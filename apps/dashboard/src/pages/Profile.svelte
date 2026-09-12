@@ -42,7 +42,7 @@
   let notesAbout: StaffManagerNote[] = $state([]);
   let gradeHistory: any[] = $state([]);
   let stats: any = $state(null);
-  let accessibleTools: string[] = $state([]);
+  let visibility = $state({ discipline: false, absences: false, tutoring: false, managerNotes: false, apiKeys: false });
   let scorecard = $state<any>(null);
   let loadingScorecard = $state(false);
   
@@ -90,7 +90,7 @@
     ...(isOwnProfile ? [
       { id: 'rank_card', label: m.pf_tab_rank_card(), icon: 'Sparkles' }
     ] : []),
-    ...(staffMember && isOwnProfile ? [
+    ...(staffMember && isOwnProfile && visibility.apiKeys ? [
       { id: 'api_keys', label: m.pf_tab_api_keys(), icon: 'Lock' }
     ] : [])
   ]);
@@ -141,7 +141,7 @@
         blacklistReason = data.blacklistReason;
         blacklistEndDate = data.blacklistEndDate;
         blacklistHistory = data.blacklistHistory || [];
-        accessibleTools = data.accessibleTools || [];
+        visibility = { ...visibility, ...data.visibility };
         
         // Default active tab
         if (staffMember) {
@@ -465,15 +465,6 @@
     } : null
   );
 
-  /**
-   * Le volet des notes de management s'ouvre aux seuls administrateurs. Teste
-   * par la negative, un serveur introuvable rendait `undefined`, different de
-   * 'none' comme de 'moderator' : le volet s'affichait donc quand la liste des
-   * serveurs n'etait pas encore lue. Ici, contrairement aux routes, aucune
-   * raison d'etre permissif pendant l'amorcage - il vaut mieux afficher le
-   * volet une fraction de seconde trop tard que trop tot.
-   */
-  const isRequesterManager = $derived(authStore.isAdmin);
 </script>
 
 <div class="space-y-10 animate-in fade-in slide-in-from-bottom-6 duration-1000 pb-24 font-sans">
@@ -580,8 +571,10 @@
           <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             <MetricCard label="Messages" value={`${stats?.totalMessages ?? 0}`} note={m.pf_total_sent()} icon="MessageSquare" toneClass="bg-primary/10 text-primary" />
             <MetricCard label={m.home_opt_voice()} value={`${Math.round((stats?.totalVoiceMinutes ?? 0))}m`} note={m.pf_time_spent()} icon="Mic" toneClass="bg-secondary/10 text-secondary" />
-            <MetricCard label="Sanctions" value={`${stats?.sanctionsIssued ?? 0}`} note="Warns + blacklist" icon="Hammer" toneClass="bg-rose-500/10 text-rose-500" />
-            <MetricCard label={m.pf_warnings_label()} value={`${stats?.activeWarnings ?? 0}`} note={m.pf_active_received()} icon="ShieldAlert" toneClass="bg-amber-500/10 text-amber-500" />
+            {#if visibility.discipline}
+              <MetricCard label="Sanctions" value={`${stats?.sanctionsIssued ?? 0}`} note="Warns + blacklist" icon="Hammer" toneClass="bg-rose-500/10 text-rose-500" />
+              <MetricCard label={m.pf_warnings_label()} value={`${stats?.activeWarnings ?? 0}`} note={m.pf_active_received()} icon="ShieldAlert" toneClass="bg-amber-500/10 text-amber-500" />
+            {/if}
           </div>
 
           <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -668,7 +661,9 @@
           {/if}
 
           <!-- Warnings & Absences -->
+          {#if visibility.discipline || visibility.absences}
           <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {#if visibility.discipline}
             <!-- Warnings Panel -->
             <div class="rounded-xl bg-surface-container-low/40 border border-outline-variant/10 p-8 shadow-sm">
               <h4 class="text-sm font-semibold text-primary uppercase tracking-widest mb-6">{m.pf_warnings_received()}</h4>
@@ -693,7 +688,9 @@
                 <p class="text-xs text-on-surface-variant/40 italic">{m.pf_no_warnings()}</p>
               {/if}
             </div>
+            {/if}
 
+            {#if visibility.absences}
             <!-- Absences Panel -->
             <div class="rounded-xl bg-surface-container-low/40 border border-outline-variant/10 p-8 shadow-sm">
               <h4 class="text-sm font-semibold text-primary uppercase tracking-widest mb-6">{m.pf_declared_absences()}</h4>
@@ -718,7 +715,9 @@
                 <p class="text-xs text-on-surface-variant/40 italic">{m.pf_no_absences()}</p>
               {/if}
             </div>
+            {/if}
           </div>
+          {/if}
 
           <!-- Testing Periods & Mentoring reports -->
           {#if testingPeriods.length > 0}
@@ -767,7 +766,7 @@
           {/if}
 
           <!-- Manager Notes Pane (only visible if manager/admin) -->
-          {#if isRequesterManager}
+          {#if visibility.managerNotes}
             <div class="rounded-xl bg-surface-container-low/40 border border-outline-variant/10 p-8 shadow-sm">
               <div class="flex items-center gap-3 mb-6">
                 <div class="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
@@ -1018,23 +1017,6 @@
           </div>
 
           <div class="space-y-6">
-            <!-- Tools Bento Grid -->
-            {#if accessibleTools.length > 0}
-              <div class="rounded-xl bg-surface-container-low/50 p-8 border border-outline-variant/10 shadow-sm">
-                <h5 class="text-xs font-medium text-on-surface-variant/40 mb-6">Outils Accessibles</h5>
-                <div class="space-y-3">
-                  {#each accessibleTools as tool}
-                    <div class="flex items-center gap-3 p-3.5 rounded-xl bg-surface-container-high/60 border border-outline-variant/5">
-                      <div class="w-8 h-8 rounded-lg bg-primary/5 text-primary flex items-center justify-center shrink-0">
-                        <Papicon icon="Gears" size={16} />
-                      </div>
-                      <span class="text-xs font-semibold text-on-surface-variant">{tool}</span>
-                    </div>
-                  {/each}
-                </div>
-              </div>
-            {/if}
-
             <div class="rounded-xl bg-primary/10 p-8 text-on-primary shadow-sm shadow-primary/20">
                <Papicon icon="Sparkles" size={32} class="mb-4 opacity-50" />
                <h5 class="text-lg font-semibold tracking-tight leading-tight mb-2">{m.pf_regular_activity()}</h5>
@@ -1139,7 +1121,7 @@
           <RankCardCustomizer />
         </div>
 
-      {:else if activeTab === 'api_keys' && staffMember && isOwnProfile}
+      {:else if activeTab === 'api_keys' && staffMember && isOwnProfile && visibility.apiKeys}
         <!-- API Keys Management Panel (Own profile only) -->
         <div class="grid grid-cols-1 xl:grid-cols-[1fr_400px] gap-8">
           <div class="rounded-xl bg-surface-container-low/30 p-10 border border-outline-variant/10 shadow-sm">

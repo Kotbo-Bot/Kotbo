@@ -147,7 +147,10 @@
   function resolveRouteFeatureKey(path: string): string | null {
     const fromSidebar = resolvePageFeatureKey(path);
     if (fromSidebar) return fromSidebar;
-    if (path === "/" || path.startsWith("/profile")) return "dashboard";
+    // Le profil n'est pas une section : le rattacher a « Vue d'ensemble »
+    // privait de son propre profil tout role a qui le Centre de gestion fermait
+    // l'accueil. Ce qu'il montre est filtre bloc par bloc par l'API.
+    if (path === "/") return "dashboard";
     if (path.startsWith("/analytics")) return "analytics";
     if (path.startsWith("/inbox")) return "inbox";
     if (path.startsWith("/events")) return "events";

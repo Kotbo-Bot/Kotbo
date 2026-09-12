@@ -248,6 +248,13 @@ export async function handleDashboardRoutes(
       && parts[4] === 'absences'
       && method === 'POST';
 
+    // Le panneau de demission du profil s'adresse au staff, pas aux
+    // administrateurs : sans exception, tout envoi finissait sur un refus.
+    const isStaffResignationAction = parts.length === 6
+      && parts[4] === 'staff'
+      && parts[5] === 'resignations'
+      && method === 'POST';
+
     const isMeetingAction = parts[4] === 'meetings'
       && (method === 'POST' || method === 'PATCH' || method === 'DELETE');
 
@@ -335,7 +342,7 @@ export async function handleDashboardRoutes(
       ? { ...access, canManageSettings: true }
       : access;
 
-    if (!access.canManageSettings && method !== 'GET' && !hasFeatureWriteRight && !isSanctionAction && !isDailyAlgoReviewAction && !isStaffAbsenceAction && !isNotificationAction && !isMeetingAction && !isNewsAction && !isMemberModerationAction && !isGiveawayManagerAction) {
+    if (!access.canManageSettings && method !== 'GET' && !hasFeatureWriteRight && !isSanctionAction && !isDailyAlgoReviewAction && !isStaffAbsenceAction && !isStaffResignationAction && !isNotificationAction && !isMeetingAction && !isNewsAction && !isMemberModerationAction && !isGiveawayManagerAction) {
       json(res, 403, { error: 'Action réservée aux administrateurs du dashboard.' });
       return true;
     }

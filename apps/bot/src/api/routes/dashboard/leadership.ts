@@ -82,6 +82,7 @@ import {
   
 } from '../../../services/staff/staffManagementService.js';
 import { getStaffProfileSnapshot } from '../../../services/progression/profileService.js';
+import { canViewFeatureSection, getCachedFeatureAccess } from './featureGate.js';
 import { handleAbsenceRoutes } from './leadership/absences.js';
 import { handleMeetingRoutes } from './leadership/meetings.js';
 import { handleTaskRoutes } from './leadership/tasks.js';
@@ -137,6 +138,30 @@ export async function handleLeadershipRoutes(
           return true;
         }
 
+        const isOwnProfile = userId === user.userId;
+
+        /**
+         * Le niveau `moderator` couvre tout membre du staff, jusqu'au plus bas
+         * grade : le tester seul ouvrait a chacun les avertissements, la
+         * blacklist et les notes de management de tous ses collegues. Chaque
+         * bloc suit desormais la section du Centre de gestion qui le porte.
+         *
+         * Sur son propre profil, on garde ses propres donnees meme section
+         * fermee - comme `tutoring/apprentice-progress` - sauf les notes de
+         * management, ecrites pour les responsables et non pour la personne.
+         */
+        const featureAccess = accessLevel.canManageSettings
+          ? null
+          : await getCachedFeatureAccess(client, guildId, accessLevel, user.userId);
+        const canViewSection = (key: string) =>
+          isOwnProfile || accessLevel.canManageSettings || featureAccess?.[key]?.canView !== false;
+
+        // Refuser renvoie le dashboard sur le profil communautaire du membre.
+        if (!canViewSection('staff_directory')) {
+          json(res, 403, { error: 'Accès refusé. Votre rôle ne donne pas accès aux profils du staff.', code: 'feature_denied' });
+          return true;
+        }
+
         const snapshot = await getStaffProfileSnapshot(guildId, userId);
         if (!snapshot) {
           json(res, 404, { error: 'Membre du staff introuvable' });
@@ -147,20 +172,14 @@ export async function handleLeadershipRoutes(
           ? await resolveProfileRoleDisplay(client, snapshot.publicProfile.guildId, snapshot.publicProfile.rolesSnapshot)
           : null;
 
-        const isHighStaff = accessLevel.canManageSettings
-          || ['admin', 'moderator'].includes(accessLevel.level)
-          || (snapshot.staffMember.grade ?? '').toLowerCase().includes('direction');
-
-        const accessibleTools: string[] = [];
-        if (isHighStaff) {
-          accessibleTools.push('Générateur Daily Algo');
-          accessibleTools.push('Audit Code Police');
-          accessibleTools.push('Management Staff');
-          accessibleTools.push('Éditeur de Règlement');
-        }
-
-        const isOwnProfile = userId === user.userId;
-        const canSeeSensitive = isOwnProfile || isManagerOrAdmin;
+        const visibility = {
+          discipline: canViewSection('discipline'),
+          absences: canViewSection('absences'),
+          tutoring: canViewSection('tutoring'),
+          managerNotes: accessLevel.canManageSettings,
+          // Creer ou revoquer une cle est refuse sans ce droit par le repartiteur.
+          apiKeys: isOwnProfile && accessLevel.canManageSettings,
+        };
 
         json(res, 200, {
           staffMember: snapshot.staffMember,
@@ -171,7 +190,7 @@ export async function handleLeadershipRoutes(
                 primaryRole: publicProfileRoleDisplay?.primaryRole ?? null,
               }
             : null,
-          apiKeys: isOwnProfile
+          apiKeys: visibility.apiKeys
             ? snapshot.apiKeys.map((k) => ({
                 id: k.id,
                 displayKey: k.displayKey,
@@ -180,24 +199,24 @@ export async function handleLeadershipRoutes(
                 lastUsedAt: k.lastUsedAt,
               }))
             : [],
-          activeBlacklist: canSeeSensitive ? snapshot.activeBlacklist : null,
-          blacklistHistory: canSeeSensitive ? snapshot.blacklistHistory : [],
-          warnings: canSeeSensitive ? snapshot.warnings : [],
-          testingPeriods: canSeeSensitive ? snapshot.testingPeriods : [],
+          activeBlacklist: visibility.discipline ? snapshot.activeBlacklist : null,
+          blacklistHistory: visibility.discipline ? snapshot.blacklistHistory : [],
+          warnings: visibility.discipline ? snapshot.warnings : [],
+          testingPeriods: visibility.tutoring ? snapshot.testingPeriods : [],
           activities: snapshot.activities,
-          absences: canSeeSensitive ? snapshot.absences : [],
-          notesWritten: canSeeSensitive ? snapshot.notesWritten : [],
-          notesAbout: canSeeSensitive ? snapshot.notesAbout : [],
-          gradeHistory: canSeeSensitive ? snapshot.gradeHistory : [],
+          absences: visibility.absences ? snapshot.absences : [],
+          notesWritten: visibility.managerNotes ? snapshot.notesWritten : [],
+          notesAbout: visibility.managerNotes ? snapshot.notesAbout : [],
+          gradeHistory: snapshot.gradeHistory,
           stats: {
             ...snapshot.stats,
-            activeWarnings: canSeeSensitive ? snapshot.stats.activeWarnings : 0,
-            sanctionsIssued: canSeeSensitive ? snapshot.stats.sanctionsIssued : 0,
+            activeWarnings: visibility.discipline ? snapshot.stats.activeWarnings : 0,
+            sanctionsIssued: visibility.discipline ? snapshot.stats.sanctionsIssued : 0,
           },
-          isBlacklisted: canSeeSensitive ? !!snapshot.activeBlacklist : false,
-          blacklistReason: canSeeSensitive ? snapshot.activeBlacklist?.reason : null,
-          blacklistEndDate: canSeeSensitive ? snapshot.activeBlacklist?.endDate : null,
-          accessibleTools,
+          isBlacklisted: visibility.discipline ? !!snapshot.activeBlacklist : false,
+          blacklistReason: visibility.discipline ? snapshot.activeBlacklist?.reason : null,
+          blacklistEndDate: visibility.discipline ? snapshot.activeBlacklist?.endDate : null,
+          visibility,
         });
       } catch (err) {
         logger.error('StaffAPI', 'Error getting user profile:', err);
@@ -305,6 +324,12 @@ export async function handleGuildLeadershipRoutes(
 
   // 1. GET /api/dashboard/guilds/:guildId/leadership
   if (parts.length === 5 && parts[4] === 'leadership' && method === 'GET') {
+    // Memes alertes que `staff/alerts`, sans aucune garde jusqu'ici.
+    const isStaffLevel = access.level === 'admin' || access.level === 'moderator';
+    if (!isStaffLevel || !(await canViewFeatureSection(client, guildId, access, user.userId, 'staff_directory'))) {
+      json(res, 403, { error: 'Accès refusé. Votre rôle ne donne pas accès à cette section.', code: 'feature_denied' });
+      return true;
+    }
     try {
       const metrics = await getStaffAlertsAndProgression(guildId);
       json(res, 200, { metrics });

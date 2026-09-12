@@ -83,6 +83,7 @@ import {
   importRoleMembers,
 } from '../../../../services/staff/staffManagementService.js';
 import * as altAccountService from '../../../../services/moderation/altAccountService.js';
+import { canViewFeatureSection } from '../featureGate.js';
 import { type OverwriteResolvable, Client, ChannelType, PermissionFlagsBits, EmbedBuilder, TextChannel } from 'discord.js';
 
 export async function handleStaffRoutes(
@@ -105,8 +106,23 @@ export async function handleStaffRoutes(
         return true;
       }
 
+      /**
+       * Le niveau `moderator` couvre tout le staff, jusqu'au plus bas grade, et
+       * le repartiteur laisse ce segment ouvert parce que Reunions, Planning et
+       * Tutorat y lisent l'effectif. Les lectures qui portent une section
+       * precise la reverifient donc ici.
+       */
+      const canView = (featureKey: string) =>
+        canViewFeatureSection(client, guildId, access, user.userId, featureKey);
+      const denySection = () => {
+        json(res, 403, { error: 'Accès refusé. Votre rôle ne donne pas accès à cette section.', code: 'feature_denied' });
+        return true;
+      };
+
       const isMentorReportPost = parts[5] === 'mentor-reports' && method === 'POST';
-      if (method !== 'GET' && !isMentorReportPost) {
+      // La route verifie elle-meme que la personne fait partie du staff.
+      const isOwnResignationPost = parts[5] === 'resignations' && !parts[6] && method === 'POST';
+      if (method !== 'GET' && !isMentorReportPost && !isOwnResignationPost) {
         let hasConfigurePermission = access.level === 'admin';
 
         if (!hasConfigurePermission) {
@@ -176,6 +192,7 @@ export async function handleStaffRoutes(
 
       // GET /api/dashboard/guilds/:guildId/staff/alerts
       if (parts[5] === 'alerts' && method === 'GET' && !parts[6]) {
+        if (!(await canView('staff_directory'))) return denySection();
         try {
           const metrics = await getStaffAlertsAndProgression(guildId);
           json(res, 200, { metrics });
@@ -287,7 +304,22 @@ export async function handleStaffRoutes(
             orderBy: { grade: 'asc' },
           });
 
-          json(res, 200, { members });
+          // Absences et Planning ne regardent que la presence d'une blacklist
+          // ou d'une periode d'essai pour filtrer l'effectif : sans le droit,
+          // on garde cette presence et on retire le motif et le detail.
+          const [seesDiscipline, seesTutoring] = await Promise.all([canView('discipline'), canView('tutoring')]);
+          json(res, 200, {
+            members: members.map((member) => ({
+              ...member,
+              warnings: seesDiscipline ? member.warnings : [],
+              blacklistEntries: seesDiscipline
+                ? member.blacklistEntries
+                : member.blacklistEntries.map((entry) => ({ id: entry.id, isActive: entry.isActive })),
+              testingPeriods: seesTutoring
+                ? member.testingPeriods
+                : member.testingPeriods.map((period) => ({ id: period.id, status: period.status })),
+            })),
+          });
         } catch (err) {
           logger.error('StaffAPI', 'Error listing staff members:', err);
           json(res, 500, { error: 'Erreur lors de la récupération des membres staff' });
@@ -348,9 +380,19 @@ export async function handleStaffRoutes(
       // GET /api/dashboard/guilds/:guildId/staff/members/:userId
       if (parts[5] === 'members' && parts[6] && method === 'GET' && !parts[7]) {
         const staffUserId = parts[6];
+        const isSelf = staffUserId === user.userId;
+        if (!isSelf && !(await canView('staff_directory'))) return denySection();
         try {
           const stats = await getStaffMemberStats(guildId, staffUserId);
-          json(res, 200, stats);
+          const [seesDiscipline, seesTutoring] = isSelf
+            ? [true, true]
+            : await Promise.all([canView('discipline'), canView('tutoring')]);
+          json(res, 200, {
+            ...stats,
+            warnings: seesDiscipline ? stats.warnings : [],
+            testingPeriods: seesTutoring ? stats.testingPeriods : [],
+            stats: { ...stats.stats, activeWarnings: seesDiscipline ? stats.stats.activeWarnings : 0 },
+          });
         } catch (err) {
           logger.error('StaffAPI', 'Error getting staff member details:', err);
           json(res, 500, { error: 'Erreur lors de la récupération des détails' });
@@ -361,6 +403,8 @@ export async function handleStaffRoutes(
       // GET /api/dashboard/guilds/:guildId/staff/members/:userId/scorecard
       if (parts[5] === 'members' && parts[6] && parts[7] === 'scorecard' && method === 'GET') {
         const staffUserId = parts[6];
+        // Seule la page profil l'appelle : meme regle que le profil staff d'un collegue.
+        if (staffUserId !== user.userId && !(await canView('staff_directory'))) return denySection();
         try {
           const { getStaffWeeklyScorecard } = await import('../../../../services/staff/staffScorecardService.js');
           const scorecard = await getStaffWeeklyScorecard(guildId, staffUserId);
@@ -469,6 +513,9 @@ export async function handleStaffRoutes(
       // GET /api/dashboard/guilds/:guildId/staff/:staffUserId/notes (checks regex ID)
       if (/^\d+$/.test(parts[5]) && parts[6] === 'notes' && method === 'GET') {
         const staffUserId = parts[5];
+        // Ecrire et effacer une note demandent deja ce droit : la lecture etait
+        // ouverte a tout le staff, la personne visee comprise.
+        if (!access.canManageSettings) return denySection();
         try {
           const notes = await getManagerNotes(guildId, staffUserId);
           json(res, 200, { notes });
@@ -535,6 +582,7 @@ export async function handleStaffRoutes(
 
       // GET /api/dashboard/guilds/:guildId/staff/warnings
       if (parts[5] === 'warnings' && method === 'GET' && !parts[6]) {
+        if (!(await canView('discipline'))) return denySection();
         try {
           const warnings = await prisma.staffWarning.findMany({
             where: { guildId },

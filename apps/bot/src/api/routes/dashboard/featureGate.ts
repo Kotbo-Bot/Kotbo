@@ -207,3 +207,20 @@ export async function getCachedFeatureAccess(
   await cache.set(key, featureAccess, FEATURE_ACCESS_TTL_SECONDS);
   return featureAccess;
 }
+
+/**
+ * Meme question que la garde de lecture du repartiteur, pour les routes qu'elle
+ * laisse passer (`staff`, `leadership`) mais dont un morceau appartient a une
+ * section precise.
+ */
+export async function canViewFeatureSection(
+  client: Client,
+  guildId: string,
+  access: DashboardAccess,
+  userId: string,
+  featureKey: string,
+): Promise<boolean> {
+  if (access.canManageSettings) return true;
+  const featureAccess = await getCachedFeatureAccess(client, guildId, access, userId);
+  return featureAccess[featureKey]?.canView !== false;
+}
