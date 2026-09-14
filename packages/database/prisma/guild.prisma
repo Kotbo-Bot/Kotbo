@@ -590,6 +590,10 @@ model Guild {
   tempVoiceCategoryId     String?
   tempVoiceNameTemplate   String   @default("🔊 Salon de {user}")
   tempVoiceRequiredRoleId String?
+  // Politique appliquee aux salons crees par le generateur principal :
+  // places, verrouillage, roles autorises d'office, chat texte et pouvoirs du
+  // proprietaire. `null` = comportement historique (voir tempVoiceService).
+  tempVoiceDefaults       Json?
   tempVoiceGenerators     Json?
   tempVoiceChannels       TempVoiceChannel[]
 
@@ -1052,5 +1056,8 @@ model TempVoiceChannel {
 
   guild      Guild    @relation(fields: [guildId], references: [id], onDelete: Cascade)
 
+  // Le dashboard et le balayage de demarrage lisent les salons d'un serveur a
+  // la fois ; sans index, chacune de ces lectures parcourt toute la table.
+  @@index([guildId])
   @@map("temp_voice_channels")
 }
