@@ -8,6 +8,8 @@
   import InlineFeedback from '../lib/components/InlineFeedback.svelte';
   import Papicon from '../lib/components/Papicon.svelte';
   import SearchableSelect from '../lib/components/SearchableSelect.svelte';
+  import TempVoicePolicyEditor from '../lib/components/TempVoicePolicyEditor.svelte';
+  import type { TempVoicePolicy, TempVoiceGenerator, TempVoiceGeneratorPayload } from '../lib/api/moderation';
   import { createAsyncActionState } from '../lib/asyncAction.svelte';
   import { fetchChannelsManagementConfig, updateChannelsManagementConfig, rescanChannelsManagementStats, fetchTempVoiceChannels, updateTempVoiceChannel, fetchStickyMessages, saveStickyMessage, deleteStickyMessage, repostStickyMessage, fetchChannelsByChannel, toggleChannelFeature, renameDiscordChannel, deleteDiscordChannel } from '../lib/api';
   import { dashboardStore } from '../lib/stores/dashboard.svelte';
@@ -15,6 +17,28 @@
   import { confirmDialog } from '../lib/stores/confirmDialog.svelte';
   import LoadingHint from '../lib/components/LoadingHint.svelte';
   import { m } from '../lib/i18n';
+
+  /**
+   * Politique par defaut cote page.
+   *
+   * Elle reprend a l'identique celle du bot (`tempVoiceService`) : tant qu'un
+   * serveur n'a rien regle, la page doit montrer ce que le bot appliquera
+   * vraiment, et non des champs vides.
+   */
+  function defaultTempVoicePolicy(): TempVoicePolicy {
+    return {
+      userLimit: 0,
+      lockOnCreate: false,
+      autoAllowRoleIds: [],
+      textChat: 'inherit',
+      ownerPowers: ['mute', 'deafen', 'move'],
+    };
+  }
+
+  /** Complete une entree venue de l'API pour que l'editeur ait toujours ses cles. */
+  function withPolicyDefaults(generator: TempVoiceGeneratorPayload): TempVoiceGenerator {
+    return { ...defaultTempVoicePolicy(), ...generator };
+  }
 
   // Config State
   let config = $state({
@@ -49,7 +73,8 @@
     tempVoiceCategoryId: '',
     tempVoiceNameTemplate: '🔊 Salon de {user}',
     tempVoiceRequiredRoleId: '',
-    tempVoiceGenerators: [] as any[],
+    tempVoiceDefaults: defaultTempVoicePolicy(),
+    tempVoiceGenerators: [] as TempVoiceGenerator[],
     honeypotEnabled: false,
     honeypotChannelId: '',
     honeypotSanction: 'TIMEOUT',
@@ -89,7 +114,8 @@
     tempVoiceCategoryId: '',
     tempVoiceNameTemplate: '🔊 Salon de {user}',
     tempVoiceRequiredRoleId: '',
-    tempVoiceGenerators: [] as any[],
+    tempVoiceDefaults: defaultTempVoicePolicy(),
+    tempVoiceGenerators: [] as TempVoiceGenerator[],
     honeypotEnabled: false,
     honeypotChannelId: '',
     honeypotSanction: 'TIMEOUT',
@@ -525,7 +551,10 @@
         config.tempVoiceCategoryId = res.tempVoiceCategoryId ?? '';
         config.tempVoiceNameTemplate = res.tempVoiceNameTemplate || '🔊 Salon de {user}';
         config.tempVoiceRequiredRoleId = res.tempVoiceRequiredRoleId ?? '';
-        config.tempVoiceGenerators = Array.isArray(res.tempVoiceGenerators) ? res.tempVoiceGenerators : [];
+        config.tempVoiceDefaults = { ...defaultTempVoicePolicy(), ...(res.tempVoiceDefaults ?? {}) };
+        config.tempVoiceGenerators = Array.isArray(res.tempVoiceGenerators)
+          ? res.tempVoiceGenerators.map(withPolicyDefaults)
+          : [];
         config.honeypotEnabled = res.honeypotEnabled ?? false;
         config.honeypotChannelId = res.honeypotChannelId ?? '';
         config.honeypotSanction = res.honeypotSanction ?? 'TIMEOUT';
@@ -571,6 +600,7 @@
         tempVoiceCategoryId: config.tempVoiceCategoryId || null,
         tempVoiceNameTemplate: config.tempVoiceNameTemplate,
         tempVoiceRequiredRoleId: config.tempVoiceRequiredRoleId || null,
+        tempVoiceDefaults: config.tempVoiceDefaults,
         tempVoiceGenerators: config.tempVoiceGenerators || [],
         honeypotEnabled: config.honeypotEnabled,
         honeypotChannelId: config.honeypotChannelId || null,
@@ -584,7 +614,9 @@
       if (res.resolved) {
         if (res.resolved.tempVoiceChannelId) config.tempVoiceChannelId = res.resolved.tempVoiceChannelId;
         if (res.resolved.tempVoiceCategoryId) config.tempVoiceCategoryId = res.resolved.tempVoiceCategoryId;
-        if (Array.isArray(res.resolved.tempVoiceGenerators)) config.tempVoiceGenerators = res.resolved.tempVoiceGenerators;
+        if (Array.isArray(res.resolved.tempVoiceGenerators)) {
+          config.tempVoiceGenerators = res.resolved.tempVoiceGenerators.map(withPolicyDefaults);
+        }
         if (res.resolved.honeypotChannelId) config.honeypotChannelId = res.resolved.honeypotChannelId;
         if (res.resolved.honeypotSanction) config.honeypotSanction = res.resolved.honeypotSanction;
         if (res.resolved.honeypotReinvite !== undefined) config.honeypotReinvite = res.resolved.honeypotReinvite;
@@ -1704,7 +1736,15 @@
                   bind:value={config.tempVoiceRequiredRoleId} 
                   placeholder={m.cm_no_role_required_open_placeholder()}
                 />
+                <p class="text-[10px] text-on-surface-variant/40">{m.cm_required_role_scope_hint()}</p>
               </div>
+
+              <!-- Permissions appliquées aux salons créés -->
+              <TempVoicePolicyEditor
+                bind:policy={config.tempVoiceDefaults}
+                {availableRoles}
+                idPrefix="temp-voice-main"
+              />
 
               {#if !config.tempVoiceGenerators}
                 {config.tempVoiceGenerators = []}
@@ -1814,6 +1854,15 @@
                           />
                         </div>
                       </div>
+
+                      <!-- Chaque generateur a ses propres permissions : un salon
+                           « Staff » et un salon « Public » n'accordent pas la
+                           meme chose a leur proprietaire. -->
+                      <TempVoicePolicyEditor
+                        bind:policy={config.tempVoiceGenerators[index]}
+                        {availableRoles}
+                        idPrefix="temp-voice-gen-{index}"
+                      />
                     </div>
                   {/each}
 
@@ -1826,7 +1875,8 @@
                           channelId: '',
                           categoryId: '',
                           nameTemplate: '🔊 Salon de {user}',
-                          requiredRoleId: ''
+                          requiredRoleId: '',
+                          ...defaultTempVoicePolicy()
                         }
                       ];
                     }}
@@ -1847,6 +1897,7 @@
                   <br/><strong class="text-on-surface font-semibold">• {m.cm_embed_bullet_rename()}</strong> {m.cm_embed_bullet_rename_desc()}
                   <br/><strong class="text-on-surface font-semibold">• {m.cm_embed_bullet_limit()}</strong> {m.cm_embed_bullet_limit_desc()}
                   <br/><strong class="text-on-surface font-semibold">• {m.cm_embed_bullet_kick()}</strong> {m.cm_embed_bullet_kick_desc()}
+                  <br/><strong class="text-on-surface font-semibold">• {m.cm_embed_bullet_chat()}</strong> {m.cm_embed_bullet_chat_desc()}
                 </p>
               </div>
             </div>

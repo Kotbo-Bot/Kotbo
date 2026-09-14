@@ -60,6 +60,46 @@ export async function updateAutoThreadConfig(
   });
 }
 
+/**
+ * Reglages appliques aux salons crees par un generateur de vocaux temporaires.
+ *
+ * Ces valeurs etaient codees en dur cote bot : le proprietaire recevait
+ * toujours les memes pouvoirs, aucun role n'etait autorise d'office, et le chat
+ * ecrit du salon n'etait jamais reglable. Le bot revalide tout ce qui arrive
+ * ici : la page n'est qu'un client parmi d'autres.
+ */
+export type TempVoiceOwnerPower = 'mute' | 'deafen' | 'move' | 'manageChannel' | 'manageMessages';
+
+/** `inherit` laisse le salon suivre sa categorie, comme avant ce reglage. */
+export type TempVoiceTextChatMode = 'inherit' | 'open' | 'locked';
+
+export interface TempVoicePolicy {
+  userLimit: number;
+  lockOnCreate: boolean;
+  autoAllowRoleIds: string[];
+  textChat: TempVoiceTextChatMode;
+  ownerPowers: TempVoiceOwnerPower[];
+}
+
+interface TempVoiceGeneratorFields {
+  channelId?: string;
+  categoryId?: string;
+  nameTemplate?: string;
+  requiredRoleId?: string | null;
+}
+
+/**
+ * Generateur tel que la page le manipule : sa politique est toujours complete.
+ *
+ * La page comble les cles manquantes a la lecture, de sorte que l'editeur n'ait
+ * jamais a distinguer « pas configure » de « configure a zero » - une nuance
+ * qui, cote bot, ne veut pas dire la meme chose.
+ */
+export type TempVoiceGenerator = TempVoicePolicy & TempVoiceGeneratorFields;
+
+/** Ce que la page envoie : le bot complete et revalide ce qui manque. */
+export type TempVoiceGeneratorPayload = Partial<TempVoicePolicy> & TempVoiceGeneratorFields;
+
 export async function fetchChannelsManagementConfig(guildId = authStore.selectedGuildId) {
   return dashboardRequest('/channels-management', {
     method: 'GET',
@@ -132,7 +172,8 @@ export async function updateChannelsManagementConfig(
     tempVoiceCategoryId?: string | null;
     tempVoiceNameTemplate?: string;
     tempVoiceRequiredRoleId?: string | null;
-    tempVoiceGenerators?: Array<{ channelId?: string; categoryId?: string; nameTemplate?: string; requiredRoleId?: string | null }>;
+    tempVoiceDefaults?: TempVoicePolicy;
+    tempVoiceGenerators?: Array<TempVoiceGeneratorPayload>;
     honeypotEnabled?: boolean;
     honeypotChannelId?: string | null;
     honeypotSanction?: string;
