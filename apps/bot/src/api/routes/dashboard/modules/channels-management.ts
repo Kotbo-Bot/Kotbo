@@ -8,7 +8,12 @@ import { getGuildName, json, pushAudit, readJsonBody } from '../../../shared.js'
 import { ChannelType, PermissionFlagsBits } from 'discord.js';
 import { resolveGuildLocale } from '../../../../utils/i18n.js';
 import { honeypotChannelName, provisionHoneypotChannel } from '../../../../services/moderation/honeypotProvisioning.js';
+import {
+  normalizeTempVoiceGeneratorsInput,
+  normalizeTempVoicePolicy,
+} from '../../../../services/features/tempVoiceService.js';
 import { readWordStatsEnabled, startWordStatsBackfillIfTurnedOn, type ModuleRouteContext } from './_shared.js';
+import type { Prisma } from '@prisma/client';
 
 /**
  * Fonctionnalites qui se reglent salon par salon, et le champ de la guilde qui
@@ -625,6 +630,7 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
             tempVoiceCategoryId: true,
             tempVoiceNameTemplate: true,
             tempVoiceRequiredRoleId: true,
+            tempVoiceDefaults: true,
             tempVoiceGenerators: true,
             honeypotEnabled: true,
             honeypotChannelId: true,
@@ -648,7 +654,15 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
           tempVoiceCategoryId: guild.tempVoiceCategoryId,
           tempVoiceNameTemplate: guild.tempVoiceNameTemplate,
           tempVoiceRequiredRoleId: guild.tempVoiceRequiredRoleId,
-          tempVoiceGenerators: guild.tempVoiceGenerators,
+          // Toujours renvoyer une politique complete : la page n'a pas a
+          // connaitre les valeurs par defaut ni a gerer le cas « jamais
+          // configure », qui afficherait des cases vides au lieu de l'etat reel.
+          tempVoiceDefaults: normalizeTempVoicePolicy(guild.tempVoiceDefaults),
+          // Normalises a la lecture aussi : les generateurs enregistres avant
+          // ce reglage n'ont aucune des cles de politique, et la page afficherait
+          // des champs vides la ou le bot applique en realite ses valeurs par
+          // defaut.
+          tempVoiceGenerators: normalizeTempVoiceGeneratorsInput(guild.tempVoiceGenerators),
           honeypotEnabled: guild.honeypotEnabled,
           honeypotChannelId: guild.honeypotChannelId,
           honeypotSanction: guild.honeypotSanction,
@@ -675,7 +689,8 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
           tempVoiceCategoryId?: string | null;
           tempVoiceNameTemplate?: string;
           tempVoiceRequiredRoleId?: string | null;
-          tempVoiceGenerators?: Array<{ channelId?: string; categoryId?: string; nameTemplate?: string; requiredRoleId?: string | null }>;
+          tempVoiceDefaults?: unknown;
+          tempVoiceGenerators?: unknown;
           honeypotEnabled?: boolean;
           /** Demande au dashboard de creer le salon piege automatiquement. */
           createHoneypotChannel?: boolean;
@@ -721,8 +736,16 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
         if (Object.prototype.hasOwnProperty.call(body, 'tempVoiceRequiredRoleId')) {
           data.tempVoiceRequiredRoleId = body.tempVoiceRequiredRoleId;
         }
+        if (Object.prototype.hasOwnProperty.call(body, 'tempVoiceDefaults')) {
+          data.tempVoiceDefaults = normalizeTempVoicePolicy(body.tempVoiceDefaults) as unknown as Prisma.InputJsonValue;
+        }
         if (Object.prototype.hasOwnProperty.call(body, 'tempVoiceGenerators')) {
-          data.tempVoiceGenerators = body.tempVoiceGenerators;
+          // Le corps de la requete etait ecrit tel quel dans la colonne : une
+          // limite de places aberrante ou un identifiant de role invente
+          // arrivait intact jusqu'a l'appel Discord, qui echouait sans rien
+          // dire. La page n'est qu'un client parmi d'autres (outils MCP, appels
+          // directs) : la validation ne peut pas vivre de son cote.
+          data.tempVoiceGenerators = normalizeTempVoiceGeneratorsInput(body.tempVoiceGenerators) as unknown as Prisma.InputJsonValue;
         }
         if (Object.prototype.hasOwnProperty.call(body, 'honeypotEnabled')) {
           data.honeypotEnabled = !!body.honeypotEnabled;
@@ -754,15 +777,25 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
 
         if (discordGuild) {
           if (body.tempVoiceEnabled) {
-            if (!body.tempVoiceCategoryId) {
+            // Categorie d'accueil des salons temporaires, partagee par tous les
+            // generateurs qui n'en designent pas : en creer une par generateur
+            // laissait autant de categories « 🔊 Salons Vocaux » que de
+            // sauvegardes.
+            const ensureDefaultCategory = async (): Promise<string | undefined> => {
               const existing = discordGuild.channels.cache.find(
                 c => c.type === ChannelType.GuildCategory && c.name === '🔊 Salons Vocaux'
               );
-              const cat = existing || await discordGuild.channels.create({
+              if (existing) return existing.id;
+              const created = await discordGuild.channels.create({
                 name: '🔊 Salons Vocaux',
                 type: ChannelType.GuildCategory,
               }).catch(() => null);
-              if (cat) data.tempVoiceCategoryId = cat.id;
+              return created?.id;
+            };
+
+            if (!body.tempVoiceCategoryId) {
+              const categoryId = await ensureDefaultCategory();
+              if (categoryId) data.tempVoiceCategoryId = categoryId;
             }
             if (!body.tempVoiceChannelId) {
               const parentId = (data.tempVoiceCategoryId as string | undefined) || body.tempVoiceCategoryId || undefined;
@@ -776,34 +809,36 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
               }
             }
 
-            // Auto-create channels for additional generators
+            // Generateurs additionnels : la page peut laisser le salon vide
+            // pour demander au bot de le creer.
             if (Array.isArray(body.tempVoiceGenerators)) {
-              const resolvedGenerators = [];
-              for (const gen of body.tempVoiceGenerators) {
-                const resolved = { ...gen };
+              const resolvedGenerators: Array<Record<string, unknown>> = [];
+
+              for (const entry of body.tempVoiceGenerators) {
+                if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
+                const resolved: Record<string, unknown> = { ...(entry as Record<string, unknown>) };
 
                 if (!resolved.categoryId) {
-                  const cat = await discordGuild.channels.create({
-                    name: '🔊 Salons Vocaux',
-                    type: ChannelType.GuildCategory,
-                  }).catch(() => null);
-                  if (cat) resolved.categoryId = cat.id;
+                  const categoryId = await ensureDefaultCategory();
+                  if (categoryId) resolved.categoryId = categoryId;
                 }
 
                 if (!resolved.channelId) {
                   const newVoice = await discordGuild.channels.create({
                     name: '➕ Créer un salon',
                     type: ChannelType.GuildVoice,
-                    parent: resolved.categoryId || undefined,
+                    parent: typeof resolved.categoryId === 'string' ? resolved.categoryId : undefined,
                   }).catch(() => null);
                   if (newVoice) resolved.channelId = newVoice.id;
                 }
 
-                if (resolved.channelId) {
-                  resolvedGenerators.push(resolved);
-                }
+                resolvedGenerators.push(resolved);
               }
-              data.tempVoiceGenerators = resolvedGenerators;
+
+              // La validation vient apres la creation, et non avant : un
+              // generateur que la page laisse vide pour que le bot le cree n'a
+              // pas encore d'identifiant, et serait ecarte comme invalide.
+              data.tempVoiceGenerators = normalizeTempVoiceGeneratorsInput(resolvedGenerators) as unknown as Prisma.InputJsonValue;
             }
           }
 
