@@ -147,6 +147,9 @@ export async function updateChannelsManagementConfig(
     autoThreadChannels?: string[];
     statsEnabled?: boolean;
     statsConfig?: any;
+    // Accepte par la route (`channels-management`, PATCH) : le champ existe en
+    // base et le bot le lit, seule sa declaration manquait ici.
+    wordStatsEnabled?: boolean;
     tempVoiceEnabled?: boolean;
     tempVoiceChannelId?: string | null;
     tempVoiceCategoryId?: string | null;

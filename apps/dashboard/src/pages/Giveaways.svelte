@@ -421,7 +421,7 @@
    * a de mieux, et la modale ne s'ouvre pas avant.
    */
   function factoryStyle(): Partial<GiveawayAppearance> {
-    const source = (defaults ?? config) as Record<string, unknown>;
+    const source = (defaults ?? config) as unknown as Record<string, unknown>;
     const fields: Record<string, unknown> = {};
     for (const key of APPEARANCE_KEYS) fields[key] = source[key] ?? null;
     return fields as unknown as Partial<GiveawayAppearance>;

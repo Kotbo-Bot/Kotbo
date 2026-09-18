@@ -263,7 +263,9 @@
         title: 'Accepter cette proposition ?',
         description: 'Un dossier est ouvert de chaque côté et les deux sont reliés par un pont. Rien n\'est actif tant que vous ne l\'activez pas.',
         confirmLabel: 'Accepter',
-        variant: 'primary',
+        // `default` rend deja le style primaire (ConfirmModal) : 'primary'
+        // n'existe pas dans l'union et y tombait par le cas par defaut.
+        variant: 'default',
       });
       if (!confirmed) return;
     }
