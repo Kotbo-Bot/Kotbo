@@ -1,3 +1,4 @@
+import type { Prisma } from '@prisma/client';
 import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
 import { isAnalyticsCollectionEnabled } from './analyticsConsent.js';
@@ -101,74 +102,239 @@ function queueMemberDaily(guildId: string, userId: string, dateKey: string, incr
 // FLUSH PROCESSORS
 // ============================================================================
 
+/**
+ * Chaque flush écrivait un `upsert` par ligne bufferisée, le tout dans un
+ * `$transaction` unique : un serveur actif ouvrait ainsi une transaction de
+ * plusieurs milliers d'instructions toutes les 60 s, et les quatre partaient
+ * en parallèle. Le pool saturait, Postgres refusait d'ouvrir la transaction
+ * suivante (`P2028`) et le CPU partait en vrille sur des lots rejoués.
+ *
+ * Ici, une table se flushe en deux instructions par lot, quel que soit le
+ * nombre de lignes : `createMany` crée les lignes manquantes à zéro, puis un
+ * seul `UPDATE ... FROM (VALUES ...)` applique les compteurs.
+ */
+
+type BulkKeyColumn = { name: string; type: 'text' | 'int' };
+
+type BulkRow = {
+  keys: Array<string | number>;
+  counters: Record<string, number>;
+  overwrites?: Record<string, number>;
+};
+
+type BulkTarget = {
+  label: string;
+  table: string;
+  keys: BulkKeyColumn[];
+  counterColumns: readonly string[];
+  overwriteColumns?: readonly string[];
+  createMany: (data: Array<Record<string, string | number>>) => Prisma.PrismaPromise<unknown>;
+};
+
+const ANALYTICS_CHUNK_SIZE =
+  Number.parseInt(process.env.ANALYTICS_CHUNK_SIZE ?? '200', 10) || 200;
+
+/**
+ * `maxWait` vaut 2 s par défaut côté Prisma : sous charge, l'attente d'une
+ * connexion libre dépassait ce délai et le lot entier était perdu avant même
+ * d'avoir touché la base. On laisse au pool le temps de se dégager.
+ */
+const ANALYTICS_TX_MAX_WAIT_MS =
+  Number.parseInt(process.env.ANALYTICS_TX_MAX_WAIT_MS ?? '15000', 10) || 15000;
+const ANALYTICS_TX_TIMEOUT_MS =
+  Number.parseInt(process.env.ANALYTICS_TX_TIMEOUT_MS ?? '30000', 10) || 30000;
+
+async function flushBulkChunk(target: BulkTarget, chunk: BulkRow[]): Promise<void> {
+  const overwriteColumns = target.overwriteColumns ?? [];
+  const columnTypes = [
+    ...target.keys.map((key) => key.type),
+    ...target.counterColumns.map(() => 'int' as const),
+    ...overwriteColumns.map(() => 'int' as const),
+  ];
+
+  const params: unknown[] = [];
+  const tuples = chunk.map((row) => {
+    const base = params.length;
+    params.push(
+      ...row.keys,
+      ...target.counterColumns.map((col) => row.counters[col] ?? 0),
+      ...overwriteColumns.map((col) => row.overwrites?.[col] ?? 0),
+    );
+    return `(${columnTypes.map((type, index) => `$${base + 1 + index}::${type}`).join(', ')})`;
+  });
+
+  const valueColumns = [
+    ...target.keys.map((key) => key.name),
+    ...target.counterColumns,
+    ...overwriteColumns,
+  ]
+    .map((col) => `"${col}"`)
+    .join(', ');
+
+  const setClause = [
+    ...target.counterColumns.map((col) => `"${col}" = m."${col}" + v."${col}"`),
+    ...overwriteColumns.map((col) => `"${col}" = v."${col}"`),
+  ].join(', ');
+
+  const whereClause = target.keys
+    .map((key) => `m."${key.name}" = v."${key.name}"`)
+    .join(' AND ');
+
+  await prisma.$transaction(
+    [
+      // Les lignes absentes sont créées à zéro d'abord : l'UPDATE qui suit n'a
+      // alors plus qu'à incrémenter, sans avoir à générer d'`id` cuid ni
+      // d'`updatedAt` en SQL brut.
+      target.createMany(
+        chunk.map((row) => {
+          const data: Record<string, string | number> = {};
+          target.keys.forEach((key, index) => {
+            data[key.name] = row.keys[index]!;
+          });
+          return data;
+        }),
+      ),
+      prisma.$executeRawUnsafe(
+        `UPDATE ${target.table} AS m
+       SET ${setClause}, "updatedAt" = NOW()
+       FROM (VALUES ${tuples.join(', ')}) AS v(${valueColumns})
+       WHERE ${whereClause}`,
+        ...params,
+      ),
+    ],
+    { maxWait: ANALYTICS_TX_MAX_WAIT_MS, timeout: ANALYTICS_TX_TIMEOUT_MS },
+  );
+}
+
+async function flushBulk(target: BulkTarget, rows: BulkRow[]): Promise<void> {
+  for (let i = 0; i < rows.length; i += ANALYTICS_CHUNK_SIZE) {
+    const chunk = rows.slice(i, i + ANALYTICS_CHUNK_SIZE);
+    await flushBulkChunk(target, chunk).catch((error) => {
+      logger.error('Analytics', `Error flushing ${target.label} batch (offset ${i}):`, error);
+    });
+  }
+}
+
+/**
+ * Une ligne sans aucun compteur non nul ne mérite ni création ni UPDATE : on
+ * la laisse tomber ici plutôt que d'alourdir le lot.
+ */
+function buildBulkRow(
+  keys: Array<string | number>,
+  counterColumns: readonly string[],
+  data: Record<string, number | undefined>,
+  overwrites?: Record<string, number>,
+): BulkRow | null {
+  const counters: Record<string, number> = {};
+  let hasValue = false;
+
+  for (const col of counterColumns) {
+    const value = data[col];
+    if (value) {
+      counters[col] = value;
+      hasValue = true;
+    } else {
+      counters[col] = 0;
+    }
+  }
+
+  if (overwrites && Object.values(overwrites).some((value) => value > 0)) hasValue = true;
+  if (!hasValue) return null;
+
+  return { keys, counters, overwrites };
+}
+
+const GUILD_DAILY_COUNTERS = [
+  'messagesCount',
+  'voiceMinutes',
+  'voiceSessionsCount',
+  'membersJoined',
+  'membersLeft',
+  'reactionsCount',
+] as const;
+
+const GUILD_DAILY_TARGET: BulkTarget = {
+  label: 'GuildDailyStats',
+  table: 'guild_daily_stats',
+  keys: [
+    { name: 'guildId', type: 'text' },
+    { name: 'dateKey', type: 'text' },
+  ],
+  counterColumns: GUILD_DAILY_COUNTERS,
+  createMany: (data) =>
+    prisma.guildDailyStat.createMany({ data: data as never, skipDuplicates: true }),
+};
+
 async function flushGuildDailyStats(): Promise<void> {
   const entries = [...guildDailyStatsBuffer.entries()];
   guildDailyStatsBuffer.clear();
 
-  const ops = entries.map(([key, data]) => {
+  const rows: BulkRow[] = [];
+  for (const [key, data] of entries) {
     const [guildId, dateKey] = key.split(':');
-    if (!guildId || !dateKey) return null;
-
-    const updateData: Record<string, unknown> = {};
-    const createData: Record<string, unknown> = { guildId, dateKey };
-
-    for (const [col, val] of Object.entries(data)) {
-      if (val !== undefined && val !== 0) {
-        updateData[col] = { increment: val };
-        createData[col] = val;
-      }
-    }
-
-    if (Object.keys(updateData).length === 0) return null;
-
-    return prisma.guildDailyStat.upsert({
-      where: { guildId_dateKey: { guildId, dateKey } },
-      update: updateData as never,
-      create: createData as never,
-    });
-  }).filter((op) => op !== null);
-
-  if (ops.length > 0) {
-    await prisma.$transaction(ops).catch((error) => {
-      logger.error('Analytics', 'Error flushing GuildDailyStats batch:', error);
-    });
+    if (!guildId || !dateKey) continue;
+    const row = buildBulkRow([guildId, dateKey], GUILD_DAILY_COUNTERS, data);
+    if (row) rows.push(row);
   }
+
+  await flushBulk(GUILD_DAILY_TARGET, rows);
 }
+
+const GUILD_HOURLY_COUNTERS = [
+  'messagesCount',
+  'voiceMinutes',
+  'joinsCount',
+  'leavesCount',
+  'reactionsCount',
+  'threadsCount',
+] as const;
+
+const GUILD_HOURLY_TARGET: BulkTarget = {
+  label: 'GuildHourlyStats',
+  table: 'guild_hourly_stats',
+  keys: [
+    { name: 'guildId', type: 'text' },
+    { name: 'dateKey', type: 'text' },
+    { name: 'hour', type: 'int' },
+  ],
+  counterColumns: GUILD_HOURLY_COUNTERS,
+  createMany: (data) =>
+    prisma.guildHourlyStat.createMany({ data: data as never, skipDuplicates: true }),
+};
 
 async function flushGuildHourlyStats(): Promise<void> {
   const entries = [...guildHourlyStatsBuffer.entries()];
   guildHourlyStatsBuffer.clear();
 
-  const ops = entries.map(([key, data]) => {
+  const rows: BulkRow[] = [];
+  for (const [key, data] of entries) {
     const [guildId, dateKey, hourStr] = key.split(':');
-    if (!guildId || !dateKey || !hourStr) return null;
-    const hour = parseInt(hourStr, 10);
-
-    const updateData: Record<string, unknown> = {};
-    const createData: Record<string, unknown> = { guildId, dateKey, hour };
-
-    for (const [col, val] of Object.entries(data)) {
-      if (val !== undefined && val !== 0) {
-        updateData[col] = { increment: val };
-        createData[col] = val;
-      }
-    }
-
-    if (Object.keys(updateData).length === 0) return null;
-
-    return prisma.guildHourlyStat.upsert({
-      where: { guildId_dateKey_hour: { guildId, dateKey, hour } },
-      update: updateData as never,
-      create: createData as never,
-    });
-  }).filter((op) => op !== null);
-
-  if (ops.length > 0) {
-    await prisma.$transaction(ops).catch((error) => {
-      logger.error('Analytics', 'Error flushing GuildHourlyStats batch:', error);
-    });
+    if (!guildId || !dateKey || !hourStr) continue;
+    const hour = Number.parseInt(hourStr, 10);
+    if (Number.isNaN(hour)) continue;
+    const row = buildBulkRow([guildId, dateKey, hour], GUILD_HOURLY_COUNTERS, data);
+    if (row) rows.push(row);
   }
+
+  await flushBulk(GUILD_HOURLY_TARGET, rows);
 }
+
+const CHANNEL_DAILY_COUNTERS = ['messagesCount', 'voiceMinutes'] as const;
+
+const CHANNEL_DAILY_TARGET: BulkTarget = {
+  label: 'ChannelDailyStats',
+  table: 'channel_daily_stats',
+  keys: [
+    { name: 'guildId', type: 'text' },
+    { name: 'channelId', type: 'text' },
+    { name: 'dateKey', type: 'text' },
+  ],
+  counterColumns: CHANNEL_DAILY_COUNTERS,
+  // `uniqueAuthors` est un décompte du jour, pas un delta : il s'écrase.
+  overwriteColumns: ['uniqueAuthors'],
+  createMany: (data) =>
+    prisma.channelDailyStat.createMany({ data: data as never, skipDuplicates: true }),
+};
 
 async function flushChannelDailyStats(): Promise<void> {
   const currentDateKey = getDateKey();
@@ -181,45 +347,22 @@ async function flushChannelDailyStats(): Promise<void> {
   const entries = [...channelDailyStatsBuffer.entries()];
   channelDailyStatsBuffer.clear();
 
-  const ops = entries.map(([key, data]) => {
+  const rows: BulkRow[] = [];
+  for (const [key, data] of entries) {
     const [guildId, channelId, dateKey] = key.split(':');
-    if (!guildId || !channelId || !dateKey) return null;
+    if (!guildId || !channelId || !dateKey) continue;
 
-    const count = data.messagesCount || 0;
-    const voiceMins = data.voiceMinutes || 0;
-    const authorsSet = channelDailyAuthors.get(key);
-    const uniqueCount = authorsSet ? authorsSet.size : 0;
-
-    const updateData: Record<string, unknown> = {};
-    const createData: Record<string, unknown> = { guildId, channelId, dateKey };
-
-    if (count > 0) {
-      updateData.messagesCount = { increment: count };
-      createData.messagesCount = count;
-    }
-    if (uniqueCount > 0) {
-      updateData.uniqueAuthors = uniqueCount;
-      createData.uniqueAuthors = uniqueCount;
-    }
-    if (voiceMins > 0) {
-      updateData.voiceMinutes = { increment: voiceMins };
-      createData.voiceMinutes = voiceMins;
-    }
-
-    if (Object.keys(updateData).length === 0) return null;
-
-    return prisma.channelDailyStat.upsert({
-      where: { guildId_channelId_dateKey: { guildId, channelId, dateKey } },
-      create: createData as never,
-      update: updateData as never,
-    });
-  }).filter((op) => op !== null);
-
-  if (ops.length > 0) {
-    await prisma.$transaction(ops).catch((error) => {
-      logger.error('Analytics', 'Error flushing ChannelDailyStats batch:', error);
-    });
+    const uniqueAuthors = channelDailyAuthors.get(key)?.size ?? 0;
+    const row = buildBulkRow(
+      [guildId, channelId, dateKey],
+      CHANNEL_DAILY_COUNTERS,
+      data,
+      { uniqueAuthors },
+    );
+    if (row) rows.push(row);
   }
+
+  await flushBulk(CHANNEL_DAILY_TARGET, rows);
 }
 
 const MEMBER_DAILY_COUNTERS = [
@@ -230,105 +373,63 @@ const MEMBER_DAILY_COUNTERS = [
   'repliesCount',
 ] as const;
 
-type MemberDailyCounter = (typeof MEMBER_DAILY_COUNTERS)[number];
-
-type MemberDailyRow = {
-  guildId: string;
-  userId: string;
-  dateKey: string;
-  increments: Record<MemberDailyCounter, number>;
+const MEMBER_DAILY_TARGET: BulkTarget = {
+  label: 'MemberDailyStats',
+  table: 'member_daily_stats',
+  keys: [
+    { name: 'guildId', type: 'text' },
+    { name: 'userId', type: 'text' },
+    { name: 'dateKey', type: 'text' },
+  ],
+  counterColumns: MEMBER_DAILY_COUNTERS,
+  createMany: (data) =>
+    prisma.memberDailyStat.createMany({ data: data as never, skipDuplicates: true }),
 };
-
-/**
- * Un serveur actif produit des milliers de lignes membre par flush. En
- * upserts unitaires, chaque lot de 50 ouvrait sa propre transaction : c'est
- * ce qui saturait Postgres et provoquait les timeouts. Ici un lot entier
- * tient en deux instructions, quel que soit le nombre de membres.
- */
-const MEMBER_DAILY_CHUNK_SIZE = 200;
-
-async function flushMemberDailyChunk(chunk: MemberDailyRow[]): Promise<void> {
-  const params: unknown[] = [];
-  const tuples = chunk.map(({ guildId, userId, dateKey, increments }) => {
-    const base = params.length;
-    params.push(guildId, userId, dateKey, ...MEMBER_DAILY_COUNTERS.map((col) => increments[col]));
-    const placeholders = [
-      `$${base + 1}::text`,
-      `$${base + 2}::text`,
-      `$${base + 3}::text`,
-      ...MEMBER_DAILY_COUNTERS.map((_, index) => `$${base + 4 + index}::int`),
-    ];
-    return `(${placeholders.join(', ')})`;
-  });
-
-  const valueColumns = ['guildId', 'userId', 'dateKey', ...MEMBER_DAILY_COUNTERS]
-    .map((col) => `"${col}"`)
-    .join(', ');
-  const setClause = MEMBER_DAILY_COUNTERS
-    .map((col) => `"${col}" = m."${col}" + v."${col}"`)
-    .join(', ');
-
-  await prisma.$transaction([
-    // Les lignes absentes sont créées à zéro d'abord : l'UPDATE qui suit n'a
-    // alors plus qu'à incrémenter, sans avoir à générer d'`id` cuid ni
-    // d'`updatedAt` en SQL brut.
-    prisma.memberDailyStat.createMany({
-      data: chunk.map(({ guildId, userId, dateKey }) => ({ guildId, userId, dateKey })),
-      skipDuplicates: true,
-    }),
-    prisma.$executeRawUnsafe(
-      `UPDATE member_daily_stats AS m
-       SET ${setClause}, "updatedAt" = NOW()
-       FROM (VALUES ${tuples.join(', ')}) AS v(${valueColumns})
-       WHERE m."guildId" = v."guildId" AND m."userId" = v."userId" AND m."dateKey" = v."dateKey"`,
-      ...params,
-    ),
-  ]);
-}
 
 async function flushMemberDailyStats(): Promise<void> {
   const entries = [...memberDailyStatsBuffer.entries()];
   memberDailyStatsBuffer.clear();
 
-  const rows: MemberDailyRow[] = [];
+  const rows: BulkRow[] = [];
   for (const [key, data] of entries) {
     const [guildId, userId, dateKey] = key.split(':');
     if (!guildId || !userId || !dateKey) continue;
-
-    const increments = {
-      messagesCount: 0,
-      voiceMinutes: 0,
-      reactionsCount: 0,
-      threadsCreated: 0,
-      repliesCount: 0,
-    };
-    let hasIncrement = false;
-    for (const col of MEMBER_DAILY_COUNTERS) {
-      const value = data[col];
-      if (value) {
-        increments[col] = value;
-        hasIncrement = true;
-      }
-    }
-
-    if (hasIncrement) rows.push({ guildId, userId, dateKey, increments });
+    const row = buildBulkRow([guildId, userId, dateKey], MEMBER_DAILY_COUNTERS, data);
+    if (row) rows.push(row);
   }
 
-  for (let i = 0; i < rows.length; i += MEMBER_DAILY_CHUNK_SIZE) {
-    const chunk = rows.slice(i, i + MEMBER_DAILY_CHUNK_SIZE);
-    await flushMemberDailyChunk(chunk).catch((error) => {
-      logger.error('Analytics', `Error flushing MemberDailyStats batch (offset ${i}):`, error);
-    });
-  }
+  await flushBulk(MEMBER_DAILY_TARGET, rows);
+}
+
+/**
+ * Les quatre flushes partaient ensemble et le minuteur en relançait un jeu
+ * complet toutes les 60 s sans se soucier du précédent : sur une base lente,
+ * les flushes s'empilaient et se disputaient le pool. Ils s'enchaînent
+ * désormais, et un flush déjà en vol est rejoint plutôt que doublé.
+ */
+let flushInFlight: Promise<void> | null = null;
+
+async function runAnalyticsFlush(): Promise<void> {
+  await flushGuildDailyStats();
+  await flushGuildHourlyStats();
+  await flushChannelDailyStats();
+  await flushMemberDailyStats();
 }
 
 export async function flushAllAnalyticsStats(): Promise<void> {
-  await Promise.all([
-    flushGuildDailyStats(),
-    flushGuildHourlyStats(),
-    flushChannelDailyStats(),
-    flushMemberDailyStats(),
-  ]);
+  if (flushInFlight) return flushInFlight;
+
+  flushInFlight = runAnalyticsFlush()
+    .catch((error) => {
+      // Le minuteur appelle sans `await` : une exception qui remonterait ici
+      // deviendrait un rejet non géré, donc un arrêt du bot.
+      logger.error('Analytics', 'Error during analytics flush:', error);
+    })
+    .finally(() => {
+      flushInFlight = null;
+    });
+
+  return flushInFlight;
 }
 
 /**

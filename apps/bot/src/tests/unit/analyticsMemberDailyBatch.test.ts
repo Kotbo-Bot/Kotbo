@@ -12,17 +12,24 @@ import path from 'node:path';
 const findUnique = mock((_args?: unknown) => Promise.resolve({ id: 'guild-batch', analyticsEnabled: true }));
 const upsert = mock((_args?: unknown) => Promise.resolve({ id: 'row' }));
 const createMany = mock((_args?: unknown) => Promise.resolve({ count: 0 }));
+const otherCreateMany = mock((_args?: unknown) => Promise.resolve({ count: 0 }));
 const executeRawUnsafe = mock((_sql?: string, ..._params: unknown[]) => Promise.resolve(0));
 
 const mockDb = {
   guild: { findUnique },
-  guildDailyStat: { upsert },
-  guildHourlyStat: { upsert },
-  channelDailyStat: { upsert },
+  guildDailyStat: { upsert, createMany: otherCreateMany },
+  guildHourlyStat: { upsert, createMany: otherCreateMany },
+  channelDailyStat: { upsert, createMany: otherCreateMany },
   memberDailyStat: { upsert, createMany },
   $executeRawUnsafe: executeRawUnsafe,
   $transaction: mock((ops: unknown[]) => Promise.all(ops as Promise<unknown>[])),
 };
+
+/** Les quatre tables passent par le même chemin brut : on isole celle du test. */
+const memberRawCalls = () =>
+  executeRawUnsafe.mock.calls.filter(
+    (call) => typeof call[0] === 'string' && call[0].includes('member_daily_stats'),
+  ) as Array<[string, ...unknown[]]>;
 
 const dbPath = path.resolve(import.meta.dir, '../../utils/db.ts');
 const dbJsPath = path.resolve(import.meta.dir, '../../utils/db.js');
@@ -36,6 +43,7 @@ type CreateManyArgs = { data: Array<{ guildId: string; userId: string; dateKey: 
 
 beforeEach(async () => {
   createMany.mockClear();
+  otherCreateMany.mockClear();
   executeRawUnsafe.mockClear();
   upsert.mockClear();
   await cache.invalidateGuild('guild-batch');
@@ -50,7 +58,7 @@ describe('flush des statistiques membre', () => {
     await flushAllAnalyticsStats();
 
     expect(createMany).toHaveBeenCalledTimes(1);
-    expect(executeRawUnsafe).toHaveBeenCalledTimes(1);
+    expect(memberRawCalls()).toHaveLength(1);
 
     const args = createMany.mock.calls[0]?.[0] as CreateManyArgs;
     expect(args.data).toHaveLength(120);
@@ -67,7 +75,7 @@ describe('flush des statistiques membre', () => {
     await flushAllAnalyticsStats();
 
     expect(createMany).toHaveBeenCalledTimes(2);
-    expect(executeRawUnsafe).toHaveBeenCalledTimes(2);
+    expect(memberRawCalls()).toHaveLength(2);
   });
 
   test('agrège les messages d\'un même membre en une seule ligne', async () => {
@@ -80,7 +88,7 @@ describe('flush des statistiques membre', () => {
     const args = createMany.mock.calls[0]?.[0] as CreateManyArgs;
     expect(args.data).toHaveLength(1);
 
-    const [, ...params] = executeRawUnsafe.mock.calls[0] as [string, ...unknown[]];
+    const [, ...params] = memberRawCalls()[0]!;
     // (guildId, userId, dateKey) puis les cinq compteurs, messagesCount en tête.
     expect(params.slice(0, 2)).toEqual(['guild-batch', 'membre-bavard']);
     expect(params[3]).toBe(5);
@@ -90,6 +98,7 @@ describe('flush des statistiques membre', () => {
     await flushAllAnalyticsStats();
 
     expect(createMany).not.toHaveBeenCalled();
+    expect(otherCreateMany).not.toHaveBeenCalled();
     expect(executeRawUnsafe).not.toHaveBeenCalled();
   });
 });

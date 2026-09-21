@@ -17,10 +17,10 @@ const createMany = mock((_args?: unknown) => Promise.resolve({ count: 0 }));
 const executeRawUnsafe = mock((_sql?: string, ..._params: unknown[]) => Promise.resolve(0));
 const mockDb = {
   guild: { findUnique },
-  guildDailyStat: { upsert },
-  guildHourlyStat: { upsert },
-  channelDailyStat: { upsert },
-  // Le flush des stats membre passe par createMany + UPDATE brut, pas par upsert.
+  // Les flushes passent tous par createMany + UPDATE brut, pas par upsert.
+  guildDailyStat: { upsert, createMany },
+  guildHourlyStat: { upsert, createMany },
+  channelDailyStat: { upsert, createMany },
   memberDailyStat: { upsert, createMany },
   $executeRawUnsafe: executeRawUnsafe,
   $transaction: mock((ops: unknown[]) => Promise.resolve(ops)),
@@ -85,6 +85,8 @@ describe('collecte désactivée', () => {
     await flushAllAnalyticsStats();
 
     expect(upsert).not.toHaveBeenCalled();
+    expect(createMany).not.toHaveBeenCalled();
+    expect(executeRawUnsafe).not.toHaveBeenCalled();
     expect(mockDb.$transaction).not.toHaveBeenCalled();
   });
 });
@@ -96,6 +98,7 @@ describe('collecte activée', () => {
     await trackMessage('guild-analytics', 'salon-1', 'membre-1');
     await flushAllAnalyticsStats();
 
-    expect(upsert).toHaveBeenCalled();
+    expect(createMany).toHaveBeenCalled();
+    expect(executeRawUnsafe).toHaveBeenCalled();
   });
 });
