@@ -375,14 +375,14 @@ export function registerRpgTools(ctx: McpToolContext) {
             const from = asDifficulty(config.shopDifficulty);
             const result = await applyShopDifficulty(guildId, { from, to: difficulty, dryRun: preview });
             if (!preview) await audit(key_name, 'Difficulté des prix RPG MCP', `${from} vers ${difficulty}`, `${result.updated} prix modifié(s)`);
-            return ok({ ok: true, from, to: difficulty, preview, ...result });
+            return ok({ ok: true, from, to: difficulty, dryRun: preview, ...result });
           }
 
           const isBoss = target === 'boss';
           const from = asDifficulty(isBoss ? config.bossDifficulty : config.monsterDifficulty);
           const result = await applyBestiaryDifficulty(guildId, { isBoss, from, to: difficulty, dryRun: preview });
           if (!preview) await audit(key_name, 'Difficulté du bestiaire RPG MCP', `${isBoss ? 'Boss' : 'Monstres'} : ${from} vers ${difficulty}`, `${result.updated} fiche(s) réécrite(s)`);
-          return ok({ ok: true, from, to: difficulty, preview, ...result });
+          return ok({ ok: true, from, to: difficulty, dryRun: preview, ...result });
         } catch (e) {
           return fail(e);
         }
