@@ -1,5 +1,7 @@
 /** Routes dashboard du module `logs`. */
 import prisma from '../../../../utils/db.js';
+import { cache } from '../../../../utils/cache.js';
+import { enregistrerConfigsEvenements } from '../../../../utils/logEventConfig.js';
 import { logger } from '../../../../utils/logger.js';
 import { getGuildName, json, pushAudit, readJsonBody, resolveFeatureAccessMap } from '../../../shared.js';
 import { type ModuleRouteContext } from './_shared.js';
@@ -90,22 +92,39 @@ export async function handleLogsRoutes(ctx: ModuleRouteContext): Promise<boolean
           return true;
         }
 
-        await prisma.$transaction(
-          body.configs.map(c => prisma.guildLogEventConfig.upsert({
-            where: {
-              guildId_eventType: { guildId, eventType: c.eventType }
+        // L'enregistrement et l'invalidation sont soudés dans la même
+        // fonction : jusqu'ici cette route écrivait en base sans jamais
+        // toucher au cache, et la configuration restait périmée jusqu'à
+        // soixante secondes après une sauvegarde.
+        await enregistrerConfigsEvenements(
+          {
+            enregistrer: async (configs) => {
+              await prisma.$transaction(
+                configs.map(c => prisma.guildLogEventConfig.upsert({
+                  where: {
+                    guildId_eventType: { guildId, eventType: c.eventType }
+                  },
+                  update: {
+                    enabled: c.enabled,
+                    channelId: c.channelId
+                  },
+                  create: {
+                    guildId,
+                    eventType: c.eventType,
+                    enabled: c.enabled,
+                    channelId: c.channelId
+                  }
+                }))
+              );
             },
-            update: {
-              enabled: c.enabled,
-              channelId: c.channelId ? c.channelId : null
-            },
-            create: {
-              guildId,
-              eventType: c.eventType,
-              enabled: c.enabled,
-              channelId: c.channelId ? c.channelId : null
-            }
-          }))
+            oublier: (cle) => cache.delete(cle),
+          },
+          guildId,
+          body.configs.map(c => ({
+            eventType: c.eventType,
+            enabled: c.enabled,
+            channelId: c.channelId ? c.channelId : null,
+          })),
         );
 
         await pushAudit(guildId, {

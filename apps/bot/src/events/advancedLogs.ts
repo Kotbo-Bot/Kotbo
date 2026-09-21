@@ -21,6 +21,7 @@ import prisma from '../utils/db.js';
 import { logger } from '../utils/logger.js';
 import { queueAuditLog } from '../utils/auditLogger.js';
 import { cache, getCachedGuild } from '../utils/cache.js';
+import { cleConfigEvenement } from '../utils/logEventConfig.js';
 import { recordStaffActivity, syncStaffHierarchyMembership } from '../services/staff/staffManagementService.js';
 import { resolveOnlineMembersCount } from '../services/core/presenceDetectionService.js';
 import { syncGuildInvites, markInviteAsDeleted, recordInvitedMemberLeave } from '../services/analytics/inviteService.js';
@@ -506,7 +507,7 @@ async function sendLogEmbed(
   }
 
   // 1. Fetch event config from cache/database
-  const cacheKey = `guild:${guild.id}:log_event_config:${eventType}`;
+  const cacheKey = cleConfigEvenement(guild.id, eventType);
   let config = await cache.get<GuildLogEventConfig | { disabledDummy: true }>(cacheKey);
   if (!config) {
     config = await prisma.guildLogEventConfig.findUnique({
