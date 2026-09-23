@@ -2713,50 +2713,39 @@ describe('Réécriture du panneau : anciens messages et composants V2', () => {
     return channel;
   }
 
-  test('un panneau d\'avant les composants V2 est remplacé, jamais édité', async () => {
-    // Discord refuse `MESSAGE_CANNOT_USE_LEGACY_FIELDS_WITH_COMPONENTS_V2` :
-    // un message qui porte encore un `content` ne peut pas être édité vers du
-    // V2, et la conversion globale du dépôt ne traite que le cas inverse. Vu
-    // en staging sur un salon dont le panneau datait d'avant la refonte.
+  test('le panneau est mis a jour, jamais supprime ni repose', async () => {
+    // Le panneau de base est poste une fois, a la creation du salon. Le
+    // supprimer pour en reposter un laissait le salon SANS AUCUN panneau des que
+    // l'envoi echouait - et il echoue precisement quand le mode d'ecriture ferme
+    // le chat, puisque le bot n'a pas de surcharge a lui.
     const ancien = fauxPanneau(false);
     const dejaV2 = fauxPanneau(true);
-    const recalcitrant = fauxPanneau(false, false);
 
     const salonAncien = salonAvecPanneau('910000000000000001', ancien);
     const salonV2 = salonAvecPanneau('910000000000000002', dejaV2);
-    const salonBloque = salonAvecPanneau('910000000000000003', recalcitrant);
 
     const { client, listeners } = fakeClient();
     registerTempVoiceListener(client);
     const guild = fakeGuild(new Map());
 
-    // N'importe quelle interaction programme la réécriture : les trois
-    // minuteurs courent ensemble, une seule attente les couvre.
-    for (const salon of [salonAncien, salonV2, salonBloque]) {
+    for (const salon of [salonAncien, salonV2]) {
       const { interaction } = fakeButtonInteraction('salon', { channel: salon, guild, member: null });
       await listeners.get(Events.InteractionCreate)?.(interaction);
     }
 
-    // La réécriture part sur le front montant : il suffit de laisser la boucle
-    // d'événements terminer les envois, plus d'attendre une fenêtre entière.
     await new Promise((resolve) => setTimeout(resolve, 400));
 
-    // 1. L'ancien panneau part et un neuf le remplace.
-    expect(ancien.delete).toHaveBeenCalled();
-    expect(ancien.edit).not.toHaveBeenCalled();
-    expect(salonAncien.send).toHaveBeenCalledTimes(1);
-
-    // 2. Un panneau déjà en V2 se contente d'une édition.
+    // Les deux sont edites, quelle que soit leur forme.
+    expect(ancien.edit).toHaveBeenCalled();
     expect(dejaV2.edit).toHaveBeenCalled();
+
+    // Et aucun n'est supprime, ni remplace par un envoi.
+    expect(ancien.delete).not.toHaveBeenCalled();
     expect(dejaV2.delete).not.toHaveBeenCalled();
+    expect(salonAncien.send).not.toHaveBeenCalled();
     expect(salonV2.send).not.toHaveBeenCalled();
 
-    // 3. Suppression refusée : surtout ne pas poster un second panneau à côté
-    // du premier - `retrouverPanneau` prendrait ensuite le premier venu.
-    expect(recalcitrant.delete).toHaveBeenCalled();
-    expect(salonBloque.send).not.toHaveBeenCalled();
-
-    for (const id of ['910000000000000001', '910000000000000002', '910000000000000003']) {
+    for (const id of ['910000000000000001', '910000000000000002']) {
       tempChannels.delete(id);
     }
   }, 10_000);
@@ -3219,5 +3208,52 @@ describe('Verite des presents : le cache de discord.js ment par omission', () =>
 
     tempChannels.delete(CHANNEL);
     guildConfig = null;
+  }, 10_000);
+});
+
+describe('Les trois portes : ouvrir a cote, ou reprendre le sous-panneau', () => {
+  async function cliquerPorte(depuisEphemere: boolean) {
+    guildConfig = { tempVoiceEnabled: true, baseStaffRoleId: null, moderatorRoleId: null, testStaffRoleId: null };
+    const { channel } = fakeChannel();
+    const { client, listeners } = fakeClient();
+    registerTempVoiceListener(client);
+    tempChannels.set(CHANNEL, { creatorId: OWNER });
+
+    const scene = fakeButtonInteraction('salon', {
+      channel,
+      guild: fakeGuild(new Map()),
+      member: fakeTarget(OWNER, false),
+    });
+    (scene.interaction as { update?: unknown }).update = mock(async () => undefined);
+    if (depuisEphemere) {
+      (scene.interaction as { message: Record<string, unknown> }).message = {
+        flags: { has: (drapeau: number) => drapeau === MessageFlags.Ephemeral },
+        edit: mock(async () => undefined),
+      };
+    }
+
+    await listeners.get(Events.InteractionCreate)?.(scene.interaction);
+
+    tempChannels.delete(CHANNEL);
+    guildConfig = null;
+    return scene.interaction as unknown as {
+      reply: { mock: { calls: unknown[][] } };
+      update: { mock: { calls: unknown[][] } };
+    };
+  }
+
+  test('depuis le panneau public, un ephemere s ouvre a cote', async () => {
+    // L'editer effacerait le panneau pour tout le serveur.
+    const interaction = await cliquerPorte(false);
+    expect(interaction.reply.mock.calls.length).toBeGreaterThan(0);
+    expect(interaction.update.mock.calls).toHaveLength(0);
+  }, 10_000);
+
+  test('depuis un sous-panneau, le message existant est repris', async () => {
+    // C'est le cas du bouton « Retour » du mode compact : sans cela, il empilait
+    // un ephemere de plus a chaque retour - exactement ce que ce mode evite.
+    const interaction = await cliquerPorte(true);
+    expect(interaction.update.mock.calls.length).toBeGreaterThan(0);
+    expect(interaction.reply.mock.calls).toHaveLength(0);
   }, 10_000);
 });

@@ -844,16 +844,24 @@ async function retrouverPanneau(channel: VoiceChannel, entree: EntreeSalonTempor
 }
 
 /**
- * Un message posté avant que le dépôt ne passe aux composants V2 porte encore
- * un `content`. Discord refuse d'éditer un tel message vers du V2 tant que ce
- * `content` est là (`MESSAGE_CANNOT_USE_LEGACY_FIELDS_WITH_COMPONENTS_V2`), et
- * la conversion globale de `patchV2` ne sait pas le retirer : elle traite le cas
- * inverse, un message déjà V2 édité avec des champs anciens.
+ * Le bot garde le droit d'écrire dans le salon, quel que soit le mode.
  *
- * Un panneau d'avant la refonte est donc remplacé plutôt que réécrit.
+ * Il n'a aucune surcharge à lui : son droit d'écrire vient de `@everyone`, que
+ * trois des quatre modes refusent, et que le verrou refuse aussi. Le bot se
+ * muselait donc lui-même, et ne pouvait plus poster ni panneau, ni avis, ni
+ * carte de décision — dans un salon dont il est pourtant le seul à tenir
+ * l'affichage.
  */
-function panneauEnV2(message: Message): boolean {
-  return Boolean(message.flags?.has?.(MessageFlags.IsComponentsV2));
+async function assurerBotPeutEcrire(channel: VoiceChannel): Promise<void> {
+  const moi = channel.guild?.members?.me;
+  if (!moi?.id) return;
+
+  // On n'agit que sur un constat, jamais sur une supposition : sans lecture des
+  // permissions effectives, poser une surcharge reviendrait a ecrire au hasard.
+  const effectives = channel.permissionsFor?.(moi);
+  if (!effectives || effectives.has(PermissionFlagsBits.SendMessages)) return;
+
+  await poserSurcharge(channel, moi.id, { SendMessages: true });
 }
 
 async function reecrirePanneau(channel: VoiceChannel): Promise<void> {
@@ -867,12 +875,13 @@ async function reecrirePanneau(channel: VoiceChannel): Promise<void> {
 
   const panneau = await construirePanneau(channel, entree);
 
-  if (!panneauEnV2(message)) {
-    await remplacerPanneauAncien(channel, entree, message, panneau);
-    return;
-  }
-
-  // La mention est repassée à chaque réécriture : une édition remplace tous les
+  // Le panneau est posté une fois, à la création du salon, et **seulement mis à
+  // jour** ensuite. Il n'est jamais supprimé ni reposté : une suppression suivie
+  // d'un envoi qui échoue laisse le salon sans aucun panneau, et l'envoi échoue
+  // précisément quand le chat est fermé. Éditer son propre message, lui,
+  // n'exige aucune permission d'écriture — c'est le chemin qui tient toujours.
+  //
+  // La mention est repassée à chaque fois : une édition remplace tous les
   // composants, et sans elle la ligne « @propriétaire » disparaissait au premier
   // changement. `patchV2` la replie en `TextDisplay` et neutralise la
   // notification, donc personne n'est repingé.
@@ -881,35 +890,6 @@ async function reecrirePanneau(channel: VoiceChannel): Promise<void> {
   });
 }
 
-/**
- * Le remplacement se fait dans cet ordre : supprimer, puis poster. L'inverse
- * laisserait deux panneaux côte à côte si la suppression échouait, et
- * `retrouverPanneau` prendrait le premier venu au passage suivant.
- */
-async function remplacerPanneauAncien(
-  channel: VoiceChannel,
-  entree: EntreeSalonTemporaire,
-  ancien: Message,
-  panneau: PanneauRendu,
-): Promise<void> {
-  const supprime = await ancien.delete().then(() => true).catch((err: unknown) => {
-    logger.warn('TempVoice', `L'ancien panneau de ${channel.id} n'a pas pu être retiré :`, err);
-    return false;
-  });
-  // Échec de la suppression : on garde l'ancien panneau plutôt que d'en poster
-  // un second. Ses boutons répondent — leurs identifiants restent acceptés — et
-  // le passage suivant réessaiera.
-  if (!supprime) return;
-
-  entree.panneauId = undefined;
-  const poste = await channel
-    .send({ content: `<@${entree.creatorId}>`, ...panneau })
-    .catch((err: unknown) => {
-      logger.warn('TempVoice', `Le panneau de ${channel.id} n'a pas pu être reposté :`, err);
-      return null;
-    });
-  if (poste?.id) entree.panneauId = poste.id;
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Mode d'écriture : application sur Discord
@@ -1029,6 +1009,10 @@ async function appliquerModeEcriture(
   // refusé entre les deux le laisserait muet chez lui.
   await channel.permissionOverwrites.edit(entree.creatorId, surcharges.proprietaire);
   await channel.permissionOverwrites.edit(guildId, surcharges.everyone);
+
+  // « Moi seul », « Personne » et « ceux qui sont en vocal » refusent
+  // `SendMessages` a @everyone - le bot compris, faute de surcharge a lui.
+  await assurerBotPeutEcrire(channel);
 
   const presents = [...(channel.members?.keys() ?? [])];
   const transition = transitionModeEcriture(
@@ -1588,9 +1572,18 @@ async function createTempChannel(
   // notification, un embed n'en produisant aucune.
   const entree = tempChannels.get(tempChannel.id) ?? { creatorId: member.id };
   const panneau = await construirePanneau(tempChannel, entree);
+
+  // Une categorie qui refuse `SendMessages` a @everyone prive aussi le bot, qui
+  // n'a pas de surcharge a lui : le panneau ne serait jamais poste, et le salon
+  // naitrait sans aucune commande.
+  await assurerBotPeutEcrire(tempChannel);
+
   const poste = await tempChannel
     .send({ content: `<@${member.id}>`, ...panneau })
-    .catch(() => null);
+    .catch((err: unknown) => {
+      logger.warn('TempVoice', `Le panneau de ${tempChannel.id} n'a pas pu etre poste :`, err);
+      return null;
+    });
   if (poste?.id) entree.panneauId = poste.id;
 
   logger.info('TempVoice', `Salon créé : ${tempChannel.name} (${tempChannel.id})`);
@@ -2674,6 +2667,24 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
   const retourVers = ctx.ctxp.panneauCompact ? ONGLET_DORIGINE[action] ?? null : null;
   const reply = (content: string) => respond(interaction, content, retourVers);
 
+  /**
+   * Ouvre une des trois portes du panneau.
+   *
+   * Depuis le panneau public, un ephemere s'ouvre a cote. Depuis un
+   * sous-panneau - c'est le cas du bouton « Retour » - il faut reprendre le
+   * message existant : sinon le mode compact, dont toute la promesse est de
+   * n'avoir qu'un seul ephemere, en empilait un de plus a chaque retour.
+   */
+  const ouvrirPorte = async (rendu: PanneauRendu): Promise<void> => {
+    if (surMessageEphemere(interaction)) {
+      await (interaction as unknown as { update: (o: unknown) => Promise<unknown> })
+        .update(rendu)
+        .catch(() => null);
+      return;
+    }
+    await interaction.reply({ ...rendu, ...ephemeral });
+  };
+
   // ─── Menu « Qui peut écrire » ───
   // L'action est comparée avant le type : un `switch` sur le type d'interaction
   // coûterait un appel de plus à chaque clic, pour un identifiant qui dit déjà
@@ -2753,17 +2764,17 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
     switch (action) {
       // ─── Les trois portes du panneau, plus la quatrième ───
       case 'salon': {
-        await interaction.reply({ ...(await panneauSalon(channel, cache, ctx.ctxp)), ...ephemeral });
+        await ouvrirPorte(await panneauSalon(channel, cache, ctx.ctxp));
         return;
       }
 
       case 'membres': {
-        await interaction.reply({ ...(await panneauMembres(channel, cache, ctx.ctxp)), ...ephemeral });
+        await ouvrirPorte(await panneauMembres(channel, cache, ctx.ctxp));
         return;
       }
 
       case 'propriete': {
-        await interaction.reply({ ...panneauPropriete(channel, cache, ctx.ctxp), ...ephemeral });
+        await ouvrirPorte(panneauPropriete(channel, cache, ctx.ctxp));
         return;
       }
 
