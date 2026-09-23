@@ -834,27 +834,28 @@ function resteEnClair(etat: EtatSalon): string {
   return `${etat.placesLibres} place${etat.placesLibres > 1 ? 's' : ''} libre${etat.placesLibres > 1 ? 's' : ''}`;
 }
 
-/** « 0 banni », « 2 bannis » : l'accord se fait, sinon la carte parle mal. */
-function compte(nombre: number, singulier: string, pluriel = `${singulier}s`): string {
-  return `${nombre} ${nombre > 1 ? pluriel : singulier}`;
-}
-
 /**
- * La carte d'etat, en trois lignes.
+ * La carte d'etat, telle que la maquette la dessine.
  *
- * Elle en faisait quatorze sur telephone : six champs « inline » se replient en
- * colonne unique des que l'ecran est etroit, et le panneau mangeait tout
- * l'ecran pour six valeurs courtes. Deux d'entre eux — l'etat et les places —
- * repetaient mot pour mot ce que le titre disait deja.
+ * Les six valeurs sont dans la DESCRIPTION, pas dans des champs. Discord ne
+ * range les champs « inline » en trois colonnes que sur ordinateur : sur
+ * telephone il les empile, un par ligne. Un meme embed rendait donc deux
+ * dispositions differentes, et la version telephone mangeait tout l'ecran.
  *
- * Tout tient donc dans la description : les mentions y restent cliquables (un
- * titre, lui, les afficherait en brut), rien ne se replie, et la hauteur est la
- * meme sur ordinateur et sur telephone.
+ * Une ligne par valeur, partout : c'est la seule disposition que Discord rend a
+ * l'identique sur les deux, et elle reprend les libelles, l'ordre et les icones
+ * de la maquette.
  */
 function carteEtat(etat: EtatSalon): EmbedBuilder {
   const mode = LIBELLES_MODES_ECRITURE[etat.modeEcriture];
-  const places = `${I.profile} ${etat.occupants} / ${etat.limite > 0 ? etat.limite : '∞'}`;
-  const reserve = etat.reserveRoleId ? `${I.shield} <@&${etat.reserveRoleId}>` : `${I.shield} Non réservé`;
+  const lignes: Array<[string, string]> = [
+    ['État', `${etat.verrouille ? I.lock : I.unlock} ${etat.verrouille ? 'Verrouillé' : 'Ouvert'}`],
+    ['Places', `${I.profile} ${etat.occupants} / ${etat.limite > 0 ? etat.limite : '∞'}`],
+    ['Écriture', `${iconeModeCarte(etat.modeEcriture)} ${mode.libelle}`],
+    ['Autorisés', `${I.check} ${etat.autorises}`],
+    ['Bannis', `${I.ban} ${etat.bannis}`],
+    ['Réservé', etat.reserveRoleId ? `${I.shield} <@&${etat.reserveRoleId}>` : `${I.shield} Non`],
+  ];
 
   return new EmbedBuilder()
     .setTitle(`${etat.verrouille ? I.lock : I.unlock} ${etat.verrouille ? 'Verrouillé' : 'Ouvert'} · ${resteEnClair(etat)}`)
@@ -864,8 +865,7 @@ function carteEtat(etat: EtatSalon): EmbedBuilder {
     .setDescription([
       `${I.voice} Salon de <@${etat.proprietaireId}>`,
       '',
-      `${places} · ${iconeModeCarte(etat.modeEcriture)} ${mode.libelle}`,
-      `${I.check} ${compte(etat.autorises, 'autorisé')} · ${I.ban} ${compte(etat.bannis, 'banni')} · ${reserve}`,
+      ...lignes.map(([nom, valeur]) => `**${nom}** · ${valeur}`),
     ].join('\n'))
     .setColor(etat.verrouille ? COULEUR_FERME : COULEUR_OUVERT)
     .setFooter({ text: 'Kotbo · Salon temporaire' })
