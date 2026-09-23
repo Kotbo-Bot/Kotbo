@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import { PermissionFlagsBits } from 'discord.js';
 import {
+  normaliserHistoriqueRenommage,
+  normaliserEtatDemandes,
   MAX_ROLES_RESERVABLES,
   planDebordement,
   membresSansLeRole,
@@ -1157,6 +1159,102 @@ describe('Reservation : roles prevus et sort de ceux qui restent', () => {
       expect(plan.action).toBe('deconnecter');
       expect(plan.membres).toEqual(['a', 'b']);
       expect(plan.repliSurDeconnexion).toBe(false);
+    });
+  });
+});
+
+describe('Persistance du panneau : ce qui mourait avec le processus', () => {
+  const G = 'g1';
+  const C = 'c1';
+  const T0 = 1_700_000_000_000;
+
+  describe('RegistreDemandesAcces : export et import', () => {
+    test('une demande et un silence vivants font l aller-retour', () => {
+      const registre = new RegistreDemandesAcces();
+      registre.demander(G, C, 'a', T0);
+      registre.resoudre(G, C, 'b', 'refusee', T0);
+
+      const etat = registre.exporterSalon(G, C, T0);
+      expect(etat.demandes.map((d) => d.userId)).toEqual(['a']);
+      expect(etat.silences.map((v) => v.userId)).toEqual(['b']);
+
+      const neuf = new RegistreDemandesAcces();
+      neuf.importerSalon(G, C, etat, T0);
+      expect(neuf.demandeEnAttente(G, C, 'a', T0)?.userId).toBe('a');
+      expect(neuf.estEnSilence(G, C, 'b', T0)).toBe(true);
+    });
+
+    test('ce qui a expire pendant l arret n est ni exporte ni recharge', () => {
+      // Le temps a continue de passer sans le bot : un silence de dix minutes ne
+      // se remet pas a courir parce que le processus a redemarre.
+      const registre = new RegistreDemandesAcces();
+      registre.demander(G, C, 'a', T0);
+      registre.resoudre(G, C, 'b', 'refusee', T0);
+
+      const plusTard = T0 + 60 * 60_000;
+      expect(registre.exporterSalon(G, C, plusTard)).toEqual({ demandes: [], silences: [] });
+
+      // Meme en rechargeant un etat ancien, rien de perime ne revit.
+      const neuf = new RegistreDemandesAcces();
+      neuf.importerSalon(G, C, registre.exporterSalon(G, C, T0), plusTard);
+      expect(neuf.taille).toEqual({ demandes: 0, silences: 0 });
+    });
+
+    test('un salon n exporte que le sien', () => {
+      const registre = new RegistreDemandesAcces();
+      registre.demander(G, C, 'a', T0);
+      registre.demander(G, 'autre-salon', 'z', T0);
+
+      expect(registre.exporterSalon(G, C, T0).demandes.map((d) => d.userId)).toEqual(['a']);
+    });
+  });
+
+  describe('normaliserEtatDemandes : la colonne JSON n est validee par personne', () => {
+    test('tout ce qui n est pas exploitable est ignore, jamais devine', () => {
+      for (const brut of [null, undefined, 42, 'texte', [], { demandes: 'non' }]) {
+        expect(normaliserEtatDemandes(brut)).toEqual({ demandes: [], silences: [] });
+      }
+    });
+
+    test('les entrees incompletes sont ecartees une par une', () => {
+      const etat = normaliserEtatDemandes({
+        demandes: [
+          { userId: 'ok', demandeeA: T0, expireA: T0 + 1000 },
+          { userId: '', demandeeA: T0, expireA: T0 + 1000 },
+          { userId: 'sansInstant' },
+          { demandeeA: T0, expireA: T0 + 1000 },
+          { userId: 'nan', demandeeA: Number.NaN, expireA: T0 },
+        ],
+        silences: [
+          { userId: 'ok2', libereA: T0 + 1000 },
+          { userId: 'ko', libereA: 'bientot' },
+        ],
+      });
+
+      expect(etat.demandes.map((d) => d.userId)).toEqual(['ok']);
+      expect(etat.silences.map((v) => v.userId)).toEqual(['ok2']);
+    });
+  });
+
+  describe('normaliserHistoriqueRenommage', () => {
+    test('un horodatage dans le futur est ecarte, pas corrige', () => {
+      // Il bloquerait le bouton pour toujours, alors que le quota se
+      // reconstitue de lui-meme en dix minutes.
+      const historique = normaliserHistoriqueRenommage([T0 - 1000, T0 + 99_999_999], T0);
+      expect(historique).toEqual([T0 - 1000]);
+    });
+
+    test('ce qui n est pas une liste d instants rend une liste vide', () => {
+      for (const brut of [null, 'x', 42, {}, ['a', null, Number.POSITIVE_INFINITY]]) {
+        expect(normaliserHistoriqueRenommage(brut, T0)).toEqual([]);
+      }
+    });
+
+    test('la liste est triee et bornee', () => {
+      const brut = Array.from({ length: 50 }, (_, i) => T0 - i * 1000);
+      const historique = normaliserHistoriqueRenommage(brut, T0);
+      expect(historique.length).toBeLessThanOrEqual(RENOMMAGES_PAR_FENETRE * 2);
+      expect([...historique].sort((a, b) => a - b)).toEqual(historique);
     });
   });
 });

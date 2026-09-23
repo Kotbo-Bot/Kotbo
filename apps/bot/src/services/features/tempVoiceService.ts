@@ -1100,10 +1100,122 @@ export class RegistreDemandesAcces {
     return retires;
   }
 
+  /**
+   * Ce qu'il faut réécrire en base pour ce salon : les demandes encore vivantes
+   * et les silences non expirés, rien de plus.
+   *
+   * Exporter ce qui a expiré ferait grossir la ligne sans fin et ressusciterait
+   * au démarrage des silences que le temps avait levés.
+   */
+  exporterSalon(guildId: string, channelId: string, maintenant: number): EtatDemandesSalon {
+    const prefixe = `${guildId}:${channelId}:`;
+
+    const demandes = [...this.enAttente.entries()]
+      .filter(([cle, demande]) => cle.startsWith(prefixe) && demande.expireA > maintenant)
+      .map(([, demande]) => ({
+        userId: demande.userId,
+        demandeeA: demande.demandeeA,
+        expireA: demande.expireA,
+      }));
+
+    const silences = [...this.silences.entries()]
+      .filter(([cle, libereA]) => cle.startsWith(prefixe) && libereA > maintenant)
+      .map(([cle, libereA]) => ({ userId: cle.slice(prefixe.length), libereA }));
+
+    return { demandes, silences };
+  }
+
+  /**
+   * Recharge l'état d'un salon après un redémarrage.
+   *
+   * Ce qui a expiré pendant l'arrêt n'est pas rechargé : le temps a continué de
+   * passer sans le bot, et un silence de dix minutes ne se remet pas à courir
+   * parce que le processus a redémarré.
+   */
+  importerSalon(guildId: string, channelId: string, brut: unknown, maintenant: number): void {
+    const etat = normaliserEtatDemandes(brut);
+
+    for (const demande of etat.demandes) {
+      if (demande.expireA <= maintenant) continue;
+      this.enAttente.set(cleMembreSalon(guildId, channelId, demande.userId), {
+        guildId,
+        channelId,
+        userId: demande.userId,
+        demandeeA: demande.demandeeA,
+        expireA: demande.expireA,
+      });
+    }
+
+    for (const silence of etat.silences) {
+      if (silence.libereA <= maintenant) continue;
+      this.silences.set(cleMembreSalon(guildId, channelId, silence.userId), silence.libereA);
+    }
+  }
+
   /** Pour les tests et la supervision : ce que le registre garde en mémoire. */
   get taille(): { demandes: number; silences: number } {
     return { demandes: this.enAttente.size, silences: this.silences.size };
   }
+}
+
+export interface EtatDemandesSalon {
+  demandes: Array<{ userId: string; demandeeA: number; expireA: number }>;
+  silences: Array<{ userId: string; libereA: number }>;
+}
+
+/** Un instant plausible : ni absent, ni hors de l'échelle des millisecondes. */
+function estInstant(valeur: unknown): valeur is number {
+  return typeof valeur === 'number' && Number.isFinite(valeur) && valeur > 0;
+}
+
+/**
+ * Ce qui revient de la base est une colonne JSON : personne ne l'a validé, et
+ * une ligne ecrite par une version anterieure peut avoir n'importe quelle forme.
+ * Tout ce qui n'est pas exploitable est ignoré, jamais devine.
+ */
+export function normaliserEtatDemandes(brut: unknown): EtatDemandesSalon {
+  const vide: EtatDemandesSalon = { demandes: [], silences: [] };
+  if (!brut || typeof brut !== 'object') return vide;
+
+  const ligne = brut as { demandes?: unknown; silences?: unknown };
+
+  const demandes = Array.isArray(ligne.demandes)
+    ? ligne.demandes
+      .map((entree) => entree as Record<string, unknown>)
+      .filter((entree) => typeof entree?.userId === 'string' && entree.userId.length > 0)
+      .filter((entree) => estInstant(entree.demandeeA) && estInstant(entree.expireA))
+      .map((entree) => ({
+        userId: entree.userId as string,
+        demandeeA: entree.demandeeA as number,
+        expireA: entree.expireA as number,
+      }))
+    : [];
+
+  const silences = Array.isArray(ligne.silences)
+    ? ligne.silences
+      .map((entree) => entree as Record<string, unknown>)
+      .filter((entree) => typeof entree?.userId === 'string' && entree.userId.length > 0)
+      .filter((entree) => estInstant(entree.libereA))
+      .map((entree) => ({ userId: entree.userId as string, libereA: entree.libereA as number }))
+    : [];
+
+  return { demandes, silences };
+}
+
+/**
+ * L'historique de renommage relu depuis la base.
+ *
+ * Les instants aberrants sont ecartes plutot que corriges : un horodatage dans
+ * le futur bloquerait le bouton pour toujours, et le quota se reconstitue de
+ * lui-meme en dix minutes.
+ */
+export function normaliserHistoriqueRenommage(brut: unknown, maintenant: number): number[] {
+  if (!Array.isArray(brut)) return [];
+  return brut
+    .filter((valeur): valeur is number => estInstant(valeur))
+    .filter((instant) => instant <= maintenant)
+    .sort((a, b) => a - b)
+    .slice(-RENOMMAGES_PAR_FENETRE * 2);
 }
 
 /**

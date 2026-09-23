@@ -80,6 +80,8 @@ import {
   ordreNotification,
   RegistreOriginesSurcharge,
   membresAReduireAuSilence,
+  normaliserEtatDemandes,
+  normaliserHistoriqueRenommage,
   membresSansLeRole,
   planDebordement,
   normaliserConfigReservation,
@@ -281,6 +283,38 @@ function historiqueRenommage(salonId: string): number[] {
 
 function noterRenommage(salonId: string, maintenant = Date.now()): void {
   historiquesRenommage.set(salonId, enregistrerRenommage(historiqueRenommage(salonId), maintenant));
+}
+
+/**
+ * Écrit en base ce que le panneau gardait en mémoire.
+ *
+ * Le quota de renommage et les demandes d'accès mouraient avec le processus :
+ * le bouton réannonçait « 2/2 » alors que Discord comptait toujours, et un
+ * silence de dix minutes après un refus s'évaporait au redémarrage.
+ *
+ * Une base indisponible ne doit jamais faire échouer le geste de l'utilisateur :
+ * l'écriture est tentée, journalisée si elle rate, et on continue.
+ */
+async function persisterEtatSalon(guildId: string, salonId: string): Promise<void> {
+  const maintenant = Date.now();
+  const etat = registreDemandes.exporterSalon(guildId, salonId, maintenant);
+  try {
+    await prisma.tempVoiceChannel.update({
+      where: { id: salonId },
+      data: {
+        renameHistory: historiqueRenommage(salonId),
+        // Recompose en litteral : Prisma exige une valeur JSON, et une interface
+        // nommee ne lui est pas assignable en TypeScript - une limite de typage,
+        // pas une donnee qui ne conviendrait pas.
+        accessRequests: {
+          demandes: etat.demandes.map((d) => ({ ...d })),
+          silences: etat.silences.map((v) => ({ ...v })),
+        },
+      },
+    });
+  } catch (err) {
+    logger.warn('TempVoice', `Etat du panneau non persiste pour ${salonId} :`, err);
+  }
 }
 
 /** Un salon temporaire disparaît : ses demandes, ses marques d'origine et son
@@ -598,7 +632,14 @@ async function sweepOrphanChannels(client: Client): Promise<void> {
     .findMany({ where: { guildId: { in: guildIds } } })
     .catch((err: unknown) => {
       logger.error('TempVoice', 'Erreur lors de la lecture des salons temporaires :', err);
-      return [] as Array<{ id: string; creatorId: string; guildId: string; writeMode: string | null }>;
+      return [] as Array<{
+        id: string;
+        creatorId: string;
+        guildId: string;
+        writeMode: string | null;
+        renameHistory: unknown;
+        accessRequests: unknown;
+      }>;
     });
 
   let restored = 0;
@@ -645,6 +686,15 @@ async function sweepOrphanChannels(client: Client): Promise<void> {
       ...(estModeEcriture(entry.writeMode) ? { modeEcriture: entry.writeMode } : {}),
     };
     tempChannels.set(entry.id, entree);
+
+    // Le quota de renommage et les demandes d'acces reprennent ou ils en
+    // etaient. Ce qui a expire pendant l'arret n'est pas recharge : le temps a
+    // continue de passer sans le bot.
+    const maintenant = Date.now();
+    const historique = normaliserHistoriqueRenommage(entry.renameHistory, maintenant);
+    if (historique.length > 0) historiquesRenommage.set(entry.id, historique);
+    registreDemandes.importerSalon(entry.guildId, entry.id, entry.accessRequests, maintenant);
+
     await reparerPresencesAuDemarrage(channel, entry.guildId, entree);
     restored += 1;
   }
@@ -2168,6 +2218,7 @@ async function traiterDemandeAcces(ctx: ActionContext): Promise<void> {
     expirationMs: ctxp.demandes.expirationMs,
     silenceMs: ctxp.demandes.silenceMs,
   });
+  if (resultat.statut === 'enregistree') await persisterEtatSalon(guildId, channel.id);
 
   if (resultat.statut === 'silence') {
     await respond(
@@ -2473,6 +2524,9 @@ async function traiterDecisionDemande(ctx: ActionContext, decision: 'ok' | 'non'
     maintenant,
     { silenceMs: ctxp.demandes.silenceMs },
   );
+  // Le silence apres un refus est la moitie utile du garde-fou : le perdre au
+  // redemarrage laissait redemander aussitot.
+  await persisterEtatSalon(guildId, channel.id);
 
   if (decision === 'ok') {
     const patch = categoryTrustPatch(channel, demandeur);
