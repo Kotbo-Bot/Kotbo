@@ -2059,6 +2059,10 @@ async function basculerVerrou(ctx: ActionContext): Promise<string> {
     ownerChatPatch(true, categoryOverwriteFor(channel, cache.creatorId)),
   );
   await channel.permissionOverwrites.edit(guildId, CHANNEL_PATCHES.lock);
+  // Le verrou coupe `SendMessages` a @everyone - le bot compris, tant
+  // qu'il n'a pas de surcharge a lui. Sans cela il ne peut plus mettre a
+  // jour le panneau ni poster le moindre avis dans le salon.
+  await assurerBotPeutEcrire(channel);
   return `${I.lock} Le salon est verrouillé : seuls toi, les rôles autorisés d'office et les membres que tu as ajoutés peuvent encore le rejoindre.`;
 }
 
@@ -2875,6 +2879,10 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
           ownerChatPatch(true, categoryOverwriteFor(channel, cache.creatorId)),
         );
         await channel.permissionOverwrites.edit(guildId, CHANNEL_PATCHES.lock);
+        // Le verrou coupe `SendMessages` a @everyone - le bot compris, tant
+        // qu'il n'a pas de surcharge a lui. Sans cela il ne peut plus mettre a
+        // jour le panneau ni poster le moindre avis dans le salon.
+        await assurerBotPeutEcrire(channel);
         await reply(`${I.lock} Le salon a été verrouillé : seuls vous, les rôles autorisés d'office et les membres que vous avez ajoutés peuvent encore le rejoindre.`);
         planifierRafraichissementPanneau(channel);
         return;
@@ -3157,6 +3165,10 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
       if (ownerPatch && owner) await channel.permissionOverwrites.edit(owner, ownerPatch);
       await channel.permissionOverwrites.edit(selectedRoleId, rolePatch);
       await channel.permissionOverwrites.edit(guildId, CHANNEL_PATCHES.lock);
+      // Le verrou coupe `SendMessages` a @everyone - le bot compris, tant
+      // qu'il n'a pas de surcharge a lui. Sans cela il ne peut plus mettre a
+      // jour le panneau ni poster le moindre avis dans le salon.
+      await assurerBotPeutEcrire(channel);
 
       const saved = await prisma.tempVoiceChannel
         .update({ where: { id: channel.id }, data: { roleId: selectedRoleId } })

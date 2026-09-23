@@ -3257,3 +3257,182 @@ describe('Les trois portes : ouvrir a cote, ou reprendre le sous-panneau', () =>
     expect(interaction.reply.mock.calls).toHaveLength(0);
   }, 10_000);
 });
+
+describe('Limites de Discord : depassees, le message entier est rejete', () => {
+  /** Chaque rangee et chaque composant d'une charge, quelle que soit sa forme. */
+  function rangeesDe(charge: unknown) {
+    const p = charge as { components?: Array<{ components?: unknown[] }> } | undefined;
+    return (p?.components ?? []).map((rangee) => ({
+      composants: (rangee.components ?? []) as Array<Record<string, unknown>>,
+    }));
+  }
+
+  function identifiants(charge: unknown): string[] {
+    return rangeesDe(charge).flatMap((rangee) => rangee.composants
+      .map((composant) => {
+        const c = composant as { data?: { custom_id?: string }; custom_id?: string };
+        return c.data?.custom_id ?? c.custom_id ?? '';
+      })
+      .filter(Boolean));
+  }
+
+  function optionsDe(composant: unknown): unknown[] {
+    const c = composant as { options?: unknown[]; data?: { options?: unknown[] } };
+    return c.options ?? c.data?.options ?? [];
+  }
+
+  /** Ouvre une porte du panneau et rend ce que Discord recevrait. */
+  async function charge(action: string, presents = 3) {
+    guildConfig = { tempVoiceEnabled: true, baseStaffRoleId: null, moderatorRoleId: null, testStaffRoleId: null };
+    const { channel } = fakeChannel();
+    const membres = new Map<string, unknown>();
+    for (let i = 0; i < presents; i += 1) {
+      const id = `71000000000000${String(1000 + i)}`;
+      membres.set(id, { ...fakeTarget(id, false), displayName: `Membre tres tres long nom ${i}` });
+    }
+    (channel as { members: Map<string, unknown> }).members = membres;
+
+    const { client, listeners } = fakeClient();
+    registerTempVoiceListener(client);
+    tempChannels.set(CHANNEL, { creatorId: OWNER });
+
+    const scene = fakeButtonInteraction(action, {
+      channel,
+      guild: fakeGuild(new Map()),
+      member: fakeTarget(OWNER, false),
+    });
+    await listeners.get(Events.InteractionCreate)?.(scene.interaction);
+
+    tempChannels.delete(CHANNEL);
+    guildConfig = null;
+
+    const appels = (scene.interaction.reply as unknown as { mock: { calls: unknown[][] } }).mock.calls;
+    return appels[0]?.[0];
+  }
+
+  test('les trois portes respectent les plafonds de composants', async () => {
+    // Cinq rangees par message, cinq boutons par rangee, vingt-cinq options par
+    // menu : au-dela, Discord refuse le message entier, pas le composant fautif.
+    // Trente presents : assez pour depasser le plafond d'options si rien ne le
+    // borne. Avec trois, le test passerait sans rien prouver.
+    for (const porte of ['salon', 'membres', 'propriete']) {
+      const rendu = await charge(porte, 30);
+      const rangees = rangeesDe(rendu);
+
+      // D'abord : la charge existe. Un sous-panneau qui leve en se construisant
+      // ne produit RIEN, et toutes les assertions suivantes porteraient alors
+      // sur un tableau vide - le test passerait en defendant un plantage.
+      expect(rendu).toBeDefined();
+      expect(rangees.length).toBeGreaterThan(0);
+
+      expect(rangees.length).toBeLessThanOrEqual(5);
+      for (const rangee of rangees) {
+        expect(rangee.composants.length).toBeLessThanOrEqual(5);
+        for (const composant of rangee.composants) {
+          expect(optionsDe(composant).length).toBeLessThanOrEqual(25);
+        }
+      }
+    }
+  }, 15_000);
+
+  test('aucun identifiant de composant ne depasse cent caracteres', async () => {
+    // Le plafond de `custom_id`. Deux identifiants Discord y tiennent, mais rien
+    // n'empeche d'en ajouter un troisieme sans s'en rendre compte.
+    for (const porte of ['salon', 'membres', 'propriete']) {
+      const rendu = await charge(porte);
+      expect(rendu).toBeDefined();
+      for (const id of identifiants(rendu)) {
+        expect(id.length).toBeLessThanOrEqual(100);
+        // Et il doit rester lisible par le routeur du module.
+        expect(id.startsWith('tempvoice:')).toBe(true);
+      }
+    }
+  }, 15_000);
+
+  test('aucun menu n est pose vide', async () => {
+    // Un menu sans option fait rejeter le message entier : la rangee doit
+    // disparaitre, pas se vider. Salon sans personne = cas reel.
+    for (const porte of ['salon', 'membres', 'propriete']) {
+      const rendu = await charge(porte, 0);
+      for (const rangee of rangeesDe(rendu)) {
+        for (const composant of rangee.composants) {
+          const c = composant as { data?: { custom_id?: string } };
+          // Un menu se reconnait a ce qu'il porte des options ailleurs.
+          const options = optionsDe(composant);
+          const estMenu = String(c.data?.custom_id ?? '').includes('select')
+            || String(c.data?.custom_id ?? '').includes('membre_ici');
+          if (estMenu && options.length === 0) {
+            // Les menus natifs (roles, membres) n'ont pas d'options : normal.
+            expect(String(c.data?.custom_id)).not.toContain('membre_ici');
+          }
+        }
+      }
+    }
+  }, 15_000);
+});
+
+describe('Le bot ne se muselle pas lui-meme', () => {
+  /** Un salon ou le bot n'a PAS le droit d'ecrire au moment du controle. */
+  function salonOuLeBotEstMuet() {
+    const { channel, edits } = fakeChannel();
+    (channel as { guild: Record<string, unknown> }).guild = {
+      id: GUILD,
+      roles: { everyone: { id: GUILD } },
+      channels: { fetch: mock(async () => null) },
+      members: { me: { id: BOT_ID, permissions: { has: () => true } } },
+    };
+    (channel as { permissionsFor?: unknown }).permissionsFor = () => ({ has: () => false });
+    return { channel, edits };
+  }
+
+  const BOT_ID = '600000000000000009';
+
+  test('verrouiller le salon lui laisse une surcharge pour ecrire', async () => {
+    // `CHANNEL_PATCHES.lock` coupe `SendMessages` a @everyone. Le bot n'a pas de
+    // surcharge a lui : il perdait donc le droit de mettre a jour le panneau
+    // dans le salon qu'il venait de verrouiller.
+    guildConfig = { tempVoiceEnabled: true, baseStaffRoleId: null, moderatorRoleId: null, testStaffRoleId: null };
+    const { channel, edits } = salonOuLeBotEstMuet();
+    const { client, listeners } = fakeClient();
+    registerTempVoiceListener(client);
+    tempChannels.set(CHANNEL, { creatorId: OWNER });
+
+    const { interaction } = fakeButtonInteraction('lock', {
+      channel,
+      guild: fakeGuild(new Map()),
+      member: fakeTarget(OWNER, false),
+    });
+    await listeners.get(Events.InteractionCreate)?.(interaction);
+
+    const pourLeBot = edits.filter((e) => e.id === BOT_ID);
+    expect(pourLeBot.length).toBeGreaterThan(0);
+    expect(pourLeBot.at(-1)?.patch.SendMessages).toBe(true);
+
+    tempChannels.delete(CHANNEL);
+    guildConfig = null;
+  }, 10_000);
+
+  test('rien n est ecrit quand le bot a deja le droit', async () => {
+    // On n'agit que sur un constat : sans cela, chaque verrou poserait une
+    // surcharge inutile de plus sur un salon deja charge.
+    guildConfig = { tempVoiceEnabled: true, baseStaffRoleId: null, moderatorRoleId: null, testStaffRoleId: null };
+    const { channel, edits } = salonOuLeBotEstMuet();
+    (channel as { permissionsFor?: unknown }).permissionsFor = () => ({ has: () => true });
+
+    const { client, listeners } = fakeClient();
+    registerTempVoiceListener(client);
+    tempChannels.set(CHANNEL, { creatorId: OWNER });
+
+    const { interaction } = fakeButtonInteraction('lock', {
+      channel,
+      guild: fakeGuild(new Map()),
+      member: fakeTarget(OWNER, false),
+    });
+    await listeners.get(Events.InteractionCreate)?.(interaction);
+
+    expect(edits.filter((e) => e.id === BOT_ID)).toHaveLength(0);
+
+    tempChannels.delete(CHANNEL);
+    guildConfig = null;
+  }, 10_000);
+});
