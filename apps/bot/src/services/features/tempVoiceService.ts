@@ -1319,7 +1319,7 @@ interface SujetReglage {
 
 /** De quoi écrire la phrase de la maquette : « Le mode d'écriture et la
  *  réservation sont réservés aux admins sur ce serveur. » */
-const SUJETS_REGLAGES: Readonly<Record<ReglageModerateur, SujetReglage>> = {
+export const SUJETS_REGLAGES: Readonly<Record<ReglageModerateur, SujetReglage>> = {
   renommer: { sujet: 'le renommage', genre: 'm' },
   limite: { sujet: 'la limite de places', genre: 'f' },
   verrouiller: { sujet: 'le verrouillage', genre: 'm' },

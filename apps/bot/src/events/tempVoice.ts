@@ -42,7 +42,7 @@ import prisma from '../utils/db.js';
 import { logger } from '../utils/logger.js';
 import { E } from '../utils/emojis.js';
 import { RENAME_TIMEOUT_MS, settleWithin } from '../utils/discord.js';
-import { getCachedGuild } from '../utils/cache.js';
+import { cache, getCachedGuild } from '../utils/cache.js';
 import { annoncerIntentionVocale } from '../services/moderation/voiceIntentRegistry.js';
 import {
   buildCreationOverwrites,
@@ -80,6 +80,9 @@ import {
   ordreNotification,
   RegistreOriginesSurcharge,
   membresAReduireAuSilence,
+  REGLAGES_MODERATEUR,
+  SUJETS_REGLAGES,
+  type ReglageModerateur,
   normaliserEtatDemandes,
   normaliserHistoriqueRenommage,
   membresSansLeRole,
@@ -1289,13 +1292,91 @@ async function panneauSalon(
       }),
     );
 
-  return {
-    embeds: encartRole(entree, ctxp),
-    components: [
-      rangeeBoutons,
-      new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(menu),
-    ],
+  const rangees = [
+    rangeeBoutons,
+    new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(menu),
+  ];
+
+  // Les reglages admin vivaient uniquement dans le dashboard : un administrateur
+  // voyait donc exactement le meme panneau qu'un membre. Ils sont ici, dans
+  // « Salon », et nulle part ailleurs — pas un sous-menu de plus.
+  const reglages = menuReglagesModerateur(ctxp);
+  if (reglages) rangees.push(reglages);
+
+  return { embeds: encartRole(entree, ctxp), components: rangees };
+}
+
+/**
+ * Ce qu'un moderateur a le droit de faire, reglable par un admin depuis le
+ * panneau.
+ *
+ * Un seul menu a choix multiple plutot que sept interrupteurs : sept boutons
+ * prendraient deux rangees sur les cinq que Discord accorde, et le panneau en
+ * compte deja deux. Ce qui est coche est permis ; tout decocher ne laisse au
+ * moderateur que ce qu'aucun reglage ne gouverne.
+ */
+function menuReglagesModerateur(
+  ctxp: ContextePanneau,
+): ActionRowBuilder<MessageActionRowComponentBuilder> | null {
+  if (ctxp.role !== 'admin') return null;
+
+  const ouverts = REGLAGES_MODERATEUR.filter((reglage) => ctxp.reglages[reglage] !== 'adminsSeulement');
+
+  return new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId('tempvoice:reglages_mod')
+      .setPlaceholder(`Modérateurs · ${ouverts.length} / ${REGLAGES_MODERATEUR.length} action${ouverts.length > 1 ? 's' : ''} permise${ouverts.length > 1 ? 's' : ''}`)
+      // Zero minimum : tout fermer est un reglage valide, pas une erreur.
+      .setMinValues(0)
+      .setMaxValues(REGLAGES_MODERATEUR.length)
+      .addOptions(REGLAGES_MODERATEUR.map((reglage) => new StringSelectMenuOptionBuilder()
+        .setLabel(majusculeInitiale(SUJETS_REGLAGES[reglage].sujet))
+        .setDescription(ouverts.includes(reglage) ? 'Permis aux modérateurs' : 'Réservé aux admins')
+        .setValue(reglage)
+        .setDefault(ouverts.includes(reglage)))),
+  );
+}
+
+function majusculeInitiale(texte: string): string {
+  return texte.charAt(0).toUpperCase() + texte.slice(1);
+}
+
+/**
+ * Enregistre les sept lignes d'un coup.
+ *
+ * L'absence de ligne en base vaut « tout permis » : le premier enregistrement
+ * doit donc ecrire les sept, sinon celles qu'on vient de fermer resteraient
+ * ouvertes faute d'exister.
+ */
+async function enregistrerReglagesModerateur(guildId: string, permis: readonly string[]): Promise<boolean> {
+  const coche = (reglage: ReglageModerateur) => permis.includes(reglage);
+  const donnees = {
+    canRename: coche('renommer'),
+    canChangeLimit: coche('limite'),
+    canLock: coche('verrouiller'),
+    canChangeWriteMode: coche('modeEcriture'),
+    canReserve: coche('reserver'),
+    canKickOrBan: coche('expulserBannir'),
+    canTransfer: coche('transferer'),
   };
+
+  try {
+    await prisma.tempVoiceModPermissionsConfig.upsert({
+      where: { guildId },
+      create: { guildId, ...donnees },
+      update: donnees,
+    });
+  } catch (err) {
+    logger.error('TempVoice', `Reglages moderateur non enregistres pour ${guildId} :`, err);
+    return false;
+  }
+
+  // Le dashboard sert ces memes reglages depuis un cache : sans cette purge, il
+  // afficherait l'etat d'avant pendant une minute.
+  await cache.invalidateGuild(guildId).catch((err: unknown) => {
+    logger.warn('TempVoice', `Cache non purge pour ${guildId} :`, err);
+  });
+  return true;
 }
 
 /** 👥 Membres — une porte au lieu de quatre : on choisit d'abord la personne. */
@@ -2863,6 +2944,26 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
   // ─── Fiche d'un membre : choisir la personne, puis voir ce qui est possible ───
   // Deux portes, une seule fiche : la liste des présents et la recherche dans le
   // serveur mènent au même endroit.
+  // ─── Reglages admin, depuis « Salon » ───
+  if (action === 'reglages_mod' && interaction.isStringSelectMenu()) {
+    if (ctx.ctxp.role !== 'admin') {
+      await reponseSupplementaire(interaction, `${I.lock} Seul un administrateur règle ce que les modérateurs peuvent faire.`);
+      return;
+    }
+    await acquitterMiseAJour(interaction);
+
+    const enregistre = await enregistrerReglagesModerateur(guildId, interaction.values);
+    if (!enregistre) {
+      await reponseSupplementaire(interaction, "❌ Les réglages n'ont pas pu être enregistrés.");
+      return;
+    }
+
+    // Relire plutot que deduire : le panneau doit montrer ce que la base porte.
+    ctx.ctxp.reglages = (await lireReglagesAdmin(guildId)).reglages;
+    await rafraichirSousPanneauSalon(ctx);
+    return;
+  }
+
   if (action === 'membre_ici' && interaction.isStringSelectMenu()) {
     await acquitterMiseAJour(interaction);
 
