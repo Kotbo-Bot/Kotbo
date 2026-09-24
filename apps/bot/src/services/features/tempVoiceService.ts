@@ -402,8 +402,10 @@ export const CHANNEL_PATCHES = {
   clearReservation: { Connect: null, SendMessages: null },
   /** @deprecated Ancien nom de `ownerOnly`, gardé le temps que les panneaux en place migrent. */
   closeChat: { SendMessages: false },
-  /** @deprecated Ancien nom de `everyone`, gardé le temps que les panneaux en place migrent. */
-  openChat: { SendMessages: null },
+  /** @deprecated Ancien nom de `everyone`, garde le temps que les panneaux en place
+   *  migrent. Il suit `everyone` : l'ancien bouton « Chat » et le nouveau mode
+   *  doivent ouvrir le chat de la meme facon. */
+  openChat: { SendMessages: true },
   /** Bannissement : couper la seule connexion laisse lire et écrire dans le chat. */
   ban: { Connect: false, ViewChannel: false, SendMessages: false },
 
@@ -412,8 +414,9 @@ export const CHANNEL_PATCHES = {
   // rendue par `surchargesModeEcriture()`. Deux modes portaient déjà ces bits
   // sans porter de nom ; les deux autres sont neufs.
 
-  /** « Tout le monde » — l'ancien `openChat`. Rendre le droit à la catégorie, jamais l'accorder. */
-  everyone: { SendMessages: null },
+  /** « Tout le monde » — le droit d'ecrire est ACCORDE, pas rendu a la categorie :
+   *  le libelle le promet, et une categorie qui le refuse fermait le chat. */
+  everyone: { SendMessages: true },
   /** « Ceux qui sont en vocal » — @everyone est refusé, la présence pose une surcharge nominative. */
   inVoice: { SendMessages: false },
   /** « Moi seul » — l'ancien `closeChat`, complété par `ownerChatPatch(true, …)`. */
@@ -686,8 +689,13 @@ export function surchargesModeEcriture(
   switch (mode) {
     case 'everyone':
       return {
-        everyone: restoreFromCategory(CHANNEL_PATCHES.everyone, categorieEveryone),
-        proprietaire: ownerChatPatch(false, categorieProprietaire),
+        // « Tout le monde » ACCORDE le droit d'ecrire, il ne se contente pas de
+        // le rendre a la categorie. C'est ce que le libelle promet, et rendre le
+        // droit a une categorie qui le refuse fermait le chat en annoncant
+        // l'inverse - le defaut vu en conditions reelles.
+        everyone: { SendMessages: true },
+        // Le proprietaire est autorise NOMMEMENT, jamais par heritage.
+        proprietaire: ownerChatPatch(true, categorieProprietaire),
         suitLaPresence: false,
       };
     case 'ownerOnly':
@@ -705,12 +713,13 @@ export function surchargesModeEcriture(
         suitLaPresence: false,
       };
     case 'inVoice':
-      // Le propriétaire redevient un membre ordinaire pour ce bit : sa présence
-      // lui rend l'écriture comme aux autres, son départ la lui retire. Lui
-      // laisser un `allow` nommé ferait de `inVoice` un `ownerOnly` déguisé.
+      // Le proprietaire garde la parole meme deconnecte : c'est SON salon, et la
+      // regle « le proprietaire a toujours l'acces » passe avant l'elegance du
+      // mode. Sans elle, @everyone etant refuse ici, il devenait muet chez lui
+      // des qu'il quittait le vocal.
       return {
         everyone: { ...CHANNEL_PATCHES.inVoice },
-        proprietaire: ownerChatPatch(false, categorieProprietaire),
+        proprietaire: ownerChatPatch(true, categorieProprietaire),
         suitLaPresence: true,
       };
   }

@@ -529,22 +529,21 @@ describe('CHANNEL_PATCHES', () => {
    * résout ; `true` l'écraserait. La nuance ne se voit pas à la lecture du code
    * appelant, d'où ces assertions.
    */
-  test('rien de ce qui rouvre un salon n\'autorise explicitement', () => {
+  test('rouvrir un ACCES rend le droit ; rouvrir le CHAT l\'accorde', () => {
+    // Deux gestes differents, deux regles differentes.
+    //
+    // Deverrouiller ou lever une reservation rend un droit d'ENTREE : `null`,
+    // resolu par `restoreFromCategory`, pour ne pas ouvrir un salon que la
+    // categorie ferme.
     expect(CHANNEL_PATCHES.unlock.Connect).toBeNull();
     expect(CHANNEL_PATCHES.clearReservation.Connect).toBeNull();
-    expect(CHANNEL_PATCHES.openChat.SendMessages).toBeNull();
 
-    // Le type de `CHANNEL_PATCHES` interdit déjà `true` ; l'assertion garde le
-    // jour où quelqu'un élargirait ce type sans y penser.
-    const patches: Record<string, Record<string, boolean | null>> = CHANNEL_PATCHES;
-    for (const patch of Object.values(patches)) {
-      for (const [permission, value] of Object.entries(patch)) {
-        expect(
-          value === true,
-          `${permission} ne doit jamais être autorisé explicitement : utiliser null, résolu par restoreFromCategory`,
-        ).toBe(false);
-      }
-    }
+    // Ouvrir le chat, lui, ACCORDE. Ce test exigeait `null` ici aussi, et c'est
+    // ce qui cassait le chat : le mode annoncait « Tout le monde » et rendait le
+    // droit a une categorie qui le refusait — personne ne pouvait ecrire, le
+    // proprietaire compris.
+    expect(CHANNEL_PATCHES.openChat.SendMessages).toBe(true);
+    expect(CHANNEL_PATCHES.everyone.SendMessages).toBe(true);
   });
 
   test('naître verrouillé ferme le chat comme le bouton', () => {
@@ -600,11 +599,17 @@ describe('restoreFromCategory', () => {
       .toEqual({ Connect: false, SendMessages: null });
   });
 
-  test('rouvrir le chat garde le refus d\'écriture que porte la catégorie', () => {
+  test('un droit ACCORDE traverse restoreFromCategory sans etre repris', () => {
+    // Ce test exigeait l'inverse : que rouvrir le chat garde le refus de la
+    // categorie. C'est ce qui le cassait. `restoreFromCategory` ne reprend que
+    // ce qui vaut `null` — une valeur explicite passe, et c'est voulu.
     const categoryEveryone = { allow: 0n, deny: PermissionFlagsBits.SendMessages };
 
     expect(restoreFromCategory(CHANNEL_PATCHES.openChat, categoryEveryone))
-      .toEqual({ SendMessages: false });
+      .toEqual({ SendMessages: true });
+    // Le droit d'ENTREE, lui, reste soumis a la categorie.
+    expect(restoreFromCategory(CHANNEL_PATCHES.unlock, { allow: 0n, deny: PermissionFlagsBits.Connect }))
+      .toEqual({ Connect: false, SendMessages: null });
   });
 
   test('reprend une autorisation de la catégorie, sans en inventer', () => {

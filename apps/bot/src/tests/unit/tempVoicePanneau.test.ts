@@ -98,12 +98,14 @@ describe('modes d’écriture — CHANNEL_PATCHES', () => {
     expect(CHANNEL_PATCHES.ownerOnly).toEqual(CHANNEL_PATCHES.closeChat);
   });
 
-  test('les quatre modes existent et aucun n’autorise explicitement @everyone', () => {
+  test('seul « Tout le monde » autorise @everyone ; les trois autres le refusent', () => {
+    // Ce test affirmait qu'AUCUN mode n'accorde. C'etait le defaut : « Tout le
+    // monde » rendait le droit a la categorie, donc fermait le chat quand celle-ci
+    // le refusait, en annoncant l'inverse.
     for (const mode of MODES_ECRITURE) {
       const patch = CHANNEL_PATCHES[mode] as Record<string, boolean | null>;
       expect(patch).toBeDefined();
-      // Rien de ce qui rouvre un salon n'accorde : on rend le droit à la catégorie.
-      expect(patch.SendMessages).not.toBe(true);
+      expect(patch.SendMessages).toBe(mode === 'everyone' ? true : false);
     }
   });
 
@@ -118,20 +120,38 @@ describe('modes d’écriture — CHANNEL_PATCHES', () => {
 });
 
 describe('surchargesModeEcriture', () => {
-  test('« Tout le monde » rend le droit à la catégorie des deux côtés', () => {
+  test('le proprietaire ecrit dans TOUS les modes, sauf « Personne »', () => {
+    // Regle posee par Toji : « dans tous les cas, le proprietaire du salon doit
+    // avoir l'acces ». Sans autorisation nommee, il HERITE de @everyone - et une
+    // categorie qui refuse `SendMessages` le rendait muet chez lui, alors que le
+    // panneau annoncait « Tout le monde ».
+    for (const mode of ['everyone', 'inVoice', 'ownerOnly'] as const) {
+      expect(surchargesModeEcriture(mode).proprietaire).toEqual({ SendMessages: true });
+    }
+    // « Personne » est le seul qui le coupe, et c'est ce qui le distingue.
+    expect(surchargesModeEcriture('nobody').proprietaire).toEqual({ SendMessages: false });
+  });
+
+  test('« Tout le monde » accorde le droit d ecrire, des deux cotes', () => {
+    // Ce test affirmait `{ SendMessages: null }` des deux cotes, et il defendait
+    // le defaut : rendre le droit a la categorie, c'est fermer le chat quand la
+    // categorie le refuse - en annoncant « Tout le monde ».
     const surcharges = surchargesModeEcriture('everyone');
-    expect(surcharges.everyone).toEqual({ SendMessages: null });
-    expect(surcharges.proprietaire).toEqual({ SendMessages: null });
+    expect(surcharges.everyone).toEqual({ SendMessages: true });
+    expect(surcharges.proprietaire).toEqual({ SendMessages: true });
     expect(surcharges.suitLaPresence).toBe(false);
   });
 
-  test('« Tout le monde » n’écrase pas un refus nommé de la catégorie', () => {
-    // Sinon le bouton d'un propriétaire rouvrirait un salon que la catégorie ferme.
+  test('« Tout le monde » passe outre un refus de la categorie — c est le but', () => {
+    // Ce test defendait l'inverse : « ne pas ecraser un refus nomme de la
+    // categorie ». C'est precisement ce qui cassait le chat — le mode annoncait
+    // « Tout le monde » et rendait le droit a une categorie qui le refusait.
+    // Un salon vocal temporaire est a son proprietaire : le mode tranche.
     const surcharges = surchargesModeEcriture('everyone', {
       allow: 0n,
       deny: PermissionFlagsBits.SendMessages,
     });
-    expect(surcharges.everyone).toEqual({ SendMessages: false });
+    expect(surcharges.everyone).toEqual({ SendMessages: true });
   });
 
   test('« Moi seul » coupe @everyone et rend l’écriture au propriétaire', () => {
@@ -159,12 +179,14 @@ describe('surchargesModeEcriture', () => {
     expect(nobody.proprietaire).not.toEqual(ownerOnly.proprietaire);
   });
 
-  test('« Ceux qui sont en vocal » ne donne aucun allow nommé au propriétaire', () => {
+  test('« Ceux qui sont en vocal » garde la parole au proprietaire', () => {
+    // Ce test defendait l'elegance du mode : aucun allow nomme, le proprietaire
+    // comme les autres. Mais @everyone est refuse ici, donc il devenait muet
+    // chez lui des qu'il quittait le vocal. La regle « le proprietaire a
+    // toujours l'acces » passe avant.
     const surcharges = surchargesModeEcriture('inVoice');
     expect(surcharges.everyone).toEqual({ SendMessages: false });
-    // Un `allow` nommé sur le propriétaire ferait de `inVoice` un `ownerOnly`
-    // déguisé : il écrirait même hors du vocal.
-    expect(surcharges.proprietaire).toEqual({ SendMessages: null });
+    expect(surcharges.proprietaire).toEqual({ SendMessages: true });
     expect(surcharges.suitLaPresence).toBe(true);
   });
 
