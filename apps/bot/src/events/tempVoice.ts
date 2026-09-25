@@ -3076,15 +3076,15 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
           await channel.permissionOverwrites.edit(guildId, CHANNEL_PATCHES.closeChat);
           await reply("💬 Le chat textuel du salon est fermé : seuls vous et les membres autorisés peuvent y écrire.");
         } else {
-          await channel.permissionOverwrites.edit(
-            guildId,
-            restoreFromCategory(CHANNEL_PATCHES.openChat, categoryOverwriteFor(channel, guildId)),
-          );
+          // Ouvrir le chat ACCORDE le droit d'ecrire. Le repasser par la
+          // categorie l'annulait des qu'elle le refusait : le bouton disait
+          // « ouvert » et personne ne pouvait ecrire, proprietaire compris.
+          await channel.permissionOverwrites.edit(guildId, CHANNEL_PATCHES.openChat);
           await channel.permissionOverwrites.edit(
             cache.creatorId,
-            ownerChatPatch(false, categoryOverwriteFor(channel, cache.creatorId)),
+            ownerChatPatch(true, categoryOverwriteFor(channel, cache.creatorId)),
           );
-          await reply(`${I.msg} Le chat textuel du salon retrouve l'accès prévu par sa catégorie.`);
+          await reply(`${I.msg} Le chat textuel du salon est ouvert : tout le monde peut y écrire.`);
         }
         planifierRafraichissementPanneau(channel);
         return;
