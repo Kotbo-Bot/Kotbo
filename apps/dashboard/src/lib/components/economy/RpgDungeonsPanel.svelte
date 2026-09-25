@@ -90,6 +90,8 @@
     firstClearItemName: string | null;
     firstClearTitleId: string | null;
     firstClearRoleId: string | null;
+    /** Section du premier vainqueur ouverte. Fermée, le donjon n'a pas de prime. */
+    firstClearOn: boolean;
     enabled: boolean;
   };
 
@@ -186,6 +188,7 @@
       firstClearItemName: null,
       firstClearTitleId: null,
       firstClearRoleId: null,
+      firstClearOn: false,
       enabled: true,
     };
   }
@@ -210,6 +213,11 @@
       firstClearItemName: dungeon.firstClearItemName,
       firstClearTitleId: dungeon.firstClearTitleId,
       firstClearRoleId: dungeon.firstClearRoleId,
+      firstClearOn: dungeon.firstClearCoins > 0
+        || dungeon.firstClearXp > 0
+        || !!dungeon.firstClearItemName
+        || !!dungeon.firstClearTitleId
+        || !!dungeon.firstClearRoleId,
       enabled: dungeon.enabled,
     };
   }
@@ -252,11 +260,12 @@
         completionItemName: draft.completionItemName || null,
         completionTitleId: draft.completionTitleId || null,
         completionRoleId: draft.completionRoleId || null,
-        firstClearCoins: Number(draft.firstClearCoins) || 0,
-        firstClearXp: Number(draft.firstClearXp) || 0,
-        firstClearItemName: draft.firstClearItemName || null,
-        firstClearTitleId: draft.firstClearTitleId || null,
-        firstClearRoleId: draft.firstClearRoleId || null,
+        // Section fermée : aucune prime, et donc aucune annonce à la première victoire.
+        firstClearCoins: draft.firstClearOn ? Number(draft.firstClearCoins) || 0 : 0,
+        firstClearXp: draft.firstClearOn ? Number(draft.firstClearXp) || 0 : 0,
+        firstClearItemName: draft.firstClearOn ? draft.firstClearItemName || null : null,
+        firstClearTitleId: draft.firstClearOn ? draft.firstClearTitleId || null : null,
+        firstClearRoleId: draft.firstClearOn ? draft.firstClearRoleId || null : null,
         enabled: draft.enabled,
       });
       editing = null;
@@ -605,10 +614,18 @@
       </div>
 
       <div class="space-y-3 pt-2 border-t border-outline-variant/5">
-        <div>
-          <h4 class="text-sm font-bold">{m.eco_dungeon_first_clear()}</h4>
-          <p class="text-xs text-on-surface-variant/60 mt-0.5 leading-relaxed">{m.eco_dungeon_first_clear_hint()}</p>
+        <div class="flex items-start justify-between gap-4">
+          <div>
+            <h4 class="text-sm font-bold">{m.eco_dungeon_first_clear()}</h4>
+            <p class="text-xs text-on-surface-variant/60 mt-0.5 leading-relaxed">{m.eco_dungeon_first_clear_hint()}</p>
+          </div>
+          <ToggleSwitch
+            checked={editing.firstClearOn}
+            ariaLabel={m.eco_dungeon_first_clear_toggle_aria()}
+            onToggle={(value: boolean) => { if (editing) editing.firstClearOn = value; }}
+          />
         </div>
+        {#if editing.firstClearOn}
         <div class="grid grid-cols-2 gap-3">
           <div class="space-y-1">
             <label for="firstClearCoins" class="text-xs font-semibold text-on-surface-variant/60 ml-2">{currencyName || m.eco_fish_field_value()}</label>
@@ -655,6 +672,7 @@
           </div>
         </div>
         <p class="text-2xs text-on-surface-variant/50 leading-relaxed">{m.eco_bestiary_first_kill_role_hint()}</p>
+        {/if}
       </div>
 
       <div class="flex items-center justify-between pt-2 border-t border-outline-variant/5">

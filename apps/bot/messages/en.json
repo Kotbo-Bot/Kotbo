@@ -2781,7 +2781,7 @@
   "rpg_dungeon_refused_expired": "More than {minutes} min without fighting: the dungeon closed in on you and the pending loot is lost.",
   "rpg_track_start_btn": "Track it",
   "rpg_track_stop_btn": "Stop tracking",
-  "rpg_track_hub_btn": "Track: {name}",
+  "rpg_track_hub_btn": "Track",
   "rpg_track_started_note": "You are tracking {name}. The tracking button appears on your profile, next to Fight: {energy} energy per hunt, then {cooldown} before the next fight.",
   "rpg_track_stopped_note": "You are no longer tracking any creature.",
   "rpg_dungeon_chest_line": "Chest: {reward}",
@@ -2791,5 +2791,6 @@
   "rpg_dungeon_field_first_clear": "First on the server!",
   "rpg_dungeon_first_clear_no_bounty": "You are the first on the server to clear this dungeon.",
   "rpg_dungeon_first_clear_announce_title": "Dungeon cleared for the first time",
-  "rpg_dungeon_first_clear_announce_desc": "{user} is the first on the server to clear **{dungeon}**."
+  "rpg_dungeon_first_clear_announce_desc": "{user} is the first on the server to clear **{dungeon}**.",
+  "rpg_track_hub_note": "Tracking: {name}"
 }

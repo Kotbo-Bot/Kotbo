@@ -642,8 +642,8 @@ async function claimDungeonFirstClear(
 }
 
 /**
- * Annonce dans le salon des premiers vainqueurs du bestiaire. Un donjon se range avec les
- * boss : annoncé en mode « boss seulement » comme en mode « tout ».
+ * Annonce dans le salon des premiers vainqueurs du bestiaire, quand le donjon a une prime.
+ * Un donjon se range avec les boss : annoncé en mode « boss seulement » comme en mode « tout ».
  */
 async function announceDungeonFirstClear(
   client: Client,
@@ -652,8 +652,15 @@ async function announceDungeonFirstClear(
   dungeon: RpgDungeon,
   result: FirstKillResult,
 ): Promise<void> {
+  // Comme pour le bestiaire : sans prime réellement versée, le record s'inscrit sans annonce.
+  if (!hasFirstClearReward(dungeon)) return;
+
   const config = await getOrCreateEconomyConfig(guildId);
   if (!config.firstKillChannelId || !shouldAnnounceFirstKill(config.firstKillAnnounce, true)) return;
+
+  const locale = await resolveGuildLocale(guildId);
+  const reward = formatFirstKillReward(result, config.currencyEmoji, locale);
+  if (!reward) return;
 
   const channel = await client.channels.fetch(config.firstKillChannelId).catch(() => null);
   if (!channel?.isTextBased() || !channel.isSendable()) {
@@ -661,14 +668,11 @@ async function announceDungeonFirstClear(
     return;
   }
 
-  const locale = await resolveGuildLocale(guildId);
   const embed = new EmbedBuilder()
     .setTitle(m.rpg_dungeon_first_clear_announce_title({}, { locale }))
     .setDescription(m.rpg_dungeon_first_clear_announce_desc({ user: `<@${userId}>`, dungeon: `${dungeon.emoji} ${dungeon.name}` }, { locale }))
-    .setColor(COLORS.warning);
-
-  const reward = hasFirstClearReward(dungeon) ? formatFirstKillReward(result, config.currencyEmoji, locale) : '';
-  if (reward) embed.addFields({ name: m.rpg_first_kill_field_reward({}, { locale }), value: reward });
+    .setColor(COLORS.warning)
+    .addFields({ name: m.rpg_first_kill_field_reward({}, { locale }), value: reward });
 
   // Le vainqueur est nommé, pas notifié : une annonce ne doit sonner chez personne.
   await channel.send({ embeds: [embed], allowedMentions: { parse: [] } });

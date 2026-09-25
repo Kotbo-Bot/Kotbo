@@ -2781,7 +2781,7 @@
   "rpg_dungeon_refused_expired": "Plus de {minutes} min sans combattre : le donjon s’est refermé sur vous et le butin en attente est perdu.",
   "rpg_track_start_btn": "Suivre sa trace",
   "rpg_track_stop_btn": "Arrêter la traque",
-  "rpg_track_hub_btn": "Traquer : {name}",
+  "rpg_track_hub_btn": "Traquer",
   "rpg_track_started_note": "Vous suivez la trace de {name}. Le bouton de traque apparaît sur votre fiche, à côté de Combattre : {energy} d’énergie par traque, puis {cooldown} avant le combat suivant.",
   "rpg_track_stopped_note": "Vous ne traquez plus aucune créature.",
   "rpg_dungeon_chest_line": "Coffre : {reward}",
@@ -2791,5 +2791,6 @@
   "rpg_dungeon_field_first_clear": "Premier vainqueur du serveur !",
   "rpg_dungeon_first_clear_no_bounty": "Vous êtes le premier du serveur à terminer ce donjon.",
   "rpg_dungeon_first_clear_announce_title": "Donjon vaincu pour la première fois",
-  "rpg_dungeon_first_clear_announce_desc": "{user} est le premier du serveur à venir à bout de **{dungeon}**."
+  "rpg_dungeon_first_clear_announce_desc": "{user} est le premier du serveur à venir à bout de **{dungeon}**.",
+  "rpg_track_hub_note": "Traque en cours : {name}"
 }

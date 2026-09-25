@@ -778,13 +778,6 @@ function hubNavRow(ownerId: string, locale: Locale, isAdmin: boolean): ActionRow
   return new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select);
 }
 
-/**
- * Longueur du nom de la cible sur le bouton de traque. Discord accepte 80 caractères, mais
- * un bouton aussi large pousse ses voisins à la ligne sur mobile, et la rangée du tour de
- * jeu se disloque.
- */
-const TRACK_LABEL_NAME_MAX = 16;
-
 /** Nombre maximal de boutons que Discord accepte dans une rangée. */
 const BUTTONS_PER_ROW = 5;
 
@@ -826,10 +819,14 @@ function buildHubButtons(
   // La traque se place à côté du combat au hasard, qu'elle double sans le remplacer : le
   // joueur choisit à chaque clic s'il paie le surcoût. Elle n'existe que le temps d'une
   // traque, et repousse le dernier geste de la rangée vers la suivante.
+  //
+  // Le bouton ne porte pas le nom de la cible : un nom long l'élargissait assez pour pousser
+  // ses voisins à la ligne sur mobile. La cible est nommée sur la fiche, juste au-dessus.
   if (tracked) {
     played.splice(1, 0, new ButtonBuilder()
       .setCustomId(`rpg:hunt:${ownerId}:${tracked.id}`)
-      .setLabel(m.rpg_track_hub_btn({ name: truncate(tracked.name, TRACK_LABEL_NAME_MAX) }, { locale }))
+      .setLabel(m.rpg_track_hub_btn({}, { locale }))
+      .setEmoji(icon('rpgSpd'))
       .setStyle(ButtonStyle.Danger));
   }
 
@@ -889,6 +886,11 @@ export async function buildHubView(
     prisma.rpgProfile.findUnique({ where: { guildId_userId: { guildId, userId: viewer.id } }, select: { trackedMonsterId: true, level: true } }),
   ]);
   const tracked = hunter ? await loadTrackedMonster(guildId, viewer.id, hunter.trackedMonsterId, hunter.level) : null;
+  if (tracked) {
+    container.addTextDisplayComponents(new TextDisplayBuilder().setContent(
+      `-# ${icon('rpgSpd')} ${m.rpg_track_hub_note({ name: `${tracked.emoji} ${tracked.name}` }, { locale })}`,
+    ));
+  }
   return {
     embeds: [],
     components: [
@@ -6198,6 +6200,9 @@ function buildDungeonSettlementView(
   }, currencyEmoji, locale);
   if (chestExtras) embed.addFields({ name: m.rpg_dungeon_field_chest({}, { locale }), value: chestExtras });
 
+  // Le compte rendu met à jour l'écran de la partie, il n'ajoute aucun message au salon :
+  // le joueur apprend qu'il est le premier même sans prime, comme au bestiaire. Seule
+  // l'annonce dans le salon des premiers vainqueurs se tait dans ce cas.
   if (settlement.firstClear) {
     const bounty = formatFirstKillReward(settlement.firstClear, currencyEmoji, locale);
     embed.addFields({

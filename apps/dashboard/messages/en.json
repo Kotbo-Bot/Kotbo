@@ -6008,7 +6008,7 @@
   "eco_bestiary_title_none": "No title",
   "eco_bestiary_title_empty": "Create a title in the Titles tab first",
   "eco_first_kill_announce_title": "First kill announcement",
-  "eco_first_kill_announce_desc": "Posts a message when a player is the first on the server to defeat a creature.",
+  "eco_first_kill_announce_desc": "Posts a message when a player is the first on the server to defeat a creature or clear a dungeon, and wins a bounty for it. Without a bounty, nothing is posted. Dungeons follow the boss setting.",
   "eco_first_kill_announce_none": "No announcement",
   "eco_first_kill_announce_bosses": "Bosses only",
   "eco_first_kill_announce_all": "Monsters and bosses",
@@ -11007,7 +11007,7 @@
   "eco_hunt_cd_hint": "As a percentage of the fight delay, which also applies to the next fight. 200: doubled delay.",
   "eco_dungeon_rpg_xp": "RPG XP",
   "eco_dungeon_first_clear": "First to clear",
-  "eco_dungeon_first_clear_hint": "Bounty granted only once, to the first player on the server who clears the dungeon, on top of the chest. Their win is announced in the bestiary first kill channel, if one is set.",
+  "eco_dungeon_first_clear_hint": "Bounty granted only once, to the first player on the server who clears the dungeon, on top of the chest. Their win is announced in the bestiary first kill channel, if one is set. Without a bounty, the record is kept with no announcement.",
   "eco_dungeon_first_clear_none": "no bounty",
   "eco_dungeon_first_clear_reset_btn": "Put back in play",
   "eco_dungeon_first_clear_reset_confirm": "Put the first clear bounty back in play?",
@@ -11022,5 +11022,6 @@
   "eco_gambling_guess": "Guess the number",
   "commands_bulk_shown": "{count} command(s) shown, {disabled} disabled",
   "commands_bulk_enable": "Enable all",
-  "commands_bulk_disable": "Disable all"
+  "commands_bulk_disable": "Disable all",
+  "eco_dungeon_first_clear_toggle_aria": "Enable the first clear bounty"
 }

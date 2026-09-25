@@ -230,8 +230,17 @@ async function announceFirstKill(
   monster: FirstKillMonster,
   result: FirstKillResult,
 ): Promise<void> {
+  // Sans prime, le record s'inscrit sans bruit : annoncer chaque créature battue pour la
+  // première fois inondait le salon sans rien à célébrer. Ce qui compte est ce qui a été
+  // versé : une prime réduite à un objet retiré du catalogue ou à un rôle refusé se tait aussi.
+  if (!hasFirstKillReward(monster)) return;
+
   const config = await getOrCreateEconomyConfig(guildId);
   if (!config.firstKillChannelId || !shouldAnnounceFirstKill(config.firstKillAnnounce, monster.isBoss)) return;
+
+  const locale: BotLocale = await resolveGuildLocale(guildId);
+  const reward = formatFirstKillReward(result, config.currencyEmoji, locale);
+  if (!reward) return;
 
   const channel = await client.channels.fetch(config.firstKillChannelId).catch(() => null);
   if (!channel?.isTextBased() || !channel.isSendable()) {
@@ -239,14 +248,11 @@ async function announceFirstKill(
     return;
   }
 
-  const locale: BotLocale = await resolveGuildLocale(guildId);
   const embed = new EmbedBuilder()
     .setTitle(m.rpg_first_kill_announce_title({}, { locale }))
     .setDescription(m.rpg_first_kill_announce_desc({ user: `<@${userId}>`, monster: `${monster.emoji} ${monster.name}` }, { locale }))
-    .setColor(COLORS.warning);
-
-  const reward = formatFirstKillReward(result, config.currencyEmoji, locale);
-  if (reward) embed.addFields({ name: m.rpg_first_kill_field_reward({}, { locale }), value: reward });
+    .setColor(COLORS.warning)
+    .addFields({ name: m.rpg_first_kill_field_reward({}, { locale }), value: reward });
 
   // Le vainqueur est nommé, pas notifié : une annonce ne doit sonner chez personne.
   await channel.send({ embeds: [embed], allowedMentions: { parse: [] } });

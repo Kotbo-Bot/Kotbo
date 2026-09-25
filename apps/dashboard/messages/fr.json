@@ -6008,7 +6008,7 @@
   "eco_bestiary_title_none": "Aucun titre",
   "eco_bestiary_title_empty": "Crée d'abord un titre dans l'onglet Titres",
   "eco_first_kill_announce_title": "Annonce du premier vainqueur",
-  "eco_first_kill_announce_desc": "Publie un message quand un joueur est le premier du serveur à vaincre une créature.",
+  "eco_first_kill_announce_desc": "Publie un message quand un joueur est le premier du serveur à vaincre une créature ou à terminer un donjon, et qu'il y gagne une prime. Sans prime, rien n'est publié. Les donjons suivent le réglage des boss.",
   "eco_first_kill_announce_none": "Aucune annonce",
   "eco_first_kill_announce_bosses": "Boss seulement",
   "eco_first_kill_announce_all": "Monstres et boss",
@@ -11007,7 +11007,7 @@
   "eco_hunt_cd_hint": "En pourcentage du délai de combat, qui s'applique aussi au combat suivant. 200 : délai doublé.",
   "eco_dungeon_rpg_xp": "XP RPG",
   "eco_dungeon_first_clear": "Premier vainqueur",
-  "eco_dungeon_first_clear_hint": "Prime versée une seule fois, au premier joueur du serveur qui termine le donjon, en plus du coffre. Sa victoire est annoncée dans le salon des premiers vainqueurs du bestiaire, s'il est réglé.",
+  "eco_dungeon_first_clear_hint": "Prime versée une seule fois, au premier joueur du serveur qui termine le donjon, en plus du coffre. Sa victoire est annoncée dans le salon des premiers vainqueurs du bestiaire, s'il est réglé. Sans prime, le record est inscrit sans annonce.",
   "eco_dungeon_first_clear_none": "aucune prime",
   "eco_dungeon_first_clear_reset_btn": "Remettre en jeu",
   "eco_dungeon_first_clear_reset_confirm": "Remettre la prime du premier vainqueur en jeu ?",
@@ -11022,5 +11022,6 @@
   "eco_gambling_guess": "Devine le nombre",
   "commands_bulk_shown": "{count} commande(s) affichée(s), dont {disabled} désactivée(s)",
   "commands_bulk_enable": "Tout activer",
-  "commands_bulk_disable": "Tout désactiver"
+  "commands_bulk_disable": "Tout désactiver",
+  "eco_dungeon_first_clear_toggle_aria": "Activer la prime du premier vainqueur"
 }
