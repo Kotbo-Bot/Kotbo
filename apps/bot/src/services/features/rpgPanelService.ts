@@ -5054,6 +5054,23 @@ async function startFightSession(
     return;
   }
 
+  // Le bouton porte sa cible dans son identifiant, et un ancien panneau garde le sien : sans
+  // ce contrôle, changer de cible puis revenir sur l'ancien message permettait de traquer
+  // deux créatures à la fois. Seule la cible enregistrée sur le profil se traque. La
+  // comparaison passe par la créature résolue : une cible globale personnalisée depuis a
+  // changé de ligne, et l'ancien identifiant la désigne encore.
+  if (target) {
+    const tracked = profile.trackedMonsterId ? await findGuildMonsterById(guildId, profile.trackedMonsterId) : null;
+    if (!tracked) {
+      await interaction.reply({ embeds: [errorEmbed(m.rpg_hunt_no_track_title({}, { locale }), m.rpg_hunt_no_track_desc({}, { locale }))], flags: [MessageFlags.Ephemeral] });
+      return;
+    }
+    if (tracked.id !== target.id) {
+      await interaction.reply({ embeds: [errorEmbed(m.rpg_hunt_not_tracked_title({}, { locale }), m.rpg_hunt_not_tracked_desc({ name: `${tracked.emoji} ${tracked.name}` }, { locale }))], flags: [MessageFlags.Ephemeral] });
+      return;
+    }
+  }
+
   // Une traque coûte plus qu'une rencontre au hasard, et repousse le verrou commun des
   // combats : `lastBattle` est alors posé dans le futur, et chaque écriture du verrou,
   // jusqu'à la fin du combat, doit reprendre ce report.

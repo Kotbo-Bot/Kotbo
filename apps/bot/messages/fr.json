@@ -2792,5 +2792,9 @@
   "rpg_dungeon_first_clear_no_bounty": "Vous êtes le premier du serveur à terminer ce donjon.",
   "rpg_dungeon_first_clear_announce_title": "Donjon vaincu pour la première fois",
   "rpg_dungeon_first_clear_announce_desc": "{user} est le premier du serveur à venir à bout de **{dungeon}**.",
-  "rpg_track_hub_note": "Traque en cours : {name}"
+  "rpg_track_hub_note": "Traque en cours : {name}",
+  "rpg_hunt_not_tracked_title": "Traque terminée",
+  "rpg_hunt_not_tracked_desc": "Vous ne suivez plus la trace de cette créature : votre cible actuelle est {name}. Ouvrez votre fiche avec /rpg pour la traquer.",
+  "rpg_hunt_no_track_title": "Aucune traque en cours",
+  "rpg_hunt_no_track_desc": "Vous ne traquez aucune créature. Choisissez une cible dans le bestiaire avec « Suivre sa trace »."
 }

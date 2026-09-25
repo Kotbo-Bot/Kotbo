@@ -2792,5 +2792,9 @@
   "rpg_dungeon_first_clear_no_bounty": "You are the first on the server to clear this dungeon.",
   "rpg_dungeon_first_clear_announce_title": "Dungeon cleared for the first time",
   "rpg_dungeon_first_clear_announce_desc": "{user} is the first on the server to clear **{dungeon}**.",
-  "rpg_track_hub_note": "Tracking: {name}"
+  "rpg_track_hub_note": "Tracking: {name}",
+  "rpg_hunt_not_tracked_title": "Tracking over",
+  "rpg_hunt_not_tracked_desc": "You are no longer tracking this creature: your current target is {name}. Open your profile with /rpg to hunt it.",
+  "rpg_hunt_no_track_title": "No active tracking",
+  "rpg_hunt_no_track_desc": "You are not tracking any creature. Pick a target in the bestiary with \"Track it\"."
 }
