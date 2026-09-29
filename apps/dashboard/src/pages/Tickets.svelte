@@ -1416,7 +1416,7 @@
       return false;
     }
     let success = false;
-    await saveAction.run(async () => {
+    const ok = await saveAction.run(async () => {
       const res = await dashboardFetch(`/tickets/config`, {
         method: 'PATCH',
         headers: {
@@ -1479,12 +1479,18 @@
           ticketWelcomeFooter
         })
       });
-      if (!res.ok) throw new Error(m.e1_tickets_err_save());
+      if (!res.ok) {
+        const payload = await res.json().catch(() => null);
+        throw new Error(payload?.error || m.e1_tickets_err_save());
+      }
       await dashboardStore.refresh();
       await loadTicketsAndConfig();
       success = true;
       return true;
     }, { successMessage: m.e1_tickets_config_saved() });
+    // Meme relais que pour la mise en route : sans InlineFeedback sur la page,
+    // un refus de l'API laissait la barre d'enregistrement en place sans un mot.
+    if (!ok) toast.error(saveAction.state.error || m.e1_tickets_err_save());
     return success;
   }
 
