@@ -51,10 +51,20 @@
     <h1 class="mt-7 text-2xl sm:text-[30px] leading-tight font-semibold tracking-tight text-on-surface font-headline">
       Kotbo est arrivé sur {selectedGuild?.name ?? 'ton serveur'}.
     </h1>
-    <p class="mt-3 max-w-lg text-[15px] text-on-surface-variant/75 leading-relaxed">
-      Quelques questions, et ton serveur est monté, protégé et prêt à accueillir.
-      Tu choisiras toi-même ce qu'on configure - et tu pourras tout ajuster ensuite.
-    </p>
+    {#if wizard.fromLanding}
+      <!-- Le visiteur a déjà monté son serveur sur kotbo.fr : on le lui dit
+           tout de suite, sans quoi l'absence des écrans qu'il connaît
+           ressemblerait à un oubli. -->
+      <p class="mt-3 max-w-lg text-[15px] text-on-surface-variant/75 leading-relaxed">
+        On a repris ce que tu as préparé sur kotbo.fr : la vocation du serveur, ce que Kotbo prend en charge
+        et, si tu l'as cochée, la modération. Il ne reste que ce qu'on ne pouvait pas deviner d'ici.
+      </p>
+    {:else}
+      <p class="mt-3 max-w-lg text-[15px] text-on-surface-variant/75 leading-relaxed">
+        Quelques questions, et ton serveur est monté, protégé et prêt à accueillir.
+        Tu choisiras toi-même ce qu'on configure - et tu pourras tout ajuster ensuite.
+      </p>
+    {/if}
 
     <div class="mt-4 inline-flex items-center gap-2 rounded-full border border-outline-variant/35 bg-surface-container-low/40 px-3 py-1.5">
       <Papicon icon="clock" size={13} class="text-primary" />

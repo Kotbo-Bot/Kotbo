@@ -25,7 +25,7 @@
    * En contrepartie « Retour » relit une etape sans la defaire : c'est le prix
    * d'un serveur qui se construit sous les yeux.
    */
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import { router } from 'tinro';
   import { authStore } from '../lib/stores/auth.svelte';
   import { wizard } from '../lib/stores/onboardingWizard.svelte';
@@ -33,6 +33,10 @@
   import { globalNotice } from '../lib/stores/globalNotice.svelte';
   import KotboMark from '../lib/components/onboarding/KotboMark.svelte';
   import { MAPPING_STEPS, defaultMapping, type MappingState, type ThemeKey } from '../lib/onboarding';
+  import { consumeLandingKit } from '../lib/onboarding/landingKit';
+  import type { ModerationLevel } from '../lib/onboarding';
+  import { updateAutoModConfig, updateRaidProtection } from '../lib/api';
+  import { AUTOMOD_PRESETS, type AutomodPreset } from '@kotbo/shared';
 
   import WelcomeStep from '../lib/components/onboarding/steps/WelcomeStep.svelte';
   import KindStep from '../lib/components/onboarding/steps/KindStep.svelte';
@@ -126,7 +130,46 @@
     const guildId = authStore.selectedGuildId;
     if (!guildId) return;
     wizard.initialize(guildId);
+
+    /**
+     * Le serveur monté sur kotbo.fr, s'il y en a un.
+     *
+     * Ses réponses ne sont pas redemandées : les écrans de la vocation et des
+     * pistes sortent du parcours, et celui de la modération aussi une fois sa
+     * configuration réellement écrite. Jamais par-dessus un parcours entamé :
+     * quelqu'un qui a déjà choisi ses pistes ici a le dernier mot sur ce qu'il
+     * avait coché sur la landing.
+     */
+    // `untrack` : l'effet ne doit dépendre que du serveur choisi, pas des
+    // réponses qu'il vient lui-même d'écrire.
+    untrack(() => {
+      const landing = consumeLandingKit();
+      if (!landing || wizard.tracksChosen || wizard.theme !== null || wizard.isDone('welcome')) return;
+      wizard.adoptLanding(landing, ['tracks', 'theme']);
+      if (landing.tracks.includes('moderation')) void applyLandingModeration(landing.moderation);
+    });
   });
+
+  /**
+   * La modération choisie sur la landing, écrite comme le ferait son écran.
+   *
+   * Contrairement à la vocation, valider cet écran écrit deux configurations
+   * (filtres et anti-raid). Le retirer du parcours sans les écrire laisserait
+   * un serveur non protégé qui croirait l'être ; il ne sort donc qu'après une
+   * écriture réussie. En cas d'échec, l'écran reste, pré-réglé, et se validera
+   * d'un clic.
+   */
+  async function applyLandingModeration(level: ModerationLevel) {
+    const preset = AUTOMOD_PRESETS.find((entry: AutomodPreset) => entry.id === level);
+    if (!preset) return;
+    try {
+      await updateAutoModConfig(preset.filters, undefined, { silent: true });
+      await updateRaidProtection(preset.raid, undefined, { silent: true });
+      wizard.markPrefilled(['moderation']);
+    } catch {
+      // L'écran de modération reste au programme : rien n'est perdu.
+    }
+  }
 
   /**
    * Le mappage de depart, reaccorde a la vocation choisie.

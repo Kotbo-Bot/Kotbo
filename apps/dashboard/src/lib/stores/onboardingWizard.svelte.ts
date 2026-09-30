@@ -91,6 +91,13 @@ type WizardState = {
   startedAt: number | null;
   /** Etapes validees, pour ne pas redemander ce qui a deja ete ecrit. */
   done: WizardStep[];
+  /**
+   * Etapes deja repondues ailleurs - sur kotbo.fr, avant l'ajout du bot - et
+   * donc retirees du parcours. Elles ne sont ni traversees ni comptees dans la
+   * progression : faire valider deux fois la meme reponse est exactement ce
+   * que la landing promet d'eviter. Y revenir expres (`goto`) les rouvre.
+   */
+  prefilled: WizardStep[];
 };
 
 const DEFAULT_STATE: WizardState = {
@@ -117,6 +124,7 @@ const DEFAULT_STATE: WizardState = {
   mcpScope: null,
   startedAt: null,
   done: [],
+  prefilled: [],
 };
 
 const storageKey = (guildId: string) => `kotbo-wizard-${guildId}`;
@@ -146,6 +154,9 @@ function sanitize(parsed: unknown): WizardState {
     structured: typeof raw.structured === 'boolean' ? raw.structured : null,
     mapping: sanitizeMapping(raw.mapping),
     done: (stringArray(raw.done) ?? []).filter(
+      (entry): entry is WizardStep => (WIZARD_STEPS as readonly string[]).includes(entry),
+    ),
+    prefilled: (stringArray(raw.prefilled) ?? []).filter(
       (entry): entry is WizardStep => (WIZARD_STEPS as readonly string[]).includes(entry),
     ),
     // Une etape inconnue - parcours renomme depuis - ramene au debut plutot
@@ -269,7 +280,16 @@ export const wizard = {
 
   /** Les ecrans reellement traverses, dans l'ordre. */
   get steps(): WizardStep[] {
-    return stepsFor(this.tracks, state.kind ?? 'new', { structured: state.structured === true });
+    return stepsFor(this.tracks, state.kind ?? 'new', { structured: state.structured === true }).filter(
+      // L'ecran courant reste toujours dans la liste, meme repris : sans quoi
+      // son index tomberait a -1 et « Suivant » ne saurait plus ou aller.
+      (step) => step === state.step || !state.prefilled.includes(step),
+    );
+  },
+
+  /** Vrai quand des reponses de kotbo.fr ont ete reprises : l'accueil le dit. */
+  get fromLanding(): boolean {
+    return state.prefilled.length > 0;
   },
 
   get index() { return this.steps.indexOf(state.step); },
@@ -313,7 +333,30 @@ export const wizard = {
   },
 
   goto(step: WizardStep): void {
+    // Revenir expres sur un ecran repris de la landing le rouvre : c'est une
+    // demande explicite de le revoir, il reprend sa place dans le parcours.
+    state.prefilled = state.prefilled.filter((entry) => entry !== step);
     state.step = step;
+    writeState(guildId, state);
+  },
+
+  /**
+   * Reprend les reponses donnees sur kotbo.fr et retire leurs ecrans du
+   * parcours. `steps` dit lesquels : seuls ceux dont la reponse suffit a
+   * valider l'ecran (vocation, pistes), ou dont l'ecriture a deja ete faite.
+   */
+  adoptLanding(
+    answers: { theme: ThemeKey; moderation: ModerationLevel; tracks: TrackKey[] },
+    steps: WizardStep[],
+  ): void {
+    Object.assign(state, answers);
+    this.markPrefilled(steps);
+  },
+
+  /** Retire des ecrans du parcours comme deja repondus (voir `prefilled`). */
+  markPrefilled(steps: WizardStep[]): void {
+    state.done = [...new Set([...state.done, ...steps])];
+    state.prefilled = [...new Set([...state.prefilled, ...steps])];
     writeState(guildId, state);
   },
 

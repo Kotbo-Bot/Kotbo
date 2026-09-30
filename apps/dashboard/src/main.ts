@@ -1,6 +1,12 @@
 import { mount } from 'svelte'
 import './app.css'
 import App from './App.svelte'
+import { captureLandingKit } from './lib/onboarding/landingKit'
+
+// Le serveur préparé sur kotbo.fr arrive dans l'URL de « Mes serveurs ». Il est
+// retenu avant tout routage : la garde de connexion peut rediriger et perdre la
+// requête avant qu'une page ait eu le temps de la lire.
+captureLandingKit(window.location.search)
 
 const nativeFetch = window.fetch.bind(window)
 const configuredApiUrl = (import.meta.env.VITE_API_URL ?? '').trim().replace(/\/$/, '')
