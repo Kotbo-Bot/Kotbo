@@ -179,11 +179,10 @@
             <tr class="border-b border-outline-variant/20 text-xs font-semibold text-on-surface-variant">
               <th class="py-2.5 px-4">Module</th>
               {#each COLUMNS as col (col.key)}
-                <th class="py-2.5 px-3 text-right">
+                <th class="py-2.5 px-3 text-right" aria-sort={sortKey === col.key ? 'descending' : 'none'}>
                   <button
                     type="button"
                     class="hover:text-on-surface {sortKey === col.key ? 'text-on-surface' : ''}"
-                    aria-sort={sortKey === col.key ? 'descending' : 'none'}
                     onclick={() => { sortKey = col.key; }}
                   >
                     {col.label}{sortKey === col.key ? ' ↓' : ''}

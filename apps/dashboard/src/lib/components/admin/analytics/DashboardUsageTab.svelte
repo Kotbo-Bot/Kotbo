@@ -288,11 +288,10 @@
                 { key: 'errors', label: 'Erreurs' },
                 { key: 'exits', label: 'Sorties' },
               ] as col (col.key)}
-                <th class="py-2.5 px-3 text-right">
+                <th class="py-2.5 px-3 text-right" aria-sort={sortKey === col.key ? 'descending' : 'none'}>
                   <button
                     type="button"
                     class="inline-flex items-center gap-1 hover:text-on-surface {sortKey === col.key ? 'text-on-surface' : ''}"
-                    aria-sort={sortKey === col.key ? 'descending' : 'none'}
                     onclick={() => { sortKey = col.key as SortKey; }}
                   >
                     {col.label}{sortKey === col.key ? ' ↓' : ''}

@@ -9,6 +9,7 @@
    * ce qui s'affiche ici est ce que le joueur parcourra sur Discord, et le serveur revalide
    * tout à l'enregistrement.
    */
+  import { untrack } from 'svelte';
   import { m } from '../../i18n';
   import { createAsyncActionState } from '../../asyncAction.svelte';
   import { previewRpgTowerFloor, saveRpgTowerLayout } from '../../api';
@@ -402,7 +403,10 @@
 
   const actionState = createAsyncActionState();
   // L'éditeur est recréé à chaque chargement : il part des étages enregistrés à ce moment-là.
-  const seeded = initialFloors.length > 0 ? initialFloors.map((floor) => cloneLayout(floor)) : [cloneLayout(null)];
+  // `untrack` le dit au compilateur : la copie initiale est voulue, pas un oubli de réactivité.
+  const seeded = untrack(() =>
+    initialFloors.length > 0 ? initialFloors.map((floor) => cloneLayout(floor)) : [cloneLayout(null)],
+  );
   // `floors` garde une copie de chaque étage ; `layout` est l'étage ouvert, recopié à chaque changement d'étage.
   let floors = $state<Layout[]>(seeded);
   let current = $state(0);
@@ -1542,6 +1546,7 @@
         viewBox="0 0 {frameW} {frameH + CRENEL}"
         class="w-full max-w-[720px] mx-auto select-none touch-none"
         role="grid"
+        tabindex="0"
         aria-label={m.eco_tower_map_title()}
         oncontextmenu={(event) => { if (canManage && !disabled) event.preventDefault(); }}
       >
