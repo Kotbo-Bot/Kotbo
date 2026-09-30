@@ -33,6 +33,13 @@ export const ACQUISITION_STEPS_UPSTREAM = [
   'faq_opened',
   /** Clic sur « Prendre rendez-vous » (offre Sur mesure). */
   'sales_clicked',
+  /**
+   * Premier geste dans une zone jouable de la landing. `content` dit laquelle :
+   * `builder` (monter son serveur), `crisis`, `commands`, `rankcard`.
+   */
+  'playground_started',
+  /** La même zone menée au bout : serveur monté, soirée réglée, carte téléchargée. */
+  'playground_completed',
   /** Clic sur un bouton d'invitation. `content` dit lequel. */
   'invite_clicked',
   /** Passage effectif par `/api/public/invite`. */

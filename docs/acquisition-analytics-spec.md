@@ -273,8 +273,10 @@ l'entrée de l'API.
 | `comparison_viewed` | Section comparatif affichée | Landing |
 | `faq_opened` | Ouverture d'une question | Landing |
 | `sales_clicked` | Clic sur « Prendre rendez-vous » | Landing |
+| `playground_started` | Premier geste dans une zone jouable (`content` : `builder`, `crisis`, `commands`, `rankcard`) | Landing |
+| `playground_completed` | Zone jouable menée au bout (serveur monté, soirée réglée, carte téléchargée) | Landing |
 | `invite_clicked` | Clic sur un bouton d'invitation | Landing |
-| `invite_redirected` | Passage par `/api/public/invite` | Bot |
+| `invite_redirected` | Passage par `/api/public/invite` (`metadata.kit` : serveur monté sur la landing) | Bot |
 | `dashboard_servers_seen` | Arrivée sur `/servers` avec un `utm_source` | Dashboard |
 | `discord_authorize_opened` | Départ vers l'écran d'autorisation Discord | Dashboard |
 
