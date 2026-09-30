@@ -94,6 +94,23 @@ function shortValue(value: string | undefined): string | null {
   return trimmed.slice(0, SHORT_VALUE_MAX);
 }
 
+/**
+ * Le serveur préparé sur la landing (`1.gaming.standard.greeting-tickets`).
+ *
+ * Recopié tel quel vers le dashboard, qui seul sait le lire (voir
+ * `apps/dashboard/src/lib/onboarding/landingKit.ts`). La route n'a pas à le
+ * comprendre ; elle garantit seulement qu'il ne transporte rien d'autre
+ * qu'une suite de clés : jeu de caractères étroit, longueur bornée, et rejet
+ * complet au moindre écart. Contrairement à une provenance, un `kit` tronqué
+ * appliquerait des réglages que personne n'a choisis.
+ */
+const KIT_PATTERN = /^[a-z0-9.-]{1,160}$/;
+
+function kitValue(value: string | undefined): string | null {
+  const trimmed = value?.trim();
+  return trimmed && KIT_PATTERN.test(trimmed) ? trimmed : null;
+}
+
 export function createPublicInviteRouter(): OpenAPIHono {
   const router = new OpenAPIHono();
 
@@ -117,6 +134,7 @@ export function createPublicInviteRouter(): OpenAPIHono {
     const content = shortValue(c.req.query('utm_content'));
     const campaign = shortValue(c.req.query('utm_campaign'));
     const visitorId = shortValue(c.req.query('vid'));
+    const kit = kitValue(c.req.query('kit'));
     const direct = c.req.query('direct') === '1';
 
     // Ce point de passage voit *tous* ceux qui cliquent, y compris ceux qui
@@ -128,7 +146,9 @@ export function createPublicInviteRouter(): OpenAPIHono {
       source,
       campaign,
       content,
-      metadata: { direct },
+      // Ce que le visiteur a monté avant de cliquer : de quoi comparer, plus
+      // tard, ceux qui ont joué sur la landing et les autres.
+      metadata: { direct, kit },
     });
 
     if (!direct) {
@@ -141,6 +161,7 @@ export function createPublicInviteRouter(): OpenAPIHono {
       if (content) params.set('utm_content', content);
       if (campaign) params.set('utm_campaign', campaign);
       if (visitorId) params.set('vid', visitorId);
+      if (kit) params.set('kit', kit);
       return c.redirect(`${dashboard}/servers?${params.toString()}`, 302);
     }
 
