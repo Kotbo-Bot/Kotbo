@@ -11,7 +11,8 @@
  * chaque duel. Le coût du duel est l'énergie et le temps d'attente, pas la santé.
  */
 
-import prisma, { upsertRetryingRace } from '../../../utils/db.js';
+import prisma from '../../../utils/db.js';
+import { upsertRetryingRace } from '../../../utils/upsertRetry.js';
 import { logger } from '../../../utils/logger.js';
 import { loadAvailableSkills, loadEffectiveStats } from '../combatService.js';
 import { computeAttack } from './rpgCombatMath.js';

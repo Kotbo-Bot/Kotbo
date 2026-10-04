@@ -1,6 +1,7 @@
 import { IncomingMessage, ServerResponse } from 'node:http';
 import { Client } from 'discord.js';
-import prisma, { upsertRetryingRace } from '../../../utils/db.js';
+import prisma from '../../../utils/db.js';
+import { upsertRetryingRace } from '../../../utils/upsertRetry.js';
 import { logger } from '../../../utils/logger.js';
 import { json, readJsonBody, getGuildName, pushAudit, broadcastDashboardStateChange, type AuthClaims, type DashboardAccess } from '../../shared.js';
 import { clanTasks, runDistribution, runClear, runClanArtifactCleanup, handleEndSeason, settleRaidBeforeSeasonEnd } from '../../../services/community/clanService.js';

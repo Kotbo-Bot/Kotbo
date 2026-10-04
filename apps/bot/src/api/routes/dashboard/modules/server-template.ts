@@ -1,5 +1,6 @@
 /** Routes dashboard de la mise en place guidee du serveur. */
-import prisma, { upsertRetryingRace } from '../../../../utils/db.js';
+import prisma from '../../../../utils/db.js';
+import { upsertRetryingRace } from '../../../../utils/upsertRetry.js';
 import { errorMessage } from '../../../../utils/errors.js';
 import { resolveGuildLocale } from '../../../../utils/i18n.js';
 import { logger } from '../../../../utils/logger.js';

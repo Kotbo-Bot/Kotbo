@@ -28,7 +28,8 @@ import {
   type RankedLadderEntry,
   type RpSource,
 } from '@kotbo/shared';
-import prisma, { prismaRead, upsertRetryingRace } from '../../../utils/db.js';
+import prisma, { prismaRead } from '../../../utils/db.js';
+import { upsertRetryingRace } from '../../../utils/upsertRetry.js';
 import { logger } from '../../../utils/logger.js';
 import { resolveGuildLocale, type BotLocale } from '../../../utils/i18n.js';
 import * as m from '../../../lib/paraglide/messages.js';

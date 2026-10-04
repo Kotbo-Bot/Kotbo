@@ -9,7 +9,8 @@
 
 import { EmbedBuilder, type Client } from 'discord.js';
 import { Prisma, type RpgTowerReward, type RpgTowerRun } from '@prisma/client';
-import prisma, { upsertRetryingRace } from '../../../utils/db.js';
+import prisma from '../../../utils/db.js';
+import { upsertRetryingRace } from '../../../utils/upsertRetry.js';
 import { logger } from '../../../utils/logger.js';
 import { resolveGuildLocale } from '../../../utils/i18n.js';
 import { resolveGuildTimezone } from '../../../utils/timezone.js';

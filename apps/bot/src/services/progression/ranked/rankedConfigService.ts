@@ -19,7 +19,8 @@ import {
   type RankedLadder,
   type StreakConfig,
 } from '@kotbo/shared';
-import prisma, { prismaRead, upsertRetryingRace } from '../../../utils/db.js';
+import prisma, { prismaRead } from '../../../utils/db.js';
+import { upsertRetryingRace } from '../../../utils/upsertRetry.js';
 import { cache } from '../../../utils/cache.js';
 
 const CONFIG_TTL_SECONDS = 60;

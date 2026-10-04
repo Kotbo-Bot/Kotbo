@@ -21,7 +21,8 @@
  * encaissé. Il est journalisé en avertissement, ce qui le rend rattrapable.
  */
 
-import prisma, { upsertRetryingRace } from '../../utils/db.js';
+import prisma from '../../utils/db.js';
+import { upsertRetryingRace } from '../../utils/upsertRetry.js';
 import { logger } from '../../utils/logger.js';
 import { CGV_VERSION, type Stripe } from './stripeService.js';
 
