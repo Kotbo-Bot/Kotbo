@@ -8,7 +8,8 @@ import {
 } from 'discord.js';
 import { errorContainer, infoContainer, kotboContainer, successContainer } from '../../utils/embeds.js';
 import { E } from '../../utils/emojis.js';
-import prisma, { upsertRetryingRace } from '../../utils/db.js';
+import prisma from '../../utils/db.js';
+import { upsertRetryingRace } from '../../utils/upsertRetry.js';
 import { logger } from '../../utils/logger.js';
 import { getModuleStatsSummary, getModuleActivationStats, getModuleUsageStats, getModulePerformanceStats , KOTBO_MODULES, type KotboModule } from '../../services/analytics/moduleStatsService.js';
 import { separator, v2Message } from '@arcscord/components';

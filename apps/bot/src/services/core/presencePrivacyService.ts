@@ -19,7 +19,8 @@
  */
 
 import type { Prisma } from '@prisma/client';
-import prisma, { upsertRetryingRace } from '../../utils/db.js';
+import prisma from '../../utils/db.js';
+import { upsertRetryingRace } from '../../utils/upsertRetry.js';
 import { cache } from '../../utils/cache.js';
 import { logger } from '../../utils/logger.js';
 

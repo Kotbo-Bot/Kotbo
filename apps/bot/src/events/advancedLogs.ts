@@ -17,7 +17,8 @@ import {
   type VoiceState,
 } from 'discord.js';
 import { kotboEventBus } from '@kotbo/core';
-import prisma, { upsertRetryingRace } from '../utils/db.js';
+import prisma from '../utils/db.js';
+import { upsertRetryingRace } from '../utils/upsertRetry.js';
 import { logger } from '../utils/logger.js';
 import { isLogIgnoredChannel, sendLogEmbed } from '../utils/logDispatch.js';
 import { queueAuditLog } from '../utils/auditLogger.js';

@@ -1,7 +1,8 @@
 import type { SlashCommandDefinition } from '../../commands.js';
 import { SlashCommandBuilder, type ChatInputCommandInteraction, PermissionFlagsBits } from 'discord.js';
 import { sendMainConfigPanel } from '../../panels/generalConfigPanel.js';
-import prisma, { upsertRetryingRace } from '../../utils/db.js';
+import prisma from '../../utils/db.js';
+import { upsertRetryingRace } from '../../utils/upsertRetry.js';
 import { getCommandMetadata } from '../../utils/i18n.js';
 
 const meta = getCommandMetadata('c1_config');

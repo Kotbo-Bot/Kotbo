@@ -37,7 +37,8 @@ import {
 import { creditRpFromXp } from './ranked/rankedService.js';
 import { visiblePresenceStatus } from '../core/presencePrivacyService.js';
 import { kotboEventBus } from '@kotbo/core';
-import prisma, { prismaRead, upsertRetryingRace } from '../../utils/db.js';
+import prisma, { prismaRead } from '../../utils/db.js';
+import { upsertRetryingRace } from '../../utils/upsertRetry.js';
 import { logger } from '../../utils/logger.js';
 import { cache, getCachedGuild } from '../../utils/cache.js';
 import { type BotLocale, resolveGuildLocale } from '../../utils/i18n.js';

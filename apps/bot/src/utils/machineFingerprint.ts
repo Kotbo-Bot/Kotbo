@@ -1,4 +1,5 @@
-import prisma, { upsertRetryingRace } from './db.js';
+import prisma from './db.js';
+import { upsertRetryingRace } from './upsertRetry.js';
 
 let cached: string | null = null;
 
