@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
-import prisma, { upsertRetryingRace } from '../../utils/db.js';
+import prisma from '../../utils/db.js';
+import { upsertRetryingRace } from '../../utils/upsertRetry.js';
 import { logger } from '../../utils/logger.js';
 import { isShopItemAvailable, normalizeRpgGuildLevel, type ShopModuleState } from './economyPolicy.js';
 import { seedRpgContent } from './rpg/rpgSeedService.js';

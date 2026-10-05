@@ -20,7 +20,8 @@ import {
   type GuildMember,
   type OverwriteResolvable,
 } from 'discord.js';
-import prisma, { upsertRetryingRace } from '../../utils/db.js';
+import prisma from '../../utils/db.js';
+import { upsertRetryingRace } from '../../utils/upsertRetry.js';
 import { logger } from '../../utils/logger.js';
 import { admitJoiningMember } from '../moderation/joinAdmissionService.js';
 import { buildTicketChannelName } from './ticketService.js';

@@ -5,6 +5,8 @@
  */
 import { OverwriteType, PermissionFlagsBits, type OverwriteResolvable } from 'discord.js';
 import type { TempVoiceOwnerPower, TempVoiceTextChatMode, TempVoicePolicy } from '@kotbo/shared';
+import * as m from '../../lib/paraglide/messages.js';
+import type { BotLocale } from '../../utils/i18n.js';
 
 export type { TempVoiceOwnerPower, TempVoiceTextChatMode, TempVoicePolicy };
 
@@ -77,7 +79,15 @@ export interface StoredTempVoiceGenerator {
   reservationFallbackMode?: RepliReservation;
 }
 
-export const DEFAULT_NAME_TEMPLATE = "🔊 {user}'s channel";
+/**
+ * Le gabarit par defaut du NOM d'un salon temporaire.
+ *
+ * Pas de Paraglide ici, et c'est voulu : un nom de salon est ECRIT dans
+ * Discord puis range en base (`Guild.tempVoiceNameTemplate`), il n'est pas
+ * rendu a chaque affichage. Il ne peut donc pas suivre la langue du serveur,
+ * et le defaut reste celui de la base (`guild.prisma`), en francais.
+ */
+export const DEFAULT_NAME_TEMPLATE = '🔊 Salon de {user}';
 
 export function defaultTempVoicePolicy(): TempVoicePolicy {
   return {
@@ -654,26 +664,40 @@ export interface LibelleModeEcriture {
   emoji?: string;
 }
 
-/** Libellés repris un pour un de la maquette : c'est elle qui fait foi. */
-export const LIBELLES_MODES_ECRITURE: Readonly<Record<ModeEcriture, LibelleModeEcriture>> = {
-  everyone: {
-    emoji: '🌍',
-    libelle: 'Everyone',
-    description: 'Anyone who can see the channel can write.',
-  },
-  inVoice: {
-    libelle: 'Those in voice',
-    description: 'The chat follows the room: you can write as long as you\'re connected.',
-  },
-  ownerOnly: {
-    libelle: 'Me only',
-    description: 'No one else can write.',
-  },
-  nobody: {
-    libelle: 'No one',
-    description: 'Including me. The channel becomes a display-only board.',
-  },
-};
+/**
+ * Libellés repris un pour un de la maquette : c'est elle qui fait foi.
+ *
+ * `locale` est un PARAMÈTRE, pas un état de module : deux serveurs de langues
+ * différentes rendent leur panneau dans le même processus, et chaque appel doit
+ * pouvoir dire laquelle sans en changer pour l'autre.
+ */
+export const EMOJI_MODE_EVERYONE = '🌍';
+
+export function libelleModeEcriture(mode: ModeEcriture, locale: BotLocale): LibelleModeEcriture {
+  switch (mode) {
+    case 'everyone':
+      return {
+        emoji: EMOJI_MODE_EVERYONE,
+        libelle: m.panel_tempvoice_mode_everyone_label({}, { locale }),
+        description: m.panel_tempvoice_mode_everyone_desc({}, { locale }),
+      };
+    case 'inVoice':
+      return {
+        libelle: m.panel_tempvoice_mode_invoice_label({}, { locale }),
+        description: m.panel_tempvoice_mode_invoice_desc({}, { locale }),
+      };
+    case 'ownerOnly':
+      return {
+        libelle: m.panel_tempvoice_mode_owneronly_label({}, { locale }),
+        description: m.panel_tempvoice_mode_owneronly_desc({}, { locale }),
+      };
+    case 'nobody':
+      return {
+        libelle: m.panel_tempvoice_mode_nobody_label({}, { locale }),
+        description: m.panel_tempvoice_mode_nobody_desc({}, { locale }),
+      };
+  }
+}
 
 export function estModeEcriture(value: unknown): value is ModeEcriture {
   return MODES_ECRITURE.includes(value as ModeEcriture);
@@ -813,12 +837,14 @@ export function enregistrerRenommage(historique: readonly number[], maintenant: 
 }
 
 /** « ✏️ Renommer (2/2) » au repos, « ✏️ Renommer (0/2 · 6 min) » une fois épuisé. */
-export function libelleRenommer(quota: QuotaRenommage, maintenant: number): string {
-  if (quota.restants > 0) return `✏️ Rename (${quota.restants}/${RENOMMAGES_PAR_FENETRE})`;
+export function libelleRenommer(quota: QuotaRenommage, maintenant: number, locale: BotLocale): string {
+  if (quota.restants > 0) {
+    return m.panel_tempvoice_btn_rename({ left: quota.restants, max: RENOMMAGES_PAR_FENETRE }, { locale });
+  }
   const reste = Math.max(0, (quota.libereA ?? maintenant) - maintenant);
   // Arrondi au-dessus : annoncer « 0 min » sur un bouton grisé serait un mensonge.
   const minutes = Math.max(1, Math.ceil(reste / 60_000));
-  return `✏️ Rename (0/${RENOMMAGES_PAR_FENETRE} · ${minutes} min)`;
+  return m.panel_tempvoice_btn_rename_cooldown({ max: RENOMMAGES_PAR_FENETRE, minutes }, { locale });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -947,7 +973,11 @@ export function normaliserConfigDemandes(raw: unknown): ConfigDemandesAcces {
  * `repondreDemande` n'est gouvernée par aucune ligne des réglages modérateur,
  * et c'est cette colonne-ci qui tranche.
  */
-export function peutRepondreDemande(role: RoleAgissant, repondeurs: RepondeurDemande): VerdictAction {
+export function peutRepondreDemande(
+  role: RoleAgissant,
+  repondeurs: RepondeurDemande,
+  locale: BotLocale,
+): VerdictAction {
   if (role === 'proprietaire') return { autorise: true };
   // Un admin garde la main : il peut déjà tout sur le salon, lui refuser la
   // carte de décision ferait un bouton mort plutôt qu'une limite.
@@ -956,7 +986,7 @@ export function peutRepondreDemande(role: RoleAgissant, repondeurs: RepondeurDem
   return {
     autorise: false,
     motif: 'adminsSeulement',
-    raison: 'On this server, only the channel owner can respond to access requests.',
+    raison: m.panel_tempvoice_refuse_requests_owner_only({}, { locale }),
   };
 }
 
@@ -1354,22 +1384,44 @@ const REGLAGE_PAR_ACTION: Readonly<Record<ActionPanneau, ReglageModerateur | nul
   repondreDemande: null,
 };
 
-interface SujetReglage {
-  sujet: string;
-  genre: 'm' | 'f' | 'pluriel';
+/**
+ * Le sujet d'un réglage, tel qu'une phrase le nomme : « le mode d'écriture »,
+ * « the chat mode ». Sert au libellé du menu et à la liste de la phrase à
+ * plusieurs sujets.
+ */
+export function sujetReglage(reglage: ReglageModerateur, locale: BotLocale): string {
+  return {
+    renommer: m.panel_tempvoice_subject_rename,
+    limite: m.panel_tempvoice_subject_limit,
+    verrouiller: m.panel_tempvoice_subject_lock,
+    modeEcriture: m.panel_tempvoice_subject_writemode,
+    reserver: m.panel_tempvoice_subject_reserve,
+    expulserBannir: m.panel_tempvoice_subject_kickban,
+    transferer: m.panel_tempvoice_subject_transfer,
+  }[reglage]({}, { locale });
 }
 
-/** De quoi écrire la phrase de la maquette : « Le mode d'écriture et la
- *  réservation sont réservés aux admins sur ce serveur. » */
-export const SUJETS_REGLAGES: Readonly<Record<ReglageModerateur, SujetReglage>> = {
-  renommer: { sujet: 'renaming', genre: 'm' },
-  limite: { sujet: 'the member limit', genre: 'f' },
-  verrouiller: { sujet: 'locking', genre: 'm' },
-  modeEcriture: { sujet: 'the chat mode', genre: 'm' },
-  reserver: { sujet: 'reservations', genre: 'pluriel' },
-  expulserBannir: { sujet: 'kicking and banning', genre: 'pluriel' },
-  transferer: { sujet: 'the ownership transfer', genre: 'm' },
+/** La phrase ENTIÈRE quand un seul réglage est fermé. Pas de moteur d'accord :
+ *  l'accord est une propriété de la LANGUE, pas du réglage — « la réservation »
+ *  est féminin singulier là où « reservations » est pluriel, et un genre partagé
+ *  entre les deux langues donnerait forcément faux d'un côté. */
+const PHRASES_UN_SEUL_REGLAGE: Readonly<
+  Record<ReglageModerateur, (inputs: Record<string, never>, options: { locale: BotLocale }) => string>
+> = {
+  renommer: m.panel_tempvoice_admins_only_rename,
+  limite: m.panel_tempvoice_admins_only_limit,
+  verrouiller: m.panel_tempvoice_admins_only_lock,
+  modeEcriture: m.panel_tempvoice_admins_only_writemode,
+  reserver: m.panel_tempvoice_admins_only_reserve,
+  expulserBannir: m.panel_tempvoice_admins_only_kickban,
+  transferer: m.panel_tempvoice_admins_only_transfer,
 };
+
+/** Les réglages dont le sujet est FÉMININ en français (« la limite de places »,
+ *  « la réservation »). Une liste qui ne contient qu'eux s'accorde au féminin
+ *  pluriel ; dès qu'un masculin s'y mêle, le masculin l'emporte. L'anglais
+ *  n'accorde pas : sa variante féminine est la même phrase. */
+const REGLAGES_SUJET_FEMININ: ReadonlySet<ReglageModerateur> = new Set(['limite', 'reserver']);
 
 function majuscule(texte: string): string {
   return texte.charAt(0).toUpperCase() + texte.slice(1);
@@ -1377,24 +1429,26 @@ function majuscule(texte: string): string {
 
 /** Une seule phrase pour tout ce qu'un modérateur n'a pas le droit de toucher :
  *  la maquette en affiche une, pas une par bouton. */
-export function raisonAdminsSeulement(reglages: readonly ReglageModerateur[]): string {
+export function raisonAdminsSeulement(reglages: readonly ReglageModerateur[], locale: BotLocale): string {
   // On repart de l'ordre canonique : deux appels avec les mêmes réglages dans un
   // ordre différent ne doivent pas produire deux phrases différentes.
   const uniques = REGLAGES_MODERATEUR.filter((reglage) => reglages.includes(reglage));
   if (uniques.length === 0) return '';
 
-  const sujets = uniques.map((reglage) => SUJETS_REGLAGES[reglage].sujet);
-  const liste =
-    sujets.length === 1
-      ? (sujets[0] as string)
-      : `${sujets.slice(0, -1).join(', ')} and ${sujets[sujets.length - 1] as string}`;
+  // Un seul sujet : sa phrase est écrite en entier dans chaque langue, accord
+  // compris. Plusieurs : le pluriel vaut dans les deux, et la liste s'assemble.
+  if (uniques.length === 1) {
+    return PHRASES_UN_SEUL_REGLAGE[uniques[0] as ReglageModerateur]({}, { locale });
+  }
 
-  const premier = SUJETS_REGLAGES[uniques[0] as ReglageModerateur];
-  const pluriel = uniques.length > 1 || premier.genre === 'pluriel';
-  // L'anglais n'accorde pas en genre : seul le nombre decide du verbe.
-  const verbe = pluriel ? 'are reserved' : 'is reserved';
+  const sujets = uniques.map((reglage) => sujetReglage(reglage, locale));
+  const et = m.panel_tempvoice_list_and({}, { locale });
+  const liste = `${sujets.slice(0, -1).join(', ')} ${et} ${sujets[sujets.length - 1] as string}`;
 
-  return `${majuscule(liste)} ${verbe} for admins on this server.`;
+  const phrase = uniques.every((reglage) => REGLAGES_SUJET_FEMININ.has(reglage))
+    ? m.panel_tempvoice_admins_only_plural_feminine
+    : m.panel_tempvoice_admins_only_plural;
+  return phrase({ subjects: majuscule(liste) }, { locale });
 }
 
 /** Ce qu'un modérateur ne peut pas toucher sur ce serveur, pour l'encart unique. */
@@ -1433,11 +1487,16 @@ export function peutAgir(
   role: RoleAgissant,
   action: ActionPanneau,
   reglagesAdmin: unknown,
+  locale: BotLocale,
 ): VerdictAction {
   if (role === 'proprietaire') {
     // Jamais un bouton mort : chez lui, ces deux-là n'ont pas de sens.
-    if (action === 'recuperer') return refus('dejaProprietaire', 'You already own this channel.');
-    if (action === 'demanderAcces') return refus('dejaProprietaire', 'You are already home in this channel.');
+    if (action === 'recuperer') {
+      return refus('dejaProprietaire', m.panel_tempvoice_refuse_already_owner({}, { locale }));
+    }
+    if (action === 'demanderAcces') {
+      return refus('dejaProprietaire', m.panel_tempvoice_refuse_already_home({}, { locale }));
+    }
     return AUTORISE;
   }
 
@@ -1450,7 +1509,7 @@ export function peutAgir(
 
   const reglages = normaliserReglagesAdmin(reglagesAdmin);
   if (reglages[reglage] === 'adminsSeulement') {
-    return refus('adminsSeulement', raisonAdminsSeulement([reglage]));
+    return refus('adminsSeulement', raisonAdminsSeulement([reglage], locale));
   }
   return AUTORISE;
 }
@@ -1467,8 +1526,8 @@ export interface CibleMembre {
   autorise: boolean;
 }
 
-function designation(cible: CibleMembre): string {
-  return cible.nom ?? 'This person';
+function designation(cible: CibleMembre, locale: BotLocale): string {
+  return cible.nom ?? m.panel_tempvoice_target_this_person({}, { locale });
 }
 
 /**
@@ -1481,23 +1540,26 @@ export function peutAgirSurCible(
   action: ActionPanneau,
   reglagesAdmin: unknown,
   cible: CibleMembre,
+  locale: BotLocale,
 ): VerdictAction {
-  const verdict = peutAgir(role, action, reglagesAdmin);
+  const verdict = peutAgir(role, action, reglagesAdmin, locale);
   if (!verdict.autorise) return verdict;
 
   if (action === 'expulser' || action === 'bannir') {
     if (cible.estSoiMeme) {
       return refus(
         'cibleSoiMeme',
-        action === 'expulser' ? "You can't kick yourself." : "You can't ban yourself.",
+        action === 'expulser'
+          ? m.panel_tempvoice_refuse_kick_self({}, { locale })
+          : m.panel_tempvoice_refuse_ban_self({}, { locale }),
       );
     }
     if (cible.estStaff) {
       return refus(
         'cibleStaff',
         cible.nom
-          ? `${cible.nom} is part of the staff: they can't be kicked or banned.`
-          : "This person is part of the staff: they can't be kicked or banned.",
+          ? m.panel_tempvoice_refuse_target_staff_named({ name: cible.nom }, { locale })
+          : m.panel_tempvoice_refuse_target_staff({}, { locale }),
       );
     }
   }
@@ -1505,7 +1567,10 @@ export function peutAgirSurCible(
   // Bannir quelqu'un qui n'est pas là a du sens — il ne verra plus le salon.
   // L'expulser, non.
   if (action === 'expulser' && !cible.dansLeSalon) {
-    return refus('cibleHorsSalon', `${designation(cible)} is not in the channel.`);
+    return refus(
+      'cibleHorsSalon',
+      m.panel_tempvoice_refuse_target_outside({ who: designation(cible, locale) }, { locale }),
+    );
   }
 
   // « Autoriser » et « Retirer l'acces » ecrivent une surcharge de confiance.
@@ -1517,17 +1582,20 @@ export function peutAgirSurCible(
     return refus(
       'cibleDejaProprietaire',
       cible.nom
-        ? `${cible.nom} owns the channel: their access doesn't come from a permission.`
-        : "This person owns the channel: their access doesn't come from a permission.",
+        ? m.panel_tempvoice_refuse_target_is_owner_named({ name: cible.nom }, { locale })
+        : m.panel_tempvoice_refuse_target_is_owner({}, { locale }),
     );
   }
 
   if (action === 'transferer') {
     if (cible.estSoiMeme) {
-      return refus('cibleSoiMeme', "You can't transfer the channel to yourself.");
+      return refus('cibleSoiMeme', m.panel_tempvoice_refuse_transfer_self({}, { locale }));
     }
     if (cible.estProprietaire) {
-      return refus('cibleDejaProprietaire', `${designation(cible)} already owns the channel.`);
+      return refus(
+        'cibleDejaProprietaire',
+        m.panel_tempvoice_refuse_transfer_already_owner({ who: designation(cible, locale) }, { locale }),
+      );
     }
   }
 
@@ -1539,16 +1607,19 @@ export function peutAgirSurCible(
 export function libelleActionMembre(
   action: 'expulser' | 'bannir' | 'autoriser' | 'transferer',
   cible: CibleMembre,
+  locale: BotLocale,
 ): string {
   switch (action) {
     case 'expulser':
-      return 'Kick';
+      return m.panel_tempvoice_action_kick({}, { locale });
     case 'bannir':
-      return 'Ban';
+      return m.panel_tempvoice_action_ban({}, { locale });
     case 'autoriser':
-      return cible.autorise ? 'Remove access' : 'Allow';
+      return cible.autorise
+        ? m.panel_tempvoice_action_untrust({}, { locale })
+        : m.panel_tempvoice_action_trust({}, { locale });
     case 'transferer':
-      return 'Transfer the channel';
+      return m.panel_tempvoice_action_transfer({}, { locale });
   }
 }
 

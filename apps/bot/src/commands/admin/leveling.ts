@@ -6,7 +6,8 @@ import {
   MessageFlags,
   ContainerBuilder,
 } from 'discord.js';
-import prisma, { upsertRetryingRace } from '../../utils/db.js';
+import prisma from '../../utils/db.js';
+import { upsertRetryingRace } from '../../utils/upsertRetry.js';
 import { text, successContainer, errorContainer, v2, COLORS_RAW } from '../../utils/embeds.js';
 import { E } from '../../utils/emojis.js';
 import { MAX_XP } from '@kotbo/shared';
