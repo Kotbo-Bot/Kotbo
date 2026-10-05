@@ -602,7 +602,7 @@ model Guild {
   tempVoiceEnabled        Boolean  @default(false)
   tempVoiceChannelId      String?
   tempVoiceCategoryId     String?
-  tempVoiceNameTemplate   String   @default("🔊 {user}'s channel")
+  tempVoiceNameTemplate   String   @default("🔊 Salon de {user}")
   tempVoiceRequiredRoleId String?
   // Politique appliquee aux salons crees par le generateur principal :
   // places, verrouillage, roles autorises d'office, chat texte et pouvoirs du

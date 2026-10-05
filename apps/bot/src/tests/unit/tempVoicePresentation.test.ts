@@ -211,8 +211,11 @@ describe('T20 — les jetons du gabarit de nom', () => {
     // ce test est là pour que quiconque les ajoute le fasse exprès.
     expect(renderChannelName('🔊 {count} de {user}', 'Tojii')).toBe('🔊 {count} de Tojii');
     expect(renderChannelName('{game} — {user}', 'Tojii')).toBe('{game} — Tojii');
-    // Et le gabarit livré, lui, ne porte que {user}.
-    expect(DEFAULT_NAME_TEMPLATE).toBe("🔊 {user}'s channel");
+    // Et le gabarit livré, lui, ne porte que {user}. Il reste en FRANÇAIS et hors
+    // de Paraglide : un nom de salon est écrit dans Discord puis rangé en base
+    // (`Guild.tempVoiceNameTemplate`), pas rendu à chaque affichage — il ne peut
+    // donc pas suivre la langue du serveur, et doit valoir le défaut de la base.
+    expect(DEFAULT_NAME_TEMPLATE).toBe('🔊 Salon de {user}');
     expect(DEFAULT_NAME_TEMPLATE.match(/\{[a-z]+\}/g)).toEqual(['{user}']);
   });
 });

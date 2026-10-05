@@ -4,6 +4,8 @@ import { logger } from '../utils/logger.js';
 import { resolvePlaceholders, type PlaceholderContext } from '../utils/placeholders.js';
 import { fetchAllMembers } from '../utils/discord.js';
 import { readStatsConfig } from '../services/analytics/statsConfig.js';
+import * as m from '../lib/paraglide/messages.js';
+import { resolveGuildLocale } from '../utils/i18n.js';
 
 const updateTimeouts = new Map<string, NodeJS.Timeout>();
 
@@ -68,6 +70,12 @@ export async function updateGuildStats(client: Client, guildId: string): Promise
 
   const guild = client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId).catch(() => null);
   if (!guild) return;
+
+  // Les gabarits par defaut suivent la langue du serveur, comme le reste du bot.
+  // `{count}` est passe LITTERAL : c'est `resolvePlaceholders` qui le remplace
+  // ensuite, pas Paraglide — meme motif que `serverTemplateService`.
+  const locale = await resolveGuildLocale(guildId, guild.preferredLocale ?? null);
+  const compteur = { count: '{count}' } as const;
 
   const config = readStatsConfig(guildConfig.statsConfig);
 
@@ -147,22 +155,22 @@ export async function updateGuildStats(client: Client, guildId: string): Promise
 
   // 3. Rename active stats channels
   if ((config.memberEnabled ?? !!config.memberChannelId) && config.memberChannelId) {
-    await renameChannelIfNeeded(config.memberChannelId, config.memberTemplate || '👤 Members: {count}', membersCount);
+    await renameChannelIfNeeded(config.memberChannelId, config.memberTemplate || m.setup_template_stats_members(compteur, { locale }), membersCount);
   }
   if ((config.botEnabled ?? !!config.botChannelId) && config.botChannelId) {
-    await renameChannelIfNeeded(config.botChannelId, config.botTemplate || '🤖 Bots: {count}', botsCount);
+    await renameChannelIfNeeded(config.botChannelId, config.botTemplate || m.setup_template_stats_bots(compteur, { locale }), botsCount);
   }
   if ((config.roleEnabled ?? !!config.roleChannelId) && config.roleChannelId && config.roleTargetId) {
-    await renameChannelIfNeeded(config.roleChannelId, config.roleTemplate || '👑 Staff: {count}', roleCount);
+    await renameChannelIfNeeded(config.roleChannelId, config.roleTemplate || m.setup_template_stats_staff(compteur, { locale }), roleCount);
   }
   if ((config.channelEnabled ?? !!config.channelChannelId) && config.channelChannelId) {
-    await renameChannelIfNeeded(config.channelChannelId, config.channelTemplate || '💬 Channels: {count}', channelsCount);
+    await renameChannelIfNeeded(config.channelChannelId, config.channelTemplate || m.setup_template_stats_channels(compteur, { locale }), channelsCount);
   }
   if ((config.categoryEnabled ?? !!config.categoryChannelId) && config.categoryChannelId) {
-    await renameChannelIfNeeded(config.categoryChannelId, config.categoryTemplate || '📁 Categories: {count}', categoriesCount);
+    await renameChannelIfNeeded(config.categoryChannelId, config.categoryTemplate || m.setup_template_stats_categories(compteur, { locale }), categoriesCount);
   }
   if ((config.activityEnabled ?? !!config.activityChannelId) && config.activityChannelId) {
-    await renameChannelIfNeeded(config.activityChannelId, config.activityTemplate || '📈 Active 24h: {count}', activityCount);
+    await renameChannelIfNeeded(config.activityChannelId, config.activityTemplate || m.setup_template_stats_active24h(compteur, { locale }), activityCount);
   }
 
   // 4. Update custom stats channels (voice or category)

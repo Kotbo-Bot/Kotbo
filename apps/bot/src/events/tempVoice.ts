@@ -66,7 +66,8 @@ import {
   // ─── Refonte du panneau : tout le calcul vit dans le service ───
   MODES_ECRITURE,
   MODE_ECRITURE_PAR_DEFAUT,
-  LIBELLES_MODES_ECRITURE,
+  libelleModeEcriture,
+  EMOJI_MODE_EVERYONE,
   normaliserModeEcriture,
   surchargesModeEcriture,
   quotaRenommage,
@@ -82,7 +83,7 @@ import {
   RegistreOriginesSurcharge,
   membresAReduireAuSilence,
   REGLAGES_MODERATEUR,
-  SUJETS_REGLAGES,
+  sujetReglage,
   type ReglageModerateur,
   normaliserEtatDemandes,
   normaliserHistoriqueRenommage,
@@ -130,6 +131,8 @@ import {
 } from '../services/features/tempVoiceService.js';
 import { rendreEtatPng, type ValeurEtat } from '../services/features/tempVoicePanelImage.js';
 import { messageEstV2, sansConversionV2 } from '../utils/patchV2.js';
+import * as m from '../lib/paraglide/messages.js';
+import { resolveGuildLocale, type BotLocale } from '../utils/i18n.js';
 
 /**
  * Ce que le panneau doit savoir d'un salon et que Discord ne porte pas.
@@ -280,7 +283,7 @@ function iconeModeCarte(mode: ModeEcriture): string {
 function iconeMode(mode: ModeEcriture): string {
   switch (mode) {
     // Le globe manque au jeu `ktb_` : le service fournit son repli Unicode.
-    case 'everyone': return LIBELLES_MODES_ECRITURE.everyone.emoji ?? ICONES_ABSENTES.globe;
+    case 'everyone': return EMOJI_MODE_EVERYONE || ICONES_ABSENTES.globe;
     case 'inVoice': return I.voice;
     case 'ownerOnly': return I.crown;
     case 'nobody': return I.mute;
@@ -594,34 +597,46 @@ function lancerReecriture(channel: VoiceChannel): Promise<void> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Durées, rendues en anglais comme tout le panneau
+// Durées, rendues dans la langue du serveur comme tout le panneau
 // ─────────────────────────────────────────────────────────────────────────────
 
-function formaterDuree(ms: number): string {
+function formaterDuree(ms: number, locale: BotLocale): string {
   const minutes = Math.max(1, Math.round(ms / 60_000));
-  if (minutes < 60) return `${minutes} min`;
+  if (minutes < 60) return m.panel_tempvoice_duration_min({ count: minutes }, { locale });
   const heures = Math.round(minutes / 60);
-  if (heures < 24) return `${heures} h`;
+  if (heures < 24) return m.panel_tempvoice_duration_hour({ count: heures }, { locale });
   const jours = Math.round(heures / 24);
-  if (jours < 31) return `${jours} day${jours > 1 ? 's' : ''}`;
+  if (jours < 31) {
+    return jours > 1
+      ? m.panel_tempvoice_duration_days({ count: jours }, { locale })
+      : m.panel_tempvoice_duration_day({ count: jours }, { locale });
+  }
   const mois = Math.round(jours / 30);
-  if (mois < 12) return `${mois} month${mois > 1 ? 's' : ''}`;
+  if (mois < 12) {
+    return mois > 1
+      ? m.panel_tempvoice_duration_months({ count: mois }, { locale })
+      : m.panel_tempvoice_duration_month({ count: mois }, { locale });
+  }
   const annees = Math.round(mois / 12);
-  return `${annees} year${annees > 1 ? 's' : ''}`;
+  return annees > 1
+    ? m.panel_tempvoice_duration_years({ count: annees }, { locale })
+    : m.panel_tempvoice_duration_year({ count: annees }, { locale });
 }
 
-const PERMISSION_LABELS: Record<string, string> = {
-  [String(PermissionFlagsBits.ManageChannels)]: 'Manage Channels',
-  [String(PermissionFlagsBits.MoveMembers)]: 'Move Members',
-  [String(PermissionFlagsBits.MuteMembers)]: 'Mute Members',
-  [String(PermissionFlagsBits.DeafenMembers)]: 'Deafen Members',
-  [String(PermissionFlagsBits.ManageMessages)]: 'Manage Messages',
-  [String(PermissionFlagsBits.SendMessages)]: 'Send Messages',
-  [String(PermissionFlagsBits.ReadMessageHistory)]: 'Read Message History',
-  [String(PermissionFlagsBits.ManageRoles)]: 'Manage Roles',
-  [String(PermissionFlagsBits.ViewChannel)]: 'View Channel',
-  [String(PermissionFlagsBits.Connect)]: 'Connect',
-  [String(PermissionFlagsBits.Speak)]: 'Speak',
+/** Le nom lisible d'un droit Discord. La table ne porte que la CLÉ du message :
+ *  le texte, lui, est rendu à l'appel, dans la langue du serveur. */
+const CLES_PERMISSIONS: Readonly<Record<string, (inputs: Record<string, never>, options: { locale: BotLocale }) => string>> = {
+  [String(PermissionFlagsBits.ManageChannels)]: m.panel_tempvoice_perm_managechannels,
+  [String(PermissionFlagsBits.MoveMembers)]: m.panel_tempvoice_perm_movemembers,
+  [String(PermissionFlagsBits.MuteMembers)]: m.panel_tempvoice_perm_mutemembers,
+  [String(PermissionFlagsBits.DeafenMembers)]: m.panel_tempvoice_perm_deafenmembers,
+  [String(PermissionFlagsBits.ManageMessages)]: m.panel_tempvoice_perm_managemessages,
+  [String(PermissionFlagsBits.SendMessages)]: m.panel_tempvoice_perm_sendmessages,
+  [String(PermissionFlagsBits.ReadMessageHistory)]: m.panel_tempvoice_perm_readmessagehistory,
+  [String(PermissionFlagsBits.ManageRoles)]: m.panel_tempvoice_perm_manageroles,
+  [String(PermissionFlagsBits.ViewChannel)]: m.panel_tempvoice_perm_viewchannel,
+  [String(PermissionFlagsBits.Connect)]: m.panel_tempvoice_perm_connect,
+  [String(PermissionFlagsBits.Speak)]: m.panel_tempvoice_perm_speak,
 };
 
 /** Droits manquants au bot : Discord refuse un salon dont une surcharge accorde
@@ -629,6 +644,7 @@ const PERMISSION_LABELS: Record<string, string> = {
 function missingBotPermissions(
   guild: DiscordGuild,
   policy: TempVoicePolicy,
+  locale: BotLocale,
   parent?: CategoryChannel,
 ): string[] {
   const me = guild.members.me;
@@ -638,7 +654,7 @@ function missingBotPermissions(
 
   return requiredBotPermissions(policy)
     .filter((permission) => !effective?.has(permission))
-    .map((permission) => PERMISSION_LABELS[String(permission)] ?? String(permission));
+    .map((permission) => CLES_PERMISSIONS[String(permission)]?.({}, { locale }) ?? String(permission));
 }
 
 async function isStaff(guildId: string, member: GuildMember | null): Promise<boolean> {
@@ -781,7 +797,8 @@ async function sweepOrphanChannels(client: Client): Promise<void> {
     }
 
     if (channel.members.size === 0) {
-      await closeTempChannel(channel, 'Salon vocal temporaire vide au démarrage');
+      const locale = await resolveGuildLocale(channel.guild?.id ?? '', channel.guild?.preferredLocale ?? null);
+      await closeTempChannel(channel, m.panel_tempvoice_audit_empty_startup({}, { locale }));
       removed += 1;
       continue;
     }
@@ -905,10 +922,12 @@ function deduireModeEcriture(everyone: SurchargeLue, proprietaire: SurchargeLue)
 }
 
 /** « 4 places libres », « complet », « places illimitées ». */
-function resteEnClair(etat: EtatSalon): string {
-  if (etat.placesLibres === null) return 'unlimited slots';
-  if (etat.placesLibres === 0) return 'full';
-  return `${etat.placesLibres} slot${etat.placesLibres > 1 ? 's' : ''} free`;
+function resteEnClair(etat: EtatSalon, locale: BotLocale): string {
+  if (etat.placesLibres === null) return m.panel_tempvoice_slots_unlimited({}, { locale });
+  if (etat.placesLibres === 0) return m.panel_tempvoice_slots_full({}, { locale });
+  return etat.placesLibres > 1
+    ? m.panel_tempvoice_slots_free({ count: etat.placesLibres }, { locale })
+    : m.panel_tempvoice_slots_free_one({ count: etat.placesLibres }, { locale });
 }
 
 /**
@@ -923,31 +942,44 @@ function resteEnClair(etat: EtatSalon): string {
  * la grille. Essaye et compare avant de rechanger : ca a deja ete fait, et la
  * grille a gagne.
  */
-function carteEtat(etat: EtatSalon): EmbedBuilder {
-  const mode = LIBELLES_MODES_ECRITURE[etat.modeEcriture];
+function carteEtat(etat: EtatSalon, locale: BotLocale): EmbedBuilder {
+  const mode = libelleModeEcriture(etat.modeEcriture, locale);
+  const etatEnClair = etat.verrouille
+    ? m.panel_tempvoice_state_locked({}, { locale })
+    : m.panel_tempvoice_state_open({}, { locale });
 
-  return carteSansValeurs(etat)
+  return carteSansValeurs(etat, locale)
     .addFields(
-      { name: 'Status', value: `${etat.verrouille ? I.lock : I.unlock} ${etat.verrouille ? 'Locked' : 'Open'}`, inline: true },
-      { name: 'Slots', value: `${I.profile} ${etat.occupants} / ${etat.limite > 0 ? etat.limite : '∞'}`, inline: true },
-      { name: 'Chat', value: `${iconeModeCarte(etat.modeEcriture)} ${mode.libelle}`, inline: true },
-      { name: 'Allowed', value: `${I.check} ${etat.autorises}`, inline: true },
-      { name: 'Banned', value: `${I.ban} ${etat.bannis}`, inline: true },
-      { name: 'Reserved', value: etat.reserveRoleId ? `${I.shield} <@&${etat.reserveRoleId}>` : `${I.shield} No`, inline: true },
+      { name: m.panel_tempvoice_field_status({}, { locale }), value: `${etat.verrouille ? I.lock : I.unlock} ${etatEnClair}`, inline: true },
+      { name: m.panel_tempvoice_field_slots({}, { locale }), value: `${I.profile} ${etat.occupants} / ${etat.limite > 0 ? etat.limite : '∞'}`, inline: true },
+      { name: m.panel_tempvoice_field_chat({}, { locale }), value: `${iconeModeCarte(etat.modeEcriture)} ${mode.libelle}`, inline: true },
+      { name: m.panel_tempvoice_field_allowed({}, { locale }), value: `${I.check} ${etat.autorises}`, inline: true },
+      { name: m.panel_tempvoice_field_banned({}, { locale }), value: `${I.ban} ${etat.bannis}`, inline: true },
+      {
+        name: m.panel_tempvoice_field_reserved({}, { locale }),
+        value: etat.reserveRoleId
+          ? `${I.shield} <@&${etat.reserveRoleId}>`
+          : `${I.shield} ${m.panel_tempvoice_reserved_no({}, { locale })}`,
+        inline: true,
+      },
     );
 }
 
 /** Le contour de la carte — titre, mention, couleur, pied — sans les six valeurs :
  *  les champs inline et l'image se posent dessus, à l'identique. */
-function carteSansValeurs(etat: EtatSalon): EmbedBuilder {
+function carteSansValeurs(etat: EtatSalon, locale: BotLocale): EmbedBuilder {
+  const etatEnClair = etat.verrouille
+    ? m.panel_tempvoice_state_locked({}, { locale })
+    : m.panel_tempvoice_state_open({}, { locale });
+
   return new EmbedBuilder()
-    .setTitle(`${etat.verrouille ? I.lock : I.unlock} ${etat.verrouille ? 'Locked' : 'Open'} · ${resteEnClair(etat)}`)
+    .setTitle(`${etat.verrouille ? I.lock : I.unlock} ${etatEnClair} · ${resteEnClair(etat, locale)}`)
     // Le ping va ici, jamais dans le titre : Discord n'interprète les mentions
     // ni dans un titre ni dans une ligne d'auteur, elles s'y afficheraient en
     // brut. Seules la description et la valeur d'un champ les rendent cliquables.
-    .setDescription(`${I.voice} <@${etat.proprietaireId}>'s channel`)
+    .setDescription(`${I.voice} ${m.panel_tempvoice_card_owner({ owner: etat.proprietaireId }, { locale })}`)
     .setColor(etat.verrouille ? COULEUR_FERME : COULEUR_OUVERT)
-    .setFooter({ text: 'Kotbo · Temporary channel' })
+    .setFooter({ text: m.panel_tempvoice_card_footer({}, { locale }) })
     .setTimestamp();
 }
 
@@ -967,16 +999,26 @@ const FICHIER_ICONE_MODE: Readonly<Record<ModeEcriture, string>> = {
 
 /** Les six valeurs dans l'ordre exact qu'attend `rendreEtatPng` :
  *  État, Places, Écriture, Autorisés, Bannis, Réservé. */
-function valeursEtat(etat: EtatSalon, nomRoleReserve: string | null): ValeurEtat[] {
+function valeursEtat(etat: EtatSalon, nomRoleReserve: string | null, locale: BotLocale): ValeurEtat[] {
   return [
-    { libelle: 'Status', valeur: etat.verrouille ? 'Locked' : 'Open', icone: etat.verrouille ? 'ktb_lock' : 'ktb_unlock' },
-    { libelle: 'Slots', valeur: `${etat.occupants} / ${etat.limite > 0 ? etat.limite : '∞'}`, icone: 'ktb_profile' },
-    { libelle: 'Chat', valeur: LIBELLES_MODES_ECRITURE[etat.modeEcriture].libelle, icone: FICHIER_ICONE_MODE[etat.modeEcriture] },
-    { libelle: 'Allowed', valeur: String(etat.autorises), icone: 'ktb_check' },
-    { libelle: 'Banned', valeur: String(etat.bannis), icone: 'ktb_ban' },
+    {
+      libelle: m.panel_tempvoice_field_status({}, { locale }),
+      valeur: etat.verrouille
+        ? m.panel_tempvoice_state_locked({}, { locale })
+        : m.panel_tempvoice_state_open({}, { locale }),
+      icone: etat.verrouille ? 'ktb_lock' : 'ktb_unlock',
+    },
+    { libelle: m.panel_tempvoice_field_slots({}, { locale }), valeur: `${etat.occupants} / ${etat.limite > 0 ? etat.limite : '∞'}`, icone: 'ktb_profile' },
+    { libelle: m.panel_tempvoice_field_chat({}, { locale }), valeur: libelleModeEcriture(etat.modeEcriture, locale).libelle, icone: FICHIER_ICONE_MODE[etat.modeEcriture] },
+    { libelle: m.panel_tempvoice_field_allowed({}, { locale }), valeur: String(etat.autorises), icone: 'ktb_check' },
+    { libelle: m.panel_tempvoice_field_banned({}, { locale }), valeur: String(etat.bannis), icone: 'ktb_ban' },
     // Jamais `<@&id>` ici : une image ne résout aucune mention, elle
     // afficherait la syntaxe brute. Le nom du rôle, sinon « Non ».
-    { libelle: 'Reserved', valeur: nomRoleReserve ?? 'No', icone: 'ktb_shield' },
+    {
+      libelle: m.panel_tempvoice_field_reserved({}, { locale }),
+      valeur: nomRoleReserve ?? m.panel_tempvoice_reserved_no({}, { locale }),
+      icone: 'ktb_shield',
+    },
   ];
 }
 
@@ -1015,12 +1057,14 @@ async function carteEtatImage(
   channel: VoiceChannel,
   etat: EtatSalon,
   presentation: ReglagesPresentation,
+  locale: BotLocale,
 ): Promise<{ embed: EmbedBuilder; piece: AttachmentBuilder }> {
   const nomRole = etat.reserveRoleId
-    ? channel.guild?.roles?.cache?.get?.(etat.reserveRoleId)?.name ?? 'Unknown role'
+    ? channel.guild?.roles?.cache?.get?.(etat.reserveRoleId)?.name
+      ?? m.panel_tempvoice_role_unknown({}, { locale })
     : null;
 
-  const valeurs = valeursEtat(etat, nomRole);
+  const valeurs = valeursEtat(etat, nomRole, locale);
   const png = await rendreEtatPng(valeurs, presentation.disposition, presentation.teinte);
   const nom = nomFichierEtat({
     salonId: channel.id,
@@ -1029,7 +1073,7 @@ async function carteEtatImage(
   });
 
   return {
-    embed: carteSansValeurs(etat).setImage(`attachment://${nom}`),
+    embed: carteSansValeurs(etat, locale).setImage(`attachment://${nom}`),
     piece: new AttachmentBuilder(png, { name: nom }),
   };
 }
@@ -1045,11 +1089,12 @@ async function carteEtatImage(
 function rangeePrincipale(
   etat: EtatSalon,
   demandes: ConfigDemandesAcces,
+  locale: BotLocale,
 ): ActionRowBuilder<MessageActionRowComponentBuilder> {
   const boutons: ButtonBuilder[] = [
-    avecIcone(new ButtonBuilder().setCustomId('tempvoice:salon').setLabel('Channel').setStyle(ButtonStyle.Secondary), I.settings),
-    avecIcone(new ButtonBuilder().setCustomId('tempvoice:membres').setLabel('Members').setStyle(ButtonStyle.Secondary), I.profile),
-    avecIcone(new ButtonBuilder().setCustomId('tempvoice:propriete').setLabel('Ownership').setStyle(ButtonStyle.Secondary), I.crown),
+    avecIcone(new ButtonBuilder().setCustomId('tempvoice:salon').setLabel(m.panel_tempvoice_tab_channel({}, { locale })).setStyle(ButtonStyle.Secondary), I.settings),
+    avecIcone(new ButtonBuilder().setCustomId('tempvoice:membres').setLabel(m.panel_tempvoice_tab_members({}, { locale })).setStyle(ButtonStyle.Secondary), I.profile),
+    avecIcone(new ButtonBuilder().setCustomId('tempvoice:propriete').setLabel(m.panel_tempvoice_tab_ownership({}, { locale })).setStyle(ButtonStyle.Secondary), I.crown),
   ];
 
   // Sur un salon simplement *plein*, demander l'accès ne changerait rien :
@@ -1059,7 +1104,7 @@ function rangeePrincipale(
   if (boutonDemanderAccesVisible({ verrouille: etat.verrouille, reserve: etat.reserveRoleId !== null }, demandes)) {
     boutons.push(
       avecIcone(
-        new ButtonBuilder().setCustomId('tempvoice:demander').setLabel('Request access').setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId('tempvoice:demander').setLabel(m.panel_tempvoice_btn_request_access({}, { locale })).setStyle(ButtonStyle.Primary),
         I.unlock,
       ),
     );
@@ -1100,6 +1145,7 @@ function rangeesPlates(
   channel: VoiceChannel,
   etat: EtatSalon,
   demandes: ConfigDemandesAcces,
+  locale: BotLocale,
 ): ActionRowBuilder<MessageActionRowComponentBuilder>[] {
   const maintenant = Date.now();
   const quota = quotaRenommage(historiqueRenommage(channel.id), maintenant);
@@ -1108,27 +1154,31 @@ function rangeesPlates(
     avecIcone(
       new ButtonBuilder()
         .setCustomId('tempvoice:bascule_verrou')
-        .setLabel(etat.verrouille ? 'Locked' : 'Open')
+        .setLabel(etat.verrouille
+          ? m.panel_tempvoice_state_locked({}, { locale })
+          : m.panel_tempvoice_state_open({}, { locale }))
         .setStyle(etat.verrouille ? ButtonStyle.Danger : ButtonStyle.Success),
       etat.verrouille ? I.lock : I.unlock,
     ),
     avecIcone(
       new ButtonBuilder()
         .setCustomId('tempvoice:limit')
-        .setLabel(`Limit: ${etat.limite > 0 ? etat.limite : 'unlimited'}`)
+        .setLabel(m.panel_tempvoice_btn_limit({
+          value: etat.limite > 0 ? etat.limite : m.panel_tempvoice_limit_unlimited({}, { locale }),
+        }, { locale }))
         .setStyle(ButtonStyle.Primary),
       I.profile,
     ),
     // `libelleRenommer` porte déjà son ✏️ : l'icône « renommer » manque au jeu `ktb_`.
     new ButtonBuilder()
       .setCustomId('tempvoice:rename')
-      .setLabel(libelleRenommer(quota, maintenant))
+      .setLabel(libelleRenommer(quota, maintenant, locale))
       .setStyle(ButtonStyle.Primary)
       .setDisabled(quota.restants === 0),
     avecIcone(
       new ButtonBuilder()
         .setCustomId('tempvoice:reserve')
-        .setLabel(`Reserved: ${etat.reserveRoleId ? 'yes' : 'no'}`)
+        .setLabel(libelleReserveGenerique(etat, locale))
         .setStyle(ButtonStyle.Secondary),
       I.shield,
     ),
@@ -1137,7 +1187,7 @@ function rangeesPlates(
   if (boutonDemanderAccesVisible({ verrouille: etat.verrouille, reserve: etat.reserveRoleId !== null }, demandes)) {
     actions.push(
       avecIcone(
-        new ButtonBuilder().setCustomId('tempvoice:demander').setLabel('Request access').setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId('tempvoice:demander').setLabel(m.panel_tempvoice_btn_request_access({}, { locale })).setStyle(ButtonStyle.Primary),
         I.unlock,
       ),
     );
@@ -1147,22 +1197,22 @@ function rangeesPlates(
     rangee(...actions),
     rangee(
       avecIcone(
-        new ButtonBuilder().setCustomId('tempvoice:propriete').setLabel('Ownership').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('tempvoice:propriete').setLabel(m.panel_tempvoice_tab_ownership({}, { locale })).setStyle(ButtonStyle.Secondary),
         I.crown,
       ),
       avecIcone(
-        new ButtonBuilder().setCustomId('tempvoice:reglages').setLabel('Settings').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('tempvoice:reglages').setLabel(m.panel_tempvoice_btn_settings({}, { locale })).setStyle(ButtonStyle.Secondary),
         I.settings,
       ),
     ),
-    rangee(menuModeEcriture(etat, true)),
+    rangee(menuModeEcriture(etat, true, locale)),
   ];
 
   // Les bots occupent des places dans la liste sans qu'aucune action du panneau
   // ait de sens sur eux.
   const presents = [...(channel.members?.values() ?? [])].filter((membre) => !membre.user?.bot);
   if (presents.length > 0) {
-    rangees.push(rangee(menuMembresPresents(presents.slice(0, MAX_OPTIONS_MENU), presents.length)));
+    rangees.push(rangee(menuMembresPresents(presents.slice(0, MAX_OPTIONS_MENU), presents.length, locale)));
   }
 
   return rangees;
@@ -1225,8 +1275,19 @@ async function presentationDuSalon(
   );
 }
 
+/**
+ * Le panneau PUBLIC, dans la langue du serveur.
+ *
+ * C'est ici que la langue est résolue pour tout le rendu public : le salon donne
+ * son serveur, donc la cascade `Guild.language` → locale Discord y est lisible.
+ * Elle est ensuite passée EN PARAMÈTRE à chaque fonction de rendu — jamais
+ * posée dans un état de module : deux serveurs de langues différentes rendent
+ * leur panneau dans le même processus, et un état partagé donnerait à l'un la
+ * langue de l'autre selon l'ordre des événements.
+ */
 async function construirePanneau(channel: VoiceChannel, entree: EntreeSalonTemporaire): Promise<PanneauPublic> {
   const guildId = channel.guild?.id ?? '';
+  const locale = await resolveGuildLocale(guildId, channel.guild?.preferredLocale ?? null);
   const etat = await lireEtatSalon(channel, entree);
   const demandes = await lireConfigDemandes(guildId);
   const presentation = await presentationDuSalon(guildId, entree, await lireReglagesAdmin(guildId));
@@ -1235,24 +1296,24 @@ async function construirePanneau(channel: VoiceChannel, entree: EntreeSalonTempo
   // message public. Le tri entre les personnes se fait au clic, ici comme là —
   // un message Discord ne porte qu'un seul jeu de composants.
   const components = presentation.mode === 'FLAT'
-    ? rangeesPlates(channel, etat, demandes)
-    : [rangeePrincipale(etat, demandes)];
+    ? rangeesPlates(channel, etat, demandes, locale)
+    : [rangeePrincipale(etat, demandes, locale)];
 
   // Le rendu livré (six champs inline) reste celui de tout serveur qui n'a rien
   // réglé : voir `etatRenduNativement`, qui dit pourquoi `dispositionNative` ne
   // suffit pas à le décider seul.
   if (etatRenduNativement(presentation)) {
-    return { charge: { embeds: [carteEtat(etat)], components }, presentation };
+    return { charge: { embeds: [carteEtat(etat, locale)], components }, presentation };
   }
 
   try {
-    const { embed, piece } = await carteEtatImage(channel, etat, presentation);
+    const { embed, piece } = await carteEtatImage(channel, etat, presentation, locale);
     return { charge: { embeds: [embed], components, files: [piece] }, presentation };
   } catch (err) {
     // Un rendu d'image qui échoue ne doit JAMAIS laisser le salon sans panneau :
     // les six champs inline restent lisibles partout, et l'échec se dit.
     logger.warn('TempVoice', `Carte d'état non rendue en image pour ${channel.id}, repli sur les six champs :`, err);
-    return { charge: { embeds: [carteEtat(etat)], components }, presentation };
+    return { charge: { embeds: [carteEtat(etat, locale)], components }, presentation };
   }
 }
 
@@ -1549,6 +1610,15 @@ const ACTIONS_OUVERTES = new Set(['claim', 'demander']);
 interface ContextePanneau {
   role: RoleAgissant;
   reglages: ReglagesAdmin;
+  /**
+   * La langue du serveur, résolue une fois par interaction et descendue
+   * explicitement jusqu'au rendu.
+   *
+   * Dans le contexte et non dans un état de module : deux serveurs de langues
+   * différentes cliquent dans le même processus, et un état partagé rendrait
+   * l'un dans la langue de l'autre selon l'ordre des événements.
+   */
+  locale: BotLocale;
   /** Réglage admin : un seul éphémère réécrit sur place, avec un bouton
    *  « Retour », plutôt qu'un message de plus à chaque action. */
   panneauCompact: boolean;
@@ -1579,13 +1649,27 @@ interface ContextePanneau {
  * circonstances : il ne porte qu'un seul jeu de composants pour tout le serveur.
  */
 function libelleReserver(channel: VoiceChannel, etat: EtatSalon, ctxp: ContextePanneau): string {
-  if (ctxp.plan.type !== 'role_unique') return `Reserved: ${etat.reserveRoleId ? 'yes' : 'no'}`;
+  if (ctxp.plan.type !== 'role_unique') return libelleReserveGenerique(etat, ctxp.locale);
 
-  const nom = channel.guild?.roles?.cache?.get?.(ctxp.plan.roleId)?.name ?? 'this role';
+  const nom = channel.guild?.roles?.cache?.get?.(ctxp.plan.roleId)?.name
+    ?? m.panel_tempvoice_this_role({}, { locale: ctxp.locale });
   // Discord plafonne un libellé de bouton à quatre-vingts caractères ; un nom de
   // rôle peut aller jusqu'à cent.
   const pose = etat.reserveRoleId === ctxp.plan.roleId;
-  return `${pose ? 'Release' : 'Reserve'}: ${nom}`.slice(0, 80);
+  const libelle = pose
+    ? m.panel_tempvoice_btn_release_role({ role: nom }, { locale: ctxp.locale })
+    : m.panel_tempvoice_btn_reserve_role({ role: nom }, { locale: ctxp.locale });
+  return libelle.slice(0, 80);
+}
+
+/** Le libellé générique de « Réserver » : celui du message PUBLIC, qui ne porte
+ *  qu'un seul jeu de composants et ne peut donc nommer aucun rôle en propre. */
+function libelleReserveGenerique(etat: EtatSalon, locale: BotLocale): string {
+  return m.panel_tempvoice_btn_reserved({
+    value: etat.reserveRoleId
+      ? m.panel_tempvoice_yes({}, { locale })
+      : m.panel_tempvoice_no({}, { locale }),
+  }, { locale });
 }
 
 /** Grise un bouton et dit pourquoi : la maquette montre le motif *avant* le clic,
@@ -1601,8 +1685,8 @@ function selonVerdict(bouton: ButtonBuilder, verdict: VerdictAction): ButtonBuil
 function encartRole(entree: EntreeSalonTemporaire, ctxp: ContextePanneau): EmbedBuilder[] {
   if (ctxp.role !== 'moderateur') return [];
 
-  const lignes = [`You are acting on <@${entree.creatorId}>'s channel. Your actions are logged.`];
-  const raison = raisonAdminsSeulement(reglagesVerrouilles(ctxp.reglages));
+  const lignes: string[] = [m.panel_tempvoice_mod_notice({ owner: entree.creatorId }, { locale: ctxp.locale })];
+  const raison = raisonAdminsSeulement(reglagesVerrouilles(ctxp.reglages), ctxp.locale);
   if (raison) lignes.push(`${I.lock} ${raison}`);
 
   return [new EmbedBuilder().setColor(COULEUR_NEUTRE).setDescription(lignes.join('\n\n'))];
@@ -1619,19 +1703,22 @@ async function panneauSalon(
   ctxp: ContextePanneau,
 ): Promise<PanneauRendu> {
   const etat = await lireEtatSalon(channel, entree);
+  const locale = ctxp.locale;
   const maintenant = Date.now();
   const quota = quotaRenommage(historiqueRenommage(channel.id), maintenant);
 
-  const verrou = peutAgir(ctxp.role, 'verrouiller', ctxp.reglages);
-  const limite = peutAgir(ctxp.role, 'limite', ctxp.reglages);
-  const renommer = peutAgir(ctxp.role, 'renommer', ctxp.reglages);
-  const reserver = peutAgir(ctxp.role, 'reserver', ctxp.reglages);
-  const modeEcriture = peutAgir(ctxp.role, 'modeEcriture', ctxp.reglages);
+  const verrou = peutAgir(ctxp.role, 'verrouiller', ctxp.reglages, ctxp.locale);
+  const limite = peutAgir(ctxp.role, 'limite', ctxp.reglages, ctxp.locale);
+  const renommer = peutAgir(ctxp.role, 'renommer', ctxp.reglages, ctxp.locale);
+  const reserver = peutAgir(ctxp.role, 'reserver', ctxp.reglages, ctxp.locale);
+  const modeEcriture = peutAgir(ctxp.role, 'modeEcriture', ctxp.reglages, ctxp.locale);
 
   const bascule = avecIcone(
     new ButtonBuilder()
       .setCustomId('tempvoice:bascule_verrou')
-      .setLabel(etat.verrouille ? 'Locked' : 'Open')
+      .setLabel(etat.verrouille
+        ? m.panel_tempvoice_state_locked({}, { locale })
+        : m.panel_tempvoice_state_open({}, { locale }))
       .setStyle(etat.verrouille ? ButtonStyle.Danger : ButtonStyle.Success),
     etat.verrouille ? I.lock : I.unlock,
   );
@@ -1642,7 +1729,9 @@ async function panneauSalon(
       avecIcone(
         new ButtonBuilder()
           .setCustomId('tempvoice:limit')
-          .setLabel(`Limit: ${etat.limite > 0 ? etat.limite : 'unlimited'}`)
+          .setLabel(m.panel_tempvoice_btn_limit({
+            value: etat.limite > 0 ? etat.limite : m.panel_tempvoice_limit_unlimited({}, { locale }),
+          }, { locale }))
           .setStyle(ButtonStyle.Primary),
         I.profile,
       ),
@@ -1652,7 +1741,7 @@ async function panneauSalon(
     selonVerdict(
       new ButtonBuilder()
         .setCustomId('tempvoice:rename')
-        .setLabel(libelleRenommer(quota, maintenant))
+        .setLabel(libelleRenommer(quota, maintenant, locale))
         .setStyle(ButtonStyle.Primary)
         .setDisabled(quota.restants === 0),
       renommer,
@@ -1671,7 +1760,7 @@ async function panneauSalon(
 
   const rangees = [
     rangeeBoutons,
-    rangee(menuModeEcriture(etat, modeEcriture.autorise)),
+    rangee(menuModeEcriture(etat, modeEcriture.autorise, locale)),
   ];
 
   // Les reglages admin vivaient uniquement dans le dashboard : un administrateur
@@ -1687,7 +1776,7 @@ async function panneauSalon(
   // restait sans effet. `v1ImpossibleSignale` porte le fait MESURÉ par
   // `reecrirePanneau` ; il est dit ici, dans l'écran qui porte les réglages.
   if (ctxp.presentation.composants === 'V1' && v1ImpossibleSignale.has(channel.id)) {
-    embeds.push(avis(`${I.warn} This panel is already served as **Components V2**. Discord never removes that flag from an existing message, so the **V1** setting will only take effect on the next channel created.`));
+    embeds.push(avis(`${I.warn} ${m.panel_tempvoice_v2_already({}, { locale })}`));
   }
 
   return { embeds, components: rangees };
@@ -1697,20 +1786,22 @@ async function panneauSalon(
  * Le menu « Qui peut écrire », identique dans le sous-panneau « Salon » et sur
  * le message public en mode FLAT — seul son état actif/grisé change.
  */
-function menuModeEcriture(etat: EtatSalon, actif: boolean): StringSelectMenuBuilder {
+function menuModeEcriture(etat: EtatSalon, actif: boolean, locale: BotLocale): StringSelectMenuBuilder {
   return new StringSelectMenuBuilder()
     .setCustomId('tempvoice:mode_select')
-    .setPlaceholder(`Channel chat · who can post: ${LIBELLES_MODES_ECRITURE[etat.modeEcriture].libelle}`)
+    .setPlaceholder(m.panel_tempvoice_mode_placeholder({
+      mode: libelleModeEcriture(etat.modeEcriture, locale).libelle,
+    }, { locale }))
     .setDisabled(!actif)
     .addOptions(
       MODES_ECRITURE.map((mode) => {
-        const libelle = LIBELLES_MODES_ECRITURE[mode];
+        const libelle = libelleModeEcriture(mode, locale);
         return avecIcone(
           new StringSelectMenuOptionBuilder()
             // Discord affiche le libellé de l'option active à la place du texte
             // d'invite : sans ce préfixe, le menu replié n'annonce que « Moi
             // seul » et ne dit nulle part de quoi il parle.
-            .setLabel(`Chat: ${libelle.libelle}`)
+            .setLabel(m.panel_tempvoice_mode_option({ mode: libelle.libelle }, { locale }))
             .setDescription(libelle.description)
             .setValue(mode)
             .setDefault(mode === etat.modeEcriture),
@@ -1739,13 +1830,18 @@ function menuReglagesModerateur(
   return new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
     new StringSelectMenuBuilder()
       .setCustomId('tempvoice:reglages_mod')
-      .setPlaceholder(`Moderators · ${ouverts.length} / ${REGLAGES_MODERATEUR.length} action${ouverts.length > 1 ? 's' : ''} allowed`)
+      .setPlaceholder((ouverts.length > 1 ? m.panel_tempvoice_mod_placeholder_many : m.panel_tempvoice_mod_placeholder_one)(
+        { open: ouverts.length, total: REGLAGES_MODERATEUR.length },
+        { locale: ctxp.locale },
+      ))
       // Zero minimum : tout fermer est un reglage valide, pas une erreur.
       .setMinValues(0)
       .setMaxValues(REGLAGES_MODERATEUR.length)
       .addOptions(REGLAGES_MODERATEUR.map((reglage) => new StringSelectMenuOptionBuilder()
-        .setLabel(majusculeInitiale(SUJETS_REGLAGES[reglage].sujet))
-        .setDescription(ouverts.includes(reglage) ? 'Allowed for moderators' : 'Admins only')
+        .setLabel(majusculeInitiale(sujetReglage(reglage, ctxp.locale)))
+        .setDescription(ouverts.includes(reglage)
+          ? m.panel_tempvoice_mod_allowed({}, { locale: ctxp.locale })
+          : m.panel_tempvoice_mod_admins_only({}, { locale: ctxp.locale }))
         .setValue(reglage)
         .setDefault(ouverts.includes(reglage)))),
   );
@@ -1807,11 +1903,15 @@ const MAX_UTILISATEURS_MENU = 25;
 function menuMembresPresents(
   listes: readonly GuildMember[],
   total: number,
+  locale: BotLocale,
   customId = 'tempvoice:membre_ici',
 ): StringSelectMenuBuilder {
   return new StringSelectMenuBuilder()
     .setCustomId(customId)
-    .setPlaceholder(`In the channel · ${total} ${total > 1 ? 'people' : 'person'}`)
+    .setPlaceholder((total > 1 ? m.panel_tempvoice_members_placeholder_many : m.panel_tempvoice_members_placeholder_one)(
+      { count: total },
+      { locale },
+    ))
     .addOptions(
       listes.map((membre) => new StringSelectMenuOptionBuilder()
         // Discord plafonne un libellé à cent caractères, et un pseudo
@@ -1852,24 +1952,30 @@ async function panneauMembres(
   // fonction. La recherche serveur est donc refusée au niveau du gestionnaire,
   // là où tous les chemins passent — pas au niveau du bouton.
   const rechercheServeur = ctxp.presentation.mode !== 'FLAT';
+  const locale = ctxp.locale;
 
   const invite = new EmbedBuilder()
     .setColor(COULEUR_NEUTRE)
-    .setTitle('Who?')
+    .setTitle(m.panel_tempvoice_who_title({}, { locale }))
     .setDescription(presents.length === 0
       ? rechercheServeur
-        ? 'Nobody is in the channel right now: search for anyone on the server.'
-        : 'Nobody is in the channel right now, and this panel only targets the people present.'
+        ? m.panel_tempvoice_who_empty_search({}, { locale })
+        : m.panel_tempvoice_who_empty_flat({}, { locale })
       : tronquee
-        ? `Pick someone from the channel — the first ${listes.length} are listed${rechercheServeur ? ' — or search for anyone on the server' : ''}.`
-        : `Pick someone who is in the channel${rechercheServeur ? ', or search for anyone on the server' : ''}.`);
+        ? m.panel_tempvoice_who_truncated({
+          count: listes.length,
+          suffix: rechercheServeur ? m.panel_tempvoice_who_or_search_dash({}, { locale }) : '',
+        }, { locale })
+        : m.panel_tempvoice_who_pick({
+          suffix: rechercheServeur ? m.panel_tempvoice_who_or_search_comma({}, { locale }) : '',
+        }, { locale }));
 
   const rangees: ActionRowBuilder<MessageActionRowComponentBuilder>[] = [];
 
   // Un menu sans option fait rejeter le message entier par Discord : la rangée
   // n'existe que lorsqu'il y a quelqu'un à y mettre.
   if (listes.length > 0) {
-    rangees.push(rangee(menuMembresPresents(listes, presents.length)));
+    rangees.push(rangee(menuMembresPresents(listes, presents.length, locale)));
   }
 
   if (rechercheServeur) {
@@ -1877,7 +1983,7 @@ async function panneauMembres(
       new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
         new UserSelectMenuBuilder()
           .setCustomId('tempvoice:membre_select')
-          .setPlaceholder('Search anyone on the server…')
+          .setPlaceholder(m.panel_tempvoice_search_placeholder({}, { locale }))
           .setMinValues(1)
           .setMaxValues(1),
       ),
@@ -1924,23 +2030,34 @@ async function ficheMembre(
     autorise,
   };
 
-  const expulser = peutAgirSurCible(ctxp.role, 'expulser', ctxp.reglages, cible);
-  const bannir = peutAgirSurCible(ctxp.role, 'bannir', ctxp.reglages, cible);
-  const autoriser = peutAgirSurCible(ctxp.role, 'autoriser', ctxp.reglages, cible);
-  const transferer = peutAgirSurCible(ctxp.role, 'transferer', ctxp.reglages, cible);
+  const expulser = peutAgirSurCible(ctxp.role, 'expulser', ctxp.reglages, cible, ctxp.locale);
+  const bannir = peutAgirSurCible(ctxp.role, 'bannir', ctxp.reglages, cible, ctxp.locale);
+  const autoriser = peutAgirSurCible(ctxp.role, 'autoriser', ctxp.reglages, cible, ctxp.locale);
+  const transferer = peutAgirSurCible(ctxp.role, 'transferer', ctxp.reglages, cible, ctxp.locale);
 
-  const acces = banni ? `${I.ban} Banned` : autorise ? `${I.check} Allowed` : `${I.dot} Not allowed`;
+  const locale = ctxp.locale;
+  const acces = banni
+    ? `${I.ban} ${m.panel_tempvoice_access_banned({}, { locale })}`
+    : autorise
+      ? `${I.check} ${m.panel_tempvoice_access_allowed({}, { locale })}`
+      : `${I.dot} ${m.panel_tempvoice_access_not_allowed({}, { locale })}`;
   const roleAffiche = cibleMembre.roles?.highest?.name && cibleMembre.roles.highest.name !== '@everyone'
     ? cibleMembre.roles.highest.name
-    : 'Member';
+    : m.panel_tempvoice_role_member({}, { locale });
 
   const fiche = new EmbedBuilder()
     .setColor(COULEUR_NEUTRE)
     .setTitle(cibleMembre.displayName)
     .addFields(
-      { name: 'Presence', value: dansLeSalon ? `${I.voice} In the channel` : `${I.dot} Outside the channel`, inline: true },
-      { name: 'Access', value: acces, inline: true },
-      { name: 'Role', value: roleAffiche, inline: true },
+      {
+        name: m.panel_tempvoice_field_presence({}, { locale }),
+        value: dansLeSalon
+          ? `${I.voice} ${m.panel_tempvoice_presence_in({}, { locale })}`
+          : `${I.dot} ${m.panel_tempvoice_presence_out({}, { locale })}`,
+        inline: true,
+      },
+      { name: m.panel_tempvoice_field_access({}, { locale }), value: acces, inline: true },
+      { name: m.panel_tempvoice_field_role({}, { locale }), value: roleAffiche, inline: true },
     );
 
   // Une seule ligne d'alerte, comme la maquette : le premier motif qui ferme une
@@ -1955,7 +2072,7 @@ async function ficheMembre(
       avecIcone(
         new ButtonBuilder()
           .setCustomId(`tempvoice:m_kick:${cibleMembre.id}`)
-          .setLabel(libelleActionMembre('expulser', cible))
+          .setLabel(libelleActionMembre('expulser', cible, locale))
           .setStyle(ButtonStyle.Danger),
         I.kick,
       ),
@@ -1965,7 +2082,7 @@ async function ficheMembre(
       avecIcone(
         new ButtonBuilder()
           .setCustomId(`tempvoice:m_ban:${cibleMembre.id}`)
-          .setLabel(libelleActionMembre('bannir', cible))
+          .setLabel(libelleActionMembre('bannir', cible, locale))
           .setStyle(ButtonStyle.Danger),
         I.ban,
       ),
@@ -1975,7 +2092,7 @@ async function ficheMembre(
       avecIcone(
         new ButtonBuilder()
           .setCustomId(`tempvoice:${autorise ? 'm_untrust' : 'm_trust'}:${cibleMembre.id}`)
-          .setLabel(libelleActionMembre('autoriser', cible))
+          .setLabel(libelleActionMembre('autoriser', cible, locale))
           .setStyle(ButtonStyle.Success),
         autorise ? I.cross : I.check,
       ),
@@ -1988,7 +2105,7 @@ async function ficheMembre(
       avecIcone(
         new ButtonBuilder()
           .setCustomId(`tempvoice:m_transfer:${cibleMembre.id}`)
-          .setLabel(libelleActionMembre('transferer', cible))
+          .setLabel(libelleActionMembre('transferer', cible, locale))
           .setStyle(ButtonStyle.Primary),
         I.crown,
       ),
@@ -2016,25 +2133,28 @@ function panneauPropriete(
             avecIcone(
               new ButtonBuilder()
                 .setCustomId('tempvoice:transfer')
-                .setLabel('Transfer the channel')
+                .setLabel(m.panel_tempvoice_btn_transfer({}, { locale: ctxp.locale }))
                 .setStyle(ButtonStyle.Primary),
               I.crown,
             ),
-            peutAgir(ctxp.role, 'transferer', ctxp.reglages),
+            peutAgir(ctxp.role, 'transferer', ctxp.reglages, ctxp.locale),
           ),
         ),
       ],
     };
   }
 
+  const locale = ctxp.locale;
   const depuis = entree.departProprietaireA
-    ? ` ${formaterDuree(Date.now() - entree.departProprietaireA)} ago`
+    ? m.panel_tempvoice_since_ago({
+      duration: formaterDuree(Date.now() - entree.departProprietaireA, locale),
+    }, { locale })
     : '';
 
   const abandon = new EmbedBuilder()
     .setColor(COULEUR_NEUTRE)
-    .setTitle(`${I.crown} This channel has no owner`)
-    .setDescription(`<@${entree.creatorId}> left the channel${depuis}.`);
+    .setTitle(`${I.crown} ${m.panel_tempvoice_no_owner_title({}, { locale })}`)
+    .setDescription(m.panel_tempvoice_no_owner_desc({ owner: entree.creatorId, since: depuis }, { locale }));
 
   return {
     embeds: [abandon],
@@ -2043,7 +2163,7 @@ function panneauPropriete(
         // L'icône « récupérer » manque au jeu `ktb_` : l'Unicode reste.
         new ButtonBuilder()
           .setCustomId('tempvoice:claim')
-          .setLabel(`${ICONES_ABSENTES.recuperer} Claim the channel`)
+          .setLabel(`${ICONES_ABSENTES.recuperer} ${m.panel_tempvoice_btn_claim({}, { locale })}`)
           .setStyle(ButtonStyle.Success),
       ),
     ],
@@ -2069,23 +2189,36 @@ function carteDecision(
   salonId: string,
   dejaRefuse: boolean,
   expireA: number,
+  locale: BotLocale,
 ): PanneauRendu {
   const anciennete = demandeur.joinedTimestamp
-    ? `for ${formaterDuree(Date.now() - demandeur.joinedTimestamp)}`
-    : 'unknown';
+    ? m.panel_tempvoice_since_for({
+      duration: formaterDuree(Date.now() - demandeur.joinedTimestamp, locale),
+    }, { locale })
+    : m.panel_tempvoice_date_unknown({}, { locale });
   const roleAffiche = demandeur.roles?.highest?.name && demandeur.roles.highest.name !== '@everyone'
     ? demandeur.roles.highest.name
-    : 'Member';
+    : m.panel_tempvoice_role_member({}, { locale });
 
   const carte = new EmbedBuilder()
     .setColor(COULEUR_ACCENT)
-    .setTitle(`${I.profile} ${demandeur.displayName} wants to join`)
+    .setTitle(`${I.profile} ${m.panel_tempvoice_request_title({ name: demandeur.displayName }, { locale })}`)
     .addFields(
-      { name: 'In the server', value: anciennete, inline: true },
-      { name: 'Role', value: roleAffiche, inline: true },
-      { name: 'Already denied here', value: dejaRefuse ? `${I.cross} Yes` : `${I.dot} No`, inline: true },
+      { name: m.panel_tempvoice_field_in_server({}, { locale }), value: anciennete, inline: true },
+      { name: m.panel_tempvoice_field_role({}, { locale }), value: roleAffiche, inline: true },
+      {
+        name: m.panel_tempvoice_field_already_denied({}, { locale }),
+        value: dejaRefuse
+          ? `${I.cross} ${m.panel_tempvoice_yes_cap({}, { locale })}`
+          : `${I.dot} ${m.panel_tempvoice_no_cap({}, { locale })}`,
+        inline: true,
+      },
     )
-    .setFooter({ text: `Expires in ${formaterDuree(Math.max(0, expireA - Date.now()))}` });
+    .setFooter({
+      text: m.panel_tempvoice_request_expires({
+        duration: formaterDuree(Math.max(0, expireA - Date.now()), locale),
+      }, { locale }),
+    });
 
   return {
     embeds: [carte],
@@ -2094,21 +2227,21 @@ function carteDecision(
         avecIcone(
           new ButtonBuilder()
             .setCustomId(identifiantDecision('ok', demandeur.id, salonId))
-            .setLabel('Allow')
+            .setLabel(m.panel_tempvoice_action_trust({}, { locale }))
             .setStyle(ButtonStyle.Success),
           I.check,
         ),
         avecIcone(
           new ButtonBuilder()
             .setCustomId(identifiantDecision('non', demandeur.id, salonId))
-            .setLabel('Deny')
+            .setLabel(m.panel_tempvoice_btn_deny({}, { locale }))
             .setStyle(ButtonStyle.Danger),
           I.cross,
         ),
         avecIcone(
           new ButtonBuilder()
             .setCustomId(identifiantDecision('ban', demandeur.id, salonId))
-            .setLabel('Deny and ban')
+            .setLabel(m.panel_tempvoice_btn_deny_ban({}, { locale }))
             .setStyle(ButtonStyle.Secondary),
           I.ban,
         ),
@@ -2123,6 +2256,10 @@ async function createTempChannel(
   generator: TempVoiceGenerator,
 ): Promise<void> {
   const guild = member.guild;
+  // La langue du serveur est résolue ICI, où la guilde est connue, et passée
+  // explicitement à tout ce qui produit du texte visible : messages privés et
+  // raisons d'audit Discord comprises.
+  const locale = await resolveGuildLocale(guild.id, guild.preferredLocale ?? null);
 
   const policy = generator.policy;
 
@@ -2131,13 +2268,15 @@ async function createTempChannel(
   const parent = generator.categoryId ? guild.channels.cache.get(generator.categoryId) : undefined;
   const parentCategory = parent?.type === ChannelType.GuildCategory ? parent : undefined;
 
-  const missing = missingBotPermissions(guild, policy, parentCategory);
+  const missing = missingBotPermissions(guild, policy, locale, parentCategory);
   if (missing.length > 0) {
     logger.warn('TempVoice', `Droits manquants sur ${guild.name} (${guild.id}) : ${missing.join(', ')}`);
+    const droits = missing.join(m.panel_tempvoice_perm_sep({}, { locale }));
     await member
-      .send(
-        `❌ The temporary channel could not be created on **${guild.name}**: the bot is missing the ${missing.length > 1 ? 'permissions' : 'permission'} “${missing.join('” and “')}”.`,
-      )
+      .send((missing.length > 1 ? m.panel_tempvoice_dm_missing_perms_many : m.panel_tempvoice_dm_missing_perms_one)(
+        { guild: guild.name, perms: droits },
+        { locale },
+      ))
       .catch(() => null);
     return;
   }
@@ -2158,7 +2297,7 @@ async function createTempChannel(
         inherited,
         policy: generator.policy,
       }),
-      reason: `Création de salon temporaire pour ${member.user.tag}`,
+      reason: m.panel_tempvoice_audit_create({ user: member.user.tag }, { locale }),
     })
     .catch((err: unknown) => {
       logger.error('TempVoice', `Impossible de créer le salon temporaire sur ${guild.id} :`, err);
@@ -2182,7 +2321,7 @@ async function createTempChannel(
     return false;
   });
   if (!moved) {
-    await tempChannel.delete('Déplacement vers le salon temporaire impossible').catch(() => null);
+    await tempChannel.delete(m.panel_tempvoice_audit_move_failed({}, { locale })).catch(() => null);
     logger.warn('TempVoice', `Déplacement impossible pour ${member.user.tag}, salon temporaire annulé.`);
     return;
   }
@@ -2299,9 +2438,12 @@ export function registerTempVoiceListener(client: Client): void {
             const oublierRefus = annoncerIntentionVocale(guild.id, member.id, 'disconnect', {
               libelle: 'Kotbo (rôle requis manquant sur le salon générateur)',
             });
-            await newState.disconnect('Accès au salon générateur restreint').catch(() => oublierRefus());
+            const locale = await resolveGuildLocale(guild.id, guild.preferredLocale ?? null);
+            await newState
+              .disconnect(m.panel_tempvoice_audit_generator_restricted({}, { locale }))
+              .catch(() => oublierRefus());
             await member
-              .send(`❌ You do not have the role required to use the temporary-channel generator on **${guild.name}**.`)
+              .send(m.panel_tempvoice_dm_missing_role({ guild: guild.name }, { locale }))
               .catch(() => null);
             return;
           }
@@ -2334,7 +2476,8 @@ export function registerTempVoiceListener(client: Client): void {
           tempChannels.has(oldChannel.id) &&
           oldChannel.members.size === 0
         ) {
-          const closed = await closeTempChannel(oldChannel, 'Salon vocal temporaire vide');
+          const locale = await resolveGuildLocale(guild.id, guild.preferredLocale ?? null);
+          const closed = await closeTempChannel(oldChannel, m.panel_tempvoice_audit_empty({}, { locale }));
           if (closed) {
             logger.info('TempVoice', `Salon supprimé car vide : ${oldChannel.name} (${oldChannel.id})`);
           }
@@ -2369,11 +2512,17 @@ export function registerTempVoiceListener(client: Client): void {
     const guild = interaction.guild ?? channel?.guild ?? null;
     if (!channel || !guild) return;
     const guildId = guild.id;
+    // Résolue avant le premier refus : les deux gardes ci-dessous répondent déjà
+    // du texte, et elles passent avant que `ctxp` n'existe.
+    const locale = await resolveGuildLocale(guildId, interaction.guildLocale ?? guild.preferredLocale ?? null);
 
     const cache = tempChannels.get(channel.id);
     if (!cache) {
       await interaction
-        .reply({ embeds: [avis('❌ This channel is no longer registered as a temporary one.')], flags: [MessageFlags.Ephemeral] })
+        .reply({
+          embeds: [avis(m.panel_tempvoice_err_not_temp({}, { locale }))],
+          flags: [MessageFlags.Ephemeral],
+        })
         .catch(() => null);
       return;
     }
@@ -2389,7 +2538,10 @@ export function registerTempVoiceListener(client: Client): void {
     // dehors. Les deux sont donc ouvertes à autrui.
     if (!ACTIONS_OUVERTES.has(action) && cache.creatorId !== user.id && !(await isStaff(guildId, actingMember))) {
       await interaction
-        .reply({ embeds: [avis('❌ Only the channel owner can do that.')], flags: [MessageFlags.Ephemeral] })
+        .reply({
+          embeds: [avis(m.panel_tempvoice_err_owner_only({}, { locale }))],
+          flags: [MessageFlags.Ephemeral],
+        })
         .catch(() => null);
       return;
     }
@@ -2405,6 +2557,7 @@ export function registerTempVoiceListener(client: Client): void {
     const presentation = await presentationDuSalon(guildId, cache, module);
     const ctxp: ContextePanneau = {
       role: await roleAgissant(guildId, actingMember, cache.creatorId),
+      locale,
       ...module,
       // Après l'étalement : `module.presentation` est le réglage du SERVEUR, et
       // c'est la présentation résolue pour ce salon qui doit faire foi.
@@ -2439,7 +2592,10 @@ export function registerTempVoiceListener(client: Client): void {
       await handleTempVoiceAction({ interaction, action, channel, cache, guild, guildId, actingMember, ctxp });
     } catch (err) {
       logger.error('TempVoice', `Erreur lors de l'action « ${action} » :`, err);
-      const message = { embeds: [avis('❌ That action could not be applied.')], flags: [MessageFlags.Ephemeral] as const };
+      const message = {
+        embeds: [avis(m.panel_tempvoice_err_action_failed({}, { locale }))],
+        flags: [MessageFlags.Ephemeral] as const,
+      };
       await (interaction.isRepliable() && (interaction.replied || interaction.deferred)
         ? interaction.followUp(message).catch(() => null)
         : interaction.reply(message).catch(() => null));
@@ -2523,17 +2679,17 @@ const ONGLET_DORIGINE: Readonly<Record<string, OngletPanneau>> = {
   claim: 'propriete',
 };
 
-const LIBELLES_ONGLETS: Readonly<Record<OngletPanneau, string>> = {
-  salon: 'Channel',
-  membres: 'Members',
-  propriete: 'Ownership',
+const LIBELLES_ONGLETS: Readonly<Record<OngletPanneau, (inputs: Record<string, never>, options: { locale: BotLocale }) => string>> = {
+  salon: m.panel_tempvoice_tab_channel,
+  membres: m.panel_tempvoice_tab_members,
+  propriete: m.panel_tempvoice_tab_ownership,
 };
 
-function rangeeRetour(onglet: OngletPanneau): ActionRowBuilder<MessageActionRowComponentBuilder> {
+function rangeeRetour(onglet: OngletPanneau, locale: BotLocale): ActionRowBuilder<MessageActionRowComponentBuilder> {
   return new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
     new ButtonBuilder()
       .setCustomId(`tempvoice:${onglet}`)
-      .setLabel(`Back · ${LIBELLES_ONGLETS[onglet]}`)
+      .setLabel(m.panel_tempvoice_btn_back({ tab: LIBELLES_ONGLETS[onglet]({}, { locale }) }, { locale }))
       .setEmoji('◀️')
       .setStyle(ButtonStyle.Secondary),
   );
@@ -2558,7 +2714,7 @@ function avis(texte: string, couleur = COULEUR_NEUTRE): EmbedBuilder {
 async function respond(
   interaction: RepliableInteraction,
   content: string,
-  retour?: OngletPanneau | null,
+  retour?: { onglet: OngletPanneau; locale: BotLocale } | null,
 ): Promise<void> {
   if (interaction.deferred || interaction.replied) {
     // ⚠️ Le verdict part en EMBED, jamais en `content` brut.
@@ -2576,7 +2732,7 @@ async function respond(
       embeds: [new EmbedBuilder().setColor(COULEUR_NEUTRE).setDescription(content)],
       // Le menu qui a provoque le verdict est retire : un selecteur deja
       // consomme ne doit pas rester cliquable.
-      components: retour ? [rangeeRetour(retour)] : [],
+      components: retour ? [rangeeRetour(retour.onglet, retour.locale)] : [],
     };
     await interaction.editReply(charge).catch(() => null);
     return;
@@ -2656,7 +2812,7 @@ async function selecteurPersonnes(
 
   const listes = presents.slice(0, MAX_OPTIONS_MENU);
   return rangee(
-    menuMembresPresents(listes, presents.length, customId)
+    menuMembresPresents(listes, presents.length, ctxp.locale, customId)
       .setPlaceholder(placeholder)
       .setMinValues(1)
       .setMaxValues(Math.min(maxValues, listes.length)),
@@ -2782,6 +2938,7 @@ async function rafraichirFicheMembre(ctx: ActionContext, cible: GuildMember): Pr
  *  sans effet : c'est une bascule, et l'état courant décide du sens. */
 async function basculerVerrou(ctx: ActionContext): Promise<string> {
   const { channel, cache, guildId } = ctx;
+  const locale = ctx.ctxp.locale;
 
   // L'état doit être relu : `upsert` ne met pas le cache à jour, seul
   // `CHANNEL_UPDATE` le fait. Sans cette relecture, la bascule se décide sur un
@@ -2801,7 +2958,7 @@ async function basculerVerrou(ctx: ActionContext): Promise<string> {
       cache.creatorId,
       ownerChatPatch(false, categoryOverwriteFor(channel, cache.creatorId)),
     );
-    return `${I.unlock} The channel is open again: it goes back to the access its category defines.`;
+    return `${I.unlock} ${m.panel_tempvoice_unlocked({}, { locale })}`;
   }
 
   await channel.permissionOverwrites.edit(
@@ -2813,7 +2970,7 @@ async function basculerVerrou(ctx: ActionContext): Promise<string> {
   // qu'il n'a pas de surcharge a lui. Sans cela il ne peut plus mettre a
   // jour le panneau ni poster le moindre avis dans le salon.
   await assurerBotPeutEcrire(channel);
-  return `${I.lock} The channel is locked: only you, the roles allowed by default and the members you added can still join.`;
+  return `${I.lock} ${m.panel_tempvoice_locked({}, { locale })}`;
 }
 
 /**
@@ -2894,8 +3051,9 @@ async function traiterDemandeAcces(ctx: ActionContext): Promise<void> {
   const { interaction, channel, cache, guild, guildId, ctxp } = ctx;
   const demandeurId = interaction.user.id;
   const maintenant = Date.now();
+  const locale = ctxp.locale;
 
-  const verdict = peutAgir(ctxp.role, 'demanderAcces', ctxp.reglages);
+  const verdict = peutAgir(ctxp.role, 'demanderAcces', ctxp.reglages, ctxp.locale);
   if (!verdict.autorise) {
     await respond(interaction, `${I.crown} ${verdict.raison}`);
     return;
@@ -2904,13 +3062,13 @@ async function traiterDemandeAcces(ctx: ActionContext): Promise<void> {
   // Un panneau posté avant qu'un administrateur ne désactive les demandes porte
   // encore le bouton : le refus se dit ici, le bouton grisé ne suffit pas.
   if (!ctxp.demandes.activees) {
-    await respond(interaction, `${I.lock} Access requests are not enabled on this server.`);
+    await respond(interaction, `${I.lock} ${m.panel_tempvoice_requests_disabled({}, { locale })}`);
     return;
   }
 
   const etat = await lireEtatSalon(channel, cache);
   if (!boutonDemanderAccesVisible({ verrouille: etat.verrouille, reserve: etat.reserveRoleId !== null }, ctxp.demandes)) {
-    await respond(interaction, `${I.unlock} The channel is open: you can just join it.`);
+    await respond(interaction, `${I.unlock} ${m.panel_tempvoice_channel_open_just_join({}, { locale })}`);
     return;
   }
 
@@ -2923,7 +3081,7 @@ async function traiterDemandeAcces(ctx: ActionContext): Promise<void> {
   if (resultat.statut === 'silence') {
     await respond(
       interaction,
-      `${I.cross} Your request was denied recently. You can ask again in ${formaterDuree(resultat.resteMs)}.`,
+      `${I.cross} ${m.panel_tempvoice_request_cooldown({ duration: formaterDuree(resultat.resteMs, locale) }, { locale })}`,
     );
     return;
   }
@@ -2931,7 +3089,7 @@ async function traiterDemandeAcces(ctx: ActionContext): Promise<void> {
   if (resultat.statut === 'dejaEnAttente') {
     await respond(
       interaction,
-      `${I.warn} Your request is already pending: it expires in ${formaterDuree(resultat.resteMs)}.`,
+      `${I.warn} ${m.panel_tempvoice_request_pending({ duration: formaterDuree(resultat.resteMs, locale) }, { locale })}`,
     );
     return;
   }
@@ -2939,7 +3097,7 @@ async function traiterDemandeAcces(ctx: ActionContext): Promise<void> {
   const demandeur = await guild.members.fetch(demandeurId).catch(() => null);
   if (!demandeur) {
     annulerDemande(guildId, channel.id, demandeurId, maintenant);
-    await respond(interaction, '❌ Your profile on this server could not be read: try again in a moment.');
+    await respond(interaction, m.panel_tempvoice_err_profile_unreadable({}, { locale }));
     return;
   }
 
@@ -2948,6 +3106,7 @@ async function traiterDemandeAcces(ctx: ActionContext): Promise<void> {
     channel.id,
     registreDemandes.estEnSilence(guildId, channel.id, demandeurId, maintenant),
     resultat.demande.expireA,
+    locale,
   );
   const voie = await transmettreCarteDecision(channel, guild, cache.creatorId, ctxp.demandes, carte);
 
@@ -2955,7 +3114,7 @@ async function traiterDemandeAcces(ctx: ActionContext): Promise<void> {
     // Aucun canal n'a abouti : laisser la demande en attente ferait patienter
     // le demandeur devant une réponse que personne ne peut lui donner.
     annulerDemande(guildId, channel.id, demandeurId, maintenant);
-    await respond(interaction, '❌ The request could not be delivered to the owner.');
+    await respond(interaction, m.panel_tempvoice_err_request_undelivered({}, { locale }));
     return;
   }
 
@@ -2964,8 +3123,8 @@ async function traiterDemandeAcces(ctx: ActionContext): Promise<void> {
       embeds: [
         new EmbedBuilder()
           .setColor(COULEUR_NEUTRE)
-          .setTitle(`${I.check} Request sent`)
-          .setDescription(`<@${cache.creatorId}> has been notified. You will be allowed in as soon as they accept.`),
+          .setTitle(`${I.check} ${m.panel_tempvoice_request_sent_title({}, { locale })}`)
+          .setDescription(m.panel_tempvoice_request_sent_desc({ owner: cache.creatorId }, { locale })),
       ],
     })
     .catch(() => null);
@@ -3006,24 +3165,28 @@ async function traiterDebordementReservation(ctx: ActionContext, roleId: string)
 
 /** Les trois issues, posées au propriétaire plutôt que décidées pour lui. */
 async function proposerDebordement(ctx: ActionContext, plan: PlanDebordement): Promise<void> {
+  const locale = ctx.ctxp.locale;
   const noms = plan.membres.map((id) => `<@${id}>`).join(', ');
+  const plusieurs = plan.membres.length > 1;
   const embed = new EmbedBuilder()
     .setColor(COULEUR_ACCENT)
-    .setTitle(`${I.warn} ${plan.membres.length} ${plan.membres.length > 1 ? 'people' : 'person'} without the role`)
-    .setDescription(`${noms} ${plan.membres.length > 1 ? 'are' : 'is'} in the channel without the reserved role. What do you want to do?`);
+    .setTitle(`${I.warn} ${(plusieurs ? m.panel_tempvoice_overflow_title_many : m.panel_tempvoice_overflow_title_one)({ count: plan.membres.length }, { locale })}`)
+    .setDescription((plusieurs ? m.panel_tempvoice_overflow_desc_many : m.panel_tempvoice_overflow_desc_one)({ names: noms }, { locale }));
 
   const rangee = new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
     new ButtonBuilder()
       .setCustomId('tempvoice:resa_rien')
-      .setLabel('Leave them')
+      .setLabel(m.panel_tempvoice_btn_leave_them({}, { locale }))
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId('tempvoice:resa_deplacer')
-      .setLabel(ctx.ctxp.reservation.salonDeRepli ? 'Move them' : 'Disconnect them (no channel set)')
+      .setLabel(ctx.ctxp.reservation.salonDeRepli
+        ? m.panel_tempvoice_btn_move_them({}, { locale })
+        : m.panel_tempvoice_btn_move_them_none({}, { locale }))
       .setStyle(ButtonStyle.Primary),
     new ButtonBuilder()
       .setCustomId('tempvoice:resa_deconnecter')
-      .setLabel('Disconnect them')
+      .setLabel(m.panel_tempvoice_btn_disconnect_them({}, { locale }))
       .setStyle(ButtonStyle.Danger),
   );
 
@@ -3035,6 +3198,8 @@ async function proposerDebordement(ctx: ActionContext, plan: PlanDebordement): P
 /** Déplacer ou déconnecter, en annonçant l'intention au journal de modération. */
 async function appliquerDebordement(ctx: ActionContext, plan: PlanDebordement): Promise<void> {
   const { channel, guild, guildId, interaction } = ctx;
+  const locale = ctx.ctxp.locale;
+  const raisonAudit = m.panel_tempvoice_audit_reserved_role({}, { locale });
 
   const accueil = plan.action === 'deplacer' && plan.salon
     ? await guild.channels.fetch(plan.salon).catch(() => null)
@@ -3055,19 +3220,24 @@ async function appliquerDebordement(ctx: ActionContext, plan: PlanDebordement): 
     });
 
     const fait = deplace
-      ? await membre.voice.setChannel(accueil as never, 'Salon réservé à un rôle').then(() => true).catch(() => { oubli(); return false; })
-      : await membre.voice.disconnect('Salon réservé à un rôle').then(() => true).catch(() => { oubli(); return false; });
+      ? await membre.voice.setChannel(accueil as never, raisonAudit).then(() => true).catch(() => { oubli(); return false; })
+      : await membre.voice.disconnect(raisonAudit).then(() => true).catch(() => { oubli(); return false; });
 
     if (fait) traites += 1;
   }
 
   if (traites === 0) return;
 
-  const ou = deplace && accueil ? ` to <#${accueil.id}>` : '';
-  const motif = plan.repliSurDeconnexion ? ' — no fallback channel is set' : '';
+  const ou = deplace && accueil
+    ? m.panel_tempvoice_overflow_to({ channel: accueil.id }, { locale })
+    : '';
+  const motif = plan.repliSurDeconnexion ? m.panel_tempvoice_overflow_no_fallback({}, { locale }) : '';
+  const phrase = deplace
+    ? (traites > 1 ? m.panel_tempvoice_overflow_moved_many : m.panel_tempvoice_overflow_moved_one)
+    : (traites > 1 ? m.panel_tempvoice_overflow_disconnected_many : m.panel_tempvoice_overflow_disconnected_one);
   await reponseSupplementaire(
     interaction,
-    `${I.voice} ${traites} ${traites > 1 ? 'people' : 'person'} ${deplace ? 'moved' : 'disconnected'}${ou}${motif}.`,
+    `${I.voice} ${phrase({ count: traites, where: ou, why: motif }, { locale })}`,
   );
 }
 
@@ -3087,8 +3257,9 @@ async function cloreProposition(interaction: RepliableInteraction, verdict: stri
  */
 async function repondreDebordement(ctx: ActionContext, choix: 'deplacer' | 'deconnecter'): Promise<void> {
   const { channel, cache, ctxp, interaction } = ctx;
+  const locale = ctxp.locale;
 
-  const verdict = peutAgir(ctxp.role, 'reserver', ctxp.reglages);
+  const verdict = peutAgir(ctxp.role, 'reserver', ctxp.reglages, ctxp.locale);
   if (!verdict.autorise) {
     await respond(interaction, `${I.lock} ${verdict.raison}`);
     return;
@@ -3100,7 +3271,7 @@ async function repondreDebordement(ctx: ActionContext, choix: 'deplacer' | 'deco
     .catch(() => null);
 
   if (!roleId) {
-    await cloreProposition(interaction, `${I.unlock} The channel is no longer reserved: there is nothing left to do.`);
+    await cloreProposition(interaction, `${I.unlock} ${m.panel_tempvoice_overflow_nothing_left({}, { locale })}`);
     return;
   }
 
@@ -3113,12 +3284,12 @@ async function repondreDebordement(ctx: ActionContext, choix: 'deplacer' | 'deco
   const concernes = membresSansLeRole(presents, roleId, cache.creatorId);
 
   if (concernes.length === 0) {
-    await cloreProposition(interaction, `${I.check} Nobody is affected any more.`);
+    await cloreProposition(interaction, `${I.check} ${m.panel_tempvoice_overflow_nobody_affected({}, { locale })}`);
     return;
   }
 
   const salon = choix === 'deplacer' ? ctxp.reservation.salonDeRepli : null;
-  await cloreProposition(interaction, `${I.voice} Working on it…`);
+  await cloreProposition(interaction, `${I.voice} ${m.panel_tempvoice_overflow_working({}, { locale })}`);
   await appliquerDebordement(ctx, {
     action: salon ? 'deplacer' : 'deconnecter',
     salon,
@@ -3142,26 +3313,29 @@ async function prevenirDemandeur(
   demandeur: GuildMember,
   acceptee: boolean,
   silenceMs: number,
+  locale: BotLocale,
 ): Promise<void> {
   const embed = acceptee
     ? new EmbedBuilder()
       .setColor(COULEUR_OUVERT)
-      .setTitle(`${I.check} You can join`)
-      .setDescription(`Your request was accepted. **${channel.name}** is open to you.`)
+      .setTitle(`${I.check} ${m.panel_tempvoice_req_accepted_title({}, { locale })}`)
+      .setDescription(m.panel_tempvoice_req_accepted_desc({ channel: channel.name }, { locale }))
     : new EmbedBuilder()
       .setColor(COULEUR_NEUTRE)
-      .setTitle(`${I.cross} Request denied`)
+      .setTitle(`${I.cross} ${m.panel_tempvoice_req_denied_title({}, { locale })}`)
       // Le délai du serveur, et non celui du registre : un seul registre sert
       // tous les serveurs, annoncer son défaut donnerait un chiffre faux dès
       // qu'un administrateur règle le sien.
-      .setDescription(`You can ask again in ${formaterDuree(silenceMs)}.`);
+      .setDescription(m.panel_tempvoice_req_denied_desc({ duration: formaterDuree(silenceMs, locale) }, { locale }));
 
   const envoye = await demandeur.send({ embeds: [embed] }).then(() => true).catch(() => false);
 
   // Les MP fermés font échouer l'envoi en silence. L'acceptation peut se dire
   // dans le salon — la personne y entre de toute façon ; le refus, non.
   if (!envoye && acceptee) {
-    await channel.send({ content: `${I.check} <@${demandeur.id}> has been allowed to join the channel.` }).catch(() => null);
+    await channel
+      .send({ content: `${I.check} ${m.panel_tempvoice_req_allowed_public({ user: demandeur.id }, { locale })}` })
+      .catch(() => null);
   }
 }
 
@@ -3169,10 +3343,11 @@ async function prevenirDemandeur(
 async function traiterDecisionDemande(ctx: ActionContext, decision: 'ok' | 'non' | 'ban'): Promise<void> {
   const { interaction, channel, cache, guild, guildId, ctxp } = ctx;
   const maintenant = Date.now();
+  const locale = ctxp.locale;
 
   // `peutAgir` ne sait rien de cette action : aucune ligne des réglages
   // modérateur ne la gouverne, c'est la colonne `responders` qui tranche.
-  const verdict = peutRepondreDemande(ctxp.role, ctxp.demandes.repondeurs);
+  const verdict = peutRepondreDemande(ctxp.role, ctxp.demandes.repondeurs, locale);
   if (!verdict.autorise) {
     await respond(interaction, `${I.lock} ${verdict.raison}`);
     return;
@@ -3181,7 +3356,7 @@ async function traiterDecisionDemande(ctx: ActionContext, decision: 'ok' | 'non'
   const demandeurId = interaction.customId.split(':')[2] ?? '';
   const demandeur = demandeurId ? await guild.members.fetch(demandeurId).catch(() => null) : null;
   if (!demandeur) {
-    await respond(interaction, '❌ That member cannot be found on this server.');
+    await respond(interaction, m.panel_tempvoice_err_member_not_found_server({}, { locale }));
     return;
   }
 
@@ -3189,8 +3364,8 @@ async function traiterDecisionDemande(ctx: ActionContext, decision: 'ok' | 'non'
   // vérification, « Autoriser » accordait encore l'accès des heures plus tard,
   // sur une demande que le registre avait déjà oubliée.
   if (!registreDemandes.demandeEnAttente(guildId, channel.id, demandeurId, maintenant)) {
-    await cloreCarteDecision(interaction, `${I.warn} **${demandeur.displayName}**'s request has expired.`);
-    await respond(interaction, `${I.warn} This request has expired: **${demandeur.displayName}** has to send a new one.`);
+    await cloreCarteDecision(interaction, `${I.warn} ${m.panel_tempvoice_request_expired_card({ name: demandeur.displayName }, { locale })}`);
+    await respond(interaction, `${I.warn} ${m.panel_tempvoice_request_expired_reply({ name: demandeur.displayName }, { locale })}`);
     return;
   }
 
@@ -3205,7 +3380,7 @@ async function traiterDecisionDemande(ctx: ActionContext, decision: 'ok' | 'non'
       estSoiMeme: demandeur.id === interaction.user.id,
       dansLeSalon: demandeur.voice.channelId === channel.id,
       autorise: false,
-    });
+    }, ctxp.locale);
     if (!verdictBan.autorise) {
       // La demande reste en attente : le refus porte sur le bannissement, pas
       // sur la demande, qu'un autre bouton peut encore trancher.
@@ -3229,16 +3404,16 @@ async function traiterDecisionDemande(ctx: ActionContext, decision: 'ok' | 'non'
   if (decision === 'ok') {
     const patch = categoryTrustPatch(channel, demandeur);
     if (!patch) {
-      await respond(interaction, `❌ The channel category denies access to **${demandeur.displayName}**.`);
+      await respond(interaction, m.panel_tempvoice_err_category_denies({ name: demandeur.displayName }, { locale }));
       return;
     }
     await channel.permissionOverwrites.edit(demandeur.id, patch);
     // Marquée comme donnée à la main : un départ du vocal ne doit jamais
     // l'effacer, alors que « Autoriser » et la présence écrivent le même bit.
     originesSurcharge.marquer(guildId, channel.id, demandeur.id, 'autorisation');
-    await cloreCarteDecision(interaction, `${I.check} **${demandeur.displayName}** has been allowed in.`);
-    await prevenirDemandeur(channel, demandeur, true, ctxp.demandes.silenceMs);
-    await respond(interaction, `${I.check} **${demandeur.displayName}** has been allowed to join the channel.`);
+    await cloreCarteDecision(interaction, `${I.check} ${m.panel_tempvoice_allowed_in({ name: demandeur.displayName }, { locale })}`);
+    await prevenirDemandeur(channel, demandeur, true, ctxp.demandes.silenceMs, locale);
+    await respond(interaction, `${I.check} ${m.panel_tempvoice_allowed_to_join({ name: demandeur.displayName }, { locale })}`);
     planifierRafraichissementPanneau(channel);
     return;
   }
@@ -3250,18 +3425,20 @@ async function traiterDecisionDemande(ctx: ActionContext, decision: 'ok' | 'non'
       const oubli = annoncerIntentionVocale(guildId, demandeur.id, 'disconnect', {
         libelle: `${interaction.user.tag} (demande d'accès refusée)`,
       });
-      await demandeur.voice.disconnect('Demande d\'accès refusée et bannissement du salon.').catch(() => oubli());
+      await demandeur.voice
+        .disconnect(m.panel_tempvoice_audit_request_denied_ban({}, { locale }))
+        .catch(() => oubli());
     }
-    await cloreCarteDecision(interaction, `${I.ban} **${demandeur.displayName}** has been denied and banned.`);
-    await prevenirDemandeur(channel, demandeur, false, ctxp.demandes.silenceMs);
-    await respond(interaction, `${I.ban} **${demandeur.displayName}** has been denied and banned from the channel.`);
+    await cloreCarteDecision(interaction, `${I.ban} ${m.panel_tempvoice_denied_banned_card({ name: demandeur.displayName }, { locale })}`);
+    await prevenirDemandeur(channel, demandeur, false, ctxp.demandes.silenceMs, locale);
+    await respond(interaction, `${I.ban} ${m.panel_tempvoice_denied_banned_reply({ name: demandeur.displayName }, { locale })}`);
     planifierRafraichissementPanneau(channel);
     return;
   }
 
-  await cloreCarteDecision(interaction, `${I.cross} **${demandeur.displayName}** has been denied.`);
-  await prevenirDemandeur(channel, demandeur, false, ctxp.demandes.silenceMs);
-  await respond(interaction, `${I.cross} **${demandeur.displayName}** has been denied.`);
+  await cloreCarteDecision(interaction, `${I.cross} ${m.panel_tempvoice_denied({ name: demandeur.displayName }, { locale })}`);
+  await prevenirDemandeur(channel, demandeur, false, ctxp.demandes.silenceMs, locale);
+  await respond(interaction, `${I.cross} ${m.panel_tempvoice_denied({ name: demandeur.displayName }, { locale })}`);
 }
 
 /**
@@ -3302,18 +3479,19 @@ async function traiterActionMembre(
   action: 'expulser' | 'bannir' | 'autoriser' | 'retirer',
 ): Promise<void> {
   const { interaction, channel, cache, guild, guildId, ctxp } = ctx;
+  const locale = ctxp.locale;
 
   const cibleId = interaction.customId.split(':')[2] ?? '';
   const target = cibleId ? await guild.members.fetch(cibleId).catch(() => null) : null;
   if (!target) {
-    await reponseSupplementaire(interaction, '❌ Member not found on this server.');
+    await reponseSupplementaire(interaction, m.panel_tempvoice_err_member_not_found({}, { locale }));
     return;
   }
 
   // Le bot doit garder l'accès au salon : banni, il ne pourrait plus le
   // supprimer quand il se vide.
   if (target.user.bot) {
-    await reponseSupplementaire(interaction, '❌ A bot cannot be targeted by this action.');
+    await reponseSupplementaire(interaction, m.panel_tempvoice_err_bot_target({}, { locale }));
     return;
   }
 
@@ -3324,6 +3502,7 @@ async function traiterActionMembre(
     action === 'retirer' ? 'autoriser' : action,
     ctxp.reglages,
     cible,
+    ctxp.locale,
   );
   if (!verdict.autorise) {
     await reponseSupplementaire(interaction, `${I.warn} ${verdict.raison}`);
@@ -3335,11 +3514,13 @@ async function traiterActionMembre(
       const oubli = annoncerIntentionVocale(guildId, target.id, 'disconnect', {
         libelle: `${interaction.user.tag} (panneau du salon vocal temporaire)`,
       });
-      await target.voice.disconnect('Expulsé du salon vocal temporaire depuis le panneau.').catch((error: unknown) => {
-        oubli();
-        throw error;
-      });
-      await reponseSupplementaire(interaction, `${I.kick} **${target.displayName}** has been kicked out of the voice channel.`);
+      await target.voice
+        .disconnect(m.panel_tempvoice_audit_kick_panel({}, { locale }))
+        .catch((error: unknown) => {
+          oubli();
+          throw error;
+        });
+      await reponseSupplementaire(interaction, `${I.kick} ${m.panel_tempvoice_kicked({ name: target.displayName }, { locale })}`);
       break;
     }
 
@@ -3350,20 +3531,22 @@ async function traiterActionMembre(
         const oubli = annoncerIntentionVocale(guildId, target.id, 'disconnect', {
           libelle: `${interaction.user.tag} (panneau du salon vocal temporaire)`,
         });
-        await target.voice.disconnect('Banni du salon vocal temporaire depuis le panneau.').catch(() => oubli());
+        await target.voice
+          .disconnect(m.panel_tempvoice_audit_ban_panel({}, { locale }))
+          .catch(() => oubli());
       }
-      await reponseSupplementaire(interaction, `${I.ban} **${target.displayName}** has been banned from the channel, text chat included.`);
+      await reponseSupplementaire(interaction, `${I.ban} ${m.panel_tempvoice_banned({ name: target.displayName }, { locale })}`);
       break;
     }
 
     case 'autoriser': {
       if (channel.parentId && !channel.parent) {
-        await reponseSupplementaire(interaction, '❌ The channel category cannot be found: access cannot be checked.');
+        await reponseSupplementaire(interaction, m.panel_tempvoice_err_category_missing({}, { locale }));
         return;
       }
       const patch = categoryTrustPatch(channel, target);
       if (!patch) {
-        await reponseSupplementaire(interaction, `❌ The channel category denies access to **${target.displayName}**.`);
+        await reponseSupplementaire(interaction, m.panel_tempvoice_err_category_denies({ name: target.displayName }, { locale }));
         return;
       }
       await channel.permissionOverwrites.edit(target.id, patch);
@@ -3372,8 +3555,8 @@ async function traiterActionMembre(
       originesSurcharge.marquer(guildId, channel.id, target.id, 'autorisation');
       const complet = Object.keys(patch).length === TRUST_BIT_COUNT;
       await reponseSupplementaire(interaction, complet
-        ? `${I.check} **${target.displayName}** has been allowed to join the channel.`
-        : `${I.warn} **${target.displayName}** only got partial access: the category denies the rest.`);
+        ? `${I.check} ${m.panel_tempvoice_allowed_to_join({ name: target.displayName }, { locale })}`
+        : `${I.warn} ${m.panel_tempvoice_partial_access({ name: target.displayName }, { locale })}`);
       break;
     }
 
@@ -3394,12 +3577,12 @@ async function traiterActionMembre(
         }
       } else if (decision.action === 'retirer') {
         await channel.permissionOverwrites
-          .delete(target.id, 'Autorisation retirée depuis le panneau')
+          .delete(target.id, m.panel_tempvoice_audit_untrust({}, { locale }))
           .catch(() => poserSurcharge(channel, target.id, decision.patch));
         originesSurcharge.oublier(guildId, channel.id, target.id);
       }
 
-      await reponseSupplementaire(interaction, `${I.cross} **${target.displayName}**'s access has been revoked.`);
+      await reponseSupplementaire(interaction, `${I.cross} ${m.panel_tempvoice_access_revoked({ name: target.displayName }, { locale })}`);
       break;
     }
   }
@@ -3426,6 +3609,7 @@ async function appliquerReservation(
   reply: (texte: string) => Promise<void>,
 ): Promise<void> {
   const { channel, cache, guild, guildId } = ctx;
+  const locale = ctx.ctxp.locale;
   const stored = await prisma.tempVoiceChannel.findUnique({ where: { id: channel.id } }).catch(() => null);
 
   const grantForRole = (id: string): Record<string, true> | null =>
@@ -3438,7 +3622,7 @@ async function appliquerReservation(
   // personne ne peut rejoindre.
   const rolePatch = selectedRoleId ? grantForRole(selectedRoleId) : null;
   if (selectedRoleId && !rolePatch) {
-    await reply('❌ The channel category denies access to that role: it cannot be reserved.');
+    await reply(m.panel_tempvoice_err_role_denied({}, { locale }));
     return;
   }
 
@@ -3448,7 +3632,7 @@ async function appliquerReservation(
   let previousCleared = true;
   if (stored?.roleId && stored.roleId !== selectedRoleId) {
     previousCleared = await channel.permissionOverwrites
-      .delete(stored.roleId, 'Réservation précédente levée')
+      .delete(stored.roleId, m.panel_tempvoice_audit_prev_reservation({}, { locale }))
       .then(() => true)
       .catch((err: unknown) => {
         logger.warn('TempVoice', `Impossible de lever la réservation précédente sur ${channel.id} :`, err);
@@ -3483,8 +3667,8 @@ async function appliquerReservation(
     // Sans la ligne en base, le prochain changement ne saura pas quelle
     // surcharge lever : elles s'accumuleraient sans que personne ne le voie.
     await reply(previousCleared && saved
-      ? `${I.shield} The channel is reserved for <@&${selectedRoleId}>. Only its members, the members you added and you can join.`
-      : `${I.shield} The channel is reserved for <@&${selectedRoleId}>, but the previous reservation could not be fully lifted: please report it to the staff.`);
+      ? `${I.shield} ${m.panel_tempvoice_reserved_ok({ role: selectedRoleId }, { locale })}`
+      : `${I.shield} ${m.panel_tempvoice_reserved_partial({ role: selectedRoleId }, { locale })}`);
     // Réserver ne déplaçait personne : ceux qui étaient déjà là restaient dans
     // un salon qu'ils n'auraient plus eu le droit de rejoindre.
     await traiterDebordementReservation(ctx, selectedRoleId);
@@ -3500,8 +3684,8 @@ async function appliquerReservation(
     .update({ where: { id: channel.id }, data: { roleId: null } })
     .catch((err: unknown) => logger.error('TempVoice', "Erreur lors de l'enregistrement de la réservation :", err));
   await reply(previousCleared
-    ? `${I.unlock} Reservation cleared: the channel goes back to the access its category defines.`
-    : `${I.unlock} Reservation cleared, but the previous role's override could not be removed: it keeps access.`);
+    ? `${I.unlock} ${m.panel_tempvoice_reservation_cleared({}, { locale })}`
+    : `${I.unlock} ${m.panel_tempvoice_reservation_cleared_partial({}, { locale })}`);
   planifierRafraichissementPanneau(channel);
   return;
 }
@@ -3529,9 +3713,10 @@ async function reserverPourDesMembres(
   reply: (texte: string) => Promise<void>,
 ): Promise<void> {
   const { channel, guild, guildId, cache } = ctx;
+  const locale = ctx.ctxp.locale;
 
   if (idsChoisis.length === 0) {
-    await reply('❌ Nobody selected: the channel was not reserved.');
+    await reply(m.panel_tempvoice_err_nobody_selected_reserve({}, { locale }));
     return;
   }
 
@@ -3562,7 +3747,7 @@ async function reserverPourDesMembres(
   }
 
   if (autorises.length === 0) {
-    await reply('❌ Nobody could be allowed in: the channel is left as it is.');
+    await reply(m.panel_tempvoice_err_nobody_allowed({}, { locale }));
     return;
   }
 
@@ -3578,9 +3763,15 @@ async function reserverPourDesMembres(
   await assurerBotPeutEcrire(channel);
 
   const reste = refuses.length > 0
-    ? ` ${refuses.length} ${refuses.length > 1 ? 'people' : 'person'} could not be allowed in: the category denies them.`
+    ? (refuses.length > 1 ? m.panel_tempvoice_reserve_refused_many : m.panel_tempvoice_reserve_refused_one)(
+      { count: refuses.length },
+      { locale },
+    )
     : '';
-  await reply(`${I.lock} Channel locked and reserved for ${autorises.length} ${autorises.length > 1 ? 'people' : 'person'}: ${autorises.join(', ')}.${reste}`);
+  const phrase = autorises.length > 1
+    ? m.panel_tempvoice_reserved_members_many
+    : m.panel_tempvoice_reserved_members_one;
+  await reply(`${I.lock} ${phrase({ count: autorises.length, names: autorises.join(', '), rest: reste }, { locale })}`);
   planifierRafraichissementPanneau(channel);
 }
 
@@ -3588,12 +3779,14 @@ async function reserverPourDesMembres(
 async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
   const { interaction, action, channel, cache, guild, guildId } = ctx;
   const user = interaction.user;
+  const locale = ctx.ctxp.locale;
 
   const ephemeral = { flags: [MessageFlags.Ephemeral] as const };
   // En mode compact, la réponse remplace le sous-panneau : elle doit donc
   // porter de quoi y revenir. En mode empilé elle ouvre un message de plus, et
   // le sous-panneau est toujours là derrière — aucun bouton à ajouter.
-  const retourVers = ctx.ctxp.panneauCompact ? ONGLET_DORIGINE[action] ?? null : null;
+  const ongletRetour = ctx.ctxp.panneauCompact ? ONGLET_DORIGINE[action] ?? null : null;
+  const retourVers = ongletRetour ? { onglet: ongletRetour, locale } : null;
   const reply = (content: string) => respond(interaction, content, retourVers);
 
   /**
@@ -3621,7 +3814,7 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
   if (action === 'mode_select' && interaction.isStringSelectMenu()) {
     await acquitterMiseAJour(interaction);
 
-    const verdict = peutAgir(ctx.ctxp.role, 'modeEcriture', ctx.ctxp.reglages);
+    const verdict = peutAgir(ctx.ctxp.role, 'modeEcriture', ctx.ctxp.reglages, ctx.ctxp.locale);
     if (!verdict.autorise) {
       await reponseSupplementaire(interaction, `${I.lock} ${verdict.raison}`);
       return;
@@ -3632,7 +3825,7 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
     await rafraichirSousPanneauSalon(ctx);
     await reponseSupplementaire(
       interaction,
-      `${iconeMode(mode)} Who can post: **${LIBELLES_MODES_ECRITURE[mode].libelle}**.`,
+      `${iconeMode(mode)} ${m.panel_tempvoice_mode_applied({ mode: libelleModeEcriture(mode, locale).libelle }, { locale })}`,
     );
     planifierRafraichissementPanneau(channel);
     return;
@@ -3644,14 +3837,14 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
   // ─── Reglages admin, depuis « Salon » ───
   if (action === 'reglages_mod' && interaction.isStringSelectMenu()) {
     if (ctx.ctxp.role !== 'admin') {
-      await reponseSupplementaire(interaction, `${I.lock} Only an administrator sets what moderators may do.`);
+      await reponseSupplementaire(interaction, `${I.lock} ${m.panel_tempvoice_err_admin_only_settings({}, { locale })}`);
       return;
     }
     await acquitterMiseAJour(interaction);
 
     const enregistre = await enregistrerReglagesModerateur(guildId, interaction.values);
     if (!enregistre) {
-      await reponseSupplementaire(interaction, '❌ The settings could not be saved.');
+      await reponseSupplementaire(interaction, m.panel_tempvoice_err_settings_not_saved({}, { locale }));
       return;
     }
 
@@ -3667,7 +3860,7 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
     const cibleId = interaction.values[0];
     const target = cibleId ? await guild.members.fetch(cibleId).catch(() => null) : null;
     if (!target) {
-      await reponseSupplementaire(interaction, '❌ That member has left the server.');
+      await reponseSupplementaire(interaction, m.panel_tempvoice_err_member_left({}, { locale }));
       return;
     }
 
@@ -3682,7 +3875,7 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
     const cibleId = interaction.values[0];
     const target = cibleId ? await guild.members.fetch(cibleId).catch(() => null) : null;
     if (!target) {
-      await reponseSupplementaire(interaction, '❌ Member not found on this server.');
+      await reponseSupplementaire(interaction, m.panel_tempvoice_err_member_not_found({}, { locale }));
       return;
     }
 
@@ -3733,7 +3926,7 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
       // déjà pour les seuls admins — donc aucun écran de plus à maintenir.
       case 'reglages': {
         if (ctx.ctxp.role !== 'admin') {
-          await reply(`${I.lock} Admins only: they alone set what moderators may do.`);
+          await reply(`${I.lock} ${m.panel_tempvoice_admins_only_settings({}, { locale })}`);
           return;
         }
         await ouvrirPorte(await panneauSalon(channel, cache, ctx.ctxp));
@@ -3747,7 +3940,7 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
 
       // ─── Sous-panneau « Salon » ───
       case 'bascule_verrou': {
-        const verdict = peutAgir(ctx.ctxp.role, 'verrouiller', ctx.ctxp.reglages);
+        const verdict = peutAgir(ctx.ctxp.role, 'verrouiller', ctx.ctxp.reglages, ctx.ctxp.locale);
         if (!verdict.autorise) {
           await reponseSupplementaire(interaction, `${I.lock} ${verdict.raison}`);
           return;
@@ -3777,7 +3970,7 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
         return;
       }
       case 'm_transfer': {
-        const verdict = peutAgir(ctx.ctxp.role, 'transferer', ctx.ctxp.reglages);
+        const verdict = peutAgir(ctx.ctxp.role, 'transferer', ctx.ctxp.reglages, ctx.ctxp.locale);
         if (!verdict.autorise) {
           await reponseSupplementaire(interaction, `${I.crown} ${verdict.raison}`);
           return;
@@ -3786,7 +3979,7 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
         const cibleId = interaction.customId.split(':')[2] ?? '';
         const target = cibleId ? await guild.members.fetch(cibleId).catch(() => null) : null;
         if (!target) {
-          await reply('❌ Member not found on this server.');
+          await reply(m.panel_tempvoice_err_member_not_found({}, { locale }));
           return;
         }
         await transferOwnership(ctx, target, 'transfer');
@@ -3796,7 +3989,7 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
 
       // ─── Suite d'une réservation : que faire de ceux qui restent ───
       case 'resa_rien': {
-        await cloreProposition(interaction, `${I.check} Nobody was moved.`);
+        await cloreProposition(interaction, `${I.check} ${m.panel_tempvoice_overflow_nobody_moved({}, { locale })}`);
         return;
       }
       case 'resa_deplacer': {
@@ -3827,7 +4020,7 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
       // panneau-là se redessine à la première interaction (voir l'écouteur), mais
       // les règles qui s'y appliquent sont exactement celles de la refonte.
       case 'lock': {
-        const verrouAutorise = peutAgir(ctx.ctxp.role, 'verrouiller', ctx.ctxp.reglages);
+        const verrouAutorise = peutAgir(ctx.ctxp.role, 'verrouiller', ctx.ctxp.reglages, ctx.ctxp.locale);
         if (!verrouAutorise.autorise) {
           await reply(`${I.lock} ${verrouAutorise.raison}`);
           return;
@@ -3841,13 +4034,13 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
         // qu'il n'a pas de surcharge a lui. Sans cela il ne peut plus mettre a
         // jour le panneau ni poster le moindre avis dans le salon.
         await assurerBotPeutEcrire(channel);
-        await reply(`${I.lock} The channel has been locked: only you, the roles allowed by default and the members you added can still join.`);
+        await reply(`${I.lock} ${m.panel_tempvoice_locked_legacy({}, { locale })}`);
         planifierRafraichissementPanneau(channel);
         return;
       }
 
       case 'unlock': {
-        const ouvertureAutorisee = peutAgir(ctx.ctxp.role, 'verrouiller', ctx.ctxp.reglages);
+        const ouvertureAutorisee = peutAgir(ctx.ctxp.role, 'verrouiller', ctx.ctxp.reglages, ctx.ctxp.locale);
         if (!ouvertureAutorisee.autorise) {
           await reply(`${I.lock} ${ouvertureAutorisee.raison}`);
           return;
@@ -3860,13 +4053,13 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
           cache.creatorId,
           ownerChatPatch(false, categoryOverwriteFor(channel, cache.creatorId)),
         );
-        await reply(`${I.unlock} The channel has been unlocked: it goes back to the access its category defines.`);
+        await reply(`${I.unlock} ${m.panel_tempvoice_unlocked_legacy({}, { locale })}`);
         planifierRafraichissementPanneau(channel);
         return;
       }
 
       case 'chat': {
-        const ecritureAutorisee = peutAgir(ctx.ctxp.role, 'modeEcriture', ctx.ctxp.reglages);
+        const ecritureAutorisee = peutAgir(ctx.ctxp.role, 'modeEcriture', ctx.ctxp.reglages, ctx.ctxp.locale);
         if (!ecritureAutorisee.autorise) {
           await reply(`${I.lock} ${ecritureAutorisee.raison}`);
           return;
@@ -3885,7 +4078,7 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
             ownerChatPatch(true, categoryOverwriteFor(channel, cache.creatorId)),
           );
           await channel.permissionOverwrites.edit(guildId, CHANNEL_PATCHES.closeChat);
-          await reply('💬 The channel text chat is closed: only you and the allowed members can post in it.');
+          await reply(`💬 ${m.panel_tempvoice_chat_closed({}, { locale })}`);
         } else {
           // Ouvrir le chat ACCORDE le droit d'écrire. Le repasser par la catégorie
           // l'annulait dès qu'elle le refusait : le bouton disait « ouvert » et
@@ -3895,30 +4088,30 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
             cache.creatorId,
             ownerChatPatch(true, categoryOverwriteFor(channel, cache.creatorId)),
           );
-          await reply(`${I.msg} The channel text chat is open: anyone can post in it.`);
+          await reply(`${I.msg} ${m.panel_tempvoice_chat_open({}, { locale })}`);
         }
         planifierRafraichissementPanneau(channel);
         return;
       }
 
       case 'claim': {
-        const recuperationAutorisee = peutAgir(ctx.ctxp.role, 'recuperer', ctx.ctxp.reglages);
+        const recuperationAutorisee = peutAgir(ctx.ctxp.role, 'recuperer', ctx.ctxp.reglages, ctx.ctxp.locale);
         if (!recuperationAutorisee.autorise) {
           await reply(`${I.crown} ${recuperationAutorisee.raison}`);
           return;
         }
         if (channel.members.has(cache.creatorId)) {
-          await reply('❌ The current owner of the voice channel is still here.');
+          await reply(m.panel_tempvoice_err_owner_still_here({}, { locale }));
           return;
         }
         // On ne reprend que le salon où l'on se trouve : le panneau reste
         // lisible depuis l'extérieur.
         if (!channel.members.has(user.id)) {
-          await reply('❌ Join the voice channel before claiming its ownership.');
+          await reply(m.panel_tempvoice_err_join_before_claim({}, { locale }));
           return;
         }
         if (!ctx.actingMember) {
-          await reply('❌ Your profile on this server could not be read: try again in a moment.');
+          await reply(m.panel_tempvoice_err_profile_unreadable_formal({}, { locale }));
           return;
         }
         await transferOwnership(ctx, ctx.actingMember, 'claim');
@@ -3926,7 +4119,7 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
       }
 
       case 'limit': {
-        const limiteAutorisee = peutAgir(ctx.ctxp.role, 'limite', ctx.ctxp.reglages);
+        const limiteAutorisee = peutAgir(ctx.ctxp.role, 'limite', ctx.ctxp.reglages, ctx.ctxp.locale);
         if (!limiteAutorisee.autorise) {
           await reply(`${I.lock} ${limiteAutorisee.raison}`);
           return;
@@ -3934,9 +4127,9 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
         await interaction.showModal(
           textModal(
             'tempvoice:limit_modal',
-            '👥 User limit',
-            `Max members (0 for unlimited, max ${MAX_USER_LIMIT})`,
-            'e.g. 5',
+            m.panel_tempvoice_modal_limit_title({}, { locale }),
+            m.panel_tempvoice_modal_limit_label({ max: MAX_USER_LIMIT }, { locale }),
+            m.panel_tempvoice_modal_limit_placeholder({}, { locale }),
             2,
           ),
         );
@@ -3944,7 +4137,7 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
       }
 
       case 'rename': {
-        const renommageAutorise = peutAgir(ctx.ctxp.role, 'renommer', ctx.ctxp.reglages);
+        const renommageAutorise = peutAgir(ctx.ctxp.role, 'renommer', ctx.ctxp.reglages, ctx.ctxp.locale);
         if (!renommageAutorise.autorise) {
           await reply(`${I.lock} ${renommageAutorise.raison}`);
           return;
@@ -3954,12 +4147,21 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
         const quotaCourant = quotaRenommage(historiqueRenommage(channel.id), Date.now());
         if (quotaCourant.restants === 0) {
           await reply(
-            `${I.warn} Discord only accepts ${RENOMMAGES_PAR_FENETRE} renames per ten-minute window: try again in ${formaterDuree((quotaCourant.libereA ?? Date.now()) - Date.now())}.`,
+            `${I.warn} ${m.panel_tempvoice_rename_quota({
+              max: RENOMMAGES_PAR_FENETRE,
+              duration: formaterDuree((quotaCourant.libereA ?? Date.now()) - Date.now(), locale),
+            }, { locale })}`,
           );
           return;
         }
         await interaction.showModal(
-          textModal('tempvoice:rename_modal', '✏️ Rename the channel', 'New channel name', 'e.g. Gaming Lounge', 50),
+          textModal(
+            'tempvoice:rename_modal',
+            m.panel_tempvoice_modal_rename_title({}, { locale }),
+            m.panel_tempvoice_modal_rename_label({}, { locale }),
+            m.panel_tempvoice_modal_rename_placeholder({}, { locale }),
+            50,
+          ),
         );
         return;
       }
@@ -3969,15 +4171,15 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
       case 'trust':
       case 'transfer': {
         const labels: Record<string, string> = {
-          kick: '👢 Pick the member to kick out of the channel.',
-          ban: '🚫 Pick the member to ban from the channel.',
-          trust: '➕ Pick the member to allow in.',
-          transfer: "👑 Pick the channel's new owner.",
+          kick: m.panel_tempvoice_pick_kick({}, { locale }),
+          ban: m.panel_tempvoice_pick_ban({}, { locale }),
+          trust: m.panel_tempvoice_pick_trust({}, { locale }),
+          transfer: m.panel_tempvoice_pick_transfer({}, { locale }),
         };
         const ACTION_LEGACY: Readonly<Record<string, ActionPanneau>> = {
           kick: 'expulser', ban: 'bannir', trust: 'autoriser', transfer: 'transferer',
         };
-        const cibleeAutorisee = peutAgir(ctx.ctxp.role, ACTION_LEGACY[action] ?? 'autoriser', ctx.ctxp.reglages);
+        const cibleeAutorisee = peutAgir(ctx.ctxp.role, ACTION_LEGACY[action] ?? 'autoriser', ctx.ctxp.reglages, ctx.ctxp.locale);
         if (!cibleeAutorisee.autorise) {
           await reply(`${I.lock} ${cibleeAutorisee.raison}`);
           return;
@@ -3985,15 +4187,15 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
         // Le sélecteur suit le mode du panneau : serveur entier en CLASSIC, les
         // seuls présents en FLAT. Transférer au propriétaire actuel ne ferait
         // rien, l'option n'est donc pas proposée.
-        const selecteur = await selecteurPersonnes(channel, ctx.ctxp, `tempvoice:${action}_select`, 'Choose a member', {
+        const selecteur = await selecteurPersonnes(channel, ctx.ctxp, `tempvoice:${action}_select`, m.panel_tempvoice_pick_member_placeholder({}, { locale }), {
           exclureId: action === 'transfer' ? cache.creatorId : undefined,
         });
         if (!selecteur) {
-          await reply(`${I.warn} Nobody is in the channel to act on, and this panel only targets the people present.`);
+          await reply(`${I.warn} ${m.panel_tempvoice_err_nobody_to_act_on({}, { locale })}`);
           return;
         }
         await interaction.reply({
-          embeds: [avis(labels[action] ?? 'Pick a member.')],
+          embeds: [avis(labels[action] ?? m.panel_tempvoice_pick_member({}, { locale }))],
           components: [selecteur],
           ...ephemeral,
         });
@@ -4001,7 +4203,7 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
       }
 
       case 'reserve': {
-        const reservationAutorisee = peutAgir(ctx.ctxp.role, 'reserver', ctx.ctxp.reglages);
+        const reservationAutorisee = peutAgir(ctx.ctxp.role, 'reserver', ctx.ctxp.reglages, ctx.ctxp.locale);
         if (!reservationAutorisee.autorise) {
           await reply(`${I.lock} ${reservationAutorisee.raison}`);
           return;
@@ -4013,7 +4215,7 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
         const plan = ctx.ctxp.plan;
 
         if (plan.type === 'interdit') {
-          await reply(`${I.lock} Reserving this channel requires one of the roles the admins allowed: you have none of them.`);
+          await reply(`${I.lock} ${m.panel_tempvoice_err_reserve_no_role({}, { locale })}`);
           return;
         }
 
@@ -4022,15 +4224,15 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
           // à la fois, parce que réserver à une seule n'a pas de sens.
           // Même règle que le transfert : en FLAT, on ne cherche personne dans
           // le serveur, on choisit parmi les présents.
-          const qui = await selecteurPersonnes(channel, ctx.ctxp, 'tempvoice:reserve_membres', 'Who may join the channel…', {
+          const qui = await selecteurPersonnes(channel, ctx.ctxp, 'tempvoice:reserve_membres', m.panel_tempvoice_reserve_members_placeholder({}, { locale }), {
             maxValues: MAX_UTILISATEURS_MENU,
           });
           if (!qui) {
-            await reply(`${I.warn} Nobody is in the channel to reserve it for, and this panel only targets the people present.`);
+            await reply(`${I.warn} ${m.panel_tempvoice_err_nobody_to_reserve_for({}, { locale })}`);
             return;
           }
           await interaction.reply({
-            embeds: [avis(`${I.profile} **Reserve the channel for specific people**:\nPick who will be able to join. The channel gets locked, and only those people (plus you) will have access.`)],
+            embeds: [avis(`${I.profile} ${m.panel_tempvoice_reserve_members_hint({}, { locale })}`)],
             components: [qui],
             ...ephemeral,
           });
@@ -4059,8 +4261,8 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
           .slice(0, MAX_OPTIONS_MENU);
 
         const invite = reservationPosee
-          ? 'Untick to lift the reservation, or pick another role'
-          : 'Pick a role to reserve the channel';
+          ? m.panel_tempvoice_reserve_role_untick({}, { locale })
+          : m.panel_tempvoice_reserve_role_pick({}, { locale });
 
         // Liste imposee des que le plan en donne une qui tient debout. Si tous
         // les roles prevus ont disparu, mieux vaut le menu libre qu'un menu
@@ -4093,8 +4295,8 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
 
         await interaction.reply({
           embeds: [avis(reservationPosee
-            ? `🛡️ **Reserve the channel for a role**:\nThe channel is reserved for <@&${reservationPosee}>. Untick it to lift the reservation, or pick another role.`
-            : '🛡️ **Reserve the channel for a role**:\nPick the role that will be allowed to join your voice channel. Pick nothing to reset it.')],
+            ? m.panel_tempvoice_reserve_role_hint_set({ role: reservationPosee }, { locale })
+            : m.panel_tempvoice_reserve_role_hint({}, { locale }))],
           components: [new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(menuRole)],
           allowedMentions: { parse: [] },
           ...ephemeral,
@@ -4112,7 +4314,7 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
   if ((interaction.isRoleSelectMenu() || interaction.isStringSelectMenu()) && action === 'reserve_select') {
     await deferIfNeeded(interaction);
 
-    const reservationAutorisee = peutAgir(ctx.ctxp.role, 'reserver', ctx.ctxp.reglages);
+    const reservationAutorisee = peutAgir(ctx.ctxp.role, 'reserver', ctx.ctxp.reglages, ctx.ctxp.locale);
     if (!reservationAutorisee.autorise) {
       await reply(`${I.lock} ${reservationAutorisee.raison}`);
       return;
@@ -4126,7 +4328,7 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
       : null;
 
     if (chosen && !selectedRoleId) {
-      await reply('❌ That role cannot be used to reserve the channel.');
+      await reply(m.panel_tempvoice_err_role_not_usable({}, { locale }));
       return;
     }
     await appliquerReservation(ctx, selectedRoleId, reply);
@@ -4142,7 +4344,7 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
   if ((interaction.isUserSelectMenu() || interaction.isStringSelectMenu()) && action === 'reserve_membres') {
     await deferIfNeeded(interaction);
 
-    const verdictMembres = peutAgir(ctx.ctxp.role, 'reserver', ctx.ctxp.reglages);
+    const verdictMembres = peutAgir(ctx.ctxp.role, 'reserver', ctx.ctxp.reglages, ctx.ctxp.locale);
     if (!verdictMembres.autorise) {
       await reply(`${I.lock} ${verdictMembres.raison}`);
       return;
@@ -4161,20 +4363,20 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
 
     const targetId = interaction.values[0];
     if (!targetId) {
-      await reply('❌ No member selected.');
+      await reply(m.panel_tempvoice_err_no_member_selected({}, { locale }));
       return;
     }
 
     const target = await guild.members.fetch(targetId).catch(() => null);
     if (!target) {
-      await reply('❌ Member not found on this server.');
+      await reply(m.panel_tempvoice_err_member_not_found({}, { locale }));
       return;
     }
 
     // Le bot doit garder l'accès au salon : banni, il ne pourrait plus le
     // supprimer quand il se vide, et le salon resterait ouvert indéfiniment.
     if (target.user.bot) {
-      await reply('❌ A bot cannot be targeted by this action.');
+      await reply(m.panel_tempvoice_err_bot_target({}, { locale }));
       return;
     }
 
@@ -4183,13 +4385,13 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
     // pouvoir agir sur lui.
     const actingAsStaff = await isStaff(guildId, ctx.actingMember);
     if (target.id === cache.creatorId && !actingAsStaff) {
-      await reply('❌ The channel owner cannot be targeted.');
+      await reply(m.panel_tempvoice_err_owner_target({}, { locale }));
       return;
     }
 
     switch (action) {
       case 'transfer_select': {
-        const transfertAutorise = peutAgir(ctx.ctxp.role, 'transferer', ctx.ctxp.reglages);
+        const transfertAutorise = peutAgir(ctx.ctxp.role, 'transferer', ctx.ctxp.reglages, ctx.ctxp.locale);
         if (!transfertAutorise.autorise) {
           await reply(`${I.crown} ${transfertAutorise.raison}`);
           return;
@@ -4205,6 +4407,7 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
           'autoriser',
           ctx.ctxp.reglages,
           await decrireCible(ctx, target),
+          ctx.ctxp.locale,
         );
         if (!verdictAutorisation.autorise) {
           await reply(`${I.warn} ${verdictAutorisation.raison}`);
@@ -4216,13 +4419,13 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
         // Catégorie configurée mais introuvable : le dire, plutôt que de laisser
         // le refus générique ci-dessous parler d'un accès refusé.
         if (channel.parentId && !channel.parent) {
-          await reply('❌ The channel category cannot be found: access cannot be checked.');
+          await reply(m.panel_tempvoice_err_category_missing({}, { locale }));
           return;
         }
 
         const patch = categoryTrustPatch(channel, target);
         if (!patch) {
-          await reply(`❌ The channel category denies access to **${target.displayName}**.`);
+          await reply(m.panel_tempvoice_err_category_denies({ name: target.displayName }, { locale }));
           return;
         }
 
@@ -4237,8 +4440,8 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
         // une réussite que la catégorie contredit.
         const fullAccess = Object.keys(patch).length === TRUST_BIT_COUNT;
         await reply(fullAccess
-          ? `${ICONES_ABSENTES.ajouter} **${target.displayName}** has been allowed to join the channel.`
-          : `${I.warn} **${target.displayName}** only got partial access: the category denies the rest.`);
+          ? `${ICONES_ABSENTES.ajouter} ${m.panel_tempvoice_allowed_to_join({ name: target.displayName }, { locale })}`
+          : `${I.warn} ${m.panel_tempvoice_partial_access({ name: target.displayName }, { locale })}`);
         planifierRafraichissementPanneau(channel);
         return;
       }
@@ -4249,6 +4452,7 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
           'expulser',
           ctx.ctxp.reglages,
           await decrireCible(ctx, target),
+          ctx.ctxp.locale,
         );
         if (!verdictExpulsion.autorise) {
           await reply(`${I.warn} ${verdictExpulsion.raison}`);
@@ -4257,11 +4461,13 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
         const oublierExpulsion = annoncerIntentionVocale(guildId, target.id, 'disconnect', {
           libelle: `${user.tag} (panneau du salon vocal temporaire)`,
         });
-        await target.voice.disconnect('Expulsé du salon vocal temporaire par le propriétaire.').catch((error: unknown) => {
-          oublierExpulsion();
-          throw error;
-        });
-        await reply(`${I.kick} **${target.displayName}** has been kicked out of the voice channel.`);
+        await target.voice
+          .disconnect(m.panel_tempvoice_audit_kick_owner({}, { locale }))
+          .catch((error: unknown) => {
+            oublierExpulsion();
+            throw error;
+          });
+        await reply(`${I.kick} ${m.panel_tempvoice_kicked({ name: target.displayName }, { locale })}`);
         planifierRafraichissementPanneau(channel);
         return;
       }
@@ -4272,6 +4478,7 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
           'bannir',
           ctx.ctxp.reglages,
           await decrireCible(ctx, target),
+          ctx.ctxp.locale,
         );
         if (!verdictBannissement.autorise) {
           await reply(`${I.warn} ${verdictBannissement.raison}`);
@@ -4282,10 +4489,12 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
           const oublierBannissement = annoncerIntentionVocale(guildId, target.id, 'disconnect', {
             libelle: `${user.tag} (panneau du salon vocal temporaire)`,
           });
-          await target.voice.disconnect('Banni du salon vocal temporaire par le propriétaire.').catch(() => oublierBannissement());
+          await target.voice
+            .disconnect(m.panel_tempvoice_audit_ban_owner({}, { locale }))
+            .catch(() => oublierBannissement());
         }
         originesSurcharge.oublier(guildId, channel.id, target.id);
-        await reply(`${I.ban} **${target.displayName}** has been banned from the channel, text chat included.`);
+        await reply(`${I.ban} ${m.panel_tempvoice_banned({ name: target.displayName }, { locale })}`);
         planifierRafraichissementPanneau(channel);
         return;
       }
@@ -4305,18 +4514,20 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
       // où elle a été écrite, comme le nombre de droits d'un accès complet.
       const limit = Number.parseInt(value, 10);
       if (!Number.isFinite(limit) || limit < 0 || limit > MAX_USER_LIMIT) {
-        await reply(`❌ Invalid number (must be between 0 and ${MAX_USER_LIMIT}).`);
+        await reply(m.panel_tempvoice_err_invalid_number({ max: MAX_USER_LIMIT }, { locale }));
         return;
       }
       await channel.setUserLimit(limit);
-      await reply(limit === 0 ? `${I.profile} Slot limit removed.` : `${I.profile} Limit set to ${limit} members.`);
+      await reply(limit === 0
+        ? `${I.profile} ${m.panel_tempvoice_limit_removed({}, { locale })}`
+        : `${I.profile} ${m.panel_tempvoice_limit_set({ limit }, { locale })}`);
       planifierRafraichissementPanneau(channel);
       return;
     }
 
     if (action === 'rename_modal') {
       if (!value) {
-        await reply('❌ The name cannot be empty.');
+        await reply(m.panel_tempvoice_err_name_empty({}, { locale }));
         return;
       }
 
@@ -4336,15 +4547,15 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
         // Un vrai refus : nom invalide, salon disparu, droits perdus. Annoncer
         // une attente serait faux - il ne s'appliquera jamais.
         logger.warn('TempVoice', `Impossible de renommer le salon ${channel.id} :`, renamed.error);
-        await reply('❌ Discord rejected that name.');
+        await reply(m.panel_tempvoice_err_name_rejected({}, { locale }));
         return;
       }
 
       planifierRafraichissementPanneau(channel);
       await reply(
         renamed.status === 'done'
-          ? `${ICONES_ABSENTES.renommer} Channel renamed to: **${newName}**`
-          : '⏳ Discord did not confirm the rename: a channel can only change name twice per ten-minute window. The new name may apply in a few minutes.',
+          ? `${ICONES_ABSENTES.renommer} ${m.panel_tempvoice_renamed({ name: newName }, { locale })}`
+          : m.panel_tempvoice_rename_unconfirmed({}, { locale }),
       );
       return;
     }
@@ -4367,12 +4578,13 @@ async function applyOwnershipTransfer(
   kind: 'claim' | 'transfer',
 ): Promise<void> {
   const { interaction, channel, cache, guild, guildId } = ctx;
+  const locale = ctx.ctxp.locale;
   if (!target) return;
 
   // La garde de « Récupérer » a été évaluée avant la mise en file : deux
   // réclamations simultanées la passent toutes les deux. Elle est revue ici.
   if (kind === 'claim' && channel.members.has(cache.creatorId)) {
-    await respond(interaction, '❌ The current owner of the voice channel is still here.');
+    await respond(interaction, m.panel_tempvoice_err_owner_still_here({}, { locale }));
     return;
   }
 
@@ -4429,8 +4641,8 @@ async function applyOwnershipTransfer(
     .catch((err: unknown) => logger.error('TempVoice', "Erreur lors de l'enregistrement du propriétaire :", err));
 
   const message = kind === 'claim'
-    ? `👑 **${target.displayName}** claimed ownership of the voice channel!`
-    : `👑 Ownership of the channel has been transferred to **${target.displayName}**.`;
+    ? m.panel_tempvoice_claimed({ name: target.displayName }, { locale })
+    : m.panel_tempvoice_transferred({ name: target.displayName }, { locale });
 
   await respond(interaction, message);
 
