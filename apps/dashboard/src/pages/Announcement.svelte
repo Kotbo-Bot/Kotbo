@@ -19,6 +19,7 @@
   import LoadingHint from '../lib/components/LoadingHint.svelte';
   import ActionButton from '../lib/components/ActionButton.svelte';
   import EmojiPicker from '../lib/components/EmojiPicker.svelte';
+  import WelcomeExperiments from '../lib/components/welcome/WelcomeExperiments.svelte';
   import {
     fetchWelcomeConfig,
     updateWelcomeConfig,
@@ -72,7 +73,7 @@
   let showWelcomePresets = $state(false);
   let showLeavePresets   = $state(false);
   let showBoostPresets   = $state(false);
-  const announcementTabs = ['welcome', 'leave', 'boost', 'autoroles', 'thread'] as const;
+  const announcementTabs = ['welcome', 'leave', 'boost', 'autoroles', 'thread', 'experiments'] as const;
   type AnnouncementTab = typeof announcementTabs[number];
   const ANNOUNCE_BASE = window.location.pathname.startsWith('/welcome') ? '/welcome' : '/announcement';
   let activeTab = $state<AnnouncementTab>('welcome');
@@ -651,6 +652,11 @@
     <!-- Tab Contents -->
     <div class="space-y-6">
       
+      <!-- Tests A/B de l'accueil -->
+      {#if activeTab === 'experiments'}
+        <WelcomeExperiments />
+      {/if}
+
       <!-- Welcome Tab -->
       {#if activeTab === 'welcome'}
         <section data-guide="welcome-message" class="bg-surface-container-low/30 border border-outline-variant/10 p-8 rounded-xl space-y-6 max-w-4xl">

@@ -4,6 +4,7 @@ import prisma from '../../utils/db.js';
 import { canvasFont, ensureCanvasFonts } from '../../utils/canvasFonts.js';
 import { logger } from '../../utils/logger.js';
 import { resolvePlaceholders, type PlaceholderMember } from '../../utils/placeholders.js';
+import type { ExperimentVariant } from './welcomeExperimentMath.js';
 
 type DepartedMember = PlaceholderMember & Pick<GuildMember, 'guild'>;
 
@@ -44,7 +45,7 @@ function replaceTokens(template: string, member: DepartedMember): string {
 /**
  * Gère l'arrivée d'un membre (Welcome)
  */
-export async function handleGuildMemberAdd(member: GuildMember, _client: Client) {
+export async function handleGuildMemberAdd(member: GuildMember, _client: Client, variant: ExperimentVariant | null = null) {
   try {
     const config = await getOrCreateWelcomeConfig(member.guild.id);
     if (!config.welcomeEnabled || !config.welcomeChannelId) return;
@@ -52,11 +53,13 @@ export async function handleGuildMemberAdd(member: GuildMember, _client: Client)
     const channel = member.guild.channels.cache.get(config.welcomeChannelId);
     if (!channel?.isTextBased()) return;
 
-    const text = replaceTokens(config.welcomeMessage, member);
+    // Test A/B en cours : la version tirée pour ce membre remplace ce qu'elle
+    // précise, le reste suit la configuration.
+    const text = replaceTokens(variant?.message ?? config.welcomeMessage, member);
     const options: { content: string; files?: AttachmentBuilder[] } = { content: text };
 
     // Si la bannière image est activée, la générer
-    if (config.welcomeImageEnabled) {
+    if (variant?.imageEnabled ?? config.welcomeImageEnabled) {
       const buffer = await generateWelcomeCard(member);
       const attachment = new AttachmentBuilder(buffer, { name: 'welcome-card.png' });
       options.files = [attachment];

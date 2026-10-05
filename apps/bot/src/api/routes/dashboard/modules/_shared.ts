@@ -383,6 +383,111 @@ export function msgEmbedsMap(embeds: Embed[], guild: Guild | null) {
   }));
 }
 
+/** Composant Discord brut (`toJSON()`), réduit à ce que la conversion lit. */
+type RawComponent = {
+  type: number;
+  components?: RawComponent[];
+  content?: string;
+  accent_color?: number | null;
+  accessory?: RawComponent;
+  media?: { url?: string };
+  items?: Array<{ media?: { url?: string } }>;
+  label?: string;
+  url?: string;
+  emoji?: { name?: string | null; id?: string | null; animated?: boolean };
+  style?: number;
+  disabled?: boolean;
+};
+
+export type MessageCardButton = { label: string; emoji: string | null; url: string | null; style: number; disabled: boolean };
+
+/** Bouton lisible par le dashboard : libellé, émoji (texte ou image), lien. */
+function cardButton(raw: RawComponent): MessageCardButton {
+  const emoji = raw.emoji?.id
+    ? `https://cdn.discordapp.com/emojis/${raw.emoji.id}.${raw.emoji.animated ? 'gif' : 'png'}?size=32`
+    : raw.emoji?.name ?? null;
+  return { label: raw.label ?? '', emoji, url: raw.url ?? null, style: raw.style ?? 2, disabled: raw.disabled === true };
+}
+
+/**
+ * Messages en Components V2 lus comme des embeds.
+ *
+ * Le bot convertit ses embeds en conteneurs V2 (`utils/patchV2.ts`) : leurs
+ * messages arrivent sans `embeds`, et la vue live d'un ticket les montrait
+ * vides. Chaque conteneur devient une carte au format d'un embed (texte,
+ * couleur, vignette, images), ses boutons en plus. Le texte posé hors de tout
+ * conteneur revient séparément, comme le contenu d'un message classique.
+ */
+export function msgComponentsV2Map(components: Array<{ toJSON(): unknown }>, guild: Guild | null) {
+  const cards: Array<ReturnType<typeof msgEmbedsMap>[number] & { images: string[]; buttons: MessageCardButton[] }> = [];
+  const looseText: string[] = [];
+  const looseButtons: MessageCardButton[] = [];
+
+  const toCard = (texts: string[], color: number | null | undefined, images: string[], thumbnail: string | null, buttons: MessageCardButton[]) => {
+    const description = texts.filter((text) => text.trim()).join('\n\n');
+    cards.push({
+      title: null,
+      description,
+      htmlDescription: description ? parseDiscordMarkdown(description, guild) : '',
+      color: typeof color === 'number' ? `#${color.toString(16).padStart(6, '0')}` : null,
+      fields: [],
+      image: images[0] ? { url: images[0] } : null,
+      images: images.slice(1),
+      thumbnail: thumbnail ? { url: thumbnail } : null,
+      video: null,
+      buttons,
+    });
+  };
+
+  for (const component of components) {
+    const raw = component.toJSON() as RawComponent;
+    if (raw.type === 17) {
+      const texts: string[] = [];
+      const images: string[] = [];
+      const buttons: MessageCardButton[] = [];
+      let thumbnail: string | null = null;
+      const walk = (node: RawComponent) => {
+        switch (node.type) {
+          case 10: texts.push(node.content ?? ''); break;
+          case 9:
+            node.components?.forEach(walk);
+            if (node.accessory?.type === 11 && node.accessory.media?.url) thumbnail = node.accessory.media.url;
+            if (node.accessory?.type === 2) buttons.push(cardButton(node.accessory));
+            break;
+          case 12: node.items?.forEach((item) => { if (item.media?.url) images.push(item.media.url); }); break;
+          case 1: node.components?.filter((child) => child.type === 2).forEach((child) => buttons.push(cardButton(child))); break;
+          default: break;
+        }
+      };
+      raw.components?.forEach(walk);
+      toCard(texts, raw.accent_color, images, thumbnail, buttons);
+    } else if (raw.type === 10) {
+      looseText.push(raw.content ?? '');
+    } else if (raw.type === 1) {
+      const buttons = raw.components?.filter((child) => child.type === 2).map(cardButton) ?? [];
+      // Une rangée de boutons sous un conteneur lui appartient visuellement.
+      if (cards.length > 0) cards[cards.length - 1].buttons.push(...buttons);
+      else looseButtons.push(...buttons);
+    } else if (raw.type === 12) {
+      toCard([], null, raw.items?.map((item) => item.media?.url).filter((url): url is string => !!url) ?? [], null, []);
+    }
+  }
+
+  return { cards, text: looseText.filter((text) => text.trim()).join('\n'), buttons: looseButtons };
+}
+
+/** Réactions d'un message : émoji (texte ou image) et nombre. */
+export function msgReactionsMap(reactions: Iterable<{ emoji: { id: string | null; name: string | null; animated?: boolean | null }; count: number | null }>) {
+  return [...reactions].map((reaction) => ({
+    emoji: reaction.emoji.id ? null : reaction.emoji.name,
+    imageUrl: reaction.emoji.id
+      ? `https://cdn.discordapp.com/emojis/${reaction.emoji.id}.${reaction.emoji.animated ? 'gif' : 'png'}?size=32`
+      : null,
+    name: reaction.emoji.name ?? '',
+    count: reaction.count ?? 0,
+  }));
+}
+
 /**
  * Bascule des statistiques de mots, ecrite depuis deux pages : le panneau
  * « Analytique avancee » l'allume d'un clic, l'onglet Verification de la page

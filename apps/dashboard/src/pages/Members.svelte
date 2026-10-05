@@ -3,8 +3,8 @@
   import { canViewFeature } from '../lib/permissions.svelte';
   import { router } from 'tinro';
   import { authStore } from '../lib/stores/auth.svelte';
-  import { fetchMemberCase, dashboardFetch } from '../lib/api';
-  import MemberCaseModal from '../lib/components/MemberCaseModal.svelte';
+  import { dashboardFetch } from '../lib/api';
+  import MemberProfile from '../lib/components/members/MemberProfile.svelte';
   import Papicon from '../lib/components/Papicon.svelte';
   import { memberAvatarSrc } from '../lib/discordMedia';
   import { m, dateLocale } from '../lib/i18n';
@@ -61,12 +61,6 @@
   let serverStatus = $state<'on_server' | 'left' | 'all'>('on_server');
   let searchRequestId = 0;
 
-  let modalOpen = $state(false);
-  let selectedUserId = $state<string | null>(null);
-  let selectedUserName = $state('');
-  let caseData = $state<any>(null);
-  let loadingCase = $state(false);
-  let caseError = $state('');
 
   const stats = $derived({
     total: totalFound,
@@ -165,41 +159,15 @@
    */
   const canOpenMemberCase = $derived(canViewFeature('members'));
 
-  async function openMemberCase(member: MemberSearchResult | { id: string, displayName?: string, username?: string }) {
+  /**
+   * La fiche d'un membre est une page a part entiere, a son adresse
+   * `/members/:id` : on y arrive depuis la liste, un lien de chronologie, un
+   * favori. Le dossier detaille reste disponible depuis la fiche.
+   */
+  function openMemberProfile(member: MemberSearchResult) {
     if (!canOpenMemberCase) return;
-    if (!authStore.selectedGuildId) return;
-
-    selectedUserId = member.id;
-    selectedUserName = ('displayName' in member ? member.displayName : null) || ('username' in member ? member.username : null) || m.mb_member_fallback();
-    modalOpen = true;
-    loadingCase = true;
-    caseError = '';
-    caseData = null;
-
-    if ($router.path !== `/members/${member.id}`) {
-      router.goto(`/members/${member.id}`);
-    }
-
-    try {
-      caseData = await fetchMemberCase(member.id, authStore.selectedGuildId);
-      if (caseData?.profile) {
-        selectedUserName = caseData.profile.displayName || caseData.profile.username || selectedUserName;
-      }
-    } catch (error) {
-      caseError = error instanceof Error ? error.message : m.mb_case_load_error();
-    } finally {
-      loadingCase = false;
-    }
+    router.goto(`/members/${member.id}`);
   }
-
-  $effect(() => {
-    if (userIdFromUrl && userIdFromUrl !== selectedUserId && authStore.selectedGuildId) {
-      void openMemberCase({ id: userIdFromUrl });
-    } else if (!userIdFromUrl && modalOpen) {
-      modalOpen = false;
-      selectedUserId = null;
-    }
-  });
 
   function resetSearch() {
     searchQuery = '';
@@ -240,6 +208,7 @@
   featureKey="members"
 >
   {#snippet actions()}
+    {#if !userIdFromUrl}
     <div class="flex items-center gap-4">
       <div class="flex -space-x-3">
         {#each members.slice(0, 5) as member}
@@ -261,7 +230,14 @@
         <div class="text-xs font-semibold text-on-surface-variant/40">{m.mb_total_members()}</div>
       </div>
     </div>
+    {/if}
   {/snippet}
+
+  {#if userIdFromUrl}
+    {#if canOpenMemberCase}
+      <MemberProfile userId={userIdFromUrl} />
+    {/if}
+  {:else}
 
   <!-- Barre d'Action Ergonomique -->
   <section class="sticky top-0 z-10 -mx-4 space-y-4 rounded-b-4xl bg-surface/80 px-4 pb-6 pt-2 md:top-4 md:mx-0 md:rounded-xl md:pt-4">
@@ -440,7 +416,7 @@
       <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {#each members as member (member.id)}
           <button
-            onclick={() => openMemberCase(member)}
+            onclick={() => openMemberProfile(member)}
             class={`group flex flex-col rounded-xl border ${member.isOnServer ? 'border-outline-variant/10 bg-surface-container-low/40' : 'border-error/10 bg-error/5'} p-4 text-left transition-all duration-300 hover:border-primary/20 hover:bg-surface-container-low hover:shadow-xl hover:shadow-primary/5`}
           >
             <div class="flex items-start gap-4">
@@ -518,20 +494,7 @@
     </footer>
   {/if}
 
-<MemberCaseModal
-  open={modalOpen}
-  userId={selectedUserId}
-  userName={selectedUserName}
-  {caseData}
-  loading={loadingCase}
-  error={caseError}
-  onClose={() => {
-    modalOpen = false;
-    if ($router.path !== '/members') {
-      router.goto('/members');
-    }
-  }}
-  onSelectUser={(newUserId: string) => void openMemberCase({ id: newUserId })}
-/>
+  {/if}
+
 
 </ModulePage>

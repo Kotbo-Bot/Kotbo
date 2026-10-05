@@ -888,6 +888,18 @@ export async function handleButton(interaction: Interaction, client: Client): Pr
     return;
   }
 
+  // ── Kotbo × AegisAI (cartes du staff) ───────────────────────────────
+  if (customId.startsWith('aegis:')) {
+    const member = await resolveGuildMemberByUserId(interaction, user.id);
+    if (!(await canModerate(member, guildId!))) {
+      await interaction.reply({ content: "❌ Tu n'as pas les permissions nécessaires.", flags: [MessageFlags.Ephemeral] });
+      return;
+    }
+    const { handleAegisButton } = await import('../services/moderation/aegis/aegisButtons.js');
+    await handleAegisButton(interaction);
+    return;
+  }
+
   // ── Security Verification Buttons ────────────────────────────────────
   if (customId.startsWith('secverif_start_')) {
     const DASHBOARD_URL = process.env.DASHBOARD_URL || 'http://localhost:5173';

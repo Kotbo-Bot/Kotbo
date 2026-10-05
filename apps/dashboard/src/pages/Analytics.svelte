@@ -40,6 +40,7 @@
   import CohortTriangle from '../lib/components/analytics/CohortTriangle.svelte';
   import ResponseTimesView from '../lib/components/analytics/ResponseTimesView.svelte';
   import ConcentrationView from '../lib/components/analytics/ConcentrationView.svelte';
+  import ClimateView from '../lib/components/analytics/ClimateView.svelte';
   import ChannelHealthView from '../lib/components/analytics/ChannelHealthView.svelte';
   import NetworkInsightsView from '../lib/components/analytics/NetworkInsightsView.svelte';
   import GrowthInsightsView from '../lib/components/analytics/GrowthInsightsView.svelte';
@@ -146,6 +147,10 @@
         { id: 'moderation', label: m.an_tab_moderation(), icon: 'Gavel', scope: 'period', legacy: true },
         { id: 'mod-advanced', label: m.an_tab_mod_advanced(), icon: 'ChartLineUp', scope: 'own' },
       ],
+    },
+    {
+      id: 'climate', label: m.anx_section_climate(), icon: 'sparkles', description: m.anx_section_climate_desc(), isNew: true,
+      tabs: [{ id: 'climate', label: m.anx_tab_climate(), icon: 'sparkles', scope: 'period' }],
     },
     {
       id: 'staff', label: m.anx_section_staff(), icon: 'Users', description: m.anx_section_staff_desc(),
@@ -536,6 +541,8 @@
           </div>
         {:else if activeTab === 'concentration'}
           <ConcentrationView />
+        {:else if activeTab === 'climate'}
+          <ClimateView onOpenMember={openMemberDetails} />
         {:else if activeTab === 'interactions'}
           {#if interactions}
             <div class="flex flex-col gap-4">

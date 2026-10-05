@@ -17,7 +17,14 @@ import { getCachedGuild } from '../../../utils/cache.js';
 import { registerTimeoutSanction, registerBanSanction, registerWarnSanction } from '../sanctionService.js';
 import { mirrorModlogToStaffServer } from '../../staff/staffServerService.js';
 import { getSpamConfig, thresholdsFromConfig, tuningFromConfig } from './config.js';
-import { getHistory, getLastTypingAt, isTypingObservable, recordMessage, recordTyping } from './activityStore.js';
+import {
+  getHistory,
+  getLastTypingAt,
+  getTypingSessionStartAt,
+  isTypingObservable,
+  recordMessage,
+  recordTyping,
+} from './activityStore.js';
 import { loadSpamWeights, logSpamSample } from './learning.js';
 import { normalizeContent } from './normalize.js';
 import { evaluateMessage } from './scoring.js';
@@ -238,6 +245,7 @@ export async function handleSpamMessage(message: Message): Promise<boolean> {
         mentionedEveryone: message.mentions.everyone,
         history: getHistory(guildId, message.author.id),
         lastTypingAt: getLastTypingAt(guildId, message.author.id),
+        typingSessionStartAt: getTypingSessionStartAt(guildId, message.author.id),
         typingObservable: isTypingObservable(guildId),
         trust,
         tuning,
@@ -294,7 +302,7 @@ export async function handleSpamMessage(message: Message): Promise<boolean> {
   return true;
 }
 
-/** Branché sur `typingStart` : alimente le signal « posté sans frappe ». */
+/** Branché sur `typingStart` : alimente les signaux « posté sans frappe » et « copier-coller ». */
 export function handleTypingStart(guildId: string, userId: string): void {
   recordTyping(guildId, userId);
 }

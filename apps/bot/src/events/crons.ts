@@ -435,6 +435,10 @@ export async function registerCrons(client: Client): Promise<void> {
     'word-stats-prune': async () => {
       await pruneOldWordStats();
     },
+    'aegis-prune': async () => {
+      const { pruneAegisData } = await import('../services/moderation/aegis/aegisRetention.js');
+      await pruneAegisData();
+    },
     'workflow-executions-prune': async () => {
       const deleted = await pruneWorkflowExecutions();
       if (deleted > 0) logger.info('Cron', `${deleted} exécution(s) de workflow purgée(s)`);
@@ -764,6 +768,15 @@ export async function registerCrons(client: Client): Promise<void> {
     await runLocalSweep('workflow-schedule', () => dispatchScheduledWorkflows(client));
   });
 
+  // Webhooks sortants : relances dues et purge du journal (30 jours). Chaque
+  // envoi est réservé avant d'être tenté, deux processus ne le doublent pas.
+  cron.schedule('* * * * *', async () => {
+    await runLocalSweep('outgoing-webhooks', async () => {
+      const { runOutgoingWebhookSweep } = await import('../services/integrations/outgoingWebhookService.js');
+      await runOutgoingWebhookSweep();
+    });
+  });
+
   // Workflows : purge du journal des exécutions (tous les jours à 04:25). En
   // file, contrairement aux balayages : elle porte sur toute la base, un seul
   // processus suffit.
@@ -802,6 +815,14 @@ export async function registerCrons(client: Client): Promise<void> {
   cron.schedule('45 3 * * *', async () => {
     await runCronJob('word-stats-prune', async () => {
       await pruneOldWordStats();
+    }, 2000);
+  });
+
+  // 🛡️ Kotbo × AegisAI: extraits à l'échéance de la rétention des logs, détections et agrégats anciens (tous les jours à 03:50)
+  cron.schedule('50 3 * * *', async () => {
+    await runCronJob('aegis-prune', async () => {
+      const { pruneAegisData } = await import('../services/moderation/aegis/aegisRetention.js');
+      await pruneAegisData();
     }, 2000);
   });
 

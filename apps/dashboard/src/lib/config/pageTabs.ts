@@ -108,9 +108,11 @@ export const PAGE_TABS: Record<string, PageTabConfig[]> = {
   '/security/filters': [
     { id: 'bot', label: () => m.am_tab_bot_filters(), icon: 'shield-alert' },
     { id: 'discord', label: () => m.am_tab_discord_filters(), icon: 'shield' },
+    { id: 'ai', label: () => m.aegis_tab(), icon: 'sparkles' },
     { id: 'security', label: () => m.am_tab_security(), icon: 'lock' },
     { id: 'behavioral', label: () => m.am_tab_behavioral(), icon: 'activity' },
     { id: 'exceptions', label: () => m.am_tab_exceptions(), icon: 'filter' },
+    { id: 'simulator', label: () => m.sim_tab_label(), icon: 'history' },
   ],
 
   '/security/filters/nicknames': [
@@ -189,6 +191,7 @@ export const PAGE_TABS: Record<string, PageTabConfig[]> = {
     { id: 'boost', label: () => m.announcements_tab_boost(), icon: 'Zap' },
     { id: 'autoroles', label: () => m.announcements_tab_autoroles(), icon: 'Shield' },
     { id: 'thread', label: () => m.announcements_tab_thread(), icon: 'chat' },
+    { id: 'experiments', label: () => m.wx_tab(), icon: 'git-branch' },
   ],
 
   '/news': [
@@ -217,6 +220,7 @@ export const PAGE_TABS: Record<string, PageTabConfig[]> = {
 
   '/tickets': [
     { id: 'tickets', label: () => m.e1_tickets_tab_tickets(), icon: 'message-square' },
+    { id: 'performance', label: () => m.th_tab_performance(), icon: 'trending-up' },
     { id: 'transcripts', label: () => m.e1_tickets_tab_transcripts(), icon: 'file-text' },
     { id: 'satisfaction', label: () => m.e1_tickets_tab_satisfaction(), icon: 'star' },
     { id: 'macros', label: () => m.e1_tickets_tab_macros(), icon: 'message-circle' },

@@ -463,12 +463,15 @@ export const startDashboardApi = async (client: Client) => {
   // n'importe quel utilisateur du dashboard. On n'y publie que les
   // identifiants, et l'onglet concerne relit les messages par l'API, qui
   // verifie ses droits (cf. `broadcastDashboardEvent`).
-  client.on('messageCreate', async (msg) => {
-    if (msg.author.bot && msg.author.id !== client.user!.id) return;
+  //
+  // Une réaction, une modification ou une suppression change aussi ce que la
+  // vue live affiche : elles relancent la même relecture. Le fil compte comme
+  // le salon, pour les tickets en mode fil ou relayés depuis les MP.
+  const notifyTicketConversation = async (channelId: string) => {
     try {
-      if (!(await mayBeTicketChannel(msg.channelId))) return;
+      if (!(await mayBeTicketChannel(channelId))) return;
       const ticket = await prisma.ticket.findFirst({
-        where: { channelId: msg.channelId },
+        where: { OR: [{ channelId }, { threadId: channelId }] },
         select: { id: true, guildId: true },
       });
       if (!ticket) return;
@@ -481,7 +484,16 @@ export const startDashboardApi = async (client: Client) => {
     } catch (err) {
       logger.error('DashboardWS', 'Erreur lors de la diffusion du message live du ticket:', err);
     }
+  };
+
+  client.on('messageCreate', async (msg) => {
+    if (msg.author.bot && msg.author.id !== client.user!.id) return;
+    await notifyTicketConversation(msg.channelId);
   });
+  client.on('messageUpdate', async (_old, msg) => notifyTicketConversation(msg.channelId));
+  client.on('messageDelete', async (msg) => notifyTicketConversation(msg.channelId));
+  client.on('messageReactionAdd', async (reaction) => notifyTicketConversation(reaction.message.channelId));
+  client.on('messageReactionRemove', async (reaction) => notifyTicketConversation(reaction.message.channelId));
 
   logger.success('DashboardAPI', `API dashboard active sur http://localhost:${port}`);
 

@@ -17,6 +17,10 @@
   import Skeleton from '../lib/components/Skeleton.svelte';
   import LoadingHint from '../lib/components/LoadingHint.svelte';
   import AntiSpamPanel from '../lib/components/AntiSpamPanel.svelte';
+  import AegisPanel from '../lib/components/aegis/AegisPanel.svelte';
+  import RuleSimulator from '../lib/components/automod/RuleSimulator.svelte';
+  import Button from '../lib/components/ui/Button.svelte';
+  import type { SimulatedRule, SimulatedRuleKind } from '../lib/api';
   import {
     fetchAutoModConfig,
     updateAutoModConfig
@@ -24,7 +28,7 @@
 
   const actionState = createAsyncActionState();
   let loading = $state(false);
-  const FILTER_TABS = ['bot', 'discord', 'security', 'behavioral', 'exceptions'] as const;
+  const FILTER_TABS = ['bot', 'discord', 'ai', 'security', 'behavioral', 'exceptions', 'simulator'] as const;
   let activeTab = $state<string>('bot');
 
   // L'onglet vit dans l'URL, comme ailleurs : la palette de commandes propose
@@ -282,6 +286,47 @@
     config.adminLockSecurityRoleIds = config.adminLockSecurityRoleIds.filter(id => id !== roleId);
   }
 
+  // ── Simulateur ─────────────────────────────────────────
+  // Le simulateur teste le brouillon de la page, listes saisies comprises,
+  // avant tout enregistrement.
+  const parseLines = (text: string) => text.split('\n').map((line) => line.trim().toLowerCase()).filter((line) => line.length > 0);
+  const simulatorDraft = $derived({
+    ...config,
+    linksWhitelist: parseLines(whitelistInput),
+    customWords: parseLines(customWordsInput),
+    customWordsAllowList: parseLines(customWordsAllowInput),
+  });
+  // `?rule=scam` : le lien « Tester » d'une autre page ouvre directement sa règle.
+  const SIMULATOR_KINDS: SimulatedRuleKind[] = ['keywords', 'links', 'caps', 'emojis', 'mentions', 'everyone', 'spam', 'scam', 'regex'];
+  const requestedRule = typeof window === 'undefined' ? null : new URLSearchParams(window.location.search).get('rule');
+  let simulatorKind = $state<SimulatedRuleKind>(
+    SIMULATOR_KINDS.includes(requestedRule as SimulatedRuleKind) ? requestedRule as SimulatedRuleKind : 'keywords',
+  );
+
+  function openSimulator(kind: SimulatedRuleKind) {
+    simulatorKind = kind;
+    gotoTab('/security/filters', 'simulator', 'bot');
+  }
+
+  /** Reporte dans la page les réglages trouvés dans le simulateur. */
+  function applySimulation(rule: SimulatedRule) {
+    switch (rule.kind) {
+      case 'spam': config.spamEnabled = true; config.spamLimit = rule.limit; config.spamIntervalSeconds = rule.intervalSeconds; break;
+      case 'links': config.linksEnabled = true; whitelistInput = rule.whitelist.join('\n'); config.linksWhitelist = rule.whitelist; break;
+      case 'caps': config.capsEnabled = true; config.capsThresholdPercent = rule.thresholdPercent; config.capsMinLength = rule.minLength; break;
+      case 'emojis': config.emojisEnabled = true; config.emojisLimit = rule.limit; break;
+      case 'mentions': config.mentionsEnabled = true; config.mentionsLimit = rule.limit; break;
+      case 'keywords':
+        config.customWordsEnabled = true;
+        customWordsInput = rule.keywords.join('\n');
+        customWordsAllowInput = rule.allowList.join('\n');
+        config.customWords = rule.keywords;
+        config.customWordsAllowList = rule.allowList;
+        break;
+      default: break;
+    }
+  }
+
   // Les niveaux de protection vivent desormais dans Securite > Vue d'ensemble :
   // ils deplacent aussi les seuils anti-raid, que cette page n'affiche pas, et
   // les proposer ici laissait croire qu'ils ne touchaient qu'aux filtres.
@@ -322,11 +367,14 @@
                 <Papicon icon="Clock" size={20} class="text-primary" />
                 {m.am_spam_title()}
               </h3>
+              <div class="flex items-center gap-2">
+                <Button size="sm" variant="ghost" icon="history" onclick={() => openSimulator('spam')}>{m.sim_test_button()}</Button>
               <ToggleSwitch 
                 checked={config.spamEnabled} 
                 onToggle={(v: boolean) => config.spamEnabled = v} 
                 disabled={!canManageSettings}
               />
+              </div>
             </div>
 
             {#if config.spamEnabled}
@@ -380,11 +428,14 @@
                 <Papicon icon="Link" size={20} class="text-secondary" />
                 {m.am_links_title()}
               </h3>
+              <div class="flex items-center gap-2">
+                <Button size="sm" variant="ghost" icon="history" onclick={() => openSimulator('links')}>{m.sim_test_button()}</Button>
               <ToggleSwitch 
                 checked={config.linksEnabled} 
                 onToggle={(v: boolean) => config.linksEnabled = v} 
                 disabled={!canManageSettings}
               />
+              </div>
             </div>
 
             {#if config.linksEnabled}
@@ -423,11 +474,14 @@
                 <Papicon icon="Font" size={20} class="text-tertiary" />
                 {m.am_caps_title()}
               </h3>
+              <div class="flex items-center gap-2">
+                <Button size="sm" variant="ghost" icon="history" onclick={() => openSimulator('caps')}>{m.sim_test_button()}</Button>
               <ToggleSwitch 
                 checked={config.capsEnabled} 
                 onToggle={(v: boolean) => config.capsEnabled = v} 
                 disabled={!canManageSettings}
               />
+              </div>
             </div>
 
             {#if config.capsEnabled}
@@ -472,11 +526,14 @@
                   <Papicon icon="Emoji" size={18} class="text-warning" />
                   {m.am_emojis_title()}
                 </h3>
+                <div class="flex items-center gap-2">
+                  <Button size="sm" variant="ghost" icon="history" onclick={() => openSimulator('emojis')}>{m.sim_test_button()}</Button>
                 <ToggleSwitch 
                   checked={config.emojisEnabled} 
                   onToggle={(v: boolean) => config.emojisEnabled = v} 
                   disabled={!canManageSettings}
                 />
+                </div>
               </div>
 
               {#if config.emojisEnabled}
@@ -503,11 +560,14 @@
                   <Papicon icon="User" size={18} class="text-purple-400" />
                   {m.am_mentions_title()}
                 </h3>
+                <div class="flex items-center gap-2">
+                  <Button size="sm" variant="ghost" icon="history" onclick={() => openSimulator('mentions')}>{m.sim_test_button()}</Button>
                 <ToggleSwitch 
                   checked={config.mentionsEnabled} 
                   onToggle={(v: boolean) => config.mentionsEnabled = v} 
                   disabled={!canManageSettings}
                 />
+                </div>
               </div>
 
               {#if config.mentionsEnabled}
@@ -572,11 +632,14 @@
                   <Papicon icon="ShieldAlert" size={18} class="text-error" />
                   {m.am_everyone_title()}
                 </h3>
+                <div class="flex items-center gap-2">
+                  <Button size="sm" variant="ghost" icon="history" onclick={() => openSimulator('everyone')}>{m.sim_test_button()}</Button>
                 <ToggleSwitch 
                   checked={config.antiEveryoneEnabled} 
                   onToggle={(v: boolean) => config.antiEveryoneEnabled = v} 
                   disabled={!canManageSettings}
                 />
+                </div>
               </div>
 
               <p class="text-2xs text-on-surface-variant/70 leading-relaxed">
@@ -628,11 +691,14 @@
                 <Papicon icon="Filter" size={20} class="text-orange-400" />
                 {m.am_customwords_title()}
               </h3>
+              <div class="flex items-center gap-2">
+                <Button size="sm" variant="ghost" icon="history" onclick={() => openSimulator('keywords')}>{m.sim_test_button()}</Button>
               <ToggleSwitch
                 checked={config.customWordsEnabled}
                 onToggle={(v: boolean) => config.customWordsEnabled = v}
                 disabled={!canManageSettings}
               />
+              </div>
             </div>
 
             <p class="text-xs text-on-surface-variant/70 leading-relaxed">
@@ -1096,11 +1162,28 @@
         <Papicon icon="chevron-right" size={16} class="shrink-0 text-on-surface-variant/60" />
       </a>
 
+    {:else if activeTab === 'ai'}
+      <!-- Kotbo × AegisAI : sa propre configuration (AegisConfig), chargée et
+           enregistrée par le panneau. -->
+      <div class="mt-6">
+        <AegisPanel />
+      </div>
+
     {:else if activeTab === 'behavioral'}
       <!-- Le panneau gere son propre chargement et son propre enregistrement :
            il s'appuie sur SpamDetectionConfig, pas sur AutoModConfig. -->
       <AntiSpamPanel />
 
+    {:else if activeTab === 'simulator'}
+      <div class="mt-6">
+        <RuleSimulator
+          draft={simulatorDraft}
+          saved={savedConfig}
+          bind:kind={simulatorKind}
+          canApply={canManageSettings}
+          onapply={applySimulation}
+        />
+      </div>
     {:else if activeTab === 'exceptions'}
       <div class="animate-in fade-in duration-300">
         <!-- Exempt rules (Bypass) -->

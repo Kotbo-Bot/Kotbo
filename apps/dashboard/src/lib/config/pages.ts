@@ -195,6 +195,7 @@ export const configItems: PageConfig[] = [
   { name: m.nav_backups(),         icon: "archive",        href: "/backups",              featureKey: "settings", beta: false, wip: false },
   { name: m.nav_schedules(),      icon: "calendar",      href: "/schedules",            featureKey: "settings", beta: false, wip: false },
   { name: m.nav_mcp_api(),             icon: "cpu",           href: "/mcp-settings",         featureKey: "settings", beta: false, wip: false },
+  { name: m.nav_outgoing_webhooks(),   icon: "send",          href: "/webhooks",             featureKey: "settings", beta: true, wip: false },
   { name: m.nav_custom_bot(),          icon: "bot",           href: "/custom-bot",           featureKey: "settings", beta: false, wip: true, wipMessage: m.nav_custom_bot_wip() },
 ];
 

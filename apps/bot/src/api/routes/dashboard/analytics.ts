@@ -420,6 +420,21 @@ export async function handleAnalyticsRoutes(
     return true;
   }
 
+  // GET …/analytics/climate : toxicité et émotions (Kotbo × AegisAI). Période seule.
+  if (parts.length === 6 && parts[5] === 'climate') {
+    try {
+      const { parseRange } = await import('../../../services/analytics/contentAnalyticsService.js');
+      const { getClimateAnalytics } = await import('../../../services/moderation/aegis/aegisInsights.js');
+      const range = parseRange(url.searchParams);
+      json(res, 200, await cache.wrap(`guild:${guildId}:analytics:climate:${range.start}:${range.end}`, 300, () =>
+        getClimateAnalytics(client, guildId, range)));
+    } catch (err) {
+      logger.error('AnalyticsAPI', 'Erreur analytics (climate):', err);
+      jsonFailure(res, err, 'Erreur lors du calcul des statistiques', 'AnalyticsAPI');
+    }
+    return true;
+  }
+
   // GET …/analytics/members/overview : effectif, arrivées par source, inviteurs
   // et qualité des nouveaux. Période seule.
   if (parts.length === 7 && parts[5] === 'members' && parts[6] === 'overview') {

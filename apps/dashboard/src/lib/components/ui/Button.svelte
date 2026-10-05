@@ -13,6 +13,9 @@
 
   type Variant = 'primary' | 'secondary' | 'ghost' | 'danger';
 
+  // Avertissement propre aux custom elements, que le dashboard n'emploie pas :
+  // svelte.config.ts le filtre déjà à la compilation, le lint ne lit pas ce filtre.
+  // svelte-ignore custom_element_props_identifier
   const {
     variant = 'secondary',
     size = 'md',

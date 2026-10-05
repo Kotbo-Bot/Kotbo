@@ -55,6 +55,7 @@ export type BackgroundJobName =
   | 'acquisition-alerts-check'
   | 'acquisition-weekly-recap'
   | 'word-stats-prune'
+  | 'aegis-prune'
   | 'workflow-executions-prune'
   | 'ban-hygiene-scan'
   | 'warn-auto-archive'

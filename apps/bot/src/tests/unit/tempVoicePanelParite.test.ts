@@ -119,7 +119,7 @@ const mockCache = () => completeModuleMock(cheminCache, {
 });
 
 for (const relatif of ['../../utils/db']) {
-  const fabrique = () => ({ default: prismaMock, prisma: prismaMock, prismaRead: prismaMock });
+  const fabrique = () => ({ default: prismaMock, prisma: prismaMock, prismaRead: prismaMock, upsertRetryingRace: (upsert: () => Promise<unknown>) => upsert() });
   mock.module(path.resolve(import.meta.dir, `${relatif}.ts`), fabrique);
   mock.module(path.resolve(import.meta.dir, `${relatif}.js`), fabrique);
 }
