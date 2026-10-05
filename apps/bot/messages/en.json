@@ -3369,6 +3369,7 @@
   "panel_tempvoice_subject_transfer": "the ownership transfer",
   "panel_tempvoice_list_and": "and",
   "panel_tempvoice_admins_only_plural": "{subjects} are reserved for admins on this server.",
+  "panel_tempvoice_admins_only_plural_feminine": "{subjects} are reserved for admins on this server.",
   "panel_tempvoice_refuse_already_owner": "You already own this channel.",
   "panel_tempvoice_refuse_already_home": "You are already home in this channel.",
   "panel_tempvoice_target_this_person": "This person",

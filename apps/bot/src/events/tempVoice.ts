@@ -798,9 +798,13 @@ async function sweepOrphanChannels(client: Client): Promise<void> {
 
     if (channel.members.size === 0) {
       const locale = await resolveGuildLocale(channel.guild?.id ?? '', channel.guild?.preferredLocale ?? null);
-      await closeTempChannel(channel, m.panel_tempvoice_audit_empty_startup({}, { locale }));
-      removed += 1;
-      continue;
+      // Relu après l'attente, comme à la sortie d'un membre : un salon rejoint
+      // entre-temps est repris, pas supprimé.
+      if (channel.members.size === 0) {
+        await closeTempChannel(channel, m.panel_tempvoice_audit_empty_startup({}, { locale }));
+        removed += 1;
+        continue;
+      }
     }
 
     // « Ceux qui sont en vocal » ne se relit dans aucune surcharge : sans la
@@ -2477,11 +2481,16 @@ export function registerTempVoiceListener(client: Client): void {
           oldChannel.members.size === 0
         ) {
           const locale = await resolveGuildLocale(guild.id, guild.preferredLocale ?? null);
-          const closed = await closeTempChannel(oldChannel, m.panel_tempvoice_audit_empty({}, { locale }));
-          if (closed) {
-            logger.info('TempVoice', `Salon supprimé car vide : ${oldChannel.name} (${oldChannel.id})`);
+          // Relu après l'attente : quelqu'un a pu entrer pendant la résolution de
+          // la langue, et `closeTempChannel` supprimerait le salon avec lui dedans.
+          // S'il n'est plus vide, la sortie se traite comme celle d'un salon vivant.
+          if (oldChannel.members.size === 0) {
+            const closed = await closeTempChannel(oldChannel, m.panel_tempvoice_audit_empty({}, { locale }));
+            if (closed) {
+              logger.info('TempVoice', `Salon supprimé car vide : ${oldChannel.name} (${oldChannel.id})`);
+            }
+            return;
           }
-          return;
         }
 
         // Le salon vit encore : la sortie doit être traitée, et elle seule sait

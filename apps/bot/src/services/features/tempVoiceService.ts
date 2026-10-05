@@ -1417,6 +1417,12 @@ const PHRASES_UN_SEUL_REGLAGE: Readonly<
   transferer: m.panel_tempvoice_admins_only_transfer,
 };
 
+/** Les réglages dont le sujet est FÉMININ en français (« la limite de places »,
+ *  « la réservation »). Une liste qui ne contient qu'eux s'accorde au féminin
+ *  pluriel ; dès qu'un masculin s'y mêle, le masculin l'emporte. L'anglais
+ *  n'accorde pas : sa variante féminine est la même phrase. */
+const REGLAGES_SUJET_FEMININ: ReadonlySet<ReglageModerateur> = new Set(['limite', 'reserver']);
+
 function majuscule(texte: string): string {
   return texte.charAt(0).toUpperCase() + texte.slice(1);
 }
@@ -1439,7 +1445,10 @@ export function raisonAdminsSeulement(reglages: readonly ReglageModerateur[], lo
   const et = m.panel_tempvoice_list_and({}, { locale });
   const liste = `${sujets.slice(0, -1).join(', ')} ${et} ${sujets[sujets.length - 1] as string}`;
 
-  return m.panel_tempvoice_admins_only_plural({ subjects: majuscule(liste) }, { locale });
+  const phrase = uniques.every((reglage) => REGLAGES_SUJET_FEMININ.has(reglage))
+    ? m.panel_tempvoice_admins_only_plural_feminine
+    : m.panel_tempvoice_admins_only_plural;
+  return phrase({ subjects: majuscule(liste) }, { locale });
 }
 
 /** Ce qu'un modérateur ne peut pas toucher sur ce serveur, pour l'encart unique. */

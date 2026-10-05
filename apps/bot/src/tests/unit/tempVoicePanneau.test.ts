@@ -535,6 +535,15 @@ describe('raisonAdminsSeulement', () => {
       'Reservations are reserved for admins on this server.',
     );
 
+    // Que des sujets féminins : le pluriel s'accorde au féminin. Un seul
+    // masculin dans la liste (cas du dessus) et le masculin l'emporte.
+    expect(raisonAdminsSeulement(['limite', 'reserver'], 'fr')).toBe(
+      'La limite de places et la réservation sont réservées aux admins sur ce serveur.',
+    );
+    expect(raisonAdminsSeulement(['limite', 'reserver'], 'en')).toBe(
+      'The member limit and reservations are reserved for admins on this server.',
+    );
+
     // Une ligne qui couvre deux actions reste au pluriel, même seule.
     expect(raisonAdminsSeulement(['expulserBannir'], 'fr')).toBe(
       "L'expulsion et le bannissement sont réservés aux admins sur ce serveur.",
@@ -651,7 +660,7 @@ describe('peutAgirSurCible', () => {
     expect(peutAgirSurCible('proprietaire', 'expulser', TOUT_AUTORISE, bob, 'fr')).toEqual({
       autorise: false,
       motif: 'cibleStaff',
-      raison: 'Bob fait partie du staff : il ne peut être ni expulsé ni banni.',
+      raison: 'Bob fait partie du staff : ni expulsion ni bannissement possible.',
     });
   });
 
