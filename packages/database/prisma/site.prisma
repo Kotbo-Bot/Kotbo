@@ -282,7 +282,6 @@ model SiteDailyStat {
   dimension String
   key       String @default("")
   views     Int    @default(0)
-  visitors  Int    @default(0)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
