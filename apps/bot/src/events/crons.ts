@@ -404,6 +404,10 @@ export async function registerCrons(client: Client): Promise<void> {
       const { pruneSiteAnalytics } = await import('../services/site/siteAnalyticsService.js');
       await pruneSiteAnalytics();
     },
+    'site-scheduled-publish': async () => {
+      const { publishDuePages } = await import('../services/site/siteAdminService.js');
+      await publishDuePages(client);
+    },
     'acquisition-abandon-scan': async () => {
       const { scanAbandonedOnboardings } = await import('../services/analytics/acquisitionMaintenance.js');
       await scanAbandonedOnboardings();
@@ -528,6 +532,14 @@ export async function registerCrons(client: Client): Promise<void> {
     await runCronJob('sanctions', async () => {
       await processScheduledSanctions(client);
     }, 1000);
+  });
+
+  // 🌐 Sites communautaires : publications programmées (toutes les minutes).
+  cron.schedule('* * * * *', async () => {
+    await runCronJob('site-scheduled-publish', async () => {
+      const { publishDuePages } = await import('../services/site/siteAdminService.js');
+      await publishDuePages(client);
+    }, 1500);
   });
 
   // 🎯 Événements planifiés: Toutes les minutes (CTF & Quiz planifiés)
