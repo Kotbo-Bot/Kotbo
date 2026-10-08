@@ -1,5 +1,6 @@
 import { Client, EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder, MessageFlags, type ButtonInteraction, type ColorResolvable, type Message } from 'discord.js';
 import { kotboEventBus } from '@kotbo/core';
+import type { Suggestion } from '@prisma/client';
 import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
 import { broadcastDashboardStateChange } from '../../api/shared/sharding.js';
@@ -228,6 +229,106 @@ export async function createSuggestion(guildId: string, userId: string, username
   return suggestion;
 }
 
+type SuggestionVoteResult =
+  | { ok: true; suggestion: Suggestion; upvoters: string[]; downvoters: string[] }
+  | { ok: false; reason: 'not_found' | 'closed' };
+
+/**
+ * Enregistre un vote : un second clic du même côté le retire, un clic de
+ * l'autre côté le déplace. La ligne est verrouillée le temps de l'écriture,
+ * pour que deux votes simultanés (Discord et site) ne s'écrasent pas.
+ */
+export async function applySuggestionVote(guildId: string, suggestionId: string, userId: string, type: 'up' | 'down'): Promise<SuggestionVoteResult> {
+  const result = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT 1 FROM suggestions WHERE id = ${suggestionId} FOR UPDATE`;
+    const suggestion = await tx.suggestion.findUnique({ where: { id: suggestionId } });
+    if (!suggestion || suggestion.guildId !== guildId) return { ok: false as const, reason: 'not_found' as const };
+    if (suggestion.status !== 'PENDING') return { ok: false as const, reason: 'closed' as const };
+
+    let upvoters = [...suggestion.upvoters];
+    let downvoters = [...suggestion.downvoters];
+    const hasUpvoted = upvoters.includes(userId);
+    const hasDownvoted = downvoters.includes(userId);
+
+    if (type === 'up') {
+      if (hasUpvoted) {
+        upvoters = upvoters.filter(id => id !== userId);
+      } else {
+        upvoters.push(userId);
+        downvoters = downvoters.filter(id => id !== userId); // Enlever du camp adverse
+      }
+    } else {
+      if (hasDownvoted) {
+        downvoters = downvoters.filter(id => id !== userId);
+      } else {
+        downvoters.push(userId);
+        upvoters = upvoters.filter(id => id !== userId); // Enlever du camp adverse
+      }
+    }
+
+    await tx.suggestion.update({ where: { id: suggestionId }, data: { upvoters, downvoters } });
+    return { ok: true as const, suggestion, upvoters, downvoters };
+  });
+
+  if (result.ok) broadcastDashboardStateChange(guildId, 'suggestions_updated');
+  return result;
+}
+
+/** Redessine compteurs et boutons du message public après un vote. Vrai si l'édition a réussi. */
+async function editSuggestionVoteMessage(message: Message, suggestion: Suggestion, upvoters: string[], downvoters: string[]): Promise<boolean> {
+  const originalEmbed = message.embeds.find(embed => embed.footer?.text?.includes(suggestion.id));
+  const updatedEmbed = originalEmbed
+    ? EmbedBuilder.from(originalEmbed)
+      .setFields(
+        { name: 'Statut', value: "⏳ En cours d'évaluation", inline: true },
+        { name: 'Votes', value: `👍 Upvotes : \`${upvoters.length}\` | 👎 Downvotes : \`${downvoters.length}\``, inline: true }
+      )
+    : buildSuggestionEmbed(suggestion, upvoters.length, downvoters.length);
+
+  const upBtn = new ButtonBuilder()
+    .setCustomId(`suggest_vote:${suggestion.id}:up`)
+    .setEmoji('👍')
+    .setLabel(String(upvoters.length))
+    .setStyle(ButtonStyle.Secondary);
+
+  const downBtn = new ButtonBuilder()
+    .setCustomId(`suggest_vote:${suggestion.id}:down`)
+    .setEmoji('👎')
+    .setLabel(String(downvoters.length))
+    .setStyle(ButtonStyle.Secondary);
+
+  const row = new ActionRowBuilder<ButtonBuilder>().addComponents(upBtn, downBtn);
+
+  try {
+    await message.edit({ embeds: [updatedEmbed], components: [row] });
+
+    if (suggestion.channelId !== message.channelId || suggestion.messageId !== message.id) {
+      await prisma.suggestion.update({
+        where: { id: suggestion.id },
+        data: { channelId: message.channelId, messageId: message.id },
+      });
+    }
+    return true;
+  } catch (e: unknown) {
+    logger.error('Suggestions', `Impossible de mettre à jour l'embed de la suggestion ${suggestion.id}:`, e);
+    return false;
+  }
+}
+
+/**
+ * Vote venu d'ailleurs que Discord (site communautaire) : même écriture, et le
+ * message public est retrouvé par le salon enregistré plutôt que par
+ * l'interaction.
+ */
+export async function voteOnSuggestion(client: Client, guildId: string, suggestionId: string, userId: string, type: 'up' | 'down'): Promise<SuggestionVoteResult> {
+  const vote = await applySuggestionVote(guildId, suggestionId, userId, type);
+  if (!vote.ok || !vote.suggestion.channelId) return vote;
+  const channel = await client.channels.fetch(vote.suggestion.channelId).catch(() => null);
+  const message = channel ? await findSuggestionMessageInChannel(channel, vote.suggestion.id, vote.suggestion.messageId) : null;
+  if (message) await editSuggestionVoteMessage(message, vote.suggestion, vote.upvoters, vote.downvoters);
+  return vote;
+}
+
 /**
  * Traite les votes sur une suggestion (Upvote / Downvote)
  */
@@ -249,84 +350,24 @@ export async function handleSuggestionVote(interaction: ButtonInteraction, type:
 
   await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
 
-  let upvoters = [...suggestion.upvoters];
-  let downvoters = [...suggestion.downvoters];
-
-  const hasUpvoted = upvoters.includes(userId);
-  const hasDownvoted = downvoters.includes(userId);
-
-  if (type === 'up') {
-    if (hasUpvoted) {
-      upvoters = upvoters.filter(id => id !== userId);
-    } else {
-      upvoters.push(userId);
-      downvoters = downvoters.filter(id => id !== userId); // Enlever du camp adverse
-    }
-  } else {
-    if (hasDownvoted) {
-      downvoters = downvoters.filter(id => id !== userId);
-    } else {
-      downvoters.push(userId);
-      upvoters = upvoters.filter(id => id !== userId); // Enlever du camp adverse
-    }
+  const vote = await applySuggestionVote(suggestion.guildId, suggestionId, userId, type);
+  if (!vote.ok) {
+    return interaction.editReply({
+      content: vote.reason === 'closed' ? '❌ Cette suggestion a déjà été tranchée par le staff.' : '❌ Suggestion introuvable.',
+    });
   }
-
-  // Enregistrer les votes
-  await prisma.suggestion.update({
-    where: { id: suggestionId },
-    data: { upvoters, downvoters },
-  });
-
-  broadcastDashboardStateChange(suggestion.guildId, 'suggestions_updated');
 
   const message = await findSuggestionMessage(interaction, suggestion);
   if (message) {
-    const originalEmbed = message.embeds.find(embed => embed.footer?.text?.includes(suggestion.id));
-    const updatedEmbed = originalEmbed
-      ? EmbedBuilder.from(originalEmbed)
-        .setFields(
-          { name: 'Statut', value: "⏳ En cours d'évaluation", inline: true },
-          { name: 'Votes', value: `👍 Upvotes : \`${upvoters.length}\` | 👎 Downvotes : \`${downvoters.length}\``, inline: true }
-        )
-      : buildSuggestionEmbed(suggestion, upvoters.length, downvoters.length);
-
-    const upBtn = new ButtonBuilder()
-      .setCustomId(`suggest_vote:${suggestion.id}:up`)
-      .setEmoji('👍')
-      .setLabel(String(upvoters.length))
-      .setStyle(ButtonStyle.Secondary);
-
-    const downBtn = new ButtonBuilder()
-      .setCustomId(`suggest_vote:${suggestion.id}:down`)
-      .setEmoji('👎')
-      .setLabel(String(downvoters.length))
-      .setStyle(ButtonStyle.Secondary);
-
-    const row = new ActionRowBuilder<ButtonBuilder>().addComponents(upBtn, downBtn);
-
-    try {
-      await message.edit({ embeds: [updatedEmbed], components: [row] });
-
-      if (suggestion.channelId !== message.channelId || suggestion.messageId !== message.id) {
-        await prisma.suggestion.update({
-          where: { id: suggestionId },
-          data: { channelId: message.channelId, messageId: message.id },
-        });
-      }
-    } catch (e: unknown) {
-      logger.error('Suggestions', `Impossible de mettre à jour l'embed de la suggestion ${suggestion.id}:`, e);
-      return interaction.editReply({
-        content: "✅ Votre vote a été enregistré, mais l'affichage du compteur n'a pas pu être rafraîchi.",
-      });
-    }
-
+    const edited = await editSuggestionVoteMessage(message, vote.suggestion, vote.upvoters, vote.downvoters);
     return interaction.editReply({
-      content: '✅ Votre vote a été pris en compte !',
+      content: edited
+        ? '✅ Votre vote a été pris en compte !'
+        : "✅ Votre vote a été enregistré, mais l'affichage du compteur n'a pas pu être rafraîchi.",
     });
-  } else {
-    logger.warn('Suggestions', `Message public introuvable pour la suggestion ${suggestion.id} (interaction message: ${interaction.message.id})`);
   }
 
+  logger.warn('Suggestions', `Message public introuvable pour la suggestion ${suggestion.id} (interaction message: ${interaction.message.id})`);
   return interaction.editReply({
     content: "✅ Votre vote a été enregistré, mais le message public de la suggestion est introuvable.",
   });
