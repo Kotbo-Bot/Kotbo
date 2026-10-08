@@ -173,6 +173,18 @@ export async function lookupSite(segment: string): Promise<SiteLookup> {
   return { kind: 'site', site };
 }
 
+/** Site désigné par son identifiant (API du script du site). */
+export async function getSiteById(siteId: string): Promise<SiteRecord | null> {
+  if (!/^[a-z0-9]{20,32}$/.test(siteId)) return null;
+  const guildId = await cache.wrap(`site-id:${siteId}`, SLUG_TTL_SECONDS, async () => {
+    const row = await prisma.communitySite.findUnique({ where: { id: siteId }, select: { guildId: true } });
+    return row?.guildId ?? null;
+  });
+  if (!guildId) return null;
+  const site = await getSiteByGuild(guildId);
+  return site?.id === siteId ? site : null;
+}
+
 export async function invalidateSiteCache(guildId: string, slugs: string[] = []): Promise<void> {
   await Promise.all([
     cache.delete(siteKey(guildId)),

@@ -243,7 +243,7 @@ function clientStrings(locale: SiteLocale): Record<string, string> {
 
 /** JSON sûr dans une balise `<script>` : `<` échappé, la balise ne peut pas se fermer. */
 export function safeJson(value: unknown): string {
-  return JSON.stringify(value).replace(/</g, '\\u003c').replace(/ /g, '\\u2028').replace(/ /g, '\\u2029');
+  return JSON.stringify(value).replace(/</g, '\\u003c');
 }
 
 export function renderSiteShell(opts: ShellOptions): string {
