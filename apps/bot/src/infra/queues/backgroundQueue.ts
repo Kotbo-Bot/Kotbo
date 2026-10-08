@@ -78,13 +78,7 @@ export type BackgroundJobName =
   | 'tower-daily-podium'
   | 'clan-tower-cycle'
   | 'clan-weekly-digest'
-  | 'campaign-cycle'
-  // Meme oubli pour les partenariats : quatre crons planifies sans handler, donc
-  // quatre echecs par heure et un cycle qui n'a jamais tourne.
-  | 'partnerships-hourly'
-  | 'partnerships-daily'
-  | 'partnerships-digest-weekly'
-  | 'partnerships-digest-monthly';
+  | 'campaign-cycle';
 
 
 

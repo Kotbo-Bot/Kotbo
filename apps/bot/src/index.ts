@@ -74,7 +74,6 @@ import { registerChannelLinkListener } from './events/channelLinkEvents.js';
 import { registerStarboardListener } from './events/starboardEvents.js';
 import { registerStaffServerListener } from './events/staffServerEvents.js';
 import { registerAbsenceMentionListener } from './events/absenceMentionEvents.js';
-import { registerPartnershipListener } from './services/features/partnershipService.js';
 import { registerRaidProtectionListener } from './events/raidProtection.js';
 import { registerServerTagRoleListener } from './events/serverTagRole.js';
 import { registerClanListener } from './events/clanEvents.js';
@@ -90,7 +89,6 @@ import { registerAdminLockModule } from './modules/adminLock.module.js';
 import { registerAutoThreadBusSubscribers } from './modules/autoThread.module.js';
 import { registerStickyMessageBusSubscribers } from './modules/stickyMessage.module.js';
 import { registerWelcomeGoodbyeBusSubscribers } from './modules/welcomeGoodbye.module.js';
-import { registerPartnershipBusSubscribers } from './modules/partnerships.module.js';
 import { registerModerationBusSubscribers } from './modules/moderation.module.js';
 import { registerTicketsBusSubscribers } from './modules/tickets.module.js';
 import { loadActivatedGuilds, isGuildActivated, activateGuildSelfServe } from './utils/activation.js';
@@ -460,7 +458,6 @@ client.once(Events.ClientReady, async (c) => {
   registerWelcomeGoodbyeBusSubscribers(client);
   registerModerationBusSubscribers(scopeClientToModule(client, 'sanctions'));
   registerTicketsBusSubscribers(client);
-  registerPartnershipBusSubscribers(client);
 
   // ── Direct listeners (not yet migrated to the bus) ────────
   //
@@ -493,7 +490,6 @@ client.once(Events.ClientReady, async (c) => {
   registerChannelLinkListener(scopeClientToModule(client, 'channel_links'));
   registerStaffServerListener(scopeClientToModule(client, 'staff_server'));
   registerAbsenceMentionListener(scopeClientToModule(client, 'absences'));
-  registerPartnershipListener(client);
   registerRaidProtectionListener(scopeClientToModule(client, 'raid_protection'));
   registerServerTagRoleListener(client);
   registerClanListener(scopeClientToModule(client, 'clans'));

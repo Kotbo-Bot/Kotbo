@@ -58,7 +58,6 @@ import { statsCommand } from './commands/utility/stats.js';
 import { statusCommand } from './commands/admin/status.js';
 import { suggestCommand } from './commands/utility/suggest.js';
 import { ticketCommand } from './commands/utility/ticket.js';
-import { partnershipCommand } from './commands/community/partenariat.js';
 import { transcriptCommand } from './commands/moderation/transcript.js';
 import { suggestionConfigCommand } from './commands/utility/suggestion-config.js';
 import { clearCommand } from './commands/moderation/clear.js';
@@ -137,7 +136,6 @@ export const commands: SlashCommandDefinition[] = [
   activateCommand,
   transcriptCommand,
   ticketCommand,
-  partnershipCommand,
   sayCommand,
   mpsayCommand,
   demissionCommand,
@@ -284,7 +282,6 @@ export const COMMAND_MODULES = new Map<ApplicationCommandDefinition, string>([
   // Communauté
   [dailyAlgoCommand, 'daily_algo'],
   [ticketCommand, 'tickets'],
-  [partnershipCommand, 'partnerships'],
   [giveawayCommand, 'giveaways'],
   [suggestCommand, 'suggestions'],
   [suggestionConfigCommand, 'suggestions'],

@@ -181,8 +181,6 @@ export const staffItems: PageConfig[] = [
 
 export const crossServerItems: PageConfig[] = [
   { name: m.nav_channel_links(),        icon: "link",          href: "/channel-links",      featureKey: "channel_links", beta: false, wip: false },
-  { name: "Partenariats",               icon: "handshake",     href: "/partnerships",       featureKey: "partnerships", beta: false, wip: true },
-  { name: "Annuaire partenaires",       icon: "compass",       href: "/partnerships/directory", featureKey: "partnerships", beta: false, wip: true },
   { name: m.nav_staff_servers(),         icon: "shield",        href: "/staff-server",       featureKey: "staff_server", beta: false, wip: false },
 ];
 
