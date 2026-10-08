@@ -24,6 +24,7 @@ import { isTicketActive, openTicketFromSite, postTicketMessageFromSite } from '.
 import { toggleGiveawayParticipation } from '../../../../services/features/giveawayService.js';
 import { createSuggestion, voteOnSuggestion } from '../../../../services/features/suggestionService.js';
 import { buyListing } from '../../../../services/economy/marketplaceService.js';
+import { LEGACY_PAGE_KINDS, resolveFormRedirect, resolveLegacyRedirect, type LegacyPageKind } from '../../../../services/site/siteRedirects.js';
 
 // ============================================================================
 // API DU SCRIPT DES SITES COMMUNAUTAIRES
@@ -96,6 +97,20 @@ async function blockDocument(site: SiteRecord, pageId: string, viewer: SiteViewe
 
 export function createSiteApiRouter(client: Client): OpenAPIHono {
   const app = new OpenAPIHono();
+
+  // ── Redirection des anciennes pages publiques ─────────────────────────────
+  // Appelée par les pages publiques historiques du dashboard au chargement.
+  app.get('/api/site/redirect', async (c) => {
+    const formId = c.req.query('formId');
+    const guildId = c.req.query('guildId') ?? '';
+    const kind = c.req.query('kind') ?? '';
+    let path: string | null = null;
+    if (formId) path = await resolveFormRedirect(formId);
+    else if (/^\d{17,20}$/.test(guildId) && (LEGACY_PAGE_KINDS as readonly string[]).includes(kind)) path = await resolveLegacyRedirect(guildId, kind as LegacyPageKind);
+    c.header('Cache-Control', 'public, max-age=60');
+    return c.json({ path });
+  });
+
   app.use('/api/site/:siteId/*', optionalAuth);
 
   // ── Visiteur ──────────────────────────────────────────────────────────────
