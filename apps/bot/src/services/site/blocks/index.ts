@@ -46,7 +46,7 @@ const LIVE_REFRESH_SECONDS: Partial<Record<SiteModuleKey, number>> = {
   voice: 30,
   channelFeed: 60,
   giveaways: 120,
-  ticket: 0,
+  ticket: 30,
 };
 
 export function isBlockAvailable(ctx: BlockContext, key: SiteModuleKey, config: Record<string, unknown>): boolean {

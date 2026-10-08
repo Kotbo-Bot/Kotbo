@@ -100,8 +100,9 @@ async function renderSearch(ctx: BlockContext): Promise<string> {
 async function renderProfile(ctx: BlockContext): Promise<string> {
   const o = { locale: ctx.locale };
   const viewer = ctx.viewer;
+  if (!ctx.viewerKnown) return `<div class="profile" data-profile><p class="empty">${esc(m.site_loading({}, o))}</p></div>`;
   if (!viewer) {
-    return `<div class="profile" data-profile><p class="empty">${esc(m.site_profile_login({}, o))}</p><p class="btn-row"><a class="btn btn-primary" data-login href="#">${esc(m.site_login({}, o))}</a></p></div>`;
+    return `<div class="profile" data-profile><p class="empty">${esc(m.site_profile_login({}, o))}</p><p class="btn-row"><a class="btn btn-primary btn-discord" data-login href="#">${esc(m.site_login({}, o))}</a></p></div>`;
   }
   const guildId = ctx.site.guildId;
   const [level, rpg, rep] = await Promise.all([

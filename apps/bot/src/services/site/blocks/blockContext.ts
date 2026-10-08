@@ -23,6 +23,12 @@ export interface BlockContext {
   basePath: string;
   /** Nul au rendu serveur : le cookie de session ne vit pas sur ce domaine. */
   viewer: SiteViewer | null;
+  /**
+   * Vrai quand la session a été lue (rechargement d'un bloc par l'API) : un
+   * `viewer` nul veut alors dire « anonyme », pas « inconnu ». Les blocs qui ne
+   * vivent que pour un membre connecté rendent un chargement tant que c'est faux.
+   */
+  viewerKnown: boolean;
   moduleStates: ModuleStates;
 }
 

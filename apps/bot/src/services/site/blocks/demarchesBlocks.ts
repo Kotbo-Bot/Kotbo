@@ -13,7 +13,8 @@ import prisma from '../../../utils/db.js';
 import * as m from '../../../lib/paraglide/messages.js';
 import { parseDiscordMarkdown } from '../../../api/shared/markdown.js';
 import { attrs, cls, esc, truncate } from '../siteHtml.js';
-import { emptyState, formatNumber, timeTag, type BlockContext, type BlockRef, type BlockRegistry, type SiteLocale } from './blockContext.js';
+import { emptyState, formatDateTime, formatNumber, timeTag, type BlockContext, type BlockRef, type BlockRegistry, type SiteLocale } from './blockContext.js';
+import { isTicketActive, listSiteTicketTypes, listViewerTickets, readTicketThread } from '../siteTicketService.js';
 
 // ─── Formulaires ────────────────────────────────────────────────────────────
 
@@ -145,30 +146,200 @@ async function renderRecruitment(ctx: BlockContext, config: Record<string, unkno
   return `<div class="card-grid">${cards}</div>`;
 }
 
+// ─── Connexion requise ──────────────────────────────────────────────────────
+
+/**
+ * Corps d'un bloc réservé aux membres connectés, tant que le visiteur n'est
+ * pas confirmé : chargement au rendu serveur, invitation à se connecter une
+ * fois l'API sûre qu'il est anonyme.
+ */
+function viewerGate(ctx: BlockContext): string | null {
+  const o = { locale: ctx.locale };
+  if (!ctx.viewerKnown) return `<p class="empty">${esc(m.site_loading({}, o))}</p>`;
+  if (!ctx.viewer) {
+    return `<p class="empty">${esc(m.site_login_to_continue({}, o))}</p><p class="btn-row"><a class="btn btn-primary btn-discord" data-login href="#">${esc(m.site_login({}, o))}</a></p>`;
+  }
+  return null;
+}
+
 // ─── Appel de sanction ──────────────────────────────────────────────────────
+
+const APPEAL_STATUS_LABELS = {
+  PENDING: m.site_appeal_status_PENDING,
+  NEEDS_INFO: m.site_appeal_status_NEEDS_INFO,
+  ACCEPTED: m.site_appeal_status_ACCEPTED,
+  DENIED: m.site_appeal_status_DENIED,
+  DENIED_PERMANENT: m.site_appeal_status_DENIED_PERMANENT,
+} as const;
+
+function appealBlockedMessage(blockedBy: string, cooldownEndsAt: string | undefined, locale: SiteLocale): string {
+  const o = { locale };
+  switch (blockedBy) {
+    case 'blacklisted':
+      return m.site_appeal_blocked_blacklisted({}, o);
+    case 'active_appeal':
+      return m.site_appeal_blocked_active_appeal({}, o);
+    case 'cooldown':
+      return m.site_appeal_blocked_cooldown({ date: cooldownEndsAt ? new Date(cooldownEndsAt).toLocaleDateString(locale === 'fr' ? 'fr-FR' : 'en-GB') : '' }, o);
+    case 'nothing_to_appeal':
+      return m.site_appeal_blocked_nothing_to_appeal({}, o);
+    default:
+      return m.site_appeal_blocked_not_banned({}, o);
+  }
+}
 
 async function renderAppeal(ctx: BlockContext): Promise<string> {
   const o = { locale: ctx.locale };
-  const config = await prisma.banAppealConfig.findUnique({ where: { guildId: ctx.site.guildId }, select: { enabled: true } });
+  const guildId = ctx.site.guildId;
+  const { getAppealConfig, getAppealEligibility } = await import('../../moderation/banAppealService.js');
+  const config = await getAppealConfig(guildId);
   if (!config?.enabled) return emptyState(m.site_appeal_disabled({}, o));
-  // Le parcours (sanctions du visiteur, formulaire, réponses du staff) se joue
-  // côté navigateur sur /api/public/appeal, qui exige la session Discord.
-  return `<div class="appeal"${attrs({ 'data-appeal': ctx.site.guildId })}>
+
+  const wrap = (body: string) => `<div class="appeal"${attrs({ 'data-appeal': guildId })}>
   <p class="mod-title">${esc(m.site_appeal_title({}, o))}</p>
-  <p class="mod-lead">${esc(m.site_appeal_desc({}, o))}</p>
-  <div class="appeal-body" data-appeal-body><p class="empty">${esc(m.site_loading({}, o))}</p></div>
+  ${config.welcomeText ? `<div class="mod-lead rich">${parseDiscordMarkdown(config.welcomeText, ctx.guild)}</div>` : `<p class="mod-lead">${esc(m.site_appeal_desc({}, o))}</p>`}
+  ${body}
 </div>`;
+  const gate = viewerGate(ctx);
+  if (gate !== null) return wrap(gate);
+  const viewer = ctx.viewer!;
+
+  const [eligibility, latest] = await Promise.all([
+    getAppealEligibility(ctx.client, guildId, viewer.userId),
+    prisma.banAppeal.findFirst({
+      where: { guildId, userId: viewer.userId },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, status: true, createdAt: true, decisionReason: true, infoRequest: true, infoResponse: true },
+    }),
+  ]);
+
+  const parts: string[] = [];
+  if (latest) {
+    const label = APPEAL_STATUS_LABELS[latest.status as keyof typeof APPEAL_STATUS_LABELS] ?? APPEAL_STATUS_LABELS.PENDING;
+    const decision = latest.decisionReason
+      ? `<div class="suggest-response"><p class="suggest-response-title">${esc(m.site_appeal_decision({}, o))}</p><p>${esc(latest.decisionReason)}</p></div>`
+      : '';
+    let info = '';
+    if (latest.status === 'NEEDS_INFO' && latest.infoRequest && !latest.infoResponse) {
+      info = `<div class="suggest-response"><p class="suggest-response-title">${esc(m.site_appeal_info_request({}, o))}</p><p>${esc(latest.infoRequest)}</p></div>
+<form class="site-form" data-appeal-info novalidate>
+  <label class="sr-only" for="appeal-info">${esc(m.site_appeal_info_placeholder({}, o))}</label>
+  <textarea id="appeal-info" name="response" rows="4" maxlength="4000" required${attrs({ placeholder: m.site_appeal_info_placeholder({}, o) })}></textarea>
+  <p class="form-status" role="status" aria-live="polite"></p>
+  <div class="form-actions"><button type="submit" class="btn btn-primary btn-sm">${esc(m.site_appeal_info_send({}, o))}</button></div>
+</form>`;
+    } else if (latest.infoResponse && latest.status === 'NEEDS_INFO') {
+      info = `<p class="form-status is-ok">${esc(m.site_appeal_info_sent({}, o))}</p>`;
+    }
+    parts.push(`<div class="panel">
+  <p class="card-meta">${esc(m.site_appeal_status_title({}, o))} · ${timeTag(latest.createdAt, ctx.locale, 'medium')}</p>
+  <p><span class="${cls('pill', `pill-status-${latest.status === 'ACCEPTED' ? 'approved' : latest.status.startsWith('DENIED') ? 'rejected' : 'pending'}`)}">${esc(label({}, o))}</span></p>
+  ${decision}${info}
+</div>`);
+  }
+
+  if (eligibility.eligible) {
+    // Formulaire propre au type de la première sanction contestable, sinon celui du serveur.
+    const perType = config.formIdByType && typeof config.formIdByType === 'object' && !Array.isArray(config.formIdByType) ? (config.formIdByType as Record<string, unknown>) : {};
+    const typedFormId = eligibility.sanctions.map((s) => perType[s.type]).find((id): id is string => typeof id === 'string' && id.length > 0);
+    const typedForm = typedFormId ? await prisma.customForm.findFirst({ where: { id: typedFormId, guildId }, select: { id: true, structure: true } }) : null;
+    const form = typedForm ?? config.form;
+    const fields = form ? readFormFields(form.structure) : [];
+
+    const sanctions = eligibility.sanctions
+      .map(
+        (s) => `<div class="appeal-sanction">
+  <label class="choice"><input type="checkbox" name="__sanction"${attrs({ value: s.id, checked: eligibility.sanctions.length === 1 })}> <span><strong>${esc(s.typeLabel)}</strong> · ${timeTag(s.createdAt, ctx.locale, 'medium')}<br><small>${esc(truncate(s.reason, 200))}</small></span></label>
+  <textarea rows="2" maxlength="1500"${attrs({ name: `__statement_${s.id}`, 'data-statement': s.id, 'aria-label': m.site_appeal_statement({}, o), placeholder: m.site_appeal_statement({}, o) })}></textarea>
+</div>`,
+      )
+      .join('');
+    parts.push(`<form class="site-form" data-appeal-form novalidate>
+  ${eligibility.banned && eligibility.banReason ? `<p class="form-auth">${esc(m.site_appeal_banned_reason({ reason: eligibility.banReason }, o))}</p>` : ''}
+  ${eligibility.sanctions.length > 0 ? `<fieldset class="field"><legend>${esc(m.site_appeal_sanctions({}, o))}</legend><p class="field-help">${esc(m.site_appeal_sanctions_max({ count: eligibility.maxSelectable }, o))}</p><div class="choices">${sanctions}</div></fieldset>` : ''}
+  ${form ? fields.map((f) => renderField(f, form.id, ctx.locale)).join('\n  ') : ''}
+  <p class="form-status" role="status" aria-live="polite"></p>
+  <div class="form-actions"><button type="submit" class="btn btn-primary">${esc(m.site_appeal_submit({}, o))}</button></div>
+</form>`);
+  } else if (!(eligibility.blockedBy === 'active_appeal' && latest)) {
+    parts.push(`<p class="empty">${esc(appealBlockedMessage(eligibility.blockedBy, eligibility.cooldownEndsAt, ctx.locale))}</p>`);
+  }
+
+  return wrap(parts.join(''));
 }
 
 // ─── Ticket ─────────────────────────────────────────────────────────────────
 
+function ticketStatusPill(status: string, locale: SiteLocale): string {
+  const o = { locale };
+  const active = isTicketActive(status);
+  return `<span class="${cls('pill', active ? 'pill-ok' : 'pill-muted')}">${esc(active ? m.site_ticket_status_open({}, o) : m.site_ticket_status_closed({}, o))}</span>`;
+}
+
 async function renderTicket(ctx: BlockContext, _config: Record<string, unknown>, ref: BlockRef): Promise<string> {
   const o = { locale: ctx.locale };
-  return `<div class="ticket"${attrs({ 'data-ticket': ref.pageId })}>
+  const wrap = (body: string) => `<div class="ticket"${attrs({ 'data-ticket': ref.pageId })}>
   <p class="mod-title">${esc(m.site_ticket_title({}, o))}</p>
   <p class="mod-lead">${esc(m.site_ticket_desc({}, o))}</p>
-  <div class="ticket-body" data-ticket-body><p class="empty">${esc(m.site_loading({}, o))}</p></div>
+  ${body}
 </div>`;
+  const gate = viewerGate(ctx);
+  if (gate !== null) return wrap(gate);
+  const viewer = ctx.viewer!;
+  const guildId = ctx.site.guildId;
+
+  const [tickets, types] = await Promise.all([listViewerTickets(guildId, viewer.userId), listSiteTicketTypes(guildId)]);
+  const active = tickets.find((t) => isTicketActive(t.status));
+  const parts: string[] = [];
+
+  if (active) {
+    let thread: string;
+    if (active.status === 'PENDING') {
+      thread = `<p class="empty">${esc(m.site_ticket_pending_review({}, o))}</p>`;
+    } else {
+      const messages = await readTicketThread(ctx.client, guildId, { ...active, userId: viewer.userId });
+      if (messages === null) {
+        thread = `<p class="empty">${esc(m.site_ticket_offsite({}, o))}</p>`;
+      } else {
+        const items = messages
+          .map(
+            (msg) => `<div class="${cls('ticket-msg', msg.mine && 'is-mine')}"><small>${esc(msg.mine ? m.site_comment_author_you({}, o) : `${msg.authorName} · ${m.site_ticket_staff({}, o)}`)} · ${esc(formatDateTime(msg.createdAt, ctx.locale))}</small><div class="rich">${parseDiscordMarkdown(msg.content, ctx.guild)}</div></div>`,
+          )
+          .join('');
+        thread = `<div class="ticket-thread">${items || `<p class="empty">${esc(m.site_ticket_empty_thread({}, o))}</p>`}</div>
+<form class="site-form"${attrs({ 'data-ticket-reply': active.id })} novalidate>
+  <label class="sr-only" for="ticket-reply">${esc(m.site_ticket_reply({}, o))}</label>
+  <textarea id="ticket-reply" name="content" rows="3" maxlength="3800" required></textarea>
+  <p class="form-status" role="status" aria-live="polite"></p>
+  <div class="form-actions"><button type="submit" class="btn btn-primary btn-sm">${esc(m.site_ticket_reply({}, o))}</button></div>
+</form>`;
+      }
+    }
+    parts.push(`<div class="panel"><p class="card-meta">${ticketStatusPill(active.status, ctx.locale)} <strong>${esc(active.reason)}</strong> · ${timeTag(active.createdAt, ctx.locale, 'medium')}</p>${thread}</div>`);
+  }
+
+  const typeSelect =
+    types.length > 1
+      ? `<div class="field"><label for="ticket-type">${esc(m.site_ticket_type({}, o))}</label><select id="ticket-type" name="typeId">${types.map((t) => `<option${attrs({ value: t.id })}>${t.emoji ? `${esc(t.emoji)} ` : ''}${esc(t.label)}</option>`).join('')}</select></div>`
+      : types.length === 1
+        ? `<input type="hidden" name="typeId"${attrs({ value: types[0].id })}>`
+        : '';
+  const newForm = `<form class="site-form" data-ticket-new novalidate>
+  ${typeSelect}
+  <div class="field"><label for="ticket-subject">${esc(m.site_ticket_subject({}, o))}<span class="req">*</span></label><input id="ticket-subject" type="text" name="subject" maxlength="100" required></div>
+  <div class="field"><label for="ticket-message">${esc(m.site_ticket_message({}, o))}<span class="req">*</span></label><textarea id="ticket-message" name="message" rows="5" maxlength="3800" required></textarea></div>
+  <p class="form-status" role="status" aria-live="polite"></p>
+  <div class="form-actions"><button type="submit" class="btn btn-primary">${esc(m.site_ticket_open({}, o))}</button></div>
+</form>`;
+  parts.push(active ? `<details class="faq-item"><summary>${esc(m.site_ticket_new({}, o))}</summary><div class="faq-answer">${newForm}</div></details>` : newForm);
+
+  const past = tickets.filter((t) => t.id !== active?.id).slice(0, 5);
+  if (past.length > 0) {
+    parts.push(`<p class="mod-title mod-title-spaced">${esc(m.site_ticket_mine({}, o))}</p><ul class="search-results">${past
+      .map((t) => `<li>${ticketStatusPill(t.status, ctx.locale)} <strong>${esc(t.reason)}</strong> <span class="card-meta">· ${timeTag(t.createdAt, ctx.locale, 'medium')}</span></li>`)
+      .join('')}</ul>`);
+  }
+  return wrap(parts.join(''));
 }
 
 // ─── Suggestions ────────────────────────────────────────────────────────────
