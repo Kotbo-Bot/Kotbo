@@ -206,7 +206,9 @@ export const startDashboardApi = async (client: Client) => {
       // -----------------------------------------------------------------------
       try {
         const honoResponse = await honoApp.fetch(request.clone());
-        if (honoResponse.status !== 404) {
+        // Une route Hono peut répondre 404 pour de bon (page de site
+        // introuvable) : `X-Kotbo-Handled` la distingue d'une route absente.
+        if (honoResponse.status !== 404 || honoResponse.headers.get('X-Kotbo-Handled') === '1') {
           return honoResponse;
         }
       } catch (honoErr) {

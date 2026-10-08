@@ -3808,5 +3808,18 @@
   "site_ticket_pending_review": "Ta demande attend la validation de l'équipe.",
   "site_ticket_empty_thread": "Pas encore de message.",
   "site_ticket_back": "Tous mes tickets",
-  "site_comment_author_you": "Toi"
+  "site_comment_author_you": "Toi",
+  "site_err_login": "Connecte-toi avec Discord pour continuer.",
+  "site_err_member_only": "Seuls les membres du serveur peuvent faire ça.",
+  "site_err_unavailable": "Cette fonctionnalité n'est pas disponible sur ce serveur.",
+  "site_err_not_found": "Élément introuvable.",
+  "site_err_too_many": "Trop de requêtes. Réessaie dans une minute.",
+  "site_err_invalid": "Requête invalide.",
+  "site_err_refused": "Ton message n'a pas pu être publié.",
+  "site_err_comments_closed": "Les commentaires sont fermés sur cet article.",
+  "site_err_event_already": "Tu es déjà inscrit à cet événement.",
+  "site_err_event_closed": "Les inscriptions à cet événement sont fermées.",
+  "site_err_report_limit": "Tu as déjà envoyé plusieurs signalements pour ce site aujourd'hui.",
+  "site_event_registered_ok": "C'est noté, tu es inscrit.",
+  "site_vote_saved": "Vote enregistré."
 }

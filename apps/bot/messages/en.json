@@ -3808,5 +3808,18 @@
   "site_ticket_pending_review": "Your request is waiting for the team's approval.",
   "site_ticket_empty_thread": "No messages yet.",
   "site_ticket_back": "All my tickets",
-  "site_comment_author_you": "You"
+  "site_comment_author_you": "You",
+  "site_err_login": "Log in with Discord to continue.",
+  "site_err_member_only": "Only server members can do this.",
+  "site_err_unavailable": "This feature isn't available on this server.",
+  "site_err_not_found": "Item not found.",
+  "site_err_too_many": "Too many requests. Try again in a minute.",
+  "site_err_invalid": "Invalid request.",
+  "site_err_refused": "Your message couldn't be posted.",
+  "site_err_comments_closed": "Comments are closed on this article.",
+  "site_err_event_already": "You're already signed up for this event.",
+  "site_err_event_closed": "Sign-ups for this event are closed.",
+  "site_err_report_limit": "You've already sent several reports for this site today.",
+  "site_event_registered_ok": "Done, you're signed up.",
+  "site_vote_saved": "Vote saved."
 }
