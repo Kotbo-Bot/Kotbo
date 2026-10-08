@@ -6,10 +6,10 @@ import { SITE_MODULE_KEYS, siteModuleBotDependency, getSiteModuleSpec } from '@k
 import prisma from '../../../utils/db.js';
 import { logger } from '../../../utils/logger.js';
 import { requireAuth } from '../middleware/auth.js';
-import { getDashboardUrl, resolveDashboardAccess, resolveMemberFeatureAccess, type FeatureAccessMap } from '../../shared.js';
+import { getDashboardUrl } from '../../shared.js';
 import { recordAdminAudit } from '../../../services/system/adminAuditService.js';
 import { getModuleStates } from '../../../services/core/moduleGate.js';
-import { canEditSection, resolveSiteViewer, type SiteViewer } from '../../../services/site/siteService.js';
+import { canEditKind, resolveSiteRights, type SiteRights } from '../../../services/site/siteRights.js';
 import {
   createPage,
   createSite,
@@ -39,6 +39,7 @@ import { deleteSiteAsset, listSiteAssets, storeSiteAsset, SITE_UPLOAD_MAX_BYTES 
 import { getSiteAnalytics } from '../../../services/site/siteAnalyticsService.js';
 import { createPreviewToken } from '../../../services/site/sitePreview.js';
 import { isSiteTemplate, SITE_TEMPLATES } from '../../../services/site/siteTemplates.js';
+import { flushCollabRoom, resetCollabRoom } from '../../../services/site/siteCollabService.js';
 import { isPubliclyVisible } from '../../../services/site/blocks/discordBlocks.js';
 
 // ============================================================================
@@ -61,47 +62,6 @@ const SNOWFLAKE = /^\d{17,20}$/;
 const CUID = /^[a-z0-9]{20,32}$/;
 const READ_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
-interface Rights {
-  userId: string;
-  viewer: SiteViewer;
-  dashboard: boolean;
-  manage: boolean;
-  wiki: boolean;
-  blog: boolean;
-  moderateComments: boolean;
-  viewStats: boolean;
-  viaGlobalAdmin: boolean;
-}
-
-async function resolveRights(client: Client, guildId: string, userId: string): Promise<Rights> {
-  const [access, viewer, site] = await Promise.all([
-    resolveDashboardAccess(client, guildId, userId),
-    resolveSiteViewer(client, guildId, userId),
-    prisma.communitySite.findUnique({ where: { guildId }, select: { wikiEditorRoleIds: true, blogEditorRoleIds: true } }),
-  ]);
-  const features: FeatureAccessMap = access.canViewDashboard ? await resolveMemberFeatureAccess(client, guildId, access, userId) : {};
-  const manage = access.canManageSettings || Boolean(features.site?.canConfigure);
-  const writes = (key: string) => Boolean(features[key]?.canConfigure || features[key]?.canModerate);
-  const roleEditor = (kind: SitePageKind) => Boolean(site && canEditSection(site, kind, viewer));
-  return {
-    userId,
-    viewer,
-    dashboard: access.canViewDashboard,
-    manage,
-    wiki: manage || writes('site_wiki') || roleEditor('WIKI'),
-    blog: manage || writes('site_blog') || roleEditor('BLOG'),
-    moderateComments: manage || Boolean(features.site_blog?.canModerate),
-    viewStats: manage || Boolean(features.site?.canView && access.canViewDashboard),
-    viaGlobalAdmin: Boolean(access.viaGlobalAdmin),
-  };
-}
-
-function canEditKind(rights: Rights, kind: SitePageKind): boolean {
-  if (kind === 'WIKI') return rights.wiki;
-  if (kind === 'BLOG') return rights.blog;
-  return rights.manage;
-}
-
 function fail(c: Context, err: unknown) {
   if (err instanceof SiteAdminError) return c.json({ error: err.code, detail: err.detail ?? null }, err.status as 400);
   logger.error('SiteAdmin', 'Erreur non gérée :', err);
@@ -119,7 +79,7 @@ async function body(c: Context): Promise<Record<string, unknown>> {
 
 declare module 'hono' {
   interface ContextVariableMap {
-    siteRights: Rights;
+    siteRights: SiteRights;
   }
 }
 
@@ -131,7 +91,7 @@ export function createSiteAdminRouter(client: Client): OpenAPIHono {
   const gate = async (c: Context, next: () => Promise<void>) => {
     const guildId = c.req.param('guildId') ?? '';
     if (!SNOWFLAKE.test(guildId)) return c.json({ error: 'invalid_guild' }, 400);
-    const rights = await resolveRights(client, guildId, c.var.auth.userId);
+    const rights = await resolveSiteRights(client, guildId, c.var.auth.userId);
     if (!rights.dashboard && !rights.wiki && !rights.blog) return c.json({ error: 'forbidden' }, 403);
     c.set('siteRights', rights);
     if (rights.viaGlobalAdmin && !READ_METHODS.has(c.req.method)) {
@@ -300,6 +260,8 @@ export function createSiteAdminRouter(client: Client): OpenAPIHono {
     const found = await editablePage(c);
     if ('error' in found) return found.error;
     const input = await body(c);
+    // Les dernières frappes d'une session à plusieurs sont encore en mémoire.
+    await flushCollabRoom(found.page.id);
     try {
       return c.json({ page: await publishPage(client, found.site.guildId, found.page.id, c.var.siteRights.userId, typeof input.note === 'string' ? input.note : null) });
     } catch (err) {
@@ -349,7 +311,10 @@ export function createSiteAdminRouter(client: Client): OpenAPIHono {
     const found = await editablePage(c);
     if ('error' in found) return found.error;
     try {
-      return c.json({ page: await restoreRevision(found.site.guildId, found.page.id, c.req.param('revisionId'), c.var.siteRights.userId) });
+      const page = await restoreRevision(found.site.guildId, found.page.id, c.req.param('revisionId'), c.var.siteRights.userId);
+      // Les éditeurs connectés repartent du brouillon restauré.
+      await resetCollabRoom(found.page.id);
+      return c.json({ page });
     } catch (err) {
       return fail(c, err);
     }
