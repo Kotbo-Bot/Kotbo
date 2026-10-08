@@ -3821,5 +3821,13 @@
   "site_err_event_closed": "Les inscriptions à cet événement sont fermées.",
   "site_err_report_limit": "Tu as déjà envoyé plusieurs signalements pour ce site aujourd'hui.",
   "site_event_registered_ok": "C'est noté, tu es inscrit.",
-  "site_vote_saved": "Vote enregistré."
+  "site_vote_saved": "Vote enregistré.",
+  "site_cmd_wiki_name": "wiki",
+  "site_cmd_wiki_description": "📚 Chercher une page du wiki du serveur",
+  "site_cmd_wiki_opt_query": "Titre ou mots-clés de la page",
+  "site_cmd_wiki_no_site": "Ce serveur n'a pas encore de wiki en ligne.",
+  "site_cmd_wiki_not_found": "Aucune page du wiki ne correspond à « {query} ».",
+  "site_cmd_wiki_results": "Pages du wiki pour « {query} »",
+  "site_cmd_wiki_open": "Ouvrir sur le site",
+  "site_cmd_wiki_guild_only": "Cette commande s'utilise sur un serveur."
 }

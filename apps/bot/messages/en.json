@@ -3821,5 +3821,13 @@
   "site_err_event_closed": "Sign-ups for this event are closed.",
   "site_err_report_limit": "You've already sent several reports for this site today.",
   "site_event_registered_ok": "Done, you're signed up.",
-  "site_vote_saved": "Vote saved."
+  "site_vote_saved": "Vote saved.",
+  "site_cmd_wiki_name": "wiki",
+  "site_cmd_wiki_description": "📚 Search the server's wiki",
+  "site_cmd_wiki_opt_query": "Page title or keywords",
+  "site_cmd_wiki_no_site": "This server doesn't have a wiki online yet.",
+  "site_cmd_wiki_not_found": "No wiki page matches “{query}”.",
+  "site_cmd_wiki_results": "Wiki pages for “{query}”",
+  "site_cmd_wiki_open": "Open on the website",
+  "site_cmd_wiki_guild_only": "This command only works in a server."
 }
