@@ -19,6 +19,7 @@ import { createBillingRouter } from './routes/billing.js';
 import { createSiteRenderRouter } from './routes/public/siteRender.js';
 import { createSiteApiRouter } from './routes/public/siteApi.js';
 import { createSiteAdminRouter } from './routes/siteAdmin.js';
+import { createAdminSitesRouter } from './routes/adminSites.js';
 import { logger } from '../../utils/logger.js';
 
 /**
@@ -65,6 +66,7 @@ export function createHonoApp(client: Client): OpenAPIHono {
   app.route('/', createSiteRenderRouter(client));
   app.route('/', createSiteApiRouter(client));
   app.route('/', createSiteAdminRouter(client));
+  app.route('/', createAdminSitesRouter(client));
 
   // ---------------------------------------------------------------------------
   // OpenAPI / Swagger UI (uniquement en développement)
