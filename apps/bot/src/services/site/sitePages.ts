@@ -156,12 +156,16 @@ export async function buildSiteCtx(
   const guild = req.client.guilds.cache.get(site.guildId) ?? null;
   const locale = pickLocale(req.query, req.acceptLanguage);
   const basePath = `/s/${site.slug}`;
-  const [moduleStates, pagesList, wiki, blog] = await Promise.all([
+  const [moduleStates, pagesList, wikiPages, blogPages] = await Promise.all([
     getModuleStates(site.guildId),
     listPublishedPages(site, 'PAGE'),
     listPublishedPages(site, 'WIKI'),
     listPublishedPages(site, 'BLOG'),
   ]);
+  // Wiki ou blog éteint au Centre de gestion : la section disparaît du site,
+  // menu, index, recherche et plan du site compris.
+  const wiki = moduleStates.site_wiki === false ? [] : wikiPages;
+  const blog = moduleStates.site_blog === false ? [] : blogPages;
   return {
     req: req as SiteHttpRequest,
     site,
@@ -466,7 +470,10 @@ async function searchResponse(ctx: SiteCtx): Promise<SiteHttpResponse> {
   const query = (ctx.req.query.get('q') ?? '').trim().slice(0, 100);
   let results = '';
   if (query.length >= 2) {
-    const hits = (await searchSite(ctx.site.id, query)).filter((hit) => hit.visibility === 'PUBLIC');
+    const states = ctx.block.moduleStates;
+    const hits = (await searchSite(ctx.site.id, query)).filter(
+      (hit) => hit.visibility === 'PUBLIC' && !(hit.kind === 'WIKI' && states.site_wiki === false) && !(hit.kind === 'BLOG' && states.site_blog === false),
+    );
     results = hits.length
       ? `<p class="mod-meta">${esc(m.site_search_results({ query }, o))}</p><ul class="search-results">${hits
           .map((hit) => `<li><a${attrs({ href: pageUrl(ctx.basePath, hit) })}>${esc(hit.title)}</a><p>${hit.snippetHtml}</p></li>`)
@@ -707,7 +714,10 @@ export async function handleSiteRequest(req: SiteHttpRequest): Promise<SiteHttpR
   // c'est le moyen de relire un site en construction.
   if (section === '_' && a === 'theme.css' && rest.length === 2) return themeCssResponse(ctx);
   if (section === 'preview' && a && rest.length === 2) return previewResponse(ctx, a);
-  if (!site.published) return statePage(ctx, 404, m.site_unpublished_title({}, o), m.site_unpublished_desc({}, o));
+  if (!site.published || ctx.block.moduleStates.site === false) return statePage(ctx, 404, m.site_unpublished_title({}, o), m.site_unpublished_desc({}, o));
+  const wikiOn = ctx.block.moduleStates.site_wiki !== false;
+  const blogOn = ctx.block.moduleStates.site_blog !== false;
+  if ((section === 'wiki' && !wikiOn) || (section === 'blog' && !blogOn)) return notFound(ctx);
 
   let response: SiteHttpResponse;
   let trackPath: string | null = `/${rest.join('/')}`;
