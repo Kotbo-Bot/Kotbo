@@ -368,7 +368,7 @@
       <span aria-hidden="true" class="mx-1.5 text-on-surface-variant/40">·</span>
       {m.mb_stat_left({ count: stats.left })}
       <span aria-hidden="true" class="mx-1.5 text-on-surface-variant/40">·</span>
-      {m.mb_stat_bots({ count: stats.bots })}
+      {stats.bots === 1 ? m.mb_stat_bots_one() : m.mb_stat_bots({ count: stats.bots })}
     </p>
   </section>
 
