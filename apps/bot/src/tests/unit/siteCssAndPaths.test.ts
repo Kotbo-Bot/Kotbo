@@ -9,7 +9,10 @@ import {
   normalizeSiteNavigation,
   prepareSiteCss,
   readableOn,
+  canonicalSiteTheme,
   resolveSiteTheme,
+  siteFontStylesheetUrl,
+  siteThemeColorCss,
   sanitizeSiteCss,
   scopeSiteCss,
   slugify,
@@ -119,14 +122,40 @@ describe('menu', () => {
 
 describe('thèmes', () => {
   test('thème inconnu : thème par défaut', () => {
-    expect(resolveSiteTheme('inexistant', {}).key).toBe('verre');
+    expect(resolveSiteTheme('inexistant', {}).key).toBe('azur');
+  });
+
+  test('anciens thèmes ramenés à leur équivalent, avec leur mode', () => {
+    const clair = resolveSiteTheme('clair', {});
+    expect(clair.key).toBe('azur');
+    expect(clair.mode).toBe('light');
+    expect(resolveSiteTheme('neon', {}).key).toBe('aurore');
+    expect(resolveSiteTheme('nuit', {}).mode).toBe('dark');
+    expect(resolveSiteTheme('clair', { mode: 'dark' }).mode).toBe('dark');
+    expect(canonicalSiteTheme('verre')).toBe('azur');
+    expect(canonicalSiteTheme('inexistant')).toBeNull();
   });
 
   test('réglages filtrés', () => {
-    const theme = resolveSiteTheme('clair', { accent: 'red', radius: 99, font: 'Comic Sans' });
-    expect(theme.accent).toBe('#5865f2');
-    expect(theme.radius).toBe(28);
-    expect(theme.font).toBe('Inter');
+    const theme = resolveSiteTheme('azur', { accent: 'red', radius: 99, font: 'Comic Sans', mode: 'sepia', background: 'gradient' });
+    expect(theme.accent).toBe('#2f7de1');
+    expect(theme.radius).toBe(24);
+    expect(theme.font).toBe('Open Sans');
+    expect(theme.mode).toBe('auto');
+    expect(theme.background).toBe('plain');
+  });
+
+  test('feuille des couleurs selon le mode', () => {
+    const auto = siteThemeColorCss(resolveSiteTheme('azur', {}));
+    expect(auto).toContain('prefers-color-scheme: dark');
+    expect(auto).toContain('[data-mode="dark"]');
+    const dark = siteThemeColorCss(resolveSiteTheme('azur', { mode: 'dark' }));
+    expect(dark).not.toContain('prefers-color-scheme');
+    expect(dark).toContain('[data-mode="light"]');
+  });
+
+  test('graisses de police disponibles chez Google Fonts', () => {
+    expect(siteFontStylesheetUrl({ font: 'Lato', headingFont: 'Montserrat' })).toContain('family=Lato:wght@400;700&family=Montserrat:wght@400;500;600;700');
   });
 
   test('texte sur accent lisible', () => {

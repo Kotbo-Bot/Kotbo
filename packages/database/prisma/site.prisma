@@ -50,7 +50,7 @@ model CommunitySite {
 
   // Thème prêt à l'emploi et ses réglages (accent, police, arrondis, fond,
   // disposition de la navigation). Le CSS libre est stocké déjà filtré.
-  theme         String  @default("verre")
+  theme         String  @default("azur")
   themeSettings Json    @default("{}")
   customCss     String?
 

@@ -9,6 +9,8 @@ import {
   siteDocumentToMarkdown,
   SITE_FONTS,
   SITE_MODULES,
+  SITE_BACKGROUNDS,
+  SITE_COLOR_MODES,
   SITE_THEME_KEYS,
   siteModuleBotDependency,
   type SiteDocument,
@@ -353,14 +355,15 @@ export function registerSiteTools(ctx: McpToolContext) {
   server.registerTool(
     'set_site_theme',
     {
-      description: 'Thème du site et ses réglages (accent, polices, arrondis, fond) ; CSS libre facultatif, filtré par le serveur.',
+      description: 'Thème du site et ses réglages (accent, polices, arrondis, fond, mode clair/sombre par défaut) ; CSS libre facultatif, filtré par le serveur. Le visiteur peut toujours changer de mode.',
       inputSchema: {
         theme: z.enum(SITE_THEME_KEYS as [string, ...string[]]).optional(),
         accent: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
         font: z.enum(SITE_FONTS).optional(),
         heading_font: z.enum(SITE_FONTS).optional(),
-        radius: z.number().int().min(0).max(28).optional(),
-        background: z.enum(['plain', 'gradient', 'banner']).optional(),
+        radius: z.number().int().min(0).max(24).optional(),
+        background: z.enum(SITE_BACKGROUNDS).optional(),
+        mode: z.enum(SITE_COLOR_MODES).optional(),
         custom_css: z.string().max(30_000).nullable().optional(),
         key_name: keyName,
       },
@@ -376,6 +379,7 @@ export function registerSiteTools(ctx: McpToolContext) {
         if (args.heading_font) settings.headingFont = args.heading_font;
         if (args.radius !== undefined) settings.radius = args.radius;
         if (args.background) settings.background = args.background;
+        if (args.mode) settings.mode = args.mode;
         const site = await updateSite(guildId, { theme: args.theme, themeSettings: settings, customCss: args.custom_css });
         await audit(args.key_name, 'Thème du site (MCP)', `/s/${site.slug}`, site.theme);
         return ok({ theme: site.theme, themeSettings: site.themeSettings, customCss: site.customCss });

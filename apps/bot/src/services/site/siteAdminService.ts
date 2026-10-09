@@ -12,7 +12,7 @@ import {
   collectNavPageIds,
   extractSiteDocumentText,
   foldSearchText,
-  isSiteThemeKey,
+  canonicalSiteTheme,
   normalizeSiteDocument,
   normalizeSiteNavigation,
   normalizeSiteThemeSettings,
@@ -226,8 +226,10 @@ export async function updateSite(guildId: string, patch: SitePatch) {
   if (patch.bannerUrl !== undefined) data.bannerUrl = optionalImage(patch.bannerUrl);
   if (patch.faviconUrl !== undefined) data.faviconUrl = optionalImage(patch.faviconUrl);
   if (patch.theme !== undefined) {
-    if (!isSiteThemeKey(patch.theme)) throw new SiteAdminError('invalid_theme');
-    data.theme = patch.theme;
+    // Les anciens noms (verre, clair…) restent acceptés et sont ramenés au thème actuel.
+    const theme = canonicalSiteTheme(patch.theme);
+    if (!theme) throw new SiteAdminError('invalid_theme');
+    data.theme = theme;
   }
   if (patch.themeSettings !== undefined) data.themeSettings = normalizeSiteThemeSettings(patch.themeSettings) as Prisma.InputJsonValue;
   if (patch.customCss !== undefined) {
@@ -623,8 +625,8 @@ async function announcePublication(client: Client, guildId: string, siteId: stri
   const locale = await resolveGuildLocale(guildId);
   const label =
     page.kind === 'WIKI'
-      ? isFirst ? (locale === 'en' ? '📚 New wiki page' : '📚 Nouvelle page du wiki') : locale === 'en' ? '📚 Wiki page updated' : '📚 Page du wiki mise à jour'
-      : locale === 'en' ? '📰 New article' : '📰 Nouvel article';
+      ? isFirst ? (locale === 'en' ? 'New wiki page' : 'Nouvelle page du wiki') : locale === 'en' ? 'Wiki page updated' : 'Page du wiki mise à jour'
+      : locale === 'en' ? 'New article' : 'Nouvel article';
   // Un article republié après correction n'est pas réannoncé.
   if (page.kind === 'BLOG' && !isFirst) return;
   const embed = new EmbedBuilder()
