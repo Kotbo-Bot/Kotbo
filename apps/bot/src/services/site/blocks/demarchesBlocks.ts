@@ -10,6 +10,7 @@
  */
 
 import prisma from '../../../utils/db.js';
+import { siteIconSvg } from '@kotbo/shared';
 import * as m from '../../../lib/paraglide/messages.js';
 import { parseDiscordMarkdown } from '../../../api/shared/markdown.js';
 import { attrs, cls, esc, truncate } from '../siteHtml.js';
@@ -390,8 +391,8 @@ async function renderSuggestions(ctx: BlockContext, config: Record<string, unkno
       const votable = s.status === 'PENDING';
       const vote = (dir: 'up' | 'down', count: number, label: string) =>
         votable
-          ? `<button type="button" class="${cls('vote', `vote-${dir}`, mine === dir && 'is-active')}"${attrs({ 'data-action': 'suggestion-vote', 'data-id': s.id, 'data-dir': dir, 'data-requires-login': '1', 'aria-pressed': mine === dir ? 'true' : 'false', 'aria-label': label })}>${dir === 'up' ? '▲' : '▼'} <span>${formatNumber(count, ctx.locale)}</span></button>`
-          : `<span class="${cls('vote', `vote-${dir}`)}" aria-label="${esc(label)}">${dir === 'up' ? '▲' : '▼'} <span>${formatNumber(count, ctx.locale)}</span></span>`;
+          ? `<button type="button" class="${cls('vote', `vote-${dir}`, mine === dir && 'is-active')}"${attrs({ 'data-action': 'suggestion-vote', 'data-id': s.id, 'data-dir': dir, 'data-requires-login': '1', 'aria-pressed': mine === dir ? 'true' : 'false', 'aria-label': label })}>${siteIconSvg(dir === 'up' ? 'chevron-up' : 'chevron-down', 16)} <span>${formatNumber(count, ctx.locale)}</span></button>`
+          : `<span class="${cls('vote', `vote-${dir}`)}" aria-label="${esc(label)}">${siteIconSvg(dir === 'up' ? 'chevron-up' : 'chevron-down', 16)} <span>${formatNumber(count, ctx.locale)}</span></span>`;
       const response = s.responseText
         ? `<div class="suggest-response"><p class="suggest-response-title">${esc(m.site_suggestion_response({}, o))}</p><div class="rich">${parseDiscordMarkdown(s.responseText, ctx.guild)}</div></div>`
         : '';

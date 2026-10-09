@@ -27,7 +27,9 @@ import { ACTIVE_TICKET_STATUSES, checkMemberTicketQuota, resolveTicketQuotas } f
 import type { SiteViewer } from './siteService.js';
 
 /** Pied des messages relayés : c'est lui qui les distingue des messages du bot. */
-export const SITE_RELAY_FOOTER = '🌐 Envoyé depuis le site';
+export const SITE_RELAY_FOOTER = 'Envoyé depuis le site';
+/** Pied des messages relayés avant le retrait des emojis : toujours reconnu. */
+const LEGACY_SITE_RELAY_FOOTER = String.fromCodePoint(0x1f310) + ' Envoyé depuis le site';
 
 export interface SiteTicketType {
   id: string;
@@ -131,7 +133,7 @@ async function ticketChannel(client: Client, ticket: Pick<SiteTicketSummary, 'ch
 }
 
 function toSiteMessage(msg: Message, ownerId: string, botId: string): SiteTicketMessage | null {
-  const relayed = msg.author.id === botId ? msg.embeds.find((e) => e.footer?.text === SITE_RELAY_FOOTER) : undefined;
+  const relayed = msg.author.id === botId ? msg.embeds.find((e) => e.footer?.text === SITE_RELAY_FOOTER || e.footer?.text === LEGACY_SITE_RELAY_FOOTER) : undefined;
   if (relayed) {
     return {
       id: msg.id,

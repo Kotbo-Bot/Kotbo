@@ -9,6 +9,7 @@
 
 import { GuildScheduledEventStatus } from 'discord.js';
 import prisma from '../../../utils/db.js';
+import { siteIconSvg } from '@kotbo/shared';
 import { cache } from '../../../utils/cache.js';
 import * as m from '../../../lib/paraglide/messages.js';
 import { parseDiscordMarkdown } from '../../../api/shared/markdown.js';
@@ -218,12 +219,12 @@ async function renderGiveaways(ctx: BlockContext, config: Record<string, unknown
           })}>${esc(joined ? m.site_giveaway_leave({}, o) : m.site_giveaway_join({}, o))}</button>`;
       const winners =
         g.ended && g.validationStatus !== 'PENDING' && g.winners.length > 0
-          ? `<p class="card-text">🏆 ${g.winners.map((id) => esc(identities.get(id)?.displayName ?? id)).join(', ')}</p>`
+          ? `<p class="card-meta">${siteIconSvg('trophy', 16)} ${g.winners.map((id) => esc(identities.get(id)?.displayName ?? id)).join(', ')}</p>`
           : '';
       return `<article class="giveaway-card">
   <div class="card-body">
     <p class="card-kicker">${g.ended ? esc(m.site_giveaway_ended({}, o)) : m.site_giveaway_ends({ date: timeTag(g.endsAt, ctx.locale, 'medium') }, o)}</p>
-    <h3 class="card-title">🎁 ${esc(g.prize)}</h3>
+    <h3 class="card-title">${siteIconSvg('gift', 20)} ${esc(g.prize)}</h3>
     ${g.description ? `<div class="card-text rich">${parseDiscordMarkdown(truncate(g.description, 400), ctx.guild)}</div>` : ''}
     <p class="card-meta">${esc(m.site_giveaway_participants({ count: formatNumber(g.participants.length, ctx.locale) }, o))} · ${esc(m.site_giveaway_winners({ count: g.winnerCount }, o))}</p>
     ${winners}
@@ -407,7 +408,7 @@ async function renderMarketplace(ctx: BlockContext, config: Record<string, unkno
       const canBuy = !isAuction && l.sellerId !== viewerId;
       return `<article class="${cls('market-card', `rarity-${(item?.rarity ?? 'COMMON').toLowerCase()}`)}">
   <div class="card-body">
-    <p class="market-item"><span class="market-emoji" aria-hidden="true">${esc(item?.emoji ?? '📦')}</span> ${esc(item?.name ?? '?')}${l.upgrade > 0 ? ` <span class="pill">+${l.upgrade}</span>` : ''} ${l.quantity > 1 ? `<span class="market-qty">${esc(m.site_market_quantity({ count: l.quantity }, o))}</span>` : ''}</p>
+    <p class="market-item"><span class="market-emoji" aria-hidden="true">${item?.emoji ? esc(item.emoji) : siteIconSvg('package', 20)}</span> ${esc(item?.name ?? '?')}${l.upgrade > 0 ? ` <span class="pill">+${l.upgrade}</span>` : ''} ${l.quantity > 1 ? `<span class="market-qty">${esc(m.site_market_quantity({ count: l.quantity }, o))}</span>` : ''}</p>
     <p class="card-meta">${esc(m.site_market_seller({ name: seller }, o))}</p>
     <p class="market-price">${isAuction ? `<small>${esc(m.site_market_bid({}, o))}</small> ` : ''}${esc(m.site_coins({ value: price }, o))}</p>
     ${canBuy ? `<div class="card-actions"><button type="button" class="btn btn-primary btn-sm"${attrs({ 'data-action': 'market-buy', 'data-id': l.id, 'data-requires-login': '1' })}>${esc(m.site_market_buy({}, o))}</button></div>` : ''}
@@ -469,7 +470,7 @@ async function renderStarboard(ctx: BlockContext, config: Record<string, unknown
     .map(
       (s) => `<article class="star-card">
   <div class="card-body">
-    <p class="feed-head">${avatar(s.authorAvatar, s.authorName, 'sm')} <strong>${esc(s.authorName)}</strong> <span class="star-score">⭐ ${esc(formatNumber(s.score, ctx.locale))}</span></p>
+    <p class="feed-head">${avatar(s.authorAvatar, s.authorName, 'sm')} <strong>${esc(s.authorName)}</strong> <span class="star-score">${siteIconSvg('star', 16)} ${esc(formatNumber(s.score, ctx.locale))}</span></p>
     ${s.content ? `<div class="card-text rich">${parseDiscordMarkdown(truncate(s.content, 600), guild)}</div>` : ''}
     ${s.image ? `<img class="feed-image"${attrs({ src: s.image, alt: '', loading: 'lazy', decoding: 'async', referrerpolicy: 'no-referrer' })}>` : ''}
     <p class="card-meta">${timeTag(s.createdAt, ctx.locale, 'medium')} · <a${attrs({ href: discordMessageUrl(guild.id, s.channelId, s.messageId), rel: 'noopener', target: '_blank' })}>${esc(m.site_open_in_discord({}, o))}</a></p>

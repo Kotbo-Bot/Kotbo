@@ -8,6 +8,7 @@
 
 import { ChannelType, PermissionFlagsBits, type Guild, type GuildBasedChannel, type TextChannel } from 'discord.js';
 import prisma from '../../../utils/db.js';
+import { siteIconSvg } from '@kotbo/shared';
 import { cache } from '../../../utils/cache.js';
 import { logger } from '../../../utils/logger.js';
 import * as m from '../../../lib/paraglide/messages.js';
@@ -131,7 +132,7 @@ async function renderVoice(ctx: BlockContext): Promise<string> {
         .map((member) => `<li title="${esc(member.name)}">${avatar(member.avatarUrl, member.name, 'sm')}<span class="voice-name">${esc(member.name)}</span></li>`)
         .join('');
       const more = members.length > 12 ? `<li class="voice-more">+${members.length - 12}</li>` : '';
-      return `<div class="voice-room"><p class="voice-channel">🔊 ${esc(channel?.name ?? '')}</p><ul class="voice-members">${faces}${more}</ul></div>`;
+      return `<div class="voice-room"><p class="voice-channel">${siteIconSvg('volume', 18)} ${esc(channel?.name ?? '')}</p><ul class="voice-members">${faces}${more}</ul></div>`;
     })
     .join('');
   return `<p class="mod-meta">${esc(m.site_voice_count({ count: formatNumber(total, ctx.locale) }, o))}</p><div class="voice">${rooms}</div>`;

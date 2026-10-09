@@ -11,7 +11,9 @@
  * synchrone et pur.
  */
 
-import { collectSiteHeadings, type SiteDocument, type SiteMark, type SiteNode } from '@kotbo/shared';
+import { collectSiteHeadings, siteIconSvg, type SiteDocument, type SiteIconName, type SiteMark, type SiteNode } from '@kotbo/shared';
+
+const CALLOUT_ICONS: Record<string, SiteIconName> = { info: 'info', success: 'circle-check', warning: 'alert', danger: 'octagon', note: 'note' };
 import { attrs, cls, esc } from './siteHtml.js';
 
 export interface SiteRenderEnv {
@@ -189,7 +191,8 @@ class Renderer {
         return `<${tag}${attrs({ colspan: Number(a.colspan) > 1 ? Number(a.colspan) : null, rowspan: Number(a.rowspan) > 1 ? Number(a.rowspan) : null })}>${this.children(node)}</${tag}>`;
       }
       case 'callout': {
-        const icon = typeof a.icon === 'string' && a.icon ? `<span class="callout-icon" aria-hidden="true">${esc(a.icon)}</span>` : '';
+        // Pictogramme selon le style de l'encadré (l'ancien attribut emoji est ignoré).
+        const icon = `<span class="callout-icon" aria-hidden="true">${siteIconSvg(CALLOUT_ICONS[String(a.variant)] ?? 'info', 20)}</span>`;
         return `<aside class="callout callout-${esc(a.variant ?? 'info')}">${icon}<div class="callout-body">${this.children(node)}</div></aside>`;
       }
       case 'grid':
