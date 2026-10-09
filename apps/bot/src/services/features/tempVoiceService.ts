@@ -292,6 +292,8 @@ export function requiredBotPermissions(policy: TempVoicePolicy): bigint[] {
       // Créer un salon avec des surcharges de permissions exige `ManageRoles`.
       PermissionFlagsBits.ManageRoles,
       ...ownerAllowBits(policy),
+      // Le chat « open » et les rôles autorisés d'office accordent aussi l'écriture.
+      ...(policy.textChat === 'open' || policy.autoAllowRoleIds.length > 0 ? [PermissionFlagsBits.SendMessages] : []),
     ]),
   ];
 }
@@ -399,12 +401,13 @@ export function buildCreationOverwrites(input: BuildCreationOverwritesInput): Ov
 
   // 3. @everyone : verrouillage et chat, rien d'autre.
   if (everyoneAllow.length > 0 || everyoneDeny.length > 0) {
-    // Même règle : le mode « ouvert » n'écrase pas un refus nommé de la catégorie.
+    // « Ouvert » est un choix explicite : il accorde l'écriture même contre un
+    // refus de la catégorie, comme « Everyone » du panneau. « Hérité » ne touche à rien.
     drafts.set(
       everyoneRoleId,
       applyBits(
         ensure(everyoneRoleId, OverwriteType.Role),
-        grantableBits(everyoneAllow, inheritedDenyFor(everyoneRoleId)),
+        everyoneAllow,
         everyoneDeny,
       ),
     );

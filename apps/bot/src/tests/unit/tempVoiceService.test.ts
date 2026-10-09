@@ -436,9 +436,8 @@ describe('buildCreationOverwrites', () => {
     expect(has(allowOf(overwrites, VIP_ROLE), PermissionFlagsBits.Connect)).toBeTrue();
   });
 
-  test('ouvrir le chat ne rouvre pas ce que la catégorie refuse à @everyone', () => {
-    // L'étape @everyone ne passait pas par le filtre : un refus d'écriture posé
-    // par la catégorie était effacé par le mode « ouvert ».
+  test('ouvrir le chat accorde l\'écriture même si la catégorie la refuse à @everyone', () => {
+    // Sinon le salon naît en « Personne » : @everyone refusé, propriétaire sans `allow`.
     const overwrites = buildCreationOverwrites({
       everyoneRoleId: EVERYONE,
       ownerId: OWNER,
@@ -451,8 +450,8 @@ describe('buildCreationOverwrites', () => {
       policy: { ...defaultTempVoicePolicy(), textChat: 'open' },
     });
 
-    expect(has(allowOf(overwrites, EVERYONE), PermissionFlagsBits.SendMessages)).toBeFalse();
-    expect(has(denyOf(overwrites, EVERYONE), PermissionFlagsBits.SendMessages)).toBeTrue();
+    expect(has(allowOf(overwrites, EVERYONE), PermissionFlagsBits.SendMessages)).toBeTrue();
+    expect(has(denyOf(overwrites, EVERYONE), PermissionFlagsBits.SendMessages)).toBeFalse();
   });
 
   test('un refus porté par @everyone reste dépassable par le propriétaire', () => {
@@ -805,6 +804,13 @@ describe('régressions relevées en revue', () => {
     expect(withoutPower).toContain(PermissionFlagsBits.ManageChannels);
     expect(withoutPower).not.toContain(PermissionFlagsBits.ManageMessages);
     expect(withMessages).toContain(PermissionFlagsBits.ManageMessages);
+  });
+
+  test('ouvrir le chat exige que le bot puisse écrire lui-même', () => {
+    // Sinon Discord refuse la création au lieu du message « droit manquant ».
+    expect(requiredBotPermissions(defaultTempVoicePolicy())).not.toContain(PermissionFlagsBits.SendMessages);
+    expect(requiredBotPermissions({ ...defaultTempVoicePolicy(), textChat: 'open' })).toContain(PermissionFlagsBits.SendMessages);
+    expect(requiredBotPermissions({ ...defaultTempVoicePolicy(), autoAllowRoleIds: [VIP_ROLE] })).toContain(PermissionFlagsBits.SendMessages);
   });
 
   test('un pseudo contenant $& n\'est pas interprété', () => {
