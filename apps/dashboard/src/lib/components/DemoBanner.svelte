@@ -21,7 +21,7 @@
       <span class="text-on-surface-variant"> · Un serveur fictif pour tout essayer. Tes changements restent sur cet appareil.</span>
     </p>
 
-    <div class="flex items-center gap-1 shrink-0">
+    <div class="flex flex-wrap items-center gap-1 sm:shrink-0">
       <button
         type="button"
         onclick={() => demoTour.start()}
@@ -41,7 +41,7 @@
         href={DEMO_INVITE_URL}
         target="_blank"
         rel="noopener noreferrer"
-        class="ml-1 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-primary text-on-primary hover:opacity-90 transition-opacity"
+        class="sm:ml-1 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-primary text-on-primary hover:opacity-90 transition-opacity"
       >
         Ajouter Kotbo à mon serveur
       </a>

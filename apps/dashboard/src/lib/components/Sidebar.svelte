@@ -326,7 +326,7 @@
       </div>
     {:else}
       {#if pinnedItems.length > 0}
-        <p class="px-3 pb-1 text-2xs font-medium text-on-surface-variant/70">Épinglés</p>
+        <p class="px-3 pb-1 text-2xs font-medium text-on-surface-variant/70">{m.nav_pinned()}</p>
         <div class="space-y-px mb-3">
           {#each pinnedItems as item (item.href)}
             {@render pageLink(item, true)}

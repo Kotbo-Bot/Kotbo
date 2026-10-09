@@ -79,14 +79,14 @@
   </header>
 
   {#if visibleTabs.length > 1}
-    <nav class="flex flex-wrap gap-1 border-b border-outline-variant/30" aria-label={title}>
+    <nav class="flex flex-nowrap md:flex-wrap gap-1 overflow-x-auto [scrollbar-width:none] border-b border-outline-variant/30" aria-label={title}>
       {#each visibleTabs as tab (tab.key)}
         <button
           type="button"
           onclick={() => gotoTab(basePath, tab.key, defaultTab)}
           aria-current={activeTab === tab.key ? 'page' : undefined}
           class="
-            -mb-px flex items-center gap-2 border-b-2 px-3 py-2.5 text-body-sm font-medium
+            -mb-px flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 px-3 py-2.5 text-body-sm font-medium
             transition-colors duration-150
             {activeTab === tab.key
               ? 'border-primary text-primary'
