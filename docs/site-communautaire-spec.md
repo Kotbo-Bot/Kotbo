@@ -80,14 +80,22 @@ Visites, pages vues, sources, sans cookie (hachage quotidien comme la télémét
 
 ### Rendu
 
-`apps/bot/src/services/site/` :
+Logique pure partagée dans `packages/shared/src/site/` (utilisée par le bot et le dashboard) :
 
-- `siteDocument.ts` : liste blanche des nœuds et marques, normalisation de tout document reçu (attributs typés, URL `http(s)` uniquement). Aucun HTML brut n'est jamais stocké.
-- `siteRenderer.ts` : document → HTML, tout échappé. Les blocs de modules sont résolus côté serveur.
-- `siteTheme.ts` : thèmes, variables CSS, assainissement du CSS libre (réutilise `sanitizeCustomCss`).
-- `siteBlocks/` : un résolveur de données par bloc de module.
+- `document.ts` : liste blanche des nœuds et marques, normalisation de tout document reçu (attributs typés, URL `http(s)` uniquement). Aucun HTML brut n'est jamais stocké.
+- `modules.ts` : catalogue des 25 blocs de modules (catégorie, module du bot requis, besoin du visiteur, rafraîchissement en direct, configuration par défaut).
+- `themes.ts`, `css.ts`, `paths.ts`, `markdown.ts` : thèmes, filtrage et portée du CSS libre, adresses et menu, conversion Markdown ↔ document pour les agents.
 
-Routes Hono `GET /api/site/render/s/<slug>/…` (pages, `sitemap.xml`, `robots.txt`, `rss.xml`, `embed/…`, `_/site.css`, `_/site.js`, `_/a/<asset>`).
+Côté bot, `apps/bot/src/services/site/` :
+
+- `siteRenderer.ts` : document → HTML, tout échappé. Les blocs de modules sont résolus côté serveur par `blocks/` (un résolveur par bloc).
+- `sitePages.ts`, `siteLayout.ts`, `assets/site.css`, `assets/site.js` : routage des pages, gabarit, script du site (visiteur, blocs à jour, actions, signalement, bandeau d'agent).
+- `siteAdminService.ts`, `siteRights.ts` : écritures du dashboard et du MCP, droits par section.
+- `siteCollabService.ts`, `siteCollabCodec.ts` : salle Yjs par page, conversion document ↔ Yjs.
+- `siteAgentLock.ts` : verrou de l'agent MCP (voir plus bas).
+- `siteAnalyticsService.ts`, `siteSearch.ts`, `sitePreview.ts`, `siteModeration.ts`, `siteRedirects.ts`, `siteTemplates.ts`, `siteUploads.ts`.
+
+Routes Hono `GET /api/site/render/s/…` : `/s/<slug>/…` (pages, `sitemap.xml`, `rss.xml`, `_/theme.css`, `embed/<page>/<bloc>`, `preview/<jeton>`) et, communs à tous les sites, `/s/_/site.css`, `/s/_/site.js`, `/s/_/a/<image>`. `robots.txt` est servi à la racine.
 
 **Sécurité**, le site étant servi sous le domaine du dashboard :
 
@@ -97,4 +105,32 @@ Routes Hono `GET /api/site/render/s/<slug>/…` (pages, `sitemap.xml`, `robots.t
 
 ### Édition
 
-Tiptap (ProseMirror) dans le dashboard, avec `BubbleMenu`, menu `/`, nœuds personnalisés pour les blocs de modules (aperçu Svelte), extension Collaboration branchée sur un WebSocket Yjs de l'API (`/api/site/collab/<pageId>`). L'état Yjs est persisté sur la page ; « Publier » fige le document dans `publishedContent` et crée une révision.
+Tiptap (ProseMirror) dans le dashboard, avec `BubbleMenu`, menu `/`, nœuds personnalisés pour les blocs de modules (aperçu Svelte), extension Collaboration branchée sur un WebSocket Yjs de l'API (`/api/site/collab/<guildId>/<pageId>`, protocole y-websocket). L'état Yjs est persisté sur la page ; « Publier » fige le document dans `publishedContent` et crée une révision (100 au plus). Sans WebSocket au bout de 6 secondes, l'éditeur repasse en édition seule avec enregistrement par l'API.
+
+Écrans du dashboard :
+
+- `/site` : onglets Aperçu, Pages, Wiki, Blog, Apparence, Menu, Commentaires, Fréquentation, Réglages, selon les droits de chacun.
+- `/site/edit/<pageId>` : l'éditeur, avec réglages de la page, historique, lien d'aperçu (7 jours) et programmation.
+- Mon espace : section « Rédaction » pour les rôles rédacteurs du wiki et du blog, qui n'ont pas accès au dashboard.
+- Analytics : section « Site web ».
+- `/admin/sites` : signalements, recherche, suspension motivée.
+- Les anciennes pages publiques (appel, formulaire, classements, clans, liste des giveaways, actualités) renvoient vers la page du site qui porte le bloc équivalent, quand il y en a une publique.
+
+### Agents MCP
+
+Deux permissions de clé : **Lire le site** (`READ_SITE`) et **Modifier le site** (`WRITE_SITE`). Les outils couvrent tout ce que fait le dashboard : création et suppression du site, réglages, thème, menu, mise en ligne, pages du wiki et du blog (contenu en Markdown ou en document), ajout de blocs de modules, publication, programmation, révisions, ordre des pages, modération des commentaires, import d'image, lien d'aperçu, fréquentation.
+
+**Verrou de l'agent.** Toute écriture d'un agent pose un verrou sur le site :
+
+- l'édition humaine passe en lecture seule (dashboard, collaboration en direct, API d'administration qui répond `423 agent_locked`) ;
+- un bandeau l'annonce dans le dashboard et, pour les gestionnaires, sur le site public ;
+- le verrou tombe après 90 secondes sans écriture, ou quand l'agent appelle `release_site_lock` ;
+- un humain peut **interrompre** l'agent depuis le dashboard ou le site : l'agent est alors bloqué 15 minutes, sauf si un gestionnaire l'autorise à nouveau. L'interruption part au journal d'audit.
+
+Le verrou vit en mémoire du process du bot (une seule instance), il ne survit pas à un redémarrage.
+
+## Déploiement
+
+- Migrations à appliquer : `20261109100000_community_site` et `20261109110000_mcp_site_permissions`.
+- Images : `SITE_ASSETS_DIR=/app/data/site-assets` dans le conteneur du bot. Ce dossier doit être un **volume persistant** sur le VPS, sinon les images disparaissent à chaque redéploiement. Quota de 500 Mo par site.
+- nginx du dashboard : `location ^~ /s/` relaie vers `/api/site/render/s/…` de l'API, `/robots.txt` aussi.
