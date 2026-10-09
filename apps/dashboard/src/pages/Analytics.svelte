@@ -25,6 +25,7 @@
   import { Button, Callout, SectionCard, Tabs } from '../lib/components/ui';
   import ExportDropdown from '../lib/components/analytics/ExportDropdown.svelte';
   import AnalyticsFilterBar from '../lib/components/analytics/AnalyticsFilterBar.svelte';
+  import SiteAnalyticsPanel from '../lib/components/site/SiteAnalyticsPanel.svelte';
   import AnalyticsSkeleton from '../lib/components/analytics/AnalyticsSkeleton.svelte';
   import OverviewSection from '../lib/components/analytics/OverviewSection.svelte';
   import ActivitySection, { type ActivityView } from '../lib/components/analytics/ActivitySection.svelte';
@@ -159,6 +160,10 @@
         { id: 'performance', label: m.an_tab_staff_performance(), icon: 'TrendUp', scope: 'period', legacy: true },
         { id: 'tickets', label: m.anx_tab_tickets(), icon: 'Ticket', scope: 'period' },
       ],
+    },
+    {
+      id: 'website', label: m.ste_analytics_section(), icon: 'Globe', description: m.ste_analytics_section_desc(), isNew: true,
+      tabs: [{ id: 'website', label: m.ste_analytics_tab(), icon: 'Globe', scope: 'own' }],
     },
     {
       id: 'automation', label: m.anx_section_automation(), icon: 'Bell', description: m.anx_section_automation_desc(),
@@ -571,6 +576,8 @@
             <GrowthSection {legacy} {legacyLoading} onOpenMember={openMemberDetails} />
             <GrowthInsightsView />
           </div>
+        {:else if activeTab === 'website'}
+          <SiteAnalyticsPanel guildId={authStore.selectedGuildId ?? ''} />
         {:else if activeTab === 'tickets'}
           <StaffInsightsView onOpenMember={openMemberDetails} />
         {:else if activeTab === 'compare'}
