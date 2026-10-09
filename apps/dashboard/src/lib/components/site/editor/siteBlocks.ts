@@ -3,37 +3,37 @@
  * leurs libellés, icônes et le résumé affiché dans la carte d'un bloc.
  */
 import type { Editor, Range } from '@tiptap/core';
-import { SITE_MODULES, normalizeModuleConfig, type SiteModuleKey } from '@kotbo/shared';
+import { SITE_MODULES, normalizeModuleConfig, type SiteIconName, type SiteModuleKey } from '@kotbo/shared';
 import { m } from '../../../i18n';
 import type { SiteCatalog } from '../../../api/site';
 import type { SlashItem } from './slashMenu';
 
-export const MODULE_ICONS: Record<SiteModuleKey, string> = {
-  staff: '👥',
-  rules: '📜',
-  news: '📰',
-  partners: '🤝',
-  serverStats: '📊',
-  appeal: '⚖️',
-  recruitment: '🧑‍💼',
-  form: '📝',
-  ticket: '🎫',
-  suggestions: '💡',
-  leaderboard: '🏆',
-  clans: '🛡️',
-  giveaways: '🎁',
-  events: '📅',
-  seasons: '🗓️',
-  marketplace: '🛒',
-  starboard: '⭐',
-  profile: '🙂',
-  wikiIndex: '📚',
-  blogList: '✍️',
-  search: '🔎',
-  members: '🟢',
-  join: '🚪',
-  voice: '🔊',
-  channelFeed: '💬',
+export const MODULE_ICONS: Record<SiteModuleKey, SiteIconName> = {
+  staff: 'users',
+  rules: 'scroll',
+  news: 'newspaper',
+  partners: 'handshake',
+  serverStats: 'chart',
+  appeal: 'gavel',
+  recruitment: 'user-plus',
+  form: 'clipboard',
+  ticket: 'ticket',
+  suggestions: 'lightbulb',
+  leaderboard: 'trophy',
+  clans: 'shield',
+  giveaways: 'gift',
+  events: 'calendar',
+  seasons: 'calendar-range',
+  marketplace: 'cart',
+  starboard: 'star',
+  profile: 'user',
+  wikiIndex: 'book',
+  blogList: 'pen',
+  search: 'search',
+  members: 'users-round',
+  join: 'login',
+  voice: 'volume',
+  channelFeed: 'message',
 };
 
 export function moduleLabel(key: SiteModuleKey): string {
@@ -191,28 +191,28 @@ export function buildSlashItems(context: SlashContext): SlashItem[] {
   const layout = m.ste_group_layout();
   const media = m.ste_group_media();
   const items: SlashItem[] = [
-    { id: 'p', group: text, label: m.ste_item_paragraph(), description: m.ste_item_paragraph_desc(), icon: '¶', keywords: 'texte text', run: setBlock('paragraph') },
-    { id: 'h1', group: text, label: m.ste_item_h1(), description: m.ste_item_heading_desc(), icon: 'H1', keywords: 'titre heading', run: setBlock('heading', { level: 1 }) },
-    { id: 'h2', group: text, label: m.ste_item_h2(), description: m.ste_item_heading_desc(), icon: 'H2', keywords: 'titre heading', run: setBlock('heading', { level: 2 }) },
-    { id: 'h3', group: text, label: m.ste_item_h3(), description: m.ste_item_heading_desc(), icon: 'H3', keywords: 'titre heading', run: setBlock('heading', { level: 3 }) },
-    { id: 'ul', group: text, label: m.ste_item_bullets(), description: m.ste_item_bullets_desc(), icon: '•', keywords: 'liste list', run: (e, r) => e.chain().focus().deleteRange(r).toggleBulletList().run() },
-    { id: 'ol', group: text, label: m.ste_item_numbers(), description: m.ste_item_numbers_desc(), icon: '1.', keywords: 'liste list', run: (e, r) => e.chain().focus().deleteRange(r).toggleOrderedList().run() },
-    { id: 'todo', group: text, label: m.ste_item_tasks(), description: m.ste_item_tasks_desc(), icon: '☑', keywords: 'tâches tasks checklist', run: (e, r) => e.chain().focus().deleteRange(r).toggleTaskList().run() },
-    { id: 'quote', group: text, label: m.ste_item_quote(), description: m.ste_item_quote_desc(), icon: '❝', keywords: 'citation quote', run: (e, r) => e.chain().focus().deleteRange(r).toggleBlockquote().run() },
-    { id: 'code', group: text, label: m.ste_item_code(), description: m.ste_item_code_desc(), icon: '</>', keywords: 'code', run: (e, r) => e.chain().focus().deleteRange(r).toggleCodeBlock().run() },
-    { id: 'callout', group: layout, label: m.ste_item_callout(), description: m.ste_item_callout_desc(), icon: 'ℹ️', keywords: 'encadré note info alerte', run: insert({ type: 'callout', attrs: { variant: 'info', icon: 'ℹ️' }, content: [emptyParagraph] }) },
-    { id: 'grid2', group: layout, label: m.ste_item_grid({ count: 2 }), description: m.ste_item_grid_desc(), icon: '▦', keywords: 'bento grille colonnes', run: insert({ type: 'grid', attrs: { columns: 2 }, content: [cell(), cell()] }) },
-    { id: 'grid3', group: layout, label: m.ste_item_grid({ count: 3 }), description: m.ste_item_grid_desc(), icon: '▦', keywords: 'bento grille colonnes', run: insert({ type: 'grid', attrs: { columns: 3 }, content: [cell(), cell(), cell()] }) },
-    { id: 'bento', group: layout, label: m.ste_item_bento(), description: m.ste_item_bento_desc(), icon: '◧', keywords: 'bento grille', run: insert({ type: 'grid', attrs: { columns: 3 }, content: [cell(2), cell(1), cell(1), cell(2)] }) },
-    { id: 'hr', group: layout, label: m.ste_item_divider(), description: m.ste_item_divider_desc(), icon: '—', keywords: 'séparateur divider', run: (e, r) => e.chain().focus().deleteRange(r).setHorizontalRule().run() },
-    { id: 'table', group: layout, label: m.ste_item_table(), description: m.ste_item_table_desc(), icon: '⊞', keywords: 'tableau table', run: (e, r) => e.chain().focus().deleteRange(r).insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run() },
-    { id: 'faq', group: layout, label: m.ste_item_faq(), description: m.ste_item_faq_desc(), icon: '❓', keywords: 'faq questions', run: insert({ type: 'faq', content: [{ type: 'faqItem', attrs: { question: '' }, content: [emptyParagraph] }] }) },
+    { id: 'p', group: text, label: m.ste_item_paragraph(), description: m.ste_item_paragraph_desc(), icon: 'pilcrow', keywords: 'texte text', run: setBlock('paragraph') },
+    { id: 'h1', group: text, label: m.ste_item_h1(), description: m.ste_item_heading_desc(), icon: 'h1', keywords: 'titre heading', run: setBlock('heading', { level: 1 }) },
+    { id: 'h2', group: text, label: m.ste_item_h2(), description: m.ste_item_heading_desc(), icon: 'h2', keywords: 'titre heading', run: setBlock('heading', { level: 2 }) },
+    { id: 'h3', group: text, label: m.ste_item_h3(), description: m.ste_item_heading_desc(), icon: 'h3', keywords: 'titre heading', run: setBlock('heading', { level: 3 }) },
+    { id: 'ul', group: text, label: m.ste_item_bullets(), description: m.ste_item_bullets_desc(), icon: 'list', keywords: 'liste list', run: (e, r) => e.chain().focus().deleteRange(r).toggleBulletList().run() },
+    { id: 'ol', group: text, label: m.ste_item_numbers(), description: m.ste_item_numbers_desc(), icon: 'list-ordered', keywords: 'liste list', run: (e, r) => e.chain().focus().deleteRange(r).toggleOrderedList().run() },
+    { id: 'todo', group: text, label: m.ste_item_tasks(), description: m.ste_item_tasks_desc(), icon: 'list-checks', keywords: 'tâches tasks checklist', run: (e, r) => e.chain().focus().deleteRange(r).toggleTaskList().run() },
+    { id: 'quote', group: text, label: m.ste_item_quote(), description: m.ste_item_quote_desc(), icon: 'quote', keywords: 'citation quote', run: (e, r) => e.chain().focus().deleteRange(r).toggleBlockquote().run() },
+    { id: 'code', group: text, label: m.ste_item_code(), description: m.ste_item_code_desc(), icon: 'code', keywords: 'code', run: (e, r) => e.chain().focus().deleteRange(r).toggleCodeBlock().run() },
+    { id: 'callout', group: layout, label: m.ste_item_callout(), description: m.ste_item_callout_desc(), icon: 'info', keywords: 'encadré note info alerte', run: insert({ type: 'callout', attrs: { variant: 'info', icon: '' }, content: [emptyParagraph] }) },
+    { id: 'grid2', group: layout, label: m.ste_item_grid({ count: 2 }), description: m.ste_item_grid_desc(), icon: 'columns2', keywords: 'bento grille colonnes', run: insert({ type: 'grid', attrs: { columns: 2 }, content: [cell(), cell()] }) },
+    { id: 'grid3', group: layout, label: m.ste_item_grid({ count: 3 }), description: m.ste_item_grid_desc(), icon: 'columns3', keywords: 'bento grille colonnes', run: insert({ type: 'grid', attrs: { columns: 3 }, content: [cell(), cell(), cell()] }) },
+    { id: 'bento', group: layout, label: m.ste_item_bento(), description: m.ste_item_bento_desc(), icon: 'grid', keywords: 'bento grille', run: insert({ type: 'grid', attrs: { columns: 3 }, content: [cell(2), cell(1), cell(1), cell(2)] }) },
+    { id: 'hr', group: layout, label: m.ste_item_divider(), description: m.ste_item_divider_desc(), icon: 'minus', keywords: 'séparateur divider', run: (e, r) => e.chain().focus().deleteRange(r).setHorizontalRule().run() },
+    { id: 'table', group: layout, label: m.ste_item_table(), description: m.ste_item_table_desc(), icon: 'table', keywords: 'tableau table', run: (e, r) => e.chain().focus().deleteRange(r).insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run() },
+    { id: 'faq', group: layout, label: m.ste_item_faq(), description: m.ste_item_faq_desc(), icon: 'help', keywords: 'faq questions', run: insert({ type: 'faq', content: [{ type: 'faqItem', attrs: { question: '' }, content: [emptyParagraph] }] }) },
     {
       id: 'button',
       group: layout,
       label: m.ste_item_button(),
       description: m.ste_item_button_desc(),
-      icon: '🔘',
+      icon: 'pointer',
       keywords: 'bouton lien cta',
       run: (e, r) => {
         e.chain().focus().deleteRange(r).insertContent({ type: 'button', attrs: { label: m.ste_button_default(), href: '/~/', variant: 'primary', align: 'left' } }).run();
@@ -220,13 +220,13 @@ export function buildSlashItems(context: SlashContext): SlashItem[] {
         context.configureAt('button', Math.max(0, pos), { label: m.ste_button_default(), href: '/~/', variant: 'primary', align: 'left' });
       },
     },
-    { id: 'toc', group: layout, label: m.ste_item_toc(), description: m.ste_item_toc_desc(), icon: '🧭', keywords: 'sommaire toc', run: insert({ type: 'toc', attrs: { maxLevel: 3 } }) },
+    { id: 'toc', group: layout, label: m.ste_item_toc(), description: m.ste_item_toc_desc(), icon: 'toc', keywords: 'sommaire toc', run: insert({ type: 'toc', attrs: { maxLevel: 3 } }) },
     {
       id: 'image',
       group: media,
       label: m.ste_item_image(),
       description: m.ste_item_image_desc(),
-      icon: '🖼️',
+      icon: 'image',
       keywords: 'image photo',
       run: (e, r) => {
         e.chain().focus().deleteRange(r).run();
@@ -238,7 +238,7 @@ export function buildSlashItems(context: SlashContext): SlashItem[] {
       group: media,
       label: m.ste_item_video(),
       description: m.ste_item_video_desc(),
-      icon: '▶️',
+      icon: 'play',
       keywords: 'vidéo youtube twitch vimeo',
       run: (e, r) => {
         e.chain().focus().deleteRange(r).run();

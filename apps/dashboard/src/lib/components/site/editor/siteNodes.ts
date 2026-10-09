@@ -8,7 +8,10 @@
  * `editor.storage.siteNodes.onConfigure`, que la page branche sur sa modale.
  */
 import { Extension, Mark, Node, mergeAttributes, type Editor } from '@tiptap/core';
-import { SITE_CALLOUT_VARIANTS, SITE_HIGHLIGHT_COLORS, SITE_IMAGE_WIDTHS, sanitizeSiteHref } from '@kotbo/shared';
+import { SITE_CALLOUT_VARIANTS, SITE_HIGHLIGHT_COLORS, SITE_IMAGE_WIDTHS, sanitizeSiteHref, siteIconSvg, type SiteIconName } from '@kotbo/shared';
+
+/** Pictogramme de chaque style d'encadré, comme sur le site publié. */
+const CALLOUT_ICONS: Record<string, SiteIconName> = { info: 'info', success: 'circle-check', warning: 'alert', danger: 'octagon', note: 'note' };
 
 export interface ConfigureRequest {
   type: string;
@@ -18,7 +21,7 @@ export interface ConfigureRequest {
 
 export interface SiteNodesStorage {
   onConfigure: ((request: ConfigureRequest) => void) | null;
-  describeModule: ((key: string, config: Record<string, unknown>) => { label: string; summary: string; icon: string; available: boolean }) | null;
+  describeModule: ((key: string, config: Record<string, unknown>) => { label: string; summary: string; icon: SiteIconName; available: boolean }) | null;
   labels: Record<string, string>;
 }
 
@@ -46,13 +49,14 @@ function configure(editor: Editor, type: string, getPos: () => number | undefine
 }
 
 /** Carte d'un nœud atomique : icône, titre, résumé, bouton « Configurer ». */
-function atomCard(editor: Editor, opts: { icon: string; title: string; summary: string; warning?: string; onConfigure: () => void }): HTMLElement {
+function atomCard(editor: Editor, opts: { icon: SiteIconName; title: string; summary: string; warning?: string; onConfigure: () => void }): HTMLElement {
   const card = document.createElement('div');
   card.className = 'site-atom';
   card.contentEditable = 'false';
   const icon = document.createElement('span');
   icon.className = 'site-atom-icon';
-  icon.textContent = opts.icon;
+  // SVG constant du jeu partagé, jamais une donnée saisie.
+  icon.innerHTML = siteIconSvg(opts.icon, 20);
   const body = document.createElement('div');
   body.className = 'site-atom-body';
   const title = document.createElement('p');
@@ -107,7 +111,7 @@ export const ModuleNode = Node.create({
         const description = editor.storage.siteNodes?.describeModule?.(String(attrs.module), (attrs.config ?? {}) as Record<string, unknown>) ?? {
           label: String(attrs.module),
           summary: '',
-          icon: '🧩',
+          icon: 'puzzle',
           available: true,
         };
         return atomCard(editor, {
@@ -243,7 +247,7 @@ export const Callout = Node.create({
       icon.type = 'button';
       icon.className = 'callout-icon site-callout-switch';
       icon.contentEditable = 'false';
-      icon.textContent = node.attrs.icon || 'ℹ️';
+      icon.innerHTML = siteIconSvg(CALLOUT_ICONS[node.attrs.variant] ?? 'info', 18);
       icon.title = label(editor, 'calloutStyle', 'Style de l’encadré');
       icon.addEventListener('mousedown', (event) => event.preventDefault());
       icon.addEventListener('click', () => {
@@ -252,9 +256,8 @@ export const Callout = Node.create({
         if (typeof pos !== 'number') return;
         const current = SITE_CALLOUT_VARIANTS.indexOf(node.attrs.variant);
         const next = SITE_CALLOUT_VARIANTS[(current + 1) % SITE_CALLOUT_VARIANTS.length];
-        const icons: Record<string, string> = { info: 'ℹ️', success: '✅', warning: '⚠️', danger: '⛔', note: '📝' };
         editor.chain().command(({ tr }) => {
-          tr.setNodeMarkup(pos, undefined, { ...node.attrs, variant: next, icon: icons[next] });
+          tr.setNodeMarkup(pos, undefined, { ...node.attrs, variant: next, icon: '' });
           return true;
         }).run();
       });
@@ -459,7 +462,7 @@ export const Video = Node.create({
     return ({ node, editor, getPos }) => {
       const render = (attrs: Record<string, unknown>) =>
         atomCard(editor, {
-          icon: attrs.provider === 'twitch' ? '🟣' : attrs.provider === 'vimeo' ? '🎞️' : '▶️',
+          icon: 'play',
           title: label(editor, 'video', 'Vidéo'),
           summary: `${attrs.provider} · ${attrs.videoId}`,
           onConfigure: () => configure(editor, 'video', getPos, attrs),
@@ -499,7 +502,7 @@ export const Toc = Node.create({
   addNodeView() {
     return ({ node, editor, getPos }) => ({
       dom: atomCard(editor, {
-        icon: '🧭',
+        icon: 'toc',
         title: label(editor, 'toc', 'Sommaire'),
         summary: label(editor, 'tocSummary', 'Construit à partir des titres de la page.'),
         onConfigure: () => configure(editor, 'toc', getPos, node.attrs),
