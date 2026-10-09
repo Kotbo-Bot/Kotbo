@@ -13425,5 +13425,9 @@
   "aegis_member_recent": "Dernières détections",
   "aegis_ticket_mood": "Humeur du demandeur : {mood}",
   "aegis_evidence": "Preuve",
-  "aegis_test_shared": "Partagée avec AegisAI pour l'entraînement (Vie privée : oui)."
+  "aegis_test_shared": "Partagée avec AegisAI pour l'entraînement (Vie privée : oui).",
+  "mcp_perm_read_site_label": "Lire le site",
+  "mcp_perm_read_site_desc": "Réglages, pages et leur contenu, historique, commentaires et fréquentation du site communautaire.",
+  "mcp_perm_write_site_label": "Modifier le site",
+  "mcp_perm_write_site_desc": "Créer et régler le site, écrire et publier des pages, gérer le menu et les commentaires. L'agent verrouille l'édition le temps de son passage, et peut être interrompu depuis le dashboard ou le site."
 }

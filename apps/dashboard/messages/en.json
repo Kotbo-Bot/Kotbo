@@ -13425,5 +13425,9 @@
   "aegis_member_recent": "Latest detections",
   "aegis_ticket_mood": "Requester's mood: {mood}",
   "aegis_evidence": "Evidence",
-  "aegis_test_shared": "Shared with AegisAI for training (Privacy: yes)."
+  "aegis_test_shared": "Shared with AegisAI for training (Privacy: yes).",
+  "mcp_perm_read_site_label": "Read the website",
+  "mcp_perm_read_site_desc": "Settings, pages and their content, history, comments and traffic of the community website.",
+  "mcp_perm_write_site_label": "Edit the website",
+  "mcp_perm_write_site_desc": "Create and configure the website, write and publish pages, manage the menu and comments. The agent locks editing while it works, and can be stopped from the dashboard or the website."
 }
