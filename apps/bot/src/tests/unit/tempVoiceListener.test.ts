@@ -3047,6 +3047,12 @@ describe('Modes d\'écriture : ce que le libellé promet', () => {
     return [...edits].reverse().find((e) => e.id === id)?.patch;
   }
 
+  test('« Hérité » retire les surcharges d\'écriture du mode, la catégorie décide de nouveau', async () => {
+    const edits = await basculerVers('inherit');
+    expect(dernierPatch(edits, OWNER)).toEqual({ SendMessages: null });
+    expect(dernierPatch(edits, GUILD)).toEqual({ SendMessages: null });
+  });
+
   test('« Personne » fait taire aussi ceux qui ont été autorisés', async () => {
     // « Personne — y compris moi. Le salon devient un mur d'affichage. » Couper
     // @everyone ne suffit pas : une autorisation accorde `SendMessages`
@@ -3360,6 +3366,12 @@ describe('Limites de Discord : depassees, le message entier est rejete', () => {
         expect(rangee.composants.length).toBeLessThanOrEqual(5);
         for (const composant of rangee.composants) {
           expect(optionsDe(composant).length).toBeLessThanOrEqual(25);
+          for (const option of optionsDe(composant)) {
+            const o = ((option as { data?: unknown }).data ?? option) as { label?: string; description?: string; value?: string };
+            expect((o.label ?? '').length).toBeLessThanOrEqual(100);
+            expect((o.description ?? '').length).toBeLessThanOrEqual(100);
+            expect((o.value ?? '').length).toBeLessThanOrEqual(100);
+          }
         }
       }
     }

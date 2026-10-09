@@ -21,7 +21,9 @@ export const TEMP_VOICE_OWNER_POWERS: readonly TempVoiceOwnerPower[] = [
 export const TEMP_VOICE_TEXT_CHAT_MODES: readonly TempVoiceTextChatMode[] = [
   'inherit',
   'open',
+  'inVoice',
   'locked',
+  'nobody',
 ] as const;
 
 export const LEGACY_OWNER_POWERS: readonly TempVoiceOwnerPower[] = ['mute', 'deafen', 'move'] as const;
@@ -268,7 +270,7 @@ const OWNER_POWER_BITS: Record<TempVoiceOwnerPower, bigint> = {
  *  de son propre salon. Sans cette surcharge, tout le monde suit la même règle que la catégorie,
  *  et le mode « open » reste le moyen explicite d'ouvrir le chat à tous. */
 export function ownerAllowBits(policy: TempVoicePolicy): bigint[] {
-  const chatReserve = policy.lockOnCreate || policy.textChat === 'locked';
+  const chatReserve = policy.textChat !== 'nobody' && policy.textChat !== 'inVoice' && (policy.lockOnCreate || policy.textChat === 'locked');
 
   const bits = [
     PermissionFlagsBits.ViewChannel,
@@ -293,7 +295,8 @@ export function requiredBotPermissions(policy: TempVoicePolicy): bigint[] {
       PermissionFlagsBits.ManageRoles,
       ...ownerAllowBits(policy),
       // Le chat « open » et les rôles autorisés d'office accordent aussi l'écriture.
-      ...(policy.textChat === 'open' || policy.autoAllowRoleIds.length > 0 ? [PermissionFlagsBits.SendMessages] : []),
+      // « nobody » pose un refus : Discord exige aussi ce droit côté bot (prudence, non vérifié).
+      ...(policy.textChat === 'open' || policy.textChat === 'nobody' || policy.textChat === 'inVoice' || policy.autoAllowRoleIds.length > 0 ? [PermissionFlagsBits.SendMessages] : []),
     ]),
   ];
 }
@@ -375,7 +378,7 @@ export function buildCreationOverwrites(input: BuildCreationOverwritesInput): Ov
     PermissionFlagsBits.ViewChannel,
     PermissionFlagsBits.Connect,
     PermissionFlagsBits.Speak,
-    PermissionFlagsBits.SendMessages,
+    ...(policy.textChat === 'nobody' ? [] : [PermissionFlagsBits.SendMessages]),
     PermissionFlagsBits.ReadMessageHistory,
   ];
 
@@ -397,7 +400,7 @@ export function buildCreationOverwrites(input: BuildCreationOverwritesInput): Ov
     if (policy.textChat !== 'open') everyoneDeny.push(PermissionFlagsBits.SendMessages);
   }
   if (policy.textChat === 'open') everyoneAllow.push(PermissionFlagsBits.SendMessages);
-  if (policy.textChat === 'locked') everyoneDeny.push(PermissionFlagsBits.SendMessages);
+  if (policy.textChat !== 'inherit' && policy.textChat !== 'open') everyoneDeny.push(PermissionFlagsBits.SendMessages);
 
   // 3. @everyone : verrouillage et chat, rien d'autre.
   if (everyoneAllow.length > 0 || everyoneDeny.length > 0) {
@@ -656,6 +659,9 @@ export function renderChannelName(template: string, displayName: string): string
 export const MODES_ECRITURE = ['everyone', 'inVoice', 'ownerOnly', 'nobody'] as const;
 export type ModeEcriture = (typeof MODES_ECRITURE)[number];
 
+/** Choix du menu qui rend l'écriture à la catégorie ; ce n'est pas un mode mémorisé. */
+export const MODE_HERITE = 'inherit' as const;
+
 /** Un salon sans réglage explicite suit sa catégorie, ce que le panneau nomme « Tout le monde ». */
 export const MODE_ECRITURE_PAR_DEFAUT: ModeEcriture = 'everyone';
 
@@ -709,22 +715,30 @@ export function estModeEcriture(value: unknown): value is ModeEcriture {
 /** Personne d'autre ne valide ce que le dashboard écrit. Une valeur inconnue
  *  retombe sur « Tout le monde », qui est le comportement historique d'un salon
  *  sans réglage — et non un mode plus fermé qu'on n'a pas demandé. */
+export function estChoixModeEcriture(value: unknown): value is ModeEcriture | typeof MODE_HERITE {
+  return value === MODE_HERITE || estModeEcriture(value);
+}
+
 export function normaliserModeEcriture(value: unknown): ModeEcriture {
   return estModeEcriture(value) ? value : MODE_ECRITURE_PAR_DEFAUT;
 }
 
-/** Pont vers l'ancien réglage à trois valeurs, tant que la base ne porte pas les
- *  quatre modes (colonne à ajouter côté `packages/database`). `inherit` n'est pas
- *  un mode : le salon suit sa catégorie, ce que le panneau affiche « Tout le monde ». */
-export function modeEcritureDepuisTextChat(textChat: TempVoiceTextChatMode): ModeEcriture {
-  return textChat === 'locked' ? 'ownerOnly' : 'everyone';
+/** Table unique réglage du générateur ↔ mode du panneau ; `null` = « Hérité » (la catégorie décide). */
+export const MODE_ECRITURE_PAR_TEXT_CHAT: Readonly<Record<TempVoiceTextChatMode, ModeEcriture | null>> = {
+  inherit: null,
+  open: 'everyone',
+  inVoice: 'inVoice',
+  locked: 'ownerOnly',
+  nobody: 'nobody',
+};
+
+export function modeEcritureDepuisTextChat(textChat: TempVoiceTextChatMode): ModeEcriture | null {
+  return MODE_ECRITURE_PAR_TEXT_CHAT[textChat];
 }
 
-/** Repli dans l'autre sens : `inVoice` et `nobody` refusent tous deux @everyone,
- *  donc ils se rangent sous `locked`. Une base restée à trois valeurs garde ainsi
- *  un salon fermé fermé — jamais l'inverse. */
-export function textChatDepuisModeEcriture(mode: ModeEcriture): TempVoiceTextChatMode {
-  return mode === 'everyone' ? 'open' : 'locked';
+export function textChatDepuisModeEcriture(mode: ModeEcriture | null): TempVoiceTextChatMode {
+  const trouve = TEMP_VOICE_TEXT_CHAT_MODES.find((textChat) => MODE_ECRITURE_PAR_TEXT_CHAT[textChat] === mode);
+  return trouve ?? 'inherit';
 }
 
 export interface SurchargesModeEcriture {

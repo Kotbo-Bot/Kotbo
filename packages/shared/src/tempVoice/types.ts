@@ -16,7 +16,7 @@ export type TempVoiceOwnerPower = 'mute' | 'deafen' | 'move' | 'manageChannel' |
  * autorise - seule autorisation explicite du module, assumée, et que
  * `grantableBits` empêche de dépasser un refus de la catégorie.
  */
-export type TempVoiceTextChatMode = 'inherit' | 'open' | 'locked';
+export type TempVoiceTextChatMode = 'inherit' | 'open' | 'inVoice' | 'locked' | 'nobody';
 
 export interface TempVoicePolicy {
   /** Places du salon à la création ; 0 laisse le salon sans limite. */

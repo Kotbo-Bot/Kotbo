@@ -3397,6 +3397,8 @@
   "panel_tempvoice_mode_owneronly_desc": "No one else can write.",
   "panel_tempvoice_mode_nobody_label": "No one",
   "panel_tempvoice_mode_nobody_desc": "Including me. The channel becomes a display-only board.",
+  "panel_tempvoice_mode_inherit_label": "Inherited (category)",
+  "panel_tempvoice_mode_inherit_desc": "The category decides again.",
   "panel_tempvoice_subject_rename": "renaming",
   "panel_tempvoice_subject_limit": "the member limit",
   "panel_tempvoice_subject_lock": "locking",

@@ -3397,6 +3397,8 @@
   "panel_tempvoice_mode_owneronly_desc": "Personne d'autre ne peut écrire.",
   "panel_tempvoice_mode_nobody_label": "Personne",
   "panel_tempvoice_mode_nobody_desc": "Y compris moi. Le salon devient un mur d'affichage.",
+  "panel_tempvoice_mode_inherit_label": "Hérité (catégorie)",
+  "panel_tempvoice_mode_inherit_desc": "La catégorie décide de nouveau.",
   "panel_tempvoice_subject_rename": "le renommage",
   "panel_tempvoice_subject_limit": "la limite de places",
   "panel_tempvoice_subject_lock": "le verrouillage",

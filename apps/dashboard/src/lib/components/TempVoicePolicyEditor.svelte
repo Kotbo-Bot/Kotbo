@@ -38,7 +38,9 @@
   const TEXT_CHAT_MODES: Array<{ key: TempVoiceTextChatMode; label: () => string; hint: () => string }> = [
     { key: 'inherit', label: () => m.cm_tv_chat_inherit(), hint: () => m.cm_tv_chat_inherit_hint() },
     { key: 'open', label: () => m.cm_tv_chat_open(), hint: () => m.cm_tv_chat_open_hint() },
+    { key: 'inVoice', label: () => m.cm_tv_chat_inVoice(), hint: () => m.cm_tv_chat_inVoice_hint() },
     { key: 'locked', label: () => m.cm_tv_chat_locked(), hint: () => m.cm_tv_chat_locked_hint() },
+    { key: 'nobody', label: () => m.cm_tv_chat_nobody(), hint: () => m.cm_tv_chat_nobody_hint() },
   ];
 
   /** Choix de rôle restants : un rôle déjà autorisé n'a pas à être reproposé. */
@@ -124,7 +126,7 @@
   <!-- Chat textuel du salon -->
   <div class="space-y-2">
     <span class="text-xs font-bold text-on-surface/80 block">{m.cm_tv_chat_label()}</span>
-    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
       {#each TEXT_CHAT_MODES as mode (mode.key)}
         <label
           for="{idPrefix}-chat-{mode.key}"

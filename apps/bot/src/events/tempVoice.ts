@@ -97,6 +97,9 @@ import {
   decisionRetraitAutorisation,
   transitionModeEcriture,
   estModeEcriture,
+  estChoixModeEcriture,
+  MODE_HERITE,
+  modeEcritureDepuisTextChat,
   nettoyagePresenceAuDemarrage,
   PATCH_PRESENCE_RETIREE,
   peutAgir,
@@ -905,10 +908,20 @@ async function lireEtatSalon(channel: VoiceChannel, entree: EntreeSalonTemporair
     limite,
     placesLibres,
     complet: placesLibres === 0,
-    modeEcriture: entree.modeEcriture ?? deduireModeEcriture(surchargeEveryone, surchargeProprietaire),
+    modeEcriture: entree.modeEcriture ?? deduireModeEcriture(
+      surchargeEveryone,
+      surchargeProprietaire,
+      everyonePeutEcrire(channel),
+    ),
     autorises,
     bannis,
   };
+}
+
+/** Droit effectif de @everyone, catégorie comprise ; `undefined` si Discord ne le dit pas. */
+function everyonePeutEcrire(channel: VoiceChannel): boolean | undefined {
+  const everyone = channel.guild?.roles?.everyone;
+  return everyone ? channel.permissionsFor?.(everyone)?.has(PermissionFlagsBits.SendMessages) : undefined;
 }
 
 type SurchargeLue = { allow?: { has(bit: bigint): boolean }; deny?: { has(bit: bigint): boolean } } | undefined;
@@ -920,8 +933,13 @@ type SurchargeLue = { allow?: { has(bit: bigint): boolean }; deny?: { has(bit: b
  * est donc rangé là. C'est `TempVoiceChannel.writeMode` qui le distingue, et
  * cette déduction ne sert plus qu'aux salons créés avant la colonne.
  */
-function deduireModeEcriture(everyone: SurchargeLue, proprietaire: SurchargeLue): ModeEcriture {
-  if (!everyone?.deny?.has(PermissionFlagsBits.SendMessages)) return MODE_ECRITURE_PAR_DEFAUT;
+export function deduireModeEcriture(
+  everyone: SurchargeLue,
+  proprietaire: SurchargeLue,
+  everyonePeutEcrire?: boolean,
+): ModeEcriture {
+  const refuse = everyone?.deny?.has(PermissionFlagsBits.SendMessages) || everyonePeutEcrire === false;
+  if (!refuse) return MODE_ECRITURE_PAR_DEFAUT;
   return proprietaire?.allow?.has(PermissionFlagsBits.SendMessages) ? 'ownerOnly' : 'nobody';
 }
 
@@ -1449,6 +1467,7 @@ function modeDuSalon(channel: VoiceChannel, entree: EntreeSalonTemporaire): Mode
   return deduireModeEcriture(
     everyoneId ? surcharges?.get(everyoneId) : undefined,
     surcharges?.get(entree.creatorId),
+    everyonePeutEcrire(channel),
   );
 }
 
@@ -1535,16 +1554,18 @@ async function appliquerSortieVocale(channel: VoiceChannel, membreId: string): P
 async function appliquerModeEcriture(
   channel: VoiceChannel,
   entree: EntreeSalonTemporaire,
-  nouveau: ModeEcriture,
+  nouveau: ModeEcriture | typeof MODE_HERITE,
 ): Promise<void> {
   const guildId = channel.guild?.id ?? '';
   const ancien = modeDuSalon(channel, entree);
+  const herite = nouveau === MODE_HERITE;
 
   // Les surcharges nominatives decident de qui doit se taire : les lire perimees
   // laisserait ecrire quelqu'un qu'on vient tout juste d'autoriser.
   await relireSalon(channel);
 
-  const surcharges = surchargesModeEcriture(
+  // « Hérité » retire ce que le mode a posé : la catégorie décide de nouveau.
+  const surcharges = herite ? { everyone: { SendMessages: null }, proprietaire: { SendMessages: null } } : surchargesModeEcriture(
     nouveau,
     categoryOverwriteFor(channel, guildId),
     categoryOverwriteFor(channel, entree.creatorId),
@@ -1562,7 +1583,7 @@ async function appliquerModeEcriture(
   const presents = [...(channel.members?.keys() ?? [])];
   const transition = transitionModeEcriture(
     ancien,
-    nouveau,
+    herite ? 'everyone' : nouveau,
     presents,
     originesSurcharge.originesDuSalon(guildId, channel.id),
   );
@@ -1579,7 +1600,7 @@ async function appliquerModeEcriture(
   // Une surcharge nominative prime sur @everyone : sans ce passage, « Personne »
   // laissait ecrire tous ceux qui avaient ete autorises. Seul le bit d'ecriture
   // part - la personne reste autorisee a entrer.
-  for (const membreId of membresAReduireAuSilence(
+  for (const membreId of herite ? [] : membresAReduireAuSilence(
     nouveau,
     surchargesMembresLues(channel, entree.creatorId),
     presents,
@@ -1590,7 +1611,8 @@ async function appliquerModeEcriture(
     if (retiree) originesSurcharge.oublier(guildId, channel.id, membreId);
   }
 
-  entree.modeEcriture = nouveau;
+  if (herite) delete entree.modeEcriture;
+  else entree.modeEcriture = nouveau;
 
   // La mémoire du salon meurt avec le process. Sans cette ligne, « ceux qui
   // sont en vocal » redevient au redémarrage un mode déduit - et les surcharges
@@ -1598,7 +1620,7 @@ async function appliquerModeEcriture(
   // Une base indisponible ne doit pas faire échouer le clic : le mode est
   // appliqué sur Discord, c'est l'essentiel.
   try {
-    await prisma.tempVoiceChannel.update({ where: { id: channel.id }, data: { writeMode: nouveau } });
+    await prisma.tempVoiceChannel.update({ where: { id: channel.id }, data: { writeMode: herite ? null : nouveau } });
   } catch (err) {
     logger.warn('TempVoice', `Mode d'écriture non persisté pour ${channel.id} :`, err);
   }
@@ -1811,7 +1833,15 @@ function menuModeEcriture(etat: EtatSalon, actif: boolean, locale: BotLocale): S
             .setDefault(mode === etat.modeEcriture),
           iconeMode(mode),
         );
-      }),
+      }).concat([
+        avecIcone(
+          new StringSelectMenuOptionBuilder()
+            .setLabel(m.panel_tempvoice_mode_option({ mode: m.panel_tempvoice_mode_inherit_label({}, { locale }) }, { locale }))
+            .setDescription(m.panel_tempvoice_mode_inherit_desc({}, { locale }))
+            .setValue(MODE_HERITE),
+          I.settings,
+        ),
+      ]),
     );
 }
 
@@ -2333,7 +2363,13 @@ async function createTempChannel(
   // Le générateur est à portée ICI et nulle part ailleurs : c'est le seul moment
   // où l'on sait par quel salon générateur on est passé. Ne pas le noter
   // maintenant, c'est ne plus jamais pouvoir le deviner.
-  tempChannels.set(tempChannel.id, { creatorId: member.id, generateurId: generator.channelId });
+  // Le mode du panneau suit le réglage du générateur (table unique du service).
+  const modeInitial = modeEcritureDepuisTextChat(policy.textChat);
+  tempChannels.set(tempChannel.id, {
+    creatorId: member.id,
+    generateurId: generator.channelId,
+    ...(modeInitial && modeInitial !== 'inVoice' ? { modeEcriture: modeInitial } : {}),
+  });
 
   // Objet nommé plutôt qu'écrit dans l'appel : `generatorChannelId` n'est pas
   // dans le client Prisma généré de ce worktree, qui précède la migration
@@ -2344,6 +2380,7 @@ async function createTempChannel(
     guildId: guild.id,
     creatorId: member.id,
     generatorChannelId: generator.channelId,
+    writeMode: modeInitial,
   };
 
   await prisma.tempVoiceChannel
@@ -2353,6 +2390,11 @@ async function createTempChannel(
   // La ligne de mention au-dessus de l'embed reste : c'est elle qui déclenche la
   // notification, un embed n'en produisant aucune.
   const entree = tempChannels.get(tempChannel.id) ?? { creatorId: member.id };
+  // « Ceux en vocal » : poser la présence des occupants, comme le fait le panneau.
+  if (modeInitial === 'inVoice') {
+    await appliquerModeEcriture(tempChannel, entree, 'inVoice').catch((err: unknown) =>
+      logger.warn('TempVoice', `Mode d'écriture initial non appliqué pour ${tempChannel.id} :`, err));
+  }
   const { charge, presentation } = await construirePanneau(tempChannel, entree);
 
   // Une categorie qui refuse `SendMessages` a @everyone prive aussi le bot, qui
@@ -3829,12 +3871,13 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
       return;
     }
 
-    const mode = normaliserModeEcriture(interaction.values[0]);
+    const valeur = interaction.values[0];
+    const mode = estChoixModeEcriture(valeur) ? valeur : normaliserModeEcriture(valeur);
     await appliquerModeEcriture(channel, cache, mode);
     await rafraichirSousPanneauSalon(ctx);
     await reponseSupplementaire(
       interaction,
-      `${iconeMode(mode)} ${m.panel_tempvoice_mode_applied({ mode: libelleModeEcriture(mode, locale).libelle }, { locale })}`,
+      `${mode === MODE_HERITE ? I.settings : iconeMode(mode)} ${m.panel_tempvoice_mode_applied({ mode: mode === MODE_HERITE ? m.panel_tempvoice_mode_inherit_label({}, { locale }) : libelleModeEcriture(mode, locale).libelle }, { locale })}`,
     );
     planifierRafraichissementPanneau(channel);
     return;
