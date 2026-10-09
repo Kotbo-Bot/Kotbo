@@ -10,6 +10,7 @@
   import { m } from '../../i18n';
   import { createSitePage, fetchMyEditorSites, type MyEditorSite, type SitePageKind } from '../../api/site';
   import { siteErrorMessage } from './siteErrors';
+  import SiteIcon from './SiteIcon.svelte';
 
   let sites = $state<MyEditorSite[]>([]);
   let loaded = $state(false);
@@ -58,7 +59,7 @@
             {#each site.pages.slice(0, 12) as page (page.id)}
               <li>
                 <a class="space-page" href={`/site/edit/${page.id}?guild=${site.guildId}`}>
-                  <span>{page.kind === 'WIKI' ? '📚' : '✍️'} {page.title}</span>
+                  <span class="space-title"><SiteIcon name={page.kind === 'WIKI' ? 'book' : 'pen'} size={16} />{page.title}</span>
                   <span class="text-2xs text-on-surface-variant">{page.publishedAt ? (page.hasUnpublishedChanges ? m.ste_status_changes() : m.ste_status_published()) : m.ste_status_draft()}</span>
                 </a>
               </li>
@@ -72,5 +73,7 @@
 
 <style>
   .space-page { display: flex; justify-content: space-between; gap: 12px; padding: 6px 10px; border-radius: 8px; text-decoration: none; color: inherit; font-size: 0.9rem; }
-  .space-page:hover { background: rgb(255 255 255 / 0.05); }
+  .space-page:hover { background: var(--color-surface-hover); }
+  .space-title { display: inline-flex; align-items: center; gap: 8px; min-width: 0; color: var(--color-on-surface); }
+  .space-title :global(.site-icon) { color: var(--color-on-surface-variant); }
 </style>
