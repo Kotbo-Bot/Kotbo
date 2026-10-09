@@ -12,7 +12,7 @@ import {
   collectNavPageIds,
   extractSiteDocumentText,
   foldSearchText,
-  isSiteThemeKey,
+  canonicalSiteTheme,
   normalizeSiteDocument,
   normalizeSiteNavigation,
   normalizeSiteThemeSettings,
@@ -33,6 +33,7 @@ import { invalidateSiteCache } from './siteService.js';
 import { findScamInDocument } from './siteModeration.js';
 import { buildSiteBlueprint, blueprintNavigation, type SiteTemplateKey } from './siteTemplates.js';
 import { readStaffPageSettings } from './blocks/vitrineBlocks.js';
+import { afterCommentApproved } from './siteActivity.js';
 
 export class SiteAdminError extends Error {
   constructor(
@@ -226,8 +227,10 @@ export async function updateSite(guildId: string, patch: SitePatch) {
   if (patch.bannerUrl !== undefined) data.bannerUrl = optionalImage(patch.bannerUrl);
   if (patch.faviconUrl !== undefined) data.faviconUrl = optionalImage(patch.faviconUrl);
   if (patch.theme !== undefined) {
-    if (!isSiteThemeKey(patch.theme)) throw new SiteAdminError('invalid_theme');
-    data.theme = patch.theme;
+    // Les anciens noms (verre, clair…) restent acceptés et sont ramenés au thème actuel.
+    const theme = canonicalSiteTheme(patch.theme);
+    if (!theme) throw new SiteAdminError('invalid_theme');
+    data.theme = theme;
   }
   if (patch.themeSettings !== undefined) data.themeSettings = normalizeSiteThemeSettings(patch.themeSettings) as Prisma.InputJsonValue;
   if (patch.customCss !== undefined) {
@@ -623,8 +626,8 @@ async function announcePublication(client: Client, guildId: string, siteId: stri
   const locale = await resolveGuildLocale(guildId);
   const label =
     page.kind === 'WIKI'
-      ? isFirst ? (locale === 'en' ? '📚 New wiki page' : '📚 Nouvelle page du wiki') : locale === 'en' ? '📚 Wiki page updated' : '📚 Page du wiki mise à jour'
-      : locale === 'en' ? '📰 New article' : '📰 Nouvel article';
+      ? isFirst ? (locale === 'en' ? 'New wiki page' : 'Nouvelle page du wiki') : locale === 'en' ? 'Wiki page updated' : 'Page du wiki mise à jour'
+      : locale === 'en' ? 'New article' : 'Nouvel article';
   // Un article republié après correction n'est pas réannoncé.
   if (page.kind === 'BLOG' && !isFirst) return;
   const embed = new EmbedBuilder()
@@ -651,8 +654,11 @@ export async function listComments(guildId: string, status: unknown) {
 
 export async function setCommentStatus(guildId: string, commentId: string, status: unknown): Promise<void> {
   if (status !== 'VISIBLE' && status !== 'HIDDEN') throw new SiteAdminError('invalid_field');
-  const updated = await prisma.siteComment.updateMany({ where: { id: commentId, guildId }, data: { status } });
-  if (updated.count === 0) throw new SiteAdminError('comment_missing', 404);
+  const previous = await prisma.siteComment.findFirst({ where: { id: commentId, guildId }, select: { status: true } });
+  if (!previous) throw new SiteAdminError('comment_missing', 404);
+  await prisma.siteComment.update({ where: { id: commentId }, data: { status } });
+  // Retenu par la modération puis affiché : récompense, MP à l'auteur et à celui de l'article.
+  if (previous.status === 'PENDING' && status === 'VISIBLE') afterCommentApproved(commentId);
 }
 
 export async function deleteComment(guildId: string, commentId: string): Promise<void> {

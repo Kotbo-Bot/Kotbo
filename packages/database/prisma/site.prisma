@@ -50,7 +50,7 @@ model CommunitySite {
 
   // Thème prêt à l'emploi et ses réglages (accent, police, arrondis, fond,
   // disposition de la navigation). Le CSS libre est stocké déjà filtré.
-  theme         String  @default("verre")
+  theme         String  @default("azur")
   themeSettings Json    @default("{}")
   customCss     String?
 
@@ -63,6 +63,9 @@ model CommunitySite {
   staffPage Json @default("{}")
   // Widgets, partenaires saisis à la main, commentaires par défaut…
   settings  Json @default("{}")
+  // Récompenses de l'activité sur le site (visite du jour, participation,
+  // lecture, vote) : montants en monnaie du bot et en XP, plafonds.
+  rewards   Json @default("{}")
 
   wikiEditorRoleIds     String[] @default([])
   blogEditorRoleIds     String[] @default([])
@@ -306,4 +309,68 @@ model SiteVisitor {
   @@unique([siteId, dateKey, scope, visitorHash], map: "site_visitors_key")
   @@index([dateKey])
   @@map("site_visitors")
+}
+
+enum SiteRewardKind {
+  DAILY
+  PARTICIPATION
+  READ
+  VOTE
+}
+
+// Réglages d'un membre pour le site de son serveur : profil public masqué,
+// notifications en MP, séries de visites.
+model SiteMemberSettings {
+  id String @id @default(cuid())
+
+  guildId String
+  userId  String
+
+  profileHidden Boolean @default(false)
+  // { comments, tickets, shop, voteReminder } : booléens.
+  notifications Json @default("{}")
+
+  dailyStreak  Int     @default(0)
+  lastDailyKey String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([guildId, userId], map: "site_member_settings_key")
+  @@map("site_member_settings")
+}
+
+// Récompense versée pour une action sur le site. La clé de référence rend chaque
+// versement unique (jour, page lue, commentaire…) : rejouer ne paie pas deux fois.
+model SiteRewardLog {
+  id String @id @default(cuid())
+
+  guildId String
+  userId  String
+  kind    SiteRewardKind
+  refKey  String
+  coins   Int @default(0)
+  xp      Int @default(0)
+
+  createdAt DateTime @default(now())
+
+  @@unique([guildId, userId, refKey], map: "site_reward_logs_key")
+  @@index([guildId, userId, createdAt])
+  @@map("site_reward_logs")
+}
+
+// Ticket ouvert depuis le site : le membre est prévenu en MP quand le staff
+// répond (au plus un message par délai, voir `lastNotifiedAt`).
+model SiteTicketLink {
+  id String @id @default(cuid())
+
+  ticketId String @unique
+  guildId  String
+  userId   String
+
+  lastNotifiedAt DateTime?
+  createdAt      DateTime  @default(now())
+
+  @@index([guildId])
+  @@map("site_ticket_links")
 }

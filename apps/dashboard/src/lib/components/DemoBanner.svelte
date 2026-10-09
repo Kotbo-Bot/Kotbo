@@ -24,8 +24,8 @@
           </svg>
         </span>
         <div class="min-w-0">
-          <span class="font-semibold text-primary">Mode Démonstration</span>
-          <span class="text-on-surface-variant hidden md:inline"> — Vous explorez le vrai dashboard sans serveur. Les actions sont enregistrées dans votre navigateur (localStorage).</span>
+          <span class="font-semibold text-primary">{m.demo_mode()}</span>
+          <span class="text-on-surface-variant hidden md:inline">{m.demo_description()}</span>
         </div>
       </div>
 
@@ -42,9 +42,9 @@
           type="button"
           onclick={handleReset}
           class="px-2.5 py-1 rounded-md text-xs font-medium text-on-surface-variant hover:text-on-surface hover:bg-surface-container-highest transition-colors cursor-pointer"
-          title="Remet toutes les modifications à zéro"
+          title={m.demo_reset_title()}
         >
-          Réinitialiser
+          {m.demo_reset()}
         </button>
 
         <a
@@ -53,7 +53,7 @@
           rel="noopener noreferrer"
           class="inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-semibold bg-primary text-on-primary hover:opacity-90 transition-opacity shadow-xs"
         >
-          <span>Ajouter Kotbo</span>
+          <span>{m.demo_add_kotbo()}</span>
           <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
             <polyline points="15 3 21 3 21 9" />
@@ -65,7 +65,7 @@
           type="button"
           onclick={() => (dismissed = true)}
           class="p-1 rounded-md text-on-surface-variant hover:text-on-surface hover:bg-surface-container-highest transition-colors cursor-pointer"
-          aria-label="Fermer le bandeau"
+          aria-label="{m.demo_dismiss()}"
         >
           <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <line x1="18" y1="6" x2="6" y2="18" />

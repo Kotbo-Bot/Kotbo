@@ -134,3 +134,24 @@ Le verrou vit en mémoire du process du bot (une seule instance), il ne survit p
 - Migrations à appliquer : `20261109100000_community_site` et `20261109110000_mcp_site_permissions`.
 - Images : `SITE_ASSETS_DIR=/app/data/site-assets` dans le conteneur du bot. Ce dossier doit être un **volume persistant** sur le VPS, sinon les images disparaissent à chaque redéploiement. Quota de 500 Mo par site.
 - nginx du dashboard : `location ^~ /s/` relaie vers `/api/site/render/s/…` de l'API, `/robots.txt` aussi.
+
+## v2 : design façon Azuriom et fonctions de communauté
+
+Décisions arrêtées avec Elouan le 2026-10-09, livrées d'un seul tenant sur `feat/site-communautaire`.
+
+### Design
+
+- **Rien qui fasse « généré par IA »** : pas d'emoji en guise d'icône, pas de violet par défaut, pas de dégradés en halo ni d'effet verre, pas de cartes toutes identiques, textes courts et concrets. Vaut pour le site public et pour les écrans du site dans le dashboard (le reste du dashboard suit son propre chantier UI).
+- **Thème de base façon Azuriom**, en **clair et sombre au choix du visiteur** (bouton dans la barre, préférence du système par défaut) : barre de navigation pleine sur toute la largeur, grande bannière d'accueil sur l'image du serveur, cartes sobres, pied de page en colonnes.
+- Bannière d'accueil : membres en ligne et total, bouton Rejoindre le Discord, puis les dernières actualités en cartes avec vignette.
+- Les anciens thèmes (Verre, Néon, Arcade…) sont refaits dans le même esprit ; chaque site existant bascule sur l'équivalent le plus proche.
+- Sections de page prêtes à l'emploi : bannière d'appel, chiffres clés calculés en direct, bande-annonce et galerie, témoignages et FAQ.
+
+### Fonctions
+
+- **Boutique** : la boutique du module Économie, enrichie et achetable sur Discord comme sur le site. Monnaie du bot uniquement pour l'instant ; le modèle garde la place d'un prix en argent réel pour plus tard. Articles : rôles Discord (durée possible, retrait à l'expiration), objets et monnaie du bot, et tout ce que l'économie sait livrer. Abonnements prélevés en monnaie du bot à chaque période (rappel en MP si le solde manque, retrait du rôle après un délai de grâce). Règles : stock, limite par membre, promotions datées, accès par rôle ou niveau, validation par le staff (remboursement si refus), codes promo, cadeau à un autre membre. Pas de serveur de jeu (ni RCON, ni plugin).
+- **Votes serveur** : top.gg, annuaires Discord FR et sites de classement de serveurs de jeu, avec vérification du vote quand le site l'offre. Récompenses dans l'économie, séries, classement des voteurs, rappel en MP quand le vote est de nouveau possible.
+- **Forum** : par catégorie, soit miroir d'un salon forum Discord (sujets et réponses dans les deux sens), soit propre au site.
+- **Site qui se tient à jour seul** : messages d'un salon d'annonces repris en actualités, changelog généré, pages de modules créées et tenues à jour automatiquement, résumé de la semaine en article.
+- **Galerie de thèmes partagés** : tout serveur publie directement (signalable). Un thème partagé contient couleurs, polices, arrondis, CSS personnalisé (refiltré à l'installation), modèles de pages (sans contenu privé du serveur d'origine) et menu.
+- **Membres** : profils publics (visibles par défaut, le membre peut se masquer), espace membre complet (inventaire, quêtes, tickets, candidatures, votes, achats), récompenses pour l'activité web (vote, participation plafonnée par jour, visite quotidienne avec série, lecture du wiki une fois par page), notifications en MP Discord au choix du membre.

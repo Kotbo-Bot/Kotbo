@@ -121,6 +121,6 @@
 </SectionCard>
 
 <style>
-  .nav-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px; border-radius: 10px; background: rgb(255 255 255 / 0.03); }
-  .nav-row.is-nested { margin-left: 32px; background: rgb(255 255 255 / 0.02); }
+  .nav-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px; border-radius: 10px; background: var(--color-surface-container); }
+  .nav-row.is-nested { margin-left: 32px; background: var(--color-surface-container); }
 </style>

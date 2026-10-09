@@ -1,6 +1,7 @@
 /**
- * Gabarit d'une page du site communautaire : `<head>`, en-tête ou barre
- * latérale selon le thème, contenu, pied de page, habillage Kotbo.
+ * Gabarit d'une page du site communautaire : `<head>`, barre de navigation (ou
+ * menu latéral selon le thème), bannière d'accueil, contenu, pied de page en
+ * colonnes, habillage Kotbo.
  *
  * La racine du contenu (`.site-root`) porte un style en ligne `!important`
  * qu'aucune feuille ne peut écraser : elle crée son propre contexte
@@ -12,6 +13,8 @@ import {
   normalizeSiteNavigation,
   resolveSiteTheme,
   siteFontStylesheetUrl,
+  siteIconSvg,
+  siteThemeColorCss,
   type ResolvedSiteTheme,
   type SiteNavItem,
 } from '@kotbo/shared';
@@ -58,6 +61,10 @@ export interface ShellOptions {
   navPages: PageSummary[];
   hasWiki: boolean;
   hasBlog: boolean;
+  /** Invitation Discord du site, reprise dans le pied de page. */
+  inviteUrl?: string | null;
+  /** Bannière pleine largeur entre la barre et le contenu (accueil). */
+  hero?: string;
   main: string;
   /** Données structurées schema.org, sérialisées dans une balise à nonce. */
   jsonLd?: Record<string, unknown> | null;
@@ -113,55 +120,62 @@ function defaultNav(opts: ShellOptions): SiteNavItem[] {
   return items;
 }
 
+function navLink(item: ResolvedNavItem, activeKey: string | null | undefined): string {
+  if (!item.href) return '';
+  const current = item.key !== null && item.key === activeKey;
+  return `<a${attrs({ href: item.href, 'aria-current': current ? 'page' : null, rel: item.external ? 'noopener noreferrer' : null, target: item.external ? '_blank' : null })}>${esc(item.label)}</a>`;
+}
+
 function renderNavItems(items: ResolvedNavItem[], activeKey: string | null | undefined): string {
   return items
     .map((item) => {
-      const current = item.key !== null && item.key === activeKey;
-      const link = item.href
-        ? `<a${attrs({ href: item.href, 'aria-current': current ? 'page' : null, rel: item.external ? 'noopener noreferrer' : null, target: item.external ? '_blank' : null })}>${esc(item.label)}</a>`
-        : '';
-      if (item.children.length === 0) return link;
-      const children = renderNavItems(item.children, activeKey);
-      return `<details><summary>${esc(item.label)}</summary><div>${link}${children}</div></details>`;
+      if (item.children.length === 0) return navLink(item, activeKey);
+      const open = item.children.some((c) => c.key !== null && c.key === activeKey);
+      return `<details${open ? ' data-current' : ''}><summary>${esc(item.label)}${siteIconSvg('chevron-down', 16)}</summary><div>${navLink(item, activeKey)}${renderNavItems(item.children, activeKey)}</div></details>`;
     })
     .join('');
 }
 
-const ICONS = {
-  search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>',
-  menu: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>',
-  rss: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 11a8 8 0 0 1 8 8M5 5a14 14 0 0 1 14 14"/><circle cx="6" cy="18" r="1.5" fill="currentColor"/></svg>',
-};
+/** Liens du menu à plat, pour le pied de page. */
+function flatLinks(items: ResolvedNavItem[]): ResolvedNavItem[] {
+  return items.flatMap((item) => [item, ...flatLinks(item.children)]).filter((item) => item.href);
+}
 
-function brand(opts: ShellOptions): string {
+function brand(opts: ShellOptions, size = 36): string {
   const logo = opts.site.logoUrl ?? opts.identity.iconUrl;
   const mark = logo
-    ? `<img${attrs({ src: logo, alt: '', width: 36, height: 36 })}>`
-    : `<span class="avatar avatar-md avatar-fallback" aria-hidden="true">${esc(opts.identity.name.slice(0, 1).toUpperCase())}</span>`;
+    ? `<img${attrs({ src: logo, alt: '', width: size, height: size })}>`
+    : `<span class="brand-fallback" aria-hidden="true">${esc(opts.identity.name.slice(0, 1).toUpperCase())}</span>`;
   return `<a class="brand"${attrs({ href: opts.basePath })}>${mark}<span class="brand-name">${esc(opts.identity.name)}</span></a>`;
+}
+
+function modeToggle(opts: ShellOptions): string {
+  const label = m.site_mode_toggle({}, { locale: opts.locale });
+  return `<button type="button" class="icon-btn mode-toggle" data-mode-toggle${attrs({ 'aria-label': label, title: label })}>${siteIconSvg('moon', 20, 'icon icon-moon')}${siteIconSvg('sun', 20, 'icon icon-sun')}</button>`;
 }
 
 function headerTop(opts: ShellOptions, nav: ResolvedNavItem[]): string {
   const o = { locale: opts.locale };
-  return `<header class="site-header"><div class="site-header-inner">
+  return `<header class="site-header"><div class="container site-header-inner">
   ${brand(opts)}
-  <button type="button" class="icon-btn menu-toggle" data-menu-toggle aria-controls="site-nav" aria-expanded="false" aria-label="${esc(m.site_menu({}, o))}">${ICONS.menu}</button>
   <nav id="site-nav" class="nav" aria-label="${esc(m.site_menu({}, o))}">${renderNavItems(nav, opts.activeKey)}</nav>
   <div class="header-actions">
-    <a class="icon-btn"${attrs({ href: `${opts.basePath}/search`, 'aria-label': m.site_search({}, o) })}>${ICONS.search}</a>
-    <span data-viewer-slot></span>
+    <a class="icon-btn"${attrs({ href: `${opts.basePath}/search`, 'aria-label': m.site_search({}, o), title: m.site_search({}, o) })}>${siteIconSvg('search')}</a>
+    ${modeToggle(opts)}
+    <span class="viewer-slot" data-viewer-slot></span>
+    <button type="button" class="icon-btn menu-toggle" data-menu-toggle aria-controls="site-nav" aria-expanded="false" aria-label="${esc(m.site_menu({}, o))}">${siteIconSvg('menu')}</button>
   </div>
 </div></header>`;
 }
 
 function sideNav(opts: ShellOptions, nav: ResolvedNavItem[]): string {
   const o = { locale: opts.locale };
-  return `<div class="side-top">${brand(opts)}<button type="button" class="icon-btn" data-menu-toggle aria-controls="site-side" aria-expanded="false" aria-label="${esc(m.site_menu({}, o))}" style="margin-left:auto">${ICONS.menu}</button></div>
+  return `<div class="side-top">${brand(opts)}<div class="header-actions">${modeToggle(opts)}<button type="button" class="icon-btn" data-menu-toggle aria-controls="site-side" aria-expanded="false" aria-label="${esc(m.site_menu({}, o))}">${siteIconSvg('menu')}</button></div></div>
 <aside id="site-side" class="side-nav">
-  ${brand(opts)}
+  <div class="side-brand">${brand(opts)}${modeToggle(opts)}</div>
   ${renderSearchForm(opts.basePath, opts.locale)}
   <nav class="nav" aria-label="${esc(m.site_menu({}, o))}">${renderNavItems(nav, opts.activeKey)}</nav>
-  <div data-viewer-slot></div>
+  <div class="viewer-slot" data-viewer-slot></div>
 </aside>`;
 }
 
@@ -173,6 +187,28 @@ function breadcrumbs(opts: ShellOptions): string {
     )
     .join('');
   return `<nav class="breadcrumb" aria-label="${esc(m.site_breadcrumb({}, { locale: opts.locale }))}"><ol>${items}</ol></nav>`;
+}
+
+function footer(opts: ShellOptions, nav: ResolvedNavItem[]): string {
+  const o = { locale: opts.locale };
+  const links = flatLinks(nav)
+    .slice(0, 8)
+    .map((item) => `<li>${navLink(item, null)}</li>`)
+    .join('');
+  const community = [
+    opts.inviteUrl ? `<li><a${attrs({ href: opts.inviteUrl, rel: 'noopener', target: '_blank' })}>${esc(m.site_join_discord({}, o))}</a></li>` : '',
+    `<li><a${attrs({ href: `${opts.basePath}/search` })}>${esc(m.site_search({}, o))}</a></li>`,
+    opts.hasBlog ? `<li><a${attrs({ href: `${opts.basePath}/rss.xml` })}>${esc(m.site_rss_feed({}, o))}</a></li>` : '',
+  ].join('');
+  const about = opts.site.tagline ? `<p>${esc(opts.site.tagline)}</p>` : '';
+  return `<footer class="site-footer">
+  <div class="container footer-grid">
+    <div class="footer-about">${brand(opts, 32)}${about}</div>
+    ${links ? `<nav class="footer-col" aria-label="${esc(m.site_footer_navigation({}, o))}"><h2>${esc(m.site_footer_navigation({}, o))}</h2><ul>${links}</ul></nav>` : ''}
+    <div class="footer-col"><h2>${esc(m.site_footer_community({}, o))}</h2><ul>${community}</ul></div>
+  </div>
+  <div class="container footer-bottom">© ${new Date().getFullYear()} ${esc(opts.identity.name)}</div>
+</footer>`;
 }
 
 function kotboBar(opts: ShellOptions): string {
@@ -241,12 +277,31 @@ function clientStrings(locale: SiteLocale): Record<string, string> {
     agentActive: m.site_agent_active({ key: '{key}' }, o),
     agentInterrupt: m.site_agent_interrupt({}, o),
     agentInterrupted: m.site_agent_interrupted({}, o),
+    rewardCoins: m.site_reward_coins({ count: '{count}' }, o),
+    rewardXp: m.site_reward_xp({ count: '{count}' }, o),
+    rewardDaily: m.site_reward_toast_daily({}, o),
+    rewardRead: m.site_reward_toast_read({}, o),
+    rewardOther: m.site_reward_toast_other({}, o),
+    rewardStreak: m.site_reward_toast_streak({ count: '{count}' }, o),
   };
 }
 
 /** JSON sûr dans une balise `<script>` : `<` échappé, la balise ne peut pas se fermer. */
 export function safeJson(value: unknown): string {
   return JSON.stringify(value).replace(/</g, '\\u003c');
+}
+
+/**
+ * Applique le mode choisi par le visiteur avant le premier rendu, pour éviter
+ * un flash de l'autre palette. `data-effective` sert à l'icône de la bascule.
+ */
+function modeBootScript(siteId: string, defaultMode: string): string {
+  return `(function(){var d=document.documentElement,k=${safeJson(`kotbo-site-mode:${siteId}`)},m=null;try{m=localStorage.getItem(k)}catch(e){}if(m==='light'||m==='dark')d.setAttribute('data-mode',m);var e=m||${safeJson(defaultMode)};if(e==='auto')e=window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';d.setAttribute('data-effective',e)})();`;
+}
+
+/** Image de bannière utilisable en `url()` : HTTPS ou image du site, sans caractère qui casse la règle. */
+export function safeBannerUrl(url: string | null | undefined): string | null {
+  return url && /^(https:\/\/|\/s\/_\/a\/)[^"'()\s\\]+$/.test(url) ? url : null;
 }
 
 export function renderSiteShell(opts: ShellOptions): string {
@@ -269,8 +324,8 @@ export function renderSiteShell(opts: ShellOptions): string {
 ${description ? `<meta name="description"${attrs({ content: description })}>` : ''}
 <link rel="canonical"${attrs({ href: canonical })}>
 ${opts.noindex ? '<meta name="robots" content="noindex, nofollow">' : ''}
-<meta name="theme-color"${attrs({ content: theme.bg })}>
-<meta name="color-scheme"${attrs({ content: theme.dark ? 'dark' : 'light' })}>
+<meta name="theme-color"${attrs({ content: theme.initial.header })}>
+<meta name="color-scheme"${attrs({ content: theme.mode === 'auto' ? 'light dark' : theme.mode })}>
 <meta property="og:site_name"${attrs({ content: opts.identity.name })}>
 <meta property="og:title"${attrs({ content: opts.title })}>
 <meta property="og:type"${attrs({ content: opts.ogType ?? 'website' })}>
@@ -280,6 +335,7 @@ ${description ? `<meta property="og:description"${attrs({ content: description }
 ${absoluteImage ? `<meta property="og:image"${attrs({ content: absoluteImage })}><meta name="twitter:card" content="summary_large_image">` : '<meta name="twitter:card" content="summary">'}
 ${favicon ? `<link rel="icon"${attrs({ href: favicon })}>` : ''}
 <link rel="alternate" type="application/rss+xml"${attrs({ title: opts.identity.name, href: `${opts.basePath}/rss.xml` })}>
+<script${attrs({ nonce: opts.nonce })}>${modeBootScript(opts.site.id, theme.mode)}</script>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet"${attrs({ href: siteFontStylesheetUrl(theme) })}>
 <link rel="stylesheet"${attrs({ href: `/s/_/site.css?v=${versions.css}` })}>
@@ -289,13 +345,13 @@ ${opts.jsonLd ? `<script type="application/ld+json"${attrs({ nonce: opts.nonce }
 <script defer${attrs({ src: `/s/_/site.js?v=${versions.js}`, nonce: opts.nonce })}></script>`;
 
   const preview = opts.previewNotice ? `<div class="notice" role="note">${esc(m.site_draft_preview({}, o))}</div>` : '';
-  const main = `<main id="contenu" class="main" tabindex="-1">${preview}${breadcrumbs(opts)}${opts.main}</main>`;
-  const footer = `<footer class="site-footer"><span>© ${new Date().getFullYear()} ${esc(opts.identity.name)}</span><a${attrs({ href: `${opts.basePath}/rss.xml`, 'aria-label': 'RSS' })}>RSS</a></footer>`;
+  const main = `<main id="contenu" class="main container" tabindex="-1">${preview}${breadcrumbs(opts)}${opts.main}</main>`;
+  const hero = opts.hero ?? '';
 
   const body =
     theme.navLayout === 'side'
-      ? `${sideNav(opts, nav)}<div class="layout-side-main">${main}${footer}</div>`
-      : `${headerTop(opts, nav)}${main}${footer}`;
+      ? `${sideNav(opts, nav)}<div class="layout-side-main">${hero}${main}${footer(opts, nav)}</div>`
+      : `${headerTop(opts, nav)}${hero}${main}${footer(opts, nav)}`;
 
   return `<!doctype html>
 <html${attrs({
@@ -305,11 +361,12 @@ ${opts.jsonLd ? `<script type="application/ld+json"${attrs({ nonce: opts.nonce }
     'data-base': opts.basePath,
     'data-api': opts.apiOrigin,
     'data-page': opts.pageId ?? null,
+    'data-default-mode': theme.mode,
   })}>
 <head>
 ${head}
 </head>
-<body${attrs({ 'data-glass': theme.glass ? '1' : '0', 'data-glow': theme.glow ? '1' : '0', 'data-background': theme.background, 'data-nav': theme.navLayout })}>
+<body${attrs({ 'data-background': theme.background, 'data-nav': theme.navLayout, 'data-theme': theme.key })}>
 <a class="skip-link" href="#contenu">${esc(m.site_skip_to_content({}, o))}</a>
 <div class="${cls('site-root', theme.navLayout === 'side' && 'layout-side')}" style="isolation:isolate !important;position:relative !important;z-index:0 !important">
 ${body}
@@ -322,14 +379,8 @@ ${kotboBar(opts)}
 /** Variables du thème, puis CSS libre du site : le contenu de `<base>/_/theme.css`. */
 export function renderThemeCss(site: Pick<SiteRecord, 'theme' | 'themeSettings' | 'customCss' | 'bannerUrl'>, bannerUrl: string | null): string {
   const t = resolveSiteTheme(site.theme, site.themeSettings);
-  const banner = site.bannerUrl ?? bannerUrl;
+  const banner = safeBannerUrl(site.bannerUrl ?? bannerUrl);
   const vars = `:root{
-  --site-bg:${t.bg};
-  --site-surface:${t.surface};
-  --site-surface-strong:${t.surfaceStrong};
-  --site-text:${t.text};
-  --site-muted:${t.muted};
-  --site-border:${t.border};
   --site-accent:${t.accent};
   --site-on-accent:${t.onAccent};
   --site-radius:${t.radius}px;
@@ -337,6 +388,7 @@ export function renderThemeCss(site: Pick<SiteRecord, 'theme' | 'themeSettings' 
   --site-heading-font:"${t.headingFont}";
   --discord-logo:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M20.3 4.4A19.8 19.8 0 0 0 15.4 3l-.6 1.3a18.3 18.3 0 0 0-5.5 0L8.6 3a19.7 19.7 0 0 0-4.9 1.4C.5 9.1-.3 13.6.1 18.1a19.9 19.9 0 0 0 6 3l1.3-2.1a12.9 12.9 0 0 1-2-1l.5-.4a14.2 14.2 0 0 0 12.2 0l.5.4c-.6.4-1.3.7-2 1l1.3 2.1a19.8 19.8 0 0 0 6-3c.5-5.2-.9-9.7-3.6-13.7ZM8 15.3c-1.2 0-2.2-1.1-2.2-2.4S6.8 10.4 8 10.4s2.2 1.1 2.2 2.5-1 2.4-2.2 2.4Zm8 0c-1.2 0-2.2-1.1-2.2-2.4s1-2.5 2.2-2.5 2.2 1.1 2.2 2.5-1 2.4-2.2 2.4Z'/%3E%3C/svg%3E");
 }
-${t.background === 'banner' && banner && /^(https:\/\/|\/s\/_\/a\/)[^"()\s]+$/.test(banner) ? `body[data-background="banner"]{background:linear-gradient(color-mix(in srgb,var(--site-bg) 82%,transparent),var(--site-bg) 420px),url("${banner}") top center / 100% auto no-repeat,var(--site-bg)}` : ''}`;
+${siteThemeColorCss(t)}
+${t.background === 'banner' && banner ? `body[data-background="banner"]{background:linear-gradient(color-mix(in srgb,var(--site-bg) 86%,transparent),var(--site-bg) 480px),url("${banner}") top center / 100% auto no-repeat,var(--site-bg)}` : ''}`;
   return `${vars}\n${site.customCss ?? ''}\n`;
 }

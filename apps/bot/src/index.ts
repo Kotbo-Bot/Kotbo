@@ -70,6 +70,7 @@ import { registerLevelingListener } from './events/levelingEvents.js';
 import { registerSecurityVerificationListener } from './events/securityVerificationEvents.js';
 import { registerAutoResponseListener } from './events/autoResponseEvents.js';
 import { registerBumpReminderListener } from './events/bumpReminderEvents.js';
+import { registerSiteListeners } from './events/siteEvents.js';
 import { registerChannelLinkListener } from './events/channelLinkEvents.js';
 import { registerStarboardListener } from './events/starboardEvents.js';
 import { registerStaffServerListener } from './events/staffServerEvents.js';
@@ -487,6 +488,7 @@ client.once(Events.ClientReady, async (c) => {
   registerSecurityVerificationListener(scopeClientToModule(client, 'security_verification'));
   registerAutoResponseListener(scopeClientToModule(client, 'auto_responses'));
   registerBumpReminderListener(scopeClientToModule(client, 'bump_reminder'));
+  registerSiteListeners(scopeClientToModule(client, 'site'));
   registerChannelLinkListener(scopeClientToModule(client, 'channel_links'));
   registerStaffServerListener(scopeClientToModule(client, 'staff_server'));
   registerAbsenceMentionListener(scopeClientToModule(client, 'absences'));

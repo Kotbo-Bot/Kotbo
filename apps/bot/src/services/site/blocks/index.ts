@@ -28,6 +28,7 @@ import { discordBlocks } from './discordBlocks.js';
 import { engagementBlocks } from './engagementBlocks.js';
 import { demarchesBlocks } from './demarchesBlocks.js';
 import { contentBlocks } from './contentBlocks.js';
+import { memberBlocks } from './memberBlocks.js';
 
 export type { BlockContext, BlockRef } from './blockContext.js';
 
@@ -37,6 +38,7 @@ const REGISTRY: BlockRegistry = {
   ...engagementBlocks,
   ...demarchesBlocks,
   ...contentBlocks,
+  ...memberBlocks,
 };
 
 /** Fréquence de rafraîchissement des blocs en direct, en secondes. */

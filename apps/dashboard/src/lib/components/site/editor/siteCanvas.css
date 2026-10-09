@@ -11,7 +11,7 @@
   font-family: var(--site-font), system-ui, sans-serif;
   font-size: 16px;
   line-height: 1.65;
-  border-radius: 16px;
+  border-radius: 8px;
   border: 1px solid var(--site-border);
   padding: 40px clamp(16px, 5vw, 56px) 80px;
   min-height: 70vh;
@@ -59,7 +59,7 @@
 .site-canvas .callout { display: flex; gap: 12px; padding: 14px 16px; border-radius: var(--site-radius); border: 1px solid var(--site-border); border-left: 4px solid var(--callout, var(--site-accent)); background: var(--site-surface); }
 .site-canvas .callout-info { --callout: #3b82f6; } .site-canvas .callout-success { --callout: #22c55e; } .site-canvas .callout-warning { --callout: #f59e0b; }
 .site-canvas .callout-danger { --callout: #ef4444; } .site-canvas .callout-note { --callout: var(--site-muted); }
-.site-canvas .site-callout-switch { background: none; border: 0; font-size: 1.2rem; cursor: pointer; padding: 0; line-height: 1.6; }
+.site-canvas .site-callout-switch { background: none; border: 0; cursor: pointer; padding: 3px 0 0; line-height: 0; color: var(--callout, var(--site-accent)); }
 .site-canvas .callout-body { flex: 1; min-width: 0; }
 .site-canvas .callout-body > :first-child { margin-top: 0; }
 
@@ -109,7 +109,7 @@
   user-select: none;
 }
 .site-canvas .ProseMirror-selectednode > .site-atom, .site-canvas .site-atom.ProseMirror-selectednode, .site-canvas .ProseMirror-selectednode.site-atom { outline: 2px solid var(--site-accent); outline-offset: 2px; }
-.site-canvas .site-atom-icon { flex: none; width: 40px; height: 40px; display: grid; place-items: center; border-radius: 10px; background: color-mix(in srgb, var(--site-accent) 16%, transparent); font-size: 1.25rem; }
+.site-canvas .site-atom-icon { flex: none; width: 40px; height: 40px; display: grid; place-items: center; border-radius: 10px; background: color-mix(in srgb, var(--site-accent) 14%, transparent); color: var(--site-accent); }
 .site-canvas .site-atom-body { flex: 1; min-width: 0; }
 .site-canvas .site-atom-title { margin: 0; font-weight: 700; }
 .site-canvas .site-atom-summary { margin: 0; color: var(--site-muted); font-size: 0.88rem; }
@@ -130,26 +130,55 @@
   max-height: 360px;
   overflow-y: auto;
   padding: 6px;
-  border-radius: 12px;
-  border: 1px solid rgb(255 255 255 / 0.1);
-  background: rgb(18 20 26 / 0.97);
-  color: #e9ebf1;
-  box-shadow: 0 18px 50px rgb(0 0 0 / 0.45);
-  -webkit-backdrop-filter: blur(16px);
-  backdrop-filter: blur(16px);
+  border-radius: 8px;
+  border: 1px solid var(--color-outline-variant);
+  background: var(--color-surface-container-high);
+  color: var(--color-on-surface);
+  box-shadow: 0 12px 30px rgb(0 0 0 / 0.25);
   font: 14px/1.4 Inter, system-ui, sans-serif;
 }
-.site-slash-group { margin: 8px 8px 4px; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #8a93a3; }
+.site-slash-group { margin: 8px 8px 4px; font-size: 11px; font-weight: 700; color: var(--color-on-surface-variant); }
 .site-slash-item { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; padding: 7px 8px; border-radius: 8px; border: 0; background: transparent; color: inherit; cursor: pointer; }
-.site-slash-item.is-active { background: rgb(124 108 255 / 0.18); }
+.site-slash-item.is-active { background: color-mix(in srgb, var(--color-primary) 18%, transparent); }
 .site-slash-item.is-disabled { opacity: 0.5; }
-.site-slash-icon { flex: none; width: 30px; height: 30px; display: grid; place-items: center; border-radius: 8px; background: rgb(255 255 255 / 0.06); font-size: 13px; font-weight: 700; }
+.site-slash-icon { flex: none; width: 30px; height: 30px; display: grid; place-items: center; border-radius: 6px; background: var(--color-surface-container); color: var(--color-on-surface-variant); }
 .site-slash-text { display: flex; flex-direction: column; min-width: 0; }
-.site-slash-text small { color: #8a93a3; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.site-slash-empty { margin: 8px; color: #8a93a3; }
+.site-slash-text small { color: var(--color-on-surface-variant); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.site-slash-empty { margin: 8px; color: var(--color-on-surface-variant); }
 
 .site-canvas.is-readonly { opacity: 0.85; }
 .site-canvas.is-readonly .site-atom-button,
 .site-canvas.is-readonly .site-cell-handle,
 .site-canvas.is-readonly .site-image-toolbar,
 .site-canvas.is-readonly .site-callout-switch { pointer-events: none; opacity: 0.4; }
+
+/* Sections prêtes à l'emploi (mêmes règles que le site publié) */
+.site-canvas .sec-banner { position: relative; margin: 1.6em 0; border-radius: var(--site-radius); overflow: hidden; border: 1px solid var(--site-border); background: var(--site-surface-strong); color: var(--site-text); }
+.site-canvas .sec-banner.tone-accent { background: var(--site-accent); color: var(--site-on-accent); border-color: transparent; }
+.site-canvas .sec-banner.tone-dark { background: #14171c; color: #f1f3f6; border-color: transparent; }
+.site-canvas .sec-banner.has-image { color: #fff; border-color: transparent; background: linear-gradient(rgb(0 0 0 / 0.45), rgb(0 0 0 / 0.65)), var(--banner-image) center / cover no-repeat, #111; }
+.site-canvas .sec-banner-inner { padding: 40px 28px; max-width: 760px; }
+.site-canvas .sec-banner.align-center .sec-banner-inner { margin: 0 auto; text-align: center; }
+.site-canvas .sec-banner.is-tall .sec-banner-inner { padding-top: 88px; padding-bottom: 88px; }
+.site-canvas .sec-banner.tone-accent .btn-primary, .site-canvas .sec-banner.has-image .btn-primary, .site-canvas .sec-banner.tone-dark .btn-primary { background: #fff; color: #111; }
+.site-canvas .site-section-handle { position: absolute; top: 8px; right: 8px; z-index: 1; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 6px; border: 1px solid var(--site-border); background: var(--site-surface); color: var(--site-muted); cursor: pointer; opacity: 0; transition: opacity 0.15s; }
+.site-canvas .sec-banner:hover > .site-section-handle, .site-canvas .sec-banner:focus-within > .site-section-handle { opacity: 1; }
+
+.site-canvas .site-gallery-strip { display: flex; gap: 6px; margin-top: 8px; overflow: hidden; }
+.site-canvas .site-gallery-strip img { width: 56px; height: 42px; object-fit: cover; border-radius: 4px; flex: none; }
+
+.site-canvas .key-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+
+.site-canvas .testimonials { display: grid; grid-template-columns: repeat(var(--cols, 3), minmax(0, 1fr)); gap: 16px; margin: 1.6em 0; }
+.site-canvas .testimonials.cols-1 { --cols: 1; } .site-canvas .testimonials.cols-2 { --cols: 2; } .site-canvas .testimonials.cols-3 { --cols: 3; }
+.site-canvas .testimonial { margin: 0; display: flex; flex-direction: column; gap: 12px; padding: 18px; background: var(--site-surface); border: 1px solid var(--site-border); border-radius: var(--site-radius); }
+.site-canvas .testimonial blockquote { margin: 0; padding: 0; border: 0; color: var(--site-text); }
+.site-canvas .testimonial figcaption { display: flex; align-items: center; gap: 10px; margin-top: auto; }
+.site-canvas .testimonial figcaption > span { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.site-canvas .site-testimonial-avatar { flex: none; width: 44px; height: 44px; border-radius: 50%; overflow: hidden; display: grid; place-items: center; border: 1px dashed var(--site-border); background: var(--site-surface-strong); color: var(--site-muted); cursor: pointer; padding: 0; }
+.site-canvas .site-testimonial-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.site-canvas .site-testimonial-name, .site-canvas .site-testimonial-role { width: 100%; border: 0; background: transparent; color: var(--site-text); font: inherit; padding: 0; outline: none; }
+.site-canvas .site-testimonial-name { font-weight: 700; }
+.site-canvas .site-testimonial-role { color: var(--site-muted); font-size: 0.86rem; }
+.site-canvas.is-readonly .site-section-handle, .site-canvas.is-readonly .site-testimonial-avatar { pointer-events: none; }
+@media (max-width: 860px) { .site-canvas .testimonials, .site-canvas .key-stats { grid-template-columns: 1fr; } }

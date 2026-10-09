@@ -94,7 +94,7 @@
   <SectionCard>
     <div class="px-5 py-5 flex flex-wrap items-center justify-between gap-4">
       <div class="min-w-0">
-        <p class="text-2xs uppercase tracking-wider text-on-surface-variant">{m.ste_site_address()}</p>
+        <p class="text-2xs text-on-surface-variant">{m.ste_site_address()}</p>
         <a class="text-body font-semibold text-on-surface break-all" href={url} target="_blank" rel="noopener">{url}</a>
         <p class="text-body-sm text-on-surface-variant mt-1">{site.published ? m.ste_site_online_desc() : m.ste_site_offline_desc()}</p>
       </div>
@@ -166,8 +166,8 @@
   .counts { list-style: none; margin: 0; display: flex; flex-wrap: wrap; gap: 24px; }
   .counts li { display: flex; flex-direction: column; }
   .counts strong { font-size: 1.6rem; font-weight: 700; font-variant-numeric: tabular-nums; }
-  .counts span { font-size: 0.8rem; color: rgb(255 255 255 / 0.55); }
+  .counts span { font-size: 0.8rem; color: var(--color-on-surface-variant); }
   .resume { list-style: none; margin: 0; display: flex; flex-direction: column; gap: 6px; }
   .resume a { display: flex; flex-direction: column; padding: 8px 10px; border-radius: 10px; text-decoration: none; }
-  .resume a:hover { background: rgb(255 255 255 / 0.05); }
+  .resume a:hover { background: var(--color-surface-hover); }
 </style>

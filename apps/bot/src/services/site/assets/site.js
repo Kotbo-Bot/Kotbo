@@ -110,6 +110,41 @@
     });
   });
 
+  // ─── Mode clair / sombre ───────────────────────────────────────────────
+  // Le mode par défaut vient du thème (`data-default-mode`, éventuellement
+  // `auto`) ; le choix du visiteur est retenu par site, et appliqué avant le
+  // premier rendu par le script en tête de page.
+
+  var modeKey = 'kotbo-site-mode:' + root.getAttribute('data-site');
+  var systemDark = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+
+  function effectiveMode() {
+    var chosen = root.getAttribute('data-mode');
+    if (chosen === 'light' || chosen === 'dark') return chosen;
+    var fallback = root.getAttribute('data-default-mode') || 'auto';
+    if (fallback === 'auto') return systemDark && systemDark.matches ? 'dark' : 'light';
+    return fallback;
+  }
+
+  function syncEffectiveMode() {
+    root.setAttribute('data-effective', effectiveMode());
+  }
+
+  document.querySelectorAll('[data-mode-toggle]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var next = effectiveMode() === 'dark' ? 'light' : 'dark';
+      root.setAttribute('data-mode', next);
+      try {
+        localStorage.setItem(modeKey, next);
+      } catch (e) {
+        // Stockage indisponible (navigation privée) : le choix vaut pour la page.
+      }
+      syncEffectiveMode();
+    });
+  });
+  if (systemDark && systemDark.addEventListener) systemDark.addEventListener('change', syncEffectiveMode);
+  syncEffectiveMode();
+
   // Un sous-menu ouvert se referme quand on clique ailleurs.
   document.addEventListener('click', function (event) {
     document.querySelectorAll('.nav details[open]').forEach(function (d) {
@@ -147,6 +182,7 @@
       .then(function (data) {
         viewer = data.viewer || null;
         agent = data.agent || null;
+        pendingReward = data.reward || null;
       })
       .catch(function () {
         viewer = null;
@@ -156,6 +192,52 @@
         renderViewerSlots();
         renderAgentBanner();
       });
+  }
+
+  // ─── Récompenses de l'activité ─────────────────────────────────────────
+
+  var pendingReward = null;
+
+  /** Petit encart en bas de page : pièces, XP, série. */
+  function showReward(reward) {
+    if (!reward || (!reward.coins && !reward.xp)) return;
+    var parts = [];
+    if (reward.coins) parts.push((T.rewardCoins || '+{count}').replace('{count}', reward.coins));
+    if (reward.xp) parts.push((T.rewardXp || '+{count} XP').replace('{count}', reward.xp));
+    var title = reward.kind === 'DAILY' ? T.rewardDaily : reward.kind === 'READ' ? T.rewardRead : T.rewardOther;
+    var note = el('div', { class: 'reward-toast', role: 'status' });
+    note.appendChild(el('strong', null, title || ''));
+    note.appendChild(el('span', null, parts.join(' · ')));
+    if (reward.streak && reward.streak > 1) note.appendChild(el('span', { class: 'reward-streak' }, (T.rewardStreak || '').replace('{count}', reward.streak)));
+    document.body.appendChild(note);
+    setTimeout(function () {
+      note.classList.add('is-leaving');
+      setTimeout(function () { note.remove(); }, 400);
+    }, 5000);
+  }
+
+  /**
+   * Page lue jusqu'au bout : le repère de fin est visible après au moins
+   * 20 secondes sur la page. Une seule fois par page et par visite.
+   */
+  function trackReading() {
+    var mark = document.querySelector('[data-read-page]');
+    if (!mark || !viewer || !viewer.isMember || !('IntersectionObserver' in window)) return;
+    var started = Date.now();
+    var sent = false;
+    var observer = new IntersectionObserver(function (entries) {
+      if (sent || !entries.some(function (e) { return e.isIntersecting; })) return;
+      var wait = Math.max(0, 20000 - (Date.now() - started));
+      setTimeout(function () {
+        if (sent) return;
+        sent = true;
+        observer.disconnect();
+        request('POST', SITE_API + '/read/' + encodeURIComponent(mark.getAttribute('data-read-page')), {})
+          .then(function (data) { showReward(data.reward); })
+          .catch(function () {});
+      }, wait);
+    });
+    observer.observe(mark);
   }
 
   // ─── Agent MCP (gérants seulement) ─────────────────────────────────────
@@ -500,6 +582,22 @@
         },
       );
     },
+    'data-member-settings': function (form) {
+      var notifications = {};
+      form.querySelectorAll('input[name^="notify_"]').forEach(function (input) {
+        notifications[input.name.slice(7)] = input.checked;
+      });
+      var visible = form.querySelector('input[name="profileVisible"]');
+      submitWith(
+        form,
+        function () {
+          return request('POST', SITE_API + '/me/settings', { profileHidden: visible ? !visible.checked : undefined, notifications: notifications });
+        },
+        function (data) {
+          setStatus(form, (data && data.message) || T.formSent, 'ok');
+        },
+      );
+    },
   };
 
   document.addEventListener('submit', function (event) {
@@ -590,9 +688,11 @@
     // pour un anonyme, le rendu serveur est déjà le bon, sauf l'appel et le
     // ticket, qui doivent proposer la connexion.
     document.querySelectorAll('section.mod[data-viewer-aware]').forEach(function (section) {
-      var needsViewer = section.querySelector('[data-appeal], [data-ticket], [data-profile]');
+      var needsViewer = section.querySelector('[data-appeal], [data-ticket], [data-profile], [data-member-block]');
       if (viewer || needsViewer) refreshBlock(section);
     });
+    showReward(pendingReward);
+    trackReading();
   });
 
   // Le statut est exposé pour le débogage, pas pour d'autres scripts.

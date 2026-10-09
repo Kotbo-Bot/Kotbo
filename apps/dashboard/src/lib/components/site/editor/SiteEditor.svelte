@@ -32,18 +32,23 @@
     resolveSiteTheme,
     sanitizeSiteHref,
     siteFontStylesheetUrl,
+    siteIconSvg,
+    sitePaletteVars,
     SITE_HIGHLIGHT_COLORS,
     isSiteModuleKey,
     type SiteDocument,
+    type SiteIconName,
   } from '@kotbo/shared';
   import { m } from '../../../i18n';
   import { toast } from '../../../stores/toast.svelte';
   import { siteCollabUrl, uploadSiteAsset, type SiteCatalog, type SitePageSummary } from '../../../api/site';
   import { siteErrorMessage } from '../siteErrors';
   import {
+    Banner,
     Callout,
     Faq,
     FaqItem,
+    Gallery,
     Grid,
     GridCell,
     isAllowedSiteUri,
@@ -52,6 +57,8 @@
     SiteHighlight,
     SiteImage,
     SiteNodesBridge,
+    Testimonial,
+    Testimonials,
     Toc,
     Video,
     type ConfigureRequest,
@@ -109,12 +116,8 @@
   const resolved = $derived(resolveSiteTheme(theme, themeSettings));
   const canvasStyle = $derived(
     [
-      `--site-bg:${resolved.bg}`,
-      `--site-surface:${resolved.surface}`,
-      `--site-surface-strong:${resolved.surfaceStrong}`,
-      `--site-text:${resolved.text}`,
-      `--site-muted:${resolved.muted}`,
-      `--site-border:${resolved.border}`,
+      // Palette affichée par défaut sur le site (claire quand le mode suit l'appareil).
+      sitePaletteVars(resolved.initial),
       `--site-accent:${resolved.accent}`,
       `--site-on-accent:${resolved.onAccent}`,
       `--site-radius:${resolved.radius}px`,
@@ -158,8 +161,8 @@
     };
   });
 
-  function describeModule(key: string, config: Record<string, unknown>) {
-    if (!isSiteModuleKey(key)) return { label: key, summary: '', icon: '🧩', available: true };
+  function describeModule(key: string, config: Record<string, unknown>): { label: string; summary: string; icon: SiteIconName; available: boolean } {
+    if (!isSiteModuleKey(key)) return { label: key, summary: '', icon: 'puzzle', available: true };
     const block = catalog?.blocks.find((b) => b.key === key);
     return { label: moduleLabel(key), summary: moduleSummary(key, config, catalog), icon: MODULE_ICONS[key], available: block?.available !== false };
   }
@@ -206,6 +209,10 @@
       FaqItem,
       Video,
       Toc,
+      Banner,
+      Gallery,
+      Testimonials,
+      Testimonial,
       ModuleNode,
       SiteNodesBridge,
       SlashMenu.configure({
@@ -279,6 +286,12 @@
       video: m.ste_item_video(),
       toc: m.ste_item_toc(),
       tocSummary: m.ste_item_toc_desc(),
+      sectionSettings: m.ste_section_settings(),
+      gallery: m.ste_item_gallery(),
+      galleryCount: m.ste_sum_gallery({ count: '{count}' }),
+      testimonialAvatar: m.ste_testimonial_avatar(),
+      testimonialName: m.ste_testimonial_name(),
+      testimonialRole: m.ste_testimonial_role(),
     };
     editor = instance;
   }
@@ -428,7 +441,7 @@
       <button type="button" class="site-bubble-btn" class:is-on={active.underline} aria-pressed={active.underline} title={m.ste_fmt_underline()} onclick={() => editor?.chain().focus().toggleUnderline().run()}><u>U</u></button>
       <button type="button" class="site-bubble-btn" class:is-on={active.strike} aria-pressed={active.strike} title={m.ste_fmt_strike()} onclick={() => editor?.chain().focus().toggleStrike().run()}><s>S</s></button>
       <button type="button" class="site-bubble-btn" class:is-on={active.code} aria-pressed={active.code} title={m.ste_fmt_code()} onclick={() => editor?.chain().focus().toggleCode().run()}>&lt;/&gt;</button>
-      <button type="button" class="site-bubble-btn" class:is-on={active.link} aria-pressed={active.link} title={m.ste_fmt_link()} onclick={openLink}>🔗</button>
+      <button type="button" class="site-bubble-btn" class:is-on={active.link} aria-pressed={active.link} title={m.ste_fmt_link()} onclick={openLink}>{@html siteIconSvg('link', 16)}</button>
       <span class="site-bubble-sep" aria-hidden="true"></span>
       {#each SITE_HIGHLIGHT_COLORS as color (color)}
         <button
@@ -442,24 +455,33 @@
         ></button>
       {/each}
       <span class="site-bubble-sep" aria-hidden="true"></span>
-      {#each [['left', '⇤'], ['center', '↔'], ['right', '⇥']] as [align, glyph] (align)}
-        <button type="button" class="site-bubble-btn" class:is-on={active.align === align} aria-pressed={active.align === align} title={m.ste_fmt_align()} onclick={() => editor?.chain().focus().setTextAlign(align).run()}>{glyph}</button>
+      {#each [['left', 'align-left'], ['center', 'align-center'], ['right', 'align-right']] as const as [align, glyph] (align)}
+        <button type="button" class="site-bubble-btn" class:is-on={active.align === align} aria-pressed={active.align === align} title={m.ste_fmt_align()} onclick={() => editor?.chain().focus().setTextAlign(align).run()}>{@html siteIconSvg(glyph, 16)}</button>
       {/each}
       <button type="button" class="site-bubble-btn" class:is-on={active.sup} aria-pressed={active.sup} title={m.ste_fmt_sup()} onclick={() => editor?.chain().focus().toggleSuperscript().run()}>x²</button>
       <button type="button" class="site-bubble-btn" class:is-on={active.sub} aria-pressed={active.sub} title={m.ste_fmt_sub()} onclick={() => editor?.chain().focus().toggleSubscript().run()}>x₂</button>
       {#if active.table}
         <span class="site-bubble-sep" aria-hidden="true"></span>
-        <button type="button" class="site-bubble-btn" title={m.ste_table_row()} onclick={() => editor?.chain().focus().addRowAfter().run()}>+↧</button>
-        <button type="button" class="site-bubble-btn" title={m.ste_table_col()} onclick={() => editor?.chain().focus().addColumnAfter().run()}>+↦</button>
-        <button type="button" class="site-bubble-btn" title={m.ste_table_del_row()} onclick={() => editor?.chain().focus().deleteRow().run()}>−↧</button>
-        <button type="button" class="site-bubble-btn" title={m.ste_table_del_col()} onclick={() => editor?.chain().focus().deleteColumn().run()}>−↦</button>
-        <button type="button" class="site-bubble-btn" title={m.ste_table_delete()} onclick={() => editor?.chain().focus().deleteTable().run()}>🗑</button>
+        <button type="button" class="site-bubble-btn" title={m.ste_table_row()} onclick={() => editor?.chain().focus().addRowAfter().run()}>{@html siteIconSvg('row-add', 16)}</button>
+        <button type="button" class="site-bubble-btn" title={m.ste_table_col()} onclick={() => editor?.chain().focus().addColumnAfter().run()}>{@html siteIconSvg('col-add', 16)}</button>
+        <button type="button" class="site-bubble-btn" title={m.ste_table_del_row()} onclick={() => editor?.chain().focus().deleteRow().run()}>{@html siteIconSvg('row-remove', 16)}</button>
+        <button type="button" class="site-bubble-btn" title={m.ste_table_del_col()} onclick={() => editor?.chain().focus().deleteColumn().run()}>{@html siteIconSvg('col-remove', 16)}</button>
+        <button type="button" class="site-bubble-btn" title={m.ste_table_delete()} onclick={() => editor?.chain().focus().deleteTable().run()}>{@html siteIconSvg('trash', 16)}</button>
       {/if}
     {/if}
   {/if}
 </div>
 
-<NodeConfigModal bind:request={configRequest} {catalog} {pages} onSave={saveNode} />
+<NodeConfigModal
+  bind:request={configRequest}
+  {catalog}
+  {pages}
+  onSave={saveNode}
+  pickAsset={(onPick) => {
+    pickerCallback = onPick;
+    pickerOpen = true;
+  }}
+/>
 <AssetPicker
   bind:open={pickerOpen}
   {guildId}
@@ -476,12 +498,10 @@
     align-items: center;
     gap: 2px;
     padding: 4px;
-    border-radius: 10px;
-    border: 1px solid rgb(255 255 255 / 0.1);
-    background: rgb(18 20 26 / 0.97);
-    box-shadow: 0 12px 34px rgb(0 0 0 / 0.4);
-    -webkit-backdrop-filter: blur(14px);
-    backdrop-filter: blur(14px);
+    border-radius: 8px;
+    border: 1px solid var(--color-outline-variant);
+    background: var(--color-surface-container-high);
+    box-shadow: 0 10px 26px rgb(0 0 0 / 0.25);
     z-index: 50;
   }
   .site-bubble-btn {
@@ -491,19 +511,19 @@
     border: 0;
     border-radius: 7px;
     background: transparent;
-    color: #e9ebf1;
+    color: var(--color-on-surface);
     font: 600 13px/1 Inter, system-ui, sans-serif;
     cursor: pointer;
   }
-  .site-bubble-btn:hover { background: rgb(255 255 255 / 0.08); }
-  .site-bubble-btn.is-on { background: rgb(124 108 255 / 0.28); color: #fff; }
-  .site-bubble-sep { width: 1px; height: 20px; background: rgb(255 255 255 / 0.12); margin: 0 3px; }
+  .site-bubble-btn:hover { background: var(--color-surface-hover); }
+  .site-bubble-btn.is-on { background: color-mix(in srgb, var(--color-primary) 28%, transparent); color: #fff; }
+  .site-bubble-sep { width: 1px; height: 20px; background: var(--color-surface-container); margin: 0 3px; }
   .site-bubble-swatch { width: 18px; height: 18px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; margin: 0 1px; }
   .site-bubble-swatch.is-on { border-color: #fff; }
-  .site-bubble-swatch.hl-accent { background: #7c6cff; } .site-bubble-swatch.hl-yellow { background: #facc15; } .site-bubble-swatch.hl-green { background: #22c55e; }
+  .site-bubble-swatch.hl-accent { background: var(--site-accent, var(--color-primary)); } .site-bubble-swatch.hl-yellow { background: #facc15; } .site-bubble-swatch.hl-green { background: #22c55e; }
   .site-bubble-swatch.hl-blue { background: #3b82f6; } .site-bubble-swatch.hl-pink { background: #ec4899; } .site-bubble-swatch.hl-red { background: #ef4444; }
   .site-bubble-link { display: flex; align-items: center; gap: 4px; }
-  .site-bubble-input, .site-bubble-select { height: 30px; border-radius: 7px; border: 1px solid rgb(255 255 255 / 0.12); background: rgb(255 255 255 / 0.05); color: #e9ebf1; padding: 0 8px; font: 13px Inter, system-ui, sans-serif; }
+  .site-bubble-input, .site-bubble-select { height: 30px; border-radius: 7px; border: 1px solid var(--color-outline-variant); background: var(--color-surface-container); color: var(--color-on-surface); padding: 0 8px; font: 13px Inter, system-ui, sans-serif; }
   .site-bubble-input { width: 220px; }
   .site-bubble-select { max-width: 180px; }
 </style>

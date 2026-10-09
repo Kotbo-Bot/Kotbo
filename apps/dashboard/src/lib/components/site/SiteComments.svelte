@@ -93,6 +93,6 @@
 
 <style>
   .comment-list { list-style: none; margin: 0; padding: 0; }
-  .comment-list li { display: flex; gap: 12px; align-items: flex-start; padding: 12px 16px; border-top: 1px solid rgb(255 255 255 / 0.06); }
-  .avatar { flex: none; width: 32px; height: 32px; border-radius: 50%; background: rgb(255 255 255 / 0.08); object-fit: cover; }
+  .comment-list li { display: flex; gap: 12px; align-items: flex-start; padding: 12px 16px; border-top: 1px solid var(--color-outline-variant); }
+  .avatar { flex: none; width: 32px; height: 32px; border-radius: 50%; background: var(--color-surface-container); object-fit: cover; }
 </style>

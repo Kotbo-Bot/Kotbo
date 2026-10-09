@@ -19,6 +19,8 @@
     type SiteState,
   } from '../../api/site';
   import { siteErrorMessage } from './siteErrors';
+  import SiteIcon from './SiteIcon.svelte';
+  import type { SiteIconName } from '@kotbo/shared';
 
   let { siteState, guildId, kind, onChanged }: { siteState: SiteState; guildId: string; kind: SitePageKind; onChanged: () => void } = $props();
 
@@ -71,7 +73,12 @@
     return { label: m.ste_status_published(), tone: 'ok' };
   }
 
-  const VISIBILITY_ICON: Record<string, string> = { PUBLIC: '🌐', MEMBERS: '👥', ROLES: '🎭', STAFF: '🛡️' };
+  const VISIBILITY: Record<string, { icon: SiteIconName; label: () => string }> = {
+    PUBLIC: { icon: 'globe', label: () => m.ste_vis_public() },
+    MEMBERS: { icon: 'users', label: () => m.ste_vis_members() },
+    ROLES: { icon: 'tag', label: () => m.ste_vis_roles() },
+    STAFF: { icon: 'shield', label: () => m.ste_vis_staff() },
+  };
 
   async function create(event: SubmitEvent) {
     event.preventDefault();
@@ -145,7 +152,7 @@
         {@const st = status(page)}
         <li style="--depth:{depth}">
           <a class="page-main" href={`/site/edit/${page.id}`}>
-            <span class="page-vis" title={page.visibility} aria-hidden="true">{VISIBILITY_ICON[page.visibility]}</span>
+            <span class="page-vis" title={VISIBILITY[page.visibility]?.label()}><SiteIcon name={VISIBILITY[page.visibility]?.icon ?? 'globe'} size={16} /></span>
             <span class="min-w-0">
               <span class="page-title">{page.title}{#if page.id === site.homePageId}<span class="page-home">{m.ste_home_badge()}</span>{/if}</span>
               <span class="page-sub">/{page.slug}{#if page.tags.length} · {page.tags.join(', ')}{/if} · {new Date(page.updatedAt).toLocaleDateString(dateLocale(), { dateStyle: 'medium' })}</span>
@@ -198,17 +205,17 @@
 
 <style>
   .page-list { list-style: none; margin: 0; padding: 0; }
-  .page-list li { display: flex; align-items: center; gap: 12px; padding: 10px 16px 10px calc(16px + var(--depth) * 22px); border-top: 1px solid rgb(255 255 255 / 0.06); }
+  .page-list li { display: flex; align-items: center; gap: 12px; padding: 10px 16px 10px calc(16px + var(--depth) * 22px); border-top: 1px solid var(--color-outline-variant); }
   .page-main { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; text-decoration: none; color: inherit; }
   .page-main:hover .page-title { color: rgb(167 139 250); }
   .page-vis { flex: none; width: 24px; text-align: center; }
   .page-title { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 0.92rem; }
-  .page-home { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; padding: 1px 6px; border-radius: 999px; background: rgb(124 108 255 / 0.2); color: #c4b5fd; }
-  .page-sub { display: block; font-size: 0.75rem; color: rgb(255 255 255 / 0.5); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .page-pill { flex: none; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: rgb(255 255 255 / 0.08); color: rgb(255 255 255 / 0.7); }
-  .page-pill-ok { background: rgb(34 197 94 / 0.14); color: #4ade80; }
-  .page-pill-warning { background: rgb(245 158 11 / 0.14); color: #fbbf24; }
-  .page-pill-info { background: rgb(59 130 246 / 0.14); color: #60a5fa; }
+  .page-home { font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 999px; background: color-mix(in srgb, var(--color-primary) 20%, transparent); color: var(--color-primary); }
+  .page-sub { display: block; font-size: 0.75rem; color: var(--color-on-surface-variant); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .page-pill { flex: none; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--color-surface-container); color: var(--color-on-surface-variant); }
+  .page-pill-ok { background: color-mix(in srgb, var(--color-success) 14%, transparent); color: var(--color-success); }
+  .page-pill-warning { background: color-mix(in srgb, var(--color-warning) 14%, transparent); color: var(--color-warning); }
+  .page-pill-info { background: color-mix(in srgb, var(--color-primary) 14%, transparent); color: var(--color-primary); }
   .page-actions { flex: none; display: flex; gap: 2px; }
   @media (max-width: 720px) { .page-pill { display: none; } }
 </style>

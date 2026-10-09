@@ -9,6 +9,8 @@ import {
   siteDocumentToMarkdown,
   SITE_FONTS,
   SITE_MODULES,
+  SITE_BACKGROUNDS,
+  SITE_COLOR_MODES,
   SITE_THEME_KEYS,
   siteModuleBotDependency,
   type SiteDocument,
@@ -201,13 +203,16 @@ export function registerSiteTools(ctx: McpToolContext) {
             inline: ['text (marks: bold, italic, underline, strike, code, link{href}, highlight{color: accent|yellow|green|blue|pink|red}, subscript, superscript)', 'hardBreak'],
             siteBlocks: {
               image: '{ type: "image", attrs: { src: "https://… ou /s/_/a/<id>.webp", alt, caption, width: small|medium|wide|full } }',
-              callout: '{ type: "callout", attrs: { variant: info|success|warning|danger|note, icon: "ℹ️" }, content: [blocs] }',
+              callout: '{ type: "callout", attrs: { variant: info|success|warning|danger|note }, content: [blocs] } (pictogramme selon la variante)',
               grid: '{ type: "grid", attrs: { columns: 1-4 }, content: [{ type: "gridCell", attrs: { span: 1-4, rowSpan: 1-3, surface: true }, content: [blocs] }] } (grille bento)',
               button: '{ type: "button", attrs: { label, href, variant: primary|secondary|ghost, align: left|center|right } }',
               faq: '{ type: "faq", content: [{ type: "faqItem", attrs: { question }, content: [blocs] }] }',
               video: '{ type: "video", attrs: { provider: youtube|twitch|vimeo, videoId, caption } }',
               toc: '{ type: "toc", attrs: { maxLevel: 2-4 } }',
               module: '{ type: "module", attrs: { module: <clé>, config: {…} } }',
+              banner: '{ type: "banner", attrs: { image: "https://… ou /s/_/a/<id>.webp" (facultatif, assombrie), tone: surface|accent|dark, align: left|center, tall: false }, content: [blocs : titre, texte, bouton…] } (bannière d\'appel)',
+              gallery: '{ type: "gallery", attrs: { images: [{ src, alt, caption }] (24 au plus), layout: grid|carousel, columns: 2-4 } }',
+              testimonials: '{ type: "testimonials", attrs: { columns: 1-3 }, content: [{ type: "testimonial", attrs: { name, role, avatar }, content: [blocs : la citation] }] }',
             },
             links: 'Lien interne au site : "/~/<page>", "/~/wiki/<page>", "/~/blog/<article>" (suit le site si son adresse change). Sinon https://… ou mailto:.',
           },
@@ -353,14 +358,15 @@ export function registerSiteTools(ctx: McpToolContext) {
   server.registerTool(
     'set_site_theme',
     {
-      description: 'Thème du site et ses réglages (accent, polices, arrondis, fond) ; CSS libre facultatif, filtré par le serveur.',
+      description: 'Thème du site et ses réglages (accent, polices, arrondis, fond, mode clair/sombre par défaut) ; CSS libre facultatif, filtré par le serveur. Le visiteur peut toujours changer de mode.',
       inputSchema: {
         theme: z.enum(SITE_THEME_KEYS as [string, ...string[]]).optional(),
         accent: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
         font: z.enum(SITE_FONTS).optional(),
         heading_font: z.enum(SITE_FONTS).optional(),
-        radius: z.number().int().min(0).max(28).optional(),
-        background: z.enum(['plain', 'gradient', 'banner']).optional(),
+        radius: z.number().int().min(0).max(24).optional(),
+        background: z.enum(SITE_BACKGROUNDS).optional(),
+        mode: z.enum(SITE_COLOR_MODES).optional(),
         custom_css: z.string().max(30_000).nullable().optional(),
         key_name: keyName,
       },
@@ -376,6 +382,7 @@ export function registerSiteTools(ctx: McpToolContext) {
         if (args.heading_font) settings.headingFont = args.heading_font;
         if (args.radius !== undefined) settings.radius = args.radius;
         if (args.background) settings.background = args.background;
+        if (args.mode) settings.mode = args.mode;
         const site = await updateSite(guildId, { theme: args.theme, themeSettings: settings, customCss: args.custom_css });
         await audit(args.key_name, 'Thème du site (MCP)', `/s/${site.slug}`, site.theme);
         return ok({ theme: site.theme, themeSettings: site.themeSettings, customCss: site.customCss });

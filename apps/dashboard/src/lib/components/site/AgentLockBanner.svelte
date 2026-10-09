@@ -92,10 +92,8 @@
 {/if}
 
 <style>
-  .agent-banner { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-radius: 12px; border: 1px solid rgb(255 255 255 / 0.1); background: rgb(255 255 255 / 0.04); margin-bottom: 12px; }
-  .agent-banner-active { border-color: rgb(167 139 250 / 0.5); background: rgb(124 108 255 / 0.12); }
-  .agent-dot { flex: none; width: 10px; height: 10px; border-radius: 50%; background: #a78bfa; box-shadow: 0 0 0 4px rgb(167 139 250 / 0.25); animation: agent-pulse 1.6s ease-in-out infinite; }
-  .agent-dot-off { background: #9ca3af; box-shadow: none; animation: none; }
-  @keyframes agent-pulse { 50% { box-shadow: 0 0 0 7px rgb(167 139 250 / 0.08); } }
-  @media (prefers-reduced-motion: reduce) { .agent-dot { animation: none; } }
+  .agent-banner { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-radius: 8px; border: 1px solid var(--color-outline-variant); background: var(--color-surface-container); margin-bottom: 12px; }
+  .agent-banner-active { border-color: color-mix(in srgb, var(--color-warning) 55%, transparent); background: color-mix(in srgb, var(--color-warning) 10%, transparent); }
+  .agent-dot { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--color-warning); }
+  .agent-dot-off { background: var(--color-on-surface-variant); }
 </style>

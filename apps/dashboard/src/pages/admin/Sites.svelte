@@ -186,5 +186,5 @@
 
 <style>
   .admin-list { list-style: none; margin: 0; padding: 0; }
-  .admin-list li { display: flex; gap: 12px; align-items: center; padding: 12px 16px; border-top: 1px solid rgb(255 255 255 / 0.06); }
+  .admin-list li { display: flex; gap: 12px; align-items: center; padding: 12px 16px; border-top: 1px solid var(--color-outline-variant); }
 </style>

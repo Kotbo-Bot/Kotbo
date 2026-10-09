@@ -118,13 +118,13 @@
 </Modal>
 
 <style>
-  .asset-drop { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 22px; border: 1.5px dashed rgb(255 255 255 / 0.14); border-radius: 14px; margin-bottom: 16px; text-align: center; }
-  .asset-drop.is-dragging { border-color: rgb(124 108 255 / 0.8); background: rgb(124 108 255 / 0.08); }
+  .asset-drop { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 22px; border: 1.5px dashed var(--color-outline-variant); border-radius: 14px; margin-bottom: 16px; text-align: center; }
+  .asset-drop.is-dragging { border-color: color-mix(in srgb, var(--color-primary) 80%, transparent); background: color-mix(in srgb, var(--color-primary) 8%, transparent); }
   .asset-grid { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
   .asset-grid li { position: relative; }
-  .asset-tile { display: block; width: 100%; padding: 0; border: 1px solid rgb(255 255 255 / 0.08); border-radius: 10px; overflow: hidden; background: rgb(255 255 255 / 0.03); cursor: pointer; text-align: left; }
-  .asset-tile:hover, .asset-tile:focus-visible { border-color: rgb(124 108 255 / 0.7); }
+  .asset-tile { display: block; width: 100%; padding: 0; border: 1px solid var(--color-outline-variant); border-radius: 10px; overflow: hidden; background: var(--color-surface-container); cursor: pointer; text-align: left; }
+  .asset-tile:hover, .asset-tile:focus-visible { border-color: color-mix(in srgb, var(--color-primary) 70%, transparent); }
   .asset-tile img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; }
-  .asset-meta { display: block; padding: 4px 8px; font-size: 11px; color: rgb(255 255 255 / 0.55); }
+  .asset-meta { display: block; padding: 4px 8px; font-size: 11px; color: var(--color-on-surface-variant); }
   .asset-remove { position: absolute; top: 4px; right: 4px; width: 24px; height: 24px; border-radius: 50%; border: 0; background: rgb(0 0 0 / 0.65); color: #fff; cursor: pointer; }
 </style>

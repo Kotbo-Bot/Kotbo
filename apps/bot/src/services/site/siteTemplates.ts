@@ -21,10 +21,10 @@ export function isSiteTemplate(value: unknown): value is SiteTemplateKey {
 }
 
 const THEMES: Record<SiteTemplateKey, SiteThemeKey> = {
-  general: 'verre',
-  gaming: 'neon',
+  general: 'azur',
+  gaming: 'carbone',
   rp: 'royaume',
-  esport: 'arcade',
+  esport: 'braise',
   etude: 'documentation',
 };
 
@@ -204,7 +204,7 @@ export function buildSiteBlueprint(template: SiteTemplateKey, lang: Lang, module
     pages.push({ key: 'team', kind: 'PAGE', slug: 'equipe', title: c.team, excerpt: c.teamLead, content: doc(p(c.teamLead), mod('staff', { layout: 'grid' })), publish: true, inNav: true });
   }
   if (on('regulation')) {
-    pages.push({ key: 'rules', kind: 'PAGE', slug: 'reglement', title: c.rules, excerpt: c.rulesLead, content: doc(callout('info', '📜', p(c.rulesLead)), mod('rules')), publish: true, inNav: true });
+    pages.push({ key: 'rules', kind: 'PAGE', slug: 'reglement', title: c.rules, excerpt: c.rulesLead, content: doc(callout('info', '', p(c.rulesLead)), mod('rules')), publish: true, inNav: true });
   }
 
   const rankings: Node[] = [];

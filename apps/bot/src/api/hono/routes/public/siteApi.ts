@@ -26,6 +26,9 @@ import { createSuggestion, voteOnSuggestion } from '../../../../services/feature
 import { buyListing } from '../../../../services/economy/marketplaceService.js';
 import { getAgentLockStatus, interruptAgent } from '../../../../services/site/siteAgentLock.js';
 import { LEGACY_PAGE_KINDS, resolveFormRedirect, resolveLegacyRedirect, type LegacyPageKind } from '../../../../services/site/siteRedirects.js';
+import { afterCommentVisible, rewardParticipation } from '../../../../services/site/siteActivity.js';
+import { claimDailyVisit, grantSiteReward } from '../../../../services/site/siteRewardService.js';
+import { updateSiteMemberSettings } from '../../../../services/site/siteMemberService.js';
 
 // ============================================================================
 // API DU SCRIPT DES SITES COMMUNAUTAIRES
@@ -119,13 +122,43 @@ export function createSiteApiRouter(client: Client): OpenAPIHono {
     const site = await liveSite(c);
     if (!site) return c.json({ error: 'Site introuvable' }, 404);
     const viewer = await viewerFor(client, c, site);
+    // Première visite du jour d'un membre connecté : récompense et série.
+    const reward = viewer?.isMember ? await claimDailyVisit(client, site.guildId, viewer.userId).catch(() => null) : null;
     return c.json({
       viewer: viewer
         ? { userId: viewer.userId, displayName: viewer.displayName, avatarUrl: viewer.avatarUrl, isMember: viewer.isMember, isStaff: viewer.isStaff, canManageSite: viewer.canManageSite }
         : null,
       // Seul qui gère le site apprend qu'un agent le modifie, et peut l'arrêter.
       agent: viewer?.canManageSite ? getAgentLockStatus(site.guildId) : null,
+      reward,
     });
+  });
+
+  // ── Page lue jusqu'au bout (récompense, une fois par page) ────────────────
+  app.post('/api/site/:siteId/read/:pageId', async (c) => {
+    const site = await liveSite(c);
+    if (!site) return c.json({ error: 'Introuvable' }, 404);
+    const viewer = await viewerFor(client, c, site);
+    if (!viewer?.isMember) return c.json({ reward: null });
+    const pageId = c.req.param('pageId') ?? '';
+    if (!CUID.test(pageId) || rateLimited(`read:${viewer.userId}`, 30, 60 * 60_000)) return c.json({ reward: null });
+    const page = await getPublishedPageById(site.id, pageId);
+    if (!page || page.kind === 'BLOG' || checkPageAccess(page, viewer) !== 'allowed') return c.json({ reward: null });
+    const reward = await grantSiteReward(client, site.guildId, viewer.userId, 'READ', `read:${page.id}`).catch(() => null);
+    return c.json({ reward });
+  });
+
+  // ── Réglages du membre : profil public, notifications ─────────────────────
+  app.post('/api/site/:siteId/me/settings', async (c) => {
+    const site = await liveSite(c);
+    if (!site) return c.json({ error: 'Introuvable' }, 404);
+    const o = { locale: localeOf(c) };
+    const viewer = await viewerFor(client, c, site);
+    if (!viewer) return c.json({ error: m.site_err_login({}, o) }, 401);
+    if (!viewer.isMember) return c.json({ error: m.site_err_member_only({}, o) }, 403);
+    const body = await readBody(c);
+    const settings = await updateSiteMemberSettings(site.guildId, viewer.userId, { profileHidden: body.profileHidden, notifications: body.notifications });
+    return c.json({ ok: true, settings, message: m.site_settings_saved({}, o) });
   });
 
   // ── Interrompre un agent depuis le site publié ────────────────────────────
@@ -219,7 +252,8 @@ export function createSiteApiRouter(client: Client): OpenAPIHono {
             logger.info('Site', `Suggestion refusée sur ${guildId} (${verdict.reason}) pour ${viewer.userId}`);
             return c.json({ error: m.site_err_refused({}, o) }, 422);
           }
-          await createSuggestion(guildId, viewer.userId, viewer.username, content, client);
+          const suggestion = await createSuggestion(guildId, viewer.userId, viewer.username, content, client);
+          if (suggestion) rewardParticipation(guildId, viewer.userId, `suggestion:${suggestion.id}`);
           return c.json({ ok: true, message: m.site_suggestion_sent({}, o) });
         }
         case 'event-register': {
@@ -231,6 +265,7 @@ export function createSiteApiRouter(client: Client): OpenAPIHono {
             .create({ data: { eventId: event.id, guildId, userId: viewer.userId, username: viewer.username, userTag: viewer.username } })
             .then(() => true)
             .catch(() => false);
+          if (created) rewardParticipation(guildId, viewer.userId, `event:${event.id}`);
           return created ? c.json({ ok: true, message: m.site_event_registered_ok({}, o) }) : c.json({ error: m.site_err_event_already({}, o) }, 409);
         }
         case 'market-buy': {
@@ -288,6 +323,7 @@ export function createSiteApiRouter(client: Client): OpenAPIHono {
       },
       select: { id: true, status: true },
     });
+    if (comment.status === 'VISIBLE') afterCommentVisible({ id: comment.id, pageId: page.id, guildId: site.guildId, authorId: viewer.userId, authorName: viewer.displayName });
     return c.json({ ok: true, id: comment.id, status: comment.status }, 201);
   });
 

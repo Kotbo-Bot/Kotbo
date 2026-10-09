@@ -11,7 +11,7 @@
  * sous `site_module_<clé>`.
  */
 
-export const SITE_MODULE_CATEGORIES = ['vitrine', 'demarches', 'engagement', 'contenus', 'discord'] as const;
+export const SITE_MODULE_CATEGORIES = ['vitrine', 'demarches', 'engagement', 'membre', 'contenus', 'discord'] as const;
 export type SiteModuleCategory = (typeof SITE_MODULE_CATEGORIES)[number];
 
 export const SITE_LEADERBOARD_VARIANTS = ['xp', 'prestige', 'reputation', 'season', 'economy'] as const;
@@ -20,6 +20,9 @@ export const SITE_GIVEAWAY_FILTERS = ['active', 'ended', 'all'] as const;
 export const SITE_STAFF_LAYOUTS = ['grid', 'org'] as const;
 export const SITE_LIST_LAYOUTS = ['cards', 'list'] as const;
 export const SITE_SUGGESTION_FILTERS = ['open', 'accepted', 'all'] as const;
+/** Chiffres que le bloc « Chiffres clés » sait calculer ; `custom` = valeur saisie. */
+export const SITE_KEY_STAT_METRICS = ['members', 'online', 'boosts', 'channels', 'messages30d', 'voiceHours30d', 'joined30d', 'wikiPages', 'blogArticles', 'custom'] as const;
+export type SiteKeyStatMetric = (typeof SITE_KEY_STAT_METRICS)[number];
 
 interface ModuleSpec {
   category: SiteModuleCategory;
@@ -44,6 +47,14 @@ export const SITE_MODULES = {
   news: { category: 'vitrine', botModule: 'news', needsViewer: false, interactive: false, live: false, defaults: { limit: 6, layout: 'cards' } },
   partners: { category: 'vitrine', botModule: null, needsViewer: false, interactive: false, live: false, defaults: { items: [] } },
   serverStats: { category: 'vitrine', botModule: null, needsViewer: false, interactive: false, live: true, defaults: {} },
+  keyStats: {
+    category: 'vitrine',
+    botModule: null,
+    needsViewer: false,
+    interactive: false,
+    live: false,
+    defaults: { items: [{ metric: 'members', label: '', value: '' }, { metric: 'online', label: '', value: '' }, { metric: 'messages30d', label: '', value: '' }] },
+  },
 
   // Démarches
   appeal: { category: 'demarches', botModule: 'ban_appeals', needsViewer: true, interactive: true, live: false, defaults: {} },
@@ -60,7 +71,10 @@ export const SITE_MODULES = {
   seasons: { category: 'engagement', botModule: 'seasons', needsViewer: false, interactive: false, live: false, defaults: { limit: 10 } },
   marketplace: { category: 'engagement', botModule: 'marketplace', needsViewer: false, interactive: true, live: false, defaults: { limit: 12 } },
   starboard: { category: 'engagement', botModule: 'starboard', needsViewer: false, interactive: false, live: false, defaults: { limit: 6 } },
-  profile: { category: 'engagement', botModule: null, needsViewer: true, interactive: false, live: false, defaults: {} },
+  profile: { category: 'membre', botModule: null, needsViewer: true, interactive: false, live: false, defaults: {} },
+  memberSettings: { category: 'membre', botModule: null, needsViewer: true, interactive: true, live: false, defaults: {} },
+  memberRewards: { category: 'membre', botModule: null, needsViewer: true, interactive: false, live: false, defaults: {} },
+  memberInventory: { category: 'membre', botModule: 'economy', needsViewer: true, interactive: false, live: false, defaults: {} },
 
   // Contenus
   wikiIndex: { category: 'contenus', botModule: null, needsViewer: false, interactive: false, live: false, defaults: { parentId: '' } },
@@ -119,6 +133,14 @@ function httpsUrl(value: unknown): string {
   }
 }
 
+export interface SiteKeyStatItem {
+  metric: SiteKeyStatMetric;
+  /** Libellé affiché ; vide = libellé par défaut du chiffre. */
+  label: string;
+  /** Valeur saisie, pour `custom` seulement. */
+  value: string;
+}
+
 export interface SitePartnerItem {
   name: string;
   description: string;
@@ -145,6 +167,14 @@ export function normalizeModuleConfig(key: SiteModuleKey, raw: unknown): Record<
           url: httpsUrl(item.url),
         }))
         .filter((item) => item.name);
+      return { items };
+    }
+    case 'keyStats': {
+      const items: SiteKeyStatItem[] = (Array.isArray(input.items) ? input.items : [])
+        .filter(isRecord)
+        .slice(0, 6)
+        .map((item) => ({ metric: oneOf(item.metric, SITE_KEY_STAT_METRICS, 'members'), label: text(item.label, 40), value: text(item.value, 20) }))
+        .filter((item) => item.metric !== 'custom' || (item.value && item.label));
       return { items };
     }
     case 'recruitment':

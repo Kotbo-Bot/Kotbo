@@ -25,9 +25,12 @@ import {
 import { beginTicketOpening, endTicketOpening } from '../features/ticketRecordingNotice.js';
 import { ACTIVE_TICKET_STATUSES, checkMemberTicketQuota, resolveTicketQuotas } from '../features/ticketQuotaService.js';
 import type { SiteViewer } from './siteService.js';
+import { linkSiteTicket } from './siteNotifyService.js';
 
 /** Pied des messages relayés : c'est lui qui les distingue des messages du bot. */
-export const SITE_RELAY_FOOTER = '🌐 Envoyé depuis le site';
+export const SITE_RELAY_FOOTER = 'Envoyé depuis le site';
+/** Pied des messages relayés avant le retrait des emojis : toujours reconnu. */
+const LEGACY_SITE_RELAY_FOOTER = String.fromCodePoint(0x1f310) + ' Envoyé depuis le site';
 
 export interface SiteTicketType {
   id: string;
@@ -81,6 +84,7 @@ export async function openTicketFromSite(
     const result = resolveRequireApproval(ticketType, configRecord)
       ? await createPendingTicketRequest(client, params)
       : await createTicketWorkspace(client, params);
+    await linkSiteTicket(guild.id, viewer.userId, result.ticketId).catch((err: unknown) => logger.warn('Site', 'Lien du ticket du site non enregistré :', err));
     return { ok: true, ticketId: result.ticketId };
   } catch (err) {
     logger.error('Site', `Ouverture de ticket depuis le site impossible sur ${guild.id} :`, err);
@@ -131,7 +135,7 @@ async function ticketChannel(client: Client, ticket: Pick<SiteTicketSummary, 'ch
 }
 
 function toSiteMessage(msg: Message, ownerId: string, botId: string): SiteTicketMessage | null {
-  const relayed = msg.author.id === botId ? msg.embeds.find((e) => e.footer?.text === SITE_RELAY_FOOTER) : undefined;
+  const relayed = msg.author.id === botId ? msg.embeds.find((e) => e.footer?.text === SITE_RELAY_FOOTER || e.footer?.text === LEGACY_SITE_RELAY_FOOTER) : undefined;
   if (relayed) {
     return {
       id: msg.id,

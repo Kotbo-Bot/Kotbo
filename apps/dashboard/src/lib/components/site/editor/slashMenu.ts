@@ -8,13 +8,14 @@
 import { Extension, type Editor, type Range } from '@tiptap/core';
 import { Suggestion, type SuggestionProps, type SuggestionKeyDownProps } from '@tiptap/suggestion';
 import { PluginKey } from '@tiptap/pm/state';
+import { siteIconSvg, type SiteIconName } from '@kotbo/shared';
 
 export interface SlashItem {
   id: string;
   group: string;
   label: string;
   description: string;
-  icon: string;
+  icon: SiteIconName;
   /** Mots qui retrouvent l'élément en plus de son libellé. */
   keywords?: string;
   disabled?: boolean;
@@ -86,7 +87,8 @@ class SlashMenuView {
       option.setAttribute('aria-selected', i === this.index ? 'true' : 'false');
       const icon = document.createElement('span');
       icon.className = 'site-slash-icon';
-      icon.textContent = item.icon;
+      // SVG constant du jeu partagé, jamais une donnée saisie.
+      icon.innerHTML = siteIconSvg(item.icon, 18);
       const text = document.createElement('span');
       text.className = 'site-slash-text';
       const name = document.createElement('strong');

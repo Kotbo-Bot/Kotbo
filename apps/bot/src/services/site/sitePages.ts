@@ -18,14 +18,17 @@ import type { Client, Guild } from 'discord.js';
 import type { SitePageKind } from '@prisma/client';
 import {
   collectSiteHeadings,
+  collectSiteModules,
   estimateReadingMinutes,
   extractSiteDocumentText,
   normalizeSiteDocument,
   prepareSiteCss,
   SITE_ASSET_PATH_PREFIX,
+  siteIconSvg,
   type SiteDocument,
 } from '@kotbo/shared';
 import prisma from '../../utils/db.js';
+import { cache } from '../../utils/cache.js';
 import { logger } from '../../utils/logger.js';
 import * as m from '../../lib/paraglide/messages.js';
 import { getModuleStates } from '../core/moduleGate.js';
@@ -33,10 +36,13 @@ import { getMemberIdentities } from '../moderation/memberIdentityService.js';
 import { attrs, createNonce, esc } from './siteHtml.js';
 import { renderSiteDocument } from './siteRenderer.js';
 import { renderDocumentBlocks, renderBlock } from './blocks/index.js';
-import { formatDate, timeTag, type BlockContext, type SiteLocale } from './blocks/blockContext.js';
+import { formatDate, formatNumber, timeTag, type BlockContext, type SiteLocale } from './blocks/blockContext.js';
+import { getGuildCounts } from './blocks/vitrineBlocks.js';
+import { getSiteInviteUrl } from './blocks/discordBlocks.js';
 import { pageUrl, renderArticleCards, renderSearchForm, renderWikiTree, visiblePages } from './blocks/contentBlocks.js';
 import { loadSiteForm, renderSiteForm } from './blocks/demarchesBlocks.js';
-import { renderSiteShell, renderThemeCss, type Breadcrumb, type SiteIdentity } from './siteLayout.js';
+import { renderSiteShell, renderThemeCss, safeBannerUrl, type Breadcrumb, type SiteIdentity } from './siteLayout.js';
+import { getPublicMemberProfile } from './siteMemberService.js';
 import { getSiteScript, getSiteStylesheet } from './siteAssets.js';
 import { readSiteAsset, mimeForExtension } from './siteUploads.js';
 import { searchSite } from './siteSearch.js';
@@ -137,6 +143,8 @@ export interface SiteCtx {
   nonce: string;
   block: BlockContext;
   pages: Record<SitePageKind, PageSummary[]>;
+  /** Invitation Discord du site (pages HTML seulement), pour la bannière et le pied de page. */
+  inviteUrl: string | null;
 }
 
 export function siteIdentity(site: SiteRecord, guild: Guild | null): SiteIdentity {
@@ -176,6 +184,7 @@ export async function buildSiteCtx(
     nonce: createNonce(),
     block: { client: req.client, site, guild, locale, basePath, viewer, viewerKnown, moduleStates },
     pages: { PAGE: pagesList, WIKI: wiki, BLOG: blog },
+    inviteUrl: null,
   };
 }
 
@@ -199,6 +208,7 @@ function shell(
     breadcrumbs?: Breadcrumb[];
     jsonLd?: Record<string, unknown> | null;
     previewNotice?: boolean;
+    hero?: string;
   },
 ): string {
   return renderSiteShell({
@@ -212,6 +222,7 @@ function shell(
     navPages: publicPages(ctx),
     hasWiki: ctx.pages.WIKI.some((p) => p.visibility === 'PUBLIC'),
     hasBlog: ctx.pages.BLOG.some((p) => p.visibility === 'PUBLIC'),
+    inviteUrl: ctx.inviteUrl,
     ...options,
   });
 }
@@ -228,11 +239,21 @@ export function virtualDocument(pageId: string): SiteDocument | null {
   if (pageId === AUTO_HOME_ID) {
     return normalizeSiteDocument({
       type: 'doc',
-      content: [mod('serverStats'), mod('join'), mod('blogList', { limit: 3 }), mod('wikiIndex')],
+      // Chiffres, bouton Rejoindre et derniers articles sont dans la bannière d'accueil.
+      content: [mod('wikiIndex')],
     });
   }
   if (pageId === ME_PAGE_ID) {
-    return normalizeSiteDocument({ type: 'doc', content: [mod('profile'), mod('ticket')] });
+    const cell = (module: string) => ({ type: 'gridCell', attrs: { span: 1, rowSpan: 1, surface: true }, content: [mod(module)] });
+    return normalizeSiteDocument({
+      type: 'doc',
+      content: [
+        mod('profile'),
+        { type: 'grid', attrs: { columns: 2 }, content: [cell('memberRewards'), cell('memberSettings')] },
+        mod('memberInventory'),
+        mod('ticket'),
+      ],
+    });
   }
   return null;
 }
@@ -245,7 +266,7 @@ export async function renderDocumentHtml(ctx: SiteCtx, doc: SiteDocument, pageId
     basePath: ctx.basePath,
     host: ctx.req.host ?? '',
     moduleHtml,
-    labels: { toc: m.site_toc({}, { locale: ctx.locale }), video: m.site_video({}, { locale: ctx.locale }) },
+    labels: { toc: m.site_toc({}, { locale: ctx.locale }), video: m.site_video({}, { locale: ctx.locale }), gallery: m.site_gallery({}, { locale: ctx.locale }) },
   });
 }
 
@@ -343,10 +364,11 @@ export async function renderPageMain(ctx: SiteCtx, page: PublishedPage): Promise
       ? `<nav class="toc" aria-label="${esc(m.site_toc({}, o))}"><p class="toc-title">${esc(m.site_toc({}, o))}</p><ol>${headings.map((h) => `<li class="toc-l${h.level}"><a href="#${esc(h.id)}">${esc(h.text)}</a></li>`).join('')}</ol></nav>`
       : '';
     const meta = page.publishedAt ? esc(m.site_updated_on({ date: formatDate(page.publishedAt, ctx.locale, 'long') }, o)) : '';
+    const readMark = `<div class="read-mark"${attrs({ 'data-read-page': page.id })} aria-hidden="true"></div>`;
     return `<div class="wiki-layout">
   <nav aria-label="${esc(m.site_wiki({}, o))}">${tree}</nav>
   <div class="with-aside">
-    <article>${hero(title, page.excerpt, meta)}<div class="prose">${body}</div>${subpages}</article>
+    <article>${hero(title, page.excerpt, meta)}<div class="prose">${body}</div>${subpages}${readMark}</article>
     <aside>${toc}</aside>
   </div>
 </div>`;
@@ -376,7 +398,8 @@ export async function renderPageMain(ctx: SiteCtx, page: PublishedPage): Promise
     return `<article>${hero(title, page.excerpt, meta, page.coverUrl)}${tags}<div class="prose">${body}</div>${share}${pager}${comments}</article>`;
   }
 
-  return `<article class="doc-wide">${page.id === ctx.site.homePageId ? '' : hero(title, page.excerpt, undefined, page.coverUrl)}<div class="prose wide">${body}</div></article>`;
+  const readMark = page.id === ctx.site.homePageId ? '' : `<div class="read-mark"${attrs({ 'data-read-page': page.id })} aria-hidden="true"></div>`;
+  return `<article class="doc-wide">${page.id === ctx.site.homePageId ? '' : hero(title, page.excerpt, undefined, page.coverUrl)}<div class="prose wide">${body}</div>${readMark}</article>`;
 }
 
 // ─── Pages ──────────────────────────────────────────────────────────────────
@@ -392,14 +415,61 @@ function restrictedMain(ctx: SiteCtx, page: PublishedPage): string {
 </div>`;
 }
 
-async function pageResponse(ctx: SiteCtx, page: PublishedPage, path: string): Promise<SiteHttpResponse> {
+/**
+ * Invitation du site pour la bannière et le pied de page. L'absence est mise
+ * en cache elle aussi : sans droit d'inviter, chaque page vue relancerait sinon
+ * une tentative de création.
+ */
+async function pageInviteUrl(ctx: SiteCtx): Promise<string | null> {
+  if (!ctx.guild) return null;
+  const url = await cache.wrap(`guild:${ctx.site.guildId}:site-invite-url`, 600, async () => (await getSiteInviteUrl(ctx.block).catch(() => null)) ?? '');
+  return url || null;
+}
+
+/** Bannière d'accueil : image du serveur, nom, accroche, membres, bouton Rejoindre. */
+async function homeHero(ctx: SiteCtx): Promise<string> {
+  const o = { locale: ctx.locale };
+  const banner = safeBannerUrl(ctx.site.bannerUrl ?? ctx.identity.bannerUrl);
+  const logo = ctx.site.logoUrl ?? ctx.identity.iconUrl;
+  const counts = ctx.guild ? await getGuildCounts(ctx.block).catch(() => null) : null;
+  const stats = counts
+    ? `<p class="hero-stats"><span class="presence-dot" aria-hidden="true"></span><span>${esc(m.site_members_online({ count: formatNumber(counts.online, ctx.locale) }, o))}</span><span class="hero-sep" aria-hidden="true">·</span><span>${esc(m.site_members_total({ count: formatNumber(counts.members, ctx.locale) }, o))}</span></p>`
+    : '';
+  const join = ctx.inviteUrl
+    ? `<p class="hero-actions"><a class="btn btn-primary btn-lg btn-discord"${attrs({ href: ctx.inviteUrl, rel: 'noopener', target: '_blank' })}>${esc(m.site_join_discord({}, o))}</a></p>`
+    : '';
+  return `<section${attrs({ class: banner ? 'site-hero has-image' : 'site-hero', style: banner ? `--hero-image:url("${banner}")` : null })}>
+  <div class="container hero-inner">
+    ${logo ? `<img class="hero-logo"${attrs({ src: logo, alt: '', width: 96, height: 96 })}>` : ''}
+    <h1 class="hero-title">${esc(ctx.identity.name)}</h1>
+    ${ctx.site.tagline ? `<p class="hero-lead">${esc(ctx.site.tagline)}</p>` : ''}
+    ${stats}
+    ${join}
+  </div>
+</section>`;
+}
+
+/** Trois derniers articles sous la bannière, sauf si la page d'accueil liste déjà le blog. */
+function homeNews(ctx: SiteCtx, doc: SiteDocument): string {
+  const modules = collectSiteModules(doc);
+  if (modules.includes('blogList')) return '';
+  const articles = visiblePages(ctx.pages.BLOG, null).slice(0, 3);
+  if (articles.length === 0) return '';
+  const o = { locale: ctx.locale };
+  return `<section class="home-section">
+  <div class="section-head"><h2>${esc(m.site_latest_news({}, o))}</h2><a${attrs({ href: `${ctx.basePath}/blog` })}>${esc(m.site_all_news({}, o))}${siteIconSvg('arrow-right', 16)}</a></div>
+  ${renderArticleCards(ctx.block, articles)}
+</section>`;
+}
+
+async function pageResponse(ctx: SiteCtx, page: PublishedPage, path: string, home?: { hero: string; before: string }): Promise<SiteHttpResponse> {
   const title = page.publishedTitle ?? page.slug;
   if (checkPageAccess(page, null) !== 'allowed') {
     // Ni titre ni contenu : une page réservée ne se dévoile pas à qui n'y a pas droit.
     const body = shell(ctx, { path, title: m.site_restricted_title({}, { locale: ctx.locale }), main: restrictedMain(ctx, page), noindex: true, pageId: page.id });
     return html(200, body, ctx.nonce, ctx.req.apiOrigin, { noindex: true });
   }
-  const main = await renderPageMain(ctx, page);
+  const main = (home?.before ?? '') + (await renderPageMain(ctx, page));
   const isArticle = page.kind === 'BLOG';
   const description = page.seoDescription ?? page.excerpt ?? null;
   const absolute = `${ctx.req.origin}${path}`;
@@ -427,20 +497,24 @@ async function pageResponse(ctx: SiteCtx, page: PublishedPage, path: string): Pr
     breadcrumbs: page.kind === 'PAGE' ? undefined : breadcrumbsFor(ctx, page),
     jsonLd,
     main,
+    hero: home?.hero,
   });
   return html(200, body, ctx.nonce, ctx.req.apiOrigin, { cacheSeconds: 30 });
 }
 
 async function homeResponse(ctx: SiteCtx): Promise<SiteHttpResponse> {
+  const heroHtml = await homeHero(ctx);
   if (ctx.site.homePageId) {
     const page = await getPublishedPageById(ctx.site.id, ctx.site.homePageId);
+    // Page réservée en accueil : pas de bannière, la page explique l'accès.
+    if (page && checkPageAccess(page, null) === 'allowed') return pageResponse(ctx, page, ctx.basePath, { hero: heroHtml, before: homeNews(ctx, publishedDoc(page)) });
     if (page) return pageResponse(ctx, page, ctx.basePath);
   }
   const doc = virtualDocument(AUTO_HOME_ID)!;
   const body = await renderDocumentHtml(ctx, doc, AUTO_HOME_ID);
-  const main = `${hero(ctx.identity.name, ctx.site.tagline, undefined, ctx.site.bannerUrl ?? ctx.identity.bannerUrl)}<div class="prose wide">${body}</div>`;
+  const main = `${homeNews(ctx, doc)}<div class="prose wide">${body}</div>`;
   const jsonLd = { '@context': 'https://schema.org', '@type': 'WebSite', name: ctx.identity.name, url: `${ctx.req.origin}${ctx.basePath}` };
-  return html(200, shell(ctx, { path: ctx.basePath, title: ctx.identity.name, description: ctx.site.tagline, main, activeKey: 'home', pageId: AUTO_HOME_ID, jsonLd }), ctx.nonce, ctx.req.apiOrigin, { cacheSeconds: 30 });
+  return html(200, shell(ctx, { path: ctx.basePath, title: ctx.identity.name, description: ctx.site.tagline, main, hero: heroHtml, activeKey: 'home', pageId: AUTO_HOME_ID, jsonLd }), ctx.nonce, ctx.req.apiOrigin, { cacheSeconds: 30 });
 }
 
 function wikiIndexResponse(ctx: SiteCtx): SiteHttpResponse {
@@ -491,6 +565,35 @@ async function meResponse(ctx: SiteCtx): Promise<SiteHttpResponse> {
   const body = await renderDocumentHtml(ctx, virtualDocument(ME_PAGE_ID)!, ME_PAGE_ID);
   const main = `${hero(m.site_my_space({}, o))}<div class="prose wide">${body}</div>`;
   return html(200, shell(ctx, { path: `${ctx.basePath}/me`, title: m.site_my_space({}, o), main, activeKey: 'me', noindex: true, pageId: ME_PAGE_ID }), ctx.nonce, ctx.req.apiOrigin, { noindex: true });
+}
+
+/** Profil public d'un membre (masquable par le membre, non indexé). */
+async function memberProfileResponse(ctx: SiteCtx, userId: string): Promise<SiteHttpResponse> {
+  const o = { locale: ctx.locale };
+  const profile = await getPublicMemberProfile(ctx.req.client, ctx.site.guildId, userId);
+  if (!profile) return statePage(ctx, 404, m.site_member_profile_missing_title({}, o), m.site_member_profile_missing_desc({}, o));
+  const tile = (value: string, label: string) => `<div class="stat"><p class="stat-value">${esc(value)}</p><p class="stat-label">${esc(label)}</p></div>`;
+  const tiles = [
+    profile.level ? tile(m.site_level({ level: profile.level.level }, o), `${formatNumber(profile.level.xp, ctx.locale)} XP`) : '',
+    profile.level ? tile(`#${formatNumber(profile.level.rank, ctx.locale)}`, m.site_leaderboard_xp({}, o)) : '',
+    profile.reputation ? tile(formatNumber(profile.reputation, ctx.locale), m.site_rep({ value: '' }, o).trim()) : '',
+    tile(formatNumber(profile.messageCount, ctx.locale), m.site_member_messages({}, o)),
+    profile.voiceHours ? tile(formatNumber(profile.voiceHours, ctx.locale), m.site_member_voice_hours({}, o)) : '',
+  ].join('');
+  const meta = [
+    profile.username ? `@${esc(profile.username)}` : '',
+    profile.joinedAt ? esc(m.site_member_since({ date: formatDate(profile.joinedAt, ctx.locale, 'long') }, o)) : '',
+    profile.isStaff ? `<span class="pill">${esc(m.site_staff_other({}, o))}</span>` : '',
+  ].filter(Boolean).join(' · ');
+  const avatarHtml = profile.avatarUrl
+    ? `<img class="member-avatar"${attrs({ src: profile.avatarUrl, alt: '', width: 96, height: 96 })}>`
+    : `<span class="member-avatar" aria-hidden="true">${esc(profile.displayName.slice(0, 1).toUpperCase())}</span>`;
+  const main = `<article class="member-profile">
+  <header class="member-head">${avatarHtml}<div><h1 class="page-title">${esc(profile.displayName)}</h1><p class="page-meta">${meta}</p></div></header>
+  ${profile.bio ? `<p class="member-bio">${esc(profile.bio)}</p>` : ''}
+  <div class="stats">${tiles}</div>
+</article>`;
+  return html(200, shell(ctx, { path: `${ctx.basePath}/u/${profile.userId}`, title: profile.displayName, main, image: profile.avatarUrl, noindex: true }), ctx.nonce, ctx.req.apiOrigin, { cacheSeconds: 60, noindex: true });
 }
 
 async function formResponse(ctx: SiteCtx, formId: string): Promise<SiteHttpResponse> {
@@ -708,6 +811,7 @@ export async function handleSiteRequest(req: SiteHttpRequest): Promise<SiteHttpR
   if (site.suspendedAt) return bareStatePage(req, 451, m.site_suspended_title({}, o), m.site_suspended_desc({}, o));
 
   const ctx = await buildSiteCtx(req, site);
+  ctx.inviteUrl = await pageInviteUrl(ctx);
   const [section, a, b] = rest;
 
   // Les fichiers techniques et l'aperçu restent servis avant la publication :
@@ -728,6 +832,7 @@ export async function handleSiteRequest(req: SiteHttpRequest): Promise<SiteHttpR
     else if (section === 'embed' && a && b && rest.length === 3) (response = await embedResponse(ctx, a, b)), (trackPath = null);
     else if (section === 'search' && rest.length === 1) response = await searchResponse(ctx);
     else if (section === 'me' && rest.length === 1) response = await meResponse(ctx);
+    else if (section === 'u' && a && rest.length === 2) response = await memberProfileResponse(ctx, a);
     else if (section === 'form' && a && rest.length === 2) response = await formResponse(ctx, a);
     else if (section === 'wiki' && rest.length === 1) response = wikiIndexResponse(ctx);
     else if (section === 'wiki' && a && rest.length === 2) {
