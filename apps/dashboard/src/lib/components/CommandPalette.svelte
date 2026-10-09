@@ -5,7 +5,6 @@
   import { themeStore } from '../stores/theme.svelte';
   import { feedbackModal } from '../stores/feedbackModal.svelte';
   import { searchStore } from '../stores/search.svelte';
-  import { sidebarStore } from '../stores/sidebar.svelte';
   import { serverSwitcherStore } from '../stores/serverSwitcher.svelte';
   import { onboardingStore } from '../stores/tutorial.svelte';
   import { navigationStore } from '../stores/navigation.svelte';
@@ -247,74 +246,28 @@
     }
   }
 
-  let lastCtrlKTime = 0;
-
+  /**
+   * « / » et Ctrl+K ouvrent la meme recherche. Ils visaient avant un champ de
+   * la barre laterale (`.sidebar input`) qui n'existait plus, et un double
+   * Ctrl+K basculait sur la palette : deux recherches, deux gestes, pour les
+   * memes pages. La barre laterale n'a plus de champ ; tout passe par ici.
+   */
   function handleGlobalKeydown(e: KeyboardEvent) {
-    // "/" ouvre la recherche sidebar (sauf si on est dans un champ texte)
-    if (e.key === '/' && !open) {
-      const active = document.activeElement;
-      const isEditing = active && (
-        active.tagName === 'INPUT' ||
-        active.tagName === 'TEXTAREA' ||
-        active.getAttribute('contenteditable') === 'true'
-      );
-      if (!isEditing) {
-        e.preventDefault();
-        serverSwitcherStore.close();
-        const sidebarSearchInput = document.querySelector('.sidebar input') as HTMLInputElement;
-        if (sidebarSearchInput) {
-          if (sidebarStore.collapsed) {
-            sidebarStore.set(false);
-          }
-          setTimeout(() => {
-            const input = document.querySelector('.sidebar input') as HTMLInputElement;
-            input?.focus();
-            input?.select();
-          }, 50);
-        } else {
-          searchStore.toggle();
-        }
-        return;
-      }
-    }
+    const active = document.activeElement;
+    const isEditing = active && (
+      active.tagName === 'INPUT' ||
+      active.tagName === 'TEXTAREA' ||
+      active.getAttribute('contenteditable') === 'true'
+    );
 
-    const isSearchKey = e.key === 'k' || e.key === 'K';
-    if ((e.metaKey || e.ctrlKey) && isSearchKey) {
-      e.preventDefault();
-      serverSwitcherStore.close();
-      onboardingStore.markShortcutUsed();
+    const isSlash = e.key === '/' && !open && !isEditing;
+    const isCtrlK = (e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K');
+    if (!isSlash && !isCtrlK) return;
 
-      const now = Date.now();
-      if (now - lastCtrlKTime < 500) {
-        // Double Ctrl+K: toggle command palette navigation modal
-        close();
-        searchStore.toggle();
-        lastCtrlKTime = 0;
-
-        // Blur sidebar input if it was focused
-        const sidebarSearchInput = document.querySelector('.sidebar input') as HTMLInputElement;
-        if (sidebarSearchInput) {
-          sidebarSearchInput.blur();
-        }
-      } else {
-        // Single Ctrl+K: focus sidebar search if it exists
-        const sidebarSearchInput = document.querySelector('.sidebar input') as HTMLInputElement;
-        if (sidebarSearchInput) {
-          if (sidebarStore.collapsed) {
-            sidebarStore.set(false);
-          }
-          setTimeout(() => {
-            const input = document.querySelector('.sidebar input') as HTMLInputElement;
-            input?.focus();
-            input?.select();
-          }, 50);
-        } else {
-          // If sidebar search doesn't exist (e.g. admin pages), toggle command palette instantly
-          searchStore.toggle();
-        }
-        lastCtrlKTime = now;
-      }
-    }
+    e.preventDefault();
+    serverSwitcherStore.close();
+    if (isCtrlK) onboardingStore.markShortcutUsed();
+    searchStore.toggle();
   }
 </script>
 

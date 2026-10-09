@@ -34,7 +34,7 @@ export const generalItems: PageConfig[] = [
   // manque rien.
   // « Créer mon serveur » y a été fusionné : monter la structure et vérifier
   // ce qu'il reste à régler sont le même moment.
-  { name: "Prise en main",        icon: "compass",   href: "/setup",     featureKey: "settings", beta: true, wip: false },
+  { name: "Bien démarrer",        icon: "compass",   href: "/setup",     featureKey: "settings", beta: true, wip: false },
   // « Reprise » a quitte le menu : la detection des autres bots et la
   // recuperation de ce qui est lisible du serveur se font desormais dans le
   // parcours de configuration, imposees des qu'on repond « serveur existant ».

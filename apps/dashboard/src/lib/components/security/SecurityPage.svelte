@@ -30,7 +30,8 @@
     basePath: string;
     title: string;
     description: string;
-    icon: string;
+    /** Accepte pour compatibilite ; l'en-tete n'affiche plus d'icone. */
+    icon?: string;
     tabs: SecurityTab[];
     /** Rendu du contenu, l'onglet actif est passe en argument. */
     children: Snippet<[string]>;
@@ -38,7 +39,7 @@
     actions?: Snippet;
   };
 
-  const { basePath, title, description, icon, tabs, children, actions }: Props = $props();
+  const { basePath, title, description, tabs, children, actions }: Props = $props();
 
   const visibleTabs = $derived(tabs.filter((tab) => !tab.hidden));
   const defaultTab = $derived(visibleTabs[0]?.key ?? '');
@@ -53,28 +54,20 @@
   const readOnly = $derived(!navigationStore.canManageSecurity);
 </script>
 
-<div class="flex flex-col gap-6 animate-in fade-in slide-in-from-bottom-2 duration-500">
-  <header
-    class="flex flex-col gap-4 rounded-xl border border-outline-variant/30 bg-surface-container-low/40 p-5 md:flex-row md:items-center md:justify-between"
-  >
-    <div class="flex min-w-0 items-center gap-4">
-      <div
-        class="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-linear-to-br from-primary to-primary-container shadow-md shadow-primary/15"
-      >
-        <Papicon {icon} size={22} class="text-white" />
-      </div>
-      <div class="min-w-0">
-        <h1 class="font-headline text-lg font-semibold leading-tight tracking-tight text-on-surface">
-          {title}
-        </h1>
-        <p class="text-sm font-medium text-on-surface-variant/70">{description}</p>
-      </div>
+<div class="flex flex-col gap-6">
+  <!-- Meme en-tete que ModulePage : un titre, une phrase, les actions. -->
+  <header class="flex flex-col gap-x-6 gap-y-3 md:flex-row md:items-end md:justify-between">
+    <div class="min-w-0">
+      <h1 class="font-headline text-2xl font-semibold leading-tight tracking-tight text-on-surface">
+        {title}
+      </h1>
+      <p class="mt-1 max-w-prose text-sm text-on-surface-variant">{description}</p>
     </div>
 
-    <div class="flex items-center gap-3">
+    <div class="flex items-center gap-2">
       {#if readOnly}
         <span
-          class="inline-flex items-center gap-1.5 rounded-lg border border-outline-variant/30 bg-surface-container px-2.5 py-1.5 text-2xs font-medium text-on-surface-variant"
+          class="inline-flex items-center gap-1.5 rounded-lg bg-surface-container px-2.5 py-1.5 text-2xs font-medium text-on-surface-variant"
           title="Seuls les administrateurs peuvent modifier la configuration de sécurité."
         >
           <Papicon icon="Eye" size={13} />

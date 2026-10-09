@@ -1,20 +1,25 @@
 <script lang="ts">
-  import Papicon from './Papicon.svelte';
+  import { router } from 'tinro';
   import { dashboardStore } from '../stores/dashboard.svelte';
-  import ToggleSwitch from './ToggleSwitch.svelte';
   import { updateModuleStatus } from '../api';
   import { createAsyncActionState } from '../asyncAction.svelte';
   import InlineFeedback from './InlineFeedback.svelte';
   import Button from './ui/Button.svelte';
   import Callout from './ui/Callout.svelte';
+  import Menu, { type MenuItem } from './ui/Menu.svelte';
   import { toast } from '../stores/toast.svelte';
+  import { confirmDialog } from '../stores/confirmDialog.svelte';
+  import { feedbackModal } from '../stores/feedbackModal.svelte';
+  import { getPageStatus } from '../config/pages';
   import { m } from '../i18n';
 
-  const { 
-    title = '', 
-    description = '', 
-    icon = 'Grid', 
-    featureKey = '', 
+  // `icon` reste accepte : les 59 pages qui le passent n'ont pas a changer,
+  // mais l'en-tete ne l'affiche plus. Le menu montre deja l'icone de la page.
+  const {
+    title = '',
+    description = '',
+    icon: _icon = 'Grid',
+    featureKey = '',
     children,
     actions = undefined
   } = $props();
@@ -44,10 +49,12 @@
     module?.requiredPlan ? PLAN_LABELS[module.requiredPlan] ?? module.requiredPlan : 'payante',
   );
 
-  async function toggleModule() {
+  const isBeta = $derived(getPageStatus($router.path, $router.url)?.beta ?? false);
+
+  async function setModule(enabled: boolean) {
     if (!module || isFixed || lockedByPlan) return;
-    const newStatus = isModuleEnabled ? 'inactive' : 'active';
-    
+    const newStatus = enabled ? 'active' : 'inactive';
+
     await saveAction.run(async () => {
       const ok = await updateModuleStatus(featureKey, newStatus);
       if (!ok) throw new Error(m.d7_api_error());
@@ -62,43 +69,67 @@
       return true;
     }, { successMessage: newStatus === 'active' ? '' : m.d7_module_disabled() });
   }
+
+  /**
+   * Eteindre un module coupe ses commandes et ses automatismes pour tout le
+   * serveur. C'etait un interrupteur pose a cote du titre de chaque page, au
+   * meme rang que l'action principale ; il vit maintenant dans le menu de la
+   * page, et demande confirmation. Le rallumer reste a un clic (encadre).
+   */
+  async function askDisable() {
+    const confirmed = await confirmDialog.ask({
+      title: `Désactiver « ${title} » ?`,
+      description: m.mp_disable_confirm_desc(),
+      confirmLabel: m.mp_disable_confirm_action(),
+      variant: 'warning',
+    });
+    if (confirmed) await setModule(false);
+  }
+
+  const pageMenu = $derived.by((): MenuItem[] => {
+    const items: MenuItem[] = [];
+    if (isBeta) {
+      items.push({ label: m.banner_report_issue(), icon: 'message-square', onselect: () => feedbackModal.show() });
+    }
+    if (module && !isFixed && !lockedByPlan && isModuleEnabled) {
+      items.push({
+        label: m.mp_disable_action(),
+        description: m.mp_disable_action_desc(),
+        icon: 'power',
+        onselect: () => void askDisable(),
+      });
+    }
+    return items;
+  });
 </script>
 
-<div class="module-page flex flex-col gap-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+<div class="module-page flex flex-col gap-6">
   <InlineFeedback state={saveAction} />
-  
-  <!-- Header -->
-  <header class="module-page__header flex flex-col md:flex-row md:items-center justify-between gap-4 bg-surface-container-lowest p-5 rounded-xl border border-outline-variant">
-    <div class="module-page__identity flex min-w-0 items-center gap-4">
-      <div class="module-page__icon w-11 h-11 shrink-0 bg-primary-container text-on-primary-container rounded-lg flex items-center justify-center">
-        <Papicon {icon} size={22} />
+
+  <header class="module-page__header flex flex-col md:flex-row md:items-end justify-between gap-x-6 gap-y-3">
+    <div class="module-page__identity min-w-0">
+      <div class="flex items-center gap-2 min-w-0">
+        <h1 class="text-2xl font-semibold tracking-tight text-on-surface font-headline leading-tight truncate">{title}</h1>
+        {#if isBeta}
+          <span class="shrink-0 px-1.5 py-0.5 rounded-md text-2xs font-medium bg-primary/10 text-primary">{m.common_beta()}</span>
+        {/if}
       </div>
-      <div class="min-w-0">
-        <h1 class="text-lg font-semibold tracking-tight text-on-surface font-headline leading-tight">{title}</h1>
-        <p class="text-sm text-on-surface-variant">{description}</p>
-      </div>
+      {#if description}
+        <p class="mt-1 max-w-prose text-sm text-on-surface-variant">{description}</p>
+      {/if}
     </div>
 
-    <div class="module-page__actions flex items-center flex-wrap justify-end gap-3">
+    <div class="module-page__actions flex items-center flex-wrap md:justify-end gap-2 shrink-0">
       {#if actions}
         {@render actions()}
       {/if}
 
       {#if module && !isFixed && lockedByPlan}
-        <div class="h-8 w-px bg-outline-variant mx-1 hidden md:block"></div>
         <Button href="/billing" variant="primary" icon="Lock">Offre {requiredPlanLabel}</Button>
-      {:else if module && !isFixed}
-        <div class="h-8 w-px bg-outline-variant mx-1 hidden md:block"></div>
-        <div class="flex items-center gap-2.5 px-3 py-1.5 bg-surface-container rounded-lg border border-outline-variant">
-          <span class="text-xs font-medium {isModuleEnabled ? 'text-primary' : 'text-on-surface-variant'}">
-            {isModuleEnabled ? m.d7_enabled() : m.d7_disabled()}
-          </span>
-          <ToggleSwitch
-            checked={isModuleEnabled}
-            onToggle={toggleModule}
-            disabled={saveAction.state.loading}
-          />
-        </div>
+      {/if}
+
+      {#if pageMenu.length > 0}
+        <Menu items={pageMenu} label={m.mp_page_menu({ page: title })} />
       {/if}
     </div>
   </header>
@@ -122,7 +153,7 @@
       <Callout variant="warning" title={m.mp_module_off_title()}>
         {m.mp_module_off_desc()}
         {#snippet actions()}
-          <Button variant="primary" size="sm" icon="power" loading={saveAction.state.loading} onclick={toggleModule}>
+          <Button variant="primary" size="sm" icon="power" loading={saveAction.state.loading} onclick={() => setModule(true)}>
             {m.mp_module_off_action()}
           </Button>
         {/snippet}
