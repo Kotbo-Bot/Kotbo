@@ -12,6 +12,7 @@
   import { feedbackModal } from '../stores/feedbackModal.svelte';
   import { getPageStatus } from '../config/pages';
   import { m } from '../i18n';
+  import { isCoreModule } from '@kotbo/contracts';
 
   // `icon` reste accepte : les 59 pages qui le passent n'ont pas a changer,
   // mais l'en-tete ne l'affiche plus. Le menu montre deja l'icone de la page.
@@ -28,7 +29,10 @@
 
   const module = $derived((dashboardStore.state.modules as any[]).find((m) => m.id === featureKey));
   const isModuleEnabled = $derived(!module || module.status === 'active');
-  const isFixed = $derived(module?.id === 'activity' || module?.id === 'dashboard');
+  // Les modules du coeur (parametres, membres, commandes...) ne s'eteignent
+  // pas : le catalogue les montre verrouilles, la page n'a pas a proposer de
+  // les desactiver.
+  const isFixed = $derived(module?.id === 'activity' || module?.id === 'dashboard' || (!!module && isCoreModule(module.id)));
 
   /**
    * Verrouille par l'offre, et non eteint par choix. La distinction change le

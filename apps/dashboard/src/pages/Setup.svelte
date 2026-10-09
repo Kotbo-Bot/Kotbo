@@ -142,18 +142,6 @@
     return TRACKS.filter((track) => !kept.has(track.key));
   });
 
-  function ringColor(value: number): string {
-    if (value >= 85) return 'stroke-emerald-500';
-    if (value >= 50) return 'stroke-amber-500';
-    return 'stroke-primary';
-  }
-
-  function textColor(value: number): string {
-    if (value >= 85) return 'text-success';
-    if (value >= 50) return 'text-warning';
-    return 'text-primary';
-  }
-
   /**
    * Une etape a faire ouvre sa page en montrant le champ, comme depuis
    * l'accueil. Le lien reste un vrai lien : clic molette et Ctrl+clic ouvrent
@@ -168,9 +156,6 @@
     startSetupGuide(step);
   }
 
-  const RING_RADIUS = 42;
-  const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
-  const ringOffset = $derived(RING_CIRCUMFERENCE * (1 - percent / 100));
 
   async function load() {
     if (!authStore.selectedGuildId) return;
@@ -233,12 +218,36 @@
     <EmptyState icon="compass" title="Liste indisponible" description="Réessaie avec le bouton Actualiser." />
   {:else}
     <div class="space-y-4">
+      <!-- Une ligne d'avancement plutot qu'un anneau de 110px : l'anneau
+           virait a l'orange des 50 %, comme une alerte, et sa phrase
+           « Le prochain : ... » repetait la premiere carte juste au-dessus. -->
+      <div class="flex items-center gap-3">
+        <div
+          class="h-1.5 flex-1 rounded-full bg-surface-container-high overflow-hidden"
+          role="progressbar"
+          aria-valuemin={0}
+          aria-valuemax={progress.total}
+          aria-valuenow={progress.done}
+          aria-label="Avancement"
+        >
+          <div class="h-full rounded-full bg-primary transition-[width] duration-500" style="width: {percent}%"></div>
+        </div>
+        <p class="shrink-0 text-body-sm text-on-surface-variant">
+          {#if remaining.length === 0}
+            <span class="font-medium text-success">Tout est réglé</span>
+          {:else}
+            <span class="font-medium text-on-surface">{progress.done} sur {progress.total}</span> réglés
+          {/if}
+        </p>
+      </div>
+
       <!-- ── Les trois prochaines actions ───────────────────────────────── -->
       {#if nextActions.length > 0}
         <div class="grid gap-3 sm:grid-cols-3">
           {#each nextActions as action, index (action.key)}
             <a
               href={action.href}
+              onclick={(event) => guideTo(event, action)}
               class="group rounded-2xl border p-4 transition-colors
               {index === 0
                 ? 'border-primary/45 bg-primary/[0.05] hover:border-primary/70'
@@ -267,50 +276,6 @@
           {/each}
         </div>
       {/if}
-
-      <!-- ── Avancement ─────────────────────────────────────────────────── -->
-      <SectionCard>
-        <div class="flex flex-col sm:flex-row items-center gap-5">
-          <div class="relative w-[110px] h-[110px] shrink-0">
-            <svg viewBox="0 0 100 100" class="w-full h-full -rotate-90">
-              <circle cx="50" cy="50" r={RING_RADIUS} class="stroke-outline-variant/30" stroke-width="8" fill="none" />
-              <circle
-                cx="50" cy="50" r={RING_RADIUS}
-                class="{ringColor(percent)} transition-all duration-700"
-                stroke-width="8" fill="none" stroke-linecap="round"
-                stroke-dasharray={RING_CIRCUMFERENCE}
-                stroke-dashoffset={ringOffset}
-              />
-            </svg>
-            <div class="absolute inset-0 flex flex-col items-center justify-center">
-              <span class="text-2xl font-bold tracking-tight {textColor(percent)}">{percent}%</span>
-              <span class="text-xs text-on-surface-variant/70">
-                {progress.done}/{progress.total}
-              </span>
-            </div>
-          </div>
-
-          <div class="min-w-0 flex-1 text-center sm:text-left">
-            {#if remaining.length === 0}
-              <p class="text-sm font-semibold text-success">Tout est configuré.</p>
-              <p class="text-body-sm text-on-surface-variant mt-1 leading-relaxed">
-                Les points essentiels sont couverts. Le reste se règle module par module,
-                au fil de ce dont le serveur a besoin.
-              </p>
-            {:else}
-              <p class="text-sm font-semibold text-on-surface">
-                {remaining.length} point{remaining.length > 1 ? 's' : ''} à régler
-              </p>
-              <p class="text-body-sm text-on-surface-variant mt-1 leading-relaxed">
-                Le prochain : <a href={remaining[0].href} onclick={(event) => guideTo(event, remaining[0])} class="text-primary hover:underline font-medium">{remaining[0].label}</a>.
-                {remaining[0].why}
-              </p>
-            {/if}
-          </div>
-        </div>
-      </SectionCard>
-
-      <QuickSetupHub />
 
       <!-- ── Monter le serveur ──────────────────────────────────────────── -->
       {#if canBuildServer}
@@ -401,6 +366,8 @@
           </SectionCard>
         {/if}
       {/each}
+
+      <QuickSetupHub />
 
       {#if skippedTracks.length > 0}
         <!-- Ce qu'on a laisse de cote pendant le parcours. Quelqu'un qui a
