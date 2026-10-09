@@ -48,6 +48,8 @@ import { createHonoApp } from './hono/app.js';
 
 import { jsonFailure } from './shared/failure.js';
 import { canViewFeatureSection } from './routes/dashboard/featureGate.js';
+import { closeCollabConnection, handleCollabMessage, openCollabConnection } from '../services/site/siteCollabService.js';
+import { canEditKind, resolveSiteRights } from '../services/site/siteRights.js';
 import {
   addLiveSubscriber,
   liveSnapshot,
@@ -92,6 +94,8 @@ export async function notifyDashboardSanctionReportRequired(params: {
 interface WebSocketData {
   isAuthenticated: boolean;
   userId?: string;
+  /** Socket d'édition à plusieurs d'une page de site (protocole y-websocket). */
+  collab?: { pageId: string; guildId: string };
   /** Serveurs dont ce socket suit le temps réel d'Analytics. */
   liveGuilds?: Set<string>;
 }
@@ -178,6 +182,39 @@ export const startDashboardApi = async (client: Client) => {
     async fetch(request, serverInstance) {
       const url = new URL(request.url);
 
+      // Édition à plusieurs d'une page de site : même contrôle d'origine et de
+      // session que le WebSocket du dashboard, plus le droit d'éditer la page.
+      const collabParts = url.pathname.startsWith('/api/site/collab/')
+        ? url.pathname.slice('/api/site/collab/'.length).split('/').filter(Boolean)
+        : null;
+      if (collabParts) {
+        const [collabGuildId = '', collabPageId = ''] = collabParts;
+        if (collabParts.length !== 2 || !SNOWFLAKE_RE.test(collabGuildId) || !/^[a-z0-9]{20,32}$/.test(collabPageId)) {
+          return new Response('Chemin invalide', { status: 400 });
+        }
+        const origin = request.headers.get('origin');
+        let allowedOrigin = origin === getDashboardOrigin() || getAllInstances().some((i) => i.dashboardOrigin === origin);
+        if (!allowedOrigin && process.env.NODE_ENV !== 'production' && origin) {
+          try {
+            allowedOrigin = ['localhost', '127.0.0.1'].includes(new URL(origin).hostname);
+          } catch {
+            allowedOrigin = false;
+          }
+        }
+        if (!allowedOrigin) return new Response('Origine WebSocket refusée', { status: 403 });
+        const session = await getDashboardSession(sessionIdFromCookieHeader(request.headers.get('cookie') ?? undefined));
+        if (!session) return new Response('Session WebSocket absente ou expirée', { status: 401 });
+        const page = await prisma.sitePage.findFirst({ where: { id: collabPageId, guildId: collabGuildId }, select: { kind: true } });
+        if (!page) return new Response('Page introuvable', { status: 404 });
+        const rights = await resolveSiteRights(client, collabGuildId, session.userId);
+        if (!canEditKind(rights, page.kind)) return new Response('Accès refusé', { status: 403 });
+        const upgraded = serverInstance.upgrade(request, {
+          data: { isAuthenticated: true, userId: session.userId, collab: { pageId: collabPageId, guildId: collabGuildId } },
+        });
+        if (upgraded) return undefined;
+        return new Response('Upgrade WebSocket impossible', { status: 400 });
+      }
+
       // WebSocket upgrade (inchangé)
       if (url.pathname === '/api/dashboard/ws') {
         const origin = request.headers.get('origin');
@@ -206,7 +243,9 @@ export const startDashboardApi = async (client: Client) => {
       // -----------------------------------------------------------------------
       try {
         const honoResponse = await honoApp.fetch(request.clone());
-        if (honoResponse.status !== 404) {
+        // Une route Hono peut répondre 404 pour de bon (page de site
+        // introuvable) : `X-Kotbo-Handled` la distingue d'une route absente.
+        if (honoResponse.status !== 404 || honoResponse.headers.get('X-Kotbo-Handled') === '1') {
           return honoResponse;
         }
       } catch (honoErr) {
@@ -352,10 +391,18 @@ export const startDashboardApi = async (client: Client) => {
     },
     websocket: {
       open(ws) {
+        if (ws.data.collab) {
+          void openCollabConnection(ws, ws.data.collab.pageId, ws.data.collab.guildId, ws.data.userId ?? '');
+          return;
+        }
         ws.subscribe('authenticated-dashboard');
         ws.send(JSON.stringify({ type: 'dashboard_ws_connected', at: new Date().toISOString() }));
       },
       async message(ws, messageData) {
+        if (ws.data.collab) {
+          if (typeof messageData !== 'string') await handleCollabMessage(ws, new Uint8Array(messageData));
+          return;
+        }
         let data: { type?: string; guildId?: unknown };
         try {
           const raw = typeof messageData === 'string' ? messageData : new TextDecoder().decode(messageData);
@@ -396,6 +443,10 @@ export const startDashboardApi = async (client: Client) => {
         }
       },
       close(ws) {
+        if (ws.data.collab) {
+          void closeCollabConnection(ws);
+          return;
+        }
         ws.unsubscribe('authenticated-dashboard');
         for (const guildId of ws.data.liveGuilds ?? []) removeLiveSubscriber(guildId);
         ws.data.liveGuilds?.clear();

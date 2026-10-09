@@ -396,6 +396,8 @@ export const MCP_SCOPES: {
       'WRITE_COMMUNITY',
       'WRITE_MEMBERS',
       'WRITE_WORKFLOWS',
+      'READ_SITE',
+      'WRITE_SITE',
     ],
   },
 ];

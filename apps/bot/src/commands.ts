@@ -87,6 +87,7 @@ import { messageHubContextCommand, userHubContextCommand } from './commands/cont
 import { protectionCommand } from './commands/admin/protection.js';
 import { auditCommand } from './commands/admin/audit.js';
 import { reportCommand, reportMessageContextCommand } from './commands/moderation/report.js';
+import { wikiCommand } from './commands/community/wiki.js';
 
 export type SlashCommandDefinition = {
   data: { name: string; description: string; toJSON: () => unknown };
@@ -190,6 +191,7 @@ export const commands: SlashCommandDefinition[] = [
   reportCommand,
   optOutCommand,
   privacyCommand,
+  wikiCommand,
 ];
 
 /**
@@ -284,6 +286,7 @@ export const COMMAND_MODULES = new Map<ApplicationCommandDefinition, string>([
   [ticketCommand, 'tickets'],
   [giveawayCommand, 'giveaways'],
   [suggestCommand, 'suggestions'],
+  [wikiCommand, 'site_wiki'],
   [suggestionConfigCommand, 'suggestions'],
   [eventCommand, 'events'],
   [ctfCommand, 'events'],

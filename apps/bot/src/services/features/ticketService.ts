@@ -244,11 +244,12 @@ export function resolveRequireApproval(ticketType: TicketPanelTypeConfig, guildC
   return guildConfig.ticketApprovalEnabled === true;
 }
 
-function resolveTicketPanelType(guildConfig: Record<string, unknown>, typeId?: string | null): TicketPanelTypeConfig {
+/** Types de ticket du serveur, avec le type par défaut quand aucun n'est configuré. */
+export function listTicketPanelTypes(guildConfig: Record<string, unknown>): TicketPanelTypeConfig[] {
   const asText = (value: unknown, fallback: string) => (typeof value === 'string' && value ? value : fallback);
   const asId = (value: unknown) => (typeof value === 'string' ? value : null);
 
-  const ticketTypes = normalizeTicketPanelTypes(guildConfig.ticketTypes, {
+  return normalizeTicketPanelTypes(guildConfig.ticketTypes, {
     label: asText(guildConfig.ticketEmbedButtonText, 'Ouvrir un ticket'),
     description: asText(guildConfig.ticketEmbedDesc, "Cliquez sur le bouton ci-dessous pour ouvrir un ticket d'assistance."),
     categoryId: asId(guildConfig.ticketCategoryId),
@@ -256,6 +257,10 @@ function resolveTicketPanelType(guildConfig: Record<string, unknown>, typeId?: s
     emoji: '📩',
     buttonStyle: 'PRIMARY',
   });
+}
+
+export function resolveTicketPanelType(guildConfig: Record<string, unknown>, typeId?: string | null): TicketPanelTypeConfig {
+  const ticketTypes = listTicketPanelTypes(guildConfig);
 
   if (!typeId) {
     return ticketTypes[0];
@@ -2432,7 +2437,7 @@ function buildTicketLockNoticeEmbed(staffMention: string | null): EmbedBuilder {
  * Enregistre une demande de ticket en attente et depose sa carte de validation
  * dans le salon prevu. Aucun salon de ticket n'est cree a ce stade.
  */
-async function createPendingTicketRequest(
+export async function createPendingTicketRequest(
   client: Client,
   params: Omit<TicketWorkspaceParams, 'existingTicketId'>,
 ): Promise<TicketWorkspaceResult> {

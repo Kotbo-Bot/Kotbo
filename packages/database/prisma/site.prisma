@@ -1,0 +1,309 @@
+// Site communautaire : le site public d'un serveur, servi sous /s/<slug> par
+// le rendu serveur de l'API (voir docs/site-communautaire-spec.md).
+//
+// Aucun HTML n'est stocké : les contenus sont des documents ProseMirror (JSON)
+// normalisés par services/site/siteDocument.ts avant chaque écriture, et
+// rendus par services/site/siteRenderer.ts, qui échappe tout.
+
+enum SitePageKind {
+  PAGE
+  WIKI
+  BLOG
+}
+
+enum SiteVisibility {
+  PUBLIC
+  // Membres du serveur connectés avec Discord.
+  MEMBERS
+  // Membres portant l'un des rôles de `visibleRoleIds`.
+  ROLES
+  STAFF
+}
+
+enum SiteCommentStatus {
+  VISIBLE
+  // Retenu par le filtre de liens ou AegisAI, en attente d'un rédacteur.
+  PENDING
+  HIDDEN
+}
+
+enum SiteReportStatus {
+  OPEN
+  RESOLVED
+  DISMISSED
+}
+
+model CommunitySite {
+  id String @id @default(cuid())
+
+  guildId String @unique
+  // Segment d'URL : /s/<slug>. Minuscules, chiffres et tirets.
+  slug      String  @unique
+  published Boolean @default(false)
+
+  // Surcharges du branding Discord. Nul = repris du serveur.
+  name       String?
+  tagline    String?
+  logoUrl    String?
+  bannerUrl  String?
+  faviconUrl String?
+
+  // Thème prêt à l'emploi et ses réglages (accent, police, arrondis, fond,
+  // disposition de la navigation). Le CSS libre est stocké déjà filtré.
+  theme         String  @default("verre")
+  themeSettings Json    @default("{}")
+  customCss     String?
+
+  // Menu : [{ label, pageId | href | module, children: [...] }].
+  navigation Json    @default("[]")
+  homePageId String?
+
+  // Fiche équipe : hiérarchies montrées, champs affichés (bio, absence,
+  // ancienneté, statistiques).
+  staffPage Json @default("{}")
+  // Widgets, partenaires saisis à la main, commentaires par défaut…
+  settings  Json @default("{}")
+
+  wikiEditorRoleIds     String[] @default([])
+  blogEditorRoleIds     String[] @default([])
+  wikiAnnounceChannelId String?
+  blogAnnounceChannelId String?
+
+  // Suspension par l'administration Kotbo : le site répond 451 et ne peut
+  // plus être republié par le serveur tant qu'elle n'est pas levée.
+  suspendedAt     DateTime?
+  suspendedReason String?
+  suspendedById   String?
+
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  guild     Guild              @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  pages     SitePage[]
+  redirects SiteSlugRedirect[]
+  assets    SiteAsset[]
+  reports   SiteReport[]
+
+  @@index([published])
+  @@map("community_sites")
+}
+
+// Ancien slug, gardé pour que les liens déjà partagés continuent de marcher.
+model SiteSlugRedirect {
+  slug   String @id
+  siteId String
+
+  createdAt DateTime @default(now())
+
+  site CommunitySite @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@index([siteId])
+  @@map("site_slug_redirects")
+}
+
+model SitePage {
+  id String @id @default(cuid())
+
+  siteId  String
+  guildId String
+  kind    SitePageKind @default(PAGE)
+  slug    String
+  title   String
+  // Résumé (listes d'articles, Open Graph) et couverture.
+  excerpt  String?
+  coverUrl String?
+  icon     String?
+
+  // Arborescence du wiki. Nul = racine.
+  parentId  String?
+  sortOrder Int      @default(0)
+  tags      String[] @default([])
+
+  visibility     SiteVisibility @default(PUBLIC)
+  visibleRoleIds String[]       @default([])
+
+  // Brouillon : le document en cours d'édition, et l'état Yjs qui le porte
+  // pendant l'édition à plusieurs.
+  draftContent          Json    @default("{\"type\":\"doc\",\"content\":[]}")
+  collabState           Bytes?
+  hasUnpublishedChanges Boolean @default(true)
+
+  // Version vue par le public. Nul tant que la page n'a jamais été publiée.
+  publishedContent Json?
+  publishedTitle   String?
+  publishedAt      DateTime?
+  firstPublishedAt DateTime?
+  // Publication programmée du brouillon.
+  scheduledAt      DateTime?
+  archivedAt       DateTime?
+
+  commentsEnabled Boolean @default(true)
+  seoTitle        String?
+  seoDescription  String?
+
+  // Texte brut de la version publiée, sans accents et en minuscules : la
+  // recherche plein texte porte sur un index GIN posé par la migration.
+  searchText String @default("")
+
+  authorId       String
+  lastEditedById String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  site      CommunitySite      @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  parent    SitePage?          @relation("SitePageTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children  SitePage[]         @relation("SitePageTree")
+  revisions SitePageRevision[]
+  comments  SiteComment[]
+
+  @@unique([siteId, kind, slug])
+  @@index([siteId, kind, parentId, sortOrder])
+  @@index([siteId, kind, publishedAt])
+  @@index([scheduledAt])
+  @@map("site_pages")
+}
+
+// Une ligne par publication : l'historique se lit et se restaure d'ici.
+model SitePageRevision {
+  id String @id @default(cuid())
+
+  pageId   String
+  guildId  String
+  title    String
+  content  Json
+  authorId String
+  note     String?
+
+  createdAt DateTime @default(now())
+
+  page SitePage @relation(fields: [pageId], references: [id], onDelete: Cascade)
+
+  @@index([pageId, createdAt])
+  @@map("site_page_revisions")
+}
+
+model SiteComment {
+  id String @id @default(cuid())
+
+  pageId       String
+  guildId      String
+  authorId     String
+  authorName   String
+  authorAvatar String?
+  content      String
+
+  status           SiteCommentStatus @default(VISIBLE)
+  moderationReason String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  page SitePage @relation(fields: [pageId], references: [id], onDelete: Cascade)
+
+  @@index([pageId, status, createdAt])
+  @@index([guildId, status, createdAt])
+  @@map("site_comments")
+}
+
+// Image téléversée, rangée sur le disque du VPS sous `storageKey`.
+model SiteAsset {
+  id String @id @default(cuid())
+
+  siteId       String
+  guildId      String
+  fileName     String
+  storageKey   String
+  mimeType     String
+  sizeBytes    Int
+  width        Int?
+  height       Int?
+  // Un même fichier téléversé deux fois n'est stocké qu'une fois par site.
+  sha256       String
+  uploadedById String
+
+  createdAt DateTime @default(now())
+
+  site CommunitySite @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@unique([siteId, sha256])
+  @@index([siteId, createdAt])
+  @@map("site_assets")
+}
+
+// « Signaler ce site » : remonte à l'administration Kotbo, pas au serveur.
+model SiteReport {
+  id String @id @default(cuid())
+
+  siteId  String
+  guildId String
+  pageId  String?
+  path    String
+  reason  String
+  details String?
+  // Hash salé du jour de l'adresse IP : limite les signalements en rafale
+  // sans conserver l'adresse.
+  reporterHash String
+
+  status       SiteReportStatus @default(OPEN)
+  resolvedById String?
+  resolvedAt   DateTime?
+
+  createdAt DateTime @default(now())
+
+  site CommunitySite @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
+  @@index([siteId, createdAt])
+  @@map("site_reports")
+}
+
+// Ce que chaque membre du staff règle lui-même pour la page Équipe.
+model SiteStaffProfile {
+  guildId String
+  userId  String
+  bio     String?
+  hidden  Boolean @default(false)
+
+  updatedAt DateTime @updatedAt
+
+  @@id([guildId, userId])
+  @@map("site_staff_profiles")
+}
+
+// Fréquentation, agrégée par jour, sans cookie ni identifiant. `dimension`
+// vaut "all", "path", "referrer" ou "device" ; `key` porte la valeur.
+model SiteDailyStat {
+  id String @id @default(cuid())
+
+  siteId    String
+  guildId   String
+  dateKey   String
+  dimension String
+  key       String @default("")
+  views     Int    @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([siteId, dateKey, dimension, key], map: "site_daily_stats_key")
+  @@index([guildId, dateKey])
+  @@map("site_daily_stats")
+}
+
+// Visiteur unique du jour (hash salé, sel jamais écrit en base) sur une
+// portée : "all" ou "path:/x". Purgé avec les statistiques.
+model SiteVisitor {
+  id String @id @default(cuid())
+
+  siteId      String
+  dateKey     String
+  scope       String
+  visitorHash String
+
+  createdAt DateTime @default(now())
+
+  @@unique([siteId, dateKey, scope, visitorHash], map: "site_visitors_key")
+  @@index([dateKey])
+  @@map("site_visitors")
+}

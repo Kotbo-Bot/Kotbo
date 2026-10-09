@@ -400,6 +400,14 @@ export async function registerCrons(client: Client): Promise<void> {
       const { pruneDashboardTelemetry } = await import('../services/analytics/dashboardTelemetryService.js');
       await pruneDashboardTelemetry();
     },
+    'site-analytics-prune': async () => {
+      const { pruneSiteAnalytics } = await import('../services/site/siteAnalyticsService.js');
+      await pruneSiteAnalytics();
+    },
+    'site-scheduled-publish': async () => {
+      const { publishDuePages } = await import('../services/site/siteAdminService.js');
+      await publishDuePages(client);
+    },
     'acquisition-abandon-scan': async () => {
       const { scanAbandonedOnboardings } = await import('../services/analytics/acquisitionMaintenance.js');
       await scanAbandonedOnboardings();
@@ -524,6 +532,14 @@ export async function registerCrons(client: Client): Promise<void> {
     await runCronJob('sanctions', async () => {
       await processScheduledSanctions(client);
     }, 1000);
+  });
+
+  // 🌐 Sites communautaires : publications programmées (toutes les minutes).
+  cron.schedule('* * * * *', async () => {
+    await runCronJob('site-scheduled-publish', async () => {
+      const { publishDuePages } = await import('../services/site/siteAdminService.js');
+      await publishDuePages(client);
+    }, 1500);
   });
 
   // 🎯 Événements planifiés: Toutes les minutes (CTF & Quiz planifiés)
@@ -667,6 +683,14 @@ export async function registerCrons(client: Client): Promise<void> {
     await runCronJob('dashboard-telemetry-prune', async () => {
       const { pruneDashboardTelemetry } = await import('../services/analytics/dashboardTelemetryService.js');
       await pruneDashboardTelemetry();
+    }, 2000);
+  });
+
+  // 🌐 Frequentation des sites communautaires : purge au-dela de 180 jours (03:57).
+  cron.schedule('57 3 * * *', async () => {
+    await runCronJob('site-analytics-prune', async () => {
+      const { pruneSiteAnalytics } = await import('../services/site/siteAnalyticsService.js');
+      await pruneSiteAnalytics();
     }, 2000);
   });
 
