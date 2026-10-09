@@ -273,8 +273,8 @@
 </script>
 
 <ModulePage
-  title="Vue d'ensemble"
-  description="Analyse complète de la configuration du serveur, catégorie par catégorie"
+  title="Bilan"
+  description="Ce qui protège ton serveur, et ce qu'il reste à régler."
   icon="ShieldCheck"
   featureKey="raid_protection"
 >

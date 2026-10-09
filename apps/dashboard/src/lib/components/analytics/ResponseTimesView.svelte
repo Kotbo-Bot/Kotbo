@@ -82,7 +82,7 @@
         hint: m.anx_resp_unanswered_hint(),
         color: SERIES[1]!,
         format: (v) => fmtPct(v),
-        value: t.unansweredRate === null ? '—' : fmtPct(t.unansweredRate),
+        value: t.unansweredRate === null ? '–' : fmtPct(t.unansweredRate),
         delta: t.unansweredRate !== null && p.unansweredRate ? relativeDelta(t.unansweredRate, p.unansweredRate) : undefined,
         invert: true,
         aggregate: 'avg',
@@ -195,7 +195,7 @@
                     </th>
                     <td class="num">{fmtNumber(row.turns)}</td>
                     <td class="num">{fmtDuration(row.medianSec)}</td>
-                    <td class="num">{row.unansweredRate === null ? '—' : fmtPct(row.unansweredRate)}</td>
+                    <td class="num">{row.unansweredRate === null ? '–' : fmtPct(row.unansweredRate)}</td>
                   </tr>
                 {/each}
               </tbody>

@@ -15,7 +15,7 @@
     try {
       data = await fetchEvaluations();
     } catch {
-      toast.error('Erreur lors du chargement');
+      toast.error('Impossible de charger. Réessaie.');
     } finally {
       loading = false;
     }
@@ -28,7 +28,7 @@
       toast.success(`${result.count} évaluations générées`);
       await load();
     } catch {
-      toast.error('Erreur lors de la génération');
+      toast.error('Impossible de générer. Réessaie.');
     } finally {
       generating = false;
     }
@@ -58,7 +58,7 @@
 
 <ModulePage
   title="Évaluations Staff"
-  description="Rapports de performance automatisés."
+  description="Un bilan du travail de chaque membre du staff sur les 30 derniers jours."
   icon="award"
   featureKey="evaluations"
 >

@@ -57,7 +57,7 @@ class NotificationsStore {
             this.fetchedAt = Date.now();
           }
         } else if (authStore.selectedGuildId === guildId) {
-          this.error = 'Erreur lors de la récupération des notifications';
+          this.error = 'Impossible de récupérer les notifications. Réessaie.';
         }
       } catch {
         if (authStore.selectedGuildId === guildId) {

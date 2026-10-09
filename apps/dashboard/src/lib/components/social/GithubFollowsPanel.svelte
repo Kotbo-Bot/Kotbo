@@ -81,7 +81,7 @@
     }
     await actionState.run(async () => {
       const res = await saveGithubFollow(toPayload({ ...form, mentionKey: form.mention }, form.repo.trim()));
-      if (!res) throw new Error('Erreur API');
+      if (!res) throw new Error("Ça n'a pas marché. Réessaie.");
       form = emptyForm();
       await reload();
       return true;
@@ -91,7 +91,7 @@
   async function handleUpdate(follow: any) {
     await actionState.run(async () => {
       const res = await saveGithubFollow(toPayload(follow, follow.repo));
-      if (!res) throw new Error('Erreur API');
+      if (!res) throw new Error("Ça n'a pas marché. Réessaie.");
       return true;
     }, { successMessage: m.social_gh_toast_updated() });
   }
@@ -100,7 +100,7 @@
     if (!(await confirmDialog.danger(m.social_gh_confirm_delete_title(), '', m.social_gh_confirm_delete_btn()))) return;
     await actionState.run(async () => {
       const ok = await deleteGithubFollow(id);
-      if (!ok) throw new Error('Erreur API');
+      if (!ok) throw new Error("Ça n'a pas marché. Réessaie.");
       follows = follows.filter((f) => f.id !== id);
       return true;
     }, { successMessage: m.social_gh_toast_deleted() });

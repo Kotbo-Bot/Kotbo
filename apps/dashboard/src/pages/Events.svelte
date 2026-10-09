@@ -72,7 +72,7 @@
       const data = await res.json();
       events = data.events || [];
     } catch (err) {
-      toast.error('Erreur lors du chargement des événements');
+      toast.error('Impossible de charger les événements. Réessaie.');
     } finally {
       isFetching = false;
     }
@@ -122,7 +122,7 @@
         router.goto(`/events/edit/${data.event.id}`);
       }
     } catch (err) {
-      toast.error('Erreur lors de la création');
+      toast.error('Impossible de créer. Réessaie.');
     } finally {
       isCreating = false;
     }
@@ -147,10 +147,10 @@
         await loadEvents();
       } else {
         const data = await res.json();
-        toast.error(data.error || 'Erreur lors de la suppression');
+        toast.error(data.error || 'Impossible de supprimer. Réessaie.');
       }
     } catch (err) {
-      toast.error('Erreur de connexion avec le serveur');
+      toast.error('Impossible de se connecter avec le serveur. Réessaie.');
     }
   }
 </script>

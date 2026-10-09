@@ -182,7 +182,7 @@
       mediaLibrary = media;
       templates = tpl.templates;
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Erreur de chargement');
+      toast.error(err instanceof Error ? err.message : 'Impossible de charger. Réessaie.');
     } finally {
       loading = false;
     }
@@ -295,7 +295,7 @@
     try {
       deliveries = (await fetchBroadcastDeliveries(log.id)).deliveries;
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Erreur de chargement du rapport');
+      toast.error(err instanceof Error ? err.message : 'Impossible de charger le rapport. Réessaie.');
       deliveries = [];
     } finally {
       deliveriesLoading = false;
@@ -320,7 +320,7 @@
       history = history.filter((log) => log.id !== id);
       toast.success('Entrée supprimée');
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Erreur de suppression');
+      toast.error(err instanceof Error ? err.message : 'Impossible de supprimer. Réessaie.');
     }
   }
 
@@ -360,7 +360,7 @@
       templates = templates.filter((t) => t.id !== id);
       toast.success('Modèle supprimé');
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Erreur de suppression');
+      toast.error(err instanceof Error ? err.message : 'Impossible de supprimer. Réessaie.');
     }
   }
 
@@ -375,7 +375,7 @@
       mediaLibrary = await fetchBroadcastMedia();
       toast.success('Image supprimée');
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Erreur de suppression');
+      toast.error(err instanceof Error ? err.message : 'Impossible de supprimer. Réessaie.');
     }
   }
 

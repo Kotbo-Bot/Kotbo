@@ -30,7 +30,7 @@
       }
     } catch (err) {
       console.error(err);
-      error = 'Erreur lors de la récupération du fichier de preuve.';
+      error = 'Impossible de récupérer le fichier de preuve. Réessaie.';
     } finally {
       loading = false;
     }

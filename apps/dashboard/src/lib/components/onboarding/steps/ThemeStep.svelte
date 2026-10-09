@@ -93,7 +93,7 @@
         {#each tree as category (category.key)}
           <p class="px-2 pt-2.5 pb-1 text-xs font-semibold text-[#949ba4]">
             {category.name}
-            {#if category.already}<span class="ml-1 font-medium normal-case tracking-normal text-[#6d7178]">— déjà là</span>{/if}
+            {#if category.already}<span class="ml-1 font-medium normal-case tracking-normal text-[#6d7178]">(déjà là)</span>{/if}
           </p>
           {#each category.children as channel (channel.key)}
             <p class="flex items-center gap-1.5 rounded px-2 py-0.5 text-body-sm {channel.already ? 'text-[#80848e]' : 'text-[#dbdee1]'}">

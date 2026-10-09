@@ -167,7 +167,7 @@
       });
       if (!res.ok) {
         const err = await res.json();
-        submitError = err.error || 'Erreur lors de la soumission';
+        submitError = err.error || 'Impossible d\'envoyer. Réessaie.';
         return;
       }
       submitted = true;

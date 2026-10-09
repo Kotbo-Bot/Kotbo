@@ -68,7 +68,7 @@
         disabled={enabling}
         class="inline-flex items-center gap-1.5 h-10 px-4 rounded-lg bg-primary text-on-primary text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
       >
-        {enabling ? 'Activation…' : 'Activer ce module'}
+        {enabling ? 'Activation…' : 'Activer'}
       </button>
     {/if}
   </div>

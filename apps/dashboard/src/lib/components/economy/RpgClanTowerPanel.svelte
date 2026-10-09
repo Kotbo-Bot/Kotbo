@@ -106,7 +106,7 @@
   const choiceClass = 'text-left p-3.5 rounded-xl border transition-colors disabled:cursor-not-allowed';
 
   function when(value: string | null | undefined): string {
-    return value ? new Date(value).toLocaleString(undefined, { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }) : '—';
+    return value ? new Date(value).toLocaleString(undefined, { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }) : '–';
   }
 </script>
 
@@ -148,12 +148,12 @@
     <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
       {@render kpi(
         m.eco_clan_tower_current_title(),
-        current ? when(current.endsAt) : '—',
+        current ? when(current.endsAt) : '–',
         current ? m.eco_clan_tower_kpi_until() : settings.enabled ? m.eco_clan_tower_next({ start: when(nextOpensAt) }) : m.eco_clan_tower_off(),
         'clock',
       )}
       {@render kpi(m.eco_clan_tower_kpi_clans(), current?.standings.length ?? 0, '', 'user')}
-      {@render kpi(m.eco_clan_tower_kpi_leader(), leader?.name ?? '—', leader ? m.eco_tower_milestone_floor({ floor: leader.floors }) : '', 'crown')}
+      {@render kpi(m.eco_clan_tower_kpi_leader(), leader?.name ?? '–', leader ? m.eco_tower_milestone_floor({ floor: leader.floors }) : '', 'crown')}
     </div>
     {@render awards()}
   {:else if view === 'board'}

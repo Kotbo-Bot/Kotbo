@@ -82,9 +82,9 @@
     data
       ? [
           { id: 'week', label: m.anx_hm_week_total(), hint: m.anx_hm_week_total_hint(), value: fmt(weekTotal), delta: relativeDelta(weekTotal, prevWeekTotal), color: SERIES[0] },
-          { id: 'best', label: m.anx_hm_best_slot(), value: best[0] ? `${SHORT[best[0].dow]} ${best[0].hour} h` : '—', hint: best[0] ? `${fmt(best[0].value)} ${metricLabel(metric).toLowerCase()}` : undefined, color: SERIES[0] },
-          { id: 'hour', label: m.anx_hm_best_hour(), value: bestHour === null ? '—' : `${bestHour} h`, color: SERIES[0] },
-          { id: 'weekend', label: m.anx_hm_weekend(), hint: m.anx_hm_weekend_hint(), value: weekendShare === null ? '—' : fmtPct(weekendShare, 0), color: SERIES[0] },
+          { id: 'best', label: m.anx_hm_best_slot(), value: best[0] ? `${SHORT[best[0].dow]} ${best[0].hour} h` : '–', hint: best[0] ? `${fmt(best[0].value)} ${metricLabel(metric).toLowerCase()}` : undefined, color: SERIES[0] },
+          { id: 'hour', label: m.anx_hm_best_hour(), value: bestHour === null ? '–' : `${bestHour} h`, color: SERIES[0] },
+          { id: 'weekend', label: m.anx_hm_weekend(), hint: m.anx_hm_weekend_hint(), value: weekendShare === null ? '–' : fmtPct(weekendShare, 0), color: SERIES[0] },
         ]
       : [],
   );

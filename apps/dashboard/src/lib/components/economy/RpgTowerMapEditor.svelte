@@ -1537,7 +1537,7 @@
                   title={valid ? '' : m.eco_tower_floor_invalid()}
                   class="w-full text-left rounded-md px-2 py-1 border transition-all flex items-center gap-2 {entry.index === current ? 'border-primary bg-primary/15' : 'border-outline-variant/15 bg-surface-container-high/40 hover:border-outline-variant/40'}">
                   <span class="text-2xs font-mono text-on-surface-variant/60 shrink-0">{floorTitle(entry.index)}</span>
-                  <span class="text-2xs font-semibold truncate flex-1">{entry.floor.name || '—'}</span>
+                  <span class="text-2xs font-semibold truncate flex-1">{entry.floor.name || '–'}</span>
                   {#if floorTags[entry.index]?.variant}<span class="text-2xs text-on-surface-variant/50 shrink-0">{floorTags[entry.index].chance} %</span>{/if}
                   {#if !valid}<span class="text-warning flex shrink-0"><Papicon icon="AlertTriangle" size={11} /></span>{/if}
                 </button>
@@ -1557,7 +1557,7 @@
                       {/each}
                     </svg>
                     <span class="min-w-0">
-                      <span class="block text-xs font-semibold truncate">{entry.floor.name || '—'}</span>
+                      <span class="block text-xs font-semibold truncate">{entry.floor.name || '–'}</span>
                       <span class="block text-2xs text-on-surface-variant/50">{m.eco_tower_map_summary({ rooms: entry.floor.rooms.length, max: roomsMax })}</span>
                     </span>
                   </span>

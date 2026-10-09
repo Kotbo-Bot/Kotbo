@@ -45,7 +45,7 @@
       holders = result.holders;
       profiles = result.profiles;
     } catch (err) {
-      loadError = errorMessage(err) ?? 'Erreur lors du chargement des succès';
+      loadError = errorMessage(err) ?? 'Impossible de charger les succès. Réessaie.';
     } finally {
       loading = false;
     }
@@ -78,7 +78,7 @@
       holders = { ...holders, [id]: (holders[id] ?? []).filter((entry) => entry.userId !== holder.userId) };
       toast.success('Succès retiré.');
     } catch (err) {
-      toast.error(errorMessage(err) ?? 'Erreur lors du retrait du succès');
+      toast.error(errorMessage(err) ?? 'Impossible de retirer le succès. Réessaie.');
     } finally {
       revoking = null;
     }

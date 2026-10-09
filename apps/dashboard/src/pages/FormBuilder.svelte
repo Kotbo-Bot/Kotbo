@@ -309,7 +309,7 @@
         }
       }
     } catch {
-      if (!silent) toast.error('Erreur lors de la sauvegarde');
+      if (!silent) toast.error('Impossible d\'enregistrer. Réessaie.');
     } finally {
       saving = false;
     }

@@ -87,7 +87,7 @@ class StaffStore {
       } catch (err) {
         console.error('StaffStore fetch error:', err);
         if (authStore.selectedGuildId === guildId) {
-          this.error = 'Erreur lors du chargement des données staff';
+          this.error = 'Impossible de charger les données staff. Réessaie.';
         }
       } finally {
         if (authStore.selectedGuildId === guildId) {

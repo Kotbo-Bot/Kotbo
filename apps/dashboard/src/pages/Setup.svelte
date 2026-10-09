@@ -84,19 +84,19 @@
     {
       key: 'essentiel',
       title: 'Essentiel',
-      description: "Sans ces trois-là, le reste fonctionne mal ou en silence.",
+      description: "Sans ces trois réglages, le reste marche mal.",
       icon: 'star',
     },
     {
       key: 'moderation',
       title: 'Modération',
-      description: 'De quoi encadrer le serveur et rendre les décisions défendables.',
+      description: 'Pour encadrer le serveur et garder une trace des décisions.',
       icon: 'shield',
     },
     {
       key: 'engagement',
       title: 'Vie du serveur',
-      description: "Ce qui fait revenir les membres : accueil, entraide, réponse aux demandes.",
+      description: "Accueil, entraide et réponses aux demandes : ce qui fait revenir les membres.",
       icon: 'users',
     },
   ];
@@ -180,7 +180,7 @@
       steps = data?.steps ?? [];
       progress = data?.progress ?? { done: 0, total: 0 };
     } catch (err) {
-      toast.error(errorMessage(err) || 'Chargement du parcours impossible');
+      toast.error(errorMessage(err) || 'Impossible de charger la liste. Réessaie.');
       steps = [];
     } finally {
       loading = false;
@@ -218,8 +218,8 @@
 </script>
 
 <ModulePage
-  title="Prise en main"
-  description="Par quoi commencer, ce qui manque, et ce que tu avais laissé de côté"
+  title="Bien démarrer"
+  description="Ce qu'il reste à régler, dans l'ordre."
   icon="compass"
   featureKey="settings"
 >
@@ -230,7 +230,7 @@
   {#if loading && steps.length === 0}
     <LoadingHint context="config" />
   {:else if steps.length === 0}
-    <EmptyState icon="compass" title="Parcours indisponible" description="Relance le calcul." />
+    <EmptyState icon="compass" title="Liste indisponible" description="Réessaie avec le bouton Actualiser." />
   {:else}
     <div class="space-y-4">
       <!-- ── Les trois prochaines actions ───────────────────────────────── -->
@@ -260,7 +260,7 @@
               <p class="mt-1 text-xs text-on-surface-variant/70 leading-relaxed">{action.why}</p>
               {#if action.detail}
                 <p class="mt-2 text-2xs px-1.5 py-0.5 rounded bg-error/10 text-error inline-block">
-                  manque : {action.detail}
+                  Il manque : {action.detail}
                 </p>
               {/if}
             </a>
@@ -334,8 +334,8 @@
 
             {#if templateApplied && !templateOpen}
               <p class="text-body-sm text-on-surface-variant leading-relaxed">
-                La structure a été posée : elle ne se relance pas. « Revoir » rouvre le
-                détail de ce qui a été créé.
+                Les salons et les rôles sont créés. « Revoir » affiche ce qui a été
+                créé.
               </p>
             {/if}
 
@@ -384,7 +384,7 @@
                         </span>
                         {#if !step.done && step.detail}
                           <span class="text-2xs px-1.5 py-0.5 rounded bg-error/10 text-error">
-                            manque : {step.detail}
+                            Il manque : {step.detail}
                           </span>
                         {:else if step.done && step.detail}
                           <span class="text-2xs px-1.5 py-0.5 rounded bg-surface-container text-on-surface-variant">
@@ -408,7 +408,7 @@
              Kotbo faisait ; ici, il le sait, et personne ne le lui reproposait. -->
         <SectionCard
           title="Ce que tu n'as pas encore configuré"
-          description="Tu l'avais laissé de côté à la mise en place. Rien ne presse - mais voilà ce que ça apporterait."
+          description="Tu l'avais laissé de côté au départ. Rien ne presse : voici ce que ça t'apporterait."
           icon="package"
         >
           <div class="grid gap-2.5 sm:grid-cols-2">
