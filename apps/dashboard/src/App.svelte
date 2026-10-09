@@ -20,6 +20,7 @@
   import NotFound from "./pages/NotFound.svelte";
   import GlobalErrorOverlay from "./lib/components/GlobalErrorOverlay.svelte";
   import LazyRoute from "./lib/components/LazyRoute.svelte";
+  import LegacySiteGate from "./lib/components/site/LegacySiteGate.svelte";
   import ModuleDisabledNotice from "./lib/components/ModuleDisabledNotice.svelte";
   import NoAccessNotice from "./lib/components/NoAccessNotice.svelte";
   import { navigationStore } from "./lib/stores/navigation.svelte";
@@ -601,6 +602,8 @@
 {:else}
   <svelte:boundary>
     {#if isPublicPage}
+      <!-- Anciennes pages publiques : renvoi vers le site du serveur s'il en a un. -->
+      <LegacySiteGate path={$router.path}>
       <LazyRoute
         path="/:serverId/news"
         load={() => import("./pages/News.svelte")}
@@ -686,6 +689,7 @@
       <Route fallback>
         <NotFound />
       </Route>
+      </LegacySiteGate>
     {:else}
       <Route path="/login">
         <Login />
