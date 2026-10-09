@@ -4,9 +4,9 @@
 -- choisi un. Le fond « dégradé » disparaît au profit du fond uni.
 -- Rejouable sans effet : les anciens noms ne réapparaissent pas.
 
-ALTER TABLE "CommunitySite" ALTER COLUMN "theme" SET DEFAULT 'azur';
+ALTER TABLE "community_sites" ALTER COLUMN "theme" SET DEFAULT 'azur';
 
-UPDATE "CommunitySite"
+UPDATE "community_sites"
 SET "themeSettings" = jsonb_build_object('mode', CASE "theme"
       WHEN 'clair' THEN 'light'
       WHEN 'neon' THEN 'dark'
@@ -23,6 +23,6 @@ SET "themeSettings" = jsonb_build_object('mode', CASE "theme"
     END
 WHERE "theme" IN ('verre', 'clair', 'neon', 'nuit', 'arcade');
 
-UPDATE "CommunitySite"
+UPDATE "community_sites"
 SET "themeSettings" = "themeSettings" - 'background'
 WHERE "themeSettings"->>'background' = 'gradient';
