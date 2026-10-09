@@ -3829,5 +3829,8 @@
   "site_cmd_wiki_not_found": "Aucune page du wiki ne correspond à « {query} ».",
   "site_cmd_wiki_results": "Pages du wiki pour « {query} »",
   "site_cmd_wiki_open": "Ouvrir sur le site",
-  "site_cmd_wiki_guild_only": "Cette commande s'utilise sur un serveur."
+  "site_cmd_wiki_guild_only": "Cette commande s'utilise sur un serveur.",
+  "site_agent_active": "Un agent IA ({key}) modifie ce site : l'édition est verrouillée.",
+  "site_agent_interrupt": "Interrompre l'agent",
+  "site_agent_interrupted": "Agent interrompu. Il ne peut plus modifier le site sans nouvelle autorisation."
 }

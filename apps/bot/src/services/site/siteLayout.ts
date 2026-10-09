@@ -238,6 +238,9 @@ function clientStrings(locale: SiteLocale): Record<string, string> {
     ticketStatusClosed: m.site_ticket_status_closed({}, o),
     ticketStaff: m.site_ticket_staff({}, o),
     appealDisabled: m.site_appeal_disabled({}, o),
+    agentActive: m.site_agent_active({ key: '{key}' }, o),
+    agentInterrupt: m.site_agent_interrupt({}, o),
+    agentInterrupted: m.site_agent_interrupted({}, o),
   };
 }
 

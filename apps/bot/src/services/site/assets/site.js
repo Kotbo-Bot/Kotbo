@@ -29,6 +29,8 @@
 
   var viewer = null;
   var viewerLoaded = false;
+  var agent = null;
+  var agentTimer = null;
 
   // ─── Utilitaires ────────────────────────────────────────────────────────
 
@@ -144,6 +146,7 @@
     return request('GET', SITE_API + '/viewer')
       .then(function (data) {
         viewer = data.viewer || null;
+        agent = data.agent || null;
       })
       .catch(function () {
         viewer = null;
@@ -151,7 +154,53 @@
       .then(function () {
         viewerLoaded = true;
         renderViewerSlots();
+        renderAgentBanner();
       });
+  }
+
+  // ─── Agent MCP (gérants seulement) ─────────────────────────────────────
+
+  /** Bandeau « un agent modifie ce site », avec de quoi l'arrêter. */
+  function renderAgentBanner() {
+    var existing = document.getElementById('kotbo-agent');
+    if (!agent || !agent.active) {
+      if (existing) existing.remove();
+      if (agentTimer) clearInterval(agentTimer);
+      agentTimer = null;
+      return;
+    }
+    var banner = existing || el('div', { id: 'kotbo-agent', class: 'kotbo-agent', role: 'status' });
+    banner.textContent = '';
+    banner.appendChild(el('span', { class: 'kotbo-agent-dot', 'aria-hidden': 'true' }));
+    banner.appendChild(el('span', null, (T.agentActive || '').replace('{key}', agent.keyName || 'MCP') + (agent.activity ? ' — ' + agent.activity : '')));
+    var stop = el('button', { type: 'button', class: 'kotbo-agent-stop' }, T.agentInterrupt);
+    stop.addEventListener('click', function () {
+      stop.disabled = true;
+      request('POST', SITE_API + '/agent/interrupt', {})
+        .then(function (data) {
+          agent = data.agent || null;
+          renderAgentBanner();
+          var note = el('div', { class: 'kotbo-agent', role: 'status' }, T.agentInterrupted);
+          document.body.appendChild(note);
+          setTimeout(function () { note.remove(); }, 4000);
+        })
+        .catch(function (err) {
+          stop.disabled = false;
+          banner.appendChild(el('span', { class: 'kotbo-agent-error' }, err.message));
+        });
+    });
+    banner.appendChild(stop);
+    if (!existing) document.body.appendChild(banner);
+    if (!agentTimer) {
+      agentTimer = setInterval(function () {
+        request('GET', SITE_API + '/viewer')
+          .then(function (data) {
+            agent = data.agent || null;
+            renderAgentBanner();
+          })
+          .catch(function () {});
+      }, 15000);
+    }
   }
 
   // ─── Blocs ─────────────────────────────────────────────────────────────

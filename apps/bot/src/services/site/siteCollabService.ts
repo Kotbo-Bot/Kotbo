@@ -25,6 +25,7 @@ import type { Prisma } from '@prisma/client';
 import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
 import { COLLAB_FRAGMENT, fragmentToDocument, seedFragment } from './siteCollabCodec.js';
+import { isSiteAgentLocked } from './siteAgentLock.js';
 
 const MESSAGE_SYNC = 0;
 const MESSAGE_AWARENESS = 1;
@@ -205,6 +206,9 @@ export async function handleCollabMessage(socket: CollabSocket, data: Uint8Array
     const decoder = decoding.createDecoder(data);
     const type = decoding.readVarUint(decoder);
     if (type === MESSAGE_SYNC) {
+      // Un agent tient la main sur le site : les éditeurs humains lisent, mais
+      // leurs modifications (étape 2, mises à jour) sont ignorées.
+      if (decoding.peekVarUint(decoder) !== syncProtocol.messageYjsSyncStep1 && isSiteAgentLocked(room.guildId)) return;
       const encoder = encoding.createEncoder();
       encoding.writeVarUint(encoder, MESSAGE_SYNC);
       syncProtocol.readSyncMessage(decoder, encoder, room.doc, socket);

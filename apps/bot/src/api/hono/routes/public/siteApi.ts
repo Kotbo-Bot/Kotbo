@@ -24,6 +24,7 @@ import { isTicketActive, openTicketFromSite, postTicketMessageFromSite } from '.
 import { toggleGiveawayParticipation } from '../../../../services/features/giveawayService.js';
 import { createSuggestion, voteOnSuggestion } from '../../../../services/features/suggestionService.js';
 import { buyListing } from '../../../../services/economy/marketplaceService.js';
+import { getAgentLockStatus, interruptAgent } from '../../../../services/site/siteAgentLock.js';
 import { LEGACY_PAGE_KINDS, resolveFormRedirect, resolveLegacyRedirect, type LegacyPageKind } from '../../../../services/site/siteRedirects.js';
 
 // ============================================================================
@@ -122,7 +123,19 @@ export function createSiteApiRouter(client: Client): OpenAPIHono {
       viewer: viewer
         ? { userId: viewer.userId, displayName: viewer.displayName, avatarUrl: viewer.avatarUrl, isMember: viewer.isMember, isStaff: viewer.isStaff, canManageSite: viewer.canManageSite }
         : null,
+      // Seul qui gère le site apprend qu'un agent le modifie, et peut l'arrêter.
+      agent: viewer?.canManageSite ? getAgentLockStatus(site.guildId) : null,
     });
+  });
+
+  // ── Interrompre un agent depuis le site publié ────────────────────────────
+  app.post('/api/site/:siteId/agent/interrupt', async (c) => {
+    const site = await getSiteById(c.req.param('siteId') ?? '');
+    if (!site) return c.json({ error: 'Introuvable' }, 404);
+    const viewer = await viewerFor(client, c, site);
+    if (!viewer) return c.json({ error: m.site_err_login({}, { locale: localeOf(c) }) }, 401);
+    if (!viewer.canManageSite) return c.json({ error: 'Accès refusé' }, 403);
+    return c.json({ agent: await interruptAgent(site.guildId, { id: viewer.userId, name: viewer.displayName }) });
   });
 
   // ── Page réservée ─────────────────────────────────────────────────────────

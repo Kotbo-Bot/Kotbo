@@ -3829,5 +3829,8 @@
   "site_cmd_wiki_not_found": "No wiki page matches “{query}”.",
   "site_cmd_wiki_results": "Wiki pages for “{query}”",
   "site_cmd_wiki_open": "Open on the website",
-  "site_cmd_wiki_guild_only": "This command only works in a server."
+  "site_cmd_wiki_guild_only": "This command only works in a server.",
+  "site_agent_active": "An AI agent ({key}) is editing this site: editing is locked.",
+  "site_agent_interrupt": "Stop the agent",
+  "site_agent_interrupted": "Agent stopped. It can't edit the site again until you allow it."
 }

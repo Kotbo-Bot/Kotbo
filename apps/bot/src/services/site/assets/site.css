@@ -517,3 +517,8 @@ dialog.kotbo-dialog p { margin: 0 0 14px; color: var(--site-muted); }
 .appeal-sanction { display: flex; flex-direction: column; gap: 6px; padding: 10px 0; border-bottom: 1px solid var(--site-border); }
 .appeal-sanction:last-child { border-bottom: 0; }
 .appeal-sanction textarea { min-height: 56px; }
+
+/* Agent MCP en train de modifier le site (visible des seuls gérants) */
+.kotbo-agent { position: fixed; right: 16px; bottom: 16px; z-index: 2147483647; display: flex; align-items: center; gap: 10px; max-width: min(460px, calc(100vw - 32px)); padding: 10px 12px; border-radius: 12px; background: #15131f; color: #f1efff; border: 1px solid rgb(124 108 255 / 0.5); box-shadow: 0 12px 30px rgb(0 0 0 / 0.4); font: 500 14px/1.4 system-ui, -apple-system, 'Segoe UI', sans-serif; }
+.kotbo-agent-dot { flex: none; width: 10px; height: 10px; border-radius: 50%; background: #a78bfa; box-shadow: 0 0 0 4px rgb(167 139 250 / 0.25); }
+.kotbo-agent-stop { flex: none; margin-left: auto; padding: 6px 10px; border-radius: 8px; border: 0; background: #ef4444; color: #fff; font: inherit; font-weight: 600; cursor: pointer; }

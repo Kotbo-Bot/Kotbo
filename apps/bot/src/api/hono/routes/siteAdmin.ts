@@ -40,6 +40,7 @@ import { getSiteAnalytics } from '../../../services/site/siteAnalyticsService.js
 import { createPreviewToken } from '../../../services/site/sitePreview.js';
 import { isSiteTemplate, SITE_TEMPLATES } from '../../../services/site/siteTemplates.js';
 import { flushCollabRoom, resetCollabRoom } from '../../../services/site/siteCollabService.js';
+import { allowAgentAgain, getAgentLockStatus, interruptAgent, isSiteAgentLocked } from '../../../services/site/siteAgentLock.js';
 import { isPubliclyVisible } from '../../../services/site/blocks/discordBlocks.js';
 
 // ============================================================================
@@ -94,6 +95,12 @@ export function createSiteAdminRouter(client: Client): OpenAPIHono {
     const rights = await resolveSiteRights(client, guildId, c.var.auth.userId);
     if (!rights.dashboard && !rights.wiki && !rights.blog) return c.json({ error: 'forbidden' }, 403);
     c.set('siteRights', rights);
+    // Un agent MCP tient la main sur le site : les écritures humaines attendent
+    // qu'il la rende ou qu'on l'interrompe (routes /agent et fiche staff exceptées).
+    const exempt = c.req.path.endsWith('/staff-profile') || c.req.path.includes(`/site-admin/${guildId}/agent`);
+    if (!READ_METHODS.has(c.req.method) && isSiteAgentLocked(guildId) && !exempt) {
+      return c.json({ error: 'agent_locked', agent: getAgentLockStatus(guildId) }, 423);
+    }
     if (rights.viaGlobalAdmin && !READ_METHODS.has(c.req.method)) {
       void recordAdminAudit({
         actorId: rights.userId,
@@ -156,6 +163,21 @@ export function createSiteAdminRouter(client: Client): OpenAPIHono {
     if (!c.var.siteRights.manage) return c.json({ error: 'forbidden' }, 403);
     await deleteSite(c.req.param('guildId'));
     return c.json({ ok: true });
+  });
+
+  // ── Agent MCP ─────────────────────────────────────────────────────────────
+  app.get('/api/site-admin/:guildId/agent', (c) => c.json({ agent: getAgentLockStatus(c.req.param('guildId')) }));
+
+  app.post('/api/site-admin/:guildId/agent/interrupt', async (c) => {
+    const rights = c.var.siteRights;
+    if (!rights.manage && !rights.wiki && !rights.blog) return c.json({ error: 'forbidden' }, 403);
+    const agent = await interruptAgent(c.req.param('guildId'), { id: rights.userId, name: rights.viewer.displayName });
+    return c.json({ agent });
+  });
+
+  app.post('/api/site-admin/:guildId/agent/allow', (c) => {
+    if (!c.var.siteRights.manage) return c.json({ error: 'forbidden' }, 403);
+    return c.json({ agent: allowAgentAgain(c.req.param('guildId')) });
   });
 
   // ── Catalogue pour l'éditeur ──────────────────────────────────────────────
