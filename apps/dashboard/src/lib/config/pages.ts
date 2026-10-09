@@ -163,6 +163,7 @@ export const communityItems: PageConfig[] = [
   { name: m.nav_embeds(),              icon: "file-plus",     href: "/embed-builder",    featureKey: "embed_builder", beta: false, wip: false },
   { name: m.nav_regulation(),           icon: "book",          href: "/regulation",       featureKey: "regulation", beta: false, wip: false },
   { name: m.nav_news(),    icon: "rss",           href: "/news",             featureKey: "news", beta: false, wip: false },
+  { name: m.nav_site(),    icon: "globe",         href: "/site",             featureKey: "site", beta: true, wip: false },
   { name: m.nav_fun_channels(),          icon: "smile",         href: "/fun",              featureKey: "fun",  beta: false, wip: false },
   { name: m.nav_social_networks(),     icon: "share-2",       href: "/social-networks",  featureKey: "social_networks", beta: true, wip: false },
 ];

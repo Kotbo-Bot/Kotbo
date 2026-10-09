@@ -79,6 +79,7 @@ export const PAGE_TABS: Record<string, PageTabConfig[]> = {
     { id: 'staff', label: () => m.an_tab_staff_directory(), icon: 'Users' },
     { id: 'performance', label: () => m.an_tab_staff_performance(), icon: 'TrendUp' },
     { id: 'tickets', label: () => m.anx_tab_tickets(), icon: 'Ticket' },
+    { id: 'website', label: () => m.ste_analytics_tab(), icon: 'Globe' },
     { id: 'alerts', label: () => m.anx_tab_alerts(), icon: 'Bell' },
     { id: 'reports', label: () => m.anx_tab_reports(), icon: 'Mail' },
   ],
@@ -192,6 +193,18 @@ export const PAGE_TABS: Record<string, PageTabConfig[]> = {
     { id: 'autoroles', label: () => m.announcements_tab_autoroles(), icon: 'Shield' },
     { id: 'thread', label: () => m.announcements_tab_thread(), icon: 'chat' },
     { id: 'experiments', label: () => m.wx_tab(), icon: 'git-branch' },
+  ],
+
+  '/site': [
+    { id: 'apercu', label: () => m.ste_tab_overview(), icon: 'layout' },
+    { id: 'pages', label: () => m.ste_tab_pages(), icon: 'file-text' },
+    { id: 'wiki', label: () => m.ste_tab_wiki(), icon: 'book-open' },
+    { id: 'blog', label: () => m.ste_tab_blog(), icon: 'edit-2' },
+    { id: 'apparence', label: () => m.ste_tab_appearance(), icon: 'palette' },
+    { id: 'menu', label: () => m.ste_tab_menu(), icon: 'menu' },
+    { id: 'commentaires', label: () => m.ste_tab_comments(), icon: 'message-square' },
+    { id: 'frequentation', label: () => m.ste_tab_traffic(), icon: 'trending-up' },
+    { id: 'reglages', label: () => m.ste_tab_settings(), icon: 'settings' },
   ],
 
   '/news': [
