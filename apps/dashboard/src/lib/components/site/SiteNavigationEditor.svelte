@@ -15,7 +15,7 @@
   let { siteState, guildId, onChanged }: { siteState: SiteState; guildId: string; onChanged: () => void } = $props();
 
   const initial = untrack(() => siteState.site!);
-  let items = $state<SiteNavItem[]>(structuredClone(initial.navigation ?? []));
+  let items = $state<SiteNavItem[]>($state.snapshot(initial.navigation ?? []) as SiteNavItem[]);
   let saving = $state(false);
   const dirty = $derived(JSON.stringify(items) !== JSON.stringify(siteState.site!.navigation ?? []));
 

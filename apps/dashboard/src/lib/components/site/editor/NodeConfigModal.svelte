@@ -40,8 +40,8 @@
 
   $effect(() => {
     if (!request) return;
-    attrs = structuredClone($state.snapshot(request.attrs) as Record<string, unknown>);
-    config = structuredClone(((request.attrs.config ?? {}) as Record<string, unknown>));
+    attrs = $state.snapshot(request.attrs) as Record<string, unknown>;
+    config = $state.snapshot((request.attrs.config ?? {}) as Record<string, unknown>) as Record<string, unknown>;
     videoUrl = request.type === 'video' && request.attrs.videoId ? videoLink(String(request.attrs.provider), String(request.attrs.videoId)) : '';
     linkMode = typeof request.attrs.href === 'string' && /^https?:|^mailto:/.test(request.attrs.href) ? 'url' : 'page';
     error = '';
