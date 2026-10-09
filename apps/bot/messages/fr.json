@@ -3839,5 +3839,15 @@
   "site_footer_navigation": "Navigation",
   "site_footer_community": "Communauté",
   "site_latest_news": "Dernières actualités",
-  "site_all_news": "Toutes les actualités"
+  "site_all_news": "Toutes les actualités",
+  "site_gallery": "Galerie d'images",
+  "site_metric_members": "Membres",
+  "site_metric_online": "En ligne",
+  "site_metric_boosts": "Boosts",
+  "site_metric_channels": "Salons",
+  "site_metric_messages30d": "Messages ce mois-ci",
+  "site_metric_voice_hours30d": "Heures en vocal ce mois-ci",
+  "site_metric_joined30d": "Arrivées ce mois-ci",
+  "site_metric_wiki_pages": "Pages du wiki",
+  "site_metric_blog_articles": "Articles"
 }

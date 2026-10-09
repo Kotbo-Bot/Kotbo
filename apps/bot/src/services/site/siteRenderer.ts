@@ -14,6 +14,8 @@
 import { collectSiteHeadings, siteIconSvg, type SiteDocument, type SiteIconName, type SiteMark, type SiteNode } from '@kotbo/shared';
 
 const CALLOUT_ICONS: Record<string, SiteIconName> = { info: 'info', success: 'circle-check', warning: 'alert', danger: 'octagon', note: 'note' };
+/** Image utilisable dans un `url()` de style : HTTPS ou image du site, sans caractère qui casse la règle. */
+const SAFE_CSS_IMAGE = /^(https:\/\/|\/s\/_\/a\/)[^"'()\s\\]+$/;
 import { attrs, cls, esc } from './siteHtml.js';
 
 export interface SiteRenderEnv {
@@ -23,7 +25,7 @@ export interface SiteRenderEnv {
   host: string;
   /** HTML de chaque nœud `module`, dans l'ordre du document. */
   moduleHtml: string[];
-  labels: { toc: string; video: string };
+  labels: { toc: string; video: string; gallery: string };
 }
 
 const HIGHLIGHT_CLASSES: Record<string, string> = {
@@ -220,6 +222,40 @@ class Renderer {
       }
       case 'toc':
         return this.toc(Number(a.maxLevel) || 3);
+      case 'banner': {
+        const image = typeof a.image === 'string' && SAFE_CSS_IMAGE.test(a.image) ? a.image : '';
+        const tone = ['surface', 'accent', 'dark'].includes(String(a.tone)) ? String(a.tone) : 'surface';
+        const align = a.align === 'left' ? 'left' : 'center';
+        return `<section${attrs({
+          class: cls('sec-banner', `tone-${tone}`, `align-${align}`, a.tall === true && 'is-tall', image && 'has-image'),
+          style: image ? `--banner-image:url("${image}")` : null,
+        })}><div class="sec-banner-inner">${this.children(node)}</div></section>`;
+      }
+      case 'gallery': {
+        const images = (Array.isArray(a.images) ? a.images : []) as Array<{ src: string; alt?: string; caption?: string }>;
+        if (images.length === 0) return '';
+        const figures = images
+          .map((img) => `<figure class="gallery-item"><img${attrs({ src: img.src, alt: img.alt ?? '', loading: 'lazy', decoding: 'async' })}>${img.caption ? `<figcaption>${esc(img.caption)}</figcaption>` : ''}</figure>`)
+          .join('');
+        if (a.layout === 'carousel') {
+          return `<div class="gallery gallery-carousel" role="region" tabindex="0"${attrs({ 'aria-label': this.env.labels.gallery })}>${figures}</div>`;
+        }
+        return `<div class="${cls('gallery', 'gallery-grid', `cols-${Number(a.columns) || 3}`)}">${figures}</div>`;
+      }
+      case 'testimonials':
+        return `<div class="${cls('testimonials', `cols-${Number(a.columns) || 3}`)}">${this.children(node)}</div>`;
+      case 'testimonial': {
+        const name = typeof a.name === 'string' ? a.name : '';
+        const role = typeof a.role === 'string' ? a.role : '';
+        const avatar =
+          typeof a.avatar === 'string' && a.avatar
+            ? `<img class="testimonial-avatar"${attrs({ src: a.avatar, alt: '', loading: 'lazy', width: 44, height: 44 })}>`
+            : name
+              ? `<span class="testimonial-avatar" aria-hidden="true">${esc(name.slice(0, 1).toUpperCase())}</span>`
+              : '';
+        const who = name || role ? `<figcaption>${avatar}<span><strong>${esc(name)}</strong>${role ? `<span>${esc(role)}</span>` : ''}</span></figcaption>` : '';
+        return `<figure class="testimonial"><blockquote>${this.children(node)}</blockquote>${who}</figure>`;
+      }
       case 'module':
         return this.env.moduleHtml[this.moduleIndex++] ?? '';
       default:

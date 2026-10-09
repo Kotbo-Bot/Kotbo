@@ -2,12 +2,13 @@
  * Blocs « vitrine » : équipe, règlement, actualités, partenaires, chiffres.
  */
 
-import type { SitePartnerItem } from '@kotbo/shared';
+import type { SiteKeyStatItem, SitePartnerItem } from '@kotbo/shared';
 import prisma from '../../../utils/db.js';
 import { cache } from '../../../utils/cache.js';
 import * as m from '../../../lib/paraglide/messages.js';
 import { parseDiscordMarkdown } from '../../../api/shared/markdown.js';
 import { attrs, cls, esc, truncate } from '../siteHtml.js';
+import { listPublishedPages } from '../siteService.js';
 import { avatar, emptyState, formatNumber, timeTag, type BlockContext, type BlockRegistry } from './blockContext.js';
 
 // ─── Équipe ─────────────────────────────────────────────────────────────────
@@ -288,7 +289,63 @@ async function renderServerStats(ctx: BlockContext): Promise<string> {
   return `<div class="stats">${tile(counts.members, m.site_stat_members({}, o))}${tile(counts.online, m.site_stat_online({}, o))}${tile(counts.boosts, m.site_stat_boosts({}, o))}${tile(counts.channels, m.site_stat_channels({}, o))}</div>`;
 }
 
+// ─── Chiffres clés ──────────────────────────────────────────────────────────
+
+/** Sommes des 30 derniers jours tirées des statistiques quotidiennes du serveur. */
+async function monthlyActivity(guildId: string): Promise<{ messages: number; voiceMinutes: number; joined: number }> {
+  return cache.wrap(`guild:${guildId}:site-month-activity`, 600, async () => {
+    const since = new Date(Date.now() - 30 * 86_400_000).toISOString().slice(0, 10);
+    const sum = await prisma.guildDailyStat.aggregate({
+      where: { guildId, dateKey: { gte: since } },
+      _sum: { messagesCount: true, voiceMinutes: true, membersJoined: true },
+    });
+    return { messages: sum._sum.messagesCount ?? 0, voiceMinutes: sum._sum.voiceMinutes ?? 0, joined: sum._sum.membersJoined ?? 0 };
+  });
+}
+
+async function renderKeyStats(ctx: BlockContext, config: Record<string, unknown>): Promise<string> {
+  const items = (config.items as SiteKeyStatItem[] | undefined) ?? [];
+  if (items.length === 0) return '';
+  const o = { locale: ctx.locale };
+  const metrics = new Set(items.map((i) => i.metric));
+  const needsCounts = ['members', 'online', 'boosts', 'channels'].some((k) => metrics.has(k as SiteKeyStatItem['metric']));
+  const needsMonth = ['messages30d', 'voiceHours30d', 'joined30d'].some((k) => metrics.has(k as SiteKeyStatItem['metric']));
+  const needsPages = metrics.has('wikiPages') || metrics.has('blogArticles');
+  const [counts, month, wiki, blog] = await Promise.all([
+    needsCounts ? getGuildCounts(ctx) : null,
+    needsMonth ? monthlyActivity(ctx.site.guildId) : null,
+    needsPages && ctx.moduleStates.site_wiki !== false ? listPublishedPages(ctx.site, 'WIKI') : [],
+    needsPages && ctx.moduleStates.site_blog !== false ? listPublishedPages(ctx.site, 'BLOG') : [],
+  ]);
+  const publicCount = (pages: Array<{ visibility: string }>) => pages.filter((p) => p.visibility === 'PUBLIC').length;
+  const resolve = (item: SiteKeyStatItem): { value: string; label: string } | null => {
+    const num = (n: number | undefined) => formatNumber(n ?? 0, ctx.locale);
+    switch (item.metric) {
+      case 'members': return { value: num(counts?.members), label: m.site_metric_members({}, o) };
+      case 'online': return { value: num(counts?.online), label: m.site_metric_online({}, o) };
+      case 'boosts': return { value: num(counts?.boosts), label: m.site_metric_boosts({}, o) };
+      case 'channels': return { value: num(counts?.channels), label: m.site_metric_channels({}, o) };
+      case 'messages30d': return { value: num(month?.messages), label: m.site_metric_messages30d({}, o) };
+      case 'voiceHours30d': return { value: num(Math.round((month?.voiceMinutes ?? 0) / 60)), label: m.site_metric_voice_hours30d({}, o) };
+      case 'joined30d': return { value: num(month?.joined), label: m.site_metric_joined30d({}, o) };
+      case 'wikiPages': return { value: num(publicCount(wiki)), label: m.site_metric_wiki_pages({}, o) };
+      case 'blogArticles': return { value: num(publicCount(blog)), label: m.site_metric_blog_articles({}, o) };
+      case 'custom': return item.value ? { value: item.value, label: item.label } : null;
+      default: return null;
+    }
+  };
+  const tiles = items
+    .map((item) => {
+      const r = resolve(item);
+      if (!r) return '';
+      return `<div class="key-stat"><p class="key-stat-value">${esc(r.value)}</p><p class="key-stat-label">${esc(item.label || r.label)}</p></div>`;
+    })
+    .join('');
+  return tiles ? `<div class="key-stats" style="--count:${items.length}">${tiles}</div>` : '';
+}
+
 export const vitrineBlocks: BlockRegistry = {
+  keyStats: renderKeyStats,
   staff: renderStaff,
   rules: renderRules,
   news: renderNews,

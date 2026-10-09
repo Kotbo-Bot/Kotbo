@@ -256,7 +256,7 @@ export async function renderDocumentHtml(ctx: SiteCtx, doc: SiteDocument, pageId
     basePath: ctx.basePath,
     host: ctx.req.host ?? '',
     moduleHtml,
-    labels: { toc: m.site_toc({}, { locale: ctx.locale }), video: m.site_video({}, { locale: ctx.locale }) },
+    labels: { toc: m.site_toc({}, { locale: ctx.locale }), video: m.site_video({}, { locale: ctx.locale }), gallery: m.site_gallery({}, { locale: ctx.locale }) },
   });
 }
 

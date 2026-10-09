@@ -52,6 +52,10 @@ export const SITE_BUTTON_VARIANTS = ['primary', 'secondary', 'ghost'] as const;
 export const SITE_HIGHLIGHT_COLORS = ['accent', 'yellow', 'green', 'blue', 'pink', 'red'] as const;
 export const SITE_VIDEO_PROVIDERS = ['youtube', 'twitch', 'vimeo'] as const;
 export const SITE_IMAGE_WIDTHS = ['small', 'medium', 'wide', 'full'] as const;
+export const SITE_BANNER_TONES = ['surface', 'accent', 'dark'] as const;
+export const SITE_GALLERY_LAYOUTS = ['grid', 'carousel'] as const;
+/** Plafonds des sections : au-delà, le surplus est ignoré. */
+export const SITE_SECTION_LIMITS = { galleryImages: 24 } as const;
 
 /**
  * Contenu permis de chaque nœud bloc : `block` (tout bloc), `inline` (texte),
@@ -84,12 +88,16 @@ const BLOCK_CONTENT: Record<string, ContentRule> = {
   video: 'none',
   toc: 'none',
   module: 'none',
+  banner: 'block',
+  gallery: 'none',
+  testimonials: ['testimonial'],
+  testimonial: 'block',
 };
 
 /** Nœuds permis directement sous `doc` (et partout où `block` est attendu). */
 const TOP_BLOCKS = new Set(
   Object.keys(BLOCK_CONTENT).filter(
-    (type) => !['listItem', 'taskItem', 'tableRow', 'tableHeader', 'tableCell', 'gridCell', 'faqItem'].includes(type),
+    (type) => !['listItem', 'taskItem', 'tableRow', 'tableHeader', 'tableCell', 'gridCell', 'faqItem', 'testimonial'].includes(type),
   ),
 );
 
@@ -255,6 +263,25 @@ function normalizeAttrs(type: string, attrs: Record<string, unknown>): Record<st
     }
     case 'toc':
       return { maxLevel: int(attrs.maxLevel, 2, 4, 3) };
+    case 'banner':
+      return {
+        image: sanitizeSiteImageSrc(attrs.image) ?? '',
+        tone: oneOf(attrs.tone, SITE_BANNER_TONES, 'surface'),
+        align: oneOf(attrs.align, ['left', 'center'] as const, 'center'),
+        tall: attrs.tall === true,
+      };
+    case 'gallery': {
+      const images = (Array.isArray(attrs.images) ? attrs.images : [])
+        .filter(isRecord)
+        .map((image) => ({ src: sanitizeSiteImageSrc(image.src) ?? '', alt: str(image.alt, 300), caption: str(image.caption, 300) }))
+        .filter((image) => image.src)
+        .slice(0, SITE_SECTION_LIMITS.galleryImages);
+      return { images, layout: oneOf(attrs.layout, SITE_GALLERY_LAYOUTS, 'grid'), columns: int(attrs.columns, 2, 4, 3) };
+    }
+    case 'testimonials':
+      return { columns: int(attrs.columns, 1, 3, 3) };
+    case 'testimonial':
+      return { name: str(attrs.name, 80).trim(), role: str(attrs.role, 80).trim(), avatar: sanitizeSiteImageSrc(attrs.avatar) ?? '' };
     case 'module': {
       if (!isSiteModuleKey(attrs.module)) return null;
       const moduleKey: SiteModuleKey = attrs.module;
@@ -323,7 +350,7 @@ function normalizeBlock(raw: unknown, allowed: ContentRule, depth: number, state
     }
     // Conteneurs qui n'ont de sens qu'avec un contenu : vides, ils sautent.
     if (content.length === 0) {
-      if (['bulletList', 'orderedList', 'taskList', 'table', 'tableRow', 'grid', 'faq'].includes(type)) return null;
+      if (['bulletList', 'orderedList', 'taskList', 'table', 'tableRow', 'grid', 'faq', 'testimonials'].includes(type)) return null;
       // Une cellule, un élément de liste ou un encadré vide garde un paragraphe
       // vide : ProseMirror refuse un nœud bloc sans contenu.
       content.push({ type: 'paragraph' });

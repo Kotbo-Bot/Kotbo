@@ -8,7 +8,7 @@ import { describe, expect, test } from 'bun:test';
 import { normalizeSiteDocument } from '@kotbo/shared';
 import { renderSiteDocument, resolveSiteHref } from '../../services/site/siteRenderer.js';
 
-const env = { basePath: '/s/nerds', host: 'dash.kotbo.fr', moduleHtml: [], labels: { toc: 'Sommaire', video: 'Vidéo' } };
+const env = { basePath: '/s/nerds', host: 'dash.kotbo.fr', moduleHtml: [], labels: { toc: 'Sommaire', video: 'Vidéo', gallery: 'Galerie' } };
 const render = (content: unknown[], moduleHtml: string[] = []) =>
   renderSiteDocument(normalizeSiteDocument({ type: 'doc', content }), { ...env, moduleHtml });
 
@@ -78,5 +78,37 @@ describe('structure', () => {
   test('grille bento', () => {
     const html = render([{ type: 'grid', attrs: { columns: 3 }, content: [{ type: 'gridCell', attrs: { span: 2 }, content: [{ type: 'paragraph' }] }] }]);
     expect(html).toBe('<div class="bento cols-3"><div class="cell span-2 surface"><p><br></p></div></div>');
+  });
+});
+
+describe('sections prêtes à l’emploi', () => {
+  test('bannière : texte éditable, image filtrée, ton et alignement bornés', () => {
+    const ok = render([{ type: 'banner', attrs: { image: '/s/_/a/abcdefghijklmnopqrstuvwx.webp', tone: 'accent', align: 'left', tall: true }, content: [{ type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text: 'Rejoins-nous' }] }] }]);
+    expect(ok).toContain('class="sec-banner tone-accent align-left is-tall has-image"');
+    expect(ok).toContain('--banner-image:url(&quot;/s/_/a/abcdefghijklmnopqrstuvwx.webp&quot;)');
+    expect(ok).toContain('Rejoins-nous');
+    const bad = render([{ type: 'banner', attrs: { image: 'javascript:alert(1)', tone: 'fuchsia' }, content: [{ type: 'paragraph' }] }]);
+    expect(bad).toContain('class="sec-banner tone-surface align-center"');
+    expect(bad).not.toContain('banner-image');
+  });
+
+  test('galerie : sources filtrées, plafond, mise en page', () => {
+    const images = [{ src: 'https://cdn.exemple.fr/a.png', alt: 'A<b>', caption: 'Légende' }, { src: 'http://non-https.fr/b.png' }, { src: 'data:image/png;base64,AAAA' }];
+    const grid = render([{ type: 'gallery', attrs: { images, columns: 9 } }]);
+    expect(grid).toContain('class="gallery gallery-grid cols-4"');
+    expect(grid.match(/<figure/g)?.length).toBe(1);
+    expect(grid).toContain('alt="A&lt;b&gt;"');
+    const carousel = render([{ type: 'gallery', attrs: { images, layout: 'carousel' } }]);
+    expect(carousel).toContain('gallery-carousel');
+    expect(render([{ type: 'gallery', attrs: { images: [] } }])).toBe('');
+  });
+
+  test('témoignages : citation éditable, nom et rôle échappés, conteneur vide retiré', () => {
+    const html = render([{ type: 'testimonials', attrs: { columns: 2 }, content: [{ type: 'testimonial', attrs: { name: '<Léa>', role: 'Modo' }, content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Super serveur' }] }] }] }]);
+    expect(html).toContain('class="testimonials cols-2"');
+    expect(html).toContain('<strong>&lt;Léa&gt;</strong><span>Modo</span>');
+    expect(html).toContain('Super serveur');
+    expect(normalizeSiteDocument({ type: 'doc', content: [{ type: 'testimonials', content: [] }] }).content).toEqual([]);
+    expect(normalizeSiteDocument({ type: 'doc', content: [{ type: 'testimonial', content: [] }] }).content).toEqual([]);
   });
 });
