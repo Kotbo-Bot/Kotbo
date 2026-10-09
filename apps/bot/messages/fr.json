@@ -3832,5 +3832,12 @@
   "site_cmd_wiki_guild_only": "Cette commande s'utilise sur un serveur.",
   "site_agent_active": "Un agent IA ({key}) modifie ce site : l'édition est verrouillée.",
   "site_agent_interrupt": "Interrompre l'agent",
-  "site_agent_interrupted": "Agent interrompu. Il ne peut plus modifier le site sans nouvelle autorisation."
+  "site_agent_interrupted": "Agent interrompu. Il ne peut plus modifier le site sans nouvelle autorisation.",
+  "site_mode_toggle": "Mode clair ou sombre",
+  "site_join_discord": "Rejoindre le Discord",
+  "site_rss_feed": "Flux RSS",
+  "site_footer_navigation": "Navigation",
+  "site_footer_community": "Communauté",
+  "site_latest_news": "Dernières actualités",
+  "site_all_news": "Toutes les actualités"
 }

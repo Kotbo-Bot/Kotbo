@@ -110,6 +110,41 @@
     });
   });
 
+  // ─── Mode clair / sombre ───────────────────────────────────────────────
+  // Le mode par défaut vient du thème (`data-default-mode`, éventuellement
+  // `auto`) ; le choix du visiteur est retenu par site, et appliqué avant le
+  // premier rendu par le script en tête de page.
+
+  var modeKey = 'kotbo-site-mode:' + root.getAttribute('data-site');
+  var systemDark = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+
+  function effectiveMode() {
+    var chosen = root.getAttribute('data-mode');
+    if (chosen === 'light' || chosen === 'dark') return chosen;
+    var fallback = root.getAttribute('data-default-mode') || 'auto';
+    if (fallback === 'auto') return systemDark && systemDark.matches ? 'dark' : 'light';
+    return fallback;
+  }
+
+  function syncEffectiveMode() {
+    root.setAttribute('data-effective', effectiveMode());
+  }
+
+  document.querySelectorAll('[data-mode-toggle]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var next = effectiveMode() === 'dark' ? 'light' : 'dark';
+      root.setAttribute('data-mode', next);
+      try {
+        localStorage.setItem(modeKey, next);
+      } catch (e) {
+        // Stockage indisponible (navigation privée) : le choix vaut pour la page.
+      }
+      syncEffectiveMode();
+    });
+  });
+  if (systemDark && systemDark.addEventListener) systemDark.addEventListener('change', syncEffectiveMode);
+  syncEffectiveMode();
+
   // Un sous-menu ouvert se referme quand on clique ailleurs.
   document.addEventListener('click', function (event) {
     document.querySelectorAll('.nav details[open]').forEach(function (d) {

@@ -3832,5 +3832,12 @@
   "site_cmd_wiki_guild_only": "This command only works in a server.",
   "site_agent_active": "An AI agent ({key}) is editing this site: editing is locked.",
   "site_agent_interrupt": "Stop the agent",
-  "site_agent_interrupted": "Agent stopped. It can't edit the site again until you allow it."
+  "site_agent_interrupted": "Agent stopped. It can't edit the site again until you allow it.",
+  "site_mode_toggle": "Light or dark mode",
+  "site_join_discord": "Join the Discord",
+  "site_rss_feed": "RSS feed",
+  "site_footer_navigation": "Navigation",
+  "site_footer_community": "Community",
+  "site_latest_news": "Latest news",
+  "site_all_news": "All news"
 }
