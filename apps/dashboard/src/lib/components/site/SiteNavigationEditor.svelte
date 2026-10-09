@@ -4,6 +4,7 @@
    * recherche, espace membre) ou une adresse externe, sous-menus d'un niveau.
    * Sans menu, le site en compose un par défaut.
    */
+  import { untrack } from 'svelte';
   import { SITE_NAV_LIMITS, SITE_NAV_SECTIONS, type SiteNavItem, type SiteNavSection, type SiteNavTarget } from '@kotbo/shared';
   import { Button, EmptyState, SectionCard } from '../ui';
   import { toast } from '../../stores/toast.svelte';
@@ -11,13 +12,14 @@
   import { updateSite, type SiteState } from '../../api/site';
   import { siteErrorMessage } from './siteErrors';
 
-  let { state, guildId, onChanged }: { state: SiteState; guildId: string; onChanged: () => void } = $props();
+  let { siteState, guildId, onChanged }: { siteState: SiteState; guildId: string; onChanged: () => void } = $props();
 
-  let items = $state<SiteNavItem[]>(structuredClone(state.site!.navigation ?? []));
+  const initial = untrack(() => siteState.site!);
+  let items = $state<SiteNavItem[]>(structuredClone(initial.navigation ?? []));
   let saving = $state(false);
-  const dirty = $derived(JSON.stringify(items) !== JSON.stringify(state.site!.navigation ?? []));
+  const dirty = $derived(JSON.stringify(items) !== JSON.stringify(siteState.site!.navigation ?? []));
 
-  const pages = $derived(state.pages.filter((p) => p.kind === 'PAGE'));
+  const pages = $derived(siteState.pages.filter((p) => p.kind === 'PAGE'));
   const SECTION_LABELS: Record<SiteNavSection, () => string> = {
     home: () => m.ste_link_home(),
     wiki: () => m.ste_link_wiki(),

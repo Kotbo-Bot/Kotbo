@@ -3,6 +3,7 @@
    * Création du site : une adresse, un type de communauté. Les pages sont
    * composées d'après les modules actifs du serveur ; tout se modifie ensuite.
    */
+  import { untrack } from 'svelte';
   import { resolveSiteTheme, slugify, validateSiteSlug } from '@kotbo/shared';
   import { Button, Field, SectionCard } from '../ui';
   import { toast } from '../../stores/toast.svelte';
@@ -10,7 +11,7 @@
   import { createSite, type SiteState, type SiteTemplate } from '../../api/site';
   import { siteErrorMessage } from './siteErrors';
 
-  let { state, guildId, onCreated }: { state: SiteState; guildId: string; onCreated: () => void } = $props();
+  let { siteState, guildId, onCreated }: { siteState: SiteState; guildId: string; onCreated: () => void } = $props();
 
   const THEMES: Record<SiteTemplate, string> = { general: 'verre', gaming: 'neon', rp: 'royaume', esport: 'arcade', etude: 'documentation' };
   const TEMPLATES: Array<{ key: SiteTemplate; label: () => string; desc: () => string; icon: string }> = [
@@ -21,7 +22,7 @@
     { key: 'etude', label: () => m.ste_tpl_etude(), desc: () => m.ste_tpl_etude_desc(), icon: '📚' },
   ];
 
-  let slug = $state(state.suggestedSlug ?? '');
+  let slug = $state(untrack(() => siteState.suggestedSlug) ?? '');
   let template = $state<SiteTemplate>('general');
   let creating = $state(false);
 
@@ -53,7 +54,7 @@
 
 <SectionCard title={m.ste_create_title()} description={m.ste_create_desc()} icon="globe">
   <form class="px-5 pb-5 space-y-6" onsubmit={create}>
-    <Field label={m.ste_create_address()} hint={`${state.baseUrl}${slug || '…'}`} error={slugError}>
+    <Field label={m.ste_create_address()} hint={`${siteState.baseUrl}${slug || '…'}`} error={slugError}>
       {#snippet children(id, describedBy)}
         <input {id} aria-describedby={describedBy} class="input w-full font-mono" maxlength="40" bind:value={slug} oninput={() => (slug = slug.toLowerCase().replace(/ +/g, '-'))} onblur={() => (slug = slugify(slug, 40))} />
       {/snippet}

@@ -47,7 +47,7 @@
   const guildId = $derived(($router.query.guild as string | undefined) ?? authStore.selectedGuildId ?? '');
   const fromSpace = $derived(Boolean($router.query.guild));
 
-  let state = $state<SiteState | null>(null);
+  let siteState = $state<SiteState | null>(null);
   let page = $state<SitePageDetail | null>(null);
   let catalog = $state<SiteCatalog | null>(null);
   let loading = $state(true);
@@ -83,9 +83,9 @@
 
   const kindRoot = $derived(fromSpace ? '/me' : page?.kind === 'WIKI' ? '/site/wiki' : page?.kind === 'BLOG' ? '/site/blog' : '/site/pages');
   const publicUrl = $derived.by(() => {
-    if (!state?.site || !page) return null;
-    const base = `${state.baseUrl}${state.site.slug}`;
-    if (page.id === state.site.homePageId) return base;
+    if (!siteState?.site || !page) return null;
+    const base = `${siteState.baseUrl}${siteState.site.slug}`;
+    if (page.id === siteState.site.homePageId) return base;
     return page.kind === 'WIKI' ? `${base}/wiki/${page.slug}` : page.kind === 'BLOG' ? `${base}/blog/${page.slug}` : `${base}/${page.slug}`;
   });
 
@@ -102,7 +102,7 @@
     failed = false;
     try {
       const [s, p, c] = await Promise.all([fetchSiteState(guildId), fetchSitePage(pageId, guildId), fetchSiteCatalog(guildId)]);
-      state = s;
+      siteState = s;
       page = p.page;
       catalog = c;
       tagsInput = p.page.tags.join(', ');
@@ -159,7 +159,7 @@
 
   function setField<K extends keyof SitePagePatch>(key: K, value: SitePagePatch[K]) {
     if (!page) return;
-    (page as Record<string, unknown>)[key] = value;
+    (page as unknown as Record<string, unknown>)[key] = value;
     queue({ [key]: value } as SitePagePatch);
   }
 
@@ -287,7 +287,7 @@
     setField('visibleRoleIds', next);
   }
 
-  const wikiParents = $derived((state?.pages ?? []).filter((p) => p.kind === 'WIKI' && p.id !== page?.id));
+  const wikiParents = $derived((siteState?.pages ?? []).filter((p) => p.kind === 'WIKI' && p.id !== page?.id));
   const minScheduleValue = $derived(new Date(Date.now() + 5 * 60_000).toISOString().slice(0, 16));
 </script>
 
@@ -295,7 +295,7 @@
 
 {#if loading}
   <div class="space-y-3 p-4"><Skeleton height="h-14" /><Skeleton height="h-96" /></div>
-{:else if failed || !page || !state}
+{:else if failed || !page || !siteState}
   <EmptyState icon="alert-circle" title={m.ste_err_page_missing()} description={m.ste_editor_load_error()} />
   <div class="flex justify-center"><Button variant="ghost" icon="arrow-left" href="/site">{m.ste_back()}</Button></div>
 {:else}
@@ -342,9 +342,9 @@
       </div>
     </header>
 
-    <AgentLockBanner bind:this={agentBanner} {guildId} canManage={state.rights.manage} onChange={(locked) => (agentLocked = locked)} />
+    <AgentLockBanner bind:this={agentBanner} {guildId} canManage={siteState.rights.manage} onChange={(locked) => (agentLocked = locked)} />
 
-    {#if !state.modules.site}
+    {#if !siteState.modules.site}
       <Callout variant="warning" title={m.ste_module_off_title()} class="mb-3">{m.ste_module_off_desc()}</Callout>
     {/if}
 
@@ -357,10 +357,10 @@
           wide={page.kind === 'PAGE'}
           user={me}
           {catalog}
-          pages={state.pages}
-          theme={state.site?.theme ?? 'verre'}
-          themeSettings={state.site?.themeSettings ?? {}}
-          canManageAssets={state.rights.manage}
+          pages={siteState.pages}
+          theme={siteState.site?.theme ?? 'verre'}
+          themeSettings={siteState.site?.themeSettings ?? {}}
+          canManageAssets={siteState.rights.manage}
           readOnly={agentLocked}
           bind:editor
           onChange={onDocChange}
@@ -502,7 +502,7 @@
     {/snippet}
   </Modal>
 
-  <AssetPicker bind:open={coverPickerOpen} {guildId} canDelete={state.rights.manage} onPick={(asset) => setField('coverUrl', asset.url)} />
+  <AssetPicker bind:open={coverPickerOpen} {guildId} canDelete={siteState.rights.manage} onPick={(asset) => setField('coverUrl', asset.url)} />
 {/if}
 
 <style>

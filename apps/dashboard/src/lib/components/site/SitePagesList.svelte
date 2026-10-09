@@ -20,16 +20,16 @@
   } from '../../api/site';
   import { siteErrorMessage } from './siteErrors';
 
-  let { state, guildId, kind, onChanged }: { state: SiteState; guildId: string; kind: SitePageKind; onChanged: () => void } = $props();
+  let { siteState, guildId, kind, onChanged }: { siteState: SiteState; guildId: string; kind: SitePageKind; onChanged: () => void } = $props();
 
-  const site = $derived(state.site!);
+  const site = $derived(siteState.site!);
   let createOpen = $state(false);
   let newTitle = $state('');
   let newParent = $state('');
   let creating = $state(false);
   let query = $state('');
 
-  const pages = $derived(state.pages.filter((p) => p.kind === kind));
+  const pages = $derived(siteState.pages.filter((p) => p.kind === kind));
 
   /** Lignes affichées : arborescence pour le wiki, date pour le blog, ordre du menu sinon. */
   const rows = $derived.by(() => {
@@ -59,7 +59,7 @@
   });
 
   function publicUrl(page: SitePageSummary): string {
-    const base = `${state.baseUrl}${site.slug}`;
+    const base = `${siteState.baseUrl}${site.slug}`;
     if (page.id === site.homePageId) return base;
     return kind === 'WIKI' ? `${base}/wiki/${page.slug}` : kind === 'BLOG' ? `${base}/blog/${page.slug}` : `${base}/${page.slug}`;
   }
@@ -157,7 +157,7 @@
               <Button size="sm" variant="ghost" icon="arrow-up" aria-label={m.ste_move_up()} onclick={() => move(page, -1)} />
               <Button size="sm" variant="ghost" icon="arrow-down" aria-label={m.ste_move_down()} onclick={() => move(page, 1)} />
             {/if}
-            {#if kind === 'PAGE' && page.id !== site.homePageId && state.rights.manage}
+            {#if kind === 'PAGE' && page.id !== site.homePageId && siteState.rights.manage}
               <Button size="sm" variant="ghost" icon="home" aria-label={m.ste_set_home()} title={m.ste_set_home()} onclick={() => setHome(page)} />
             {/if}
             {#if page.publishedAt}

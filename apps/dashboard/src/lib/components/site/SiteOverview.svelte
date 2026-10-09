@@ -18,10 +18,10 @@
   } from '../../api/site';
   import { siteErrorMessage } from './siteErrors';
 
-  let { state, guildId, onChanged }: { state: SiteState; guildId: string; onChanged: () => void } = $props();
+  let { siteState, guildId, onChanged }: { siteState: SiteState; guildId: string; onChanged: () => void } = $props();
 
-  const site = $derived(state.site!);
-  const url = $derived(`${state.baseUrl}${site.slug}`);
+  const site = $derived(siteState.site!);
+  const url = $derived(`${siteState.baseUrl}${site.slug}`);
   let publishing = $state(false);
   let report = $state<SiteAnalyticsReport | null>(null);
   let profile = $state<{ isStaff: boolean; bio: string; hidden: boolean } | null>(null);
@@ -29,7 +29,7 @@
 
   onMount(async () => {
     const [r, p] = await Promise.all([
-      state.rights.viewStats ? fetchSiteAnalytics(7, guildId).catch(() => null) : Promise.resolve(null),
+      siteState.rights.viewStats ? fetchSiteAnalytics(7, guildId).catch(() => null) : Promise.resolve(null),
       fetchSiteStaffProfile(guildId).catch(() => null),
     ]);
     report = r?.report ?? null;
@@ -69,13 +69,13 @@
   }
 
   const counts = $derived({
-    PAGE: state.pages.filter((p) => p.kind === 'PAGE').length,
-    WIKI: state.pages.filter((p) => p.kind === 'WIKI').length,
-    BLOG: state.pages.filter((p) => p.kind === 'BLOG').length,
+    PAGE: siteState.pages.filter((p) => p.kind === 'PAGE').length,
+    WIKI: siteState.pages.filter((p) => p.kind === 'WIKI').length,
+    BLOG: siteState.pages.filter((p) => p.kind === 'BLOG').length,
   });
 
   const toResume = $derived(
-    state.pages
+    siteState.pages
       .filter((p) => p.hasUnpublishedChanges || p.scheduledAt)
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
       .slice(0, 6),
@@ -100,7 +100,7 @@
       </div>
       <div class="flex items-center gap-3">
         <Button size="sm" variant="ghost" icon="copy" onclick={copy}>{m.ste_copy_link()}</Button>
-        {#if state.rights.manage}
+        {#if siteState.rights.manage}
           <ToggleSwitch checked={site.published} disabled={publishing || !!site.suspendedAt} ariaLabel={m.ste_site_online_label()} onToggle={setPublished} />
           <span class="text-body-sm text-on-surface">{site.published ? m.ste_site_online() : m.ste_site_offline()}</span>
         {/if}
@@ -112,8 +112,8 @@
     <SectionCard title={m.ste_overview_content()} icon="file-text">
       <ul class="px-5 pb-5 counts">
         <li><strong>{counts.PAGE}</strong><span>{m.ste_kind_pages()}</span></li>
-        {#if state.modules.site_wiki}<li><strong>{counts.WIKI}</strong><span>{m.ste_kind_wiki()}</span></li>{/if}
-        {#if state.modules.site_blog}<li><strong>{counts.BLOG}</strong><span>{m.ste_kind_blog()}</span></li>{/if}
+        {#if siteState.modules.site_wiki}<li><strong>{counts.WIKI}</strong><span>{m.ste_kind_wiki()}</span></li>{/if}
+        {#if siteState.modules.site_blog}<li><strong>{counts.BLOG}</strong><span>{m.ste_kind_blog()}</span></li>{/if}
       </ul>
     </SectionCard>
 

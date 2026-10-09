@@ -4,6 +4,7 @@
    * rédacteurs du wiki et du blog (sans accès au dashboard), salons
    * d'annonce, suppression.
    */
+  import { untrack } from 'svelte';
   import { router } from 'tinro';
   import { validateSiteSlug } from '@kotbo/shared';
   import { Button, Callout, Field, SectionCard, ToggleSwitch } from '../ui';
@@ -13,18 +14,20 @@
   import { deleteSite, updateSite, type CommunitySite, type SiteCatalog, type SiteState } from '../../api/site';
   import { siteErrorMessage } from './siteErrors';
 
-  let { state, catalog, guildId, onChanged }: { state: SiteState; catalog: SiteCatalog | null; guildId: string; onChanged: () => void } = $props();
+  let { siteState, catalog, guildId, onChanged }: { siteState: SiteState; catalog: SiteCatalog | null; guildId: string; onChanged: () => void } = $props();
 
-  const site = $derived(state.site!);
-  let slug = $state(state.site!.slug);
-  let name = $state(state.site!.name ?? '');
-  let tagline = $state(state.site!.tagline ?? '');
-  let staffPage = $state({ bio: true, absence: true, seniority: true, stats: false, ...(state.site!.staffPage ?? {}) });
-  let commentsByDefault = $state(state.site!.settings?.commentsByDefault !== false);
-  let wikiEditors = $state<string[]>([...state.site!.wikiEditorRoleIds]);
-  let blogEditors = $state<string[]>([...state.site!.blogEditorRoleIds]);
-  let wikiChannel = $state(state.site!.wikiAnnounceChannelId ?? '');
-  let blogChannel = $state(state.site!.blogAnnounceChannelId ?? '');
+  const site = $derived(siteState.site!);
+  // Valeurs de départ du formulaire, modifiées localement jusqu'à l'enregistrement.
+  const initial = untrack(() => siteState.site!);
+  let slug = $state(initial.slug);
+  let name = $state(initial.name ?? '');
+  let tagline = $state(initial.tagline ?? '');
+  let staffPage = $state({ bio: true, absence: true, seniority: true, stats: false, ...(initial.staffPage ?? {}) });
+  let commentsByDefault = $state(initial.settings?.commentsByDefault !== false);
+  let wikiEditors = $state<string[]>([...initial.wikiEditorRoleIds]);
+  let blogEditors = $state<string[]>([...initial.blogEditorRoleIds]);
+  let wikiChannel = $state(initial.wikiAnnounceChannelId ?? '');
+  let blogChannel = $state(initial.blogAnnounceChannelId ?? '');
   let saving = $state(false);
   let deleteConfirm = $state('');
 
@@ -90,14 +93,14 @@
 <div class="space-y-4">
   <SectionCard title={m.ste_identity()} icon="globe">
     <div class="px-5 pb-5 grid gap-4 md:grid-cols-2">
-      <Field label={m.ste_slug_site()} hint={`${state.baseUrl}${slug}`} error={slugInvalid ? m.ste_err_slug_invalid() : ''}>
+      <Field label={m.ste_slug_site()} hint={`${siteState.baseUrl}${slug}`} error={slugInvalid ? m.ste_err_slug_invalid() : ''}>
         {#snippet children(id, describedBy)}
           <input {id} aria-describedby={describedBy} class="input w-full font-mono" maxlength="40" bind:value={slug} />
         {/snippet}
       </Field>
       <Field label={m.ste_site_name()} hint={m.ste_site_name_hint()}>
         {#snippet children(id, describedBy)}
-          <input {id} aria-describedby={describedBy} class="input w-full" maxlength="60" placeholder={state.guild?.name ?? ''} bind:value={name} />
+          <input {id} aria-describedby={describedBy} class="input w-full" maxlength="60" placeholder={siteState.guild?.name ?? ''} bind:value={name} />
         {/snippet}
       </Field>
       <div class="md:col-span-2">
@@ -122,10 +125,10 @@
     </div>
   </SectionCard>
 
-  {#if state.modules.site_wiki || state.modules.site_blog}
+  {#if siteState.modules.site_wiki || siteState.modules.site_blog}
     <SectionCard title={m.ste_editors()} description={m.ste_editors_desc()} icon="edit-2">
       <div class="px-5 pb-5 grid gap-6 md:grid-cols-2">
-        {#each [['wiki', state.modules.site_wiki, wikiEditors, m.ste_editors_wiki()], ['blog', state.modules.site_blog, blogEditors, m.ste_editors_blog()]] as [key, enabled, list, label] (key)}
+        {#each [['wiki', siteState.modules.site_wiki, wikiEditors, m.ste_editors_wiki()], ['blog', siteState.modules.site_blog, blogEditors, m.ste_editors_blog()]] as [key, enabled, list, label] (key)}
           {#if enabled}
             <fieldset class="space-y-2">
               <legend class="text-body-sm font-medium text-on-surface">{label}</legend>
@@ -152,7 +155,7 @@
 
     <SectionCard title={m.ste_announces()} description={m.ste_announces_desc()} icon="bell">
       <div class="px-5 pb-5 grid gap-4 md:grid-cols-2">
-        {#if state.modules.site_wiki}
+        {#if siteState.modules.site_wiki}
           <Field label={m.ste_announce_wiki()}>
             {#snippet children(id)}
               <select {id} class="input w-full" bind:value={wikiChannel}>
@@ -162,7 +165,7 @@
             {/snippet}
           </Field>
         {/if}
-        {#if state.modules.site_blog}
+        {#if siteState.modules.site_blog}
           <Field label={m.ste_announce_blog()}>
             {#snippet children(id)}
               <select {id} class="input w-full" bind:value={blogChannel}>

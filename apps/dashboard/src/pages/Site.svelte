@@ -29,7 +29,7 @@
   type Tab = (typeof TABS)[number];
 
   const guildId = $derived(authStore.selectedGuildId ?? '');
-  let state = $state<SiteState | null>(null);
+  let siteState = $state<SiteState | null>(null);
   let catalog = $state<SiteCatalog | null>(null);
   let loading = $state(true);
   let agentLocked = $state(false);
@@ -43,7 +43,7 @@
     loading = true;
     try {
       const [s, c] = await Promise.all([fetchSiteState(guildId), fetchSiteCatalog(guildId).catch(() => null)]);
-      state = s;
+      siteState = s;
       catalog = c;
     } catch {
       toast.error(m.ste_load_error());
@@ -54,12 +54,12 @@
 
   onMount(load);
 
-  const rights = $derived(state?.rights);
+  const rights = $derived(siteState?.rights);
   const visibleTab = (id: string) => {
-    if (!state?.site) return false;
-    if (id === 'wiki') return Boolean(rights?.wiki) && state.modules.site_wiki;
-    if (id === 'blog') return Boolean(rights?.blog) && state.modules.site_blog;
-    if (id === 'commentaires') return Boolean(rights?.moderateComments) && state.modules.site_blog;
+    if (!siteState?.site) return false;
+    if (id === 'wiki') return Boolean(rights?.wiki) && siteState.modules.site_wiki;
+    if (id === 'blog') return Boolean(rights?.blog) && siteState.modules.site_blog;
+    if (id === 'commentaires') return Boolean(rights?.moderateComments) && siteState.modules.site_blog;
     if (id === 'frequentation') return Boolean(rights?.viewStats);
     if (['pages', 'apparence', 'menu', 'reglages'].includes(id)) return Boolean(rights?.manage);
     return true;
@@ -68,51 +68,51 @@
 
 <ModulePage title={m.nav_site()} description={m.ste_page_desc()} icon="globe" featureKey="site">
   {#snippet actions()}
-    {#if state?.site}
-      <Button size="sm" variant="ghost" icon="external-link" href={`${state.baseUrl}${state.site.slug}`} target="_blank">{m.ste_open_site()}</Button>
+    {#if siteState?.site}
+      <Button size="sm" variant="ghost" icon="external-link" href={`${siteState.baseUrl}${siteState.site.slug}`} target="_blank">{m.ste_open_site()}</Button>
     {/if}
   {/snippet}
 
-  {#if loading && !state}
+  {#if loading && !siteState}
     <div class="space-y-3"><Skeleton height="h-24" /><Skeleton height="h-64" /></div>
-  {:else if !state}
+  {:else if !siteState}
     <EmptyState icon="alert-circle" title={m.ste_load_error()} description="" />
-  {:else if !state.site}
-    {#if state.rights.manage}
-      <SiteCreateWizard {state} {guildId} onCreated={load} />
+  {:else if !siteState.site}
+    {#if siteState.rights.manage}
+      <SiteCreateWizard {siteState} {guildId} onCreated={load} />
     {:else}
       <EmptyState icon="globe" title={m.ste_no_site()} description={m.ste_no_site_desc()} />
     {/if}
   {:else}
-    <AgentLockBanner {guildId} canManage={state.rights.manage} onChange={(locked) => (agentLocked = locked)} />
-    {#if !state.modules.site}
+    <AgentLockBanner {guildId} canManage={siteState.rights.manage} onChange={(locked) => (agentLocked = locked)} />
+    {#if !siteState.modules.site}
       <Callout variant="warning" title={m.ste_module_off_title()} class="mb-4">{m.ste_module_off_desc()}</Callout>
     {/if}
-    {#if state.site.suspendedAt}
-      <Callout variant="danger" title={m.ste_suspended_title()} class="mb-4">{state.site.suspendedReason ?? m.ste_suspended_desc()}</Callout>
+    {#if siteState.site.suspendedAt}
+      <Callout variant="danger" title={m.ste_suspended_title()} class="mb-4">{siteState.site.suspendedReason ?? m.ste_suspended_desc()}</Callout>
     {/if}
 
     <Tabs label={m.nav_site()} class="mb-6" tabs={pageTabItems('/site', visibleTab)} active={active} onchange={(id) => gotoTab('/site', id, 'apercu')} />
 
     <div class:site-locked={agentLocked} inert={agentLocked && active !== 'apercu' && active !== 'frequentation'}>
       {#if active === 'apercu'}
-        <SiteOverview {state} {guildId} onChanged={load} />
+        <SiteOverview {siteState} {guildId} onChanged={load} />
       {:else if active === 'pages'}
-        <SitePagesList {state} {guildId} kind="PAGE" onChanged={load} />
+        <SitePagesList {siteState} {guildId} kind="PAGE" onChanged={load} />
       {:else if active === 'wiki'}
-        <SitePagesList {state} {guildId} kind="WIKI" onChanged={load} />
+        <SitePagesList {siteState} {guildId} kind="WIKI" onChanged={load} />
       {:else if active === 'blog'}
-        <SitePagesList {state} {guildId} kind="BLOG" onChanged={load} />
+        <SitePagesList {siteState} {guildId} kind="BLOG" onChanged={load} />
       {:else if active === 'apparence'}
-        <SiteAppearance {state} {guildId} onChanged={load} />
+        <SiteAppearance {siteState} {guildId} onChanged={load} />
       {:else if active === 'menu'}
-        <SiteNavigationEditor {state} {guildId} onChanged={load} />
+        <SiteNavigationEditor {siteState} {guildId} onChanged={load} />
       {:else if active === 'commentaires'}
         <SiteComments {guildId} />
       {:else if active === 'frequentation'}
         <SiteAnalyticsPanel {guildId} />
       {:else if active === 'reglages'}
-        <SiteSettings {state} {catalog} {guildId} onChanged={load} />
+        <SiteSettings {siteState} {catalog} {guildId} onChanged={load} />
       {/if}
     </div>
   {/if}

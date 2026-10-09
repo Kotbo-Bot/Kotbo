@@ -4,6 +4,7 @@
    * polices, arrondis, fond, logo, bannière, favicon et CSS libre. Aperçu en
    * direct avec les mêmes jetons que le site publié.
    */
+  import { untrack } from 'svelte';
   import { resolveSiteTheme, siteFontStylesheetUrl, SITE_FONTS, SITE_THEME_KEYS, type SiteThemeSettings } from '@kotbo/shared';
   import { Button, Field, SectionCard } from '../ui';
   import { toast } from '../../stores/toast.svelte';
@@ -12,15 +13,17 @@
   import AssetPicker from './editor/AssetPicker.svelte';
   import { siteErrorMessage } from './siteErrors';
 
-  let { state, guildId, onChanged }: { state: SiteState; guildId: string; onChanged: () => void } = $props();
+  let { siteState, guildId, onChanged }: { siteState: SiteState; guildId: string; onChanged: () => void } = $props();
 
-  const site = $derived(state.site!);
-  let theme = $state(state.site!.theme);
-  let settings = $state<SiteThemeSettings>({ ...(state.site!.themeSettings ?? {}) });
-  let customCss = $state(state.site!.customCss ?? '');
-  let logoUrl = $state(state.site!.logoUrl);
-  let bannerUrl = $state(state.site!.bannerUrl);
-  let faviconUrl = $state(state.site!.faviconUrl);
+  const site = $derived(siteState.site!);
+  // Valeurs de départ du formulaire, modifiées localement jusqu'à l'enregistrement.
+  const initial = untrack(() => siteState.site!);
+  let theme = $state(initial.theme);
+  let settings = $state<SiteThemeSettings>({ ...(initial.themeSettings ?? {}) });
+  let customCss = $state(initial.customCss ?? '');
+  let logoUrl = $state(initial.logoUrl);
+  let bannerUrl = $state(initial.bannerUrl);
+  let faviconUrl = $state(initial.faviconUrl);
   let saving = $state(false);
   let picking = $state<'logo' | 'banner' | 'favicon' | null>(null);
   let pickerOpen = $state(false);
@@ -139,7 +142,7 @@
 
     <SectionCard title={m.ste_branding()} description={m.ste_branding_desc()} icon="image">
       <div class="px-5 pb-5 brand-grid">
-        {#each [['logo', logoUrl, state.guild?.iconUrl, m.ste_logo()], ['banner', bannerUrl, state.guild?.bannerUrl, m.ste_banner()], ['favicon', faviconUrl, state.guild?.iconUrl, m.ste_favicon()]] as [key, value, fallback, label] (key)}
+        {#each [['logo', logoUrl, siteState.guild?.iconUrl, m.ste_logo()], ['banner', bannerUrl, siteState.guild?.bannerUrl, m.ste_banner()], ['favicon', faviconUrl, siteState.guild?.iconUrl, m.ste_favicon()]] as [key, value, fallback, label] (key)}
           <div class="brand-slot">
             <p class="text-body-sm font-medium text-on-surface">{label}</p>
             <div class="brand-preview" class:is-banner={key === 'banner'}>
@@ -173,8 +176,8 @@
     <p class="text-2xs uppercase tracking-wider text-on-surface-variant mb-2">{m.ste_preview_live()}</p>
     <div class="preview" style={previewStyle}>
       <div class="pv-header">
-        <span class="pv-logo">{#if logoUrl || state.guild?.iconUrl}<img src={(logoUrl || state.guild?.iconUrl) as string} alt="" />{/if}</span>
-        <strong>{site.name || state.guild?.name || site.slug}</strong>
+        <span class="pv-logo">{#if logoUrl || siteState.guild?.iconUrl}<img src={(logoUrl || siteState.guild?.iconUrl) as string} alt="" />{/if}</span>
+        <strong>{site.name || siteState.guild?.name || site.slug}</strong>
         <span class="pv-nav">{m.ste_preview_nav()}</span>
       </div>
       <h3 class="pv-title">{m.ste_preview_heading()}</h3>
@@ -190,7 +193,7 @@
 <AssetPicker
   bind:open={pickerOpen}
   {guildId}
-  canDelete={state.rights.manage}
+  canDelete={siteState.rights.manage}
   onPick={(asset) => {
     if (picking === 'logo') logoUrl = asset.url;
     else if (picking === 'banner') bannerUrl = asset.url;
