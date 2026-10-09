@@ -325,7 +325,7 @@
     tempVoiceEnabled: false,
     tempVoiceChannelId: '',
     tempVoiceCategoryId: '',
-    tempVoiceNameTemplate: '🔊 {user}\'s channel',
+    tempVoiceNameTemplate: m.cm_tv_default_name_template({ user: "{user}" }),
     tempVoiceRequiredRoleId: '',
     tempVoiceDefaults: defaultTempVoicePolicy(),
     tempVoiceGenerators: [] as TempVoiceGenerator[],
@@ -368,7 +368,7 @@
     tempVoiceEnabled: false,
     tempVoiceChannelId: '',
     tempVoiceCategoryId: '',
-    tempVoiceNameTemplate: '🔊 {user}\'s channel',
+    tempVoiceNameTemplate: m.cm_tv_default_name_template({ user: "{user}" }),
     tempVoiceRequiredRoleId: '',
     tempVoiceDefaults: defaultTempVoicePolicy(),
     tempVoiceGenerators: [] as TempVoiceGenerator[],
@@ -937,7 +937,7 @@
         config.tempVoiceEnabled = res.tempVoiceEnabled ?? false;
         config.tempVoiceChannelId = res.tempVoiceChannelId ?? '';
         config.tempVoiceCategoryId = res.tempVoiceCategoryId ?? '';
-        config.tempVoiceNameTemplate = res.tempVoiceNameTemplate || '🔊 {user}\'s channel';
+        config.tempVoiceNameTemplate = res.tempVoiceNameTemplate || m.cm_tv_default_name_template({ user: "{user}" });
         config.tempVoiceRequiredRoleId = res.tempVoiceRequiredRoleId ?? '';
         config.tempVoiceDefaults = { ...defaultTempVoicePolicy(), ...(res.tempVoiceDefaults ?? {}) };
         config.tempVoiceGenerators = Array.isArray(res.tempVoiceGenerators)
@@ -2045,7 +2045,7 @@
                   id="temp-voice-name-template-input"
                   type="text" 
                   bind:value={config.tempVoiceNameTemplate} 
-                  placeholder={m.cm_template_user_placeholder()} 
+                  placeholder={m.cm_template_user_placeholder({ user: "{user}" })} 
                   class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-5 py-3 text-sm outline-none focus:ring-2 focus:ring-primary/30 transition-all"
                 />
                 <p class="text-2xs text-on-surface-variant/40 mt-1">{m.cm_user_placeholder_hint({ code: '{user}' })}</p>
@@ -2213,7 +2213,7 @@
                             id="temp-voice-name-template-input-{index}"
                             type="text" 
                             bind:value={generator.nameTemplate} 
-                            placeholder={m.cm_template_user_placeholder()} 
+                            placeholder={m.cm_template_user_placeholder({ user: "{user}" })} 
                             class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs outline-none focus:ring-1 focus:ring-primary/30 transition-all"
                           />
                         </div>
@@ -2306,7 +2306,7 @@
                           {
                             channelId: '',
                             categoryId: '',
-                            nameTemplate: '🔊 {user}\'s channel',
+                            nameTemplate: m.cm_tv_default_name_template({ user: "{user}" }),
                             requiredRoleId: '',
                             ...defaultTempVoicePolicy()
                           }
