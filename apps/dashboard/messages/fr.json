@@ -2349,7 +2349,7 @@
   "cm_tv_chat_inherit_hint": "Suit les permissions de la catégorie.",
   "cm_tv_chat_open": "Tout le monde",
   "cm_tv_chat_open_hint": "Tout le monde peut écrire, même si la catégorie l'interdit.",
-  "cm_tv_chat_inVoice": "Ceux en vocal",
+  "cm_tv_chat_inVoice": "Ceux qui sont en vocal",
   "cm_tv_chat_inVoice_hint": "Seuls les membres connectés au salon vocal et les rôles autorisés d'office peuvent écrire.",
   "cm_tv_chat_locked": "Uniquement le créateur",
   "cm_tv_chat_locked_hint": "Seuls le créateur du salon et les rôles autorisés d'office peuvent écrire.",
