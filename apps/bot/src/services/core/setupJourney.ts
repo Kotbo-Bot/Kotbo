@@ -97,7 +97,9 @@ export async function computeSetupJourney(guildId: string): Promise<SetupJourney
       // `timezone` a une valeur par defaut : le point est fait, il est
       // rappele pour que personne ne decouvre le decalage apres coup.
       done: filled(guild.timezone),
-      href: '/settings',
+      // `/settings` n'est pas une page du dashboard : le lien tombait dans le
+      // vide. Le fuseau se regle dans « Reglages du serveur ».
+      href: '/management',
       detail: guild.timezone ?? undefined,
     },
     {

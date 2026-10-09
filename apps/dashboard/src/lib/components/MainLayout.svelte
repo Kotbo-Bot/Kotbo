@@ -5,7 +5,6 @@
   import ServerSwitcherModal from './ServerSwitcherModal.svelte';
   import UnsavedChangesBar from './UnsavedChangesBar.svelte';
   import TutorialWelcome from './TutorialWelcome.svelte';
-  import TutorialChecklist from './TutorialChecklist.svelte';
   import GuideSpotlight from './GuideSpotlight.svelte';
   import MobileTopBar from './mobile/MobileTopBar.svelte';
   import MobileTabBar from './mobile/MobileTabBar.svelte';
@@ -238,7 +237,6 @@
   <ServerSwitcherModal />
   <UnsavedChangesBar />
   <TutorialWelcome />
-  <TutorialChecklist />
   <GuideSpotlight />
   {#if DEMO_MODE}
     <DemoTour />
