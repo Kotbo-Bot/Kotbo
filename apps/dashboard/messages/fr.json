@@ -2339,7 +2339,7 @@
   "cm_embed_bullet_kick_desc": "(exclure un intrus du vocal)",
   "cm_required_role_scope_hint": "Ce rôle conditionne l'accès au générateur, pas les permissions dans le salon créé.",
   "cm_tv_policy_title": "Permissions des salons créés",
-  "cm_tv_policy_desc": "Ce que le bot applique à chaque salon temporaire dès sa création. Le salon reste toujours aligné sur sa catégorie : ces réglages s'ajoutent par-dessus, ils n'ouvrent jamais un salon fermé.",
+  "cm_tv_policy_desc": "Ce que le bot applique à chaque salon temporaire dès sa création. Le salon part des permissions de sa catégorie : ces réglages s'ajoutent par-dessus. Seul le chat « Tout le monde » ouvre l'écriture contre un refus de la catégorie.",
   "cm_tv_user_limit_label": "👥 Places par défaut",
   "cm_tv_user_limit_hint": "0 pour un salon sans limite. Le propriétaire peut la modifier ensuite depuis le panneau.",
   "cm_tv_lock_label": "🔒 Verrouillage",

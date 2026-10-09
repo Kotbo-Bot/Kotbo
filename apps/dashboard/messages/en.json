@@ -2339,7 +2339,7 @@
   "cm_embed_bullet_kick_desc": "(remove an intruder from the voice channel)",
   "cm_required_role_scope_hint": "This role gates access to the generator, not the permissions inside the created channel.",
   "cm_tv_policy_title": "Created channel permissions",
-  "cm_tv_policy_desc": "What the bot applies to every temporary channel as soon as it is created. The channel always stays aligned with its category: these settings stack on top, they never open a closed channel.",
+  "cm_tv_policy_desc": "What the bot applies to every temporary channel as soon as it is created. The channel starts from its category permissions: these settings stack on top. Only the \"Everyone\" chat mode opens writing against a category deny.",
   "cm_tv_user_limit_label": "👥 Default slots",
   "cm_tv_user_limit_hint": "0 for an unlimited channel. The owner can change it afterwards from the panel.",
   "cm_tv_lock_label": "🔒 Locking",
