@@ -294,9 +294,9 @@ export function requiredBotPermissions(policy: TempVoicePolicy): bigint[] {
       // Créer un salon avec des surcharges de permissions exige `ManageRoles`.
       PermissionFlagsBits.ManageRoles,
       ...ownerAllowBits(policy),
-      // Le chat « open » et les rôles autorisés d'office accordent aussi l'écriture.
-      // « nobody » pose un refus : Discord exige aussi ce droit côté bot (prudence, non vérifié).
-      ...(policy.textChat === 'open' || policy.textChat === 'nobody' || policy.textChat === 'inVoice' || policy.autoAllowRoleIds.length > 0 ? [PermissionFlagsBits.SendMessages] : []),
+      // Discord n'accepte un allow ou un deny que sur un droit que le bot possède :
+      // tout mode de chat autre qu'« inherit », et les rôles d'office, touchent `SendMessages`.
+      ...(policy.textChat !== 'inherit' || policy.autoAllowRoleIds.length > 0 ? [PermissionFlagsBits.SendMessages] : []),
     ]),
   ];
 }
