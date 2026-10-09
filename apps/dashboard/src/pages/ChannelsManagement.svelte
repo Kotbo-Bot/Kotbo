@@ -436,6 +436,7 @@
   // « Par salon » d'abord : c'est la question qu'on se pose en arrivant
   // (« qu'est-ce qui touche ce salon ? »), la ou les onglets par fonctionnalite
   // repondent a l'inverse (« quels salons ont cette fonctionnalite ? »).
+  let tvSub = $state<'generators' | 'permissions' | 'panel' | 'active'>('generators');
   const channelTabs = ['by-channel', 'auto-thread', 'sticky', 'stats', 'temp-voice', 'access-requests', 'honeypot'] as const;
   let activeTab = $state<'by-channel' | 'auto-thread' | 'sticky' | 'stats' | 'temp-voice' | 'access-requests' | 'honeypot'>('by-channel');
   $effect(() => {
@@ -1948,6 +1949,21 @@
 
       {:else if activeTab === 'temp-voice'}
         <!-- DYNAMIC VOCAL CREATORS TAB -->
+        {#if config.tempVoiceEnabled}
+          <Tabs
+            label={m.cm_tv_tabs_label()}
+            class="mb-6"
+            tabs={[
+              { id: 'generators', label: m.cm_tv_tab_generators(), icon: 'volume-2' },
+              { id: 'permissions', label: m.cm_tv_tab_permissions(), icon: 'lock' },
+              { id: 'panel', label: m.cm_tv_tab_panel(), icon: 'grid' },
+              { id: 'active', label: m.cm_tv_tab_active(), icon: 'user', badge: activeTempChannels.length || undefined },
+            ]}
+            active={tvSub}
+            onchange={(id) => { tvSub = id as typeof tvSub; }}
+          />
+        {/if}
+        {#if !config.tempVoiceEnabled || tvSub === 'generators' || tvSub === 'permissions'}
         <section class="bg-surface-container-low/30 border border-outline-variant/10 p-8 rounded-xl space-y-6">
           <div class="flex items-center justify-between">
             <div>
@@ -1969,6 +1985,7 @@
 
           {#if config.tempVoiceEnabled}
             <div class="space-y-4 pt-4 border-t border-outline-variant/10 max-w-xl">
+              {#if tvSub === 'generators'}
               <!-- Generator Voice Channel Selection -->
               <div class="space-y-1.5">
                 <label for="temp-voice-channel-select" class="text-xs font-bold text-on-surface/80 block">{m.cm_generator_voice_channel_label()}</label>
@@ -2046,13 +2063,19 @@
                 <p class="text-2xs text-on-surface-variant/40">{m.cm_required_role_scope_hint()}</p>
               </div>
 
+              {/if}
+
               <!-- Permissions appliquées aux salons créés -->
+              {#if tvSub === 'permissions'}
               <TempVoicePolicyEditor
                 bind:policy={config.tempVoiceDefaults}
                 availableRoles={autoAllowableRoles}
                 idPrefix="temp-voice-main"
               />
+              {/if}
 
+
+              {#if tvSub === 'generators'}
               {#if !config.tempVoiceGenerators}
                 {config.tempVoiceGenerators = []}
               {/if}
@@ -2297,25 +2320,15 @@
                   {/if}
                 </div>
               </div>
-
-              <!-- Description of Chat Control Embed -->
-              <div class="p-5 bg-primary/5 border border-primary/20 rounded-xl mt-4">
-                <h4 class="text-xs font-semibold text-primary mb-2">{m.cm_management_embed_title()}</h4>
-                <p class="text-xs text-on-surface-variant/80 leading-relaxed">
-                  {m.cm_management_embed_intro()}
-                  <br/><strong class="text-on-surface font-semibold">• {m.cm_embed_bullet_lock()}</strong> {m.cm_embed_bullet_lock_desc()}
-                  <br/><strong class="text-on-surface font-semibold">• {m.cm_embed_bullet_rename()}</strong> {m.cm_embed_bullet_rename_desc()}
-                  <br/><strong class="text-on-surface font-semibold">• {m.cm_embed_bullet_limit()}</strong> {m.cm_embed_bullet_limit_desc()}
-                  <br/><strong class="text-on-surface font-semibold">• {m.cm_embed_bullet_kick()}</strong> {m.cm_embed_bullet_kick_desc()}
-                  <br/><strong class="text-on-surface font-semibold">• {m.cm_embed_bullet_chat()}</strong> {m.cm_embed_bullet_chat_desc()}
-                </p>
-              </div>
+              {/if}
             </div>
           {/if}
         </section>
+        {/if}
 
         {#if config.tempVoiceEnabled}
-          <section class="bg-surface-container-low/30 border border-outline-variant/10 p-8 rounded-xl space-y-6 mt-6">
+          {#if tvSub === 'active'}
+          <section class="bg-surface-container-low/30 border border-outline-variant/10 p-8 rounded-xl space-y-6">
             <div class="flex items-center justify-between border-b border-outline-variant/10 pb-4">
               <div>
                 <h3 class="text-xl font-semibold flex items-center gap-3">
@@ -2522,6 +2535,7 @@
               </div>
             {/if}
           </section>
+          {/if}
 
           <!-- Présentation du panneau : mode, mise en page de l'état, palette et
                composants (V1/V2) : configurable par serveur, comme le reste de
@@ -2529,7 +2543,20 @@
                dans le même {#if config.tempVoiceEnabled} que la section
                voisine : les salons temporaires désactivés, l'onglet ne garde
                que l'interrupteur, pas un bloc de réglages orphelin. -->
-          <section class="bg-surface-container-low/30 border border-outline-variant/10 p-5 lg:p-6 rounded-xl space-y-4 mt-6">
+          {#if tvSub === 'panel'}
+          <section class="bg-surface-container-low/30 border border-outline-variant/10 p-5 lg:p-6 rounded-xl space-y-4">
+              <!-- Description of Chat Control Embed -->
+              <div class="p-5 bg-primary/5 border border-primary/20 rounded-xl">
+                <h4 class="text-xs font-semibold text-primary mb-2">{m.cm_management_embed_title()}</h4>
+                <p class="text-xs text-on-surface-variant/80 leading-relaxed">
+                  {m.cm_management_embed_intro()}
+                  <br/><strong class="text-on-surface font-semibold">• {m.cm_embed_bullet_lock()}</strong> {m.cm_embed_bullet_lock_desc()}
+                  <br/><strong class="text-on-surface font-semibold">• {m.cm_embed_bullet_rename()}</strong> {m.cm_embed_bullet_rename_desc()}
+                  <br/><strong class="text-on-surface font-semibold">• {m.cm_embed_bullet_limit()}</strong> {m.cm_embed_bullet_limit_desc()}
+                  <br/><strong class="text-on-surface font-semibold">• {m.cm_embed_bullet_kick()}</strong> {m.cm_embed_bullet_kick_desc()}
+                  <br/><strong class="text-on-surface font-semibold">• {m.cm_embed_bullet_chat()}</strong> {m.cm_embed_bullet_chat_desc()}
+                </p>
+              </div>
             <div>
               <h3 class="text-sm font-semibold text-on-surface">{m.cm_tv_panel_title()}</h3>
               <p class="text-2xs text-on-surface-variant mt-0.5">{m.cm_tv_panel_desc()}</p>
@@ -2687,6 +2714,7 @@
               </div>
             </div>
           </section>
+          {/if}
         {/if}
 
       {:else if activeTab === 'access-requests'}
