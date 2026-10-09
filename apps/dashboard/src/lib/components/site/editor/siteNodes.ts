@@ -442,6 +442,223 @@ export const FaqItem = Node.create({
   },
 });
 
+// ─── Sections ───────────────────────────────────────────────────────────────
+
+/** Même filtre que le rendu public : une image utilisable dans `url()`. */
+const SAFE_CSS_IMAGE = /^(https:\/\/|\/s\/_\/a\/)[^"'()\s\\]+$/;
+
+function settingsHandle(editor: Editor, title: string, onClick: () => void): HTMLButtonElement {
+  const handle = document.createElement('button');
+  handle.type = 'button';
+  handle.className = 'site-section-handle';
+  handle.contentEditable = 'false';
+  handle.title = title;
+  handle.setAttribute('aria-label', title);
+  // SVG constant du jeu partagé, jamais une donnée saisie.
+  handle.innerHTML = siteIconSvg('palette', 16);
+  handle.addEventListener('mousedown', (event) => event.preventDefault());
+  handle.addEventListener('click', onClick);
+  return handle;
+}
+
+/** Bannière d'appel : contenu éditable sur place, réglages (image, ton) par la fenêtre. */
+export const Banner = Node.create({
+  name: 'banner',
+  group: 'block',
+  content: 'block+',
+  defining: true,
+  isolating: true,
+  addAttributes() {
+    return { image: { default: '' }, tone: { default: 'surface' }, align: { default: 'center' }, tall: { default: false } };
+  },
+  parseHTML() {
+    return [{ tag: 'section[data-banner]' }];
+  },
+  renderHTML({ HTMLAttributes }) {
+    return ['section', { 'data-banner': '', class: `sec-banner tone-${HTMLAttributes.tone}` }, ['div', { class: 'sec-banner-inner' }, 0]];
+  },
+  addNodeView() {
+    return ({ node, editor, getPos }) => {
+      const dom = document.createElement('section');
+      const apply = (attrs: Record<string, unknown>) => {
+        const image = typeof attrs.image === 'string' && SAFE_CSS_IMAGE.test(attrs.image) ? attrs.image : '';
+        dom.className = ['sec-banner', `tone-${attrs.tone}`, `align-${attrs.align === 'left' ? 'left' : 'center'}`, attrs.tall ? 'is-tall' : '', image ? 'has-image' : '', 'site-section'].filter(Boolean).join(' ');
+        if (image) dom.style.setProperty('--banner-image', `url("${image}")`);
+        else dom.style.removeProperty('--banner-image');
+      };
+      apply(node.attrs);
+      const handle = settingsHandle(editor, label(editor, 'sectionSettings', 'Réglages de la section'), () => configure(editor, 'banner', getPos, node.attrs));
+      const content = document.createElement('div');
+      content.className = 'sec-banner-inner';
+      dom.append(handle, content);
+      return {
+        dom,
+        contentDOM: content,
+        update(updated) {
+          if (updated.type.name !== 'banner') return false;
+          node = updated;
+          apply(updated.attrs);
+          return true;
+        },
+        ignoreMutation: (mutation) => !content.contains(mutation.target as globalThis.Node),
+      };
+    };
+  },
+});
+
+/** Galerie : liste d'images réglée par la fenêtre, aperçu en vignettes. */
+export const Gallery = Node.create({
+  name: 'gallery',
+  group: 'block',
+  atom: true,
+  draggable: true,
+  selectable: true,
+  addAttributes() {
+    return { images: { default: [] }, layout: { default: 'grid' }, columns: { default: 3 } };
+  },
+  parseHTML() {
+    return [{ tag: 'div[data-gallery]' }];
+  },
+  renderHTML() {
+    return ['div', { 'data-gallery': '' }];
+  },
+  addNodeView() {
+    return ({ node, editor, getPos }) => {
+      const render = (attrs: Record<string, unknown>) => {
+        const images = (Array.isArray(attrs.images) ? attrs.images : []) as Array<{ src: string }>;
+        const card = atomCard(editor, {
+          icon: 'layers',
+          title: label(editor, 'gallery', 'Galerie'),
+          summary: label(editor, 'galleryCount', '{count} image(s)').replace('{count}', String(images.length)),
+          onConfigure: () => configure(editor, 'gallery', getPos, attrs),
+        });
+        if (images.length > 0) {
+          const strip = document.createElement('div');
+          strip.className = 'site-gallery-strip';
+          for (const image of images.slice(0, 8)) {
+            const img = document.createElement('img');
+            img.src = image.src;
+            img.alt = '';
+            img.loading = 'lazy';
+            strip.append(img);
+          }
+          card.querySelector('.site-atom-body')?.append(strip);
+        }
+        return card;
+      };
+      let dom = render(node.attrs);
+      return {
+        dom,
+        update(updated) {
+          if (updated.type.name !== 'gallery') return false;
+          const next = render(updated.attrs);
+          dom.replaceWith(next);
+          dom = next;
+          return true;
+        },
+        ignoreMutation: () => true,
+      };
+    };
+  },
+});
+
+export const Testimonials = Node.create({
+  name: 'testimonials',
+  group: 'block',
+  content: 'testimonial+',
+  isolating: true,
+  addAttributes() {
+    return { columns: { default: 3 } };
+  },
+  parseHTML() {
+    return [{ tag: 'div[data-testimonials]' }];
+  },
+  renderHTML({ HTMLAttributes }) {
+    return ['div', { 'data-testimonials': '', class: `testimonials cols-${HTMLAttributes.columns}` }, 0];
+  },
+});
+
+/** Témoignage : citation éditable sur place, nom et rôle en champs, photo par la fenêtre. */
+export const Testimonial = Node.create({
+  name: 'testimonial',
+  content: 'block+',
+  defining: true,
+  isolating: true,
+  addAttributes() {
+    return { name: { default: '' }, role: { default: '' }, avatar: { default: '' } };
+  },
+  parseHTML() {
+    return [{ tag: 'figure[data-testimonial]' }];
+  },
+  renderHTML() {
+    return ['figure', { 'data-testimonial': '', class: 'testimonial' }, ['blockquote', {}, 0]];
+  },
+  addNodeView() {
+    return ({ node, editor, getPos }) => {
+      const dom = document.createElement('figure');
+      dom.className = 'testimonial site-testimonial';
+      const content = document.createElement('blockquote');
+      const caption = document.createElement('figcaption');
+      caption.contentEditable = 'false';
+      const avatar = document.createElement('button');
+      avatar.type = 'button';
+      avatar.className = 'testimonial-avatar site-testimonial-avatar';
+      avatar.title = label(editor, 'testimonialAvatar', 'Photo');
+      avatar.addEventListener('mousedown', (event) => event.preventDefault());
+      avatar.addEventListener('click', () => configure(editor, 'testimonial', getPos, node.attrs));
+      const fields = document.createElement('span');
+      const field = (key: 'name' | 'role', placeholder: string) => {
+        const input = document.createElement('input');
+        input.className = `site-testimonial-${key}`;
+        input.placeholder = placeholder;
+        input.maxLength = 80;
+        input.value = String(node.attrs[key] ?? '');
+        input.addEventListener('change', () => {
+          const pos = getPos();
+          if (typeof pos === 'number') editor.chain().command(({ tr }) => {
+            tr.setNodeAttribute(pos, key, input.value.slice(0, 80));
+            return true;
+          }).run();
+        });
+        input.addEventListener('keydown', (event) => event.stopPropagation());
+        return input;
+      };
+      const name = field('name', label(editor, 'testimonialName', 'Nom'));
+      const role = field('role', label(editor, 'testimonialRole', 'Rôle'));
+      fields.append(name, role);
+      caption.append(avatar, fields);
+      const renderAvatar = (attrs: Record<string, unknown>) => {
+        avatar.textContent = '';
+        const src = typeof attrs.avatar === 'string' ? attrs.avatar : '';
+        if (src) {
+          const img = document.createElement('img');
+          img.src = src;
+          img.alt = '';
+          avatar.append(img);
+        } else {
+          avatar.innerHTML = siteIconSvg('user', 20);
+        }
+      };
+      renderAvatar(node.attrs);
+      dom.append(content, caption);
+      return {
+        dom,
+        contentDOM: content,
+        update(updated) {
+          if (updated.type.name !== 'testimonial') return false;
+          node = updated;
+          if (document.activeElement !== name) name.value = String(updated.attrs.name ?? '');
+          if (document.activeElement !== role) role.value = String(updated.attrs.role ?? '');
+          renderAvatar(updated.attrs);
+          return true;
+        },
+        stopEvent: (event) => event.target === name || event.target === role,
+        ignoreMutation: (mutation) => !content.contains(mutation.target as globalThis.Node),
+      };
+    };
+  },
+});
+
 // ─── Vidéo ──────────────────────────────────────────────────────────────────
 
 export const Video = Node.create({

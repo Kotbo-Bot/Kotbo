@@ -44,9 +44,11 @@
   import { siteCollabUrl, uploadSiteAsset, type SiteCatalog, type SitePageSummary } from '../../../api/site';
   import { siteErrorMessage } from '../siteErrors';
   import {
+    Banner,
     Callout,
     Faq,
     FaqItem,
+    Gallery,
     Grid,
     GridCell,
     isAllowedSiteUri,
@@ -55,6 +57,8 @@
     SiteHighlight,
     SiteImage,
     SiteNodesBridge,
+    Testimonial,
+    Testimonials,
     Toc,
     Video,
     type ConfigureRequest,
@@ -205,6 +209,10 @@
       FaqItem,
       Video,
       Toc,
+      Banner,
+      Gallery,
+      Testimonials,
+      Testimonial,
       ModuleNode,
       SiteNodesBridge,
       SlashMenu.configure({
@@ -278,6 +286,12 @@
       video: m.ste_item_video(),
       toc: m.ste_item_toc(),
       tocSummary: m.ste_item_toc_desc(),
+      sectionSettings: m.ste_section_settings(),
+      gallery: m.ste_item_gallery(),
+      galleryCount: m.ste_sum_gallery({ count: '{count}' }),
+      testimonialAvatar: m.ste_testimonial_avatar(),
+      testimonialName: m.ste_testimonial_name(),
+      testimonialRole: m.ste_testimonial_role(),
     };
     editor = instance;
   }
@@ -458,7 +472,16 @@
   {/if}
 </div>
 
-<NodeConfigModal bind:request={configRequest} {catalog} {pages} onSave={saveNode} />
+<NodeConfigModal
+  bind:request={configRequest}
+  {catalog}
+  {pages}
+  onSave={saveNode}
+  pickAsset={(onPick) => {
+    pickerCallback = onPick;
+    pickerOpen = true;
+  }}
+/>
 <AssetPicker
   bind:open={pickerOpen}
   {guildId}

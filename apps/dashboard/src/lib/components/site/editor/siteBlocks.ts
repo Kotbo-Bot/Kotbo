@@ -3,7 +3,7 @@
  * leurs libellés, icônes et le résumé affiché dans la carte d'un bloc.
  */
 import type { Editor, Range } from '@tiptap/core';
-import { SITE_MODULES, normalizeModuleConfig, type SiteIconName, type SiteModuleKey } from '@kotbo/shared';
+import { SITE_MODULES, normalizeModuleConfig, type SiteIconName, type SiteKeyStatItem, type SiteKeyStatMetric, type SiteModuleKey } from '@kotbo/shared';
 import { m } from '../../../i18n';
 import type { SiteCatalog } from '../../../api/site';
 import type { SlashItem } from './slashMenu';
@@ -14,6 +14,7 @@ export const MODULE_ICONS: Record<SiteModuleKey, SiteIconName> = {
   news: 'newspaper',
   partners: 'handshake',
   serverStats: 'chart',
+  keyStats: 'activity',
   appeal: 'gavel',
   recruitment: 'user-plus',
   form: 'clipboard',
@@ -43,6 +44,7 @@ export function moduleLabel(key: SiteModuleKey): string {
     news: () => m.ste_block_news(),
     partners: () => m.ste_block_partners(),
     serverStats: () => m.ste_block_serverStats(),
+    keyStats: () => m.ste_block_keyStats(),
     appeal: () => m.ste_block_appeal(),
     recruitment: () => m.ste_block_recruitment(),
     form: () => m.ste_block_form(),
@@ -74,6 +76,7 @@ export function moduleDescription(key: SiteModuleKey): string {
     news: () => m.ste_block_news_desc(),
     partners: () => m.ste_block_partners_desc(),
     serverStats: () => m.ste_block_serverStats_desc(),
+    keyStats: () => m.ste_block_keyStats_desc(),
     appeal: () => m.ste_block_appeal_desc(),
     recruitment: () => m.ste_block_recruitment_desc(),
     form: () => m.ste_block_form_desc(),
@@ -144,9 +147,30 @@ export function moduleSummary(key: SiteModuleKey, raw: Record<string, unknown>, 
     }
     case 'suggestions':
       return m.ste_sum_limit({ limit: Number(config.limit) });
+    case 'keyStats': {
+      const items = (config.items as SiteKeyStatItem[]) ?? [];
+      return items.map((item) => item.label || keyStatLabel(item.metric)).join(' · ') || moduleDescription(key);
+    }
     default:
       return moduleDescription(key);
   }
+}
+
+/** Nom d'un chiffre du bloc « Chiffres clés ». */
+export function keyStatLabel(metric: SiteKeyStatMetric): string {
+  const labels: Record<SiteKeyStatMetric, () => string> = {
+    members: () => m.ste_metric_members(),
+    online: () => m.ste_metric_online(),
+    boosts: () => m.ste_metric_boosts(),
+    channels: () => m.ste_metric_channels(),
+    messages30d: () => m.ste_metric_messages30d(),
+    voiceHours30d: () => m.ste_metric_voice_hours30d(),
+    joined30d: () => m.ste_metric_joined30d(),
+    wikiPages: () => m.ste_metric_wiki_pages(),
+    blogArticles: () => m.ste_metric_blog_articles(),
+    custom: () => m.ste_metric_custom(),
+  };
+  return labels[metric]();
 }
 
 export function leaderboardVariantLabel(variant: string): string {
@@ -174,6 +198,8 @@ function insert(content: Record<string, unknown> | Record<string, unknown>[]) {
 
 const emptyParagraph = { type: 'paragraph' };
 const cell = (span = 1) => ({ type: 'gridCell', attrs: { span, rowSpan: 1, surface: true }, content: [emptyParagraph] });
+const heading = (level: number, text: string) => ({ type: 'heading', attrs: { level }, content: [{ type: 'text', text }] });
+const testimonial = () => ({ type: 'testimonial', attrs: { name: '', role: '', avatar: '' }, content: [emptyParagraph] });
 
 export interface SlashContext {
   catalog: SiteCatalog | null;
@@ -190,6 +216,7 @@ export function buildSlashItems(context: SlashContext): SlashItem[] {
   const text = m.ste_group_text();
   const layout = m.ste_group_layout();
   const media = m.ste_group_media();
+  const sections = m.ste_group_sections();
   const items: SlashItem[] = [
     { id: 'p', group: text, label: m.ste_item_paragraph(), description: m.ste_item_paragraph_desc(), icon: 'pilcrow', keywords: 'texte text', run: setBlock('paragraph') },
     { id: 'h1', group: text, label: m.ste_item_h1(), description: m.ste_item_heading_desc(), icon: 'h1', keywords: 'titre heading', run: setBlock('heading', { level: 1 }) },
@@ -220,6 +247,41 @@ export function buildSlashItems(context: SlashContext): SlashItem[] {
         context.configureAt('button', Math.max(0, pos), { label: m.ste_button_default(), href: '/~/', variant: 'primary', align: 'left' });
       },
     },
+    {
+      id: 'banner',
+      group: sections,
+      label: m.ste_item_banner(),
+      description: m.ste_item_banner_desc(),
+      icon: 'flame',
+      keywords: 'bannière banner hero appel cta section',
+      run: insert({
+        type: 'banner',
+        attrs: { image: '', tone: 'accent', align: 'center', tall: false },
+        content: [heading(2, m.ste_banner_title()), { type: 'paragraph', content: [{ type: 'text', text: m.ste_banner_text() }] }, { type: 'button', attrs: { label: m.ste_button_default(), href: '/~/', variant: 'primary', align: 'center' } }],
+      }),
+    },
+    {
+      id: 'testimonials',
+      group: sections,
+      label: m.ste_item_testimonials(),
+      description: m.ste_item_testimonials_desc(),
+      icon: 'message-circle',
+      keywords: 'témoignages avis testimonials reviews section',
+      run: insert({ type: 'testimonials', attrs: { columns: 3 }, content: [testimonial(), testimonial(), testimonial()] }),
+    },
+    {
+      id: 'gallery',
+      group: sections,
+      label: m.ste_item_gallery(),
+      description: m.ste_item_gallery_desc(),
+      icon: 'layers',
+      keywords: 'galerie images photos carrousel gallery section',
+      run: (e, r) => {
+        e.chain().focus().deleteRange(r).insertContent({ type: 'gallery', attrs: { images: [], layout: 'grid', columns: 3 } }).run();
+        const pos = e.state.selection.from - 1;
+        context.configureAt('gallery', Math.max(0, pos), { images: [], layout: 'grid', columns: 3 });
+      },
+    },
     { id: 'toc', group: layout, label: m.ste_item_toc(), description: m.ste_item_toc_desc(), icon: 'toc', keywords: 'sommaire toc', run: insert({ type: 'toc', attrs: { maxLevel: 3 } }) },
     {
       id: 'image',
@@ -239,7 +301,7 @@ export function buildSlashItems(context: SlashContext): SlashItem[] {
       label: m.ste_item_video(),
       description: m.ste_item_video_desc(),
       icon: 'play',
-      keywords: 'vidéo youtube twitch vimeo',
+      keywords: 'vidéo bande-annonce trailer youtube twitch vimeo',
       run: (e, r) => {
         e.chain().focus().deleteRange(r).run();
         context.pickVideo((attrs) => e.chain().focus().insertContent({ type: 'video', attrs }).run());
@@ -261,7 +323,7 @@ export function buildSlashItems(context: SlashContext): SlashItem[] {
         const config = normalizeModuleConfig(key, spec.defaults);
         e.chain().focus().deleteRange(r).insertContent({ type: 'module', attrs: { module: key, config } }).run();
         // Les blocs qui n'ont pas de sens sans réglage s'ouvrent tout de suite.
-        if (['form', 'channelFeed', 'partners'].includes(key)) {
+        if (['form', 'channelFeed', 'partners', 'keyStats'].includes(key)) {
           const pos = e.state.selection.from - 1;
           context.configureAt('module', Math.max(0, pos), { module: key, config });
         }

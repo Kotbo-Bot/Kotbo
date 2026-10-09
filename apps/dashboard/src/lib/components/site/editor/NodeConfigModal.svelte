@@ -7,14 +7,18 @@
   import {
     normalizeModuleConfig,
     parseSiteVideo,
+    SITE_KEY_STAT_METRICS,
     SITE_LEADERBOARD_VARIANTS,
+    SITE_SECTION_LIMITS,
+    type SiteKeyStatItem,
     type SiteModuleKey,
     type SitePartnerItem,
   } from '@kotbo/shared';
+  import SiteIcon from '../SiteIcon.svelte';
   import { Button, Field, Modal } from '../../ui';
   import { m } from '../../../i18n';
   import type { SiteCatalog, SitePageSummary } from '../../../api/site';
-  import { leaderboardVariantLabel, moduleDescription, moduleLabel, MODULE_ICONS } from './siteBlocks';
+  import { keyStatLabel, leaderboardVariantLabel, moduleDescription, moduleLabel, MODULE_ICONS } from './siteBlocks';
   import type { ConfigureRequest } from './siteNodes';
 
   let {
@@ -22,11 +26,14 @@
     catalog,
     pages,
     onSave,
+    pickAsset,
   }: {
     request: ConfigureRequest | null;
     catalog: SiteCatalog | null;
     pages: SitePageSummary[];
     onSave: (pos: number, attrs: Record<string, unknown>) => void;
+    /** Ouvre la bibliothèque d'images ; le rappel reçoit l'adresse choisie. */
+    pickAsset: (onPick: (src: string) => void) => void;
   } = $props();
 
   let open = $state(false);
@@ -103,6 +110,39 @@
     config.items = partners().map((p, i) => (i === index ? { ...p, ...patch } : p));
   }
 
+  type GalleryImage = { src: string; alt: string; caption: string };
+
+  function galleryImages(): GalleryImage[] {
+    return Array.isArray(attrs.images) ? (attrs.images as GalleryImage[]) : [];
+  }
+
+  function setGalleryImage(index: number, patch: Partial<GalleryImage>) {
+    attrs.images = galleryImages().map((img, i) => (i === index ? { ...img, ...patch } : img));
+  }
+
+  function moveGalleryImage(index: number, delta: number) {
+    const list = [...galleryImages()];
+    const target = index + delta;
+    if (target < 0 || target >= list.length) return;
+    [list[index], list[target]] = [list[target], list[index]];
+    attrs.images = list;
+  }
+
+  function addGalleryImage() {
+    pickAsset((src) => {
+      if (galleryImages().length >= SITE_SECTION_LIMITS.galleryImages) return;
+      attrs.images = [...galleryImages(), { src, alt: '', caption: '' }];
+    });
+  }
+
+  function keyStats(): SiteKeyStatItem[] {
+    return Array.isArray(config.items) ? (config.items as SiteKeyStatItem[]) : [];
+  }
+
+  function setKeyStat(index: number, patch: Partial<SiteKeyStatItem>) {
+    config.items = keyStats().map((item, i) => (i === index ? { ...item, ...patch } : item));
+  }
+
   const title = $derived.by(() => {
     if (!request) return '';
     if (request.type === 'module' && moduleKey) return moduleLabel(moduleKey);
@@ -112,6 +152,9 @@
       image: () => m.ste_item_image(),
       toc: () => m.ste_item_toc(),
       gridCell: () => m.ste_cell_title(),
+      banner: () => m.ste_item_banner(),
+      gallery: () => m.ste_item_gallery(),
+      testimonial: () => m.ste_item_testimonial(),
     };
     return titles[request.type]?.() ?? '';
   });
@@ -121,7 +164,7 @@
   <form id="site-node-config" class="space-y-4" onsubmit={save}>
     {#if request?.type === 'module' && moduleKey}
       <div class="flex items-center gap-3 text-body-sm text-on-surface-variant">
-        <span class="text-2xl" aria-hidden="true">{MODULE_ICONS[moduleKey]}</span>
+        <SiteIcon name={MODULE_ICONS[moduleKey]} size={22} />
         {#if catalog?.blocks.find((b) => b.key === moduleKey)?.available === false}
           <span class="text-warning">{m.ste_block_unavailable()}</span>
         {/if}
@@ -286,10 +329,30 @@
         </Field>
       {/if}
 
+      {#if moduleKey === 'keyStats'}
+        <div class="space-y-2">
+          {#each keyStats() as item, index (index)}
+            <div class="cfg-row flex flex-wrap gap-2 items-center">
+              <select class="input w-48" aria-label={m.ste_cfg_metric()} value={item.metric} onchange={(e) => setKeyStat(index, { metric: (e.currentTarget as HTMLSelectElement).value as SiteKeyStatItem['metric'] })}>
+                {#each SITE_KEY_STAT_METRICS as metric (metric)}<option value={metric}>{keyStatLabel(metric)}</option>{/each}
+              </select>
+              <input class="input flex-1 min-w-32" maxlength="40" aria-label={m.ste_cfg_stat_label()} placeholder={item.metric === 'custom' ? m.ste_cfg_stat_label() : keyStatLabel(item.metric)} value={item.label} oninput={(e) => setKeyStat(index, { label: (e.currentTarget as HTMLInputElement).value })} />
+              {#if item.metric === 'custom'}
+                <input class="input w-28" maxlength="20" aria-label={m.ste_cfg_stat_value()} placeholder={m.ste_cfg_stat_value()} value={item.value} oninput={(e) => setKeyStat(index, { value: (e.currentTarget as HTMLInputElement).value })} />
+              {/if}
+              <Button size="sm" variant="ghost" icon="trash-2" aria-label={m.common_delete()} onclick={() => (config.items = keyStats().filter((_, i) => i !== index))} />
+            </div>
+          {/each}
+          {#if keyStats().length < 6}
+            <Button size="sm" icon="plus" onclick={() => (config.items = [...keyStats(), { metric: 'members', label: '', value: '' }])}>{m.ste_cfg_stat_add()}</Button>
+          {/if}
+        </div>
+      {/if}
+
       {#if moduleKey === 'partners'}
         <div class="space-y-3">
           {#each partners() as partner, index (index)}
-            <div class="rounded-lg border border-white/10 p-3 space-y-2">
+            <div class="cfg-row space-y-2">
               <div class="flex gap-2">
                 <input class="input flex-1" maxlength="80" placeholder={m.ste_partner_name()} value={partner.name} oninput={(e) => setPartner(index, { name: (e.currentTarget as HTMLInputElement).value })} />
                 <Button size="sm" variant="ghost" icon="trash-2" aria-label={m.common_delete()} onclick={() => (config.items = partners().filter((_, i) => i !== index))} />
@@ -381,6 +444,102 @@
           </select>
         {/snippet}
       </Field>
+    {:else if request?.type === 'banner'}
+      <Field label={m.ste_cfg_image()} hint={m.ste_cfg_banner_image_hint()}>
+        {#snippet children()}
+          <div class="flex items-center gap-3">
+            {#if attrs.image}<img class="cfg-thumb cfg-thumb-wide" src={String(attrs.image)} alt="" />{/if}
+            <Button size="sm" icon="image" onclick={() => pickAsset((src) => (attrs.image = src))}>{m.ste_cfg_image_choose()}</Button>
+            {#if attrs.image}<Button size="sm" variant="ghost" onclick={() => (attrs.image = '')}>{m.ste_cover_remove()}</Button>{/if}
+          </div>
+        {/snippet}
+      </Field>
+      <div class="grid grid-cols-2 gap-3">
+        <Field label={m.ste_cfg_tone()}>
+          {#snippet children(id)}
+            <select {id} class="input w-full" bind:value={attrs.tone} disabled={Boolean(attrs.image)}>
+              <option value="surface">{m.ste_tone_surface()}</option>
+              <option value="accent">{m.ste_tone_accent()}</option>
+              <option value="dark">{m.ste_tone_dark()}</option>
+            </select>
+          {/snippet}
+        </Field>
+        <Field label={m.ste_cfg_align()}>
+          {#snippet children(id)}
+            <select {id} class="input w-full" bind:value={attrs.align}>
+              <option value="center">{m.ste_align_center()}</option>
+              <option value="left">{m.ste_align_left()}</option>
+            </select>
+          {/snippet}
+        </Field>
+      </div>
+      <label class="flex items-center gap-2 text-body-sm text-on-surface">
+        <input type="checkbox" checked={attrs.tall === true} onchange={(e) => (attrs.tall = (e.currentTarget as HTMLInputElement).checked)} />
+        {m.ste_cfg_tall()}
+      </label>
+    {:else if request?.type === 'gallery'}
+      <div class="grid grid-cols-2 gap-3">
+        <Field label={m.ste_cfg_layout()}>
+          {#snippet children(id)}
+            <select {id} class="input w-full" bind:value={attrs.layout}>
+              <option value="grid">{m.ste_layout_grid()}</option>
+              <option value="carousel">{m.ste_layout_carousel()}</option>
+            </select>
+          {/snippet}
+        </Field>
+        {#if attrs.layout !== 'carousel'}
+          <Field label={m.ste_cfg_columns()}>
+            {#snippet children(id)}
+              <select {id} class="input w-full" bind:value={attrs.columns}>
+                {#each [2, 3, 4] as n (n)}<option value={n}>{n}</option>{/each}
+              </select>
+            {/snippet}
+          </Field>
+        {/if}
+      </div>
+      <div class="space-y-2">
+        {#each galleryImages() as image, index (index)}
+          <div class="cfg-row flex gap-3 items-start">
+            <img class="cfg-thumb" src={image.src} alt="" />
+            <div class="flex-1 space-y-2 min-w-0">
+              <input class="input w-full" maxlength="300" aria-label={m.ste_alt_text()} placeholder={m.ste_alt_text()} value={image.alt} oninput={(e) => setGalleryImage(index, { alt: (e.currentTarget as HTMLInputElement).value })} />
+              <input class="input w-full" maxlength="300" aria-label={m.ste_caption()} placeholder={m.ste_caption()} value={image.caption} oninput={(e) => setGalleryImage(index, { caption: (e.currentTarget as HTMLInputElement).value })} />
+            </div>
+            <div class="flex flex-col gap-1">
+              <Button size="sm" variant="ghost" icon="arrow-up" aria-label={m.ste_move_up()} onclick={() => moveGalleryImage(index, -1)} />
+              <Button size="sm" variant="ghost" icon="arrow-down" aria-label={m.ste_move_down()} onclick={() => moveGalleryImage(index, 1)} />
+              <Button size="sm" variant="ghost" icon="trash-2" aria-label={m.common_delete()} onclick={() => (attrs.images = galleryImages().filter((_, i) => i !== index))} />
+            </div>
+          </div>
+        {:else}
+          <p class="text-body-sm text-on-surface-variant">{m.ste_gallery_empty()}</p>
+        {/each}
+        {#if galleryImages().length < SITE_SECTION_LIMITS.galleryImages}
+          <Button size="sm" icon="plus" onclick={addGalleryImage}>{m.ste_gallery_add()}</Button>
+        {/if}
+      </div>
+    {:else if request?.type === 'testimonial'}
+      <div class="grid grid-cols-2 gap-3">
+        <Field label={m.ste_testimonial_name()}>
+          {#snippet children(id)}
+            <input {id} class="input w-full" maxlength="80" bind:value={attrs.name} />
+          {/snippet}
+        </Field>
+        <Field label={m.ste_testimonial_role()}>
+          {#snippet children(id)}
+            <input {id} class="input w-full" maxlength="80" bind:value={attrs.role} />
+          {/snippet}
+        </Field>
+      </div>
+      <Field label={m.ste_testimonial_avatar()}>
+        {#snippet children()}
+          <div class="flex items-center gap-3">
+            {#if attrs.avatar}<img class="cfg-thumb cfg-thumb-round" src={String(attrs.avatar)} alt="" />{/if}
+            <Button size="sm" icon="image" onclick={() => pickAsset((src) => (attrs.avatar = src))}>{m.ste_cfg_image_choose()}</Button>
+            {#if attrs.avatar}<Button size="sm" variant="ghost" onclick={() => (attrs.avatar = '')}>{m.ste_cover_remove()}</Button>{/if}
+          </div>
+        {/snippet}
+      </Field>
     {:else if request?.type === 'gridCell'}
       <div class="grid grid-cols-2 gap-3">
         <Field label={m.ste_cell_span()}>
@@ -412,3 +571,10 @@
     <Button variant="primary" type="submit" form="site-node-config">{m.common_save()}</Button>
   {/snippet}
 </Modal>
+
+<style>
+  .cfg-row { border: 1px solid var(--color-outline-variant); border-radius: 8px; padding: 10px; }
+  .cfg-thumb { flex: none; width: 64px; height: 48px; object-fit: cover; border-radius: 6px; background: var(--color-surface-container); }
+  .cfg-thumb-wide { width: 120px; height: 52px; }
+  .cfg-thumb-round { width: 44px; height: 44px; border-radius: 50%; }
+</style>
