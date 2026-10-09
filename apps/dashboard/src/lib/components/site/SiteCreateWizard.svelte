@@ -4,22 +4,24 @@
    * composées d'après les modules actifs du serveur ; tout se modifie ensuite.
    */
   import { untrack } from 'svelte';
-  import { resolveSiteTheme, slugify, validateSiteSlug } from '@kotbo/shared';
+  import { resolveSiteTheme, slugify, validateSiteSlug, type SiteIconName } from '@kotbo/shared';
   import { Button, Field, SectionCard } from '../ui';
   import { toast } from '../../stores/toast.svelte';
   import { m } from '../../i18n';
   import { createSite, type SiteState, type SiteTemplate } from '../../api/site';
   import { siteErrorMessage } from './siteErrors';
+  import SiteIcon from './SiteIcon.svelte';
 
   let { siteState, guildId, onCreated }: { siteState: SiteState; guildId: string; onCreated: () => void } = $props();
 
-  const THEMES: Record<SiteTemplate, string> = { general: 'verre', gaming: 'neon', rp: 'royaume', esport: 'arcade', etude: 'documentation' };
-  const TEMPLATES: Array<{ key: SiteTemplate; label: () => string; desc: () => string; icon: string }> = [
-    { key: 'general', label: () => m.ste_tpl_general(), desc: () => m.ste_tpl_general_desc(), icon: '💬' },
-    { key: 'gaming', label: () => m.ste_tpl_gaming(), desc: () => m.ste_tpl_gaming_desc(), icon: '🎮' },
-    { key: 'rp', label: () => m.ste_tpl_rp(), desc: () => m.ste_tpl_rp_desc(), icon: '🏰' },
-    { key: 'esport', label: () => m.ste_tpl_esport(), desc: () => m.ste_tpl_esport_desc(), icon: '🏆' },
-    { key: 'etude', label: () => m.ste_tpl_etude(), desc: () => m.ste_tpl_etude_desc(), icon: '📚' },
+  // Même correspondance que les modèles du bot (siteTemplates.ts).
+  const THEMES: Record<SiteTemplate, string> = { general: 'azur', gaming: 'carbone', rp: 'royaume', esport: 'braise', etude: 'documentation' };
+  const TEMPLATES: Array<{ key: SiteTemplate; label: () => string; desc: () => string; icon: SiteIconName }> = [
+    { key: 'general', label: () => m.ste_tpl_general(), desc: () => m.ste_tpl_general_desc(), icon: 'message-circle' },
+    { key: 'gaming', label: () => m.ste_tpl_gaming(), desc: () => m.ste_tpl_gaming_desc(), icon: 'gamepad' },
+    { key: 'rp', label: () => m.ste_tpl_rp(), desc: () => m.ste_tpl_rp_desc(), icon: 'castle' },
+    { key: 'esport', label: () => m.ste_tpl_esport(), desc: () => m.ste_tpl_esport_desc(), icon: 'trophy' },
+    { key: 'etude', label: () => m.ste_tpl_etude(), desc: () => m.ste_tpl_etude_desc(), icon: 'graduation' },
   ];
 
   let slug = $state(untrack(() => siteState.suggestedSlug) ?? '');
@@ -60,21 +62,18 @@
       {/snippet}
     </Field>
 
-    <fieldset class="space-y-3">
-      <legend class="text-body-sm font-medium text-on-surface mb-1">{m.ste_create_type()}</legend>
-      <div class="tpl-grid">
+    <fieldset class="space-y-2">
+      <legend class="text-body-sm font-medium text-on-surface mb-2">{m.ste_create_type()}</legend>
+      <div class="tpl-list">
         {#each TEMPLATES as tpl (tpl.key)}
           {@const theme = resolveSiteTheme(THEMES[tpl.key], {})}
-          <label class="tpl-card" class:is-selected={template === tpl.key}>
+          <label class="tpl-row" class:is-selected={template === tpl.key}>
             <input class="sr-only" type="radio" name="template" value={tpl.key} bind:group={template} />
-            <span class="tpl-preview" style="--bg:{theme.bg};--accent:{theme.accent};--text:{theme.text};--surface:{theme.surface};--radius:{Math.min(theme.radius, 14)}px">
-              <span class="tpl-bar"></span>
-              <span class="tpl-block"></span>
-              <span class="tpl-block tpl-block-small"></span>
-              <span class="tpl-dot"></span>
+            <span class="tpl-icon" style="--accent:{theme.accent}"><SiteIcon name={tpl.icon} size={20} /></span>
+            <span class="min-w-0">
+              <span class="tpl-name">{tpl.label()}</span>
+              <span class="tpl-desc">{tpl.desc()}</span>
             </span>
-            <span class="tpl-name">{tpl.icon} {tpl.label()}</span>
-            <span class="tpl-desc">{tpl.desc()}</span>
           </label>
         {/each}
       </div>
@@ -89,16 +88,12 @@
 </SectionCard>
 
 <style>
-  .tpl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; }
-  .tpl-card { display: flex; flex-direction: column; gap: 6px; padding: 10px; border-radius: 14px; border: 1px solid rgb(255 255 255 / 0.08); background: rgb(255 255 255 / 0.02); cursor: pointer; transition: border-color 0.15s, background 0.15s; }
-  .tpl-card:hover { border-color: rgb(255 255 255 / 0.18); }
-  .tpl-card.is-selected { border-color: rgb(124 108 255 / 0.8); background: rgb(124 108 255 / 0.08); }
-  .tpl-card:has(input:focus-visible) { outline: 2px solid rgb(124 108 255); outline-offset: 2px; }
-  .tpl-preview { position: relative; display: block; height: 96px; border-radius: 10px; background: var(--bg); overflow: hidden; border: 1px solid rgb(255 255 255 / 0.06); }
-  .tpl-bar { position: absolute; left: 8px; right: 8px; top: 8px; height: 12px; border-radius: 6px; background: var(--surface); }
-  .tpl-block { position: absolute; left: 8px; top: 28px; width: 58%; height: 58px; border-radius: var(--radius); background: var(--surface); }
-  .tpl-block-small { left: auto; right: 8px; width: 30%; }
-  .tpl-dot { position: absolute; left: 16px; top: 40px; width: 36px; height: 8px; border-radius: 4px; background: var(--accent); }
-  .tpl-name { font-weight: 600; font-size: 0.9rem; }
-  .tpl-desc { font-size: 0.78rem; color: rgb(255 255 255 / 0.55); }
+  .tpl-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px; }
+  .tpl-row { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--color-outline-variant); cursor: pointer; }
+  .tpl-row:hover { background: var(--color-surface-hover); }
+  .tpl-row.is-selected { border-color: var(--color-primary); box-shadow: inset 0 0 0 1px var(--color-primary); }
+  .tpl-row:has(input:focus-visible) { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+  .tpl-icon { flex: none; display: grid; place-items: center; width: 38px; height: 38px; border-radius: 8px; color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
+  .tpl-name { display: block; font-weight: 600; font-size: 0.92rem; }
+  .tpl-desc { display: block; font-size: 0.8rem; color: var(--color-on-surface-variant); }
 </style>
