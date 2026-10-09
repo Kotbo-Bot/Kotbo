@@ -87,6 +87,41 @@ declare module 'hono' {
 export function createSiteAdminRouter(client: Client): OpenAPIHono {
   const app = new OpenAPIHono();
 
+  // ── Sites dont la personne est rédactrice (« Mon espace ») ────────────────
+  // Les rédacteurs désignés par rôle n'ont souvent pas accès au dashboard : ce
+  // point d'entrée leur liste les sections qu'ils peuvent écrire, serveur par serveur.
+  app.get('/api/site-editor/mine', requireAuth, async (c) => {
+    const userId = c.var.auth.userId;
+    const sites = await prisma.communitySite.findMany({
+      where: { suspendedAt: null, OR: [{ wikiEditorRoleIds: { isEmpty: false } }, { blogEditorRoleIds: { isEmpty: false } }] },
+      select: { id: true, guildId: true, slug: true, name: true, wikiEditorRoleIds: true, blogEditorRoleIds: true },
+      take: 500,
+    });
+    const result = [];
+    for (const site of sites) {
+      const guild = client.guilds.cache.get(site.guildId);
+      if (!guild) continue;
+      const member = guild.members.cache.get(userId) ?? (await guild.members.fetch(userId).catch(() => null));
+      if (!member) continue;
+      const roles = member.roles.cache;
+      const states = await getModuleStates(site.guildId);
+      const kinds: SitePageKind[] = [];
+      if (states.site_wiki !== false && site.wikiEditorRoleIds.some((id) => roles.has(id))) kinds.push('WIKI');
+      if (states.site_blog !== false && site.blogEditorRoleIds.some((id) => roles.has(id))) kinds.push('BLOG');
+      if (kinds.length === 0 || states.site === false) continue;
+      const pages = await listAdminPages(site.id, kinds);
+      result.push({
+        guildId: site.guildId,
+        guildName: guild.name,
+        guildIcon: guild.iconURL({ size: 64 }),
+        site: { slug: site.slug, name: site.name, url: `${getDashboardUrl().replace(/\/$/, '')}/s/${site.slug}` },
+        kinds,
+        pages,
+      });
+    }
+    return c.json({ sites: result });
+  });
+
   app.use('/api/site-admin/:guildId', requireAuth);
   app.use('/api/site-admin/:guildId/*', requireAuth);
   const gate = async (c: Context, next: () => Promise<void>) => {
