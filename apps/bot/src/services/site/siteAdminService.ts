@@ -33,6 +33,7 @@ import { invalidateSiteCache } from './siteService.js';
 import { findScamInDocument } from './siteModeration.js';
 import { buildSiteBlueprint, blueprintNavigation, type SiteTemplateKey } from './siteTemplates.js';
 import { readStaffPageSettings } from './blocks/vitrineBlocks.js';
+import { afterCommentApproved } from './siteActivity.js';
 
 export class SiteAdminError extends Error {
   constructor(
@@ -653,8 +654,11 @@ export async function listComments(guildId: string, status: unknown) {
 
 export async function setCommentStatus(guildId: string, commentId: string, status: unknown): Promise<void> {
   if (status !== 'VISIBLE' && status !== 'HIDDEN') throw new SiteAdminError('invalid_field');
-  const updated = await prisma.siteComment.updateMany({ where: { id: commentId, guildId }, data: { status } });
-  if (updated.count === 0) throw new SiteAdminError('comment_missing', 404);
+  const previous = await prisma.siteComment.findFirst({ where: { id: commentId, guildId }, select: { status: true } });
+  if (!previous) throw new SiteAdminError('comment_missing', 404);
+  await prisma.siteComment.update({ where: { id: commentId }, data: { status } });
+  // Retenu par la modération puis affiché : récompense, MP à l'auteur et à celui de l'article.
+  if (previous.status === 'PENDING' && status === 'VISIBLE') afterCommentApproved(commentId);
 }
 
 export async function deleteComment(guildId: string, commentId: string): Promise<void> {

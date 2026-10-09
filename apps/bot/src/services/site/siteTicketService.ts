@@ -25,6 +25,7 @@ import {
 import { beginTicketOpening, endTicketOpening } from '../features/ticketRecordingNotice.js';
 import { ACTIVE_TICKET_STATUSES, checkMemberTicketQuota, resolveTicketQuotas } from '../features/ticketQuotaService.js';
 import type { SiteViewer } from './siteService.js';
+import { linkSiteTicket } from './siteNotifyService.js';
 
 /** Pied des messages relayés : c'est lui qui les distingue des messages du bot. */
 export const SITE_RELAY_FOOTER = 'Envoyé depuis le site';
@@ -83,6 +84,7 @@ export async function openTicketFromSite(
     const result = resolveRequireApproval(ticketType, configRecord)
       ? await createPendingTicketRequest(client, params)
       : await createTicketWorkspace(client, params);
+    await linkSiteTicket(guild.id, viewer.userId, result.ticketId).catch((err: unknown) => logger.warn('Site', 'Lien du ticket du site non enregistré :', err));
     return { ok: true, ticketId: result.ticketId };
   } catch (err) {
     logger.error('Site', `Ouverture de ticket depuis le site impossible sur ${guild.id} :`, err);

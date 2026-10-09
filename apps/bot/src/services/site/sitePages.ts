@@ -42,6 +42,7 @@ import { getSiteInviteUrl } from './blocks/discordBlocks.js';
 import { pageUrl, renderArticleCards, renderSearchForm, renderWikiTree, visiblePages } from './blocks/contentBlocks.js';
 import { loadSiteForm, renderSiteForm } from './blocks/demarchesBlocks.js';
 import { renderSiteShell, renderThemeCss, safeBannerUrl, type Breadcrumb, type SiteIdentity } from './siteLayout.js';
+import { getPublicMemberProfile } from './siteMemberService.js';
 import { getSiteScript, getSiteStylesheet } from './siteAssets.js';
 import { readSiteAsset, mimeForExtension } from './siteUploads.js';
 import { searchSite } from './siteSearch.js';
@@ -243,7 +244,16 @@ export function virtualDocument(pageId: string): SiteDocument | null {
     });
   }
   if (pageId === ME_PAGE_ID) {
-    return normalizeSiteDocument({ type: 'doc', content: [mod('profile'), mod('ticket')] });
+    const cell = (module: string) => ({ type: 'gridCell', attrs: { span: 1, rowSpan: 1, surface: true }, content: [mod(module)] });
+    return normalizeSiteDocument({
+      type: 'doc',
+      content: [
+        mod('profile'),
+        { type: 'grid', attrs: { columns: 2 }, content: [cell('memberRewards'), cell('memberSettings')] },
+        mod('memberInventory'),
+        mod('ticket'),
+      ],
+    });
   }
   return null;
 }
@@ -354,10 +364,11 @@ export async function renderPageMain(ctx: SiteCtx, page: PublishedPage): Promise
       ? `<nav class="toc" aria-label="${esc(m.site_toc({}, o))}"><p class="toc-title">${esc(m.site_toc({}, o))}</p><ol>${headings.map((h) => `<li class="toc-l${h.level}"><a href="#${esc(h.id)}">${esc(h.text)}</a></li>`).join('')}</ol></nav>`
       : '';
     const meta = page.publishedAt ? esc(m.site_updated_on({ date: formatDate(page.publishedAt, ctx.locale, 'long') }, o)) : '';
+    const readMark = `<div class="read-mark"${attrs({ 'data-read-page': page.id })} aria-hidden="true"></div>`;
     return `<div class="wiki-layout">
   <nav aria-label="${esc(m.site_wiki({}, o))}">${tree}</nav>
   <div class="with-aside">
-    <article>${hero(title, page.excerpt, meta)}<div class="prose">${body}</div>${subpages}</article>
+    <article>${hero(title, page.excerpt, meta)}<div class="prose">${body}</div>${subpages}${readMark}</article>
     <aside>${toc}</aside>
   </div>
 </div>`;
@@ -387,7 +398,8 @@ export async function renderPageMain(ctx: SiteCtx, page: PublishedPage): Promise
     return `<article>${hero(title, page.excerpt, meta, page.coverUrl)}${tags}<div class="prose">${body}</div>${share}${pager}${comments}</article>`;
   }
 
-  return `<article class="doc-wide">${page.id === ctx.site.homePageId ? '' : hero(title, page.excerpt, undefined, page.coverUrl)}<div class="prose wide">${body}</div></article>`;
+  const readMark = page.id === ctx.site.homePageId ? '' : `<div class="read-mark"${attrs({ 'data-read-page': page.id })} aria-hidden="true"></div>`;
+  return `<article class="doc-wide">${page.id === ctx.site.homePageId ? '' : hero(title, page.excerpt, undefined, page.coverUrl)}<div class="prose wide">${body}</div>${readMark}</article>`;
 }
 
 // ─── Pages ──────────────────────────────────────────────────────────────────
@@ -553,6 +565,35 @@ async function meResponse(ctx: SiteCtx): Promise<SiteHttpResponse> {
   const body = await renderDocumentHtml(ctx, virtualDocument(ME_PAGE_ID)!, ME_PAGE_ID);
   const main = `${hero(m.site_my_space({}, o))}<div class="prose wide">${body}</div>`;
   return html(200, shell(ctx, { path: `${ctx.basePath}/me`, title: m.site_my_space({}, o), main, activeKey: 'me', noindex: true, pageId: ME_PAGE_ID }), ctx.nonce, ctx.req.apiOrigin, { noindex: true });
+}
+
+/** Profil public d'un membre (masquable par le membre, non indexé). */
+async function memberProfileResponse(ctx: SiteCtx, userId: string): Promise<SiteHttpResponse> {
+  const o = { locale: ctx.locale };
+  const profile = await getPublicMemberProfile(ctx.req.client, ctx.site.guildId, userId);
+  if (!profile) return statePage(ctx, 404, m.site_member_profile_missing_title({}, o), m.site_member_profile_missing_desc({}, o));
+  const tile = (value: string, label: string) => `<div class="stat"><p class="stat-value">${esc(value)}</p><p class="stat-label">${esc(label)}</p></div>`;
+  const tiles = [
+    profile.level ? tile(m.site_level({ level: profile.level.level }, o), `${formatNumber(profile.level.xp, ctx.locale)} XP`) : '',
+    profile.level ? tile(`#${formatNumber(profile.level.rank, ctx.locale)}`, m.site_leaderboard_xp({}, o)) : '',
+    profile.reputation ? tile(formatNumber(profile.reputation, ctx.locale), m.site_rep({ value: '' }, o).trim()) : '',
+    tile(formatNumber(profile.messageCount, ctx.locale), m.site_member_messages({}, o)),
+    profile.voiceHours ? tile(formatNumber(profile.voiceHours, ctx.locale), m.site_member_voice_hours({}, o)) : '',
+  ].join('');
+  const meta = [
+    profile.username ? `@${esc(profile.username)}` : '',
+    profile.joinedAt ? esc(m.site_member_since({ date: formatDate(profile.joinedAt, ctx.locale, 'long') }, o)) : '',
+    profile.isStaff ? `<span class="pill">${esc(m.site_staff_other({}, o))}</span>` : '',
+  ].filter(Boolean).join(' · ');
+  const avatarHtml = profile.avatarUrl
+    ? `<img class="member-avatar"${attrs({ src: profile.avatarUrl, alt: '', width: 96, height: 96 })}>`
+    : `<span class="member-avatar" aria-hidden="true">${esc(profile.displayName.slice(0, 1).toUpperCase())}</span>`;
+  const main = `<article class="member-profile">
+  <header class="member-head">${avatarHtml}<div><h1 class="page-title">${esc(profile.displayName)}</h1><p class="page-meta">${meta}</p></div></header>
+  ${profile.bio ? `<p class="member-bio">${esc(profile.bio)}</p>` : ''}
+  <div class="stats">${tiles}</div>
+</article>`;
+  return html(200, shell(ctx, { path: `${ctx.basePath}/u/${profile.userId}`, title: profile.displayName, main, image: profile.avatarUrl, noindex: true }), ctx.nonce, ctx.req.apiOrigin, { cacheSeconds: 60, noindex: true });
 }
 
 async function formResponse(ctx: SiteCtx, formId: string): Promise<SiteHttpResponse> {
@@ -791,6 +832,7 @@ export async function handleSiteRequest(req: SiteHttpRequest): Promise<SiteHttpR
     else if (section === 'embed' && a && b && rest.length === 3) (response = await embedResponse(ctx, a, b)), (trackPath = null);
     else if (section === 'search' && rest.length === 1) response = await searchResponse(ctx);
     else if (section === 'me' && rest.length === 1) response = await meResponse(ctx);
+    else if (section === 'u' && a && rest.length === 2) response = await memberProfileResponse(ctx, a);
     else if (section === 'form' && a && rest.length === 2) response = await formResponse(ctx, a);
     else if (section === 'wiki' && rest.length === 1) response = wikiIndexResponse(ctx);
     else if (section === 'wiki' && a && rest.length === 2) {

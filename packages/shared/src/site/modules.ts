@@ -11,7 +11,7 @@
  * sous `site_module_<clé>`.
  */
 
-export const SITE_MODULE_CATEGORIES = ['vitrine', 'demarches', 'engagement', 'contenus', 'discord'] as const;
+export const SITE_MODULE_CATEGORIES = ['vitrine', 'demarches', 'engagement', 'membre', 'contenus', 'discord'] as const;
 export type SiteModuleCategory = (typeof SITE_MODULE_CATEGORIES)[number];
 
 export const SITE_LEADERBOARD_VARIANTS = ['xp', 'prestige', 'reputation', 'season', 'economy'] as const;
@@ -71,7 +71,10 @@ export const SITE_MODULES = {
   seasons: { category: 'engagement', botModule: 'seasons', needsViewer: false, interactive: false, live: false, defaults: { limit: 10 } },
   marketplace: { category: 'engagement', botModule: 'marketplace', needsViewer: false, interactive: true, live: false, defaults: { limit: 12 } },
   starboard: { category: 'engagement', botModule: 'starboard', needsViewer: false, interactive: false, live: false, defaults: { limit: 6 } },
-  profile: { category: 'engagement', botModule: null, needsViewer: true, interactive: false, live: false, defaults: {} },
+  profile: { category: 'membre', botModule: null, needsViewer: true, interactive: false, live: false, defaults: {} },
+  memberSettings: { category: 'membre', botModule: null, needsViewer: true, interactive: true, live: false, defaults: {} },
+  memberRewards: { category: 'membre', botModule: null, needsViewer: true, interactive: false, live: false, defaults: {} },
+  memberInventory: { category: 'membre', botModule: 'economy', needsViewer: true, interactive: false, live: false, defaults: {} },
 
   // Contenus
   wikiIndex: { category: 'contenus', botModule: null, needsViewer: false, interactive: false, live: false, defaults: { parentId: '' } },

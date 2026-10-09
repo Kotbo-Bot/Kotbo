@@ -277,6 +277,12 @@ function clientStrings(locale: SiteLocale): Record<string, string> {
     agentActive: m.site_agent_active({ key: '{key}' }, o),
     agentInterrupt: m.site_agent_interrupt({}, o),
     agentInterrupted: m.site_agent_interrupted({}, o),
+    rewardCoins: m.site_reward_coins({ count: '{count}' }, o),
+    rewardXp: m.site_reward_xp({ count: '{count}' }, o),
+    rewardDaily: m.site_reward_toast_daily({}, o),
+    rewardRead: m.site_reward_toast_read({}, o),
+    rewardOther: m.site_reward_toast_other({}, o),
+    rewardStreak: m.site_reward_toast_streak({ count: '{count}' }, o),
   };
 }
 
