@@ -48,6 +48,7 @@ import { registerManagementCenterTools } from './tools/management-center.js';
 import { registerRpgTools } from './tools/rpg.js';
 import { registerRpgTowerTools } from './tools/rpg-tower.js';
 import { registerRpgClanTowerTools } from './tools/rpg-clan-tower.js';
+import { registerSiteTools } from './tools/site.js';
 
 export function registerMcpTools(
   mcpServer: McpServer,
@@ -155,4 +156,5 @@ export function registerMcpTools(
   registerWriteWelcomeThreadTools(ctx);
   registerDashboardAccessTools(ctx);
   registerManagementCenterTools(ctx);
+  registerSiteTools(ctx);
 }

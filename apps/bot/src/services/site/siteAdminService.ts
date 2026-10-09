@@ -455,6 +455,9 @@ export async function updatePage(site: { id: string; guildId: string }, pageId: 
   if (patch.draftContent !== undefined) {
     data.draftContent = normalizeSiteDocument(patch.draftContent) as unknown as Prisma.InputJsonValue;
     data.hasUnpublishedChanges = true;
+    // Brouillon réécrit hors de la session à plusieurs : l'état Yjs enregistré
+    // ne lui correspond plus, la prochaine session repartira du brouillon.
+    data.collabState = null;
   }
   if (data.title !== undefined) data.hasUnpublishedChanges = true;
   data.lastEditedById = userId;
