@@ -586,6 +586,41 @@ export async function dashboardRequest<T = any>(
   }
 }
 
+/**
+ * Comme dashboardRequest, pour une route de l'API qui ne vit pas sous
+ * `/api/dashboard/guilds/<id>` (sites communautaires, par exemple) : `path`
+ * part de la racine de l'API. Même délai, mêmes rejeux, mêmes erreurs.
+ */
+export async function apiRequest<T = any>(path: string, options: RequestOptions = {}): Promise<T> {
+  const method = (options.method ?? 'GET').toUpperCase();
+  const errorContext = options.errorContext || 'API Error';
+
+  if (!isReadMethod(method) && !backendHealth.canWrite) {
+    throw new DashboardApiError({ kind: 'unavailable', serverMessage: offlineWriteMessage(), path, method });
+  }
+
+  let response: Response;
+  try {
+    response = await performRequest(`${API_BASE_URL}${path}`, path, { ...options, method });
+  } catch (err) {
+    const error = asApiError(err, path, method);
+    recordFailure(error, errorContext);
+    throw error;
+  }
+
+  if (options.successMessage && !options.silent) {
+    toast.success(options.successMessage);
+  }
+
+  try {
+    return (await response.json()) as T;
+  } catch (err) {
+    const error = new DashboardApiError({ kind: 'parse', status: response.status, path, method, cause: err });
+    recordFailure(error, errorContext);
+    throw error;
+  }
+}
+
 function isReadMethod(method: string): boolean {
   return method === 'GET' || method === 'HEAD' || method === 'OPTIONS';
 }
