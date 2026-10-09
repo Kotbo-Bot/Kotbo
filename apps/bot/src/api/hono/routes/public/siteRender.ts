@@ -47,9 +47,20 @@ function rateLimited(ip: string): boolean {
   return recent.length > RATE_MAX;
 }
 
+/**
+ * Hôte du dashboard qui relaie la requête. `X-Kotbo-Site-Host` est posé par le
+ * nginx du dashboard : un proxy placé devant l'API (Traefik, par exemple)
+ * réécrit `X-Forwarded-Host` avec l'hôte de l'API, mais laisse cet en-tête.
+ * `X-Forwarded-Host` reste lu pour les dashboards pas encore redéployés.
+ */
+function relayHost(c: Context): string | null {
+  const host = c.req.header('x-kotbo-site-host') ?? c.req.header('x-forwarded-host');
+  return host?.split(',')[0]?.trim() || null;
+}
+
 /** Origine du dashboard qui relaie la requête, si elle est connue ; sinon nulle. */
 function proxiedDashboardOrigin(c: Context): string | null {
-  const forwardedHost = c.req.header('x-forwarded-host')?.split(',')[0]?.trim();
+  const forwardedHost = relayHost(c);
   if (!forwardedHost) return null;
   const candidates = [getDashboardUrl(), ...getAllInstances().map((i) => i.dashboardOrigin)].filter(Boolean);
   for (const candidate of candidates) {
@@ -100,6 +111,12 @@ export function createSiteRenderRouter(client: Client): OpenAPIHono {
     const rest = url.pathname.slice('/api/site/render/s'.length);
     const origin = proxiedDashboardOrigin(c);
     if (!origin) {
+      // Arrivée par le nginx d'un dashboard que l'API ne reconnaît pas : rediriger
+      // vers le dashboard reviendrait ici en boucle.
+      if (c.req.header('x-kotbo-site-host')) {
+        logger.warn(`[Site] Dashboard relais inconnu : ${relayHost(c)} (attendu : ${getDashboardUrl()})`);
+        return c.body('Ce dashboard ne peut pas servir les sites communautaires.', 421, { 'Content-Type': 'text/plain; charset=utf-8', 'X-Kotbo-Handled': '1' });
+      }
       return c.redirect(`${getDashboardUrl().replace(/\/$/, '')}/s${rest}${url.search}`, 302);
     }
 
