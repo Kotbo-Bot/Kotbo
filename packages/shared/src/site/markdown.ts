@@ -210,7 +210,7 @@ function blockToMarkdown(node: SiteNode, depth = 0): string {
         })
         .join('\n');
     case 'callout':
-      return `> **${String(node.attrs?.icon || 'ℹ')}** ${children(node).replace(/\n/g, '\n> ')}`;
+      return `> **${String(node.attrs?.variant || 'info')}** ${children(node).replace(/\n/g, '\n> ')}`;
     case 'faq':
       return (node.content ?? []).map((item) => `**${item.attrs?.question ?? ''}**\n\n${children(item)}`).join('\n\n');
     case 'grid':
@@ -223,6 +223,14 @@ function blockToMarkdown(node: SiteNode, depth = 0): string {
       return '[sommaire]';
     case 'module':
       return `[bloc ${String(node.attrs?.module)} ${JSON.stringify(node.attrs?.config ?? {})}]`;
+    case 'banner':
+      return `[bannière ${String(node.attrs?.tone ?? 'surface')}]\n\n${children(node)}`;
+    case 'gallery':
+      return `[galerie ${Array.isArray(node.attrs?.images) ? node.attrs.images.length : 0} image(s)]`;
+    case 'testimonials':
+      return (node.content ?? [])
+        .map((item) => `> ${children(item).replace(/\n/g, '\n> ')}\n> — ${[item.attrs?.name, item.attrs?.role].filter(Boolean).join(', ')}`)
+        .join('\n\n');
     default:
       return children(node);
   }
