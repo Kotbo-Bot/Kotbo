@@ -52,6 +52,7 @@ import { createPreviewToken } from '../../../services/site/sitePreview.js';
 import { isSiteTemplate, SITE_TEMPLATES } from '../../../services/site/siteTemplates.js';
 import { assertWebhookUrlReachable } from '../../../services/integrations/outgoingWebhookSecurity.js';
 import { deleteVoteSite, listAdminVoteSites, saveVoteSite, SiteVoteError, topVoters } from '../../../services/site/siteVoteService.js';
+import { deleteForumCategory, deleteForumPost, ForumError, listForumCategories, listRecentForumPosts, saveForumCategory, setForumTopicFlags } from '../../../services/site/siteForumService.js';
 
 /**
  * Tout ce que l'éditeur permet, un agent peut le faire ici. Deux règles en
@@ -85,6 +86,7 @@ function failure(error: unknown) {
   }
   if (error instanceof SiteAdminError) return err(error.detail ? `${error.code}: ${error.detail}` : error.code, { code: error.code });
   if (error instanceof SiteVoteError) return err(error.code, { code: error.code });
+  if (error instanceof ForumError) return err(error.code, { code: error.code });
   return err(error instanceof Error ? error.message : String(error));
 }
 
@@ -292,6 +294,20 @@ export function registerSiteTools(ctx: McpToolContext) {
           topVoters: top,
           providers: Object.entries(SITE_VOTE_PROVIDERS).map(([key, spec]) => ({ key, ...spec })),
         });
+      }),
+    );
+
+    server.registerTool(
+      'get_site_forum',
+      { description: 'Forum du site : catégories (propres au site ou miroir d’un salon forum Discord) et derniers messages, pour la modération.', inputSchema: {}, _meta: toolMeta },
+      guard('READ_SITE', async () => {
+        try {
+          const site = await requireSite();
+          const [categories, recent] = await Promise.all([listForumCategories(site.id), listRecentForumPosts(guildId, 30)]);
+          return ok({ categories, recent });
+        } catch (error) {
+          return failure(error);
+        }
       }),
     );
 
@@ -819,6 +835,70 @@ export function registerSiteTools(ctx: McpToolContext) {
       await deleteVoteSite(guildId, id);
       await audit(key_name, 'Site de vote retiré (MCP)', id, '');
       return ok({ ok: true });
+    }),
+  );
+
+  server.registerTool(
+    'save_site_forum_category',
+    {
+      description:
+        "Ajoute ou modifie une catégorie du forum. mode SITE : sur le site seulement ; MIRROR : recopie le salon forum Discord channel_id dans les deux sens (Kotbo doit pouvoir gérer les webhooks du salon). write_role_ids vide = tous les membres.",
+      inputSchema: {
+        id: z.string().optional(),
+        name: z.string().optional(),
+        description: z.string().optional(),
+        mode: z.enum(['SITE', 'MIRROR']).optional(),
+        channel_id: z.string().optional(),
+        write_role_ids: z.array(z.string()).optional(),
+        staff_topics_only: z.boolean().optional(),
+        key_name: keyName,
+      },
+      _meta: toolMeta,
+    },
+    guard('WRITE_SITE', async (args) => {
+      try {
+        const category = await saveForumCategory(client, guildId, args.id ?? null, {
+          name: args.name,
+          description: args.description,
+          mode: args.mode,
+          channelId: args.channel_id,
+          writeRoleIds: args.write_role_ids,
+          staffTopicsOnly: args.staff_topics_only,
+        });
+        await audit(args.key_name, args.id ? 'Catégorie du forum modifiée (MCP)' : 'Catégorie du forum créée (MCP)', category.name, category.mode);
+        return ok({ id: category.id, slug: category.slug, mode: category.mode });
+      } catch (error) {
+        return failure(error);
+      }
+    }),
+  );
+
+  server.registerTool(
+    'delete_site_forum_category',
+    { description: 'Supprime une catégorie du forum et ses sujets du site (le salon Discord n’est pas touché).', inputSchema: { id: z.string(), key_name: keyName }, _meta: toolMeta },
+    guard('WRITE_SITE', async ({ id, key_name }) => {
+      await deleteForumCategory(client, guildId, id);
+      await audit(key_name, 'Catégorie du forum supprimée (MCP)', id, '');
+      return ok({ ok: true });
+    }),
+  );
+
+  server.registerTool(
+    'moderate_site_forum',
+    {
+      description: 'Modère le forum : épingler ou verrouiller un sujet (topic_id), ou retirer un message (post_id ; le premier message d’un sujet retire le sujet).',
+      inputSchema: { topic_id: z.string().optional(), pinned: z.boolean().optional(), locked: z.boolean().optional(), post_id: z.string().optional(), key_name: keyName },
+      _meta: toolMeta,
+    },
+    guard('WRITE_SITE', async ({ topic_id, pinned, locked, post_id, key_name }) => {
+      try {
+        if (topic_id) await setForumTopicFlags(guildId, topic_id, { pinned, locked });
+        if (post_id) await deleteForumPost(client, guildId, post_id, { userId: ownerId ?? 'mcp_agent', isStaff: true });
+        await audit(key_name, 'Modération du forum (MCP)', topic_id ?? post_id ?? '', [pinned !== undefined ? `épinglé=${pinned}` : '', locked !== undefined ? `verrouillé=${locked}` : '', post_id ? 'message retiré' : ''].filter(Boolean).join(', '));
+        return ok({ ok: true });
+      } catch (error) {
+        return failure(error);
+      }
     }),
   );
 
