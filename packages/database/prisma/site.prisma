@@ -88,6 +88,7 @@ model CommunitySite {
   assets    SiteAsset[]
   reports   SiteReport[]
   voteSites SiteVoteSite[]
+  forumCategories SiteForumCategory[]
 
   @@index([published])
   @@map("community_sites")

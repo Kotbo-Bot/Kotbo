@@ -1,0 +1,100 @@
+// Forum du site communautaire.
+//
+// Chaque catégorie est soit propre au site, soit le miroir d'un salon forum
+// Discord : un sujet y correspond alors à un fil Discord et chaque message à
+// un message du fil, dans les deux sens. Les messages écrits sur le site
+// partent sur Discord par un webhook du salon, au nom du membre ; ceux de ce
+// webhook sont ignorés au retour pour ne pas être recopiés deux fois.
+
+enum SiteForumMode {
+  SITE
+  MIRROR
+}
+
+model SiteForumCategory {
+  id      String @id @default(cuid())
+  siteId  String
+  guildId String
+
+  name        String
+  slug        String
+  description String        @default("")
+  mode        SiteForumMode @default(SITE)
+  // MIRROR : salon forum Discord recopié, et webhook qui y publie au nom des membres.
+  channelId   String?
+  webhookId   String?
+  // Jeton du webhook, chiffré (secretBox).
+  webhookToken String?
+  // Rôles autorisés à écrire ; vide = tous les membres. Le staff écrit toujours.
+  writeRoleIds String[] @default([])
+  // Seul le staff ouvre des sujets (annonces, règles) ; les membres répondent.
+  staffTopicsOnly Boolean @default(false)
+  sortOrder   Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  site   CommunitySite    @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  topics SiteForumTopic[]
+
+  @@unique([siteId, slug], map: "site_forum_categories_slug_key")
+  @@index([guildId])
+  @@index([channelId])
+  @@map("site_forum_categories")
+}
+
+model SiteForumTopic {
+  id         String @id @default(cuid())
+  categoryId String
+  guildId    String
+
+  title    String
+  authorId String
+  // MIRROR : fil Discord du sujet.
+  threadId String? @unique
+  pinned   Boolean @default(false)
+  locked   Boolean @default(false)
+
+  replyCount Int      @default(0)
+  lastPostAt DateTime @default(now())
+  lastPostBy String?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  category SiteForumCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  posts    SiteForumPost[]
+
+  @@index([categoryId, deletedAt, pinned, lastPostAt])
+  @@index([guildId])
+  @@map("site_forum_topics")
+}
+
+model SiteForumPost {
+  id      String @id @default(cuid())
+  topicId String
+  guildId String
+
+  authorId   String
+  // Nom et avatar au moment du message : l'auteur peut avoir quitté le serveur.
+  authorName String
+  authorAvatar String?
+  content    String
+  // [{ name, url, contentType }] : pièces jointes venues de Discord.
+  attachments Json   @default("[]")
+  // MIRROR : message Discord correspondant.
+  messageId  String? @unique
+  // "site" ou "discord".
+  source     String  @default("site")
+
+  createdAt DateTime  @default(now())
+  editedAt  DateTime?
+  deletedAt DateTime?
+
+  topic SiteForumTopic @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  @@index([topicId, createdAt])
+  @@index([guildId, createdAt])
+  @@map("site_forum_posts")
+}
