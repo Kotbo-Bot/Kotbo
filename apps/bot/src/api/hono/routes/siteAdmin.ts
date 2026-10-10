@@ -8,6 +8,7 @@ import { logger } from '../../../utils/logger.js';
 import { deleteVoteSite, listAdminVoteSites, regenerateVoteWebhookSecret, reorderVoteSites, saveVoteSite, SiteVoteError, topVoters } from '../../../services/site/siteVoteService.js';
 import { requireAuth } from '../middleware/auth.js';
 import { getApiUrl, getDashboardUrl } from '../../shared.js';
+import { getMemberIdentities } from '../../../services/moderation/memberIdentityService.js';
 import { recordAdminAudit } from '../../../services/system/adminAuditService.js';
 import { getModuleStates } from '../../../services/core/moduleGate.js';
 import { canEditKind, resolveSiteRights, type SiteRights } from '../../../services/site/siteRights.js';
@@ -446,7 +447,11 @@ export function createSiteAdminRouter(client: Client): OpenAPIHono {
     if (!c.var.siteRights.manage) return c.json({ error: 'forbidden' }, 403);
     const guildId = c.req.param('guildId');
     const [voteSites, top] = await Promise.all([listAdminVoteSites(guildId, getApiUrl()), topVoters(guildId, 10)]);
-    return c.json({ voteSites, topVoters: top });
+    const identities = await getMemberIdentities(client, guildId, top.map((t) => t.userId));
+    return c.json({
+      voteSites,
+      topVoters: top.map((t) => ({ ...t, name: identities.get(t.userId)?.displayName ?? t.userId, avatarUrl: identities.get(t.userId)?.avatarUrl ?? null })),
+    });
   });
 
   app.post('/api/site-admin/:guildId/votes', async (c) => {
