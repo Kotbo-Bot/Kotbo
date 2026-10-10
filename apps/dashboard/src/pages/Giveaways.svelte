@@ -12,7 +12,7 @@
   import { confirmDialog } from '../lib/stores/confirmDialog.svelte';
   import { resolveTabFromUrl, gotoTab } from '../lib/tabRouting';
   import { pageTabItems } from '../lib/config/pageTabs';
-  import { Tabs, Button } from '../lib/components/ui';
+  import { Tabs } from '../lib/components/ui';
   import ModulePage from '../lib/components/ModulePage.svelte';
   import SectionCard from '../lib/components/SectionCard.svelte';
   import Papicon from '../lib/components/Papicon.svelte';
@@ -1975,15 +1975,57 @@
     </div>
   {:else}
     <div class="space-y-6">
+      <!-- Page publique : consultable sans compte, elle sert de vitrine aux concours -->
+      <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-linear-to-r from-tertiary/10 to-secondary/10 border border-tertiary/20 rounded-xl p-6 px-8 shadow-xs relative overflow-hidden">
+        <div class="flex items-center gap-4">
+          <div class="w-12 h-12 rounded-lg bg-tertiary/10 border border-tertiary/20 flex items-center justify-center text-tertiary shadow-inner">
+            <Papicon icon="Globe" size={22} />
+          </div>
+          <div>
+            <p class="text-sm font-semibold text-on-surface">{m.giv_public_banner_title()}</p>
+            <p class="text-xs text-on-surface-variant/70 font-medium">{m.giv_public_page_desc()}</p>
+          </div>
+        </div>
+        <div class="flex items-center gap-3 shrink-0 w-full sm:w-auto">
+          <a
+            href={publicGiveawaysUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            class="flex items-center justify-center gap-2 px-5 py-3 bg-tertiary/20 text-tertiary border border-tertiary/25 rounded-lg text-xs font-semibold hover:bg-tertiary/30 transition-all hover:scale-103 w-full sm:w-auto text-center"
+          >
+            <Papicon icon="ExternalLink" size={14} />
+            {m.giv_public_page_view()}
+          </a>
+          <button
+            onclick={copyPublicGiveawaysUrl}
+            class="flex items-center justify-center gap-2 px-5 py-3 rounded-lg text-xs font-semibold transition-all hover:scale-103 w-full sm:w-auto {copySuccess ? 'bg-success/15 text-success border border-success/20' : 'bg-surface-container-high/40 text-on-surface-variant border border-outline-variant/10 hover:bg-surface-container-high/60'}"
+          >
+            {#if copySuccess}
+              <Papicon icon="Check" size={14} />
+              {m.giv_public_page_copied()}
+            {:else}
+              <Papicon icon="Copy" size={14} />
+              {m.giv_public_page_copy()}
+            {/if}
+          </button>
+        </div>
+      </div>
+
+      <!-- Title & Actions Bar -->
       <div class="flex items-center justify-between gap-4 flex-wrap">
-        <h2 class="text-lg font-semibold text-on-surface">
+        <h3 class="text-xl font-semibold flex items-center gap-3">
+          <Papicon icon="List" size={20} class="text-secondary" />
           {m.giv_list_title({ count: giveaways.length })}
-        </h2>
+        </h3>
 
         {#if canManageSettings}
-          <Button variant="primary" icon="Add" onclick={openCreateModal}>
+          <button
+            onclick={openCreateModal}
+            class="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-on-primary font-medium text-body-sm rounded-lg transition-all cursor-pointer"
+          >
+            <Papicon icon="Add" size={16} />
             {m.giv_btn_create()}
-          </Button>
+          </button>
         {/if}
       </div>
 
@@ -2115,22 +2157,6 @@
             {/if}
           </div>
         {/each}
-      </div>
-
-      <!-- Page publique : consultable sans compte, elle sert de vitrine aux
-           giveaways. Utile, mais pas le geste du jour : une ligne sous la
-           liste plutot qu'un encart au-dessus de l'action principale. -->
-      <div class="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-outline-variant/20 pt-4 text-sm text-on-surface-variant">
-        <Papicon icon="Globe" size={14} class="shrink-0" />
-        <span>{m.giv_public_line()}</span>
-        <span class="flex items-center gap-1">
-          <Button href={publicGiveawaysUrl} target="_blank" variant="ghost" size="sm" iconRight="ExternalLink">
-            {m.giv_public_page_view()}
-          </Button>
-          <Button variant="ghost" size="sm" icon={copySuccess ? 'Check' : 'Copy'} onclick={copyPublicGiveawaysUrl}>
-            {copySuccess ? m.giv_public_page_copied() : m.giv_public_page_copy()}
-          </Button>
-        </span>
       </div>
     </div>
   {/if}

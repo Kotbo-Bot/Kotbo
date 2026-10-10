@@ -45,7 +45,7 @@
         syncServiceWorkerConfig();
       }
     } catch {
-      toast.error('Impossible de régénérer le token. Réessaie.');
+      toast.error('Erreur lors de la régénération du token');
     } finally {
       rotatingToken = false;
     }
@@ -57,7 +57,7 @@
       data = await fetchWidgetData();
       syncServiceWorkerConfig();
     } catch {
-      toast.error('Impossible de charger. Réessaie.');
+      toast.error('Erreur lors du chargement');
     } finally {
       loading = false;
     }
@@ -98,10 +98,10 @@
     acting = true;
     try {
       await deactivateWidget();
-      toast.success('Widget désactivé.');
+      toast.success('Widget désactivé avec succès.');
       await load();
     } catch {
-      toast.error('Impossible de désactiver. Réessaie.');
+      toast.error('Erreur lors de la désactivation');
     } finally {
       acting = false;
     }
@@ -115,7 +115,7 @@
         toast.success('Widget rafraîchi !');
       }
     } catch {
-      toast.error('Impossible d\'actualiser. Réessaie.');
+      toast.error('Erreur lors du rafraîchissement');
     } finally {
       acting = false;
     }
@@ -132,7 +132,7 @@
         toast.success(`Widgets rafraîchis : ${result?.success ?? 0} OK`);
       }
     } catch {
-      toast.error('Impossible de tout actualiser. Réessaie.');
+      toast.error('Erreur lors du rafraîchissement global');
     } finally {
       acting = false;
     }

@@ -14,8 +14,6 @@
   import LoadingHint from '../lib/components/LoadingHint.svelte';
   import ModulePage from '../lib/components/ModulePage.svelte';
   import ToggleSwitch from '../lib/components/ToggleSwitch.svelte';
-  import Callout from '../lib/components/ui/Callout.svelte';
-  import Button from '../lib/components/ui/Button.svelte';
   import ClanRebalanceModal from '../lib/components/clans/ClanRebalanceModal.svelte';
   import { m, dateLocale } from '../lib/i18n';
   import { confirmDialog } from '../lib/stores/confirmDialog.svelte';
@@ -23,7 +21,6 @@
     fetchClansData,
     fetchLevelingData,
     updateClanSettings,
-    updateModuleStatus,
     createClan,
     updateClan,
     deleteClan,
@@ -69,27 +66,7 @@
   let editingClan = $state<ClanEntry | null>(null);
 
   // States
-  // `clansEnabled` n'est plus un interrupteur de la page : c'est la colonne du
-  // module Clans, que le menu de ModulePage bascule. On la garde en lecture,
-  // parce que la reinitialisation complete l'eteint sans toucher a la ligne du
-  // module : la page dit alors « actif » quand /clan refuse de repondre.
   let clansEnabled = $state(false);
-  let clansLoaded = $state(false);
-  const clansModuleActive = $derived(
-    (dashboardStore.state.modules as any[]).find((mod) => mod.id === 'clans')?.status === 'active'
-  );
-
-  // Relancer passe par la bascule de module : elle ecrit la colonne et la ligne
-  // du module ensemble, ce que la route des reglages ne fait que sur un vrai
-  // changement d'etat.
-  async function resumeClans() {
-    await actionState.run(async () => {
-      const ok = await updateModuleStatus('clans', 'active');
-      if (!ok) throw new Error(m.clan_err_save());
-      await refreshData(true);
-      return true;
-    });
-  }
   let clanAutoAssignOnJoin = $state(false);
   let clanWeeklyDigest = $state(false);
   let currentClanSeason = $state(1);
@@ -137,6 +114,7 @@
   let endTime = $state('00:00');
 
   // Saved states (for dirty checking)
+  let savedClansEnabled = $state(false);
   let savedClanAutoAssignOnJoin = $state(false);
   let savedClanWeeklyDigest = $state(false);
 
@@ -470,7 +448,8 @@
 
   // Sync state changes with the unsaved changes bar
   $effect(() => {
-    const dirty = clanAutoAssignOnJoin !== savedClanAutoAssignOnJoin
+    const dirty = clansEnabled !== savedClansEnabled
+      || clanAutoAssignOnJoin !== savedClanAutoAssignOnJoin
       || clanWeeklyDigest !== savedClanWeeklyDigest
       || clanXpFromLevelUp !== savedClanXpFromLevelUp
       || clanXpPerLevelUp !== savedClanXpPerLevelUp
@@ -491,6 +470,7 @@
           label: m.clan_unsaved_label(),
           onSave: () => handleSaveSettings(),
           onReset: () => {
+            clansEnabled = savedClansEnabled;
             clanAutoAssignOnJoin = savedClanAutoAssignOnJoin;
             clanWeeklyDigest = savedClanWeeklyDigest;
             clanXpFromLevelUp = savedClanXpFromLevelUp;
@@ -575,7 +555,6 @@
       const res = await fetchClansData();
       if (res) {
         clansEnabled = res.clansEnabled;
-        clansLoaded = true;
         clanAutoAssignOnJoin = res.clanAutoAssignOnJoin;
         clanWeeklyDigest = res.clanWeeklyDigest ?? false;
         currentClanSeason = res.currentClanSeason;
@@ -599,6 +578,7 @@
         // Formater les dates pour l'interface
         setSeasonDates(res.clanSeasonStartsAt, res.clanSeasonEndsAt);
         
+        savedClansEnabled = res.clansEnabled;
         savedClanAutoAssignOnJoin = res.clanAutoAssignOnJoin;
         savedClanWeeklyDigest = res.clanWeeklyDigest ?? false;
         savedClanXpFromLevelUp = res.clanXpFromLevelUp;
@@ -699,6 +679,7 @@
     let success = false;
     await actionState.run(async () => {
       const res = await updateClanSettings({
+        clansEnabled,
         clanAutoAssignOnJoin,
         clanWeeklyDigest,
         clanXpFromLevelUp,
@@ -719,6 +700,7 @@
       });
       if (!res) throw new Error(m.clan_err_save());
 
+      savedClansEnabled = res.clansEnabled;
       savedClanAutoAssignOnJoin = res.clanAutoAssignOnJoin;
       savedClanWeeklyDigest = res.clanWeeklyDigest ?? false;
       savedClanXpFromLevelUp = res.clanXpFromLevelUp;
@@ -1004,19 +986,6 @@ savedBetSettings = {
 >
   <InlineFeedback state={actionState} />
 
-  {#if clansLoaded && clansModuleActive && !clansEnabled}
-    <Callout variant="warning" title={m.clan_paused_title()}>
-      {m.clan_paused_desc()}
-      {#snippet actions()}
-        {#if canManageSettings}
-          <Button variant="primary" size="sm" icon="power" loading={actionState.state.loading} onclick={resumeClans}>
-            {m.clan_paused_action()}
-          </Button>
-        {/if}
-      {/snippet}
-    </Callout>
-  {/if}
-
   <!-- Navigation par Onglets -->
   <div class="flex border-b border-outline-variant/15 mb-6">
     <button
@@ -1105,6 +1074,14 @@ savedBetSettings = {
 
           <div class="space-y-4">
             <div class="flex items-center justify-between">
+              <div>
+                <span class="text-sm font-medium text-on-surface">{m.clan_enable_title()}</span>
+                <p class="text-xs text-on-surface-variant/70">{m.clan_enable_desc()}</p>
+              </div>
+              <ToggleSwitch checked={clansEnabled} onToggle={(v) => clansEnabled = v} disabled={!canManageSettings} />
+            </div>
+
+            <div class="flex items-center justify-between pt-4 border-t border-outline-variant/10">
               <div>
                 <span class="text-sm font-medium text-on-surface">{m.clan_autoassign_title()}</span>
                 <p class="text-xs text-on-surface-variant/70">{m.clan_autoassign_desc()}</p>

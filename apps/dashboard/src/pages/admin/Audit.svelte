@@ -60,7 +60,7 @@
       entries = result.entries;
       nextCursor = result.nextCursor;
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Impossible de charger. Réessaie.');
+      toast.error(err instanceof Error ? err.message : 'Erreur de chargement');
     } finally {
       loading = false;
     }
@@ -81,7 +81,7 @@
       entries = [...entries, ...result.entries];
       nextCursor = result.nextCursor;
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Impossible de charger. Réessaie.');
+      toast.error(err instanceof Error ? err.message : 'Erreur de chargement');
     } finally {
       loadingMore = false;
     }

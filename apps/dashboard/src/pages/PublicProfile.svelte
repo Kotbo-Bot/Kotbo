@@ -23,7 +23,7 @@
       const res = await fetch(`${API_BASE_URL}/api/public/profile/${userId}`);
       if (!res.ok) {
         if (res.status === 404) throw new Error('Utilisateur introuvable');
-        throw new Error('Impossible de récupérer le profil. Réessaie.');
+        throw new Error('Erreur lors de la récupération du profil');
       }
       profile = await res.json();
     } catch (err) {

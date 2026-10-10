@@ -214,7 +214,7 @@
             <optgroup label="Catégories du serveur">
               {#each candidatesFor(category) as option (option.id)}
                 <option value="adopt:{option.id}" disabled={option.disabled}>
-                  {option.name}{option.note ? ` (${option.note})` : ''}
+                  {option.name}{option.note ? ` — ${option.note}` : ''}
                 </option>
               {/each}
             </optgroup>
@@ -255,7 +255,7 @@
                      ne pas s'en contenter : c'est exactement ce rapprochement
                      silencieux qui produisait les doublons quand il ratait. -->
                 <p class="mt-1 text-2xs text-on-surface-variant/55">
-                  Détecté sur ton serveur. Confirme ou corrige.
+                  Détecté sur ton serveur — confirme ou corrige.
                 </p>
               {:else if decision.mode === 'create'}
                 <p class="mt-1 text-2xs text-on-surface-variant/45">
@@ -273,7 +273,7 @@
               <optgroup label={line.kind === 'role' ? 'Rôles du serveur' : 'Salons du serveur'}>
                 {#each candidatesFor(line) as option (option.id)}
                   <option value="adopt:{option.id}" disabled={option.disabled}>
-                    {option.name}{option.note ? ` (${option.note})` : ''}
+                    {option.name}{option.note ? ` — ${option.note}` : ''}
                   </option>
                 {/each}
               </optgroup>

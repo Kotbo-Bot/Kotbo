@@ -5,16 +5,14 @@
   import { authStore } from '../stores/auth.svelte';
   import { notificationsStore } from '../stores/notifications.svelte';
   import { sidebarStore } from '../stores/sidebar.svelte';
-  import { searchStore } from '../stores/search.svelte';
   import { navigationStore, isActiveNavItem as matchNavItem, type NavGroup } from '../stores/navigation.svelte';
   import { prefetchRoute } from '../lazyRoutes';
   import { portal } from '../actions/portal';
   import { lockBodyScroll, unlockBodyScroll } from '../scrollLock';
-  import type { PageConfig } from '../config/pages';
-  import { resolveGuildIconSrc } from '../discordMedia';
+  import { isPageBeta, isPageWip, type PageConfig } from '../config/pages';
+  import { resolveGuildIconSrc, resolveUserAvatarSrc } from '../discordMedia';
   import { m } from '../i18n';
   import { serverSwitcherStore } from '../stores/serverSwitcher.svelte';
-  import { brandingStore } from '../stores/branding.svelte';
 
   let isDesktop = $state(
     typeof window !== 'undefined'
@@ -62,51 +60,49 @@
   const currentGuild = $derived(
     authStore.guilds.find((g) => g.id === authStore.selectedGuildId),
   );
-  const currentGuildIcon = $derived(
-    currentGuild ? resolveGuildIconSrc(currentGuild.id, currentGuild.icon) : null,
-  );
 
+  // Permissions, grouping and favourites live in navigationStore so the mobile
+  // navigation sheet renders exactly the same set of pages.
+  const isModuleDisabled = navigationStore.isModuleDisabled;
   const isStaffServerGuild = $derived(navigationStore.isStaffServer);
   const navGroups = $derived(navigationStore.menuGroups);
+
+  const itemLabel = (item: PageConfig): string => {
+    if (isPageWip(item))  return `${item.name} (WIP)`;
+    if (isPageBeta(item)) return `${item.name} (Bêta)`;
+    return item.name;
+  };
+
+  function loadGroupStates(): Record<string, boolean> {
+    try {
+      const s = typeof localStorage !== 'undefined' && localStorage.getItem('sidebar_groups');
+      return s ? (JSON.parse(s) as Record<string, boolean>) : {};
+    } catch { return {}; }
+  }
+
+  let groupStates = $state<Record<string, boolean>>(loadGroupStates());
+
+  // Progressive disclosure : les groupes secondaires démarrent repliés.
+  // Le choix explicite de l'utilisateur (groupStates) reste prioritaire,
+  // et le groupe contenant la page active s'ouvre toujours.
+  const DEFAULT_COLLAPSED = new Set(['leveling', 'economy', 'community', 'crossserver']);
+
+  const isGroupCollapsed = (key: string): boolean => {
+    if (navGroups.find((g) => g.key === key)?.items.some((i) => isActiveNavItem(i.href))) {
+      return false;
+    }
+    if (groupStates[key] === undefined) return DEFAULT_COLLAPSED.has(key);
+    return groupStates[key] === true;
+  };
+
+  function toggleGroup(key: string): void {
+    groupStates = { ...groupStates, [key]: !isGroupCollapsed(key) };
+    try { localStorage.setItem('sidebar_groups', JSON.stringify(groupStates)); } catch {}
+  }
+  let searchQuery       = $state('');
+  let showOnlyFavorites = $state(false);
+
   const favorites = $derived(navigationStore.favorites);
-
-  /**
-   * Le groupe « general » n'a pas d'en-tete : ses quelques pages (accueil,
-   * notifications, statistiques) sont celles qu'on ouvre chaque jour, et les
-   * ranger derriere un titre n'apprenait rien.
-   */
-  const primaryGroup = $derived(navGroups.find((g) => g.key === 'general') ?? null);
-  const spaces = $derived(navGroups.filter((g) => g.key !== 'general'));
-
-  const pinnedItems = $derived(
-    favorites
-      .map((href) => navGroups.flatMap((g) => g.items).find((item) => item.href === href))
-      .filter((item): item is PageConfig => !!item),
-  );
-
-  function isActiveNavItem(href: string): boolean {
-    return matchNavItem(href, $router.path, $router.url);
-  }
-
-  const activeSpaceKey = $derived(
-    spaces.find((g) => g.items.some((i) => isActiveNavItem(i.href)))?.key ?? null,
-  );
-
-  /**
-   * Un seul espace ouvert a la fois. La barre listait jusqu'a soixante-dix
-   * pages d'un bloc ; elle n'en montre plus que les titres des espaces, et le
-   * contenu de celui ou l'on se trouve. Ouvrir un autre espace pour y jeter un
-   * oeil referme le precedent, et changer de page ramene l'espace courant.
-   */
-  let openSpace = $state<string | null>(null);
-
-  $effect(() => {
-    openSpace = activeSpaceKey;
-  });
-
-  function toggleSpace(key: string): void {
-    openSpace = openSpace === key ? null : key;
-  }
 
   function toggleFavorite(href: string, e: Event): void {
     e.preventDefault();
@@ -114,9 +110,23 @@
     navigationStore.toggleFavorite(href);
   }
 
-  function openSearch(): void {
-    sidebarStore.closeMobile?.();
-    searchStore.show();
+  const filteredGroups = $derived.by((): NavGroup[] => {
+    const groups = showOnlyFavorites
+      ? navGroups
+          .map((g) => ({ ...g, items: g.items.filter((i) => favorites.includes(i.href)) }))
+          .filter((g) => g.items.length > 0)
+      : navGroups;
+
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return groups;
+
+    return groups
+      .map((g) => ({ ...g, items: g.items.filter((i) => i.name.toLowerCase().includes(q)) }))
+      .filter((g) => g.items.length > 0);
+  });
+
+  function isActiveNavItem(href: string): boolean {
+    return matchNavItem(href, $router.path, $router.url);
   }
 
   let swipeStartX = 0;
@@ -134,67 +144,20 @@
     if (dx > 60 && dy < 80) sidebarStore.closeMobile?.();
   }
 
+  const profileHref = $derived(
+    authStore.user?.id ? `/profile/${authStore.user.id}` : '/profile',
+  );
+
+  const userAvatar = $derived(
+    resolveUserAvatarSrc(authStore.user?.id, authStore.user?.avatar),
+  );
+  const currentGuildIcon = $derived(
+    currentGuild ? resolveGuildIconSrc(currentGuild.id, currentGuild.icon) : null,
+  );
+
+  import { brandingStore } from '../stores/branding.svelte';
   const LOGO_URL = $derived(brandingStore.logoUrl || '/favicon.svg');
-  const unread = $derived(notificationsStore.unreadCount);
 </script>
-
-{#snippet unreadBadge(href: string)}
-  {#if href === '/inbox' && unread > 0}
-    <span
-      class="min-w-4 h-4 px-1 rounded-full bg-primary text-on-primary text-2xs font-semibold leading-none flex items-center justify-center"
-      aria-label="{unread} notifications non lues"
-    >
-      {unread > 99 ? '99+' : unread}
-    </span>
-  {/if}
-{/snippet}
-
-{#snippet pageLink(item: PageConfig, withIcon: boolean)}
-  {@const active = isActiveNavItem(item.href)}
-  <div class="nav-row group relative flex items-center rounded-lg transition-colors duration-150 {active ? 'is-active' : ''}">
-    <a
-      href={item.href}
-      onmouseenter={() => prefetchRoute(item.href)}
-      onfocus={() => prefetchRoute(item.href)}
-      aria-current={active ? 'page' : undefined}
-      class="flex-1 flex items-center gap-2.5 min-w-0 py-1.5 {withIcon ? 'pl-2.5' : 'pl-3'} pr-1.5"
-    >
-      {#if withIcon}
-        <Papicon icon={item.icon} size={16} class="shrink-0 nav-row__icon" />
-      {/if}
-      <span class="flex-1 min-w-0 truncate text-body-sm">{item.name}</span>
-      {@render unreadBadge(item.href)}
-    </a>
-    <button
-      type="button"
-      onclick={(e) => toggleFavorite(item.href, e)}
-      aria-label={favorites.includes(item.href) ? m.nav_unfavorite() : m.nav_favorite()}
-      aria-pressed={favorites.includes(item.href)}
-      class="nav-row__pin mr-1 flex items-center justify-center w-6 h-6 rounded-md shrink-0 transition-opacity duration-150
-        {favorites.includes(item.href) ? 'opacity-100 text-warning' : 'opacity-0 group-hover:opacity-100 focus-visible:opacity-100 text-on-surface-variant/50 hover:text-warning'}"
-    >
-      <Papicon icon="star" size={12} class={favorites.includes(item.href) ? 'fill-current' : ''} />
-    </button>
-  </div>
-{/snippet}
-
-{#snippet railLink(href: string, icon: string, label: string, active: boolean)}
-  <a
-    {href}
-    onmouseenter={(e) => { showTooltip(e, label); prefetchRoute(href); }}
-    onfocus={() => prefetchRoute(href)}
-    onmouseleave={hideTooltip}
-    aria-label={label}
-    aria-current={active ? 'page' : undefined}
-    class="relative flex items-center justify-center w-full h-10 rounded-lg transition-colors duration-150
-      {active ? 'text-primary bg-primary/10' : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container'}"
-  >
-    <Papicon {icon} size={18} />
-    {#if href === '/inbox' && unread > 0}
-      <span class="absolute top-1.5 right-2.5 w-2 h-2 rounded-full bg-primary" aria-hidden="true"></span>
-    {/if}
-  </a>
-{/snippet}
 
 {#if !isDesktop && mobileOpen}
   <div
@@ -207,13 +170,13 @@
 
 <aside
   id="dashboard-sidebar"
-  data-telemetry-nav="sidebar"
+  data-telemetry-nav={showOnlyFavorites ? 'favorite' : 'sidebar'}
   inert={!isDesktop && !mobileOpen}
   aria-hidden={!isDesktop && !mobileOpen}
   ontouchstart={onTouchStart}
   ontouchend={onTouchEnd}
   class="
-    fixed left-0 top-0 h-dvh flex flex-col z-50
+ fixed left-0 top-0 h-dvh flex flex-col z-50
     bg-surface-container-lowest
     border-r border-outline-variant
     will-change-transform transition-[transform,width] duration-200 ease-in-out
@@ -229,7 +192,7 @@
     type="button"
     onclick={() => sidebarStore.toggle()}
     class="
-      absolute -right-3 top-14 z-10
+ absolute -right-3 top-14 z-10
       w-6 h-6 rounded-full border border-outline-variant
       bg-surface-container-lowest shadow-sm
       hidden lg:flex items-center justify-center
@@ -237,27 +200,51 @@
       hover:bg-surface-container hover:text-primary
       text-on-surface-variant
     "
-    aria-label={isCollapsed ? 'Déplier le menu' : 'Replier le menu'}
+    aria-label={isCollapsed ? 'Étendre la sidebar' : 'Réduire la sidebar'}
   >
     <div class="transition-transform duration-200 {isCollapsed ? 'rotate-180' : ''}">
       <Papicon icon="chevrons-left" size={12} />
     </div>
   </button>
 
-  <div class="flex items-center gap-2.5 px-4 h-14 shrink-0 {isCollapsed ? 'lg:justify-center lg:px-0' : ''}">
-    <img alt={brandingStore.brandName} src={LOGO_URL} class="w-7 h-7 shrink-0 object-cover rounded-lg" />
+  <div class="flex items-center gap-3 px-4 pt-4 pb-3 {isCollapsed ? 'lg:justify-center' : ''}">
+    <div class="w-8 h-8 shrink-0">
+      <img alt={brandingStore.brandName} src={LOGO_URL} class="w-full h-full object-cover rounded-lg" />
+    </div>
 
     {#if !isCollapsed}
-      <span class="flex-1 min-w-0 text-sm font-semibold text-on-surface truncate font-headline">{brandingStore.brandName}</span>
-      {#if isStaffServerGuild}
-        <span class="shrink-0 px-1.5 py-0.5 rounded-md text-2xs font-medium bg-primary/10 text-primary">Staff</span>
+      <div class="flex flex-col min-w-0 flex-1">
+        <span class="text-sm font-semibold text-on-surface leading-none truncate">{brandingStore.brandName}</span>
+        {#if isStaffServerGuild}
+          <span class="inline-flex items-center gap-1 mt-0.5 w-fit px-1.5 py-0.5 rounded text-xs font-medium bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-500/20">
+            Serveur Staff
+          </span>
+        {:else}
+          <span class="text-2xs text-on-surface-variant mt-0.5">Dashboard</span>
+        {/if}
+      </div>
+
+      {#if navigationStore.isAdmin}
+        <a
+          href="/management"
+          title={m.mgmt_page_title()}
+          aria-label={m.mgmt_page_title()}
+          aria-current={isActiveNavItem('/management') ? 'page' : undefined}
+          onmouseenter={() => prefetchRoute('/management')}
+          onfocus={() => prefetchRoute('/management')}
+          class="flex items-center justify-center w-8 h-8 shrink-0 rounded-md transition-colors {isActiveNavItem('/management')
+            ? 'text-primary bg-primary/10'
+            : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container'}"
+        >
+          <Papicon icon="settings" size={16} />
+        </a>
       {/if}
 
       <button
         type="button"
         onclick={() => sidebarStore.closeMobile?.()}
         class="flex items-center justify-center w-8 h-8 rounded-md text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors lg:hidden"
-        aria-label="Fermer le menu"
+        aria-label="Fermer la navigation"
       >
         <Papicon icon="x" size={16} />
       </button>
@@ -282,121 +269,320 @@
           {currentGuild?.name?.charAt(0) ?? '?'}
         </span>
       {/if}
-      <span class="min-w-0 flex-1 block truncate text-sm font-semibold text-on-surface">{currentGuild?.name ?? 'Serveur'}</span>
+      <span class="min-w-0 flex-1">
+        <span class="block truncate text-sm font-semibold text-on-surface">{currentGuild?.name ?? 'Serveur'}</span>
+        <span class="block text-2xs text-on-surface-variant">
+          {authStore.guilds.length > 1 ? 'Toucher pour changer' : 'Serveur actuel'}
+        </span>
+      </span>
       {#if authStore.guilds.length > 1}
         <Papicon icon="chevron-right" size={16} class="shrink-0 text-on-surface-variant/60" />
       {/if}
     </button>
   {/if}
 
-  <!-- Une seule recherche dans tout le dashboard : la barre filtrait le menu
-       pendant que la palette cherchait les memes pages, avec deux raccourcis
-       differents. Ce bouton ouvre la palette, qui sait aussi lancer des actions. -->
-  <div class="px-3 pb-3 {isCollapsed ? 'lg:px-2' : ''}">
-    <button
-      type="button"
-      onclick={openSearch}
-      onmouseenter={(e) => showTooltip(e, m.nav_search_pages())}
-      onmouseleave={hideTooltip}
-      aria-label={m.nav_search_pages()}
-      class="nav-search w-full flex items-center gap-2 h-9 rounded-lg border border-outline-variant bg-surface-container-low text-on-surface-variant hover:text-on-surface hover:border-outline transition-colors
-        {isCollapsed ? 'lg:justify-center lg:px-0 px-3' : 'px-3'}"
-    >
-      <Papicon icon="search" size={14} class="shrink-0" />
-      {#if !isCollapsed}
-        <span class="flex-1 text-left text-body-sm">Rechercher</span>
-        <kbd class="hidden lg:inline text-2xs font-medium text-on-surface-variant/70 font-body">Ctrl K</kbd>
-      {/if}
-    </button>
-  </div>
-
-  <nav
-    class="flex-1 overflow-y-auto overscroll-contain scrollbar-hide pb-3 {isCollapsed ? 'lg:px-2' : 'px-3'}"
-    aria-label="Navigation principale"
-  >
-    {#if isCollapsed}
-      <div class="flex flex-col gap-1">
-        {#each primaryGroup?.items ?? [] as item (item.href)}
-          {@render railLink(item.href, item.icon ?? 'circle', item.name, isActiveNavItem(item.href))}
-        {/each}
-        <div class="h-px bg-outline-variant my-2" aria-hidden="true"></div>
-        {#each spaces as space (space.key)}
-          {@render railLink(space.items[0].href, space.icon, space.label, activeSpaceKey === space.key)}
-        {/each}
+  {#if !isCollapsed}
+    <div class="px-3 pb-2 flex items-center gap-1.5">
+      <div class="relative flex-1">
+        <input
+          type="search"
+          placeholder={m.sidebar_search_placeholder()}
+          bind:value={searchQuery}
+          autocomplete="off"
+          autocorrect="off"
+          spellcheck={false}
+          class="
+ w-full pl-8 pr-8 py-1.5 text-xs rounded-md
+            bg-surface-container border border-outline-variant
+            text-on-surface placeholder:text-on-surface-variant/50
+            focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20
+            transition-all duration-150
+          "
+        />
+        <div class="absolute left-2.5 top-1/2 -translate-y-1/2 text-on-surface-variant/40 pointer-events-none">
+          <Papicon icon="search" size={13} />
+        </div>
+        {#if searchQuery}
+          <button
+            type="button"
+            onclick={() => (searchQuery = '')}
+            class="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 text-on-surface-variant/40 hover:text-on-surface transition-colors"
+            aria-label="Effacer la recherche"
+          >
+            <Papicon icon="x" size={11} />
+          </button>
+        {:else}
+          <kbd class="absolute right-2 top-1/2 -translate-y-1/2 px-1 py-0.5 rounded bg-surface-container-high text-2xs font-medium font-mono leading-none text-on-surface-variant/40 pointer-events-none hidden lg:block">
+            /
+          </kbd>
+        {/if}
       </div>
-    {:else}
-      {#if pinnedItems.length > 0}
-        <p class="px-3 pb-1 text-2xs font-medium text-on-surface-variant/70">{m.nav_pinned()}</p>
-        <div class="space-y-px mb-3">
-          {#each pinnedItems as item (item.href)}
-            {@render pageLink(item, true)}
-          {/each}
-        </div>
-      {/if}
 
-      {#if primaryGroup}
-        <div class="space-y-px">
-          {#each primaryGroup.items as item (item.href)}
-            {@render pageLink(item, true)}
-          {/each}
-        </div>
-      {/if}
-
-      {#if spaces.length > 0}
-        <div class="mt-4 space-y-px">
-          {#each spaces as space (space.key)}
-            {@const open = openSpace === space.key}
-            {@const current = activeSpaceKey === space.key}
-            <button
-              type="button"
-              onclick={() => toggleSpace(space.key)}
-              aria-expanded={open}
-              aria-controls="nav-space-{space.key}"
-              class="nav-space w-full flex items-center gap-2.5 pl-2.5 pr-2 py-1.5 rounded-lg text-left transition-colors hover:bg-surface-container
-                {current ? 'text-on-surface' : 'text-on-surface-variant hover:text-on-surface'}"
-            >
-              <Papicon icon={space.icon} size={16} class="shrink-0 {current ? 'text-primary' : 'text-on-surface-variant/70'}" />
-              <span class="flex-1 min-w-0 truncate text-body-sm {current ? 'font-medium' : ''}">{space.label}</span>
-              <span
-                aria-hidden="true"
-                class="text-on-surface-variant/40 transition-transform duration-150 {open ? '' : '-rotate-90'}"
-              >
-                <Papicon icon="chevron-down" size={12} />
-              </span>
-            </button>
-
-            {#if open}
-              <div id="nav-space-{space.key}" class="nav-thread relative ml-[1.1rem] pl-2 mt-px mb-2 space-y-px">
-                {#each space.items as item (item.href)}
-                  {@render pageLink(item, false)}
-                {/each}
-              </div>
-            {/if}
-          {/each}
-        </div>
-      {/if}
-    {/if}
-  </nav>
-
-  {#if authStore.isBotAdmin || navigationStore.canViewBilling}
-    <div class="border-t border-outline-variant {isCollapsed ? 'lg:px-2 py-2' : 'px-3 py-2'} space-y-px">
-      {#if navigationStore.canViewBilling}
-        {#if isCollapsed}
-          {@render railLink('/billing', 'credit-card', m.nav_billing(), isActiveNavItem('/billing'))}
-        {:else}
-          {@render pageLink({ name: m.nav_billing(), icon: 'credit-card', href: '/billing' }, true)}
-        {/if}
-      {/if}
-
-      {#if authStore.isBotAdmin}
-        {#if isCollapsed}
-          {@render railLink('/admin', 'lock', m.nav_administration(), isActiveNavItem('/admin'))}
-        {:else}
-          {@render pageLink({ name: m.nav_administration(), icon: 'lock', href: '/admin' }, true)}
-        {/if}
-      {/if}
+      <button
+        type="button"
+        onclick={() => (showOnlyFavorites = !showOnlyFavorites)}
+        aria-label="Filtrer par favoris"
+        aria-pressed={showOnlyFavorites}
+        title={showOnlyFavorites ? 'Afficher tout' : 'Favoris'}
+        class="
+ flex items-center justify-center w-7 h-7 rounded-md border
+          transition-colors duration-150 shrink-0
+          {showOnlyFavorites
+            ? 'bg-warning/10 border-warning/25 text-warning'
+            : 'bg-surface-container border-outline-variant text-on-surface-variant/50 hover:text-on-surface hover:bg-surface-container-high'}
+        "
+      >
+        <Papicon icon="star" size={13} class={showOnlyFavorites ? 'fill-amber-500 text-warning' : ''} />
+      </button>
     </div>
   {/if}
+
+  <nav
+    class="flex-1 overflow-y-auto overscroll-contain scrollbar-hide pb-2 {isCollapsed ? 'lg:px-2' : 'px-3'}"
+    aria-label="Navigation principale"
+  >
+    {#each filteredGroups as group, gi (group.key)}
+
+      {#if isCollapsed}
+        {#if gi > 0}<div class="h-2" aria-hidden="true"></div>{/if}
+
+        {#each group.items as item (item.href)}
+          <a
+            href={item.href}
+            onmouseenter={(e) => { showTooltip(e, itemLabel(item)); prefetchRoute(item.href); }}
+            onfocus={() => prefetchRoute(item.href)}
+            onmouseleave={hideTooltip}
+            aria-label={itemLabel(item)}
+            aria-current={isActiveNavItem(item.href) ? 'page' : undefined}
+            class="
+ relative flex items-center justify-center w-full py-2 rounded-md
+              transition-colors duration-150 group
+              {isActiveNavItem(item.href)
+                ? 'text-primary bg-primary/8'
+                : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container'}
+              {isModuleDisabled(item.featureKey, item.href) ? 'opacity-40' : ''}
+            "
+          >
+            {#if isActiveNavItem(item.href)}
+              <div class="absolute left-0 top-1.5 bottom-1.5 w-0.5 bg-primary rounded-full" aria-hidden="true"></div>
+            {/if}
+
+            <div class="relative">
+              <Papicon icon={item.icon} size={18} />
+              {#if isPageWip(item)}
+                <span class="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-amber-500" aria-label="WIP"></span>
+              {:else if isPageBeta(item)}
+                <span class="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-purple-500" aria-label="Bêta"></span>
+              {/if}
+            </div>
+
+            {#if item.name === 'Inbox' && notificationsStore.unreadCount > 0}
+              <div
+                class="absolute top-0.5 right-1 min-w-[14px] h-[14px] px-0.5 bg-primary text-white text-2xs font-semibold rounded-full flex items-center justify-center"
+                aria-label="{notificationsStore.unreadCount} notifications non lues"
+              >
+                {notificationsStore.unreadCount > 9 ? '9+' : notificationsStore.unreadCount}
+              </div>
+            {/if}
+          </a>
+        {/each}
+
+      {:else}
+        {#if gi > 0}
+          <div class="my-1.5 border-t border-outline-variant" role="separator"></div>
+        {/if}
+
+        <button
+          type="button"
+          onclick={() => toggleGroup(group.key)}
+          aria-expanded={!isGroupCollapsed(group.key)}
+          aria-controls="nav-group-{group.key}"
+          class="
+ w-full flex items-center gap-2 px-2 py-1.5 mb-0.5 rounded-md
+            transition-colors hover:bg-surface-container
+            group/label sticky top-0 z-10
+            bg-surface-container-lowest
+          "
+        >
+          <span class="flex-1 text-left text-xs font-medium text-on-surface-variant">
+            {group.label}
+          </span>
+          <div
+            aria-hidden="true"
+            class="text-on-surface-variant/30 group-hover/label:text-on-surface-variant transition-transform duration-150 {isGroupCollapsed(group.key) ? '-rotate-90' : ''}"
+          >
+            <Papicon icon="chevron-down" size={11} />
+          </div>
+        </button>
+
+        {#if !isGroupCollapsed(group.key)}
+          <div id="nav-group-{group.key}" class="space-y-px mb-1">
+            {#each group.items as item (item.href)}
+              <div
+                class="
+ relative flex items-center rounded-md
+                  transition-colors duration-150 group
+                  {isActiveNavItem(item.href)
+                    ? 'text-primary bg-primary/6 font-medium'
+                    : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container'}
+                  {isModuleDisabled(item.featureKey, item.href) ? 'opacity-40' : ''}
+                "
+              >
+                {#if isActiveNavItem(item.href)}
+                  <div class="absolute left-0 top-1.5 bottom-1.5 w-0.5 bg-primary rounded-full" aria-hidden="true"></div>
+                {/if}
+
+                <a
+                  href={item.href}
+                  onmouseenter={() => prefetchRoute(item.href)}
+                  onfocus={() => prefetchRoute(item.href)}
+                  aria-current={isActiveNavItem(item.href) ? 'page' : undefined}
+                  class="flex-1 flex items-center gap-2.5 pl-3 pr-2 py-2 min-w-0"
+                >
+                  <Papicon
+                    icon={item.icon}
+                    size={16}
+                    class="shrink-0 transition-colors duration-150 {isActiveNavItem(item.href) ? 'text-primary' : 'text-on-surface-variant/60 group-hover:text-on-surface/70'}"
+                  />
+                  <span class="flex-1 min-w-0 text-body-sm leading-none truncate">{item.name}</span>
+                </a>
+
+                <div class="flex items-center gap-1 pr-2 shrink-0">
+                  {#if isPageWip(item)}
+                    <span class="px-1.5 py-0.5 rounded text-xs font-medium bg-warning/10 text-warning border border-warning/25">
+                      WIP
+                    </span>
+                  {:else if isPageBeta(item)}
+                    <span class="px-1.5 py-0.5 rounded text-xs font-medium bg-purple-50 dark:bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-200 dark:border-purple-500/20">
+                      BETA
+                    </span>
+                  {/if}
+
+                  {#if item.name === 'Inbox' && notificationsStore.unreadCount > 0}
+                    <div
+                      class="min-w-[16px] h-[16px] px-0.5 bg-primary text-white text-2xs font-medium rounded-full flex items-center justify-center"
+                      aria-label="{notificationsStore.unreadCount} messages non lus"
+                    >
+                      {notificationsStore.unreadCount > 99 ? '99+' : notificationsStore.unreadCount}
+                    </div>
+                  {/if}
+
+                  <button
+                    type="button"
+                    onclick={(e) => toggleFavorite(item.href, e)}
+                    aria-label={favorites.includes(item.href) ? 'Retirer des favoris' : 'Ajouter aux favoris'}
+                    aria-pressed={favorites.includes(item.href)}
+                    class="
+ flex items-center justify-center w-6 h-6 rounded
+                      transition-all duration-150
+                      text-on-surface-variant/30 hover:text-warning
+                      {favorites.includes(item.href)
+                        ? 'opacity-100 text-warning'
+                        : 'opacity-0 group-hover:opacity-100 focus:opacity-100'}
+                    "
+                  >
+                    <Papicon icon="star" size={12} class={favorites.includes(item.href) ? 'fill-amber-500 text-warning' : ''} />
+                  </button>
+                </div>
+              </div>
+            {/each}
+          </div>
+        {/if}
+      {/if}
+
+    {:else}
+      {#if !isCollapsed}
+        <div class="flex flex-col items-center py-8 text-center text-on-surface-variant/50 px-4">
+          {#if showOnlyFavorites}
+            <Papicon icon="star" size={20} class="mb-2 text-warning" />
+            <p class="text-xs">{m.sidebar_no_favorites()}</p>
+          {:else}
+            <Papicon icon="search" size={20} class="mb-2" />
+            <p class="text-xs">{m.sidebar_no_results({ query: searchQuery })}</p>
+          {/if}
+        </div>
+      {/if}
+    {/each}
+  </nav>
+
+  <div class="border-t border-outline-variant {isCollapsed ? 'lg:px-2 py-2' : 'px-3 py-2'} space-y-0.5">
+
+    {#if authStore.isBotAdmin}
+      <a
+        href="/admin"
+        onmouseenter={(e) => showTooltip(e, 'Administration')}
+        onmouseleave={hideTooltip}
+        aria-label={isCollapsed ? 'Administration' : undefined}
+        aria-current={isActiveNavItem('/admin') ? 'page' : undefined}
+        class="
+ relative flex items-center rounded-md
+          transition-colors duration-150 group
+          {isCollapsed ? 'lg:justify-center py-2' : 'gap-2.5 px-3 py-2'}
+          {isActiveNavItem('/admin')
+            ? 'text-warning bg-warning/10'
+            : 'text-on-surface-variant hover:text-warning hover:bg-surface-container'}
+        "
+      >
+        <Papicon icon="lock" size={isCollapsed ? 18 : 16} class="shrink-0" />
+        {#if !isCollapsed}
+          <span class="text-body-sm">{m.nav_administration()}</span>
+        {/if}
+      </a>
+    {/if}
+
+    <!-- Facturation : au-dessus du profil et hors des groupes de modules, comme
+         l'entrée Administration. Elle n'apparaît que pour ceux qui ont à la
+         voir - l'administrateur, celui qui paie, ou tout le staff quand le
+         serveur a choisi de leur ouvrir (`billingAccess`, calculé par l'API). -->
+    {#if navigationStore.canViewBilling}
+      <a
+        href="/billing"
+        onmouseenter={(e) => showTooltip(e, m.nav_billing())}
+        onmouseleave={hideTooltip}
+        aria-label={isCollapsed ? m.nav_billing() : undefined}
+        aria-current={isActiveNavItem('/billing') ? 'page' : undefined}
+        class="
+          relative flex items-center rounded-md
+          transition-colors duration-150 group
+          {isCollapsed ? 'lg:justify-center py-2' : 'gap-2.5 px-3 py-2'}
+          {isActiveNavItem('/billing')
+            ? 'text-primary bg-primary/8'
+            : 'text-on-surface-variant hover:text-primary hover:bg-surface-container'}
+        "
+      >
+        <Papicon icon="credit-card" size={isCollapsed ? 18 : 16} class="shrink-0" />
+        {#if !isCollapsed}
+          <span class="text-body-sm">{m.nav_billing()}</span>
+        {/if}
+      </a>
+    {/if}
+
+    <a
+      href={profileHref}
+      onmouseenter={(e) => showTooltip(e, authStore.user?.username ?? 'Mon Profil')}
+      onmouseleave={hideTooltip}
+      aria-current={isActiveNavItem(profileHref) ? 'page' : undefined}
+      class="flex items-center {isCollapsed ? 'lg:justify-center py-2' : 'gap-2.5 px-2 py-2'} rounded-md transition-colors duration-150 hover:bg-surface-container group"
+    >
+      <div class="shrink-0 w-7 h-7">
+        <img
+          src={userAvatar}
+          alt="Avatar de {authStore.user?.username ?? 'utilisateur'}"
+          referrerpolicy="no-referrer"
+          class="w-full h-full rounded-md object-cover ring-1 ring-outline-variant"
+        />
+      </div>
+      {#if !isCollapsed}
+        <div class="flex flex-col min-w-0">
+          <span class="text-xs font-medium text-on-surface truncate leading-none">
+            {authStore.user?.username ?? '…'}
+          </span>
+          <span class="text-2xs text-on-surface-variant mt-0.5">{m.nav_my_profile()}</span>
+        </div>
+      {/if}
+    </a>
+
+  </div>
 </aside>
 
 {#if activeTooltip && isCollapsed}
@@ -413,61 +599,4 @@
 <style>
   .scrollbar-hide::-webkit-scrollbar { display: none; }
   .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
-
-  .nav-row {
-    color: var(--on-surface-variant);
-  }
-
-  .nav-row:hover {
-    color: var(--on-surface);
-    background: var(--surface-container);
-  }
-
-  .nav-row :global(.nav-row__icon) {
-    color: color-mix(in srgb, var(--on-surface-variant) 75%, transparent);
-  }
-
-  .nav-row.is-active {
-    color: var(--on-surface);
-    background: color-mix(in srgb, var(--primary-color) 10%, transparent);
-    font-weight: 500;
-  }
-
-  .nav-row.is-active :global(.nav-row__icon) {
-    color: var(--primary-color);
-  }
-
-  /* Le fil de l'espace ouvert : une ligne fine relie ses pages a son titre,
-     et la page courante y est marquee d'un segment de la couleur principale.
-     C'est le seul ornement de la barre, et il dit ou l'on se trouve. */
-  .nav-thread::before {
-    content: "";
-    position: absolute;
-    left: 0;
-    top: 0.25rem;
-    bottom: 0.25rem;
-    width: 1px;
-    background: var(--outline-variant);
-  }
-
-  .nav-thread .nav-row.is-active::before {
-    content: "";
-    position: absolute;
-    left: -0.5rem;
-    top: 0.375rem;
-    bottom: 0.375rem;
-    width: 2px;
-    margin-left: -0.5px;
-    border-radius: 2px;
-    background: var(--primary-color);
-  }
-
-  .nav-thread .nav-row.is-active {
-    background: transparent;
-    color: var(--primary-color);
-  }
-
-  .nav-thread .nav-row.is-active:hover {
-    background: var(--surface-container);
-  }
 </style>

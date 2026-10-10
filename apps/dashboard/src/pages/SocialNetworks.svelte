@@ -105,7 +105,7 @@
       };
 
       const res = await addYoutubeFollow(payload);
-      if (!res) throw new Error("Ça n'a pas marché. Réessaie.");
+      if (!res) throw new Error('Erreur API');
 
       ytForm = {
         query: '',
@@ -133,7 +133,7 @@
         shortMessage: follow.shortMessage || null,
       };
       const res = await addYoutubeFollow(payload);
-      if (!res) throw new Error("Ça n'a pas marché. Réessaie.");
+      if (!res) throw new Error('Erreur API');
       return true;
     }, { successMessage: m.social_yt_toast_updated() });
   }
@@ -143,7 +143,7 @@
 
     await actionState.run(async () => {
       const ok = await deleteYoutubeFollow(id);
-      if (!ok) throw new Error("Ça n'a pas marché. Réessaie.");
+      if (!ok) throw new Error('Erreur API');
 
       youtubeFollows = youtubeFollows.filter(f => f.id !== id);
       return true;
@@ -165,7 +165,7 @@
       };
 
       const res = await addTwitchFollow(payload);
-      if (!res) throw new Error("Ça n'a pas marché. Réessaie.");
+      if (!res) throw new Error('Erreur API');
 
       twitchForm = {
         query: '',
@@ -189,7 +189,7 @@
         liveMessage: follow.liveMessage || null,
       };
       const res = await addTwitchFollow(payload);
-      if (!res) throw new Error("Ça n'a pas marché. Réessaie.");
+      if (!res) throw new Error('Erreur API');
       return true;
     }, { successMessage: m.social_twitch_toast_updated() });
   }
@@ -199,7 +199,7 @@
 
     await actionState.run(async () => {
       const ok = await deleteTwitchFollow(id);
-      if (!ok) throw new Error("Ça n'a pas marché. Réessaie.");
+      if (!ok) throw new Error('Erreur API');
 
       twitchFollows = twitchFollows.filter(f => f.id !== id);
       return true;

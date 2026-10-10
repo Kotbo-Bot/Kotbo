@@ -24,8 +24,6 @@
   import { toast } from '../lib/stores/toast.svelte';
   import ToggleSwitch from '../lib/components/ToggleSwitch.svelte';
   import Papicon from '../lib/components/Papicon.svelte';
-  import FilterPills, { type FilterOption } from '../lib/components/ui/FilterPills.svelte';
-  import Button from '../lib/components/ui/Button.svelte';
   import RolePermissionSettings from '../lib/components/RolePermissionSettings.svelte';
   import { m } from '../lib/i18n';
   import { moduleDescription, moduleName } from '../lib/moduleLabels';
@@ -147,17 +145,6 @@
   );
   const lockedCount = $derived(modules.filter((mod) => mod.lockedByPlan).length);
 
-  type StatusFilter = typeof statusFilter;
-  const filterOptions = $derived<FilterOption<StatusFilter>[]>([
-    { value: 'all', label: m.mc_filter_all(), count: modules.length },
-    { value: 'active', label: m.mc_filter_active(), count: activeCount },
-    { value: 'inactive', label: m.mc_filter_inactive(), count: inactiveCount },
-    { value: 'blocked', label: m.mc_filter_blocked(), count: blockedCount },
-    ...(lockedCount > 0
-      ? [{ value: 'locked' as const, label: m.mc_filter_locked(), count: lockedCount }]
-      : []),
-  ]);
-
   const selected = $derived(selectedId ? moduleById.get(selectedId) ?? null : null);
 
   // ── Bascule ────────────────────────────────────────────────────────────
@@ -252,16 +239,19 @@
       key: 'general',
       title: m.mgmt_preset_general(),
       description: m.mc_preset_general_desc(),
+      icon: 'Users',
     },
     {
       key: 'gaming',
       title: m.mgmt_preset_gaming(),
       description: m.mc_preset_gaming_desc(),
+      icon: 'Sparkles',
     },
     {
       key: 'dev',
       title: m.mgmt_preset_dev(),
       description: m.mc_preset_dev_desc(),
+      icon: 'Code',
     },
   ]);
 
@@ -289,57 +279,85 @@
     }
   }
 
-  /**
-   * Les modules du coeur ne s'eteignent pas : leur rubrique part repliee, pour
-   * que la page s'ouvre sur ce qu'on peut vraiment allumer ou couper. Une
-   * recherche la deplie d'office, sinon « Membres » semblerait introuvable.
-   */
-  function isCollapsed(key: string) {
-    return collapsedCategories[key] ?? (key === 'core' && !search.trim());
-  }
-
   function toggleCategory(key: string) {
-    collapsedCategories = { ...collapsedCategories, [key]: !isCollapsed(key) };
+    collapsedCategories = { ...collapsedCategories, [key]: !collapsedCategories[key] };
   }
-
-  const coreCount = $derived(modules.filter((mod) => (mod.category ?? 'core') === 'core').length);
 
   const isLoading = $derived(dashboardStore.state.loading && modules.length === 0);
 </script>
 
-<div class="pb-24 space-y-6">
+<div class="max-w-6xl mx-auto px-4 md:px-8 pb-24 space-y-6">
 
-  <header class="flex flex-col md:flex-row md:items-end justify-between gap-x-6 gap-y-3">
-    <div class="min-w-0">
-      <h1 class="text-2xl font-semibold tracking-tight text-on-surface font-headline leading-tight">{m.mc_title()}</h1>
-      <p class="mt-1 max-w-prose text-sm text-on-surface-variant">{m.mc_intro()}</p>
+  <!-- En-tête : compteurs + recherche + filtres -->
+  <header class="pt-6 space-y-5">
+    <div class="flex flex-wrap items-start justify-between gap-4">
+      <div class="flex items-start gap-3 min-w-0">
+        <div class="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
+          <Papicon icon="Grid" size={20} />
+        </div>
+        <div class="min-w-0">
+          <h1 class="text-xl font-semibold text-on-surface tracking-tight leading-tight">{m.mc_title()}</h1>
+          <p class="text-body-sm text-on-surface-variant leading-relaxed max-w-xl">{m.mc_intro()}</p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-4 text-xs font-medium">
+        <span class="flex items-center gap-2 text-on-surface-variant">
+          <span class="w-2 h-2 rounded-full bg-emerald-500"></span>{m.mc_count_active({ count: activeCount })}
+        </span>
+        <span class="flex items-center gap-2 text-on-surface-variant">
+          <span class="w-2 h-2 rounded-full bg-on-surface-variant/30"></span>{m.mc_count_inactive({ count: inactiveCount })}
+        </span>
+        {#if blockedCount > 0}
+          <span class="flex items-center gap-2 text-warning">
+            <span class="w-2 h-2 rounded-full bg-amber-500"></span>{m.mc_count_blocked({ count: blockedCount })}
+          </span>
+        {/if}
+        {#if lockedCount > 0}
+          <a href="/billing" class="flex items-center gap-2 text-primary hover:underline">
+            <Papicon icon="Lock" size={12} />{m.mc_count_locked({ count: lockedCount })}
+          </a>
+        {/if}
+
+        <a
+          href="/setup#structure"
+          class="flex items-center gap-2 h-9 px-3 rounded-lg bg-primary/10 text-primary border border-primary/20 hover:bg-primary/15 transition-colors"
+        >
+          <Papicon icon="sparkles" size={16} />
+          {m.mc_create_server()}
+        </a>
+      </div>
+    </div>
+
+    <div class="flex flex-col sm:flex-row gap-3">
+      <label class="relative flex-1 min-w-0">
+        <span class="sr-only">{m.mc_search_label()}</span>
+        <span class="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant/60 pointer-events-none">
+          <Papicon icon="Search" size={16} />
+        </span>
+        <input
+          type="search"
+          bind:value={search}
+          placeholder={m.mc_search_placeholder()}
+          class="w-full h-10 pl-9 pr-3 rounded-lg bg-surface-container-low border border-outline-variant/40 text-sm text-on-surface placeholder:text-on-surface-variant/50 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/40"
+        />
+      </label>
+
+      <div class="flex gap-1 p-1 rounded-lg bg-surface-container-low border border-outline-variant/40 shrink-0">
+        {#each [['all', m.mc_filter_all()], ['active', m.mc_filter_active()], ['inactive', m.mc_filter_inactive()], ['blocked', m.mc_filter_blocked()], ...(lockedCount > 0 ? [['locked', m.mc_filter_locked()]] : [])] as [value, label]}
+          <button
+            type="button"
+            onclick={() => (statusFilter = value as typeof statusFilter)}
+            class="px-3 h-8 rounded-md text-xs font-medium transition-colors {statusFilter === value
+              ? 'bg-primary text-on-primary'
+              : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high'}"
+          >
+            {label}
+          </button>
+        {/each}
+      </div>
     </div>
   </header>
-
-  <!-- Les compteurs vivent dans les filtres : un seul endroit pour lire
-       « combien » et pour n'afficher que ceux-la. -->
-  <div class="flex flex-col sm:flex-row sm:items-center gap-3">
-    <label class="relative flex-1 min-w-0">
-      <span class="sr-only">{m.mc_search_label()}</span>
-      <span class="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant/60 pointer-events-none">
-        <Papicon icon="Search" size={16} />
-      </span>
-      <input
-        type="search"
-        bind:value={search}
-        placeholder={m.mc_search_placeholder()}
-        class="w-full h-10 pl-9 pr-3 rounded-lg bg-surface-container-low border border-outline-variant/40 text-sm text-on-surface placeholder:text-on-surface-variant/50 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/40"
-      />
-    </label>
-
-    <FilterPills
-      label={m.mc_search_label()}
-      value={statusFilter}
-      onchange={(value) => (statusFilter = value)}
-      options={filterOptions}
-      class="shrink-0"
-    />
-  </div>
 
   <!-- Liste groupée par rubrique -->
   {#if isLoading}
@@ -355,30 +373,24 @@
   {:else}
     <div class="space-y-4">
       {#each groups as group (group.key)}
-        {@const collapsed = isCollapsed(group.key)}
-        {@const isCore = group.key === 'core'}
+        {@const collapsed = collapsedCategories[group.key]}
         {@const groupActive = group.items.filter((m) => displayedStatus(m) === 'active').length}
         <section class="rounded-xl border border-outline-variant/30 bg-surface-container-lowest overflow-hidden">
           <button
             type="button"
             onclick={() => toggleCategory(group.key)}
-            aria-expanded={!collapsed}
             class="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-surface-container-low transition-colors"
           >
-            {#if isCore}
-              <span class="min-w-0 flex-1">
-                <span class="block text-sm font-semibold text-on-surface leading-tight">{m.mc_core_summary({ count: coreCount })}</span>
-                <span class="block text-xs text-on-surface-variant truncate">{m.mc_core_summary_desc()}</span>
-              </span>
-            {:else}
-              <span class="min-w-0 flex-1">
-                <span class="block text-sm font-semibold text-on-surface leading-tight">{group.label}</span>
-                <span class="block text-xs text-on-surface-variant truncate">{group.description}</span>
-              </span>
-              <span class="text-xs text-on-surface-variant tabular-nums shrink-0">
-                {m.mc_group_active_count({ active: groupActive, total: group.items.length })}
-              </span>
-            {/if}
+            <span class="w-7 h-7 rounded-lg bg-surface-container text-on-surface-variant flex items-center justify-center shrink-0">
+              <Papicon icon={group.icon} size={15} />
+            </span>
+            <span class="min-w-0 flex-1">
+              <span class="block text-sm font-semibold text-on-surface leading-tight">{group.label}</span>
+              <span class="block text-xs text-on-surface-variant/70 truncate">{group.description}</span>
+            </span>
+            <span class="text-2xs font-medium text-on-surface-variant/60 tabular-nums shrink-0">
+              {groupActive}/{group.items.length}
+            </span>
             <span class="text-on-surface-variant/50 shrink-0 transition-transform {collapsed ? '' : 'rotate-90'}">
               <Papicon icon="ChevronRight" size={14} />
             </span>
@@ -392,8 +404,12 @@
                 {@const blocked = !locked && (mod.blockedBy?.length ?? 0) > 0}
                 {@const busy = pending[mod.id]}
                 <li class="flex items-center gap-3 px-4 py-3 hover:bg-surface-container-low/50 transition-colors {status === 'active' ? '' : 'opacity-70'}">
-                  <span class="w-5 flex justify-center shrink-0 {status === 'active' ? 'text-on-surface-variant' : 'text-on-surface-variant/50'}">
-                    <Papicon icon={mod.icon || 'Grid'} size={16} />
+                  <span
+                    class="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 {status === 'active'
+                      ? 'bg-primary/10 text-primary'
+                      : 'bg-surface-container text-on-surface-variant/50'}"
+                  >
+                    <Papicon icon={mod.icon || 'Grid'} size={17} />
                   </span>
 
                   <button
@@ -403,6 +419,11 @@
                   >
                     <span class="flex items-center gap-2 flex-wrap">
                       <span class="text-sm font-medium text-on-surface group-hover:text-primary transition-colors">{nameOf(mod.id)}</span>
+                      {#if mod.isFixed}
+                        <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-semibold bg-surface-container-high text-on-surface-variant/70">
+                          <Papicon icon="Lock" size={9} /> {m.mc_badge_core()}
+                        </span>
+                      {/if}
                       {#if locked}
                         <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-semibold bg-primary/15 text-primary">
                           <Papicon icon="Lock" size={9} /> {planLabel(mod.requiredPlan)}
@@ -441,18 +462,14 @@
                       </a>
                     {/if}
 
-                    <!-- Pas d'interrupteur fige sur un module du coeur : il ne
-                         s'eteint pas, la rubrique le dit une fois pour tous. -->
-                    {#if !mod.isFixed}
-                      <span class="shrink-0 {busy ? 'opacity-50 pointer-events-none' : ''}">
-                        <ToggleSwitch
-                          checked={status === 'active'}
-                          disabled={!canConfigureModule(mod.id)}
-                          ariaLabel={m.mc_toggle_aria({ name: nameOf(mod.id) })}
-                          onToggle={() => toggleModule(mod)}
-                        />
-                      </span>
-                    {/if}
+                    <span class="shrink-0 {busy ? 'opacity-50 pointer-events-none' : ''}">
+                      <ToggleSwitch
+                        checked={status === 'active'}
+                        disabled={mod.isFixed || !canConfigureModule(mod.id)}
+                        ariaLabel={m.mc_toggle_aria({ name: nameOf(mod.id) })}
+                        onToggle={() => toggleModule(mod)}
+                      />
+                    </span>
                   {/if}
                 </li>
               {/each}
@@ -463,32 +480,32 @@
     </div>
   {/if}
 
-  <!-- Presets, en bas : c'est une action de mise en route, pas le geste courant.
-       Le lien vers l'assistant de creation de serveur vit ici pour la meme
-       raison : il etait dans l'en-tete, au rang d'une action de la page. -->
-  <section class="space-y-3 pt-4">
-    <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-x-6 gap-y-2">
-      <div>
-        <h2 class="text-base font-semibold text-on-surface">{m.mc_presets_title()}</h2>
-        <p class="text-sm text-on-surface-variant mt-0.5 max-w-prose">{m.mc_presets_desc()}</p>
-      </div>
-      <Button href="/setup#structure" variant="ghost" size="sm" icon="sparkles">{m.mc_create_server()}</Button>
+  <!-- Presets, en bas : c'est une action de mise en route, pas le geste courant -->
+  <section class="rounded-xl border border-outline-variant/30 bg-surface-container-lowest p-5 space-y-4">
+    <div>
+      <h2 class="text-sm font-semibold text-on-surface">{m.mc_presets_title()}</h2>
+      <p class="text-body-sm text-on-surface-variant mt-0.5">{m.mc_presets_desc()}</p>
     </div>
     <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
       {#each presets as preset}
-        <div class="rounded-xl border border-outline-variant/30 bg-surface-container-lowest p-4 flex flex-col gap-2">
-          <span class="text-sm font-medium text-on-surface">{preset.title}</span>
-          <p class="text-xs text-on-surface-variant leading-relaxed flex-1">{preset.description}</p>
-          <Button
-            variant="secondary"
-            size="sm"
+        <div class="rounded-lg border border-outline-variant/30 bg-surface-container-low p-4 flex flex-col gap-3">
+          <div class="flex items-center gap-2">
+            <span class="w-8 h-8 rounded-lg bg-surface-container text-on-surface-variant flex items-center justify-center">
+              <Papicon icon={preset.icon} size={15} />
+            </span>
+            <span class="text-sm font-medium text-on-surface">{preset.title}</span>
+          </div>
+          <p class="text-xs text-on-surface-variant/80 leading-relaxed flex-1">{preset.description}</p>
+          <button
+            type="button"
             onclick={() => applyPreset(preset.key)}
             disabled={!canApplyPreset || !!applyingPreset}
-            loading={applyingPreset === preset.key}
-            class="self-start mt-1"
+            class="h-9 rounded-lg text-xs font-medium transition-colors {!canApplyPreset || applyingPreset
+              ? 'bg-surface-container-high text-on-surface-variant/40 cursor-not-allowed'
+              : 'bg-primary text-on-primary hover:bg-primary/90'}"
           >
             {applyingPreset === preset.key ? m.mc_applying() : m.mc_apply()}
-          </Button>
+          </button>
         </div>
       {/each}
     </div>
@@ -565,10 +582,10 @@
           >
             {m.mc_see_plans()} <Papicon icon="ArrowRight" size={12} />
           </a>
-        {:else if !mod.isFixed}
+        {:else}
           <ToggleSwitch
             checked={displayedStatus(mod) === 'active'}
-            disabled={!canConfigureModule(mod.id)}
+            disabled={mod.isFixed || !canConfigureModule(mod.id)}
             ariaLabel={m.mc_toggle_aria({ name: nameOf(mod.id) })}
             onToggle={() => toggleModule(mod)}
           />

@@ -959,7 +959,7 @@
           {/if}
 
           <p class="text-xs text-on-surface-variant/70 leading-relaxed">
-            {m.am_adminlock_desc_before()}{m.am_adminlock_desc_after()}
+            {m.am_adminlock_desc_before()}<strong>ADMINISTRATOR</strong>{m.am_adminlock_desc_after()}
           </p>
 
           {#if config.adminLockEnabled}

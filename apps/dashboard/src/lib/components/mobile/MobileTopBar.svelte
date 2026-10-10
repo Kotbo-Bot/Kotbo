@@ -234,14 +234,15 @@
   }
 
   .topbar__server-hint {
-    color: var(--on-surface-variant);
-    font-size: 0.75rem;
+    color: var(--primary-color);
+    font-size: 0.6875rem;
+    font-weight: 600;
     line-height: 1.3;
   }
 
   .topbar__server :global(.topbar__server-caret) {
     flex: none;
-    color: var(--on-surface-variant);
+    color: var(--primary-color);
   }
 
   /* ── Every other page: back arrow or a compact server chip ── */
@@ -266,8 +267,8 @@
     height: 2.75rem;
     flex: none;
     align-items: center;
-    gap: 0.25rem;
-    padding: 0 0.25rem;
+    gap: 0.125rem;
+    padding: 0 0.25rem 0 0.125rem;
     border-radius: 999px;
     -webkit-tap-highlight-color: transparent;
   }
@@ -308,8 +309,8 @@
   .topbar__server-fallback {
     background: color-mix(in srgb, var(--primary-color) 14%, transparent);
     color: var(--primary-color);
-    font-size: 0.75rem;
-    font-weight: 600;
+    font-size: 0.8125rem;
+    font-weight: 800;
   }
 
   .topbar__heading {
@@ -335,7 +336,7 @@
   .topbar__context {
     overflow: hidden;
     color: var(--on-surface-variant);
-    font-size: 0.75rem;
+    font-size: 0.6875rem;
     line-height: 1.3;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -348,7 +349,7 @@
     height: 3.25rem;
     flex: none;
     align-items: center;
-    gap: 0;
+    gap: 0.125rem;
   }
 
   /* The desktop bell is a small bordered square; on a phone it needs to be a

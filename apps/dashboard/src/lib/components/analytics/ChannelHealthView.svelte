@@ -98,7 +98,7 @@
               <td class="num">{fmtDelta(relativeDelta(row.messages, row.prevMessages), 'pct')}</td>
               <td class="num">{fmtNumber(row.authors)}</td>
               <td class="num">{fmtDuration(row.medianResponseSec)}</td>
-              <td class="num">{row.unansweredRate === null ? '–' : fmtPct(row.unansweredRate)}</td>
+              <td class="num">{row.unansweredRate === null ? '—' : fmtPct(row.unansweredRate)}</td>
               <td class="suggestion">
                 {#if row.status === 'dead' && row.lastActiveDaysAgo !== null}
                   {m.anx_ch_last_active({ days: fmtNumber(row.lastActiveDaysAgo) })}.

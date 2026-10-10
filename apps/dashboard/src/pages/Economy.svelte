@@ -4,7 +4,7 @@
   import { router } from 'tinro';
   import { resolveTabFromUrl, gotoTab } from '../lib/tabRouting';
   import { pageTabItems } from '../lib/config/pageTabs';
-  import { Tabs, FilterPills, Callout, Button } from '../lib/components/ui';
+  import { Tabs, FilterPills } from '../lib/components/ui';
   import { unsavedChanges } from '../lib/stores/unsavedChanges.svelte';
   import { dashboardStore } from '../lib/stores/dashboard.svelte';
   import { authStore } from '../lib/stores/auth.svelte';
@@ -996,39 +996,6 @@ import EmojiText from '../lib/components/EmojiText.svelte';
     }
   }
 
-  /*
-   * Deux interrupteurs gardent l'economie, et le bot exige les deux : le module
-   * (menu de ModulePage, garde des commandes) et `EconomyConfig.enabled`, que
-   * /daily, /rpg et les jeux d'argent lisent avant de repondre. Le second n'est
-   * plus un interrupteur d'en-tete : c'est une pause, montree en encadre quand
-   * elle est active et proposee en bas de la configuration sinon.
-   */
-  const economyModuleActive = $derived(
-    (dashboardStore.state.modules as any[]).find((mod) => mod.id === 'economy')?.status === 'active'
-  );
-
-  async function setEconomyRunning(running: boolean) {
-    if (!canManageSettings) return;
-    if (!running) {
-      const confirmed = await confirmDialog.ask({
-        title: m.eco_pause_confirm_title(),
-        description: m.eco_pause_confirm_desc(),
-        confirmLabel: m.eco_pause_action(),
-        variant: 'warning',
-      });
-      if (!confirmed) return;
-    }
-    await actionState.run(async () => {
-      // Envoi partiel : le reste du formulaire, peut-etre en cours d'edition,
-      // n'est ni enregistre ni ecrase.
-      const res = await updateEconomyConfig({ enabled: running });
-      if (!res || !res.config) throw new Error(m.eco_pause_error());
-      config.enabled = running;
-      savedConfig.enabled = running;
-      return true;
-    }, { successMessage: running ? m.eco_resumed_toast() : m.eco_paused_toast() });
-  }
-
   async function handleSaveConfig(): Promise<boolean> {
     if (!canManageSettings) return false;
     if (config.dailyRewardMax < config.dailyRewardMin) {
@@ -1362,7 +1329,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
   // Les paliers sont independants : appliquer « Difficile » aux boss ne dit rien du bestiaire
   // courant ni des prix, et l'inverse est vrai aussi.
   async function handleApplyDifficulty(scope: BestiaryScope, difficulty: BestiaryDifficulty) {
-    if (!canManageSettings) return;
+    if (!canManageSettings || !config.enabled) return;
     const current = scope === 'boss' ? bossDifficulty : monsterDifficulty;
     if (current === difficulty) return;
 
@@ -1401,7 +1368,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
   }
 
   async function handleApplyShopDifficulty(difficulty: BestiaryDifficulty) {
-    if (!canManageSettings) return;
+    if (!canManageSettings || !config.enabled) return;
     if (shopDifficulty === difficulty) return;
 
     const dry = await runPreview(() => applyRpgShopDifficulty(difficulty, { preview: true }));
@@ -1642,26 +1609,20 @@ import EmojiText from '../lib/components/EmojiText.svelte';
           <Papicon icon={publicUrlCopied ? 'Check' : 'Link'} size={15} />
         </button>
       {/if}
+      <div class="flex items-center gap-3 bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5">
+        <span class="text-xs font-bold text-on-surface-variant/80">{m.eco_module_status()}</span>
+        <ToggleSwitch
+          checked={config.enabled}
+          onToggle={(v: boolean) => {
+            config.enabled = v;
+          }}
+          disabled={!canManageSettings}
+        />
+      </div>
     {/if}
   {/snippet}
 
   <InlineFeedback state={actionState} />
-
-  <!-- Module actif mais economie a l'arret : le cas de tout serveur neuf, la
-       configuration naissant avec `enabled: false`. Le dire une fois ici vaut
-       mieux qu'un formulaire grise sans explication. -->
-  {#if !loading && !loadFailed && economyModuleActive && !config.enabled}
-    <Callout variant="warning" title={m.eco_paused_title()}>
-      {m.eco_paused_desc()}
-      {#snippet actions()}
-        {#if canManageSettings}
-          <Button variant="primary" size="sm" icon="Play" loading={actionState.state.loading} onclick={() => setEconomyRunning(true)}>
-            {m.eco_paused_action()}
-          </Button>
-        {/if}
-      {/snippet}
-    </Callout>
-  {/if}
 
   {#if loadFailed}
     <p class="text-xs text-warning/90 bg-warning/5 border border-warning/20 rounded-lg px-4 py-3 leading-relaxed">
@@ -1696,7 +1657,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
                 <h4 class="text-sm font-bold">{m.eco_rpg_toggle_title()}</h4>
                 <p class="text-xs text-on-surface-variant/60 mt-0.5">{m.eco_rpg_toggle_desc()}</p>
               </div>
-              <ToggleSwitch checked={config.rpgEnabled} onToggle={(v: boolean) => config.rpgEnabled = v} disabled={!canManageSettings} />
+              <ToggleSwitch checked={config.rpgEnabled} onToggle={(v: boolean) => config.rpgEnabled = v} disabled={!canManageSettings || !config.enabled} />
             </div>
 
             <!-- Shop Toggle -->
@@ -1705,7 +1666,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
                 <h4 class="text-sm font-bold">{m.eco_shop_toggle_title()}</h4>
                 <p class="text-xs text-on-surface-variant/60 mt-0.5">{m.eco_shop_toggle_desc()}</p>
               </div>
-              <ToggleSwitch checked={config.shopEnabled} onToggle={(v: boolean) => config.shopEnabled = v} disabled={!canManageSettings} />
+              <ToggleSwitch checked={config.shopEnabled} onToggle={(v: boolean) => config.shopEnabled = v} disabled={!canManageSettings || !config.enabled} />
             </div>
 
             <!-- Guilds Toggle -->
@@ -1714,7 +1675,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
                 <h4 class="text-sm font-bold">{m.eco_guilds_toggle_title()}</h4>
                 <p class="text-xs text-on-surface-variant/60 mt-0.5">{m.eco_guilds_toggle_desc()}</p>
               </div>
-              <ToggleSwitch checked={config.guildsEnabled} onToggle={(v: boolean) => config.guildsEnabled = v} disabled={!canManageSettings} />
+              <ToggleSwitch checked={config.guildsEnabled} onToggle={(v: boolean) => config.guildsEnabled = v} disabled={!canManageSettings || !config.enabled} />
             </div>
 
             <div class="space-y-2 pt-4 border-t border-outline-variant/5">
@@ -1736,20 +1697,20 @@ import EmojiText from '../lib/components/EmojiText.svelte';
         </div>
 
         <!-- Details config -->
-        <div class="bg-surface-container-low/30 border border-outline-variant/10 p-8 rounded-xl space-y-6">
+        <div class="bg-surface-container-low/30 border border-outline-variant/10 p-8 rounded-xl space-y-6 transition-opacity duration-300 {!config.enabled ? 'opacity-60' : ''}">
           <h3 class="text-lg font-semibold border-b border-outline-variant/15 pb-4">{m.eco_settings_title()}</h3>
           
           <div class="grid grid-cols-2 gap-4">
             <div class="space-y-1.5">
               <label for="curName" class="text-xs font-semibold text-on-surface-variant/60">{m.eco_currency_name()}</label>
-              <input id="curName" type="text" bind:value={config.currencyName} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings} />
+              <input id="curName" type="text" bind:value={config.currencyName} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings || !config.enabled} />
             </div>
 
             <div class="space-y-1.5">
               <label for="curEmoji" class="text-xs font-semibold text-on-surface-variant/60">{m.eco_currency_emoji()}</label>
               <div class="flex gap-2">
-                <input id="curEmoji" type="text" bind:value={config.currencyEmoji} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings} />
-                <EmojiPicker bind:value={config.currencyEmoji} disabled={!canManageSettings} />
+                <input id="curEmoji" type="text" bind:value={config.currencyEmoji} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings || !config.enabled} />
+                <EmojiPicker bind:value={config.currencyEmoji} disabled={!canManageSettings || !config.enabled} />
               </div>
             </div>
 
@@ -1766,7 +1727,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
                     <div class="w-full h-full rounded-xl bg-surface-container overflow-hidden border border-outline-variant/20 flex items-center justify-center">
                       <img src={config.currencyIcon} alt="Icone" class="w-full h-full object-contain" />
                     </div>
-                    {#if canManageSettings}
+                    {#if canManageSettings && config.enabled}
                       <button
                         type="button"
                         onclick={() => { config.currencyIcon = null; }}
@@ -1790,6 +1751,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
                       id="currencyIconUpload"
                       accept="image/*"
                       class="hidden"
+                      disabled={!config.enabled}
                       onchange={(e: Event) => {
                         const file = (e.currentTarget as HTMLInputElement).files?.[0];
                         if (file) {
@@ -1808,6 +1770,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
                       type="button"
                       onclick={() => document.getElementById('currencyIconUpload')?.click()}
                       class="px-4 py-2 bg-secondary text-on-secondary hover:scale-102 active:scale-98 transition-all text-xs font-bold rounded-xl shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                      disabled={!config.enabled}
                     >
                       {config.currencyIcon ? m.eco_change_icon() : m.eco_upload_icon()}
                     </button>
@@ -1821,32 +1784,32 @@ import EmojiText from '../lib/components/EmojiText.svelte';
 
             <div class="space-y-1.5">
               <label for="dailyMin" class="text-xs font-semibold text-on-surface-variant/60">{m.eco_daily_min()}</label>
-              <input id="dailyMin" type="number" bind:value={config.dailyRewardMin} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings} />
+              <input id="dailyMin" type="number" bind:value={config.dailyRewardMin} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings || !config.enabled} />
             </div>
 
             <div class="space-y-1.5">
               <label for="dailyMax" class="text-xs font-semibold text-on-surface-variant/60">{m.eco_daily_max()}</label>
-              <input id="dailyMax" type="number" bind:value={config.dailyRewardMax} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings} />
+              <input id="dailyMax" type="number" bind:value={config.dailyRewardMax} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings || !config.enabled} />
             </div>
 
             <div class="space-y-1.5">
               <label for="dailyCd" class="text-xs font-semibold text-on-surface-variant/60">{m.eco_daily_cd()}</label>
-              <input id="dailyCd" type="number" bind:value={config.dailyCooldownHour} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings} />
+              <input id="dailyCd" type="number" bind:value={config.dailyCooldownHour} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings || !config.enabled} />
             </div>
 
             <div class="space-y-1.5">
               <label for="advCd" class="text-xs font-semibold text-on-surface-variant/60">{m.eco_adv_cd()}</label>
-              <input id="advCd" type="number" bind:value={config.adventureCooldownMin} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings} />
+              <input id="advCd" type="number" bind:value={config.adventureCooldownMin} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings || !config.enabled} />
             </div>
 
             <div class="space-y-1.5">
               <label for="maxEnergy" class="text-xs font-semibold text-on-surface-variant/60">{m.eco_max_energy()}</label>
-              <input id="maxEnergy" type="number" bind:value={config.maxEnergy} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings} />
+              <input id="maxEnergy" type="number" bind:value={config.maxEnergy} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings || !config.enabled} />
             </div>
 
             <div class="space-y-1.5">
               <label for="energyRecovery" class="text-xs font-semibold text-on-surface-variant/60">{m.eco_energy_recovery()}</label>
-              <input id="energyRecovery" type="number" bind:value={config.energyRecoveryPerHour} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings} />
+              <input id="energyRecovery" type="number" bind:value={config.energyRecoveryPerHour} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings || !config.enabled} />
             </div>
           </div>
         </div>
@@ -1870,7 +1833,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
                 checked={allGamblingOpen}
                 ariaLabel={m.eco_gambling_all_aria()}
                 onToggle={(open: boolean) => setAllGambling(open)}
-                disabled={!canManageSettings}
+                disabled={!canManageSettings || !config.enabled}
               />
             </div>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -1889,7 +1852,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
                     checked={gamblingGames[game]}
                     ariaLabel={`/${game}`}
                     onToggle={(open: boolean) => { gamblingGames = { ...gamblingGames, [game]: open }; }}
-                    disabled={!canManageSettings}
+                    disabled={!canManageSettings || !config.enabled}
                   />
                 </div>
               {/each}
@@ -1899,30 +1862,30 @@ import EmojiText from '../lib/components/EmojiText.svelte';
           <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div class="space-y-1.5">
               <label for="maxBet" class="text-xs font-semibold text-on-surface-variant/60">{m.eco_max_bet()}</label>
-              <input id="maxBet" type="number" min="1" bind:value={config.maxBetAmount} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings} />
+              <input id="maxBet" type="number" min="1" bind:value={config.maxBetAmount} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings || !config.enabled} />
               <p class="text-2xs text-on-surface-variant/40">{m.eco_max_bet_hint()}</p>
             </div>
 
             <div class="space-y-1.5">
               <label for="maxDailyBets" class="text-xs font-semibold text-on-surface-variant/60">{m.eco_max_daily_bets()}</label>
-              <input id="maxDailyBets" type="number" min="0" bind:value={config.maxDailyBets} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings} />
+              <input id="maxDailyBets" type="number" min="0" bind:value={config.maxDailyBets} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings || !config.enabled} />
               <p class="text-2xs text-on-surface-variant/40">{m.eco_max_daily_bets_hint()}</p>
             </div>
 
             <div class="space-y-1.5">
               <label for="maxTransfer" class="text-xs font-semibold text-on-surface-variant/60">{m.eco_max_transfer()}</label>
-              <input id="maxTransfer" type="number" min="1" bind:value={config.maxTransferAmount} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings} />
+              <input id="maxTransfer" type="number" min="1" bind:value={config.maxTransferAmount} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings || !config.enabled} />
               <p class="text-2xs text-on-surface-variant/40">{m.eco_max_transfer_hint()}</p>
             </div>
 
             <div class="space-y-1.5">
               <label for="transferCd" class="text-xs font-semibold text-on-surface-variant/60">{m.eco_transfer_cd()}</label>
-              <input id="transferCd" type="number" min="0" bind:value={config.transferCooldownMin} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings} />
+              <input id="transferCd" type="number" min="0" bind:value={config.transferCooldownMin} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings || !config.enabled} />
             </div>
 
             <div class="space-y-1.5">
               <label for="marketTax" class="text-xs font-semibold text-on-surface-variant/60">{m.eco_market_tax()}</label>
-              <input id="marketTax" type="number" min="0" max="50" bind:value={config.marketplaceTaxPercent} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings} />
+              <input id="marketTax" type="number" min="0" max="50" bind:value={config.marketplaceTaxPercent} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings || !config.enabled} />
               <p class="text-2xs text-on-surface-variant/40">{m.eco_market_tax_hint()}</p>
             </div>
           </div>
@@ -1937,25 +1900,25 @@ import EmojiText from '../lib/components/EmojiText.svelte';
           <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div class="space-y-1.5">
               <label for="fightCd" class="text-xs font-semibold text-on-surface-variant/60">{m.eco_fight_cd()}</label>
-              <input id="fightCd" type="number" min="0" max="3600" bind:value={config.fightCooldownSec} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings} />
+              <input id="fightCd" type="number" min="0" max="3600" bind:value={config.fightCooldownSec} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings || !config.enabled} />
               <p class="text-2xs text-on-surface-variant/40">{m.eco_fight_cd_hint()}</p>
             </div>
 
             <div class="space-y-1.5">
               <label for="bossCd" class="text-xs font-semibold text-on-surface-variant/60">{m.eco_boss_cd()}</label>
-              <input id="bossCd" type="number" min="0" max="1440" bind:value={config.bossCooldownMin} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings} />
+              <input id="bossCd" type="number" min="0" max="1440" bind:value={config.bossCooldownMin} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings || !config.enabled} />
               <p class="text-2xs text-on-surface-variant/40">{m.eco_boss_cd_hint()}</p>
             </div>
 
             <div class="space-y-1.5">
               <label for="huntEnergy" class="text-xs font-semibold text-on-surface-variant/60">{m.eco_hunt_energy()}</label>
-              <input id="huntEnergy" type="number" min="100" max="500" bind:value={config.huntEnergyPercent} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings} />
+              <input id="huntEnergy" type="number" min="100" max="500" bind:value={config.huntEnergyPercent} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings || !config.enabled} />
               <p class="text-2xs text-on-surface-variant/40">{m.eco_hunt_energy_hint()}</p>
             </div>
 
             <div class="space-y-1.5">
               <label for="huntCd" class="text-xs font-semibold text-on-surface-variant/60">{m.eco_hunt_cd()}</label>
-              <input id="huntCd" type="number" min="100" max="1000" bind:value={config.huntCooldownPercent} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings} />
+              <input id="huntCd" type="number" min="100" max="1000" bind:value={config.huntCooldownPercent} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings || !config.enabled} />
               <p class="text-2xs text-on-surface-variant/40">{m.eco_hunt_cd_hint()}</p>
             </div>
           </div>
@@ -1968,7 +1931,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
             <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
               <div class="space-y-1.5">
                 <label for="firstKillAnnounce" class="text-xs font-semibold text-on-surface-variant/60">{m.eco_bm_announce_mode()}</label>
-                <select id="firstKillAnnounce" bind:value={config.firstKillAnnounce} disabled={!canManageSettings} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none disabled:opacity-50">
+                <select id="firstKillAnnounce" bind:value={config.firstKillAnnounce} disabled={!canManageSettings || !config.enabled} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none disabled:opacity-50">
                   <option value="NONE">{m.eco_first_kill_announce_none()}</option>
                   <option value="BOSSES">{m.eco_first_kill_announce_bosses()}</option>
                   <option value="ALL">{m.eco_first_kill_announce_all()}</option>
@@ -1990,99 +1953,88 @@ import EmojiText from '../lib/components/EmojiText.svelte';
           </div>
         </div>
 
-        <!-- Pause et reinitialisations : rares, et pour certaines definitives.
-             Elles ferment la configuration, la pause en ligne discrete, les
-             remises a zero repliees derriere la zone de danger. -->
+        <!-- Reset Economy Section -->
         {#if canManageSettings}
-          <div class="col-span-1 lg:col-span-2 space-y-4">
-            {#if config.enabled}
-              <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-1">
-                <div>
-                  <p class="text-sm font-medium text-on-surface">{m.eco_pause_title()}</p>
-                  <p class="text-xs text-on-surface-variant mt-0.5">{m.eco_pause_desc()}</p>
-                </div>
-                <Button variant="secondary" size="sm" icon="Pause" class="shrink-0" onclick={() => setEconomyRunning(false)}>
-                  {m.eco_pause_action()}
-                </Button>
-              </div>
-            {/if}
+          <div class="col-span-1 lg:col-span-2 bg-surface-container-low/30 border border-outline-variant/10 p-8 rounded-xl space-y-6 transition-opacity duration-300 {!config.enabled ? 'opacity-60' : ''}">
+            <div class="border-b border-outline-variant/15 pb-4">
+              <h3 class="text-lg font-semibold text-error flex items-center gap-2.5">
+                <Papicon icon="alert-triangle" size={20} class="text-error" />
+                {m.eco_reset_section_title()}
+              </h3>
+              <p class="text-xs text-on-surface-variant/60 mt-1">{m.eco_reset_section_desc()}</p>
+            </div>
 
-            <details class="group rounded-xl border border-error/20 bg-error/5">
-              <summary class="flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-4 [&::-webkit-details-marker]:hidden">
-                <span class="min-w-0">
-                  <span class="flex items-center gap-2 text-sm font-semibold text-error">
-                    <Papicon icon="alert-triangle" size={16} />
-                    {m.eco_reset_section_title()}
-                  </span>
-                  <span class="block text-xs text-on-surface-variant mt-0.5">{m.eco_reset_section_desc()}</span>
-                </span>
-                <Papicon icon="chevron-down" size={18} class="shrink-0 text-on-surface-variant transition-transform group-open:rotate-180" />
-              </summary>
-              <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 px-5 pb-5">
-                <button
-                  type="button"
-                  onclick={() => triggerReset('profiles')}
-                  class="px-5 py-4 bg-error/10 hover:bg-error/20 text-error text-xs font-bold rounded-lg transition-all border border-error/20 flex flex-col items-center justify-center text-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <span class="font-semibold flex items-center gap-1.5"><Papicon icon="users" size={14} /> {m.eco_reset_players_btn()}</span>
-                  <span class="text-2xs text-on-surface-variant/60 font-normal">{m.eco_reset_players_desc()}</span>
-                </button>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <button
+                type="button"
+                onclick={() => triggerReset('profiles')}
+                disabled={!config.enabled}
+                class="px-5 py-4 bg-error/10 hover:bg-error/20 text-error text-xs font-bold rounded-lg transition-all border border-error/20 flex flex-col items-center justify-center text-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <span class="font-semibold flex items-center gap-1.5"><Papicon icon="users" size={14} /> {m.eco_reset_players_btn()}</span>
+                <span class="text-2xs text-on-surface-variant/60 font-normal">{m.eco_reset_players_desc()}</span>
+              </button>
 
-                <button
-                  type="button"
-                  onclick={() => triggerReset('items')}
-                  class="px-5 py-4 bg-error/10 hover:bg-error/20 text-error text-xs font-bold rounded-lg transition-all border border-error/20 flex flex-col items-center justify-center text-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <span class="font-semibold flex items-center gap-1.5"><Papicon icon="package" size={14} /> {m.eco_reset_items_btn()}</span>
-                  <span class="text-2xs text-on-surface-variant/60 font-normal">{m.eco_reset_items_desc()}</span>
-                </button>
+              <button
+                type="button"
+                onclick={() => triggerReset('items')}
+                disabled={!config.enabled}
+                class="px-5 py-4 bg-error/10 hover:bg-error/20 text-error text-xs font-bold rounded-lg transition-all border border-error/20 flex flex-col items-center justify-center text-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <span class="font-semibold flex items-center gap-1.5"><Papicon icon="package" size={14} /> {m.eco_reset_items_btn()}</span>
+                <span class="text-2xs text-on-surface-variant/60 font-normal">{m.eco_reset_items_desc()}</span>
+              </button>
 
-                <button
-                  type="button"
-                  onclick={() => triggerReset('bestiary')}
-                  class="px-5 py-4 bg-error/10 hover:bg-error/20 text-error text-xs font-bold rounded-lg transition-all border border-error/20 flex flex-col items-center justify-center text-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <span class="font-semibold flex items-center gap-1.5"><Papicon icon="ghost" size={14} /> {m.eco_reset_bestiary_btn()}</span>
-                  <span class="text-2xs text-on-surface-variant/60 font-normal">{m.eco_reset_bestiary_desc()}</span>
-                </button>
+              <button
+                type="button"
+                onclick={() => triggerReset('bestiary')}
+                disabled={!config.enabled}
+                class="px-5 py-4 bg-error/10 hover:bg-error/20 text-error text-xs font-bold rounded-lg transition-all border border-error/20 flex flex-col items-center justify-center text-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <span class="font-semibold flex items-center gap-1.5"><Papicon icon="ghost" size={14} /> {m.eco_reset_bestiary_btn()}</span>
+                <span class="text-2xs text-on-surface-variant/60 font-normal">{m.eco_reset_bestiary_desc()}</span>
+              </button>
 
-                <button
-                  type="button"
-                  onclick={() => triggerReset('guilds')}
-                  class="px-5 py-4 bg-error/10 hover:bg-error/20 text-error text-xs font-bold rounded-lg transition-all border border-error/20 flex flex-col items-center justify-center text-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <span class="font-semibold flex items-center gap-1.5"><Papicon icon="shield" size={14} /> {m.eco_reset_guilds_btn()}</span>
-                  <span class="text-2xs text-on-surface-variant/60 font-normal">{m.eco_reset_guilds_desc()}</span>
-                </button>
+              <button
+                type="button"
+                onclick={() => triggerReset('guilds')}
+                disabled={!config.enabled}
+                class="px-5 py-4 bg-error/10 hover:bg-error/20 text-error text-xs font-bold rounded-lg transition-all border border-error/20 flex flex-col items-center justify-center text-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <span class="font-semibold flex items-center gap-1.5"><Papicon icon="shield" size={14} /> {m.eco_reset_guilds_btn()}</span>
+                <span class="text-2xs text-on-surface-variant/60 font-normal">{m.eco_reset_guilds_desc()}</span>
+              </button>
 
-                <button
-                  type="button"
-                  onclick={() => triggerReset('titles')}
-                  class="px-5 py-4 bg-error/10 hover:bg-error/20 text-error text-xs font-bold rounded-lg transition-all border border-error/20 flex flex-col items-center justify-center text-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <span class="font-semibold flex items-center gap-1.5"><Papicon icon="award" size={14} /> {m.eco_reset_titles_btn()}</span>
-                  <span class="text-2xs text-on-surface-variant/60 font-normal">{m.eco_reset_titles_desc()}</span>
-                </button>
+              <button
+                type="button"
+                onclick={() => triggerReset('titles')}
+                disabled={!config.enabled}
+                class="px-5 py-4 bg-error/10 hover:bg-error/20 text-error text-xs font-bold rounded-lg transition-all border border-error/20 flex flex-col items-center justify-center text-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <span class="font-semibold flex items-center gap-1.5"><Papicon icon="award" size={14} /> {m.eco_reset_titles_btn()}</span>
+                <span class="text-2xs text-on-surface-variant/60 font-normal">{m.eco_reset_titles_desc()}</span>
+              </button>
 
-                <button
-                  type="button"
-                  onclick={() => triggerReset('config')}
-                  class="px-5 py-4 bg-error/10 hover:bg-error/20 text-error text-xs font-bold rounded-lg transition-all border border-error/20 flex flex-col items-center justify-center text-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <span class="font-semibold flex items-center gap-1.5"><Papicon icon="settings" size={14} /> {m.eco_reset_config_btn()}</span>
-                  <span class="text-2xs text-on-surface-variant/60 font-normal">{m.eco_reset_config_desc()}</span>
-                </button>
+              <button
+                type="button"
+                onclick={() => triggerReset('config')}
+                disabled={!config.enabled}
+                class="px-5 py-4 bg-error/10 hover:bg-error/20 text-error text-xs font-bold rounded-lg transition-all border border-error/20 flex flex-col items-center justify-center text-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <span class="font-semibold flex items-center gap-1.5"><Papicon icon="settings" size={14} /> {m.eco_reset_config_btn()}</span>
+                <span class="text-2xs text-on-surface-variant/60 font-normal">{m.eco_reset_config_desc()}</span>
+              </button>
 
-                <button
-                  type="button"
-                  onclick={() => triggerReset('all')}
-                  class="px-5 py-4 bg-error text-on-error hover:bg-error-hover text-xs font-bold rounded-lg shadow-lg transition-all flex flex-col items-center justify-center text-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <span class="font-semibold flex items-center gap-1.5"><Papicon icon="alert-triangle" size={14} /> {m.eco_reset_all_btn()}</span>
-                  <span class="text-2xs text-on-error/80 font-normal">{m.eco_reset_all_desc()}</span>
-                </button>
-              </div>
-            </details>
+              <button
+                type="button"
+                onclick={() => triggerReset('all')}
+                disabled={!config.enabled}
+                class="px-5 py-4 bg-error text-on-error hover:bg-error-hover text-xs font-bold rounded-lg shadow-lg transition-all flex flex-col items-center justify-center text-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <span class="font-semibold flex items-center gap-1.5"><Papicon icon="alert-triangle" size={14} /> {m.eco_reset_all_btn()}</span>
+                <span class="text-2xs text-on-error/80 font-normal">{m.eco_reset_all_desc()}</span>
+              </button>
+            </div>
           </div>
         {/if}
       </div>
@@ -2090,13 +2042,14 @@ import EmojiText from '../lib/components/EmojiText.svelte';
 
     <!-- Tab 2: Shop Items -->
     {#if activeTab === 'items'}
-      <div class="bg-surface-container-low/30 border border-outline-variant/10 p-8 rounded-xl space-y-6">
+      <div class="bg-surface-container-low/30 border border-outline-variant/10 p-8 rounded-xl space-y-6 transition-opacity duration-300 {!config.enabled ? 'opacity-60' : ''}">
         <div class="flex items-center justify-between border-b border-outline-variant/15 pb-4">
           <h3 class="text-lg font-semibold">{m.eco_shop_title()}</h3>
           {#if canManageSettings}
             <button 
               type="button" 
               onclick={openNewItem}
+              disabled={!config.enabled}
               class="px-4 py-2 bg-primary hover:bg-primary-hover text-on-primary text-body-sm font-medium rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
             >
               <Papicon icon="plus" size={14} />
@@ -2122,7 +2075,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
               <button
                 type="button"
                 onclick={() => handleApplyShopDifficulty(level)}
-                disabled={!canManageSettings}
+                disabled={!canManageSettings || !config.enabled}
                 aria-pressed={selected}
                 class="text-left p-4 rounded-xl border transition-all disabled:opacity-50 disabled:cursor-not-allowed {selected ? 'bg-primary/8 border-primary/50' : 'bg-surface-container-low/30 border-outline-variant/10 hover:border-outline-variant/30 hover:bg-surface-container-high/20'}"
               >
@@ -2210,6 +2163,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
                       <button 
                         type="button" 
                         onclick={() => openEditItem(item)}
+                        disabled={!config.enabled}
                         class="p-2 bg-outline-variant/10 hover:bg-outline-variant/20 rounded-lg text-xs disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
                         title={m.eco_btn_edit()}
                       >
@@ -2218,6 +2172,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
                       <button 
                         type="button" 
                         onclick={() => handleDeleteItem(item.id)}
+                        disabled={!config.enabled}
                         class="p-2 bg-error/10 hover:bg-error/25 rounded-lg text-xs disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
                         title={m.fb_delete()}
                       >
@@ -2239,7 +2194,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
 
     <!-- Tab 3: Bestiaire (boss et monstres) -->
     {#if activeTab === 'bestiaire'}
-      <div class="bg-surface-container-low/30 border border-outline-variant/10 p-8 rounded-xl space-y-6">
+      <div class="bg-surface-container-low/30 border border-outline-variant/10 p-8 rounded-xl space-y-6 transition-opacity duration-300 {!config.enabled ? 'opacity-60' : ''}">
         <div class="flex flex-wrap items-start justify-between gap-4 border-b border-outline-variant/15 pb-4">
           <div class="max-w-2xl">
             <h3 class="text-lg font-semibold">{m.eco_bestiary_title()}</h3>
@@ -2250,6 +2205,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
               <button
                 type="button"
                 onclick={() => openNewMonster(true)}
+                disabled={!config.enabled}
                 class="px-4 py-2 bg-primary hover:bg-primary-hover text-on-primary text-body-sm font-medium rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
               >
                 <Papicon icon="plus" size={14} />
@@ -2258,6 +2214,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
               <button
                 type="button"
                 onclick={() => openNewMonster(false)}
+                disabled={!config.enabled}
                 class="px-4 py-2 bg-outline-variant/10 hover:bg-outline-variant/20 text-body-sm font-medium rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
               >
                 <Papicon icon="plus" size={14} />
@@ -2275,6 +2232,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
               <button
                 type="button"
                 onclick={() => bestiaryFileInput?.click()}
+                disabled={!config.enabled}
                 class="px-4 py-2 bg-outline-variant/10 hover:bg-outline-variant/20 text-body-sm font-medium rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
                 title={m.eco_bestiary_import_hint()}
               >
@@ -2301,7 +2259,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
             <ToggleSwitch
               checked={config.clanPointsFromRpg}
               onToggle={(v: boolean) => config.clanPointsFromRpg = v}
-              disabled={!canManageSettings}
+              disabled={!canManageSettings || !config.enabled}
             />
           </div>
         {/if}
@@ -2347,7 +2305,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
                   <button
                     type="button"
                     onclick={() => handleApplyDifficulty(row.scope, level)}
-                    disabled={!canManageSettings}
+                    disabled={!canManageSettings || !config.enabled}
                     aria-pressed={selected}
                     class="text-left p-4 rounded-xl border transition-all disabled:opacity-50 disabled:cursor-not-allowed {selected ? 'bg-primary/8 border-primary/50' : 'bg-surface-container-low/30 border-outline-variant/10 hover:border-outline-variant/30 hover:bg-surface-container-high/20'}"
                   >
@@ -2499,6 +2457,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
                     <button
                       type="button"
                       onclick={() => openEditMonster(monster)}
+                      disabled={!config.enabled}
                       class="flex-1 px-3 py-2 bg-outline-variant/10 hover:bg-outline-variant/20 rounded-lg text-2xs font-bold disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
                     >
                       <Papicon icon="edit" size={13} />
@@ -2507,6 +2466,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
                     <button
                       type="button"
                       onclick={() => handleToggleMonster(monster, !monster.enabled)}
+                      disabled={!config.enabled}
                       class="p-2 bg-outline-variant/10 hover:bg-outline-variant/20 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
                       title={monster.enabled ? m.eco_bestiary_btn_disable() : m.eco_bestiary_btn_enable()}
                     >
@@ -2516,6 +2476,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
                       <button
                         type="button"
                         onclick={() => handleDeleteMonster(monster)}
+                        disabled={!config.enabled}
                         class="p-2 bg-error/10 hover:bg-error/25 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
                         title={monster.overridesGlobal ? m.eco_bestiary_btn_reset() : m.fb_delete()}
                       >
@@ -2605,14 +2566,14 @@ import EmojiText from '../lib/components/EmojiText.svelte';
     {/if}
 
     {#if activeTab === 'titres'}
-      <div class="bg-surface-container-low/30 border border-outline-variant/10 p-8 rounded-xl space-y-6">
+      <div class="bg-surface-container-low/30 border border-outline-variant/10 p-8 rounded-xl space-y-6 transition-opacity duration-300 {!config.enabled ? 'opacity-60' : ''}">
         <div class="flex flex-wrap items-start justify-between gap-4 border-b border-outline-variant/15 pb-4">
           <div class="max-w-2xl">
             <h3 class="text-lg font-semibold">{m.eco_titles_title()}</h3>
             <p class="text-xs text-on-surface-variant/60 mt-1 leading-relaxed">{m.eco_titles_desc()}</p>
           </div>
           {#if canManageSettings}
-            <button type="button" onclick={openNewTitle} class="px-4 py-2 bg-primary hover:bg-primary-hover text-on-primary text-body-sm font-medium rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5">
+            <button type="button" onclick={openNewTitle} disabled={!config.enabled} class="px-4 py-2 bg-primary hover:bg-primary-hover text-on-primary text-body-sm font-medium rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5">
               <Papicon icon="plus" size={14} />
               {m.eco_title_create()}
             </button>
@@ -2679,11 +2640,11 @@ import EmojiText from '../lib/components/EmojiText.svelte';
 
                 {#if canManageSettings}
                   <div class="mt-6 border-t border-outline-variant/5 pt-4 flex items-center gap-2">
-                    <button type="button" onclick={() => openEditTitle(title)} class="flex-1 px-3 py-2 bg-outline-variant/10 hover:bg-outline-variant/20 rounded-lg text-2xs font-bold disabled:opacity-50 flex items-center justify-center gap-1.5">
+                    <button type="button" onclick={() => openEditTitle(title)} disabled={!config.enabled} class="flex-1 px-3 py-2 bg-outline-variant/10 hover:bg-outline-variant/20 rounded-lg text-2xs font-bold disabled:opacity-50 flex items-center justify-center gap-1.5">
                       <Papicon icon="edit" size={12} />
                       {m.eco_bestiary_btn_customize()}
                     </button>
-                    <button type="button" onclick={() => handleDeleteTitle(title)} class="px-3 py-2 bg-error/10 hover:bg-error/20 text-error rounded-lg text-2xs font-bold disabled:opacity-50">
+                    <button type="button" onclick={() => handleDeleteTitle(title)} disabled={!config.enabled} class="px-3 py-2 bg-error/10 hover:bg-error/20 text-error rounded-lg text-2xs font-bold disabled:opacity-50">
                       <Papicon icon="trash" size={12} />
                     </button>
                   </div>
@@ -2696,14 +2657,14 @@ import EmojiText from '../lib/components/EmojiText.svelte';
     {/if}
 
     {#if activeTab === 'quetes'}
-      <div class="bg-surface-container-low/30 border border-outline-variant/10 p-8 rounded-xl space-y-6">
+      <div class="bg-surface-container-low/30 border border-outline-variant/10 p-8 rounded-xl space-y-6 transition-opacity duration-300 {!config.enabled ? 'opacity-60' : ''}">
         <div class="flex flex-wrap items-start justify-between gap-4 border-b border-outline-variant/15 pb-4">
           <div class="max-w-2xl">
             <h3 class="text-lg font-semibold">{m.eco_quests_title()}</h3>
             <p class="text-xs text-on-surface-variant/60 mt-1 leading-relaxed">{m.eco_quests_desc()}</p>
           </div>
           {#if canManageSettings}
-            <button type="button" onclick={openNewQuest} class="px-4 py-2 bg-primary hover:bg-primary-hover text-on-primary text-body-sm font-medium rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5">
+            <button type="button" onclick={openNewQuest} disabled={!config.enabled} class="px-4 py-2 bg-primary hover:bg-primary-hover text-on-primary text-body-sm font-medium rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5">
               <Papicon icon="plus" size={14} />
               {m.eco_quest_create()}
             </button>
@@ -2776,11 +2737,11 @@ import EmojiText from '../lib/components/EmojiText.svelte';
 
                 {#if canManageSettings}
                   <div class="mt-6 border-t border-outline-variant/5 pt-4 flex items-center gap-2">
-                    <button type="button" onclick={() => openEditQuest(quest)} class="flex-1 px-3 py-2 bg-outline-variant/10 hover:bg-outline-variant/20 rounded-lg text-2xs font-bold disabled:opacity-50 flex items-center justify-center gap-1.5">
+                    <button type="button" onclick={() => openEditQuest(quest)} disabled={!config.enabled} class="flex-1 px-3 py-2 bg-outline-variant/10 hover:bg-outline-variant/20 rounded-lg text-2xs font-bold disabled:opacity-50 flex items-center justify-center gap-1.5">
                       <Papicon icon="edit" size={12} />
                       {m.eco_bestiary_btn_customize()}
                     </button>
-                    <button type="button" onclick={() => handleDeleteQuest(quest)} class="px-3 py-2 bg-error/10 hover:bg-error/20 text-error rounded-lg text-2xs font-bold disabled:opacity-50">
+                    <button type="button" onclick={() => handleDeleteQuest(quest)} disabled={!config.enabled} class="px-3 py-2 bg-error/10 hover:bg-error/20 text-error rounded-lg text-2xs font-bold disabled:opacity-50">
                       <Papicon icon="trash" size={12} />
                     </button>
                   </div>
@@ -2796,7 +2757,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
 
     <!-- Tab 4: Raid hebdomadaire -->
     {#if activeTab === 'raid'}
-      <div class="bg-surface-container-low/30 border border-outline-variant/10 p-8 rounded-xl space-y-6">
+      <div class="bg-surface-container-low/30 border border-outline-variant/10 p-8 rounded-xl space-y-6 transition-opacity duration-300 {!config.enabled ? 'opacity-60' : ''}">
         <div class="border-b border-outline-variant/15 pb-4 max-w-3xl">
           <h3 class="text-lg font-semibold">{m.eco_raid_title()}</h3>
           <p class="text-xs text-on-surface-variant/60 mt-1 leading-relaxed">{m.eco_raid_desc()}</p>
@@ -2810,7 +2771,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
           <ToggleSwitch
             checked={config.raidEnabled}
             onToggle={(v: boolean) => config.raidEnabled = v}
-            disabled={!canManageSettings}
+            disabled={!canManageSettings || !config.enabled}
           />
         </div>
 
@@ -2825,7 +2786,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
               <button
                 type="button"
                 onclick={() => config.raidTeamMode = mode.id}
-                disabled={!canManageSettings || !available}
+                disabled={!canManageSettings || !config.enabled || !available}
                 aria-pressed={selected}
                 class="text-left p-4 rounded-xl border transition-all disabled:opacity-50 disabled:cursor-not-allowed {selected ? 'bg-primary/8 border-primary/50' : 'bg-surface-container-low/30 border-outline-variant/10 hover:border-outline-variant/30'}"
               >
@@ -2869,14 +2830,14 @@ import EmojiText from '../lib/components/EmojiText.svelte';
               <button
                 type="button"
                 onclick={handleStartRaid}
-                disabled={!canManageSettings || !config.enabled || !config.raidEnabled || !!raidState?.open || configDirty}
+                disabled={!canManageSettings || !config.raidEnabled || !!raidState?.open || configDirty}
                 class="w-full px-4 py-3 bg-primary hover:bg-primary-hover text-on-primary text-body-sm font-medium rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
                 <Papicon icon="Sparkles" size={15} />
                 {raidState?.open ? m.eco_raid_start_running() : m.eco_raid_start()}
               </button>
               <p class="text-2xs text-on-surface-variant/50 leading-relaxed">
-                {!config.enabled ? m.eco_paused_title() : configDirty ? m.eco_raid_start_unsaved() : m.eco_raid_start_hint()}
+                {configDirty ? m.eco_raid_start_unsaved() : m.eco_raid_start_hint()}
               </p>
             {/if}
 
@@ -3129,11 +3090,11 @@ import EmojiText from '../lib/components/EmojiText.svelte';
             </div>
             {#if canManageSettings}
               <div class="flex gap-2">
-                <button type="button" onclick={openNewRaidBoss} class="px-4 py-2 bg-primary hover:bg-primary-hover text-on-primary text-body-sm font-medium rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5">
+                <button type="button" onclick={openNewRaidBoss} disabled={!config.enabled} class="px-4 py-2 bg-primary hover:bg-primary-hover text-on-primary text-body-sm font-medium rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5">
                   <Papicon icon="plus" size={14} />
                   {m.eco_raid_boss_create()}
                 </button>
-                <button type="button" onclick={handleRestoreRaidBosses} class="px-4 py-2 bg-outline-variant/10 hover:bg-outline-variant/20 text-body-sm font-medium rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5" title={m.eco_raid_restore_hint()}>
+                <button type="button" onclick={handleRestoreRaidBosses} disabled={!config.enabled} class="px-4 py-2 bg-outline-variant/10 hover:bg-outline-variant/20 text-body-sm font-medium rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5" title={m.eco_raid_restore_hint()}>
                   <Papicon icon="refresh" size={14} />
                   {m.eco_raid_restore()}
                 </button>
@@ -3186,11 +3147,11 @@ import EmojiText from '../lib/components/EmojiText.svelte';
 
                   {#if canManageSettings}
                     <div class="mt-6 border-t border-outline-variant/5 pt-4 flex items-center gap-2">
-                      <button type="button" onclick={() => openEditRaidBoss(boss)} class="flex-1 px-3 py-2 bg-outline-variant/10 hover:bg-outline-variant/20 rounded-lg text-2xs font-bold disabled:opacity-50 flex items-center justify-center gap-1.5">
+                      <button type="button" onclick={() => openEditRaidBoss(boss)} disabled={!config.enabled} class="flex-1 px-3 py-2 bg-outline-variant/10 hover:bg-outline-variant/20 rounded-lg text-2xs font-bold disabled:opacity-50 flex items-center justify-center gap-1.5">
                         <Papicon icon="edit" size={12} />
                         {m.eco_bestiary_btn_customize()}
                       </button>
-                      <button type="button" onclick={() => handleDeleteRaidBoss(boss)} class="px-3 py-2 bg-error/10 hover:bg-error/20 text-error rounded-lg text-2xs font-bold disabled:opacity-50">
+                      <button type="button" onclick={() => handleDeleteRaidBoss(boss)} disabled={!config.enabled} class="px-3 py-2 bg-error/10 hover:bg-error/20 text-error rounded-lg text-2xs font-bold disabled:opacity-50">
                         <Papicon icon="trash" size={12} />
                       </button>
                     </div>
@@ -3221,7 +3182,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
             <ToggleSwitch
               checked={config.blackMarketEnabled}
               onToggle={(v: boolean) => config.blackMarketEnabled = v}
-              disabled={!canManageSettings || !config.shopEnabled}
+              disabled={!canManageSettings || !config.enabled || !config.shopEnabled}
             />
           </div>
 
@@ -3314,27 +3275,27 @@ import EmojiText from '../lib/components/EmojiText.svelte';
 
     <!-- Tab 4: Players list & Leaderboard -->
     {#if activeTab === 'peche'}
-      <RpgFishPanel canManage={canManageSettings} currencyName={config.currencyName} />
+      <RpgFishPanel canManage={canManageSettings} disabled={!config.enabled} currencyName={config.currencyName} />
     {/if}
 
     {#if activeTab === 'donjons'}
-      <RpgDungeonsPanel canManage={canManageSettings} currencyName={config.currencyName} />
+      <RpgDungeonsPanel canManage={canManageSettings} disabled={!config.enabled} currencyName={config.currencyName} />
     {/if}
 
     {#if activeTab === 'tour'}
-      <RpgTowerPanel canManage={canManageSettings} currencyName={config.currencyName} />
+      <RpgTowerPanel canManage={canManageSettings} disabled={!config.enabled} currencyName={config.currencyName} />
     {/if}
 
     {#if activeTab === 'aventures'}
-      <RpgEventsPanel canManage={canManageSettings} />
+      <RpgEventsPanel canManage={canManageSettings} disabled={!config.enabled} />
     {/if}
 
     {#if activeTab === 'guildes'}
-      <RpgGuildsPanel canManage={canManageSettings} currencyName={config.currencyName} />
+      <RpgGuildsPanel canManage={canManageSettings} disabled={!config.enabled} currencyName={config.currencyName} />
     {/if}
 
     {#if activeTab === 'players'}
-      <div class="bg-surface-container-low/30 border border-outline-variant/10 p-8 rounded-xl space-y-6">
+      <div class="bg-surface-container-low/30 border border-outline-variant/10 p-8 rounded-xl space-y-6 transition-opacity duration-300 {!config.enabled ? 'opacity-60' : ''}">
         <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-outline-variant/15 pb-4">
           <h3 class="text-lg font-semibold">{m.eco_players_title()}</h3>
           
@@ -3350,7 +3311,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
               <button
                 type="button"
                 onclick={() => triggerReset('profiles')}
-                disabled={players.length === 0}
+                disabled={!config.enabled || players.length === 0}
                 title={m.eco_players_reset_all_hint()}
                 class="px-4 py-2.5 bg-error/10 hover:bg-error/20 text-error text-2xs font-bold rounded-lg border border-error/20 transition-all flex items-center justify-center gap-1.5 whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
               >
@@ -3484,6 +3445,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
                           <button 
                              type="button" 
                              onclick={() => openEditPlayer(player)}
+                             disabled={!config.enabled}
                              class="px-3 py-1.5 bg-outline-variant/10 hover:bg-outline-variant/25 text-xs font-bold rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 w-fit"
                           >
                             <Papicon icon="edit" size={12} /> {m.eco_btn_edit()}
@@ -3491,6 +3453,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
                           <button
                              type="button"
                              onclick={() => openInventory(player)}
+                             disabled={!config.enabled}
                              class="px-3 py-1.5 bg-outline-variant/10 hover:bg-outline-variant/25 text-xs font-bold rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 w-fit"
                           >
                             <Papicon icon="package" size={12} /> {m.eco_inventory_btn()}

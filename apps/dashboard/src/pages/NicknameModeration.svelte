@@ -6,9 +6,6 @@
   import { Tabs } from '../lib/components/ui';
   import ModulePage from '../lib/components/ModulePage.svelte';
   import ToggleSwitch from '../lib/components/ToggleSwitch.svelte';
-  import Callout from '../lib/components/ui/Callout.svelte';
-  import Button from '../lib/components/ui/Button.svelte';
-  import { dashboardStore } from '../lib/stores/dashboard.svelte';
   import InlineFeedback from '../lib/components/InlineFeedback.svelte';
   import Papicon from '../lib/components/Papicon.svelte';
   import LoadingHint from '../lib/components/LoadingHint.svelte';
@@ -22,7 +19,6 @@
   import {
     fetchNicknameModerationConfig,
     updateNicknameModerationConfig,
-    updateModuleStatus,
     fetchBannedWords,
     addBannedWord,
     deleteBannedWord,
@@ -188,25 +184,18 @@
   // Actions
   // ---------------------------------------------------------------------------
 
-  // `enabled` est la colonne du module (`autoNicknameModerationEnabled`) : le
-  // menu de ModulePage la bascule avec la ligne du module. L'ancien
-  // interrupteur de la page n'ecrivait que la colonne, et a pu laisser des
-  // serveurs avec un module « actif » dont le bot ne verifie plus rien. Ce cas
-  // s'affiche en encadre, et se repare par la bascule de module.
-  const moduleActive = $derived(
-    (dashboardStore.state.modules as any[]).find((mod) => mod.id === 'nickname_moderation')?.status === 'active'
-  );
-
-  async function resumeModule() {
-    await saveToggleAction.run(
+  async function saveToggle(nextValue: boolean) {
+    const previousValue = enabled;
+    enabled = nextValue;
+    const saved = await saveToggleAction.run(
       async () => {
-        const ok = await updateModuleStatus('nickname_moderation', 'active');
+        const ok = await updateNicknameModerationConfig({ enabled: nextValue });
         if (!ok) throw new Error(m.nm_error_api());
-        await loadData(false);
         return true;
       },
-      { successMessage: m.nm_module_enabled() }
+      { successMessage: nextValue ? m.nm_module_enabled() : m.nm_module_disabled() }
     );
+    if (!saved) enabled = previousValue;
   }
 
   async function saveGranularToggle(field: 'onJoin' | 'onUpdate' | 'checkInvisible' | 'checkGlobal' | 'checkCustom' | 'discordAutoModSync', value: boolean) {
@@ -450,19 +439,8 @@
     </div>
   {:else}
     <div class="flex flex-col gap-8">
-      {#if moduleActive && !enabled}
-        <Callout variant="warning" title={m.nm_paused_title()}>
-          {m.nm_paused_desc()}
-          {#snippet actions()}
-            <Button variant="primary" size="sm" icon="power" loading={saveToggleAction.state.loading} onclick={resumeModule}>
-              {m.nm_paused_action()}
-            </Button>
-          {/snippet}
-        </Callout>
-      {/if}
-
       <!-- ============================================================ -->
-      <!-- Section 1 - Ce que le bot verifie                               -->
+      <!-- Section 1 - Toggle principal                                   -->
     <!-- ============================================================ -->
     <section class="bg-surface-container-low/40 rounded-xl border border-outline-variant/30 p-8 flex flex-col gap-6">
       <div class="flex items-start justify-between gap-6">
@@ -475,6 +453,9 @@
             {m.nm_activation_desc_2()} <code class="font-mono text-primary bg-primary/10 px-1.5 py-0.5 rounded-lg text-xs">/rescan pseudo rescan</code>
           </p>
         </div>
+        <div class="flex-shrink-0">
+          <ToggleSwitch checked={enabled} onToggle={saveToggle} disabled={saveToggleAction.state.loading} />
+        </div>
       </div>
 
       <div class="p-4 rounded-lg bg-surface-container/30 border border-outline-variant/20 flex flex-col gap-5">
@@ -485,11 +466,11 @@
           <p class="text-body-sm font-medium text-on-surface-variant/50">{m.nm_group_when()}</p>
           <div class="flex items-center justify-between gap-4 py-1.5 px-2 rounded-xl hover:bg-surface-container-high/30 transition-colors">
             <span class="text-sm text-on-surface-variant/80">{m.nm_watch_join()}</span>
-            <ToggleSwitch checked={onJoin} onToggle={(value) => saveGranularToggle('onJoin', value)} disabled={saveToggleAction.state.loading} />
+            <ToggleSwitch checked={onJoin} onToggle={(value) => saveGranularToggle('onJoin', value)} disabled={!enabled || saveToggleAction.state.loading} />
           </div>
           <div class="flex items-center justify-between gap-4 py-1.5 px-2 rounded-xl hover:bg-surface-container-high/30 transition-colors">
             <span class="text-sm text-on-surface-variant/80">{m.nm_watch_update()}</span>
-            <ToggleSwitch checked={onUpdate} onToggle={(value) => saveGranularToggle('onUpdate', value)} disabled={saveToggleAction.state.loading} />
+            <ToggleSwitch checked={onUpdate} onToggle={(value) => saveGranularToggle('onUpdate', value)} disabled={!enabled || saveToggleAction.state.loading} />
           </div>
           {#if enabled && !onJoin && !onUpdate}
             <p class="text-xs text-tertiary flex items-start gap-2 px-2">
@@ -503,15 +484,15 @@
           <p class="text-body-sm font-medium text-on-surface-variant/50">{m.nm_group_what()}</p>
           <div class="flex items-center justify-between gap-4 py-1.5 px-2 rounded-xl hover:bg-surface-container-high/30 transition-colors">
             <span class="text-sm text-on-surface-variant/80">{m.nm_watch_invisible()}</span>
-            <ToggleSwitch checked={checkInvisible} onToggle={(value) => saveGranularToggle('checkInvisible', value)} disabled={saveToggleAction.state.loading} />
+            <ToggleSwitch checked={checkInvisible} onToggle={(value) => saveGranularToggle('checkInvisible', value)} disabled={!enabled || saveToggleAction.state.loading} />
           </div>
           <div class="flex items-center justify-between gap-4 py-1.5 px-2 rounded-xl hover:bg-surface-container-high/30 transition-colors">
             <span class="text-sm text-on-surface-variant/80">{m.nm_watch_global()}</span>
-            <ToggleSwitch checked={checkGlobal} onToggle={(value) => saveGranularToggle('checkGlobal', value)} disabled={saveToggleAction.state.loading} />
+            <ToggleSwitch checked={checkGlobal} onToggle={(value) => saveGranularToggle('checkGlobal', value)} disabled={!enabled || saveToggleAction.state.loading} />
           </div>
           <div class="flex items-center justify-between gap-4 py-1.5 px-2 rounded-xl hover:bg-surface-container-high/30 transition-colors">
             <span class="text-sm text-on-surface-variant/80">{m.nm_watch_custom()}</span>
-            <ToggleSwitch checked={checkCustom} onToggle={(value) => saveGranularToggle('checkCustom', value)} disabled={saveToggleAction.state.loading} />
+            <ToggleSwitch checked={checkCustom} onToggle={(value) => saveGranularToggle('checkCustom', value)} disabled={!enabled || saveToggleAction.state.loading} />
           </div>
           {#if enabled && !checkInvisible && !checkGlobal && !checkCustom}
             <p class="text-xs text-tertiary flex items-start gap-2 px-2">
@@ -526,7 +507,7 @@
             <span class="text-sm font-semibold text-on-surface">{m.nm_discord_automod()}</span>
             <span class="text-xs text-on-surface-variant/60">{m.nm_discord_automod_desc()}</span>
           </div>
-          <ToggleSwitch checked={discordAutoModSync} onToggle={(value) => saveGranularToggle('discordAutoModSync', value)} disabled={saveToggleAction.state.loading} />
+          <ToggleSwitch checked={discordAutoModSync} onToggle={(value) => saveGranularToggle('discordAutoModSync', value)} disabled={!enabled || saveToggleAction.state.loading} />
         </div>
 
         <p class="text-xs text-on-surface-variant/40 italic mt-1">
@@ -569,7 +550,7 @@
           <button
             type="button"
             onclick={() => saveGranularToggle(activeTab === 'custom' ? 'checkCustom' : 'checkGlobal', true)}
-            disabled={saveToggleAction.state.loading}
+            disabled={!enabled || saveToggleAction.state.loading}
             class="shrink-0 px-4 py-2 rounded-lg text-xs font-bold bg-tertiary/20 text-tertiary hover:bg-tertiary/30 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
             {m.nm_enable_it()}

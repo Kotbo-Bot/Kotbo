@@ -55,14 +55,7 @@ export function buildCrumbs(path: string): Crumb[] {
       list.push({ name: adminNames[segments[1]] || segments[1], href: path });
     }
   } else {
-    // L'entree la plus precise gagne. Le seul premier segment faisait de
-    // `/security/anti-raid` une page « Vue d'ensemble », celle de `/security`.
-    const matchedPage = [...allPages]
-      .sort((a, b) => b.href.length - a.href.length)
-      .find((page) => {
-        const base = page.href.split('?')[0];
-        return base !== '/' && (path === base || path.startsWith(`${base}/`));
-      });
+    const matchedPage = allPages.find((page) => page.href.split('?')[0] === `/${segments[0]}`);
 
     if (matchedPage) {
       list.push({ name: matchedPage.name, href: matchedPage.href });

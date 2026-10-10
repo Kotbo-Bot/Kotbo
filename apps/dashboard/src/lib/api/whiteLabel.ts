@@ -8,13 +8,13 @@ import { API_BASE_URL, authorizedFetch, dashboardRequest } from './client';
 
 export async function fetchWhiteLabelInstances() {
   const res = await authorizedFetch(`${API_BASE_URL}/api/admin/whitelabel`);
-  if (!res.ok) throw new Error('Impossible de récupérer les instances. Réessaie.');
+  if (!res.ok) throw new Error('Erreur lors de la récupération des instances');
   return res.json();
 }
 
 export async function fetchWhiteLabelInstance(id: string) {
   const res = await authorizedFetch(`${API_BASE_URL}/api/admin/whitelabel/${id}`);
-  if (!res.ok) throw new Error('Impossible de récupérer l\'instance. Réessaie.');
+  if (!res.ok) throw new Error('Erreur lors de la récupération de l\'instance');
   return res.json();
 }
 
@@ -26,7 +26,7 @@ export async function createWhiteLabelInstance(data: Record<string, unknown>) {
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || 'Impossible de créer. Réessaie.');
+    throw new Error(err.error || 'Erreur lors de la création');
   }
   return res.json();
 }
@@ -39,7 +39,7 @@ export async function updateWhiteLabelInstance(id: string, data: Record<string, 
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || 'Impossible de mettre à jour. Réessaie.');
+    throw new Error(err.error || 'Erreur lors de la mise à jour');
   }
   return res.json();
 }
@@ -50,7 +50,7 @@ export async function deleteWhiteLabelInstance(id: string) {
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || 'Impossible de supprimer. Réessaie.');
+    throw new Error(err.error || 'Erreur lors de la suppression');
   }
   return res.json();
 }

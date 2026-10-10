@@ -14,7 +14,7 @@
 
 <ModulePage
   title="Configuration rapide"
-  description="Choisis un niveau de protection : il règle d'un coup les filtres et l'anti-raid."
+  description="Un niveau de protection règle d'un coup les filtres et l'anti-raid"
   icon="Sparkles"
   featureKey="automod"
 >

@@ -93,7 +93,7 @@ export const MAPPING_SCREENS: MappingScreen[] = [
     step: 'map-stats',
     sections: ['stats'],
     title: 'Les compteurs du serveur.',
-    lead: "Des salons vocaux que personne ne rejoint : leur nom porte le chiffre, et Kotbo le tient à jour. Si tu en as déjà, désigne-les : ils seront renommés au même format, pas doublés.",
+    lead: "Des salons vocaux que personne ne rejoint : leur nom porte le chiffre, et Kotbo le tient à jour. Si tu en as déjà, désigne-les — ils seront renommés au même format, pas doublés.",
     icon: 'chart',
   },
   {

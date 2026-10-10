@@ -28,12 +28,9 @@
   const profileHref = $derived(authStore.user?.id ? `/profile/${authStore.user.id}` : '/profile');
   const canSwitchServer = $derived(authStore.guilds.length > 1);
 
-  // Chaque langue s'ecrit dans sa propre langue : c'est ainsi qu'on la
-  // reconnait quand on ne lit pas celle de l'interface. Les drapeaux
-  // s'affichaient en carres vides sur la plupart des Android et Windows.
   const languages = [
-    { code: 'fr', label: 'Français' },
-    { code: 'en', label: 'English' },
+    { code: 'fr', flag: '🇫🇷', label: 'FR' },
+    { code: 'en', flag: '🇬🇧', label: 'EN' },
   ] as const;
 
   async function go(href: string) {
@@ -69,7 +66,13 @@
   }
 </script>
 
-<BottomSheet {open} title={m.nav_account()} maxHeight="88dvh" onclose={() => mobileNav.close()}>
+<BottomSheet
+  {open}
+  title={m.nav_account()}
+  subtitle={authStore.user?.username}
+  maxHeight="88dvh"
+  onclose={() => mobileNav.close()}
+>
   {#snippet footer()}
     <button
       type="button"
@@ -79,23 +82,24 @@
         authStore.logout();
       }}
     >
-      <Papicon icon="log-out" size={16} />
+      <Papicon icon="log-out" size={17} />
       <span>{m.navbar_logout()}</span>
     </button>
   {/snippet}
 
   <div class="account">
-    <button type="button" class="account__row account__identity" onclick={() => go(profileHref)}>
-      <img src={userAvatar} alt="" referrerpolicy="no-referrer" width="40" height="40" />
+    <button type="button" class="account__identity" onclick={() => go(profileHref)}>
+      <img src={userAvatar} alt="" referrerpolicy="no-referrer" width="48" height="48" />
       <span class="account__identity-text">
-        <span class="account__row-label">{authStore.user?.username ?? '…'}</span>
-        <span class="account__hint">{m.navbar_my_profile()}</span>
+        <span class="account__identity-name">{authStore.user?.username ?? '…'}</span>
+        <span class="account__identity-link">{m.navbar_my_profile()}</span>
       </span>
       <Papicon icon="chevron-right" size={16} class="account__chevron" />
     </button>
 
     {#if canSwitchServer}
-      <button type="button" class="account__row" onclick={openServerSwitcher}>
+      <h3 class="account__label">{m.nav_current_server()}</h3>
+      <button type="button" class="account__row account__row--server" onclick={openServerSwitcher}>
         {#if guildIcon}
           <img class="account__server-icon" src={guildIcon} alt="" referrerpolicy="no-referrer" />
         {:else}
@@ -105,11 +109,10 @@
         {/if}
         <span class="account__row-label">{guild?.name ?? '-'}</span>
         <span class="account__row-action">{m.common_change()}</span>
+        <Papicon icon="chevron-right" size={16} class="account__chevron" />
       </button>
     {/if}
 
-    <!-- Theme et langue : les deux reglages d'affichage, chacun en deux choix
-         visibles plutot qu'un interrupteur qui tait l'autre option. -->
     <h3 class="account__label">{m.nav_appearance()}</h3>
 
     <div class="account__setting">
@@ -121,7 +124,7 @@
           aria-pressed={!themeStore.dark}
           onclick={() => (themeStore.dark = false)}
         >
-          <Papicon icon="sun" size={16} />
+          <Papicon icon="sun" size={15} />
           <span>{m.nav_theme_light_short()}</span>
         </button>
         <button
@@ -130,7 +133,7 @@
           aria-pressed={themeStore.dark}
           onclick={() => (themeStore.dark = true)}
         >
-          <Papicon icon="moon" size={16} />
+          <Papicon icon="moon" size={15} />
           <span>{m.nav_theme_dark_short()}</span>
         </button>
       </div>
@@ -142,12 +145,12 @@
         {#each languages as lang (lang.code)}
           <button
             type="button"
-            lang={lang.code}
             class:account__segment--on={userPrefs.prefs.language === lang.code}
             aria-pressed={userPrefs.prefs.language === lang.code}
             onclick={() => userPrefs.set('language', lang.code)}
           >
-            {lang.label}
+            <span class="account__flag" aria-hidden="true">{lang.flag}</span>
+            <span>{lang.label}</span>
           </button>
         {/each}
       </div>
@@ -156,6 +159,14 @@
     <h3 class="account__label">{m.nav_preferences()}</h3>
 
     <ul class="account__list">
+      <li>
+        <button type="button" class="account__row" onclick={() => mobileNav.open('tabs')}>
+          <span class="account__row-icon"><Papicon icon="tune" size={18} /></span>
+          <span class="account__row-label">{m.nav_customize_tabbar()}</span>
+          <Papicon icon="chevron-right" size={16} class="account__chevron" />
+        </button>
+      </li>
+
       {@render action('settings', m.navbar_settings(), () => go('/userSettings'))}
       {@render action('history', m.navbar_my_activity(), () => go('/activity'))}
       {@render action('school', m.navbar_tutorial(), startTutorial)}
@@ -169,9 +180,9 @@
           rel="noopener noreferrer"
           onclick={() => mobileNav.close()}
         >
-          <span class="account__row-icon"><Papicon icon="pronote" size={20} /></span>
+          <span class="account__row-icon"><Papicon icon="pronote" size={18} /></span>
           <span class="account__row-label">{m.navbar_documentation()}</span>
-          <Papicon icon="external-link" size={16} class="account__chevron" />
+          <Papicon icon="external-link" size={15} class="account__chevron" />
         </a>
       </li>
 
@@ -192,7 +203,7 @@
 {#snippet action(icon: string, label: string, onclick: () => void)}
   <li>
     <button type="button" class="account__row" {onclick}>
-      <span class="account__row-icon"><Papicon {icon} size={20} /></span>
+      <span class="account__row-icon"><Papicon {icon} size={18} /></span>
       <span class="account__row-label">{label}</span>
       <Papicon icon="chevron-right" size={16} class="account__chevron" />
     </button>
@@ -200,45 +211,32 @@
 {/snippet}
 
 <style>
-  /* Quatre tailles de texte au plus : titre de la feuille, lignes (16px),
-     choix des reglages (14px), intitules et indications (12px). */
-
   .account {
     padding-bottom: 0.5rem;
   }
 
-  .account__list {
-    display: flex;
-    flex-direction: column;
-  }
-
-  .account__row {
+  .account__identity {
     display: flex;
     width: 100%;
-    min-height: 3rem;
     align-items: center;
     gap: 0.75rem;
-    padding: 0 0.75rem;
-    border-radius: 0.75rem;
-    color: var(--on-surface);
-    font-size: 1rem;
+    padding: 0.75rem;
+    border: 1px solid var(--outline-variant);
+    border-radius: 1rem;
+    background: var(--surface-container);
     text-align: left;
     -webkit-tap-highlight-color: transparent;
   }
 
-  .account__row:active {
-    background: var(--surface-container);
-  }
-
-  .account__identity {
-    min-height: 3.5rem;
+  .account__identity:active {
+    background: var(--surface-container-high, var(--surface-container));
   }
 
   .account__identity img {
-    width: 2.5rem;
-    height: 2.5rem;
+    width: 3rem;
+    height: 3rem;
     flex: none;
-    border-radius: 999px;
+    border-radius: 0.875rem;
     object-fit: cover;
   }
 
@@ -249,35 +247,77 @@
     flex-direction: column;
   }
 
-  .account__identity .account__row-label {
+  .account__identity-name {
+    overflow: hidden;
+    color: var(--on-surface);
+    font-family: var(--font-headline);
+    font-size: 1rem;
+    font-weight: 700;
+    letter-spacing: -0.015em;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .account__identity-link {
+    color: var(--primary-color);
+    font-size: 0.75rem;
     font-weight: 600;
   }
 
-  .account__hint {
+  .account__label {
+    margin: 1.25rem 0 0.375rem;
+    padding-left: 0.25rem;
     color: var(--on-surface-variant);
-    font-size: 0.75rem;
+    font-family: var(--font-label);
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
   }
 
-  .account__label {
-    margin: 1rem 0 0.25rem;
-    padding: 0 0.75rem;
-    color: var(--on-surface-variant);
-    font-size: 0.75rem;
-    font-weight: 500;
+  .account__list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+  }
+
+  .account__row {
+    display: flex;
+    width: 100%;
+    min-height: 3rem;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0 0.5rem 0 0.625rem;
+    border-radius: 0.75rem;
+    color: var(--on-surface);
+    text-align: left;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .account__row:active {
+    background: var(--surface-container);
+  }
+
+  .account__row--server {
+    border: 1px solid var(--outline-variant);
+    background: var(--surface-container);
   }
 
   .account__row-icon {
     display: grid;
-    width: 1.25rem;
+    width: 1.75rem;
     flex: none;
     place-items: center;
-    color: var(--on-surface-variant);
+    color: inherit;
+    opacity: 0.75;
   }
 
   .account__row-label {
     min-width: 0;
     flex: 1 1 auto;
     overflow: hidden;
+    font-size: 0.9375rem;
+    font-weight: 500;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
@@ -285,14 +325,15 @@
   .account__row-action {
     flex: none;
     color: var(--primary-color);
-    font-size: 0.875rem;
-    font-weight: 500;
+    font-size: 0.8125rem;
+    font-weight: 650;
   }
 
-  .account__row :global(.account__chevron) {
+  .account__row :global(.account__chevron),
+  .account__identity :global(.account__chevron) {
     flex: none;
     color: var(--on-surface-variant);
-    opacity: 0.6;
+    opacity: 0.5;
   }
 
   .account__server-icon {
@@ -309,64 +350,77 @@
     background: color-mix(in srgb, var(--primary-color) 14%, transparent);
     color: var(--primary-color);
     font-size: 0.75rem;
-    font-weight: 600;
+    font-weight: 700;
   }
 
   .account__setting {
     display: flex;
-    min-height: 3.5rem;
+    min-height: 3rem;
     align-items: center;
     gap: 0.75rem;
-    padding: 0 0 0 0.75rem;
+    padding-left: 0.625rem;
   }
 
   .account__setting-name {
     flex: 1 1 auto;
     color: var(--on-surface);
-    font-size: 1rem;
+    font-size: 0.9375rem;
+    font-weight: 500;
   }
 
-  /* Deux choix, tous deux visibles : un interrupteur seul ne dit jamais
-     quelle est l'autre option. */
+  /* Two states, both visible: a lone toggle never says what the other one is. */
   .account__segmented {
     display: flex;
     flex: none;
-    padding: 0.25rem;
+    gap: 0.125rem;
+    padding: 0.1875rem;
+    border: 1px solid var(--outline-variant);
     border-radius: 999px;
     background: var(--surface-container);
   }
 
   .account__segmented > button {
     display: flex;
-    min-height: 2.75rem;
+    min-height: 2.25rem;
     align-items: center;
-    gap: 0.5rem;
+    gap: 0.375rem;
     padding: 0 0.75rem;
     border-radius: 999px;
     color: var(--on-surface-variant);
-    font-size: 0.875rem;
-    font-weight: 500;
+    font-size: 0.8125rem;
+    font-weight: 600;
     transition: background-color 150ms ease, color 150ms ease;
   }
 
   .account__segmented > button.account__segment--on {
-    background: color-mix(in srgb, var(--primary-color) 16%, transparent);
+    background: var(--surface-container-lowest);
+    box-shadow: 0 1px 3px rgb(0 0 0 / 0.12);
     color: var(--primary-color);
+  }
+
+  .account__flag {
+    font-size: 0.9375rem;
+    line-height: 1;
   }
 
   .account__logout {
     display: flex;
     width: 100%;
-    min-height: 3rem;
+    min-height: 2.75rem;
     align-items: center;
     justify-content: center;
     gap: 0.5rem;
-    border-radius: 0.75rem;
-    background: color-mix(in srgb, var(--error-color) 10%, transparent);
-    color: var(--error-color);
-    font-size: 1rem;
-    font-weight: 500;
+    border-radius: 0.875rem;
+    background: color-mix(in srgb, #dc2626 10%, transparent);
+    color: #dc2626;
+    font-size: 0.9375rem;
+    font-weight: 650;
     -webkit-tap-highlight-color: transparent;
+  }
+
+  :global(.dark) .account__logout {
+    background: color-mix(in srgb, #f87171 14%, transparent);
+    color: #f87171;
   }
 
   @media (prefers-reduced-motion: reduce) {

@@ -272,17 +272,18 @@
 </script>
 
 <div class="space-y-8 animate-in fade-in duration-300">
-  <header class="flex flex-col md:flex-row md:items-end justify-between gap-x-6 gap-y-3">
+  <header class="flex flex-wrap items-start justify-between gap-3">
     <div class="min-w-0">
-      <h2 class="text-lg font-semibold tracking-tight text-on-surface font-headline leading-tight">Anti-spam comportemental</h2>
-      <p class="mt-1 max-w-prose text-sm text-on-surface-variant">
-        Repère les comptes qui agissent comme des robots : messages répétés, liens postés partout,
-        rythme anormal. Il complète les filtres au-dessus, qui comptent seulement les messages.
+      <h2 class="text-[15px] font-semibold text-on-surface flex items-center gap-2">
+        <Papicon icon="ShieldAlert" size={16} />
+        Anti-spam comportemental
+      </h2>
+      <p class="text-xs text-on-surface-variant mt-0.5 leading-relaxed max-w-2xl">
+        Moteur de score multi-signaux, distinct des filtres à seuil ci-dessus : il combine des indices
+        d'automatisation, de diffusion et de répétition plutôt que de compter les messages.
       </p>
     </div>
-    <div class="flex items-center gap-2 shrink-0">
-      <RefreshButton onclick={load} loading={loading} />
-    </div>
+    <RefreshButton onclick={load} loading={loading} />
   </header>
 
   {#if loading}

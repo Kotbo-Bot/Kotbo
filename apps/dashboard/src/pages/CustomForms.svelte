@@ -71,7 +71,7 @@
 
       if (!res.ok) {
         const err = await res.json();
-        throw new Error(err.error || 'Impossible de créer le formulaire. Réessaie.');
+        throw new Error(err.error || 'Erreur lors de la création du formulaire');
       }
 
       const createdData = await res.json();
@@ -93,7 +93,7 @@
       const res = await dashboardFetch(`/custom-forms/${formId}`, {
         method: 'DELETE'
         });
-      if (!res.ok) throw new Error('Impossible de supprimer. Réessaie.');
+      if (!res.ok) throw new Error('Erreur lors de la suppression');
       await fetchForms();
       return true;
     }, { successMessage: m.cf_delete_success() });

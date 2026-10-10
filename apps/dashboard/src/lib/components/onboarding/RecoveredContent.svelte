@@ -108,7 +108,7 @@
           </ul>
         {:else}
           <p class="mt-2.5 text-2xs text-on-surface-variant/50">
-            Bouton « {payload.buttonText} » : aucun sujet à récupérer.
+            Bouton « {payload.buttonText} » — aucun sujet à récupérer.
           </p>
         {/if}
 
