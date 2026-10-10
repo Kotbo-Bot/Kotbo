@@ -295,6 +295,71 @@ export function reorderSiteVoteSites(ids: string[], guildId?: string) {
   return apiRequest<{ ok: boolean }>(`${base(gid(guildId))}/votes/reorder`, { method: 'POST', payload: { ids }, errorContext: 'API Error (Reorder vote sites):' });
 }
 
+// ─── Forum ───────────────────────────────────────────────────────────────────
+
+export interface ForumCategoryAdmin {
+  id: string;
+  name: string;
+  slug: string;
+  description: string;
+  mode: 'SITE' | 'MIRROR';
+  channelId: string | null;
+  webhookId: string | null;
+  writeRoleIds: string[];
+  staffTopicsOnly: boolean;
+  sortOrder: number;
+  topicCount: number;
+  lastPostAt: string | null;
+}
+
+export interface ForumRecentPost {
+  id: string;
+  authorId: string;
+  authorName: string;
+  content: string;
+  source: string;
+  createdAt: string;
+  topic: { id: string; title: string; pinned: boolean; locked: boolean; category: { name: string; slug: string } };
+}
+
+export interface ForumAdminState {
+  categories: ForumCategoryAdmin[];
+  recent: ForumRecentPost[];
+  forumChannels: Array<{ id: string; name: string; botCanManage: boolean }>;
+}
+
+export function fetchForumAdmin(guildId?: string) {
+  return apiRequest<ForumAdminState>(`${base(gid(guildId))}/forum`, { errorContext: 'API Error (Forum):' });
+}
+
+export function createForumCategory(input: Record<string, unknown>, guildId?: string) {
+  return apiRequest<{ id: string }>(`${base(gid(guildId))}/forum/categories`, { method: 'POST', payload: input, errorContext: 'API Error (Create forum category):' });
+}
+
+export function updateForumCategory(id: string, input: Record<string, unknown>, guildId?: string) {
+  return apiRequest<{ ok: boolean }>(`${base(gid(guildId))}/forum/categories/${id}`, { method: 'PATCH', payload: input, errorContext: 'API Error (Update forum category):' });
+}
+
+export function deleteForumCategory(id: string, guildId?: string) {
+  return apiRequest<{ ok: boolean }>(`${base(gid(guildId))}/forum/categories/${id}`, { method: 'DELETE', errorContext: 'API Error (Delete forum category):' });
+}
+
+export function reorderForumCategories(ids: string[], guildId?: string) {
+  return apiRequest<{ ok: boolean }>(`${base(gid(guildId))}/forum/categories/reorder`, { method: 'POST', payload: { ids }, errorContext: 'API Error (Reorder forum categories):' });
+}
+
+export function importForumCategory(id: string, guildId?: string) {
+  return apiRequest<{ imported: number }>(`${base(gid(guildId))}/forum/categories/${id}/import`, { method: 'POST', errorContext: 'API Error (Import forum):' });
+}
+
+export function setForumTopicFlags(topicId: string, flags: { pinned?: boolean; locked?: boolean }, guildId?: string) {
+  return apiRequest<{ ok: boolean }>(`${base(gid(guildId))}/forum/topics/${topicId}/flags`, { method: 'POST', payload: flags, errorContext: 'API Error (Forum topic):' });
+}
+
+export function deleteForumPostAdmin(postId: string, guildId?: string) {
+  return apiRequest<{ ok: boolean }>(`${base(gid(guildId))}/forum/posts/${postId}`, { method: 'DELETE', errorContext: 'API Error (Delete forum post):' });
+}
+
 // ─── Boutique ────────────────────────────────────────────────────────────────
 
 export interface ShopSettingsAdmin {

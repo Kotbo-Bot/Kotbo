@@ -26,8 +26,9 @@
   import SiteSettings from '../lib/components/site/SiteSettings.svelte';
   import SiteVotes from '../lib/components/site/SiteVotes.svelte';
   import SiteShop from '../lib/components/site/SiteShop.svelte';
+  import SiteForum from '../lib/components/site/SiteForum.svelte';
 
-  const TABS = ['apercu', 'pages', 'wiki', 'blog', 'apparence', 'menu', 'votes', 'boutique', 'commentaires', 'frequentation', 'reglages'] as const;
+  const TABS = ['apercu', 'pages', 'wiki', 'blog', 'apparence', 'menu', 'votes', 'boutique', 'forum', 'commentaires', 'frequentation', 'reglages'] as const;
   type Tab = (typeof TABS)[number];
 
   const guildId = $derived(authStore.selectedGuildId ?? '');
@@ -63,6 +64,7 @@
     if (id === 'blog') return Boolean(rights?.blog) && siteState.modules.site_blog;
     if (id === 'commentaires') return Boolean(rights?.moderateComments) && siteState.modules.site_blog;
     if (id === 'frequentation') return Boolean(rights?.viewStats);
+    if (id === 'forum') return Boolean(rights?.manage || rights?.moderateComments);
     if (['pages', 'apparence', 'menu', 'reglages', 'votes', 'boutique'].includes(id)) return Boolean(rights?.manage);
     return true;
   };
@@ -113,6 +115,8 @@
         <SiteVotes {guildId} />
       {:else if active === 'boutique'}
         <SiteShop {guildId} />
+      {:else if active === 'forum'}
+        <SiteForum {guildId} canManage={Boolean(rights?.manage)} siteUrl={`${siteState.baseUrl}${siteState.site.slug}`} />
       {:else if active === 'commentaires'}
         <SiteComments {guildId} />
       {:else if active === 'frequentation'}

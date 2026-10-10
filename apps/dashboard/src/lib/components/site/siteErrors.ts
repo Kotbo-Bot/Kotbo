@@ -47,12 +47,16 @@ const MESSAGES: Record<string, () => string> = {
   delivery_failed: () => m.ste_err_delivery_failed(),
   too_many_offers: () => m.ste_err_too_many_offers(),
   too_many_codes: () => m.ste_err_too_many_codes(),
-  name_required: () => m.ste_shop_err_name(),
+  name_required: () => m.ste_err_name_required(),
   invalid_price: () => m.ste_shop_err_price(),
   role_required: () => m.ste_shop_err_role(),
   item_required: () => m.ste_shop_err_item(),
   invalid_duration: () => m.ste_shop_err_duration(),
   invalid_quantity: () => m.ste_shop_err_quantity(),
+  category_missing: () => m.ste_err_category_missing(),
+  channel_invalid: () => m.ste_err_forum_channel(),
+  webhook_failed: () => m.ste_err_forum_webhook(),
+  too_many_categories: () => m.ste_err_too_many_categories(),
 };
 
 export function siteErrorMessage(err: unknown): string {
