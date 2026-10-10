@@ -245,6 +245,56 @@ export function deleteSiteComment(commentId: string, guildId?: string) {
   return apiRequest<{ ok: boolean }>(`${base(gid(guildId))}/comments/${commentId}`, { method: 'DELETE', errorContext: 'API Error (Delete comment):' });
 }
 
+// ─── Votes ──────────────────────────────────────────────────────────────────
+
+export interface SiteVoteSiteAdmin {
+  id: string;
+  provider: string;
+  label: string;
+  voteUrl: string;
+  cooldownHours: number;
+  enabled: boolean;
+  sortOrder: number;
+  hasKey: boolean;
+  /** top.gg : adresse et secret à coller dans le tableau de bord du site de classement. */
+  webhookUrl: string | null;
+  webhookSecret: string | null;
+  votes30d: number;
+}
+
+export interface SiteVoteSiteInput {
+  provider?: string;
+  label?: string;
+  voteUrl?: string;
+  verificationKey?: string | null;
+  cooldownHours?: number;
+  enabled?: boolean;
+}
+
+export function fetchSiteVotes(guildId?: string) {
+  return apiRequest<{ voteSites: SiteVoteSiteAdmin[]; topVoters: Array<{ userId: string; votes: number; name: string; avatarUrl: string | null }> }>(`${base(gid(guildId))}/votes`, { errorContext: 'API Error (Site votes):' });
+}
+
+export function createSiteVoteSite(input: SiteVoteSiteInput, guildId?: string) {
+  return apiRequest<{ id: string }>(`${base(gid(guildId))}/votes`, { method: 'POST', payload: input, errorContext: 'API Error (Create vote site):' });
+}
+
+export function updateSiteVoteSite(id: string, input: SiteVoteSiteInput, guildId?: string) {
+  return apiRequest<{ ok: boolean }>(`${base(gid(guildId))}/votes/${id}`, { method: 'PATCH', payload: input, errorContext: 'API Error (Update vote site):' });
+}
+
+export function deleteSiteVoteSite(id: string, guildId?: string) {
+  return apiRequest<{ ok: boolean }>(`${base(gid(guildId))}/votes/${id}`, { method: 'DELETE', errorContext: 'API Error (Delete vote site):' });
+}
+
+export function regenerateSiteVoteSecret(id: string, guildId?: string) {
+  return apiRequest<{ ok: boolean }>(`${base(gid(guildId))}/votes/${id}/secret`, { method: 'POST', errorContext: 'API Error (Vote secret):' });
+}
+
+export function reorderSiteVoteSites(ids: string[], guildId?: string) {
+  return apiRequest<{ ok: boolean }>(`${base(gid(guildId))}/votes/reorder`, { method: 'POST', payload: { ids }, errorContext: 'API Error (Reorder vote sites):' });
+}
+
 export function fetchSiteAnalytics(days: number, guildId?: string) {
   return apiRequest<{ report: SiteAnalyticsReport }>(`${base(gid(guildId))}/analytics?days=${days}`, { errorContext: 'API Error (Site analytics):' });
 }

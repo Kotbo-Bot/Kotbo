@@ -1,7 +1,7 @@
 <script lang="ts">
   /**
    * Menu du site : entrées vers une page, une section (accueil, wiki, blog,
-   * recherche, espace membre) ou une adresse externe, sous-menus d'un niveau.
+   * recherche, espace membre, votes) ou une adresse externe, sous-menus d'un niveau.
    * Sans menu, le site en compose un par défaut.
    */
   import { untrack } from 'svelte';
@@ -26,6 +26,7 @@
     blog: () => m.ste_link_blog(),
     search: () => m.ste_section_search(),
     me: () => m.ste_section_me(),
+    votes: () => m.ste_section_votes(),
   };
 
   const newId = () => `nav-${Math.random().toString(36).slice(2, 10)}`;

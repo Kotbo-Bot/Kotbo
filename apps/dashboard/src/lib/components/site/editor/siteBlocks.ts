@@ -27,6 +27,8 @@ export const MODULE_ICONS: Record<SiteModuleKey, SiteIconName> = {
   seasons: 'calendar-range',
   marketplace: 'cart',
   starboard: 'star',
+  vote: 'vote',
+  voteLeaderboard: 'trophy',
   profile: 'user',
   memberSettings: 'bell',
   memberRewards: 'coins',
@@ -60,6 +62,8 @@ export function moduleLabel(key: SiteModuleKey): string {
     seasons: () => m.ste_block_seasons(),
     marketplace: () => m.ste_block_marketplace(),
     starboard: () => m.ste_block_starboard(),
+    vote: () => m.ste_block_vote(),
+    voteLeaderboard: () => m.ste_block_voteLeaderboard(),
     profile: () => m.ste_block_profile(),
     memberSettings: () => m.ste_block_memberSettings(),
     memberRewards: () => m.ste_block_memberRewards(),
@@ -95,6 +99,8 @@ export function moduleDescription(key: SiteModuleKey): string {
     seasons: () => m.ste_block_seasons_desc(),
     marketplace: () => m.ste_block_marketplace_desc(),
     starboard: () => m.ste_block_starboard_desc(),
+    vote: () => m.ste_block_vote_desc(),
+    voteLeaderboard: () => m.ste_block_voteLeaderboard_desc(),
     profile: () => m.ste_block_profile_desc(),
     memberSettings: () => m.ste_block_memberSettings_desc(),
     memberRewards: () => m.ste_block_memberRewards_desc(),
@@ -130,6 +136,7 @@ export function moduleSummary(key: SiteModuleKey, raw: Record<string, unknown>, 
     case 'news':
     case 'events':
     case 'marketplace':
+    case 'voteLeaderboard':
     case 'starboard':
     case 'blogList':
     case 'seasons':

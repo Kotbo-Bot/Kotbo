@@ -31,6 +31,11 @@ const MESSAGES: Record<string, () => string> = {
   forbidden: () => m.ste_err_forbidden(),
   not_staff: () => m.ste_err_not_staff(),
   agent_locked: () => m.ste_err_agent_locked(),
+  invalid_vote_url: () => m.ste_err_invalid_vote_url(),
+  vote_key_required: () => m.ste_err_vote_key_required(),
+  invalid_provider: () => m.ste_err_invalid_provider(),
+  too_many_vote_sites: () => m.ste_err_too_many_vote_sites(),
+  vote_site_missing: () => m.ste_err_vote_site_missing(),
 };
 
 export function siteErrorMessage(err: unknown): string {
