@@ -794,6 +794,7 @@ model Guild {
 
   // Sticky bot - message collé en bas de salon
   stickyMessages StickyMessage[]
+  autoThreadConfigs AutoThreadConfig[]
 
   // Starlight - mise en avant des messages plébiscités
   starboardConfig StarboardConfig?

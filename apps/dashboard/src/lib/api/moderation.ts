@@ -1,5 +1,5 @@
 /** Moderation : pseudos, salons, mots bannis. */
-import type { TempVoicePolicy } from '@kotbo/shared';
+import type { AutoThreadConfigData, TempVoicePolicy } from '@kotbo/shared';
 import { authStore } from '../stores/auth.svelte';
 import { API_BASE_URL, JSON_HEADERS, authorizedFetch, dashboardMutation, dashboardRequest } from './client';
 
@@ -41,24 +41,72 @@ export async function updateNicknameModerationConfig(
 // ==========================================
 // AUTO-THREAD & CHANNELS MANAGEMENT
 // ==========================================
-export async function fetchAutoThreadConfig(guildId = authStore.selectedGuildId) {
-  return dashboardRequest('/auto-thread', {
+/** Configuration Auto-Thread telle que l'API la renvoie (ligne de base). */
+export interface AutoThreadConfigRow extends AutoThreadConfigData {
+  id: string;
+  channelId: string;
+  position: number;
+  threadCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type AutoThreadConfigPayload = AutoThreadConfigData & { channelId: string };
+
+export async function fetchAutoThreadConfigs(guildId = authStore.selectedGuildId) {
+  return dashboardRequest<{ configs?: AutoThreadConfigRow[]; error?: string }>('/auto-thread/configs', {
     method: 'GET',
     guildId,
-    errorContext: 'API Error (Fetch Auto Thread Config):',
+    errorContext: 'API Error (Fetch Auto Thread Configs):',
     silent: true,
   });
 }
 
-export async function updateAutoThreadConfig(
-  payload: { enabled: boolean; channels: string[]; botsEnabled?: boolean },
-  guildId = authStore.selectedGuildId
-) {
-  return dashboardMutation('/auto-thread', {
-    method: 'PATCH',
+export async function createAutoThreadConfig(payload: AutoThreadConfigPayload, guildId = authStore.selectedGuildId) {
+  return dashboardRequest<{ ok?: boolean; config?: AutoThreadConfigRow; error?: string }>('/auto-thread/configs', {
+    method: 'POST',
     payload,
     guildId,
-    errorContext: 'API Error (Update Auto Thread Config):'
+    errorContext: 'API Error (Create Auto Thread Config):',
+    silent: true,
+  });
+}
+
+export async function updateAutoThreadConfig(id: string, payload: AutoThreadConfigPayload, guildId = authStore.selectedGuildId) {
+  return dashboardRequest<{ ok?: boolean; config?: AutoThreadConfigRow; error?: string }>(`/auto-thread/configs/${id}`, {
+    method: 'PUT',
+    payload,
+    guildId,
+    errorContext: 'API Error (Update Auto Thread Config):',
+    silent: true,
+  });
+}
+
+export async function duplicateAutoThreadConfig(id: string, guildId = authStore.selectedGuildId) {
+  return dashboardRequest<{ ok?: boolean; config?: AutoThreadConfigRow; error?: string }>(`/auto-thread/configs/${id}/duplicate`, {
+    method: 'POST',
+    guildId,
+    errorContext: 'API Error (Duplicate Auto Thread Config):',
+    silent: true,
+  });
+}
+
+export async function deleteAutoThreadConfig(id: string, guildId = authStore.selectedGuildId) {
+  return dashboardRequest<{ ok?: boolean; error?: string }>(`/auto-thread/configs/${id}`, {
+    method: 'DELETE',
+    guildId,
+    errorContext: 'API Error (Delete Auto Thread Config):',
+    silent: true,
+  });
+}
+
+export async function reorderAutoThreadConfigs(channelId: string, ids: string[], guildId = authStore.selectedGuildId) {
+  return dashboardRequest<{ ok?: boolean; configs?: AutoThreadConfigRow[]; error?: string }>('/auto-thread/configs/reorder', {
+    method: 'POST',
+    payload: { channelId, ids },
+    guildId,
+    errorContext: 'API Error (Reorder Auto Thread Configs):',
+    silent: true,
   });
 }
 
@@ -303,6 +351,11 @@ export async function saveStickyMessage(
     embedColor?: string;
     messageThreshold?: number;
     cooldownSeconds?: number;
+    jsonEnabled?: boolean;
+    jsonPayload?: string | null;
+    webhookEnabled?: boolean;
+    webhookName?: string | null;
+    webhookAvatarUrl?: string | null;
   },
   guildId = authStore.selectedGuildId
 ) {

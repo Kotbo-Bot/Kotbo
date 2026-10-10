@@ -11,6 +11,8 @@
   import Papicon from '../lib/components/Papicon.svelte';
   import SearchableSelect from '../lib/components/SearchableSelect.svelte';
   import TempVoicePolicyEditor from '../lib/components/TempVoicePolicyEditor.svelte';
+  import AutoThreadPanel from '../lib/components/channels/AutoThreadPanel.svelte';
+  import { ToggleSwitch } from '../lib/components/ui';
   import type { TempVoicePolicy } from '@kotbo/shared';
   import type { TempVoiceGenerator, TempVoiceGeneratorPayload } from '../lib/api/moderation';
   import { createAsyncActionState } from '../lib/asyncAction.svelte';
@@ -440,7 +442,6 @@
     const _path = $router.path;
     activeTab = resolveTabFromUrl('/channels-management', channelTabs, 'by-channel') as typeof activeTab;
   });
-  let searchQuery = $state('');
 
   // ── Vue « Par salon » ──────────────────────────────────────────────────────
   type ChannelRow = {
@@ -621,9 +622,17 @@
     );
   }
 
-  const filteredChannels = $derived(
-    selectableChannels.filter(c => c.name.toLowerCase().includes(searchQuery.toLowerCase()))
+  /**
+   * Salons où l'auto-thread peut ouvrir un fil : textuels et d'annonces. Un
+   * forum ouvre déjà un fil par publication, un vocal n'en porte pas.
+   */
+  const autoThreadChannelOptions = $derived(
+    availableChannels
+      .filter(c => !['thread', 'voice', 'stage', 'forum', 'media', 'category'].includes(c.type))
+      .map(c => ({ id: c.id, name: channelDisplayName(c) }))
   );
+
+  const roleOptions = $derived(autoAllowableRoles.map(role => ({ id: role.id, name: role.name })));
 
   /**
    * Choix d'un selecteur, en gardant la valeur deja enregistree meme si elle ne
@@ -674,7 +683,18 @@
     embedColor: string;
     messageThreshold: number;
     cooldownSeconds: number;
+    jsonEnabled: boolean;
+    jsonPayload: string;
+    webhookEnabled: boolean;
+    webhookName: string;
+    webhookAvatarUrl: string;
   };
+
+  /** Exemple affiché sous l'interrupteur JSON, à recopier puis adapter. */
+  const STICKY_JSON_EXAMPLE = JSON.stringify({
+    content: '',
+    embeds: [{ title: '📌 À lire avant de poster', description: 'Consulte le **règlement** du serveur.', color: 5793266 }],
+  }, null, 2);
 
   let stickies = $state([] as StickyDraft[]);
   let loadingStickies = $state(false);
@@ -692,6 +712,11 @@
       embedColor: raw.embedColor ?? '#5865F2',
       messageThreshold: raw.messageThreshold ?? 5,
       cooldownSeconds: raw.cooldownSeconds ?? 10,
+      jsonEnabled: raw.jsonEnabled ?? false,
+      jsonPayload: raw.jsonPayload ?? '',
+      webhookEnabled: raw.webhookEnabled ?? false,
+      webhookName: raw.webhookName ?? '',
+      webhookAvatarUrl: raw.webhookAvatarUrl ?? '',
     };
   }
 
@@ -729,6 +754,11 @@
         embedColor: '#5865F2',
         messageThreshold: 5,
         cooldownSeconds: 10,
+        jsonEnabled: false,
+        jsonPayload: '',
+        webhookEnabled: false,
+        webhookName: '',
+        webhookAvatarUrl: '',
       },
     ];
   }
@@ -739,8 +769,23 @@
       toast.error(m.cm_sticky_channel_required());
       return;
     }
-    if (!sticky.content.trim()) {
+    if (sticky.jsonEnabled) {
+      if (!sticky.jsonPayload.trim()) {
+        toast.error(m.cm_sticky_json_required());
+        return;
+      }
+      try {
+        JSON.parse(sticky.jsonPayload);
+      } catch {
+        toast.error(m.cm_sticky_json_invalid());
+        return;
+      }
+    } else if (!sticky.content.trim()) {
       toast.error(m.cm_sticky_content_required());
+      return;
+    }
+    if (sticky.webhookEnabled && /discord|clyde/i.test(sticky.webhookName)) {
+      toast.error(m.cm_sticky_webhook_name_invalid());
       return;
     }
 
@@ -755,6 +800,11 @@
         embedColor: sticky.embedColor,
         messageThreshold: sticky.messageThreshold,
         cooldownSeconds: sticky.cooldownSeconds,
+        jsonEnabled: sticky.jsonEnabled,
+        jsonPayload: sticky.jsonPayload || null,
+        webhookEnabled: sticky.webhookEnabled,
+        webhookName: sticky.webhookName || null,
+        webhookAvatarUrl: sticky.webhookAvatarUrl || null,
       });
       if (!res || !res.ok) throw new Error(res?.error || m.cm_sticky_save_failed());
       stickies[index] = toStickyDraft(res.sticky);
@@ -931,7 +981,6 @@
 
       const res = await updateChannelsManagementConfig({
         autoThreadEnabled: config.autoThreadEnabled,
-        autoThreadChannels: config.autoThreadChannels,
         statsEnabled: config.statsEnabled,
         statsConfig: config.statsConfig,
         tempVoiceEnabled: config.tempVoiceEnabled,
@@ -984,21 +1033,6 @@
     return success;
   }
 
-  function toggleChannel(channelId: string) {
-    if (config.autoThreadChannels.includes(channelId)) {
-      config.autoThreadChannels = config.autoThreadChannels.filter(id => id !== channelId);
-    } else {
-      config.autoThreadChannels = [...config.autoThreadChannels, channelId];
-    }
-  }
-
-  function selectAll() {
-    config.autoThreadChannels = filteredChannels.map(c => c.id);
-  }
-
-  function deselectAll() {
-    config.autoThreadChannels = [];
-  }
 </script>
 
 <ModulePage
@@ -1144,87 +1178,8 @@
         </section>
       {:else if activeTab === 'auto-thread'}
         <!-- AUTO-THREAD TAB -->
-        <section class="bg-surface-container-low/30 border border-outline-variant/10 p-8 rounded-xl space-y-6">
-          <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div>
-              <h3 class="text-xl font-semibold flex items-center gap-3">
-                <Papicon icon="chat" size={20} class="text-primary" />
-                {m.cm_eligible_channels_title()}
-              </h3>
-              <p class="text-xs text-on-surface-variant/60 mt-1">{m.cm_eligible_channels_desc()}</p>
-            </div>
-            
-            <div class="flex items-center gap-2">
-              <button 
-                onclick={selectAll}
-                class="px-4 py-2 bg-surface-container-high/40 hover:bg-surface-container-high/80 border border-outline-variant/10 text-xs font-bold rounded-xl transition-all"
-              >
-                {m.cm_select_all_filtered()}
-              </button>
-              <button 
-                onclick={deselectAll}
-                class="px-4 py-2 bg-surface-container-high/40 hover:bg-surface-container-high/80 border border-outline-variant/10 text-xs font-bold rounded-xl transition-all"
-              >
-                {m.cm_deselect_all()}
-              </button>
-            </div>
-          </div>
-
-          <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
-            <div class="flex-1 relative">
-              <input
-                type="text"
-                bind:value={searchQuery}
-                placeholder={m.cm_search_channel_placeholder()}
-                class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg pl-11 pr-5 py-3 text-sm text-on-surface placeholder:text-on-surface-variant/30 focus:outline-none focus:border-primary/60 focus:ring-1 focus:ring-primary/20 transition-all outline-none"
-              />
-              <div class="absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant/50">
-                <Papicon icon="search" size={16} />
-              </div>
-            </div>
-            
-            <div class="px-5 py-3 rounded-lg bg-surface-container-high/20 border border-outline-variant/5 flex items-center gap-2 text-xs font-bold">
-              <span class="text-primary">{config.autoThreadChannels.length}</span>
-              <span class="text-on-surface-variant/60">{m.cm_channels_selected_count()}</span>
-            </div>
-          </div>
-
-          {#if filteredChannels.length > 0}
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[450px] overflow-y-auto pr-2 no-scrollbar">
-              {#each filteredChannels as channel}
-                {@const isChecked = config.autoThreadChannels.includes(channel.id)}
-                <button
-                  onclick={() => toggleChannel(channel.id)}
-                  class="flex items-center justify-between p-4 rounded-lg border transition-all text-left group
- {isChecked 
-                      ? 'bg-primary/5 border-primary/30 text-primary hover:bg-primary/10' 
-                      : 'bg-surface-container-high/10 border-outline-variant/5 hover:bg-surface-container-high/30'}"
-                >
-                  <div class="flex items-center gap-3">
-                    <div class="w-8 h-8 rounded-lg flex items-center justify-center {isChecked ? 'bg-primary/10' : 'bg-surface-container-highest'}">
-                      <span class="text-sm font-semibold opacity-60">#</span>
-                    </div>
-                    <span class="text-sm font-semibold truncate max-w-[180px]">{channel.name}</span>
-                  </div>
-                  
-                  <div class="w-5 h-5 rounded-md border flex items-center justify-center transition-all
- {isChecked 
-                      ? 'bg-primary border-primary text-on-primary' 
-                      : 'border-outline-variant/30 group-hover:border-outline-variant/60'}"
-                  >
-                    {#if isChecked}
-                      <Papicon icon="check" size={12} class="text-white" />
-                    {/if}
-                  </div>
-                </button>
-              {/each}
-            </div>
-          {:else}
-            <div class="flex flex-col items-center justify-center py-12 text-on-surface-variant/30 bg-surface-container-high/10 border border-dashed border-outline-variant/10 rounded-lg gap-3">
-              <Papicon icon="search" size={32} class="opacity-30" />
-              <p class="text-sm font-bold">{m.cm_no_channel_matches_search()}</p>
-            </div>
-          {/if}
+        <section class="bg-surface-container-low/30 border border-outline-variant/10 p-5 sm:p-8 rounded-xl">
+          <AutoThreadPanel channels={autoThreadChannelOptions} roles={roleOptions} />
         </section>
 
       {:else if activeTab === 'sticky'}
@@ -1291,18 +1246,82 @@
                     </div>
                   </div>
 
-                  <div class="space-y-1.5">
-                    <label for="sticky-content-{index}" class="text-xs font-bold text-on-surface/80 block">{m.cm_sticky_content_label()}</label>
-                    <textarea
-                      id="sticky-content-{index}"
-                      bind:value={sticky.content}
-                      rows="4"
-                      maxlength="2000"
-                      placeholder={m.cm_sticky_content_placeholder()}
-                      class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm text-on-surface outline-none focus:ring-1 focus:ring-primary/30 transition-all resize-y"
-                    ></textarea>
-                    <p class="text-2xs text-on-surface-variant/40">{m.cm_sticky_placeholders_hint()}</p>
+                  <div class="flex items-center justify-between gap-4 p-4 bg-surface-container-high/20 border border-outline-variant/5 rounded-xl">
+                    <div class="space-y-0.5">
+                      <p class="text-xs font-bold text-on-surface/80">{m.cm_sticky_webhook_label()}</p>
+                      <p class="text-2xs text-on-surface-variant/60">{m.cm_sticky_webhook_desc()}</p>
+                    </div>
+                    <ToggleSwitch checked={sticky.webhookEnabled} onToggle={(v) => (sticky.webhookEnabled = v)} ariaLabel={m.cm_sticky_webhook_label()} />
                   </div>
+
+                  {#if sticky.webhookEnabled}
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div class="space-y-1.5">
+                        <label for="sticky-webhook-name-{index}" class="text-xs font-bold text-on-surface/80 block">{m.cm_sticky_webhook_name_label()}</label>
+                        <input
+                          id="sticky-webhook-name-{index}"
+                          type="text"
+                          maxlength="80"
+                          bind:value={sticky.webhookName}
+                          placeholder={m.cm_sticky_webhook_name_placeholder()}
+                          class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm outline-none focus:ring-1 focus:ring-primary/30 transition-all"
+                        />
+                      </div>
+                      <div class="space-y-1.5">
+                        <label for="sticky-webhook-avatar-{index}" class="text-xs font-bold text-on-surface/80 block">{m.cm_sticky_webhook_avatar_label()}</label>
+                        <input
+                          id="sticky-webhook-avatar-{index}"
+                          type="url"
+                          maxlength="512"
+                          bind:value={sticky.webhookAvatarUrl}
+                          placeholder="https://"
+                          aria-describedby="sticky-webhook-avatar-hint-{index}"
+                          class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm outline-none focus:ring-1 focus:ring-primary/30 transition-all"
+                        />
+                        <p id="sticky-webhook-avatar-hint-{index}" class="text-2xs text-on-surface-variant/40">{m.cm_sticky_webhook_avatar_hint()}</p>
+                      </div>
+                    </div>
+                  {/if}
+
+                  <div class="flex items-center justify-between gap-4 p-4 bg-surface-container-high/20 border border-outline-variant/5 rounded-xl">
+                    <div class="space-y-0.5">
+                      <p class="text-xs font-bold text-on-surface/80">{m.cm_sticky_json_label()}</p>
+                      <p class="text-2xs text-on-surface-variant/60">{m.cm_sticky_json_desc()}</p>
+                    </div>
+                    <ToggleSwitch checked={sticky.jsonEnabled} onToggle={(v) => (sticky.jsonEnabled = v)} ariaLabel={m.cm_sticky_json_label()} />
+                  </div>
+
+                  {#if sticky.jsonEnabled}
+                    <div class="space-y-1.5">
+                      <p class="text-2xs text-on-surface-variant/60">{m.cm_sticky_json_example()}</p>
+                      <pre class="overflow-x-auto whitespace-pre-wrap break-words rounded-lg border border-dashed border-outline-variant/20 p-3 text-xs text-on-surface-variant">{STICKY_JSON_EXAMPLE}</pre>
+                      <label for="sticky-json-{index}" class="sr-only">{m.cm_sticky_json_label()}</label>
+                      <textarea
+                        id="sticky-json-{index}"
+                        bind:value={sticky.jsonPayload}
+                        rows="10"
+                        maxlength="65536"
+                        spellcheck="false"
+                        placeholder={STICKY_JSON_EXAMPLE}
+                        aria-describedby="sticky-json-hint-{index}"
+                        class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 font-mono text-sm text-on-surface outline-none focus:ring-1 focus:ring-primary/30 transition-all resize-y"
+                      ></textarea>
+                      <p id="sticky-json-hint-{index}" class="text-2xs text-on-surface-variant/40">{m.cm_sticky_json_hint()} {m.cm_sticky_placeholders_hint()}</p>
+                    </div>
+                  {:else}
+                    <div class="space-y-1.5">
+                      <label for="sticky-content-{index}" class="text-xs font-bold text-on-surface/80 block">{m.cm_sticky_content_label()}</label>
+                      <textarea
+                        id="sticky-content-{index}"
+                        bind:value={sticky.content}
+                        rows="4"
+                        maxlength="2000"
+                        placeholder={m.cm_sticky_content_placeholder()}
+                        class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm text-on-surface outline-none focus:ring-1 focus:ring-primary/30 transition-all resize-y"
+                      ></textarea>
+                      <p class="text-2xs text-on-surface-variant/40">{m.cm_sticky_placeholders_hint()}</p>
+                    </div>
+                  {/if}
 
                   <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div class="space-y-1.5">
@@ -1332,6 +1351,7 @@
                     </div>
                   </div>
 
+                  {#if !sticky.jsonEnabled}
                   <div class="flex items-center justify-between p-4 bg-surface-container-high/20 border border-outline-variant/5 rounded-xl">
                     <div class="space-y-0.5">
                       <label for="sticky-embed-{index}" class="text-xs font-bold text-on-surface/80 block">{m.cm_sticky_embed_label()}</label>
@@ -1368,6 +1388,7 @@
                         />
                       </div>
                     </div>
+                  {/if}
                   {/if}
 
                   <div class="flex flex-wrap items-center justify-end gap-2 pt-2 border-t border-outline-variant/10">
@@ -3063,12 +3084,3 @@
   {/if}
 </ModulePage>
 
-<style>
-  .no-scrollbar::-webkit-scrollbar {
-    display: none;
-  }
-  .no-scrollbar {
-    -ms-overflow-style: none;
-    scrollbar-width: none;
-  }
-</style>
