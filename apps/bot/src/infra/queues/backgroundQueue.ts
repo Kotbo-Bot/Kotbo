@@ -53,6 +53,7 @@ export type BackgroundJobName =
   | 'dashboard-telemetry-prune'
   | 'site-analytics-prune'
   | 'site-scheduled-publish'
+  | 'site-vote-reminders'
   | 'acquisition-abandon-scan'
   | 'acquisition-alerts-check'
   | 'acquisition-weekly-recap'
