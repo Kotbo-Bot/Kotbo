@@ -1,0 +1,188 @@
+// Boutique du serveur, vendue en monnaie du bot, sur le site et sur Discord.
+//
+// Elle complète la boutique d'objets RPG : une offre vend un rôle (permanent
+// ou pour une durée), des objets RPG, de l'XP, un abonnement (rôle prélevé à
+// chaque période) ou une prestation que le staff livre à la main. Le paiement
+// passe toujours par le solde `RpgProfile.balance` ; l'argent réel viendra plus
+// tard, sans changer ces tables.
+
+enum ShopOfferKind {
+  ROLE
+  ITEM
+  XP
+  SUBSCRIPTION
+  CUSTOM
+}
+
+enum ShopOrderStatus {
+  // Payée, en attente de la décision du staff (offre soumise à validation).
+  PENDING
+  COMPLETED
+  // Refusée par le staff ou impossible à livrer : remboursée.
+  REFUSED
+}
+
+enum ShopSubscriptionStatus {
+  ACTIVE
+  // Prélèvement refusé (solde insuffisant) : le rôle reste jusqu'à `graceUntil`.
+  GRACE
+  ENDED
+}
+
+model ShopSettings {
+  guildId String @id
+
+  enabled           Boolean @default(true)
+  // Salon où tombent les commandes à valider, et journal de toutes les ventes.
+  approvalChannelId String?
+  logChannelId      String?
+  // Jours de grâce d'un abonnement impayé avant le retrait du rôle.
+  graceDays         Int     @default(3)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("shop_settings")
+}
+
+model ShopOffer {
+  id      String @id @default(cuid())
+  guildId String
+
+  kind        ShopOfferKind
+  name        String
+  description String        @default("")
+  imageUrl    String?
+  category    String?
+  price       Int
+
+  // ROLE et SUBSCRIPTION : rôle donné. `durationDays` : durée d'un rôle
+  // temporaire (null = permanent) ou période d'un abonnement.
+  roleId       String?
+  durationDays Int?
+  // ITEM : objet RPG donné. `quantity` : exemplaires (ITEM) ou points (XP).
+  itemId   String?
+  quantity Int     @default(1)
+
+  // Règles. `stock` : exemplaires restants (null = illimité) ; `perMemberLimit` :
+  // achats par bénéficiaire, en attente compris.
+  stock            Int?
+  perMemberLimit   Int?
+  requiredRoleIds  String[] @default([])
+  minLevel         Int      @default(0)
+  requiresApproval Boolean  @default(false)
+  giftable         Boolean  @default(true)
+  enabled          Boolean  @default(true)
+  sortOrder        Int      @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  orders        ShopOrder[]
+  subscriptions ShopSubscription[]
+
+  @@index([guildId, enabled])
+  @@map("shop_offers")
+}
+
+// Achat. Le nom et le prix de l'offre sont recopiés : l'historique survit à la
+// suppression de l'offre.
+model ShopOrder {
+  id      String  @id @default(cuid())
+  guildId String
+  offerId String?
+
+  offerName   String
+  kind        ShopOfferKind
+  buyerId     String
+  recipientId String
+  // Prix payé, après code promo ; `listPrice` : prix de l'offre à l'achat.
+  price       Int
+  listPrice   Int
+  promoCodeId String?
+  status      ShopOrderStatus
+  // "site", "discord" ou "renewal" (prélèvement d'abonnement).
+  source      String
+  // Message du membre au staff (prestations), motif d'un refus.
+  note          String?
+  decidedBy     String?
+  decidedAt     DateTime?
+  refusalReason String?
+
+  createdAt DateTime @default(now())
+
+  offer ShopOffer? @relation(fields: [offerId], references: [id], onDelete: SetNull)
+
+  @@index([guildId, status, createdAt])
+  @@index([guildId, buyerId, createdAt])
+  @@index([guildId, recipientId, createdAt])
+  @@index([offerId, recipientId])
+  @@map("shop_orders")
+}
+
+model ShopPromoCode {
+  id      String @id @default(cuid())
+  guildId String
+
+  code       String
+  // Remise en pourcentage ou en montant fixe (l'un des deux).
+  percentOff Int?
+  amountOff  Int?
+  maxUses    Int?
+  uses       Int       @default(0)
+  // Offres concernées ; vide = toute la boutique.
+  offerIds   String[]  @default([])
+  expiresAt  DateTime?
+  enabled    Boolean   @default(true)
+
+  createdAt DateTime @default(now())
+
+  @@unique([guildId, code], map: "shop_promo_codes_code_key")
+  @@map("shop_promo_codes")
+}
+
+// Rôle acheté pour une durée : retiré à l'échéance. Un rachat prolonge la
+// ligne en cours plutôt que d'en ouvrir une seconde.
+model ShopRoleGrant {
+  id      String @id @default(cuid())
+  guildId String
+  userId  String
+  roleId  String
+  orderId String?
+
+  expiresAt DateTime
+  removedAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([guildId, userId, roleId])
+  @@index([removedAt, expiresAt])
+  @@map("shop_role_grants")
+}
+
+model ShopSubscription {
+  id      String @id @default(cuid())
+  guildId String
+  offerId String
+  userId  String
+  roleId  String
+
+  price        Int
+  periodDays   Int
+  status       ShopSubscriptionStatus @default(ACTIVE)
+  nextChargeAt DateTime
+  graceUntil   DateTime?
+  // Le membre a résilié : le rôle reste jusqu'à la fin de la période payée.
+  cancelAtPeriodEnd Boolean @default(false)
+  endedAt           DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  offer ShopOffer @relation(fields: [offerId], references: [id], onDelete: Cascade)
+
+  @@unique([offerId, userId], map: "shop_subscriptions_member_key")
+  @@index([status, nextChargeAt])
+  @@index([guildId, userId])
+  @@map("shop_subscriptions")
+}
