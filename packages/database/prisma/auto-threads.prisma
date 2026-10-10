@@ -1,0 +1,83 @@
+// ============================================================================
+// FILS AUTOMATIQUES - CONFIGURATIONS PAR SALON
+// ============================================================================
+// Un salon peut porter plusieurs configurations, évaluées dans l'ordre de
+// `position` : la première dont le déclenchement accepte le message ouvre le
+// fil. Si aucune ne l'accepte, la politique de rejet de la première
+// configuration active qui en définit une s'applique (avertir, supprimer).
+//
+// Le détail des conditions et des règles de nommage vit en JSON : leur forme
+// est validée par `normalizeAutoThreadConfig` (@kotbo/shared), partagée par le
+// bot et le dashboard.
+//
+// `guild.autoThreadChannels` reste en place comme miroir : la liste des salons
+// qui portent au moins une configuration active. La vue « Par salon » et les
+// états de la guilde le lisent sans connaître ce modèle.
+
+model AutoThreadConfig {
+  id String @id @default(cuid())
+
+  guildId   String
+  channelId String
+
+  /// Nom affiché dans le dashboard (« Bugs », « Médias »...).
+  name    String  @default("Configuration")
+  enabled Boolean @default(true)
+  /// Ordre d'évaluation dans le salon, du plus petit au plus grand.
+  position Int @default(0)
+
+  // ── Déclenchement ──────────────────────────────────────────────────────────
+  /// all | text | links | media | custom
+  trigger    String @default("all")
+  /// Arbre de conditions, lu quand `trigger` vaut `custom`.
+  conditions Json?
+
+  // ── Nommage du fil ─────────────────────────────────────────────────────────
+  /// first_line | author | author_first_line | date | custom
+  namingMode  String @default("author_first_line")
+  /// Règles essayées dans l'ordre quand `namingMode` vaut `custom` (5 max).
+  namingRules Json?
+
+  // ── Fil créé ───────────────────────────────────────────────────────────────
+  /// Durée d'inactivité avant archivage : 60, 1440, 4320 ou 10080 minutes.
+  archiveMinutes   Int    @default(1440)
+  /// moderators | author_and_moderators | everyone
+  renamePermission String @default("moderators")
+  /// Les messages des bots et webhooks sont-ils évalués ?
+  allowBots        Boolean @default(false)
+  /// Compteur des fils ouverts, pour le placeholder {count}.
+  threadCount      Int     @default(0)
+
+  // ── Messages non conformes ─────────────────────────────────────────────────
+  /// keep | warn | delete
+  rejectAction       String  @default("keep")
+  /// Délai avant suppression du message (et de l'avertissement).
+  rejectDelaySeconds Int     @default(60)
+  /// Avertissement public. Vide : texte par défaut.
+  rejectMessage      String?
+
+  guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  threads AutoThreadCreated[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([guildId, channelId, position])
+  @@map("auto_thread_configs")
+}
+
+/// Fil ouvert par une configuration : retrouve l'auteur du message d'origine
+/// pour la commande de renommage, et la règle qui s'applique.
+model AutoThreadCreated {
+  threadId  String @id
+  guildId   String
+  configId  String
+  authorId  String
+  createdAt DateTime @default(now())
+
+  config AutoThreadConfig @relation(fields: [configId], references: [id], onDelete: Cascade)
+
+  @@index([guildId])
+  @@index([configId])
+  @@map("auto_thread_created")
+}

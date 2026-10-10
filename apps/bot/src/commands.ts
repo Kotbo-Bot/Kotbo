@@ -62,6 +62,7 @@ import { transcriptCommand } from './commands/moderation/transcript.js';
 import { suggestionConfigCommand } from './commands/utility/suggestion-config.js';
 import { clearCommand } from './commands/moderation/clear.js';
 import { channelCommand } from './commands/moderation/channel.js';
+import { threadCommand } from './commands/utility/thread.js';
 import { signalCommand, signalContextCommand } from './commands/moderation/signal.js';
 import { dashboardCommand } from './commands/utility/dashboard.js';
 import { linkCommand } from './commands/admin/link.js';
@@ -149,6 +150,7 @@ export const commands: SlashCommandDefinition[] = [
   suggestionConfigCommand,
   clearCommand,
   channelCommand,
+  threadCommand,
   signalCommand,
   roleCommand,
   dashboardCommand,
@@ -325,6 +327,7 @@ export const COMMAND_MODULES = new Map<ApplicationCommandDefinition, string>([
 
   // Contenu & intégrations
   [channelCommand, 'auto_thread'],
+  [threadCommand, 'auto_thread'],
   [channelhealthCommand, 'channel_health'],
   [serverstatsCommand, 'analytics'],
   [statsCommand, 'analytics'],

@@ -26,6 +26,8 @@ type Publisher = (topic: string, message: string) => void;
 
 declare global {
   // Émetteur du shard qui porte l'API, atteint par les autres via `broadcastEval`.
+  // `var` obligatoire : seul il rattache la déclaration à `globalThis`.
+  // eslint-disable-next-line no-var
   var KOTBO_SITE_LIVE_PUBLISHER: Publisher | undefined;
 }
 

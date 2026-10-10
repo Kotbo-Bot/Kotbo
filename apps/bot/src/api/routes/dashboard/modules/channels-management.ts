@@ -699,7 +699,12 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
       const { kind, field, label } = CHANNEL_FEATURES[feature];
       const enabled = body?.enabled === true;
 
-      if (kind === 'single') {
+      if (feature === 'autoThread') {
+        // Les fils automatiques vivent dans leurs configurations ; la liste de
+        // la guilde n'en est que le miroir, recalcule par le service.
+        const { setAutoThreadChannel } = await import('../../../../services/features/autoThreadService.js');
+        await setAutoThreadChannel(guildId, channelId, enabled);
+      } else if (kind === 'single') {
         // Un champ unique ne se « decoche » pas ailleurs : eteindre revient a
         // vider le champ, et l'allumer deplace la fonctionnalite sur ce salon.
         await prisma.guild.update({
@@ -837,6 +842,7 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
       const stickies = await prisma.stickyMessage.findMany({
         where: { guildId },
         orderBy: { createdAt: 'asc' },
+        omit: { webhookToken: true },
       });
       json(res, 200, { stickies });
     } catch (err) {
@@ -858,6 +864,11 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
         embedColor?: string;
         messageThreshold?: number;
         cooldownSeconds?: number;
+        jsonEnabled?: boolean;
+        jsonPayload?: string | null;
+        webhookEnabled?: boolean;
+        webhookName?: string | null;
+        webhookAvatarUrl?: string | null;
       }>(req);
 
       const channelId = (body?.channelId || '').trim();
@@ -873,11 +884,36 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
         return true;
       }
 
+      const { parseStickyJsonPayload, STICKY_JSON_MAX_LENGTH } =
+        await import('../../../../services/features/stickyMessageService.js');
+
       const content = (body?.content ?? '').slice(0, 2000);
-      if (!content.trim()) {
+      const jsonEnabled = !!body?.jsonEnabled;
+      const jsonPayload = typeof body?.jsonPayload === 'string' ? body.jsonPayload.slice(0, STICKY_JSON_MAX_LENGTH) : '';
+      if (jsonEnabled) {
+        const parsed = parseStickyJsonPayload(jsonPayload);
+        if (!parsed.ok) {
+          json(res, 400, { error: parsed.error });
+          return true;
+        }
+      } else if (!content.trim()) {
         json(res, 400, { error: 'Le message sticky ne peut pas être vide' });
         return true;
       }
+
+      // Discord refuse un nom de webhook qui contient « discord » ou « clyde ».
+      const webhookEnabled = !!body?.webhookEnabled;
+      const webhookName = (body?.webhookName ?? '').trim().slice(0, 80) || null;
+      if (webhookName && /discord|clyde/i.test(webhookName)) {
+        json(res, 400, { error: 'Le nom du webhook ne peut pas contenir « discord » ni « clyde ».' });
+        return true;
+      }
+      const avatarRaw = (body?.webhookAvatarUrl ?? '').trim();
+      if (avatarRaw && (!/^https:\/\/\S+$/i.test(avatarRaw) || avatarRaw.length > 512)) {
+        json(res, 400, { error: 'L’avatar doit être une adresse https (512 caractères au maximum).' });
+        return true;
+      }
+      const webhookAvatarUrl = avatarRaw || null;
 
       const threshold = Math.min(200, Math.max(1, Math.floor(Number(body?.messageThreshold ?? 5) || 5)));
       const cooldown = Math.min(3600, Math.max(0, Math.floor(Number(body?.cooldownSeconds ?? 10) || 0)));
@@ -891,6 +927,11 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
         embedColor,
         messageThreshold: threshold,
         cooldownSeconds: cooldown,
+        jsonEnabled,
+        jsonPayload: jsonPayload || null,
+        webhookEnabled,
+        webhookName,
+        webhookAvatarUrl,
       };
 
       const previous = await prisma.stickyMessage.findUnique({
@@ -903,16 +944,29 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
         update: payload,
       });
 
-      const { clearStickyMessage, invalidateStickyCache, repostSticky, resetStickyCounter } =
+      const { clearStickyMessage, deleteStickyWebhook, invalidateStickyCache, repostSticky, resetStickyCounter } =
         await import('../../../../services/features/stickyMessageService.js');
+
+      // Retour à l'identité du bot : le message affiché appartient au webhook,
+      // que seul le webhook peut retirer. On le retire, puis le webhook.
+      let current = sticky;
+      if (previous?.webhookEnabled && !sticky.webhookEnabled) {
+        await clearStickyMessage(client, previous);
+        await deleteStickyWebhook(previous);
+        current = await prisma.stickyMessage.update({
+          where: { id: sticky.id },
+          data: { lastMessageId: null, webhookId: null, webhookToken: null },
+        });
+      }
+
       await invalidateStickyCache(guildId);
       resetStickyCounter(channelId);
 
-      if (!sticky.enabled) {
+      if (!current.enabled) {
         // Désactivation : on retire le message encore affiché.
-        await clearStickyMessage(client, sticky);
+        await clearStickyMessage(client, current);
         await prisma.stickyMessage.update({
-          where: { id: sticky.id },
+          where: { id: current.id },
           data: { lastMessageId: null },
         }).catch(() => null);
         await invalidateStickyCache(guildId);
@@ -920,12 +974,17 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
         // Publication immédiate : sans ça, rien n'apparaît avant le prochain
         // franchissement de seuil, ce qui donne l'impression d'un module cassé.
         const contentChanged = !previous
-          || previous.content !== sticky.content
-          || previous.embedEnabled !== sticky.embedEnabled
-          || previous.embedTitle !== sticky.embedTitle
-          || previous.embedColor !== sticky.embedColor
+          || previous.content !== current.content
+          || previous.embedEnabled !== current.embedEnabled
+          || previous.embedTitle !== current.embedTitle
+          || previous.embedColor !== current.embedColor
+          || previous.jsonEnabled !== current.jsonEnabled
+          || previous.jsonPayload !== current.jsonPayload
+          || previous.webhookEnabled !== current.webhookEnabled
+          || previous.webhookName !== current.webhookName
+          || previous.webhookAvatarUrl !== current.webhookAvatarUrl
           || !previous.enabled;
-        if (contentChanged) await repostSticky(client, sticky, { force: true });
+        if (contentChanged) await repostSticky(client, current, { force: true });
       }
 
       await pushAudit(guildId, {
@@ -938,7 +997,8 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
         channelId,
       });
 
-      json(res, 200, { ok: true, sticky });
+      const { webhookToken: _token, ...publicSticky } = current;
+      json(res, 200, { ok: true, sticky: publicSticky });
     } catch (err) {
       logger.error('ChannelsManagementAPI', 'POST sticky error:', err);
       jsonFailure(res, err, 'Erreur lors de l\'enregistrement du message sticky', 'ChannelsManagementAPI');
@@ -958,9 +1018,10 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
         return true;
       }
 
-      const { clearStickyMessage, invalidateStickyCache } =
+      const { clearStickyMessage, deleteStickyWebhook, invalidateStickyCache } =
         await import('../../../../services/features/stickyMessageService.js');
       await clearStickyMessage(client, sticky);
+      await deleteStickyWebhook(sticky);
       await prisma.stickyMessage.delete({ where: { id: sticky.id } });
       await invalidateStickyCache(guildId);
 
@@ -1370,8 +1431,19 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
         if (Object.prototype.hasOwnProperty.call(body, 'autoThreadEnabled')) {
           data.autoThreadEnabled = !!body.autoThreadEnabled;
         }
-        if (Object.prototype.hasOwnProperty.call(body, 'autoThreadChannels')) {
-          data.autoThreadChannels = body.autoThreadChannels;
+        if (Array.isArray(body.autoThreadChannels)) {
+          // Les salons armés sont portés par les configurations Auto-Thread :
+          // la liste n'est que leur miroir, le service la recalcule.
+          const { reconcileAutoThreadChannels } = await import('../../../../services/features/autoThreadService.js');
+          const discordGuild = client.guilds.cache.get(guildId);
+          await reconcileAutoThreadChannels(
+            guildId,
+            body.autoThreadChannels.filter((id): id is string => typeof id === 'string'),
+            (id) => {
+              const ch = discordGuild?.channels.cache.get(id);
+              return !!ch && (ch.type === ChannelType.GuildText || ch.type === ChannelType.GuildAnnouncement);
+            },
+          );
         }
         if (Object.prototype.hasOwnProperty.call(body, 'autoThreadBotsEnabled')) {
           data.autoThreadBotsEnabled = !!body.autoThreadBotsEnabled;
