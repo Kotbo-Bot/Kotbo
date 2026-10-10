@@ -201,6 +201,7 @@ export const PAGE_TABS: Record<string, PageTabConfig[]> = {
     { id: 'wiki', label: () => m.ste_tab_wiki(), icon: 'book-open' },
     { id: 'blog', label: () => m.ste_tab_blog(), icon: 'edit-2' },
     { id: 'apparence', label: () => m.ste_tab_appearance(), icon: 'palette' },
+    { id: 'galerie', label: () => m.ste_tab_gallery(), icon: 'layers' },
     { id: 'menu', label: () => m.ste_tab_menu(), icon: 'menu' },
     { id: 'votes', label: () => m.ste_tab_votes(), icon: 'trending-up' },
     { id: 'boutique', label: () => m.ste_tab_shop(), icon: 'shopping-bag' },

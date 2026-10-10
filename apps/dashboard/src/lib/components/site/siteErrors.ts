@@ -57,6 +57,9 @@ const MESSAGES: Record<string, () => string> = {
   channel_invalid: () => m.ste_err_forum_channel(),
   webhook_failed: () => m.ste_err_forum_webhook(),
   too_many_categories: () => m.ste_err_too_many_categories(),
+  share_missing: () => m.ste_err_share_missing(),
+  too_many_shares: () => m.ste_err_too_many_shares(),
+  nothing_to_share: () => m.ste_err_nothing_to_apply(),
 };
 
 export function siteErrorMessage(err: unknown): string {

@@ -27,8 +27,9 @@
   import SiteVotes from '../lib/components/site/SiteVotes.svelte';
   import SiteShop from '../lib/components/site/SiteShop.svelte';
   import SiteForum from '../lib/components/site/SiteForum.svelte';
+  import SiteGallery from '../lib/components/site/SiteGallery.svelte';
 
-  const TABS = ['apercu', 'pages', 'wiki', 'blog', 'apparence', 'menu', 'votes', 'boutique', 'forum', 'commentaires', 'frequentation', 'reglages'] as const;
+  const TABS = ['apercu', 'pages', 'wiki', 'blog', 'apparence', 'galerie', 'menu', 'votes', 'boutique', 'forum', 'commentaires', 'frequentation', 'reglages'] as const;
   type Tab = (typeof TABS)[number];
 
   const guildId = $derived(authStore.selectedGuildId ?? '');
@@ -65,7 +66,7 @@
     if (id === 'commentaires') return Boolean(rights?.moderateComments) && siteState.modules.site_blog;
     if (id === 'frequentation') return Boolean(rights?.viewStats);
     if (id === 'forum') return Boolean(rights?.manage || rights?.moderateComments);
-    if (['pages', 'apparence', 'menu', 'reglages', 'votes', 'boutique'].includes(id)) return Boolean(rights?.manage);
+    if (['pages', 'apparence', 'galerie', 'menu', 'reglages', 'votes', 'boutique'].includes(id)) return Boolean(rights?.manage);
     return true;
   };
 </script>
@@ -109,6 +110,8 @@
         <SitePagesList {siteState} {guildId} kind="BLOG" onChanged={load} />
       {:else if active === 'apparence'}
         <SiteAppearance {siteState} {guildId} onChanged={load} />
+      {:else if active === 'galerie'}
+        <SiteGallery {siteState} {guildId} onChanged={load} />
       {:else if active === 'menu'}
         <SiteNavigationEditor {siteState} {guildId} onChanged={load} />
       {:else if active === 'votes'}

@@ -295,6 +295,60 @@ export function reorderSiteVoteSites(ids: string[], guildId?: string) {
   return apiRequest<{ ok: boolean }>(`${base(gid(guildId))}/votes/reorder`, { method: 'POST', payload: { ids }, errorContext: 'API Error (Reorder vote sites):' });
 }
 
+// ─── Galerie de thèmes ───────────────────────────────────────────────────────
+
+interface GalleryPalette {
+  bg: string;
+  surface: string;
+  text: string;
+  muted: string;
+  border: string;
+  header: string;
+  accent: string;
+}
+
+export interface GalleryCard {
+  id: string;
+  name: string;
+  description: string;
+  authorName: string;
+  installs: number;
+  templates: Array<{ key: string; title: string }>;
+  hasCss: boolean;
+  hasMenu: boolean;
+  createdAt: string;
+  preview: { mode: string; font: string; headingFont: string; radius: number; light: GalleryPalette; dark: GalleryPalette };
+  installed: boolean;
+  own: boolean;
+}
+
+export interface GalleryState {
+  items: GalleryCard[];
+  pages: number;
+  own: Array<{ id: string; name: string; description: string; installs: number; hidden: boolean; createdAt: string; updatedAt: string }>;
+}
+
+export function fetchGallery(params: { sort: 'popular' | 'recent'; q: string; page: number }, guildId?: string) {
+  const query = new URLSearchParams({ sort: params.sort, page: String(params.page), ...(params.q ? { q: params.q } : {}) });
+  return apiRequest<GalleryState>(`${base(gid(guildId))}/gallery?${query}`, { errorContext: 'API Error (Theme gallery):' });
+}
+
+export function publishThemeShare(input: { id?: string; name: string; description: string; includeCss: boolean; includeMenu: boolean; pageIds: string[] }, guildId?: string) {
+  return apiRequest<{ id: string }>(`${base(gid(guildId))}/gallery`, { method: 'POST', payload: input, errorContext: 'API Error (Publish theme):' });
+}
+
+export function deleteThemeShare(id: string, guildId?: string) {
+  return apiRequest<{ ok: boolean }>(`${base(gid(guildId))}/gallery/${id}`, { method: 'DELETE', errorContext: 'API Error (Delete theme):' });
+}
+
+export function installThemeShare(id: string, parts: { style: boolean; css: boolean; templates: boolean; menu: boolean }, guildId?: string) {
+  return apiRequest<{ pagesCreated: number }>(`${base(gid(guildId))}/gallery/${id}/install`, { method: 'POST', payload: parts, errorContext: 'API Error (Install theme):' });
+}
+
+export function reportThemeShare(id: string, reason: string, guildId?: string) {
+  return apiRequest<{ ok: boolean }>(`${base(gid(guildId))}/gallery/${id}/report`, { method: 'POST', payload: { reason }, errorContext: 'API Error (Report theme):' });
+}
+
 // ─── Site automatique ────────────────────────────────────────────────────────
 
 export function publishWeeklySummaryNow(guildId?: string) {
