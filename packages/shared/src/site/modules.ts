@@ -79,6 +79,8 @@ export const SITE_MODULES = {
   memberRewards: { category: 'membre', botModule: null, needsViewer: true, interactive: false, live: false, defaults: {} },
   memberInventory: { category: 'membre', botModule: 'economy', needsViewer: true, interactive: false, live: false, defaults: {} },
   memberPurchases: { category: 'membre', botModule: 'economy', needsViewer: true, interactive: true, live: false, defaults: {} },
+  memberQuests: { category: 'membre', botModule: 'quests', needsViewer: true, interactive: false, live: false, defaults: {} },
+  memberApplications: { category: 'membre', botModule: null, needsViewer: true, interactive: false, live: false, defaults: {} },
 
   // Contenus
   wikiIndex: { category: 'contenus', botModule: null, needsViewer: false, interactive: false, live: false, defaults: { parentId: '' } },

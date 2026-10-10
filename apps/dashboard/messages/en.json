@@ -14233,5 +14233,9 @@
   "ste_gallery_next": "Next",
   "ste_err_share_missing": "This theme is no longer available.",
   "ste_err_too_many_shares": "You've already published 5 themes: remove or update one.",
-  "ste_err_nothing_to_apply": "Pick at least one part of the theme to apply."
+  "ste_err_nothing_to_apply": "Pick at least one part of the theme to apply.",
+  "ste_block_memberQuests": "My quests",
+  "ste_block_memberQuests_desc": "Signed-in member's daily and weekly quests, with progress.",
+  "ste_block_memberApplications": "My applications",
+  "ste_block_memberApplications_desc": "Staff applications and forms sent by the signed-in member, with their status."
 }

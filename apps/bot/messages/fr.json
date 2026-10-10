@@ -4066,5 +4066,19 @@
   "site_weekly_replies": "{count} réponses",
   "site_weekly_voters": "Meilleurs votants",
   "site_weekly_votes": "{count} votes",
-  "site_weekly_outro": "Merci à tous pour cette semaine. Rendez-vous sur le serveur."
+  "site_weekly_outro": "Merci à tous pour cette semaine. Rendez-vous sur le serveur.",
+  "site_quests_title": "Mes quêtes",
+  "site_quests_empty": "Pas de quête en ce moment.",
+  "site_quests_daily": "du jour",
+  "site_quests_weekly": "de la semaine",
+  "site_quests_progress": "{current} / {target}",
+  "site_quests_done": "Terminée",
+  "site_applications_title": "Mes candidatures",
+  "site_applications_empty": "Tu n'as encore envoyé ni candidature ni formulaire.",
+  "site_applications_candidature": "Candidature au staff",
+  "site_applications_pending": "En attente",
+  "site_applications_oral": "Entretien",
+  "site_applications_approved": "Acceptée",
+  "site_applications_rejected": "Refusée",
+  "site_applications_sent": "Envoyé"
 }

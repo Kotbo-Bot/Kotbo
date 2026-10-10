@@ -14233,5 +14233,9 @@
   "ste_gallery_next": "Suivant",
   "ste_err_share_missing": "Ce thème n'est plus disponible.",
   "ste_err_too_many_shares": "Tu as déjà publié 5 thèmes : retires-en un ou mets-en un à jour.",
-  "ste_err_nothing_to_apply": "Choisis au moins une partie du thème à appliquer."
+  "ste_err_nothing_to_apply": "Choisis au moins une partie du thème à appliquer.",
+  "ste_block_memberQuests": "Mes quêtes",
+  "ste_block_memberQuests_desc": "Quêtes du jour et de la semaine du membre connecté, avec leur avancement.",
+  "ste_block_memberApplications": "Mes candidatures",
+  "ste_block_memberApplications_desc": "Candidatures au staff et formulaires envoyés par le membre connecté, avec leur état."
 }

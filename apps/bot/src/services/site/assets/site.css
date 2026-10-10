@@ -735,3 +735,14 @@ dialog.kotbo-dialog p { margin: 0 0 14px; color: var(--site-muted); }
 .changelog-day ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .changelog-day li { display: flex; align-items: center; gap: 8px; }
 .changelog-icon { flex: none; display: inline-grid; place-items: center; color: var(--site-accent); }
+
+/* Quêtes et candidatures */
+.quests { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.quest { padding: 12px 14px; border: 1px solid var(--site-border); border-radius: var(--site-radius); display: flex; flex-direction: column; gap: 6px; }
+.quest-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.quest-head .tag { margin: 0; }
+.quest-bar { height: 8px; border-radius: 999px; background: var(--site-surface-strong); overflow: hidden; }
+.quest-bar span { display: block; height: 100%; background: var(--site-accent); border-radius: inherit; }
+.quest.is-done .quest-bar span { background: #16a34a; }
+.application-approved { color: #16a34a; }
+.application-rejected, .application-auto_rejected { color: #ef4444; }

@@ -4066,5 +4066,19 @@
   "site_weekly_replies": "{count} replies",
   "site_weekly_voters": "Top voters",
   "site_weekly_votes": "{count} votes",
-  "site_weekly_outro": "Thanks everyone for this week. See you on the server."
+  "site_weekly_outro": "Thanks everyone for this week. See you on the server.",
+  "site_quests_title": "My quests",
+  "site_quests_empty": "No quests right now.",
+  "site_quests_daily": "daily",
+  "site_quests_weekly": "weekly",
+  "site_quests_progress": "{current} / {target}",
+  "site_quests_done": "Done",
+  "site_applications_title": "My applications",
+  "site_applications_empty": "You haven't sent any application or form yet.",
+  "site_applications_candidature": "Staff application",
+  "site_applications_pending": "Pending",
+  "site_applications_oral": "Interview",
+  "site_applications_approved": "Accepted",
+  "site_applications_rejected": "Declined",
+  "site_applications_sent": "Sent"
 }

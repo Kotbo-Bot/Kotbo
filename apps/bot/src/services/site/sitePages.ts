@@ -261,7 +261,9 @@ export function virtualDocument(pageId: string): SiteDocument | null {
         mod('profile'),
         { type: 'grid', attrs: { columns: 2 }, content: [cell('memberRewards'), cell('memberSettings')] },
         mod('memberInventory'),
+        mod('memberQuests'),
         mod('memberPurchases'),
+        mod('memberApplications'),
         mod('ticket'),
       ],
     });
