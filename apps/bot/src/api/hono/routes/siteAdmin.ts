@@ -20,6 +20,17 @@ import {
   saveShopSettings,
   ShopError,
 } from '../../../services/shop/shopService.js';
+import {
+  deleteForumCategory,
+  deleteForumPost,
+  ForumError,
+  importForumHistory,
+  listForumCategories,
+  listRecentForumPosts,
+  reorderForumCategories,
+  saveForumCategory,
+  setForumTopicFlags,
+} from '../../../services/site/siteForumService.js';
 import { requireAuth } from '../middleware/auth.js';
 import { getApiUrl, getDashboardUrl } from '../../shared.js';
 import { getMemberIdentities } from '../../../services/moderation/memberIdentityService.js';
@@ -83,6 +94,7 @@ function fail(c: Context, err: unknown) {
   if (err instanceof SiteAdminError) return c.json({ error: err.code, detail: err.detail ?? null }, err.status as 400);
   if (err instanceof SiteVoteError) return c.json({ error: err.code, detail: null }, err.status as 400);
   if (err instanceof ShopError) return c.json({ error: err.code, detail: null }, err.status as 400);
+  if (err instanceof ForumError) return c.json({ error: err.code, detail: null }, err.status as 400);
   logger.error('SiteAdmin', 'Erreur non gérée :', err);
   return c.json({ error: 'internal' }, 500);
 }
@@ -517,6 +529,92 @@ export function createSiteAdminRouter(client: Client): OpenAPIHono {
     if (!c.var.siteRights.manage) return c.json({ error: 'forbidden' }, 403);
     await deleteVoteSite(c.req.param('guildId'), c.req.param('voteSiteId'));
     return c.json({ ok: true });
+  });
+
+  // ── Forum : catégories (site ou miroir Discord), modération ─────────────
+  const canModerateForum = (rights: SiteRights) => rights.manage || rights.moderateComments;
+
+  app.get('/api/site-admin/:guildId/forum', async (c) => {
+    if (!canModerateForum(c.var.siteRights)) return c.json({ error: 'forbidden' }, 403);
+    const guildId = c.req.param('guildId');
+    const current = await site(c);
+    if (!current) return c.json({ error: 'site_missing' }, 404);
+    const guild = client.guilds.cache.get(guildId);
+    const me = guild?.members.me ?? null;
+    const forumChannels = guild
+      ? [...guild.channels.cache.values()]
+          .filter((ch) => ch.type === ChannelType.GuildForum)
+          .map((ch) => ({ id: ch.id, name: ch.name, botCanManage: Boolean(me && ch.permissionsFor(me)?.has([PermissionFlagsBits.ManageWebhooks, PermissionFlagsBits.ViewChannel])) }))
+      : [];
+    const [categories, recent] = await Promise.all([listForumCategories(current.id), listRecentForumPosts(guildId, 50)]);
+    return c.json({ categories, recent, forumChannels });
+  });
+
+  app.post('/api/site-admin/:guildId/forum/categories', async (c) => {
+    if (!c.var.siteRights.manage) return c.json({ error: 'forbidden' }, 403);
+    try {
+      const category = await saveForumCategory(client, c.req.param('guildId'), null, await body(c));
+      return c.json({ id: category.id }, 201);
+    } catch (err) {
+      return fail(c, err);
+    }
+  });
+
+  app.post('/api/site-admin/:guildId/forum/categories/reorder', async (c) => {
+    if (!c.var.siteRights.manage) return c.json({ error: 'forbidden' }, 403);
+    await reorderForumCategories(c.req.param('guildId'), (await body(c)).ids);
+    return c.json({ ok: true });
+  });
+
+  app.patch('/api/site-admin/:guildId/forum/categories/:categoryId', async (c) => {
+    if (!c.var.siteRights.manage) return c.json({ error: 'forbidden' }, 403);
+    const categoryId = c.req.param('categoryId');
+    if (!CUID.test(categoryId)) return c.json({ error: 'category_missing' }, 404);
+    try {
+      await saveForumCategory(client, c.req.param('guildId'), categoryId, await body(c));
+      return c.json({ ok: true });
+    } catch (err) {
+      return fail(c, err);
+    }
+  });
+
+  app.delete('/api/site-admin/:guildId/forum/categories/:categoryId', async (c) => {
+    if (!c.var.siteRights.manage) return c.json({ error: 'forbidden' }, 403);
+    await deleteForumCategory(client, c.req.param('guildId'), c.req.param('categoryId'));
+    return c.json({ ok: true });
+  });
+
+  app.post('/api/site-admin/:guildId/forum/categories/:categoryId/import', async (c) => {
+    if (!c.var.siteRights.manage) return c.json({ error: 'forbidden' }, 403);
+    const guildId = c.req.param('guildId');
+    const categoryId = c.req.param('categoryId');
+    const category = CUID.test(categoryId) ? await prisma.siteForumCategory.findFirst({ where: { id: categoryId, guildId }, select: { id: true } }) : null;
+    if (!category) return c.json({ error: 'category_missing' }, 404);
+    return c.json({ imported: await importForumHistory(client, category.id) });
+  });
+
+  app.post('/api/site-admin/:guildId/forum/topics/:topicId/flags', async (c) => {
+    if (!canModerateForum(c.var.siteRights)) return c.json({ error: 'forbidden' }, 403);
+    const input = await body(c);
+    try {
+      await setForumTopicFlags(c.req.param('guildId'), c.req.param('topicId'), {
+        pinned: typeof input.pinned === 'boolean' ? input.pinned : undefined,
+        locked: typeof input.locked === 'boolean' ? input.locked : undefined,
+      });
+      return c.json({ ok: true });
+    } catch (err) {
+      return fail(c, err);
+    }
+  });
+
+  app.delete('/api/site-admin/:guildId/forum/posts/:postId', async (c) => {
+    if (!canModerateForum(c.var.siteRights)) return c.json({ error: 'forbidden' }, 403);
+    try {
+      await deleteForumPost(client, c.req.param('guildId'), c.req.param('postId'), { userId: c.var.auth.userId, isStaff: true });
+      return c.json({ ok: true });
+    } catch (err) {
+      return fail(c, err);
+    }
   });
 
   // ── Boutique : offres, codes promo, commandes à valider, réglages ───────
