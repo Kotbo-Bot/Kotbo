@@ -17,6 +17,7 @@ import { logger } from '../../utils/logger.js';
 import { getClient } from '../../utils/client.js';
 import { queueAuditLog } from '../../utils/auditLogger.js';
 import { getPartnershipSettings } from './partnershipSettings.js';
+import { broadcastDashboardStateChange } from '../../api/shared/sharding.js';
 
 /** Teintes reprises de `COLORS_RAW`, sans importer le module d'embeds v2. */
 const TONE_COLORS = {
@@ -201,6 +202,9 @@ async function notifyDashboard(input: PartnershipAlertInput, tone: PartnershipAl
       link: input.link ?? '/partnerships',
     })),
   });
+  // Sans cet evenement, la cloche ne l'apprenait qu'au sondage suivant, et la
+  // notification de bureau partait avec deux minutes de retard.
+  broadcastDashboardStateChange(input.guildId, 'notifications_updated');
 }
 
 async function dmOwner(input: PartnershipAlertInput, tone: PartnershipAlertTone): Promise<void> {
