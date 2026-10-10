@@ -10,6 +10,7 @@ import {
   handleForumThreadDelete,
   handleForumThreadUpdate,
 } from '../services/site/siteForumService.js';
+import { handleAnnouncementDelete, handleAnnouncementMessage, handleAnnouncementUpdate } from '../services/site/siteAutoService.js';
 
 /**
  * Filtre par serveur avant tout signal : un serveur bavard ne doit pas
@@ -40,14 +41,17 @@ export function registerSiteListeners(client: Client) {
       logger.error('Site', 'Erreur sur un message de ticket du site :', err);
     }
     await handleForumMessageCreate(message).catch((err: unknown) => logger.error('Site', 'Message de forum non recopié :', err));
+    await handleAnnouncementMessage(client, message).catch((err: unknown) => logger.error('Site', 'Annonce non recopiée sur le blog :', err));
   });
 
   // Forum du site : fils et messages des salons forum recopiés.
   client.on(Events.MessageUpdate, (_before: Message | PartialMessage, after: Message | PartialMessage) => {
     void handleForumMessageUpdate(after).catch((err: unknown) => logger.error('Site', 'Modification de forum non recopiée :', err));
+    void handleAnnouncementUpdate(client, after).catch((err: unknown) => logger.error('Site', 'Annonce modifiée non recopiée :', err));
   });
   client.on(Events.MessageDelete, (message: Message | PartialMessage) => {
     void handleForumMessageDelete(message).catch((err: unknown) => logger.error('Site', 'Suppression de forum non recopiée :', err));
+    void handleAnnouncementDelete(message).catch((err: unknown) => logger.error('Site', 'Annonce supprimée non retirée :', err));
   });
   client.on(Events.ThreadCreate, (thread: AnyThreadChannel) => {
     void handleForumThreadCreate(thread).catch((err: unknown) => logger.error('Site', 'Fil de forum non recopié :', err));

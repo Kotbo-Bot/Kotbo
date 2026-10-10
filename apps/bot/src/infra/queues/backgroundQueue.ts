@@ -55,6 +55,7 @@ export type BackgroundJobName =
   | 'site-scheduled-publish'
   | 'site-vote-reminders'
   | 'shop-renewals'
+  | 'site-weekly-summary'
   | 'acquisition-abandon-scan'
   | 'acquisition-alerts-check'
   | 'acquisition-weekly-recap'

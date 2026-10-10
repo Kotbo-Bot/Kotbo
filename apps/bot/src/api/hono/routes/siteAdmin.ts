@@ -31,6 +31,8 @@ import {
   saveForumCategory,
   setForumTopicFlags,
 } from '../../../services/site/siteForumService.js';
+import { publishWeeklySummary, syncAutoModulePages } from '../../../services/site/siteAutoService.js';
+import { getSiteByGuild } from '../../../services/site/siteService.js';
 import { requireAuth } from '../middleware/auth.js';
 import { getApiUrl, getDashboardUrl } from '../../shared.js';
 import { getMemberIdentities } from '../../../services/moderation/memberIdentityService.js';
@@ -529,6 +531,29 @@ export function createSiteAdminRouter(client: Client): OpenAPIHono {
     if (!c.var.siteRights.manage) return c.json({ error: 'forbidden' }, 403);
     await deleteVoteSite(c.req.param('guildId'), c.req.param('voteSiteId'));
     return c.json({ ok: true });
+  });
+
+  // ── Site automatique : actions immédiates ───────────────────────────────
+  app.post('/api/site-admin/:guildId/auto/weekly', async (c) => {
+    if (!c.var.siteRights.manage) return c.json({ error: 'forbidden' }, 403);
+    const current = await site(c);
+    if (!current) return c.json({ error: 'site_missing' }, 404);
+    try {
+      const full = await getSiteByGuild(current.guildId);
+      if (!full) return c.json({ error: 'site_missing' }, 404);
+      return c.json({ pageId: await publishWeeklySummary(client, full) });
+    } catch (err) {
+      return fail(c, err);
+    }
+  });
+
+  app.post('/api/site-admin/:guildId/auto/module-pages', async (c) => {
+    if (!c.var.siteRights.manage) return c.json({ error: 'forbidden' }, 403);
+    try {
+      return c.json({ created: await syncAutoModulePages(client, c.req.param('guildId')) });
+    } catch (err) {
+      return fail(c, err);
+    }
   });
 
   // ── Forum : catégories (site ou miroir Discord), modération ─────────────

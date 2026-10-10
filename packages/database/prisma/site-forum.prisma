@@ -98,3 +98,19 @@ model SiteForumPost {
   @@index([guildId, createdAt])
   @@map("site_forum_posts")
 }
+
+// Article publié tout seul : annonce Discord recopiée (`msg:<message>`) ou
+// résumé de la semaine (`weekly:<année>-W<semaine>`). La clé empêche les
+// doublons et retrouve l'article quand l'annonce est modifiée ou supprimée.
+model SiteAutoPost {
+  key    String @id
+  siteId String
+  pageId String
+
+  createdAt DateTime @default(now())
+
+  page SitePage @relation(fields: [pageId], references: [id], onDelete: Cascade)
+
+  @@index([siteId])
+  @@map("site_auto_posts")
+}

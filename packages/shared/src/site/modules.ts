@@ -84,6 +84,7 @@ export const SITE_MODULES = {
   wikiIndex: { category: 'contenus', botModule: null, needsViewer: false, interactive: false, live: false, defaults: { parentId: '' } },
   blogList: { category: 'contenus', botModule: null, needsViewer: false, interactive: false, live: false, defaults: { limit: 6, tag: '', layout: 'cards' } },
   search: { category: 'contenus', botModule: null, needsViewer: false, interactive: false, live: false, defaults: {} },
+  changelog: { category: 'contenus', botModule: null, needsViewer: false, interactive: false, live: false, defaults: { days: 30, limit: 15 } },
 
   // Discord en direct
   members: { category: 'discord', botModule: null, needsViewer: false, interactive: false, live: true, defaults: {} },
@@ -209,6 +210,8 @@ export function normalizeModuleConfig(key: SiteModuleKey, raw: unknown): Record<
       return { limit: int(input.limit, 3, 50, 10) };
     case 'shop':
       return { category: text(input.category, 40) };
+    case 'changelog':
+      return { days: int(input.days, 7, 90, 30), limit: int(input.limit, 3, 50, 15) };
     case 'wikiIndex':
       return { parentId: CUID.test(String(input.parentId ?? '')) ? String(input.parentId) : '' };
     case 'blogList':

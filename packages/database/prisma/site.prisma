@@ -161,6 +161,7 @@ model SitePage {
   children  SitePage[]         @relation("SitePageTree")
   revisions SitePageRevision[]
   comments  SiteComment[]
+  autoPosts SiteAutoPost[]
 
   @@unique([siteId, kind, slug])
   @@index([siteId, kind, parentId, sortOrder])

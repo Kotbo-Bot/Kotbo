@@ -728,3 +728,10 @@ dialog.kotbo-dialog p { margin: 0 0 14px; color: var(--site-muted); }
   .forum-topic-last { display: none; }
   .forum-cat-stats { display: none; }
 }
+
+/* Nouveautés */
+.changelog { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 14px; }
+.changelog-date { margin: 0 0 6px; font-size: 0.85rem; font-weight: 600; color: var(--site-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.changelog-day ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.changelog-day li { display: flex; align-items: center; gap: 8px; }
+.changelog-icon { flex: none; display: inline-grid; place-items: center; color: var(--site-accent); }

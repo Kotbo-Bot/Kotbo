@@ -8,3 +8,4 @@ export * from './icons.js';
 export * from './members.js';
 export * from './votes.js';
 export * from './shop.js';
+export * from './auto.js';

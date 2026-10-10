@@ -321,6 +321,16 @@ export async function setDashboardModuleStatus(
   // groupee : appliquer un preset bascule une dizaine de modules d'affilee.
   scheduleCommandSync(guildId);
 
+  // Site automatique : un module allumé reçoit sa page sur le site, s'il en a une.
+  if (enabled) {
+    void import('../site/siteAutoService.js')
+      .then(async ({ scheduleAutoModulePages }) => {
+        const { getClient } = await import('../../utils/client.js');
+        scheduleAutoModulePages(getClient(), guildId);
+      })
+      .catch(() => null);
+  }
+
   return { moduleKey: key, enabled, enabledRequirements, disabledDependents, preparedOnly };
 }
 
