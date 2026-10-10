@@ -101,6 +101,18 @@
   );
 
   /**
+   * Rangee sous la pastille. Pendant la glissade, la pastille montre l'icone
+   * de chaque ligne qu'elle traverse, puis celle de la page d'arrivee.
+   */
+  let sliderHref = $state<string | null>(null);
+  const sliderIcon = $derived(
+    spaces.flatMap((g) => g.items).find((i) => i.href === (sliderHref ?? activeSpaceItem?.href))?.icon ?? 'circle',
+  );
+
+  /** Duree de `.nav-slider` (280 ms) et de son rebond, avec un peu de marge. */
+  const SLIDE_TRACK_MS = 360;
+
+  /**
    * Fait glisser la pastille du fil jusqu'a la rangee de la page courante.
    * Mesure au cadre suivant, une fois la classe active posee. Une pastille
    * qui vient d'apparaitre (espace ouvert, premiere page de l'espace) se pose
@@ -109,13 +121,34 @@
   function slideToActive(thread: HTMLElement, href: string | null) {
     let knob: HTMLElement | null = null;
     let frame = 0;
+    let trackFrame = 0;
+
+    // Suit la pastille image par image et retient la rangee qu'elle couvre.
+    const track = (target: string, until: number) => {
+      if (!knob) return;
+      const box = knob.getBoundingClientRect();
+      const y = box.top + box.height / 2;
+      for (const row of thread.querySelectorAll<HTMLElement>('.nav-row[data-href]')) {
+        const rect = row.getBoundingClientRect();
+        if (y >= rect.top && y < rect.bottom) {
+          sliderHref = row.dataset.href ?? target;
+          break;
+        }
+      }
+      if (performance.now() < until) {
+        trackFrame = requestAnimationFrame(() => track(target, until));
+      } else {
+        sliderHref = target;
+      }
+    };
 
     const place = (target: string | null) => {
       cancelAnimationFrame(frame);
+      cancelAnimationFrame(trackFrame);
       frame = requestAnimationFrame(() => {
         const next = thread.querySelector<HTMLElement>('.nav-slider');
         const row = target ? thread.querySelector<HTMLElement>(`.nav-row[data-href="${CSS.escape(target)}"]`) : null;
-        if (!next || !row) return;
+        if (!next || !row || !target) return;
         const fresh = next !== knob;
         knob = next;
         if (fresh) next.style.transition = 'none';
@@ -124,14 +157,20 @@
           next.getBoundingClientRect();
           next.style.transition = '';
           next.classList.add('is-placed');
+          sliderHref = target;
+          return;
         }
+        track(target, performance.now() + SLIDE_TRACK_MS);
       });
     };
 
     place(href);
     return {
       update: place,
-      destroy: () => cancelAnimationFrame(frame),
+      destroy: () => {
+        cancelAnimationFrame(frame);
+        cancelAnimationFrame(trackFrame);
+      },
     };
   }
 
@@ -421,9 +460,9 @@
               >
                 {#if current && activeSpaceItem}
                   <span class="nav-slider" aria-hidden="true">
-                    {#key activeSpaceItem.href}
-                      <span class="nav-slider__icon" in:fade={{ duration: 180 }}>
-                        <Papicon icon={activeSpaceItem.icon ?? 'circle'} size={12} />
+                    {#key sliderIcon}
+                      <span class="nav-slider__icon" in:fade={{ duration: 120 }}>
+                        <Papicon icon={sliderIcon} size={12} />
                       </span>
                     {/key}
                   </span>
