@@ -155,3 +155,15 @@ Décisions arrêtées avec Elouan le 2026-10-09, livrées d'un seul tenant sur `
 - **Site qui se tient à jour seul** : messages d'un salon d'annonces repris en actualités, changelog généré, pages de modules créées et tenues à jour automatiquement, résumé de la semaine en article.
 - **Galerie de thèmes partagés** : tout serveur publie directement (signalable). Un thème partagé contient couleurs, polices, arrondis, CSS personnalisé (refiltré à l'installation), modèles de pages (sans contenu privé du serveur d'origine) et menu.
 - **Membres** : profils publics (visibles par défaut, le membre peut se masquer), espace membre complet (inventaire, quêtes, tickets, candidatures, votes, achats), récompenses pour l'activité web (vote, participation plafonnée par jour, visite quotidienne avec série, lecture du wiki une fois par page), notifications en MP Discord au choix du membre.
+
+### Livraison (2026-10-10)
+
+Tout ce qui précède est codé, fusionné dans `recette`. Choix de détail faits pendant la livraison :
+
+- **Boutique** : tables `shop_*`, indépendantes du site (la boutique marche sans site). Types d'offre : rôle (permanent ou pour N jours, un rachat prolonge), objets RPG, XP, abonnement (rôle prélevé chaque période, jours de grâce réglables, résiliation en fin de période) et prestation livrée à la main (toujours validée). Les règles (rôles requis, niveau, limite) portent sur le bénéficiaire ; un code promo sert une fois par membre ; un abonnement ne s'offre pas. Commande `/boutique` sur Discord (panneau éphémère), page `/shop` sur le site, onglet Boutique au dashboard, outils MCP. Prélèvements et rôles échus traités toutes les 15 minutes.
+- **Votes** : top.gg par webhook à secret chiffré, les autres sites vérifiés à la demande (compte Discord ou adresse IP). Un vote compte une fois par fenêtre de délai.
+- **Forum** : un miroir écrit dans le salon par un webhook créé par Kotbo (jeton chiffré) au nom et avec l'avatar du membre ; les messages de ce webhook sont ignorés au retour. À la création d'un miroir, les 50 derniers fils (100 messages chacun) sont importés. Les pièces jointes Discord ne sont pas recopiées (liens qui expirent) : un lien « Voir sur Discord » les remplace.
+- **Site automatique** : réglages dans `settings.auto`. Annonces : titre tiré de la première ligne, première image copiée dans les images du site, article suivi en cas de modification ou de suppression. Pages des modules : créées une seule fois par module (une page retirée n'est pas recréée). Les articles générés ne sont pas réannoncés sur Discord.
+- **Galerie** : 5 thèmes publiés au plus par serveur, 8 pages modèles par thème ; les réglages de bloc propres au serveur d'origine (salon, formulaire, hiérarchie) sont vidés ; pages appliquées en brouillon ; masquage d'office après 5 signalements de serveurs différents.
+
+Migrations à appliquer en plus des deux premières : `20261110100000_site_themes_v2`, `20261110110000_site_members`, `20261110120000_site_votes`, `20261111100000_shop`, `20261111110000_site_forum`, `20261111120000_site_auto_posts`, `20261111130000_site_theme_gallery`.
