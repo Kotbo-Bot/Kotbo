@@ -34,6 +34,7 @@ export type SiteRecord = Pick<
   | 'homePageId'
   | 'staffPage'
   | 'settings'
+  | 'rewards'
   | 'wikiEditorRoleIds'
   | 'blogEditorRoleIds'
   | 'suspendedAt'
@@ -57,6 +58,7 @@ export const SITE_SELECT = {
   homePageId: true,
   staffPage: true,
   settings: true,
+  rewards: true,
   wikiEditorRoleIds: true,
   blogEditorRoleIds: true,
   suspendedAt: true,
