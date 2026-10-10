@@ -37,6 +37,7 @@ import {
 import { defaultLevelUpMessage, getOrCreateLevelConfig, invalidateLevelConfigCache } from '../progression/levelingService.js';
 import { setDashboardModuleStatus } from './moduleActivationService.js';
 import { provisionHoneypotChannel } from '../moderation/honeypotProvisioning.js';
+import { setAutoThreadChannel } from '../features/autoThreadService.js';
 import type { TicketProvisionOutcome } from '../features/ticketProvisioning.js';
 import { type StatsConfig, readStatsConfig } from '../analytics/statsConfig.js';
 
@@ -1465,13 +1466,13 @@ export async function applyServerTemplate(input: {
         });
         record(channel.entry);
 
-        // Le salon media ouvre un fil par publication. Ajoute a la liste plutot
-        // qu'ecrit par-dessus : un serveur qui a deja arme l'auto-thread
+        // Le salon media ouvre un fil par publication. Une configuration est
+        // ajoutee a ce salon seul : un serveur qui a deja arme l'auto-thread
         // ailleurs ne doit pas le perdre en posant sa structure.
         if (key === 'text.media' && selection.has('module.auto_thread')) {
           const known = new Set(config?.autoThreadChannels ?? []);
           if (!known.has(channel.channel.id)) {
-            data.autoThreadChannels = [...known, channel.channel.id];
+            await setAutoThreadChannel(guild.id, channel.channel.id, true);
           }
           data.autoThreadEnabled = true;
         }

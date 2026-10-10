@@ -699,7 +699,12 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
       const { kind, field, label } = CHANNEL_FEATURES[feature];
       const enabled = body?.enabled === true;
 
-      if (kind === 'single') {
+      if (feature === 'autoThread') {
+        // Les fils automatiques vivent dans leurs configurations ; la liste de
+        // la guilde n'en est que le miroir, recalcule par le service.
+        const { setAutoThreadChannel } = await import('../../../../services/features/autoThreadService.js');
+        await setAutoThreadChannel(guildId, channelId, enabled);
+      } else if (kind === 'single') {
         // Un champ unique ne se « decoche » pas ailleurs : eteindre revient a
         // vider le champ, et l'allumer deplace la fonctionnalite sur ce salon.
         await prisma.guild.update({
@@ -1370,8 +1375,19 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
         if (Object.prototype.hasOwnProperty.call(body, 'autoThreadEnabled')) {
           data.autoThreadEnabled = !!body.autoThreadEnabled;
         }
-        if (Object.prototype.hasOwnProperty.call(body, 'autoThreadChannels')) {
-          data.autoThreadChannels = body.autoThreadChannels;
+        if (Array.isArray(body.autoThreadChannels)) {
+          // Les salons armés sont portés par les configurations Auto-Thread :
+          // la liste n'est que leur miroir, le service la recalcule.
+          const { reconcileAutoThreadChannels } = await import('../../../../services/features/autoThreadService.js');
+          const discordGuild = client.guilds.cache.get(guildId);
+          await reconcileAutoThreadChannels(
+            guildId,
+            body.autoThreadChannels.filter((id): id is string => typeof id === 'string'),
+            (id) => {
+              const ch = discordGuild?.channels.cache.get(id);
+              return !!ch && (ch.type === ChannelType.GuildText || ch.type === ChannelType.GuildAnnouncement);
+            },
+          );
         }
         if (Object.prototype.hasOwnProperty.call(body, 'autoThreadBotsEnabled')) {
           data.autoThreadBotsEnabled = !!body.autoThreadBotsEnabled;
