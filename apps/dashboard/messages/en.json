@@ -14040,5 +14040,21 @@
   "ste_block_memberRewards": "My rewards",
   "ste_block_memberRewards_desc": "Visit streak and latest rewards earned on the site.",
   "ste_block_memberInventory": "My inventory",
-  "ste_block_memberInventory_desc": "Coins and items of the signed-in member."
+  "ste_block_memberInventory_desc": "Coins and items of the signed-in member.",
+  "ste_rewards": "Rewards",
+  "ste_rewards_desc": "Coins and XP signed-in members earn for their activity on the site.",
+  "ste_rewards_enabled": "Reward activity on the site",
+  "ste_rewards_action": "Action",
+  "ste_rewards_coins": "Coins",
+  "ste_rewards_xp": "XP",
+  "ste_rewards_limit": "Limit or bonus",
+  "ste_rewards_daily": "Daily visit",
+  "ste_rewards_participation": "Participation",
+  "ste_rewards_read": "Page read",
+  "ste_rewards_vote": "Vote for the server",
+  "ste_rewards_streak_bonus": "Streak bonus",
+  "ste_rewards_streak_bonus_unit": "coins per streak day",
+  "ste_rewards_daily_cap": "Daily cap",
+  "ste_rewards_per_day": "times a day at most",
+  "ste_rewards_hint": "Participation: comment, suggestion, event sign-up, forum message. Coins go to the economy and XP to leveling, when those modules are on."
 }

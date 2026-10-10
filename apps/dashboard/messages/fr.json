@@ -14040,5 +14040,21 @@
   "ste_block_memberRewards": "Mes récompenses",
   "ste_block_memberRewards_desc": "Série de visites et dernières récompenses gagnées sur le site.",
   "ste_block_memberInventory": "Mon inventaire",
-  "ste_block_memberInventory_desc": "Pièces et objets du membre connecté."
+  "ste_block_memberInventory_desc": "Pièces et objets du membre connecté.",
+  "ste_rewards": "Récompenses",
+  "ste_rewards_desc": "Pièces et XP gagnés par les membres connectés pour leur activité sur le site.",
+  "ste_rewards_enabled": "Récompenser l'activité sur le site",
+  "ste_rewards_action": "Action",
+  "ste_rewards_coins": "Pièces",
+  "ste_rewards_xp": "XP",
+  "ste_rewards_limit": "Limite ou bonus",
+  "ste_rewards_daily": "Visite du jour",
+  "ste_rewards_participation": "Participation",
+  "ste_rewards_read": "Page lue",
+  "ste_rewards_vote": "Vote pour le serveur",
+  "ste_rewards_streak_bonus": "Bonus de série",
+  "ste_rewards_streak_bonus_unit": "pièces par jour de série",
+  "ste_rewards_daily_cap": "Plafond par jour",
+  "ste_rewards_per_day": "fois par jour au plus",
+  "ste_rewards_hint": "Participation : commentaire, suggestion, inscription à un événement, message au forum. Les pièces vont dans l'économie et l'XP dans le leveling, si ces modules sont actifs."
 }

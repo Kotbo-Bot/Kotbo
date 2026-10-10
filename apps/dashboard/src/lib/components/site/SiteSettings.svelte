@@ -6,7 +6,7 @@
    */
   import { untrack } from 'svelte';
   import { router } from 'tinro';
-  import { validateSiteSlug } from '@kotbo/shared';
+  import { normalizeSiteRewards, validateSiteSlug, type SiteRewardSettings } from '@kotbo/shared';
   import { Button, Callout, Field, SectionCard, ToggleSwitch } from '../ui';
   import { toast } from '../../stores/toast.svelte';
   import { confirmDialog } from '../../stores/confirmDialog.svelte';
@@ -28,6 +28,7 @@
   let blogEditors = $state<string[]>([...initial.blogEditorRoleIds]);
   let wikiChannel = $state(initial.wikiAnnounceChannelId ?? '');
   let blogChannel = $state(initial.blogAnnounceChannelId ?? '');
+  let rewards = $state<SiteRewardSettings>(normalizeSiteRewards(initial.rewards));
   let saving = $state(false);
   let deleteConfirm = $state('');
 
@@ -56,6 +57,7 @@
         blogEditorRoleIds: blogEditors,
         wikiAnnounceChannelId: wikiChannel || null,
         blogAnnounceChannelId: blogChannel || null,
+        rewards: normalizeSiteRewards(rewards) as unknown as Record<string, unknown>,
       };
       if (slugChanged) patch.slug = slug;
       await updateSite(patch, guildId);
@@ -183,6 +185,62 @@
     </SectionCard>
   {/if}
 
+  <SectionCard title={m.ste_rewards()} description={m.ste_rewards_desc()} icon="award">
+    <div class="px-5 pb-5 space-y-4">
+      <label class="flex items-center gap-3 text-body-sm text-on-surface">
+        <ToggleSwitch size="sm" checked={rewards.enabled} ariaLabel={m.ste_rewards_enabled()} onToggle={(v) => (rewards.enabled = v)} />
+        {m.ste_rewards_enabled()}
+      </label>
+      {#if rewards.enabled}
+        <div class="reward-table" role="table" aria-label={m.ste_rewards()}>
+          <div class="reward-head" role="row">
+            <span role="columnheader">{m.ste_rewards_action()}</span>
+            <span role="columnheader">{m.ste_rewards_coins()}</span>
+            <span role="columnheader">{m.ste_rewards_xp()}</span>
+            <span role="columnheader">{m.ste_rewards_limit()}</span>
+          </div>
+          <div class="reward-row" role="row">
+            <span role="cell">{m.ste_rewards_daily()}</span>
+            <input class="input" type="number" min="0" max="100000" aria-label={m.ste_rewards_coins()} bind:value={rewards.daily.coins} />
+            <input class="input" type="number" min="0" max="10000" aria-label={m.ste_rewards_xp()} bind:value={rewards.daily.xp} />
+            <span class="reward-extra">
+              <input class="input" type="number" min="0" max="10000" aria-label={m.ste_rewards_streak_bonus()} bind:value={rewards.daily.streakBonus} />
+              <span>{m.ste_rewards_streak_bonus_unit()}</span>
+            </span>
+          </div>
+          <div class="reward-row" role="row">
+            <span role="cell">{m.ste_rewards_participation()}</span>
+            <input class="input" type="number" min="0" max="100000" aria-label={m.ste_rewards_coins()} bind:value={rewards.participation.coins} />
+            <input class="input" type="number" min="0" max="10000" aria-label={m.ste_rewards_xp()} bind:value={rewards.participation.xp} />
+            <span class="reward-extra">
+              <input class="input" type="number" min="0" max="100" aria-label={m.ste_rewards_daily_cap()} bind:value={rewards.participation.dailyCap} />
+              <span>{m.ste_rewards_per_day()}</span>
+            </span>
+          </div>
+          <div class="reward-row" role="row">
+            <span role="cell">{m.ste_rewards_read()}</span>
+            <input class="input" type="number" min="0" max="100000" aria-label={m.ste_rewards_coins()} bind:value={rewards.read.coins} />
+            <input class="input" type="number" min="0" max="10000" aria-label={m.ste_rewards_xp()} bind:value={rewards.read.xp} />
+            <span class="reward-extra">
+              <input class="input" type="number" min="0" max="100" aria-label={m.ste_rewards_daily_cap()} bind:value={rewards.read.dailyCap} />
+              <span>{m.ste_rewards_per_day()}</span>
+            </span>
+          </div>
+          <div class="reward-row" role="row">
+            <span role="cell">{m.ste_rewards_vote()}</span>
+            <input class="input" type="number" min="0" max="100000" aria-label={m.ste_rewards_coins()} bind:value={rewards.vote.coins} />
+            <input class="input" type="number" min="0" max="10000" aria-label={m.ste_rewards_xp()} bind:value={rewards.vote.xp} />
+            <span class="reward-extra">
+              <input class="input" type="number" min="0" max="10000" aria-label={m.ste_rewards_streak_bonus()} bind:value={rewards.vote.streakBonus} />
+              <span>{m.ste_rewards_streak_bonus_unit()}</span>
+            </span>
+          </div>
+        </div>
+        <p class="text-2xs text-on-surface-variant">{m.ste_rewards_hint()}</p>
+      {/if}
+    </div>
+  </SectionCard>
+
   <div class="flex justify-end">
     <Button variant="primary" icon="check" loading={saving} disabled={slugInvalid} onclick={save}>{m.common_save()}</Button>
   </div>
@@ -200,5 +258,13 @@
 </div>
 
 <style>
+  .reward-table { display: grid; gap: 6px; }
+  .reward-head, .reward-row { display: grid; grid-template-columns: minmax(140px, 1.4fr) 90px 90px minmax(170px, 1.4fr); gap: 8px; align-items: center; }
+  .reward-head { font-size: 0.78rem; font-weight: 600; color: var(--color-on-surface-variant); }
+  .reward-row { font-size: 0.9rem; color: var(--color-on-surface); }
+  .reward-row .input { width: 100%; }
+  .reward-extra { display: flex; align-items: center; gap: 6px; font-size: 0.8rem; color: var(--color-on-surface-variant); }
+  .reward-extra .input { width: 76px; flex: none; }
+  @media (max-width: 720px) { .reward-head { display: none; } .reward-head, .reward-row { grid-template-columns: 1fr 1fr; } }
   .role-list { display: flex; flex-direction: column; gap: 6px; max-height: 240px; overflow-y: auto; padding-right: 6px; }
 </style>
