@@ -68,7 +68,7 @@ interface TempVoiceGeneratorFields {
   nameTemplate?: string;
   requiredRoleId?: string | null;
   /**
-   * Surcharges de présentation du panneau POUR CE GÉNÉRATEUR — mêmes noms et
+   * Surcharges de présentation du panneau POUR CE GÉNÉRATEUR : mêmes noms et
    * mêmes unions que les cinq réglages de `tempVoiceModPermissions` plus bas.
    * Absente ou `null` : hérite du réglage serveur. N'a aucun effet tant que
    * `tempVoiceModPermissions.perGeneratorPresentation` est faux (voir sa doc).
@@ -213,7 +213,7 @@ export async function updateChannelsManagementConfig(
        * L'interrupteur de secours de la personnalisation par générateur.
        * Défaut `false` : au déploiement, aucun serveur existant ne change de
        * comportement. Le couper IGNORE les surcharges des générateurs, il ne
-       * les EFFACE PAS — elles restent dans `tempVoiceGenerators` et reviennent
+       * les EFFACE PAS : elles restent dans `tempVoiceGenerators` et reviennent
        * telles quelles au rallumage.
        */
       perGeneratorPresentation: boolean;
@@ -427,7 +427,7 @@ export async function deleteBannedWord(id: string, guildId = authStore.selectedG
 
 export async function fetchGlobalBannedWords() {
   const response = await authorizedFetch(`${API_BASE_URL}/api/admin/banned-words`, { method: 'GET' });
-  if (!response.ok) throw new Error('Erreur lors du chargement des mots globaux');
+  if (!response.ok) throw new Error('Impossible de charger les mots globaux. Réessaie.');
   return response.json();
 }
 
@@ -474,7 +474,7 @@ export async function updateGlobalBannedWord(
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
-    throw new Error(error.error || 'Erreur lors de la mise à jour du mot global');
+    throw new Error(error.error || 'Impossible de mettre à jour le mot global. Réessaie.');
   }
 
   return response.json();
@@ -486,6 +486,6 @@ export async function toggleGlobalBannedWord(id: string, enabled: boolean) {
 
 export async function deleteGlobalBannedWord(id: string) {
   const response = await authorizedFetch(`${API_BASE_URL}/api/admin/banned-words/${id}`, { method: 'DELETE' });
-  if (!response.ok) throw new Error('Erreur lors de la suppression du mot global');
+  if (!response.ok) throw new Error('Impossible de supprimer le mot global. Réessaie.');
   return response.json();
 }

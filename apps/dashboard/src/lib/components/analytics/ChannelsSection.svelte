@@ -67,8 +67,8 @@
 
   /** Part du serveur : messages pour l'écrit, temps pour le vocal. */
   function share(row: { messages: number; voiceMinutes: number }, voice = false): string {
-    if (voice) return totals.voiceMinutes > 0 ? fmtPct(pct(row.voiceMinutes, totals.voiceMinutes)) : '—';
-    return totals.messages > 0 ? fmtPct(pct(row.messages, totals.messages)) : '—';
+    if (voice) return totals.voiceMinutes > 0 ? fmtPct(pct(row.voiceMinutes, totals.voiceMinutes)) : '–';
+    return totals.messages > 0 ? fmtPct(pct(row.messages, totals.messages)) : '–';
   }
 
   function trend(now: number, before: number): { text: string; cls: string } {
@@ -147,7 +147,7 @@
                   </span>
                 </th>
                 <td>{fmtNumber(cat.messages)}</td>
-                <td>{cat.voiceMinutes > 0 ? fmtMinutes(cat.voiceMinutes) : '—'}</td>
+                <td>{cat.voiceMinutes > 0 ? fmtMinutes(cat.voiceMinutes) : '–'}</td>
                 <td>{fmtNumber(cat.authors)}</td>
                 <td>{share(cat)}</td>
                 {#if filters.compare}<td class={catTrend.cls}>{catTrend.text}</td>{/if}
@@ -171,9 +171,9 @@
                         {#if quiet}<span class="quiet-tag">{quiet}</span>{/if}
                       </span>
                     </th>
-                    <td>{voice ? '—' : fmtNumber(channel.messages)}</td>
-                    <td>{channel.voiceMinutes > 0 ? fmtMinutes(channel.voiceMinutes) : '—'}</td>
-                    <td>{voice ? '—' : fmtNumber(channel.authors)}</td>
+                    <td>{voice ? '–' : fmtNumber(channel.messages)}</td>
+                    <td>{channel.voiceMinutes > 0 ? fmtMinutes(channel.voiceMinutes) : '–'}</td>
+                    <td>{voice ? '–' : fmtNumber(channel.authors)}</td>
                     <td>{share(channel, voice)}</td>
                     {#if filters.compare}<td class={chTrend.cls}>{chTrend.text}</td>{/if}
                   </tr>

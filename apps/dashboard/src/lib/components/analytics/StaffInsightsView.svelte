@@ -1,7 +1,7 @@
 <!--
   Réactivité du staff sur les tickets : délai de première réponse et de
   résolution, part des tickets répondus en moins d'une heure, charge par
-  membre du staff, et grille jour × heure des tickets ouverts — la teinte
+  membre du staff, et grille jour × heure des tickets ouverts : la teinte
   marque les heures où ils attendent le plus (staff absent).
 -->
 <script lang="ts">
@@ -26,7 +26,7 @@
     return [
       { id: 'opened', label: m.anx_staff_opened(), value: fmtNumber(t.opened), delta: relativeDelta(t.opened, t.previousOpened), color: SERIES[0] },
       { id: 'first', label: m.anx_staff_first(), hint: m.anx_staff_first_hint(), value: fmtDuration(t.firstResponseMedianSec), delta: delta(t.firstResponseMedianSec, t.previousFirstResponseMedianSec), invert: true, color: SERIES[0] },
-      { id: 'within1h', label: m.anx_staff_within1h(), value: t.within1h === null ? '—' : fmtPct(t.within1h), color: SERIES[0] },
+      { id: 'within1h', label: m.anx_staff_within1h(), value: t.within1h === null ? '–' : fmtPct(t.within1h), color: SERIES[0] },
       { id: 'resolution', label: m.anx_staff_resolution(), value: fmtDuration(t.resolutionMedianSec), delta: delta(t.resolutionMedianSec, t.previousResolutionMedianSec), invert: true, color: SERIES[0] },
       { id: 'unresolved', label: m.anx_staff_unresolved(), value: fmtNumber(t.unresolved), color: SERIES[0] },
     ];

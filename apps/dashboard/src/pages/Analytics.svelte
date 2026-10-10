@@ -442,12 +442,12 @@
 </script>
 
 <div id="analytics-export-root" class="analytics-v2 mx-auto flex w-full max-w-[96rem] flex-col gap-5 pb-20">
-  <header class="flex flex-wrap items-end justify-between gap-4">
-    <div class="flex min-w-0 flex-col gap-1">
-      <h1 class="font-headline text-2xl font-semibold text-on-surface">{m.anx_page_title()}</h1>
-      <p class="max-w-2xl text-body-sm text-on-surface-variant">{section.description}</p>
+  <header class="flex flex-col md:flex-row md:items-end justify-between gap-x-6 gap-y-3">
+    <div class="min-w-0">
+      <h1 class="text-2xl font-semibold tracking-tight text-on-surface font-headline leading-tight">{m.anx_page_title()}</h1>
+      <p class="mt-1 max-w-prose text-sm text-on-surface-variant">{section.description}</p>
     </div>
-    <div class="flex items-center gap-2">
+    <div class="flex items-center flex-wrap md:justify-end gap-2 shrink-0">
       <SavedViewsMenu {activeTab} onApply={goTab} />
       <ExportDropdown onExportCSV={exportCSV} onExportXLSX={exportXLSX} onExportImage={exportImages} />
     </div>

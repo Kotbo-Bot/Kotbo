@@ -123,11 +123,12 @@
 
 
 :root {
-  /* Mobile shell geometry. Anything that floats above the page (toasts, FABs,
-     the tutorial checklist) offsets itself with these so the tab bar can change
-     height without every consumer needing to be found and edited. */
+  /* Mobile shell geometry. Anything that floats above the page (toasts, FABs)
+     offsets itself with these so the tab bar can change height without every
+     consumer needing to be found and edited. Tab bar: 52px tabs, 4px above and
+     below, 1px top border. */
   --mobile-topbar-height: 3.25rem;
-  --mobile-tabbar-height: 3.625rem;
+  --mobile-tabbar-height: 3.8125rem;
   --mobile-safe-bottom: env(safe-area-inset-bottom, 0px);
   --mobile-tabbar-clearance: calc(var(--mobile-tabbar-height) + var(--mobile-safe-bottom));
   --mobile-gutter: 1rem;
@@ -279,25 +280,6 @@
 
 /* ── Shared UI Primitives ─────────────────────────────── */
 
-/* Feedback tactile : léger enfoncement au clic, remontée au survol */
-.pressable {
-  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease;
-}
-
-.pressable:hover {
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-}
-
-.pressable:active {
-  transform: scale(0.98);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .pressable:active {
-    transform: none;
-  }
-}
-
 /* Anneau de focus clavier uniforme (navigation au clavier uniquement) */
 :where(a, button, [role="tab"], [role="button"]):focus-visible {
   outline: 2px solid var(--primary-color);
@@ -318,10 +300,6 @@
 :root.compact-ui .section-card,
 :root.compact-ui .section-card-flush {
   border-radius: 0.625rem;
-}
-
-:root.compact-ui .page-header {
-  margin-bottom: 1.25rem;
 }
 
 :root.compact-ui .stat-kpi {
@@ -412,24 +390,6 @@
   padding: 0.75rem 1rem;
 }
 
-.page-header {
-  margin-bottom: 2rem;
-}
-
-.page-header h2 {
-  font-size: 1.5rem;
-  font-weight: 700;
-  letter-spacing: -0.025em;
-  color: var(--on-surface);
-  font-family: var(--font-headline);
-}
-
-.page-header p {
-  color: var(--on-surface-variant);
-  margin-top: 0.25rem;
-  font-size: 0.875rem;
-  line-height: 1.5;
-}
 
 .stat-kpi {
   background: var(--surface-container-lowest);
@@ -749,28 +709,6 @@
   color: var(--on-surface-variant);
 }
 
-.info-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0.625rem 0;
-  border-bottom: 1px solid var(--outline-variant);
-  font-size: 0.875rem;
-}
-
-.info-row:last-child {
-  border-bottom: none;
-}
-
-.info-row dt {
-  font-weight: 500;
-  color: var(--on-surface);
-}
-
-.info-row dd {
-  color: var(--on-surface-variant);
-}
-
 /* Discord Mentions */
 .mention {
   background: rgba(99, 102, 241, 0.08);
@@ -807,12 +745,6 @@
 
 .dark .mention-link:hover {
   background: rgba(129, 140, 248, 0.15);
-}
-
-/* Glass panel - kept but simplified */
-.glass-panel {
-  background: var(--surface-container-low);
-  border: 1px solid var(--outline-variant);
 }
 
 /* Animations */
@@ -935,8 +867,7 @@
 @media (hover: none) {
   .section-card:hover,
   .premium-card:hover,
-  .stat-kpi:hover,
-  .pressable:hover {
+  .stat-kpi:hover {
     box-shadow: none;
   }
 }
@@ -970,13 +901,6 @@
 
   .app-sidebar button[aria-label] {
     min-width: 2.75rem;
-  }
-
-  .app-sidebar input[type="search"] {
-    min-height: 2.625rem;
-    padding-top: 0.625rem;
-    padding-bottom: 0.625rem;
-    font-size: 0.875rem;
   }
 
   .app-navbar {
@@ -1049,26 +973,8 @@
     padding-bottom: calc(var(--mobile-tabbar-clearance) + 1.5rem);
   }
 
-  /* ── Type and rhythm ── */
-
-  .page-header {
-    margin-bottom: 1.25rem;
-  }
-
-  .page-header h1,
-  .page-header h2 {
-    font-family: var(--font-headline);
-    font-size: clamp(1.35rem, 6.5vw, 1.75rem);
-    letter-spacing: -0.035em;
-    line-height: 1.1;
-  }
-
-  .page-header p {
-    max-width: 42rem;
-    font-size: 0.8125rem;
-  }
-
-  /* Desktop padding scales are too generous once the viewport is 390px wide.
+  /* ── Type and rhythm ──
+     Desktop padding scales are too generous once the viewport is 390px wide.
      Compacting them here beats editing the same values across 90 pages. */
   .app-main :where(.p-8, .p-6) {
     padding: 1rem;
@@ -1130,8 +1036,11 @@
     justify-content: flex-start;
   }
 
-  .section-card__actions > :where(button, a),
-  .module-page__actions > :where(button, a) {
+  /* Les boutons a libelle s'etirent pour offrir une cible large ; un bouton
+     icone (le menu "...") garde sa taille, sinon son ratio carre le faisait
+     grandir jusqu'a la largeur de l'ecran. */
+  .section-card__actions > :where(button, a):not(.btn-icon),
+  .module-page__actions > :where(button, a):not(.btn-icon) {
     min-height: 2.75rem;
     flex: 1 1 auto;
     justify-content: center;
@@ -1145,60 +1054,26 @@
     padding: 0;
   }
 
+  /* L'en-tete de ModulePage n'est plus une carte : pas de cadre a rembourrer,
+     il s'aligne sur le contenu. Seule la rangee d'actions passe sous le titre. */
   .module-page {
     gap: 1.25rem;
   }
 
   .module-page__header {
     gap: 1rem;
-    padding: 1rem;
-    border-radius: 1rem;
   }
 
   .module-page__identity {
     width: 100%;
-    align-items: flex-start;
-  }
-
-  .module-page__icon {
-    width: 2.5rem;
-    height: 2.5rem;
-    border-radius: 0.75rem;
-  }
-
-  .module-page__identity h1 {
-    font-family: var(--font-headline);
-    font-size: 1.125rem;
-  }
-
-  .module-page__identity p {
-    margin-top: 0.2rem;
-    font-size: 0.75rem;
-    line-height: 1.45;
   }
 
   .module-page__actions {
     width: 100%;
-    flex-wrap: wrap;
   }
 
-  /* ── Tabs ── */
-
-  .tab-group {
-    width: 100%;
-    flex-wrap: wrap;
-    justify-content: flex-start;
-    overflow: visible;
-  }
-
-  .tab-button {
-    min-width: 0;
-    flex: 1 1 auto;
-    justify-content: center;
-    padding-inline: 0.875rem;
-    text-align: center;
-    white-space: normal;
-  }
+  /* Les onglets : la regle de base (<= 640px) en fait deja une seule ligne
+     qui defile au doigt ; ne pas la recasser en plusieurs rangees ici. */
 
   /* ── Data tables ──
      responsiveTables tags each table as either a card list (simple, labelled)
@@ -1498,18 +1373,12 @@
 
   /* ── Floating furniture sits above the tab bar ── */
 
-  .toast-container,
-  .tutorial-checklist {
+  .toast-container {
     right: 0.75rem;
     bottom: calc(var(--mobile-tabbar-clearance) + 0.5rem);
     left: 0.75rem;
     width: auto;
     max-width: none;
-  }
-
-  .tutorial-checklist__panel {
-    width: min(100%, 22rem);
-    max-height: min(68dvh, 38rem);
   }
 
   /* Le bouton d'édition du layout est en z-100 : il passait par-dessus la
@@ -1642,17 +1511,6 @@
   .app-main[data-mobile-layout="editor"] :where(form, [role="dialog"])
     :where(.grid-cols-2, .grid-cols-3, .grid-cols-4, .grid-cols-5, .grid-cols-6) {
     grid-template-columns: minmax(0, 1fr);
-  }
-
-  .info-row {
-    align-items: flex-start;
-    gap: 0.75rem;
-  }
-
-  .info-row dd {
-    max-width: 58%;
-    overflow-wrap: anywhere;
-    text-align: right;
   }
 
   /* Label above value: side by side leaves neither enough room. */

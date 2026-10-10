@@ -148,18 +148,13 @@
   });
 </script>
 
-<div class="max-w-6xl mx-auto px-4 md:px-8 pb-24 space-y-6">
-  <header class="pt-6 space-y-5">
-    <div class="flex items-start gap-3 min-w-0">
-      <div class="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
-        <Papicon name="CreditCard" size={20} />
-      </div>
-      <div class="min-w-0">
-        <h1 class="text-xl font-semibold text-on-surface tracking-tight leading-tight">Facturation</h1>
-        <p class="text-body-sm text-on-surface-variant leading-relaxed max-w-xl">
-          L'offre de ce serveur détermine les modules disponibles. Paiement et factures sont gérés par Stripe.
-        </p>
-      </div>
+<div class="pb-24 space-y-6">
+  <header class="flex flex-col md:flex-row md:items-end justify-between gap-x-6 gap-y-3">
+    <div class="min-w-0">
+      <h1 class="text-2xl font-semibold tracking-tight text-on-surface font-headline leading-tight">Facturation</h1>
+      <p class="mt-1 max-w-prose text-sm text-on-surface-variant">
+        L'offre de ce serveur décide des modules disponibles. Le paiement et les factures passent par Stripe.
+      </p>
     </div>
   </header>
 

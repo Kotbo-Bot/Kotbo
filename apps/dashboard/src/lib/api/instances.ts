@@ -39,7 +39,7 @@ export interface OrphanInstanceBan {
 
 export async function fetchBotInstances(): Promise<{ instances: BotInstance[]; orphanBans: OrphanInstanceBan[] }> {
   const res = await authorizedFetch(`${API_BASE_URL}/api/admin/instances`);
-  if (!res.ok) throw new Error('Erreur lors de la récupération des instances');
+  if (!res.ok) throw new Error('Impossible de récupérer les instances. Réessaie.');
   return res.json();
 }
 

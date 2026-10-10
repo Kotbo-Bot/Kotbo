@@ -25,7 +25,7 @@ import {
 } from './navigationStorage';
 import { dashboardStore } from './dashboard.svelte';
 
-export type NavGroup = { key: string; label: string; items: PageConfig[] };
+export type NavGroup = { key: string; label: string; icon: string; items: PageConfig[] };
 
 const MAX_FAVORITES = 80;
 const MAX_RECENTS = 6;
@@ -222,20 +222,27 @@ class NavigationStore {
 
   /** Navigation groups in reading order, empty groups removed. */
   readonly groups = $derived.by((): NavGroup[] => {
-    const general = { key: 'general', label: m.nav_group_general(), items: this.#visibleGeneral };
-    const moderation = { key: 'moderation', label: m.nav_group_moderation(), items: this.#visibleModeration };
-    const security = { key: 'security', label: m.nav_group_security(), items: this.#visibleSecurity };
-    const leveling = { key: 'leveling', label: m.nav_group_xp(), items: this.#visibleLeveling };
-    const economy = { key: 'economy', label: m.nav_group_economy(), items: this.#visibleEconomy };
-    const community = { key: 'community', label: m.nav_group_community(), items: this.#visibleCommunity };
-    const staff = { key: 'staff', label: m.nav_group_staff(), items: this.#visibleStaff };
-    const crossserver = { key: 'crossserver', label: m.nav_group_crossserver(), items: this.#visibleCrossServer };
-    const config = { key: 'config', label: m.nav_group_config(), items: this.#visibleConfig };
+    const general = { key: 'general', label: m.nav_group_general(), icon: 'home', items: this.#visibleGeneral };
+    const moderation = { key: 'moderation', label: m.nav_group_moderation(), icon: 'users', items: this.#visibleModeration };
+    const security = { key: 'security', label: m.nav_group_security(), icon: 'shieldcheck', items: this.#visibleSecurity };
+    const leveling = { key: 'leveling', label: m.nav_group_xp(), icon: 'trophy', items: this.#visibleLeveling };
+    const economy = { key: 'economy', label: m.nav_group_economy(), icon: 'coins', items: this.#visibleEconomy };
+    const community = { key: 'community', label: m.nav_group_community(), icon: 'sparkles', items: this.#visibleCommunity };
+    const staff = { key: 'staff', label: m.nav_group_staff(), icon: 'message-square', items: this.#visibleStaff };
+    // Les outils multi-serveurs ne remplissaient plus qu'un groupe de deux
+    // lignes, reserve aux memes administrateurs que la configuration : ils
+    // rejoignent les reglages plutot que d'ouvrir un dixieme groupe.
+    const config = {
+      key: 'config',
+      label: m.nav_group_config(),
+      icon: 'settings',
+      items: [...this.#visibleConfig, ...this.#visibleCrossServer],
+    };
 
     // On a staff server the staff tooling is the reason people are here.
     const ordered = this.isStaffServer
-      ? [general, staff, moderation, security, leveling, economy, community, crossserver, config]
-      : [general, moderation, security, leveling, economy, community, staff, crossserver, config];
+      ? [general, staff, moderation, security, leveling, economy, community, config]
+      : [general, moderation, security, leveling, economy, community, staff, config];
 
     return ordered.filter((group) => group.items.length > 0);
   });
@@ -244,10 +251,14 @@ class NavigationStore {
    * Groupes affiches dans le menu (barre laterale, menu mobile) : sans les
    * pages marquees `hidden`, que l'on atteint depuis un hub. La palette garde
    * `groups` et les propose toujours.
+   *
+   * Les pages en chantier (`wip`) quittent aussi le menu : elles n'ouvraient
+   * sur rien d'autre qu'un ecran « bientot disponible », et occupaient une
+   * ligne de chaque serveur pour le dire.
    */
   readonly menuGroups = $derived(
     this.groups
-      .map((group) => ({ ...group, items: group.items.filter((item) => !item.hidden) }))
+      .map((group) => ({ ...group, items: group.items.filter((item) => !item.hidden && !item.wip) }))
       .filter((group) => group.items.length > 0),
   );
 

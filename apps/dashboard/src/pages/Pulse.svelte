@@ -263,8 +263,12 @@
 
   /** Le backend renvoie le nom français ; on le retraduit via son index. */
   const FR_DAYS = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
+  // Les donnees de demo envoient le nom anglais en minuscules : sans ce
+  // second index, « saturday » s'affichait tel quel dans l'interface.
+  const EN_DAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
   function dayName(value: string): string {
-    const index = FR_DAYS.indexOf(value);
+    const frIndex = FR_DAYS.indexOf(value);
+    const index = frIndex >= 0 ? frIndex : EN_DAYS.indexOf(value?.toLowerCase?.() ?? '');
     return index >= 0 ? DAY_KEYS[index]() : value;
   }
 

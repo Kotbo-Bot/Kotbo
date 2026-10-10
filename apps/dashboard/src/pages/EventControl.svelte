@@ -100,7 +100,7 @@
         toast.success(m.evc_reg_removed_toast());
         await loadRegistrations();
       } else {
-        toast.error('Erreur lors de la suppression');
+        toast.error('Impossible de supprimer. Réessaie.');
       }
     } catch {
       toast.error('Erreur réseau');

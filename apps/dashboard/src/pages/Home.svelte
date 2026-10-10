@@ -4,13 +4,13 @@
   import { dashboardStore } from '../lib/stores/dashboard.svelte';
   import { notificationsStore } from '../lib/stores/notifications.svelte';
   import { staffStore } from '../lib/stores/staff.svelte';
-  import { fetchAnalytics, fetchUserSettings, updateUserSettings, fetchChangelog, fetchStaffServerLinks, fetchGuildLanguage, updateGuildLanguage, fetchGuildTimezone, updateGuildTimezone, fetchHomeWidgets } from '../lib/api';
-  import type { ChangelogCommit, GuildLanguageState, GuildTimezoneState, HomeWidgetsData, HomeWidgetSection } from '../lib/api';
-  import { timezoneStore } from '../lib/stores/timezone.svelte';
+  import { fetchAnalytics, fetchUserSettings, updateUserSettings, fetchChangelog, fetchStaffServerLinks, fetchHomeWidgets } from '../lib/api';
+  import type { ChangelogCommit, HomeWidgetsData, HomeWidgetSection } from '../lib/api';
   import RefreshButton from '../lib/components/RefreshButton.svelte';
   import Papicon from '../lib/components/Papicon.svelte';
-  import MetricCard from '../lib/components/MetricCard.svelte';
   import HomeTodo from '../lib/components/home/HomeTodo.svelte';
+  import ServerLocaleSettings from '../lib/components/ServerLocaleSettings.svelte';
+  import { Button, Callout, Menu, type MenuItem } from '../lib/components/ui';
   import { toast } from '../lib/stores/toast.svelte';
   import { m, dateLocale } from '../lib/i18n';
   import { isMobile } from '../lib/stores/media.svelte';
@@ -25,19 +25,19 @@
     visible: boolean;
   }
 
+  /**
+   * Ce que voit un nouveau venu, sous « A traiter » : l'etat du serveur, rien
+   * de plus. L'ancienne grille par defaut empilait douze blocs, dont deux
+   * reglages du serveur (langue, fuseau), un doublon de la cloche et un etat
+   * systeme toujours « Optimal ». Ils restent dans la bibliotheque, et les
+   * dispositions deja enregistrees ne bougent pas.
+   */
   const DEFAULT_LAYOUT: LayoutItem[] = [
     { id: 'liveStats', colSpan: 3, rowSpan: 1, visible: true },
     { id: 'analytics', colSpan: 2, rowSpan: 1, visible: true },
-    { id: 'system', colSpan: 1, rowSpan: 1, visible: true },
-    { id: 'channels', colSpan: 1, rowSpan: 1, visible: true },
     { id: 'moderation', colSpan: 1, rowSpan: 1, visible: true },
-    { id: 'members', colSpan: 1, rowSpan: 1, visible: true },
-    { id: 'notifications', colSpan: 1, rowSpan: 1, visible: true },
     { id: 'staff', colSpan: 1, rowSpan: 1, visible: true },
-    { id: 'audit', colSpan: 1, rowSpan: 1, visible: true },
-    { id: 'botLanguage', colSpan: 1, rowSpan: 1, visible: true },
-    { id: 'timezone', colSpan: 1, rowSpan: 1, visible: true },
-    { id: 'actions', colSpan: 3, rowSpan: 1, visible: true },
+    { id: 'audit', colSpan: 2, rowSpan: 1, visible: true },
   ];
 
   const MODULE_CATALOG = [
@@ -85,6 +85,40 @@
   }
 
   let isEditing = $state(false);
+  /** Disposition d'avant l'edition, pour que « Annuler » la rende telle quelle. */
+  let layoutBeforeEdit: LayoutItem[] | null = null;
+
+  function startEditing() {
+    layoutBeforeEdit = userLayout.map((item) => ({ ...item }));
+    isEditing = true;
+  }
+
+  function cancelEditing() {
+    if (layoutBeforeEdit) userLayout = layoutBeforeEdit;
+    layoutBeforeEdit = null;
+    isEditing = false;
+  }
+
+  const editMenu = $derived<MenuItem[]>([
+    {
+      label: m.home_edit_presets(),
+      description: m.home_edit_presets_desc(),
+      icon: 'layers',
+      onselect: () => { showPresetsModal = true; void loadPresets(); },
+    },
+    {
+      label: m.home_edit_export(),
+      description: m.home_edit_export_desc(),
+      icon: 'download',
+      onselect: exportCurrentLayout,
+    },
+    {
+      label: m.home_edit_reset(),
+      description: m.home_edit_reset_desc(),
+      icon: 'rotate-ccw',
+      onselect: () => (showResetConfirm = true),
+    },
+  ]);
   let showAddModuleModal = $state(false);
   let showResetConfirm = $state(false);
   let showPresetsModal = $state(false);
@@ -175,7 +209,8 @@
     // Save to localStorage as redundancy
     const key = getStorageKey();
     localStorage.setItem(key, JSON.stringify(userLayout));
-    
+
+    layoutBeforeEdit = null;
     isEditing = false;
     toast.success(m.home_layout_saved());
   }
@@ -200,6 +235,7 @@
     }
 
     showResetConfirm = false;
+    layoutBeforeEdit = null;
     isEditing = false;
     
     // Reset in localStorage
@@ -517,13 +553,8 @@
   let currentTime = $state('');
   let currentDate = $state('');
 
-  // Alimente aussi l'apercu du fuseau : un second intervalle pour la meme
-  // horloge ferait deux reveils par seconde pour rien.
-  let clockTick = $state(Date.now());
-
   function updateDateTime() {
     const now = new Date();
-    clockTick = now.getTime();
     currentTime = now.toLocaleTimeString(dateLocale(), { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     currentDate = now.toLocaleDateString(dateLocale(), { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
   }
@@ -671,92 +702,6 @@
     }
   }
 
-  let botLanguage = $state<GuildLanguageState | null>(null);
-  let botLanguageLoading = $state(false);
-  let botLanguageRerender = $state<GuildLanguageState['rerender']>(null);
-  let botLanguageGuildId: string | null = null;
-
-  async function loadBotLanguage(force = false) {
-    const guildId = authStore.selectedGuildId;
-    if (!guildId || botLanguageLoading || (!force && botLanguageGuildId === guildId)) return;
-    botLanguageLoading = true;
-    try {
-      botLanguage = await fetchGuildLanguage();
-      if (authStore.selectedGuildId === guildId) botLanguageGuildId = guildId;
-    } finally {
-      botLanguageLoading = false;
-    }
-  }
-
-  async function setBotLanguage(payload: { mode: 'auto' } | { language: 'fr' | 'en' }) {
-    if (botLanguageLoading) return;
-    botLanguageLoading = true;
-    botLanguageRerender = null;
-    try {
-      const state = await updateGuildLanguage(payload);
-      if (state) {
-        botLanguage = state;
-        botLanguageRerender = state.rerender;
-      }
-    } catch {
-      // dashboardRequest a deja notifie l'echec.
-    } finally {
-      botLanguageLoading = false;
-    }
-  }
-
-  const botLanguageLabel = (code: 'fr' | 'en') =>
-    code === 'fr' ? m.home_botlanguage_fr() : m.home_botlanguage_en();
-
-  let timezone = $state<GuildTimezoneState | null>(null);
-  let timezoneLoading = $state(false);
-  let timezoneGuildId: string | null = null;
-
-  async function loadTimezone(force = false) {
-    const guildId = authStore.selectedGuildId;
-    if (!guildId || timezoneLoading || (!force && timezoneGuildId === guildId)) return;
-    timezoneLoading = true;
-    try {
-      timezone = await fetchGuildTimezone();
-      if (authStore.selectedGuildId === guildId) timezoneGuildId = guildId;
-    } finally {
-      timezoneLoading = false;
-    }
-  }
-
-  async function setTimezone(value: string) {
-    if (timezoneLoading || !timezone || value === timezone.timezone) return;
-    timezoneLoading = true;
-    try {
-      const state = await updateGuildTimezone(value);
-      if (state) {
-        timezone = state;
-        // Home tient son propre etat pour la liste des fuseaux ; le store
-        // partage sert aux formulaires ailleurs. Sans cette synchro, changer
-        // le fuseau depuis l'accueil sans recharger laisserait Meetings et
-        // Planning saisir dans l'ancien.
-        timezoneStore.apply(state.timezone);
-      }
-    } catch {
-      // dashboardRequest a deja notifie l'echec.
-    } finally {
-      timezoneLoading = false;
-    }
-  }
-
-  const timezonePreview = $derived.by(() => {
-    if (!timezone) return '';
-    try {
-      return new Intl.DateTimeFormat(dateLocale(), {
-        timeZone: timezone.timezone,
-        hour: '2-digit',
-        minute: '2-digit',
-      }).format(new Date(clockTick));
-    } catch {
-      return '';
-    }
-  });
-
   const WIDGET_SECTIONS: Record<string, HomeWidgetSection> = {
     leveling: 'leveling',
     invites: 'invites',
@@ -839,8 +784,6 @@
       if (visibleIds.has('staff')) void staffStore.fetchAll();
       if (visibleIds.has('news')) void loadChangelog();
       if (visibleIds.has('staffServer')) void loadStaffServerLinks();
-      if (visibleIds.has('botLanguage')) void loadBotLanguage();
-      if (visibleIds.has('timezone')) void loadTimezone();
       void loadHomeWidgets(sectionsFor(visibleIds));
     };
 
@@ -854,7 +797,6 @@
   });
 
   const activeModulesCount = $derived(dashboardStore.state.modules.filter(m => m.status === 'active').length);
-  const totalModulesCount = $derived(dashboardStore.state.modules.length);
   const errorModulesCount = $derived(dashboardStore.state.modules.filter(m => m.status === 'error').length);
   const errorModules = $derived(dashboardStore.state.modules.filter(m => m.status === 'error'));
 
@@ -873,14 +815,27 @@
   let todoCount = $state(0);
   let todoRefreshKey = $state(0);
 
+  /** « 1 sujet » ou « 4 sujets » : paraglide n'a pas de pluriel, on choisit la cle. */
+  const plural = (n: number, one: () => string, other: (p: { n: number }) => string) =>
+    n === 1 ? one() : other({ n });
+
   const dynamicSubtitle = $derived.by(() => {
     const guildName = dashboardStore.state.guildName || m.home_your_server();
     const parts: string[] = [];
-    if (errorModulesCount > 0) parts.push(m.home_modules_error_count({ n: errorModulesCount }));
-    if (todoCount > 0) parts.push(m.home_tasks_count({ n: todoCount }));
-    if (notificationsStore.unreadCount > 0) parts.push(m.home_notifications_count({ n: notificationsStore.unreadCount }));
-    if (parts.length > 0) return m.home_subtitle_issues({ parts: parts.join(' · '), guild: guildName });
-    return m.home_all_good({ guild: guildName });
+    if (errorModulesCount > 0) parts.push(plural(errorModulesCount, m.home_modules_error_one, m.home_modules_error_count));
+    if (todoCount > 0) parts.push(plural(todoCount, m.home_tasks_one, m.home_tasks_count));
+    const unread = notificationsStore.unreadCount;
+    if (unread > 0) parts.push(plural(unread, m.home_notifications_one, m.home_notifications_count));
+    if (parts.length === 0) return m.home_all_good({ guild: guildName });
+    // « 4 sujets a traiter et 2 notifications non lues » se lit ; les points
+    // medians d'avant faisaient une liste de compteurs.
+    let joined = parts.join(', ');
+    try {
+      joined = new Intl.ListFormat(dateLocale(), { type: 'conjunction' }).format(parts);
+    } catch {
+      // Navigateur sans ListFormat : la virgule suffit.
+    }
+    return m.home_subtitle_issues({ parts: joined, guild: guildName });
   });
 
   // Chart data from analytics
@@ -908,9 +863,9 @@
       case 'joins':
         return { title: m.home_stat_joins_title(), subtitle: m.home_stat_joins_sub(), color: 'var(--color-primary)', values: trend.map(d => d.membersJoined || 0), unit: '' };
       case 'leaves':
-        return { title: m.home_stat_leaves_title(), subtitle: m.home_stat_leaves_sub(), color: 'rgb(239, 68, 68)', values: trend.map(d => d.membersLeft || 0), unit: '' };
+        return { title: m.home_stat_leaves_title(), subtitle: m.home_stat_leaves_sub(), color: 'var(--color-error)', values: trend.map(d => d.membersLeft || 0), unit: '' };
       case 'sanctions':
-        return { title: m.nav_sanctions(), subtitle: m.home_stat_sanctions_sub(), color: 'rgb(245, 158, 11)', values: trend.map(d => d.sanctions || 0), unit: '' };
+        return { title: m.nav_sanctions(), subtitle: m.home_stat_sanctions_sub(), color: 'var(--color-warning)', values: trend.map(d => d.sanctions || 0), unit: '' };
       default:
         return { title: 'Messages', subtitle: m.home_stat_messages_sub(), color: 'var(--color-tertiary)', values: trend.map(d => d.messages || 0), unit: '' };
     }
@@ -947,19 +902,6 @@
   // Moderation
   const moderation = $derived(analyticsData?.moderation || null);
 
-  // Health status
-  const healthStatus = $derived(dashboardStore.state.analytics.healthStatus ?? 100);
-  const healthLabel = $derived(
-    healthStatus >= 90 ? m.home_health_optimal() :
-    healthStatus >= 70 ? m.home_health_good() :
-    healthStatus >= 50 ? m.home_health_degraded() : m.home_health_critical()
-  );
-  const healthColor = $derived(
-    healthStatus >= 90 ? 'text-success' :
-    healthStatus >= 70 ? 'text-blue-400' :
-    healthStatus >= 50 ? 'text-warning' : 'text-error'
-  );
-
   const handleMarkAsRead = async (id: string) => {
     await notificationsStore.markAsRead(id);
   };
@@ -995,77 +937,50 @@
   }
 </script>
 
-<div class="space-y-5 pb-10">
+<div class="space-y-5 {isEditing ? 'pb-28' : 'pb-10'}">
 
-  <!-- Header -->
-  <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-    <div>
-      <h1 class="text-xl font-semibold text-on-surface">{dynamicGreeting}</h1>
-      <p class="text-sm text-on-surface-variant mt-0.5">{dynamicSubtitle}</p>
+  <header>
+    <div class="flex items-center justify-between gap-3">
+      <h1 class="min-w-0 text-2xl font-semibold font-headline text-on-surface">{isEditing ? m.home_edit_title() : dynamicGreeting}</h1>
+      {#if !isEditing}
+        <div class="flex items-center gap-1 shrink-0">
+          <Button variant="ghost" size="sm" icon="sliders" onclick={startEditing} data-tour="home-customize">
+            {m.home_customize()}
+          </Button>
+          <RefreshButton onClick={handleRefresh} ariaLabel={m.home_refresh_aria()} />
+        </div>
+      {/if}
     </div>
-    <RefreshButton
-      onClick={handleRefresh}
-      ariaLabel={m.home_refresh_aria()}
-      className="rounded-lg! px-3.5! py-2! bg-primary text-white text-sm"
-    />
-  </div>
+    <p class="text-sm text-on-surface-variant mt-1">{isEditing ? m.home_edit_hint() : dynamicSubtitle}</p>
+  </header>
 
-  <!-- API unreachable banner -->
   {#if dashboardStore.state.error === 'api_unreachable'}
-    <div class="bg-warning/10 border border-warning/20 px-4 py-3 rounded-lg text-warning flex items-center justify-between gap-4">
-      <div class="flex items-center gap-3">
-        <div class="w-8 h-8 rounded-md bg-warning/20 flex items-center justify-center shrink-0">
-          <svg class="w-4 h-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-          </svg>
-        </div>
-        <div>
-          <p class="text-sm font-medium">{m.home_api_restarting()}</p>
-          <p class="text-xs opacity-70">{m.home_api_reconnect()}</p>
-        </div>
-      </div>
-      <button
-        onclick={() => dashboardStore.refresh()}
-        class="px-3 py-1.5 text-xs font-medium bg-warning/20 hover:bg-warning/30 rounded-md transition-colors cursor-pointer shrink-0"
-      >
-        {m.home_retry()}
-      </button>
-    </div>
+    <Callout variant="warning" title={m.home_api_restarting()}>
+      {m.home_api_reconnect()}
+      {#snippet actions()}
+        <Button size="sm" variant="secondary" onclick={() => dashboardStore.refresh()}>{m.home_retry()}</Button>
+      {/snippet}
+    </Callout>
   {/if}
 
-  <!-- Error modules alert -->
   {#if errorModulesCount > 0}
-    <div class="bg-error/10 border border-error/20 px-4 py-3 rounded-lg text-error flex items-center justify-between gap-4">
-      <div class="flex items-center gap-3">
-        <div class="w-8 h-8 rounded-md bg-error/20 flex items-center justify-center">
-          <Papicon icon="alert-octagon" size={16} />
-        </div>
-        <div>
-          <p class="text-sm font-medium">{m.home_maintenance_required()}</p>
-          <p class="text-xs opacity-70">{errorModules.map(m => m.name).join(', ')}</p>
-        </div>
-      </div>
-      <button
-        onclick={() => router.goto('/modules')}
-        class="px-3 py-1.5 text-xs font-medium bg-error/20 hover:bg-error/30 rounded-md transition-colors"
-      >
-        {m.home_repair()}
-      </button>
-    </div>
+    <Callout
+      variant="danger"
+      title={errorModulesCount === 1 ? m.home_modules_failing_one() : m.home_modules_failing({ n: errorModulesCount })}
+    >
+      {errorModules.map((mod) => mod.name).join(', ')}
+      {#snippet actions()}
+        <Button size="sm" variant="secondary" href="/modules">{m.home_see_modules()}</Button>
+      {/snippet}
+    </Callout>
   {/if}
 
   <HomeTodo refreshKey={todoRefreshKey} bind:count={todoCount} />
 
-  <!-- Live Stats Row -->
-  {#if isEditing}
-    <div class="flex justify-center my-3 shrink-0">
-      <button
-        onclick={() => showAddModuleModal = true}
-        class="flex items-center gap-2 px-4 py-2.5 bg-primary text-white rounded-full hover:bg-primary/95 transition-all active:scale-[0.98] shadow-lg font-medium text-xs border border-primary/20 cursor-pointer"
-      >
-        <Papicon icon="add" size={14} /> {m.home_add_module()}
-      </button>
+  {#if visibleLayout.length === 0 && !isEditing}
+    <div class="section-card p-6 flex flex-wrap items-center justify-between gap-3">
+      <p class="text-sm text-on-surface-variant">{m.home_grid_empty()}</p>
+      <Button size="sm" variant="secondary" icon="add" onclick={() => { startEditing(); showAddModuleModal = true; }}>{m.home_add_module()}</Button>
     </div>
   {/if}
 
@@ -1173,72 +1088,80 @@
         {/if}
 
         {#if item.id === 'liveStats'}
-          <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 h-full">
-            <MetricCard
-              label={m.home_members_label()}
-              value={liveStats ? formatNumber(liveStats.humansCount) : '-'}
-              note={liveStats ? `${liveStats.botsCount} bot${liveStats.botsCount > 1 ? 's' : ''}` : ''}
-              icon="users"
-              toneClass="bg-primary/10 text-primary"
-              loading={analyticsLoading}
-            />
-            <MetricCard
-              label={m.home_online_label()}
-              value={liveStats ? formatNumber(liveStats.onlineMembers + liveStats.idleMembers + liveStats.dndMembers) : '-'}
-              note={liveStats ? m.home_actives_note({ n: liveStats.onlineMembers }) : ''}
-              icon="wifi"
-              toneClass="bg-success/10 text-success"
-              loading={analyticsLoading}
-            />
-            <MetricCard
-              label={m.home_in_voice()}
-              value={liveStats ? String(liveStats.voiceConnected) : '-'}
-              note={m.home_connected_now()}
-              icon="headphones"
-              toneClass="bg-secondary/10 text-secondary"
-              loading={analyticsLoading}
-            />
-            <MetricCard
-              label={m.home_growth_7d()}
-              value={totals ? `${totals.netGrowth >= 0 ? '+' : ''}${totals.netGrowth}` : '-'}
-              note={totals ? m.home_joins_leaves_note({ joins: totals.joins, leaves: totals.leaves }) : ''}
-              icon="trending-up"
-              toneClass={totals && totals.netGrowth >= 0 ? 'bg-success/10 text-success' : 'bg-error/10 text-error'}
-              loading={analyticsLoading}
-            />
+          <!-- Une seule surface : quatre chiffres cote a cote, sans carte par
+               chiffre ni pastille d'icone. Les colonnes suivent la largeur du
+               bloc, pas celle de l'ecran, pour tenir aussi en bloc etroit. -->
+          {@const stats = [
+            {
+              label: m.home_members_label(),
+              value: liveStats ? formatNumber(liveStats.humansCount) : '-',
+              note: liveStats ? (liveStats.botsCount === 1 ? m.home_bots_one() : m.home_bots_count({ n: liveStats.botsCount })) : '',
+              tone: '',
+            },
+            {
+              label: m.home_connected_label(),
+              value: liveStats ? formatNumber(liveStats.onlineMembers + liveStats.idleMembers + liveStats.dndMembers) : '-',
+              note: liveStats ? m.home_online_available({ n: liveStats.onlineMembers }) : '',
+              tone: '',
+            },
+            {
+              label: m.home_in_voice(),
+              value: liveStats ? String(liveStats.voiceConnected) : '-',
+              note: m.home_right_now(),
+              tone: '',
+            },
+            {
+              label: m.home_this_week(),
+              value: totals ? `${totals.netGrowth > 0 ? '+' : ''}${totals.netGrowth}` : '-',
+              note: totals ? m.home_joins_leaves_note({ joins: totals.joins, leaves: totals.leaves }) : '',
+              tone: totals && totals.netGrowth < 0 ? 'text-error' : '',
+            },
+          ]}
+          <div class="@container h-full flex items-center">
+            <dl class="w-full grid grid-cols-2 @xl:grid-cols-4 gap-x-6 gap-y-4">
+              {#each stats as stat (stat.label)}
+                <div class="min-w-0 @xl:border-l @xl:border-outline-variant @xl:pl-5 @xl:first:border-l-0 @xl:first:pl-0">
+                  <dt class="text-xs text-on-surface-variant truncate">{stat.label}</dt>
+                  <dd class="mt-0.5">
+                    {#if analyticsLoading && !liveStats}
+                      <span class="block h-7 w-14 animate-pulse bg-surface-container-high rounded"></span>
+                    {:else}
+                      <span class="block text-2xl font-semibold tracking-tight tabular-nums text-on-surface {stat.tone}">{stat.value}</span>
+                    {/if}
+                    {#if stat.note}
+                      <span class="block text-xs text-on-surface-variant truncate">{stat.note}</span>
+                    {/if}
+                  </dd>
+                </div>
+              {/each}
+            </dl>
           </div>
         {:else if item.id === 'analytics'}
           {#if dashboardStore.state.featureAccess.analytics?.canView}
             <div class="flex flex-col h-full justify-between">
-              <div class="flex items-center justify-between mb-3 shrink-0">
-                <div class="flex items-center gap-2.5">
-                  <div class="w-8 h-8 rounded-lg bg-tertiary/10 flex items-center justify-center text-tertiary">
-                    <Papicon icon="trending-up" size={16} />
-                  </div>
-                  <div>
-                    <div class="flex items-center gap-2">
-                      <h3 class="font-medium text-on-surface">{statConfig.title}</h3>
-                      <select
-                        value={selectedStat}
-                        onchange={(e) => handleStatChange(e.currentTarget.value)}
-                        class="bg-surface-container text-2xs text-on-surface-variant border border-outline-variant rounded-md px-1.5 py-0.5 outline-none cursor-pointer"
-                      >
-                        <option value="messages">Messages</option>
-                        <option value="voice">{m.home_opt_voice()}</option>
-                        <option value="joins">{m.home_stat_joins_title()}</option>
-                        <option value="leaves">{m.home_stat_leaves_title()}</option>
-                        <option value="sanctions">{m.nav_sanctions()}</option>
-                      </select>
-                    </div>
-                    <p class="text-2xs text-on-surface-variant">{statConfig.subtitle}</p>
-                  </div>
+              <div class="flex items-start justify-between gap-3 mb-3 shrink-0">
+                <div class="min-w-0">
+                  <label for="home-stat-{item.id}" class="sr-only">{m.home_chart_pick()}</label>
+                  <select
+                    id="home-stat-{item.id}"
+                    value={selectedStat}
+                    onchange={(e) => handleStatChange(e.currentTarget.value)}
+                    class="-ml-1.5 pl-1.5 pr-1 py-0.5 rounded-md bg-transparent text-sm font-medium text-on-surface hover:bg-surface-container focus:bg-surface-container outline-none cursor-pointer"
+                  >
+                    <option value="messages">Messages</option>
+                    <option value="voice">{m.home_opt_voice()}</option>
+                    <option value="joins">{m.home_stat_joins_title()}</option>
+                    <option value="leaves">{m.home_stat_leaves_title()}</option>
+                    <option value="sanctions">{m.nav_sanctions()}</option>
+                  </select>
+                  <p class="text-xs text-on-surface-variant">{statConfig.subtitle}</p>
                 </div>
                 <div class="text-right shrink-0">
                   {#if analyticsLoading}
                     <div class="h-7 w-16 animate-pulse bg-surface-container-high rounded"></div>
                   {:else}
-                    <span class="text-xl font-semibold text-on-surface">{formatNumber(statTotal)}{statConfig.unit}</span>
-                    <p class="text-2xs text-success">{m.home_last_7_days()}</p>
+                    <span class="text-xl font-semibold tabular-nums text-on-surface">{formatNumber(statTotal)}{statConfig.unit}</span>
+                    <p class="text-xs text-on-surface-variant">{m.home_last_7_days()}</p>
                   {/if}
                 </div>
               </div>
@@ -1261,180 +1184,48 @@
                     />
                   {/await}
                 {:else}
-                  <div class="h-full flex items-center justify-center text-on-surface-variant/40 text-xs">
+                  <div class="h-full flex items-center justify-center text-on-surface-variant text-xs">
                     {analyticsLoading ? m.common_loading() : m.home_no_data()}
                   </div>
                 {/if}
               </div>
             </div>
           {/if}
-        {:else if item.id === 'botLanguage'}
-          <div class="flex flex-col gap-4 h-full">
-            <div class="flex items-center gap-2.5 shrink-0">
-              <div class="w-8 h-8 rounded-lg bg-surface-container flex items-center justify-center text-on-surface-variant">
-                <Papicon icon="globe" size={16} />
-              </div>
-              <h3 class="font-medium text-on-surface">{m.home_botlanguage()}</h3>
-            </div>
-
-            {#if botLanguage}
-              <div class="flex flex-col gap-3 grow">
-                <div>
-                  <p class="text-2xl font-semibold text-on-surface">{botLanguageLabel(botLanguage.locale)}</p>
-                  <p class="text-xs text-on-surface-variant mt-0.5">
-                    {botLanguage.mode === 'manual' ? m.home_botlanguage_mode_manual() : m.home_botlanguage_mode_auto()}
-                  </p>
-                </div>
-
-                <p class="text-2xs text-on-surface-variant">
-                  {#if botLanguage.detected}
-                    {m.home_botlanguage_detected({ lang: botLanguageLabel(botLanguage.detected) })}
-                  {:else}
-                    {m.home_botlanguage_detected_none()}
-                  {/if}
-                </p>
-
-                <div class="flex flex-wrap gap-2 mt-auto">
-                  {#each botLanguage.available as code}
-                    <button
-                      type="button"
-                      disabled={botLanguageLoading}
-                      onclick={() => setBotLanguage({ language: code })}
-                      class="px-2.5 py-1 rounded-lg text-xs border transition-colors disabled:opacity-50 cursor-pointer
-                        {botLanguage.mode === 'manual' && botLanguage.locale === code
-                          ? 'border-primary text-primary bg-primary/10'
-                          : 'border-outline-variant text-on-surface-variant hover:bg-surface-container'}"
-                    >
-                      {botLanguageLabel(code)}
-                    </button>
-                  {/each}
-                  <button
-                    type="button"
-                    disabled={botLanguageLoading || botLanguage.mode === 'auto'}
-                    onclick={() => setBotLanguage({ mode: 'auto' })}
-                    class="px-2.5 py-1 rounded-lg text-xs border transition-colors disabled:opacity-50 cursor-pointer
-                      {botLanguage.mode === 'auto'
-                        ? 'border-primary text-primary bg-primary/10'
-                        : 'border-outline-variant text-on-surface-variant hover:bg-surface-container'}"
-                  >
-                    {m.home_botlanguage_auto_action()}
-                  </button>
-                </div>
-
-                {#if botLanguageRerender}
-                  {#if botLanguageRerender.failed > 0}
-                    <p class="text-2xs text-warning">{m.home_botlanguage_panels_failed({ n: botLanguageRerender.failed })}</p>
-                  {:else if botLanguageRerender.updated > 0}
-                    <p class="text-2xs text-success">{m.home_botlanguage_panels_updated({ n: botLanguageRerender.updated })}</p>
-                  {:else}
-                    <p class="text-2xs text-on-surface-variant/70">{m.home_botlanguage_panels_none()}</p>
-                  {/if}
-                {:else}
-                  <p class="text-2xs text-on-surface-variant/70">{m.home_botlanguage_hint()}</p>
-                {/if}
-              </div>
-            {:else}
-              <div class="h-full flex items-center justify-center text-on-surface-variant/40 text-xs">
-                {botLanguageLoading ? m.common_loading() : m.home_no_data()}
-              </div>
-            {/if}
-          </div>
-        {:else if item.id === 'timezone'}
-          <div class="flex flex-col gap-4 h-full">
-            <div class="flex items-center gap-2.5 shrink-0">
-              <div class="w-8 h-8 rounded-lg bg-surface-container flex items-center justify-center text-on-surface-variant">
-                <Papicon icon="clock" size={16} />
-              </div>
-              <h3 class="font-medium text-on-surface">{m.home_timezone()}</h3>
-            </div>
-
-            {#if timezone}
-              <div class="flex flex-col gap-3 grow">
-                <div>
-                  <p class="text-2xl font-semibold text-on-surface">{timezonePreview}</p>
-                  <p class="text-xs text-on-surface-variant mt-0.5">{timezone.timezone}</p>
-                </div>
-
-                <label class="flex flex-col gap-1 mt-auto">
-                  <span class="text-2xs uppercase font-medium text-on-surface-variant">{m.home_timezone_label()}</span>
-                  <select
-                    disabled={timezoneLoading}
-                    value={timezone.timezone}
-                    onchange={(e) => setTimezone((e.target as HTMLSelectElement).value)}
-                    class="w-full bg-surface-container border border-outline-variant/20 rounded-lg px-2 py-1.5 text-xs text-on-surface outline-none focus:border-primary disabled:opacity-50 cursor-pointer"
-                  >
-                    {#each timezone.available as zone}
-                      <option value={zone}>{zone.replace(/_/g, ' ')}</option>
-                    {/each}
-                  </select>
-                </label>
-
-                <p class="text-2xs text-on-surface-variant/70">{m.home_timezone_hint()}</p>
-              </div>
-            {:else}
-              <div class="h-full flex items-center justify-center text-on-surface-variant/40 text-xs">
-                {timezoneLoading ? m.common_loading() : m.home_no_data()}
-              </div>
-            {/if}
+        {:else if item.id === 'botLanguage' || item.id === 'timezone'}
+          <!-- Reglages du serveur, pas des chiffres : le meme bloc vit dans
+               Reglages du serveur > Apercu. Le widget reste pour qui l'avait. -->
+          <div class="h-full -my-2">
+            <ServerLocaleSettings only={item.id === 'botLanguage' ? 'language' : 'timezone'} stacked bare />
           </div>
         {:else if item.id === 'system'}
-          <div class="flex flex-col gap-4 h-full justify-between">
-            <div class="flex items-center justify-between shrink-0">
-              <div class="flex items-center gap-2.5">
-                <div class="w-8 h-8 rounded-lg bg-surface-container flex items-center justify-center text-on-surface-variant">
-                  <Papicon icon="cpu" size={16} />
-                </div>
-                <h3 class="font-medium text-on-surface">{m.home_system()}</h3>
-              </div>
-              <button onclick={() => router.goto('/modules')} class="text-xs text-primary hover:underline cursor-pointer">{m.nav_modules()}</button>
+          <!-- L'ancien anneau affichait une sante fixee a 100 % par l'API, et
+               « Interactions » additionnait des compteurs sans rapport. Ne
+               reste que ce qui est vrai : combien de modules tournent, et
+               lesquels sont en erreur. -->
+          <div class="flex flex-col gap-3 h-full">
+            <div class="flex items-center justify-between gap-2 shrink-0">
+              <h3 class="text-sm font-medium text-on-surface">{m.home_mod_system_title()}</h3>
+              <a href="/modules" class="text-2xs text-primary hover:underline">{m.home_manage()}</a>
             </div>
-
-            <div class="flex {displayColSpan(item) >= 2 ? 'flex-row gap-6' : 'flex-col gap-4'} grow {displayColSpan(item) < 2 ? 'justify-center' : 'items-center'}">
-              <div class="flex items-center gap-4 {displayColSpan(item) >= 2 ? '' : 'justify-center'}">
-                <div class="relative w-16 h-16 shrink-0">
-                  <svg class="w-16 h-16 -rotate-90" viewBox="0 0 64 64">
-                    <circle cx="32" cy="32" r="28" fill="none" stroke="currentColor" class="text-surface-container-high" stroke-width="4" />
-                    <circle cx="32" cy="32" r="28" fill="none" stroke="currentColor" class={healthColor} stroke-width="4" stroke-linecap="round"
-                      stroke-dasharray={`${healthStatus * 1.76} 176`} />
-                  </svg>
-                  <span class="absolute inset-0 flex items-center justify-center text-sm font-semibold text-on-surface">{healthStatus}%</span>
-                </div>
+            <div class="grow flex flex-col justify-center gap-2">
+              <p>
+                <span class="text-2xl font-semibold tabular-nums text-on-surface">{activeModulesCount}</span>
+                <span class="text-sm text-on-surface-variant">{activeModulesCount === 1 ? m.home_modules_active_one() : m.home_modules_active_other()}</span>
+              </p>
+              {#if errorModules.length > 0}
                 <div>
-                  <p class="text-sm font-medium {healthColor}">{healthLabel}</p>
-                  <p class="text-xs text-on-surface-variant mt-0.5">{m.home_modules_active({ active: activeModulesCount, total: totalModulesCount })}</p>
-                  {#if errorModulesCount > 0}
-                    <p class="text-xs text-error mt-0.5">{m.home_n_errors({ n: errorModulesCount })}</p>
-                  {/if}
+                  <p class="text-xs font-medium text-error">
+                    {errorModules.length === 1 ? m.home_modules_failing_one() : m.home_modules_failing({ n: errorModules.length })}
+                  </p>
+                  <ul class="mt-1 space-y-0.5">
+                    {#each errorModules.slice(0, displayRowSpan(item) >= 2 ? 8 : 4) as mod (mod.name)}
+                      <li class="text-xs text-on-surface truncate">{mod.name}</li>
+                    {/each}
+                  </ul>
                 </div>
-              </div>
-
-              {#if displayColSpan(item) >= 2 || displayRowSpan(item) >= 2}
-                <div class="flex-1 space-y-1.5 {displayColSpan(item) >= 2 ? 'border-l border-outline-variant pl-6' : 'border-t border-outline-variant pt-3'}">
-                  <span class="text-2xs text-on-surface-variant">{m.home_active_modules()}</span>
-                  {#each dashboardStore.state.modules.filter(m => m.status === 'active').slice(0, displayRowSpan(item) >= 2 ? 8 : 5) as mod}
-                    <div class="flex items-center justify-between text-xs">
-                      <span class="text-on-surface truncate">{mod.name}</span>
-                      <span class="text-2xs text-success shrink-0">{m.home_active_lower()}</span>
-                    </div>
-                  {/each}
-                  {#each dashboardStore.state.modules.filter(m => m.status === 'error') as mod}
-                    <div class="flex items-center justify-between text-xs">
-                      <span class="text-on-surface truncate">{mod.name}</span>
-                      <span class="text-2xs text-error shrink-0">{m.home_error_lower()}</span>
-                    </div>
-                  {/each}
-                </div>
+              {:else}
+                <p class="text-xs text-on-surface-variant">{m.home_modules_none_failing()}</p>
               {/if}
-            </div>
-
-            <div class="border-t border-outline-variant pt-3 mt-auto shrink-0">
-              <div class="flex items-center justify-between text-xs text-on-surface-variant mb-2">
-                <span>Interactions</span>
-                <span class="font-medium text-on-surface">{formatNumber(dashboardStore.state.analytics.totalAutomations)}</span>
-              </div>
-              <div class="h-1.5 w-full bg-surface-container-high rounded-full overflow-hidden">
-                <div class="bg-secondary h-full rounded-full transition-all duration-500" style="width: {totalModulesCount > 0 ? (activeModulesCount / totalModulesCount) * 100 : 0}%"></div>
-              </div>
             </div>
           </div>
         {:else if item.id === 'channels'}
@@ -1443,12 +1234,9 @@
           <div class="flex flex-col h-full justify-between">
             <div class="flex items-center justify-between mb-3 shrink-0">
               <div class="flex items-center gap-2.5">
-                <div class="w-7 h-7 rounded-lg bg-tertiary/10 flex items-center justify-center text-tertiary">
-                  <Papicon icon="hash" size={14} />
-                </div>
                 <h3 class="text-sm font-medium text-on-surface">{m.home_active_channels()}</h3>
               </div>
-              <span class="text-2xs text-on-surface-variant">7 jours</span>
+              <span class="text-2xs text-on-surface-variant">{m.home_last_7_days()}</span>
             </div>
             <div class="grow flex flex-col justify-center {channelsCols > 1 ? 'grid grid-cols-2 gap-x-4 gap-y-2 items-start' : 'space-y-2'}">
               {#if analyticsLoading}
@@ -1472,51 +1260,46 @@
                   </div>
                 {/each}
               {:else}
-                <div class="flex items-center justify-center h-full text-xs text-on-surface-variant/40 {channelsCols > 1 ? 'col-span-2' : ''}">{m.home_no_data()}</div>
+                <div class="flex items-center justify-center h-full text-xs text-on-surface-variant {channelsCols > 1 ? 'col-span-2' : ''}">{m.home_no_data()}</div>
               {/if}
             </div>
           </div>
         {:else if item.id === 'moderation'}
+          {@const modStats = moderation ? [
+            { label: m.home_mod_warns(), value: moderation.totals.warns },
+            { label: m.home_mod_timeouts(), value: moderation.totals.timeouts },
+            { label: m.home_mod_kicks(), value: moderation.totals.kicks },
+            { label: m.home_mod_bans(), value: moderation.totals.bans },
+          ] : []}
           <div class="flex flex-col h-full justify-between">
-            <div class="flex items-center justify-between mb-3 shrink-0">
-              <div class="flex items-center gap-2.5">
-                <div class="w-7 h-7 rounded-lg bg-warning/10 flex items-center justify-center text-warning">
-                  <Papicon icon="shield" size={14} />
-                </div>
-                <h3 class="text-sm font-medium text-on-surface">{m.home_mod_moderation_title()}</h3>
-              </div>
-              <button onclick={() => router.goto('/analytics')} class="text-2xs text-primary hover:underline cursor-pointer">{m.home_details()}</button>
+            <div class="flex items-center justify-between gap-2 mb-3 shrink-0">
+              <h3 class="text-sm font-medium text-on-surface">{m.home_mod_moderation_title()}</h3>
+              <a href="/analytics" class="text-2xs text-primary hover:underline">{m.home_details()}</a>
             </div>
-            <div class="space-y-2.5 grow flex flex-col justify-center">
-              {#if analyticsLoading}
-                {#each Array(4) as _}
-                  <div class="h-6 animate-pulse bg-surface-container-high rounded"></div>
+            <div class="space-y-3 grow flex flex-col justify-center">
+              {#if analyticsLoading && !moderation}
+                {#each Array(2) as _}
+                  <div class="h-10 animate-pulse bg-surface-container-high rounded"></div>
                 {/each}
               {:else if moderation}
-                <div class="grid {displayColSpan(item) >= 2 ? 'grid-cols-4' : 'grid-cols-2'} gap-2">
-                  <div class="px-3 py-2 rounded-lg bg-warning/5 border border-warning/10">
-                    <p class="text-lg font-semibold text-on-surface">{moderation.totals.warns}</p>
-                    <p class="text-2xs text-on-surface-variant">Warns</p>
-                  </div>
-                  <div class="px-3 py-2 rounded-lg bg-orange-500/5 border border-orange-500/10">
-                    <p class="text-lg font-semibold text-on-surface">{moderation.totals.timeouts}</p>
-                    <p class="text-2xs text-on-surface-variant">Timeouts</p>
-                  </div>
-                  <div class="px-3 py-2 rounded-lg bg-error/5 border border-error/10">
-                    <p class="text-lg font-semibold text-on-surface">{moderation.totals.kicks}</p>
-                    <p class="text-2xs text-on-surface-variant">Kicks</p>
-                  </div>
-                  <div class="px-3 py-2 rounded-lg bg-error/5 border border-error/10">
-                    <p class="text-lg font-semibold text-on-surface">{moderation.totals.bans}</p>
-                    <p class="text-2xs text-on-surface-variant">Bans</p>
-                  </div>
-                </div>
-                {#if moderation.activeSanctions > 0}
-                  <p class="text-2xs text-warning mt-1">{m.home_active_sanctions({ n: moderation.activeSanctions })}</p>
-                {/if}
+                <dl class="grid {displayColSpan(item) >= 2 ? 'grid-cols-4' : 'grid-cols-2'} gap-x-4 gap-y-3">
+                  {#each modStats as stat (stat.label)}
+                    <div class="min-w-0">
+                      <dd class="text-lg font-semibold tabular-nums text-on-surface">{stat.value}</dd>
+                      <dt class="text-xs text-on-surface-variant truncate">{stat.label}</dt>
+                    </div>
+                  {/each}
+                </dl>
+                <p class="text-xs text-on-surface-variant">
+                  {#if moderation.activeSanctions > 0}
+                    <span class="text-warning">{moderation.activeSanctions === 1 ? m.home_active_sanctions_one() : m.home_active_sanctions({ n: moderation.activeSanctions })}</span>
+                  {:else}
+                    {m.home_mod_week_note()}
+                  {/if}
+                </p>
                 {#if displayRowSpan(item) >= 2 && moderation.recentSanctions?.length > 0}
-                  <div class="border-t border-outline-variant pt-2 mt-1 space-y-1.5">
-                    <span class="text-2xs text-on-surface-variant">{m.home_recent_sanctions()}</span>
+                  <div class="border-t border-outline-variant pt-2 space-y-1.5">
+                    <span class="text-xs text-on-surface-variant">{m.home_recent_sanctions()}</span>
                     {#each moderation.recentSanctions.slice(0, displayRowSpan(item) >= 3 ? 6 : 3) as sanction}
                       <div class="flex items-center justify-between text-xs">
                         <span class="text-on-surface truncate">{sanction.targetName || m.home_member()}</span>
@@ -1526,7 +1309,7 @@
                   </div>
                 {/if}
               {:else}
-                <div class="flex items-center justify-center h-full text-xs text-on-surface-variant/40">{m.home_no_data()}</div>
+                <div class="flex items-center justify-center h-full text-xs text-on-surface-variant">{m.home_no_data()}</div>
               {/if}
             </div>
           </div>
@@ -1536,12 +1319,9 @@
           <div class="flex flex-col h-full justify-between">
             <div class="flex items-center justify-between mb-3 shrink-0">
               <div class="flex items-center gap-2.5">
-                <div class="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
-                  <Papicon icon="award" size={14} />
-                </div>
                 <h3 class="text-sm font-medium text-on-surface">{m.home_top_members()}</h3>
               </div>
-              <span class="text-2xs text-on-surface-variant">7 jours</span>
+              <span class="text-2xs text-on-surface-variant">{m.home_last_7_days()}</span>
             </div>
             <div class="grow flex flex-col justify-center {membersCols > 1 ? 'grid grid-cols-2 gap-x-4 gap-y-2 items-start' : 'space-y-2'}">
               {#if analyticsLoading}
@@ -1566,7 +1346,7 @@
                   </div>
                 {/each}
               {:else}
-                <div class="flex items-center justify-center h-full text-xs text-on-surface-variant/40 {membersCols > 1 ? 'col-span-2' : ''}">{m.home_no_data()}</div>
+                <div class="flex items-center justify-center h-full text-xs text-on-surface-variant {membersCols > 1 ? 'col-span-2' : ''}">{m.home_no_data()}</div>
               {/if}
             </div>
           </div>
@@ -1576,12 +1356,9 @@
           <div class="flex flex-col h-full justify-between">
             <div class="flex items-center justify-between mb-3 shrink-0">
               <div class="flex items-center gap-2.5">
-                <div class="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
-                  <Papicon icon="inbox" size={14} />
-                </div>
                 <div>
                   <h3 class="text-sm font-medium text-on-surface">Notifications</h3>
-                  <span class="text-2xs text-on-surface-variant">{m.home_unread_count({ n: notificationsStore.unreadCount })}</span>
+                  <span class="text-2xs text-on-surface-variant">{notificationsStore.unreadCount === 1 ? m.home_notifications_one() : m.home_notifications_count({ n: notificationsStore.unreadCount })}</span>
                 </div>
               </div>
               <a href="/inbox" class="w-6 h-6 rounded-md bg-surface-container flex items-center justify-center hover:bg-surface-container-high transition-colors text-on-surface-variant">
@@ -1593,7 +1370,7 @@
                 {#each notificationsStore.items.filter(n => !n.isRead).slice(0, notifCount) as notif}
                   <div class="px-2.5 py-2 rounded-lg border border-outline-variant bg-surface-container-low flex items-center justify-between gap-2 hover:border-primary/30 transition-colors">
                     <div class="flex items-center gap-2 min-w-0">
-                      <div class="w-1.5 h-1.5 rounded-full {notif.type === 'ERROR' ? 'bg-red-400' : notif.type === 'WARNING' ? 'bg-amber-400' : 'bg-primary'} shrink-0"></div>
+                      <div class="w-1.5 h-1.5 rounded-full {notif.type === 'ERROR' ? 'bg-error' : notif.type === 'WARNING' ? 'bg-warning' : 'bg-primary'} shrink-0"></div>
                       <div class="min-w-0">
                         <p class="text-xs font-medium leading-tight truncate">{notif.title}</p>
                         <p class="text-2xs text-on-surface-variant mt-0.5 line-clamp-1">{notif.message}</p>
@@ -1608,7 +1385,7 @@
                   </div>
                 {/each}
               {:else}
-                <div class="flex flex-col items-center justify-center py-6 text-center text-on-surface-variant/40 {notifCols > 1 ? 'col-span-2' : ''}">
+                <div class="flex flex-col items-center justify-center py-6 text-center text-on-surface-variant {notifCols > 1 ? 'col-span-2' : ''}">
                   <Papicon icon="check-circle" size={18} class="mb-1 text-success/50" />
                   <p class="text-2xs">{m.home_all_up_to_date()}</p>
                 </div>
@@ -1618,66 +1395,50 @@
         {:else if item.id === 'staff'}
           {@const staffAbsCount = displayRowSpan(item) >= 2 ? 3 : 1}
           {@const staffMeetCount = displayRowSpan(item) >= 2 ? 3 : 1}
-          <div class="flex flex-col h-full justify-between">
-            <div class="flex items-center justify-between mb-3 shrink-0">
-              <div class="flex items-center gap-2.5">
-                <div class="w-7 h-7 rounded-lg bg-secondary/10 flex items-center justify-center text-secondary">
-                  <Papicon icon="users" size={14} />
-                </div>
-                <h3 class="text-sm font-medium text-on-surface">Staff</h3>
-              </div>
-              <div class="flex gap-1.5">
-                <span class="px-1.5 py-0.5 text-2xs rounded bg-warning/10 text-warning">{pendingAbsences.length} abs.</span>
-                <span class="px-1.5 py-0.5 text-2xs rounded bg-surface-container text-on-surface-variant">{m.home_meetings_badge({ n: staffStore.upcomingMeetings.length })}</span>
-              </div>
+          <!-- Deux listes courtes separees par un filet : les petites cartes
+               bordees d'avant faisaient une carte dans la carte, et les
+               pastilles « 2 abs. » / « 1 reu. » demandaient a etre dechiffrees. -->
+          <div class="flex flex-col h-full">
+            <div class="flex items-center justify-between gap-2 mb-3 shrink-0">
+              <h3 class="text-sm font-medium text-on-surface">{m.home_staff_title()}</h3>
+              <a href="/staff-management" class="text-2xs text-primary hover:underline">{m.home_manage_team()}</a>
             </div>
-
-            <div class="grow flex {displayColSpan(item) >= 2 ? 'flex-row gap-4' : 'flex-col'} justify-center">
-              <div class="{displayColSpan(item) >= 2 ? 'flex-1' : ''} space-y-2.5">
-                {#each pendingAbsences.slice(0, staffAbsCount) as absence, i}
-                  <div class="p-2.5 rounded-lg border border-outline-variant bg-surface-container-low">
-                    <span class="text-2xs text-primary block mb-1">{i === 0 ? m.home_next_absence() : m.home_absence()}</span>
-                    <p class="text-xs font-medium truncate">{absence.staffDisplayName || m.home_staff_member()}</p>
-                    <p class="text-2xs text-on-surface-variant mt-0.5 truncate">{absence.reason || 'N/A'}</p>
-                  </div>
-                {:else}
-                  <div class="p-2.5 rounded-lg border border-outline-variant bg-surface-container-low">
-                    <span class="text-2xs text-primary block mb-1">{m.home_next_absence()}</span>
-                    <p class="text-2xs text-on-surface-variant/50">{m.home_none_f()}</p>
-                  </div>
+            <div class="grid {displayColSpan(item) >= 2 ? 'grid-cols-2 gap-6' : 'grid-cols-1 gap-3'}">
+              <section>
+                <h4 class="text-xs text-on-surface-variant">
+                  {pendingAbsences.length === 0 ? m.home_absences_none() : pendingAbsences.length === 1 ? m.home_absences_one() : m.home_absences_count({ n: pendingAbsences.length })}
+                </h4>
+                {#each pendingAbsences.slice(0, staffAbsCount) as absence}
+                  <a href="/planning" class="block mt-1 rounded-md -mx-1.5 px-1.5 py-1 hover:bg-surface-container">
+                    <span class="block text-sm font-medium text-on-surface truncate">{absence.staffDisplayName || m.home_staff_member()}</span>
+                    {#if absence.reason}
+                      <span class="block text-xs text-on-surface-variant truncate">{absence.reason}</span>
+                    {/if}
+                  </a>
                 {/each}
-              </div>
-
-              <div class="{displayColSpan(item) >= 2 ? 'flex-1' : ''} space-y-2.5 {displayColSpan(item) < 2 ? 'mt-2.5' : ''}">
-                {#each staffStore.upcomingMeetings.slice(0, staffMeetCount) as meeting, i}
-                  <div class="p-2.5 rounded-lg border border-outline-variant bg-surface-container-low">
-                    <span class="text-2xs text-secondary block mb-1">{i === 0 ? m.home_next_meeting() : m.home_meeting()}</span>
-                    <p class="text-xs font-medium truncate">{meeting.title}</p>
-                    <p class="text-2xs text-on-surface-variant mt-0.5 text-on-surface">
-                      {m.home_date_at_time({ date: new Date(meeting.scheduledAt).toLocaleDateString(dateLocale(), { day: 'numeric', month: 'short' }), time: new Date(meeting.scheduledAt).toLocaleTimeString(dateLocale(), { hour: '2-digit', minute: '2-digit' }) })}
-                    </p>
-                  </div>
-                {:else}
-                  <div class="p-2.5 rounded-lg border border-outline-variant bg-surface-container-low">
-                    <span class="text-2xs text-secondary block mb-1">{m.home_next_meeting()}</span>
-                    <p class="text-2xs text-on-surface-variant/50">{m.home_none_f()}</p>
-                  </div>
+              </section>
+              <section class="{displayColSpan(item) >= 2 ? '' : 'pt-3 border-t border-outline-variant'}">
+                <h4 class="text-xs text-on-surface-variant">
+                  {staffStore.upcomingMeetings.length === 0 ? m.home_meetings_none() : m.home_next_meeting()}
+                </h4>
+                {#each staffStore.upcomingMeetings.slice(0, staffMeetCount) as meeting}
+                  <a href="/planning" class="block mt-1 rounded-md -mx-1.5 px-1.5 py-1 hover:bg-surface-container">
+                    <span class="block text-sm font-medium text-on-surface truncate">{meeting.title}</span>
+                    <span class="block text-xs text-on-surface-variant">
+                      {m.home_date_at_time({ date: new Date(meeting.scheduledAt).toLocaleDateString(dateLocale(), { weekday: 'long', day: 'numeric', month: 'short' }), time: new Date(meeting.scheduledAt).toLocaleTimeString(dateLocale(), { hour: '2-digit', minute: '2-digit' }) })}
+                    </span>
+                  </a>
                 {/each}
-              </div>
+              </section>
             </div>
-
-            <a href="/staff-management" class="mt-3 flex items-center justify-center gap-1.5 w-full py-2 rounded-lg bg-surface-container text-xs text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors border border-outline-variant">
-              {m.home_manage_team()} <Papicon icon="arrow-right" size={12} />
-            </a>
           </div>
         {:else if item.id === 'audit'}
-          {@const auditCount = getListCount(5, displayColSpan(item), displayRowSpan(item))}
+          <!-- La largeur sert a lire chaque ligne en entier, pas a en montrer
+               plus : seule la hauteur allonge la liste. -->
+          {@const auditCount = getListCount(5, 1, displayRowSpan(item))}
           <div class="flex flex-col h-full justify-between">
             <div class="flex items-center justify-between mb-3 shrink-0">
               <div class="flex items-center gap-2.5">
-                <div class="w-7 h-7 rounded-lg bg-surface-container flex items-center justify-center text-on-surface-variant">
-                  <Papicon icon="activity" size={14} />
-                </div>
                 <h3 class="text-sm font-medium text-on-surface">{m.home_recent_activity()}</h3>
               </div>
               <a href="/activity" class="text-2xs text-primary hover:underline">{m.home_see_all()}</a>
@@ -1693,14 +1454,13 @@
                       <span class="text-2xs text-primary truncate">{entry.module}</span>
                       <span class="text-2xs text-on-surface-variant shrink-0">{entry.dateIso ? relativeTime(entry.dateIso) : ''}</span>
                     </div>
-                    <p class="text-2xs text-on-surface {displayColSpan(item) >= 2 ? '' : 'truncate'}">{entry.action}</p>
-                    {#if displayColSpan(item) >= 2 && entry.user}
-                      <p class="text-2xs text-on-surface-variant">{m.home_by_user({ user: entry.user })}</p>
-                    {/if}
+                    <p class="text-xs text-on-surface truncate">
+                      {entry.action}{#if displayColSpan(item) >= 2 && entry.user}<span class="text-on-surface-variant">{' · '}{m.home_by_user({ user: entry.user })}</span>{/if}
+                    </p>
                   </div>
                 </div>
               {:else}
-                <div class="flex items-center justify-center h-full text-xs text-on-surface-variant/40">{m.home_no_activity()}</div>
+                <div class="flex items-center justify-center h-full text-xs text-on-surface-variant">{m.home_no_activity()}</div>
               {/each}
             </div>
           </div>
@@ -1715,10 +1475,10 @@
                 <Papicon icon="video" size={12} class="text-secondary" /> {m.home_meeting()}
               </button>
               <button onclick={() => router.goto('/modules')} class="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-surface-container border border-outline-variant rounded-md text-xs text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors cursor-pointer">
-                <Papicon icon="plus-circle" size={12} class="text-tertiary" /> Module
+                <Papicon icon="plus-circle" size={12} class="text-tertiary" /> {m.nav_modules()}
               </button>
               <button onclick={() => router.goto('/analytics')} class="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-surface-container border border-outline-variant rounded-md text-xs text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors cursor-pointer">
-                <Papicon icon="bar-chart-2" size={12} class="text-warning" /> Analytics
+                <Papicon icon="bar-chart-2" size={12} class="text-warning" /> {m.home_shortcut_stats()}
               </button>
               <button onclick={() => router.goto('/staff-management')} class="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-surface-container border border-outline-variant rounded-md text-xs text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors cursor-pointer">
                 <Papicon icon="users" size={12} class="text-success" /> Staff
@@ -1728,9 +1488,6 @@
         {:else if item.id === 'notes'}
           <div class="flex flex-col h-full min-h-[160px]">
             <div class="flex items-center gap-2.5 mb-2 shrink-0">
-              <div class="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
-                <Papicon icon="edit" size={14} />
-              </div>
               <h3 class="text-sm font-medium text-on-surface">{m.home_team_notes()}</h3>
             </div>
             <textarea
@@ -1746,9 +1503,6 @@
           <div class="flex flex-col h-full justify-between">
             <div class="flex items-center justify-between mb-3 shrink-0">
               <div class="flex items-center gap-2.5">
-                <div class="w-7 h-7 rounded-lg bg-indigo-500/10 flex items-center justify-center text-indigo-400">
-                  <Papicon icon="server" size={14} />
-                </div>
                 <h3 class="text-sm font-medium text-on-surface">{m.home_mod_serverinfo_title()}</h3>
               </div>
             </div>
@@ -1783,9 +1537,6 @@
           <div class="flex flex-col h-full justify-between">
             <div class="flex items-center justify-between mb-3 shrink-0">
               <div class="flex items-center gap-2.5">
-                <div class="w-7 h-7 rounded-lg bg-success/10 flex items-center justify-center text-success">
-                  <Papicon icon="cpu" size={14} />
-                </div>
                 <h3 class="text-sm font-medium text-on-surface">{m.home_mod_bothosting_title()}</h3>
               </div>
               {#if hosting}
@@ -1830,9 +1581,6 @@
           <div class="flex flex-col h-full justify-between">
             <div class="flex items-center justify-between mb-3 shrink-0">
               <div class="flex items-center gap-2.5">
-                <div class="w-7 h-7 rounded-lg bg-purple-500/10 flex items-center justify-center text-purple-400">
-                  <Papicon icon="book" size={14} />
-                </div>
                 <h3 class="text-sm font-medium text-on-surface">{m.home_kotbo_news()}</h3>
               </div>
             </div>
@@ -1880,9 +1628,6 @@
           ]}
           <div class="flex flex-col h-full justify-between">
             <div class="flex items-center gap-2.5 mb-3 shrink-0">
-              <div class="w-7 h-7 rounded-lg bg-warning/10 flex items-center justify-center text-warning">
-                <Papicon icon="info" size={14} />
-              </div>
               <h3 class="text-sm font-medium text-on-surface">{m.home_quick_guide()}</h3>
             </div>
             <div class="space-y-2 grow flex flex-col justify-center">
@@ -1905,9 +1650,6 @@
         {:else if item.id === 'clockWeather'}
           <div class="flex flex-col h-full justify-between min-h-[130px]">
             <div class="flex items-center gap-2.5 mb-2 shrink-0">
-              <div class="w-7 h-7 rounded-lg bg-sky-500/10 flex items-center justify-center text-sky-400">
-                <Papicon icon="clock" size={14} />
-              </div>
               <h3 class="text-sm font-medium text-on-surface">{m.home_mod_clockweather_title()}</h3>
             </div>
             <div class="flex flex-col justify-center grow">
@@ -1920,9 +1662,6 @@
           <div class="flex flex-col h-full justify-between">
             <div class="flex items-center justify-between mb-3 shrink-0">
               <div class="flex items-center gap-2.5">
-                <div class="w-7 h-7 rounded-lg bg-warning/10 flex items-center justify-center text-warning">
-                  <Papicon icon="dollar-sign" size={14} />
-                </div>
                 <h3 class="text-sm font-medium text-on-surface">{m.home_mod_economy_title()}</h3>
               </div>
               <button onclick={() => router.goto('/economy')} class="text-2xs text-primary hover:underline cursor-pointer">{m.home_manage()}</button>
@@ -1954,9 +1693,6 @@
           <div class="flex flex-col h-full justify-between">
             <div class="flex items-center justify-between mb-3 shrink-0">
               <div class="flex items-center gap-2.5">
-                <div class="w-7 h-7 rounded-lg bg-indigo-500/10 flex items-center justify-center text-indigo-400">
-                  <Papicon icon="bar-chart-2" size={14} />
-                </div>
                 <h3 class="text-sm font-medium text-on-surface">{m.home_mod_leveling_title()}</h3>
               </div>
               <button onclick={() => router.goto('/leveling')} class="text-2xs text-primary hover:underline cursor-pointer">{m.home_leaderboard()}</button>
@@ -1988,9 +1724,6 @@
           <div class="flex flex-col h-full justify-between">
             <div class="flex items-center justify-between mb-3 shrink-0">
               <div class="flex items-center gap-2.5">
-                <div class="w-7 h-7 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-400">
-                  <Papicon icon="message-square" size={14} />
-                </div>
                 <h3 class="text-sm font-medium text-on-surface">Tickets</h3>
               </div>
               <button onclick={() => router.goto('/tickets')} class="text-2xs text-primary hover:underline cursor-pointer">{m.home_see_everything()}</button>
@@ -2017,9 +1750,6 @@
           <div class="flex flex-col h-full justify-between">
             <div class="flex items-center justify-between mb-3 shrink-0">
               <div class="flex items-center gap-2.5">
-                <div class="w-7 h-7 rounded-lg bg-teal-500/10 flex items-center justify-center text-teal-400">
-                  <Papicon icon="user-plus" size={14} />
-                </div>
                 <h3 class="text-sm font-medium text-on-surface">{m.home_mod_invites_title()}</h3>
               </div>
               <button onclick={() => router.goto('/invitations')} class="text-2xs text-primary hover:underline cursor-pointer">{m.home_details()}</button>
@@ -2050,16 +1780,13 @@
           <div class="flex flex-col h-full justify-between">
             <div class="flex items-center justify-between mb-3 shrink-0">
               <div class="flex items-center gap-2.5">
-                <div class="w-7 h-7 rounded-lg bg-error/10 flex items-center justify-center text-error">
-                  <Papicon icon="calendar" size={14} />
-                </div>
                 <h3 class="text-sm font-medium text-on-surface">{m.home_mod_events_title()}</h3>
               </div>
               <button onclick={() => router.goto('/events')} class="text-2xs text-primary hover:underline cursor-pointer">{m.home_see_everything()}</button>
             </div>
             <div class="space-y-2 grow flex flex-col {upcomingEvents.length > 0 ? '' : 'justify-center'}">
               {#if upcomingEvents.length === 0}
-                <div class="flex flex-col items-center justify-center py-4 text-center text-on-surface-variant/40">
+                <div class="flex flex-col items-center justify-center py-4 text-center text-on-surface-variant">
                   <Papicon icon="calendar" size={18} class="mb-1 text-error/50" />
                   <p class="text-2xs">{m.home_no_upcoming_events()}</p>
                   <p class="text-2xs mt-0.5">{m.home_create_event_hint()}</p>
@@ -2090,16 +1817,13 @@
           <div class="flex flex-col h-full justify-between">
             <div class="flex items-center justify-between mb-3 shrink-0">
               <div class="flex items-center gap-2.5">
-                <div class="w-7 h-7 rounded-lg bg-violet-500/10 flex items-center justify-center text-violet-400">
-                  <Papicon icon="bar-chart" size={14} />
-                </div>
                 <h3 class="text-sm font-medium text-on-surface">{m.home_mod_polls_title()}</h3>
               </div>
               <button onclick={() => router.goto('/staff-management/polls')} class="text-2xs text-primary hover:underline cursor-pointer">{m.home_see_everything()}</button>
             </div>
             <div class="space-y-2 grow flex flex-col {openPolls.length > 0 ? '' : 'justify-center'}">
               {#if openPolls.length === 0}
-                <div class="flex flex-col items-center justify-center py-4 text-center text-on-surface-variant/40">
+                <div class="flex flex-col items-center justify-center py-4 text-center text-on-surface-variant">
                   <Papicon icon="bar-chart" size={18} class="mb-1 text-violet-500/50" />
                   <p class="text-2xs">{m.home_no_active_polls()}</p>
                   <p class="text-2xs mt-0.5">{m.home_polls_hint()}</p>
@@ -2120,9 +1844,6 @@
           <div class="flex flex-col h-full justify-between">
             <div class="flex items-center justify-between mb-3 shrink-0">
               <div class="flex items-center gap-2.5">
-                <div class="w-7 h-7 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-400">
-                  <Papicon icon="shield" size={14} />
-                </div>
                 <h3 class="text-sm font-medium text-on-surface">{m.home_mod_staffserver_title()}</h3>
               </div>
               <button onclick={() => router.goto('/staff-server')} class="text-2xs text-primary hover:underline cursor-pointer">{m.home_manage()}</button>
@@ -2153,7 +1874,7 @@
               </div>
             {:else}
               <div class="space-y-2 grow flex flex-col justify-center">
-                <div class="flex flex-col items-center justify-center py-4 text-center text-on-surface-variant/40">
+                <div class="flex flex-col items-center justify-center py-4 text-center text-on-surface-variant">
                   <Papicon icon="shield" size={18} class="mb-1 text-blue-500/50" />
                   <p class="text-2xs">{m.home_no_staff_server()}</p>
                   <p class="text-2xs mt-0.5">{m.home_link_staff_hint()}</p>
@@ -2166,69 +1887,30 @@
     {/each}
   </div>
 
-  <!-- Floating Actions -->
-  <div class="home-floating-actions fixed bottom-6 right-6 z-100 flex items-center gap-3">
-    {#if !isEditing}
-      <button
-        onclick={() => isEditing = true}
-        class="w-14 h-14 rounded-full bg-primary text-on-primary flex items-center justify-center shadow-lg hover:bg-primary/95 transition-all active:scale-[0.98] group relative cursor-pointer"
-        title={m.home_edit_layout()}
-      >
-        <Papicon icon="edit" size={24} />
-        <span class="absolute bottom-16 bg-surface-container border border-outline-variant px-2.5 py-1 rounded-md text-xs text-on-surface shadow-sm opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
-          {m.home_edit_layout()}
-        </span>
-      </button>
-    {:else}
-      <!-- Reset -->
-      <button
-        onclick={() => showResetConfirm = true}
-        class="w-11 h-11 rounded-full bg-error/10 border border-error/30 text-error flex items-center justify-center shadow-lg hover:bg-red-500 hover:text-white transition-all active:scale-[0.98] group relative cursor-pointer"
-        title={m.common_reset()}
-      >
-        <Papicon icon="rotate-ccw" size={18} />
-        <span class="absolute bottom-14 bg-surface-container border border-outline-variant px-2.5 py-1 rounded-md text-xs text-on-surface shadow-sm opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
-          {m.common_reset()}
-        </span>
-      </button>
-
-      <!-- Presets -->
-      <button
-        onclick={() => { showPresetsModal = true; loadPresets(); }}
-        class="w-11 h-11 rounded-full bg-surface-container border border-outline-variant text-on-surface-variant flex items-center justify-center shadow-lg hover:bg-surface-container-high hover:text-on-surface transition-all active:scale-[0.98] group relative cursor-pointer"
-        title="Presets"
-      >
-        <Papicon icon="layers" size={18} />
-        <span class="absolute bottom-14 bg-surface-container border border-outline-variant px-2.5 py-1 rounded-md text-xs text-on-surface shadow-sm opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
-          Presets
-        </span>
-      </button>
-
-      <!-- Export -->
-      <button
-        onclick={exportCurrentLayout}
-        class="w-11 h-11 rounded-full bg-surface-container border border-outline-variant text-on-surface-variant flex items-center justify-center shadow-lg hover:bg-surface-container-high hover:text-on-surface transition-all active:scale-[0.98] group relative cursor-pointer"
-        title={m.common_export()}
-      >
-        <Papicon icon="download" size={18} />
-        <span class="absolute bottom-14 bg-surface-container border border-outline-variant px-2.5 py-1 rounded-md text-xs text-on-surface shadow-sm opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
-          {m.common_export()}
-        </span>
-      </button>
-
-      <!-- Validate -->
-      <button
-        onclick={saveLayout}
-        class="w-14 h-14 rounded-full bg-emerald-500 text-white flex items-center justify-center shadow-lg hover:bg-emerald-600 transition-all active:scale-[0.98] group relative cursor-pointer"
-        title={m.home_validate_changes()}
-      >
-        <Papicon icon="check" size={24} />
-        <span class="absolute bottom-16 bg-surface-container border border-outline-variant px-2.5 py-1 rounded-md text-xs text-on-surface shadow-sm opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
-          {m.common_save()}
-        </span>
-      </button>
-    {/if}
-  </div>
+  <!-- Barre d'edition : visible seulement pendant la personnalisation, et
+       collee au bas de l'ecran pour qu'Enregistrer reste a portee pendant
+       qu'on parcourt la grille. Hors edition, l'entree est le bouton
+       « Personnaliser » de l'en-tete : l'ancien rond flottant recouvrait les
+       blocs. Centree sur ordinateur : en bas a droite, les toasts (« Bloc
+       ajoute ») la recouvraient. Le positionnement mobile vit dans app.css
+       (.home-floating-actions). -->
+  {#if isEditing}
+    <div
+      class="home-floating-actions fixed bottom-6 right-6 md:right-auto md:left-1/2 md:-translate-x-1/2 z-40 flex items-center gap-1.5 p-1.5 rounded-xl bg-surface-container-high border border-outline-variant shadow-lg"
+      role="toolbar"
+      aria-label={m.home_edit_title()}
+    >
+      {#if $isMobile}
+        <!-- Sur telephone, la barre doit tenir sur une ligne au-dessus des onglets. -->
+        <Button size="sm" variant="secondary" icon="add" aria-label={m.home_add_module()} onclick={() => (showAddModuleModal = true)} />
+      {:else}
+        <Button size="sm" variant="secondary" icon="add" onclick={() => (showAddModuleModal = true)}>{m.home_add_module()}</Button>
+      {/if}
+      <Menu items={editMenu} label={m.home_edit_more()} />
+      <Button size="sm" variant="ghost" onclick={cancelEditing}>{m.common_cancel()}</Button>
+      <Button size="sm" variant="primary" onclick={saveLayout}>{m.common_save()}</Button>
+    </div>
+  {/if}
 
   <!-- Add Module Modal -->
   {#if showAddModuleModal}
@@ -2289,28 +1971,13 @@
   {#if showResetConfirm}
     <div class="modal-backdrop" onclick={() => showResetConfirm = false} role="button" tabindex="-1" onkeydown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) showResetConfirm = false; }}>
       <div class="modal-panel max-w-sm" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} role="dialog" aria-modal="true" tabindex="-1">
-        <div class="flex items-center gap-3 text-warning mb-3">
-          <div class="w-10 h-10 rounded-lg bg-warning/10 flex items-center justify-center shrink-0">
-            <Papicon icon="warning" size={20} />
-          </div>
-          <h3 class="font-semibold text-sm text-on-surface">{m.home_reset_layout_q()}</h3>
-        </div>
-        <p class="text-xs text-on-surface-variant leading-normal mb-5">
+        <h3 class="font-semibold text-base text-on-surface mb-2">{m.home_reset_layout_q()}</h3>
+        <p class="text-sm text-on-surface-variant leading-normal mb-5">
           {m.home_reset_layout_warn()}
         </p>
-        <div class="flex justify-end gap-2.5">
-          <button
-            onclick={() => showResetConfirm = false}
-            class="px-3.5 py-2 text-xs font-medium bg-surface-container hover:bg-surface-container-high rounded-lg text-on-surface transition-colors cursor-pointer"
-          >
-            {m.common_cancel()}
-          </button>
-          <button
-            onclick={resetLayout}
-            class="px-3.5 py-2 text-xs font-medium bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors cursor-pointer"
-          >
-            {m.common_confirm()}
-          </button>
+        <div class="flex justify-end gap-2">
+          <Button size="sm" variant="ghost" onclick={() => (showResetConfirm = false)}>{m.common_cancel()}</Button>
+          <Button size="sm" variant="danger" onclick={resetLayout}>{m.home_edit_reset()}</Button>
         </div>
       </div>
     </div>
@@ -2433,7 +2100,7 @@
               </div>
             {/each}
           {:else}
-            <div class="flex flex-col items-center justify-center py-8 text-on-surface-variant/40">
+            <div class="flex flex-col items-center justify-center py-8 text-on-surface-variant">
               <Papicon icon="layers" size={24} class="mb-2" />
               <p class="text-xs">{m.home_no_presets()}</p>
               <p class="text-2xs mt-0.5">{m.home_no_presets_hint()}</p>

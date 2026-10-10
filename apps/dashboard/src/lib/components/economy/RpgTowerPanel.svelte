@@ -832,7 +832,7 @@
             <td class="py-1.5 pl-2">
               <div class="flex items-center gap-2">
                 <div class="flex-1 h-2 rounded-full bg-surface-container overflow-hidden"><div class="h-full bg-error/70" style="width: {rate}%"></div></div>
-                <span class="w-9 text-right font-mono">{card.arrivals > 0 ? `${rate} %` : '—'}</span>
+                <span class="w-9 text-right font-mono">{card.arrivals > 0 ? `${rate} %` : '–'}</span>
               </div>
             </td>
           </tr>
@@ -1144,8 +1144,8 @@
           <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
             {@render kpi(m.eco_tower_stat_players(), stats.players.toLocaleString(), m.eco_tower_kpi_active({ count: stats.activeRuns }), 'user', m.eco_tower_stat_players_tip())}
             {@render kpi(m.eco_tower_stat_runs(), stats.runs.toLocaleString(), m.eco_tower_kpi_best({ floor: stats.bestFloor }), 'walk', m.eco_tower_stat_runs_tip())}
-            {@render kpi(m.eco_tower_insight_average(), insights && insights.finishedRuns > 0 ? insights.averageFloor : '—', '', 'grades', m.eco_tower_insight_average_tip())}
-            {@render kpi(m.eco_tower_insight_deaths(), insights && insights.finishedRuns > 0 ? `${insights.deathRate} %` : '—', '', 'ghost', m.eco_tower_insight_deaths_tip())}
+            {@render kpi(m.eco_tower_insight_average(), insights && insights.finishedRuns > 0 ? insights.averageFloor : '–', '', 'grades', m.eco_tower_insight_average_tip())}
+            {@render kpi(m.eco_tower_insight_deaths(), insights && insights.finishedRuns > 0 ? `${insights.deathRate} %` : '–', '', 'ghost', m.eco_tower_insight_deaths_tip())}
           </div>
 
           {#if !settings.enabled}
@@ -1185,7 +1185,7 @@
                   {/each}
                 </ol>
               {:else}
-                <p class="text-body-sm text-on-surface-variant">—</p>
+                <p class="text-body-sm text-on-surface-variant">–</p>
               {/if}
             </SectionCard>
           </div>
@@ -1689,7 +1689,7 @@
                         <span class="w-8 text-right font-mono">{entry.deaths}</span>
                       </div>
                     {:else}
-                      <p class="text-2xs text-on-surface-variant">—</p>
+                      <p class="text-2xs text-on-surface-variant">–</p>
                     {/each}
                   </div>
                   <div class="rounded-xl border border-outline-variant p-4">
@@ -1698,7 +1698,7 @@
                       {#each simResult.topKillers as killer}
                         <li class="flex justify-between gap-2"><span class="truncate font-semibold">{killer.name}</span><span class="text-on-surface-variant">{killer.deaths}</span></li>
                       {:else}
-                        <li class="text-on-surface-variant">—</li>
+                        <li class="text-on-surface-variant">–</li>
                       {/each}
                     </ol>
                   </div>

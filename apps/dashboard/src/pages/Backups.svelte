@@ -68,7 +68,7 @@
       const data = await fetchBackups(authStore.selectedGuildId ?? '');
       backups = data || [];
     } catch (error) {
-      console.error('Erreur lors du chargement des backups:', error);
+      console.error('Impossible de charger les sauvegardes :', error);
     }
     loading = false;
   }

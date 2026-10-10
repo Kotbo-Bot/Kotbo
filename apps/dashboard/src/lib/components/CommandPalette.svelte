@@ -5,7 +5,6 @@
   import { themeStore } from '../stores/theme.svelte';
   import { feedbackModal } from '../stores/feedbackModal.svelte';
   import { searchStore } from '../stores/search.svelte';
-  import { sidebarStore } from '../stores/sidebar.svelte';
   import { serverSwitcherStore } from '../stores/serverSwitcher.svelte';
   import { onboardingStore } from '../stores/tutorial.svelte';
   import { navigationStore } from '../stores/navigation.svelte';
@@ -115,7 +114,7 @@
     const profileBase = authStore.user?.id ? `/profile/${authStore.user.id}` : '/profile';
     items.push({
       id: 'profile',
-      label: 'Mon Profil',
+      label: 'Mon profil',
       sublabel: 'Profil utilisateur',
       icon: 'user',
       group: 'Compte',
@@ -124,8 +123,8 @@
     for (const tab of tabsForPage('/profile')) {
       items.push({
         id: `profile-${tab.id}`,
-        label: `Mon Profil › ${tab.label()}`,
-        sublabel: 'Onglet · Mon Profil',
+        label: `Mon profil › ${tab.label()}`,
+        sublabel: 'Onglet · Mon profil',
         icon: tab.icon || 'user',
         group: 'Compte',
         action: () => router.goto(`${profileBase}/${tab.id}`)
@@ -146,8 +145,8 @@
     // Theme Toggle action
     items.push({
       id: 'action-theme',
-      label: 'Basculer le thème (Sombre / Clair)',
-      sublabel: themeStore.dark ? 'Activer le mode clair' : 'Activer le mode sombre',
+      label: themeStore.dark ? 'Passer en thème clair' : 'Passer en thème sombre',
+      sublabel: 'Apparence',
       icon: themeStore.dark ? 'sun' : 'moon',
       group: 'Actions',
       action: () => themeStore.toggle()
@@ -156,8 +155,8 @@
     // Feedback modal action
     items.push({
       id: 'action-feedback',
-      label: 'Envoyer un retour / signaler un bug',
-      sublabel: 'Feedback & suggestions',
+      label: 'Signaler un problème ou proposer une idée',
+      sublabel: 'Envoyer un message à l\'équipe Kotbo',
       icon: 'bug_report',
       group: 'Actions',
       action: () => feedbackModal.show()
@@ -166,8 +165,8 @@
     // Logout action
     items.push({
       id: 'action-logout',
-      label: 'Déconnexion',
-      sublabel: 'Se déconnecter du dashboard',
+      label: 'Se déconnecter',
+      sublabel: 'Compte',
       icon: 'log-out',
       group: 'Actions',
       action: () => authStore.logout()
@@ -176,19 +175,68 @@
     return items;
   });
 
-  const filteredItems = $derived(() => {
-    const q = query.toLowerCase().trim();
-    const matched = q
-      ? allPaletteItems.filter(item =>
-          item.label.toLowerCase().includes(q) ||
-          item.sublabel?.toLowerCase().includes(q) ||
-          item.group.toLowerCase().includes(q)
-        )
-      : allPaletteItems;
+  const normalize = (value: string): string =>
+    value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
 
-    // Group by group label
+  /**
+   * Pertinence d'un element pour la saisie. Un mot qui commence par la saisie
+   * passe avant une saisie trouvee au milieu d'un mot : « sanc » trouvait
+   * d'abord « Statistiques > Croissance » (cro-issanc-e), parce que les
+   * groupes etaient affiches dans l'ordre du menu et non par pertinence.
+   * Une page passe avant ses onglets.
+   */
+  function score(item: PaletteItem, q: string): number {
+    const label = normalize(item.label);
+    const words = label.split(/[\s›>/'-]+/);
+    let value = 0;
+    if (label.startsWith(q)) value = 100;
+    else if (words.some((word) => word.startsWith(q))) value = 80;
+    else if (label.includes(q)) value = 40;
+    else if (normalize(item.sublabel ?? '').includes(q) || normalize(item.group).includes(q)) value = 20;
+    if (value > 0 && !item.label.includes('›')) value += 10;
+    return value;
+  }
+
+  /**
+   * Sans saisie, la palette listait toutes les pages et tous leurs onglets,
+   * soit une centaine de lignes. Elle propose maintenant ce qu'on rouvre :
+   * les pages epinglees, les dernieres consultees, puis les actions.
+   */
+  const suggestedItems = $derived.by((): Record<string, PaletteItem[]> => {
+    const toItem = (page: { name: string; href: string; icon?: string }, group: string): PaletteItem => ({
+      id: `${group}-${page.href}`,
+      label: page.name,
+      sublabel: 'Page',
+      icon: page.icon || 'home',
+      group,
+      action: () => router.goto(page.href),
+    });
     const groups: Record<string, PaletteItem[]> = {};
-    for (const item of matched) {
+    const pinned = navigationStore.favoriteItems.slice(0, 5);
+    const pinnedHrefs = new Set(pinned.map((page) => page.href));
+    const recent = navigationStore.recentItems.filter((page) => !pinnedHrefs.has(page.href)).slice(0, 5);
+    if (pinned.length > 0) groups['Épinglés'] = pinned.map((page) => toItem(page, 'Épinglés'));
+    if (recent.length > 0) groups['Récemment consultés'] = recent.map((page) => toItem(page, 'Récemment consultés'));
+    if (pinned.length === 0 && recent.length === 0) {
+      const general = navGroups.find((group) => group.key === 'general');
+      if (general) groups[general.label] = general.items.map((page) => toItem(page, general.label));
+    }
+    groups['Actions'] = allPaletteItems.filter((item) => item.group === 'Actions');
+    return groups;
+  });
+
+  const filteredItems = $derived(() => {
+    const q = normalize(query);
+    if (!q) return suggestedItems;
+
+    const ranked = allPaletteItems
+      .map((item) => ({ item, value: score(item, q) }))
+      .filter((entry) => entry.value > 0)
+      .sort((x, y) => y.value - x.value);
+
+    // Les groupes apparaissent dans l'ordre de leur meilleur resultat.
+    const groups: Record<string, PaletteItem[]> = {};
+    for (const { item } of ranked) {
       if (!groups[item.group]) groups[item.group] = [];
       groups[item.group].push(item);
     }
@@ -247,74 +295,28 @@
     }
   }
 
-  let lastCtrlKTime = 0;
-
+  /**
+   * « / » et Ctrl+K ouvrent la meme recherche. Ils visaient avant un champ de
+   * la barre laterale (`.sidebar input`) qui n'existait plus, et un double
+   * Ctrl+K basculait sur la palette : deux recherches, deux gestes, pour les
+   * memes pages. La barre laterale n'a plus de champ ; tout passe par ici.
+   */
   function handleGlobalKeydown(e: KeyboardEvent) {
-    // "/" ouvre la recherche sidebar (sauf si on est dans un champ texte)
-    if (e.key === '/' && !open) {
-      const active = document.activeElement;
-      const isEditing = active && (
-        active.tagName === 'INPUT' ||
-        active.tagName === 'TEXTAREA' ||
-        active.getAttribute('contenteditable') === 'true'
-      );
-      if (!isEditing) {
-        e.preventDefault();
-        serverSwitcherStore.close();
-        const sidebarSearchInput = document.querySelector('.sidebar input') as HTMLInputElement;
-        if (sidebarSearchInput) {
-          if (sidebarStore.collapsed) {
-            sidebarStore.set(false);
-          }
-          setTimeout(() => {
-            const input = document.querySelector('.sidebar input') as HTMLInputElement;
-            input?.focus();
-            input?.select();
-          }, 50);
-        } else {
-          searchStore.toggle();
-        }
-        return;
-      }
-    }
+    const active = document.activeElement;
+    const isEditing = active && (
+      active.tagName === 'INPUT' ||
+      active.tagName === 'TEXTAREA' ||
+      active.getAttribute('contenteditable') === 'true'
+    );
 
-    const isSearchKey = e.key === 'k' || e.key === 'K';
-    if ((e.metaKey || e.ctrlKey) && isSearchKey) {
-      e.preventDefault();
-      serverSwitcherStore.close();
-      onboardingStore.markShortcutUsed();
+    const isSlash = e.key === '/' && !open && !isEditing;
+    const isCtrlK = (e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K');
+    if (!isSlash && !isCtrlK) return;
 
-      const now = Date.now();
-      if (now - lastCtrlKTime < 500) {
-        // Double Ctrl+K: toggle command palette navigation modal
-        close();
-        searchStore.toggle();
-        lastCtrlKTime = 0;
-
-        // Blur sidebar input if it was focused
-        const sidebarSearchInput = document.querySelector('.sidebar input') as HTMLInputElement;
-        if (sidebarSearchInput) {
-          sidebarSearchInput.blur();
-        }
-      } else {
-        // Single Ctrl+K: focus sidebar search if it exists
-        const sidebarSearchInput = document.querySelector('.sidebar input') as HTMLInputElement;
-        if (sidebarSearchInput) {
-          if (sidebarStore.collapsed) {
-            sidebarStore.set(false);
-          }
-          setTimeout(() => {
-            const input = document.querySelector('.sidebar input') as HTMLInputElement;
-            input?.focus();
-            input?.select();
-          }, 50);
-        } else {
-          // If sidebar search doesn't exist (e.g. admin pages), toggle command palette instantly
-          searchStore.toggle();
-        }
-        lastCtrlKTime = now;
-      }
-    }
+    e.preventDefault();
+    serverSwitcherStore.close();
+    if (isCtrlK) onboardingStore.markShortcutUsed();
+    searchStore.toggle();
   }
 </script>
 

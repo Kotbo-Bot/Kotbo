@@ -10,7 +10,6 @@
    */
   import { authStore } from '../lib/stores/auth.svelte';
   import { API_BASE_URL, authorizedFetch } from '../lib/api/client';
-  import { resolveUserAvatarSrc } from '../lib/discordMedia';
   import { toast } from '../lib/stores/toast.svelte';
   import { m } from '../lib/i18n';
   import { Button, Callout, SectionCard, ToggleSwitch } from '../lib/components/ui';
@@ -89,23 +88,18 @@
 
 <main id="main-content" class="min-h-screen bg-background text-on-background">
   <div class="mx-auto w-full max-w-3xl px-4 sm:px-6 py-10 space-y-6">
-    <header class="flex flex-wrap items-center gap-4">
-      <img
-        src={resolveUserAvatarSrc(authStore.user?.id, authStore.user?.avatar)}
-        alt=""
-        width="56"
-        height="56"
-        class="w-14 h-14 rounded-full object-cover bg-surface-container shrink-0"
-      />
-      <div class="min-w-0 flex-1">
-        <h1 class="text-xl font-semibold text-on-surface">{m.me_title()}</h1>
-        <p class="mt-0.5 text-body-sm text-on-surface-variant">{m.me_subtitle()}</p>
+    <header class="flex flex-col md:flex-row md:items-end justify-between gap-x-6 gap-y-3">
+      <div class="min-w-0">
+        <h1 class="text-2xl font-semibold tracking-tight text-on-surface font-headline leading-tight">{m.me_title()}</h1>
+        <p class="mt-1 max-w-prose text-sm text-on-surface-variant">{m.me_subtitle()}</p>
       </div>
-      {#if hasDashboard}
-        <Button href="/" size="sm" icon="arrow-left">{m.me_back_dashboard()}</Button>
-      {:else}
-        <Button size="sm" variant="ghost" icon="log-out" onclick={() => authStore.logout()}>{m.navbar_logout()}</Button>
-      {/if}
+      <div class="flex items-center gap-2 shrink-0">
+        {#if hasDashboard}
+          <Button href="/" size="sm" icon="arrow-left">{m.me_back_dashboard()}</Button>
+        {:else}
+          <Button size="sm" variant="ghost" icon="log-out" onclick={() => authStore.logout()}>{m.navbar_logout()}</Button>
+        {/if}
+      </div>
     </header>
 
     <SectionCard title={m.me_profile_title()} description={m.me_profile_desc()}>

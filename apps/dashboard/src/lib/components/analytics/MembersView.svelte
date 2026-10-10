@@ -161,9 +161,9 @@
     const n = data.newcomers;
     return [
       { id: 'joined', label: m.anx_mem_newcomers(), value: fmtNumber(n.joined), color: SERIES[0] },
-      { id: 'young', label: m.anx_mem_young(), hint: m.anx_mem_young_hint(), value: young === null ? '—' : fmtPct(young, 0), color: SERIES[0] },
-      ...(n.onboarding ? [{ id: 'onboarding', label: m.anx_mem_onboarding(), hint: m.anx_mem_onboarding_hint(), value: n.onboarding.rate === null ? '—' : fmtPct(n.onboarding.rate, 0), color: SERIES[0] }] : []),
-      { id: 'left24h', label: m.anx_growth_quick_leave(), hint: m.anx_growth_quick_leave_hint(), value: n.left24h.rate === null ? '—' : fmtPct(n.left24h.rate, 0), color: SERIES[0] },
+      { id: 'young', label: m.anx_mem_young(), hint: m.anx_mem_young_hint(), value: young === null ? '–' : fmtPct(young, 0), color: SERIES[0] },
+      ...(n.onboarding ? [{ id: 'onboarding', label: m.anx_mem_onboarding(), hint: m.anx_mem_onboarding_hint(), value: n.onboarding.rate === null ? '–' : fmtPct(n.onboarding.rate, 0), color: SERIES[0] }] : []),
+      { id: 'left24h', label: m.anx_growth_quick_leave(), hint: m.anx_growth_quick_leave_hint(), value: n.left24h.rate === null ? '–' : fmtPct(n.left24h.rate, 0), color: SERIES[0] },
     ];
   });
 
@@ -272,9 +272,9 @@
                       {#if link.label}<span class="row-sub">{link.code}</span>{/if}
                       {#if link.isVanity}<span class="row-sub">{m.anx_mem_src_vanity()}</span>{/if}
                     </th>
-                    <td>{link.inviterTag ?? '—'}</td>
+                    <td>{link.inviterTag ?? '–'}</td>
                     <td class="num">{fmtNumber(link.joined)}</td>
-                    <td class="num">{link.retention === null ? '—' : fmtPct(link.retention, 0)}</td>
+                    <td class="num">{link.retention === null ? '–' : fmtPct(link.retention, 0)}</td>
                   </tr>
                 {/each}
               </tbody>

@@ -295,7 +295,7 @@
         : item.label))
       .join(' · ');
     if (preview) parts.push(preview);
-    return parts.join(' — ');
+    return parts.join(' · ');
   }
 </script>
 
