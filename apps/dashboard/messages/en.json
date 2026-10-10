@@ -14033,5 +14033,12 @@
   "ste_layout_carousel": "Carousel",
   "ste_cfg_columns": "Columns",
   "ste_gallery_empty": "No images yet.",
-  "ste_gallery_add": "Add an image"
+  "ste_gallery_add": "Add an image",
+  "ste_cat_membre": "Member space",
+  "ste_block_memberSettings": "Member settings",
+  "ste_block_memberSettings_desc": "Public profile and direct messages, as the member chooses.",
+  "ste_block_memberRewards": "My rewards",
+  "ste_block_memberRewards_desc": "Visit streak and latest rewards earned on the site.",
+  "ste_block_memberInventory": "My inventory",
+  "ste_block_memberInventory_desc": "Coins and items of the signed-in member."
 }

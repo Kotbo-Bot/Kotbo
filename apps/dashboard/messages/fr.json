@@ -14033,5 +14033,12 @@
   "ste_layout_carousel": "Carrousel",
   "ste_cfg_columns": "Colonnes",
   "ste_gallery_empty": "Aucune image pour l'instant.",
-  "ste_gallery_add": "Ajouter une image"
+  "ste_gallery_add": "Ajouter une image",
+  "ste_cat_membre": "Espace membre",
+  "ste_block_memberSettings": "Réglages du membre",
+  "ste_block_memberSettings_desc": "Profil public et messages privés, au choix du membre.",
+  "ste_block_memberRewards": "Mes récompenses",
+  "ste_block_memberRewards_desc": "Série de visites et dernières récompenses gagnées sur le site.",
+  "ste_block_memberInventory": "Mon inventaire",
+  "ste_block_memberInventory_desc": "Pièces et objets du membre connecté."
 }
