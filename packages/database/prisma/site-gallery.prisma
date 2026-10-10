@@ -1,0 +1,69 @@
+// Galerie de thèmes partagés entre serveurs.
+//
+// Un serveur publie directement son style (thème, couleurs, polices, arrondis,
+// CSS libre refiltré), des modèles de pages et son menu ; tout serveur peut
+// l'appliquer. Les modèles sont « portables » : les réglages propres au
+// serveur d'origine (salons, formulaires, hiérarchies) en sont retirés. Un
+// thème signalé par plusieurs serveurs est masqué en attendant l'équipe Kotbo.
+
+model SiteThemeShare {
+  id      String @id @default(cuid())
+  guildId String
+  siteId  String
+
+  name        String
+  description String  @default("")
+  // Nom du serveur à la publication : affiché même si le bot l'a quitté.
+  authorName  String
+  authorId    String
+
+  theme         String
+  themeSettings Json    @default("{}")
+  customCss     String?
+  // [{ key, title, content }] : pages modèles, documents portables.
+  templates     Json    @default("[]")
+  // Menu : cibles « page » réécrites vers la clé d'un modèle (`tpl:<clé>`).
+  navigation    Json?
+
+  installs Int       @default(0)
+  reports  Int       @default(0)
+  hiddenAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  site          CommunitySite      @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  installations SiteThemeInstall[]
+  reportsList   SiteThemeReport[]
+
+  @@index([guildId])
+  @@index([hiddenAt, installs])
+  @@index([hiddenAt, createdAt])
+  @@map("site_theme_shares")
+}
+
+// Un serveur compte une fois dans les installations d'un thème.
+model SiteThemeInstall {
+  shareId String
+  guildId String
+
+  createdAt DateTime @default(now())
+
+  share SiteThemeShare @relation(fields: [shareId], references: [id], onDelete: Cascade)
+
+  @@id([shareId, guildId])
+  @@map("site_theme_installs")
+}
+
+model SiteThemeReport {
+  shareId String
+  guildId String
+  reason  String @default("")
+
+  createdAt DateTime @default(now())
+
+  share SiteThemeShare @relation(fields: [shareId], references: [id], onDelete: Cascade)
+
+  @@id([shareId, guildId])
+  @@map("site_theme_reports")
+}

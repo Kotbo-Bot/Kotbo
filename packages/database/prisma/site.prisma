@@ -89,6 +89,7 @@ model CommunitySite {
   reports   SiteReport[]
   voteSites SiteVoteSite[]
   forumCategories SiteForumCategory[]
+  themeShares SiteThemeShare[]
 
   @@index([published])
   @@map("community_sites")
