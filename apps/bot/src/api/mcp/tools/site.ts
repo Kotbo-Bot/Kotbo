@@ -310,7 +310,7 @@ export function registerSiteTools(ctx: McpToolContext) {
   server.registerTool(
     'update_site_settings',
     {
-      description: "Réglages du site : adresse (l'ancienne redirige), nom, accroche, logo, bannière, favicon, page d'accueil, champs de la page Équipe, rôles rédacteurs du wiki/blog, salons d'annonce.",
+      description: "Réglages du site : adresse (l'ancienne redirige), nom, accroche, logo, bannière, favicon, page d'accueil, champs de la page Équipe, rôles rédacteurs du wiki/blog, salons d'annonce, récompenses de l'activité (pièces et XP pour la visite du jour, la participation, la lecture et le vote, plafonds et bonus de série).",
       inputSchema: {
         slug: z.string().optional(),
         name: z.string().nullable().optional(),
@@ -325,6 +325,15 @@ export function registerSiteTools(ctx: McpToolContext) {
         blog_editor_role_ids: z.array(z.string()).optional(),
         wiki_announce_channel_id: z.string().nullable().optional(),
         blog_announce_channel_id: z.string().nullable().optional(),
+        rewards: z
+          .object({
+            enabled: z.boolean().optional(),
+            daily: z.object({ coins: z.number().int().optional(), xp: z.number().int().optional(), streakBonus: z.number().int().optional(), streakCap: z.number().int().optional() }).optional(),
+            participation: z.object({ coins: z.number().int().optional(), xp: z.number().int().optional(), dailyCap: z.number().int().optional() }).optional(),
+            read: z.object({ coins: z.number().int().optional(), xp: z.number().int().optional(), dailyCap: z.number().int().optional() }).optional(),
+            vote: z.object({ coins: z.number().int().optional(), xp: z.number().int().optional(), streakBonus: z.number().int().optional(), streakCap: z.number().int().optional() }).optional(),
+          })
+          .optional(),
         key_name: keyName,
       },
       _meta: toolMeta,
@@ -346,6 +355,7 @@ export function registerSiteTools(ctx: McpToolContext) {
           blogEditorRoleIds: args.blog_editor_role_ids,
           wikiAnnounceChannelId: args.wiki_announce_channel_id,
           blogAnnounceChannelId: args.blog_announce_channel_id,
+          rewards: args.rewards,
         });
         await audit(args.key_name, 'Réglages du site (MCP)', `/s/${site.slug}`, Object.keys(args).filter((k) => k !== 'key_name').join(', '));
         return ok({ site: { ...site, url: siteUrl(site.slug) } });

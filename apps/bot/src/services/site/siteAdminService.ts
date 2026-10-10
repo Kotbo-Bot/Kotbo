@@ -15,6 +15,7 @@ import {
   canonicalSiteTheme,
   normalizeSiteDocument,
   normalizeSiteNavigation,
+  normalizeSiteRewards,
   normalizeSiteThemeSettings,
   sanitizeSiteCss,
   sanitizeSiteImageSrc,
@@ -159,6 +160,7 @@ export interface SitePatch {
   homePageId?: unknown;
   staffPage?: unknown;
   settings?: unknown;
+  rewards?: unknown;
   wikiEditorRoleIds?: unknown;
   blogEditorRoleIds?: unknown;
   wikiAnnounceChannelId?: unknown;
@@ -191,6 +193,17 @@ const optionalChannel = (value: unknown): string | null => {
 };
 
 /** Réglages libres du site : seules les clés connues passent. */
+/** Fusion sur deux niveaux : un sous-objet du patch complète celui en place au lieu de le remplacer. */
+function mergeRecords(current: unknown, patch: unknown): Record<string, unknown> {
+  const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
+  const base = isRecord(current) ? { ...current } : {};
+  if (!isRecord(patch)) return base;
+  for (const [key, value] of Object.entries(patch)) {
+    base[key] = isRecord(value) && isRecord(base[key]) ? { ...(base[key] as Record<string, unknown>), ...value } : value;
+  }
+  return base;
+}
+
 function normalizeSiteSettings(current: unknown, patch: unknown): Record<string, unknown> {
   const base = typeof current === 'object' && current !== null ? { ...(current as Record<string, unknown>) } : {};
   if (typeof patch !== 'object' || patch === null) return base;
@@ -260,6 +273,8 @@ export async function updateSite(guildId: string, patch: SitePatch) {
   }
   if (patch.staffPage !== undefined) data.staffPage = readStaffPageSettings(patch.staffPage) as unknown as Prisma.InputJsonValue;
   if (patch.settings !== undefined) data.settings = normalizeSiteSettings(site.settings, patch.settings) as Prisma.InputJsonValue;
+  // Récompenses : on part des réglages actuels, un champ absent du patch est gardé.
+  if (patch.rewards !== undefined) data.rewards = normalizeSiteRewards(mergeRecords(site.rewards, patch.rewards)) as unknown as Prisma.InputJsonValue;
   if (patch.wikiEditorRoleIds !== undefined) data.wikiEditorRoleIds = snowflakes(patch.wikiEditorRoleIds);
   if (patch.blogEditorRoleIds !== undefined) data.blogEditorRoleIds = snowflakes(patch.blogEditorRoleIds);
   if (patch.wikiAnnounceChannelId !== undefined) data.wikiAnnounceChannelId = optionalChannel(patch.wikiAnnounceChannelId);
