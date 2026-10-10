@@ -2,6 +2,7 @@ import { Client, EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder, Mes
 import { kotboEventBus } from '@kotbo/core';
 import type { Suggestion } from '@prisma/client';
 import prisma from '../../utils/db.js';
+import { publishGuildSignal } from '../site/siteLive.js';
 import { logger } from '../../utils/logger.js';
 import { broadcastDashboardStateChange } from '../../api/shared/sharding.js';
 
@@ -226,6 +227,7 @@ export async function createSuggestion(guildId: string, userId: string, username
     timestamp: Date.now(),
   });
 
+  publishGuildSignal(guildId, 'module:suggestions');
   return suggestion;
 }
 
@@ -270,7 +272,10 @@ export async function applySuggestionVote(guildId: string, suggestionId: string,
     return { ok: true as const, suggestion, upvoters, downvoters };
   });
 
-  if (result.ok) broadcastDashboardStateChange(guildId, 'suggestions_updated');
+  if (result.ok) {
+    broadcastDashboardStateChange(guildId, 'suggestions_updated');
+    publishGuildSignal(guildId, 'module:suggestions');
+  }
   return result;
 }
 

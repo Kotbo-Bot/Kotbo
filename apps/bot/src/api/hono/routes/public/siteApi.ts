@@ -28,6 +28,7 @@ import { getAgentLockStatus, interruptAgent } from '../../../../services/site/si
 import { LEGACY_PAGE_KINDS, resolveFormRedirect, resolveLegacyRedirect, type LegacyPageKind } from '../../../../services/site/siteRedirects.js';
 import { afterCommentVisible, rewardParticipation } from '../../../../services/site/siteActivity.js';
 import { claimDailyVisit, grantSiteReward } from '../../../../services/site/siteRewardService.js';
+import { publishGuildSignal } from '../../../../services/site/siteLive.js';
 import { updateSiteMemberSettings } from '../../../../services/site/siteMemberService.js';
 
 // ============================================================================
@@ -265,7 +266,10 @@ export function createSiteApiRouter(client: Client): OpenAPIHono {
             .create({ data: { eventId: event.id, guildId, userId: viewer.userId, username: viewer.username, userTag: viewer.username } })
             .then(() => true)
             .catch(() => false);
-          if (created) rewardParticipation(guildId, viewer.userId, `event:${event.id}`);
+          if (created) {
+            rewardParticipation(guildId, viewer.userId, `event:${event.id}`);
+            publishGuildSignal(guildId, 'module:events');
+          }
           return created ? c.json({ ok: true, message: m.site_event_registered_ok({}, o) }) : c.json({ error: m.site_err_event_already({}, o) }, 409);
         }
         case 'market-buy': {

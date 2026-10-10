@@ -1,5 +1,6 @@
 import prisma, { prismaRead } from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
+import { publishGuildSignal } from '../site/siteLive.js';
 import { isModuleEnabled } from '../core/moduleGate.js';
 import { equippedItemIds } from '../features/rpg/rpgEquipment.js';
 import type { MarketplaceListing, Prisma, RpgItem } from '@prisma/client';
@@ -222,6 +223,7 @@ export async function buyListing(
       };
     });
 
+    publishGuildSignal(guildId, 'module:marketplace');
     return { success: true, listing: purchased };
   } catch (error) {
     if (error instanceof MarketplacePurchaseError) {

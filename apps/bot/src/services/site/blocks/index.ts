@@ -75,6 +75,7 @@ export async function renderBlock(ctx: BlockContext, key: SiteModuleKey, config:
   return `<section${attrs({
     class: `mod mod-${key}`,
     'data-block': `${ref.pageId}:${ref.index}`,
+    'data-module': key,
     'data-live': spec.live && refresh ? refresh : null,
     'data-viewer-aware': spec.needsViewer || spec.interactive ? '1' : null,
   })}>${inner}</section>`;
