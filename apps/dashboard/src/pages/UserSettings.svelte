@@ -12,6 +12,8 @@
   import Papicon from '../lib/components/Papicon.svelte';
   import ToggleSwitch from '../lib/components/ToggleSwitch.svelte';
   import { m } from '../lib/i18n';
+  import { desktopPermission, requestDesktopPermission, sendTestNotification } from '../lib/notificationAlerts';
+  import { playNotificationSound, type NotificationTone } from '../lib/notificationSounds';
 
   import type { DateFormat, Language, SidebarBehavior } from '../lib/stores/userPreferences.svelte';
 
@@ -105,48 +107,48 @@
   }
 
   async function testNotifications() {
-    if (typeof window === 'undefined' || !('Notification' in window)) {
+    const permission = await sendTestNotification();
+    permissionState = permission;
+    if (permission === 'unsupported') {
       toast.warning(m.us_notif_unavailable());
-      return;
-    }
-
-    const permission = Notification.permission === 'granted'
-      ? 'granted'
-      : await Notification.requestPermission();
-
-    if (permission !== 'granted') {
+    } else if (permission !== 'granted') {
       toast.error(m.us_notif_denied());
-      return;
+    } else {
+      toast.success(m.us_notif_preview_sent());
     }
+  }
 
-    new Notification('Kotbo', {
-      body: m.us_notif_preview_body(),
-    });
+  let permissionState = $state(desktopPermission());
 
-    if (userPrefs.prefs.soundNotifications) {
-      try {
-        const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-        if (AudioContextClass) {
-          const context = new AudioContextClass();
-          const oscillator = context.createOscillator();
-          const gain = context.createGain();
-
-          oscillator.type = 'sine';
-          oscillator.frequency.value = 880;
-          gain.gain.value = 0.02;
-
-          oscillator.connect(gain);
-          gain.connect(context.destination);
-          oscillator.start();
-          oscillator.stop(context.currentTime + 0.12);
-        }
-      } catch {
-        // Ignore audio preview errors.
+  /**
+   * Activer les notifications bureau sans la permission du navigateur
+   * laisserait un interrupteur allume qui ne fait rien : on la demande au
+   * moment du clic, seul moment ou le navigateur accepte d'afficher la demande.
+   */
+  async function handleNotificationToggle(key: 'soundNotifications' | 'desktopNotifications', value: boolean) {
+    if (key === 'desktopNotifications' && value) {
+      const permission = await requestDesktopPermission();
+      permissionState = permission;
+      if (permission === 'unsupported') {
+        toast.warning(m.us_notif_unavailable());
+        return;
+      }
+      if (permission !== 'granted') {
+        toast.error(m.us_notif_denied());
+        return;
       }
     }
-
-    toast.success(m.us_notif_preview_sent());
+    handleToggle(key, value);
+    // Un retour immediat : sans lui, activer le son ne produit rien d'audible.
+    if (key === 'soundNotifications' && value) playNotificationSound('INFO', { force: true });
   }
+
+  const soundPreviews = $derived<{ tone: NotificationTone; label: string }[]>([
+    { tone: 'INFO', label: m.us_sound_type_info() },
+    { tone: 'SUCCESS', label: m.us_sound_type_success() },
+    { tone: 'WARNING', label: m.us_sound_type_warning() },
+    { tone: 'ERROR', label: m.us_sound_type_error() },
+  ]);
 
   const activeThemeLabel = $derived(
     THEME_PRESETS.find(p => p.id === themeStore.themeId)?.label ?? 'Custom'
@@ -571,22 +573,60 @@
       </h2>
 
       <div class="space-y-3">
-        {#each [
-          { key: 'soundNotifications', label: m.us_sound_notif(), desc: m.us_sound_notif_desc(), color: 'rose' },
-          { key: 'desktopNotifications', label: m.us_desktop_notif(), desc: m.us_desktop_notif_desc(), color: 'rose' },
-          { key: 'showOnlineStatus', label: m.us_online_status(), desc: m.us_online_status_desc(), color: 'rose' },
-        ] as item}
-          <div class="flex items-center justify-between p-4 rounded-lg bg-surface-container-high/20 border border-outline-variant/5 hover:bg-surface-container-high/40 transition-colors">
+        <div class="p-4 rounded-lg bg-surface-container-high/20 border border-outline-variant/5 hover:bg-surface-container-high/40 transition-colors space-y-3">
+          <div class="flex items-center justify-between gap-4">
             <div>
-              <p class="text-sm font-bold">{item.label}</p>
-              <p class="text-2xs text-on-surface-variant/50">{item.desc}</p>
+              <p class="text-sm font-bold">{m.us_sound_notif()}</p>
+              <p class="text-2xs text-on-surface-variant/50">{m.us_sound_notif_desc()}</p>
             </div>
             <ToggleSwitch
-              checked={(userPrefs.prefs as any)[item.key]}
-              onToggle={(v: boolean) => handleToggle(item.key as any, v)}
+              checked={userPrefs.prefs.soundNotifications}
+              onToggle={(v: boolean) => handleNotificationToggle('soundNotifications', v)}
             />
           </div>
-        {/each}
+          {#if userPrefs.prefs.soundNotifications}
+            <div class="flex flex-wrap items-center gap-2">
+              <span class="text-2xs text-on-surface-variant/60">{m.us_sound_preview()}</span>
+              {#each soundPreviews as preview}
+                <button
+                  type="button"
+                  onclick={() => playNotificationSound(preview.tone, { force: true })}
+                  class="flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-outline-variant/20 bg-surface-container-high/20 text-2xs font-medium hover:border-primary/30 hover:bg-primary/5 transition-colors"
+                >
+                  <Papicon icon="Play" size={10} />
+                  {preview.label}
+                </button>
+              {/each}
+            </div>
+          {/if}
+        </div>
+
+        <div class="p-4 rounded-lg bg-surface-container-high/20 border border-outline-variant/5 hover:bg-surface-container-high/40 transition-colors space-y-2">
+          <div class="flex items-center justify-between gap-4">
+            <div>
+              <p class="text-sm font-bold">{m.us_desktop_notif()}</p>
+              <p class="text-2xs text-on-surface-variant/50">{m.us_desktop_notif_desc()}</p>
+            </div>
+            <ToggleSwitch
+              checked={userPrefs.prefs.desktopNotifications && permissionState === 'granted'}
+              onToggle={(v: boolean) => handleNotificationToggle('desktopNotifications', v)}
+            />
+          </div>
+          {#if permissionState === 'denied'}
+            <p class="text-2xs text-warning">{m.us_notif_blocked_hint()}</p>
+          {/if}
+        </div>
+
+        <div class="flex items-center justify-between p-4 rounded-lg bg-surface-container-high/20 border border-outline-variant/5 hover:bg-surface-container-high/40 transition-colors">
+          <div>
+            <p class="text-sm font-bold">{m.us_online_status()}</p>
+            <p class="text-2xs text-on-surface-variant/50">{m.us_online_status_desc()}</p>
+          </div>
+          <ToggleSwitch
+            checked={userPrefs.prefs.showOnlineStatus}
+            onToggle={(v: boolean) => handleToggle('showOnlineStatus', v)}
+          />
+        </div>
       </div>
 
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
