@@ -5,8 +5,9 @@ import type { SitePageKind } from '@prisma/client';
 import { SITE_MODULE_KEYS, siteModuleBotDependency, getSiteModuleSpec } from '@kotbo/shared';
 import prisma from '../../../utils/db.js';
 import { logger } from '../../../utils/logger.js';
+import { deleteVoteSite, listAdminVoteSites, regenerateVoteWebhookSecret, reorderVoteSites, saveVoteSite, SiteVoteError, topVoters } from '../../../services/site/siteVoteService.js';
 import { requireAuth } from '../middleware/auth.js';
-import { getDashboardUrl } from '../../shared.js';
+import { getApiUrl, getDashboardUrl } from '../../shared.js';
 import { recordAdminAudit } from '../../../services/system/adminAuditService.js';
 import { getModuleStates } from '../../../services/core/moduleGate.js';
 import { canEditKind, resolveSiteRights, type SiteRights } from '../../../services/site/siteRights.js';
@@ -65,6 +66,7 @@ const READ_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
 function fail(c: Context, err: unknown) {
   if (err instanceof SiteAdminError) return c.json({ error: err.code, detail: err.detail ?? null }, err.status as 400);
+  if (err instanceof SiteVoteError) return c.json({ error: err.code, detail: null }, err.status as 400);
   logger.error('SiteAdmin', 'Erreur non gérée :', err);
   return c.json({ error: 'internal' }, 500);
 }
@@ -437,6 +439,64 @@ export function createSiteAdminRouter(client: Client): OpenAPIHono {
     if (!current) return c.json({ error: 'site_missing' }, 404);
     const days = Number.parseInt(c.req.query('days') ?? '30', 10);
     return c.json({ report: await getSiteAnalytics(current.id, Number.isFinite(days) ? days : 30) });
+  });
+
+  // ── Votes : sites de classement, secrets de webhook, meilleurs votants ────
+  app.get('/api/site-admin/:guildId/votes', async (c) => {
+    if (!c.var.siteRights.manage) return c.json({ error: 'forbidden' }, 403);
+    const guildId = c.req.param('guildId');
+    const [voteSites, top] = await Promise.all([listAdminVoteSites(guildId, getApiUrl()), topVoters(guildId, 10)]);
+    return c.json({ voteSites, topVoters: top });
+  });
+
+  app.post('/api/site-admin/:guildId/votes', async (c) => {
+    if (!c.var.siteRights.manage) return c.json({ error: 'forbidden' }, 403);
+    try {
+      const created = await saveVoteSite(c.req.param('guildId'), null, await body(c));
+      return c.json({ id: created.id }, 201);
+    } catch (err) {
+      return fail(c, err);
+    }
+  });
+
+  app.post('/api/site-admin/:guildId/votes/reorder', async (c) => {
+    if (!c.var.siteRights.manage) return c.json({ error: 'forbidden' }, 403);
+    try {
+      await reorderVoteSites(c.req.param('guildId'), (await body(c)).ids);
+      return c.json({ ok: true });
+    } catch (err) {
+      return fail(c, err);
+    }
+  });
+
+  app.patch('/api/site-admin/:guildId/votes/:voteSiteId', async (c) => {
+    if (!c.var.siteRights.manage) return c.json({ error: 'forbidden' }, 403);
+    const voteSiteId = c.req.param('voteSiteId');
+    if (!CUID.test(voteSiteId)) return c.json({ error: 'vote_site_missing' }, 404);
+    try {
+      await saveVoteSite(c.req.param('guildId'), voteSiteId, await body(c));
+      return c.json({ ok: true });
+    } catch (err) {
+      return fail(c, err);
+    }
+  });
+
+  app.post('/api/site-admin/:guildId/votes/:voteSiteId/secret', async (c) => {
+    if (!c.var.siteRights.manage) return c.json({ error: 'forbidden' }, 403);
+    const voteSiteId = c.req.param('voteSiteId');
+    if (!CUID.test(voteSiteId)) return c.json({ error: 'vote_site_missing' }, 404);
+    try {
+      await regenerateVoteWebhookSecret(c.req.param('guildId'), voteSiteId);
+      return c.json({ ok: true });
+    } catch (err) {
+      return fail(c, err);
+    }
+  });
+
+  app.delete('/api/site-admin/:guildId/votes/:voteSiteId', async (c) => {
+    if (!c.var.siteRights.manage) return c.json({ error: 'forbidden' }, 403);
+    await deleteVoteSite(c.req.param('guildId'), c.req.param('voteSiteId'));
+    return c.json({ ok: true });
   });
 
   // ── Fiche staff du visiteur ───────────────────────────────────────────────

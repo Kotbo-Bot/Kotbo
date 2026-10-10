@@ -28,6 +28,7 @@ import { getAgentLockStatus, interruptAgent } from '../../../../services/site/si
 import { LEGACY_PAGE_KINDS, resolveFormRedirect, resolveLegacyRedirect, type LegacyPageKind } from '../../../../services/site/siteRedirects.js';
 import { afterCommentVisible, rewardParticipation } from '../../../../services/site/siteActivity.js';
 import { claimDailyVisit, grantSiteReward } from '../../../../services/site/siteRewardService.js';
+import { checkMemberVote, handleVoteWebhook, SiteVoteError } from '../../../../services/site/siteVoteService.js';
 import { publishGuildSignal } from '../../../../services/site/siteLive.js';
 import { updateSiteMemberSettings } from '../../../../services/site/siteMemberService.js';
 
@@ -133,6 +134,21 @@ export function createSiteApiRouter(client: Client): OpenAPIHono {
       agent: viewer?.canManageSite ? getAgentLockStatus(site.guildId) : null,
       reward,
     });
+  });
+
+  // ── Webhook de vote (top.gg) : le secret fait foi, pas la session ─────────
+  app.post('/api/site-votes/webhook/:voteSiteId', async (c) => {
+    const voteSiteId = c.req.param('voteSiteId') ?? '';
+    if (!CUID.test(voteSiteId)) return c.json({ error: 'Introuvable' }, 404);
+    if (rateLimited(`vote-webhook:${voteSiteId}`, 600, 60_000)) return c.json({ error: 'Trop de requêtes' }, 429);
+    const outcome = await handleVoteWebhook(client, voteSiteId, c.req.header('authorization') ?? null, await readBody(c)).catch((err: unknown) => {
+      logger.warn('SiteVote', `Webhook de vote en échec (${voteSiteId}) :`, err);
+      return 'error' as const;
+    });
+    if (outcome === 'missing') return c.json({ error: 'Introuvable' }, 404);
+    if (outcome === 'unauthorized') return c.json({ error: 'Secret invalide' }, 401);
+    if (outcome === 'error') return c.json({ error: 'Erreur' }, 500);
+    return c.json({ ok: true, outcome });
   });
 
   // ── Page lue jusqu'au bout (récompense, une fois par page) ────────────────
@@ -271,6 +287,20 @@ export function createSiteApiRouter(client: Client): OpenAPIHono {
             publishGuildSignal(guildId, 'module:events');
           }
           return created ? c.json({ ok: true, message: m.site_event_registered_ok({}, o) }) : c.json({ error: m.site_err_event_already({}, o) }, 409);
+        }
+        case 'vote-check': {
+          if (!CUID.test(id)) return c.json({ error: m.site_err_invalid({}, o) }, 400);
+          if (rateLimited(`vote:${viewer.userId}`, 10, 10 * 60_000)) return c.json({ error: m.site_err_too_many({}, o) }, 429);
+          try {
+            const result = await checkMemberVote(client, guildId, id, viewer.userId, clientIp(c) === 'unknown' ? null : clientIp(c));
+            if (!result.verified) return c.json({ error: m.site_vote_not_found({}, o) }, 409);
+            if (!result.counted) return c.json({ ok: true, message: m.site_vote_already({}, o) });
+            const gains = [result.coins ? m.site_reward_coins({ count: result.coins }, o) : '', result.xp ? m.site_reward_xp({ count: result.xp }, o) : ''].filter(Boolean).join(' · ');
+            return c.json({ ok: true, message: gains ? m.site_vote_counted_reward({ gains }, o) : m.site_vote_counted({}, o) });
+          } catch (err) {
+            if (err instanceof SiteVoteError) return c.json({ error: m.site_vote_unavailable({}, o) }, err.status as 400);
+            throw err;
+          }
         }
         case 'market-buy': {
           if (!(await isModuleEnabled(guildId, 'marketplace'))) return c.json({ error: m.site_err_unavailable({}, o) }, 403);
