@@ -583,6 +583,30 @@
         },
       );
     },
+    // Achat à la boutique : cadeau, code promo, message au staff.
+    'data-shop-buy': function (form) {
+      var collected = collectFormData(form);
+      if (collected.missing) {
+        setStatus(form, T.formRequired, 'error');
+        collected.missing.focus();
+        return;
+      }
+      var payload = { id: form.getAttribute('data-shop-buy') };
+      Object.keys(collected.data).forEach(function (k) {
+        payload[k] = collected.data[k];
+      });
+      submitWith(
+        form,
+        function () {
+          return request('POST', SITE_API + '/actions/shop-buy', payload);
+        },
+        function (data) {
+          setStatus(form, (data && data.message) || T.formSent, 'ok');
+          var section = blockOf(form);
+          if (section) setTimeout(function () { refreshBlock(section); }, 1800);
+        },
+      );
+    },
     'data-member-settings': function (form) {
       var notifications = {};
       form.querySelectorAll('input[name^="notify_"]').forEach(function (input) {
@@ -615,6 +639,35 @@
       return;
     }
     FORM_HANDLERS[key](form);
+  });
+
+  // Prix recalculé avec le code promo saisi, sans rien acheter.
+  document.addEventListener('click', function (event) {
+    var button = event.target.closest('[data-shop-quote]');
+    if (!button) return;
+    event.preventDefault();
+    var form = button.closest('form[data-shop-buy]');
+    if (!form) return;
+    if (!viewer) {
+      goLogin();
+      return;
+    }
+    var collected = collectFormData(form);
+    var payload = { id: form.getAttribute('data-shop-buy'), code: collected.data.code || '', recipient: collected.data.recipient || '' };
+    button.disabled = true;
+    request('POST', SITE_API + '/actions/shop-quote', payload)
+      .then(function (data) {
+        var total = form.querySelector('[data-shop-total]');
+        if (total && data && data.total) total.textContent = data.total;
+        setStatus(form, (data && data.message) || '', 'ok');
+      })
+      .catch(function (err) {
+        if (err.status === 401) return goLogin();
+        setStatus(form, err.message, 'error');
+      })
+      .then(function () {
+        button.disabled = false;
+      });
   });
 
   // ─── Commentaires ──────────────────────────────────────────────────────

@@ -236,6 +236,7 @@ const mod = (module: string, config: Record<string, unknown> = {}) => ({ type: '
 export const AUTO_HOME_ID = '_home';
 export const ME_PAGE_ID = '_me';
 export const VOTES_PAGE_ID = '_votes';
+export const SHOP_PAGE_ID = '_shop';
 
 export function virtualDocument(pageId: string): SiteDocument | null {
   if (pageId === AUTO_HOME_ID) {
@@ -248,6 +249,9 @@ export function virtualDocument(pageId: string): SiteDocument | null {
   if (pageId === VOTES_PAGE_ID) {
     return normalizeSiteDocument({ type: 'doc', content: [mod('vote'), mod('voteLeaderboard', { limit: 10 })] });
   }
+  if (pageId === SHOP_PAGE_ID) {
+    return normalizeSiteDocument({ type: 'doc', content: [mod('shop')] });
+  }
   if (pageId === ME_PAGE_ID) {
     const cell = (module: string) => ({ type: 'gridCell', attrs: { span: 1, rowSpan: 1, surface: true }, content: [mod(module)] });
     return normalizeSiteDocument({
@@ -256,6 +260,7 @@ export function virtualDocument(pageId: string): SiteDocument | null {
         mod('profile'),
         { type: 'grid', attrs: { columns: 2 }, content: [cell('memberRewards'), cell('memberSettings')] },
         mod('memberInventory'),
+        mod('memberPurchases'),
         mod('ticket'),
       ],
     });
@@ -573,6 +578,14 @@ async function meResponse(ctx: SiteCtx): Promise<SiteHttpResponse> {
 }
 
 /** Profil public d'un membre (masquable par le membre, non indexé). */
+/** Boutique du serveur. */
+async function shopResponse(ctx: SiteCtx): Promise<SiteHttpResponse> {
+  const o = { locale: ctx.locale };
+  const body = await renderDocumentHtml(ctx, virtualDocument(SHOP_PAGE_ID)!, SHOP_PAGE_ID);
+  const main = `${hero(m.site_shop_page_title({}, o), m.site_shop_page_lead({}, o))}<div class="prose wide">${body}</div>`;
+  return html(200, shell(ctx, { path: `${ctx.basePath}/shop`, title: m.site_shop_page_title({}, o), main, activeKey: 'shop', pageId: SHOP_PAGE_ID }), ctx.nonce, ctx.req.apiOrigin, { cacheSeconds: 30 });
+}
+
 /** Page des votes : où voter, statut du membre, meilleurs votants du mois. */
 async function votesResponse(ctx: SiteCtx): Promise<SiteHttpResponse> {
   const o = { locale: ctx.locale };
@@ -847,6 +860,7 @@ export async function handleSiteRequest(req: SiteHttpRequest): Promise<SiteHttpR
     else if (section === 'me' && rest.length === 1) response = await meResponse(ctx);
     else if (section === 'u' && a && rest.length === 2) response = await memberProfileResponse(ctx, a);
     else if (section === 'votes' && rest.length === 1) response = await votesResponse(ctx);
+    else if ((section === 'shop' || section === 'boutique') && rest.length === 1) response = await shopResponse(ctx);
     else if (section === 'form' && a && rest.length === 2) response = await formResponse(ctx, a);
     else if (section === 'wiki' && rest.length === 1) response = wikiIndexResponse(ctx);
     else if (section === 'wiki' && a && rest.length === 2) {

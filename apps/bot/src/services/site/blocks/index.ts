@@ -30,6 +30,7 @@ import { demarchesBlocks } from './demarchesBlocks.js';
 import { contentBlocks } from './contentBlocks.js';
 import { memberBlocks } from './memberBlocks.js';
 import { voteBlocks } from './voteBlocks.js';
+import { shopBlocks } from './shopBlocks.js';
 
 export type { BlockContext, BlockRef } from './blockContext.js';
 
@@ -41,6 +42,7 @@ const REGISTRY: BlockRegistry = {
   ...contentBlocks,
   ...memberBlocks,
   ...voteBlocks,
+  ...shopBlocks,
 };
 
 /** Fréquence de rafraîchissement des blocs en direct, en secondes. */

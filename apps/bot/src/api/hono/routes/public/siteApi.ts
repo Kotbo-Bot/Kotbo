@@ -31,6 +31,8 @@ import { claimDailyVisit, grantSiteReward } from '../../../../services/site/site
 import { checkMemberVote, handleVoteWebhook, SiteVoteError } from '../../../../services/site/siteVoteService.js';
 import { publishGuildSignal } from '../../../../services/site/siteLive.js';
 import { updateSiteMemberSettings } from '../../../../services/site/siteMemberService.js';
+import { formatShopPrice, purchaseShopOffer, quoteShopOffer, setShopSubscriptionCancelled, ShopError } from '../../../../services/shop/shopService.js';
+import { resolveShopRecipient, shopErrorMessage } from '../../../../services/site/blocks/shopBlocks.js';
 
 // ============================================================================
 // API DU SCRIPT DES SITES COMMUNAUTAIRES
@@ -299,6 +301,48 @@ export function createSiteApiRouter(client: Client): OpenAPIHono {
             return c.json({ ok: true, message: gains ? m.site_vote_counted_reward({ gains }, o) : m.site_vote_counted({}, o) });
           } catch (err) {
             if (err instanceof SiteVoteError) return c.json({ error: m.site_vote_unavailable({}, o) }, err.status as 400);
+            throw err;
+          }
+        }
+        case 'shop-quote':
+        case 'shop-buy': {
+          if (!CUID.test(id)) return c.json({ error: m.site_err_invalid({}, o) }, 400);
+          if (rateLimited(`shop:${viewer.userId}`, 20, 60_000)) return c.json({ error: m.site_err_too_many({}, o) }, 429);
+          try {
+            const recipientInput = str(body.recipient, 40);
+            const recipientId = recipientInput ? await resolveShopRecipient(client, guildId, recipientInput) : null;
+            if (recipientInput && !recipientId) return c.json({ error: shopErrorMessage('recipient_missing', o) }, 404);
+            const options = { recipientId, code: str(body.code, 32) || null, note: str(body.note, 500) || null };
+            if (c.req.param('action') === 'shop-quote') {
+              const quote = await quoteShopOffer(client, guildId, viewer.userId, id, options);
+              return c.json({
+                ok: true,
+                total: await formatShopPrice(guildId, quote.price),
+                message: quote.codeApplied ? m.site_shop_code_applied({}, o) : undefined,
+              });
+            }
+            const order = await purchaseShopOffer(client, guildId, viewer.userId, id, { ...options, source: 'site' });
+            const message =
+              order.status === 'PENDING'
+                ? m.site_shop_pending({}, o)
+                : order.recipientId !== viewer.userId
+                  ? m.site_shop_gifted({ name: order.offerName }, o)
+                  : m.site_shop_bought({ name: order.offerName }, o);
+            return c.json({ ok: true, status: order.status, message });
+          } catch (err) {
+            if (err instanceof ShopError) return c.json({ error: shopErrorMessage(err.code, o) }, err.status as 400);
+            throw err;
+          }
+        }
+        case 'shop-sub-cancel':
+        case 'shop-sub-resume': {
+          if (!CUID.test(id)) return c.json({ error: m.site_err_invalid({}, o) }, 400);
+          try {
+            const cancel = c.req.param('action') === 'shop-sub-cancel';
+            await setShopSubscriptionCancelled(guildId, viewer.userId, id, cancel);
+            return c.json({ ok: true, message: cancel ? m.site_shop_sub_cancelled({}, o) : m.site_shop_sub_resumed({}, o) });
+          } catch (err) {
+            if (err instanceof ShopError) return c.json({ error: shopErrorMessage(err.code, o) }, err.status as 400);
             throw err;
           }
         }
