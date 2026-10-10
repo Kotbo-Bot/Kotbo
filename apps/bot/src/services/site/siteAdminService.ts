@@ -15,6 +15,7 @@ import {
   canonicalSiteTheme,
   normalizeSiteDocument,
   normalizeSiteNavigation,
+  normalizeSiteRewards,
   normalizeSiteThemeSettings,
   sanitizeSiteCss,
   sanitizeSiteImageSrc,
@@ -23,6 +24,7 @@ import {
   slugify,
   validatePageSlug,
   validateSiteSlug,
+  normalizeSiteAuto,
   type SiteDocument,
 } from '@kotbo/shared';
 import prisma from '../../utils/db.js';
@@ -159,6 +161,7 @@ export interface SitePatch {
   homePageId?: unknown;
   staffPage?: unknown;
   settings?: unknown;
+  rewards?: unknown;
   wikiEditorRoleIds?: unknown;
   blogEditorRoleIds?: unknown;
   wikiAnnounceChannelId?: unknown;
@@ -191,12 +194,25 @@ const optionalChannel = (value: unknown): string | null => {
 };
 
 /** Réglages libres du site : seules les clés connues passent. */
+/** Fusion sur deux niveaux : un sous-objet du patch complète celui en place au lieu de le remplacer. */
+function mergeRecords(current: unknown, patch: unknown): Record<string, unknown> {
+  const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
+  const base = isRecord(current) ? { ...current } : {};
+  if (!isRecord(patch)) return base;
+  for (const [key, value] of Object.entries(patch)) {
+    base[key] = isRecord(value) && isRecord(base[key]) ? { ...(base[key] as Record<string, unknown>), ...value } : value;
+  }
+  return base;
+}
+
 function normalizeSiteSettings(current: unknown, patch: unknown): Record<string, unknown> {
   const base = typeof current === 'object' && current !== null ? { ...(current as Record<string, unknown>) } : {};
   if (typeof patch !== 'object' || patch === null) return base;
   const p = patch as Record<string, unknown>;
   if (typeof p.commentsByDefault === 'boolean') base.commentsByDefault = p.commentsByDefault;
   if (typeof p.showMemberCount === 'boolean') base.showMemberCount = p.showMemberCount;
+  // Site automatique : relu en entier, fusionné sur ce qui est en place.
+  if (p.auto !== undefined) base.auto = normalizeSiteAuto(mergeRecords(base.auto, p.auto));
   return base;
 }
 
@@ -260,6 +276,8 @@ export async function updateSite(guildId: string, patch: SitePatch) {
   }
   if (patch.staffPage !== undefined) data.staffPage = readStaffPageSettings(patch.staffPage) as unknown as Prisma.InputJsonValue;
   if (patch.settings !== undefined) data.settings = normalizeSiteSettings(site.settings, patch.settings) as Prisma.InputJsonValue;
+  // Récompenses : on part des réglages actuels, un champ absent du patch est gardé.
+  if (patch.rewards !== undefined) data.rewards = normalizeSiteRewards(mergeRecords(site.rewards, patch.rewards)) as unknown as Prisma.InputJsonValue;
   if (patch.wikiEditorRoleIds !== undefined) data.wikiEditorRoleIds = snowflakes(patch.wikiEditorRoleIds);
   if (patch.blogEditorRoleIds !== undefined) data.blogEditorRoleIds = snowflakes(patch.blogEditorRoleIds);
   if (patch.wikiAnnounceChannelId !== undefined) data.wikiAnnounceChannelId = optionalChannel(patch.wikiAnnounceChannelId);
@@ -501,7 +519,8 @@ function autoExcerpt(doc: SiteDocument): string | null {
   return text.length > 220 ? `${text.slice(0, 217).trimEnd()}…` : text;
 }
 
-export async function publishPage(client: Client, guildId: string, pageId: string, userId: string, note?: string | null) {
+/** `announce: false` : pas d'annonce sur Discord (articles générés, qui en viennent souvent). */
+export async function publishPage(client: Client, guildId: string, pageId: string, userId: string, note?: string | null, options: { announce?: boolean } = {}) {
   const page = await prisma.sitePage.findFirst({
     where: { id: pageId, guildId },
     select: { id: true, siteId: true, kind: true, slug: true, title: true, tags: true, excerpt: true, draftContent: true, firstPublishedAt: true, visibility: true },
@@ -540,7 +559,7 @@ export async function publishPage(client: Client, guildId: string, pageId: strin
   if (stale.length > 0) await prisma.sitePageRevision.deleteMany({ where: { id: { in: stale.map((r) => r.id) } } });
 
   await invalidateSiteCache(guildId);
-  if (page.visibility === 'PUBLIC' && (page.kind === 'WIKI' || page.kind === 'BLOG')) {
+  if (options.announce !== false && page.visibility === 'PUBLIC' && (page.kind === 'WIKI' || page.kind === 'BLOG')) {
     void announcePublication(client, guildId, page.siteId, page.id, isFirst).catch((err) => logger.warn('Site', `Annonce de publication impossible sur ${guildId} :`, err));
   }
   return published;

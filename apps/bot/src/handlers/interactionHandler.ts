@@ -636,6 +636,13 @@ export async function handleButton(interaction: Interaction, client: Client): Pr
     return;
   }
 
+  // Boutique du serveur (/boutique) - fiche d'une offre, achat, cadeau, code promo
+  if (customId.startsWith('shop:')) {
+    const { handleShopButton } = await import('../services/shop/shopPanel.js');
+    await handleShopButton(client, customId, interaction);
+    return;
+  }
+
   // Hôtel des ventes (/market) - étal, fiche d'annonce, achat, retrait, mise en vente
   if (customId.startsWith('mkt:')) {
     const { handleMarketButton } = await import('../services/economy/marketplacePanel.js');
@@ -1475,6 +1482,13 @@ export async function handleSelectMenu(interaction: AnySelectMenuInteraction, cl
     return;
   }
 
+  if (customId.startsWith('shop:')) {
+    if (!interaction.isStringSelectMenu() && !interaction.isUserSelectMenu()) return;
+    const { handleShopSelect } = await import('../services/shop/shopPanel.js');
+    await handleShopSelect(client, customId, interaction);
+    return;
+  }
+
   if (customId.startsWith('mkt:')) {
     if (!interaction.isStringSelectMenu()) return;
     const { handleMarketSelect } = await import('../services/economy/marketplacePanel.js');
@@ -1653,6 +1667,12 @@ export async function handleModalSubmit(interaction: ModalSubmitInteraction, cli
   // Hub RPG (/rpg) - création/rejoindre guilde, dépôt, payer, vendre, admin
   if (customId.startsWith('rpg:')) {
     await handleRpgModalSubmit(client, customId, interaction);
+    return;
+  }
+
+  if (customId.startsWith('shop:')) {
+    const { handleShopModal } = await import('../services/shop/shopPanel.js');
+    await handleShopModal(client, customId, interaction);
     return;
   }
 

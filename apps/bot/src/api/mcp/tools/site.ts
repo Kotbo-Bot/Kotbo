@@ -12,12 +12,13 @@ import {
   SITE_BACKGROUNDS,
   SITE_COLOR_MODES,
   SITE_THEME_KEYS,
+  SITE_VOTE_PROVIDERS,
   siteModuleBotDependency,
   type SiteDocument,
   type SiteNode,
 } from '@kotbo/shared';
 import prisma from '../../../utils/db.js';
-import { getDashboardUrl } from '../../shared.js';
+import { getApiUrl, getDashboardUrl } from '../../shared.js';
 import { type McpToolContext, err, ok } from '../toolkit.js';
 import { getModuleStates } from '../../../services/core/moduleGate.js';
 import {
@@ -50,6 +51,8 @@ import { listSiteAssets, storeSiteAsset, SITE_UPLOAD_MAX_BYTES } from '../../../
 import { createPreviewToken } from '../../../services/site/sitePreview.js';
 import { isSiteTemplate, SITE_TEMPLATES } from '../../../services/site/siteTemplates.js';
 import { assertWebhookUrlReachable } from '../../../services/integrations/outgoingWebhookSecurity.js';
+import { deleteVoteSite, listAdminVoteSites, saveVoteSite, SiteVoteError, topVoters } from '../../../services/site/siteVoteService.js';
+import { deleteForumCategory, deleteForumPost, ForumError, listForumCategories, listRecentForumPosts, saveForumCategory, setForumTopicFlags } from '../../../services/site/siteForumService.js';
 
 /**
  * Tout ce que l'éditeur permet, un agent peut le faire ici. Deux règles en
@@ -82,6 +85,8 @@ function failure(error: unknown) {
     );
   }
   if (error instanceof SiteAdminError) return err(error.detail ? `${error.code}: ${error.detail}` : error.code, { code: error.code });
+  if (error instanceof SiteVoteError) return err(error.code, { code: error.code });
+  if (error instanceof ForumError) return err(error.code, { code: error.code });
   return err(error instanceof Error ? error.message : String(error));
 }
 
@@ -275,6 +280,38 @@ export function registerSiteTools(ctx: McpToolContext) {
     );
 
     server.registerTool(
+      'get_site_votes',
+      {
+        description:
+          "Sites de vote du serveur (top.gg, annuaires) : lien, délai entre deux votes, votes des 30 derniers jours, adresse du webhook top.gg, et les meilleurs votants du mois. Le secret du webhook n'est visible que dans le dashboard.",
+        inputSchema: {},
+        _meta: toolMeta,
+      },
+      guard('READ_SITE', async () => {
+        const [sites, top] = await Promise.all([listAdminVoteSites(guildId, getApiUrl()), topVoters(guildId, 10)]);
+        return ok({
+          voteSites: sites.map(({ webhookSecret, ...site }) => ({ ...site, hasWebhookSecret: Boolean(webhookSecret) })),
+          topVoters: top,
+          providers: Object.entries(SITE_VOTE_PROVIDERS).map(([key, spec]) => ({ key, ...spec })),
+        });
+      }),
+    );
+
+    server.registerTool(
+      'get_site_forum',
+      { description: 'Forum du site : catégories (propres au site ou miroir d’un salon forum Discord) et derniers messages, pour la modération.', inputSchema: {}, _meta: toolMeta },
+      guard('READ_SITE', async () => {
+        try {
+          const site = await requireSite();
+          const [categories, recent] = await Promise.all([listForumCategories(site.id), listRecentForumPosts(guildId, 30)]);
+          return ok({ categories, recent });
+        } catch (error) {
+          return failure(error);
+        }
+      }),
+    );
+
+    server.registerTool(
       'get_site_agent_status',
       { description: "État du verrou de l'agent : qui tient la main, depuis quand, et si un humain l'a interrompu.", inputSchema: {}, _meta: toolMeta },
       guard('READ_SITE', async () => ok({ agent: getAgentLockStatus(guildId) })),
@@ -310,7 +347,7 @@ export function registerSiteTools(ctx: McpToolContext) {
   server.registerTool(
     'update_site_settings',
     {
-      description: "Réglages du site : adresse (l'ancienne redirige), nom, accroche, logo, bannière, favicon, page d'accueil, champs de la page Équipe, rôles rédacteurs du wiki/blog, salons d'annonce.",
+      description: "Réglages du site : adresse (l'ancienne redirige), nom, accroche, logo, bannière, favicon, page d'accueil, champs de la page Équipe, rôles rédacteurs du wiki/blog, salons d'annonce, récompenses de l'activité (pièces et XP pour la visite du jour, la participation, la lecture et le vote, plafonds et bonus de série).",
       inputSchema: {
         slug: z.string().optional(),
         name: z.string().nullable().optional(),
@@ -325,6 +362,15 @@ export function registerSiteTools(ctx: McpToolContext) {
         blog_editor_role_ids: z.array(z.string()).optional(),
         wiki_announce_channel_id: z.string().nullable().optional(),
         blog_announce_channel_id: z.string().nullable().optional(),
+        rewards: z
+          .object({
+            enabled: z.boolean().optional(),
+            daily: z.object({ coins: z.number().int().optional(), xp: z.number().int().optional(), streakBonus: z.number().int().optional(), streakCap: z.number().int().optional() }).optional(),
+            participation: z.object({ coins: z.number().int().optional(), xp: z.number().int().optional(), dailyCap: z.number().int().optional() }).optional(),
+            read: z.object({ coins: z.number().int().optional(), xp: z.number().int().optional(), dailyCap: z.number().int().optional() }).optional(),
+            vote: z.object({ coins: z.number().int().optional(), xp: z.number().int().optional(), streakBonus: z.number().int().optional(), streakCap: z.number().int().optional() }).optional(),
+          })
+          .optional(),
         key_name: keyName,
       },
       _meta: toolMeta,
@@ -346,6 +392,7 @@ export function registerSiteTools(ctx: McpToolContext) {
           blogEditorRoleIds: args.blog_editor_role_ids,
           wikiAnnounceChannelId: args.wiki_announce_channel_id,
           blogAnnounceChannelId: args.blog_announce_channel_id,
+          rewards: args.rewards,
         });
         await audit(args.key_name, 'Réglages du site (MCP)', `/s/${site.slug}`, Object.keys(args).filter((k) => k !== 'key_name').join(', '));
         return ok({ site: { ...site, url: siteUrl(site.slug) } });
@@ -740,6 +787,115 @@ export function registerSiteTools(ctx: McpToolContext) {
         await flushCollabRoom(page_id);
         const { token, expiresAt } = createPreviewToken(page.id);
         return ok({ url: `${siteUrl(site.slug)}/preview/${token}`, expiresAt });
+      } catch (error) {
+        return failure(error);
+      }
+    }),
+  );
+
+  server.registerTool(
+    'save_site_vote_site',
+    {
+      description:
+        "Ajoute ou modifie un site de vote. provider : voir get_site_votes ; vote_url doit pointer vers le site choisi. Les annuaires vérifiés par compte ou par IP demandent une clé (verification_key) si elle ne figure pas dans le lien ; top.gg n'en demande pas (webhook à configurer depuis le dashboard).",
+      inputSchema: {
+        id: z.string().optional().describe('Site de vote à modifier ; absent pour en ajouter un'),
+        provider: z.enum(Object.keys(SITE_VOTE_PROVIDERS) as [string, ...string[]]).optional().describe('Obligatoire à la création, non modifiable ensuite'),
+        vote_url: z.string().optional(),
+        label: z.string().optional(),
+        verification_key: z.string().nullable().optional().describe('Clé ou identifiant fourni par le site de vote'),
+        cooldown_hours: z.number().int().min(1).max(48).optional(),
+        enabled: z.boolean().optional(),
+        key_name: keyName,
+      },
+      _meta: toolMeta,
+    },
+    guard('WRITE_SITE', async (args) => {
+      try {
+        const saved = await saveVoteSite(guildId, args.id ?? null, {
+          provider: args.provider,
+          voteUrl: args.vote_url,
+          label: args.label,
+          verificationKey: args.verification_key,
+          cooldownHours: args.cooldown_hours,
+          enabled: args.enabled,
+        });
+        await audit(args.key_name, args.id ? 'Site de vote modifié (MCP)' : 'Site de vote ajouté (MCP)', saved.voteUrl, saved.provider);
+        return ok({ id: saved.id, provider: saved.provider, label: saved.label, voteUrl: saved.voteUrl, cooldownHours: saved.cooldownHours, enabled: saved.enabled });
+      } catch (error) {
+        return failure(error);
+      }
+    }),
+  );
+
+  server.registerTool(
+    'delete_site_vote_site',
+    { description: 'Retire un site de vote de la page Votes. Les votes déjà comptés restent.', inputSchema: { id: z.string(), key_name: keyName }, _meta: toolMeta },
+    guard('WRITE_SITE', async ({ id, key_name }) => {
+      await deleteVoteSite(guildId, id);
+      await audit(key_name, 'Site de vote retiré (MCP)', id, '');
+      return ok({ ok: true });
+    }),
+  );
+
+  server.registerTool(
+    'save_site_forum_category',
+    {
+      description:
+        "Ajoute ou modifie une catégorie du forum. mode SITE : sur le site seulement ; MIRROR : recopie le salon forum Discord channel_id dans les deux sens (Kotbo doit pouvoir gérer les webhooks du salon). write_role_ids vide = tous les membres.",
+      inputSchema: {
+        id: z.string().optional(),
+        name: z.string().optional(),
+        description: z.string().optional(),
+        mode: z.enum(['SITE', 'MIRROR']).optional(),
+        channel_id: z.string().optional(),
+        write_role_ids: z.array(z.string()).optional(),
+        staff_topics_only: z.boolean().optional(),
+        key_name: keyName,
+      },
+      _meta: toolMeta,
+    },
+    guard('WRITE_SITE', async (args) => {
+      try {
+        const category = await saveForumCategory(client, guildId, args.id ?? null, {
+          name: args.name,
+          description: args.description,
+          mode: args.mode,
+          channelId: args.channel_id,
+          writeRoleIds: args.write_role_ids,
+          staffTopicsOnly: args.staff_topics_only,
+        });
+        await audit(args.key_name, args.id ? 'Catégorie du forum modifiée (MCP)' : 'Catégorie du forum créée (MCP)', category.name, category.mode);
+        return ok({ id: category.id, slug: category.slug, mode: category.mode });
+      } catch (error) {
+        return failure(error);
+      }
+    }),
+  );
+
+  server.registerTool(
+    'delete_site_forum_category',
+    { description: 'Supprime une catégorie du forum et ses sujets du site (le salon Discord n’est pas touché).', inputSchema: { id: z.string(), key_name: keyName }, _meta: toolMeta },
+    guard('WRITE_SITE', async ({ id, key_name }) => {
+      await deleteForumCategory(client, guildId, id);
+      await audit(key_name, 'Catégorie du forum supprimée (MCP)', id, '');
+      return ok({ ok: true });
+    }),
+  );
+
+  server.registerTool(
+    'moderate_site_forum',
+    {
+      description: 'Modère le forum : épingler ou verrouiller un sujet (topic_id), ou retirer un message (post_id ; le premier message d’un sujet retire le sujet).',
+      inputSchema: { topic_id: z.string().optional(), pinned: z.boolean().optional(), locked: z.boolean().optional(), post_id: z.string().optional(), key_name: keyName },
+      _meta: toolMeta,
+    },
+    guard('WRITE_SITE', async ({ topic_id, pinned, locked, post_id, key_name }) => {
+      try {
+        if (topic_id) await setForumTopicFlags(guildId, topic_id, { pinned, locked });
+        if (post_id) await deleteForumPost(client, guildId, post_id, { userId: ownerId ?? 'mcp_agent', isStaff: true });
+        await audit(key_name, 'Modération du forum (MCP)', topic_id ?? post_id ?? '', [pinned !== undefined ? `épinglé=${pinned}` : '', locked !== undefined ? `verrouillé=${locked}` : '', post_id ? 'message retiré' : ''].filter(Boolean).join(', '));
+        return ok({ ok: true });
       } catch (error) {
         return failure(error);
       }

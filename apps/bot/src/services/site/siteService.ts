@@ -34,6 +34,7 @@ export type SiteRecord = Pick<
   | 'homePageId'
   | 'staffPage'
   | 'settings'
+  | 'rewards'
   | 'wikiEditorRoleIds'
   | 'blogEditorRoleIds'
   | 'suspendedAt'
@@ -57,6 +58,7 @@ export const SITE_SELECT = {
   homePageId: true,
   staffPage: true,
   settings: true,
+  rewards: true,
   wikiEditorRoleIds: true,
   blogEditorRoleIds: true,
   suspendedAt: true,
@@ -191,6 +193,8 @@ export async function invalidateSiteCache(guildId: string, slugs: string[] = [])
     cache.delete(pagesKey(guildId, 'PAGE')),
     cache.delete(pagesKey(guildId, 'WIKI')),
     cache.delete(pagesKey(guildId, 'BLOG')),
+    // Salons d'annonce surveillés par le site automatique (siteAutoService).
+    cache.delete(`site-auto:announce:${guildId}`),
     ...slugs.map((slug) => cache.delete(slugKey(slug))),
   ]);
 }

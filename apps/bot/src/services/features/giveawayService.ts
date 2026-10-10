@@ -5,6 +5,7 @@ import { getLocale, resolveGuildLocale, type BotLocale } from '../../utils/i18n.
 import * as m from '../../lib/paraglide/messages.js';
 import { Client, EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder, MessageFlags, type ButtonInteraction, type ColorResolvable, type Guild, type Message, type MessageMentionOptions } from 'discord.js';
 import prisma from '../../utils/db.js';
+import { publishGuildSignal } from '../site/siteLive.js';
 import { upsertRetryingRace } from '../../utils/upsertRetry.js';
 import { logger } from '../../utils/logger.js';
 import { resolveEmojiShortcodes } from '../../utils/emojis.js';
@@ -603,6 +604,7 @@ export async function toggleGiveawayParticipation(
       });
     }
 
+    publishGuildSignal(guildId, 'module:giveaways');
     return { ok: true, joined, message: resolveEmojiShortcodes(responseText).slice(0, 2000) };
   } catch (err: unknown) {
     if (errorMessage(err) === 'LINKED_ACCOUNT') {

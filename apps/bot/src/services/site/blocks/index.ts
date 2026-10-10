@@ -29,6 +29,9 @@ import { engagementBlocks } from './engagementBlocks.js';
 import { demarchesBlocks } from './demarchesBlocks.js';
 import { contentBlocks } from './contentBlocks.js';
 import { memberBlocks } from './memberBlocks.js';
+import { voteBlocks } from './voteBlocks.js';
+import { shopBlocks } from './shopBlocks.js';
+import { autoBlocks } from './autoBlocks.js';
 
 export type { BlockContext, BlockRef } from './blockContext.js';
 
@@ -39,6 +42,9 @@ const REGISTRY: BlockRegistry = {
   ...demarchesBlocks,
   ...contentBlocks,
   ...memberBlocks,
+  ...voteBlocks,
+  ...shopBlocks,
+  ...autoBlocks,
 };
 
 /** Fréquence de rafraîchissement des blocs en direct, en secondes. */
@@ -75,6 +81,7 @@ export async function renderBlock(ctx: BlockContext, key: SiteModuleKey, config:
   return `<section${attrs({
     class: `mod mod-${key}`,
     'data-block': `${ref.pageId}:${ref.index}`,
+    'data-module': key,
     'data-live': spec.live && refresh ? refresh : null,
     'data-viewer-aware': spec.needsViewer || spec.interactive ? '1' : null,
   })}>${inner}</section>`;

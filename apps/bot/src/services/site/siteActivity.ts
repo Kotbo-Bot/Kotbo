@@ -12,6 +12,7 @@ import * as m from '../../lib/paraglide/messages.js';
 import { grantSiteReward } from './siteRewardService.js';
 import { notifySiteMember } from './siteNotifyService.js';
 import { pageUrl } from './blocks/contentBlocks.js';
+import { publishGuildSignal } from './siteLive.js';
 
 function background(label: string, task: () => Promise<unknown>): void {
   task().catch((err: unknown) => logger.warn('Site', `${label} :`, err));
@@ -30,6 +31,7 @@ export function rewardParticipation(guildId: string, userId: string, refKey: str
 /** Commentaire visible : récompense de l'auteur, MP à l'auteur de l'article. */
 export function afterCommentVisible(comment: { id: string; pageId: string; guildId: string; authorId: string; authorName: string }): void {
   rewardParticipation(comment.guildId, comment.authorId, `comment:${comment.id}`);
+  publishGuildSignal(comment.guildId, `comments:${comment.pageId}`);
   background('Notification de commentaire', async () => {
     const page = await prisma.sitePage.findUnique({ where: { id: comment.pageId }, select: { kind: true, slug: true, authorId: true, publishedTitle: true, title: true } });
     if (!page || page.authorId === comment.authorId) return;

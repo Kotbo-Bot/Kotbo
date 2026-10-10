@@ -408,6 +408,18 @@ export async function registerCrons(client: Client): Promise<void> {
       const { publishDuePages } = await import('../services/site/siteAdminService.js');
       await publishDuePages(client);
     },
+    'site-vote-reminders': async () => {
+      const { sendVoteReminders } = await import('../services/site/siteVoteService.js');
+      await sendVoteReminders(client);
+    },
+    'site-weekly-summary': async () => {
+      const { runWeeklySummaries } = await import('../services/site/siteAutoService.js');
+      await runWeeklySummaries(client);
+    },
+    'shop-renewals': async () => {
+      const { processShopRenewals } = await import('../services/shop/shopService.js');
+      await processShopRenewals(client);
+    },
     'acquisition-abandon-scan': async () => {
       const { scanAbandonedOnboardings } = await import('../services/analytics/acquisitionMaintenance.js');
       await scanAbandonedOnboardings();
@@ -540,6 +552,30 @@ export async function registerCrons(client: Client): Promise<void> {
       const { publishDuePages } = await import('../services/site/siteAdminService.js');
       await publishDuePages(client);
     }, 1500);
+  });
+
+  // 🌐 Sites communautaires : rappels de vote en MP (toutes les 15 minutes).
+  cron.schedule('*/15 * * * *', async () => {
+    await runCronJob('site-vote-reminders', async () => {
+      const { sendVoteReminders } = await import('../services/site/siteVoteService.js');
+      await sendVoteReminders(client);
+    }, 2500);
+  });
+
+  // Sites communautaires : résumé de la semaine, au jour et à l'heure choisis (passage horaire).
+  cron.schedule('3 * * * *', async () => {
+    await runCronJob('site-weekly-summary', async () => {
+      const { runWeeklySummaries } = await import('../services/site/siteAutoService.js');
+      await runWeeklySummaries(client);
+    }, 2500);
+  });
+
+  // Boutique : prélèvements d'abonnements et rôles temporaires échus (toutes les 15 minutes).
+  cron.schedule('7-59/15 * * * *', async () => {
+    await runCronJob('shop-renewals', async () => {
+      const { processShopRenewals } = await import('../services/shop/shopService.js');
+      await processShopRenewals(client);
+    }, 2500);
   });
 
   // 🎯 Événements planifiés: Toutes les minutes (CTF & Quiz planifiés)

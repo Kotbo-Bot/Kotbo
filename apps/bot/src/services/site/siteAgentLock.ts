@@ -18,6 +18,7 @@
 
 import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
+import { publishGuildSignal } from './siteLive.js';
 
 export const AGENT_IDLE_MS = 90_000;
 export const INTERRUPT_BLOCK_MS = 15 * 60_000;
@@ -49,6 +50,24 @@ export class AgentLockError extends Error {
   ) {
     super(code);
   }
+}
+
+/** Fin d'inactivité de chaque verrou : signale sa chute aux onglets ouverts. */
+const idleTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+function signalAgent(guildId: string): void {
+  publishGuildSignal(guildId, 'agent');
+}
+
+function armIdleTimer(guildId: string): void {
+  const previous = idleTimers.get(guildId);
+  if (previous) clearTimeout(previous);
+  const timer = setTimeout(() => {
+    idleTimers.delete(guildId);
+    signalAgent(guildId);
+  }, AGENT_IDLE_MS + 1_000);
+  timer.unref?.();
+  idleTimers.set(guildId, timer);
 }
 
 function activeSession(guildId: string, now = Date.now()): AgentSession | null {
@@ -85,11 +104,15 @@ export function beginAgentWrite(guildId: string, keyName: string, activity: stri
   session.activity = activity.slice(0, 160);
   if (pageId) session.pageIds.add(pageId);
   sessions.set(guildId, session);
+  armIdleTimer(guildId);
+  signalAgent(guildId);
 }
 
 /** L'agent rend la main. */
 export function releaseAgentLock(guildId: string): boolean {
-  return sessions.delete(guildId);
+  const released = sessions.delete(guildId);
+  if (released) signalAgent(guildId);
+  return released;
 }
 
 export interface AgentLockStatus {
@@ -143,11 +166,13 @@ export async function interruptAgent(guildId: string, user: { id: string; name: 
       },
     })
     .catch((err) => logger.warn('SiteAgent', `Journal d'interruption impossible sur ${guildId} :`, err));
+  signalAgent(guildId);
   return getAgentLockStatus(guildId);
 }
 
 /** Lever l'interdiction posée par une interruption. */
 export function allowAgentAgain(guildId: string): AgentLockStatus {
   interruptions.delete(guildId);
+  signalAgent(guildId);
   return getAgentLockStatus(guildId);
 }

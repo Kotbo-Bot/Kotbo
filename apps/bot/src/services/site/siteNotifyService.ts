@@ -14,6 +14,7 @@ import { logger } from '../../utils/logger.js';
 import { resolveGuildLocale } from '../../utils/i18n.js';
 import * as m from '../../lib/paraglide/messages.js';
 import { getSiteByGuild } from './siteService.js';
+import { publishGuildSignal } from './siteLive.js';
 
 /** Délai minimal entre deux MP pour un même ticket. */
 const TICKET_NOTIFY_INTERVAL_MS = 10 * 60_000;
@@ -96,12 +97,15 @@ async function siteTicketChannels(guildId: string): Promise<string[]> {
  * le membre (le staff), le membre est prévenu en MP, au plus une fois par délai.
  */
 export async function handleSiteTicketMessage(message: Message): Promise<void> {
-  if (!message.guildId || message.author.bot || message.system) return;
+  if (!message.guildId || message.system) return;
   const channels = await siteTicketChannels(message.guildId);
   if (!channels.includes(message.channelId)) return;
 
   const ticket = await prisma.ticket.findUnique({ where: { channelId: message.channelId }, select: { id: true, userId: true, reason: true } });
-  if (!ticket || ticket.userId === message.author.id) return;
+  if (!ticket) return;
+  // Tout message (relais du site compris) rafraîchit le fil ouvert dans les onglets du membre.
+  publishGuildSignal(message.guildId, `user:${ticket.userId}`);
+  if (message.author.bot || ticket.userId === message.author.id) return;
   const link = await prisma.siteTicketLink.findUnique({ where: { ticketId: ticket.id } });
   if (!link) return;
 

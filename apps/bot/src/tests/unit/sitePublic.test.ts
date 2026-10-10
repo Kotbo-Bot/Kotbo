@@ -16,7 +16,7 @@ describe('CSP du site', () => {
     expect(csp).toContain("script-src 'self' 'nonce-abc'");
     expect(csp).not.toContain("'unsafe-inline' https");
     expect(csp).toContain("frame-ancestors 'none'");
-    expect(csp).toContain("connect-src 'self' https://api.kotbo.fr");
+    expect(csp).toContain("connect-src 'self' https://api.kotbo.fr wss://api.kotbo.fr");
   });
 
   test('seule la page d’intégration accepte d’être encadrée', () => {

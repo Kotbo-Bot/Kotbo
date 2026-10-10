@@ -190,6 +190,7 @@
       .then(function () {
         viewerLoaded = true;
         renderViewerSlots();
+        applyForumViewer();
         renderAgentBanner();
       });
   }
@@ -275,6 +276,7 @@
     if (!existing) document.body.appendChild(banner);
     if (!agentTimer) {
       agentTimer = setInterval(function () {
+        if (live.connected) return;
         request('GET', SITE_API + '/viewer')
           .then(function (data) {
             agent = data.agent || null;
@@ -307,7 +309,7 @@
     var seconds = Number(section.getAttribute('data-live'));
     if (!seconds || section.__liveTimer) return;
     section.__liveTimer = setInterval(function () {
-      if (document.hidden || !document.body.contains(section)) {
+      if (document.hidden || !document.body.contains(section) || signalledByLive(section)) {
         if (!document.body.contains(section)) clearInterval(section.__liveTimer);
         return;
       }
@@ -582,6 +584,70 @@
         },
       );
     },
+    // Achat à la boutique : cadeau, code promo, message au staff.
+    'data-shop-buy': function (form) {
+      var collected = collectFormData(form);
+      if (collected.missing) {
+        setStatus(form, T.formRequired, 'error');
+        collected.missing.focus();
+        return;
+      }
+      var payload = { id: form.getAttribute('data-shop-buy') };
+      Object.keys(collected.data).forEach(function (k) {
+        payload[k] = collected.data[k];
+      });
+      submitWith(
+        form,
+        function () {
+          return request('POST', SITE_API + '/actions/shop-buy', payload);
+        },
+        function (data) {
+          setStatus(form, (data && data.message) || T.formSent, 'ok');
+          var section = blockOf(form);
+          if (section) setTimeout(function () { refreshBlock(section); }, 1800);
+        },
+      );
+    },
+    // Forum : nouveau sujet (ouvert aussitôt) et réponse (dernière page rechargée).
+    'data-forum-topic': function (form) {
+      var collected = collectFormData(form);
+      if (collected.missing) {
+        setStatus(form, T.formRequired, 'error');
+        collected.missing.focus();
+        return;
+      }
+      submitWith(
+        form,
+        function () {
+          return request('POST', SITE_API + '/forum/categories/' + encodeURIComponent(form.getAttribute('data-forum-topic')) + '/topics', collected.data);
+        },
+        function (data) {
+          if (data && data.url) location.href = data.url;
+        },
+      );
+    },
+    'data-forum-reply': function (form) {
+      var collected = collectFormData(form);
+      if (collected.missing) {
+        setStatus(form, T.formRequired, 'error');
+        collected.missing.focus();
+        return;
+      }
+      var topicId = form.getAttribute('data-forum-reply');
+      submitWith(
+        form,
+        function () {
+          return request('POST', SITE_API + '/forum/topics/' + encodeURIComponent(topicId) + '/posts', { content: collected.data.content });
+        },
+        function (data) {
+          form.reset();
+          setStatus(form, '', null);
+          var holder = document.querySelector('[data-forum-live="' + topicId + '"]');
+          if (holder && data && data.pages) holder.setAttribute('data-page', String(data.pages));
+          reloadForum(topicId, true);
+        },
+      );
+    },
     'data-member-settings': function (form) {
       var notifications = {};
       form.querySelectorAll('input[name^="notify_"]').forEach(function (input) {
@@ -614,6 +680,86 @@
       return;
     }
     FORM_HANDLERS[key](form);
+  });
+
+  // ─── Forum ─────────────────────────────────────────────────────────────
+
+  /** Boutons et formulaires réservés : son propre message, le staff, un sujet ouvert. */
+  function applyForumViewer() {
+    document.querySelectorAll('[data-forum-delete]').forEach(function (button) {
+      button.hidden = !viewer || !(viewer.isStaff || viewer.userId === button.getAttribute('data-author'));
+    });
+    document.querySelectorAll('[data-staff-only]').forEach(function (node) {
+      node.hidden = !(viewer && viewer.isStaff);
+    });
+    document.querySelectorAll('form[data-locked]').forEach(function (form) {
+      form.hidden = !(viewer && viewer.isStaff);
+    });
+  }
+
+  function reloadForum(id, scroll) {
+    document.querySelectorAll('[data-forum-live="' + id + '"]').forEach(function (holder) {
+      var kind = holder.getAttribute('data-forum-kind');
+      var page = holder.getAttribute('data-page') || '1';
+      request('GET', SITE_API + '/forum/fragment/' + encodeURIComponent(kind) + '/' + encodeURIComponent(id) + '?page=' + encodeURIComponent(page))
+        .then(function (data) {
+          if (typeof data.html !== 'string') return;
+          holder.innerHTML = data.html;
+          if (data.pages) holder.setAttribute('data-pages', String(data.pages));
+          applyForumViewer();
+          if (scroll) {
+            var last = holder.querySelector('.forum-post:last-of-type');
+            if (last) last.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        })
+        .catch(function () {});
+    });
+  }
+
+  document.addEventListener('click', function (event) {
+    var button = event.target.closest('[data-forum-delete]');
+    if (!button) return;
+    event.preventDefault();
+    if (!window.confirm(T.forumDeleteConfirm)) return;
+    var holder = button.closest('[data-forum-live]');
+    button.disabled = true;
+    request('DELETE', SITE_API + '/forum/posts/' + encodeURIComponent(button.getAttribute('data-forum-delete')))
+      .then(function () {
+        if (holder) reloadForum(holder.getAttribute('data-forum-live'));
+      })
+      .catch(function (err) {
+        alertInline(button, err.message, 'error');
+        button.disabled = false;
+      });
+  });
+
+  // Prix recalculé avec le code promo saisi, sans rien acheter.
+  document.addEventListener('click', function (event) {
+    var button = event.target.closest('[data-shop-quote]');
+    if (!button) return;
+    event.preventDefault();
+    var form = button.closest('form[data-shop-buy]');
+    if (!form) return;
+    if (!viewer) {
+      goLogin();
+      return;
+    }
+    var collected = collectFormData(form);
+    var payload = { id: form.getAttribute('data-shop-buy'), code: collected.data.code || '', recipient: collected.data.recipient || '' };
+    button.disabled = true;
+    request('POST', SITE_API + '/actions/shop-quote', payload)
+      .then(function (data) {
+        var total = form.querySelector('[data-shop-total]');
+        if (total && data && data.total) total.textContent = data.total;
+        setStatus(form, (data && data.message) || '', 'ok');
+      })
+      .catch(function (err) {
+        if (err.status === 401) return goLogin();
+        setStatus(form, err.message, 'error');
+      })
+      .then(function () {
+        button.disabled = false;
+      });
   });
 
   // ─── Commentaires ──────────────────────────────────────────────────────
@@ -678,6 +824,108 @@
     });
   });
 
+  // ─── Temps réel ────────────────────────────────────────────────────────
+  // Le socket ne porte que des signaux (« ce bloc a changé ») ; le contenu est
+  // relu par les routes HTTP habituelles. Sans socket, le sondage des blocs en
+  // direct reste en place.
+
+  var live = { socket: null, connected: false, retry: 0, channels: [] };
+  /** Blocs dont le rafraîchissement vient du socket quand il est ouvert. */
+  var SIGNALLED = { voice: true, channelFeed: true, giveaways: true, ticket: true, suggestions: true, events: true, marketplace: true };
+
+  function liveChannels() {
+    var channels = {};
+    document.querySelectorAll('section.mod[data-module]').forEach(function (section) {
+      channels['module:' + section.getAttribute('data-module')] = true;
+    });
+    document.querySelectorAll('[data-comments]').forEach(function (holder) {
+      channels['comments:' + holder.getAttribute('data-comments')] = true;
+    });
+    document.querySelectorAll('[data-forum-live]').forEach(function (holder) {
+      channels['forum:' + holder.getAttribute('data-forum-live')] = true;
+    });
+    if (viewer) {
+      channels['user:' + viewer.userId] = true;
+      if (viewer.canManageSite) channels.agent = true;
+    }
+    return Object.keys(channels).slice(0, 40);
+  }
+
+  function onSignal(channel) {
+    if (channel === 'agent') {
+      request('GET', SITE_API + '/viewer')
+        .then(function (data) {
+          agent = data.agent || null;
+          renderAgentBanner();
+        })
+        .catch(function () {});
+      return;
+    }
+    if (channel.indexOf('module:') === 0) {
+      var key = channel.slice(7);
+      document.querySelectorAll('section.mod[data-module="' + key + '"]').forEach(function (section) {
+        // Étalé : tous les visiteurs ne relisent pas le bloc à la même milliseconde.
+        setTimeout(function () { refreshBlock(section); }, Math.floor(Math.random() * 800));
+      });
+      return;
+    }
+    if (channel.indexOf('comments:') === 0) {
+      reloadComments(channel.slice(9));
+      return;
+    }
+    if (channel.indexOf('forum:') === 0) {
+      reloadForum(channel.slice(6));
+      return;
+    }
+    if (channel.indexOf('user:') === 0) {
+      document.querySelectorAll('section.mod[data-module="ticket"], section.mod[data-module^="member"]').forEach(function (section) {
+        refreshBlock(section);
+      });
+    }
+  }
+
+  function connectLive() {
+    if (!('WebSocket' in window) || !API || !SITE) return;
+    var url;
+    try {
+      url = new URL('/api/site/live/' + encodeURIComponent(SITE), API);
+      url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+    } catch (e) {
+      return;
+    }
+    var socket = new WebSocket(url.toString());
+    live.socket = socket;
+    socket.addEventListener('message', function (event) {
+      var data;
+      try {
+        data = JSON.parse(event.data);
+      } catch (e) {
+        return;
+      }
+      if (data.type === 'site_live_ready') {
+        live.connected = true;
+        live.retry = 0;
+        live.channels = liveChannels();
+        socket.send(JSON.stringify({ type: 'subscribe', channels: live.channels }));
+      } else if (data.type === 'site_signal' && typeof data.channel === 'string') {
+        onSignal(data.channel);
+      }
+    });
+    socket.addEventListener('close', function () {
+      live.connected = false;
+      live.socket = null;
+      // Reprise progressive : 2 s, 4 s, 8 s… jusqu'à une minute.
+      var delay = Math.min(60000, 2000 * Math.pow(2, live.retry));
+      live.retry += 1;
+      setTimeout(connectLive, delay);
+    });
+  }
+
+  /** Sondage d'un bloc en direct : inutile tant que le socket le signale. */
+  function signalledByLive(section) {
+    return live.connected && SIGNALLED[section.getAttribute('data-module')] === true;
+  }
+
   // ─── Démarrage ─────────────────────────────────────────────────────────
 
   document.querySelectorAll('section.mod[data-live]').forEach(bindLive);
@@ -693,6 +941,7 @@
     });
     showReward(pendingReward);
     trackReading();
+    connectLive();
   });
 
   // Le statut est exposé pour le débogage, pas pour d'autres scripts.

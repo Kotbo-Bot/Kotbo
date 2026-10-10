@@ -342,7 +342,7 @@
       </div>
     </header>
 
-    <AgentLockBanner bind:this={agentBanner} {guildId} canManage={siteState.rights.manage} onChange={(locked) => (agentLocked = locked)} />
+    <AgentLockBanner bind:this={agentBanner} {guildId} siteId={siteState.site?.id ?? null} canManage={siteState.rights.manage} onChange={(locked) => (agentLocked = locked)} />
 
     {#if !siteState.modules.site}
       <Callout variant="warning" title={m.ste_module_off_title()} class="mb-3">{m.ste_module_off_desc()}</Callout>

@@ -27,7 +27,15 @@ export const MODULE_ICONS: Record<SiteModuleKey, SiteIconName> = {
   seasons: 'calendar-range',
   marketplace: 'cart',
   starboard: 'star',
+  vote: 'vote',
+  voteLeaderboard: 'trophy',
   profile: 'user',
+  memberSettings: 'bell',
+  memberRewards: 'coins',
+  memberInventory: 'package',
+  memberPurchases: 'bag',
+  shop: 'cart',
+  changelog: 'history',
   wikiIndex: 'book',
   blogList: 'pen',
   search: 'search',
@@ -57,7 +65,15 @@ export function moduleLabel(key: SiteModuleKey): string {
     seasons: () => m.ste_block_seasons(),
     marketplace: () => m.ste_block_marketplace(),
     starboard: () => m.ste_block_starboard(),
+    vote: () => m.ste_block_vote(),
+    voteLeaderboard: () => m.ste_block_voteLeaderboard(),
     profile: () => m.ste_block_profile(),
+    memberSettings: () => m.ste_block_memberSettings(),
+    memberRewards: () => m.ste_block_memberRewards(),
+    memberInventory: () => m.ste_block_memberInventory(),
+    memberPurchases: () => m.ste_block_memberPurchases(),
+    shop: () => m.ste_block_shop(),
+    changelog: () => m.ste_block_changelog(),
     wikiIndex: () => m.ste_block_wikiIndex(),
     blogList: () => m.ste_block_blogList(),
     search: () => m.ste_block_search(),
@@ -89,7 +105,15 @@ export function moduleDescription(key: SiteModuleKey): string {
     seasons: () => m.ste_block_seasons_desc(),
     marketplace: () => m.ste_block_marketplace_desc(),
     starboard: () => m.ste_block_starboard_desc(),
+    vote: () => m.ste_block_vote_desc(),
+    voteLeaderboard: () => m.ste_block_voteLeaderboard_desc(),
     profile: () => m.ste_block_profile_desc(),
+    memberSettings: () => m.ste_block_memberSettings_desc(),
+    memberRewards: () => m.ste_block_memberRewards_desc(),
+    memberInventory: () => m.ste_block_memberInventory_desc(),
+    memberPurchases: () => m.ste_block_memberPurchases_desc(),
+    shop: () => m.ste_block_shop_desc(),
+    changelog: () => m.ste_block_changelog_desc(),
     wikiIndex: () => m.ste_block_wikiIndex_desc(),
     blogList: () => m.ste_block_blogList_desc(),
     search: () => m.ste_block_search_desc(),
@@ -105,6 +129,7 @@ const CATEGORY_LABELS: Record<string, () => string> = {
   vitrine: () => m.ste_cat_vitrine(),
   demarches: () => m.ste_cat_demarches(),
   engagement: () => m.ste_cat_engagement(),
+  membre: () => m.ste_cat_membre(),
   contenus: () => m.ste_cat_contenus(),
   discord: () => m.ste_cat_discord(),
 };
@@ -120,6 +145,8 @@ export function moduleSummary(key: SiteModuleKey, raw: Record<string, unknown>, 
     case 'news':
     case 'events':
     case 'marketplace':
+    case 'voteLeaderboard':
+    case 'changelog':
     case 'starboard':
     case 'blogList':
     case 'seasons':

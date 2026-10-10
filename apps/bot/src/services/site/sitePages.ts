@@ -46,6 +46,7 @@ import { getPublicMemberProfile } from './siteMemberService.js';
 import { getSiteScript, getSiteStylesheet } from './siteAssets.js';
 import { readSiteAsset, mimeForExtension } from './siteUploads.js';
 import { searchSite } from './siteSearch.js';
+import { forumCategoryPage, forumIndexPage, forumTopicPage, parseForumPage, type ForumPage } from './siteForumPages.js';
 import { verifyPreviewToken } from './sitePreview.js';
 import { recordSiteHit } from './siteAnalyticsService.js';
 import {
@@ -93,7 +94,8 @@ export function siteCsp(nonce: string, apiOrigin: string, embed = false): string
     "style-src-attr 'unsafe-inline'",
     "img-src 'self' data: https:",
     'font-src https://fonts.gstatic.com',
-    `connect-src 'self' ${apiOrigin}`,
+    // Signaux temps réel du site : le WebSocket vit sur l'origine de l'API.
+    `connect-src 'self' ${apiOrigin} ${apiOrigin.replace(/^http/, 'ws')}`,
     `frame-src ${FRAME_SOURCES}`,
     `form-action 'self' ${apiOrigin}`,
     "base-uri 'none'",
@@ -234,6 +236,8 @@ const mod = (module: string, config: Record<string, unknown> = {}) => ({ type: '
 /** Accueil généré quand le propriétaire n'a pas désigné de page d'accueil. */
 export const AUTO_HOME_ID = '_home';
 export const ME_PAGE_ID = '_me';
+export const VOTES_PAGE_ID = '_votes';
+export const SHOP_PAGE_ID = '_shop';
 
 export function virtualDocument(pageId: string): SiteDocument | null {
   if (pageId === AUTO_HOME_ID) {
@@ -243,6 +247,12 @@ export function virtualDocument(pageId: string): SiteDocument | null {
       content: [mod('wikiIndex')],
     });
   }
+  if (pageId === VOTES_PAGE_ID) {
+    return normalizeSiteDocument({ type: 'doc', content: [mod('vote'), mod('voteLeaderboard', { limit: 10 })] });
+  }
+  if (pageId === SHOP_PAGE_ID) {
+    return normalizeSiteDocument({ type: 'doc', content: [mod('shop')] });
+  }
   if (pageId === ME_PAGE_ID) {
     const cell = (module: string) => ({ type: 'gridCell', attrs: { span: 1, rowSpan: 1, surface: true }, content: [mod(module)] });
     return normalizeSiteDocument({
@@ -251,6 +261,7 @@ export function virtualDocument(pageId: string): SiteDocument | null {
         mod('profile'),
         { type: 'grid', attrs: { columns: 2 }, content: [cell('memberRewards'), cell('memberSettings')] },
         mod('memberInventory'),
+        mod('memberPurchases'),
         mod('ticket'),
       ],
     });
@@ -568,6 +579,32 @@ async function meResponse(ctx: SiteCtx): Promise<SiteHttpResponse> {
 }
 
 /** Profil public d'un membre (masquable par le membre, non indexé). */
+/** Pages du forum, habillées comme les autres pages du site. */
+function forumResponse(ctx: SiteCtx, page: ForumPage | null): SiteHttpResponse {
+  if (!page) return notFound(ctx);
+  const main = `${hero(page.title, page.lead ?? null)}<div class="forum">${page.main}</div>`;
+  return html(200, shell(ctx, { path: page.path, title: page.title, main, activeKey: 'forum', breadcrumbs: page.breadcrumbs, noindex: page.noindex }), ctx.nonce, ctx.req.apiOrigin, {
+    cacheSeconds: 15,
+    noindex: page.noindex,
+  });
+}
+
+/** Boutique du serveur. */
+async function shopResponse(ctx: SiteCtx): Promise<SiteHttpResponse> {
+  const o = { locale: ctx.locale };
+  const body = await renderDocumentHtml(ctx, virtualDocument(SHOP_PAGE_ID)!, SHOP_PAGE_ID);
+  const main = `${hero(m.site_shop_page_title({}, o), m.site_shop_page_lead({}, o))}<div class="prose wide">${body}</div>`;
+  return html(200, shell(ctx, { path: `${ctx.basePath}/shop`, title: m.site_shop_page_title({}, o), main, activeKey: 'shop', pageId: SHOP_PAGE_ID }), ctx.nonce, ctx.req.apiOrigin, { cacheSeconds: 30 });
+}
+
+/** Page des votes : où voter, statut du membre, meilleurs votants du mois. */
+async function votesResponse(ctx: SiteCtx): Promise<SiteHttpResponse> {
+  const o = { locale: ctx.locale };
+  const body = await renderDocumentHtml(ctx, virtualDocument(VOTES_PAGE_ID)!, VOTES_PAGE_ID);
+  const main = `${hero(m.site_vote_page_title({}, o), m.site_vote_page_lead({}, o))}<div class="prose wide">${body}</div>`;
+  return html(200, shell(ctx, { path: `${ctx.basePath}/votes`, title: m.site_vote_page_title({}, o), main, activeKey: 'votes', pageId: VOTES_PAGE_ID }), ctx.nonce, ctx.req.apiOrigin, { cacheSeconds: 30 });
+}
+
 async function memberProfileResponse(ctx: SiteCtx, userId: string): Promise<SiteHttpResponse> {
   const o = { locale: ctx.locale };
   const profile = await getPublicMemberProfile(ctx.req.client, ctx.site.guildId, userId);
@@ -833,6 +870,13 @@ export async function handleSiteRequest(req: SiteHttpRequest): Promise<SiteHttpR
     else if (section === 'search' && rest.length === 1) response = await searchResponse(ctx);
     else if (section === 'me' && rest.length === 1) response = await meResponse(ctx);
     else if (section === 'u' && a && rest.length === 2) response = await memberProfileResponse(ctx, a);
+    else if (section === 'votes' && rest.length === 1) response = await votesResponse(ctx);
+    else if ((section === 'shop' || section === 'boutique') && rest.length === 1) response = await shopResponse(ctx);
+    else if (section === 'forum' && rest.length === 1) response = forumResponse(ctx, await forumIndexPage(ctx.block));
+    else if (section === 'forum' && a && rest.length === 2) response = forumResponse(ctx, await forumCategoryPage(ctx.block, a, parseForumPage(ctx.req.query.get('page'))));
+    else if (section === 'forum' && a && b && /^[a-z0-9]{20,32}$/.test(b) && rest.length === 3) {
+      response = forumResponse(ctx, await forumTopicPage(ctx.block, a, b, parseForumPage(ctx.req.query.get('page'))));
+    }
     else if (section === 'form' && a && rest.length === 2) response = await formResponse(ctx, a);
     else if (section === 'wiki' && rest.length === 1) response = wikiIndexResponse(ctx);
     else if (section === 'wiki' && a && rest.length === 2) {

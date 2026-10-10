@@ -50,6 +50,7 @@ import { jsonFailure } from './shared/failure.js';
 import { canViewFeatureSection } from './routes/dashboard/featureGate.js';
 import { closeCollabConnection, handleCollabMessage, openCollabConnection } from '../services/site/siteCollabService.js';
 import { canEditKind, resolveSiteRights } from '../services/site/siteRights.js';
+import { isAllowedLiveChannel, setSiteLivePublisher, siteLiveTopic } from '../services/site/siteLive.js';
 import {
   addLiveSubscriber,
   liveSnapshot,
@@ -98,7 +99,12 @@ interface WebSocketData {
   collab?: { pageId: string; guildId: string };
   /** Serveurs dont ce socket suit le temps réel d'Analytics. */
   liveGuilds?: Set<string>;
+  /** Signaux temps réel d'un site communautaire (visiteur anonyme ou connecté). */
+  siteLive?: { siteId: string; topics: Set<string> };
 }
+
+/** Plafond de sujets suivis par un onglet du site. */
+const SITE_LIVE_TOPICS_MAX = 40;
 
 const SNOWFLAKE_RE = /^\d{17,20}$/;
 /** Plafond d'abonnements live par socket : un onglet n'en suit qu'un à la fois. */
@@ -143,6 +149,9 @@ export const startDashboardApi = async (client: Client) => {
   };
 
   setDashboardStateBroadcaster(broadcastDashboardStateChangeLocal);
+  setSiteLivePublisher((topic, message) => {
+    server.publish(topic, message);
+  });
   setDashboardEventBroadcaster(broadcastDashboardEventLocal);
   (globalThis as unknown as Record<string, unknown>).KOTBO_WS_BROADCASTER = broadcastDashboardStateChangeLocal;
   // Point d'entree des diffusions venues des autres shards, qui n'ont pas de
@@ -210,6 +219,31 @@ export const startDashboardApi = async (client: Client) => {
         if (!canEditKind(rights, page.kind)) return new Response('Accès refusé', { status: 403 });
         const upgraded = serverInstance.upgrade(request, {
           data: { isAuthenticated: true, userId: session.userId, collab: { pageId: collabPageId, guildId: collabGuildId } },
+        });
+        if (upgraded) return undefined;
+        return new Response('Upgrade WebSocket impossible', { status: 400 });
+      }
+
+      // Signaux temps réel d'un site communautaire : ouverts aux anonymes (les
+      // signaux ne portent aucune donnée), depuis l'origine d'un dashboard.
+      if (url.pathname.startsWith('/api/site/live/')) {
+        const siteId = url.pathname.slice('/api/site/live/'.length);
+        if (!/^[a-z0-9]{20,32}$/.test(siteId)) return new Response('Chemin invalide', { status: 400 });
+        const origin = request.headers.get('origin');
+        let allowedOrigin = origin === getDashboardOrigin() || getAllInstances().some((i) => i.dashboardOrigin === origin);
+        if (!allowedOrigin && process.env.NODE_ENV !== 'production' && origin) {
+          try {
+            allowedOrigin = ['localhost', '127.0.0.1'].includes(new URL(origin).hostname);
+          } catch {
+            allowedOrigin = false;
+          }
+        }
+        if (!allowedOrigin) return new Response('Origine WebSocket refusée', { status: 403 });
+        const site = await prisma.communitySite.findUnique({ where: { id: siteId }, select: { id: true, suspendedAt: true } });
+        if (!site || site.suspendedAt) return new Response('Site introuvable', { status: 404 });
+        const session = await getDashboardSession(sessionIdFromCookieHeader(request.headers.get('cookie') ?? undefined)).catch(() => null);
+        const upgraded = serverInstance.upgrade(request, {
+          data: { isAuthenticated: Boolean(session), userId: session?.userId, siteLive: { siteId, topics: new Set<string>() } },
         });
         if (upgraded) return undefined;
         return new Response('Upgrade WebSocket impossible', { status: 400 });
@@ -391,6 +425,10 @@ export const startDashboardApi = async (client: Client) => {
     },
     websocket: {
       open(ws) {
+        if (ws.data.siteLive) {
+          ws.send(JSON.stringify({ type: 'site_live_ready' }));
+          return;
+        }
         if (ws.data.collab) {
           void openCollabConnection(ws, ws.data.collab.pageId, ws.data.collab.guildId, ws.data.userId ?? '');
           return;
@@ -399,6 +437,27 @@ export const startDashboardApi = async (client: Client) => {
         ws.send(JSON.stringify({ type: 'dashboard_ws_connected', at: new Date().toISOString() }));
       },
       async message(ws, messageData) {
+        if (ws.data.siteLive) {
+          // { type: 'subscribe', channels: [...] } : chaque canal est revérifié.
+          let data: { type?: string; channels?: unknown };
+          try {
+            data = JSON.parse(typeof messageData === 'string' ? messageData : new TextDecoder().decode(messageData)) as typeof data;
+          } catch {
+            ws.close(4000, 'Payload invalide');
+            return;
+          }
+          if (data.type !== 'subscribe' || !Array.isArray(data.channels)) return;
+          const live = ws.data.siteLive;
+          for (const channel of data.channels.slice(0, SITE_LIVE_TOPICS_MAX)) {
+            if (live.topics.size >= SITE_LIVE_TOPICS_MAX) break;
+            if (!isAllowedLiveChannel(channel, ws.data.userId ?? null)) continue;
+            const topic = siteLiveTopic(live.siteId, channel);
+            if (live.topics.has(topic)) continue;
+            live.topics.add(topic);
+            ws.subscribe(topic);
+          }
+          return;
+        }
         if (ws.data.collab) {
           if (typeof messageData !== 'string') await handleCollabMessage(ws, new Uint8Array(messageData));
           return;
@@ -443,6 +502,11 @@ export const startDashboardApi = async (client: Client) => {
         }
       },
       close(ws) {
+        if (ws.data.siteLive) {
+          for (const topic of ws.data.siteLive.topics) ws.unsubscribe(topic);
+          ws.data.siteLive.topics.clear();
+          return;
+        }
         if (ws.data.collab) {
           void closeCollabConnection(ws);
           return;

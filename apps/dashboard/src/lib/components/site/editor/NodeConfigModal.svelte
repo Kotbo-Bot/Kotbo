@@ -193,7 +193,7 @@
         </Field>
       {/if}
 
-      {#if ['leaderboard', 'clans', 'news', 'events', 'giveaways', 'seasons', 'marketplace', 'starboard', 'suggestions', 'blogList', 'channelFeed'].includes(moduleKey)}
+      {#if ['leaderboard', 'clans', 'news', 'events', 'giveaways', 'seasons', 'marketplace', 'starboard', 'suggestions', 'blogList', 'channelFeed', 'voteLeaderboard', 'changelog'].includes(moduleKey)}
         <Field label={m.ste_cfg_limit()}>
           {#snippet children(id)}
             <input {id} class="input w-32" type="number" min="1" max="100" bind:value={config.limit} />
@@ -312,6 +312,14 @@
         <Field label={m.ste_cfg_button_label()} hint={m.ste_cfg_join_hint()}>
           {#snippet children(id, describedBy)}
             <input {id} aria-describedby={describedBy} class="input w-full" maxlength="60" bind:value={config.label} />
+          {/snippet}
+        </Field>
+      {/if}
+
+      {#if moduleKey === 'shop'}
+        <Field label={m.ste_cfg_shop_category()} hint={m.ste_cfg_shop_category_hint()}>
+          {#snippet children(id, describedBy)}
+            <input {id} aria-describedby={describedBy} class="input w-full" maxlength="40" bind:value={config.category} />
           {/snippet}
         </Field>
       {/if}

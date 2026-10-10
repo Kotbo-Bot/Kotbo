@@ -13,7 +13,7 @@ import { listSiteRewards } from '../siteRewardService.js';
 import { emptyState, formatNumber, timeTag, type BlockContext, type BlockRegistry } from './blockContext.js';
 
 /** Attente du visiteur, ou invitation à se connecter. `null` = visiteur connu. */
-function viewerGate(ctx: BlockContext): string | null {
+export function viewerGate(ctx: BlockContext): string | null {
   const o = { locale: ctx.locale };
   // `data-member-block` : le script recharge le bloc même pour un anonyme, qui doit voir l'invitation à se connecter.
   if (!ctx.viewerKnown) return `<div data-member-block>${emptyState(m.site_loading({}, o))}</div>`;

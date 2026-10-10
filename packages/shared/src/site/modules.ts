@@ -71,15 +71,20 @@ export const SITE_MODULES = {
   seasons: { category: 'engagement', botModule: 'seasons', needsViewer: false, interactive: false, live: false, defaults: { limit: 10 } },
   marketplace: { category: 'engagement', botModule: 'marketplace', needsViewer: false, interactive: true, live: false, defaults: { limit: 12 } },
   starboard: { category: 'engagement', botModule: 'starboard', needsViewer: false, interactive: false, live: false, defaults: { limit: 6 } },
+  vote: { category: 'engagement', botModule: null, needsViewer: true, interactive: true, live: false, defaults: {} },
+  voteLeaderboard: { category: 'engagement', botModule: null, needsViewer: false, interactive: false, live: false, defaults: { limit: 10 } },
+  shop: { category: 'engagement', botModule: 'economy', needsViewer: false, interactive: true, live: false, defaults: { category: '' } },
   profile: { category: 'membre', botModule: null, needsViewer: true, interactive: false, live: false, defaults: {} },
   memberSettings: { category: 'membre', botModule: null, needsViewer: true, interactive: true, live: false, defaults: {} },
   memberRewards: { category: 'membre', botModule: null, needsViewer: true, interactive: false, live: false, defaults: {} },
   memberInventory: { category: 'membre', botModule: 'economy', needsViewer: true, interactive: false, live: false, defaults: {} },
+  memberPurchases: { category: 'membre', botModule: 'economy', needsViewer: true, interactive: true, live: false, defaults: {} },
 
   // Contenus
   wikiIndex: { category: 'contenus', botModule: null, needsViewer: false, interactive: false, live: false, defaults: { parentId: '' } },
   blogList: { category: 'contenus', botModule: null, needsViewer: false, interactive: false, live: false, defaults: { limit: 6, tag: '', layout: 'cards' } },
   search: { category: 'contenus', botModule: null, needsViewer: false, interactive: false, live: false, defaults: {} },
+  changelog: { category: 'contenus', botModule: null, needsViewer: false, interactive: false, live: false, defaults: { days: 30, limit: 15 } },
 
   // Discord en direct
   members: { category: 'discord', botModule: null, needsViewer: false, interactive: false, live: true, defaults: {} },
@@ -201,6 +206,12 @@ export function normalizeModuleConfig(key: SiteModuleKey, raw: unknown): Record<
       return { limit: int(input.limit, 1, 48, 12) };
     case 'starboard':
       return { limit: int(input.limit, 1, 24, 6) };
+    case 'voteLeaderboard':
+      return { limit: int(input.limit, 3, 50, 10) };
+    case 'shop':
+      return { category: text(input.category, 40) };
+    case 'changelog':
+      return { days: int(input.days, 7, 90, 30), limit: int(input.limit, 3, 50, 15) };
     case 'wikiIndex':
       return { parentId: CUID.test(String(input.parentId ?? '')) ? String(input.parentId) : '' };
     case 'blogList':

@@ -3,7 +3,7 @@
  * fréquentation (API /api/site-admin/:guildId), et administration Kotbo
  * (/api/admin/sites).
  */
-import type { SiteDocument, SiteNavItem, SiteThemeSettings } from '@kotbo/shared';
+import type { ShopOfferKind, SiteDocument, SiteNavItem, SiteThemeSettings } from '@kotbo/shared';
 import { authStore } from '../stores/auth.svelte';
 import { apiRequest, API_BASE_URL, authorizedFetch } from './client';
 import { DashboardApiError } from './errors';
@@ -28,7 +28,9 @@ export interface CommunitySite {
   navigation: SiteNavItem[];
   homePageId: string | null;
   staffPage: { bio?: boolean; absence?: boolean; seniority?: boolean; stats?: boolean };
-  settings: { commentsByDefault?: boolean; showMemberCount?: boolean };
+  settings: { commentsByDefault?: boolean; showMemberCount?: boolean; auto?: unknown };
+  /** Récompenses de l'activité sur le site (voir `normalizeSiteRewards`). */
+  rewards: Record<string, unknown>;
   wikiEditorRoleIds: string[];
   blogEditorRoleIds: string[];
   wikiAnnounceChannelId: string | null;
@@ -243,6 +245,244 @@ export function deleteSiteComment(commentId: string, guildId?: string) {
   return apiRequest<{ ok: boolean }>(`${base(gid(guildId))}/comments/${commentId}`, { method: 'DELETE', errorContext: 'API Error (Delete comment):' });
 }
 
+// ─── Votes ──────────────────────────────────────────────────────────────────
+
+export interface SiteVoteSiteAdmin {
+  id: string;
+  provider: string;
+  label: string;
+  voteUrl: string;
+  cooldownHours: number;
+  enabled: boolean;
+  sortOrder: number;
+  hasKey: boolean;
+  /** top.gg : adresse et secret à coller dans le tableau de bord du site de classement. */
+  webhookUrl: string | null;
+  webhookSecret: string | null;
+  votes30d: number;
+}
+
+export interface SiteVoteSiteInput {
+  provider?: string;
+  label?: string;
+  voteUrl?: string;
+  verificationKey?: string | null;
+  cooldownHours?: number;
+  enabled?: boolean;
+}
+
+export function fetchSiteVotes(guildId?: string) {
+  return apiRequest<{ voteSites: SiteVoteSiteAdmin[]; topVoters: Array<{ userId: string; votes: number; name: string; avatarUrl: string | null }> }>(`${base(gid(guildId))}/votes`, { errorContext: 'API Error (Site votes):' });
+}
+
+export function createSiteVoteSite(input: SiteVoteSiteInput, guildId?: string) {
+  return apiRequest<{ id: string }>(`${base(gid(guildId))}/votes`, { method: 'POST', payload: input, errorContext: 'API Error (Create vote site):' });
+}
+
+export function updateSiteVoteSite(id: string, input: SiteVoteSiteInput, guildId?: string) {
+  return apiRequest<{ ok: boolean }>(`${base(gid(guildId))}/votes/${id}`, { method: 'PATCH', payload: input, errorContext: 'API Error (Update vote site):' });
+}
+
+export function deleteSiteVoteSite(id: string, guildId?: string) {
+  return apiRequest<{ ok: boolean }>(`${base(gid(guildId))}/votes/${id}`, { method: 'DELETE', errorContext: 'API Error (Delete vote site):' });
+}
+
+export function regenerateSiteVoteSecret(id: string, guildId?: string) {
+  return apiRequest<{ ok: boolean }>(`${base(gid(guildId))}/votes/${id}/secret`, { method: 'POST', errorContext: 'API Error (Vote secret):' });
+}
+
+export function reorderSiteVoteSites(ids: string[], guildId?: string) {
+  return apiRequest<{ ok: boolean }>(`${base(gid(guildId))}/votes/reorder`, { method: 'POST', payload: { ids }, errorContext: 'API Error (Reorder vote sites):' });
+}
+
+// ─── Site automatique ────────────────────────────────────────────────────────
+
+export function publishWeeklySummaryNow(guildId?: string) {
+  return apiRequest<{ pageId: string | null }>(`${base(gid(guildId))}/auto/weekly`, { method: 'POST', errorContext: 'API Error (Weekly summary):' });
+}
+
+export function syncModulePagesNow(guildId?: string) {
+  return apiRequest<{ created: number }>(`${base(gid(guildId))}/auto/module-pages`, { method: 'POST', errorContext: 'API Error (Module pages):' });
+}
+
+// ─── Forum ───────────────────────────────────────────────────────────────────
+
+export interface ForumCategoryAdmin {
+  id: string;
+  name: string;
+  slug: string;
+  description: string;
+  mode: 'SITE' | 'MIRROR';
+  channelId: string | null;
+  webhookId: string | null;
+  writeRoleIds: string[];
+  staffTopicsOnly: boolean;
+  sortOrder: number;
+  topicCount: number;
+  lastPostAt: string | null;
+}
+
+export interface ForumRecentPost {
+  id: string;
+  authorId: string;
+  authorName: string;
+  content: string;
+  source: string;
+  createdAt: string;
+  topic: { id: string; title: string; pinned: boolean; locked: boolean; category: { name: string; slug: string } };
+}
+
+export interface ForumAdminState {
+  categories: ForumCategoryAdmin[];
+  recent: ForumRecentPost[];
+  forumChannels: Array<{ id: string; name: string; botCanManage: boolean }>;
+}
+
+export function fetchForumAdmin(guildId?: string) {
+  return apiRequest<ForumAdminState>(`${base(gid(guildId))}/forum`, { errorContext: 'API Error (Forum):' });
+}
+
+export function createForumCategory(input: Record<string, unknown>, guildId?: string) {
+  return apiRequest<{ id: string }>(`${base(gid(guildId))}/forum/categories`, { method: 'POST', payload: input, errorContext: 'API Error (Create forum category):' });
+}
+
+export function updateForumCategory(id: string, input: Record<string, unknown>, guildId?: string) {
+  return apiRequest<{ ok: boolean }>(`${base(gid(guildId))}/forum/categories/${id}`, { method: 'PATCH', payload: input, errorContext: 'API Error (Update forum category):' });
+}
+
+export function deleteForumCategory(id: string, guildId?: string) {
+  return apiRequest<{ ok: boolean }>(`${base(gid(guildId))}/forum/categories/${id}`, { method: 'DELETE', errorContext: 'API Error (Delete forum category):' });
+}
+
+export function reorderForumCategories(ids: string[], guildId?: string) {
+  return apiRequest<{ ok: boolean }>(`${base(gid(guildId))}/forum/categories/reorder`, { method: 'POST', payload: { ids }, errorContext: 'API Error (Reorder forum categories):' });
+}
+
+export function importForumCategory(id: string, guildId?: string) {
+  return apiRequest<{ imported: number }>(`${base(gid(guildId))}/forum/categories/${id}/import`, { method: 'POST', errorContext: 'API Error (Import forum):' });
+}
+
+export function setForumTopicFlags(topicId: string, flags: { pinned?: boolean; locked?: boolean }, guildId?: string) {
+  return apiRequest<{ ok: boolean }>(`${base(gid(guildId))}/forum/topics/${topicId}/flags`, { method: 'POST', payload: flags, errorContext: 'API Error (Forum topic):' });
+}
+
+export function deleteForumPostAdmin(postId: string, guildId?: string) {
+  return apiRequest<{ ok: boolean }>(`${base(gid(guildId))}/forum/posts/${postId}`, { method: 'DELETE', errorContext: 'API Error (Delete forum post):' });
+}
+
+// ─── Boutique ────────────────────────────────────────────────────────────────
+
+export interface ShopSettingsAdmin {
+  enabled: boolean;
+  approvalChannelId: string | null;
+  logChannelId: string | null;
+  graceDays: number;
+}
+
+export interface ShopOfferAdmin {
+  id: string;
+  kind: ShopOfferKind;
+  name: string;
+  description: string;
+  imageUrl: string | null;
+  category: string | null;
+  price: number;
+  roleId: string | null;
+  durationDays: number | null;
+  itemId: string | null;
+  quantity: number;
+  stock: number | null;
+  perMemberLimit: number | null;
+  requiredRoleIds: string[];
+  minLevel: number;
+  requiresApproval: boolean;
+  giftable: boolean;
+  enabled: boolean;
+  sortOrder: number;
+  sales30d: { count: number; revenue: number };
+}
+
+export interface ShopPromoCodeAdmin {
+  id: string;
+  code: string;
+  percentOff: number | null;
+  amountOff: number | null;
+  maxUses: number | null;
+  uses: number;
+  offerIds: string[];
+  expiresAt: string | null;
+  enabled: boolean;
+}
+
+export interface ShopOrderAdmin {
+  id: string;
+  offerId: string | null;
+  offerName: string;
+  kind: ShopOfferKind;
+  buyerId: string;
+  recipientId: string;
+  buyerName: string;
+  recipientName: string;
+  price: number;
+  listPrice: number;
+  status: 'PENDING' | 'COMPLETED' | 'REFUSED';
+  source: string;
+  note: string | null;
+  refusalReason: string | null;
+  createdAt: string;
+}
+
+export interface ShopAdminState {
+  settings: ShopSettingsAdmin;
+  currency: { name: string; emoji: string };
+  offers: ShopOfferAdmin[];
+  codes: ShopPromoCodeAdmin[];
+  pending: ShopOrderAdmin[];
+  recent: ShopOrderAdmin[];
+  items: Array<{ id: string; name: string; emoji: string; type: string }>;
+  roles: Array<{ id: string; name: string; color: string; assignable: boolean }>;
+}
+
+export function fetchShopAdmin(guildId?: string) {
+  return apiRequest<ShopAdminState>(`${base(gid(guildId))}/shop`, { errorContext: 'API Error (Shop):' });
+}
+
+export function saveShopSettingsAdmin(input: Partial<ShopSettingsAdmin>, guildId?: string) {
+  return apiRequest<{ settings: ShopSettingsAdmin }>(`${base(gid(guildId))}/shop/settings`, { method: 'PUT', payload: input, errorContext: 'API Error (Shop settings):' });
+}
+
+export function createShopOffer(input: Record<string, unknown>, guildId?: string) {
+  return apiRequest<{ id: string }>(`${base(gid(guildId))}/shop/offers`, { method: 'POST', payload: input, errorContext: 'API Error (Create shop offer):' });
+}
+
+export function updateShopOffer(id: string, input: Record<string, unknown>, guildId?: string) {
+  return apiRequest<{ ok: boolean }>(`${base(gid(guildId))}/shop/offers/${id}`, { method: 'PATCH', payload: input, errorContext: 'API Error (Update shop offer):' });
+}
+
+export function deleteShopOffer(id: string, guildId?: string) {
+  return apiRequest<{ ok: boolean; result: 'deleted' | 'disabled' }>(`${base(gid(guildId))}/shop/offers/${id}`, { method: 'DELETE', errorContext: 'API Error (Delete shop offer):' });
+}
+
+export function reorderShopOffers(ids: string[], guildId?: string) {
+  return apiRequest<{ ok: boolean }>(`${base(gid(guildId))}/shop/offers/reorder`, { method: 'POST', payload: { ids }, errorContext: 'API Error (Reorder shop offers):' });
+}
+
+export function createShopCode(input: Record<string, unknown>, guildId?: string) {
+  return apiRequest<{ id: string }>(`${base(gid(guildId))}/shop/codes`, { method: 'POST', payload: input, errorContext: 'API Error (Create promo code):' });
+}
+
+export function updateShopCode(id: string, input: Record<string, unknown>, guildId?: string) {
+  return apiRequest<{ ok: boolean }>(`${base(gid(guildId))}/shop/codes/${id}`, { method: 'PATCH', payload: input, errorContext: 'API Error (Update promo code):' });
+}
+
+export function deleteShopCode(id: string, guildId?: string) {
+  return apiRequest<{ ok: boolean }>(`${base(gid(guildId))}/shop/codes/${id}`, { method: 'DELETE', errorContext: 'API Error (Delete promo code):' });
+}
+
+export function decideShopOrder(id: string, approve: boolean, reason: string, guildId?: string) {
+  return apiRequest<{ ok: boolean; status: string }>(`${base(gid(guildId))}/shop/orders/${id}/decide`, { method: 'POST', payload: { approve, reason }, errorContext: 'API Error (Decide shop order):' });
+}
+
 export function fetchSiteAnalytics(days: number, guildId?: string) {
   return apiRequest<{ report: SiteAnalyticsReport }>(`${base(gid(guildId))}/analytics?days=${days}`, { errorContext: 'API Error (Site analytics):' });
 }
@@ -259,6 +499,61 @@ export function updateSiteStaffProfile(input: { bio?: string; hidden?: boolean }
 export function siteCollabUrl(guildId: string): string {
   const origin = API_BASE_URL || (typeof window !== 'undefined' ? window.location.origin : '');
   return `${origin.replace(/^http/i, 'ws')}/api/site/collab/${guildId}`;
+}
+
+/**
+ * Signaux temps réel d'un site (« ceci a changé »), par le même WebSocket que
+ * le site publié. Reconnexion progressive ; `close()` arrête tout. Le contenu
+ * se relit toujours par l'API habituelle.
+ */
+export function subscribeSiteSignals(
+  siteId: string,
+  channels: string[],
+  onSignal: (channel: string) => void,
+  onStatus?: (connected: boolean) => void,
+): { close: () => void } {
+  const origin = API_BASE_URL || (typeof window !== 'undefined' ? window.location.origin : '');
+  const url = `${origin.replace(/^http/i, 'ws')}/api/site/live/${encodeURIComponent(siteId)}`;
+  let socket: WebSocket | null = null;
+  let closed = false;
+  let retry = 0;
+  let timer: ReturnType<typeof setTimeout> | null = null;
+
+  const connect = () => {
+    if (closed || typeof WebSocket === 'undefined') return;
+    socket = new WebSocket(url);
+    socket.addEventListener('message', (event) => {
+      let data: { type?: string; channel?: unknown };
+      try {
+        data = JSON.parse(String(event.data)) as typeof data;
+      } catch {
+        return;
+      }
+      if (data.type === 'site_live_ready') {
+        retry = 0;
+        socket?.send(JSON.stringify({ type: 'subscribe', channels }));
+        onStatus?.(true);
+      } else if (data.type === 'site_signal' && typeof data.channel === 'string') {
+        onSignal(data.channel);
+      }
+    });
+    socket.addEventListener('close', () => {
+      onStatus?.(false);
+      socket = null;
+      if (closed) return;
+      timer = setTimeout(connect, Math.min(60_000, 2000 * 2 ** retry));
+      retry += 1;
+    });
+  };
+  connect();
+
+  return {
+    close: () => {
+      closed = true;
+      if (timer) clearTimeout(timer);
+      socket?.close();
+    },
+  };
 }
 
 // ─── Administration Kotbo ───────────────────────────────────────────────────

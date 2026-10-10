@@ -5,8 +5,37 @@ import type { SitePageKind } from '@prisma/client';
 import { SITE_MODULE_KEYS, siteModuleBotDependency, getSiteModuleSpec } from '@kotbo/shared';
 import prisma from '../../../utils/db.js';
 import { logger } from '../../../utils/logger.js';
+import { deleteVoteSite, listAdminVoteSites, regenerateVoteWebhookSecret, reorderVoteSites, saveVoteSite, SiteVoteError, topVoters } from '../../../services/site/siteVoteService.js';
+import {
+  decideShopOrder,
+  deleteShopOffer,
+  deleteShopPromoCode,
+  getShopSettings,
+  listShopOffers,
+  listShopOrders,
+  listShopPromoCodes,
+  reorderShopOffers,
+  saveShopOffer,
+  saveShopPromoCode,
+  saveShopSettings,
+  ShopError,
+} from '../../../services/shop/shopService.js';
+import {
+  deleteForumCategory,
+  deleteForumPost,
+  ForumError,
+  importForumHistory,
+  listForumCategories,
+  listRecentForumPosts,
+  reorderForumCategories,
+  saveForumCategory,
+  setForumTopicFlags,
+} from '../../../services/site/siteForumService.js';
+import { publishWeeklySummary, syncAutoModulePages } from '../../../services/site/siteAutoService.js';
+import { getSiteByGuild } from '../../../services/site/siteService.js';
 import { requireAuth } from '../middleware/auth.js';
-import { getDashboardUrl } from '../../shared.js';
+import { getApiUrl, getDashboardUrl } from '../../shared.js';
+import { getMemberIdentities } from '../../../services/moderation/memberIdentityService.js';
 import { recordAdminAudit } from '../../../services/system/adminAuditService.js';
 import { getModuleStates } from '../../../services/core/moduleGate.js';
 import { canEditKind, resolveSiteRights, type SiteRights } from '../../../services/site/siteRights.js';
@@ -65,6 +94,9 @@ const READ_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
 function fail(c: Context, err: unknown) {
   if (err instanceof SiteAdminError) return c.json({ error: err.code, detail: err.detail ?? null }, err.status as 400);
+  if (err instanceof SiteVoteError) return c.json({ error: err.code, detail: null }, err.status as 400);
+  if (err instanceof ShopError) return c.json({ error: err.code, detail: null }, err.status as 400);
+  if (err instanceof ForumError) return c.json({ error: err.code, detail: null }, err.status as 400);
   logger.error('SiteAdmin', 'Erreur non gérée :', err);
   return c.json({ error: 'internal' }, 500);
 }
@@ -437,6 +469,303 @@ export function createSiteAdminRouter(client: Client): OpenAPIHono {
     if (!current) return c.json({ error: 'site_missing' }, 404);
     const days = Number.parseInt(c.req.query('days') ?? '30', 10);
     return c.json({ report: await getSiteAnalytics(current.id, Number.isFinite(days) ? days : 30) });
+  });
+
+  // ── Votes : sites de classement, secrets de webhook, meilleurs votants ────
+  app.get('/api/site-admin/:guildId/votes', async (c) => {
+    if (!c.var.siteRights.manage) return c.json({ error: 'forbidden' }, 403);
+    const guildId = c.req.param('guildId');
+    const [voteSites, top] = await Promise.all([listAdminVoteSites(guildId, getApiUrl()), topVoters(guildId, 10)]);
+    const identities = await getMemberIdentities(client, guildId, top.map((t) => t.userId));
+    return c.json({
+      voteSites,
+      topVoters: top.map((t) => ({ ...t, name: identities.get(t.userId)?.displayName ?? t.userId, avatarUrl: identities.get(t.userId)?.avatarUrl ?? null })),
+    });
+  });
+
+  app.post('/api/site-admin/:guildId/votes', async (c) => {
+    if (!c.var.siteRights.manage) return c.json({ error: 'forbidden' }, 403);
+    try {
+      const created = await saveVoteSite(c.req.param('guildId'), null, await body(c));
+      return c.json({ id: created.id }, 201);
+    } catch (err) {
+      return fail(c, err);
+    }
+  });
+
+  app.post('/api/site-admin/:guildId/votes/reorder', async (c) => {
+    if (!c.var.siteRights.manage) return c.json({ error: 'forbidden' }, 403);
+    try {
+      await reorderVoteSites(c.req.param('guildId'), (await body(c)).ids);
+      return c.json({ ok: true });
+    } catch (err) {
+      return fail(c, err);
+    }
+  });
+
+  app.patch('/api/site-admin/:guildId/votes/:voteSiteId', async (c) => {
+    if (!c.var.siteRights.manage) return c.json({ error: 'forbidden' }, 403);
+    const voteSiteId = c.req.param('voteSiteId');
+    if (!CUID.test(voteSiteId)) return c.json({ error: 'vote_site_missing' }, 404);
+    try {
+      await saveVoteSite(c.req.param('guildId'), voteSiteId, await body(c));
+      return c.json({ ok: true });
+    } catch (err) {
+      return fail(c, err);
+    }
+  });
+
+  app.post('/api/site-admin/:guildId/votes/:voteSiteId/secret', async (c) => {
+    if (!c.var.siteRights.manage) return c.json({ error: 'forbidden' }, 403);
+    const voteSiteId = c.req.param('voteSiteId');
+    if (!CUID.test(voteSiteId)) return c.json({ error: 'vote_site_missing' }, 404);
+    try {
+      await regenerateVoteWebhookSecret(c.req.param('guildId'), voteSiteId);
+      return c.json({ ok: true });
+    } catch (err) {
+      return fail(c, err);
+    }
+  });
+
+  app.delete('/api/site-admin/:guildId/votes/:voteSiteId', async (c) => {
+    if (!c.var.siteRights.manage) return c.json({ error: 'forbidden' }, 403);
+    await deleteVoteSite(c.req.param('guildId'), c.req.param('voteSiteId'));
+    return c.json({ ok: true });
+  });
+
+  // ── Site automatique : actions immédiates ───────────────────────────────
+  app.post('/api/site-admin/:guildId/auto/weekly', async (c) => {
+    if (!c.var.siteRights.manage) return c.json({ error: 'forbidden' }, 403);
+    const current = await site(c);
+    if (!current) return c.json({ error: 'site_missing' }, 404);
+    try {
+      const full = await getSiteByGuild(current.guildId);
+      if (!full) return c.json({ error: 'site_missing' }, 404);
+      return c.json({ pageId: await publishWeeklySummary(client, full) });
+    } catch (err) {
+      return fail(c, err);
+    }
+  });
+
+  app.post('/api/site-admin/:guildId/auto/module-pages', async (c) => {
+    if (!c.var.siteRights.manage) return c.json({ error: 'forbidden' }, 403);
+    try {
+      return c.json({ created: await syncAutoModulePages(client, c.req.param('guildId')) });
+    } catch (err) {
+      return fail(c, err);
+    }
+  });
+
+  // ── Forum : catégories (site ou miroir Discord), modération ─────────────
+  const canModerateForum = (rights: SiteRights) => rights.manage || rights.moderateComments;
+
+  app.get('/api/site-admin/:guildId/forum', async (c) => {
+    if (!canModerateForum(c.var.siteRights)) return c.json({ error: 'forbidden' }, 403);
+    const guildId = c.req.param('guildId');
+    const current = await site(c);
+    if (!current) return c.json({ error: 'site_missing' }, 404);
+    const guild = client.guilds.cache.get(guildId);
+    const me = guild?.members.me ?? null;
+    const forumChannels = guild
+      ? [...guild.channels.cache.values()]
+          .filter((ch) => ch.type === ChannelType.GuildForum)
+          .map((ch) => ({ id: ch.id, name: ch.name, botCanManage: Boolean(me && ch.permissionsFor(me)?.has([PermissionFlagsBits.ManageWebhooks, PermissionFlagsBits.ViewChannel])) }))
+      : [];
+    const [categories, recent] = await Promise.all([listForumCategories(current.id), listRecentForumPosts(guildId, 50)]);
+    return c.json({ categories, recent, forumChannels });
+  });
+
+  app.post('/api/site-admin/:guildId/forum/categories', async (c) => {
+    if (!c.var.siteRights.manage) return c.json({ error: 'forbidden' }, 403);
+    try {
+      const category = await saveForumCategory(client, c.req.param('guildId'), null, await body(c));
+      return c.json({ id: category.id }, 201);
+    } catch (err) {
+      return fail(c, err);
+    }
+  });
+
+  app.post('/api/site-admin/:guildId/forum/categories/reorder', async (c) => {
+    if (!c.var.siteRights.manage) return c.json({ error: 'forbidden' }, 403);
+    await reorderForumCategories(c.req.param('guildId'), (await body(c)).ids);
+    return c.json({ ok: true });
+  });
+
+  app.patch('/api/site-admin/:guildId/forum/categories/:categoryId', async (c) => {
+    if (!c.var.siteRights.manage) return c.json({ error: 'forbidden' }, 403);
+    const categoryId = c.req.param('categoryId');
+    if (!CUID.test(categoryId)) return c.json({ error: 'category_missing' }, 404);
+    try {
+      await saveForumCategory(client, c.req.param('guildId'), categoryId, await body(c));
+      return c.json({ ok: true });
+    } catch (err) {
+      return fail(c, err);
+    }
+  });
+
+  app.delete('/api/site-admin/:guildId/forum/categories/:categoryId', async (c) => {
+    if (!c.var.siteRights.manage) return c.json({ error: 'forbidden' }, 403);
+    await deleteForumCategory(client, c.req.param('guildId'), c.req.param('categoryId'));
+    return c.json({ ok: true });
+  });
+
+  app.post('/api/site-admin/:guildId/forum/categories/:categoryId/import', async (c) => {
+    if (!c.var.siteRights.manage) return c.json({ error: 'forbidden' }, 403);
+    const guildId = c.req.param('guildId');
+    const categoryId = c.req.param('categoryId');
+    const category = CUID.test(categoryId) ? await prisma.siteForumCategory.findFirst({ where: { id: categoryId, guildId }, select: { id: true } }) : null;
+    if (!category) return c.json({ error: 'category_missing' }, 404);
+    return c.json({ imported: await importForumHistory(client, category.id) });
+  });
+
+  app.post('/api/site-admin/:guildId/forum/topics/:topicId/flags', async (c) => {
+    if (!canModerateForum(c.var.siteRights)) return c.json({ error: 'forbidden' }, 403);
+    const input = await body(c);
+    try {
+      await setForumTopicFlags(c.req.param('guildId'), c.req.param('topicId'), {
+        pinned: typeof input.pinned === 'boolean' ? input.pinned : undefined,
+        locked: typeof input.locked === 'boolean' ? input.locked : undefined,
+      });
+      return c.json({ ok: true });
+    } catch (err) {
+      return fail(c, err);
+    }
+  });
+
+  app.delete('/api/site-admin/:guildId/forum/posts/:postId', async (c) => {
+    if (!canModerateForum(c.var.siteRights)) return c.json({ error: 'forbidden' }, 403);
+    try {
+      await deleteForumPost(client, c.req.param('guildId'), c.req.param('postId'), { userId: c.var.auth.userId, isStaff: true });
+      return c.json({ ok: true });
+    } catch (err) {
+      return fail(c, err);
+    }
+  });
+
+  // ── Boutique : offres, codes promo, commandes à valider, réglages ───────
+  app.get('/api/site-admin/:guildId/shop', async (c) => {
+    if (!c.var.siteRights.manage) return c.json({ error: 'forbidden' }, 403);
+    const guildId = c.req.param('guildId');
+    const guild = client.guilds.cache.get(guildId);
+    const since = new Date(Date.now() - 30 * 86_400_000);
+    const [settings, offers, codes, pending, recent, sales, items, economy] = await Promise.all([
+      getShopSettings(guildId),
+      listShopOffers(guildId, { includeDisabled: true }),
+      listShopPromoCodes(guildId),
+      listShopOrders(guildId, { status: 'PENDING', limit: 100 }),
+      listShopOrders(guildId, { limit: 50 }),
+      prisma.shopOrder.groupBy({ by: ['offerId'], where: { guildId, status: 'COMPLETED', createdAt: { gte: since } }, _count: { _all: true }, _sum: { price: true } }),
+      prisma.rpgItem.findMany({ where: { OR: [{ guildId }, { guildId: null }] }, select: { id: true, name: true, emoji: true, type: true }, orderBy: { name: 'asc' }, take: 500 }),
+      prisma.economyConfig.findUnique({ where: { guildId }, select: { currencyName: true, currencyEmoji: true } }),
+    ]);
+    const salesBy = new Map(sales.map((s) => [s.offerId, { count: s._count._all, revenue: s._sum.price ?? 0 }]));
+    const people = [...new Set([...pending, ...recent].flatMap((o) => [o.buyerId, o.recipientId]))];
+    const identities = await getMemberIdentities(client, guildId, people);
+    const withNames = (order: (typeof recent)[number]) => ({
+      ...order,
+      buyerName: identities.get(order.buyerId)?.displayName ?? order.buyerId,
+      recipientName: identities.get(order.recipientId)?.displayName ?? order.recipientId,
+    });
+    const roles = guild
+      ? [...guild.roles.cache.values()]
+          .filter((r) => r.id !== guild.id && !r.managed)
+          .sort((a, b) => b.position - a.position)
+          .map((r) => ({ id: r.id, name: r.name, color: r.hexColor, assignable: r.editable }))
+      : [];
+    return c.json({
+      settings,
+      currency: { name: economy?.currencyName ?? 'KotboCoins', emoji: economy?.currencyEmoji ?? '' },
+      offers: offers.map((offer) => ({ ...offer, sales30d: salesBy.get(offer.id) ?? { count: 0, revenue: 0 } })),
+      codes,
+      pending: pending.map(withNames),
+      recent: recent.map(withNames),
+      items,
+      roles,
+    });
+  });
+
+  app.put('/api/site-admin/:guildId/shop/settings', async (c) => {
+    if (!c.var.siteRights.manage) return c.json({ error: 'forbidden' }, 403);
+    try {
+      return c.json({ settings: await saveShopSettings(c.req.param('guildId'), await body(c)) });
+    } catch (err) {
+      return fail(c, err);
+    }
+  });
+
+  app.post('/api/site-admin/:guildId/shop/offers', async (c) => {
+    if (!c.var.siteRights.manage) return c.json({ error: 'forbidden' }, 403);
+    try {
+      const offer = await saveShopOffer(client, c.req.param('guildId'), null, await body(c));
+      return c.json({ id: offer.id }, 201);
+    } catch (err) {
+      return fail(c, err);
+    }
+  });
+
+  app.post('/api/site-admin/:guildId/shop/offers/reorder', async (c) => {
+    if (!c.var.siteRights.manage) return c.json({ error: 'forbidden' }, 403);
+    await reorderShopOffers(c.req.param('guildId'), (await body(c)).ids);
+    return c.json({ ok: true });
+  });
+
+  app.patch('/api/site-admin/:guildId/shop/offers/:offerId', async (c) => {
+    if (!c.var.siteRights.manage) return c.json({ error: 'forbidden' }, 403);
+    const offerId = c.req.param('offerId');
+    if (!CUID.test(offerId)) return c.json({ error: 'offer_missing' }, 404);
+    try {
+      await saveShopOffer(client, c.req.param('guildId'), offerId, await body(c));
+      return c.json({ ok: true });
+    } catch (err) {
+      return fail(c, err);
+    }
+  });
+
+  app.delete('/api/site-admin/:guildId/shop/offers/:offerId', async (c) => {
+    if (!c.var.siteRights.manage) return c.json({ error: 'forbidden' }, 403);
+    const result = await deleteShopOffer(c.req.param('guildId'), c.req.param('offerId'));
+    return c.json({ ok: true, result });
+  });
+
+  app.post('/api/site-admin/:guildId/shop/codes', async (c) => {
+    if (!c.var.siteRights.manage) return c.json({ error: 'forbidden' }, 403);
+    try {
+      const code = await saveShopPromoCode(c.req.param('guildId'), null, await body(c));
+      return c.json({ id: code.id }, 201);
+    } catch (err) {
+      return fail(c, err);
+    }
+  });
+
+  app.patch('/api/site-admin/:guildId/shop/codes/:codeId', async (c) => {
+    if (!c.var.siteRights.manage) return c.json({ error: 'forbidden' }, 403);
+    const codeId = c.req.param('codeId');
+    if (!CUID.test(codeId)) return c.json({ error: 'invalid_code' }, 404);
+    try {
+      await saveShopPromoCode(c.req.param('guildId'), codeId, await body(c));
+      return c.json({ ok: true });
+    } catch (err) {
+      return fail(c, err);
+    }
+  });
+
+  app.delete('/api/site-admin/:guildId/shop/codes/:codeId', async (c) => {
+    if (!c.var.siteRights.manage) return c.json({ error: 'forbidden' }, 403);
+    await deleteShopPromoCode(c.req.param('guildId'), c.req.param('codeId'));
+    return c.json({ ok: true });
+  });
+
+  app.post('/api/site-admin/:guildId/shop/orders/:orderId/decide', async (c) => {
+    if (!c.var.siteRights.manage) return c.json({ error: 'forbidden' }, 403);
+    const orderId = c.req.param('orderId');
+    if (!CUID.test(orderId)) return c.json({ error: 'order_missing' }, 404);
+    const input = await body(c);
+    try {
+      const order = await decideShopOrder(client, c.req.param('guildId'), orderId, c.var.auth.userId, input.approve === true, input.reason);
+      return c.json({ ok: true, status: order.status });
+    } catch (err) {
+      return fail(c, err);
+    }
   });
 
   // ── Fiche staff du visiteur ───────────────────────────────────────────────

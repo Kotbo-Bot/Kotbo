@@ -87,6 +87,8 @@ model CommunitySite {
   redirects SiteSlugRedirect[]
   assets    SiteAsset[]
   reports   SiteReport[]
+  voteSites SiteVoteSite[]
+  forumCategories SiteForumCategory[]
 
   @@index([published])
   @@map("community_sites")
@@ -159,6 +161,7 @@ model SitePage {
   children  SitePage[]         @relation("SitePageTree")
   revisions SitePageRevision[]
   comments  SiteComment[]
+  autoPosts SiteAutoPost[]
 
   @@unique([siteId, kind, slug])
   @@index([siteId, kind, parentId, sortOrder])
@@ -333,6 +336,10 @@ model SiteMemberSettings {
   dailyStreak  Int     @default(0)
   lastDailyKey String?
 
+  voteStreak         Int       @default(0)
+  lastVoteDayKey     String?
+  lastVoteReminderAt DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -373,4 +380,54 @@ model SiteTicketLink {
 
   @@index([guildId])
   @@map("site_ticket_links")
+}
+
+// Site de classement sur lequel les membres votent pour le serveur. La clé de
+// vérification et le secret de webhook sont chiffrés (secretBox).
+model SiteVoteSite {
+  id String @id @default(cuid())
+
+  siteId  String
+  guildId String
+
+  provider        String
+  label           String
+  voteUrl         String
+  verificationKey String?
+  webhookSecret   String?
+  cooldownHours   Int     @default(24)
+  sortOrder       Int     @default(0)
+  enabled         Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  site  CommunitySite @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  votes SiteVote[]
+
+  @@index([guildId])
+  @@map("site_vote_sites")
+}
+
+// Vote compté (et récompensé) : un par fenêtre de délai, par site et par membre.
+model SiteVote {
+  id String @id @default(cuid())
+
+  voteSiteId String
+  guildId    String
+  userId     String
+  window     Int
+  // "webhook" (le site de classement prévient) ou "check" (vérifié à la demande).
+  source     String
+  coins      Int    @default(0)
+  xp         Int    @default(0)
+
+  createdAt DateTime @default(now())
+
+  voteSite SiteVoteSite @relation(fields: [voteSiteId], references: [id], onDelete: Cascade)
+
+  @@unique([voteSiteId, userId, window], map: "site_votes_window_key")
+  @@index([guildId, createdAt])
+  @@index([guildId, userId, createdAt])
+  @@map("site_votes")
 }
