@@ -20,6 +20,7 @@
   import NotFound from "./pages/NotFound.svelte";
   import GlobalErrorOverlay from "./lib/components/GlobalErrorOverlay.svelte";
   import LazyRoute from "./lib/components/LazyRoute.svelte";
+  import LegacySiteGate from "./lib/components/site/LegacySiteGate.svelte";
   import ModuleDisabledNotice from "./lib/components/ModuleDisabledNotice.svelte";
   import NoAccessNotice from "./lib/components/NoAccessNotice.svelte";
   import { navigationStore } from "./lib/stores/navigation.svelte";
@@ -229,10 +230,12 @@
     if (path.startsWith("/command-access")) return "commands";
     if (path.startsWith("/regulation")) return "regulation";
     if (path.startsWith("/news")) return "news";
+    if (path.startsWith("/site")) return "site";
     if (path.startsWith("/social-networks")) return "social_networks";
     if (path.startsWith("/backups")) return "settings";
     if (path.startsWith("/schedules")) return "settings";
     if (path.startsWith("/mcp-settings")) return "settings";
+    if (path.startsWith("/webhooks")) return "settings";
     if (path.startsWith("/fun")) return "fun";
     if (path.startsWith("/channel-health")) return "channel_health";
     if (path.startsWith("/channel-links")) return "channel_links";
@@ -293,8 +296,8 @@
    */
   const ADMIN_ROUTES = [
     "/management", "/modules", "/server-template", "/setup",
-    "/migration", "/campaigns", "/partnerships", "/module-settings", "/notifications",
-    "/command-access", "/backups", "/schedules", "/mcp-settings",
+    "/migration", "/campaigns", "/module-settings", "/notifications",
+    "/command-access", "/backups", "/schedules", "/mcp-settings", "/webhooks",
     "/custom-bot", "/automations", "/staff-management", "/channels-management",
   ];
 
@@ -599,6 +602,8 @@
 {:else}
   <svelte:boundary>
     {#if isPublicPage}
+      <!-- Anciennes pages publiques : renvoi vers le site du serveur s'il en a un. -->
+      <LegacySiteGate path={$router.path}>
       <LazyRoute
         path="/:serverId/news"
         load={() => import("./pages/News.svelte")}
@@ -684,6 +689,7 @@
       <Route fallback>
         <NotFound />
       </Route>
+      </LegacySiteGate>
     {:else}
       <Route path="/login">
         <Login />
@@ -712,10 +718,19 @@
         {:else if isMemberSpace}
           <!-- Avant le parcours et l'activation : ils concernent le serveur
                selectionne, pas la fiche de la personne. -->
-          <LazyRoute
-            path="/*"
-            load={() => import("./pages/MemberSpace.svelte")}
-          />
+          {#if $router.path.startsWith("/site/edit/")}
+            <!-- Rédacteur du wiki ou du blog sans accès au dashboard. -->
+            <LazyRoute
+              path="/site/edit/:pageId"
+              load={() => import("./pages/SitePageEditor.svelte")}
+              props={(meta) => ({ pageId: meta.params.pageId })}
+            />
+          {:else}
+            <LazyRoute
+              path="/*"
+              load={() => import("./pages/MemberSpace.svelte")}
+            />
+          {/if}
         {:else if $router.path === "/activation"}
           <!-- Le chemin des codes : activation offerte, partenariat, reprise
                par le support. Il faut le demander - il n'accueille plus
@@ -827,6 +842,10 @@
                 path="/admin/audit"
                 load={() => import("./pages/admin/Audit.svelte")}
               />
+              <LazyRoute
+                path="/admin/sites"
+                load={() => import("./pages/admin/Sites.svelte")}
+              />
             {/if}
             <LazyRoute
               path="/logs/*"
@@ -876,6 +895,19 @@
               path="/news/*"
               load={() => import("./pages/News.svelte")}
             />
+            <!-- Site communautaire : la page vérifie elle-même les droits par
+                 section (Site, Wiki, Blog), l'API aussi. -->
+            <LazyRoute
+              path="/site/edit/:pageId"
+              load={() => import("./pages/SitePageEditor.svelte")}
+              props={(meta) => ({ pageId: meta.params.pageId })}
+            />
+            {#if !$router.path.startsWith("/site/edit/")}
+              <LazyRoute
+                path="/site/*"
+                load={() => import("./pages/Site.svelte")}
+              />
+            {/if}
             <LazyRoute
               path="/social-networks/*"
               load={() => import("./pages/SocialNetworks.svelte")}
@@ -915,14 +947,6 @@
                 path="/campaigns"
                 load={() => import("./pages/Campaigns.svelte")}
               />
-              <LazyRoute
-                path="/partnerships"
-                load={() => import("./pages/Partnerships.svelte")}
-              />
-              <LazyRoute
-                path="/partnerships/directory"
-                load={() => import("./pages/PartnershipDirectory.svelte")}
-              />
               <Route path="/module-settings/:moduleId" let:meta>
                 <!-- Simple redirect logic for legacy URLs -->
                 {@render handleLegacyRedirect(meta.params.moduleId)}
@@ -946,6 +970,10 @@
               <LazyRoute
                 path="/mcp-settings"
                 load={() => import("./pages/MCPSettings.svelte")}
+              />
+              <LazyRoute
+                path="/webhooks/*"
+                load={() => import("./pages/OutgoingWebhooks.svelte")}
               />
               <LazyRoute
                 path="/custom-bot"

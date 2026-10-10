@@ -398,6 +398,7 @@ model Guild {
   giveawayTemplates GiveawayTemplate[]
   giveawayConfigPresets GiveawayConfigPreset[]
   welcomeConfig WelcomeConfig?
+  welcomeExperiments WelcomeExperiment[]
   welcomeThreadConfig WelcomeThreadConfig?
   reactionRoleMenus ReactionRoleMenu[]
   autoResponses AutoResponse[]
@@ -444,6 +445,15 @@ model Guild {
   analyticsSavedViews AnalyticsSavedView[]
   commandUsageDailyStats CommandUsageDailyStat[]
   contentItemDailyStats ContentItemDailyStat[]
+  outgoingWebhooks OutgoingWebhook[]
+  communitySite    CommunitySite?
+
+  // Kotbo × AegisAI (toxicité et émotions)
+  aegisConfig           AegisConfig?
+  aegisDetections       AegisDetection[]
+  aegisHourlyStats      AegisHourlyStat[]
+  aegisMemberDailyStats AegisMemberDailyStat[]
+
   memberInvites MemberInvite[]
   guildInvites  GuildInvite[]
   suspendedInviters SuspendedInviter[]
@@ -546,6 +556,19 @@ model Guild {
   ticketQuotaReopenEnabled    Boolean  @default(false)
   ticketQuotaReopenMax        Int      @default(3)
 
+  // Objectifs de service (SLA) des tickets. Vide = pas d'objectif : la boîte
+  // de réception n'affiche alors ni compte à rebours ni dépassement.
+  ticketSlaFirstResponseMinutes Int?
+  ticketSlaResolutionHours      Int?
+
+  // Avertissement d'enregistrement, montré au membre (lui seul) avant la
+  // création de son ticket : conservation, transcription à la fermeture,
+  // archivage. Le ticket n'est créé qu'après le délai de lecture.
+  ticketRecordingNoticeEnabled Boolean @default(true)
+  ticketRecordingNoticeSeconds Int     @default(10)
+  // Texte propre au serveur ; vide = texte par défaut.
+  ticketRecordingNoticeText    String?
+
   // Catégorie où sont rangés les salons des tickets archivés. Vide = le salon
   // reste où il est, seules ses permissions passent en lecture seule.
   ticketArchiveCategoryId     String?
@@ -602,7 +625,7 @@ model Guild {
   tempVoiceEnabled        Boolean  @default(false)
   tempVoiceChannelId      String?
   tempVoiceCategoryId     String?
-  tempVoiceNameTemplate   String   @default("🔊 {user}'s channel")
+  tempVoiceNameTemplate   String   @default("🔊 Salon de {user}")
   tempVoiceRequiredRoleId String?
   // Politique appliquee aux salons crees par le generateur principal :
   // places, verrouillage, roles autorises d'office, chat texte et pouvoirs du
@@ -825,6 +848,8 @@ model Guild {
   channelLockdowns     ChannelLockdown[]
   memberReports        MemberReport[]
   scamImageHashes      ScamImageHash[]
+  scamDomains          ScamDomain[]
+  scamTextSamples      ScamTextSample[]
   inviteApprovalRequests InviteApprovalRequest[]
   memberRoleSnapshots    MemberRoleSnapshot[]
 

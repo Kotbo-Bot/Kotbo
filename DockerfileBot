@@ -59,6 +59,11 @@ ENV NODE_ENV=production
 ENV DOCKER=true
 ENV PRISMA_HIDE_UPDATE_MESSAGE=true
 
+# Images televersees des sites communautaires. Le dossier doit etre un volume
+# persistant chez l'hebergeur : sans lui, chaque redeploiement perd les images.
+ENV SITE_ASSETS_DIR=/app/data/site-assets
+RUN mkdir -p /app/data/site-assets
+
 # Port de l'API dashboard, servie par le process du bot lui-meme. Il suit
 # DASHBOARD_API_PORT (defaut 8787, cf. utils/instanceResolver.ts). La
 # declaration ne publie rien a elle seule : elle sert au reverse proxy, qui

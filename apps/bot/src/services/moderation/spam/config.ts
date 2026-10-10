@@ -42,6 +42,7 @@ export function tuningFromConfig(config: SpamDetectionConfig): SpamTuning {
     crossChannelThreshold: config.crossChannelThreshold,
     duplicateSimilarity: config.duplicateSimilarity,
     typingSignalEnabled: config.typingSignalEnabled,
+    pasteSignalEnabled: config.pasteSignalEnabled,
     crossChannelEnabled: config.crossChannelEnabled,
     duplicateEnabled: config.duplicateEnabled,
     cadenceEnabled: config.cadenceEnabled,

@@ -104,8 +104,8 @@ const mockDb = {
 
 const dbPath = path.resolve(import.meta.dir, '../../utils/db.ts');
 const dbJsPath = path.resolve(import.meta.dir, '../../utils/db.js');
-mock.module(dbPath, () => ({ default: mockDb, prisma: mockDb, prismaRead: mockDb }));
-mock.module(dbJsPath, () => ({ default: mockDb, prisma: mockDb, prismaRead: mockDb }));
+mock.module(dbPath, () => ({ default: mockDb, prisma: mockDb, prismaRead: mockDb, upsertRetryingRace: (upsert: () => Promise<unknown>) => upsert() }));
+mock.module(dbJsPath, () => ({ default: mockDb, prisma: mockDb, prismaRead: mockDb, upsertRetryingRace: (upsert: () => Promise<unknown>) => upsert() }));
 
 const { claimDaily, registerGambleAttempt, work } = await import('../../services/features/economyService.js');
 

@@ -49,6 +49,13 @@ model Ticket {
   // Premier message d'une autre personne que l'auteur : sert au délai de première réponse.
   firstResponseAt DateTime?
   firstResponderId String?
+  // Dernier message de l'auteur et dernier message du staff : disent à qui
+  // revient la parole (« en attente du staff ») sans relire le salon.
+  lastMemberMessageAt DateTime?
+  lastStaffMessageAt  DateTime?
+  // LOW | NORMAL | HIGH | URGENT
+  priority      String       @default("NORMAL")
+  tags          String[]     @default([])
   inactivityAlertSent Boolean  @default(false)
   isAnonymous         Boolean  @default(false)
   staffServerGuildId  String?  // Si relay sur serveur staff, l'ID du serveur staff
@@ -82,6 +89,13 @@ model Ticket {
   deletionLockedByName String?
   deletionLockReason   String?
 
+  // ── Humeur (Kotbo × AegisAI) ──────────────────────────────────────────────
+  // Dernière émotion marquée de l'auteur et pic de toxicité de ses messages.
+  moodLabel     String?
+  moodScore     Float?
+  peakToxicity  Float?
+  moodUpdatedAt DateTime?
+
   guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
 
   @@index([guildId, createdAt])
@@ -93,6 +107,7 @@ model Ticket {
   // du Pulse sont déjà couverts : (guildId, status) est un préfixe de
   // (guildId, status, createdAt), et (guildId, createdAt) existe ci-dessus.
   @@index([guildId, closedAt])
+  @@index([guildId, claimedById, status])
   @@map("tickets")
 }
 

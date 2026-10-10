@@ -10,9 +10,12 @@ import { broadcastDashboardStateChange, extractMediaUrls, getDashboardUrl, getGu
 import { type ProvisionedEntry, acquireProvisionLock, missingProvisionPermissions, provisionCooldown, provisionCooldownMessage, releaseProvisionLock, startProvisionCooldown } from '../../../../services/core/channelProvisioningService.js';
 import { Prisma } from '@prisma/client';
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, type ColorResolvable, EmbedBuilder, type OverwriteResolvable, PermissionFlagsBits, TextChannel } from 'discord.js';
-import { type ModuleRouteContext, msgEmbedsMap } from './_shared.js';
+import { type ModuleRouteContext, msgComponentsV2Map, msgEmbedsMap, msgReactionsMap } from './_shared.js';
 import { parseTranscriptHtml } from '../../../../services/features/transcriptService.js';
 import { clampCommentTimeout } from '../../../../services/features/ticketSatisfactionService.js';
+import { INBOX_VIEWS, computeSla, normalizeView, viewWhere, waitingOn, type SlaConfig } from '../../../../services/features/ticketHelpdesk.js';
+import { handleTicketHelpdeskRoutes } from './ticketHelpdesk.js';
+import { noticeSeconds } from '../../../../services/features/ticketRecordingNotice.js';
 
 import { jsonFailure } from '../../../shared/failure.js';
 
@@ -23,6 +26,11 @@ import { jsonFailure } from '../../../shared/failure.js';
  * et ecrase la base au prochain enregistrement.
  */
 const TICKET_CONFIG_SELECT = {
+  ticketRecordingNoticeEnabled: true,
+  ticketRecordingNoticeSeconds: true,
+  ticketRecordingNoticeText: true,
+  ticketSlaFirstResponseMinutes: true,
+  ticketSlaResolutionHours: true,
   ticketCategoryId: true,
   ticketLogChannelId: true,
   ticketStaffRoleId: true,
@@ -148,6 +156,13 @@ function parseMacroInput(body: Record<string, unknown>): { data: MacroData } | {
   };
 }
 
+/** Objectif de service : entier strictement positif et borne, ou `null` pour « aucun ». */
+function slaTarget(value: unknown, max: number): number | null {
+  if (value === null || value === '' || value === undefined) return null;
+  const n = Math.trunc(Number(value));
+  return Number.isFinite(n) && n > 0 ? Math.min(n, max) : null;
+}
+
 export async function handleTicketsRoutes(ctx: ModuleRouteContext): Promise<boolean> {
   const { req, res, parts, url, client, user, guildId, access, method, auditUser, moduleKey } = ctx;
 
@@ -171,6 +186,11 @@ export async function handleTicketsRoutes(ctx: ModuleRouteContext): Promise<bool
     // Voir n'est pas effacer : sans ce controle, tout staff a qui la section
     // est ouverte pouvait supprimer une macro ou vider la liste noire.
     const canDeleteTickets = () => !!featureAccess.tickets?.canDelete;
+
+    // Centre de support : propriétés, attribution, staff, statistiques. Avant
+    // la lecture générique `GET /tickets/:id`, qui prendrait « stats » pour
+    // un identifiant de ticket.
+    if (await handleTicketHelpdeskRoutes(ctx)) return true;
 
     // GET /api/dashboard/guilds/:guildId/tickets/config
     if (parts.length === 6 && parts[5] === 'config' && method === 'GET') {
@@ -340,6 +360,11 @@ export async function handleTicketsRoutes(ctx: ModuleRouteContext): Promise<bool
         ticketQuotaStaffLoadBypassRoleIds?: unknown;
         ticketQuotaReopenEnabled?: unknown;
         ticketQuotaReopenMax?: unknown;
+        ticketSlaFirstResponseMinutes?: unknown;
+        ticketSlaResolutionHours?: unknown;
+        ticketRecordingNoticeEnabled?: unknown;
+        ticketRecordingNoticeSeconds?: unknown;
+        ticketRecordingNoticeText?: unknown;
       }
 
       /**
@@ -519,6 +544,16 @@ export async function handleTicketsRoutes(ctx: ModuleRouteContext): Promise<bool
               : [],
             ticketQuotaReopenEnabled: body.ticketQuotaReopenEnabled === true,
             ticketQuotaReopenMax: quotaNumber(body.ticketQuotaReopenMax, 3, 50),
+            // Objectifs de service : ecrits seulement s'ils sont envoyes, pour
+            // qu'un ancien ecran qui ne les connait pas ne les efface pas.
+            ...('ticketSlaFirstResponseMinutes' in body ? { ticketSlaFirstResponseMinutes: slaTarget(body.ticketSlaFirstResponseMinutes, 7 * 24 * 60) } : {}),
+            ...('ticketSlaResolutionHours' in body ? { ticketSlaResolutionHours: slaTarget(body.ticketSlaResolutionHours, 30 * 24) } : {}),
+            // Avertissement d'enregistrement : même règle, écrit seulement s'il est envoyé.
+            ...(typeof body.ticketRecordingNoticeEnabled === 'boolean' ? { ticketRecordingNoticeEnabled: body.ticketRecordingNoticeEnabled } : {}),
+            ...('ticketRecordingNoticeSeconds' in body ? { ticketRecordingNoticeSeconds: noticeSeconds(body.ticketRecordingNoticeSeconds) } : {}),
+            ...('ticketRecordingNoticeText' in body
+              ? { ticketRecordingNoticeText: typeof body.ticketRecordingNoticeText === 'string' && body.ticketRecordingNoticeText.trim() ? body.ticketRecordingNoticeText.trim().slice(0, 3000) : null }
+              : {}),
           }
         });
 
@@ -884,10 +919,47 @@ export async function handleTicketsRoutes(ctx: ModuleRouteContext): Promise<bool
           }
         };
 
+        // Vues du centre de support (`view`) : remplacent le filtre par statut,
+        // qui reste accepte pour les anciens appels.
+        const slaRow = await prisma.guild.findUnique({
+          where: { id: guildId },
+          select: { ticketSlaFirstResponseMinutes: true, ticketSlaResolutionHours: true },
+        });
+        const sla: SlaConfig = {
+          firstResponseMinutes: slaRow?.ticketSlaFirstResponseMinutes ?? null,
+          resolutionHours: slaRow?.ticketSlaResolutionHours ?? null,
+        };
+        const now = new Date();
+        const viewContext = { guildId, userId: user.userId, now, sla, staffTurnField: prisma.ticket.fields.lastStaffMessageAt };
+        const requestedView = url.searchParams.get('view');
+        const query = (url.searchParams.get('q') ?? '').trim().slice(0, 100);
+        const search: Prisma.TicketWhereInput = query
+          ? { OR: [
+            { username: { contains: query, mode: 'insensitive' } },
+            { reason: { contains: query, mode: 'insensitive' } },
+            { userId: query },
+            { tags: { has: query.toLowerCase() } },
+          ] }
+          : {};
+        const viewFilter = requestedView ? viewWhere(normalizeView(requestedView), viewContext) : null;
+        const listWhere: Prisma.TicketWhereInput = requestedView
+          ? { AND: [viewFilter ?? { id: '__aucun__' }, search] }
+          : { guildId, ...(status ? { status } : {}), ...search };
+        // Les files de travail se traitent du plus ancien au plus récent ; les
+        // archives se relisent du plus récent au plus ancien.
+        const sort = url.searchParams.get('sort') === 'oldest' ? 'asc' : 'desc';
+
+        const viewCounts = requestedView
+          ? Object.fromEntries(await Promise.all(INBOX_VIEWS.filter((view) => view !== 'all' && view !== 'closed').map(async (view) => {
+            const where = viewWhere(view, viewContext);
+            return [view, where ? await prisma.ticket.count({ where }) : 0] as const;
+          })))
+          : null;
+
         const [ticketRows, guildConfig] = await Promise.all([
           prisma.ticket.findMany({
-            where: { guildId, ...(status ? { status } : {}) },
-            orderBy: { createdAt: 'desc' },
+            where: listWhere,
+            orderBy: [{ createdAt: sort }, { id: sort }],
             skip: offset,
             // Une ligne supplémentaire permet de signaler la page suivante
             // sans imposer un COUNT(*) à chaque affichage.
@@ -902,6 +974,17 @@ export async function handleTicketsRoutes(ctx: ModuleRouteContext): Promise<bool
               claimedByName: true,
               transcriptId: true,
               createdAt: true,
+              ticketTypeLabel: true,
+              priority: true,
+              tags: true,
+              firstResponseAt: true,
+              closedAt: true,
+              lastMemberMessageAt: true,
+              lastStaffMessageAt: true,
+              // Humeur du demandeur (Kotbo × AegisAI).
+              moodLabel: true,
+              moodScore: true,
+              peakToxicity: true,
             },
           }),
           prisma.guild.findUnique({
@@ -915,12 +998,13 @@ export async function handleTicketsRoutes(ctx: ModuleRouteContext): Promise<bool
         const enrichedTickets = tickets.map((t) => {
           const userAvatar = avatarFromCache(t.userId);
           const claimedByAvatar = t.claimedById ? avatarFromCache(t.claimedById) : null;
-          return { ...t, userAvatar, claimedByAvatar };
+          return { ...t, userAvatar, claimedByAvatar, waitingOn: waitingOn(t), sla: computeSla(t, sla, now) };
         });
 
         json(res, 200, {
           tickets: enrichedTickets,
           config: guildConfig || {},
+          ...(viewCounts ? { views: viewCounts } : {}),
           pagination: {
             limit,
             offset,
@@ -950,27 +1034,40 @@ export async function handleTicketsRoutes(ctx: ModuleRouteContext): Promise<bool
 
         let channelName: string | null = null;
         let messages: unknown[] = [];
-        if (ticket.channelId) {
-          const discordChannel = client.channels.cache.get(ticket.channelId);
-          if (discordChannel && discordChannel instanceof TextChannel) {
+        // Salon du ticket, ou fil pour les modes « fil » et MP relayé : sans
+        // le fil, ces tickets s'affichaient vides.
+        const conversationId = ticket.channelId ?? ticket.threadId;
+        if (conversationId) {
+          const discordChannel = client.channels.cache.get(conversationId)
+            ?? await client.channels.fetch(conversationId).catch(() => null);
+          if (discordChannel && (discordChannel instanceof TextChannel || discordChannel.isThread())) {
             channelName = discordChannel.name;
             try {
               const fetched = await discordChannel.messages.fetch({ limit: 50 });
               const guild = discordChannel.guild;
-              messages = fetched.map(m => ({
-                id: m.id,
-                authorId: m.author.id,
-                authorName: m.member?.displayName || m.author.displayName || m.author.username,
-                authorAvatar: m.author.displayAvatarURL(),
-                isStaff: m.author.bot,
-                content: m.content,
-                htmlContent: parseDiscordMarkdown(m.content, guild),
-                mediaUrls: extractMediaUrls(m.content),
-                stickers: m.stickers ? m.stickers.map(s => ({ id: s.id, name: s.name, url: s.url })) : [],
-                attachments: m.attachments.map(a => ({ url: a.url, contentType: a.contentType })),
-                embeds: msgEmbedsMap(m.embeds, guild),
-                createdAt: m.createdAt.toISOString()
-              }));
+              messages = fetched.map(m => {
+                // Les messages du bot sont en Components V2 : leur texte et
+                // leurs « embeds » vivent dans des conteneurs, pas dans
+                // `content` ni `embeds`.
+                const v2 = msgComponentsV2Map(m.components, guild);
+                const content = [m.content, v2.text].filter(Boolean).join('\n');
+                return {
+                  id: m.id,
+                  authorId: m.author.id,
+                  authorName: m.member?.displayName || m.author.displayName || m.author.username,
+                  authorAvatar: m.author.displayAvatarURL(),
+                  isStaff: m.author.bot,
+                  content,
+                  htmlContent: parseDiscordMarkdown(content, guild),
+                  mediaUrls: extractMediaUrls(content),
+                  stickers: m.stickers ? m.stickers.map(s => ({ id: s.id, name: s.name, url: s.url })) : [],
+                  attachments: m.attachments.map(a => ({ url: a.url, contentType: a.contentType })),
+                  embeds: [...msgEmbedsMap(m.embeds, guild), ...v2.cards],
+                  buttons: v2.buttons,
+                  reactions: msgReactionsMap(m.reactions.cache.values()),
+                  createdAt: m.createdAt.toISOString()
+                };
+              });
               messages.reverse();
             } catch { /* ignored */ }
           }
@@ -1069,6 +1166,12 @@ export async function handleTicketsRoutes(ctx: ModuleRouteContext): Promise<bool
         }
 
         const sent = await discordChannel.send(`💬 **[Kotbo Dashboard - ${user.username}]** ${body.content}`);
+        // Envoyé sous le nom du bot : le suivi du tour de parole, qui ignore les
+        // bots, ne le compterait pas comme une réponse du staff.
+        await prisma.ticket.update({
+          where: { id: ticket.id },
+          data: { lastStaffMessageAt: sent.createdAt, ...(ticket.firstResponseAt ? {} : { firstResponseAt: sent.createdAt, firstResponderId: user.userId }) },
+        }).catch(() => null);
         
         json(res, 200, {
           success: true,
@@ -1198,9 +1301,8 @@ export async function handleTicketsRoutes(ctx: ModuleRouteContext): Promise<bool
               logger.error('TicketsAPI', `Error updating welcome embed from dashboard API: ${welcomeErr}`);
             }
 
-            await ch.send({
-              embeds: [successEmbed('Pris en charge', `Ce ticket a été revendiqué depuis le Dashboard Kotbo par **${user.username}**.`)]
-            }).catch(() => null);
+            const { announceTicketClaim } = await import('../../../../services/features/ticketService.js');
+            await announceTicketClaim(ch, successEmbed('Pris en charge', `Ce ticket a été revendiqué depuis le Dashboard Kotbo par **${user.username}**.`));
           }
         }
 

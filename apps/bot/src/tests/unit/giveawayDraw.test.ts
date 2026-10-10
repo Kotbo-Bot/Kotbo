@@ -25,7 +25,7 @@ const mockCache = {
 
 const resolve = (file: string) => path.resolve(import.meta.dir, `../../${file}`);
 for (const ext of ['ts', 'js']) {
-  mock.module(resolve(`utils/db.${ext}`), () => ({ default: mockDb, prisma: mockDb, prismaRead: mockDb }));
+  mock.module(resolve(`utils/db.${ext}`), () => ({ default: mockDb, prisma: mockDb, prismaRead: mockDb, upsertRetryingRace: (upsert: () => Promise<unknown>) => upsert() }));
   mock.module(resolve(`utils/cache.${ext}`), () => mockCache);
 }
 

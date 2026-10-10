@@ -11,6 +11,7 @@
 export type SpamSignalType =
   // Automatisation : comment le message a été produit
   | 'no_typing'
+  | 'paste_burst'
   | 'inhuman_rate'
   | 'regular_intervals'
   // Diffusion : où le message est parti
@@ -32,6 +33,7 @@ export type SpamSignalFamily = 'AUTOMATION' | 'DIFFUSION' | 'REPETITION' | 'CONT
 
 export const SPAM_SIGNAL_FAMILY: Record<SpamSignalType, SpamSignalFamily> = {
   no_typing: 'AUTOMATION',
+  paste_burst: 'AUTOMATION',
   inhuman_rate: 'AUTOMATION',
   regular_intervals: 'AUTOMATION',
 
@@ -101,6 +103,7 @@ export type SpamTuning = {
   crossChannelThreshold: number;
   duplicateSimilarity: number;
   typingSignalEnabled: boolean;
+  pasteSignalEnabled: boolean;
   crossChannelEnabled: boolean;
   duplicateEnabled: boolean;
   cadenceEnabled: boolean;
@@ -113,6 +116,7 @@ export const DEFAULT_TUNING: SpamTuning = {
   crossChannelThreshold: 3,
   duplicateSimilarity: 0.85,
   typingSignalEnabled: true,
+  pasteSignalEnabled: true,
   crossChannelEnabled: true,
   duplicateEnabled: true,
   cadenceEnabled: true,
@@ -133,6 +137,11 @@ export type SpamEvaluationContext = {
   history: RecentMessage[];
   /** Dernier `typingStart` observé pour ce membre, ou null. */
   lastTypingAt: number | null;
+  /**
+   * Premier `typingStart` de la saisie en cours (remis à zéro à chaque message
+   * envoyé), ou null. Sert à estimer le temps passé à écrire ce message.
+   */
+  typingSessionStartAt: number | null;
   /**
    * false quand le bot n'a jamais observé le moindre événement de frappe sur la
    * guilde : l'intent est probablement absent, le signal serait faussé.

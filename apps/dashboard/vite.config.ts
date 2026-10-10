@@ -28,6 +28,23 @@ export default defineConfig({
       strategy: ['localStorage', 'preferredLanguage', 'baseLocale'],
     }),
   ],
+  server: {
+    // Sites communautaires en développement : même relais que nginx en
+    // production, l'API ne servant le site qu'à un dashboard connu.
+    proxy: {
+      '/s/': {
+        target: process.env.VITE_API_URL || 'http://localhost:8787',
+        changeOrigin: true,
+        rewrite: (path) => `/api/site/render${path}`,
+        headers: { 'X-Forwarded-Host': 'localhost:5173', 'X-Forwarded-Proto': 'http' },
+      },
+      '/robots.txt': {
+        target: process.env.VITE_API_URL || 'http://localhost:8787',
+        changeOrigin: true,
+        rewrite: () => '/api/site/robots.txt',
+      },
+    },
+  },
   optimizeDeps: {
     include: [
       'monaco-editor/esm/vs/editor/editor.api.js',

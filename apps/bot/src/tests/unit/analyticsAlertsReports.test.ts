@@ -4,8 +4,8 @@ import path from 'node:path';
 const mockDb = {};
 const dbPath = path.resolve(import.meta.dir, '../../utils/db.ts');
 const dbJsPath = path.resolve(import.meta.dir, '../../utils/db.js');
-mock.module(dbPath, () => ({ default: mockDb, prisma: mockDb, prismaRead: mockDb }));
-mock.module(dbJsPath, () => ({ default: mockDb, prisma: mockDb, prismaRead: mockDb }));
+mock.module(dbPath, () => ({ default: mockDb, prisma: mockDb, prismaRead: mockDb, upsertRetryingRace: (upsert: () => Promise<unknown>) => upsert() }));
+mock.module(dbJsPath, () => ({ default: mockDb, prisma: mockDb, prismaRead: mockDb, upsertRetryingRace: (upsert: () => Promise<unknown>) => upsert() }));
 
 const { periodKeyOf, evaluateCondition, inCooldown, validateAlertRule, supportsWindow } = await import('../../services/analytics/analyticsAlertsService');
 const { computeNextRun, reportRange, validateReportSchedule } = await import('../../services/analytics/analyticsReportService');

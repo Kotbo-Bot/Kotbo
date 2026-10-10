@@ -144,7 +144,7 @@ const mockCache = () => completeModuleMock(cheminCache, {
 });
 
 const mocksModules: Array<[string, () => Record<string, unknown>]> = [
-  ['../../utils/db', () => ({ default: prismaMock, prisma: prismaMock, prismaRead: prismaMock })],
+  ['../../utils/db', () => ({ default: prismaMock, prisma: prismaMock, prismaRead: prismaMock, upsertRetryingRace: (upsert: () => Promise<unknown>) => upsert() })],
   ['../../utils/cache', mockCache],
 ];
 

@@ -25,6 +25,7 @@
   import { Button, Callout, SectionCard, Tabs } from '../lib/components/ui';
   import ExportDropdown from '../lib/components/analytics/ExportDropdown.svelte';
   import AnalyticsFilterBar from '../lib/components/analytics/AnalyticsFilterBar.svelte';
+  import SiteAnalyticsPanel from '../lib/components/site/SiteAnalyticsPanel.svelte';
   import AnalyticsSkeleton from '../lib/components/analytics/AnalyticsSkeleton.svelte';
   import OverviewSection from '../lib/components/analytics/OverviewSection.svelte';
   import ActivitySection, { type ActivityView } from '../lib/components/analytics/ActivitySection.svelte';
@@ -40,6 +41,7 @@
   import CohortTriangle from '../lib/components/analytics/CohortTriangle.svelte';
   import ResponseTimesView from '../lib/components/analytics/ResponseTimesView.svelte';
   import ConcentrationView from '../lib/components/analytics/ConcentrationView.svelte';
+  import ClimateView from '../lib/components/analytics/ClimateView.svelte';
   import ChannelHealthView from '../lib/components/analytics/ChannelHealthView.svelte';
   import NetworkInsightsView from '../lib/components/analytics/NetworkInsightsView.svelte';
   import GrowthInsightsView from '../lib/components/analytics/GrowthInsightsView.svelte';
@@ -148,12 +150,20 @@
       ],
     },
     {
+      id: 'climate', label: m.anx_section_climate(), icon: 'sparkles', description: m.anx_section_climate_desc(), isNew: true,
+      tabs: [{ id: 'climate', label: m.anx_tab_climate(), icon: 'sparkles', scope: 'period' }],
+    },
+    {
       id: 'staff', label: m.anx_section_staff(), icon: 'Users', description: m.anx_section_staff_desc(),
       tabs: [
         { id: 'staff', label: m.an_tab_staff_directory(), icon: 'Users', scope: 'period', legacy: true },
         { id: 'performance', label: m.an_tab_staff_performance(), icon: 'TrendUp', scope: 'period', legacy: true },
         { id: 'tickets', label: m.anx_tab_tickets(), icon: 'Ticket', scope: 'period' },
       ],
+    },
+    {
+      id: 'website', label: m.ste_analytics_section(), icon: 'Globe', description: m.ste_analytics_section_desc(), isNew: true,
+      tabs: [{ id: 'website', label: m.ste_analytics_tab(), icon: 'Globe', scope: 'own' }],
     },
     {
       id: 'automation', label: m.anx_section_automation(), icon: 'Bell', description: m.anx_section_automation_desc(),
@@ -536,6 +546,8 @@
           </div>
         {:else if activeTab === 'concentration'}
           <ConcentrationView />
+        {:else if activeTab === 'climate'}
+          <ClimateView onOpenMember={openMemberDetails} />
         {:else if activeTab === 'interactions'}
           {#if interactions}
             <div class="flex flex-col gap-4">
@@ -564,6 +576,8 @@
             <GrowthSection {legacy} {legacyLoading} onOpenMember={openMemberDetails} />
             <GrowthInsightsView />
           </div>
+        {:else if activeTab === 'website'}
+          <SiteAnalyticsPanel guildId={authStore.selectedGuildId ?? ''} />
         {:else if activeTab === 'tickets'}
           <StaffInsightsView onOpenMember={openMemberDetails} />
         {:else if activeTab === 'compare'}

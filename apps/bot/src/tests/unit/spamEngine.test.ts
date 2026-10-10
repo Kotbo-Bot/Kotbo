@@ -11,6 +11,12 @@ import {
 import { collectSignals } from '../../services/moderation/spam/signals.js';
 import { computeSpamScore, evaluateMessage, trustMultiplier } from '../../services/moderation/spam/scoring.js';
 import {
+  getTypingSessionStartAt,
+  recordMessage,
+  recordTyping,
+  resetActivityStore,
+} from '../../services/moderation/spam/activityStore.js';
+import {
   DEFAULT_TUNING,
   resolveAction,
   type RecentMessage,
@@ -48,6 +54,7 @@ function ctx(overrides: Partial<SpamEvaluationContext> = {}): SpamEvaluationCont
     mentionedEveryone: false,
     history: [],
     lastTypingAt: NOW - 2000,
+    typingSessionStartAt: NOW - 60_000,
     typingObservable: true,
     trust: VETERAN,
     tuning: DEFAULT_TUNING,
@@ -164,6 +171,97 @@ describe('signal : message sans indicateur de frappe', () => {
     // Sans cette garde, l'absence d'intent marquerait tout le serveur.
     const signals = collectSignals(ctx({ content: long, lastTypingAt: null, typingObservable: false }));
     expect(typesOf(signals)).not.toContain('no_typing');
+  });
+});
+
+describe('signal : copier-coller', () => {
+  const pasted = 'Gagne 50 euros de Nitro gratuit, clique vite sur le lien avant la fin de l offre. '.repeat(4);
+
+  test('se declenche sur un gros message envoye une seconde apres la premiere frappe', () => {
+    const signals = collectSignals(ctx({ content: pasted, lastTypingAt: NOW - 1000, typingSessionStartAt: NOW - 1000 }));
+    const paste = signals.find((s) => s.type === 'paste_burst');
+    expect(paste).toBeDefined();
+    expect(paste!.score).toBe(35);
+  });
+
+  test('pese moins quand la frappe est courte mais pas instantanee', () => {
+    // ~330 caracteres en 10 s : 33 car./s, impossible a taper mais pas instantane.
+    const signals = collectSignals(ctx({ content: pasted, lastTypingAt: NOW - 2000, typingSessionStartAt: NOW - 10_000 }));
+    expect(signals.find((s) => s.type === 'paste_burst')?.score).toBe(25);
+  });
+
+  test('ne se declenche pas quand le temps de frappe suffit a ecrire le texte', () => {
+    const signals = collectSignals(ctx({ content: pasted, lastTypingAt: NOW - 2000, typingSessionStartAt: NOW - 45_000 }));
+    expect(typesOf(signals)).not.toContain('paste_burst');
+  });
+
+  test('ne se declenche pas sur un message court colle', () => {
+    const signals = collectSignals(ctx({ content: 'a'.repeat(120), lastTypingAt: NOW - 500, typingSessionStartAt: NOW - 500 }));
+    expect(typesOf(signals)).not.toContain('paste_burst');
+  });
+
+  test('ignore les blocs de code', () => {
+    const code = '```ts\n' + 'const x = 1;\n'.repeat(30) + '```';
+    const signals = collectSignals(ctx({ content: code, lastTypingAt: NOW - 500, typingSessionStartAt: NOW - 500 }));
+    expect(typesOf(signals)).not.toContain('paste_burst');
+  });
+
+  test('laisse le cas sans aucune frappe a no_typing', () => {
+    const signals = collectSignals(ctx({ content: pasted, lastTypingAt: null, typingSessionStartAt: null }));
+    expect(typesOf(signals)).toContain('no_typing');
+    expect(typesOf(signals)).not.toContain('paste_burst');
+  });
+
+  test('reste muet quand le bot ne recoit pas les evenements de frappe', () => {
+    const signals = collectSignals(
+      ctx({ content: pasted, lastTypingAt: NOW - 500, typingSessionStartAt: NOW - 500, typingObservable: false })
+    );
+    expect(typesOf(signals)).not.toContain('paste_burst');
+  });
+
+  test('se desactive avec son reglage', () => {
+    const signals = collectSignals(
+      ctx({
+        content: pasted,
+        lastTypingAt: NOW - 500,
+        typingSessionStartAt: NOW - 500,
+        tuning: { ...DEFAULT_TUNING, pasteSignalEnabled: false },
+      })
+    );
+    expect(typesOf(signals)).not.toContain('paste_burst');
+  });
+
+  test('ne decide pas seul pour un membre installe', () => {
+    const verdict = evaluateMessage(ctx({ content: pasted, lastTypingAt: NOW - 500, typingSessionStartAt: NOW - 500 }));
+    expect(verdict.score).toBeLessThan(55);
+  });
+});
+
+describe('activite : saisie en cours', () => {
+  const at = (s: number) => NOW + s * 1000;
+
+  test('la saisie commence a la premiere frappe et survit aux relances', () => {
+    resetActivityStore();
+    recordTyping('g', 'u', at(0));
+    recordTyping('g', 'u', at(10));
+    recordTyping('g', 'u', at(20));
+    expect(getTypingSessionStartAt('g', 'u')).toBe(at(0));
+  });
+
+  test('un message envoye clot la saisie', () => {
+    resetActivityStore();
+    recordTyping('g', 'u', at(0));
+    recordMessage('g', 'u', msg({ at: at(5) }));
+    expect(getTypingSessionStartAt('g', 'u')).toBeNull();
+    recordTyping('g', 'u', at(8));
+    expect(getTypingSessionStartAt('g', 'u')).toBe(at(8));
+  });
+
+  test('un long silence ouvre une nouvelle saisie', () => {
+    resetActivityStore();
+    recordTyping('g', 'u', at(0));
+    recordTyping('g', 'u', at(600));
+    expect(getTypingSessionStartAt('g', 'u')).toBe(at(600));
   });
 });
 

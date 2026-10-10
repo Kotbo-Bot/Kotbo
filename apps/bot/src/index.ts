@@ -70,25 +70,26 @@ import { registerLevelingListener } from './events/levelingEvents.js';
 import { registerSecurityVerificationListener } from './events/securityVerificationEvents.js';
 import { registerAutoResponseListener } from './events/autoResponseEvents.js';
 import { registerBumpReminderListener } from './events/bumpReminderEvents.js';
+import { registerSiteListeners } from './events/siteEvents.js';
 import { registerChannelLinkListener } from './events/channelLinkEvents.js';
 import { registerStarboardListener } from './events/starboardEvents.js';
 import { registerStaffServerListener } from './events/staffServerEvents.js';
 import { registerAbsenceMentionListener } from './events/absenceMentionEvents.js';
-import { registerPartnershipListener } from './services/features/partnershipService.js';
 import { registerRaidProtectionListener } from './events/raidProtection.js';
 import { registerServerTagRoleListener } from './events/serverTagRole.js';
 import { registerClanListener } from './events/clanEvents.js';
 import { registerEventBusBridge } from './events/eventBusBridge.js';
 import { registerAnalyticsBusSubscribers } from './modules/analytics.module.js';
 import { registerWorkflowBusSubscribers } from './modules/workflow.module.js';
+import { registerOutgoingWebhookSubscribers } from './services/integrations/outgoingWebhookService.js';
 import { registerLevelingBusSubscribers } from './modules/leveling.module.js';
 import { registerRankedBusSubscribers } from './modules/ranked.module.js';
 import { registerAutoModBusSubscribers } from './modules/autoMod.module.js';
+import { registerAegisModule } from './modules/aegis.module.js';
 import { registerAdminLockModule } from './modules/adminLock.module.js';
 import { registerAutoThreadBusSubscribers } from './modules/autoThread.module.js';
 import { registerStickyMessageBusSubscribers } from './modules/stickyMessage.module.js';
 import { registerWelcomeGoodbyeBusSubscribers } from './modules/welcomeGoodbye.module.js';
-import { registerPartnershipBusSubscribers } from './modules/partnerships.module.js';
 import { registerModerationBusSubscribers } from './modules/moderation.module.js';
 import { registerTicketsBusSubscribers } from './modules/tickets.module.js';
 import { loadActivatedGuilds, isGuildActivated, activateGuildSelfServe } from './utils/activation.js';
@@ -445,16 +446,19 @@ client.once(Events.ClientReady, async (c) => {
   // sont restés sur `client.on()` reçoivent la vue filtrée du client.
   registerAnalyticsBusSubscribers(client);
   registerWorkflowBusSubscribers(client);
+  registerOutgoingWebhookSubscribers();
   registerLevelingBusSubscribers(client);
   registerRankedBusSubscribers(client);
   registerAutoModBusSubscribers(scopeClientToModule(client, 'automod'));
   registerAdminLockModule(scopeClientToModule(client, 'automod'));
+  // Kotbo × AegisAI : sous-module d'AutoMod, allumé par sa propre config.
+  void registerAegisModule(client, scopeClientToModule(client, 'automod'))
+    .catch((error) => logger.error('Modules', 'Module AegisAI non démarré :', error));
   registerAutoThreadBusSubscribers(client);
   registerStickyMessageBusSubscribers(client);
   registerWelcomeGoodbyeBusSubscribers(client);
   registerModerationBusSubscribers(scopeClientToModule(client, 'sanctions'));
   registerTicketsBusSubscribers(client);
-  registerPartnershipBusSubscribers(client);
 
   // ── Direct listeners (not yet migrated to the bus) ────────
   //
@@ -484,10 +488,10 @@ client.once(Events.ClientReady, async (c) => {
   registerSecurityVerificationListener(scopeClientToModule(client, 'security_verification'));
   registerAutoResponseListener(scopeClientToModule(client, 'auto_responses'));
   registerBumpReminderListener(scopeClientToModule(client, 'bump_reminder'));
+  registerSiteListeners(scopeClientToModule(client, 'site'));
   registerChannelLinkListener(scopeClientToModule(client, 'channel_links'));
   registerStaffServerListener(scopeClientToModule(client, 'staff_server'));
   registerAbsenceMentionListener(scopeClientToModule(client, 'absences'));
-  registerPartnershipListener(client);
   registerRaidProtectionListener(scopeClientToModule(client, 'raid_protection'));
   registerServerTagRoleListener(client);
   registerClanListener(scopeClientToModule(client, 'clans'));
@@ -1043,6 +1047,13 @@ function flushAndStop(exitCode = 0): Promise<void> {
     clearInterval(flushInterval);
     try {
       await flushIndexBuffers();
+      // Kotbo × AegisAI : compteurs de la dernière minute, et le worker de la
+      // file rend ses jobs en cours à Redis plutôt que de les laisser bloqués.
+      const [{ flushAegisStats }, { stopAegisQueue }] = await Promise.all([
+        import('./services/moderation/aegis/aegisStats.js'),
+        import('./services/moderation/aegis/aegisQueue.js'),
+      ]);
+      await Promise.allSettled([flushAegisStats(), stopAegisQueue()]);
     } finally {
       process.exit(exitCode);
     }

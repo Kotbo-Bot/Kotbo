@@ -42,6 +42,9 @@ model SpamDetectionConfig {
   /// Message conséquent posté sans aucun événement de frappe préalable.
   /// Un client Discord réel émet toujours `typingStart` ; les scripts non.
   typingSignalEnabled Boolean @default(true)
+  /// Gros message envoyé après une frappe bien trop courte pour l'avoir écrit :
+  /// copier-coller, le geste du spammeur manuel qui recopie la même arnaque.
+  pasteSignalEnabled  Boolean @default(true)
   /// Même contenu diffusé dans plusieurs salons en quelques secondes.
   crossChannelEnabled Boolean @default(true)
   /// Répétition quasi identique dans l'historique récent du membre.

@@ -28,6 +28,8 @@
     { value: 'WRITE_MEMBERS',   label: m.mcp_perm_write_members_label(),  desc: m.mcp_perm_write_members_desc() },
     { value: 'READ_WORKFLOWS',  label: m.mcp_perm_read_workflows_label(), desc: m.mcp_perm_read_workflows_desc() },
     { value: 'WRITE_WORKFLOWS', label: m.mcp_perm_write_workflows_label(),desc: m.mcp_perm_write_workflows_desc() },
+    { value: 'READ_SITE',       label: m.mcp_perm_read_site_label(),      desc: m.mcp_perm_read_site_desc() },
+    { value: 'WRITE_SITE',      label: m.mcp_perm_write_site_label(),     desc: m.mcp_perm_write_site_desc() },
   ]);
 
   type McpKey = {

@@ -81,6 +81,7 @@ const silentLogger = {
 for (const suffix of ['../../utils/db.ts', '../../utils/db.js']) {
   mock.module(path.resolve(import.meta.dir, suffix), () => ({
     default: mockDb, prisma: mockDb, prismaRead: mockDb,
+    upsertRetryingRace: (upsert: () => Promise<unknown>) => upsert(),
   }));
 }
 for (const suffix of ['../../utils/logger.ts', '../../utils/logger.js']) {

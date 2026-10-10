@@ -12,7 +12,7 @@ import { Events, type Message, ActionRowBuilder, ButtonBuilder, ButtonStyle, Emb
 import { subscribeForModule } from '../services/core/moduleScope.js';
 import prisma from '../utils/db.js';
 import { COLORS } from '../utils/embeds.js';
-import { autoClaimTicketOnStaffMessage, markTicketOrphaned, recordTicketFirstResponse, relayDmToThread, relayThreadToDm } from '../services/features/ticketService.js';
+import { autoClaimTicketOnStaffMessage, markTicketOrphaned, recordTicketFirstResponse, recordTicketTurn, relayDmToThread, relayThreadToDm } from '../services/features/ticketService.js';
 import { logger } from '../utils/logger.js';
 
 const MODULE_NAME = 'tickets';
@@ -131,6 +131,7 @@ export function registerTicketsBusSubscribers(client: Client): void {
 
       if (message.guild) {
         await recordTicketFirstResponse(message);
+        await recordTicketTurn(message);
         await autoClaimTicketOnStaffMessage(client, message);
       }
 

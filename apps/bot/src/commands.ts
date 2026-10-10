@@ -58,7 +58,6 @@ import { statsCommand } from './commands/utility/stats.js';
 import { statusCommand } from './commands/admin/status.js';
 import { suggestCommand } from './commands/utility/suggest.js';
 import { ticketCommand } from './commands/utility/ticket.js';
-import { partnershipCommand } from './commands/community/partenariat.js';
 import { transcriptCommand } from './commands/moderation/transcript.js';
 import { suggestionConfigCommand } from './commands/utility/suggestion-config.js';
 import { clearCommand } from './commands/moderation/clear.js';
@@ -88,6 +87,7 @@ import { messageHubContextCommand, userHubContextCommand } from './commands/cont
 import { protectionCommand } from './commands/admin/protection.js';
 import { auditCommand } from './commands/admin/audit.js';
 import { reportCommand, reportMessageContextCommand } from './commands/moderation/report.js';
+import { wikiCommand } from './commands/community/wiki.js';
 
 export type SlashCommandDefinition = {
   data: { name: string; description: string; toJSON: () => unknown };
@@ -137,7 +137,6 @@ export const commands: SlashCommandDefinition[] = [
   activateCommand,
   transcriptCommand,
   ticketCommand,
-  partnershipCommand,
   sayCommand,
   mpsayCommand,
   demissionCommand,
@@ -192,6 +191,7 @@ export const commands: SlashCommandDefinition[] = [
   reportCommand,
   optOutCommand,
   privacyCommand,
+  wikiCommand,
 ];
 
 /**
@@ -284,9 +284,9 @@ export const COMMAND_MODULES = new Map<ApplicationCommandDefinition, string>([
   // Communauté
   [dailyAlgoCommand, 'daily_algo'],
   [ticketCommand, 'tickets'],
-  [partnershipCommand, 'partnerships'],
   [giveawayCommand, 'giveaways'],
   [suggestCommand, 'suggestions'],
+  [wikiCommand, 'site_wiki'],
   [suggestionConfigCommand, 'suggestions'],
   [eventCommand, 'events'],
   [ctfCommand, 'events'],

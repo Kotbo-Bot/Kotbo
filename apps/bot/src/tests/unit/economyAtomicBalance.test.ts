@@ -72,7 +72,7 @@ const mockDb = {
 };
 
 for (const file of ['../../utils/db.ts', '../../utils/db.js']) {
-  mock.module(path.resolve(import.meta.dir, file), () => ({ default: mockDb, prisma: mockDb, prismaRead: mockDb }));
+  mock.module(path.resolve(import.meta.dir, file), () => ({ default: mockDb, prisma: mockDb, prismaRead: mockDb, upsertRetryingRace: (upsert: () => Promise<unknown>) => upsert() }));
 }
 
 const { takeBet, creditBalance, removeBalanceFloored, depositToRpgGuildTreasury } = await import('../../services/features/economyService.js');

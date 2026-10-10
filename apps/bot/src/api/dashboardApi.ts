@@ -16,7 +16,6 @@ import {
   configRateLimiter,
   errorReportRateLimiter,
   feedbackReportRateLimiter,
-  partnershipRateLimiter,
   dashboardWriteRateLimiter,
   dashboardSensitiveRateLimiter,
   rankCardPreviewRateLimiter,
@@ -37,7 +36,6 @@ import { handlePublicRoutes } from './routes/public.js';
 import { handleAuthRoutes } from './routes/auth.js';
 import { handleReportErrorRoute } from './routes/error.js';
 import { handleReportFeedbackRoute } from './routes/feedback.js';
-import { handlePartnershipRoute } from './routes/partnership.js';
 import { handleUserRoutes } from './routes/user.js';
 import { handleAdminRoutes } from './routes/admin.js';
 import { startBroadcastScheduler } from '../services/system/broadcastService.js';
@@ -50,6 +48,8 @@ import { createHonoApp } from './hono/app.js';
 
 import { jsonFailure } from './shared/failure.js';
 import { canViewFeatureSection } from './routes/dashboard/featureGate.js';
+import { closeCollabConnection, handleCollabMessage, openCollabConnection } from '../services/site/siteCollabService.js';
+import { canEditKind, resolveSiteRights } from '../services/site/siteRights.js';
 import {
   addLiveSubscriber,
   liveSnapshot,
@@ -94,6 +94,8 @@ export async function notifyDashboardSanctionReportRequired(params: {
 interface WebSocketData {
   isAuthenticated: boolean;
   userId?: string;
+  /** Socket d'édition à plusieurs d'une page de site (protocole y-websocket). */
+  collab?: { pageId: string; guildId: string };
   /** Serveurs dont ce socket suit le temps réel d'Analytics. */
   liveGuilds?: Set<string>;
 }
@@ -163,7 +165,6 @@ export const startDashboardApi = async (client: Client) => {
     cleanLimiter(configRateLimiter, 60 * 1000);
     cleanLimiter(errorReportRateLimiter, 15 * 60 * 1000);
     cleanLimiter(feedbackReportRateLimiter, 15 * 60 * 1000);
-    cleanLimiter(partnershipRateLimiter, 60 * 60 * 1000);
     cleanLimiter(mcpRateLimiter, 60 * 1000);
     cleanLimiter(dashboardWriteRateLimiter, 60 * 1000);
     cleanLimiter(dashboardSensitiveRateLimiter, 60 * 1000);
@@ -180,6 +181,39 @@ export const startDashboardApi = async (client: Client) => {
     reusePort: true,
     async fetch(request, serverInstance) {
       const url = new URL(request.url);
+
+      // Édition à plusieurs d'une page de site : même contrôle d'origine et de
+      // session que le WebSocket du dashboard, plus le droit d'éditer la page.
+      const collabParts = url.pathname.startsWith('/api/site/collab/')
+        ? url.pathname.slice('/api/site/collab/'.length).split('/').filter(Boolean)
+        : null;
+      if (collabParts) {
+        const [collabGuildId = '', collabPageId = ''] = collabParts;
+        if (collabParts.length !== 2 || !SNOWFLAKE_RE.test(collabGuildId) || !/^[a-z0-9]{20,32}$/.test(collabPageId)) {
+          return new Response('Chemin invalide', { status: 400 });
+        }
+        const origin = request.headers.get('origin');
+        let allowedOrigin = origin === getDashboardOrigin() || getAllInstances().some((i) => i.dashboardOrigin === origin);
+        if (!allowedOrigin && process.env.NODE_ENV !== 'production' && origin) {
+          try {
+            allowedOrigin = ['localhost', '127.0.0.1'].includes(new URL(origin).hostname);
+          } catch {
+            allowedOrigin = false;
+          }
+        }
+        if (!allowedOrigin) return new Response('Origine WebSocket refusée', { status: 403 });
+        const session = await getDashboardSession(sessionIdFromCookieHeader(request.headers.get('cookie') ?? undefined));
+        if (!session) return new Response('Session WebSocket absente ou expirée', { status: 401 });
+        const page = await prisma.sitePage.findFirst({ where: { id: collabPageId, guildId: collabGuildId }, select: { kind: true } });
+        if (!page) return new Response('Page introuvable', { status: 404 });
+        const rights = await resolveSiteRights(client, collabGuildId, session.userId);
+        if (!canEditKind(rights, page.kind)) return new Response('Accès refusé', { status: 403 });
+        const upgraded = serverInstance.upgrade(request, {
+          data: { isAuthenticated: true, userId: session.userId, collab: { pageId: collabPageId, guildId: collabGuildId } },
+        });
+        if (upgraded) return undefined;
+        return new Response('Upgrade WebSocket impossible', { status: 400 });
+      }
 
       // WebSocket upgrade (inchangé)
       if (url.pathname === '/api/dashboard/ws') {
@@ -209,7 +243,9 @@ export const startDashboardApi = async (client: Client) => {
       // -----------------------------------------------------------------------
       try {
         const honoResponse = await honoApp.fetch(request.clone());
-        if (honoResponse.status !== 404) {
+        // Une route Hono peut répondre 404 pour de bon (page de site
+        // introuvable) : `X-Kotbo-Handled` la distingue d'une route absente.
+        if (honoResponse.status !== 404 || honoResponse.headers.get('X-Kotbo-Handled') === '1') {
           return honoResponse;
         }
       } catch (honoErr) {
@@ -340,7 +376,6 @@ export const startDashboardApi = async (client: Client) => {
             if (await handleVerifyRoutes(req, res, parts, url, client)) return;
             if (await handleReportErrorRoute(req, res, parts, url, client)) return;
             if (await handleReportFeedbackRoute(req, res, parts, url, client)) return;
-            if (await handlePartnershipRoute(req, res, parts, url, client)) return;
             if (await handleUserRoutes(req, res, parts, url, client)) return;
             if (await handleAdminRoutes(req, res, parts, url, client)) return;
             if (await handleMCPRoutes(req, res, parts, url, client)) return;
@@ -356,10 +391,18 @@ export const startDashboardApi = async (client: Client) => {
     },
     websocket: {
       open(ws) {
+        if (ws.data.collab) {
+          void openCollabConnection(ws, ws.data.collab.pageId, ws.data.collab.guildId, ws.data.userId ?? '');
+          return;
+        }
         ws.subscribe('authenticated-dashboard');
         ws.send(JSON.stringify({ type: 'dashboard_ws_connected', at: new Date().toISOString() }));
       },
       async message(ws, messageData) {
+        if (ws.data.collab) {
+          if (typeof messageData !== 'string') await handleCollabMessage(ws, new Uint8Array(messageData));
+          return;
+        }
         let data: { type?: string; guildId?: unknown };
         try {
           const raw = typeof messageData === 'string' ? messageData : new TextDecoder().decode(messageData);
@@ -400,6 +443,10 @@ export const startDashboardApi = async (client: Client) => {
         }
       },
       close(ws) {
+        if (ws.data.collab) {
+          void closeCollabConnection(ws);
+          return;
+        }
         ws.unsubscribe('authenticated-dashboard');
         for (const guildId of ws.data.liveGuilds ?? []) removeLiveSubscriber(guildId);
         ws.data.liveGuilds?.clear();
@@ -463,12 +510,15 @@ export const startDashboardApi = async (client: Client) => {
   // n'importe quel utilisateur du dashboard. On n'y publie que les
   // identifiants, et l'onglet concerne relit les messages par l'API, qui
   // verifie ses droits (cf. `broadcastDashboardEvent`).
-  client.on('messageCreate', async (msg) => {
-    if (msg.author.bot && msg.author.id !== client.user!.id) return;
+  //
+  // Une réaction, une modification ou une suppression change aussi ce que la
+  // vue live affiche : elles relancent la même relecture. Le fil compte comme
+  // le salon, pour les tickets en mode fil ou relayés depuis les MP.
+  const notifyTicketConversation = async (channelId: string) => {
     try {
-      if (!(await mayBeTicketChannel(msg.channelId))) return;
+      if (!(await mayBeTicketChannel(channelId))) return;
       const ticket = await prisma.ticket.findFirst({
-        where: { channelId: msg.channelId },
+        where: { OR: [{ channelId }, { threadId: channelId }] },
         select: { id: true, guildId: true },
       });
       if (!ticket) return;
@@ -481,7 +531,16 @@ export const startDashboardApi = async (client: Client) => {
     } catch (err) {
       logger.error('DashboardWS', 'Erreur lors de la diffusion du message live du ticket:', err);
     }
+  };
+
+  client.on('messageCreate', async (msg) => {
+    if (msg.author.bot && msg.author.id !== client.user!.id) return;
+    await notifyTicketConversation(msg.channelId);
   });
+  client.on('messageUpdate', async (_old, msg) => notifyTicketConversation(msg.channelId));
+  client.on('messageDelete', async (msg) => notifyTicketConversation(msg.channelId));
+  client.on('messageReactionAdd', async (reaction) => notifyTicketConversation(reaction.message.channelId));
+  client.on('messageReactionRemove', async (reaction) => notifyTicketConversation(reaction.message.channelId));
 
   logger.success('DashboardAPI', `API dashboard active sur http://localhost:${port}`);
 

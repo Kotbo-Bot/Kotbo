@@ -74,6 +74,7 @@
     polls_unvoted: 'bar-chart',
     meetings_upcoming: 'users',
     recruitment_pending: 'user-plus',
+    // Partenariats en pause : le bot ne produit plus cette tâche, l'entrée reste pour la reprise.
     partner_applications_pending: 'handshake',
     suggestions_pending: 'thumbs-up',
     channel_health_alerts: 'activity',

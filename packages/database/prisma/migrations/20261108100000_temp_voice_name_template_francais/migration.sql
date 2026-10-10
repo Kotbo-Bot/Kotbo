@@ -1,0 +1,14 @@
+-- Retour au defaut FRANCAIS du gabarit de nom des salons vocaux temporaires.
+--
+-- POURQUOI : la migration 20260930120000 avait bascule ce defaut en anglais
+-- ("{user}'s channel") en meme temps que le panneau etait traduit en anglais en
+-- dur. Le reste du bot est en francais et dispose d'un i18n par serveur ; un nom
+-- de salon, lui, est ECRIT dans Discord puis range en base : il ne peut pas
+-- suivre la langue du serveur, donc son defaut revient a celui du produit.
+--
+-- `ALTER COLUMN ... SET DEFAULT` ne touche AUCUNE ligne existante : il ne change
+-- que la valeur posee a la creation des lignes suivantes. Les serveurs qui ont
+-- deja une valeur dans "tempVoiceNameTemplate" (le defaut d'alors y compris,
+-- copie a la creation de leur ligne) gardent exactement la leur, et aucun salon
+-- deja cree n'est renomme.
+ALTER TABLE "guilds" ALTER COLUMN "tempVoiceNameTemplate" SET DEFAULT '🔊 Salon de {user}';

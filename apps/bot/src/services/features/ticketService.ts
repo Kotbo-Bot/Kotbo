@@ -13,6 +13,7 @@ import { broadcastDashboardStateChange } from '../../api/shared/sharding.js';
 import { COLORS, COLORS_RAW, successEmbed, errorEmbed, v2 } from '../../utils/embeds.js';
 import { resolveEmojiShortcodes } from '../../utils/emojis.js';
 import { generateTranscript } from './transcriptService.js';
+import { beginTicketOpening, endTicketOpening, showRecordingNotice } from './ticketRecordingNotice.js';
 import { resolveExecutor } from '../analytics/auditDiffService.js';
 import { buildMemberCasePanel } from '../moderation/memberCaseService.js';
 import { handleTicketTrigger } from './autoResponseService.js';
@@ -243,11 +244,12 @@ export function resolveRequireApproval(ticketType: TicketPanelTypeConfig, guildC
   return guildConfig.ticketApprovalEnabled === true;
 }
 
-function resolveTicketPanelType(guildConfig: Record<string, unknown>, typeId?: string | null): TicketPanelTypeConfig {
+/** Types de ticket du serveur, avec le type par défaut quand aucun n'est configuré. */
+export function listTicketPanelTypes(guildConfig: Record<string, unknown>): TicketPanelTypeConfig[] {
   const asText = (value: unknown, fallback: string) => (typeof value === 'string' && value ? value : fallback);
   const asId = (value: unknown) => (typeof value === 'string' ? value : null);
 
-  const ticketTypes = normalizeTicketPanelTypes(guildConfig.ticketTypes, {
+  return normalizeTicketPanelTypes(guildConfig.ticketTypes, {
     label: asText(guildConfig.ticketEmbedButtonText, 'Ouvrir un ticket'),
     description: asText(guildConfig.ticketEmbedDesc, "Cliquez sur le bouton ci-dessous pour ouvrir un ticket d'assistance."),
     categoryId: asId(guildConfig.ticketCategoryId),
@@ -255,6 +257,10 @@ function resolveTicketPanelType(guildConfig: Record<string, unknown>, typeId?: s
     emoji: '📩',
     buttonStyle: 'PRIMARY',
   });
+}
+
+export function resolveTicketPanelType(guildConfig: Record<string, unknown>, typeId?: string | null): TicketPanelTypeConfig {
+  const ticketTypes = listTicketPanelTypes(guildConfig);
 
   if (!typeId) {
     return ticketTypes[0];
@@ -1575,10 +1581,7 @@ export async function handleTicketButton(client: Client, customId: string, inter
         logger.error('Ticket', 'Error updating welcome message container:', err);
       }
 
-      await ticketChannel.send({
-        embeds: [successEmbed('Pris en charge', `Ce ticket est désormais pris en charge par <@${user.id}>.`)],
-        allowedMentions: { users: [user.id] },
-      });
+      await announceTicketClaim(ticketChannel, successEmbed('Pris en charge', `Ce ticket est désormais pris en charge par <@${user.id}>.`), { mentionUserIds: [user.id] });
     }
 
     // Logger
@@ -1600,45 +1603,11 @@ export async function handleTicketButton(client: Client, customId: string, inter
 
     await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
 
-    const ticketType = resolveTicketPanelType(guildConfig, ticket.ticketTypeId);
-    const opener = await client.users.fetch(ticket.userId).catch(() => null);
-    const locale = await resolveGuildLocale(guildId, guild.preferredLocale);
-
     try {
-      const result = await createTicketWorkspace(client, {
-        guild,
-        user: { id: ticket.userId, username: opener?.username ?? ticket.username },
-        ticketType,
-        guildConfig,
-        reason: ticket.reason,
-        description: ticket.description,
-        locale,
-        existingTicketId: ticket.id,
-      });
-
-      await prisma.ticket.update({
-        where: { id: ticket.id },
-        data: { reviewedById: user.id, reviewedByName: user.username, reviewedAt: new Date() },
-      });
-
-      await updateTicketReviewCard(client, ticket, 'APPROVED', user, null);
-
-      // Le membre n'est pas forcement encore devant Discord : le MP le ramene
-      // vers son ticket sans qu'il ait a surveiller la liste des salons.
-      if (opener) {
-        await opener.send({
-          embeds: [successEmbed('Demande de ticket acceptée', `Votre demande sur **${guild.name}** a été validée par <@${user.id}>.\n\n${result.userMessage}`)],
-          allowedMentions: { parse: [] },
-        }).catch(() => null);
-      }
-
+      const result = await approvePendingTicket(client, guild, guildConfig, ticket, { id: user.id, username: user.username });
       await interaction.editReply({ content: `✅ Demande validée. ${result.userMessage}` });
     } catch (err) {
-      logger.error('Ticket', 'Error approving ticket request:', err);
-      const message = err instanceof Error && err.message.startsWith('❌')
-        ? err.message
-        : "❌ Impossible de créer le ticket. Vérifiez la configuration du module.";
-      await interaction.editReply({ content: message });
+      await interaction.editReply({ content: approvalErrorMessage(err) });
     }
     return;
   }
@@ -2423,10 +2392,39 @@ export async function createTicketWorkspace(
   }
 }
 
+const TICKET_LOCK_NOTICE_TITLE = '🔒 Ticket verrouillé';
+
+/**
+ * Annonce la prise en charge d'un ticket. Si l'encart « Ticket verrouillé »
+ * est encore dans le salon, il est remplacé par l'annonce plutôt que laissé
+ * au-dessus d'elle : il n'a plus rien de vrai une fois le ticket pris en
+ * charge, et deux encarts à la suite se contredisaient.
+ */
+export async function announceTicketClaim(
+  channel: TextChannel | ThreadChannel,
+  embed: EmbedBuilder,
+  options: { content?: string; mentionUserIds?: string[] } = {},
+): Promise<void> {
+  const allowedMentions = { users: options.mentionUserIds ?? [] };
+  const recent = await channel.messages.fetch({ limit: 50 }).catch(() => null);
+  const notice = recent?.find((message) =>
+    message.author.id === channel.client.user?.id && message.embeds[0]?.title === TICKET_LOCK_NOTICE_TITLE);
+  if (notice) {
+    const edited = await notice.edit({ embeds: [embed], allowedMentions }).then(() => true).catch(() => false);
+    // Le contenu d'un message modifié ne notifie personne : la mention part
+    // dans un message à part, sans second encart.
+    if (edited) {
+      if (options.content) await channel.send({ content: options.content, allowedMentions }).catch(() => null);
+      return;
+    }
+  }
+  await channel.send({ ...(options.content ? { content: options.content } : {}), embeds: [embed], allowedMentions }).catch(() => null);
+}
+
 /** Encart depose dans un ticket verrouille pour expliquer l'absence d'ecriture. */
 function buildTicketLockNoticeEmbed(staffMention: string | null): EmbedBuilder {
   return new EmbedBuilder()
-    .setTitle('🔒 Ticket verrouillé')
+    .setTitle(TICKET_LOCK_NOTICE_TITLE)
     .setDescription(
       `Ce ticket est visible mais **verrouillé** : personne ne peut y écrire tant qu'un membre du staff${staffMention ? ` (${staffMention})` : ''} ne l'a pas pris en charge.\n\n` +
       'Le salon s\'ouvrira automatiquement dès la prise en charge.',
@@ -2439,7 +2437,7 @@ function buildTicketLockNoticeEmbed(staffMention: string | null): EmbedBuilder {
  * Enregistre une demande de ticket en attente et depose sa carte de validation
  * dans le salon prevu. Aucun salon de ticket n'est cree a ce stade.
  */
-async function createPendingTicketRequest(
+export async function createPendingTicketRequest(
   client: Client,
   params: Omit<TicketWorkspaceParams, 'existingTicketId'>,
 ): Promise<TicketWorkspaceResult> {
@@ -2501,6 +2499,126 @@ async function createPendingTicketRequest(
  * Fige la carte de validation apres decision : boutons retires et verdict
  * affiche, pour qu'aucun autre membre du staff ne rejoue la meme demande.
  */
+export class TicketReviewError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'TicketReviewError';
+  }
+}
+
+export function approvalErrorMessage(err: unknown): string {
+  if (err instanceof TicketReviewError) return err.message;
+  logger.error('Ticket', 'Error reviewing ticket request:', err);
+  return err instanceof Error && err.message.startsWith('❌')
+    ? err.message
+    : "❌ Impossible de créer le ticket. Vérifiez la configuration du module.";
+}
+
+/**
+ * Réserve une demande en attente pour la personne qui la traite. Le bouton
+ * Discord et le dashboard peuvent agir au même instant : sans cette
+ * écriture conditionnelle, les deux créeraient chacun un salon.
+ */
+async function reservePendingTicket(ticketId: string, reviewer: { id: string; username: string }): Promise<boolean> {
+  const { count } = await prisma.ticket.updateMany({
+    where: { id: ticketId, status: 'PENDING', reviewedAt: null },
+    data: { reviewedById: reviewer.id, reviewedByName: reviewer.username, reviewedAt: new Date() },
+  });
+  return count === 1;
+}
+
+/**
+ * Accepte une demande de ticket en attente : crée son salon (ou fil, ou MP),
+ * met à jour la carte de validation et prévient le membre. Utilisé par le
+ * bouton « Valider » de Discord et par le dashboard.
+ */
+export async function approvePendingTicket(
+  client: Client,
+  guild: Guild,
+  guildConfig: any,
+  ticket: Ticket,
+  reviewer: { id: string; username: string },
+): Promise<{ userMessage: string; ticketId: string | null }> {
+  if (ticket.status !== 'PENDING') throw new TicketReviewError('⚠️ Cette demande a déjà été traitée.');
+  if (!(await reservePendingTicket(ticket.id, reviewer))) throw new TicketReviewError('⚠️ Cette demande a déjà été traitée.');
+
+  const ticketType = resolveTicketPanelType(guildConfig, ticket.ticketTypeId);
+  const opener = await client.users.fetch(ticket.userId).catch(() => null);
+  const locale = await resolveGuildLocale(guild.id, guild.preferredLocale);
+
+  let result: Awaited<ReturnType<typeof createTicketWorkspace>>;
+  try {
+    result = await createTicketWorkspace(client, {
+      guild,
+      user: { id: ticket.userId, username: opener?.username ?? ticket.username },
+      ticketType,
+      guildConfig,
+      reason: ticket.reason,
+      description: ticket.description,
+      locale,
+      existingTicketId: ticket.id,
+    });
+  } catch (err) {
+    // La création a échoué : la demande redevient traitable par quelqu'un d'autre.
+    await prisma.ticket.updateMany({
+      where: { id: ticket.id, status: 'PENDING' },
+      data: { reviewedById: null, reviewedByName: null, reviewedAt: null },
+    }).catch(() => null);
+    throw err;
+  }
+
+  await updateTicketReviewCard(client, ticket, 'APPROVED', reviewer, null);
+
+  // Le membre n'est pas forcement encore devant Discord : le MP le ramene
+  // vers son ticket sans qu'il ait a surveiller la liste des salons.
+  if (opener) {
+    await opener.send({
+      embeds: [successEmbed('Demande de ticket acceptée', `Votre demande sur **${guild.name}** a été validée par <@${reviewer.id}>.\n\n${result.userMessage}`)],
+      allowedMentions: { parse: [] },
+    }).catch(() => null);
+  }
+
+  broadcastDashboardStateChange(guild.id, 'tickets_updated');
+  return { userMessage: result.userMessage, ticketId: result.ticketId };
+}
+
+/** Refuse une demande de ticket en attente et prévient le membre en MP. */
+export async function rejectPendingTicket(
+  client: Client,
+  guild: Guild,
+  ticket: Ticket,
+  reviewer: { id: string; username: string },
+  rejectionReason: string | null,
+): Promise<void> {
+  if (ticket.status !== 'PENDING') throw new TicketReviewError('⚠️ Cette demande a déjà été traitée.');
+  const { count } = await prisma.ticket.updateMany({
+    where: { id: ticket.id, status: 'PENDING', reviewedAt: null },
+    data: {
+      status: 'REJECTED',
+      rejectionReason,
+      reviewedById: reviewer.id,
+      reviewedByName: reviewer.username,
+      reviewedAt: new Date(),
+    },
+  });
+  if (count !== 1) throw new TicketReviewError('⚠️ Cette demande a déjà été traitée.');
+
+  await updateTicketReviewCard(client, ticket, 'REJECTED', reviewer, rejectionReason);
+
+  const opener = await client.users.fetch(ticket.userId).catch(() => null);
+  if (opener) {
+    await opener.send({
+      embeds: [errorEmbed(
+        'Demande de ticket refusée',
+        `Votre demande sur **${guild.name}** a été refusée.${rejectionReason ? `\n\n**Motif :** ${rejectionReason}` : ''}`,
+      )],
+      allowedMentions: { parse: [] },
+    }).catch(() => null);
+  }
+
+  broadcastDashboardStateChange(guild.id, 'tickets_updated');
+}
+
 async function updateTicketReviewCard(
   client: Client,
   ticket: { id: string; reviewChannelId: string | null; reviewMessageId: string | null; userId: string; username: string; reason: string; description: string; ticketTypeLabel: string | null },
@@ -2586,13 +2704,24 @@ export async function executeTicketCreation(
   // d'accueil est lu dans le salon par tous ceux qui y ont acces.
   const locale = await resolveGuildLocale(guildId, guild.preferredLocale);
 
+  // Pendant le délai de lecture, un second clic ne doit pas lancer une
+  // seconde création : les contrôles de doublon ne voient le ticket qu'une
+  // fois écrit en base.
+  if (!beginTicketOpening(guildId, user.id)) {
+    await interaction.editReply({ content: '⏳ Ton ticket est déjà en préparation, il arrive dans quelques secondes.' });
+    return null;
+  }
+
   try {
+    // Avertissement d'enregistrement, lu avant que le ticket n'existe.
+    await showRecordingNotice(interaction, guildConfig);
+
     const params = { guild, user, ticketType, guildConfig, reason, description, locale };
     const result = resolveRequireApproval(ticketType, guildConfig)
       ? await createPendingTicketRequest(client, params)
       : await createTicketWorkspace(client, params);
 
-    await interaction.editReply({ content: result.userMessage });
+    await interaction.editReply({ content: result.userMessage, embeds: [] });
     return result.ticketId;
   } catch (err) {
     logger.error('Ticket', 'Error creating ticket:', err);
@@ -2602,8 +2731,10 @@ export async function executeTicketCreation(
     const message = err instanceof Error && err.message.startsWith('❌')
       ? err.message
       : "❌ Une erreur est survenue lors de l'ouverture du ticket. Veuillez contacter un administrateur.";
-    await interaction.editReply({ content: message });
+    await interaction.editReply({ content: message, embeds: [] });
     return null;
+  } finally {
+    endTicketOpening(guildId, user.id);
   }
 }
 
@@ -2677,31 +2808,12 @@ export async function handleTicketModalSubmit(client: Client, customId: string, 
 
     const rejectionReason = interaction.fields.getTextInputValue('reason')?.trim() || null;
 
-    await prisma.ticket.update({
-      where: { id: ticket.id },
-      data: {
-        status: 'REJECTED',
-        rejectionReason,
-        reviewedById: interaction.user.id,
-        reviewedByName: interaction.user.username,
-        reviewedAt: new Date(),
-      },
-    });
-
-    await updateTicketReviewCard(client, ticket, 'REJECTED', interaction.user, rejectionReason);
-
-    const opener = await client.users.fetch(ticket.userId).catch(() => null);
-    if (opener) {
-      await opener.send({
-        embeds: [errorEmbed(
-          'Demande de ticket refusée',
-          `Votre demande sur **${guild.name}** a été refusée.${rejectionReason ? `\n\n**Motif :** ${rejectionReason}` : ''}`,
-        )],
-        allowedMentions: { parse: [] },
-      }).catch(() => null);
+    try {
+      await rejectPendingTicket(client, guild, ticket, { id: interaction.user.id, username: interaction.user.username }, rejectionReason);
+      await interaction.editReply({ content: '⛔ Demande refusée. Le membre a été prévenu en message privé.' });
+    } catch (err) {
+      await interaction.editReply({ content: approvalErrorMessage(err) });
     }
-
-    await interaction.editReply({ content: '⛔ Demande refusée. Le membre a été prévenu en message privé.' });
     return;
   }
 
@@ -2810,6 +2922,18 @@ async function handleDmDirectTicket(
 
   const reason = interaction.fields.getTextInputValue('reason');
   const description = interaction.fields.getTextInputValue('description');
+
+  // Même avertissement d'enregistrement qu'à l'ouverture depuis le serveur.
+  if (!beginTicketOpening(targetGuildId, user.id)) {
+    await interaction.editReply({ content: '⏳ Ton ticket est déjà en préparation, il arrive dans quelques secondes.' });
+    return;
+  }
+  try {
+    await showRecordingNotice(interaction, guildConfig);
+  } finally {
+    endTicketOpening(targetGuildId, user.id);
+  }
+  await interaction.editReply({ embeds: [] }).catch(() => null);
 
   const ticketStaffRoleId = guildConfig.ticketStaffRoleId || null;
   const staffMention = ticketStaffRoleId ? `<@&${ticketStaffRoleId}>` : null;
@@ -2946,6 +3070,9 @@ export async function relayDmToThread(client: Client, message: Message): Promise
 
     const files = message.attachments.map(a => a.url);
     await (thread as ThreadChannel).send({ embeds: [relayEmbed], files, allowedMentions: { parse: [] } });
+    // Le message du membre arrive par MP : le relais est signé du bot, le
+    // suivi du tour de parole ne le verrait pas passer.
+    await prisma.ticket.update({ where: { id: ticket.id }, data: { lastMemberMessageAt: message.createdAt } }).catch(() => null);
 
     await message.react('✅').catch(() => null);
   } catch (err) {
@@ -3015,6 +3142,26 @@ export async function recordTicketFirstResponse(message: Message): Promise<void>
   });
 }
 
+/**
+ * Tour de parole : date du dernier message de l'auteur du ticket et de celui
+ * du staff. C'est ce qui range un ticket dans « en attente du staff » sans
+ * relire le salon. Deux écritures conditionnelles, l'une ou l'autre seulement
+ * touchant une ligne.
+ */
+export async function recordTicketTurn(message: Message): Promise<void> {
+  if (message.author.bot || !message.guildId) return;
+  if (!(await mayBeTicketChannel(message.channelId))) return;
+  const inTicket = { OR: [{ channelId: message.channelId }, { threadId: message.channelId }] };
+  await prisma.ticket.updateMany({
+    where: { guildId: message.guildId, userId: message.author.id, ...inTicket },
+    data: { lastMemberMessageAt: message.createdAt },
+  });
+  await prisma.ticket.updateMany({
+    where: { guildId: message.guildId, userId: { not: message.author.id }, status: { in: ['OPEN', 'CLAIMED'] }, ...inTicket },
+    data: { lastStaffMessageAt: message.createdAt },
+  });
+}
+
 export async function autoClaimTicketOnStaffMessage(client: Client, message: Message): Promise<void> {
   if (message.author.bot || !message.guildId || !message.member) return;
   if (!(await mayBeTicketChannel(message.channelId))) return;
@@ -3080,10 +3227,11 @@ export async function autoClaimTicketOnStaffMessage(client: Client, message: Mes
       });
     }
 
-    await ticketChannel.send({
-      embeds: [successEmbed('Pris en charge automatiquement', `Ce ticket est désormais pris en charge par <@${message.author.id}>, suite à son intervention.`)],
-      allowedMentions: { users: [message.author.id] },
-    });
+    await announceTicketClaim(
+      ticketChannel,
+      successEmbed('Pris en charge automatiquement', `Ce ticket est désormais pris en charge par <@${message.author.id}>, suite à son intervention.`),
+      { mentionUserIds: [message.author.id] },
+    );
   } catch (err) {
     logger.error('Ticket', 'Error updating welcome message after auto-claim:', err);
   }

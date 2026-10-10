@@ -198,26 +198,6 @@ export async function registerCrons(client: Client): Promise<void> {
       logger.debug('Cron', 'Vérification Hugging Face...');
       await checkHuggingFaceFollows(client);
     },
-    'partnerships-hourly': async () => {
-      logger.debug('Cron', 'Cycle horaire des partenariats...');
-      const { runHourlyPartnershipCycle } = await import('../services/partnerships/partnershipCycleService.js');
-      await runHourlyPartnershipCycle(client);
-    },
-    'partnerships-daily': async () => {
-      logger.debug('Cron', 'Cycle quotidien des partenariats...');
-      const { runDailyPartnershipCycle } = await import('../services/partnerships/partnershipCycleService.js');
-      await runDailyPartnershipCycle(client);
-    },
-    'partnerships-digest-weekly': async () => {
-      logger.debug('Cron', 'Bilan hebdomadaire des partenariats...');
-      const { runPartnershipDigest } = await import('../services/partnerships/partnershipCycleService.js');
-      await runPartnershipDigest(client, 'weekly');
-    },
-    'partnerships-digest-monthly': async () => {
-      logger.debug('Cron', 'Bilan mensuel des partenariats...');
-      const { runPartnershipDigest } = await import('../services/partnerships/partnershipCycleService.js');
-      await runPartnershipDigest(client, 'monthly');
-    },
     'staff-warnings-expiration': expireStaffWarnings,
     'staff-blacklist-expiration': expireStaffBlacklist,
     'activity-10min-snapshot': async () => {
@@ -420,6 +400,14 @@ export async function registerCrons(client: Client): Promise<void> {
       const { pruneDashboardTelemetry } = await import('../services/analytics/dashboardTelemetryService.js');
       await pruneDashboardTelemetry();
     },
+    'site-analytics-prune': async () => {
+      const { pruneSiteAnalytics } = await import('../services/site/siteAnalyticsService.js');
+      await pruneSiteAnalytics();
+    },
+    'site-scheduled-publish': async () => {
+      const { publishDuePages } = await import('../services/site/siteAdminService.js');
+      await publishDuePages(client);
+    },
     'acquisition-abandon-scan': async () => {
       const { scanAbandonedOnboardings } = await import('../services/analytics/acquisitionMaintenance.js');
       await scanAbandonedOnboardings();
@@ -434,6 +422,10 @@ export async function registerCrons(client: Client): Promise<void> {
     },
     'word-stats-prune': async () => {
       await pruneOldWordStats();
+    },
+    'aegis-prune': async () => {
+      const { pruneAegisData } = await import('../services/moderation/aegis/aegisRetention.js');
+      await pruneAegisData();
     },
     'workflow-executions-prune': async () => {
       const deleted = await pruneWorkflowExecutions();
@@ -540,6 +532,14 @@ export async function registerCrons(client: Client): Promise<void> {
     await runCronJob('sanctions', async () => {
       await processScheduledSanctions(client);
     }, 1000);
+  });
+
+  // 🌐 Sites communautaires : publications programmées (toutes les minutes).
+  cron.schedule('* * * * *', async () => {
+    await runCronJob('site-scheduled-publish', async () => {
+      const { publishDuePages } = await import('../services/site/siteAdminService.js');
+      await publishDuePages(client);
+    }, 1500);
   });
 
   // 🎯 Événements planifiés: Toutes les minutes (CTF & Quiz planifiés)
@@ -686,6 +686,14 @@ export async function registerCrons(client: Client): Promise<void> {
     }, 2000);
   });
 
+  // 🌐 Frequentation des sites communautaires : purge au-dela de 180 jours (03:57).
+  cron.schedule('57 3 * * *', async () => {
+    await runCronJob('site-analytics-prune', async () => {
+      const { pruneSiteAnalytics } = await import('../services/site/siteAnalyticsService.js');
+      await pruneSiteAnalytics();
+    }, 2000);
+  });
+
   // 🕳️ Acquisition: parcours de configuration abandonnes (toutes les heures).
   // L'abandon est la seule etape que personne n'emet : un visiteur qui renonce
   // ferme l'onglet. Elle ne peut etre que deduite.
@@ -712,42 +720,6 @@ export async function registerCrons(client: Client): Promise<void> {
     }, 2000);
   });
 
-  // 🤝 Partenariats: publications dues, controles de reciprocite et constat des
-  // engagements (toutes les heures a la 10e minute).
-  cron.schedule('10 * * * *', async () => {
-    await runCronJob('partnerships-hourly', async () => {
-      const { runHourlyPartnershipCycle } = await import('../services/partnerships/partnershipCycleService.js');
-      await runHourlyPartnershipCycle(client);
-    }, 3000);
-  });
-
-  // 🤝 Partenariats: echeances, renouvellements, retention et entretien des
-  // fiches (chaque jour a 04:10). Tout ce qui se compte en jours : le faire a
-  // l'heure produirait vingt-quatre fois le meme travail.
-  cron.schedule('10 4 * * *', async () => {
-    await runCronJob('partnerships-daily', async () => {
-      const { runDailyPartnershipCycle } = await import('../services/partnerships/partnershipCycleService.js');
-      await runDailyPartnershipCycle(client);
-    }, 3000);
-  });
-
-  // 🤝 Partenariats: bilan hebdomadaire (chaque lundi a 09:15, apres le recap
-  // commercial pour ne pas poster deux bilans dans la meme minute).
-  cron.schedule('15 9 * * 1', async () => {
-    await runCronJob('partnerships-digest-weekly', async () => {
-      const { runPartnershipDigest } = await import('../services/partnerships/partnershipCycleService.js');
-      await runPartnershipDigest(client, 'weekly');
-    }, 2000);
-  });
-
-  // 🤝 Partenariats: bilan mensuel (le 1er du mois a 09:20).
-  cron.schedule('20 9 1 * *', async () => {
-    await runCronJob('partnerships-digest-monthly', async () => {
-      const { runPartnershipDigest } = await import('../services/partnerships/partnershipCycleService.js');
-      await runPartnershipDigest(client, 'monthly');
-    }, 2000);
-  });
-
   // 🧩 Workflows: reprise des exécutions suspendues par un nœud « Attendre »,
   // et déclencheurs planifiés. Un balayage plutôt qu'une tâche cron par
   // workflow : la liste change à chaque enregistrement, et un balayage reprend
@@ -762,6 +734,15 @@ export async function registerCrons(client: Client): Promise<void> {
 
   cron.schedule('* * * * *', async () => {
     await runLocalSweep('workflow-schedule', () => dispatchScheduledWorkflows(client));
+  });
+
+  // Webhooks sortants : relances dues et purge du journal (30 jours). Chaque
+  // envoi est réservé avant d'être tenté, deux processus ne le doublent pas.
+  cron.schedule('* * * * *', async () => {
+    await runLocalSweep('outgoing-webhooks', async () => {
+      const { runOutgoingWebhookSweep } = await import('../services/integrations/outgoingWebhookService.js');
+      await runOutgoingWebhookSweep();
+    });
   });
 
   // Workflows : purge du journal des exécutions (tous les jours à 04:25). En
@@ -802,6 +783,14 @@ export async function registerCrons(client: Client): Promise<void> {
   cron.schedule('45 3 * * *', async () => {
     await runCronJob('word-stats-prune', async () => {
       await pruneOldWordStats();
+    }, 2000);
+  });
+
+  // 🛡️ Kotbo × AegisAI: extraits à l'échéance de la rétention des logs, détections et agrégats anciens (tous les jours à 03:50)
+  cron.schedule('50 3 * * *', async () => {
+    await runCronJob('aegis-prune', async () => {
+      const { pruneAegisData } = await import('../services/moderation/aegis/aegisRetention.js');
+      await pruneAegisData();
     }, 2000);
   });
 

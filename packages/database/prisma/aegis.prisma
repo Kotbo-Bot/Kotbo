@@ -1,0 +1,176 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// Kotbo × AegisAI : toxicité et émotions des messages, par l'API de marvideo.
+//
+// Le texte part chez AegisAI pour être noté ; il n'entre dans son jeu
+// d'entraînement que si le serveur l'a accepté (`trainingConsent`).
+// ─────────────────────────────────────────────────────────────────────────────
+
+model AegisConfig {
+  guildId String @id
+
+  enabled Boolean @default(false)
+
+  // Partage des messages avec AegisAI pour entraîner son modèle (`save` de
+  // /analyze). null = question jamais posée, ce qui vaut non.
+  trainingConsent     Boolean?
+  trainingConsentById String?
+  trainingConsentAt   DateTime?
+
+  // Seuils en points de toxicité (0-100). Au-dessus de `autoThreshold`, le
+  // bot agit seul ; entre les deux, le staff tranche.
+  reviewThreshold Int     @default(80)
+  autoThreshold   Int     @default(95)
+  autoAction      String  @default("DELETE_AND_WARN") // DELETE | DELETE_AND_WARN | DELETE_AND_TIMEOUT
+  warnWeight      Int     @default(2) // poids du warn sur l'échelle pondérée (1-3)
+  timeoutMinutes  Int     @default(10)
+  notifyMember    Boolean @default(true)
+  reviewChannelId String? // à défaut : salon de logs du serveur
+
+  // S'ajoutent aux exemptions d'AutoMod.
+  exemptChannelIds String[] @default([])
+  exemptRoleIds    String[] @default([])
+
+  analyzeEdits        Boolean @default(true)
+  analyzeNicknames    Boolean @default(false)
+  analyzeTickets      Boolean @default(true)
+  ticketPriorityBoost Boolean @default(false) // colère ou détresse forte de l'auteur → priorité HIGH
+
+  // Escalade : messages toxiques ou en colère d'au moins deux membres dans un
+  // salon, sur une fenêtre courte → mode lent temporaire + alerte.
+  conflictEnabled          Boolean @default(false)
+  conflictWindowSec        Int     @default(120)
+  conflictMessageThreshold Int     @default(4)
+  conflictSlowmodeSec      Int     @default(10)
+  conflictDurationMin      Int     @default(10)
+
+  // Harcèlement : messages toxiques répétés d'un membre vers le même membre.
+  harassmentEnabled   Boolean @default(false)
+  harassmentWindowMin Int     @default(30)
+  harassmentThreshold Int     @default(3)
+  harassmentAction    String  @default("ALERT") // ALERT | TIMEOUT
+
+  // Détresse : tristesse ou peur très forte, sans toxicité. Alerte discrète
+  // au staff, jamais de sanction.
+  distressEnabled       Boolean @default(false)
+  distressThreshold     Int     @default(95)
+  distressChannelId     String?
+  distressCooldownHours Int     @default(24)
+
+  guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("aegis_configs")
+}
+
+/// Ce que le module a relevé : message toxique, harcèlement, escalade, détresse.
+model AegisDetection {
+  id        String  @id @default(cuid())
+  guildId   String
+  channelId String
+  messageId String?
+  authorId  String
+  // Membre visé : auteur du message auquel on répond, ou unique mention.
+  targetUserId String?
+
+  kind   String // TOXIC | HARASSMENT | CONFLICT | DISTRESS
+  source String @default("MESSAGE") // MESSAGE | EDIT | NICKNAME | TICKET
+
+  toxicity     Float?
+  emotion      String?
+  emotionScore Float?
+  // Extrait du message, effacé à l'échéance de la rétention des logs.
+  excerpt      String?
+
+  action String @default("NONE") // NONE | REVIEW | DELETE | WARN | TIMEOUT | SLOWMODE | NICKNAME_RESET | ALERT
+  status String @default("PENDING") // PENDING | CONFIRMED | DISMISSED | AUTO
+  // Analysé trop tard pour agir seul : passé en revue au lieu d'être supprimé.
+  late   Boolean @default(false)
+
+  sanctionId     String?
+  // Transcription du salon autour du message, prise avant tout retrait :
+  // jointe en preuve à la sanction et à la carte du staff.
+  evidenceUrl    String?
+  // Escalade : mode lent posé par le module, à lever à `restoreAt` en
+  // remettant `previousSlowmode` (survit à un redémarrage du bot).
+  previousSlowmode Int?
+  restoreAt        DateTime?
+  restoredAt       DateTime?
+  alertChannelId String?
+  alertMessageId String?
+  reviewedById   String?
+  reviewedAt     DateTime?
+
+  guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([guildId, createdAt])
+  @@index([guildId, status, createdAt])
+  @@index([guildId, authorId, createdAt])
+  @@index([restoreAt])
+  @@map("aegis_detections")
+}
+
+/// Agrégats par heure (UTC) et par salon. Jamais de contenu.
+model AegisHourlyStat {
+  id String @id @default(cuid())
+
+  guildId   String
+  dateKey   String // YYYY-MM-DD (UTC)
+  hour      Int // 0-23 (UTC)
+  channelId String
+
+  analyzed      Int @default(0)
+  toxic         Int @default(0) // au-dessus du seuil de revue
+  severe        Int @default(0) // au-dessus du seuil d'action automatique
+  toxicityMilli Int @default(0) // somme des scores × 1000
+
+  emotionAnalyzed Int @default(0)
+  joy             Int @default(0)
+  sad             Int @default(0)
+  anger           Int @default(0)
+  fear            Int @default(0)
+  surprise        Int @default(0)
+  neutral         Int @default(0)
+
+  guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([guildId, dateKey, hour, channelId])
+  @@index([guildId, dateKey])
+  @@map("aegis_hourly_stats")
+}
+
+/// Agrégats par jour (UTC) et par membre, pour sa fiche. Jamais de contenu.
+model AegisMemberDailyStat {
+  id String @id @default(cuid())
+
+  guildId String
+  dateKey String // YYYY-MM-DD (UTC)
+  userId  String
+
+  analyzed      Int @default(0)
+  toxic         Int @default(0)
+  toxicityMilli Int @default(0)
+
+  emotionAnalyzed Int @default(0)
+  joy             Int @default(0)
+  sad             Int @default(0)
+  anger           Int @default(0)
+  fear            Int @default(0)
+  surprise        Int @default(0)
+  neutral         Int @default(0)
+
+  guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([guildId, dateKey, userId])
+  @@index([guildId, userId, dateKey])
+  @@map("aegis_member_daily_stats")
+}

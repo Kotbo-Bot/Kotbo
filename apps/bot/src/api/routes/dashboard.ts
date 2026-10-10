@@ -28,6 +28,7 @@ import { handleCustomFormRoutes } from './dashboard/customForms.js';
 import { handleBanAppealRoutes } from './dashboard/banAppeals.js';
 import { handleAdminLockRoutes } from './dashboard/adminLock.js';
 import { handleMembersRoutes } from './dashboard/members.js';
+import { handleMemberProfileRoutes } from './dashboard/memberProfile.js';
 import { handleLeadershipRoutes, handleGuildLeadershipRoutes } from './dashboard/leadership.js';
 import { handleModulesRoutes } from './dashboard/modules.js';
 import { handleEventsRoutes } from './dashboard/events.js';
@@ -36,9 +37,12 @@ import { handleBackupRoutes } from './dashboard/backups.js';
 import { handleScheduleRoutes } from './dashboard/schedules.js';
 import { handleMigrationRoutes } from './dashboard/migration.js';
 import { handleCampaignRoutes } from './dashboard/campaigns.js';
-import { handlePartnershipRoutes } from './dashboard/partnerships.js';
 import { handleSetupRoutes } from './dashboard/setup.js';
 import { handleMCPKeyRoutes } from './dashboard/mcp.js';
+import { handleOutgoingWebhookRoutes } from './dashboard/outgoingWebhooks.js';
+import { handleAutomodSimulationRoute } from './dashboard/automodSimulation.js';
+import { handleWelcomeExperimentRoutes } from './dashboard/welcomeExperiments.js';
+import { handleAegisRoutes } from './dashboard/aegis.js';
 import { handleCustomBotRoutes } from './dashboard/customBot.js';
 import { handleChannelLinkRoutes } from './dashboard/channelLinks.js';
 import { handleStaffServerRoutes } from './dashboard/staffServer.js';
@@ -318,6 +322,12 @@ export async function handleDashboardRoutes(
     // configuration, sinon l'onglet « Notes Modérateur » renvoie une erreur
     // d'enregistrement à tous les modérateurs (issue #215). Le niveau d'accès
     // exact est revérifié dans handleMembersRoutes.
+    // Kotbo × AegisAI : trancher une détection ou essayer une phrase revient
+    // au staff de modération, pas seulement aux administrateurs. Le droit
+    // exact est revérifié dans handleAegisRoutes.
+    const isAegisReviewAction = parts[4] === 'aegis' && method === 'POST'
+      && (parts[5] === 'test' || (parts[5] === 'detections' && parts.length === 8));
+
     const isMemberModerationAction = parts.length === 7
       && parts[4] === 'members'
       && ((parts[6] === 'note' && method === 'PATCH') || (parts[6] === 'actions' && method === 'POST'));
@@ -384,7 +394,7 @@ export async function handleDashboardRoutes(
       ? { ...access, canManageSettings: true }
       : access;
 
-    if (!access.canManageSettings && method !== 'GET' && !hasFeatureWriteRight && !isSanctionAction && !isDailyAlgoReviewAction && !isStaffAbsenceAction && !isStaffResignationAction && !isNotificationAction && !isMeetingAction && !isNewsAction && !isMemberModerationAction && !isGiveawayManagerAction && !isAnalyticsAnnotationAction) {
+    if (!access.canManageSettings && method !== 'GET' && !hasFeatureWriteRight && !isSanctionAction && !isDailyAlgoReviewAction && !isStaffAbsenceAction && !isStaffResignationAction && !isNotificationAction && !isMeetingAction && !isNewsAction && !isMemberModerationAction && !isGiveawayManagerAction && !isAnalyticsAnnotationAction && !isAegisReviewAction) {
       json(res, 403, { error: 'Action réservée aux administrateurs du dashboard.' });
       return true;
     }
@@ -433,6 +443,13 @@ export async function handleDashboardRoutes(
         // Créer un emoji ajoute un asset permanent au serveur Discord :
         // rien ne le retire ensuite depuis le dashboard.
         || parts[4] === 'emojis'
+        // Test et renvoi d'un webhook sortant : chacun appelle un serveur
+        // tiers et attend sa réponse.
+        || (parts[4] === 'outgoing-webhooks' && (parts[6] === 'test' || parts[8] === 'redeliver'))
+        // Simulation d'une règle : relit jusqu'à cent mille messages.
+        || (parts[4] === 'automod' && parts[5] === 'simulate')
+        // Essai d'une phrase : deux appels à l'API AegisAI.
+        || (parts[4] === 'aegis' && parts[5] === 'test')
         // Le prestige crée un salon d'annonce, et jusqu'à trente rôles d'un
         // coup : même catégorie que les mises en route ci-dessus.
         || (parts[4] === 'ranked' && parts[5] === 'announce-channel')
@@ -486,6 +503,9 @@ export async function handleDashboardRoutes(
       // remonter « peut configurer » sur chaque fonctionnalite sans regle de
       // role, et la lecture suivante relirait ce mensonge dans le cache.
       const featureAccess = await getCachedFeatureAccess(client, guildId, access, user.userId);
+      if (await handleMemberProfileRoutes(req, res, parts, url, guildId, effectiveAccess, featureAccess)) {
+        return true;
+      }
       if (await handleMembersRoutes(req, res, parts, url, client, user, guildId, effectiveAccess, featureAccess)) {
         if (method !== 'GET') await cache.invalidateGuild(guildId);
         return true;
@@ -497,6 +517,13 @@ export async function handleDashboardRoutes(
     }
     if (await handleModulesRoutes(req, res, parts, url, client, user, guildId, effectiveAccess)) {
       if (method !== 'GET') await cache.invalidateGuild(guildId);
+      return true;
+    }
+    // Avant les modules généralistes, qui portent le reste du segment `automod`.
+    // `access` et non `effectiveAccess` : la route doit savoir si le droit de
+    // configurer vient d'un administrateur ou de la seule case « Configurer ».
+    // Pas d'invalidation du cache derrière : une simulation n'écrit rien.
+    if (await handleAutomodSimulationRoute(req, res, parts, client, user, guildId, access)) {
       return true;
     }
     if (await handleGeneralistModulesRoutes(req, res, parts, url, client, user, guildId, effectiveAccess)) {
@@ -523,14 +550,22 @@ export async function handleDashboardRoutes(
       if (method !== 'GET') await cache.invalidateGuild(guildId);
       return true;
     }
-    if (await handlePartnershipRoutes(req, res, parts, url, client, user, guildId, effectiveAccess)) {
-      if (method !== 'GET') await cache.invalidateGuild(guildId);
-      return true;
-    }
     if (await handleSetupRoutes(req, res, parts, url, client, user)) {
       return true;
     }
     if (await handleMCPKeyRoutes(req, res, parts, url, client, user, guildId, effectiveAccess)) {
+      if (method !== 'GET') await cache.invalidateGuild(guildId);
+      return true;
+    }
+    if (await handleAegisRoutes(req, res, parts, url, client, user, guildId, effectiveAccess)) {
+      if (method !== 'GET') await cache.invalidateGuild(guildId);
+      return true;
+    }
+    if (await handleWelcomeExperimentRoutes(req, res, parts, client, user, guildId, effectiveAccess)) {
+      if (method !== 'GET') await cache.invalidateGuild(guildId);
+      return true;
+    }
+    if (await handleOutgoingWebhookRoutes(req, res, parts, url, client, user, guildId, effectiveAccess)) {
       if (method !== 'GET') await cache.invalidateGuild(guildId);
       return true;
     }

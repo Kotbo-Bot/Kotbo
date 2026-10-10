@@ -163,6 +163,7 @@ export const communityItems: PageConfig[] = [
   { name: m.nav_embeds(),              icon: "file-plus",     href: "/embed-builder",    featureKey: "embed_builder", beta: false, wip: false },
   { name: m.nav_regulation(),           icon: "book",          href: "/regulation",       featureKey: "regulation", beta: false, wip: false },
   { name: m.nav_news(),    icon: "rss",           href: "/news",             featureKey: "news", beta: false, wip: false },
+  { name: m.nav_site(),    icon: "globe",         href: "/site",             featureKey: "site", beta: true, wip: false },
   { name: m.nav_fun_channels(),          icon: "smile",         href: "/fun",              featureKey: "fun",  beta: false, wip: false },
   { name: m.nav_social_networks(),     icon: "share-2",       href: "/social-networks",  featureKey: "social_networks", beta: true, wip: false },
 ];
@@ -181,8 +182,6 @@ export const staffItems: PageConfig[] = [
 
 export const crossServerItems: PageConfig[] = [
   { name: m.nav_channel_links(),        icon: "link",          href: "/channel-links",      featureKey: "channel_links", beta: false, wip: false },
-  { name: "Partenariats",               icon: "handshake",     href: "/partnerships",       featureKey: "partnerships", beta: false, wip: true },
-  { name: "Annuaire partenaires",       icon: "compass",       href: "/partnerships/directory", featureKey: "partnerships", beta: false, wip: true },
   { name: m.nav_staff_servers(),         icon: "shield",        href: "/staff-server",       featureKey: "staff_server", beta: false, wip: false },
 ];
 
@@ -195,6 +194,7 @@ export const configItems: PageConfig[] = [
   { name: m.nav_backups(),         icon: "archive",        href: "/backups",              featureKey: "settings", beta: false, wip: false },
   { name: m.nav_schedules(),      icon: "calendar",      href: "/schedules",            featureKey: "settings", beta: false, wip: false },
   { name: m.nav_mcp_api(),             icon: "cpu",           href: "/mcp-settings",         featureKey: "settings", beta: false, wip: false },
+  { name: m.nav_outgoing_webhooks(),   icon: "send",          href: "/webhooks",             featureKey: "settings", beta: true, wip: false },
   { name: m.nav_custom_bot(),          icon: "bot",           href: "/custom-bot",           featureKey: "settings", beta: false, wip: true, wipMessage: m.nav_custom_bot_wip() },
 ];
 

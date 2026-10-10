@@ -29,6 +29,7 @@
     bypassRoleIds: string[];
     bypassChannelIds: string[];
     typingSignalEnabled: boolean;
+    pasteSignalEnabled: boolean;
     crossChannelEnabled: boolean;
     duplicateEnabled: boolean;
     cadenceEnabled: boolean;
@@ -76,6 +77,7 @@
     bypassRoleIds: [],
     bypassChannelIds: [],
     typingSignalEnabled: true,
+    pasteSignalEnabled: true,
     crossChannelEnabled: true,
     duplicateEnabled: true,
     cadenceEnabled: true,
@@ -88,6 +90,7 @@
 
   const SIGNAL_LABELS: Record<string, string> = {
     no_typing: 'Posté sans indicateur de frappe',
+    paste_burst: 'Copier-coller',
     inhuman_rate: 'Débit inhumain',
     regular_intervals: 'Intervalles réguliers',
     cross_channel_burst: 'Diffusion multi-salons',
@@ -107,6 +110,11 @@
       field: 'typingSignalEnabled',
       label: 'Absence d\'indicateur de frappe',
       help: 'Un client Discord réel émet un événement de frappe avant un message conséquent. Les scripts et les comptes pilotés par token volé ne le font pratiquement jamais. Le signal se neutralise automatiquement si le bot ne reçoit pas ces événements.',
+    },
+    {
+      field: 'pasteSignalEnabled',
+      label: 'Copier-coller',
+      help: 'Gros message (200 caractères et plus) envoyé après une frappe bien trop courte pour l\'avoir écrit : le geste du spammeur qui recopie la même arnaque de serveur en serveur. Coller un texte reste courant, le signal pèse peu seul et compte surtout en concordance. Les blocs de code sont ignorés.',
     },
     {
       field: 'crossChannelEnabled',
@@ -450,6 +458,7 @@
         {#each SIGNAL_TOGGLES as toggle (toggle.field)}
           {@const usage = stats?.signals.find((s) =>
             toggle.field === 'typingSignalEnabled' ? s.type === 'no_typing'
+            : toggle.field === 'pasteSignalEnabled' ? s.type === 'paste_burst'
             : toggle.field === 'crossChannelEnabled' ? s.type === 'cross_channel_burst'
             : toggle.field === 'duplicateEnabled' ? s.type === 'near_duplicate'
             : toggle.field === 'cadenceEnabled' ? s.type === 'inhuman_rate'

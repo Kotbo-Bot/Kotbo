@@ -16,6 +16,7 @@
   import Navbar from '../lib/components/Navbar.svelte';
   import ServerSwitcherModal from '../lib/components/ServerSwitcherModal.svelte';
   import RankCardCustomizer from '../lib/components/RankCardCustomizer.svelte';
+  import SiteEditorSpace from '../lib/components/site/SiteEditorSpace.svelte';
 
   const BIO_MAX = 500;
 
@@ -148,6 +149,8 @@
         </div>
       {/if}
     </SectionCard>
+
+    <SiteEditorSpace />
 
     <section class="section-card p-5">
       <RankCardCustomizer />

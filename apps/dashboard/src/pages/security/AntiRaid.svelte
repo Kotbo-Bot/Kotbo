@@ -24,6 +24,7 @@
   import SectionCard from '../../lib/components/SectionCard.svelte';
   import ToggleSwitch from '../../lib/components/ToggleSwitch.svelte';
   import RefreshButton from '../../lib/components/RefreshButton.svelte';
+  import Button from '../../lib/components/ui/Button.svelte';
   import EmptyState from '../../lib/components/EmptyState.svelte';
   import LoadingHint from '../../lib/components/LoadingHint.svelte';
 
@@ -707,17 +708,24 @@
     {#if activeTab === 'scams'}
       <SectionCard
         title="Filtre anti-arnaque"
-        description="Bloque les liens de phishing (faux Nitro, faux Steam) et les images d'arnaque connues."
+        description="Bloque les liens de phishing (faux Nitro, faux Steam), les faux giveaways crypto/casino, les faux recrutements « revenu facile » et les images d'arnaque connues."
         icon="Fishing"
       >
+        {#snippet actions()}
+          <!-- Le simulateur vit dans les filtres AutoMod : il rejoue l'analyse
+               de texte et de domaines sur les messages passés. -->
+          <Button size="sm" variant="ghost" icon="history" href="/security/filters/simulator?rule=scam">Tester sur l'historique</Button>
+        {/snippet}
         <div class="space-y-3">
           {@render switchRow('scamFilterEnabled', 'Filtre anti-arnaque', 'Analyse les domaines et les combinaisons de texte typiques des campagnes de phishing.')}
           {@render switchRow('scamImageFilterEnabled', 'Filtre d\'images', 'Compare les images postées aux empreintes d\'arnaques déjà identifiées sur le serveur, alimentées automatiquement par le honeypot. La comparaison est perceptuelle : une capture recompressée ou légèrement recadrée reste reconnue.')}
           {@render switchRow('scamQrFilterEnabled', 'Filtre de codes QR', 'Le phishing par QR de connexion Discord ne contient aucun lien : aucun filtre de domaine ne peut l\'attraper. Les images porteuses d\'un code QR envoyées par un compte sans historique sont bloquées.')}
 
-          {#if config.scamQrFilterEnabled}
+          {@render switchRow('scamOcrEnabled', 'Lecture du texte des images', 'Lit le texte des images postées par un compte sans historique (lecture locale, aucune image n\'est envoyée à un tiers) et le compare aux domaines et textes d\'arnaque connus. Rattrape les captures photographiées ou recadrées que la comparaison d\'empreintes ne reconnaît pas. Consomme du processeur : à activer si le serveur est visé par ces campagnes.')}
+
+          {#if config.scamQrFilterEnabled || config.scamOcrEnabled}
             <div class="rounded-xl border border-outline-variant/30 p-3">
-              {@render numberField('scamQrTrustedMessages', 'Messages avant d\'être considéré comme installé', 0, 10000, 'Au-delà, les codes QR du membre ne sont plus bloqués : partager un QR wifi ou 2FA est légitime.')}
+              {@render numberField('scamQrTrustedMessages', 'Messages avant d\'être considéré comme installé', 0, 10000, 'Au-delà, le membre n\'est plus concerné par le filtre de codes QR ni par la lecture du texte des images : partager un QR wifi ou 2FA est légitime.')}
             </div>
           {/if}
 

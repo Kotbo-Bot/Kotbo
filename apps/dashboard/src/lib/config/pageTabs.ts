@@ -79,6 +79,7 @@ export const PAGE_TABS: Record<string, PageTabConfig[]> = {
     { id: 'staff', label: () => m.an_tab_staff_directory(), icon: 'Users' },
     { id: 'performance', label: () => m.an_tab_staff_performance(), icon: 'TrendUp' },
     { id: 'tickets', label: () => m.anx_tab_tickets(), icon: 'Ticket' },
+    { id: 'website', label: () => m.ste_analytics_tab(), icon: 'Globe' },
     { id: 'alerts', label: () => m.anx_tab_alerts(), icon: 'Bell' },
     { id: 'reports', label: () => m.anx_tab_reports(), icon: 'Mail' },
   ],
@@ -108,9 +109,11 @@ export const PAGE_TABS: Record<string, PageTabConfig[]> = {
   '/security/filters': [
     { id: 'bot', label: () => m.am_tab_bot_filters(), icon: 'shield-alert' },
     { id: 'discord', label: () => m.am_tab_discord_filters(), icon: 'shield' },
+    { id: 'ai', label: () => m.aegis_tab(), icon: 'sparkles' },
     { id: 'security', label: () => m.am_tab_security(), icon: 'lock' },
     { id: 'behavioral', label: () => m.am_tab_behavioral(), icon: 'activity' },
     { id: 'exceptions', label: () => m.am_tab_exceptions(), icon: 'filter' },
+    { id: 'simulator', label: () => m.sim_tab_label(), icon: 'history' },
   ],
 
   '/security/filters/nicknames': [
@@ -189,6 +192,19 @@ export const PAGE_TABS: Record<string, PageTabConfig[]> = {
     { id: 'boost', label: () => m.announcements_tab_boost(), icon: 'Zap' },
     { id: 'autoroles', label: () => m.announcements_tab_autoroles(), icon: 'Shield' },
     { id: 'thread', label: () => m.announcements_tab_thread(), icon: 'chat' },
+    { id: 'experiments', label: () => m.wx_tab(), icon: 'git-branch' },
+  ],
+
+  '/site': [
+    { id: 'apercu', label: () => m.ste_tab_overview(), icon: 'layout' },
+    { id: 'pages', label: () => m.ste_tab_pages(), icon: 'file-text' },
+    { id: 'wiki', label: () => m.ste_tab_wiki(), icon: 'book-open' },
+    { id: 'blog', label: () => m.ste_tab_blog(), icon: 'edit-2' },
+    { id: 'apparence', label: () => m.ste_tab_appearance(), icon: 'palette' },
+    { id: 'menu', label: () => m.ste_tab_menu(), icon: 'menu' },
+    { id: 'commentaires', label: () => m.ste_tab_comments(), icon: 'message-square' },
+    { id: 'frequentation', label: () => m.ste_tab_traffic(), icon: 'trending-up' },
+    { id: 'reglages', label: () => m.ste_tab_settings(), icon: 'settings' },
   ],
 
   '/news': [
@@ -217,6 +233,7 @@ export const PAGE_TABS: Record<string, PageTabConfig[]> = {
 
   '/tickets': [
     { id: 'tickets', label: () => m.e1_tickets_tab_tickets(), icon: 'message-square' },
+    { id: 'performance', label: () => m.th_tab_performance(), icon: 'trending-up' },
     { id: 'transcripts', label: () => m.e1_tickets_tab_transcripts(), icon: 'file-text' },
     { id: 'satisfaction', label: () => m.e1_tickets_tab_satisfaction(), icon: 'star' },
     { id: 'macros', label: () => m.e1_tickets_tab_macros(), icon: 'message-circle' },
