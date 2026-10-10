@@ -152,6 +152,11 @@
 {#snippet pageLink(item: PageConfig, withIcon: boolean)}
   {@const active = isActiveNavItem(item.href)}
   <div class="nav-row group relative flex items-center rounded-lg transition-colors duration-150 {active ? 'is-active' : ''}">
+    {#if !withIcon}
+      <span class="nav-row__node" aria-hidden="true">
+        <Papicon icon={item.icon ?? 'circle'} size={12} />
+      </span>
+    {/if}
     <a
       href={item.href}
       onmouseenter={() => prefetchRoute(item.href)}
@@ -437,9 +442,11 @@
     color: var(--primary-color);
   }
 
-  /* Le fil de l'espace ouvert : une ligne fine relie ses pages a son titre,
-     et la page courante y est marquee d'un segment de la couleur principale.
-     C'est le seul ornement de la barre, et il dit ou l'on se trouve. */
+  /* Le fil de l'espace ouvert : une ligne fine relie ses pages a son titre.
+     La page courante y porte une pastille ronde de la couleur principale avec
+     son icone ; survoler une autre page fait paraitre la sienne, en teinte.
+     Les pages d'un espace restent sans icone au repos : la liste se lit d'un
+     coup d'oeil, et l'icone n'apparait que la ou se pose l'attention. */
   .nav-thread::before {
     content: "";
     position: absolute;
@@ -450,16 +457,44 @@
     background: var(--outline-variant);
   }
 
-  .nav-thread .nav-row.is-active::before {
-    content: "";
+  /* Centree sur le fil : la ligne est a 0.5rem a gauche de la rangee. */
+  .nav-row__node {
     position: absolute;
-    left: -0.5rem;
-    top: 0.375rem;
-    bottom: 0.375rem;
-    width: 2px;
-    margin-left: -0.5px;
-    border-radius: 2px;
+    left: calc(-0.5rem - 10px);
+    top: 50%;
+    width: 20px;
+    height: 20px;
+    margin-top: -10px;
+    display: grid;
+    place-items: center;
+    border-radius: 9999px;
+    background: color-mix(in srgb, var(--primary-color) 18%, var(--surface-container-lowest));
+    color: var(--primary-color);
+    box-shadow: 0 0 0 2px var(--surface-container-lowest);
+    opacity: 0;
+    transform: scale(0.6);
+    transition: opacity 150ms ease, transform 150ms ease, background-color 150ms ease;
+    pointer-events: none;
+  }
+
+  .nav-row:hover .nav-row__node,
+  .nav-row:focus-within .nav-row__node {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  .nav-row.is-active .nav-row__node {
+    opacity: 1;
+    transform: scale(1);
     background: var(--primary-color);
+    color: var(--on-primary-color);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .nav-row__node {
+      transition: none;
+      transform: none;
+    }
   }
 
   .nav-thread .nav-row.is-active {
