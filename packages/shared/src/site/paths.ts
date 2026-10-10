@@ -56,7 +56,7 @@ export function validatePageSlug(value: string): SiteSlugError | null {
 
 // ─── Menu ────────────────────────────────────────────────────────────────────
 
-export const SITE_NAV_SECTIONS = ['home', 'wiki', 'blog', 'search', 'me', 'votes', 'shop'] as const;
+export const SITE_NAV_SECTIONS = ['home', 'wiki', 'blog', 'search', 'me', 'votes', 'shop', 'forum'] as const;
 export type SiteNavSection = (typeof SITE_NAV_SECTIONS)[number];
 
 export type SiteNavTarget =

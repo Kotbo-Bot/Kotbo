@@ -14227,5 +14227,6 @@
   "ste_err_invalid_discount": "Indique une remise.",
   "ste_err_delivery_failed": "Livraison impossible (membre parti, rôle inaccessible…) : le membre a été remboursé.",
   "ste_err_too_many_offers": "Tu as atteint le nombre maximal d'offres.",
-  "ste_err_too_many_codes": "Tu as atteint le nombre maximal de codes promo."
+  "ste_err_too_many_codes": "Tu as atteint le nombre maximal de codes promo.",
+  "ste_section_forum": "Forum"
 }

@@ -46,6 +46,7 @@ import { getPublicMemberProfile } from './siteMemberService.js';
 import { getSiteScript, getSiteStylesheet } from './siteAssets.js';
 import { readSiteAsset, mimeForExtension } from './siteUploads.js';
 import { searchSite } from './siteSearch.js';
+import { forumCategoryPage, forumIndexPage, forumTopicPage, parseForumPage, type ForumPage } from './siteForumPages.js';
 import { verifyPreviewToken } from './sitePreview.js';
 import { recordSiteHit } from './siteAnalyticsService.js';
 import {
@@ -578,6 +579,16 @@ async function meResponse(ctx: SiteCtx): Promise<SiteHttpResponse> {
 }
 
 /** Profil public d'un membre (masquable par le membre, non indexé). */
+/** Pages du forum, habillées comme les autres pages du site. */
+function forumResponse(ctx: SiteCtx, page: ForumPage | null): SiteHttpResponse {
+  if (!page) return notFound(ctx);
+  const main = `${hero(page.title, page.lead ?? null)}<div class="forum">${page.main}</div>`;
+  return html(200, shell(ctx, { path: page.path, title: page.title, main, activeKey: 'forum', breadcrumbs: page.breadcrumbs, noindex: page.noindex }), ctx.nonce, ctx.req.apiOrigin, {
+    cacheSeconds: 15,
+    noindex: page.noindex,
+  });
+}
+
 /** Boutique du serveur. */
 async function shopResponse(ctx: SiteCtx): Promise<SiteHttpResponse> {
   const o = { locale: ctx.locale };
@@ -861,6 +872,11 @@ export async function handleSiteRequest(req: SiteHttpRequest): Promise<SiteHttpR
     else if (section === 'u' && a && rest.length === 2) response = await memberProfileResponse(ctx, a);
     else if (section === 'votes' && rest.length === 1) response = await votesResponse(ctx);
     else if ((section === 'shop' || section === 'boutique') && rest.length === 1) response = await shopResponse(ctx);
+    else if (section === 'forum' && rest.length === 1) response = forumResponse(ctx, await forumIndexPage(ctx.block));
+    else if (section === 'forum' && a && rest.length === 2) response = forumResponse(ctx, await forumCategoryPage(ctx.block, a, parseForumPage(ctx.req.query.get('page'))));
+    else if (section === 'forum' && a && b && /^[a-z0-9]{20,32}$/.test(b) && rest.length === 3) {
+      response = forumResponse(ctx, await forumTopicPage(ctx.block, a, b, parseForumPage(ctx.req.query.get('page'))));
+    }
     else if (section === 'form' && a && rest.length === 2) response = await formResponse(ctx, a);
     else if (section === 'wiki' && rest.length === 1) response = wikiIndexResponse(ctx);
     else if (section === 'wiki' && a && rest.length === 2) {

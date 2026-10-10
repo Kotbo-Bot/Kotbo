@@ -190,6 +190,7 @@
       .then(function () {
         viewerLoaded = true;
         renderViewerSlots();
+        applyForumViewer();
         renderAgentBanner();
       });
   }
@@ -607,6 +608,46 @@
         },
       );
     },
+    // Forum : nouveau sujet (ouvert aussitôt) et réponse (dernière page rechargée).
+    'data-forum-topic': function (form) {
+      var collected = collectFormData(form);
+      if (collected.missing) {
+        setStatus(form, T.formRequired, 'error');
+        collected.missing.focus();
+        return;
+      }
+      submitWith(
+        form,
+        function () {
+          return request('POST', SITE_API + '/forum/categories/' + encodeURIComponent(form.getAttribute('data-forum-topic')) + '/topics', collected.data);
+        },
+        function (data) {
+          if (data && data.url) location.href = data.url;
+        },
+      );
+    },
+    'data-forum-reply': function (form) {
+      var collected = collectFormData(form);
+      if (collected.missing) {
+        setStatus(form, T.formRequired, 'error');
+        collected.missing.focus();
+        return;
+      }
+      var topicId = form.getAttribute('data-forum-reply');
+      submitWith(
+        form,
+        function () {
+          return request('POST', SITE_API + '/forum/topics/' + encodeURIComponent(topicId) + '/posts', { content: collected.data.content });
+        },
+        function (data) {
+          form.reset();
+          setStatus(form, '', null);
+          var holder = document.querySelector('[data-forum-live="' + topicId + '"]');
+          if (holder && data && data.pages) holder.setAttribute('data-page', String(data.pages));
+          reloadForum(topicId, true);
+        },
+      );
+    },
     'data-member-settings': function (form) {
       var notifications = {};
       form.querySelectorAll('input[name^="notify_"]').forEach(function (input) {
@@ -639,6 +680,57 @@
       return;
     }
     FORM_HANDLERS[key](form);
+  });
+
+  // ─── Forum ─────────────────────────────────────────────────────────────
+
+  /** Boutons et formulaires réservés : son propre message, le staff, un sujet ouvert. */
+  function applyForumViewer() {
+    document.querySelectorAll('[data-forum-delete]').forEach(function (button) {
+      button.hidden = !viewer || !(viewer.isStaff || viewer.userId === button.getAttribute('data-author'));
+    });
+    document.querySelectorAll('[data-staff-only]').forEach(function (node) {
+      node.hidden = !(viewer && viewer.isStaff);
+    });
+    document.querySelectorAll('form[data-locked]').forEach(function (form) {
+      form.hidden = !(viewer && viewer.isStaff);
+    });
+  }
+
+  function reloadForum(id, scroll) {
+    document.querySelectorAll('[data-forum-live="' + id + '"]').forEach(function (holder) {
+      var kind = holder.getAttribute('data-forum-kind');
+      var page = holder.getAttribute('data-page') || '1';
+      request('GET', SITE_API + '/forum/fragment/' + encodeURIComponent(kind) + '/' + encodeURIComponent(id) + '?page=' + encodeURIComponent(page))
+        .then(function (data) {
+          if (typeof data.html !== 'string') return;
+          holder.innerHTML = data.html;
+          if (data.pages) holder.setAttribute('data-pages', String(data.pages));
+          applyForumViewer();
+          if (scroll) {
+            var last = holder.querySelector('.forum-post:last-of-type');
+            if (last) last.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        })
+        .catch(function () {});
+    });
+  }
+
+  document.addEventListener('click', function (event) {
+    var button = event.target.closest('[data-forum-delete]');
+    if (!button) return;
+    event.preventDefault();
+    if (!window.confirm(T.forumDeleteConfirm)) return;
+    var holder = button.closest('[data-forum-live]');
+    button.disabled = true;
+    request('DELETE', SITE_API + '/forum/posts/' + encodeURIComponent(button.getAttribute('data-forum-delete')))
+      .then(function () {
+        if (holder) reloadForum(holder.getAttribute('data-forum-live'));
+      })
+      .catch(function (err) {
+        alertInline(button, err.message, 'error');
+        button.disabled = false;
+      });
   });
 
   // Prix recalculé avec le code promo saisi, sans rien acheter.
@@ -749,6 +841,9 @@
     document.querySelectorAll('[data-comments]').forEach(function (holder) {
       channels['comments:' + holder.getAttribute('data-comments')] = true;
     });
+    document.querySelectorAll('[data-forum-live]').forEach(function (holder) {
+      channels['forum:' + holder.getAttribute('data-forum-live')] = true;
+    });
     if (viewer) {
       channels['user:' + viewer.userId] = true;
       if (viewer.canManageSite) channels.agent = true;
@@ -776,6 +871,10 @@
     }
     if (channel.indexOf('comments:') === 0) {
       reloadComments(channel.slice(9));
+      return;
+    }
+    if (channel.indexOf('forum:') === 0) {
+      reloadForum(channel.slice(6));
       return;
     }
     if (channel.indexOf('user:') === 0) {

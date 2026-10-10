@@ -14227,5 +14227,6 @@
   "ste_err_invalid_discount": "Enter a discount.",
   "ste_err_delivery_failed": "Delivery failed (member left, role out of reach…): the member was refunded.",
   "ste_err_too_many_offers": "You've reached the maximum number of offers.",
-  "ste_err_too_many_codes": "You've reached the maximum number of promo codes."
+  "ste_err_too_many_codes": "You've reached the maximum number of promo codes.",
+  "ste_section_forum": "Forum"
 }

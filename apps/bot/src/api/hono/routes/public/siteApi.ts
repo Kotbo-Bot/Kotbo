@@ -33,6 +33,8 @@ import { publishGuildSignal } from '../../../../services/site/siteLive.js';
 import { updateSiteMemberSettings } from '../../../../services/site/siteMemberService.js';
 import { formatShopPrice, purchaseShopOffer, quoteShopOffer, setShopSubscriptionCancelled, ShopError } from '../../../../services/shop/shopService.js';
 import { resolveShopRecipient, shopErrorMessage } from '../../../../services/site/blocks/shopBlocks.js';
+import { createForumTopic, deleteForumPost, ForumError, replyToForumTopic, type ForumAuthor, type ForumErrorCode } from '../../../../services/site/siteForumService.js';
+import { forumIndexPage, parseForumPage, renderForumPosts, renderForumTopics } from '../../../../services/site/siteForumPages.js';
 
 // ============================================================================
 // API DU SCRIPT DES SITES COMMUNAUTAIRES
@@ -358,6 +360,123 @@ export function createSiteApiRouter(client: Client): OpenAPIHono {
     } catch (err) {
       logger.error('SiteApi', `Action ${c.req.param('action')} en échec sur ${guildId} :`, err);
       return c.json({ error: err instanceof Error && err.message ? err.message : m.site_error_generic({}, o) }, 500);
+    }
+  });
+
+  // ── Forum ─────────────────────────────────────────────────────────────────
+  const forumError = (code: ForumErrorCode, o: { locale: 'fr' | 'en' }): string => {
+    const messages: Partial<Record<ForumErrorCode, () => string>> = {
+      forbidden: () => m.site_forum_err_forbidden({}, o),
+      locked: () => m.site_forum_locked({}, o),
+      title_required: () => m.site_forum_err_title({}, o),
+      content_required: () => m.site_forum_err_content({}, o),
+      discord_failed: () => m.site_forum_err_discord({}, o),
+    };
+    return (messages[code] ?? (() => m.site_err_not_found({}, o)))();
+  };
+
+  /** Catégorie ou sujet du site, pour les fragments rechargés par le script. */
+  async function forumTarget(siteId: string, kind: 'category' | 'topic', id: string) {
+    if (!CUID.test(id)) return null;
+    if (kind === 'category') {
+      const category = await prisma.siteForumCategory.findFirst({ where: { id, siteId } });
+      return category ? { category, topic: null } : null;
+    }
+    const topic = await prisma.siteForumTopic.findFirst({ where: { id, deletedAt: null, category: { siteId } }, include: { category: true } });
+    return topic ? { category: topic.category, topic } : null;
+  }
+
+  app.get('/api/site/:siteId/forum/fragment/:kind/:id', async (c) => {
+    const site = await liveSite(c);
+    if (!site) return c.json({ error: 'Introuvable' }, 404);
+    if (rateLimited(`forum-read:${clientIp(c)}`, 240, 60_000)) return c.json({ error: m.site_err_too_many({}, { locale: localeOf(c) }) }, 429);
+    const kind = c.req.param('kind');
+    const ctx = await buildSiteCtx({ client, query: new URLSearchParams(c.req.query()), acceptLanguage: c.req.header('accept-language') ?? null }, site, null, true);
+    const page = parseForumPage(c.req.query('page') ?? null);
+    c.header('Cache-Control', 'no-store');
+    if (kind === 'index') return c.json({ html: (await forumIndexPage(ctx.block)).main });
+    const target = await forumTarget(site.id, kind === 'topics' ? 'category' : 'topic', c.req.param('id'));
+    if (!target) return c.json({ error: 'Introuvable' }, 404);
+    if (kind === 'topics') return c.json({ html: await renderForumTopics(ctx.block, target.category, page) });
+    const posts = await renderForumPosts(ctx.block, target.category, target.topic!, page);
+    return c.json({ html: posts.html, pages: posts.pages });
+  });
+
+  async function forumAuthor(c: Context, site: SiteRecord): Promise<ForumAuthor | Response> {
+    const o = { locale: localeOf(c) };
+    const viewer = await viewerFor(client, c, site);
+    if (!viewer) return c.json({ error: m.site_err_login({}, o) }, 401);
+    if (!viewer.isMember) return c.json({ error: m.site_err_member_only({}, o) }, 403);
+    if (rateLimited(`forum-write:${viewer.userId}`, 6, 60_000)) return c.json({ error: m.site_err_too_many({}, o) }, 429);
+    return { userId: viewer.userId, displayName: viewer.displayName, avatarUrl: viewer.avatarUrl, roleIds: viewer.roleIds, isStaff: viewer.isStaff };
+  }
+
+  app.post('/api/site/:siteId/forum/categories/:categoryId/topics', async (c) => {
+    const site = await liveSite(c);
+    if (!site) return c.json({ error: 'Introuvable' }, 404);
+    const o = { locale: localeOf(c) };
+    const author = await forumAuthor(c, site);
+    if (author instanceof Response) return author;
+    const target = await forumTarget(site.id, 'category', c.req.param('categoryId'));
+    if (!target) return c.json({ error: m.site_err_not_found({}, o) }, 404);
+    const body = await readBody(c);
+    const text = `${str(body.title, 120)}\n${str(body.content, 2000)}`;
+    const verdict = await moderateMemberText(site.guildId, text);
+    if (!verdict.allowed) {
+      logger.info('Site', `Sujet de forum refusé sur ${site.guildId} (${verdict.reason}) pour ${author.userId}`);
+      return c.json({ error: m.site_err_refused({}, o) }, 422);
+    }
+    try {
+      const topic = await createForumTopic(client, target.category, author, body.title, body.content);
+      rewardParticipation(site.guildId, author.userId, `forum-topic:${topic.id}`);
+      return c.json({ ok: true, url: `/s/${site.slug}/forum/${target.category.slug}/${topic.id}` });
+    } catch (err) {
+      if (err instanceof ForumError) return c.json({ error: forumError(err.code, o) }, err.status as 400);
+      throw err;
+    }
+  });
+
+  app.post('/api/site/:siteId/forum/topics/:topicId/posts', async (c) => {
+    const site = await liveSite(c);
+    if (!site) return c.json({ error: 'Introuvable' }, 404);
+    const o = { locale: localeOf(c) };
+    const author = await forumAuthor(c, site);
+    if (author instanceof Response) return author;
+    const target = await forumTarget(site.id, 'topic', c.req.param('topicId'));
+    if (!target?.topic) return c.json({ error: m.site_err_not_found({}, o) }, 404);
+    const body = await readBody(c);
+    const verdict = await moderateMemberText(site.guildId, str(body.content, 2000));
+    if (!verdict.allowed) {
+      logger.info('Site', `Réponse de forum refusée sur ${site.guildId} (${verdict.reason}) pour ${author.userId}`);
+      return c.json({ error: m.site_err_refused({}, o) }, 422);
+    }
+    try {
+      const post = await replyToForumTopic(client, target.category, target.topic, author, body.content);
+      rewardParticipation(site.guildId, author.userId, `forum-post:${post.id}`);
+      const total = await prisma.siteForumPost.count({ where: { topicId: target.topic.id, deletedAt: null } });
+      return c.json({ ok: true, pages: Math.max(1, Math.ceil(total / 25)) });
+    } catch (err) {
+      if (err instanceof ForumError) return c.json({ error: forumError(err.code, o) }, err.status as 400);
+      throw err;
+    }
+  });
+
+  app.delete('/api/site/:siteId/forum/posts/:postId', async (c) => {
+    const site = await liveSite(c);
+    if (!site) return c.json({ error: 'Introuvable' }, 404);
+    const o = { locale: localeOf(c) };
+    const viewer = await viewerFor(client, c, site);
+    if (!viewer) return c.json({ error: m.site_err_login({}, o) }, 401);
+    const postId = c.req.param('postId');
+    if (!CUID.test(postId)) return c.json({ error: m.site_err_not_found({}, o) }, 404);
+    const post = await prisma.siteForumPost.findFirst({ where: { id: postId, topic: { category: { siteId: site.id } } }, select: { id: true } });
+    if (!post) return c.json({ error: m.site_err_not_found({}, o) }, 404);
+    try {
+      await deleteForumPost(client, site.guildId, postId, { userId: viewer.userId, isStaff: viewer.isStaff });
+      return c.json({ ok: true });
+    } catch (err) {
+      if (err instanceof ForumError) return c.json({ error: forumError(err.code, o) }, err.status as 400);
+      throw err;
     }
   });
 
