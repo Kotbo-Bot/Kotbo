@@ -2,27 +2,31 @@
   /**
    * Bandeau « un agent modifie le site ».
    *
-   * Surveille le verrou de l'agent MCP (toutes les 5 s, plus vite quand il est
-   * actif) et le remonte à la page, qui passe alors en lecture seule. Propose
+   * Suit le verrou de l'agent MCP par les signaux temps réel du site (sondage
+   * de secours toutes les 5 s, ou 30 s quand le socket est ouvert) et le
+   * remonte à la page, qui passe alors en lecture seule. Propose
    * d'interrompre l'agent, puis, une fois interrompu, de l'autoriser de nouveau.
    */
   import { onDestroy, onMount } from 'svelte';
   import { Button } from '../ui';
   import { toast } from '../../stores/toast.svelte';
   import { m, dateLocale } from '../../i18n';
-  import { allowSiteAgent, fetchSiteAgent, interruptSiteAgent, type SiteAgentStatus } from '../../api/site';
+  import { allowSiteAgent, fetchSiteAgent, interruptSiteAgent, subscribeSiteSignals, type SiteAgentStatus } from '../../api/site';
   import { siteErrorMessage } from './siteErrors';
 
   let {
     guildId,
+    siteId = null,
     canManage = false,
     onChange,
-  }: { guildId: string; canManage?: boolean; onChange?: (locked: boolean) => void } = $props();
+  }: { guildId: string; siteId?: string | null; canManage?: boolean; onChange?: (locked: boolean) => void } = $props();
 
   let agent = $state<SiteAgentStatus | null>(null);
   let busy = $state(false);
   let timer: ReturnType<typeof setTimeout> | null = null;
   let stopped = false;
+  let liveConnected = false;
+  let live: { close: () => void } | null = null;
 
   async function poll() {
     try {
@@ -31,7 +35,7 @@
     } catch {
       // Sans réponse, on garde le dernier état connu.
     }
-    if (!stopped) timer = setTimeout(poll, agent?.active ? 3000 : 5000);
+    if (!stopped) timer = setTimeout(poll, liveConnected ? 30_000 : agent?.active ? 3000 : 5000);
   }
 
   /** Relu tout de suite, par exemple après un refus 423 de l'API. */
@@ -40,10 +44,18 @@
     void poll();
   }
 
-  onMount(poll);
+  onMount(() => {
+    void poll();
+    if (siteId) {
+      live = subscribeSiteSignals(siteId, ['agent'], (channel) => {
+        if (channel === 'agent') refresh();
+      }, (connected) => (liveConnected = connected));
+    }
+  });
   onDestroy(() => {
     stopped = true;
     if (timer) clearTimeout(timer);
+    live?.close();
   });
 
   async function interrupt() {

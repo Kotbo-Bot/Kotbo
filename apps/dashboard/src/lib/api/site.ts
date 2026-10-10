@@ -261,6 +261,61 @@ export function siteCollabUrl(guildId: string): string {
   return `${origin.replace(/^http/i, 'ws')}/api/site/collab/${guildId}`;
 }
 
+/**
+ * Signaux temps réel d'un site (« ceci a changé »), par le même WebSocket que
+ * le site publié. Reconnexion progressive ; `close()` arrête tout. Le contenu
+ * se relit toujours par l'API habituelle.
+ */
+export function subscribeSiteSignals(
+  siteId: string,
+  channels: string[],
+  onSignal: (channel: string) => void,
+  onStatus?: (connected: boolean) => void,
+): { close: () => void } {
+  const origin = API_BASE_URL || (typeof window !== 'undefined' ? window.location.origin : '');
+  const url = `${origin.replace(/^http/i, 'ws')}/api/site/live/${encodeURIComponent(siteId)}`;
+  let socket: WebSocket | null = null;
+  let closed = false;
+  let retry = 0;
+  let timer: ReturnType<typeof setTimeout> | null = null;
+
+  const connect = () => {
+    if (closed || typeof WebSocket === 'undefined') return;
+    socket = new WebSocket(url);
+    socket.addEventListener('message', (event) => {
+      let data: { type?: string; channel?: unknown };
+      try {
+        data = JSON.parse(String(event.data)) as typeof data;
+      } catch {
+        return;
+      }
+      if (data.type === 'site_live_ready') {
+        retry = 0;
+        socket?.send(JSON.stringify({ type: 'subscribe', channels }));
+        onStatus?.(true);
+      } else if (data.type === 'site_signal' && typeof data.channel === 'string') {
+        onSignal(data.channel);
+      }
+    });
+    socket.addEventListener('close', () => {
+      onStatus?.(false);
+      socket = null;
+      if (closed) return;
+      timer = setTimeout(connect, Math.min(60_000, 2000 * 2 ** retry));
+      retry += 1;
+    });
+  };
+  connect();
+
+  return {
+    close: () => {
+      closed = true;
+      if (timer) clearTimeout(timer);
+      socket?.close();
+    },
+  };
+}
+
 // ─── Administration Kotbo ───────────────────────────────────────────────────
 
 export interface AdminSiteRow {

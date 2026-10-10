@@ -84,7 +84,7 @@
       <EmptyState icon="globe" title={m.ste_no_site()} description={m.ste_no_site_desc()} />
     {/if}
   {:else}
-    <AgentLockBanner {guildId} canManage={siteState.rights.manage} onChange={(locked) => (agentLocked = locked)} />
+    <AgentLockBanner {guildId} siteId={siteState.site.id} canManage={siteState.rights.manage} onChange={(locked) => (agentLocked = locked)} />
     {#if !siteState.modules.site}
       <Callout variant="warning" title={m.ste_module_off_title()} class="mb-4">{m.ste_module_off_desc()}</Callout>
     {/if}
