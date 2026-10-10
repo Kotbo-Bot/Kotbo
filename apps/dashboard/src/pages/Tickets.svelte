@@ -1776,9 +1776,16 @@
   featureKey="tickets"
 >
   {#snippet actions()}
-    <!-- La roue crantee qui menait a « Configuration » faisait doublon avec
-         l'onglet du meme nom, juste en dessous : elle est retiree. -->
-    <RefreshButton onClick={handleRefresh} loading={loading} label={m.e1_tickets_refresh()} />
+    <div class="flex items-center gap-3">
+      <RefreshButton onClick={handleRefresh} loading={loading} label={m.e1_tickets_refresh()} />
+      <button 
+      onclick={() => changeTab(activeTab === 'config' ? 'tickets' : 'config')}
+        class="p-3 rounded-xl bg-surface-container-high hover:bg-primary/10 hover:text-primary transition-all text-on-surface-variant/70"
+        title={m.e1_tickets_settings_tooltip()}
+      >
+        <Papicon icon="settings" size={20} />
+      </button>
+    </div>
   {/snippet}
 
   <Tabs

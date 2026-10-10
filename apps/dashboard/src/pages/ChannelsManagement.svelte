@@ -65,7 +65,7 @@
   type TempVoiceAccessNotifyVia = 'VOICE' | 'DM' | 'CHANNEL';
   type TempVoiceReservationOverflow = 'ASK' | 'NOTHING' | 'MOVE' | 'DISCONNECT';
   /**
-   * Réglages de présentation du panneau, configurables par serveur : cinq
+   * Réglages de présentation du panneau, configurables par serveur — cinq
    * champs ajoutés au même titre que les permissions modérateur ci-dessous,
    * dans le même objet `tempVoiceModPermissions`.
    */
@@ -120,7 +120,7 @@
      * Interrupteur de secours de la personnalisation par générateur. Défaut
      * `false` : au déploiement, aucun serveur existant ne change de
      * comportement. Le couper IGNORE les surcharges des générateurs
-     * additionnels, il ne les EFFACE PAS : elles restent dans
+     * additionnels, il ne les EFFACE PAS — elles restent dans
      * `tempVoiceGenerators` et reviennent telles quelles au rallumage.
      */
     perGeneratorPresentation: boolean;
@@ -208,7 +208,7 @@
 
   /**
    * Les quatre axes de présentation du panneau, en cartes-radio avec une aide
-   * PAR OPTION : même forme que `NOTIFY_MODES` ci-dessus, et que la maquette de
+   * PAR OPTION — même forme que `NOTIFY_MODES` ci-dessus, et que la maquette de
    * référence (`blocMode`/`blocFormat`/`blocCouleurs`) : le choix et ce qu'il
    * coûte se lisent ensemble, au lieu d'un `<select>` surmontant une aide
    * partagée qui ne décrivait que l'option déjà sélectionnée.
@@ -248,7 +248,7 @@
   ];
 
   /** Même liste que les trois `<option>` du réglage serveur (plus bas dans le
-   *  template) : extraite en tableau pour être réutilisée par le sélecteur de
+   *  template) — extraite en tableau pour être réutilisée par le sélecteur de
    *  surcharge par générateur, qui a aussi besoin d'en tirer un libellé. */
   const RESERVATION_FALLBACK_MODES: Array<{ key: TempVoiceReservationFallback; label: () => string }> = [
     { key: 'ANY_ROLE', label: () => m.cm_tv_panel_reservation_fallback_any_role() },
@@ -263,7 +263,7 @@
     return options.find((o) => o.key === key)?.label() ?? key;
   }
 
-  /** Nombre de champs que CE générateur surcharge : sert à la pastille de la
+  /** Nombre de champs que CE générateur surcharge — sert à la pastille de la
    *  liste (`m.cm_tv_panel_per_gen_badge_overrides`) sans ouvrir sa carte. */
   function generatorOverrideCount(generator: TempVoiceGenerator): number {
     const keys = ['panelMode', 'stateLayout', 'stateColors', 'panelComponents', 'reservationFallbackMode'] as const;
@@ -280,7 +280,7 @@
    *
    * La page annonçait `stateLayout === 'GRID3' && panelComponents === 'V1'` :
    * dans la configuration PAR DÉFAUT (V2 + GRID3 + NEUTRAL) elle affichait donc
-   * « rendu en image (PNG) » alors que le bot rend nativement : l'aide disait
+   * « rendu en image (PNG) » alors que le bot rend nativement — l'aide disait
    * le contraire du produit. Une seule combinaison sur 24 diffère entre les
    * deux conditions, et c'est justement celle de tous les serveurs en service.
    */
@@ -387,7 +387,7 @@
    * : avec le défaut V2 + GRID3 + NEUTRAL le rendu est bien natif, mais passer
    * la teinte à DARK ou LIGHT le fait justement basculer en image. Griser sur
    * « rendu natif » enfermerait le serveur sur NEUTRAL sans aucun moyen d'en
-   * sortir : le réglage deviendrait inatteignable depuis la page.
+   * sortir — le réglage deviendrait inatteignable depuis la page.
    */
   const stateColorsInert = $derived(
     config.tempVoiceModPermissions.stateLayout === 'GRID3'
@@ -2503,7 +2503,7 @@
           </section>
 
           <!-- Présentation du panneau : mode, mise en page de l'état, palette et
-               composants (V1/V2) : configurable par serveur, comme le reste de
+               composants (V1/V2) — configurable par serveur, comme le reste de
                tempVoiceModPermissions envoyé en entier à la sauvegarde. Reste
                dans le même {#if config.tempVoiceEnabled} que la section
                voisine : les salons temporaires désactivés, l'onglet ne garde
@@ -2517,7 +2517,7 @@
             <!-- Interrupteur de secours : coupé (défaut), les 5 réglages
                  ci-dessous valent pour TOUS les générateurs et les surcharges
                  des additionnels ne sont même pas lues côté bot
-                 (`presentationPourGenerateur`, tempVoiceService.ts) : l'écran
+                 (`presentationPourGenerateur`, tempVoiceService.ts) — l'écran
                  reste identique à celui d'avant cette fonctionnalité. Le
                  couper n'efface rien : les surcharges restent dans
                  `tempVoiceGenerators` et reviennent telles quelles au

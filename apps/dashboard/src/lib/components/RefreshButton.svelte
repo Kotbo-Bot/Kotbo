@@ -23,14 +23,10 @@
 
   import Papicon from './Papicon.svelte';
 
-  /**
-   * Les donnees se rechargent seules (temps reel, retour sur la page) :
-   * actualiser est un recours, pas l'action principale. Le bouton plein,
-   * couleur primaire, etait le plus visible de vingt pages ; il devient une
-   * icone discrete. `iconOnly` reste accepte, `label` sert d'infobulle.
-   */
   function getBaseClass() {
-    return 'inline-flex items-center justify-center w-9 h-9 shrink-0 rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors';
+    return iconOnly
+      ? 'p-3 rounded-lg bg-surface-container-low border border-outline-variant/30 text-on-surface-variant hover:text-primary hover:border-primary transition-all active:scale-95'
+      : 'flex items-center gap-2 bg-primary text-white px-5 py-2 rounded-xl text-sm font-semibold hover:opacity-90 transition-all shadow-md';
   }
 </script>
 
@@ -38,13 +34,14 @@
   type="button"
   onclick={onClick ?? onclick}
   aria-label={ariaLabel}
-  aria-busy={loading}
-  title={label}
-  class="{getBaseClass()} {iconOnly ? className : ''}"
+  class="{getBaseClass()} {className}"
 >
   <Papicon 
     icon="refresh-cw" 
-    size={16}
-    class="{iconClass} {loading ? 'animate-spin' : ''}"
+    size={14} 
+    class="{iconClass} {loading ? 'animate-spin' : ''}" 
   />
+  {#if !iconOnly}
+    {label}
+  {/if}
 </button>

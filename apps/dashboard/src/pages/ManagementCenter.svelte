@@ -24,7 +24,6 @@
   import ManagementOverview from '../lib/components/management/ManagementOverview.svelte';
   import ManagementChannelsRoles from '../lib/components/management/ManagementChannelsRoles.svelte';
   import ManagementAccess from '../lib/components/management/ManagementAccess.svelte';
-  import ServerLocaleSettings from '../lib/components/ServerLocaleSettings.svelte';
 
   const OWNER_ID = 'management-center';
 
@@ -301,11 +300,15 @@
 </script>
 
 <div class="mgmt animate-in fade-in duration-500">
-  <!-- Meme en-tete que ModulePage, et le nom du menu. -->
   <header class="mgmt__header">
-    <div class="min-w-0">
-      <h1 class="text-2xl font-semibold tracking-tight text-on-surface font-headline leading-tight">{m.nav_management_center()}</h1>
-      <p class="mt-1 max-w-prose text-sm text-on-surface-variant">{m.mgmt_page_desc()}</p>
+    <div class="mgmt__identity">
+      <div class="mgmt__badge bg-primary/10 text-primary">
+        <Papicon icon="Gear" size={20} />
+      </div>
+      <div class="min-w-0">
+        <h1 class="text-lg font-semibold tracking-tight leading-tight">{m.mgmt_page_title()}</h1>
+        <p class="text-sm text-on-surface-variant/70 font-medium">{m.mgmt_page_desc()}</p>
+      </div>
     </div>
     <InlineFeedback state={saveAction} />
   </header>
@@ -389,17 +392,12 @@
                 onApplyPreset={handleApplyPreset}
               />
             {:else}
-              <div class="space-y-10">
-                <ManagementOverview
-                  {features}
-                  {guildSettings}
-                  modules={registryModules}
-                  onNavigate={goToSection}
-                />
-                <!-- Le fuseau n'avait aucune autre place apres la prise en main
-                     qu'un widget de l'accueil : il revient ici, avec la langue. -->
-                <ServerLocaleSettings />
-              </div>
+              <ManagementOverview
+                {features}
+                {guildSettings}
+                modules={registryModules}
+                onNavigate={goToSection}
+              />
             {/if}
           </div>
         {/key}
@@ -422,9 +420,30 @@
   .mgmt__header {
     display: flex;
     flex-wrap: wrap;
-    align-items: flex-end;
+    align-items: center;
     justify-content: space-between;
     gap: 1rem;
+    padding: 1.25rem;
+    border-radius: 0.75rem;
+    background: color-mix(in srgb, var(--surface-container-low) 40%, transparent);
+    border: 1px solid color-mix(in srgb, var(--outline-variant) 30%, transparent);
+  }
+
+  .mgmt__identity {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    min-width: 0;
+  }
+
+  .mgmt__badge {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 0.5rem;
+    flex-shrink: 0;
   }
 
   .mgmt__denied {

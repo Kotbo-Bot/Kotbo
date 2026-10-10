@@ -4,7 +4,7 @@ import { API_BASE_URL, BASE_URL, JSON_HEADERS, authorizedFetch, getGuildId, dash
 
 export async function fetchAdminStats() {
   const response = await authorizedFetch(`${API_BASE_URL}/api/admin/stats`);
-  if (!response.ok) throw new Error('Impossible de charger les statistiques admin. Réessaie.');
+  if (!response.ok) throw new Error('Erreur lors du chargement des statistiques admin');
   return response.json();
 }
 
@@ -25,13 +25,13 @@ export async function fetchAdminModuleStats(options?: {
   if (options?.summary) params.set('summary', 'true');
 
   const response = await authorizedFetch(`${API_BASE_URL}/api/admin/stats/modules?${params.toString()}`);
-  if (!response.ok) throw new Error('Impossible de charger les statistiques de modules. Réessaie.');
+  if (!response.ok) throw new Error('Erreur lors du chargement des statistiques de modules');
   return response.json();
 }
 
 export async function fetchAdminGuilds() {
   const response = await authorizedFetch(`${API_BASE_URL}/api/admin/guilds`);
-  if (!response.ok) throw new Error('Impossible de charger les serveurs. Réessaie.');
+  if (!response.ok) throw new Error('Erreur lors du chargement des serveurs');
   return response.json();
 }
 
@@ -77,13 +77,13 @@ async function adminBillingMutation(path: string, method: 'PUT' | 'POST', body?:
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   const result = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(result.error || 'Impossible de mettre à jour la facturation. Réessaie.');
+  if (!response.ok) throw new Error(result.error || 'Erreur lors de la mise à jour de la facturation');
   return result as { ok: boolean; message: string; plan?: AdminPlanKey; status?: string };
 }
 
 export async function fetchAdminBilling(): Promise<AdminBillingState> {
   const response = await authorizedFetch(`${API_BASE_URL}/api/admin/billing`);
-  if (!response.ok) throw new Error("Impossible de charger la facturation. Réessaie.");
+  if (!response.ok) throw new Error("Erreur lors du chargement de la facturation");
   return response.json();
 }
 
@@ -105,7 +105,7 @@ export function resyncAdminGuildBilling(guildId: string) {
 
 export async function fetchAdminShards() {
   const response = await authorizedFetch(`${API_BASE_URL}/api/admin/shards`);
-  if (!response.ok) throw new Error('Impossible de charger les shards. Réessaie.');
+  if (!response.ok) throw new Error('Erreur lors du chargement des shards');
   return response.json();
 }
 
@@ -153,7 +153,7 @@ export async function leaveAdminGuild(guildId: string) {
 
 export async function fetchGlobalAdmins() {
   const response = await authorizedFetch(`${API_BASE_URL}/api/admin/admins`, { method: 'GET' });
-  if (!response.ok) throw new Error('Impossible de charger les admins globaux. Réessaie.');
+  if (!response.ok) throw new Error('Erreur lors du chargement des admins globaux');
   return response.json();
 }
 
@@ -459,7 +459,7 @@ export async function deleteActivationCode(id: string) {
 
 export async function deactivateAdminGuild(guildId: string) {
   const response = await authorizedFetch(`${API_BASE_URL}/api/admin/guilds/${guildId}/deactivate`, { method: 'POST' });
-  if (!response.ok) throw new Error('Impossible de désactiver le serveur. Réessaie.');
+  if (!response.ok) throw new Error('Erreur lors de la désactivation du serveur');
   return response.json();
 }
 
@@ -492,7 +492,7 @@ export async function extendAdminGuildAccess(guildId: string, minutes: number, a
 
 export async function reconcileStaffServers() {
   const response = await authorizedFetch(`${API_BASE_URL}/api/admin/staff-servers/reconcile`, { method: 'POST' });
-  if (!response.ok) throw new Error('Impossible de synchroniser les serveurs staff. Réessaie.');
+  if (!response.ok) throw new Error('Erreur lors de la synchronisation des serveurs staff');
   return response.json();
 }
 
@@ -502,7 +502,7 @@ export async function rescanAdminGuildStats(guildId: string, force = false) {
     headers: JSON_HEADERS,
     body: JSON.stringify({ force })
   });
-  if (!response.ok) throw new Error('Impossible de lancer le rescan des statistiques. Réessaie.');
+  if (!response.ok) throw new Error('Erreur lors du lancement du rescan des statistiques');
   return response.json();
 }
 
@@ -512,7 +512,7 @@ export async function resyncAdminGuildData(guildId: string) {
   });
   if (!response.ok) {
     const error = await response.json().catch(() => null);
-    throw new Error(error?.error || 'Impossible de lancer la synchronisation complète. Réessaie.');
+    throw new Error(error?.error || 'Erreur lors du lancement de la synchronisation complète');
   }
   return response.json();
 }
@@ -523,7 +523,7 @@ export async function resetAdminGuildServerTemplate(guildId: string) {
   });
   if (!response.ok) {
     const error = await response.json().catch(() => null);
-    throw new Error(error?.error || 'Impossible de réinitialiser la mise en place. Réessaie.');
+    throw new Error(error?.error || 'Erreur lors de la réinitialisation de la mise en place');
   }
   return response.json();
 }
@@ -612,7 +612,7 @@ export async function uploadBroadcastMedia(file: File): Promise<BroadcastMedia> 
 
 export async function fetchBroadcastMedia(limit = 60): Promise<BroadcastMediaLibrary> {
   const response = await authorizedFetch(`${API_BASE_URL}/api/admin/broadcast/media?limit=${limit}`);
-  if (!response.ok) throw new Error('Impossible de charger les images. Réessaie.');
+  if (!response.ok) throw new Error('Erreur lors du chargement des images');
   return response.json();
 }
 
@@ -642,7 +642,7 @@ export interface BroadcastTemplate {
 
 export async function fetchBroadcastTemplates(): Promise<{ templates: BroadcastTemplate[] }> {
   const response = await authorizedFetch(`${API_BASE_URL}/api/admin/broadcast/templates`);
-  if (!response.ok) throw new Error('Impossible de charger les modèles. Réessaie.');
+  if (!response.ok) throw new Error('Erreur lors du chargement des modèles');
   return response.json();
 }
 
@@ -654,14 +654,14 @@ export async function createBroadcastTemplate(payload: BroadcastPayload & { name
   });
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
-    throw new Error(error.error || 'Impossible de créer le modèle. Réessaie.');
+    throw new Error(error.error || 'Erreur lors de la création du modèle');
   }
   return response.json();
 }
 
 export async function deleteBroadcastTemplate(id: string): Promise<void> {
   const response = await authorizedFetch(`${API_BASE_URL}/api/admin/broadcast/templates/${id}`, { method: 'DELETE' });
-  if (!response.ok) throw new Error('Impossible de supprimer le modèle. Réessaie.');
+  if (!response.ok) throw new Error('Erreur lors de la suppression du modèle');
 }
 
 // ── Rapport de diffusion et annulation ──────────────────────────────────────
@@ -671,7 +671,7 @@ export async function fetchBroadcastDeliveries(
   status: 'ALL' | 'SENT' | 'FAILED' | 'SKIPPED' = 'ALL',
 ): Promise<{ deliveries: BroadcastDelivery[] }> {
   const response = await authorizedFetch(`${API_BASE_URL}/api/admin/broadcast/${broadcastId}/deliveries?status=${status}`);
-  if (!response.ok) throw new Error('Impossible de charger le rapport de diffusion. Réessaie.');
+  if (!response.ok) throw new Error('Erreur lors du chargement du rapport de diffusion');
   return response.json();
 }
 
@@ -749,13 +749,13 @@ export async function fetchAdminAudit(query: AdminAuditQuery = {}): Promise<{
     if (value !== undefined && value !== null && value !== '') params.set(key, String(value));
   }
   const response = await authorizedFetch(`${API_BASE_URL}/api/admin/audit?${params.toString()}`);
-  if (!response.ok) throw new Error('Impossible de charger le journal. Réessaie.');
+  if (!response.ok) throw new Error('Erreur lors du chargement du journal');
   return response.json();
 }
 
 export async function fetchAdminAuditActions(): Promise<{ actions: { action: string; count: number }[] }> {
   const response = await authorizedFetch(`${API_BASE_URL}/api/admin/audit/actions`);
-  if (!response.ok) throw new Error('Impossible de charger les actions. Réessaie.');
+  if (!response.ok) throw new Error('Erreur lors du chargement des actions');
   return response.json();
 }
 
@@ -781,7 +781,7 @@ export async function fetchManualAchievements(): Promise<{
   profiles: Record<string, DiscordProfile>;
 }> {
   const response = await authorizedFetch(`${API_BASE_URL}/api/admin/achievements`, { method: 'GET' });
-  if (!response.ok) throw await adminAchievementError(response, 'Impossible de charger les succès. Réessaie.');
+  if (!response.ok) throw await adminAchievementError(response, 'Erreur lors du chargement des succès');
   return response.json();
 }
 
@@ -803,5 +803,5 @@ export async function revokeManualAchievement(userId: string, achievementId: str
     `${API_BASE_URL}/api/admin/achievements/grants/${encodeURIComponent(achievementId)}/${userId}`,
     { method: 'DELETE' },
   );
-  if (!response.ok) throw await adminAchievementError(response, 'Impossible de retirer le succès. Réessaie.');
+  if (!response.ok) throw await adminAchievementError(response, 'Erreur lors du retrait du succès');
 }

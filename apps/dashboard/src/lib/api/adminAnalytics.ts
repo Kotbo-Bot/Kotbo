@@ -192,7 +192,7 @@ export async function fetchAdminFunnelStats(options?: {
   if (options?.compare) params.set('compare', 'previous');
 
   const res = await authorizedFetch(`${API_BASE_URL}/api/admin/analytics/funnel?${params.toString()}`);
-  if (!res.ok) throw new Error('Impossible de charger les statistiques du tunnel. Réessaie.');
+  if (!res.ok) throw new Error('Erreur lors du chargement des statistiques du tunnel');
   return res.json();
 }
 
@@ -224,13 +224,13 @@ export async function fetchAdminRevenueStats(options?: {
   if (options?.compare) params.set('compare', 'previous');
 
   const res = await authorizedFetch(`${API_BASE_URL}/api/admin/analytics/revenue?${params.toString()}`);
-  if (!res.ok) throw new Error('Impossible de charger les statistiques de revenus. Réessaie.');
+  if (!res.ok) throw new Error('Erreur lors du chargement des statistiques de revenus');
   return res.json();
 }
 
 export async function fetchAdminRetentionCohorts(): Promise<{ cohorts: CohortRow[] }> {
   const res = await authorizedFetch(`${API_BASE_URL}/api/admin/analytics/revenue/cohorts`);
-  if (!res.ok) throw new Error('Impossible de charger les cohortes. Réessaie.');
+  if (!res.ok) throw new Error('Erreur lors du chargement des cohortes');
   return res.json();
 }
 
@@ -245,13 +245,13 @@ export async function fetchAdminSegmentsStats(options?: {
   if (options?.to) params.set('to', options.to);
 
   const res = await authorizedFetch(`${API_BASE_URL}/api/admin/analytics/segments?${params.toString()}`);
-  if (!res.ok) throw new Error('Impossible de charger les segments. Réessaie.');
+  if (!res.ok) throw new Error('Erreur lors du chargement des segments');
   return res.json();
 }
 
 export async function fetchAdminModuleCorrelations(): Promise<ModuleCorrelationsResult> {
   const res = await authorizedFetch(`${API_BASE_URL}/api/admin/analytics/modules`);
-  if (!res.ok) throw new Error('Impossible de charger les modules. Réessaie.');
+  if (!res.ok) throw new Error('Erreur lors du chargement des modules');
   return res.json();
 }
 
@@ -272,13 +272,13 @@ export async function fetchAdminAnalyticsGuilds(options: {
   if (options.bucket) params.set('bucket', options.bucket);
 
   const res = await authorizedFetch(`${API_BASE_URL}/api/admin/analytics/guilds?${params.toString()}`);
-  if (!res.ok) throw new Error('Impossible de charger les serveurs. Réessaie.');
+  if (!res.ok) throw new Error('Erreur lors du chargement des serveurs');
   return res.json();
 }
 
 export async function fetchAdminRisksSummary(): Promise<RisksSummaryResult> {
   const res = await authorizedFetch(`${API_BASE_URL}/api/admin/analytics/risks`);
-  if (!res.ok) throw new Error('Impossible de charger les risques. Réessaie.');
+  if (!res.ok) throw new Error('Erreur lors du chargement des risques');
   return res.json();
 }
 
@@ -287,7 +287,7 @@ export async function fetchAdminAlertThresholds(): Promise<{
   recentAlerts: Array<{ key: string; lastFiredAt: string; lastValue: number | null }>;
 }> {
   const res = await authorizedFetch(`${API_BASE_URL}/api/admin/analytics/alerts`);
-  if (!res.ok) throw new Error('Impossible de charger les seuils. Réessaie.');
+  if (!res.ok) throw new Error('Erreur lors du chargement des seuils');
   return res.json();
 }
 
@@ -297,7 +297,7 @@ export async function saveAdminAlertThresholds(thresholds: Partial<AlertThreshol
     headers: JSON_HEADERS,
     body: JSON.stringify(thresholds),
   });
-  if (!res.ok) throw new Error('Impossible d\'enregistrer les seuils. Réessaie.');
+  if (!res.ok) throw new Error('Erreur lors de la sauvegarde des seuils');
 }
 
 export async function downloadAdminAnalyticsCsv(view: string, options?: {
@@ -382,6 +382,6 @@ export async function fetchAdminModuleFleet(options?: { from?: string; to?: stri
   if (options?.to) params.set('to', options.to);
 
   const res = await authorizedFetch(`${API_BASE_URL}/api/admin/analytics/module-fleet?${params.toString()}`);
-  if (!res.ok) throw new Error('Impossible de charger les modules. Réessaie.');
+  if (!res.ok) throw new Error('Erreur lors du chargement des modules');
   return res.json();
 }

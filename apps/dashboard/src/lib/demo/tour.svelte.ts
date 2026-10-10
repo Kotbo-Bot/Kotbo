@@ -92,7 +92,7 @@ export const pageTours: Record<string, TourStep[]> = {
       body: () => m.demo_page_home_chart_body(),
     },
     {
-      target: tour('home-customize'),
+      target: '.home-floating-actions button',
       title: () => m.demo_page_home_edit_title(),
       body: () => m.demo_page_home_edit_body(),
     },

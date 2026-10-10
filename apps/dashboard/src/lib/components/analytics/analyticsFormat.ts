@@ -19,7 +19,7 @@ export function fmtMinutes(minutes: number | null | undefined): string {
 
 /** Durée en secondes lue à l'échelle utile : « 45 s », « 3 min », « 1 h 20 ». */
 export function fmtDuration(seconds: number | null | undefined): string {
-  if (seconds === null || seconds === undefined) return '–';
+  if (seconds === null || seconds === undefined) return '—';
   const s = Math.max(0, Math.round(seconds));
   if (s < 60) return m.anx_unit_seconds({ count: fmtNumber(s) });
   if (s < 3600) return m.anx_unit_minutes({ count: fmtNumber(Math.round(s / 60)) });

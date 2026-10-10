@@ -12,6 +12,7 @@
   import EmptyState from '../lib/components/EmptyState.svelte';
   import Papicon from '../lib/components/Papicon.svelte';
   import InlineFeedback from '../lib/components/InlineFeedback.svelte';
+  import ToggleSwitch from '../lib/components/ToggleSwitch.svelte';
   import SearchableSelect from '../lib/components/SearchableSelect.svelte';
   import Skeleton from '../lib/components/Skeleton.svelte';
   import UserDisplay from '../lib/components/UserDisplay.svelte';
@@ -38,15 +39,14 @@
 
   const availableChannels = $derived(dashboardStore.state.discordChannels || []);
 
-  // Le marche/arret du module vit dans le menu de ModulePage : la route de
-  // configuration ne recoit plus que le salon. Renvoyer `enabled` charge au
-  // montage pouvait rallumer un module eteint entre-temps depuis ce menu.
   let moduleConfig = $state({
+    enabled: true,
     channelId: null as string | null,
   });
 
   // Snapshot of last-saved state
   let savedConfig = $state({
+    enabled: true,
     channelId: null as string | null,
   });
 
@@ -107,6 +107,7 @@
     const res = await fetchSuggestionsConfig();
     if (res?.config) {
       const loaded = {
+        enabled: res.config.enabled ?? true,
         channelId: res.config.channelId ?? null,
       };
       moduleConfig = loaded;
@@ -140,6 +141,7 @@
       const res = await updateSuggestionsConfig(moduleConfig);
       if (!res?.config) throw new Error(m.suggestions_save_config_error());
       const saved = {
+        enabled: res.config.enabled ?? true,
         channelId: res.config.channelId ?? null,
       };
       moduleConfig = saved;
@@ -325,16 +327,30 @@
         description={m.suggestions_config_section_desc()}
         icon="settings"
       >
-        <div class="max-w-md">
-          <label for="suggestions-channel" class="field-label">{m.suggestions_channel_label()}</label>
-          <SearchableSelect
-            id="suggestions-channel"
-            bind:value={moduleConfig.channelId}
-            options={availableChannels.map((c) => ({ id: c.id, name: channelDisplayName(c) }))}
-            placeholder={m.announcements_select_channel_placeholder()}
-            className="w-full"
-            disabled={!canConfigure}
-          />
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div class="flex items-center justify-between gap-4 p-4 bg-surface-container rounded-lg border border-outline-variant">
+            <div>
+              <p class="text-sm font-medium text-on-surface">{m.suggestions_system_toggle_title()}</p>
+              <p class="text-xs text-on-surface-variant mt-0.5">{m.suggestions_system_toggle_desc()}</p>
+            </div>
+            <ToggleSwitch
+              checked={moduleConfig.enabled}
+              onToggle={(v: boolean) => { moduleConfig.enabled = v; }}
+              disabled={!canConfigure}
+            />
+          </div>
+
+          <div>
+            <label for="suggestions-channel" class="field-label">{m.suggestions_channel_label()}</label>
+            <SearchableSelect
+              id="suggestions-channel"
+              bind:value={moduleConfig.channelId}
+              options={availableChannels.map((c) => ({ id: c.id, name: channelDisplayName(c) }))}
+              placeholder={m.announcements_select_channel_placeholder()}
+              className="w-full bg-surface-container border border-outline-variant rounded-lg px-4 py-3 text-sm"
+              disabled={!canConfigure || !moduleConfig.enabled}
+            />
+          </div>
         </div>
       </SectionCard>
     {/if}

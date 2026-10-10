@@ -123,8 +123,8 @@
 
       {#if kind === 'voice'}
         <div class="kpi-grid" style="--kpi-cols: 2;">
-          <KpiTile label={m.anx_kpi_voice_sessions()} value={legacy ? fmtNumber(voiceSessions) : legacyLoading ? '…' : '–'} hint={m.anx_period_only_note()} />
-          <KpiTile label={m.anx_kpi_peak_voice()} value={legacy ? fmtNumber(peakVoice) : legacyLoading ? '…' : '–'} hint={m.anx_kpi_peak_voice_hint()} />
+          <KpiTile label={m.anx_kpi_voice_sessions()} value={legacy ? fmtNumber(voiceSessions) : legacyLoading ? '…' : '—'} hint={m.anx_period_only_note()} />
+          <KpiTile label={m.anx_kpi_peak_voice()} value={legacy ? fmtNumber(peakVoice) : legacyLoading ? '…' : '—'} hint={m.anx_kpi_peak_voice_hint()} />
         </div>
       {/if}
 

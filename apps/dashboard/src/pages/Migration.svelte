@@ -152,7 +152,7 @@
 
 <ModulePage
   title="Reprise"
-  description="Récupère ce que tes anciens bots avaient mis en place."
+  description="Ce que Kotbo peut récupérer d'un serveur déjà équipé par d'autres bots"
   icon="download"
   featureKey="settings"
 >

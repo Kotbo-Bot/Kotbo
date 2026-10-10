@@ -84,21 +84,21 @@
       newBlacklistReason = '';
       const data = await fetchGlobalBlacklist();
       globalBlacklist = data.blacklist;
-      toast.success('Utilisateur ajouté à la liste noire.');
+      toast.success('Utilisateur ajouté à la blacklist.');
     } catch (err) { toast.error(errorMessage(err)); }
   }
 
   async function handleRemoveBlacklist(userId: string) {
-    if (!(await confirmDialog.ask({ title: 'Retirer de la liste noire globale ?', confirmLabel: 'Retirer', variant: 'warning' }))) return;
+    if (!(await confirmDialog.ask({ title: 'Retirer de la blacklist globale ?', confirmLabel: 'Retirer', variant: 'warning' }))) return;
     try {
       await removeGlobalBlacklist(userId);
       globalBlacklist = globalBlacklist.filter(b => b.userId !== userId);
-      toast.success('Utilisateur retiré de la liste noire.');
+      toast.success('Utilisateur retiré de la blacklist.');
     } catch (err) { toast.error(errorMessage(err)); }
   }
 </script>
 
-<AdminShell title="Sécurité" description="Administrateurs globaux, liste noire et erreurs remontées par le bot.">
+<AdminShell title="Sécurité" description="Administrateurs globaux, blacklist et erreurs remontées par le bot.">
   <div class="space-y-6 pb-12 animate-in fade-in slide-in-from-bottom-3 duration-600">
 
     <div class="flex flex-wrap items-center justify-end gap-3">
@@ -133,7 +133,7 @@
  {adminTab === 'blacklist' ? 'bg-surface-container text-on-surface shadow-sm' : 'text-on-surface-variant/50 hover:text-on-surface'}"
       >
         <Papicon icon="UserX" size={13} />
-        Liste noire
+        Blacklist
         {#if globalBlacklist.length > 0}
           <span class="px-1.5 py-0.5 rounded-full bg-error/20 text-error text-2xs font-semibold">{globalBlacklist.length}</span>
         {/if}
@@ -223,7 +223,7 @@
       <div class="bg-surface-container-low/50 border border-outline-variant/10 rounded-lg p-6 space-y-5">
         <!-- Add form -->
         <div class="space-y-2">
-          <p class="text-xs font-medium text-on-surface-variant/40">Ajouter à la liste noire</p>
+          <p class="text-xs font-medium text-on-surface-variant/40">Ajouter à la blacklist</p>
           <form onsubmit={handleAddBlacklist} class="space-y-2">
             <input
               type="text"
@@ -256,7 +256,7 @@
               <div class="w-10 h-10 rounded-xl bg-success/10 border border-success/15 flex items-center justify-center text-success">
                 <Papicon icon="ShieldCheck" size={18} />
               </div>
-              <p class="text-sm text-on-surface-variant/40 font-medium">Personne dans la liste noire.</p>
+              <p class="text-sm text-on-surface-variant/40 font-medium">Aucun utilisateur dans la blacklist.</p>
             </div>
           {:else}
             {#each globalBlacklist as user}

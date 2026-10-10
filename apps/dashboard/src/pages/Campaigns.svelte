@@ -275,7 +275,7 @@
 
 <ModulePage
   title="Campagnes"
-  description="Envoie une série de messages programmés à un groupe de membres, et vois qui ils touchent."
+  description="Une suite de messages programmés, adressée à une audience choisie, dont on mesure la portée"
   icon="megaphone"
   featureKey="campaigns"
 >

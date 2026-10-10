@@ -298,8 +298,8 @@
 </script>
 
 <ModulePage
-  title="Annuaire des partenaires"
-  description="Trouve des serveurs partenaires, et fais-toi trouver par eux."
+  title="Annuaire partenaires"
+  description="Se faire trouver par les serveurs Kotbo, et trouver ceux qui te correspondent"
   icon="compass"
   featureKey="partnerships"
 >

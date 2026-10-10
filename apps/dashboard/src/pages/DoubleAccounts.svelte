@@ -387,12 +387,12 @@
   // ── Config ──
   let doubleAccountsConfig = $state<any>(null);
   let workflowDraft = $state({ validationRoleId: '', sanctionRoleId: '', dsRoleId: '', autoDetectionEnabled: true });
-  let savedConfig = $state({ validationRoleId: '', sanctionRoleId: '', dsRoleId: '', autoDetectionEnabled: true });
+  let savedConfig = $state({ enabled: false, validationRoleId: '', sanctionRoleId: '', dsRoleId: '', autoDetectionEnabled: true });
   const saveAction = createAsyncActionState();
 
   $effect(() => {
     if (!doubleAccountsConfig) return;
-    const current = JSON.stringify({ ...workflowDraft });
+    const current = JSON.stringify({ enabled: doubleAccountsConfig.enabled, ...workflowDraft });
     const saved = JSON.stringify(savedConfig);
     if (current !== saved) {
       untrack(() => {
@@ -401,6 +401,7 @@
           label: m.da_unsaved_label(),
           onSave: () => saveConfig(),
           onReset: () => {
+            doubleAccountsConfig.enabled = savedConfig.enabled;
             workflowDraft = { validationRoleId: savedConfig.validationRoleId, sanctionRoleId: savedConfig.sanctionRoleId, dsRoleId: savedConfig.dsRoleId, autoDetectionEnabled: savedConfig.autoDetectionEnabled };
           }
         });
@@ -421,7 +422,7 @@
         // fonction, et le premier `m.xxx()` ajoute ici aurait lu la metadonnee.
         const meta = doubleAccountsConfig.metadata || {};
         workflowDraft = { validationRoleId: meta.validationRoleId || '', sanctionRoleId: meta.sanctionRoleId || '', dsRoleId: meta.dsRoleId || '', autoDetectionEnabled: meta.autoDetectionEnabled ?? true };
-        savedConfig = { ...workflowDraft };
+        savedConfig = { enabled: doubleAccountsConfig.enabled, ...workflowDraft };
       }
     } catch {}
   }
@@ -430,10 +431,18 @@
     if (!doubleAccountsConfig) return false;
     let success = false;
     await saveAction.run(async () => {
-      // Le marche/arret du module n'est plus ici : c'est la meme ligne que
-      // l'interrupteur du menu de ModulePage, qui passe par la bascule de module
-      // (cascade des dependances, offre, cache d'etats). La route de
-      // configuration ne recoit que les reglages.
+      // L'activation part par sa propre route : le serveur y attache la cascade
+      // des dependances, le controle de l'offre et la purge du cache d'etats. La
+      // route de configuration ne fait qu'ecrire la colonne, ce qui donnait une
+      // pastille juste et un bot qui n'avait rien change.
+      if (doubleAccountsConfig.enabled !== savedConfig.enabled) {
+        const toggled = await updateModuleStatus(
+          'double_accounts',
+          doubleAccountsConfig.enabled ? 'active' : 'inactive'
+        );
+        if (!toggled) throw new Error(m.da_error_api());
+      }
+
       const ok = await updateFeatureConfiguration('double_accounts', {
         channelId: doubleAccountsConfig.channelId, secondaryChannelId: doubleAccountsConfig.secondaryChannelId,
         notificationRoleId: doubleAccountsConfig.notificationRoleId,
@@ -1646,6 +1655,24 @@
   {:else if activeTab === 'config'}
     {#if doubleAccountsConfig}
       <div class="space-y-6">
+        <!-- Module toggle -->
+        <div class="flex items-center justify-between gap-4 p-4 rounded-xl border border-outline-variant/10 bg-surface-container-low/30">
+          <div class="flex items-center gap-3">
+            <div class="h-9 w-9 rounded-lg bg-success/10 flex items-center justify-center text-success shrink-0">
+              <Papicon icon="Users" size={18} />
+            </div>
+            <div>
+              <p class="font-bold text-on-surface text-sm">{m.da_module()}</p>
+              <p class="text-xs text-on-surface-variant/50">{m.da_module_desc()}</p>
+            </div>
+          </div>
+          <ToggleSwitch
+            checked={doubleAccountsConfig.enabled}
+            onToggle={(v) => (doubleAccountsConfig.enabled = v)}
+            activeClass="bg-emerald-500"
+          />
+        </div>
+
         <!-- Roles -->
         <div class="grid gap-4 grid-cols-1 sm:grid-cols-3">
           <label class="space-y-1.5">

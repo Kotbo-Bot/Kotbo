@@ -52,7 +52,7 @@
   }
 
   const rate = (count: number, base: number) => (base > 0 ? pct(count, base) : null);
-  const show = (v: number | null) => (v === null ? '–' : fmtPct(v, 0));
+  const show = (v: number | null) => (v === null ? '—' : fmtPct(v, 0));
 
   function sourceLabel(row: OnboardingFunnel['bySource'][number]): string {
     if (row.kind === 'unknown') return m.anx_funnel_source_unknown();
@@ -61,7 +61,7 @@
   }
 
   function delayText(days: number | null): string {
-    if (days === null) return '–';
+    if (days === null) return '—';
     if (days < 1) return m.anx_funnel_same_day();
     return m.anx_fact_days({ count: fmtNumber(Math.round(days * 10) / 10) });
   }

@@ -43,7 +43,7 @@
             id: 'quick',
             label: m.anx_growth_quick_leave(),
             hint: m.anx_growth_quick_leave_hint(),
-            value: data.quickLeave.rate === null ? '–' : fmtPct(data.quickLeave.rate),
+            value: data.quickLeave.rate === null ? '—' : fmtPct(data.quickLeave.rate),
             delta: data.quickLeave.rate !== null && data.quickLeave.previousRate ? relativeDelta(data.quickLeave.rate, data.quickLeave.previousRate) : undefined,
             invert: true,
             color: SERIES[0],

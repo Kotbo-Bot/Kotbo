@@ -48,14 +48,14 @@
       : [],
   );
 
-  const fmtMs = (ms: number | null) => (ms === null ? '–' : ms < 1000 ? `${fmtNumber(ms)} ms` : `${fmtNumber(Math.round(ms / 100) / 10)} s`);
+  const fmtMs = (ms: number | null) => (ms === null ? '—' : ms < 1000 ? `${fmtNumber(ms)} ms` : `${fmtNumber(Math.round(ms / 100) / 10)} s`);
 
   const tiles: MetricTab[] = $derived(
     data
       ? [
           { id: 'users', label: m.anx_cmd_users(), value: fmtNumber(data.totals.users), delta: relativeDelta(data.totals.users, data.totals.previousUsers), color: SERIES[0] },
           { id: 'commands', label: m.anx_cmd_distinct(), value: fmtNumber(data.totals.commands), color: SERIES[0] },
-          { id: 'errors', label: m.anx_cmd_error_rate(), hint: m.anx_cmd_error_rate_hint(), value: data.totals.errorRate === null ? '–' : fmtPct(data.totals.errorRate), color: SERIES[0] },
+          { id: 'errors', label: m.anx_cmd_error_rate(), hint: m.anx_cmd_error_rate_hint(), value: data.totals.errorRate === null ? '—' : fmtPct(data.totals.errorRate), color: SERIES[0] },
           { id: 'duration', label: m.anx_cmd_avg_duration(), value: fmtMs(data.totals.avgMs), color: SERIES[0] },
         ]
       : [],
@@ -135,7 +135,7 @@
                   <td class="num">{fmtNumber(c.uses)} <span class="text-on-surface-variant">· {fmtPct(c.share, 0)}</span></td>
                   {#if filters.compare}<td class="num">{fmtDelta(relativeDelta(c.uses, c.previous), 'pct')}</td>{/if}
                   <td class="num">{fmtNumber(c.users)}</td>
-                  <td class="num {c.errorRate !== null && c.errorRate >= 5 ? 'text-error' : ''}">{c.errorRate === null ? '–' : fmtPct(c.errorRate)}</td>
+                  <td class="num {c.errorRate !== null && c.errorRate >= 5 ? 'text-error' : ''}">{c.errorRate === null ? '—' : fmtPct(c.errorRate)}</td>
                   <td class="num">{fmtMs(c.avgMs)}</td>
                   <td><Sparkline values={c.spark} width={64} height={18} fill={false} /></td>
                 </tr>

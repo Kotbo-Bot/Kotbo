@@ -8,8 +8,6 @@
   import Papicon from '../lib/components/Papicon.svelte';
   import { memberAvatarSrc } from '../lib/discordMedia';
   import { m, dateLocale } from '../lib/i18n';
-  import { slide } from 'svelte/transition';
-  import { Button, FilterPills } from '../lib/components/ui';
 
   const userIdFromUrl = $derived.by(() => {
     const parts = $router.path.split('/');
@@ -62,13 +60,6 @@
   let botFilter = $state<'human' | 'bot' | 'all'>('human');
   let serverStatus = $state<'on_server' | 'left' | 'all'>('on_server');
   let searchRequestId = 0;
-  let filtersOpen = $state(false);
-
-  // Ecarts au reglage par defaut, comptes sur le bouton « Filtres » : un filtre
-  // replie ne doit pas pouvoir vider la liste sans qu'on le voie.
-  const activeFilterCount = $derived(
-    (botFilter !== 'human' ? 1 : 0) + (serverStatus !== 'on_server' ? 1 : 0) + (limit !== 24 ? 1 : 0),
-  );
 
   let modalOpen = $state(false);
   let selectedUserId = $state<string | null>(null);
@@ -248,128 +239,161 @@
   icon="users"
   featureKey="members"
 >
-  <!-- Recherche et tri restent visibles : c'est le geste courant. Le reste
-       (type de compte, presence, taille de page) attend derriere « Filtres »,
-       qui signale d'un compteur ce qui s'ecarte du reglage par defaut. -->
-  <section class="space-y-3">
-    <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
-      <div class="relative flex-1 min-w-0">
-        <span class="pointer-events-none absolute inset-y-0 left-3 flex items-center text-on-surface-variant/60">
-          <Papicon icon="search" size={16} />
+  {#snippet actions()}
+    <div class="flex items-center gap-4">
+      <div class="flex -space-x-3">
+        {#each members.slice(0, 5) as member}
+          <img
+            src={memberAvatarSrc(member.avatarUrl, member.displayName || member.username, member.id)}
+            alt=""
+            class="h-8 w-8 rounded-full border-2 border-surface-container object-cover"
+          />
+        {/each}
+        {#if totalFound > 5}
+          <div class="flex h-8 w-8 items-center justify-center rounded-full border-2 border-surface-container bg-surface-container-high text-2xs font-bold text-on-surface-variant">
+            +{totalFound - 5}
+          </div>
+        {/if}
+      </div>
+      <div class="h-8 w-px bg-outline-variant/20"></div>
+      <div class="text-right">
+        <div class="text-lg font-semibold text-on-surface">{onServerCount.toLocaleString(dateLocale())}</div>
+        <div class="text-xs font-semibold text-on-surface-variant/40">{m.mb_total_members()}</div>
+      </div>
+    </div>
+  {/snippet}
+
+  <!-- Barre d'Action Ergonomique -->
+  <section class="sticky top-0 z-10 -mx-4 space-y-4 rounded-b-4xl bg-surface/80 px-4 pb-6 pt-2 md:top-4 md:mx-0 md:rounded-xl md:pt-4">
+    <div class="flex flex-col gap-3 lg:flex-row lg:items-center">
+      <div class="relative flex-1">
+        <span class="pointer-events-none absolute inset-y-0 left-4 flex items-center text-on-surface-variant/40">
+          <Papicon icon="search" size={18} />
         </span>
         <input
           type="search"
           value={searchQuery}
           oninput={updateQuery}
           placeholder={m.mb_search_placeholder()}
-          aria-label={m.mb_search_placeholder()}
-          class="w-full h-10 rounded-lg border border-outline-variant/40 bg-surface-container-low pl-9 pr-9 text-sm text-on-surface placeholder:text-on-surface-variant/50 outline-hidden focus:border-primary/40 focus:ring-2 focus:ring-primary/40"
+          class="w-full rounded-lg border border-outline-variant/10 bg-surface-container-low/70 py-3.5 pl-12 pr-12 text-sm text-on-surface placeholder:text-on-surface-variant/30 outline-hidden transition-all focus:border-primary/30 focus:bg-surface-container focus:ring-4 focus:ring-primary/5"
         />
         {#if loadingSearch}
-          <span class="absolute inset-y-0 right-3 flex items-center text-on-surface-variant">
-            <Papicon icon="loader" size={14} class="animate-spin" />
+          <span class="absolute inset-y-0 right-4 flex items-center text-primary/60">
+            <Papicon icon="loader" size={16} class="animate-spin" />
           </span>
         {/if}
       </div>
 
-      <div class="flex items-center gap-2">
-        <div class="relative flex-1 sm:flex-none">
+      <div class="flex flex-wrap items-center gap-2">
+        <div class="group relative">
           <select
             value={sortBy}
-            aria-label={m.mb_sort_label()}
             onchange={(event) => changeFilter((value) => { sortBy = value; }, (event.currentTarget as HTMLSelectElement).value as typeof sortBy)}
-            class="w-full h-10 appearance-none rounded-lg border border-outline-variant/40 bg-surface-container-low pl-3 pr-9 text-sm text-on-surface transition-colors hover:bg-surface-container focus:border-primary/40"
+            class="appearance-none rounded-lg border border-outline-variant/10 bg-surface-container-low/70 py-3.5 pl-4 pr-10 text-xs font-bold text-on-surface-variant transition-colors hover:bg-surface-container focus:border-primary/30"
           >
             {#each sortOptions as option}
               <option value={option.value}>{option.label}</option>
             {/each}
           </select>
-          <span class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant/60">
+          <span class="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-on-surface-variant/40">
             <Papicon icon="chevron-down" size={14} />
           </span>
         </div>
 
-        <Button
-          variant="ghost"
-          icon={sortOrder === 'asc' ? 'sort-asc' : 'sort-desc'}
+        <button
           onclick={() => changeFilter((value) => { sortOrder = value; }, sortOrder === 'asc' ? 'desc' : 'asc')}
+          class="inline-flex h-11.5 w-11.5 items-center justify-center rounded-lg border border-outline-variant/10 bg-surface-container-low/70 text-on-surface-variant transition-colors hover:bg-surface-container"
           title={sortOrder === 'asc' ? m.mb_sort_asc() : m.mb_sort_desc()}
-          aria-label={sortOrder === 'asc' ? m.mb_sort_asc() : m.mb_sort_desc()}
-        />
-
-        <Button
-          variant={filtersOpen ? 'secondary' : 'ghost'}
-          icon="sliders-horizontal"
-          onclick={() => (filtersOpen = !filtersOpen)}
-          aria-expanded={filtersOpen}
-          aria-controls="members-filters"
         >
-          {m.mb_filters()}
-          {#if activeFilterCount > 0}
-            <span class="ml-0.5 rounded-full bg-primary px-1.5 text-2xs font-semibold text-on-primary tabular-nums">{activeFilterCount}</span>
-          {/if}
-        </Button>
+          <Papicon icon={sortOrder === 'asc' ? 'sort-asc' : 'sort-desc'} size={18} />
+        </button>
+
+        <div class="h-8 w-px bg-outline-variant/20 mx-1 hidden sm:block"></div>
+
+        <div class="flex rounded-lg border border-outline-variant/10 bg-surface-container-low/70 p-1">
+          <button
+            onclick={() => { botFilter = 'human'; void search(true); }}
+            class={`rounded-xl px-4 py-2 text-xs font-bold transition-all ${botFilter === 'human' ? 'bg-surface text-primary shadow-xs' : 'text-on-surface-variant/60 hover:text-on-surface'}`}
+          >
+            {m.mb_filter_humans()}
+          </button>
+          <button
+            onclick={() => { botFilter = 'bot'; void search(true); }}
+            class={`rounded-xl px-4 py-2 text-xs font-bold transition-all ${botFilter === 'bot' ? 'bg-surface text-primary shadow-xs' : 'text-on-surface-variant/60 hover:text-on-surface'}`}
+          >
+            {m.mb_filter_bots()}
+          </button>
+          <button
+            onclick={() => { botFilter = 'all'; void search(true); }}
+            class={`rounded-xl px-4 py-2 text-xs font-bold transition-all ${botFilter === 'all' ? 'bg-surface text-primary shadow-xs' : 'text-on-surface-variant/60 hover:text-on-surface'}`}
+          >
+            {m.common_all()}
+          </button>
+        </div>
+
+        <div class="flex rounded-lg border border-outline-variant/10 bg-surface-container-low/70 p-1">
+          <button
+            onclick={() => { serverStatus = 'on_server'; void search(true); }}
+            class={`rounded-xl px-4 py-2 text-xs font-bold transition-all ${serverStatus === 'on_server' ? 'bg-surface text-primary shadow-xs' : 'text-on-surface-variant/60 hover:text-on-surface'}`}
+          >
+            {m.mb_status_present()}
+          </button>
+          <button
+            onclick={() => { serverStatus = 'left'; void search(true); }}
+            class={`rounded-xl px-4 py-2 text-xs font-bold transition-all ${serverStatus === 'left' ? 'bg-surface text-primary shadow-xs' : 'text-on-surface-variant/60 hover:text-on-surface'}`}
+          >
+            {m.mb_status_left()}
+          </button>
+          <button
+            onclick={() => { serverStatus = 'all'; void search(true); }}
+            class={`rounded-xl px-4 py-2 text-xs font-bold transition-all ${serverStatus === 'all' ? 'bg-surface text-primary shadow-xs' : 'text-on-surface-variant/60 hover:text-on-surface'}`}
+          >
+            {m.common_all()}
+          </button>
+        </div>
+
+        <button
+          onclick={resetSearch}
+          class="inline-flex h-11.5 w-11.5 items-center justify-center rounded-lg border border-outline-variant/10 bg-surface-container-low/70 text-on-surface-variant transition-colors hover:bg-surface-container hover:text-error"
+          title={m.mb_reset_filters()}
+        >
+          <Papicon icon="rotate-ccw" size={18} />
+        </button>
       </div>
     </div>
 
-    {#if filtersOpen}
-      <div
-        id="members-filters"
-        transition:slide={{ duration: 160 }}
-        class="flex flex-wrap items-center gap-x-6 gap-y-3 rounded-lg border border-outline-variant/30 bg-surface-container-low/60 px-4 py-3"
-      >
-        <FilterPills
-          label={m.mb_filter_type_label()}
-          value={botFilter}
-          onchange={(value) => changeFilter((v) => { botFilter = v; }, value)}
-          options={[
-            { value: 'human', label: m.mb_filter_humans() },
-            { value: 'bot', label: m.mb_filter_bots() },
-            { value: 'all', label: m.common_all() },
-          ]}
-        />
-        <FilterPills
-          label={m.mb_filter_presence_label()}
-          value={serverStatus}
-          onchange={(value) => changeFilter((v) => { serverStatus = v; }, value)}
-          options={[
-            { value: 'on_server', label: m.mb_status_present() },
-            { value: 'left', label: m.mb_status_left() },
-            { value: 'all', label: m.common_all() },
-          ]}
-        />
-        <label class="flex items-center gap-2 text-xs text-on-surface-variant">
-          {m.mb_per_page()}
-          <select
-            value={limit}
-            onchange={(event) => {
-              limit = Number((event.currentTarget as HTMLSelectElement).value);
-              void search(true);
-            }}
-            class="h-8 rounded-md border border-outline-variant/40 bg-surface-container-low px-2 text-xs text-on-surface outline-hidden"
-          >
-            <!-- Valeurs numeriques : avec des chaines, `limit` (number) ne
-                 correspond a aucune option et le select s'affiche vide. -->
-            <option value={12}>12</option>
-            <option value={24}>24</option>
-            <option value={48}>48</option>
-          </select>
-        </label>
-        {#if activeFilterCount > 0}
-          <Button variant="ghost" size="sm" icon="rotate-ccw" onclick={resetSearch} class="ml-auto">
-            {m.mb_reset_filters()}
-          </Button>
-        {/if}
+    <!-- Quick Stats Bar -->
+    <div class="flex flex-wrap items-center gap-4 px-2">
+      <div class="flex items-center gap-1.5 text-xs font-semibold text-on-surface-variant/40">
+        <div class="h-1.5 w-1.5 rounded-full bg-emerald-500"></div>
+        {m.mb_stat_online({ count: stats.onServer })}
       </div>
-    {/if}
-
-    <p class="text-xs text-on-surface-variant">
-      {m.mb_stat_online({ count: stats.onServer })}
-      <span aria-hidden="true" class="mx-1.5 text-on-surface-variant/40">·</span>
-      {m.mb_stat_left({ count: stats.left })}
-      <span aria-hidden="true" class="mx-1.5 text-on-surface-variant/40">·</span>
-      {stats.bots === 1 ? m.mb_stat_bots_one() : m.mb_stat_bots({ count: stats.bots })}
-    </p>
+      <div class="flex items-center gap-1.5 text-xs font-semibold text-on-surface-variant/40">
+        <div class="h-1.5 w-1.5 rounded-full bg-amber-500"></div>
+        {m.mb_stat_left({ count: stats.left })}
+      </div>
+      <div class="flex items-center gap-1.5 text-xs font-semibold text-on-surface-variant/40">
+        <div class="h-1.5 w-1.5 rounded-full bg-primary/50"></div>
+        {m.mb_stat_bots({ count: stats.bots })}
+      </div>
+      <div class="ml-auto flex items-center gap-2">
+        <span class="text-xs font-semibold text-on-surface-variant/40">{m.mb_per_page()}</span>
+        <select
+          value={limit}
+          onchange={(event) => {
+            limit = Number((event.currentTarget as HTMLSelectElement).value);
+            void search(true);
+          }}
+          class="bg-transparent text-2xs font-bold text-on-surface-variant outline-hidden"
+        >
+          <!-- Valeurs numeriques : avec des chaines, `limit` (number) ne
+               correspond a aucune option et le select s'affiche vide. -->
+          <option value={12}>12</option>
+          <option value={24}>24</option>
+          <option value={48}>48</option>
+        </select>
+      </div>
+    </div>
   </section>
 
   {#if searchError}
@@ -379,8 +403,8 @@
     </div>
   {/if}
 
-  <!-- Grille de résultats (la coque porte deja le <main> de la page) -->
-  <div>
+  <!-- Grille de Résultats Sobres -->
+  <main>
     {#if loadingSearch && members.length === 0}
       <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {#each Array(8) as _}
@@ -417,47 +441,51 @@
         {#each members as member (member.id)}
           <button
             onclick={() => openMemberCase(member)}
-            class={`group flex flex-col rounded-xl border ${member.isOnServer ? 'border-outline-variant/30 bg-surface-container-lowest' : 'border-error/20 bg-error/5'} p-4 text-left transition-colors hover:border-primary/30 hover:bg-surface-container-low`}
+            class={`group flex flex-col rounded-xl border ${member.isOnServer ? 'border-outline-variant/10 bg-surface-container-low/40' : 'border-error/10 bg-error/5'} p-4 text-left transition-all duration-300 hover:border-primary/20 hover:bg-surface-container-low hover:shadow-xl hover:shadow-primary/5`}
           >
-            <div class="flex items-center gap-3">
-              <div class="relative shrink-0">
+            <div class="flex items-start gap-4">
+              <div class="relative">
                 <img
                   src={memberAvatarSrc(member.avatarUrl, member.displayName || member.username, member.id)}
                   alt=""
-                  class="h-11 w-11 rounded-full object-cover"
+                  class="h-12 w-12 rounded-xl object-cover grayscale-[0.2] transition-all group-hover:grayscale-0"
                 />
                 {#if member.isBot}
-                  <div class="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-on-primary">
+                  <div class="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] text-white">
                     <Papicon icon="bot" size={10} />
                   </div>
                 {/if}
-                <div class={`absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-surface-container-lowest ${member.presenceStatus === 'online' ? 'bg-success' : member.presenceStatus === 'idle' ? 'bg-warning' : member.presenceStatus === 'dnd' ? 'bg-error' : 'bg-on-surface-variant/40'}`}></div>
+                <div class={`absolute -bottom-1 -right-1 h-3.5 w-3.5 rounded-full border-2 border-surface-container-low ${member.presenceStatus === 'online' ? 'bg-emerald-500' : member.presenceStatus === 'idle' ? 'bg-amber-500' : member.presenceStatus === 'dnd' ? 'bg-rose-500' : 'bg-slate-400'}`}></div>
               </div>
 
               <div class="min-w-0 flex-1">
-                <h3 class="truncate text-sm font-semibold text-on-surface group-hover:text-primary transition-colors">{member.displayName || m.mb_no_name()}</h3>
-                <p class="truncate text-xs text-on-surface-variant">@{member.username || member.id.slice(0, 8)}</p>
+                <h3 class="truncate text-base font-bold text-on-surface">{member.displayName || m.mb_no_name()}</h3>
+                <p class="truncate text-2xs font-bold tracking-wider text-on-surface-variant/40">@{member.username || member.id.slice(0, 8)}</p>
               </div>
             </div>
 
-            <!-- Valeurs lisibles, libelles en retrait : on lit « il y a 2 min »,
-                 pas « Activite ». L'identifiant Discord brut n'a rien a faire
-                 sur la carte ; la recherche l'accepte toujours. -->
-            <dl class="mt-4 grid grid-cols-2 gap-3">
-              <div>
-                <dt class="text-2xs text-on-surface-variant/70">{m.mb_col_activity()}</dt>
-                <dd class="text-sm text-on-surface">{formatRelative(member.lastSeenAt)}</dd>
+            <div class="mt-6 grid grid-cols-2 gap-3">
+              <div class="space-y-0.5">
+                <div class="text-xs font-semibold text-on-surface-variant/30">{m.mb_col_activity()}</div>
+                <div class="text-2xs font-bold text-on-surface-variant/70">{formatRelative(member.lastSeenAt)}</div>
               </div>
-              <div>
-                <dt class="text-2xs text-on-surface-variant/70">{m.mb_col_messages()}</dt>
-                <dd class="text-sm text-on-surface tabular-nums">{member.messageCount.toLocaleString(dateLocale())}</dd>
+              <div class="space-y-0.5">
+                <div class="text-xs font-semibold text-on-surface-variant/30">{m.mb_col_messages()}</div>
+                <div class="text-2xs font-bold text-on-surface-variant/70">{member.messageCount.toLocaleString(dateLocale())}</div>
               </div>
-            </dl>
+            </div>
+
+            <div class="mt-4 flex items-center justify-between border-t border-outline-variant/5 pt-3">
+              <span class="text-2xs font-bold text-on-surface-variant/30">{member.id.slice(0, 14)}…</span>
+              <span class="text-xs font-semibold text-primary/0 transition-all group-hover:text-primary">
+                {m.mb_open_case()} <Papicon icon="arrow-right" size={10} />
+              </span>
+            </div>
           </button>
         {/each}
       </div>
     {/if}
-  </div>
+  </main>
 
   <!-- Pagination Minimaliste -->
   {#if totalPages > 1}

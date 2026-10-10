@@ -77,7 +77,7 @@
       const data = await fetchSchedules(authStore.selectedGuildId ?? '');
       schedules = data || [];
     } catch (error) {
-      console.error('Impossible de charger les planifications :', error);
+      console.error('Erreur lors du chargement des planifications:', error);
     }
     loading = false;
   }

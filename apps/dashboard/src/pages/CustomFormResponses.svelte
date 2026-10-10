@@ -183,7 +183,7 @@
       responses = [...responses, ...(data.submissions || [])];
       responseTotal = data.total ?? responseTotal;
     } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : 'Impossible de charger. Réessaie.');
+      toast.error(e instanceof Error ? e.message : 'Erreur de chargement');
     } finally {
       loadingMore = false;
     }
