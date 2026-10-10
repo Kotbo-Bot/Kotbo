@@ -8,7 +8,7 @@
  * socket : un abonnement indiscret n'apprendrait qu'un horodatage.
  *
  * Sujets : `site:<siteId>:<canal>`, canaux `agent`, `module:<clé>`,
- * `comments:<pageId>`, `user:<userId>` (réservé au membre lui-même).
+ * `comments:<pageId>`, `forum:<catégorie|sujet|index>`, `user:<userId>` (réservé au membre lui-même).
  *
  * Seul le shard qui porte l'API a les sockets ; ailleurs, le signal traverse
  * les shards comme les événements du dashboard. Les rafales sont regroupées :
@@ -20,7 +20,7 @@ import { getClient } from '../../utils/client.js';
 import { logger } from '../../utils/logger.js';
 import { getSiteByGuild } from './siteService.js';
 
-export type SiteLiveChannel = 'agent' | `module:${string}` | `comments:${string}` | `user:${string}`;
+export type SiteLiveChannel = 'agent' | `module:${string}` | `comments:${string}` | `user:${string}` | `forum:${string}`;
 
 type Publisher = (topic: string, message: string) => void;
 
@@ -50,6 +50,8 @@ export function isAllowedLiveChannel(channel: unknown, userId: string | null): c
   if (channel === 'agent') return true;
   if (channel.startsWith('module:')) return isSiteModuleKey(channel.slice(7));
   if (channel.startsWith('comments:')) return /^[a-z0-9]{20,32}$/.test(channel.slice(9));
+  // Forum : liste des catégories (`index`), une catégorie ou un sujet.
+  if (channel.startsWith('forum:')) return channel === 'forum:index' || /^[a-z0-9]{20,32}$/.test(channel.slice(6));
   if (channel.startsWith('user:')) return Boolean(userId) && channel.slice(5) === userId;
   return false;
 }

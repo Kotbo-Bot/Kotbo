@@ -9,6 +9,9 @@ describe('canaux temps réel', () => {
   test('canaux publics acceptés pour tous', () => {
     expect(isAllowedLiveChannel('agent', null)).toBe(true);
     expect(isAllowedLiveChannel('module:giveaways', null)).toBe(true);
+    expect(isAllowedLiveChannel('forum:index', null)).toBe(true);
+    expect(isAllowedLiveChannel('forum:clxyz0123456789abcdefgh', null)).toBe(true);
+    expect(isAllowedLiveChannel('forum:../../etc', null)).toBe(false);
     expect(isAllowedLiveChannel('comments:abcdefghijklmnopqrstuvwx', null)).toBe(true);
   });
 

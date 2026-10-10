@@ -1,7 +1,15 @@
-import { Client, Events, type Message, type VoiceState } from 'discord.js';
+import { Client, Events, type AnyThreadChannel, type Message, type PartialMessage, type VoiceState } from 'discord.js';
 import { handleSiteTicketMessage } from '../services/site/siteNotifyService.js';
 import { publishGuildSignal, type SiteLiveChannel } from '../services/site/siteLive.js';
 import { logger } from '../utils/logger.js';
+import {
+  handleForumMessageCreate,
+  handleForumMessageDelete,
+  handleForumMessageUpdate,
+  handleForumThreadCreate,
+  handleForumThreadDelete,
+  handleForumThreadUpdate,
+} from '../services/site/siteForumService.js';
 
 /**
  * Filtre par serveur avant tout signal : un serveur bavard ne doit pas
@@ -31,6 +39,24 @@ export function registerSiteListeners(client: Client) {
     } catch (err) {
       logger.error('Site', 'Erreur sur un message de ticket du site :', err);
     }
+    await handleForumMessageCreate(message).catch((err: unknown) => logger.error('Site', 'Message de forum non recopié :', err));
+  });
+
+  // Forum du site : fils et messages des salons forum recopiés.
+  client.on(Events.MessageUpdate, (_before: Message | PartialMessage, after: Message | PartialMessage) => {
+    void handleForumMessageUpdate(after).catch((err: unknown) => logger.error('Site', 'Modification de forum non recopiée :', err));
+  });
+  client.on(Events.MessageDelete, (message: Message | PartialMessage) => {
+    void handleForumMessageDelete(message).catch((err: unknown) => logger.error('Site', 'Suppression de forum non recopiée :', err));
+  });
+  client.on(Events.ThreadCreate, (thread: AnyThreadChannel) => {
+    void handleForumThreadCreate(thread).catch((err: unknown) => logger.error('Site', 'Fil de forum non recopié :', err));
+  });
+  client.on(Events.ThreadUpdate, (_before: AnyThreadChannel, after: AnyThreadChannel) => {
+    void handleForumThreadUpdate(after).catch((err: unknown) => logger.error('Site', 'Fil de forum non mis à jour :', err));
+  });
+  client.on(Events.ThreadDelete, (thread: AnyThreadChannel) => {
+    void handleForumThreadDelete(thread).catch((err: unknown) => logger.error('Site', 'Fil de forum non retiré :', err));
   });
 
   client.on(Events.VoiceStateUpdate, (before: VoiceState, after: VoiceState) => {
