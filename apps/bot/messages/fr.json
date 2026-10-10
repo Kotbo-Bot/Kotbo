@@ -3994,5 +3994,17 @@
   "site_shop_renewal": "renouvellement",
   "site_shop_status_pending": "En attente",
   "site_shop_status_completed": "Livré",
-  "site_shop_status_refused": "Remboursé"
+  "site_shop_status_refused": "Remboursé",
+  "shop_cmd_title": "Boutique de {guild}",
+  "shop_cmd_balance": "Ton solde : {balance}",
+  "shop_cmd_pick": "Choisis une offre",
+  "shop_cmd_buy": "Acheter · {price}",
+  "shop_cmd_code": "Code promo…",
+  "shop_cmd_gift": "Offrir…",
+  "shop_cmd_back": "Retour",
+  "shop_cmd_site": "Ouvrir la boutique sur le site",
+  "shop_cmd_gift_pick": "À qui veux-tu offrir « {name} » ?",
+  "shop_cmd_gift_placeholder": "Choisis un membre",
+  "shop_cmd_modal_title": "Commander « {name} »",
+  "shop_cmd_modal_code": "Code promo (facultatif)"
 }

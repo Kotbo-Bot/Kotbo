@@ -3994,5 +3994,17 @@
   "site_shop_renewal": "renewal",
   "site_shop_status_pending": "Pending",
   "site_shop_status_completed": "Delivered",
-  "site_shop_status_refused": "Refunded"
+  "site_shop_status_refused": "Refunded",
+  "shop_cmd_title": "{guild} shop",
+  "shop_cmd_balance": "Your balance: {balance}",
+  "shop_cmd_pick": "Pick an offer",
+  "shop_cmd_buy": "Buy · {price}",
+  "shop_cmd_code": "Promo code…",
+  "shop_cmd_gift": "Gift…",
+  "shop_cmd_back": "Back",
+  "shop_cmd_site": "Open the shop on the site",
+  "shop_cmd_gift_pick": "Who do you want to gift \"{name}\" to?",
+  "shop_cmd_gift_placeholder": "Pick a member",
+  "shop_cmd_modal_title": "Order \"{name}\"",
+  "shop_cmd_modal_code": "Promo code (optional)"
 }
