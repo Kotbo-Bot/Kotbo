@@ -12,12 +12,13 @@ import {
   SITE_BACKGROUNDS,
   SITE_COLOR_MODES,
   SITE_THEME_KEYS,
+  SITE_VOTE_PROVIDERS,
   siteModuleBotDependency,
   type SiteDocument,
   type SiteNode,
 } from '@kotbo/shared';
 import prisma from '../../../utils/db.js';
-import { getDashboardUrl } from '../../shared.js';
+import { getApiUrl, getDashboardUrl } from '../../shared.js';
 import { type McpToolContext, err, ok } from '../toolkit.js';
 import { getModuleStates } from '../../../services/core/moduleGate.js';
 import {
@@ -50,6 +51,7 @@ import { listSiteAssets, storeSiteAsset, SITE_UPLOAD_MAX_BYTES } from '../../../
 import { createPreviewToken } from '../../../services/site/sitePreview.js';
 import { isSiteTemplate, SITE_TEMPLATES } from '../../../services/site/siteTemplates.js';
 import { assertWebhookUrlReachable } from '../../../services/integrations/outgoingWebhookSecurity.js';
+import { deleteVoteSite, listAdminVoteSites, saveVoteSite, SiteVoteError, topVoters } from '../../../services/site/siteVoteService.js';
 
 /**
  * Tout ce que l'éditeur permet, un agent peut le faire ici. Deux règles en
@@ -82,6 +84,7 @@ function failure(error: unknown) {
     );
   }
   if (error instanceof SiteAdminError) return err(error.detail ? `${error.code}: ${error.detail}` : error.code, { code: error.code });
+  if (error instanceof SiteVoteError) return err(error.code, { code: error.code });
   return err(error instanceof Error ? error.message : String(error));
 }
 
@@ -271,6 +274,24 @@ export function registerSiteTools(ctx: McpToolContext) {
         } catch (error) {
           return failure(error);
         }
+      }),
+    );
+
+    server.registerTool(
+      'get_site_votes',
+      {
+        description:
+          "Sites de vote du serveur (top.gg, annuaires) : lien, délai entre deux votes, votes des 30 derniers jours, adresse du webhook top.gg, et les meilleurs votants du mois. Le secret du webhook n'est visible que dans le dashboard.",
+        inputSchema: {},
+        _meta: toolMeta,
+      },
+      guard('READ_SITE', async () => {
+        const [sites, top] = await Promise.all([listAdminVoteSites(guildId, getApiUrl()), topVoters(guildId, 10)]);
+        return ok({
+          voteSites: sites.map(({ webhookSecret, ...site }) => ({ ...site, hasWebhookSecret: Boolean(webhookSecret) })),
+          topVoters: top,
+          providers: Object.entries(SITE_VOTE_PROVIDERS).map(([key, spec]) => ({ key, ...spec })),
+        });
       }),
     );
 
@@ -753,6 +774,51 @@ export function registerSiteTools(ctx: McpToolContext) {
       } catch (error) {
         return failure(error);
       }
+    }),
+  );
+
+  server.registerTool(
+    'save_site_vote_site',
+    {
+      description:
+        "Ajoute ou modifie un site de vote. provider : voir get_site_votes ; vote_url doit pointer vers le site choisi. Les annuaires vérifiés par compte ou par IP demandent une clé (verification_key) si elle ne figure pas dans le lien ; top.gg n'en demande pas (webhook à configurer depuis le dashboard).",
+      inputSchema: {
+        id: z.string().optional().describe('Site de vote à modifier ; absent pour en ajouter un'),
+        provider: z.enum(Object.keys(SITE_VOTE_PROVIDERS) as [string, ...string[]]).optional().describe('Obligatoire à la création, non modifiable ensuite'),
+        vote_url: z.string().optional(),
+        label: z.string().optional(),
+        verification_key: z.string().nullable().optional().describe('Clé ou identifiant fourni par le site de vote'),
+        cooldown_hours: z.number().int().min(1).max(48).optional(),
+        enabled: z.boolean().optional(),
+        key_name: keyName,
+      },
+      _meta: toolMeta,
+    },
+    guard('WRITE_SITE', async (args) => {
+      try {
+        const saved = await saveVoteSite(guildId, args.id ?? null, {
+          provider: args.provider,
+          voteUrl: args.vote_url,
+          label: args.label,
+          verificationKey: args.verification_key,
+          cooldownHours: args.cooldown_hours,
+          enabled: args.enabled,
+        });
+        await audit(args.key_name, args.id ? 'Site de vote modifié (MCP)' : 'Site de vote ajouté (MCP)', saved.voteUrl, saved.provider);
+        return ok({ id: saved.id, provider: saved.provider, label: saved.label, voteUrl: saved.voteUrl, cooldownHours: saved.cooldownHours, enabled: saved.enabled });
+      } catch (error) {
+        return failure(error);
+      }
+    }),
+  );
+
+  server.registerTool(
+    'delete_site_vote_site',
+    { description: 'Retire un site de vote de la page Votes. Les votes déjà comptés restent.', inputSchema: { id: z.string(), key_name: keyName }, _meta: toolMeta },
+    guard('WRITE_SITE', async ({ id, key_name }) => {
+      await deleteVoteSite(guildId, id);
+      await audit(key_name, 'Site de vote retiré (MCP)', id, '');
+      return ok({ ok: true });
     }),
   );
 
