@@ -1,5 +1,6 @@
 import { dashboardFetch } from '../api';
 import { authStore } from './auth.svelte';
+import { announceNotifications, onNotificationOpened } from '../notificationAlerts';
 
 export type Notification = {
   id: string;
@@ -21,6 +22,38 @@ class NotificationsStore {
   private fetchedAt = 0;
 
   private static readonly FRESH_FOR_MS = 30_000;
+  /** Une notification plus ancienne n'est plus « nouvelle », meme jamais vue. */
+  private static readonly ANNOUNCE_WITHIN_MS = 15 * 60_000;
+
+  /**
+   * Les identifiants deja vus pour la guilde `knownGuildId`. Le premier
+   * chargement d'une guilde sert de reference et n'annonce rien : sinon chaque
+   * rechargement de page ou changement de serveur sonnerait pour toute la boite.
+   */
+  private knownIds = new Set<string>();
+  private knownGuildId: string | null = null;
+
+  constructor() {
+    onNotificationOpened((id) => {
+      const notif = this.items.find((n) => n.id === id);
+      if (notif && !notif.isRead) void this.markAsRead(id);
+    });
+  }
+
+  private detectNew(guildId: string, incoming: Notification[]) {
+    if (this.knownGuildId === guildId) {
+      const now = Date.now();
+      const fresh = incoming.filter(
+        (n) =>
+          !n.isRead &&
+          !this.knownIds.has(n.id) &&
+          now - Date.parse(n.createdAt) < NotificationsStore.ANNOUNCE_WITHIN_MS,
+      );
+      if (fresh.length > 0) void announceNotifications(fresh);
+    }
+    this.knownIds = new Set(incoming.map((n) => n.id));
+    this.knownGuildId = guildId;
+  }
 
   get unreadCount() {
     return this.items.filter(n => !n.isRead).length;
@@ -53,6 +86,7 @@ class NotificationsStore {
           const data = await res.json();
           if (authStore.selectedGuildId === guildId) {
             this.items = data.notifications || [];
+            this.detectNew(guildId, this.items);
             this.error = null;
             this.fetchedAt = Date.now();
           }
