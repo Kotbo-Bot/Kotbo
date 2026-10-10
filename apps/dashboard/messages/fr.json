@@ -14099,5 +14099,12 @@
   "ste_err_vote_key_required": "Ce site a besoin d'une clé pour vérifier les votes.",
   "ste_err_invalid_provider": "Site de vote inconnu.",
   "ste_err_too_many_vote_sites": "Tu as atteint le nombre maximal de sites de vote.",
-  "ste_err_vote_site_missing": "Ce site de vote n'existe plus."
+  "ste_err_vote_site_missing": "Ce site de vote n'existe plus.",
+  "ste_section_shop": "Boutique",
+  "ste_block_shop": "Boutique",
+  "ste_block_shop_desc": "Les offres de la boutique, achetables depuis le site.",
+  "ste_block_memberPurchases": "Mes achats",
+  "ste_block_memberPurchases_desc": "Abonnements, rôles temporaires et historique d'achats du membre connecté.",
+  "ste_cfg_shop_category": "Catégorie",
+  "ste_cfg_shop_category_hint": "Laisse vide pour toute la boutique."
 }

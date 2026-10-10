@@ -27,6 +27,7 @@
     search: () => m.ste_section_search(),
     me: () => m.ste_section_me(),
     votes: () => m.ste_section_votes(),
+    shop: () => m.ste_section_shop(),
   };
 
   const newId = () => `nav-${Math.random().toString(36).slice(2, 10)}`;

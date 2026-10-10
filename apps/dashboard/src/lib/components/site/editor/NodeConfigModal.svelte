@@ -316,6 +316,14 @@
         </Field>
       {/if}
 
+      {#if moduleKey === 'shop'}
+        <Field label={m.ste_cfg_shop_category()} hint={m.ste_cfg_shop_category_hint()}>
+          {#snippet children(id, describedBy)}
+            <input {id} aria-describedby={describedBy} class="input w-full" maxlength="40" bind:value={config.category} />
+          {/snippet}
+        </Field>
+      {/if}
+
       {#if moduleKey === 'wikiIndex'}
         <Field label={m.ste_cfg_wiki_root()}>
           {#snippet children(id)}

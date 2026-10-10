@@ -14099,5 +14099,12 @@
   "ste_err_vote_key_required": "This site needs a key to verify votes.",
   "ste_err_invalid_provider": "Unknown vote site.",
   "ste_err_too_many_vote_sites": "You've reached the maximum number of vote sites.",
-  "ste_err_vote_site_missing": "This vote site no longer exists."
+  "ste_err_vote_site_missing": "This vote site no longer exists.",
+  "ste_section_shop": "Shop",
+  "ste_block_shop": "Shop",
+  "ste_block_shop_desc": "The shop's offers, purchasable from the site.",
+  "ste_block_memberPurchases": "My purchases",
+  "ste_block_memberPurchases_desc": "Signed-in member's subscriptions, timed roles and purchase history.",
+  "ste_cfg_shop_category": "Category",
+  "ste_cfg_shop_category_hint": "Leave empty for the whole shop."
 }
