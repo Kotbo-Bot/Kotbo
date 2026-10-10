@@ -8558,6 +8558,7 @@
   "e1_tickets_original_transcript": "Original transcript",
   "e1_tickets_rename_ph": "ticket-new-name",
   "e1_tickets_rename_btn": "Rename",
+  "e1_tickets_details_toggle": "Details",
   "e1_tickets_transcript_iframe_title": "Ticket transcript",
   "e1_tickets_no_message": "No message in this ticket.",
   "e1_tickets_staff_badge": "Staff",

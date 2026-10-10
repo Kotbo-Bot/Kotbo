@@ -92,6 +92,17 @@
   
   let showMobileChat = $state(false);
 
+  // Propriétés et renommage restent repliés par défaut : dépliés en permanence,
+  // ils mangeaient plus de la moitié de la hauteur de la conversation.
+  const DETAILS_OPEN_KEY = 'kotbo.tickets.detailsOpen';
+  let detailsOpen = $state((() => {
+    try { return localStorage.getItem(DETAILS_OPEN_KEY) === '1'; } catch { return false; }
+  })());
+  function toggleDetails() {
+    detailsOpen = !detailsOpen;
+    try { localStorage.setItem(DETAILS_OPEN_KEY, detailsOpen ? '1' : '0'); } catch { /* stockage indisponible */ }
+  }
+
   // Member Case Modal Integration
   let caseModalOpen = $state(false);
   let selectedCaseUser = $state<{ name: string; id: string | null } | null>(null);
@@ -632,6 +643,13 @@
     }
   }
 
+  // Pastille affichée dans l'en-tête quand le panneau Détails est replié.
+  const PRIORITY_CHIP = {
+    LOW: { label: () => m.th_priority_low(), tone: 'bg-outline-variant/10 text-on-surface-variant border-outline-variant/20' },
+    HIGH: { label: () => m.th_priority_high(), tone: 'bg-warning/10 text-warning border-warning/20' },
+    URGENT: { label: () => m.th_priority_urgent(), tone: 'bg-error/10 text-error border-error/20' },
+  };
+
   onMount(async () => {
     await loadTicketsAndConfig();
 
@@ -687,10 +705,12 @@
       <Callout variant="danger" class="mb-4">{error}</Callout>
     {/if}
     <!-- Tickets Main View - mobile: master/detail pattern -->
-    <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-6 h-auto lg:h-[75vh]">
+    <!-- Les colonnes latérales ont une largeur bornée : en douzièmes, elles
+         grandissaient avec l'écran et la conversation restait étroite. -->
+    <div class="grid grid-cols-1 lg:grid-cols-[minmax(15rem,18rem)_minmax(0,1fr)] xl:grid-cols-[minmax(15rem,18rem)_minmax(0,1fr)_minmax(16rem,19rem)] gap-4 h-auto lg:h-[calc(100dvh-13rem)] lg:min-h-144">
 
       <!-- Left Panel: Tickets Browser -->
-      <div data-tour="tickets-list" class="lg:col-span-4 xl:col-span-3 bg-surface-container-low/40 border border-outline-variant/10 rounded-xl p-4 lg:p-6 flex flex-col overflow-hidden {showMobileChat && selectedTicketId ? 'hidden lg:flex' : 'flex'} h-[50vh] lg:h-full">
+      <div data-tour="tickets-list" class="bg-surface-container-low/40 border border-outline-variant/10 rounded-xl p-4 flex flex-col overflow-hidden {showMobileChat && selectedTicketId ? 'hidden lg:flex' : 'flex'} h-[50vh] lg:h-full">
         <TicketInboxList
           tickets={tickets as InboxTicket[]}
           view={inboxView}
@@ -711,7 +731,7 @@
       </div>
 
       <!-- Right Panel: Live Chat & Actions -->
-      <div data-tour="tickets-chat" class="lg:col-span-8 xl:col-span-6 bg-surface-container-low/40 border border-outline-variant/10 rounded-xl flex flex-col overflow-hidden {!showMobileChat && selectedTicketId ? 'hidden lg:flex' : !selectedTicketId ? 'hidden lg:flex' : 'flex'} h-[75vh] lg:h-full">
+      <div data-tour="tickets-chat" class="min-w-0 bg-surface-container-low/40 border border-outline-variant/10 rounded-xl flex flex-col overflow-hidden {!showMobileChat && selectedTicketId ? 'hidden lg:flex' : !selectedTicketId ? 'hidden lg:flex' : 'flex'} h-[75vh] lg:h-full">
         {#if !selectedTicketId}
           <div class="flex-1 flex flex-col items-center justify-center text-on-surface-variant/30 py-20">
             <div class="w-16 h-16 rounded-xl bg-surface-container flex items-center justify-center mb-4 shadow-inner">
@@ -721,17 +741,18 @@
             <p class="text-xs opacity-60 mt-1">{m.e1_tickets_no_selection_desc()}</p>
           </div>
         {:else}
-          <!-- Chat Header -->
-          <div class="p-3 lg:p-5 border-b border-outline-variant/10 bg-surface-container/20">
+          <!-- Chat Header : bornée en hauteur et défilante, pour que la
+               conversation garde toujours la plus grande part du panneau. -->
+          <div class="shrink-0 max-h-[55%] overflow-y-auto px-3 py-3 lg:px-4 border-b border-outline-variant/10 bg-surface-container/20">
             <div class="flex items-center gap-3">
               <!-- Mobile back button -->
               <button onclick={() => showMobileChat = false} class="lg:hidden p-2 -ml-1 rounded-lg hover:bg-surface-container transition-colors">
                 <Papicon icon="arrow-left" size={18} />
               </button>
               {#if selectedTicketDetail?.userAvatar}
-                <img src={selectedTicketDetail.userAvatar} alt={selectedTicketDetail.username} class="w-10 h-10 rounded-xl object-cover shadow-inner shrink-0" />
+                <img src={selectedTicketDetail.userAvatar} alt={selectedTicketDetail.username} class="w-9 h-9 rounded-xl object-cover shadow-inner shrink-0" />
               {:else}
-                <div class="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-semibold text-base shadow-inner shrink-0">
+                <div class="w-9 h-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-semibold text-base shadow-inner shrink-0">
                   {selectedTicketDetail?.username?.charAt(0).toUpperCase() || '?'}
                 </div>
               {/if}
@@ -746,6 +767,21 @@
                       {selectedTicketDetail.mode === 'DM' ? m.e1_tickets_mode_dm() : m.e1_tickets_mode_thread()}
                     </span>
                   {/if}
+                  <!-- Panneau replié : la priorité hors normale et les
+                       étiquettes restent lisibles sans le déplier. -->
+                  {#if !detailsOpen}
+                    {#if selectedTicketDetail?.priority && selectedTicketDetail.priority !== 'NORMAL'}
+                      <span class="px-2 py-0.5 rounded-full text-xs font-semibold border {PRIORITY_CHIP[selectedTicketDetail.priority as keyof typeof PRIORITY_CHIP]?.tone ?? ''}">
+                        {PRIORITY_CHIP[selectedTicketDetail.priority as keyof typeof PRIORITY_CHIP]?.label()}
+                      </span>
+                    {/if}
+                    {#each (selectedTicketDetail?.tags ?? []).slice(0, 3) as tag (tag)}
+                      <span class="px-2 py-0.5 rounded-full text-xs bg-surface-container text-on-surface-variant">#{tag}</span>
+                    {/each}
+                    {#if (selectedTicketDetail?.tags?.length ?? 0) > 3}
+                      <span class="text-xs text-on-surface-variant">+{selectedTicketDetail.tags.length - 3}</span>
+                    {/if}
+                  {/if}
                 </div>
                 {#if selectedTicketDetail?.claimedByName}
                   <div class="flex items-center gap-1 text-2xs text-primary/80 font-bold">
@@ -756,15 +792,20 @@
                   </div>
                 {/if}
               </div>
+              {#if selectedTicketDetail}
+                <button
+                  type="button"
+                  onclick={toggleDetails}
+                  aria-expanded={detailsOpen}
+                  aria-controls="ticket-details-panel"
+                  class="px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 shrink-0 border transition-colors {detailsOpen ? 'bg-primary/10 text-primary border-primary/20' : 'text-on-surface-variant border-outline-variant/20 hover:bg-surface-container'}"
+                >
+                  <Papicon icon="sliders" size={12} />
+                  <span class="hidden sm:inline">{m.e1_tickets_details_toggle()}</span>
+                  <Papicon icon={detailsOpen ? 'chevron-up' : 'chevron-down'} size={12} />
+                </button>
+              {/if}
             </div>
-
-            {#if selectedTicketDetail}
-              <TicketProperties
-                ticket={{ ...(selectedInboxRow ?? {}), ...selectedTicketDetail, sla: selectedInboxRow?.sla ?? null }}
-                {knownTags}
-                onchange={patchSelectedTicket}
-              />
-            {/if}
 
             <!-- Demande en attente ou refusée : aucun salon n'existe, l'écran
                  doit dire pourquoi plutôt que rester vide. -->
@@ -866,7 +907,7 @@
                   <button onclick={() => { if (!deletionLock) showDeleteConfirmModal = true; }}
                     disabled={!!deletionLock}
                     title={deletionLock ? m.e1_tickets_delete_locked_hint() : undefined}
-                    class="px-3 py-1.5 rounded-lg text-2xs font-semibold uppercase tracking-wider active:scale-[0.98] transition-all flex items-center gap-1.5 shrink-0 {deletionLock ? 'bg-surface-container text-on-surface-variant/30 border border-outline-variant/10 cursor-not-allowed' : 'bg-rose-600 text-white'}"
+                    class="px-3 py-1.5 rounded-lg text-xs font-semibold active:scale-[0.98] transition-all flex items-center gap-1.5 shrink-0 {deletionLock ? 'bg-surface-container text-on-surface-variant/30 border border-outline-variant/10 cursor-not-allowed' : 'bg-rose-600 text-white border border-transparent hover:bg-rose-500'}"
                   >
                     <Papicon icon="delete" size={12} /> {m.e1_tickets_btn_delete()}
                   </button>
@@ -877,7 +918,7 @@
                     onclick={() => { if (restoresLeft > 0) showRestoreModal = true; }}
                     disabled={restoresLeft <= 0}
                     title={restoresLeft <= 0 ? m.e1_tickets_restore_limit_tooltip() : m.e1_tickets_restore_left_tooltip({ count: restoresLeft })}
-                    class="px-3 py-1.5 rounded-lg text-2xs font-semibold uppercase tracking-wider flex items-center gap-1.5 shrink-0 transition-all {restoresLeft > 0 ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20 hover:bg-purple-500 hover:text-white cursor-pointer' : 'bg-surface-container text-on-surface-variant/30 border border-outline-variant/10 cursor-not-allowed'}"
+                    class="px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 shrink-0 transition-all {restoresLeft > 0 ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20 hover:bg-purple-500 hover:text-white cursor-pointer' : 'bg-surface-container text-on-surface-variant/30 border border-outline-variant/10 cursor-not-allowed'}"
                   >
                     <Papicon icon="refresh-ccw" size={12} /> {m.e1_tickets_btn_restore({ left: restoresLeft })}
                   </button>
@@ -907,15 +948,25 @@
               </div>
             {/if}
 
-            {#if selectedTicketDetail?.channelId && selectedTicketDetail?.mode !== 'DM'}
-              <div class="mt-3 flex gap-2 items-center">
-                <FormInput type="text" bind:value={ticketRenameName} placeholder={m.e1_tickets_rename_ph()} className="flex-1" />
-                <button onclick={renameTicket} disabled={renameAction.state.loading || !ticketRenameName.trim()}
-                  class="px-3 py-2.5 bg-primary text-white rounded-lg text-xs font-semibold disabled:opacity-50 flex items-center gap-1.5 shrink-0"
-                >
-                  <Papicon icon="edit" size={12} />
-                  {renameAction.state.loading ? '...' : m.e1_tickets_rename_btn()}
-                </button>
+            {#if detailsOpen && selectedTicketDetail}
+              <div id="ticket-details-panel">
+                <TicketProperties
+                  ticket={{ ...(selectedInboxRow ?? {}), ...selectedTicketDetail, sla: selectedInboxRow?.sla ?? null }}
+                  {knownTags}
+                  onchange={patchSelectedTicket}
+                />
+
+                {#if selectedTicketDetail.channelId && selectedTicketDetail.mode !== 'DM'}
+                  <div class="mt-3 flex gap-2 items-center">
+                    <FormInput type="text" bind:value={ticketRenameName} placeholder={m.e1_tickets_rename_ph()} className="flex-1" />
+                    <button onclick={renameTicket} disabled={renameAction.state.loading || !ticketRenameName.trim()}
+                      class="px-3 py-1.5 bg-primary/10 text-primary border border-primary/20 rounded-lg text-xs font-semibold hover:bg-primary hover:text-white transition-all disabled:opacity-50 disabled:pointer-events-none flex items-center gap-1.5 shrink-0"
+                    >
+                      <Papicon icon="edit" size={12} />
+                      {renameAction.state.loading ? '...' : m.e1_tickets_rename_btn()}
+                    </button>
+                  </div>
+                {/if}
               </div>
             {/if}
           </div>
@@ -1129,7 +1180,7 @@
            écrans plus étroits, le même dossier reste accessible par le bouton
            « Dossier » de l'en-tête. -->
       {#if selectedTicketDetail?.userId}
-        <aside class="hidden xl:flex xl:col-span-3 flex-col bg-surface-container-low/40 border border-outline-variant/10 rounded-xl overflow-hidden h-full" aria-label={m.tmp_label()}>
+        <aside class="hidden xl:flex flex-col bg-surface-container-low/40 border border-outline-variant/10 rounded-xl overflow-hidden h-full" aria-label={m.tmp_label()}>
           <TicketMemberPanel
             userId={selectedTicketDetail.userId}
             fallbackName={selectedTicketDetail.username}
@@ -1137,7 +1188,7 @@
           />
         </aside>
       {:else}
-        <div class="hidden xl:block xl:col-span-3"></div>
+        <div class="hidden xl:block"></div>
       {/if}
     </div>
   {:else if activeTab === 'performance'}
