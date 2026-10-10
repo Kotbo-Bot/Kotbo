@@ -58,6 +58,8 @@ const ACTION_LABELS: Record<string, string> = {
   WARN: 'Message supprimé + avertissement',
   TIMEOUT: 'Message supprimé + exclusion temporaire',
   NICKNAME_RESET: 'Pseudo remplacé',
+  NICKNAME_WARN: 'Pseudo remplacé + avertissement',
+  NICKNAME_TIMEOUT: 'Pseudo remplacé + exclusion temporaire',
   SLOWMODE: 'Mode lent activé',
   ALERT: 'Alerte au staff',
   REVIEW: 'À vérifier',
@@ -94,7 +96,11 @@ export function buildToxicEmbed(detection: CardDetection, note?: string): EmbedB
   const auto = detection.status === 'AUTO';
   const embed = new EmbedBuilder()
     .setColor((auto ? COLORS.danger : COLORS.warning) as ColorResolvable)
-    .setTitle(auto ? '🛡️ Propos toxiques retirés' : '🔎 Propos à vérifier')
+    .setTitle(
+      detection.source === 'NICKNAME'
+        ? (auto ? '🛡️ Pseudo toxique remplacé' : '🔎 Pseudo à vérifier')
+        : (auto ? '🛡️ Propos toxiques retirés' : '🔎 Propos à vérifier'),
+    )
     .setFooter({ text: FOOTER })
     .setTimestamp()
     .addFields(

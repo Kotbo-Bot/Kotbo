@@ -92,6 +92,42 @@ async function resetNickname(guild: Guild, userId: string, reason: string): Prom
   return member.setNickname(safeNickname(locale), reason).then(() => true).catch(() => false);
 }
 
+type NicknameOutcome = { action: string; sanctionId: string | null; note?: string };
+
+/** Serveur sans configuration AegisAI (supprimée entre-temps) : on renomme seulement. */
+const RENAME_ONLY = { autoAction: 'DELETE', warnWeight: 1, timeoutMinutes: 0 } as const;
+
+/**
+ * Pseudo toxique : remplacé, puis sanctionné comme un message (avertissement
+ * ou exclusion selon `autoAction`). Avec « Retirer » seul, il n'y a rien à
+ * retirer : le remplacement suffit.
+ */
+async function moderateNickname(
+  client: Client,
+  guild: Guild,
+  authorId: string,
+  config: Pick<AegisRuntimeConfig, 'autoAction' | 'warnWeight' | 'timeoutMinutes'>,
+  reason: string,
+  moderator: Actor,
+): Promise<NicknameOutcome> {
+  const renamed = await resetNickname(guild, authorId, reason);
+  const sanction = config.autoAction === 'DELETE'
+    ? { action: 'DELETE' as const, sanctionId: null }
+    : await sanctionAuthor(client, guild, authorId, config, reason, moderator, []);
+  const note = renamed ? undefined : 'Le pseudo n’a pas pu être remplacé (rôle du membre au-dessus de celui du bot ?).';
+  if (sanction.action === 'WARN' || sanction.action === 'TIMEOUT') {
+    return { action: `NICKNAME_${sanction.action}`, sanctionId: sanction.sanctionId, note };
+  }
+  return { action: renamed ? 'NICKNAME_RESET' : 'ALERT', sanctionId: null, note };
+}
+
+/** Action d'une détection ramenée à celles du bus d'événements AutoMod. */
+function busAction(action: string): 'TIMEOUT' | 'WARN' | 'DELETE' | 'LOG' {
+  if (action.endsWith('TIMEOUT')) return 'TIMEOUT';
+  if (action.endsWith('WARN')) return 'WARN';
+  return action === 'DELETE' ? 'DELETE' : 'LOG';
+}
+
 export type ToxicContext = {
   client: Client;
   guild: Guild;
@@ -156,9 +192,17 @@ export async function handleToxic(ctx: ToxicContext): Promise<AegisDetection> {
   let sanctionId: string | null = null;
 
   if (job.source === 'NICKNAME') {
-    const renamed = await resetNickname(guild, job.authorId, reasonWithExcerpt(`[AegisAI] Pseudo toxique${scoreText}`, job.excerpt));
-    action = renamed ? 'NICKNAME_RESET' : 'ALERT';
-    if (!renamed) note = 'Le pseudo n’a pas pu être remplacé (rôle du membre au-dessus de celui du bot ?).';
+    const outcome = await moderateNickname(
+      client,
+      guild,
+      job.authorId,
+      config,
+      reasonWithExcerpt(`[AegisAI] Pseudo toxique${scoreText}`, job.excerpt),
+      botActor(client),
+    );
+    action = outcome.action;
+    sanctionId = outcome.sanctionId;
+    note = outcome.note ?? note;
   } else {
     await message!.delete().catch((err) => logger.warn('AegisAI', 'Suppression impossible :', err));
     if (config.notifyMember) await noticeInChannel(message!);
@@ -183,7 +227,7 @@ export async function handleToxic(ctx: ToxicContext): Promise<AegisDetection> {
     channelId: job.channelId,
     rule: job.source === 'NICKNAME' ? 'Pseudo toxique (AegisAI)' : 'Propos toxiques (AegisAI)',
     matchedContent: job.excerpt.slice(0, 1000),
-    action: action === 'TIMEOUT' ? 'TIMEOUT' : action === 'WARN' ? 'WARN' : action === 'DELETE' ? 'DELETE' : 'LOG',
+    action: busAction(action),
     timestamp: Date.now(),
   });
 
@@ -223,11 +267,17 @@ export async function confirmDetection(client: Client, guild: Guild, detectionId
 
   if (detection.kind === 'TOXIC') {
     const config = await prisma.aegisConfig.findUnique({ where: { guildId: guild.id } });
-    const reason = reasonWithExcerpt(`[AegisAI] Propos toxiques confirmés par ${actor.tag}`, detection.excerpt);
     if (detection.source === 'NICKNAME') {
-      action = (await resetNickname(guild, detection.authorId, reason)) ? 'NICKNAME_RESET' : 'ALERT';
-      decision = `Confirmé par <@${actor.id}>${action === 'NICKNAME_RESET' ? ' : pseudo remplacé' : ' (pseudo non modifiable)'}`;
+      const reason = reasonWithExcerpt(`[AegisAI] Pseudo toxique confirmé par ${actor.tag}`, detection.excerpt);
+      const outcome = await moderateNickname(client, guild, detection.authorId, config ?? RENAME_ONLY, reason, actor);
+      action = outcome.action;
+      sanctionId = outcome.sanctionId;
+      const done = [outcome.note ? 'pseudo non modifiable' : 'pseudo remplacé'];
+      if (action.endsWith('WARN')) done.push('avertissement');
+      if (action.endsWith('TIMEOUT')) done.push('exclusion temporaire');
+      decision = `Confirmé par <@${actor.id}> : ${done.join(' + ')}`;
     } else {
+      const reason = reasonWithExcerpt(`[AegisAI] Propos toxiques confirmés par ${actor.tag}`, detection.excerpt);
       // Détection antérieure à la capture des preuves : on la prend maintenant,
       // avant de retirer le message.
       evidenceUrl ??= await captureEvidence(guild, detection.channelId, detection.messageId);

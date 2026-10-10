@@ -50,6 +50,8 @@ export function actionLabel(action: string): string {
     case 'WARN': return m.aegis_did_WARN();
     case 'TIMEOUT': return m.aegis_did_TIMEOUT();
     case 'NICKNAME_RESET': return m.aegis_did_NICKNAME_RESET();
+    case 'NICKNAME_WARN': return m.aegis_did_NICKNAME_WARN();
+    case 'NICKNAME_TIMEOUT': return m.aegis_did_NICKNAME_TIMEOUT();
     case 'SLOWMODE': return m.aegis_did_SLOWMODE();
     case 'ALERT': return m.aegis_did_ALERT();
     case 'REVIEW': return m.aegis_did_REVIEW();
