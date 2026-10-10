@@ -203,6 +203,7 @@ export const PAGE_TABS: Record<string, PageTabConfig[]> = {
     { id: 'apparence', label: () => m.ste_tab_appearance(), icon: 'palette' },
     { id: 'menu', label: () => m.ste_tab_menu(), icon: 'menu' },
     { id: 'votes', label: () => m.ste_tab_votes(), icon: 'trending-up' },
+    { id: 'boutique', label: () => m.ste_tab_shop(), icon: 'shopping-bag' },
     { id: 'commentaires', label: () => m.ste_tab_comments(), icon: 'message-square' },
     { id: 'frequentation', label: () => m.ste_tab_traffic(), icon: 'trending-up' },
     { id: 'reglages', label: () => m.ste_tab_settings(), icon: 'settings' },

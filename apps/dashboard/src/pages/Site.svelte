@@ -25,8 +25,9 @@
   import SiteAnalyticsPanel from '../lib/components/site/SiteAnalyticsPanel.svelte';
   import SiteSettings from '../lib/components/site/SiteSettings.svelte';
   import SiteVotes from '../lib/components/site/SiteVotes.svelte';
+  import SiteShop from '../lib/components/site/SiteShop.svelte';
 
-  const TABS = ['apercu', 'pages', 'wiki', 'blog', 'apparence', 'menu', 'votes', 'commentaires', 'frequentation', 'reglages'] as const;
+  const TABS = ['apercu', 'pages', 'wiki', 'blog', 'apparence', 'menu', 'votes', 'boutique', 'commentaires', 'frequentation', 'reglages'] as const;
   type Tab = (typeof TABS)[number];
 
   const guildId = $derived(authStore.selectedGuildId ?? '');
@@ -62,7 +63,7 @@
     if (id === 'blog') return Boolean(rights?.blog) && siteState.modules.site_blog;
     if (id === 'commentaires') return Boolean(rights?.moderateComments) && siteState.modules.site_blog;
     if (id === 'frequentation') return Boolean(rights?.viewStats);
-    if (['pages', 'apparence', 'menu', 'reglages', 'votes'].includes(id)) return Boolean(rights?.manage);
+    if (['pages', 'apparence', 'menu', 'reglages', 'votes', 'boutique'].includes(id)) return Boolean(rights?.manage);
     return true;
   };
 </script>
@@ -110,6 +111,8 @@
         <SiteNavigationEditor {siteState} {guildId} onChanged={load} />
       {:else if active === 'votes'}
         <SiteVotes {guildId} />
+      {:else if active === 'boutique'}
+        <SiteShop {guildId} />
       {:else if active === 'commentaires'}
         <SiteComments {guildId} />
       {:else if active === 'frequentation'}

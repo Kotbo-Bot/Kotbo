@@ -36,6 +36,23 @@ const MESSAGES: Record<string, () => string> = {
   invalid_provider: () => m.ste_err_invalid_provider(),
   too_many_vote_sites: () => m.ste_err_too_many_vote_sites(),
   vote_site_missing: () => m.ste_err_vote_site_missing(),
+  offer_missing: () => m.ste_err_offer_missing(),
+  order_missing: () => m.ste_err_order_decided(),
+  order_decided: () => m.ste_err_order_decided(),
+  role_unmanageable: () => m.ste_err_role_unmanageable(),
+  item_missing: () => m.ste_err_item_missing(),
+  code_taken: () => m.ste_err_code_taken(),
+  invalid_code: () => m.ste_err_invalid_code(),
+  invalid_discount: () => m.ste_err_invalid_discount(),
+  delivery_failed: () => m.ste_err_delivery_failed(),
+  too_many_offers: () => m.ste_err_too_many_offers(),
+  too_many_codes: () => m.ste_err_too_many_codes(),
+  name_required: () => m.ste_shop_err_name(),
+  invalid_price: () => m.ste_shop_err_price(),
+  role_required: () => m.ste_shop_err_role(),
+  item_required: () => m.ste_shop_err_item(),
+  invalid_duration: () => m.ste_shop_err_duration(),
+  invalid_quantity: () => m.ste_shop_err_quantity(),
 };
 
 export function siteErrorMessage(err: unknown): string {
