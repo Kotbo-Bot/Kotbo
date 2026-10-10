@@ -32,6 +32,7 @@ import {
   setForumTopicFlags,
 } from '../../../services/site/siteForumService.js';
 import { publishWeeklySummary, syncAutoModulePages } from '../../../services/site/siteAutoService.js';
+import { deleteThemeShare, GalleryError, installThemeShare, listGallery, listOwnThemeShares, publishThemeShare, reportThemeShare } from '../../../services/site/siteGalleryService.js';
 import { getSiteByGuild } from '../../../services/site/siteService.js';
 import { requireAuth } from '../middleware/auth.js';
 import { getApiUrl, getDashboardUrl } from '../../shared.js';
@@ -97,6 +98,7 @@ function fail(c: Context, err: unknown) {
   if (err instanceof SiteVoteError) return c.json({ error: err.code, detail: null }, err.status as 400);
   if (err instanceof ShopError) return c.json({ error: err.code, detail: null }, err.status as 400);
   if (err instanceof ForumError) return c.json({ error: err.code, detail: null }, err.status as 400);
+  if (err instanceof GalleryError) return c.json({ error: err.code, detail: null }, err.status as 400);
   logger.error('SiteAdmin', 'Erreur non gérée :', err);
   return c.json({ error: 'internal' }, 500);
 }
@@ -531,6 +533,56 @@ export function createSiteAdminRouter(client: Client): OpenAPIHono {
     if (!c.var.siteRights.manage) return c.json({ error: 'forbidden' }, 403);
     await deleteVoteSite(c.req.param('guildId'), c.req.param('voteSiteId'));
     return c.json({ ok: true });
+  });
+
+  // ── Galerie de thèmes partagés ──────────────────────────────────────────
+  app.get('/api/site-admin/:guildId/gallery', async (c) => {
+    if (!c.var.siteRights.manage) return c.json({ error: 'forbidden' }, 403);
+    const guildId = c.req.param('guildId');
+    const sort = c.req.query('sort') === 'recent' ? 'recent' : 'popular';
+    const page = Number.parseInt(c.req.query('page') ?? '1', 10) || 1;
+    const [gallery, own] = await Promise.all([listGallery(guildId, { sort, search: c.req.query('q') ?? '', page }), listOwnThemeShares(guildId)]);
+    return c.json({ ...gallery, own: own.map((s) => ({ id: s.id, name: s.name, description: s.description, installs: s.installs, hidden: Boolean(s.hiddenAt), createdAt: s.createdAt, updatedAt: s.updatedAt })) });
+  });
+
+  app.post('/api/site-admin/:guildId/gallery', async (c) => {
+    if (!c.var.siteRights.manage) return c.json({ error: 'forbidden' }, 403);
+    try {
+      const input = await body(c);
+      const share = await publishThemeShare(client, c.req.param('guildId'), c.var.auth.userId, typeof input.id === 'string' && CUID.test(input.id) ? input.id : null, input);
+      return c.json({ id: share.id }, 201);
+    } catch (err) {
+      return fail(c, err);
+    }
+  });
+
+  app.delete('/api/site-admin/:guildId/gallery/:shareId', async (c) => {
+    if (!c.var.siteRights.manage) return c.json({ error: 'forbidden' }, 403);
+    await deleteThemeShare(c.req.param('guildId'), c.req.param('shareId'));
+    return c.json({ ok: true });
+  });
+
+  app.post('/api/site-admin/:guildId/gallery/:shareId/install', async (c) => {
+    if (!c.var.siteRights.manage) return c.json({ error: 'forbidden' }, 403);
+    const shareId = c.req.param('shareId');
+    if (!CUID.test(shareId)) return c.json({ error: 'share_missing' }, 404);
+    try {
+      return c.json(await installThemeShare(c.req.param('guildId'), c.var.auth.userId, shareId, await body(c)));
+    } catch (err) {
+      return fail(c, err);
+    }
+  });
+
+  app.post('/api/site-admin/:guildId/gallery/:shareId/report', async (c) => {
+    if (!c.var.siteRights.manage) return c.json({ error: 'forbidden' }, 403);
+    const shareId = c.req.param('shareId');
+    if (!CUID.test(shareId)) return c.json({ error: 'share_missing' }, 404);
+    try {
+      await reportThemeShare(c.req.param('guildId'), shareId, (await body(c)).reason);
+      return c.json({ ok: true });
+    } catch (err) {
+      return fail(c, err);
+    }
   });
 
   // ── Site automatique : actions immédiates ───────────────────────────────
