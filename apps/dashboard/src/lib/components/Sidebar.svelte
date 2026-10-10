@@ -92,6 +92,49 @@
     spaces.find((g) => g.items.some((i) => isActiveNavItem(i.href)))?.key ?? null,
   );
 
+  /** Page courante d'un espace : la plus precise si deux adresses s'emboitent. */
+  const activeSpaceItem = $derived(
+    spaces
+      .flatMap((g) => g.items)
+      .filter((i) => isActiveNavItem(i.href))
+      .sort((a, b) => b.href.length - a.href.length)[0] ?? null,
+  );
+
+  /**
+   * Fait glisser la pastille du fil jusqu'a la rangee de la page courante.
+   * Mesure au cadre suivant, une fois la classe active posee. Une pastille
+   * qui vient d'apparaitre (espace ouvert, premiere page de l'espace) se pose
+   * sans glisser : elle n'a pas de position de depart.
+   */
+  function slideToActive(thread: HTMLElement, href: string | null) {
+    let knob: HTMLElement | null = null;
+    let frame = 0;
+
+    const place = (target: string | null) => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const next = thread.querySelector<HTMLElement>('.nav-slider');
+        const row = target ? thread.querySelector<HTMLElement>(`.nav-row[data-href="${CSS.escape(target)}"]`) : null;
+        if (!next || !row) return;
+        const fresh = next !== knob;
+        knob = next;
+        if (fresh) next.style.transition = 'none';
+        next.style.setProperty('--slider-y', `${row.offsetTop + row.offsetHeight / 2}px`);
+        if (fresh) {
+          next.getBoundingClientRect();
+          next.style.transition = '';
+          next.classList.add('is-placed');
+        }
+      });
+    };
+
+    place(href);
+    return {
+      update: place,
+      destroy: () => cancelAnimationFrame(frame),
+    };
+  }
+
   /**
    * Un seul espace ouvert a la fois. La barre listait jusqu'a soixante-dix
    * pages d'un bloc ; elle n'en montre plus que les titres des espaces, et le
@@ -151,7 +194,7 @@
 
 {#snippet pageLink(item: PageConfig, withIcon: boolean)}
   {@const active = isActiveNavItem(item.href)}
-  <div class="nav-row group relative flex items-center rounded-lg transition-colors duration-150 {active ? 'is-active' : ''}">
+  <div data-href={item.href} class="nav-row group relative flex items-center rounded-lg transition-colors duration-150 {active ? 'is-active' : ''}">
     {#if !withIcon}
       <span class="nav-row__node" aria-hidden="true">
         <Papicon icon={item.icon ?? 'circle'} size={12} />
@@ -371,7 +414,20 @@
             </button>
 
             {#if open}
-              <div id="nav-space-{space.key}" class="nav-thread relative ml-[1.1rem] pl-2 mt-px mb-2 space-y-px">
+              <div
+                id="nav-space-{space.key}"
+                class="nav-thread relative ml-[1.1rem] pl-2 mt-px mb-2 space-y-px"
+                use:slideToActive={current ? activeSpaceItem?.href ?? null : null}
+              >
+                {#if current && activeSpaceItem}
+                  <span class="nav-slider" aria-hidden="true">
+                    {#key activeSpaceItem.href}
+                      <span class="nav-slider__icon" in:fade={{ duration: 180 }}>
+                        <Papicon icon={activeSpaceItem.icon ?? 'circle'} size={12} />
+                      </span>
+                    {/key}
+                  </span>
+                {/if}
                 {#each space.items as item (item.href)}
                   {@render pageLink(item, false)}
                 {/each}
@@ -483,16 +539,48 @@
     transform: scale(1);
   }
 
+  /* La pastille de la page courante passe par-dessus : celle de la rangee
+     ne doit pas se montrer dessous pendant la glissade. */
   .nav-row.is-active .nav-row__node {
-    opacity: 1;
-    transform: scale(1);
+    opacity: 0;
+  }
+
+  /* Une seule pastille par espace, qui glisse le long du fil d'une page a
+     l'autre. `--slider-y` est le milieu de la rangee active (slideToActive). */
+  .nav-slider {
+    position: absolute;
+    z-index: 1;
+    left: -10px;
+    top: 0;
+    width: 20px;
+    height: 20px;
+    display: grid;
+    place-items: center;
+    border-radius: 9999px;
     background: var(--primary-color);
     color: var(--on-primary-color);
+    box-shadow: 0 0 0 2px var(--surface-container-lowest);
+    transform: translateY(calc(var(--slider-y, 0px) - 10px));
+    transition: transform 280ms cubic-bezier(0.34, 1.3, 0.64, 1);
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .nav-slider:global(.is-placed) {
+    opacity: 1;
+  }
+
+  .nav-slider__icon {
+    display: grid;
+    place-items: center;
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .nav-row__node {
+    .nav-row__node,
+    .nav-slider {
       transition: none;
+    }
+    .nav-row__node {
       transform: none;
     }
   }
