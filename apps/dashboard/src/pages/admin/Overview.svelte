@@ -90,7 +90,7 @@
       lastRefresh = new Date();
       error = null;
     } catch (err) {
-      error = err instanceof Error ? err.message : 'Erreur de chargement';
+      error = err instanceof Error ? err.message : 'Impossible de charger. Réessaie.';
     } finally {
       loading = false;
     }

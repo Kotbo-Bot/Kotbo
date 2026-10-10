@@ -244,7 +244,7 @@
                   </td>
                   <td class="px-5 py-3 tabular-nums text-on-surface">{nf.format(inst.guildCount)}</td>
                   <td class="px-5 py-3 tabular-nums text-on-surface">{nf.format(inst.userCount)}</td>
-                  <td class="px-5 py-3 font-mono text-xs text-on-surface-variant">{inst.version ?? '—'}</td>
+                  <td class="px-5 py-3 font-mono text-xs text-on-surface-variant">{inst.version ?? '–'}</td>
                   <td class="px-5 py-3">
                     <span class="badge {inst.status === 'online' ? 'badge-success' : 'badge-neutral'}" title={formatDate(inst.lastPingAt)}>
                       {inst.status === 'online' ? 'En ligne' : 'Silencieuse'}

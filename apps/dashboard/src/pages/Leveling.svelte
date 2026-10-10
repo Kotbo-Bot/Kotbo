@@ -16,6 +16,8 @@
   import Papicon from '../lib/components/Papicon.svelte';
   import InlineFeedback from '../lib/components/InlineFeedback.svelte';
   import ToggleSwitch from '../lib/components/ToggleSwitch.svelte';
+  import Callout from '../lib/components/ui/Callout.svelte';
+  import Button from '../lib/components/ui/Button.svelte';
   import SearchableSelect from '../lib/components/SearchableSelect.svelte';
   import Skeleton from '../lib/components/Skeleton.svelte';
   import SimpleModeToggle from '../lib/components/SimpleModeToggle.svelte';
@@ -39,6 +41,7 @@
     fetchLevelingRoleResync,
     runLevelingRoleResync,
     updateLevelingConfig,
+    updateModuleStatus,
     createLevelUpChannel,
     addLevelingReward,
     deleteLevelingReward,
@@ -55,6 +58,24 @@
   } from '@kotbo/shared';
 
   const saveAction = createAsyncActionState();
+
+  // Le module se bascule depuis le menu de ModulePage, qui ecrit aussi
+  // `levelConfig.enabled`. Les deux ne divergent que sur un serveur passe par
+  // l'ancien interrupteur de la page : l'encadre le dit et la bascule repare.
+  let levelingLoaded = $state(false);
+  const levelingModuleActive = $derived(
+    (dashboardStore.state.modules as any[]).find((mod) => mod.id === 'leveling')?.status === 'active'
+  );
+
+  async function resumeLeveling() {
+    await saveAction.run(async () => {
+      const ok = await updateModuleStatus('leveling', 'active');
+      if (!ok) throw new Error(m.lv_err_save());
+      config.enabled = true;
+      savedConfig.enabled = true;
+      return true;
+    });
+  }
   const rewardAction = createAsyncActionState();
   const createChannelAction = createAsyncActionState();
   let loading = $state(false);
@@ -287,6 +308,7 @@
           dailyXpCap: res.config.dailyXpCap ?? 0
         };
         savedConfig = JSON.parse(JSON.stringify(config));
+        levelingLoaded = true;
         curveMode.resolve(curveFitsSimpleMode());
         // La carte des parametres XP n'ouvre en simple que si tout ce qu'elle
         // contient est representable par ses crans.
@@ -357,7 +379,12 @@
     const curveWasDirty = curveDirty;
     await saveAction.run(async () => {
       // 1. Enregistrer la configuration du leveling
-      const res = await updateLevelingConfig(config);
+      // `enabled` reste hors de l'envoi : la bascule du module (menu de
+      // ModulePage) l'ecrit avec la ligne du module. La route des reglages ne
+      // tient que la colonne, et la renvoyer telle que chargee au montage
+      // laissait la page dire « actif » quand le bot ne donnait plus d'XP.
+      const { enabled: _moduleState, ...editable } = config;
+      const res = await updateLevelingConfig(editable);
       if (!res) throw new Error(m.lv_err_save());
       config = res.config;
       savedConfig = JSON.parse(JSON.stringify(res.config));
@@ -986,9 +1013,10 @@
 {/snippet}
 
 <ModulePage
-  title="Leveling & XP"
+  title={m.nav_leveling()}
   description={m.lv_page_description()}
   icon="trophy"
+  featureKey="leveling"
 >
   {#snippet actions()}
     {#if !loading}
@@ -1004,22 +1032,25 @@
           <Papicon icon="ChevronRight" size={14} class="transition-transform group-hover:translate-x-0.5" />
         {/if}
       </button>
-      <div class="flex items-center gap-3 bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5">
-        <span class="text-xs font-bold text-on-surface-variant/80">{m.lv_module_status()}</span>
-        <ToggleSwitch
-          checked={config.enabled}
-          onToggle={(v: boolean) => {
-            config.enabled = v;
-          }}
-          disabled={!canManageSettings}
-        />
-      </div>
     {/if}
   {/snippet}
 
   <InlineFeedback state={saveAction} />
   <InlineFeedback state={rewardAction} />
   <InlineFeedback state={createChannelAction} />
+
+  {#if levelingLoaded && levelingModuleActive && !config.enabled}
+    <Callout variant="warning" title={m.lv_paused_title()}>
+      {m.lv_paused_desc()}
+      {#snippet actions()}
+        {#if canManageSettings}
+          <Button variant="primary" size="sm" icon="power" loading={saveAction.state.loading} onclick={resumeLeveling}>
+            {m.lv_paused_action()}
+          </Button>
+        {/if}
+      {/snippet}
+    </Callout>
+  {/if}
 
   <!-- L'accueil (les preselections) n'est pas un onglet : on y entre et on
        en sort par le bouton de l'en-tete. -->
@@ -1047,7 +1078,6 @@
         disabled={!canManageSettings}
         dirty={configDirty}
         saving={saveAction.state.loading}
-        moduleEnabled={config.enabled}
         onselect={applyLevelingPreset}
         onsave={handleSaveConfig}
         ondetail={openPresetDetail}

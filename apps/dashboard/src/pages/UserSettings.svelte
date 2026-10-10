@@ -12,16 +12,8 @@
   import Papicon from '../lib/components/Papicon.svelte';
   import ToggleSwitch from '../lib/components/ToggleSwitch.svelte';
   import { m } from '../lib/i18n';
-  import { memberAvatarSrc } from '../lib/discordMedia';
 
   import type { DateFormat, Language, SidebarBehavior } from '../lib/stores/userPreferences.svelte';
-
-  const getUserAvatar = () => {
-    const hash = authStore.user?.avatar;
-    const id = authStore.user?.id;
-    const url = id && hash ? `https://cdn.discordapp.com/avatars/${id}/${hash}.png` : null;
-    return memberAvatarSrc(url, authStore.user?.username, id);
-  };
 
   const SETTINGS_BASE = '/userSettings';
   const settingsTabs = ['preferences', 'widget'] as const;
@@ -209,42 +201,32 @@
 
 <div class="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700 pb-12">
 
-  <!-- Header -->
-  <header class="relative overflow-hidden flex flex-col md:flex-row md:items-center gap-4 bg-surface-container-low/40 p-5 rounded-xl border border-outline-variant/30">
-    <div class="relative flex items-center gap-4 flex-1">
-      <div class="relative shrink-0">
-        <div class="relative w-11 h-11 rounded-lg border border-white/20 shadow-sm overflow-hidden">
-          <img src={getUserAvatar()} alt="Avatar" class="w-full h-full object-cover" />
-        </div>
-      </div>
-      <div>
-        <h1 class="text-lg font-semibold tracking-tight leading-tight">{m.us_title()}</h1>
-        <p class="text-sm text-on-surface-variant/70 font-medium">
-          {m.us_subtitle()}
-          {#if authStore.user?.username}
-            · <span class="text-primary font-bold">{authStore.user.username}</span>
-          {/if}
-        </p>
-      </div>
+  <header class="flex flex-col md:flex-row md:items-end justify-between gap-x-6 gap-y-3">
+    <div class="min-w-0">
+      <h1 class="text-2xl font-semibold tracking-tight text-on-surface font-headline leading-tight">{m.us_title()}</h1>
+      <p class="mt-1 max-w-prose text-sm text-on-surface-variant">
+        {m.us_subtitle()}
+        {#if authStore.user?.username}
+          · <span class="font-medium text-on-surface">{authStore.user.username}</span>
+        {/if}
+      </p>
     </div>
 
-    <!-- Save feedback badge -->
+    <!-- Les preferences s'enregistrent seules : une ligne discrete le dit,
+         et confirme chaque enregistrement, sans prendre la place d'un bouton. -->
     {#if activeTab === 'preferences'}
-      <div class="relative shrink-0">
-        <div class="flex items-center gap-2 px-5 py-2.5 rounded-lg font-bold text-sm transition-all duration-500 {savedFeedback ? 'bg-success/20 border border-success/40 text-success' : 'bg-surface-container-high/30 border border-outline-variant/20 text-on-surface-variant/50'}">
-          {#if savedFeedback}
-            <Papicon icon="check" size={16} />
-            {m.us_saved_auto()}
-          {:else}
-            <Papicon icon="Gears" size={16} />
-            {m.us_autosave()}
-          {/if}
-        </div>
-      </div>
+      <p class="flex shrink-0 items-center gap-1.5 text-xs {savedFeedback ? 'text-success' : 'text-on-surface-variant'}" aria-live="polite">
+        {#if savedFeedback}
+          <Papicon icon="check" size={14} />
+          {m.us_saved_auto()}
+        {:else}
+          {m.us_autosave()}
+        {/if}
+      </p>
     {/if}
   </header>
 
-  <div class="flex justify-center">
+  <div class="flex">
     <Tabs
       label={m.nav_user_settings()}
       {tabs}

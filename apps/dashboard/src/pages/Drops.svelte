@@ -14,6 +14,8 @@
   import LoadingHint from '../lib/components/LoadingHint.svelte';
   import ModulePage from '../lib/components/ModulePage.svelte';
   import ToggleSwitch from '../lib/components/ToggleSwitch.svelte';
+  import Callout from '../lib/components/ui/Callout.svelte';
+  import Button from '../lib/components/ui/Button.svelte';
   import { m, dateLocale } from '../lib/i18n';
   import {
     fetchDiscordChannels,
@@ -21,6 +23,7 @@
     fetchRpgItems,
     fetchEconomyConfig,
     updateDropGlobalSettings,
+    updateModuleStatus,
     updateDropTypeSettings,
     type DropConfigEntry,
     type DropHistoryEntry,
@@ -263,6 +266,7 @@
         };
         globalSettings = { ...loadedGlobal };
         savedGlobalSettings = { ...loadedGlobal };
+        dropsLoaded = true;
 
         for (const type of DROP_TYPES) {
           const loaded = res.configs.find((config) => config.type === type) ?? blankConfig(type);
@@ -306,8 +310,12 @@
 
     await actionState.run(async () => {
       if (JSON.stringify(globalSettings) !== JSON.stringify(savedGlobalSettings)) {
+        // `dropsEnabled` reste hors de l'envoi : c'est la colonne du module, que
+        // seul le menu de ModulePage bascule. La renvoyer telle que chargee au
+        // montage pouvait rallumer ou eteindre le module dans son dos.
+        const { dropsEnabled: _moduleState, ...editable } = globalSettings;
         const res = await updateDropGlobalSettings({
-          ...globalSettings,
+          ...editable,
           dropChannelId: globalSettings.dropChannelId || null,
           dropMentionRoleId: globalSettings.dropMentionRoleId || null,
         });
@@ -385,6 +393,24 @@
     unsubscribeRealtime?.();
     unsavedChanges.release('drops');
   });
+
+  // `dropsEnabled` est la colonne du module : la bascule du menu de ModulePage
+  // l'ecrit avec la ligne du module. Un serveur ou les deux divergent (ligne
+  // ecrite avant que la colonne ne suive) aurait un module « actif » qui ne
+  // fait rien tomber, sans aucun interrupteur pour le rattraper : l'encadre le
+  // dit, et la bascule de module repare.
+  let dropsLoaded = $state(false);
+  const dropsModuleActive = $derived(moduleEntry('drops')?.status === 'active');
+
+  async function resumeDrops() {
+    await actionState.run(async () => {
+      const ok = await updateModuleStatus('drops', 'active');
+      if (!ok) throw new Error(m.drop_save_error());
+      globalSettings.dropsEnabled = true;
+      savedGlobalSettings.dropsEnabled = true;
+      return true;
+    });
+  }
 </script>
 
 <ModulePage
@@ -394,6 +420,19 @@
   featureKey="drops"
 >
   <InlineFeedback state={actionState} />
+
+  {#if dropsLoaded && dropsModuleActive && !globalSettings.dropsEnabled}
+    <Callout variant="warning" title={m.drop_paused_title()}>
+      {m.drop_paused_desc()}
+      {#snippet actions()}
+        {#if canManageSettings}
+          <Button variant="primary" size="sm" icon="power" loading={actionState.state.loading} onclick={resumeDrops}>
+            {m.drop_paused_action()}
+          </Button>
+        {/if}
+      {/snippet}
+    </Callout>
+  {/if}
 
   <!-- Navigation par Onglets -->
   <div class="flex flex-wrap border-b border-outline-variant/15 mb-6">
@@ -429,10 +468,7 @@
             <h3 class="text-lg font-semibold flex items-center gap-2"><Papicon icon="Gears" size={18} /> {m.drop_global_heading()}</h3>
             <p class="text-xs text-on-surface-variant/70 mt-1">{m.drop_global_desc()}</p>
           </div>
-          <ToggleSwitch checked={globalSettings.dropsEnabled} onToggle={(v) => globalSettings.dropsEnabled = v} disabled={!canManageSettings} />
         </div>
-
-        <p class="text-xs text-on-surface-variant/70">{m.drop_enable_desc()}</p>
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div class="space-y-1.5">
@@ -586,12 +622,6 @@
         </div>
 
         <p class="text-xs text-on-surface-variant/70">{m.drop_type_enable_desc()}</p>
-
-        {#if !globalSettings.dropsEnabled}
-          <p class="text-xs text-warning bg-warning/10 border border-warning/20 rounded-lg px-4 py-3">
-            {m.drop_enable_desc()}
-          </p>
-        {/if}
 
         {#if !configs[type].channelId && !globalSettings.dropChannelId}
           <p class="text-xs text-warning bg-warning/10 border border-warning/20 rounded-lg px-4 py-3">

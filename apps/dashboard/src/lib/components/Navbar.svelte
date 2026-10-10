@@ -24,17 +24,12 @@
 
   let config = $state({ discordClientId: '' });
   let userMenuOpen = $state(false);
-  let langMenuOpen = $state(false);
-  const searchQuery = $state('');
 
   const languages = [
     { code: 'fr', flag: '🇫🇷', label: 'Français' },
     { code: 'en', flag: '🇬🇧', label: 'English' },
   ] as const;
 
-  const currentLanguage = $derived(
-    languages.find((lang) => lang.code === userPrefs.prefs.language) ?? languages[0]
-  );
   onMount(() => {
     (async () => {
       try {
@@ -51,9 +46,6 @@
       const target = e.target as HTMLElement;
       if (!target.closest('.user-menu-container')) {
         userMenuOpen = false;
-      }
-      if (!target.closest('.lang-menu-container')) {
-        langMenuOpen = false;
       }
     };
     window.addEventListener('click', handleClick);
@@ -225,66 +217,11 @@
     {/if}
   </div>
 
-  <div class="app-navbar__actions flex shrink-0 items-center gap-3">
+  <div class="app-navbar__actions flex shrink-0 items-center gap-2">
 
-    {#if authStore.member?.roles}
-      <div class="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-surface-container border border-outline-variant">
-        <Papicon icon={selectedGuild?.accessLevel === 'moderator' ? 'user' : selectedGuild?.accessLevel === 'admin' ? 'crown' : 'shield'} size={14} class="text-on-surface-variant" />
-        <span class="text-2xs font-medium text-on-surface-variant">{highestRole}</span>
-      </div>
-    {/if}
-
-    <button
-      onclick={themeStore.toggle}
-      class="app-navbar__secondary-action w-8 h-8 rounded-md border border-outline-variant bg-surface-container-lowest flex items-center justify-center transition-colors hover:bg-surface-container"
-      aria-label={m.navbar_change_theme()}
-      id="theme-toggle"
-    >
-      {#if themeStore.dark}
-        <Papicon icon="sun" size={16} class="text-warning" />
-      {:else}
-        <Papicon icon="moon" size={16} class="text-on-surface-variant" />
-      {/if}
-    </button>
-
-    <div class="app-navbar__secondary-action relative lang-menu-container">
-      <button
-        onclick={() => (langMenuOpen = !langMenuOpen)}
-        class="w-8 h-8 rounded-md border border-outline-variant bg-surface-container-lowest flex items-center justify-center transition-colors hover:bg-surface-container text-sm font-semibold select-none cursor-pointer"
-        title={m.navbar_lang_switch()}
-        aria-label={m.navbar_lang_switch()}
-        aria-haspopup="listbox"
-        aria-expanded={langMenuOpen}
-      >
-        {currentLanguage.flag}
-      </button>
-
-      {#if langMenuOpen}
-        <div
-          class="absolute right-0 mt-2 w-40 rounded-lg border border-outline-variant bg-surface-container-lowest shadow-lg py-1 z-50"
-          role="listbox"
-        >
-          {#each languages as lang}
-            <button
-              role="option"
-              aria-selected={userPrefs.prefs.language === lang.code}
-              onclick={() => {
-                userPrefs.set('language', lang.code);
-                langMenuOpen = false;
-              }}
-              class="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-left transition-colors hover:bg-surface-container cursor-pointer {userPrefs.prefs.language === lang.code ? 'bg-surface-container font-semibold' : ''}"
-            >
-              <span class="text-base leading-none">{lang.flag}</span>
-              <span class="flex-1">{lang.label}</span>
-              {#if userPrefs.prefs.language === lang.code}
-                <Papicon icon="Check" size={14} class="text-primary" />
-              {/if}
-            </button>
-          {/each}
-        </div>
-      {/if}
-    </div>
-
+    <!-- A droite, deux choses : ce qui attend une reponse, et soi. Le role
+         Discord, le theme et la langue occupaient trois cases de plus sur
+         chaque page ; theme et langue vivent dans le menu du profil. -->
     <NotificationBell />
 
     <div class="flex items-center gap-2 group user-menu-container relative">
@@ -314,10 +251,12 @@
       </button>
 
       {#if userMenuOpen}
-        <div class="absolute right-0 top-12 w-52 rounded-lg border border-outline-variant bg-surface-container-lowest shadow-lg overflow-hidden animate-in fade-in slide-up duration-150 z-50">
+        <div class="absolute right-0 top-12 w-64 rounded-lg border border-outline-variant bg-surface-container-lowest shadow-lg overflow-hidden animate-in fade-in slide-up duration-150 z-50">
           <div class="px-3 py-2.5 border-b border-outline-variant">
             <p class="text-xs font-medium text-on-surface truncate">{authStore.user?.username}</p>
-            <p class="text-2xs text-on-surface-variant mt-0.5">ID: {authStore.user?.id?.slice(0, 10)}...</p>
+            {#if selectedGuild?.name}
+              <p class="text-2xs text-on-surface-variant mt-0.5 truncate">{highestRole} · {selectedGuild.name}</p>
+            {/if}
           </div>
           <div class="py-1">
             <button
@@ -345,14 +284,6 @@
               {m.me_title()}
             </a>
             <a
-              href="/activity"
-              class="flex items-center gap-2.5 px-3 py-2 text-sm text-on-surface-variant transition-colors hover:bg-surface-container hover:text-on-surface"
-              onclick={() => userMenuOpen = false}
-            >
-              <Papicon icon="history" size={16} />
-              {m.navbar_my_activity()}
-            </a>
-            <a
               href="/userSettings"
               class="flex items-center gap-2.5 px-3 py-2 text-sm text-on-surface-variant transition-colors hover:bg-surface-container hover:text-on-surface"
               onclick={() => userMenuOpen = false}
@@ -360,6 +291,39 @@
               <Papicon icon="settings" size={16} />
               {m.navbar_settings()}
             </a>
+          </div>
+          <div class="border-t border-outline-variant px-3 py-2.5 space-y-2.5">
+            <div class="flex items-center justify-between gap-3">
+              <span class="text-sm text-on-surface-variant">{m.nav_theme()}</span>
+              <div class="flex rounded-lg bg-surface-container p-0.5" role="group" aria-label={m.nav_theme()}>
+                <button
+                  type="button"
+                  onclick={() => { if (themeStore.dark) themeStore.toggle(); }}
+                  aria-pressed={!themeStore.dark}
+                  class="px-2 py-1 rounded-md text-xs font-medium transition-colors {!themeStore.dark ? 'bg-surface-container-lowest text-on-surface shadow-sm' : 'text-on-surface-variant hover:text-on-surface'}"
+                >{m.nav_theme_light_short()}</button>
+                <button
+                  type="button"
+                  onclick={() => { if (!themeStore.dark) themeStore.toggle(); }}
+                  aria-pressed={themeStore.dark}
+                  class="px-2 py-1 rounded-md text-xs font-medium transition-colors {themeStore.dark ? 'bg-surface-container-lowest text-on-surface shadow-sm' : 'text-on-surface-variant hover:text-on-surface'}"
+                >{m.nav_theme_dark_short()}</button>
+              </div>
+            </div>
+            <div class="flex items-center justify-between gap-3">
+              <span class="text-sm text-on-surface-variant">{m.nav_language()}</span>
+              <div class="flex rounded-lg bg-surface-container p-0.5" role="group" aria-label={m.nav_language()}>
+                {#each languages as lang (lang.code)}
+                  <button
+                    type="button"
+                    onclick={() => userPrefs.set('language', lang.code)}
+                    aria-pressed={userPrefs.prefs.language === lang.code}
+                    title={lang.label}
+                    class="px-2 py-1 rounded-md text-xs font-medium uppercase transition-colors {userPrefs.prefs.language === lang.code ? 'bg-surface-container-lowest text-on-surface shadow-sm' : 'text-on-surface-variant hover:text-on-surface'}"
+                  >{lang.code}</button>
+                {/each}
+              </div>
+            </div>
           </div>
           <div class="border-t border-outline-variant py-1">
             <a

@@ -525,6 +525,8 @@ const legacyFallbacks: Record<string, keyof typeof icons> = {
   Paper: 'FileText',
   Pie: 'PieChart',
   Placeholder: 'Circle',
+  Refresh: 'RefreshCw',
+  RefreshCcw: 'RotateCcw',
   Pronote: 'School',
   TextBubble: 'MessageCircle',
   UserCross: 'UserX',

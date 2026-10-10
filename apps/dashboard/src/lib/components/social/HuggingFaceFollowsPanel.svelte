@@ -66,7 +66,7 @@
         mention: keyToMention(form.mention),
         message: form.message || null,
       });
-      if (!res) throw new Error('Erreur API');
+      if (!res) throw new Error("Ça n'a pas marché. Réessaie.");
       form = emptyForm();
       const updated = await fetchSocialFollows();
       if (updated) follows = withMentionKey(updated.huggingface);
@@ -83,7 +83,7 @@
         mention: keyToMention(follow.mentionKey),
         message: follow.message || null,
       });
-      if (!res) throw new Error('Erreur API');
+      if (!res) throw new Error("Ça n'a pas marché. Réessaie.");
       return true;
     }, { successMessage: m.social_hf_toast_updated() });
   }
@@ -92,7 +92,7 @@
     if (!(await confirmDialog.danger(m.social_hf_confirm_delete_title(), '', m.social_hf_confirm_delete_btn()))) return;
     await actionState.run(async () => {
       const ok = await deleteHuggingFaceFollow(id);
-      if (!ok) throw new Error('Erreur API');
+      if (!ok) throw new Error("Ça n'a pas marché. Réessaie.");
       follows = follows.filter((f) => f.id !== id);
       return true;
     }, { successMessage: m.social_hf_toast_deleted() });

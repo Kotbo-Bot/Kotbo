@@ -45,7 +45,7 @@
     
     await saveAction.run(async () => {
       const ok = await updateRoleAccess(featureKey, payload);
-      if (!ok) throw new Error('Erreur API');
+      if (!ok) throw new Error("Ça n'a pas marché. Réessaie.");
       await dashboardStore.refresh();
       return true;
     }, { successMessage: m.rp_updated_toast() });

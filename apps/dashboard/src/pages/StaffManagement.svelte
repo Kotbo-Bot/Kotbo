@@ -3,7 +3,7 @@
   import { router } from 'tinro';
   import { resolveTabFromUrl, gotoTab } from '../lib/tabRouting';
   import { pageTabItems } from '../lib/config/pageTabs';
-  import { Tabs } from '../lib/components/ui';
+  import { Tabs, Button } from '../lib/components/ui';
   import { authStore } from '../lib/stores/auth.svelte';
   import { dashboardStore } from '../lib/stores/dashboard.svelte';
   import { toast } from '../lib/stores/toast.svelte';
@@ -1419,7 +1419,7 @@
   ]);
 </script>
 
-<div class="space-y-16 animate-in fade-in slide-in-from-bottom-6 duration-1000">
+<div class="space-y-8 animate-in fade-in slide-in-from-bottom-6 duration-1000">
   {#if !guildId && !error}
     <div class="space-y-8 p-8 md:p-10 w-full animate-in fade-in duration-700">
       <Skeleton width="w-1/3" height="h-14" rounded="rounded-lg" />
@@ -1436,33 +1436,26 @@
       {error}
     </div>
   {:else if guildId}
-    <div
-      class="rounded-xl border border-outline-variant/20 bg-linear-to-br from-surface-container/90 via-surface-container-low/80 to-surface-container/50 p-5"
-    >
-      <div class="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-        <div class="flex items-center gap-4">
-          <div class="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center text-primary">
-            <Papicon icon="users" size={20} />
-          </div>
-          <div>
-            <h2 class="text-lg font-semibold text-on-surface tracking-tight font-headline leading-tight">
-              {m.sm_header_title()}
-            </h2>
-            <p class="text-sm text-on-surface-variant/70 font-medium">
-              {m.sm_header_desc()}
-            </p>
-          </div>
-        </div>
-        {#if canManageSettings}
-          <div>
-            <button onclick={() => showConfigMenu = true} class="flex h-10 w-10 items-center justify-center rounded-lg border border-outline-variant/20 bg-surface text-on-surface transition-all hover:border-primary/50 hover:bg-primary/5 hover:text-primary active:scale-95" title={m.sm_header_config_title()}>
-              <Papicon icon="settings" size={20} />
-            </button>
-          </div>
-        {/if}
+    <header class="flex flex-col md:flex-row md:items-end justify-between gap-x-6 gap-y-3">
+      <div class="min-w-0">
+        <h1 class="text-2xl font-semibold tracking-tight text-on-surface font-headline leading-tight">
+          {m.sm_header_title()}
+        </h1>
+        <p class="mt-1 max-w-prose text-sm text-on-surface-variant">
+          {m.sm_header_desc()}
+        </p>
       </div>
-
-    </div>
+      {#if canManageSettings}
+        <div class="flex items-center gap-2 shrink-0">
+          <Button
+            variant="secondary"
+            icon="settings"
+            onclick={() => showConfigMenu = true}
+            title={m.sm_header_config_title()}
+          >{m.sm_header_settings()}</Button>
+        </div>
+      {/if}
+    </header>
 
     <!-- STATS -->
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6" data-tour="staff-stats">

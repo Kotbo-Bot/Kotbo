@@ -1,8 +1,7 @@
 <script lang="ts">
   import { router } from 'tinro';
   import { m } from '../../i18n';
-  import { isPageBeta, isPageWip, type PageConfig } from '../../config/pages';
-  import { authStore } from '../../stores/auth.svelte';
+  import type { PageConfig } from '../../config/pages';
   import { confirmDialog } from '../../stores/confirmDialog.svelte';
   import { mobileNav } from '../../stores/mobileNav.svelte';
   import { navigationStore, isActiveNavItem } from '../../stores/navigation.svelte';
@@ -13,21 +12,88 @@
 
   const open = $derived(mobileNav.sheet === 'nav');
 
-  let query = $state('');
-  let searchInput = $state<HTMLInputElement | null>(null);
+  /*
+   * Meme architecture que la barre laterale : les epingles en tete, le groupe
+   * « general » a plat, puis les espaces en accordeon dont un seul est ouvert.
+   * Un utilisateur qui passe du telephone a l'ordinateur retrouve ses pages au
+   * meme endroit.
+   */
+  const navGroups = $derived(navigationStore.menuGroups);
+  const primaryGroup = $derived(navGroups.find((g) => g.key === 'general') ?? null);
+  const spaces = $derived(navGroups.filter((g) => g.key !== 'general'));
 
-  const results = $derived(query.trim() ? navigationStore.search(query) : []);
-  const searching = $derived(query.trim().length > 0);
-
-  const guild = $derived(authStore.guilds.find((g) => g.id === authStore.selectedGuildId));
-
-  // Closing wipes the query so the sheet always reopens on the browse view.
-  $effect(() => {
-    if (!open) query = '';
-  });
+  const pinnedItems = $derived(
+    navigationStore.favorites
+      .map((href) => navGroups.flatMap((g) => g.items).find((item) => item.href === href))
+      .filter((item): item is PageConfig => !!item),
+  );
 
   function isActive(href: string): boolean {
     return isActiveNavItem(href, $router.path, $router.url);
+  }
+
+  const activeSpaceKey = $derived(
+    spaces.find((g) => g.items.some((item) => isActive(item.href)))?.key ?? null,
+  );
+
+  let openSpace = $state<string | null>(null);
+
+  // Chaque ouverture repart de l'espace de la page courante.
+  $effect(() => {
+    if (open) openSpace = activeSpaceKey;
+  });
+
+  function toggleSpace(key: string): void {
+    openSpace = openSpace === key ? null : key;
+  }
+
+  /*
+   * Recherche. Le champ ne montre jamais un ecran vide : des qu'il a le focus,
+   * il propose les pages recentes et epinglees, puis les resultats en tapant.
+   * Le mode ne se quitte que par « Annuler » ou en fermant la feuille, pas sur
+   * une perte de focus : sinon toucher un resultat, qui ferme le clavier,
+   * changeait la liste sous le doigt avant que le toucher n'arrive.
+   */
+  let query = $state('');
+  let searching = $state(false);
+  let searchInput = $state<HTMLInputElement | null>(null);
+
+  const trimmed = $derived(query.trim());
+  // Les pages en chantier restent hors du menu, recherche comprise.
+  const results = $derived(
+    trimmed ? navigationStore.search(trimmed).filter((item) => !item.wip) : [],
+  );
+
+  const recentItems = $derived(
+    navigationStore.recentItems.filter((item) => !item.wip && !isActive(item.href)),
+  );
+
+  /** Ce que la recherche propose avant la premiere lettre, ou faute de resultat. */
+  const suggestions = $derived.by(() => {
+    if (recentItems.length > 0) return { label: m.nav_recents(), items: recentItems };
+    if (pinnedItems.length > 0) return { label: m.nav_pinned(), items: pinnedItems };
+    return { label: m.nav_suggestions(), items: primaryGroup?.items ?? [] };
+  });
+
+  /** Espace d'une page, affiche a cote d'un resultat pour lever les homonymes. */
+  const spaceOf = $derived(
+    new Map(
+      navigationStore.groups.flatMap((group) =>
+        group.key === 'general' ? [] : group.items.map((item) => [item.href, group.label] as const),
+      ),
+    ),
+  );
+
+  $effect(() => {
+    if (open) return;
+    query = '';
+    searching = false;
+  });
+
+  function cancelSearch(): void {
+    query = '';
+    searching = false;
+    searchInput?.blur();
   }
 
   async function go(href: string) {
@@ -62,16 +128,9 @@
   }
 </script>
 
-<BottomSheet
-  {open}
-  title={m.nav_browse()}
-  subtitle={guild?.name}
-  maxHeight="90dvh"
-  onclose={() => mobileNav.close()}
->
-  <!-- Account, theme and server moved behind the avatar in the top bar. The one
-       setting that belongs to this surface sits in the header, where it is read
-       before the list rather than found under eighty page links. -->
+<BottomSheet {open} title={m.nav_browse()} maxHeight="90dvh" onclose={() => mobileNav.close()}>
+  <!-- Choisir les onglets de la barre du bas se fait ici, a cote de la liste
+       dont ils sont tires. -->
   {#snippet header()}
     <button
       type="button"
@@ -79,55 +138,107 @@
       aria-haspopup="dialog"
       onclick={() => mobileNav.open('tabs')}
     >
-      <Papicon icon="tune" size={15} />
+      <Papicon icon="tune" size={16} />
       <span>{m.nav_shortcuts()}</span>
     </button>
   {/snippet}
 
-  <div class="navsheet">
-    <!-- Search first: no tab bar can hold 80 pages, so typing is the fast path. -->
+  <div class="navsheet" class:navsheet--searching={searching}>
     <div class="navsheet__search">
-      <Papicon icon="search" size={16} class="navsheet__search-icon" />
-      <input
-        bind:this={searchInput}
-        bind:value={query}
-        type="search"
-        inputmode="search"
-        autocomplete="off"
-        autocorrect="off"
-        spellcheck={false}
-        placeholder={m.nav_search_pages()}
-        aria-label={m.nav_search_pages()}
-      />
-      {#if query}
-        <button type="button" onclick={() => { query = ''; searchInput?.focus(); }} aria-label={m.common_clear()}>
-          <Papicon icon="x" size={14} />
+      <div class="navsheet__field">
+        <Papicon icon="search" size={16} class="navsheet__field-icon" />
+        <input
+          bind:this={searchInput}
+          bind:value={query}
+          type="search"
+          inputmode="search"
+          enterkeyhint="go"
+          autocomplete="off"
+          autocorrect="off"
+          spellcheck={false}
+          placeholder={m.nav_search_pages()}
+          aria-label={m.nav_search_pages()}
+          onfocus={() => (searching = true)}
+          onkeydown={(event) => {
+            if (event.key === 'Enter' && results[0]) void go(results[0].href);
+          }}
+        />
+        {#if query}
+          <button
+            type="button"
+            class="navsheet__clear"
+            onclick={() => { query = ''; searchInput?.focus(); }}
+            aria-label={m.common_clear()}
+          >
+            <Papicon icon="x" size={16} />
+          </button>
+        {/if}
+      </div>
+      {#if searching}
+        <button type="button" class="navsheet__cancel" onclick={cancelSearch}>
+          {m.common_cancel()}
         </button>
       {/if}
     </div>
 
     {#if searching}
-      {#if results.length > 0}
+      {#if trimmed && results.length > 0}
         <ul class="navsheet__list" aria-label={m.nav_search_results()}>
           {#each results as item (item.href)}
-            {@render row(item)}
+            {@render row(item, { icon: true, context: spaceOf.get(item.href) })}
           {/each}
         </ul>
       {:else}
-        <p class="navsheet__empty">{m.sidebar_no_results({ query })}</p>
+        {#if trimmed}
+          <p class="navsheet__empty" role="status">{m.sidebar_no_results({ query: trimmed })}</p>
+        {/if}
+        {#if suggestions.items.length > 0}
+          {@render section(suggestions.label, suggestions.items)}
+        {/if}
       {/if}
     {:else}
-      {#if navigationStore.favoriteItems.length > 0}
-        {@render section(m.nav_favorites(), navigationStore.favoriteItems)}
+      {#if pinnedItems.length > 0}
+        {@render section(m.nav_pinned(), pinnedItems)}
       {/if}
 
-      {#if navigationStore.recentItems.length > 0}
-        {@render section(m.nav_recents(), navigationStore.recentItems)}
+      {#if primaryGroup}
+        <ul class="navsheet__list">
+          {#each primaryGroup.items as item (item.href)}
+            {@render row(item, { icon: true })}
+          {/each}
+        </ul>
       {/if}
 
-      {#each navigationStore.menuGroups as group (group.key)}
-        {@render section(group.label, group.items)}
-      {/each}
+      {#if spaces.length > 0}
+        <div class="navsheet__spaces">
+          {#each spaces as space (space.key)}
+            {@const expanded = openSpace === space.key}
+            {@const current = activeSpaceKey === space.key}
+            <button
+              type="button"
+              class="navsheet__space"
+              class:navsheet__space--current={current}
+              aria-expanded={expanded}
+              aria-controls="navsheet-space-{space.key}"
+              onclick={() => toggleSpace(space.key)}
+            >
+              <span class="navsheet__icon"><Papicon icon={space.icon} size={20} /></span>
+              <span class="navsheet__label">{space.label}</span>
+              <span class="navsheet__chevron" class:navsheet__chevron--open={expanded} aria-hidden="true">
+                <Papicon icon="chevron-down" size={16} />
+              </span>
+            </button>
+
+            {#if expanded}
+              <ul id="navsheet-space-{space.key}" class="navsheet__list navsheet__thread">
+                {#each space.items as item (item.href)}
+                  {@render row(item, { icon: false })}
+                {/each}
+              </ul>
+            {/if}
+          {/each}
+        </div>
+      {/if}
     {/if}
   </div>
 </BottomSheet>
@@ -137,56 +248,66 @@
     <h3 class="navsheet__group-title">{label}</h3>
     <ul class="navsheet__list">
       {#each items as item (item.href)}
-        {@render row(item)}
+        {@render row(item, { icon: true })}
       {/each}
     </ul>
   </section>
 {/snippet}
 
-{#snippet row(item: PageConfig)}
+{#snippet row(item: PageConfig, opts: { icon: boolean; context?: string })}
   {@const active = isActive(item.href)}
   {@const badge = badgeFor(item)}
-  <li class="navsheet__item">
+  {@const pinned = navigationStore.isFavorite(item.href)}
+  <li class="navsheet__item" class:navsheet__item--active={active}>
     <button
       type="button"
       class="navsheet__row"
-      class:navsheet__row--active={active}
-      class:navsheet__row--muted={navigationStore.isModuleDisabled(item.featureKey, item.href)}
+      class:navsheet__row--plain={!opts.icon}
       aria-current={active ? 'page' : undefined}
       onclick={() => go(item.href)}
     >
-      <span class="navsheet__row-icon"><Papicon icon={item.icon ?? 'circle'} size={17} /></span>
-      <span class="navsheet__row-label">{item.name}</span>
-
-      {#if isPageWip(item)}
-        <span class="navsheet__tag navsheet__tag--wip">WIP</span>
-      {:else if isPageBeta(item)}
-        <span class="navsheet__tag navsheet__tag--beta">BETA</span>
+      {#if opts.icon}
+        <span class="navsheet__icon"><Papicon icon={item.icon ?? 'circle'} size={20} /></span>
       {/if}
-
+      <span class="navsheet__label">{item.name}</span>
+      {#if opts.context}
+        <span class="navsheet__context">{opts.context}</span>
+      {/if}
       {#if badge > 0}
         <span class="navsheet__count">{badge > 99 ? '99+' : badge}</span>
       {/if}
-
     </button>
 
+    <!-- L'etoile est une soeur du lien, pas un enfant : un bouton dans un
+         bouton est invalide et les lecteurs d'ecran ne l'atteindraient pas. -->
     <button
       type="button"
-      class="navsheet__star"
-      class:navsheet__star--on={navigationStore.isFavorite(item.href)}
-      aria-pressed={navigationStore.isFavorite(item.href)}
-      aria-label={navigationStore.isFavorite(item.href) ? m.nav_unfavorite() : m.nav_favorite()}
+      class="navsheet__pin"
+      class:navsheet__pin--on={pinned}
+      aria-pressed={pinned}
+      aria-label={pinned ? m.nav_unfavorite() : m.nav_favorite()}
       onclick={(event) => toggleFavorite(event, item.href)}
     >
-      <Papicon icon="star" size={15} />
+      <Papicon icon="star" size={16} class={pinned ? 'fill-current' : ''} />
     </button>
   </li>
 {/snippet}
 
 <style>
+  /* Trois tailles de texte dans la feuille : le champ et les lignes (16px),
+     les intitules et le contexte (12px), le titre de la feuille. */
+
   .navsheet {
     padding-bottom: 1rem;
   }
+
+  /* En recherche, la feuille garde sa hauteur : sans cela elle se tassait a
+     chaque lettre et le champ descendait sous le pouce. */
+  .navsheet--searching {
+    min-height: calc(90dvh - 6rem);
+  }
+
+  /* ── Recherche ── */
 
   .navsheet__search {
     position: sticky;
@@ -195,224 +316,292 @@
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    margin-bottom: 0.75rem;
-    padding: 0.125rem 0 0.625rem;
+    padding-bottom: 0.75rem;
     background: var(--surface-container-lowest);
   }
 
-  .navsheet__search :global(.navsheet__search-icon) {
+  .navsheet__field {
+    position: relative;
+    display: flex;
+    min-width: 0;
+    flex: 1 1 auto;
+    align-items: center;
+  }
+
+  .navsheet__field :global(.navsheet__field-icon) {
     position: absolute;
-    left: 0.875rem;
+    left: 0.75rem;
     color: var(--on-surface-variant);
     pointer-events: none;
   }
 
-  .navsheet__search input {
+  .navsheet__field input {
     width: 100%;
-    min-height: 2.875rem;
-    padding: 0 2.5rem;
+    height: 2.75rem;
+    padding: 0 2.75rem 0 2.5rem;
     border: 1px solid var(--outline-variant);
-    border-radius: 0.875rem;
+    border-radius: 0.75rem;
     background: var(--surface-container);
     color: var(--on-surface);
-    /* 16px keeps iOS Safari from zooming the page when the field is focused. */
+    /* 16px : en dessous, Safari iOS zoome la page au focus. */
     font-size: 1rem;
   }
 
-  .navsheet__search input:focus {
+  .navsheet__field input::placeholder {
+    color: var(--on-surface-variant);
+  }
+
+  .navsheet__field input:focus {
     border-color: color-mix(in srgb, var(--primary-color) 55%, transparent);
     outline: none;
   }
 
-  .navsheet__search input::-webkit-search-cancel-button {
+  .navsheet__field input::-webkit-search-cancel-button {
     display: none;
   }
 
-  .navsheet__search > button {
+  .navsheet__clear {
     position: absolute;
-    right: 0.5rem;
+    right: 0;
     display: grid;
-    width: 2rem;
-    height: 2rem;
+    width: 2.75rem;
+    height: 2.75rem;
     place-items: center;
     border-radius: 999px;
     color: var(--on-surface-variant);
   }
 
-  .navsheet__group + .navsheet__group {
-    margin-top: 1.125rem;
+  .navsheet__cancel {
+    min-height: 2.75rem;
+    flex: none;
+    padding: 0 0.25rem;
+    color: var(--primary-color);
+    font-size: 1rem;
+    font-weight: 500;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .navsheet__empty {
+    padding: 0.5rem 0.75rem 0;
+    color: var(--on-surface-variant);
+    font-size: 0.75rem;
+  }
+
+  /* ── Listes ── */
+
+  .navsheet__group {
+    margin-bottom: 1rem;
   }
 
   .navsheet__group-title {
-    margin-bottom: 0.375rem;
-    padding-left: 0.25rem;
+    padding: 0.75rem 0.75rem 0.25rem;
     color: var(--on-surface-variant);
-    font-family: var(--font-label);
-    font-size: 0.6875rem;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
+    font-size: 0.75rem;
+    font-weight: 500;
   }
 
   .navsheet__list {
     display: flex;
     flex-direction: column;
-    gap: 0.125rem;
   }
 
-  /* The star is a sibling rather than a nested control: a button inside a
-     button is invalid, and screen readers would not reach the favourite. */
   .navsheet__item {
+    position: relative;
     display: flex;
     align-items: center;
-    gap: 0.125rem;
+    border-radius: 0.75rem;
   }
 
-  .navsheet__row {
+  .navsheet__item--active {
+    background: color-mix(in srgb, var(--primary-color) 10%, transparent);
+  }
+
+  .navsheet__row,
+  .navsheet__space {
     display: flex;
-    width: 100%;
+    min-width: 0;
     min-height: 3rem;
     flex: 1 1 auto;
     align-items: center;
     gap: 0.75rem;
-    padding: 0 0.5rem 0 0.625rem;
+    padding: 0 0.25rem 0 0.75rem;
     border-radius: 0.75rem;
     color: var(--on-surface);
+    font-size: 1rem;
     text-align: left;
     -webkit-tap-highlight-color: transparent;
   }
 
-  .navsheet__row:active {
+  .navsheet__row:active,
+  .navsheet__space:active {
     background: var(--surface-container);
   }
 
-  .navsheet__row--active {
-    background: color-mix(in srgb, var(--primary-color) 10%, transparent);
+  .navsheet__item--active .navsheet__row {
+    color: var(--primary-color);
+    font-weight: 600;
+  }
+
+  .navsheet__icon {
+    display: grid;
+    width: 1.25rem;
+    flex: none;
+    place-items: center;
+    color: var(--on-surface-variant);
+  }
+
+  .navsheet__item--active .navsheet__icon,
+  .navsheet__space--current .navsheet__icon {
     color: var(--primary-color);
   }
 
-  .navsheet__row--muted {
-    opacity: 0.45;
-  }
-
-  .navsheet__row-icon {
-    display: grid;
-    width: 1.75rem;
-    flex: none;
-    place-items: center;
-    color: inherit;
-    opacity: 0.75;
-  }
-
-  .navsheet__row--active .navsheet__row-icon {
-    opacity: 1;
-  }
-
-  .navsheet__row-label {
+  .navsheet__label {
     min-width: 0;
     flex: 1 1 auto;
     overflow: hidden;
-    font-size: 0.9375rem;
-    font-weight: 500;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
-  .navsheet__row--active .navsheet__row-label {
-    font-weight: 650;
-  }
-
-  .navsheet__tag {
+  .navsheet__context {
     flex: none;
-    padding: 0.125rem 0.3125rem;
-    border-radius: 0.25rem;
-    font-size: 0.5625rem;
-    font-weight: 700;
-    letter-spacing: 0.04em;
+    max-width: 40%;
+    overflow: hidden;
+    color: var(--on-surface-variant);
+    font-size: 0.75rem;
+    font-weight: 400;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
-
-  .navsheet__tag--wip {
-    background: color-mix(in srgb, #f59e0b 16%, transparent);
-    color: #b45309;
-  }
-
-  .navsheet__tag--beta {
-    background: color-mix(in srgb, #a855f7 16%, transparent);
-    color: #7e22ce;
-  }
-
-  :global(.dark) .navsheet__tag--wip { color: #fbbf24; }
-  :global(.dark) .navsheet__tag--beta { color: #d8b4fe; }
 
   .navsheet__count {
     display: grid;
     min-width: 1.25rem;
     height: 1.25rem;
     flex: none;
-    padding: 0 0.3125rem;
+    padding: 0 0.25rem;
     place-items: center;
     border-radius: 999px;
     background: var(--primary-color);
     color: var(--on-primary-color);
-    font-size: 0.625rem;
-    font-weight: 700;
+    font-size: 0.75rem;
+    font-weight: 600;
   }
 
-  .navsheet__star {
+  .navsheet__pin {
     display: grid;
     width: 2.75rem;
     height: 2.75rem;
     flex: none;
     place-items: center;
     border-radius: 999px;
-    color: var(--on-surface-variant);
-    opacity: 0.35;
+    color: color-mix(in srgb, var(--on-surface-variant) 45%, transparent);
     -webkit-tap-highlight-color: transparent;
   }
 
-  .navsheet__star:active {
+  .navsheet__pin:active {
     background: var(--surface-container);
   }
 
-  .navsheet__star--on {
-    color: #f59e0b;
-    opacity: 1;
+  .navsheet__pin--on {
+    color: var(--warning-color);
   }
 
-  .navsheet__row :global(.navsheet__chevron) {
-    flex: none;
-    color: var(--on-surface-variant);
-    opacity: 0.5;
+  /* ── Espaces ── */
+
+  .navsheet__spaces {
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--outline-variant);
   }
+
+  .navsheet__space {
+    width: 100%;
+    padding-right: 0.75rem;
+    color: var(--on-surface-variant);
+  }
+
+  .navsheet__space--current {
+    color: var(--on-surface);
+    font-weight: 500;
+  }
+
+  .navsheet__chevron {
+    display: grid;
+    flex: none;
+    place-items: center;
+    color: var(--on-surface-variant);
+    transform: rotate(-90deg);
+    transition: transform 150ms ease;
+  }
+
+  .navsheet__chevron--open {
+    transform: none;
+  }
+
+  /* Le fil de l'espace ouvert, comme dans la barre laterale : une ligne fine
+     sous l'icone de l'espace relie ses pages, et la page courante y porte un
+     segment de la couleur principale. */
+  .navsheet__thread {
+    position: relative;
+    margin: 0 0 0.5rem 1.375rem;
+    padding-left: 0.5rem;
+  }
+
+  .navsheet__thread::before {
+    position: absolute;
+    top: 0.5rem;
+    bottom: 0.5rem;
+    left: 0;
+    width: 1px;
+    content: '';
+    background: var(--outline-variant);
+  }
+
+  .navsheet__thread .navsheet__item--active {
+    background: transparent;
+  }
+
+  .navsheet__thread .navsheet__item--active::before {
+    position: absolute;
+    top: 0.75rem;
+    bottom: 0.75rem;
+    left: -0.5rem;
+    width: 2px;
+    margin-left: -0.5px;
+    content: '';
+    border-radius: 2px;
+    background: var(--primary-color);
+  }
+
+  .navsheet__row--plain {
+    min-height: 2.75rem;
+  }
+
+  /* ── En-tete ── */
 
   .navsheet__shortcuts {
     display: flex;
-    min-height: 2.25rem;
+    min-height: 2.75rem;
     flex: none;
     align-items: center;
-    gap: 0.375rem;
+    gap: 0.5rem;
     padding: 0 0.75rem;
-    border: 1px solid var(--outline-variant);
     border-radius: 999px;
-    background: var(--surface-container);
-    color: var(--on-surface);
-    font-family: var(--font-label);
-    font-size: 0.75rem;
-    font-weight: 650;
+    color: var(--primary-color);
+    font-size: 0.875rem;
+    font-weight: 500;
     white-space: nowrap;
     -webkit-tap-highlight-color: transparent;
   }
 
   .navsheet__shortcuts:active {
     background: color-mix(in srgb, var(--primary-color) 12%, transparent);
-    color: var(--primary-color);
   }
 
-  .navsheet__empty {
-    padding: 2rem 1rem;
-    color: var(--on-surface-variant);
-    font-size: 0.875rem;
-    text-align: center;
+  @media (prefers-reduced-motion: reduce) {
+    .navsheet__chevron {
+      transition: none;
+    }
   }
-
 </style>

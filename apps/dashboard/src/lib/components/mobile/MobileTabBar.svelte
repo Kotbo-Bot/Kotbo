@@ -51,8 +51,8 @@
 
   /**
    * Holding the bar opens its editor, the gesture people already expect from a
-   * phone home screen. The editor also has plain rows in the account and
-   * navigation sheets, so nobody has to discover the gesture to reach it.
+   * phone home screen. The navigation sheet also opens it from a plain button
+   * in its header, so nobody has to discover the gesture to reach it.
    */
   const LONG_PRESS_MS = 500;
   const LONG_PRESS_SLOP = 10;
@@ -139,7 +139,7 @@
         onclick={(event) => navigate(event, tab.href)}
       >
         <span class="tabbar__glyph">
-          <Papicon icon={tab.icon ?? 'circle'} size={21} />
+          <Papicon icon={tab.icon ?? 'circle'} size={20} />
           {#if badge > 0}
             <span class="tabbar__badge" aria-hidden="true">{badge > 9 ? '9+' : badge}</span>
           {/if}
@@ -160,7 +160,7 @@
       onclick={openMore}
     >
       <span class="tabbar__glyph">
-        <Papicon icon={isNavSheetOpen ? 'x' : 'menu'} size={21} />
+        <Papicon icon={isNavSheetOpen ? 'x' : 'menu'} size={20} />
       </span>
       <span class="tabbar__label">{m.nav_more()}</span>
     </button>
@@ -178,7 +178,7 @@
     grid-auto-columns: minmax(0, 1fr);
     grid-auto-flow: column;
     align-items: stretch;
-    padding: 0.25rem 0.25rem calc(0.25rem + env(safe-area-inset-bottom));
+    padding: 0.25rem 0 calc(0.25rem + env(safe-area-inset-bottom));
     border-top: 1px solid var(--outline-variant);
     background: color-mix(in srgb, var(--surface-container-lowest) 88%, transparent);
     transition: transform 200ms ease, opacity 200ms ease;
@@ -199,76 +199,74 @@
     position: relative;
     display: flex;
     min-width: 0;
-    min-height: 3rem;
+    min-height: 3.25rem;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     gap: 0.25rem;
-    border-radius: 0.75rem;
     color: var(--on-surface-variant);
     transition: color 150ms ease;
     -webkit-tap-highlight-color: transparent;
   }
 
-  .tabbar__tab:active .tabbar__glyph {
-    transform: scale(0.9);
-  }
-
   .tabbar__tab--active {
-    color: var(--primary-color);
+    color: var(--on-surface);
   }
 
+  /* L'onglet actif porte une pastille derriere son icone : une couleur seule
+     ne se lit pas en plein soleil, et le trait de 3px d'avant passait
+     inapercu. */
   .tabbar__glyph {
     position: relative;
     display: grid;
-    width: 1.75rem;
-    height: 1.5rem;
+    width: 3.5rem;
+    height: 2rem;
     place-items: center;
-    transition: transform 150ms ease;
-  }
-
-  /* A short bar above the active icon reads faster than a filled pill. */
-  .tabbar__tab--active .tabbar__glyph::after {
-    position: absolute;
-    top: -0.4375rem;
-    width: 1.125rem;
-    height: 0.1875rem;
-    content: '';
     border-radius: 999px;
-    background: var(--primary-color);
+    transition: background-color 150ms ease, transform 150ms ease;
   }
 
+  .tabbar__tab--active .tabbar__glyph {
+    background: color-mix(in srgb, var(--primary-color) 16%, transparent);
+    color: var(--primary-color);
+  }
+
+  .tabbar__tab:active .tabbar__glyph {
+    transform: scale(0.94);
+  }
+
+  /* 11px, le plancher du dashboard. Les libelles du menu ont ete raccourcis
+     pour tenir dans un cinquieme d'ecran sans etre coupes. */
   .tabbar__label {
     max-width: 100%;
     overflow: hidden;
-    font-family: var(--font-label);
-    font-size: 0.625rem;
-    font-weight: 650;
-    letter-spacing: -0.01em;
-    line-height: 1.1;
+    padding: 0 0.125rem;
+    font-size: 0.6875rem;
+    font-weight: 500;
+    line-height: 1rem;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
   .tabbar__tab--active .tabbar__label {
-    font-weight: 750;
+    font-weight: 600;
   }
 
   .tabbar__badge {
     position: absolute;
-    top: -0.1875rem;
-    right: -0.0625rem;
+    top: -0.125rem;
+    right: 0.5rem;
     display: grid;
-    min-width: 1.0625rem;
-    height: 1.0625rem;
+    min-width: 1.125rem;
+    height: 1.125rem;
     padding: 0 0.25rem;
     place-items: center;
     border: 2px solid var(--surface-container-lowest);
     border-radius: 999px;
-    background: #ef4444;
-    color: #fff;
-    font-size: 0.5625rem;
-    font-weight: 800;
+    background: var(--primary-color);
+    color: var(--on-primary-color);
+    font-size: 0.6875rem;
+    font-weight: 600;
     line-height: 1;
   }
 
@@ -288,7 +286,7 @@
     }
 
     .tabbar__tab {
-      min-height: 2.5rem;
+      min-height: 2.75rem;
     }
   }
 
