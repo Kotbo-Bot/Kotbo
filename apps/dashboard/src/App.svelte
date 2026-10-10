@@ -194,6 +194,7 @@
     if (path.startsWith("/security/quick-setup")) return "automod";
     if (path.startsWith("/security/sanctions")) return "sanctions";
     if (path.startsWith("/security/filters")) return "automod";
+    if (path.startsWith("/security/aegis")) return "automod";
     if (path.startsWith("/security/accounts")) return "double_accounts";
     if (path.startsWith("/security")) return "raid_protection";
     if (path.startsWith("/channels-management")) return "auto_thread";
@@ -868,6 +869,10 @@
             <LazyRoute
               path="/security/filters/*"
               load={() => import("./pages/security/Filters.svelte")}
+            />
+            <LazyRoute
+              path="/security/aegis"
+              load={() => import("./pages/security/Aegis.svelte")}
             />
             <LazyRoute
               path="/security/accounts/*"

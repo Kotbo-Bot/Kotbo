@@ -1,5 +1,6 @@
 <!--
-  Sécurité → Filtres → IA · AegisAI.
+  Sécurité → AegisAI : tout le contenu de la page, dont l'en-tête porte déjà
+  le nom du partenariat et sa présentation.
 
   Charge et enregistre sa propre configuration (AegisConfig), comme le panneau
   anti-spam de l'onglet Comportemental. Deux réglages s'appliquent tout de
@@ -196,13 +197,13 @@
   </div>
 {:else}
   <div class="aegis">
-    <!-- En-tête : identité du partenariat, état de l'API, interrupteur. -->
+    <!-- En-tête : état de l'API et interrupteur. Le nom du partenariat est
+         le titre de la page. -->
     <section class="hero">
       <div class="hero__brand">
         <span class="hero__logo" aria-hidden="true"><Papicon icon="ShieldCheck" size={22} /></span>
         <div class="min-w-0">
-          <h2 class="hero__title">{m.aegis_title()}</h2>
-          <p class="hero__subtitle">{m.aegis_subtitle()}</p>
+          <h2 class="hero__title">{m.aegis_enable_label()}</h2>
           <div class="hero__status">
             <span class="pill {apiTone}"><span class="pill__dot" aria-hidden="true"></span>{apiLabel}{#if api?.configured && api.circuit === 'closed' && api.latencyP50Ms !== null} · {m.aegis_status_latency({ ms: String(api.latencyP50Ms) })}{/if}</span>
             {#if queue && config.enabled}
@@ -212,7 +213,6 @@
         </div>
       </div>
       <div class="hero__toggle">
-        <span class="text-body-sm text-on-surface-variant">{m.aegis_enable_label()}</span>
         <ToggleSwitch
           checked={config.enabled}
           disabled={!canEdit || toggling || !api?.configured}
@@ -512,12 +512,6 @@
     color: var(--color-on-surface);
   }
 
-  .hero__subtitle {
-    margin: 0.125rem 0 0;
-    font-size: 0.8125rem;
-    line-height: 1.5;
-    color: var(--color-on-surface-variant);
-  }
 
   .hero__status {
     display: flex;

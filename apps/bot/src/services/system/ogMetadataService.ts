@@ -154,6 +154,7 @@ const DASHBOARD_SECTIONS: { prefix: string; fr: string; en: string }[] = [
   { prefix: '/security/quick-setup', fr: 'Securite - Demarrage rapide', en: 'Security - Quick setup' },
   { prefix: '/security/anti-raid', fr: 'Securite - Anti-raid', en: 'Security - Anti-raid' },
   { prefix: '/security/filters', fr: 'Securite - Filtres', en: 'Security - Filters' },
+  { prefix: '/security/aegis', fr: 'Securite - AegisAI', en: 'Security - AegisAI' },
   { prefix: '/security/accounts', fr: 'Securite - Comptes', en: 'Security - Accounts' },
   { prefix: '/security/sanctions', fr: 'Securite - Sanctions', en: 'Security - Sanctions' },
   { prefix: '/security', fr: 'Securite', en: 'Security' },

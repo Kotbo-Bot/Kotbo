@@ -109,7 +109,6 @@ export const PAGE_TABS: Record<string, PageTabConfig[]> = {
   '/security/filters': [
     { id: 'bot', label: () => m.am_tab_bot_filters(), icon: 'shield-alert' },
     { id: 'discord', label: () => m.am_tab_discord_filters(), icon: 'shield' },
-    { id: 'ai', label: () => m.aegis_tab(), icon: 'sparkles' },
     { id: 'security', label: () => m.am_tab_security(), icon: 'lock' },
     { id: 'behavioral', label: () => m.am_tab_behavioral(), icon: 'activity' },
     { id: 'exceptions', label: () => m.am_tab_exceptions(), icon: 'filter' },

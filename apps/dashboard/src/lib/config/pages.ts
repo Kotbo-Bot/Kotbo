@@ -67,6 +67,8 @@ export const moderationItems: PageConfig[] = [
  * Deux sous-pages gardent une entree a elles tant que leur onglet d'accueil
  * n'existe pas : les pseudos sous Filtres, et les appels de ban sous Sanctions
  * - sans entree, /security/sanctions/appeals n'etait plus atteignable au clic.
+ * AegisAI a quitte les onglets de Filtres pour sa propre page : reglages,
+ * file de revue et modules derives en faisaient une page dans la page.
  */
 export const securityItems: PageConfig[] = [
   { name: m.nav_security_overview(),  icon: "shieldcheck",   href: "/security",           featureKey: "raid_protection", beta: false, wip: false },
@@ -74,6 +76,7 @@ export const securityItems: PageConfig[] = [
   { name: m.nav_security_antiraid(),  icon: "shieldwarning", href: "/security/anti-raid", featureKey: "raid_protection", beta: false, wip: false },
   { name: m.nav_security_filters(),   icon: "shield-alert",  href: "/security/filters",   featureKey: "automod", beta: false, wip: false },
   { name: m.nav_nicknames(),          icon: "user",          href: "/security/filters/nicknames", featureKey: "nickname_moderation", beta: false, wip: false },
+  { name: m.nav_aegis(),              icon: "sparkles",      href: "/security/aegis",     featureKey: "automod", beta: false, wip: false },
   { name: m.nav_security_accounts(),  icon: "shield",        href: "/security/accounts",  featureKey: "double_accounts", beta: false, wip: false },
   { name: m.nav_security_sanctions(), icon: "alert-triangle",href: "/security/sanctions", featureKey: "sanctions", beta: false, wip: false },
   { name: m.nav_ban_appeals(),        icon: "gavel",         href: "/security/sanctions/appeals", featureKey: "ban_appeals", beta: false, wip: false },
@@ -99,6 +102,7 @@ export const SECURITY_LEGACY_REDIRECTS: Record<string, string> = {
   '/appeals':               '/security/sanctions/appeals',
   '/admin-lock':            '/security/sanctions/admin-approval',
   '/security/verification': '/security/accounts/verification',
+  '/security/filters/ai':   '/security/aegis',
 };
 
 /**

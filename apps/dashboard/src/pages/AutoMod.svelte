@@ -17,7 +17,6 @@
   import Skeleton from '../lib/components/Skeleton.svelte';
   import LoadingHint from '../lib/components/LoadingHint.svelte';
   import AntiSpamPanel from '../lib/components/AntiSpamPanel.svelte';
-  import AegisPanel from '../lib/components/aegis/AegisPanel.svelte';
   import RuleSimulator from '../lib/components/automod/RuleSimulator.svelte';
   import Button from '../lib/components/ui/Button.svelte';
   import type { SimulatedRule, SimulatedRuleKind } from '../lib/api';
@@ -28,7 +27,7 @@
 
   const actionState = createAsyncActionState();
   let loading = $state(false);
-  const FILTER_TABS = ['bot', 'discord', 'ai', 'security', 'behavioral', 'exceptions', 'simulator'] as const;
+  const FILTER_TABS = ['bot', 'discord', 'security', 'behavioral', 'exceptions', 'simulator'] as const;
   let activeTab = $state<string>('bot');
 
   // L'onglet vit dans l'URL, comme ailleurs : la palette de commandes propose
@@ -1161,13 +1160,6 @@
         </div>
         <Papicon icon="chevron-right" size={16} class="shrink-0 text-on-surface-variant/60" />
       </a>
-
-    {:else if activeTab === 'ai'}
-      <!-- Kotbo × AegisAI : sa propre configuration (AegisConfig), chargée et
-           enregistrée par le panneau. -->
-      <div class="mt-6">
-        <AegisPanel />
-      </div>
 
     {:else if activeTab === 'behavioral'}
       <!-- Le panneau gere son propre chargement et son propre enregistrement :

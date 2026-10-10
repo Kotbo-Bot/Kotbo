@@ -177,7 +177,7 @@
     {#if !data.enabled && noData}
       <Callout variant="info" title={m.aegis_climate_off_title()}>
         {m.aegis_climate_off_desc()}
-        {#snippet actions()}<Button size="sm" href="/security/filters/ai">{m.aegis_climate_open_settings()}</Button>{/snippet}
+        {#snippet actions()}<Button size="sm" href="/security/aegis">{m.aegis_climate_open_settings()}</Button>{/snippet}
       </Callout>
     {:else if noData}
       <Callout variant="info" title={m.aegis_climate_empty_title()}>{m.aegis_climate_empty_desc()}</Callout>
