@@ -93,7 +93,8 @@ export function siteCsp(nonce: string, apiOrigin: string, embed = false): string
     "style-src-attr 'unsafe-inline'",
     "img-src 'self' data: https:",
     'font-src https://fonts.gstatic.com',
-    `connect-src 'self' ${apiOrigin}`,
+    // Signaux temps réel du site : le WebSocket vit sur l'origine de l'API.
+    `connect-src 'self' ${apiOrigin} ${apiOrigin.replace(/^http/, 'ws')}`,
     `frame-src ${FRAME_SOURCES}`,
     `form-action 'self' ${apiOrigin}`,
     "base-uri 'none'",

@@ -275,6 +275,7 @@
     if (!existing) document.body.appendChild(banner);
     if (!agentTimer) {
       agentTimer = setInterval(function () {
+        if (live.connected) return;
         request('GET', SITE_API + '/viewer')
           .then(function (data) {
             agent = data.agent || null;
@@ -307,7 +308,7 @@
     var seconds = Number(section.getAttribute('data-live'));
     if (!seconds || section.__liveTimer) return;
     section.__liveTimer = setInterval(function () {
-      if (document.hidden || !document.body.contains(section)) {
+      if (document.hidden || !document.body.contains(section) || signalledByLive(section)) {
         if (!document.body.contains(section)) clearInterval(section.__liveTimer);
         return;
       }
@@ -678,6 +679,101 @@
     });
   });
 
+  // ─── Temps réel ────────────────────────────────────────────────────────
+  // Le socket ne porte que des signaux (« ce bloc a changé ») ; le contenu est
+  // relu par les routes HTTP habituelles. Sans socket, le sondage des blocs en
+  // direct reste en place.
+
+  var live = { socket: null, connected: false, retry: 0, channels: [] };
+  /** Blocs dont le rafraîchissement vient du socket quand il est ouvert. */
+  var SIGNALLED = { voice: true, channelFeed: true, giveaways: true, ticket: true, suggestions: true, events: true, marketplace: true };
+
+  function liveChannels() {
+    var channels = {};
+    document.querySelectorAll('section.mod[data-module]').forEach(function (section) {
+      channels['module:' + section.getAttribute('data-module')] = true;
+    });
+    document.querySelectorAll('[data-comments]').forEach(function (holder) {
+      channels['comments:' + holder.getAttribute('data-comments')] = true;
+    });
+    if (viewer) {
+      channels['user:' + viewer.userId] = true;
+      if (viewer.canManageSite) channels.agent = true;
+    }
+    return Object.keys(channels).slice(0, 40);
+  }
+
+  function onSignal(channel) {
+    if (channel === 'agent') {
+      request('GET', SITE_API + '/viewer')
+        .then(function (data) {
+          agent = data.agent || null;
+          renderAgentBanner();
+        })
+        .catch(function () {});
+      return;
+    }
+    if (channel.indexOf('module:') === 0) {
+      var key = channel.slice(7);
+      document.querySelectorAll('section.mod[data-module="' + key + '"]').forEach(function (section) {
+        // Étalé : tous les visiteurs ne relisent pas le bloc à la même milliseconde.
+        setTimeout(function () { refreshBlock(section); }, Math.floor(Math.random() * 800));
+      });
+      return;
+    }
+    if (channel.indexOf('comments:') === 0) {
+      reloadComments(channel.slice(9));
+      return;
+    }
+    if (channel.indexOf('user:') === 0) {
+      document.querySelectorAll('section.mod[data-module="ticket"], section.mod[data-module^="member"]').forEach(function (section) {
+        refreshBlock(section);
+      });
+    }
+  }
+
+  function connectLive() {
+    if (!('WebSocket' in window) || !API || !SITE) return;
+    var url;
+    try {
+      url = new URL('/api/site/live/' + encodeURIComponent(SITE), API);
+      url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+    } catch (e) {
+      return;
+    }
+    var socket = new WebSocket(url.toString());
+    live.socket = socket;
+    socket.addEventListener('message', function (event) {
+      var data;
+      try {
+        data = JSON.parse(event.data);
+      } catch (e) {
+        return;
+      }
+      if (data.type === 'site_live_ready') {
+        live.connected = true;
+        live.retry = 0;
+        live.channels = liveChannels();
+        socket.send(JSON.stringify({ type: 'subscribe', channels: live.channels }));
+      } else if (data.type === 'site_signal' && typeof data.channel === 'string') {
+        onSignal(data.channel);
+      }
+    });
+    socket.addEventListener('close', function () {
+      live.connected = false;
+      live.socket = null;
+      // Reprise progressive : 2 s, 4 s, 8 s… jusqu'à une minute.
+      var delay = Math.min(60000, 2000 * Math.pow(2, live.retry));
+      live.retry += 1;
+      setTimeout(connectLive, delay);
+    });
+  }
+
+  /** Sondage d'un bloc en direct : inutile tant que le socket le signale. */
+  function signalledByLive(section) {
+    return live.connected && SIGNALLED[section.getAttribute('data-module')] === true;
+  }
+
   // ─── Démarrage ─────────────────────────────────────────────────────────
 
   document.querySelectorAll('section.mod[data-live]').forEach(bindLive);
@@ -693,6 +789,7 @@
     });
     showReward(pendingReward);
     trackReading();
+    connectLive();
   });
 
   // Le statut est exposé pour le débogage, pas pour d'autres scripts.
