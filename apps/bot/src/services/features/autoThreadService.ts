@@ -106,6 +106,31 @@ export async function setAutoThreadChannel(guildId: string, channelId: string, e
   await invalidateAutoThreadConfigs(guildId);
 }
 
+/**
+ * Aligne les salons armés sur une liste complète (ancien format de l'API :
+ * une liste de salons). Un salon ajouté reçoit une configuration par défaut,
+ * un salon retiré voit les siennes désactivées, pas supprimées.
+ */
+export async function reconcileAutoThreadChannels(
+  guildId: string,
+  channelIds: string[],
+  isValidChannel: (channelId: string) => boolean,
+): Promise<void> {
+  const wanted = new Set(channelIds);
+  const current = await prisma.autoThreadConfig.findMany({
+    where: { guildId, enabled: true },
+    select: { channelId: true },
+    distinct: ['channelId'],
+  });
+  const armed = new Set(current.map((row) => row.channelId));
+  for (const channelId of wanted) {
+    if (!armed.has(channelId) && isValidChannel(channelId)) await setAutoThreadChannel(guildId, channelId, true);
+  }
+  for (const channelId of armed) {
+    if (!wanted.has(channelId)) await setAutoThreadChannel(guildId, channelId, false);
+  }
+}
+
 // ── Lecture d'un message ────────────────────────────────────────────────────
 
 const MEDIA_EXTENSIONS = /\.(png|jpe?g|gif|webp|avif|mp4|mov|webm|mkv)$/i;
