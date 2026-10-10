@@ -65,6 +65,31 @@ self.addEventListener('fetch', (event) => {
 });
 
 // ---------------------------------------------------------------------------
+// Notifications de bureau du dashboard (affichées par notificationAlerts.ts).
+// Un clic ramène sur un onglet ouvert et lui confie la navigation ; sans
+// onglet, il en ouvre un directement sur la page concernée.
+// ---------------------------------------------------------------------------
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const data = event.notification.data || {};
+  const link = typeof data.link === 'string' && data.link.startsWith('/') && !data.link.startsWith('//')
+    ? data.link
+    : null;
+
+  event.waitUntil((async () => {
+    const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    const target = windows.find((client) => client.focused) || windows[0];
+    if (target) {
+      await target.focus().catch(() => undefined);
+      target.postMessage({ type: 'KOTBO_NOTIFICATION_OPEN', id: data.id ?? null, link });
+      return;
+    }
+    await self.clients.openWindow(link || '/inbox');
+  })());
+});
+
+// ---------------------------------------------------------------------------
 // Configuration du widget (token + base API), stockée en IndexedDB.
 // La page Widget du dashboard pousse la config via postMessage.
 // ---------------------------------------------------------------------------
