@@ -54,6 +54,7 @@ export type BackgroundJobName =
   | 'site-analytics-prune'
   | 'site-scheduled-publish'
   | 'site-vote-reminders'
+  | 'shop-renewals'
   | 'acquisition-abandon-scan'
   | 'acquisition-alerts-check'
   | 'acquisition-weekly-recap'

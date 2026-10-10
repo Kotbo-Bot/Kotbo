@@ -412,6 +412,10 @@ export async function registerCrons(client: Client): Promise<void> {
       const { sendVoteReminders } = await import('../services/site/siteVoteService.js');
       await sendVoteReminders(client);
     },
+    'shop-renewals': async () => {
+      const { processShopRenewals } = await import('../services/shop/shopService.js');
+      await processShopRenewals(client);
+    },
     'acquisition-abandon-scan': async () => {
       const { scanAbandonedOnboardings } = await import('../services/analytics/acquisitionMaintenance.js');
       await scanAbandonedOnboardings();
@@ -551,6 +555,14 @@ export async function registerCrons(client: Client): Promise<void> {
     await runCronJob('site-vote-reminders', async () => {
       const { sendVoteReminders } = await import('../services/site/siteVoteService.js');
       await sendVoteReminders(client);
+    }, 2500);
+  });
+
+  // Boutique : prélèvements d'abonnements et rôles temporaires échus (toutes les 15 minutes).
+  cron.schedule('7-59/15 * * * *', async () => {
+    await runCronJob('shop-renewals', async () => {
+      const { processShopRenewals } = await import('../services/shop/shopService.js');
+      await processShopRenewals(client);
     }, 2500);
   });
 
