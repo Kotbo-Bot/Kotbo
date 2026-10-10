@@ -13,6 +13,7 @@
   import { m } from '../../i18n';
   import { deleteSite, updateSite, type CommunitySite, type SiteCatalog, type SiteState } from '../../api/site';
   import { siteErrorMessage } from './siteErrors';
+  import SiteAutoSettings from './SiteAutoSettings.svelte';
 
   let { siteState, catalog, guildId, onChanged }: { siteState: SiteState; catalog: SiteCatalog | null; guildId: string; onChanged: () => void } = $props();
 
@@ -126,6 +127,8 @@
       {/each}
     </div>
   </SectionCard>
+
+  <SiteAutoSettings {siteState} {catalog} {guildId} {onChanged} />
 
   {#if siteState.modules.site_wiki || siteState.modules.site_blog}
     <SectionCard title={m.ste_editors()} description={m.ste_editors_desc()} icon="edit-2">

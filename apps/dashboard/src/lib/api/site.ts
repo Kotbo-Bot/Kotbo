@@ -28,7 +28,7 @@ export interface CommunitySite {
   navigation: SiteNavItem[];
   homePageId: string | null;
   staffPage: { bio?: boolean; absence?: boolean; seniority?: boolean; stats?: boolean };
-  settings: { commentsByDefault?: boolean; showMemberCount?: boolean };
+  settings: { commentsByDefault?: boolean; showMemberCount?: boolean; auto?: unknown };
   /** Récompenses de l'activité sur le site (voir `normalizeSiteRewards`). */
   rewards: Record<string, unknown>;
   wikiEditorRoleIds: string[];
@@ -293,6 +293,16 @@ export function regenerateSiteVoteSecret(id: string, guildId?: string) {
 
 export function reorderSiteVoteSites(ids: string[], guildId?: string) {
   return apiRequest<{ ok: boolean }>(`${base(gid(guildId))}/votes/reorder`, { method: 'POST', payload: { ids }, errorContext: 'API Error (Reorder vote sites):' });
+}
+
+// ─── Site automatique ────────────────────────────────────────────────────────
+
+export function publishWeeklySummaryNow(guildId?: string) {
+  return apiRequest<{ pageId: string | null }>(`${base(gid(guildId))}/auto/weekly`, { method: 'POST', errorContext: 'API Error (Weekly summary):' });
+}
+
+export function syncModulePagesNow(guildId?: string) {
+  return apiRequest<{ created: number }>(`${base(gid(guildId))}/auto/module-pages`, { method: 'POST', errorContext: 'API Error (Module pages):' });
 }
 
 // ─── Forum ───────────────────────────────────────────────────────────────────

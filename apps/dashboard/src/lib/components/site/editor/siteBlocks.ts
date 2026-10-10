@@ -35,6 +35,7 @@ export const MODULE_ICONS: Record<SiteModuleKey, SiteIconName> = {
   memberInventory: 'package',
   memberPurchases: 'bag',
   shop: 'cart',
+  changelog: 'history',
   wikiIndex: 'book',
   blogList: 'pen',
   search: 'search',
@@ -72,6 +73,7 @@ export function moduleLabel(key: SiteModuleKey): string {
     memberInventory: () => m.ste_block_memberInventory(),
     memberPurchases: () => m.ste_block_memberPurchases(),
     shop: () => m.ste_block_shop(),
+    changelog: () => m.ste_block_changelog(),
     wikiIndex: () => m.ste_block_wikiIndex(),
     blogList: () => m.ste_block_blogList(),
     search: () => m.ste_block_search(),
@@ -111,6 +113,7 @@ export function moduleDescription(key: SiteModuleKey): string {
     memberInventory: () => m.ste_block_memberInventory_desc(),
     memberPurchases: () => m.ste_block_memberPurchases_desc(),
     shop: () => m.ste_block_shop_desc(),
+    changelog: () => m.ste_block_changelog_desc(),
     wikiIndex: () => m.ste_block_wikiIndex_desc(),
     blogList: () => m.ste_block_blogList_desc(),
     search: () => m.ste_block_search_desc(),
@@ -143,6 +146,7 @@ export function moduleSummary(key: SiteModuleKey, raw: Record<string, unknown>, 
     case 'events':
     case 'marketplace':
     case 'voteLeaderboard':
+    case 'changelog':
     case 'starboard':
     case 'blogList':
     case 'seasons':
