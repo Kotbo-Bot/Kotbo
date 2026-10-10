@@ -235,6 +235,7 @@ const mod = (module: string, config: Record<string, unknown> = {}) => ({ type: '
 /** Accueil généré quand le propriétaire n'a pas désigné de page d'accueil. */
 export const AUTO_HOME_ID = '_home';
 export const ME_PAGE_ID = '_me';
+export const VOTES_PAGE_ID = '_votes';
 
 export function virtualDocument(pageId: string): SiteDocument | null {
   if (pageId === AUTO_HOME_ID) {
@@ -243,6 +244,9 @@ export function virtualDocument(pageId: string): SiteDocument | null {
       // Chiffres, bouton Rejoindre et derniers articles sont dans la bannière d'accueil.
       content: [mod('wikiIndex')],
     });
+  }
+  if (pageId === VOTES_PAGE_ID) {
+    return normalizeSiteDocument({ type: 'doc', content: [mod('vote'), mod('voteLeaderboard', { limit: 10 })] });
   }
   if (pageId === ME_PAGE_ID) {
     const cell = (module: string) => ({ type: 'gridCell', attrs: { span: 1, rowSpan: 1, surface: true }, content: [mod(module)] });
@@ -569,6 +573,14 @@ async function meResponse(ctx: SiteCtx): Promise<SiteHttpResponse> {
 }
 
 /** Profil public d'un membre (masquable par le membre, non indexé). */
+/** Page des votes : où voter, statut du membre, meilleurs votants du mois. */
+async function votesResponse(ctx: SiteCtx): Promise<SiteHttpResponse> {
+  const o = { locale: ctx.locale };
+  const body = await renderDocumentHtml(ctx, virtualDocument(VOTES_PAGE_ID)!, VOTES_PAGE_ID);
+  const main = `${hero(m.site_vote_page_title({}, o), m.site_vote_page_lead({}, o))}<div class="prose wide">${body}</div>`;
+  return html(200, shell(ctx, { path: `${ctx.basePath}/votes`, title: m.site_vote_page_title({}, o), main, activeKey: 'votes', pageId: VOTES_PAGE_ID }), ctx.nonce, ctx.req.apiOrigin, { cacheSeconds: 30 });
+}
+
 async function memberProfileResponse(ctx: SiteCtx, userId: string): Promise<SiteHttpResponse> {
   const o = { locale: ctx.locale };
   const profile = await getPublicMemberProfile(ctx.req.client, ctx.site.guildId, userId);
@@ -834,6 +846,7 @@ export async function handleSiteRequest(req: SiteHttpRequest): Promise<SiteHttpR
     else if (section === 'search' && rest.length === 1) response = await searchResponse(ctx);
     else if (section === 'me' && rest.length === 1) response = await meResponse(ctx);
     else if (section === 'u' && a && rest.length === 2) response = await memberProfileResponse(ctx, a);
+    else if (section === 'votes' && rest.length === 1) response = await votesResponse(ctx);
     else if (section === 'form' && a && rest.length === 2) response = await formResponse(ctx, a);
     else if (section === 'wiki' && rest.length === 1) response = wikiIndexResponse(ctx);
     else if (section === 'wiki' && a && rest.length === 2) {

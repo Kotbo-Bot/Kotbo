@@ -15,6 +15,8 @@ export const SITE_SLUG_MAX = 40;
 export const SITE_RESERVED_PAGE_SLUGS = new Set([
   '_', 'wiki', 'blog', 'search', 'me', 'profile', 'embed', 'login', 'logout',
   'rss.xml', 'sitemap.xml', 'robots.txt', 'feed', 'api',
+  // Routes du site : profils, votes, formulaires, aperçus, boutique, forum.
+  'u', 'votes', 'form', 'preview', 'shop', 'boutique', 'forum',
 ]);
 
 /** Slugs de site refusés : ils prêteraient à confusion avec Kotbo lui-même. */
@@ -54,7 +56,7 @@ export function validatePageSlug(value: string): SiteSlugError | null {
 
 // ─── Menu ────────────────────────────────────────────────────────────────────
 
-export const SITE_NAV_SECTIONS = ['home', 'wiki', 'blog', 'search', 'me'] as const;
+export const SITE_NAV_SECTIONS = ['home', 'wiki', 'blog', 'search', 'me', 'votes'] as const;
 export type SiteNavSection = (typeof SITE_NAV_SECTIONS)[number];
 
 export type SiteNavTarget =
