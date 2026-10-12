@@ -530,6 +530,45 @@ describe('création d\'un salon temporaire', () => {
     tempChannels.delete(CHANNEL);
   });
 
+  test('« Ceux qui sont en vocal » : le créateur déplacé dans son salon peut écrire, pas un absent', async () => {
+    // Le créateur n'a aucune surcharge d'écriture à la naissance (@everyone est
+    // refusé) : s'il n'est pas traité comme présent, il est muet chez lui.
+    guildConfig = generatorConfig({ textChat: 'inVoice' });
+
+    const { guild, created } = fakeCreationGuild(fakeCategory());
+    const { newState, oldState } = fakeJoiningMember(guild);
+
+    // Le salon créé garde trace des écritures de permissions, et le déplacement
+    // du créateur le fait apparaître dans ses occupants.
+    const ecritures: Array<{ id: string; patch: Record<string, unknown> }> = [];
+    let salonCree: { members: Map<string, unknown>; permissionOverwrites: Record<string, unknown> } | undefined;
+    const creerSalon = guild.channels.create;
+    guild.channels.create = mock(async (payload: Record<string, unknown>) => {
+      const salon = await creerSalon(payload) as unknown as NonNullable<typeof salonCree>;
+      salon.permissionOverwrites.edit = mock(async (cible: string | { id: string }, patch: Record<string, unknown>) => {
+        ecritures.push({ id: typeof cible === 'string' ? cible : cible.id, patch });
+      });
+      // OTHER est sur le serveur, hors du salon : sans lui l'assertion finale ne prouverait rien.
+      (salon as unknown as { guild: { members: { cache: Map<string, unknown> } } }).guild.members.cache = new Map([[OTHER, { id: OTHER }]]);
+      salonCree = salon;
+      return salon;
+    }) as typeof guild.channels.create;
+    newState.setChannel = mock(async () => { salonCree!.members.set(OWNER, {}); });
+
+    const { client, listeners } = fakeClient();
+    registerTempVoiceListener(client);
+    await listeners.get(Events.VoiceStateUpdate)?.(oldState, newState);
+
+    expect(created).toHaveLength(1);
+    expect(ecritures.filter((e) => e.id === OWNER && e.patch.SendMessages === true)).toHaveLength(1);
+    expect(ecritures.some((e) => e.id === OTHER)).toBe(false);
+    const overwrites = created[0]?.permissionOverwrites as Array<{ id: string; deny: bigint }>;
+    const everyone = overwrites.find((entry) => entry.id === GUILD);
+    expect((everyone!.deny & PermissionFlagsBits.SendMessages) === PermissionFlagsBits.SendMessages).toBe(true);
+
+    tempChannels.delete(CHANNEL);
+  });
+
   test('poste un panneau dont chaque bouton a une action correspondante', async () => {
     // Un identifiant de bouton mal orthographié ne lève rien : le clic tombe
     // dans le `default` du `switch` et l'interaction reste sans réponse.

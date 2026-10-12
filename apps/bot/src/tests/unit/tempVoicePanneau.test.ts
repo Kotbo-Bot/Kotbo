@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { PermissionFlagsBits } from 'discord.js';
-import { deduireModeEcriture } from '../../events/tempVoice.js';
+import { PermissionFlagsBits, PermissionsBitField } from 'discord.js';
+import { deduireModeEcriture, modeDuSalon } from '../../events/tempVoice.js';
 import {
   normaliserHistoriqueRenommage,
   normaliserEtatDemandes,
@@ -254,6 +254,24 @@ describe('normalisation et pont vers l’ancien réglage', () => {
     expect(deduireModeEcriture(rien, rien, undefined)).toBe('everyone');
     const proprio = { allow: { has: () => true }, deny: { has: () => false } };
     expect(deduireModeEcriture(rien, proprio, false)).toBe('ownerOnly');
+  });
+
+  test('Hérité : le refus vient du rôle @everyone du serveur, sans surcharge → la lecture réelle ne rend pas « Tout le monde »', () => {
+    // Réglage Hérité : aucun mode mémorisé qui court-circuiterait la lecture des permissions.
+    expect(modeEcritureDepuisTextChat('inherit')).toBeNull();
+    // Droits de base du rôle sans SendMessages ; aucune surcharge sur le salon, rien dans la catégorie.
+    const droitsDeBase = new PermissionsBitField(PermissionFlagsBits.ViewChannel | PermissionFlagsBits.Connect);
+    const salon = (permissionsFor: unknown) =>
+      ({
+        guild: { id: 'g1', roles: { everyone: { id: 'g1' } } },
+        permissionOverwrites: { cache: new Map() },
+        permissionsFor,
+      }) as never;
+    const entree = { creatorId: 'proprio' } as never;
+
+    expect(modeDuSalon(salon(() => droitsDeBase), entree)).toBe('nobody');
+    // Contre-épreuve : si le rôle peut écrire, c'est bien « Tout le monde ».
+    expect(modeDuSalon(salon(() => new PermissionsBitField(PermissionFlagsBits.SendMessages)), entree)).toBe('everyone');
   });
 });
 
