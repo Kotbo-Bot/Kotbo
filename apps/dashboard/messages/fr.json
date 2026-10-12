@@ -1286,6 +1286,8 @@
   "lg_ev_voice_leave_d": "Déconnexion d’un salon vocal.",
   "lg_ev_voice_move": "Changement de salon",
   "lg_ev_voice_move_d": "Déplacement entre salons vocaux.",
+  "lg_ev_voice_panel": "Panneau vocal",
+  "lg_ev_voice_panel_d": "Chaque action faite depuis le panneau d’un salon vocal temporaire : qui, quoi, sur quel salon.",
   "lg_cat_lifecycle": "Salons et rôles",
   "lg_ev_channel_lifecycle": "Salons",
   "lg_ev_channel_lifecycle_d": "Création, modification ou suppression d’un salon.",

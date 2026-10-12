@@ -38,7 +38,7 @@ export async function handleLogsRoutes(ctx: ModuleRouteContext): Promise<boolean
           'message_delete', 'message_edit', 'message_bulk_delete',
           'member_join', 'member_leave', 'member_roles_update', 'member_timeout',
           'moderation_kick', 'moderation_ban', 'moderation_unban', 'moderation_timeout',
-          'voice_join', 'voice_leave', 'voice_move',
+          'voice_join', 'voice_leave', 'voice_move', 'voice_panel',
           'channel_lifecycle', 'role_lifecycle'
         ];
 

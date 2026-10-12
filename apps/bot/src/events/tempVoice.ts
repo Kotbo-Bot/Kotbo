@@ -41,6 +41,7 @@ import {
 } from 'discord.js';
 import prisma from '../utils/db.js';
 import { logger } from '../utils/logger.js';
+import { sendLogEmbed } from '../utils/logDispatch.js';
 import { E } from '../utils/emojis.js';
 import { RENAME_TIMEOUT_MS, settleWithin } from '../utils/discord.js';
 import { cache, getCachedGuild } from '../utils/cache.js';
@@ -2450,6 +2451,166 @@ const PURGE_DEMANDES_MS = 5 * 60 * 1000;
  *  par chaque test, et autant d'intervalles s'accumuleraient. */
 let purgeDemandes: ReturnType<typeof setInterval> | null = null;
 
+// ─── Journal du panneau ───
+// Tout composant `tempvoice:` passe par l'écouteur d'interactions, qui journalise
+// une fois le traitement terminé : ajouter un bouton sans l'inscrire ici ne le
+// rend pas muet, il apparaît sous son identifiant brut.
+
+/** Action lisible de chaque composant du panneau (identifiant sans le préfixe ni les paramètres). */
+export const LIBELLES_ACTIONS_PANNEAU: Readonly<Record<string, string>> = {
+  salon: "Ouvrir l'onglet « Salon »",
+  membres: "Ouvrir l'onglet « Membres »",
+  propriete: "Ouvrir l'onglet « Propriété »",
+  reglages: 'Ouvrir les réglages des modérateurs',
+  demander: "Demander l'accès au salon",
+  bascule_verrou: 'Verrouiller ou déverrouiller le salon',
+  limit: 'Ouvrir la saisie de la limite de places',
+  limit_modal: 'Définir la limite de places',
+  rename: 'Ouvrir la saisie du nom du salon',
+  rename_modal: 'Renommer le salon',
+  reserve: 'Réserver le salon',
+  reserve_select: 'Réserver le salon à un rôle',
+  reserve_membres: 'Réserver le salon à des membres',
+  mode_select: 'Changer qui peut écrire dans le chat',
+  reglages_mod: 'Modifier les réglages des modérateurs',
+  membre_ici: "Ouvrir la fiche d'un membre présent",
+  membre_select: "Ouvrir la fiche d'un membre",
+  m_kick: 'Expulser un membre du salon',
+  m_ban: 'Bannir un membre du salon',
+  m_trust: 'Autoriser un membre à rejoindre le salon',
+  m_untrust: "Retirer l'autorisation d'un membre",
+  m_transfer: 'Transférer la propriété du salon',
+  claim: 'Récupérer le salon',
+  resa_rien: 'Réservation : ne déplacer personne',
+  resa_deplacer: 'Réservation : déplacer les membres restants',
+  resa_deconnecter: 'Réservation : déconnecter les membres restants',
+  demande_ok: "Accepter une demande d'accès",
+  demande_non: "Refuser une demande d'accès",
+  demande_ban: "Bannir l'auteur d'une demande d'accès",
+  transfer_select: 'Transférer la propriété du salon',
+  trust_select: 'Autoriser un membre à rejoindre le salon',
+  kick_select: 'Expulser un membre du salon',
+  ban_select: 'Bannir un membre du salon',
+  // Identifiants d'un ancien panneau, encore acceptés.
+  lock: 'Verrouiller le salon (ancien panneau)',
+  unlock: 'Déverrouiller le salon (ancien panneau)',
+  chat: 'Ouvrir ou fermer le chat (ancien panneau)',
+  kick: 'Choisir un membre à expulser (ancien panneau)',
+  ban: 'Choisir un membre à bannir (ancien panneau)',
+  trust: 'Choisir un membre à autoriser (ancien panneau)',
+  transfer: 'Choisir le nouveau propriétaire (ancien panneau)',
+};
+
+/** Ces actions répondent par un panneau entier : sa description n'est pas un résultat. */
+const ACTIONS_SANS_TEXTE_DE_REPONSE = new Set([
+  'salon', 'membres', 'propriete', 'reglages', 'membre_ici', 'membre_select',
+]);
+
+/** Texte lisible d'une réponse (chaîne, `content` ou description du premier embed). */
+function texteDeReponse(charge: unknown): string | null {
+  if (typeof charge === 'string') return charge;
+  const o = charge as {
+    content?: unknown;
+    embeds?: Array<{ data?: { description?: string }; toJSON?: () => { description?: string } }>;
+  } | null;
+  if (typeof o?.content === 'string' && o.content) return o.content;
+  const embed = o?.embeds?.[0];
+  return embed?.data?.description ?? embed?.toJSON?.().description ?? null;
+}
+
+/** Mandataire de l'interaction qui retient le dernier texte répondu : l'objet d'origine reste intact. */
+function espionnerReponses<T extends Interaction>(interaction: T): { texte: string | null; vue: T } {
+  const etat = { texte: null as string | null };
+  const vue = new Proxy(interaction, {
+    get(cible, nom) {
+      const valeur = Reflect.get(cible, nom, cible) as unknown;
+      if (typeof valeur !== 'function') return valeur;
+      const lie = (valeur as (...a: unknown[]) => unknown).bind(cible);
+      if (!['reply', 'followUp', 'editReply', 'update'].includes(String(nom))) return lie;
+      return (...args: unknown[]) => {
+        etat.texte = texteDeReponse(args[0]) ?? etat.texte;
+        return lie(...args);
+      };
+    },
+  });
+  return { get texte() { return etat.texte; }, vue };
+}
+
+/** Valeur choisie dans un menu ou saisie dans une fenêtre, et personne visée, en clair. */
+function decrireChoix(
+  interaction: Interaction & { customId: string },
+  action: string,
+): { valeur: string | null; cible: string | null } {
+  const paramCible = interaction.customId.split(':')[2];
+  let cible = paramCible && /^\d+$/.test(paramCible) ? `<@${paramCible}>` : null;
+  const valeurs = 'values' in interaction ? (interaction.values as string[]) : null;
+  let valeur: string | null = null;
+
+  if (action === 'mode_select' && valeurs) {
+    const mode = estChoixModeEcriture(valeurs[0]) ? valeurs[0] : normaliserModeEcriture(valeurs[0]);
+    valeur = mode === MODE_HERITE
+      ? m.panel_tempvoice_mode_inherit_label({}, { locale: 'fr' })
+      : libelleModeEcriture(mode, 'fr').libelle;
+  } else if (action === 'reglages_mod' && valeurs) {
+    valeur = valeurs.length
+      ? valeurs.map((r) => majusculeInitiale(sujetReglage(r as ReglageModerateur, 'fr'))).join(', ')
+      : 'Aucune action ouverte aux modérateurs';
+  } else if (action === 'reserve_select' && valeurs) {
+    valeur = valeurs[0] ? `<@&${valeurs[0]}>` : 'Aucun rôle (réservation levée)';
+  } else if (valeurs) {
+    cible = valeurs.map((id) => `<@${id}>`).join(', ') || cible;
+  } else if (interaction.isModalSubmit()) {
+    try { valeur = interaction.fields.getTextInputValue('value').trim() || null; } catch { valeur = null; }
+  }
+  return { valeur, cible };
+}
+
+/**
+ * Une ligne de journal par clic sur le panneau, par le chemin commun des logs :
+ * interrupteur et salon du type `voice_panel`, salons ignorés, pied « Action
+ * réalisée par ». Un échec d'envoi ne remonte jamais : l'action est déjà faite.
+ */
+async function journaliserActionPanneau(p: {
+  interaction: Interaction & { customId: string };
+  guild: DiscordGuild;
+  channel: VoiceChannel;
+  action: string;
+  reponse: string | null;
+  issue?: 'Refusée' | 'Erreur';
+}): Promise<void> {
+  try {
+    const { interaction, guild, channel, action, issue } = p;
+    const user = interaction.user;
+    const texte = issue || !ACTIONS_SANS_TEXTE_DE_REPONSE.has(action) ? p.reponse : null;
+    const { valeur, cible } = decrireChoix(interaction, action);
+    const type = interaction.isButton() ? 'Bouton' : interaction.isModalSubmit() ? 'Fenêtre de saisie' : 'Menu';
+    const coupe = (s: string) => (s.length > 1000 ? `${s.slice(0, 997)}...` : s);
+    const libelle = LIBELLES_ACTIONS_PANNEAU[action] ?? action;
+
+    const champs: Array<{ name: string; value: string; inline?: boolean }> = [
+      { name: 'Membre', value: `<@${user.id}>\n${user.tag}\n\`${user.id}\``, inline: true },
+      { name: 'Salon vocal', value: `<#${channel.id}>\n\`${channel.id}\``, inline: true },
+      { name: 'Action', value: libelle, inline: false },
+      { name: 'Composant', value: `${type} \`${interaction.customId}\``, inline: false },
+    ];
+    if (valeur) champs.push({ name: 'Valeur choisie', value: coupe(valeur), inline: true });
+    if (cible) champs.push({ name: 'Cible', value: coupe(cible), inline: true });
+    if (issue) champs.push({ name: 'Issue', value: issue, inline: true });
+    if (texte) champs.push({ name: issue ? 'Motif' : 'Réponse au membre', value: coupe(texte), inline: false });
+
+    const embed = new EmbedBuilder()
+      .setColor(issue ? 0xe63946 : 0x457b9d)
+      .setTitle('🎛️ Action du panneau vocal')
+      .setDescription(`<@${user.id}> (${user.tag}) — ${libelle}`)
+      .addFields(champs)
+      .setTimestamp();
+
+    await sendLogEmbed(guild as never, embed, 'voice_panel', undefined, user.tag, [channel.id]);
+  } catch (err) {
+    logger.warn('TempVoice', `Journal du panneau non envoyé (action « ${p.action} ») :`, err);
+  }
+}
+
 export function registerTempVoiceListener(client: Client): void {
   const scheduleSweep = () => {
     void sweepOrphanChannels(client).catch((err: unknown) => {
@@ -2579,6 +2740,7 @@ export function registerTempVoiceListener(client: Client): void {
     }
 
     const action = interaction.customId.split(':')[1] ?? '';
+    const reponses = espionnerReponses(interaction);
     const actingMember = interaction.member instanceof GuildMember
       ? interaction.member
       : await guild.members.fetch(user.id).catch(() => null);
@@ -2588,12 +2750,13 @@ export function registerTempVoiceListener(client: Client): void {
     // dont le propriétaire est parti ; `demander` s'adresse justement à qui est
     // dehors. Les deux sont donc ouvertes à autrui.
     if (!ACTIONS_OUVERTES.has(action) && cache.creatorId !== user.id && !(await isStaff(guildId, actingMember))) {
-      await interaction
+      await reponses.vue
         .reply({
           embeds: [avis(m.panel_tempvoice_err_owner_only({}, { locale }))],
           flags: [MessageFlags.Ephemeral],
         })
         .catch(() => null);
+      await journaliserActionPanneau({ interaction, guild, channel, action, reponse: reponses.texte, issue: 'Refusée' });
       return;
     }
 
@@ -2639,18 +2802,22 @@ export function registerTempVoiceListener(client: Client): void {
     //
     // Chaque action qui change quelque chose appelle `planifierRafraichissement`
     // une fois son travail fait : c'est là que le redessin a un sens.
+    let erreur = false;
     try {
-      await handleTempVoiceAction({ interaction, action, channel, cache, guild, guildId, actingMember, ctxp });
+      await handleTempVoiceAction({ interaction: reponses.vue, action, channel, cache, guild, guildId, actingMember, ctxp });
     } catch (err) {
+      erreur = true;
       logger.error('TempVoice', `Erreur lors de l'action « ${action} » :`, err);
       const message = {
         embeds: [avis(m.panel_tempvoice_err_action_failed({}, { locale }))],
         flags: [MessageFlags.Ephemeral] as const,
       };
       await (interaction.isRepliable() && (interaction.replied || interaction.deferred)
-        ? interaction.followUp(message).catch(() => null)
-        : interaction.reply(message).catch(() => null));
+        ? reponses.vue.followUp(message).catch(() => null)
+        : reponses.vue.reply(message).catch(() => null));
     }
+    // Après le traitement, pour que la réponse faite au membre soit connue.
+    await journaliserActionPanneau({ interaction, guild, channel, action, reponse: reponses.texte, issue: erreur ? 'Erreur' : undefined });
   });
 
   logger.success('TempVoice', 'Écouteur Vocal Temporaire enregistré');

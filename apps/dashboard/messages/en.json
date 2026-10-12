@@ -1286,6 +1286,8 @@
   "lg_ev_voice_leave_d": "Disconnection from a voice channel.",
   "lg_ev_voice_move": "Channel switch",
   "lg_ev_voice_move_d": "Moving between voice channels.",
+  "lg_ev_voice_panel": "Voice panel",
+  "lg_ev_voice_panel_d": "Every action taken from a temporary voice channel panel: who, what, on which channel.",
   "lg_cat_lifecycle": "Channels & Roles",
   "lg_ev_channel_lifecycle": "Channels",
   "lg_ev_channel_lifecycle_d": "Creation, modification or deletion of a channel.",
