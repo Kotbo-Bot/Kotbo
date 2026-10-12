@@ -176,7 +176,7 @@ mock.module('@kotbo/contracts', () => contractsDuWorktree);
 
 const { registerTempVoiceListener, tempChannels } = await import('../../events/tempVoice.js');
 const { DASHBOARD_ACCESS_ADMIN } = await import('../../api/shared.js');
-const { handleChannelsManagementRoutes } = await import(
+const { handleChannelsManagementRoutes, normalizeTempVoiceModPermissionsInput } = await import(
   '../../api/routes/dashboard/modules/channels-management.js'
 );
 
@@ -791,7 +791,11 @@ describe('écriture — la route et la création du salon', () => {
     // L'erreur doit NOMMER le générateur fautif et le champ : « invalide »
     // tout court laisserait chercher dans vingt-cinq générateurs.
     expect(erreur).toContain('panelComponents');
-    expect(erreur).toContain('#2');
+    expect(erreur).toContain('Générateur n°2');
+    // Message en français, comme les autres erreurs de validation du dashboard.
+    expect(erreur).toContain("n'est pas une valeur valide");
+    expect(erreur).toContain("Rien n'a été enregistré");
+    expect(erreur).not.toContain('Nothing was saved');
     // Rejet TOTAL : pas d'écriture partielle du générateur valide.
     expect((prismaMock.guild.update.mock.calls as unknown[][]).length).toBe(ecrituresAvant);
 
@@ -901,6 +905,19 @@ describe('écriture — la route et la création du salon', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 // 13 à 15 — L'INTERRUPTEUR : la sortie de secours
 // ─────────────────────────────────────────────────────────────────────────────
+
+describe('messages de validation en français', () => {
+  test('12 — un corps non objet et une valeur hors liste sont refusés en français', () => {
+    const nul = normalizeTempVoiceModPermissionsInput(null);
+    expect(nul).toEqual({ error: "tempVoiceModPermissions : objet attendu. Rien n'a été enregistré." });
+
+    const faux = normalizeTempVoiceModPermissionsInput({ panelMode: 'ZZZ' });
+    expect('error' in faux && faux.error).toBe(
+      "Mode du panneau (panelMode) : « ZZZ » n'est pas une valeur valide (attendu : " +
+        "CLASSIC | FLAT). Rien n'a été enregistré.",
+    );
+  });
+});
 
 describe("l'interrupteur perGeneratorPresentation — la sortie de secours", () => {
   /** Un générateur qui surcharge les cinq champs : si l'interrupteur ne coupait

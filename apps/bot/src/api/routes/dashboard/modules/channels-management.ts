@@ -310,10 +310,10 @@ function normalizeTempVoiceAccessRequestInput(
   raw: unknown,
 ): { data: Partial<TempVoiceAccessRequestConfigView> } | { error: string } {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
-    // Anglais comme tous les messages de cette route : c'est ce texte que la
+    // Français comme les autres messages de cette route : c'est ce texte que la
     // page affiche tel quel (`res.error`). `panelSettingError` est déclarée
     // plus bas dans le fichier — une déclaration de fonction, donc hissée.
-    return { error: 'tempVoiceAccessRequest: expected an object. Nothing was saved.' };
+    return { error: 'tempVoiceAccessRequest : objet attendu. Rien n\'a été enregistré.' };
   }
   const body = raw as Record<string, unknown>;
   const data: Partial<TempVoiceAccessRequestConfigView> = {};
@@ -323,13 +323,13 @@ function normalizeTempVoiceAccessRequestInput(
   }
   if (Object.prototype.hasOwnProperty.call(body, 'responders')) {
     if (!TEMP_VOICE_ACCESS_RESPONDERS.includes(body.responders as TempVoiceAccessResponders)) {
-      return { error: panelSettingError('Responders', 'responders', body.responders, TEMP_VOICE_ACCESS_RESPONDERS.join(' | ')) };
+      return { error: panelSettingError('Répondants', 'responders', body.responders, TEMP_VOICE_ACCESS_RESPONDERS.join(' | ')) };
     }
     data.responders = body.responders as TempVoiceAccessResponders;
   }
   if (Object.prototype.hasOwnProperty.call(body, 'notifyVia')) {
     if (!TEMP_VOICE_ACCESS_NOTIFY_VIA.includes(body.notifyVia as TempVoiceAccessNotifyVia)) {
-      return { error: panelSettingError('Notification target', 'notifyVia', body.notifyVia, TEMP_VOICE_ACCESS_NOTIFY_VIA.join(' | ')) };
+      return { error: panelSettingError('Cible de notification', 'notifyVia', body.notifyVia, TEMP_VOICE_ACCESS_NOTIFY_VIA.join(' | ')) };
     }
     data.notifyVia = body.notifyVia as TempVoiceAccessNotifyVia;
   }
@@ -340,14 +340,14 @@ function normalizeTempVoiceAccessRequestInput(
   if (Object.prototype.hasOwnProperty.call(body, 'requestExpiresMinutes')) {
     const n = Math.floor(Number(body.requestExpiresMinutes));
     if (!Number.isFinite(n) || n < 1 || n > 1440) {
-      return { error: panelSettingError('Request expiry', 'requestExpiresMinutes', body.requestExpiresMinutes, 'a whole number of minutes, 1 to 1440') };
+      return { error: panelSettingError('Expiration de la demande', 'requestExpiresMinutes', body.requestExpiresMinutes, 'un nombre entier de minutes, de 1 à 1440') };
     }
     data.requestExpiresMinutes = n;
   }
   if (Object.prototype.hasOwnProperty.call(body, 'denyCooldownMinutes')) {
     const n = Math.floor(Number(body.denyCooldownMinutes));
     if (!Number.isFinite(n) || n < 0 || n > 1440) {
-      return { error: panelSettingError('Deny cooldown', 'denyCooldownMinutes', body.denyCooldownMinutes, 'a whole number of minutes, 0 to 1440') };
+      return { error: panelSettingError('Délai après un refus', 'denyCooldownMinutes', body.denyCooldownMinutes, 'un nombre entier de minutes, de 0 à 1440') };
     }
     data.denyCooldownMinutes = n;
   }
@@ -373,10 +373,8 @@ function isPlausibleSnowflake(value: unknown): value is string {
  * enregistrement. Sans la valeur dans le message, un dashboard plus récent que
  * le bot ferait échouer la page sur une cause illisible.
  *
- * Rédigé en ANGLAIS, contrairement aux commentaires : le dashboard affiche
- * `res.error` tel quel (`handleSave`) et la langue de référence de l'interface
- * est l'anglais (`en.json` fait foi). Les messages que le bot envoie dans
- * Discord restent français, ils ne passent pas par ici.
+ * Rédigé en français, comme les autres messages d'erreur des routes du
+ * dashboard : la page affiche `res.error` tel quel (`handleSave`).
  *
  * `expected` borne la valeur attendue quand la liste n'est pas fermée (un
  * nombre dans un intervalle). La valeur reçue est tronquée à 40 caractères :
@@ -385,8 +383,8 @@ function isPlausibleSnowflake(value: unknown): value is string {
  */
 function panelSettingError(label: string, key: string, value: unknown, expected?: string): string {
   const seen = typeof value === 'string' ? value : String(value);
-  const suffix = expected ? ` (expected: ${expected})` : '';
-  return `${label} (${key}): "${seen.slice(0, 40)}" is not a valid value${suffix}. Nothing was saved.`;
+  const suffix = expected ? ` (attendu : ${expected})` : '';
+  return `${label} (${key}) : « ${seen.slice(0, 40)} » n'est pas une valeur valide${suffix}. Rien n'a été enregistré.`;
 }
 
 /**
@@ -423,7 +421,7 @@ export function normalizeTempVoiceModPermissionsInput(
   raw: unknown,
 ): { data: Partial<TempVoiceModPermissionsConfigView> } | { error: string } {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
-    return { error: 'tempVoiceModPermissions: expected an object. Nothing was saved.' };
+    return { error: 'tempVoiceModPermissions : objet attendu. Rien n\'a été enregistré.' };
   }
   const body = raw as Record<string, unknown>;
   const data: Partial<TempVoiceModPermissionsConfigView> = {};
@@ -494,25 +492,25 @@ export function normalizeTempVoiceModPermissionsInput(
   // piège que `boolKeys`).
   if (Object.prototype.hasOwnProperty.call(body, 'panelMode')) {
     if (!TEMP_VOICE_PANEL_MODE.includes(body.panelMode as TempVoicePanelMode)) {
-      return { error: panelSettingError('Panel mode', 'panelMode', body.panelMode, TEMP_VOICE_PANEL_MODE.join(' | ')) };
+      return { error: panelSettingError('Mode du panneau', 'panelMode', body.panelMode, TEMP_VOICE_PANEL_MODE.join(' | ')) };
     }
     data.panelMode = body.panelMode as TempVoicePanelMode;
   }
   if (Object.prototype.hasOwnProperty.call(body, 'stateLayout')) {
     if (!TEMP_VOICE_STATE_LAYOUT.includes(body.stateLayout as TempVoiceStateLayout)) {
-      return { error: panelSettingError('State layout', 'stateLayout', body.stateLayout, TEMP_VOICE_STATE_LAYOUT.join(' | ')) };
+      return { error: panelSettingError('Disposition des états', 'stateLayout', body.stateLayout, TEMP_VOICE_STATE_LAYOUT.join(' | ')) };
     }
     data.stateLayout = body.stateLayout as TempVoiceStateLayout;
   }
   if (Object.prototype.hasOwnProperty.call(body, 'stateColors')) {
     if (!TEMP_VOICE_STATE_COLORS.includes(body.stateColors as TempVoiceStateColors)) {
-      return { error: panelSettingError('State palette', 'stateColors', body.stateColors, TEMP_VOICE_STATE_COLORS.join(' | ')) };
+      return { error: panelSettingError('Palette des états', 'stateColors', body.stateColors, TEMP_VOICE_STATE_COLORS.join(' | ')) };
     }
     data.stateColors = body.stateColors as TempVoiceStateColors;
   }
   if (Object.prototype.hasOwnProperty.call(body, 'panelComponents')) {
     if (!TEMP_VOICE_PANEL_COMPONENTS.includes(body.panelComponents as TempVoicePanelComponents)) {
-      return { error: panelSettingError('Panel components', 'panelComponents', body.panelComponents, TEMP_VOICE_PANEL_COMPONENTS.join(' | ')) };
+      return { error: panelSettingError('Composants du panneau', 'panelComponents', body.panelComponents, TEMP_VOICE_PANEL_COMPONENTS.join(' | ')) };
     }
     data.panelComponents = body.panelComponents as TempVoicePanelComponents;
   }
@@ -524,7 +522,7 @@ export function normalizeTempVoiceModPermissionsInput(
   if (Object.prototype.hasOwnProperty.call(body, fallbackKey)) {
     const value = body[fallbackKey];
     if (!TEMP_VOICE_RESERVATION_FALLBACK_MODE.includes(value as TempVoiceReservationFallbackMode)) {
-      return { error: panelSettingError('Reservation fallback', fallbackKey, value, TEMP_VOICE_RESERVATION_FALLBACK_MODE.join(' | ')) };
+      return { error: panelSettingError('Repli de la réservation', fallbackKey, value, TEMP_VOICE_RESERVATION_FALLBACK_MODE.join(' | ')) };
     }
     data.reservationFallbackMode = value as TempVoiceReservationFallbackMode;
   }
@@ -558,38 +556,38 @@ function validateGeneratorPresentationOverrides(raw: unknown): string | null {
     const entry = raw[i];
     if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
     const body = entry as Record<string, unknown>;
-    const prefix = `Generator #${i + 1}`;
+    const prefix = `Générateur n°${i + 1}`;
 
     if (
       Object.prototype.hasOwnProperty.call(body, 'panelMode') && body.panelMode != null
       && !TEMP_VOICE_PANEL_MODE.includes(body.panelMode as TempVoicePanelMode)
     ) {
-      return panelSettingError(`${prefix} panel mode`, 'panelMode', body.panelMode, TEMP_VOICE_PANEL_MODE.join(' | '));
+      return panelSettingError(`${prefix} : mode du panneau`, 'panelMode', body.panelMode, TEMP_VOICE_PANEL_MODE.join(' | '));
     }
     if (
       Object.prototype.hasOwnProperty.call(body, 'stateLayout') && body.stateLayout != null
       && !TEMP_VOICE_STATE_LAYOUT.includes(body.stateLayout as TempVoiceStateLayout)
     ) {
-      return panelSettingError(`${prefix} state layout`, 'stateLayout', body.stateLayout, TEMP_VOICE_STATE_LAYOUT.join(' | '));
+      return panelSettingError(`${prefix} : disposition des états`, 'stateLayout', body.stateLayout, TEMP_VOICE_STATE_LAYOUT.join(' | '));
     }
     if (
       Object.prototype.hasOwnProperty.call(body, 'stateColors') && body.stateColors != null
       && !TEMP_VOICE_STATE_COLORS.includes(body.stateColors as TempVoiceStateColors)
     ) {
-      return panelSettingError(`${prefix} state palette`, 'stateColors', body.stateColors, TEMP_VOICE_STATE_COLORS.join(' | '));
+      return panelSettingError(`${prefix} : palette des états`, 'stateColors', body.stateColors, TEMP_VOICE_STATE_COLORS.join(' | '));
     }
     if (
       Object.prototype.hasOwnProperty.call(body, 'panelComponents') && body.panelComponents != null
       && !TEMP_VOICE_PANEL_COMPONENTS.includes(body.panelComponents as TempVoicePanelComponents)
     ) {
-      return panelSettingError(`${prefix} panel components`, 'panelComponents', body.panelComponents, TEMP_VOICE_PANEL_COMPONENTS.join(' | '));
+      return panelSettingError(`${prefix} : composants du panneau`, 'panelComponents', body.panelComponents, TEMP_VOICE_PANEL_COMPONENTS.join(' | '));
     }
     if (
       Object.prototype.hasOwnProperty.call(body, 'reservationFallbackMode') && body.reservationFallbackMode != null
       && !TEMP_VOICE_RESERVATION_FALLBACK_MODE.includes(body.reservationFallbackMode as TempVoiceReservationFallbackMode)
     ) {
       return panelSettingError(
-        `${prefix} reservation fallback`,
+        `${prefix} : repli de la réservation`,
         'reservationFallbackMode',
         body.reservationFallbackMode,
         TEMP_VOICE_RESERVATION_FALLBACK_MODE.join(' | '),
@@ -1512,7 +1510,7 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
          * Réglages acceptés ET enregistrés, mais dont l'effet est nul dans la
          * combinaison obtenue. Ni une erreur (rien à corriger, la valeur est
          * valide) ni un silence (sinon le réglage paraît perdu) : la réponse les
-         * porte, en anglais comme les erreurs, à côté de `ok: true`. Champ absent
+         * porte, en français comme les erreurs, à côté de `ok: true`. Champ absent
          * quand il n'y a rien à dire, pour ne pas changer la forme de la réponse
          * dans le cas courant.
          */
@@ -1829,7 +1827,7 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
             && effectif.stateColors !== TEMP_VOICE_MOD_PERMISSIONS_DEFAULTS.stateColors
           ) {
             notices.push(
-              `stateColors="${effectif.stateColors}" was saved but has no visible effect: stateLayout=GRID3 with panelComponents=V1 renders Discord's native embed, which has no state image to tint. Switch panelComponents to V2, or pick another stateLayout, for the palette to apply.`,
+              `stateColors="${effectif.stateColors}" a été enregistré mais n'a aucun effet visible : stateLayout=GRID3 avec panelComponents=V1 affiche l'embed natif de Discord, qui n'a pas d'image d'état à teinter. Passez panelComponents en V2, ou choisissez un autre stateLayout, pour que la palette s'applique.`,
             );
           }
         }
