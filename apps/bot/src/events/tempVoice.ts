@@ -1460,7 +1460,7 @@ async function reecrirePanneau(channel: VoiceChannel): Promise<void> {
 
 /** Le mode mémorisé, sinon celui que portent les surcharges. Aucune lecture de base :
  *  ce chemin est sur la route d'un `VoiceStateUpdate`, qui arrive en rafale. */
-function modeDuSalon(channel: VoiceChannel, entree: EntreeSalonTemporaire): ModeEcriture {
+export function modeDuSalon(channel: VoiceChannel, entree: EntreeSalonTemporaire): ModeEcriture {
   if (entree.modeEcriture) return entree.modeEcriture;
   const surcharges = channel.permissionOverwrites?.cache;
   const everyoneId = channel.guild?.id ?? '';
@@ -4669,21 +4669,32 @@ async function applyOwnershipTransfer(
     powers = mainGenerator?.policy.ownerPowers ?? defaultTempVoicePolicy().ownerPowers;
   }
 
-  await channel.permissionOverwrites.edit(
-    target.id,
-    ownerPermissionPatch(powers, categoryOverwriteFor(channel, target.id)),
-  );
+  const patchNouveau = ownerPermissionPatch(powers, categoryOverwriteFor(channel, target.id));
+  const patchAncien = ownerRevokedPermissions(categoryOverwriteFor(channel, previousOwnerId));
+
+  // Le droit d'écrire obéit au mode du salon, pas à la propriété : le mode se
+  // lit ici, avant que `creatorId` change, car sa déduction part du propriétaire.
+  // « Moi seul » : le droit passe de l'un à l'autre (patchs tels quels).
+  // « Personne » : le nouveau propriétaire n'écrit pas non plus.
+  // Les autres modes (présence en vocal, tout le monde, hérité) ne dépendent pas
+  // du propriétaire : le bit n'est écrit pour personne, sinon l'ancien perdrait
+  // une écriture que sa présence ou @everyone lui donne.
+  const mode = modeDuSalon(channel, cache);
+  if (mode === 'nobody') {
+    patchNouveau.SendMessages = false;
+  } else if (mode !== 'ownerOnly') {
+    delete patchNouveau.SendMessages;
+    delete patchAncien.SendMessages;
+  }
+
+  await channel.permissionOverwrites.edit(target.id, patchNouveau);
 
   if (previousOwnerId !== target.id) {
     // Type explicite : sans lui, `upsert` cherche la cible dans `roles.cache`
     // puis `users.cache` et lève avant tout appel réseau si aucun ne la connaît.
     // Un ancien propriétaire hors cache garderait ses pouvoirs.
     await channel.permissionOverwrites
-      .edit(
-        previousOwnerId,
-        ownerRevokedPermissions(categoryOverwriteFor(channel, previousOwnerId)),
-        { type: OverwriteType.Member },
-      )
+      .edit(previousOwnerId, patchAncien, { type: OverwriteType.Member })
       .catch((err: unknown) => logger.warn('TempVoice', `Impossible de retirer les pouvoirs de l'ancien propriétaire sur ${channel.id} :`, err));
   }
 
