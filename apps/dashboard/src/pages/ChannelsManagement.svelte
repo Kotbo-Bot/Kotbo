@@ -1307,7 +1307,7 @@
                         aria-describedby="sticky-json-hint-{index}"
                         class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 font-mono text-sm text-on-surface outline-none focus:ring-1 focus:ring-primary/30 transition-all resize-y"
                       ></textarea>
-                      <p id="sticky-json-hint-{index}" class="text-2xs text-on-surface-variant/40">{m.cm_sticky_json_hint()} {m.cm_sticky_placeholders_hint()}</p>
+                      <p id="sticky-json-hint-{index}" class="text-2xs text-on-surface-variant/40">{m.cm_sticky_json_hint()} {m.cm_sticky_placeholders_hint({ server: '{server}', membres: '{membres}', salons: '{salons}', members: '{members}', channelCount: '{channelCount}', boosts: '{boosts}' })}</p>
                     </div>
                   {:else}
                     <div class="space-y-1.5">
@@ -1320,7 +1320,7 @@
                         placeholder={m.cm_sticky_content_placeholder()}
                         class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm text-on-surface outline-none focus:ring-1 focus:ring-primary/30 transition-all resize-y"
                       ></textarea>
-                      <p class="text-2xs text-on-surface-variant/40">{m.cm_sticky_placeholders_hint()}</p>
+                      <p class="text-2xs text-on-surface-variant/40">{m.cm_sticky_placeholders_hint({ server: '{server}', membres: '{membres}', salons: '{salons}', members: '{members}', channelCount: '{channelCount}', boosts: '{boosts}' })}</p>
                     </div>
                   {/if}
 
@@ -1560,7 +1560,7 @@
                   <input 
                     type="text" 
                     bind:value={config.statsConfig.memberTemplate} 
-                    placeholder={m.cm_template_members_placeholder()} 
+                    placeholder={m.cm_template_members_placeholder({ count: '{count}' })} 
                     class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-5 py-2.5 text-xs outline-none focus:ring-1 focus:ring-primary/30"
                   />
                 {/if}
@@ -1601,7 +1601,7 @@
                   <input 
                     type="text" 
                     bind:value={config.statsConfig.botTemplate} 
-                    placeholder={m.cm_template_bots_placeholder()} 
+                    placeholder={m.cm_template_bots_placeholder({ count: '{count}' })} 
                     class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-5 py-2.5 text-xs outline-none focus:ring-1 focus:ring-primary/30"
                   />
                 {/if}
@@ -1647,7 +1647,7 @@
                   <input 
                     type="text" 
                     bind:value={config.statsConfig.roleTemplate} 
-                    placeholder={m.cm_template_staff_placeholder()} 
+                    placeholder={m.cm_template_staff_placeholder({ count: '{count}' })} 
                     class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-5 py-2.5 text-xs outline-none focus:ring-1 focus:ring-primary/30"
                   />
                 {/if}
@@ -1688,7 +1688,7 @@
                   <input 
                     type="text" 
                     bind:value={config.statsConfig.channelTemplate} 
-                    placeholder={m.cm_template_channels_placeholder()} 
+                    placeholder={m.cm_template_channels_placeholder({ count: '{count}' })} 
                     class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-5 py-2.5 text-xs outline-none focus:ring-1 focus:ring-primary/30"
                   />
                 {/if}
@@ -1729,7 +1729,7 @@
                   <input 
                     type="text" 
                     bind:value={config.statsConfig.categoryTemplate} 
-                    placeholder={m.cm_template_categories_placeholder()} 
+                    placeholder={m.cm_template_categories_placeholder({ count: '{count}' })} 
                     class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-5 py-2.5 text-xs outline-none focus:ring-1 focus:ring-primary/30"
                   />
                 {/if}
@@ -1770,7 +1770,7 @@
                   <input 
                     type="text" 
                     bind:value={config.statsConfig.activityTemplate} 
-                    placeholder={m.cm_template_activity_placeholder()} 
+                    placeholder={m.cm_template_activity_placeholder({ count: '{count}' })} 
                     class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-5 py-2.5 text-xs outline-none focus:ring-1 focus:ring-primary/30"
                   />
                 {/if}
@@ -1907,7 +1907,7 @@
                           id="custom-template-{index}"
                           type="text" 
                           bind:value={custom.template} 
-                          placeholder={custom.type === 'goal' ? m.cm_template_goal_placeholder() : m.cm_template_name_placeholder()} 
+                          placeholder={custom.type === 'goal' ? m.cm_template_goal_placeholder({ count: '{count}', goal: '{goal}' }) : m.cm_template_name_placeholder({ count: '{count}' })} 
                           class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-5 py-2.5 text-xs outline-none focus:ring-1 focus:ring-primary/30"
                         />
                         <p class="text-2xs text-on-surface-variant/40 mt-1">
@@ -1949,6 +1949,23 @@
 
       {:else if activeTab === 'temp-voice'}
         <!-- DYNAMIC VOCAL CREATORS TAB -->
+        <div class="flex items-center justify-between mb-6">
+          <div>
+            <h3 class="text-xl font-semibold flex items-center gap-3">
+              <Papicon icon="volume-2" size={20} class="text-primary" />
+              {m.cm_temp_voice_title()}
+            </h3>
+            <p class="text-xs text-on-surface-variant mt-1">{m.cm_temp_voice_desc()}</p>
+          </div>
+
+          <div class="flex items-center gap-2">
+            <input 
+              type="checkbox" 
+              bind:checked={config.tempVoiceEnabled} 
+              class="w-10 h-6 bg-surface-container-high rounded-full relative appearance-none cursor-pointer transition-all border border-outline-variant/20 checked:bg-primary before:content-[''] before:absolute before:h-4 before:w-4 before:rounded-full before:bg-white before:top-0.5 before:left-0.5 checked:before:translate-x-4 before:transition-all"
+            />
+          </div>
+        </div>
         {#if config.tempVoiceEnabled}
           <Tabs
             label={m.cm_tv_tabs_label()}
@@ -1963,28 +1980,9 @@
             onchange={(id) => { tvSub = id as typeof tvSub; }}
           />
         {/if}
-        {#if !config.tempVoiceEnabled || tvSub === 'generators' || tvSub === 'permissions'}
+        {#if config.tempVoiceEnabled && (tvSub === 'generators' || tvSub === 'permissions')}
         <section class="bg-surface-container-low/30 border border-outline-variant/10 p-8 rounded-xl space-y-6">
-          <div class="flex items-center justify-between">
-            <div>
-              <h3 class="text-xl font-semibold flex items-center gap-3">
-                <Papicon icon="volume-2" size={20} class="text-primary" />
-                {m.cm_temp_voice_title()}
-              </h3>
-              <p class="text-xs text-on-surface-variant mt-1">{m.cm_temp_voice_desc()}</p>
-            </div>
-            
-            <div class="flex items-center gap-2">
-              <input 
-                type="checkbox" 
-                bind:checked={config.tempVoiceEnabled} 
-                class="w-10 h-6 bg-surface-container-high rounded-full relative appearance-none cursor-pointer transition-all border border-outline-variant/20 checked:bg-primary before:content-[''] before:absolute before:h-4 before:w-4 before:rounded-full before:bg-white before:top-0.5 before:left-0.5 checked:before:translate-x-4 before:transition-all"
-              />
-            </div>
-          </div>
-
-          {#if config.tempVoiceEnabled}
-            <div class="space-y-4 pt-4 border-t border-outline-variant/10 max-w-xl">
+            <div class="space-y-4 max-w-xl">
               {#if tvSub === 'generators'}
               <!-- Generator Voice Channel Selection -->
               <div class="space-y-1.5">
@@ -2322,7 +2320,6 @@
               </div>
               {/if}
             </div>
-          {/if}
         </section>
         {/if}
 
