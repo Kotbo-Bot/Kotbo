@@ -2544,22 +2544,31 @@ function texteDeReponse(charge: unknown): string | null {
   return embed?.data?.description ?? embed?.toJSON?.().description ?? null;
 }
 
-/** Mandataire de l'interaction qui retient le dernier texte répondu : l'objet d'origine reste intact. */
-function espionnerReponses<T extends Interaction>(interaction: T): { texte: string | null; vue: T } {
-  const etat = { texte: null as string | null };
+/**
+ * Mandataire de l'interaction qui retient le dernier texte répondu et si une
+ * réponse a abouti : l'objet d'origine reste intact.
+ *
+ * `repondu` ne se lit pas sur `replied` : `followUp` après un `deferReply` ou un
+ * `deferUpdate` répond sans jamais le passer à vrai.
+ */
+function espionnerReponses<T extends Interaction>(interaction: T): { texte: string | null; repondu: boolean; vue: T } {
+  const etat = { texte: null as string | null, repondu: false };
   const vue = new Proxy(interaction, {
     get(cible, nom) {
       const valeur = Reflect.get(cible, nom, cible) as unknown;
       if (typeof valeur !== 'function') return valeur;
       const lie = (valeur as (...a: unknown[]) => unknown).bind(cible);
-      if (!['reply', 'followUp', 'editReply', 'update'].includes(String(nom))) return lie;
+      if (!['reply', 'followUp', 'editReply', 'update', 'showModal'].includes(String(nom))) return lie;
       return (...args: unknown[]) => {
         etat.texte = texteDeReponse(args[0]) ?? etat.texte;
-        return lie(...args);
+        return Promise.resolve(lie(...args)).then((retour) => {
+          etat.repondu = true;
+          return retour;
+        });
       };
     },
   });
-  return { get texte() { return etat.texte; }, vue };
+  return { get texte() { return etat.texte; }, get repondu() { return etat.repondu; }, vue };
 }
 
 /** Valeur choisie dans un menu ou saisie dans une fenêtre, et personne visée, en clair. */
@@ -2748,7 +2757,18 @@ export function registerTempVoiceListener(client: Client): void {
     // Le MP porte la carte mais pas le serveur : c'est le salon retrouvé qui le
     // donne. Dans le salon vocal, les deux désignent le même.
     const guild = interaction.guild ?? channel?.guild ?? null;
-    if (!channel || !guild) return;
+    if (!channel || !guild) {
+      // Carte d'un salon supprimé depuis (MP, ancien message) : se taire laisserait
+      // Discord afficher « Cette interaction a échoué » au bout de trois secondes.
+      const langue = await resolveGuildLocale(interaction.guildId, interaction.guildLocale ?? interaction.locale ?? null);
+      await interaction
+        .reply({
+          embeds: [avis(m.panel_tempvoice_err_not_temp({}, { locale: langue }))],
+          flags: [MessageFlags.Ephemeral],
+        })
+        .catch(() => null);
+      return;
+    }
     const guildId = guild.id;
     // Résolue avant le premier refus : les deux gardes ci-dessous répondent déjà
     // du texte, et elles passent avant que `ctxp` n'existe.
@@ -2841,6 +2861,16 @@ export function registerTempVoiceListener(client: Client): void {
       await (interaction.isRepliable() && (interaction.replied || interaction.deferred)
         ? reponses.vue.followUp(message).catch(() => null)
         : reponses.vue.reply(message).catch(() => null));
+    }
+    // Un identifiant périmé (ancienne fenêtre de saisie, bouton retiré) ne
+    // correspond à aucune branche du répartiteur : sans réponse, Discord affiche
+    // « Cette interaction a échoué », ou laisse « réfléchit… » si elle a été
+    // acquittée. Le contrôle est ici, au point où tous les chemins passent.
+    if (!erreur && !reponses.repondu) {
+      const inconnue = { embeds: [avis(m.panel_tempvoice_err_action_failed({}, { locale }))] };
+      await (interaction.isRepliable() && interaction.deferred
+        ? reponses.vue.editReply(inconnue)
+        : reponses.vue.reply({ ...inconnue, flags: [MessageFlags.Ephemeral] })).catch(() => null);
     }
     // Après le traitement, pour que la réponse faite au membre soit connue.
     await journaliserActionPanneau({ interaction, guild, channel, action, reponse: reponses.texte, issue: erreur ? 'Erreur' : undefined });
@@ -3489,7 +3519,10 @@ async function appliquerDebordement(ctx: ActionContext, plan: PlanDebordement): 
 /** Referme la proposition : ses boutons ne doivent pas rester cliquables. */
 async function cloreProposition(interaction: RepliableInteraction, verdict: string): Promise<void> {
   if (!interaction.isMessageComponent()) return;
-  await interaction.update({ embeds: [avis(verdict)], components: [] }).catch(() => null);
+  const charge = { embeds: [avis(verdict)], components: [] };
+  // Déjà acquittée (lecture longue avant le verdict) : `update` lèverait.
+  await (interaction.deferred || interaction.replied ? interaction.editReply(charge) : interaction.update(charge))
+    .catch(() => null);
 }
 
 /**
@@ -3509,6 +3542,9 @@ async function repondreDebordement(ctx: ActionContext, choix: 'deplacer' | 'deco
     await respond(interaction, `${I.lock} ${verdict.raison}`);
     return;
   }
+
+  // La base et la relecture du salon passent avant le verdict : acquitter d'abord.
+  await acquitterMiseAJour(interaction);
 
   const roleId = await prisma.tempVoiceChannel
     .findUnique({ where: { id: channel.id } })
@@ -4028,7 +4064,6 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
   const user = interaction.user;
   const locale = ctx.ctxp.locale;
 
-  const ephemeral = { flags: [MessageFlags.Ephemeral] as const };
   // En mode compact, la réponse remplace le sous-panneau : elle doit donc
   // porter de quoi y revenir. En mode empilé elle ouvre un message de plus, et
   // le sous-panneau est toujours là derrière — aucun bouton à ajouter.
@@ -4044,14 +4079,12 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
    * message existant : sinon le mode compact, dont toute la promesse est de
    * n'avoir qu'un seul ephemere, en empilait un de plus a chaque retour.
    */
-  const ouvrirPorte = async (rendu: PanneauRendu): Promise<void> => {
-    if (surMessageEphemere(interaction)) {
-      await (interaction as unknown as { update: (o: unknown) => Promise<unknown> })
-        .update(rendu)
-        .catch(() => null);
-      return;
-    }
-    await interaction.reply({ ...rendu, ...ephemeral });
+  const ouvrirPorte = async (rendre: () => Promise<PanneauRendu>): Promise<void> => {
+    // Acquitté avant le rendu : il lit la base et Discord, et trois secondes
+    // passées l'interaction est morte. `acquitterMiseAJour` reprend le
+    // sous-panneau éphémère, ou ouvre un éphémère à côté depuis le panneau public.
+    await acquitterMiseAJour(interaction);
+    await interaction.editReply(await rendre()).catch(() => null);
   };
 
   // ─── Menu « Qui peut écrire » ───
@@ -4154,17 +4187,17 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
     switch (action) {
       // ─── Les trois portes du panneau, plus la quatrième ───
       case 'salon': {
-        await ouvrirPorte(await panneauSalon(channel, cache, ctx.ctxp));
+        await ouvrirPorte(() => panneauSalon(channel, cache, ctx.ctxp));
         return;
       }
 
       case 'membres': {
-        await ouvrirPorte(await panneauMembres(channel, cache, ctx.ctxp));
+        await ouvrirPorte(() => panneauMembres(channel, cache, ctx.ctxp));
         return;
       }
 
       case 'propriete': {
-        await ouvrirPorte(panneauPropriete(channel, cache, ctx.ctxp));
+        await ouvrirPorte(async () => panneauPropriete(channel, cache, ctx.ctxp));
         return;
       }
 
@@ -4177,7 +4210,7 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
           await reply(`${I.lock} ${m.panel_tempvoice_admins_only_settings({}, { locale })}`);
           return;
         }
-        await ouvrirPorte(await panneauSalon(channel, cache, ctx.ctxp));
+        await ouvrirPorte(() => panneauSalon(channel, cache, ctx.ctxp));
         return;
       }
 
@@ -4436,6 +4469,8 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
         // Le sélecteur suit le mode du panneau : serveur entier en CLASSIC, les
         // seuls présents en FLAT. Transférer au propriétaire actuel ne ferait
         // rien, l'option n'est donc pas proposée.
+        // En FLAT, le sélecteur relit le salon : acquitter avant.
+        await deferIfNeeded(interaction);
         const selecteur = await selecteurPersonnes(channel, ctx.ctxp, `tempvoice:${action}_select`, m.panel_tempvoice_pick_member_placeholder({}, { locale }), {
           exclureId: action === 'transfer' ? cache.creatorId : undefined,
         });
@@ -4443,10 +4478,9 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
           await reply(`${I.warn} ${m.panel_tempvoice_err_nobody_to_act_on({}, { locale })}`);
           return;
         }
-        await interaction.reply({
+        await interaction.editReply({
           embeds: [avis(labels[action] ?? m.panel_tempvoice_pick_member({}, { locale }))],
           components: [selecteur],
-          ...ephemeral,
         });
         return;
       }
@@ -4468,6 +4502,11 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
           return;
         }
 
+        // Lecture de la base (et du salon en FLAT) avant toute réponse : acquitter
+        // d'abord. Seule la bascule d'un rôle unique reprend le sous-panneau en
+        // mode compact ; les menus s'ouvrent à côté.
+        await deferIfNeeded(interaction, ctx.ctxp.panneauCompact && plan.type === 'role_unique');
+
         if (plan.type === 'membres') {
           // Repli « MEMBERS » : pas de rôle à choisir, des personnes. Plusieurs
           // à la fois, parce que réserver à une seule n'a pas de sens.
@@ -4480,10 +4519,9 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
             await reply(`${I.warn} ${m.panel_tempvoice_err_nobody_to_reserve_for({}, { locale })}`);
             return;
           }
-          await interaction.reply({
+          await interaction.editReply({
             embeds: [avis(`${I.profile} ${m.panel_tempvoice_reserve_members_hint({}, { locale })}`)],
             components: [qui],
-            ...ephemeral,
           });
           return;
         }
@@ -4496,7 +4534,6 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
         if (plan.type === 'role_unique') {
           // Un seul rôle réservable possédé : le bouton est une bascule, pas un
           // menu à une option. Un clic pose la réservation, le suivant la lève.
-          await deferIfNeeded(interaction, ctx.ctxp.panneauCompact);
           await appliquerReservation(ctx, reservationPosee === plan.roleId ? null : plan.roleId, reply);
           return;
         }
@@ -4542,13 +4579,12 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
           menuRole.setDefaultRoles(reservationPosee);
         }
 
-        await interaction.reply({
+        await interaction.editReply({
           embeds: [avis(reservationPosee
             ? m.panel_tempvoice_reserve_role_hint_set({ role: reservationPosee }, { locale })
             : m.panel_tempvoice_reserve_role_hint({}, { locale }))],
           components: [new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(menuRole)],
           allowedMentions: { parse: [] },
-          ...ephemeral,
         });
         return;
       }

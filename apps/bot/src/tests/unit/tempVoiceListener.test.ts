@@ -3171,7 +3171,7 @@ describe('Sous-panneau « Membres » : deux portes', () => {
     tempChannels.delete(CHANNEL);
     guildConfig = null;
 
-    const appels = (interaction.reply as unknown as { mock: { calls: unknown[][] } }).mock.calls;
+    const appels = (interaction.editReply as unknown as { mock: { calls: unknown[][] } }).mock.calls;
     return (appels[0]?.[0] ?? {}) as { components?: Array<{ components: Array<{ data: Record<string, unknown> }> }> };
   }
 
@@ -3269,7 +3269,7 @@ describe('Verite des presents : le cache de discord.js ment par omission', () =>
     expect(recuperes.flat()).toContain(ABSENT);
 
     // ...et il figure dans le menu des presents.
-    const appels = (interaction.reply as unknown as { mock: { calls: unknown[][] } }).mock.calls;
+    const appels = (interaction.editReply as unknown as { mock: { calls: unknown[][] } }).mock.calls;
     const charge = (appels[0]?.[0] ?? {}) as {
       components?: Array<{ components: Array<{ data: Record<string, unknown>; options?: unknown[] }> }>;
     };
@@ -3311,25 +3311,20 @@ describe('Les trois portes : ouvrir a cote, ou reprendre le sous-panneau', () =>
 
     tempChannels.delete(CHANNEL);
     guildConfig = null;
-    return scene.interaction as unknown as {
-      reply: { mock: { calls: unknown[][] } };
-      update: { mock: { calls: unknown[][] } };
-    };
+    return scene;
   }
 
   test('depuis le panneau public, un ephemere s ouvre a cote', async () => {
     // L'editer effacerait le panneau pour tout le serveur.
-    const interaction = await cliquerPorte(false);
-    expect(interaction.reply.mock.calls.length).toBeGreaterThan(0);
-    expect(interaction.update.mock.calls).toHaveLength(0);
+    const { calls } = await cliquerPorte(false);
+    expect(calls).toEqual(['defer', 'editReply']);
   }, 10_000);
 
   test('depuis un sous-panneau, le message existant est repris', async () => {
     // C'est le cas du bouton « Retour » du mode compact : sans cela, il empilait
     // un ephemere de plus a chaque retour - exactement ce que ce mode evite.
-    const interaction = await cliquerPorte(true);
-    expect(interaction.update.mock.calls.length).toBeGreaterThan(0);
-    expect(interaction.reply.mock.calls).toHaveLength(0);
+    const { calls } = await cliquerPorte(true);
+    expect(calls).toEqual(['deferUpdate', 'editReply']);
   }, 10_000);
 });
 
@@ -3381,7 +3376,7 @@ describe('Limites de Discord : depassees, le message entier est rejete', () => {
     tempChannels.delete(CHANNEL);
     guildConfig = null;
 
-    const appels = (scene.interaction.reply as unknown as { mock: { calls: unknown[][] } }).mock.calls;
+    const appels = (scene.interaction.editReply as unknown as { mock: { calls: unknown[][] } }).mock.calls;
     return appels[0]?.[0];
   }
 
@@ -3604,7 +3599,7 @@ describe('Ephemeres : jamais de content brut', () => {
     tempChannels.delete(CHANNEL);
     guildConfig = null;
 
-    const appels = (scene.interaction.reply as unknown as { mock: { calls: unknown[][] } }).mock.calls;
+    const appels = (scene.interaction.editReply as unknown as { mock: { calls: unknown[][] } }).mock.calls;
     return appels.map((appel) => appel[0] as { content?: unknown; embeds?: unknown[] } | undefined);
   }
 
@@ -3850,7 +3845,7 @@ describe('Reglages admin, depuis « Salon »', () => {
     tempChannels.delete(CHANNEL);
     guildConfig = null;
 
-    const appels = (scene.interaction.reply as unknown as { mock: { calls: unknown[][] } }).mock.calls;
+    const appels = (scene.interaction.editReply as unknown as { mock: { calls: unknown[][] } }).mock.calls;
     const charge = (appels[0]?.[0] ?? {}) as {
       components?: Array<{ components: Array<{ data: Record<string, unknown> }> }>;
     };
