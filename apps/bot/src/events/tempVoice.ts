@@ -1394,6 +1394,31 @@ async function assurerBotPeutEcrire(channel: VoiceChannel): Promise<void> {
   await poserSurcharge(channel, moi.id, { SendMessages: true });
 }
 
+/**
+ * Le staff garde toujours l'entrée d'un salon fermé à @everyone : sans
+ * surcharge à lui, le modérateur qui verrouille ou réserve depuis le panneau
+ * se mettait lui-même dehors. Seul un administrateur passe outre de lui-même.
+ * Rien n'est retiré au déverrouillage : l'entrée du staff ne gêne personne.
+ */
+async function garderEntreeStaff(channel: VoiceChannel, acteurId?: string | null): Promise<void> {
+  const config = await getCachedGuild(channel.guild.id);
+  const entree = { ViewChannel: true, Connect: true };
+  const roles = new Set(
+    [config?.baseStaffRoleId, config?.moderatorRoleId, config?.testStaffRoleId]
+      .filter((id): id is string => Boolean(id) && id !== channel.guild.id),
+  );
+
+  for (const roleId of roles) {
+    await channel.permissionOverwrites
+      .edit(roleId, entree, { type: OverwriteType.Role })
+      .catch((err: unknown) => logger.warn('TempVoice', `Entrée du staff refusée sur ${channel.id} pour ${roleId} :`, err));
+  }
+
+  if (acteurId && acteurId !== tempChannels.get(channel.id)?.creatorId) {
+    await poserSurcharge(channel, acteurId, entree);
+  }
+}
+
 /** Salons dont le panneau est déjà en V2 alors que le réglage demande V1 :
  *  signalé une fois, pas à chaque réécriture (le panneau se réécrit en rafale). */
 const v1ImpossibleSignale = new Set<string>();
@@ -2402,6 +2427,7 @@ async function createTempChannel(
   // n'a pas de surcharge a lui : le panneau ne serait jamais poste, et le salon
   // naitrait sans aucune commande.
   await assurerBotPeutEcrire(tempChannel);
+  if (policy.lockOnCreate) await garderEntreeStaff(tempChannel);
 
   // Pas d'`attachments: []` ici : un message qui naît n'a aucune pièce jointe à
   // vider, et cette liste n'a de sens qu'en édition.
@@ -3183,6 +3209,7 @@ async function basculerVerrou(ctx: ActionContext): Promise<string> {
     cache.creatorId,
     ownerChatPatch(true, categoryOverwriteFor(channel, cache.creatorId)),
   );
+  await garderEntreeStaff(channel, ctx.interaction.user.id);
   await channel.permissionOverwrites.edit(guildId, CHANNEL_PATCHES.lock);
   // Le verrou coupe `SendMessages` a @everyone - le bot compris, tant
   // qu'il n'a pas de surcharge a lui. Sans cela il ne peut plus mettre a
@@ -3868,6 +3895,7 @@ async function appliquerReservation(
     // sans réservation, que rien ne vient rouvrir.
     if (ownerPatch && owner) await channel.permissionOverwrites.edit(owner, ownerPatch);
     await channel.permissionOverwrites.edit(selectedRoleId, rolePatch);
+    await garderEntreeStaff(channel, ctx.interaction.user.id);
     await channel.permissionOverwrites.edit(guildId, CHANNEL_PATCHES.lock);
     // Le verrou coupe `SendMessages` a @everyone - le bot compris, tant
     // qu'il n'a pas de surcharge a lui. Sans cela il ne peut plus mettre a
@@ -3975,6 +4003,7 @@ async function reserverPourDesMembres(
   const ownerPatch = categoryTrustPatch(channel, owner);
   if (owner && ownerPatch) await channel.permissionOverwrites.edit(owner, ownerPatch);
 
+  await garderEntreeStaff(channel, ctx.interaction.user.id);
   await channel.permissionOverwrites.edit(guildId, CHANNEL_PATCHES.lock);
   // Le verrou coupe `SendMessages` a @everyone - le bot compris, tant qu'il n'a
   // pas de surcharge a lui : sans cela, plus de panneau ni d'avis.
@@ -4248,6 +4277,7 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
           cache.creatorId,
           ownerChatPatch(true, categoryOverwriteFor(channel, cache.creatorId)),
         );
+        await garderEntreeStaff(channel, ctx.interaction.user.id);
         await channel.permissionOverwrites.edit(guildId, CHANNEL_PATCHES.lock);
         // Le verrou coupe `SendMessages` a @everyone - le bot compris, tant
         // qu'il n'a pas de surcharge a lui. Sans cela il ne peut plus mettre a
