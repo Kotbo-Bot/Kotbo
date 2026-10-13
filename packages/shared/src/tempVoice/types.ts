@@ -12,9 +12,12 @@ export type TempVoiceOwnerPower = 'mute' | 'deafen' | 'move' | 'manageChannel' |
 /**
  * Sort du chat texte intégré au salon vocal.
  *
- * `inherit` ne pose rien, `locked` refuse l'écriture à @everyone, `open` la lui
- * autorise - seule autorisation explicite du module, assumée, et que
- * `grantableBits` empêche de dépasser un refus de la catégorie.
+ * - `inherit` : la catégorie décide, le module ne pose rien.
+ * - `open` : tout le monde peut écrire, même contre la catégorie.
+ * - `inVoice` : seuls les membres connectés au salon écrivent.
+ * - `locked` : seul le propriétaire écrit (les rôles autorisés d'office aussi).
+ * - `nobody` : personne n'écrit, ni le propriétaire ni les modérateurs ; les
+ *   administrateurs Discord passent outre.
  */
 export type TempVoiceTextChatMode = 'inherit' | 'open' | 'inVoice' | 'locked' | 'nobody';
 

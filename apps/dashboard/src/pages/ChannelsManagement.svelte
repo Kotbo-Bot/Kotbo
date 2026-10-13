@@ -1003,8 +1003,8 @@
       });
 
       // `res.error` d'abord : la route nomme le champ qu'elle refuse
-      // (`panelSettingError` : « Palette de l'état (stateColors): "X" is not a
-      // valid value. Nothing was saved. »). « API save error » seul ne disait
+      // (`panelSettingError` : « Palette de l'état (stateColors) : valeur
+      // invalide, rien n'a été enregistré. »). « API save error » seul ne disait
       // pas lequel des vingt-et-un champs du corps avait été rejeté.
       if (!res || !res.ok) throw new Error(res?.error || m.cm_save_api_error());
 
@@ -2071,7 +2071,6 @@
                 idPrefix="temp-voice-main"
               />
               {/if}
-
 
               {#if tvSub === 'generators'}
               {#if !config.tempVoiceGenerators}
