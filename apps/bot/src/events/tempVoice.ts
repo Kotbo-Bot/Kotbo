@@ -1585,19 +1585,22 @@ async function appliquerSortieVocale(channel: VoiceChannel, membreId: string): P
 }
 
 /**
- * Quand le chat est réservé (« Personne » ou « Moi seul » mémorisé), une
- * autorisation d'accès (Autoriser, demande acceptée, réservation à un rôle ou à
- * des membres) n'accorde pas l'écriture : le patch perd `SendMessages`.
- * Le propriétaire (`proprietaire`) garde la sienne en « Moi seul » : seul
- * « Personne » la lui retire.
+ * Une autorisation d'accès (Autoriser, demande acceptée, réservation à un rôle
+ * ou à des membres) n'accorde l'écriture que si le mode mémorisé la laisse :
+ * jamais en « Personne » ; en « Moi seul », seulement au propriétaire ; en
+ * « ceux qui sont en vocal », la présence décide, et seul le propriétaire
+ * connecté garde la sienne. Le patch perd alors `SendMessages`.
  * Copie, le patch d'origine reste lisible pour savoir s'il était complet.
  */
 function sansEcritureSiChatReserve<T extends Record<string, unknown>>(
   patch: T,
   entree: EntreeSalonTemporaire,
   proprietaire = false,
+  present = true,
 ): T {
-  const reserve = entree.modeEcriture === 'nobody' || (entree.modeEcriture === 'ownerOnly' && !proprietaire);
+  const reserve = entree.modeEcriture === 'nobody'
+    || (entree.modeEcriture === 'ownerOnly' && !proprietaire)
+    || (entree.modeEcriture === 'inVoice' && (!proprietaire || !present));
   if (!reserve) return patch;
   const copie = { ...patch };
   delete copie.SendMessages;
@@ -4064,7 +4067,7 @@ async function appliquerReservation(
     const owner = guild.members.cache.get(cache.creatorId)
       ?? await guild.members.fetch(cache.creatorId).catch(() => null);
     const ownerPatchComplet = categoryTrustPatch(channel, owner);
-    const ownerPatch = ownerPatchComplet && sansEcritureSiChatReserve(ownerPatchComplet, cache, true);
+    const ownerPatch = ownerPatchComplet && sansEcritureSiChatReserve(ownerPatchComplet, cache, true, channel.members?.has(cache.creatorId));
 
     // Les autorisations d'abord, le verrou ensuite : dans l'ordre inverse, un
     // appel refusé entre les deux laisse un salon fermé à tout le monde et
@@ -4177,7 +4180,7 @@ async function reserverPourDesMembres(
     ?? await guild.members.fetch(cache.creatorId).catch(() => null);
   // En « Personne » le propriétaire reste muet : la réservation ne lui rend pas l'écriture.
   const ownerPatch = categoryTrustPatch(channel, owner);
-  if (owner && ownerPatch) await channel.permissionOverwrites.edit(owner, sansEcritureSiChatReserve(ownerPatch, cache, true));
+  if (owner && ownerPatch) await channel.permissionOverwrites.edit(owner, sansEcritureSiChatReserve(ownerPatch, cache, true, channel.members?.has(cache.creatorId)));
 
   await garderEntreeStaff(channel, ctx.interaction.user.id);
   await channel.permissionOverwrites.edit(guildId, CHANNEL_PATCHES.lock);

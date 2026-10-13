@@ -609,3 +609,35 @@ describe('verrou en « ceux qui sont en vocal » et rôle réservé', () => {
     finReserve();
   });
 });
+
+describe('réservation en « ceux qui sont en vocal » : la présence décide', () => {
+  test("propriétaire absent, réservation à un rôle : il n'écrit pas", async () => {
+    const s = session({ depart: [[GUILD, fermeEcriture], [ROLE_OFFICE, ouvertEcriture]], mode: 'inVoice' });
+    await s.cliquer('reserve_select', [ROLE_R]);
+    expect(s.ferme()).toBe(true);
+    expect(s.ecrit(PROPRIO)).not.toBe('oui');
+    s.fin();
+  });
+
+  test("réservation à un rôle : le rôle réservé n'écrit pas", async () => {
+    const s = session({ depart: [[GUILD, fermeEcriture], [ROLE_OFFICE, ouvertEcriture]], mode: 'inVoice' });
+    await s.cliquer('reserve_select', [ROLE_R]);
+    expect(s.ecrit(ROLE_R)).not.toBe('oui');
+    s.fin();
+  });
+
+  test("propriétaire absent, réservation à des membres : il n'écrit pas", async () => {
+    const s = session({ depart: [[GUILD, fermeEcriture]], mode: 'inVoice' });
+    await s.cliquer('reserve_membres' as never, [NOUVEAU]);
+    expect(s.ecrit(PROPRIO)).not.toBe('oui');
+    s.fin();
+  });
+
+  test("propriétaire connecté, réservation à un rôle : il écrit", async () => {
+    const s = session({ depart: [[GUILD, fermeEcriture], [PROPRIO, ouvertEcriture], [ROLE_OFFICE, ouvertEcriture]], mode: 'inVoice' });
+    s.channel.members.set(PROPRIO, {});
+    await s.cliquer('reserve_select', [ROLE_R]);
+    expect(s.ecrit(PROPRIO)).toBe('oui');
+    s.fin();
+  });
+});
