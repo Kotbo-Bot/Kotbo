@@ -3607,7 +3607,7 @@
   "panel_tempvoice_admins_only_settings": "Admins seulement : eux seuls règlent ce que les modérateurs peuvent faire.",
   "panel_tempvoice_locked_legacy": "Le salon a été verrouillé : seuls vous, les rôles autorisés d'office et les membres que vous avez ajoutés peuvent encore le rejoindre.",
   "panel_tempvoice_unlocked_legacy": "Le salon a été déverrouillé : il retrouve l'accès prévu par sa catégorie.",
-  "panel_tempvoice_chat_closed": "Le chat textuel du salon est fermé : seuls vous et les membres autorisés peuvent y écrire.",
+  "panel_tempvoice_chat_closed": "Le chat textuel du salon est fermé : seul vous pouvez y écrire, avec les rôles autorisés d'office.",
   "panel_tempvoice_chat_open": "Le chat textuel du salon est ouvert : tout le monde peut y écrire.",
   "panel_tempvoice_err_owner_still_here": "❌ Le propriétaire actuel du salon vocal est toujours présent.",
   "panel_tempvoice_err_join_before_claim": "❌ Rejoignez le salon vocal avant d'en récupérer la propriété.",

@@ -3607,7 +3607,7 @@
   "panel_tempvoice_admins_only_settings": "Admins only: they alone set what moderators may do.",
   "panel_tempvoice_locked_legacy": "The channel has been locked: only you, the roles allowed by default and the members you added can still join.",
   "panel_tempvoice_unlocked_legacy": "The channel has been unlocked: it goes back to the access its category defines.",
-  "panel_tempvoice_chat_closed": "The channel text chat is closed: only you and the allowed members can post in it.",
+  "panel_tempvoice_chat_closed": "The channel text chat is closed: only you can post in it, along with the auto-allowed roles.",
   "panel_tempvoice_chat_open": "The channel text chat is open: anyone can post in it.",
   "panel_tempvoice_err_owner_still_here": "❌ The current owner of the voice channel is still here.",
   "panel_tempvoice_err_join_before_claim": "❌ Join the voice channel before claiming its ownership.",

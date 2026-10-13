@@ -1585,12 +1585,20 @@ async function appliquerSortieVocale(channel: VoiceChannel, membreId: string): P
 }
 
 /**
- * En « Personne » mémorisé, une autorisation d'accès (Autoriser, réservation à un
- * rôle ou à des membres) n'accorde pas l'écriture : le patch perd `SendMessages`.
+ * Quand le chat est réservé (« Personne » ou « Moi seul » mémorisé), une
+ * autorisation d'accès (Autoriser, demande acceptée, réservation à un rôle ou à
+ * des membres) n'accorde pas l'écriture : le patch perd `SendMessages`.
+ * Le propriétaire (`proprietaire`) garde la sienne en « Moi seul » : seul
+ * « Personne » la lui retire.
  * Copie, le patch d'origine reste lisible pour savoir s'il était complet.
  */
-function sansEcritureSiPersonne<T extends Record<string, unknown>>(patch: T, entree: EntreeSalonTemporaire): T {
-  if (entree.modeEcriture !== 'nobody') return patch;
+function sansEcritureSiChatReserve<T extends Record<string, unknown>>(
+  patch: T,
+  entree: EntreeSalonTemporaire,
+  proprietaire = false,
+): T {
+  const reserve = entree.modeEcriture === 'nobody' || (entree.modeEcriture === 'ownerOnly' && !proprietaire);
+  if (!reserve) return patch;
   const copie = { ...patch };
   delete copie.SendMessages;
   return copie;
@@ -1726,6 +1734,12 @@ async function appliquerModeEcriture(
     if (posee) originesSurcharge.marquer(guildId, channel.id, membreId, 'presence');
   }
   for (const membreId of transition.aRetirer) {
+    // Le propriétaire a reçu son écriture du patch ci-dessus (« Moi seul ») :
+    // la lui retirer ici le rendrait muet. Seule sa marque de présence part.
+    if (membreId === entree.creatorId) {
+      originesSurcharge.oublier(guildId, channel.id, membreId);
+      continue;
+    }
     const retiree = await poserSurcharge(channel, membreId, { SendMessages: null });
     if (retiree) originesSurcharge.oublier(guildId, channel.id, membreId);
   }
@@ -3797,7 +3811,7 @@ async function traiterDecisionDemande(ctx: ActionContext, decision: 'ok' | 'non'
       await respond(interaction, m.panel_tempvoice_err_category_denies({ name: demandeur.displayName }, { locale }));
       return;
     }
-    await channel.permissionOverwrites.edit(demandeur.id, sansEcritureSiPersonne(patch, cache));
+    await channel.permissionOverwrites.edit(demandeur.id, sansEcritureSiChatReserve(patch, cache));
     // Marquée comme donnée à la main : un départ du vocal ne doit jamais
     // l'effacer, alors que « Autoriser » et la présence écrivent le même bit.
     originesSurcharge.marquer(guildId, channel.id, demandeur.id, 'autorisation');
@@ -3939,7 +3953,7 @@ async function traiterActionMembre(
         await reponseSupplementaire(interaction, m.panel_tempvoice_err_category_denies({ name: target.displayName }, { locale }));
         return;
       }
-      await channel.permissionOverwrites.edit(target.id, sansEcritureSiPersonne(patch, cache));
+      await channel.permissionOverwrites.edit(target.id, sansEcritureSiChatReserve(patch, cache));
       // Le marquage est la moitié utile de « Autoriser » : sans lui, quitter le
       // vocal en mode « ceux qui sont en vocal » effacerait ce droit.
       originesSurcharge.marquer(guildId, channel.id, target.id, 'autorisation');
@@ -4011,7 +4025,7 @@ async function appliquerReservation(
   // toute écriture, sans quoi le verrou resterait pose sur un salon que plus
   // personne ne peut rejoindre.
   const rolePatchComplet = selectedRoleId ? grantForRole(selectedRoleId) : null;
-  const rolePatch = rolePatchComplet && sansEcritureSiPersonne(rolePatchComplet, cache);
+  const rolePatch = rolePatchComplet && sansEcritureSiChatReserve(rolePatchComplet, cache);
   if (selectedRoleId && !rolePatch) {
     await reply(m.panel_tempvoice_err_role_denied({}, { locale }));
     return;
@@ -4035,7 +4049,7 @@ async function appliquerReservation(
     const owner = guild.members.cache.get(cache.creatorId)
       ?? await guild.members.fetch(cache.creatorId).catch(() => null);
     const ownerPatchComplet = categoryTrustPatch(channel, owner);
-    const ownerPatch = ownerPatchComplet && sansEcritureSiPersonne(ownerPatchComplet, cache);
+    const ownerPatch = ownerPatchComplet && sansEcritureSiChatReserve(ownerPatchComplet, cache, true);
 
     // Les autorisations d'abord, le verrou ensuite : dans l'ordre inverse, un
     // appel refusé entre les deux laisse un salon fermé à tout le monde et
@@ -4127,7 +4141,7 @@ async function reserverPourDesMembres(
       refuses.push(membre.displayName);
       continue;
     }
-    const posee = await poserSurcharge(channel, membre.id, sansEcritureSiPersonne(patch, cache));
+    const posee = await poserSurcharge(channel, membre.id, sansEcritureSiChatReserve(patch, cache));
     if (!posee) {
       refuses.push(membre.displayName);
       continue;
@@ -4148,7 +4162,7 @@ async function reserverPourDesMembres(
     ?? await guild.members.fetch(cache.creatorId).catch(() => null);
   // En « Personne » le propriétaire reste muet : la réservation ne lui rend pas l'écriture.
   const ownerPatch = categoryTrustPatch(channel, owner);
-  if (owner && ownerPatch) await channel.permissionOverwrites.edit(owner, sansEcritureSiPersonne(ownerPatch, cache));
+  if (owner && ownerPatch) await channel.permissionOverwrites.edit(owner, sansEcritureSiChatReserve(ownerPatch, cache, true));
 
   await garderEntreeStaff(channel, ctx.interaction.user.id);
   await channel.permissionOverwrites.edit(guildId, CHANNEL_PATCHES.lock);
@@ -4813,7 +4827,7 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
           return;
         }
 
-        await channel.permissionOverwrites.edit(target.id, sansEcritureSiPersonne(patch, cache));
+        await channel.permissionOverwrites.edit(target.id, sansEcritureSiChatReserve(patch, cache));
 
         // La moitié utile de « Autoriser » : sans ce marquage, quitter le vocal en
         // mode « ceux qui sont en vocal » effacerait ce droit, les deux écrivant
@@ -5012,14 +5026,20 @@ async function applyOwnershipTransfer(
   // du propriétaire : le bit n'est écrit pour personne, sinon l'ancien perdrait
   // une écriture que sa présence ou @everyone lui donne.
   // Un salon verrouillé fait écrire son propriétaire (le verrou lui pose le bit) :
-  // le droit passe alors aussi, sauf en « Personne » et en « ceux qui sont en
-  // vocal », où la présence décide et personne ne perd la sienne. Seul un
-  // « Personne » mémorisé coupe le nouveau : déduit d'une catégorie, il ne touche à rien.
+  // le droit passe alors aussi, sauf en « Personne ». En « ceux qui sont en
+  // vocal », la présence décide : le nouveau n'a pas de bit nominatif, l'ancien
+  // ne garde le sien que s'il est encore connecté. Seul un « Personne » mémorisé
+  // coupe le nouveau : déduit d'une catégorie, il ne touche à rien.
   const mode = modeDuSalon(channel, cache);
   const verrouille = Boolean(channel.permissionOverwrites.cache.get(guildId)?.deny?.has(PermissionFlagsBits.Connect));
   if (cache.modeEcriture === 'nobody') {
     patchNouveau.SendMessages = false;
-  } else if (mode !== 'ownerOnly' && !(verrouille && mode !== 'nobody' && mode !== 'inVoice')) {
+  } else if (mode === 'inVoice' && verrouille) {
+    // La présence décide : le nouveau n'a pas de bit nominatif, et l'ancien ne
+    // garde le sien que s'il est encore en vocal (absent, il n'écrit plus).
+    delete patchNouveau.SendMessages;
+    if (channel.members.has(previousOwnerId)) delete patchAncien.SendMessages;
+  } else if (mode !== 'ownerOnly' && !(verrouille && mode !== 'nobody')) {
     delete patchNouveau.SendMessages;
     delete patchAncien.SendMessages;
   }

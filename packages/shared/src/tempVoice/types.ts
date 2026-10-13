@@ -15,8 +15,8 @@ export type TempVoiceOwnerPower = 'mute' | 'deafen' | 'move' | 'manageChannel' |
  * - `inherit` : la catégorie décide, le module ne pose rien.
  * - `open` : tout le monde peut écrire, même contre la catégorie.
  * - `inVoice` : seuls les membres connectés au salon écrivent.
- * - `locked` : seuls écrivent le propriétaire, les rôles autorisés d'office et
- *   les membres autorisés.
+ * - `locked` : seuls écrivent le propriétaire et les rôles autorisés d'office
+ *   (pas les membres autorisés).
  * - `nobody` : personne n'écrit, ni le propriétaire, ni les modérateurs, ni les
  *   membres autorisés ; les administrateurs Discord passent outre.
  */

@@ -2474,6 +2474,23 @@ describe('configuration des demandes d\'accès', () => {
     scene.ranger();
   });
 
+  test("demande acceptée en « Personne » : le demandeur entre sans obtenir l'écriture", async () => {
+    const demandeur = fakeTarget('733000000000000000', false);
+    const scene = await demandeDeposee({
+      ligne: ligneDemandes(),
+      demandeur,
+      repondeur: fakeTarget(OWNER, false),
+    });
+    tempChannels.get(CHANNEL)!.modeEcriture = 'nobody';
+
+    await scene.trancher('ok');
+
+    const patch = scene.edits.filter((e) => e.id === demandeur.id).at(-1)?.patch;
+    expect(patch?.Connect).toBe(true);
+    expect(patch?.SendMessages).not.toBe(true);
+    scene.ranger();
+  });
+
   test('« Refuser et bannir » respecte le réglage des modérateurs', async () => {
     // Le plus grave des points de revue : cette branche passait par
     // `repondreDemande`, qu'aucun réglage ne gouverne. Un modérateur bannissait
