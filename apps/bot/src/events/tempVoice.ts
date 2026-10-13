@@ -1716,13 +1716,27 @@ async function appliquerModeEcriture(
 
   // Les rôles autorisés d'office suivent la même règle qu'à la création : ils
   // écrivent dans tous les modes sauf « Personne », hors refus nommé de la catégorie.
-  for (const roleId of await rolesAutoriseDOffice(channel, guildId, entree)) {
+  const rolesOffice = await rolesAutoriseDOffice(channel, guildId, entree);
+  for (const roleId of rolesOffice) {
     const ecriture = nouveau === 'nobody'
       ? false
       : ownerChatPatch(true, categoryOverwriteFor(channel, roleId)).SendMessages;
     await channel.permissionOverwrites
       .edit(roleId, { SendMessages: ecriture }, { type: OverwriteType.Role })
       .catch((err: unknown) => logger.warn('TempVoice', `Écriture du rôle ${roleId} non réglée sur ${channel.id} :`, err));
+  }
+
+  // Le rôle réservé a reçu `SendMessages` à la réservation (en « Tout le monde »).
+  // Dans les modes qui refusent l'écriture à @everyone, il ne la garde pas, sauf
+  // s'il est aussi autorisé d'office (réglé juste au-dessus) ; en « ceux qui sont
+  // en vocal », la présence de ses membres décide. Le bit est effacé, pas refusé.
+  if (nouveau === 'ownerOnly' || nouveau === 'nobody' || nouveau === 'inVoice') {
+    const reserve = await roleReserve(channel.id);
+    if (reserve && !rolesOffice.includes(reserve)) {
+      await channel.permissionOverwrites
+        .edit(reserve, { SendMessages: null }, { type: OverwriteType.Role })
+        .catch((err: unknown) => logger.warn('TempVoice', `Écriture du rôle réservé ${reserve} non retirée sur ${channel.id} :`, err));
+    }
   }
 
   // « Moi seul », « Personne » et « ceux qui sont en vocal » refusent
@@ -3355,8 +3369,9 @@ async function basculerVerrou(ctx: ActionContext): Promise<string> {
     return `${I.unlock} ${m.panel_tempvoice_unlocked({}, { locale })}`;
   }
 
-  // En « Personne » le propriétaire reste muet : le verrou ne lui rend pas l'écriture.
-  if (cache.modeEcriture !== 'nobody') {
+  // En « Personne » le propriétaire reste muet, en « ceux qui sont en vocal » sa
+  // présence décide : le verrou ne lui pose le bit d'écriture dans aucun des deux.
+  if (cache.modeEcriture !== 'nobody' && cache.modeEcriture !== 'inVoice') {
     await channel.permissionOverwrites.edit(
       cache.creatorId,
       ownerChatPatch(true, categoryOverwriteFor(channel, cache.creatorId)),
@@ -4431,7 +4446,8 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
           await reply(`${I.lock} ${verrouAutorise.raison}`);
           return;
         }
-        if (cache.modeEcriture !== 'nobody') {
+        // Même règle que `basculerVerrou` : ni « Personne » ni « en vocal » ne reçoivent le bit.
+        if (cache.modeEcriture !== 'nobody' && cache.modeEcriture !== 'inVoice') {
           await channel.permissionOverwrites.edit(
             cache.creatorId,
             ownerChatPatch(true, categoryOverwriteFor(channel, cache.creatorId)),
@@ -5025,10 +5041,11 @@ async function applyOwnershipTransfer(
   // Les autres modes (présence en vocal, tout le monde, hérité) ne dépendent pas
   // du propriétaire : le bit n'est écrit pour personne, sinon l'ancien perdrait
   // une écriture que sa présence ou @everyone lui donne.
-  // Un salon verrouillé fait écrire son propriétaire (le verrou lui pose le bit) :
-  // le droit passe alors aussi, sauf en « Personne ». En « ceux qui sont en
-  // vocal », la présence décide : le nouveau n'a pas de bit nominatif, l'ancien
-  // ne garde le sien que s'il est encore connecté. Seul un « Personne » mémorisé
+  // Un salon verrouillé fait écrire son propriétaire (le verrou lui pose le bit,
+  // sauf en « Personne » et en « ceux qui sont en vocal ») : le droit passe alors
+  // aussi, sauf en « Personne ». En « ceux qui sont en vocal », la présence
+  // décide : le nouveau n'a pas de bit nominatif, l'ancien ne garde le sien que
+  // s'il est encore connecté. Seul un « Personne » mémorisé
   // coupe le nouveau : déduit d'une catégorie, il ne touche à rien.
   const mode = modeDuSalon(channel, cache);
   const verrouille = Boolean(channel.permissionOverwrites.cache.get(guildId)?.deny?.has(PermissionFlagsBits.Connect));

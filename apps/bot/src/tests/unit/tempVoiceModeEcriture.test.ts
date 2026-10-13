@@ -31,6 +31,7 @@ const NOUVEAU = '300000000000000000';
 let CHANNEL = '';
 let numeroSalon = 0;
 const ROLE_OFFICE = '510000000000000000';
+const ROLE_R = '520000000000000000';
 const GENERATEUR = '600000000000000000';
 const CATEGORIE = '700000000000000000';
 const ECRIRE = PermissionFlagsBits.SendMessages;
@@ -73,7 +74,7 @@ function appliquer(courante: Surcharge, patch: Record<string, unknown>): Surchar
 }
 
 /** Comme discord.js, chaque surcharge porte son type : 0 pour un rôle, 1 pour un membre. */
-const typeDe = (id: string) => (id === GUILD || id === ROLE_OFFICE ? 0 : 1);
+const typeDe = (id: string) => (id === GUILD || id === ROLE_OFFICE || id === ROLE_R ? 0 : 1);
 
 function salon(depart: Array<[string, Surcharge]>, categorie: Array<[string, Surcharge]> = []) {
   const cache = new Map<string, Surcharge & { type: number }>(depart.map(([id, s]) => [id, { ...s, type: typeDe(id) }]));
@@ -118,7 +119,7 @@ function guildDe(membres: Array<ReturnType<typeof membre>>) {
     available: true,
     ownerId: '999999999999999999',
     preferredLocale: 'fr',
-    roles: { everyone: { id: GUILD }, cache: new Map([[ROLE_OFFICE, { id: ROLE_OFFICE }]]) },
+    roles: { everyone: { id: GUILD }, cache: new Map([[ROLE_OFFICE, { id: ROLE_OFFICE }], [ROLE_R, { id: ROLE_R }]]) },
     members: {
       me: { permissions: { has: () => true } },
       cache: parId,
@@ -524,5 +525,87 @@ describe("rôles autorisés d'office : seuls les rôles déjà surchargés sont 
     await s.cliquer('mode_select', ['ownerOnly']);
     expect(s.channel.permissionOverwrites.cache.has(ROLE_OFFICE)).toBe(false);
     s.fin();
+  });
+});
+
+describe('verrou en « ceux qui sont en vocal » et rôle réservé', () => {
+  test("verrou, propriétaire absent : le verrou ne lui donne pas l'écriture", async () => {
+    const s = session({ depart: [[GUILD, fermeEcriture]], mode: 'inVoice' });
+    await s.cliquer('bascule_verrou');
+    expect(s.ecrit(PROPRIO)).not.toBe('oui');
+    s.fin();
+  });
+
+  test("ancien « lock » puis « unlock », propriétaire connecté : il écrit", async () => {
+    const s = session({ depart: [[GUILD, ouvertEcriture], [PROPRIO, ouvertEcriture]], mode: 'everyone' });
+    s.channel.members.set(PROPRIO, {});
+    await s.cliquer('mode_select', ['inVoice']);
+    await s.cliquer('lock' as never);
+    expect(s.ecrit(PROPRIO)).toBe('oui');
+    await s.cliquer('unlock');
+    expect(s.ecrit(PROPRIO)).toBe('oui');
+    s.fin();
+  });
+
+  test("ancien « lock » en « ceux qui sont en vocal », propriétaire absent : il n'écrit pas", async () => {
+    const s = session({ depart: [[GUILD, fermeEcriture]], mode: 'inVoice' });
+    await s.cliquer('lock' as never);
+    expect(s.ecrit(PROPRIO)).not.toBe('oui');
+    s.fin();
+  });
+
+  /** Réserve le salon au rôle R en « Tout le monde » : la base le rend à la lecture suivante. */
+  async function reserveEnToutLeMonde() {
+    const s = session({ depart: [[GUILD, ouvertEcriture], [PROPRIO, ouvertEcriture], [ROLE_OFFICE, ouvertEcriture]], mode: 'everyone' });
+    prismaMock.tempVoiceChannel.findUnique.mockImplementation((async () => ({ roleId: ROLE_R })) as never);
+    await s.cliquer('reserve_select', [ROLE_R]);
+    expect(s.ecrit(ROLE_R)).toBe('oui');
+    return s;
+  }
+  const finReserve = () => prismaMock.tempVoiceChannel.findUnique.mockImplementation((async () => null) as never);
+
+  test("rôle réservé en « Tout le monde » puis « Moi seul » : il n'écrit plus", async () => {
+    const s = await reserveEnToutLeMonde();
+    await s.cliquer('mode_select', ['ownerOnly']);
+    expect(s.ecrit(ROLE_R)).not.toBe('oui');
+    expect(s.ecrit(PROPRIO)).toBe('oui');
+    expect(s.ecrit(ROLE_OFFICE)).toBe('oui');
+    s.fin();
+    finReserve();
+  });
+
+  test("rôle réservé en « Tout le monde » puis « Personne » : il n'écrit plus", async () => {
+    const s = await reserveEnToutLeMonde();
+    await s.cliquer('mode_select', ['nobody']);
+    expect(s.ecrit(ROLE_R)).not.toBe('oui');
+    s.fin();
+    finReserve();
+  });
+
+  test("rôle réservé en « Tout le monde » puis « ceux qui sont en vocal » : la présence décide", async () => {
+    const s = await reserveEnToutLeMonde();
+    await s.cliquer('mode_select', ['inVoice']);
+    expect(s.ecrit(ROLE_R)).not.toBe('oui');
+    s.fin();
+    finReserve();
+  });
+
+  test("rôle réservé autorisé d'office : il garde l'écriture en « Moi seul »", async () => {
+    const s = session({ depart: [[GUILD, ouvertEcriture], [PROPRIO, ouvertEcriture], [ROLE_OFFICE, ouvertEcriture]], mode: 'everyone' });
+    prismaMock.tempVoiceChannel.findUnique.mockImplementation((async () => ({ roleId: ROLE_OFFICE })) as never);
+    await s.cliquer('mode_select', ['ownerOnly']);
+    expect(s.ecrit(ROLE_OFFICE)).toBe('oui');
+    s.fin();
+    finReserve();
+  });
+
+  test("retour en « Tout le monde » après « Moi seul » : @everyone écrit, le rôle réservé n'a pas de bit", async () => {
+    const s = await reserveEnToutLeMonde();
+    await s.cliquer('mode_select', ['ownerOnly']);
+    await s.cliquer('mode_select', ['everyone']);
+    expect(s.ecrit(GUILD)).toBe('oui');
+    expect(s.ecrit(ROLE_R)).not.toBe('non');
+    s.fin();
+    finReserve();
   });
 });
