@@ -207,7 +207,7 @@ describe("transfert : le droit d'écrire suit le mode du salon", () => {
   });
 
   test("« Personne » : le nouveau propriétaire n'écrit pas, ni l'ancien", async () => {
-    const r = await executer({ kind: 'transfer', depart: departNobody, proprietaire: ANCIEN });
+    const r = await executer({ kind: 'transfer', depart: departNobody, modeEcriture: 'nobody', proprietaire: ANCIEN });
     expect(r.avant).toBe('nobody');
     expect(r.ecriture(NOUVEAU)).not.toContain(true);
     expect(r.ecriture(ANCIEN)).not.toContain(true);

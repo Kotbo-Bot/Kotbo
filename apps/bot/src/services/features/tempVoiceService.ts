@@ -712,13 +712,14 @@ export function estModeEcriture(value: unknown): value is ModeEcriture {
   return MODES_ECRITURE.includes(value as ModeEcriture);
 }
 
-/** Personne d'autre ne valide ce que le dashboard écrit. Une valeur inconnue
- *  retombe sur « Tout le monde », qui est le comportement historique d'un salon
- *  sans réglage — et non un mode plus fermé qu'on n'a pas demandé. */
+/** « Hérité » ou l'un des quatre modes. */
 export function estChoixModeEcriture(value: unknown): value is ModeEcriture | typeof MODE_HERITE {
   return value === MODE_HERITE || estModeEcriture(value);
 }
 
+/** Personne d'autre ne valide ce que le dashboard écrit. Une valeur inconnue
+ *  retombe sur « Tout le monde », qui est le comportement historique d'un salon
+ *  sans réglage — et non un mode plus fermé qu'on n'a pas demandé. */
 export function normaliserModeEcriture(value: unknown): ModeEcriture {
   return estModeEcriture(value) ? value : MODE_ECRITURE_PAR_DEFAUT;
 }
