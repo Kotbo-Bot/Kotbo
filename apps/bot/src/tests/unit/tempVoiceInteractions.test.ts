@@ -289,8 +289,9 @@ describe('Acquitter avant toute lecture lente', () => {
   });
 
   test('« Déplacer » : la proposition est refermée après acquittement', async () => {
-    // Base (2,5 s) puis relecture du salon (2,5 s) avant le verdict : un `update`
-    // tardif était rejeté, la proposition restait cliquable.
+    // Base (2,5 s) puis relecture du salon (2,5 s) avant le verdict : la
+    // proposition se referme après l'acquittement, jamais par un `update` tardif
+    // que Discord rejetterait.
     baseLente = true;
     const { channel, guild } = scene({ lent: true });
     const s = await cliquer({

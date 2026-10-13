@@ -1584,21 +1584,53 @@ async function appliquerSortieVocale(channel: VoiceChannel, membreId: string): P
   planifierRafraichissementPanneau(channel);
 }
 
+/**
+ * En « Personne » mémorisé, une autorisation d'accès (Autoriser, réservation à un
+ * rôle ou à des membres) n'accorde pas l'écriture : le patch perd `SendMessages`.
+ * Copie, le patch d'origine reste lisible pour savoir s'il était complet.
+ */
+function sansEcritureSiPersonne<T extends Record<string, unknown>>(patch: T, entree: EntreeSalonTemporaire): T {
+  if (entree.modeEcriture !== 'nobody') return patch;
+  const copie = { ...patch };
+  delete copie.SendMessages;
+  return copie;
+}
+
 /** Rôles que le générateur du salon autorise d'office (repli : le générateur principal). */
-async function rolesAutoriseDOffice(guildId: string, entree: EntreeSalonTemporaire): Promise<string[]> {
+async function rolesAutoriseDOffice(channel: VoiceChannel, guildId: string, entree: EntreeSalonTemporaire): Promise<string[]> {
   const config = await getCachedGuild(guildId).catch(() => null);
   if (!config) return [];
   const generateurs = resolveTempVoiceGenerators(config as unknown as TempVoiceGuildConfig, guildId);
   const generateur = generateurs.find((candidat) => candidat.channelId === entree.generateurId)
     ?? generateurs.find((candidat) => candidat.primary);
-  return (generateur?.policy.autoAllowRoleIds ?? []).filter((id) => id !== guildId);
+  // Seuls les rôles déjà surchargés sur le salon sont réglés : un rôle ajouté
+  // depuis ou posé par un autre générateur ne reçoit pas de surcharge neuve.
+  return (generateur?.policy.autoAllowRoleIds ?? [])
+    .filter((id) => id !== guildId && channel.permissionOverwrites.cache.has(id));
 }
 
 /**
- * Le verrou coupe l'écriture de @everyone et rend le propriétaire écrivain ; en
- * rouvrant, le mode mémorisé redevient la seule source de ces deux bits, sans
- * quoi le panneau affiche « Moi seul » sur un salon qui ne l'est plus. Sans mode
- * mémorisé, rien n'est posé ici : la catégorie décide. Renvoie `true` si posé.
+ * Surcharge du propriétaire pour un mode. En « ceux qui sont en vocal », le
+ * propriétaire connecté écrit par sa présence : lui poser le refus du mode
+ * l'écraserait, il reçoit l'écriture (hors refus nommé de la catégorie).
+ */
+function surchargeProprietaire(
+  channel: VoiceChannel,
+  entree: EntreeSalonTemporaire,
+  mode: ModeEcriture,
+  surcharges: ReturnType<typeof surchargesModeEcriture>,
+): Record<string, boolean | null> {
+  return mode === 'inVoice' && channel.members?.has(entree.creatorId)
+    ? ownerChatPatch(true, categoryOverwriteFor(channel, entree.creatorId))
+    : surcharges.proprietaire;
+}
+
+/**
+ * Rétablit le mode mémorisé, quel qu'il soit, comme seule source des bits
+ * d'écriture de @everyone et du propriétaire : le verrou coupe l'un et rend
+ * l'autre écrivain, et sans ce retour le panneau affiche un mode que le salon
+ * n'a plus. Sans mode mémorisé, rien n'est posé ici : la catégorie décide.
+ * Renvoie `true` si posé.
  */
 async function rendreEcritureAuMode(channel: VoiceChannel, entree: EntreeSalonTemporaire): Promise<boolean> {
   if (!entree.modeEcriture) return false;
@@ -1609,7 +1641,10 @@ async function rendreEcritureAuMode(channel: VoiceChannel, entree: EntreeSalonTe
     categoryOverwriteFor(channel, entree.creatorId),
   );
   // Le propriétaire d'abord : dans l'ordre inverse, un appel refusé entre les deux le laisserait muet chez lui.
-  await channel.permissionOverwrites.edit(entree.creatorId, surcharges.proprietaire);
+  await channel.permissionOverwrites.edit(
+    entree.creatorId,
+    surchargeProprietaire(channel, entree, entree.modeEcriture, surcharges),
+  );
   await channel.permissionOverwrites.edit(guildId, surcharges.everyone);
   return true;
 }
@@ -1651,16 +1686,30 @@ async function appliquerModeEcriture(
     categoryOverwriteFor(channel, guildId),
     categoryOverwriteFor(channel, entree.creatorId),
   );
+  const presents = [...(channel.members?.keys() ?? [])];
+  const transition = transitionModeEcriture(
+    ancien,
+    herite ? 'everyone' : nouveau,
+    presents,
+    originesSurcharge.originesDuSalon(guildId, channel.id),
+  );
+  const surchargeDuProprietaire = herite
+    ? surcharges.proprietaire
+    : surchargeProprietaire(channel, entree, nouveau, surcharges as ReturnType<typeof surchargesModeEcriture>);
 
   // Le propriétaire d'abord, @everyone ensuite : dans l'ordre inverse, un appel
   // refusé entre les deux le laisserait muet chez lui.
-  await channel.permissionOverwrites.edit(entree.creatorId, surcharges.proprietaire);
+  // Présent, le propriétaire reçoit son écriture de la transition (elle la marque
+  // comme présence) : la poser deux fois doublerait l'appel.
+  if (!(nouveau === 'inVoice' && transition.aPoser.includes(entree.creatorId))) {
+    await channel.permissionOverwrites.edit(entree.creatorId, surchargeDuProprietaire);
+  }
   await channel.permissionOverwrites.edit(guildId, surcharges.everyone);
 
   // Les rôles autorisés d'office suivent la même règle qu'à la création : ils
   // écrivent dans tous les modes sauf « Personne », hors refus nommé de la catégorie.
-  for (const roleId of await rolesAutoriseDOffice(guildId, entree)) {
-    const ecriture = nouveau === 'nobody' && !herite
+  for (const roleId of await rolesAutoriseDOffice(channel, guildId, entree)) {
+    const ecriture = nouveau === 'nobody'
       ? false
       : ownerChatPatch(true, categoryOverwriteFor(channel, roleId)).SendMessages;
     await channel.permissionOverwrites
@@ -1671,14 +1720,6 @@ async function appliquerModeEcriture(
   // « Moi seul », « Personne » et « ceux qui sont en vocal » refusent
   // `SendMessages` a @everyone - le bot compris, faute de surcharge a lui.
   await assurerBotPeutEcrire(channel);
-
-  const presents = [...(channel.members?.keys() ?? [])];
-  const transition = transitionModeEcriture(
-    ancien,
-    herite ? 'everyone' : nouveau,
-    presents,
-    originesSurcharge.originesDuSalon(guildId, channel.id),
-  );
 
   for (const membreId of transition.aPoser) {
     const posee = await poserSurcharge(channel, membreId, { SendMessages: true });
@@ -3756,7 +3797,7 @@ async function traiterDecisionDemande(ctx: ActionContext, decision: 'ok' | 'non'
       await respond(interaction, m.panel_tempvoice_err_category_denies({ name: demandeur.displayName }, { locale }));
       return;
     }
-    await channel.permissionOverwrites.edit(demandeur.id, patch);
+    await channel.permissionOverwrites.edit(demandeur.id, sansEcritureSiPersonne(patch, cache));
     // Marquée comme donnée à la main : un départ du vocal ne doit jamais
     // l'effacer, alors que « Autoriser » et la présence écrivent le même bit.
     originesSurcharge.marquer(guildId, channel.id, demandeur.id, 'autorisation');
@@ -3898,7 +3939,7 @@ async function traiterActionMembre(
         await reponseSupplementaire(interaction, m.panel_tempvoice_err_category_denies({ name: target.displayName }, { locale }));
         return;
       }
-      await channel.permissionOverwrites.edit(target.id, patch);
+      await channel.permissionOverwrites.edit(target.id, sansEcritureSiPersonne(patch, cache));
       // Le marquage est la moitié utile de « Autoriser » : sans lui, quitter le
       // vocal en mode « ceux qui sont en vocal » effacerait ce droit.
       originesSurcharge.marquer(guildId, channel.id, target.id, 'autorisation');
@@ -3969,7 +4010,8 @@ async function appliquerReservation(
   // refuse - le même travers que « Ajouter ». Le refus est constaté avant
   // toute écriture, sans quoi le verrou resterait pose sur un salon que plus
   // personne ne peut rejoindre.
-  const rolePatch = selectedRoleId ? grantForRole(selectedRoleId) : null;
+  const rolePatchComplet = selectedRoleId ? grantForRole(selectedRoleId) : null;
+  const rolePatch = rolePatchComplet && sansEcritureSiPersonne(rolePatchComplet, cache);
   if (selectedRoleId && !rolePatch) {
     await reply(m.panel_tempvoice_err_role_denied({}, { locale }));
     return;
@@ -3992,13 +4034,13 @@ async function appliquerReservation(
   if (selectedRoleId && rolePatch) {
     const owner = guild.members.cache.get(cache.creatorId)
       ?? await guild.members.fetch(cache.creatorId).catch(() => null);
-    const ownerPatch = categoryTrustPatch(channel, owner);
+    const ownerPatchComplet = categoryTrustPatch(channel, owner);
+    const ownerPatch = ownerPatchComplet && sansEcritureSiPersonne(ownerPatchComplet, cache);
 
     // Les autorisations d'abord, le verrou ensuite : dans l'ordre inverse, un
     // appel refusé entre les deux laisse un salon fermé à tout le monde et
     // sans réservation, que rien ne vient rouvrir.
     // En « Personne » le propriétaire reste muet : la réservation ne lui rend pas l'écriture.
-    if (ownerPatch && cache.modeEcriture === 'nobody') delete ownerPatch.SendMessages;
     if (ownerPatch && owner) await channel.permissionOverwrites.edit(owner, ownerPatch);
     await channel.permissionOverwrites.edit(selectedRoleId, rolePatch);
     await garderEntreeStaff(channel, ctx.interaction.user.id);
@@ -4085,7 +4127,7 @@ async function reserverPourDesMembres(
       refuses.push(membre.displayName);
       continue;
     }
-    const posee = await poserSurcharge(channel, membre.id, patch);
+    const posee = await poserSurcharge(channel, membre.id, sansEcritureSiPersonne(patch, cache));
     if (!posee) {
       refuses.push(membre.displayName);
       continue;
@@ -4104,8 +4146,9 @@ async function reserverPourDesMembres(
   // Le propriétaire garde son accès, comme pour une réservation à un rôle.
   const owner = guild.members.cache.get(cache.creatorId)
     ?? await guild.members.fetch(cache.creatorId).catch(() => null);
+  // En « Personne » le propriétaire reste muet : la réservation ne lui rend pas l'écriture.
   const ownerPatch = categoryTrustPatch(channel, owner);
-  if (owner && ownerPatch) await channel.permissionOverwrites.edit(owner, ownerPatch);
+  if (owner && ownerPatch) await channel.permissionOverwrites.edit(owner, sansEcritureSiPersonne(ownerPatch, cache));
 
   await garderEntreeStaff(channel, ctx.interaction.user.id);
   await channel.permissionOverwrites.edit(guildId, CHANNEL_PATCHES.lock);
@@ -4423,24 +4466,11 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
         const everyoneOverwrite = channel.permissionOverwrites.cache.get(guildId);
         const chatIsOpen = !everyoneOverwrite?.deny.has(PermissionFlagsBits.SendMessages);
 
-        if (chatIsOpen) {
-          await channel.permissionOverwrites.edit(
-            cache.creatorId,
-            ownerChatPatch(true, categoryOverwriteFor(channel, cache.creatorId)),
-          );
-          await channel.permissionOverwrites.edit(guildId, CHANNEL_PATCHES.closeChat);
-          await reply(`💬 ${m.panel_tempvoice_chat_closed({}, { locale })}`);
-        } else {
-          // Ouvrir le chat ACCORDE le droit d'écrire. Le repasser par la catégorie
-          // l'annulait dès qu'elle le refusait : le bouton disait « ouvert » et
-          // personne ne pouvait écrire, propriétaire compris. (repris de la PR #533)
-          await channel.permissionOverwrites.edit(guildId, CHANNEL_PATCHES.openChat);
-          await channel.permissionOverwrites.edit(
-            cache.creatorId,
-            ownerChatPatch(true, categoryOverwriteFor(channel, cache.creatorId)),
-          );
-          await reply(`${I.msg} ${m.panel_tempvoice_chat_open({}, { locale })}`);
-        }
+        // Le bouton passe par le mode d'écriture : le mode mémorisé suit le chat.
+        await appliquerModeEcriture(channel, cache, chatIsOpen ? 'ownerOnly' : 'everyone');
+        await reply(chatIsOpen
+          ? `💬 ${m.panel_tempvoice_chat_closed({}, { locale })}`
+          : `${I.msg} ${m.panel_tempvoice_chat_open({}, { locale })}`);
         planifierRafraichissementPanneau(channel);
         return;
       }
@@ -4783,7 +4813,7 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
           return;
         }
 
-        await channel.permissionOverwrites.edit(target.id, patch);
+        await channel.permissionOverwrites.edit(target.id, sansEcritureSiPersonne(patch, cache));
 
         // La moitié utile de « Autoriser » : sans ce marquage, quitter le vocal en
         // mode « ceux qui sont en vocal » effacerait ce droit, les deux écrivant
@@ -4982,13 +5012,14 @@ async function applyOwnershipTransfer(
   // du propriétaire : le bit n'est écrit pour personne, sinon l'ancien perdrait
   // une écriture que sa présence ou @everyone lui donne.
   // Un salon verrouillé fait écrire son propriétaire (le verrou lui pose le bit) :
-  // le droit passe alors aussi, sauf en « Personne ». Seul un « Personne »
-  // mémorisé coupe le nouveau : déduit d'une catégorie, il ne touche à rien.
+  // le droit passe alors aussi, sauf en « Personne » et en « ceux qui sont en
+  // vocal », où la présence décide et personne ne perd la sienne. Seul un
+  // « Personne » mémorisé coupe le nouveau : déduit d'une catégorie, il ne touche à rien.
   const mode = modeDuSalon(channel, cache);
   const verrouille = Boolean(channel.permissionOverwrites.cache.get(guildId)?.deny?.has(PermissionFlagsBits.Connect));
   if (cache.modeEcriture === 'nobody') {
     patchNouveau.SendMessages = false;
-  } else if (mode !== 'ownerOnly' && !(verrouille && mode !== 'nobody')) {
+  } else if (mode !== 'ownerOnly' && !(verrouille && mode !== 'nobody' && mode !== 'inVoice')) {
     delete patchNouveau.SendMessages;
     delete patchAncien.SendMessages;
   }

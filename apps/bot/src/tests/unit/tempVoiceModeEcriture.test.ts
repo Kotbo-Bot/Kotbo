@@ -126,12 +126,12 @@ function guildDe(membres: Array<ReturnType<typeof membre>>) {
   };
 }
 
-type Action = 'mode_select' | 'bascule_verrou' | 'reserve_select' | 'transfer_select';
+type Action = 'mode_select' | 'bascule_verrou' | 'reserve_select' | 'transfer_select' | 'trust_select' | 'reserve_membres' | 'unlock' | 'chat';
 
 function interaction(action: Action, auteurId: string, channel: unknown, guild: unknown, values: string[] = []) {
   const menuTexte = action === 'mode_select';
   const menuRole = action === 'reserve_select';
-  const menuMembre = action === 'transfer_select';
+  const menuMembre = action === 'transfer_select' || action === 'trust_select' || action === 'reserve_membres';
   const i = {
     guildId: GUILD,
     customId: `tempvoice:${action}`,
@@ -202,6 +202,7 @@ function session(opts: {
     },
     ferme: () => Boolean(channel.permissionOverwrites.cache.get(GUILD)?.deny.has(CONNECTER)),
     fin: () => tempChannels.delete(CHANNEL),
+    channel,
   };
 }
 
@@ -334,6 +335,110 @@ describe('transfert', () => {
     const s = session({ depart: [[GUILD, fermeEcriture], [PROPRIO, fermeEcriture]], mode: 'nobody' });
     await s.cliquer('transfer_select', [NOUVEAU]);
     expect(s.ecrit(NOUVEAU)).toBe('non');
+    s.fin();
+  });
+});
+
+describe('« ceux qui sont en vocal » : le propriétaire connecté écrit par sa présence', () => {
+  test('verrou puis déverrouillage : le propriétaire connecté écrit toujours', async () => {
+    const s = session({ depart: [[GUILD, ouvertEcriture], [PROPRIO, ouvertEcriture]], mode: 'everyone' });
+    s.channel.members.set(PROPRIO, {});
+    await s.cliquer('mode_select', ['inVoice']);
+    await s.cliquer('bascule_verrou');
+    await s.cliquer('bascule_verrou');
+    expect(s.ecrit(PROPRIO)).toBe('oui');
+    expect(s.mode()).toBe('inVoice');
+    s.fin();
+  });
+
+  test('re-sélection du mode : le propriétaire connecté garde la parole', async () => {
+    const s = session({ depart: [[GUILD, ouvertEcriture], [PROPRIO, ouvertEcriture]], mode: 'everyone' });
+    s.channel.members.set(PROPRIO, {});
+    await s.cliquer('mode_select', ['inVoice']);
+    await s.cliquer('mode_select', ['inVoice']);
+    expect(s.ecrit(PROPRIO)).toBe('oui');
+    s.fin();
+  });
+
+  test("transfert d'un salon verrouillé : l'ancien propriétaire présent garde la parole, le nouveau présent l'a", async () => {
+    const s = session({ depart: [[GUILD, ouvertEcriture], [PROPRIO, ouvertEcriture]], mode: 'everyone' });
+    s.channel.members.set(PROPRIO, {});
+    s.channel.members.set(NOUVEAU, {});
+    await s.cliquer('mode_select', ['inVoice']);
+    await s.cliquer('bascule_verrou');
+    await s.cliquer('transfer_select', [NOUVEAU]);
+    expect(s.creatorId()).toBe(NOUVEAU);
+    expect(s.ecrit(PROPRIO)).toBe('oui');
+    expect(s.ecrit(NOUVEAU)).toBe('oui');
+    s.fin();
+  });
+});
+
+describe("« Personne » : les autorisations d'accès n'accordent pas l'écriture", () => {
+  const personne = () => session({ depart: [[GUILD, fermeEcriture], [PROPRIO, fermeEcriture]], mode: 'nobody' });
+
+  test('réservation à des membres : le propriétaire reste sans écriture', async () => {
+    const s = personne();
+    await s.cliquer('reserve_membres', [NOUVEAU]);
+    expect(s.ferme()).toBe(true);
+    expect(s.ecrit(PROPRIO)).not.toBe('oui');
+    expect(s.ecrit(NOUVEAU)).not.toBe('oui');
+    s.fin();
+  });
+
+  test('réservation à un rôle : le propriétaire et le rôle restent sans écriture', async () => {
+    const s = personne();
+    await s.cliquer('reserve_select', [ROLE_OFFICE]);
+    expect(s.ecrit(PROPRIO)).not.toBe('oui');
+    expect(s.ecrit(ROLE_OFFICE)).not.toBe('oui');
+    s.fin();
+  });
+
+  test('« Autoriser » un membre : il entre sans écrire', async () => {
+    const s = personne();
+    await s.cliquer('trust_select', [NOUVEAU]);
+    expect(s.ecrit(NOUVEAU)).not.toBe('oui');
+    expect(s.edits.some((e) => e.id === NOUVEAU && 'Connect' in e.patch)).toBe(true);
+    s.fin();
+  });
+
+  test("« Autoriser » en « Moi seul » accorde toujours l'écriture au membre", async () => {
+    const s = session({ depart: [[GUILD, fermeEcriture], [PROPRIO, ouvertEcriture]], mode: 'ownerOnly' });
+    await s.cliquer('trust_select', [NOUVEAU]);
+    expect(s.ecrit(NOUVEAU)).toBe('oui');
+    s.fin();
+  });
+});
+
+describe('anciens boutons du panneau', () => {
+  test('« chat » : ferme puis rouvre, le mode mémorisé suit', async () => {
+    const s = session({ depart: [[GUILD, ouvertEcriture], [PROPRIO, ouvertEcriture]], mode: 'everyone' });
+    await s.cliquer('chat');
+    expect(s.mode()).toBe('ownerOnly');
+    expect(s.ecrit(GUILD)).toBe('non');
+    expect(s.ecrit(PROPRIO)).toBe('oui');
+    await s.cliquer('chat');
+    expect(s.mode()).toBe('everyone');
+    expect(s.ecrit(GUILD)).toBe('oui');
+    s.fin();
+  });
+
+  test('« unlock » : rétablit le mode mémorisé, pas « Moi seul » par défaut', async () => {
+    const s = session({ depart: [[GUILD, fermeEcriture], [PROPRIO, fermeEcriture]], mode: 'nobody' });
+    await s.cliquer('bascule_verrou');
+    await s.cliquer('unlock');
+    expect(s.ferme()).toBe(false);
+    expect(s.mode()).toBe('nobody');
+    expect(s.ecrit(PROPRIO)).toBe('non');
+    s.fin();
+  });
+});
+
+describe("rôles autorisés d'office : seuls les rôles déjà surchargés sont réglés", () => {
+  test("un rôle sans surcharge sur le salon n'en reçoit pas", async () => {
+    const s = session({ depart: [[GUILD, ouvertEcriture], [PROPRIO, ouvertEcriture]], mode: 'everyone' });
+    await s.cliquer('mode_select', ['ownerOnly']);
+    expect(s.channel.permissionOverwrites.cache.has(ROLE_OFFICE)).toBe(false);
     s.fin();
   });
 });

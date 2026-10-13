@@ -1771,7 +1771,8 @@ describe('chat textuel du salon', () => {
     // @everyone retrouve sa catégorie, et le propriétaire aussi : lui laisser
     // la surcharge posée à la fermeture ferait du salon rouvert un endroit où
     // lui seul garde un droit explicite.
-    expect(edits.map((entry) => entry.id)).toEqual([GUILD, OWNER]);
+    // Le propriétaire d'abord : un appel refusé entre les deux ne le laisse pas muet.
+    expect(edits.map((entry) => entry.id)).toEqual([OWNER, GUILD]);
     expect(edits[0]?.patch.SendMessages).toBe(true);
     expect(edits[1]?.patch.SendMessages).toBe(true);
     tempChannels.delete(CHANNEL);
