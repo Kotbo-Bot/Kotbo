@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
 import path from 'node:path';
 import { completeModuleMock } from '../helpers/moduleMock.js';
-import { Events, type Client } from 'discord.js';
+import { Events, PermissionFlagsBits, type Client } from 'discord.js';
 
 /**
  * Le staff garde l'entrée d'un salon fermé à @everyone : verrou, réservation à
@@ -44,6 +44,9 @@ const GUILD = '100000000000000000';
 const PROPRIO = '200000000000000000';
 const MODO = '300000000000000000';
 const CIBLE = '310000000000000000';
+// Passe la barrière du panneau sans rôle staff ni bit administrateur : le propriétaire du serveur.
+const AUTORISE = '999999999999999999';
+const ADMIN = '330000000000000000';
 const CHANNEL = '400000000000000000';
 const ROLE_BASE = '510000000000000000';
 const ROLE_MODO = '520000000000000000';
@@ -61,12 +64,12 @@ const CONFIG_STAFF = {
 
 interface Edit { id: string; patch: Record<string, unknown>; type?: number }
 
-function membre(id: string, roles: string[] = []) {
+function membre(id: string, roles: string[] = [], admin = false) {
   return {
     id,
     displayName: `membre-${id}`,
     user: { id, bot: false, tag: `tag-${id}` },
-    permissions: { has: () => false },
+    permissions: { has: () => admin },
     roles: { cache: { has: (r: string) => roles.includes(r) } },
     guild: { ownerId: '999999999999999999' },
     voice: { channelId: null as string | null, disconnect: mock(async () => undefined) },
@@ -75,7 +78,7 @@ function membre(id: string, roles: string[] = []) {
 }
 
 /** Salon qui note chaque `edit` dans l'ordre ; `refuser` fait rejeter ceux d'un identifiant. */
-function salon(refuser: string[] = []) {
+function salon(refuser: string[] = [], depart: Array<[string, unknown]> = []) {
   const edits: Edit[] = [];
   const channel = {
     id: CHANNEL,
@@ -88,7 +91,7 @@ function salon(refuser: string[] = []) {
     setUserLimit: mock(async () => undefined),
     delete: mock(async () => undefined),
     permissionOverwrites: {
-      cache: new Map(),
+      cache: new Map<string, unknown>(depart),
       edit: mock(async (cible: string | { id: string }, patch: Record<string, unknown>, opts?: { type?: number }) => {
         const id = typeof cible === 'string' ? cible : cible.id;
         edits.push({ id, patch, type: opts?.type });
@@ -167,9 +170,15 @@ function ecouteurs() {
 }
 
 /** Un clic sur le panneau, par le propriétaire ou par un modérateur (rôle staff, non propriétaire). */
-async function cliquer(action: Action, opts: { acteur?: 'proprietaire' | 'modo'; refuser?: string[] } = {}) {
-  const { channel, edits } = salon(opts.refuser);
-  const acteur = opts.acteur === 'proprietaire' ? membre(PROPRIO) : membre(MODO, [ROLE_MODO]);
+async function cliquer(
+  action: Action,
+  opts: { acteur?: 'proprietaire' | 'modo' | 'autorise' | 'admin'; refuser?: string[]; depart?: Array<[string, unknown]> } = {},
+) {
+  const { channel, edits } = salon(opts.refuser, opts.depart);
+  const acteur = opts.acteur === 'proprietaire' ? membre(PROPRIO)
+    : opts.acteur === 'autorise' ? membre(AUTORISE)
+      : opts.acteur === 'admin' ? membre(ADMIN, [], true)
+        : membre(MODO, [ROLE_MODO]);
   const guild = guildDe([membre(PROPRIO), acteur, membre(CIBLE)]);
   channel.guild = guild;
   tempChannels.set(CHANNEL, { creatorId: PROPRIO });
@@ -215,8 +224,8 @@ beforeEach(() => {
 });
 
 describe('verrou : le staff garde l\'entrée', () => {
-  test("un modérateur qui verrouille : rôles staff et lui-même entrent, AVANT la fermeture d'@everyone", async () => {
-    const { edits, acteurId } = await cliquer('bascule_verrou');
+  test("un acteur sans rôle staff mais autorisé : rôles staff et surcharge à son nom, AVANT la fermeture d'@everyone", async () => {
+    const { edits, acteurId } = await cliquer('bascule_verrou', { acteur: 'autorise' });
 
     expect(idsRoles(edits)).toEqual([...ROLES_STAFF].sort());
     expect(entreesRoles(edits).every((e) => e.type === 0)).toBe(true);
@@ -231,6 +240,33 @@ describe('verrou : le staff garde l\'entrée', () => {
     expect(edits.some((e) => e.id === GUILD && estEntree(e))).toBe(false);
   });
 
+  test("un modérateur porteur d'un rôle staff : le rôle l'a fait entrer, aucune surcharge à son nom", async () => {
+    const { edits, acteurId } = await cliquer('bascule_verrou');
+
+    expect(idsRoles(edits)).toEqual([...ROLES_STAFF].sort());
+    expect(edits.some((e) => e.id === acteurId)).toBe(false);
+    expect(indexVerrou(edits)).toBeGreaterThan(-1);
+  });
+
+  test("un administrateur sans rôle staff : aucune surcharge à son nom", async () => {
+    const { edits, acteurId } = await cliquer('bascule_verrou', { acteur: 'admin' });
+
+    expect(acteurId).toBe(ADMIN);
+    expect(edits.some((e) => e.id === ADMIN)).toBe(false);
+    expect(indexVerrou(edits)).toBeGreaterThan(-1);
+  });
+
+  test("entrée déjà ouverte en cache (rôle staff et acteur) : aucun appel redondant", async () => {
+    const ouvert = { allow: { has: (bit: bigint) => (bit & (PermissionFlagsBits.ViewChannel | PermissionFlagsBits.Connect)) === bit } };
+    const { edits } = await cliquer('bascule_verrou', {
+      acteur: 'autorise',
+      depart: [...ROLES_STAFF.map((id): [string, unknown] => [id, ouvert]), [AUTORISE, ouvert]],
+    });
+
+    expect(edits.filter((e) => estEntree(e))).toEqual([]);
+    expect(indexVerrou(edits)).toBeGreaterThan(-1);
+  });
+
   test("le propriétaire qui verrouille : rôles staff oui, pas de surcharge d'entrée en son nom", async () => {
     const { edits } = await cliquer('bascule_verrou', { acteur: 'proprietaire' });
 
@@ -240,7 +276,7 @@ describe('verrou : le staff garde l\'entrée', () => {
   });
 
   test("ancien panneau (« lock ») : même garantie, avant le verrou", async () => {
-    const { edits, acteurId } = await cliquer('lock');
+    const { edits, acteurId } = await cliquer('lock', { acteur: 'autorise' });
 
     expect(idsRoles(edits)).toEqual([...ROLES_STAFF].sort());
     expect(edits.some((e) => e.id === acteurId && estEntree(e))).toBe(true);
@@ -252,7 +288,7 @@ describe('verrou : le staff garde l\'entrée', () => {
 
 describe('réservation : le staff garde l\'entrée', () => {
   test('réservation à un rôle : rôles staff et acteur entrent avant le verrou', async () => {
-    const { edits, acteurId } = await cliquer('reserve_select');
+    const { edits, acteurId } = await cliquer('reserve_select', { acteur: 'autorise' });
 
     expect(edits.some((e) => e.id === ROLE_RESERVE)).toBe(true);
     expect(idsRoles(edits)).toEqual([...ROLES_STAFF].sort());
@@ -263,7 +299,7 @@ describe('réservation : le staff garde l\'entrée', () => {
   });
 
   test('réservation à des membres : rôles staff et acteur entrent avant le verrou', async () => {
-    const { edits, acteurId } = await cliquer('reserve_membres');
+    const { edits, acteurId } = await cliquer('reserve_membres', { acteur: 'autorise' });
 
     expect(edits.some((e) => e.id === CIBLE)).toBe(true);
     expect(idsRoles(edits)).toEqual([...ROLES_STAFF].sort());

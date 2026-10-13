@@ -1394,10 +1394,18 @@ async function assurerBotPeutEcrire(channel: VoiceChannel): Promise<void> {
   await poserSurcharge(channel, moi.id, { SendMessages: true });
 }
 
+/** La surcharge en cache ouvre déjà la vue et la connexion : l'écrire de nouveau serait un appel inutile. */
+function entreeDejaOuverte(channel: VoiceChannel, id: string): boolean {
+  const allow = channel.permissionOverwrites.cache.get(id)?.allow;
+  return Boolean(allow?.has(PermissionFlagsBits.ViewChannel) && allow.has(PermissionFlagsBits.Connect));
+}
+
 /**
- * Le staff garde toujours l'entrée d'un salon fermé à @everyone : sans
- * surcharge à lui, le modérateur qui verrouille ou réserve depuis le panneau
- * se mettait lui-même dehors. Seul un administrateur passe outre de lui-même.
+ * Le staff garde toujours l'entrée d'un salon fermé à @everyone : chaque rôle
+ * staff configuré reçoit une surcharge d'entrée. L'acteur n'en reçoit une à son
+ * nom que si ni un rôle staff ni le droit d'administrateur ne le fait déjà
+ * entrer : sinon elle le compterait parmi les « autorisés » du salon.
+ * Une surcharge qui ouvre déjà l'entrée est laissée telle quelle.
  * Rien n'est retiré au déverrouillage : l'entrée du staff ne gêne personne.
  */
 async function garderEntreeStaff(channel: VoiceChannel, acteurId?: string | null): Promise<void> {
@@ -1409,14 +1417,20 @@ async function garderEntreeStaff(channel: VoiceChannel, acteurId?: string | null
   );
 
   for (const roleId of roles) {
+    if (entreeDejaOuverte(channel, roleId)) continue;
     await channel.permissionOverwrites
       .edit(roleId, entree, { type: OverwriteType.Role })
       .catch((err: unknown) => logger.warn('TempVoice', `Entrée du staff refusée sur ${channel.id} pour ${roleId} :`, err));
   }
 
-  if (acteurId && acteurId !== tempChannels.get(channel.id)?.creatorId) {
-    await poserSurcharge(channel, acteurId, entree);
-  }
+  if (!acteurId || acteurId === tempChannels.get(channel.id)?.creatorId || entreeDejaOuverte(channel, acteurId)) return;
+
+  // Acteur introuvable : on pose, ne pas pouvoir prouver son entrée vaut mieux que de le laisser dehors.
+  const acteur = channel.guild.members.cache.get(acteurId)
+    ?? await channel.guild.members.fetch(acteurId).catch(() => null);
+  const entreDeLuiMeme = acteur
+    && (acteur.permissions.has(PermissionFlagsBits.Administrator) || [...roles].some((id) => acteur.roles.cache.has(id)));
+  if (!entreDeLuiMeme) await poserSurcharge(channel, acteurId, entree);
 }
 
 /** Salons dont le panneau est déjà en V2 alors que le réglage demande V1 :
