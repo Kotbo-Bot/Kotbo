@@ -1,7 +1,7 @@
 import { describe, test, expect } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { DashboardApiError, messageForApiCode, TRANSLATED_API_CODES } from './errors';
+import { DashboardApiError, messageForApiCode, messageForNotice, TRANSLATED_API_CODES, TRANSLATED_NOTICE_CODES } from './errors';
 import { m } from '../i18n';
 
 /**
@@ -72,5 +72,41 @@ describe('codes d\'erreur de la route vocale', () => {
 
   test('sans code ni message, le texte de la catégorie reste le repli', () => {
     expect(new DashboardApiError({ kind: 'not_found', status: 404 }).message).toBe(m.api_err_not_found());
+  });
+});
+
+describe('avis de la route vocale (`notices`)', () => {
+  const emisAvis = [...new Set([...routeSource.matchAll(/'(notice_tv_[a-z_]+)'/g)].map((x) => x[1]))];
+
+  test('chaque avis émis par la route a son entrée de table et ses clés fr/en', () => {
+    expect(emisAvis.length).toBeGreaterThanOrEqual(6);
+    expect(emisAvis.filter((code) => !TRANSLATED_NOTICE_CODES.includes(code))).toEqual([]);
+    expect(TRANSLATED_NOTICE_CODES.filter((code) => !emisAvis.includes(code))).toEqual([]);
+    for (const lang of ['fr', 'en'] as const) {
+      const dict = messages(lang);
+      expect(emisAvis.filter((code) => !dict[`api_${code}`])).toEqual([]);
+    }
+  });
+
+  test('le code et les paramètres donnent le texte du dashboard, pas celui du serveur', () => {
+    const texte = messageForNotice({
+      code: 'notice_tv_generator_duplicate',
+      params: { n: 4, name: '#Créer B', first: 3 },
+      message: 'Le générateur n°4 repli français',
+    });
+    expect(texte).toBe(m.api_notice_tv_generator_duplicate({ n: 4, name: '#Créer B', first: 3 }));
+    expect(texte).toContain('#Créer B');
+    expect(texte).not.toContain('repli français');
+  });
+
+  test('un code inconnu garde le texte du serveur, une chaîne seule passe telle quelle', () => {
+    expect(messageForNotice({ code: 'notice_inconnu', params: {}, message: 'Texte du serveur' })).toBe('Texte du serveur');
+    expect(messageForNotice({ code: 'constructor', message: 'Repli' })).toBe('Repli');
+    expect(messageForNotice('Ancien serveur')).toBe('Ancien serveur');
+  });
+
+  test('en anglais, aucune notice ne reste en français', () => {
+    const en = messages('en');
+    for (const code of TRANSLATED_NOTICE_CODES) expect(en[`api_${code}`]).not.toMatch(/générateur|enregistré/i);
   });
 });

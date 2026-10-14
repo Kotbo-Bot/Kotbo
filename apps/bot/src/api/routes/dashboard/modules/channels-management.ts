@@ -6,7 +6,8 @@ import prisma from '../../../../utils/db.js';
 import { logger } from '../../../../utils/logger.js';
 import { RENAME_TIMEOUT_MS, settleWithin } from '../../../../utils/discord.js';
 import { getGuildName, json, pushAudit, readJsonBody } from '../../../shared.js';
-import { ChannelType, PermissionFlagsBits, type Guild } from 'discord.js';
+import { isDeepStrictEqual } from 'node:util';
+import { ChannelType, PermissionFlagsBits, type Guild, type VoiceChannel } from 'discord.js';
 import { sendLogEmbed } from '../../../../utils/logDispatch.js';
 import { construireEmbedReglagesVocaux } from '../../../../utils/tempVoiceReglagesLog.js';
 import { resolveGuildLocale } from '../../../../utils/i18n.js';
@@ -800,6 +801,20 @@ const VOICE_KEYS = [
   'tempVoiceModPermissions',
 ] as const;
 
+/** Clés du PATCH hors vocal qui s'écrivent dans `Guild` : la ligne générique du journal en dépend. */
+const CLES_NON_VOCALES = [
+  'autoThreadEnabled',
+  'autoThreadChannels',
+  'autoThreadBotsEnabled',
+  'statsEnabled',
+  'statsConfig',
+  'honeypotEnabled',
+  'honeypotChannelId',
+  'honeypotSanction',
+  'honeypotReinvite',
+  'wordStatsEnabled',
+] as const;
+
 interface VoiceGuildRow {
   tempVoiceEnabled?: boolean;
   tempVoiceChannelId?: string | null;
@@ -836,6 +851,20 @@ export function snapshotReglagesVocaux(
 }
 
 /**
+ * Un avis de l'enregistrement : `code` et `params` pour que le dashboard le dise
+ * dans sa langue, `message` (français) en repli pour un code qu'il ne connaît pas.
+ */
+export interface NoticeVocale {
+  code: string;
+  params: Record<string, string | number>;
+  message: string;
+}
+
+function avisVocal(code: string, params: Record<string, string | number>, message: string): NoticeVocale {
+  return { code, params, message };
+}
+
+/**
  * Entrées de `tempVoiceGenerators` que la normalisation du serveur a écartées
  * (salon absent, déjà pris par le principal ou par un autre générateur, plafond
  * dépassé), dites en français. Sans cela la page remplaçait sa liste par celle
@@ -847,34 +876,36 @@ export function explainDroppedGenerators(
   kept: ReadonlyArray<{ channelId: string }>,
   mainChannelId?: string | null,
   nomSalon: (id: string) => string | undefined = () => undefined,
-): string[] {
+): NoticeVocale[] {
   if (!Array.isArray(input)) return [];
   const keptIds = new Set(kept.map((g) => g.channelId));
   const firstSeen = new Map<string, number>();
-  const notices: string[] = [];
+  const notices: NoticeVocale[] = [];
   input.forEach((entry, index) => {
     if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return;
     const n = index + 2;
     const id = (entry as Record<string, unknown>).channelId;
     if (index >= MAX_ADDITIONAL_GENERATORS) {
-      notices.push(`Le générateur n°${n} n'a pas été enregistré : le plafond de ${MAX_ADDITIONAL_GENERATORS} générateurs additionnels est atteint.`);
+      notices.push(avisVocal('notice_tv_generator_cap', { n, max: MAX_ADDITIONAL_GENERATORS },
+        `Le générateur n°${n} n'a pas été enregistré : le plafond de ${MAX_ADDITIONAL_GENERATORS} générateurs additionnels est atteint.`));
       return;
     }
     if (!isPlausibleSnowflake(id)) {
-      notices.push(`Le générateur n°${n} n'a pas été enregistré : aucun salon vocal valide n'est choisi.`);
+      notices.push(avisVocal('notice_tv_generator_no_channel', { n }, `Le générateur n°${n} n'a pas été enregistré : aucun salon vocal valide n'est choisi.`));
       return;
     }
     const name = nomSalon(id) ? `#${nomSalon(id)}` : id;
     const first = firstSeen.get(id);
     if (first !== undefined) {
-      notices.push(`Le générateur n°${n} n'a pas été enregistré : ${name} est déjà utilisé par le générateur n°${first}.`);
+      notices.push(avisVocal('notice_tv_generator_duplicate', { n, name, first },
+        `Le générateur n°${n} n'a pas été enregistré : ${name} est déjà utilisé par le générateur n°${first}.`));
       return;
     }
     if (!keptIds.has(id)) {
       notices.push(
         id === mainChannelId
-          ? `Le générateur n°${n} n'a pas été enregistré : ${name} est déjà le générateur principal.`
-          : `Le générateur n°${n} n'a pas été enregistré : ${name} n'a pas été retenu par le serveur.`,
+          ? avisVocal('notice_tv_generator_is_main', { n, name }, `Le générateur n°${n} n'a pas été enregistré : ${name} est déjà le générateur principal.`)
+          : avisVocal('notice_tv_generator_not_kept', { n, name }, `Le générateur n°${n} n'a pas été enregistré : ${name} n'a pas été retenu par le serveur.`),
       );
       return;
     }
@@ -1450,8 +1481,10 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
         });
 
         // Also clean up from local memory cache
-        const { tempChannels } = await import('../../../../events/tempVoice.js');
+        const { tempChannels, oublierProprieteSalon } = await import('../../../../events/tempVoice.js');
         tempChannels.delete(channelId);
+        // Une passation en cours s'arrête avec le salon : ni minuterie ni « délai écoulé ».
+        oublierProprieteSalon(channel as VoiceChannel);
 
         await pushAudit(guildId, {
           user: auditUser,
@@ -1827,7 +1860,7 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
          * quand il n'y a rien à dire, pour ne pas changer la forme de la réponse
          * dans le cas courant.
          */
-        const notices: string[] = [];
+        const notices: NoticeVocale[] = [];
 
         let tempVoiceModPermissionsData: Partial<TempVoiceModPermissionsConfigView> | null = null;
         if (Object.prototype.hasOwnProperty.call(body, 'tempVoiceModPermissions')) {
@@ -1888,6 +1921,16 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
               ]);
               return snapshotReglagesVocaux(guildId, guildRow, accessRow, modRow);
             })()
+          : null;
+
+        // État non vocal d'AVANT l'écriture : la ligne générique du journal ne
+        // part que si une de ces valeurs a réellement changé.
+        const touchesAutre = Object.keys(body).some((key) => !(VOICE_KEYS as readonly string[]).includes(key));
+        const nonVocalAvant = touchesAutre
+          ? await prisma.guild.findUnique({
+            where: { id: guildId },
+            select: Object.fromEntries(CLES_NON_VOCALES.map((key) => [key, true])),
+          }).catch(() => null) as Record<string, unknown> | null
           : null;
 
         const discordGuild = client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId).catch(() => null);
@@ -2170,9 +2213,11 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
             dispositionNative({ disposition: effectif.stateLayout, composants: effectif.panelComponents })
             && effectif.stateColors !== TEMP_VOICE_MOD_PERMISSIONS_DEFAULTS.stateColors
           ) {
-            notices.push(
+            notices.push(avisVocal(
+              'notice_tv_state_colors_inert',
+              { colors: effectif.stateColors },
               `stateColors="${effectif.stateColors}" a été enregistré mais n'a aucun effet visible : stateLayout=GRID3 avec panelComponents=V1 affiche l'embed natif de Discord, qui n'a pas d'image d'état à teinter. Passez panelComponents en V2, ou choisissez un autre stateLayout, pour que la palette s'applique.`,
-            );
+            ));
           }
         }
 
@@ -2240,8 +2285,15 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
             await envoyerEmbedReglagesVocaux(discordGuild, guildId, auditUser, (langue) => diffReglagesVocaux(voiceBefore, voiceAfter, noms, langue));
           }
         }
-        // Le reste du corps (fils auto, stats, honeypot...) garde la ligne générique.
-        if (Object.keys(body).some((key) => !(VOICE_KEYS as readonly string[]).includes(key))) {
+        // Le reste du corps (fils auto, stats, honeypot...) garde la ligne générique,
+        // quand une de ses valeurs a bougé : la page renvoie tout le corps à chaque
+        // enregistrement, un réglage vocal seul ne doit pas la doubler. Une base
+        // illisible avant l'écriture compte pour un changement.
+        const apres: Record<string, unknown> = { ...data };
+        if (Array.isArray(body.autoThreadChannels)) apres.autoThreadChannels = body.autoThreadChannels;
+        const nonVocalChange = touchesAutre && (!nonVocalAvant
+          || CLES_NON_VOCALES.some((key) => key in apres && !isDeepStrictEqual(nonVocalAvant[key] ?? null, apres[key] ?? null)));
+        if (nonVocalChange) {
           await pushAudit(guildId, {
             user: auditUser,
             action: 'Sauvegarde configuration Gestion des salons',

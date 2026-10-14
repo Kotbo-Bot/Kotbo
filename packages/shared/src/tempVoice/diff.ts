@@ -171,14 +171,19 @@ function aplatir(valeur: unknown, chemin: string, sortie: Map<string, unknown>):
   sortie.set(chemin, valeur);
 }
 
-/** Les listes se comparent comme des ensembles : l'ordre d'un tableau d'ids ne change rien. */
-function canon(valeur: unknown): string {
-  if (Array.isArray(valeur)) return JSON.stringify([...valeur].map(String).sort());
-  return JSON.stringify(valeur ?? null);
-}
-
 function vide(valeur: unknown): boolean {
   return valeur === null || valeur === undefined || valeur === '' || (Array.isArray(valeur) && valeur.length === 0);
+}
+
+/**
+ * Les listes se comparent comme des ensembles : l'ordre d'un tableau d'ids ne
+ * change rien. `''`, `null`, `[]` et l'absence valent « aucun » : passer de l'un
+ * à l'autre n'est pas un changement.
+ */
+function canon(valeur: unknown): string {
+  if (vide(valeur)) return 'null';
+  if (Array.isArray(valeur)) return JSON.stringify([...valeur].map(String).sort());
+  return JSON.stringify(valeur);
 }
 
 function nomDe(id: string, resolveur: ((id: string) => string | undefined) | undefined, prefixe: string): string {

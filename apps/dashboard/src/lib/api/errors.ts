@@ -148,6 +148,32 @@ export function messageForApiCode(code: string | undefined, data?: unknown): str
   return build(params && typeof params === 'object' ? (params as CodeParams) : {});
 }
 
+/**
+ * Avis d'un enregistrement réussi (`notices` de la route vocale) : même
+ * mécanisme que les erreurs, un `code` et des `params` traduits ici, le texte
+ * français du serveur ne servant que de repli pour un code inconnu.
+ */
+const NOTICE_MESSAGES = new Map<string, (p: CodeParams) => string>([
+  ['notice_tv_generator_cap', (p) => m.api_notice_tv_generator_cap({ n: Number(p.n ?? 0), max: Number(p.max ?? 0) })],
+  ['notice_tv_generator_no_channel', (p) => m.api_notice_tv_generator_no_channel({ n: Number(p.n ?? 0) })],
+  ['notice_tv_generator_duplicate', (p) => m.api_notice_tv_generator_duplicate({ n: Number(p.n ?? 0), name: String(p.name ?? ''), first: Number(p.first ?? 0) })],
+  ['notice_tv_generator_is_main', (p) => m.api_notice_tv_generator_is_main({ n: Number(p.n ?? 0), name: String(p.name ?? '') })],
+  ['notice_tv_generator_not_kept', (p) => m.api_notice_tv_generator_not_kept({ n: Number(p.n ?? 0), name: String(p.name ?? '') })],
+  ['notice_tv_state_colors_inert', (p) => m.api_notice_tv_state_colors_inert({ colors: String(p.colors ?? '') })],
+]);
+
+/** Codes d'avis que ce dashboard sait traduire. */
+export const TRANSLATED_NOTICE_CODES: readonly string[] = [...NOTICE_MESSAGES.keys()];
+
+/** Texte d'un avis dans la langue du dashboard ; une chaîne seule (ancien serveur) passe telle quelle. */
+export function messageForNotice(notice: unknown): string {
+  if (typeof notice === 'string') return notice;
+  const { code, params, message } = (notice ?? {}) as { code?: unknown; params?: unknown; message?: unknown };
+  const build = typeof code === 'string' ? NOTICE_MESSAGES.get(code) : undefined;
+  if (build) return build(params && typeof params === 'object' ? (params as CodeParams) : {});
+  return typeof message === 'string' ? message : String(notice);
+}
+
 export type DashboardApiErrorInit = {
   kind: ApiErrorKind;
   /** Statut HTTP, absent quand la requete n'a jamais abouti. */

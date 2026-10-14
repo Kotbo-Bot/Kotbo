@@ -16,6 +16,7 @@
   import { TEMP_VOICE_HANDOVER_DELAY_BOUNDS, TEMP_VOICE_OWNER_MENTION_DEFAULT, TEMP_VOICE_OWNERSHIP_DEFAULTS, type TempVoiceClaimWho, type TempVoiceOwnerMentionPlacement, type TempVoiceOwnershipSettings, type TempVoicePolicy } from '@kotbo/shared';
   import { clampInt, selectableGeneratorChannels, takenGeneratorChannelIds, tempVoiceSubFromSearch, withTempVoiceSub, type TempVoiceSubTab } from '../lib/tempVoiceUi';
   import type { TempVoiceGenerator, TempVoiceGeneratorPayload } from '../lib/api/moderation';
+  import { messageForNotice } from '../lib/api/errors';
   import { createAsyncActionState } from '../lib/asyncAction.svelte';
   import { fetchChannelsManagementConfig, updateChannelsManagementConfig, rescanChannelsManagementStats, fetchTempVoiceChannels, updateTempVoiceChannel, fetchStickyMessages, saveStickyMessage, deleteStickyMessage, repostStickyMessage, fetchChannelsByChannel, toggleChannelFeature, renameDiscordChannel, deleteDiscordChannel } from '../lib/api';
   import { dashboardStore } from '../lib/stores/dashboard.svelte';
@@ -1107,7 +1108,7 @@
       
       // Enregistré, mais pas tout à fait comme demandé : le serveur le dit.
       if (Array.isArray(res.notices)) {
-        for (const notice of res.notices) toast.info(String(notice), 12000);
+        for (const notice of res.notices) toast.info(messageForNotice(notice), 12000);
       }
 
       await dashboardStore.refresh();

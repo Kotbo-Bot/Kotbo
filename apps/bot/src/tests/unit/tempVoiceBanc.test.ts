@@ -729,10 +729,13 @@ afterAll(() => {
     e.n += 1;
     uniques.set(cle, e);
   }
-  // eslint-disable-next-line no-console
-  console.log(`\nPanneau public réécrit et validé dans ${reecritures.size} combinaisons customId × format × mode`);
-  // eslint-disable-next-line no-console
-  console.log(`\nBILAN ${bilan.filter((b) => !b.problemes.length).length}/${bilan.length} cellules vertes\n${lignes.join('\n')}\n\nPROBLÈMES\n${[...uniques].sort((a, b) => b[1].n - a[1].n).map(([k, e]) => `${String(e.n).padStart(4)} × ${k}\n       ex. ${e.exemple}`).join('\n')}`);
+  // Le bilan ne s'affiche que sur demande : `BANC_TRACE=1`.
+  if (process.env.BANC_TRACE) {
+    // eslint-disable-next-line no-console
+    console.log(`\nPanneau public réécrit et validé dans ${reecritures.size} combinaisons customId × format × mode`);
+    // eslint-disable-next-line no-console
+    console.log(`\nBILAN ${bilan.filter((b) => !b.problemes.length).length}/${bilan.length} cellules vertes\n${lignes.join('\n')}\n\nPROBLÈMES\n${[...uniques].sort((a, b) => b[1].n - a[1].n).map(([k, e]) => `${String(e.n).padStart(4)} × ${k}\n       ex. ${e.exemple}`).join('\n')}`);
+  }
 });
 
 // ─── Mode compact : un seul éphémère réécrit sur place (deferUpdate au lieu de deferReply) ───
@@ -866,7 +869,7 @@ describe('Cas limite : salon supprimé pendant l\'action (10003 au premier appel
   }
 });
 
-describe('Cas limite : redémarrage du bot (nouveau client, cache vidé, reprise depuis la base)', () => {
+describe('Cas limite : redémarrage du bot (nouveau client, cache vidé, relance depuis la base)', () => {
   let generation = 0;
 
   async function redemarrer(sc: Scene, reglages?: Partial<Record<string, unknown>>) {
@@ -884,7 +887,7 @@ describe('Cas limite : redémarrage du bot (nouveau client, cache vidé, reprise
   }
 
   for (const format of FORMATS) for (const mode of MODES) {
-    test(`panneau ${format} ${mode} existant : repris et cliquable`, async () => {
+    test(`panneau ${format} ${mode} existant : relancé et cliquable`, async () => {
       const sc = await monterScene({ langue: 'fr', format, mode });
       const { sc2, tv2 } = await redemarrer(sc);
       expect(tv2.tempChannels.get(sc.salonId)?.creatorId).toBe(IDS.PROPRIO);

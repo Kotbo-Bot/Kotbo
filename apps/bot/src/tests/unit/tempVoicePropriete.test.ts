@@ -179,7 +179,7 @@ function scene(presents: FauxMembre[], horsSalon: FauxMembre[] = []) {
   const cliquer = async (
     auteur: FauxMembre,
     customId: string,
-    options: { valeurs?: string[]; ou?: 'ephemere' | 'salon' | 'mp'; message?: FauxMessage } = {},
+    options: { valeurs?: string[]; ou?: 'ephemere' | 'salon' | 'mp'; message?: FauxMessage; guildId?: string } = {},
   ) => {
     const ou = options.ou ?? 'ephemere';
     const textes: string[] = [];
@@ -189,7 +189,7 @@ function scene(presents: FauxMembre[], horsSalon: FauxMembre[] = []) {
     };
     const message = options.message ?? fauxMessage({});
     const i = {
-      guildId: ou === 'mp' ? null : GUILD,
+      guildId: options.guildId ?? (ou === 'mp' ? null : GUILD),
       customId,
       ...(options.valeurs ? { values: options.valeurs } : {}),
       channel: ou === 'mp' ? { type: 1, id: '800000000000000000' } : channel,
@@ -884,5 +884,294 @@ describe('dashboard : les six réglages de passation', () => {
       await s.quitter(proprio);
       expect(s.channel.delete).toHaveBeenCalled();
     }
+  });
+});
+
+// ─── Revue 7 : course à la passation, avis, suppression, garde-fous ───
+
+/** Un MP dont l'envoi reste en vol tant que `liberer()` n'est pas appelé (dans l'ordre des envois). */
+function mpEnVol(membre: FauxMembre) {
+  const portes: Array<() => void> = [];
+  membre.send = mock(async (charge: Record<string, unknown>) => {
+    const message = fauxMessage(charge);
+    membre.mp.push(message);
+    await new Promise<void>((resolve) => { portes.push(resolve); });
+    return message;
+  }) as never;
+  return {
+    liberer: async (rang = 0) => { portes[rang]?.(); await vider(); },
+    envoyes: () => portes.length,
+  };
+}
+
+async function routeSalon(s: ReturnType<typeof scene>, action: 'DELETE') {
+  s.guild.channels.cache.set(SALON, s.channel as never);
+  prismaMock.tempVoiceChannel.findUnique.mockImplementation((async () => ({ id: SALON })) as never);
+  const req = new IncomingMessage(new Socket());
+  req.method = 'PATCH';
+  req.headers = { 'content-type': 'application/json' };
+  req.push(JSON.stringify({ action }));
+  req.push(null);
+  const res = new ServerResponse(new IncomingMessage(new Socket()));
+  res.setHeader = () => res;
+  res.writeHead = () => res;
+  res.end = (() => res) as never;
+  try {
+    await handleChannelsManagementRoutes({
+      req,
+      res,
+      parts: ['api', 'dashboard', 'guilds', GUILD, 'channels-management', 'temp-voice', 'channels', SALON],
+      url: new URL(`http://localhost/api/dashboard/guilds/${GUILD}/channels-management/temp-voice/channels/${SALON}`),
+      client: { guilds: { cache: new Map([[GUILD, s.guild]]) } } as unknown as Client,
+      user: { userId: 'u', username: 'Admin' } as AuthClaims,
+      guildId: GUILD,
+      access: DASHBOARD_ACCESS_ADMIN as DashboardAccess,
+      method: 'PATCH',
+      auditUser: 'Admin',
+      moduleKey: 'channels-management',
+    } as never);
+  } finally {
+    prismaMock.tempVoiceChannel.findUnique.mockImplementation((async () => null) as never);
+  }
+  await vider();
+}
+
+describe('revue 7 — 1 : la passation est posée avant la première lecture', () => {
+  test("un membre qui clique « Récupérer » pendant l'envoi du MP est refusé", async () => {
+    const proprio = fauxMembre(PROPRIO);
+    const membre = fauxMembre(MEMBRE);
+    const mp = mpEnVol(proprio);
+    const s = scene([proprio, membre]);
+
+    const depart = s.quitter(proprio);
+    await vider();
+    expect(mp.envoyes()).toBe(1);
+
+    const refus = await s.cliquer(membre, 'tempvoice:claim');
+    expect(refus.dernier).toContain('réessaie dans');
+    expect(proprietaire()).toBe(PROPRIO);
+
+    await mp.liberer();
+    await depart;
+    expect(proprietaire()).toBe(PROPRIO);
+    expect(proprio.mp[0]!.edit).not.toHaveBeenCalled();
+    // La passation suit son cours jusqu'au bout.
+    await avancer(31_000);
+    expect(messagesRecuperer(s.postes)).toHaveLength(1);
+  });
+
+  test('un clic qui attend dans la file du salon est revu à son tour', async () => {
+    const proprio = fauxMembre(PROPRIO);
+    const membre = fauxMembre(MEMBRE);
+    const s = scene([membre]);
+    tempChannels.set(SALON, { creatorId: PROPRIO, modeEcriture: 'inVoice' });
+    // Le propriétaire entre : surcharge de présence, retirée dans la file à son départ.
+    s.guild.members.cache.set(PROPRIO, proprio);
+    await s.entrer(proprio);
+    let ouvrir!: () => void;
+    const porte = new Promise<void>((resolve) => { ouvrir = resolve; });
+    s.channel.permissionOverwrites.edit.mockImplementation((async () => { await porte; }) as never);
+
+    const depart = s.quitter(proprio);
+    await vider();
+    const clic = s.cliquer(membre, 'tempvoice:claim');
+    await vider();
+    ouvrir();
+    const refus = await clic;
+    await depart;
+
+    expect(proprietaire()).toBe(PROPRIO);
+    expect(refus.dernier).toContain('réessaie dans');
+  });
+
+  test('départ, retour, départ rapides : le second MP reste valable, le premier est refermé', async () => {
+    const proprio = fauxMembre(PROPRIO);
+    const membre = fauxMembre(MEMBRE);
+    const mp = mpEnVol(proprio);
+    const s = scene([proprio, membre]);
+
+    const depart1 = s.quitter(proprio);
+    await vider();
+    await s.entrer(proprio);
+    const depart2 = s.quitter(proprio);
+    await vider();
+    expect(mp.envoyes()).toBe(2);
+
+    await mp.liberer(0);
+    await mp.liberer(1);
+    await Promise.all([depart1, depart2]);
+
+    const [mp1, mp2] = proprio.mp;
+    expect(mp1!.edit).toHaveBeenCalled();
+    expect(texteEmbed(derniereEdition(mp1!))).toContain('la passation est annulée');
+    expect(mp2!.edit).not.toHaveBeenCalled();
+    // Le MP valable désigne bien un successeur.
+    await s.cliquer(proprio, `tempvoice:leader:${PROPRIO}:${SALON}`, { valeurs: [MEMBRE], ou: 'mp', message: mp2 });
+    expect(proprietaire()).toBe(MEMBRE);
+  });
+});
+
+describe('revue 7 — 2, 11 : textes de la récupération', () => {
+  test("annulation d'une réclamation sur un serveur anglais : motif traduit", async () => {
+    guildConfig = { ...guildConfig, language: 'en' };
+    const proprio = fauxMembre(PROPRIO);
+    const membre = fauxMembre(MEMBRE);
+    const modo = fauxMembre(MODO, { staff: true });
+    const s = scene([proprio, membre, modo]);
+    await s.quitter(proprio);
+    await avancer(31_000);
+    const [message] = messagesRecuperer(s.postes);
+    await s.cliquer(membre, 'tempvoice:reclamer', { ou: 'salon', message: message! });
+    envoyerLog.mockClear();
+    await s.cliquer(modo, `tempvoice:reclam_annuler:${MEMBRE}:${SALON}`, { ou: 'salon', message: message! });
+
+    const logs = envoyerLog.mock.calls.map((c) => JSON.stringify((c[1] as { toJSON: () => unknown }).toJSON())).join('\n');
+    expect(logs).toContain(`Claim by <@${MEMBRE}> cancelled by <@${MODO}>`);
+    expect(logs).not.toContain('Réclamation de');
+  });
+
+  test('claimWho = moderators : le message ne promet pas le salon au premier membre', async () => {
+    for (const language of ['fr', 'en'] as const) {
+      guildConfig = { ...guildConfig, language };
+      ligne = { claimWho: 'moderators' };
+      const proprio = fauxMembre(PROPRIO);
+      const s = scene([proprio, fauxMembre(MEMBRE)]);
+      await s.quitter(proprio);
+      await avancer(31_000);
+      const [message] = messagesRecuperer(s.postes);
+      const texte = texteEmbed(message!.charge);
+      expect(texte).not.toMatch(/premier membre|first member/);
+      expect(texte).toContain(language === 'fr' ? 'Un modérateur peut' : 'A moderator can');
+      tempChannels.delete(SALON);
+    }
+  });
+});
+
+describe('revue 7 — 3 : aucune mention non voulue', () => {
+  test('un pseudo « @everyone » ne notifie personne (choix du propriétaire et récupération)', async () => {
+    const proprio = fauxMembre(PROPRIO);
+    const piege = fauxMembre(MEMBRE);
+    piege.displayName = '@everyone';
+    const s = scene([proprio, piege]);
+    await s.quitter(proprio);
+    await s.cliquer(proprio, `tempvoice:leader:${PROPRIO}:${SALON}`, { valeurs: [MEMBRE], ou: 'mp', message: proprio.mp[0] });
+    const annonce = s.postes.at(-1)!.charge;
+    expect(String(annonce.content)).toContain('@everyone');
+    expect(annonce.allowedMentions).toEqual({ parse: [] });
+    tempChannels.delete(SALON);
+
+    // Récupération par le bouton du panneau, sans message dans le chat.
+    ligne = { claimEmbedEnabled: false };
+    const proprio2 = fauxMembre(PROPRIO);
+    const piege2 = fauxMembre(MEMBRE2);
+    piege2.displayName = '@everyone';
+    const s2 = scene([proprio2, piege2]);
+    await s2.quitter(proprio2);
+    await avancer(31_000);
+    await s2.cliquer(piege2, 'tempvoice:claim');
+    expect(proprietaire()).toBe(MEMBRE2);
+    const annonce2 = s2.postes.at(-1)!.charge;
+    expect(String(annonce2.content)).toContain('@everyone');
+    expect(annonce2.allowedMentions).toEqual({ parse: [] });
+  });
+});
+
+describe('revue 7 — 5 : un salon supprimé arrête la passation', () => {
+  const sansDelai = () => {
+    expect(actions()).not.toContain('Délai de passation écoulé sans choix');
+    expect(actions()).not.toContain('Message « Récupérer le salon » posté');
+  };
+
+  test('supprimé à la main (ChannelDelete) pendant la passation : ni MP « délai écoulé », ni log de délai', async () => {
+    const proprio = fauxMembre(PROPRIO);
+    const s = scene([proprio, fauxMembre(MEMBRE)]);
+    await s.quitter(proprio);
+    await s.ecouteurs.get(Events.ChannelDelete)?.(s.channel);
+    await vider();
+
+    expect(texteEmbed(derniereEdition(proprio.mp[0]!))).toContain('Le salon a été supprimé');
+    await avancer(31_000);
+    expect(proprio.mp[0]!.edit).toHaveBeenCalledTimes(1);
+    sansDelai();
+    expect(messagesRecuperer(s.postes)).toHaveLength(0);
+  });
+
+  test('fermé depuis le dashboard pendant la passation : même arrêt', async () => {
+    const proprio = fauxMembre(PROPRIO);
+    const s = scene([proprio, fauxMembre(MEMBRE)]);
+    await s.quitter(proprio);
+    await routeSalon(s, 'DELETE');
+
+    expect(s.channel.delete).toHaveBeenCalled();
+    expect(texteEmbed(derniereEdition(proprio.mp[0]!))).toContain('Le salon a été supprimé');
+    await avancer(31_000);
+    expect(proprio.mp[0]!.edit).toHaveBeenCalledTimes(1);
+    sansDelai();
+    expect(messagesRecuperer(s.postes)).toHaveLength(0);
+  });
+});
+
+describe('revue 7 — 8 : une lecture en panne ne supprime jamais un salon', () => {
+  test('réglages illisibles à la sortie du dernier membre : le salon reste', async () => {
+    prismaMock.tempVoiceModPermissionsConfig.findUnique.mockImplementation((async () => { throw new Error('base injoignable'); }) as never);
+    try {
+      const proprio = fauxMembre(PROPRIO);
+      const s = scene([proprio]);
+      await s.quitter(proprio);
+      expect(s.channel.delete).not.toHaveBeenCalled();
+      expect(tempChannels.has(SALON)).toBe(true);
+    } finally {
+      prismaMock.tempVoiceModPermissionsConfig.findUnique.mockImplementation((async () => ligne) as never);
+    }
+  });
+});
+
+describe('revue 7 — 9, 10 : gardes relues au clic', () => {
+  test('« Annuler la réclamation » après la désactivation du réglage : refus éphémère', async () => {
+    const proprio = fauxMembre(PROPRIO);
+    const membre = fauxMembre(MEMBRE);
+    const modo = fauxMembre(MODO, { staff: true });
+    const s = scene([proprio, membre, modo]);
+    await s.quitter(proprio);
+    await avancer(31_000);
+    const [message] = messagesRecuperer(s.postes);
+    await s.cliquer(membre, 'tempvoice:reclamer', { ou: 'salon', message: message! });
+    expect(idsDe(derniereEdition(message!))).toContain(`tempvoice:reclam_annuler:${MEMBRE}:${SALON}`);
+
+    ligne = { moderatorClaimOverride: false };
+    const refus = await s.cliquer(modo, `tempvoice:reclam_annuler:${MEMBRE}:${SALON}`, { ou: 'salon', message: message! });
+    expect(refus.dernier).toContain("n'est plus valable");
+    expect(proprietaire()).toBe(MEMBRE);
+  });
+
+  test("un identifiant de bouton cliqué dans un autre serveur ne pilote pas le salon", async () => {
+    const proprio = fauxMembre(PROPRIO);
+    const membre = fauxMembre(MEMBRE);
+    const s = scene([proprio, membre]);
+    await s.quitter(proprio);
+    await avancer(31_000);
+
+    const autre = '999000000000000001';
+    const panneau = await s.cliquer(membre, 'tempvoice:claim', { guildId: autre });
+    expect(panneau.dernier).toContain("n'est plus valable");
+    expect(proprietaire()).toBe(PROPRIO);
+    const [message] = messagesRecuperer(s.postes);
+    const carte = await s.cliquer(membre, 'tempvoice:reclamer', { ou: 'salon', message: message!, guildId: autre });
+    expect(carte.dernier).toContain("n'est plus valable");
+    expect(proprietaire()).toBe(PROPRIO);
+  });
+});
+
+describe('revue 7 — 6 : le choix de passation appartient au propriétaire parti', () => {
+  test('un autre que le propriétaire (même modérateur) ne peut pas désigner le successeur', async () => {
+    const proprio = fauxMembre(PROPRIO);
+    const modo = fauxMembre(MODO, { staff: true });
+    const s = scene([proprio, modo, fauxMembre(MEMBRE2)]);
+    await s.quitter(proprio);
+
+    const intrus = await s.cliquer(modo, `tempvoice:leader:${PROPRIO}:${SALON}`, { valeurs: [MEMBRE2], ou: 'mp', message: proprio.mp[0] });
+    expect(intrus.dernier).toContain("n'est plus valable");
+    expect(proprietaire()).toBe(PROPRIO);
+    expect(proprio.mp[0]!.edit).not.toHaveBeenCalled();
   });
 });

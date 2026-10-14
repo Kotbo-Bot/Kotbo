@@ -135,3 +135,40 @@ describe('diffReglagesVocaux', () => {
     expect(diffReglagesVocaux(null, etat()).length).toBeGreaterThan(10);
   });
 });
+
+describe('diffReglagesVocaux : comparaison stable', () => {
+  test('l\'ordre d\'un tableau d\'ids ne change rien, même à contenu égal', () => {
+    const avant = avecMod({ reservableRoleIds: [ROLE, GEN_B, GEN_A] });
+    const apres = avecMod({ reservableRoleIds: [GEN_A, ROLE, GEN_B] });
+    expect(diffReglagesVocaux(avant, apres)).toEqual([]);
+    // Et un contenu différent reste vu, quel que soit l'ordre.
+    expect(diffReglagesVocaux(avant, avecMod({ reservableRoleIds: [GEN_A, ROLE] }))).toHaveLength(1);
+  });
+
+  test('les générateurs se comparent par salon : réordonner la liste ne change rien', () => {
+    const base = { ...etat(), tempVoiceGenerators: [{ channelId: GEN_A, userLimit: 5 }, { channelId: GEN_B, userLimit: 9 }] };
+    const permute = { ...etat(), tempVoiceGenerators: [{ channelId: GEN_B, userLimit: 9 }, { channelId: GEN_A, userLimit: 5 }] };
+    expect(diffReglagesVocaux(base, permute)).toEqual([]);
+  });
+
+  test('un champ modifié sur un générateur déplacé est attribué à son salon, pas à sa place', () => {
+    const base = { ...etat(), tempVoiceGenerators: [{ channelId: GEN_A, userLimit: 5 }, { channelId: GEN_B, userLimit: 9 }] };
+    const apres = { ...etat(), tempVoiceGenerators: [{ channelId: GEN_B, userLimit: 12 }, { channelId: GEN_A, userLimit: 5 }] };
+    expect(diffReglagesVocaux(base, apres, { salon: (id) => (id === GEN_B ? 'Créer B' : undefined) })).toEqual([
+      { champ: 'Générateur #Créer B : places', avant: '9', apres: '12' },
+    ]);
+  });
+
+  test('"", null, [] et l\'absence valent « aucun » : jamais « (aucun) → (aucun) »', () => {
+    const avant = { ...etat(), tempVoiceCategoryId: '', tempVoiceModPermissions: { ...(etat().tempVoiceModPermissions as object), reservableRoleIds: [] } };
+    const apres = { ...etat(), tempVoiceCategoryId: null, tempVoiceModPermissions: { ...(etat().tempVoiceModPermissions as object), reservableRoleIds: undefined } };
+    expect(diffReglagesVocaux(avant, apres)).toEqual([]);
+    for (const [x, y] of [['', []], [null, ''], [[], null]] as const) {
+      const lignes = lignesDiffReglages(diffReglagesVocaux(
+        { ...etat(), tempVoiceCategoryId: x },
+        { ...etat(), tempVoiceCategoryId: y },
+      ));
+      expect(lignes.filter((l) => l.includes('(aucun) → (aucun)'))).toEqual([]);
+    }
+  });
+});

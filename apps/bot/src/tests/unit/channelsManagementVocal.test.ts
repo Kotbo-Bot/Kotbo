@@ -33,6 +33,7 @@ const mockDb = {
     delete: mock(async () => ({})),
   },
   dashboardAuditLog: { create: mock(async (_arg: unknown) => ({})) },
+  dashboardFeatureConfig: { upsert: mock(async (_a: unknown) => ({})) },
   guild: { findUnique: mock(async () => null as unknown), update: mock(async (_a: unknown) => ({})) },
   tempVoiceAccessRequestConfig: {
     findUnique: mock(async () => null as unknown),
@@ -233,6 +234,34 @@ describe('B — journal des changements de réglages vocaux', () => {
 
     const entries = audits();
     expect(entries.map((e) => e.action)).toEqual([
+      expect.stringContaining('Réglages vocaux modifiés'),
+      'Sauvegarde configuration Gestion des salons',
+    ]);
+  });
+});
+
+describe('B — la ligne générique ne double pas le journal vocal', () => {
+  const CORPS_PAGE = {
+    autoThreadEnabled: false,
+    autoThreadBotsEnabled: false,
+    statsEnabled: false,
+    statsConfig: null,
+    honeypotEnabled: false,
+    honeypotChannelId: null,
+    honeypotSanction: 'WARN',
+    honeypotReinvite: false,
+    wordStatsEnabled: false,
+  };
+
+  test('corps de la page, valeurs non vocales inchangées + un réglage vocal : une seule ligne', async () => {
+    const res = await callConfig('PATCH', { ...CORPS_PAGE, tempVoiceModPermissions: { panelMode: 'FLAT' } });
+    expect(res.statusCode).toBe(200);
+    expect(audits().map((e) => e.action)).toEqual([expect.stringContaining('Réglages vocaux modifiés')]);
+  });
+
+  test('une valeur non vocale qui change garde sa ligne générique', async () => {
+    await callConfig('PATCH', { ...CORPS_PAGE, honeypotSanction: 'BAN', tempVoiceModPermissions: { panelMode: 'FLAT' } });
+    expect(audits().map((e) => e.action)).toEqual([
       expect.stringContaining('Réglages vocaux modifiés'),
       'Sauvegarde configuration Gestion des salons',
     ]);
@@ -495,12 +524,30 @@ describe('1 — générateurs écartés par le serveur : notice', () => {
     const body = JSON.parse(res.body);
     expect(body.resolved.tempVoiceGenerators.map((g: { channelId: string }) => g.channelId)).toEqual([GEN_B]);
     expect(body.notices).toHaveLength(3);
-    expect(body.notices[0]).toContain('n°2');
-    expect(body.notices[0]).toContain('déjà le générateur principal');
-    expect(body.notices[1]).toContain('n°4');
-    expect(body.notices[1]).toContain('déjà utilisé par le générateur n°3');
-    expect(body.notices[2]).toContain('n°5');
-    expect(body.notices[2]).toContain('aucun salon vocal valide');
+    expect(body.notices[0].message).toContain('n°2');
+    expect(body.notices[0].message).toContain('déjà le générateur principal');
+    expect(body.notices[1].message).toContain('n°4');
+    expect(body.notices[1].message).toContain('déjà utilisé par le générateur n°3');
+    expect(body.notices[2].message).toContain('n°5');
+    expect(body.notices[2].message).toContain('aucun salon vocal valide');
+  });
+
+  test('chaque avis porte un code et ses paramètres, le texte français reste en repli', async () => {
+    const res = await callConfig('PATCH', {
+      tempVoiceChannelId: GEN_A,
+      tempVoiceGenerators: [{ channelId: GEN_A }, { channelId: GEN_B }, { channelId: GEN_B }],
+    });
+    const { notices } = JSON.parse(res.body) as { notices: Array<{ code: string; params: Record<string, unknown>; message: string }> };
+    expect(notices.map((n) => n.code)).toEqual(['notice_tv_generator_is_main', 'notice_tv_generator_duplicate']);
+    expect(notices[1].params).toMatchObject({ n: 4, first: 3 });
+    expect(notices.every((n) => n.message.startsWith('Le générateur n°'))).toBe(true);
+  });
+
+  test('stateColors sans effet (GRID3 + V1) : avis codé', async () => {
+    mockDb.tempVoiceModPermissionsConfig.upsert = mock(async (_a: unknown) => modRow({ panelComponents: 'V1', stateColors: 'DARK' }));
+    const res = await callConfig('PATCH', { tempVoiceModPermissions: { panelComponents: 'V1', stateColors: 'DARK' } });
+    const { notices } = JSON.parse(res.body) as { notices?: Array<{ code: string; params: Record<string, unknown> }> };
+    expect(notices?.[0]).toMatchObject({ code: 'notice_tv_state_colors_inert', params: { colors: 'DARK' } });
   });
 
   test('sans écart, pas de champ `notices`', async () => {
@@ -513,7 +560,7 @@ describe('1 — générateurs écartés par le serveur : notice', () => {
     const kept = input.slice(0, 25);
     const notices = explainDroppedGenerators(input, kept, null, (id) => (id === input[25].channelId ? 'Trop' : undefined));
     expect(notices).toHaveLength(2);
-    expect(notices[0]).toContain('plafond de 25');
+    expect(notices[0].message).toContain('plafond de 25');
   });
 });
 
