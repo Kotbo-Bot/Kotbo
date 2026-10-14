@@ -26,12 +26,14 @@ const prismaMock = {
 };
 
 const envoyerLog = mock(async (..._args: unknown[]) => undefined);
+/** Langue du serveur : le journal est écrit dans celle-ci. */
+let langue: 'fr' | 'en' = 'fr';
 
 const cachePath = path.resolve(import.meta.dir, '../../utils/cache.ts');
 const moduleMocks: Array<[string, () => Record<string, unknown>]> = [
   ['../../utils/db', () => ({ default: prismaMock, prisma: prismaMock, prismaRead: prismaMock })],
   ['../../utils/cache', () => completeModuleMock(cachePath, {
-    getCachedGuild: mock(async () => ({ tempVoiceEnabled: true })),
+    getCachedGuild: mock(async () => ({ tempVoiceEnabled: true, language: langue })),
   })],
   ['../../utils/logDispatch', () => ({ sendLogEmbed: envoyerLog })],
 ];
@@ -127,7 +129,7 @@ function membre(id: string) {
 
 function salon() {
   const edit = mock(async () => undefined);
-  return {
+  const channel = {
     id: CHANNEL,
     type: 2,
     guild: { id: GUILD, roles: { everyone: { id: GUILD } } },
@@ -135,9 +137,11 @@ function salon() {
     parentId: null as string | null,
     parent: null as unknown,
     send: mock(async () => ({ id: '888888888888888888' })),
-    setUserLimit: mock(async () => undefined),
+    userLimit: 0,
+    setUserLimit: mock(async (n: number) => { channel.userLimit = n; }),
     permissionOverwrites: { cache: new Map(), edit },
   };
+  return channel;
 }
 
 function guildDe(membres: Array<ReturnType<typeof membre>>) {
@@ -186,8 +190,9 @@ function interaction(cas: Cas, channel: unknown, guild: unknown) {
   return i;
 }
 
-async function cliquer(cas: Cas, opts: { acteur?: string; limiteEnPanne?: boolean } = {}) {
+async function cliquer(cas: Cas, opts: { acteur?: string; limiteEnPanne?: boolean; categorie?: string } = {}) {
   const channel = salon();
+  if (opts.categorie) channel.parentId = opts.categorie;
   if (opts.limiteEnPanne) channel.setUserLimit.mockImplementation(async () => { throw new Error('Discord indisponible'); });
   const guild = guildDe([membre(PROPRIO), membre(CIBLE)]);
   const listeners = new Map<string, (...args: unknown[]) => unknown>();
@@ -219,6 +224,7 @@ function champ(embed: { toJSON: () => { fields?: Array<{ name: string; value: st
 }
 
 beforeEach(() => {
+  langue = 'fr';
   envoyerLog.mockClear();
   envoyerLog.mockImplementation(async () => undefined);
 });
@@ -226,7 +232,7 @@ beforeEach(() => {
 describe('journal du panneau : un log par clic', () => {
   test('la table couvre exactement les composants connus du journal', () => {
     expect(CAS.map((c) => c.action).sort()).toEqual(Object.keys(LIBELLES_ACTIONS_PANNEAU).sort());
-    for (const cas of CAS) expect(LIBELLES_ACTIONS_PANNEAU[cas.action]).toBe(cas.libelle);
+    for (const cas of CAS) expect(LIBELLES_ACTIONS_PANNEAU[cas.action]({}, { locale: 'fr' })).toBe(cas.libelle);
   });
 
   for (const cas of CAS) {
@@ -291,5 +297,21 @@ describe('journal du panneau : un log par clic', () => {
     expect(envoyerLog).toHaveBeenCalledTimes(1);
     expect(channel.setUserLimit).toHaveBeenCalledWith(5);
     expect(reponses.reduce((n, f) => n + f.mock.calls.length, 0)).toBeGreaterThan(0);
+  });
+
+  test('D3 — la catégorie du salon accompagne le salon dans les sources (salons ignorés)', async () => {
+    await cliquer(CAS.find((c) => c.action === 'limit_modal')!, { categorie: '600000000000000000' });
+    expect((envoyerLog.mock.calls[0] as unknown[])[5]).toEqual([CHANNEL, '600000000000000000']);
+  });
+
+  test('serveur en anglais : noms de champs, action, issue et pied en anglais', async () => {
+    langue = 'en';
+    await cliquer(CAS.find((c) => c.action === 'limit')!, { acteur: CIBLE });
+    const embed = (envoyerLog.mock.calls[0] as unknown[])[1] as { toJSON: () => { fields?: Array<{ name: string; value: string }>; footer?: { text: string }; title?: string } };
+    expect(champ(embed, 'Member')).toContain(`<@${CIBLE}>`);
+    expect(champ(embed, 'Action')).toBe('Open the user limit input');
+    expect(champ(embed, 'Outcome')).toBe('Refused');
+    expect(embed.toJSON().footer?.text).toBe(`Action performed by tag-${CIBLE}`);
+    expect(embed.toJSON().title).toBe('🎛️ Voice panel action');
   });
 });

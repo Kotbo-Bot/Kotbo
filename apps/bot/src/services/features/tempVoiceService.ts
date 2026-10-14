@@ -2115,6 +2115,25 @@ export function normaliserReglagesPresentation(raw: unknown): ReglagesPresentati
 }
 
 /**
+ * Où se trouve la mention qui notifie le propriétaire à la création du salon :
+ * `panel` dans le panneau lui-même, `message` dans un message posté juste
+ * au-dessus (le panneau n'en porte alors aucune), `none` nulle part qui notifie.
+ */
+export const PLACEMENTS_MENTION = ['panel', 'message', 'none'] as const;
+export type PlacementMention = (typeof PLACEMENTS_MENTION)[number];
+
+/**
+ * `ownerMentionPlacement` lu sur la ligne des réglages du module. Colonne
+ * absente (client Prisma d'avant la migration), vide ou inconnue : `panel`, le
+ * comportement sans doublon le plus proche de celui livré.
+ */
+export function lirePlacementMention(raw: unknown): PlacementMention {
+  const valeur = (raw as { ownerMentionPlacement?: unknown } | null | undefined)?.ownerMentionPlacement;
+  const bas = typeof valeur === 'string' ? valeur.toLowerCase() : '';
+  return PLACEMENTS_MENTION.includes(bas as PlacementMention) ? (bas as PlacementMention) : 'panel';
+}
+
+/**
  * L'interrupteur de secours de la personnalisation par générateur, lu sur la
  * MÊME ligne que les cinq réglages ci-dessus.
  *

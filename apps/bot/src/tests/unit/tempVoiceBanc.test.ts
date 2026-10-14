@@ -13,7 +13,7 @@
  */
 import { afterAll, describe, expect, mock, setSystemTime, test } from 'bun:test';
 import path from 'node:path';
-import { Events, PermissionFlagsBits, type Client } from 'discord.js';
+import { Events, PermissionFlagsBits, PermissionsBitField, type Client } from 'discord.js';
 
 import { completeModuleMock } from '../helpers/moduleMock.js';
 import {
@@ -72,7 +72,15 @@ const prismaMock = {
 
 let configServeur: Record<string, unknown> = {};
 
-interface LigneJournal { type: string; acteur: string; salons: string[]; champs: Array<{ name: string; value: string }> }
+interface LigneJournal {
+  type: string;
+  acteur: string;
+  salons: string[];
+  champs: Array<{ name: string; value: string }>;
+  titre?: string;
+  pied?: string;
+  audit?: { details?: string; channelId?: string | null };
+}
 const journal: LigneJournal[] = [];
 
 const mocks: Array<[string, () => Record<string, unknown>]> = [
@@ -82,8 +90,13 @@ const mocks: Array<[string, () => Record<string, unknown>]> = [
     cache: { invalidateGuild: mock(async () => undefined) },
   })],
   ['../../utils/logDispatch', () => completeModuleMock(path.resolve(import.meta.dir, '../../utils/logDispatch.ts'), {
-    sendLogEmbed: mock(async (_g: unknown, embed: { toJSON: () => { fields?: Array<{ name: string; value: string }> } }, type: string, _c: unknown, tag: string, salons: string[]) => {
-      journal.push({ type, acteur: tag, salons, champs: embed.toJSON().fields ?? [] });
+    sendLogEmbed: mock(async (
+      _g: unknown,
+      embed: { toJSON: () => { fields?: Array<{ name: string; value: string }>; title?: string; footer?: { text: string } } },
+      type: string, _c: unknown, tag: string, salons: string[], audit?: LigneJournal['audit'],
+    ) => {
+      const e = embed.toJSON();
+      journal.push({ type, acteur: tag, salons, champs: e.fields ?? [], titre: e.title, pied: e.footer?.text, audit });
     }),
   })],
 ];
@@ -94,6 +107,7 @@ for (const [relatif, fabrique] of mocks) {
 
 const tv = await import('../../events/tempVoice.js');
 const { logger } = await import('../../utils/logger.js');
+const m = await import('../../lib/paraglide/messages.js');
 
 // Les erreurs que le code avale (`.catch(() => null)` puis un log) restent visibles ici.
 const avertissements: string[] = [];
@@ -146,6 +160,12 @@ interface OptionsScene {
   /** Mode compact : un seul éphémère réécrit sur place. */
   compact?: boolean;
   latenceRestMs?: number;
+  /** `ownerMentionPlacement` de la ligne de réglages ; absent = colonne d'avant la migration. */
+  mention?: string;
+  /** Modèle de nom du serveur (défaut du banc : un modèle personnalisé). */
+  modeleNom?: string;
+  /** Salon de repli des membres sans le rôle réservé. */
+  repliSalon?: string;
 }
 
 interface Scene {
@@ -171,6 +191,8 @@ function reglerBase(opts: OptionsScene) {
     // Repli MEMBERS : il ne joue que si le serveur a des rôles réservables que la personne n'a pas.
     reservableRoleIds: opts.repli === 'MEMBERS' ? [IDS.ROLE_RESA] : [],
     panelCompactMode: opts.compact === true,
+    ...(opts.mention ? { ownerMentionPlacement: opts.mention } : {}),
+    ...(opts.repliSalon ? { reservationFallbackChannelId: opts.repliSalon } : {}),
   };
   base.demandes = opts.demandes
     ? { guildId: IDS.GUILD, enabled: true, responders: 'OWNER_AND_STAFF', notifyVia: 'VOICE', notifyChannelId: null, requestExpiresMinutes: 10, denyCooldownMinutes: 10 }
@@ -179,7 +201,7 @@ function reglerBase(opts: OptionsScene) {
     tempVoiceEnabled: true,
     tempVoiceChannelId: IDS.GEN,
     tempVoiceCategoryId: null,
-    tempVoiceNameTemplate: 'Salon de {user}',
+    tempVoiceNameTemplate: opts.modeleNom ?? 'Salon de {user}',
     tempVoiceDefaults: {},
     moderatorRoleId: IDS.ROLE_MOD,
     language: opts.langue,
@@ -211,7 +233,8 @@ async function monterScene(opts: OptionsScene): Promise<Scene> {
   avancer(1_500);
   m.poserSurchargeDirecte(salonId, IDS.AUTORISE, 1, PermissionFlagsBits.ViewChannel | PermissionFlagsBits.Connect);
   await m.calme(enCours);
-  const panneau = [...m.messages.values()].find((msg) => msg.channel_id === salonId && !(msg.flags & 64));
+  // Le panneau porte des composants : en `message`, la mention seule est postée au-dessus.
+  const panneau = [...m.messages.values()].find((msg) => msg.channel_id === salonId && !(msg.flags & 64) && msg.components.length);
   if (!panneau) throw new Error(`Panneau non posté : ${avertissements.slice(-3).join(' | ')}`);
   return { monde: m, client, salonId, panneauId: panneau.id, enCours, opts };
 }
@@ -343,11 +366,16 @@ function problemes(r: Rapport, ctx: { langue: Langue; acteur: string; salonId: s
   const lignes = r.journal.filter((j) => j.type === 'voice_panel');
   if (lignes.length !== 1) p.push(`${lignes.length} log(s) voice_panel au lieu d'un`);
   else {
+    // Le journal est écrit dans la langue du serveur : noms de champs et valeurs.
+    const L = { locale: ctx.langue };
     const champ = (n: string) => lignes[0].champs.find((c) => c.name === n)?.value ?? '';
-    if (!champ('Membre').includes(`<@${ctx.acteur}>`)) p.push(`log voice_panel sans le bon membre (${champ('Membre')})`);
-    if (!champ('Salon vocal').includes(`<#${ctx.salonId}>`) || !lignes[0].salons.includes(ctx.salonId)) p.push('log voice_panel sans le bon salon');
-    if (champ('Issue') === 'Erreur') p.push(`l'action a levé : ${r.avertissements.filter((a) => a.includes('Erreur')).join(' | ').slice(0, 300)}`);
-    if (ctx.refusAttendu && champ('Issue') !== 'Refusée') p.push(`refus attendu, issue « ${champ('Issue') || 'aucune'} »`);
+    const issue = champ(m.log_tempvoice_field_outcome({}, L));
+    if (!champ(m.log_tempvoice_field_member({}, L)).includes(`<@${ctx.acteur}>`)) p.push(`log voice_panel sans le bon membre (${champ(m.log_tempvoice_field_member({}, L))})`);
+    if (!champ(m.log_tempvoice_field_channel({}, L)).includes(`<#${ctx.salonId}>`) || !lignes[0].salons.includes(ctx.salonId)) p.push('log voice_panel sans le bon salon');
+    if (issue === m.log_tempvoice_outcome_error({}, L)) p.push(`l'action a levé : ${r.avertissements.filter((a) => a.includes('Erreur')).join(' | ').slice(0, 300)}`);
+    if (ctx.refusAttendu && issue !== m.log_tempvoice_outcome_refused({}, L)) p.push(`refus attendu, issue « ${issue || 'aucune'} »`);
+    for (const c of horsLangue(lignes[0].champs.flatMap((x) => [x.name, x.value]), ctx.langue)) p.push(`log en ${ctx.langue} : ${c}`);
+    for (const c of clesBrutes(lignes[0].champs.flatMap((x) => [x.name, x.value]))) p.push(`log : ${c}`);
   }
   if (ctx.refusAttendu && r.mutations.length) p.push(`refusé mais Discord modifié : ${r.mutations.map((a) => `${a.methode} ${a.route}`).join(', ')}`);
   return p;
@@ -742,9 +770,7 @@ const CAS_PAR_ACTION = (nom: string) => CAS.find((c) => action(c.customId) === n
 describe('Cas limite : double clic (deux interactions identiques quasi simultanées)', () => {
   const DOUBLES = ['salon', 'bascule_verrou', 'limit_modal', 'rename_modal', 'mode_select', 'reserve_select', 'm_kick', 'transfer_select', 'lock', 'demande_ok'];
   for (const nom of DOUBLES) for (const mode of MODES) {
-    // D2 : le second « Expulser » part sur un membre déjà déconnecté (40032) et
-    // répond « L'action n'a pas pu être appliquée » au lieu de « n'est plus en vocal ».
-    (nom === 'm_kick' ? test.failing : test)(`${nom} ${mode}${nom === 'm_kick' ? ' — DÉFAUT D2' : ''}`, async () => {
+    test(`${nom} ${mode}`, async () => {
       const cas = CAS_PAR_ACTION(nom);
       const sc = await monterScene({ langue: 'fr', format: 'V2', mode, demandes: cas.demandes });
       const { clic } = await parcourir(sc, cas, IDS.PROPRIO);
@@ -756,7 +782,12 @@ describe('Cas limite : double clic (deux interactions identiques quasi simultan�
         if (x.enAttente) p.push(`clic ${i + 1} : « réfléchit… » jamais résolu`);
         for (const e of x.refusLocaux) p.push(`clic ${i + 1} : ${e}`);
       }
-      for (const e of r.erreursDiscord) p.push(`erreur Discord : ${e}`);
+      // A2 (D2) — le second « Expulser » vise un membre déjà déconnecté : Discord
+      // répond 40032, et c'est « n'est plus en vocal » qu'on lit, pas un échec générique.
+      const deja = nom === 'm_kick' ? r.erreursDiscord.filter((e) => e.includes('→ 40032 ')) : [];
+      if (nom === 'm_kick' && !r.textes.some((t) => t.includes("n'est plus en vocal"))) p.push('second clic sans « n’est plus en vocal »');
+      for (const e of r.erreursDiscord.filter((x) => !deja.includes(x))) p.push(`erreur Discord : ${e}`);
+      if (deja.length > 1) p.push(`${deja.length} × 40032`);
       for (const v of r.violations) p.push(`charge invalide : ${v}`);
       const logs = r.journal.filter((j) => j.type === 'voice_panel').length;
       if (logs !== 2) p.push(`${logs} log(s) voice_panel pour deux clics`);
@@ -778,23 +809,26 @@ describe('Cas limite : interaction expirée (reçue 3,5 s après sa création)',
       const callbacks = r.appels.filter((a) => a.typeCallback !== undefined);
       expect(r.acks).toBe(0);
       expect(callbacks.every((a) => a.erreur?.code === 10062)).toBe(true);
-      // Constaté : l'acquittement raté, la réponse de l'action, puis le secours de
-      // l'écouteur — trois appels voués à 10062 (voir D1), jamais plus.
-      expect(callbacks.length).toBeLessThanOrEqual(3);
+      // L'acquittement raté, et rien d'autre : aucune réponse vouée à 10062 n'est retentée.
+      expect(callbacks.length).toBeLessThanOrEqual(1);
       expect(r.journal.filter((j) => j.type === 'voice_panel')).toHaveLength(1);
       expect(r.erreursBanc).toEqual([]);
     });
   }
 
-  // Discord a affiché « Cette interaction a échoué » : la personne croit que rien
-  // n'a été fait, et recliquera. L'action ne devrait donc pas s'appliquer.
+  // A1 (D1) — Discord a affiché « Cette interaction a échoué » : la personne croit
+  // que rien n'a été fait, et recliquera. L'action ne s'applique donc pas, et le
+  // journal le dit.
   for (const nom of ['bascule_verrou', 'mode_select', 'lock', 'm_kick', 'limit_modal']) {
-    test.failing(`${nom} : aucune modification quand l'acquittement a échoué — DÉFAUT D1`, async () => {
+    test(`${nom} : aucune modification quand l'acquittement a échoué`, async () => {
       const cas = CAS_PAR_ACTION(nom);
       const sc = await monterScene({ langue: 'fr', format: 'V2', mode: 'CLASSIC' });
       const { clic } = await parcourir(sc, cas, IDS.PROPRIO);
       const r = await cliquer(sc, { ...clic, ageMs: 3_500 });
       expect(r.mutations.filter((a) => !a.route.includes('/messages/')).map((a) => `${a.methode} ${a.route}`)).toEqual([]);
+      const champs = r.journal.find((j) => j.type === 'voice_panel')!.champs;
+      expect(champs.find((c) => c.name === 'Issue')?.value).toBe('Erreur');
+      expect(champs.find((c) => c.name === 'Motif')?.value).toContain('Interaction expirée');
     });
   }
 });
@@ -802,8 +836,7 @@ describe('Cas limite : interaction expirée (reçue 3,5 s après sa création)',
 describe('Cas limite : salon supprimé pendant l\'action (10003 au premier appel qui le modifie)', () => {
   const SUPPRIMES = ['bascule_verrou', 'limit_modal', 'rename_modal', 'mode_select', 'reserve_select', 'm_trust', 'm_ban', 'trust_select', 'lock', 'unlock', 'chat'];
   for (const nom of SUPPRIMES) {
-    // D3 : salon disparu pendant un renommage, la personne lit « Discord a refusé ce nom ».
-    (nom === 'rename_modal' ? test.failing : test)(`${nom} : une réponse propre, pas de « réfléchit… »${nom === 'rename_modal' ? ' — DÉFAUT D3' : ''}`, async () => {
+    test(`${nom} : une réponse propre, pas de « réfléchit… »`, async () => {
       const cas = CAS_PAR_ACTION(nom);
       const sc = await monterScene({ langue: 'fr', format: 'V2', mode: 'CLASSIC' });
       const { clic } = await parcourir(sc, cas, IDS.PROPRIO);
@@ -904,4 +937,235 @@ describe('Cas limite : la langue du serveur change entre deux clics', () => {
     expect(problemes(r, { langue: 'fr', acteur: IDS.PROPRIO, salonId: sc.salonId, action: 'bascule_verrou', refusAttendu: false })).toEqual([]);
     expect(horsLangue(textesVisibles(sc.monde.messages.get(sc.panneauId) as Brut), 'fr')).toEqual([]);
   });
+});
+
+// ─── Lot : mention du propriétaire, langue des panneaux, journal ───
+
+// Chargés à l'usage : le service des panneaux tire tickets, règlement et auto-rôles.
+const servicePanneaux = () => import('../../services/core/panelRerenderService.js');
+const registreIntentions = () => import('../../services/moderation/voiceIntentRegistry.js');
+
+/** Composants à plat, conteneurs compris. */
+function aPlat(composants: unknown): Brut[] {
+  return ((composants ?? []) as Brut[]).flatMap((c) => [c, ...aPlat(c.components), ...(c.accessory ? [c.accessory] : [])]);
+}
+
+/** Vrai si ce POST notifie la personne : mention dans le `content` ou un Text Display, et permise. */
+function notifie(corps: Brut, id: string): boolean {
+  const textes = [corps.content, ...aPlat(corps.components).filter((c) => c.type === 10).map((c) => c.content)];
+  if (!textes.some((t) => typeof t === 'string' && t.includes(`<@${id}>`))) return false;
+  const am = corps.allowed_mentions as Brut | undefined;
+  return !am || (am.users ?? []).includes(id) || (am.parse ?? []).includes('users');
+}
+
+/** Mentions du propriétaire visibles dans le salon (messages publics, état courant). */
+function mentionsVisibles(sc: Scene): number {
+  return [...sc.monde.messages.values()]
+    .filter((msg) => msg.channel_id === sc.salonId && !(msg.flags & 64))
+    .flatMap((msg) => textesVisibles(msg))
+    .reduce((n, t) => n + t.split(`<@${IDS.PROPRIO}>`).length - 1, 0);
+}
+
+describe('B — mention du propriétaire : une seule, là où le réglage la place', () => {
+  const ATTENDU: Record<string, number> = { panel: 1, message: 1, none: 0, absent: 1 };
+  for (const format of FORMATS) for (const mention of ['panel', 'message', 'none', 'absent']) {
+    test(`${format} · ${mention} : ${ATTENDU[mention]} notification, une seule mention visible, avant et après réécriture`, async () => {
+      const sc = await monterScene({ langue: 'fr', format, mode: 'CLASSIC', mention: mention === 'absent' ? undefined : mention });
+      const postes = sc.monde.appels.filter((a) => a.methode === 'POST' && a.route === `/channels/${sc.salonId}/messages`);
+      expect(postes.flatMap((a) => a.violations)).toEqual([]);
+      expect(postes.filter((a) => notifie(a.corps as Brut, IDS.PROPRIO))).toHaveLength(ATTENDU[mention]);
+      expect(postes).toHaveLength(mention === 'message' ? 2 : 1);
+      expect(mentionsVisibles(sc)).toBe(1);
+
+      const { clic } = await parcourir(sc, CAS_PAR_ACTION('bascule_verrou'), IDS.PROPRIO);
+      const r = await cliquer(sc, clic);
+      expect(r.appels.some((a) => a.methode === 'PATCH' && a.route === `/channels/${sc.salonId}/messages/${sc.panneauId}` && !a.erreur && !a.violations.length)).toBe(true);
+      expect(mentionsVisibles(sc)).toBe(1);
+    });
+  }
+});
+
+describe('C — langue du serveur', () => {
+  test('C1 — bascule fr → en : le panneau déjà posté est réécrit en anglais', async () => {
+    const sc = await monterScene({ langue: 'fr', format: 'V2', mode: 'CLASSIC' });
+    const avant = textesVisibles(sc.monde.messages.get(sc.panneauId));
+    expect(avant).toContain(m.panel_tempvoice_tab_channel({}, { locale: 'fr' }));
+    configServeur.language = 'en';
+    avancer(1_500);
+    const { rafraichirPanneauxVocaux } = await servicePanneaux();
+    expect(rafraichirPanneauxVocaux(sc.client, IDS.GUILD)).toBe(1);
+    await sc.monde.calme(sc.enCours);
+    const apres = textesVisibles(sc.monde.messages.get(sc.panneauId));
+    expect(apres).toContain(m.panel_tempvoice_tab_channel({}, { locale: 'en' }));
+    expect(horsLangue(apres, 'en')).toEqual([]);
+  });
+
+  for (const langue of LANGUES) {
+    test(`C2 — modèle de nom resté au défaut : nom dans la langue du serveur (${langue})`, async () => {
+      const sc = await monterScene({ langue, format: 'V2', mode: 'CLASSIC', modeleNom: '🔊 Salon de {user}' });
+      const nom = String(sc.monde.salons.get(sc.salonId)!.name);
+      const pseudo = nom.replace(/^🔊 (Salon de )?/, '').replace(/'s channel$/, '');
+      expect(nom).toBe(m.setup_template_voice_name({ user: pseudo }, { locale: langue }));
+      expect(nom).toMatch(langue === 'fr' ? /^🔊 Salon de / : /'s channel$/);
+    });
+  }
+
+  test('C2 — un modèle personnalisé reste tel quel, même en anglais', async () => {
+    const sc = await monterScene({ langue: 'en', format: 'V2', mode: 'CLASSIC' });
+    expect(String(sc.monde.salons.get(sc.salonId)!.name)).toMatch(/^Salon de /);
+  });
+});
+
+/** La ligne `voice_panel` du clic, champs par nom. */
+function ligneDuClic(r: Rapport): Record<string, string> {
+  const lignes = r.journal.filter((j) => j.type === 'voice_panel');
+  expect(lignes).toHaveLength(1);
+  return Object.fromEntries(lignes[0].champs.map((c) => [c.name, c.value]));
+}
+
+async function clicJournal(opts: OptionsScene, nom: string, role: Role = 'proprietaire', values?: string[]) {
+  const sc = await monterScene(opts);
+  const cas = CAS_PAR_ACTION(nom);
+  const { clic } = await parcourir(sc, values ? { ...cas, values } : cas, ACTEUR[role]);
+  const r = await cliquer(sc, clic);
+  return { sc, r, champs: ligneDuClic(r) };
+}
+
+describe('D — journal voice_panel, dans la langue du serveur', () => {
+  for (const langue of LANGUES) {
+    const L = { locale: langue };
+    test(`D1 — verrouiller : Avant / Après ne listent que le verrou (${langue})`, async () => {
+      const { champs } = await clicJournal({ langue, format: 'V2', mode: 'CLASSIC' }, 'bascule_verrou');
+      const verrou = m.log_tempvoice_state_lock({}, L);
+      const avant = champs[m.log_tempvoice_field_before({}, L)];
+      const apres = champs[m.log_tempvoice_field_after({}, L)];
+      expect(avant).toContain(`**${verrou}** — ${m.log_tempvoice_val_open({}, L)}`);
+      expect(apres).toContain(`**${verrou}** — ${m.log_tempvoice_val_locked({}, L)}`);
+      // Seul ce qui a changé : ni le nom, ni la limite, ni le propriétaire.
+      for (const cle of [m.log_tempvoice_state_name({}, L), m.log_tempvoice_state_limit({}, L), m.log_tempvoice_state_owner({}, L)]) {
+        expect(`${avant}
+${apres}`).not.toContain(`**${cle}**`);
+      }
+      expect(champs[m.log_tempvoice_field_outcome({}, L)]).toBeUndefined();
+    });
+  }
+
+  test('D1 — expulser : état de la cible avant / après', async () => {
+    const { champs } = await clicJournal({ langue: 'fr', format: 'V2', mode: 'CLASSIC' }, 'm_kick');
+    expect(champs.Avant).toContain(`<@${IDS.CIBLE}> en vocal** — oui`);
+    expect(champs['Après']).toContain(`<@${IDS.CIBLE}> en vocal** — non`);
+  });
+
+  test('D1 — droit modérateur fermé : « Sans effet », motif = la réponse, pas d\'Avant/Après', async () => {
+    const { champs } = await clicJournal({ langue: 'fr', format: 'V2', mode: 'CLASSIC', droitsFermes: true }, 'bascule_verrou', 'staffSansDroits');
+    expect(champs.Issue).toBe('Sans effet');
+    expect(champs.Motif).toBeTruthy();
+    expect(champs.Avant).toBeUndefined();
+  });
+
+  test('D1 — le mode d\'écriture déjà en place, choisi à nouveau : « Sans effet »', async () => {
+    const { champs } = await clicJournal({ langue: 'en', format: 'V2', mode: 'CLASSIC' }, 'mode_select', 'proprietaire', ['everyone']);
+    expect(champs.Outcome).toBe('No effect');
+  });
+
+  test('D1 — garde propriétaire : « Refusée » ; navigation : ni Avant, ni Après, ni issue', async () => {
+    const refus = await clicJournal({ langue: 'fr', format: 'V2', mode: 'CLASSIC' }, 'bascule_verrou', 'inconnu');
+    expect(refus.champs.Issue).toBe('Refusée');
+    const nav = await clicJournal({ langue: 'fr', format: 'V2', mode: 'CLASSIC' }, 'salon');
+    expect(['Avant', 'Après', 'Issue'].filter((nom) => nom in nav.champs)).toEqual([]);
+  });
+
+  test('D2 — l\'audit en base garde valeur, après et réponse ; son salon est le salon vocal', async () => {
+    const { r } = await clicJournal({ langue: 'fr', format: 'V2', mode: 'CLASSIC' }, 'limit_modal');
+    const ligne = r.journal.find((j) => j.type === 'voice_panel')!;
+    expect(ligne.audit?.channelId).toBe(ligne.salons[0]);
+    expect(ligne.audit?.details).toContain('Valeur choisie: 5');
+    expect(ligne.audit?.details).toContain('Après:');
+    expect(ligne.audit?.details).toContain('Réponse au membre:');
+  });
+
+  test('D3 — la catégorie du salon accompagne le salon dans les sources du log', async () => {
+    const sc = await monterScene({ langue: 'fr', format: 'V2', mode: 'CLASSIC' });
+    const CATEGORIE = '900000000000000600';
+    // Côté Discord et côté cache : une relecture du salon repasse par les deux.
+    sc.monde.salons.get(sc.salonId)!.parent_id = CATEGORIE;
+    (sc.client.channels.cache.get(sc.salonId) as unknown as { parentId: string | null }).parentId = CATEGORIE;
+    const { clic } = await parcourir(sc, CAS_PAR_ACTION('salon'), IDS.PROPRIO);
+    const r = await cliquer(sc, clic);
+    expect(r.journal.find((j) => j.type === 'voice_panel')!.salons).toEqual([sc.salonId, CATEGORIE]);
+  });
+
+  test('D4 — débordement : membres touchés et salon de repli au journal', async () => {
+    const REPLI = '900000000000000500';
+    const sc = await monterScene({ langue: 'fr', format: 'V2', mode: 'CLASSIC', repliSalon: REPLI });
+    sc.monde.salons.set(REPLI, sc.monde.salonBrut(REPLI, 'Repli', []));
+    const { clic } = await parcourir(sc, CAS_PAR_ACTION('resa_deplacer'), IDS.PROPRIO);
+    const champs = ligneDuClic(await cliquer(sc, clic));
+    expect(champs['Membres touchés']).toContain(`<@${IDS.CIBLE}>`);
+    expect(champs['Salon de repli']).toBe(`<#${REPLI}>`);
+  });
+
+  test('D5 — la proposition de débordement n\'écrase pas le verdict de la réservation', async () => {
+    const { champs } = await clicJournal({ langue: 'fr', format: 'V2', mode: 'CLASSIC' }, 'reserve_select');
+    expect(champs['Réponse au membre']).toContain(m.panel_tempvoice_reserved_ok({ role: IDS.ROLE_RESA }, { locale: 'fr' }));
+  });
+
+  for (const langue of LANGUES) {
+    test(`D6 — création et suppression automatiques journalisées, acteur Système (${langue})`, async () => {
+      const L = { locale: langue };
+      const debut = journal.length;
+      const sc = await monterScene({ langue, format: 'V2', mode: 'CLASSIC' });
+      const creation = journal.slice(debut).find((j) => j.champs.some((c) => c.value === m.log_tempvoice_created({}, L)))!;
+      expect(creation.acteur).toBe(m.log_tempvoice_system({}, L));
+      const champs = Object.fromEntries(creation.champs.map((c) => [c.name, c.value]));
+      expect(champs[m.log_tempvoice_field_trigger({}, L)]).toBe(`<@${IDS.PROPRIO}>`);
+      expect(champs[m.log_tempvoice_field_generator({}, L)]).toBe(`<#${IDS.GEN}>`);
+      expect(champs[m.log_tempvoice_field_initial_mode({}, L)]).toBeTruthy();
+
+      const avantSortie = journal.length;
+      for (const id of [IDS.PROPRIO, IDS.AUTORISE, IDS.STAFF, IDS.INCONNU, IDS.ADMIN, IDS.CIBLE]) {
+        avancer(1_500);
+        sc.monde.bouger(id, null);
+        await sc.monde.calme(sc.enCours);
+      }
+      const suppression = journal.slice(avantSortie).find((j) => j.champs.some((c) => c.value === m.log_tempvoice_deleted({}, L)));
+      expect(suppression).toBeDefined();
+      const s = Object.fromEntries(suppression!.champs.map((c) => [c.name, c.value]));
+      expect(s[m.log_tempvoice_field_reason({}, L)]).toBe(m.panel_tempvoice_audit_empty({}, L));
+      expect(s[m.log_tempvoice_field_lifetime({}, L)]).toBeTruthy();
+      expect(horsLangue(suppression!.champs.flatMap((c) => [c.name, c.value]), langue)).toEqual([]);
+    });
+  }
+
+  test('D6 — création refusée faute de droits du bot : journalisée, en erreur', async () => {
+    const sc = await monterScene({ langue: 'fr', format: 'V2', mode: 'CLASSIC' });
+    const roleBot = sc.client.guilds.cache.get(IDS.GUILD)!.roles.cache.get(IDS.ROLE_BOT)!;
+    (roleBot as unknown as { permissions: PermissionsBitField }).permissions = new PermissionsBitField(PermissionFlagsBits.ViewChannel);
+    const debut = journal.length;
+    avancer(1_500);
+    sc.monde.bouger(IDS.DEHORS, IDS.GEN);
+    await sc.monde.calme(sc.enCours);
+    const refus = journal.slice(debut).find((j) => j.champs.some((c) => c.value === m.log_tempvoice_create_refused({}, { locale: 'fr' })));
+    expect(refus).toBeDefined();
+    const champs = Object.fromEntries(refus!.champs.map((c) => [c.name, c.value]));
+    expect(champs['Déclenché par']).toBe(`<@${IDS.DEHORS}>`);
+    expect(champs['Droits manquants']).toBeTruthy();
+    expect(refus!.salons).toEqual([IDS.GEN]);
+  });
+
+  for (const langue of LANGUES) {
+    test(`D7 — titre, pied et auteur annoncé au journal vocal dans la langue du serveur (${langue})`, async () => {
+      const L = { locale: langue };
+      const { prendreIntentionVocale, reinitialiserIntentionsVocales } = await registreIntentions();
+      reinitialiserIntentionsVocales();
+      const { r } = await clicJournal({ langue, format: 'V2', mode: 'CLASSIC' }, 'm_kick');
+      const ligne = r.journal.find((j) => j.type === 'voice_panel')!;
+      expect(ligne.titre).toBe(m.log_tempvoice_title({}, L));
+      expect(ligne.pied).toBe(m.log_tempvoice_footer({ tag: ligne.acteur }, L));
+      expect(horsLangue([ligne.titre!, ligne.pied!, ...ligne.champs.flatMap((c) => [c.name, c.value])], langue)).toEqual([]);
+      // L'auteur que le journal vocal affichera pour cette déconnexion.
+      expect(prendreIntentionVocale(IDS.GUILD, IDS.CIBLE, 'disconnect')?.libelle)
+        .toBe(m.log_tempvoice_author_panel({ tag: ligne.acteur }, L));
+    });
+  }
 });

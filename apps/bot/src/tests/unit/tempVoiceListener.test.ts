@@ -477,7 +477,8 @@ describe('création d\'un salon temporaire', () => {
     // Le câblage complet : gabarit de nom, nombre de places, et surcharges
     // calculées à partir de la catégorie. Sans lui, le panneau du dashboard
     // n'a aucun effet sur les salons créés.
-    guildConfig = generatorConfig({ userLimit: 7, ownerPowers: ['mute'] });
+    // Serveur en français : le gabarit par défaut suit la langue du serveur.
+    guildConfig = { ...generatorConfig({ userLimit: 7, ownerPowers: ['mute'] }), language: 'fr' };
 
     const inherited = new Map<string, unknown>([
       // La catégorie refuse nommément l'accès à un membre : le salon temporaire
@@ -3013,7 +3014,8 @@ describe('Vitesse de réécriture du panneau', () => {
 
   test('la mention du propriétaire survit à la réécriture', async () => {
     // Une édition remplace tous les composants : sans repasser la mention, la
-    // ligne « @propriétaire » disparaissait au premier changement d'état.
+    // ligne « @propriétaire » disparaissait au premier changement d'état. Par
+    // défaut (`panel`, V2), elle vit dans la carte, pas dans un `content`.
     const { channel, message } = panneauDeSalon('930000000000000002');
     const { client, listeners } = fakeClient();
     registerTempVoiceListener(client);
@@ -3027,8 +3029,9 @@ describe('Vitesse de réécriture du panneau', () => {
     await new Promise((resolve) => setTimeout(resolve, 300));
 
     const appels = message.edit.mock.calls as unknown as unknown[][];
-    const charge = appels[0]?.[0] as { content?: string } | undefined;
-    expect(charge?.content).toBe(`<@${OWNER}>`);
+    const charge = appels[0]?.[0] as { content?: string; embeds?: Array<{ data: { description?: string } }> } | undefined;
+    expect(charge?.content).toBeUndefined();
+    expect(charge?.embeds?.[0]?.data.description).toContain(`<@${OWNER}>`);
 
     tempChannels.delete('930000000000000002');
   }, 10_000);
