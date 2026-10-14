@@ -936,7 +936,7 @@ async function routeSalon(s: ReturnType<typeof scene>, action: 'DELETE') {
   await vider();
 }
 
-describe('revue 7 — 1 : la passation est posée avant la première lecture', () => {
+describe('la passation est posée avant la première lecture', () => {
   test("un membre qui clique « Récupérer » pendant l'envoi du MP est refusé", async () => {
     const proprio = fauxMembre(PROPRIO);
     const membre = fauxMembre(MEMBRE);
@@ -1011,7 +1011,7 @@ describe('revue 7 — 1 : la passation est posée avant la première lecture', (
   });
 });
 
-describe('revue 7 — 2, 11 : textes de la récupération', () => {
+describe('textes de la récupération', () => {
   test("annulation d'une réclamation sur un serveur anglais : motif traduit", async () => {
     guildConfig = { ...guildConfig, language: 'en' };
     const proprio = fauxMembre(PROPRIO);
@@ -1047,7 +1047,7 @@ describe('revue 7 — 2, 11 : textes de la récupération', () => {
   });
 });
 
-describe('revue 7 — 3 : aucune mention non voulue', () => {
+describe('aucune mention non voulue', () => {
   test('un pseudo « @everyone » ne notifie personne (choix du propriétaire et récupération)', async () => {
     const proprio = fauxMembre(PROPRIO);
     const piege = fauxMembre(MEMBRE);
@@ -1076,7 +1076,7 @@ describe('revue 7 — 3 : aucune mention non voulue', () => {
   });
 });
 
-describe('revue 7 — 5 : un salon supprimé arrête la passation', () => {
+describe('un salon supprimé arrête la passation', () => {
   const sansDelai = () => {
     expect(actions()).not.toContain('Délai de passation écoulé sans choix');
     expect(actions()).not.toContain('Message « Récupérer le salon » posté');
@@ -1111,7 +1111,7 @@ describe('revue 7 — 5 : un salon supprimé arrête la passation', () => {
   });
 });
 
-describe('revue 7 — 8 : une lecture en panne ne supprime jamais un salon', () => {
+describe('une lecture en panne ne supprime jamais un salon', () => {
   test('réglages illisibles à la sortie du dernier membre : le salon reste', async () => {
     prismaMock.tempVoiceModPermissionsConfig.findUnique.mockImplementation((async () => { throw new Error('base injoignable'); }) as never);
     try {
@@ -1126,7 +1126,7 @@ describe('revue 7 — 8 : une lecture en panne ne supprime jamais un salon', () 
   });
 });
 
-describe('revue 7 — 9, 10 : gardes relues au clic', () => {
+describe('gardes relues au clic', () => {
   test('« Annuler la réclamation » après la désactivation du réglage : refus éphémère', async () => {
     const proprio = fauxMembre(PROPRIO);
     const membre = fauxMembre(MEMBRE);
@@ -1162,7 +1162,7 @@ describe('revue 7 — 9, 10 : gardes relues au clic', () => {
   });
 });
 
-describe('revue 7 — 6 : le choix de passation appartient au propriétaire parti', () => {
+describe('le choix de passation appartient au propriétaire parti', () => {
   test('un autre que le propriétaire (même modérateur) ne peut pas désigner le successeur', async () => {
     const proprio = fauxMembre(PROPRIO);
     const modo = fauxMembre(MODO, { staff: true });

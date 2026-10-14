@@ -43,6 +43,13 @@ import {
 } from '@kotbo/shared';
 
 import { jsonFailure } from '../../../shared/failure.js';
+
+// Une liste d'identifiants se compare comme un ensemble, un objet vide vaut une absence :
+// la page renvoie l'un ou l'autre sans que la valeur ait changé.
+function memeValeur(avant: unknown, apres: unknown): boolean {
+  const norme = (v: unknown) => (Array.isArray(v) ? [...v].sort() : v && typeof v === 'object' && Object.keys(v).length === 0 ? null : v ?? null);
+  return isDeepStrictEqual(norme(avant), norme(apres));
+}
 /**
  * Fonctionnalites qui se reglent salon par salon, et le champ de la guilde qui
  * les porte. Toutes se ramenent a deux formes : une liste d'identifiants a
@@ -2292,7 +2299,7 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
         const apres: Record<string, unknown> = { ...data };
         if (Array.isArray(body.autoThreadChannels)) apres.autoThreadChannels = body.autoThreadChannels;
         const nonVocalChange = touchesAutre && (!nonVocalAvant
-          || CLES_NON_VOCALES.some((key) => key in apres && !isDeepStrictEqual(nonVocalAvant[key] ?? null, apres[key] ?? null)));
+          || CLES_NON_VOCALES.some((key) => key in apres && !memeValeur(nonVocalAvant[key], apres[key])));
         if (nonVocalChange) {
           await pushAudit(guildId, {
             user: auditUser,

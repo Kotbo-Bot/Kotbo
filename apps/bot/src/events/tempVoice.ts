@@ -4127,6 +4127,17 @@ async function posterReclamation(
  * menu des présents ; sinon, ou sans MP possible, le salon est à récupérer.
  */
 async function proposerPassation(channel: VoiceChannel, entree: EntreeSalonTemporaire): Promise<void> {
+  try {
+    await deroulerPassation(channel, entree);
+  } catch (err) {
+    // Une étape restée sans minuterie rendrait le salon impossible à récupérer.
+    const etape = proprietes.get(channel.id);
+    if (etape?.etape === 'passation' && !etape.minuteur) clorePropriete(channel.id);
+    logger.warn('TempVoice', `Passation interrompue sur ${channel.id} :`, err);
+  }
+}
+
+async function deroulerPassation(channel: VoiceChannel, entree: EntreeSalonTemporaire): Promise<void> {
   const guild = channel.guild;
   const proprietaireId = entree.creatorId;
 
