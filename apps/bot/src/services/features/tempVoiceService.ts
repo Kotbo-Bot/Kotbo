@@ -5,6 +5,12 @@
  */
 import { OverwriteType, PermissionFlagsBits, type OverwriteResolvable } from 'discord.js';
 import type { TempVoiceOwnerPower, TempVoiceTextChatMode, TempVoicePolicy } from '@kotbo/shared';
+import {
+  TEMP_VOICE_CLAIM_WHO,
+  TEMP_VOICE_HANDOVER_DELAY_BOUNDS,
+  TEMP_VOICE_OWNERSHIP_DEFAULTS,
+  type TempVoiceOwnershipSettings,
+} from '@kotbo/shared';
 import * as m from '../../lib/paraglide/messages.js';
 import type { BotLocale } from '../../utils/i18n.js';
 
@@ -2330,4 +2336,33 @@ export function planReservation(
     default:
       return { type: 'tous_roles' };
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 9. La propriété d'un salon dont le propriétaire est parti
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Les six réglages de passation, tels que la ligne `TempVoiceModPermissionsConfig`
+ * les porte. Lecture tolérante, comme `normaliserReglagesPresentation` : un champ
+ * absent ou mal typé vaut son défaut, et le délai est ramené dans ses bornes —
+ * un salon ne doit jamais rester bloqué sur un réglage illisible.
+ */
+export function normaliserReglagesPropriete(raw: unknown): TempVoiceOwnershipSettings {
+  const ligne = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw as Record<string, unknown> : {};
+  const d = TEMP_VOICE_OWNERSHIP_DEFAULTS;
+  const booleen = (cle: 'handoverDmEnabled' | 'claimEmbedEnabled' | 'moderatorClaimOverride' | 'deleteWhenEmpty'): boolean =>
+    typeof ligne[cle] === 'boolean' ? ligne[cle] as boolean : d[cle];
+  const delai = ligne.handoverDelaySeconds;
+  const { min, max } = TEMP_VOICE_HANDOVER_DELAY_BOUNDS;
+  return {
+    handoverDmEnabled: booleen('handoverDmEnabled'),
+    handoverDelaySeconds: typeof delai === 'number' && Number.isFinite(delai)
+      ? Math.min(max, Math.max(min, Math.round(delai)))
+      : d.handoverDelaySeconds,
+    claimEmbedEnabled: booleen('claimEmbedEnabled'),
+    claimWho: TEMP_VOICE_CLAIM_WHO.find((v) => v === ligne.claimWho) ?? d.claimWho,
+    moderatorClaimOverride: booleen('moderatorClaimOverride'),
+    deleteWhenEmpty: booleen('deleteWhenEmpty'),
+  };
 }

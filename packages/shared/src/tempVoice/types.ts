@@ -32,3 +32,39 @@ export interface TempVoicePolicy {
   textChat: TempVoiceTextChatMode;
   ownerPowers: TempVoiceOwnerPower[];
 }
+
+/**
+ * Passation d'un salon dont le propriétaire part.
+ *
+ * Mêmes noms que les colonnes de `TempVoiceModPermissionsConfig` : le bot, la
+ * route du dashboard et la page lisent cette seule définition.
+ */
+export const TEMP_VOICE_CLAIM_WHO = ['present', 'moderators'] as const;
+/** `present` : tout membre en vocal, modérateurs compris ; `moderators` : le staff seul. */
+export type TempVoiceClaimWho = (typeof TEMP_VOICE_CLAIM_WHO)[number];
+
+export interface TempVoiceOwnershipSettings {
+  /** Le propriétaire qui part reçoit en MP le menu des présents pour choisir son successeur. */
+  handoverDmEnabled: boolean;
+  /** Durée de validité de ce MP, en secondes : seuls son choix et le staff changent la propriété pendant ce temps. */
+  handoverDelaySeconds: number;
+  /** Sans choix, un message « Récupérer le salon » est posté dans le chat du salon. */
+  claimEmbedEnabled: boolean;
+  claimWho: TempVoiceClaimWho;
+  /** Le staff peut annuler la réclamation d'un membre (bouton « Annuler la réclamation »). */
+  moderatorClaimOverride: boolean;
+  /** Un salon vide est supprimé ; sinon il reste, et le premier qui entre peut le récupérer. */
+  deleteWhenEmpty: boolean;
+}
+
+export const TEMP_VOICE_OWNERSHIP_DEFAULTS: TempVoiceOwnershipSettings = {
+  handoverDmEnabled: true,
+  handoverDelaySeconds: 30,
+  claimEmbedEnabled: true,
+  claimWho: 'present',
+  moderatorClaimOverride: true,
+  deleteWhenEmpty: true,
+};
+
+/** Bornes du délai de passation, en secondes, incluses. */
+export const TEMP_VOICE_HANDOVER_DELAY_BOUNDS = { min: 10, max: 300 } as const;

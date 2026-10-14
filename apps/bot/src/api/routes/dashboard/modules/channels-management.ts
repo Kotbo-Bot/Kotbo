@@ -22,6 +22,13 @@ import {
 } from '../../../../services/features/tempVoiceService.js';
 import { readWordStatsEnabled, startWordStatsBackfillIfTurnedOn, type ModuleRouteContext } from './_shared.js';
 import type { Prisma } from '@prisma/client';
+import {
+  TEMP_VOICE_CLAIM_WHO,
+  TEMP_VOICE_HANDOVER_DELAY_BOUNDS,
+  TEMP_VOICE_OWNERSHIP_DEFAULTS,
+  type TempVoiceClaimWho,
+  type TempVoiceOwnershipSettings,
+} from '@kotbo/shared';
 
 import { jsonFailure } from '../../../shared/failure.js';
 /**
@@ -99,7 +106,7 @@ interface TempVoiceAccessRequestConfigView {
   denyCooldownMinutes: number;
 }
 
-interface TempVoiceModPermissionsConfigView {
+interface TempVoiceModPermissionsConfigView extends TempVoiceOwnershipSettings {
   canRename: boolean;
   canChangeLimit: boolean;
   canLock: boolean;
@@ -212,6 +219,7 @@ const TEMP_VOICE_MOD_PERMISSIONS_DEFAULTS: TempVoiceModPermissionsConfigView = {
   panelComponents: 'V2',
   reservationFallbackMode: 'ANY_ROLE',
   perGeneratorPresentation: false,
+  ...TEMP_VOICE_OWNERSHIP_DEFAULTS,
 };
 
 /**
@@ -264,6 +272,12 @@ function viewTempVoiceModPermissionsConfig(
     panelComponents: string;
     reservationFallbackMode: string;
     perGeneratorPresentation: boolean;
+    handoverDmEnabled: boolean;
+    handoverDelaySeconds: number;
+    claimEmbedEnabled: boolean;
+    claimWho: string;
+    moderatorClaimOverride: boolean;
+    deleteWhenEmpty: boolean;
   } | null,
 ): TempVoiceModPermissionsConfigView {
   if (!row) return { ...TEMP_VOICE_MOD_PERMISSIONS_DEFAULTS };
@@ -297,6 +311,14 @@ function viewTempVoiceModPermissionsConfig(
       ? (row.reservationFallbackMode as TempVoiceReservationFallbackMode)
       : TEMP_VOICE_MOD_PERMISSIONS_DEFAULTS.reservationFallbackMode,
     perGeneratorPresentation: row.perGeneratorPresentation === true,
+    handoverDmEnabled: row.handoverDmEnabled,
+    handoverDelaySeconds: row.handoverDelaySeconds,
+    claimEmbedEnabled: row.claimEmbedEnabled,
+    claimWho: TEMP_VOICE_CLAIM_WHO.includes(row.claimWho as TempVoiceClaimWho)
+      ? (row.claimWho as TempVoiceClaimWho)
+      : TEMP_VOICE_OWNERSHIP_DEFAULTS.claimWho,
+    moderatorClaimOverride: row.moderatorClaimOverride,
+    deleteWhenEmpty: row.deleteWhenEmpty,
   };
 }
 
@@ -439,6 +461,10 @@ export function normalizeTempVoiceModPermissionsInput(
     | 'canTransfer'
     | 'panelCompactMode'
     | 'perGeneratorPresentation'
+    | 'handoverDmEnabled'
+    | 'claimEmbedEnabled'
+    | 'moderatorClaimOverride'
+    | 'deleteWhenEmpty'
   > = [
     'canRename',
     'canChangeLimit',
@@ -452,6 +478,11 @@ export function normalizeTempVoiceModPermissionsInput(
     // au-dessus, pas régime REJET comme les cinq réglages de présentation
     // ci-dessous — une valeur qui n'est pas `true` vaut `false`, jamais un 400.
     'perGeneratorPresentation',
+    // Les quatre interrupteurs de la passation, même régime booléen.
+    'handoverDmEnabled',
+    'claimEmbedEnabled',
+    'moderatorClaimOverride',
+    'deleteWhenEmpty',
   ];
   for (const key of boolKeys) {
     if (Object.prototype.hasOwnProperty.call(body, key)) {
@@ -525,6 +556,23 @@ export function normalizeTempVoiceModPermissionsInput(
       return { error: panelSettingError('Repli de la réservation', fallbackKey, value, TEMP_VOICE_RESERVATION_FALLBACK_MODE.join(' | ')) };
     }
     data.reservationFallbackMode = value as TempVoiceReservationFallbackMode;
+  }
+
+  // Passation : même régime REJET que la présentation — un délai ou un choix
+  // ramené en silence sur le défaut se lirait comme un réglage perdu.
+  if (Object.prototype.hasOwnProperty.call(body, 'claimWho')) {
+    if (!TEMP_VOICE_CLAIM_WHO.includes(body.claimWho as TempVoiceClaimWho)) {
+      return { error: panelSettingError('Qui peut récupérer le salon', 'claimWho', body.claimWho, TEMP_VOICE_CLAIM_WHO.join(' | ')) };
+    }
+    data.claimWho = body.claimWho as TempVoiceClaimWho;
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'handoverDelaySeconds')) {
+    const { min, max } = TEMP_VOICE_HANDOVER_DELAY_BOUNDS;
+    const n = body.handoverDelaySeconds;
+    if (typeof n !== 'number' || !Number.isInteger(n) || n < min || n > max) {
+      return { error: panelSettingError('Délai de passation', 'handoverDelaySeconds', n, `un nombre entier de secondes, de ${min} à ${max}`) };
+    }
+    data.handoverDelaySeconds = n;
   }
 
   return { data };
