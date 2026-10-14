@@ -118,6 +118,7 @@ import {
   dispositionNative,
   nomFichierEtat,
   planReservation,
+  normaliserReglagesPropriete,
   type ReglagesPresentation,
   type PlanReservation,
   type ModeEcriture,
@@ -137,6 +138,7 @@ import { rendreEtatPng, type ValeurEtat } from '../services/features/tempVoicePa
 import { messageEstV2, sansConversionV2 } from '../utils/patchV2.js';
 import * as m from '../lib/paraglide/messages.js';
 import { resolveGuildLocale, type BotLocale } from '../utils/i18n.js';
+import type { TempVoiceOwnershipSettings } from '@kotbo/shared';
 
 /**
  * Ce que le panneau doit savoir d'un salon et que Discord ne porte pas.
@@ -356,6 +358,7 @@ async function persisterEtatSalon(guildId: string, salonId: string): Promise<voi
 /** Un salon temporaire disparaît : ses demandes, ses marques d'origine et son
  *  historique de renommage aussi, sans laisser de ligne orpheline. */
 function oublierSalon(guildId: string, salonId: string): void {
+  clorePropriete(salonId);
   registreDemandes.oublierSalon(guildId, salonId);
   originesSurcharge.oublierSalon(guildId, salonId);
   historiquesRenommage.delete(salonId);
@@ -403,6 +406,8 @@ interface ReglagesModule {
    * `presentationDuSalon` est le seul endroit qui les assemble.
    */
   presentationParGenerateur: boolean;
+  /** Passation du salon quand le propriétaire part, et sort d'un salon vide. */
+  propriete: TempVoiceOwnershipSettings;
 }
 
 async function lireReglagesAdmin(guildId: string): Promise<ReglagesModule> {
@@ -430,6 +435,7 @@ async function lireReglagesAdmin(guildId: string): Promise<ReglagesModule> {
       // personnalisation par generateur. Le sens du repli va vers le
       // comportement actuel, jamais vers le nouveau.
       presentationParGenerateur: false,
+      propriete: normaliserReglagesPropriete(undefined),
     };
   }
   if (!ligne) {
@@ -441,6 +447,7 @@ async function lireReglagesAdmin(guildId: string): Promise<ReglagesModule> {
       // Aucune ligne = serveur qui n'a jamais ouvert l'onglet : rien de
       // personnalise, comme avant cette colonne.
       presentationParGenerateur: false,
+      propriete: normaliserReglagesPropriete(undefined),
     };
   }
 
@@ -466,6 +473,7 @@ async function lireReglagesAdmin(guildId: string): Promise<ReglagesModule> {
     // Tout ce qui n'est pas exactement `true` vaut faux, colonne absente comprise
     // — le client Prisma peut precéder la migration sans que rien ne bascule.
     presentationParGenerateur: presentationParGenerateurActive(ligne),
+    propriete: normaliserReglagesPropriete(ligne),
   };
 }
 
@@ -692,6 +700,7 @@ async function closeTempChannel(channel: VoiceChannel, reason: string): Promise<
 
   if (!deleted) return false;
 
+  annulerPropriete(channel, 'suppression');
   tempChannels.delete(channel.id);
   // Un salon temporaire disparaît ; ses demandes en attente, ses marques
   // d'origine et son historique de renommage aussi, sans laisser de ligne
@@ -800,7 +809,9 @@ async function sweepOrphanChannels(client: Client): Promise<void> {
       continue;
     }
 
-    if (channel.members.size === 0) {
+    // Un salon vide n'est supprimé que si le serveur le veut ; gardé, il est
+    // repris comme les autres et reste à récupérer.
+    if (channel.members.size === 0 && (await lireReglagesAdmin(entry.guildId)).propriete.deleteWhenEmpty) {
       const locale = await resolveGuildLocale(channel.guild?.id ?? '', channel.guild?.preferredLocale ?? null);
       // Relu après l'attente, comme à la sortie d'un membre : un salon rejoint
       // entre-temps est repris, pas supprimé.
@@ -1539,7 +1550,10 @@ async function appliquerEntreeVocale(channel: VoiceChannel, membreId: string): P
   if (!entree) return;
   const guildId = channel.guild?.id ?? '';
 
-  if (membreId === entree.creatorId) entree.departProprietaireA = undefined;
+  if (membreId === entree.creatorId) {
+    entree.departProprietaireA = undefined;
+    annulerPropriete(channel, 'retour');
+  }
 
   const decision = decisionEntreeVocal(
     modeDuSalon(channel, entree),
@@ -1578,6 +1592,13 @@ async function appliquerSortieVocale(channel: VoiceChannel, membreId: string): P
     await serializeByChannel(channel.id, async () => {
       const retiree = await poserSurcharge(channel, membreId, decision.patch);
       if (retiree) originesSurcharge.oublier(guildId, channel.id, membreId);
+    });
+  }
+
+  if (membreId === entree.creatorId) {
+    // La passation est un confort : son échec ne doit pas interrompre la sortie.
+    await proposerPassation(channel, entree).catch((err: unknown) => {
+      logger.warn('TempVoice', `Passation impossible sur ${channel.id} :`, err);
     });
   }
 
@@ -1795,7 +1816,7 @@ async function appliquerModeEcriture(
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** Actions ouvertes à qui n'est ni propriétaire ni staff. */
-const ACTIONS_OUVERTES = new Set(['claim', 'demander']);
+const ACTIONS_OUVERTES = new Set(['claim', 'reclamer', 'demander', 'propriete']);
 
 interface ContextePanneau {
   role: RoleAgissant;
@@ -1827,6 +1848,9 @@ interface ContextePanneau {
    * l'interaction et jamais dans le panneau public, qui est le même pour tous.
    */
   plan: PlanReservation;
+  /** `isStaff` de la personne qui clique, lu une fois : il décide qui réclame et qui tranche. */
+  staff: boolean;
+  propriete: TempVoiceOwnershipSettings;
 }
 
 /**
@@ -2323,6 +2347,11 @@ function panneauPropriete(
   const present = channel.members?.has(entree.creatorId) ?? false;
 
   if (present) {
+    // « Propriété » est ouvert aux présents pour qu'ils puissent réclamer : un
+    // membre sans pouvoir ne voit pas de bouton « Transférer » qui le refuserait.
+    if (ctxp.role === 'moderateur' && !ctxp.staff) {
+      return { embeds: [avis(m.panel_tempvoice_claim_owner_here({}, { locale: ctxp.locale }))], components: [] };
+    }
     return {
       embeds: encartRole(entree, ctxp),
       components: [
@@ -2349,10 +2378,16 @@ function panneauPropriete(
     }, { locale })
     : '';
 
+  // Le bouton dit d'avance pourquoi il attend : passation en cours,
+  // récupération réservée au staff, ou propriétaire qui regarde son salon.
+  const verdict = peutAgir(ctxp.role, 'recuperer', ctxp.reglages, locale);
+  const raison = verdict.autorise ? raisonRecuperation(channel, ctxp) : verdict.raison;
+
+  const description = m.panel_tempvoice_no_owner_desc({ owner: entree.creatorId, since: depuis }, { locale });
   const abandon = new EmbedBuilder()
     .setColor(COULEUR_NEUTRE)
     .setTitle(`${I.crown} ${m.panel_tempvoice_no_owner_title({}, { locale })}`)
-    .setDescription(m.panel_tempvoice_no_owner_desc({ owner: entree.creatorId, since: depuis }, { locale }));
+    .setDescription(raison ? `${description}\n\n${raison}` : description);
 
   return {
     embeds: [abandon],
@@ -2362,7 +2397,8 @@ function panneauPropriete(
         new ButtonBuilder()
           .setCustomId('tempvoice:claim')
           .setLabel(`${ICONES_ABSENTES.recuperer} ${m.panel_tempvoice_btn_claim({}, { locale })}`)
-          .setStyle(ButtonStyle.Success),
+          .setStyle(ButtonStyle.Success)
+          .setDisabled(Boolean(raison)),
       ),
     ],
   };
@@ -2645,6 +2681,9 @@ export const LIBELLES_ACTIONS_PANNEAU: Readonly<Record<string, string>> = {
   m_untrust: "Retirer l'autorisation d'un membre",
   m_transfer: 'Transférer la propriété du salon',
   claim: 'Récupérer le salon',
+  reclamer: 'Récupérer le salon (message du salon)',
+  reclam_annuler: 'Annuler une réclamation',
+  leader: 'Choisir le nouveau propriétaire (MP de passation)',
   resa_rien: 'Réservation : ne déplacer personne',
   resa_deplacer: 'Réservation : déplacer les membres restants',
   resa_deconnecter: 'Réservation : déconnecter les membres restants',
@@ -2750,6 +2789,8 @@ async function journaliserActionPanneau(p: {
   action: string;
   reponse: string | null;
   issue?: 'Refusée' | 'Erreur';
+  /** L'action a changé le propriétaire : avant → après. */
+  proprietaire?: { avant: string; apres: string };
 }): Promise<void> {
   try {
     const { interaction, guild, channel, action, issue } = p;
@@ -2769,6 +2810,7 @@ async function journaliserActionPanneau(p: {
     if (valeur) champs.push({ name: 'Valeur choisie', value: coupe(valeur), inline: true });
     if (cible) champs.push({ name: 'Cible', value: coupe(cible), inline: true });
     if (issue) champs.push({ name: 'Issue', value: issue, inline: true });
+    if (p.proprietaire) champs.push({ name: 'Propriétaire', value: `<@${p.proprietaire.avant}> → <@${p.proprietaire.apres}>`, inline: true });
     if (texte) champs.push({ name: issue ? 'Motif' : 'Réponse au membre', value: coupe(texte), inline: false });
 
     const embed = new EmbedBuilder()
@@ -2857,10 +2899,13 @@ export function registerTempVoiceListener(client: Client): void {
           oldChannel.members.size === 0
         ) {
           const locale = await resolveGuildLocale(guild.id, guild.preferredLocale ?? null);
+          // Un serveur peut garder ses salons vides : la sortie se traite alors
+          // comme celle d'un salon vivant, et le salon reste à récupérer.
+          const supprimer = (await lireReglagesAdmin(guild.id)).propriete.deleteWhenEmpty;
           // Relu après l'attente : quelqu'un a pu entrer pendant la résolution de
           // la langue, et `closeTempChannel` supprimerait le salon avec lui dedans.
           // S'il n'est plus vide, la sortie se traite comme celle d'un salon vivant.
-          if (oldChannel.members.size === 0) {
+          if (supprimer && oldChannel.members.size === 0) {
             const closed = await closeTempChannel(oldChannel, m.panel_tempvoice_audit_empty({}, { locale }));
             if (closed) {
               logger.info('TempVoice', `Salon supprimé car vide : ${oldChannel.name} (${oldChannel.id})`);
@@ -2933,7 +2978,8 @@ export function registerTempVoiceListener(client: Client): void {
     // voit la même rangée, le tri se fait ici, au clic. `claim` rend un salon
     // dont le propriétaire est parti ; `demander` s'adresse justement à qui est
     // dehors. Les deux sont donc ouvertes à autrui.
-    if (!ACTIONS_OUVERTES.has(action) && cache.creatorId !== user.id && !(await isStaff(guildId, actingMember))) {
+    const staff = await isStaff(guildId, actingMember);
+    if (!ACTIONS_OUVERTES.has(action) && cache.creatorId !== user.id && !staff) {
       await reponses.vue
         .reply({
           embeds: [avis(m.panel_tempvoice_err_owner_only({}, { locale }))],
@@ -2972,6 +3018,7 @@ export function registerTempVoiceListener(client: Client): void {
         module.reservation.rolesReservables,
         presentation.repliReservation,
       ),
+      staff,
     };
 
     // ⚠️ Aucun redessin ici. Il y en avait un, hérité de l'époque où
@@ -2987,8 +3034,9 @@ export function registerTempVoiceListener(client: Client): void {
     // Chaque action qui change quelque chose appelle `planifierRafraichissement`
     // une fois son travail fait : c'est là que le redessin a un sens.
     let erreur = false;
+    const contexte: ActionContext = { interaction: reponses.vue, action, channel, cache, guild, guildId, actingMember, ctxp };
     try {
-      await handleTempVoiceAction({ interaction: reponses.vue, action, channel, cache, guild, guildId, actingMember, ctxp });
+      await handleTempVoiceAction(contexte);
     } catch (err) {
       erreur = true;
       logger.error('TempVoice', `Erreur lors de l'action « ${action} » :`, err);
@@ -3011,7 +3059,10 @@ export function registerTempVoiceListener(client: Client): void {
         : reponses.vue.reply({ ...inconnue, flags: [MessageFlags.Ephemeral] })).catch(() => null);
     }
     // Après le traitement, pour que la réponse faite au membre soit connue.
-    await journaliserActionPanneau({ interaction, guild, channel, action, reponse: reponses.texte, issue: erreur ? 'Erreur' : undefined });
+    await journaliserActionPanneau({
+      interaction, guild, channel, action, reponse: reponses.texte, issue: erreur ? 'Erreur' : contexte.issue,
+      proprietaire: contexte.proprietaire,
+    });
   });
 
   logger.success('TempVoice', 'Écouteur Vocal Temporaire enregistré');
@@ -3164,6 +3215,10 @@ interface ActionContext {
   /** Qui clique et ce que les modérateurs ont le droit de faire sur ce serveur :
    *  lus une fois, passés explicitement — `peutAgir` n'a pas de défaut. */
   ctxp: ContextePanneau;
+  /** Un traitement qui refuse l'action le dit au journal, même sans passer par la garde. */
+  issue?: 'Refusée';
+  /** Posé par `changerProprietaire` quand CETTE action a changé le propriétaire : avant → après. */
+  proprietaire?: { avant: string; apres: string };
 }
 
 function textModal(customId: string, title: string, label: string, placeholder: string, maxLength: number) {
@@ -3414,47 +3469,560 @@ function annulerDemande(guildId: string, salonId: string, demandeurId: string, m
 async function transmettreCarteDecision(
   channel: VoiceChannel,
   guild: DiscordGuild,
-  proprietaireId: string,
-  config: ConfigDemandesAcces,
   carte: PanneauRendu,
-): Promise<CanalNotification | null> {
-  const mention = `<@${proprietaireId}>`;
-  let proprietaire: GuildMember | null | undefined;
+  canaux: readonly CanalNotification[],
+  options: {
+    /** Qui est mentionné, et le seul qu'un MP peut joindre. */
+    destinataireId?: string | null;
+    canalId?: string | null;
+    /** Le serveur a réglé V1 : la carte part sans conversion en Components V2. */
+    v1?: boolean;
+  } = {},
+): Promise<{ canal: CanalNotification; message: Message | null } | null> {
+  const { destinataireId = null, canalId = null } = options;
+  const mention = destinataireId ? `<@${destinataireId}>` : '';
+  // La marque V1 est une clé non énumérable : elle se pose sur la charge
+  // finale, qu'un étalement aurait perdue.
+  const charge = <T extends object>(p: T): T => (options.v1 ? sansConversionV2(p) : p);
+  const publique = () => charge({
+    ...(mention ? { content: mention } : {}),
+    ...carte,
+    allowedMentions: { users: destinataireId ? [destinataireId] : [] },
+  });
+  let destinataire: GuildMember | null | undefined;
 
-  for (const canal of ordreNotification(config)) {
+  for (const canal of canaux) {
     if (canal === 'VOICE') {
-      const poste = await channel.send({ content: mention, ...carte, allowedMentions: { users: [proprietaireId] } }).catch((err: unknown) => {
-        logger.warn('TempVoice', `La demande d'accès n'a pas pu être postée dans ${channel.id} :`, err);
+      const poste = await channel.send(publique()).catch((err: unknown) => {
+        logger.warn('TempVoice', `La carte de décision n'a pas pu être postée dans ${channel.id} :`, err);
         return null;
       });
-      if (poste) return 'VOICE';
+      if (poste) return { canal: 'VOICE', message: poste };
       continue;
     }
 
     if (canal === 'DM') {
-      if (proprietaire === undefined) proprietaire = await guild.members.fetch(proprietaireId).catch(() => null);
-      const envoye = proprietaire
-        ? await proprietaire.send(carte).then(() => true).catch(() => false)
-        : false;
-      if (envoye) return 'DM';
+      if (!destinataireId) continue;
+      if (destinataire === undefined) destinataire = await guild.members.fetch(destinataireId).catch(() => null);
+      // Un MP fermé rejette l'envoi : seul un envoi résolu vaut remise.
+      const envoi = destinataire
+        ? await destinataire.send(charge({ ...carte })).then((message) => ({ message: message ?? null })).catch(() => null)
+        : null;
+      if (envoi) return { canal: 'DM', message: envoi.message };
       continue;
     }
 
-    if (!config.canalId) continue;
-    const dedie = await guild.channels.fetch(config.canalId).catch(() => null);
+    if (!canalId) continue;
+    const dedie = await guild.channels.fetch(canalId).catch(() => null);
     if (!dedie?.isTextBased()) continue;
     // Un salon où le bot ne peut pas écrire n'est pas un canal : l'essayer
     // quand même coûterait un aller-retour pour un refus certain.
     const moi = guild.members.me;
     if (moi && !dedie.permissionsFor(moi)?.has(PermissionFlagsBits.SendMessages)) continue;
-    const poste = await dedie.send({ content: mention, ...carte, allowedMentions: { users: [proprietaireId] } }).catch((err: unknown) => {
-      logger.warn('TempVoice', `La demande d'accès n'a pas pu être postée dans ${config.canalId} :`, err);
+    const poste = await dedie.send(publique()).catch((err: unknown) => {
+      logger.warn('TempVoice', `La carte de décision n'a pas pu être postée dans ${canalId} :`, err);
       return null;
     });
-    if (poste) return 'CHANNEL';
+    if (poste) return { canal: 'CHANNEL', message: poste };
   }
 
   return null;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Passation d'un salon dont le propriétaire est parti
+//
+// Trois étapes, en mémoire seulement, une au plus par salon :
+//   - passation : le propriétaire parti a reçu en MP le menu des présents ;
+//     seuls son choix et le staff changent la propriété jusqu'au délai ;
+//   - attente : le message « Récupérer le salon » est posté, le premier membre
+//     présent qui clique l'obtient ;
+//   - reclame : un membre l'a obtenu, le staff peut annuler pendant dix minutes.
+// Un redémarrage les perd. L'absence d'étape vaut « récupération ouverte » :
+// le propriétaire reste celui que la base porte, le bouton du panneau marche,
+// et un ancien message cliqué fait une réclamation ordinaire.
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface EtapePassation {
+  etape: 'passation';
+  proprietaireId: string;
+  expireA: number;
+  minuteur: ReturnType<typeof setTimeout>;
+  locale: BotLocale;
+  /** Le MP envoyé, refermé quand la passation se termine. */
+  mp: Message | null;
+}
+
+interface EtapeAttente {
+  etape: 'attente';
+  /** Le propriétaire parti, nommé dans le message. */
+  ancienId: string;
+  message: Message;
+  minuteur: null;
+  locale: BotLocale;
+}
+
+interface EtapeReclame {
+  etape: 'reclame';
+  reclamantId: string;
+  ancienId: string;
+  message: Message;
+  minuteur: ReturnType<typeof setTimeout>;
+  locale: BotLocale;
+}
+
+type EtapePropriete = EtapePassation | EtapeAttente | EtapeReclame;
+
+const proprietes = new Map<string, EtapePropriete>();
+
+/** Le bouton « Annuler la réclamation » expire au bout de ce délai. */
+const DUREE_ANNULATION_MS = 10 * 60 * 1000;
+
+/** Termine l'étape en cours : minuterie coupée, état retiré. */
+function clorePropriete(salonId: string): EtapePropriete | undefined {
+  const etape = proprietes.get(salonId);
+  if (!etape) return undefined;
+  if (etape.minuteur) clearTimeout(etape.minuteur);
+  proprietes.delete(salonId);
+  return etape;
+}
+
+/** Réécrit un message de passation ; un échec (message supprimé, MP fermé) n'arrête rien. */
+function editerMessage(message: Message | null | undefined, charge: PanneauRendu): void {
+  void Promise.resolve().then(() => message?.edit(charge)).catch(() => null);
+}
+
+function fermerCarte(message: Message | null | undefined, texte: string): void {
+  editerMessage(message, { embeds: [avis(texte)], components: [] });
+}
+
+/** L'échéance passe dans la file du salon, après tout changement de propriétaire en cours. */
+function minuteriePropriete(channel: VoiceChannel, delaiMs: number, tache: () => Promise<void>): ReturnType<typeof setTimeout> {
+  const minuteur = setTimeout(() => {
+    void serializeByChannel(channel.id, tache).catch((err: unknown) => {
+      logger.warn('TempVoice', `Échéance de passation non traitée sur ${channel.id} :`, err);
+    });
+  }, delaiMs);
+  (minuteur as unknown as { unref?: () => void }).unref?.();
+  return minuteur;
+}
+
+/** Les secondes comptent ici : « 1 min » pour trente secondes serait faux. */
+function formaterDelai(ms: number, locale: BotLocale): string {
+  return ms < 60_000
+    ? m.panel_tempvoice_duration_sec({ count: Math.max(1, Math.round(ms / 1000)) }, { locale })
+    : formaterDuree(ms, locale);
+}
+
+/**
+ * Pourquoi ce membre ne peut pas récupérer le salon maintenant, `null` s'il le
+ * peut. Le staff passe toujours ; un membre attend la fin de la passation.
+ */
+function raisonRecuperation(channel: VoiceChannel, ctxp: ContextePanneau): string | null {
+  if (ctxp.staff) return null;
+  const locale = ctxp.locale;
+  if (ctxp.propriete.claimWho === 'moderators') return m.panel_tempvoice_claim_moderators_only({}, { locale });
+  const etape = proprietes.get(channel.id);
+  if (etape?.etape !== 'passation') return null;
+  const secondes = Math.max(1, Math.ceil((etape.expireA - Date.now()) / 1000));
+  return m.panel_tempvoice_claim_wait_handover({ seconds: secondes }, { locale });
+}
+
+/**
+ * Une ligne `voice_panel` pour ce qui arrive sans clic (départ, échéance,
+ * annulation) : même forme que `journaliserActionPanneau`, acteur « Système ».
+ */
+async function journaliserPropriete(
+  channel: VoiceChannel,
+  libelle: string,
+  details: { canal?: string; avant?: string; apres?: string; motif?: string } = {},
+): Promise<void> {
+  try {
+    const champs: Array<{ name: string; value: string; inline?: boolean }> = [
+      { name: 'Membre', value: 'Système', inline: true },
+      { name: 'Salon vocal', value: `<#${channel.id}>\n\`${channel.id}\``, inline: true },
+      { name: 'Action', value: libelle, inline: false },
+    ];
+    if (details.canal) champs.push({ name: 'Canal', value: details.canal, inline: true });
+    if (details.avant && details.apres) {
+      champs.push({ name: 'Propriétaire', value: `<@${details.avant}> → <@${details.apres}>`, inline: true });
+    }
+    if (details.motif) champs.push({ name: 'Motif', value: details.motif, inline: false });
+
+    const embed = new EmbedBuilder()
+      .setColor(0x457b9d)
+      .setTitle('🎛️ Action du panneau vocal')
+      .setDescription(`Système — ${libelle}`)
+      .addFields(champs)
+      .setTimestamp();
+    await sendLogEmbed(channel.guild as never, embed, 'voice_panel', undefined, 'Système', [channel.id]);
+  } catch (err) {
+    logger.warn('TempVoice', `Journal de passation non envoyé (« ${libelle} ») :`, err);
+  }
+}
+
+/** Le MP du propriétaire qui part : le menu des présents, rien d'autre. */
+function carteDesignation(
+  channel: VoiceChannel,
+  proprietaireId: string,
+  presents: GuildMember[],
+  delaiMs: number,
+  locale: BotLocale,
+): PanneauRendu {
+  return {
+    embeds: [
+      new EmbedBuilder()
+        .setColor(COULEUR_ACCENT)
+        .setTitle(`${I.crown} ${m.panel_tempvoice_handover_title({}, { locale })}`)
+        .setDescription(m.panel_tempvoice_handover_desc({ channel: channel.name, duration: formaterDelai(delaiMs, locale) }, { locale })),
+    ],
+    components: [
+      rangee(
+        // Identifiant `leader:<propriétaire>:<salon>` : le MP n'a pas le salon sous la main.
+        menuMembresPresents(presents.slice(0, MAX_OPTIONS_MENU), presents.length, locale, `tempvoice:leader:${proprietaireId}:${channel.id}`)
+          .setPlaceholder(m.panel_tempvoice_handover_placeholder({}, { locale })),
+      ),
+    ],
+  };
+}
+
+/**
+ * Le message « Récupérer le salon » du chat du salon. Une fois le salon pris,
+ * le bouton reste, grisé, sous « Récupéré par X » ; l'annulation n'apparaît
+ * que pour la réclamation d'un membre, et seul le staff peut s'en servir.
+ */
+function messageReclamation(
+  salonId: string,
+  ancienId: string,
+  locale: BotLocale,
+  prise?: { par: string; annulable: boolean },
+): PanneauRendu {
+  const description = m.panel_tempvoice_claim_embed_desc({ owner: ancienId }, { locale });
+  const boutons = [
+    // L'icône « récupérer » manque au jeu `ktb_` : l'Unicode reste.
+    new ButtonBuilder()
+      .setCustomId('tempvoice:reclamer')
+      .setLabel(`${ICONES_ABSENTES.recuperer} ${m.panel_tempvoice_btn_claim({}, { locale })}`)
+      .setStyle(ButtonStyle.Success)
+      .setDisabled(Boolean(prise)),
+  ];
+  if (prise?.annulable) {
+    boutons.push(
+      new ButtonBuilder()
+        .setCustomId(`tempvoice:reclam_annuler:${prise.par}:${salonId}`)
+        .setLabel(m.panel_tempvoice_btn_cancel_claim({}, { locale }))
+        .setStyle(ButtonStyle.Danger),
+    );
+  }
+  return {
+    embeds: [
+      new EmbedBuilder()
+        .setColor(prise ? COULEUR_NEUTRE : COULEUR_ACCENT)
+        .setTitle(`${I.crown} ${m.panel_tempvoice_claim_embed_title({}, { locale })}`)
+        .setDescription(prise ? `${description}\n\n${m.panel_tempvoice_claim_embed_taken({ user: prise.par }, { locale })}` : description),
+    ],
+    components: [rangee(...boutons)],
+  };
+}
+
+/** La propriété est passée à `nouveauId` par un autre chemin : l'étape en cours le dit. */
+function remplacerEtape(salonId: string, etape: EtapePropriete | undefined, nouveauId: string): void {
+  if (!etape) return;
+  if (etape.etape === 'passation') {
+    fermerCarte(etape.mp, `${I.check} ${m.panel_tempvoice_handover_taken({ user: nouveauId }, { locale: etape.locale })}`);
+    return;
+  }
+  editerMessage(etape.message, messageReclamation(salonId, etape.ancienId, etape.locale, { par: nouveauId, annulable: false }));
+}
+
+interface OptionsPassation {
+  reglages: TempVoiceOwnershipSettings;
+  v1: boolean;
+  locale: BotLocale;
+}
+
+/** Sans choix du propriétaire : le message « Récupérer le salon », si le serveur le veut. */
+async function posterReclamation(
+  channel: VoiceChannel,
+  entree: EntreeSalonTemporaire,
+  options: OptionsPassation,
+  motif: string,
+): Promise<void> {
+  planifierRafraichissementPanneau(channel);
+  if (!options.reglages.claimEmbedEnabled) {
+    await journaliserPropriete(channel, 'Récupération ouverte (bouton du panneau)', { motif });
+    return;
+  }
+
+  const ancienId = entree.creatorId;
+  const rendu = messageReclamation(channel.id, ancienId, options.locale);
+  const poste = await channel.send(options.v1 ? sansConversionV2({ ...rendu }) : rendu).catch((err: unknown) => {
+    logger.warn('TempVoice', `Le message de récupération n'a pas pu être posté dans ${channel.id} :`, err);
+    return null;
+  });
+  if (!poste) {
+    await journaliserPropriete(channel, 'Message « Récupérer le salon » impossible à poster', { motif });
+    return;
+  }
+
+  // Revenu, salon repris ou supprimé pendant l'envoi : le message n'a plus d'objet.
+  if (channel.members?.has(ancienId) || tempChannels.get(channel.id) !== entree
+    || entree.creatorId !== ancienId || proprietes.has(channel.id)) {
+    void Promise.resolve().then(() => poste.delete()).catch(() => null);
+    return;
+  }
+  proprietes.set(channel.id, { etape: 'attente', ancienId, message: poste, minuteur: null, locale: options.locale });
+  await journaliserPropriete(channel, 'Message « Récupérer le salon » posté', { motif });
+}
+
+/**
+ * Le propriétaire quitte son salon : s'il reste du monde, il reçoit en MP le
+ * menu des présents ; sinon, ou sans MP possible, le salon est à récupérer.
+ */
+async function proposerPassation(channel: VoiceChannel, entree: EntreeSalonTemporaire): Promise<void> {
+  const guild = channel.guild;
+  const proprietaireId = entree.creatorId;
+  const module = await lireReglagesAdmin(guild.id);
+  const options: OptionsPassation = {
+    reglages: module.propriete,
+    v1: (await presentationDuSalon(guild.id, entree, module)).composants === 'V1',
+    locale: await resolveGuildLocale(guild.id, guild.preferredLocale ?? null),
+  };
+  const { locale } = options;
+
+  // Un départ remplace l'étape précédente : l'annulation d'une réclamation
+  // d'avant expire avec ce nouveau message.
+  remplacerEtape(channel.id, clorePropriete(channel.id), proprietaireId);
+
+  const presents = [...(channel.members?.values() ?? [])].filter((membre) => !membre.user?.bot);
+  if (presents.length === 0 || !module.propriete.handoverDmEnabled) {
+    await posterReclamation(channel, entree, options, presents.length === 0 ? 'Salon vide' : 'MP de passation désactivé');
+    return;
+  }
+
+  const delaiMs = module.propriete.handoverDelaySeconds * 1000;
+  const envoi = await transmettreCarteDecision(
+    channel,
+    guild,
+    carteDesignation(channel, proprietaireId, presents, delaiMs, locale),
+    ['DM'],
+    { destinataireId: proprietaireId, v1: options.v1 },
+  );
+
+  if (channel.members?.has(proprietaireId) || tempChannels.get(channel.id) !== entree
+    || entree.creatorId !== proprietaireId || proprietes.has(channel.id)) {
+    fermerCarte(envoi?.message, `${I.warn} ${m.panel_tempvoice_handover_owner_back({}, { locale })}`);
+    return;
+  }
+  if (!envoi) {
+    await posterReclamation(channel, entree, options, 'MP impossible (messages privés fermés)');
+    return;
+  }
+
+  const etape: EtapePassation = {
+    etape: 'passation',
+    proprietaireId,
+    expireA: Date.now() + delaiMs,
+    locale,
+    mp: envoi.message,
+    minuteur: minuteriePropriete(channel, delaiMs, async () => {
+      if (proprietes.get(channel.id) !== etape) return;
+      clorePropriete(channel.id);
+      fermerCarte(etape.mp, `${I.warn} ${m.panel_tempvoice_handover_expired({}, { locale })}`);
+      await journaliserPropriete(channel, 'Délai de passation écoulé sans choix');
+      await posterReclamation(channel, entree, options, 'Délai de passation écoulé');
+    }),
+  };
+  proprietes.set(channel.id, etape);
+  await journaliserPropriete(channel, 'Départ du propriétaire : MP de passation envoyé', {
+    canal: 'Message privé',
+    motif: `${module.propriete.handoverDelaySeconds} s pour choisir`,
+  });
+}
+
+/** Le propriétaire revient, le salon disparaît : l'étape en cours s'arrête là. */
+function annulerPropriete(channel: VoiceChannel, motif: 'retour' | 'suppression'): void {
+  // Le retour qui compte est celui du propriétaire absent : après une
+  // réclamation, le propriétaire est le réclamant, déjà présent.
+  if (motif === 'retour' && proprietes.get(channel.id)?.etape === 'reclame') return;
+  const etape = clorePropriete(channel.id);
+  if (!etape) return;
+  const pourquoi = motif === 'retour' ? 'retour du propriétaire' : 'salon supprimé';
+
+  if (etape.etape === 'passation') {
+    fermerCarte(etape.mp, `${I.warn} ${motif === 'retour'
+      ? m.panel_tempvoice_handover_owner_back({}, { locale: etape.locale })
+      : m.panel_tempvoice_handover_channel_deleted({}, { locale: etape.locale })}`);
+    void journaliserPropriete(channel, `Passation annulée : ${pourquoi}`);
+  } else {
+    // Le message vit dans le salon : il part avec lui, ou au retour du propriétaire.
+    if (motif === 'retour') void Promise.resolve().then(() => etape.message.delete()).catch(() => null);
+    void journaliserPropriete(channel, `Message « Récupérer le salon » retiré : ${pourquoi}`);
+  }
+  // Un salon supprimé n'a plus de panneau à redessiner.
+  if (motif === 'retour') planifierRafraichissementPanneau(channel);
+}
+
+/**
+ * Le choix du propriétaire parti, depuis son MP. L'étape est revue dans la
+ * file du salon : un retour, l'échéance ou un modérateur passés entre-temps
+ * rendent le MP périmé. Un membre choisi qui a quitté le vocal est refusé, et
+ * le MP reste valable jusqu'au délai.
+ */
+async function designerLeader(ctx: ActionContext, cibleId: string): Promise<void> {
+  const { interaction, channel, cache, guild, ctxp } = ctx;
+  const locale = ctxp.locale;
+  const proprietaireId = interaction.customId.split(':')[2] ?? '';
+
+  const issue = await serializeByChannel(channel.id, async (): Promise<'perimee' | 'parti' | GuildMember> => {
+    const etape = proprietes.get(channel.id);
+    if (etape?.etape !== 'passation' || etape.proprietaireId !== proprietaireId
+      || interaction.user.id !== proprietaireId || cache.creatorId !== proprietaireId) return 'perimee';
+    const cible = channel.members?.get(cibleId);
+    if (!cible || cible.user?.bot) return 'parti';
+    clorePropriete(channel.id);
+    await changerProprietaire(channel, cache, guild, cible, ctx);
+    return cible;
+  });
+
+  if (issue === 'perimee') {
+    const texte = `${I.warn} ${m.panel_tempvoice_handover_stale({}, { locale })}`;
+    await cloreCarteDecision(interaction, texte);
+    await respond(interaction, texte);
+    return;
+  }
+  if (issue === 'parti') {
+    ctx.issue = 'Refusée';
+    const nom = guild.members.cache?.get(cibleId)?.displayName ?? cibleId;
+    await respond(interaction, `${I.warn} ${m.panel_tempvoice_handover_gone({ name: nom }, { locale })}`);
+    return;
+  }
+
+  const texte = m.panel_tempvoice_handover_named({ name: issue.displayName, owner: proprietaireId }, { locale });
+  await cloreCarteDecision(interaction, texte);
+  await respond(interaction, texte);
+  await channel.send({ content: texte }).catch(() => null);
+  planifierRafraichissementPanneau(channel);
+}
+
+/**
+ * « Récupérer le salon », depuis le panneau (`claim`) ou depuis le message du
+ * chat (`reclamer`). Le premier clic valide gagne : la prise est revue dans la
+ * file du salon, et les suivants trouvent un propriétaire présent.
+ */
+async function reclamerSalon(ctx: ActionContext, reply: (texte: string) => Promise<void>): Promise<void> {
+  const { interaction, channel, cache, guild, ctxp } = ctx;
+  const locale = ctxp.locale;
+  const demandeurId = interaction.user.id;
+  const refuser = async (texte: string): Promise<void> => {
+    ctx.issue = 'Refusée';
+    await reply(texte);
+  };
+
+  const verdict = peutAgir(ctxp.role, 'recuperer', ctxp.reglages, locale);
+  if (!verdict.autorise) return refuser(`${I.crown} ${verdict.raison}`);
+  if (channel.members.has(cache.creatorId)) return refuser(`${I.crown} ${m.panel_tempvoice_claim_taken({ user: cache.creatorId }, { locale })}`);
+  // On ne récupère que le salon où l'on se trouve : le panneau reste lisible
+  // depuis l'extérieur.
+  if (!channel.members.has(demandeurId)) return refuser(m.panel_tempvoice_err_join_before_claim({}, { locale }));
+  const demandeur = ctx.actingMember;
+  if (!demandeur) return refuser(m.panel_tempvoice_err_profile_unreadable_formal({}, { locale }));
+  const raison = raisonRecuperation(channel, ctxp);
+  if (raison) return refuser(`${I.lock} ${raison}`);
+
+  const prise = await serializeByChannel(channel.id, async () => {
+    if (channel.members.has(cache.creatorId)) return null;
+    const precedente = clorePropriete(channel.id);
+    const avant = cache.creatorId;
+    await changerProprietaire(channel, cache, guild, demandeur, ctx);
+    return { precedente, avant };
+  });
+  if (!prise) return refuser(`${I.crown} ${m.panel_tempvoice_claim_taken({ user: cache.creatorId }, { locale })}`);
+
+  const { precedente, avant } = prise;
+  // Le message à mettre à jour : celui de l'étape, ou celui qu'on vient de
+  // cliquer quand l'étape a été perdue (redémarrage).
+  const message = precedente && precedente.etape !== 'passation'
+    ? precedente.message
+    : ctx.action === 'reclamer' && interaction.isMessageComponent() ? interaction.message : null;
+  if (precedente?.etape === 'passation') remplacerEtape(channel.id, precedente, demandeurId);
+
+  const annulable = Boolean(message) && !ctxp.staff && ctxp.propriete.moderatorClaimOverride;
+  if (message) editerMessage(message, messageReclamation(channel.id, avant, locale, { par: demandeurId, annulable }));
+  if (message && annulable) {
+    const etape: EtapeReclame = {
+      etape: 'reclame',
+      reclamantId: demandeurId,
+      ancienId: avant,
+      message,
+      locale,
+      minuteur: minuteriePropriete(channel, DUREE_ANNULATION_MS, async () => {
+        if (proprietes.get(channel.id) !== etape) return;
+        clorePropriete(channel.id);
+        editerMessage(message, messageReclamation(channel.id, avant, locale, { par: demandeurId, annulable: false }));
+        await journaliserPropriete(channel, "Fin de la possibilité d'annuler la réclamation");
+      }),
+    };
+    proprietes.set(channel.id, etape);
+  }
+
+  const annonce = m.panel_tempvoice_claimed({ name: demandeur.displayName }, { locale });
+  await reply(annonce);
+  // Le message mis à jour annonce déjà la reprise dans le salon.
+  if (!message) await channel.send({ content: annonce }).catch(() => null);
+  planifierRafraichissementPanneau(channel);
+}
+
+/**
+ * Un modérateur annule la réclamation d'un membre : le réclamant perd la
+ * propriété, qui revient nominalement au propriétaire parti — absent, donc le
+ * salon est de nouveau à récupérer, et il retrouve son salon s'il revient.
+ */
+async function annulerReclamation(ctx: ActionContext): Promise<void> {
+  const { interaction, channel, cache, guild, ctxp } = ctx;
+  const locale = ctxp.locale;
+  if (!ctxp.staff) {
+    ctx.issue = 'Refusée';
+    await respond(interaction, `${I.lock} ${m.panel_tempvoice_claim_staff_only({}, { locale })}`);
+    return;
+  }
+  const reclamantId = interaction.customId.split(':')[2] ?? '';
+  const valide = () => {
+    const etape = proprietes.get(channel.id);
+    return etape?.etape === 'reclame' && etape.reclamantId === reclamantId && cache.creatorId === reclamantId ? etape : null;
+  };
+
+  const lue = valide();
+  const ancien = lue ? await guild.members.fetch(lue.ancienId).catch(() => null) : null;
+  if (lue && !ancien) {
+    ctx.issue = 'Refusée';
+    await respond(interaction, `${I.warn} ${m.panel_tempvoice_claim_previous_owner_gone({}, { locale })}`);
+    return;
+  }
+
+  const etape = ancien && await serializeByChannel(channel.id, async () => {
+    const encore = valide();
+    if (!encore) return null;
+    clorePropriete(channel.id);
+    await changerProprietaire(channel, cache, guild, ancien, ctx);
+    return encore;
+  });
+  if (!etape || !ancien) {
+    await respond(interaction, `${I.warn} ${m.panel_tempvoice_claim_stale({}, { locale })}`);
+    return;
+  }
+
+  const texte = `${I.cross} ${m.panel_tempvoice_claim_cancelled_by({ user: reclamantId, mod: interaction.user.id }, { locale })}`;
+  fermerCarte(etape.message, texte);
+  await respond(interaction, texte);
+  if (!channel.members.has(ancien.id)) {
+    await posterReclamation(channel, cache, {
+      reglages: ctxp.propriete,
+      v1: ctxp.presentation.composants === 'V1',
+      locale,
+    }, `Réclamation de <@${reclamantId}> annulée par <@${interaction.user.id}>`);
+  }
+  planifierRafraichissementPanneau(channel);
 }
 
 /**
@@ -3524,7 +4092,10 @@ async function traiterDemandeAcces(ctx: ActionContext): Promise<void> {
     resultat.demande.expireA,
     locale,
   );
-  const voie = await transmettreCarteDecision(channel, guild, cache.creatorId, ctxp.demandes, carte);
+  const voie = await transmettreCarteDecision(channel, guild, carte, ordreNotification(ctxp.demandes), {
+    destinataireId: cache.creatorId,
+    canalId: ctxp.demandes.canalId,
+  });
 
   if (!voie) {
     // Aucun canal n'a abouti : laisser la demande en attente ferait patienter
@@ -4255,6 +4826,13 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
     return;
   }
 
+  // ─── MP de passation : le menu des présents ───
+  if (action === 'leader' && interaction.isStringSelectMenu()) {
+    await deferIfNeeded(interaction);
+    await designerLeader(ctx, interaction.values[0] ?? '');
+    return;
+  }
+
   // ─── Fiche d'un membre : choisir la personne, puis voir ce qui est possible ───
   // Deux portes, une seule fiche : la liste des présents et la recherche dans le
   // serveur mènent au même endroit.
@@ -4316,6 +4894,8 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
       // La carte de décision est un message public : la réponse au propriétaire
       // reste éphémère, et c'est `cloreCarteDecision` qui referme la carte.
       'demande_ok', 'demande_non', 'demande_ban',
+      // Même règle pour le message « Récupérer le salon » du chat.
+      'reclamer', 'reclam_annuler',
     ]);
     const ACQUITTER_EN_PLACE = new Set([
       'bascule_verrou',
@@ -4406,7 +4986,7 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
           await reply(m.panel_tempvoice_err_member_not_found({}, { locale }));
           return;
         }
-        await transferOwnership(ctx, target, 'transfer');
+        await transferOwnership(ctx, target);
         planifierRafraichissementPanneau(channel);
         return;
       }
@@ -4508,27 +5088,13 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
         return;
       }
 
-      case 'claim': {
-        const recuperationAutorisee = peutAgir(ctx.ctxp.role, 'recuperer', ctx.ctxp.reglages, ctx.ctxp.locale);
-        if (!recuperationAutorisee.autorise) {
-          await reply(`${I.crown} ${recuperationAutorisee.raison}`);
-          return;
-        }
-        if (channel.members.has(cache.creatorId)) {
-          await reply(m.panel_tempvoice_err_owner_still_here({}, { locale }));
-          return;
-        }
-        // On ne reprend que le salon où l'on se trouve : le panneau reste
-        // lisible depuis l'extérieur.
-        if (!channel.members.has(user.id)) {
-          await reply(m.panel_tempvoice_err_join_before_claim({}, { locale }));
-          return;
-        }
-        if (!ctx.actingMember) {
-          await reply(m.panel_tempvoice_err_profile_unreadable_formal({}, { locale }));
-          return;
-        }
-        await transferOwnership(ctx, ctx.actingMember, 'claim');
+      case 'claim':
+      case 'reclamer': {
+        await reclamerSalon(ctx, reply);
+        return;
+      }
+      case 'reclam_annuler': {
+        await annulerReclamation(ctx);
         return;
       }
 
@@ -4813,7 +5379,7 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
           await reply(`${I.crown} ${transfertAutorise.raison}`);
           return;
         }
-        await transferOwnership(ctx, target, 'transfer');
+        await transferOwnership(ctx, target);
         planifierRafraichissementPanneau(channel);
         return;
       }
@@ -4981,30 +5547,31 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
 
 /** Passe la propriété d'un salon : le nouveau est écrit en base, sans quoi un
  *  redémarrage rendrait le salon à son créateur d'origine. */
-function transferOwnership(
-  ctx: ActionContext,
-  target: GuildMember | null,
-  kind: 'claim' | 'transfer',
-): Promise<void> {
-  return serializeByChannel(ctx.channel.id, () => applyOwnershipTransfer(ctx, target, kind));
+function transferOwnership(ctx: ActionContext, target: GuildMember | null): Promise<void> {
+  return serializeByChannel(ctx.channel.id, () => applyOwnershipTransfer(ctx, target));
 }
 
-async function applyOwnershipTransfer(
-  ctx: ActionContext,
-  target: GuildMember | null,
-  kind: 'claim' | 'transfer',
-): Promise<void> {
-  const { interaction, channel, cache, guild, guildId } = ctx;
-  const locale = ctx.ctxp.locale;
+async function applyOwnershipTransfer(ctx: ActionContext, target: GuildMember | null): Promise<void> {
   if (!target) return;
+  await changerProprietaire(ctx.channel, ctx.cache, ctx.guild, target, ctx);
+  remplacerEtape(ctx.channel.id, clorePropriete(ctx.channel.id), target.id);
+  await respond(ctx.interaction, m.panel_tempvoice_transferred({ name: target.displayName }, { locale: ctx.ctxp.locale }));
+}
 
-  // La garde de « Récupérer » a été évaluée avant la mise en file : deux
-  // réclamations simultanées la passent toutes les deux. Elle est revue ici.
-  if (kind === 'claim' && channel.members.has(cache.creatorId)) {
-    await respond(interaction, m.panel_tempvoice_err_owner_still_here({}, { locale }));
-    return;
-  }
-
+/**
+ * Le changement de propriétaire lui-même, sans interaction : transfert,
+ * désignation d'un leader et réclamation accordée passent tous par ici. À
+ * appeler dans `serializeByChannel`.
+ */
+async function changerProprietaire(
+  channel: VoiceChannel,
+  cache: EntreeSalonTemporaire,
+  guild: DiscordGuild,
+  target: GuildMember,
+  /** L'action qui en est la cause, pour le journal. */
+  action?: Pick<ActionContext, 'proprietaire'>,
+): Promise<void> {
+  const guildId = guild.id;
   // Relu ici, et non avant la mise en file : un transfert précédent a pu changer
   // le propriétaire pendant l'attente.
   const previousOwnerId = cache.creatorId;
@@ -5076,19 +5643,8 @@ async function applyOwnershipTransfer(
   }
 
   cache.creatorId = target.id;
+  if (action && previousOwnerId !== target.id) action.proprietaire = { avant: previousOwnerId, apres: target.id };
   await prisma.tempVoiceChannel
     .update({ where: { id: channel.id }, data: { creatorId: target.id } })
     .catch((err: unknown) => logger.error('TempVoice', "Erreur lors de l'enregistrement du propriétaire :", err));
-
-  const message = kind === 'claim'
-    ? m.panel_tempvoice_claimed({ name: target.displayName }, { locale })
-    : m.panel_tempvoice_transferred({ name: target.displayName }, { locale });
-
-  await respond(interaction, message);
-
-  // « Récupérer » est ouvert à tous : la réponse reste privée pour qu'un refus
-  // ne s'affiche pas devant le salon, la reprise est annoncée dans le salon.
-  if (kind === 'claim') {
-    await channel.send({ content: message }).catch(() => null);
-  }
 }
