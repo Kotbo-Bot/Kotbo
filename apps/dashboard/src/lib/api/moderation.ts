@@ -265,6 +265,8 @@ export async function updateChannelsManagementConfig(
        * telles quelles au rallumage.
        */
       perGeneratorPresentation: boolean;
+      /** Où se trouve la mention qui notifie le propriétaire : panneau, message au-dessus ou aucune. */
+      ownerMentionPlacement: 'panel' | 'message' | 'none';
     } & TempVoiceOwnershipSettings;
     honeypotEnabled?: boolean;
     honeypotChannelId?: string | null;

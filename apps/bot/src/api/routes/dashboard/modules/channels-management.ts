@@ -25,8 +25,15 @@ import type { Prisma } from '@prisma/client';
 import {
   TEMP_VOICE_CLAIM_WHO,
   TEMP_VOICE_HANDOVER_DELAY_BOUNDS,
+  TEMP_VOICE_OWNER_MENTION_DEFAULT,
+  TEMP_VOICE_OWNER_MENTION_PLACEMENTS,
   TEMP_VOICE_OWNERSHIP_DEFAULTS,
+  diffReglagesVocaux,
+  lignesDiffReglages,
+  type NomsLisibles,
+  type ReglagesVocaux,
   type TempVoiceClaimWho,
+  type TempVoiceOwnerMentionPlacement,
   type TempVoiceOwnershipSettings,
 } from '@kotbo/shared';
 
@@ -156,6 +163,12 @@ interface TempVoiceModPermissionsConfigView extends TempVoiceOwnershipSettings {
    * il ne les EFFACE PAS.
    */
   perGeneratorPresentation: boolean;
+  /**
+   * Où se trouve la mention qui notifie le propriétaire à la création du salon
+   * (panneau / message au-dessus / aucune). Défaut `panel`. Lu par le bot dans
+   * cette même ligne que `panelMode`/`panelComponents`.
+   */
+  ownerMentionPlacement: TempVoiceOwnerMentionPlacement;
 }
 
 /** `@default` du modèle Prisma `TempVoiceAccessRequestConfig`. */
@@ -219,6 +232,7 @@ const TEMP_VOICE_MOD_PERMISSIONS_DEFAULTS: TempVoiceModPermissionsConfigView = {
   panelComponents: 'V2',
   reservationFallbackMode: 'ANY_ROLE',
   perGeneratorPresentation: false,
+  ownerMentionPlacement: TEMP_VOICE_OWNER_MENTION_DEFAULT,
   ...TEMP_VOICE_OWNERSHIP_DEFAULTS,
 };
 
@@ -249,7 +263,8 @@ function viewTempVoiceAccessRequestConfig(
       : TEMP_VOICE_ACCESS_REQUEST_DEFAULTS.notifyVia,
     notifyChannelId: row.notifyChannelId,
     requestExpiresMinutes: row.requestExpiresMinutes,
-    denyCooldownMinutes: row.denyCooldownMinutes,
+    // Le bot lit 0 comme 1 minute ; la page doit montrer ce qui s'applique.
+    denyCooldownMinutes: Math.max(MIN_DENY_COOLDOWN_MINUTES, row.denyCooldownMinutes),
   };
 }
 
@@ -272,6 +287,7 @@ function viewTempVoiceModPermissionsConfig(
     panelComponents: string;
     reservationFallbackMode: string;
     perGeneratorPresentation: boolean;
+    ownerMentionPlacement?: string;
     handoverDmEnabled: boolean;
     handoverDelaySeconds: number;
     claimEmbedEnabled: boolean;
@@ -311,6 +327,9 @@ function viewTempVoiceModPermissionsConfig(
       ? (row.reservationFallbackMode as TempVoiceReservationFallbackMode)
       : TEMP_VOICE_MOD_PERMISSIONS_DEFAULTS.reservationFallbackMode,
     perGeneratorPresentation: row.perGeneratorPresentation === true,
+    ownerMentionPlacement: TEMP_VOICE_OWNER_MENTION_PLACEMENTS.includes(row.ownerMentionPlacement as TempVoiceOwnerMentionPlacement)
+      ? (row.ownerMentionPlacement as TempVoiceOwnerMentionPlacement)
+      : TEMP_VOICE_OWNER_MENTION_DEFAULT,
     handoverDmEnabled: row.handoverDmEnabled,
     handoverDelaySeconds: row.handoverDelaySeconds,
     claimEmbedEnabled: row.claimEmbedEnabled,
@@ -323,6 +342,46 @@ function viewTempVoiceModPermissionsConfig(
 }
 
 /**
+ * Refus d'une requête : le texte français (`error`, repli) et un `code` stable
+ * que le dashboard traduit (apps/dashboard/src/lib/api/errors.ts, clés
+ * `api_err_tv_*`). `params` porte les valeurs que le message traduit insère.
+ * Tout code posé ici doit avoir sa clé dans les deux fichiers de messages du
+ * dashboard : un test le vérifie.
+ */
+export interface TvFailure {
+  error: string;
+  code: string;
+  params?: Record<string, string | number>;
+}
+
+/** Réponse d'erreur de cette route : même forme partout, `code` toujours présent. */
+function tvError(res: ModuleRouteContext['res'], status: number, failure: TvFailure | string, code?: string): void {
+  json(res, status, typeof failure === 'string' ? { error: failure, code } : failure);
+}
+
+/** Valeur hors liste fermée. `expected` est la liste, séparée par « | ». */
+function choiceFailure(label: string, key: string, value: unknown, allowed: readonly string[]): TvFailure {
+  const expected = allowed.join(' | ');
+  return {
+    error: panelSettingError(label, key, value, expected),
+    code: 'tv_setting_invalid_choice',
+    params: { field: key, value: String(value).slice(0, 40), expected },
+  };
+}
+
+/** Nombre entier hors bornes. `unit` : « minutes », « secondes ». */
+function rangeFailure(label: string, key: string, value: unknown, unit: string, min: number, max: number): TvFailure {
+  return {
+    error: panelSettingError(label, key, value, `un nombre entier de ${unit}, de ${min} à ${max}`),
+    code: 'tv_setting_invalid_range',
+    params: { field: key, value: String(value).slice(0, 40), min, max },
+  };
+}
+
+/** Borne basse de « silence après un refus » : le bot lit 0 comme 1 minute. */
+const MIN_DENY_COOLDOWN_MINUTES = 1;
+
+/**
  * Valide le payload entrant pour `tempVoiceAccessRequest`. Même esprit que la
  * validation de `honeypotSanction` un peu plus bas dans ce fichier : un champ
  * hors des valeurs admises rejette toute la requête plutôt que de descendre
@@ -330,12 +389,17 @@ function viewTempVoiceModPermissionsConfig(
  */
 function normalizeTempVoiceAccessRequestInput(
   raw: unknown,
-): { data: Partial<TempVoiceAccessRequestConfigView> } | { error: string } {
+): { data: Partial<TempVoiceAccessRequestConfigView> } | TvFailure {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
-    // Français comme les autres messages de cette route : c'est ce texte que la
-    // page affiche tel quel (`res.error`). `panelSettingError` est déclarée
-    // plus bas dans le fichier — une déclaration de fonction, donc hissée.
-    return { error: 'tempVoiceAccessRequest : objet attendu. Rien n\'a été enregistré.' };
+    // Français comme les autres messages de cette route : c'est le repli que la
+    // page affiche quand le `code` n'a pas de traduction. `panelSettingError`
+    // est déclarée plus bas dans le fichier — une déclaration de fonction,
+    // donc hissée.
+    return {
+      error: 'tempVoiceAccessRequest : objet attendu. Rien n\'a été enregistré.',
+      code: 'tv_object_expected',
+      params: { field: 'tempVoiceAccessRequest' },
+    };
   }
   const body = raw as Record<string, unknown>;
   const data: Partial<TempVoiceAccessRequestConfigView> = {};
@@ -345,31 +409,39 @@ function normalizeTempVoiceAccessRequestInput(
   }
   if (Object.prototype.hasOwnProperty.call(body, 'responders')) {
     if (!TEMP_VOICE_ACCESS_RESPONDERS.includes(body.responders as TempVoiceAccessResponders)) {
-      return { error: panelSettingError('Répondants', 'responders', body.responders, TEMP_VOICE_ACCESS_RESPONDERS.join(' | ')) };
+      return choiceFailure('Répondants', 'responders', body.responders, TEMP_VOICE_ACCESS_RESPONDERS);
     }
     data.responders = body.responders as TempVoiceAccessResponders;
   }
   if (Object.prototype.hasOwnProperty.call(body, 'notifyVia')) {
     if (!TEMP_VOICE_ACCESS_NOTIFY_VIA.includes(body.notifyVia as TempVoiceAccessNotifyVia)) {
-      return { error: panelSettingError('Cible de notification', 'notifyVia', body.notifyVia, TEMP_VOICE_ACCESS_NOTIFY_VIA.join(' | ')) };
+      return choiceFailure('Cible de notification', 'notifyVia', body.notifyVia, TEMP_VOICE_ACCESS_NOTIFY_VIA);
     }
     data.notifyVia = body.notifyVia as TempVoiceAccessNotifyVia;
   }
   if (Object.prototype.hasOwnProperty.call(body, 'notifyChannelId')) {
     const value = body.notifyChannelId;
-    data.notifyChannelId = typeof value === 'string' && value.trim() ? value.trim() : null;
+    const id = typeof value === 'string' ? value.trim() : '';
+    // Vide ou absent : pas de salon dédié. Une valeur qui n'est pas un
+    // identifiant de salon est refusée plutôt qu'écrite telle quelle.
+    if (value !== null && value !== undefined && value !== '' && !isPlausibleSnowflake(id)) {
+      return snowflakeFailure('Salon dédié aux demandes', 'notifyChannelId', value);
+    }
+    data.notifyChannelId = id || null;
   }
   if (Object.prototype.hasOwnProperty.call(body, 'requestExpiresMinutes')) {
     const n = Math.floor(Number(body.requestExpiresMinutes));
     if (!Number.isFinite(n) || n < 1 || n > 1440) {
-      return { error: panelSettingError('Expiration de la demande', 'requestExpiresMinutes', body.requestExpiresMinutes, 'un nombre entier de minutes, de 1 à 1440') };
+      return rangeFailure('Expiration de la demande', 'requestExpiresMinutes', body.requestExpiresMinutes, 'minutes', 1, 1440);
     }
     data.requestExpiresMinutes = n;
   }
   if (Object.prototype.hasOwnProperty.call(body, 'denyCooldownMinutes')) {
     const n = Math.floor(Number(body.denyCooldownMinutes));
-    if (!Number.isFinite(n) || n < 0 || n > 1440) {
-      return { error: panelSettingError('Délai après un refus', 'denyCooldownMinutes', body.denyCooldownMinutes, 'un nombre entier de minutes, de 0 à 1440') };
+    // Pas de 0 : le bot lit 0 comme 1 minute, la page afficherait donc un délai
+    // que personne n'applique.
+    if (!Number.isFinite(n) || n < MIN_DENY_COOLDOWN_MINUTES || n > 1440) {
+      return rangeFailure('Délai après un refus', 'denyCooldownMinutes', body.denyCooldownMinutes, 'minutes', MIN_DENY_COOLDOWN_MINUTES, 1440);
     }
     data.denyCooldownMinutes = n;
   }
@@ -384,6 +456,21 @@ function normalizeTempVoiceAccessRequestInput(
  */
 function isPlausibleSnowflake(value: unknown): value is string {
   return typeof value === 'string' && /^\d{17,20}$/.test(value);
+}
+
+function snowflakeFailure(label: string, key: string, value: unknown): TvFailure {
+  return {
+    error: `${label} (${key}) : « ${String(value).slice(0, 40)} » n'est pas un identifiant Discord valide. Rien n'a été enregistré.`,
+    code: 'tv_snowflake_invalid',
+    params: { field: key, value: String(value).slice(0, 40) },
+  };
+}
+
+/** `null`, absent ou vide valent « aucun » ; sinon un identifiant Discord plausible. */
+function readOptionalSnowflake(value: unknown, label: string, key: string): { value: string | null } | TvFailure {
+  if (value === null || value === undefined || value === '') return { value: null };
+  if (typeof value === 'string' && isPlausibleSnowflake(value.trim())) return { value: value.trim() };
+  return snowflakeFailure(label, key, value);
 }
 
 /**
@@ -441,9 +528,13 @@ function panelSettingError(label: string, key: string, value: unknown, expected?
  */
 export function normalizeTempVoiceModPermissionsInput(
   raw: unknown,
-): { data: Partial<TempVoiceModPermissionsConfigView> } | { error: string } {
+): { data: Partial<TempVoiceModPermissionsConfigView> } | TvFailure {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
-    return { error: 'tempVoiceModPermissions : objet attendu. Rien n\'a été enregistré.' };
+    return {
+      error: 'tempVoiceModPermissions : objet attendu. Rien n\'a été enregistré.',
+      code: 'tv_object_expected',
+      params: { field: 'tempVoiceModPermissions' },
+    };
   }
   const body = raw as Record<string, unknown>;
   const data: Partial<TempVoiceModPermissionsConfigView> = {};
@@ -512,7 +603,11 @@ export function normalizeTempVoiceModPermissionsInput(
 
   if (Object.prototype.hasOwnProperty.call(body, 'reservationFallbackChannelId')) {
     const value = body.reservationFallbackChannelId;
-    data.reservationFallbackChannelId = typeof value === 'string' && value.trim() ? value.trim() : null;
+    const id = typeof value === 'string' ? value.trim() : '';
+    if (value !== null && value !== undefined && value !== '' && !isPlausibleSnowflake(id)) {
+      return snowflakeFailure('Salon de repli', 'reservationFallbackChannelId', value);
+    }
+    data.reservationFallbackChannelId = id || null;
   }
 
   // Cinq réglages de présentation du panneau, régime REJET — le pourquoi est
@@ -523,25 +618,25 @@ export function normalizeTempVoiceModPermissionsInput(
   // piège que `boolKeys`).
   if (Object.prototype.hasOwnProperty.call(body, 'panelMode')) {
     if (!TEMP_VOICE_PANEL_MODE.includes(body.panelMode as TempVoicePanelMode)) {
-      return { error: panelSettingError('Mode du panneau', 'panelMode', body.panelMode, TEMP_VOICE_PANEL_MODE.join(' | ')) };
+      return choiceFailure('Mode du panneau', 'panelMode', body.panelMode, TEMP_VOICE_PANEL_MODE);
     }
     data.panelMode = body.panelMode as TempVoicePanelMode;
   }
   if (Object.prototype.hasOwnProperty.call(body, 'stateLayout')) {
     if (!TEMP_VOICE_STATE_LAYOUT.includes(body.stateLayout as TempVoiceStateLayout)) {
-      return { error: panelSettingError('Disposition des états', 'stateLayout', body.stateLayout, TEMP_VOICE_STATE_LAYOUT.join(' | ')) };
+      return choiceFailure('Disposition des états', 'stateLayout', body.stateLayout, TEMP_VOICE_STATE_LAYOUT);
     }
     data.stateLayout = body.stateLayout as TempVoiceStateLayout;
   }
   if (Object.prototype.hasOwnProperty.call(body, 'stateColors')) {
     if (!TEMP_VOICE_STATE_COLORS.includes(body.stateColors as TempVoiceStateColors)) {
-      return { error: panelSettingError('Palette des états', 'stateColors', body.stateColors, TEMP_VOICE_STATE_COLORS.join(' | ')) };
+      return choiceFailure('Palette des états', 'stateColors', body.stateColors, TEMP_VOICE_STATE_COLORS);
     }
     data.stateColors = body.stateColors as TempVoiceStateColors;
   }
   if (Object.prototype.hasOwnProperty.call(body, 'panelComponents')) {
     if (!TEMP_VOICE_PANEL_COMPONENTS.includes(body.panelComponents as TempVoicePanelComponents)) {
-      return { error: panelSettingError('Composants du panneau', 'panelComponents', body.panelComponents, TEMP_VOICE_PANEL_COMPONENTS.join(' | ')) };
+      return choiceFailure('Composants du panneau', 'panelComponents', body.panelComponents, TEMP_VOICE_PANEL_COMPONENTS);
     }
     data.panelComponents = body.panelComponents as TempVoicePanelComponents;
   }
@@ -553,7 +648,7 @@ export function normalizeTempVoiceModPermissionsInput(
   if (Object.prototype.hasOwnProperty.call(body, fallbackKey)) {
     const value = body[fallbackKey];
     if (!TEMP_VOICE_RESERVATION_FALLBACK_MODE.includes(value as TempVoiceReservationFallbackMode)) {
-      return { error: panelSettingError('Repli de la réservation', fallbackKey, value, TEMP_VOICE_RESERVATION_FALLBACK_MODE.join(' | ')) };
+      return choiceFailure('Repli de la réservation', fallbackKey, value, TEMP_VOICE_RESERVATION_FALLBACK_MODE);
     }
     data.reservationFallbackMode = value as TempVoiceReservationFallbackMode;
   }
@@ -562,7 +657,7 @@ export function normalizeTempVoiceModPermissionsInput(
   // ramené en silence sur le défaut se lirait comme un réglage perdu.
   if (Object.prototype.hasOwnProperty.call(body, 'claimWho')) {
     if (!TEMP_VOICE_CLAIM_WHO.includes(body.claimWho as TempVoiceClaimWho)) {
-      return { error: panelSettingError('Qui peut récupérer le salon', 'claimWho', body.claimWho, TEMP_VOICE_CLAIM_WHO.join(' | ')) };
+      return choiceFailure('Qui peut récupérer le salon', 'claimWho', body.claimWho, TEMP_VOICE_CLAIM_WHO);
     }
     data.claimWho = body.claimWho as TempVoiceClaimWho;
   }
@@ -570,9 +665,18 @@ export function normalizeTempVoiceModPermissionsInput(
     const { min, max } = TEMP_VOICE_HANDOVER_DELAY_BOUNDS;
     const n = body.handoverDelaySeconds;
     if (typeof n !== 'number' || !Number.isInteger(n) || n < min || n > max) {
-      return { error: panelSettingError('Délai de passation', 'handoverDelaySeconds', n, `un nombre entier de secondes, de ${min} à ${max}`) };
+      return rangeFailure('Délai de passation', 'handoverDelaySeconds', n, 'secondes', min, max);
     }
     data.handoverDelaySeconds = n;
+  }
+
+  // Mention du propriétaire : même régime REJET — une valeur hors liste
+  // ramenée en silence sur `panel` se lirait comme un réglage qui ne s'enregistre pas.
+  if (Object.prototype.hasOwnProperty.call(body, 'ownerMentionPlacement')) {
+    if (!TEMP_VOICE_OWNER_MENTION_PLACEMENTS.includes(body.ownerMentionPlacement as TempVoiceOwnerMentionPlacement)) {
+      return choiceFailure('Mention du propriétaire', 'ownerMentionPlacement', body.ownerMentionPlacement, TEMP_VOICE_OWNER_MENTION_PLACEMENTS);
+    }
+    data.ownerMentionPlacement = body.ownerMentionPlacement as TempVoiceOwnerMentionPlacement;
   }
 
   return { data };
@@ -597,7 +701,7 @@ export function normalizeTempVoiceModPermissionsInput(
  * valent tous deux « hérite du serveur » et ne sont jamais rejetés — seule une
  * valeur PRÉSENTE et hors énumération l'est.
  */
-function validateGeneratorPresentationOverrides(raw: unknown): string | null {
+function validateGeneratorPresentationOverrides(raw: unknown): TvFailure | null {
   if (!Array.isArray(raw)) return null;
 
   for (let i = 0; i < raw.length; i++) {
@@ -610,40 +714,136 @@ function validateGeneratorPresentationOverrides(raw: unknown): string | null {
       Object.prototype.hasOwnProperty.call(body, 'panelMode') && body.panelMode != null
       && !TEMP_VOICE_PANEL_MODE.includes(body.panelMode as TempVoicePanelMode)
     ) {
-      return panelSettingError(`${prefix} : mode du panneau`, 'panelMode', body.panelMode, TEMP_VOICE_PANEL_MODE.join(' | '));
+      return choiceFailure(`${prefix} : mode du panneau`, 'panelMode', body.panelMode, TEMP_VOICE_PANEL_MODE);
     }
     if (
       Object.prototype.hasOwnProperty.call(body, 'stateLayout') && body.stateLayout != null
       && !TEMP_VOICE_STATE_LAYOUT.includes(body.stateLayout as TempVoiceStateLayout)
     ) {
-      return panelSettingError(`${prefix} : disposition des états`, 'stateLayout', body.stateLayout, TEMP_VOICE_STATE_LAYOUT.join(' | '));
+      return choiceFailure(`${prefix} : disposition des états`, 'stateLayout', body.stateLayout, TEMP_VOICE_STATE_LAYOUT);
     }
     if (
       Object.prototype.hasOwnProperty.call(body, 'stateColors') && body.stateColors != null
       && !TEMP_VOICE_STATE_COLORS.includes(body.stateColors as TempVoiceStateColors)
     ) {
-      return panelSettingError(`${prefix} : palette des états`, 'stateColors', body.stateColors, TEMP_VOICE_STATE_COLORS.join(' | '));
+      return choiceFailure(`${prefix} : palette des états`, 'stateColors', body.stateColors, TEMP_VOICE_STATE_COLORS);
     }
     if (
       Object.prototype.hasOwnProperty.call(body, 'panelComponents') && body.panelComponents != null
       && !TEMP_VOICE_PANEL_COMPONENTS.includes(body.panelComponents as TempVoicePanelComponents)
     ) {
-      return panelSettingError(`${prefix} : composants du panneau`, 'panelComponents', body.panelComponents, TEMP_VOICE_PANEL_COMPONENTS.join(' | '));
+      return choiceFailure(`${prefix} : composants du panneau`, 'panelComponents', body.panelComponents, TEMP_VOICE_PANEL_COMPONENTS);
     }
     if (
       Object.prototype.hasOwnProperty.call(body, 'reservationFallbackMode') && body.reservationFallbackMode != null
       && !TEMP_VOICE_RESERVATION_FALLBACK_MODE.includes(body.reservationFallbackMode as TempVoiceReservationFallbackMode)
     ) {
-      return panelSettingError(
+      return choiceFailure(
         `${prefix} : repli de la réservation`,
         'reservationFallbackMode',
         body.reservationFallbackMode,
-        TEMP_VOICE_RESERVATION_FALLBACK_MODE.join(' | '),
+        TEMP_VOICE_RESERVATION_FALLBACK_MODE,
       );
     }
   }
 
   return null;
+}
+
+/** Clés du PATCH qui relèvent des salons vocaux temporaires (journal des changements). */
+const VOICE_KEYS = [
+  'tempVoiceEnabled',
+  'tempVoiceChannelId',
+  'tempVoiceCategoryId',
+  'tempVoiceNameTemplate',
+  'tempVoiceRequiredRoleId',
+  'tempVoiceDefaults',
+  'tempVoiceGenerators',
+  'tempVoiceAccessRequest',
+  'tempVoiceModPermissions',
+] as const;
+
+interface VoiceGuildRow {
+  tempVoiceEnabled?: boolean;
+  tempVoiceChannelId?: string | null;
+  tempVoiceCategoryId?: string | null;
+  tempVoiceNameTemplate?: string | null;
+  tempVoiceRequiredRoleId?: string | null;
+  tempVoiceDefaults?: unknown;
+  tempVoiceGenerators?: unknown;
+}
+
+/**
+ * État des réglages vocaux tel que `diffReglagesVocaux` le compare : politique
+ * et générateurs normalisés comme à la lecture, les deux tables à leurs défauts
+ * quand la ligne n'existe pas. `guild` absent (serveur jamais enregistré) donne
+ * les défauts, pas un état vide.
+ */
+export function snapshotReglagesVocaux(
+  guildId: string,
+  guild: VoiceGuildRow | null | undefined,
+  accessRow: Parameters<typeof viewTempVoiceAccessRequestConfig>[0],
+  modRow: Parameters<typeof viewTempVoiceModPermissionsConfig>[0],
+): ReglagesVocaux {
+  return {
+    tempVoiceEnabled: guild?.tempVoiceEnabled ?? false,
+    tempVoiceChannelId: guild?.tempVoiceChannelId ?? null,
+    tempVoiceCategoryId: guild?.tempVoiceCategoryId ?? null,
+    tempVoiceNameTemplate: guild?.tempVoiceNameTemplate ?? '',
+    tempVoiceRequiredRoleId: guild?.tempVoiceRequiredRoleId ?? null,
+    tempVoiceDefaults: normalizeTempVoicePolicy(guild?.tempVoiceDefaults, guildId),
+    tempVoiceGenerators: normalizeTempVoiceGeneratorsInput(guild?.tempVoiceGenerators, guildId, guild?.tempVoiceChannelId),
+    tempVoiceModPermissions: viewTempVoiceModPermissionsConfig(modRow),
+    tempVoiceAccessRequest: viewTempVoiceAccessRequestConfig(accessRow),
+  };
+}
+
+/**
+ * Entrées de `tempVoiceGenerators` que la normalisation du serveur a écartées
+ * (salon absent, déjà pris par le principal ou par un autre générateur, plafond
+ * dépassé), dites en français. Sans cela la page remplaçait sa liste par celle
+ * du serveur et la carte disparaissait sans un mot. Le numéro est celui que la
+ * page affiche (le principal est le n°1).
+ */
+export function explainDroppedGenerators(
+  input: unknown,
+  kept: ReadonlyArray<{ channelId: string }>,
+  mainChannelId?: string | null,
+  nomSalon: (id: string) => string | undefined = () => undefined,
+): string[] {
+  if (!Array.isArray(input)) return [];
+  const keptIds = new Set(kept.map((g) => g.channelId));
+  const firstSeen = new Map<string, number>();
+  const notices: string[] = [];
+  input.forEach((entry, index) => {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return;
+    const n = index + 2;
+    const id = (entry as Record<string, unknown>).channelId;
+    if (index >= MAX_ADDITIONAL_GENERATORS) {
+      notices.push(`Le générateur n°${n} n'a pas été enregistré : le plafond de ${MAX_ADDITIONAL_GENERATORS} générateurs additionnels est atteint.`);
+      return;
+    }
+    if (!isPlausibleSnowflake(id)) {
+      notices.push(`Le générateur n°${n} n'a pas été enregistré : aucun salon vocal valide n'est choisi.`);
+      return;
+    }
+    const name = nomSalon(id) ? `#${nomSalon(id)}` : id;
+    const first = firstSeen.get(id);
+    if (first !== undefined) {
+      notices.push(`Le générateur n°${n} n'a pas été enregistré : ${name} est déjà utilisé par le générateur n°${first}.`);
+      return;
+    }
+    if (!keptIds.has(id)) {
+      notices.push(
+        id === mainChannelId
+          ? `Le générateur n°${n} n'a pas été enregistré : ${name} est déjà le générateur principal.`
+          : `Le générateur n°${n} n'a pas été enregistré : ${name} n'a pas été retenu par le serveur.`,
+      );
+      return;
+    }
+    firstSeen.set(id, n);
+  });
+  return notices;
 }
 
 export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): Promise<boolean> {
@@ -659,7 +859,7 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
     try {
       const guild = client.guilds.cache.get(guildId) ?? (await client.guilds.fetch(guildId).catch(() => null));
       if (!guild) {
-        json(res, 404, { error: 'Serveur Discord introuvable' });
+        tvError(res, 404, 'Serveur Discord introuvable', 'tv_guild_not_found');
         return true;
       }
       if (guild.channels.cache.size === 0) await guild.channels.fetch().catch(() => null);
@@ -738,7 +938,7 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
       const feature = body?.feature as ChannelFeatureKey | undefined;
 
       if (!feature || !CHANNEL_FEATURE_KEYS.includes(feature)) {
-        json(res, 400, { error: 'Fonctionnalité inconnue' });
+        tvError(res, 400, 'Fonctionnalité inconnue', 'tv_feature_unknown');
         return true;
       }
 
@@ -793,18 +993,18 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
       const guild = client.guilds.cache.get(guildId) ?? (await client.guilds.fetch(guildId).catch(() => null));
       const channel = await guild?.channels.fetch(parts[6]).catch(() => null);
       if (!guild || !channel) {
-        json(res, 404, { error: 'Salon introuvable' });
+        tvError(res, 404, 'Salon introuvable', 'tv_channel_not_found');
         return true;
       }
       if (!channel.manageable) {
-        json(res, 403, { error: 'Le bot ne peut pas modifier ce salon (permissions ou hiérarchie).' });
+        tvError(res, 403, 'Le bot ne peut pas modifier ce salon (permissions ou hiérarchie).', 'tv_channel_not_editable');
         return true;
       }
 
       const body = await readJsonBody<{ name?: string }>(req);
       const name = typeof body?.name === 'string' ? body.name.trim().slice(0, 100) : '';
       if (!name) {
-        json(res, 400, { error: 'Nom de salon invalide' });
+        tvError(res, 400, 'Nom de salon invalide', 'tv_channel_name_invalid');
         return true;
       }
 
@@ -835,11 +1035,11 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
       const guild = client.guilds.cache.get(guildId) ?? (await client.guilds.fetch(guildId).catch(() => null));
       const channel = await guild?.channels.fetch(parts[6]).catch(() => null);
       if (!guild || !channel) {
-        json(res, 404, { error: 'Salon introuvable' });
+        tvError(res, 404, 'Salon introuvable', 'tv_channel_not_found');
         return true;
       }
       if (!channel.manageable) {
-        json(res, 403, { error: 'Le bot ne peut pas supprimer ce salon (permissions ou hiérarchie).' });
+        tvError(res, 403, 'Le bot ne peut pas supprimer ce salon (permissions ou hiérarchie).', 'tv_channel_not_deletable');
         return true;
       }
 
@@ -919,14 +1119,14 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
 
       const channelId = (body?.channelId || '').trim();
       if (!channelId) {
-        json(res, 400, { error: 'Salon manquant' });
+        tvError(res, 400, 'Salon manquant', 'tv_sticky_channel_missing');
         return true;
       }
 
       const discordGuild = client.guilds.cache.get(guildId);
       const channel = discordGuild?.channels.cache.get(channelId);
       if (!channel || (channel.type !== ChannelType.GuildText && channel.type !== ChannelType.GuildAnnouncement)) {
-        json(res, 400, { error: 'Salon textuel introuvable sur ce serveur' });
+        tvError(res, 400, 'Salon textuel introuvable sur ce serveur', 'tv_sticky_channel_invalid');
         return true;
       }
 
@@ -939,11 +1139,11 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
       if (jsonEnabled) {
         const parsed = parseStickyJsonPayload(jsonPayload);
         if (!parsed.ok) {
-          json(res, 400, { error: parsed.error });
+          tvError(res, 400, { error: parsed.error, code: 'tv_sticky_json_invalid', params: { detail: parsed.error } });
           return true;
         }
       } else if (!content.trim()) {
-        json(res, 400, { error: 'Le message sticky ne peut pas être vide' });
+        tvError(res, 400, 'Le message sticky ne peut pas être vide', 'tv_sticky_empty');
         return true;
       }
 
@@ -951,12 +1151,12 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
       const webhookEnabled = !!body?.webhookEnabled;
       const webhookName = (body?.webhookName ?? '').trim().slice(0, 80) || null;
       if (webhookName && /discord|clyde/i.test(webhookName)) {
-        json(res, 400, { error: 'Le nom du webhook ne peut pas contenir « discord » ni « clyde ».' });
+        tvError(res, 400, 'Le nom du webhook ne peut pas contenir « discord » ni « clyde ».', 'tv_sticky_webhook_name');
         return true;
       }
       const avatarRaw = (body?.webhookAvatarUrl ?? '').trim();
       if (avatarRaw && (!/^https:\/\/\S+$/i.test(avatarRaw) || avatarRaw.length > 512)) {
-        json(res, 400, { error: 'L’avatar doit être une adresse https (512 caractères au maximum).' });
+        tvError(res, 400, 'L’avatar doit être une adresse https (512 caractères au maximum).', 'tv_sticky_avatar_invalid');
         return true;
       }
       const webhookAvatarUrl = avatarRaw || null;
@@ -1060,7 +1260,7 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
         where: { guildId_channelId: { guildId, channelId } },
       });
       if (!sticky) {
-        json(res, 404, { error: 'Sticky introuvable' });
+        tvError(res, 404, 'Sticky introuvable', 'tv_sticky_not_found');
         return true;
       }
 
@@ -1097,14 +1297,14 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
         where: { guildId_channelId: { guildId, channelId } },
       });
       if (!sticky || !sticky.enabled) {
-        json(res, 404, { error: 'Sticky introuvable ou désactivé' });
+        tvError(res, 404, 'Sticky introuvable ou désactivé', 'tv_sticky_not_found_or_off');
         return true;
       }
 
       const { repostSticky } = await import('../../../../services/features/stickyMessageService.js');
       const messageId = await repostSticky(client, sticky, { force: true });
       if (!messageId) {
-        json(res, 502, { error: 'Renvoi impossible (salon ou permissions).' });
+        tvError(res, 502, 'Renvoi impossible (salon ou permissions).', 'tv_sticky_repost_failed');
         return true;
       }
 
@@ -1173,7 +1373,7 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
       const channel = discordGuild?.channels.cache.get(channelId);
 
       if (!channel || channel.type !== ChannelType.GuildVoice) {
-        json(res, 404, { error: 'Salon introuvable.' });
+        tvError(res, 404, 'Salon introuvable.', 'tv_channel_not_found');
         return true;
       }
 
@@ -1182,7 +1382,7 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
       });
 
       if (!dbChan) {
-        json(res, 404, { error: 'Salon non enregistré.' });
+        tvError(res, 404, 'Salon non enregistré.', 'tv_temp_channel_unregistered');
         return true;
       }
 
@@ -1194,7 +1394,9 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
         // que les déconnecter laisse l'écouteur supprimer le salon avant nous.
         // Discord avant la base : purger l'état sans savoir si la suppression a
         // abouti laisserait un salon vivant que plus rien ne référence.
-        const deleted = await channel.delete('Fermé par le dashboard.').then(() => true).catch((err: unknown) => {
+        // La raison nomme l'utilisateur du dashboard : sans elle, le journal
+        // d'audit de Discord attribue la suppression au bot.
+        const deleted = await channel.delete(`Fermé depuis le dashboard par ${auditUser}`).then(() => true).catch((err: unknown) => {
           // Salon déjà disparu : le résultat voulu est atteint, l'état suit.
           if ((err as { code?: number }).code === 10003) return true;
           logger.warn('ChannelsManagementAPI', `Impossible de supprimer le salon ${channelId} :`, err);
@@ -1202,7 +1404,7 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
         });
 
         if (!deleted) {
-          json(res, 409, { error: 'Discord a refusé la suppression du salon.' });
+          tvError(res, 409, 'Discord a refusé la suppression du salon.', 'tv_discord_delete_refused');
           return true;
         }
 
@@ -1221,7 +1423,7 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
           module: 'Gestion des salons',
           eventType: 'Manuel',
           details: `Salon temporaire ${closedName} (${channelId}) supprimé par l'administrateur.`,
-          channelId: null
+          channelId,
         });
 
         json(res, 200, { ok: true, message: 'Salon fermé avec succès.' });
@@ -1241,11 +1443,14 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
         // `@discordjs/rest` attend la fin de la fenêtre au lieu de rejeter :
         // sans borne, la requête HTTP resterait ouverte plusieurs minutes et le
         // navigateur abandonnerait avant d'avoir un verdict.
-        const renamed = await settleWithin(channel.setName(newName), RENAME_TIMEOUT_MS);
+        const renamed = await settleWithin(
+          channel.setName(newName, `Renommé depuis le dashboard par ${auditUser}`),
+          RENAME_TIMEOUT_MS,
+        );
 
         if (renamed.status === 'failed') {
           logger.warn('ChannelsManagementAPI', `Impossible de renommer le salon ${channelId} :`, renamed.error);
-          json(res, 409, { error: "Discord a refusé le renommage du salon." });
+          tvError(res, 409, "Discord a refusé le renommage du salon.", 'tv_discord_rename_refused');
           return true;
         }
 
@@ -1264,7 +1469,7 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
           module: 'Gestion des salons',
           eventType: 'Manuel',
           details: `Renommé de ${formerName} à ${newName}.`,
-          channelId: null
+          channelId,
         });
       }
 
@@ -1277,7 +1482,7 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
           : null;
 
         if (body.roleId && !newRoleId) {
-          json(res, 400, { error: 'Rôle de réservation invalide' });
+          tvError(res, 400, 'Rôle de réservation invalide', 'tv_reservation_role_invalid');
           return true;
         }
 
@@ -1287,16 +1492,17 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
           ? categoryTrustPatch(channel, channel.guild.roles.cache.get(newRoleId) ?? null)
           : null;
         if (newRoleId && !rolePatch) {
-          json(res, 409, { error: "La catégorie du salon refuse l'accès à ce rôle" });
+          tvError(res, 409, "La catégorie du salon refuse l'accès à ce rôle", 'tv_reservation_category_refused');
           return true;
         }
 
         // Sans ce retrait, les surcharges des rôles réservés s'accumulent, et
         // son échec doit remonter : l'ancien rôle garde sinon l'accès.
+        const reason = `Réservation modifiée depuis le dashboard par ${auditUser}`;
         let previousCleared = true;
         if (dbChan.roleId && dbChan.roleId !== newRoleId) {
           previousCleared = await channel.permissionOverwrites
-            .delete(dbChan.roleId, 'Réservation précédente levée')
+            .delete(dbChan.roleId, `Réservation précédente levée depuis le dashboard par ${auditUser}`)
             .then(() => true)
             .catch((err: unknown) => {
               logger.warn('ChannelsManagementAPI', `Impossible de lever la réservation précédente sur ${channelId} :`, err);
@@ -1314,9 +1520,9 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
           // Les autorisations d'abord, le verrou ensuite : dans l'ordre inverse,
           // un appel refusé entre les deux laisse un salon fermé à tout le monde
           // et sans réservation.
-          if (ownerPatch && owner) await channel.permissionOverwrites.edit(owner, ownerPatch);
-          await channel.permissionOverwrites.edit(newRoleId, rolePatch);
-          await channel.permissionOverwrites.edit(guildId, CHANNEL_PATCHES.lock);
+          if (ownerPatch && owner) await channel.permissionOverwrites.edit(owner, ownerPatch, { reason });
+          await channel.permissionOverwrites.edit(newRoleId, rolePatch, { reason });
+          await channel.permissionOverwrites.edit(guildId, CHANNEL_PATCHES.lock, { reason });
 
           data.roleId = newRoleId;
         } else {
@@ -1325,6 +1531,7 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
           await channel.permissionOverwrites.edit(
             guildId,
             restoreFromCategory(CHANNEL_PATCHES.clearReservation, categoryOverwriteFor(channel, guildId)),
+            { reason },
           );
 
           data.roleId = null;
@@ -1335,14 +1542,16 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
           data
         });
 
+        // Ancien rôle → nouveau, par leur nom quand le cache le connaît.
+        const roleLabel = (id: string | null) => (id ? `@${channel.guild.roles.cache.get(id)?.name ?? id}` : 'aucun');
         await pushAudit(guildId, {
           user: auditUser,
-          action: newRoleId ? `Réservation du salon ${channel.name} pour le rôle ID ${newRoleId}` : `Libération de la réservation du salon ${channel.name}`,
+          action: newRoleId ? `Réservation du salon ${channel.name} pour ${roleLabel(newRoleId)}` : `Libération de la réservation du salon ${channel.name}`,
           context: getGuildName(client, guildId),
           module: 'Gestion des salons',
           eventType: 'Manuel',
-          details: newRoleId ? `Accès restreint au rôle ${newRoleId}.` : `Salon ouvert à tous.`,
-          channelId: null
+          details: `Rôle de réservation : ${roleLabel(dbChan.roleId)} → ${roleLabel(newRoleId)}. ${newRoleId ? `Accès restreint à ${roleLabel(newRoleId)}.` : 'Salon ouvert à tous.'}`,
+          channelId,
         });
 
         // La surcharge du rôle précédent n'a pas pu être retirée : l'annoncer,
@@ -1398,7 +1607,7 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
           prisma.tempVoiceModPermissionsConfig.findUnique({ where: { guildId } }),
         ]);
         if (!guild) {
-          json(res, 404, { error: 'Serveur introuvable' });
+          tvError(res, 404, 'Serveur introuvable', 'tv_guild_not_found');
           return true;
         }
         json(res, 200, {
@@ -1453,7 +1662,8 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
           tempVoiceEnabled?: boolean;
           tempVoiceChannelId?: string | null;
           tempVoiceCategoryId?: string | null;
-          tempVoiceNameTemplate?: string;
+          // `unknown` : le corps vient d'un appelant quelconque, validé plus bas.
+          tempVoiceNameTemplate?: unknown;
           tempVoiceRequiredRoleId?: string | null;
           tempVoiceDefaults?: unknown;
           tempVoiceGenerators?: unknown;
@@ -1469,7 +1679,7 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
         }>(req);
 
         if (!body) {
-          json(res, 400, { error: 'Payload invalide' });
+          tvError(res, 400, 'Payload invalide', 'tv_payload_invalid');
           return true;
         }
 
@@ -1503,17 +1713,35 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
         if (Object.prototype.hasOwnProperty.call(body, 'tempVoiceEnabled')) {
           data.tempVoiceEnabled = !!body.tempVoiceEnabled;
         }
-        if (Object.prototype.hasOwnProperty.call(body, 'tempVoiceChannelId')) {
-          data.tempVoiceChannelId = body.tempVoiceChannelId;
-        }
-        if (Object.prototype.hasOwnProperty.call(body, 'tempVoiceCategoryId')) {
-          data.tempVoiceCategoryId = body.tempVoiceCategoryId;
+        // Identifiants et gabarit validés ici, avant toute écriture : un `null`
+        // ou un nombre dans `tempVoiceNameTemplate` faisait échouer l'update en
+        // 500, et un identifiant quelconque était enregistré tel quel puis
+        // relu comme un salon par le bot.
+        for (const [key, label] of [
+          ['tempVoiceChannelId', 'Salon générateur'],
+          ['tempVoiceCategoryId', 'Catégorie des salons créés'],
+          ['tempVoiceRequiredRoleId', 'Rôle requis'],
+        ] as const) {
+          if (!Object.prototype.hasOwnProperty.call(body, key)) continue;
+          const parsed = readOptionalSnowflake(body[key], label, key);
+          if ('error' in parsed) {
+            tvError(res, 400, parsed);
+            return true;
+          }
+          data[key] = parsed.value;
         }
         if (Object.prototype.hasOwnProperty.call(body, 'tempVoiceNameTemplate')) {
-          data.tempVoiceNameTemplate = body.tempVoiceNameTemplate;
-        }
-        if (Object.prototype.hasOwnProperty.call(body, 'tempVoiceRequiredRoleId')) {
-          data.tempVoiceRequiredRoleId = body.tempVoiceRequiredRoleId;
+          const template = body.tempVoiceNameTemplate;
+          if (typeof template !== 'string') {
+            tvError(res, 400, {
+              error: `Modèle de nom (tempVoiceNameTemplate) : « ${String(template).slice(0, 40)} » n'est pas un texte. Rien n'a été enregistré.`,
+              code: 'tv_name_template_invalid',
+              params: { value: String(template).slice(0, 40) },
+            });
+            return true;
+          }
+          // Même plafond que le modèle des générateurs additionnels.
+          data.tempVoiceNameTemplate = template.trim().slice(0, 100);
         }
         if (Object.prototype.hasOwnProperty.call(body, 'tempVoiceDefaults')) {
           data.tempVoiceDefaults = normalizeTempVoicePolicy(body.tempVoiceDefaults, guildId) as unknown as Prisma.InputJsonValue;
@@ -1527,7 +1755,7 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
           // avec la lecture (rendu du panneau), qui reste tolérante.
           const presentationError = validateGeneratorPresentationOverrides(body.tempVoiceGenerators);
           if (presentationError) {
-            json(res, 400, { error: presentationError });
+            tvError(res, 400, presentationError);
             return true;
           }
           // La page n'est qu'un client parmi d'autres (outils MCP, appels
@@ -1548,7 +1776,7 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
         if (Object.prototype.hasOwnProperty.call(body, 'tempVoiceAccessRequest')) {
           const parsed = normalizeTempVoiceAccessRequestInput(body.tempVoiceAccessRequest);
           if ('error' in parsed) {
-            json(res, 400, { error: parsed.error });
+            tvError(res, 400, parsed);
             return true;
           }
           tempVoiceAccessRequestData = parsed.data;
@@ -1568,7 +1796,7 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
         if (Object.prototype.hasOwnProperty.call(body, 'tempVoiceModPermissions')) {
           const parsed = normalizeTempVoiceModPermissionsInput(body.tempVoiceModPermissions);
           if ('error' in parsed) {
-            json(res, 400, { error: parsed.error });
+            tvError(res, 400, parsed);
             return true;
           }
           tempVoiceModPermissionsData = parsed.data;
@@ -1584,7 +1812,7 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
           if (['WARN', 'KICK', 'TIMEOUT', 'BAN', 'SOFTBAN'].includes(body.honeypotSanction as string)) {
             data.honeypotSanction = body.honeypotSanction;
           } else {
-            json(res, 400, { error: 'Type de sanction honeypot invalide' });
+            tvError(res, 400, 'Type de sanction honeypot invalide', 'tv_honeypot_sanction_invalid');
             return true;
           }
         }
@@ -1600,7 +1828,36 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
           ? await readWordStatsEnabled(guildId)
           : null;
 
+        // État vocal d'AVANT l'écriture, pour le journal des changements. Lu
+        // seulement quand le corps touche un réglage vocal.
+        const touchesVoice = VOICE_KEYS.some((key) => Object.prototype.hasOwnProperty.call(body, key));
+        const voiceBefore = touchesVoice
+          ? await (async () => {
+              const [guildRow, accessRow, modRow] = await Promise.all([
+                prisma.guild.findUnique({
+                  where: { id: guildId },
+                  select: {
+                    tempVoiceEnabled: true,
+                    tempVoiceChannelId: true,
+                    tempVoiceCategoryId: true,
+                    tempVoiceNameTemplate: true,
+                    tempVoiceRequiredRoleId: true,
+                    tempVoiceDefaults: true,
+                    tempVoiceGenerators: true,
+                  },
+                }),
+                prisma.tempVoiceAccessRequestConfig.findUnique({ where: { guildId } }),
+                prisma.tempVoiceModPermissionsConfig.findUnique({ where: { guildId } }),
+              ]);
+              return snapshotReglagesVocaux(guildId, guildRow, accessRow, modRow);
+            })()
+          : null;
+
         const discordGuild = client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId).catch(() => null);
+
+        // Ce que le serveur a réellement tenté d'enregistrer, pour dire ce qu'il
+        // écarte : la liste du corps, ou celle d'après création des salons vides.
+        let generatorsTried: unknown = body.tempVoiceGenerators;
 
         if (discordGuild) {
           if (body.tempVoiceEnabled) {
@@ -1690,6 +1947,8 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
 
                 resolvedGenerators.push(resolved);
               }
+
+              generatorsTried = [...resolvedGenerators, ...body.tempVoiceGenerators.slice(MAX_ADDITIONAL_GENERATORS)];
 
               // La validation vient après la création, et non avant : un
               // générateur que la page laisse vide pour que le bot le crée n'a
@@ -1880,6 +2139,26 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
           }
         }
 
+        // Générateurs que la normalisation a écartés : le dire, sinon la carte de
+        // la page disparaît à l'enregistrement sans explication.
+        const nomSalon = (id: string): string | undefined => {
+          try {
+            return discordGuild?.channels?.cache?.get(id)?.name;
+          } catch {
+            return undefined;
+          }
+        };
+        if (Array.isArray(generatorsTried) && Array.isArray(data.tempVoiceGenerators)) {
+          notices.push(
+            ...explainDroppedGenerators(
+              generatorsTried,
+              data.tempVoiceGenerators as unknown as Array<{ channelId: string }>,
+              ('tempVoiceChannelId' in data ? data.tempVoiceChannelId : voiceBefore?.tempVoiceChannelId) as string | null | undefined,
+              nomSalon,
+            ),
+          );
+        }
+
         // Purge les caches préfixés guild:<id>: - config du bot (getCachedGuild)
         // et payloads d'analytics avancées, qui embarquent les toggles (ex.
         // wordStatsEnabled). Couvre aussi les deux upserts juste au-dessus :
@@ -1889,15 +2168,52 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
 
         startWordStatsBackfillIfTurnedOn(guildId, wordStatsWasEnabled, data.wordStatsEnabled, 'ChannelsManagementAPI');
 
-        await pushAudit(guildId, {
-          user: auditUser,
-          action: 'Sauvegarde configuration Gestion des salons',
-          context: getGuildName(client, guildId),
-          module: 'Gestion des salons',
-          eventType: 'Manuel',
-          details: 'Configuration de la gestion des salons mise à jour.',
-          channelId: null
-        });
+        // Journal des changements vocaux : UNE ligne d'audit, un champ par ligne
+        // « champ : avant → après ». Rien quand aucun champ vocal n'a bougé.
+        if (voiceBefore) {
+          const voiceAfter: ReglagesVocaux = {
+            ...voiceBefore,
+            ...Object.fromEntries(VOICE_KEYS.filter((key) => key in data).map((key) => [key, data[key]])),
+            ...(tempVoiceModPermissionsData
+              ? { tempVoiceModPermissions: { ...(voiceBefore.tempVoiceModPermissions as object), ...tempVoiceModPermissionsData } }
+              : {}),
+            ...(tempVoiceAccessRequestData
+              ? { tempVoiceAccessRequest: { ...(voiceBefore.tempVoiceAccessRequest as object), ...tempVoiceAccessRequestData } }
+              : {}),
+          };
+          const nomRole = (id: string): string | undefined => {
+            try {
+              return discordGuild?.roles?.cache?.get(id)?.name;
+            } catch {
+              return undefined;
+            }
+          };
+          const noms: NomsLisibles = { salon: nomSalon, role: nomRole };
+          const changes = diffReglagesVocaux(voiceBefore, voiceAfter, noms);
+          if (changes.length > 0) {
+            await pushAudit(guildId, {
+              user: auditUser,
+              action: `Réglages vocaux modifiés (${changes.length})`,
+              context: getGuildName(client, guildId),
+              module: 'Gestion des salons',
+              eventType: 'Manuel',
+              details: lignesDiffReglages(changes).join('\n').slice(0, 4000),
+              channelId: null,
+            });
+          }
+        }
+        // Le reste du corps (fils auto, stats, honeypot...) garde la ligne générique.
+        if (Object.keys(body).some((key) => !(VOICE_KEYS as readonly string[]).includes(key))) {
+          await pushAudit(guildId, {
+            user: auditUser,
+            action: 'Sauvegarde configuration Gestion des salons',
+            context: getGuildName(client, guildId),
+            module: 'Gestion des salons',
+            eventType: 'Manuel',
+            details: 'Configuration de la gestion des salons mise à jour.',
+            channelId: null,
+          });
+        }
 
         if (body.statsEnabled) {
           updateGuildStats(client, guildId).catch((err) => 
@@ -1934,6 +2250,16 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
             honeypotSanction: data.honeypotSanction,
             honeypotReinvite: data.honeypotReinvite,
             statsConfig: data.statsConfig,
+            // Ce que le serveur a normalisé et gardé : la page le réapplique au
+            // lieu de garder ce qu'elle a envoyé (un plafond de places ramené à
+            // 99, un délai ramené dans ses bornes...).
+            tempVoiceDefaults: data.tempVoiceDefaults,
+            tempVoiceModPermissions: tempVoiceModPermissionsData
+              ? { ...(voiceBefore?.tempVoiceModPermissions as object), ...tempVoiceModPermissionsData }
+              : undefined,
+            tempVoiceAccessRequest: tempVoiceAccessRequestData
+              ? { ...(voiceBefore?.tempVoiceAccessRequest as object), ...tempVoiceAccessRequestData }
+              : undefined,
           }
         });
       } catch (err) {

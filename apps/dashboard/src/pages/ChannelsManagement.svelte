@@ -13,7 +13,8 @@
   import TempVoicePolicyEditor from '../lib/components/TempVoicePolicyEditor.svelte';
   import AutoThreadPanel from '../lib/components/channels/AutoThreadPanel.svelte';
   import { ToggleSwitch } from '../lib/components/ui';
-  import { TEMP_VOICE_HANDOVER_DELAY_BOUNDS, TEMP_VOICE_OWNERSHIP_DEFAULTS, type TempVoiceClaimWho, type TempVoiceOwnershipSettings, type TempVoicePolicy } from '@kotbo/shared';
+  import { TEMP_VOICE_HANDOVER_DELAY_BOUNDS, TEMP_VOICE_OWNER_MENTION_DEFAULT, TEMP_VOICE_OWNERSHIP_DEFAULTS, type TempVoiceClaimWho, type TempVoiceOwnerMentionPlacement, type TempVoiceOwnershipSettings, type TempVoicePolicy } from '@kotbo/shared';
+  import { clampInt, selectableGeneratorChannels, takenGeneratorChannelIds, tempVoiceSubFromSearch, withTempVoiceSub, type TempVoiceSubTab } from '../lib/tempVoiceUi';
   import type { TempVoiceGenerator, TempVoiceGeneratorPayload } from '../lib/api/moderation';
   import { createAsyncActionState } from '../lib/asyncAction.svelte';
   import { fetchChannelsManagementConfig, updateChannelsManagementConfig, rescanChannelsManagementStats, fetchTempVoiceChannels, updateTempVoiceChannel, fetchStickyMessages, saveStickyMessage, deleteStickyMessage, repostStickyMessage, fetchChannelsByChannel, toggleChannelFeature, renameDiscordChannel, deleteDiscordChannel } from '../lib/api';
@@ -22,7 +23,7 @@
   import { toast } from '../lib/stores/toast.svelte';
   import { confirmDialog } from '../lib/stores/confirmDialog.svelte';
   import LoadingHint from '../lib/components/LoadingHint.svelte';
-  import { m } from '../lib/i18n';
+  import { m, getLocale } from '../lib/i18n';
 
   import { errorMessage } from '@kotbo/shared';
   /**
@@ -127,6 +128,8 @@
      * `tempVoiceGenerators` et reviennent telles quelles au rallumage.
      */
     perGeneratorPresentation: boolean;
+    /** Où se trouve la mention qui notifie le propriétaire (panneau / message / aucune). Défaut `panel`. */
+    ownerMentionPlacement: TempVoiceOwnerMentionPlacement;
   }
 
   /** `@default` du modèle Prisma `TempVoiceAccessRequestConfig`. */
@@ -164,6 +167,7 @@
       panelComponents: 'V2',
       reservationFallbackMode: 'ANY_ROLE',
       perGeneratorPresentation: false,
+      ownerMentionPlacement: TEMP_VOICE_OWNER_MENTION_DEFAULT,
       ...TEMP_VOICE_OWNERSHIP_DEFAULTS,
     };
   }
@@ -249,6 +253,13 @@
   const PANEL_MODES: Array<{ key: TempVoicePanelMode; label: () => string; hint: () => string }> = [
     { key: 'CLASSIC', label: () => m.cm_tv_panel_mode_classic(), hint: () => m.cm_tv_panel_mode_classic_hint() },
     { key: 'FLAT', label: () => m.cm_tv_panel_mode_flat(), hint: () => m.cm_tv_panel_mode_flat_hint() },
+  ];
+
+  /** Cartes-radio de la mention du propriétaire, une aide par option. */
+  const OWNER_MENTION_MODES: Array<{ key: TempVoiceOwnerMentionPlacement; label: () => string; hint: () => string }> = [
+    { key: 'panel', label: () => m.cm_tv_owner_mention_panel(), hint: () => m.cm_tv_owner_mention_panel_hint() },
+    { key: 'message', label: () => m.cm_tv_owner_mention_message(), hint: () => m.cm_tv_owner_mention_message_hint() },
+    { key: 'none', label: () => m.cm_tv_owner_mention_none(), hint: () => m.cm_tv_owner_mention_none_hint() },
   ];
 
   const STATE_LAYOUT_MODES: Array<{ key: TempVoiceStateLayout; label: () => string; hint: () => string }> = [
@@ -422,8 +433,16 @@
     config.tempVoiceModPermissions.panelComponents,
   ));
 
+  const isDirty = $derived(JSON.stringify(config) !== JSON.stringify(savedConfig));
+
+  // « Configuration enregistrée » (ou l'erreur d'un essai précédent) ne doit pas
+  // rester affiché pendant l'édition suivante : il décrirait un état dépassé.
   $effect(() => {
-    const dirty = JSON.stringify(config) !== JSON.stringify(savedConfig);
+    if (isDirty) untrack(() => saveAction.clearFeedback());
+  });
+
+  $effect(() => {
+    const dirty = isDirty;
     if (dirty) {
       untrack(() => {
         unsavedChanges.register({
@@ -451,7 +470,16 @@
   // « Par salon » d'abord : c'est la question qu'on se pose en arrivant
   // (« qu'est-ce qui touche ce salon ? »), la ou les onglets par fonctionnalite
   // repondent a l'inverse (« quels salons ont cette fonctionnalite ? »).
-  let tvSub = $state<'generators' | 'permissions' | 'panel' | 'active'>('generators');
+  // Le sous-onglet vocal vit dans `?sub=` (même principe que `?tab=` des analytics
+  // admin) : un lien partagé ou un rechargement rouvre le bon sous-onglet.
+  let tvSub = $state<TempVoiceSubTab>(tempVoiceSubFromSearch(window.location.search));
+  $effect(() => {
+    if (activeTab !== 'temp-voice') return;
+    const search = withTempVoiceSub(window.location.search, tvSub);
+    if (search !== window.location.search) {
+      window.history.replaceState(window.history.state, '', `${window.location.pathname}${search}${window.location.hash}`);
+    }
+  });
   const channelTabs = ['by-channel', 'auto-thread', 'sticky', 'stats', 'temp-voice', 'access-requests', 'honeypot'] as const;
   let activeTab = $state<'by-channel' | 'auto-thread' | 'sticky' | 'stats' | 'temp-voice' | 'access-requests' | 'honeypot'>('by-channel');
   $effect(() => {
@@ -649,6 +677,20 @@
   );
 
   const roleOptions = $derived(autoAllowableRoles.map(role => ({ id: role.id, name: role.name })));
+
+  // Salons vocaux proposés aux sélecteurs de générateurs, sans ceux que le
+  // principal ou un autre générateur occupe déjà : le serveur écarte un doublon,
+  // et la carte disparaissait à l'enregistrement.
+  const mainGeneratorChannelOptions = $derived(
+    selectableGeneratorChannels(availableVoiceChannels, takenGeneratorChannelIds(null, config.tempVoiceGenerators))
+      .map(c => ({ id: c.id, name: `🔊 ${c.name}` }))
+  );
+  function generatorChannelOptions(index: number) {
+    return selectableGeneratorChannels(
+      availableVoiceChannels,
+      takenGeneratorChannelIds(config.tempVoiceChannelId, config.tempVoiceGenerators, index),
+    ).map(c => ({ id: c.id, name: `🔊 ${c.name}` }));
+  }
 
   /**
    * Choix d'un selecteur, en gardant la valeur deja enregistree meme si elle ne
@@ -874,6 +916,12 @@
     }
   }
 
+  /** « 1 connecté » / « 5 connectés » : le français garde le singulier jusqu'à 1 inclus. */
+  function connectedLabel(count: number): string {
+    const singular = getLocale() === 'fr' ? count <= 1 : count === 1;
+    return singular ? m.cm_members_connected_one({ count }) : m.cm_members_connected_other({ count });
+  }
+
   let editingChannel = $state(null as string | null);
   let newChannelName = $state('');
   let actionInProgress = $state(false);
@@ -990,9 +1038,10 @@
     let success = false;
     await saveAction.run(async () => {
       // Validate statistics role target only if role channel or auto-creation is requested
+      // Le message part en toast avec les autres erreurs, plus bas : un seul
+      // endroit, donc jamais deux toasts pour la même erreur.
       if (config.statsConfig.roleEnabled && !config.statsConfig.roleTargetId) {
-        toast.error(m.cm_role_target_required());
-        throw new Error(m.cm_role_target_missing());
+        throw new Error(m.cm_role_target_required());
       }
 
       const res = await updateChannelsManagementConfig({
@@ -1009,6 +1058,10 @@
         tempVoiceAccessRequest: {
           ...config.tempVoiceAccessRequest,
           notifyChannelId: config.tempVoiceAccessRequest.notifyChannelId || null,
+          // Mêmes bornes que la route : 1 à 1440 minutes. Un champ vidé ou à 0
+          // reprend le défaut au lieu de partir en 400.
+          requestExpiresMinutes: clampInt(config.tempVoiceAccessRequest.requestExpiresMinutes, 1, 1440, 10),
+          denyCooldownMinutes: clampInt(config.tempVoiceAccessRequest.denyCooldownMinutes, 1, 1440, 10),
         },
         tempVoiceModPermissions: config.tempVoiceModPermissions,
         honeypotEnabled: config.honeypotEnabled,
@@ -1025,6 +1078,17 @@
 
       // Update local state with resolved (auto-created) values from backend
       if (res.resolved) {
+        // Ce que le serveur a normalisé et gardé remplace ce que la page a envoyé
+        // (places ramenées à 99, délai remis dans ses bornes...).
+        if (res.resolved.tempVoiceDefaults) {
+          config.tempVoiceDefaults = { ...defaultTempVoicePolicy(), ...res.resolved.tempVoiceDefaults };
+        }
+        if (res.resolved.tempVoiceModPermissions) {
+          config.tempVoiceModPermissions = { ...defaultTempVoiceModPermissions(), ...res.resolved.tempVoiceModPermissions };
+        }
+        if (res.resolved.tempVoiceAccessRequest) {
+          config.tempVoiceAccessRequest = { ...defaultTempVoiceAccessRequestConfig(), ...res.resolved.tempVoiceAccessRequest };
+        }
         if (res.resolved.tempVoiceChannelId) config.tempVoiceChannelId = res.resolved.tempVoiceChannelId;
         if (res.resolved.tempVoiceCategoryId) config.tempVoiceCategoryId = res.resolved.tempVoiceCategoryId;
         if (Array.isArray(res.resolved.tempVoiceGenerators)) {
@@ -1041,11 +1105,19 @@
         }
       }
       
+      // Enregistré, mais pas tout à fait comme demandé : le serveur le dit.
+      if (Array.isArray(res.notices)) {
+        for (const notice of res.notices) toast.info(String(notice), 12000);
+      }
+
       await dashboardStore.refresh();
       savedConfig = JSON.parse(JSON.stringify(config));
       success = true;
       return true;
     }, { successMessage: m.cm_config_saved() });
+    // L'erreur s'affiche aussi en toast : l'InlineFeedback est en haut de page,
+    // hors de vue quand on enregistre depuis la barre du bas.
+    if (!success && saveAction.state.error) toast.error(saveAction.state.error);
     return success;
   }
 
@@ -1973,11 +2045,11 @@
             <p class="text-xs text-on-surface-variant mt-1">{m.cm_temp_voice_desc()}</p>
           </div>
 
-          <div class="flex items-center gap-2">
-            <input 
-              type="checkbox" 
-              bind:checked={config.tempVoiceEnabled} 
-              class="w-10 h-6 bg-surface-container-high rounded-full relative appearance-none cursor-pointer transition-all border border-outline-variant/20 checked:bg-primary before:content-[''] before:absolute before:h-4 before:w-4 before:rounded-full before:bg-white before:top-0.5 before:left-0.5 checked:before:translate-x-4 before:transition-all"
+          <div class="flex items-center gap-2 shrink-0">
+            <ToggleSwitch
+              checked={config.tempVoiceEnabled}
+              onToggle={(v) => (config.tempVoiceEnabled = v)}
+              ariaLabel={m.cm_temp_voice_title()}
             />
           </div>
         </div>
@@ -1997,8 +2069,9 @@
         {/if}
         {#if config.tempVoiceEnabled && (tvSub === 'generators' || tvSub === 'permissions')}
         <section class="bg-surface-container-low/30 border border-outline-variant/10 p-8 rounded-xl space-y-6">
-            <div class="space-y-4 max-w-xl">
+            <div class="space-y-4">
               {#if tvSub === 'generators'}
+              <div class="space-y-4 max-w-xl">
               <!-- Generator Voice Channel Selection -->
               <div class="space-y-1.5">
                 <label for="temp-voice-channel-select" class="text-xs font-bold text-on-surface/80 block">{m.cm_generator_voice_channel_label()}</label>
@@ -2006,7 +2079,7 @@
                   <div class="flex-1">
                     <SearchableSelect 
                       id="temp-voice-channel-select"
-                      options={availableVoiceChannels.map(c => ({ id: c.id, name: `🔊 ${c.name}` }))} 
+                      options={mainGeneratorChannelOptions}
                       bind:value={config.tempVoiceChannelId} 
                       placeholder={m.cm_create_channel_auto_placeholder()}
                     />
@@ -2075,16 +2148,19 @@
                 />
                 <p class="text-2xs text-on-surface-variant/40">{m.cm_required_role_scope_hint()}</p>
               </div>
+              </div>
 
               {/if}
 
               <!-- Permissions appliquées aux salons créés -->
               {#if tvSub === 'permissions'}
-              <TempVoicePolicyEditor
-                bind:policy={config.tempVoiceDefaults}
-                availableRoles={autoAllowableRoles}
-                idPrefix="temp-voice-main"
-              />
+              <div class="max-w-xl">
+                <TempVoicePolicyEditor
+                  bind:policy={config.tempVoiceDefaults}
+                  availableRoles={autoAllowableRoles}
+                  idPrefix="temp-voice-main"
+                />
+              </div>
               {/if}
 
               {#if tvSub === 'generators'}
@@ -2100,6 +2176,7 @@
                     {m.cm_additional_generators_title()}
                   </h4>
                   <p class="text-xs text-on-surface-variant">{m.cm_additional_generators_desc()}</p>
+                  <p class="text-2xs text-on-surface-variant/40 mt-1">{m.cm_tv_generator_taken_hint()}</p>
                 </div>
 
                 <!-- Un sélecteur de surcharge de présentation, réutilisé cinq
@@ -2165,7 +2242,7 @@
                         </button>
                       </div>
 
-                      <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <!-- Generator Voice Channel Selection -->
                         <div class="space-y-1.5">
                           <label for="temp-voice-channel-select-{index}" class="text-xs font-bold text-on-surface/80 block">{m.cm_generator_voice_channel_label()}</label>
@@ -2173,7 +2250,7 @@
                             <div class="flex-1">
                               <SearchableSelect 
                                 id="temp-voice-channel-select-{index}"
-                                options={availableVoiceChannels.map(c => ({ id: c.id, name: `🔊 ${c.name}` }))} 
+                                options={generatorChannelOptions(index)}
                                 bind:value={generator.channelId} 
                                 placeholder={m.cm_create_auto_placeholder()}
                               />
@@ -2262,7 +2339,7 @@
                             <span class="text-xs font-bold text-on-surface/80 block">{m.cm_tv_panel_per_gen_override_title()}</span>
                             <p class="text-2xs text-on-surface-variant/40">{m.cm_tv_panel_per_gen_override_desc()}</p>
                           </div>
-                          <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
+                          <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3">
                             {@render presentationOverrideSelect(
                               `gen-${index}-panel-mode`,
                               m.cm_tv_panel_mode_label(),
@@ -2560,7 +2637,14 @@
                             disabled={actionInProgress}
                             class="px-2 py-1 bg-primary text-white text-2xs font-semibold rounded-md"
                           >
-                            OK
+                            {m.cm_validate()}
+                          </button>
+                          <button
+                            type="button"
+                            onclick={() => editingChannel = null}
+                            class="px-2 py-1 bg-surface-container text-on-surface text-2xs font-semibold rounded-md border border-outline-variant/20"
+                          >
+                            {m.common_cancel()}
                           </button>
                         </div>
                       {:else}
@@ -2587,7 +2671,7 @@
                       </div>
                       <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs font-semibold bg-primary/10 text-primary border border-primary/20">
                         <Papicon icon="user" size={10} />
-                        {chan.membersCount} {m.cm_members_connected_suffix()}
+                        {connectedLabel(chan.membersCount)}
                       </span>
                     </div>
 
@@ -2761,6 +2845,33 @@
                 </p>
               </div>
 
+              <div class="space-y-2 md:col-span-2">
+                <span class="text-xs font-bold text-on-surface/80 block">{m.cm_tv_owner_mention_label()}</span>
+                <p class="text-2xs text-on-surface-variant/40">{m.cm_tv_owner_mention_desc()}</p>
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  {#each OWNER_MENTION_MODES as mode (mode.key)}
+                    <label
+                      for="tv-owner-mention-{mode.key}"
+                      class="flex flex-col gap-1 border rounded-lg px-4 py-3 cursor-pointer transition-all {config.tempVoiceModPermissions.ownerMentionPlacement === mode.key
+                        ? 'bg-primary/10 border-primary/40'
+                        : 'bg-surface-container-high/20 border-outline-variant/10 hover:border-primary/20'}"
+                    >
+                      <span class="flex items-center gap-2 text-xs font-bold text-on-surface">
+                        <input
+                          id="tv-owner-mention-{mode.key}"
+                          type="radio"
+                          value={mode.key}
+                          bind:group={config.tempVoiceModPermissions.ownerMentionPlacement}
+                          class="accent-primary w-3.5 h-3.5"
+                        />
+                        {mode.label()}
+                      </span>
+                      <span class="text-2xs text-on-surface-variant leading-relaxed">{mode.hint()}</span>
+                    </label>
+                  {/each}
+                </div>
+              </div>
+
               <div class="space-y-2">
                 <span class="text-xs font-bold text-on-surface/80 block">{m.cm_tv_panel_state_colors_label()}</span>
                 <div class="space-y-2">
@@ -2811,11 +2922,11 @@
               <p class="text-xs text-on-surface-variant mt-1">{m.cm_ar_desc()}</p>
             </div>
 
-            <div class="flex items-center gap-2">
-              <input
-                type="checkbox"
-                bind:checked={config.tempVoiceAccessRequest.enabled}
-                class="w-10 h-6 bg-surface-container-high rounded-full relative appearance-none cursor-pointer transition-all border border-outline-variant/20 checked:bg-primary before:content-[''] before:absolute before:h-4 before:w-4 before:rounded-full before:bg-white before:top-0.5 before:left-0.5 checked:before:translate-x-4 before:transition-all"
+            <div class="flex items-center gap-2 shrink-0">
+              <ToggleSwitch
+                checked={config.tempVoiceAccessRequest.enabled}
+                onToggle={(v) => (config.tempVoiceAccessRequest.enabled = v)}
+                ariaLabel={m.cm_ar_title()}
               />
             </div>
           </div>
@@ -2896,7 +3007,7 @@
                   <input
                     id="ar-cooldown-input"
                     type="number"
-                    min="0"
+                    min="1"
                     max="1440"
                     bind:value={config.tempVoiceAccessRequest.denyCooldownMinutes}
                     class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm outline-none focus:ring-1 focus:ring-primary/30 transition-all"
@@ -3079,11 +3190,11 @@
               <p class="text-xs text-on-surface-variant mt-1">{m.cm_honeypot_desc()}</p>
             </div>
             
-            <div class="flex items-center gap-2">
-              <input 
-                type="checkbox" 
-                bind:checked={config.honeypotEnabled} 
-                class="w-10 h-6 bg-surface-container-high rounded-full relative appearance-none cursor-pointer transition-all border border-outline-variant/20 checked:bg-primary before:content-[''] before:absolute before:h-4 before:w-4 before:rounded-full before:bg-white before:top-0.5 before:left-0.5 checked:before:translate-x-4 before:transition-all"
+            <div class="flex items-center gap-2 shrink-0">
+              <ToggleSwitch
+                checked={config.honeypotEnabled}
+                onToggle={(v) => (config.honeypotEnabled = v)}
+                ariaLabel={m.cm_honeypot_title()}
               />
             </div>
           </div>

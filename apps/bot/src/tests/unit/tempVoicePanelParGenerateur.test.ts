@@ -909,7 +909,11 @@ describe('écriture — la route et la création du salon', () => {
 describe('messages de validation en français', () => {
   test('12 — un corps non objet et une valeur hors liste sont refusés en français', () => {
     const nul = normalizeTempVoiceModPermissionsInput(null);
-    expect(nul).toEqual({ error: "tempVoiceModPermissions : objet attendu. Rien n'a été enregistré." });
+    expect(nul).toEqual({
+      error: "tempVoiceModPermissions : objet attendu. Rien n'a été enregistré.",
+      code: 'tv_object_expected',
+      params: { field: 'tempVoiceModPermissions' },
+    });
 
     const faux = normalizeTempVoiceModPermissionsInput({ panelMode: 'ZZZ' });
     expect('error' in faux && faux.error).toBe(

@@ -11,6 +11,7 @@
   import SearchableSelect from './SearchableSelect.svelte';
   import Papicon from './Papicon.svelte';
   import { m } from '../i18n';
+  import { MAX_USER_LIMIT, userLimitDisplayFix } from '../tempVoiceUi';
   import type { TempVoicePolicy, TempVoiceOwnerPower, TempVoiceTextChatMode } from '@kotbo/shared';
 
   let {
@@ -23,8 +24,7 @@
     idPrefix?: string;
   } = $props();
 
-  /** Le bot applique la même borne : au-delà, Discord refuse la valeur. */
-  const MAX_USER_LIMIT = 99;
+  // Le bot applique la même borne (MAX_USER_LIMIT) : au-delà, Discord refuse la valeur.
   const MAX_AUTO_ALLOW_ROLES = 10;
 
   const OWNER_POWERS: Array<{ key: TempVoiceOwnerPower; label: () => string; hint: () => string }> = [
@@ -73,8 +73,18 @@
   }
 
   function onUserLimitInput(event: Event) {
-    const raw = Number.parseInt((event.currentTarget as HTMLInputElement).value, 10);
+    const input = event.currentTarget as HTMLInputElement;
+    const raw = Number.parseInt(input.value, 10);
     policy.userLimit = Number.isFinite(raw) ? Math.min(Math.max(raw, 0), MAX_USER_LIMIT) : 0;
+    // Si la valeur retenue est déjà celle de l'état (99 enregistré, « 150 »
+    // tapé), Svelte ne réécrit pas le champ : on le corrige à la main.
+    const fix = userLimitDisplayFix(input.value);
+    if (fix !== null) input.value = fix;
+  }
+
+  /** Champ vidé ou laissé en cours de frappe : il reprend la valeur enregistrée. */
+  function resyncUserLimit(event: Event) {
+    (event.currentTarget as HTMLInputElement).value = String(policy.userLimit);
   }
 </script>
 
@@ -100,6 +110,7 @@
         max={MAX_USER_LIMIT}
         value={policy.userLimit}
         oninput={onUserLimitInput}
+        onblur={resyncUserLimit}
         class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/30 transition-all"
       />
       <p class="text-2xs text-on-surface-variant/40">{m.cm_tv_user_limit_hint()}</p>

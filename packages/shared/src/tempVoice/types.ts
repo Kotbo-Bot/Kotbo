@@ -68,3 +68,17 @@ export const TEMP_VOICE_OWNERSHIP_DEFAULTS: TempVoiceOwnershipSettings = {
 
 /** Bornes du délai de passation, en secondes, incluses. */
 export const TEMP_VOICE_HANDOVER_DELAY_BOUNDS = { min: 10, max: 300 } as const;
+
+/**
+ * Où se trouve la mention qui notifie le propriétaire à la création du salon.
+ *
+ * - `panel` : dans le panneau de gestion lui-même (comportement d'origine).
+ * - `message` : dans un message distinct au-dessus du panneau.
+ * - `none` : aucune mention, le propriétaire n'est pas notifié.
+ *
+ * Lu par le bot dans la même ligne que `panelMode`/`panelComponents`
+ * (`TempVoiceModPermissionsConfig.ownerMentionPlacement`).
+ */
+export const TEMP_VOICE_OWNER_MENTION_PLACEMENTS = ['panel', 'message', 'none'] as const;
+export type TempVoiceOwnerMentionPlacement = (typeof TEMP_VOICE_OWNER_MENTION_PLACEMENTS)[number];
+export const TEMP_VOICE_OWNER_MENTION_DEFAULT: TempVoiceOwnerMentionPlacement = 'panel';
