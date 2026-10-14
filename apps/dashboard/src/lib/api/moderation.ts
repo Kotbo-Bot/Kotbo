@@ -1,5 +1,5 @@
 /** Moderation : pseudos, salons, mots bannis. */
-import type { AutoThreadConfigData, TempVoicePolicy } from '@kotbo/shared';
+import type { AutoThreadConfigData, TempVoicePolicy, TempVoiceOwnershipSettings } from '@kotbo/shared';
 import { authStore } from '../stores/auth.svelte';
 import { API_BASE_URL, JSON_HEADERS, authorizedFetch, dashboardMutation, dashboardRequest } from './client';
 
@@ -265,7 +265,7 @@ export async function updateChannelsManagementConfig(
        * telles quelles au rallumage.
        */
       perGeneratorPresentation: boolean;
-    };
+    } & TempVoiceOwnershipSettings;
     honeypotEnabled?: boolean;
     honeypotChannelId?: string | null;
     honeypotSanction?: string;

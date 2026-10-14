@@ -4429,6 +4429,12 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "panelComponents": "V2",
     "reservationFallbackMode": "ANY_ROLE",
     "perGeneratorPresentation": false,
+    "handoverDmEnabled": true,
+    "handoverDelaySeconds": 30,
+    "claimEmbedEnabled": true,
+    "claimWho": "present",
+    "moderatorClaimOverride": true,
+    "deleteWhenEmpty": true,
     "createdAt": "__NOW__",
     "updatedAt": "__NOW__"
   },

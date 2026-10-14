@@ -13,7 +13,7 @@
   import TempVoicePolicyEditor from '../lib/components/TempVoicePolicyEditor.svelte';
   import AutoThreadPanel from '../lib/components/channels/AutoThreadPanel.svelte';
   import { ToggleSwitch } from '../lib/components/ui';
-  import type { TempVoicePolicy } from '@kotbo/shared';
+  import { TEMP_VOICE_HANDOVER_DELAY_BOUNDS, TEMP_VOICE_OWNERSHIP_DEFAULTS, type TempVoiceClaimWho, type TempVoiceOwnershipSettings, type TempVoicePolicy } from '@kotbo/shared';
   import type { TempVoiceGenerator, TempVoiceGeneratorPayload } from '../lib/api/moderation';
   import { createAsyncActionState } from '../lib/asyncAction.svelte';
   import { fetchChannelsManagementConfig, updateChannelsManagementConfig, rescanChannelsManagementStats, fetchTempVoiceChannels, updateTempVoiceChannel, fetchStickyMessages, saveStickyMessage, deleteStickyMessage, repostStickyMessage, fetchChannelsByChannel, toggleChannelFeature, renameDiscordChannel, deleteDiscordChannel } from '../lib/api';
@@ -86,7 +86,8 @@
     denyCooldownMinutes: number;
   }
 
-  interface TempVoiceModPermissionsConfig {
+  /** Les six réglages de passation vivent dans la même ligne (`TempVoiceOwnershipSettings`). */
+  interface TempVoiceModPermissionsConfig extends TempVoiceOwnershipSettings {
     canRename: boolean;
     canChangeLimit: boolean;
     canLock: boolean;
@@ -163,8 +164,22 @@
       panelComponents: 'V2',
       reservationFallbackMode: 'ANY_ROLE',
       perGeneratorPresentation: false,
+      ...TEMP_VOICE_OWNERSHIP_DEFAULTS,
     };
   }
+
+  /** Les quatre interrupteurs de la passation, chacun avec son aide. */
+  const OWNERSHIP_TOGGLES: Array<{ key: 'handoverDmEnabled' | 'claimEmbedEnabled' | 'moderatorClaimOverride' | 'deleteWhenEmpty'; label: () => string; hint: () => string }> = [
+    { key: 'handoverDmEnabled', label: () => m.cm_tv_own_dm_label(), hint: () => m.cm_tv_own_dm_hint() },
+    { key: 'claimEmbedEnabled', label: () => m.cm_tv_own_embed_label(), hint: () => m.cm_tv_own_embed_hint() },
+    { key: 'moderatorClaimOverride', label: () => m.cm_tv_own_override_label(), hint: () => m.cm_tv_own_override_hint() },
+    { key: 'deleteWhenEmpty', label: () => m.cm_tv_own_delete_label(), hint: () => m.cm_tv_own_delete_hint() },
+  ];
+
+  const CLAIM_WHO_MODES: Array<{ key: TempVoiceClaimWho; label: () => string; hint: () => string }> = [
+    { key: 'present', label: () => m.cm_tv_own_who_present(), hint: () => m.cm_tv_own_who_present_hint() },
+    { key: 'moderators', label: () => m.cm_tv_own_who_moderators(), hint: () => m.cm_tv_own_who_moderators_hint() },
+  ];
 
   /** Même plafond que côté bot : au-delà, un menu Discord ne pourrait pas les afficher. */
   const MAX_RESERVABLE_ROLES = 25;
@@ -2319,6 +2334,77 @@
               </div>
               {/if}
             </div>
+        </section>
+        {/if}
+
+        <!-- Passation : un bloc à part dans « Permissions », car il décide de
+             qui détient les droits du salon quand son propriétaire part. -->
+        {#if config.tempVoiceEnabled && tvSub === 'permissions'}
+        <section class="bg-surface-container-low/30 border border-outline-variant/10 p-8 rounded-xl space-y-6 mt-6">
+          <div>
+            <h3 class="text-xl font-semibold flex items-center gap-3">
+              <Papicon icon="user" size={20} class="text-primary" />
+              {m.cm_tv_own_title()}
+            </h3>
+            <p class="text-xs text-on-surface-variant mt-1">{m.cm_tv_own_desc()}</p>
+          </div>
+
+          <div class="grid grid-cols-1 gap-3 max-w-xl">
+            {#each OWNERSHIP_TOGGLES as row (row.key)}
+              <div class="flex items-center justify-between gap-4 p-4 bg-surface-container-high/20 border border-outline-variant/5 rounded-xl">
+                <div class="space-y-0.5">
+                  <label for="tv-own-{row.key}" class="text-xs font-bold text-on-surface/80 block">{row.label()}</label>
+                  <p class="text-2xs text-on-surface-variant">{row.hint()}</p>
+                </div>
+                <input
+                  id="tv-own-{row.key}"
+                  type="checkbox"
+                  bind:checked={config.tempVoiceModPermissions[row.key]}
+                  class="shrink-0 w-10 h-6 bg-surface-container-high rounded-full relative appearance-none cursor-pointer transition-all border border-outline-variant/20 checked:bg-primary before:content-[''] before:absolute before:h-4 before:w-4 before:rounded-full before:bg-white before:top-0.5 before:left-0.5 checked:before:translate-x-4 before:transition-all"
+                />
+              </div>
+            {/each}
+          </div>
+
+          <div class="space-y-1.5 max-w-xl">
+            <label for="tv-own-delay" class="text-xs font-bold text-on-surface/80 block">{m.cm_tv_own_delay_label()}</label>
+            <input
+              id="tv-own-delay"
+              type="number"
+              min={TEMP_VOICE_HANDOVER_DELAY_BOUNDS.min}
+              max={TEMP_VOICE_HANDOVER_DELAY_BOUNDS.max}
+              disabled={!config.tempVoiceModPermissions.handoverDmEnabled}
+              bind:value={config.tempVoiceModPermissions.handoverDelaySeconds}
+              class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm outline-none focus:ring-1 focus:ring-primary/30 transition-all disabled:opacity-40"
+            />
+            <p class="text-2xs text-on-surface-variant/40">{m.cm_tv_own_delay_hint({ min: TEMP_VOICE_HANDOVER_DELAY_BOUNDS.min, max: TEMP_VOICE_HANDOVER_DELAY_BOUNDS.max })}</p>
+          </div>
+
+          <div class="space-y-2 max-w-xl">
+            <span class="text-xs font-bold text-on-surface/80 block">{m.cm_tv_own_who_label()}</span>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {#each CLAIM_WHO_MODES as mode (mode.key)}
+                <label
+                  for="tv-own-who-{mode.key}"
+                  class="flex flex-col gap-1 border rounded-lg px-4 py-3 cursor-pointer transition-all {config.tempVoiceModPermissions.claimWho === mode.key
+                    ? 'bg-primary/10 border-primary/40'
+                    : 'bg-surface-container-high/20 border-outline-variant/10 hover:border-primary/20'}"
+                >
+                  <span class="flex items-center gap-2 text-xs font-bold text-on-surface">
+                    <input
+                      id="tv-own-who-{mode.key}"
+                      type="radio"
+                      value={mode.key}
+                      bind:group={config.tempVoiceModPermissions.claimWho}
+                      class="accent-primary w-3.5 h-3.5"
+                    />
+                    {mode.label()}
+                  </span>
+                  <span class="text-2xs text-on-surface-variant leading-relaxed">{mode.hint()}</span>
+                </label>
+              {/each}
+            </div>
+          </div>
         </section>
         {/if}
 
