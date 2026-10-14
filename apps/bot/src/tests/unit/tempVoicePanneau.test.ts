@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { PermissionFlagsBits } from 'discord.js';
+import { PermissionFlagsBits, PermissionsBitField } from 'discord.js';
+import { deduireModeEcriture, modeDuSalon } from '../../events/tempVoice.js';
 import {
   normaliserHistoriqueRenommage,
   normaliserEtatDemandes,
@@ -47,6 +48,10 @@ import {
   SILENCE_APRES_REFUS_MS,
   surchargesModeEcriture,
   textChatDepuisModeEcriture,
+  MODE_ECRITURE_PAR_TEXT_CHAT,
+  TEMP_VOICE_TEXT_CHAT_MODES,
+  buildCreationOverwrites,
+  defaultTempVoicePolicy,
   transitionModeEcriture,
   type CibleMembre,
   type ModeEcriture,
@@ -205,17 +210,68 @@ describe('normalisation et pont vers l’ancien réglage', () => {
     expect(estModeEcriture('locked')).toBe(false);
   });
 
-  test('le repli vers trois valeurs ne rouvre jamais un salon fermé', () => {
-    // `inVoice` et `nobody` refusent @everyone : ils se rangent sous `locked`.
-    // Les ranger sous `open` ouvrirait le chat d'une base pas encore migrée.
-    expect(textChatDepuisModeEcriture('everyone')).toBe('open');
-    expect(textChatDepuisModeEcriture('inVoice')).toBe('locked');
-    expect(textChatDepuisModeEcriture('ownerOnly')).toBe('locked');
-    expect(textChatDepuisModeEcriture('nobody')).toBe('locked');
-
+  test('la table réglage ↔ mode est bijective sur les cinq valeurs', () => {
+    expect(modeEcritureDepuisTextChat('inherit')).toBeNull();
     expect(modeEcritureDepuisTextChat('open')).toBe('everyone');
+    expect(modeEcritureDepuisTextChat('inVoice')).toBe('inVoice');
     expect(modeEcritureDepuisTextChat('locked')).toBe('ownerOnly');
-    expect(modeEcritureDepuisTextChat('inherit')).toBe('everyone');
+    expect(modeEcritureDepuisTextChat('nobody')).toBe('nobody');
+
+    for (const textChat of TEMP_VOICE_TEXT_CHAT_MODES) {
+      expect(textChatDepuisModeEcriture(modeEcritureDepuisTextChat(textChat))).toBe(textChat);
+    }
+    expect(Object.keys(MODE_ECRITURE_PAR_TEXT_CHAT)).toHaveLength(5);
+  });
+
+  test('un salon créé avec chacun des cinq réglages affiche le mode correspondant', () => {
+    const EVERY = '100000000000000000';
+    const OWN = '200000000000000000';
+    // Lu sur les surcharges seules, `inVoice` a la forme de « Personne » (le propriétaire
+    // entre ensuite par présence) : c'est `writeMode`, enregistré à la création, qui le distingue.
+    const attendu = { inherit: 'everyone', open: 'everyone', inVoice: 'nobody', locked: 'ownerOnly', nobody: 'nobody' } as const;
+
+    for (const textChat of TEMP_VOICE_TEXT_CHAT_MODES) {
+      const ow = buildCreationOverwrites({
+        everyoneRoleId: EVERY, ownerId: OWN, inherited: [], policy: { ...defaultTempVoicePolicy(), textChat },
+      }) as unknown as Array<{ id: string; allow?: bigint; deny?: bigint }>;
+      const lire = (id: string) => {
+        const o = ow.find((x) => x.id === id);
+        const a = o?.allow ?? 0n;
+        const d = o?.deny ?? 0n;
+        return { allow: { has: (b: bigint) => (a & b) === b }, deny: { has: (b: bigint) => (d & b) === b } };
+      };
+      expect(deduireModeEcriture(lire(EVERY), lire(OWN), undefined)).toBe(attendu[textChat]);
+      expect(MODE_ECRITURE_PAR_TEXT_CHAT[textChat]).toBe(
+        ({ inherit: null, open: 'everyone', inVoice: 'inVoice', locked: 'ownerOnly', nobody: 'nobody' } as Record<string, string | null>)[textChat] as never,
+      );
+    }
+  });
+
+  test('panneau : aucune surcharge mais @everyone sans SendMessages réel → Personne', () => {
+    const rien = { allow: { has: () => false }, deny: { has: () => false } };
+    expect(deduireModeEcriture(rien, rien, false)).toBe('nobody');
+    expect(deduireModeEcriture(rien, rien, true)).toBe('everyone');
+    expect(deduireModeEcriture(rien, rien, undefined)).toBe('everyone');
+    const proprio = { allow: { has: () => true }, deny: { has: () => false } };
+    expect(deduireModeEcriture(rien, proprio, false)).toBe('ownerOnly');
+  });
+
+  test('Hérité : le refus vient du rôle @everyone du serveur, sans surcharge → la lecture réelle ne rend pas « Tout le monde »', () => {
+    // Réglage Hérité : aucun mode mémorisé qui court-circuiterait la lecture des permissions.
+    expect(modeEcritureDepuisTextChat('inherit')).toBeNull();
+    // Droits de base du rôle sans SendMessages ; aucune surcharge sur le salon, rien dans la catégorie.
+    const droitsDeBase = new PermissionsBitField(PermissionFlagsBits.ViewChannel | PermissionFlagsBits.Connect);
+    const salon = (permissionsFor: unknown) =>
+      ({
+        guild: { id: 'g1', roles: { everyone: { id: 'g1' } } },
+        permissionOverwrites: { cache: new Map() },
+        permissionsFor,
+      }) as never;
+    const entree = { creatorId: 'proprio' } as never;
+
+    expect(modeDuSalon(salon(() => droitsDeBase), entree)).toBe('nobody');
+    // Contre-épreuve : si le rôle peut écrire, c'est bien « Tout le monde ».
+    expect(modeDuSalon(salon(() => new PermissionsBitField(PermissionFlagsBits.SendMessages)), entree)).toBe('everyone');
   });
 });
 

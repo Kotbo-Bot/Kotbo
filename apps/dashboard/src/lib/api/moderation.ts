@@ -1,5 +1,5 @@
 /** Moderation : pseudos, salons, mots bannis. */
-import type { AutoThreadConfigData, TempVoicePolicy } from '@kotbo/shared';
+import type { AutoThreadConfigData, TempVoicePolicy, TempVoiceOwnershipSettings } from '@kotbo/shared';
 import { authStore } from '../stores/auth.svelte';
 import { API_BASE_URL, JSON_HEADERS, authorizedFetch, dashboardMutation, dashboardRequest } from './client';
 
@@ -265,7 +265,9 @@ export async function updateChannelsManagementConfig(
        * telles quelles au rallumage.
        */
       perGeneratorPresentation: boolean;
-    };
+      /** Où se trouve la mention qui notifie le propriétaire : panneau, message au-dessus ou aucune. */
+      ownerMentionPlacement: 'panel' | 'message' | 'none';
+    } & TempVoiceOwnershipSettings;
     honeypotEnabled?: boolean;
     honeypotChannelId?: string | null;
     honeypotSanction?: string;

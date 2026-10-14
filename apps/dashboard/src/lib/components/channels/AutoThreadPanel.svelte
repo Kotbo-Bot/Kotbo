@@ -704,7 +704,7 @@
                     />
                   {/snippet}
                 </Field>
-                <Field label={m.at_reject_message_label()} hint={m.at_reject_message_hint()}>
+                <Field label={m.at_reject_message_label()} hint={m.at_reject_message_hint({ user: '{user}', channel: '{channel}', delay: '{delay}' })}>
                   {#snippet children(id, describedBy)}
                     <textarea
                       {id}
@@ -712,7 +712,7 @@
                       class="input"
                       rows="3"
                       maxlength={AUTO_THREAD_LIMITS.rejectMessage}
-                      placeholder={draft!.rejectAction === 'delete' ? m.at_reject_message_placeholder_delete() : m.at_reject_message_placeholder_warn()}
+                      placeholder={draft!.rejectAction === 'delete' ? m.at_reject_message_placeholder_delete({ user: '{user}', channel: '{channel}', delay: '{delay}' }) : m.at_reject_message_placeholder_warn({ user: '{user}', channel: '{channel}', delay: '{delay}' })}
                       value={draft!.rejectMessage ?? ''}
                       oninput={(e) => draft && (draft.rejectMessage = (e.currentTarget as HTMLTextAreaElement).value || null)}
                     ></textarea>

@@ -11,6 +11,7 @@ import {
   type BotLocale,
 } from '../../utils/i18n.js';
 import {
+  rafraichirPanneauxVocaux,
   rerenderPersistentPanels,
   type PanelRerenderOutcome,
 } from '../../services/core/panelRerenderService.js';
@@ -95,6 +96,7 @@ function outcomeLine(outcome: PanelRerenderOutcome, locale: BotLocale): string {
 
 async function handleSetLanguage(interaction: ChatInputCommandInteraction, guildId: string): Promise<void> {
   const target = interaction.options.getString('langue', true) as BotLocale;
+  const avant = (await getGuildLanguageState(guildId, interaction.guildLocale)).locale;
 
   await prisma.guild.upsert({
     where: { id: guildId },
@@ -102,6 +104,8 @@ async function handleSetLanguage(interaction: ChatInputCommandInteraction, guild
     create: { id: guildId, language: target },
   });
   await cache.invalidateGuild(guildId);
+  // Les panneaux vocaux déjà postés se réécrivent dans la nouvelle langue.
+  if (target !== avant) rafraichirPanneauxVocaux(interaction.client, guildId);
 
   await interaction.reply({
     embeds: [
@@ -116,6 +120,7 @@ async function handleSetLanguage(interaction: ChatInputCommandInteraction, guild
 async function handleAuto(interaction: ChatInputCommandInteraction, guildId: string): Promise<void> {
   // `language = null` = mode automatique : la cascade retombe sur la locale du
   // serveur Discord, puis sur l'anglais.
+  const avant = (await getGuildLanguageState(guildId, interaction.guildLocale)).locale;
   await prisma.guild.upsert({
     where: { id: guildId },
     update: { language: null },
@@ -124,6 +129,7 @@ async function handleAuto(interaction: ChatInputCommandInteraction, guildId: str
   await cache.invalidateGuild(guildId);
 
   const detected = normalizeLocale(interaction.guildLocale) ?? 'en';
+  if (detected !== avant) rafraichirPanneauxVocaux(interaction.client, guildId);
 
   await interaction.reply({
     embeds: [

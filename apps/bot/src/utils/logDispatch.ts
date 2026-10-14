@@ -127,6 +127,12 @@ export async function sendLogEmbed(
   components?: Array<ActionRowBuilder<ButtonBuilder>>,
   executorTag?: string | null,
   sourceChannelIds?: Array<string | null | undefined>,
+  /**
+   * Ce que l'audit en base doit garder, quand le résumé de l'embed (description
+   * et quatre premiers champs) en perdrait : passé tel quel à `queueAuditLog`.
+   * Sans lui, rien ne change pour l'appelant.
+   */
+  audit?: { details?: string; channelId?: string | null },
 ): Promise<void> {
   if (sourceChannelIds && await isLogIgnoredChannel(guild, sourceChannelIds)) return;
 
@@ -168,13 +174,13 @@ export async function sendLogEmbed(
   
   queueAuditLog({
     guildId: guild.id,
-    channelId,
+    channelId: audit?.channelId ?? channelId,
     user: executorTag ?? 'Système',
     action: summary.action,
     context: guild.name,
     module: 'Logs avancés',
     eventType: 'Discord',
-    details: summary.details,
+    details: audit?.details ?? summary.details,
   });
 
   if (!channelId) return;

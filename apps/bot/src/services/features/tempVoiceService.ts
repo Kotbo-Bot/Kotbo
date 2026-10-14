@@ -4,7 +4,15 @@
  * serveurs déjà configurés inchangés.
  */
 import { OverwriteType, PermissionFlagsBits, type OverwriteResolvable } from 'discord.js';
-import type { TempVoiceOwnerPower, TempVoiceTextChatMode, TempVoicePolicy } from '@kotbo/shared';
+import type { TempVoiceOwnerMentionPlacement, TempVoiceOwnerPower, TempVoiceTextChatMode, TempVoicePolicy } from '@kotbo/shared';
+import {
+  TEMP_VOICE_CLAIM_WHO,
+  TEMP_VOICE_HANDOVER_DELAY_BOUNDS,
+  TEMP_VOICE_OWNER_MENTION_DEFAULT,
+  TEMP_VOICE_OWNER_MENTION_PLACEMENTS,
+  TEMP_VOICE_OWNERSHIP_DEFAULTS,
+  type TempVoiceOwnershipSettings,
+} from '@kotbo/shared';
 import * as m from '../../lib/paraglide/messages.js';
 import type { BotLocale } from '../../utils/i18n.js';
 
@@ -21,7 +29,9 @@ export const TEMP_VOICE_OWNER_POWERS: readonly TempVoiceOwnerPower[] = [
 export const TEMP_VOICE_TEXT_CHAT_MODES: readonly TempVoiceTextChatMode[] = [
   'inherit',
   'open',
+  'inVoice',
   'locked',
+  'nobody',
 ] as const;
 
 export const LEGACY_OWNER_POWERS: readonly TempVoiceOwnerPower[] = ['mute', 'deafen', 'move'] as const;
@@ -268,7 +278,7 @@ const OWNER_POWER_BITS: Record<TempVoiceOwnerPower, bigint> = {
  *  de son propre salon. Sans cette surcharge, tout le monde suit la même règle que la catégorie,
  *  et le mode « open » reste le moyen explicite d'ouvrir le chat à tous. */
 export function ownerAllowBits(policy: TempVoicePolicy): bigint[] {
-  const chatReserve = policy.lockOnCreate || policy.textChat === 'locked';
+  const chatReserve = policy.textChat !== 'nobody' && policy.textChat !== 'inVoice' && (policy.lockOnCreate || policy.textChat === 'locked');
 
   const bits = [
     PermissionFlagsBits.ViewChannel,
@@ -292,6 +302,9 @@ export function requiredBotPermissions(policy: TempVoicePolicy): bigint[] {
       // Créer un salon avec des surcharges de permissions exige `ManageRoles`.
       PermissionFlagsBits.ManageRoles,
       ...ownerAllowBits(policy),
+      // Discord n'accepte un allow ou un deny que sur un droit que le bot possède :
+      // tout mode de chat autre qu'« inherit », et les rôles d'office, touchent `SendMessages`.
+      ...(policy.textChat !== 'inherit' || policy.autoAllowRoleIds.length > 0 ? [PermissionFlagsBits.SendMessages] : []),
     ]),
   ];
 }
@@ -373,7 +386,7 @@ export function buildCreationOverwrites(input: BuildCreationOverwritesInput): Ov
     PermissionFlagsBits.ViewChannel,
     PermissionFlagsBits.Connect,
     PermissionFlagsBits.Speak,
-    PermissionFlagsBits.SendMessages,
+    ...(policy.textChat === 'nobody' ? [] : [PermissionFlagsBits.SendMessages]),
     PermissionFlagsBits.ReadMessageHistory,
   ];
 
@@ -395,16 +408,17 @@ export function buildCreationOverwrites(input: BuildCreationOverwritesInput): Ov
     if (policy.textChat !== 'open') everyoneDeny.push(PermissionFlagsBits.SendMessages);
   }
   if (policy.textChat === 'open') everyoneAllow.push(PermissionFlagsBits.SendMessages);
-  if (policy.textChat === 'locked') everyoneDeny.push(PermissionFlagsBits.SendMessages);
+  if (policy.textChat !== 'inherit' && policy.textChat !== 'open') everyoneDeny.push(PermissionFlagsBits.SendMessages);
 
   // 3. @everyone : verrouillage et chat, rien d'autre.
   if (everyoneAllow.length > 0 || everyoneDeny.length > 0) {
-    // Même règle : le mode « ouvert » n'écrase pas un refus nommé de la catégorie.
+    // « Ouvert » est un choix explicite : il accorde l'écriture même contre un
+    // refus de la catégorie, comme « Everyone » du panneau. « Hérité » ne touche à rien.
     drafts.set(
       everyoneRoleId,
       applyBits(
         ensure(everyoneRoleId, OverwriteType.Role),
-        grantableBits(everyoneAllow, inheritedDenyFor(everyoneRoleId)),
+        everyoneAllow,
         everyoneDeny,
       ),
     );
@@ -653,6 +667,9 @@ export function renderChannelName(template: string, displayName: string): string
 export const MODES_ECRITURE = ['everyone', 'inVoice', 'ownerOnly', 'nobody'] as const;
 export type ModeEcriture = (typeof MODES_ECRITURE)[number];
 
+/** Choix du menu qui rend l'écriture à la catégorie ; ce n'est pas un mode mémorisé. */
+export const MODE_HERITE = 'inherit' as const;
+
 /** Un salon sans réglage explicite suit sa catégorie, ce que le panneau nomme « Tout le monde ». */
 export const MODE_ECRITURE_PAR_DEFAUT: ModeEcriture = 'everyone';
 
@@ -703,6 +720,11 @@ export function estModeEcriture(value: unknown): value is ModeEcriture {
   return MODES_ECRITURE.includes(value as ModeEcriture);
 }
 
+/** « Hérité » ou l'un des quatre modes. */
+export function estChoixModeEcriture(value: unknown): value is ModeEcriture | typeof MODE_HERITE {
+  return value === MODE_HERITE || estModeEcriture(value);
+}
+
 /** Personne d'autre ne valide ce que le dashboard écrit. Une valeur inconnue
  *  retombe sur « Tout le monde », qui est le comportement historique d'un salon
  *  sans réglage — et non un mode plus fermé qu'on n'a pas demandé. */
@@ -710,18 +732,22 @@ export function normaliserModeEcriture(value: unknown): ModeEcriture {
   return estModeEcriture(value) ? value : MODE_ECRITURE_PAR_DEFAUT;
 }
 
-/** Pont vers l'ancien réglage à trois valeurs, tant que la base ne porte pas les
- *  quatre modes (colonne à ajouter côté `packages/database`). `inherit` n'est pas
- *  un mode : le salon suit sa catégorie, ce que le panneau affiche « Tout le monde ». */
-export function modeEcritureDepuisTextChat(textChat: TempVoiceTextChatMode): ModeEcriture {
-  return textChat === 'locked' ? 'ownerOnly' : 'everyone';
+/** Table unique réglage du générateur ↔ mode du panneau ; `null` = « Hérité » (la catégorie décide). */
+export const MODE_ECRITURE_PAR_TEXT_CHAT: Readonly<Record<TempVoiceTextChatMode, ModeEcriture | null>> = {
+  inherit: null,
+  open: 'everyone',
+  inVoice: 'inVoice',
+  locked: 'ownerOnly',
+  nobody: 'nobody',
+};
+
+export function modeEcritureDepuisTextChat(textChat: TempVoiceTextChatMode): ModeEcriture | null {
+  return MODE_ECRITURE_PAR_TEXT_CHAT[textChat];
 }
 
-/** Repli dans l'autre sens : `inVoice` et `nobody` refusent tous deux @everyone,
- *  donc ils se rangent sous `locked`. Une base restée à trois valeurs garde ainsi
- *  un salon fermé fermé — jamais l'inverse. */
-export function textChatDepuisModeEcriture(mode: ModeEcriture): TempVoiceTextChatMode {
-  return mode === 'everyone' ? 'open' : 'locked';
+export function textChatDepuisModeEcriture(mode: ModeEcriture | null): TempVoiceTextChatMode {
+  const trouve = TEMP_VOICE_TEXT_CHAT_MODES.find((textChat) => MODE_ECRITURE_PAR_TEXT_CHAT[textChat] === mode);
+  return trouve ?? 'inherit';
 }
 
 export interface SurchargesModeEcriture {
@@ -2091,6 +2117,24 @@ export function normaliserReglagesPresentation(raw: unknown): ReglagesPresentati
 }
 
 /**
+ * Où se trouve la mention qui notifie le propriétaire à la création du salon :
+ * `panel` dans le panneau lui-même, `message` dans un message posté juste
+ * au-dessus (le panneau n'en porte alors aucune), `none` nulle part qui notifie.
+ */
+export type PlacementMention = TempVoiceOwnerMentionPlacement;
+
+/**
+ * `ownerMentionPlacement` lu sur la ligne des réglages du module. Colonne
+ * absente (client Prisma d'avant la migration), vide ou inconnue : `panel`, le
+ * comportement sans doublon le plus proche de celui livré.
+ */
+export function lirePlacementMention(raw: unknown): PlacementMention {
+  const valeur = (raw as { ownerMentionPlacement?: unknown } | null | undefined)?.ownerMentionPlacement;
+  const bas = typeof valeur === 'string' ? valeur.toLowerCase() : '';
+  return TEMP_VOICE_OWNER_MENTION_PLACEMENTS.includes(bas as PlacementMention) ? (bas as PlacementMention) : TEMP_VOICE_OWNER_MENTION_DEFAULT;
+}
+
+/**
  * L'interrupteur de secours de la personnalisation par générateur, lu sur la
  * MÊME ligne que les cinq réglages ci-dessus.
  *
@@ -2312,4 +2356,33 @@ export function planReservation(
     default:
       return { type: 'tous_roles' };
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 9. La propriété d'un salon dont le propriétaire est parti
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Les six réglages de passation, tels que la ligne `TempVoiceModPermissionsConfig`
+ * les porte. Lecture tolérante, comme `normaliserReglagesPresentation` : un champ
+ * absent ou mal typé vaut son défaut, et le délai est ramené dans ses bornes —
+ * un salon ne doit jamais rester bloqué sur un réglage illisible.
+ */
+export function normaliserReglagesPropriete(raw: unknown): TempVoiceOwnershipSettings {
+  const ligne = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw as Record<string, unknown> : {};
+  const d = TEMP_VOICE_OWNERSHIP_DEFAULTS;
+  const booleen = (cle: 'handoverDmEnabled' | 'claimEmbedEnabled' | 'moderatorClaimOverride' | 'deleteWhenEmpty'): boolean =>
+    typeof ligne[cle] === 'boolean' ? ligne[cle] as boolean : d[cle];
+  const delai = ligne.handoverDelaySeconds;
+  const { min, max } = TEMP_VOICE_HANDOVER_DELAY_BOUNDS;
+  return {
+    handoverDmEnabled: booleen('handoverDmEnabled'),
+    handoverDelaySeconds: typeof delai === 'number' && Number.isFinite(delai)
+      ? Math.min(max, Math.max(min, Math.round(delai)))
+      : d.handoverDelaySeconds,
+    claimEmbedEnabled: booleen('claimEmbedEnabled'),
+    claimWho: TEMP_VOICE_CLAIM_WHO.find((v) => v === ligne.claimWho) ?? d.claimWho,
+    moderatorClaimOverride: booleen('moderatorClaimOverride'),
+    deleteWhenEmpty: booleen('deleteWhenEmpty'),
+  };
 }
