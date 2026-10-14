@@ -72,6 +72,10 @@ const CAS: Cas[] = [
   { action: 'rename', genre: 'bouton', libelle: 'Ouvrir la saisie du nom du salon' },
   { action: 'reserve', genre: 'bouton', libelle: 'Réserver le salon' },
   { action: 'claim', genre: 'bouton', libelle: 'Récupérer le salon' },
+  // Passation : message du chat et MP, sans étape en cours ici, un seul log.
+  { action: 'reclamer', genre: 'bouton', libelle: 'Récupérer le salon (message du salon)' },
+  { action: 'reclam_annuler', genre: 'bouton', suffixe: `${CIBLE}:${CHANNEL}`, libelle: 'Annuler une réclamation' },
+  { action: 'leader', genre: 'menu', suffixe: `${PROPRIO}:${CHANNEL}`, values: [CIBLE], libelle: 'Choisir le nouveau propriétaire (MP de passation)' },
   // Fiche d'un membre
   { action: 'm_kick', genre: 'bouton', suffixe: CIBLE, libelle: 'Expulser un membre du salon' },
   { action: 'm_ban', genre: 'bouton', suffixe: CIBLE, libelle: 'Bannir un membre du salon' },
