@@ -93,6 +93,76 @@ const LIBELLES: Record<string, string> = {
   'tempVoiceAccessRequest.denyCooldownMinutes': 'Demandes d\'accès : silence après un refus (min)',
 };
 
+/** Langues des libellés : le français est la langue de l'audit, l'anglais sert l'embed d'un serveur anglophone. */
+export type LangueDiff = 'fr' | 'en';
+
+const TEXTES = {
+  fr: { oui: 'oui', non: 'non', aucun: AUCUN, present: 'présent', ajoute: 'ajouté', supprime: 'supprimé', generateur: 'Générateur' },
+  en: { oui: 'yes', non: 'no', aucun: '(none)', present: 'present', ajoute: 'added', supprime: 'removed', generateur: 'Generator' },
+} as const;
+
+const LIBELLES_POLITIQUE_EN: Record<string, string> = {
+  userLimit: 'User limit',
+  lockOnCreate: 'Locked on creation',
+  autoAllowRoleIds: 'Roles allowed by default',
+  textChat: 'Text chat',
+  ownerPowers: 'Owner powers',
+};
+
+const LIBELLES_GENERATEUR_EN: Record<string, string> = {
+  ...LIBELLES_POLITIQUE_EN,
+  channelId: 'Channel',
+  categoryId: 'Category',
+  nameTemplate: 'Name template',
+  requiredRoleId: 'Required role',
+  panelMode: 'Panel: mode',
+  stateLayout: 'Panel: state layout',
+  stateColors: 'Panel: palette',
+  panelComponents: 'Panel: components',
+  reservationFallbackMode: 'Reservation: fallback without role',
+};
+
+const LIBELLES_EN: Record<string, string> = {
+  tempVoiceEnabled: 'Temporary channels enabled',
+  tempVoiceChannelId: 'Main generator: channel',
+  tempVoiceCategoryId: 'Main generator: category',
+  tempVoiceNameTemplate: 'Main generator: name template',
+  tempVoiceRequiredRoleId: 'Main generator: required role',
+  ...Object.fromEntries(
+    Object.entries(LIBELLES_POLITIQUE_EN).map(([k, v]) => [`tempVoiceDefaults.${k}`, `Main generator: ${v.toLowerCase()}`]),
+  ),
+  'tempVoiceModPermissions.canRename': 'Moderators: rename',
+  'tempVoiceModPermissions.canChangeLimit': 'Moderators: change the limit',
+  'tempVoiceModPermissions.canLock': 'Moderators: lock',
+  'tempVoiceModPermissions.canChangeWriteMode': 'Moderators: write mode',
+  'tempVoiceModPermissions.canKickOrBan': 'Moderators: kick or ban',
+  'tempVoiceModPermissions.canReserve': 'Moderators: reserve',
+  'tempVoiceModPermissions.canTransfer': 'Moderators: transfer',
+  'tempVoiceModPermissions.panelCompactMode': 'Compact panel',
+  'tempVoiceModPermissions.reservableRoleIds': 'Reservation: offered roles',
+  'tempVoiceModPermissions.reservationOverflow': 'Reservation: members already inside',
+  'tempVoiceModPermissions.reservationFallbackChannelId': 'Reservation: fallback channel',
+  'tempVoiceModPermissions.reservationFallbackMode': 'Reservation: fallback without role',
+  'tempVoiceModPermissions.panelMode': 'Panel: mode',
+  'tempVoiceModPermissions.stateLayout': 'Panel: state layout',
+  'tempVoiceModPermissions.stateColors': 'Panel: palette',
+  'tempVoiceModPermissions.panelComponents': 'Panel: components',
+  'tempVoiceModPermissions.perGeneratorPresentation': 'Per-generator presentation',
+  'tempVoiceModPermissions.ownerMentionPlacement': 'Owner mention',
+  'tempVoiceModPermissions.handoverDmEnabled': 'Handover: DM to the owner',
+  'tempVoiceModPermissions.handoverDelaySeconds': 'Handover: delay (seconds)',
+  'tempVoiceModPermissions.claimEmbedEnabled': 'Handover: "Claim the channel" message',
+  'tempVoiceModPermissions.claimWho': 'Handover: who can claim',
+  'tempVoiceModPermissions.moderatorClaimOverride': 'Handover: staff can cancel',
+  'tempVoiceModPermissions.deleteWhenEmpty': 'Delete an empty channel',
+  'tempVoiceAccessRequest.enabled': 'Access requests enabled',
+  'tempVoiceAccessRequest.responders': 'Access requests: responders',
+  'tempVoiceAccessRequest.notifyVia': 'Access requests: notification',
+  'tempVoiceAccessRequest.notifyChannelId': 'Access requests: dedicated channel',
+  'tempVoiceAccessRequest.requestExpiresMinutes': 'Access requests: expiry (min)',
+  'tempVoiceAccessRequest.denyCooldownMinutes': 'Access requests: silence after a refusal (min)',
+};
+
 function aplatir(valeur: unknown, chemin: string, sortie: Map<string, unknown>): void {
   if (valeur && typeof valeur === 'object' && !Array.isArray(valeur)) {
     for (const [cle, sous] of Object.entries(valeur)) aplatir(sous, chemin ? `${chemin}.${cle}` : cle, sortie);
@@ -116,11 +186,11 @@ function nomDe(id: string, resolveur: ((id: string) => string | undefined) | und
   return nom ? `${prefixe}${nom}` : id;
 }
 
-function rendre(champ: string, valeur: unknown, noms: NomsLisibles): string {
-  if (vide(valeur)) return AUCUN;
+function rendre(champ: string, valeur: unknown, noms: NomsLisibles, t: (typeof TEXTES)[LangueDiff]): string {
+  if (vide(valeur)) return t.aucun;
   const nature = /RoleIds?$/.test(champ) ? 'role' : /(channel|category)id$/i.test(champ) ? 'salon' : null;
   const un = (v: unknown): string => {
-    if (typeof v === 'boolean') return v ? 'oui' : 'non';
+    if (typeof v === 'boolean') return v ? t.oui : t.non;
     const texte = String(v);
     if (nature === 'role') return nomDe(texte, noms.role, '@');
     if (nature === 'salon') return nomDe(texte, noms.salon, '#');
@@ -158,7 +228,11 @@ export function diffReglagesVocaux(
   avant: ReglagesVocaux | null | undefined,
   apres: ReglagesVocaux,
   noms: NomsLisibles = {},
+  langue: LangueDiff = 'fr',
 ): ChangementReglage[] {
+  const t = TEXTES[langue];
+  const libelles = langue === 'en' ? LIBELLES_EN : LIBELLES;
+  const libellesGen = langue === 'en' ? LIBELLES_GENERATEUR_EN : LIBELLES_GENERATEUR;
   const a = new Map<string, unknown>();
   const b = new Map<string, unknown>();
   const { tempVoiceGenerators: genAvant, ...resteAvant } = avant ?? {};
@@ -171,28 +245,28 @@ export function diffReglagesVocaux(
   for (const chemin of chemins) {
     if (canon(a.get(chemin)) === canon(b.get(chemin))) continue;
     changements.push({
-      champ: LIBELLES[chemin] ?? chemin,
-      avant: rendre(chemin, a.get(chemin), noms),
-      apres: rendre(chemin, b.get(chemin), noms),
+      champ: libelles[chemin] ?? chemin,
+      avant: rendre(chemin, a.get(chemin), noms, t),
+      apres: rendre(chemin, b.get(chemin), noms, t),
     });
   }
 
   const ga = aplatirGenerateurs(genAvant);
   const gb = aplatirGenerateurs(genApres);
-  const nomGen = (cle: string) => `Générateur ${cle.startsWith('#') ? cle : nomDe(cle, noms.salon, '#')}`;
+  const nomGen = (cle: string) => `${t.generateur} ${cle.startsWith('#') ? cle : nomDe(cle, noms.salon, '#')}`;
   for (const cle of new Set([...ga.keys(), ...gb.keys()])) {
     const ancien = ga.get(cle);
     const nouveau = gb.get(cle);
     if (!ancien || !nouveau) {
-      changements.push({ champ: nomGen(cle), avant: ancien ? 'présent' : AUCUN, apres: nouveau ? 'ajouté' : 'supprimé' });
+      changements.push({ champ: nomGen(cle), avant: ancien ? t.present : t.aucun, apres: nouveau ? t.ajoute : t.supprime });
       continue;
     }
     for (const champ of new Set([...ancien.keys(), ...nouveau.keys()])) {
       if (canon(ancien.get(champ)) === canon(nouveau.get(champ))) continue;
       changements.push({
-        champ: `${nomGen(cle)} : ${(LIBELLES_GENERATEUR[champ] ?? champ).replace(/^./, (c) => c.toLowerCase())}`,
-        avant: rendre(champ, ancien.get(champ), noms),
-        apres: rendre(champ, nouveau.get(champ), noms),
+        champ: `${nomGen(cle)} : ${(libellesGen[champ] ?? champ).replace(/^./, (c) => c.toLowerCase())}`,
+        avant: rendre(champ, ancien.get(champ), noms, t),
+        apres: rendre(champ, nouveau.get(champ), noms, t),
       });
     }
   }

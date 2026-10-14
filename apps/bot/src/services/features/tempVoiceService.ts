@@ -4,10 +4,12 @@
  * serveurs déjà configurés inchangés.
  */
 import { OverwriteType, PermissionFlagsBits, type OverwriteResolvable } from 'discord.js';
-import type { TempVoiceOwnerPower, TempVoiceTextChatMode, TempVoicePolicy } from '@kotbo/shared';
+import type { TempVoiceOwnerMentionPlacement, TempVoiceOwnerPower, TempVoiceTextChatMode, TempVoicePolicy } from '@kotbo/shared';
 import {
   TEMP_VOICE_CLAIM_WHO,
   TEMP_VOICE_HANDOVER_DELAY_BOUNDS,
+  TEMP_VOICE_OWNER_MENTION_DEFAULT,
+  TEMP_VOICE_OWNER_MENTION_PLACEMENTS,
   TEMP_VOICE_OWNERSHIP_DEFAULTS,
   type TempVoiceOwnershipSettings,
 } from '@kotbo/shared';
@@ -2119,8 +2121,7 @@ export function normaliserReglagesPresentation(raw: unknown): ReglagesPresentati
  * `panel` dans le panneau lui-même, `message` dans un message posté juste
  * au-dessus (le panneau n'en porte alors aucune), `none` nulle part qui notifie.
  */
-export const PLACEMENTS_MENTION = ['panel', 'message', 'none'] as const;
-export type PlacementMention = (typeof PLACEMENTS_MENTION)[number];
+export type PlacementMention = TempVoiceOwnerMentionPlacement;
 
 /**
  * `ownerMentionPlacement` lu sur la ligne des réglages du module. Colonne
@@ -2130,7 +2131,7 @@ export type PlacementMention = (typeof PLACEMENTS_MENTION)[number];
 export function lirePlacementMention(raw: unknown): PlacementMention {
   const valeur = (raw as { ownerMentionPlacement?: unknown } | null | undefined)?.ownerMentionPlacement;
   const bas = typeof valeur === 'string' ? valeur.toLowerCase() : '';
-  return PLACEMENTS_MENTION.includes(bas as PlacementMention) ? (bas as PlacementMention) : 'panel';
+  return TEMP_VOICE_OWNER_MENTION_PLACEMENTS.includes(bas as PlacementMention) ? (bas as PlacementMention) : TEMP_VOICE_OWNER_MENTION_DEFAULT;
 }
 
 /**

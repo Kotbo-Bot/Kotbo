@@ -6,7 +6,9 @@ import prisma from '../../../../utils/db.js';
 import { logger } from '../../../../utils/logger.js';
 import { RENAME_TIMEOUT_MS, settleWithin } from '../../../../utils/discord.js';
 import { getGuildName, json, pushAudit, readJsonBody } from '../../../shared.js';
-import { ChannelType, PermissionFlagsBits } from 'discord.js';
+import { ChannelType, PermissionFlagsBits, type Guild } from 'discord.js';
+import { sendLogEmbed } from '../../../../utils/logDispatch.js';
+import { construireEmbedReglagesVocaux } from '../../../../utils/tempVoiceReglagesLog.js';
 import { resolveGuildLocale } from '../../../../utils/i18n.js';
 import { honeypotChannelName, provisionHoneypotChannel } from '../../../../services/moderation/honeypotProvisioning.js';
 import {
@@ -30,6 +32,8 @@ import {
   TEMP_VOICE_OWNERSHIP_DEFAULTS,
   diffReglagesVocaux,
   lignesDiffReglages,
+  type ChangementReglage,
+  type LangueDiff,
   type NomsLisibles,
   type ReglagesVocaux,
   type TempVoiceClaimWho,
@@ -182,10 +186,37 @@ const TEMP_VOICE_ACCESS_REQUEST_DEFAULTS: TempVoiceAccessRequestConfigView = {
 };
 
 /**
+ * Embed Discord des changements vocaux faits depuis le dashboard, dans la langue
+ * du serveur, par le chemin commun des logs (`voice_panel`). Un échec d'envoi ne
+ * remonte jamais : l'enregistrement est déjà fait.
+ */
+async function envoyerEmbedReglagesVocaux(
+  discordGuild: Guild | null | undefined,
+  guildId: string,
+  auditUser: string,
+  diffDans: (langue: LangueDiff) => ChangementReglage[],
+): Promise<void> {
+  if (!discordGuild) return;
+  try {
+    const locale = await resolveGuildLocale(guildId, discordGuild.preferredLocale);
+    const lignes = lignesDiffReglages(diffDans(locale));
+    const embed = construireEmbedReglagesVocaux(lignes, auditUser, locale);
+    if (!embed) return;
+    await sendLogEmbed(discordGuild, embed, 'voice_panel', undefined, auditUser, [], {
+      details: lignes.join('\n').slice(0, 4000),
+      channelId: null,
+    });
+  } catch (err) {
+    logger.warn('ChannelsManagementAPI', `Embed des réglages vocaux non envoyé (guilde ${guildId}) :`, err);
+  }
+}
+
+/**
  * `@default` du modèle Prisma `TempVoiceModPermissionsConfig`.
  *
- * ATTENTION — QUATRE AUTRES COPIES de ces valeurs existent, et rien ne les compare
- * automatiquement — ajouter un réglage ou une valeur ici SEUL ne donne pas une
+ * ATTENTION — SIX AUTRES COPIES de ces valeurs existent. Seules celles de la passation et
+ * de la mention du propriétaire sont comparées (test « F » de
+ * `channelsManagementVocal.test.ts`) — ajouter un réglage ou une valeur ici SEUL ne donne pas une
  * fonctionnalité à moitié livrée, ça donne un 400 à l'autre bout :
  *
  *  1. `packages/database/prisma/temp-voice-access.prisma` — les `@default(...)`
@@ -203,6 +234,12 @@ const TEMP_VOICE_ACCESS_REQUEST_DEFAULTS: TempVoiceAccessRequestConfigView = {
  *  4. `apps/dashboard/src/pages/ChannelsManagement.svelte` — les `<option>` des
  *     sélecteurs et les défauts de `config` : ce qu'un administrateur peut
  *     réellement choisir.
+ *  5. `packages/shared/src/tempVoice/types.ts` — `TEMP_VOICE_OWNERSHIP_DEFAULTS`
+ *     (passation) et `TEMP_VOICE_OWNER_MENTION_DEFAULT` : ce fichier, la page et
+ *     le bot s'en servent, c'est la seule copie qu'on n'écrit pas deux fois.
+ *  6. `apps/dashboard/src/lib/demo/generated/prismaDefaults.ts` — la démo, générée
+ *     depuis le schéma par `bun scripts/demo-prisma-defaults.mjs` : la relancer
+ *     après toute modification du schéma, ne jamais l'éditer à la main.
  *
  * Et dans CE fichier : les cinq listes `TEMP_VOICE_*` juste au-dessus, qui
  * décident du rejet 400 dans `normalizeTempVoiceModPermissionsInput`. Une
@@ -2200,6 +2237,7 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
               details: lignesDiffReglages(changes).join('\n').slice(0, 4000),
               channelId: null,
             });
+            await envoyerEmbedReglagesVocaux(discordGuild, guildId, auditUser, (langue) => diffReglagesVocaux(voiceBefore, voiceAfter, noms, langue));
           }
         }
         // Le reste du corps (fils auto, stats, honeypot...) garde la ligne générique.

@@ -49,7 +49,11 @@ const prismaMock = {
   },
   tempVoiceAccessRequestConfig: {
     findUnique: mock(async () => { coutBase(); return base.demandes ? { ...base.demandes } : null; }),
+    upsert: mock(async () => ({})),
   },
+  // Seulement pour la route du dashboard (PATCH des réglages) du test de bout en bout.
+  guild: { findUnique: mock(async () => ({ ...configServeur })), update: mock(async () => ({})) },
+  dashboardAuditLog: { create: mock(async () => ({})) },
   tempVoiceChannel: {
     findMany: mock(async () => { coutBase(); return [...base.salons.values()].map((s) => ({ ...s })); }),
     findUnique: mock(async (a: { where: { id: string } }) => { coutBase(); const s = base.salons.get(a.where.id); return s ? { ...s } : null; }),
@@ -166,6 +170,8 @@ interface OptionsScene {
   modeleNom?: string;
   /** Salon de repli des membres sans le rôle réservé. */
   repliSalon?: string;
+  /** Ne pas réécrire la base : un test l'a déjà préparée (et modifiée par la route du dashboard). */
+  garderBase?: boolean;
 }
 
 interface Scene {
@@ -210,7 +216,7 @@ function reglerBase(opts: OptionsScene) {
 
 /** Monte un monde, crée le salon par le générateur, fait entrer les autres. */
 async function monterScene(opts: OptionsScene): Promise<Scene> {
-  reglerBase(opts);
+  if (!opts.garderBase) reglerBase(opts);
   const m = new FauxDiscord({ latenceRestMs: opts.latenceRestMs ?? Number(process.env.BANC_LATENCE ?? 150), langueDiscord: opts.langue === 'fr' ? 'fr' : 'en-US' });
   monde = m;
   const client = m.creerClient();
@@ -1166,6 +1172,49 @@ ${apres}`).not.toContain(`**${cle}**`);
       // L'auteur que le journal vocal affichera pour cette déconnexion.
       expect(prendreIntentionVocale(IDS.GUILD, IDS.CIBLE, 'disconnect')?.libelle)
         .toBe(m.log_tempvoice_author_panel({ tag: ligne.acteur }, L));
+    });
+  }
+});
+
+describe('B — mention du propriétaire : du PATCH du dashboard au salon créé (bout en bout)', () => {
+  // Attendu par réglage : [notifications, mentions visibles, mention dans le panneau ; « none » l'affiche sans notifier]
+  const ATTENDU_PATCH: Array<['message' | 'none' | 'panel', number, number, number]> = [
+    ['message', 1, 1, 0], ['none', 0, 1, 1], ['panel', 1, 1, 1],
+  ];
+  for (const format of FORMATS) for (const [mention, notifs, visibles, dansPanneau] of ATTENDU_PATCH) {
+    test(`${format} · PATCH ${mention} puis création : ${notifs} notification, ${dansPanneau} mention dans le panneau`, async () => {
+      // Ligne en base SANS mention : seul le PATCH réel peut poser le réglage.
+      reglerBase({ langue: 'fr', format, mode: 'CLASSIC' });
+      base.reglages = { ...base.reglages, ownerMentionPlacement: mention === 'panel' ? 'message' : 'panel' };
+      const { handleChannelsManagementRoutes } = await import('../../api/routes/dashboard/modules/channels-management.js');
+      const { IncomingMessage, ServerResponse } = await import('node:http');
+      const { Socket } = await import('node:net');
+      const req = new IncomingMessage(new Socket());
+      req.method = 'PATCH';
+      req.headers = { 'content-type': 'application/json' };
+      req.push(JSON.stringify({ tempVoiceModPermissions: { ownerMentionPlacement: mention } }));
+      req.push(null);
+      const res = new ServerResponse(req) as InstanceType<typeof ServerResponse> & { code?: number };
+      res.setHeader = () => res;
+      res.writeHead = (c: number) => { res.code = c; return res; };
+      res.end = (() => res) as never;
+      const client = new FauxDiscord({ latenceRestMs: 0, langueDiscord: 'fr' }).creerClient();
+      await handleChannelsManagementRoutes({
+        req, res, parts: ['api', 'dashboard', 'guilds', IDS.GUILD, 'channels-management'],
+        url: new URL('http://localhost/x'), client, user: { userId: 'u', username: 'Admin' } as never,
+        guildId: IDS.GUILD, access: 'admin' as never, method: 'PATCH', auditUser: 'Toji (dashboard)', moduleKey: 'channels-management',
+      });
+      expect(res.code ?? 200).toBe(200);
+      expect(base.reglages?.ownerMentionPlacement).toBe(mention);
+
+      // Création par le vrai événement voiceStateUpdate, lue sur la ligne que le PATCH vient d'écrire.
+      const sc = await monterScene({ langue: 'fr', format, mode: 'CLASSIC', garderBase: true });
+      const publics = [...sc.monde.messages.values()].filter((msg) => msg.channel_id === sc.salonId && !(msg.flags & 64));
+      const mentionsDe = (msg: Brut) => textesVisibles(msg).join(' ').split(`<@${IDS.PROPRIO}>`).length - 1;
+      expect(publics.reduce((n, msg) => n + mentionsDe(msg), 0)).toBe(visibles);
+      expect(mentionsDe(publics.find((msg) => msg.id === sc.panneauId)!)).toBe(dansPanneau);
+      const postes = sc.monde.appels.filter((a) => a.methode === 'POST' && a.route === `/channels/${sc.salonId}/messages`);
+      expect(postes.filter((a) => notifie(a.corps as Brut, IDS.PROPRIO))).toHaveLength(notifs);
     });
   }
 });

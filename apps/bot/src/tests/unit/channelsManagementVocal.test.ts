@@ -1,8 +1,11 @@
-import { describe, expect, test, mock, beforeEach } from 'bun:test';
+import { afterAll, describe, expect, test, mock, beforeEach } from 'bun:test';
 import { IncomingMessage, ServerResponse } from 'node:http';
 import { Socket } from 'node:net';
 import path from 'node:path';
-import type { Client } from 'discord.js';
+import type { APIEmbed, Client } from 'discord.js';
+import { completeModuleMock } from '../helpers/moduleMock.js';
+import { readFileSync } from 'node:fs';
+import { TEMP_VOICE_OWNER_MENTION_DEFAULT, TEMP_VOICE_OWNERSHIP_DEFAULTS } from '@kotbo/shared';
 import { DASHBOARD_ACCESS_ADMIN, type AuthClaims, type DashboardAccess } from '../../api/shared.js';
 
 /**
@@ -45,8 +48,29 @@ for (const dbPath of ['../../utils/db.ts', '../../utils/db.js']) {
   mock.module(path.resolve(__dirname, dbPath), () => ({ default: mockDb, prisma: mockDb, prismaRead: mockDb }));
 }
 
+// Chemin commun des logs : on capture l'embed au lieu de le poster.
+const envois: Array<{ embed: APIEmbed; type: string; tag: unknown; sources: unknown; audit: unknown }> = [];
+let envoiEnEchec = false;
+// Le vrai module, rendu en fin de fichier : `mock.module` est global au process.
+const logDispatchReel = { ...(await import('../../utils/logDispatch.js')) };
+afterAll(() => {
+  for (const logPath of ['../../utils/logDispatch.ts', '../../utils/logDispatch.js']) {
+    mock.module(path.resolve(__dirname, logPath), () => logDispatchReel);
+  }
+});
+for (const logPath of ['../../utils/logDispatch.ts', '../../utils/logDispatch.js']) {
+  mock.module(path.resolve(__dirname, logPath), () => completeModuleMock(path.resolve(__dirname, '../../utils/logDispatch.ts'), {
+    sendLogEmbed: mock(async (_g: unknown, embed: { toJSON: () => APIEmbed }, type: string, _c: unknown, tag: unknown, sources: unknown, audit: unknown) => {
+      if (envoiEnEchec) throw new Error('Discord injoignable');
+      envois.push({ embed: embed.toJSON(), type, tag, sources, audit });
+    }),
+  }));
+}
+
 const { handleChannelsManagementRoutes, explainDroppedGenerators } =
   await import('../../api/routes/dashboard/modules/channels-management.js');
+const { construireEmbedReglagesVocaux } = await import('../../utils/tempVoiceReglagesLog.js');
+const { lirePlacementMention, normaliserReglagesPropriete } = await import('../../services/features/tempVoiceService.js');
 
 function createMockRequest(body: Record<string, unknown>, method = 'PATCH'): IncomingMessage {
   const req = new IncomingMessage(new Socket());
@@ -78,7 +102,7 @@ function createMockResponse(): MockResponse {
 }
 
 /** Serveur avec quelques salons et rôles en cache, de quoi nommer les ids. */
-function mockClient(extra: { channel?: Record<string, unknown> } = {}) {
+function mockClient(extra: { channel?: Record<string, unknown>; locale?: string } = {}) {
   const channels = new Map<string, unknown>([
     [GEN_A, { id: GEN_A, name: 'Créer A', type: 2 }],
     [GEN_B, { id: GEN_B, name: 'Créer B', type: 2 }],
@@ -87,7 +111,7 @@ function mockClient(extra: { channel?: Record<string, unknown> } = {}) {
   const guild = {
     id: GUILD,
     name: 'Serveur test',
-    preferredLocale: 'fr',
+    preferredLocale: extra.locale ?? 'fr',
     channels: { cache: channels, fetch: mock(async (id: string) => channels.get(id) ?? null) },
     roles: { cache: new Map<string, unknown>([[ROLE, { id: ROLE, name: 'Membres' }], [PREVIOUS_ROLE, { id: PREVIOUS_ROLE, name: 'Anciens' }]]) },
     members: { cache: new Map<string, unknown>([[OWNER, { id: OWNER }]]), fetch: mock(async () => ({ id: OWNER })) },
@@ -158,6 +182,8 @@ beforeEach(() => {
   mockDb.tempVoiceAccessRequestConfig.upsert = mock(async (_a: unknown) => ({}));
   mockDb.tempVoiceModPermissionsConfig.findUnique = mock(async () => modRow());
   mockDb.tempVoiceModPermissionsConfig.upsert = mock(async (_a: unknown) => ({}));
+  envois.length = 0;
+  envoiEnEchec = false;
 });
 
 describe('B — journal des changements de réglages vocaux', () => {
@@ -504,5 +530,89 @@ describe('12 — la page réapplique ce que le serveur a gardé', () => {
     expect(resolved.tempVoiceDefaults).toMatchObject({ userLimit: 99, lockOnCreate: true, textChat: 'inherit' });
     expect(resolved.tempVoiceAccessRequest.requestExpiresMinutes).toBe(12);
     expect(resolved.tempVoiceModPermissions).toMatchObject({ panelMode: 'FLAT', ownerMentionPlacement: 'panel', canRename: true });
+  });
+});
+
+describe('E — embed Discord des réglages vocaux modifiés depuis le dashboard', () => {
+  const champs = (i = 0) => Object.fromEntries((envois[i].embed.fields as Array<{ name: string; value: string }>).map((f) => [f.name, f.value]));
+
+  test('serveur francophone : un embed, titre, « Par » et lignes « champ : avant → après »', async () => {
+    const res = await callConfig('PATCH', { tempVoiceModPermissions: { panelMode: 'FLAT', ownerMentionPlacement: 'none' }, tempVoiceDefaults: { userLimit: 12 } });
+    expect(res.statusCode).toBe(200);
+    expect(envois).toHaveLength(1);
+    expect(envois[0].type).toBe('voice_panel');
+    expect(envois[0].tag).toBe('Toji (dashboard)');
+    expect(envois[0].embed.title).toBe('🎛️ Réglages des salons vocaux modifiés (dashboard)');
+    expect(champs().Par).toBe('Toji (dashboard)');
+    expect(champs().Modifications.split('\n')).toEqual([
+      'Générateur principal : places : 0 → 12',
+      'Panneau : mode : CLASSIC → FLAT',
+      'Mention du propriétaire : panel → none',
+    ]);
+    expect(String((envois[0].audit as { details: string }).details)).toContain('Panneau : mode : CLASSIC → FLAT');
+  });
+
+  test('serveur anglophone : titre, champs et libellés en anglais', async () => {
+    await callConfig('PATCH', { tempVoiceModPermissions: { panelMode: 'FLAT', canRename: false } }, mockClient({ locale: 'en-US' }).client);
+    expect(envois[0].embed.title).toBe('🎛️ Voice channel settings changed (dashboard)');
+    expect(champs().By).toBe('Toji (dashboard)');
+    expect(champs().Changes.split('\n')).toEqual(['Moderators: rename : yes → no', 'Panel: mode : CLASSIC → FLAT']);
+  });
+
+  test('aucun changement : aucun embed', async () => {
+    await callConfig('PATCH', { tempVoiceModPermissions: { panelMode: 'CLASSIC' } });
+    expect(envois).toHaveLength(0);
+  });
+
+  test('un échec d\'envoi n\'empêche pas l\'enregistrement ni l\'audit', async () => {
+    envoiEnEchec = true;
+    const res = await callConfig('PATCH', { tempVoiceModPermissions: { panelMode: 'FLAT' } });
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body).ok).toBe(true);
+    expect(mockDb.tempVoiceModPermissionsConfig.upsert).toHaveBeenCalled();
+    expect(audits()).toHaveLength(1);
+  });
+
+  test('un très long journal respecte les limites d\'embed (champ 1024, total 6000, 25 champs)', () => {
+    const lignes = Array.from({ length: 300 }, (_, i) => `Champ ${i} : ${'a'.repeat(300)} → ${'b'.repeat(200)}`);
+    for (const locale of ['fr', 'en'] as const) {
+      const e = construireEmbedReglagesVocaux(lignes, 'Toji (dashboard)', locale)!.toJSON();
+      const fields = e.fields!;
+      expect(fields.length).toBeLessThanOrEqual(25);
+      expect(fields.every((f) => f.value.length <= 1024 && f.name.length <= 256)).toBe(true);
+      const total = (e.title?.length ?? 0) + (e.footer?.text.length ?? 0) + fields.reduce((n, f) => n + f.name.length + f.value.length, 0);
+      expect(total).toBeLessThanOrEqual(6000);
+      expect(fields.at(-1)!.value).toMatch(/^… (et \d+ autre|and \d+ more)/);
+    }
+    expect(construireEmbedReglagesVocaux([], 'x', 'fr')).toBeNull();
+  });
+});
+
+describe('F — copies des défauts de TempVoiceModPermissionsConfig', () => {
+  test('schéma Prisma, type partagé, route (ligne absente) et démo du dashboard portent les mêmes défauts', async () => {
+    const schema = readFileSync(path.resolve(__dirname, '../../../../../packages/database/prisma/temp-voice-access.prisma'), 'utf8');
+    const modele = schema.match(/model TempVoiceModPermissionsConfig \{([\s\S]*?)\n\}/)![1];
+    const prisma: Record<string, unknown> = {};
+    for (const [, nom, defaut] of modele.matchAll(/^\s+(\w+)\s+\w+\??\s+@default\(([^()]*)\)/gm)) {
+      prisma[nom] = defaut === 'true' ? true : defaut === 'false' ? false : /^-?\d+$/.test(defaut) ? Number(defaut) : defaut.replace(/^"|"$/g, '');
+    }
+    for (const nom of ['handoverDmEnabled', 'handoverDelaySeconds', 'claimEmbedEnabled', 'claimWho', 'moderatorClaimOverride', 'deleteWhenEmpty', 'ownerMentionPlacement']) {
+      expect(prisma).toHaveProperty(nom);
+    }
+
+    mockDb.tempVoiceModPermissionsConfig.findUnique = mock(async () => null);
+    const route = JSON.parse((await callConfig('GET', {})).body).tempVoiceModPermissions as Record<string, unknown>;
+    const { PRISMA_DEFAULTS } = await import('../../../../dashboard/src/lib/demo/generated/prismaDefaults');
+    const demo = (PRISMA_DEFAULTS as Record<string, Record<string, unknown>>).TempVoiceModPermissionsConfig;
+    const partage = { ...TEMP_VOICE_OWNERSHIP_DEFAULTS, ownerMentionPlacement: TEMP_VOICE_OWNER_MENTION_DEFAULT } as Record<string, unknown>;
+
+    for (const [nom, valeur] of Object.entries(prisma)) {
+      expect({ nom, route: route[nom] }).toEqual({ nom, route: valeur });
+      expect({ nom, demo: demo[nom] }).toEqual({ nom, demo: valeur });
+      if (nom in partage) expect({ nom, partage: partage[nom] }).toEqual({ nom, partage: valeur });
+    }
+    // Côté bot : une ligne illisible retombe sur les mêmes valeurs.
+    expect(normaliserReglagesPropriete(undefined)).toEqual(TEMP_VOICE_OWNERSHIP_DEFAULTS);
+    expect(lirePlacementMention(undefined)).toBe(prisma.ownerMentionPlacement as typeof TEMP_VOICE_OWNER_MENTION_DEFAULT);
   });
 });

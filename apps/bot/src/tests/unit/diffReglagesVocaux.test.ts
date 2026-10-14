@@ -43,6 +43,16 @@ describe('diffReglagesVocaux', () => {
     expect(diffReglagesVocaux(etat(), etat())).toEqual([]);
   });
 
+  test('langue anglaise : libellés, booléens, « aucun » et générateurs traduits', () => {
+    const apres = { ...avecMod({ panelMode: 'FLAT', canRename: false, reservationFallbackChannelId: GEN_B }), tempVoiceGenerators: [{ channelId: GEN_A }] };
+    expect(lignesDiffReglages(diffReglagesVocaux(etat(), apres, {}, 'en'))).toEqual([
+      'Moderators: rename : yes → no',
+      `Reservation: fallback channel : (none) → ${GEN_B}`,
+      'Panel: mode : CLASSIC → FLAT',
+      `Generator ${GEN_A} : (none) → added`,
+    ]);
+  });
+
   test('un champ simple : libellé français, avant, après', () => {
     expect(diffReglagesVocaux(etat(), avecMod({ panelMode: 'FLAT' }))).toEqual([
       { champ: 'Panneau : mode', avant: 'CLASSIC', apres: 'FLAT' },
