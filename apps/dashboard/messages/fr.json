@@ -2328,6 +2328,7 @@
   "cm_no_role_required_open_placeholder": "- Aucun rôle requis (ouvert à tous) -",
   "cm_additional_generators_title": "Salons générateurs additionnels",
   "cm_additional_generators_desc": "Ajoute d'autres salons générateurs de salons temporaires (ex : pour d'autres catégories ou avec d'autres modèles de noms).",
+  "cm_tv_generator_taken_hint": "Un salon déjà utilisé par le générateur principal ou par un autre générateur n'est pas proposé.",
   "cm_generator_n": "Générateur #{n}",
   "cm_delete_generator_title": "Supprimer ce générateur",
   "cm_create_auto_placeholder": "- Créer automatiquement -",
