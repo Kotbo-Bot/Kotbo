@@ -32,6 +32,7 @@ import {
   StringSelectMenuBuilder,
   StringSelectMenuOptionBuilder,
   GuildMember,
+  SnowflakeUtil,
   type CategoryChannel,
   type Guild as DiscordGuild,
   type Message,
@@ -41,6 +42,7 @@ import {
 } from 'discord.js';
 import prisma from '../utils/db.js';
 import { logger } from '../utils/logger.js';
+import { sendLogEmbed } from '../utils/logDispatch.js';
 import { E } from '../utils/emojis.js';
 import { RENAME_TIMEOUT_MS, settleWithin } from '../utils/discord.js';
 import { cache, getCachedGuild } from '../utils/cache.js';
@@ -97,6 +99,9 @@ import {
   decisionRetraitAutorisation,
   transitionModeEcriture,
   estModeEcriture,
+  estChoixModeEcriture,
+  MODE_HERITE,
+  modeEcritureDepuisTextChat,
   nettoyagePresenceAuDemarrage,
   PATCH_PRESENCE_RETIREE,
   peutAgir,
@@ -114,6 +119,10 @@ import {
   dispositionNative,
   nomFichierEtat,
   planReservation,
+  normaliserReglagesPropriete,
+  lirePlacementMention,
+  DEFAULT_NAME_TEMPLATE,
+  type PlacementMention,
   type ReglagesPresentation,
   type PlanReservation,
   type ModeEcriture,
@@ -132,7 +141,8 @@ import {
 import { rendreEtatPng, type ValeurEtat } from '../services/features/tempVoicePanelImage.js';
 import { messageEstV2, sansConversionV2 } from '../utils/patchV2.js';
 import * as m from '../lib/paraglide/messages.js';
-import { resolveGuildLocale, type BotLocale } from '../utils/i18n.js';
+import { FALLBACK_LOCALE, resolveGuildLocale, type BotLocale } from '../utils/i18n.js';
+import { TEMP_VOICE_OWNERSHIP_DEFAULTS, type TempVoiceOwnershipSettings } from '@kotbo/shared';
 
 /**
  * Ce que le panneau doit savoir d'un salon et que Discord ne porte pas.
@@ -352,6 +362,7 @@ async function persisterEtatSalon(guildId: string, salonId: string): Promise<voi
 /** Un salon temporaire disparaît : ses demandes, ses marques d'origine et son
  *  historique de renommage aussi, sans laisser de ligne orpheline. */
 function oublierSalon(guildId: string, salonId: string): void {
+  clorePropriete(salonId);
   registreDemandes.oublierSalon(guildId, salonId);
   originesSurcharge.oublierSalon(guildId, salonId);
   historiquesRenommage.delete(salonId);
@@ -399,6 +410,10 @@ interface ReglagesModule {
    * `presentationDuSalon` est le seul endroit qui les assemble.
    */
   presentationParGenerateur: boolean;
+  /** Passation du salon quand le propriétaire part, et sort d'un salon vide. */
+  propriete: TempVoiceOwnershipSettings;
+  /** Où la mention du propriétaire notifie à la création du salon. */
+  mentionProprietaire: PlacementMention;
 }
 
 async function lireReglagesAdmin(guildId: string): Promise<ReglagesModule> {
@@ -426,6 +441,11 @@ async function lireReglagesAdmin(guildId: string): Promise<ReglagesModule> {
       // personnalisation par generateur. Le sens du repli va vers le
       // comportement actuel, jamais vers le nouveau.
       presentationParGenerateur: false,
+      // Le repli « tout autorisé » vaut pour le panneau, pas pour la suppression :
+      // un salon supprimé ne revient pas, une lecture en panne ne décide donc
+      // jamais d'en supprimer un.
+      propriete: { ...normaliserReglagesPropriete(undefined), deleteWhenEmpty: false },
+      mentionProprietaire: lirePlacementMention(undefined),
     };
   }
   if (!ligne) {
@@ -437,6 +457,8 @@ async function lireReglagesAdmin(guildId: string): Promise<ReglagesModule> {
       // Aucune ligne = serveur qui n'a jamais ouvert l'onglet : rien de
       // personnalise, comme avant cette colonne.
       presentationParGenerateur: false,
+      propriete: normaliserReglagesPropriete(undefined),
+      mentionProprietaire: lirePlacementMention(undefined),
     };
   }
 
@@ -462,6 +484,8 @@ async function lireReglagesAdmin(guildId: string): Promise<ReglagesModule> {
     // Tout ce qui n'est pas exactement `true` vaut faux, colonne absente comprise
     // — le client Prisma peut precéder la migration sans que rien ne bascule.
     presentationParGenerateur: presentationParGenerateurActive(ligne),
+    propriete: normaliserReglagesPropriete(ligne),
+    mentionProprietaire: lirePlacementMention(ligne),
   };
 }
 
@@ -551,7 +575,7 @@ function etatReecriture(salonId: string): EtatReecriture {
  * sa fermeture : verrouiller puis deverrouiller laissait « Verrouille » affiche
  * une seconde et demie apres coup.
  */
-function planifierRafraichissementPanneau(channel: VoiceChannel): void {
+export function planifierRafraichissementPanneau(channel: VoiceChannel): void {
   const etat = etatReecriture(channel.id);
 
   if (etat.enCours) {
@@ -677,7 +701,7 @@ async function isProtectedTarget(guildId: string, target: GuildMember): Promise<
   return isStaff(guildId, target);
 }
 
-async function closeTempChannel(channel: VoiceChannel, reason: string): Promise<boolean> {
+async function closeTempChannel(channel: VoiceChannel, reason: string, locale: BotLocale): Promise<boolean> {
   // Discord d'abord : l'état n'est purgé que si la suppression a abouti, sans
   // quoi un salon refusé survivrait sans que rien ne le référence - pas même le
   // balayage, qui lit la base.
@@ -688,13 +712,37 @@ async function closeTempChannel(channel: VoiceChannel, reason: string): Promise<
 
   if (!deleted) return false;
 
+  const proprietaireId = tempChannels.get(channel.id)?.creatorId ?? null;
+  annulerPropriete(channel, 'suppression');
   tempChannels.delete(channel.id);
   // Un salon temporaire disparaît ; ses demandes en attente, ses marques
   // d'origine et son historique de renommage aussi, sans laisser de ligne
   // orpheline que plus rien ne référencerait.
   oublierSalon(channel.guild?.id ?? '', channel.id);
   await prisma.tempVoiceChannel.delete({ where: { id: channel.id } }).catch(() => null);
+  // La raison d'audit donnée par l'appelant dit déjà pourquoi, dans la langue du serveur.
+  await journaliserSuppression(channel.guild, channel.id, channel.parentId, proprietaireId, reason, locale);
   return true;
+}
+
+/** « Salon supprimé », acteur « Système » : motif, propriétaire, durée de vie. */
+async function journaliserSuppression(
+  guild: DiscordGuild,
+  salonId: string,
+  parentId: string | null | undefined,
+  proprietaireId: string | null,
+  motif: string,
+  locale: BotLocale,
+): Promise<void> {
+  const L = { locale };
+  const champs: ChampJournal[] = [{ name: m.log_tempvoice_field_reason({}, L), value: motif, inline: false }];
+  if (proprietaireId) champs.push({ name: m.log_tempvoice_field_owner({}, L), value: `<@${proprietaireId}>`, inline: true });
+  champs.push({
+    name: m.log_tempvoice_field_lifetime({}, L),
+    value: formaterDuree(Date.now() - SnowflakeUtil.timestampFrom(salonId), locale),
+    inline: true,
+  });
+  await envoyerJournalVocal({ guild, locale, salonId, parentId, libelle: m.log_tempvoice_deleted({}, L), champs });
 }
 
 /**
@@ -792,16 +840,20 @@ async function sweepOrphanChannels(client: Client): Promise<void> {
       await prisma.tempVoiceChannel
         .delete({ where: { id: entry.id } })
         .catch((err: unknown) => logger.error('TempVoice', 'Impossible de supprimer la ligne du salon temporaire :', err));
+      const locale = await resolveGuildLocale(guild.id, guild.preferredLocale ?? null);
+      await journaliserSuppression(guild, entry.id, null, entry.creatorId, m.log_tempvoice_delete_gone({}, { locale }), locale);
       removed += 1;
       continue;
     }
 
-    if (channel.members.size === 0) {
+    // Un salon vide n'est supprimé que si le serveur le veut ; gardé, il est
+    // repris comme les autres et reste à récupérer.
+    if (channel.members.size === 0 && (await lireReglagesAdmin(entry.guildId)).propriete.deleteWhenEmpty) {
       const locale = await resolveGuildLocale(channel.guild?.id ?? '', channel.guild?.preferredLocale ?? null);
       // Relu après l'attente, comme à la sortie d'un membre : un salon rejoint
       // entre-temps est repris, pas supprimé.
       if (channel.members.size === 0) {
-        await closeTempChannel(channel, m.panel_tempvoice_audit_empty_startup({}, { locale }));
+        await closeTempChannel(channel, m.panel_tempvoice_audit_empty_startup({}, { locale }), locale);
         removed += 1;
         continue;
       }
@@ -905,10 +957,20 @@ async function lireEtatSalon(channel: VoiceChannel, entree: EntreeSalonTemporair
     limite,
     placesLibres,
     complet: placesLibres === 0,
-    modeEcriture: entree.modeEcriture ?? deduireModeEcriture(surchargeEveryone, surchargeProprietaire),
+    modeEcriture: entree.modeEcriture ?? deduireModeEcriture(
+      surchargeEveryone,
+      surchargeProprietaire,
+      everyonePeutEcrire(channel),
+    ),
     autorises,
     bannis,
   };
+}
+
+/** Droit effectif de @everyone, catégorie comprise ; `undefined` si Discord ne le dit pas. */
+function everyonePeutEcrire(channel: VoiceChannel): boolean | undefined {
+  const everyone = channel.guild?.roles?.everyone;
+  return everyone ? channel.permissionsFor?.(everyone)?.has(PermissionFlagsBits.SendMessages) : undefined;
 }
 
 type SurchargeLue = { allow?: { has(bit: bigint): boolean }; deny?: { has(bit: bigint): boolean } } | undefined;
@@ -920,8 +982,13 @@ type SurchargeLue = { allow?: { has(bit: bigint): boolean }; deny?: { has(bit: b
  * est donc rangé là. C'est `TempVoiceChannel.writeMode` qui le distingue, et
  * cette déduction ne sert plus qu'aux salons créés avant la colonne.
  */
-function deduireModeEcriture(everyone: SurchargeLue, proprietaire: SurchargeLue): ModeEcriture {
-  if (!everyone?.deny?.has(PermissionFlagsBits.SendMessages)) return MODE_ECRITURE_PAR_DEFAUT;
+export function deduireModeEcriture(
+  everyone: SurchargeLue,
+  proprietaire: SurchargeLue,
+  everyonePeutEcrire?: boolean,
+): ModeEcriture {
+  const refuse = everyone?.deny?.has(PermissionFlagsBits.SendMessages) || everyonePeutEcrire === false;
+  if (!refuse) return MODE_ECRITURE_PAR_DEFAUT;
   return proprietaire?.allow?.has(PermissionFlagsBits.SendMessages) ? 'ownerOnly' : 'nobody';
 }
 
@@ -1242,6 +1309,31 @@ interface PanneauRendu {
 interface PanneauPublic {
   charge: PanneauRendu;
   presentation: ReglagesPresentation;
+  mention: PlacementMention;
+}
+
+/**
+ * La charge du panneau public avec UNE mention du propriétaire, là où le serveur
+ * la veut — à la création comme à chaque réécriture, pour que le panneau garde
+ * la même forme.
+ *
+ * La ligne « Salon de @x » est la description de la carte. Discord ne notifie
+ * jamais une mention d'embed : en V1, la notifier demande de la sortir dans le
+ * `content`. En V2, `patchV2` la range dans un Text Display, qui notifie selon
+ * `allowedMentions`. `message` la retire du panneau : elle est postée à part,
+ * au-dessus, par la création.
+ */
+function chargeAvecMention(panneau: PanneauPublic, proprietaireId: string): Record<string, unknown> {
+  const { charge, presentation, mention } = panneau;
+  const carte = charge.embeds?.[0] as EmbedBuilder | undefined;
+  const ligne = carte?.data.description ?? null;
+  if (mention === 'message') carte?.setDescription(null);
+  if (mention !== 'panel') return { ...charge, allowedMentions: { parse: [] } };
+  if (presentation.composants === 'V1' && ligne) {
+    carte?.setDescription(null);
+    return { content: ligne, ...charge, allowedMentions: { users: [proprietaireId] } };
+  }
+  return { ...charge, allowedMentions: { users: [proprietaireId] } };
 }
 
 /**
@@ -1294,7 +1386,9 @@ async function construirePanneau(channel: VoiceChannel, entree: EntreeSalonTempo
   const locale = await resolveGuildLocale(guildId, channel.guild?.preferredLocale ?? null);
   const etat = await lireEtatSalon(channel, entree);
   const demandes = await lireConfigDemandes(guildId);
-  const presentation = await presentationDuSalon(guildId, entree, await lireReglagesAdmin(guildId));
+  const module = await lireReglagesAdmin(guildId);
+  const presentation = await presentationDuSalon(guildId, entree, module);
+  const mention = module.mentionProprietaire;
 
   // CLASSIC : les trois portes, exactement comme avant. FLAT : tout sur le
   // message public. Le tri entre les personnes se fait au clic, ici comme là —
@@ -1307,17 +1401,17 @@ async function construirePanneau(channel: VoiceChannel, entree: EntreeSalonTempo
   // réglé : voir `etatRenduNativement`, qui dit pourquoi `dispositionNative` ne
   // suffit pas à le décider seul.
   if (etatRenduNativement(presentation)) {
-    return { charge: { embeds: [carteEtat(etat, locale)], components }, presentation };
+    return { charge: { embeds: [carteEtat(etat, locale)], components }, presentation, mention };
   }
 
   try {
     const { embed, piece } = await carteEtatImage(channel, etat, presentation, locale);
-    return { charge: { embeds: [embed], components, files: [piece] }, presentation };
+    return { charge: { embeds: [embed], components, files: [piece] }, presentation, mention };
   } catch (err) {
     // Un rendu d'image qui échoue ne doit JAMAIS laisser le salon sans panneau :
     // les six champs inline restent lisibles partout, et l'échec se dit.
     logger.warn('TempVoice', `Carte d'état non rendue en image pour ${channel.id}, repli sur les six champs :`, err);
-    return { charge: { embeds: [carteEtat(etat, locale)], components }, presentation };
+    return { charge: { embeds: [carteEtat(etat, locale)], components }, presentation, mention };
   }
 }
 
@@ -1375,6 +1469,45 @@ async function assurerBotPeutEcrire(channel: VoiceChannel): Promise<void> {
   await poserSurcharge(channel, moi.id, { SendMessages: true });
 }
 
+/** La surcharge en cache ouvre déjà la vue et la connexion : l'écrire de nouveau serait un appel inutile. */
+function entreeDejaOuverte(channel: VoiceChannel, id: string): boolean {
+  const allow = channel.permissionOverwrites.cache.get(id)?.allow;
+  return Boolean(allow?.has(PermissionFlagsBits.ViewChannel) && allow.has(PermissionFlagsBits.Connect));
+}
+
+/**
+ * Le staff garde toujours l'entrée d'un salon fermé à @everyone : chaque rôle
+ * staff configuré reçoit une surcharge d'entrée. L'acteur n'en reçoit une à son
+ * nom que si ni un rôle staff ni le droit d'administrateur ne le fait déjà
+ * entrer : sinon elle le compterait parmi les « autorisés » du salon.
+ * Une surcharge qui ouvre déjà l'entrée est laissée telle quelle.
+ * Rien n'est retiré au déverrouillage : l'entrée du staff ne gêne personne.
+ */
+async function garderEntreeStaff(channel: VoiceChannel, acteurId?: string | null): Promise<void> {
+  const config = await getCachedGuild(channel.guild.id);
+  const entree = { ViewChannel: true, Connect: true };
+  const roles = new Set(
+    [config?.baseStaffRoleId, config?.moderatorRoleId, config?.testStaffRoleId]
+      .filter((id): id is string => Boolean(id) && id !== channel.guild.id),
+  );
+
+  for (const roleId of roles) {
+    if (entreeDejaOuverte(channel, roleId)) continue;
+    await channel.permissionOverwrites
+      .edit(roleId, entree, { type: OverwriteType.Role })
+      .catch((err: unknown) => logger.warn('TempVoice', `Entrée du staff refusée sur ${channel.id} pour ${roleId} :`, err));
+  }
+
+  if (!acteurId || acteurId === tempChannels.get(channel.id)?.creatorId || entreeDejaOuverte(channel, acteurId)) return;
+
+  // Acteur introuvable : on pose, ne pas pouvoir prouver son entrée vaut mieux que de le laisser dehors.
+  const acteur = channel.guild.members.cache.get(acteurId)
+    ?? await channel.guild.members.fetch(acteurId).catch(() => null);
+  const entreDeLuiMeme = acteur
+    && (acteur.permissions.has(PermissionFlagsBits.Administrator) || [...roles].some((id) => acteur.roles.cache.has(id)));
+  if (!entreDeLuiMeme) await poserSurcharge(channel, acteurId, entree);
+}
+
 /** Salons dont le panneau est déjà en V2 alors que le réglage demande V1 :
  *  signalé une fois, pas à chaque réécriture (le panneau se réécrit en rafale). */
 const v1ImpossibleSignale = new Set<string>();
@@ -1388,7 +1521,8 @@ async function reecrirePanneau(channel: VoiceChannel): Promise<void> {
 
   await relireSalon(channel);
 
-  const { charge, presentation } = await construirePanneau(channel, entree);
+  const panneau = await construirePanneau(channel, entree);
+  const { charge, presentation } = panneau;
 
   // Le panneau est posté une fois, à la création du salon, et **seulement mis à
   // jour** ensuite. Il n'est jamais supprimé ni reposté : une suppression suivie
@@ -1396,17 +1530,14 @@ async function reecrirePanneau(channel: VoiceChannel): Promise<void> {
   // précisément quand le chat est fermé. Éditer son propre message, lui,
   // n'exige aucune permission d'écriture — c'est le chemin qui tient toujours.
   //
-  // La mention est repassée à chaque fois : une édition remplace tous les
-  // composants, et sans elle la ligne « @propriétaire » disparaissait au premier
-  // changement. `patchV2` la replie en `TextDisplay` et neutralise la
-  // notification, donc personne n'est repingé.
+  // La mention est replacée à chaque fois, au même endroit qu'à la création :
+  // une édition remplace tout le message. Une édition ne notifie jamais.
   // ⚠️ `attachments: []` est indispensable dès qu'il y a une image : sur une
   // ÉDITION, Discord CONSERVE les pièces jointes du message. Sans cette liste
   // vide, la nouvelle image s'ajoute et l'ANCIENNE reste affichée — le panneau
   // montre alors deux états, dont un faux.
   const charge2 = {
-    content: `<@${entree.creatorId}>`,
-    ...charge,
+    ...chargeAvecMention(panneau, entree.creatorId),
     ...(charge.files ? { attachments: [] } : {}),
   };
 
@@ -1442,13 +1573,14 @@ async function reecrirePanneau(channel: VoiceChannel): Promise<void> {
 
 /** Le mode mémorisé, sinon celui que portent les surcharges. Aucune lecture de base :
  *  ce chemin est sur la route d'un `VoiceStateUpdate`, qui arrive en rafale. */
-function modeDuSalon(channel: VoiceChannel, entree: EntreeSalonTemporaire): ModeEcriture {
+export function modeDuSalon(channel: VoiceChannel, entree: EntreeSalonTemporaire): ModeEcriture {
   if (entree.modeEcriture) return entree.modeEcriture;
   const surcharges = channel.permissionOverwrites?.cache;
   const everyoneId = channel.guild?.id ?? '';
   return deduireModeEcriture(
     everyoneId ? surcharges?.get(everyoneId) : undefined,
     surcharges?.get(entree.creatorId),
+    everyonePeutEcrire(channel),
   );
 }
 
@@ -1480,7 +1612,10 @@ async function appliquerEntreeVocale(channel: VoiceChannel, membreId: string): P
   if (!entree) return;
   const guildId = channel.guild?.id ?? '';
 
-  if (membreId === entree.creatorId) entree.departProprietaireA = undefined;
+  if (membreId === entree.creatorId) {
+    entree.departProprietaireA = undefined;
+    annulerPropriete(channel, 'retour');
+  }
 
   const decision = decisionEntreeVocal(
     modeDuSalon(channel, entree),
@@ -1522,7 +1657,101 @@ async function appliquerSortieVocale(channel: VoiceChannel, membreId: string): P
     });
   }
 
+  if (membreId === entree.creatorId) {
+    // La passation est un confort : son échec ne doit pas interrompre la sortie.
+    await proposerPassation(channel, entree).catch((err: unknown) => {
+      logger.warn('TempVoice', `Passation impossible sur ${channel.id} :`, err);
+    });
+  }
+
   planifierRafraichissementPanneau(channel);
+}
+
+/**
+ * Une autorisation d'accès (Autoriser, demande acceptée, réservation à un rôle
+ * ou à des membres) n'accorde l'écriture que si le mode mémorisé la laisse :
+ * jamais en « Personne » ; en « Moi seul », seulement au propriétaire ; en
+ * « ceux qui sont en vocal », la présence décide, et seul le propriétaire
+ * connecté garde la sienne. Le patch perd alors `SendMessages`.
+ * Copie, le patch d'origine reste lisible pour savoir s'il était complet.
+ */
+function sansEcritureSiChatReserve<T extends Record<string, unknown>>(
+  patch: T,
+  entree: EntreeSalonTemporaire,
+  proprietaire = false,
+  present = true,
+): T {
+  const reserve = entree.modeEcriture === 'nobody'
+    || (entree.modeEcriture === 'ownerOnly' && !proprietaire)
+    || (entree.modeEcriture === 'inVoice' && (!proprietaire || !present));
+  if (!reserve) return patch;
+  const copie = { ...patch };
+  delete copie.SendMessages;
+  return copie;
+}
+
+/** Rôles que le générateur du salon autorise d'office (repli : le générateur principal). */
+async function rolesAutoriseDOffice(channel: VoiceChannel, guildId: string, entree: EntreeSalonTemporaire): Promise<string[]> {
+  const config = await getCachedGuild(guildId).catch(() => null);
+  if (!config) return [];
+  const generateurs = resolveTempVoiceGenerators(config as unknown as TempVoiceGuildConfig, guildId);
+  const generateur = generateurs.find((candidat) => candidat.channelId === entree.generateurId)
+    ?? generateurs.find((candidat) => candidat.primary);
+  // Seuls les rôles déjà surchargés sur le salon sont réglés : un rôle ajouté
+  // depuis ou posé par un autre générateur ne reçoit pas de surcharge neuve.
+  return (generateur?.policy.autoAllowRoleIds ?? [])
+    .filter((id) => id !== guildId && channel.permissionOverwrites.cache.has(id));
+}
+
+/**
+ * Surcharge du propriétaire pour un mode. En « ceux qui sont en vocal », le
+ * propriétaire connecté écrit par sa présence : lui poser le refus du mode
+ * l'écraserait, il reçoit l'écriture (hors refus nommé de la catégorie).
+ */
+function surchargeProprietaire(
+  channel: VoiceChannel,
+  entree: EntreeSalonTemporaire,
+  mode: ModeEcriture,
+  surcharges: ReturnType<typeof surchargesModeEcriture>,
+): Record<string, boolean | null> {
+  return mode === 'inVoice' && channel.members?.has(entree.creatorId)
+    ? ownerChatPatch(true, categoryOverwriteFor(channel, entree.creatorId))
+    : surcharges.proprietaire;
+}
+
+/**
+ * Rétablit le mode mémorisé, quel qu'il soit, comme seule source des bits
+ * d'écriture de @everyone et du propriétaire : le verrou coupe l'un et rend
+ * l'autre écrivain, et sans ce retour le panneau affiche un mode que le salon
+ * n'a plus. Sans mode mémorisé, rien n'est posé ici : la catégorie décide.
+ * Renvoie `true` si posé.
+ */
+async function rendreEcritureAuMode(channel: VoiceChannel, entree: EntreeSalonTemporaire): Promise<boolean> {
+  if (!entree.modeEcriture) return false;
+  const guildId = channel.guild?.id ?? '';
+  const surcharges = surchargesModeEcriture(
+    entree.modeEcriture,
+    categoryOverwriteFor(channel, guildId),
+    categoryOverwriteFor(channel, entree.creatorId),
+  );
+  // Le propriétaire d'abord : dans l'ordre inverse, un appel refusé entre les deux le laisserait muet chez lui.
+  await channel.permissionOverwrites.edit(
+    entree.creatorId,
+    surchargeProprietaire(channel, entree, entree.modeEcriture, surcharges),
+  );
+  await channel.permissionOverwrites.edit(guildId, surcharges.everyone);
+  return true;
+}
+
+/** Le patch de réouverture de @everyone, sans `SendMessages` quand le mode mémorisé le pose juste après. */
+function patchReouverture(
+  patch: Readonly<Record<string, boolean | null>>,
+  channel: VoiceChannel,
+  entree: EntreeSalonTemporaire,
+): Record<string, boolean | null> {
+  const restaure = restoreFromCategory(patch, categoryOverwriteFor(channel, channel.guild?.id ?? ''));
+  if (entree.modeEcriture) delete restaure.SendMessages;
+  return restaure;
 }
 
 /**
@@ -1535,43 +1764,82 @@ async function appliquerSortieVocale(channel: VoiceChannel, membreId: string): P
 async function appliquerModeEcriture(
   channel: VoiceChannel,
   entree: EntreeSalonTemporaire,
-  nouveau: ModeEcriture,
+  nouveau: ModeEcriture | typeof MODE_HERITE,
 ): Promise<void> {
   const guildId = channel.guild?.id ?? '';
   const ancien = modeDuSalon(channel, entree);
+  const herite = nouveau === MODE_HERITE;
 
   // Les surcharges nominatives decident de qui doit se taire : les lire perimees
   // laisserait ecrire quelqu'un qu'on vient tout juste d'autoriser.
   await relireSalon(channel);
 
-  const surcharges = surchargesModeEcriture(
+  // « Hérité » retire ce que le mode a posé : la catégorie décide de nouveau.
+  const surcharges = herite ? { everyone: { SendMessages: null }, proprietaire: { SendMessages: null } } : surchargesModeEcriture(
     nouveau,
     categoryOverwriteFor(channel, guildId),
     categoryOverwriteFor(channel, entree.creatorId),
   );
+  const presents = [...(channel.members?.keys() ?? [])];
+  const transition = transitionModeEcriture(
+    ancien,
+    herite ? 'everyone' : nouveau,
+    presents,
+    originesSurcharge.originesDuSalon(guildId, channel.id),
+  );
+  const surchargeDuProprietaire = herite
+    ? surcharges.proprietaire
+    : surchargeProprietaire(channel, entree, nouveau, surcharges as ReturnType<typeof surchargesModeEcriture>);
 
   // Le propriétaire d'abord, @everyone ensuite : dans l'ordre inverse, un appel
   // refusé entre les deux le laisserait muet chez lui.
-  await channel.permissionOverwrites.edit(entree.creatorId, surcharges.proprietaire);
+  // Présent, le propriétaire reçoit son écriture de la transition (elle la marque
+  // comme présence) : la poser deux fois doublerait l'appel.
+  if (!(nouveau === 'inVoice' && transition.aPoser.includes(entree.creatorId))) {
+    await channel.permissionOverwrites.edit(entree.creatorId, surchargeDuProprietaire);
+  }
   await channel.permissionOverwrites.edit(guildId, surcharges.everyone);
+
+  // Les rôles autorisés d'office suivent la même règle qu'à la création : ils
+  // écrivent dans tous les modes sauf « Personne », hors refus nommé de la catégorie.
+  const rolesOffice = await rolesAutoriseDOffice(channel, guildId, entree);
+  for (const roleId of rolesOffice) {
+    const ecriture = nouveau === 'nobody'
+      ? false
+      : ownerChatPatch(true, categoryOverwriteFor(channel, roleId)).SendMessages;
+    await channel.permissionOverwrites
+      .edit(roleId, { SendMessages: ecriture }, { type: OverwriteType.Role })
+      .catch((err: unknown) => logger.warn('TempVoice', `Écriture du rôle ${roleId} non réglée sur ${channel.id} :`, err));
+  }
+
+  // Le rôle réservé a reçu `SendMessages` à la réservation (en « Tout le monde »).
+  // Dans les modes qui refusent l'écriture à @everyone, il ne la garde pas, sauf
+  // s'il est aussi autorisé d'office (réglé juste au-dessus) ; en « ceux qui sont
+  // en vocal », la présence de ses membres décide. Le bit est effacé, pas refusé.
+  if (nouveau === 'ownerOnly' || nouveau === 'nobody' || nouveau === 'inVoice') {
+    const reserve = await roleReserve(channel.id);
+    if (reserve && !rolesOffice.includes(reserve)) {
+      await channel.permissionOverwrites
+        .edit(reserve, { SendMessages: null }, { type: OverwriteType.Role })
+        .catch((err: unknown) => logger.warn('TempVoice', `Écriture du rôle réservé ${reserve} non retirée sur ${channel.id} :`, err));
+    }
+  }
 
   // « Moi seul », « Personne » et « ceux qui sont en vocal » refusent
   // `SendMessages` a @everyone - le bot compris, faute de surcharge a lui.
   await assurerBotPeutEcrire(channel);
-
-  const presents = [...(channel.members?.keys() ?? [])];
-  const transition = transitionModeEcriture(
-    ancien,
-    nouveau,
-    presents,
-    originesSurcharge.originesDuSalon(guildId, channel.id),
-  );
 
   for (const membreId of transition.aPoser) {
     const posee = await poserSurcharge(channel, membreId, { SendMessages: true });
     if (posee) originesSurcharge.marquer(guildId, channel.id, membreId, 'presence');
   }
   for (const membreId of transition.aRetirer) {
+    // Le propriétaire a reçu son écriture du patch ci-dessus (« Moi seul ») :
+    // la lui retirer ici le rendrait muet. Seule sa marque de présence part.
+    if (membreId === entree.creatorId) {
+      originesSurcharge.oublier(guildId, channel.id, membreId);
+      continue;
+    }
     const retiree = await poserSurcharge(channel, membreId, { SendMessages: null });
     if (retiree) originesSurcharge.oublier(guildId, channel.id, membreId);
   }
@@ -1579,7 +1847,7 @@ async function appliquerModeEcriture(
   // Une surcharge nominative prime sur @everyone : sans ce passage, « Personne »
   // laissait ecrire tous ceux qui avaient ete autorises. Seul le bit d'ecriture
   // part - la personne reste autorisee a entrer.
-  for (const membreId of membresAReduireAuSilence(
+  for (const membreId of herite ? [] : membresAReduireAuSilence(
     nouveau,
     surchargesMembresLues(channel, entree.creatorId),
     presents,
@@ -1590,7 +1858,8 @@ async function appliquerModeEcriture(
     if (retiree) originesSurcharge.oublier(guildId, channel.id, membreId);
   }
 
-  entree.modeEcriture = nouveau;
+  if (herite) delete entree.modeEcriture;
+  else entree.modeEcriture = nouveau;
 
   // La mémoire du salon meurt avec le process. Sans cette ligne, « ceux qui
   // sont en vocal » redevient au redémarrage un mode déduit - et les surcharges
@@ -1598,7 +1867,7 @@ async function appliquerModeEcriture(
   // Une base indisponible ne doit pas faire échouer le clic : le mode est
   // appliqué sur Discord, c'est l'essentiel.
   try {
-    await prisma.tempVoiceChannel.update({ where: { id: channel.id }, data: { writeMode: nouveau } });
+    await prisma.tempVoiceChannel.update({ where: { id: channel.id }, data: { writeMode: herite ? null : nouveau } });
   } catch (err) {
     logger.warn('TempVoice', `Mode d'écriture non persisté pour ${channel.id} :`, err);
   }
@@ -1609,7 +1878,7 @@ async function appliquerModeEcriture(
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** Actions ouvertes à qui n'est ni propriétaire ni staff. */
-const ACTIONS_OUVERTES = new Set(['claim', 'demander']);
+const ACTIONS_OUVERTES = new Set(['claim', 'reclamer', 'demander', 'propriete']);
 
 interface ContextePanneau {
   role: RoleAgissant;
@@ -1641,6 +1910,9 @@ interface ContextePanneau {
    * l'interaction et jamais dans le panneau public, qui est le même pour tous.
    */
   plan: PlanReservation;
+  /** `isStaff` de la personne qui clique, lu une fois : il décide qui réclame et qui tranche. */
+  staff: boolean;
+  propriete: TempVoiceOwnershipSettings;
 }
 
 /**
@@ -1811,7 +2083,15 @@ function menuModeEcriture(etat: EtatSalon, actif: boolean, locale: BotLocale): S
             .setDefault(mode === etat.modeEcriture),
           iconeMode(mode),
         );
-      }),
+      }).concat([
+        avecIcone(
+          new StringSelectMenuOptionBuilder()
+            .setLabel(m.panel_tempvoice_mode_option({ mode: m.panel_tempvoice_mode_inherit_label({}, { locale }) }, { locale }))
+            .setDescription(m.panel_tempvoice_mode_inherit_desc({}, { locale }))
+            .setValue(MODE_HERITE),
+          I.settings,
+        ),
+      ]),
     );
 }
 
@@ -2129,6 +2409,11 @@ function panneauPropriete(
   const present = channel.members?.has(entree.creatorId) ?? false;
 
   if (present) {
+    // « Propriété » est ouvert aux présents pour qu'ils puissent réclamer : un
+    // membre sans pouvoir ne voit pas de bouton « Transférer » qui le refuserait.
+    if (ctxp.role === 'moderateur' && !ctxp.staff) {
+      return { embeds: [avis(m.panel_tempvoice_claim_owner_here({}, { locale: ctxp.locale }))], components: [] };
+    }
     return {
       embeds: encartRole(entree, ctxp),
       components: [
@@ -2155,10 +2440,16 @@ function panneauPropriete(
     }, { locale })
     : '';
 
+  // Le bouton dit d'avance pourquoi il attend : passation en cours,
+  // récupération réservée au staff, ou propriétaire qui regarde son salon.
+  const verdict = peutAgir(ctxp.role, 'recuperer', ctxp.reglages, locale);
+  const raison = verdict.autorise ? raisonRecuperation(channel, ctxp) : verdict.raison;
+
+  const description = m.panel_tempvoice_no_owner_desc({ owner: entree.creatorId, since: depuis }, { locale });
   const abandon = new EmbedBuilder()
     .setColor(COULEUR_NEUTRE)
     .setTitle(`${I.crown} ${m.panel_tempvoice_no_owner_title({}, { locale })}`)
-    .setDescription(m.panel_tempvoice_no_owner_desc({ owner: entree.creatorId, since: depuis }, { locale }));
+    .setDescription(raison ? `${description}\n\n${raison}` : description);
 
   return {
     embeds: [abandon],
@@ -2168,7 +2459,8 @@ function panneauPropriete(
         new ButtonBuilder()
           .setCustomId('tempvoice:claim')
           .setLabel(`${ICONES_ABSENTES.recuperer} ${m.panel_tempvoice_btn_claim({}, { locale })}`)
-          .setStyle(ButtonStyle.Success),
+          .setStyle(ButtonStyle.Success)
+          .setDisabled(Boolean(raison)),
       ),
     ],
   };
@@ -2254,6 +2546,18 @@ function carteDecision(
   };
 }
 
+/**
+ * Un modèle de nom resté au défaut (ou vide) suit la langue du serveur. Le
+ * défaut enregistré est celui de la langue de qui a ouvert le dashboard (ou
+ * `DEFAULT_NAME_TEMPLATE`) : sans cela, un serveur passé en anglais garde des
+ * « Salon de … ».
+ */
+function modeleDeNom(modele: string | null | undefined, locale: BotLocale): string {
+  const defaut = (l: BotLocale) => m.setup_template_voice_name({ user: '{user}' }, { locale: l });
+  const brut = (modele ?? '').trim();
+  return !brut || brut === DEFAULT_NAME_TEMPLATE || brut === defaut('fr') || brut === defaut('en') ? defaut(locale) : (modele as string);
+}
+
 async function createTempChannel(
   state: VoiceState,
   member: GuildMember,
@@ -2276,6 +2580,18 @@ async function createTempChannel(
   if (missing.length > 0) {
     logger.warn('TempVoice', `Droits manquants sur ${guild.name} (${guild.id}) : ${missing.join(', ')}`);
     const droits = missing.join(m.panel_tempvoice_perm_sep({}, { locale }));
+    await envoyerJournalVocal({
+      guild,
+      locale,
+      salonId: generator.channelId,
+      parentId: generator.categoryId,
+      libelle: m.log_tempvoice_create_refused({}, { locale }),
+      champs: [
+        { name: m.log_tempvoice_field_trigger({}, { locale }), value: `<@${member.id}>`, inline: true },
+        { name: m.log_tempvoice_field_missing_perms({}, { locale }), value: droits, inline: false },
+      ],
+      enErreur: true,
+    });
     await member
       .send((missing.length > 1 ? m.panel_tempvoice_dm_missing_perms_many : m.panel_tempvoice_dm_missing_perms_one)(
         { guild: guild.name, perms: droits },
@@ -2291,7 +2607,7 @@ async function createTempChannel(
 
   const tempChannel = await guild.channels
     .create({
-      name: renderChannelName(generator.nameTemplate, member.displayName || member.user.username),
+      name: renderChannelName(modeleDeNom(generator.nameTemplate, locale), member.displayName || member.user.username),
       type: ChannelType.GuildVoice,
       parent: generator.categoryId,
       userLimit: generator.policy.userLimit,
@@ -2318,7 +2634,7 @@ async function createTempChannel(
   // aucun etat vocal n'a alors change, et l'annonce serait attribuee au premier
   // deplacement sans rapport survenu avant peremption.
   const oublierDeplacement = annoncerIntentionVocale(guild.id, member.id, 'move', {
-    libelle: 'Kotbo (salon vocal temporaire)',
+    libelle: m.log_tempvoice_author_system({}, { locale }),
   });
   const moved = await state.setChannel(tempChannel).then(() => true).catch(() => {
     oublierDeplacement();
@@ -2333,7 +2649,13 @@ async function createTempChannel(
   // Le générateur est à portée ICI et nulle part ailleurs : c'est le seul moment
   // où l'on sait par quel salon générateur on est passé. Ne pas le noter
   // maintenant, c'est ne plus jamais pouvoir le deviner.
-  tempChannels.set(tempChannel.id, { creatorId: member.id, generateurId: generator.channelId });
+  // Le mode du panneau suit le réglage du générateur (table unique du service).
+  const modeInitial = modeEcritureDepuisTextChat(policy.textChat);
+  tempChannels.set(tempChannel.id, {
+    creatorId: member.id,
+    generateurId: generator.channelId,
+    ...(modeInitial && modeInitial !== 'inVoice' ? { modeEcriture: modeInitial } : {}),
+  });
 
   // Objet nommé plutôt qu'écrit dans l'appel : `generatorChannelId` n'est pas
   // dans le client Prisma généré de ce worktree, qui précède la migration
@@ -2344,28 +2666,39 @@ async function createTempChannel(
     guildId: guild.id,
     creatorId: member.id,
     generatorChannelId: generator.channelId,
+    writeMode: modeInitial,
   };
 
   await prisma.tempVoiceChannel
     .create({ data: ligneSalon })
     .catch((err: unknown) => logger.error('TempVoice', "Erreur lors de l'enregistrement du salon temporaire :", err));
 
-  // La ligne de mention au-dessus de l'embed reste : c'est elle qui déclenche la
-  // notification, un embed n'en produisant aucune.
   const entree = tempChannels.get(tempChannel.id) ?? { creatorId: member.id };
-  const { charge, presentation } = await construirePanneau(tempChannel, entree);
+  // « Ceux en vocal » : poser la présence des occupants, comme le fait le panneau.
+  if (modeInitial === 'inVoice') {
+    await appliquerModeEcriture(tempChannel, entree, 'inVoice').catch((err: unknown) =>
+      logger.warn('TempVoice', `Mode d'écriture initial non appliqué pour ${tempChannel.id} :`, err));
+  }
+  const panneau = await construirePanneau(tempChannel, entree);
 
   // Une categorie qui refuse `SendMessages` a @everyone prive aussi le bot, qui
   // n'a pas de surcharge a lui : le panneau ne serait jamais poste, et le salon
   // naitrait sans aucune commande.
   await assurerBotPeutEcrire(tempChannel);
+  if (policy.lockOnCreate) await garderEntreeStaff(tempChannel);
 
   // Pas d'`attachments: []` ici : un message qui naît n'a aucune pièce jointe à
   // vider, et cette liste n'a de sens qu'en édition.
-  const aPoster = { content: `<@${member.id}>`, ...charge, allowedMentions: { users: [member.id] } };
+  const aPoster = chargeAvecMention(panneau, member.id);
   // Un message neuf ne peut pas déjà porter IsComponentsV2 : le réglage V1
   // s'applique donc toujours ici, contrairement à l'édition.
-  if (presentation.composants === 'V1') sansConversionV2(aPoster);
+  if (panneau.presentation.composants === 'V1') sansConversionV2(aPoster);
+  // `message` : la seule mention qui notifie, juste au-dessus du panneau.
+  if (panneau.mention === 'message') {
+    await tempChannel
+      .send({ content: `<@${member.id}>`, allowedMentions: { users: [member.id] } })
+      .catch((err: unknown) => logger.warn('TempVoice', `Mention du propriétaire non postée dans ${tempChannel.id} :`, err));
+  }
 
   const poste = await tempChannel
     .send(aPoster)
@@ -2376,6 +2709,25 @@ async function createTempChannel(
   if (poste?.id) entree.panneauId = poste.id;
 
   logger.info('TempVoice', `Salon créé : ${tempChannel.name} (${tempChannel.id})`);
+  const L = { locale };
+  await envoyerJournalVocal({
+    guild,
+    locale,
+    salonId: tempChannel.id,
+    parentId: tempChannel.parentId,
+    libelle: m.log_tempvoice_created({}, L),
+    champs: [
+      { name: m.log_tempvoice_field_trigger({}, L), value: `<@${member.id}>`, inline: true },
+      { name: m.log_tempvoice_field_owner({}, L), value: `<@${entree.creatorId}>`, inline: true },
+      { name: m.log_tempvoice_field_generator({}, L), value: `<#${generator.channelId}>`, inline: true },
+      {
+        name: m.log_tempvoice_field_category({}, L),
+        value: generator.categoryId ? `<#${generator.categoryId}>` : m.log_tempvoice_val_none({}, L),
+        inline: true,
+      },
+      { name: m.log_tempvoice_field_initial_mode({}, L), value: libelleModeEcriture(modeDuSalon(tempChannel, entree), locale).libelle, inline: true },
+    ],
+  });
 }
 
 /**
@@ -2408,6 +2760,357 @@ const PURGE_DEMANDES_MS = 5 * 60 * 1000;
  *  par chaque test, et autant d'intervalles s'accumuleraient. */
 let purgeDemandes: ReturnType<typeof setInterval> | null = null;
 
+// ─── Journal du panneau ───
+// Tout composant `tempvoice:` passe par l'écouteur d'interactions, qui journalise
+// une fois le traitement terminé : ajouter un bouton sans l'inscrire ici ne le
+// rend pas muet, il apparaît sous son identifiant brut.
+
+type MessageSimple = (inputs: Record<string, never>, options: { locale: BotLocale }) => string;
+
+/** Action lisible de chaque composant du panneau (identifiant sans le préfixe ni les
+ *  paramètres), rendue dans la langue du serveur. */
+export const LIBELLES_ACTIONS_PANNEAU: Readonly<Record<string, MessageSimple>> = {
+  salon: m.log_tempvoice_action_salon,
+  membres: m.log_tempvoice_action_membres,
+  propriete: m.log_tempvoice_action_propriete,
+  reglages: m.log_tempvoice_action_reglages,
+  demander: m.log_tempvoice_action_demander,
+  bascule_verrou: m.log_tempvoice_action_bascule_verrou,
+  limit: m.log_tempvoice_action_limit,
+  limit_modal: m.log_tempvoice_action_limit_modal,
+  rename: m.log_tempvoice_action_rename,
+  rename_modal: m.log_tempvoice_action_rename_modal,
+  reserve: m.log_tempvoice_action_reserve,
+  reserve_select: m.log_tempvoice_action_reserve_select,
+  reserve_membres: m.log_tempvoice_action_reserve_membres,
+  mode_select: m.log_tempvoice_action_mode_select,
+  reglages_mod: m.log_tempvoice_action_reglages_mod,
+  membre_ici: m.log_tempvoice_action_membre_ici,
+  membre_select: m.log_tempvoice_action_membre_select,
+  m_kick: m.log_tempvoice_action_m_kick,
+  m_ban: m.log_tempvoice_action_m_ban,
+  m_trust: m.log_tempvoice_action_m_trust,
+  m_untrust: m.log_tempvoice_action_m_untrust,
+  m_transfer: m.log_tempvoice_action_m_transfer,
+  claim: m.log_tempvoice_action_claim,
+  reclamer: m.log_tempvoice_action_reclamer,
+  reclam_annuler: m.log_tempvoice_action_reclam_annuler,
+  leader: m.log_tempvoice_action_leader,
+  resa_rien: m.log_tempvoice_action_resa_rien,
+  resa_deplacer: m.log_tempvoice_action_resa_deplacer,
+  resa_deconnecter: m.log_tempvoice_action_resa_deconnecter,
+  demande_ok: m.log_tempvoice_action_demande_ok,
+  demande_non: m.log_tempvoice_action_demande_non,
+  demande_ban: m.log_tempvoice_action_demande_ban,
+  transfer_select: m.log_tempvoice_action_transfer_select,
+  trust_select: m.log_tempvoice_action_trust_select,
+  kick_select: m.log_tempvoice_action_kick_select,
+  ban_select: m.log_tempvoice_action_ban_select,
+  // Identifiants d'un ancien panneau, encore acceptés.
+  lock: m.log_tempvoice_action_lock,
+  unlock: m.log_tempvoice_action_unlock,
+  chat: m.log_tempvoice_action_chat,
+  kick: m.log_tempvoice_action_kick,
+  ban: m.log_tempvoice_action_ban,
+  trust: m.log_tempvoice_action_trust,
+  transfer: m.log_tempvoice_action_transfer,
+};
+
+/** Ces actions répondent par un panneau entier : sa description n'est pas un résultat. */
+const ACTIONS_SANS_TEXTE_DE_REPONSE = new Set([
+  'salon', 'membres', 'propriete', 'reglages', 'membre_ici', 'membre_select',
+]);
+
+/** Ouvrir un onglet, une fiche, une saisie ou un sélecteur : journalisé, sans Avant/Après. */
+const ACTIONS_NAVIGATION = new Set([
+  'salon', 'membres', 'propriete', 'reglages', 'membre_ici', 'membre_select',
+  'limit', 'rename', 'kick', 'ban', 'trust', 'transfer',
+]);
+
+/**
+ * Actions faites pour changer le salon ou une personne : quand rien n'a changé
+ * entre avant et après, l'issue est « Sans effet ». C'est ce qui couvre les refus
+ * des traitements (droit modérateur fermé, cible protégée, catégorie qui refuse…)
+ * sans toucher à chacun.
+ */
+const ACTIONS_A_EFFET = new Set([
+  'bascule_verrou', 'limit_modal', 'rename_modal', 'reserve_select', 'reserve_membres',
+  'mode_select', 'reglages_mod', 'm_kick', 'm_ban', 'm_trust', 'm_untrust', 'm_transfer',
+  'claim', 'reclamer', 'leader', 'resa_deplacer', 'resa_deconnecter', 'demande_ok', 'demande_ban',
+  'transfer_select', 'trust_select', 'kick_select', 'ban_select', 'lock', 'unlock', 'chat',
+]);
+
+/** Texte lisible d'une réponse (chaîne, `content` ou description du premier embed). */
+function texteDeReponse(charge: unknown): string | null {
+  if (typeof charge === 'string') return charge;
+  const o = charge as {
+    content?: unknown;
+    embeds?: Array<{ data?: { description?: string }; toJSON?: () => { description?: string } }>;
+  } | null;
+  if (typeof o?.content === 'string' && o.content) return o.content;
+  const embed = o?.embeds?.[0];
+  return embed?.data?.description ?? embed?.toJSON?.().description ?? null;
+}
+
+/** Réponses qui ne sont pas un verdict (la proposition de débordement) : le
+ *  journal garde le verdict qui les précède. */
+const horsVerdict = new WeakSet<object>();
+
+/**
+ * Mandataire de l'interaction qui retient le dernier texte répondu et si une
+ * réponse a abouti : l'objet d'origine reste intact.
+ *
+ * `repondu` ne se lit pas sur `replied` : `followUp` après un `deferReply` ou un
+ * `deferUpdate` répond sans jamais le passer à vrai.
+ */
+function espionnerReponses<T extends Interaction>(interaction: T): { texte: string | null; repondu: boolean; vue: T } {
+  const etat = { texte: null as string | null, repondu: false };
+  const vue = new Proxy(interaction, {
+    get(cible, nom) {
+      const valeur = Reflect.get(cible, nom, cible) as unknown;
+      if (typeof valeur !== 'function') return valeur;
+      const lie = (valeur as (...a: unknown[]) => unknown).bind(cible);
+      if (!['reply', 'followUp', 'editReply', 'update', 'showModal'].includes(String(nom))) return lie;
+      return (...args: unknown[]) => {
+        const charge = args[0];
+        if (!(charge && typeof charge === 'object' && horsVerdict.has(charge))) etat.texte = texteDeReponse(charge) ?? etat.texte;
+        return Promise.resolve(lie(...args)).then((retour) => {
+          etat.repondu = true;
+          return retour;
+        });
+      };
+    },
+  });
+  return { get texte() { return etat.texte; }, get repondu() { return etat.repondu; }, vue };
+}
+
+/** Valeur choisie dans un menu ou saisie dans une fenêtre, et personne visée, en clair. */
+function decrireChoix(
+  interaction: Interaction & { customId: string },
+  action: string,
+  locale: BotLocale,
+): { valeur: string | null; cible: string | null } {
+  const paramCible = interaction.customId.split(':')[2];
+  let cible = paramCible && /^\d+$/.test(paramCible) ? `<@${paramCible}>` : null;
+  const valeurs = 'values' in interaction ? (interaction.values as string[]) : null;
+  let valeur: string | null = null;
+
+  if (action === 'mode_select' && valeurs) {
+    const mode = estChoixModeEcriture(valeurs[0]) ? valeurs[0] : normaliserModeEcriture(valeurs[0]);
+    valeur = mode === MODE_HERITE
+      ? m.panel_tempvoice_mode_inherit_label({}, { locale })
+      : libelleModeEcriture(mode, locale).libelle;
+  } else if (action === 'reglages_mod' && valeurs) {
+    valeur = valeurs.length
+      ? valeurs.map((r) => majusculeInitiale(sujetReglage(r as ReglageModerateur, locale))).join(', ')
+      : m.log_tempvoice_no_mod_action({}, { locale });
+  } else if (action === 'reserve_select' && valeurs) {
+    valeur = valeurs[0] ? `<@&${valeurs[0]}>` : m.log_tempvoice_no_role({}, { locale });
+  } else if (valeurs) {
+    cible = valeurs.map((id) => `<@${id}>`).join(', ') || cible;
+  } else if (interaction.isModalSubmit()) {
+    try { valeur = interaction.fields.getTextInputValue('value').trim() || null; } catch { valeur = null; }
+  }
+  return { valeur, cible };
+}
+
+/** La personne sur qui porte l'action : paramètre de l'identifiant, ou choix d'un ancien sélecteur. */
+function cibleDuClic(interaction: Interaction & { customId: string }, action: string): string | null {
+  const param = interaction.customId.split(':')[2];
+  if (param && /^\d+$/.test(param)) return param;
+  const valeurs = 'values' in interaction ? (interaction.values as string[]) : [];
+  return ['transfer_select', 'trust_select', 'kick_select', 'ban_select'].includes(action) ? valeurs[0] ?? null : null;
+}
+
+/** Ce que l'action peut changer, en clair : libellé → valeur, dans l'ordre d'affichage. */
+type Instantane = Map<string, string>;
+
+/**
+ * L'état du salon à cet instant, copié en texte : l'action modifie en place les
+ * objets discord.js, une référence relue après coup dirait déjà l'état d'après.
+ * Discord est lu à l'appel. La réservation, en base, part une micro-tâche plus
+ * tard : l'acquittement de l'action est alors déjà envoyé, et aucune écriture
+ * ne peut encore avoir eu lieu (elles attendent toutes cet acquittement).
+ */
+async function photographierSalon(p: {
+  channel: VoiceChannel;
+  cache: EntreeSalonTemporaire;
+  locale: BotLocale;
+  cibleId: string | null;
+  /** Réglages modérateur, seulement pour l'action qui les change. */
+  reglages: ReglagesAdmin | null;
+  /** Déconnectés par l'action, absents quoi que dise encore le cache. */
+  sortis?: string[];
+}): Promise<Instantane> {
+  const { channel, cache, cibleId } = p;
+  const L = { locale: p.locale };
+  const aucun = m.log_tempvoice_val_none({}, L);
+  const ouiNon = (v: boolean) => (v ? m.log_tempvoice_val_yes({}, L) : m.log_tempvoice_val_no({}, L));
+  const everyone = channel.permissionOverwrites?.cache?.get(channel.guild?.id ?? '');
+  const role = Promise.resolve().then(() => roleReserve(channel.id));
+
+  const photo: Instantane = new Map();
+  photo.set(m.log_tempvoice_state_name({}, L), channel.name ?? aucun);
+  photo.set(m.log_tempvoice_state_limit({}, L), channel.userLimit ? String(channel.userLimit) : m.log_tempvoice_val_unlimited({}, L));
+  photo.set(m.log_tempvoice_state_mode({}, L), libelleModeEcriture(modeDuSalon(channel, cache), p.locale).libelle);
+  photo.set(m.log_tempvoice_state_lock({}, L), everyone?.deny?.has(PermissionFlagsBits.Connect)
+    ? m.log_tempvoice_val_locked({}, L)
+    : m.log_tempvoice_val_open({}, L));
+  const cleReserve = m.log_tempvoice_state_reserved({}, L);
+  photo.set(cleReserve, aucun);
+  photo.set(m.log_tempvoice_state_owner({}, L), `<@${cache.creatorId}>`);
+  if (p.reglages) {
+    const ouverts = REGLAGES_MODERATEUR.filter((r) => p.reglages![r] === 'autorise');
+    photo.set(m.log_tempvoice_state_mods({}, L), ouverts.map((r) => majusculeInitiale(sujetReglage(r, p.locale))).join(', ') || aucun);
+  }
+  if (cibleId) {
+    const qui = { target: `<@${cibleId}>` };
+    const present = !p.sortis?.includes(cibleId) && (channel.guild?.voiceStates?.cache?.get(cibleId)?.channelId === channel.id
+      || Boolean(channel.members?.has(cibleId)));
+    photo.set(m.log_tempvoice_state_present(qui, L), ouiNon(present));
+    photo.set(m.log_tempvoice_state_allowed(qui, L), ouiNon(estAutorise(channel, cibleId)));
+    photo.set(m.log_tempvoice_state_banned(qui, L), ouiNon(estBanni(channel, cibleId)));
+  }
+  const reserve = await role.catch(() => null);
+  if (reserve) photo.set(cleReserve, `<@&${reserve}>`);
+  return photo;
+}
+
+/** Les seules lignes qui ont changé, avant et après ; `null` si rien n'a changé. */
+function ecartInstantanes(avant: Instantane, apres: Instantane): { avant: string; apres: string } | null {
+  const cles = [...new Set([...avant.keys(), ...apres.keys()])].filter((cle) => avant.get(cle) !== apres.get(cle));
+  if (cles.length === 0) return null;
+  const lister = (photo: Instantane) => cles.map((cle) => `**${cle}** — ${photo.get(cle) ?? '—'}`).join('\n');
+  return { avant: lister(avant), apres: lister(apres) };
+}
+
+interface ChampJournal { name: string; value: string; inline?: boolean }
+
+/**
+ * Le seul envoi des logs `voice_panel`, par le chemin commun des logs
+ * (interrupteur et salon du type, salons ignorés) : même titre, mêmes trois
+ * premiers champs, même pied, tout dans la langue du serveur. `acteur` absent
+ * = « Système ». La catégorie du salon accompagne le salon dans les sources :
+ * un salon temporaire n'a pas d'identifiant fixe, l'ignorer n'a de sens que par
+ * sa catégorie. Un échec d'envoi ne remonte jamais.
+ */
+async function envoyerJournalVocal(p: {
+  guild: DiscordGuild;
+  locale: BotLocale;
+  salonId: string;
+  parentId?: string | null;
+  acteur?: { id: string; tag: string } | null;
+  libelle: string;
+  champs: ChampJournal[];
+  enErreur?: boolean;
+}): Promise<void> {
+  try {
+    const L = { locale: p.locale };
+    const systeme = m.log_tempvoice_system({}, L);
+    const tag = p.acteur?.tag ?? systeme;
+    const coupe = (s: string) => (s.length > 1000 ? `${s.slice(0, 997)}...` : s);
+    const champs: ChampJournal[] = [
+      {
+        name: m.log_tempvoice_field_member({}, L),
+        value: p.acteur ? `<@${p.acteur.id}>\n${p.acteur.tag}\n\`${p.acteur.id}\`` : systeme,
+        inline: true,
+      },
+      { name: m.log_tempvoice_field_channel({}, L), value: `<#${p.salonId}>\n\`${p.salonId}\``, inline: true },
+      { name: m.log_tempvoice_field_action({}, L), value: p.libelle, inline: false },
+      ...p.champs.map((c) => ({ ...c, value: coupe(c.value) })),
+    ];
+
+    const embed = new EmbedBuilder()
+      .setColor(p.enErreur ? 0xe63946 : 0x457b9d)
+      .setTitle(m.log_tempvoice_title({}, L))
+      .setDescription(`${p.acteur ? `<@${p.acteur.id}> (${p.acteur.tag})` : systeme} — ${p.libelle}`)
+      .addFields(champs)
+      .setFooter({ text: m.log_tempvoice_footer({ tag }, L) })
+      .setTimestamp();
+
+    // L'audit en base garde tous les champs : son résumé par défaut s'arrête aux quatre premiers.
+    const details = champs.map((c) => `${c.name}: ${c.value.replace(/\s*\n\s*/g, ' ')}`).join(' | ').slice(0, 2000);
+    const sources = [p.salonId, p.parentId].filter((id): id is string => Boolean(id));
+    await sendLogEmbed(p.guild as never, embed, 'voice_panel', undefined, tag, sources, { details, channelId: p.salonId });
+  } catch (err) {
+    logger.warn('TempVoice', `Journal vocal non envoyé (« ${p.libelle} ») :`, err);
+  }
+}
+
+type IssueJournal = 'refusee' | 'erreur';
+
+/**
+ * Une ligne de journal par clic sur le panneau. Avant/Après ne listent que ce
+ * qui a changé ; une action à effet qui n'a rien changé est « Sans effet ».
+ */
+async function journaliserActionPanneau(p: {
+  interaction: Interaction & { customId: string };
+  guild: DiscordGuild;
+  channel: VoiceChannel;
+  action: string;
+  locale: BotLocale;
+  reponse: string | null;
+  issue?: IssueJournal;
+  /** L'action a changé le propriétaire : avant → après. */
+  proprietaire?: { avant: string; apres: string };
+  avant?: Instantane | null;
+  apres?: Instantane | null;
+  /** Membres déplacés ou déconnectés par la réservation, et le salon de repli. */
+  debordement?: { membres: string[]; salon: string | null };
+}): Promise<void> {
+  try {
+    const { interaction, channel, action, locale } = p;
+    const L = { locale };
+    const ecart = p.avant && p.apres ? ecartInstantanes(p.avant, p.apres) : null;
+    const sansEffet = !p.issue && Boolean(p.avant && p.apres) && !ecart
+      && ACTIONS_A_EFFET.has(action) && !p.debordement?.membres.length;
+    const issue = p.issue === 'refusee'
+      ? m.log_tempvoice_outcome_refused({}, L)
+      : p.issue === 'erreur'
+        ? m.log_tempvoice_outcome_error({}, L)
+        : sansEffet ? m.log_tempvoice_outcome_no_effect({}, L) : null;
+    const texte = issue || !ACTIONS_SANS_TEXTE_DE_REPONSE.has(action) ? p.reponse : null;
+    const { valeur, cible } = decrireChoix(interaction, action, locale);
+    const type = interaction.isButton()
+      ? m.log_tempvoice_kind_button({}, L)
+      : interaction.isModalSubmit() ? m.log_tempvoice_kind_modal({}, L) : m.log_tempvoice_kind_menu({}, L);
+
+    const champs: ChampJournal[] = [
+      { name: m.log_tempvoice_field_component({}, L), value: `${type} \`${interaction.customId}\``, inline: false },
+    ];
+    if (valeur) champs.push({ name: m.log_tempvoice_field_value({}, L), value: valeur, inline: true });
+    if (cible) champs.push({ name: m.log_tempvoice_field_target({}, L), value: cible, inline: true });
+    if (issue) champs.push({ name: m.log_tempvoice_field_outcome({}, L), value: issue, inline: true });
+    if (p.proprietaire) {
+      champs.push({ name: m.log_tempvoice_field_owner({}, L), value: `<@${p.proprietaire.avant}> → <@${p.proprietaire.apres}>`, inline: true });
+    }
+    if (ecart) {
+      champs.push(
+        { name: m.log_tempvoice_field_before({}, L), value: ecart.avant, inline: true },
+        { name: m.log_tempvoice_field_after({}, L), value: ecart.apres, inline: true },
+      );
+    }
+    if (p.debordement?.membres.length) {
+      champs.push({ name: m.log_tempvoice_field_affected({}, L), value: p.debordement.membres.map((id) => `<@${id}>`).join(', '), inline: false });
+      if (p.debordement.salon) champs.push({ name: m.log_tempvoice_field_fallback({}, L), value: `<#${p.debordement.salon}>`, inline: true });
+    }
+    if (texte) champs.push({ name: issue ? m.log_tempvoice_field_reason({}, L) : m.log_tempvoice_field_reply({}, L), value: texte, inline: false });
+
+    await envoyerJournalVocal({
+      guild: p.guild,
+      locale,
+      salonId: channel.id,
+      parentId: channel.parentId,
+      acteur: { id: interaction.user.id, tag: interaction.user.tag },
+      libelle: LIBELLES_ACTIONS_PANNEAU[action]?.({}, L) ?? action,
+      champs,
+      enErreur: Boolean(issue),
+    });
+  } catch (err) {
+    logger.warn('TempVoice', `Journal du panneau non envoyé (action « ${p.action} ») :`, err);
+  }
+}
+
 export function registerTempVoiceListener(client: Client): void {
   const scheduleSweep = () => {
     void sweepOrphanChannels(client).catch((err: unknown) => {
@@ -2439,10 +3142,10 @@ export function registerTempVoiceListener(client: Client): void {
 
         if (generator) {
           if (generator.requiredRoleId && !member.roles.cache.has(generator.requiredRoleId)) {
-            const oublierRefus = annoncerIntentionVocale(guild.id, member.id, 'disconnect', {
-              libelle: 'Kotbo (rôle requis manquant sur le salon générateur)',
-            });
             const locale = await resolveGuildLocale(guild.id, guild.preferredLocale ?? null);
+            const oublierRefus = annoncerIntentionVocale(guild.id, member.id, 'disconnect', {
+              libelle: m.log_tempvoice_author_missing_role({}, { locale }),
+            });
             await newState
               .disconnect(m.panel_tempvoice_audit_generator_restricted({}, { locale }))
               .catch(() => oublierRefus());
@@ -2481,11 +3184,14 @@ export function registerTempVoiceListener(client: Client): void {
           oldChannel.members.size === 0
         ) {
           const locale = await resolveGuildLocale(guild.id, guild.preferredLocale ?? null);
+          // Un serveur peut garder ses salons vides : la sortie se traite alors
+          // comme celle d'un salon vivant, et le salon reste à récupérer.
+          const supprimer = (await lireReglagesAdmin(guild.id)).propriete.deleteWhenEmpty;
           // Relu après l'attente : quelqu'un a pu entrer pendant la résolution de
           // la langue, et `closeTempChannel` supprimerait le salon avec lui dedans.
           // S'il n'est plus vide, la sortie se traite comme celle d'un salon vivant.
-          if (oldChannel.members.size === 0) {
-            const closed = await closeTempChannel(oldChannel, m.panel_tempvoice_audit_empty({}, { locale }));
+          if (supprimer && oldChannel.members.size === 0) {
+            const closed = await closeTempChannel(oldChannel, m.panel_tempvoice_audit_empty({}, { locale }), locale);
             if (closed) {
               logger.info('TempVoice', `Salon supprimé car vide : ${oldChannel.name} (${oldChannel.id})`);
             }
@@ -2504,6 +3210,11 @@ export function registerTempVoiceListener(client: Client): void {
     }
   });
 
+  // Un salon supprimé à la main : sa passation en cours s'arrête avec lui.
+  client.on(Events.ChannelDelete, (supprime) => {
+    if (supprime.type === ChannelType.GuildVoice && tempChannels.has(supprime.id)) oublierProprieteSalon(supprime as VoiceChannel);
+  });
+
   client.on(Events.InteractionCreate, async (interaction: Interaction) => {
     if (
       !interaction.isButton() &&
@@ -2519,8 +3230,31 @@ export function registerTempVoiceListener(client: Client): void {
     // Le MP porte la carte mais pas le serveur : c'est le salon retrouvé qui le
     // donne. Dans le salon vocal, les deux désignent le même.
     const guild = interaction.guild ?? channel?.guild ?? null;
-    if (!channel || !guild) return;
+    if (!channel || !guild) {
+      // Carte d'un salon supprimé depuis (MP, ancien message) : se taire laisserait
+      // Discord afficher « Cette interaction a échoué » au bout de trois secondes.
+      const langue = await resolveGuildLocale(interaction.guildId, interaction.guildLocale ?? interaction.locale ?? null);
+      await interaction
+        .reply({
+          embeds: [avis(m.panel_tempvoice_err_not_temp({}, { locale: langue }))],
+          flags: [MessageFlags.Ephemeral],
+        })
+        .catch(() => null);
+      return;
+    }
     const guildId = guild.id;
+    // Le salon visé par un identifiant de bouton doit être celui du serveur où
+    // l'on clique : un identifiant porté d'un serveur à l'autre ne pilote rien.
+    if (interaction.guildId && channel.guild?.id !== interaction.guildId) {
+      const langue = await resolveGuildLocale(interaction.guildId, interaction.guildLocale ?? interaction.locale ?? null);
+      await interaction
+        .reply({
+          embeds: [avis(m.panel_tempvoice_claim_stale({}, { locale: langue }))],
+          flags: [MessageFlags.Ephemeral],
+        })
+        .catch(() => null);
+      return;
+    }
     // Résolue avant le premier refus : les deux gardes ci-dessous répondent déjà
     // du texte, et elles passent avant que `ctxp` n'existe.
     const locale = await resolveGuildLocale(guildId, interaction.guildLocale ?? guild.preferredLocale ?? null);
@@ -2537,6 +3271,7 @@ export function registerTempVoiceListener(client: Client): void {
     }
 
     const action = interaction.customId.split(':')[1] ?? '';
+    const reponses = espionnerReponses(interaction);
     const actingMember = interaction.member instanceof GuildMember
       ? interaction.member
       : await guild.members.fetch(user.id).catch(() => null);
@@ -2545,13 +3280,15 @@ export function registerTempVoiceListener(client: Client): void {
     // voit la même rangée, le tri se fait ici, au clic. `claim` rend un salon
     // dont le propriétaire est parti ; `demander` s'adresse justement à qui est
     // dehors. Les deux sont donc ouvertes à autrui.
-    if (!ACTIONS_OUVERTES.has(action) && cache.creatorId !== user.id && !(await isStaff(guildId, actingMember))) {
-      await interaction
+    const staff = await isStaff(guildId, actingMember);
+    if (!ACTIONS_OUVERTES.has(action) && cache.creatorId !== user.id && !staff) {
+      await reponses.vue
         .reply({
           embeds: [avis(m.panel_tempvoice_err_owner_only({}, { locale }))],
           flags: [MessageFlags.Ephemeral],
         })
         .catch(() => null);
+      await journaliserActionPanneau({ interaction, guild, channel, action, locale, reponse: reponses.texte, issue: 'refusee' });
       return;
     }
 
@@ -2583,6 +3320,7 @@ export function registerTempVoiceListener(client: Client): void {
         module.reservation.rolesReservables,
         presentation.repliReservation,
       ),
+      staff,
     };
 
     // ⚠️ Aucun redessin ici. Il y en avait un, hérité de l'époque où
@@ -2597,18 +3335,66 @@ export function registerTempVoiceListener(client: Client): void {
     //
     // Chaque action qui change quelque chose appelle `planifierRafraichissement`
     // une fois son travail fait : c'est là que le redessin a un sens.
+    // L'état d'avant, copié avant que l'action ne touche à rien. La navigation
+    // ne change rien : elle est journalisée sans Avant/Après.
+    const photo = (reglages: ReglagesAdmin, sortis?: string[]) => photographierSalon({
+      channel, cache, locale, cibleId: cibleDuClic(interaction, action), reglages: action === 'reglages_mod' ? reglages : null, sortis,
+    }).catch(() => null);
+    const photoAvant = ACTIONS_NAVIGATION.has(action) ? null : photo(ctxp.reglages);
+
+    let erreur = false;
+    let expiree = false;
+    const contexte: ActionContext = { interaction: reponses.vue, action, channel, cache, guild, guildId, actingMember, ctxp };
     try {
-      await handleTempVoiceAction({ interaction, action, channel, cache, guild, guildId, actingMember, ctxp });
+      await handleTempVoiceAction(contexte);
     } catch (err) {
-      logger.error('TempVoice', `Erreur lors de l'action « ${action} » :`, err);
+      erreur = true;
+      expiree = estInteractionExpiree(err);
+      if (expiree) {
+        // Discord a déjà affiché l'échec : toute réponse prendrait 10062 à son tour.
+        logger.warn('TempVoice', `Interaction expirée : action « ${action} » abandonnée sur ${channel.id}.`);
+      } else {
+        logger.error('TempVoice', `Erreur lors de l'action « ${action} » :`, err);
+      }
+    }
+    if (erreur && !expiree) {
       const message = {
         embeds: [avis(m.panel_tempvoice_err_action_failed({}, { locale }))],
         flags: [MessageFlags.Ephemeral] as const,
       };
       await (interaction.isRepliable() && (interaction.replied || interaction.deferred)
-        ? interaction.followUp(message).catch(() => null)
-        : interaction.reply(message).catch(() => null));
+        ? reponses.vue.followUp(message).catch(() => null)
+        : reponses.vue.reply(message).catch(() => null));
     }
+    // Un identifiant périmé (ancienne fenêtre de saisie, bouton retiré) ne
+    // correspond à aucune branche du répartiteur : sans réponse, Discord affiche
+    // « Cette interaction a échoué », ou laisse « réfléchit… » si elle a été
+    // acquittée. Le contrôle est ici, au point où tous les chemins passent.
+    if (!erreur && !reponses.repondu) {
+      const inconnue = { embeds: [avis(m.panel_tempvoice_err_action_failed({}, { locale }))] };
+      await (interaction.isRepliable() && interaction.deferred
+        ? reponses.vue.editReply(inconnue)
+        : reponses.vue.reply({ ...inconnue, flags: [MessageFlags.Ephemeral] })).catch(() => null);
+    }
+    // L'état d'après, relu sur Discord : le cache ne voit pas les surcharges
+    // qu'on vient d'écrire. Une interaction expirée n'a rien appliqué.
+    let avant: Instantane | null = null;
+    let apres: Instantane | null = null;
+    if (photoAvant && !expiree) {
+      avant = await photoAvant;
+      await relireSalon(channel).catch(() => null);
+      apres = await photo(contexte.ctxp.reglages, contexte.sortis);
+    }
+    // Après le traitement, pour que la réponse faite au membre soit connue.
+    await journaliserActionPanneau({
+      interaction, guild, channel, action, locale,
+      reponse: expiree ? m.log_tempvoice_expired({}, { locale }) : reponses.texte,
+      issue: erreur ? 'erreur' : contexte.issue ? 'refusee' : undefined,
+      proprietaire: contexte.proprietaire,
+      avant,
+      apres,
+      debordement: contexte.debordement,
+    });
   });
 
   logger.success('TempVoice', 'Écouteur Vocal Temporaire enregistré');
@@ -2636,17 +3422,33 @@ function surMessageEphemere(interaction: RepliableInteraction): boolean {
   return Boolean(drapeaux?.has?.(MessageFlags.Ephemeral));
 }
 
-async function deferIfNeeded(interaction: RepliableInteraction, compact = false): Promise<void> {
-  if (interaction.deferred || interaction.replied) return;
+/** Discord a fermé l'interaction (reçue après 3 s) : toute réponse est vouée à 10062. */
+function estInteractionExpiree(err: unknown): boolean {
+  return (err as { code?: unknown } | null)?.code === 10062;
+}
+
+/**
+ * Rend vrai si l'interaction est acquittée. Sur 10062, l'erreur remonte : Discord
+ * a déjà affiché l'échec à la personne, qui recliquera — l'action ne doit donc pas
+ * s'appliquer, et l'écouteur l'abandonne sans retenter de réponse.
+ */
+function acquitter(envoi: () => Promise<unknown>): Promise<boolean> {
+  return envoi().then(() => true, (err: unknown) => {
+    if (estInteractionExpiree(err)) throw err;
+    return false;
+  });
+}
+
+async function deferIfNeeded(interaction: RepliableInteraction, compact = false): Promise<boolean> {
+  if (interaction.deferred || interaction.replied) return true;
 
   // `deferReply` crée un message de plus ; `deferUpdate` reprend celui qui porte
   // le composant. En mode compact, les trois éphémères d'une réservation — le
   // menu, le choix, le verdict — n'en font plus qu'un.
   if (compact && surMessageEphemere(interaction)) {
-    await (interaction as unknown as { deferUpdate: () => Promise<unknown> }).deferUpdate().catch(() => null);
-    return;
+    return acquitter(() => (interaction as unknown as { deferUpdate: () => Promise<unknown> }).deferUpdate());
   }
-  await interaction.deferReply({ flags: [MessageFlags.Ephemeral] }).catch(() => null);
+  return acquitter(() => interaction.deferReply({ flags: [MessageFlags.Ephemeral] }));
 }
 
 /** Les trois portes du panneau, vers lesquelles « Retour » sait ramener. */
@@ -2761,6 +3563,15 @@ interface ActionContext {
   /** Qui clique et ce que les modérateurs ont le droit de faire sur ce serveur :
    *  lus une fois, passés explicitement — `peutAgir` n'a pas de défaut. */
   ctxp: ContextePanneau;
+  /** Un traitement qui refuse l'action le dit au journal, même sans passer par la garde. */
+  issue?: 'Refusée';
+  /** Posé par `changerProprietaire` quand CETTE action a changé le propriétaire : avant → après. */
+  proprietaire?: { avant: string; apres: string };
+  /** Posé par `appliquerDebordement` : qui a été déplacé ou déconnecté, et vers où. */
+  debordement?: { membres: string[]; salon: string | null };
+  /** Déconnectés par cette action : Discord l'a accepté, mais la passerelle peut
+   *  annoncer leur départ après la relecture qui sert au journal. */
+  sortis?: string[];
 }
 
 function textModal(customId: string, title: string, label: string, placeholder: string, maxLength: number) {
@@ -2837,18 +3648,17 @@ async function selecteurPersonnes(
  * Acquitte une interaction de composant sans consommer la réponse : `deferUpdate`
  * garde la main sur le message éphémère, qu'un `editReply` réécrira ensuite.
  */
-async function acquitterMiseAJour(interaction: RepliableInteraction): Promise<void> {
-  if (interaction.deferred || interaction.replied) return;
+async function acquitterMiseAJour(interaction: RepliableInteraction): Promise<boolean> {
+  if (interaction.deferred || interaction.replied) return true;
   // ⚠️ `deferUpdate` ne vaut que sur un message ÉPHÉMÈRE. En mode FLAT, les
   // mêmes composants vivent sur le message PUBLIC : le `editReply` qui suit
   // remplacerait alors le panneau du salon par la fiche d'un membre, pour tout
   // le serveur. Sur un message public, on ouvre donc un éphémère à côté —
   // exactement ce que fait `ouvrirPorte` pour les trois portes.
   if (interaction.isMessageComponent() && surMessageEphemere(interaction)) {
-    await interaction.deferUpdate().catch(() => null);
-    return;
+    return acquitter(() => interaction.deferUpdate());
   }
-  await deferIfNeeded(interaction);
+  return deferIfNeeded(interaction);
 }
 
 /** Une réponse qui ne remplace pas le sous-panneau ouvert : elle s'ajoute à côté. */
@@ -2959,21 +3769,25 @@ async function basculerVerrou(ctx: ActionContext): Promise<string> {
   );
 
   if (verrouille) {
-    await channel.permissionOverwrites.edit(
-      guildId,
-      restoreFromCategory(CHANNEL_PATCHES.unlock, categoryOverwriteFor(channel, guildId)),
-    );
-    await channel.permissionOverwrites.edit(
-      cache.creatorId,
-      ownerChatPatch(false, categoryOverwriteFor(channel, cache.creatorId)),
-    );
+    await channel.permissionOverwrites.edit(guildId, patchReouverture(CHANNEL_PATCHES.unlock, channel, cache));
+    if (!await rendreEcritureAuMode(channel, cache)) {
+      await channel.permissionOverwrites.edit(
+        cache.creatorId,
+        ownerChatPatch(false, categoryOverwriteFor(channel, cache.creatorId)),
+      );
+    }
     return `${I.unlock} ${m.panel_tempvoice_unlocked({}, { locale })}`;
   }
 
-  await channel.permissionOverwrites.edit(
-    cache.creatorId,
-    ownerChatPatch(true, categoryOverwriteFor(channel, cache.creatorId)),
-  );
+  // En « Personne » le propriétaire reste muet, en « ceux qui sont en vocal » sa
+  // présence décide : le verrou ne lui pose le bit d'écriture dans aucun des deux.
+  if (cache.modeEcriture !== 'nobody' && cache.modeEcriture !== 'inVoice') {
+    await channel.permissionOverwrites.edit(
+      cache.creatorId,
+      ownerChatPatch(true, categoryOverwriteFor(channel, cache.creatorId)),
+    );
+  }
+  await garderEntreeStaff(channel, ctx.interaction.user.id);
   await channel.permissionOverwrites.edit(guildId, CHANNEL_PATCHES.lock);
   // Le verrou coupe `SendMessages` a @everyone - le bot compris, tant
   // qu'il n'a pas de surcharge a lui. Sans cela il ne peut plus mettre a
@@ -3007,47 +3821,615 @@ function annulerDemande(guildId: string, salonId: string, demandeurId: string, m
 async function transmettreCarteDecision(
   channel: VoiceChannel,
   guild: DiscordGuild,
-  proprietaireId: string,
-  config: ConfigDemandesAcces,
   carte: PanneauRendu,
-): Promise<CanalNotification | null> {
-  const mention = `<@${proprietaireId}>`;
-  let proprietaire: GuildMember | null | undefined;
+  canaux: readonly CanalNotification[],
+  options: {
+    /** Qui est mentionné, et le seul qu'un MP peut joindre. */
+    destinataireId?: string | null;
+    canalId?: string | null;
+    /** Le serveur a réglé V1 : la carte part sans conversion en Components V2. */
+    v1?: boolean;
+  } = {},
+): Promise<{ canal: CanalNotification; message: Message | null } | null> {
+  const { destinataireId = null, canalId = null } = options;
+  const mention = destinataireId ? `<@${destinataireId}>` : '';
+  // La marque V1 est une clé non énumérable : elle se pose sur la charge
+  // finale, qu'un étalement aurait perdue.
+  const charge = <T extends object>(p: T): T => (options.v1 ? sansConversionV2(p) : p);
+  const publique = () => charge({
+    ...(mention ? { content: mention } : {}),
+    ...carte,
+    allowedMentions: { users: destinataireId ? [destinataireId] : [] },
+  });
+  let destinataire: GuildMember | null | undefined;
 
-  for (const canal of ordreNotification(config)) {
+  for (const canal of canaux) {
     if (canal === 'VOICE') {
-      const poste = await channel.send({ content: mention, ...carte, allowedMentions: { users: [proprietaireId] } }).catch((err: unknown) => {
-        logger.warn('TempVoice', `La demande d'accès n'a pas pu être postée dans ${channel.id} :`, err);
+      const poste = await channel.send(publique()).catch((err: unknown) => {
+        logger.warn('TempVoice', `La carte de décision n'a pas pu être postée dans ${channel.id} :`, err);
         return null;
       });
-      if (poste) return 'VOICE';
+      if (poste) return { canal: 'VOICE', message: poste };
       continue;
     }
 
     if (canal === 'DM') {
-      if (proprietaire === undefined) proprietaire = await guild.members.fetch(proprietaireId).catch(() => null);
-      const envoye = proprietaire
-        ? await proprietaire.send(carte).then(() => true).catch(() => false)
-        : false;
-      if (envoye) return 'DM';
+      if (!destinataireId) continue;
+      if (destinataire === undefined) destinataire = await guild.members.fetch(destinataireId).catch(() => null);
+      // Un MP fermé rejette l'envoi : seul un envoi résolu vaut remise.
+      const envoi = destinataire
+        ? await destinataire.send(charge({ ...carte })).then((message) => ({ message: message ?? null })).catch(() => null)
+        : null;
+      if (envoi) return { canal: 'DM', message: envoi.message };
       continue;
     }
 
-    if (!config.canalId) continue;
-    const dedie = await guild.channels.fetch(config.canalId).catch(() => null);
+    if (!canalId) continue;
+    const dedie = await guild.channels.fetch(canalId).catch(() => null);
     if (!dedie?.isTextBased()) continue;
     // Un salon où le bot ne peut pas écrire n'est pas un canal : l'essayer
     // quand même coûterait un aller-retour pour un refus certain.
     const moi = guild.members.me;
     if (moi && !dedie.permissionsFor(moi)?.has(PermissionFlagsBits.SendMessages)) continue;
-    const poste = await dedie.send({ content: mention, ...carte, allowedMentions: { users: [proprietaireId] } }).catch((err: unknown) => {
-      logger.warn('TempVoice', `La demande d'accès n'a pas pu être postée dans ${config.canalId} :`, err);
+    const poste = await dedie.send(publique()).catch((err: unknown) => {
+      logger.warn('TempVoice', `La carte de décision n'a pas pu être postée dans ${canalId} :`, err);
       return null;
     });
-    if (poste) return 'CHANNEL';
+    if (poste) return { canal: 'CHANNEL', message: poste };
   }
 
   return null;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Passation d'un salon dont le propriétaire est parti
+//
+// Trois étapes, en mémoire seulement, une au plus par salon :
+//   - passation : le propriétaire parti a reçu en MP le menu des présents ;
+//     seuls son choix et le staff changent la propriété jusqu'au délai ;
+//   - attente : le message « Récupérer le salon » est posté, le premier membre
+//     présent qui clique l'obtient ;
+//   - reclame : un membre l'a obtenu, le staff peut annuler pendant dix minutes.
+// Un redémarrage les perd. L'absence d'étape vaut « récupération ouverte » :
+// le propriétaire reste celui que la base porte, le bouton du panneau marche,
+// et un ancien message cliqué fait une réclamation ordinaire.
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface EtapePassation {
+  etape: 'passation';
+  proprietaireId: string;
+  expireA: number;
+  /** `null` tant que le MP n'est pas parti : l'étape est posée avant la première lecture. */
+  minuteur: ReturnType<typeof setTimeout> | null;
+  locale: BotLocale;
+  /** Le MP envoyé, refermé quand la passation se termine ; `null` avant l'envoi. */
+  mp: Message | null;
+}
+
+interface EtapeAttente {
+  etape: 'attente';
+  /** Le propriétaire parti, nommé dans le message. */
+  ancienId: string;
+  message: Message;
+  minuteur: null;
+  locale: BotLocale;
+  /** Le message dit que seuls les modérateurs peuvent récupérer. */
+  moderateurs: boolean;
+}
+
+interface EtapeReclame {
+  etape: 'reclame';
+  reclamantId: string;
+  ancienId: string;
+  message: Message;
+  minuteur: ReturnType<typeof setTimeout>;
+  locale: BotLocale;
+  moderateurs: boolean;
+}
+
+type EtapePropriete = EtapePassation | EtapeAttente | EtapeReclame;
+
+const proprietes = new Map<string, EtapePropriete>();
+
+/** Le bouton « Annuler la réclamation » expire au bout de ce délai. */
+const DUREE_ANNULATION_MS = 10 * 60 * 1000;
+
+/** Termine l'étape en cours : minuterie coupée, état retiré. */
+function clorePropriete(salonId: string): EtapePropriete | undefined {
+  const etape = proprietes.get(salonId);
+  if (!etape) return undefined;
+  if (etape.minuteur) clearTimeout(etape.minuteur);
+  proprietes.delete(salonId);
+  return etape;
+}
+
+/** Réécrit un message de passation ; un échec (message supprimé, MP fermé) n'arrête rien. */
+function editerMessage(message: Message | null | undefined, charge: PanneauRendu): void {
+  void Promise.resolve().then(() => message?.edit(charge)).catch(() => null);
+}
+
+function fermerCarte(message: Message | null | undefined, texte: string): void {
+  editerMessage(message, { embeds: [avis(texte)], components: [] });
+}
+
+/** L'échéance passe dans la file du salon, après tout changement de propriétaire en cours. */
+function minuteriePropriete(channel: VoiceChannel, delaiMs: number, tache: () => Promise<void>): ReturnType<typeof setTimeout> {
+  const minuteur = setTimeout(() => {
+    void serializeByChannel(channel.id, tache).catch((err: unknown) => {
+      logger.warn('TempVoice', `Échéance de passation non traitée sur ${channel.id} :`, err);
+    });
+  }, delaiMs);
+  (minuteur as unknown as { unref?: () => void }).unref?.();
+  return minuteur;
+}
+
+/** Les secondes comptent ici : « 1 min » pour trente secondes serait faux. */
+function formaterDelai(ms: number, locale: BotLocale): string {
+  return ms < 60_000
+    ? m.panel_tempvoice_duration_sec({ count: Math.max(1, Math.round(ms / 1000)) }, { locale })
+    : formaterDuree(ms, locale);
+}
+
+/**
+ * Pourquoi ce membre ne peut pas récupérer le salon maintenant, `null` s'il le
+ * peut. Le staff passe toujours ; un membre attend la fin de la passation.
+ */
+function raisonRecuperation(channel: VoiceChannel, ctxp: ContextePanneau): string | null {
+  if (ctxp.staff) return null;
+  const locale = ctxp.locale;
+  if (ctxp.propriete.claimWho === 'moderators') return m.panel_tempvoice_claim_moderators_only({}, { locale });
+  const etape = proprietes.get(channel.id);
+  if (etape?.etape !== 'passation') return null;
+  const secondes = Math.max(1, Math.ceil((etape.expireA - Date.now()) / 1000));
+  return m.panel_tempvoice_claim_wait_handover({ seconds: secondes }, { locale });
+}
+
+/**
+ * Une ligne `voice_panel` pour ce qui arrive sans clic (départ, échéance,
+ * annulation) : même forme que `journaliserActionPanneau`, acteur « Système ».
+ */
+async function journaliserPropriete(
+  channel: VoiceChannel,
+  locale: BotLocale,
+  libelle: string,
+  details: { canal?: string; avant?: string; apres?: string; motif?: string } = {},
+): Promise<void> {
+  const L = { locale };
+  const champs: ChampJournal[] = [];
+  if (details.canal) champs.push({ name: m.log_tempvoice_field_via({}, L), value: details.canal, inline: true });
+  if (details.avant && details.apres) {
+    champs.push({ name: m.log_tempvoice_field_owner({}, L), value: `<@${details.avant}> → <@${details.apres}>`, inline: true });
+  }
+  if (details.motif) champs.push({ name: m.log_tempvoice_field_reason({}, L), value: details.motif, inline: false });
+  await envoyerJournalVocal({ guild: channel.guild, locale, salonId: channel.id, parentId: channel.parentId, libelle, champs });
+}
+
+/** Le MP du propriétaire qui part : le menu des présents, rien d'autre. */
+function carteDesignation(
+  channel: VoiceChannel,
+  proprietaireId: string,
+  presents: GuildMember[],
+  delaiMs: number,
+  locale: BotLocale,
+): PanneauRendu {
+  return {
+    embeds: [
+      new EmbedBuilder()
+        .setColor(COULEUR_ACCENT)
+        .setTitle(`${I.crown} ${m.panel_tempvoice_handover_title({}, { locale })}`)
+        .setDescription(m.panel_tempvoice_handover_desc({ channel: channel.name, duration: formaterDelai(delaiMs, locale) }, { locale })),
+    ],
+    components: [
+      rangee(
+        // Identifiant `leader:<propriétaire>:<salon>` : le MP n'a pas le salon sous la main.
+        menuMembresPresents(presents.slice(0, MAX_OPTIONS_MENU), presents.length, locale, `tempvoice:leader:${proprietaireId}:${channel.id}`)
+          .setPlaceholder(m.panel_tempvoice_handover_placeholder({}, { locale })),
+      ),
+    ],
+  };
+}
+
+/**
+ * Le message « Récupérer le salon » du chat du salon. Une fois le salon pris,
+ * le bouton reste, grisé, sous « Récupéré par X » ; l'annulation n'apparaît
+ * que pour la réclamation d'un membre, et seul le staff peut s'en servir.
+ */
+function messageReclamation(
+  salonId: string,
+  ancienId: string,
+  locale: BotLocale,
+  prise?: { par: string; annulable: boolean },
+  moderateurs = false,
+): PanneauRendu {
+  const description = moderateurs
+    ? m.panel_tempvoice_claim_embed_desc_moderators({ owner: ancienId }, { locale })
+    : m.panel_tempvoice_claim_embed_desc({ owner: ancienId }, { locale });
+  const boutons = [
+    // L'icône « récupérer » manque au jeu `ktb_` : l'Unicode reste.
+    new ButtonBuilder()
+      .setCustomId('tempvoice:reclamer')
+      .setLabel(`${ICONES_ABSENTES.recuperer} ${m.panel_tempvoice_btn_claim({}, { locale })}`)
+      .setStyle(ButtonStyle.Success)
+      .setDisabled(Boolean(prise)),
+  ];
+  if (prise?.annulable) {
+    boutons.push(
+      new ButtonBuilder()
+        .setCustomId(`tempvoice:reclam_annuler:${prise.par}:${salonId}`)
+        .setLabel(m.panel_tempvoice_btn_cancel_claim({}, { locale }))
+        .setStyle(ButtonStyle.Danger),
+    );
+  }
+  return {
+    embeds: [
+      new EmbedBuilder()
+        .setColor(prise ? COULEUR_NEUTRE : COULEUR_ACCENT)
+        .setTitle(`${I.crown} ${m.panel_tempvoice_claim_embed_title({}, { locale })}`)
+        .setDescription(prise ? `${description}\n\n${m.panel_tempvoice_claim_embed_taken({ user: prise.par }, { locale })}` : description),
+    ],
+    components: [rangee(...boutons)],
+  };
+}
+
+/** La propriété est passée à `nouveauId` par un autre chemin : l'étape en cours le dit. */
+function remplacerEtape(salonId: string, etape: EtapePropriete | undefined, nouveauId: string): void {
+  if (!etape) return;
+  if (etape.etape === 'passation') {
+    fermerCarte(etape.mp, `${I.check} ${m.panel_tempvoice_handover_taken({ user: nouveauId }, { locale: etape.locale })}`);
+    return;
+  }
+  editerMessage(etape.message, messageReclamation(salonId, etape.ancienId, etape.locale, { par: nouveauId, annulable: false }, etape.moderateurs));
+}
+
+interface OptionsPassation {
+  reglages: TempVoiceOwnershipSettings;
+  v1: boolean;
+  locale: BotLocale;
+}
+
+/** Sans choix du propriétaire : le message « Récupérer le salon », si le serveur le veut. */
+async function posterReclamation(
+  channel: VoiceChannel,
+  entree: EntreeSalonTemporaire,
+  options: OptionsPassation,
+  motif: string,
+): Promise<void> {
+  planifierRafraichissementPanneau(channel);
+  if (!options.reglages.claimEmbedEnabled) {
+    await journaliserPropriete(channel, options.locale, m.log_tempvoice_own_claim_open({}, { locale: options.locale }), { motif });
+    return;
+  }
+
+  const ancienId = entree.creatorId;
+  const moderateurs = options.reglages.claimWho === 'moderators';
+  const rendu = messageReclamation(channel.id, ancienId, options.locale, undefined, moderateurs);
+  const poste = await channel.send(options.v1 ? sansConversionV2({ ...rendu }) : rendu).catch((err: unknown) => {
+    logger.warn('TempVoice', `Le message de récupération n'a pas pu être posté dans ${channel.id} :`, err);
+    return null;
+  });
+  if (!poste) {
+    await journaliserPropriete(channel, options.locale, m.log_tempvoice_own_claim_post_failed({}, { locale: options.locale }), { motif });
+    return;
+  }
+
+  // Revenu, salon repris ou supprimé pendant l'envoi : le message n'a plus d'objet.
+  if (channel.members?.has(ancienId) || tempChannels.get(channel.id) !== entree
+    || entree.creatorId !== ancienId || proprietes.has(channel.id)) {
+    void Promise.resolve().then(() => poste.delete()).catch(() => null);
+    return;
+  }
+  proprietes.set(channel.id, { etape: 'attente', ancienId, message: poste, minuteur: null, locale: options.locale, moderateurs });
+  await journaliserPropriete(channel, options.locale, m.log_tempvoice_own_claim_posted({}, { locale: options.locale }), { motif });
+}
+
+/**
+ * Le propriétaire quitte son salon : s'il reste du monde, il reçoit en MP le
+ * menu des présents ; sinon, ou sans MP possible, le salon est à récupérer.
+ */
+async function proposerPassation(channel: VoiceChannel, entree: EntreeSalonTemporaire): Promise<void> {
+  try {
+    await deroulerPassation(channel, entree);
+  } catch (err) {
+    // Une étape restée sans minuterie rendrait le salon impossible à récupérer.
+    const etape = proprietes.get(channel.id);
+    if (etape?.etape === 'passation' && !etape.minuteur) clorePropriete(channel.id);
+    logger.warn('TempVoice', `Passation interrompue sur ${channel.id} :`, err);
+  }
+}
+
+async function deroulerPassation(channel: VoiceChannel, entree: EntreeSalonTemporaire): Promise<void> {
+  const guild = channel.guild;
+  const proprietaireId = entree.creatorId;
+
+  // L'étape est posée avant la première lecture : pendant les lectures et
+  // l'envoi du MP, un membre qui clique « Récupérer » trouve déjà la passation
+  // en cours. Un départ remplace l'étape précédente : l'annulation d'une
+  // réclamation d'avant expire avec ce nouveau message.
+  const etape: EtapePassation = {
+    etape: 'passation',
+    proprietaireId,
+    expireA: Date.now() + TEMP_VOICE_OWNERSHIP_DEFAULTS.handoverDelaySeconds * 1000,
+    locale: FALLBACK_LOCALE,
+    mp: null,
+    minuteur: null,
+  };
+  remplacerEtape(channel.id, clorePropriete(channel.id), proprietaireId);
+  proprietes.set(channel.id, etape);
+  const enCours = () => proprietes.get(channel.id) === etape;
+
+  const module = await lireReglagesAdmin(guild.id);
+  const options: OptionsPassation = {
+    reglages: module.propriete,
+    v1: (await presentationDuSalon(guild.id, entree, module)).composants === 'V1',
+    locale: await resolveGuildLocale(guild.id, guild.preferredLocale ?? null),
+  };
+  const { locale } = options;
+  etape.locale = locale;
+  if (!enCours()) return;
+
+  const presents = [...(channel.members?.values() ?? [])].filter((membre) => !membre.user?.bot);
+  if (presents.length === 0 || !module.propriete.handoverDmEnabled) {
+    clorePropriete(channel.id);
+    await posterReclamation(channel, entree, options, presents.length === 0
+      ? m.log_tempvoice_own_motif_empty({}, { locale })
+      : m.log_tempvoice_own_motif_dm_off({}, { locale }));
+    return;
+  }
+
+  const delaiMs = module.propriete.handoverDelaySeconds * 1000;
+  etape.expireA = Date.now() + delaiMs;
+  const envoi = await transmettreCarteDecision(
+    channel,
+    guild,
+    carteDesignation(channel, proprietaireId, presents, delaiMs, locale),
+    ['DM'],
+    { destinataireId: proprietaireId, v1: options.v1 },
+  );
+
+  if (channel.members?.has(proprietaireId) || tempChannels.get(channel.id) !== entree
+    || entree.creatorId !== proprietaireId || !enCours()) {
+    // L'étape a été close ou remplacée pendant l'envoi : le MP n'a plus d'objet.
+    if (enCours()) clorePropriete(channel.id);
+    const supprime = tempChannels.get(channel.id) !== entree;
+    fermerCarte(envoi?.message, entree.creatorId !== proprietaireId && !supprime
+      ? `${I.check} ${m.panel_tempvoice_handover_taken({ user: entree.creatorId }, { locale })}`
+      : `${I.warn} ${supprime ? m.panel_tempvoice_handover_channel_deleted({}, { locale }) : m.panel_tempvoice_handover_owner_back({}, { locale })}`);
+    return;
+  }
+  if (!envoi) {
+    clorePropriete(channel.id);
+    await posterReclamation(channel, entree, options, m.log_tempvoice_own_motif_dm_closed({}, { locale }));
+    return;
+  }
+
+  etape.mp = envoi.message;
+  etape.expireA = Date.now() + delaiMs;
+  etape.minuteur = minuteriePropriete(channel, delaiMs, async () => {
+    if (!enCours()) return;
+    clorePropriete(channel.id);
+    fermerCarte(etape.mp, `${I.warn} ${m.panel_tempvoice_handover_expired({}, { locale })}`);
+    await journaliserPropriete(channel, locale, m.log_tempvoice_own_handover_timeout({}, { locale }));
+    await posterReclamation(channel, entree, options, m.log_tempvoice_own_motif_timeout({}, { locale }));
+  });
+  await journaliserPropriete(channel, locale, m.log_tempvoice_own_handover_sent({}, { locale }), {
+    canal: m.log_tempvoice_own_dm({}, { locale }),
+    motif: m.log_tempvoice_own_delay({ seconds: module.propriete.handoverDelaySeconds }, { locale }),
+  });
+}
+
+/**
+ * Un salon supprimé hors du chemin habituel (dashboard, suppression à la main) :
+ * son étape de passation est annulée et son état en mémoire oublié, sans
+ * minuterie qui survive au salon.
+ */
+export function oublierProprieteSalon(channel: VoiceChannel): void {
+  annulerPropriete(channel, 'suppression');
+  oublierSalon(channel.guild?.id ?? '', channel.id);
+}
+
+/** Le propriétaire revient, le salon disparaît : l'étape en cours s'arrête là. */
+function annulerPropriete(channel: VoiceChannel, motif: 'retour' | 'suppression'): void {
+  // Le retour qui compte est celui du propriétaire absent : après une
+  // réclamation, le propriétaire est le réclamant, déjà présent.
+  if (motif === 'retour' && proprietes.get(channel.id)?.etape === 'reclame') return;
+  const etape = clorePropriete(channel.id);
+  if (!etape) return;
+  const L = { locale: etape.locale };
+  const pourquoi = motif === 'retour' ? m.log_tempvoice_own_why_back({}, L) : m.log_tempvoice_own_why_deleted({}, L);
+
+  if (etape.etape === 'passation') {
+    // Avant l'envoi du MP, rien n'a été annoncé : `proposerPassation` referme
+    // la carte et ne journalise pas une annulation sans départ.
+    if (etape.mp) {
+      fermerCarte(etape.mp, `${I.warn} ${motif === 'retour'
+        ? m.panel_tempvoice_handover_owner_back({}, { locale: etape.locale })
+        : m.panel_tempvoice_handover_channel_deleted({}, { locale: etape.locale })}`);
+      void journaliserPropriete(channel, etape.locale, m.log_tempvoice_own_handover_cancelled({ why: pourquoi }, L));
+    }
+  } else {
+    // Le message vit dans le salon : il part avec lui, ou au retour du propriétaire.
+    if (motif === 'retour') void Promise.resolve().then(() => etape.message.delete()).catch(() => null);
+    void journaliserPropriete(channel, etape.locale, m.log_tempvoice_own_claim_removed({ why: pourquoi }, L));
+  }
+  // Un salon supprimé n'a plus de panneau à redessiner.
+  if (motif === 'retour') planifierRafraichissementPanneau(channel);
+}
+
+/**
+ * Le choix du propriétaire parti, depuis son MP. L'étape est revue dans la
+ * file du salon : un retour, l'échéance ou un modérateur passés entre-temps
+ * rendent le MP périmé. Un membre choisi qui a quitté le vocal est refusé, et
+ * le MP reste valable jusqu'au délai.
+ */
+async function designerLeader(ctx: ActionContext, cibleId: string): Promise<void> {
+  const { interaction, channel, cache, guild, ctxp } = ctx;
+  const locale = ctxp.locale;
+  const proprietaireId = interaction.customId.split(':')[2] ?? '';
+
+  const issue = await serializeByChannel(channel.id, async (): Promise<'perimee' | 'parti' | GuildMember> => {
+    const etape = proprietes.get(channel.id);
+    if (etape?.etape !== 'passation' || etape.proprietaireId !== proprietaireId
+      || interaction.user.id !== proprietaireId || cache.creatorId !== proprietaireId) return 'perimee';
+    const cible = channel.members?.get(cibleId);
+    if (!cible || cible.user?.bot) return 'parti';
+    clorePropriete(channel.id);
+    await changerProprietaire(channel, cache, guild, cible, ctx);
+    return cible;
+  });
+
+  if (issue === 'perimee') {
+    const texte = `${I.warn} ${m.panel_tempvoice_handover_stale({}, { locale })}`;
+    // La carte n'appartient qu'au propriétaire parti : un autre clic ne la referme pas.
+    if (interaction.user.id === proprietaireId) await cloreCarteDecision(interaction, texte);
+    await respond(interaction, texte);
+    return;
+  }
+  if (issue === 'parti') {
+    ctx.issue = 'Refusée';
+    const nom = guild.members.cache?.get(cibleId)?.displayName ?? cibleId;
+    await respond(interaction, `${I.warn} ${m.panel_tempvoice_handover_gone({ name: nom }, { locale })}`);
+    return;
+  }
+
+  const texte = m.panel_tempvoice_handover_named({ name: issue.displayName, owner: proprietaireId }, { locale });
+  await cloreCarteDecision(interaction, texte);
+  await respond(interaction, texte);
+  await channel.send({ content: texte, allowedMentions: { parse: [] } }).catch(() => null);
+  planifierRafraichissementPanneau(channel);
+}
+
+/**
+ * « Récupérer le salon », depuis le panneau (`claim`) ou depuis le message du
+ * chat (`reclamer`). Le premier clic valide gagne : la prise est revue dans la
+ * file du salon, et les suivants trouvent un propriétaire présent.
+ */
+async function reclamerSalon(ctx: ActionContext, reply: (texte: string) => Promise<void>): Promise<void> {
+  const { interaction, channel, cache, guild, ctxp } = ctx;
+  const locale = ctxp.locale;
+  const demandeurId = interaction.user.id;
+  const refuser = async (texte: string): Promise<void> => {
+    ctx.issue = 'Refusée';
+    await reply(texte);
+  };
+
+  const verdict = peutAgir(ctxp.role, 'recuperer', ctxp.reglages, locale);
+  if (!verdict.autorise) return refuser(`${I.crown} ${verdict.raison}`);
+  if (channel.members.has(cache.creatorId)) return refuser(`${I.crown} ${m.panel_tempvoice_claim_taken({ user: cache.creatorId }, { locale })}`);
+  // On ne récupère que le salon où l'on se trouve : le panneau reste lisible
+  // depuis l'extérieur.
+  if (!channel.members.has(demandeurId)) return refuser(m.panel_tempvoice_err_join_before_claim({}, { locale }));
+  const demandeur = ctx.actingMember;
+  if (!demandeur) return refuser(m.panel_tempvoice_err_profile_unreadable_formal({}, { locale }));
+  const raison = raisonRecuperation(channel, ctxp);
+  if (raison) return refuser(`${I.lock} ${raison}`);
+
+  // La règle est revue dans la file : une passation ouverte pendant les
+  // lectures ci-dessus (départ du propriétaire) ferme la porte à un membre.
+  const prise = await serializeByChannel(channel.id, async () => {
+    if (channel.members.has(cache.creatorId)) return null;
+    const attente = raisonRecuperation(channel, ctxp);
+    if (attente) return attente;
+    const precedente = clorePropriete(channel.id);
+    const avant = cache.creatorId;
+    await changerProprietaire(channel, cache, guild, demandeur, ctx);
+    return { precedente, avant };
+  });
+  if (!prise) return refuser(`${I.crown} ${m.panel_tempvoice_claim_taken({ user: cache.creatorId }, { locale })}`);
+  if (typeof prise === 'string') return refuser(`${I.lock} ${prise}`);
+
+  const { precedente, avant } = prise;
+  // Le message à mettre à jour : celui de l'étape, ou celui qu'on vient de
+  // cliquer quand l'étape a été perdue (redémarrage).
+  const message = precedente && precedente.etape !== 'passation'
+    ? precedente.message
+    : ctx.action === 'reclamer' && interaction.isMessageComponent() ? interaction.message : null;
+  if (precedente?.etape === 'passation') remplacerEtape(channel.id, precedente, demandeurId);
+
+  const annulable = Boolean(message) && !ctxp.staff && ctxp.propriete.moderatorClaimOverride;
+  const moderateurs = ctxp.propriete.claimWho === 'moderators';
+  if (message) editerMessage(message, messageReclamation(channel.id, avant, locale, { par: demandeurId, annulable }, moderateurs));
+  if (message && annulable) {
+    const etape: EtapeReclame = {
+      etape: 'reclame',
+      reclamantId: demandeurId,
+      ancienId: avant,
+      message,
+      locale,
+      moderateurs,
+      minuteur: minuteriePropriete(channel, DUREE_ANNULATION_MS, async () => {
+        if (proprietes.get(channel.id) !== etape) return;
+        clorePropriete(channel.id);
+        editerMessage(message, messageReclamation(channel.id, avant, locale, { par: demandeurId, annulable: false }, moderateurs));
+        await journaliserPropriete(channel, locale, m.log_tempvoice_own_claim_cancel_end({}, { locale }));
+      }),
+    };
+    proprietes.set(channel.id, etape);
+  }
+
+  const annonce = m.panel_tempvoice_claimed({ name: demandeur.displayName }, { locale });
+  await reply(annonce);
+  // Le message mis à jour annonce déjà la récupération dans le salon.
+  if (!message) await channel.send({ content: annonce, allowedMentions: { parse: [] } }).catch(() => null);
+  planifierRafraichissementPanneau(channel);
+}
+
+/**
+ * Un modérateur annule la réclamation d'un membre : le réclamant perd la
+ * propriété, qui revient nominalement au propriétaire parti — absent, donc le
+ * salon est de nouveau à récupérer, et il retrouve son salon s'il revient.
+ */
+async function annulerReclamation(ctx: ActionContext): Promise<void> {
+  const { interaction, channel, cache, guild, ctxp } = ctx;
+  const locale = ctxp.locale;
+  if (!ctxp.staff) {
+    ctx.issue = 'Refusée';
+    await respond(interaction, `${I.lock} ${m.panel_tempvoice_claim_staff_only({}, { locale })}`);
+    return;
+  }
+  // Le bouton posté avant la désactivation du réglage reste cliquable : le
+  // refus se dit ici, sur le réglage lu à ce clic.
+  if (!ctxp.propriete.moderatorClaimOverride) {
+    ctx.issue = 'Refusée';
+    await respond(interaction, `${I.warn} ${m.panel_tempvoice_claim_stale({}, { locale })}`);
+    return;
+  }
+  const reclamantId = interaction.customId.split(':')[2] ?? '';
+  const valide = () => {
+    const etape = proprietes.get(channel.id);
+    return etape?.etape === 'reclame' && etape.reclamantId === reclamantId && cache.creatorId === reclamantId ? etape : null;
+  };
+
+  const lue = valide();
+  const ancien = lue ? await guild.members.fetch(lue.ancienId).catch(() => null) : null;
+  if (lue && !ancien) {
+    ctx.issue = 'Refusée';
+    await respond(interaction, `${I.warn} ${m.panel_tempvoice_claim_previous_owner_gone({}, { locale })}`);
+    return;
+  }
+
+  const etape = ancien && await serializeByChannel(channel.id, async () => {
+    const encore = valide();
+    if (!encore) return null;
+    clorePropriete(channel.id);
+    await changerProprietaire(channel, cache, guild, ancien, ctx);
+    return encore;
+  });
+  if (!etape || !ancien) {
+    await respond(interaction, `${I.warn} ${m.panel_tempvoice_claim_stale({}, { locale })}`);
+    return;
+  }
+
+  const texte = `${I.cross} ${m.panel_tempvoice_claim_cancelled_by({ user: reclamantId, mod: interaction.user.id }, { locale })}`;
+  fermerCarte(etape.message, texte);
+  await respond(interaction, texte);
+  if (!channel.members.has(ancien.id)) {
+    await posterReclamation(channel, cache, {
+      reglages: ctxp.propriete,
+      v1: ctxp.presentation.composants === 'V1',
+      locale,
+    }, m.log_tempvoice_own_motif_claim_cancelled({ claimant: reclamantId, moderator: interaction.user.id }, { locale }));
+  }
+  planifierRafraichissementPanneau(channel);
 }
 
 /**
@@ -3117,7 +4499,10 @@ async function traiterDemandeAcces(ctx: ActionContext): Promise<void> {
     resultat.demande.expireA,
     locale,
   );
-  const voie = await transmettreCarteDecision(channel, guild, cache.creatorId, ctxp.demandes, carte);
+  const voie = await transmettreCarteDecision(channel, guild, carte, ordreNotification(ctxp.demandes), {
+    destinataireId: cache.creatorId,
+    canalId: ctxp.demandes.canalId,
+  });
 
   if (!voie) {
     // Aucun canal n'a abouti : laisser la demande en attente ferait patienter
@@ -3199,9 +4584,10 @@ async function proposerDebordement(ctx: ActionContext, plan: PlanDebordement): P
       .setStyle(ButtonStyle.Danger),
   );
 
-  await ctx.interaction
-    .followUp({ embeds: [embed], components: [rangee], allowedMentions: { parse: [] }, flags: [MessageFlags.Ephemeral] })
-    .catch(() => null);
+  // Une question, pas un verdict : « Réponse au membre » garde la réservation faite.
+  const proposition = { embeds: [embed], components: [rangee], allowedMentions: { parse: [] }, flags: [MessageFlags.Ephemeral] as const };
+  horsVerdict.add(proposition);
+  await ctx.interaction.followUp(proposition).catch(() => null);
 }
 
 /** Déplacer ou déconnecter, en annonçant l'intention au journal de modération. */
@@ -3217,7 +4603,7 @@ async function appliquerDebordement(ctx: ActionContext, plan: PlanDebordement): 
   // Un salon d'accueil disparu depuis le réglage ne doit pas laisser les gens
   // en place sans le dire : on déconnecte, et le message l'annonce.
   const deplace = Boolean(accueil && accueil.type === ChannelType.GuildVoice);
-  let traites = 0;
+  const touches: string[] = [];
 
   for (const membreId of plan.membres) {
     const membre = channel.members?.get(membreId)
@@ -3225,17 +4611,19 @@ async function appliquerDebordement(ctx: ActionContext, plan: PlanDebordement): 
     if (!membre || membre.voice?.channelId !== channel.id) continue;
 
     const oubli = annoncerIntentionVocale(guildId, membreId, deplace ? 'move' : 'disconnect', {
-      libelle: `${interaction.user.tag} (salon réservé à un rôle)`,
+      libelle: m.log_tempvoice_author_reserved({ tag: interaction.user.tag }, { locale }),
     });
 
     const fait = deplace
       ? await membre.voice.setChannel(accueil as never, raisonAudit).then(() => true).catch(() => { oubli(); return false; })
       : await membre.voice.disconnect(raisonAudit).then(() => true).catch(() => { oubli(); return false; });
 
-    if (fait) traites += 1;
+    if (fait) touches.push(membreId);
   }
 
+  const traites = touches.length;
   if (traites === 0) return;
+  ctx.debordement = { membres: touches, salon: deplace && accueil ? accueil.id : null };
 
   const ou = deplace && accueil
     ? m.panel_tempvoice_overflow_to({ channel: accueil.id }, { locale })
@@ -3253,7 +4641,10 @@ async function appliquerDebordement(ctx: ActionContext, plan: PlanDebordement): 
 /** Referme la proposition : ses boutons ne doivent pas rester cliquables. */
 async function cloreProposition(interaction: RepliableInteraction, verdict: string): Promise<void> {
   if (!interaction.isMessageComponent()) return;
-  await interaction.update({ embeds: [avis(verdict)], components: [] }).catch(() => null);
+  const charge = { embeds: [avis(verdict)], components: [] };
+  // Déjà acquittée (lecture longue avant le verdict) : `update` lèverait.
+  await (interaction.deferred || interaction.replied ? interaction.editReply(charge) : interaction.update(charge))
+    .catch(() => null);
 }
 
 /**
@@ -3273,6 +4664,9 @@ async function repondreDebordement(ctx: ActionContext, choix: 'deplacer' | 'deco
     await respond(interaction, `${I.lock} ${verdict.raison}`);
     return;
   }
+
+  // La base et la relecture du salon passent avant le verdict : acquitter d'abord.
+  await acquitterMiseAJour(interaction);
 
   const roleId = await prisma.tempVoiceChannel
     .findUnique({ where: { id: channel.id } })
@@ -3416,7 +4810,7 @@ async function traiterDecisionDemande(ctx: ActionContext, decision: 'ok' | 'non'
       await respond(interaction, m.panel_tempvoice_err_category_denies({ name: demandeur.displayName }, { locale }));
       return;
     }
-    await channel.permissionOverwrites.edit(demandeur.id, patch);
+    await channel.permissionOverwrites.edit(demandeur.id, sansEcritureSiChatReserve(patch, cache));
     // Marquée comme donnée à la main : un départ du vocal ne doit jamais
     // l'effacer, alors que « Autoriser » et la présence écrivent le même bit.
     originesSurcharge.marquer(guildId, channel.id, demandeur.id, 'autorisation');
@@ -3432,7 +4826,7 @@ async function traiterDecisionDemande(ctx: ActionContext, decision: 'ok' | 'non'
     originesSurcharge.oublier(guildId, channel.id, demandeur.id);
     if (demandeur.voice.channelId === channel.id) {
       const oubli = annoncerIntentionVocale(guildId, demandeur.id, 'disconnect', {
-        libelle: `${interaction.user.tag} (demande d'accès refusée)`,
+        libelle: m.log_tempvoice_author_request_denied({ tag: interaction.user.tag }, { locale }),
       });
       await demandeur.voice
         .disconnect(m.panel_tempvoice_audit_request_denied_ban({}, { locale }))
@@ -3475,6 +4869,19 @@ async function decrireCible(ctx: ActionContext, target: GuildMember): Promise<Ci
     dansLeSalon: estDansLeSalon(ctx.channel, target),
     autorise: estAutorise(ctx.channel, target.id),
   };
+}
+
+/**
+ * Déconnecte un membre ; faux s'il n'est déjà plus en vocal (40032, double clic
+ * sur « Expulser »). Toute autre erreur remonte. L'intention annoncée est oubliée
+ * dès que l'appel échoue : aucun état vocal n'a changé.
+ */
+async function deconnecterOuAbsent(target: GuildMember, raison: string, oubli: () => void): Promise<boolean> {
+  return target.voice.disconnect(raison).then(() => true, (error: unknown) => {
+    oubli();
+    if ((error as { code?: unknown } | null)?.code === 40032) return false;
+    throw error;
+  });
 }
 
 /**
@@ -3521,15 +4928,13 @@ async function traiterActionMembre(
   switch (action) {
     case 'expulser': {
       const oubli = annoncerIntentionVocale(guildId, target.id, 'disconnect', {
-        libelle: `${interaction.user.tag} (panneau du salon vocal temporaire)`,
+        libelle: m.log_tempvoice_author_panel({ tag: interaction.user.tag }, { locale }),
       });
-      await target.voice
-        .disconnect(m.panel_tempvoice_audit_kick_panel({}, { locale }))
-        .catch((error: unknown) => {
-          oubli();
-          throw error;
-        });
-      await reponseSupplementaire(interaction, `${I.kick} ${m.panel_tempvoice_kicked({ name: target.displayName }, { locale })}`);
+      const expulse = await deconnecterOuAbsent(target, m.panel_tempvoice_audit_kick_panel({}, { locale }), oubli);
+      if (expulse) ctx.sortis = [target.id];
+      await reponseSupplementaire(interaction, expulse
+        ? `${I.kick} ${m.panel_tempvoice_kicked({ name: target.displayName }, { locale })}`
+        : m.panel_tempvoice_err_target_not_in_voice({ name: target.displayName }, { locale }));
       break;
     }
 
@@ -3538,7 +4943,7 @@ async function traiterActionMembre(
       originesSurcharge.oublier(guildId, channel.id, target.id);
       if (target.voice.channelId === channel.id) {
         const oubli = annoncerIntentionVocale(guildId, target.id, 'disconnect', {
-          libelle: `${interaction.user.tag} (panneau du salon vocal temporaire)`,
+          libelle: m.log_tempvoice_author_panel({ tag: interaction.user.tag }, { locale }),
         });
         await target.voice
           .disconnect(m.panel_tempvoice_audit_ban_panel({}, { locale }))
@@ -3558,7 +4963,7 @@ async function traiterActionMembre(
         await reponseSupplementaire(interaction, m.panel_tempvoice_err_category_denies({ name: target.displayName }, { locale }));
         return;
       }
-      await channel.permissionOverwrites.edit(target.id, patch);
+      await channel.permissionOverwrites.edit(target.id, sansEcritureSiChatReserve(patch, cache));
       // Le marquage est la moitié utile de « Autoriser » : sans lui, quitter le
       // vocal en mode « ceux qui sont en vocal » effacerait ce droit.
       originesSurcharge.marquer(guildId, channel.id, target.id, 'autorisation');
@@ -3629,7 +5034,8 @@ async function appliquerReservation(
   // refuse - le même travers que « Ajouter ». Le refus est constaté avant
   // toute écriture, sans quoi le verrou resterait pose sur un salon que plus
   // personne ne peut rejoindre.
-  const rolePatch = selectedRoleId ? grantForRole(selectedRoleId) : null;
+  const rolePatchComplet = selectedRoleId ? grantForRole(selectedRoleId) : null;
+  const rolePatch = rolePatchComplet && sansEcritureSiChatReserve(rolePatchComplet, cache);
   if (selectedRoleId && !rolePatch) {
     await reply(m.panel_tempvoice_err_role_denied({}, { locale }));
     return;
@@ -3652,13 +5058,16 @@ async function appliquerReservation(
   if (selectedRoleId && rolePatch) {
     const owner = guild.members.cache.get(cache.creatorId)
       ?? await guild.members.fetch(cache.creatorId).catch(() => null);
-    const ownerPatch = categoryTrustPatch(channel, owner);
+    const ownerPatchComplet = categoryTrustPatch(channel, owner);
+    const ownerPatch = ownerPatchComplet && sansEcritureSiChatReserve(ownerPatchComplet, cache, true, channel.members?.has(cache.creatorId));
 
     // Les autorisations d'abord, le verrou ensuite : dans l'ordre inverse, un
     // appel refusé entre les deux laisse un salon fermé à tout le monde et
     // sans réservation, que rien ne vient rouvrir.
+    // En « Personne » le propriétaire reste muet : la réservation ne lui rend pas l'écriture.
     if (ownerPatch && owner) await channel.permissionOverwrites.edit(owner, ownerPatch);
     await channel.permissionOverwrites.edit(selectedRoleId, rolePatch);
+    await garderEntreeStaff(channel, ctx.interaction.user.id);
     await channel.permissionOverwrites.edit(guildId, CHANNEL_PATCHES.lock);
     // Le verrou coupe `SendMessages` a @everyone - le bot compris, tant
     // qu'il n'a pas de surcharge a lui. Sans cela il ne peut plus mettre a
@@ -3685,10 +5094,8 @@ async function appliquerReservation(
     return;
   }
 
-  await channel.permissionOverwrites.edit(
-    guildId,
-    restoreFromCategory(CHANNEL_PATCHES.clearReservation, categoryOverwriteFor(channel, guildId)),
-  );
+  await channel.permissionOverwrites.edit(guildId, patchReouverture(CHANNEL_PATCHES.clearReservation, channel, cache));
+  await rendreEcritureAuMode(channel, cache);
   await prisma.tempVoiceChannel
     .update({ where: { id: channel.id }, data: { roleId: null } })
     .catch((err: unknown) => logger.error('TempVoice', "Erreur lors de l'enregistrement de la réservation :", err));
@@ -3744,7 +5151,7 @@ async function reserverPourDesMembres(
       refuses.push(membre.displayName);
       continue;
     }
-    const posee = await poserSurcharge(channel, membre.id, patch);
+    const posee = await poserSurcharge(channel, membre.id, sansEcritureSiChatReserve(patch, cache));
     if (!posee) {
       refuses.push(membre.displayName);
       continue;
@@ -3763,9 +5170,11 @@ async function reserverPourDesMembres(
   // Le propriétaire garde son accès, comme pour une réservation à un rôle.
   const owner = guild.members.cache.get(cache.creatorId)
     ?? await guild.members.fetch(cache.creatorId).catch(() => null);
+  // En « Personne » le propriétaire reste muet : la réservation ne lui rend pas l'écriture.
   const ownerPatch = categoryTrustPatch(channel, owner);
-  if (owner && ownerPatch) await channel.permissionOverwrites.edit(owner, ownerPatch);
+  if (owner && ownerPatch) await channel.permissionOverwrites.edit(owner, sansEcritureSiChatReserve(ownerPatch, cache, true, channel.members?.has(cache.creatorId)));
 
+  await garderEntreeStaff(channel, ctx.interaction.user.id);
   await channel.permissionOverwrites.edit(guildId, CHANNEL_PATCHES.lock);
   // Le verrou coupe `SendMessages` a @everyone - le bot compris, tant qu'il n'a
   // pas de surcharge a lui : sans cela, plus de panneau ni d'avis.
@@ -3790,7 +5199,6 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
   const user = interaction.user;
   const locale = ctx.ctxp.locale;
 
-  const ephemeral = { flags: [MessageFlags.Ephemeral] as const };
   // En mode compact, la réponse remplace le sous-panneau : elle doit donc
   // porter de quoi y revenir. En mode empilé elle ouvre un message de plus, et
   // le sous-panneau est toujours là derrière — aucun bouton à ajouter.
@@ -3806,14 +5214,12 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
    * message existant : sinon le mode compact, dont toute la promesse est de
    * n'avoir qu'un seul ephemere, en empilait un de plus a chaque retour.
    */
-  const ouvrirPorte = async (rendu: PanneauRendu): Promise<void> => {
-    if (surMessageEphemere(interaction)) {
-      await (interaction as unknown as { update: (o: unknown) => Promise<unknown> })
-        .update(rendu)
-        .catch(() => null);
-      return;
-    }
-    await interaction.reply({ ...rendu, ...ephemeral });
+  const ouvrirPorte = async (rendre: () => Promise<PanneauRendu>): Promise<void> => {
+    // Acquitté avant le rendu : il lit la base et Discord, et trois secondes
+    // passées l'interaction est morte. `acquitterMiseAJour` reprend le
+    // sous-panneau éphémère, ou ouvre un éphémère à côté depuis le panneau public.
+    await acquitterMiseAJour(interaction);
+    await interaction.editReply(await rendre()).catch(() => null);
   };
 
   // ─── Menu « Qui peut écrire » ───
@@ -3829,14 +5235,22 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
       return;
     }
 
-    const mode = normaliserModeEcriture(interaction.values[0]);
+    const valeur = interaction.values[0];
+    const mode = estChoixModeEcriture(valeur) ? valeur : normaliserModeEcriture(valeur);
     await appliquerModeEcriture(channel, cache, mode);
     await rafraichirSousPanneauSalon(ctx);
     await reponseSupplementaire(
       interaction,
-      `${iconeMode(mode)} ${m.panel_tempvoice_mode_applied({ mode: libelleModeEcriture(mode, locale).libelle }, { locale })}`,
+      `${mode === MODE_HERITE ? I.settings : iconeMode(mode)} ${m.panel_tempvoice_mode_applied({ mode: mode === MODE_HERITE ? m.panel_tempvoice_mode_inherit_label({}, { locale }) : libelleModeEcriture(mode, locale).libelle }, { locale })}`,
     );
     planifierRafraichissementPanneau(channel);
+    return;
+  }
+
+  // ─── MP de passation : le menu des présents ───
+  if (action === 'leader' && interaction.isStringSelectMenu()) {
+    await deferIfNeeded(interaction);
+    await designerLeader(ctx, interaction.values[0] ?? '');
     return;
   }
 
@@ -3901,6 +5315,8 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
       // La carte de décision est un message public : la réponse au propriétaire
       // reste éphémère, et c'est `cloreCarteDecision` qui referme la carte.
       'demande_ok', 'demande_non', 'demande_ban',
+      // Même règle pour le message « Récupérer le salon » du chat.
+      'reclamer', 'reclam_annuler',
     ]);
     const ACQUITTER_EN_PLACE = new Set([
       'bascule_verrou',
@@ -3915,17 +5331,17 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
     switch (action) {
       // ─── Les trois portes du panneau, plus la quatrième ───
       case 'salon': {
-        await ouvrirPorte(await panneauSalon(channel, cache, ctx.ctxp));
+        await ouvrirPorte(() => panneauSalon(channel, cache, ctx.ctxp));
         return;
       }
 
       case 'membres': {
-        await ouvrirPorte(await panneauMembres(channel, cache, ctx.ctxp));
+        await ouvrirPorte(() => panneauMembres(channel, cache, ctx.ctxp));
         return;
       }
 
       case 'propriete': {
-        await ouvrirPorte(panneauPropriete(channel, cache, ctx.ctxp));
+        await ouvrirPorte(async () => panneauPropriete(channel, cache, ctx.ctxp));
         return;
       }
 
@@ -3938,7 +5354,7 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
           await reply(`${I.lock} ${m.panel_tempvoice_admins_only_settings({}, { locale })}`);
           return;
         }
-        await ouvrirPorte(await panneauSalon(channel, cache, ctx.ctxp));
+        await ouvrirPorte(() => panneauSalon(channel, cache, ctx.ctxp));
         return;
       }
 
@@ -3991,7 +5407,7 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
           await reply(m.panel_tempvoice_err_member_not_found({}, { locale }));
           return;
         }
-        await transferOwnership(ctx, target, 'transfer');
+        await transferOwnership(ctx, target);
         planifierRafraichissementPanneau(channel);
         return;
       }
@@ -4034,10 +5450,14 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
           await reply(`${I.lock} ${verrouAutorise.raison}`);
           return;
         }
-        await channel.permissionOverwrites.edit(
-          cache.creatorId,
-          ownerChatPatch(true, categoryOverwriteFor(channel, cache.creatorId)),
-        );
+        // Même règle que `basculerVerrou` : ni « Personne » ni « en vocal » ne reçoivent le bit.
+        if (cache.modeEcriture !== 'nobody' && cache.modeEcriture !== 'inVoice') {
+          await channel.permissionOverwrites.edit(
+            cache.creatorId,
+            ownerChatPatch(true, categoryOverwriteFor(channel, cache.creatorId)),
+          );
+        }
+        await garderEntreeStaff(channel, ctx.interaction.user.id);
         await channel.permissionOverwrites.edit(guildId, CHANNEL_PATCHES.lock);
         // Le verrou coupe `SendMessages` a @everyone - le bot compris, tant
         // qu'il n'a pas de surcharge a lui. Sans cela il ne peut plus mettre a
@@ -4054,14 +5474,13 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
           await reply(`${I.lock} ${ouvertureAutorisee.raison}`);
           return;
         }
-        await channel.permissionOverwrites.edit(
-          guildId,
-          restoreFromCategory(CHANNEL_PATCHES.unlock, categoryOverwriteFor(channel, guildId)),
-        );
-        await channel.permissionOverwrites.edit(
-          cache.creatorId,
-          ownerChatPatch(false, categoryOverwriteFor(channel, cache.creatorId)),
-        );
+        await channel.permissionOverwrites.edit(guildId, patchReouverture(CHANNEL_PATCHES.unlock, channel, cache));
+        if (!await rendreEcritureAuMode(channel, cache)) {
+          await channel.permissionOverwrites.edit(
+            cache.creatorId,
+            ownerChatPatch(false, categoryOverwriteFor(channel, cache.creatorId)),
+          );
+        }
         await reply(`${I.unlock} ${m.panel_tempvoice_unlocked_legacy({}, { locale })}`);
         planifierRafraichissementPanneau(channel);
         return;
@@ -4081,49 +5500,22 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
         const everyoneOverwrite = channel.permissionOverwrites.cache.get(guildId);
         const chatIsOpen = !everyoneOverwrite?.deny.has(PermissionFlagsBits.SendMessages);
 
-        if (chatIsOpen) {
-          await channel.permissionOverwrites.edit(
-            cache.creatorId,
-            ownerChatPatch(true, categoryOverwriteFor(channel, cache.creatorId)),
-          );
-          await channel.permissionOverwrites.edit(guildId, CHANNEL_PATCHES.closeChat);
-          await reply(`💬 ${m.panel_tempvoice_chat_closed({}, { locale })}`);
-        } else {
-          // Ouvrir le chat ACCORDE le droit d'écrire. Le repasser par la catégorie
-          // l'annulait dès qu'elle le refusait : le bouton disait « ouvert » et
-          // personne ne pouvait écrire, propriétaire compris. (repris de la PR #533)
-          await channel.permissionOverwrites.edit(guildId, CHANNEL_PATCHES.openChat);
-          await channel.permissionOverwrites.edit(
-            cache.creatorId,
-            ownerChatPatch(true, categoryOverwriteFor(channel, cache.creatorId)),
-          );
-          await reply(`${I.msg} ${m.panel_tempvoice_chat_open({}, { locale })}`);
-        }
+        // Le bouton passe par le mode d'écriture : le mode mémorisé suit le chat.
+        await appliquerModeEcriture(channel, cache, chatIsOpen ? 'ownerOnly' : 'everyone');
+        await reply(chatIsOpen
+          ? `💬 ${m.panel_tempvoice_chat_closed({}, { locale })}`
+          : `${I.msg} ${m.panel_tempvoice_chat_open({}, { locale })}`);
         planifierRafraichissementPanneau(channel);
         return;
       }
 
-      case 'claim': {
-        const recuperationAutorisee = peutAgir(ctx.ctxp.role, 'recuperer', ctx.ctxp.reglages, ctx.ctxp.locale);
-        if (!recuperationAutorisee.autorise) {
-          await reply(`${I.crown} ${recuperationAutorisee.raison}`);
-          return;
-        }
-        if (channel.members.has(cache.creatorId)) {
-          await reply(m.panel_tempvoice_err_owner_still_here({}, { locale }));
-          return;
-        }
-        // On ne reprend que le salon où l'on se trouve : le panneau reste
-        // lisible depuis l'extérieur.
-        if (!channel.members.has(user.id)) {
-          await reply(m.panel_tempvoice_err_join_before_claim({}, { locale }));
-          return;
-        }
-        if (!ctx.actingMember) {
-          await reply(m.panel_tempvoice_err_profile_unreadable_formal({}, { locale }));
-          return;
-        }
-        await transferOwnership(ctx, ctx.actingMember, 'claim');
+      case 'claim':
+      case 'reclamer': {
+        await reclamerSalon(ctx, reply);
+        return;
+      }
+      case 'reclam_annuler': {
+        await annulerReclamation(ctx);
         return;
       }
 
@@ -4196,6 +5588,8 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
         // Le sélecteur suit le mode du panneau : serveur entier en CLASSIC, les
         // seuls présents en FLAT. Transférer au propriétaire actuel ne ferait
         // rien, l'option n'est donc pas proposée.
+        // En FLAT, le sélecteur relit le salon : acquitter avant.
+        await deferIfNeeded(interaction);
         const selecteur = await selecteurPersonnes(channel, ctx.ctxp, `tempvoice:${action}_select`, m.panel_tempvoice_pick_member_placeholder({}, { locale }), {
           exclureId: action === 'transfer' ? cache.creatorId : undefined,
         });
@@ -4203,10 +5597,9 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
           await reply(`${I.warn} ${m.panel_tempvoice_err_nobody_to_act_on({}, { locale })}`);
           return;
         }
-        await interaction.reply({
+        await interaction.editReply({
           embeds: [avis(labels[action] ?? m.panel_tempvoice_pick_member({}, { locale }))],
           components: [selecteur],
-          ...ephemeral,
         });
         return;
       }
@@ -4228,6 +5621,11 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
           return;
         }
 
+        // Lecture de la base (et du salon en FLAT) avant toute réponse : acquitter
+        // d'abord. Seule la bascule d'un rôle unique reprend le sous-panneau en
+        // mode compact ; les menus s'ouvrent à côté.
+        await deferIfNeeded(interaction, ctx.ctxp.panneauCompact && plan.type === 'role_unique');
+
         if (plan.type === 'membres') {
           // Repli « MEMBERS » : pas de rôle à choisir, des personnes. Plusieurs
           // à la fois, parce que réserver à une seule n'a pas de sens.
@@ -4240,10 +5638,9 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
             await reply(`${I.warn} ${m.panel_tempvoice_err_nobody_to_reserve_for({}, { locale })}`);
             return;
           }
-          await interaction.reply({
+          await interaction.editReply({
             embeds: [avis(`${I.profile} ${m.panel_tempvoice_reserve_members_hint({}, { locale })}`)],
             components: [qui],
-            ...ephemeral,
           });
           return;
         }
@@ -4256,7 +5653,6 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
         if (plan.type === 'role_unique') {
           // Un seul rôle réservable possédé : le bouton est une bascule, pas un
           // menu à une option. Un clic pose la réservation, le suivant la lève.
-          await deferIfNeeded(interaction, ctx.ctxp.panneauCompact);
           await appliquerReservation(ctx, reservationPosee === plan.roleId ? null : plan.roleId, reply);
           return;
         }
@@ -4302,13 +5698,12 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
           menuRole.setDefaultRoles(reservationPosee);
         }
 
-        await interaction.reply({
+        await interaction.editReply({
           embeds: [avis(reservationPosee
             ? m.panel_tempvoice_reserve_role_hint_set({ role: reservationPosee }, { locale })
             : m.panel_tempvoice_reserve_role_hint({}, { locale }))],
           components: [new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(menuRole)],
           allowedMentions: { parse: [] },
-          ...ephemeral,
         });
         return;
       }
@@ -4405,7 +5800,7 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
           await reply(`${I.crown} ${transfertAutorise.raison}`);
           return;
         }
-        await transferOwnership(ctx, target, 'transfer');
+        await transferOwnership(ctx, target);
         planifierRafraichissementPanneau(channel);
         return;
       }
@@ -4438,7 +5833,7 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
           return;
         }
 
-        await channel.permissionOverwrites.edit(target.id, patch);
+        await channel.permissionOverwrites.edit(target.id, sansEcritureSiChatReserve(patch, cache));
 
         // La moitié utile de « Autoriser » : sans ce marquage, quitter le vocal en
         // mode « ceux qui sont en vocal » effacerait ce droit, les deux écrivant
@@ -4468,15 +5863,13 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
           return;
         }
         const oublierExpulsion = annoncerIntentionVocale(guildId, target.id, 'disconnect', {
-          libelle: `${user.tag} (panneau du salon vocal temporaire)`,
+          libelle: m.log_tempvoice_author_panel({ tag: user.tag }, { locale }),
         });
-        await target.voice
-          .disconnect(m.panel_tempvoice_audit_kick_owner({}, { locale }))
-          .catch((error: unknown) => {
-            oublierExpulsion();
-            throw error;
-          });
-        await reply(`${I.kick} ${m.panel_tempvoice_kicked({ name: target.displayName }, { locale })}`);
+        const expulse = await deconnecterOuAbsent(target, m.panel_tempvoice_audit_kick_owner({}, { locale }), oublierExpulsion);
+        if (expulse) ctx.sortis = [target.id];
+        await reply(expulse
+          ? `${I.kick} ${m.panel_tempvoice_kicked({ name: target.displayName }, { locale })}`
+          : m.panel_tempvoice_err_target_not_in_voice({ name: target.displayName }, { locale }));
         planifierRafraichissementPanneau(channel);
         return;
       }
@@ -4496,7 +5889,7 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
         await channel.permissionOverwrites.edit(target.id, CHANNEL_PATCHES.ban);
         if (target.voice.channelId === channel.id) {
           const oublierBannissement = annoncerIntentionVocale(guildId, target.id, 'disconnect', {
-            libelle: `${user.tag} (panneau du salon vocal temporaire)`,
+            libelle: m.log_tempvoice_author_panel({ tag: user.tag }, { locale }),
           });
           await target.voice
             .disconnect(m.panel_tempvoice_audit_ban_owner({}, { locale }))
@@ -4556,7 +5949,10 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
         // Un vrai refus : nom invalide, salon disparu, droits perdus. Annoncer
         // une attente serait faux - il ne s'appliquera jamais.
         logger.warn('TempVoice', `Impossible de renommer le salon ${channel.id} :`, renamed.error);
-        await reply(m.panel_tempvoice_err_name_rejected({}, { locale }));
+        // 10003 : le salon a disparu pendant la saisie, le nom n'y est pour rien.
+        await reply((renamed.error as { code?: unknown } | null)?.code === 10003
+          ? m.panel_tempvoice_err_channel_gone({}, { locale })
+          : m.panel_tempvoice_err_name_rejected({}, { locale }));
         return;
       }
 
@@ -4573,30 +5969,31 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
 
 /** Passe la propriété d'un salon : le nouveau est écrit en base, sans quoi un
  *  redémarrage rendrait le salon à son créateur d'origine. */
-function transferOwnership(
-  ctx: ActionContext,
-  target: GuildMember | null,
-  kind: 'claim' | 'transfer',
-): Promise<void> {
-  return serializeByChannel(ctx.channel.id, () => applyOwnershipTransfer(ctx, target, kind));
+function transferOwnership(ctx: ActionContext, target: GuildMember | null): Promise<void> {
+  return serializeByChannel(ctx.channel.id, () => applyOwnershipTransfer(ctx, target));
 }
 
-async function applyOwnershipTransfer(
-  ctx: ActionContext,
-  target: GuildMember | null,
-  kind: 'claim' | 'transfer',
-): Promise<void> {
-  const { interaction, channel, cache, guild, guildId } = ctx;
-  const locale = ctx.ctxp.locale;
+async function applyOwnershipTransfer(ctx: ActionContext, target: GuildMember | null): Promise<void> {
   if (!target) return;
+  await changerProprietaire(ctx.channel, ctx.cache, ctx.guild, target, ctx);
+  remplacerEtape(ctx.channel.id, clorePropriete(ctx.channel.id), target.id);
+  await respond(ctx.interaction, m.panel_tempvoice_transferred({ name: target.displayName }, { locale: ctx.ctxp.locale }));
+}
 
-  // La garde de « Récupérer » a été évaluée avant la mise en file : deux
-  // réclamations simultanées la passent toutes les deux. Elle est revue ici.
-  if (kind === 'claim' && channel.members.has(cache.creatorId)) {
-    await respond(interaction, m.panel_tempvoice_err_owner_still_here({}, { locale }));
-    return;
-  }
-
+/**
+ * Le changement de propriétaire lui-même, sans interaction : transfert,
+ * désignation d'un leader et réclamation accordée passent tous par ici. À
+ * appeler dans `serializeByChannel`.
+ */
+async function changerProprietaire(
+  channel: VoiceChannel,
+  cache: EntreeSalonTemporaire,
+  guild: DiscordGuild,
+  target: GuildMember,
+  /** L'action qui en est la cause, pour le journal. */
+  action?: Pick<ActionContext, 'proprietaire'>,
+): Promise<void> {
+  const guildId = guild.id;
   // Relu ici, et non avant la mise en file : un transfert précédent a pu changer
   // le propriétaire pendant l'attente.
   const previousOwnerId = cache.creatorId;
@@ -4626,38 +6023,50 @@ async function applyOwnershipTransfer(
     powers = mainGenerator?.policy.ownerPowers ?? defaultTempVoicePolicy().ownerPowers;
   }
 
-  await channel.permissionOverwrites.edit(
-    target.id,
-    ownerPermissionPatch(powers, categoryOverwriteFor(channel, target.id)),
-  );
+  const patchNouveau = ownerPermissionPatch(powers, categoryOverwriteFor(channel, target.id));
+  const patchAncien = ownerRevokedPermissions(categoryOverwriteFor(channel, previousOwnerId));
+
+  // Le droit d'écrire obéit au mode du salon, pas à la propriété : le mode se
+  // lit ici, avant que `creatorId` change, car sa déduction part du propriétaire.
+  // « Moi seul » : le droit passe de l'un à l'autre (patchs tels quels).
+  // « Personne » : le nouveau propriétaire n'écrit pas non plus.
+  // Les autres modes (présence en vocal, tout le monde, hérité) ne dépendent pas
+  // du propriétaire : le bit n'est écrit pour personne, sinon l'ancien perdrait
+  // une écriture que sa présence ou @everyone lui donne.
+  // Un salon verrouillé fait écrire son propriétaire (le verrou lui pose le bit,
+  // sauf en « Personne » et en « ceux qui sont en vocal ») : le droit passe alors
+  // aussi, sauf en « Personne ». En « ceux qui sont en vocal », la présence
+  // décide : le nouveau n'a pas de bit nominatif, l'ancien ne garde le sien que
+  // s'il est encore connecté. Seul un « Personne » mémorisé
+  // coupe le nouveau : déduit d'une catégorie, il ne touche à rien.
+  const mode = modeDuSalon(channel, cache);
+  const verrouille = Boolean(channel.permissionOverwrites.cache.get(guildId)?.deny?.has(PermissionFlagsBits.Connect));
+  if (cache.modeEcriture === 'nobody') {
+    patchNouveau.SendMessages = false;
+  } else if (mode === 'inVoice' && verrouille) {
+    // La présence décide : le nouveau n'a pas de bit nominatif, et l'ancien ne
+    // garde le sien que s'il est encore en vocal (absent, il n'écrit plus).
+    delete patchNouveau.SendMessages;
+    if (channel.members.has(previousOwnerId)) delete patchAncien.SendMessages;
+  } else if (mode !== 'ownerOnly' && !(verrouille && mode !== 'nobody')) {
+    delete patchNouveau.SendMessages;
+    delete patchAncien.SendMessages;
+  }
+
+  await channel.permissionOverwrites.edit(target.id, patchNouveau);
 
   if (previousOwnerId !== target.id) {
     // Type explicite : sans lui, `upsert` cherche la cible dans `roles.cache`
     // puis `users.cache` et lève avant tout appel réseau si aucun ne la connaît.
     // Un ancien propriétaire hors cache garderait ses pouvoirs.
     await channel.permissionOverwrites
-      .edit(
-        previousOwnerId,
-        ownerRevokedPermissions(categoryOverwriteFor(channel, previousOwnerId)),
-        { type: OverwriteType.Member },
-      )
+      .edit(previousOwnerId, patchAncien, { type: OverwriteType.Member })
       .catch((err: unknown) => logger.warn('TempVoice', `Impossible de retirer les pouvoirs de l'ancien propriétaire sur ${channel.id} :`, err));
   }
 
   cache.creatorId = target.id;
+  if (action && previousOwnerId !== target.id) action.proprietaire = { avant: previousOwnerId, apres: target.id };
   await prisma.tempVoiceChannel
     .update({ where: { id: channel.id }, data: { creatorId: target.id } })
     .catch((err: unknown) => logger.error('TempVoice', "Erreur lors de l'enregistrement du propriétaire :", err));
-
-  const message = kind === 'claim'
-    ? m.panel_tempvoice_claimed({ name: target.displayName }, { locale })
-    : m.panel_tempvoice_transferred({ name: target.displayName }, { locale });
-
-  await respond(interaction, message);
-
-  // « Récupérer » est ouvert à tous : la réponse reste privée pour qu'un refus
-  // ne s'affiche pas devant le salon, la reprise est annoncée dans le salon.
-  if (kind === 'claim') {
-    await channel.send({ content: message }).catch(() => null);
-  }
 }

@@ -99,6 +99,9 @@ describe('normalizeTempVoicePolicy', () => {
   test('un mode de chat inconnu retombe sur l\'héritage', () => {
     expect(normalizeTempVoicePolicy({ textChat: 'members' }).textChat).toBe('inherit');
     expect(normalizeTempVoicePolicy({ textChat: 'locked' }).textChat).toBe('locked');
+    expect(normalizeTempVoicePolicy({ textChat: 'nobody' }).textChat).toBe('nobody');
+    expect(normalizeTempVoicePolicy({ textChat: 'inVoice' }).textChat).toBe('inVoice');
+    expect(normalizeTempVoicePolicy({ textChat: 'personne' }).textChat).toBe('inherit');
   });
 
   test('écarte un pouvoir inventé', () => {
@@ -436,9 +439,8 @@ describe('buildCreationOverwrites', () => {
     expect(has(allowOf(overwrites, VIP_ROLE), PermissionFlagsBits.Connect)).toBeTrue();
   });
 
-  test('ouvrir le chat ne rouvre pas ce que la catégorie refuse à @everyone', () => {
-    // L'étape @everyone ne passait pas par le filtre : un refus d'écriture posé
-    // par la catégorie était effacé par le mode « ouvert ».
+  test('ouvrir le chat accorde l\'écriture même si la catégorie la refuse à @everyone', () => {
+    // Sinon le salon naît en « Personne » : @everyone refusé, propriétaire sans `allow`.
     const overwrites = buildCreationOverwrites({
       everyoneRoleId: EVERYONE,
       ownerId: OWNER,
@@ -451,8 +453,8 @@ describe('buildCreationOverwrites', () => {
       policy: { ...defaultTempVoicePolicy(), textChat: 'open' },
     });
 
-    expect(has(allowOf(overwrites, EVERYONE), PermissionFlagsBits.SendMessages)).toBeFalse();
-    expect(has(denyOf(overwrites, EVERYONE), PermissionFlagsBits.SendMessages)).toBeTrue();
+    expect(has(allowOf(overwrites, EVERYONE), PermissionFlagsBits.SendMessages)).toBeTrue();
+    expect(has(denyOf(overwrites, EVERYONE), PermissionFlagsBits.SendMessages)).toBeFalse();
   });
 
   test('un refus porté par @everyone reste dépassable par le propriétaire', () => {
@@ -499,6 +501,32 @@ describe('buildCreationOverwrites', () => {
     expect(has(denyOf(overwrites, EVERYONE), PermissionFlagsBits.SendMessages)).toBe(true);
     expect(has(allowOf(overwrites, OWNER), PermissionFlagsBits.SendMessages)).toBe(true);
     expect(has(allowOf(overwrites, VIP_ROLE), PermissionFlagsBits.SendMessages)).toBe(true);
+  });
+
+  test('« nobody » refuse @everyone et n\'accorde l\'écriture ni au propriétaire ni aux rôles d\'office', () => {
+    for (const lockOnCreate of [false, true]) {
+      const overwrites = buildCreationOverwrites({
+        everyoneRoleId: EVERYONE,
+        ownerId: OWNER,
+        inherited: [],
+        policy: { ...defaultTempVoicePolicy(), lockOnCreate, textChat: 'nobody', autoAllowRoleIds: [VIP_ROLE] },
+      });
+
+      expect(has(denyOf(overwrites, EVERYONE), PermissionFlagsBits.SendMessages)).toBe(true);
+      expect(has(allowOf(overwrites, OWNER), PermissionFlagsBits.SendMessages)).toBe(false);
+      expect(has(allowOf(overwrites, VIP_ROLE), PermissionFlagsBits.SendMessages)).toBe(false);
+      expect(has(allowOf(overwrites, OWNER), PermissionFlagsBits.Connect)).toBe(true);
+      expect(has(allowOf(overwrites, VIP_ROLE), PermissionFlagsBits.Connect)).toBe(true);
+    }
+    expect(requiredBotPermissions({ ...defaultTempVoicePolicy(), textChat: 'nobody' })).toContain(PermissionFlagsBits.SendMessages);
+  });
+
+  test('« inVoice » refuse @everyone sans allow nommé pour le propriétaire', () => {
+    const overwrites = buildCreationOverwrites({
+      everyoneRoleId: EVERYONE, ownerId: OWNER, inherited: [], policy: { ...defaultTempVoicePolicy(), textChat: 'inVoice' },
+    });
+    expect(has(denyOf(overwrites, EVERYONE), PermissionFlagsBits.SendMessages)).toBe(true);
+    expect(has(allowOf(overwrites, OWNER), PermissionFlagsBits.SendMessages)).toBe(false);
   });
 
   test('ne pose aucune surcharge @everyone quand la politique n\'en demande pas', () => {
@@ -805,6 +833,13 @@ describe('régressions relevées en revue', () => {
     expect(withoutPower).toContain(PermissionFlagsBits.ManageChannels);
     expect(withoutPower).not.toContain(PermissionFlagsBits.ManageMessages);
     expect(withMessages).toContain(PermissionFlagsBits.ManageMessages);
+  });
+
+  test('ouvrir le chat exige que le bot puisse écrire lui-même', () => {
+    // Sinon Discord refuse la création au lieu du message « droit manquant ».
+    expect(requiredBotPermissions(defaultTempVoicePolicy())).not.toContain(PermissionFlagsBits.SendMessages);
+    expect(requiredBotPermissions({ ...defaultTempVoicePolicy(), textChat: 'open' })).toContain(PermissionFlagsBits.SendMessages);
+    expect(requiredBotPermissions({ ...defaultTempVoicePolicy(), autoAllowRoleIds: [VIP_ROLE] })).toContain(PermissionFlagsBits.SendMessages);
   });
 
   test('un pseudo contenant $& n\'est pas interprété', () => {

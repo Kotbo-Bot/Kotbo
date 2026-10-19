@@ -88,6 +88,92 @@ function defaultMessage(kind: ApiErrorKind): string {
   }
 }
 
+type CodeParams = Record<string, string | number>;
+
+/**
+ * Codes applicatifs de la route vocale (`channels-management`, préfixe `tv_`)
+ * et leur message traduit (`api_err_tv_*`). Consultée AVANT le message du
+ * serveur : le texte français que la route renvoie ne sert que de repli quand
+ * le code est inconnu de cette version du dashboard. Une `Map` plutôt qu'un
+ * objet, pour qu'un code `constructor` ne retombe pas sur le prototype.
+ */
+const CODE_MESSAGES = new Map<string, (p: CodeParams) => string>([
+  ['tv_guild_not_found', () => m.api_err_tv_guild_not_found()],
+  ['tv_feature_unknown', () => m.api_err_tv_feature_unknown()],
+  ['tv_channel_not_found', () => m.api_err_tv_channel_not_found()],
+  ['tv_channel_not_editable', () => m.api_err_tv_channel_not_editable()],
+  ['tv_channel_name_invalid', () => m.api_err_tv_channel_name_invalid()],
+  ['tv_channel_not_deletable', () => m.api_err_tv_channel_not_deletable()],
+  ['tv_sticky_channel_missing', () => m.api_err_tv_sticky_channel_missing()],
+  ['tv_sticky_channel_invalid', () => m.api_err_tv_sticky_channel_invalid()],
+  ['tv_sticky_json_invalid', (p) => m.api_err_tv_sticky_json_invalid({ detail: String(p.detail ?? '') })],
+  ['tv_sticky_empty', () => m.api_err_tv_sticky_empty()],
+  ['tv_sticky_webhook_name', () => m.api_err_tv_sticky_webhook_name()],
+  ['tv_sticky_avatar_invalid', () => m.api_err_tv_sticky_avatar_invalid()],
+  ['tv_sticky_not_found', () => m.api_err_tv_sticky_not_found()],
+  ['tv_sticky_not_found_or_off', () => m.api_err_tv_sticky_not_found_or_off()],
+  ['tv_sticky_repost_failed', () => m.api_err_tv_sticky_repost_failed()],
+  ['tv_temp_channel_unregistered', () => m.api_err_tv_temp_channel_unregistered()],
+  ['tv_discord_delete_refused', () => m.api_err_tv_discord_delete_refused()],
+  ['tv_discord_rename_refused', () => m.api_err_tv_discord_rename_refused()],
+  ['tv_reservation_role_invalid', () => m.api_err_tv_reservation_role_invalid()],
+  ['tv_reservation_category_refused', () => m.api_err_tv_reservation_category_refused()],
+  ['tv_payload_invalid', () => m.api_err_tv_payload_invalid()],
+  ['tv_honeypot_sanction_invalid', () => m.api_err_tv_honeypot_sanction_invalid()],
+  ['tv_name_template_invalid', () => m.api_err_tv_name_template_invalid()],
+  ['tv_object_expected', (p) => m.api_err_tv_object_expected({ field: String(p.field ?? '') })],
+  [
+    'tv_setting_invalid_choice',
+    (p) => m.api_err_tv_setting_invalid_choice({ field: String(p.field ?? ''), value: String(p.value ?? ''), expected: String(p.expected ?? '') }),
+  ],
+  [
+    'tv_setting_invalid_range',
+    (p) => m.api_err_tv_setting_invalid_range({ field: String(p.field ?? ''), value: String(p.value ?? ''), min: String(p.min ?? ''), max: String(p.max ?? '') }),
+  ],
+  ['tv_snowflake_invalid', (p) => m.api_err_tv_snowflake_invalid({ field: String(p.field ?? ''), value: String(p.value ?? '') })],
+]);
+
+/** Codes que ce dashboard sait traduire (pour les tests et la détection d'oubli). */
+export const TRANSLATED_API_CODES: readonly string[] = [...CODE_MESSAGES.keys()];
+
+/**
+ * Message traduit d'un code applicatif, ou `undefined` si le code est absent
+ * ou inconnu (le message du serveur prend alors le relais). `data` est le corps
+ * de la réponse d'échec : ses `params` alimentent les messages à variables.
+ */
+export function messageForApiCode(code: string | undefined, data?: unknown): string | undefined {
+  const build = code ? CODE_MESSAGES.get(code) : undefined;
+  if (!build) return undefined;
+  const params = (data as { params?: unknown } | null | undefined)?.params;
+  return build(params && typeof params === 'object' ? (params as CodeParams) : {});
+}
+
+/**
+ * Avis d'un enregistrement réussi (`notices` de la route vocale) : même
+ * mécanisme que les erreurs, un `code` et des `params` traduits ici, le texte
+ * français du serveur ne servant que de repli pour un code inconnu.
+ */
+const NOTICE_MESSAGES = new Map<string, (p: CodeParams) => string>([
+  ['notice_tv_generator_cap', (p) => m.api_notice_tv_generator_cap({ n: Number(p.n ?? 0), max: Number(p.max ?? 0) })],
+  ['notice_tv_generator_no_channel', (p) => m.api_notice_tv_generator_no_channel({ n: Number(p.n ?? 0) })],
+  ['notice_tv_generator_duplicate', (p) => m.api_notice_tv_generator_duplicate({ n: Number(p.n ?? 0), name: String(p.name ?? ''), first: Number(p.first ?? 0) })],
+  ['notice_tv_generator_is_main', (p) => m.api_notice_tv_generator_is_main({ n: Number(p.n ?? 0), name: String(p.name ?? '') })],
+  ['notice_tv_generator_not_kept', (p) => m.api_notice_tv_generator_not_kept({ n: Number(p.n ?? 0), name: String(p.name ?? '') })],
+  ['notice_tv_state_colors_inert', (p) => m.api_notice_tv_state_colors_inert({ colors: String(p.colors ?? '') })],
+]);
+
+/** Codes d'avis que ce dashboard sait traduire. */
+export const TRANSLATED_NOTICE_CODES: readonly string[] = [...NOTICE_MESSAGES.keys()];
+
+/** Texte d'un avis dans la langue du dashboard ; une chaîne seule (ancien serveur) passe telle quelle. */
+export function messageForNotice(notice: unknown): string {
+  if (typeof notice === 'string') return notice;
+  const { code, params, message } = (notice ?? {}) as { code?: unknown; params?: unknown; message?: unknown };
+  const build = typeof code === 'string' ? NOTICE_MESSAGES.get(code) : undefined;
+  if (build) return build(params && typeof params === 'object' ? (params as CodeParams) : {});
+  return typeof message === 'string' ? message : String(notice);
+}
+
 export type DashboardApiErrorInit = {
   kind: ApiErrorKind;
   /** Statut HTTP, absent quand la requete n'a jamais abouti. */
@@ -123,7 +209,7 @@ export class DashboardApiError extends Error {
 
   constructor(init: DashboardApiErrorInit) {
     const serverMessage = init.serverMessage?.trim();
-    super(serverMessage || defaultMessage(init.kind));
+    super(messageForApiCode(init.code, init.data) ?? (serverMessage || defaultMessage(init.kind)));
     this.name = 'DashboardApiError';
     this.kind = init.kind;
     this.status = init.status;
@@ -142,7 +228,7 @@ export class DashboardApiError extends Error {
    * l'erreur est levee et celui ou un ecran l'affiche.
    */
   get userMessage(): string {
-    return this.message;
+    return messageForApiCode(this.code, this.data) ?? this.message;
   }
 
   /** Vaut-il la peine de rejouer la requete telle quelle ? */

@@ -13,8 +13,10 @@
   import TempVoicePolicyEditor from '../lib/components/TempVoicePolicyEditor.svelte';
   import AutoThreadPanel from '../lib/components/channels/AutoThreadPanel.svelte';
   import { ToggleSwitch } from '../lib/components/ui';
-  import type { TempVoicePolicy } from '@kotbo/shared';
+  import { TEMP_VOICE_HANDOVER_DELAY_BOUNDS, TEMP_VOICE_OWNER_MENTION_DEFAULT, TEMP_VOICE_OWNERSHIP_DEFAULTS, type TempVoiceClaimWho, type TempVoiceOwnerMentionPlacement, type TempVoiceOwnershipSettings, type TempVoicePolicy } from '@kotbo/shared';
+  import { clampInt, selectableGeneratorChannels, takenGeneratorChannelIds, tempVoiceSubFromSearch, withTempVoiceSub, type TempVoiceSubTab } from '../lib/tempVoiceUi';
   import type { TempVoiceGenerator, TempVoiceGeneratorPayload } from '../lib/api/moderation';
+  import { messageForNotice } from '../lib/api/errors';
   import { createAsyncActionState } from '../lib/asyncAction.svelte';
   import { fetchChannelsManagementConfig, updateChannelsManagementConfig, rescanChannelsManagementStats, fetchTempVoiceChannels, updateTempVoiceChannel, fetchStickyMessages, saveStickyMessage, deleteStickyMessage, repostStickyMessage, fetchChannelsByChannel, toggleChannelFeature, renameDiscordChannel, deleteDiscordChannel } from '../lib/api';
   import { dashboardStore } from '../lib/stores/dashboard.svelte';
@@ -22,7 +24,7 @@
   import { toast } from '../lib/stores/toast.svelte';
   import { confirmDialog } from '../lib/stores/confirmDialog.svelte';
   import LoadingHint from '../lib/components/LoadingHint.svelte';
-  import { m } from '../lib/i18n';
+  import { m, getLocale } from '../lib/i18n';
 
   import { errorMessage } from '@kotbo/shared';
   /**
@@ -86,7 +88,8 @@
     denyCooldownMinutes: number;
   }
 
-  interface TempVoiceModPermissionsConfig {
+  /** Les six réglages de passation vivent dans la même ligne (`TempVoiceOwnershipSettings`). */
+  interface TempVoiceModPermissionsConfig extends TempVoiceOwnershipSettings {
     canRename: boolean;
     canChangeLimit: boolean;
     canLock: boolean;
@@ -126,6 +129,8 @@
      * `tempVoiceGenerators` et reviennent telles quelles au rallumage.
      */
     perGeneratorPresentation: boolean;
+    /** Où se trouve la mention qui notifie le propriétaire (panneau / message / aucune). Défaut `panel`. */
+    ownerMentionPlacement: TempVoiceOwnerMentionPlacement;
   }
 
   /** `@default` du modèle Prisma `TempVoiceAccessRequestConfig`. */
@@ -163,8 +168,23 @@
       panelComponents: 'V2',
       reservationFallbackMode: 'ANY_ROLE',
       perGeneratorPresentation: false,
+      ownerMentionPlacement: TEMP_VOICE_OWNER_MENTION_DEFAULT,
+      ...TEMP_VOICE_OWNERSHIP_DEFAULTS,
     };
   }
+
+  /** Les quatre interrupteurs de la passation, chacun avec son aide. */
+  const OWNERSHIP_TOGGLES: Array<{ key: 'handoverDmEnabled' | 'claimEmbedEnabled' | 'moderatorClaimOverride' | 'deleteWhenEmpty'; label: () => string; hint: () => string }> = [
+    { key: 'handoverDmEnabled', label: () => m.cm_tv_own_dm_label(), hint: () => m.cm_tv_own_dm_hint() },
+    { key: 'claimEmbedEnabled', label: () => m.cm_tv_own_embed_label(), hint: () => m.cm_tv_own_embed_hint() },
+    { key: 'moderatorClaimOverride', label: () => m.cm_tv_own_override_label(), hint: () => m.cm_tv_own_override_hint() },
+    { key: 'deleteWhenEmpty', label: () => m.cm_tv_own_delete_label(), hint: () => m.cm_tv_own_delete_hint() },
+  ];
+
+  const CLAIM_WHO_MODES: Array<{ key: TempVoiceClaimWho; label: () => string; hint: () => string }> = [
+    { key: 'present', label: () => m.cm_tv_own_who_present(), hint: () => m.cm_tv_own_who_present_hint() },
+    { key: 'moderators', label: () => m.cm_tv_own_who_moderators(), hint: () => m.cm_tv_own_who_moderators_hint() },
+  ];
 
   /** Même plafond que côté bot : au-delà, un menu Discord ne pourrait pas les afficher. */
   const MAX_RESERVABLE_ROLES = 25;
@@ -234,6 +254,13 @@
   const PANEL_MODES: Array<{ key: TempVoicePanelMode; label: () => string; hint: () => string }> = [
     { key: 'CLASSIC', label: () => m.cm_tv_panel_mode_classic(), hint: () => m.cm_tv_panel_mode_classic_hint() },
     { key: 'FLAT', label: () => m.cm_tv_panel_mode_flat(), hint: () => m.cm_tv_panel_mode_flat_hint() },
+  ];
+
+  /** Cartes-radio de la mention du propriétaire, une aide par option. */
+  const OWNER_MENTION_MODES: Array<{ key: TempVoiceOwnerMentionPlacement; label: () => string; hint: () => string }> = [
+    { key: 'panel', label: () => m.cm_tv_owner_mention_panel(), hint: () => m.cm_tv_owner_mention_panel_hint() },
+    { key: 'message', label: () => m.cm_tv_owner_mention_message(), hint: () => m.cm_tv_owner_mention_message_hint() },
+    { key: 'none', label: () => m.cm_tv_owner_mention_none(), hint: () => m.cm_tv_owner_mention_none_hint() },
   ];
 
   const STATE_LAYOUT_MODES: Array<{ key: TempVoiceStateLayout; label: () => string; hint: () => string }> = [
@@ -325,7 +352,7 @@
     tempVoiceEnabled: false,
     tempVoiceChannelId: '',
     tempVoiceCategoryId: '',
-    tempVoiceNameTemplate: '🔊 {user}\'s channel',
+    tempVoiceNameTemplate: m.cm_tv_default_name_template({ user: "{user}" }),
     tempVoiceRequiredRoleId: '',
     tempVoiceDefaults: defaultTempVoicePolicy(),
     tempVoiceGenerators: [] as TempVoiceGenerator[],
@@ -368,7 +395,7 @@
     tempVoiceEnabled: false,
     tempVoiceChannelId: '',
     tempVoiceCategoryId: '',
-    tempVoiceNameTemplate: '🔊 {user}\'s channel',
+    tempVoiceNameTemplate: m.cm_tv_default_name_template({ user: "{user}" }),
     tempVoiceRequiredRoleId: '',
     tempVoiceDefaults: defaultTempVoicePolicy(),
     tempVoiceGenerators: [] as TempVoiceGenerator[],
@@ -407,8 +434,16 @@
     config.tempVoiceModPermissions.panelComponents,
   ));
 
+  const isDirty = $derived(JSON.stringify(config) !== JSON.stringify(savedConfig));
+
+  // « Configuration enregistrée » (ou l'erreur d'un essai précédent) ne doit pas
+  // rester affiché pendant l'édition suivante : il décrirait un état dépassé.
   $effect(() => {
-    const dirty = JSON.stringify(config) !== JSON.stringify(savedConfig);
+    if (isDirty) untrack(() => saveAction.clearFeedback());
+  });
+
+  $effect(() => {
+    const dirty = isDirty;
     if (dirty) {
       untrack(() => {
         unsavedChanges.register({
@@ -436,6 +471,16 @@
   // « Par salon » d'abord : c'est la question qu'on se pose en arrivant
   // (« qu'est-ce qui touche ce salon ? »), la ou les onglets par fonctionnalite
   // repondent a l'inverse (« quels salons ont cette fonctionnalite ? »).
+  // Le sous-onglet vocal vit dans `?sub=` (même principe que `?tab=` des analytics
+  // admin) : un lien partagé ou un rechargement rouvre le bon sous-onglet.
+  let tvSub = $state<TempVoiceSubTab>(tempVoiceSubFromSearch(window.location.search));
+  $effect(() => {
+    if (activeTab !== 'temp-voice') return;
+    const search = withTempVoiceSub(window.location.search, tvSub);
+    if (search !== window.location.search) {
+      window.history.replaceState(window.history.state, '', `${window.location.pathname}${search}${window.location.hash}`);
+    }
+  });
   const channelTabs = ['by-channel', 'auto-thread', 'sticky', 'stats', 'temp-voice', 'access-requests', 'honeypot'] as const;
   let activeTab = $state<'by-channel' | 'auto-thread' | 'sticky' | 'stats' | 'temp-voice' | 'access-requests' | 'honeypot'>('by-channel');
   $effect(() => {
@@ -633,6 +678,20 @@
   );
 
   const roleOptions = $derived(autoAllowableRoles.map(role => ({ id: role.id, name: role.name })));
+
+  // Salons vocaux proposés aux sélecteurs de générateurs, sans ceux que le
+  // principal ou un autre générateur occupe déjà : le serveur écarte un doublon,
+  // et la carte disparaissait à l'enregistrement.
+  const mainGeneratorChannelOptions = $derived(
+    selectableGeneratorChannels(availableVoiceChannels, takenGeneratorChannelIds(null, config.tempVoiceGenerators))
+      .map(c => ({ id: c.id, name: `🔊 ${c.name}` }))
+  );
+  function generatorChannelOptions(index: number) {
+    return selectableGeneratorChannels(
+      availableVoiceChannels,
+      takenGeneratorChannelIds(config.tempVoiceChannelId, config.tempVoiceGenerators, index),
+    ).map(c => ({ id: c.id, name: `🔊 ${c.name}` }));
+  }
 
   /**
    * Choix d'un selecteur, en gardant la valeur deja enregistree meme si elle ne
@@ -858,6 +917,12 @@
     }
   }
 
+  /** « 1 connecté » / « 5 connectés » : le français garde le singulier jusqu'à 1 inclus. */
+  function connectedLabel(count: number): string {
+    const singular = getLocale() === 'fr' ? count <= 1 : count === 1;
+    return singular ? m.cm_members_connected_one({ count }) : m.cm_members_connected_other({ count });
+  }
+
   let editingChannel = $state(null as string | null);
   let newChannelName = $state('');
   let actionInProgress = $state(false);
@@ -936,7 +1001,7 @@
         config.tempVoiceEnabled = res.tempVoiceEnabled ?? false;
         config.tempVoiceChannelId = res.tempVoiceChannelId ?? '';
         config.tempVoiceCategoryId = res.tempVoiceCategoryId ?? '';
-        config.tempVoiceNameTemplate = res.tempVoiceNameTemplate || '🔊 {user}\'s channel';
+        config.tempVoiceNameTemplate = res.tempVoiceNameTemplate || m.cm_tv_default_name_template({ user: "{user}" });
         config.tempVoiceRequiredRoleId = res.tempVoiceRequiredRoleId ?? '';
         config.tempVoiceDefaults = { ...defaultTempVoicePolicy(), ...(res.tempVoiceDefaults ?? {}) };
         config.tempVoiceGenerators = Array.isArray(res.tempVoiceGenerators)
@@ -974,9 +1039,10 @@
     let success = false;
     await saveAction.run(async () => {
       // Validate statistics role target only if role channel or auto-creation is requested
+      // Le message part en toast avec les autres erreurs, plus bas : un seul
+      // endroit, donc jamais deux toasts pour la même erreur.
       if (config.statsConfig.roleEnabled && !config.statsConfig.roleTargetId) {
-        toast.error(m.cm_role_target_required());
-        throw new Error(m.cm_role_target_missing());
+        throw new Error(m.cm_role_target_required());
       }
 
       const res = await updateChannelsManagementConfig({
@@ -993,6 +1059,10 @@
         tempVoiceAccessRequest: {
           ...config.tempVoiceAccessRequest,
           notifyChannelId: config.tempVoiceAccessRequest.notifyChannelId || null,
+          // Mêmes bornes que la route : 1 à 1440 minutes. Un champ vidé ou à 0
+          // reprend le défaut au lieu de partir en 400.
+          requestExpiresMinutes: clampInt(config.tempVoiceAccessRequest.requestExpiresMinutes, 1, 1440, 10),
+          denyCooldownMinutes: clampInt(config.tempVoiceAccessRequest.denyCooldownMinutes, 1, 1440, 10),
         },
         tempVoiceModPermissions: config.tempVoiceModPermissions,
         honeypotEnabled: config.honeypotEnabled,
@@ -1002,13 +1072,24 @@
       });
 
       // `res.error` d'abord : la route nomme le champ qu'elle refuse
-      // (`panelSettingError` : « Palette de l'état (stateColors): "X" is not a
-      // valid value. Nothing was saved. »). « API save error » seul ne disait
+      // (`panelSettingError` : « Palette de l'état (stateColors) : valeur
+      // invalide, rien n'a été enregistré. »). « API save error » seul ne disait
       // pas lequel des vingt-et-un champs du corps avait été rejeté.
       if (!res || !res.ok) throw new Error(res?.error || m.cm_save_api_error());
 
       // Update local state with resolved (auto-created) values from backend
       if (res.resolved) {
+        // Ce que le serveur a normalisé et gardé remplace ce que la page a envoyé
+        // (places ramenées à 99, délai remis dans ses bornes...).
+        if (res.resolved.tempVoiceDefaults) {
+          config.tempVoiceDefaults = { ...defaultTempVoicePolicy(), ...res.resolved.tempVoiceDefaults };
+        }
+        if (res.resolved.tempVoiceModPermissions) {
+          config.tempVoiceModPermissions = { ...defaultTempVoiceModPermissions(), ...res.resolved.tempVoiceModPermissions };
+        }
+        if (res.resolved.tempVoiceAccessRequest) {
+          config.tempVoiceAccessRequest = { ...defaultTempVoiceAccessRequestConfig(), ...res.resolved.tempVoiceAccessRequest };
+        }
         if (res.resolved.tempVoiceChannelId) config.tempVoiceChannelId = res.resolved.tempVoiceChannelId;
         if (res.resolved.tempVoiceCategoryId) config.tempVoiceCategoryId = res.resolved.tempVoiceCategoryId;
         if (Array.isArray(res.resolved.tempVoiceGenerators)) {
@@ -1025,11 +1106,19 @@
         }
       }
       
+      // Enregistré, mais pas tout à fait comme demandé : le serveur le dit.
+      if (Array.isArray(res.notices)) {
+        for (const notice of res.notices) toast.info(messageForNotice(notice), 12000);
+      }
+
       await dashboardStore.refresh();
       savedConfig = JSON.parse(JSON.stringify(config));
       success = true;
       return true;
     }, { successMessage: m.cm_config_saved() });
+    // L'erreur s'affiche aussi en toast : l'InlineFeedback est en haut de page,
+    // hors de vue quand on enregistre depuis la barre du bas.
+    if (!success && saveAction.state.error) toast.error(saveAction.state.error);
     return success;
   }
 
@@ -1306,7 +1395,7 @@
                         aria-describedby="sticky-json-hint-{index}"
                         class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 font-mono text-sm text-on-surface outline-none focus:ring-1 focus:ring-primary/30 transition-all resize-y"
                       ></textarea>
-                      <p id="sticky-json-hint-{index}" class="text-2xs text-on-surface-variant/40">{m.cm_sticky_json_hint()} {m.cm_sticky_placeholders_hint()}</p>
+                      <p id="sticky-json-hint-{index}" class="text-2xs text-on-surface-variant/40">{m.cm_sticky_json_hint()} {m.cm_sticky_placeholders_hint({ server: '{server}', membres: '{membres}', salons: '{salons}', members: '{members}', channelCount: '{channelCount}', boosts: '{boosts}' })}</p>
                     </div>
                   {:else}
                     <div class="space-y-1.5">
@@ -1319,7 +1408,7 @@
                         placeholder={m.cm_sticky_content_placeholder()}
                         class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm text-on-surface outline-none focus:ring-1 focus:ring-primary/30 transition-all resize-y"
                       ></textarea>
-                      <p class="text-2xs text-on-surface-variant/40">{m.cm_sticky_placeholders_hint()}</p>
+                      <p class="text-2xs text-on-surface-variant/40">{m.cm_sticky_placeholders_hint({ server: '{server}', membres: '{membres}', salons: '{salons}', members: '{members}', channelCount: '{channelCount}', boosts: '{boosts}' })}</p>
                     </div>
                   {/if}
 
@@ -1559,7 +1648,7 @@
                   <input 
                     type="text" 
                     bind:value={config.statsConfig.memberTemplate} 
-                    placeholder={m.cm_template_members_placeholder()} 
+                    placeholder={m.cm_template_members_placeholder({ count: '{count}' })} 
                     class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-5 py-2.5 text-xs outline-none focus:ring-1 focus:ring-primary/30"
                   />
                 {/if}
@@ -1600,7 +1689,7 @@
                   <input 
                     type="text" 
                     bind:value={config.statsConfig.botTemplate} 
-                    placeholder={m.cm_template_bots_placeholder()} 
+                    placeholder={m.cm_template_bots_placeholder({ count: '{count}' })} 
                     class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-5 py-2.5 text-xs outline-none focus:ring-1 focus:ring-primary/30"
                   />
                 {/if}
@@ -1646,7 +1735,7 @@
                   <input 
                     type="text" 
                     bind:value={config.statsConfig.roleTemplate} 
-                    placeholder={m.cm_template_staff_placeholder()} 
+                    placeholder={m.cm_template_staff_placeholder({ count: '{count}' })} 
                     class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-5 py-2.5 text-xs outline-none focus:ring-1 focus:ring-primary/30"
                   />
                 {/if}
@@ -1687,7 +1776,7 @@
                   <input 
                     type="text" 
                     bind:value={config.statsConfig.channelTemplate} 
-                    placeholder={m.cm_template_channels_placeholder()} 
+                    placeholder={m.cm_template_channels_placeholder({ count: '{count}' })} 
                     class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-5 py-2.5 text-xs outline-none focus:ring-1 focus:ring-primary/30"
                   />
                 {/if}
@@ -1728,7 +1817,7 @@
                   <input 
                     type="text" 
                     bind:value={config.statsConfig.categoryTemplate} 
-                    placeholder={m.cm_template_categories_placeholder()} 
+                    placeholder={m.cm_template_categories_placeholder({ count: '{count}' })} 
                     class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-5 py-2.5 text-xs outline-none focus:ring-1 focus:ring-primary/30"
                   />
                 {/if}
@@ -1769,7 +1858,7 @@
                   <input 
                     type="text" 
                     bind:value={config.statsConfig.activityTemplate} 
-                    placeholder={m.cm_template_activity_placeholder()} 
+                    placeholder={m.cm_template_activity_placeholder({ count: '{count}' })} 
                     class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-5 py-2.5 text-xs outline-none focus:ring-1 focus:ring-primary/30"
                   />
                 {/if}
@@ -1906,7 +1995,7 @@
                           id="custom-template-{index}"
                           type="text" 
                           bind:value={custom.template} 
-                          placeholder={custom.type === 'goal' ? m.cm_template_goal_placeholder() : m.cm_template_name_placeholder()} 
+                          placeholder={custom.type === 'goal' ? m.cm_template_goal_placeholder({ count: '{count}', goal: '{goal}' }) : m.cm_template_name_placeholder({ count: '{count}' })} 
                           class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-5 py-2.5 text-xs outline-none focus:ring-1 focus:ring-primary/30"
                         />
                         <p class="text-2xs text-on-surface-variant/40 mt-1">
@@ -1948,27 +2037,42 @@
 
       {:else if activeTab === 'temp-voice'}
         <!-- DYNAMIC VOCAL CREATORS TAB -->
-        <section class="bg-surface-container-low/30 border border-outline-variant/10 p-8 rounded-xl space-y-6">
-          <div class="flex items-center justify-between">
-            <div>
-              <h3 class="text-xl font-semibold flex items-center gap-3">
-                <Papicon icon="volume-2" size={20} class="text-primary" />
-                {m.cm_temp_voice_title()}
-              </h3>
-              <p class="text-xs text-on-surface-variant mt-1">{m.cm_temp_voice_desc()}</p>
-            </div>
-            
-            <div class="flex items-center gap-2">
-              <input 
-                type="checkbox" 
-                bind:checked={config.tempVoiceEnabled} 
-                class="w-10 h-6 bg-surface-container-high rounded-full relative appearance-none cursor-pointer transition-all border border-outline-variant/20 checked:bg-primary before:content-[''] before:absolute before:h-4 before:w-4 before:rounded-full before:bg-white before:top-0.5 before:left-0.5 checked:before:translate-x-4 before:transition-all"
-              />
-            </div>
+        <div class="flex items-center justify-between mb-6">
+          <div>
+            <h3 class="text-xl font-semibold flex items-center gap-3">
+              <Papicon icon="volume-2" size={20} class="text-primary" />
+              {m.cm_temp_voice_title()}
+            </h3>
+            <p class="text-xs text-on-surface-variant mt-1">{m.cm_temp_voice_desc()}</p>
           </div>
 
-          {#if config.tempVoiceEnabled}
-            <div class="space-y-4 pt-4 border-t border-outline-variant/10 max-w-xl">
+          <div class="flex items-center gap-2 shrink-0">
+            <ToggleSwitch
+              checked={config.tempVoiceEnabled}
+              onToggle={(v) => (config.tempVoiceEnabled = v)}
+              ariaLabel={m.cm_temp_voice_title()}
+            />
+          </div>
+        </div>
+        {#if config.tempVoiceEnabled}
+          <Tabs
+            label={m.cm_tv_tabs_label()}
+            class="mb-6"
+            tabs={[
+              { id: 'generators', label: m.cm_tv_tab_generators(), icon: 'volume-2' },
+              { id: 'permissions', label: m.cm_tv_tab_permissions(), icon: 'lock' },
+              { id: 'panel', label: m.cm_tv_tab_panel(), icon: 'grid' },
+              { id: 'active', label: m.cm_tv_tab_active(), icon: 'user', badge: activeTempChannels.length || undefined },
+            ]}
+            active={tvSub}
+            onchange={(id) => { tvSub = id as typeof tvSub; }}
+          />
+        {/if}
+        {#if config.tempVoiceEnabled && (tvSub === 'generators' || tvSub === 'permissions')}
+        <section class="bg-surface-container-low/30 border border-outline-variant/10 p-8 rounded-xl space-y-6">
+            <div class="space-y-4">
+              {#if tvSub === 'generators'}
+              <div class="space-y-4 max-w-xl">
               <!-- Generator Voice Channel Selection -->
               <div class="space-y-1.5">
                 <label for="temp-voice-channel-select" class="text-xs font-bold text-on-surface/80 block">{m.cm_generator_voice_channel_label()}</label>
@@ -1976,7 +2080,7 @@
                   <div class="flex-1">
                     <SearchableSelect 
                       id="temp-voice-channel-select"
-                      options={availableVoiceChannels.map(c => ({ id: c.id, name: `🔊 ${c.name}` }))} 
+                      options={mainGeneratorChannelOptions}
                       bind:value={config.tempVoiceChannelId} 
                       placeholder={m.cm_create_channel_auto_placeholder()}
                     />
@@ -2028,7 +2132,7 @@
                   id="temp-voice-name-template-input"
                   type="text" 
                   bind:value={config.tempVoiceNameTemplate} 
-                  placeholder={m.cm_template_user_placeholder()} 
+                  placeholder={m.cm_template_user_placeholder({ user: "{user}" })} 
                   class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-5 py-3 text-sm outline-none focus:ring-2 focus:ring-primary/30 transition-all"
                 />
                 <p class="text-2xs text-on-surface-variant/40 mt-1">{m.cm_user_placeholder_hint({ code: '{user}' })}</p>
@@ -2045,14 +2149,22 @@
                 />
                 <p class="text-2xs text-on-surface-variant/40">{m.cm_required_role_scope_hint()}</p>
               </div>
+              </div>
+
+              {/if}
 
               <!-- Permissions appliquées aux salons créés -->
-              <TempVoicePolicyEditor
-                bind:policy={config.tempVoiceDefaults}
-                availableRoles={autoAllowableRoles}
-                idPrefix="temp-voice-main"
-              />
+              {#if tvSub === 'permissions'}
+              <div class="max-w-xl">
+                <TempVoicePolicyEditor
+                  bind:policy={config.tempVoiceDefaults}
+                  availableRoles={autoAllowableRoles}
+                  idPrefix="temp-voice-main"
+                />
+              </div>
+              {/if}
 
+              {#if tvSub === 'generators'}
               {#if !config.tempVoiceGenerators}
                 {config.tempVoiceGenerators = []}
               {/if}
@@ -2065,6 +2177,7 @@
                     {m.cm_additional_generators_title()}
                   </h4>
                   <p class="text-xs text-on-surface-variant">{m.cm_additional_generators_desc()}</p>
+                  <p class="text-2xs text-on-surface-variant/40 mt-1">{m.cm_tv_generator_taken_hint()}</p>
                 </div>
 
                 <!-- Un sélecteur de surcharge de présentation, réutilisé cinq
@@ -2130,7 +2243,7 @@
                         </button>
                       </div>
 
-                      <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <!-- Generator Voice Channel Selection -->
                         <div class="space-y-1.5">
                           <label for="temp-voice-channel-select-{index}" class="text-xs font-bold text-on-surface/80 block">{m.cm_generator_voice_channel_label()}</label>
@@ -2138,7 +2251,7 @@
                             <div class="flex-1">
                               <SearchableSelect 
                                 id="temp-voice-channel-select-{index}"
-                                options={availableVoiceChannels.map(c => ({ id: c.id, name: `🔊 ${c.name}` }))} 
+                                options={generatorChannelOptions(index)}
                                 bind:value={generator.channelId} 
                                 placeholder={m.cm_create_auto_placeholder()}
                               />
@@ -2190,7 +2303,7 @@
                             id="temp-voice-name-template-input-{index}"
                             type="text" 
                             bind:value={generator.nameTemplate} 
-                            placeholder={m.cm_template_user_placeholder()} 
+                            placeholder={m.cm_template_user_placeholder({ user: "{user}" })} 
                             class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs outline-none focus:ring-1 focus:ring-primary/30 transition-all"
                           />
                         </div>
@@ -2227,7 +2340,7 @@
                             <span class="text-xs font-bold text-on-surface/80 block">{m.cm_tv_panel_per_gen_override_title()}</span>
                             <p class="text-2xs text-on-surface-variant/40">{m.cm_tv_panel_per_gen_override_desc()}</p>
                           </div>
-                          <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
+                          <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3">
                             {@render presentationOverrideSelect(
                               `gen-${index}-panel-mode`,
                               m.cm_tv_panel_mode_label(),
@@ -2283,7 +2396,7 @@
                           {
                             channelId: '',
                             categoryId: '',
-                            nameTemplate: '🔊 {user}\'s channel',
+                            nameTemplate: m.cm_tv_default_name_template({ user: "{user}" }),
                             requiredRoleId: '',
                             ...defaultTempVoicePolicy()
                           }
@@ -2297,25 +2410,85 @@
                   {/if}
                 </div>
               </div>
-
-              <!-- Description of Chat Control Embed -->
-              <div class="p-5 bg-primary/5 border border-primary/20 rounded-xl mt-4">
-                <h4 class="text-xs font-semibold text-primary mb-2">{m.cm_management_embed_title()}</h4>
-                <p class="text-xs text-on-surface-variant/80 leading-relaxed">
-                  {m.cm_management_embed_intro()}
-                  <br/><strong class="text-on-surface font-semibold">• {m.cm_embed_bullet_lock()}</strong> {m.cm_embed_bullet_lock_desc()}
-                  <br/><strong class="text-on-surface font-semibold">• {m.cm_embed_bullet_rename()}</strong> {m.cm_embed_bullet_rename_desc()}
-                  <br/><strong class="text-on-surface font-semibold">• {m.cm_embed_bullet_limit()}</strong> {m.cm_embed_bullet_limit_desc()}
-                  <br/><strong class="text-on-surface font-semibold">• {m.cm_embed_bullet_kick()}</strong> {m.cm_embed_bullet_kick_desc()}
-                  <br/><strong class="text-on-surface font-semibold">• {m.cm_embed_bullet_chat()}</strong> {m.cm_embed_bullet_chat_desc()}
-                </p>
-              </div>
+              {/if}
             </div>
-          {/if}
         </section>
+        {/if}
+
+        <!-- Passation : un bloc à part dans « Permissions », car il décide de
+             qui détient les droits du salon quand son propriétaire part. -->
+        {#if config.tempVoiceEnabled && tvSub === 'permissions'}
+        <section class="bg-surface-container-low/30 border border-outline-variant/10 p-8 rounded-xl space-y-6 mt-6">
+          <div>
+            <h3 class="text-xl font-semibold flex items-center gap-3">
+              <Papicon icon="user" size={20} class="text-primary" />
+              {m.cm_tv_own_title()}
+            </h3>
+            <p class="text-xs text-on-surface-variant mt-1">{m.cm_tv_own_desc()}</p>
+          </div>
+
+          <div class="grid grid-cols-1 gap-3 max-w-xl">
+            {#each OWNERSHIP_TOGGLES as row (row.key)}
+              <div class="flex items-center justify-between gap-4 p-4 bg-surface-container-high/20 border border-outline-variant/5 rounded-xl">
+                <div class="space-y-0.5">
+                  <label for="tv-own-{row.key}" class="text-xs font-bold text-on-surface/80 block">{row.label()}</label>
+                  <p class="text-2xs text-on-surface-variant">{row.hint()}</p>
+                </div>
+                <input
+                  id="tv-own-{row.key}"
+                  type="checkbox"
+                  bind:checked={config.tempVoiceModPermissions[row.key]}
+                  class="shrink-0 w-10 h-6 bg-surface-container-high rounded-full relative appearance-none cursor-pointer transition-all border border-outline-variant/20 checked:bg-primary before:content-[''] before:absolute before:h-4 before:w-4 before:rounded-full before:bg-white before:top-0.5 before:left-0.5 checked:before:translate-x-4 before:transition-all"
+                />
+              </div>
+            {/each}
+          </div>
+
+          <div class="space-y-1.5 max-w-xl">
+            <label for="tv-own-delay" class="text-xs font-bold text-on-surface/80 block">{m.cm_tv_own_delay_label()}</label>
+            <input
+              id="tv-own-delay"
+              type="number"
+              min={TEMP_VOICE_HANDOVER_DELAY_BOUNDS.min}
+              max={TEMP_VOICE_HANDOVER_DELAY_BOUNDS.max}
+              disabled={!config.tempVoiceModPermissions.handoverDmEnabled}
+              bind:value={config.tempVoiceModPermissions.handoverDelaySeconds}
+              class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm outline-none focus:ring-1 focus:ring-primary/30 transition-all disabled:opacity-40"
+            />
+            <p class="text-2xs text-on-surface-variant/40">{m.cm_tv_own_delay_hint({ min: TEMP_VOICE_HANDOVER_DELAY_BOUNDS.min, max: TEMP_VOICE_HANDOVER_DELAY_BOUNDS.max })}</p>
+          </div>
+
+          <div class="space-y-2 max-w-xl">
+            <span class="text-xs font-bold text-on-surface/80 block">{m.cm_tv_own_who_label()}</span>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {#each CLAIM_WHO_MODES as mode (mode.key)}
+                <label
+                  for="tv-own-who-{mode.key}"
+                  class="flex flex-col gap-1 border rounded-lg px-4 py-3 cursor-pointer transition-all {config.tempVoiceModPermissions.claimWho === mode.key
+                    ? 'bg-primary/10 border-primary/40'
+                    : 'bg-surface-container-high/20 border-outline-variant/10 hover:border-primary/20'}"
+                >
+                  <span class="flex items-center gap-2 text-xs font-bold text-on-surface">
+                    <input
+                      id="tv-own-who-{mode.key}"
+                      type="radio"
+                      value={mode.key}
+                      bind:group={config.tempVoiceModPermissions.claimWho}
+                      class="accent-primary w-3.5 h-3.5"
+                    />
+                    {mode.label()}
+                  </span>
+                  <span class="text-2xs text-on-surface-variant leading-relaxed">{mode.hint()}</span>
+                </label>
+              {/each}
+            </div>
+          </div>
+        </section>
+        {/if}
 
         {#if config.tempVoiceEnabled}
-          <section class="bg-surface-container-low/30 border border-outline-variant/10 p-8 rounded-xl space-y-6 mt-6">
+          {#if tvSub === 'active'}
+          <section class="bg-surface-container-low/30 border border-outline-variant/10 p-8 rounded-xl space-y-6">
             <div class="flex items-center justify-between border-b border-outline-variant/10 pb-4">
               <div>
                 <h3 class="text-xl font-semibold flex items-center gap-3">
@@ -2465,7 +2638,14 @@
                             disabled={actionInProgress}
                             class="px-2 py-1 bg-primary text-white text-2xs font-semibold rounded-md"
                           >
-                            OK
+                            {m.cm_validate()}
+                          </button>
+                          <button
+                            type="button"
+                            onclick={() => editingChannel = null}
+                            class="px-2 py-1 bg-surface-container text-on-surface text-2xs font-semibold rounded-md border border-outline-variant/20"
+                          >
+                            {m.common_cancel()}
                           </button>
                         </div>
                       {:else}
@@ -2492,7 +2672,7 @@
                       </div>
                       <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs font-semibold bg-primary/10 text-primary border border-primary/20">
                         <Papicon icon="user" size={10} />
-                        {chan.membersCount} {m.cm_members_connected_suffix()}
+                        {connectedLabel(chan.membersCount)}
                       </span>
                     </div>
 
@@ -2522,6 +2702,7 @@
               </div>
             {/if}
           </section>
+          {/if}
 
           <!-- Présentation du panneau : mode, mise en page de l'état, palette et
                composants (V1/V2) : configurable par serveur, comme le reste de
@@ -2529,7 +2710,20 @@
                dans le même {#if config.tempVoiceEnabled} que la section
                voisine : les salons temporaires désactivés, l'onglet ne garde
                que l'interrupteur, pas un bloc de réglages orphelin. -->
-          <section class="bg-surface-container-low/30 border border-outline-variant/10 p-5 lg:p-6 rounded-xl space-y-4 mt-6">
+          {#if tvSub === 'panel'}
+          <section class="bg-surface-container-low/30 border border-outline-variant/10 p-5 lg:p-6 rounded-xl space-y-4">
+              <!-- Description of Chat Control Embed -->
+              <div class="p-5 bg-primary/5 border border-primary/20 rounded-xl">
+                <h4 class="text-xs font-semibold text-primary mb-2">{m.cm_management_embed_title()}</h4>
+                <p class="text-xs text-on-surface-variant/80 leading-relaxed">
+                  {m.cm_management_embed_intro()}
+                  <br/><strong class="text-on-surface font-semibold">• {m.cm_embed_bullet_lock()}</strong> {m.cm_embed_bullet_lock_desc()}
+                  <br/><strong class="text-on-surface font-semibold">• {m.cm_embed_bullet_rename()}</strong> {m.cm_embed_bullet_rename_desc()}
+                  <br/><strong class="text-on-surface font-semibold">• {m.cm_embed_bullet_limit()}</strong> {m.cm_embed_bullet_limit_desc()}
+                  <br/><strong class="text-on-surface font-semibold">• {m.cm_embed_bullet_kick()}</strong> {m.cm_embed_bullet_kick_desc()}
+                  <br/><strong class="text-on-surface font-semibold">• {m.cm_embed_bullet_chat()}</strong> {m.cm_embed_bullet_chat_desc()}
+                </p>
+              </div>
             <div>
               <h3 class="text-sm font-semibold text-on-surface">{m.cm_tv_panel_title()}</h3>
               <p class="text-2xs text-on-surface-variant mt-0.5">{m.cm_tv_panel_desc()}</p>
@@ -2652,6 +2846,33 @@
                 </p>
               </div>
 
+              <div class="space-y-2 md:col-span-2">
+                <span class="text-xs font-bold text-on-surface/80 block">{m.cm_tv_owner_mention_label()}</span>
+                <p class="text-2xs text-on-surface-variant/40">{m.cm_tv_owner_mention_desc()}</p>
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  {#each OWNER_MENTION_MODES as mode (mode.key)}
+                    <label
+                      for="tv-owner-mention-{mode.key}"
+                      class="flex flex-col gap-1 border rounded-lg px-4 py-3 cursor-pointer transition-all {config.tempVoiceModPermissions.ownerMentionPlacement === mode.key
+                        ? 'bg-primary/10 border-primary/40'
+                        : 'bg-surface-container-high/20 border-outline-variant/10 hover:border-primary/20'}"
+                    >
+                      <span class="flex items-center gap-2 text-xs font-bold text-on-surface">
+                        <input
+                          id="tv-owner-mention-{mode.key}"
+                          type="radio"
+                          value={mode.key}
+                          bind:group={config.tempVoiceModPermissions.ownerMentionPlacement}
+                          class="accent-primary w-3.5 h-3.5"
+                        />
+                        {mode.label()}
+                      </span>
+                      <span class="text-2xs text-on-surface-variant leading-relaxed">{mode.hint()}</span>
+                    </label>
+                  {/each}
+                </div>
+              </div>
+
               <div class="space-y-2">
                 <span class="text-xs font-bold text-on-surface/80 block">{m.cm_tv_panel_state_colors_label()}</span>
                 <div class="space-y-2">
@@ -2687,6 +2908,7 @@
               </div>
             </div>
           </section>
+          {/if}
         {/if}
 
       {:else if activeTab === 'access-requests'}
@@ -2701,11 +2923,11 @@
               <p class="text-xs text-on-surface-variant mt-1">{m.cm_ar_desc()}</p>
             </div>
 
-            <div class="flex items-center gap-2">
-              <input
-                type="checkbox"
-                bind:checked={config.tempVoiceAccessRequest.enabled}
-                class="w-10 h-6 bg-surface-container-high rounded-full relative appearance-none cursor-pointer transition-all border border-outline-variant/20 checked:bg-primary before:content-[''] before:absolute before:h-4 before:w-4 before:rounded-full before:bg-white before:top-0.5 before:left-0.5 checked:before:translate-x-4 before:transition-all"
+            <div class="flex items-center gap-2 shrink-0">
+              <ToggleSwitch
+                checked={config.tempVoiceAccessRequest.enabled}
+                onToggle={(v) => (config.tempVoiceAccessRequest.enabled = v)}
+                ariaLabel={m.cm_ar_title()}
               />
             </div>
           </div>
@@ -2786,7 +3008,7 @@
                   <input
                     id="ar-cooldown-input"
                     type="number"
-                    min="0"
+                    min="1"
                     max="1440"
                     bind:value={config.tempVoiceAccessRequest.denyCooldownMinutes}
                     class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm outline-none focus:ring-1 focus:ring-primary/30 transition-all"
@@ -2969,11 +3191,11 @@
               <p class="text-xs text-on-surface-variant mt-1">{m.cm_honeypot_desc()}</p>
             </div>
             
-            <div class="flex items-center gap-2">
-              <input 
-                type="checkbox" 
-                bind:checked={config.honeypotEnabled} 
-                class="w-10 h-6 bg-surface-container-high rounded-full relative appearance-none cursor-pointer transition-all border border-outline-variant/20 checked:bg-primary before:content-[''] before:absolute before:h-4 before:w-4 before:rounded-full before:bg-white before:top-0.5 before:left-0.5 checked:before:translate-x-4 before:transition-all"
+            <div class="flex items-center gap-2 shrink-0">
+              <ToggleSwitch
+                checked={config.honeypotEnabled}
+                onToggle={(v) => (config.honeypotEnabled = v)}
+                ariaLabel={m.cm_honeypot_title()}
               />
             </div>
           </div>

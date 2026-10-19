@@ -1,9 +1,10 @@
-import type { Client } from 'discord.js';
+import { ChannelType, type Client } from 'discord.js';
 import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
 import { publishOrUpdateRegulationMessage } from '../staff/regulationService.js';
 import { sendTicketSetupEmbed } from '../features/ticketService.js';
 import { sendOrUpdateMenuMessage } from '../features/reactionRoleService.js';
+import { planifierRafraichissementPanneau, tempChannels } from '../../events/tempVoice.js';
 
 /**
  * Re-publication des panneaux persistants apres un changement de langue.
@@ -16,7 +17,7 @@ import { sendOrUpdateMenuMessage } from '../features/reactionRoleService.js';
  */
 
 /** Identifiants stables, utilises dans les rapports rendus a l'utilisateur. */
-export type RerenderablePanel = 'regulation' | 'tickets' | 'reactionRoles';
+export type RerenderablePanel = 'regulation' | 'tickets' | 'reactionRoles' | 'tempVoice';
 
 export interface PanelRerenderOutcome {
   panel: RerenderablePanel;
@@ -108,6 +109,24 @@ async function rerenderReactionRoles(client: Client, guildId: string): Promise<P
 }
 
 /**
+ * Réécrit sur place le panneau de chaque salon vocal temporaire du serveur : il
+ * relit la langue à chaque rendu, il suffit donc de le redessiner. Passe par
+ * l'anti-rebond du panneau (une réécriture par seconde et par salon). Rend le
+ * nombre de panneaux planifiés.
+ */
+export function rafraichirPanneauxVocaux(client: Client, guildId: string): number {
+  const salons = client.guilds.cache.get(guildId)?.channels.cache;
+  let planifies = 0;
+  for (const id of tempChannels.keys()) {
+    const salon = salons?.get(id);
+    if (salon?.type !== ChannelType.GuildVoice) continue;
+    planifierRafraichissementPanneau(salon);
+    planifies += 1;
+  }
+  return planifies;
+}
+
+/**
  * Re-publie tous les panneaux persistants du serveur dans la langue courante.
  *
  * Chaque panneau est traite independamment : un echec n'interrompt pas les
@@ -118,6 +137,10 @@ export async function rerenderPersistentPanels(client: Client, guildId: string):
     await rerenderRegulation(client, guildId),
     await rerenderTickets(client, guildId),
     await rerenderReactionRoles(client, guildId),
+    (() => {
+      const count = rafraichirPanneauxVocaux(client, guildId);
+      return { panel: 'tempVoice', status: count ? 'updated' : 'skipped', count } as PanelRerenderOutcome;
+    })(),
   ];
 
   return {
