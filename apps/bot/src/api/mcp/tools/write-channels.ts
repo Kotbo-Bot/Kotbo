@@ -1,7 +1,7 @@
 /** Outils MCP - write channels (permission WRITE_MEMBERS). */
 import { ChannelType, PermissionFlagsBits } from 'discord.js';
 import { z } from 'zod';
-import { type McpToolContext, err, ok, resolveChannel, resolveMember, toolError } from '../toolkit.js';
+import { type McpToolContext, err, ok, resolveGuildChannel, resolveMember, toolError } from '../toolkit.js';
 
 export function registerWriteChannelsTools(ctx: McpToolContext) {
   const { server, guildId, client, shouldRegister, guard, audit, toolMeta } = ctx;
@@ -115,7 +115,7 @@ export function registerWriteChannelsTools(ctx: McpToolContext) {
     server.registerTool(
       'edit_channel',
       {
-        description: 'Modifie les propriétés d\'un salon existant (nom, sujet, catégorie, lenteur…). Requiert WRITE_MEMBERS.',
+        description: 'Modifie les propriétés d\'un salon existant, forum et catégorie compris (nom, sujet ou consignes du forum, catégorie, lenteur…). Requiert WRITE_MEMBERS.',
         inputSchema: {
           channel: z.string().describe('Nom, mention <#id> ou ID du salon à modifier'),
           name: z.string().optional().describe('Nouveau nom'),
@@ -132,7 +132,7 @@ export function registerWriteChannelsTools(ctx: McpToolContext) {
         _meta: toolMeta,
       },
       guard('WRITE_MEMBERS', async ({ channel, name, topic, category, nsfw, slowmode, user_limit, bitrate, position, reason, key_name }) => {
-        const resolved = resolveChannel(guildId, client, channel);
+        const resolved = resolveGuildChannel(guildId, client, channel);
         if (!resolved.ok) return resolved.response;
         const ch = resolved.channel as any;
 
@@ -176,8 +176,9 @@ export function registerWriteChannelsTools(ctx: McpToolContext) {
       'set_channel_permissions',
       {
         description:
-          'Définit ou supprime des permissions sur un salon pour un rôle ou un membre. ' +
-          'Utilise allow/deny comme listes de permissions Discord (ex: ["ViewChannel","SendMessages"]). ' +
+          'Définit ou supprime des permissions sur un salon (textuel, vocal, forum ou catégorie) pour un rôle ou un membre. ' +
+          'Utilise allow/deny comme listes de permissions Discord (ex: ["ViewChannel","SendMessages"] ; ' +
+          'sur un forum, SendMessages = publier un post, SendMessagesInThreads = répondre). ' +
           'Requiert WRITE_MEMBERS.',
         inputSchema: {
           channel: z.string().describe('Nom, mention <#id> ou ID du salon'),
@@ -191,7 +192,7 @@ export function registerWriteChannelsTools(ctx: McpToolContext) {
         _meta: toolMeta,
       },
       guard('WRITE_MEMBERS', async ({ channel, target, target_type, allow, deny, reset, key_name }) => {
-        const resolved = resolveChannel(guildId, client, channel);
+        const resolved = resolveGuildChannel(guildId, client, channel);
         if (!resolved.ok) return resolved.response;
         const ch = resolved.channel as any;
 
