@@ -106,13 +106,17 @@
     { id: 'waiting', label: m.th_view_waiting(), value: fmtNumber(stats.backlog.waitingStaff) },
     { id: 'breached', label: m.th_view_breached(), value: fmtNumber(stats.backlog.breached) },
     {
+      id: 'unanswered', label: m.th_kpi_unanswered(), value: fmtNumber(stats.unanswered.tickets),
+      hint: m.th_kpi_unanswered_hint({ count: stats.unanswered.reminders }),
+    },
+    {
       id: 'oldest', label: m.th_kpi_oldest(),
       value: stats.backlog.oldestActiveAt ? duration((Date.now() - new Date(stats.backlog.oldestActiveAt).getTime()) / 60_000) : '—',
     },
   ] : []);
 
   // ── Tableau du staff ──────────────────────────────────
-  type SortKey = 'handled' | 'closed' | 'firstResponse' | 'resolution' | 'rating' | 'openNow';
+  type SortKey = 'handled' | 'closed' | 'firstResponse' | 'resolution' | 'rating' | 'openNow' | 'unanswered';
   let sort = $state<SortKey>('handled');
   const sortValue = (agent: TicketStats['agents'][number], key: SortKey): number => {
     switch (key) {
@@ -132,6 +136,7 @@
     { key: 'resolution', label: () => m.th_col_resolution() },
     { key: 'rating', label: () => m.th_col_csat() },
     { key: 'openNow', label: () => m.th_col_open() },
+    { key: 'unanswered', label: () => m.th_col_unanswered() },
   ];
 </script>
 
@@ -201,6 +206,7 @@
                       {rating(agent.rating)}{#if agent.ratings} <span class="text-on-surface-variant">· {agent.ratings}</span>{/if}
                     </td>
                     <td class="num">{fmtNumber(agent.openNow)}</td>
+                    <td class="num {agent.unanswered > 0 ? 'text-warning' : ''}">{fmtNumber(agent.unanswered)}</td>
                   </tr>
                 {/each}
               </tbody>

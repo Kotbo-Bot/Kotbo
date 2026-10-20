@@ -14716,5 +14716,11 @@
   "mcx_next": "Page suivante",
   "mcx_report": "Rapport",
   "mcx_see_recruitment": "Voir le recrutement",
-  "mcx_open_sanctions": "Ouvrir les sanctions"
+  "mcx_open_sanctions": "Ouvrir les sanctions",
+  "e1_tickets_staff_reminder_enable": "Relancer le staff quand un membre attend",
+  "e1_tickets_staff_reminder_desc": "Si personne du staff n'a répondu au membre après ce délai, le bot mentionne la personne qui a pris le ticket, sinon le rôle staff. Une relance par attente, comptée dans les statistiques.",
+  "e1_tickets_staff_reminder_minutes": "Délai sans réponse (minutes)",
+  "th_kpi_unanswered": "Restés sans réponse",
+  "th_kpi_unanswered_hint": "Tickets de la période où le staff a dû être relancé ({count} relance(s)). Active la relance dans Paramètres › Inactivité.",
+  "th_col_unanswered": "Sans réponse"
 }

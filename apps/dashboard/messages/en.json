@@ -14716,5 +14716,11 @@
   "mcx_next": "Next page",
   "mcx_report": "Report",
   "mcx_see_recruitment": "See recruitment",
-  "mcx_open_sanctions": "Open sanctions"
+  "mcx_open_sanctions": "Open sanctions",
+  "e1_tickets_staff_reminder_enable": "Remind staff when a member is waiting",
+  "e1_tickets_staff_reminder_desc": "If no staff member has replied after this delay, the bot mentions whoever claimed the ticket, otherwise the staff role. One reminder per wait, counted in the stats.",
+  "e1_tickets_staff_reminder_minutes": "Delay without reply (minutes)",
+  "th_kpi_unanswered": "Left unanswered",
+  "th_kpi_unanswered_hint": "Tickets in this period where staff had to be reminded ({count} reminder(s)). Turn reminders on in Settings › Inactivity.",
+  "th_col_unanswered": "Unanswered"
 }
