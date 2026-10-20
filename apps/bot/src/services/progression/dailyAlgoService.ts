@@ -1470,88 +1470,32 @@ export async function reviewDailyAlgoSubmission(params: {
   await updateDailyAlgoLeaderboard(params.client, submission.runId);
 
   const moderator = await params.client.users.fetch(params.moderatorId).catch(() => null);
-  const author = await params.client.users.fetch(submission.authorId).catch(() => null);
-
-  if (author) {
-    const guild = params.client.guilds.cache.get(submission.run.guildId) || await params.client.guilds.fetch(submission.run.guildId).catch(() => null);
-    const serverName = guild ? guild.name : '';
-
-    const dmDescription = params.action === 'approve'
+  const details: string[] = [
+    params.action === 'approve'
       ? 'Ta soumission a été notée par le staff.'
       : params.action === 'dismiss'
         ? 'Ta soumission a été jugée hors-sujet par le staff : elle ne rapporte pas de points, mais elle n’entraîne aucune sanction. N’hésite pas à retenter demain !'
-        : 'Ta soumission a été rejetée par le staff.';
-
-    const dmStatusLabel = params.action === 'approve'
-      ? '✅ Validée'
-      : params.action === 'dismiss' ? '🚫 Hors-sujet' : '❌ Rejetée';
-
-    const dmEmbed = new EmbedBuilder()
-      .setColor(params.action === 'approve'
-        ? COLORS.success
-        : params.action === 'dismiss' ? COLORS.warning : COLORS.danger)
-      .setTitle(`📬 Retour Daily Algo · ${submission.run.problem.title}`)
-      .setDescription(dmDescription)
-      .addFields(
-        {
-          name: 'Statut',
-          value: dmStatusLabel,
-          inline: true,
-        },
-        {
-          name: 'Modérateur',
-          value: moderator?.globalName ?? moderator?.username ?? `ID ${params.moderatorId}`,
-          inline: true,
-        },
-      )
-      .setTimestamp()
-      .setFooter({ text: serverName ? `Kotbo · Daily Algo · ${serverName}` : 'Kotbo · Daily Algo' });
-
-    if (params.action === 'approve' && params.scores) {
-      const average = Number(updateData.scoreFinal ?? 0);
-      const totalPoints = Number(updateData.pointsAwarded ?? 0);
-      const bonusLabel = effectiveBonus > 0 ? ` (dont ⚡+${effectiveBonus} de rapidité)` : '';
-
-      dmEmbed.addFields(
-        {
-          name: 'Détail des notes',
-          value: `✅ ${updateData.scoreCorrectness}/5 · 💬 ${updateData.scoreComments}/5 · 📦 ${updateData.scoreCompactness}/5 · ⚡ ${updateData.scoreOptimization}/5 · 🧹 ${updateData.scoreReadability}/5`,
-          inline: false,
-        },
-        {
-          name: 'Résultat',
-          value: `Moyenne: **${average.toFixed(1)}/5** · Total: **${totalPoints} pts**${bonusLabel}`,
-          inline: false,
-        },
-      );
-    }
-
-    if (normalizedFeedback) {
-      dmEmbed.addFields({
-        name: 'Feedback',
-        value: truncate(normalizedFeedback, 1024),
-        inline: false,
-      });
-    }
-
-    await author.send({ embeds: [dmEmbed] }).catch(() => null);
-
-    // Notification Dashboard
-    await notify({
-      guildId: submission.run.guildId,
-      userId: submission.authorId,
-      kind: 'community.daily_algo_feedback',
-      title: `Retour Daily Algo : ${submission.run.problem.title}`,
-      message: params.action === 'approve'
-        ? `Votre soumission a été validée avec une note de ${updateData.scoreFinal}/5, soit ${updateData.pointsAwarded} pts.`
-        : params.action === 'dismiss'
-          ? `Votre soumission a été jugée hors-sujet (aucune sanction). Motif : ${normalizedFeedback || 'Non spécifié'}`
-          : `Votre soumission a été rejetée. Motif : ${normalizedFeedback || 'Non spécifié'}`,
-      severity: params.action === 'approve' ? 'SUCCESS' : params.action === 'dismiss' ? 'WARNING' : 'ERROR',
-      link: '/dailyalgo/ide',
-      dm: false,
-    }).catch(() => null);
+        : 'Ta soumission a été rejetée par le staff.',
+    `**Statut** : ${params.action === 'approve' ? '✅ Validée' : params.action === 'dismiss' ? '🚫 Hors-sujet' : '❌ Rejetée'} · **Modérateur** : ${moderator?.globalName ?? moderator?.username ?? `ID ${params.moderatorId}`}`,
+  ];
+  if (params.action === 'approve' && params.scores) {
+    const bonusLabel = effectiveBonus > 0 ? ` (dont ⚡+${effectiveBonus} de rapidité)` : '';
+    details.push(
+      `**Détail des notes** : ✅ ${updateData.scoreCorrectness}/5 · 💬 ${updateData.scoreComments}/5 · 📦 ${updateData.scoreCompactness}/5 · ⚡ ${updateData.scoreOptimization}/5 · 🧹 ${updateData.scoreReadability}/5`,
+      `**Résultat** : moyenne **${Number(updateData.scoreFinal ?? 0).toFixed(1)}/5** · total **${Number(updateData.pointsAwarded ?? 0)} pts**${bonusLabel}`,
+    );
   }
+  if (normalizedFeedback) details.push(`**Feedback** : ${truncate(normalizedFeedback, 1024)}`);
+
+  await notify({
+    guildId: submission.run.guildId,
+    userId: submission.authorId,
+    kind: 'community.daily_algo_feedback',
+    title: `Retour Daily Algo : ${submission.run.problem.title}`,
+    message: details.join('\n'),
+    severity: params.action === 'approve' ? 'SUCCESS' : params.action === 'dismiss' ? 'WARNING' : 'ERROR',
+    link: '/dailyalgo/ide',
+  }).catch(() => null);
 
   // Notation faite depuis Discord comme depuis le panel : le classement de la
   // semaine et la file de validation changent, on prévient les onglets ouverts.

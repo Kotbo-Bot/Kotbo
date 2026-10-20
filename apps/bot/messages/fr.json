@@ -3931,8 +3931,6 @@
   "site_metric_joined30d": "Arrivées ce mois-ci",
   "site_metric_wiki_pages": "Pages du wiki",
   "site_metric_blog_articles": "Articles",
-  "site_notify_footer": "Site communautaire",
-  "site_notify_open": "Ouvrir sur le site",
   "site_notify_ticket_title": "Nouvelle réponse à ton ticket",
   "site_notify_ticket_body": "Le staff a répondu à ton ticket « {subject} ». Tu peux lui répondre depuis le site ou sur Discord.",
   "site_notify_comment_title": "Nouveau commentaire sur « {title} »",
@@ -4305,7 +4303,7 @@
   "log_tempvoice_action_ecr_jamais": "MP d'écriture : ne plus demander",
   "log_tempvoice_action_m_redemander": "Redemander pour l'écriture d'un membre",
   "log_tempvoice_state_chat_ask": "Question en MP pour {target}",
-  "ntf_open": "Ouvrir le dashboard",
+  "ntf_open": "Ouvrir",
   "ntf_inbox": "Voir mes notifications",
   "ntf_mute": "Ne plus recevoir ce type",
   "ntf_mute_done": "C'est noté : plus de MP « {category} ». Tu peux les réactiver dans tes paramètres du dashboard.",
@@ -4322,5 +4320,9 @@
   "ntf_cat_tickets": "Tickets",
   "ntf_cat_partnerships": "Partenariats",
   "ntf_cat_community": "Communauté",
-  "ntf_cat_system": "Système"
+  "ntf_cat_system": "Système",
+  "ntf_level_up_title": "Niveau {level} atteint",
+  "ntf_join_blocked_title": "Accès au serveur refusé",
+  "ntf_reminder_title": "Rappel",
+  "ntf_staff_invite_title": "Bienvenue dans l'équipe"
 }

@@ -2,6 +2,7 @@ import { EmbedBuilder, PermissionFlagsBits, type GuildMember } from 'discord.js'
 import type { RaidProtectionConfig } from '@prisma/client';
 import { logger } from '../../utils/logger.js';
 import { COLORS } from '../../utils/embeds.js';
+import { notifyJoinBlocked } from '../notifications/notifyService.js';
 import { registerBanSanction, registerKickSanction } from './sanctionService.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -68,7 +69,7 @@ export async function handleJoinAccountAgeGuard(member: GuildMember, config: Rai
   // un raid ; le salon d'alerte ci-dessous en tient lieu.
   try {
     if (action !== 'ALERT') {
-      await member.send(`🔒 **${guild.name}** - ${config.accountAgeMessage}`).catch(() => null);
+      await notifyJoinBlocked(guild.id, member.id, config.accountAgeMessage);
     }
 
     if (action === 'BAN') {

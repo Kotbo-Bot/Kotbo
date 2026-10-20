@@ -10,6 +10,7 @@ import {
   type TextChannel,
 } from 'discord.js';
 import prisma from '../../utils/db.js';
+import { notify } from '../notifications/notifyService.js';
 import { logger } from '../../utils/logger.js';
 import { COLORS } from '../../utils/embeds.js';
 import { getRaidProtectionConfig, upsertRaidProtectionConfig } from './raidProtectionService.js';
@@ -30,9 +31,8 @@ async function sendInviteAlert(guild: Guild, config: RaidProtectionConfig, embed
   }
 }
 
-async function notifyCreator(client: Client, creatorId: string, guildName: string, message: string): Promise<void> {
-  const user = await client.users.fetch(creatorId).catch(() => null);
-  await user?.send(`🔗 **${guildName}** - ${message}`).catch(() => null);
+async function notifyCreator(guildId: string, creatorId: string, message: string): Promise<void> {
+  await notify({ guildId, userId: creatorId, kind: 'security.invite_update', title: 'Ton invitation', message }).catch(() => null);
 }
 
 /**
@@ -55,7 +55,7 @@ export async function handleInviteCreate(invite: Invite): Promise<void> {
   // ── 1. Mode urgence : tout est supprimé, sans exception ────────────────────
   if (config.inviteEmergencyEnabled) {
     await invite.delete('Mode urgence invitations actif').catch(() => null);
-    await notifyCreator(client, creatorId, fullGuild.name,
+    await notifyCreator(fullGuild.id, creatorId,
       'La création d\'invitations est **suspendue** (mode urgence). Ton invitation a été supprimée.');
     await sendInviteAlert(fullGuild, config, new EmbedBuilder()
       .setColor(COLORS.danger)
@@ -83,7 +83,7 @@ export async function handleInviteCreate(invite: Invite): Promise<void> {
   // ── 3. Règle unitaire : seules les invitations à 1 usage sont autorisées ──
   if (config.inviteRequireUnitary && invite.maxUses !== 1) {
     await invite.delete('Invitation non unitaire (seules les invitations à 1 usage sont autorisées)').catch(() => null);
-    await notifyCreator(client, creatorId, fullGuild.name,
+    await notifyCreator(fullGuild.id, creatorId,
       `Ton invitation \`${invite.code}\` a été supprimée : seules les invitations à **1 usage** sont autorisées sur ce serveur (pas de 0/∞).`);
     await sendInviteAlert(fullGuild, config, new EmbedBuilder()
       .setColor(COLORS.warning)
@@ -109,7 +109,7 @@ export async function handleInviteCreate(invite: Invite): Promise<void> {
       },
     });
 
-    await notifyCreator(client, creatorId, fullGuild.name,
+    await notifyCreator(fullGuild.id, creatorId,
       'Ton invitation est **en attente de validation** par le staff. Tu recevras le lien si elle est approuvée.');
 
     const embed = new EmbedBuilder()
@@ -220,7 +220,7 @@ export async function approveInviteRequest(client: Client, requestId: string, st
     data: { status: 'APPROVED', handledById: staffId, handledAt: new Date(), approvedInviteCode: approvedCode },
   });
 
-  await notifyCreator(client, request.creatorId, guild.name,
+  await notifyCreator(request.guildId, request.creatorId,
     inviteUrl
       ? `Ton invitation a été **approuvée** par le staff ! Voici ton lien : ${inviteUrl}`
       : 'Ton invitation a été approuvée, mais la recréation a échoué. Contacte le staff.');
@@ -237,8 +237,7 @@ export async function rejectInviteRequest(client: Client, requestId: string, sta
     data: { status: 'REJECTED', handledById: staffId, handledAt: new Date() },
   });
 
-  const guild = client.guilds.cache.get(request.guildId);
-  await notifyCreator(client, request.creatorId, guild?.name ?? 'Serveur',
+  await notifyCreator(request.guildId, request.creatorId,
     'Ton invitation a été **rejetée** par le staff.');
 
   return updated;

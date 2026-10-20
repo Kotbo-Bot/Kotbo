@@ -374,3 +374,11 @@ export async function notify(input: NotifyInput, now = new Date()): Promise<Noti
 export async function notifyMany(userIds: Iterable<string>, input: Omit<NotifyInput, 'userId'>): Promise<void> {
   await Promise.allSettled([...new Set(userIds)].map((userId) => notify({ ...input, userId })));
 }
+
+/** MP au membre qu'on s'apprête à sortir du serveur (protection, captcha, piège) : à attendre avant l'expulsion. */
+export async function notifyJoinBlocked(guildId: string, userId: string, message: string, link?: string): Promise<void> {
+  const locale = await resolveGuildLocale(guildId);
+  await notify({ guildId, userId, kind: 'security.join_blocked', title: m.ntf_join_blocked_title({}, { locale }), message, severity: 'WARNING', link }).catch(
+    () => null,
+  );
+}

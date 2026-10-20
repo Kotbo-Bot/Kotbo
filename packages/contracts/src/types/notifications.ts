@@ -46,6 +46,7 @@ export const NOTIFICATION_KINDS = {
   'staff.resignation_requested': { category: 'staff' },
   'staff.resignation_decided': { category: 'staff', mandatory: true },
   'staff.news_published': { category: 'staff' },
+  'staff.staff_server_invite': { category: 'staff', mandatory: true },
 
   // Planning
   'planning.absence_pending': { category: 'planning' },
@@ -56,6 +57,7 @@ export const NOTIFICATION_KINDS = {
   'planning.meeting_ended': { category: 'planning' },
   'planning.call_scheduled': { category: 'planning' },
   'planning.task_assigned': { category: 'planning' },
+  'planning.reminder': { category: 'planning', mandatory: true, urgent: true },
 
   // Recrutement
   'recruitment.application_received': { category: 'recruitment' },
@@ -71,18 +73,34 @@ export const NOTIFICATION_KINDS = {
   'moderation.sanction_report_missing': { category: 'moderation' },
   'moderation.warning_received': { category: 'moderation', mandatory: true },
   'moderation.ban_hygiene': { category: 'moderation' },
+  // Messages au membre sanctionné : jamais coupables, ils partent avant l'expulsion.
+  'moderation.sanction_notice': { category: 'moderation', mandatory: true },
+  'moderation.appeal_update': { category: 'moderation', mandatory: true },
+  'moderation.sanction_contested': { category: 'moderation' },
 
   // Sécurité
   'security.alt_linked': { category: 'security', mandatory: true },
   'security.alt_unlinked': { category: 'security', mandatory: true },
   'security.alt_detected': { category: 'security', urgent: true },
   'security.verification_undelivered': { category: 'security' },
+  'security.join_blocked': { category: 'security', mandatory: true },
+  'security.invite_update': { category: 'security' },
+  'security.verification_notice': { category: 'security', mandatory: true },
+  'security.admin_lock': { category: 'security', mandatory: true, urgent: true },
+
+  // Tickets
+  'tickets.update': { category: 'tickets', mandatory: true },
+  'tickets.queue': { category: 'tickets' },
 
   // Partenariats
   'partnerships.alert': { category: 'partnerships' },
+  'partnerships.application_decided': { category: 'partnerships', mandatory: true },
 
   // Communauté
   'community.daily_algo_feedback': { category: 'community', mandatory: true },
+  'community.level_up': { category: 'community' },
+  'community.shop': { category: 'community' },
+  'community.site': { category: 'community' },
 
   // Système (repli pour ce qui n'a pas encore de type)
   'system.generic': { category: 'system' },

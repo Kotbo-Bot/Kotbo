@@ -597,7 +597,7 @@ export async function completeVerification(params: {
           invite: inviteUrl || '(invitation indisponible)',
           reason: appeal?.decisionReason || '',
         });
-        await sendMemberDM(client, verification.userId, dmMsg);
+        await sendMemberDM(client, verification.userId, dmMsg, guild.id, 'security.verification_notice');
       }
 
       const member = await guild.members.fetch(verifiedDiscordId).catch(() => null);

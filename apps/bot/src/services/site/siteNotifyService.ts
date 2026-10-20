@@ -6,8 +6,9 @@
  * n'est pas une erreur : on passe.
  */
 
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, type Client, type Message } from 'discord.js';
-import { normalizeSiteNotifications, resolveSiteTheme, type SiteNotificationKind, type SiteNotificationPrefs } from '@kotbo/shared';
+import { type Client, type Message } from 'discord.js';
+import { normalizeSiteNotifications, type SiteNotificationKind, type SiteNotificationPrefs } from '@kotbo/shared';
+import { notify } from '../notifications/notifyService.js';
 import prisma from '../../utils/db.js';
 import { cache } from '../../utils/cache.js';
 import { logger } from '../../utils/logger.js';
@@ -42,30 +43,15 @@ export interface SiteNotification {
  * Envoie un MP si le membre l'accepte pour ce type. Renvoie `true` quand le
  * message est parti.
  */
-export async function notifySiteMember(client: Client, guildId: string, userId: string, kind: SiteNotificationKind, notification: SiteNotification): Promise<boolean> {
+export async function notifySiteMember(_client: Client, guildId: string, userId: string, kind: SiteNotificationKind, notification: SiteNotification): Promise<boolean> {
   const prefs = await getSiteNotificationPrefs(guildId, userId);
   if (!prefs[kind]) return false;
-  const site = await getSiteByGuild(guildId);
-  if (!site || !(await isSiteReachable(site))) return false;
-
-  const guild = client.guilds.cache.get(guildId);
-  const locale = (await resolveGuildLocale(guildId, guild?.preferredLocale)) === 'en' ? 'en' : 'fr';
   const url = await siteUrl(guildId, notification.path ?? '');
-  const accent = resolveSiteTheme(site.theme, site.themeSettings).accent;
-
-  const embed = new EmbedBuilder()
-    .setColor(Number.parseInt(accent.slice(1), 16))
-    .setTitle(notification.title.slice(0, 256))
-    .setDescription(notification.body.slice(0, 2000))
-    .setFooter({ text: `${site.name || guild?.name || site.slug} · ${m.site_notify_footer({}, { locale })}`.slice(0, 2048) });
-  const components = url
-    ? [new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setStyle(ButtonStyle.Link).setURL(url).setLabel(m.site_notify_open({}, { locale })))]
-    : [];
+  if (!url) return false;
 
   try {
-    const user = await client.users.fetch(userId);
-    await user.send({ embeds: [embed], components });
-    return true;
+    const { dm } = await notify({ guildId, userId, kind: 'community.site', title: notification.title, message: notification.body.slice(0, 2000), link: url });
+    return dm === 'sent' || dm === 'queued';
   } catch (err) {
     logger.debug('Site', `MP du site non remis à ${userId} (${guildId}) :`, err);
     return false;

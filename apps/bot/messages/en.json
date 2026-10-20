@@ -3931,8 +3931,6 @@
   "site_metric_joined30d": "Joined this month",
   "site_metric_wiki_pages": "Wiki pages",
   "site_metric_blog_articles": "Articles",
-  "site_notify_footer": "Community site",
-  "site_notify_open": "Open on the site",
   "site_notify_ticket_title": "New reply to your ticket",
   "site_notify_ticket_body": "Staff replied to your ticket \"{subject}\". You can answer from the site or on Discord.",
   "site_notify_comment_title": "New comment on \"{title}\"",
@@ -4305,7 +4303,7 @@
   "log_tempvoice_action_ecr_jamais": "Chat DM: don't ask again",
   "log_tempvoice_action_m_redemander": "Ask again about a member's chat",
   "log_tempvoice_state_chat_ask": "DM question for {target}",
-  "ntf_open": "Open the dashboard",
+  "ntf_open": "Open",
   "ntf_inbox": "See my notifications",
   "ntf_mute": "Stop this type",
   "ntf_mute_done": "Done: no more \"{category}\" DMs. You can turn them back on in your dashboard settings.",
@@ -4322,5 +4320,9 @@
   "ntf_cat_tickets": "Tickets",
   "ntf_cat_partnerships": "Partnerships",
   "ntf_cat_community": "Community",
-  "ntf_cat_system": "System"
+  "ntf_cat_system": "System",
+  "ntf_level_up_title": "Level {level} reached",
+  "ntf_join_blocked_title": "Server access denied",
+  "ntf_reminder_title": "Reminder",
+  "ntf_staff_invite_title": "Welcome to the team"
 }

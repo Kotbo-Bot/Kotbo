@@ -2,6 +2,7 @@ import { type Client, type GuildMember, type Message, type TextChannel, ActionRo
 import { createCanvas } from '@napi-rs/canvas';
 import crypto from 'node:crypto';
 import prisma from '../../utils/db.js';
+import { notifyJoinBlocked } from '../notifications/notifyService.js';
 import { logger } from '../../utils/logger.js';
 import { COLORS } from '../../utils/embeds.js';
 import type { CaptchaSession, RaidProtectionConfig } from '@prisma/client';
@@ -387,7 +388,7 @@ export async function handleCaptchaMessage(message: Message): Promise<boolean> {
 }
 
 async function applyFailAction(member: GuildMember, config: RaidProtectionConfig, reason: string): Promise<void> {
-  await member.send(`🔐 **${member.guild.name}** : ${reason}. Tu peux retenter en rejoignant à nouveau le serveur.`).catch(() => null);
+  await notifyJoinBlocked(member.guild.id, member.id, `${reason}. Tu peux retenter en rejoignant à nouveau le serveur.`);
   if (config.captchaFailAction === 'BAN') {
     await member.ban({ reason }).catch(() => null);
   } else {

@@ -2,6 +2,7 @@ import { Client, EmbedBuilder, type TextChannel } from 'discord.js';
 import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
 import { COLORS } from '../../utils/embeds.js';
+import { notify } from '../notifications/notifyService.js';
 
 export async function processDueReminders(client: Client) {
   const now = new Date();
@@ -69,7 +70,15 @@ export async function processDueReminders(client: Client) {
 
         // Fallback or default to DM
         if (!sent) {
-          await user.send({ embeds: [embed] });
+          const linked = (embed.data.fields ?? []).map((f) => `**${f.name}**\n${f.value}`);
+          await notify({
+            guildId: reminder.guildId,
+            userId: reminder.userId,
+            kind: 'planning.reminder',
+            title: 'Rappel',
+            message: [reminder.message, ...linked].join('\n\n'),
+            severity: 'WARNING',
+          });
           sent = true;
         }
 

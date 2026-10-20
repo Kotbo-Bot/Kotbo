@@ -414,31 +414,6 @@ export async function rejectCandidature(
 
   const discordGuild = client.guilds.cache.get(guildId) ?? await client.guilds.fetch(guildId).catch(() => null);
 
-  // Send DM if we have a discord ID and there's a reason
-  if (candidature.discordId && discordGuild) {
-    try {
-      const member = await discordGuild.members.fetch(candidature.discordId).catch(() => null);
-      if (member) {
-        const embed = new EmbedBuilder()
-          .setColor(0xed4245)
-          .setTitle('❌ Candidature Refusée')
-          .setDescription(
-            reason
-              ? `Votre candidature sur **${discordGuild.name}** a été refusée.\n\n**Raison :** ${reason}`
-              : `Votre candidature sur **${discordGuild.name}** a été refusée. Aucune raison spécifique n'a été communiquée.`
-          )
-          .setFooter({ text: `Kotbo · Recrutement · ${discordGuild.name}` })
-          .setTimestamp();
-
-        await member.send({ embeds: [embed], allowedMentions: { parse: [] } }).catch(err => {
-          logger.warn('Recruitment', `Impossible d'envoyer un MP à ${candidature.discordId}: ${err.message}`);
-        });
-      }
-    } catch (err) {
-      logger.warn('Recruitment', `Erreur lors de l'envoi du MP de refus: ${err}`);
-    }
-  }
-
   const result = await prisma.recruitmentCandidature.update({
     where: { id: candidatureId },
     data: {
@@ -449,55 +424,21 @@ export async function rejectCandidature(
   });
 
   if (candidature.discordId) {
-    // Le MP de refus est parti plus haut : celui-ci n'alimente que la boîte.
     await notify({
       guildId,
       userId: candidature.discordId,
       kind: 'recruitment.application_rejected',
       title: 'Candidature refusée',
-      message: `Votre candidature a été refusée pour la raison suivante : ${reason || 'Aucune raison spécifiée.'}`,
+      message: reason
+        ? `Votre candidature sur **${discordGuild?.name ?? guildId}** a été refusée.\n\n**Raison :** ${reason}`
+        : `Votre candidature sur **${discordGuild?.name ?? guildId}** a été refusée. Aucune raison spécifique n'a été communiquée.`,
       severity: 'ERROR',
       link: '/recruitment',
       actorId: processedByUserId,
-      dm: false,
     }).catch(() => null);
   }
 
   return result;
-}
-
-// ============================================================================
-// SEND AUTO-REJECT DM
-// ============================================================================
-
-export async function sendAutoRejectDM(
-  client: Client,
-  guildId: string,
-  discordId: string | null,
-  reason: string,
-) {
-  if (!discordId) return;
-
-  const discordGuild = client.guilds.cache.get(guildId) ?? await client.guilds.fetch(guildId).catch(() => null);
-  if (!discordGuild) return;
-
-  try {
-    const member = await discordGuild.members.fetch(discordId).catch(() => null);
-    if (member) {
-      const embed = new EmbedBuilder()
-        .setColor(0xed4245)
-        .setTitle('❌ Candidature Automatiquement Refusée')
-        .setDescription(`Votre candidature sur **${discordGuild.name}** a été automatiquement refusée.\n\n**Raison :** ${reason}`)
-        .setFooter({ text: `Kotbo · Recrutement Automatique · ${discordGuild.name}` })
-        .setTimestamp();
-
-      await member.send({ embeds: [embed], allowedMentions: { parse: [] } }).catch(err => {
-        logger.warn('Recruitment', `Impossible d'envoyer le MP d'auto-refus à ${discordId}: ${err.message}`);
-      });
-    }
-  } catch (err) {
-    logger.warn('Recruitment', `Erreur lors de l'envoi du MP d'auto-refus: ${err}`);
-  }
 }
 
 // ============================================================================
@@ -528,29 +469,20 @@ export async function completeOral(
     reapplyDate.setMonth(reapplyDate.getMonth() + 1);
     const reapplyTimestamp = Math.floor(reapplyDate.getTime() / 1000);
 
-    // Send DM with reapply date
-    if (candidature.discordId && discordGuild) {
-      try {
-        const member = await discordGuild.members.fetch(candidature.discordId).catch(() => null);
-        if (member) {
-          const embed = new EmbedBuilder()
-            .setColor(0xed4245)
-            .setTitle('❌ Entretien Oral Non Concluant')
-            .setDescription(
-              `Votre entretien oral sur **${discordGuild.name}** n'a malheureusement pas été concluant.\n\n` +
-              (reason ? `**Raison :** ${reason}\n\n` : '') +
-              `Vous pourrez re-candidater à partir du <t:${reapplyTimestamp}:f> (<t:${reapplyTimestamp}:R>).`
-            )
-            .setFooter({ text: `Kotbo · Recrutement · ${discordGuild.name}` })
-            .setTimestamp();
-
-          await member.send({ embeds: [embed], allowedMentions: { parse: [] } }).catch(err => {
-            logger.warn('Recruitment', `Impossible d'envoyer le MP oral échoué à ${candidature.discordId}: ${err.message}`);
-          });
-        }
-      } catch (err) {
-        logger.warn('Recruitment', `Erreur lors de l'envoi du MP oral: ${err}`);
-      }
+    if (candidature.discordId) {
+      await notify({
+        guildId,
+        userId: candidature.discordId,
+        kind: 'recruitment.application_rejected',
+        title: 'Entretien oral non concluant',
+        message:
+          `Votre entretien oral sur **${discordGuild?.name ?? guildId}** n'a malheureusement pas été concluant.\n\n` +
+          (reason ? `**Raison :** ${reason}\n\n` : '') +
+          `Vous pourrez re-candidater à partir du <t:${reapplyTimestamp}:f> (<t:${reapplyTimestamp}:R>).`,
+        severity: 'ERROR',
+        link: '/recruitment',
+        actorId: processedByUserId,
+      }).catch(() => null);
     }
 
     return await prisma.recruitmentCandidature.update({

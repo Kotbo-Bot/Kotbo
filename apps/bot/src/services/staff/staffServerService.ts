@@ -391,11 +391,16 @@ async function sendOnboardingInvite(
   // Provenance = le serveur principal d'où vient le staff onboardé.
   await recordBotInvite(invite, INVITE_SOURCE.staffOnboarding(member.guild.name));
 
-  const dmSent = await member.send(
-    `🎉 Bienvenue dans l'équipe staff de **${member.guild.name}** !\n` +
-    `Voici ton invitation au serveur staff : ${invite.url}\n` +
-    `*(valable 7 jours, 1 utilisation)*`,
-  ).then(() => true).catch(() => false);
+  const { notify } = await import('../notifications/notifyService.js');
+  const dmSent = await notify({
+    guildId: member.guild.id,
+    userId: member.id,
+    kind: 'staff.staff_server_invite',
+    title: `Bienvenue dans l'équipe staff de ${member.guild.name}`,
+    message: `Voici ton invitation au serveur staff : ${invite.url}\n*(valable 7 jours, 1 utilisation)*`,
+    severity: 'SUCCESS',
+    link: invite.url,
+  }).then((r) => r.dm === 'sent').catch(() => false);
 
   const logChannel = await resolveLogChannel(member.guild, link.mainLogChannelId, TAG);
   if (logChannel) {
