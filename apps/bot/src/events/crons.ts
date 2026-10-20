@@ -412,6 +412,10 @@ export async function registerCrons(client: Client): Promise<void> {
       const { publishDuePages } = await import('../services/site/siteAdminService.js');
       await publishDuePages(client);
     },
+    'notification-dm-flush': async () => {
+      const { flushNotificationDms } = await import('../services/notifications/notifyService.js');
+      await flushNotificationDms();
+    },
     'site-vote-reminders': async () => {
       const { sendVoteReminders } = await import('../services/site/siteVoteService.js');
       await sendVoteReminders(client);
@@ -547,6 +551,14 @@ export async function registerCrons(client: Client): Promise<void> {
   cron.schedule('* * * * *', async () => {
     await runCronJob('sanctions', async () => {
       await processScheduledSanctions(client);
+    }, 1000);
+  });
+
+  // 🔔 Notifications : MP regroupés et résumés quotidiens arrivés à échéance (toutes les minutes).
+  cron.schedule('* * * * *', async () => {
+    await runCronJob('notification-dm-flush', async () => {
+      const { flushNotificationDms } = await import('../services/notifications/notifyService.js');
+      await flushNotificationDms();
     }, 1000);
   });
 

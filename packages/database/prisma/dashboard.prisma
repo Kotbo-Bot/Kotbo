@@ -101,6 +101,29 @@ model NotificationPreference {
   @@map("notification_preferences")
 }
 
+// MP en attente : regroupés s'ils arrivent rapprochés, ou gardés pour le
+// résumé quotidien (`digest`). Une ligne envoyée est supprimée.
+model NotificationDm {
+  id       String @id @default(cuid())
+  userId   String
+  guildId  String
+  kind     String
+  category String
+  title    String
+  message  String
+  severity String  @default("INFO")
+  link     String? // Lien absolu, déjà porteur de ?guild=
+  digest   Boolean @default(false)
+
+  sendAfter DateTime
+  claimedAt DateTime? // Pris par un passage d'envoi : évite le doublon entre shards
+  createdAt DateTime  @default(now())
+
+  @@index([sendAfter, claimedAt])
+  @@index([userId])
+  @@map("notification_dms")
+}
+
 // ============================================================================
 // GESTION CENTRALISÉE DU DASHBOARD
 // ============================================================================
