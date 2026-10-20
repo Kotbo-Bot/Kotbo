@@ -226,6 +226,51 @@ export class FauxDiscord {
     actions.VoiceStateUpdate.handle(this.etatVocalBrut(userId, channelId));
   }
 
+  /** Une catégorie (type 4) et ses surcharges ; annoncée par CHANNEL_CREATE si le client existe. */
+  ajouterCategorie(id: string, surcharges: Brut[]): void {
+    const brut: Brut = { ...this.salonBrut(id, 'Catégorie', surcharges), type: 4 };
+    delete brut.bitrate;
+    delete brut.user_limit;
+    this.salons.set(id, brut);
+    if (this.client) this.differer(() => (this.client as unknown as { actions: Brut }).actions.ChannelCreate.handle(structuredClone(brut)));
+  }
+
+  /** Remplace toutes les surcharges d'un salon (ou d'une catégorie) et l'annonce par CHANNEL_UPDATE. */
+  remplacerSurcharges(salonId: string, surcharges: Brut[]): void {
+    const salon = this.salons.get(salonId);
+    if (!salon) return;
+    salon.permission_overwrites = structuredClone(surcharges);
+    this.annoncerSalon(salonId);
+  }
+
+  /**
+   * `SendMessages` effectif dans ce salon, calculé comme Discord sur l'état du
+   * faux serveur (et non sur le cache du client) : rôles, Administrateur, puis
+   * @everyone, rôles (refus puis accords) et membre.
+   */
+  peutEcrire(salonId: string, userId: string): boolean {
+    const salon = this.salons.get(salonId);
+    const membre = this.membres.get(userId);
+    if (!salon || !membre) return false;
+    const roles = membre.roles as string[];
+    const role = (id: string) => this.roles.find((r) => r.id === id);
+    let perms = BigInt(role(IDS.GUILD)!.permissions);
+    for (const id of roles) perms |= BigInt(role(id)?.permissions ?? '0');
+    if ((perms & P.Administrator) === P.Administrator) return true;
+    const surcharge = (id: string) => (salon.permission_overwrites as Brut[]).find((o) => o.id === id);
+    const appliquer = (o: Brut | undefined) => { if (o) perms = (perms & ~BigInt(o.deny)) | BigInt(o.allow); };
+    appliquer(surcharge(IDS.GUILD));
+    let allow = 0n;
+    let deny = 0n;
+    for (const id of roles) {
+      const o = surcharge(id);
+      if (o) { allow |= BigInt(o.allow); deny |= BigInt(o.deny); }
+    }
+    perms = (perms & ~deny) | allow;
+    appliquer(surcharge(userId));
+    return (perms & P.SendMessages) === P.SendMessages;
+  }
+
   /** Pose une surcharge côté serveur et la fait connaître par CHANNEL_UPDATE. */
   poserSurchargeDirecte(salonId: string, cible: string, type: 0 | 1, allow: bigint, deny = 0n): void {
     const salon = this.salons.get(salonId);
@@ -239,7 +284,12 @@ export class FauxDiscord {
     const brut = this.salons.get(salonId);
     if (!brut) return;
     const copie = structuredClone(brut);
-    this.differer(() => (this.client as unknown as { actions: Brut }).actions.ChannelUpdate.handle(copie));
+    // Comme le gestionnaire CHANNEL_UPDATE de la passerelle : l'action met le
+    // cache à jour, puis l'événement est émis avec l'ancien et le nouveau salon.
+    this.differer(() => {
+      const { old, updated } = (this.client as unknown as { actions: Brut }).actions.ChannelUpdate.handle(copie) ?? {};
+      if (old && updated) this.client.emit(Events.ChannelUpdate, old, updated);
+    });
   }
 
   supprimerSalon(salonId: string): void {
