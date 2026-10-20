@@ -1,24 +1,14 @@
 import type { SlashCommandDefinition } from '../../commands.js';
 import { SlashCommandBuilder, type ChatInputCommandInteraction, MessageFlags } from 'discord.js';
+import { MODULE_REGISTRY } from '@kotbo/contracts';
 import { errorEmbed, COLORS, baseEmbed } from '../../utils/embeds.js';
 import prisma from '../../utils/db.js';
-import fs from 'fs/promises';
 import { getEffectiveLocale, getCommandMetadata } from '../../utils/i18n.js';
+import { getModuleStates } from '../../services/core/moduleGate.js';
 import * as m from '../../lib/paraglide/messages.js';
-
-const packagePath = new URL('../../package.json', import.meta.url);
+import botPackageJson from '../../../package.json';
 
 const meta = getCommandMetadata('c6_info');
-
-async function getVersion() {
-  try {
-    const raw = await fs.readFile(packagePath, 'utf8');
-    const pkg = JSON.parse(raw);
-    return pkg.version ?? 'unknown';
-  } catch {
-    return 'unknown';
-  }
-}
 
 function formatUptime(totalSeconds: number): string {
   const days = Math.floor(totalSeconds / 86_400);
@@ -36,15 +26,7 @@ function formatMb(bytes: number): string {
   return `${Math.round(bytes / 1024 / 1024)} MB`;
 }
 
-function boolChip(enabled: boolean, locale: 'fr' | 'en'): string {
-  return enabled ? m.c6_bool_enabled({}, { locale }) : m.c6_bool_disabled({}, { locale });
-}
-
-function channelRef(channelId: string | null | undefined, locale: 'fr' | 'en'): string {
-  return channelId ? `<#${channelId}>` : m.c6_info_not_set({}, { locale });
-}
-
-function truncate(value: string, max = 120): string {
+function truncate(value: string, max: number): string {
   if (value.length <= max) return value;
   return `${value.slice(0, max - 3)}...`;
 }
@@ -66,17 +48,12 @@ async function execute(interaction: ChatInputCommandInteraction) {
     return;
   }
 
-  const [
-    guild,
-    version,
-    dailyAlgoRuns,
-    dailyAlgoSubmissions,
-  ] = await Promise.all([
-    prisma.guild.findUnique({ where: { id: guildId } }),
-    getVersion(),
-    prisma.dailyAlgoRun.count({ where: { guildId } }),
-    prisma.dailyAlgoSubmission.count({ where: { run: { guildId } } }),
-  ]);
+  const states = await getModuleStates(guildId);
+
+  // Les modules socle sont toujours là : seuls ceux que le serveur a choisis comptent.
+  const activeModules = MODULE_REGISTRY
+    .filter((mod) => !mod.core && states[mod.key] !== false)
+    .map((mod) => mod.name);
 
   const uptime = process.uptime();
   const memory = process.memoryUsage();
@@ -84,10 +61,6 @@ async function execute(interaction: ChatInputCommandInteraction) {
   const guildCreated = interaction.guild?.createdTimestamp
     ? `<t:${Math.floor(interaction.guild.createdTimestamp / 1000)}:R>`
     : m.c6_info_unknown({}, { locale });
-
-  const reposPreview = guild?.githubRepositories?.length
-    ? truncate(guild.githubRepositories.slice(0, 3).join(' • '), 140)
-    : m.c6_info_no_repos({}, { locale });
 
   const embed = baseEmbed(COLORS.info, { user: interaction.user })
     .setTitle(m.c6_info_title({}, { locale }))
@@ -97,13 +70,14 @@ async function execute(interaction: ChatInputCommandInteraction) {
       {
         name: m.c6_info_field_runtime_title({}, { locale }),
         value: m.c6_info_field_runtime_body({
-          version,
+          version: botPackageJson.version,
           node: process.version,
           uptime: formatUptime(uptime),
           ping: interaction.client.ws.ping,
           heapUsed: formatMb(memory.heapUsed),
           heapTotal: formatMb(memory.heapTotal),
-          platform: process.platform,
+          guildCount: interaction.client.guilds.cache.size,
+          userCount: interaction.client.users.cache.size,
         }, { locale }),
         inline: true,
       },
@@ -113,51 +87,31 @@ async function execute(interaction: ChatInputCommandInteraction) {
           name: interaction.guild?.name ?? m.c6_info_unknown({}, { locale }),
           created: guildCreated,
           memberCount: interaction.guild?.memberCount ?? 0,
-          guildCount: interaction.client.guilds.cache.size,
-          userCount: interaction.client.users.cache.size,
         }, { locale }),
         inline: true,
       },
       {
-        name: m.c6_info_field_modules_title({}, { locale }),
-        value: m.c6_info_field_modules_body({
-          translation: boolChip(guild?.translationEnabled ?? false, locale),
-          translateTo: guild?.defaultTranslateTo ?? 'FR',
-          codePolice: boolChip(guild?.codePoliceEnabled ?? false, locale),
-          dailyAlgo: boolChip(guild?.dailyAlgoEnabled ?? false, locale),
-          githubReleases: boolChip(guild?.githubReleasesEnabled ?? false, locale),
-        }, { locale }),
+        name: m.c6_info_field_modules_title({ count: activeModules.length }, { locale }),
+        value: activeModules.length
+          ? truncate(activeModules.join(' • '), 1024)
+          : m.c6_info_no_modules({}, { locale }),
         inline: false,
       },
-      {
-        name: m.c6_info_field_metrics_title({}, { locale }),
-        value: m.c6_info_field_metrics_body({
-          runs: dailyAlgoRuns,
-          submissions: dailyAlgoSubmissions,
-        }, { locale }),
-        inline: true,
-      },
-      {
-        name: m.c6_info_field_channels_title({}, { locale }),
-        value: m.c6_info_field_channels_body({
-          dailyAlgo: channelRef(guild?.dailyAlgoChannelId, locale),
-          dailyAlgoValidation: channelRef(guild?.dailyAlgoValidationChannelId, locale),
-          statusCheck: channelRef(guild?.statusCheckChannelId, locale),
-        }, { locale }),
-        inline: true,
-      },
-      {
-        name: m.c6_info_field_github_title({}, { locale }),
-        value: m.c6_info_field_github_body({
-          channel: channelRef(guild?.githubReleasesChannelId, locale),
-          repoCount: guild?.githubRepositories?.length ?? 0,
-          preview: reposPreview,
-        }, { locale }),
-        inline: false,
-      }
     )
     .setFooter({ text: m.c6_info_footer({}, { locale }), iconURL: interaction.guild?.iconURL() ?? undefined })
     .setTimestamp();
+
+  if (states.daily_algo) {
+    const [runs, submissions] = await Promise.all([
+      prisma.dailyAlgoRun.count({ where: { guildId } }),
+      prisma.dailyAlgoSubmission.count({ where: { run: { guildId } } }),
+    ]);
+    embed.addFields({
+      name: m.c6_info_field_metrics_title({}, { locale }),
+      value: m.c6_info_field_metrics_body({ runs, submissions }, { locale }),
+      inline: false,
+    });
+  }
 
   await interaction.reply({ embeds: [embed], flags: [MessageFlags.Ephemeral] });
 }
