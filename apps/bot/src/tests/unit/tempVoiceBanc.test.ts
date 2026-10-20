@@ -455,6 +455,7 @@ const CAS: CasAction[] = [
   { customId: `tempvoice:m_trust:${IDS.CIBLE}`, genre: 'bouton', chemin: [MEMBRES, fiche(IDS.CIBLE)], effet: ecrit('PUT', `/permissions/${IDS.CIBLE}`, (c) => accorde(c, C)) },
   { customId: `tempvoice:m_untrust:${IDS.AUTORISE}`, genre: 'bouton', chemin: [MEMBRES, fiche(IDS.AUTORISE)] },
   { customId: `tempvoice:m_transfer:${IDS.CIBLE}`, genre: 'bouton', chemin: [MEMBRES, fiche(IDS.CIBLE)], effet: proprietaireDevient(IDS.CIBLE) },
+  { customId: `tempvoice:m_ecrire:${IDS.CIBLE}`, genre: 'menuTexte', values: ['deny'], chemin: [MEMBRES, fiche(IDS.CIBLE)], effet: ecrit('PUT', `/permissions/${IDS.CIBLE}`, (c) => refuse(c, PermissionFlagsBits.SendMessages)) },
   { customId: 'tempvoice:claim', genre: 'bouton', chemin: [PROPRIETE] },
   ...(['resa_rien', 'resa_deplacer', 'resa_deconnecter'] as const).map((a): CasAction => ({
     customId: `tempvoice:${a}`, genre: 'bouton',

@@ -4280,5 +4280,20 @@
   "log_tempvoice_action_ban": "Choisir un membre à bannir (ancien panneau)",
   "log_tempvoice_action_trust": "Choisir un membre à autoriser (ancien panneau)",
   "log_tempvoice_action_transfer": "Choisir le nouveau propriétaire (ancien panneau)",
-  "log_tempvoice_field_trigger": "Déclenché par"
+  "log_tempvoice_field_trigger": "Déclenché par",
+  "panel_tempvoice_chat_exception_placeholder": "Écriture dans le chat",
+  "panel_tempvoice_chat_exception_allow": "Peut écrire",
+  "panel_tempvoice_chat_exception_deny": "Ne peut pas écrire",
+  "panel_tempvoice_chat_exception_follow": "Suivre le salon",
+  "panel_tempvoice_chat_exception_done": "Écriture de {name} : {choice}.",
+  "panel_tempvoice_chat_exception_owner": "L'écriture du propriétaire suit le mode du salon.",
+  "log_tempvoice_action_m_ecrire": "Régler l'écriture d'un membre",
+  "log_tempvoice_state_chat": "Écriture de {target}",
+  "log_tempvoice_val_chat_allow": "peut écrire",
+  "log_tempvoice_val_chat_deny": "ne peut pas écrire",
+  "log_tempvoice_val_chat_unset": "non réglé",
+  "log_tempvoice_val_chat_follow": "suit le salon",
+  "log_tempvoice_category_resync": "Écriture réalignée sur la catégorie",
+  "log_tempvoice_reason_category_changed": "catégorie modifiée",
+  "log_tempvoice_field_adjusted_channels": "Salons ajustés"
 }

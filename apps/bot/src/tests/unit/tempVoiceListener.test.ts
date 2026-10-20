@@ -2190,8 +2190,10 @@ describe('câblage du panneau refondu', () => {
     channel.members.set(OWNER, {});
     await listeners.get(Events.VoiceStateUpdate)?.(...sortieVocale(channel, invite));
 
-    // Rien de plus n'a été écrit : la surcharge d'« Autoriser » est intacte.
-    expect(edits).toHaveLength(ecrituresApresAutorisation);
+    // En « ceux qui sont en vocal », seule l'écriture suit la présence : le
+    // départ retire ce bit et rien d'autre — l'accès d'« Autoriser » reste.
+    expect(edits).toHaveLength(ecrituresApresAutorisation + 1);
+    expect(edits.at(-1)).toEqual({ id: INVITE, patch: { SendMessages: null } });
     tempChannels.delete(CHANNEL);
   });
 

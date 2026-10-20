@@ -1170,6 +1170,13 @@ model TempVoiceChannel {
   /// absent — la presentation du serveur s'applique, sans erreur.
   generatorChannelId String?
 
+  /// Exceptions d'ecriture posees depuis la fiche d'un membre :
+  /// `{ "<userId>": true | false }` (peut / ne peut pas ecrire, quel que soit le
+  /// mode). Une surcharge « peut ecrire » a la forme exacte d'une presence : sans
+  /// cette colonne, le demarrage la prenait pour une presence et l'effacait.
+  /// `null` = aucune exception.
+  writeExceptions Json?
+
   createdAt  DateTime @default(now())
 
   guild      Guild    @relation(fields: [guildId], references: [id], onDelete: Cascade)

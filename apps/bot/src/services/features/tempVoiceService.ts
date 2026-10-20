@@ -1686,19 +1686,29 @@ export const PATCH_PRESENCE_RETIREE: Readonly<Record<string, null>> = { SendMess
 
 export type DecisionSurcharge =
   | { action: 'poser'; origine: OrigineSurcharge; patch: Record<string, boolean | null> }
-  | { action: 'retirer'; patch: Record<string, boolean | null> }
+  | { action: 'retirer'; patch: Record<string, boolean | null>; garderOrigine?: true }
   | { action: 'conserver'; motif: 'autorisationExplicite' | 'dejaPosee' }
   | { action: 'aucune' };
 
-/** Quelqu'un entre en vocal. */
+/**
+ * Quelqu'un entre en vocal.
+ *
+ * `accordeEcriture` : sa surcharge nominative accorde déjà `SendMessages`. C'est
+ * elle qui décide, pas l'origine : une autorisation donnée en « ceux qui sont en
+ * vocal » ou dans une catégorie muette n'accorde pas l'écriture
+ * (`sansEcritureSiChatReserve`, `categoryTrustPatch`), et s'y fier laissait muet
+ * un autorisé pourtant connecté. Par défaut, une origine connue vaut un bit posé.
+ */
 export function decisionEntreeVocal(
   mode: ModeEcriture,
   origineActuelle: OrigineSurcharge | null,
+  accordeEcriture: boolean = origineActuelle !== null,
 ): DecisionSurcharge {
   if (mode !== 'inVoice') return { action: 'aucune' };
-  if (origineActuelle === 'autorisation') return { action: 'conserver', motif: 'autorisationExplicite' };
-  if (origineActuelle === 'presence') return { action: 'conserver', motif: 'dejaPosee' };
-  return { action: 'poser', origine: 'presence', patch: { ...PATCH_PRESENCE } };
+  if (accordeEcriture) {
+    return { action: 'conserver', motif: origineActuelle === 'autorisation' ? 'autorisationExplicite' : 'dejaPosee' };
+  }
+  return { action: 'poser', origine: origineActuelle ?? 'presence', patch: { ...PATCH_PRESENCE } };
 }
 
 /** Quelqu'un quitte le vocal. C'est ici que l'origine paie. */
@@ -1707,8 +1717,13 @@ export function decisionSortieVocal(
   origineActuelle: OrigineSurcharge | null,
 ): DecisionSurcharge {
   // Le cas qui justifie tout le mécanisme : ne jamais effacer un droit donné à
-  // la main, quel que soit le mode.
-  if (origineActuelle === 'autorisation') return { action: 'conserver', motif: 'autorisationExplicite' };
+  // la main. En « ceux qui sont en vocal », l'autorisation garde l'accès mais
+  // pas l'écriture, qui suit la présence comme pour tous : seul le bit part.
+  if (origineActuelle === 'autorisation') {
+    return mode === 'inVoice'
+      ? { action: 'retirer', patch: { ...PATCH_PRESENCE_RETIREE }, garderOrigine: true }
+      : { action: 'conserver', motif: 'autorisationExplicite' };
+  }
   // Une marque de présence n'a de sens qu'en mode `inVoice`. Hors de ce mode
   // c'est un reste d'un mode précédent : à nettoyer plutôt qu'à garder.
   if (origineActuelle === 'presence') return { action: 'retirer', patch: { ...PATCH_PRESENCE_RETIREE } };
@@ -1743,15 +1758,18 @@ export function transitionModeEcriture(
   nouveau: ModeEcriture,
   presents: readonly string[],
   origines: ReadonlyMap<string, OrigineSurcharge>,
+  /** Ceux dont la surcharge accorde déjà `SendMessages` ; absent = une marque vaut un bit posé. */
+  ecrivent?: ReadonlySet<string>,
 ): TransitionModeEcriture {
-  if (ancien === nouveau) return { aPoser: [], aRetirer: [] };
-
   if (nouveau === 'inVoice') {
-    // Ceux qui portent déjà une marque ont déjà leur surcharge — y compris une
-    // autorisation, qu'il ne faut surtout pas rétrograder en présence.
-    const aPoser = [...new Set(presents)].filter((userId) => !origines.has(userId));
+    // Ceux qui écrivent déjà n'ont rien à recevoir ; une autorisation sans le
+    // bit (catégorie muette, accordée en mode réservé) le reçoit comme tout présent.
+    // Même mode choisi de nouveau : la passe répare un présent oublié.
+    const aPoser = [...new Set(presents)].filter((userId) => (ecrivent ? !ecrivent.has(userId) : !origines.has(userId)));
     return { aPoser, aRetirer: [] };
   }
+
+  if (ancien === nouveau) return { aPoser: [], aRetirer: [] };
 
   if (ancien === 'inVoice') {
     const aRetirer = [...origines.entries()]
@@ -1761,6 +1779,14 @@ export function transitionModeEcriture(
   }
 
   return { aPoser: [], aRetirer: [] };
+}
+
+/** Exceptions d'écriture lues en base, `{ userId: true | false }` ; tout le reste est écarté. */
+export function normaliserExceptionsEcriture(brut: unknown): Record<string, boolean> {
+  if (!brut || typeof brut !== 'object' || Array.isArray(brut)) return {};
+  return Object.fromEntries(
+    Object.entries(brut).filter(([id, valeur]) => isSnowflake(id) && typeof valeur === 'boolean'),
+  ) as Record<string, boolean>;
 }
 
 /** Une surcharge de membre telle qu'on la relit au démarrage. */
@@ -1777,6 +1803,8 @@ export interface PlanNettoyagePresence {
   aRetirer: string[];
   /** Surcharges de présence à réinscrire au registre : ces personnes sont là. */
   aMarquerPresence: string[];
+  /** Présents sans écriture nominative : entrés pendant l'arrêt, personne ne les a posés. */
+  aPoser: string[];
 }
 
 /**
@@ -1798,13 +1826,15 @@ export function nettoyagePresenceAuDemarrage(
 ): PlanNettoyagePresence {
   const presence = surcharges.filter((s) => s.accordeEcriture && !s.accordeConnexion);
   if (mode !== 'inVoice') {
-    return { aRetirer: presence.map((s) => s.userId), aMarquerPresence: [] };
+    return { aRetirer: presence.map((s) => s.userId), aMarquerPresence: [], aPoser: [] };
   }
 
   const ici = new Set(presents);
+  const ecrivent = new Set(surcharges.filter((s) => s.accordeEcriture).map((s) => s.userId));
   return {
     aRetirer: presence.filter((s) => !ici.has(s.userId)).map((s) => s.userId),
     aMarquerPresence: presence.filter((s) => ici.has(s.userId)).map((s) => s.userId),
+    aPoser: [...ici].filter((userId) => !ecrivent.has(userId)),
   };
 }
 

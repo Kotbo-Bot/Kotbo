@@ -84,6 +84,7 @@ const CAS: Cas[] = [
   { action: 'm_trust', genre: 'bouton', suffixe: CIBLE, libelle: 'Autoriser un membre à rejoindre le salon' },
   { action: 'm_untrust', genre: 'bouton', suffixe: CIBLE, libelle: "Retirer l'autorisation d'un membre" },
   { action: 'm_transfer', genre: 'bouton', suffixe: CIBLE, libelle: 'Transférer la propriété du salon' },
+  { action: 'm_ecrire', genre: 'menu', suffixe: CIBLE, values: ['deny'], libelle: "Régler l'écriture d'un membre" },
   // Suite d'une réservation
   { action: 'resa_rien', genre: 'bouton', libelle: 'Réservation : ne déplacer personne' },
   { action: 'resa_deplacer', genre: 'bouton', libelle: 'Réservation : déplacer les membres restants' },

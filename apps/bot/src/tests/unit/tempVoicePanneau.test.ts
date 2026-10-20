@@ -848,12 +848,36 @@ describe('origine des surcharges — entrées et sorties', () => {
     // Le point dur de toute la refonte. Sans la distinction d'origine, ce
     // départ effacerait un droit donné à la main par le propriétaire, et
     // personne ne comprendrait pourquoi l'accès a disparu.
-    for (const mode of MODES_ECRITURE) {
+    for (const mode of MODES_ECRITURE.filter((m) => m !== 'inVoice')) {
       expect(decisionSortieVocal(mode, 'autorisation')).toEqual({
         action: 'conserver',
         motif: 'autorisationExplicite',
       });
     }
+    // En « en vocal », l'accès reste mais l'écriture suit la présence : seul le
+    // bit part, la marque d'autorisation reste.
+    expect(decisionSortieVocal('inVoice', 'autorisation')).toEqual({
+      action: 'retirer',
+      patch: { SendMessages: null },
+      garderOrigine: true,
+    });
+  });
+
+  test('entrer : un autorisé SANS écriture nominative la reçoit, en gardant sa marque', () => {
+    // La cause du « mon ami est en vocal et ne peut pas écrire » : une
+    // autorisation donnée en catégorie muette ou en mode réservé n'accorde pas
+    // `SendMessages`, et l'origine seule faisait croire le bit posé.
+    expect(decisionEntreeVocal('inVoice', 'autorisation', false)).toEqual({
+      action: 'poser',
+      origine: 'autorisation',
+      patch: { SendMessages: true },
+    });
+    expect(decisionEntreeVocal('inVoice', 'presence', false)).toEqual({
+      action: 'poser',
+      origine: 'presence',
+      patch: { SendMessages: true },
+    });
+    expect(decisionEntreeVocal('inVoice', null, true)).toEqual({ action: 'conserver', motif: 'dejaPosee' });
   });
 
   test('une présence laissée par un ancien mode se nettoie à la sortie', () => {
@@ -894,9 +918,9 @@ describe('origine des surcharges — entrées et sorties', () => {
     registre.marquer(GUILD, SALON, ALICE, 'autorisation');
     expect(registre.origine(GUILD, SALON, ALICE)).toBe('autorisation');
 
-    // 3. Alice quitte le vocal : son autorisation survit.
+    // 3. Alice quitte le vocal : son autorisation survit, seule l'écriture part.
     const sortie = decisionSortieVocal('inVoice', registre.origine(GUILD, SALON, ALICE));
-    expect(sortie).toEqual({ action: 'conserver', motif: 'autorisationExplicite' });
+    expect(sortie).toEqual({ action: 'retirer', patch: { SendMessages: null }, garderOrigine: true });
     expect(registre.origine(GUILD, SALON, ALICE)).toBe('autorisation');
   });
 });
@@ -915,6 +939,21 @@ describe('transitionModeEcriture', () => {
     const origines = new Map<string, OrigineSurcharge>([[ALICE, 'autorisation']]);
     expect(transitionModeEcriture('ownerOnly', 'inVoice', [ALICE, BOB], origines)).toEqual({
       aPoser: [BOB],
+      aRetirer: [],
+    });
+  });
+
+  test("entrer dans « en vocal » : ce qui décide, c'est l'écriture nominative, pas la marque", () => {
+    // Alice est autorisée sans écriture (catégorie muette) : elle la reçoit ;
+    // Bob écrit déjà : rien à poser.
+    const origines = new Map<string, OrigineSurcharge>([[ALICE, 'autorisation']]);
+    expect(transitionModeEcriture('ownerOnly', 'inVoice', [ALICE, BOB], origines, new Set([BOB]))).toEqual({
+      aPoser: [ALICE],
+      aRetirer: [],
+    });
+    // Même mode choisi de nouveau : la passe répare un présent oublié.
+    expect(transitionModeEcriture('inVoice', 'inVoice', [ALICE], new Map(), new Set())).toEqual({
+      aPoser: [ALICE],
       aRetirer: [],
     });
   });
@@ -1150,10 +1189,10 @@ describe('nettoyagePresenceAuDemarrage', () => {
     // L'invariant qui compte le plus : un droit donné à la main ne s'efface
     // jamais tout seul — que la personne soit présente ou absente.
     const absente = nettoyagePresenceAuDemarrage('inVoice', [autorisationAlice], []);
-    expect(absente).toEqual({ aRetirer: [], aMarquerPresence: [] });
+    expect(absente).toEqual({ aRetirer: [], aMarquerPresence: [], aPoser: [] });
 
     const presente = nettoyagePresenceAuDemarrage('inVoice', [autorisationAlice], [ALICE]);
-    expect(presente).toEqual({ aRetirer: [], aMarquerPresence: [] });
+    expect(presente).toEqual({ aRetirer: [], aMarquerPresence: [], aPoser: [] });
   });
 
   test('hors « en vocal », toute surcharge de présence part, jamais de réinscription', () => {
@@ -1166,14 +1205,18 @@ describe('nettoyagePresenceAuDemarrage', () => {
   });
 
   test('rien ne casse sur une liste vide, personne de présent, ou une présence sans surcharge', () => {
-    expect(nettoyagePresenceAuDemarrage('inVoice', [], [])).toEqual({ aRetirer: [], aMarquerPresence: [] });
-    expect(nettoyagePresenceAuDemarrage('inVoice', [], [ALICE])).toEqual({ aRetirer: [], aMarquerPresence: [] });
+    expect(nettoyagePresenceAuDemarrage('inVoice', [], [])).toEqual({ aRetirer: [], aMarquerPresence: [], aPoser: [] });
+    // Un présent sans écriture nominative (entré pendant l'arrêt) est à poser.
+    expect(nettoyagePresenceAuDemarrage('inVoice', [], [ALICE])).toEqual({ aRetirer: [], aMarquerPresence: [], aPoser: [ALICE] });
 
     const sansSurcharge: SurchargeMembreLue = { userId: ALICE, accordeEcriture: false, accordeConnexion: false };
     expect(nettoyagePresenceAuDemarrage('inVoice', [sansSurcharge], [ALICE])).toEqual({
       aRetirer: [],
       aMarquerPresence: [],
+      aPoser: [ALICE],
     });
+    // Hors « en vocal », la présence ne pose rien.
+    expect(nettoyagePresenceAuDemarrage('everyone', [sansSurcharge], [ALICE]).aPoser).toEqual([]);
   });
 
   test('les deux listes sont toujours disjointes', () => {

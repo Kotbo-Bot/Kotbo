@@ -1059,6 +1059,8 @@ function flushAndStop(exitCode = 0): Promise<void> {
   stopping ??= (async () => {
     clearInterval(flushInterval);
     try {
+      // Plus de réalignement des salons vocaux « Hérité » pendant l'arrêt.
+      (await import('./events/tempVoice.js')).arreterBalayageEcriture();
       await flushIndexBuffers();
       // Kotbo × AegisAI : compteurs de la dernière minute, et le worker de la
       // file rend ses jobs en cours à Redis plutôt que de les laisser bloqués.

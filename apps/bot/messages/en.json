@@ -4280,5 +4280,20 @@
   "log_tempvoice_action_ban": "Pick a member to ban (old panel)",
   "log_tempvoice_action_trust": "Pick a member to allow (old panel)",
   "log_tempvoice_action_transfer": "Pick the new owner (old panel)",
-  "log_tempvoice_field_trigger": "Triggered by"
+  "log_tempvoice_field_trigger": "Triggered by",
+  "panel_tempvoice_chat_exception_placeholder": "Chat permission",
+  "panel_tempvoice_chat_exception_allow": "Can write",
+  "panel_tempvoice_chat_exception_deny": "Cannot write",
+  "panel_tempvoice_chat_exception_follow": "Follow the channel",
+  "panel_tempvoice_chat_exception_done": "{name}'s chat: {choice}.",
+  "panel_tempvoice_chat_exception_owner": "The owner's chat follows the channel mode.",
+  "log_tempvoice_action_m_ecrire": "Set a member's chat permission",
+  "log_tempvoice_state_chat": "{target}'s chat",
+  "log_tempvoice_val_chat_allow": "can write",
+  "log_tempvoice_val_chat_deny": "cannot write",
+  "log_tempvoice_val_chat_unset": "not set",
+  "log_tempvoice_val_chat_follow": "follows the channel",
+  "log_tempvoice_category_resync": "Chat permissions realigned with the category",
+  "log_tempvoice_reason_category_changed": "category changed",
+  "log_tempvoice_field_adjusted_channels": "Adjusted channels"
 }
