@@ -57,18 +57,48 @@ model Notification {
   guildId String
   userId String // Utilisateur cible (Discord ID)
 
+  // Type précis (catalogue NOTIFICATION_KINDS de @kotbo/contracts) et sa famille,
+  // copiée ici pour filtrer la boîte sans relire le catalogue.
+  kind     String @default("system.generic")
+  category String @default("system")
+
   title String
   message String
-  type String @default("INFO") // INFO, SUCCESS, WARNING, ERROR
+  type String @default("INFO") // Gravité : INFO, SUCCESS, WARNING, ERROR, CRITICAL
   link String? // Lien vers la page concernée (ex: /absences)
+  actorId String? // Qui a déclenché la notification (Discord ID), si quelqu'un
+  // Les notifications non lues de même clé se fondent en une seule (`count`).
+  groupKey String?
+  count    Int    @default(1)
+  data     Json? // Contexte pour les actions rapides (ex: { absenceId })
   isRead Boolean @default(false)
+  archivedAt DateTime?
 
   createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
 
   guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
 
   @@index([guildId, userId, isRead])
+  // Boîte multi-serveurs : toutes les notifications d'une personne, récentes d'abord.
+  @@index([userId, archivedAt, updatedAt])
+  @@index([guildId, userId, groupKey])
   @@map("notifications")
+}
+
+// Grille « famille × canal » d'une personne, valable sur tous ses serveurs.
+// Sans ligne : DEFAULT_NOTIFICATION_CHANNEL_PREFS (dashboard + MP).
+model NotificationPreference {
+  userId   String
+  category String
+  dashboard Boolean @default(true)
+  dm        Boolean @default(true)
+  digest    Boolean @default(false) // MP remplacés par un résumé quotidien
+
+  updatedAt DateTime @updatedAt
+
+  @@id([userId, category])
+  @@map("notification_preferences")
 }
 
 // ============================================================================
