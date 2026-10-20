@@ -146,7 +146,7 @@ function fullAnalytics(period: number) {
       const t = totals.find((x) => x.person.id === st.userId);
       const msg = t?.messages ?? 0;
       const vm = t?.voiceMinutes ?? 0;
-      return { staffId: st.userId, messages: msg, voiceMinutes: vm, name: st.displayName, grade: st.grade, avatarUrl: null, score: msg + vm * 2 };
+      return { userId: st.userId, messages: msg, voiceMinutes: vm, name: st.displayName, grade: st.grade, avatarUrl: null, score: msg + vm * 2 };
     })
     .sort((a, b) => b.score - a.score);
 
