@@ -17,6 +17,7 @@ import {
   ActivityType,
   ApplicationCommandType,
   MessageFlags,
+  PermissionFlagsBits,
   DiscordAPIError,
   type ChatInputCommandInteraction,
   type Guild,
@@ -109,6 +110,7 @@ import {
 } from './commands.js';
 import { getModuleDefinition, getModuleForCustomId } from '@kotbo/contracts';
 import { isModuleEnabled } from './services/core/moduleGate.js';
+import { isProgressionBlocked, PROGRESSION_MODULES } from './services/progression/progressionBlacklist.js';
 import { scopeClientToModule } from './services/core/moduleScope.js';
 import { reconcileGuildCommands } from './services/core/commandDeployment.js';
 
@@ -365,6 +367,37 @@ async function enforceModuleGate(interaction: Interaction): Promise<boolean> {
     }).catch(() => null);
   }
 
+  return false;
+}
+
+/**
+ * Blacklist de progression : un membre, un rôle ou un salon listé n'a plus
+ * accès aux commandes et boutons des niveaux, du RPG, de l'économie... Les
+ * administrateurs passent outre, pour pouvoir corriger un solde depuis
+ * n'importe quel salon.
+ */
+async function enforceProgressionBlacklist(interaction: Interaction): Promise<boolean> {
+  if (!interaction.guildId || !interaction.member) return true;
+  const moduleKey = interactionModuleKey(interaction);
+  if (!moduleKey || !PROGRESSION_MODULES.has(moduleKey)) return true;
+  if (interaction.memberPermissions?.any([PermissionFlagsBits.Administrator, PermissionFlagsBits.ManageGuild])) return true;
+
+  const roles = interaction.member.roles;
+  const blocked = await isProgressionBlocked(interaction.guildId, {
+    userId: interaction.user.id,
+    roleIds: Array.isArray(roles) ? roles : roles.cache.keys(),
+    channelIds: [interaction.channelId, interaction.channel && 'parentId' in interaction.channel ? interaction.channel.parentId : null, interaction.channel?.isThread() ? interaction.channel.parent?.parentId : null],
+  });
+  if (!blocked) return true;
+
+  if (interaction.isAutocomplete()) {
+    await interaction.respond([]).catch(() => null);
+  } else if (interaction.isRepliable()) {
+    await replyOrFollowUp(interaction, {
+      content: '🚫 Tu ne peux pas utiliser cette fonctionnalité ici : ce serveur t’a exclu (ou a exclu ce salon) des niveaux, du RPG et de l’économie.',
+      flags: [MessageFlags.Ephemeral],
+    }).catch(() => null);
+  }
   return false;
 }
 
@@ -818,6 +851,9 @@ client.on(Events.InteractionCreate, async (interaction) => {
     // 4. Garde des modules : une fonctionnalité éteinte ne doit répondre à
     //    aucune de ses entrées, commande comme bouton.
     if (!(await enforceModuleGate(interaction))) {
+      return;
+    }
+    if (!(await enforceProgressionBlacklist(interaction))) {
       return;
     }
     moduleTracking = startModuleTracking(interaction);

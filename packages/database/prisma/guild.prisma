@@ -527,6 +527,12 @@ model Guild {
   // `ticketStaffReminderMinutes`, le bot relance le staff dans le ticket.
   ticketStaffReminderEnabled  Boolean  @default(false)
   ticketStaffReminderMinutes  Int      @default(60)
+  // Blacklist commune aux modules de progression (niveaux, saisons, RPG,
+  // économie, quêtes...) : ni gain passif, ni commande, ni bouton. Les salons
+  // couvrent aussi leurs fils et les salons d'une catégorie listée.
+  progressionBlacklistUserIds    String[] @default([])
+  progressionBlacklistRoleIds    String[] @default([])
+  progressionBlacklistChannelIds String[] @default([])
   // Question facultative posée après la note du sondage de satisfaction.
   ticketSatisfactionCommentEnabled  Boolean @default(true)
   ticketSatisfactionCommentQuestion String  @default("")
