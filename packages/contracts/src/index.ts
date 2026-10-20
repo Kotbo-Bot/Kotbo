@@ -275,6 +275,21 @@ export type {
 } from './types/rpgEnchantments.js';
 
 export {
+  DEFAULT_NOTIFICATION_CHANNEL_PREFS,
+  NOTIFICATION_CATEGORIES,
+  NOTIFICATION_KINDS,
+  getNotificationKind,
+  isNotificationCategory,
+} from './types/notifications.js';
+export type {
+  NotificationCategory,
+  NotificationChannelPrefs,
+  NotificationKind,
+  NotificationKindMeta,
+  NotificationSeverity,
+} from './types/notifications.js';
+
+export {
   DASHBOARD_LATENCY_BUCKETS,
   DASHBOARD_NAV_SOURCES,
   DASHBOARD_TELEMETRY_EVENTS,

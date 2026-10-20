@@ -230,7 +230,7 @@
 </script>
 
 {#snippet unreadBadge(href: string)}
-  {#if href === '/inbox' && unread > 0}
+  {#if href === '/notifications' && unread > 0}
     <span
       class="min-w-4 h-4 px-1 rounded-full bg-primary text-on-primary text-2xs font-semibold leading-none flex items-center justify-center"
       aria-label="{unread} notifications non lues"
@@ -286,7 +286,7 @@
       {active ? 'text-primary bg-primary/10' : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container'}"
   >
     <Papicon {icon} size={18} />
-    {#if href === '/inbox' && unread > 0}
+    {#if href === '/notifications' && unread > 0}
       <span class="absolute top-1.5 right-2.5 w-2 h-2 rounded-full bg-primary" aria-hidden="true"></span>
     {/if}
   </a>

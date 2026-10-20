@@ -16,11 +16,12 @@ import { buildMemberCasePanel, type MemberCaseSection } from '../services/modera
 import { handleRecruitmentButton } from '../services/staff/recruitmentService.js';
 import { handleTicketButton, handleTicketModalSubmit, handleTicketSelectMenu } from '../services/features/ticketService.js';
 import { canManageGiveaways } from '../services/features/giveawayConfigService.js';
-import { resolveGuildLocale } from '../utils/i18n.js';
+import { getLocale, resolveGuildLocale } from '../utils/i18n.js';
 import * as gvwMessages from '../lib/paraglide/messages.js';
 import { handleRpgButton, handleRpgModalSubmit, handleRpgSelectMenu } from '../services/features/rpgPanelService.js';
 import { DROP_CLAIM_PREFIX, handleDropClaim } from '../services/features/dropService.js';
-import { checkInMeeting, createNotification } from '../services/staff/staffLeadershipService.js';
+import { checkInMeeting } from '../services/staff/staffLeadershipService.js';
+import { notifyMany } from '../services/notifications/notifyService.js';
 import { handleDCInteraction } from '../services/moderation/dcDetectionService.js';
 import { memberProfileIdentity } from '../services/moderation/memberIdentityService.js';
 import { handleVerifyButtonClick, handleVerificationStaffAction } from '../services/moderation/securityVerificationService.js';
@@ -145,6 +146,23 @@ export async function handleButton(interaction: Interaction, client: Client): Pr
     const guildName = client.guilds.cache.get(targetGuildId)?.name ?? targetGuildId;
     await interaction.reply({
       content: gvwMessages.lcr_optout_done({ guild: guildName }, { locale }),
+      flags: [MessageFlags.Ephemeral],
+    });
+    return;
+  }
+
+  // ── Notifications en MP : « Ne plus recevoir ce type » (notif:mute:<famille>)
+  if (customId.startsWith('notif:mute:')) {
+    const category = customId.slice('notif:mute:'.length);
+    const { isNotificationCategory } = await import('@kotbo/contracts');
+    if (!isNotificationCategory(category)) return;
+    const { muteCategoryDm, categoryLabel } = await import('../services/notifications/notifyService.js');
+    await muteCategoryDm(user.id, category).catch((error) => {
+      logger.warn('Notification', `Coupure impossible pour ${user.id}/${category}: ${String(error)}`);
+    });
+    const locale = getLocale(interaction);
+    await interaction.reply({
+      content: gvwMessages.ntf_mute_done({ category: categoryLabel(category, locale) }, { locale }),
       flags: [MessageFlags.Ephemeral],
     });
     return;
@@ -1848,39 +1866,16 @@ export async function handleModalSubmit(interaction: ModalSubmitInteraction, cli
       });
 
       if (managers.length > 0) {
-        await Promise.all(managers.map(async (m: { userId: string; username: string | null }) => {
-          // Notif dashboard
-          await createNotification(
-            guildId,
-            m.userId,
-            '🔔 Demande de démission',
-            `${interaction.user.username} a soumis une demande de démission.\nMotif : ${reason}`,
-            'WARNING',
-            '/staff-management?tab=resignations',
-            true
-          ).catch(() => null);
-
-          // MP Discord aux managers
-          try {
-            const managerDiscordUser = await client.users.fetch(m.userId).catch(() => null);
-            if (managerDiscordUser) {
-              const serverName = interaction.guild?.name || '';
-              const managerEmbed = new EmbedBuilder()
-                .setTitle('🔔 Nouvelle demande de démission')
-                .setDescription(
-                  `**${interaction.user.username}** (${interaction.user.id}) a soumis une demande de démission.\n\n` +
-                  `**Motif :**\n> ${reason}\n\n` +
-                  `Rendez-vous sur le dashboard pour approuver ou refuser cette demande.`
-                )
-                .setColor(COLORS.warning)
-                .setTimestamp()
-                .setFooter({ text: `Référence : ${resignation.id}${serverName ? ` · Serveur : ${serverName}` : ''}` });
-              await managerDiscordUser.send({ embeds: [managerEmbed] }).catch(() => null);
-            }
-          } catch {
-            // Silent fail
-          }
-        }));
+        await notifyMany(managers.map((m: { userId: string }) => m.userId), {
+          guildId,
+          kind: 'staff.resignation_requested',
+          title: 'Demande de démission',
+          message: `**${interaction.user.username}** (${interaction.user.id}) a soumis une demande de démission.\n\n**Motif :**\n> ${reason}`,
+          severity: 'WARNING',
+          link: '/staff-management?tab=resignations',
+          actorId: interaction.user.id,
+          data: { resignationId: resignation.id },
+        });
       }
 
       await interaction.reply({

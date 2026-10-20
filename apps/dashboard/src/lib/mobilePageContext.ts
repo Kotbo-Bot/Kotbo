@@ -66,7 +66,7 @@ const PAGE_RULES: PageRule[] = [
       '/tickets',
       '/transcripts-list',
       '/message-search',
-      '/inbox',
+      '/notifications',
       '/security/filters/nicknames',
       '/invitations',
       '/staff-management',

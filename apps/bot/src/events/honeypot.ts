@@ -17,6 +17,7 @@ import { recordScamImagesFromMessage } from '../services/moderation/scamFilterSe
 import { recordScamSignals } from '../services/moderation/scamDatasetService.js';
 import { scheduleScamDatasetBackfill } from '../services/moderation/scamBackfillService.js';
 import { INVITE_SOURCE, recordBotInvite } from '../services/analytics/inviteService.js';
+import { notifyJoinBlocked } from '../services/notifications/notifyService.js';
 
 export function registerHoneypotListener(client: Client): void {
   client.on(Events.MessageCreate, async (message: Message) => {
@@ -111,15 +112,14 @@ export function registerHoneypotListener(client: Client): void {
         }
 
         if (inviteUrl) {
-          try {
-            const actionVerb = sanctionType === 'KICK' ? 'exclu' : 'exclu temporairement (softban)';
-            await member.send(
-              `Bonjour, vous avez été ${actionVerb} de **${guild.name}** car vous avez envoyé un message dans un salon piège (Honeypot).\n` +
-              `S'il s'agit d'une erreur, vous pouvez rejoindre à nouveau le serveur en utilisant ce lien d'invitation unique (valable 24h) : ${inviteUrl}`
-            );
-          } catch (err) {
-            logger.warn('Honeypot', `Impossible d'envoyer le message de réinvitation en DM à ${author.tag} (${author.id}) :`, err);
-          }
+          const actionVerb = sanctionType === 'KICK' ? 'exclu' : 'exclu temporairement (softban)';
+          await notifyJoinBlocked(
+            guild.id,
+            author.id,
+            `Bonjour, vous avez été ${actionVerb} de **${guild.name}** car vous avez envoyé un message dans un salon piège (Honeypot).\n` +
+              `S'il s'agit d'une erreur, vous pouvez rejoindre à nouveau le serveur en utilisant ce lien d'invitation unique (valable 24h) : ${inviteUrl}`,
+            inviteUrl,
+          );
         }
       }
 

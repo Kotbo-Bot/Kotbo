@@ -5,7 +5,7 @@ import { logger } from '../../utils/logger.js';
 import { LinkedAccountType, LinkedAccountStatus } from '@prisma/client';
 import * as altAccountService from './altAccountService.js';
 import { computeCrossServerLinkSignals } from './crossServerLinkService.js';
-import { createNotification } from '../staff/staffLeadershipService.js';
+import { notifyMany } from '../notifications/notifyService.js';
 import { fetchAllMembers } from '../../utils/discord.js';
 import { memberProfileIdentity } from './memberIdentityService.js';
 import {
@@ -181,12 +181,16 @@ async function notifyManagersOfSuspectedDC(guildId: string, member: GuildMember)
   const managers = await prisma.staffMember.findMany({
     where: { guildId, grade: { in: ['Manager', 'Admin', 'Administrateur', 'Fondateur', 'Direction'] } }
   });
-  if (managers.length === 0) return;
-  await Promise.all(managers.map(m => createNotification(
-    guildId, m.userId, '⚠️ Alerte DC suspect',
-    `Un double compte potentiel a été détecté : ${member.user.tag}.`,
-    'WARNING', `/double-accounts?tab=detections`, false
-  ).catch(() => null)));
+  await notifyMany(managers.map(m => m.userId), {
+    guildId,
+    kind: 'security.alt_detected',
+    title: '⚠️ Alerte DC suspect',
+    message: `Un double compte potentiel a été détecté : ${member.user.tag}.`,
+    severity: 'WARNING',
+    link: '/double-accounts?tab=detections',
+    groupKey: 'security.alt_detected',
+    dm: false,
+  });
 }
 
 // ─── Scoring commun (arrivée et recalcul dashboard) ───────────────────────────
@@ -1027,16 +1031,7 @@ export async function handleDCInteraction(interaction: Interaction): Promise<voi
       data: { isSuspectedDC: false, dcScore: null }
     }).catch(() => null);
 
-    const dmEmbed = new EmbedBuilder()
-      .setColor('#57F287')
-      .setTitle('Comptes liés officiellement')
-      .setDescription(`Vos comptes <@${userId}> et <@${altId}> ont été reliés sur **${interaction.guild?.name || 'le serveur'}**.`)
-      .setTimestamp();
-
-    const u1 = await interaction.client.users.fetch(userId).catch(() => null);
-    if (u1) await u1.send({ embeds: [dmEmbed], allowedMentions: { parse: [] } }).catch(() => null);
-    const u2 = await interaction.client.users.fetch(altId).catch(() => null);
-    if (u2) await u2.send({ embeds: [dmEmbed], allowedMentions: { parse: [] } }).catch(() => null);
+    // linkAccounts a déjà prévenu les deux comptes.
 
     await interaction.update({
       content: `✅ <@${userId}> lié à <@${altId}> par <@${interaction.user.id}>.`,

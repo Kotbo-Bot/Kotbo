@@ -4,7 +4,7 @@ import { resolveMemberAvatarUrl } from '../moderation/memberIdentityService.js';
 import { cache } from '../../utils/cache.js';
 
 import crypto from 'node:crypto';
-import { createNotification } from './staffLeadershipService.js';
+import { notify, notifyMany } from '../notifications/notifyService.js';
 import { getClient } from '../../utils/client.js';
 import { logger } from '../../utils/logger.js';
 import * as altAccountService from '../moderation/altAccountService.js';
@@ -497,14 +497,15 @@ export const updateStaffGrade = async (
       }
     }
 
-    await createNotification(
+    await notify({
       guildId,
       userId,
+      kind: 'staff.grade_changed',
       title,
       message,
-      type,
-      '/profile'
-    ).catch(() => null);
+      severity: type,
+      link: '/profile',
+    }).catch(() => null);
   }
 
   await cache.invalidateGuild(guildId);
@@ -615,16 +616,18 @@ export const setStaffSuspension = async (
 
   if (!alreadyInTargetState) {
     const reason = options?.reason?.trim();
-    await createNotification(
+    await notify({
       guildId,
       userId,
-      suspended ? 'Suspension de vos fonctions staff' : 'Réintégration dans le staff',
-      suspended
+      kind: 'staff.suspension_changed',
+      title: suspended ? 'Suspension de vos fonctions staff' : 'Réintégration dans le staff',
+      message: suspended
         ? `Vos fonctions staff sont suspendues${reason ? ` : ${reason}` : ''}. Vos rôles Discord staff sont retirés le temps de la suspension.`
         : `Votre suspension est levée : vous retrouvez vos fonctions de **${updated.grade}**.`,
-      suspended ? 'WARNING' : 'SUCCESS',
-      '/profile'
-    ).catch(() => null);
+      severity: suspended ? 'WARNING' : 'SUCCESS',
+      link: '/profile',
+      actorId: options?.actorUserId,
+    }).catch(() => null);
   }
 
   await cache.invalidateGuild(guildId);
@@ -721,14 +724,16 @@ export const issueStaffWarning = async (
   // Notifier le membre
   const member = await prisma.staffMember.findUnique({ where: { id: resolvedStaffMemberId } });
   if (member) {
-    await createNotification(
+    await notify({
       guildId,
-      member.userId,
-      'Nouvel avertissement',
-      `Vous avez reçu un avertissement pour la raison suivante : ${reason}`,
-      'WARNING',
-      '/profile'
-    ).catch(() => null);
+      userId: member.userId,
+      kind: 'staff.warning_received',
+      title: 'Nouvel avertissement',
+      message: `Vous avez reçu un avertissement pour la raison suivante : ${reason}`,
+      severity: 'WARNING',
+      link: '/profile',
+      actorId: issuedByUserId,
+    }).catch(() => null);
 
     // Notifier le responsable de la hiérarchie et le modérateur qui a sanctionné
     const userIdsToNotify = new Set<string>();
@@ -758,17 +763,15 @@ export const issueStaffWarning = async (
     });
     const issuerTag = issuer?.displayName || issuer?.username || 'Un administrateur';
 
-    for (const userId of userIdsToNotify) {
-      await createNotification(
-        guildId,
-        userId,
-        `Avertissement Staff : ${member.displayName || member.username}`,
-        `${issuerTag} a appliqué un avertissement staff à ${member.displayName || member.username} pour : ${reason}`,
-        'WARNING',
-        '/staff-management',
-        true
-      ).catch(() => null);
-    }
+    await notifyMany(userIdsToNotify, {
+      guildId,
+      kind: 'staff.warning_issued',
+      title: `Avertissement Staff : ${member.displayName || member.username}`,
+      message: `${issuerTag} a appliqué un avertissement staff à ${member.displayName || member.username} pour : ${reason}`,
+      severity: 'WARNING',
+      link: '/staff-management',
+      actorId: issuedByUserId,
+    });
   }
 
   return warning;
@@ -898,14 +901,15 @@ export const blacklistStaff = async (
     const member = await prisma.staffMember.findUnique({ where: { id: staffMemberId } });
     if (!member) continue;
 
-    await createNotification(
+    await notify({
       guildId,
-      member.userId,
-      'Mise en blacklist',
-      `Vous avez été ajouté à la blacklist staff. Raison : ${reason}`,
-      'ERROR',
-      '/profile'
-    ).catch(() => null);
+      userId: member.userId,
+      kind: 'staff.blacklisted',
+      title: 'Mise en blacklist',
+      message: `Vous avez été ajouté à la blacklist staff. Raison : ${reason}`,
+      severity: 'ERROR',
+      link: '/profile',
+    }).catch(() => null);
   }
 
   return blacklist;
@@ -964,25 +968,25 @@ export const createTestingPeriod = async (
   ]);
 
   if (member) {
-    await createNotification(
+    await notify({
       guildId,
-      member.userId,
-      'Nouvelle période de test',
-      `Votre période de test pour le grade ${targetGrade || 'Staff'} a commencé !`,
-      'INFO',
-      '/profile'
-    ).catch(() => null);
+      userId: member.userId,
+      kind: 'staff.testing_started',
+      title: 'Nouvelle période de test',
+      message: `Votre période de test pour le grade ${targetGrade || 'Staff'} a commencé !`,
+      link: '/profile',
+    }).catch(() => null);
   }
 
   if (mentor) {
-    await createNotification(
+    await notify({
       guildId,
-      mentor.userId,
-      'Nouveau tutorat',
-      `Vous avez été assigné comme mentor pour ${member?.username || 'un nouveau staff'}.`,
-      'INFO',
-      '/staff-management'
-    ).catch(() => null);
+      userId: mentor.userId,
+      kind: 'staff.mentor_assigned',
+      title: 'Nouveau tutorat',
+      message: `Vous avez été assigné comme mentor pour ${member?.username || 'un nouveau staff'}.`,
+      link: '/staff-management',
+    }).catch(() => null);
   }
 
   return period;
@@ -1019,14 +1023,15 @@ export const addMentorReport = async (
 
   // Notifier le membre en test
   if (period.staffMember) {
-    await createNotification(
-      period.guildId,
-      period.staffMember.userId,
-      'Nouveau rapport de tutorat',
-      `Un nouveau rapport a été posté sur votre période de test.`,
-      type === 'POSITIVE' ? 'SUCCESS' : (type === 'NEGATIVE' ? 'ERROR' : 'INFO'),
-      '/profile'
-    ).catch(() => null);
+    await notify({
+      guildId: period.guildId,
+      userId: period.staffMember.userId,
+      kind: 'staff.mentor_report',
+      title: 'Nouveau rapport de tutorat',
+      message: 'Un nouveau rapport a été posté sur votre période de test.',
+      severity: type === 'POSITIVE' ? 'SUCCESS' : (type === 'NEGATIVE' ? 'ERROR' : 'INFO'),
+      link: '/profile',
+    }).catch(() => null);
   }
 
   return report;
@@ -1049,16 +1054,17 @@ export const endTestingPeriod = async (
 
   if (updated.staffMember) {
     const isPassed = status === 'PASSED';
-    await createNotification(
-      updated.guildId,
-      updated.staffMember.userId,
-      isPassed ? 'Période de test validée !' : 'Période de test terminée',
-      isPassed 
+    await notify({
+      guildId: updated.guildId,
+      userId: updated.staffMember.userId,
+      kind: 'staff.testing_ended',
+      title: isPassed ? 'Période de test validée !' : 'Période de test terminée',
+      message: isPassed
         ? `Félicitations ! Vous avez validé votre période de test. Bienvenue officiellement dans l'équipe !`
         : `Votre période de test s'est terminée. Un manager reviendra vers vous pour plus de détails.`,
-      isPassed ? 'SUCCESS' : 'WARNING',
-      '/profile'
-    ).catch(() => null);
+      severity: isPassed ? 'SUCCESS' : 'WARNING',
+      link: '/profile',
+    }).catch(() => null);
   }
 
   return updated;

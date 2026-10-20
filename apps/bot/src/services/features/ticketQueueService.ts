@@ -13,7 +13,6 @@ import { DiscordAPIError, type Client, type Guild } from 'discord.js';
 import type { Ticket } from '@prisma/client';
 import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
-import { successEmbed } from '../../utils/embeds.js';
 import { type BotLocale, resolveGuildLocale } from '../../utils/i18n.js';
 import { broadcastDashboardStateChange } from '../../api/shared/sharding.js';
 import { createTicketWorkspace, resolveTicketPanelType, type TicketPanelTypeConfig } from './ticketService.js';
@@ -205,9 +204,14 @@ async function retryQueuedTicket(
 
     // Le mode MP previent deja le membre dans sa conversation.
     if (ticket.mode !== 'DM') {
-      await member.send({
-        embeds: [successEmbed('Ton ticket est ouvert', `Une place s'est libérée sur **${guild.name}**.\n\n${result.userMessage}`)],
-        allowedMentions: { parse: [] },
+      const { notify } = await import('../notifications/notifyService.js');
+      await notify({
+        guildId: guild.id,
+        userId: ticket.userId,
+        kind: 'tickets.update',
+        title: 'Ton ticket est ouvert',
+        message: `Une place s'est libérée sur **${guild.name}**.\n\n${result.userMessage}`,
+        severity: 'SUCCESS',
       }).catch(() => null);
     }
     return { changed: true };

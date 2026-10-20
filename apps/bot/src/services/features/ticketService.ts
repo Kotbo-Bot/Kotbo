@@ -6,6 +6,7 @@ import { kotboEventBus } from '@kotbo/core';
 import { ticketGuildChannelId } from './ticketGuildChannel.js';
 import { ensureBotCanPost } from '../../utils/channelAccess.js';
 import prisma from '../../utils/db.js';
+import { notify, notifyMany } from '../notifications/notifyService.js';
 import { mayBeTicketChannel } from './ticketChannelLookup.js';
 import { logger } from '../../utils/logger.js';
 import { resolveLogChannel } from '../../utils/logChannel.js';
@@ -1958,21 +1959,13 @@ export async function handleTicketButton(client: Client, customId: string, inter
       if (ticket.closedById) usersToDm.add(ticket.closedById);
       if (user.id) usersToDm.add(user.id);
       
-      const dmEmbed = new EmbedBuilder()
-        .setTitle('📄 Transcription de ticket')
-        .setDescription(`Le ticket d'assistance **${ticket.reason}** du serveur **${guild.name}** a été supprimé.\n\nVoici le lien pour consulter la transcription complète :`)
-        .addFields([{ name: "Lien d'accès", value: `🌐 [Consulter le transcript](${publicLink})` }])
-        .setColor(COLORS.primary as ColorResolvable)
-        .setTimestamp();
-        
-      for (const dmUserId of usersToDm) {
-        try {
-          const dmUser = await client.users.fetch(dmUserId);
-          if (dmUser) await dmUser.send({ embeds: [dmEmbed], allowedMentions: { parse: [] } });
-        } catch (err) {
-          // Ignorer si les MPs sont bloqués
-        }
-      }
+      await notifyMany(usersToDm, {
+        guildId: guild.id,
+        kind: 'tickets.update',
+        title: 'Transcription de ticket',
+        message: `Le ticket d'assistance **${ticket.reason}** du serveur **${guild.name}** a été supprimé.\n\nLa transcription complète reste consultable : [Consulter le transcript](${publicLink})`,
+        link: publicLink,
+      });
 
       // 5. Supprimer le salon Discord après 3 secondes
       setTimeout(async () => {
@@ -2731,12 +2724,14 @@ export async function approvePendingTicket(
 
   // Le membre n'est pas forcement encore devant Discord : le MP le ramene
   // vers son ticket sans qu'il ait a surveiller la liste des salons.
-  if (opener) {
-    await opener.send({
-      embeds: [successEmbed('Demande de ticket acceptée', `Votre demande sur **${guild.name}** a été validée par <@${reviewer.id}>.\n\n${result.userMessage}`)],
-      allowedMentions: { parse: [] },
-    }).catch(() => null);
-  }
+  await notify({
+    guildId: guild.id,
+    userId: ticket.userId,
+    kind: 'tickets.update',
+    title: 'Demande de ticket acceptée',
+    message: `Votre demande sur **${guild.name}** a été validée par <@${reviewer.id}>.\n\n${result.userMessage}`,
+    severity: 'SUCCESS',
+  }).catch(() => null);
 
   broadcastDashboardStateChange(guild.id, 'tickets_updated');
   return { userMessage: result.userMessage, ticketId: result.ticketId };
@@ -2765,16 +2760,14 @@ export async function rejectPendingTicket(
 
   await updateTicketReviewCard(client, ticket, 'REJECTED', reviewer, rejectionReason);
 
-  const opener = await client.users.fetch(ticket.userId).catch(() => null);
-  if (opener) {
-    await opener.send({
-      embeds: [errorEmbed(
-        'Demande de ticket refusée',
-        `Votre demande sur **${guild.name}** a été refusée.${rejectionReason ? `\n\n**Motif :** ${rejectionReason}` : ''}`,
-      )],
-      allowedMentions: { parse: [] },
-    }).catch(() => null);
-  }
+  await notify({
+    guildId: guild.id,
+    userId: ticket.userId,
+    kind: 'tickets.update',
+    title: 'Demande de ticket refusée',
+    message: `Votre demande sur **${guild.name}** a été refusée.${rejectionReason ? `\n\n**Motif :** ${rejectionReason}` : ''}`,
+    severity: 'ERROR',
+  }).catch(() => null);
 
   broadcastDashboardStateChange(guild.id, 'tickets_updated');
 }

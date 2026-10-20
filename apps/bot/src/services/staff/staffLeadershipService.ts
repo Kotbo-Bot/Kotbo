@@ -13,7 +13,7 @@ import {
 import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
 import { broadcastDashboardStateChange } from '../../api/shared/sharding.js';
-
+import { notify, notifyMany } from '../notifications/notifyService.js';
 
 import { getClient } from '../../utils/client.js';
 import { formatGuildDateTime, formatInTimezone } from '../../utils/timezone.js';
@@ -283,15 +283,18 @@ export const createAbsence = async (
 
   // Notifier le responsable (superiorUserId)
   if (params.superiorUserId && featureConfig?.enabled !== false) {
-    await createNotification(
-      params.guildId,
-      params.superiorUserId,
-      "Validation d'absence en attente",
-      `Une absence a été soumise par un de vos subordonnés. Type: ${params.type}. Durée: ${formatAbsenceDuration(params.startDate, params.endDate)}. Motif: ${params.reason}.`,
-      'WARNING',
-      '/planning',
-      featureConfig?.notifyViaDM ?? true
-    ).catch(() => null);
+    await notify({
+      guildId: params.guildId,
+      userId: params.superiorUserId,
+      kind: 'planning.absence_pending',
+      title: "Validation d'absence en attente",
+      message: `Une absence a été soumise par un de vos subordonnés. Type: ${params.type}. Durée: ${formatAbsenceDuration(params.startDate, params.endDate)}. Motif: ${params.reason}.`,
+      severity: 'WARNING',
+      link: '/planning',
+      actorId: params.staffMemberId,
+      data: { absenceId: absence.id },
+      dm: featureConfig?.notifyViaDM ?? true,
+    }).catch(() => null);
   }
 
   // Notifier tous les managers/admins
@@ -303,17 +306,19 @@ export const createAbsence = async (
   });
   
   if (managers.length > 0) {
-    await Promise.all(managers
-      .filter(m => m.userId !== params.superiorUserId)
-      .map(m => createNotification(
-        params.guildId,
-        m.userId,
-        'Nouvelle absence demandée',
-        `Une absence a été soumise. Staff: ${getAbsenceDisplayName(requester, params.staffMemberId)}. Type: ${params.type}. Durée: ${formatAbsenceDuration(params.startDate, params.endDate)}. Motif: ${params.reason}.`,
-        'INFO',
-        '/planning',
-        featureConfig?.notifyViaDM ?? true
-      ).catch(() => null))
+    await notifyMany(
+      managers.filter(m => m.userId !== params.superiorUserId).map(m => m.userId),
+      {
+        guildId: params.guildId,
+        kind: 'planning.absence_requested',
+        title: 'Nouvelle absence demandée',
+        message: `Une absence a été soumise. Staff: ${getAbsenceDisplayName(requester, params.staffMemberId)}. Type: ${params.type}. Durée: ${formatAbsenceDuration(params.startDate, params.endDate)}. Motif: ${params.reason}.`,
+        link: '/planning',
+        actorId: params.staffMemberId,
+        groupKey: 'planning.absence_requested',
+        data: { absenceId: absence.id },
+        dm: featureConfig?.notifyViaDM ?? true,
+      }
     );
   }
 
@@ -410,14 +415,16 @@ export const updateAbsenceStatus = async (
     include: { staffMember: true }
   });
   if (absence && absence.staffMember.userId !== decisionByUserId) {
-    await createNotification(
-      absence.guildId,
-      absence.staffMember.userId,
-      'Mise à jour de votre absence',
-      `Votre absence a été marquée comme: ${status}.`,
-      status === 'APPROVED' ? 'SUCCESS' : (status === 'REJECTED' ? 'ERROR' : 'INFO'),
-      '/planning'
-    ).catch(() => null);
+    await notify({
+      guildId: absence.guildId,
+      userId: absence.staffMember.userId,
+      kind: 'planning.absence_decided',
+      title: 'Mise à jour de votre absence',
+      message: `Votre absence a été marquée comme: ${status}.`,
+      severity: status === 'APPROVED' ? 'SUCCESS' : (status === 'REJECTED' ? 'ERROR' : 'INFO'),
+      link: '/planning',
+      actorId: decisionByUserId,
+    }).catch(() => null);
   }
 
   return result;
@@ -603,16 +610,13 @@ export const createMeeting = async (
       ? formatInTimezone(scheduledAt, timezone)
       : await formatGuildDateTime(guildId, scheduledAt);
     
-    if (staff.length > 0) {
-      await Promise.all(staff.map(m => createNotification(
-        guildId,
-        m.userId,
-        'Nouvelle réunion planifiée',
-        `La réunion "${title}" a été planifiée pour le ${meetingTimeLabel}.`,
-        'INFO',
-        '/planning'
-      ).catch(() => null)));
-    }
+    await notifyMany(staff.map(m => m.userId), {
+      guildId,
+      kind: 'planning.meeting_scheduled',
+      title: 'Nouvelle réunion planifiée',
+      message: `La réunion "${title}" a été planifiée pour le ${meetingTimeLabel}.`,
+      link: '/planning',
+    });
 
     // On met à jour l'annonce immédiatement pour afficher les stats initiales (ex: ceux déjà en congé)
     await updateMeetingAnnouncement(client, meeting.id);
@@ -1007,14 +1011,15 @@ export const createManagerNote = async (
   const target = await prisma.staffMember.findUnique({ where: { id: staffUserId } });
   
   if (target) {
-    await createNotification(
+    await notify({
       guildId,
-      target.userId,
-      'Nouvelle note de management',
-      `Une nouvelle note a été ajoutée à votre dossier par ${author?.displayName || 'un manager'}.`,
-      'INFO',
-      `/profile/${target.userId}`
-    ).catch(() => null);
+      userId: target.userId,
+      kind: 'staff.manager_note',
+      title: 'Nouvelle note de management',
+      message: `Une nouvelle note a été ajoutée à votre dossier par ${author?.displayName || 'un manager'}.`,
+      link: `/profile/${target.userId}`,
+      actorId: author?.userId,
+    }).catch(() => null);
   }
 
   return note;
@@ -1076,16 +1081,14 @@ export const createPoll = async (
     where: { guildId }
   });
 
-  if (staff.length > 0) {
-    await Promise.all(staff.map(m => createNotification(
-      guildId,
-      m.userId,
-      'Nouveau sondage staff',
-      `Un nouveau sondage est disponible : "${title}".`,
-      'INFO',
-      '/staff-management/polls'
-    ).catch(() => null)));
-  }
+  await notifyMany(staff.map(m => m.userId), {
+    guildId,
+    kind: 'staff.poll_created',
+    title: 'Nouveau sondage staff',
+    message: `Un nouveau sondage est disponible : "${title}".`,
+    link: '/staff-management/polls',
+    data: { pollId: poll.id },
+  });
 
   return poll;
 };
@@ -1149,22 +1152,16 @@ export const upsertProcedure = async (
       data: { guildId, title, content, sortOrder }
     });
 
-    // Notifier tout le staff
-    const staff = await prisma.staffMember.findMany({ where: { guildId } });
-    const notifsData = staff.map(m => ({
+    // Notifier tout le staff (dashboard seulement, comme avant la refonte)
+    const staff = await prisma.staffMember.findMany({ where: { guildId }, select: { userId: true } });
+    await notifyMany(staff.map(m => m.userId), {
       guildId,
-      userId: m.userId,
+      kind: 'staff.procedure_published',
       title: 'Nouvelle procédure disponible',
       message: `Une nouvelle procédure intitulée "${title}" a été ajoutée. Veuillez en prendre connaissance.`,
-      type: 'INFO',
       link: '/procedures',
-      isRead: false
-    }));
-
-    if (notifsData.length > 0) {
-      await prisma.notification.createMany({ data: notifsData });
-      broadcastDashboardStateChange(guildId, 'notifications_updated');
-    }
+      dm: false,
+    });
 
     return procedure;
   }
@@ -1239,8 +1236,9 @@ export const getStaffAlertsAndProgression = async (guildId: string) => {
 
 export const getNotifications = async (guildId: string, userId: string) => {
   return prisma.notification.findMany({
-    where: { guildId, userId },
-    orderBy: { createdAt: 'desc' },
+    // Même boîte que le dashboard : sans les archivées, une notification regroupée remonte à sa dernière mise à jour.
+    where: { guildId, userId, archivedAt: null },
+    orderBy: { updatedAt: 'desc' },
     take: 50
   });
 };
@@ -1259,87 +1257,6 @@ export const markAllNotificationsRead = async (guildId: string, userId: string) 
   });
   broadcastDashboardStateChange(guildId, 'notifications_updated');
   return result;
-};
-
-export const createNotification = async (
-  guildId: string,
-  userId: string,
-  title: string,
-  message: string,
-  type: 'INFO' | 'SUCCESS' | 'WARNING' | 'ERROR' | 'CRITICAL' = 'INFO',
-  link?: string,
-  sendDm: boolean = true
-) => {
-  // 1. Vérifier si l'utilisateur est un membre du staff pour enregistrer la notification sur le dashboard
-  const staff = await prisma.staffMember.findUnique({
-    where: { guildId_userId: { guildId, userId } }
-  });
-
-  let notification = null;
-  if (staff) {
-    notification = await prisma.notification.create({
-      data: {
-        guildId,
-        userId,
-        title,
-        message,
-        type,
-        link,
-        isRead: false
-      }
-    });
-    broadcastDashboardStateChange(guildId, 'notifications_updated');
-  }
-
-  // 2. Envoi d'un MP automatique (pour tout le monde, staff ou non)
-  if (sendDm) {
-    try {
-      const client = getClient();
-      const user = await client.users.fetch(userId).catch(() => null);
-      if (user) {
-        const typeEmoji = {
-          'SUCCESS': '✅',
-          'WARNING': '⚠️',
-          'ERROR': '❌',
-          'INFO': 'ℹ️',
-          'CRITICAL': '🚨'
-        }[type] || '🔔';
-
-        const guild = client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId).catch(() => null);
-        const serverName = guild ? guild.name : '';
-
-        const embed = new EmbedBuilder()
-          .setTitle(`${typeEmoji} ${title}`)
-          .setDescription(message)
-          .setColor(type === 'ERROR' || type === 'CRITICAL' ? '#ED4245' : (type === 'WARNING' ? '#FEE75C' : (type === 'SUCCESS' ? '#57F287' : '#5865F2')))
-          .setTimestamp();
-
-        if (serverName) {
-          embed.setFooter({ text: `Serveur : ${serverName}` });
-        }
-
-        if (link && staff) { // Le lien vers le dashboard n'est utile que pour le staff
-          const dashboardUrl = process.env.DASHBOARD_URL || 'http://localhost:5173';
-          const fullLink = link.startsWith('http') ? link : `${dashboardUrl}${link}`;
-          
-          const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-            new ButtonBuilder()
-              .setLabel('Voir sur le Dashboard')
-              .setStyle(ButtonStyle.Link)
-              .setURL(fullLink)
-          );
-          
-          await user.send({ embeds: [embed], components: [row], allowedMentions: { parse: [] } }).catch(() => null);
-        } else {
-          await user.send({ embeds: [embed], allowedMentions: { parse: [] } }).catch(() => null);
-        }
-      }
-    } catch (error) {
-      logger.debug('Notification', `Impossible d'envoyer le MP à ${userId}: ${error}`);
-    }
-  }
-
-  return notification;
 };
 
 /**
@@ -1376,20 +1293,13 @@ export const processMeetingNotifications = async () => {
       
       if (!hasStartNotification) {
         // Envoyer les notifications de début
-        const participants = meeting.presences.map(p => p.staffMember);
-        const notificationTasks = participants.map((member) =>
-          createNotification(
-            meeting.guildId,
-            member.userId,
-            '📅 Réunion en cours',
-            `La réunion ${meeting.title} commence maintenant!`,
-            'INFO',
-            `/planning?id=${meeting.id}`,
-            true
-          )
-        );
-        
-        await Promise.all(notificationTasks);
+        await notifyMany(meeting.presences.map(p => p.staffMember.userId), {
+          guildId: meeting.guildId,
+          kind: 'planning.meeting_started',
+          title: '📅 Réunion en cours',
+          message: `La réunion ${meeting.title} commence maintenant!`,
+          link: `/planning?id=${meeting.id}`,
+        });
         
         // Mettre à jour la notification date
         await prisma.staffMeeting.update({
@@ -1426,20 +1336,13 @@ export const processMeetingNotifications = async () => {
       
       if (!hasEndNotification && meeting.status === 'SCHEDULED') {
         // Envoyer les notifications de fin
-        const participants = meeting.presences.map(p => p.staffMember);
-        const notificationTasks = participants.map((member) =>
-          createNotification(
-            meeting.guildId,
-            member.userId,
-            '📅 Réunion terminée',
-            `La réunion ${meeting.title} est terminée.`,
-            'INFO',
-            `/planning?id=${meeting.id}`,
-            true
-          )
-        );
-        
-        await Promise.all(notificationTasks);
+        await notifyMany(meeting.presences.map(p => p.staffMember.userId), {
+          guildId: meeting.guildId,
+          kind: 'planning.meeting_ended',
+          title: '📅 Réunion terminée',
+          message: `La réunion ${meeting.title} est terminée.`,
+          link: `/planning?id=${meeting.id}`,
+        });
         
         // Mettre à jour la notification end date et marquer comme complétée
         await prisma.staffMeeting.update({
@@ -1845,16 +1748,13 @@ export const createCall = async (
     });
 
     const timeLabel = await formatGuildDateTime(guildId, scheduledAt);
-    await Promise.all(inviteeStaff.map(m => 
-      createNotification(
-        guildId,
-        m.userId,
-        `Nouvel appel planifié`,
-        `Vous êtes invité à l'appel "${title}" planifié pour le ${timeLabel}.`,
-        'INFO',
-        '/planning'
-      ).catch(() => null)
-    ));
+    await notifyMany(inviteeStaff.map(m => m.userId), {
+      guildId,
+      kind: 'planning.call_scheduled',
+      title: 'Nouvel appel planifié',
+      message: `Vous êtes invité à l'appel "${title}" planifié pour le ${timeLabel}.`,
+      link: '/planning',
+    });
 
     return call;
   } catch (error) {
@@ -2037,14 +1937,16 @@ export const createTask = async (
   });
 
   if (task.assignee.userId !== createdByUserId) {
-    await createNotification(
+    await notify({
       guildId,
-      task.assignee.userId,
-      `Nouvelle tâche assignée`,
-      `Vous avez reçu une nouvelle tâche : "${title}" (Priorité: ${priority}).`,
-      'INFO',
-      '/planning'
-    ).catch(() => null);
+      userId: task.assignee.userId,
+      kind: 'planning.task_assigned',
+      title: 'Nouvelle tâche assignée',
+      message: `Vous avez reçu une nouvelle tâche : "${title}" (Priorité: ${priority}).`,
+      link: '/planning',
+      actorId: task.creator?.userId,
+      data: { taskId: task.id },
+    }).catch(() => null);
   }
 
   return task;

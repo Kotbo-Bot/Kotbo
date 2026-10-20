@@ -1,6 +1,7 @@
 import { type Client, type Guild, type GuildMember, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, type TextChannel, PermissionFlagsBits } from 'discord.js';
 import prisma from '../../utils/db.js';
 import { cache } from '../../utils/cache.js';
+import { notifyJoinBlocked } from '../notifications/notifyService.js';
 import { logger } from '../../utils/logger.js';
 import { COLORS } from '../../utils/embeds.js';
 import type { RaidProtectionConfig } from '@prisma/client';
@@ -243,7 +244,7 @@ export async function handleJoinDuringLock(member: GuildMember, config: RaidProt
   const me = member.guild.members.me;
   if (!me?.permissions.has(PermissionFlagsBits.KickMembers)) return false;
 
-  await member.send(`🔒 **${member.guild.name}** - ${config.joinLockMessage}`).catch(() => null);
+  await notifyJoinBlocked(member.guild.id, member.id, config.joinLockMessage);
   await member.kick('Join lock actif (protection anti-raid)').catch(() => null);
   return true;
 }
@@ -253,9 +254,7 @@ export async function handleJoinDuringRaidKick(member: GuildMember, config: Raid
   if (!config.raidModeActive || config.antiRaidAction !== 'KICK') return false;
   if (member.user.bot) return false;
 
-  await member
-    .send(`🚨 **${member.guild.name}** est actuellement en mode protection anti-raid. Merci de réessayer plus tard.`)
-    .catch(() => null);
+  await notifyJoinBlocked(member.guild.id, member.id, `**${member.guild.name}** est actuellement en mode protection anti-raid. Merci de réessayer plus tard.`);
   await member.kick('Raid mode actif - expulsion automatique').catch(() => null);
   return true;
 }

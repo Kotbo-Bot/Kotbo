@@ -1207,10 +1207,15 @@ async function processLevelUp(
       .replace(/{level}/g, String(newLevel)) + coinRewardText;
 
     if (config.levelUpChannelId === 'DM') {
-      const dmChannel = await member.createDM().catch(() => null);
-      if (dmChannel) {
-        await dmChannel.send(msg).catch(() => null);
-      }
+      const { notify } = await import('../notifications/notifyService.js');
+      await notify({
+        guildId,
+        userId,
+        kind: 'community.level_up',
+        title: m.ntf_level_up_title({ level: newLevel }, { locale }),
+        message: msg,
+        severity: 'SUCCESS',
+      }).catch(() => null);
     } else if (config.levelUpChannelId && config.levelUpChannelId !== 'current') {
       const targetChannel = discordGuild.channels.cache.get(config.levelUpChannelId);
       if (targetChannel?.isTextBased()) {

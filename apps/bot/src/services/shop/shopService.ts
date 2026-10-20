@@ -20,6 +20,7 @@ import {
   type ShopOfferError,
 } from '@kotbo/shared';
 import prisma from '../../utils/db.js';
+import { notify } from '../notifications/notifyService.js';
 import { logger } from '../../utils/logger.js';
 import { resolveGuildLocale } from '../../utils/i18n.js';
 import * as m from '../../lib/paraglide/messages.js';
@@ -562,7 +563,7 @@ export async function processShopRenewals(client: Client): Promise<{ charged: nu
     signalShop(grant.guildId, grant.userId);
     const locale = await localeOf(client, grant.guildId);
     const role = client.guilds.cache.get(grant.guildId)?.roles.cache.get(grant.roleId);
-    await notifyShopMember(client, grant.userId, {
+    await notifyShopMember(grant.guildId, grant.userId, {
       title: m.shop_notify_role_expired_title({}, { locale }),
       body: m.shop_notify_role_expired_body({ role: role?.name ?? grant.roleId }, { locale }),
     });
@@ -578,7 +579,7 @@ async function renewSubscription(client: Client, sub: ShopSubscriptionRow, now: 
   const name = offer?.name ?? '';
   if (sub.cancelAtPeriodEnd || !offer) {
     await endSubscription(client, sub, now);
-    await notifyShopMember(client, sub.userId, {
+    await notifyShopMember(sub.guildId, sub.userId, {
       title: m.shop_notify_sub_ended_title({}, { locale }),
       body: m.shop_notify_sub_ended_body({ name }, { locale }),
     });
@@ -620,11 +621,11 @@ async function renewSubscription(client: Client, sub: ShopSubscriptionRow, now: 
     const graceUntil = new Date(now.getTime() + settings.graceDays * PERIOD_MS);
     if (settings.graceDays <= 0) {
       await endSubscription(client, sub, now);
-      await notifyShopMember(client, sub.userId, { title: m.shop_notify_sub_ended_title({}, { locale }), body: m.shop_notify_sub_unpaid_body({ name }, { locale }) });
+      await notifyShopMember(sub.guildId, sub.userId, { title: m.shop_notify_sub_ended_title({}, { locale }), body: m.shop_notify_sub_unpaid_body({ name }, { locale }) });
       return 'ended';
     }
     await prisma.shopSubscription.update({ where: { id: sub.id }, data: { status: 'GRACE', graceUntil } });
-    await notifyShopMember(client, sub.userId, {
+    await notifyShopMember(sub.guildId, sub.userId, {
       title: m.shop_notify_sub_grace_title({}, { locale }),
       body: m.shop_notify_sub_grace_body({ name, price: await formatShopPrice(sub.guildId, price), date: graceUntil.toLocaleDateString(locale === 'en' ? 'en-GB' : 'fr-FR') }, { locale }),
     });
@@ -633,7 +634,7 @@ async function renewSubscription(client: Client, sub: ShopSubscriptionRow, now: 
   }
   if (sub.graceUntil && sub.graceUntil.getTime() <= now.getTime()) {
     await endSubscription(client, sub, now);
-    await notifyShopMember(client, sub.userId, { title: m.shop_notify_sub_ended_title({}, { locale }), body: m.shop_notify_sub_unpaid_body({ name }, { locale }) });
+    await notifyShopMember(sub.guildId, sub.userId, { title: m.shop_notify_sub_ended_title({}, { locale }), body: m.shop_notify_sub_unpaid_body({ name }, { locale }) });
     return 'ended';
   }
   return 'waiting';
@@ -663,18 +664,15 @@ async function localeOf(client: Client, guildId: string): Promise<'fr' | 'en'> {
 }
 
 /** MP au membre (messages privés fermés : rien à faire). */
-async function notifyShopMember(client: Client, userId: string, notification: { title: string; body: string }): Promise<void> {
-  try {
-    const user = await client.users.fetch(userId);
-    await user.send({ embeds: [new EmbedBuilder().setTitle(notification.title.slice(0, 256)).setDescription(notification.body.slice(0, 2000))] });
-  } catch {
-    // MP fermés.
-  }
+async function notifyShopMember(guildId: string, userId: string, notification: { title: string; body: string }): Promise<void> {
+  await notify({ guildId, userId, kind: 'community.shop', title: notification.title, message: notification.body.slice(0, 2000) }).catch(
+    (err: unknown) => logger.debug('Shop', `Notification boutique non remise à ${userId} :`, err),
+  );
 }
 
 async function notifyOrderDecision(client: Client, order: ShopOrder, approved: boolean, reason: string): Promise<void> {
   const locale = await localeOf(client, order.guildId);
-  await notifyShopMember(client, order.buyerId, approved
+  await notifyShopMember(order.guildId, order.buyerId, approved
     ? { title: m.shop_notify_approved_title({}, { locale }), body: m.shop_notify_approved_body({ name: order.offerName }, { locale }) }
     : {
         title: m.shop_notify_refused_title({}, { locale }),
@@ -685,7 +683,7 @@ async function notifyOrderDecision(client: Client, order: ShopOrder, approved: b
 async function afterCompletion(client: Client, guildId: string, logChannelId: string | null, order: ShopOrder): Promise<void> {
   const locale = await localeOf(client, guildId);
   if (order.recipientId !== order.buyerId) {
-    await notifyShopMember(client, order.recipientId, {
+    await notifyShopMember(order.guildId, order.recipientId, {
       title: m.shop_notify_gift_title({}, { locale }),
       body: m.shop_notify_gift_body({ name: order.offerName, buyer: `<@${order.buyerId}>` }, { locale }),
     });

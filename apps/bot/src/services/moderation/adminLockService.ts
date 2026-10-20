@@ -32,6 +32,7 @@ import { type GuildMember,
 import type { AdminPermissionRequest, AdminPermissionRequestType } from '@prisma/client';
 import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
+import { notify } from '../notifications/notifyService.js';
 import { publicErrorMessage } from '../../utils/publicError.js';
 import { resolveLogChannel } from '../../utils/logChannel.js';
 import { getOrCreateAutoModConfig, invalidateAutoModCache } from './autoModService.js';
@@ -452,8 +453,7 @@ async function tripCircuitBreakerIfNeeded(client: Client, guild: Guild): Promise
     .setDescription("Plus de 10 annulations en 60 secondes ont été détectées. La fonctionnalité a été désactivée pour éviter une boucle. Réactivez-la manuellement depuis le dashboard après vérification.")
     .setTimestamp();
 
-  const owner = await guild.members.fetch(guild.ownerId).catch(() => null);
-  await owner?.send({ embeds: [embed] }).catch(() => null);
+  await notifyAdminLock(guild.id, guild.ownerId, embedToNotice(embed));
 
   const guildDb = await prisma.guild.findUnique({ where: { id: guild.id }, select: { logChannelId: true } });
   const logChannel = await resolveLogChannel(guild, guildDb?.logChannelId, 'AdminLockService');
@@ -490,19 +490,26 @@ async function notifyNativeRevert(
 
   await mirrorModlogToStaffServer(client, guild.id, embed).catch(() => null);
 
-  const executor = await client.users.fetch(params.executorId).catch(() => null);
-  await executor
-    ?.send(
-      `⚠️ Une action que vous avez effectuée sur **${guild.name}** a été annulée automatiquement : ce serveur protège l'octroi de la permission ADMINISTRATOR (Admin Permission Lock).`
-    )
-    .catch(() => null);
+  await notifyAdminLock(guild.id, params.executorId, {
+    title: 'Action annulée',
+    message: `Une action que vous avez effectuée sur **${guild.name}** a été annulée automatiquement : ce serveur protège l'octroi de la permission ADMINISTRATOR (Admin Permission Lock).`,
+  });
 
-  const owner = await guild.members.fetch(guild.ownerId).catch(() => null);
-  if (owner && owner.id !== params.executorId) {
-    await owner
-      .send(`🔒 **${guild.name}** - Admin Permission Lock a annulé une action potentiellement dangereuse effectuée par <@${params.executorId}>.\n${params.details}`)
-      .catch(() => null);
+  if (guild.ownerId !== params.executorId) {
+    await notifyAdminLock(guild.id, guild.ownerId, {
+      title: 'Admin Permission Lock',
+      message: `Admin Permission Lock a annulé une action potentiellement dangereuse effectuée par <@${params.executorId}>.\n${params.details}`,
+    });
   }
+}
+
+function embedToNotice(embed: EmbedBuilder): { title: string; message: string } {
+  const fields = (embed.data.fields ?? []).map((f) => `**${f.name}** : ${f.value}`);
+  return { title: embed.data.title ?? 'Admin Permission Lock', message: [embed.data.description ?? '', ...fields].filter(Boolean).join('\n') };
+}
+
+async function notifyAdminLock(guildId: string, userId: string, notice: { title: string; message: string }): Promise<void> {
+  await notify({ guildId, userId, kind: 'security.admin_lock', severity: 'CRITICAL', ...notice }).catch(() => null);
 }
 
 function findChange(entry: GuildAuditLogsEntry, key: string): { old?: unknown; new?: unknown } | undefined {
@@ -686,10 +693,7 @@ async function handleBurstSuspendCheck(
   }
   await mirrorModlogToStaffServer(client, guild.id, embed).catch(() => null);
 
-  const owner = await guild.members.fetch(guild.ownerId).catch(() => null);
-  if (owner && owner.id !== executorId) {
-    await owner.send({ embeds: [embed] }).catch(() => null);
-  }
+  if (guild.ownerId !== executorId) await notifyAdminLock(guild.id, guild.ownerId, embedToNotice(embed));
 }
 
 export function registerAdminLockAuditListener(client: Client): void {

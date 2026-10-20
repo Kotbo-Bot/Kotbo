@@ -184,7 +184,6 @@
     // l'accueil. Ce qu'il montre est filtre bloc par bloc par l'API.
     if (path === "/") return "dashboard";
     if (path.startsWith("/analytics")) return "analytics";
-    if (path.startsWith("/inbox")) return "inbox";
     if (path.startsWith("/events")) return "events";
     if (path.startsWith("/members") || path.startsWith("/invitations"))
       return "members";
@@ -297,7 +296,7 @@
    */
   const ADMIN_ROUTES = [
     "/management", "/modules", "/server-template", "/setup",
-    "/migration", "/campaigns", "/module-settings", "/notifications",
+    "/migration", "/campaigns", "/module-settings", "/alerts",
     "/command-access", "/backups", "/schedules", "/mcp-settings", "/webhooks",
     "/custom-bot", "/automations", "/staff-management", "/channels-management",
   ];
@@ -961,7 +960,7 @@
                 {@render handleLegacyRedirect(meta.params.moduleId)}
               </Route>
               <LazyRoute
-                path="/notifications"
+                path="/alerts"
                 load={() => import("./pages/NotificationsSettings.svelte")}
               />
               <LazyRoute
@@ -1103,9 +1102,13 @@
               path="/planning/*"
               load={() => import("./pages/Planning.svelte")}
             />
+            <!-- La boîte personnelle a pris la place de l'Inbox : les anciens liens y mènent. -->
+            <Route path="/inbox/*">
+              <div use:navigate={"/notifications"}></div>
+            </Route>
             <LazyRoute
-              path="/inbox/*"
-              load={() => import("./pages/Inbox.svelte")}
+              path="/notifications"
+              load={() => import("./pages/Notifications.svelte")}
             />
             <LazyRoute
               path="/tutoring"

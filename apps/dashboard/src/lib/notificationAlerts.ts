@@ -33,6 +33,7 @@ export type AnnouncedNotification = {
   message: string;
   type: string;
   link?: string | null;
+  updatedAt?: string;
 };
 
 type DesktopPermission = NotificationPermission | 'unsupported';
@@ -52,6 +53,7 @@ const CLAIM_MEMORY = 200;
 const ICON_URL = `${import.meta.env.BASE_URL ?? '/'}icons/icon-192.png`.replace(/\/{2,}/g, '/');
 
 export function toTone(type: string): NotificationTone {
+  if (type === 'CRITICAL') return 'ERROR';
   return type in SEVERITY ? (type as NotificationTone) : 'INFO';
 }
 
@@ -113,14 +115,16 @@ function readClaimed(): string[] {
  * sans lui (navigateur ancien), on accepte le risque d'un doublon plutot que de
  * ne rien annoncer.
  */
-async function claim<T extends { id: string }>(items: T[]): Promise<T[]> {
+async function claim<T extends { id: string; updatedAt?: string }>(items: T[]): Promise<T[]> {
+  // Une notification regroupée revient sous le même id : sa mise à jour compte comme une nouvelle annonce.
+  const keyOf = (item: T) => (item.updatedAt ? `${item.id}:${item.updatedAt}` : item.id);
   const run = () => {
     const claimed = readClaimed();
     const known = new Set(claimed);
-    const fresh = items.filter((item) => !known.has(item.id));
+    const fresh = items.filter((item) => !known.has(keyOf(item)));
     if (fresh.length > 0) {
       try {
-        const next = [...claimed, ...fresh.map((item) => item.id)].slice(-CLAIM_MEMORY);
+        const next = [...claimed, ...fresh.map(keyOf)].slice(-CLAIM_MEMORY);
         localStorage.setItem(CLAIM_KEY, JSON.stringify(next));
       } catch {
         // Mode prive : chaque onglet annonce pour lui-meme.
@@ -225,7 +229,7 @@ export async function announceNotifications(items: AnnouncedNotification[]): Pro
       const text = item.message ? `${item.title} · ${truncate(item.message, 120)}` : item.title;
       toast.add(text, TOAST_TYPE[toTone(item.type)], 7000, {
         label: m.notif_toast_view(),
-        onClick: () => openNotification(item.id, item.link ?? '/inbox'),
+        onClick: () => openNotification(item.id, item.link ?? '/notifications'),
       });
     }
     return;
@@ -244,7 +248,7 @@ export async function announceNotifications(items: AnnouncedNotification[]): Pro
         id: null,
         title: 'Kotbo',
         body: m.notif_desktop_many({ count: fresh.length }),
-        link: '/inbox',
+        link: '/notifications',
         tone,
       },
       silent,

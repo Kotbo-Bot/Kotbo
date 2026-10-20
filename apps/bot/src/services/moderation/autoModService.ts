@@ -1377,16 +1377,15 @@ export async function handleAntiBotAdd(member: GuildMember, client: Client): Pro
 
     // Notifier la personne qui a ajouté le bot (si identifiable)
     if (addedById) {
-      try {
-        const adder = await client.users.fetch(addedById).catch(() => null);
-        if (adder) {
-          await adder.send(
-            `⚠️ Le bot **${member.user.tag}** que vous avez ajouté sur **${member.guild.name}** a été ${action === 'BAN' ? 'banni' : 'expulsé'} automatiquement. Ce serveur est en **mode sécurisé** : seul le propriétaire peut ajouter des bots.`
-          ).catch(() => null);
-        }
-      } catch {
-        // DM fermés, pas grave
-      }
+      const { notify } = await import('../notifications/notifyService.js');
+      await notify({
+        guildId: member.guild.id,
+        userId: addedById,
+        kind: 'security.admin_lock',
+        title: 'Bot retiré automatiquement',
+        message: `Le bot **${member.user.tag}** que vous avez ajouté sur **${member.guild.name}** a été ${action === 'BAN' ? 'banni' : 'expulsé'} automatiquement. Ce serveur est en **mode sécurisé** : seul le propriétaire peut ajouter des bots.`,
+        severity: 'WARNING',
+      }).catch(() => null);
     }
 
     return true;
