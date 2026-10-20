@@ -11,6 +11,7 @@ type StoredInvite = {
   inviterTag: string | null;
   isTemporary: boolean;
   isDeleted: boolean;
+  sourceLabel?: string | null;
 };
 
 let storedInvites: StoredInvite[] = [];
@@ -33,16 +34,18 @@ for (const dbPath of ['../../utils/db.ts', '../../utils/db.js']) {
 
 const { syncGuildInvites } = await import('../../services/analytics/inviteService.js');
 
-function discordInvite(code: string, uses: number) {
+function discordInvite(code: string, uses: number, inviter: { id: string; username: string; bot?: boolean } = { id: 'u1', username: 'membre' }) {
   return {
     code,
     uses,
     maxUses: 0,
     expiresAt: null,
-    inviter: { id: 'u1', tag: 'membre', username: 'membre' },
+    inviter: { tag: inviter.username, bot: false, ...inviter },
     temporary: false,
   };
 }
+
+const DISBOARD = { id: '302050872383242240', username: 'DISBOARD', bot: true };
 
 function stored(code: string, uses: number): StoredInvite {
   return {
@@ -61,6 +64,7 @@ let fetchCalls = 0;
 function fakeGuild(id: string, invites: ReturnType<typeof discordInvite>[]) {
   return {
     id,
+    client: { user: { id: 'kotbo' } },
     invites: {
       fetch: async () => {
         fetchCalls += 1;
@@ -114,5 +118,38 @@ describe('syncGuildInvites', () => {
     await syncGuildInvites(guild, { maxAgeMs: 60_000 });
 
     expect(fetchCalls).toBe(1);
+  });
+
+  test("etiquette les invitations creees par un autre bot, jamais celles de Kotbo", async () => {
+    storedInvites = [];
+    await syncGuildInvites(fakeGuild('g4', [
+      discordInvite('d', 0, DISBOARD),
+      discordInvite('k', 0, { id: 'kotbo', username: 'Kotbo', bot: true }),
+      discordInvite('m', 0),
+    ]));
+
+    const created = createMany.mock.calls[0][0].data as Array<{ code: string; sourceLabel: string | null }>;
+    expect(created.map((row) => [row.code, row.sourceLabel])).toEqual([
+      ['d', 'Bot-DISBOARD'],
+      ['k', null],
+      ['m', null],
+    ]);
+  });
+
+  test("etiquette une invitation de bot deja connue sans provenance, garde une provenance nommee", async () => {
+    storedInvites = [
+      { ...stored('d', 0), inviterId: DISBOARD.id, inviterTag: 'DISBOARD', sourceLabel: null },
+      { ...stored('e', 0), inviterId: DISBOARD.id, inviterTag: 'DISBOARD', sourceLabel: 'Bump' },
+    ];
+    await syncGuildInvites(fakeGuild('g5', [
+      discordInvite('d', 0, DISBOARD),
+      discordInvite('e', 0, DISBOARD),
+    ]));
+
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(update.mock.calls[0][0]).toEqual({
+      where: { code: 'd' },
+      data: expect.objectContaining({ sourceLabel: 'Bot-DISBOARD' }),
+    });
   });
 });
