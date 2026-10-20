@@ -498,6 +498,13 @@ const CAS: CasAction[] = [
   { customId: `tempvoice:m_untrust:${IDS.AUTORISE}`, genre: 'bouton', chemin: [MEMBRES, fiche(IDS.AUTORISE)] },
   { customId: `tempvoice:m_transfer:${IDS.CIBLE}`, genre: 'bouton', chemin: [MEMBRES, fiche(IDS.CIBLE)], effet: proprietaireDevient(IDS.CIBLE) },
   { customId: `tempvoice:m_ecrire:${IDS.CIBLE}`, genre: 'menuTexte', values: ['deny'], chemin: [MEMBRES, fiche(IDS.CIBLE)], effet: ecrit('PUT', `/permissions/${IDS.CIBLE}`, (c) => refuse(c, PermissionFlagsBits.SendMessages)) },
+  { customId: `tempvoice:m_ecrire:${IDS.CIBLE}`, genre: 'menuTexte', values: ['allow'], chemin: [MEMBRES, fiche(IDS.CIBLE)], effet: ecrit('PUT', `/permissions/${IDS.CIBLE}`, (c) => accorde(c, PermissionFlagsBits.SendMessages)) },
+  // « Suivre le salon » lève une exception posée avant par le propriétaire.
+  {
+    customId: `tempvoice:m_ecrire:${IDS.CIBLE}`, genre: 'menuTexte', values: ['follow'],
+    chemin: [{ customId: `tempvoice:m_ecrire:${IDS.CIBLE}`, genre: 'menuTexte', values: ['deny'], acteur: IDS.PROPRIO, ancien: true }, MEMBRES, fiche(IDS.CIBLE)],
+    effet: (sc) => (tv.tempChannels.get(sc.salonId)?.exceptionsEcriture?.[IDS.CIBLE] === undefined ? null : 'exception encore posée'),
+  },
   // « Redemander » : sur la fiche, seulement pour le propriétaire qui a choisi « Ne plus demander ».
   { customId: `tempvoice:m_redemander:${IDS.CIBLE}`, genre: 'bouton', chemin: [MEMBRES, fiche(IDS.CIBLE)], nePlusDemander: true },
   // MP au propriétaire après un changement de mode qui contredit une exception (porteur : le MP).
@@ -719,7 +726,7 @@ describe('Le banc lui-même', () => {
 
 describe('Matrice : customId × format × mode × rôle × langue', () => {
   for (const cas of CAS) {
-    describe(cas.customId.replace(/\d{18}/g, 'ID').replace(':SALON', ''), () => {
+    describe(`${cas.customId.replace(/\d{18}/g, 'ID').replace(':SALON', '')}${cas.customId.includes(':m_ecrire:') ? ` [${cas.values}]` : ''}`, () => {
       for (const format of FORMATS) for (const mode of MODES) for (const role of ROLES) for (const langue of LANGUES) {
         const coord: Coord = { customId: cas.customId, format, mode, role, langue };
         const defaut = defautConnu(coord);
