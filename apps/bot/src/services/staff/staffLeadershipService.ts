@@ -1236,8 +1236,9 @@ export const getStaffAlertsAndProgression = async (guildId: string) => {
 
 export const getNotifications = async (guildId: string, userId: string) => {
   return prisma.notification.findMany({
-    where: { guildId, userId },
-    orderBy: { createdAt: 'desc' },
+    // Même boîte que le dashboard : sans les archivées, une notification regroupée remonte à sa dernière mise à jour.
+    where: { guildId, userId, archivedAt: null },
+    orderBy: { updatedAt: 'desc' },
     take: 50
   });
 };

@@ -140,7 +140,8 @@ async function transcriptMessageCount(transcriptId: string): Promise<number | nu
 const DASHBOARD_SECTIONS: { prefix: string; fr: string; en: string }[] = [
   { prefix: '/analytics', fr: 'Analytique', en: 'Analytics' },
   { prefix: '/pulse', fr: 'Pulse', en: 'Pulse' },
-  { prefix: '/inbox', fr: 'Boite de reception', en: 'Inbox' },
+  { prefix: '/notifications', fr: 'Notifications', en: 'Notifications' },
+  { prefix: '/alerts', fr: 'Alertes du serveur', en: 'Server alerts' },
   { prefix: '/members', fr: 'Membres', en: 'Members' },
   { prefix: '/invitations', fr: 'Invitations', en: 'Invites' },
   { prefix: '/logs', fr: 'Journaux Discord', en: 'Discord logs' },
