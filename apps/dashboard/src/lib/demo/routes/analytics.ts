@@ -146,7 +146,7 @@ function fullAnalytics(period: number) {
       const t = totals.find((x) => x.person.id === st.userId);
       const msg = t?.messages ?? 0;
       const vm = t?.voiceMinutes ?? 0;
-      return { staffId: st.userId, messages: msg, voiceMinutes: vm, name: st.displayName, grade: st.grade, avatarUrl: null, score: msg + vm * 2 };
+      return { userId: st.userId, messages: msg, voiceMinutes: vm, name: st.displayName, grade: st.grade, avatarUrl: null, score: msg + vm * 2 };
     })
     .sort((a, b) => b.score - a.score);
 
@@ -489,6 +489,10 @@ function categoryDetail(categoryId: string, days: number) {
       voiceOnly: Math.round(d.peakVoice * 0.6),
       both: Math.round(d.peakVoice * 0.8),
     })),
+    series: {
+      current: serverSeries(days).map((d) => ({ dateKey: d.dateKey, messages: Math.round(d.messages * share), voiceMinutes: Math.round(d.voiceMinutes * share) })),
+      previous: serverSeries(days, days).map((d) => ({ dateKey: d.dateKey, messages: Math.round(d.messages * share), voiceMinutes: Math.round(d.voiceMinutes * share) })),
+    },
     voiceHistoryDays: 90,
     channels: cat.channels,
     topMembers: memberTotals(days).slice(0, 8).map((t) => ({

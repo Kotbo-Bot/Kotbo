@@ -604,7 +604,10 @@ export async function getCategoryDetail(client: Client, guildId: string, categor
   const statIds = [...childIds, ...threadParent.keys()];
   const scopeIds = statIds.length > 0 ? statIds : ['0'];
 
-  const [tree, textDays, voiceSessions, memberMessages, guildTotals, prevGuildTotals] = await Promise.all([
+  const seriesScope: AnalyticsScope = {
+    channelIds: scopeIds, userIds: null, excludeUserIds: [], channelFilter: null, roleFilter: null, excludeStaff: false,
+  };
+  const [tree, textDays, voiceSessions, memberMessages, guildTotals, prevGuildTotals, currentSeries, previousSeries] = await Promise.all([
     getChannelTree(client, guildId, range),
     prismaRead.$queryRaw<Array<{ dateKey: string; userId: string; messages: number }>>`
       SELECT "dateKey", "userId", SUM("messages")::int AS "messages"
@@ -631,7 +634,24 @@ export async function getCategoryDetail(client: Client, guildId: string, categor
     `,
     prismaRead.guildDailyStat.aggregate({ where: { guildId, dateKey: { gte: range.start, lte: range.end } }, _sum: { messagesCount: true, voiceMinutes: true } }),
     prismaRead.guildDailyStat.aggregate({ where: { guildId, dateKey: { gte: range.prevStart, lte: range.prevEnd } }, _sum: { messagesCount: true, voiceMinutes: true } }),
+    dailyActivity(guildId, range.start, range.end, seriesScope),
+    dailyActivity(guildId, range.prevStart, range.prevEnd, seriesScope),
   ]);
+
+  // Messages et vocal jour par jour, la période et celle d'avant alignées : les
+  // courbes de la fiche, avec la comparaison en pointillé.
+  const fillDays = (rows: DayRow[], start: string, end: string): DayRow[] => {
+    const byKey = new Map(rows.map((r) => [r.dateKey, r]));
+    return dayKeys(start, end).map((dateKey) => ({
+      dateKey,
+      messages: Number(byKey.get(dateKey)?.messages ?? 0),
+      voiceMinutes: Number(byKey.get(dateKey)?.voiceMinutes ?? 0),
+    }));
+  };
+  const series = {
+    current: fillDays(currentSeries.rows, range.start, range.end),
+    previous: fillDays(previousSeries.rows, range.prevStart, range.prevEnd),
+  };
 
   const row = tree.categories.find((c) => c.id === categoryId);
   const channels = row?.channels ?? [];
@@ -701,6 +721,7 @@ export async function getCategoryDetail(client: Client, guildId: string, categor
       voiceShare: share(row?.voiceMinutes ?? 0, serverVoice),
     },
     daily,
+    series,
     // La timeline vocale n'est gardée que 60 jours.
     voiceHistoryDays: 60,
     channels,

@@ -9,7 +9,7 @@ import prisma from '../../utils/db.js';
 import { GENERIC_ERROR_MESSAGE, publicErrorMessage } from '../../utils/publicError.js';
 import { embedToV2 } from '../../utils/patchV2.js';
 import { type CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { type APIEmbed, ChannelType, Client, ContainerBuilder, ForumChannel, type Guild, type Message, MessageFlags, type NewsChannel, TextChannel, TextDisplayBuilder, ThreadChannel } from 'discord.js';
+import { type APIEmbed, ChannelType, Client, ContainerBuilder, ForumChannel, type Guild, type GuildBasedChannel, type Message, type NonThreadGuildBasedChannel, MessageFlags, type NewsChannel, TextChannel, TextDisplayBuilder, ThreadChannel } from 'discord.js';
 import { z } from 'zod';
 import type { McpKeyPermission } from '@prisma/client';
 
@@ -139,9 +139,17 @@ export type ChannelResolution =
   | { ok: true; channel: TextChannel | NewsChannel }
   | { ok: false; response: ReturnType<typeof err> };
 
-// Accepte un ID de salon, une mention <#id>, ou un nom de salon (avec ou sans #)
-// et le résout vers un salon textuel unique.
-export function resolveChannel(guildId: string, client: Client, raw: string): ChannelResolution {
+export type GuildChannelResolution =
+  | { ok: true; channel: NonThreadGuildBasedChannel }
+  | { ok: false; response: ReturnType<typeof err> };
+
+function findChannel<T extends GuildBasedChannel>(
+  guildId: string,
+  client: Client,
+  raw: string,
+  accepts: (c: GuildBasedChannel) => c is T,
+  rejected: string,
+): { ok: true; channel: T } | { ok: false; response: ReturnType<typeof err> } {
   const guild = client.guilds.cache.get(guildId);
   if (!guild) return { ok: false, response: err('Serveur Discord introuvable') };
 
@@ -151,15 +159,15 @@ export function resolveChannel(guildId: string, client: Client, raw: string): Ch
   if (directId) {
     const ch = guild.channels.cache.get(directId);
     if (!ch) return { ok: false, response: err('Salon introuvable') };
-    if (!ch.isTextBased()) return { ok: false, response: err("Ce salon n'est pas un salon textuel") };
-    return { ok: true, channel: ch as TextChannel | NewsChannel };
+    if (!accepts(ch)) return { ok: false, response: err(rejected) };
+    return { ok: true, channel: ch };
   }
 
   const name = input.replace(/^#/, '').toLowerCase();
-  const textChannels = guild.channels.cache.filter((c) => c.isTextBased());
+  const candidates = guild.channels.cache.filter(accepts);
 
-  let matches = textChannels.filter((c) => c.name.toLowerCase() === name);
-  if (matches.size === 0) matches = textChannels.filter((c) => c.name.toLowerCase().includes(name));
+  let matches = candidates.filter((c) => c.name.toLowerCase() === name);
+  if (matches.size === 0) matches = candidates.filter((c) => c.name.toLowerCase().includes(name));
 
   if (matches.size === 0) {
     return { ok: false, response: err(`Aucun salon ne correspond à « ${raw} ».`) };
@@ -175,7 +183,34 @@ export function resolveChannel(guildId: string, client: Client, raw: string): Ch
     };
   }
 
-  return { ok: true, channel: matches.first() as TextChannel | NewsChannel };
+  return { ok: true, channel: matches.first()! };
+}
+
+// Accepte un ID de salon, une mention <#id>, ou un nom de salon (avec ou sans #)
+// et le résout vers un salon textuel unique.
+export function resolveChannel(guildId: string, client: Client, raw: string): ChannelResolution {
+  return findChannel(
+    guildId,
+    client,
+    raw,
+    (c): c is TextChannel | NewsChannel => c.isTextBased(),
+    "Ce salon n'est pas un salon textuel",
+  );
+}
+
+/**
+ * Comme `resolveChannel`, mais pour tout salon qui porte ses propres réglages et
+ * permissions : forums, catégories, vocaux... Les fils en sont exclus, ils
+ * héritent de leur salon parent.
+ */
+export function resolveGuildChannel(guildId: string, client: Client, raw: string): GuildChannelResolution {
+  return findChannel(
+    guildId,
+    client,
+    raw,
+    (c): c is NonThreadGuildBasedChannel => !c.isThread(),
+    'Un fil hérite des permissions de son salon parent : modifie plutôt le salon parent.',
+  );
 }
 
 export type ForumResolution =

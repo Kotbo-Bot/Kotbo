@@ -55,6 +55,8 @@
   let ticketAutoClaimOnReply = $state(false);
   let ticketInactivityEnabled = $state(false);
   let ticketInactivityHours = $state(24);
+  let ticketStaffReminderEnabled = $state(false);
+  let ticketStaffReminderMinutes = $state(60);
   let ticketInactivityMessage = $state('');
   let ticketSatisfactionCommentEnabled = $state(true);
   let ticketSatisfactionCommentQuestion = $state('');
@@ -168,6 +170,8 @@
     ticketInactivityEnabled,
     ticketInactivityHours,
     ticketInactivityMessage,
+    ticketStaffReminderEnabled,
+    ticketStaffReminderMinutes,
     ticketSatisfactionCommentEnabled,
     ticketSatisfactionCommentQuestion,
     ticketSatisfactionCommentTimeout,
@@ -241,6 +245,8 @@
     ticketInactivityEnabled = savedSettingsConfig.ticketInactivityEnabled;
     ticketInactivityHours = savedSettingsConfig.ticketInactivityHours;
     ticketInactivityMessage = savedSettingsConfig.ticketInactivityMessage;
+    ticketStaffReminderEnabled = savedSettingsConfig.ticketStaffReminderEnabled;
+    ticketStaffReminderMinutes = savedSettingsConfig.ticketStaffReminderMinutes;
     ticketSatisfactionCommentEnabled = savedSettingsConfig.ticketSatisfactionCommentEnabled;
     ticketSatisfactionCommentQuestion = savedSettingsConfig.ticketSatisfactionCommentQuestion;
     ticketSatisfactionCommentTimeout = savedSettingsConfig.ticketSatisfactionCommentTimeout;
@@ -576,6 +582,8 @@
     ticketInactivityEnabled = config.ticketInactivityEnabled !== undefined ? config.ticketInactivityEnabled : false;
     ticketInactivityHours = config.ticketInactivityHours !== undefined ? config.ticketInactivityHours : 24;
     ticketInactivityMessage = config.ticketInactivityMessage || '';
+    ticketStaffReminderEnabled = config.ticketStaffReminderEnabled === true;
+    ticketStaffReminderMinutes = config.ticketStaffReminderMinutes ?? 60;
     ticketSatisfactionCommentEnabled = config.ticketSatisfactionCommentEnabled !== undefined ? config.ticketSatisfactionCommentEnabled : true;
     // Laisse vide : le bot pose alors sa question par defaut, comme pour les embeds.
     ticketSatisfactionCommentQuestion = config.ticketSatisfactionCommentQuestion || '';
@@ -641,6 +649,8 @@
       ticketInactivityEnabled,
       ticketInactivityHours,
       ticketInactivityMessage,
+      ticketStaffReminderEnabled,
+      ticketStaffReminderMinutes,
       ticketSatisfactionCommentEnabled,
       ticketSatisfactionCommentQuestion,
       ticketSatisfactionCommentTimeout,
@@ -762,6 +772,8 @@
           ticketInactivityEnabled,
           ticketInactivityHours,
           ticketInactivityMessage,
+          ticketStaffReminderEnabled,
+          ticketStaffReminderMinutes,
           ticketSatisfactionCommentEnabled,
           ticketSatisfactionCommentQuestion,
           ticketSatisfactionCommentTimeout,
@@ -1305,7 +1317,7 @@
         </div>
       </div>
       <div class="flex items-center gap-2 shrink-0">
-        {#if ticketInactivityEnabled}
+        {#if ticketInactivityEnabled || ticketStaffReminderEnabled}
           <span class="px-2 py-0.5 rounded-full text-2xs font-semibold uppercase bg-success/10 text-success border border-success/20">{m.e1_tickets_active_badge()}</span>
         {/if}
         <Papicon icon={expandedConfigSection === 'inactivity' ? 'chevron-up' : 'chevron-down'} size={16} class="text-on-surface-variant/40" />
@@ -1331,6 +1343,20 @@
               <FormTextarea bind:value={ticketInactivityMessage} placeholder={m.e1_tickets_inactivity_ph({ user: '{user}' })} className="w-full h-20" />
             </label>
           </div>
+        {/if}
+
+        <label class="flex items-center gap-3 cursor-pointer p-2.5 hover:bg-white/5 rounded-xl transition-colors">
+          <input type="checkbox" bind:checked={ticketStaffReminderEnabled} class="w-4 h-4 rounded text-primary focus:ring-primary border-outline-variant/30" />
+          <div>
+            <span class="text-xs font-bold text-on-surface">{m.e1_tickets_staff_reminder_enable()}</span>
+            <p class="text-2xs text-on-surface-variant">{m.e1_tickets_staff_reminder_desc()}</p>
+          </div>
+        </label>
+        {#if ticketStaffReminderEnabled}
+          <label class="block sm:max-w-[33%]">
+            <span class="text-xs font-bold text-on-surface-variant/80 ml-1 mb-2 block">{m.e1_tickets_staff_reminder_minutes()}</span>
+            <input type="number" bind:value={ticketStaffReminderMinutes} min={1} max={10080} class="w-full bg-surface-container-high text-sm px-4 py-2.5 rounded-xl border border-outline-variant/10 focus:ring-1 ring-primary/30 transition-all outline-none" />
+          </label>
         {/if}
       </div>
     {/if}

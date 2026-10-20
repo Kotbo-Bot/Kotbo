@@ -61,6 +61,10 @@ model Ticket {
   priority      String       @default("NORMAL")
   tags          String[]     @default([])
   inactivityAlertSent Boolean  @default(false)
+  // Dernière relance du staff (membre resté sans réponse) et leur nombre :
+  // une relance par attente, le compteur alimente les statistiques.
+  staffReminderSentAt DateTime?
+  staffReminderCount  Int      @default(0)
   isAnonymous         Boolean  @default(false)
   staffServerGuildId  String?  // Si relay sur serveur staff, l'ID du serveur staff
 

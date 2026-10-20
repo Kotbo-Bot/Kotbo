@@ -162,7 +162,10 @@ async function analyzeAttachments(message: Message, withOcr = false): Promise<Fe
 
 type ImageSource = 'HONEYPOT' | 'MANUAL' | 'QR';
 
-/** Enregistre une image analysée, ses empreintes et le texte qu'on y a lu. */
+/**
+ * Enregistre une image analysée, ses empreintes et le texte qu'on y a lu.
+ * Retourne false si l'image ne porte aucun indice d'arnaque.
+ */
 async function storeScamImage(
   guildId: string,
   image: FetchedImage,
@@ -171,6 +174,12 @@ async function storeScamImage(
   countRepeat: boolean
 ): Promise<boolean> {
   try {
+    // Domaines et texte lus dans la capture rejoignent le jeu de données.
+    const signals = image.ocrText ? await recordScamSignals(guildId, image.ocrText, 'OCR', { countRepeat }) : null;
+    // Le salon piège reçoit aussi des mèmes et des GIF : sans QR ni texte
+    // d'arnaque, l'image ne prouve rien et bloquerait tous ceux qui la repostent.
+    if (source !== 'MANUAL' && !image.qr && !signals?.textRecorded && !signals?.domains.length) return false;
+
     const ocrText = image.ocrText ? compactOcrText(image.ocrText) : null;
     await prisma.scamImageHash.upsert({
       where: { guildId_hash: { guildId, hash: image.sha256 } },
@@ -190,8 +199,6 @@ async function storeScamImage(
       },
     });
     await promoteImageIfWidespread(image.sha256, image.phash, image.name);
-    // Domaines et texte lus dans la capture rejoignent le jeu de données.
-    if (image.ocrText) await recordScamSignals(guildId, image.ocrText, 'OCR', { countRepeat });
     return true;
   } catch (err) {
     logger.error('ScamFilter', `Enregistrement du hash d'image impossible (${guildId})`, err);

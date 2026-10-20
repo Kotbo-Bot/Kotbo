@@ -20,6 +20,7 @@
   import Callout from '../lib/components/ui/Callout.svelte';
   import Button from '../lib/components/ui/Button.svelte';
   import SearchableSelect from '../lib/components/SearchableSelect.svelte';
+  import MemberSearchSelect from '../lib/components/MemberSearchSelect.svelte';
   import Skeleton from '../lib/components/Skeleton.svelte';
   import SimpleModeToggle from '../lib/components/SimpleModeToggle.svelte';
   import SimpleModeNotice from '../lib/components/SimpleModeNotice.svelte';
@@ -104,6 +105,12 @@
 
   const availableChannels = $derived(dashboardStore.state.discordChannels || []);
   const availableRoles = $derived(dashboardStore.state.discordRoles || []);
+  // La blacklist couvre aussi les vocaux (XP vocale) et les categories entieres.
+  const blacklistableChannels = $derived([
+    ...availableChannels,
+    ...(dashboardStore.state.discordVoiceChannels || []),
+    ...(dashboardStore.state.discordCategories || []),
+  ]);
 
   // URL publique du classement
   const publicLeaderboardUrl = $derived(
@@ -135,7 +142,10 @@
     voiceRequireUndeafened: true,
     voiceIgnoreAfkChannel: true,
     voiceMinMembers: 1,
-    dailyXpCap: 0
+    dailyXpCap: 0,
+    progressionBlacklistUserIds: [] as string[],
+    progressionBlacklistRoleIds: [] as string[],
+    progressionBlacklistChannelIds: [] as string[]
   });
 
   // Snapshot of last-saved state
@@ -162,7 +172,10 @@
     voiceRequireUndeafened: true,
     voiceIgnoreAfkChannel: true,
     voiceMinMembers: 1,
-    dailyXpCap: 0
+    dailyXpCap: 0,
+    progressionBlacklistUserIds: [] as string[],
+    progressionBlacklistRoleIds: [] as string[],
+    progressionBlacklistChannelIds: [] as string[]
   })));
 
   // Clan states for boost configuration
@@ -262,6 +275,32 @@
   let searchQuery = $state('');
   let pendingIgnoreChannelId = $state<string | null>(null);
   let pendingIgnoreRoleId = $state<string | null>(null);
+  // Blacklist commune : noms des membres listés (le serveur les donne au chargement).
+  let blacklistNames = $state<Record<string, string>>({});
+  let pendingBlacklistUserId = $state('');
+  let pendingBlacklistRoleId = $state<string | null>(null);
+  let pendingBlacklistChannelId = $state<string | null>(null);
+
+  $effect(() => {
+    const id = pendingBlacklistUserId;
+    if (!id) return;
+    if (!config.progressionBlacklistUserIds.includes(id)) config.progressionBlacklistUserIds = [...config.progressionBlacklistUserIds, id];
+    pendingBlacklistUserId = '';
+  });
+
+  $effect(() => {
+    const id = pendingBlacklistRoleId;
+    if (!id) return;
+    if (!config.progressionBlacklistRoleIds.includes(id)) config.progressionBlacklistRoleIds = [...config.progressionBlacklistRoleIds, id];
+    pendingBlacklistRoleId = null;
+  });
+
+  $effect(() => {
+    const id = pendingBlacklistChannelId;
+    if (!id) return;
+    if (!config.progressionBlacklistChannelIds.includes(id)) config.progressionBlacklistChannelIds = [...config.progressionBlacklistChannelIds, id];
+    pendingBlacklistChannelId = null;
+  });
 
   $effect(() => {
     const channelId = pendingIgnoreChannelId;
@@ -306,9 +345,13 @@
           voiceRequireUndeafened: res.config.voiceRequireUndeafened ?? true,
           voiceIgnoreAfkChannel: res.config.voiceIgnoreAfkChannel ?? true,
           voiceMinMembers: res.config.voiceMinMembers ?? 1,
-          dailyXpCap: res.config.dailyXpCap ?? 0
+          dailyXpCap: res.config.dailyXpCap ?? 0,
+          progressionBlacklistUserIds: res.config.progressionBlacklistUserIds ?? [],
+          progressionBlacklistRoleIds: res.config.progressionBlacklistRoleIds ?? [],
+          progressionBlacklistChannelIds: res.config.progressionBlacklistChannelIds ?? []
         };
         savedConfig = JSON.parse(JSON.stringify(config));
+        blacklistNames = res.blacklistNames ?? {};
         levelingLoaded = true;
         curveMode.resolve(curveFitsSimpleMode());
         // La carte des parametres XP n'ouvre en simple que si tout ce qu'elle
@@ -1398,6 +1441,93 @@
 
         </div>
 
+      </section>
+
+      <!-- Blacklist commune aux modules de progression -->
+      <section class="bg-surface-container-low/30 border border-outline-variant/10 p-8 rounded-xl space-y-6">
+        <h3 class="text-xl font-semibold flex items-center gap-3">
+          <Papicon icon="Prohibit" size={20} class="text-error" />
+          {m.lv_blacklist_title()}
+        </h3>
+        <p class="text-xs text-on-surface-variant leading-relaxed">{m.lv_blacklist_desc()}</p>
+
+        {#snippet chips(ids: string[], label: (id: string) => string, missing: (id: string) => boolean, remove: (id: string) => void, empty: string)}
+          <div class="flex flex-wrap gap-2 p-2.5 bg-surface-container-high/20 border border-outline-variant/10 rounded-lg min-h-[46px] items-center">
+            {#each ids as id (id)}
+              <span
+                class="flex items-center gap-1.5 px-3 py-1 text-xs font-bold rounded-xl border shadow-sm {missing(id) ? 'bg-warning/10 text-warning border-warning/30' : 'bg-surface-container-low text-on-surface-variant border-outline-variant/10'}"
+                title={missing(id) ? m.lv_missing_ref_hint() : undefined}
+              >
+                {label(id)}
+                {#if canManageSettings}
+                  <button type="button" onclick={() => remove(id)} aria-label={m.d4_remove_item({ name: label(id) })} class="inline-flex items-center text-error"><Papicon icon="x" size={11} /></button>
+                {/if}
+              </span>
+            {:else}
+              <span class="text-xs text-on-surface-variant/40 ml-2 font-medium">{empty}</span>
+            {/each}
+          </div>
+        {/snippet}
+
+        <div class="grid grid-cols-1 gap-6">
+          <div class="space-y-2">
+            <p class="text-xs font-semibold text-on-surface-variant ml-2">{m.lv_blacklist_members()}</p>
+            {@render chips(
+              config.progressionBlacklistUserIds,
+              (id) => blacklistNames[id] ?? id,
+              () => false,
+              (id) => (config.progressionBlacklistUserIds = config.progressionBlacklistUserIds.filter((x) => x !== id)),
+              m.lv_blacklist_none(),
+            )}
+            {#if canManageSettings}
+              <MemberSearchSelect
+                bind:value={pendingBlacklistUserId}
+                placeholder={m.lv_blacklist_add_member()}
+                onselect={(member) => (blacklistNames = { ...blacklistNames, [member.id]: member.displayName || member.username })}
+              />
+            {/if}
+          </div>
+
+          <div class="space-y-2 pt-2 border-t border-outline-variant/10">
+            <p class="text-xs font-semibold text-on-surface-variant ml-2">{m.lv_blacklist_roles()}</p>
+            {@render chips(
+              config.progressionBlacklistRoleIds,
+              (id) => `@${availableRoles.find((r) => r.id === id)?.name ?? id}`,
+              (id) => isMissingReference(id, availableRoles),
+              (id) => (config.progressionBlacklistRoleIds = config.progressionBlacklistRoleIds.filter((x) => x !== id)),
+              m.lv_blacklist_none(),
+            )}
+            {#if canManageSettings}
+              <SearchableSelect
+                bind:value={pendingBlacklistRoleId}
+                options={availableRoles.filter((r) => !config.progressionBlacklistRoleIds.includes(r.id)).map((r) => ({ id: r.id, name: `@${r.name}` }))}
+                placeholder={m.lv_blacklist_add_role()}
+                className="w-full"
+                clearable={false}
+              />
+            {/if}
+          </div>
+
+          <div class="space-y-2 pt-2 border-t border-outline-variant/10">
+            <p class="text-xs font-semibold text-on-surface-variant ml-2">{m.lv_blacklist_channels()}</p>
+            {@render chips(
+              config.progressionBlacklistChannelIds,
+              (id) => { const c = blacklistableChannels.find((ch) => ch.id === id); return c ? channelDisplayName(c) : `#${id}`; },
+              (id) => isMissingReference(id, blacklistableChannels),
+              (id) => (config.progressionBlacklistChannelIds = config.progressionBlacklistChannelIds.filter((x) => x !== id)),
+              m.lv_blacklist_none(),
+            )}
+            {#if canManageSettings}
+              <SearchableSelect
+                bind:value={pendingBlacklistChannelId}
+                options={blacklistableChannels.filter((c) => !config.progressionBlacklistChannelIds.includes(c.id)).map((c) => ({ id: c.id, name: channelDisplayName(c) }))}
+                placeholder={m.lv_blacklist_add_channel()}
+                className="w-full"
+                clearable={false}
+              />
+            {/if}
+          </div>
+        </div>
       </section>
 
       <!-- Exclusions et multiplicateurs -->

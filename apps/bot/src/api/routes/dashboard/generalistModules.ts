@@ -60,6 +60,7 @@ import { resolveGuildLocale } from '../../../utils/i18n.js';
 import * as m from '../../../lib/paraglide/messages.js';
 
 import { jsonFailure } from '../../shared/failure.js';
+import { cache } from '../../../utils/cache.js';
 import { publicErrorMessage } from '../../../utils/publicError.js';
 /** Modules de ce fichier dont l'acces est filtre par les regles de role. */
 const FEATURE_GUARDED_MODULE_KEYS = new Set(['economy', 'fun']);
@@ -129,6 +130,13 @@ function parseEmojiRiddleInput(
   return { emojis, answers };
 }
 
+/** Blacklist de progression, renvoyée avec la config du leveling. */
+const BLACKLIST_SELECT = {
+  progressionBlacklistUserIds: true,
+  progressionBlacklistRoleIds: true,
+  progressionBlacklistChannelIds: true,
+} as const;
+
 export async function handleGeneralistModulesRoutes(
   req: IncomingMessage,
   res: ServerResponse,
@@ -187,7 +195,16 @@ export async function handleGeneralistModulesRoutes(
           maxLevel: totals._max.level ?? 0,
         };
 
-        json(res, 200, { config, rewards, stats });
+        // Blacklist commune aux modules de progression : rangée sur le serveur,
+        // éditée depuis cette page qui porte déjà les exclusions du leveling.
+        const blacklist = await prisma.guild.findUnique({ where: { id: guildId }, select: BLACKLIST_SELECT });
+
+        const identities = await getMemberIdentities(client, guildId, blacklist?.progressionBlacklistUserIds ?? []);
+        const blacklistNames = Object.fromEntries(
+          [...identities].map(([id, who]) => [id, who.displayName || who.username]),
+        );
+
+        json(res, 200, { config: { ...config, ...blacklist }, rewards, stats, blacklistNames });
       } catch (err) {
         logger.error('LevelingAPI', 'Error fetching leveling data:', err);
         jsonFailure(res, err, 'Erreur lors de la récupération du leveling', 'LevelingAPI');
@@ -436,6 +453,9 @@ export async function handleGeneralistModulesRoutes(
           stackRewards?: boolean;
           ignoredChannels?: string[];
           ignoredRoles?: string[];
+          progressionBlacklistUserIds?: unknown;
+          progressionBlacklistRoleIds?: unknown;
+          progressionBlacklistChannelIds?: unknown;
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           xpMultipliers?: any;
           lengthBonusEnabled?: boolean;
@@ -511,6 +531,20 @@ export async function handleGeneralistModulesRoutes(
 
         await invalidateLevelConfigCache(guildId);
 
+        // Seuls des identifiants Discord passent : la liste est lue à chaque gain d'XP.
+        const snowflakes = (value: unknown): string[] | undefined => Array.isArray(value)
+          ? [...new Set(value.filter((id): id is string => typeof id === 'string' && /^\d{15,25}$/.test(id)))].slice(0, 500)
+          : undefined;
+        const blacklistUpdate = {
+          progressionBlacklistUserIds: snowflakes(body.progressionBlacklistUserIds),
+          progressionBlacklistRoleIds: snowflakes(body.progressionBlacklistRoleIds),
+          progressionBlacklistChannelIds: snowflakes(body.progressionBlacklistChannelIds),
+        };
+        const blacklist = Object.values(blacklistUpdate).some((list) => list !== undefined)
+          ? await prisma.guild.update({ where: { id: guildId }, data: blacklistUpdate, select: BLACKLIST_SELECT })
+          : await prisma.guild.findUnique({ where: { id: guildId }, select: BLACKLIST_SELECT });
+        await cache.delete(`guild:${guildId}:config`);
+
         // Un changement de courbe redistribue les niveaux : la colonne `level`
         // est réalignée tout de suite, sinon les membres inactifs la gardent
         // périmée jusqu'à leur prochain gain d'XP.
@@ -547,7 +581,7 @@ export async function handleGeneralistModulesRoutes(
           channelId: null
         });
 
-        json(res, 200, { config, resynced, roleResync: getRoleResyncStatus(guildId) });
+        json(res, 200, { config: { ...config, ...blacklist }, resynced, roleResync: getRoleResyncStatus(guildId) });
       } catch (err) {
         logger.error('LevelingAPI', 'Error updating leveling config:', err);
         jsonFailure(res, err, 'Erreur lors de la mise à jour du leveling', 'LevelingAPI');
@@ -2678,6 +2712,7 @@ export async function handleGeneralistModulesRoutes(
             funEmojiRiddleChannelId: true,
             funNeverSayChannelId: true,
             funEmojiOnlyChannelId: true,
+            funImageOfDayChannelId: true,
             funPunitiveMode: true,
             funEmojiRiddleUseDefaults: true,
           }
@@ -2721,6 +2756,7 @@ export async function handleGeneralistModulesRoutes(
           funEmojiRiddleChannelId?: string | null;
           funNeverSayChannelId?: string | null;
           funEmojiOnlyChannelId?: string | null;
+          funImageOfDayChannelId?: string | null;
           funPunitiveMode?: boolean;
           funEmojiRiddleUseDefaults?: boolean;
         }>(req);
@@ -2751,6 +2787,7 @@ export async function handleGeneralistModulesRoutes(
             funEmojiRiddleChannelId: body.funEmojiRiddleChannelId,
             funNeverSayChannelId: body.funNeverSayChannelId,
             funEmojiOnlyChannelId: body.funEmojiOnlyChannelId,
+            funImageOfDayChannelId: body.funImageOfDayChannelId,
             funPunitiveMode: body.funPunitiveMode,
             funEmojiRiddleUseDefaults: typeof body.funEmojiRiddleUseDefaults === 'boolean'
               ? body.funEmojiRiddleUseDefaults
@@ -2799,6 +2836,7 @@ export async function handleGeneralistModulesRoutes(
             funEmojiRiddleChannelId: updatedGuild.funEmojiRiddleChannelId,
             funNeverSayChannelId: updatedGuild.funNeverSayChannelId,
             funEmojiOnlyChannelId: updatedGuild.funEmojiOnlyChannelId,
+            funImageOfDayChannelId: updatedGuild.funImageOfDayChannelId,
             funPunitiveMode: updatedGuild.funPunitiveMode,
             funEmojiRiddleUseDefaults: updatedGuild.funEmojiRiddleUseDefaults,
           },

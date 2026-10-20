@@ -149,6 +149,7 @@ class DashboardStore {
     funEmojiRiddleChannelId: '',
     funNeverSayChannelId: '',
     funEmojiOnlyChannelId: '',
+    funImageOfDayChannelId: '',
     funPunitiveMode: true,
     commandRestrictions: [] as CommandRestrictionRule[],
     sidebarFavorites: [] as string[],
@@ -446,6 +447,7 @@ class DashboardStore {
         this.state.funEmojiRiddleChannelId = data.funEmojiRiddleChannelId || '';
         this.state.funNeverSayChannelId = data.funNeverSayChannelId || '';
         this.state.funEmojiOnlyChannelId = data.funEmojiOnlyChannelId || '';
+        this.state.funImageOfDayChannelId = data.funImageOfDayChannelId || '';
         this.state.funPunitiveMode = data.funPunitiveMode ?? true;
         this.state.commandRestrictions = data.commandRestrictions || [];
         this.state.sidebarFavorites = data.sidebarFavorites || [];

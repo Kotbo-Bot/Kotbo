@@ -33,6 +33,8 @@ export interface AgentStats {
   rating: number | null;
   ratings: number;
   openNow: number;
+  /** Tickets pris en charge pour lesquels le staff a dû être relancé. */
+  unanswered: number;
 }
 
 /** Une mesure jour par jour, sur la période et sur celle d'avant (même longueur). */
@@ -66,6 +68,8 @@ export interface TicketStats {
   };
   satisfaction: { average: number | null; count: number; distribution: number[] };
   backlog: { active: number; unassigned: number; waitingStaff: number; breached: number; oldestActiveAt: string | null };
+  /** Tickets de la période restés sans réponse assez longtemps pour une relance du staff. */
+  unanswered: { tickets: number; reminders: number };
   agents: AgentStats[];
   byType: Array<{ label: string; count: number; resolution: DurationStats }>;
   byTag: Array<{ tag: string; count: number }>;
@@ -145,6 +149,7 @@ export async function getTicketStats(guildId: string, days: number, timezone: st
       select: {
         status: true, createdAt: true, firstResponseAt: true, firstResponderId: true, closedAt: true, claimedById: true,
         claimedByName: true, ticketTypeLabel: true, tags: true, lastMemberMessageAt: true, lastStaffMessageAt: true,
+        staffReminderCount: true,
       },
       take: MAX_TICKETS,
     }),
@@ -238,11 +243,11 @@ export async function getTicketStats(guildId: string, days: number, timezone: st
   }
 
   // ── Par membre du staff ──
-  const agents = new Map<string, { name: string; handled: number; closed: number; frt: number[]; resolution: number[] }>();
+  const agents = new Map<string, { name: string; handled: number; closed: number; unanswered: number; frt: number[]; resolution: number[] }>();
   const agent = (id: string, name: string | null) => {
     let entry = agents.get(id);
     if (!entry) {
-      entry = { name: name ?? id, handled: 0, closed: 0, frt: [], resolution: [] };
+      entry = { name: name ?? id, handled: 0, closed: 0, unanswered: 0, frt: [], resolution: [] };
       agents.set(id, entry);
     } else if (name && entry.name === id) {
       entry.name = name;
@@ -253,6 +258,7 @@ export async function getTicketStats(guildId: string, days: number, timezone: st
     if (ticket.claimedById) {
       const entry = agent(ticket.claimedById, ticket.claimedByName);
       entry.handled += 1;
+      if (ticket.staffReminderCount > 0) entry.unanswered += 1;
       if (ticket.closedAt) {
         entry.closed += 1;
         entry.resolution.push(minutesBetween(ticket.createdAt, ticket.closedAt));
@@ -283,6 +289,7 @@ export async function getTicketStats(guildId: string, days: number, timezone: st
       rating: own.length ? Math.round((own.reduce((a, b) => a + b, 0) / own.length) * 10) / 10 : null,
       ratings: own.length,
       openNow: openByStaff.get(userId) ?? 0,
+      unanswered: entry.unanswered,
     };
   }).sort((a, b) => b.handled - a.handled || b.firstResponse.count - a.firstResponse.count);
 
@@ -346,6 +353,10 @@ export async function getTicketStats(guildId: string, days: number, timezone: st
       waitingStaff,
       breached,
       oldestActiveAt: oldest?.toISOString() ?? null,
+    },
+    unanswered: {
+      tickets: created.filter((ticket) => ticket.staffReminderCount > 0).length,
+      reminders: created.reduce((sum, ticket) => sum + ticket.staffReminderCount, 0),
     },
     agents: agentRows.slice(0, 30),
     byType: [...typeCounts.entries()]

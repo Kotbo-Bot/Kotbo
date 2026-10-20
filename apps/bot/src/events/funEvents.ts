@@ -9,6 +9,7 @@ import {
   handleNeverSayMessage,
   handleEmojiOnlyMessage
 } from '../services/features/funService.js';
+import { handleImageOfDayMessage } from '../services/features/imageOfDayService.js';
 import { logger } from '../utils/logger.js';
 import { isModuleEnabled } from '../services/core/moduleGate.js';
 
@@ -73,6 +74,8 @@ async function handleFunMessage(message: Message, guildId: string) {
       await handleNeverSayMessage(message);
     } else if (guild.funEmojiOnlyChannelId && channelId === guild.funEmojiOnlyChannelId) {
       await handleEmojiOnlyMessage(message);
+    } else if (guild.funImageOfDayChannelId && channelId === guild.funImageOfDayChannelId) {
+      await handleImageOfDayMessage(message, guildId);
     }
   } catch (error) {
     logger.error('FunEvents', `Error processing message in fun channels:`, error);

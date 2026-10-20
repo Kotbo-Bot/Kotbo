@@ -78,6 +78,8 @@ export interface TicketStats {
   sla: { configured: boolean; firstResponseMinutes: number | null; resolutionHours: number | null; firstResponseMet: number | null; resolutionMet: number | null };
   satisfaction: { average: number | null; count: number; distribution: number[] };
   backlog: { active: number; unassigned: number; waitingStaff: number; breached: number; oldestActiveAt: string | null };
+  /** Tickets de la période qui ont nécessité une relance du staff. */
+  unanswered: { tickets: number; reminders: number };
   agents: Array<{
     userId: string;
     name: string;
@@ -88,6 +90,7 @@ export interface TicketStats {
     rating: number | null;
     ratings: number;
     openNow: number;
+    unanswered: number;
   }>;
   byType: Array<{ label: string; count: number; resolution: DurationStats }>;
   byTag: Array<{ tag: string; count: number }>;

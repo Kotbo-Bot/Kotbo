@@ -17,6 +17,7 @@ import { checkGithubFollows } from '../services/integrations/githubService.js';
 import { checkHuggingFaceFollows } from '../services/integrations/huggingFaceService.js';
 import { initializeDatabaseBackup } from '../services/system/databaseBackupService.js';
 import { checkTicketInactivity } from '../services/features/ticketService.js';
+import { checkTicketStaffReminders } from '../services/features/ticketStaffReminder.js';
 import { checkExpiredGiveaways } from '../services/features/giveawayService.js';
 import { refreshAllAutoLeaderboards } from '../services/progression/leaderboardService.js';
 import { pruneOldMessageLogs } from './messageLogging.js';
@@ -210,6 +211,7 @@ export async function registerCrons(client: Client): Promise<void> {
     'ticket-inactivity': async () => {
       logger.debug('Cron', "Vérification de l'inactivité des tickets...");
       await checkTicketInactivity(client);
+      await checkTicketStaffReminders(client);
     },
     'satisfaction-prompt-expiry': async () => {
       const { expirePendingCommentPrompts } = await import('../services/features/ticketSatisfactionService.js');
@@ -1037,6 +1039,7 @@ export async function registerCrons(client: Client): Promise<void> {
   cron.schedule('*/10 * * * *', async () => {
     await runCronJob('ticket-inactivity', async () => {
       await checkTicketInactivity(client);
+      await checkTicketStaffReminders(client);
     }, 2000);
   });
 

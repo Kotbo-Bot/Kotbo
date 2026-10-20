@@ -1435,7 +1435,8 @@ export async function handleAnalyticsRoutes(
         staffAgg.set(key, existing);
       }
       const staffLeaderboard = [...staffAgg.entries()]
-        .map(([id, data]) => ({ staffId: id, ...data, score: data.messages + data.voiceMinutes * 2 }))
+        // `userId`, comme les autres listes de la page : la fiche membre l'attend.
+        .map(([id, data]) => ({ userId: id, ...data, score: data.messages + data.voiceMinutes * 2 }))
         .sort((a, b) => b.score - a.score)
         .slice(0, 15);
 
