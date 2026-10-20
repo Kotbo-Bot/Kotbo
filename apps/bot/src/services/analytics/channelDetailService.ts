@@ -49,10 +49,10 @@ function channelTypeLabel(type: ChannelType): string {
   }
 }
 
-/** Liste des dateKeys de `startDate` (inclus) jusqu'à aujourd'hui, en UTC. */
-function buildDateKeys(days: number): string[] {
+/** Les `days` dateKeys finissant aujourd'hui (ou `offsetDays` jours plus tôt), en UTC. */
+function buildDateKeys(days: number, offsetDays = 0): string[] {
   const keys: string[] = [];
-  const start = new Date(Date.now() - (days - 1) * DAY_MS);
+  const start = new Date(Date.now() - (days - 1 + offsetDays) * DAY_MS);
   for (let i = 0; i < days; i++) {
     keys.push(getDateKey(new Date(start.getTime() + i * DAY_MS)));
   }
@@ -140,8 +140,8 @@ async function buildActivity(guildId: string, channelId: string, days: number) {
   const current = rows.filter((r) => r.dateKey >= startKey);
   const previous = rows.filter((r) => r.dateKey < startKey);
 
-  const byDate = new Map(current.map((r) => [r.dateKey, r]));
-  const daily = buildDateKeys(days).map((dateKey) => {
+  const byDate = new Map(rows.map((r) => [r.dateKey, r]));
+  const dayRow = (dateKey: string) => {
     const row = byDate.get(dateKey);
     return {
       dateKey,
@@ -149,7 +149,10 @@ async function buildActivity(guildId: string, channelId: string, days: number) {
       uniqueAuthors: row?.uniqueAuthors ?? 0,
       voiceMinutes: row?.voiceMinutes ?? 0,
     };
-  });
+  };
+  const daily = buildDateKeys(days).map(dayRow);
+  // Même longueur que `daily`, jour pour jour : la courbe en pointillé des fiches.
+  const previousDaily = buildDateKeys(days, days).map(dayRow);
 
   const sum = (list: typeof current, field: 'messagesCount' | 'voiceMinutes') =>
     list.reduce((acc, r) => acc + r[field], 0);
@@ -178,6 +181,7 @@ async function buildActivity(guildId: string, channelId: string, days: number) {
 
   return {
     daily,
+    previousDaily,
     totals: {
       messages,
       voiceMinutes,
