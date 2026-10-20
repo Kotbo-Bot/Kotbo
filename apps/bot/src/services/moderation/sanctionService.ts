@@ -8,7 +8,7 @@ import { queueAuditLog } from '../../utils/auditLogger.js';
 import { COLORS } from '../../utils/embeds.js';
 import { notifyDashboardSanctionReportRequired } from '../../api/dashboardApi.js';
 import { broadcastDashboardStateChange } from '../../api/shared/sharding.js';
-import { createNotification } from '../staff/staffLeadershipService.js';
+import { notify, notifyMany } from '../notifications/notifyService.js';
 import * as altAccountService from './altAccountService.js';
 import { getMissingReportReminderActions, type MissingReportReminderState } from './sanctionReportReminderPolicy.js';
 import { archiveScoreFilter } from './sanctionArchiveService.js';
@@ -455,14 +455,16 @@ async function emitSanctionReportReminder(params: SanctionReportReminderInput) {
     });
 
     // Notification persistante (Inbox)
-    await createNotification(
-      params.guildId,
-      params.moderatorUserId,
-      'Rapport de sanction requis',
-      `Vous devez remplir un rapport pour la sanction appliquée à ${params.targetTag || params.targetUserId}.`,
-      'WARNING',
-      '/sanctions'
-    ).catch(() => null);
+    await notify({
+      guildId: params.guildId,
+      userId: params.moderatorUserId,
+      kind: 'moderation.sanction_report_required',
+      title: 'Rapport de sanction requis',
+      message: `Vous devez remplir un rapport pour la sanction appliquée à ${params.targetTag || params.targetUserId}.`,
+      severity: 'WARNING',
+      link: '/sanctions',
+      data: { sanctionId: params.sanctionId },
+    }).catch(() => null);
 
   } catch (error) {
     logger.warn(
@@ -530,17 +532,15 @@ async function notifyStaffOfSanction(guildId: string, sanction: SanctionNotifica
   const userIdsToNotify = await resolveStaffToNotify(guildId, sanction);
   const typeLabel = sanctionTypeLabel(sanction.type);
 
-  for (const userId of userIdsToNotify) {
-    await createNotification(
-      guildId,
-      userId,
-      `${typeLabel} : ${sanction.targetTag}`,
-      `${sanction.moderatorTag} a appliqué un ${typeLabel.toLowerCase()} à ${sanction.targetTag} pour : ${sanction.reason}`,
-      sanction.type === 'BAN' || sanction.type === 'TEMP_BAN' ? 'ERROR' : 'WARNING',
-      `/members/${sanction.targetUserId}`,
-      true // On envoie un MP car ce sont uniquement les personnes directement concernées
-    ).catch(() => null);
-  }
+  await notifyMany(userIdsToNotify, {
+    guildId,
+    kind: 'moderation.sanction_applied',
+    title: `${typeLabel} : ${sanction.targetTag}`,
+    message: `${sanction.moderatorTag} a appliqué un ${typeLabel.toLowerCase()} à ${sanction.targetTag} pour : ${sanction.reason}`,
+    severity: sanction.type === 'BAN' || sanction.type === 'TEMP_BAN' ? 'ERROR' : 'WARNING',
+    link: `/members/${sanction.targetUserId}`,
+    actorId: sanction.moderatorUserId,
+  });
 }
 
 /**
@@ -558,17 +558,15 @@ export async function notifyStaffOfSyncedSanction(
   const typeLabel = sanctionTypeLabel(originalSanction.type);
   const othersList = syncedTargetTags.join(', ');
 
-  for (const userId of userIdsToNotify) {
-    await createNotification(
-      guildId,
-      userId,
-      `${typeLabel} : ${originalSanction.targetTag} (+ comptes liés)`,
-      `${originalSanction.moderatorTag} a appliqué un ${typeLabel.toLowerCase()} à ${originalSanction.targetTag} pour : ${originalSanction.reason}. Synchronisé sur ${syncedTargetTags.length} compte(s) lié(s) : ${othersList}.`,
-      originalSanction.type === 'BAN' || originalSanction.type === 'TEMP_BAN' ? 'ERROR' : 'WARNING',
-      `/members/${originalSanction.targetUserId}`,
-      true
-    ).catch(() => null);
-  }
+  await notifyMany(userIdsToNotify, {
+    guildId,
+    kind: 'moderation.sanction_applied',
+    title: `${typeLabel} : ${originalSanction.targetTag} (+ comptes liés)`,
+    message: `${originalSanction.moderatorTag} a appliqué un ${typeLabel.toLowerCase()} à ${originalSanction.targetTag} pour : ${originalSanction.reason}. Synchronisé sur ${syncedTargetTags.length} compte(s) lié(s) : ${othersList}.`,
+    severity: originalSanction.type === 'BAN' || originalSanction.type === 'TEMP_BAN' ? 'ERROR' : 'WARNING',
+    link: `/members/${originalSanction.targetUserId}`,
+    actorId: originalSanction.moderatorUserId,
+  });
 }
 
 async function propagateSanction(client: Client, originalGuildId: string, sanction: SanctionNotificationInput) {
@@ -705,14 +703,16 @@ export async function registerWarnSanction(params: {
   }
 
   // Notifier l'utilisateur concerné (si profil existant)
-  await createNotification(
-    params.guildId,
-    params.target.id,
-    'Avertissement reçu',
-    `Vous avez reçu un avertissement pour la raison suivante : ${params.reason}`,
-    'WARNING',
-    '/profile'
-  ).catch(() => null);
+  await notify({
+    guildId: params.guildId,
+    userId: params.target.id,
+    kind: 'moderation.warning_received',
+    title: 'Avertissement reçu',
+    message: `Vous avez reçu un avertissement pour la raison suivante : ${params.reason}`,
+    severity: 'WARNING',
+    link: '/profile',
+    actorId: params.moderator.id,
+  }).catch(() => null);
 
   if (params.client && !params.isSync) {
     void propagateSanction(params.client, params.guildId, sanction).catch(() => null);
@@ -1748,14 +1748,16 @@ export async function checkMissingReports() {
 
       if (claim.count === 1) {
         try {
-          await createNotification(
-            sanction.guildId,
-            sanction.moderatorUserId,
-            'RAPPEL : Rapport manquant (3 jours+)',
-            `Le rapport pour la sanction sur ${sanction.targetTag ?? sanction.targetUserId} est toujours manquant.`,
-            'ERROR',
-            '/sanctions'
-          );
+          await notify({
+            guildId: sanction.guildId,
+            userId: sanction.moderatorUserId,
+            kind: 'moderation.sanction_report_overdue',
+            title: 'RAPPEL : Rapport manquant (3 jours+)',
+            message: `Le rapport pour la sanction sur ${sanction.targetTag ?? sanction.targetUserId} est toujours manquant.`,
+            severity: 'ERROR',
+            link: '/sanctions',
+            data: { sanctionId: sanction.id },
+          });
         } catch (error) {
           await prisma.sanction.updateMany({
             where: { id: sanction.id, lastReportReminderAt: now },
@@ -1786,14 +1788,16 @@ export async function checkMissingReports() {
       });
 
       const results = await Promise.allSettled(managers.map((manager) =>
-        createNotification(
-          sanction.guildId,
-          manager.userId,
-          'Alerte : Rapport non rempli par un staff',
-          `Le modérateur ${sanction.moderatorTag ?? sanction.moderatorUserId} n'a pas rempli le rapport pour sa sanction sur ${sanction.targetTag ?? sanction.targetUserId} depuis 7 jours.`,
-          'ERROR',
-          `/members/${sanction.targetUserId}`
-        )
+        notify({
+          guildId: sanction.guildId,
+          userId: manager.userId,
+          kind: 'moderation.sanction_report_missing',
+          title: 'Alerte : Rapport non rempli par un staff',
+          message: `Le modérateur ${sanction.moderatorTag ?? sanction.moderatorUserId} n'a pas rempli le rapport pour sa sanction sur ${sanction.targetTag ?? sanction.targetUserId} depuis 7 jours.`,
+          severity: 'ERROR',
+          link: `/members/${sanction.targetUserId}`,
+          actorId: sanction.moderatorUserId,
+        })
       ));
 
       if (managers.length === 0 || results.every((result) => result.status === 'rejected')) {

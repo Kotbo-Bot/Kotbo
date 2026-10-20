@@ -5,7 +5,7 @@ import { logger } from '../../utils/logger.js';
 import { LinkedAccountType, LinkedAccountStatus } from '@prisma/client';
 import * as altAccountService from './altAccountService.js';
 import { computeCrossServerLinkSignals } from './crossServerLinkService.js';
-import { createNotification } from '../staff/staffLeadershipService.js';
+import { notifyMany } from '../notifications/notifyService.js';
 import { fetchAllMembers } from '../../utils/discord.js';
 import { memberProfileIdentity } from './memberIdentityService.js';
 import {
@@ -181,12 +181,16 @@ async function notifyManagersOfSuspectedDC(guildId: string, member: GuildMember)
   const managers = await prisma.staffMember.findMany({
     where: { guildId, grade: { in: ['Manager', 'Admin', 'Administrateur', 'Fondateur', 'Direction'] } }
   });
-  if (managers.length === 0) return;
-  await Promise.all(managers.map(m => createNotification(
-    guildId, m.userId, '⚠️ Alerte DC suspect',
-    `Un double compte potentiel a été détecté : ${member.user.tag}.`,
-    'WARNING', `/double-accounts?tab=detections`, false
-  ).catch(() => null)));
+  await notifyMany(managers.map(m => m.userId), {
+    guildId,
+    kind: 'security.alt_detected',
+    title: '⚠️ Alerte DC suspect',
+    message: `Un double compte potentiel a été détecté : ${member.user.tag}.`,
+    severity: 'WARNING',
+    link: '/double-accounts?tab=detections',
+    groupKey: 'security.alt_detected',
+    dm: false,
+  });
 }
 
 // ─── Scoring commun (arrivée et recalcul dashboard) ───────────────────────────

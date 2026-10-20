@@ -29,8 +29,7 @@ import {
   
   
   
-  createNotification,
-  
+
   getPolls,
   createPoll,
   castPollVote,
@@ -49,6 +48,7 @@ import {
   
   
 } from '../../../../services/staff/staffLeadershipService.js';
+import { notify } from '../../../../services/notifications/notifyService.js';
 import {
   getStaffMember,
   addStaffMember,
@@ -1505,15 +1505,19 @@ export async function handleStaffRoutes(
 
           if (managers.length > 0) {
             await Promise.all(managers.map(async (m) => {
-              await createNotification(
+              // Le MP part juste en dessous, avec la référence de la demande.
+              await notify({
                 guildId,
-                m.userId,
-                '🔔 Demande de démission',
-                `${staffMember.username ?? user.userId} a soumis une demande de démission via le dashboard.\nMotif : ${reason}`,
-                'WARNING',
-                '/staff-management?tab=resignations',
-                true
-              ).catch(() => null);
+                userId: m.userId,
+                kind: 'staff.resignation_requested',
+                title: '🔔 Demande de démission',
+                message: `${staffMember.username ?? user.userId} a soumis une demande de démission via le dashboard.\nMotif : ${reason}`,
+                severity: 'WARNING',
+                link: '/staff-management?tab=resignations',
+                actorId: user.userId,
+                data: { resignationId: resignation.id },
+                dm: false,
+              }).catch(() => null);
 
               try {
                 const managerUser = await client.users.fetch(m.userId).catch(() => null);
@@ -1585,17 +1589,20 @@ export async function handleStaffRoutes(
             }
           });
 
-          await createNotification(
+          // Le MP détaillé part juste en dessous.
+          await notify({
             guildId,
-            resignation.staffMember.userId,
-            body.action === 'APPROVED' ? '✅ Démission approuvée' : '❌ Démission refusée',
-            body.action === 'APPROVED'
+            userId: resignation.staffMember.userId,
+            kind: 'staff.resignation_decided',
+            title: body.action === 'APPROVED' ? '✅ Démission approuvée' : '❌ Démission refusée',
+            message: body.action === 'APPROVED'
               ? `Votre demande de démission a été approuvée.${body.note ? `\nNote : ${body.note}` : ''}`
               : `Votre demande de démission a été refusée.${body.note ? `\nMotif : ${body.note}` : ''}`,
-            body.action === 'APPROVED' ? 'SUCCESS' : 'ERROR',
-            '/profile',
-            true
-          ).catch(() => null);
+            severity: body.action === 'APPROVED' ? 'SUCCESS' : 'ERROR',
+            link: '/profile',
+            actorId: user.userId,
+            dm: false,
+          }).catch(() => null);
 
           try {
             const discordUser = await client.users.fetch(resignation.staffMember.userId).catch(() => null);

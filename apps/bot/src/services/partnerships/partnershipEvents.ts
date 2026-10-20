@@ -17,7 +17,7 @@ import { logger } from '../../utils/logger.js';
 import { getClient } from '../../utils/client.js';
 import { queueAuditLog } from '../../utils/auditLogger.js';
 import { getPartnershipSettings } from './partnershipSettings.js';
-import { broadcastDashboardStateChange } from '../../api/shared/sharding.js';
+import { notifyMany } from '../notifications/notifyService.js';
 
 /** Teintes reprises de `COLORS_RAW`, sans importer le module d'embeds v2. */
 const TONE_COLORS = {
@@ -190,21 +190,16 @@ async function notifyDashboard(input: PartnershipAlertInput, tone: PartnershipAl
     for (const member of staff) recipients.add(member.userId);
   }
 
-  if (recipients.size === 0) return;
-
-  await prisma.notification.createMany({
-    data: Array.from(recipients).map((userId) => ({
-      guildId: input.guildId,
-      userId,
-      title: input.title.slice(0, 200),
-      message: input.description.slice(0, 1000),
-      type,
-      link: input.link ?? '/partnerships',
-    })),
+  // Le MP au responsable part à part (dmOwner) : ici, la boîte seulement.
+  await notifyMany(recipients, {
+    guildId: input.guildId,
+    kind: 'partnerships.alert',
+    title: input.title.slice(0, 200),
+    message: input.description.slice(0, 1000),
+    severity: type,
+    link: input.link ?? '/partnerships',
+    dm: false,
   });
-  // Sans cet evenement, la cloche ne l'apprenait qu'au sondage suivant, et la
-  // notification de bureau partait avec deux minutes de retard.
-  broadcastDashboardStateChange(input.guildId, 'notifications_updated');
 }
 
 async function dmOwner(input: PartnershipAlertInput, tone: PartnershipAlertTone): Promise<void> {

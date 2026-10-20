@@ -1,7 +1,7 @@
 import { type Client, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, type TextChannel } from 'discord.js';
 import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
-import { createNotification } from '../staff/staffLeadershipService.js';
+import { notifyMany } from '../notifications/notifyService.js';
 import { COLORS } from '../../utils/embeds.js';
 
 function buildEmbedDescription(article: { summary: string | null; content: string }, mode: 'summary' | 'full_embed') {
@@ -109,20 +109,13 @@ export async function publishNewsArticle(client: Client, guildId: string, articl
     where: { guildId }
   });
 
-  if (staff.length > 0) {
-    await Promise.all(
-      staff.map(m =>
-        createNotification(
-          guildId,
-          m.userId,
-          `Nouvel article : ${article.title}`,
-          `Un nouvel article de catégorie "${article.category}" rédigé par ${article.authorName} a été publié.`,
-          'INFO',
-          '/news'
-        ).catch(() => null)
-      )
-    );
-  }
+  await notifyMany(staff.map(m => m.userId), {
+    guildId,
+    kind: 'staff.news_published',
+    title: `Nouvel article : ${article.title}`,
+    message: `Un nouvel article de catégorie "${article.category}" rédigé par ${article.authorName} a été publié.`,
+    link: '/news',
+  });
 }
 
 export function generateRssXml(

@@ -10,7 +10,7 @@ import { Prisma } from '@prisma/client';
 import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
 import { COLORS, truncate } from '../../utils/embeds.js';
-import { createNotification } from '../staff/staffLeadershipService.js';
+import { notify } from '../notifications/notifyService.js';
 import { broadcastDashboardStateChange } from '../../api/shared.js';
 import {
   DAILY_ALGO_SPEED_BONUS,
@@ -1537,19 +1537,20 @@ export async function reviewDailyAlgoSubmission(params: {
     await author.send({ embeds: [dmEmbed] }).catch(() => null);
 
     // Notification Dashboard
-    await createNotification(
-      submission.run.guildId,
-      submission.authorId,
-      `Retour Daily Algo : ${submission.run.problem.title}`,
-      params.action === 'approve'
+    await notify({
+      guildId: submission.run.guildId,
+      userId: submission.authorId,
+      kind: 'community.daily_algo_feedback',
+      title: `Retour Daily Algo : ${submission.run.problem.title}`,
+      message: params.action === 'approve'
         ? `Votre soumission a été validée avec une note de ${updateData.scoreFinal}/5, soit ${updateData.pointsAwarded} pts.`
         : params.action === 'dismiss'
           ? `Votre soumission a été jugée hors-sujet (aucune sanction). Motif : ${normalizedFeedback || 'Non spécifié'}`
           : `Votre soumission a été rejetée. Motif : ${normalizedFeedback || 'Non spécifié'}`,
-      params.action === 'approve' ? 'SUCCESS' : params.action === 'dismiss' ? 'WARNING' : 'ERROR',
-      '/dailyalgo/ide',
-      false
-    ).catch(() => null);
+      severity: params.action === 'approve' ? 'SUCCESS' : params.action === 'dismiss' ? 'WARNING' : 'ERROR',
+      link: '/dailyalgo/ide',
+      dm: false,
+    }).catch(() => null);
   }
 
   // Notation faite depuis Discord comme depuis le panel : le classement de la

@@ -20,7 +20,8 @@ import { resolveGuildLocale } from '../utils/i18n.js';
 import * as gvwMessages from '../lib/paraglide/messages.js';
 import { handleRpgButton, handleRpgModalSubmit, handleRpgSelectMenu } from '../services/features/rpgPanelService.js';
 import { DROP_CLAIM_PREFIX, handleDropClaim } from '../services/features/dropService.js';
-import { checkInMeeting, createNotification } from '../services/staff/staffLeadershipService.js';
+import { checkInMeeting } from '../services/staff/staffLeadershipService.js';
+import { notify } from '../services/notifications/notifyService.js';
 import { handleDCInteraction } from '../services/moderation/dcDetectionService.js';
 import { memberProfileIdentity } from '../services/moderation/memberIdentityService.js';
 import { handleVerifyButtonClick, handleVerificationStaffAction } from '../services/moderation/securityVerificationService.js';
@@ -1849,16 +1850,19 @@ export async function handleModalSubmit(interaction: ModalSubmitInteraction, cli
 
       if (managers.length > 0) {
         await Promise.all(managers.map(async (m: { userId: string; username: string | null }) => {
-          // Notif dashboard
-          await createNotification(
+          // Notif dashboard (le MP part juste en dessous)
+          await notify({
             guildId,
-            m.userId,
-            '🔔 Demande de démission',
-            `${interaction.user.username} a soumis une demande de démission.\nMotif : ${reason}`,
-            'WARNING',
-            '/staff-management?tab=resignations',
-            true
-          ).catch(() => null);
+            userId: m.userId,
+            kind: 'staff.resignation_requested',
+            title: '🔔 Demande de démission',
+            message: `${interaction.user.username} a soumis une demande de démission.\nMotif : ${reason}`,
+            severity: 'WARNING',
+            link: '/staff-management?tab=resignations',
+            actorId: interaction.user.id,
+            data: { resignationId: resignation.id },
+            dm: false,
+          }).catch(() => null);
 
           // MP Discord aux managers
           try {
