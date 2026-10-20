@@ -14722,5 +14722,14 @@
   "e1_tickets_staff_reminder_minutes": "Délai sans réponse (minutes)",
   "th_kpi_unanswered": "Restés sans réponse",
   "th_kpi_unanswered_hint": "Tickets de la période où le staff a dû être relancé ({count} relance(s)). Active la relance dans Paramètres › Inactivité.",
-  "th_col_unanswered": "Sans réponse"
+  "th_col_unanswered": "Sans réponse",
+  "lv_blacklist_title": "Blacklist commune",
+  "lv_blacklist_desc": "Vaut pour les niveaux, le prestige, les saisons, l'économie et le RPG, le marché, les quêtes, les drops, les clans et la réputation : les membres, rôles et salons listés n'y gagnent plus rien et leurs commandes y sont refusées. Une catégorie couvre tous ses salons. Les administrateurs ne sont pas concernés.",
+  "lv_blacklist_members": "Membres",
+  "lv_blacklist_roles": "Rôles",
+  "lv_blacklist_channels": "Salons et catégories",
+  "lv_blacklist_none": "Personne",
+  "lv_blacklist_add_member": "Ajouter un membre…",
+  "lv_blacklist_add_role": "Ajouter un rôle…",
+  "lv_blacklist_add_channel": "Ajouter un salon ou une catégorie…"
 }

@@ -14722,5 +14722,14 @@
   "e1_tickets_staff_reminder_minutes": "Delay without reply (minutes)",
   "th_kpi_unanswered": "Left unanswered",
   "th_kpi_unanswered_hint": "Tickets in this period where staff had to be reminded ({count} reminder(s)). Turn reminders on in Settings › Inactivity.",
-  "th_col_unanswered": "Unanswered"
+  "th_col_unanswered": "Unanswered",
+  "lv_blacklist_title": "Shared blacklist",
+  "lv_blacklist_desc": "Applies to levels, prestige, seasons, economy and RPG, market, quests, drops, clans and reputation: listed members, roles and channels earn nothing there and their commands are refused. A category covers all its channels. Administrators are not affected.",
+  "lv_blacklist_members": "Members",
+  "lv_blacklist_roles": "Roles",
+  "lv_blacklist_channels": "Channels and categories",
+  "lv_blacklist_none": "Nobody",
+  "lv_blacklist_add_member": "Add a member…",
+  "lv_blacklist_add_role": "Add a role…",
+  "lv_blacklist_add_channel": "Add a channel or category…"
 }

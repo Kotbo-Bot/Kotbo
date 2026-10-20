@@ -130,6 +130,13 @@ function parseEmojiRiddleInput(
   return { emojis, answers };
 }
 
+/** Blacklist de progression, renvoyée avec la config du leveling. */
+const BLACKLIST_SELECT = {
+  progressionBlacklistUserIds: true,
+  progressionBlacklistRoleIds: true,
+  progressionBlacklistChannelIds: true,
+} as const;
+
 export async function handleGeneralistModulesRoutes(
   req: IncomingMessage,
   res: ServerResponse,
@@ -190,12 +197,14 @@ export async function handleGeneralistModulesRoutes(
 
         // Blacklist commune aux modules de progression : rangée sur le serveur,
         // éditée depuis cette page qui porte déjà les exclusions du leveling.
-        const blacklist = await prisma.guild.findUnique({
-          where: { id: guildId },
-          select: { progressionBlacklistUserIds: true, progressionBlacklistRoleIds: true, progressionBlacklistChannelIds: true },
-        });
+        const blacklist = await prisma.guild.findUnique({ where: { id: guildId }, select: BLACKLIST_SELECT });
 
-        json(res, 200, { config, rewards, stats, blacklist });
+        const identities = await getMemberIdentities(client, guildId, blacklist?.progressionBlacklistUserIds ?? []);
+        const blacklistNames = Object.fromEntries(
+          [...identities].map(([id, who]) => [id, who.displayName || who.username]),
+        );
+
+        json(res, 200, { config: { ...config, ...blacklist }, rewards, stats, blacklistNames });
       } catch (err) {
         logger.error('LevelingAPI', 'Error fetching leveling data:', err);
         jsonFailure(res, err, 'Erreur lors de la récupération du leveling', 'LevelingAPI');
@@ -531,10 +540,10 @@ export async function handleGeneralistModulesRoutes(
           progressionBlacklistRoleIds: snowflakes(body.progressionBlacklistRoleIds),
           progressionBlacklistChannelIds: snowflakes(body.progressionBlacklistChannelIds),
         };
-        if (Object.values(blacklistUpdate).some((list) => list !== undefined)) {
-          await prisma.guild.update({ where: { id: guildId }, data: blacklistUpdate });
-          await cache.delete(`guild:${guildId}:config`);
-        }
+        const blacklist = Object.values(blacklistUpdate).some((list) => list !== undefined)
+          ? await prisma.guild.update({ where: { id: guildId }, data: blacklistUpdate, select: BLACKLIST_SELECT })
+          : await prisma.guild.findUnique({ where: { id: guildId }, select: BLACKLIST_SELECT });
+        await cache.delete(`guild:${guildId}:config`);
 
         // Un changement de courbe redistribue les niveaux : la colonne `level`
         // est réalignée tout de suite, sinon les membres inactifs la gardent
@@ -572,7 +581,7 @@ export async function handleGeneralistModulesRoutes(
           channelId: null
         });
 
-        json(res, 200, { config, resynced, roleResync: getRoleResyncStatus(guildId) });
+        json(res, 200, { config: { ...config, ...blacklist }, resynced, roleResync: getRoleResyncStatus(guildId) });
       } catch (err) {
         logger.error('LevelingAPI', 'Error updating leveling config:', err);
         jsonFailure(res, err, 'Erreur lors de la mise à jour du leveling', 'LevelingAPI');

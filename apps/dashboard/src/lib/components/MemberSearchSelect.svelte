@@ -8,13 +8,16 @@
     value?: string;
     placeholder?: string;
     disabled?: boolean;
+    /** Appelé avec le membre choisi, pour qui a besoin de plus que son identifiant. */
+    onselect?: (member: GuildMemberSearchResult) => void;
   }
 
   let {
     id = '',
     value = $bindable(''),
     placeholder = '',
-    disabled = false
+    disabled = false,
+    onselect
   }: Props = $props();
 
   let query = $state('');
@@ -72,6 +75,7 @@
     query = member.displayName || member.username;
     open = false;
     results = [];
+    onselect?.(member);
   }
 
   function clear() {
