@@ -2881,14 +2881,16 @@ async function demanderPourLesExceptions(
 
 /**
  * Un clic sur le MP. Tout est revu au clic : propriétaire, présence, exception.
- * Un seul acquittement : le MP lui-même, réécrit avec le verdict et ses boutons
- * désactivés.
+ * Un seul acquittement (`deferUpdate`), puis le MP réécrit avec le verdict et
+ * ses boutons désactivés.
  */
 async function repondreQuestionEcriture(ctx: ActionContext): Promise<void> {
   const { interaction, channel, cache, guild, guildId, ctxp, action } = ctx;
   const locale = ctxp.locale;
   const membreId = interaction.customId.split(':')[2] ?? '';
   questionsEcriture.delete(`${channel.id}:${interaction.user.id}:${membreId}`);
+  // Acquitté avant la file du salon : une pose lente y passerait les trois secondes.
+  if (interaction.isMessageComponent()) await acquitter(() => interaction.deferUpdate());
   const name = guild.members.cache.get(membreId)?.displayName ?? membreId;
 
   const verdict = await serializeByChannel(channel.id, async (): Promise<{ texte: string; refus?: true }> => {
@@ -2911,7 +2913,7 @@ async function repondreQuestionEcriture(ctx: ActionContext): Promise<void> {
   if (action === 'ecr_appliquer' && !verdict.refus) planifierRafraichissementPanneau(channel);
 }
 
-/** Le MP réécrit : le verdict, et les mêmes boutons désactivés. Seul acquittement de l'interaction. */
+/** Le MP réécrit : le verdict, et les mêmes boutons désactivés. Acquitte l'interaction si ce n'est déjà fait. */
 async function fermerQuestionEcriture(interaction: RepliableInteraction & { customId: string }, texte: string, locale: BotLocale): Promise<void> {
   const [, , membreId = '', salonId = ''] = interaction.customId.split(':');
   const charge = { embeds: [avis(texte)], components: [rangeeQuestionEcriture(membreId, salonId, locale, true)] };

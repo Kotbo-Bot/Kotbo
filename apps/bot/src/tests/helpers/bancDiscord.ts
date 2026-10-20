@@ -629,7 +629,8 @@ export class FauxDiscord {
     if (!msg) throw new RefusDiscord(10008, `message ${messageId} introuvable (acquittement ${it.typeAck})`);
     if (methode === 'GET') return structuredClone(msg);
     if (methode === 'PATCH') {
-      if (!(msg.flags & 64) && msg.author?.id === IDS.BOT && msg.components?.length) {
+      // Un MP n'est lu que par son destinataire, comme pour update().
+      if (!(msg.flags & 64) && !this.mp.has(msg.channel_id) && msg.author?.id === IDS.BOT && msg.components?.length) {
         appel.violations.push('editReply réécrit un message PUBLIC (le panneau du salon ?)');
       }
       it.enAttente = false;

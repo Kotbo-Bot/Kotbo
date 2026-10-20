@@ -1119,7 +1119,7 @@ describe('E — changement de mode : MP au propriétaire pour une exception pré
       const sc = await monterException({ format, categorie: CAT_MUETTE });
       await choisirMode(sc, 'everyone');
       const r = await cliquerMp(sc, mpDe(sc)[0], 'ecr_appliquer');
-      expect(r.acks).toEqual([7]);
+      expect(r.acks).toEqual([6]);
       expect(sc.tv.tempChannels.get(sc.salonId)?.exceptionsEcriture).toBeUndefined();
       expect(base.salons.get(sc.salonId)?.writeExceptions).toEqual({});
       expect(ecrit(sc, AMI)).toBe(true);
@@ -1143,7 +1143,7 @@ describe('E — changement de mode : MP au propriétaire pour une exception pré
       await choisirMode(sc, 'everyone');
       const avant = sc.monde.appels.length;
       const r = await cliquerMp(sc, mpDe(sc)[0], 'ecr_garder');
-      expect(r.acks).toEqual([7]);
+      expect(r.acks).toEqual([6]);
       expect(sc.monde.mutations(avant).filter((a) => a.route.includes('/permissions/'))).toEqual([]);
       expect(sc.tv.tempChannels.get(sc.salonId)?.exceptionsEcriture).toEqual({ [AMI]: false });
       expect(ecrit(sc, AMI)).toBe(false);
@@ -1157,7 +1157,7 @@ describe('E — changement de mode : MP au propriétaire pour une exception pré
       const sc = await monterException({ format, mode, categorie: CAT_MUETTE });
       await choisirMode(sc, 'everyone');
       const r = await cliquerMp(sc, mpDe(sc)[0], 'ecr_jamais');
-      expect(r.acks).toEqual([7]);
+      expect(r.acks).toEqual([6]);
       expect(base.profils.get(`${IDS.GUILD}:${IDS.PROPRIO}`)).toEqual([AMI]);
       expect(sc.tv.tempChannels.get(sc.salonId)?.exceptionsEcriture).toEqual({ [AMI]: false });
       const L = { locale: 'fr' as const };
@@ -1224,7 +1224,7 @@ describe('E — changement de mode : MP au propriétaire pour une exception pré
     await bouger(sc, AMI, null);
     const avant = sc.monde.appels.length;
     const r = await cliquerMp(sc, mpDe(sc)[0], 'ecr_appliquer');
-    expect(r.acks).toEqual([7]);
+    expect(r.acks).toEqual([6]);
     expect(sc.tv.tempChannels.get(sc.salonId)?.exceptionsEcriture).toEqual({ [AMI]: false });
     expect(sc.monde.mutations(avant).filter((a) => a.route.includes('/permissions/'))).toEqual([]);
     expect(r.texte).toContain(m.panel_tempvoice_chat_ask_gone({ name: 'cible' }, { locale: 'fr' }));
@@ -1240,7 +1240,7 @@ describe('E — changement de mode : MP au propriétaire pour une exception pré
     expect(sc.tv.tempChannels.get(sc.salonId)?.creatorId).toBe(IDS.STAFF);
     for (const action of ['ecr_appliquer', 'ecr_jamais']) {
       const r = await cliquerMp(sc, mpDe(sc)[0], action);
-      expect(r.acks).toEqual([7]);
+      expect(r.acks).toEqual([6]);
       expect(r.texte).toContain(m.panel_tempvoice_chat_ask_not_owner({}, { locale: 'fr' }));
       expect(boutonsDesactives(r.msg)).toEqual([true, true, true]);
     }
@@ -1344,6 +1344,112 @@ describe('F — les deux restes de la revue', () => {
       expect(ecrit(sc, IDS.INCONNU)).toBe(false);
       await bouger(sc, AMI, null);
       expect(ecrit(sc, AMI)).toBe(false);
+    });
+  }
+});
+
+// ─── V : vérification finale du MP au propriétaire ───
+
+/** Lance plusieurs interactions sans attendre entre elles, puis attend le calme. */
+async function rafale(sc: Scene, bruts: Brut[]): Promise<void> {
+  avancer(1_500);
+  for (const brut of bruts) (sc.client as unknown as { actions: { InteractionCreate: { handle: (d: unknown) => void } } }).actions.InteractionCreate.handle(brut);
+  await sc.monde.calme(sc.enCours);
+}
+const brutMode = (sc: Scene, mode: string): Brut => {
+  const w = sc.monde;
+  const composant = { type: 3, custom_id: 'tempvoice:mode_select', options: [{ label: mode, value: mode }] };
+  const porteur = w.creerMessage(sc.salonId, { flags: 64, components: [{ type: 1, components: [composant] }] }, {
+    interaction_metadata: { id: '1', type: 3, user: w.membres.get(IDS.PROPRIO)!.user, authorizing_integration_owners: {} },
+  });
+  return w.interactionBrute({ customId: 'tempvoice:mode_select', genre: 'menuTexte', acteur: IDS.PROPRIO, channelId: sc.salonId, message: porteur, values: [mode] });
+};
+const brutMp = (sc: Scene, msg: Brut, action: string, acteur: string = IDS.PROPRIO): Brut => sc.monde.interactionBrute({
+  customId: idsBoutons(msg).find((id) => id.startsWith(`tempvoice:${action}:`))!, genre: 'bouton', acteur, channelId: msg.channel_id, message: msg,
+});
+const acquittements = (sc: Scene, brut: Brut) => sc.monde.appels.filter((a) => a.interactionId === brut.id && a.typeCallback !== undefined && !a.erreur).map((a) => a.typeCallback as number);
+
+describe('V — vérification finale du MP au propriétaire', () => {
+  for (const format of FORMATS) {
+    test(`V1 ${format} — deux changements de mode en rafale : un seul MP, réécrit`, async () => {
+      const sc = await monterException({ format, categorie: CAT_MUETTE });
+      await rafale(sc, [brutMode(sc, 'everyone'), brutMode(sc, 'inVoice')]);
+      expect(sc.tv.tempChannels.get(sc.salonId)?.modeEcriture).toBe('inVoice');
+      expect(mpDe(sc)).toHaveLength(1);
+      // Le MP suivi est bien celui qui existe : un troisième changement le réécrit.
+      const posts = () => sc.monde.appels.filter((a) => a.methode === 'POST' && a.route === `/channels/${sc.monde.canalMp(IDS.PROPRIO)}/messages`).length;
+      await choisirMode(sc, 'everyone');
+      expect(mpDe(sc)).toHaveLength(1);
+      expect(posts()).toBe(1);
+    });
+
+    test(`V2 ${format} — « Appliquer » derrière une pose lente (> 3 s) : acquitté à temps, exception levée, boutons désactivés`, async () => {
+      const sc = await monterException({ format, categorie: CAT_MUETTE });
+      await choisirMode(sc, 'everyone');
+      const traiter = sc.monde.traiter.bind(sc.monde);
+      sc.monde.traiter = async (o: Brut) => {
+        if (String(o.method) === 'PUT' && String(o.fullRoute).includes(`/permissions/${AMI}`)) sc.monde.horloge += 3_500;
+        return traiter(o);
+      };
+      const r = await cliquerMp(sc, mpDe(sc)[0], 'ecr_appliquer');
+      expect(sc.monde.appels.filter((a) => a.erreur?.code === 10062)).toEqual([]);
+      expect(r.acks).toHaveLength(1);
+      expect(sc.tv.tempChannels.get(sc.salonId)?.exceptionsEcriture).toBeUndefined();
+      expect(boutonsDesactives(r.msg)).toEqual([true, true, true]);
+      expect(r.texte).toContain(m.panel_tempvoice_chat_ask_applied({ name: 'cible' }, { locale: 'fr' }));
+    });
+  }
+
+  test('V3 — double clic sur « Appliquer » : une seule levée, chaque clic acquitté une fois', async () => {
+    const sc = await monterException({ format: 'V2', categorie: CAT_MUETTE });
+    await choisirMode(sc, 'everyone');
+    const mp = mpDe(sc)[0];
+    const avant = sc.monde.appels.length;
+    const [a, b] = [brutMp(sc, mp, 'ecr_appliquer'), brutMp(sc, mp, 'ecr_appliquer')];
+    await rafale(sc, [a, b]);
+    expect(acquittements(sc, a)).toHaveLength(1);
+    expect(acquittements(sc, b)).toHaveLength(1);
+    expect(sc.monde.appels.slice(avant).filter((x) => x.erreur).map((x) => x.erreur!.code)).toEqual([]);
+    expect(sc.monde.mutations(avant).filter((x) => x.route.includes(`/permissions/${AMI}`)).length).toBeLessThanOrEqual(1);
+    expect(sc.tv.tempChannels.get(sc.salonId)?.exceptionsEcriture).toBeUndefined();
+    expect(ecrit(sc, AMI)).toBe(true);
+  });
+
+  test('V4 — un autre que le propriétaire clique le bouton (identifiant recopié) : refus, rien ne change, le MP du propriétaire reste suivi', async () => {
+    const sc = await monterException({ format: 'V2', categorie: CAT_MUETTE });
+    await choisirMode(sc, 'everyone');
+    const mp = mpDe(sc)[0];
+    for (const action of ['ecr_appliquer', 'ecr_jamais']) {
+      const brut = brutMp(sc, mp, action, AMI);
+      await rafale(sc, [brut]);
+      expect(acquittements(sc, brut)).toHaveLength(1);
+    }
+    expect(sc.tv.tempChannels.get(sc.salonId)?.exceptionsEcriture).toEqual({ [AMI]: false });
+    expect(base.profils.size).toBe(0);
+    expect(mpDe(sc, AMI)).toHaveLength(0);
+    await choisirMode(sc, 'inVoice');
+    expect(mpDe(sc)).toHaveLength(1);
+  });
+
+  for (const langue of ['fr', 'en'] as const) {
+    test(`V5 ${langue} — verdicts des trois boutons et refus : dans la langue du serveur, sans clé brute`, async () => {
+      const L = { locale: langue };
+      for (const [action, attendu] of [
+        ['ecr_appliquer', m.panel_tempvoice_chat_ask_applied({ name: 'cible' }, L)],
+        ['ecr_garder', m.panel_tempvoice_chat_ask_kept({ name: 'cible' }, L)],
+        ['ecr_jamais', m.panel_tempvoice_chat_ask_never_done({ name: 'cible' }, L)],
+      ] as const) {
+        const sc = await monterException({ format: 'V2', langue, categorie: CAT_MUETTE });
+        await choisirMode(sc, 'everyone');
+        const r = await cliquerMp(sc, mpDe(sc)[0], action);
+        expect(clesBrutes([r.texte])).toEqual([]);
+        expect(r.texte).toContain(attendu);
+      }
+      const sc = await monterException({ format: 'V2', langue, categorie: CAT_MUETTE });
+      await choisirMode(sc, 'everyone');
+      await bouger(sc, AMI, null);
+      const r = await cliquerMp(sc, mpDe(sc)[0], 'ecr_garder');
+      expect(r.texte).toContain(m.panel_tempvoice_chat_ask_gone({ name: 'cible' }, L));
     });
   }
 });
