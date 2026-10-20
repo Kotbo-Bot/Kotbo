@@ -12,6 +12,8 @@
  * - D : une navigation montre au plus deux messages, le panneau public et UN
  *   sous-panneau éphémère par membre, réécrit d'une porte à l'autre, avec
  *   « Retour » à chaque niveau.
+ * - E : le propriétaire change le mode alors qu'un présent a une exception que
+ *   ce mode contredit : un MP (Appliquer / Garder / Ne plus demander).
  */
 import { describe, expect, mock, setSystemTime, test } from 'bun:test';
 import path from 'node:path';
@@ -25,6 +27,8 @@ type Brut = Record<string, any>;
 const base = {
   salons: new Map<string, Record<string, unknown>>(),
   reglages: null as Record<string, unknown> | null,
+  /** `tempVoiceWriteNoAsk` des profils, clé `${guildId}:${userId}`. */
+  profils: new Map<string, unknown>(),
 };
 
 const prismaMock = {
@@ -34,6 +38,16 @@ const prismaMock = {
   },
   tempVoiceAccessRequestConfig: { findUnique: mock(async () => null), upsert: mock(async () => ({})) },
   dashboardAuditLog: { create: mock(async () => ({})) },
+  memberProfile: {
+    findUnique: mock(async (a: { where: { guildId_userId: { guildId: string; userId: string } } }) => {
+      const cle = `${a.where.guildId_userId.guildId}:${a.where.guildId_userId.userId}`;
+      return base.profils.has(cle) ? { tempVoiceWriteNoAsk: structuredClone(base.profils.get(cle)) } : null;
+    }),
+    upsert: mock(async (a: { where: { guildId_userId: { guildId: string; userId: string } }; update: { tempVoiceWriteNoAsk: unknown } }) => {
+      base.profils.set(`${a.where.guildId_userId.guildId}:${a.where.guildId_userId.userId}`, structuredClone(a.update.tempVoiceWriteNoAsk));
+      return {};
+    }),
+  },
   tempVoiceChannel: {
     findMany: mock(async () => [...base.salons.values()].map((s) => ({ ...s }))),
     findUnique: mock(async (a: { where: { id: string } }) => { const s = base.salons.get(a.where.id); return s ? { ...s } : null; }),
@@ -81,6 +95,14 @@ const tv = await import('../../events/tempVoice.js');
 const { logger } = await import('../../utils/logger.js');
 const m = await import('../../lib/paraglide/messages.js');
 (logger as unknown as Record<string, unknown>).info = () => undefined;
+const avertissements: string[] = [];
+{
+  const warn = logger.warn.bind(logger);
+  (logger as unknown as Record<string, unknown>).warn = (...a: unknown[]) => {
+    avertissements.push(a.map((x) => (x instanceof Error ? x.message : String(x))).join(' '));
+    return (warn as (...b: unknown[]) => unknown)(...a);
+  };
+}
 if (process.env.BANC_LOG) for (const n of ["warn", "error"] as const) { const o = logger[n].bind(logger); (logger as unknown as Record<string, unknown>)[n] = (...a: unknown[]) => { console.log("LOG", n, ...a); return (o as (...b: unknown[]) => unknown)(...a); }; }
 (logger as unknown as Record<string, unknown>).success = () => undefined;
 
@@ -119,12 +141,15 @@ interface Options {
   amiPresent?: boolean;
   langue?: 'fr' | 'en';
   mode?: 'CLASSIC' | 'FLAT';
+  /** Appelé sur le monde juste avant que le propriétaire rejoigne le générateur. */
+  avantCreation?: (w: FauxDiscord) => void;
 }
 
 interface Scene { monde: FauxDiscord; client: Client; salonId: string; enCours: Array<Promise<unknown>>; tv: typeof tv }
 
 async function monter(o: Options): Promise<Scene> {
   base.salons.clear();
+  base.profils.clear();
   base.reglages = {
     guildId: IDS.GUILD,
     canRename: true, canChangeLimit: true, canLock: true, canChangeWriteMode: true,
@@ -150,6 +175,7 @@ async function monter(o: Options): Promise<Scene> {
   tv.registerTempVoiceListener(client);
   const avant = new Set(tv.tempChannels.keys());
   avancer(1_500);
+  o.avantCreation?.(w);
   w.bouger(IDS.PROPRIO, IDS.GEN);
   await w.calme(enCours);
   const salonId = [...tv.tempChannels.keys()].find((id) => !avant.has(id));
@@ -961,4 +987,363 @@ describe('R — revue adversariale', () => {
     expect(textesVisibles(w.messages.get(sous)).join(' ')).toContain(m.panel_tempvoice_who_title({}, { locale: 'fr' }));
     expect(visibles(sc)).toEqual({ [IDS.PROPRIO]: 1 });
   });
+});
+
+// ─── E : le MP au propriétaire quand le mode contredit une exception ───
+
+/** Les MP reçus par ce membre, du plus ancien au plus récent. */
+const mpDe = (sc: Scene, id: string = IDS.PROPRIO): Brut[] =>
+  [...sc.monde.messages.values()].filter((x) => x.channel_id === sc.monde.canalMp(id));
+
+const idsBoutons = (msg: Brut): string[] => {
+  const ids: string[] = [];
+  const parcourir = (cs: Brut[] = []) => { for (const c of cs) { if (c.custom_id) ids.push(c.custom_id); parcourir(c.components); } };
+  parcourir(msg.components);
+  return ids;
+};
+const boutonsDesactives = (msg: Brut): boolean[] => {
+  const etats: boolean[] = [];
+  const parcourir = (cs: Brut[] = []) => { for (const c of cs) { if (String(c.custom_id ?? '').startsWith('tempvoice:ecr_')) etats.push(Boolean(c.disabled)); parcourir(c.components); } };
+  parcourir(msg.components);
+  return etats;
+};
+
+/** Clic sur un bouton d'un MP, comme Discord l'envoie : salon privé, sans serveur ni membre. */
+async function cliquerMp(sc: Scene, msg: Brut, action: string, acteur: string = IDS.PROPRIO): Promise<{ acks: number[]; texte: string; msg: Brut }> {
+  avancer(1_500);
+  const w = sc.monde;
+  const customId = idsBoutons(msg).find((id) => id.startsWith(`tempvoice:${action}:`))!;
+  const brut = w.interactionBrute({ customId, genre: 'bouton', acteur, channelId: msg.channel_id, message: msg });
+  (sc.client as unknown as { actions: { InteractionCreate: { handle: (d: unknown) => void } } }).actions.InteractionCreate.handle(brut);
+  await w.calme(sc.enCours);
+  const acks = w.appels.filter((a) => a.interactionId === brut.id && a.typeCallback !== undefined && !a.erreur).map((a) => a.typeCallback as number);
+  const apres = w.messages.get(msg.id)!;
+  return { acks, texte: textesVisibles(apres).join(' '), msg: apres };
+}
+
+/** L'ami présent avec une exception, le mode « Hérité » d'une catégorie ouverte. */
+async function monterException(o: Partial<Options> & { format: Format }, exception: 'allow' | 'deny' = 'deny'): Promise<Scene> {
+  const sc = await monter({ ...o });
+  await cliquer(sc, `tempvoice:m_ecrire:${AMI}`, [exception]);
+  journal.length = 0;
+  return sc;
+}
+
+const lignesPanneau = (action: string) => journal.filter((j) => j.type === 'voice_panel'
+  && j.champs.some((c) => c.value.includes(`tempvoice:${action}`)));
+
+describe('E — changement de mode : MP au propriétaire pour une exception présente', () => {
+  for (const format of FORMATS) for (const langue of ['fr', 'en'] as const) {
+    test(`E1 ${format} ${langue} — un MP concis, trois boutons, au bon format et dans la langue du serveur`, async () => {
+      const sc = await monterException({ format, langue, categorie: CAT_MUETTE });
+      await choisirMode(sc, 'everyone');
+      const mps = mpDe(sc);
+      expect(mps).toHaveLength(1);
+      expect(idsBoutons(mps[0]).filter((id) => id.startsWith('tempvoice:ecr_'))).toEqual(
+        ['ecr_appliquer', 'ecr_garder', 'ecr_jamais'].map((a) => `tempvoice:${a}:${AMI}:${sc.salonId}`),
+      );
+      expect(Boolean(mps[0].flags & (1 << 15))).toBe(format === 'V2');
+      const textes = textesVisibles(mps[0]);
+      expect(clesBrutes(textes)).toEqual([]);
+      const L = { locale: langue };
+      const mode = langue === 'fr' ? 'Tout le monde' : 'Everyone';
+      expect(textes.join(' ')).toContain(m.panel_tempvoice_chat_exception_deny({}, L));
+      expect(textes.join(' ')).toContain(mode);
+      expect(textes.join(' ')).toContain(m.panel_tempvoice_chat_ask_never({}, L));
+      // Le mode, lui, est posé pour tous les autres : l'exception n'a pas bougé.
+      expect(ecrit(sc, IDS.PROPRIO)).toBe(true);
+      expect(ecrit(sc, AMI)).toBe(false);
+      expect(sc.monde.appels.filter((a) => a.violations.length).map((a) => a.violations)).toEqual([]);
+    });
+  }
+
+  test('E2 — aucun MP : membre absent, mode qui ne change rien pour lui, même mode, catégorie, balayage, démarrage, modérateur', async () => {
+    // Absent du vocal.
+    let sc = await monterException({ format: 'V2', categorie: CAT_MUETTE });
+    await bouger(sc, AMI, null);
+    await choisirMode(sc, 'everyone');
+    expect(mpDe(sc)).toHaveLength(0);
+
+    // « Ne peut pas écrire » face à « Moi seul » et « Personne » : rien de différent pour lui.
+    sc = await monterException({ format: 'V2', categorie: CAT_MUETTE });
+    await choisirMode(sc, 'ownerOnly');
+    await choisirMode(sc, 'nobody');
+    // « Hérité » d'une catégorie muette : il n'écrirait pas non plus.
+    await choisirMode(sc, 'inherit');
+    expect(mpDe(sc)).toHaveLength(0);
+
+    // Le même mode choisi de nouveau : l'exception a été posée contre lui, en connaissance de cause.
+    sc = await monter({ format: 'V2', categorie: CAT_MUETTE });
+    await choisirMode(sc, 'everyone');
+    await cliquer(sc, `tempvoice:m_ecrire:${AMI}`, ['deny']);
+    await choisirMode(sc, 'everyone');
+    expect(mpDe(sc)).toHaveLength(0);
+
+    // Catégorie, balayage et démarrage : jamais de MP.
+    const { sc: sc2, salonsCat } = await monterCategories();
+    await cliquer(sc2, `tempvoice:m_ecrire:${AMI}`, ['allow']);
+    fermerCategorie(sc2.monde, CAT);
+    await sc2.monde.calme(sc2.enCours);
+    await tv.balayerEcritureHeritee(sc2.client);
+    const sc3 = await redemarrer(sc2);
+    try {
+      expect(sc2.monde.peutEcrire(salonsCat[0], AMI)).toBe(true);
+      expect(mpDe(sc2)).toHaveLength(0);
+    } finally {
+      sc3.tv.arreterBalayageEcriture();
+    }
+
+    // Un modérateur change le mode : le propriétaire n'est pas questionné.
+    sc = await monterException({ format: 'V2', categorie: CAT_MUETTE });
+    await bouger(sc, IDS.STAFF, sc.salonId);
+    await cliquer(sc, 'tempvoice:mode_select', ['everyone'], IDS.STAFF);
+    expect(sc.tv.tempChannels.get(sc.salonId)?.modeEcriture).toBe('everyone');
+    expect(mpDe(sc)).toHaveLength(0);
+    expect(mpDe(sc, IDS.STAFF)).toHaveLength(0);
+  });
+
+  test('E2b — « Peut écrire » face à « Personne » : un MP ; le bouton « chat » de l\'ancien panneau aussi', async () => {
+    const sc = await monterException({ format: 'V1', categorie: CAT_MUETTE }, 'allow');
+    await choisirMode(sc, 'nobody');
+    expect(mpDe(sc)).toHaveLength(1);
+    expect(ecrit(sc, AMI)).toBe(true);
+    const sc2 = await monterException({ format: 'V1' }, 'deny');
+    await choisirMode(sc2, 'ownerOnly');
+    await cliquer(sc2, 'tempvoice:chat');
+    expect(sc2.tv.tempChannels.get(sc2.salonId)?.modeEcriture).toBe('everyone');
+    expect(mpDe(sc2)).toHaveLength(1);
+  });
+
+  for (const format of FORMATS) {
+    test(`E3 ${format} — « Appliquer » : l'exception part, il suit le salon tout de suite ; un seul acquittement ; journal avant → après`, async () => {
+      const sc = await monterException({ format, categorie: CAT_MUETTE });
+      await choisirMode(sc, 'everyone');
+      const r = await cliquerMp(sc, mpDe(sc)[0], 'ecr_appliquer');
+      expect(r.acks).toEqual([7]);
+      expect(sc.tv.tempChannels.get(sc.salonId)?.exceptionsEcriture).toBeUndefined();
+      expect(base.salons.get(sc.salonId)?.writeExceptions).toEqual({});
+      expect(ecrit(sc, AMI)).toBe(true);
+      expect(boutonsDesactives(r.msg)).toEqual([true, true, true]);
+      expect(r.texte).toContain(m.panel_tempvoice_chat_ask_applied({ name: 'cible' }, { locale: 'fr' }));
+      expect(Boolean(r.msg.flags & (1 << 15))).toBe(format === 'V2');
+      const L = { locale: 'fr' as const };
+      const lignes = lignesPanneau('ecr_appliquer');
+      expect(lignes).toHaveLength(1);
+      expect(champJ(lignes[0], m.log_tempvoice_field_member({}, L))).toContain(`<@${IDS.PROPRIO}>`);
+      expect(champJ(lignes[0], m.log_tempvoice_field_action({}, L))).toBe(m.log_tempvoice_action_ecr_appliquer({}, L));
+      expect(champJ(lignes[0], m.log_tempvoice_field_before({}, L))).toContain(m.log_tempvoice_val_chat_deny({}, L));
+      expect(champJ(lignes[0], m.log_tempvoice_field_after({}, L))).toContain(m.log_tempvoice_val_chat_follow({}, L));
+      // Ensuite, il suit vraiment le salon.
+      await choisirMode(sc, 'ownerOnly');
+      expect(ecrit(sc, AMI)).toBe(false);
+    });
+
+    test(`E4 ${format} — « Garder » : rien ne change, boutons désactivés, journalisé`, async () => {
+      const sc = await monterException({ format, categorie: CAT_MUETTE });
+      await choisirMode(sc, 'everyone');
+      const avant = sc.monde.appels.length;
+      const r = await cliquerMp(sc, mpDe(sc)[0], 'ecr_garder');
+      expect(r.acks).toEqual([7]);
+      expect(sc.monde.mutations(avant).filter((a) => a.route.includes('/permissions/'))).toEqual([]);
+      expect(sc.tv.tempChannels.get(sc.salonId)?.exceptionsEcriture).toEqual({ [AMI]: false });
+      expect(ecrit(sc, AMI)).toBe(false);
+      expect(boutonsDesactives(r.msg)).toEqual([true, true, true]);
+      expect(lignesPanneau('ecr_garder')).toHaveLength(1);
+    });
+  }
+
+  for (const format of FORMATS) for (const mode of ['CLASSIC', 'FLAT'] as const) {
+    test(`E5 ${format} ${mode} — « Ne plus demander » : persistant (redémarrage, futurs salons), « Redemander » sur la fiche le lève`, async () => {
+      const sc = await monterException({ format, mode, categorie: CAT_MUETTE });
+      await choisirMode(sc, 'everyone');
+      const r = await cliquerMp(sc, mpDe(sc)[0], 'ecr_jamais');
+      expect(r.acks).toEqual([7]);
+      expect(base.profils.get(`${IDS.GUILD}:${IDS.PROPRIO}`)).toEqual([AMI]);
+      expect(sc.tv.tempChannels.get(sc.salonId)?.exceptionsEcriture).toEqual({ [AMI]: false });
+      const L = { locale: 'fr' as const };
+      const ligne = lignesPanneau('ecr_jamais');
+      expect(ligne).toHaveLength(1);
+      expect(champJ(ligne[0], m.log_tempvoice_field_before({}, L))).toContain(`${m.log_tempvoice_state_chat_ask({ target: `<@${AMI}>` }, L)}** — ${m.log_tempvoice_val_yes({}, L)}`);
+      expect(champJ(ligne[0], m.log_tempvoice_field_after({}, L))).toContain(m.log_tempvoice_val_no({}, L));
+
+      // Plus de MP, même après un redémarrage.
+      await choisirMode(sc, 'ownerOnly');
+      await choisirMode(sc, 'everyone');
+      const sc2 = await redemarrer(sc);
+      try {
+        await choisirMode(sc2, 'nobody');
+        await cliquer(sc2, `tempvoice:m_ecrire:${AMI}`, ['allow']);
+        await choisirMode(sc2, 'ownerOnly');
+        expect(mpDe(sc2)).toHaveLength(1);
+
+        // La fiche, vue par le propriétaire, porte « Redemander » ; vue par un autre, non.
+        const avantFiche = sc2.monde.appels.length;
+        await cliquer(sc2, 'tempvoice:membre_ici', [AMI]);
+        const fiche = JSON.stringify(sc2.monde.appels.slice(avantFiche).map((a) => a.corps));
+        expect(fiche).toContain(`tempvoice:m_redemander:${AMI}`);
+        expect(fiche).toContain(m.panel_tempvoice_chat_ask_reset({}, L));
+        await bouger(sc2, IDS.STAFF, sc2.salonId);
+        const avantStaff = sc2.monde.appels.length;
+        await cliquer(sc2, 'tempvoice:membre_ici', [AMI], IDS.STAFF);
+        expect(JSON.stringify(sc2.monde.appels.slice(avantStaff).map((a) => a.corps))).not.toContain('m_redemander');
+        // Un modérateur ne lève pas le choix du propriétaire.
+        await cliquer(sc2, `tempvoice:m_redemander:${AMI}`, undefined, IDS.STAFF);
+        expect(base.profils.get(`${IDS.GUILD}:${IDS.PROPRIO}`)).toEqual([AMI]);
+
+        await cliquer(sc2, `tempvoice:m_redemander:${AMI}`);
+        expect(base.profils.get(`${IDS.GUILD}:${IDS.PROPRIO}`)).toEqual([]);
+        expect(lignesPanneau('m_redemander').length).toBeGreaterThan(0);
+        const avantFiche2 = sc2.monde.appels.length;
+        await cliquer(sc2, 'tempvoice:membre_ici', [AMI]);
+        expect(JSON.stringify(sc2.monde.appels.slice(avantFiche2).map((a) => a.corps))).not.toContain('m_redemander');
+        // Le choix levé : le MP revient.
+        await choisirMode(sc2, 'nobody');
+        expect(mpDe(sc2)).toHaveLength(2);
+      } finally {
+        sc2.tv.arreterBalayageEcriture();
+      }
+    });
+  }
+
+  test('E5b — « Ne plus demander » vaut pour les futurs salons du même propriétaire', async () => {
+    const sc = await monterException({ format: 'V2', categorie: CAT_MUETTE });
+    await choisirMode(sc, 'everyone');
+    await cliquerMp(sc, mpDe(sc)[0], 'ecr_jamais');
+    const choix = base.profils.get(`${IDS.GUILD}:${IDS.PROPRIO}`);
+    // Un autre salon, plus tard : seul le profil du propriétaire en base est gardé.
+    const sc2 = await monter({ format: 'V2', categorie: CAT_MUETTE });
+    base.profils.set(`${IDS.GUILD}:${IDS.PROPRIO}`, choix);
+    await cliquer(sc2, `tempvoice:m_ecrire:${AMI}`, ['deny']);
+    await choisirMode(sc2, 'everyone');
+    expect(mpDe(sc2)).toHaveLength(0);
+  });
+
+  test('E6 — le membre quitte le vocal avant le clic : rien ne change, boutons désactivés', async () => {
+    const sc = await monterException({ format: 'V2', categorie: CAT_MUETTE });
+    await choisirMode(sc, 'everyone');
+    await bouger(sc, AMI, null);
+    const avant = sc.monde.appels.length;
+    const r = await cliquerMp(sc, mpDe(sc)[0], 'ecr_appliquer');
+    expect(r.acks).toEqual([7]);
+    expect(sc.tv.tempChannels.get(sc.salonId)?.exceptionsEcriture).toEqual({ [AMI]: false });
+    expect(sc.monde.mutations(avant).filter((a) => a.route.includes('/permissions/'))).toEqual([]);
+    expect(r.texte).toContain(m.panel_tempvoice_chat_ask_gone({ name: 'cible' }, { locale: 'fr' }));
+    expect(boutonsDesactives(r.msg)).toEqual([true, true, true]);
+    expect(champJ(lignesPanneau('ecr_appliquer')[0], m.log_tempvoice_field_outcome({}, { locale: 'fr' }))).toBe(m.log_tempvoice_outcome_refused({}, { locale: 'fr' }));
+  });
+
+  test('E7 — la propriété a changé avant le clic : rien ne change, boutons désactivés', async () => {
+    const sc = await monterException({ format: 'V2', categorie: CAT_MUETTE });
+    await bouger(sc, IDS.STAFF, sc.salonId);
+    await choisirMode(sc, 'everyone');
+    await cliquer(sc, `tempvoice:m_transfer:${IDS.STAFF}`);
+    expect(sc.tv.tempChannels.get(sc.salonId)?.creatorId).toBe(IDS.STAFF);
+    for (const action of ['ecr_appliquer', 'ecr_jamais']) {
+      const r = await cliquerMp(sc, mpDe(sc)[0], action);
+      expect(r.acks).toEqual([7]);
+      expect(r.texte).toContain(m.panel_tempvoice_chat_ask_not_owner({}, { locale: 'fr' }));
+      expect(boutonsDesactives(r.msg)).toEqual([true, true, true]);
+    }
+    expect(sc.tv.tempChannels.get(sc.salonId)?.exceptionsEcriture).toEqual({ [AMI]: false });
+    expect(base.profils.size).toBe(0);
+  });
+
+  test('E7b — le salon a disparu avant le clic : réponse courte, boutons désactivés', async () => {
+    const sc = await monterException({ format: 'V1', categorie: CAT_MUETTE });
+    await choisirMode(sc, 'everyone');
+    const mp = mpDe(sc)[0];
+    sc.monde.supprimerSalon(sc.salonId);
+    await sc.monde.calme(sc.enCours);
+    const r = await cliquerMp(sc, mp, 'ecr_appliquer');
+    expect(r.acks).toEqual([7]);
+    expect(r.texte).toContain(m.panel_tempvoice_err_not_temp({}, { locale: 'fr' }));
+    expect(boutonsDesactives(r.msg)).toEqual([true, true, true]);
+    expect(Boolean(r.msg.flags & (1 << 15))).toBe(false);
+  });
+
+  test('E8 — MP fermés (50007) : silencieux, un avertissement au journal, le mode est posé', async () => {
+    const sc = await monterException({ format: 'V2', categorie: CAT_MUETTE });
+    sc.monde.mpFermes.add(IDS.PROPRIO);
+    avertissements.length = 0;
+    journal.length = 0;
+    await choisirMode(sc, 'everyone');
+    expect(sc.monde.appels.some((a) => a.erreur?.code === 50007)).toBe(true);
+    expect(mpDe(sc)).toHaveLength(0);
+    expect(avertissements.some((a) => a.includes('50007'))).toBe(true);
+    expect(sc.tv.tempChannels.get(sc.salonId)?.modeEcriture).toBe('everyone');
+    const ligne = lignesPanneau('mode_select');
+    expect(ligne).toHaveLength(1);
+    expect(champJ(ligne[0], m.log_tempvoice_field_outcome({}, { locale: 'fr' }))).toBe('');
+  });
+
+  test('E9 — un nouveau changement réécrit le MP en attente, sans empilement ; deux membres = deux MP', async () => {
+    const sc = await monterException({ format: 'V2', categorie: CAT_MUETTE });
+    await bouger(sc, IDS.INCONNU, sc.salonId);
+    await cliquer(sc, `tempvoice:m_ecrire:${IDS.INCONNU}`, ['allow']);
+    await choisirMode(sc, 'everyone');
+    const premiers = mpDe(sc);
+    // AMI « ne peut pas écrire » contredit « Tout le monde » ; INCONNU « peut écrire », non.
+    expect(premiers).toHaveLength(1);
+    const posts = () => sc.monde.appels.filter((a) => a.methode === 'POST' && a.route === `/channels/${sc.monde.canalMp(IDS.PROPRIO)}/messages`).length;
+    expect(posts()).toBe(1);
+    await choisirMode(sc, 'inVoice');
+    expect(mpDe(sc)).toHaveLength(1);
+    expect(posts()).toBe(1);
+    expect(sc.monde.appels.some((a) => a.methode === 'PATCH' && a.route === `/channels/${premiers[0].channel_id}/messages/${premiers[0].id}`)).toBe(true);
+    // « Personne » : seul INCONNU (« peut écrire ») est contredit ; le MP d'AMI reste en attente.
+    await choisirMode(sc, 'nobody');
+    const parMembre = mpDe(sc).map((x) => idsBoutons(x).find((id) => id.startsWith('tempvoice:ecr_appliquer'))!.split(':')[2]).sort();
+    expect(parMembre).toEqual([AMI, IDS.INCONNU].sort());
+    expect(posts()).toBe(2);
+  });
+});
+
+describe('F — les deux restes de la revue', () => {
+  for (const [mode, exception] of [['nobody', 'allow'], ['everyone', 'deny'], ['inVoice', 'deny']] as const) {
+    test(`F1 ${mode} — lever le bannissement repose l'exception « ${exception} » (fiche, ancien menu)`, async () => {
+      for (const lever of [`tempvoice:m_trust:${AMI}`, 'tempvoice:trust_select'] as const) {
+        const sc = await monter({ format: 'V2', categorie: CAT_MUETTE });
+        await choisirMode(sc, mode);
+        await cliquer(sc, `tempvoice:m_ecrire:${AMI}`, [exception]);
+        await cliquer(sc, `tempvoice:m_ban:${AMI}`);
+        expect(bitDe(sc.monde, sc.salonId, AMI)).toBe(false);
+        await cliquer(sc, lever, lever.endsWith('trust_select') ? [AMI] : undefined);
+        await bouger(sc, AMI, sc.salonId);
+        expect({ lever, ecrit: ecrit(sc, AMI) }).toEqual({ lever, ecrit: exception === 'allow' });
+        expect(sc.tv.tempChannels.get(sc.salonId)?.exceptionsEcriture).toEqual({ [AMI]: exception === 'allow' });
+      }
+    });
+  }
+
+  for (const format of FORMATS) {
+    test(`F2 ${format} — la pose initiale « en vocal » échoue : le salon reste « en vocal », pas « Hérité »`, async () => {
+      let arme = false;
+      const sc = await monter({
+        format,
+        textChat: 'inVoice',
+        categorie: CAT_MUETTE,
+        amiPresent: false,
+        avantCreation: (w) => {
+          const traiter = w.traiter.bind(w);
+          arme = true;
+          w.traiter = async (o: Brut) => {
+            if (arme && String(o.method) === 'PUT' && String(o.fullRoute).includes('/permissions/')) {
+              arme = false;
+              throw new Error('panne simulée');
+            }
+            return traiter(o);
+          };
+        },
+      });
+      expect(arme).toBe(false);
+      expect(sc.tv.tempChannels.get(sc.salonId)?.modeEcriture).toBe('inVoice');
+      expect(base.salons.get(sc.salonId)?.writeMode).toBe('inVoice');
+      // L'ami qui entre écrit, celui qui reste dehors non.
+      await bouger(sc, AMI, sc.salonId);
+      expect(ecrit(sc, AMI)).toBe(true);
+      expect(ecrit(sc, IDS.INCONNU)).toBe(false);
+      await bouger(sc, AMI, null);
+      expect(ecrit(sc, AMI)).toBe(false);
+    });
+  }
 });

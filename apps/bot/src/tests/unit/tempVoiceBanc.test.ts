@@ -36,6 +36,8 @@ const base = {
   salons: new Map<string, Record<string, unknown>>(),
   reglages: null as Record<string, unknown> | null,
   demandes: null as Record<string, unknown> | null,
+  /** `tempVoiceWriteNoAsk` des profils, clé `${guildId}:${userId}`. */
+  profils: new Map<string, unknown>(),
 };
 
 const prismaMock = {
@@ -54,6 +56,18 @@ const prismaMock = {
   // Seulement pour la route du dashboard (PATCH des réglages) du test de bout en bout.
   guild: { findUnique: mock(async () => ({ ...configServeur })), update: mock(async () => ({})) },
   dashboardAuditLog: { create: mock(async () => ({})) },
+  memberProfile: {
+    findUnique: mock(async (a: { where: { guildId_userId: { guildId: string; userId: string } } }) => {
+      coutBase();
+      const cle = `${a.where.guildId_userId.guildId}:${a.where.guildId_userId.userId}`;
+      return base.profils.has(cle) ? { tempVoiceWriteNoAsk: structuredClone(base.profils.get(cle)) } : null;
+    }),
+    upsert: mock(async (a: { where: { guildId_userId: { guildId: string; userId: string } }; update: { tempVoiceWriteNoAsk: unknown } }) => {
+      coutBase();
+      base.profils.set(`${a.where.guildId_userId.guildId}:${a.where.guildId_userId.userId}`, structuredClone(a.update.tempVoiceWriteNoAsk));
+      return {};
+    }),
+  },
   tempVoiceChannel: {
     findMany: mock(async () => { coutBase(); return [...base.salons.values()].map((s) => ({ ...s })); }),
     findUnique: mock(async (a: { where: { id: string } }) => { coutBase(); const s = base.salons.get(a.where.id); return s ? { ...s } : null; }),
@@ -200,6 +214,7 @@ function reglerBase(opts: OptionsScene) {
     ...(opts.mention ? { ownerMentionPlacement: opts.mention } : {}),
     ...(opts.repliSalon ? { reservationFallbackChannelId: opts.repliSalon } : {}),
   };
+  base.profils.clear();
   base.demandes = opts.demandes
     ? { guildId: IDS.GUILD, enabled: true, responders: 'OWNER_AND_STAFF', notifyVia: 'VOICE', notifyChannelId: null, requestExpiresMinutes: 10, denyCooldownMinutes: 10 }
     : null;
@@ -291,8 +306,12 @@ function composantPublic(sc: Scene, customId: string): Brut | null {
  * porte), ou un ANCIEN panneau public V1 (d'avant la refonte, pour les anciens
  * identifiants). Utilisé seulement quand le parcours réel n'y mène pas.
  */
-function porteurFabrique(sc: Scene, clic: Omit<Clic, 'porteur'>, ephemere: boolean): Brut {
+function porteurFabrique(sc: Scene, clic: Omit<Clic, 'porteur'>, ephemere: boolean, mp = false): Brut {
   const m = sc.monde;
+  if (mp) {
+    const bouton = { type: 2, style: 2, custom_id: clic.customId, label: 'x' };
+    return m.creerMessage(m.canalMp(clic.acteur), { flags: 0, components: [{ type: 1, components: [bouton] }] });
+  }
   const type = { bouton: 2, menuTexte: 3, menuMembres: 5, menuRoles: 6, modale: 2 }[clic.genre];
   const composant = type === 2
     ? { type: 2, style: 2, custom_id: clic.customId, label: 'x' }
@@ -312,7 +331,7 @@ async function cliquer(sc: Scene, clic: Clic, opts: { simultanes?: Clic[] } = {}
   monde = m;
   const debut = { appels: m.appels.length, journal: journal.length, avert: avertissements.length, touches: m.touches.length };
   const langue = sc.opts.langue === 'fr' ? 'fr' : 'en-US';
-  const bruts = [clic, ...(opts.simultanes ?? [])].map((c) => m.interactionBrute({ ...c, channelId: sc.salonId, message: c.porteur, locale: langue }));
+  const bruts = [clic, ...(opts.simultanes ?? [])].map((c) => m.interactionBrute({ ...c, channelId: c.porteur?.channel_id ?? sc.salonId, message: c.porteur, locale: langue }));
 
   const actions = (sc.client as unknown as { actions: { InteractionCreate: { handle: (d: unknown) => void } } }).actions;
   const emit = sc.client.emit.bind(sc.client);
@@ -373,7 +392,7 @@ function ephemeresVisibles(m: FauxDiscord): Record<string, number> {
 // ─── Les invariants de chaque cellule ───
 
 /** Actions que l'écouteur ouvre à tous (miroir de `ACTIONS_OUVERTES` de tempVoice.ts). */
-const ACTIONS_OUVERTES = new Set(['claim', 'reclamer', 'demander', 'propriete']);
+const ACTIONS_OUVERTES = new Set(['claim', 'reclamer', 'demander', 'propriete', 'ecr_appliquer', 'ecr_garder', 'ecr_jamais']);
 
 function problemes(r: Rapport, ctx: { langue: Langue; acteur: string; salonId: string; action: string; refusAttendu: boolean }): string[] {
   const p: string[] = [...r.erreursBanc.map((e) => `BANC : ${e}`)];
@@ -423,6 +442,10 @@ interface CasAction {
   demandes?: boolean;
   /** Repli de réservation réglé (`MEMBERS` fait proposer des personnes). */
   repli?: string;
+  /** Le composant vit dans un MP du bot à la personne qui clique. */
+  mp?: boolean;
+  /** Le propriétaire a déjà choisi « Ne plus demander » pour la cible. */
+  nePlusDemander?: boolean;
   /** Ce que l'action doit avoir fait quand elle est permise ; `null` = fait. */
   effet?: (sc: Scene, r: Rapport) => string | null;
 }
@@ -475,6 +498,13 @@ const CAS: CasAction[] = [
   { customId: `tempvoice:m_untrust:${IDS.AUTORISE}`, genre: 'bouton', chemin: [MEMBRES, fiche(IDS.AUTORISE)] },
   { customId: `tempvoice:m_transfer:${IDS.CIBLE}`, genre: 'bouton', chemin: [MEMBRES, fiche(IDS.CIBLE)], effet: proprietaireDevient(IDS.CIBLE) },
   { customId: `tempvoice:m_ecrire:${IDS.CIBLE}`, genre: 'menuTexte', values: ['deny'], chemin: [MEMBRES, fiche(IDS.CIBLE)], effet: ecrit('PUT', `/permissions/${IDS.CIBLE}`, (c) => refuse(c, PermissionFlagsBits.SendMessages)) },
+  // « Redemander » : sur la fiche, seulement pour le propriétaire qui a choisi « Ne plus demander ».
+  { customId: `tempvoice:m_redemander:${IDS.CIBLE}`, genre: 'bouton', chemin: [MEMBRES, fiche(IDS.CIBLE)], nePlusDemander: true },
+  // MP au propriétaire après un changement de mode qui contredit une exception (porteur : le MP).
+  ...(['ecr_appliquer', 'ecr_garder', 'ecr_jamais'] as const).map((a): CasAction => ({
+    customId: `tempvoice:${a}:${IDS.CIBLE}:SALON`, genre: 'bouton', mp: true,
+    chemin: [{ customId: `tempvoice:m_ecrire:${IDS.CIBLE}`, genre: 'menuTexte', values: ['deny'], acteur: IDS.PROPRIO, ancien: true }],
+  })),
   { customId: 'tempvoice:claim', genre: 'bouton', chemin: [PROPRIETE] },
   ...(['resa_rien', 'resa_deplacer', 'resa_deconnecter'] as const).map((a): CasAction => ({
     customId: `tempvoice:${a}`, genre: 'bouton',
@@ -574,7 +604,7 @@ async function parcourir(sc: Scene, cas: CasAction, acteur: string): Promise<{ c
   const trouve = chercher(sc, id, touches);
   if (trouve) return { clic: clicSur(id, cas, acteur, trouve, mode), origine: 'parcours' };
   if (composantPublic(sc, id)) return { clic: clicSur(id, cas, acteur, panneau(), mode), origine: 'public' };
-  const fabrique = porteurFabrique(sc, { ...cas, customId: id, acteur }, !cas.ancien);
+  const fabrique = porteurFabrique(sc, { ...cas, customId: id, acteur }, !cas.ancien && !cas.mp, cas.mp);
   return { clic: clicSur(id, cas, acteur, fabrique, mode), origine: 'fabrique' };
 }
 
@@ -594,6 +624,7 @@ function tracer(titre: string, r: Rapport) {
 
 async function executerCellule(cas: CasAction, c: Omit<Coord, 'customId'>): Promise<Cellule> {
   const sc = await monterScene({ langue: c.langue, format: c.format, mode: c.mode, droitsFermes: c.role === 'staffSansDroits', demandes: cas.demandes, repli: cas.repli });
+  if (cas.nePlusDemander) base.profils.set(`${IDS.GUILD}:${IDS.PROPRIO}`, [IDS.CIBLE]);
   const { clic, origine } = await parcourir(sc, cas, ACTEUR[c.role]);
   const r = await cliquer(sc, clic);
   tracer(`${clic.customId} ${c.format} ${c.mode} ${c.role} ${c.langue} (${origine}, ${clic.genre})`, r);

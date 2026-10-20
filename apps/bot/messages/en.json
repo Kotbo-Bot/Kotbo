@@ -4295,5 +4295,22 @@
   "log_tempvoice_val_chat_follow": "follows the channel",
   "log_tempvoice_category_resync": "Chat permissions realigned with the category",
   "log_tempvoice_reason_category_changed": "category changed",
-  "log_tempvoice_field_adjusted_channels": "Adjusted channels"
+  "log_tempvoice_field_adjusted_channels": "Adjusted channels",
+  "panel_tempvoice_chat_ask": "**{name}** has the “{exception}” exception in **{channel}**. Apply “{mode}” to them too?",
+  "panel_tempvoice_chat_ask_apply": "Apply",
+  "panel_tempvoice_chat_ask_keep": "Keep",
+  "panel_tempvoice_chat_ask_never": "Don't ask again",
+  "panel_tempvoice_chat_ask_applied": "**{name}** now follows the channel.",
+  "panel_tempvoice_chat_ask_kept": "**{name}**'s exception kept.",
+  "panel_tempvoice_chat_ask_never_done": "**{name}**'s exception kept; you won't be asked about them again.",
+  "panel_tempvoice_chat_ask_gone": "**{name}** is no longer in voice: nothing changed.",
+  "panel_tempvoice_chat_ask_not_owner": "You no longer own this channel: nothing changed.",
+  "panel_tempvoice_chat_ask_no_exception": "**{name}** already follows the channel.",
+  "panel_tempvoice_chat_ask_reset": "Ask again",
+  "panel_tempvoice_chat_ask_reset_done": "You'll be asked again about **{name}**.",
+  "log_tempvoice_action_ecr_appliquer": "Chat DM: apply",
+  "log_tempvoice_action_ecr_garder": "Chat DM: keep",
+  "log_tempvoice_action_ecr_jamais": "Chat DM: don't ask again",
+  "log_tempvoice_action_m_redemander": "Ask again about a member's chat",
+  "log_tempvoice_state_chat_ask": "DM question for {target}"
 }

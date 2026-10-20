@@ -966,6 +966,11 @@ model MemberProfile {
   presenceTrackingOptOut Boolean @default(false)
   presenceOptOutAt DateTime?
 
+  // Salons vocaux temporaires : membres pour lesquels ce membre, propriétaire,
+  // ne veut plus qu'on lui demande en MP d'appliquer un changement de mode
+  // d'écriture à leur exception (`["<userId>", ...]`). `null` = aucun.
+  tempVoiceWriteNoAsk Json?
+
   guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
   eventParticipations EventParticipant[]
 

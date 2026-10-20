@@ -65,6 +65,7 @@ const ERREURS: Record<number, [number, string]> = {
   10062: [404, 'Unknown interaction'],
   40032: [400, 'Target user is not connected to voice.'],
   40060: [400, 'Interaction has already been acknowledged.'],
+  50007: [403, 'Cannot send messages to this user'],
   50035: [400, 'Invalid Form Body'],
   0: [404, 'Route non simulée par le banc'],
 };
@@ -143,6 +144,8 @@ export class FauxDiscord {
   touches: string[] = [];
   /** Salons privés ouverts par `createDM`. */
   mp = new Set<string>();
+  /** Membres aux MP fermés : tout envoi dans leur salon privé reçoit 50007. */
+  mpFermes = new Set<string>();
   /** Salon à supprimer après N appels qui le modifient (scénario « salon supprimé pendant l'action »). */
   supprimerApres: { salonId: string; n: number } | null = null;
   /** Ce qui reste à rejouer côté passerelle (CHANNEL_UPDATE…). */
@@ -334,6 +337,8 @@ export class FauxDiscord {
     const membre: Brut = structuredClone(this.membres.get(p.acteur) ?? {});
     membre.permissions = p.acteur === IDS.ADMIN ? bits(P.Administrator) : PERMS_EVERYONE;
     const salon = this.salons.get(p.channelId);
+    // Un clic dans un salon privé : ni serveur ni membre, seulement l'utilisateur.
+    const enMp = this.mp.has(p.channelId);
     const typeComposant = { bouton: 2, menuTexte: 3, menuMembres: 5, menuRoles: 6, modale: 0 }[p.genre];
     const data: Brut = p.genre === 'modale'
       ? {
@@ -361,10 +366,12 @@ export class FauxDiscord {
     });
     return {
       id, application_id: IDS.APP, type: p.genre === 'modale' ? 5 : 3, token, version: 1,
-      guild_id: IDS.GUILD, channel_id: p.channelId,
-      channel: salon ? { id: p.channelId, type: 2, guild_id: IDS.GUILD, name: salon.name } : { id: p.channelId, type: 2 },
-      member: membre, user: undefined, data, locale: p.locale ?? 'fr', guild_locale: this.langueDiscord,
-      app_permissions: PERMS_BOT, entitlements: [], authorizing_integration_owners: { 0: IDS.GUILD }, context: 0,
+      ...(enMp ? {} : { guild_id: IDS.GUILD, guild_locale: this.langueDiscord }), channel_id: p.channelId,
+      channel: enMp
+        ? { id: p.channelId, type: 1, recipients: [membre.user] }
+        : salon ? { id: p.channelId, type: 2, guild_id: IDS.GUILD, name: salon.name } : { id: p.channelId, type: 2 },
+      ...(enMp ? { user: membre.user } : { member: membre, user: undefined }), data, locale: p.locale ?? 'fr',
+      app_permissions: PERMS_BOT, entitlements: [], authorizing_integration_owners: { 0: IDS.GUILD }, context: enMp ? 1 : 0,
       ...(p.message ? { message: structuredClone(p.message) } : {}),
     };
   }
@@ -435,6 +442,7 @@ export class FauxDiscord {
       }
       if (methode === 'POST') {
         if (!this.salons.has(r[1]) && !this.mp.has(r[1])) throw new RefusDiscord(10003);
+        if (this.mp.has(r[1]) && this.mpFermes.has(this.destinataireMp(r[1]))) throw new RefusDiscord(50007);
         appel.violations.push(...validerMessage(o.body, null));
         return structuredClone(this.creerMessage(r[1], o.body));
       }
@@ -487,12 +495,22 @@ export class FauxDiscord {
     // Messages privés
     if (route === '/users/@me/channels' && methode === 'POST') {
       const dest = String(o.body?.recipient_id);
-      const id = (BigInt(dest) + 7n).toString();
-      this.mp.add(id);
+      const id = this.canalMp(dest);
       return { id, type: 1, recipients: [this.membres.get(dest)?.user ?? utilisateurBrut(dest, 'x')], last_message_id: null };
     }
 
     throw new RefusDiscord(0, `${methode} ${route}`);
+  }
+
+  /** Le salon privé du bot avec ce membre (ouvert s'il ne l'était pas). */
+  canalMp(userId: string): string {
+    const id = (BigInt(userId) + 7n).toString();
+    this.mp.add(id);
+    return id;
+  }
+
+  destinataireMp(salonId: string): string {
+    return (BigInt(salonId) - 7n).toString();
   }
 
   /** Salon existant, sinon 10003 ; compte les modifications pour le scénario de suppression. */
@@ -566,7 +584,8 @@ export class FauxDiscord {
       case 7: {
         const cible = it.messageId ? this.messages.get(it.messageId) : null;
         if (!cible) throw new RefusDiscord(10008);
-        if (!(cible.flags & 64)) appel.violations.push('update() réécrit un message PUBLIC');
+        // Un MP n'est lu que par son destinataire : le réécrire au clic est la règle.
+        if (!(cible.flags & 64) && !this.mp.has(cible.channel_id)) appel.violations.push('update() réécrit un message PUBLIC');
         this.editerMessage(cible, data, appel);
         it.originalId = cible.id;
         break;

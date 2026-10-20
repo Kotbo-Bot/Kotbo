@@ -4295,5 +4295,22 @@
   "log_tempvoice_val_chat_follow": "suit le salon",
   "log_tempvoice_category_resync": "Écriture réalignée sur la catégorie",
   "log_tempvoice_reason_category_changed": "catégorie modifiée",
-  "log_tempvoice_field_adjusted_channels": "Salons ajustés"
+  "log_tempvoice_field_adjusted_channels": "Salons ajustés",
+  "panel_tempvoice_chat_ask": "**{name}** a l'exception « {exception} » dans **{channel}**. Lui appliquer aussi « {mode} » ?",
+  "panel_tempvoice_chat_ask_apply": "Appliquer",
+  "panel_tempvoice_chat_ask_keep": "Garder",
+  "panel_tempvoice_chat_ask_never": "Ne plus demander",
+  "panel_tempvoice_chat_ask_applied": "**{name}** suit maintenant le salon.",
+  "panel_tempvoice_chat_ask_kept": "Exception de **{name}** gardée.",
+  "panel_tempvoice_chat_ask_never_done": "Exception de **{name}** gardée, plus de question pour ce membre.",
+  "panel_tempvoice_chat_ask_gone": "**{name}** n'est plus dans le vocal : rien n'a changé.",
+  "panel_tempvoice_chat_ask_not_owner": "Tu n'es plus propriétaire de ce salon : rien n'a changé.",
+  "panel_tempvoice_chat_ask_no_exception": "**{name}** suit déjà le salon.",
+  "panel_tempvoice_chat_ask_reset": "Redemander",
+  "panel_tempvoice_chat_ask_reset_done": "Tu seras de nouveau questionné pour **{name}**.",
+  "log_tempvoice_action_ecr_appliquer": "MP d'écriture : appliquer",
+  "log_tempvoice_action_ecr_garder": "MP d'écriture : garder",
+  "log_tempvoice_action_ecr_jamais": "MP d'écriture : ne plus demander",
+  "log_tempvoice_action_m_redemander": "Redemander pour l'écriture d'un membre",
+  "log_tempvoice_state_chat_ask": "Question en MP pour {target}"
 }
