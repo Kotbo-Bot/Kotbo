@@ -6,7 +6,9 @@
      * fichiers de test. `vite/client` reste present : un test peut encore
      * lire `import.meta.env` comme le code qu'il verifie.
      */
-    "types": ["vite/client", "bun-types"]
+    "types": ["vite/client", "bun-types"],
+    /** Paraglide genere du JS type par JSDoc (pas de .d.ts) : sans allowJs, tsc le voit `any` implicite (TS7016). */
+    "allowJs": true
   },
   /**
    * `include`/`exclude` ne fusionnent pas avec le tsconfig etendu, ils le

@@ -65,6 +65,7 @@ const ERREURS: Record<number, [number, string]> = {
   10062: [404, 'Unknown interaction'],
   40032: [400, 'Target user is not connected to voice.'],
   40060: [400, 'Interaction has already been acknowledged.'],
+  50007: [403, 'Cannot send messages to this user'],
   50035: [400, 'Invalid Form Body'],
   0: [404, 'Route non simulée par le banc'],
 };
@@ -82,6 +83,8 @@ export interface AppelRest {
   typeCallback?: number;
   /** Violations de charge relevées sur cet appel. */
   violations: string[];
+  /** Message NEUF que cet appel a fait apparaître (réponse, « réfléchit… », followUp). */
+  cree?: string;
 }
 
 interface EtatInteraction {
@@ -141,6 +144,8 @@ export class FauxDiscord {
   touches: string[] = [];
   /** Salons privés ouverts par `createDM`. */
   mp = new Set<string>();
+  /** Membres aux MP fermés : tout envoi dans leur salon privé reçoit 50007. */
+  mpFermes = new Set<string>();
   /** Salon à supprimer après N appels qui le modifient (scénario « salon supprimé pendant l'action »). */
   supprimerApres: { salonId: string; n: number } | null = null;
   /** Ce qui reste à rejouer côté passerelle (CHANNEL_UPDATE…). */
@@ -226,6 +231,51 @@ export class FauxDiscord {
     actions.VoiceStateUpdate.handle(this.etatVocalBrut(userId, channelId));
   }
 
+  /** Une catégorie (type 4) et ses surcharges ; annoncée par CHANNEL_CREATE si le client existe. */
+  ajouterCategorie(id: string, surcharges: Brut[]): void {
+    const brut: Brut = { ...this.salonBrut(id, 'Catégorie', surcharges), type: 4 };
+    delete brut.bitrate;
+    delete brut.user_limit;
+    this.salons.set(id, brut);
+    if (this.client) this.differer(() => (this.client as unknown as { actions: Brut }).actions.ChannelCreate.handle(structuredClone(brut)));
+  }
+
+  /** Remplace toutes les surcharges d'un salon (ou d'une catégorie) et l'annonce par CHANNEL_UPDATE. */
+  remplacerSurcharges(salonId: string, surcharges: Brut[]): void {
+    const salon = this.salons.get(salonId);
+    if (!salon) return;
+    salon.permission_overwrites = structuredClone(surcharges);
+    this.annoncerSalon(salonId);
+  }
+
+  /**
+   * `SendMessages` effectif dans ce salon, calculé comme Discord sur l'état du
+   * faux serveur (et non sur le cache du client) : rôles, Administrateur, puis
+   * @everyone, rôles (refus puis accords) et membre.
+   */
+  peutEcrire(salonId: string, userId: string): boolean {
+    const salon = this.salons.get(salonId);
+    const membre = this.membres.get(userId);
+    if (!salon || !membre) return false;
+    const roles = membre.roles as string[];
+    const role = (id: string) => this.roles.find((r) => r.id === id);
+    let perms = BigInt(role(IDS.GUILD)!.permissions);
+    for (const id of roles) perms |= BigInt(role(id)?.permissions ?? '0');
+    if ((perms & P.Administrator) === P.Administrator) return true;
+    const surcharge = (id: string) => (salon.permission_overwrites as Brut[]).find((o) => o.id === id);
+    const appliquer = (o: Brut | undefined) => { if (o) perms = (perms & ~BigInt(o.deny)) | BigInt(o.allow); };
+    appliquer(surcharge(IDS.GUILD));
+    let allow = 0n;
+    let deny = 0n;
+    for (const id of roles) {
+      const o = surcharge(id);
+      if (o) { allow |= BigInt(o.allow); deny |= BigInt(o.deny); }
+    }
+    perms = (perms & ~deny) | allow;
+    appliquer(surcharge(userId));
+    return (perms & P.SendMessages) === P.SendMessages;
+  }
+
   /** Pose une surcharge côté serveur et la fait connaître par CHANNEL_UPDATE. */
   poserSurchargeDirecte(salonId: string, cible: string, type: 0 | 1, allow: bigint, deny = 0n): void {
     const salon = this.salons.get(salonId);
@@ -239,7 +289,12 @@ export class FauxDiscord {
     const brut = this.salons.get(salonId);
     if (!brut) return;
     const copie = structuredClone(brut);
-    this.differer(() => (this.client as unknown as { actions: Brut }).actions.ChannelUpdate.handle(copie));
+    // Comme le gestionnaire CHANNEL_UPDATE de la passerelle : l'action met le
+    // cache à jour, puis l'événement est émis avec l'ancien et le nouveau salon.
+    this.differer(() => {
+      const { old, updated } = (this.client as unknown as { actions: Brut }).actions.ChannelUpdate.handle(copie) ?? {};
+      if (old && updated) this.client.emit(Events.ChannelUpdate, old, updated);
+    });
   }
 
   supprimerSalon(salonId: string): void {
@@ -282,6 +337,8 @@ export class FauxDiscord {
     const membre: Brut = structuredClone(this.membres.get(p.acteur) ?? {});
     membre.permissions = p.acteur === IDS.ADMIN ? bits(P.Administrator) : PERMS_EVERYONE;
     const salon = this.salons.get(p.channelId);
+    // Un clic dans un salon privé : ni serveur ni membre, seulement l'utilisateur.
+    const enMp = this.mp.has(p.channelId);
     const typeComposant = { bouton: 2, menuTexte: 3, menuMembres: 5, menuRoles: 6, modale: 0 }[p.genre];
     const data: Brut = p.genre === 'modale'
       ? {
@@ -309,10 +366,12 @@ export class FauxDiscord {
     });
     return {
       id, application_id: IDS.APP, type: p.genre === 'modale' ? 5 : 3, token, version: 1,
-      guild_id: IDS.GUILD, channel_id: p.channelId,
-      channel: salon ? { id: p.channelId, type: 2, guild_id: IDS.GUILD, name: salon.name } : { id: p.channelId, type: 2 },
-      member: membre, user: undefined, data, locale: p.locale ?? 'fr', guild_locale: this.langueDiscord,
-      app_permissions: PERMS_BOT, entitlements: [], authorizing_integration_owners: { 0: IDS.GUILD }, context: 0,
+      ...(enMp ? {} : { guild_id: IDS.GUILD, guild_locale: this.langueDiscord }), channel_id: p.channelId,
+      channel: enMp
+        ? { id: p.channelId, type: 1, recipients: [membre.user] }
+        : salon ? { id: p.channelId, type: 2, guild_id: IDS.GUILD, name: salon.name } : { id: p.channelId, type: 2 },
+      ...(enMp ? { user: membre.user } : { member: membre, user: undefined }), data, locale: p.locale ?? 'fr',
+      app_permissions: PERMS_BOT, entitlements: [], authorizing_integration_owners: { 0: IDS.GUILD }, context: enMp ? 1 : 0,
       ...(p.message ? { message: structuredClone(p.message) } : {}),
     };
   }
@@ -383,6 +442,7 @@ export class FauxDiscord {
       }
       if (methode === 'POST') {
         if (!this.salons.has(r[1]) && !this.mp.has(r[1])) throw new RefusDiscord(10003);
+        if (this.mp.has(r[1]) && this.mpFermes.has(this.destinataireMp(r[1]))) throw new RefusDiscord(50007);
         appel.violations.push(...validerMessage(o.body, null));
         return structuredClone(this.creerMessage(r[1], o.body));
       }
@@ -435,12 +495,22 @@ export class FauxDiscord {
     // Messages privés
     if (route === '/users/@me/channels' && methode === 'POST') {
       const dest = String(o.body?.recipient_id);
-      const id = (BigInt(dest) + 7n).toString();
-      this.mp.add(id);
+      const id = this.canalMp(dest);
       return { id, type: 1, recipients: [this.membres.get(dest)?.user ?? utilisateurBrut(dest, 'x')], last_message_id: null };
     }
 
     throw new RefusDiscord(0, `${methode} ${route}`);
+  }
+
+  /** Le salon privé du bot avec ce membre (ouvert s'il ne l'était pas). */
+  canalMp(userId: string): string {
+    const id = (BigInt(userId) + 7n).toString();
+    this.mp.add(id);
+    return id;
+  }
+
+  destinataireMp(salonId: string): string {
+    return (BigInt(salonId) - 7n).toString();
   }
 
   /** Salon existant, sinon 10003 ; compte les modifications pour le scénario de suppression. */
@@ -498,11 +568,13 @@ export class FauxDiscord {
         appel.violations.push(...validerMessage(data, null));
         if (!(Number(data.flags ?? 0) & 64)) appel.violations.push('réponse PUBLIQUE (type 4 sans drapeau éphémère)');
         it.originalId = this.creerMessage(this.salonDe(it), data).id;
+        appel.cree = it.originalId;
         break;
       }
       case 5:
         if (!(Number(data.flags ?? 0) & 64)) appel.violations.push('« réfléchit… » PUBLIC (type 5 sans drapeau éphémère)');
         it.originalId = this.creerMessage(this.salonDe(it), { flags: Number(data.flags ?? 0) }).id;
+        appel.cree = it.originalId;
         it.enAttente = true;
         break;
       case 6:
@@ -512,7 +584,8 @@ export class FauxDiscord {
       case 7: {
         const cible = it.messageId ? this.messages.get(it.messageId) : null;
         if (!cible) throw new RefusDiscord(10008);
-        if (!(cible.flags & 64)) appel.violations.push('update() réécrit un message PUBLIC');
+        // Un MP n'est lu que par son destinataire : le réécrire au clic est la règle.
+        if (!(cible.flags & 64) && !this.mp.has(cible.channel_id)) appel.violations.push('update() réécrit un message PUBLIC');
         this.editerMessage(cible, data, appel);
         it.originalId = cible.id;
         break;
@@ -547,14 +620,17 @@ export class FauxDiscord {
         return structuredClone(this.editerMessage(msg, corps, { ...appel, violations: [] }));
       }
       if (!(Number(corps?.flags ?? 0) & 64)) appel.violations.push('followUp PUBLIC (sans drapeau éphémère)');
-      return structuredClone(this.creerMessage(this.salonDe(it), corps));
+      const cree = this.creerMessage(this.salonDe(it), corps);
+      appel.cree = cree.id;
+      return structuredClone(cree);
     }
     const id = messageId === '@original' ? it.originalId : messageId;
     const msg = id ? this.messages.get(id) : null;
     if (!msg) throw new RefusDiscord(10008, `message ${messageId} introuvable (acquittement ${it.typeAck})`);
     if (methode === 'GET') return structuredClone(msg);
     if (methode === 'PATCH') {
-      if (!(msg.flags & 64) && msg.author?.id === IDS.BOT && msg.components?.length) {
+      // Un MP n'est lu que par son destinataire, comme pour update().
+      if (!(msg.flags & 64) && !this.mp.has(msg.channel_id) && msg.author?.id === IDS.BOT && msg.components?.length) {
         appel.violations.push('editReply réécrit un message PUBLIC (le panneau du salon ?)');
       }
       it.enAttente = false;

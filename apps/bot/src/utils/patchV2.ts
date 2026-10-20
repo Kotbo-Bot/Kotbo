@@ -220,7 +220,7 @@ export function sansConversionV2<T extends object>(payload: T): T {
   return payload;
 }
 
-function estSansConversionV2(options: unknown): boolean {
+export function estSansConversionV2(options: unknown): boolean {
   return !!options && typeof options === 'object'
     && (options as Record<symbol, unknown>)[SANS_CONVERSION_V2] === true;
 }

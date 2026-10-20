@@ -84,6 +84,12 @@ const CAS: Cas[] = [
   { action: 'm_trust', genre: 'bouton', suffixe: CIBLE, libelle: 'Autoriser un membre à rejoindre le salon' },
   { action: 'm_untrust', genre: 'bouton', suffixe: CIBLE, libelle: "Retirer l'autorisation d'un membre" },
   { action: 'm_transfer', genre: 'bouton', suffixe: CIBLE, libelle: 'Transférer la propriété du salon' },
+  { action: 'm_ecrire', genre: 'menu', suffixe: CIBLE, values: ['deny'], libelle: "Régler l'écriture d'un membre" },
+  { action: 'm_redemander', genre: 'bouton', suffixe: CIBLE, libelle: "Redemander pour l'écriture d'un membre" },
+  // MP au propriétaire : appliquer le nouveau mode à une exception ?
+  { action: 'ecr_appliquer', genre: 'bouton', suffixe: `${CIBLE}:${CHANNEL}`, libelle: "MP d'écriture : appliquer" },
+  { action: 'ecr_garder', genre: 'bouton', suffixe: `${CIBLE}:${CHANNEL}`, libelle: "MP d'écriture : garder" },
+  { action: 'ecr_jamais', genre: 'bouton', suffixe: `${CIBLE}:${CHANNEL}`, libelle: "MP d'écriture : ne plus demander" },
   // Suite d'une réservation
   { action: 'resa_rien', genre: 'bouton', libelle: 'Réservation : ne déplacer personne' },
   { action: 'resa_deplacer', genre: 'bouton', libelle: 'Réservation : déplacer les membres restants' },

@@ -966,6 +966,11 @@ model MemberProfile {
   presenceTrackingOptOut Boolean @default(false)
   presenceOptOutAt DateTime?
 
+  // Salons vocaux temporaires : membres pour lesquels ce membre, propriétaire,
+  // ne veut plus qu'on lui demande en MP d'appliquer un changement de mode
+  // d'écriture à leur exception (`["<userId>", ...]`). `null` = aucun.
+  tempVoiceWriteNoAsk Json?
+
   guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
   eventParticipations EventParticipant[]
 
@@ -1169,6 +1174,13 @@ model TempVoiceChannel {
   /// salons qu'il a crees. Un generateur disparu se lit comme un generateur
   /// absent — la presentation du serveur s'applique, sans erreur.
   generatorChannelId String?
+
+  /// Exceptions d'ecriture posees depuis la fiche d'un membre :
+  /// `{ "<userId>": true | false }` (peut / ne peut pas ecrire, quel que soit le
+  /// mode). Une surcharge « peut ecrire » a la forme exacte d'une presence : sans
+  /// cette colonne, le demarrage la prenait pour une presence et l'effacait.
+  /// `null` = aucune exception.
+  writeExceptions Json?
 
   createdAt  DateTime @default(now())
 

@@ -2328,6 +2328,7 @@
   "cm_no_role_required_open_placeholder": "- No role required (open to everyone) -",
   "cm_additional_generators_title": "Additional generator channels",
   "cm_additional_generators_desc": "Add other temporary-channel generator channels (e.g. for other categories or with other name templates).",
+  "cm_tv_generator_taken_hint": "A channel already used by the main generator or by another generator is not offered.",
   "cm_generator_n": "Generator #{n}",
   "cm_delete_generator_title": "Delete this generator",
   "cm_create_auto_placeholder": "- Create automatically -",

@@ -8,12 +8,12 @@
     "dev": "vite",
     "dev:demo": "vite --mode demo",
     "check": "svelte-check --output human",
-    "typecheck:test": "tsc -p tsconfig.test.json --noEmit",
+    "typecheck:test": "bun run build:i18n && tsc -p tsconfig.test.json --noEmit",
     "lint": "eslint src --ext .ts,.svelte",
     "build": "vite build",
     "build:demo": "vite build --mode demo --base /demo/ --outDir dist-demo",
     "preview": "vite preview",
-    "test": "bun test"
+    "test": "bun run build:i18n && bun test"
   },
   "devDependencies": {
     "@inlang/paraglide-js": "^2.22.0",
