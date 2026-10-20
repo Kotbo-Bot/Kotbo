@@ -4,6 +4,7 @@ import {
   normalizePriority,
   normalizeTags,
   normalizeView,
+  staffReminderDue,
   viewWhere,
   waitingOn,
 } from '../../services/features/ticketHelpdesk.js';
@@ -41,6 +42,32 @@ describe('tour de parole', () => {
 
   test('un ticket fermé n’attend personne', () => {
     expect(waitingOn(ticket({ member: '2026-10-01T12:00:00Z' }, 'CLOSED'))).toBeNull();
+  });
+});
+
+describe('relance du staff', () => {
+  const ticket = (last: { member?: string; staff?: string; reminder?: string }) => ({
+    status: 'OPEN',
+    createdAt: at('2026-10-01T10:00:00Z'),
+    lastMemberMessageAt: last.member ? at(last.member) : null,
+    lastStaffMessageAt: last.staff ? at(last.staff) : null,
+    staffReminderSentAt: last.reminder ? at(last.reminder) : null,
+  });
+
+  test('sans réponse depuis l’ouverture, relance une fois le délai passé', () => {
+    expect(staffReminderDue(ticket({ member: '2026-10-01T10:50:00Z' }), 60, at('2026-10-01T10:59:00Z'))).toBe(false);
+    // Le délai court depuis l'ouverture, pas depuis le dernier message du membre.
+    expect(staffReminderDue(ticket({ member: '2026-10-01T10:50:00Z' }), 60, at('2026-10-01T11:00:00Z'))).toBe(true);
+  });
+
+  test('une seule relance par attente, une nouvelle après un nouveau message du membre', () => {
+    const reminded = { staff: '2026-10-01T11:00:00Z', member: '2026-10-01T12:00:00Z', reminder: '2026-10-01T13:00:00Z' };
+    expect(staffReminderDue(ticket(reminded), 60, at('2026-10-01T15:00:00Z'))).toBe(false);
+    expect(staffReminderDue(ticket({ ...reminded, member: '2026-10-01T13:30:00Z' }), 60, at('2026-10-01T14:30:00Z'))).toBe(true);
+  });
+
+  test('pas de relance quand la parole est au membre', () => {
+    expect(staffReminderDue(ticket({ member: '2026-10-01T10:05:00Z', staff: '2026-10-01T10:10:00Z' }), 60, at('2026-10-02T10:00:00Z'))).toBe(false);
   });
 });
 

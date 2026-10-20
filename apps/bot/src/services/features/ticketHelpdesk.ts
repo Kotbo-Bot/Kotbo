@@ -53,6 +53,23 @@ export function waitingOn(ticket: TurnFields): 'staff' | 'member' | null {
   return 'member';
 }
 
+/**
+ * Le staff doit-il être relancé ? Le membre attend depuis sa dernière prise de
+ * parole (depuis l'ouverture si personne du staff n'a encore répondu), et une
+ * seule relance part par attente : un message du membre après la relance en
+ * ouvre une nouvelle.
+ */
+export function staffReminderDue(
+  ticket: TurnFields & { createdAt: Date; staffReminderSentAt: Date | null },
+  minutes: number,
+  now: Date,
+): boolean {
+  if (waitingOn(ticket) !== 'staff') return false;
+  const since = ticket.lastStaffMessageAt ? ticket.lastMemberMessageAt! : ticket.createdAt;
+  if (ticket.staffReminderSentAt && ticket.staffReminderSentAt >= since) return false;
+  return now.getTime() - since.getTime() >= minutes * 60_000;
+}
+
 // ── Objectifs de service ────────────────────────────────
 
 export interface SlaConfig {

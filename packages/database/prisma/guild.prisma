@@ -523,6 +523,10 @@ model Guild {
   ticketInactivityEnabled     Boolean  @default(false)
   ticketInactivityHours       Int      @default(24)
   ticketInactivityMessage     String   @default("Bonjour {user}, votre ticket est inactif depuis un moment. N'hésitez pas à y répondre si vous avez toujours besoin d'aide !")
+  // Pendant de l'inactivité côté staff : le membre attend une réponse depuis
+  // `ticketStaffReminderMinutes`, le bot relance le staff dans le ticket.
+  ticketStaffReminderEnabled  Boolean  @default(false)
+  ticketStaffReminderMinutes  Int      @default(60)
   // Question facultative posée après la note du sondage de satisfaction.
   ticketSatisfactionCommentEnabled  Boolean @default(true)
   ticketSatisfactionCommentQuestion String  @default("")

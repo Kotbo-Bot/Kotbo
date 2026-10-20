@@ -64,6 +64,8 @@ const TICKET_CONFIG_SELECT = {
   ticketInactivityEnabled: true,
   ticketInactivityHours: true,
   ticketInactivityMessage: true,
+  ticketStaffReminderEnabled: true,
+  ticketStaffReminderMinutes: true,
   ticketSatisfactionCommentEnabled: true,
   ticketSatisfactionCommentQuestion: true,
   ticketSatisfactionCommentTimeout: true,
@@ -268,6 +270,8 @@ export async function handleTicketsRoutes(ctx: ModuleRouteContext): Promise<bool
         ticketInactivityEnabled?: unknown;
         ticketInactivityHours?: unknown;
         ticketInactivityMessage?: unknown;
+        ticketStaffReminderEnabled?: unknown;
+        ticketStaffReminderMinutes?: unknown;
         ticketSatisfactionCommentEnabled?: unknown;
         ticketSatisfactionCommentQuestion?: unknown;
         ticketSatisfactionCommentTimeout?: unknown;
@@ -445,6 +449,8 @@ export async function handleTicketsRoutes(ctx: ModuleRouteContext): Promise<bool
             ticketInactivityEnabled: typeof body.ticketInactivityEnabled === 'boolean' ? body.ticketInactivityEnabled : false,
             ticketInactivityHours: body.ticketInactivityHours !== undefined ? Number(body.ticketInactivityHours) : 24,
             ticketInactivityMessage: body.ticketInactivityMessage !== undefined ? String(body.ticketInactivityMessage) : '',
+            ...('ticketStaffReminderEnabled' in body ? { ticketStaffReminderEnabled: body.ticketStaffReminderEnabled === true } : {}),
+            ...('ticketStaffReminderMinutes' in body ? { ticketStaffReminderMinutes: quotaNumber(body.ticketStaffReminderMinutes, 60, 7 * 24 * 60) } : {}),
             ticketSatisfactionCommentEnabled: typeof body.ticketSatisfactionCommentEnabled === 'boolean' ? body.ticketSatisfactionCommentEnabled : true,
             // Vide = le bot pose sa question par defaut, comme pour les textes d'embed.
             ticketSatisfactionCommentQuestion: typeof body.ticketSatisfactionCommentQuestion === 'string' ? body.ticketSatisfactionCommentQuestion.trim().slice(0, 200) : '',

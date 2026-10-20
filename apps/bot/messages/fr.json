@@ -4304,5 +4304,6 @@
   "log_tempvoice_action_ecr_garder": "MP d'écriture : garder",
   "log_tempvoice_action_ecr_jamais": "MP d'écriture : ne plus demander",
   "log_tempvoice_action_m_redemander": "Redemander pour l'écriture d'un membre",
-  "log_tempvoice_state_chat_ask": "Question en MP pour {target}"
+  "log_tempvoice_state_chat_ask": "Question en MP pour {target}",
+  "tkt_staff_reminder": "{target} ⏰ {member} attend une réponse du staff depuis {since}."
 }

@@ -4304,5 +4304,6 @@
   "log_tempvoice_action_ecr_garder": "Chat DM: keep",
   "log_tempvoice_action_ecr_jamais": "Chat DM: don't ask again",
   "log_tempvoice_action_m_redemander": "Ask again about a member's chat",
-  "log_tempvoice_state_chat_ask": "DM question for {target}"
+  "log_tempvoice_state_chat_ask": "DM question for {target}",
+  "tkt_staff_reminder": "{target} ⏰ {member} has been waiting for a staff reply since {since}."
 }
