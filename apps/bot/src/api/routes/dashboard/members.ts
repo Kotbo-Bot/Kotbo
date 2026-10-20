@@ -1338,8 +1338,8 @@ export async function handleMembersRoutes(
             return true;
           }
 
-          const daysParam = url.searchParams.get('days');
-          const days = Number(daysParam) || 30;
+          // Bornée : la valeur pilote une boucle par jour plus bas.
+          const days = Math.min(365, Math.max(1, Math.floor(Number(url.searchParams.get('days')) || 30)));
 
           const now = new Date();
           const startDate = new Date();
@@ -1379,6 +1379,25 @@ export async function handleMembersRoutes(
             orderBy: { joinedAt: 'desc' },
           });
 
+          // Arrivées et départs jour par jour, sur la période et celle d'avant
+          // (même longueur) : les courbes de la fiche, comparaison en pointillé.
+          const dayIndex = (date: Date, from: Date) => Math.floor((date.getTime() - from.getTime()) / 86_400_000);
+          const previousStart = new Date(startDate.getTime() - days * 86_400_000);
+          const perDay = (dates: Array<Date | null>, from: Date) => {
+            const out = new Array<number>(days).fill(0);
+            for (const date of dates) {
+              if (!date) continue;
+              const i = dayIndex(date, from);
+              if (i >= 0 && i < days) out[i] += 1;
+            }
+            return out;
+          };
+          const series = {
+            departures: perDay(joins.map((j) => j.leftAt), startDate),
+            previousArrivals: perDay(joins.map((j) => j.joinedAt), previousStart),
+            previousDepartures: perDay(joins.map((j) => j.leftAt), previousStart),
+          };
+
           const userIds = joins.map((j) => j.userId);
           const profiles = await prisma.memberProfile.findMany({
             where: { guildId, userId: { in: userIds } },
@@ -1415,6 +1434,7 @@ export async function handleMembersRoutes(
               totalStayed,
               labels,
               counts,
+              ...series,
             },
             joins: enrichedJoins,
             ...insights,
