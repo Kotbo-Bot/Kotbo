@@ -26,6 +26,7 @@ import {
   TextInputStyle,
   PermissionFlagsBits,
   MessageFlags,
+  MessageFlagsBitField,
   OverwriteType,
   RoleSelectMenuBuilder,
   UserSelectMenuBuilder,
@@ -140,7 +141,7 @@ import {
   type TempVoicePolicy,
 } from '../services/features/tempVoiceService.js';
 import { rendreEtatPng, type ValeurEtat } from '../services/features/tempVoicePanelImage.js';
-import { messageEstV2, sansConversionV2 } from '../utils/patchV2.js';
+import { estSansConversionV2, messageEstV2, sansConversionV2 } from '../utils/patchV2.js';
 import * as m from '../lib/paraglide/messages.js';
 import { FALLBACK_LOCALE, resolveGuildLocale, type BotLocale } from '../utils/i18n.js';
 import { TEMP_VOICE_OWNERSHIP_DEFAULTS, type TempVoiceOwnershipSettings } from '@kotbo/shared';
@@ -375,6 +376,7 @@ function oublierSalon(guildId: string, salonId: string): void {
   originesSurcharge.oublierSalon(guildId, salonId);
   historiquesRenommage.delete(salonId);
   v1ImpossibleSignale.delete(salonId);
+  oublierSousPanneaux(salonId);
   const etat = rafraichissements.get(salonId);
   if (etat?.minuteur) clearTimeout(etat.minuteur);
   rafraichissements.delete(salonId);
@@ -1754,6 +1756,7 @@ async function appliquerSortieVocale(channel: VoiceChannel, membreId: string): P
   const guildId = channel.guild?.id ?? '';
 
   if (membreId === entree.creatorId) entree.departProprietaireA = Date.now();
+  oublierSousPanneaux(channel.id, membreId);
 
   await serializeByChannel(channel.id, async () => {
     if (entree.exceptionsEcriture?.[membreId] !== undefined) return;
@@ -3644,7 +3647,7 @@ export function registerTempVoiceListener(client: Client): void {
     }
 
     const action = interaction.customId.split(':')[1] ?? '';
-    const reponses = espionnerReponses(interaction);
+    const reponses = espionnerReponses(brancherSurSousPanneau(interaction, channel.id, ONGLET_DORIGINE[action] ?? null, locale));
     const actingMember = interaction.member instanceof GuildMember
       ? interaction.member
       : await guild.members.fetch(user.id).catch(() => null);
@@ -3844,8 +3847,18 @@ const ONGLET_DORIGINE: Readonly<Record<string, OngletPanneau>> = {
   reserve_select: 'salon',
   reserve_membres: 'salon',
   reglages: 'salon',
+  reglages_mod: 'salon',
   rename: 'salon',
+  rename_modal: 'salon',
   limit: 'salon',
+  limit_modal: 'salon',
+  resa_rien: 'salon',
+  resa_deplacer: 'salon',
+  resa_deconnecter: 'salon',
+  trust_select: 'membres',
+  kick_select: 'membres',
+  ban_select: 'membres',
+  transfer_select: 'propriete',
   lock: 'salon',
   unlock: 'salon',
   chat: 'salon',
@@ -3878,6 +3891,153 @@ function rangeeRetour(onglet: OngletPanneau, locale: BotLocale): ActionRowBuilde
       .setEmoji('◀️')
       .setStyle(ButtonStyle.Secondary),
   );
+}
+
+// ─── Un seul sous-panneau par membre ───
+
+/** Un jeton d'interaction vaut 15 minutes : le sous-panneau est lâché un peu avant. */
+export const DUREE_SOUS_PANNEAU_MS = 14 * 60 * 1000;
+/** Message fermé, webhook inconnu, jeton mort : le sous-panneau n'est plus éditable. */
+const SOUS_PANNEAU_PERDU = new Set([10008, 10015, 50027]);
+
+/** Le dernier sous-panneau éphémère de chaque membre, clé `${salonId}:${membreId}`. */
+const sousPanneaux = new Map<string, { interaction: RepliableInteraction; messageId: string; expireA: number }>();
+/** Les rendus des trois portes : ils sont eux-mêmes la destination de « Retour ». */
+const rendusDePorte = new WeakSet<object>();
+
+function memoriserSousPanneau(cle: string, interaction: RepliableInteraction, messageId: string): void {
+  const maintenant = Date.now();
+  for (const [k, s] of sousPanneaux) if (s.expireA <= maintenant) sousPanneaux.delete(k);
+  sousPanneaux.set(cle, { interaction, messageId, expireA: maintenant + DUREE_SOUS_PANNEAU_MS });
+}
+
+function oublierSousPanneaux(salonId: string, membreId?: string): void {
+  if (membreId) {
+    sousPanneaux.delete(`${salonId}:${membreId}`);
+    return;
+  }
+  for (const cle of sousPanneaux.keys()) if (cle.startsWith(`${salonId}:`)) sousPanneaux.delete(cle);
+}
+
+/**
+ * La charge telle qu'elle s'écrit dans le sous-panneau.
+ *
+ * `nouveau` : la charge était faite pour un message neuf (reply, followUp) ;
+ * sans `components`, elle effacerait donc les menus du sous-panneau qu'elle
+ * remplace. Une charge qui remplace un niveau reçoit « Retour » vers sa porte,
+ * sauf si elle est la porte elle-même ou le porte déjà.
+ */
+function chargeSousPanneau(
+  brute: unknown,
+  options: { onglet: OngletPanneau | null; locale: BotLocale; ephemere: boolean; nouveau: boolean; message?: string },
+): Record<string, unknown> {
+  const source = (typeof brute === 'string' ? { content: brute } : brute ?? {}) as Record<string, unknown>;
+  const copie: Record<string, unknown> = { ...source, ...(options.message ? { message: options.message } : {}) };
+  const drapeaux = new MessageFlagsBitField((source.flags ?? 0) as number);
+  if (options.ephemere) drapeaux.add(MessageFlags.Ephemeral);
+  else drapeaux.remove(MessageFlags.Ephemeral);
+  if (drapeaux.bitfield) copie.flags = drapeaux.bitfield;
+  else delete copie.flags;
+  const composants = Array.isArray(source.components) ? source.components : options.nouveau ? [] : null;
+  if (composants) copie.components = composants;
+  if (
+    options.onglet && composants && composants.length < 5 && !rendusDePorte.has(source)
+    && !JSON.stringify(composants).includes(`"tempvoice:${options.onglet}"`)
+  ) {
+    copie.components = [...composants, rangeeRetour(options.onglet, options.locale)];
+  }
+  // La marque V1 ne suit pas un étalement : elle est reposée sur la copie.
+  return estSansConversionV2(source) ? sansConversionV2(copie) : copie;
+}
+
+type Methode = (charge?: unknown) => Promise<unknown>;
+
+/**
+ * Au plus deux messages par navigation : le panneau public et UN sous-panneau
+ * éphémère par membre.
+ *
+ * - Clic dans un sous-panneau : toute réponse le remplace (deferUpdate, update,
+ *   editReply), y compris confirmations et refus.
+ * - Clic sur le panneau public : acquitté sans le toucher (deferUpdate), puis le
+ *   sous-panneau mémorisé est réécrit. Aucun, jeton expiré ou message fermé
+ *   (10008/10015/50027) : un éphémère neuf s'ouvre et devient le sous-panneau.
+ *
+ * Hors du salon (MP, carte postée ailleurs) l'interaction passe telle quelle.
+ */
+function brancherSurSousPanneau<T extends RepliableInteraction>(
+  interaction: T,
+  salonId: string,
+  onglet: OngletPanneau | null,
+  locale: BotLocale,
+): T {
+  const porteur = (interaction as { message?: Message | null }).message ?? null;
+  if (!porteur || interaction.channelId !== salonId) return interaction;
+  const cle = `${salonId}:${interaction.user.id}`;
+  const i = interaction as unknown as Record<'deferUpdate' | 'update' | 'editReply' | 'followUp', Methode>;
+  const acquittee = () => interaction.deferred || interaction.replied;
+  const forme = (charge: unknown, ephemere: boolean, nouveau: boolean, message?: string) =>
+    chargeSousPanneau(charge, { onglet, locale, ephemere, nouveau, message });
+  let remplacements: Record<string, Methode>;
+
+  if (porteur.flags?.has(MessageFlags.Ephemeral)) {
+    memoriserSousPanneau(cle, interaction, '@original');
+    // `deferReply` ouvrait un message neuf : l'édition qui suit le remplit.
+    let differeConverti = false;
+    const remplacer = (charge: unknown) => {
+      const c = forme(charge, false, true);
+      return acquittee() ? i.editReply(c) : i.update(c);
+    };
+    remplacements = {
+      deferReply: () => {
+        differeConverti = true;
+        return i.deferUpdate();
+      },
+      reply: remplacer,
+      followUp: remplacer,
+      editReply: (charge) => i.editReply(forme(charge, false, differeConverti)),
+    };
+  } else {
+    // Le traitement a réécrit lui-même le message public (carte de décision) :
+    // ses éditions suivantes le visent.
+    let publicTouche = false;
+    const afficher = async (charge: unknown): Promise<unknown> => {
+      if (!acquittee()) await i.deferUpdate();
+      const memo = sousPanneaux.get(cle);
+      if (memo && memo.expireA > Date.now()) {
+        try {
+          return await (memo.interaction as unknown as { editReply: Methode }).editReply(forme(charge, false, true, memo.messageId));
+        } catch (err) {
+          if (!SOUS_PANNEAU_PERDU.has((err as { code?: number } | null)?.code ?? 0)) throw err;
+        }
+      }
+      sousPanneaux.delete(cle);
+      const message = (await i.followUp(forme(charge, true, true))) as Message;
+      memoriserSousPanneau(cle, interaction, message.id);
+      return message;
+    };
+    remplacements = {
+      deferReply: () => (acquittee() ? Promise.resolve() : i.deferUpdate()),
+      reply: afficher,
+      followUp: afficher,
+      editReply: (charge) => (publicTouche ? i.editReply(charge) : afficher(charge)),
+      update: (charge) => {
+        publicTouche = true;
+        return i.update(charge);
+      },
+      deferUpdate: () => {
+        publicTouche = true;
+        return i.deferUpdate();
+      },
+    };
+  }
+
+  return new Proxy(interaction, {
+    get(cible, nom) {
+      if (typeof nom === 'string' && Object.hasOwn(remplacements, nom)) return remplacements[nom];
+      const valeur = Reflect.get(cible, nom, cible) as unknown;
+      return typeof valeur === 'function' ? (valeur as (...a: unknown[]) => unknown).bind(cible) : valeur;
+    },
+  });
 }
 
 /**
@@ -4110,6 +4270,7 @@ async function hydraterMembresPresents(channel: VoiceChannel): Promise<void> {
 async function rafraichirSousPanneauSalon(ctx: ActionContext): Promise<void> {
   await relireSalon(ctx.channel);
   const rendu = await panneauSalon(ctx.channel, ctx.cache, ctx.ctxp);
+  rendusDePorte.add(rendu);
   await ctx.interaction.editReply(rendu).catch(() => null);
 }
 
@@ -5596,7 +5757,9 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
     // passées l'interaction est morte. `acquitterMiseAJour` reprend le
     // sous-panneau éphémère, ou ouvre un éphémère à côté depuis le panneau public.
     await acquitterMiseAJour(interaction);
-    await interaction.editReply(await rendre()).catch(() => null);
+    const rendu = await rendre();
+    rendusDePorte.add(rendu);
+    await interaction.editReply(rendu).catch(() => null);
   };
 
   // ─── Menu « Qui peut écrire » ───

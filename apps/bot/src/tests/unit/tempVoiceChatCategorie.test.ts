@@ -9,6 +9,9 @@
  *   démarrage), une ligne de journal par catégorie et par vague.
  * - B : la règle se pose par rôle, les rôles administrateurs ne sont jamais
  *   touchés, et une exception par membre se règle depuis sa fiche.
+ * - D : une navigation montre au plus deux messages, le panneau public et UN
+ *   sous-panneau éphémère par membre, réécrit d'une porte à l'autre, avec
+ *   « Retour » à chaque niveau.
  */
 import { describe, expect, mock, setSystemTime, test } from 'bun:test';
 import path from 'node:path';
@@ -115,6 +118,7 @@ interface Options {
   /** L'ami rejoint le salon dès sa création. */
   amiPresent?: boolean;
   langue?: 'fr' | 'en';
+  mode?: 'CLASSIC' | 'FLAT';
 }
 
 interface Scene { monde: FauxDiscord; client: Client; salonId: string; enCours: Array<Promise<unknown>>; tv: typeof tv }
@@ -125,7 +129,7 @@ async function monter(o: Options): Promise<Scene> {
     guildId: IDS.GUILD,
     canRename: true, canChangeLimit: true, canLock: true, canChangeWriteMode: true,
     canReserve: true, canKickOrBan: true, canTransfer: true,
-    panelMode: 'CLASSIC', panelComponents: o.format, stateLayout: 'GRID3', stateColors: 'NEUTRAL',
+    panelMode: o.mode ?? 'CLASSIC', panelComponents: o.format, stateLayout: 'GRID3', stateColors: 'NEUTRAL',
     reservationFallbackMode: 'ANY_ROLE', reservableRoleIds: [], panelCompactMode: false,
   };
   configServeur = {
@@ -695,5 +699,181 @@ describe('B — règle par rôle, rôles administrateurs ignorés, exception par
       await cliquer(sc, 'tempvoice:membre_ici', [IDS.PROPRIO]);
       expect(JSON.stringify(sc.monde.appels.slice(avant2).map((a) => a.corps))).not.toContain('tempvoice:m_ecrire:');
     }
+  });
+});
+
+// ─── D : au plus deux messages par navigation ───
+
+interface ResultatClic { crees: string[]; publicEdite: boolean; erreurs: string[]; violations: string[] }
+
+const panneauPublic = (sc: Scene): Brut =>
+  [...sc.monde.messages.values()].find((x) => x.channel_id === sc.salonId && !(x.flags & 64) && x.components.length)!;
+
+/** Qui a cliqué, par interaction : les éphémères se comptent par personne. */
+const acteurs = new Map<string, string>();
+
+/** Clic sur un message réel (panneau public ou sous-panneau), par le vrai chemin discord.js. */
+async function cliquerSur(
+  sc: Scene,
+  porteur: Brut,
+  customId: string,
+  o: { values?: string[]; acteur?: string; modale?: Record<string, string> } = {},
+): Promise<ResultatClic> {
+  avancer(1_500);
+  const w = sc.monde;
+  const debut = w.appels.length;
+  const publicId = panneauPublic(sc).id;
+  const acteur = o.acteur ?? IDS.PROPRIO;
+  const brut = w.interactionBrute({
+    customId,
+    genre: o.modale ? 'modale' : o.values ? 'menuTexte' : 'bouton',
+    acteur,
+    channelId: sc.salonId,
+    message: structuredClone(porteur),
+    values: o.values,
+    champs: o.modale,
+  });
+  acteurs.set(String(brut.id), acteur);
+  (sc.client as unknown as { actions: { InteractionCreate: { handle: (d: unknown) => void } } }).actions.InteractionCreate.handle(brut);
+  await w.calme(sc.enCours);
+  const appels = w.appels.slice(debut);
+  return {
+    crees: appels.flatMap((a) => (a.cree ? [a.cree] : [])),
+    publicEdite: appels.some((a) => a.methode === 'PATCH' && a.route.endsWith(`/messages/${publicId}`)),
+    erreurs: appels.filter((a) => a.erreur).map((a) => `${a.route} ${a.erreur!.code}`),
+    violations: appels.flatMap((a) => a.violations),
+  };
+}
+
+/** Éphémères encore visibles, par membre : créés par une interaction, jamais supprimés. */
+function visibles(sc: Scene): Record<string, number> {
+  const n: Record<string, number> = {};
+  for (const a of sc.monde.appels) {
+    const msg = a.cree ? sc.monde.messages.get(a.cree) : null;
+    if (!msg || !(msg.flags & 64) || !a.interactionId) continue;
+    const qui = acteurs.get(a.interactionId) ?? '?';
+    n[qui] = (n[qui] ?? 0) + 1;
+  }
+  return n;
+}
+
+const contient = (msg: Brut | undefined, customId: string) => JSON.stringify(msg?.components ?? []).includes(`"${customId}"`);
+const MODES_D = ['CLASSIC', 'FLAT'] as const;
+
+describe('D — le panneau public et UN sous-panneau par membre', () => {
+  for (const format of FORMATS) for (const mode of MODES_D) {
+    test(`D1 ${format} ${mode} — porte publique : un sous-panneau s'ouvre, le panneau public n'est pas touché`, async () => {
+      const sc = await monter({ format, mode });
+      const r = await cliquerSur(sc, panneauPublic(sc), 'tempvoice:salon');
+      expect(r.erreurs).toEqual([]);
+      expect(r.violations).toEqual([]);
+      expect(r.publicEdite).toBe(false);
+      expect(r.crees).toHaveLength(1);
+      expect(sc.monde.messages.get(r.crees[0])!.flags & 64).toBe(64);
+      expect(contient(sc.monde.messages.get(r.crees[0]), 'tempvoice:rename')).toBe(true);
+    });
+
+    test(`D2 ${format} ${mode} — une autre porte publique réécrit le MÊME sous-panneau`, async () => {
+      const sc = await monter({ format, mode });
+      const sous = (await cliquerSur(sc, panneauPublic(sc), 'tempvoice:salon')).crees[0];
+      const r2 = await cliquerSur(sc, panneauPublic(sc), 'tempvoice:membres');
+      expect(r2.erreurs).toEqual([]);
+      expect(r2.crees).toEqual([]);
+      expect(r2.publicEdite).toBe(false);
+      // Le fil de navigation : le titre est celui de la porte choisie.
+      expect(contient(sc.monde.messages.get(sous), 'tempvoice:rename')).toBe(false);
+      expect(textesVisibles(sc.monde.messages.get(sous)).join(' ')).toContain(m.panel_tempvoice_who_title({}, { locale: 'fr' }));
+      const r3 = await cliquerSur(sc, panneauPublic(sc), 'tempvoice:propriete');
+      expect(r3.crees).toEqual([]);
+      expect(visibles(sc)).toEqual({ [IDS.PROPRIO]: 1 });
+    });
+  }
+
+  test('D3 — jeton expiré (> 14 min) : un nouveau sous-panneau, et c\'est lui qu\'on réécrit ensuite', async () => {
+    const sc = await monter({ format: 'V2' });
+    const r1 = await cliquerSur(sc, panneauPublic(sc), 'tempvoice:salon');
+    avancer(tv.DUREE_SOUS_PANNEAU_MS + 60_000);
+    const r2 = await cliquerSur(sc, panneauPublic(sc), 'tempvoice:membres');
+    expect(r2.erreurs).toEqual([]);
+    expect(r2.crees).toHaveLength(1);
+    expect(r2.crees[0]).not.toBe(r1.crees[0]);
+    const r3 = await cliquerSur(sc, panneauPublic(sc), 'tempvoice:salon');
+    expect(r3.crees).toEqual([]);
+    expect(contient(sc.monde.messages.get(r2.crees[0]), 'tempvoice:rename')).toBe(true);
+  });
+
+  test('D3b — sous-panneau fermé par la personne (10008) : un nouveau s\'ouvre', async () => {
+    const sc = await monter({ format: 'V2' });
+    const r1 = await cliquerSur(sc, panneauPublic(sc), 'tempvoice:salon');
+    sc.monde.messages.delete(r1.crees[0]);
+    const r2 = await cliquerSur(sc, panneauPublic(sc), 'tempvoice:membres');
+    expect(r2.crees).toHaveLength(1);
+    expect(visibles(sc)).toEqual({ [IDS.PROPRIO]: 1 });
+  });
+
+  for (const format of FORMATS) {
+    test(`D4 ${format} — « Retour » à chaque niveau, toujours dans le même sous-panneau`, async () => {
+      const sc = await monter({ format });
+      const w = sc.monde;
+      const sous = (await cliquerSur(sc, panneauPublic(sc), 'tempvoice:membres')).crees[0];
+      // [porte, chemin vers le niveau inférieur depuis la porte]
+      const niveaux: Array<[string, Array<[string, { values?: string[]; modale?: Record<string, string> }]>]> = [
+        ['tempvoice:membres', [['tempvoice:membre_ici', { values: [AMI] }]]],
+        ['tempvoice:membres', [['tempvoice:membre_ici', { values: [AMI] }], [`tempvoice:m_trust:${AMI}`, {}]]],
+        ['tempvoice:salon', [['tempvoice:bascule_verrou', {}]]],
+        ['tempvoice:salon', [['tempvoice:rename_modal', { modale: { value: 'Nouveau nom' } }]]],
+        ['tempvoice:propriete', [['tempvoice:transfer', {}]]],
+      ];
+      for (const [porte, chemin] of niveaux) {
+        await cliquerSur(sc, w.messages.get(sous)!, porte);
+        for (const [composant, options] of chemin) {
+          const r = await cliquerSur(sc, w.messages.get(sous)!, composant, options);
+          // Le panneau public, lui, se redessine après une action : c'est attendu.
+          expect({ composant, erreurs: r.erreurs, violations: r.violations, crees: r.crees })
+            .toEqual({ composant, erreurs: [], violations: [], crees: [] });
+          // Le niveau inférieur s'affiche dans le sous-panneau, avec « Retour » vers sa porte.
+          expect({ composant, retour: contient(w.messages.get(sous), porte) }).toEqual({ composant, retour: true });
+        }
+        const retour = await cliquerSur(sc, w.messages.get(sous)!, porte);
+        expect(retour.crees).toEqual([]);
+        expect({ porte, retourSurLaPorte: contient(w.messages.get(sous), porte) }).toEqual({ porte, retourSurLaPorte: false });
+      }
+      expect(visibles(sc)).toEqual({ [IDS.PROPRIO]: 1 });
+    });
+  }
+
+  test('D4b — un refus remplace le sous-panneau et garde « Retour »', async () => {
+    const sc = await monter({ format: 'V2' });
+    const w = sc.monde;
+    const sous = (await cliquerSur(sc, panneauPublic(sc), 'tempvoice:propriete', { acteur: AMI })).crees[0];
+    const r = await cliquerSur(sc, w.messages.get(sous)!, 'tempvoice:transfer', { acteur: AMI });
+    expect(r.crees).toEqual([]);
+    expect(textesVisibles(w.messages.get(sous)).join(' ')).toContain(m.panel_tempvoice_err_owner_only({}, { locale: 'fr' }));
+    expect(contient(w.messages.get(sous), 'tempvoice:propriete')).toBe(true);
+    expect(visibles(sc)).toEqual({ [AMI]: 1 });
+  });
+
+  test('D5 — deux membres : deux sous-panneaux, chacun réécrit le sien', async () => {
+    const sc = await monter({ format: 'V2' });
+    const a = await cliquerSur(sc, panneauPublic(sc), 'tempvoice:salon');
+    const b = await cliquerSur(sc, panneauPublic(sc), 'tempvoice:propriete', { acteur: AMI });
+    expect(a.crees).toHaveLength(1);
+    expect(b.crees).toHaveLength(1);
+    expect(a.crees[0]).not.toBe(b.crees[0]);
+    const a2 = await cliquerSur(sc, panneauPublic(sc), 'tempvoice:membres');
+    const b2 = await cliquerSur(sc, panneauPublic(sc), 'tempvoice:propriete', { acteur: AMI });
+    expect([a2.crees, b2.crees]).toEqual([[], []]);
+    expect(textesVisibles(sc.monde.messages.get(a.crees[0])).join(' ')).toContain(m.panel_tempvoice_who_title({}, { locale: 'fr' }));
+    expect(visibles(sc)).toEqual({ [IDS.PROPRIO]: 1, [AMI]: 1 });
+  });
+
+  test('D6 — départ du salon : le sous-panneau est oublié, le retour en ouvre un neuf', async () => {
+    const sc = await monter({ format: 'V2' });
+    const r1 = await cliquerSur(sc, panneauPublic(sc), 'tempvoice:propriete', { acteur: AMI });
+    await bouger(sc, AMI, null);
+    await bouger(sc, AMI, sc.salonId);
+    const r2 = await cliquerSur(sc, panneauPublic(sc), 'tempvoice:propriete', { acteur: AMI });
+    expect(r2.crees).toHaveLength(1);
+    expect(r2.crees[0]).not.toBe(r1.crees[0]);
   });
 });

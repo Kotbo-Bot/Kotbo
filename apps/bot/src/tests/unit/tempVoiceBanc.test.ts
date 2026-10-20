@@ -278,6 +278,8 @@ interface Rapport {
   modale: Brut | null;
   /** Les interactions simultanées (double clic). */
   autres?: Rapport[];
+  /** Éphémères encore visibles, par membre, depuis le début de la scène. */
+  ephemeresVisibles: Record<string, number>;
 }
 
 function composantPublic(sc: Scene, customId: string): Brut | null {
@@ -352,7 +354,20 @@ function rapporter(sc: Scene, interactionId: string, debut: { appels: number; jo
     erreursBanc: m.erreursBanc.splice(0),
     touches: m.touches.slice(debut.touches),
     modale: etat.modale ?? null,
+    ephemeresVisibles: ephemeresVisibles(m),
   };
+}
+
+/** Chaque éphémère créé par une interaction et toujours là, compté pour la personne qui a cliqué. */
+function ephemeresVisibles(m: FauxDiscord): Record<string, number> {
+  const parMembre: Record<string, number> = {};
+  for (const a of m.appels) {
+    const msg = a.cree ? m.messages.get(a.cree) : null;
+    if (!msg || !(msg.flags & 64) || !a.interactionId) continue;
+    const qui = String(m.objetsInteraction.get(a.interactionId)?.user?.id ?? '?');
+    parMembre[qui] = (parMembre[qui] ?? 0) + 1;
+  }
+  return parMembre;
 }
 
 // ─── Les invariants de chaque cellule ───
@@ -367,6 +382,10 @@ function problemes(r: Rapport, ctx: { langue: Langue; acteur: string; salonId: s
   for (const e of r.refusLocaux) p.push(`refus discord.js : ${e}`);
   for (const v of r.violations) p.push(`charge invalide : ${v}`);
   if (r.enAttente) p.push('« réfléchit… » jamais résolu');
+  // Une navigation = le panneau public + UN sous-panneau éphémère par membre.
+  for (const [qui, n] of Object.entries(r.ephemeresVisibles)) {
+    if (n > 1) p.push(`${n} éphémères visibles pour ${qui} (au plus un sous-panneau)`);
+  }
   for (const c of clesBrutes(r.textes)) p.push(c);
   for (const c of horsLangue(r.textes, ctx.langue)) p.push(`langue : ${c}`);
   const lignes = r.journal.filter((j) => j.type === 'voice_panel');
@@ -548,7 +567,9 @@ async function parcourir(sc: Scene, cas: CasAction, acteur: string): Promise<{ c
   if (cas.genre === 'modale') {
     return modale?.custom_id === id
       ? { clic: clicSur(id, cas, acteur, dernierPorteur, mode), origine: 'parcours' }
-      : { clic: clicSur(id, cas, acteur, null, mode), origine: 'fabrique' };
+      // Une fenêtre vient toujours d'un composant : sans parcours jusqu'à elle
+      // (refus en route), elle est soumise depuis le dernier message atteint.
+      : { clic: clicSur(id, cas, acteur, (touches.length ? sc.monde.messages.get(touches.at(-1)!) : null) ?? dernierPorteur, mode), origine: 'fabrique' };
   }
   const trouve = chercher(sc, id, touches);
   if (trouve) return { clic: clicSur(id, cas, acteur, trouve, mode), origine: 'parcours' };

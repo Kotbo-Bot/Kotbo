@@ -82,6 +82,8 @@ export interface AppelRest {
   typeCallback?: number;
   /** Violations de charge relevées sur cet appel. */
   violations: string[];
+  /** Message NEUF que cet appel a fait apparaître (réponse, « réfléchit… », followUp). */
+  cree?: string;
 }
 
 interface EtatInteraction {
@@ -548,11 +550,13 @@ export class FauxDiscord {
         appel.violations.push(...validerMessage(data, null));
         if (!(Number(data.flags ?? 0) & 64)) appel.violations.push('réponse PUBLIQUE (type 4 sans drapeau éphémère)');
         it.originalId = this.creerMessage(this.salonDe(it), data).id;
+        appel.cree = it.originalId;
         break;
       }
       case 5:
         if (!(Number(data.flags ?? 0) & 64)) appel.violations.push('« réfléchit… » PUBLIC (type 5 sans drapeau éphémère)');
         it.originalId = this.creerMessage(this.salonDe(it), { flags: Number(data.flags ?? 0) }).id;
+        appel.cree = it.originalId;
         it.enAttente = true;
         break;
       case 6:
@@ -597,7 +601,9 @@ export class FauxDiscord {
         return structuredClone(this.editerMessage(msg, corps, { ...appel, violations: [] }));
       }
       if (!(Number(corps?.flags ?? 0) & 64)) appel.violations.push('followUp PUBLIC (sans drapeau éphémère)');
-      return structuredClone(this.creerMessage(this.salonDe(it), corps));
+      const cree = this.creerMessage(this.salonDe(it), corps);
+      appel.cree = cree.id;
+      return structuredClone(cree);
     }
     const id = messageId === '@original' ? it.originalId : messageId;
     const msg = id ? this.messages.get(id) : null;
