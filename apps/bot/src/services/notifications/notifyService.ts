@@ -57,6 +57,8 @@ export type NotifyInput = {
   data?: Prisma.InputJsonValue;
   /** `false` quand le serveur a coupé les MP de ce module (réglage du module). */
   dm?: boolean;
+  /** `false` quand le serveur a coupé la boîte du dashboard pour ce module. */
+  inbox?: boolean;
   /** Boutons propres au message (lien de recours…) : le MP part alors tout de suite, seul. */
   buttons?: ButtonBuilder[];
 };
@@ -173,6 +175,11 @@ type DmItem = {
   link: string | null;
 };
 
+/** Titre précédé de l'emoji de gravité, sauf s'il commence déjà par un emoji. */
+function withEmoji(item: DmItem): string {
+  return /^\p{Extended_Pictographic}/u.test(item.title) ? item.title : `${SEVERITY_EMOJI[item.severity]} ${item.title}`;
+}
+
 function asSeverity(value: string): NotificationSeverity {
   return value in SEVERITY_EMOJI ? (value as NotificationSeverity) : 'INFO';
 }
@@ -202,7 +209,7 @@ export async function buildSingleDm(item: DmItem, buttons: ButtonBuilder[] = [])
   return v2Message(
     kotboContainer({
       color: SEVERITY_COLOR[item.severity],
-      title: `${SEVERITY_EMOJI[item.severity]} ${item.title}`.slice(0, 250),
+      title: withEmoji(item).slice(0, 250),
       fields: [item.message.slice(0, 3500) || '​', ...(row.length ? [actionRow(...(row.slice(0, 5) as unknown as ButtonList))] : [])],
       footerTitle: m.ntf_footer({ guild: await guildName(item.guildId) }, o),
     }),
@@ -218,7 +225,7 @@ export async function buildGroupedDm(items: DmItem[], digest: boolean) {
 
   const lines = items.slice(0, GROUP_PREVIEW).map((item) => {
     const body = item.message.length > 200 ? `${item.message.slice(0, 199)}…` : item.message;
-    return `**${SEVERITY_EMOJI[item.severity]} ${item.title}** · ${names.get(item.guildId)}\n${body}`;
+    return `**${withEmoji(item)}** · ${names.get(item.guildId)}\n${body}`;
   });
   if (items.length > GROUP_PREVIEW) lines.push(m.ntf_more({ count: items.length - GROUP_PREVIEW }, o));
 
@@ -340,7 +347,7 @@ export async function notify(input: NotifyInput, now = new Date()): Promise<Noti
   });
 
   let notification = null;
-  if (isStaff && prefs.dashboard) {
+  if (isStaff && prefs.dashboard && input.inbox !== false) {
     notification = await writeInbox(input, meta.category);
     broadcastDashboardStateChange(input.guildId, 'notifications_updated');
   }

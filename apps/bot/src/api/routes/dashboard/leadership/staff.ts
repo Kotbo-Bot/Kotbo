@@ -48,7 +48,7 @@ import {
   
   
 } from '../../../../services/staff/staffLeadershipService.js';
-import { notify } from '../../../../services/notifications/notifyService.js';
+import { notify, notifyMany } from '../../../../services/notifications/notifyService.js';
 import {
   getStaffMember,
   addStaffMember,
@@ -1504,40 +1504,16 @@ export async function handleStaffRoutes(
           });
 
           if (managers.length > 0) {
-            await Promise.all(managers.map(async (m) => {
-              // Le MP part juste en dessous, avec la référence de la demande.
-              await notify({
-                guildId,
-                userId: m.userId,
-                kind: 'staff.resignation_requested',
-                title: '🔔 Demande de démission',
-                message: `${staffMember.username ?? user.userId} a soumis une demande de démission via le dashboard.\nMotif : ${reason}`,
-                severity: 'WARNING',
-                link: '/staff-management?tab=resignations',
-                actorId: user.userId,
-                data: { resignationId: resignation.id },
-                dm: false,
-              }).catch(() => null);
-
-              try {
-                const managerUser = await client.users.fetch(m.userId).catch(() => null);
-                if (managerUser) {
-                  const discordGuild = client.guilds.cache.get(guildId) ?? await client.guilds.fetch(guildId).catch(() => null);
-                  const serverName = discordGuild ? discordGuild.name : '';
-                  const embed = new EmbedBuilder()
-                    .setTitle('🔔 Nouvelle demande de démission')
-                    .setDescription(
-                      `**${staffMember.username ?? user.userId}** a soumis une demande de démission via le dashboard.\n\n` +
-                      `**Motif :**\n> ${reason}\n\n` +
-                      `Rendez-vous sur le dashboard pour traiter cette demande.`
-                    )
-                    .setColor(COLORS.warning)
-                    .setTimestamp()
-                    .setFooter({ text: `Référence : ${resignation.id}${serverName ? ` · Serveur : ${serverName}` : ''}` });
-                  await managerUser.send({ embeds: [embed] }).catch(() => null);
-                }
-              } catch { /* ignored */ }
-            }));
+            await notifyMany(managers.map((m) => m.userId), {
+              guildId,
+              kind: 'staff.resignation_requested',
+              title: 'Demande de démission',
+              message: `**${staffMember.username ?? user.userId}** a soumis une demande de démission via le dashboard.\n\n**Motif :**\n> ${reason}`,
+              severity: 'WARNING',
+              link: '/staff-management?tab=resignations',
+              actorId: user.userId,
+              data: { resignationId: resignation.id },
+            });
           }
 
           json(res, 201, { resignation });
@@ -1589,41 +1565,18 @@ export async function handleStaffRoutes(
             }
           });
 
-          // Le MP détaillé part juste en dessous.
           await notify({
             guildId,
             userId: resignation.staffMember.userId,
             kind: 'staff.resignation_decided',
-            title: body.action === 'APPROVED' ? '✅ Démission approuvée' : '❌ Démission refusée',
+            title: body.action === 'APPROVED' ? 'Démission approuvée' : 'Démission refusée',
             message: body.action === 'APPROVED'
-              ? `Votre demande de démission a été approuvée.${body.note ? `\nNote : ${body.note}` : ''}`
-              : `Votre demande de démission a été refusée.${body.note ? `\nMotif : ${body.note}` : ''}`,
+              ? `Votre demande de démission a été **approuvée** par la direction.${body.note ? `\n\n📝 **Note :** ${body.note}` : ''}`
+              : `Votre demande de démission a été **refusée** par la direction.${body.note ? `\n\n📝 **Motif :** ${body.note}` : ''}`,
             severity: body.action === 'APPROVED' ? 'SUCCESS' : 'ERROR',
             link: '/profile',
             actorId: user.userId,
-            dm: false,
           }).catch(() => null);
-
-          try {
-            const discordUser = await client.users.fetch(resignation.staffMember.userId).catch(() => null);
-            if (discordUser) {
-              const discordGuild = client.guilds.cache.get(guildId) ?? await client.guilds.fetch(guildId).catch(() => null);
-              const serverName = discordGuild ? discordGuild.name : '';
-              const dmEmbed = new EmbedBuilder()
-                .setTitle(body.action === 'APPROVED' ? '✅ Démission approuvée' : '❌ Démission refusée')
-                .setDescription(
-                  body.action === 'APPROVED'
-                    ? `Votre demande de démission a été **approuvée** par la direction.${body.note ? `\n\n📝 **Note :** ${body.note}` : ''}`
-                    : `Votre demande de démission a été **refusée** par la direction.${body.note ? `\n\n📝 **Motif :** ${body.note}` : ''}`
-                )
-                .setColor(body.action === 'APPROVED' ? COLORS.success : COLORS.warning)
-                .setTimestamp();
-              if (serverName) {
-                dmEmbed.setFooter({ text: `Serveur : ${serverName}` });
-              }
-              await discordUser.send({ embeds: [dmEmbed] }).catch(() => null);
-            }
-          } catch { /* ignored */ }
 
           await pushAudit(guildId, {
             user: user.username ?? `User${user.userId}`,

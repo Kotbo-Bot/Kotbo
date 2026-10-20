@@ -21,7 +21,7 @@ import * as gvwMessages from '../lib/paraglide/messages.js';
 import { handleRpgButton, handleRpgModalSubmit, handleRpgSelectMenu } from '../services/features/rpgPanelService.js';
 import { DROP_CLAIM_PREFIX, handleDropClaim } from '../services/features/dropService.js';
 import { checkInMeeting } from '../services/staff/staffLeadershipService.js';
-import { notify } from '../services/notifications/notifyService.js';
+import { notifyMany } from '../services/notifications/notifyService.js';
 import { handleDCInteraction } from '../services/moderation/dcDetectionService.js';
 import { memberProfileIdentity } from '../services/moderation/memberIdentityService.js';
 import { handleVerifyButtonClick, handleVerificationStaffAction } from '../services/moderation/securityVerificationService.js';
@@ -1866,42 +1866,16 @@ export async function handleModalSubmit(interaction: ModalSubmitInteraction, cli
       });
 
       if (managers.length > 0) {
-        await Promise.all(managers.map(async (m: { userId: string; username: string | null }) => {
-          // Notif dashboard (le MP part juste en dessous)
-          await notify({
-            guildId,
-            userId: m.userId,
-            kind: 'staff.resignation_requested',
-            title: '🔔 Demande de démission',
-            message: `${interaction.user.username} a soumis une demande de démission.\nMotif : ${reason}`,
-            severity: 'WARNING',
-            link: '/staff-management?tab=resignations',
-            actorId: interaction.user.id,
-            data: { resignationId: resignation.id },
-            dm: false,
-          }).catch(() => null);
-
-          // MP Discord aux managers
-          try {
-            const managerDiscordUser = await client.users.fetch(m.userId).catch(() => null);
-            if (managerDiscordUser) {
-              const serverName = interaction.guild?.name || '';
-              const managerEmbed = new EmbedBuilder()
-                .setTitle('🔔 Nouvelle demande de démission')
-                .setDescription(
-                  `**${interaction.user.username}** (${interaction.user.id}) a soumis une demande de démission.\n\n` +
-                  `**Motif :**\n> ${reason}\n\n` +
-                  `Rendez-vous sur le dashboard pour approuver ou refuser cette demande.`
-                )
-                .setColor(COLORS.warning)
-                .setTimestamp()
-                .setFooter({ text: `Référence : ${resignation.id}${serverName ? ` · Serveur : ${serverName}` : ''}` });
-              await managerDiscordUser.send({ embeds: [managerEmbed] }).catch(() => null);
-            }
-          } catch {
-            // Silent fail
-          }
-        }));
+        await notifyMany(managers.map((m: { userId: string }) => m.userId), {
+          guildId,
+          kind: 'staff.resignation_requested',
+          title: 'Demande de démission',
+          message: `**${interaction.user.username}** (${interaction.user.id}) a soumis une demande de démission.\n\n**Motif :**\n> ${reason}`,
+          severity: 'WARNING',
+          link: '/staff-management?tab=resignations',
+          actorId: interaction.user.id,
+          data: { resignationId: resignation.id },
+        });
       }
 
       await interaction.reply({

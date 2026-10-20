@@ -1,9 +1,9 @@
 import { IncomingMessage, ServerResponse } from 'node:http';
-import { type GuildMember, Client, EmbedBuilder } from 'discord.js';
+import { type GuildMember, Client } from 'discord.js';
 import prisma from '../../../utils/db.js';
+import { notifyMany } from '../../../services/notifications/notifyService.js';
 import { logger } from '../../../utils/logger.js';
 import { resolveViewTimezone } from '../../../utils/timezone.js';
-import { COLORS } from '../../../utils/embeds.js';
 import * as altAccountService from '../../../services/moderation/altAccountService.js';
 import { scanGuildMembersForYoungAccounts, getDetectionEvidence } from '../../../services/moderation/dcDetectionService.js';
 import { recordDecision, undoFalsePositive } from '../../../services/moderation/dc/learning.js';
@@ -156,21 +156,14 @@ export async function handleMembersRoutes(
 
         if (body.status === 'VALIDATED') {
           const discordGuild = client.guilds.cache.get(guildId);
-          const dmEmbed = new EmbedBuilder()
-            .setColor(COLORS.success)
-            .setTitle('🔗 Comptes liés officiellement')
-            .setDescription(`Vos comptes **<@${link.user1Id}>** et **<@${link.user2Id}>** ont été reliés sur **${discordGuild?.name || 'le serveur'}**.`)
-            .setTimestamp();
-
-          try {
-            const member1 = await client.users.fetch(link.user1Id).catch(() => null);
-            if (member1) await member1.send({ embeds: [dmEmbed] }).catch(() => null);
-          } catch { /* ignored */ }
-
-          try {
-            const member2 = await client.users.fetch(link.user2Id).catch(() => null);
-            if (member2) await member2.send({ embeds: [dmEmbed] }).catch(() => null);
-          } catch { /* ignored */ }
+          await notifyMany([link.user1Id, link.user2Id], {
+            guildId,
+            kind: 'security.alt_linked',
+            title: 'Comptes liés officiellement',
+            message: `Vos comptes **<@${link.user1Id}>** et **<@${link.user2Id}>** ont été reliés sur **${discordGuild?.name || 'le serveur'}**.`,
+            severity: 'SUCCESS',
+            actorId: user.userId,
+          });
         }
 
         json(res, 200, updatedLink);
@@ -210,21 +203,14 @@ export async function handleMembersRoutes(
         });
 
         const discordGuild = client.guilds.cache.get(guildId);
-        const dmEmbed = new EmbedBuilder()
-          .setColor(COLORS.warning)
-          .setTitle('🔗 Comptes déliés')
-          .setDescription(`Vos comptes **<@${link.user1Id}>** et **<@${link.user2Id}>** ont été séparés sur **${discordGuild?.name || 'le serveur'}**.`)
-          .setTimestamp();
-
-        try {
-          const member1 = await client.users.fetch(link.user1Id).catch(() => null);
-          if (member1) await member1.send({ embeds: [dmEmbed] }).catch(() => null);
-        } catch { /* ignored */ }
-
-        try {
-          const member2 = await client.users.fetch(link.user2Id).catch(() => null);
-          if (member2) await member2.send({ embeds: [dmEmbed] }).catch(() => null);
-        } catch { /* ignored */ }
+        await notifyMany([link.user1Id, link.user2Id], {
+          guildId,
+          kind: 'security.alt_unlinked',
+          title: 'Comptes déliés',
+          message: `Vos comptes **<@${link.user1Id}>** et **<@${link.user2Id}>** ont été séparés sur **${discordGuild?.name || 'le serveur'}**.`,
+          severity: 'WARNING',
+          actorId: user.userId,
+        });
 
         json(res, 200, { success: true });
       } catch (err) {
@@ -668,24 +654,7 @@ export async function handleMembersRoutes(
         metadata: { linkedBy: user.userId, source: 'dashboard', at: new Date().toISOString() }
       });
 
-      const discordGuild = client.guilds.cache.get(guildId);
-      const dmEmbed = new EmbedBuilder()
-        .setColor(COLORS.success)
-        .setTitle('🔗 Comptes liés officiellement')
-        .setDescription(`Vos comptes **<@${u1Id}>** et **<@${u2Id}>** ont été reliés sur **${discordGuild?.name || 'le serveur'}**.`)
-        .addFields({ name: 'Raison / Notes', value: reason || 'Liaison validée par le staff.', inline: false })
-        .setTimestamp();
-
-      try {
-        const member1 = await client.users.fetch(u1Id).catch(() => null);
-        if (member1) await member1.send({ embeds: [dmEmbed] }).catch(() => null);
-      } catch { /* ignored */ }
-
-      try {
-        const member2 = await client.users.fetch(u2Id).catch(() => null);
-        if (member2) await member2.send({ embeds: [dmEmbed] }).catch(() => null);
-      } catch { /* ignored */ }
-
+      // linkAccounts prévient déjà les deux comptes.
       json(res, 200, { success: true });
     } catch (err) {
       logger.error('MembersAPI', `Error linking accounts for ${parts[5]}:`, err);
@@ -709,24 +678,8 @@ export async function handleMembersRoutes(
         return true;
       }
 
+      // unlinkAccounts prévient déjà les deux comptes.
       await altAccountService.unlinkAccounts(guildId, u1Id, u2Id);
-      
-      const discordGuild = client.guilds.cache.get(guildId);
-      const dmEmbed = new EmbedBuilder()
-        .setColor(COLORS.warning)
-        .setTitle('🔗 Comptes déliés')
-        .setDescription(`Vos comptes **<@${u1Id}>** et **<@${u2Id}>** ont été séparés sur **${discordGuild?.name || 'le serveur'}**.`)
-        .setTimestamp();
-
-      try {
-        const member1 = await client.users.fetch(u1Id).catch(() => null);
-        if (member1) await member1.send({ embeds: [dmEmbed] }).catch(() => null);
-      } catch { /* ignored */ }
-
-      try {
-        const member2 = await client.users.fetch(u2Id).catch(() => null);
-        if (member2) await member2.send({ embeds: [dmEmbed] }).catch(() => null);
-      } catch { /* ignored */ }
 
       json(res, 200, { success: true });
     } catch (err) {

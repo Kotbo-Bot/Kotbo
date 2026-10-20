@@ -15,6 +15,7 @@ import { isPartnershipType } from '@kotbo/contracts';
 import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
 import { getClient } from '../../utils/client.js';
+import { notify } from '../notifications/notifyService.js';
 import { getPartnershipSettings } from './partnershipSettings.js';
 import { sendPartnershipAlert } from './partnershipEvents.js';
 import { createPartner } from './partnerService.js';
@@ -282,16 +283,29 @@ export async function decideApplication(
 async function notifyApplicant(application: PartnerApplication, accepted: boolean): Promise<void> {
   if (!application.applicantUserId) return;
 
-  const user = await getClient()
-    .users.fetch(application.applicantUserId)
-    .catch(() => null);
-  if (!user) return;
-
   const message = accepted
     ? `Votre demande de partenariat pour **${application.projectName}** a été acceptée. L'équipe vous recontacte pour la suite.`
     : `Votre demande de partenariat pour **${application.projectName}** n'a pas été retenue.${
         application.decisionReason ? `\n\nMotif : ${application.decisionReason}` : ''
       }`;
+
+  if (application.guildId) {
+    await notify({
+      guildId: application.guildId,
+      userId: application.applicantUserId,
+      kind: 'partnerships.application_decided',
+      title: accepted ? 'Demande de partenariat acceptée' : 'Demande de partenariat refusée',
+      message,
+      severity: accepted ? 'SUCCESS' : 'ERROR',
+    }).catch(() => null);
+    return;
+  }
+
+  // Demande faite à Kotbo lui-même : aucun serveur pour porter la notification.
+  const user = await getClient()
+    .users.fetch(application.applicantUserId)
+    .catch(() => null);
+  if (!user) return;
 
   await user.send({ content: message, allowedMentions: { parse: [] } }).catch(() => {
     logger.info('Partenariats : demandeur injoignable en message prive', { applicationId: application.id });

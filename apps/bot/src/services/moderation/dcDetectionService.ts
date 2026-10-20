@@ -1031,16 +1031,7 @@ export async function handleDCInteraction(interaction: Interaction): Promise<voi
       data: { isSuspectedDC: false, dcScore: null }
     }).catch(() => null);
 
-    const dmEmbed = new EmbedBuilder()
-      .setColor('#57F287')
-      .setTitle('Comptes liés officiellement')
-      .setDescription(`Vos comptes <@${userId}> et <@${altId}> ont été reliés sur **${interaction.guild?.name || 'le serveur'}**.`)
-      .setTimestamp();
-
-    const u1 = await interaction.client.users.fetch(userId).catch(() => null);
-    if (u1) await u1.send({ embeds: [dmEmbed], allowedMentions: { parse: [] } }).catch(() => null);
-    const u2 = await interaction.client.users.fetch(altId).catch(() => null);
-    if (u2) await u2.send({ embeds: [dmEmbed], allowedMentions: { parse: [] } }).catch(() => null);
+    // linkAccounts a déjà prévenu les deux comptes.
 
     await interaction.update({
       content: `✅ <@${userId}> lié à <@${altId}> par <@${interaction.user.id}>.`,
