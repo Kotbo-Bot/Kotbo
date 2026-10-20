@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { stripCustomEmoji } from '../../emojiParser';
   /**
    * Boutique du serveur (`/boutique` sur Discord) : offres (rôles, objets, XP,
    * abonnements, prestations), commandes à valider, codes promo et réglages.
@@ -66,7 +67,7 @@
   const roleName = (id: string | null) => shop?.roles.find((r) => r.id === id)?.name ?? id ?? '';
   const itemLabel = (id: string | null) => {
     const item = shop?.items.find((i) => i.id === id);
-    return item ? `${item.emoji} ${item.name}`.trim() : '?';
+    return item ? `${stripCustomEmoji(item.emoji)} ${item.name}`.trim() : '?';
   };
 
   function summary(offer: ShopOfferAdmin): string {
@@ -562,7 +563,7 @@
           {#snippet children(id)}
             <select {id} class="input w-full" required bind:value={draft.itemId}>
               <option value=""></option>
-              {#each shop?.items ?? [] as item (item.id)}<option value={item.id}>{item.emoji} {item.name}</option>{/each}
+              {#each shop?.items ?? [] as item (item.id)}<option value={item.id}>{stripCustomEmoji(item.emoji)} {item.name}</option>{/each}
             </select>
           {/snippet}
         </Field>

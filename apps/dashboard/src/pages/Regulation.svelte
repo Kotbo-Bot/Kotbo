@@ -7,6 +7,8 @@
   import FormInput from '../lib/components/FormInput.svelte';
   import FormTextarea from '../lib/components/FormTextarea.svelte';
   import Papicon from '../lib/components/Papicon.svelte';
+  import EmojiText from '../lib/components/EmojiText.svelte';
+  import { stripCustomEmoji } from '../lib/emojiParser';
   import ModulePage from '../lib/components/ModulePage.svelte';
   import {
     createRegulationArticle,
@@ -687,11 +689,11 @@ import EmojiPicker from '../lib/components/EmojiPicker.svelte';
                 <div class="space-y-2">
                   <div class="flex items-center gap-3">
                     {#if rule.emoji}
-                      <span class="text-2xl drop-shadow-sm">{rule.emoji}</span>
+                      <EmojiText value={rule.emoji} class="text-2xl drop-shadow-sm shrink-0" />
                     {/if}
-                    <h4 class="text-2xl font-semibold text-on-surface tracking-tight group-hover:text-primary transition-colors">{rule.title}</h4>
+                    <h4 class="text-2xl font-semibold text-on-surface tracking-tight group-hover:text-primary transition-colors"><EmojiText value={rule.title} /></h4>
                   </div>
-                  <p class="text-on-surface-variant text-base leading-relaxed whitespace-pre-wrap max-w-4xl">{rule.description}</p>
+                  <p class="text-on-surface-variant text-base leading-relaxed whitespace-pre-wrap max-w-4xl"><EmojiText value={rule.description} /></p>
                 </div>
                 
                 <div class="flex flex-wrap items-center gap-2">
@@ -820,11 +822,11 @@ import EmojiPicker from '../lib/components/EmojiPicker.svelte';
         <p class="text-xs font-semibold text-primary/60 mb-3">{m.regulation_preview_badge()}</p>
         <div class="flex items-center gap-3 mb-2">
           {#if draftEmoji}
-            <span class="text-xl">{draftEmoji}</span>
+            <EmojiText value={draftEmoji} class="text-xl shrink-0" />
           {/if}
-          <p class="text-lg font-semibold text-on-surface tracking-tight">{draftTitle || m.regulation_preview_title_ph()}</p>
+          <p class="text-lg font-semibold text-on-surface tracking-tight min-w-0 wrap-break-word"><EmojiText value={draftTitle || m.regulation_preview_title_ph()} /></p>
         </div>
-        <p class="whitespace-pre-wrap text-sm font-medium text-on-surface-variant leading-relaxed">{draftDescription || m.regulation_preview_desc_ph()}</p>
+        <p class="whitespace-pre-wrap text-sm font-medium text-on-surface-variant leading-relaxed"><EmojiText value={draftDescription || m.regulation_preview_desc_ph()} /></p>
       </div>
 
       <div class="flex items-center justify-end gap-3 pt-2">
@@ -861,7 +863,7 @@ import EmojiPicker from '../lib/components/EmojiPicker.svelte';
           <h3 id="delete-rule-title" class="text-2xl font-semibold text-on-surface tracking-tight">{m.regulation_delete_modal_title()}</h3>
         </div>
         <p class="text-sm font-bold text-on-surface-variant leading-relaxed">
-          {m.regulation_delete_modal_desc({ rule: (deletingRule.emoji ? `${deletingRule.emoji} ` : '') + deletingRule.title })}
+          {m.regulation_delete_modal_desc({ rule: [stripCustomEmoji(deletingRule.emoji), deletingRule.title].filter(Boolean).join(' ') })}
         </p>
       </div>
 

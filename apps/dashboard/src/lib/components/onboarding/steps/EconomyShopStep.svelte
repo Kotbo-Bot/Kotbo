@@ -20,6 +20,7 @@
   import { saveRpgItem } from '../../../api';
   import ToggleCard from '../ToggleCard.svelte';
   import Papicon from '../../Papicon.svelte';
+  import EmojiText from '../../EmojiText.svelte';
   import WizardShell from '../WizardShell.svelte';
 
   import { errorMessage } from '@kotbo/shared';
@@ -130,7 +131,7 @@
               class="w-24 rounded-lg border border-outline-variant/40 bg-surface-container-lowest/60 px-2 py-1
                      text-xs tabular-nums text-on-surface focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
             />
-            <span class="text-xs text-on-surface-variant truncate">{emoji} {currency}</span>
+            <span class="text-xs text-on-surface-variant truncate"><EmojiText value={emoji} /> {currency}</span>
             <span class="ml-auto shrink-0 text-2xs text-on-surface-variant/40">{effectOf(item)}</span>
           </div>
         {/if}
@@ -162,7 +163,7 @@
               <p class="text-2xs text-[#949ba4] truncate">{effectOf(item)}</p>
             </div>
             <span class="shrink-0 text-xs font-semibold tabular-nums text-[#f0b232]">
-              {emoji} {priceOf(item).toLocaleString('fr-FR')}
+              <EmojiText value={emoji} /> {priceOf(item).toLocaleString('fr-FR')}
             </span>
           </div>
         {:else}

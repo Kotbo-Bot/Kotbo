@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { stripCustomEmoji } from '../../emojiParser';
   /**
    * Pêche du RPG : espèces du serveur et récompenses du carnet.
    *
@@ -76,7 +77,7 @@
     for (const item of items) {
       if (!byName.has(item.name) || item.guildId) byName.set(item.name, item);
     }
-    return [...byName.values()].map((item) => ({ id: item.name, name: `${item.emoji} ${item.name}` }));
+    return [...byName.values()].map((item) => ({ id: item.name, name: `${stripCustomEmoji(item.emoji)} ${item.name}` }));
   });
   const titleOptions = $derived(titles.map((title) => ({ id: title.id, name: title.name })));
   const byRarity = $derived(RARITIES.map((rarity) => ({ rarity, fish: species.filter((fish) => fish.rarity === rarity) })));

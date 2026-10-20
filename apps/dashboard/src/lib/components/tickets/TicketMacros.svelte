@@ -11,6 +11,7 @@
   import { dashboardFetch } from '../../api';
   import { errorMessage } from '@kotbo/shared';
   import Papicon from '../Papicon.svelte';
+  import EmojiText from '../EmojiText.svelte';
   import Modal from '../Modal.svelte';
   import Skeleton from '../Skeleton.svelte';
   import ActionButton from '../ActionButton.svelte';
@@ -230,7 +231,7 @@
           <div class="flex items-start justify-between gap-3">
             <div class="min-w-0 flex-1">
               <div class="flex items-center gap-2 flex-wrap">
-                {#if macro.emoji}<span class="text-sm">{macro.emoji}</span>{/if}
+                {#if macro.emoji}<EmojiText value={macro.emoji} class="text-sm" />{/if}
                 <span class="text-sm font-semibold text-on-surface">{macro.name}</span>
                 {#if macro.category}
                   <span class="text-2xs px-1.5 py-0.5 rounded bg-surface-container text-on-surface-variant">{macro.category}</span>

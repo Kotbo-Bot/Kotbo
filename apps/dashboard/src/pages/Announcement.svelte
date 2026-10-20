@@ -13,6 +13,7 @@
   import ModulePage from '../lib/components/ModulePage.svelte';
   import { createAsyncActionState } from '../lib/asyncAction.svelte';
   import Papicon from '../lib/components/Papicon.svelte';
+  import EmojiText from '../lib/components/EmojiText.svelte';
   import InlineFeedback from '../lib/components/InlineFeedback.svelte';
   import ToggleSwitch from '../lib/components/ToggleSwitch.svelte';
   import SearchableSelect from '../lib/components/SearchableSelect.svelte';
@@ -1482,7 +1483,7 @@
                               <div class="flex flex-wrap gap-2 mt-4">
                                 {#each (threadPages.length > 0 ? threadPages : [{ localId: 'x', label: m.announcements_thread_example(), emoji: '', actionType: 'EMBED' }]) as page}
                                   <span class="text-2xs font-semibold px-3 py-2 rounded-lg border {page.actionType === 'ROLE' ? 'bg-success/10 border-success/20 text-success' : page.actionType === 'LINK' ? 'bg-sky-500/10 border-sky-500/20 text-sky-500' : 'bg-surface-container-high border-outline-variant/15 text-on-surface-variant/80'}">
-                                    {#if page.emoji}{page.emoji} {/if}{page.label || m.announcements_thread_nameless_page()}{#if page.actionType === 'ROLE'}<Papicon icon="user" size={11} class="inline-block ml-1 align-[-1px]" />{:else if page.actionType === 'LINK'}<Papicon icon="link" size={11} class="inline-block ml-1 align-[-1px]" />{/if}
+                                    {#if page.emoji}<EmojiText value={page.emoji} /> {/if}{page.label || m.announcements_thread_nameless_page()}{#if page.actionType === 'ROLE'}<Papicon icon="user" size={11} class="inline-block ml-1 align-[-1px]" />{:else if page.actionType === 'LINK'}<Papicon icon="link" size={11} class="inline-block ml-1 align-[-1px]" />{/if}
                                   </span>
                                 {/each}
                               </div>

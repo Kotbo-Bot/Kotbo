@@ -14,6 +14,7 @@
    */
   import type { Snippet } from 'svelte';
   import Papicon from '../Papicon.svelte';
+  import EmojiText from '../EmojiText.svelte';
 
   const {
     label,
@@ -63,7 +64,7 @@
     </span>
 
     {#if emoji}
-      <span class="text-[19px] leading-none mt-px shrink-0">{emoji}</span>
+      <EmojiText value={emoji} class="text-[19px] leading-none mt-px shrink-0" />
     {:else if icon}
       <span
         class="icon w-9 h-9 shrink-0 rounded-xl flex items-center justify-center transition-colors

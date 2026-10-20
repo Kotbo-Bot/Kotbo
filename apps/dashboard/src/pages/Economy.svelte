@@ -539,7 +539,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
     for (const item of source) {
       if (!byName.has(item.name) || item.guildId) byName.set(item.name, item);
     }
-    return [...byName.values()].map((item) => ({ id: item.name, name: `${item.emoji} ${item.name}` }));
+    return [...byName.values()].map((item) => ({ id: item.name, name: `${stripCustomEmoji(item.emoji)} ${item.name}` }));
   }
 
   // Seuls les matériaux sont proposés, sauf un objet d'un autre type déjà posé sur la
@@ -3670,7 +3670,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
                 <select id="itemEnchant" bind:value={editingItem.enchantId} class="w-full bg-surface-container-high/45 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs focus:outline-none text-on-surface">
                   <option value={null}>{m.eco_item_enchant_none()}</option>
                   {#each RPG_ENCHANTMENTS as entry (entry.id)}
-                    <option value={entry.id}>{entry.emoji} {entry.name}</option>
+                    <option value={entry.id}>{stripCustomEmoji(entry.emoji)} {entry.name}</option>
                   {/each}
                 </select>
               </div>
@@ -4130,7 +4130,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
         <label for="recipeResult" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_recipe_result()}</label>
         <select id="recipeResult" bind:value={editingRecipe.resultItemId} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs focus:outline-none">
           {#each guildItems as item (item.id)}
-            <option value={item.id}>{item.emoji} {item.name}</option>
+            <option value={item.id}>{stripCustomEmoji(item.emoji)} {item.name}</option>
           {/each}
         </select>
       </div>

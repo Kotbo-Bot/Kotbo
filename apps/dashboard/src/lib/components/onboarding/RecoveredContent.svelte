@@ -12,6 +12,7 @@
    */
   import type { InspectionPayload } from '../../stores/onboardingData.svelte';
   import Papicon from '../Papicon.svelte';
+  import EmojiText from '../EmojiText.svelte';
 
   const { payload }: { payload: InspectionPayload } = $props();
 
@@ -69,11 +70,11 @@
               </span>
               <div class="min-w-0">
                 <p class="text-xs font-medium text-on-surface">
-                  {#if article.emoji}<span class="mr-1">{article.emoji}</span>{/if}{article.title}
+                  {#if article.emoji}<span class="mr-1"><EmojiText value={article.emoji} /></span>{/if}<EmojiText value={article.title} />
                 </p>
                 {#if article.description !== article.title}
                   <p class="mt-0.5 whitespace-pre-wrap break-words text-2xs leading-relaxed text-on-surface-variant">
-                    {article.description}
+                    <EmojiText value={article.description} />
                   </p>
                 {/if}
               </div>
@@ -102,7 +103,7 @@
                 class="rounded-md bg-surface-container/70 px-1.5 py-0.5 text-2xs text-on-surface-variant/75"
                 title={type.description || undefined}
               >
-                {type.emoji} {type.label}
+                <EmojiText value={type.emoji} /> {type.label}
               </li>
             {/each}
           </ul>
@@ -117,7 +118,7 @@
         <ul class="mt-1.5 space-y-1">
           {#each payload.options as option (option.roleId)}
             <li class="flex items-center gap-2 text-xs text-on-surface-variant/75">
-              <span class="w-5 text-center">{option.emoji}</span>
+              <span class="w-5 text-center"><EmojiText value={option.emoji} /></span>
               <span class="text-on-surface-variant/40">→</span>
               <span class="truncate">{option.label}</span>
             </li>

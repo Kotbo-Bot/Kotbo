@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { stripCustomEmoji } from '../../emojiParser';
   import { explainDisabled } from '../../actions/explainDisabled';
   /**
    * Inventaire d'un joueur : consulter, donner, retirer.
@@ -39,7 +40,7 @@
   let grantItemId = $state<string | null>(null);
   let grantQuantity = $state(1);
 
-  const catalogOptions = $derived(catalog.map((item) => ({ id: item.id, name: `${item.emoji} ${item.name}` })));
+  const catalogOptions = $derived(catalog.map((item) => ({ id: item.id, name: `${stripCustomEmoji(item.emoji)} ${item.name}` })));
 
   async function load() {
     loading = true;

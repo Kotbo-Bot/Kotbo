@@ -9,6 +9,7 @@
   import { unsavedChanges } from '../lib/stores/unsavedChanges.svelte';
   import { subscribeRealtime } from '../lib/stores/realtime.svelte';
   import Papicon from '../lib/components/Papicon.svelte';
+  import EmojiText from '../lib/components/EmojiText.svelte';
   import InlineFeedback from '../lib/components/InlineFeedback.svelte';
   import SearchableSelect from '../lib/components/SearchableSelect.svelte';
   import Skeleton from '../lib/components/Skeleton.svelte';
@@ -667,7 +668,7 @@
                     ? 'bg-primary/10 border-primary/40 text-primary'
                     : 'bg-surface-container-high/30 border-outline-variant/15 text-on-surface-variant/80 hover:border-outline-variant/40'}"
                 >
-                  {item.emoji} {item.name}
+                  <EmojiText value={item.emoji} /> {item.name}
                 </button>
               {/each}
             </div>

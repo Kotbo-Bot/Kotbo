@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { stripCustomEmoji } from '../lib/emojiParser';
   import { explainDisabled } from '../lib/actions/explainDisabled';
   import { m, locales } from '../lib/i18n';
   import type { PreviewSample } from '../lib/giveawayPreview';
@@ -235,7 +236,7 @@
   let rpgItems = $state<GiveawayRpgItem[]>([]);
 
   const rpgItemOptions = $derived(
-    rpgItems.map((item) => ({ id: item.id, name: item.emoji ? `${item.emoji} ${item.name}` : item.name })),
+    rpgItems.map((item) => ({ id: item.id, name: item.emoji ? `${stripCustomEmoji(item.emoji)} ${item.name}` : item.name })),
   );
 
   /** Nom affiché d'un objet, vide quand il a disparu du module depuis. */

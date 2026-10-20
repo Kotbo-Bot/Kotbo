@@ -16,6 +16,7 @@
   import DiscordPreview from '../DiscordPreview.svelte';
   import DiscordEmbed from '../DiscordEmbed.svelte';
   import Papicon from '../../Papicon.svelte';
+  import EmojiText from '../../EmojiText.svelte';
   import WizardShell from '../WizardShell.svelte';
 
   import { errorMessage } from '@kotbo/shared';
@@ -143,7 +144,7 @@
           <li class="flex items-start gap-2 text-body-sm text-on-surface-variant/55">
             <Papicon icon="check" size={12} class="mt-1 shrink-0 text-success/60" />
             <span class="min-w-0">
-              {#if rule.emoji}<span class="mr-1">{rule.emoji}</span>{/if}{rule.title}
+              {#if rule.emoji}<span class="mr-1"><EmojiText value={rule.emoji} /></span>{/if}{rule.title}
             </span>
           </li>
         {/each}
@@ -173,7 +174,7 @@
 
           <div class="min-w-0 flex-1">
             <div class="flex items-center gap-2">
-              <span class="text-[15px] leading-none">{rule.emoji}</span>
+              <EmojiText value={rule.emoji} class="text-[15px] leading-none shrink-0" />
               <p class="text-sm font-semibold text-on-surface">{rule.title}</p>
               {#if rule.selected}
                 <button

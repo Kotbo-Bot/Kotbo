@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { stripCustomEmoji } from '../../emojiParser';
   import { explainDisabled } from '../../actions/explainDisabled';
   /**
    * Donjons du RPG : suites de boss du bestiaire, à enchaîner sans repos.
@@ -110,7 +111,7 @@
   const bossByName = $derived(new Map(bosses.map((boss) => [boss.name, boss])));
   const bossOptions = $derived(bosses.map((boss) => ({
     id: boss.name,
-    name: `${boss.emoji} ${boss.name} · ${m.eco_dungeon_level_short({ level: boss.level })}${boss.enabled ? '' : ` · ${m.eco_dungeon_boss_exclusive()}`}`,
+    name: `${stripCustomEmoji(boss.emoji)} ${boss.name} · ${m.eco_dungeon_level_short({ level: boss.level })}${boss.enabled ? '' : ` · ${m.eco_dungeon_boss_exclusive()}`}`,
   })));
   const roles = $derived((dashboardStore.state.discordRoles || []).map((role: any) => ({ id: role.id, name: `@${role.name}` })));
   const titleOptions = $derived(titles.map((title) => ({ id: title.id, name: title.name })));
@@ -119,7 +120,7 @@
     for (const item of items) {
       if (!byName.has(item.name) || item.guildId) byName.set(item.name, item);
     }
-    return [...byName.values()].map((item) => ({ id: item.name, name: `${item.emoji} ${item.name}` }));
+    return [...byName.values()].map((item) => ({ id: item.name, name: `${stripCustomEmoji(item.emoji)} ${item.name}` }));
   });
 
   // Ce que les boss rapportent au minimum sur une partie complète, coffre compris : l'aléa

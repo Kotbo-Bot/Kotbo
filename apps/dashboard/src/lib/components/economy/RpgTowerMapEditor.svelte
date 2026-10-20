@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { stripCustomEmoji } from '../../emojiParser';
   import { explainDisabled } from '../../actions/explainDisabled';
   import { untrack } from 'svelte';
   /**
@@ -1168,7 +1169,7 @@
     // Errant et geôlier sont des monstres ordinaires, renforcés par la Tour.
     return foes
       .filter((foe) => foe.isBoss === wantBoss)
-      .map((foe) => ({ id: foe.name, name: `${foe.emoji} ${foe.name}${foe.enabled ? '' : ` · ${m.eco_tower_map_foe_disabled()}`}` }));
+      .map((foe) => ({ id: foe.name, name: `${stripCustomEmoji(foe.emoji)} ${foe.name}${foe.enabled ? '' : ` · ${m.eco_tower_map_foe_disabled()}`}` }));
   });
 
   // ── Édition ─────────────────────────────────────────────────────

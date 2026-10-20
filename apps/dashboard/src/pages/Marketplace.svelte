@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { stripCustomEmoji } from '../lib/emojiParser';
   import { onMount } from 'svelte';
   import { router } from 'tinro';
   import { resolveTabFromUrl, gotoTab } from '../lib/tabRouting';
@@ -92,7 +93,7 @@
 
   /** Nom lisible d'un objet vendu, avec son niveau de forge pour un exemplaire forgé. */
   function itemLabel(entry: { itemId: string; upgrade?: number; item?: { name: string; emoji: string } | null }): string {
-    const name = entry.item ? `${entry.item.emoji} ${entry.item.name}` : entry.itemId;
+    const name = entry.item ? `${stripCustomEmoji(entry.item.emoji)} ${entry.item.name}` : entry.itemId;
     return entry.upgrade && entry.upgrade > 0 ? `${name} +${entry.upgrade}` : name;
   }
 
