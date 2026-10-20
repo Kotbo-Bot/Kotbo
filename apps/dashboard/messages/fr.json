@@ -14731,5 +14731,8 @@
   "lv_blacklist_none": "Personne",
   "lv_blacklist_add_member": "Ajouter un membre…",
   "lv_blacklist_add_role": "Ajouter un rôle…",
-  "lv_blacklist_add_channel": "Ajouter un salon ou une catégorie…"
+  "lv_blacklist_add_channel": "Ajouter un salon ou une catégorie…",
+  "fun_imageofday_title": "Image du jour",
+  "fun_imageofday_subtitle": "Une image par membre et par jour",
+  "fun_imageofday_hint": "Chacun poste l'image qu'il trouve la meilleure aujourd'hui, de 00:00 à 23:59 (heure du serveur). Un message sans image ou une 2e image dans la journée est supprimé, avec un message qui explique pourquoi. Le staff n'est pas filtré."
 }

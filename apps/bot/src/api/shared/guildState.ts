@@ -796,6 +796,7 @@ export const getGuildState = async (
     funEmojiRiddleChannelId: guild.funEmojiRiddleChannelId ?? '',
     funNeverSayChannelId: guild.funNeverSayChannelId ?? '',
     funEmojiOnlyChannelId: guild.funEmojiOnlyChannelId ?? '',
+    funImageOfDayChannelId: guild.funImageOfDayChannelId ?? '',
     funPunitiveMode: guild.funPunitiveMode,
     youtubeEnabled: moduleStates.youtube !== false,
     twitchEnabled: moduleStates.twitch !== false,

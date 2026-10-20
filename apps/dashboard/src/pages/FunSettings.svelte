@@ -42,6 +42,7 @@
     funEmojiRiddleChannelId: null as string | null,
     funNeverSayChannelId: null as string | null,
     funEmojiOnlyChannelId: null as string | null,
+    funImageOfDayChannelId: null as string | null,
     funPunitiveMode: true,
     funEmojiRiddleUseDefaults: true
   });
@@ -54,6 +55,7 @@
     funEmojiRiddleChannelId: null as string | null,
     funNeverSayChannelId: null as string | null,
     funEmojiOnlyChannelId: null as string | null,
+    funImageOfDayChannelId: null as string | null,
     funPunitiveMode: true,
     funEmojiRiddleUseDefaults: true
   });
@@ -103,6 +105,7 @@
       funEmojiRiddleChannelId: source.funEmojiRiddleChannelId ?? null,
       funNeverSayChannelId: source.funNeverSayChannelId ?? null,
       funEmojiOnlyChannelId: source.funEmojiOnlyChannelId ?? null,
+      funImageOfDayChannelId: source.funImageOfDayChannelId ?? null,
       funPunitiveMode: source.funPunitiveMode ?? true,
       funEmojiRiddleUseDefaults: source.funEmojiRiddleUseDefaults ?? true
     };
@@ -538,6 +541,37 @@
 
         <div class="text-2xs text-on-surface-variant/40 italic text-center py-2 leading-relaxed font-medium">
           {m.fun_emojionly_hint()}
+        </div>
+      </section>
+
+      <!-- Image du jour Card -->
+      <section class="bg-surface-container-low/40 border border-outline-variant/30 p-8 rounded-xl flex flex-col justify-between gap-6 hover:bg-surface-container-low/60 transition-all duration-300">
+        <div class="space-y-4">
+          <div class="flex items-center gap-3 pb-3 border-b border-outline-variant/15">
+            <div class="w-10 h-10 rounded-xl bg-pink-500/10 text-pink-500 flex items-center justify-center">
+              <Papicon icon="Image" size={20} />
+            </div>
+            <div>
+              <h3 class="text-lg font-semibold tracking-tight text-on-surface">{m.fun_imageofday_title()}</h3>
+              <p class="text-xs text-on-surface-variant/55 font-semibold">{m.fun_imageofday_subtitle()}</p>
+            </div>
+          </div>
+
+          <div class="space-y-1.5">
+            <label for="imageOfDayChannel" class="text-xs font-semibold text-on-surface-variant ml-2">{m.fun_channel_label()}</label>
+            <SearchableSelect
+              id="imageOfDayChannel"
+              bind:value={config.funImageOfDayChannelId}
+              options={availableChannels.map(c => ({ id: c.id, name: channelDisplayName(c) }))}
+              placeholder={m.fun_no_channel()}
+              className="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-pink-500/30 transition-all"
+              disabled={!canManageSettings}
+            />
+          </div>
+        </div>
+
+        <div class="text-2xs text-on-surface-variant/40 italic text-center py-2 leading-relaxed font-medium">
+          {m.fun_imageofday_hint()}
         </div>
       </section>
     </div>

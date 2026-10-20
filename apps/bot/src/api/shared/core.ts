@@ -615,6 +615,7 @@ export type DashboardState = {
   funEmojiRiddleChannelId: string;
   funNeverSayChannelId: string;
   funEmojiOnlyChannelId: string;
+  funImageOfDayChannelId: string;
   funPunitiveMode: boolean;
   recruitmentCategoryId: string;
   recruitmentLogChannelId: string;

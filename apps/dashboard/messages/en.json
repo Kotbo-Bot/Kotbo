@@ -14731,5 +14731,8 @@
   "lv_blacklist_none": "Nobody",
   "lv_blacklist_add_member": "Add a member…",
   "lv_blacklist_add_role": "Add a role…",
-  "lv_blacklist_add_channel": "Add a channel or category…"
+  "lv_blacklist_add_channel": "Add a channel or category…",
+  "fun_imageofday_title": "Image of the day",
+  "fun_imageofday_subtitle": "One image per member per day",
+  "fun_imageofday_hint": "Everyone posts the image they like best today, from 00:00 to 23:59 (server time). A message without an image or a 2nd image the same day is deleted, with a message explaining why. Staff are not filtered."
 }

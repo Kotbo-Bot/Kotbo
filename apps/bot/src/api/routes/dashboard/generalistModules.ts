@@ -2712,6 +2712,7 @@ export async function handleGeneralistModulesRoutes(
             funEmojiRiddleChannelId: true,
             funNeverSayChannelId: true,
             funEmojiOnlyChannelId: true,
+            funImageOfDayChannelId: true,
             funPunitiveMode: true,
             funEmojiRiddleUseDefaults: true,
           }
@@ -2755,6 +2756,7 @@ export async function handleGeneralistModulesRoutes(
           funEmojiRiddleChannelId?: string | null;
           funNeverSayChannelId?: string | null;
           funEmojiOnlyChannelId?: string | null;
+          funImageOfDayChannelId?: string | null;
           funPunitiveMode?: boolean;
           funEmojiRiddleUseDefaults?: boolean;
         }>(req);
@@ -2785,6 +2787,7 @@ export async function handleGeneralistModulesRoutes(
             funEmojiRiddleChannelId: body.funEmojiRiddleChannelId,
             funNeverSayChannelId: body.funNeverSayChannelId,
             funEmojiOnlyChannelId: body.funEmojiOnlyChannelId,
+            funImageOfDayChannelId: body.funImageOfDayChannelId,
             funPunitiveMode: body.funPunitiveMode,
             funEmojiRiddleUseDefaults: typeof body.funEmojiRiddleUseDefaults === 'boolean'
               ? body.funEmojiRiddleUseDefaults
@@ -2833,6 +2836,7 @@ export async function handleGeneralistModulesRoutes(
             funEmojiRiddleChannelId: updatedGuild.funEmojiRiddleChannelId,
             funNeverSayChannelId: updatedGuild.funNeverSayChannelId,
             funEmojiOnlyChannelId: updatedGuild.funEmojiOnlyChannelId,
+            funImageOfDayChannelId: updatedGuild.funImageOfDayChannelId,
             funPunitiveMode: updatedGuild.funPunitiveMode,
             funEmojiRiddleUseDefaults: updatedGuild.funEmojiRiddleUseDefaults,
           },
