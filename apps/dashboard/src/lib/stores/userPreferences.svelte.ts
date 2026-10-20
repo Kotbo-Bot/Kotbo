@@ -23,8 +23,6 @@ interface UserPrefs {
   compactMode: boolean;
   soundNotifications: boolean;
   desktopNotifications: boolean;
-  /** Familles de notifications que la personne ne veut plus recevoir (voir notificationCategories). */
-  mutedNotificationCategories: string[];
   dateFormat: DateFormat;
   accentColor: AccentColor;
   animationsEnabled: boolean;
@@ -43,7 +41,6 @@ const DEFAULT_PREFS: UserPrefs = {
   compactMode: false,
   soundNotifications: false,
   desktopNotifications: false,
-  mutedNotificationCategories: [],
   dateFormat: 'relative',
   accentColor: 'violet',
   animationsEnabled: true,

@@ -124,7 +124,7 @@
   }
 
   function badgeFor(item: PageConfig): number {
-    return item.href === '/inbox' ? notificationsStore.unreadCount : 0;
+    return item.href === '/notifications' ? notificationsStore.unreadCount : 0;
   }
 </script>
 

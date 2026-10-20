@@ -20,7 +20,7 @@ export const TAB_SLOTS = 4;
  */
 export const DEFAULT_TAB_ORDER = [
   '/',
-  '/inbox',
+  '/notifications',
   '/members',
   '/tickets',
   '/security/sanctions',

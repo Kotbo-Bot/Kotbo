@@ -44,7 +44,7 @@ export const generalItems: PageConfig[] = [
   // nouveau bot ; elle n'a simplement plus a occuper une ligne du menu de tous
   // les serveurs, y compris ceux qui n'ont jamais eu d'autre bot.
   { name: m.nav_pulse(),        icon: "activity",  href: "/pulse",     featureKey: "dashboard", beta: true, wip: false },
-  { name: m.nav_inbox(),             icon: "inbox",     href: "/inbox",     featureKey: "inbox", beta: false, wip: false },
+  { name: m.nav_inbox(),             icon: "inbox",     href: "/notifications", beta: false, wip: false },
   { name: m.nav_analytics(),         icon: "pie-chart", href: "/analytics", featureKey: "analytics", beta: false, wip: false },
 ];
 

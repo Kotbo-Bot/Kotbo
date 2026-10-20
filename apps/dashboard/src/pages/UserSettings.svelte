@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { NOTIFICATION_CATEGORIES } from '../lib/notificationCategories';
+  import NotificationPreferencesGrid from '../lib/components/NotificationPreferencesGrid.svelte';
   import { router } from 'tinro';
   import { authStore } from '../lib/stores/auth.svelte';
   import { resolveTabFromUrl, gotoTab } from '../lib/tabRouting';
@@ -126,14 +126,6 @@
    * laisserait un interrupteur allume qui ne fait rien : on la demande au
    * moment du clic, seul moment ou le navigateur accepte d'afficher la demande.
    */
-  /** Couper une famille la retire de la cloche, du compteur, du son et du bureau. */
-  function toggleNotificationCategory(key: string, wanted: boolean) {
-    const muted = new Set(userPrefs.prefs.mutedNotificationCategories ?? []);
-    if (wanted) muted.delete(key);
-    else muted.add(key);
-    userPrefs.set('mutedNotificationCategories', [...muted]);
-  }
-
   async function handleNotificationToggle(key: 'soundNotifications' | 'desktopNotifications', value: boolean) {
     if (key === 'desktopNotifications' && value) {
       const permission = await requestDesktopPermission();
@@ -626,21 +618,7 @@
           {/if}
         </div>
 
-        <div class="p-4 rounded-lg bg-surface-container-high/20 border border-outline-variant/5 space-y-3">
-          <div>
-            <p class="text-sm font-bold">{m.us_notif_categories()}</p>
-            <p class="text-2xs text-on-surface-variant">{m.us_notif_categories_desc()}</p>
-          </div>
-          {#each NOTIFICATION_CATEGORIES as category (category.key)}
-            <div class="flex items-center justify-between gap-4">
-              <p class="text-sm">{category.label()}</p>
-              <ToggleSwitch
-                checked={!(userPrefs.prefs.mutedNotificationCategories ?? []).includes(category.key)}
-                onToggle={(v: boolean) => toggleNotificationCategory(category.key, v)}
-              />
-            </div>
-          {/each}
-        </div>
+        <NotificationPreferencesGrid />
 
         <div class="flex items-center justify-between p-4 rounded-lg bg-surface-container-high/20 border border-outline-variant/5 hover:bg-surface-container-high/40 transition-colors">
           <div>

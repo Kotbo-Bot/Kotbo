@@ -34,14 +34,6 @@ export const PAGE_TABS: Record<string, PageTabConfig[]> = {
     { id: 'predictions', label: () => m.pulse_tab_predictions(), icon: 'trending-up' },
   ],
 
-  '/inbox': [
-    { id: 'tous', label: () => m.inbox_tab_all(), icon: 'layers' },
-    { id: 'modération', label: () => m.inbox_tab_moderation(), icon: 'shield' },
-    { id: 'recrutement', label: () => m.inbox_tab_recruitment(), icon: 'users' },
-    { id: 'staff', label: () => m.inbox_tab_staff(), icon: 'user-check' },
-    { id: 'système', label: () => m.inbox_tab_system(), icon: 'cpu' },
-  ],
-
   '/analytics': [
     { id: 'overview', label: () => m.an_tab_overview(), icon: 'Grid' },
     { id: 'messages', label: () => m.an_tab_messages(), icon: 'ChatCircleDots' },

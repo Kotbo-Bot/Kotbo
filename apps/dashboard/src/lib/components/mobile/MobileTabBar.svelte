@@ -17,7 +17,7 @@
   }
 
   function badgeFor(href: string): number {
-    return href === '/inbox' ? notificationsStore.unreadCount : 0;
+    return href === '/notifications' ? notificationsStore.unreadCount : 0;
   }
 
   async function navigate(event: MouseEvent, href: string) {

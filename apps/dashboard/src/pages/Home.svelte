@@ -1254,7 +1254,7 @@
                   <span class="text-2xs text-on-surface-variant">{notificationsStore.unreadCount === 1 ? m.home_notifications_one() : m.home_notifications_count({ n: notificationsStore.unreadCount })}</span>
                 </div>
               </div>
-              <a href="/inbox" class="w-6 h-6 rounded-md bg-surface-container flex items-center justify-center hover:bg-surface-container-high transition-colors text-on-surface-variant">
+              <a href="/notifications" class="w-6 h-6 rounded-md bg-surface-container flex items-center justify-center hover:bg-surface-container-high transition-colors text-on-surface-variant">
                 <Papicon icon="arrow-up-right" size={12} />
               </a>
             </div>
