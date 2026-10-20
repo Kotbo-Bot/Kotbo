@@ -489,6 +489,10 @@ function categoryDetail(categoryId: string, days: number) {
       voiceOnly: Math.round(d.peakVoice * 0.6),
       both: Math.round(d.peakVoice * 0.8),
     })),
+    series: {
+      current: serverSeries(days).map((d) => ({ dateKey: d.dateKey, messages: Math.round(d.messages * share), voiceMinutes: Math.round(d.voiceMinutes * share) })),
+      previous: serverSeries(days, days).map((d) => ({ dateKey: d.dateKey, messages: Math.round(d.messages * share), voiceMinutes: Math.round(d.voiceMinutes * share) })),
+    },
     voiceHistoryDays: 90,
     channels: cat.channels,
     topMembers: memberTotals(days).slice(0, 8).map((t) => ({

@@ -407,6 +407,11 @@ export interface CategoryDetail {
     voiceShare: number;
   };
   daily: Array<{ dateKey: string; textOnly: number; voiceOnly: number; both: number }>;
+  /** Messages et vocal par jour, la période et celle d'avant alignées jour pour jour. */
+  series: {
+    current: Array<{ dateKey: string; messages: number; voiceMinutes: number }>;
+    previous: Array<{ dateKey: string; messages: number; voiceMinutes: number }>;
+  };
   voiceHistoryDays: number;
   channels: ChannelTreeChannel[];
   topMembers: Array<{ userId: string; name: string | null; avatarUrl: string | null; messages: number; voiceMinutes: number }>;
