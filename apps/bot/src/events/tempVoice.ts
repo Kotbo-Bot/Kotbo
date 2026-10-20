@@ -1653,9 +1653,11 @@ async function rolesHorsRegle(channel: VoiceChannel, guildId: string, entree: En
 
 /**
  * Pose la règle d'écriture sur chaque rôle soumis : la valeur de la catégorie
- * en « Hérité », rien (le bit effacé) dans les autres modes, où @everyone dit
- * seul si « les membres » écrivent. Seul `SendMessages` change, et seulement là
- * où il diffère : l'entrée et la vue des rôles restent intactes.
+ * en « Hérité » ; dans les autres modes, où @everyone dit seul si « les
+ * membres » écrivent, l'accord d'un rôle est effacé mais son REFUS reste : il
+ * peut être une sanction (« Muted »), que le bot ne lève jamais. Seul
+ * `SendMessages` change, et seulement là où il diffère : l'entrée et la vue des
+ * rôles restent intactes.
  * Renvoie ce qui a changé.
  */
 async function reglerEcritureDesRoles(
@@ -1666,7 +1668,7 @@ async function reglerEcritureDesRoles(
   const changes: ChangementEcriture[] = [];
   for (const roleId of roles) {
     const avant = bitEcriture(channel.permissionOverwrites.cache.get(roleId));
-    const apres = herite ? ecritureDeLaCategorie(channel, roleId) : null;
+    const apres = herite ? ecritureDeLaCategorie(channel, roleId) : avant === false ? false : null;
     if (avant === apres) continue;
     const pose = await channel.permissionOverwrites
       .edit(roleId, { SendMessages: apres }, { type: OverwriteType.Role })
@@ -1800,6 +1802,15 @@ function sansEcritureSiChatReserve<T extends Record<string, unknown>>(
   const copie = { ...patch };
   delete copie.SendMessages;
   return copie;
+}
+
+/**
+ * Le patch d'« Autoriser » pour un membre : l'exception de sa fiche décide de
+ * son écriture, sinon la règle du mode (`sansEcritureSiChatReserve`).
+ */
+function patchAutorisation<T extends Record<string, unknown>>(patch: T, entree: EntreeSalonTemporaire, membreId: string): T {
+  const exception = entree.exceptionsEcriture?.[membreId];
+  return exception === undefined ? sansEcritureSiChatReserve(patch, entree) : { ...patch, SendMessages: exception };
 }
 
 /** Rôles que le générateur du salon autorise d'office (repli : le générateur principal). */
@@ -1965,9 +1976,8 @@ async function poserModeEcriture(
   }
 
   // La règle se lit par rôle : @everyone dit si « les membres » écrivent, et les
-  // autres rôles (hors administrateurs) n'y ajoutent ni accord ni refus — sinon
-  // « Tout le monde » laissait muet le membre d'un rôle que la catégorie refuse.
-  // En « Hérité », chacun reprend la valeur de la catégorie.
+  // autres rôles (hors administrateurs) n'y ajoutent aucun accord ; un refus de
+  // rôle reste (sanction). En « Hérité », chacun reprend la valeur de la catégorie.
   await reglerEcritureDesRoles(
     channel,
     rolesSoumisALaRegle(channel, new Set([...rolesOffice, ...(reserve ? [reserve] : [])])),
@@ -3980,21 +3990,31 @@ function brancherSurSousPanneau<T extends RepliableInteraction>(
   let remplacements: Record<string, Methode>;
 
   if (porteur.flags?.has(MessageFlags.Ephemeral)) {
-    memoriserSousPanneau(cle, interaction, '@original');
+    // Mémorisé seulement une fois le sous-panneau acquitté : un clic qui ouvre
+    // une fenêtre (`showModal`) n'a pas d'« @original », et l'éditer plus tard
+    // depuis une porte publique ouvrait un second sous-panneau.
+    const surLeSousPanneau = (appel: Promise<unknown>) => appel.then((r) => {
+      memoriserSousPanneau(cle, interaction, '@original');
+      return r;
+    });
+    const update: Methode = (charge) => surLeSousPanneau(i.update(charge));
+    const deferUpdate: Methode = () => surLeSousPanneau(i.deferUpdate());
     // `deferReply` ouvrait un message neuf : l'édition qui suit le remplit.
     let differeConverti = false;
     const remplacer = (charge: unknown) => {
       const c = forme(charge, false, true);
-      return acquittee() ? i.editReply(c) : i.update(c);
+      return acquittee() ? i.editReply(c) : update(c);
     };
     remplacements = {
       deferReply: () => {
         differeConverti = true;
-        return i.deferUpdate();
+        return deferUpdate();
       },
       reply: remplacer,
       followUp: remplacer,
       editReply: (charge) => i.editReply(forme(charge, false, differeConverti)),
+      update,
+      deferUpdate,
     };
   } else {
     // Le traitement a réécrit lui-même le message public (carte de décision) :
@@ -5345,7 +5365,7 @@ async function traiterDecisionDemande(ctx: ActionContext, decision: 'ok' | 'non'
       await respond(interaction, m.panel_tempvoice_err_category_denies({ name: demandeur.displayName }, { locale }));
       return;
     }
-    await channel.permissionOverwrites.edit(demandeur.id, sansEcritureSiChatReserve(patch, cache));
+    await channel.permissionOverwrites.edit(demandeur.id, patchAutorisation(patch, cache, demandeur.id));
     // Marquée comme donnée à la main : un départ du vocal ne doit jamais
     // l'effacer, alors que « Autoriser » et la présence écrivent le même bit.
     originesSurcharge.marquer(guildId, channel.id, demandeur.id, 'autorisation');
@@ -5498,7 +5518,7 @@ async function traiterActionMembre(
         await reponseSupplementaire(interaction, m.panel_tempvoice_err_category_denies({ name: target.displayName }, { locale }));
         return;
       }
-      await channel.permissionOverwrites.edit(target.id, sansEcritureSiChatReserve(patch, cache));
+      await channel.permissionOverwrites.edit(target.id, patchAutorisation(patch, cache, target.id));
       // Le marquage est la moitié utile de « Autoriser » : sans lui, quitter le
       // vocal en mode « ceux qui sont en vocal » effacerait ce droit.
       originesSurcharge.marquer(guildId, channel.id, target.id, 'autorisation');
@@ -5689,7 +5709,7 @@ async function reserverPourDesMembres(
       refuses.push(membre.displayName);
       continue;
     }
-    const posee = await poserSurcharge(channel, membre.id, sansEcritureSiChatReserve(patch, cache));
+    const posee = await poserSurcharge(channel, membre.id, patchAutorisation(patch, cache, membre.id));
     if (!posee) {
       refuses.push(membre.displayName);
       continue;
@@ -6410,7 +6430,7 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
           return;
         }
 
-        await channel.permissionOverwrites.edit(target.id, sansEcritureSiChatReserve(patch, cache));
+        await channel.permissionOverwrites.edit(target.id, patchAutorisation(patch, cache, target.id));
 
         // La moitié utile de « Autoriser » : sans ce marquage, quitter le vocal en
         // mode « ceux qui sont en vocal » effacerait ce droit, les deux écrivant

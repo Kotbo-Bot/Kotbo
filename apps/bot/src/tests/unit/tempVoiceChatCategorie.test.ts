@@ -305,7 +305,11 @@ describe('C — l\'ami présent en vocal écrit, l\'absent non', () => {
         categorie: [{ id: ROLE_MEMBRE, type: 0, allow: '0', deny: ENVOI }],
       });
       expect(ecrit(sc, AMI)).toBe(false);
+      // Le bot ne lève jamais un refus posé par le serveur sur un rôle : ce rôle
+      // peut être une sanction (« Muted »). L'ami écrit par une exception de sa fiche.
       await choisirMode(sc, 'everyone');
+      expect(ecrit(sc, AMI)).toBe(false);
+      await cliquer(sc, `tempvoice:m_ecrire:${AMI}`, ['allow']);
       expect(ecrit(sc, AMI)).toBe(true);
     });
 
@@ -875,5 +879,86 @@ describe('D — le panneau public et UN sous-panneau par membre', () => {
     const r2 = await cliquerSur(sc, panneauPublic(sc), 'tempvoice:propriete', { acteur: AMI });
     expect(r2.crees).toHaveLength(1);
     expect(r2.crees[0]).not.toBe(r1.crees[0]);
+  });
+});
+
+// ─── Contradicteur : chemins que la passe ne couvrait pas ───
+
+const ROLE_MUET = '900000000000000206';
+
+describe('R — revue adversariale', () => {
+  for (const mode of ['everyone', 'inVoice', 'ownerOnly']) {
+    test(`R1 ${mode} — un refus d'écrire du serveur sur un rôle de sanction n'est jamais levé par un mode`, async () => {
+      const sc = await monter({
+        format: 'V2',
+        roles: [{ id: ROLE_MUET, name: 'Muted' }],
+        rolesAmi: [ROLE_MUET],
+        categorie: [{ id: ROLE_MUET, type: 0, allow: '0', deny: ENVOI }],
+      });
+      expect(ecrit(sc, IDS.INCONNU)).toBe(true);
+      await choisirMode(sc, mode);
+      expect(bitDe(sc.monde, sc.salonId, ROLE_MUET)).toBe(false);
+      if (mode !== 'inVoice') expect(ecrit(sc, AMI)).toBe(false);
+    });
+  }
+
+  test('R2 — exception par membre : ni la catégorie, ni le balayage, ni le redémarrage ne l’écrasent', async () => {
+    const { sc, salonsCat } = await monterCategories();
+    const w = sc.monde;
+    await cliquer(sc, `tempvoice:m_ecrire:${AMI}`, ['allow']);
+    const avant = w.appels.length;
+    fermerCategorie(w, CAT);
+    await w.calme(sc.enCours);
+    expect(w.peutEcrire(salonsCat[0], IDS.INCONNU)).toBe(false);
+    expect(w.peutEcrire(salonsCat[0], AMI)).toBe(true);
+    await tv.balayerEcritureHeritee(sc.client);
+    await w.calme(sc.enCours);
+    expect(w.peutEcrire(salonsCat[0], AMI)).toBe(true);
+    expect(w.mutations(avant).some((a) => a.route.endsWith(`/permissions/${AMI}`))).toBe(false);
+
+    await cliquer(sc, `tempvoice:m_ecrire:${AMI}`, ['deny']);
+    w.remplacerSurcharges(CAT, [{ id: IDS.GUILD, type: 0, allow: ENVOI, deny: '0' }, { id: ROLE_MEMBRE, type: 0, allow: ENVOI, deny: '0' }, { id: IDS.ROLE_BOT, type: 0, allow: ENVOI, deny: '0' }]);
+    await w.calme(sc.enCours);
+    expect(w.peutEcrire(salonsCat[0], IDS.INCONNU)).toBe(true);
+    expect(w.peutEcrire(salonsCat[0], AMI)).toBe(false);
+    const sc2 = await redemarrer(sc);
+    try {
+      expect(w.peutEcrire(salonsCat[0], AMI)).toBe(false);
+      await sc2.tv.balayerEcritureHeritee(sc2.client);
+      await w.calme(sc2.enCours);
+      expect(w.peutEcrire(salonsCat[0], AMI)).toBe(false);
+    } finally {
+      sc2.tv.arreterBalayageEcriture();
+    }
+  });
+
+  for (const format of FORMATS) {
+    test(`R3 ${format} — « Autoriser » un membre en exception ne lui rend pas l'écriture refusée`, async () => {
+      const sc = await monter({ format });
+      await choisirMode(sc, 'everyone');
+      await cliquer(sc, `tempvoice:m_ecrire:${AMI}`, ['deny']);
+      expect(ecrit(sc, AMI)).toBe(false);
+      await cliquer(sc, `tempvoice:m_trust:${AMI}`);
+      expect(ecrit(sc, AMI)).toBe(false);
+      await cliquer(sc, 'tempvoice:trust_select', [AMI]);
+      expect(ecrit(sc, AMI)).toBe(false);
+      for (const mode of ['nobody', 'inVoice', 'everyone']) {
+        await choisirMode(sc, mode);
+        expect({ mode, ecrit: ecrit(sc, AMI) }).toEqual({ mode, ecrit: false });
+      }
+    });
+  }
+
+  test('R4 — fenêtre ouverte depuis le sous-panneau puis fermée : la porte publique réécrit le même sous-panneau', async () => {
+    const sc = await monter({ format: 'V2' });
+    const w = sc.monde;
+    const sous = (await cliquerSur(sc, panneauPublic(sc), 'tempvoice:salon')).crees[0];
+    const modale = await cliquerSur(sc, w.messages.get(sous)!, 'tempvoice:rename');
+    expect(modale.erreurs).toEqual([]);
+    const r = await cliquerSur(sc, panneauPublic(sc), 'tempvoice:membres');
+    expect(r.erreurs).toEqual([]);
+    expect(r.crees).toEqual([]);
+    expect(textesVisibles(w.messages.get(sous)).join(' ')).toContain(m.panel_tempvoice_who_title({}, { locale: 'fr' }));
+    expect(visibles(sc)).toEqual({ [IDS.PROPRIO]: 1 });
   });
 });
