@@ -6,7 +6,7 @@
  * Un redémarrage ne perd rien, et un membre qui supprime son image peut en
  * poster une autre.
  */
-import { type Message, PermissionFlagsBits } from 'discord.js';
+import { type Collection, type Message, PermissionFlagsBits } from 'discord.js';
 import { BucketZoner } from '../analytics/zonedBuckets.js';
 import { resolveGuildTimezone } from '../../utils/timezone.js';
 
@@ -37,7 +37,7 @@ async function notify(message: Message, text: string): Promise<void> {
 async function alreadyPostedToday(message: Message, zoner: BucketZoner, today: string): Promise<boolean> {
   let before: string | undefined = message.id;
   for (let page = 0; page < MAX_PAGES; page += 1) {
-    const batch = await message.channel.messages.fetch({ limit: 100, before }).catch(() => null);
+    const batch: Collection<string, Message> | null = await message.channel.messages.fetch({ limit: 100, before }).catch(() => null);
     if (!batch || batch.size === 0) return false;
     for (const previous of batch.values()) {
       if (zoner.fromDate(previous.createdAt).dateKey !== today) return false;
