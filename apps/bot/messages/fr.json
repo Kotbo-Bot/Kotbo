@@ -3349,6 +3349,7 @@
   "anr_metric_sanctions": "Sanctions",
   "anr_metric_channel_rate": "Messages par heure dans le salon",
   "anr_metric_unanswered": "Prises de parole sans réponse",
+  "anr_metric_pulse_score": "Score Pulse",
   "anr_period_hour": "sur la dernière heure",
   "anr_period_day": "hier",
   "anr_period_week": "sur les 7 derniers jours",

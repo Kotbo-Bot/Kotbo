@@ -3349,6 +3349,7 @@
   "anr_metric_sanctions": "Sanctions",
   "anr_metric_channel_rate": "Messages per hour in the channel",
   "anr_metric_unanswered": "Unanswered turns",
+  "anr_metric_pulse_score": "Pulse score",
   "anr_period_hour": "over the last hour",
   "anr_period_day": "yesterday",
   "anr_period_week": "over the last 7 days",

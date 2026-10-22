@@ -9,7 +9,9 @@
  *   - pas du jour : la veille contre la moyenne des 7 jours d'avant ;
  *   - pas de la semaine : les 7 derniers jours contre les 7 d'avant ;
  *   - rythme d'un salon : messages des 30 dernières minutes ramenés à l'heure,
- *     lus dans la fenêtre temps réel.
+ *     lus dans la fenêtre temps réel ;
+ *   - score Pulse : le snapshot de la veille contre la moyenne des 7 d'avant,
+ *     attendu tant que le cron Pulse ne l'a pas écrit.
  * Chaque période n'est évaluée qu'une fois (`lastPeriodKey`), et une règle
  * déclenchée se tait pendant `cooldownHours`.
  */
@@ -23,7 +25,7 @@ import { isGuildActivated } from '../../utils/activation.js';
 import { isAnalyticsCollectionEnabled } from './analyticsConsent.js';
 import { liveSnapshot } from './analyticsLiveService.js';
 
-export const ALERT_METRICS = ['messages', 'voiceMinutes', 'activeMembers', 'joins', 'leaves', 'netJoins', 'sanctions', 'channelRate', 'unansweredRate'] as const;
+export const ALERT_METRICS = ['messages', 'voiceMinutes', 'activeMembers', 'joins', 'leaves', 'netJoins', 'sanctions', 'channelRate', 'unansweredRate', 'pulseScore'] as const;
 export const ALERT_CONDITIONS = ['drop_pct', 'rise_pct', 'above', 'below'] as const;
 export const ALERT_WINDOWS = ['hour', 'day', 'week'] as const;
 export type AlertMetric = (typeof ALERT_METRICS)[number];
@@ -124,9 +126,33 @@ async function unansweredRate(guildId: string, start: string, end: string): Prom
   return Math.round((r.u / (r.a + r.u)) * 1000) / 10;
 }
 
-async function readMetric(client: Client, rule: { guildId: string; metric: string; window: string; channelId: string | null }, now: number): Promise<Reading | null> {
+/**
+ * Score Pulse quotidien. `undefined` tant que le snapshot de la veille n'est
+ * pas écrit (le cron Pulse passe vers 1 h UTC) : la période reste à évaluer.
+ */
+async function pulseScoreReading(guildId: string, window: AlertWindow, now: number): Promise<Reading | null | undefined> {
+  const rows = await prismaRead.pulseSnapshot.findMany({
+    where: { guildId, dateKey: { gte: keyOf(now - 15 * DAY_MS), lte: keyOf(now - DAY_MS) } },
+    select: { dateKey: true, score: true },
+  });
+  const byKey = new Map(rows.map((r) => [r.dateKey, r.score]));
+  if (!byKey.has(keyOf(now - DAY_MS))) return undefined;
+  const mean = (from: number, to: number): number | null => {
+    const values = Array.from({ length: to - from + 1 }, (_, i) => byKey.get(keyOf(now - (from + i) * DAY_MS))).filter((v): v is number => v !== undefined);
+    return values.length > 0 ? values.reduce((s, v) => s + v, 0) / values.length : null;
+  };
+  if (window === 'week') {
+    const value = mean(1, 7);
+    return value === null ? null : { value: Math.round(value * 10) / 10, baseline: mean(8, 14) };
+  }
+  return { value: byKey.get(keyOf(now - DAY_MS))!, baseline: mean(2, 8) };
+}
+
+async function readMetric(client: Client, rule: { guildId: string; metric: string; window: string; channelId: string | null }, now: number): Promise<Reading | null | undefined> {
   const metric = rule.metric as AlertMetric;
   const window = rule.window as AlertWindow;
+
+  if (metric === 'pulseScore') return pulseScoreReading(rule.guildId, window, now);
 
   if (metric === 'channelRate') {
     if (!rule.channelId) return null;
@@ -206,6 +232,7 @@ function metricLabel(metric: AlertMetric, locale: BotLocale): string {
     sanctions: m.anr_metric_sanctions({}, o),
     channelRate: m.anr_metric_channel_rate({}, o),
     unansweredRate: m.anr_metric_unanswered({}, o),
+    pulseScore: m.anr_metric_pulse_score({}, o),
   }[metric];
 }
 
@@ -218,7 +245,7 @@ export function describeAlert(
 ): string {
   const o = { locale };
   const metric = rule.metric as AlertMetric;
-  const unit = metric === 'unansweredRate' ? ' %' : '';
+  const unit = metric === 'unansweredRate' ? ' %' : metric === 'pulseScore' ? '/100' : '';
   const value = `${fmt(reading.value, locale)}${unit}`;
   const period = rule.window === 'hour' ? m.anr_period_hour({}, o) : rule.window === 'week' ? m.anr_period_week({}, o) : m.anr_period_day({}, o);
   const head = m.anr_alert_value({ metric: metricLabel(metric, locale), period, value }, o);
@@ -269,6 +296,7 @@ export async function runAnalyticsAlerts(client: Client, now = Date.now()): Prom
     try {
       if (!isGuildActivated(rule.guildId) || !(await isAnalyticsCollectionEnabled(rule.guildId))) continue;
       const reading = await readMetric(client, rule, now);
+      if (reading === undefined) continue;
       await prisma.analyticsAlertRule.update({ where: { id: rule.id }, data: { lastPeriodKey: periodKey } });
       if (!reading) continue;
       if (!evaluateCondition(rule.condition as AlertCondition, rule.threshold, reading.value, reading.baseline)) continue;
