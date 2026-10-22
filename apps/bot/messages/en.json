@@ -985,6 +985,8 @@
   "c1_pulse_alert_growth_churn": "{left} departures for {joined} arrivals - retention is weak.",
   "c1_pulse_alert_engagement_low": "Low engagement - few members take part actively.",
   "c1_pulse_alert_tickets_backlog": "{count} open tickets waiting.",
+  "c1_pulse_alert_toxicity_high": "Tense climate: {pct}% of messages flagged as toxic.",
+  "c1_pulse_alert_responses_low": "{pct}% of conversation turns get no reply.",
   "c1_pulse_alert_channels_unhealthy": "{count} unhealthy channels detected.",
   "c1_pulse_alert_excellent": "Excellent momentum - the server is thriving!",
   "c4_seasons_name": "seasons",
