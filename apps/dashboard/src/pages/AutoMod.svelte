@@ -55,6 +55,9 @@
     spamLimit: 5,
     spamIntervalSeconds: 5,
     spamAction: 'TIMEOUT',
+    spamGroupSlowmodeEnabled: false,
+    spamGroupSlowmodeSeconds: 10,
+    spamGroupSlowmodeMinutes: 5,
 
     linksEnabled: false,
     linksAction: 'DELETE_AND_WARN',
@@ -118,6 +121,7 @@
   let savedConfig = $state(JSON.parse(JSON.stringify({
     discordAutoModEnabled: true,
     spamEnabled: false, spamLimit: 5, spamIntervalSeconds: 5, spamAction: 'TIMEOUT',
+    spamGroupSlowmodeEnabled: false, spamGroupSlowmodeSeconds: 10, spamGroupSlowmodeMinutes: 5,
     linksEnabled: false, linksAction: 'DELETE_AND_WARN', linksWhitelist: [],
     capsEnabled: false, capsThresholdPercent: 80, capsMinLength: 10,
     emojisEnabled: false, emojisLimit: 10,
@@ -418,6 +422,46 @@
                     <option value="TIMEOUT">{m.am_action_timeout_10()}</option>
                   </select>
                 </div>
+
+                <div class="col-span-2 flex items-center justify-between pt-2 border-t border-outline-variant/10">
+                  <div>
+                    <span class="text-xs font-semibold text-on-surface-variant ml-2">{m.am_spam_group_title()}</span>
+                    <p class="text-xs text-on-surface-variant ml-2 mt-1">{m.am_spam_group_desc()}</p>
+                  </div>
+                  <ToggleSwitch
+                    checked={config.spamGroupSlowmodeEnabled}
+                    onToggle={(v: boolean) => config.spamGroupSlowmodeEnabled = v}
+                    disabled={!canManageSettings}
+                  />
+                </div>
+
+                {#if config.spamGroupSlowmodeEnabled}
+                  <div class="space-y-1.5">
+                    <label for="spamGroupSlowmodeSeconds" class="text-xs font-semibold text-on-surface-variant ml-2">{m.am_spam_group_slowmode()}</label>
+                    <input
+                      id="spamGroupSlowmodeSeconds"
+                      type="number"
+                      min="1"
+                      max="21600"
+                      bind:value={config.spamGroupSlowmodeSeconds}
+                      class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none"
+                      disabled={!canManageSettings}
+                    />
+                  </div>
+
+                  <div class="space-y-1.5">
+                    <label for="spamGroupSlowmodeMinutes" class="text-xs font-semibold text-on-surface-variant ml-2">{m.am_spam_group_duration()}</label>
+                    <input
+                      id="spamGroupSlowmodeMinutes"
+                      type="number"
+                      min="1"
+                      max="1440"
+                      bind:value={config.spamGroupSlowmodeMinutes}
+                      class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none"
+                      disabled={!canManageSettings}
+                    />
+                  </div>
+                {/if}
               </div>
             {/if}
           </section>
