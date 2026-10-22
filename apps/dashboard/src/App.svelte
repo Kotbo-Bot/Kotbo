@@ -896,7 +896,7 @@
               load={() => import("./pages/security/Overview.svelte")}
             />
             <LazyRoute
-              path="/regulation"
+              path="/regulation/*"
               load={() => import("./pages/Regulation.svelte")}
             />
             <LazyRoute

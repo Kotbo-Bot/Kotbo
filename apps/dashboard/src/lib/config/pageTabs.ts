@@ -177,6 +177,12 @@ export const PAGE_TABS: Record<string, PageTabConfig[]> = {
   ],
 
   // ── Communauté ────────────────────────────────────────────────────────────
+  '/regulation': [
+    { id: 'articles', label: () => m.regulation_tab_articles(), icon: 'ListBullets' },
+    { id: 'verification', label: () => m.regulation_tab_verification(), icon: 'ShieldCheck' },
+    { id: 'acces', label: () => m.regulation_tab_access(), icon: 'Key' },
+  ],
+
   '/giveaways': [
     { id: 'concours', label: () => m.giv_tab_giveaways(), icon: 'Sparkles' },
     { id: 'modeles', label: () => m.giv_tab_templates(), icon: 'Copy' },
