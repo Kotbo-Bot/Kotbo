@@ -259,7 +259,7 @@
         <div
           bind:this={emojiPanelEl}
           use:floatingPanel={{ anchor: emojiButtonEl, placement: 'bottom', align: 'start' }}
-          class="z-100 flex w-[22rem] max-w-[calc(100vw-1rem)] flex-col overflow-hidden rounded-xl border border-outline-variant bg-surface-container-lowest shadow-lg animate-in fade-in duration-150"
+          class="flex w-[22rem] max-w-[calc(100vw-1rem)] flex-col overflow-hidden rounded-xl border border-outline-variant bg-surface-container-lowest shadow-lg animate-in fade-in duration-150"
         >
           <EmojiPanel onpick={insertEmoji} onclose={() => { showEmojiPicker = false; emojiButtonEl?.focus(); }} />
         </div>

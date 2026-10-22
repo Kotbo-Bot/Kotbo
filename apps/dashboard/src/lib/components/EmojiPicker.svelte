@@ -79,7 +79,7 @@
   <div
     bind:this={panelEl}
     use:floatingPanel={{ anchor: buttonEl, placement: 'bottom', align: 'end' }}
-    class="z-100 flex w-[22rem] max-w-[calc(100vw-1rem)] flex-col overflow-hidden rounded-xl border border-outline-variant bg-surface-container-lowest shadow-lg animate-in fade-in duration-150"
+    class="flex w-[22rem] max-w-[calc(100vw-1rem)] flex-col overflow-hidden rounded-xl border border-outline-variant bg-surface-container-lowest shadow-lg animate-in fade-in duration-150"
   >
     <EmojiPanel {value} {format} onpick={pick} onclear={value ? () => pick('') : undefined} onclose={close} />
   </div>
