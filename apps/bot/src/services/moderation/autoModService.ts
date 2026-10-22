@@ -11,6 +11,7 @@ import { mirrorModlogToStaffServer } from '../staff/staffServerService.js';
 import { getUppercasePercentage } from './capsDetection.js';
 import { classifyLink, findKeywordRanges, findLiteralRanges, INVITE_KEYWORDS, LINK_KEYWORDS, type CensorKind, type CensorRange } from './censorship.js';
 import { queueCensoredRepost, repostCensored } from './censorService.js';
+import { handleGroupSpam } from './groupSpamSlowmode.js';
 
 // Cache for AutoMod configs: key is guildId, value is the config object
 const autoModConfigsCache = new Map<string, AutoModConfig>();
@@ -716,6 +717,12 @@ export async function handleAutoMod(message: Message, client: Client): Promise<b
       if (recentTimes.length > config.spamLimit) {
         // Déclencher sanction de Spam
         await deleteMessage(message);
+        if (
+          config.spamGroupSlowmodeEnabled
+          && await handleGroupSpam(message, config.spamGroupSlowmodeSeconds, config.spamGroupSlowmodeMinutes)
+        ) {
+          return true;
+        }
         await applySanction(
           message,
           config.spamAction,
