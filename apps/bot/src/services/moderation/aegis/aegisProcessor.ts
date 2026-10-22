@@ -16,7 +16,7 @@ import { recordAegisObservation } from './aegisStats.js';
 import { chunkText, textFingerprint } from './aegisText.js';
 import { ConflictTracker, CooldownGate, HarassmentTracker, decideToxicity, isDistress, isHeated } from './aegisSignals.js';
 import { handleToxic } from './aegisActions.js';
-import { raiseConflict, raiseDistress, raiseHarassment, updateTicketMood } from './aegisModules.js';
+import { checkLongHarassment, raiseConflict, raiseDistress, raiseHarassment, updateTicketMood } from './aegisModules.js';
 
 let discordClient: Client | null = null;
 
@@ -94,6 +94,7 @@ async function runModules(job: AegisJob, config: AegisRuntimeConfig, toxicity: n
       threshold: config.harassmentThreshold,
     });
     if (outcome.triggered) await raiseHarassment(client, guild, job, config, outcome.count);
+    else await checkLongHarassment(guild, job, config);
   }
 
   if (config.conflictEnabled && isHeated(toxicity, emotion, config.reviewThreshold)) {

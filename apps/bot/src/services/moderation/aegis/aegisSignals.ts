@@ -115,6 +115,17 @@ export class HarassmentTracker {
   }
 }
 
+/**
+ * Harcèlement sur la durée : messages toxiques visant un même membre, tous
+ * auteurs confondus. Les auteurs sont rendus du plus insistant au moins.
+ */
+export function tallyTargeting(authorIds: string[], threshold: number): { triggered: boolean; authors: { id: string; count: number }[] } {
+  const counts = new Map<string, number>();
+  for (const id of authorIds) counts.set(id, (counts.get(id) ?? 0) + 1);
+  const authors = [...counts].map(([id, count]) => ({ id, count })).sort((a, b) => b.count - a.count);
+  return { triggered: authorIds.length >= threshold, authors };
+}
+
 /** Une alerte par membre et par période, pour ne pas assaillir le staff. */
 export class CooldownGate {
   private last = new Map<string, number>();

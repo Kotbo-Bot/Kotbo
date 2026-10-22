@@ -136,6 +136,37 @@ export function buildHarassmentEmbed(detection: CardDetection, count: number, ex
     .setTimestamp();
 }
 
+export function buildLongHarassmentEmbed(
+  detection: CardDetection,
+  count: number,
+  authors: { id: string; count: number }[],
+  since: Date,
+  excerpts: string[],
+  proofs: string[],
+): EmbedBuilder {
+  const group = authors.length > 1;
+  return new EmbedBuilder()
+    .setColor(COLORS.danger)
+    .setTitle(group ? '🚨 Harcèlement en groupe probable' : '🚨 Harcèlement répété')
+    .setDescription(
+      `<@${detection.targetUserId}> a reçu **${count}** messages toxiques`
+      + (group ? ` de **${authors.length}** membres` : '')
+      + ` depuis le <t:${Math.floor(since.getTime() / 1000)}:D>.`,
+    )
+    .addFields(
+      { name: group ? 'Auteurs' : 'Auteur', value: truncate(authors.map((a) => `<@${a.id}> ×${a.count}`).join('\n'), 1000), inline: true },
+      { name: 'Action', value: ACTION_LABELS[detection.action] ?? detection.action, inline: true },
+      ...(excerpts.length
+        ? [{ name: 'Derniers messages', value: truncate(excerpts.map((e) => `• ${e.replace(/`/g, 'ˋ')}`).join('\n'), 1000), inline: false }]
+        : []),
+      ...(proofs.length
+        ? [{ name: 'Preuves', value: truncate(proofs.map((url, i) => `[${i + 1}](${url})`).join(' · '), 1000), inline: false }]
+        : []),
+    )
+    .setFooter({ text: FOOTER })
+    .setTimestamp();
+}
+
 export function buildConflictEmbed(detection: CardDetection, authors: string[], count: number, slowmodeSec: number | null, durationMin: number): EmbedBuilder {
   return new EmbedBuilder()
     .setColor(COLORS.warning)

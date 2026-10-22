@@ -12,7 +12,8 @@ import { registerTimeoutSanction } from '../sanctionService.js';
 import type { EmotionResult } from './aegisClient.js';
 import type { AegisRuntimeConfig } from './aegisConfig.js';
 import type { AegisJob } from './aegisQueue.js';
-import { buildButtons, buildConflictEmbed, buildDistressEmbed, buildHarassmentEmbed, postAlert } from './aegisAlerts.js';
+import { buildButtons, buildConflictEmbed, buildDistressEmbed, buildHarassmentEmbed, buildLongHarassmentEmbed, postAlert } from './aegisAlerts.js';
+import { tallyTargeting } from './aegisSignals.js';
 import { liftSlowmode } from './aegisActions.js';
 import { captureEvidence, evidenceLinks, reasonWithExcerpt } from './aegisEvidence.js';
 
@@ -182,6 +183,81 @@ export async function raiseHarassment(
     embeds: [buildHarassmentEmbed(detection, count, recent.map((r) => r.excerpt).filter((e): e is string => Boolean(e)))],
     components: buildButtons(detection),
   });
+}
+
+/**
+ * Harcèlement sur la durée ou en groupe : messages toxiques visant le même
+ * membre, tous auteurs confondus, sur `harassmentLongDays` jours. Lu en base
+ * (les détections restent un an), donc insensible aux redémarrages. Le compte
+ * repart de zéro après chaque alerte de harcèlement sur ce membre. Jamais de
+ * sanction d'office : des faits étalés et plusieurs auteurs, le staff tranche.
+ */
+export async function checkLongHarassment(guild: Guild, job: AegisJob, config: AegisRuntimeConfig): Promise<void> {
+  const target = job.targetUserId;
+  if (!target) return;
+  const windowStart = new Date(Date.now() - config.harassmentLongDays * 86_400_000);
+  const lastAlert = await prisma.aegisDetection.findFirst({
+    where: { guildId: guild.id, kind: 'HARASSMENT', targetUserId: target, createdAt: { gte: windowStart } },
+    orderBy: { createdAt: 'desc' },
+    select: { createdAt: true },
+  });
+  const since = lastAlert?.createdAt ?? windowStart;
+  const rows = await prisma.aegisDetection.findMany({
+    where: {
+      guildId: guild.id,
+      kind: 'TOXIC',
+      targetUserId: target,
+      authorId: { not: target },
+      status: { not: 'DISMISSED' },
+      createdAt: { gt: since },
+    },
+    orderBy: { createdAt: 'desc' },
+    select: { authorId: true, excerpt: true, evidenceUrl: true, createdAt: true },
+    take: 500,
+  });
+  const { triggered, authors } = tallyTargeting(rows.map((r) => r.authorId), config.harassmentLongThreshold);
+  if (!triggered) return;
+
+  const evidenceUrl = await captureEvidence(guild, job.channelId, job.messageId, 20);
+  const detection = await prisma.aegisDetection.create({
+    data: {
+      guildId: guild.id,
+      channelId: job.channelId,
+      messageId: job.messageId,
+      authorId: authors[0].id,
+      targetUserId: target,
+      kind: 'HARASSMENT',
+      source: 'MESSAGE',
+      excerpt: job.excerpt,
+      action: 'ALERT',
+      status: 'PENDING',
+      evidenceUrl,
+    },
+  });
+
+  kotboEventBus.publish('automod:triggered', {
+    guildId: guild.id,
+    userId: authors[0].id,
+    channelId: job.channelId,
+    rule: authors.length > 1 ? 'Harcèlement en groupe (AegisAI)' : 'Harcèlement répété (AegisAI)',
+    matchedContent: job.excerpt.slice(0, 1000),
+    action: 'LOG',
+    timestamp: Date.now(),
+  });
+
+  const recent = rows.slice(0, 5);
+  await postAlert(guild, config.reviewChannelId, detection.id, {
+    embeds: [buildLongHarassmentEmbed(
+      detection,
+      rows.length,
+      authors,
+      rows[rows.length - 1].createdAt,
+      recent.map((r) => r.excerpt).filter((e): e is string => Boolean(e)),
+      evidenceLinks(...recent.map((r) => r.evidenceUrl)),
+    )],
+    components: buildButtons(detection),
+  });
+  logger.info('AegisAI', `Harcèlement sur la durée signalé sur ${guild.id} : ${rows.length} messages vers ${target} (${authors.length} auteur(s)).`);
 }
 
 // ── Détresse ────────────────────────────────────────────────────────────────
