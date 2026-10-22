@@ -24,6 +24,7 @@
   import { confirmDialog } from '../../lib/stores/confirmDialog.svelte';
   import SecurityPage, { type SecurityTab } from '../../lib/components/security/SecurityPage.svelte';
   import SectionCard from '../../lib/components/SectionCard.svelte';
+  import CaptchaFields from '../../lib/components/security/CaptchaFields.svelte';
   import ToggleSwitch from '../../lib/components/ToggleSwitch.svelte';
   import RefreshButton from '../../lib/components/RefreshButton.svelte';
   import Button from '../../lib/components/ui/Button.svelte';
@@ -96,7 +97,6 @@
   const dirty = $derived(JSON.stringify(config) !== JSON.stringify(original));
 
   const channels = $derived((dashboardStore.state.discordChannels ?? []) as { id: string; name: string }[]);
-  const voiceChannels = $derived((dashboardStore.state.discordVoiceChannels ?? []) as { id: string; name: string }[]);
   const roles = $derived((dashboardStore.state.discordRoles ?? []) as { id: string; name: string }[]);
 
   // « Captcha d'entree » et non « Verification » : la verification d'identite
@@ -652,62 +652,7 @@
         description="Filtre les comptes automatisés à l'entrée."
         icon="UserCheck"
       >
-        <div class="space-y-3">
-          {@render switchRow('captchaEnabled', 'Captcha', 'Les arrivants doivent résoudre un code avant d\'accéder au serveur.')}
-
-          <label class="block">
-            <span class="text-xs font-medium text-on-surface-variant">Mode</span>
-            <select
-              bind:value={config.captchaMode}
-              class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface"
-            >
-              <option value="IMAGE">Image - le code est affiché</option>
-              <option value="VOICE">Vocal - le code est énoncé en salon vocal</option>
-            </select>
-            <p class="text-2xs text-on-surface-variant mt-1">
-              Le vocal est bien plus difficile à automatiser, mais la diffusion est sérielle : au-delà de la file configurée, les arrivants suivants basculent sur l'image.
-            </p>
-          </label>
-
-          <div class="grid sm:grid-cols-2 gap-3">
-            {@render channelSelect('captchaChannelId', 'Salon de vérification')}
-            {@render roleSelect('captchaUnverifiedRoleId', 'Rôle « non vérifié »', 'Appliqué à l\'arrivée, retiré après réussite.')}
-            {@render roleSelect('captchaVerifiedRoleId', 'Rôle « vérifié »', 'Accordé après réussite.')}
-            {@render channelSelect('captchaLogChannelId', 'Salon de logs du captcha')}
-          </div>
-
-          {#if config.captchaMode === 'VOICE'}
-            <div class="grid sm:grid-cols-3 gap-3 rounded-xl border border-outline-variant/30 p-3">
-              {@render channelSelect('captchaVoiceChannelId', 'Salon vocal', '', voiceChannels)}
-              <label class="block">
-                <span class="text-xs font-medium text-on-surface-variant">Langue d'énonciation</span>
-                <select
-                  bind:value={config.captchaVoiceLocale}
-                  class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface"
-                >
-                  <option value="FR">Français</option>
-                  <option value="EN">Anglais</option>
-                </select>
-              </label>
-              {@render numberField('captchaVoiceQueueLimit', 'Limite de file', 1, 200, 'Au-delà, bascule sur l\'image.')}
-            </div>
-          {/if}
-
-          <div class="grid sm:grid-cols-3 gap-3">
-            {@render numberField('captchaTimeoutMinutes', 'Délai (minutes)', 1, 120)}
-            {@render numberField('captchaMaxAttempts', 'Tentatives', 1, 10)}
-            <label class="block">
-              <span class="text-xs font-medium text-on-surface-variant">Échec</span>
-              <select
-                bind:value={config.captchaFailAction}
-                class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface"
-              >
-                <option value="KICK">Expulser</option>
-                <option value="BAN">Bannir</option>
-              </select>
-            </label>
-          </div>
-        </div>
+        <CaptchaFields bind:config />
       </SectionCard>
     {/if}
 
