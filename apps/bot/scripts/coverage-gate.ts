@@ -14,11 +14,15 @@ const run = spawnSync('bun', ['test', '--isolate', '--timeout', '30000', '--cove
   cwd: process.cwd(),
   encoding: 'utf8',
   stdio: 'pipe',
+  // En CI, Bun liste chaque test réussi : la sortie dépasse le plafond de 1 Mio
+  // par défaut, au-delà duquel spawnSync tue les tests (ENOBUFS).
+  maxBuffer: 256 * 1024 * 1024,
 });
 
 const output = `${run.stdout ?? ''}${run.stderr ?? ''}`;
 process.stdout.write(output);
 
+if (run.error) console.error(`Exécution des tests interrompue : ${run.error.message}`);
 if (run.status !== 0) {
   process.exit(run.status ?? 1);
 }
