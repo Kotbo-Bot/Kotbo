@@ -2161,6 +2161,9 @@ export async function handleGeneralistModulesRoutes(
           spamLimit?: number;
           spamIntervalSeconds?: number;
           spamAction?: string;
+          spamGroupSlowmodeEnabled?: boolean;
+          spamGroupSlowmodeSeconds?: number;
+          spamGroupSlowmodeMinutes?: number;
           linksEnabled?: boolean;
           linksAction?: string;
           linksWhitelist?: string[];
@@ -2253,12 +2256,19 @@ export async function handleGeneralistModulesRoutes(
           }
         }
 
+        const clampInt = (v: unknown, min: number, max: number) =>
+          typeof v === 'number' && Number.isFinite(v) ? Math.min(max, Math.max(min, Math.round(v))) : undefined;
+
         const configData = {
           discordAutoModEnabled: true,
           spamEnabled: body.spamEnabled,
           spamLimit: body.spamLimit,
           spamIntervalSeconds: body.spamIntervalSeconds,
           spamAction: body.spamAction,
+          spamGroupSlowmodeEnabled: typeof body.spamGroupSlowmodeEnabled === 'boolean' ? body.spamGroupSlowmodeEnabled : undefined,
+          // Plafond Discord du mode lent : 6 h.
+          spamGroupSlowmodeSeconds: clampInt(body.spamGroupSlowmodeSeconds, 1, 21_600),
+          spamGroupSlowmodeMinutes: clampInt(body.spamGroupSlowmodeMinutes, 1, 1_440),
           linksEnabled: body.linksEnabled,
           linksAction: body.linksAction,
           linksWhitelist: body.linksWhitelist,
