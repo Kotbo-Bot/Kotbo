@@ -57,12 +57,12 @@
     void loadRecipientOptions(authStore.selectedGuildId).then((o) => (channelNames = new Map(o.channels.map((c) => [c.id, c.name]))));
   });
 
-  const METRICS: AlertMetric[] = ['messages', 'activeMembers', 'voiceMinutes', 'joins', 'leaves', 'netJoins', 'sanctions', 'unansweredRate', 'channelRate'];
+  const METRICS: AlertMetric[] = ['messages', 'activeMembers', 'voiceMinutes', 'joins', 'leaves', 'netJoins', 'sanctions', 'unansweredRate', 'pulseScore', 'channelRate'];
   const metricLabel = (x: AlertMetric) =>
     ({
       messages: m.anx_metric_messages(), activeMembers: m.anx_alert_m_active(), voiceMinutes: m.anx_alert_m_voice(), joins: m.anx_live_joins(),
       leaves: m.anx_growth_left(), netJoins: m.anx_metric_net_joins(), sanctions: m.anx_fact_sanctions(), unansweredRate: m.anx_resp_unanswered(),
-      channelRate: m.anx_alert_m_channel_rate(),
+      channelRate: m.anx_alert_m_channel_rate(), pulseScore: m.pulse_alert_metric(),
     })[x];
   const conditionLabel = (c: AlertCondition) =>
     ({ drop_pct: m.anx_alert_c_drop(), rise_pct: m.anx_alert_c_rise(), above: m.anx_alert_c_above(), below: m.anx_alert_c_below() })[c];

@@ -733,7 +733,7 @@ export const fetchModerationTrends = (query: AnalyticsQuery, guildId = authStore
 export const fetchStaffInsights = (query: AnalyticsQuery, guildId = authStore.selectedGuildId) => insightsRequest<StaffInsights>('staff', query, guildId);
 export const fetchRisingWords = (query: AnalyticsQuery, guildId = authStore.selectedGuildId) => insightsRequest<RisingWords>('words', query, guildId);
 
-export type AlertMetric = 'messages' | 'voiceMinutes' | 'activeMembers' | 'joins' | 'leaves' | 'netJoins' | 'sanctions' | 'channelRate' | 'unansweredRate';
+export type AlertMetric = 'messages' | 'voiceMinutes' | 'activeMembers' | 'joins' | 'leaves' | 'netJoins' | 'sanctions' | 'channelRate' | 'unansweredRate' | 'pulseScore';
 export type AlertCondition = 'drop_pct' | 'rise_pct' | 'above' | 'below';
 export type AlertWindow = 'hour' | 'day' | 'week';
 
