@@ -84,6 +84,9 @@ const INT_FIELDS: Record<string, [number, number, string]> = {
   conflictDurationMin: [1, 240, 'Durée du mode lent'],
   harassmentWindowMin: [5, 1440, 'Fenêtre de harcèlement'],
   harassmentThreshold: [2, 20, 'Seuil de harcèlement'],
+  // Les détections sont purgées au bout d'un an : la fenêtre reste en deçà.
+  harassmentLongDays: [1, 180, 'Fenêtre du harcèlement sur la durée'],
+  harassmentLongThreshold: [3, 100, 'Seuil du harcèlement sur la durée'],
   distressThreshold: [50, 100, 'Seuil de détresse'],
   distressCooldownHours: [1, 168, 'Délai entre deux alertes de détresse'],
 };

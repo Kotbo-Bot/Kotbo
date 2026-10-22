@@ -49,6 +49,8 @@ function defaultConfig(guildId: string) {
     harassmentWindowMin: 30,
     harassmentThreshold: 3,
     harassmentAction: 'ALERT',
+    harassmentLongDays: 30,
+    harassmentLongThreshold: 5,
     distressEnabled: false,
     distressThreshold: 95,
     distressChannelId: null,
