@@ -48,6 +48,10 @@ model AegisConfig {
   harassmentWindowMin Int     @default(30)
   harassmentThreshold Int     @default(3)
   harassmentAction    String  @default("ALERT") // ALERT | TIMEOUT
+  // Sur la durée, tous auteurs confondus (un groupe sur une personne) :
+  // messages toxiques visant le même membre sur N jours → alerte au staff.
+  harassmentLongDays      Int @default(30)
+  harassmentLongThreshold Int @default(5)
 
   // Détresse : tristesse ou peur très forte, sans toxicité. Alerte discrète
   // au staff, jamais de sanction.
@@ -108,6 +112,7 @@ model AegisDetection {
 
   @@index([guildId, createdAt])
   @@index([guildId, status, createdAt])
+  @@index([guildId, targetUserId, createdAt])
   @@index([guildId, authorId, createdAt])
   @@index([restoreAt])
   @@map("aegis_detections")
