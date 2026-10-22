@@ -39,6 +39,10 @@ model PulseSnapshot {
   // `message` est le rendu français figé, conservé comme repli.
   alerts Json? // [{ type, code, severity, params?, message }]
 
+  // Version du modèle de calcul. Un snapshot plus ancien que le modèle en
+  // vigueur est recalculé par le cron : l'historique reste comparable.
+  modelVersion Int @default(1)
+
   guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now())
@@ -47,5 +51,7 @@ model PulseSnapshot {
   // `@@unique([guildId, dateKey])` crée déjà l'index B-tree correspondant :
   // un `@@index` sur les mêmes colonnes ne servait qu'à ralentir les écritures.
   @@unique([guildId, dateKey])
+  // Comparaison aux serveurs de même taille sur un même jour.
+  @@index([dateKey, totalMembers])
   @@map("pulse_snapshots")
 }
