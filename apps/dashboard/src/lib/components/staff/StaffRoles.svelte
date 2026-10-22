@@ -432,7 +432,7 @@
   title={roleModal === 'edit' ? m.sm_title_edit_role() : m.sm_btn_new_role()}
   subtitle={m.sx_role_modal_sub()}
 >
-  <div class="space-y-4 p-5">
+  <div class="space-y-4">
     <div class="field">
       <span class="field-label">{m.sm_field_linked_discord_role()}</span>
       <SearchableSelect bind:value={rDiscord} options={discordRoleOptions} placeholder={m.sm_none_option()} className="w-full" />
@@ -488,7 +488,7 @@
 
 <!-- Hierarchie -->
 <Modal open={hModal} onClose={() => (hModal = false)} title={hEditing ? m.sm_modal_edit_hierarchy_title() : m.sm_btn_new_hierarchy()} subtitle={m.sx_hierarchy_modal_sub()}>
-  <div class="space-y-4 p-5">
+  <div class="space-y-4">
     <div class="flex items-center gap-3 rounded-lg bg-surface-container px-3 py-3">
       <HierarchyIcon icon={hIcon} color={hColor} size={40} />
       <div class="min-w-0">
@@ -561,7 +561,7 @@
 
 <!-- Import -->
 <Modal open={!!importTarget} onClose={() => (importTarget = null)} title={importTarget ? m.sm_modal_import_title({ name: importTarget.name }) : ''} subtitle={m.sx_import_desc()}>
-  <div class="space-y-4 p-5">
+  <div class="space-y-4">
     {#if importResult}
       <div class="grid grid-cols-3 gap-px overflow-hidden rounded-lg border border-outline-variant bg-outline-variant text-center">
         <div class="bg-surface-container-lowest p-3"><p class="text-xl font-semibold tabular-nums text-success">{importResult.imported}</p><p class="text-xs text-on-surface-variant">{m.sx_import_added()}</p></div>

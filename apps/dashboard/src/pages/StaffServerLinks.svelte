@@ -450,7 +450,7 @@
 
     <!-- Create Link Modal -->
       <Modal bind:open={showCreateModal} title={m.staff_server_modal_create_title()}>
-        <div class="flex flex-col gap-5 p-1">
+        <div class="flex flex-col gap-5">
           <div>
             <label for="new-staff-guild-id" class="block text-sm font-medium text-on-surface mb-1.5">{m.staff_server_field_staff_guild_id()}</label>
             <input
@@ -517,7 +517,7 @@
 
     <!-- Mapping Modal -->
       <Modal bind:open={showMappingModal} title={m.staff_server_modal_mapping_title()}>
-        <div class="flex flex-col gap-5 p-1">
+        <div class="flex flex-col gap-5">
           <div>
             <label for="new-main-role-id" class="block text-sm font-medium text-on-surface mb-1.5">{m.staff_server_field_main_role()}</label>
             <select
@@ -559,7 +559,7 @@
 
     <!-- Delete Confirm Modal -->
       <Modal bind:open={showDeleteModal} title={m.staff_server_delete_modal_title()}>
-        <div class="flex flex-col gap-4 p-1">
+        <div class="flex flex-col gap-4">
           <p class="text-sm text-on-surface-variant">
             {m.staff_server_delete_modal_desc()}
           </p>

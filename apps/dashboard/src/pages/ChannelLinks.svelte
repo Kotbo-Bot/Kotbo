@@ -459,7 +459,7 @@
 
     <!-- Create Group Modal -->
     <Modal bind:open={showCreateModal} title={m.channel_links_modal_create_title()}>
-      <div class="flex flex-col gap-5 p-4">
+      <div class="flex flex-col gap-5">
         <div>
           <label for="new-group-name" class="block text-sm font-medium text-on-surface mb-1.5">{m.channel_links_group_name_label()}</label>
           <input
@@ -640,7 +640,7 @@
     <!-- Config Modal -->
     <Modal bind:open={showConfigModal} title={m.channel_links_modal_config_title()}>
       {#if configGroup}
-        <div class="flex flex-col gap-5 p-4">
+        <div class="flex flex-col gap-5">
           <div>
             <label for="config-group-name" class="block text-sm font-medium text-on-surface mb-1.5">{m.channel_links_group_name_label()}</label>
             <input
@@ -860,7 +860,7 @@
 
     <!-- Delete Confirm Modal -->
     <Modal bind:open={showDeleteModal} title={m.channel_links_delete_modal_title()}>
-      <div class="flex flex-col gap-4 p-4">
+      <div class="flex flex-col gap-4">
         <p class="text-sm text-on-surface-variant">
           {m.channel_links_delete_modal_desc()}
         </p>

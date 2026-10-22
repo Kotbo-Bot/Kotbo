@@ -65,7 +65,7 @@
   });
 </script>
 
-<Modal bind:open title={m.sta_modal_title()} size="lg">
+<Modal flush bind:open title={m.sta_modal_title()} size="lg">
   <div class="flex flex-col gap-5 p-6">
     <div class="text-xs text-on-surface-variant leading-relaxed">
       {m.sta_intro()}

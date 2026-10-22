@@ -205,7 +205,7 @@
   }
 </script>
 
-<Modal bind:open title={m.sev_modal_title()} size="full">
+<Modal flush bind:open title={m.sev_modal_title()} size="full">
   {#if step === 'search'}
     <form class="flex flex-col gap-6 p-6 sm:p-8" onsubmit={(event) => { event.preventDefault(); loadMessages(); }}>
       <div class="max-w-2xl">

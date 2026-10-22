@@ -158,7 +158,7 @@
 
 <!-- Ajouter un membre -->
 <Modal aboveCase open={staff.dialogs.addMember} onClose={() => (staff.dialogs.addMember = false)} title={m.sm_btn_add_member()} subtitle={m.sx_add_member_sub()}>
-  <div class="space-y-4 p-5">
+  <div class="space-y-4">
     <Field label={m.sm_field_discord_user()} required>
       {#snippet children()}
         <DiscordMemberLookup
@@ -206,7 +206,7 @@
 
 <!-- Avertir -->
 <Modal aboveCase open={!!staff.dialogs.warn} onClose={() => (staff.dialogs.warn = null)} title={m.sm_btn_new_warning()} subtitle={m.sm_warn_desc()}>
-  <div class="space-y-4 p-5">
+  <div class="space-y-4">
     {#if warnPreset}
       {@render presetMember(warnPreset, () => (staff.dialogs.warn = { userId: '' }))}
     {:else}
@@ -251,7 +251,7 @@
 
 <!-- Liste noire -->
 <Modal aboveCase open={!!staff.dialogs.blacklist} onClose={() => (staff.dialogs.blacklist = null)} title={m.sm_btn_blacklist()} subtitle={m.sm_blacklist_desc()}>
-  <div class="space-y-4 p-5">
+  <div class="space-y-4">
     {#if blPreset}
       {@render presetMember(blPreset, () => (staff.dialogs.blacklist = { userId: '' }))}
     {:else}
@@ -292,7 +292,7 @@
   subtitle={m.sx_grades_sub()}
 >
   {#if gradesMember}
-    <div class="space-y-5 p-5">
+    <div class="space-y-5">
       <div>
         <p class="field-label">{m.sm_current_grades()}</p>
         {#if gradesMember.hierarchyGrades?.length}
@@ -351,7 +351,7 @@
 
 <!-- Reglages : sanctions automatiques -->
 <Modal aboveCase open={staff.dialogs.settings} onClose={() => (staff.dialogs.settings = false)} title={m.sm_config_modal_title()} subtitle={m.sm_config_modal_desc()} size="lg">
-  <div class="space-y-6 p-5">
+  <div class="space-y-6">
     <section class="space-y-3">
       <div>
         <h4 class="text-sm font-semibold text-on-surface">{m.sm_execution_mode()}</h4>

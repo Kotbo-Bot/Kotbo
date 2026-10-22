@@ -122,7 +122,7 @@
   }
 </script>
 
-<Modal
+<Modal flush
   open={isOpen}
   onClose={closeModal}
   title={type === 'partenariat' || type === 'beta' ? m.d1_fb_title_partnership() : m.d1_fb_title_feedback()}

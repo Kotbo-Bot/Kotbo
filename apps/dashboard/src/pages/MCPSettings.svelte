@@ -733,7 +733,7 @@
 
 <!-- ── AI setup helper ───────────────────────────────────────────────────── -->
 <Modal bind:open={helpOpen} onClose={() => { helpOpen = false; }} title={m.mcp_help_modal_title()} size="xl">
-  <div class="space-y-5 p-5">
+  <div class="space-y-5">
     <div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
       {#each Object.entries(aiGuides) as [id, guide]}
         <button
@@ -856,7 +856,7 @@
 </Modal>
 
 <Modal bind:open={diagOpen} onClose={() => { diagOpen = false; }} title={m.mcp_logs_modal_title()} size="xl">
-  <div class="space-y-3 p-5">
+  <div class="space-y-3">
     <div class="flex items-center justify-between gap-3">
       <p class="text-sm text-gray-400">{m.mcp_logs_subtitle()}</p>
       <button

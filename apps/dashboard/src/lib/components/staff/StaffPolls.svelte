@@ -163,7 +163,7 @@
 </div>
 
 <Modal open={creating} onClose={() => (creating = false)} title={m.sm_btn_new_poll()} subtitle={m.sm_polls_desc()}>
-  <div class="space-y-4 p-5">
+  <div class="space-y-4">
     <Field label={m.sm_field_poll_title()} required>
       {#snippet children(id)}
         <input {id} class="input" type="text" placeholder={m.sm_placeholder_poll_title()} bind:value={title} />

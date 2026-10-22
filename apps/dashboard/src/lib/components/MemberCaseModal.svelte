@@ -960,6 +960,7 @@
 {/snippet}
 
 <Modal
+  flush
   open={open && canViewMembers}
   onClose={onClose}
   size="screen"
@@ -1848,7 +1849,7 @@
   title={selectedSanctionForReport ? formatTypeLabel(selectedSanctionForReport.type) : m.mcm_sanction_report()}
   subtitle={selectedSanctionForReport ? m.mcm_applied_on({ date: formatDateTime(selectedSanctionForReport.createdAt), moderator: selectedSanctionForReport.moderatorTag }) : ''}
 >
-  <div class="space-y-5 p-5">
+  <div class="space-y-5">
     {#if selectedReport}
       {#if isEditingReport}
         <div class="grid gap-4 sm:grid-cols-2">

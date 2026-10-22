@@ -126,7 +126,7 @@
 </script>
 
 <Modal bind:open onClose={closeModal} title={m.sc_import_title()} subtitle={m.sc_import_subtitle()} size="xl">
-  <div class="p-6 space-y-6">
+  <div class="space-y-6">
     <div class="space-y-2">
       <p class="field-label">{m.sc_import_step_file()}</p>
       <div class="flex flex-wrap items-center gap-3">

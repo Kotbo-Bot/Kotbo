@@ -41,7 +41,7 @@
   } = $props();
 </script>
 
-<Modal {open} {onClose} size="screen" showCloseButton={false}>
+<Modal flush {open} {onClose} size="screen" showCloseButton={false}>
   <div class="sheet" role="presentation" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
     <header class="sheet-header">
       <span class="sheet-icon"><Papicon {icon} size={24} /></span>

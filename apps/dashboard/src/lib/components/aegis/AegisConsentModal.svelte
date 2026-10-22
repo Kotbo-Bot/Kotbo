@@ -21,7 +21,7 @@
   } = $props();
 </script>
 
-<Modal bind:open title={m.aegis_consent_title()} size="md" closeOnBackdropClick={!busy} closeOnEscape={!busy}>
+<Modal flush bind:open title={m.aegis_consent_title()} size="md" closeOnBackdropClick={!busy} closeOnEscape={!busy}>
   <div class="consent">
     <p>{m.aegis_consent_intro()}</p>
     <ul>

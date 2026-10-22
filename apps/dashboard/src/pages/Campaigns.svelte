@@ -400,7 +400,7 @@
   size="xl"
   closeOnBackdropClick={!saving}
 >
-  <div class="p-5 space-y-4">
+  <div class="space-y-4">
     <!-- ── Général ────────────────────────────────────────────────────── -->
     <div class="campaign-section">
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">

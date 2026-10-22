@@ -31,5 +31,5 @@
   {readonly}
   oninput={oninput}
   onchange={onchange}
-  class={className}
+  class="input {className}"
 ></textarea>

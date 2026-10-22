@@ -324,7 +324,7 @@
   title={banTarget ? `Bannir ${banTarget.botName}` : 'Bannir'}
   subtitle={banTarget?.botClientId}
 >
-  <div class="p-5 space-y-5">
+  <div class="space-y-5">
     {#if banTarget && !banTarget.isSelfHosted}
       <Callout variant="warning" title="Cette instance se déclare officielle">
         Vérifie qu’il ne s’agit pas d’un bot Kotbo que tu héberges : le mode « Arrêt du bot » le couperait. Ce
