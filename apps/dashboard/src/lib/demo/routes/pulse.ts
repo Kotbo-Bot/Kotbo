@@ -17,16 +17,46 @@ const SCORE_HISTORY = [62, 65, 70, 68, 72, 75, 71, 74, 78, 80, 77, 82, 79, 83];
 
 function historySnapshot(daysAgo: number, idx: number) {
   const score = SCORE_HISTORY[idx % SCORE_HISTORY.length];
+  const cap = (v: number) => Math.min(100, Math.round(v));
   return {
     dateKey: dateKey(daysAgo),
     score,
-    activityScore: Math.round(score * 0.95),
-    moderationScore: Math.round(score * 1.1),
-    growthScore: Math.round(score * 0.88),
-    engagementScore: Math.round(score * 1.05),
-    healthScore: Math.round(score * 0.97),
+    activityScore: cap(score * 0.95),
+    moderationScore: cap(score * 1.1),
+    growthScore: cap(score * 0.88),
+    engagementScore: cap(score * 1.05),
+    healthScore: cap(score * 0.97),
+    totalMessages: Math.round(score * 100 + (idx % 3) * 420),
+    totalVoiceMinutes: Math.round(score * 160),
+    activeMembers: Math.round(score * 1.6),
+    totalMembers: 1_200 + idx * 4,
+    membersJoined: 3 + (idx % 4),
+    membersLeft: 1 + (idx % 2),
+    sanctionsCount: idx % 3,
+    ticketsResolved: 2 + (idx % 3),
+    ticketsOpen: 1 + (idx % 2),
+    channelsHealthy: 12,
+    channelsUnhealthy: 1,
+    alerts: idx === 2 ? [{ type: 'activity', code: 'activity_low', severity: 'danger', message: '' }] : [],
   };
 }
+
+/** Facteurs de la note, dans la forme de `computePulseBreakdown` côté bot. */
+const FACTORS = [
+  { key: 'messages', dimension: 'activity', score: 84, weight: 0.65, impact: 5.5, value: 7.2, reference: 5.9, referenceKind: 'server' },
+  { key: 'voice', dimension: 'activity', score: 71, weight: 0.35, impact: 1.8, value: 11.5, reference: 10.1, referenceKind: 'server' },
+  { key: 'participation', dimension: 'engagement', score: 78, weight: 0.35, impact: 2.5, value: 0.107, reference: 0.11, referenceKind: 'server' },
+  { key: 'stickiness', dimension: 'engagement', score: 88, weight: 0.2, impact: 1.9, value: 0.36, reference: 0.2, referenceKind: 'typical' },
+  { key: 'responses', dimension: 'engagement', score: 46, weight: 0.2, impact: -0.2, value: 0.52, reference: null, referenceKind: 'typical' },
+  { key: 'depth', dimension: 'engagement', score: 90, weight: 0.15, impact: 1.5, value: 66.7, reference: 8, referenceKind: 'typical' },
+  { key: 'netGrowth', dimension: 'growth', score: 92, weight: 0.7, impact: 5.9, value: 0.021, reference: 0, referenceKind: 'typical' },
+  { key: 'churn', dimension: 'growth', score: 18, weight: 0.3, impact: -1.9, value: 0.0096, reference: 0.01, referenceKind: 'typical' },
+  { key: 'sanctions', dimension: 'moderation', score: 93, weight: 0.6, impact: 3.9, value: 0.039, reference: 0.08, referenceKind: 'typical' },
+  { key: 'toxicity', dimension: 'moderation', score: 31, weight: 0.4, impact: -1.1, value: 0.088, reference: 0.04, referenceKind: 'typical' },
+  { key: 'channels', dimension: 'health', score: 92, weight: 0.5, impact: 3.2, value: 0.92, reference: null, referenceKind: 'typical' },
+  { key: 'ticketResolution', dimension: 'health', score: 84, weight: 0.25, impact: 1.3, value: 0.84, reference: null, referenceKind: 'typical' },
+  { key: 'ticketBacklog', dimension: 'health', score: 90, weight: 0.25, impact: 1.5, value: 4, reference: 37, referenceKind: 'typical' },
+];
 
 const CURRENT_SCORE = 83;
 
@@ -40,16 +70,15 @@ const PULSE_PAYLOAD = {
     growthScore: 75,
     engagementScore: 87,
     healthScore: 83,
-    trend: 'up',
     trendDelta: 4,
+    trend: 'UP',
     alerts: [
-      {
-        type: 'slow_growth',
-        severity: 'info',
-        message: 'La croissance ralentit légèrement ce mois-ci.',
-      },
+      { type: 'engagement', code: 'responses_low', severity: 'warning', message: '', params: { pct: 48 } },
+      { type: 'moderation', code: 'toxicity_high', severity: 'warning', message: '', params: { pct: 9 } },
     ],
     partial: false,
+    confidence: 82,
+    factors: FACTORS,
   },
   today: {
     dateKey: dateKey(0),
@@ -59,10 +88,12 @@ const PULSE_PAYLOAD = {
     growthScore: 77,
     engagementScore: 89,
     healthScore: 85,
-    trend: 'up',
-    trendDelta: 2,
+    trend: 'STABLE',
+    trendDelta: 0,
     alerts: [],
     partial: true,
+    confidence: 55,
+    factors: FACTORS,
     metrics: {
       totalMessages: 412,
       totalVoiceMinutes: 680,
@@ -92,6 +123,8 @@ const PULSE_PAYLOAD = {
     channelsUnhealthy: 1,
   },
   bumpStatus: null,
+  benchmark: { percentile: 74, peers: 46, minMembers: 623, maxMembers: 2_494 },
+  modelVersion: 2,
 };
 
 // ── Tendances membres / messages / voix ───────────────────────────────────────
@@ -120,7 +153,7 @@ function predictionPayload(days: number) {
     growthForecast: {
       predicted7d: 28,
       predicted30d: 95,
-      confidence: 0.78,
+      confidence: 78,
       dailyNet: 3.2,
     },
     anomalies: [

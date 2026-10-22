@@ -32,6 +32,7 @@
     compare = false,
     label,
     interactive = true,
+    deltaUnit = 'pct',
   }: {
     metrics: MetricTab[];
     active: string;
@@ -41,6 +42,8 @@
     label: string;
     /** false : simples chiffres clés, sans courbe à piloter. */
     interactive?: boolean;
+    /** Unité de l'écart : % (défaut) ou points, pour des notes sur 100. */
+    deltaUnit?: 'pct' | 'pts';
   } = $props();
 
   function tone(metric: MetricTab): 'up' | 'down' | 'flat' {
@@ -82,7 +85,7 @@
       {#if tone(metric) !== 'flat'}
         <Papicon icon={tone(metric) === 'up' ? 'trending-up' : 'trending-down'} size={12} />
       {/if}
-      {fmtDelta(metric.delta ?? null, 'pct')}
+      {fmtDelta(metric.delta ?? null, deltaUnit)}
       <span class="text-on-surface-variant font-normal">{m.anx_delta_vs_previous()}</span>
     </span>
   {/if}
