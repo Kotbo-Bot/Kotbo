@@ -38,6 +38,8 @@ export interface AegisConfig {
   harassmentWindowMin: number;
   harassmentThreshold: number;
   harassmentAction: 'ALERT' | 'TIMEOUT';
+  harassmentLongDays: number;
+  harassmentLongThreshold: number;
   distressEnabled: boolean;
   distressThreshold: number;
   distressChannelId: string | null;

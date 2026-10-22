@@ -428,6 +428,12 @@
                 </FormSelect>
               {/snippet}
             </Field>
+            <Field label={m.aegis_harassment_long_threshold()} hint={m.aegis_harassment_long_hint()}>
+              {#snippet children(id)}<input {id} class="input" type="number" min="3" max="100" bind:value={config!.harassmentLongThreshold} disabled={!canEdit} />{/snippet}
+            </Field>
+            <Field label={m.aegis_harassment_long_days()}>
+              {#snippet children(id)}<input {id} class="input" type="number" min="1" max="180" bind:value={config!.harassmentLongDays} disabled={!canEdit} />{/snippet}
+            </Field>
           </div>
         </SectionCard>
 
