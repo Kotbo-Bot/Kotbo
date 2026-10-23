@@ -1,21 +1,17 @@
 <script lang="ts">
-  import { explainDisabled } from '../lib/actions/explainDisabled';
   import { m } from '../lib/i18n';
   import { removeWithUndo } from '../lib/undoRemoval';
   import { onMount } from 'svelte';
   import { router } from 'tinro';
   import { resolveTabFromUrl, gotoTab } from '../lib/tabRouting';
   import { pageTabItems } from '../lib/config/pageTabs';
-  import { Tabs } from '../lib/components/ui';
+  import { Tabs, Button, Callout, Modal, EmptyState, ToggleSwitch, FilterPills } from '../lib/components/ui';
+  import { toast } from '../lib/stores/toast.svelte';
   import { dashboardStore } from '../lib/stores/dashboard.svelte';
-  import { createAsyncActionState } from '../lib/asyncAction.svelte';
   import ModulePage from '../lib/components/ModulePage.svelte';
-  import Papicon from '../lib/components/Papicon.svelte';
-  import InlineFeedback from '../lib/components/InlineFeedback.svelte';
-  import Skeleton from '../lib/components/Skeleton.svelte';
+  import FormInput from '../lib/components/FormInput.svelte';
   import SearchableSelect from '../lib/components/SearchableSelect.svelte';
-  import GithubFollowsPanel from '../lib/components/social/GithubFollowsPanel.svelte';
-  import HuggingFaceFollowsPanel from '../lib/components/social/HuggingFaceFollowsPanel.svelte';
+  import { channelDisplayName } from '../lib/channelUtils';
   import { buildMentionOptions, keyToMention, withMentionKey } from '../lib/socialMentions';
   import {
     fetchSocialFollows,
@@ -23,47 +19,132 @@
     deleteYoutubeFollow,
     addTwitchFollow,
     deleteTwitchFollow,
+    saveGithubFollow,
+    deleteGithubFollow,
+    saveHuggingFaceFollow,
+    deleteHuggingFaceFollow,
+    type HuggingFaceKind,
   } from '../lib/api';
 
-  const actionState = createAsyncActionState();
-  let loading = $state(false);
+  type Network = 'youtube' | 'twitch' | 'github' | 'huggingface';
   const socialTabs = ['youtube', 'twitch', 'github', 'huggingface'] as const;
-  let activeTab = $state<(typeof socialTabs)[number]>('youtube');
+  let activeTab = $state<Network>('youtube');
 
   $effect(() => {
     const _path = $router.path;
-    activeTab = resolveTabFromUrl('/social-networks', socialTabs, 'youtube') as typeof activeTab;
+    activeTab = resolveTabFromUrl('/social-networks', socialTabs, 'youtube') as Network;
   });
 
-  let availableChannels = $state<Array<{ id: string; name: string }>>([]);
-  const availableRoles = $derived((dashboardStore.state.discordRoles || []) as Array<{ id: string; name: string }>);
-  const mentionOptions = $derived(buildMentionOptions(availableRoles));
-  const channelOptions = $derived(availableChannels.map(ch => ({ id: ch.id, name: '#' + ch.name })));
+  let loading = $state(true);
+  let saving = $state(false);
+  let follows = $state<Record<Network, any[]>>({ youtube: [], twitch: [], github: [], huggingface: [] });
+  /** Suivi en cours d'edition dans la fenetre ; sans `id`, c'est un ajout. */
+  let draft = $state<any>(null);
 
-  let ytForm = $state({
-    query: '',
-    discordChannelId: '',
-    mention: '',
-    liveMessage: '',
-    videoMessage: '',
-    shortMessage: '',
-  });
-
-  let twitchForm = $state({
-    query: '',
-    discordChannelId: '',
-    mention: '',
-    liveMessage: '',
-  });
-
-  let youtubeFollows = $state<any[]>([]);
-  let twitchFollows = $state<any[]>([]);
-  let githubFollows = $state<any[]>([]);
-  let huggingFaceFollows = $state<any[]>([]);
-
+  const guildState = $derived(dashboardStore.state as any);
+  const channelOptions = $derived(
+    ((guildState.discordChannels || []) as any[]).map((ch) => ({ id: ch.id, name: channelDisplayName(ch) })),
+  );
+  const mentionOptions = $derived(buildMentionOptions(guildState.discordRoles || []));
   const canManage = $derived(
-    !!(dashboardStore.state.featureAccess as any)?.social_networks?.canConfigure ||
-    !!dashboardStore.state.access?.canManageSettings
+    !!guildState.featureAccess?.social_networks?.canConfigure || !!guildState.access?.canManageSettings,
+  );
+
+  const GH_TYPES = [
+    { key: 'notifyCommits', message: 'commitMessage', label: () => m.social_gh_type_commits() },
+    { key: 'notifyReleases', message: 'releaseMessage', label: () => m.social_gh_type_releases() },
+    { key: 'notifyPullRequests', message: 'pullRequestMessage', label: () => m.social_gh_type_pulls() },
+    { key: 'notifyIssues', message: 'issueMessage', label: () => m.social_gh_type_issues() },
+  ] as const;
+
+  const HF_KINDS: Array<{ value: HuggingFaceKind; label: string }> = $derived([
+    { value: 'MODEL', label: m.social_hf_kind_model() },
+    { value: 'DATASET', label: m.social_hf_kind_dataset() },
+    { value: 'SPACE', label: m.social_hf_kind_space() },
+    { value: 'AUTHOR', label: m.social_hf_kind_author() },
+  ]);
+
+  const base = (d: any) => ({ discordChannelId: d.discordChannelId || null, mention: keyToMention(d.mentionKey) });
+
+  /**
+   * Ce qui change d'un reseau a l'autre. `key` est le champ qui identifie le
+   * suivi : saisi a l'ajout, fige ensuite (l'API s'en sert pour retrouver le suivi).
+   */
+  const NETWORKS = {
+    youtube: {
+      key: 'query',
+      name: (f: any) => f.channelName,
+      href: (f: any) => `https://www.youtube.com/channel/${f.channelId}`,
+      blank: () => ({ query: '', liveMessage: '', videoMessage: '', shortMessage: '' }),
+      save: (d: any) => addYoutubeFollow({
+        query: d.query?.trim(), channelId: d.channelId, ...base(d),
+        liveMessage: d.liveMessage || null, videoMessage: d.videoMessage || null, shortMessage: d.shortMessage || null,
+      }),
+      remove: deleteYoutubeFollow,
+      text: () => ({
+        title: m.social_yt_form_title(), list: m.social_yt_list_title({ n: follows.youtube.length }), empty: m.social_yt_empty_title(),
+        keyLabel: m.social_yt_query_label(), keyPh: m.social_yt_query_ph(), keyRequired: m.social_yt_err_query_req(),
+        add: m.social_yt_add_btn(), deleted: m.social_yt_toast_deleted(), hint: '',
+      }),
+    },
+    twitch: {
+      key: 'streamerName',
+      name: (f: any) => f.streamerName,
+      href: (f: any) => `https://www.twitch.tv/${f.streamerName}`,
+      blank: () => ({ streamerName: '', liveMessage: '' }),
+      save: (d: any) => addTwitchFollow({ streamerName: d.streamerName.trim(), ...base(d), liveMessage: d.liveMessage || null }),
+      remove: deleteTwitchFollow,
+      text: () => ({
+        title: m.social_twitch_form_title(), list: m.social_twitch_list_title({ n: follows.twitch.length }), empty: m.social_twitch_empty_title(),
+        keyLabel: m.social_twitch_query_label(), keyPh: m.social_twitch_query_ph(), keyRequired: m.social_twitch_err_query_req(),
+        add: m.social_twitch_add_btn(), deleted: m.social_twitch_toast_deleted(), hint: '',
+      }),
+    },
+    github: {
+      key: 'repo',
+      name: (f: any) => f.repo,
+      href: (f: any) => `https://github.com/${f.repo}`,
+      blank: () => ({
+        repo: '', branch: '', notifyCommits: true, notifyReleases: true, notifyPullRequests: false, notifyIssues: false,
+        commitMessage: '', releaseMessage: '', pullRequestMessage: '', issueMessage: '',
+      }),
+      save: (d: any) => saveGithubFollow({
+        repo: d.repo.trim(), branch: d.branch?.trim() || null, ...base(d),
+        ...Object.fromEntries(GH_TYPES.flatMap((t) => [[t.key, !!d[t.key]], [t.message, d[t.message] || null]])),
+      }),
+      remove: deleteGithubFollow,
+      text: () => ({
+        title: m.social_gh_form_title(), list: m.social_gh_list_title({ n: follows.github.length }), empty: m.social_gh_empty_title(),
+        keyLabel: m.social_gh_repo_label(), keyPh: m.social_gh_repo_ph(), keyRequired: m.social_gh_err_repo_req(),
+        add: m.social_gh_add_btn(), deleted: m.social_gh_toast_deleted(), hint: m.social_gh_baseline_hint(),
+      }),
+    },
+    huggingface: {
+      key: 'target',
+      name: (f: any) => f.target,
+      href: (f: any) => `https://huggingface.co/${f.kind === 'DATASET' ? 'datasets/' : f.kind === 'SPACE' ? 'spaces/' : ''}${f.target}`,
+      blank: () => ({ kind: 'MODEL', target: '', message: '' }),
+      save: (d: any) => saveHuggingFaceFollow({ kind: d.kind, target: d.target.trim(), ...base(d), message: d.message || null }),
+      remove: deleteHuggingFaceFollow,
+      text: () => ({
+        title: m.social_hf_form_title(), list: m.social_hf_list_title({ n: follows.huggingface.length }), empty: m.social_hf_empty_title(),
+        keyLabel: m.social_hf_target_label(),
+        keyPh: draft?.kind === 'AUTHOR' ? m.social_hf_target_ph_author() : m.social_hf_target_ph_repo(),
+        keyRequired: m.social_hf_err_target_req(),
+        add: m.social_hf_add_btn(), deleted: m.social_hf_toast_deleted(), hint: m.social_gh_baseline_hint(),
+      }),
+    },
+  } as const;
+
+  const net = $derived(NETWORKS[activeTab]);
+  const text = $derived(net.text());
+  const list = $derived(follows[activeTab]);
+
+  // YouTube et Twitch ont chacun leur module d'annonces, en plus de celui de la page.
+  const announcerOff = $derived(
+    activeTab === 'youtube' || activeTab === 'twitch'
+      ? (guildState.modules as any[] | undefined)?.some((mod) => mod.id === activeTab && mod.status !== 'active')
+      : false,
   );
 
   async function loadData() {
@@ -72,12 +153,13 @@
       await dashboardStore.refresh();
       const res = await fetchSocialFollows();
       if (res) {
-        youtubeFollows = withMentionKey(res.youtube);
-        twitchFollows = withMentionKey(res.twitch);
-        githubFollows = withMentionKey(res.github);
-        huggingFaceFollows = withMentionKey(res.huggingface);
+        follows = {
+          youtube: withMentionKey(res.youtube),
+          twitch: withMentionKey(res.twitch),
+          github: withMentionKey(res.github),
+          huggingface: withMentionKey(res.huggingface),
+        };
       }
-      availableChannels = (dashboardStore.state.discordChannels || []) as Array<{ id: string; name: string }>;
     } catch (e) {
       console.error('Failed to load social follows:', e);
     } finally {
@@ -85,129 +167,78 @@
     }
   }
 
-  onMount(() => {
-    loadData();
-  });
+  onMount(loadData);
 
-  async function handleAddYoutube() {
-    if (!ytForm.query.trim()) {
-      actionState.setError(m.social_yt_err_query_req());
+  function openCreate() {
+    draft = { ...net.blank(), discordChannelId: '', mentionKey: '' };
+  }
+
+  function openEdit(follow: any) {
+    draft = { ...follow };
+  }
+
+  async function saveDraft() {
+    if (!draft.id && !String(draft[net.key] ?? '').trim()) {
+      toast.error(text.keyRequired);
       return;
     }
-
-    await actionState.run(async () => {
-      const payload = {
-        query: ytForm.query.trim(),
-        discordChannelId: ytForm.discordChannelId || null,
-        mention: keyToMention(ytForm.mention),
-        liveMessage: ytForm.liveMessage || null,
-        videoMessage: ytForm.videoMessage || null,
-        shortMessage: ytForm.shortMessage || null,
-      };
-
-      const res = await addYoutubeFollow(payload);
-      if (!res) throw new Error("Ça n'a pas marché. Réessaie.");
-
-      ytForm = {
-        query: '',
-        discordChannelId: '',
-        mention: '',
-        liveMessage: '',
-        videoMessage: '',
-        shortMessage: '',
-      };
-
-      const updated = await fetchSocialFollows();
-      if (updated) youtubeFollows = withMentionKey(updated.youtube);
-      return true;
-    }, { successMessage: m.social_yt_toast_added() });
+    const network = activeTab;
+    saving = true;
+    try {
+      if (!(await NETWORKS[network].save(draft))) throw new Error(m.common_error());
+      draft = null;
+      const res = await fetchSocialFollows();
+      if (res) follows[network] = withMentionKey(res[network]);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : m.common_error());
+    } finally {
+      saving = false;
+    }
   }
 
-  async function handleUpdateYoutube(follow: any) {
-    await actionState.run(async () => {
-      const payload = {
-        channelId: follow.channelId,
-        discordChannelId: follow.discordChannelId || null,
-        mention: keyToMention(follow.mentionKey),
-        liveMessage: follow.liveMessage || null,
-        videoMessage: follow.videoMessage || null,
-        shortMessage: follow.shortMessage || null,
-      };
-      const res = await addYoutubeFollow(payload);
-      if (!res) throw new Error("Ça n'a pas marché. Réessaie.");
-      return true;
-    }, { successMessage: m.social_yt_toast_updated() });
-  }
-
-  async function handleDeleteYoutube(id: string) {
-    await removeWithUndo({
-      get: () => youtubeFollows,
-      set: (next) => (youtubeFollows = next),
-      match: (f) => f.id === id,
-      message: m.social_yt_toast_deleted(),
-      commit: () => deleteYoutubeFollow(id, undefined, { silent: true }),
+  function remove(follow: any) {
+    const network = activeTab;
+    return removeWithUndo({
+      get: () => follows[network],
+      set: (next) => (follows[network] = next),
+      match: (f) => f.id === follow.id,
+      message: NETWORKS[network].text().deleted,
+      commit: () => NETWORKS[network].remove(follow.id, undefined, { silent: true }),
     });
   }
 
-  async function handleAddTwitch() {
-    if (!twitchForm.query.trim()) {
-      actionState.setError(m.social_twitch_err_query_req());
-      return;
+  /** Ligne de details sous le nom : salon, mention, puis ce qui est propre au reseau. */
+  function details(follow: any): string[] {
+    const parts = [
+      channelOptions.find((c) => c.id === follow.discordChannelId)?.name ?? m.social_default_channel_short_ph(),
+      mentionOptions.find((o) => o.id === follow.mentionKey)?.name,
+    ];
+    if (activeTab === 'github') {
+      parts.push(follow.branch || m.social_gh_default_branch());
+      parts.push(GH_TYPES.filter((t) => follow[t.key]).map((t) => t.label()).join(', '));
     }
-
-    await actionState.run(async () => {
-      const payload = {
-        streamerName: twitchForm.query.trim(),
-        discordChannelId: twitchForm.discordChannelId || null,
-        mention: keyToMention(twitchForm.mention),
-        liveMessage: twitchForm.liveMessage || null,
-      };
-
-      const res = await addTwitchFollow(payload);
-      if (!res) throw new Error("Ça n'a pas marché. Réessaie.");
-
-      twitchForm = {
-        query: '',
-        discordChannelId: '',
-        mention: '',
-        liveMessage: '',
-      };
-
-      const updated = await fetchSocialFollows();
-      if (updated) twitchFollows = withMentionKey(updated.twitch);
-      return true;
-    }, { successMessage: m.social_twitch_toast_added() });
-  }
-
-  async function handleUpdateTwitch(follow: any) {
-    await actionState.run(async () => {
-      const payload = {
-        streamerName: follow.streamerName,
-        discordChannelId: follow.discordChannelId || null,
-        mention: keyToMention(follow.mentionKey),
-        liveMessage: follow.liveMessage || null,
-      };
-      const res = await addTwitchFollow(payload);
-      if (!res) throw new Error("Ça n'a pas marché. Réessaie.");
-      return true;
-    }, { successMessage: m.social_twitch_toast_updated() });
-  }
-
-  async function handleDeleteTwitch(id: string) {
-    await removeWithUndo({
-      get: () => twitchFollows,
-      set: (next) => (twitchFollows = next),
-      match: (f) => f.id === id,
-      message: m.social_twitch_toast_deleted(),
-      commit: () => deleteTwitchFollow(id, undefined, { silent: true }),
-    });
+    if (activeTab === 'huggingface') parts.unshift(HF_KINDS.find((k) => k.value === follow.kind)?.label);
+    return parts.filter((p): p is string => !!p);
   }
 </script>
+
+{#snippet brandIcon(network: Network)}
+  {#if network === 'youtube'}
+    <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24" aria-hidden="true"><path d="M23.498 6.163a3.003 3.003 0 0 0-2.11-2.11C19.518 3.545 12 3.545 12 3.545s-7.518 0-9.388.508a3.003 3.003 0 0 0-2.11 2.11C0 8.033 0 12 0 12s0 3.967.502 5.837a3.003 3.003 0 0 0 2.11 2.11c1.87.508 9.388.508 9.388.508s7.518 0 9.388-.508a3.002 3.002 0 0 0 2.11-2.11C24 15.967 24 12 24 12s0-3.967-.502-5.837zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+  {:else if network === 'twitch'}
+    <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24" aria-hidden="true"><path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714Z"/></svg>
+  {:else if network === 'github'}
+    <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 .3a12 12 0 0 0-3.8 23.4c.6.1.8-.3.8-.6v-2c-3.3.7-4-1.6-4-1.6-.6-1.4-1.4-1.8-1.4-1.8-1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.8 1.3 3.5 1 .1-.8.4-1.3.7-1.6-2.7-.3-5.5-1.3-5.5-6 0-1.2.5-2.3 1.3-3.1-.2-.4-.6-1.6 0-3.2 0 0 1-.3 3.4 1.2a11.5 11.5 0 0 1 6 0c2.3-1.5 3.3-1.2 3.3-1.2.6 1.6.2 2.8.1 3.2.8.8 1.3 1.9 1.3 3.2 0 4.6-2.8 5.6-5.5 5.9.5.4.9 1.1.9 2.2v3.3c0 .3.1.7.8.6A12 12 0 0 0 12 .3"/></svg>
+  {:else}
+    <span class="text-sm leading-none" aria-hidden="true">🤗</span>
+  {/if}
+{/snippet}
 
 <ModulePage
   title={m.social_page_title()}
   description={m.social_page_desc()}
   icon="share-2"
+  featureKey="social_networks"
 >
   <Tabs
     label={m.social_page_title()}
@@ -216,395 +247,149 @@
     onchange={(id) => gotoTab('/social-networks', id, 'youtube')}
   />
 
-  <div class="bg-surface-container-low/40 p-6 rounded-xl border border-outline-variant/20 flex flex-col md:flex-row md:items-center justify-between gap-6">
-    <div class="space-y-1">
-      <div class="flex items-center gap-2">
-        <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-        <h4 class="font-bold text-sm">{m.social_banner_title()}</h4>
+  {#if announcerOff}
+    <Callout variant="warning" title={m.social_announcer_off_title({ network: activeTab === 'youtube' ? 'YouTube' : 'Twitch' })}>
+      {m.social_announcer_off_desc()}
+      {#snippet actions()}
+        <Button variant="primary" size="sm" iconRight="ArrowRight" href="/modules">{m.social_banner_link_text()}</Button>
+      {/snippet}
+    </Callout>
+  {/if}
+
+  <div>
+    <div class="flex items-center justify-between gap-4 mb-3">
+      <div class="min-w-0">
+        <h3 class="text-base font-semibold text-on-surface">{text.list}</h3>
+        {#if text.hint}<p class="text-xs text-on-surface-variant">{text.hint}</p>{/if}
       </div>
-      <p class="text-xs text-on-surface-variant/80">{m.social_banner_desc()} <a href="/modules" class="text-primary hover:underline font-bold">{m.social_banner_link_text()}</a>.</p>
+      {#if canManage && list.length > 0}
+        <Button variant="primary" icon="Plus" onclick={openCreate}>{text.title}</Button>
+      {/if}
     </div>
-    <div class="flex items-center gap-4 bg-surface-container-high/40 px-5 py-3 rounded-lg border border-outline-variant/10">
-      <span class="text-xs font-medium text-primary">{m.social_banner_active_label()}</span>
-      <span class="px-2.5 py-1 bg-success/10 text-success rounded-lg text-2xs font-semibold uppercase">{m.social_banner_online_badge()}</span>
-    </div>
+
+    {#if loading}
+      <div class="space-y-2">
+        {#each Array(3) as _}
+          <div class="h-16 rounded-xl bg-surface-container-low/30 border border-outline-variant/10 animate-pulse"></div>
+        {/each}
+      </div>
+    {:else if list.length === 0}
+      <EmptyState
+        icon="share-2"
+        title={text.empty}
+        description={m.social_empty_hint()}
+        actionLabel={canManage ? text.title : undefined}
+        onAction={canManage ? openCreate : undefined}
+        reason={canManage ? undefined : 'read-only'}
+      />
+    {:else}
+      <ul class="space-y-2">
+        {#each list as follow (follow.id)}
+          <li class="group flex items-center gap-3 rounded-xl border border-outline-variant/20 hover:border-outline-variant/40 bg-surface-container-low/40 px-3 py-3 transition-colors">
+            <span class="w-9 h-9 shrink-0 rounded-lg bg-surface-container-high flex items-center justify-center text-on-surface">
+              {@render brandIcon(activeTab)}
+            </span>
+
+            <button
+              type="button"
+              class="flex-1 min-w-0 text-left rounded-lg disabled:cursor-default"
+              disabled={!canManage}
+              aria-label="{m.common_edit()} {net.name(follow)}"
+              onclick={() => openEdit(follow)}
+            >
+              <span class="flex items-center gap-2 min-w-0">
+                <span class="text-body-sm font-semibold text-on-surface truncate">{net.name(follow)}</span>
+                {#if activeTab === 'twitch'}
+                  <span class="shrink-0 px-2 py-0.5 rounded-md text-2xs font-medium {follow.isLive ? 'bg-error/15 text-error' : 'bg-surface-container-high text-on-surface-variant'}">
+                    {follow.isLive ? m.social_status_live() : m.social_status_offline()}
+                  </span>
+                {/if}
+              </span>
+              <span class="block mt-0.5 text-xs text-on-surface-variant truncate">{details(follow).join(' · ')}</span>
+            </button>
+
+            <div class="flex items-center gap-1 shrink-0">
+              <Button variant="ghost" size="sm" icon="ExternalLink" href={net.href(follow)} target="_blank" aria-label={net.name(follow)} />
+              {#if canManage}
+                <Button variant="ghost" size="sm" icon="Trash" aria-label={m.social_unfollow_tooltip()} onclick={() => remove(follow)} />
+              {/if}
+            </div>
+          </li>
+        {/each}
+      </ul>
+    {/if}
   </div>
 
-  <InlineFeedback state={actionState} />
-
-  {#if loading}
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-      <div class="lg:col-span-1 p-8 bg-surface-container-low/30 border border-outline-variant/10 rounded-xl space-y-6">
-        <Skeleton width="60%" height="24px" />
-        <Skeleton width="100%" height="180px" />
-      </div>
-      <div class="lg:col-span-2 p-8 bg-surface-container-low/30 border border-outline-variant/10 rounded-xl space-y-6">
-        <Skeleton width="40%" height="24px" />
-        <Skeleton width="100%" height="80px" />
-        <Skeleton width="100%" height="80px" />
-        <Skeleton width="100%" height="80px" />
-      </div>
-    </div>
-  {:else if activeTab === 'github'}
-    <GithubFollowsPanel bind:follows={githubFollows} {channelOptions} {mentionOptions} {canManage} {actionState} />
-  {:else if activeTab === 'huggingface'}
-    <HuggingFaceFollowsPanel bind:follows={huggingFaceFollows} {channelOptions} {mentionOptions} {canManage} {actionState} />
-  {:else}
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-
-      <!-- ADD FORM COLUMN -->
-      <div class="lg:col-span-1">
-        {#if activeTab === 'youtube'}
-          <div class="bg-surface-container-low/30 border border-outline-variant/10 p-8 rounded-xl space-y-6 sticky top-8 shadow-sm">
-            <h3 class="text-lg font-semibold flex items-center gap-2.5 text-error">
-              <svg class="w-5 h-5 fill-current" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <path d="M23.498 6.163a3.003 3.003 0 0 0-2.11-2.11C19.518 3.545 12 3.545 12 3.545s-7.518 0-9.388.508a3.003 3.003 0 0 0-2.11 2.11C0 8.033 0 12 0 12s0 3.967.502 5.837a3.003 3.003 0 0 0 2.11 2.11c1.87.508 9.388.508 9.388.508s7.518 0 9.388-.508a3.002 3.002 0 0 0 2.11-2.11C24 15.967 24 12 24 12s0-3.967-.502-5.837zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
-              </svg>
-              {m.social_yt_form_title()}
-            </h3>
-
-            <div class="space-y-4">
-              <div class="space-y-1.5">
-                <label for="yt-query" class="text-xs font-semibold text-on-surface-variant ml-2">{m.social_yt_query_label()}</label>
-                <input
-                  id="yt-query"
-                  type="text"
-                  placeholder={m.social_yt_query_ph()}
-                  bind:value={ytForm.query}
-                  class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-error/30 transition-all text-on-surface"
-                />
-              </div>
-
-              <div class="space-y-1.5">
-                <label for="yt-chan" class="text-xs font-semibold text-on-surface-variant ml-2">{m.social_channel_alerts_label()}</label>
-                <SearchableSelect id="yt-chan" bind:value={ytForm.discordChannelId} options={availableChannels.map(ch => ({ id: ch.id, name: '#' + ch.name }))} placeholder={m.social_default_channel_ph()} className="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-error/30 transition-all" />
-              </div>
-
-              <div class="space-y-1.5">
-                <label for="yt-mention" class="text-xs font-semibold text-on-surface-variant ml-2">{m.social_mention_label()}</label>
-                <SearchableSelect
-                  id="yt-mention"
-                  bind:value={ytForm.mention}
-                  options={mentionOptions}
-                  placeholder={m.social_mention_ph()}
-                  className="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-error/30 transition-all"
-                />
-              </div>
-
-              <div class="pt-4 border-t border-outline-variant/10">
-                <p class="text-xs font-semibold text-on-surface-variant ml-2 mb-3">{m.social_messages_by_type()}</p>
-
-                <div class="space-y-3">
-                  <div class="space-y-1.5">
-                    <label for="yt-live-msg" class="text-2xs font-bold text-on-surface-variant ml-2">{m.social_msg_type_live()}</label>
-                    <input
-                      id="yt-live-msg"
-                      type="text"
-                      placeholder={m.social_yt_live_msg_ph()}
-                      bind:value={ytForm.liveMessage}
-                      class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-error/30 transition-all text-on-surface"
-                    />
-                    <p class="text-2xs text-on-surface-variant/40 ml-2">{m.social_msg_vars_hint()}</p>
-                  </div>
-
-                  <div class="space-y-1.5">
-                    <label for="yt-video-msg" class="text-2xs font-bold text-on-surface-variant ml-2">{m.social_msg_type_video()}</label>
-                    <input
-                      id="yt-video-msg"
-                      type="text"
-                      placeholder={m.social_yt_video_msg_ph()}
-                      bind:value={ytForm.videoMessage}
-                      class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-error/30 transition-all text-on-surface"
-                    />
-                  </div>
-
-                  <div class="space-y-1.5">
-                    <label for="yt-short-msg" class="text-2xs font-bold text-on-surface-variant ml-2">{m.social_msg_type_short()}</label>
-                    <input
-                      id="yt-short-msg"
-                      type="text"
-                      placeholder={m.social_yt_short_msg_ph()}
-                      bind:value={ytForm.shortMessage}
-                      class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-error/30 transition-all text-on-surface"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <button
-                onclick={handleAddYoutube}
-                use:explainDisabled={(!canManage) ? m.common_reason_no_permission() : ''}
-                class="w-full mt-4 py-3.5 bg-red-600 hover:bg-red-700 text-white font-medium text-body-sm rounded-lg shadow-sm active:scale-[0.98] transition-all disabled:opacity-50"
-              >
-                {m.social_yt_add_btn()}
-              </button>
+  <Modal
+    open={!!draft}
+    onClose={() => (draft = null)}
+    title={draft?.id ? net.name(draft) : text.title}
+    size="lg"
+  >
+    {#if draft}
+      <div class="space-y-5">
+        {#if !draft.id}
+          {#if activeTab === 'huggingface'}
+            <div class="space-y-1.5">
+              <span class="field-label">{m.social_hf_kind_label()}</span>
+              <FilterPills label={m.social_hf_kind_label()} options={HF_KINDS} value={draft.kind} onchange={(v) => (draft.kind = v)} />
             </div>
-          </div>
-        {:else}
-          <div class="bg-surface-container-low/30 border border-outline-variant/10 p-8 rounded-xl space-y-6 sticky top-8 shadow-sm">
-            <h3 class="text-lg font-semibold flex items-center gap-2.5 text-[#9146FF]">
-              <svg class="w-5 h-5 fill-current" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714Z"/>
-              </svg>
-              {m.social_twitch_form_title()}
-            </h3>
-
-            <div class="space-y-4">
-              <div class="space-y-1.5">
-                <label for="twitch-query" class="text-xs font-semibold text-on-surface-variant ml-2">{m.social_twitch_query_label()}</label>
-                <input
-                  id="twitch-query"
-                  type="text"
-                  placeholder={m.social_twitch_query_ph()}
-                  bind:value={twitchForm.query}
-                  class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#9146FF]/30 transition-all text-on-surface"
-                />
-              </div>
-
-              <div class="space-y-1.5">
-                <label for="twitch-chan" class="text-xs font-semibold text-on-surface-variant ml-2">{m.social_channel_alerts_label()}</label>
-                <SearchableSelect id="twitch-chan" bind:value={twitchForm.discordChannelId} options={availableChannels.map(ch => ({ id: ch.id, name: '#' + ch.name }))} placeholder={m.social_default_channel_ph()} className="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-[#9146FF]/30 transition-all" />
-              </div>
-
-              <div class="space-y-1.5">
-                <label for="twitch-mention" class="text-xs font-semibold text-on-surface-variant ml-2">{m.social_mention_label()}</label>
-                <SearchableSelect
-                  id="twitch-mention"
-                  bind:value={twitchForm.mention}
-                  options={mentionOptions}
-                  placeholder={m.social_mention_ph()}
-                  className="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-[#9146FF]/30 transition-all"
-                />
-              </div>
-
-              <div class="space-y-1.5">
-                <label for="twitch-live-msg" class="text-xs font-semibold text-on-surface-variant ml-2">{m.social_twitch_live_msg_label()}</label>
-                <input
-                  id="twitch-live-msg"
-                  type="text"
-                  placeholder={m.social_twitch_live_msg_ph()}
-                  bind:value={twitchForm.liveMessage}
-                  class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-[#9146FF]/30 transition-all text-on-surface"
-                />
-                <p class="text-2xs text-on-surface-variant/40 ml-2">{m.social_msg_vars_hint()}</p>
-              </div>
-
-              <button
-                onclick={handleAddTwitch}
-                use:explainDisabled={(!canManage) ? m.common_reason_no_permission() : ''}
-                class="w-full mt-4 py-3.5 bg-[#9146FF] hover:bg-[#772ce8] text-white font-medium text-body-sm rounded-lg shadow-lg shadow-[#9146FF]/20 active:scale-[0.98] transition-all disabled:opacity-50"
-              >
-                {m.social_twitch_add_btn()}
-              </button>
-            </div>
+          {/if}
+          <div class="space-y-1.5">
+            <FormInput id="social-key" label={text.keyLabel} bind:value={draft[net.key]} placeholder={text.keyPh} className="w-full" />
+            {#if activeTab === 'huggingface'}<p class="text-xs text-on-surface-variant">{m.social_hf_target_hint()}</p>{/if}
           </div>
         {/if}
-      </div>
 
-      <!-- LIST COLUMN -->
-      <div class="lg:col-span-2 space-y-6">
-        <div class="bg-surface-container-low/30 border border-outline-variant/10 p-8 rounded-xl space-y-6 min-h-100">
-
-          {#if activeTab === 'youtube'}
-            <div class="flex items-center justify-between border-b border-outline-variant/20 pb-4">
-              <h3 class="text-xl font-semibold flex items-center gap-2">
-                <svg class="w-5 h-5 fill-red-600" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M23.498 6.163a3.003 3.003 0 0 0-2.11-2.11C19.518 3.545 12 3.545 12 3.545s-7.518 0-9.388.508a3.003 3.003 0 0 0-2.11 2.11C0 8.033 0 12 0 12s0 3.967.502 5.837a3.003 3.003 0 0 0 2.11 2.11c1.87.508 9.388.508 9.388.508s7.518 0 9.388-.508a3.002 3.002 0 0 0 2.11-2.11C24 15.967 24 12 24 12s0-3.967-.502-5.837zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
-                </svg>
-                {m.social_yt_list_title({ n: youtubeFollows.length })}
-              </h3>
-            </div>
-
-            {#if youtubeFollows.length === 0}
-              <div class="flex flex-col items-center justify-center py-20 text-center text-on-surface-variant">
-                <Papicon icon="Info" size={48} class="mb-4 text-on-surface-variant/30" />
-                <p class="font-bold">{m.social_yt_empty_title()}</p>
-                <p class="text-xs">{m.social_empty_hint()}</p>
-              </div>
-            {:else}
-              <div class="divide-y divide-outline-variant/10 space-y-6 divide-none">
-                {#each youtubeFollows as follow (follow.id)}
-                  <div class="p-6 rounded-xl bg-surface-container-high/15 border border-outline-variant/5 hover:border-outline-variant/10 transition-all">
-                    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-                      <div class="space-y-1">
-                        <h4 class="font-bold text-base flex items-center gap-2">
-                          <span class="w-2.5 h-2.5 bg-red-600 rounded-full"></span>
-                          {follow.channelName}
-                        </h4>
-                        <p class="text-xs text-on-surface-variant/40 font-mono">ID: {follow.channelId}</p>
-                      </div>
-
-                      <div class="flex items-center gap-2">
-                        <button
-                          onclick={() => handleUpdateYoutube(follow)}
-                          use:explainDisabled={(!canManage) ? m.common_reason_no_permission() : ''}
-                          title={m.social_save_config_tooltip()}
-                          class="p-3 bg-primary/10 hover:bg-primary/20 text-primary rounded-xl transition-all"
-                        >
-                          <Papicon icon="Paper" size={16} />
-                        </button>
-                        <button
-                          onclick={() => handleDeleteYoutube(follow.id)}
-                          use:explainDisabled={(!canManage) ? m.common_reason_no_permission() : ''}
-                          title={m.social_unfollow_tooltip()}
-                          class="p-3 bg-error/10 hover:bg-error/20 text-error rounded-xl transition-all"
-                        >
-                          <Papicon icon="Trash" size={16} />
-                        </button>
-                      </div>
-                    </div>
-
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                      <div class="space-y-1">
-                        <span class="text-2xs font-bold text-on-surface-variant uppercase">{m.social_channel_alerts_label()}</span>
-                        <SearchableSelect bind:value={follow.discordChannelId} options={availableChannels.map(ch => ({ id: ch.id, name: '#' + ch.name }))} placeholder={m.social_default_channel_short_ph()} className="w-full bg-surface-container/60 border border-outline-variant/10 rounded-xl px-3 py-2 text-xs" />
-                      </div>
-
-                      <div class="space-y-1">
-                        <label for="yt-mention-{follow.id}" class="text-2xs font-bold text-on-surface-variant uppercase">{m.social_mention_label()}</label>
-                        <SearchableSelect
-                          id="yt-mention-{follow.id}"
-                          bind:value={follow.mentionKey}
-                          options={mentionOptions}
-                          placeholder={m.social_mention_ph()}
-                          className="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-error/30 transition-all"
-                        />
-                      </div>
-                    </div>
-
-                    <div class="mb-6 p-4 rounded-lg bg-surface-container/30 border border-outline-variant/5">
-                      <p class="text-xs font-semibold text-on-surface-variant mb-3">{m.social_messages_by_type()}</p>
-                      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div class="space-y-1">
-                          <label for="yt-live-msg-{follow.id}" class="text-2xs font-bold text-on-surface-variant">{m.social_msg_type_live()}</label>
-                          <input
-                            id="yt-live-msg-{follow.id}"
-                            type="text"
-                            bind:value={follow.liveMessage}
-                            placeholder={m.social_default_msg_ph()}
-                            class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-error/30 transition-all text-on-surface"
-                          />
-                        </div>
-                        <div class="space-y-1">
-                          <label for="yt-video-msg-{follow.id}" class="text-2xs font-bold text-on-surface-variant">{m.social_msg_type_video()}</label>
-                          <input
-                            id="yt-video-msg-{follow.id}"
-                            type="text"
-                            bind:value={follow.videoMessage}
-                            placeholder={m.social_default_msg_ph()}
-                            class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-error/30 transition-all text-on-surface"
-                          />
-                        </div>
-                        <div class="space-y-1">
-                          <label for="yt-short-msg-{follow.id}" class="text-2xs font-bold text-on-surface-variant">{m.social_msg_type_short()}</label>
-                          <input
-                            id="yt-short-msg-{follow.id}"
-                            type="text"
-                            bind:value={follow.shortMessage}
-                            placeholder={m.social_default_msg_ph()}
-                            class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-error/30 transition-all text-on-surface"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                {/each}
-              </div>
-            {/if}
-          {:else}
-            <!-- TWITCH LIST -->
-            <div class="flex items-center justify-between border-b border-outline-variant/20 pb-4">
-              <h3 class="text-xl font-semibold flex items-center gap-2">
-                <svg class="w-5 h-5 fill-[#9146FF]" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714Z"/>
-                </svg>
-                {m.social_twitch_list_title({ n: twitchFollows.length })}
-              </h3>
-            </div>
-
-            {#if twitchFollows.length === 0}
-              <div class="flex flex-col items-center justify-center py-20 text-center text-on-surface-variant">
-                <Papicon icon="Info" size={48} class="mb-4 text-on-surface-variant/30" />
-                <p class="font-bold">{m.social_twitch_empty_title()}</p>
-                <p class="text-xs">{m.social_empty_hint()}</p>
-              </div>
-            {:else}
-              <div class="divide-y divide-outline-variant/10 space-y-6 divide-none">
-                {#each twitchFollows as follow (follow.id)}
-                  <div class="p-6 rounded-xl bg-surface-container-high/15 border border-outline-variant/5 hover:border-outline-variant/10 transition-all space-y-4">
-                    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                      <div class="space-y-1">
-                        <h4 class="font-bold text-base flex items-center gap-2">
-                          {#if follow.isLive}
-                            <span class="relative flex h-3 w-3">
-                              <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-75"></span>
-                              <span class="relative inline-flex rounded-full h-3 w-3 bg-red-600"></span>
-                            </span>
-                          {:else}
-                            <span class="w-3 h-3 bg-zinc-600 rounded-full"></span>
-                          {/if}
-                          {follow.streamerName}
-                        </h4>
-                        <p class="text-2xs uppercase font-bold text-on-surface-variant/40">
-                          {follow.isLive ? m.social_status_live() : m.social_status_offline()}
-                        </p>
-                      </div>
-
-                      <div class="flex items-center gap-2 self-end md:self-center">
-                        <button
-                          onclick={() => handleUpdateTwitch(follow)}
-                          use:explainDisabled={(!canManage) ? m.common_reason_no_permission() : ''}
-                          title={m.social_save_config_tooltip()}
-                          class="p-3 bg-primary/10 hover:bg-primary/20 text-primary rounded-xl transition-all"
-                        >
-                          <Papicon icon="Paper" size={16} />
-                        </button>
-                        <button
-                          onclick={() => handleDeleteTwitch(follow.id)}
-                          use:explainDisabled={(!canManage) ? m.common_reason_no_permission() : ''}
-                          title={m.social_unfollow_tooltip()}
-                          class="p-3 bg-error/10 hover:bg-error/20 text-error rounded-xl transition-all"
-                        >
-                          <Papicon icon="Trash" size={16} />
-                        </button>
-                      </div>
-                    </div>
-
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <div class="space-y-1">
-                        <span class="text-2xs font-bold text-on-surface-variant uppercase">{m.social_channel_alerts_label()}</span>
-                        <SearchableSelect bind:value={follow.discordChannelId} options={(availableChannels || []).map(ch => ({ id: ch.id, name: '#' + ch.name }))} placeholder={m.social_default_channel_short_ph()} className="w-full bg-surface-container/60 border border-outline-variant/10 rounded-xl px-3 py-2 text-xs" />
-                      </div>
-
-                      <div class="space-y-1">
-                        <label for="twitch-mention-{follow.id}" class="text-2xs font-bold text-on-surface-variant uppercase">{m.social_mention_label()}</label>
-                        <SearchableSelect
-                          id="twitch-mention-{follow.id}"
-                          bind:value={follow.mentionKey}
-                          options={mentionOptions}
-                          placeholder={m.social_mention_ph()}
-                          className="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-[#9146FF]/30 transition-all"
-                        />
-                      </div>
-
-                      <div class="space-y-1">
-                        <label for="twitch-live-msg-{follow.id}" class="text-2xs font-bold text-on-surface-variant uppercase">{m.social_twitch_live_msg_label()}</label>
-                        <input
-                          id="twitch-live-msg-{follow.id}"
-                          type="text"
-                          bind:value={follow.liveMessage}
-                          placeholder={m.social_default_msg_ph()}
-                          class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-[#9146FF]/30 transition-all text-on-surface"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                {/each}
-              </div>
-            {/if}
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="space-y-1.5">
+            <label for="social-channel" class="field-label">{m.social_channel_alerts_label()}</label>
+            <SearchableSelect id="social-channel" bind:value={draft.discordChannelId} options={channelOptions} placeholder={m.social_default_channel_ph()} className="w-full" />
+          </div>
+          <div class="space-y-1.5">
+            <label for="social-mention" class="field-label">{m.social_mention_label()}</label>
+            <SearchableSelect id="social-mention" bind:value={draft.mentionKey} options={mentionOptions} placeholder={m.social_mention_ph()} className="w-full" />
+          </div>
+          {#if activeTab === 'github'}
+            <FormInput id="social-branch" label={m.social_gh_branch_label()} bind:value={draft.branch} placeholder={m.social_gh_branch_ph()} className="w-full" />
           {/if}
         </div>
+
+        <div class="space-y-3">
+          <p class="field-label">{activeTab === 'github' ? m.social_gh_types_label() : m.social_messages_by_type()}</p>
+          {#if activeTab === 'youtube'}
+            <FormInput id="social-yt-live" label={m.social_msg_type_live()} bind:value={draft.liveMessage} placeholder={m.social_yt_live_msg_ph()} className="w-full" />
+            <FormInput id="social-yt-video" label={m.social_msg_type_video()} bind:value={draft.videoMessage} placeholder={m.social_yt_video_msg_ph()} className="w-full" />
+            <FormInput id="social-yt-short" label={m.social_msg_type_short()} bind:value={draft.shortMessage} placeholder={m.social_yt_short_msg_ph()} className="w-full" />
+          {:else if activeTab === 'twitch'}
+            <FormInput id="social-twitch-live" label={m.social_twitch_live_msg_label()} bind:value={draft.liveMessage} placeholder={m.social_twitch_live_msg_ph()} className="w-full" />
+          {:else if activeTab === 'github'}
+            <div class="rounded-xl border border-outline-variant/20 divide-y divide-outline-variant/20">
+              {#each GH_TYPES as type (type.key)}
+                <div class="px-4 py-3 space-y-2">
+                  <div class="flex items-center justify-between gap-4">
+                    <span class="text-body-sm font-medium text-on-surface">{type.label()}</span>
+                    <ToggleSwitch size="sm" checked={draft[type.key]} ariaLabel={type.label()} onToggle={(v) => (draft[type.key] = v)} />
+                  </div>
+                  {#if draft[type.key]}
+                    <FormInput id="social-gh-{type.message}" bind:value={draft[type.message]} placeholder={m.social_default_msg_ph()} className="w-full" />
+                  {/if}
+                </div>
+              {/each}
+            </div>
+          {:else}
+            <FormInput id="social-hf-msg" label={m.social_hf_message_label()} bind:value={draft.message} placeholder={m.social_default_msg_ph()} className="w-full" />
+          {/if}
+          <p class="text-xs text-on-surface-variant">{activeTab === 'youtube' || activeTab === 'twitch' ? m.social_msg_vars_hint() : m.social_gh_vars_hint()}</p>
+        </div>
       </div>
-    </div>
-  {/if}
+    {/if}
+
+    {#snippet footer()}
+      <div class="flex items-center justify-end gap-2">
+        <Button variant="ghost" onclick={() => (draft = null)}>{m.common_cancel()}</Button>
+        <Button variant="primary" loading={saving} onclick={saveDraft}>{draft?.id ? m.common_save() : text.add}</Button>
+      </div>
+    {/snippet}
+  </Modal>
 </ModulePage>
