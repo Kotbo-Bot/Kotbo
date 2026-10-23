@@ -1202,6 +1202,9 @@ export async function handleGhostPingUpdate(
   }
 }
 
+// Passé ce délai, la mention a eu le temps d'être vue : retirer le message n'est plus un ghost ping
+const GHOST_PING_MAX_AGE_MS = 60 * 60 * 1000;
+
 /**
  * Déclenche l'alerte et la sanction de ghost ping
  */
@@ -1214,6 +1217,15 @@ async function triggerGhostPingAlert(
   config: AutoModConfig,
   client: Client
 ) {
+  if (Date.now() - message.createdTimestamp > GHOST_PING_MAX_AGE_MS) return;
+
+  // Une cible qui a écrit dans le salon après la mention l'a vue : on la retire
+  if (targetUsers.size > 0) {
+    const after = await message.channel.messages.fetch({ after: message.id, limit: 100 }).catch(() => null);
+    if (after) targetUsers = targetUsers.filter(u => !after.some(m => m.author.id === u.id));
+  }
+  if (targetUsers.size === 0 && targetRoles.size === 0 && !hasEveryone) return;
+
   const guildId = message.guild!.id;
   const author = message.author;
   const action = config.ghostPingAction || 'ALERT';
