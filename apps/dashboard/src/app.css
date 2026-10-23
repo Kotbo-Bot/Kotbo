@@ -619,7 +619,10 @@ button[aria-disabled="true"]:not(.btn) { opacity: 0.5; cursor: not-allowed; }
 /* ── Champs de saisie ─────────────────────────────────── */
 
 /* Les champs ecrivaient `focus:outline-none` sans rien a la place : au
-   clavier, on ne voyait plus ou l'on etait. */
+   clavier, on ne voyait plus ou l'on etait.
+   En @layer components : les utilitaires passes par les appelants (pl-10
+   sous une icone, py-0...) doivent l'emporter sur ces valeurs par defaut. */
+@layer components {
 .input {
   width: 100%;
   padding: 0.5rem 0.75rem;
@@ -640,6 +643,7 @@ button[aria-disabled="true"]:not(.btn) { opacity: 0.5; cursor: not-allowed; }
 .input:disabled { opacity: 0.5; cursor: not-allowed; }
 .field--invalid .input,
 .input[aria-invalid="true"] { border-color: var(--error-color); }
+}
 
 .field { display: flex; flex-direction: column; min-width: 0; }
 .field-required { color: var(--error-color); }
