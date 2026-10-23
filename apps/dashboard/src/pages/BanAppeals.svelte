@@ -1,5 +1,7 @@
 <script lang="ts">
   import { Tabs } from '../lib/components/ui';
+  import { pageTabItems } from '../lib/config/pageTabs';
+  import { gotoTab } from '../lib/tabRouting';
   import { onMount } from 'svelte';
   import { API_BASE_URL, dashboardFetch } from '../lib/api';
   import { authStore } from '../lib/stores/auth.svelte';
@@ -99,6 +101,11 @@
   const queue = $derived(appeals.filter(a => a.status === 'PENDING' || a.status === 'NEEDS_INFO'));
   const history = $derived(appeals.filter(a => a.status !== 'PENDING' && a.status !== 'NEEDS_INFO'));
   const publicUrl = $derived(`${window.location.origin}/appeal/${authStore.selectedGuildId}`);
+  // Meme garde que l'onglet Configuration de Sanctions.svelte.
+  const canManageSanctionSettings = $derived(
+    !!dashboardStore.state.featureAccess?.settings?.canConfigure
+      || !!dashboardStore.state.access?.canManageSettings
+  );
 
   // Verdict choisi (mais pas encore appliqué) pour chaque sanction contestée.
   let itemOutcomes = $state<Record<string, Outcome>>({});
@@ -400,6 +407,14 @@
       <Papicon icon="link" size={14} /> {m.ba_copy_public_link()}
     </button>
   {/snippet}
+
+  <!-- Meme montage que les pseudos dans Filtres : la barre de Sanctions reste. -->
+  <Tabs
+    label={m.nav_security_sanctions()}
+    tabs={pageTabItems('/security/sanctions', (id) => id !== 'settings' || canManageSanctionSettings)}
+    active="appeals"
+    onchange={(id) => gotoTab('/security/sanctions', id, 'sanctions')}
+  />
 
   <Tabs
     label={m.nav_ban_appeals()}

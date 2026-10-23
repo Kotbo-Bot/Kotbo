@@ -390,8 +390,12 @@ export const navigationStore = new NavigationStore();
 
 onNavigationStorageCleared(() => navigationStore.reset());
 
-/** Adresses du menu, sans leur eventuelle requete. Fixes : calculees une fois. */
-const NAV_BASE_PATHS = allPages.map((page) => page.href.split('?')[0]);
+/**
+ * Adresses du menu, sans leur eventuelle requete. Fixes : calculees une fois.
+ * Sans les pages `hidden` : absentes du menu, elles eteignaient leur parente
+ * (Filtres sur /security/filters/nicknames) sans rien allumer a sa place.
+ */
+const NAV_BASE_PATHS = allPages.filter((page) => !page.hidden).map((page) => page.href.split('?')[0]);
 
 /**
  * Shared active-route test so sidebar and sheet always agree on highlighting.

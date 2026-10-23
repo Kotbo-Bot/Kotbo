@@ -433,6 +433,15 @@
   icon="filter"
   featureKey="nickname_moderation"
 >
+  <!-- Onglet de Filtres rendu comme une page a part : sans la barre de Filtres,
+       on perdait le chemin du retour. -->
+  <Tabs
+    label={m.am_page_title()}
+    tabs={pageTabItems('/security/filters')}
+    active="nicknames"
+    onchange={(id) => gotoTab('/security/filters', id, 'bot')}
+  />
+
   <InlineFeedback state={saveToggleAction} />
 
   {#if loading}
