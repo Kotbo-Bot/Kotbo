@@ -77,7 +77,7 @@
       const data = await fetchSchedules(authStore.selectedGuildId ?? '');
       schedules = data || [];
     } catch (error) {
-      console.error('Erreur lors du chargement des planifications:', error);
+      console.error('Impossible de charger les planifications :', error);
     }
     loading = false;
   }
@@ -283,7 +283,7 @@
         </div>
         <div class="space-y-1">
           <h3 class="text-xl font-semibold">{m.schedules_empty_title()}</h3>
-          <p class="text-sm text-on-surface-variant/70 font-medium">{m.schedules_empty_desc()}</p>
+          <p class="text-sm text-on-surface-variant font-medium">{m.schedules_empty_desc()}</p>
         </div>
         {#if canManageSchedules}
           <ActionButton onClick={openCreateModal} variant="primary" label={m.schedules_btn_create()} icon="plus" />
@@ -371,7 +371,7 @@
   <div class="space-y-6">
     <!-- Nom -->
     <div class="space-y-2">
-      <span class="block text-xs font-semibold text-on-surface-variant/60 ml-2">{m.schedules_form_task_name()}</span>
+      <span class="block text-xs font-semibold text-on-surface-variant ml-2">{m.schedules_form_task_name()}</span>
       <input
         type="text"
         bind:value={formName}
@@ -382,7 +382,7 @@
 
     <!-- Type -->
     <div class="space-y-2">
-      <span class="block text-xs font-semibold text-on-surface-variant/60 ml-2">{m.schedules_form_action_type()}</span>
+      <span class="block text-xs font-semibold text-on-surface-variant ml-2">{m.schedules_form_action_type()}</span>
       <FormSelect
         bind:value={formType}
         className="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
@@ -397,7 +397,7 @@
     <!-- Salon Discord cible -->
     {#if formType !== 'SERVER_BACKUP'}
       <div class="space-y-2">
-        <span class="block text-xs font-semibold text-on-surface-variant/60 ml-2">{m.schedules_form_target_channel()}</span>
+        <span class="block text-xs font-semibold text-on-surface-variant ml-2">{m.schedules_form_target_channel()}</span>
         <SearchableSelect
           id="schedule-target-channel"
           bind:value={formTargetId}
@@ -411,7 +411,7 @@
     <!-- Message programmé -->
     {#if formType === 'SEND_MESSAGE'}
       <div class="space-y-2">
-        <span class="block text-xs font-semibold text-on-surface-variant/60 ml-2">Message</span>
+        <span class="block text-xs font-semibold text-on-surface-variant ml-2">Message</span>
         <FormTextarea
           bind:value={formMessage}
           placeholder="Le texte posté dans le salon."
@@ -443,7 +443,7 @@
               class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
             />
           </div>
-          <p class="text-2xs text-on-surface-variant/60">
+          <p class="text-2xs text-on-surface-variant">
             L'image doit être servie en HTTPS. Couleur au format hexadécimal.
           </p>
         </div>
@@ -453,7 +453,7 @@
         <input type="checkbox" bind:checked={formAllowMentions} class="w-4 h-4 mt-0.5 rounded text-primary focus:ring-primary border-outline-variant/30" />
         <div>
           <span class="text-xs font-bold text-on-surface">Autoriser les mentions</span>
-          <p class="text-2xs text-on-surface-variant/60">
+          <p class="text-2xs text-on-surface-variant">
             Sans cela, @everyone, @here et les mentions de rôle sont écrits mais ne notifient personne -
             un message qui se répète ne doit pas pinger tout le serveur par accident.
           </p>
@@ -464,7 +464,7 @@
         <input type="checkbox" bind:checked={formRunOnce} class="w-4 h-4 mt-0.5 rounded text-primary focus:ring-primary border-outline-variant/30" />
         <div>
           <span class="text-xs font-bold text-on-surface">Envoyer une seule fois</span>
-          <p class="text-2xs text-on-surface-variant/60">
+          <p class="text-2xs text-on-surface-variant">
             La tâche se désactive juste après l'envoi. À cocher pour un message daté :
             son expression cron se redéclencherait sinon l'année suivante.
           </p>
@@ -474,7 +474,7 @@
 
     <!-- Fréquence -->
     <div class="space-y-2">
-      <span class="block text-xs font-semibold text-on-surface-variant/60 ml-2">{m.schedules_form_frequency()}</span>
+      <span class="block text-xs font-semibold text-on-surface-variant ml-2">{m.schedules_form_frequency()}</span>
       <FormSelect
         value={formFrequency}
         onchange={(e) => handleFrequencyChange((e.target as HTMLSelectElement).value)}
@@ -489,14 +489,14 @@
     <!-- Expression Cron -->
     {#if formFrequency === 'custom'}
       <div class="space-y-2">
-        <span class="block text-xs font-semibold text-on-surface-variant/60 ml-2">{m.schedules_form_cron_expr()}</span>
+        <span class="block text-xs font-semibold text-on-surface-variant ml-2">{m.schedules_form_cron_expr()}</span>
         <input
           type="text"
           bind:value={formCron}
           placeholder={m.schedules_form_cron_placeholder()}
           class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none font-mono"
         />
-        <p class="text-2xs text-on-surface-variant/60 ml-2">{m.schedules_form_cron_help()}</p>
+        <p class="text-2xs text-on-surface-variant ml-2">{m.schedules_form_cron_help()}</p>
       </div>
     {/if}
 

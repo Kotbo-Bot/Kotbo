@@ -68,7 +68,7 @@
       const data = await fetchBackups(authStore.selectedGuildId ?? '');
       backups = data || [];
     } catch (error) {
-      console.error('Erreur lors du chargement des backups:', error);
+      console.error('Impossible de charger les sauvegardes :', error);
     }
     loading = false;
   }
@@ -345,7 +345,7 @@
         </div>
         <div class="space-y-1">
           <h3 class="text-xl font-semibold">{m.backups_empty_title()}</h3>
-          <p class="text-sm text-on-surface-variant/70 font-medium">{m.backups_empty_desc()}</p>
+          <p class="text-sm text-on-surface-variant font-medium">{m.backups_empty_desc()}</p>
         </div>
         {#if canManageBackups}
           <ActionButton onClick={() => showCreateModal = true} variant="primary" label={m.backups_empty_btn()} icon="plus" />
@@ -361,7 +361,7 @@
               </div>
               <div class="flex-1 min-w-0">
                 <h3 class="text-base font-semibold truncate leading-snug text-primary">{creatingBackup.name}</h3>
-                <p class="text-xs text-on-surface-variant/60 font-semibold mt-0.5">{m.backups_in_progress()}</p>
+                <p class="text-xs text-on-surface-variant font-semibold mt-0.5">{m.backups_in_progress()}</p>
               </div>
               <span class="px-2.5 py-1 bg-primary/10 border border-primary/20 text-primary text-xs font-semibold rounded-lg shrink-0">
                 {Math.round(creatingBackup.progress)}%
@@ -389,7 +389,7 @@
           </div>
 
           <div class="flex items-center justify-between pt-3 border-t border-outline-variant/10 mt-6">
-            <p class="text-2xs text-on-surface-variant/50 font-bold">
+            <p class="text-2xs text-on-surface-variant font-bold">
               {m.backups_background()}
             </p>
             <div class="flex items-center justify-center shrink-0">
@@ -412,7 +412,7 @@
               </div>
               <div class="flex-1 min-w-0">
                 <h3 class="text-base font-semibold truncate leading-snug">{backup.name}</h3>
-                <p class="text-xs text-on-surface-variant/60 font-semibold mt-0.5">{formatDate(backup.createdAt)}</p>
+                <p class="text-xs text-on-surface-variant font-semibold mt-0.5">{formatDate(backup.createdAt)}</p>
               </div>
               {#if backup.isPreset}
                 <span class="px-2.5 py-1 bg-primary/10 border border-primary/20 text-primary text-xs font-semibold rounded-lg shrink-0">{m.backups_preset_badge()}</span>
@@ -477,14 +477,14 @@
             {#if backup.createdByUserId}
               <button
                 onclick={() => openMemberCase(backup)}
-                class="block w-full text-2xs text-on-surface-variant/50 font-bold truncate hover:text-primary transition-colors text-left"
+                class="block w-full text-2xs text-on-surface-variant font-bold truncate hover:text-primary transition-colors text-left"
                 title={m.backups_view_case({ user: backup.createdByUsername })}
               >
                 {m.backups_author({ user: `${backup.createdByUsername}#${backup.createdByTag || '0000'}` })}
               </button>
             {:else}
               <p
-                class="text-2xs text-on-surface-variant/50 font-bold truncate"
+                class="text-2xs text-on-surface-variant font-bold truncate"
                 title={m.backups_author({ user: `${backup.createdByUsername}#${backup.createdByTag || '0000'}` })}
               >
                 {m.backups_author({ user: `${backup.createdByUsername}#${backup.createdByTag || '0000'}` })}
@@ -508,7 +508,7 @@
     <section class="bg-surface-container-low/30 border border-outline-variant/10 p-8 rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-6">
       <div class="space-y-1">
         <h3 class="text-xl font-semibold">{m.backups_import_section_title()}</h3>
-        <p class="text-sm text-on-surface-variant/70 font-medium">{m.backups_import_section_desc()}</p>
+        <p class="text-sm text-on-surface-variant font-medium">{m.backups_import_section_desc()}</p>
       </div>
       <ActionButton onClick={() => showImportModal = true} variant="muted" label={m.backups_import_section_btn()} icon="upload" />
     </section>
@@ -519,7 +519,7 @@
 <Modal bind:open={showCreateModal} title={m.backups_create_modal_title()}>
   <div class="space-y-6">
     <div class="space-y-2">
-      <span class="block text-xs font-semibold text-on-surface-variant/60 ml-2">{m.backups_field_name()}</span>
+      <span class="block text-xs font-semibold text-on-surface-variant ml-2">{m.backups_field_name()}</span>
       <input
         type="text"
         bind:value={createOptions.name}
@@ -529,7 +529,7 @@
     </div>
     
     <div class="space-y-2">
-      <span class="block text-xs font-semibold text-on-surface-variant/60 ml-2">{m.backups_field_desc()}</span>
+      <span class="block text-xs font-semibold text-on-surface-variant ml-2">{m.backups_field_desc()}</span>
       <input
         type="text"
         bind:value={createOptions.description}
@@ -539,7 +539,7 @@
     </div>
 
     <div class="space-y-3">
-      <span class="block text-xs font-semibold text-on-surface-variant/60 ml-2">{m.backups_field_include()}</span>
+      <span class="block text-xs font-semibold text-on-surface-variant ml-2">{m.backups_field_include()}</span>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-3 bg-surface-container-high/20 border border-outline-variant/5 p-4 rounded-lg">
         <label class="flex items-center gap-3 cursor-pointer group">
           <input 
@@ -620,7 +620,7 @@
 <Modal bind:open={showImportModal} title={m.backups_import_modal_title()}>
   <div class="space-y-6">
     <div class="space-y-2">
-      <span class="block text-xs font-semibold text-on-surface-variant/60 ml-2">{m.backups_field_file()}</span>
+      <span class="block text-xs font-semibold text-on-surface-variant ml-2">{m.backups_field_file()}</span>
       <input
         type="file"
         accept=".json" 
@@ -630,7 +630,7 @@
     </div>
     
     <div class="space-y-2">
-      <span class="block text-xs font-semibold text-on-surface-variant/60 ml-2">{m.backups_field_name_optional()}</span>
+      <span class="block text-xs font-semibold text-on-surface-variant ml-2">{m.backups_field_name_optional()}</span>
       <input
         type="text"
         bind:value={createOptions.name}

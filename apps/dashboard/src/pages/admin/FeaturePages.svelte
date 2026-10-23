@@ -244,7 +244,7 @@
 </script>
 
 {#snippet counter(value: string, max: number)}
-  <span class="text-[11px] tabular-nums {value.length > max ? 'text-error font-bold' : 'text-on-surface-variant/50'}">
+  <span class="text-[11px] tabular-nums {value.length > max ? 'text-error font-bold' : 'text-on-surface-variant'}">
     {value.length}/{max}
   </span>
 {/snippet}
@@ -258,7 +258,7 @@
         </div>
         <div>
           <h1 class="text-xl font-bold text-on-surface leading-tight">Pages du site</h1>
-          <p class="text-sm text-on-surface-variant/60">
+          <p class="text-sm text-on-surface-variant">
             Une page par fonctionnalité sur kotbo.fr, en français et en anglais. Seules les pages publiées sont en ligne.
           </p>
         </div>
@@ -298,7 +298,7 @@
     {/if}
 
     {#if modulesWithoutSeed.length > 0}
-      <p class="text-xs text-on-surface-variant/60">
+      <p class="text-xs text-on-surface-variant">
         Modules sans page à importer (adresse et nom anglais à définir dans <code class="font-mono">featurePageSeeds.ts</code>) :
         {modulesWithoutSeed.join(', ')}.
       </p>
@@ -334,7 +334,7 @@
       {#if pages.length === 0}
         <div class="rounded-2xl border border-dashed border-outline-variant/30 p-8 text-center space-y-2">
           <p class="font-semibold text-on-surface">Aucune page pour l'instant.</p>
-          <p class="text-sm text-on-surface-variant/60">
+          <p class="text-sm text-on-surface-variant">
             « Importer les modules » crée une page par fonctionnalité de Kotbo : les pages déjà rédigées pour le site sont publiées, les autres arrivent en brouillon.
           </p>
         </div>
@@ -346,19 +346,19 @@
                 <button onclick={() => openEdit(page)} class="w-full flex items-center gap-3 px-5 py-3.5 text-left hover:bg-on-surface/5 transition-colors">
                   <div class="min-w-0 flex-1">
                     <p class="font-semibold text-on-surface truncate">{page.content.fr.name || page.key}</p>
-                    <p class="text-xs text-on-surface-variant/50 truncate font-mono">/fonctionnalites/{page.slug.fr} · /en/features/{page.slug.en}</p>
+                    <p class="text-xs text-on-surface-variant truncate font-mono">/fonctionnalites/{page.slug.fr} · /en/features/{page.slug.en}</p>
                   </div>
                   {#if !page.published && page.missing.length > 0}
-                    <span class="hidden sm:inline text-xs text-on-surface-variant/60">{page.missing.length} élément(s) à compléter</span>
+                    <span class="hidden sm:inline text-xs text-on-surface-variant">{page.missing.length} élément(s) à compléter</span>
                   {/if}
                   <span class="text-xs px-2 py-0.5 rounded-full font-bold {page.published ? 'bg-success/15 text-success' : 'bg-on-surface/10 text-on-surface-variant'}">
                     {page.published ? 'Publiée' : 'Brouillon'}
                   </span>
-                  <span class="hidden md:inline text-xs text-on-surface-variant/50 w-24 text-right">{formatDate(page.updatedAt)}</span>
+                  <span class="hidden md:inline text-xs text-on-surface-variant w-24 text-right">{formatDate(page.updatedAt)}</span>
                 </button>
               </li>
             {:else}
-              <li class="px-5 py-4 text-sm text-on-surface-variant/50">Aucune page ne correspond.</li>
+              <li class="px-5 py-4 text-sm text-on-surface-variant">Aucune page ne correspond.</li>
             {/each}
           </ul>
         </div>
@@ -387,14 +387,14 @@
         <div class="grid gap-3 sm:grid-cols-2">
           <label class="block space-y-1.5">
             <span class={labelClass}>Adresse française</span>
-            <div class="flex items-center gap-1 text-xs text-on-surface-variant/60">
+            <div class="flex items-center gap-1 text-xs text-on-surface-variant">
               <span class="font-mono">/fonctionnalites/</span>
               <input bind:value={draft.slug.fr} placeholder="tickets-discord" class={inputClass} />
             </div>
           </label>
           <label class="block space-y-1.5">
             <span class={labelClass}>Adresse anglaise</span>
-            <div class="flex items-center gap-1 text-xs text-on-surface-variant/60">
+            <div class="flex items-center gap-1 text-xs text-on-surface-variant">
               <span class="font-mono">/en/features/</span>
               <input bind:value={draft.slug.en} placeholder="discord-tickets" class={inputClass} />
             </div>
@@ -475,13 +475,13 @@
             <div class="rounded-xl border border-outline-variant/15 p-4 space-y-3">
               <div class="flex items-center gap-2">
                 <input bind:value={section.h2} placeholder="Titre de la section (H2)" class={inputClass} />
-                <button onclick={() => move(t.sections, index, -1)} disabled={index === 0} aria-label="Monter" class="p-2 rounded-lg text-on-surface-variant/60 hover:bg-on-surface/5 disabled:opacity-30">
+                <button onclick={() => move(t.sections, index, -1)} disabled={index === 0} aria-label="Monter" class="p-2 rounded-lg text-on-surface-variant hover:bg-on-surface/5 disabled:opacity-30">
                   <Papicon icon="ChevronUp" size={15} />
                 </button>
-                <button onclick={() => move(t.sections, index, 1)} disabled={index === t.sections.length - 1} aria-label="Descendre" class="p-2 rounded-lg text-on-surface-variant/60 hover:bg-on-surface/5 disabled:opacity-30">
+                <button onclick={() => move(t.sections, index, 1)} disabled={index === t.sections.length - 1} aria-label="Descendre" class="p-2 rounded-lg text-on-surface-variant hover:bg-on-surface/5 disabled:opacity-30">
                   <Papicon icon="ChevronDown" size={15} />
                 </button>
-                <button onclick={() => t.sections.splice(index, 1)} aria-label="Supprimer la section" class="p-2 rounded-lg text-on-surface-variant/60 hover:text-error hover:bg-error/10">
+                <button onclick={() => t.sections.splice(index, 1)} aria-label="Supprimer la section" class="p-2 rounded-lg text-on-surface-variant hover:text-error hover:bg-error/10">
                   <Papicon icon="Trash2" size={15} />
                 </button>
               </div>
@@ -501,14 +501,14 @@
               <Papicon icon="Plus" size={14} /> Ajouter une question
             </button>
           </div>
-          <p class="text-xs text-on-surface-variant/60">
+          <p class="text-xs text-on-surface-variant">
             Les questions telles qu'on les tape dans Google. « Est-ce gratuit ? » est ajoutée d'office par le site.
           </p>
           {#each t.faq as entry, index (index)}
             <div class="rounded-xl border border-outline-variant/15 p-4 space-y-3">
               <div class="flex items-center gap-2">
                 <input bind:value={entry.q} placeholder="Question" class={inputClass} />
-                <button onclick={() => t.faq.splice(index, 1)} aria-label="Supprimer la question" class="p-2 rounded-lg text-on-surface-variant/60 hover:text-error hover:bg-error/10">
+                <button onclick={() => t.faq.splice(index, 1)} aria-label="Supprimer la question" class="p-2 rounded-lg text-on-surface-variant hover:text-error hover:bg-error/10">
                   <Papicon icon="Trash2" size={15} />
                 </button>
               </div>

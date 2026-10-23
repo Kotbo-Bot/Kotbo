@@ -8,13 +8,16 @@
     value?: string;
     placeholder?: string;
     disabled?: boolean;
+    /** Appelé avec le membre choisi, pour qui a besoin de plus que son identifiant. */
+    onselect?: (member: GuildMemberSearchResult) => void;
   }
 
   let {
     id = '',
     value = $bindable(''),
     placeholder = '',
-    disabled = false
+    disabled = false,
+    onselect
   }: Props = $props();
 
   let query = $state('');
@@ -72,6 +75,7 @@
     query = member.displayName || member.username;
     open = false;
     results = [];
+    onselect?.(member);
   }
 
   function clear() {
@@ -156,11 +160,11 @@
             <div class="min-w-0 flex-1">
               <div class="text-sm font-semibold truncate">{member.displayName || member.username}</div>
               {#if member.username && member.username !== member.displayName}
-                <div class="text-2xs text-on-surface-variant/70 truncate">@{member.username}</div>
+                <div class="text-2xs text-on-surface-variant truncate">@{member.username}</div>
               {/if}
             </div>
             {#if !member.isOnServer}
-              <span class="text-xs font-semibold px-1.5 py-0.5 rounded bg-surface-container-low text-on-surface-variant/60 shrink-0">{m.member_search_left_badge()}</span>
+              <span class="text-xs font-semibold px-1.5 py-0.5 rounded bg-surface-container-low text-on-surface-variant shrink-0">{m.member_search_left_badge()}</span>
             {/if}
           </button>
         {/each}

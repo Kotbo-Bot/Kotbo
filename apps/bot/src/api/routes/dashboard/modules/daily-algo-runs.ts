@@ -39,7 +39,7 @@ export async function handleDailyAlgoRunsRoutes(ctx: ModuleRouteContext): Promis
         json(res, 200, { ok: true, ...result });
       } catch (err) {
         logger.error('DailyAlgoAPI', 'Erreur lors de la génération du planning Daily Algo:', err);
-        jsonFailure(res, err, err instanceof Error ? err.message : 'Erreur lors de la génération du planning Daily Algo', 'DailyAlgoAPI');
+        jsonFailure(res, err, 'Erreur lors de la génération du planning Daily Algo', 'DailyAlgoAPI');
       }
       return true;
     }

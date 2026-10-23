@@ -11,7 +11,7 @@
 import { z } from 'zod';
 import { RPG_ENCHANTMENTS, RPG_ITEM_RARITIES, RPG_ITEM_TYPES } from '@kotbo/contracts';
 import prisma from '../../../utils/db.js';
-import { type McpToolContext, err, ok, resolveMember } from '../toolkit.js';
+import { type McpToolContext, err, ok, resolveMember, toolError } from '../toolkit.js';
 import { getOrCreateEconomyConfig } from '../../../services/features/economyService.js';
 import {
   deleteGuildMonster,
@@ -85,7 +85,7 @@ import {
   getPlayerInventory,
 } from '../../../services/features/rpg/rpgPlayerAdminService.js';
 
-const fail = (e: unknown) => err(e instanceof Error ? e.message : String(e));
+const fail = (e: unknown) => toolError(e);
 
 /**
  * Superpose les champs envoyés à la fiche existante.

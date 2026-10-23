@@ -23,14 +23,19 @@ import {
   lastCompleteDateKey,
   dateKeyBounds,
   dateKeyRange,
+  dateKeyWeekday,
 } from './dateKeys.js';
 import {
-  computePulseScores,
+  computePulseBreakdown,
   generateAlerts,
   median,
-  resolveTrend,
+  percentileRank,
+  trendAgainst,
+  PULSE_MODEL_VERSION,
   type PulseAlert,
   type PulseBaseline,
+  type PulseFactor,
+  type PulseReference,
   type PulseScoreInput,
 } from './pulseScoring.js';
 import { getBumpStatus, type BumpStatus } from '../integrations/bumpDetectionService.js';
@@ -55,7 +60,30 @@ export interface PulseSnapshotView {
   alerts: PulseAlert[];
   /** Vrai si le jour n'est pas terminé (aperçu « aujourd'hui »). */
   partial: boolean;
+  /** Fiabilité du diagnostic (0-100), `null` pour un snapshot relu sans recalcul. */
+  confidence: number | null;
+  /** Facteurs du score avec leur impact en points, vide pour un snapshot relu. */
+  factors: PulseFactor[];
 }
+
+export interface PulseBenchmark {
+  /** Part des serveurs comparables moins bien notés, 0-100. */
+  percentile: number;
+  peers: number;
+  minMembers: number;
+  maxMembers: number;
+}
+
+export type PulseHistoryPoint = PulseMetrics & {
+  dateKey: string;
+  score: number;
+  activityScore: number;
+  moderationScore: number;
+  growthScore: number;
+  engagementScore: number;
+  healthScore: number;
+  alerts: PulseAlert[];
+};
 
 export interface PulseMetrics {
   totalMessages: number;
@@ -77,18 +105,13 @@ export interface PulseData {
   current: PulseSnapshotView;
   /** Aperçu du jour en cours, recalculé à la volée. `null` si pas de données. */
   today: (PulseSnapshotView & { metrics: PulseMetrics }) | null;
-  history: Array<{
-    dateKey: string;
-    score: number;
-    activityScore: number;
-    moderationScore: number;
-    growthScore: number;
-    engagementScore: number;
-    healthScore: number;
-  }>;
+  history: PulseHistoryPoint[];
   metrics: PulseMetrics;
   /** État du rappel de bump auto-détecté, `null` si aucun bump n'a jamais été observé. */
   bumpStatus: BumpStatus | null;
+  /** Rang face aux serveurs Kotbo de taille comparable, `null` sans assez de pairs. */
+  benchmark: PulseBenchmark | null;
+  modelVersion: number;
 }
 
 const EMPTY_METRICS: PulseMetrics = {
@@ -155,15 +178,12 @@ function resolveHumans(row: Pick<DailyRow, 'totalHumans' | 'totalMembers' | 'tot
  * Médianes du serveur sur les jours précédant `dateKey` (le jour évalué est
  * exclu, sinon il tirerait sa propre référence vers lui).
  */
-function buildBaseline(rows: DailyRow[], dateKey: string): PulseBaseline | null {
-  const previous = rows.filter((r) => r.dateKey < dateKey);
-  if (previous.length === 0) return null;
-
+function referenceOf(rows: DailyRow[]): (PulseReference & { samples: number }) | null {
   const messagesPerHuman: number[] = [];
   const voicePerHuman: number[] = [];
   const participation: number[] = [];
 
-  for (const row of previous) {
+  for (const row of rows) {
     const humans = resolveHumans(row);
     if (humans <= 0) continue;
     messagesPerHuman.push(row.messagesCount / humans);
@@ -172,12 +192,36 @@ function buildBaseline(rows: DailyRow[], dateKey: string): PulseBaseline | null 
   }
 
   if (messagesPerHuman.length === 0) return null;
-
   return {
     messagesPerHuman: median(messagesPerHuman),
     voicePerHuman: median(voicePerHuman),
     participationRate: median(participation),
-    sampleDays: messagesPerHuman.length,
+    samples: messagesPerHuman.length,
+  };
+}
+
+function buildBaseline(rows: DailyRow[], dateKey: string): PulseBaseline | null {
+  const previous = rows.filter((r) => r.dateKey < dateKey);
+  const all = referenceOf(previous);
+  if (!all) return null;
+  const weekday = dateKeyWeekday(dateKey);
+  const { samples, ...reference } = all;
+  return {
+    ...reference,
+    sampleDays: samples,
+    sameWeekday: referenceOf(previous.filter((r) => dateKeyWeekday(r.dateKey) === weekday)),
+  };
+}
+
+/** Arrivées et départs des 7 jours finissant à `dateKey` (jours sans ligne exclus). */
+function weekFlow(rows: DailyRow[], dateKey: string): PulseScoreInput['week'] {
+  const from = shiftDateKey(-6, new Date(`${dateKey}T00:00:00.000Z`));
+  const inWeek = rows.filter((r) => r.dateKey >= from && r.dateKey <= dateKey);
+  if (inWeek.length === 0) return null;
+  return {
+    joined: inWeek.reduce((sum, r) => sum + r.membersJoined, 0),
+    left: inWeek.reduce((sum, r) => sum + r.membersLeft, 0),
+    days: inWeek.length,
   };
 }
 
@@ -187,7 +231,11 @@ interface GuildPulseContext {
   ticketsResolved: number;
   channelsUnhealthy: number;
   totalChannels: number;
-  previousScore: number | null;
+  /** Scores des jours précédents, du plus récent au plus ancien (7 au plus). */
+  previousScores: number[];
+  audience: PulseScoreInput['audience'];
+  responses: PulseScoreInput['responses'];
+  toxicity: PulseScoreInput['toxicity'];
 }
 
 /**
@@ -204,8 +252,9 @@ async function loadPulseContexts(
 
   const { end: dayEnd, start: dayStart } = dateKeyBounds(dateKey);
   const windowStartKey = shiftDateKey(-BASELINE_DAYS, new Date(`${dateKey}T00:00:00.000Z`));
+  const monthStartKey = shiftDateKey(-(BASELINE_DAYS - 1), new Date(`${dateKey}T00:00:00.000Z`));
 
-  const [dailyRows, openTickets, resolvedTickets, healthAlerts, previousSnapshots, channelRows] =
+  const [dailyRows, openTickets, resolvedTickets, healthAlerts, previousSnapshots, channelRows, audienceRows, responseRows, toxicityRows] =
     await Promise.all([
       prismaRead.guildDailyStat.findMany({
         where: { guildId: { in: guildIds }, dateKey: { gte: windowStartKey, lte: dateKey } },
@@ -255,6 +304,26 @@ async function loadPulseContexts(
         by: ['guildId', 'channelId'],
         where: { guildId: { in: guildIds }, dateKey: { gte: windowStartKey, lte: dateKey } },
       }),
+      // Adhérence : actifs distincts du jour et des 28 jours (texte ou vocal).
+      prismaRead.$queryRaw<Array<{ guildId: string; daily: number; monthly: number }>>`
+        SELECT "guildId",
+          COUNT(DISTINCT "userId") FILTER (WHERE "dateKey" = ${dateKey})::int AS daily,
+          COUNT(DISTINCT "userId")::int AS monthly
+        FROM "member_daily_stats"
+        WHERE "guildId" = ANY(${guildIds}) AND "dateKey" >= ${monthStartKey} AND "dateKey" <= ${dateKey}
+          AND ("messagesCount" > 0 OR "voiceMinutes" > 0)
+        GROUP BY "guildId"
+      `,
+      prismaRead.channelResponseDailyStat.groupBy({
+        by: ['guildId'],
+        where: { guildId: { in: guildIds }, dateKey },
+        _sum: { answered: true, unanswered: true, under1m: true, under5m: true, under15m: true },
+      }),
+      prismaRead.aegisMemberDailyStat.groupBy({
+        by: ['guildId'],
+        where: { guildId: { in: guildIds }, dateKey },
+        _sum: { analyzed: true, toxic: true },
+      }),
     ]);
 
   const dailyByGuild = new Map<string, DailyRow[]>();
@@ -271,11 +340,26 @@ async function loadPulseContexts(
   const resolvedMap = toCount(resolvedTickets as any);
   const unhealthyMap = toCount(healthAlerts as any);
 
-  const previousMap = new Map<string, number>();
+  // Trié par dateKey décroissant : chaque liste va du plus récent au plus ancien.
+  const previousMap = new Map<string, number[]>();
   for (const snap of previousSnapshots) {
-    // Trié par dateKey décroissant : la première occurrence est la plus récente.
-    if (!previousMap.has(snap.guildId)) previousMap.set(snap.guildId, snap.score);
+    const list = previousMap.get(snap.guildId);
+    if (list) list.push(snap.score);
+    else previousMap.set(snap.guildId, [snap.score]);
   }
+
+  const audienceMap = new Map(audienceRows.map((r) => [r.guildId, { daily: r.daily, monthly: r.monthly }]));
+  const responseMap = new Map(
+    responseRows.map((r) => [
+      r.guildId,
+      {
+        answered: r._sum.answered ?? 0,
+        unanswered: r._sum.unanswered ?? 0,
+        fast: (r._sum.under1m ?? 0) + (r._sum.under5m ?? 0) + (r._sum.under15m ?? 0),
+      },
+    ]),
+  );
+  const toxicityMap = new Map(toxicityRows.map((r) => [r.guildId, { analyzed: r._sum.analyzed ?? 0, toxic: r._sum.toxic ?? 0 }]));
 
   const dbChannelCount = new Map<string, number>();
   for (const row of channelRows as Array<{ guildId: string }>) {
@@ -296,7 +380,10 @@ async function loadPulseContexts(
       // Le cache Discord est la source la plus juste ; sinon on retombe sur les
       // salons vus dans les stats (guilde sur un autre shard, cache non peuplé).
       totalChannels: cachedChannels > 0 ? cachedChannels : (dbChannelCount.get(guildId) ?? 0),
-      previousScore: previousMap.get(guildId) ?? null,
+      previousScores: previousMap.get(guildId) ?? [],
+      audience: audienceMap.get(guildId) ?? null,
+      responses: responseMap.get(guildId) ?? null,
+      toxicity: toxicityMap.get(guildId) ?? null,
     });
   }
 
@@ -310,7 +397,9 @@ async function loadPulseContexts(
 interface ComputedSnapshot {
   guildId: string;
   dateKey: string;
-  scores: ReturnType<typeof computePulseScores>;
+  scores: ReturnType<typeof computePulseBreakdown>['scores'];
+  factors: PulseFactor[];
+  confidence: number;
   input: PulseScoreInput;
   alerts: PulseAlert[];
   trend: string;
@@ -340,18 +429,22 @@ function buildSnapshot(guildId: string, dateKey: string, ctx: GuildPulseContext)
     channelsHealthy,
     channelsUnhealthy,
     baseline: buildBaseline(ctx.daily, dateKey),
+    week: weekFlow(ctx.daily, dateKey),
+    audience: ctx.audience,
+    responses: ctx.responses,
+    toxicity: ctx.toxicity,
   };
 
-  const scores = computePulseScores(input);
+  const { scores, factors, confidence } = computePulseBreakdown(input);
   const alerts = generateAlerts(scores, input);
-
-  const trendDelta = ctx.previousScore === null ? 0 : scores.score - ctx.previousScore;
-  const trend = ctx.previousScore === null ? 'STABLE' : resolveTrend(trendDelta);
+  const { trend, delta: trendDelta } = trendAgainst(scores.score, ctx.previousScores);
 
   return {
     guildId,
     dateKey,
     scores,
+    factors,
+    confidence,
     input,
     alerts,
     trend,
@@ -394,6 +487,7 @@ function snapshotWriteData(snap: ComputedSnapshot) {
     trend: snap.trend,
     trendDelta: snap.trendDelta,
     alerts: snap.alerts as any,
+    modelVersion: PULSE_MODEL_VERSION,
   };
 }
 
@@ -501,11 +595,59 @@ export async function backfillPulseHistory(
   return written;
 }
 
+/** Calcule et écrit le snapshot de `dateKey` pour `guildIds`, en un nombre fixe de lectures. */
+async function computeForGuilds(client: Client, guildIds: string[], dateKey: string): Promise<number> {
+  const contexts = await loadPulseContexts(client, guildIds, dateKey);
+  const snapshots = guildIds
+    .map((guildId) => {
+      const ctx = contexts.get(guildId);
+      return ctx ? buildSnapshot(guildId, dateKey, ctx) : null;
+    })
+    .filter((s): s is ComputedSnapshot => s !== null);
+  await persistSnapshots(snapshots);
+  return snapshots.length;
+}
+
 /**
- * Recalcule le snapshot du dernier jour complet pour tous les serveurs.
+ * Recalcule les snapshots des {@link HISTORY_DAYS} derniers jours écrits par un
+ * modèle plus ancien que {@link PULSE_MODEL_VERSION}. Sans ça, la courbe mêlerait
+ * deux barèmes et la comparaison entre serveurs opposerait des notes incompatibles.
  *
- * Coût : un nombre fixe de lectures (6) quel que soit le nombre de guildes, puis
- * une transaction d'écriture par lot de {@link WRITE_CHUNK}.
+ * Les jours sont traités du plus ancien au plus récent : la tendance d'un jour
+ * se calcule sur des jours précédents déjà recalculés.
+ */
+export async function upgradeStaleSnapshots(client: Client): Promise<number> {
+  const stale = await prismaRead.pulseSnapshot.findMany({
+    where: { dateKey: { gte: shiftDateKey(-HISTORY_DAYS), lt: toDateKey() }, modelVersion: { lt: PULSE_MODEL_VERSION } },
+    select: { guildId: true, dateKey: true },
+  });
+  if (stale.length === 0) return 0;
+
+  const byDate = new Map<string, string[]>();
+  for (const row of stale) {
+    const list = byDate.get(row.dateKey);
+    if (list) list.push(row.guildId);
+    else byDate.set(row.dateKey, [row.guildId]);
+  }
+
+  let written = 0;
+  for (const dateKey of [...byDate.keys()].sort()) {
+    try {
+      written += await computeForGuilds(client, byDate.get(dateKey)!, dateKey);
+    } catch (error) {
+      logger.error('Pulse', `Mise à niveau des snapshots du ${dateKey} en échec:`, error);
+    }
+  }
+  logger.info('Pulse', `${written} snapshots recalculés avec le modèle v${PULSE_MODEL_VERSION}`);
+  return written;
+}
+
+/**
+ * Recalcule le snapshot du dernier jour complet pour tous les serveurs, après
+ * avoir remis à niveau l'historique éventuellement calculé par un ancien modèle.
+ *
+ * Coût : un nombre fixe de lectures (9) par jour traité, quel que soit le nombre
+ * de guildes, puis une transaction d'écriture par lot de {@link WRITE_CHUNK}.
  */
 export async function runPulseForAllGuilds(
   client: Client,
@@ -516,26 +658,20 @@ export async function runPulseForAllGuilds(
     return;
   }
 
+  try {
+    await upgradeStaleSnapshots(client);
+  } catch (error) {
+    logger.error('Pulse', 'Mise à niveau des anciens snapshots impossible:', error);
+  }
+
   const started = Date.now();
   const guilds = await prismaRead.guild.findMany({ select: { id: true } });
   const guildIds = guilds.map((g) => g.id);
   if (guildIds.length === 0) return;
 
   try {
-    const contexts = await loadPulseContexts(client, guildIds, dateKey);
-    const snapshots = guildIds
-      .map((guildId) => {
-        const ctx = contexts.get(guildId);
-        return ctx ? buildSnapshot(guildId, dateKey, ctx) : null;
-      })
-      .filter((s): s is ComputedSnapshot => s !== null);
-
-    await persistSnapshots(snapshots);
-
-    logger.info(
-      'Pulse',
-      `${snapshots.length} snapshots calculés pour ${dateKey} en ${Date.now() - started}ms`,
-    );
+    const count = await computeForGuilds(client, guildIds, dateKey);
+    logger.info('Pulse', `${count} snapshots calculés pour ${dateKey} en ${Date.now() - started}ms`);
   } catch (error) {
     logger.error('Pulse', `Erreur lors du calcul groupé du pulse (${dateKey}):`, error);
   }
@@ -565,7 +701,59 @@ function toView(snapshot: {
     trendDelta: snapshot.trendDelta,
     alerts: Array.isArray(snapshot.alerts) ? (snapshot.alerts as PulseAlert[]) : [],
     partial,
+    confidence: null,
+    factors: [],
   };
+}
+
+/** Vue d'un snapshot recalculé à la volée : avec facteurs et confiance. */
+function computedView(snap: ComputedSnapshot, partial: boolean): PulseSnapshotView {
+  return {
+    ...toView({ ...snap.scores, dateKey: snap.dateKey, trend: snap.trend, trendDelta: snap.trendDelta, alerts: snap.alerts }, partial),
+    confidence: snap.confidence,
+    factors: snap.factors,
+  };
+}
+
+/**
+ * Rang du serveur parmi ceux de taille comparable (de la moitié au double de
+ * membres), sur le même jour et le même modèle. Seuls des scores sont lus :
+ * aucune information sur les autres serveurs ne sort de cette fonction.
+ */
+async function loadBenchmark(guildId: string, dateKey: string, totalMembers: number, score: number): Promise<PulseBenchmark | null> {
+  if (totalMembers <= 0) return null;
+  const minMembers = Math.max(1, Math.floor(totalMembers / 2));
+  const maxMembers = totalMembers * 2;
+  const peers = await prismaRead.pulseSnapshot.findMany({
+    where: {
+      dateKey,
+      modelVersion: PULSE_MODEL_VERSION,
+      totalMembers: { gte: minMembers, lte: maxMembers },
+      guildId: { not: guildId },
+    },
+    select: { score: true },
+    take: 5000,
+  });
+  const percentile = percentileRank(score, peers.map((p) => p.score));
+  return percentile === null ? null : { percentile, peers: peers.length, minMembers, maxMembers };
+}
+
+const METRIC_SELECT = {
+  totalMessages: true,
+  totalVoiceMinutes: true,
+  activeMembers: true,
+  totalMembers: true,
+  membersJoined: true,
+  membersLeft: true,
+  sanctionsCount: true,
+  ticketsResolved: true,
+  ticketsOpen: true,
+  channelsHealthy: true,
+  channelsUnhealthy: true,
+} as const;
+
+function pickMetrics(row: PulseMetrics): PulseMetrics {
+  return Object.fromEntries(Object.keys(METRIC_SELECT).map((k) => [k, row[k as keyof PulseMetrics]])) as unknown as PulseMetrics;
 }
 
 /**
@@ -577,32 +765,22 @@ function toView(snapshot: {
 export async function getPulseDashboardData(guildId: string): Promise<PulseData> {
   const [history, bumpStatus] = await Promise.all([
     prismaRead.pulseSnapshot.findMany({
-    where: { guildId },
-    orderBy: { dateKey: 'desc' },
-    take: HISTORY_DAYS,
-    select: {
-      dateKey: true,
-      score: true,
-      activityScore: true,
-      moderationScore: true,
-      growthScore: true,
-      engagementScore: true,
-      healthScore: true,
-      trend: true,
-      trendDelta: true,
-      alerts: true,
-      totalMessages: true,
-      totalVoiceMinutes: true,
-      activeMembers: true,
-      totalMembers: true,
-      membersJoined: true,
-      membersLeft: true,
-      sanctionsCount: true,
-      ticketsResolved: true,
-      ticketsOpen: true,
-      channelsHealthy: true,
-      channelsUnhealthy: true,
-    },
+      where: { guildId },
+      orderBy: { dateKey: 'desc' },
+      take: HISTORY_DAYS,
+      select: {
+        dateKey: true,
+        score: true,
+        activityScore: true,
+        moderationScore: true,
+        growthScore: true,
+        engagementScore: true,
+        healthScore: true,
+        trend: true,
+        trendDelta: true,
+        alerts: true,
+        ...METRIC_SELECT,
+      },
     }),
     getBumpStatus(guildId),
   ]);
@@ -612,23 +790,27 @@ export async function getPulseDashboardData(guildId: string): Promise<PulseData>
   if (!latest) {
     return {
       hasData: false,
-      current: {
-        dateKey: lastCompleteDateKey(),
-        score: 0,
-        activityScore: 0,
-        moderationScore: 0,
-        growthScore: 0,
-        engagementScore: 0,
-        healthScore: 0,
-        trend: 'STABLE',
-        trendDelta: 0,
-        alerts: [],
-        partial: false,
-      },
+      current: toView(
+        {
+          dateKey: lastCompleteDateKey(),
+          score: 0,
+          activityScore: 0,
+          moderationScore: 0,
+          growthScore: 0,
+          engagementScore: 0,
+          healthScore: 0,
+          trend: 'STABLE',
+          trendDelta: 0,
+          alerts: [],
+        },
+        false,
+      ),
       today: null,
       history: [],
       metrics: { ...EMPTY_METRICS },
       bumpStatus,
+      benchmark: null,
+      modelVersion: PULSE_MODEL_VERSION,
     };
   }
 
@@ -649,67 +831,69 @@ export async function getPulseDashboardData(guildId: string): Promise<PulseData>
         growthScore: s.growthScore,
         engagementScore: s.engagementScore,
         healthScore: s.healthScore,
+        alerts: Array.isArray(s.alerts) ? (s.alerts as unknown as PulseAlert[]) : [],
+        ...pickMetrics(s),
       })),
-    metrics: {
-      totalMessages: latest.totalMessages,
-      totalVoiceMinutes: latest.totalVoiceMinutes,
-      activeMembers: latest.activeMembers,
-      totalMembers: latest.totalMembers,
-      membersJoined: latest.membersJoined,
-      membersLeft: latest.membersLeft,
-      sanctionsCount: latest.sanctionsCount,
-      ticketsResolved: latest.ticketsResolved,
-      ticketsOpen: latest.ticketsOpen,
-      channelsHealthy: latest.channelsHealthy,
-      channelsUnhealthy: latest.channelsUnhealthy,
-    },
+    metrics: pickMetrics(latest),
     bumpStatus,
+    benchmark: null,
+    modelVersion: PULSE_MODEL_VERSION,
   };
 }
 
 /**
- * Variante enrichie : ajoute l'aperçu (non persisté) du jour en cours.
- * Utilisée par le dashboard, qui affiche « aujourd'hui, en cours » à côté du
- * dernier jour consolidé.
+ * Variante complète, utilisée par le dashboard :
+ *   - le dernier jour complet est recalculé à la volée, ce qui donne ses
+ *     facteurs (« pourquoi ce score ») et sa confiance, que le snapshot stocké
+ *     ne garde pas ;
+ *   - l'aperçu (non persisté) du jour en cours est ajouté ;
+ *   - le rang parmi les serveurs de même taille est lu.
  */
 export async function getPulseDashboardDataWithToday(
   client: Client,
   guildId: string,
 ): Promise<PulseData> {
   const todayKey = toDateKey();
-  const [base, contexts] = await Promise.all([
+  const lastKey = lastCompleteDateKey();
+  const [base, todayContexts, lastContexts] = await Promise.all([
     getPulseDashboardData(guildId),
     loadPulseContexts(client, [guildId], todayKey),
+    loadPulseContexts(client, [guildId], lastKey),
   ]);
 
-  const ctx = contexts.get(guildId);
-  if (!ctx) return base;
+  let data = base;
 
-  const snapshot = buildSnapshot(guildId, todayKey, ctx);
-  const hasSignal = snapshot.metrics.totalMessages > 0 || snapshot.metrics.totalVoiceMinutes > 0;
-  if (!hasSignal) return base;
+  const lastCtx = lastContexts.get(guildId);
+  if (lastCtx) {
+    const snapshot = buildSnapshot(guildId, lastKey, lastCtx);
+    const hasSignal = snapshot.metrics.totalMessages > 0 || snapshot.metrics.totalVoiceMinutes > 0 || snapshot.metrics.membersJoined > 0;
+    if (base.hasData || hasSignal) {
+      data = { ...data, hasData: true, current: computedView(snapshot, false), metrics: snapshot.metrics };
+    }
+  }
 
-  return {
-    ...base,
-    hasData: true,
-    today: {
-      ...toView(
-        {
-          ...snapshot.scores,
-          dateKey: todayKey,
-          // Une journée entamée sera toujours « en baisse » face à une journée
-          // entière : afficher cette tendance ferait croire chaque matin à un
-          // effondrement. La comparaison n'a de sens qu'entre jours complets,
-          // c'est `current.trend` qui la porte.
-          trend: 'STABLE',
-          trendDelta: 0,
-          // Même raison pour les alertes : à 9 h du matin, « activité très
-          // faible » est un artefact de l'heure, pas un diagnostic.
-          alerts: [],
-        },
-        true,
-      ),
-      metrics: snapshot.metrics,
-    },
-  };
+  const todayCtx = todayContexts.get(guildId);
+  if (todayCtx) {
+    const snapshot = buildSnapshot(guildId, todayKey, todayCtx);
+    const hasSignal = snapshot.metrics.totalMessages > 0 || snapshot.metrics.totalVoiceMinutes > 0;
+    if (hasSignal) {
+      // Une journée entamée sera toujours « en baisse » face à une journée
+      // entière, et « activité très faible » à 9 h est un artefact de l'heure :
+      // l'aperçu n'a ni tendance ni alertes. La comparaison n'a de sens
+      // qu'entre jours complets, c'est `current` qui la porte.
+      const view = computedView({ ...snapshot, trend: 'STABLE', trendDelta: 0, alerts: [] }, true);
+      data = { ...data, hasData: true, today: { ...view, metrics: snapshot.metrics } };
+    }
+  }
+
+  if (data.hasData) {
+    try {
+      data = { ...data, benchmark: await loadBenchmark(guildId, data.current.dateKey, data.metrics.totalMembers, data.current.score) };
+    } catch (error) {
+      // Le rang est un bonus : son échec ne doit pas priver la page du reste.
+      logger.warn('Pulse', `Comparaison aux serveurs de même taille impossible pour ${guildId}:`, error);
+    }
+  }
+
+  return data;
 }

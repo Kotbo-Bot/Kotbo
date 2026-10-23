@@ -48,10 +48,11 @@ import {
 import { runRaidAssault, type RaidAssaultResult } from './rpgRaidCombat.js';
 import { resolveRpgTeam, type RpgTeamIdentity } from './rpgTeamResolver.js';
 import { shouldAwardClanPoints } from './rpgBestiaryPolicy.js';
+import { UserFacingError } from '../../../utils/userFacingError.js';
 
 type EconomyConfig = Awaited<ReturnType<typeof getOrCreateEconomyConfig>>;
 
-export class RaidError extends Error {
+export class RaidError extends UserFacingError {
   constructor(message: string, readonly status: number = 400) {
     super(message);
     this.name = 'RaidError';

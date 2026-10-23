@@ -1,10 +1,10 @@
-import { errorMessage } from '../../utils/errors.js';
 import type { SlashCommandDefinition } from '../../commands.js';
 import { SlashCommandBuilder, type ChatInputCommandInteraction, MessageFlags } from 'discord.js';
 import { transferCoins, getOrCreateEconomyConfig } from '../../services/features/economyService.js';
 import { errorEmbed, successEmbed } from '../../utils/embeds.js';
 import { getEffectiveLocale, getCommandMetadata } from '../../utils/i18n.js';
 import * as m from '../../lib/paraglide/messages.js';
+import { publicErrorMessage } from '../../utils/publicError.js';
 
 const meta = getCommandMetadata('b5_givecoins');
 
@@ -66,7 +66,7 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
     });
   } catch (err: unknown) {
     await interaction.reply({
-      embeds: [errorEmbed(m.b5_givecoins_failed_title({}, { locale }), errorMessage(err) || m.b5_givecoins_failed_desc({}, { locale }))],
+      embeds: [errorEmbed(m.b5_givecoins_failed_title({}, { locale }), publicErrorMessage(err, m.b5_givecoins_failed_desc({}, { locale })))],
       flags: [MessageFlags.Ephemeral]
     });
   }

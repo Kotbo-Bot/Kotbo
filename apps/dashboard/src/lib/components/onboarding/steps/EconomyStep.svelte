@@ -152,7 +152,7 @@
     </div>
 
     <div>
-      <p class="text-xs text-on-surface-variant/50 mb-2">{m.onb_economy_suggestions()}</p>
+      <p class="text-xs text-on-surface-variant mb-2">{m.onb_economy_suggestions()}</p>
       <div class="flex flex-wrap gap-2">
         <!-- Le nom du serveur en tete de liste : « Les Kotbos » se lit mieux que
              « Pièces », et c'est la suggestion qu'on ne pouvait pas ecrire a
@@ -221,7 +221,7 @@
     <button
       type="button"
       onclick={skip}
-      class="text-body-sm font-medium text-on-surface-variant/50 hover:text-on-surface transition-colors"
+      class="text-body-sm font-medium text-on-surface-variant hover:text-on-surface transition-colors"
     >
       Passer
     </button>

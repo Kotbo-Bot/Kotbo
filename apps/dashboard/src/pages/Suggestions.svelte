@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { explainDisabled } from '../lib/actions/explainDisabled';
   import { FilterPills } from '../lib/components/ui';
   import { m } from '../lib/i18n';
   import { channelDisplayName } from '../lib/channelUtils';
@@ -12,7 +13,6 @@
   import EmptyState from '../lib/components/EmptyState.svelte';
   import Papicon from '../lib/components/Papicon.svelte';
   import InlineFeedback from '../lib/components/InlineFeedback.svelte';
-  import ToggleSwitch from '../lib/components/ToggleSwitch.svelte';
   import SearchableSelect from '../lib/components/SearchableSelect.svelte';
   import Skeleton from '../lib/components/Skeleton.svelte';
   import UserDisplay from '../lib/components/UserDisplay.svelte';
@@ -39,14 +39,15 @@
 
   const availableChannels = $derived(dashboardStore.state.discordChannels || []);
 
+  // Le marche/arret du module vit dans le menu de ModulePage : la route de
+  // configuration ne recoit plus que le salon. Renvoyer `enabled` charge au
+  // montage pouvait rallumer un module eteint entre-temps depuis ce menu.
   let moduleConfig = $state({
-    enabled: true,
     channelId: null as string | null,
   });
 
   // Snapshot of last-saved state
   let savedConfig = $state({
-    enabled: true,
     channelId: null as string | null,
   });
 
@@ -107,7 +108,6 @@
     const res = await fetchSuggestionsConfig();
     if (res?.config) {
       const loaded = {
-        enabled: res.config.enabled ?? true,
         channelId: res.config.channelId ?? null,
       };
       moduleConfig = loaded;
@@ -141,7 +141,6 @@
       const res = await updateSuggestionsConfig(moduleConfig);
       if (!res?.config) throw new Error(m.suggestions_save_config_error());
       const saved = {
-        enabled: res.config.enabled ?? true,
         channelId: res.config.channelId ?? null,
       };
       moduleConfig = saved;
@@ -275,7 +274,7 @@
             <!-- Moderation actions form -->
             <div class="space-y-4 pt-4 border-t border-outline-variant/10 animate-in fade-in duration-300">
               <div class="space-y-1.5">
-                <label for={`resp-${suggestion.id}`} class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.suggestions_public_comment_label()}</label>
+                <label for={`resp-${suggestion.id}`} class="text-xs font-semibold text-on-surface-variant ml-2">{m.suggestions_public_comment_label()}</label>
                 <textarea 
                   id={`resp-${suggestion.id}`}
                   bind:value={responseDrafts[suggestion.id]} 
@@ -287,21 +286,21 @@
               <div class="flex flex-wrap gap-3 justify-end">
                 <button 
                   onclick={() => handleResolve(suggestion.id, 'REJECTED')}
-                  disabled={!responseDrafts[suggestion.id]?.trim()}
+                  use:explainDisabled={(!responseDrafts[suggestion.id]?.trim()) ? m.common_reason_fill_field() : ''}
                   class="px-4 py-2 bg-rose-500 hover:bg-rose-600 text-white text-body-sm font-medium rounded-lg transition-all disabled:opacity-50"
                 >
                   {m.suggestions_btn_reject()}
                 </button>
                 <button 
                   onclick={() => handleResolve(suggestion.id, 'APPROVED')}
-                  disabled={!responseDrafts[suggestion.id]?.trim()}
+                  use:explainDisabled={(!responseDrafts[suggestion.id]?.trim()) ? m.common_reason_fill_field() : ''}
                   class="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-body-sm font-medium rounded-lg transition-all disabled:opacity-50"
                 >
                   {m.suggestions_btn_approve()}
                 </button>
                 <button 
                   onclick={() => handleResolve(suggestion.id, 'IMPLEMENTED')}
-                  disabled={!responseDrafts[suggestion.id]?.trim()}
+                  use:explainDisabled={(!responseDrafts[suggestion.id]?.trim()) ? m.common_reason_fill_field() : ''}
                   class="px-4 py-2 bg-sky-500 hover:bg-sky-600 text-white text-body-sm font-medium rounded-lg transition-all disabled:opacity-50"
                 >
                   {m.suggestions_btn_implement()}
@@ -315,8 +314,7 @@
           <EmptyState
             icon="thumbs-up"
             title={m.suggestions_empty_title()}
-            description={m.suggestions_empty_desc()}
-          />
+            description={m.suggestions_empty_desc()} reason="accumulating" />
         </div>
       {/each}
     </div>
@@ -327,30 +325,16 @@
         description={m.suggestions_config_section_desc()}
         icon="settings"
       >
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div class="flex items-center justify-between gap-4 p-4 bg-surface-container rounded-lg border border-outline-variant">
-            <div>
-              <p class="text-sm font-medium text-on-surface">{m.suggestions_system_toggle_title()}</p>
-              <p class="text-xs text-on-surface-variant mt-0.5">{m.suggestions_system_toggle_desc()}</p>
-            </div>
-            <ToggleSwitch
-              checked={moduleConfig.enabled}
-              onToggle={(v: boolean) => { moduleConfig.enabled = v; }}
-              disabled={!canConfigure}
-            />
-          </div>
-
-          <div>
-            <label for="suggestions-channel" class="field-label">{m.suggestions_channel_label()}</label>
-            <SearchableSelect
-              id="suggestions-channel"
-              bind:value={moduleConfig.channelId}
-              options={availableChannels.map((c) => ({ id: c.id, name: channelDisplayName(c) }))}
-              placeholder={m.announcements_select_channel_placeholder()}
-              className="w-full bg-surface-container border border-outline-variant rounded-lg px-4 py-3 text-sm"
-              disabled={!canConfigure || !moduleConfig.enabled}
-            />
-          </div>
+        <div class="max-w-md">
+          <label for="suggestions-channel" class="field-label">{m.suggestions_channel_label()}</label>
+          <SearchableSelect
+            id="suggestions-channel"
+            bind:value={moduleConfig.channelId}
+            options={availableChannels.map((c) => ({ id: c.id, name: channelDisplayName(c) }))}
+            placeholder={m.announcements_select_channel_placeholder()}
+            className="w-full"
+            disabled={!canConfigure}
+          />
         </div>
       </SectionCard>
     {/if}

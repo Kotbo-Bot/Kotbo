@@ -1,4 +1,3 @@
-import { errorMessage } from '../../utils/errors.js';
 import type { ContextCommandDefinition, SlashCommandDefinition } from '../../commands.js';
 import {
   ActionRowBuilder,
@@ -42,6 +41,7 @@ import { buildMemberCaseActionRow } from '../../services/moderation/memberCaseSe
 import { extractTrackingInfo, resolveModuleFromCommand, wrapModuleTracking } from '../../utils/moduleTracking.js';
 import { getEffectiveLocale, getCommandMetadata } from '../../utils/i18n.js';
 import * as m from '../../lib/paraglide/messages.js';
+import { publicErrorMessage } from '../../utils/publicError.js';
 
 type Locale = 'fr' | 'en';
 
@@ -767,7 +767,7 @@ async function executeInternal(interaction: ChatInputCommandInteraction | UserCo
           client: interaction.client,
         });
       } catch (err: unknown) {
-        const embed = errorEmbed(m.b1_progressive_error_title({}, { locale }), errorMessage(err) || m.b1_progressive_error_fallback({}, { locale }));
+        const embed = errorEmbed(m.b1_progressive_error_title({}, { locale }), publicErrorMessage(err, m.b1_progressive_error_fallback({}, { locale })));
         await interaction.editReply({ embeds: [embed] });
         return;
       }
@@ -811,7 +811,7 @@ async function executeInternal(interaction: ChatInputCommandInteraction | UserCo
     });
   } catch (error) {
     await interaction.reply({
-      embeds: [errorEmbed(m.b1_error({}, { locale }), error instanceof Error ? error.message : m.b1_unknown_error({}, { locale }))],
+      embeds: [errorEmbed(m.b1_error({}, { locale }), publicErrorMessage(error, m.b1_unknown_error({}, { locale })))],
       flags: [MessageFlags.Ephemeral],
     });
   }

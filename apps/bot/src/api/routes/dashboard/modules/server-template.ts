@@ -37,6 +37,7 @@ import { ChannelType, PermissionFlagsBits, type Guild, type GuildBasedChannel } 
 import { type ModuleRouteContext } from './_shared.js';
 
 import { jsonFailure } from '../../../shared/failure.js';
+import { publicErrorMessage } from '../../../../utils/publicError.js';
 /**
  * Ce que le serveur porte deja de la maquette, et par quoi.
  *
@@ -573,7 +574,7 @@ export async function handleServerTemplateRoutes(ctx: ModuleRouteContext): Promi
       });
     } catch (err) {
       logger.error('ServerTemplateAPI', `Error applying server template: ${errorMessage(err)}`);
-      json(res, 500, { error: `Mise en place interrompue : ${errorMessage(err)}` });
+      json(res, 500, { error: `Mise en place interrompue : ${publicErrorMessage(err)}` });
     } finally {
       releaseProvisionSlot();
       releaseProvisionLock(lockKey);
@@ -629,7 +630,7 @@ export async function handleServerTemplateRoutes(ctx: ModuleRouteContext): Promi
       json(res, 200, channel);
     } catch (err) {
       logger.error('ServerTemplateAPI', `Error creating onboarding channel: ${errorMessage(err)}`);
-      jsonFailure(res, err, errorMessage(err) || "Le salon n'a pas pu être créé.", 'ServerTemplateAPI');
+      jsonFailure(res, err, publicErrorMessage(err, "Le salon n'a pas pu être créé."), 'ServerTemplateAPI');
     } finally {
       releaseProvisionLock(lockKey);
     }
@@ -682,7 +683,7 @@ export async function handleServerTemplateRoutes(ctx: ModuleRouteContext): Promi
       json(res, 200, result);
     } catch (err) {
       logger.error('ServerTemplateAPI', `Error creating onboarding roles: ${errorMessage(err)}`);
-      jsonFailure(res, err, errorMessage(err) || "Les rôles n'ont pas pu être créés.", 'ServerTemplateAPI');
+      jsonFailure(res, err, publicErrorMessage(err, "Les rôles n'ont pas pu être créés."), 'ServerTemplateAPI');
     } finally {
       releaseProvisionLock(lockKey);
     }

@@ -34,6 +34,7 @@ import { registerWriteMembersAltAccountsTools } from './tools/write-members-alt-
 import { registerWriteStaffLeadershipTools } from './tools/write-staff-leadership.js';
 import { registerWriteCommunityNewTools } from './tools/write-community-new.js';
 import { registerWriteTicketsNewTools } from './tools/write-tickets-new.js';
+import { registerTicketMacrosTools } from './tools/ticket-macros.js';
 import { registerWriteMembersNewTools } from './tools/write-members-new.js';
 import { registerReadServerAssetsTools } from './tools/read-server-assets.js';
 import { registerReadMembersVoicePinsThreadsTools } from './tools/read-members-voice-pins-threads.js';
@@ -48,6 +49,8 @@ import { registerManagementCenterTools } from './tools/management-center.js';
 import { registerRpgTools } from './tools/rpg.js';
 import { registerRpgTowerTools } from './tools/rpg-tower.js';
 import { registerRpgClanTowerTools } from './tools/rpg-clan-tower.js';
+import { registerSiteTools } from './tools/site.js';
+import { registerShopTools } from './tools/shop.js';
 
 export function registerMcpTools(
   mcpServer: McpServer,
@@ -141,6 +144,7 @@ export function registerMcpTools(
   registerWriteStaffLeadershipTools(ctx);
   registerWriteCommunityNewTools(ctx);
   registerWriteTicketsNewTools(ctx);
+  registerTicketMacrosTools(ctx);
   registerWriteMembersNewTools(ctx);
   registerRpgTools(ctx);
   registerRpgTowerTools(ctx);
@@ -155,4 +159,6 @@ export function registerMcpTools(
   registerWriteWelcomeThreadTools(ctx);
   registerDashboardAccessTools(ctx);
   registerManagementCenterTools(ctx);
+  registerSiteTools(ctx);
+  registerShopTools(ctx);
 }

@@ -6,7 +6,7 @@
  */
 import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
-import { type McpToolContext, err, ok, resolveMember } from '../toolkit.js';
+import { type McpToolContext, err, ok, resolveMember, toolError } from '../toolkit.js';
 import {
   adjustTowerShards,
   deleteTowerReward,
@@ -131,7 +131,7 @@ const merchantSchema = z.object({
   potionHealPercent: merchantRange('potionHealPercent').describe('Soin de toutes les potions, en % des PV max'),
 });
 
-const fail = (e: unknown) => err(e instanceof Error ? e.message : String(e));
+const fail = (e: unknown) => toolError(e);
 
 export type TowerFloorsEdit = {
   floors?: unknown[];

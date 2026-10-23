@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { explainDisabled } from '../actions/explainDisabled';
   import { onDestroy } from 'svelte';
   import {
     getRankCardAchievement,
@@ -505,7 +506,8 @@
       <button
         type="button"
         onclick={save}
-        disabled={saving || !dirty}
+        disabled={saving}
+        use:explainDisabled={(!dirty) ? m.common_reason_no_changes() : ''}
         class="rounded-lg bg-primary px-4 py-2 text-body-sm font-medium text-on-primary transition-all hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
       >
         {saving ? m.rc_saving() : m.rc_save()}

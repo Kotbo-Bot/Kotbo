@@ -27,9 +27,18 @@
 </script>
 
 <div
-  class="flex items-center gap-2.5 px-3.5 py-2.5 rounded-lg border shadow-lg shadow-black/10 dark:shadow-black/40 animate-in slide-in-from-right fade-in duration-200 {colorClass}"
+  class="relative overflow-hidden flex items-center gap-2.5 px-3.5 py-2.5 rounded-lg border shadow-lg shadow-black/10 dark:shadow-black/40 animate-in slide-in-from-right fade-in duration-200 {colorClass}"
   role="alert"
 >
+  {#if item.undoable && item.duration}
+    <!-- Le temps qu'il reste pour annuler : sans repere, on ne sait pas si
+         l'on a encore le temps de cliquer. -->
+    <span
+      class="toast-countdown absolute left-0 bottom-0 h-0.5 w-full bg-current opacity-40"
+      style="animation-duration: {item.duration}ms"
+      aria-hidden="true"
+    ></span>
+  {/if}
   <Papicon name={iconName} size={16} class="shrink-0" />
   <p class="text-sm flex-1">{item.message}</p>
   {#if item.action}
@@ -55,3 +64,21 @@
     <Papicon name="close" size={14} />
   </button>
 </div>
+
+<style>
+  .toast-countdown {
+    transform-origin: left;
+    animation-name: toast-countdown;
+    animation-timing-function: linear;
+    animation-fill-mode: forwards;
+  }
+
+  @keyframes toast-countdown {
+    from { transform: scaleX(1); }
+    to { transform: scaleX(0); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .toast-countdown { animation: none; }
+  }
+</style>

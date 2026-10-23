@@ -29,8 +29,7 @@ import {
   
   
   
-  createNotification,
-  
+
   getPolls,
   createPoll,
   castPollVote,
@@ -49,6 +48,7 @@ import {
   
   
 } from '../../../../services/staff/staffLeadershipService.js';
+import { notify, notifyMany } from '../../../../services/notifications/notifyService.js';
 import {
   getStaffMember,
   addStaffMember,
@@ -87,6 +87,7 @@ import { canViewFeatureSection } from '../featureGate.js';
 import { type OverwriteResolvable, Client, ChannelType, PermissionFlagsBits, EmbedBuilder, TextChannel } from 'discord.js';
 
 import { jsonFailure } from '../../../shared/failure.js';
+import { publicErrorMessage } from '../../../../utils/publicError.js';
 export async function handleStaffRoutes(
   req: IncomingMessage,
   res: ServerResponse,
@@ -1120,7 +1121,7 @@ export async function handleStaffRoutes(
           logger.error('StaffAPI', 'Error creating staff hierarchy:', err);
           json(res, err instanceof Error && /Hiérarchie/i.test(err.message)
             ? 400
-            : 500, { error: err instanceof Error ? err.message : 'Erreur lors de la création de la hiérarchie staff' });
+            : 500, { error: publicErrorMessage(err, 'Erreur lors de la création de la hiérarchie staff') });
         }
         return true;
       }
@@ -1226,7 +1227,7 @@ export async function handleStaffRoutes(
           json(res, 200, result);
         } catch (err: unknown) {
           logger.error('StaffAPI', 'Error importing role members:', err);
-          json(res, 500, { error: errorMessage(err) || "Erreur lors de l'import" });
+          json(res, 500, { error: publicErrorMessage(err, "Erreur lors de l'import") });
         }
         return true;
       }
@@ -1246,7 +1247,7 @@ export async function handleStaffRoutes(
           logger.error('StaffAPI', 'Error adding member to hierarchy:', err);
           json(res, /détecter automatiquement/i.test(errorMessage(err))
             ? 400
-            : 500, { error: errorMessage(err) || "Erreur lors de l'ajout" });
+            : 500, { error: publicErrorMessage(err, "Erreur lors de l'ajout") });
         }
         return true;
       }
@@ -1260,7 +1261,7 @@ export async function handleStaffRoutes(
           json(res, 200, { ok: true });
         } catch (err: unknown) {
           logger.error('StaffAPI', 'Error removing member from hierarchy:', err);
-          json(res, 500, { error: errorMessage(err) || 'Erreur lors du retrait' });
+          json(res, 500, { error: publicErrorMessage(err, 'Erreur lors du retrait') });
         }
         return true;
       }
@@ -1503,36 +1504,16 @@ export async function handleStaffRoutes(
           });
 
           if (managers.length > 0) {
-            await Promise.all(managers.map(async (m) => {
-              await createNotification(
-                guildId,
-                m.userId,
-                '🔔 Demande de démission',
-                `${staffMember.username ?? user.userId} a soumis une demande de démission via le dashboard.\nMotif : ${reason}`,
-                'WARNING',
-                '/staff-management?tab=resignations',
-                true
-              ).catch(() => null);
-
-              try {
-                const managerUser = await client.users.fetch(m.userId).catch(() => null);
-                if (managerUser) {
-                  const discordGuild = client.guilds.cache.get(guildId) ?? await client.guilds.fetch(guildId).catch(() => null);
-                  const serverName = discordGuild ? discordGuild.name : '';
-                  const embed = new EmbedBuilder()
-                    .setTitle('🔔 Nouvelle demande de démission')
-                    .setDescription(
-                      `**${staffMember.username ?? user.userId}** a soumis une demande de démission via le dashboard.\n\n` +
-                      `**Motif :**\n> ${reason}\n\n` +
-                      `Rendez-vous sur le dashboard pour traiter cette demande.`
-                    )
-                    .setColor(COLORS.warning)
-                    .setTimestamp()
-                    .setFooter({ text: `Référence : ${resignation.id}${serverName ? ` · Serveur : ${serverName}` : ''}` });
-                  await managerUser.send({ embeds: [embed] }).catch(() => null);
-                }
-              } catch { /* ignored */ }
-            }));
+            await notifyMany(managers.map((m) => m.userId), {
+              guildId,
+              kind: 'staff.resignation_requested',
+              title: 'Demande de démission',
+              message: `**${staffMember.username ?? user.userId}** a soumis une demande de démission via le dashboard.\n\n**Motif :**\n> ${reason}`,
+              severity: 'WARNING',
+              link: '/staff-management?tab=resignations',
+              actorId: user.userId,
+              data: { resignationId: resignation.id },
+            });
           }
 
           json(res, 201, { resignation });
@@ -1584,38 +1565,18 @@ export async function handleStaffRoutes(
             }
           });
 
-          await createNotification(
+          await notify({
             guildId,
-            resignation.staffMember.userId,
-            body.action === 'APPROVED' ? '✅ Démission approuvée' : '❌ Démission refusée',
-            body.action === 'APPROVED'
-              ? `Votre demande de démission a été approuvée.${body.note ? `\nNote : ${body.note}` : ''}`
-              : `Votre demande de démission a été refusée.${body.note ? `\nMotif : ${body.note}` : ''}`,
-            body.action === 'APPROVED' ? 'SUCCESS' : 'ERROR',
-            '/profile',
-            true
-          ).catch(() => null);
-
-          try {
-            const discordUser = await client.users.fetch(resignation.staffMember.userId).catch(() => null);
-            if (discordUser) {
-              const discordGuild = client.guilds.cache.get(guildId) ?? await client.guilds.fetch(guildId).catch(() => null);
-              const serverName = discordGuild ? discordGuild.name : '';
-              const dmEmbed = new EmbedBuilder()
-                .setTitle(body.action === 'APPROVED' ? '✅ Démission approuvée' : '❌ Démission refusée')
-                .setDescription(
-                  body.action === 'APPROVED'
-                    ? `Votre demande de démission a été **approuvée** par la direction.${body.note ? `\n\n📝 **Note :** ${body.note}` : ''}`
-                    : `Votre demande de démission a été **refusée** par la direction.${body.note ? `\n\n📝 **Motif :** ${body.note}` : ''}`
-                )
-                .setColor(body.action === 'APPROVED' ? COLORS.success : COLORS.warning)
-                .setTimestamp();
-              if (serverName) {
-                dmEmbed.setFooter({ text: `Serveur : ${serverName}` });
-              }
-              await discordUser.send({ embeds: [dmEmbed] }).catch(() => null);
-            }
-          } catch { /* ignored */ }
+            userId: resignation.staffMember.userId,
+            kind: 'staff.resignation_decided',
+            title: body.action === 'APPROVED' ? 'Démission approuvée' : 'Démission refusée',
+            message: body.action === 'APPROVED'
+              ? `Votre demande de démission a été **approuvée** par la direction.${body.note ? `\n\n📝 **Note :** ${body.note}` : ''}`
+              : `Votre demande de démission a été **refusée** par la direction.${body.note ? `\n\n📝 **Motif :** ${body.note}` : ''}`,
+            severity: body.action === 'APPROVED' ? 'SUCCESS' : 'ERROR',
+            link: '/profile',
+            actorId: user.userId,
+          }).catch(() => null);
 
           await pushAudit(guildId, {
             user: user.username ?? `User${user.userId}`,

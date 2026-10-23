@@ -13,7 +13,7 @@ import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
 import { LinkedAccountType, LinkedAccountStatus, VerificationStatus, VerificationLevel } from '@prisma/client';
 import * as altAccountService from './altAccountService.js';
-import { createNotification } from '../staff/staffLeadershipService.js';
+import { notifyMany } from '../notifications/notifyService.js';
 import {
   closeFallbackChannel,
   deliverVerification,
@@ -597,7 +597,7 @@ export async function completeVerification(params: {
           invite: inviteUrl || '(invitation indisponible)',
           reason: appeal?.decisionReason || '',
         });
-        await sendMemberDM(client, verification.userId, dmMsg);
+        await sendMemberDM(client, verification.userId, dmMsg, guild.id, 'security.verification_notice');
       }
 
       const member = await guild.members.fetch(verifiedDiscordId).catch(() => null);
@@ -711,19 +711,16 @@ async function notifyStaffOfDuplicate(
     },
   });
 
-  await Promise.all(
-    managers.map(m =>
-      createNotification(
-        guildId,
-        m.userId,
-        autoLinked ? '🔗 DC détecté et lié' : '⚠️ DC potentiel détecté',
-        `Double compte détecté : <@${userId1}> ↔ <@${userId2}> (${evidence.method === 'oauth_mismatch' ? 'OAuth mismatch' : evidence.method === 'device_match' ? 'même appareil' : 'même IP'}).`,
-        autoLinked ? 'SUCCESS' : 'WARNING',
-        '/double-accounts',
-        false,
-      ).catch(() => null),
-    ),
-  );
+  await notifyMany(managers.map(m => m.userId), {
+    guildId,
+    kind: 'security.alt_detected',
+    title: autoLinked ? '🔗 DC détecté et lié' : '⚠️ DC potentiel détecté',
+    message: `Double compte détecté : <@${userId1}> ↔ <@${userId2}> (${evidence.method === 'oauth_mismatch' ? 'OAuth mismatch' : evidence.method === 'device_match' ? 'même appareil' : 'même IP'}).`,
+    severity: autoLinked ? 'SUCCESS' : 'WARNING',
+    link: '/double-accounts',
+    groupKey: 'security.alt_detected',
+    dm: false,
+  });
 }
 
 export async function handleVerificationStaffAction(interaction: Interaction): Promise<void> {

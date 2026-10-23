@@ -273,7 +273,7 @@
         ] as stat (stat.label)}
           <div>
             <p class="text-2xl font-bold tracking-tight text-primary"><CountUp value={stat.n} /></p>
-            <p class="text-xs font-medium text-on-surface-variant/60">{stat.label}</p>
+            <p class="text-xs font-medium text-on-surface-variant">{stat.label}</p>
           </div>
         {/each}
       </div>
@@ -294,7 +294,7 @@
           <div class="rounded-xl border border-outline-variant/30 bg-surface-container-low/40 px-4 py-3">
             <Papicon icon={stat.icon} size={14} class="text-primary/70 mb-1.5" />
             <p class="text-2xl font-bold tracking-tight text-primary">{stat.n}</p>
-            <p class="text-xs font-medium text-on-surface-variant/60">{stat.label}</p>
+            <p class="text-xs font-medium text-on-surface-variant">{stat.label}</p>
           </div>
         {/each}
       </div>
@@ -309,7 +309,7 @@
           <div class="rounded-xl border border-outline-variant/30 bg-surface-container-low/40 px-4 py-3">
             <Papicon icon={stat.icon} size={14} class="text-primary/70 mb-1.5" />
             <p class="text-2xl font-bold tracking-tight text-primary">{stat.n}</p>
-            <p class="text-xs font-medium text-on-surface-variant/60">{stat.label}</p>
+            <p class="text-xs font-medium text-on-surface-variant">{stat.label}</p>
           </div>
         {/each}
       </div>
@@ -355,7 +355,7 @@
           </p>
           {#each present as item (item.key)}
             <p class="flex items-center gap-2 text-body-sm {mapped
-              ? 'text-on-surface-variant/70'
+              ? 'text-on-surface-variant'
               : 'text-on-surface-variant/40 line-through decoration-on-surface-variant/25'}">
               <Papicon icon={mapped ? 'link' : 'check'} size={11} class="shrink-0" />
               <span class="truncate">{item.name}</span>
@@ -368,7 +368,7 @@
 
   {#snippet footer()}
     {#if phase === 'building'}
-      <span class="text-body-sm font-medium text-on-surface-variant/50">Montage en cours…</span>
+      <span class="text-body-sm font-medium text-on-surface-variant">Montage en cours…</span>
     {:else if phase === 'built'}
       <button
         type="button"

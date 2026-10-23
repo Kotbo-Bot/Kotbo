@@ -36,6 +36,8 @@
     color = 'var(--series-1)',
     onselect,
     exportName = 'classement',
+    limit = 8,
+    bare = false,
   }: {
     title: string;
     description?: string;
@@ -48,9 +50,12 @@
     color?: string;
     onselect?: (item: ActivityRankingItem) => void;
     exportName?: string;
+    /** Lignes montrées avant « Tout voir ». */
+    limit?: number;
+    /** Sans cadre ni fond : la carte est posée dans un bloc qui en a déjà un. */
+    bare?: boolean;
   } = $props();
 
-  const TOP = 8;
   const FULL = 500;
   const PAGE = 50;
 
@@ -65,7 +70,7 @@
       requestKey = key;
       loading = true;
       error = '';
-      load(TOP)
+      load(limit)
         .then((res) => {
           if (requestKey === key) data = res;
         })
@@ -182,7 +187,7 @@
   </button>
 {/snippet}
 
-<section class="top-list">
+<section class="top-list" class:top-list--bare={bare}>
   <header class="top-list__header">
     <div class="flex min-w-0 items-start gap-2.5">
       {#if icon}
@@ -289,7 +294,8 @@
     background: var(--color-surface-container-lowest, var(--color-surface));
   }
 
-  .top-list--modal {
+  .top-list--modal,
+  .top-list--bare {
     padding: 0;
     border: none;
     background: transparent;

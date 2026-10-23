@@ -1,4 +1,3 @@
-import { errorMessage } from '../../utils/errors.js';
 import type { SlashCommandDefinition } from '../../commands.js';
 import { SlashCommandBuilder, type ChatInputCommandInteraction, type AutocompleteInteraction, MessageFlags, PermissionFlagsBits } from 'discord.js';
 import prisma from '../../utils/db.js';
@@ -6,6 +5,7 @@ import { adminSpawnItem } from '../../services/features/economyService.js';
 import { errorEmbed, successEmbed } from '../../utils/embeds.js';
 import { getEffectiveLocale, getCommandMetadata } from '../../utils/i18n.js';
 import * as m from '../../lib/paraglide/messages.js';
+import { publicErrorMessage } from '../../utils/publicError.js';
 
 const meta = getCommandMetadata('b3_spawnitem');
 
@@ -95,7 +95,7 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
     });
   } catch (err: unknown) {
     await interaction.reply({
-      embeds: [errorEmbed(m.b3_error_title({}, { locale }), errorMessage(err) || m.b3_spawnitem_error_desc({}, { locale }))],
+      embeds: [errorEmbed(m.b3_error_title({}, { locale }), publicErrorMessage(err, m.b3_spawnitem_error_desc({}, { locale })))],
       flags: [MessageFlags.Ephemeral]
     });
   }

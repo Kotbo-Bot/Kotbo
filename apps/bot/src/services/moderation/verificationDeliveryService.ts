@@ -28,7 +28,7 @@ import {
 import { VerificationFallbackKind, VerificationStatus } from '@prisma/client';
 import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
-import { createNotification } from '../staff/staffLeadershipService.js';
+import { notifyMany } from '../notifications/notifyService.js';
 
 const THREAD_AUTO_ARCHIVE_MINUTES = 10080; // 7 jours
 
@@ -456,9 +456,13 @@ async function notifyManagers(
     })
     .catch(() => []);
 
-  await Promise.all(
-    managers.map((m) =>
-      createNotification(guildId, m.userId, title, message, type, '/double-accounts', false).catch(() => null),
-    ),
-  );
+  await notifyMany(managers.map((m) => m.userId), {
+    guildId,
+    kind: 'security.verification_undelivered',
+    title,
+    message,
+    severity: type,
+    link: '/double-accounts',
+    dm: false,
+  });
 }

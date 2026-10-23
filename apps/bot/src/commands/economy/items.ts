@@ -1,10 +1,10 @@
-import { errorMessage } from '../../utils/errors.js';
 import type { SlashCommandDefinition } from '../../commands.js';
 import { SlashCommandBuilder, type ChatInputCommandInteraction, EmbedBuilder, MessageFlags } from 'discord.js';
 import { getOrCreateRpgProfile, getOrCreateEconomyConfig } from '../../services/features/economyService.js';
 import { errorEmbed, COLORS } from '../../utils/embeds.js';
 import { getEffectiveLocale, getCommandMetadata } from '../../utils/i18n.js';
 import * as m from '../../lib/paraglide/messages.js';
+import { publicErrorMessage } from '../../utils/publicError.js';
 
 interface LocalRpgItem {
   id: string;
@@ -73,7 +73,7 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
     await interaction.reply({ embeds: [embed] });
   } catch (err: unknown) {
     await interaction.reply({
-      embeds: [errorEmbed(m.b3_error_title({}, { locale }), errorMessage(err) || m.b3_items_error_desc({}, { locale }))],
+      embeds: [errorEmbed(m.b3_error_title({}, { locale }), publicErrorMessage(err, m.b3_items_error_desc({}, { locale })))],
       flags: [MessageFlags.Ephemeral]
     });
   }

@@ -126,7 +126,7 @@
 </script>
 
 <Modal bind:open onClose={closeModal} title={m.sc_import_title()} subtitle={m.sc_import_subtitle()} size="xl">
-  <div class="p-6 space-y-6">
+  <div class="space-y-6">
     <div class="space-y-2">
       <p class="field-label">{m.sc_import_step_file()}</p>
       <div class="flex flex-wrap items-center gap-3">
@@ -140,7 +140,7 @@
         <button
           type="button"
           onclick={() => fileInput?.click()}
-          class="flex items-center gap-2 rounded-lg border-2 border-dashed border-outline-variant/30 px-5 py-3 text-xs font-semibold text-on-surface-variant/70 hover:border-primary/40 hover:bg-primary/5 hover:text-primary transition-all"
+          class="flex items-center gap-2 rounded-lg border-2 border-dashed border-outline-variant/30 px-5 py-3 text-xs font-semibold text-on-surface-variant hover:border-primary/40 hover:bg-primary/5 hover:text-primary transition-all"
         >
           <Papicon icon="upload" size={16} />
           {fileName || m.sc_import_file_hint()}
@@ -164,12 +164,12 @@
       <div class="space-y-3">
         <div>
           <p class="field-label">{m.sc_import_step_mapping()}</p>
-          <p class="text-xs text-on-surface-variant/60">{m.sc_import_mapping_hint()}</p>
+          <p class="text-xs text-on-surface-variant">{m.sc_import_mapping_hint()}</p>
         </div>
         <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {#each SANCTION_IMPORT_FIELDS as field (field)}
             <div class="space-y-1">
-              <label for="mapping-{field}" class="text-xs font-semibold text-on-surface-variant/60">{FIELD_LABELS[field]()}</label>
+              <label for="mapping-{field}" class="text-xs font-semibold text-on-surface-variant">{FIELD_LABELS[field]()}</label>
               <FormSelect
                 id="mapping-{field}"
                 value={mapping[field] ?? ''}
@@ -189,7 +189,7 @@
       <div class="space-y-3">
         <div>
           <p class="field-label">{m.sc_import_step_preview()}</p>
-          <p class="text-xs text-on-surface-variant/60">
+          <p class="text-xs text-on-surface-variant">
             {m.sc_import_preview_hint({ valid: validRows.length, invalid: invalidCount })}
           </p>
         </div>
@@ -203,12 +203,12 @@
             <table class="w-full text-xs">
               <thead class="bg-surface-container-high">
                 <tr>
-                  <th class="px-3 py-2 text-left font-semibold text-on-surface-variant/60">{m.sc_import_row_type()}</th>
-                  <th class="px-3 py-2 text-left font-semibold text-on-surface-variant/60">{m.sc_import_row_target()}</th>
-                  <th class="px-3 py-2 text-left font-semibold text-on-surface-variant/60">{m.sc_import_row_moderator()}</th>
-                  <th class="px-3 py-2 text-left font-semibold text-on-surface-variant/60">{m.sc_import_row_reason()}</th>
-                  <th class="px-3 py-2 text-left font-semibold text-on-surface-variant/60">{m.sc_import_row_date()}</th>
-                  <th class="px-3 py-2 text-left font-semibold text-on-surface-variant/60">{m.sc_import_row_duration()}</th>
+                  <th class="px-3 py-2 text-left font-semibold text-on-surface-variant">{m.sc_import_row_type()}</th>
+                  <th class="px-3 py-2 text-left font-semibold text-on-surface-variant">{m.sc_import_row_target()}</th>
+                  <th class="px-3 py-2 text-left font-semibold text-on-surface-variant">{m.sc_import_row_moderator()}</th>
+                  <th class="px-3 py-2 text-left font-semibold text-on-surface-variant">{m.sc_import_row_reason()}</th>
+                  <th class="px-3 py-2 text-left font-semibold text-on-surface-variant">{m.sc_import_row_date()}</th>
+                  <th class="px-3 py-2 text-left font-semibold text-on-surface-variant">{m.sc_import_row_duration()}</th>
                 </tr>
               </thead>
               <tbody>
@@ -226,12 +226,12 @@
             </table>
           </div>
           {#if validRows.length > PREVIEW_LIMIT}
-            <p class="text-2xs text-on-surface-variant/50">{m.sc_import_more_rows({ count: validRows.length - PREVIEW_LIMIT })}</p>
+            <p class="text-2xs text-on-surface-variant">{m.sc_import_more_rows({ count: validRows.length - PREVIEW_LIMIT })}</p>
           {/if}
         {/if}
 
         {#if invalidCount > 0}
-          <details class="text-xs text-on-surface-variant/60">
+          <details class="text-xs text-on-surface-variant">
             <summary class="cursor-pointer font-semibold">{m.sc_import_row_errors()} ({invalidCount})</summary>
             <ul class="mt-2 space-y-1 list-disc list-inside">
               {#each normalizedRows.filter((r) => r.errors.length > 0).slice(0, PREVIEW_LIMIT) as row, index (index)}

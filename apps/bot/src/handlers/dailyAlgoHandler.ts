@@ -14,6 +14,7 @@ import {
   queueDailyAlgoSubmission,
 } from '../services/progression/dailyAlgoService.js';
 import { replyOrFollowUp } from '../utils/interactionResponses.js';
+import { publicErrorMessage } from '../utils/publicError.js';
 
 function formatRankLabel(rank: number): string {
   if (rank === 1) return '🥇 1er';
@@ -137,7 +138,7 @@ export function registerDailyAlgoHandlers(client: Client): void {
       });
     } catch (error) {
       logger.error('DailyAlgo', 'Erreur lors du traitement de la soumission de solution :', error);
-      const message = error instanceof Error ? error.message : 'Erreur lors de la soumission';
+      const message = publicErrorMessage(error, 'Erreur lors de la soumission');
       await replyOrFollowUp(interaction, {
         content: `❌ ${message}`,
         flags: [MessageFlags.Ephemeral],

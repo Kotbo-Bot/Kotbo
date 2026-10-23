@@ -36,8 +36,9 @@ import {
   type DungeonInput,
   type DungeonLoot,
 } from './rpgDungeonPolicy.js';
+import { UserFacingError } from '../../../utils/userFacingError.js';
 
-export class DungeonError extends Error {
+export class DungeonError extends UserFacingError {
   constructor(message: string, readonly status: number) {
     super(message);
     this.name = 'DungeonError';
@@ -57,7 +58,7 @@ export type DungeonRefusal =
   | { kind: 'stale' };
 
 /** Refus d'une action de joueur, traduit par le panneau dans la langue du joueur. */
-export class DungeonRefused extends Error {
+export class DungeonRefused extends UserFacingError {
   constructor(readonly refusal: DungeonRefusal) {
     super(`Donjon refusé : ${refusal.kind}`);
     this.name = 'DungeonRefused';

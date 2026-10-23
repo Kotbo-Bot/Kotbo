@@ -13,6 +13,7 @@ import { renderPanelTarget } from '../../utils/interactionResponses.js';
 import { buildMemberCasePanel } from '../../services/moderation/memberCaseService.js';
 import { getEffectiveLocale, getCommandMetadata } from '../../utils/i18n.js';
 import * as m from '../../lib/paraglide/messages.js';
+import { publicErrorMessage } from '../../utils/publicError.js';
 
 const meta = getCommandMetadata('b5_casier');
 
@@ -75,7 +76,7 @@ async function execute(interaction: ChatInputCommandInteraction | UserContextMen
     });
   } catch (error) {
     await renderPanelTarget(interaction, {
-      embeds: [errorEmbed(m.b5_casier_unavailable_title({}, { locale }), error instanceof Error ? error.message : m.b5_casier_load_error({}, { locale }))],
+      embeds: [errorEmbed(m.b5_casier_unavailable_title({}, { locale }), publicErrorMessage(error, m.b5_casier_load_error({}, { locale })))],
       flags: [MessageFlags.Ephemeral],
     });
   }

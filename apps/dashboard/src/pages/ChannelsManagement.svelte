@@ -11,8 +11,12 @@
   import Papicon from '../lib/components/Papicon.svelte';
   import SearchableSelect from '../lib/components/SearchableSelect.svelte';
   import TempVoicePolicyEditor from '../lib/components/TempVoicePolicyEditor.svelte';
-  import type { TempVoicePolicy } from '@kotbo/shared';
+  import AutoThreadPanel from '../lib/components/channels/AutoThreadPanel.svelte';
+  import { ToggleSwitch } from '../lib/components/ui';
+  import { TEMP_VOICE_HANDOVER_DELAY_BOUNDS, TEMP_VOICE_OWNER_MENTION_DEFAULT, TEMP_VOICE_OWNERSHIP_DEFAULTS, type TempVoiceClaimWho, type TempVoiceOwnerMentionPlacement, type TempVoiceOwnershipSettings, type TempVoicePolicy } from '@kotbo/shared';
+  import { clampInt, selectableGeneratorChannels, takenGeneratorChannelIds, tempVoiceSubFromSearch, withTempVoiceSub, type TempVoiceSubTab } from '../lib/tempVoiceUi';
   import type { TempVoiceGenerator, TempVoiceGeneratorPayload } from '../lib/api/moderation';
+  import { messageForNotice } from '../lib/api/errors';
   import { createAsyncActionState } from '../lib/asyncAction.svelte';
   import { fetchChannelsManagementConfig, updateChannelsManagementConfig, rescanChannelsManagementStats, fetchTempVoiceChannels, updateTempVoiceChannel, fetchStickyMessages, saveStickyMessage, deleteStickyMessage, repostStickyMessage, fetchChannelsByChannel, toggleChannelFeature, renameDiscordChannel, deleteDiscordChannel } from '../lib/api';
   import { dashboardStore } from '../lib/stores/dashboard.svelte';
@@ -20,7 +24,7 @@
   import { toast } from '../lib/stores/toast.svelte';
   import { confirmDialog } from '../lib/stores/confirmDialog.svelte';
   import LoadingHint from '../lib/components/LoadingHint.svelte';
-  import { m } from '../lib/i18n';
+  import { m, getLocale } from '../lib/i18n';
 
   import { errorMessage } from '@kotbo/shared';
   /**
@@ -65,7 +69,7 @@
   type TempVoiceAccessNotifyVia = 'VOICE' | 'DM' | 'CHANNEL';
   type TempVoiceReservationOverflow = 'ASK' | 'NOTHING' | 'MOVE' | 'DISCONNECT';
   /**
-   * Réglages de présentation du panneau, configurables par serveur — cinq
+   * Réglages de présentation du panneau, configurables par serveur : cinq
    * champs ajoutés au même titre que les permissions modérateur ci-dessous,
    * dans le même objet `tempVoiceModPermissions`.
    */
@@ -84,7 +88,8 @@
     denyCooldownMinutes: number;
   }
 
-  interface TempVoiceModPermissionsConfig {
+  /** Les six réglages de passation vivent dans la même ligne (`TempVoiceOwnershipSettings`). */
+  interface TempVoiceModPermissionsConfig extends TempVoiceOwnershipSettings {
     canRename: boolean;
     canChangeLimit: boolean;
     canLock: boolean;
@@ -120,10 +125,12 @@
      * Interrupteur de secours de la personnalisation par générateur. Défaut
      * `false` : au déploiement, aucun serveur existant ne change de
      * comportement. Le couper IGNORE les surcharges des générateurs
-     * additionnels, il ne les EFFACE PAS — elles restent dans
+     * additionnels, il ne les EFFACE PAS : elles restent dans
      * `tempVoiceGenerators` et reviennent telles quelles au rallumage.
      */
     perGeneratorPresentation: boolean;
+    /** Où se trouve la mention qui notifie le propriétaire (panneau / message / aucune). Défaut `panel`. */
+    ownerMentionPlacement: TempVoiceOwnerMentionPlacement;
   }
 
   /** `@default` du modèle Prisma `TempVoiceAccessRequestConfig`. */
@@ -161,8 +168,23 @@
       panelComponents: 'V2',
       reservationFallbackMode: 'ANY_ROLE',
       perGeneratorPresentation: false,
+      ownerMentionPlacement: TEMP_VOICE_OWNER_MENTION_DEFAULT,
+      ...TEMP_VOICE_OWNERSHIP_DEFAULTS,
     };
   }
+
+  /** Les quatre interrupteurs de la passation, chacun avec son aide. */
+  const OWNERSHIP_TOGGLES: Array<{ key: 'handoverDmEnabled' | 'claimEmbedEnabled' | 'moderatorClaimOverride' | 'deleteWhenEmpty'; label: () => string; hint: () => string }> = [
+    { key: 'handoverDmEnabled', label: () => m.cm_tv_own_dm_label(), hint: () => m.cm_tv_own_dm_hint() },
+    { key: 'claimEmbedEnabled', label: () => m.cm_tv_own_embed_label(), hint: () => m.cm_tv_own_embed_hint() },
+    { key: 'moderatorClaimOverride', label: () => m.cm_tv_own_override_label(), hint: () => m.cm_tv_own_override_hint() },
+    { key: 'deleteWhenEmpty', label: () => m.cm_tv_own_delete_label(), hint: () => m.cm_tv_own_delete_hint() },
+  ];
+
+  const CLAIM_WHO_MODES: Array<{ key: TempVoiceClaimWho; label: () => string; hint: () => string }> = [
+    { key: 'present', label: () => m.cm_tv_own_who_present(), hint: () => m.cm_tv_own_who_present_hint() },
+    { key: 'moderators', label: () => m.cm_tv_own_who_moderators(), hint: () => m.cm_tv_own_who_moderators_hint() },
+  ];
 
   /** Même plafond que côté bot : au-delà, un menu Discord ne pourrait pas les afficher. */
   const MAX_RESERVABLE_ROLES = 25;
@@ -208,7 +230,7 @@
 
   /**
    * Les quatre axes de présentation du panneau, en cartes-radio avec une aide
-   * PAR OPTION — même forme que `NOTIFY_MODES` ci-dessus, et que la maquette de
+   * PAR OPTION : même forme que `NOTIFY_MODES` ci-dessus, et que la maquette de
    * référence (`blocMode`/`blocFormat`/`blocCouleurs`) : le choix et ce qu'il
    * coûte se lisent ensemble, au lieu d'un `<select>` surmontant une aide
    * partagée qui ne décrivait que l'option déjà sélectionnée.
@@ -234,6 +256,13 @@
     { key: 'FLAT', label: () => m.cm_tv_panel_mode_flat(), hint: () => m.cm_tv_panel_mode_flat_hint() },
   ];
 
+  /** Cartes-radio de la mention du propriétaire, une aide par option. */
+  const OWNER_MENTION_MODES: Array<{ key: TempVoiceOwnerMentionPlacement; label: () => string; hint: () => string }> = [
+    { key: 'panel', label: () => m.cm_tv_owner_mention_panel(), hint: () => m.cm_tv_owner_mention_panel_hint() },
+    { key: 'message', label: () => m.cm_tv_owner_mention_message(), hint: () => m.cm_tv_owner_mention_message_hint() },
+    { key: 'none', label: () => m.cm_tv_owner_mention_none(), hint: () => m.cm_tv_owner_mention_none_hint() },
+  ];
+
   const STATE_LAYOUT_MODES: Array<{ key: TempVoiceStateLayout; label: () => string; hint: () => string }> = [
     { key: 'GRID3', label: () => m.cm_tv_panel_state_layout_grid3(), hint: () => m.cm_tv_panel_state_layout_grid3_hint() },
     { key: 'GRID2', label: () => m.cm_tv_panel_state_layout_grid2(), hint: () => m.cm_tv_panel_state_layout_grid2_hint() },
@@ -248,7 +277,7 @@
   ];
 
   /** Même liste que les trois `<option>` du réglage serveur (plus bas dans le
-   *  template) — extraite en tableau pour être réutilisée par le sélecteur de
+   *  template) : extraite en tableau pour être réutilisée par le sélecteur de
    *  surcharge par générateur, qui a aussi besoin d'en tirer un libellé. */
   const RESERVATION_FALLBACK_MODES: Array<{ key: TempVoiceReservationFallback; label: () => string }> = [
     { key: 'ANY_ROLE', label: () => m.cm_tv_panel_reservation_fallback_any_role() },
@@ -263,7 +292,7 @@
     return options.find((o) => o.key === key)?.label() ?? key;
   }
 
-  /** Nombre de champs que CE générateur surcharge — sert à la pastille de la
+  /** Nombre de champs que CE générateur surcharge : sert à la pastille de la
    *  liste (`m.cm_tv_panel_per_gen_badge_overrides`) sans ouvrir sa carte. */
   function generatorOverrideCount(generator: TempVoiceGenerator): number {
     const keys = ['panelMode', 'stateLayout', 'stateColors', 'panelComponents', 'reservationFallbackMode'] as const;
@@ -280,7 +309,7 @@
    *
    * La page annonçait `stateLayout === 'GRID3' && panelComponents === 'V1'` :
    * dans la configuration PAR DÉFAUT (V2 + GRID3 + NEUTRAL) elle affichait donc
-   * « rendu en image (PNG) » alors que le bot rend nativement — l'aide disait
+   * « rendu en image (PNG) » alors que le bot rend nativement : l'aide disait
    * le contraire du produit. Une seule combinaison sur 24 diffère entre les
    * deux conditions, et c'est justement celle de tous les serveurs en service.
    */
@@ -323,7 +352,7 @@
     tempVoiceEnabled: false,
     tempVoiceChannelId: '',
     tempVoiceCategoryId: '',
-    tempVoiceNameTemplate: '🔊 {user}\'s channel',
+    tempVoiceNameTemplate: m.cm_tv_default_name_template({ user: "{user}" }),
     tempVoiceRequiredRoleId: '',
     tempVoiceDefaults: defaultTempVoicePolicy(),
     tempVoiceGenerators: [] as TempVoiceGenerator[],
@@ -366,7 +395,7 @@
     tempVoiceEnabled: false,
     tempVoiceChannelId: '',
     tempVoiceCategoryId: '',
-    tempVoiceNameTemplate: '🔊 {user}\'s channel',
+    tempVoiceNameTemplate: m.cm_tv_default_name_template({ user: "{user}" }),
     tempVoiceRequiredRoleId: '',
     tempVoiceDefaults: defaultTempVoicePolicy(),
     tempVoiceGenerators: [] as TempVoiceGenerator[],
@@ -387,7 +416,7 @@
    * : avec le défaut V2 + GRID3 + NEUTRAL le rendu est bien natif, mais passer
    * la teinte à DARK ou LIGHT le fait justement basculer en image. Griser sur
    * « rendu natif » enfermerait le serveur sur NEUTRAL sans aucun moyen d'en
-   * sortir — le réglage deviendrait inatteignable depuis la page.
+   * sortir : le réglage deviendrait inatteignable depuis la page.
    */
   const stateColorsInert = $derived(
     config.tempVoiceModPermissions.stateLayout === 'GRID3'
@@ -405,8 +434,16 @@
     config.tempVoiceModPermissions.panelComponents,
   ));
 
+  const isDirty = $derived(JSON.stringify(config) !== JSON.stringify(savedConfig));
+
+  // « Configuration enregistrée » (ou l'erreur d'un essai précédent) ne doit pas
+  // rester affiché pendant l'édition suivante : il décrirait un état dépassé.
   $effect(() => {
-    const dirty = JSON.stringify(config) !== JSON.stringify(savedConfig);
+    if (isDirty) untrack(() => saveAction.clearFeedback());
+  });
+
+  $effect(() => {
+    const dirty = isDirty;
     if (dirty) {
       untrack(() => {
         unsavedChanges.register({
@@ -434,13 +471,22 @@
   // « Par salon » d'abord : c'est la question qu'on se pose en arrivant
   // (« qu'est-ce qui touche ce salon ? »), la ou les onglets par fonctionnalite
   // repondent a l'inverse (« quels salons ont cette fonctionnalite ? »).
+  // Le sous-onglet vocal vit dans `?sub=` (même principe que `?tab=` des analytics
+  // admin) : un lien partagé ou un rechargement rouvre le bon sous-onglet.
+  let tvSub = $state<TempVoiceSubTab>(tempVoiceSubFromSearch(window.location.search));
+  $effect(() => {
+    if (activeTab !== 'temp-voice') return;
+    const search = withTempVoiceSub(window.location.search, tvSub);
+    if (search !== window.location.search) {
+      window.history.replaceState(window.history.state, '', `${window.location.pathname}${search}${window.location.hash}`);
+    }
+  });
   const channelTabs = ['by-channel', 'auto-thread', 'sticky', 'stats', 'temp-voice', 'access-requests', 'honeypot'] as const;
   let activeTab = $state<'by-channel' | 'auto-thread' | 'sticky' | 'stats' | 'temp-voice' | 'access-requests' | 'honeypot'>('by-channel');
   $effect(() => {
     const _path = $router.path;
     activeTab = resolveTabFromUrl('/channels-management', channelTabs, 'by-channel') as typeof activeTab;
   });
-  let searchQuery = $state('');
 
   // ── Vue « Par salon » ──────────────────────────────────────────────────────
   type ChannelRow = {
@@ -621,9 +667,31 @@
     );
   }
 
-  const filteredChannels = $derived(
-    selectableChannels.filter(c => c.name.toLowerCase().includes(searchQuery.toLowerCase()))
+  /**
+   * Salons où l'auto-thread peut ouvrir un fil : textuels et d'annonces. Un
+   * forum ouvre déjà un fil par publication, un vocal n'en porte pas.
+   */
+  const autoThreadChannelOptions = $derived(
+    availableChannels
+      .filter(c => !['thread', 'voice', 'stage', 'forum', 'media', 'category'].includes(c.type))
+      .map(c => ({ id: c.id, name: channelDisplayName(c) }))
   );
+
+  const roleOptions = $derived(autoAllowableRoles.map(role => ({ id: role.id, name: role.name })));
+
+  // Salons vocaux proposés aux sélecteurs de générateurs, sans ceux que le
+  // principal ou un autre générateur occupe déjà : le serveur écarte un doublon,
+  // et la carte disparaissait à l'enregistrement.
+  const mainGeneratorChannelOptions = $derived(
+    selectableGeneratorChannels(availableVoiceChannels, takenGeneratorChannelIds(null, config.tempVoiceGenerators))
+      .map(c => ({ id: c.id, name: `🔊 ${c.name}` }))
+  );
+  function generatorChannelOptions(index: number) {
+    return selectableGeneratorChannels(
+      availableVoiceChannels,
+      takenGeneratorChannelIds(config.tempVoiceChannelId, config.tempVoiceGenerators, index),
+    ).map(c => ({ id: c.id, name: `🔊 ${c.name}` }));
+  }
 
   /**
    * Choix d'un selecteur, en gardant la valeur deja enregistree meme si elle ne
@@ -674,7 +742,18 @@
     embedColor: string;
     messageThreshold: number;
     cooldownSeconds: number;
+    jsonEnabled: boolean;
+    jsonPayload: string;
+    webhookEnabled: boolean;
+    webhookName: string;
+    webhookAvatarUrl: string;
   };
+
+  /** Exemple affiché sous l'interrupteur JSON, à recopier puis adapter. */
+  const STICKY_JSON_EXAMPLE = JSON.stringify({
+    content: '',
+    embeds: [{ title: '📌 À lire avant de poster', description: 'Consulte le **règlement** du serveur.', color: 5793266 }],
+  }, null, 2);
 
   let stickies = $state([] as StickyDraft[]);
   let loadingStickies = $state(false);
@@ -692,6 +771,11 @@
       embedColor: raw.embedColor ?? '#5865F2',
       messageThreshold: raw.messageThreshold ?? 5,
       cooldownSeconds: raw.cooldownSeconds ?? 10,
+      jsonEnabled: raw.jsonEnabled ?? false,
+      jsonPayload: raw.jsonPayload ?? '',
+      webhookEnabled: raw.webhookEnabled ?? false,
+      webhookName: raw.webhookName ?? '',
+      webhookAvatarUrl: raw.webhookAvatarUrl ?? '',
     };
   }
 
@@ -729,6 +813,11 @@
         embedColor: '#5865F2',
         messageThreshold: 5,
         cooldownSeconds: 10,
+        jsonEnabled: false,
+        jsonPayload: '',
+        webhookEnabled: false,
+        webhookName: '',
+        webhookAvatarUrl: '',
       },
     ];
   }
@@ -739,8 +828,23 @@
       toast.error(m.cm_sticky_channel_required());
       return;
     }
-    if (!sticky.content.trim()) {
+    if (sticky.jsonEnabled) {
+      if (!sticky.jsonPayload.trim()) {
+        toast.error(m.cm_sticky_json_required());
+        return;
+      }
+      try {
+        JSON.parse(sticky.jsonPayload);
+      } catch {
+        toast.error(m.cm_sticky_json_invalid());
+        return;
+      }
+    } else if (!sticky.content.trim()) {
       toast.error(m.cm_sticky_content_required());
+      return;
+    }
+    if (sticky.webhookEnabled && /discord|clyde/i.test(sticky.webhookName)) {
+      toast.error(m.cm_sticky_webhook_name_invalid());
       return;
     }
 
@@ -755,6 +859,11 @@
         embedColor: sticky.embedColor,
         messageThreshold: sticky.messageThreshold,
         cooldownSeconds: sticky.cooldownSeconds,
+        jsonEnabled: sticky.jsonEnabled,
+        jsonPayload: sticky.jsonPayload || null,
+        webhookEnabled: sticky.webhookEnabled,
+        webhookName: sticky.webhookName || null,
+        webhookAvatarUrl: sticky.webhookAvatarUrl || null,
       });
       if (!res || !res.ok) throw new Error(res?.error || m.cm_sticky_save_failed());
       stickies[index] = toStickyDraft(res.sticky);
@@ -806,6 +915,12 @@
     } finally {
       stickyBusy = null;
     }
+  }
+
+  /** « 1 connecté » / « 5 connectés » : le français garde le singulier jusqu'à 1 inclus. */
+  function connectedLabel(count: number): string {
+    const singular = getLocale() === 'fr' ? count <= 1 : count === 1;
+    return singular ? m.cm_members_connected_one({ count }) : m.cm_members_connected_other({ count });
   }
 
   let editingChannel = $state(null as string | null);
@@ -886,7 +1001,7 @@
         config.tempVoiceEnabled = res.tempVoiceEnabled ?? false;
         config.tempVoiceChannelId = res.tempVoiceChannelId ?? '';
         config.tempVoiceCategoryId = res.tempVoiceCategoryId ?? '';
-        config.tempVoiceNameTemplate = res.tempVoiceNameTemplate || '🔊 {user}\'s channel';
+        config.tempVoiceNameTemplate = res.tempVoiceNameTemplate || m.cm_tv_default_name_template({ user: "{user}" });
         config.tempVoiceRequiredRoleId = res.tempVoiceRequiredRoleId ?? '';
         config.tempVoiceDefaults = { ...defaultTempVoicePolicy(), ...(res.tempVoiceDefaults ?? {}) };
         config.tempVoiceGenerators = Array.isArray(res.tempVoiceGenerators)
@@ -924,14 +1039,14 @@
     let success = false;
     await saveAction.run(async () => {
       // Validate statistics role target only if role channel or auto-creation is requested
+      // Le message part en toast avec les autres erreurs, plus bas : un seul
+      // endroit, donc jamais deux toasts pour la même erreur.
       if (config.statsConfig.roleEnabled && !config.statsConfig.roleTargetId) {
-        toast.error(m.cm_role_target_required());
-        throw new Error(m.cm_role_target_missing());
+        throw new Error(m.cm_role_target_required());
       }
 
       const res = await updateChannelsManagementConfig({
         autoThreadEnabled: config.autoThreadEnabled,
-        autoThreadChannels: config.autoThreadChannels,
         statsEnabled: config.statsEnabled,
         statsConfig: config.statsConfig,
         tempVoiceEnabled: config.tempVoiceEnabled,
@@ -944,6 +1059,10 @@
         tempVoiceAccessRequest: {
           ...config.tempVoiceAccessRequest,
           notifyChannelId: config.tempVoiceAccessRequest.notifyChannelId || null,
+          // Mêmes bornes que la route : 1 à 1440 minutes. Un champ vidé ou à 0
+          // reprend le défaut au lieu de partir en 400.
+          requestExpiresMinutes: clampInt(config.tempVoiceAccessRequest.requestExpiresMinutes, 1, 1440, 10),
+          denyCooldownMinutes: clampInt(config.tempVoiceAccessRequest.denyCooldownMinutes, 1, 1440, 10),
         },
         tempVoiceModPermissions: config.tempVoiceModPermissions,
         honeypotEnabled: config.honeypotEnabled,
@@ -953,13 +1072,24 @@
       });
 
       // `res.error` d'abord : la route nomme le champ qu'elle refuse
-      // (`panelSettingError` : « Palette de l'état (stateColors): "X" is not a
-      // valid value. Nothing was saved. »). « API save error » seul ne disait
+      // (`panelSettingError` : « Palette de l'état (stateColors) : valeur
+      // invalide, rien n'a été enregistré. »). « API save error » seul ne disait
       // pas lequel des vingt-et-un champs du corps avait été rejeté.
       if (!res || !res.ok) throw new Error(res?.error || m.cm_save_api_error());
 
       // Update local state with resolved (auto-created) values from backend
       if (res.resolved) {
+        // Ce que le serveur a normalisé et gardé remplace ce que la page a envoyé
+        // (places ramenées à 99, délai remis dans ses bornes...).
+        if (res.resolved.tempVoiceDefaults) {
+          config.tempVoiceDefaults = { ...defaultTempVoicePolicy(), ...res.resolved.tempVoiceDefaults };
+        }
+        if (res.resolved.tempVoiceModPermissions) {
+          config.tempVoiceModPermissions = { ...defaultTempVoiceModPermissions(), ...res.resolved.tempVoiceModPermissions };
+        }
+        if (res.resolved.tempVoiceAccessRequest) {
+          config.tempVoiceAccessRequest = { ...defaultTempVoiceAccessRequestConfig(), ...res.resolved.tempVoiceAccessRequest };
+        }
         if (res.resolved.tempVoiceChannelId) config.tempVoiceChannelId = res.resolved.tempVoiceChannelId;
         if (res.resolved.tempVoiceCategoryId) config.tempVoiceCategoryId = res.resolved.tempVoiceCategoryId;
         if (Array.isArray(res.resolved.tempVoiceGenerators)) {
@@ -976,29 +1106,22 @@
         }
       }
       
+      // Enregistré, mais pas tout à fait comme demandé : le serveur le dit.
+      if (Array.isArray(res.notices)) {
+        for (const notice of res.notices) toast.info(messageForNotice(notice), 12000);
+      }
+
       await dashboardStore.refresh();
       savedConfig = JSON.parse(JSON.stringify(config));
       success = true;
       return true;
     }, { successMessage: m.cm_config_saved() });
+    // L'erreur s'affiche aussi en toast : l'InlineFeedback est en haut de page,
+    // hors de vue quand on enregistre depuis la barre du bas.
+    if (!success && saveAction.state.error) toast.error(saveAction.state.error);
     return success;
   }
 
-  function toggleChannel(channelId: string) {
-    if (config.autoThreadChannels.includes(channelId)) {
-      config.autoThreadChannels = config.autoThreadChannels.filter(id => id !== channelId);
-    } else {
-      config.autoThreadChannels = [...config.autoThreadChannels, channelId];
-    }
-  }
-
-  function selectAll() {
-    config.autoThreadChannels = filteredChannels.map(c => c.id);
-  }
-
-  function deselectAll() {
-    config.autoThreadChannels = [];
-  }
 </script>
 
 <ModulePage
@@ -1053,7 +1176,7 @@
           {#if byChannelLoading}
             <div class="flex justify-center py-8"><LoadingHint context="config" /></div>
           {:else if visibleByChannel.length === 0}
-            <p class="text-body-sm text-on-surface-variant/70 py-8 text-center">{m.cm_no_channel_matches_search()}</p>
+            <p class="text-body-sm text-on-surface-variant py-8 text-center">{m.cm_no_channel_matches_search()}</p>
           {:else}
             <div class="space-y-1.5">
               {#each visibleByChannel as ch (ch.id)}
@@ -1064,11 +1187,11 @@
                     onclick={() => (expandedChannelId = expandedChannelId === ch.id ? null : ch.id)}
                   >
                     <div class="flex items-center gap-2.5 min-w-0">
-                      <Papicon icon={ch.type === 'voice' ? 'volume-2' : ch.type === 'forum' ? 'message-square' : 'hash'} size={15} class="text-on-surface-variant/60 shrink-0" />
+                      <Papicon icon={ch.type === 'voice' ? 'volume-2' : ch.type === 'forum' ? 'message-square' : 'hash'} size={15} class="text-on-surface-variant shrink-0" />
                       <div class="min-w-0">
                         <p class="text-body-sm font-medium text-on-surface truncate">{ch.name}</p>
                         {#if ch.categoryName}
-                          <p class="text-2xs text-on-surface-variant/60 truncate">{ch.categoryName}</p>
+                          <p class="text-2xs text-on-surface-variant truncate">{ch.categoryName}</p>
                         {/if}
                       </div>
                     </div>
@@ -1077,7 +1200,7 @@
                         <span class="text-2xs px-1.5 py-0.5 rounded bg-primary/10 text-primary">{featureLabel(key)}</span>
                       {/each}
                       {#if ch.features.length > 3}
-                        <span class="text-2xs text-on-surface-variant/60">+{ch.features.length - 3}</span>
+                        <span class="text-2xs text-on-surface-variant">+{ch.features.length - 3}</span>
                       {/if}
                       <Papicon icon={expandedChannelId === ch.id ? 'chevron-up' : 'chevron-down'} size={15} class="text-on-surface-variant/40" />
                     </div>
@@ -1104,7 +1227,7 @@
                            contenu à saisir : on renvoie vers leur onglet plutôt
                            que d'en faire une case à cocher trompeuse. -->
                       {#if ch.features.includes('sticky') || ch.features.includes('tempVoiceGenerator')}
-                        <p class="text-2xs text-on-surface-variant/70">
+                        <p class="text-2xs text-on-surface-variant">
                           {m.cm_bc_also_carries({ items: alsoCarriedItems(ch) })}
                         </p>
                       {/if}
@@ -1144,87 +1267,8 @@
         </section>
       {:else if activeTab === 'auto-thread'}
         <!-- AUTO-THREAD TAB -->
-        <section class="bg-surface-container-low/30 border border-outline-variant/10 p-8 rounded-xl space-y-6">
-          <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div>
-              <h3 class="text-xl font-semibold flex items-center gap-3">
-                <Papicon icon="chat" size={20} class="text-primary" />
-                {m.cm_eligible_channels_title()}
-              </h3>
-              <p class="text-xs text-on-surface-variant/60 mt-1">{m.cm_eligible_channels_desc()}</p>
-            </div>
-            
-            <div class="flex items-center gap-2">
-              <button 
-                onclick={selectAll}
-                class="px-4 py-2 bg-surface-container-high/40 hover:bg-surface-container-high/80 border border-outline-variant/10 text-xs font-bold rounded-xl transition-all"
-              >
-                {m.cm_select_all_filtered()}
-              </button>
-              <button 
-                onclick={deselectAll}
-                class="px-4 py-2 bg-surface-container-high/40 hover:bg-surface-container-high/80 border border-outline-variant/10 text-xs font-bold rounded-xl transition-all"
-              >
-                {m.cm_deselect_all()}
-              </button>
-            </div>
-          </div>
-
-          <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
-            <div class="flex-1 relative">
-              <input
-                type="text"
-                bind:value={searchQuery}
-                placeholder={m.cm_search_channel_placeholder()}
-                class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg pl-11 pr-5 py-3 text-sm text-on-surface placeholder:text-on-surface-variant/30 focus:outline-none focus:border-primary/60 focus:ring-1 focus:ring-primary/20 transition-all outline-none"
-              />
-              <div class="absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant/50">
-                <Papicon icon="search" size={16} />
-              </div>
-            </div>
-            
-            <div class="px-5 py-3 rounded-lg bg-surface-container-high/20 border border-outline-variant/5 flex items-center gap-2 text-xs font-bold">
-              <span class="text-primary">{config.autoThreadChannels.length}</span>
-              <span class="text-on-surface-variant/60">{m.cm_channels_selected_count()}</span>
-            </div>
-          </div>
-
-          {#if filteredChannels.length > 0}
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[450px] overflow-y-auto pr-2 no-scrollbar">
-              {#each filteredChannels as channel}
-                {@const isChecked = config.autoThreadChannels.includes(channel.id)}
-                <button
-                  onclick={() => toggleChannel(channel.id)}
-                  class="flex items-center justify-between p-4 rounded-lg border transition-all text-left group
- {isChecked 
-                      ? 'bg-primary/5 border-primary/30 text-primary hover:bg-primary/10' 
-                      : 'bg-surface-container-high/10 border-outline-variant/5 hover:bg-surface-container-high/30'}"
-                >
-                  <div class="flex items-center gap-3">
-                    <div class="w-8 h-8 rounded-lg flex items-center justify-center {isChecked ? 'bg-primary/10' : 'bg-surface-container-highest'}">
-                      <span class="text-sm font-semibold opacity-60">#</span>
-                    </div>
-                    <span class="text-sm font-semibold truncate max-w-[180px]">{channel.name}</span>
-                  </div>
-                  
-                  <div class="w-5 h-5 rounded-md border flex items-center justify-center transition-all
- {isChecked 
-                      ? 'bg-primary border-primary text-on-primary' 
-                      : 'border-outline-variant/30 group-hover:border-outline-variant/60'}"
-                  >
-                    {#if isChecked}
-                      <Papicon icon="check" size={12} class="text-white" />
-                    {/if}
-                  </div>
-                </button>
-              {/each}
-            </div>
-          {:else}
-            <div class="flex flex-col items-center justify-center py-12 text-on-surface-variant/30 bg-surface-container-high/10 border border-dashed border-outline-variant/10 rounded-lg gap-3">
-              <Papicon icon="search" size={32} class="opacity-30" />
-              <p class="text-sm font-bold">{m.cm_no_channel_matches_search()}</p>
-            </div>
-          {/if}
+        <section class="bg-surface-container-low/30 border border-outline-variant/10 p-5 sm:p-8 rounded-xl">
+          <AutoThreadPanel channels={autoThreadChannelOptions} roles={roleOptions} />
         </section>
 
       {:else if activeTab === 'sticky'}
@@ -1236,7 +1280,7 @@
                 <Papicon icon="notes" size={20} class="text-primary" />
                 {m.cm_sticky_title()}
               </h3>
-              <p class="text-xs text-on-surface-variant/60 mt-1">{m.cm_sticky_desc()}</p>
+              <p class="text-xs text-on-surface-variant mt-1">{m.cm_sticky_desc()}</p>
             </div>
 
             <button
@@ -1252,7 +1296,7 @@
 
           <div class="flex items-start gap-2 p-3 rounded-lg bg-surface-container-high/20 border border-outline-variant/10">
             <span class="text-primary mt-0.5 shrink-0"><Papicon icon="Info" size={14} /></span>
-            <p class="text-2xs text-on-surface-variant/70 font-medium leading-relaxed">
+            <p class="text-2xs text-on-surface-variant font-medium leading-relaxed">
               {m.cm_sticky_info()}
             </p>
           </div>
@@ -1281,7 +1325,7 @@
                     </div>
 
                     <div class="flex items-center gap-3 sm:pt-6">
-                      <span class="text-xs font-semibold text-on-surface-variant/60">{m.cm_sticky_enabled_label()}</span>
+                      <span class="text-xs font-semibold text-on-surface-variant">{m.cm_sticky_enabled_label()}</span>
                       <input
                         type="checkbox"
                         aria-label={m.cm_sticky_enabled_label()}
@@ -1291,18 +1335,82 @@
                     </div>
                   </div>
 
-                  <div class="space-y-1.5">
-                    <label for="sticky-content-{index}" class="text-xs font-bold text-on-surface/80 block">{m.cm_sticky_content_label()}</label>
-                    <textarea
-                      id="sticky-content-{index}"
-                      bind:value={sticky.content}
-                      rows="4"
-                      maxlength="2000"
-                      placeholder={m.cm_sticky_content_placeholder()}
-                      class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm text-on-surface outline-none focus:ring-1 focus:ring-primary/30 transition-all resize-y"
-                    ></textarea>
-                    <p class="text-2xs text-on-surface-variant/40">{m.cm_sticky_placeholders_hint()}</p>
+                  <div class="flex items-center justify-between gap-4 p-4 bg-surface-container-high/20 border border-outline-variant/5 rounded-xl">
+                    <div class="space-y-0.5">
+                      <p class="text-xs font-bold text-on-surface/80">{m.cm_sticky_webhook_label()}</p>
+                      <p class="text-2xs text-on-surface-variant">{m.cm_sticky_webhook_desc()}</p>
+                    </div>
+                    <ToggleSwitch checked={sticky.webhookEnabled} onToggle={(v) => (sticky.webhookEnabled = v)} ariaLabel={m.cm_sticky_webhook_label()} />
                   </div>
+
+                  {#if sticky.webhookEnabled}
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div class="space-y-1.5">
+                        <label for="sticky-webhook-name-{index}" class="text-xs font-bold text-on-surface/80 block">{m.cm_sticky_webhook_name_label()}</label>
+                        <input
+                          id="sticky-webhook-name-{index}"
+                          type="text"
+                          maxlength="80"
+                          bind:value={sticky.webhookName}
+                          placeholder={m.cm_sticky_webhook_name_placeholder()}
+                          class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm outline-none focus:ring-1 focus:ring-primary/30 transition-all"
+                        />
+                      </div>
+                      <div class="space-y-1.5">
+                        <label for="sticky-webhook-avatar-{index}" class="text-xs font-bold text-on-surface/80 block">{m.cm_sticky_webhook_avatar_label()}</label>
+                        <input
+                          id="sticky-webhook-avatar-{index}"
+                          type="url"
+                          maxlength="512"
+                          bind:value={sticky.webhookAvatarUrl}
+                          placeholder="https://"
+                          aria-describedby="sticky-webhook-avatar-hint-{index}"
+                          class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm outline-none focus:ring-1 focus:ring-primary/30 transition-all"
+                        />
+                        <p id="sticky-webhook-avatar-hint-{index}" class="text-2xs text-on-surface-variant/40">{m.cm_sticky_webhook_avatar_hint()}</p>
+                      </div>
+                    </div>
+                  {/if}
+
+                  <div class="flex items-center justify-between gap-4 p-4 bg-surface-container-high/20 border border-outline-variant/5 rounded-xl">
+                    <div class="space-y-0.5">
+                      <p class="text-xs font-bold text-on-surface/80">{m.cm_sticky_json_label()}</p>
+                      <p class="text-2xs text-on-surface-variant">{m.cm_sticky_json_desc()}</p>
+                    </div>
+                    <ToggleSwitch checked={sticky.jsonEnabled} onToggle={(v) => (sticky.jsonEnabled = v)} ariaLabel={m.cm_sticky_json_label()} />
+                  </div>
+
+                  {#if sticky.jsonEnabled}
+                    <div class="space-y-1.5">
+                      <p class="text-2xs text-on-surface-variant">{m.cm_sticky_json_example()}</p>
+                      <pre class="overflow-x-auto whitespace-pre-wrap break-words rounded-lg border border-dashed border-outline-variant/20 p-3 text-xs text-on-surface-variant">{STICKY_JSON_EXAMPLE}</pre>
+                      <label for="sticky-json-{index}" class="sr-only">{m.cm_sticky_json_label()}</label>
+                      <textarea
+                        id="sticky-json-{index}"
+                        bind:value={sticky.jsonPayload}
+                        rows="10"
+                        maxlength="65536"
+                        spellcheck="false"
+                        placeholder={STICKY_JSON_EXAMPLE}
+                        aria-describedby="sticky-json-hint-{index}"
+                        class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 font-mono text-sm text-on-surface outline-none focus:ring-1 focus:ring-primary/30 transition-all resize-y"
+                      ></textarea>
+                      <p id="sticky-json-hint-{index}" class="text-2xs text-on-surface-variant/40">{m.cm_sticky_json_hint()} {m.cm_sticky_placeholders_hint({ server: '{server}', membres: '{membres}', salons: '{salons}', members: '{members}', channelCount: '{channelCount}', boosts: '{boosts}' })}</p>
+                    </div>
+                  {:else}
+                    <div class="space-y-1.5">
+                      <label for="sticky-content-{index}" class="text-xs font-bold text-on-surface/80 block">{m.cm_sticky_content_label()}</label>
+                      <textarea
+                        id="sticky-content-{index}"
+                        bind:value={sticky.content}
+                        rows="4"
+                        maxlength="2000"
+                        placeholder={m.cm_sticky_content_placeholder()}
+                        class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm text-on-surface outline-none focus:ring-1 focus:ring-primary/30 transition-all resize-y"
+                      ></textarea>
+                      <p class="text-2xs text-on-surface-variant/40">{m.cm_sticky_placeholders_hint({ server: '{server}', membres: '{membres}', salons: '{salons}', members: '{members}', channelCount: '{channelCount}', boosts: '{boosts}' })}</p>
+                    </div>
+                  {/if}
 
                   <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div class="space-y-1.5">
@@ -1332,10 +1440,11 @@
                     </div>
                   </div>
 
+                  {#if !sticky.jsonEnabled}
                   <div class="flex items-center justify-between p-4 bg-surface-container-high/20 border border-outline-variant/5 rounded-xl">
                     <div class="space-y-0.5">
                       <label for="sticky-embed-{index}" class="text-xs font-bold text-on-surface/80 block">{m.cm_sticky_embed_label()}</label>
-                      <p class="text-2xs text-on-surface-variant/60">{m.cm_sticky_embed_desc()}</p>
+                      <p class="text-2xs text-on-surface-variant">{m.cm_sticky_embed_desc()}</p>
                     </div>
                     <input
                       id="sticky-embed-{index}"
@@ -1368,6 +1477,7 @@
                         />
                       </div>
                     </div>
+                  {/if}
                   {/if}
 
                   <div class="flex flex-wrap items-center justify-end gap-2 pt-2 border-t border-outline-variant/10">
@@ -1406,7 +1516,7 @@
               <button
                 type="button"
                 onclick={addSticky}
-                class="w-full py-4 border border-dashed border-outline-variant/20 hover:border-primary/40 text-on-surface-variant/60 hover:text-primary transition-all rounded-xl text-xs font-semibold flex items-center justify-center gap-2"
+                class="w-full py-4 border border-dashed border-outline-variant/20 hover:border-primary/40 text-on-surface-variant hover:text-primary transition-all rounded-xl text-xs font-semibold flex items-center justify-center gap-2"
               >
                 <Papicon icon="plus" size={16} />
                 {m.cm_sticky_add()}
@@ -1426,7 +1536,7 @@
                 <Papicon icon="bar-chart" size={20} class="text-primary" />
                 {m.cm_stats_channels_title()}
               </h3>
-              <p class="text-xs text-on-surface-variant/60 mt-1">{m.cm_stats_channels_desc()}</p>
+              <p class="text-xs text-on-surface-variant mt-1">{m.cm_stats_channels_desc()}</p>
             </div>
             
             <div class="flex items-center gap-2">
@@ -1472,7 +1582,7 @@
                   <Papicon icon="history" size={16} />
                   {m.cm_rebuild_historical_stats_title()}
                 </h4>
-                <p class="text-xs text-on-surface-variant/60">
+                <p class="text-xs text-on-surface-variant">
                   {m.cm_rebuild_historical_stats_desc()}
                 </p>
               </div>
@@ -1538,7 +1648,7 @@
                   <input 
                     type="text" 
                     bind:value={config.statsConfig.memberTemplate} 
-                    placeholder={m.cm_template_members_placeholder()} 
+                    placeholder={m.cm_template_members_placeholder({ count: '{count}' })} 
                     class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-5 py-2.5 text-xs outline-none focus:ring-1 focus:ring-primary/30"
                   />
                 {/if}
@@ -1579,7 +1689,7 @@
                   <input 
                     type="text" 
                     bind:value={config.statsConfig.botTemplate} 
-                    placeholder={m.cm_template_bots_placeholder()} 
+                    placeholder={m.cm_template_bots_placeholder({ count: '{count}' })} 
                     class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-5 py-2.5 text-xs outline-none focus:ring-1 focus:ring-primary/30"
                   />
                 {/if}
@@ -1625,7 +1735,7 @@
                   <input 
                     type="text" 
                     bind:value={config.statsConfig.roleTemplate} 
-                    placeholder={m.cm_template_staff_placeholder()} 
+                    placeholder={m.cm_template_staff_placeholder({ count: '{count}' })} 
                     class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-5 py-2.5 text-xs outline-none focus:ring-1 focus:ring-primary/30"
                   />
                 {/if}
@@ -1666,7 +1776,7 @@
                   <input 
                     type="text" 
                     bind:value={config.statsConfig.channelTemplate} 
-                    placeholder={m.cm_template_channels_placeholder()} 
+                    placeholder={m.cm_template_channels_placeholder({ count: '{count}' })} 
                     class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-5 py-2.5 text-xs outline-none focus:ring-1 focus:ring-primary/30"
                   />
                 {/if}
@@ -1707,7 +1817,7 @@
                   <input 
                     type="text" 
                     bind:value={config.statsConfig.categoryTemplate} 
-                    placeholder={m.cm_template_categories_placeholder()} 
+                    placeholder={m.cm_template_categories_placeholder({ count: '{count}' })} 
                     class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-5 py-2.5 text-xs outline-none focus:ring-1 focus:ring-primary/30"
                   />
                 {/if}
@@ -1748,7 +1858,7 @@
                   <input 
                     type="text" 
                     bind:value={config.statsConfig.activityTemplate} 
-                    placeholder={m.cm_template_activity_placeholder()} 
+                    placeholder={m.cm_template_activity_placeholder({ count: '{count}' })} 
                     class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-5 py-2.5 text-xs outline-none focus:ring-1 focus:ring-primary/30"
                   />
                 {/if}
@@ -1762,7 +1872,7 @@
                   <Papicon icon="plus-circle" size={16} class="text-primary" />
                   {m.cm_custom_stats_title()}
                 </h4>
-                <p class="text-xs text-on-surface-variant/60">{m.cm_custom_stats_desc()}</p>
+                <p class="text-xs text-on-surface-variant">{m.cm_custom_stats_desc()}</p>
               </div>
 
               {#if !config.statsConfig.customStats}
@@ -1779,7 +1889,7 @@
                         onclick={() => {
                           config.statsConfig.customStats = config.statsConfig.customStats.filter((_, i) => i !== index);
                         }}
-                        class="text-on-surface-variant/60 hover:text-error transition-all flex items-center gap-1.5 text-xs font-bold"
+                        class="text-on-surface-variant hover:text-error transition-all flex items-center gap-1.5 text-xs font-bold"
                         title={m.cm_delete_counter_title()}
                       >
                         <Papicon icon="trash-2" size={14} />
@@ -1885,7 +1995,7 @@
                           id="custom-template-{index}"
                           type="text" 
                           bind:value={custom.template} 
-                          placeholder={custom.type === 'goal' ? m.cm_template_goal_placeholder() : m.cm_template_name_placeholder()} 
+                          placeholder={custom.type === 'goal' ? m.cm_template_goal_placeholder({ count: '{count}', goal: '{goal}' }) : m.cm_template_name_placeholder({ count: '{count}' })} 
                           class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-5 py-2.5 text-xs outline-none focus:ring-1 focus:ring-primary/30"
                         />
                         <p class="text-2xs text-on-surface-variant/40 mt-1">
@@ -1914,7 +2024,7 @@
                       }
                     ];
                   }}
-                  class="col-span-1 md:col-span-2 py-4 border border-dashed border-outline-variant/20 hover:border-primary/40 text-on-surface-variant/60 hover:text-primary transition-all rounded-xl text-xs font-semibold flex items-center justify-center gap-2"
+                  class="col-span-1 md:col-span-2 py-4 border border-dashed border-outline-variant/20 hover:border-primary/40 text-on-surface-variant hover:text-primary transition-all rounded-xl text-xs font-semibold flex items-center justify-center gap-2"
                 >
                   <Papicon icon="plus" size={16} />
                   {m.cm_add_custom_counter()}
@@ -1927,27 +2037,42 @@
 
       {:else if activeTab === 'temp-voice'}
         <!-- DYNAMIC VOCAL CREATORS TAB -->
-        <section class="bg-surface-container-low/30 border border-outline-variant/10 p-8 rounded-xl space-y-6">
-          <div class="flex items-center justify-between">
-            <div>
-              <h3 class="text-xl font-semibold flex items-center gap-3">
-                <Papicon icon="volume-2" size={20} class="text-primary" />
-                {m.cm_temp_voice_title()}
-              </h3>
-              <p class="text-xs text-on-surface-variant/60 mt-1">{m.cm_temp_voice_desc()}</p>
-            </div>
-            
-            <div class="flex items-center gap-2">
-              <input 
-                type="checkbox" 
-                bind:checked={config.tempVoiceEnabled} 
-                class="w-10 h-6 bg-surface-container-high rounded-full relative appearance-none cursor-pointer transition-all border border-outline-variant/20 checked:bg-primary before:content-[''] before:absolute before:h-4 before:w-4 before:rounded-full before:bg-white before:top-0.5 before:left-0.5 checked:before:translate-x-4 before:transition-all"
-              />
-            </div>
+        <div class="flex items-center justify-between mb-6">
+          <div>
+            <h3 class="text-xl font-semibold flex items-center gap-3">
+              <Papicon icon="volume-2" size={20} class="text-primary" />
+              {m.cm_temp_voice_title()}
+            </h3>
+            <p class="text-xs text-on-surface-variant mt-1">{m.cm_temp_voice_desc()}</p>
           </div>
 
-          {#if config.tempVoiceEnabled}
-            <div class="space-y-4 pt-4 border-t border-outline-variant/10 max-w-xl">
+          <div class="flex items-center gap-2 shrink-0">
+            <ToggleSwitch
+              checked={config.tempVoiceEnabled}
+              onToggle={(v) => (config.tempVoiceEnabled = v)}
+              ariaLabel={m.cm_temp_voice_title()}
+            />
+          </div>
+        </div>
+        {#if config.tempVoiceEnabled}
+          <Tabs
+            label={m.cm_tv_tabs_label()}
+            class="mb-6"
+            tabs={[
+              { id: 'generators', label: m.cm_tv_tab_generators(), icon: 'volume-2' },
+              { id: 'permissions', label: m.cm_tv_tab_permissions(), icon: 'lock' },
+              { id: 'panel', label: m.cm_tv_tab_panel(), icon: 'grid' },
+              { id: 'active', label: m.cm_tv_tab_active(), icon: 'user', badge: activeTempChannels.length || undefined },
+            ]}
+            active={tvSub}
+            onchange={(id) => { tvSub = id as typeof tvSub; }}
+          />
+        {/if}
+        {#if config.tempVoiceEnabled && (tvSub === 'generators' || tvSub === 'permissions')}
+        <section class="bg-surface-container-low/30 border border-outline-variant/10 p-8 rounded-xl space-y-6">
+            <div class="space-y-4">
+              {#if tvSub === 'generators'}
+              <div class="space-y-4 max-w-xl">
               <!-- Generator Voice Channel Selection -->
               <div class="space-y-1.5">
                 <label for="temp-voice-channel-select" class="text-xs font-bold text-on-surface/80 block">{m.cm_generator_voice_channel_label()}</label>
@@ -1955,7 +2080,7 @@
                   <div class="flex-1">
                     <SearchableSelect 
                       id="temp-voice-channel-select"
-                      options={availableVoiceChannels.map(c => ({ id: c.id, name: `🔊 ${c.name}` }))} 
+                      options={mainGeneratorChannelOptions}
                       bind:value={config.tempVoiceChannelId} 
                       placeholder={m.cm_create_channel_auto_placeholder()}
                     />
@@ -2007,7 +2132,7 @@
                   id="temp-voice-name-template-input"
                   type="text" 
                   bind:value={config.tempVoiceNameTemplate} 
-                  placeholder={m.cm_template_user_placeholder()} 
+                  placeholder={m.cm_template_user_placeholder({ user: "{user}" })} 
                   class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-5 py-3 text-sm outline-none focus:ring-2 focus:ring-primary/30 transition-all"
                 />
                 <p class="text-2xs text-on-surface-variant/40 mt-1">{m.cm_user_placeholder_hint({ code: '{user}' })}</p>
@@ -2024,14 +2149,22 @@
                 />
                 <p class="text-2xs text-on-surface-variant/40">{m.cm_required_role_scope_hint()}</p>
               </div>
+              </div>
+
+              {/if}
 
               <!-- Permissions appliquées aux salons créés -->
-              <TempVoicePolicyEditor
-                bind:policy={config.tempVoiceDefaults}
-                availableRoles={autoAllowableRoles}
-                idPrefix="temp-voice-main"
-              />
+              {#if tvSub === 'permissions'}
+              <div class="max-w-xl">
+                <TempVoicePolicyEditor
+                  bind:policy={config.tempVoiceDefaults}
+                  availableRoles={autoAllowableRoles}
+                  idPrefix="temp-voice-main"
+                />
+              </div>
+              {/if}
 
+              {#if tvSub === 'generators'}
               {#if !config.tempVoiceGenerators}
                 {config.tempVoiceGenerators = []}
               {/if}
@@ -2043,7 +2176,8 @@
                     <Papicon icon="plus-circle" size={16} />
                     {m.cm_additional_generators_title()}
                   </h4>
-                  <p class="text-xs text-on-surface-variant/60">{m.cm_additional_generators_desc()}</p>
+                  <p class="text-xs text-on-surface-variant">{m.cm_additional_generators_desc()}</p>
+                  <p class="text-2xs text-on-surface-variant/40 mt-1">{m.cm_tv_generator_taken_hint()}</p>
                 </div>
 
                 <!-- Un sélecteur de surcharge de présentation, réutilisé cinq
@@ -2063,7 +2197,7 @@
                   onSelect: (value: string) => void,
                 )}
                   <div class="space-y-1">
-                    <label for={id} class="text-2xs font-bold text-on-surface-variant/60 block">{labelText}</label>
+                    <label for={id} class="text-2xs font-bold text-on-surface-variant block">{labelText}</label>
                     <select
                       {id}
                       value={current ?? ''}
@@ -2090,7 +2224,7 @@
                                 {m.cm_tv_panel_per_gen_badge_overrides({ count: generatorOverrideCount(generator) })}
                               </span>
                             {:else}
-                              <span class="text-2xs font-semibold px-2 py-0.5 rounded-full bg-surface-container-high/40 text-on-surface-variant/60">
+                              <span class="text-2xs font-semibold px-2 py-0.5 rounded-full bg-surface-container-high/40 text-on-surface-variant">
                                 {m.cm_tv_panel_per_gen_badge_inherits()}
                               </span>
                             {/if}
@@ -2101,7 +2235,7 @@
                           onclick={() => {
                             config.tempVoiceGenerators = config.tempVoiceGenerators.filter((_, i) => i !== index);
                           }}
-                          class="text-on-surface-variant/60 hover:text-error transition-all flex items-center gap-1.5 text-xs font-bold"
+                          class="text-on-surface-variant hover:text-error transition-all flex items-center gap-1.5 text-xs font-bold"
                           title={m.cm_delete_generator_title()}
                         >
                           <Papicon icon="trash-2" size={14} />
@@ -2109,7 +2243,7 @@
                         </button>
                       </div>
 
-                      <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <!-- Generator Voice Channel Selection -->
                         <div class="space-y-1.5">
                           <label for="temp-voice-channel-select-{index}" class="text-xs font-bold text-on-surface/80 block">{m.cm_generator_voice_channel_label()}</label>
@@ -2117,7 +2251,7 @@
                             <div class="flex-1">
                               <SearchableSelect 
                                 id="temp-voice-channel-select-{index}"
-                                options={availableVoiceChannels.map(c => ({ id: c.id, name: `🔊 ${c.name}` }))} 
+                                options={generatorChannelOptions(index)}
                                 bind:value={generator.channelId} 
                                 placeholder={m.cm_create_auto_placeholder()}
                               />
@@ -2169,7 +2303,7 @@
                             id="temp-voice-name-template-input-{index}"
                             type="text" 
                             bind:value={generator.nameTemplate} 
-                            placeholder={m.cm_template_user_placeholder()} 
+                            placeholder={m.cm_template_user_placeholder({ user: "{user}" })} 
                             class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs outline-none focus:ring-1 focus:ring-primary/30 transition-all"
                           />
                         </div>
@@ -2206,7 +2340,7 @@
                             <span class="text-xs font-bold text-on-surface/80 block">{m.cm_tv_panel_per_gen_override_title()}</span>
                             <p class="text-2xs text-on-surface-variant/40">{m.cm_tv_panel_per_gen_override_desc()}</p>
                           </div>
-                          <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
+                          <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3">
                             {@render presentationOverrideSelect(
                               `gen-${index}-panel-mode`,
                               m.cm_tv_panel_mode_label(),
@@ -2262,13 +2396,13 @@
                           {
                             channelId: '',
                             categoryId: '',
-                            nameTemplate: '🔊 {user}\'s channel',
+                            nameTemplate: m.cm_tv_default_name_template({ user: "{user}" }),
                             requiredRoleId: '',
                             ...defaultTempVoicePolicy()
                           }
                         ];
                       }}
-                      class="py-4 border border-dashed border-outline-variant/20 hover:border-primary/40 text-on-surface-variant/60 hover:text-primary transition-all rounded-xl text-xs font-semibold flex items-center justify-center gap-2"
+                      class="py-4 border border-dashed border-outline-variant/20 hover:border-primary/40 text-on-surface-variant hover:text-primary transition-all rounded-xl text-xs font-semibold flex items-center justify-center gap-2"
                     >
                       <Papicon icon="plus" size={16} />
                       {m.cm_add_extra_generator()}
@@ -2276,32 +2410,92 @@
                   {/if}
                 </div>
               </div>
-
-              <!-- Description of Chat Control Embed -->
-              <div class="p-5 bg-primary/5 border border-primary/20 rounded-xl mt-4">
-                <h4 class="text-xs font-semibold text-primary mb-2">{m.cm_management_embed_title()}</h4>
-                <p class="text-xs text-on-surface-variant/80 leading-relaxed">
-                  {m.cm_management_embed_intro()}
-                  <br/><strong class="text-on-surface font-semibold">• {m.cm_embed_bullet_lock()}</strong> {m.cm_embed_bullet_lock_desc()}
-                  <br/><strong class="text-on-surface font-semibold">• {m.cm_embed_bullet_rename()}</strong> {m.cm_embed_bullet_rename_desc()}
-                  <br/><strong class="text-on-surface font-semibold">• {m.cm_embed_bullet_limit()}</strong> {m.cm_embed_bullet_limit_desc()}
-                  <br/><strong class="text-on-surface font-semibold">• {m.cm_embed_bullet_kick()}</strong> {m.cm_embed_bullet_kick_desc()}
-                  <br/><strong class="text-on-surface font-semibold">• {m.cm_embed_bullet_chat()}</strong> {m.cm_embed_bullet_chat_desc()}
-                </p>
-              </div>
+              {/if}
             </div>
-          {/if}
         </section>
+        {/if}
+
+        <!-- Passation : un bloc à part dans « Permissions », car il décide de
+             qui détient les droits du salon quand son propriétaire part. -->
+        {#if config.tempVoiceEnabled && tvSub === 'permissions'}
+        <section class="bg-surface-container-low/30 border border-outline-variant/10 p-8 rounded-xl space-y-6 mt-6">
+          <div>
+            <h3 class="text-xl font-semibold flex items-center gap-3">
+              <Papicon icon="user" size={20} class="text-primary" />
+              {m.cm_tv_own_title()}
+            </h3>
+            <p class="text-xs text-on-surface-variant mt-1">{m.cm_tv_own_desc()}</p>
+          </div>
+
+          <div class="grid grid-cols-1 gap-3 max-w-xl">
+            {#each OWNERSHIP_TOGGLES as row (row.key)}
+              <div class="flex items-center justify-between gap-4 p-4 bg-surface-container-high/20 border border-outline-variant/5 rounded-xl">
+                <div class="space-y-0.5">
+                  <label for="tv-own-{row.key}" class="text-xs font-bold text-on-surface/80 block">{row.label()}</label>
+                  <p class="text-2xs text-on-surface-variant">{row.hint()}</p>
+                </div>
+                <input
+                  id="tv-own-{row.key}"
+                  type="checkbox"
+                  bind:checked={config.tempVoiceModPermissions[row.key]}
+                  class="shrink-0 w-10 h-6 bg-surface-container-high rounded-full relative appearance-none cursor-pointer transition-all border border-outline-variant/20 checked:bg-primary before:content-[''] before:absolute before:h-4 before:w-4 before:rounded-full before:bg-white before:top-0.5 before:left-0.5 checked:before:translate-x-4 before:transition-all"
+                />
+              </div>
+            {/each}
+          </div>
+
+          <div class="space-y-1.5 max-w-xl">
+            <label for="tv-own-delay" class="text-xs font-bold text-on-surface/80 block">{m.cm_tv_own_delay_label()}</label>
+            <input
+              id="tv-own-delay"
+              type="number"
+              min={TEMP_VOICE_HANDOVER_DELAY_BOUNDS.min}
+              max={TEMP_VOICE_HANDOVER_DELAY_BOUNDS.max}
+              disabled={!config.tempVoiceModPermissions.handoverDmEnabled}
+              bind:value={config.tempVoiceModPermissions.handoverDelaySeconds}
+              class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm outline-none focus:ring-1 focus:ring-primary/30 transition-all disabled:opacity-40"
+            />
+            <p class="text-2xs text-on-surface-variant/40">{m.cm_tv_own_delay_hint({ min: TEMP_VOICE_HANDOVER_DELAY_BOUNDS.min, max: TEMP_VOICE_HANDOVER_DELAY_BOUNDS.max })}</p>
+          </div>
+
+          <div class="space-y-2 max-w-xl">
+            <span class="text-xs font-bold text-on-surface/80 block">{m.cm_tv_own_who_label()}</span>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {#each CLAIM_WHO_MODES as mode (mode.key)}
+                <label
+                  for="tv-own-who-{mode.key}"
+                  class="flex flex-col gap-1 border rounded-lg px-4 py-3 cursor-pointer transition-all {config.tempVoiceModPermissions.claimWho === mode.key
+                    ? 'bg-primary/10 border-primary/40'
+                    : 'bg-surface-container-high/20 border-outline-variant/10 hover:border-primary/20'}"
+                >
+                  <span class="flex items-center gap-2 text-xs font-bold text-on-surface">
+                    <input
+                      id="tv-own-who-{mode.key}"
+                      type="radio"
+                      value={mode.key}
+                      bind:group={config.tempVoiceModPermissions.claimWho}
+                      class="accent-primary w-3.5 h-3.5"
+                    />
+                    {mode.label()}
+                  </span>
+                  <span class="text-2xs text-on-surface-variant leading-relaxed">{mode.hint()}</span>
+                </label>
+              {/each}
+            </div>
+          </div>
+        </section>
+        {/if}
 
         {#if config.tempVoiceEnabled}
-          <section class="bg-surface-container-low/30 border border-outline-variant/10 p-8 rounded-xl space-y-6 mt-6">
+          {#if tvSub === 'active'}
+          <section class="bg-surface-container-low/30 border border-outline-variant/10 p-8 rounded-xl space-y-6">
             <div class="flex items-center justify-between border-b border-outline-variant/10 pb-4">
               <div>
                 <h3 class="text-xl font-semibold flex items-center gap-3">
                   <Papicon icon="volume-2" size={20} class="text-primary" />
                   {m.cm_active_temp_channels_title()}
                 </h3>
-                <p class="text-xs text-on-surface-variant/60 mt-1">{m.cm_active_temp_channels_desc()}</p>
+                <p class="text-xs text-on-surface-variant mt-1">{m.cm_active_temp_channels_desc()}</p>
               </div>
               
               <button
@@ -2329,7 +2523,7 @@
               <div class="hidden md:block overflow-x-auto w-full">
                 <table class="w-full text-left border-collapse text-xs">
                   <thead>
-                    <tr class="border-b border-outline-variant/15 text-xs font-medium text-on-surface-variant/70">
+                    <tr class="border-b border-outline-variant/15 text-xs font-medium text-on-surface-variant">
                       <th class="py-3 px-4">{m.cm_col_channel_name()}</th>
                       <th class="py-3 px-4">{m.cm_col_creator()}</th>
                       <th class="py-3 px-4 text-center">{m.cm_col_members()}</th>
@@ -2444,7 +2638,14 @@
                             disabled={actionInProgress}
                             class="px-2 py-1 bg-primary text-white text-2xs font-semibold rounded-md"
                           >
-                            OK
+                            {m.cm_validate()}
+                          </button>
+                          <button
+                            type="button"
+                            onclick={() => editingChannel = null}
+                            class="px-2 py-1 bg-surface-container text-on-surface text-2xs font-semibold rounded-md border border-outline-variant/20"
+                          >
+                            {m.common_cancel()}
                           </button>
                         </div>
                       {:else}
@@ -2471,12 +2672,12 @@
                       </div>
                       <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs font-semibold bg-primary/10 text-primary border border-primary/20">
                         <Papicon icon="user" size={10} />
-                        {chan.membersCount} {m.cm_members_connected_suffix()}
+                        {connectedLabel(chan.membersCount)}
                       </span>
                     </div>
 
                     <div class="space-y-1">
-                      <span class="text-2xs font-bold text-on-surface-variant/60 block">{m.cm_reservation_label()}</span>
+                      <span class="text-2xs font-bold text-on-surface-variant block">{m.cm_reservation_label()}</span>
                       <SearchableSelect 
                         options={availableRoles.map(r => ({ id: r.id, name: `@${r.name}` }))} 
                         value={chan.roleId || ''} 
@@ -2501,23 +2702,37 @@
               </div>
             {/if}
           </section>
+          {/if}
 
           <!-- Présentation du panneau : mode, mise en page de l'état, palette et
-               composants (V1/V2) — configurable par serveur, comme le reste de
+               composants (V1/V2) : configurable par serveur, comme le reste de
                tempVoiceModPermissions envoyé en entier à la sauvegarde. Reste
                dans le même {#if config.tempVoiceEnabled} que la section
                voisine : les salons temporaires désactivés, l'onglet ne garde
                que l'interrupteur, pas un bloc de réglages orphelin. -->
-          <section class="bg-surface-container-low/30 border border-outline-variant/10 p-5 lg:p-6 rounded-xl space-y-4 mt-6">
+          {#if tvSub === 'panel'}
+          <section class="bg-surface-container-low/30 border border-outline-variant/10 p-5 lg:p-6 rounded-xl space-y-4">
+              <!-- Description of Chat Control Embed -->
+              <div class="p-5 bg-primary/5 border border-primary/20 rounded-xl">
+                <h4 class="text-xs font-semibold text-primary mb-2">{m.cm_management_embed_title()}</h4>
+                <p class="text-xs text-on-surface-variant/80 leading-relaxed">
+                  {m.cm_management_embed_intro()}
+                  <br/><strong class="text-on-surface font-semibold">• {m.cm_embed_bullet_lock()}</strong> {m.cm_embed_bullet_lock_desc()}
+                  <br/><strong class="text-on-surface font-semibold">• {m.cm_embed_bullet_rename()}</strong> {m.cm_embed_bullet_rename_desc()}
+                  <br/><strong class="text-on-surface font-semibold">• {m.cm_embed_bullet_limit()}</strong> {m.cm_embed_bullet_limit_desc()}
+                  <br/><strong class="text-on-surface font-semibold">• {m.cm_embed_bullet_kick()}</strong> {m.cm_embed_bullet_kick_desc()}
+                  <br/><strong class="text-on-surface font-semibold">• {m.cm_embed_bullet_chat()}</strong> {m.cm_embed_bullet_chat_desc()}
+                </p>
+              </div>
             <div>
               <h3 class="text-sm font-semibold text-on-surface">{m.cm_tv_panel_title()}</h3>
-              <p class="text-2xs text-on-surface-variant/60 mt-0.5">{m.cm_tv_panel_desc()}</p>
+              <p class="text-2xs text-on-surface-variant mt-0.5">{m.cm_tv_panel_desc()}</p>
             </div>
 
             <!-- Interrupteur de secours : coupé (défaut), les 5 réglages
                  ci-dessous valent pour TOUS les générateurs et les surcharges
                  des additionnels ne sont même pas lues côté bot
-                 (`presentationPourGenerateur`, tempVoiceService.ts) — l'écran
+                 (`presentationPourGenerateur`, tempVoiceService.ts) : l'écran
                  reste identique à celui d'avant cette fonctionnalité. Le
                  couper n'efface rien : les surcharges restent dans
                  `tempVoiceGenerators` et reviennent telles quelles au
@@ -2525,7 +2740,7 @@
             <div class="flex items-center justify-between gap-4 p-4 bg-surface-container-high/20 border border-outline-variant/5 rounded-xl max-w-3xl">
               <div class="space-y-0.5">
                 <label for="per-generator-presentation-toggle" class="text-xs font-bold text-on-surface/80 block">{m.cm_tv_panel_per_gen_toggle_label()}</label>
-                <p class="text-2xs text-on-surface-variant/60">{m.cm_tv_panel_per_gen_toggle_hint()}</p>
+                <p class="text-2xs text-on-surface-variant">{m.cm_tv_panel_per_gen_toggle_hint()}</p>
               </div>
               <div class="flex items-center gap-2 shrink-0">
                 <input
@@ -2562,7 +2777,7 @@
                         {mode.label()}
                       </span>
                       {#each mode.hints as hint}
-                        <span class="text-2xs text-on-surface-variant/60 leading-relaxed">{hint()}</span>
+                        <span class="text-2xs text-on-surface-variant leading-relaxed">{hint()}</span>
                       {/each}
                     </label>
                   {/each}
@@ -2590,7 +2805,7 @@
                         />
                         {mode.label()}
                       </span>
-                      <span class="text-2xs text-on-surface-variant/60 leading-relaxed">{mode.hint()}</span>
+                      <span class="text-2xs text-on-surface-variant leading-relaxed">{mode.hint()}</span>
                     </label>
                   {/each}
                 </div>
@@ -2616,7 +2831,7 @@
                         />
                         {mode.label()}
                       </span>
-                      <span class="text-2xs text-on-surface-variant/60 leading-relaxed">{mode.hint()}</span>
+                      <span class="text-2xs text-on-surface-variant leading-relaxed">{mode.hint()}</span>
                     </label>
                   {/each}
                 </div>
@@ -2629,6 +2844,33 @@
                     ? m.cm_tv_panel_state_layout_native_hint()
                     : m.cm_tv_panel_state_layout_image_hint()}
                 </p>
+              </div>
+
+              <div class="space-y-2 md:col-span-2">
+                <span class="text-xs font-bold text-on-surface/80 block">{m.cm_tv_owner_mention_label()}</span>
+                <p class="text-2xs text-on-surface-variant/40">{m.cm_tv_owner_mention_desc()}</p>
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  {#each OWNER_MENTION_MODES as mode (mode.key)}
+                    <label
+                      for="tv-owner-mention-{mode.key}"
+                      class="flex flex-col gap-1 border rounded-lg px-4 py-3 cursor-pointer transition-all {config.tempVoiceModPermissions.ownerMentionPlacement === mode.key
+                        ? 'bg-primary/10 border-primary/40'
+                        : 'bg-surface-container-high/20 border-outline-variant/10 hover:border-primary/20'}"
+                    >
+                      <span class="flex items-center gap-2 text-xs font-bold text-on-surface">
+                        <input
+                          id="tv-owner-mention-{mode.key}"
+                          type="radio"
+                          value={mode.key}
+                          bind:group={config.tempVoiceModPermissions.ownerMentionPlacement}
+                          class="accent-primary w-3.5 h-3.5"
+                        />
+                        {mode.label()}
+                      </span>
+                      <span class="text-2xs text-on-surface-variant leading-relaxed">{mode.hint()}</span>
+                    </label>
+                  {/each}
+                </div>
               </div>
 
               <div class="space-y-2">
@@ -2654,7 +2896,7 @@
                         />
                         {mode.label()}
                       </span>
-                      <span class="text-2xs text-on-surface-variant/60 leading-relaxed">{mode.hint()}</span>
+                      <span class="text-2xs text-on-surface-variant leading-relaxed">{mode.hint()}</span>
                     </label>
                   {/each}
                 </div>
@@ -2666,6 +2908,7 @@
               </div>
             </div>
           </section>
+          {/if}
         {/if}
 
       {:else if activeTab === 'access-requests'}
@@ -2677,14 +2920,14 @@
                 <Papicon icon="lock" size={20} class="text-primary" />
                 {m.cm_ar_title()}
               </h3>
-              <p class="text-xs text-on-surface-variant/60 mt-1">{m.cm_ar_desc()}</p>
+              <p class="text-xs text-on-surface-variant mt-1">{m.cm_ar_desc()}</p>
             </div>
 
-            <div class="flex items-center gap-2">
-              <input
-                type="checkbox"
-                bind:checked={config.tempVoiceAccessRequest.enabled}
-                class="w-10 h-6 bg-surface-container-high rounded-full relative appearance-none cursor-pointer transition-all border border-outline-variant/20 checked:bg-primary before:content-[''] before:absolute before:h-4 before:w-4 before:rounded-full before:bg-white before:top-0.5 before:left-0.5 checked:before:translate-x-4 before:transition-all"
+            <div class="flex items-center gap-2 shrink-0">
+              <ToggleSwitch
+                checked={config.tempVoiceAccessRequest.enabled}
+                onToggle={(v) => (config.tempVoiceAccessRequest.enabled = v)}
+                ariaLabel={m.cm_ar_title()}
               />
             </div>
           </div>
@@ -2726,7 +2969,7 @@
                         />
                         {mode.label()}
                       </span>
-                      <span class="text-2xs text-on-surface-variant/60 leading-relaxed">{mode.hint()}</span>
+                      <span class="text-2xs text-on-surface-variant leading-relaxed">{mode.hint()}</span>
                     </label>
                   {/each}
                 </div>
@@ -2765,7 +3008,7 @@
                   <input
                     id="ar-cooldown-input"
                     type="number"
-                    min="0"
+                    min="1"
                     max="1440"
                     bind:value={config.tempVoiceAccessRequest.denyCooldownMinutes}
                     class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm outline-none focus:ring-1 focus:ring-primary/30 transition-all"
@@ -2787,7 +3030,7 @@
               <Papicon icon="shield" size={20} class="text-primary" />
               {m.cm_ar_admin_title()}
             </h3>
-            <p class="text-xs text-on-surface-variant/60 mt-1">{m.cm_ar_admin_desc()}</p>
+            <p class="text-xs text-on-surface-variant mt-1">{m.cm_ar_admin_desc()}</p>
           </div>
 
           <div class="grid grid-cols-1 gap-3 max-w-xl">
@@ -2817,7 +3060,7 @@
             <div class="flex items-center justify-between gap-4 p-4 bg-surface-container-high/20 border border-outline-variant/5 rounded-xl">
               <div class="space-y-0.5">
                 <label for="panel-compact-mode-toggle" class="text-xs font-bold text-on-surface/80 block">{m.cm_ar_admin_panel_compact_title()}</label>
-                <p class="text-2xs text-on-surface-variant/60">{m.cm_ar_admin_panel_compact_desc()}</p>
+                <p class="text-2xs text-on-surface-variant">{m.cm_ar_admin_panel_compact_desc()}</p>
               </div>
               <div class="flex items-center gap-2 shrink-0">
                 <input
@@ -2839,7 +3082,7 @@
                 <Papicon icon="lock" size={16} />
                 {m.cm_ar_reservation_title()}
               </h4>
-              <p class="text-xs text-on-surface-variant/60">{m.cm_ar_reservation_desc()}</p>
+              <p class="text-xs text-on-surface-variant">{m.cm_ar_reservation_desc()}</p>
             </div>
 
             <div class="space-y-2 max-w-xl">
@@ -2867,7 +3110,7 @@
               {/if}
 
               {#if config.tempVoiceModPermissions.reservableRoleIds.length >= MAX_RESERVABLE_ROLES}
-                <p class="text-2xs text-on-surface-variant/60">{m.cm_ar_reservation_roles_full({ max: MAX_RESERVABLE_ROLES })}</p>
+                <p class="text-2xs text-on-surface-variant">{m.cm_ar_reservation_roles_full({ max: MAX_RESERVABLE_ROLES })}</p>
               {:else}
                 <SearchableSelect
                   id="reservation-roles-select"
@@ -2945,14 +3188,14 @@
                 <Papicon icon="shield" size={20} class="text-primary" />
                 {m.cm_honeypot_title()}
               </h3>
-              <p class="text-xs text-on-surface-variant/60 mt-1">{m.cm_honeypot_desc()}</p>
+              <p class="text-xs text-on-surface-variant mt-1">{m.cm_honeypot_desc()}</p>
             </div>
             
-            <div class="flex items-center gap-2">
-              <input 
-                type="checkbox" 
-                bind:checked={config.honeypotEnabled} 
-                class="w-10 h-6 bg-surface-container-high rounded-full relative appearance-none cursor-pointer transition-all border border-outline-variant/20 checked:bg-primary before:content-[''] before:absolute before:h-4 before:w-4 before:rounded-full before:bg-white before:top-0.5 before:left-0.5 checked:before:translate-x-4 before:transition-all"
+            <div class="flex items-center gap-2 shrink-0">
+              <ToggleSwitch
+                checked={config.honeypotEnabled}
+                onToggle={(v) => (config.honeypotEnabled = v)}
+                ariaLabel={m.cm_honeypot_title()}
               />
             </div>
           </div>
@@ -3030,7 +3273,7 @@
                 <div class="flex items-center justify-between p-5 bg-surface-container-high/20 border border-outline-variant/5 rounded-xl transition-all">
                   <div class="space-y-0.5">
                     <label for="honeypot-reinvite-toggle" class="text-xs font-bold text-on-surface/80 block">{m.cm_auto_reinvite_label()}</label>
-                    <p class="text-2xs text-on-surface-variant/60">{m.cm_auto_reinvite_desc()}</p>
+                    <p class="text-2xs text-on-surface-variant">{m.cm_auto_reinvite_desc()}</p>
                   </div>
                   <div class="flex items-center gap-2">
                     <input 
@@ -3063,12 +3306,3 @@
   {/if}
 </ModulePage>
 
-<style>
-  .no-scrollbar::-webkit-scrollbar {
-    display: none;
-  }
-  .no-scrollbar {
-    -ms-overflow-style: none;
-    scrollbar-width: none;
-  }
-</style>

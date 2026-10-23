@@ -17,6 +17,7 @@ import {
   ActivityType,
   ApplicationCommandType,
   MessageFlags,
+  PermissionFlagsBits,
   DiscordAPIError,
   type ChatInputCommandInteraction,
   type Guild,
@@ -70,25 +71,26 @@ import { registerLevelingListener } from './events/levelingEvents.js';
 import { registerSecurityVerificationListener } from './events/securityVerificationEvents.js';
 import { registerAutoResponseListener } from './events/autoResponseEvents.js';
 import { registerBumpReminderListener } from './events/bumpReminderEvents.js';
+import { registerSiteListeners } from './events/siteEvents.js';
 import { registerChannelLinkListener } from './events/channelLinkEvents.js';
 import { registerStarboardListener } from './events/starboardEvents.js';
 import { registerStaffServerListener } from './events/staffServerEvents.js';
 import { registerAbsenceMentionListener } from './events/absenceMentionEvents.js';
-import { registerPartnershipListener } from './services/features/partnershipService.js';
 import { registerRaidProtectionListener } from './events/raidProtection.js';
 import { registerServerTagRoleListener } from './events/serverTagRole.js';
 import { registerClanListener } from './events/clanEvents.js';
 import { registerEventBusBridge } from './events/eventBusBridge.js';
 import { registerAnalyticsBusSubscribers } from './modules/analytics.module.js';
 import { registerWorkflowBusSubscribers } from './modules/workflow.module.js';
+import { registerOutgoingWebhookSubscribers } from './services/integrations/outgoingWebhookService.js';
 import { registerLevelingBusSubscribers } from './modules/leveling.module.js';
 import { registerRankedBusSubscribers } from './modules/ranked.module.js';
 import { registerAutoModBusSubscribers } from './modules/autoMod.module.js';
+import { registerAegisModule } from './modules/aegis.module.js';
 import { registerAdminLockModule } from './modules/adminLock.module.js';
 import { registerAutoThreadBusSubscribers } from './modules/autoThread.module.js';
 import { registerStickyMessageBusSubscribers } from './modules/stickyMessage.module.js';
 import { registerWelcomeGoodbyeBusSubscribers } from './modules/welcomeGoodbye.module.js';
-import { registerPartnershipBusSubscribers } from './modules/partnerships.module.js';
 import { registerModerationBusSubscribers } from './modules/moderation.module.js';
 import { registerTicketsBusSubscribers } from './modules/tickets.module.js';
 import { loadActivatedGuilds, isGuildActivated, activateGuildSelfServe } from './utils/activation.js';
@@ -108,6 +110,7 @@ import {
 } from './commands.js';
 import { getModuleDefinition, getModuleForCustomId } from '@kotbo/contracts';
 import { isModuleEnabled } from './services/core/moduleGate.js';
+import { isProgressionBlocked, PROGRESSION_MODULES } from './services/progression/progressionBlacklist.js';
 import { scopeClientToModule } from './services/core/moduleScope.js';
 import { reconcileGuildCommands } from './services/core/commandDeployment.js';
 
@@ -152,6 +155,8 @@ const client = new Client({
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.DirectMessages,
     GatewayIntentBits.GuildInvites,
+    // Exécutions des règles AutoMod natives, pour republier les messages censurés.
+    GatewayIntentBits.AutoModerationExecution,
   ],
   partials: [Partials.Message, Partials.Reaction],
 });
@@ -365,6 +370,37 @@ async function enforceModuleGate(interaction: Interaction): Promise<boolean> {
   return false;
 }
 
+/**
+ * Blacklist de progression : un membre, un rôle ou un salon listé n'a plus
+ * accès aux commandes et boutons des niveaux, du RPG, de l'économie... Les
+ * administrateurs passent outre, pour pouvoir corriger un solde depuis
+ * n'importe quel salon.
+ */
+async function enforceProgressionBlacklist(interaction: Interaction): Promise<boolean> {
+  if (!interaction.guildId || !interaction.member) return true;
+  const moduleKey = interactionModuleKey(interaction);
+  if (!moduleKey || !PROGRESSION_MODULES.has(moduleKey)) return true;
+  if (interaction.memberPermissions?.any([PermissionFlagsBits.Administrator, PermissionFlagsBits.ManageGuild])) return true;
+
+  const roles = interaction.member.roles;
+  const blocked = await isProgressionBlocked(interaction.guildId, {
+    userId: interaction.user.id,
+    roleIds: Array.isArray(roles) ? roles : roles.cache.keys(),
+    channelIds: [interaction.channelId, interaction.channel && 'parentId' in interaction.channel ? interaction.channel.parentId : null, interaction.channel?.isThread() ? interaction.channel.parent?.parentId : null],
+  });
+  if (!blocked) return true;
+
+  if (interaction.isAutocomplete()) {
+    await interaction.respond([]).catch(() => null);
+  } else if (interaction.isRepliable()) {
+    await replyOrFollowUp(interaction, {
+      content: '🚫 Tu ne peux pas utiliser cette fonctionnalité ici : ce serveur t’a exclu (ou a exclu ce salon) des niveaux, du RPG et de l’économie.',
+      flags: [MessageFlags.Ephemeral],
+    }).catch(() => null);
+  }
+  return false;
+}
+
 
 client.once(Events.ClientReady, async (c) => {
   logger.success('Bot', `Connecté en tant que ${c.user.tag}`);
@@ -445,16 +481,19 @@ client.once(Events.ClientReady, async (c) => {
   // sont restés sur `client.on()` reçoivent la vue filtrée du client.
   registerAnalyticsBusSubscribers(client);
   registerWorkflowBusSubscribers(client);
+  registerOutgoingWebhookSubscribers();
   registerLevelingBusSubscribers(client);
   registerRankedBusSubscribers(client);
   registerAutoModBusSubscribers(scopeClientToModule(client, 'automod'));
   registerAdminLockModule(scopeClientToModule(client, 'automod'));
+  // Kotbo × AegisAI : sous-module d'AutoMod, allumé par sa propre config.
+  void registerAegisModule(client, scopeClientToModule(client, 'automod'))
+    .catch((error) => logger.error('Modules', 'Module AegisAI non démarré :', error));
   registerAutoThreadBusSubscribers(client);
   registerStickyMessageBusSubscribers(client);
   registerWelcomeGoodbyeBusSubscribers(client);
   registerModerationBusSubscribers(scopeClientToModule(client, 'sanctions'));
   registerTicketsBusSubscribers(client);
-  registerPartnershipBusSubscribers(client);
 
   // ── Direct listeners (not yet migrated to the bus) ────────
   //
@@ -484,10 +523,10 @@ client.once(Events.ClientReady, async (c) => {
   registerSecurityVerificationListener(scopeClientToModule(client, 'security_verification'));
   registerAutoResponseListener(scopeClientToModule(client, 'auto_responses'));
   registerBumpReminderListener(scopeClientToModule(client, 'bump_reminder'));
+  registerSiteListeners(scopeClientToModule(client, 'site'));
   registerChannelLinkListener(scopeClientToModule(client, 'channel_links'));
   registerStaffServerListener(scopeClientToModule(client, 'staff_server'));
   registerAbsenceMentionListener(scopeClientToModule(client, 'absences'));
-  registerPartnershipListener(client);
   registerRaidProtectionListener(scopeClientToModule(client, 'raid_protection'));
   registerServerTagRoleListener(client);
   registerClanListener(scopeClientToModule(client, 'clans'));
@@ -639,6 +678,15 @@ client.on(Events.GuildCreate, async (guild) => {
     scheduleGuildDataSync(client, guild.id);
   }
 
+  // Le site communautaire existe des l'arrivee, hors ligne : le proprietaire le
+  // decouvre en apercu prive depuis le dashboard et le met en ligne d'un clic.
+  if (justActivated) {
+    const { ensureInstantSite } = await import('./services/site/siteInstantService.js');
+    void ensureInstantSite(client, guild.id).catch((err) =>
+      logger.warn('Site', `Site instantane non cree pour ${guild.id}:`, err)
+    );
+  }
+
   // Seulement a la premiere arrivee : un serveur deja active qui reapparait
   // apres un redemarrage n'a pas a etre accueilli une seconde fois.
   if (justActivated) {
@@ -658,6 +706,8 @@ client.on(Events.GuildCreate, async (guild) => {
 
 `
         + `*Configurer ne coûte rien.* Les modules se mettent en place tout de suite et s'allument le jour où vous choisissez une offre - il n'y a rien à refaire.
+
+`        + `🌐 **Votre site est déjà prêt.** Kotbo l'a composé d'après votre serveur : il vous attend en aperçu privé dans la section Site du tableau de bord.
 
 `
         + `🔗 **Vous ne vouliez qu'un pont entre deux communautés ?**
@@ -801,6 +851,9 @@ client.on(Events.InteractionCreate, async (interaction) => {
     // 4. Garde des modules : une fonctionnalité éteinte ne doit répondre à
     //    aucune de ses entrées, commande comme bouton.
     if (!(await enforceModuleGate(interaction))) {
+      return;
+    }
+    if (!(await enforceProgressionBlacklist(interaction))) {
       return;
     }
     moduleTracking = startModuleTracking(interaction);
@@ -1042,7 +1095,16 @@ function flushAndStop(exitCode = 0): Promise<void> {
   stopping ??= (async () => {
     clearInterval(flushInterval);
     try {
+      // Plus de réalignement des salons vocaux « Hérité » pendant l'arrêt.
+      (await import('./events/tempVoice.js')).arreterBalayageEcriture();
       await flushIndexBuffers();
+      // Kotbo × AegisAI : compteurs de la dernière minute, et le worker de la
+      // file rend ses jobs en cours à Redis plutôt que de les laisser bloqués.
+      const [{ flushAegisStats }, { stopAegisQueue }] = await Promise.all([
+        import('./services/moderation/aegis/aegisStats.js'),
+        import('./services/moderation/aegis/aegisQueue.js'),
+      ]);
+      await Promise.allSettled([flushAegisStats(), stopAegisQueue()]);
     } finally {
       process.exit(exitCode);
     }

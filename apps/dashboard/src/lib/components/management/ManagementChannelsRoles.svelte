@@ -153,7 +153,7 @@
         <Papicon icon="Shield" size={18} class="text-success shrink-0 mt-0.5" />
         <div class="space-y-1">
           <p class="text-sm font-semibold text-success">{m.mcr_analytics_off_title()}</p>
-          <p class="text-2xs text-on-surface-variant/60 leading-relaxed">{m.mcr_analytics_off_desc()}</p>
+          <p class="text-2xs text-on-surface-variant leading-relaxed">{m.mcr_analytics_off_desc()}</p>
           <a href="/modules" class="inline-flex items-center gap-1 text-2xs font-semibold text-primary hover:underline">
             {m.mcr_go_to_activation()} <Papicon icon="ArrowRight" size={11} />
           </a>
@@ -181,7 +181,7 @@
         {@const items = group.items.filter(({ feature }) => matches(feature))}
         {#if items.length > 0}
           <section class="space-y-1">
-            <p class="flex items-center gap-2 px-1 text-xs font-semibold text-on-surface-variant/50">
+            <p class="flex items-center gap-2 px-1 text-xs font-semibold text-on-surface-variant">
               <Papicon icon={categoryIcons[group.category] || 'Grid'} size={12} />
               {categoryLabel(group.category)}
             </p>

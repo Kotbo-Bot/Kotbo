@@ -11,8 +11,8 @@
  */
 
 import type { Client } from 'discord.js';
-import { Events, type Message, type PartialMessage, type GuildMember } from 'discord.js';
-import { handleAutoMod, handleGhostPingDelete, handleGhostPingUpdate, handleAntiBotAdd } from '../services/moderation/autoModService.js';
+import { Events, type AutoModerationActionExecution, type Message, type PartialMessage, type GuildMember } from 'discord.js';
+import { handleAutoMod, handleAutoModExecution, handleGhostPingDelete, handleGhostPingUpdate, handleAntiBotAdd } from '../services/moderation/autoModService.js';
 import { logger } from '../utils/logger.js';
 
 const MODULE_NAME = 'automod';
@@ -23,6 +23,15 @@ export function registerAutoModBusSubscribers(client: Client): void {
       await handleAutoMod(message, client);
     } catch (err) {
       logger.error(`[EventBus:${MODULE_NAME}]`, 'Erreur handleAutoMod:', err);
+    }
+  });
+
+  // Règles natives en mode « Censurer » : Discord bloque, le bot republie masqué.
+  client.on(Events.AutoModerationActionExecution, async (execution: AutoModerationActionExecution) => {
+    try {
+      await handleAutoModExecution(execution);
+    } catch (err) {
+      logger.error(`[EventBus:${MODULE_NAME}]`, 'Erreur handleAutoModExecution:', err);
     }
   });
 

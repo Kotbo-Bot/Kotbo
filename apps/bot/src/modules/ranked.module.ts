@@ -12,6 +12,7 @@ import { kotboEventBus } from '@kotbo/core';
 import { getOrCreateLevelConfig } from '../services/progression/levelingService.js';
 import { creditReactionRp } from '../services/progression/ranked/rankedService.js';
 import { logger } from '../utils/logger.js';
+import { isProgressionBlocked } from '../services/progression/progressionBlacklist.js';
 
 const MODULE_NAME = 'ranked';
 
@@ -32,6 +33,12 @@ export function registerRankedBusSubscribers(client: Client): void {
     const guild = client.guilds.cache.get(payload.guildId);
     const member = guild ? await guild.members.fetch(payload.userId).catch(() => null) : null;
     if (member && levelConfig.ignoredRoles?.some((roleId) => member.roles.cache.has(roleId))) return;
+    const channel = guild?.channels.cache.get(payload.channelId);
+    if (await isProgressionBlocked(payload.guildId, {
+      userId: payload.userId,
+      roleIds: member?.roles.cache.keys() ?? [],
+      channelIds: [payload.channelId, channel?.parentId, channel?.isThread() ? channel.parent?.parentId : null],
+    })) return;
 
     await creditReactionRp(payload.guildId, payload.userId, client);
   }, MODULE_NAME);

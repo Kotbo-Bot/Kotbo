@@ -1,7 +1,7 @@
 /** Outils MCP - write members 2 (permission WRITE_MEMBERS). */
 import prisma from '../../../utils/db.js';
 import { z } from 'zod';
-import { type McpToolContext, err, ok } from '../toolkit.js';
+import { type McpToolContext, ok, toolError } from '../toolkit.js';
 
 export function registerWriteMembers2Tools(ctx: McpToolContext) {
   const { server, guildId, shouldRegister, guard, audit, toolMeta } = ctx;
@@ -37,7 +37,7 @@ export function registerWriteMembers2Tools(ctx: McpToolContext) {
             layout: settings.bentoLayout,
           });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -94,7 +94,7 @@ export function registerWriteMembers2Tools(ctx: McpToolContext) {
             visibleCount: sanitized.filter((m: any) => m.visible).length,
           });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );

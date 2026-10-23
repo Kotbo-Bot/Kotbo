@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { explainDisabled } from '../../lib/actions/explainDisabled';
+  import { m } from '../../lib/i18n';
   import { onMount } from 'svelte';
   import { toast } from '../../lib/stores/toast.svelte';
   import { confirmDialog } from '../../lib/stores/confirmDialog.svelte';
@@ -357,7 +359,7 @@
           <p class="text-sm text-on-surface-variant leading-relaxed">
             Colle un CSV, un JSON ou une liste de mots. Tu choisis les catégories à la main, puis le système ne fait que nettoyer les doublons.
           </p>
-          <p class="text-xs text-on-surface-variant/50">
+          <p class="text-xs text-on-surface-variant">
             Format accepté: <span class="font-mono">mot</span>, <span class="font-mono">mot,catégorie</span>, <span class="font-mono">mot,catégorie,true/false</span> ou JSON avec <span class="font-mono">word</span>, <span class="font-mono">category</span>, <span class="font-mono">enabled</span>.
           </p>
         </div>
@@ -379,13 +381,13 @@
         <div class="flex flex-wrap gap-3">
           <button onclick={handleAnalyzeGlobalImport} class="px-5 py-3 rounded-lg bg-primary text-white font-bold text-sm hover:bg-primary/90 transition-colors">Analyser</button>
           <button onclick={resetGlobalImport} class="px-5 py-3 rounded-lg border border-outline-variant/20 text-sm font-bold text-on-surface-variant hover:bg-on-surface/5 transition-colors">Réinitialiser</button>
-          <button onclick={handleSaveGlobalImport} disabled={globalImportLoading || globalImportDrafts.length === 0} class="px-5 py-3 rounded-lg bg-emerald-500 text-white font-bold text-sm hover:bg-success/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+          <button onclick={handleSaveGlobalImport} disabled={globalImportLoading} use:explainDisabled={(globalImportDrafts.length === 0) ? m.common_reason_select_one() : ''} class="px-5 py-3 rounded-lg bg-emerald-500 text-white font-bold text-sm hover:bg-success/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
             {globalImportLoading ? 'Enregistrement...' : 'Enregistrer les mots'}
           </button>
         </div>
 
         {#if globalImportFileName}
-          <p class="text-xs text-on-surface-variant/50">Fichier chargé : {globalImportFileName}</p>
+          <p class="text-xs text-on-surface-variant">Fichier chargé : {globalImportFileName}</p>
         {/if}
 
         {#if globalImportError}
@@ -399,12 +401,12 @@
         <div class="bg-surface-container-low/50 border border-outline-variant/10 rounded-lg p-5 space-y-4">
           <div class="flex items-center justify-between gap-4">
             <h3 class="text-lg font-semibold text-on-surface">Prévisualisation ({globalImportDrafts.length})</h3>
-            <p class="text-xs text-on-surface-variant/50">Modifie les catégories avant validation.</p>
+            <p class="text-xs text-on-surface-variant">Modifie les catégories avant validation.</p>
           </div>
 
           <div class="overflow-x-auto rounded-lg border border-outline-variant/10">
             <table class="w-full text-sm">
-              <thead class="bg-surface/40 text-left text-xs text-on-surface-variant/50">
+              <thead class="bg-surface/40 text-left text-xs text-on-surface-variant">
                 <tr>
                   <th class="px-4 py-3">Mot</th>
                   <th class="px-4 py-3">Catégorie</th>
@@ -465,7 +467,7 @@
       </div>
 
       <div class="bg-surface-container-low/50 border border-outline-variant/10 rounded-lg p-5 space-y-4">
-        <p class="text-sm text-on-surface-variant/70">
+        <p class="text-sm text-on-surface-variant">
           Ces mots sont appliqués à tous les serveurs et peuvent être désactivés ou supprimés depuis cette interface d'administration.
         </p>
 
@@ -562,10 +564,10 @@
             </div>
 
             {#if globalBannedWords.length === 0}
-              <p class="py-4 text-center text-sm text-on-surface-variant/50">Aucun mot global configuré.</p>
+              <p class="py-4 text-center text-sm text-on-surface-variant">Aucun mot global configuré.</p>
             {:else}
               <div class="flex flex-col gap-3 rounded-lg border border-outline-variant/10 bg-surface/20 px-4 py-3 md:flex-row md:items-center md:justify-between">
-                <p class="text-xs text-on-surface-variant/60">
+                <p class="text-xs text-on-surface-variant">
                   Page {globalBannedWordsPage} sur {globalBannedWordsTotalPages} · {globalBannedWords.length} mot(s) global(aux)
                 </p>
                 {#if globalBannedWordsTotalPages > 1}

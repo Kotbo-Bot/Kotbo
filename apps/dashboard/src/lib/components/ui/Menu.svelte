@@ -138,7 +138,7 @@
     role="menu"
     tabindex="-1"
     aria-label={label}
-    class="fixed z-[210] rounded-lg border border-outline-variant bg-surface-container-lowest shadow-lg py-1"
+    class="fixed z-[var(--layer-popover)] rounded-lg border border-outline-variant bg-surface-container-lowest shadow-lg py-1"
     style="top: {position.top}px; left: {position.left}px; width: {MENU_WIDTH}px;"
     onkeydown={onMenuKeydown}
   >

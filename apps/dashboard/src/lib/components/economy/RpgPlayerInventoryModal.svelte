@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { stripCustomEmoji } from '../../emojiParser';
+  import { explainDisabled } from '../../actions/explainDisabled';
   /**
    * Inventaire d'un joueur : consulter, donner, retirer.
    *
@@ -38,7 +40,7 @@
   let grantItemId = $state<string | null>(null);
   let grantQuantity = $state(1);
 
-  const catalogOptions = $derived(catalog.map((item) => ({ id: item.id, name: `${item.emoji} ${item.name}` })));
+  const catalogOptions = $derived(catalog.map((item) => ({ id: item.id, name: `${stripCustomEmoji(item.emoji)} ${item.name}` })));
 
   async function load() {
     loading = true;
@@ -94,7 +96,7 @@
 
     {#if canManage}
       <div class="bg-surface-container-high/30 border border-outline-variant/10 rounded-lg p-4 space-y-3">
-        <h4 class="text-xs font-semibold text-on-surface-variant/50">{m.eco_inventory_grant_title()}</h4>
+        <h4 class="text-xs font-semibold text-on-surface-variant">{m.eco_inventory_grant_title()}</h4>
         <div class="flex flex-col sm:flex-row gap-2">
           <div class="flex-1">
             <SearchableSelect
@@ -117,7 +119,8 @@
           <button
             type="button"
             onclick={grant}
-            disabled={!grantItemId || actionState.state.loading}
+            disabled={actionState.state.loading}
+            use:explainDisabled={(!grantItemId) ? m.common_reason_fill_field() : ''}
             class="px-4 py-2 bg-primary hover:bg-primary-hover text-on-primary text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Papicon icon="Plus" size={13} /> {m.eco_inventory_grant_btn()}
@@ -131,7 +134,7 @@
         <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
       </div>
     {:else if inventory.length === 0}
-      <p class="text-center py-8 text-on-surface-variant/50 italic text-xs">{m.eco_inventory_empty()}</p>
+      <p class="text-center py-8 text-on-surface-variant italic text-xs">{m.eco_inventory_empty()}</p>
     {:else}
       <ul class="space-y-2">
         {#each inventory as entry (entry.itemId)}
@@ -141,7 +144,7 @@
               <div class="min-w-0">
                 <div class="font-semibold text-sm truncate">
                   {entry.item.name}
-                  <span class="text-on-surface-variant/60 font-normal">x{entry.quantity}</span>
+                  <span class="text-on-surface-variant font-normal">x{entry.quantity}</span>
                 </div>
                 <div class="flex flex-wrap items-center gap-2 mt-0.5 text-2xs">
                   <span class="text-primary bg-primary/10 px-2 py-0.5 rounded-full">{entry.item.type}</span>

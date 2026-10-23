@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { explainDisabled } from '../lib/actions/explainDisabled';
   import { m } from '../lib/i18n';
   import { channelDisplayName } from '../lib/channelUtils';
   import { onMount, onDestroy, untrack } from 'svelte';
@@ -41,6 +42,7 @@
     funEmojiRiddleChannelId: null as string | null,
     funNeverSayChannelId: null as string | null,
     funEmojiOnlyChannelId: null as string | null,
+    funImageOfDayChannelId: null as string | null,
     funPunitiveMode: true,
     funEmojiRiddleUseDefaults: true
   });
@@ -53,6 +55,7 @@
     funEmojiRiddleChannelId: null as string | null,
     funNeverSayChannelId: null as string | null,
     funEmojiOnlyChannelId: null as string | null,
+    funImageOfDayChannelId: null as string | null,
     funPunitiveMode: true,
     funEmojiRiddleUseDefaults: true
   });
@@ -102,6 +105,7 @@
       funEmojiRiddleChannelId: source.funEmojiRiddleChannelId ?? null,
       funNeverSayChannelId: source.funNeverSayChannelId ?? null,
       funEmojiOnlyChannelId: source.funEmojiOnlyChannelId ?? null,
+      funImageOfDayChannelId: source.funImageOfDayChannelId ?? null,
       funPunitiveMode: source.funPunitiveMode ?? true,
       funEmojiRiddleUseDefaults: source.funEmojiRiddleUseDefaults ?? true
     };
@@ -224,7 +228,7 @@
     <div class="flex items-center justify-between gap-4 rounded-xl bg-surface-container-low/40 border border-outline-variant/30 p-6 mb-8">
       <div class="min-w-0">
         <p class="text-sm font-semibold text-on-surface">{m.fun_punitive_title()}</p>
-        <p class="text-xs text-on-surface-variant/70 mt-1">{m.fun_punitive_desc()}</p>
+        <p class="text-xs text-on-surface-variant mt-1">{m.fun_punitive_desc()}</p>
       </div>
       <ToggleSwitch
         checked={config.funPunitiveMode}
@@ -260,7 +264,7 @@
           </div>
 
           <div class="space-y-1.5">
-            <label for="countingChannel" class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.fun_channel_label()}</label>
+            <label for="countingChannel" class="text-xs font-semibold text-on-surface-variant ml-2">{m.fun_channel_label()}</label>
             <SearchableSelect
               id="countingChannel"
               bind:value={config.funCountingChannelId}
@@ -272,14 +276,14 @@
           </div>
 
           <div class="p-4 rounded-lg bg-surface-container-high/20 border border-outline-variant/5 space-y-2.5">
-            <p class="text-xs font-medium text-on-surface-variant/50">{m.fun_game_state_title()}</p>
+            <p class="text-xs font-medium text-on-surface-variant">{m.fun_game_state_title()}</p>
             <div class="grid grid-cols-2 gap-4">
               <div class="bg-surface-container-high/40 p-3 rounded-xl border border-outline-variant/10 text-center">
-                <span class="text-2xs text-on-surface-variant/50 uppercase font-bold">{m.fun_counting_number()}</span>
+                <span class="text-2xs text-on-surface-variant uppercase font-bold">{m.fun_counting_number()}</span>
                 <p class="text-2xl font-semibold text-warning mt-0.5">{gameState.countingCurrent}</p>
               </div>
               <div class="bg-surface-container-high/40 p-3 rounded-xl border border-outline-variant/10 text-center flex flex-col justify-center min-w-0">
-                <span class="text-2xs text-on-surface-variant/50 uppercase font-bold truncate">{m.fun_last_player()}</span>
+                <span class="text-2xs text-on-surface-variant uppercase font-bold truncate">{m.fun_last_player()}</span>
                 <p class="text-xs font-bold text-on-surface mt-1 truncate" title={gameState.countingLastUserId || m.fun_none()}>
                   {gameState.countingLastUserId ? m.fun_user_id({ id: gameState.countingLastUserId }) : m.fun_none()}
                 </p>
@@ -291,7 +295,8 @@
         <button
           type="button"
           onclick={handleResetCounting}
-          disabled={!canManageSettings || actionState.state.loading}
+          disabled={actionState.state.loading}
+          use:explainDisabled={(!canManageSettings) ? m.common_reason_no_permission() : ''}
           class="w-full py-3.5 bg-warning/10 hover:bg-warning/20 text-warning rounded-lg text-body-sm font-medium transition-all duration-200 flex items-center justify-center gap-2 active:scale-95 disabled:opacity-40"
         >
           <Papicon icon="refresh-cw" size={14} />
@@ -313,7 +318,7 @@
           </div>
 
           <div class="space-y-1.5">
-            <label for="oneWordStoryChannel" class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.fun_channel_label()}</label>
+            <label for="oneWordStoryChannel" class="text-xs font-semibold text-on-surface-variant ml-2">{m.fun_channel_label()}</label>
             <SearchableSelect
               id="oneWordStoryChannel"
               bind:value={config.funOneWordStoryChannelId}
@@ -325,9 +330,9 @@
           </div>
 
           <div class="p-4 rounded-lg bg-surface-container-high/20 border border-outline-variant/5 space-y-2.5">
-            <p class="text-xs font-medium text-on-surface-variant/50">{m.fun_game_state_title()}</p>
+            <p class="text-xs font-medium text-on-surface-variant">{m.fun_game_state_title()}</p>
             <div class="bg-surface-container-high/40 p-3 rounded-xl border border-outline-variant/10 text-center flex flex-col justify-center min-w-0">
-              <span class="text-2xs text-on-surface-variant/50 uppercase font-bold truncate">{m.fun_last_author()}</span>
+              <span class="text-2xs text-on-surface-variant uppercase font-bold truncate">{m.fun_last_author()}</span>
               <p class="text-xs font-bold text-on-surface mt-1 truncate" title={gameState.oneWordStoryLastUserId || m.fun_none()}>
                 {gameState.oneWordStoryLastUserId ? m.fun_user_id({ id: gameState.oneWordStoryLastUserId }) : m.fun_none()}
               </p>
@@ -354,7 +359,7 @@
           </div>
 
           <div class="space-y-1.5">
-            <label for="guessNumberChannel" class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.fun_channel_label()}</label>
+            <label for="guessNumberChannel" class="text-xs font-semibold text-on-surface-variant ml-2">{m.fun_channel_label()}</label>
             <SearchableSelect
               id="guessNumberChannel"
               bind:value={config.funGuessNumberChannelId}
@@ -366,9 +371,9 @@
           </div>
 
           <div class="p-4 rounded-lg bg-surface-container-high/20 border border-outline-variant/5 space-y-2.5">
-            <p class="text-xs font-medium text-on-surface-variant/50">{m.fun_game_state_title()}</p>
+            <p class="text-xs font-medium text-on-surface-variant">{m.fun_game_state_title()}</p>
             <div class="bg-surface-container-high/40 p-3 rounded-xl border border-outline-variant/10 text-center">
-              <span class="text-2xs text-on-surface-variant/50 uppercase font-bold">{m.fun_guess_target()}</span>
+              <span class="text-2xs text-on-surface-variant uppercase font-bold">{m.fun_guess_target()}</span>
               <p class="text-2xl font-semibold text-success mt-0.5">{gameState.guessNumberTarget || '???'}</p>
             </div>
           </div>
@@ -377,7 +382,8 @@
         <button
           type="button"
           onclick={handleResetGuessNumber}
-          disabled={!canManageSettings || actionState.state.loading}
+          disabled={actionState.state.loading}
+          use:explainDisabled={(!canManageSettings) ? m.common_reason_no_permission() : ''}
           class="w-full py-3.5 bg-success/10 hover:bg-success/20 text-success rounded-lg text-body-sm font-medium transition-all duration-200 flex items-center justify-center gap-2 active:scale-95 disabled:opacity-40"
         >
           <Papicon icon="refresh-cw" size={14} />
@@ -399,7 +405,7 @@
           </div>
 
           <div class="space-y-1.5">
-            <label for="wordChainChannel" class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.fun_channel_label()}</label>
+            <label for="wordChainChannel" class="text-xs font-semibold text-on-surface-variant ml-2">{m.fun_channel_label()}</label>
             <SearchableSelect
               id="wordChainChannel"
               bind:value={config.funWordChainChannelId}
@@ -411,9 +417,9 @@
           </div>
 
           <div class="p-4 rounded-lg bg-surface-container-high/20 border border-outline-variant/5 space-y-2.5">
-            <p class="text-xs font-medium text-on-surface-variant/50">{m.fun_game_state_title()}</p>
+            <p class="text-xs font-medium text-on-surface-variant">{m.fun_game_state_title()}</p>
             <div class="bg-surface-container-high/40 p-3 rounded-xl border border-outline-variant/10 text-center flex flex-col justify-center min-w-0">
-              <span class="text-2xs text-on-surface-variant/50 uppercase font-bold truncate">{m.fun_wordchain_last_word()}</span>
+              <span class="text-2xs text-on-surface-variant uppercase font-bold truncate">{m.fun_wordchain_last_word()}</span>
               <p class="text-lg font-semibold text-sky-500 mt-0.5 truncate">{gameState.wordChainLastWord || m.fun_none()}</p>
             </div>
           </div>
@@ -422,7 +428,8 @@
         <button
           type="button"
           onclick={handleResetWordChain}
-          disabled={!canManageSettings || actionState.state.loading}
+          disabled={actionState.state.loading}
+          use:explainDisabled={(!canManageSettings) ? m.common_reason_no_permission() : ''}
           class="w-full py-3.5 bg-sky-500/10 hover:bg-sky-500/20 text-sky-600 rounded-lg text-body-sm font-medium transition-all duration-200 flex items-center justify-center gap-2 active:scale-95 disabled:opacity-40"
         >
           <Papicon icon="refresh-cw" size={14} />
@@ -444,7 +451,7 @@
           </div>
 
           <div class="space-y-1.5">
-            <label for="emojiRiddleChannel" class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.fun_channel_label()}</label>
+            <label for="emojiRiddleChannel" class="text-xs font-semibold text-on-surface-variant ml-2">{m.fun_channel_label()}</label>
             <SearchableSelect
               id="emojiRiddleChannel"
               bind:value={config.funEmojiRiddleChannelId}
@@ -456,7 +463,7 @@
           </div>
 
           <div class="p-4 rounded-lg bg-surface-container-high/20 border border-outline-variant/5 space-y-2.5">
-            <p class="text-xs font-medium text-on-surface-variant/50">{m.fun_emojiriddle_current_clue()}</p>
+            <p class="text-xs font-medium text-on-surface-variant">{m.fun_emojiriddle_current_clue()}</p>
             <div class="bg-surface-container-high/40 p-3 rounded-xl border border-outline-variant/10 text-center">
               <p class="text-2xl mt-0.5">{gameState.emojiRiddleEmojis || '❓'}</p>
             </div>
@@ -466,7 +473,8 @@
         <button
           type="button"
           onclick={handleResetEmojiRiddle}
-          disabled={!canManageSettings || actionState.state.loading}
+          disabled={actionState.state.loading}
+          use:explainDisabled={(!canManageSettings) ? m.common_reason_no_permission() : ''}
           class="w-full py-3.5 bg-error/10 hover:bg-error/20 text-error rounded-lg text-body-sm font-medium transition-all duration-200 flex items-center justify-center gap-2 active:scale-95 disabled:opacity-40"
         >
           <Papicon icon="refresh-cw" size={14} />
@@ -488,7 +496,7 @@
           </div>
 
           <div class="space-y-1.5">
-            <label for="neverSayChannel" class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.fun_channel_label()}</label>
+            <label for="neverSayChannel" class="text-xs font-semibold text-on-surface-variant ml-2">{m.fun_channel_label()}</label>
             <SearchableSelect
               id="neverSayChannel"
               bind:value={config.funNeverSayChannelId}
@@ -519,7 +527,7 @@
           </div>
 
           <div class="space-y-1.5">
-            <label for="emojiOnlyChannel" class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.fun_channel_label()}</label>
+            <label for="emojiOnlyChannel" class="text-xs font-semibold text-on-surface-variant ml-2">{m.fun_channel_label()}</label>
             <SearchableSelect
               id="emojiOnlyChannel"
               bind:value={config.funEmojiOnlyChannelId}
@@ -533,6 +541,37 @@
 
         <div class="text-2xs text-on-surface-variant/40 italic text-center py-2 leading-relaxed font-medium">
           {m.fun_emojionly_hint()}
+        </div>
+      </section>
+
+      <!-- Image du jour Card -->
+      <section class="bg-surface-container-low/40 border border-outline-variant/30 p-8 rounded-xl flex flex-col justify-between gap-6 hover:bg-surface-container-low/60 transition-all duration-300">
+        <div class="space-y-4">
+          <div class="flex items-center gap-3 pb-3 border-b border-outline-variant/15">
+            <div class="w-10 h-10 rounded-xl bg-pink-500/10 text-pink-500 flex items-center justify-center">
+              <Papicon icon="Image" size={20} />
+            </div>
+            <div>
+              <h3 class="text-lg font-semibold tracking-tight text-on-surface">{m.fun_imageofday_title()}</h3>
+              <p class="text-xs text-on-surface-variant/55 font-semibold">{m.fun_imageofday_subtitle()}</p>
+            </div>
+          </div>
+
+          <div class="space-y-1.5">
+            <label for="imageOfDayChannel" class="text-xs font-semibold text-on-surface-variant ml-2">{m.fun_channel_label()}</label>
+            <SearchableSelect
+              id="imageOfDayChannel"
+              bind:value={config.funImageOfDayChannelId}
+              options={availableChannels.map(c => ({ id: c.id, name: channelDisplayName(c) }))}
+              placeholder={m.fun_no_channel()}
+              className="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-pink-500/30 transition-all"
+              disabled={!canManageSettings}
+            />
+          </div>
+        </div>
+
+        <div class="text-2xs text-on-surface-variant/40 italic text-center py-2 leading-relaxed font-medium">
+          {m.fun_imageofday_hint()}
         </div>
       </section>
     </div>

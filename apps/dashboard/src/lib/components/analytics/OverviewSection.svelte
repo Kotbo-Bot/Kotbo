@@ -193,7 +193,7 @@
         <SectionCard>
           <div class="highlight">
             <span class="text-body-sm text-on-surface-variant">{m.anx_highlight_channel()}</span>
-            <span class="highlight__title">{topChannel ? `#${topChannel.name ?? '?'}` : '—'}</span>
+            <span class="highlight__title">{topChannel ? `#${topChannel.name ?? '?'}` : '–'}</span>
             {#if topChannel}
               <span class="text-body-sm text-on-surface-variant">{m.anx_highlight_channel_desc({ count: fmtNumber(topChannel.messages), share: fmtPct(pct(topChannel.messages, k.messages.value)) })}</span>
             {/if}
@@ -210,7 +210,7 @@
                 <img src={topEmoji.imageUrl} alt="" width="28" height="28" class="h-7 w-7 object-contain" />
                 <span>:{topEmoji.name ?? '?'}:</span>
               {:else}
-                {topEmoji?.key ?? '—'}
+                {topEmoji?.key ?? '–'}
               {/if}
             </span>
             {#if topEmoji}
@@ -224,7 +224,7 @@
         <SectionCard>
           <div class="highlight">
             <span class="text-body-sm text-on-surface-variant">{risingType?.delta !== null && filters.compare ? m.anx_highlight_type_rising() : m.anx_highlight_type_top()}</span>
-            <span class="highlight__title">{risingType?.label ?? '—'}</span>
+            <span class="highlight__title">{risingType?.label ?? '–'}</span>
             {#if risingType}
               <span class="text-body-sm text-on-surface-variant">
                 {m.anx_highlight_type_desc({ share: fmtPct(risingType.share) })}{#if risingType.delta !== null && filters.compare}, {risingType.delta >= 0 ? '+' : '−'}{m.anx_unit_points({ value: Math.abs(risingType.delta).toFixed(1).replace('.', ',') })}{/if}

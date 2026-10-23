@@ -119,7 +119,7 @@
   {:else}
     {@const list = tab === 'queue' ? queue : history}
     {#if list.length === 0}
-      <div class="text-center py-16 text-on-surface-variant/50 flex flex-col items-center justify-center">
+      <div class="text-center py-16 text-on-surface-variant flex flex-col items-center justify-center">
         <div class="mb-4 text-on-surface-variant/30">
           <Papicon icon={tab === 'queue' ? 'check' : 'inbox'} size={48} />
         </div>
@@ -137,7 +137,7 @@
               </div>
               <div class="flex-1 min-w-0">
                 <p class="font-semibold text-on-surface text-sm truncate">{TYPE_LABELS[request.type] ?? request.type} - {targetLabel(request)}</p>
-                <p class="text-xs text-on-surface-variant/60 mt-0.5 truncate">
+                <p class="text-xs text-on-surface-variant mt-0.5 truncate">
                   {m.e7_alr_meta_created({ date: formatDate(request.createdAt), requester: requesterLabel(request), via: request.requestedVia })}
                 </p>
               </div>
@@ -148,12 +148,12 @@
             {#if openId === request.id}
               <div class="border-t border-outline-variant/10 p-5 space-y-4 bg-surface-container-low/30">
                 <div class="rounded-lg bg-surface border border-outline-variant/15 p-3 text-sm space-y-1">
-                  <p><span class="font-semibold text-on-surface-variant/60">{m.e7_alr_field_type()}</span> {TYPE_LABELS[request.type] ?? request.type}</p>
-                  <p><span class="font-semibold text-on-surface-variant/60">{m.e7_alr_field_target()}</span> {targetLabel(request)}</p>
-                  <p><span class="font-semibold text-on-surface-variant/60">{m.e7_alr_field_requested_by()}</span> {requesterLabel(request)}</p>
-                  <p><span class="font-semibold text-on-surface-variant/60">{m.e7_alr_field_via()}</span> {request.requestedVia}</p>
+                  <p><span class="font-semibold text-on-surface-variant">{m.e7_alr_field_type()}</span> {TYPE_LABELS[request.type] ?? request.type}</p>
+                  <p><span class="font-semibold text-on-surface-variant">{m.e7_alr_field_target()}</span> {targetLabel(request)}</p>
+                  <p><span class="font-semibold text-on-surface-variant">{m.e7_alr_field_requested_by()}</span> {requesterLabel(request)}</p>
+                  <p><span class="font-semibold text-on-surface-variant">{m.e7_alr_field_via()}</span> {request.requestedVia}</p>
                   {#if request.requestReason}
-                    <p><span class="font-semibold text-on-surface-variant/60">{m.e7_alr_field_reason()}</span> {request.requestReason}</p>
+                    <p><span class="font-semibold text-on-surface-variant">{m.e7_alr_field_reason()}</span> {request.requestReason}</p>
                   {/if}
                 </div>
 
@@ -172,7 +172,7 @@
                         <Papicon icon="x" size={14} /> {m.e7_alr_reject_btn()}
                       </button>
                     </div>
-                    <p class="text-2xs text-on-surface-variant/50">
+                    <p class="text-2xs text-on-surface-variant">
                       {m.e7_alr_permission_note()}
                     </p>
                   </div>
@@ -180,8 +180,8 @@
                   <div class="rounded-lg bg-surface border border-outline-variant/15 p-3 text-sm">
                     <p class="font-semibold text-on-surface">
                       {m.e7_alr_decision_label({ status: STATUS_META[request.status]?.label ?? '' })}
-                      {#if request.decidedByTag}<span class="text-on-surface-variant/60 font-normal"> {m.e7_alr_decision_by({ tag: request.decidedByTag })}</span>{/if}
-                      {#if request.decidedAt}<span class="text-on-surface-variant/60 font-normal"> {m.e7_alr_decision_on({ date: formatDate(request.decidedAt) })}</span>{/if}
+                      {#if request.decidedByTag}<span class="text-on-surface-variant font-normal"> {m.e7_alr_decision_by({ tag: request.decidedByTag })}</span>{/if}
+                      {#if request.decidedAt}<span class="text-on-surface-variant font-normal"> {m.e7_alr_decision_on({ date: formatDate(request.decidedAt) })}</span>{/if}
                     </p>
                     {#if request.decisionReason}
                       <p class="text-on-surface-variant/80 mt-1">{request.decisionReason}</p>

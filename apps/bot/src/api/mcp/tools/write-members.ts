@@ -2,7 +2,7 @@
 import { guardAdminGrant, roleGrantsAdministrator } from '../../../services/moderation/adminLockService.js';
 import prisma from '../../../utils/db.js';
 import { z } from 'zod';
-import { type McpToolContext, SNOWFLAKE, err, ok, resolveMember } from '../toolkit.js';
+import { type McpToolContext, SNOWFLAKE, err, ok, resolveMember, publicErrorMessage } from '../toolkit.js';
 import { memberProfileIdentity } from '../../../services/moderation/memberIdentityService.js';
 
 export function registerWriteMembersTools(ctx: McpToolContext) {
@@ -106,7 +106,7 @@ export function registerWriteMembersTools(ctx: McpToolContext) {
         }
 
         await target.roles.add(discordRole).catch((e) => {
-          throw new Error(`Impossible d'ajouter le rôle : ${e instanceof Error ? e.message : String(e)}`);
+          throw new Error(`Impossible d'ajouter le rôle : ${publicErrorMessage(e)}`);
         });
 
         await audit(key_name, 'Ajout rôle MCP', `Membre: ${resolved.label}`, `Rôle: ${discordRole.name}`);
@@ -148,7 +148,7 @@ export function registerWriteMembersTools(ctx: McpToolContext) {
         }
 
         await target.roles.remove(discordRole).catch((e) => {
-          throw new Error(`Impossible de retirer le rôle : ${e instanceof Error ? e.message : String(e)}`);
+          throw new Error(`Impossible de retirer le rôle : ${publicErrorMessage(e)}`);
         });
 
         await audit(key_name, 'Retrait rôle MCP', `Membre: ${resolved.label}`, `Rôle: ${discordRole.name}`);

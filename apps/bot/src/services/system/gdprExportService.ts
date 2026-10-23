@@ -240,7 +240,8 @@ export async function collectUserData(client: Client, userId: string): Promise<G
       list.push({ key: source.key, label: source.label, count: records.length, records });
       byCategory.set(source.category, list);
     } catch (err) {
-      errors.push(`${source.model}: ${(err as Error).message}`);
+      // Le message brut (requête Prisma) reste dans les journaux.
+      errors.push(`${source.label} : données indisponibles pour le moment`);
       logger.warn('GDPR', `Erreur sur ${source.model}: ${(err as Error).message}`);
     }
   }

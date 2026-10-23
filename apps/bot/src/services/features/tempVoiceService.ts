@@ -4,7 +4,17 @@
  * serveurs déjà configurés inchangés.
  */
 import { OverwriteType, PermissionFlagsBits, type OverwriteResolvable } from 'discord.js';
-import type { TempVoiceOwnerPower, TempVoiceTextChatMode, TempVoicePolicy } from '@kotbo/shared';
+import type { TempVoiceOwnerMentionPlacement, TempVoiceOwnerPower, TempVoiceTextChatMode, TempVoicePolicy } from '@kotbo/shared';
+import {
+  TEMP_VOICE_CLAIM_WHO,
+  TEMP_VOICE_HANDOVER_DELAY_BOUNDS,
+  TEMP_VOICE_OWNER_MENTION_DEFAULT,
+  TEMP_VOICE_OWNER_MENTION_PLACEMENTS,
+  TEMP_VOICE_OWNERSHIP_DEFAULTS,
+  type TempVoiceOwnershipSettings,
+} from '@kotbo/shared';
+import * as m from '../../lib/paraglide/messages.js';
+import type { BotLocale } from '../../utils/i18n.js';
 
 export type { TempVoiceOwnerPower, TempVoiceTextChatMode, TempVoicePolicy };
 
@@ -19,7 +29,9 @@ export const TEMP_VOICE_OWNER_POWERS: readonly TempVoiceOwnerPower[] = [
 export const TEMP_VOICE_TEXT_CHAT_MODES: readonly TempVoiceTextChatMode[] = [
   'inherit',
   'open',
+  'inVoice',
   'locked',
+  'nobody',
 ] as const;
 
 export const LEGACY_OWNER_POWERS: readonly TempVoiceOwnerPower[] = ['mute', 'deafen', 'move'] as const;
@@ -77,7 +89,15 @@ export interface StoredTempVoiceGenerator {
   reservationFallbackMode?: RepliReservation;
 }
 
-export const DEFAULT_NAME_TEMPLATE = "🔊 {user}'s channel";
+/**
+ * Le gabarit par defaut du NOM d'un salon temporaire.
+ *
+ * Pas de Paraglide ici, et c'est voulu : un nom de salon est ECRIT dans
+ * Discord puis range en base (`Guild.tempVoiceNameTemplate`), il n'est pas
+ * rendu a chaque affichage. Il ne peut donc pas suivre la langue du serveur,
+ * et le defaut reste celui de la base (`guild.prisma`), en francais.
+ */
+export const DEFAULT_NAME_TEMPLATE = '🔊 Salon de {user}';
 
 export function defaultTempVoicePolicy(): TempVoicePolicy {
   return {
@@ -258,7 +278,7 @@ const OWNER_POWER_BITS: Record<TempVoiceOwnerPower, bigint> = {
  *  de son propre salon. Sans cette surcharge, tout le monde suit la même règle que la catégorie,
  *  et le mode « open » reste le moyen explicite d'ouvrir le chat à tous. */
 export function ownerAllowBits(policy: TempVoicePolicy): bigint[] {
-  const chatReserve = policy.lockOnCreate || policy.textChat === 'locked';
+  const chatReserve = policy.textChat !== 'nobody' && policy.textChat !== 'inVoice' && (policy.lockOnCreate || policy.textChat === 'locked');
 
   const bits = [
     PermissionFlagsBits.ViewChannel,
@@ -282,6 +302,9 @@ export function requiredBotPermissions(policy: TempVoicePolicy): bigint[] {
       // Créer un salon avec des surcharges de permissions exige `ManageRoles`.
       PermissionFlagsBits.ManageRoles,
       ...ownerAllowBits(policy),
+      // Discord n'accepte un allow ou un deny que sur un droit que le bot possède :
+      // tout mode de chat autre qu'« inherit », et les rôles d'office, touchent `SendMessages`.
+      ...(policy.textChat !== 'inherit' || policy.autoAllowRoleIds.length > 0 ? [PermissionFlagsBits.SendMessages] : []),
     ]),
   ];
 }
@@ -363,7 +386,7 @@ export function buildCreationOverwrites(input: BuildCreationOverwritesInput): Ov
     PermissionFlagsBits.ViewChannel,
     PermissionFlagsBits.Connect,
     PermissionFlagsBits.Speak,
-    PermissionFlagsBits.SendMessages,
+    ...(policy.textChat === 'nobody' ? [] : [PermissionFlagsBits.SendMessages]),
     PermissionFlagsBits.ReadMessageHistory,
   ];
 
@@ -385,16 +408,17 @@ export function buildCreationOverwrites(input: BuildCreationOverwritesInput): Ov
     if (policy.textChat !== 'open') everyoneDeny.push(PermissionFlagsBits.SendMessages);
   }
   if (policy.textChat === 'open') everyoneAllow.push(PermissionFlagsBits.SendMessages);
-  if (policy.textChat === 'locked') everyoneDeny.push(PermissionFlagsBits.SendMessages);
+  if (policy.textChat !== 'inherit' && policy.textChat !== 'open') everyoneDeny.push(PermissionFlagsBits.SendMessages);
 
   // 3. @everyone : verrouillage et chat, rien d'autre.
   if (everyoneAllow.length > 0 || everyoneDeny.length > 0) {
-    // Même règle : le mode « ouvert » n'écrase pas un refus nommé de la catégorie.
+    // « Ouvert » est un choix explicite : il accorde l'écriture même contre un
+    // refus de la catégorie, comme « Everyone » du panneau. « Hérité » ne touche à rien.
     drafts.set(
       everyoneRoleId,
       applyBits(
         ensure(everyoneRoleId, OverwriteType.Role),
-        grantableBits(everyoneAllow, inheritedDenyFor(everyoneRoleId)),
+        everyoneAllow,
         everyoneDeny,
       ),
     );
@@ -643,6 +667,9 @@ export function renderChannelName(template: string, displayName: string): string
 export const MODES_ECRITURE = ['everyone', 'inVoice', 'ownerOnly', 'nobody'] as const;
 export type ModeEcriture = (typeof MODES_ECRITURE)[number];
 
+/** Choix du menu qui rend l'écriture à la catégorie ; ce n'est pas un mode mémorisé. */
+export const MODE_HERITE = 'inherit' as const;
+
 /** Un salon sans réglage explicite suit sa catégorie, ce que le panneau nomme « Tout le monde ». */
 export const MODE_ECRITURE_PAR_DEFAUT: ModeEcriture = 'everyone';
 
@@ -654,29 +681,48 @@ export interface LibelleModeEcriture {
   emoji?: string;
 }
 
-/** Libellés repris un pour un de la maquette : c'est elle qui fait foi. */
-export const LIBELLES_MODES_ECRITURE: Readonly<Record<ModeEcriture, LibelleModeEcriture>> = {
-  everyone: {
-    emoji: '🌍',
-    libelle: 'Everyone',
-    description: 'Anyone who can see the channel can write.',
-  },
-  inVoice: {
-    libelle: 'Those in voice',
-    description: 'The chat follows the room: you can write as long as you\'re connected.',
-  },
-  ownerOnly: {
-    libelle: 'Me only',
-    description: 'No one else can write.',
-  },
-  nobody: {
-    libelle: 'No one',
-    description: 'Including me. The channel becomes a display-only board.',
-  },
-};
+/**
+ * Libellés repris un pour un de la maquette : c'est elle qui fait foi.
+ *
+ * `locale` est un PARAMÈTRE, pas un état de module : deux serveurs de langues
+ * différentes rendent leur panneau dans le même processus, et chaque appel doit
+ * pouvoir dire laquelle sans en changer pour l'autre.
+ */
+export const EMOJI_MODE_EVERYONE = '🌍';
+
+export function libelleModeEcriture(mode: ModeEcriture, locale: BotLocale): LibelleModeEcriture {
+  switch (mode) {
+    case 'everyone':
+      return {
+        emoji: EMOJI_MODE_EVERYONE,
+        libelle: m.panel_tempvoice_mode_everyone_label({}, { locale }),
+        description: m.panel_tempvoice_mode_everyone_desc({}, { locale }),
+      };
+    case 'inVoice':
+      return {
+        libelle: m.panel_tempvoice_mode_invoice_label({}, { locale }),
+        description: m.panel_tempvoice_mode_invoice_desc({}, { locale }),
+      };
+    case 'ownerOnly':
+      return {
+        libelle: m.panel_tempvoice_mode_owneronly_label({}, { locale }),
+        description: m.panel_tempvoice_mode_owneronly_desc({}, { locale }),
+      };
+    case 'nobody':
+      return {
+        libelle: m.panel_tempvoice_mode_nobody_label({}, { locale }),
+        description: m.panel_tempvoice_mode_nobody_desc({}, { locale }),
+      };
+  }
+}
 
 export function estModeEcriture(value: unknown): value is ModeEcriture {
   return MODES_ECRITURE.includes(value as ModeEcriture);
+}
+
+/** « Hérité » ou l'un des quatre modes. */
+export function estChoixModeEcriture(value: unknown): value is ModeEcriture | typeof MODE_HERITE {
+  return value === MODE_HERITE || estModeEcriture(value);
 }
 
 /** Personne d'autre ne valide ce que le dashboard écrit. Une valeur inconnue
@@ -686,18 +732,22 @@ export function normaliserModeEcriture(value: unknown): ModeEcriture {
   return estModeEcriture(value) ? value : MODE_ECRITURE_PAR_DEFAUT;
 }
 
-/** Pont vers l'ancien réglage à trois valeurs, tant que la base ne porte pas les
- *  quatre modes (colonne à ajouter côté `packages/database`). `inherit` n'est pas
- *  un mode : le salon suit sa catégorie, ce que le panneau affiche « Tout le monde ». */
-export function modeEcritureDepuisTextChat(textChat: TempVoiceTextChatMode): ModeEcriture {
-  return textChat === 'locked' ? 'ownerOnly' : 'everyone';
+/** Table unique réglage du générateur ↔ mode du panneau ; `null` = « Hérité » (la catégorie décide). */
+export const MODE_ECRITURE_PAR_TEXT_CHAT: Readonly<Record<TempVoiceTextChatMode, ModeEcriture | null>> = {
+  inherit: null,
+  open: 'everyone',
+  inVoice: 'inVoice',
+  locked: 'ownerOnly',
+  nobody: 'nobody',
+};
+
+export function modeEcritureDepuisTextChat(textChat: TempVoiceTextChatMode): ModeEcriture | null {
+  return MODE_ECRITURE_PAR_TEXT_CHAT[textChat];
 }
 
-/** Repli dans l'autre sens : `inVoice` et `nobody` refusent tous deux @everyone,
- *  donc ils se rangent sous `locked`. Une base restée à trois valeurs garde ainsi
- *  un salon fermé fermé — jamais l'inverse. */
-export function textChatDepuisModeEcriture(mode: ModeEcriture): TempVoiceTextChatMode {
-  return mode === 'everyone' ? 'open' : 'locked';
+export function textChatDepuisModeEcriture(mode: ModeEcriture | null): TempVoiceTextChatMode {
+  const trouve = TEMP_VOICE_TEXT_CHAT_MODES.find((textChat) => MODE_ECRITURE_PAR_TEXT_CHAT[textChat] === mode);
+  return trouve ?? 'inherit';
 }
 
 export interface SurchargesModeEcriture {
@@ -813,12 +863,14 @@ export function enregistrerRenommage(historique: readonly number[], maintenant: 
 }
 
 /** « ✏️ Renommer (2/2) » au repos, « ✏️ Renommer (0/2 · 6 min) » une fois épuisé. */
-export function libelleRenommer(quota: QuotaRenommage, maintenant: number): string {
-  if (quota.restants > 0) return `✏️ Rename (${quota.restants}/${RENOMMAGES_PAR_FENETRE})`;
+export function libelleRenommer(quota: QuotaRenommage, maintenant: number, locale: BotLocale): string {
+  if (quota.restants > 0) {
+    return m.panel_tempvoice_btn_rename({ left: quota.restants, max: RENOMMAGES_PAR_FENETRE }, { locale });
+  }
   const reste = Math.max(0, (quota.libereA ?? maintenant) - maintenant);
   // Arrondi au-dessus : annoncer « 0 min » sur un bouton grisé serait un mensonge.
   const minutes = Math.max(1, Math.ceil(reste / 60_000));
-  return `✏️ Rename (0/${RENOMMAGES_PAR_FENETRE} · ${minutes} min)`;
+  return m.panel_tempvoice_btn_rename_cooldown({ max: RENOMMAGES_PAR_FENETRE, minutes }, { locale });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -947,7 +999,11 @@ export function normaliserConfigDemandes(raw: unknown): ConfigDemandesAcces {
  * `repondreDemande` n'est gouvernée par aucune ligne des réglages modérateur,
  * et c'est cette colonne-ci qui tranche.
  */
-export function peutRepondreDemande(role: RoleAgissant, repondeurs: RepondeurDemande): VerdictAction {
+export function peutRepondreDemande(
+  role: RoleAgissant,
+  repondeurs: RepondeurDemande,
+  locale: BotLocale,
+): VerdictAction {
   if (role === 'proprietaire') return { autorise: true };
   // Un admin garde la main : il peut déjà tout sur le salon, lui refuser la
   // carte de décision ferait un bouton mort plutôt qu'une limite.
@@ -956,7 +1012,7 @@ export function peutRepondreDemande(role: RoleAgissant, repondeurs: RepondeurDem
   return {
     autorise: false,
     motif: 'adminsSeulement',
-    raison: 'On this server, only the channel owner can respond to access requests.',
+    raison: m.panel_tempvoice_refuse_requests_owner_only({}, { locale }),
   };
 }
 
@@ -1354,22 +1410,44 @@ const REGLAGE_PAR_ACTION: Readonly<Record<ActionPanneau, ReglageModerateur | nul
   repondreDemande: null,
 };
 
-interface SujetReglage {
-  sujet: string;
-  genre: 'm' | 'f' | 'pluriel';
+/**
+ * Le sujet d'un réglage, tel qu'une phrase le nomme : « le mode d'écriture »,
+ * « the chat mode ». Sert au libellé du menu et à la liste de la phrase à
+ * plusieurs sujets.
+ */
+export function sujetReglage(reglage: ReglageModerateur, locale: BotLocale): string {
+  return {
+    renommer: m.panel_tempvoice_subject_rename,
+    limite: m.panel_tempvoice_subject_limit,
+    verrouiller: m.panel_tempvoice_subject_lock,
+    modeEcriture: m.panel_tempvoice_subject_writemode,
+    reserver: m.panel_tempvoice_subject_reserve,
+    expulserBannir: m.panel_tempvoice_subject_kickban,
+    transferer: m.panel_tempvoice_subject_transfer,
+  }[reglage]({}, { locale });
 }
 
-/** De quoi écrire la phrase de la maquette : « Le mode d'écriture et la
- *  réservation sont réservés aux admins sur ce serveur. » */
-export const SUJETS_REGLAGES: Readonly<Record<ReglageModerateur, SujetReglage>> = {
-  renommer: { sujet: 'renaming', genre: 'm' },
-  limite: { sujet: 'the member limit', genre: 'f' },
-  verrouiller: { sujet: 'locking', genre: 'm' },
-  modeEcriture: { sujet: 'the chat mode', genre: 'm' },
-  reserver: { sujet: 'reservations', genre: 'pluriel' },
-  expulserBannir: { sujet: 'kicking and banning', genre: 'pluriel' },
-  transferer: { sujet: 'the ownership transfer', genre: 'm' },
+/** La phrase ENTIÈRE quand un seul réglage est fermé. Pas de moteur d'accord :
+ *  l'accord est une propriété de la LANGUE, pas du réglage — « la réservation »
+ *  est féminin singulier là où « reservations » est pluriel, et un genre partagé
+ *  entre les deux langues donnerait forcément faux d'un côté. */
+const PHRASES_UN_SEUL_REGLAGE: Readonly<
+  Record<ReglageModerateur, (inputs: Record<string, never>, options: { locale: BotLocale }) => string>
+> = {
+  renommer: m.panel_tempvoice_admins_only_rename,
+  limite: m.panel_tempvoice_admins_only_limit,
+  verrouiller: m.panel_tempvoice_admins_only_lock,
+  modeEcriture: m.panel_tempvoice_admins_only_writemode,
+  reserver: m.panel_tempvoice_admins_only_reserve,
+  expulserBannir: m.panel_tempvoice_admins_only_kickban,
+  transferer: m.panel_tempvoice_admins_only_transfer,
 };
+
+/** Les réglages dont le sujet est FÉMININ en français (« la limite de places »,
+ *  « la réservation »). Une liste qui ne contient qu'eux s'accorde au féminin
+ *  pluriel ; dès qu'un masculin s'y mêle, le masculin l'emporte. L'anglais
+ *  n'accorde pas : sa variante féminine est la même phrase. */
+const REGLAGES_SUJET_FEMININ: ReadonlySet<ReglageModerateur> = new Set(['limite', 'reserver']);
 
 function majuscule(texte: string): string {
   return texte.charAt(0).toUpperCase() + texte.slice(1);
@@ -1377,24 +1455,26 @@ function majuscule(texte: string): string {
 
 /** Une seule phrase pour tout ce qu'un modérateur n'a pas le droit de toucher :
  *  la maquette en affiche une, pas une par bouton. */
-export function raisonAdminsSeulement(reglages: readonly ReglageModerateur[]): string {
+export function raisonAdminsSeulement(reglages: readonly ReglageModerateur[], locale: BotLocale): string {
   // On repart de l'ordre canonique : deux appels avec les mêmes réglages dans un
   // ordre différent ne doivent pas produire deux phrases différentes.
   const uniques = REGLAGES_MODERATEUR.filter((reglage) => reglages.includes(reglage));
   if (uniques.length === 0) return '';
 
-  const sujets = uniques.map((reglage) => SUJETS_REGLAGES[reglage].sujet);
-  const liste =
-    sujets.length === 1
-      ? (sujets[0] as string)
-      : `${sujets.slice(0, -1).join(', ')} and ${sujets[sujets.length - 1] as string}`;
+  // Un seul sujet : sa phrase est écrite en entier dans chaque langue, accord
+  // compris. Plusieurs : le pluriel vaut dans les deux, et la liste s'assemble.
+  if (uniques.length === 1) {
+    return PHRASES_UN_SEUL_REGLAGE[uniques[0] as ReglageModerateur]({}, { locale });
+  }
 
-  const premier = SUJETS_REGLAGES[uniques[0] as ReglageModerateur];
-  const pluriel = uniques.length > 1 || premier.genre === 'pluriel';
-  // L'anglais n'accorde pas en genre : seul le nombre decide du verbe.
-  const verbe = pluriel ? 'are reserved' : 'is reserved';
+  const sujets = uniques.map((reglage) => sujetReglage(reglage, locale));
+  const et = m.panel_tempvoice_list_and({}, { locale });
+  const liste = `${sujets.slice(0, -1).join(', ')} ${et} ${sujets[sujets.length - 1] as string}`;
 
-  return `${majuscule(liste)} ${verbe} for admins on this server.`;
+  const phrase = uniques.every((reglage) => REGLAGES_SUJET_FEMININ.has(reglage))
+    ? m.panel_tempvoice_admins_only_plural_feminine
+    : m.panel_tempvoice_admins_only_plural;
+  return phrase({ subjects: majuscule(liste) }, { locale });
 }
 
 /** Ce qu'un modérateur ne peut pas toucher sur ce serveur, pour l'encart unique. */
@@ -1433,11 +1513,16 @@ export function peutAgir(
   role: RoleAgissant,
   action: ActionPanneau,
   reglagesAdmin: unknown,
+  locale: BotLocale,
 ): VerdictAction {
   if (role === 'proprietaire') {
     // Jamais un bouton mort : chez lui, ces deux-là n'ont pas de sens.
-    if (action === 'recuperer') return refus('dejaProprietaire', 'You already own this channel.');
-    if (action === 'demanderAcces') return refus('dejaProprietaire', 'You are already home in this channel.');
+    if (action === 'recuperer') {
+      return refus('dejaProprietaire', m.panel_tempvoice_refuse_already_owner({}, { locale }));
+    }
+    if (action === 'demanderAcces') {
+      return refus('dejaProprietaire', m.panel_tempvoice_refuse_already_home({}, { locale }));
+    }
     return AUTORISE;
   }
 
@@ -1450,7 +1535,7 @@ export function peutAgir(
 
   const reglages = normaliserReglagesAdmin(reglagesAdmin);
   if (reglages[reglage] === 'adminsSeulement') {
-    return refus('adminsSeulement', raisonAdminsSeulement([reglage]));
+    return refus('adminsSeulement', raisonAdminsSeulement([reglage], locale));
   }
   return AUTORISE;
 }
@@ -1467,8 +1552,8 @@ export interface CibleMembre {
   autorise: boolean;
 }
 
-function designation(cible: CibleMembre): string {
-  return cible.nom ?? 'This person';
+function designation(cible: CibleMembre, locale: BotLocale): string {
+  return cible.nom ?? m.panel_tempvoice_target_this_person({}, { locale });
 }
 
 /**
@@ -1481,23 +1566,26 @@ export function peutAgirSurCible(
   action: ActionPanneau,
   reglagesAdmin: unknown,
   cible: CibleMembre,
+  locale: BotLocale,
 ): VerdictAction {
-  const verdict = peutAgir(role, action, reglagesAdmin);
+  const verdict = peutAgir(role, action, reglagesAdmin, locale);
   if (!verdict.autorise) return verdict;
 
   if (action === 'expulser' || action === 'bannir') {
     if (cible.estSoiMeme) {
       return refus(
         'cibleSoiMeme',
-        action === 'expulser' ? "You can't kick yourself." : "You can't ban yourself.",
+        action === 'expulser'
+          ? m.panel_tempvoice_refuse_kick_self({}, { locale })
+          : m.panel_tempvoice_refuse_ban_self({}, { locale }),
       );
     }
     if (cible.estStaff) {
       return refus(
         'cibleStaff',
         cible.nom
-          ? `${cible.nom} is part of the staff: they can't be kicked or banned.`
-          : "This person is part of the staff: they can't be kicked or banned.",
+          ? m.panel_tempvoice_refuse_target_staff_named({ name: cible.nom }, { locale })
+          : m.panel_tempvoice_refuse_target_staff({}, { locale }),
       );
     }
   }
@@ -1505,7 +1593,10 @@ export function peutAgirSurCible(
   // Bannir quelqu'un qui n'est pas là a du sens — il ne verra plus le salon.
   // L'expulser, non.
   if (action === 'expulser' && !cible.dansLeSalon) {
-    return refus('cibleHorsSalon', `${designation(cible)} is not in the channel.`);
+    return refus(
+      'cibleHorsSalon',
+      m.panel_tempvoice_refuse_target_outside({ who: designation(cible, locale) }, { locale }),
+    );
   }
 
   // « Autoriser » et « Retirer l'acces » ecrivent une surcharge de confiance.
@@ -1517,17 +1608,20 @@ export function peutAgirSurCible(
     return refus(
       'cibleDejaProprietaire',
       cible.nom
-        ? `${cible.nom} owns the channel: their access doesn't come from a permission.`
-        : "This person owns the channel: their access doesn't come from a permission.",
+        ? m.panel_tempvoice_refuse_target_is_owner_named({ name: cible.nom }, { locale })
+        : m.panel_tempvoice_refuse_target_is_owner({}, { locale }),
     );
   }
 
   if (action === 'transferer') {
     if (cible.estSoiMeme) {
-      return refus('cibleSoiMeme', "You can't transfer the channel to yourself.");
+      return refus('cibleSoiMeme', m.panel_tempvoice_refuse_transfer_self({}, { locale }));
     }
     if (cible.estProprietaire) {
-      return refus('cibleDejaProprietaire', `${designation(cible)} already owns the channel.`);
+      return refus(
+        'cibleDejaProprietaire',
+        m.panel_tempvoice_refuse_transfer_already_owner({ who: designation(cible, locale) }, { locale }),
+      );
     }
   }
 
@@ -1539,16 +1633,19 @@ export function peutAgirSurCible(
 export function libelleActionMembre(
   action: 'expulser' | 'bannir' | 'autoriser' | 'transferer',
   cible: CibleMembre,
+  locale: BotLocale,
 ): string {
   switch (action) {
     case 'expulser':
-      return 'Kick';
+      return m.panel_tempvoice_action_kick({}, { locale });
     case 'bannir':
-      return 'Ban';
+      return m.panel_tempvoice_action_ban({}, { locale });
     case 'autoriser':
-      return cible.autorise ? 'Remove access' : 'Allow';
+      return cible.autorise
+        ? m.panel_tempvoice_action_untrust({}, { locale })
+        : m.panel_tempvoice_action_trust({}, { locale });
     case 'transferer':
-      return 'Transfer the channel';
+      return m.panel_tempvoice_action_transfer({}, { locale });
   }
 }
 
@@ -1589,19 +1686,29 @@ export const PATCH_PRESENCE_RETIREE: Readonly<Record<string, null>> = { SendMess
 
 export type DecisionSurcharge =
   | { action: 'poser'; origine: OrigineSurcharge; patch: Record<string, boolean | null> }
-  | { action: 'retirer'; patch: Record<string, boolean | null> }
+  | { action: 'retirer'; patch: Record<string, boolean | null>; garderOrigine?: true }
   | { action: 'conserver'; motif: 'autorisationExplicite' | 'dejaPosee' }
   | { action: 'aucune' };
 
-/** Quelqu'un entre en vocal. */
+/**
+ * Quelqu'un entre en vocal.
+ *
+ * `accordeEcriture` : sa surcharge nominative accorde déjà `SendMessages`. C'est
+ * elle qui décide, pas l'origine : une autorisation donnée en « ceux qui sont en
+ * vocal » ou dans une catégorie muette n'accorde pas l'écriture
+ * (`sansEcritureSiChatReserve`, `categoryTrustPatch`), et s'y fier laissait muet
+ * un autorisé pourtant connecté. Par défaut, une origine connue vaut un bit posé.
+ */
 export function decisionEntreeVocal(
   mode: ModeEcriture,
   origineActuelle: OrigineSurcharge | null,
+  accordeEcriture: boolean = origineActuelle !== null,
 ): DecisionSurcharge {
   if (mode !== 'inVoice') return { action: 'aucune' };
-  if (origineActuelle === 'autorisation') return { action: 'conserver', motif: 'autorisationExplicite' };
-  if (origineActuelle === 'presence') return { action: 'conserver', motif: 'dejaPosee' };
-  return { action: 'poser', origine: 'presence', patch: { ...PATCH_PRESENCE } };
+  if (accordeEcriture) {
+    return { action: 'conserver', motif: origineActuelle === 'autorisation' ? 'autorisationExplicite' : 'dejaPosee' };
+  }
+  return { action: 'poser', origine: origineActuelle ?? 'presence', patch: { ...PATCH_PRESENCE } };
 }
 
 /** Quelqu'un quitte le vocal. C'est ici que l'origine paie. */
@@ -1610,8 +1717,13 @@ export function decisionSortieVocal(
   origineActuelle: OrigineSurcharge | null,
 ): DecisionSurcharge {
   // Le cas qui justifie tout le mécanisme : ne jamais effacer un droit donné à
-  // la main, quel que soit le mode.
-  if (origineActuelle === 'autorisation') return { action: 'conserver', motif: 'autorisationExplicite' };
+  // la main. En « ceux qui sont en vocal », l'autorisation garde l'accès mais
+  // pas l'écriture, qui suit la présence comme pour tous : seul le bit part.
+  if (origineActuelle === 'autorisation') {
+    return mode === 'inVoice'
+      ? { action: 'retirer', patch: { ...PATCH_PRESENCE_RETIREE }, garderOrigine: true }
+      : { action: 'conserver', motif: 'autorisationExplicite' };
+  }
   // Une marque de présence n'a de sens qu'en mode `inVoice`. Hors de ce mode
   // c'est un reste d'un mode précédent : à nettoyer plutôt qu'à garder.
   if (origineActuelle === 'presence') return { action: 'retirer', patch: { ...PATCH_PRESENCE_RETIREE } };
@@ -1646,15 +1758,18 @@ export function transitionModeEcriture(
   nouveau: ModeEcriture,
   presents: readonly string[],
   origines: ReadonlyMap<string, OrigineSurcharge>,
+  /** Ceux dont la surcharge accorde déjà `SendMessages` ; absent = une marque vaut un bit posé. */
+  ecrivent?: ReadonlySet<string>,
 ): TransitionModeEcriture {
-  if (ancien === nouveau) return { aPoser: [], aRetirer: [] };
-
   if (nouveau === 'inVoice') {
-    // Ceux qui portent déjà une marque ont déjà leur surcharge — y compris une
-    // autorisation, qu'il ne faut surtout pas rétrograder en présence.
-    const aPoser = [...new Set(presents)].filter((userId) => !origines.has(userId));
+    // Ceux qui écrivent déjà n'ont rien à recevoir ; une autorisation sans le
+    // bit (catégorie muette, accordée en mode réservé) le reçoit comme tout présent.
+    // Même mode choisi de nouveau : la passe répare un présent oublié.
+    const aPoser = [...new Set(presents)].filter((userId) => (ecrivent ? !ecrivent.has(userId) : !origines.has(userId)));
     return { aPoser, aRetirer: [] };
   }
+
+  if (ancien === nouveau) return { aPoser: [], aRetirer: [] };
 
   if (ancien === 'inVoice') {
     const aRetirer = [...origines.entries()]
@@ -1664,6 +1779,14 @@ export function transitionModeEcriture(
   }
 
   return { aPoser: [], aRetirer: [] };
+}
+
+/** Exceptions d'écriture lues en base, `{ userId: true | false }` ; tout le reste est écarté. */
+export function normaliserExceptionsEcriture(brut: unknown): Record<string, boolean> {
+  if (!brut || typeof brut !== 'object' || Array.isArray(brut)) return {};
+  return Object.fromEntries(
+    Object.entries(brut).filter(([id, valeur]) => isSnowflake(id) && typeof valeur === 'boolean'),
+  ) as Record<string, boolean>;
 }
 
 /** Une surcharge de membre telle qu'on la relit au démarrage. */
@@ -1680,6 +1803,8 @@ export interface PlanNettoyagePresence {
   aRetirer: string[];
   /** Surcharges de présence à réinscrire au registre : ces personnes sont là. */
   aMarquerPresence: string[];
+  /** Présents sans écriture nominative : entrés pendant l'arrêt, personne ne les a posés. */
+  aPoser: string[];
 }
 
 /**
@@ -1701,13 +1826,15 @@ export function nettoyagePresenceAuDemarrage(
 ): PlanNettoyagePresence {
   const presence = surcharges.filter((s) => s.accordeEcriture && !s.accordeConnexion);
   if (mode !== 'inVoice') {
-    return { aRetirer: presence.map((s) => s.userId), aMarquerPresence: [] };
+    return { aRetirer: presence.map((s) => s.userId), aMarquerPresence: [], aPoser: [] };
   }
 
   const ici = new Set(presents);
+  const ecrivent = new Set(surcharges.filter((s) => s.accordeEcriture).map((s) => s.userId));
   return {
     aRetirer: presence.filter((s) => !ici.has(s.userId)).map((s) => s.userId),
     aMarquerPresence: presence.filter((s) => ici.has(s.userId)).map((s) => s.userId),
+    aPoser: [...ici].filter((userId) => !ecrivent.has(userId)),
   };
 }
 
@@ -2020,6 +2147,24 @@ export function normaliserReglagesPresentation(raw: unknown): ReglagesPresentati
 }
 
 /**
+ * Où se trouve la mention qui notifie le propriétaire à la création du salon :
+ * `panel` dans le panneau lui-même, `message` dans un message posté juste
+ * au-dessus (le panneau n'en porte alors aucune), `none` nulle part qui notifie.
+ */
+export type PlacementMention = TempVoiceOwnerMentionPlacement;
+
+/**
+ * `ownerMentionPlacement` lu sur la ligne des réglages du module. Colonne
+ * absente (client Prisma d'avant la migration), vide ou inconnue : `panel`, le
+ * comportement sans doublon le plus proche de celui livré.
+ */
+export function lirePlacementMention(raw: unknown): PlacementMention {
+  const valeur = (raw as { ownerMentionPlacement?: unknown } | null | undefined)?.ownerMentionPlacement;
+  const bas = typeof valeur === 'string' ? valeur.toLowerCase() : '';
+  return TEMP_VOICE_OWNER_MENTION_PLACEMENTS.includes(bas as PlacementMention) ? (bas as PlacementMention) : TEMP_VOICE_OWNER_MENTION_DEFAULT;
+}
+
+/**
  * L'interrupteur de secours de la personnalisation par générateur, lu sur la
  * MÊME ligne que les cinq réglages ci-dessus.
  *
@@ -2241,4 +2386,33 @@ export function planReservation(
     default:
       return { type: 'tous_roles' };
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 9. La propriété d'un salon dont le propriétaire est parti
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Les six réglages de passation, tels que la ligne `TempVoiceModPermissionsConfig`
+ * les porte. Lecture tolérante, comme `normaliserReglagesPresentation` : un champ
+ * absent ou mal typé vaut son défaut, et le délai est ramené dans ses bornes —
+ * un salon ne doit jamais rester bloqué sur un réglage illisible.
+ */
+export function normaliserReglagesPropriete(raw: unknown): TempVoiceOwnershipSettings {
+  const ligne = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw as Record<string, unknown> : {};
+  const d = TEMP_VOICE_OWNERSHIP_DEFAULTS;
+  const booleen = (cle: 'handoverDmEnabled' | 'claimEmbedEnabled' | 'moderatorClaimOverride' | 'deleteWhenEmpty'): boolean =>
+    typeof ligne[cle] === 'boolean' ? ligne[cle] as boolean : d[cle];
+  const delai = ligne.handoverDelaySeconds;
+  const { min, max } = TEMP_VOICE_HANDOVER_DELAY_BOUNDS;
+  return {
+    handoverDmEnabled: booleen('handoverDmEnabled'),
+    handoverDelaySeconds: typeof delai === 'number' && Number.isFinite(delai)
+      ? Math.min(max, Math.max(min, Math.round(delai)))
+      : d.handoverDelaySeconds,
+    claimEmbedEnabled: booleen('claimEmbedEnabled'),
+    claimWho: TEMP_VOICE_CLAIM_WHO.find((v) => v === ligne.claimWho) ?? d.claimWho,
+    moderatorClaimOverride: booleen('moderatorClaimOverride'),
+    deleteWhenEmpty: booleen('deleteWhenEmpty'),
+  };
 }

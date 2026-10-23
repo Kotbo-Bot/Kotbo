@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { explainDisabled } from '../lib/actions/explainDisabled';
   import { m } from '../lib/i18n';
   import { channelDisplayName } from '../lib/channelUtils';
   import { router } from 'tinro';
@@ -7,12 +8,13 @@
   import { Tabs } from '../lib/components/ui';
   import { dashboardStore } from '../lib/stores/dashboard.svelte';
   import { canViewFeature } from '../lib/permissions.svelte';
-  import { hideUserIds, parseDetailsMetadata, parseDetailsStructure } from '../lib/logDetails';
+  import { hideUserIds, parseDetailsMetadata } from '../lib/logDetails';
   import RefreshButton from '../lib/components/RefreshButton.svelte';
   import FormInput from '../lib/components/FormInput.svelte';
   import Papicon from '../lib/components/Papicon.svelte';
   import MemberCaseModal from '../lib/components/MemberCaseModal.svelte';
   import AuditDiffViewer from '../lib/components/logs/AuditDiffViewer.svelte';
+  import LogDetails from '../lib/components/logs/LogDetails.svelte';
   import ColumnSortFilter, { type ColumnFilterOption } from '../lib/components/sanctions/ColumnSortFilter.svelte';
   import {
     fetchMemberCase,
@@ -127,7 +129,8 @@
       events: [
         { type: 'voice_join', label: m.lg_ev_voice_join(), desc: m.lg_ev_voice_join_d() },
         { type: 'voice_leave', label: m.lg_ev_voice_leave(), desc: m.lg_ev_voice_leave_d() },
-        { type: 'voice_move', label: m.lg_ev_voice_move(), desc: m.lg_ev_voice_move_d() }
+        { type: 'voice_move', label: m.lg_ev_voice_move(), desc: m.lg_ev_voice_move_d() },
+        { type: 'voice_panel', label: m.lg_ev_voice_panel(), desc: m.lg_ev_voice_panel_d() }
       ]
     },
     {
@@ -538,7 +541,7 @@
         </div>
         <div>
           <h3 class="text-sm font-semibold text-on-surface">{m.lg_default_channel()}</h3>
-          <p class="text-xs text-on-surface-variant/70 mt-1">{m.lg_default_channel_desc()}</p>
+          <p class="text-xs text-on-surface-variant mt-1">{m.lg_default_channel_desc()}</p>
         </div>
       </div>
       <div class="w-full md:w-72">
@@ -550,7 +553,7 @@
       <div class="flex items-center justify-between gap-4">
         <div>
           <h3 class="text-sm font-semibold text-on-surface">{m.lg_ignored_channels()}</h3>
-          <p class="text-xs text-on-surface-variant/70 mt-1">{m.lg_ignored_channels_desc()}</p>
+          <p class="text-xs text-on-surface-variant mt-1">{m.lg_ignored_channels_desc()}</p>
         </div>
         {#if ignoredChannelsDirty}
           <button
@@ -584,7 +587,7 @@
     <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
       <div>
         <h4 class="text-sm font-semibold text-on-surface">{m.lg_per_event_config()}</h4>
-        <p class="text-xs text-on-surface-variant/60 mt-1">{m.lg_per_event_desc()}</p>
+        <p class="text-xs text-on-surface-variant mt-1">{m.lg_per_event_desc()}</p>
       </div>
     </div>
 
@@ -603,7 +606,7 @@
             </div>
             <div>
               <h5 class="text-body-sm font-medium text-on-surface">{cat.label}</h5>
-              <p class="text-2xs text-on-surface-variant/60">{m.lg_manage_category_alerts()}</p>
+              <p class="text-2xs text-on-surface-variant">{m.lg_manage_category_alerts()}</p>
             </div>
           </div>
 
@@ -615,7 +618,7 @@
                   <div class="flex justify-between items-start gap-4">
                     <div class="space-y-1">
                       <p class="text-xs font-bold text-on-surface">{ev.label}</p>
-                      <p class="text-2xs text-on-surface-variant/60 leading-relaxed">{ev.desc}</p>
+                      <p class="text-2xs text-on-surface-variant leading-relaxed">{ev.desc}</p>
                     </div>
                     <ToggleSwitch 
                       checked={eventConfigs[confIdx].enabled}
@@ -628,7 +631,7 @@
 
                   {#if eventConfigs[confIdx].enabled}
                     <div class="space-y-1.5 pt-3 border-t border-outline-variant/10">
-                      <label for="select-{ev.type}" class="text-xs font-semibold text-on-surface-variant/60">{m.lg_dest_channel()}</label>
+                      <label for="select-{ev.type}" class="text-xs font-semibold text-on-surface-variant">{m.lg_dest_channel()}</label>
                       <select
                         id="select-{ev.type}"
                         bind:value={eventConfigs[confIdx].channelId}
@@ -757,18 +760,17 @@
         </thead>
         <tbody class="divide-y divide-outline-variant/10">
           {#each filteredLogs as entry}
-            {@const parsed = parseDetailsStructure(entry.details, logLabels)}
             <tr class="hover:bg-surface-container-low transition-colors group">
               <td class="px-6 py-5">
                 <div class="text-xs">
                   <p class="font-bold text-on-surface">{new Date(entry.dateIso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</p>
-                  <p class="text-2xs text-on-surface-variant/60 font-medium">{new Date(entry.dateIso).toLocaleDateString()}</p>
+                  <p class="text-2xs text-on-surface-variant font-medium">{new Date(entry.dateIso).toLocaleDateString()}</p>
                 </div>
               </td>
               <td class="px-6 py-5">
                 <button
                   type="button"
-                  disabled={!canOpenMemberCase}
+                  use:explainDisabled={(!canOpenMemberCase) ? m.common_reason_no_permission() : ''}
                   onclick={() => openCaseModal(entry)}
                   class="inline-flex max-w-40 truncate rounded-full border border-outline-variant/10 bg-surface-container-high/40 px-3 py-1 text-2xs font-bold text-on-surface-variant transition-all enabled:hover:border-primary/50 enabled:hover:text-primary disabled:cursor-default"
                   title={canOpenMemberCase ? m.lg_open_case() : undefined}
@@ -788,30 +790,7 @@
                 {entry.action}
               </td>
               <td class="px-6 py-5 max-w-sm">
-                <div class="space-y-2">
-                  {#if parsed.badges.length > 0}
-                    <div class="flex flex-wrap gap-1.5">
-                      {#each parsed.badges as item}
-                        {#if item.key}
-                          <div class="inline-flex items-center gap-1 bg-surface-container-high border border-outline-variant/10 rounded-lg px-2 py-0.5 text-2xs text-on-surface-variant font-medium">
-                            <span class="text-on-surface-variant/70 font-semibold">{item.key}:</span>
-                            <span class="text-on-surface break-all">{@html item.value}</span>
-                          </div>
-                        {:else}
-                          <div class="inline-flex items-center bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-2 py-0.5 text-2xs text-on-surface-variant break-all">
-                            {@html item.value}
-                          </div>
-                        {/if}
-                      {/each}
-                    </div>
-                  {/if}
-                  {#each parsed.blocks as block}
-                    <div class="bg-surface-container-low border-l-2 border-primary/50 rounded-r-lg px-3 py-1.5 text-xs text-on-surface-variant space-y-0.5 max-w-full overflow-hidden">
-                      <p class="text-xs font-semibold text-primary/80">{block.key}</p>
-                      <p class="break-all whitespace-pre-wrap leading-relaxed text-on-surface">{@html block.value}</p>
-                    </div>
-                  {/each}
-                </div>
+                <LogDetails details={entry.details} channelId={getLogChannelId(entry)} compact />
               </td>
               <td class="px-6 py-5 text-center">
                 <span class="inline-flex items-center justify-center w-24 px-3 py-1 rounded-full text-2xs font-semibold uppercase tracking-wider
@@ -828,7 +807,7 @@
                 <div class="flex flex-col items-center justify-center">
                   <Papicon icon="Info" size={40} class="mb-3 text-on-surface-variant/40" />
                   <p class="text-sm font-bold">{m.lg_no_events()}</p>
-                  <p class="text-xs text-on-surface-variant/60 mt-1">{m.lg_no_events_hint()}</p>
+                  <p class="text-xs text-on-surface-variant mt-1">{m.lg_no_events_hint()}</p>
                 </div>
               </td>
             </tr>

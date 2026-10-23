@@ -531,6 +531,12 @@ export type DashboardState = {
   /** Offre du serveur, telle que `moduleGate` l'applique. */
   plan: PlanKey;
   /**
+   * Fin de l'essai gratuit en cours (ISO), null hors essai. Le temps qui reste
+   * s'affiche dans le dashboard : un essai dont on ne voit pas la fin se
+   * repousse au dernier jour.
+   */
+  trialEndsAt: string | null;
+  /**
    * Le serveur n'a pas fini son parcours : il n'a pas de tableau de bord, il a
    * un tunnel de configuration. Calcule cote serveur (voir `guildState.ts`), et
    * sur le seul etat du serveur - ni l'offre, ni le navigateur, ni le statut de
@@ -609,6 +615,7 @@ export type DashboardState = {
   funEmojiRiddleChannelId: string;
   funNeverSayChannelId: string;
   funEmojiOnlyChannelId: string;
+  funImageOfDayChannelId: string;
   funPunitiveMode: boolean;
   recruitmentCategoryId: string;
   recruitmentLogChannelId: string;
@@ -1334,6 +1341,11 @@ export class HttpError extends Error {
   constructor(statusCode: number, message: string) {
     super(message);
     this.statusCode = statusCode;
+  }
+
+  /** Un refus (4xx) est rédigé pour l'utilisateur ; une panne (5xx), non. */
+  get expose(): boolean {
+    return this.statusCode < 500;
   }
 }
 

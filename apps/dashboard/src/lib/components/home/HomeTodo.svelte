@@ -74,6 +74,7 @@
     polls_unvoted: 'bar-chart',
     meetings_upcoming: 'users',
     recruitment_pending: 'user-plus',
+    // Partenariats en pause : le bot ne produit plus cette tâche, l'entrée reste pour la reprise.
     partner_applications_pending: 'handshake',
     suggestions_pending: 'thumbs-up',
     channel_health_alerts: 'activity',
@@ -294,14 +295,15 @@
         : item.label))
       .join(' · ');
     if (preview) parts.push(preview);
-    return parts.join(' — ');
+    return parts.join(' · ');
   }
 </script>
 
-<section class="grid grid-cols-1 lg:grid-cols-3 gap-4" aria-labelledby="home-todo-title" data-tour="home-todo">
+<section class="grid grid-cols-1 lg:grid-cols-3 lg:items-start gap-4" aria-labelledby="home-todo-title" data-tour="home-todo">
   <div class="section-card p-5 flex flex-col gap-3 {setupMissing ? 'lg:col-span-2' : 'lg:col-span-3'}">
     <div class="flex items-center justify-between gap-3">
       <h2 id="home-todo-title" class="text-base font-semibold text-on-surface flex items-center gap-2">
+        <Papicon icon="tasks" size={18} class="text-on-surface-variant" />
         {m.home_todo_title()}
         {#if tasks.length > 0}
           <span class="text-xs font-medium px-2 py-0.5 rounded-full bg-primary/10 text-primary">{tasks.length}</span>
@@ -393,9 +395,15 @@
   </div>
 
   {#if setup && setupMissing}
+    <!-- Les cartes ne s'etirent plus a la hauteur de la voisine : une seule
+         etape en attente laissait « A traiter » a moitie vide. Les etapes
+         tiennent chacune sur une ligne, consigne comprise. -->
     <div class="section-card p-5 flex flex-col gap-3">
       <div class="flex items-center justify-between gap-3">
-        <h2 class="text-base font-semibold text-on-surface">{m.home_setup_title()}</h2>
+        <h2 class="text-base font-semibold text-on-surface flex items-center gap-2">
+          <Papicon icon="gears" size={18} class="text-on-surface-variant" />
+          {m.home_setup_title()}
+        </h2>
         <div class="flex items-center gap-1">
           <span class="text-xs text-on-surface-variant">{m.home_setup_progress({ done: setup.done, total: setup.total })}</span>
           {#if prefsReady}
@@ -413,39 +421,34 @@
       >
         <div class="h-full rounded-full bg-primary transition-all" style="width: {setupPercent}%"></div>
       </div>
-      <p class="text-xs text-on-surface-variant">{m.home_setup_intro()}</p>
-      <ul class="flex flex-col gap-2">
+      <ul class="flex flex-col -mx-2">
         {#each setupMissing.slice(0, SETUP_PREVIEW) as gap (gap.key)}
           {@const title = setupStepTitle(gap)}
           {@const why = setupStepWhy(gap)}
-          <li class="rounded-lg border border-outline-variant p-3 flex flex-col gap-2.5">
-            <div class="flex items-start gap-2">
-              <span class="mt-1.5 w-1.5 h-1.5 rounded-full bg-warning shrink-0" aria-hidden="true"></span>
-              <div class="flex-1 min-w-0">
-                <p class="text-sm font-medium text-on-surface">{title}</p>
-                {#if why}
-                  <p class="mt-0.5 text-xs text-on-surface-variant leading-relaxed">{why}</p>
-                {/if}
-                {#if gap.detail}
-                  <p class="mt-0.5 text-xs text-warning">{m.home_setup_missing_detail({ detail: gap.detail })}</p>
-                {/if}
-              </div>
-              {#if prefsReady}
-                <span class="-mt-1 -mr-1 shrink-0">
-                  <Menu items={setupMenu(gap)} label={m.home_todo_menu({ title })} />
-                </span>
+          <li class="flex items-start gap-2 rounded-lg px-2 py-2 hover:bg-surface-container-high transition-colors">
+            <span class="mt-1.5 w-1.5 h-1.5 rounded-full bg-warning shrink-0" aria-hidden="true"></span>
+            <div class="flex-1 min-w-0">
+              <p class="text-sm font-medium text-on-surface">{title}</p>
+              {#if why}
+                <p class="text-xs text-on-surface-variant line-clamp-2" title={why}>{why}</p>
+              {/if}
+              {#if gap.detail}
+                <p class="text-xs text-warning">{m.home_setup_missing_detail({ detail: gap.detail })}</p>
               {/if}
             </div>
-            <div class="pl-3.5">
-              <Button size="sm" variant="secondary" icon="target" onclick={() => startSetupGuide(gap)}>{m.home_setup_guide()}</Button>
-            </div>
+            <span class="shrink-0 flex items-center gap-0.5 -my-0.5">
+              <Button size="sm" variant="secondary" icon="target" title={m.home_setup_intro()} onclick={() => startSetupGuide(gap)}>{m.home_setup_guide()}</Button>
+              {#if prefsReady}
+                <Menu items={setupMenu(gap)} label={m.home_todo_menu({ title })} />
+              {/if}
+            </span>
           </li>
         {/each}
       </ul>
-      {#if setupMissing.length > SETUP_PREVIEW}
-        <p class="text-xs text-on-surface-variant">{m.home_setup_more_steps({ n: setupMissing.length - SETUP_PREVIEW })}</p>
-      {/if}
-      <div class="mt-auto pt-1">
+      <div class="flex items-center justify-between gap-2">
+        <p class="text-xs text-on-surface-variant">
+          {#if setupMissing.length > SETUP_PREVIEW}{m.home_setup_more_steps({ n: setupMissing.length - SETUP_PREVIEW })}{/if}
+        </p>
         <Button size="sm" variant="ghost" href="/setup" iconRight="arrow-right">{m.home_setup_continue()}</Button>
       </div>
     </div>

@@ -166,7 +166,8 @@ export interface AutoModTriggeredEvent {
   channelId: string;
   rule: string;
   matchedContent: string | null;
-  action: 'DELETE' | 'WARN' | 'TIMEOUT' | 'LOG';
+  /** CENSOR : passages masqués, message republié sous l'identité du membre. */
+  action: 'DELETE' | 'WARN' | 'TIMEOUT' | 'LOG' | 'CENSOR';
   timestamp: number;
 }
 

@@ -17,8 +17,9 @@ import {
   preferGuildRecipes,
   type RecipeInput,
 } from './rpgRecipePolicy.js';
+import { UserFacingError } from '../../../utils/userFacingError.js';
 
-export class RecipeError extends Error {
+export class RecipeError extends UserFacingError {
   constructor(message: string, readonly status: number = 400) {
     super(message);
     this.name = 'RecipeError';

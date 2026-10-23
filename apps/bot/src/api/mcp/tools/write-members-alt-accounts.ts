@@ -3,7 +3,7 @@ import { getAllLinkedUserIds, linkAccounts, unlinkAccounts } from '../../../serv
 import prisma from '../../../utils/db.js';
 import { LinkedAccountStatus, LinkedAccountType } from '@prisma/client';
 import { z } from 'zod';
-import { type McpToolContext, err, ok, resolveMember } from '../toolkit.js';
+import { type McpToolContext, err, ok, resolveMember, toolError } from '../toolkit.js';
 
 export function registerWriteMembersAltAccountsTools(ctx: McpToolContext) {
   const { server, guildId, shouldRegister, guard, audit, toolMeta } = ctx;
@@ -61,7 +61,7 @@ export function registerWriteMembersAltAccountsTools(ctx: McpToolContext) {
           await audit(key_name, 'Liaison comptes MCP', `${r1.label} ↔ ${r2.label}`, `IDs: ${r1.userId} / ${r2.userId}`);
           return ok({ ok: true, linkId: link.id, user1Id: r1.userId, user1Label: r1.label, user2Id: r2.userId, user2Label: r2.label });
         } catch (e) {
-          return err(`Erreur lors de la liaison : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e, 'Erreur lors de la liaison');
         }
       })
     );
@@ -105,7 +105,7 @@ export function registerWriteMembersAltAccountsTools(ctx: McpToolContext) {
             })),
           });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -138,7 +138,7 @@ export function registerWriteMembersAltAccountsTools(ctx: McpToolContext) {
           await audit(key_name, 'Suppression liaison MCP', `${r1.label} ↔ ${r2.label}`, `IDs: ${r1.userId} / ${r2.userId}`);
           return ok({ ok: true, removed: result.count, user1: r1.userId, user2: r2.userId });
         } catch (e) {
-          return err(`Erreur lors de la suppression du lien : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e, 'Erreur lors de la suppression du lien');
         }
       })
     );

@@ -67,7 +67,7 @@
         </div>
         <div>
           <h1 class="text-xl font-bold text-on-surface leading-tight">{m.d7_gdpr_export_title()}</h1>
-          <p class="text-sm text-on-surface-variant/60">{m.d7_gdpr_export_subtitle()}</p>
+          <p class="text-sm text-on-surface-variant">{m.d7_gdpr_export_subtitle()}</p>
         </div>
       </div>
     </div>
@@ -127,9 +127,9 @@
               <div>
                 <p class="font-bold text-on-surface">
                   {preview.meta.username ?? m.d7_gdpr_unknown_user()}
-                  {#if preview.meta.globalName}<span class="text-on-surface-variant/50 font-normal"> · {preview.meta.globalName}</span>{/if}
+                  {#if preview.meta.globalName}<span class="text-on-surface-variant font-normal"> · {preview.meta.globalName}</span>{/if}
                 </p>
-                <p class="text-xs text-on-surface-variant/50 font-mono">{preview.meta.userId}</p>
+                <p class="text-xs text-on-surface-variant font-mono">{preview.meta.userId}</p>
               </div>
             </div>
             <button
@@ -165,7 +165,7 @@
           {#if preview.identity.guilds.length}
             <div class="mt-4 flex flex-wrap gap-2">
               {#each preview.identity.guilds as g}
-                <span class="text-xs px-2.5 py-1 rounded-lg bg-on-surface/5 border border-outline-variant/10 text-on-surface-variant/70">{g.name}</span>
+                <span class="text-xs px-2.5 py-1 rounded-lg bg-on-surface/5 border border-outline-variant/10 text-on-surface-variant">{g.name}</span>
               {/each}
             </div>
           {/if}
@@ -194,7 +194,7 @@
                       {cat.label}
                       <span class="text-xs px-2 py-0.5 rounded-full bg-primary/15 text-primary font-bold">{cat.count}</span>
                     </p>
-                    <p class="text-xs text-on-surface-variant/50 truncate">{cat.description}</p>
+                    <p class="text-xs text-on-surface-variant truncate">{cat.description}</p>
                   </div>
                   <Papicon icon={expanded[cat.key] ? 'ChevronDown' : 'ChevronRight'} size={16} class="text-on-surface-variant/40 shrink-0" />
                 </button>
@@ -202,8 +202,8 @@
                   <div class="px-5 pb-4 space-y-1.5 border-t border-outline-variant/10 pt-3">
                     {#each cat.tables as t}
                       <div class="flex items-center justify-between text-sm">
-                        <span class="text-on-surface-variant/70">{t.label}</span>
-                        <span class="font-mono text-on-surface-variant/50">{t.count}</span>
+                        <span class="text-on-surface-variant">{t.label}</span>
+                        <span class="font-mono text-on-surface-variant">{t.count}</span>
                       </div>
                     {/each}
                   </div>

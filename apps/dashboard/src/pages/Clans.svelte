@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { explainDisabled } from '../lib/actions/explainDisabled';
   import { onMount, onDestroy, untrack } from 'svelte';
   import { fade, scale } from 'svelte/transition';
   import { dashboardStore } from '../lib/stores/dashboard.svelte';
@@ -14,6 +15,8 @@
   import LoadingHint from '../lib/components/LoadingHint.svelte';
   import ModulePage from '../lib/components/ModulePage.svelte';
   import ToggleSwitch from '../lib/components/ToggleSwitch.svelte';
+  import Callout from '../lib/components/ui/Callout.svelte';
+  import Button from '../lib/components/ui/Button.svelte';
   import ClanRebalanceModal from '../lib/components/clans/ClanRebalanceModal.svelte';
   import { m, dateLocale } from '../lib/i18n';
   import { confirmDialog } from '../lib/stores/confirmDialog.svelte';
@@ -21,6 +24,7 @@
     fetchClansData,
     fetchLevelingData,
     updateClanSettings,
+    updateModuleStatus,
     createClan,
     updateClan,
     deleteClan,
@@ -66,7 +70,27 @@
   let editingClan = $state<ClanEntry | null>(null);
 
   // States
+  // `clansEnabled` n'est plus un interrupteur de la page : c'est la colonne du
+  // module Clans, que le menu de ModulePage bascule. On la garde en lecture,
+  // parce que la reinitialisation complete l'eteint sans toucher a la ligne du
+  // module : la page dit alors « actif » quand /clan refuse de repondre.
   let clansEnabled = $state(false);
+  let clansLoaded = $state(false);
+  const clansModuleActive = $derived(
+    (dashboardStore.state.modules as any[]).find((mod) => mod.id === 'clans')?.status === 'active'
+  );
+
+  // Relancer passe par la bascule de module : elle ecrit la colonne et la ligne
+  // du module ensemble, ce que la route des reglages ne fait que sur un vrai
+  // changement d'etat.
+  async function resumeClans() {
+    await actionState.run(async () => {
+      const ok = await updateModuleStatus('clans', 'active');
+      if (!ok) throw new Error(m.clan_err_save());
+      await refreshData(true);
+      return true;
+    });
+  }
   let clanAutoAssignOnJoin = $state(false);
   let clanWeeklyDigest = $state(false);
   let currentClanSeason = $state(1);
@@ -114,7 +138,6 @@
   let endTime = $state('00:00');
 
   // Saved states (for dirty checking)
-  let savedClansEnabled = $state(false);
   let savedClanAutoAssignOnJoin = $state(false);
   let savedClanWeeklyDigest = $state(false);
 
@@ -293,7 +316,7 @@
     if (status === 'ACTIVE') return 'bg-primary/15 text-primary';
     if (status === 'RESOLVED') return 'bg-success/15 text-success';
     if (status === 'PENDING' || status === 'LOCKED') return 'bg-warning/15 text-warning';
-    return 'bg-surface-container-high/60 text-on-surface-variant/70';
+    return 'bg-surface-container-high/60 text-on-surface-variant';
   }
 
   // `silent` : un rafraîchissement déclenché par le serveur ne doit pas
@@ -448,8 +471,7 @@
 
   // Sync state changes with the unsaved changes bar
   $effect(() => {
-    const dirty = clansEnabled !== savedClansEnabled
-      || clanAutoAssignOnJoin !== savedClanAutoAssignOnJoin
+    const dirty = clanAutoAssignOnJoin !== savedClanAutoAssignOnJoin
       || clanWeeklyDigest !== savedClanWeeklyDigest
       || clanXpFromLevelUp !== savedClanXpFromLevelUp
       || clanXpPerLevelUp !== savedClanXpPerLevelUp
@@ -470,7 +492,6 @@
           label: m.clan_unsaved_label(),
           onSave: () => handleSaveSettings(),
           onReset: () => {
-            clansEnabled = savedClansEnabled;
             clanAutoAssignOnJoin = savedClanAutoAssignOnJoin;
             clanWeeklyDigest = savedClanWeeklyDigest;
             clanXpFromLevelUp = savedClanXpFromLevelUp;
@@ -555,6 +576,7 @@
       const res = await fetchClansData();
       if (res) {
         clansEnabled = res.clansEnabled;
+        clansLoaded = true;
         clanAutoAssignOnJoin = res.clanAutoAssignOnJoin;
         clanWeeklyDigest = res.clanWeeklyDigest ?? false;
         currentClanSeason = res.currentClanSeason;
@@ -578,7 +600,6 @@
         // Formater les dates pour l'interface
         setSeasonDates(res.clanSeasonStartsAt, res.clanSeasonEndsAt);
         
-        savedClansEnabled = res.clansEnabled;
         savedClanAutoAssignOnJoin = res.clanAutoAssignOnJoin;
         savedClanWeeklyDigest = res.clanWeeklyDigest ?? false;
         savedClanXpFromLevelUp = res.clanXpFromLevelUp;
@@ -679,7 +700,6 @@
     let success = false;
     await actionState.run(async () => {
       const res = await updateClanSettings({
-        clansEnabled,
         clanAutoAssignOnJoin,
         clanWeeklyDigest,
         clanXpFromLevelUp,
@@ -700,7 +720,6 @@
       });
       if (!res) throw new Error(m.clan_err_save());
 
-      savedClansEnabled = res.clansEnabled;
       savedClanAutoAssignOnJoin = res.clanAutoAssignOnJoin;
       savedClanWeeklyDigest = res.clanWeeklyDigest ?? false;
       savedClanXpFromLevelUp = res.clanXpFromLevelUp;
@@ -986,34 +1005,47 @@ savedBetSettings = {
 >
   <InlineFeedback state={actionState} />
 
+  {#if clansLoaded && clansModuleActive && !clansEnabled}
+    <Callout variant="warning" title={m.clan_paused_title()}>
+      {m.clan_paused_desc()}
+      {#snippet actions()}
+        {#if canManageSettings}
+          <Button variant="primary" size="sm" icon="power" loading={actionState.state.loading} onclick={resumeClans}>
+            {m.clan_paused_action()}
+          </Button>
+        {/if}
+      {/snippet}
+    </Callout>
+  {/if}
+
   <!-- Navigation par Onglets -->
   <div class="flex border-b border-outline-variant/15 mb-6">
     <button
-      class="px-5 py-3 text-sm font-semibold border-b-2 transition-all cursor-pointer inline-flex items-center gap-2 {activeTab === 'clans' ? 'border-primary text-primary font-bold bg-primary/5 rounded-t-lg' : 'border-transparent text-on-surface-variant/70 hover:text-on-surface hover:bg-surface-container-low/30'}"
+      class="px-5 py-3 text-sm font-semibold border-b-2 transition-all cursor-pointer inline-flex items-center gap-2 {activeTab === 'clans' ? 'border-primary text-primary font-bold bg-primary/5 rounded-t-lg' : 'border-transparent text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low/30'}"
       onclick={() => activeTab = 'clans'}
     >
       <Papicon icon="Shield" size={15} /> {m.clan_tab_clans()}
     </button>
     <button
-      class="px-5 py-3 text-sm font-semibold border-b-2 transition-all cursor-pointer inline-flex items-center gap-2 {activeTab === 'seasons' ? 'border-primary text-primary font-bold bg-primary/5 rounded-t-lg' : 'border-transparent text-on-surface-variant/70 hover:text-on-surface hover:bg-surface-container-low/30'}"
+      class="px-5 py-3 text-sm font-semibold border-b-2 transition-all cursor-pointer inline-flex items-center gap-2 {activeTab === 'seasons' ? 'border-primary text-primary font-bold bg-primary/5 rounded-t-lg' : 'border-transparent text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low/30'}"
       onclick={() => activeTab = 'seasons'}
     >
       <Papicon icon="Calendar" size={15} /> {m.clan_tab_seasons()}
     </button>
     <button
-      class="px-5 py-3 text-sm font-semibold border-b-2 transition-all cursor-pointer inline-flex items-center gap-2 {activeTab === 'points' ? 'border-primary text-primary font-bold bg-primary/5 rounded-t-lg' : 'border-transparent text-on-surface-variant/70 hover:text-on-surface hover:bg-surface-container-low/30'}"
+      class="px-5 py-3 text-sm font-semibold border-b-2 transition-all cursor-pointer inline-flex items-center gap-2 {activeTab === 'points' ? 'border-primary text-primary font-bold bg-primary/5 rounded-t-lg' : 'border-transparent text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low/30'}"
       onclick={() => activeTab = 'points'}
     >
       <Papicon icon="Sparkles" size={15} /> {m.clan_tab_points()}
     </button>
     <button
-      class="px-5 py-3 text-sm font-semibold border-b-2 transition-all cursor-pointer inline-flex items-center gap-2 {activeTab === 'bets' ? 'border-primary text-primary font-bold bg-primary/5 rounded-t-lg' : 'border-transparent text-on-surface-variant/70 hover:text-on-surface hover:bg-surface-container-low/30'}"
+      class="px-5 py-3 text-sm font-semibold border-b-2 transition-all cursor-pointer inline-flex items-center gap-2 {activeTab === 'bets' ? 'border-primary text-primary font-bold bg-primary/5 rounded-t-lg' : 'border-transparent text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low/30'}"
       onclick={() => activeTab = 'bets'}
     >
       <Papicon icon="Coins" size={15} /> {m.clan_tab_bets()}
     </button>
     <button
-      class="px-5 py-3 text-sm font-semibold border-b-2 transition-all cursor-pointer inline-flex items-center gap-2 {activeTab === 'admin' ? 'border-primary text-primary font-bold bg-primary/5 rounded-t-lg' : 'border-transparent text-on-surface-variant/70 hover:text-on-surface hover:bg-surface-container-low/30'}"
+      class="px-5 py-3 text-sm font-semibold border-b-2 transition-all cursor-pointer inline-flex items-center gap-2 {activeTab === 'admin' ? 'border-primary text-primary font-bold bg-primary/5 rounded-t-lg' : 'border-transparent text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low/30'}"
       onclick={() => activeTab = 'admin'}
     >
       <Papicon icon="Settings" size={15} /> {m.clan_tab_admin()}
@@ -1038,7 +1070,7 @@ savedBetSettings = {
         </div>
         <div>
           <p class="text-sm font-semibold text-on-surface">{m.clan_public_banner_title()}</p>
-          <p class="text-xs text-on-surface-variant/70 font-medium">{m.clan_public_page_desc()}</p>
+          <p class="text-xs text-on-surface-variant font-medium">{m.clan_public_page_desc()}</p>
         </div>
       </div>
       <div class="flex items-center gap-3 shrink-0 relative z-10 w-full sm:w-auto">
@@ -1075,16 +1107,8 @@ savedBetSettings = {
           <div class="space-y-4">
             <div class="flex items-center justify-between">
               <div>
-                <span class="text-sm font-medium text-on-surface">{m.clan_enable_title()}</span>
-                <p class="text-xs text-on-surface-variant/70">{m.clan_enable_desc()}</p>
-              </div>
-              <ToggleSwitch checked={clansEnabled} onToggle={(v) => clansEnabled = v} disabled={!canManageSettings} />
-            </div>
-
-            <div class="flex items-center justify-between pt-4 border-t border-outline-variant/10">
-              <div>
                 <span class="text-sm font-medium text-on-surface">{m.clan_autoassign_title()}</span>
-                <p class="text-xs text-on-surface-variant/70">{m.clan_autoassign_desc()}</p>
+                <p class="text-xs text-on-surface-variant">{m.clan_autoassign_desc()}</p>
               </div>
               <ToggleSwitch checked={clanAutoAssignOnJoin} onToggle={(v) => clanAutoAssignOnJoin = v} disabled={!canManageSettings} />
             </div>
@@ -1092,7 +1116,7 @@ savedBetSettings = {
             <div class="flex items-center justify-between pt-4 border-t border-outline-variant/10">
               <div>
                 <span class="text-sm font-medium text-on-surface">{m.clan_digest_title()}</span>
-                <p class="text-xs text-on-surface-variant/70">{m.clan_digest_desc()}</p>
+                <p class="text-xs text-on-surface-variant">{m.clan_digest_desc()}</p>
               </div>
               <ToggleSwitch checked={clanWeeklyDigest} onToggle={(v) => clanWeeklyDigest = v} disabled={!canManageSettings} />
             </div>
@@ -1110,7 +1134,7 @@ savedBetSettings = {
 
             <div class="space-y-1.5 pt-4 border-t border-outline-variant/10">
               <label for="clan-points-feed-channel" class="text-sm font-medium text-on-surface">{m.clan_points_feed_title()}</label>
-              <p class="text-xs text-on-surface-variant/70">{m.clan_points_feed_desc()}</p>
+              <p class="text-xs text-on-surface-variant">{m.clan_points_feed_desc()}</p>
               <SearchableSelect
                 id="clan-points-feed-channel"
                 bind:value={clanPointsFeedChannelId}
@@ -1130,7 +1154,7 @@ savedBetSettings = {
 
           <div class="space-y-4">
             <div class="space-y-1.5">
-              <label for="clan-announcement-channel" class="text-xs font-semibold text-on-surface-variant/60 ml-1">{m.clan_announcement_channel_label()}</label>
+              <label for="clan-announcement-channel" class="text-xs font-semibold text-on-surface-variant ml-1">{m.clan_announcement_channel_label()}</label>
               <SearchableSelect
                 id="clan-announcement-channel"
                 bind:value={clanAnnouncementChannelId}
@@ -1138,14 +1162,14 @@ savedBetSettings = {
                 placeholder={m.clan_select_channel_placeholder()}
                 disabled={!canManageSettings}
               />
-              <p class="text-2xs text-on-surface-variant/60 mt-1">{m.clan_announcement_channel_desc()}</p>
+              <p class="text-2xs text-on-surface-variant mt-1">{m.clan_announcement_channel_desc()}</p>
             </div>
 
             <div class="space-y-4 pt-2 border-t border-outline-variant/10">
               <div class="flex items-center justify-between">
                 <div>
                   <span class="text-sm font-medium text-on-surface">{m.clan_boost_giveaways_title()}</span>
-                  <p class="text-xs text-on-surface-variant/70">{m.clan_boost_giveaways_desc()}</p>
+                  <p class="text-xs text-on-surface-variant">{m.clan_boost_giveaways_desc()}</p>
                 </div>
                 <ToggleSwitch checked={clanRewardGiveaway} onToggle={(v) => clanRewardGiveaway = v} disabled={!canManageSettings} />
               </div>
@@ -1153,7 +1177,7 @@ savedBetSettings = {
               <div class="flex items-center justify-between">
                 <div>
                   <span class="text-sm font-medium text-on-surface">{m.clan_leader_role_reward_title()}</span>
-                  <p class="text-xs text-on-surface-variant/70">{m.clan_leader_role_reward_desc()}</p>
+                  <p class="text-xs text-on-surface-variant">{m.clan_leader_role_reward_desc()}</p>
                 </div>
                 <ToggleSwitch checked={clanRewardLeaderRole} onToggle={(v) => clanRewardLeaderRole = v} disabled={!canManageSettings} />
               </div>
@@ -1169,7 +1193,7 @@ savedBetSettings = {
           </div>
 
           <div class="space-y-4">
-            <p class="text-xs text-on-surface-variant/70">
+            <p class="text-xs text-on-surface-variant">
               {m.clan_season_reset_desc()}
             </p>
             {#if canManageSettings}
@@ -1252,7 +1276,7 @@ savedBetSettings = {
 
           {#if clans.length === 0}
             <div class="flex flex-col items-center justify-center py-12 text-center">
-              <p class="text-sm text-on-surface-variant/60 font-medium">{m.clan_empty_title()}</p>
+              <p class="text-sm text-on-surface-variant font-medium">{m.clan_empty_title()}</p>
               <p class="text-xs text-on-surface-variant/40">{m.clan_empty_desc()}</p>
             </div>
           {:else}
@@ -1260,7 +1284,7 @@ savedBetSettings = {
             <div class="overflow-x-auto">
               <table class="w-full text-left border-collapse">
                 <thead>
-                  <tr class="border-b border-outline-variant/10 text-xs font-semibold text-on-surface-variant/60">
+                  <tr class="border-b border-outline-variant/10 text-xs font-semibold text-on-surface-variant">
                     <th class="pb-3">{m.clan_col_name()}</th>
                     <th class="pb-3">{m.clan_col_role()}</th>
                     <th class="pb-3">{m.clan_col_general_channel()}</th>
@@ -1278,7 +1302,7 @@ savedBetSettings = {
                       <td class="py-4">
                         <span class="font-bold text-sm text-on-surface">{clan.name}</span>
                         {#if clan.description}
-                          <p class="text-xs text-on-surface-variant/70 max-w-[200px] truncate">{clan.description}</p>
+                          <p class="text-xs text-on-surface-variant max-w-[200px] truncate">{clan.description}</p>
                         {/if}
                       </td>
                       <td class="py-4">
@@ -1354,12 +1378,12 @@ savedBetSettings = {
 
             <div class="space-y-4">
               <div class="p-4 bg-surface-container-high/20 rounded-xl border border-outline-variant/10 space-y-3">
-                <span class="text-xs font-semibold text-on-surface-variant/60 block">{m.clan_time_remaining_label()}</span>
+                <span class="text-xs font-semibold text-on-surface-variant block">{m.clan_time_remaining_label()}</span>
                 <div class="flex items-center gap-2">
                   <span class="text-xl font-extrabold text-on-surface">{timeRemaining}</span>
                 </div>
                 {#if clanSeasonStartsAt && clanSeasonEndsAt}
-                  <p class="text-2xs text-on-surface-variant/50 leading-relaxed">
+                  <p class="text-2xs text-on-surface-variant leading-relaxed">
                     {m.clan_season_start_label({ date: new Date(clanSeasonStartsAt).toLocaleDateString(dateLocale(), { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }) })}
                     <br />
                     {m.clan_season_end_label({ date: new Date(clanSeasonEndsAt).toLocaleDateString(dateLocale(), { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }) })}
@@ -1367,7 +1391,7 @@ savedBetSettings = {
                 {/if}
               </div>
 
-              <p class="text-xs text-on-surface-variant/70 leading-relaxed">
+              <p class="text-xs text-on-surface-variant leading-relaxed">
                 {m.clan_season_close_desc()}
               </p>
 
@@ -1394,7 +1418,7 @@ savedBetSettings = {
 
             {#if canManageSettings}
               <div class="flex flex-wrap items-center gap-2">
-                <span class="text-xs font-semibold text-on-surface-variant/60 mr-1">{m.clan_quick_fill_label()}</span>
+                <span class="text-xs font-semibold text-on-surface-variant mr-1">{m.clan_quick_fill_label()}</span>
                 <button type="button" onclick={() => applyQuickRange(1)} class="px-2.5 py-1 bg-surface-container-high/50 hover:bg-primary/15 hover:text-primary text-on-surface-variant text-2xs font-semibold rounded-md transition-colors cursor-pointer">{m.clan_month_1()}</button>
                 <button type="button" onclick={() => applyQuickRange(3)} class="px-2.5 py-1 bg-surface-container-high/50 hover:bg-primary/15 hover:text-primary text-on-surface-variant text-2xs font-semibold rounded-md transition-colors cursor-pointer">{m.clan_quarter()}</button>
                 <button type="button" onclick={() => applyQuickRange(6)} class="px-2.5 py-1 bg-surface-container-high/50 hover:bg-primary/15 hover:text-primary text-on-surface-variant text-2xs font-semibold rounded-md transition-colors cursor-pointer">{m.clan_month_6()}</button>
@@ -1410,7 +1434,7 @@ savedBetSettings = {
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
               <!-- Début de saison -->
               <div class="space-y-2">
-                <span class="text-xs font-semibold text-on-surface-variant/60 block ml-1">{m.clan_start_date_label()}</span>
+                <span class="text-xs font-semibold text-on-surface-variant block ml-1">{m.clan_start_date_label()}</span>
                 <div class="grid grid-cols-3 gap-2">
                   <input
                     type="date"
@@ -1429,7 +1453,7 @@ savedBetSettings = {
 
               <!-- Fin de saison -->
               <div class="space-y-2">
-                <span class="text-xs font-semibold text-on-surface-variant/60 block ml-1">{m.clan_end_date_label()}</span>
+                <span class="text-xs font-semibold text-on-surface-variant block ml-1">{m.clan_end_date_label()}</span>
                 <div class="grid grid-cols-3 gap-2">
                   <input
                     type="date"
@@ -1473,7 +1497,7 @@ savedBetSettings = {
                   type="button"
                   onclick={handleSaveSeasonPlanning}
                   class="px-4 py-2 bg-primary hover:bg-primary-hover text-on-primary font-semibold text-xs rounded-lg transition-colors cursor-pointer"
-                  disabled={!startDate || !endDate}
+                  use:explainDisabled={(!startDate) ? m.common_reason_fill_field() : (!endDate) ? m.common_reason_fill_field() : ''}
                 >
                   {m.clan_save_planning_btn()}
                 </button>
@@ -1499,14 +1523,14 @@ savedBetSettings = {
               <div class="flex items-center justify-between">
                 <div>
                   <span class="text-sm font-medium text-on-surface">{m.clan_levelup_gain_title()}</span>
-                  <p class="text-xs text-on-surface-variant/70">{m.clan_levelup_gain_desc()}</p>
+                  <p class="text-xs text-on-surface-variant">{m.clan_levelup_gain_desc()}</p>
                 </div>
                 <ToggleSwitch checked={clanXpFromLevelUp} onToggle={(v) => clanXpFromLevelUp = v} disabled={!canManageSettings} />
               </div>
 
               {#if clanXpFromLevelUp}
                 <div class="space-y-1.5 pt-2 border-t border-outline-variant/10 animate-in slide-in-from-top-2 duration-200">
-                  <label for="clan-xp-levelup-amount" class="text-xs font-semibold text-on-surface-variant/60 block ml-1">{m.clan_levelup_points_label()}</label>
+                  <label for="clan-xp-levelup-amount" class="text-xs font-semibold text-on-surface-variant block ml-1">{m.clan_levelup_points_label()}</label>
                   <div class="flex items-center gap-2">
                     <input
                       id="clan-xp-levelup-amount"
@@ -1516,14 +1540,14 @@ savedBetSettings = {
                       class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold"
                       disabled={!canManageSettings}
                     />
-                    <span class="text-xs text-on-surface-variant/60 font-semibold shrink-0">{m.clan_xp_per_level_unit()}</span>
+                    <span class="text-xs text-on-surface-variant font-semibold shrink-0">{m.clan_xp_per_level_unit()}</span>
                   </div>
                 </div>
 
                 <div class="flex items-center justify-between pt-3 border-t border-outline-variant/10">
                   <div>
                     <span class="text-sm font-medium text-on-surface">{m.clan_proportional_title()}</span>
-                    <p class="text-xs text-on-surface-variant/70">{m.clan_proportional_desc()}</p>
+                    <p class="text-xs text-on-surface-variant">{m.clan_proportional_desc()}</p>
                   </div>
                   <ToggleSwitch checked={clanXpLevelUpProportional} onToggle={(v) => clanXpLevelUpProportional = v} disabled={!canManageSettings} />
                 </div>
@@ -1531,7 +1555,7 @@ savedBetSettings = {
                 {#if clanXpLevelUpProportional}
                   <div class="space-y-3 pt-2 animate-in slide-in-from-top-2 duration-200">
                     <div class="space-y-1.5">
-                      <label for="clan-xp-reference-level" class="text-xs font-semibold text-on-surface-variant/60 block ml-1">{m.clan_reference_level_label()}</label>
+                      <label for="clan-xp-reference-level" class="text-xs font-semibold text-on-surface-variant block ml-1">{m.clan_reference_level_label()}</label>
                       <input
                         id="clan-xp-reference-level"
                         type="number"
@@ -1541,15 +1565,15 @@ savedBetSettings = {
                         class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold"
                         disabled={!canManageSettings}
                       />
-                      <p class="text-2xs text-on-surface-variant/50 ml-1">{m.clan_reference_level_hint({ level: clanXpReferenceLevel, points: clanXpPerLevelUp })}</p>
+                      <p class="text-2xs text-on-surface-variant ml-1">{m.clan_reference_level_hint({ level: clanXpReferenceLevel, points: clanXpPerLevelUp })}</p>
                     </div>
 
                     <div class="rounded-lg border border-outline-variant/10 bg-surface-container-high/20 overflow-hidden">
                       <table class="w-full text-left">
                         <thead>
                           <tr class="border-b border-outline-variant/10">
-                            <th class="px-4 py-2 text-xs font-semibold text-on-surface-variant/60">{m.clan_preview_level()}</th>
-                            <th class="px-4 py-2 text-right text-xs font-semibold text-on-surface-variant/60">{m.clan_preview_points()}</th>
+                            <th class="px-4 py-2 text-xs font-semibold text-on-surface-variant">{m.clan_preview_level()}</th>
+                            <th class="px-4 py-2 text-right text-xs font-semibold text-on-surface-variant">{m.clan_preview_points()}</th>
                           </tr>
                         </thead>
                         <tbody class="divide-y divide-outline-variant/5">
@@ -1569,14 +1593,14 @@ savedBetSettings = {
               <div class="flex items-center justify-between pt-4 border-t border-outline-variant/10">
                 <div>
                   <span class="text-sm font-medium text-on-surface">{m.clan_boost_gain_title()}</span>
-                  <p class="text-xs text-on-surface-variant/70">{m.clan_boost_gain_desc()}</p>
+                  <p class="text-xs text-on-surface-variant">{m.clan_boost_gain_desc()}</p>
                 </div>
                 <ToggleSwitch checked={clanXpFromBoost} onToggle={(v) => clanXpFromBoost = v} disabled={!canManageSettings} />
               </div>
 
               {#if clanXpFromBoost}
                 <div class="space-y-1.5 pt-2 border-t border-outline-variant/10 animate-in slide-in-from-top-2 duration-200">
-                  <label for="clan-xp-boost-amount" class="text-xs font-semibold text-on-surface-variant/60 block ml-1">{m.clan_boost_points_label()}</label>
+                  <label for="clan-xp-boost-amount" class="text-xs font-semibold text-on-surface-variant block ml-1">{m.clan_boost_points_label()}</label>
                   <div class="flex items-center gap-2">
                     <input
                       id="clan-xp-boost-amount"
@@ -1586,7 +1610,7 @@ savedBetSettings = {
                       class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold"
                       disabled={!canManageSettings}
                     />
-                    <span class="text-xs text-on-surface-variant/60 font-semibold shrink-0">{m.clan_boost_points_unit()}</span>
+                    <span class="text-xs text-on-surface-variant font-semibold shrink-0">{m.clan_boost_points_unit()}</span>
                   </div>
                 </div>
               {/if}
@@ -1602,10 +1626,10 @@ savedBetSettings = {
 
             {#if !dailyAlgoEnabled}
               <div class="p-5 bg-surface-container-high/20 rounded-xl border border-outline-variant/10 flex flex-col items-center justify-center text-center space-y-3">
-                <Papicon icon="lock" size={24} class="text-on-surface-variant/60" />
+                <Papicon icon="lock" size={24} class="text-on-surface-variant" />
                 <div>
                   <h4 class="text-sm font-semibold text-on-surface">{m.clan_da_disabled_title()}</h4>
-                  <p class="text-xs text-on-surface-variant/70 mt-1">
+                  <p class="text-xs text-on-surface-variant mt-1">
                     {m.clan_da_disabled_desc()}
                   </p>
                 </div>
@@ -1617,7 +1641,7 @@ savedBetSettings = {
                 <div class="flex items-center justify-between">
                   <div>
                     <span class="text-sm font-medium text-on-surface">{m.clan_da_convert_title()}</span>
-                    <p class="text-xs text-on-surface-variant/70">
+                    <p class="text-xs text-on-surface-variant">
                       {m.clan_da_convert_desc()}
                     </p>
                   </div>
@@ -1631,7 +1655,7 @@ savedBetSettings = {
                 {#if bridge.clanPointsFromDailyAlgo}
                   <div class="space-y-4 pt-2 border-t border-outline-variant/10 animate-in slide-in-from-top-2 duration-200">
                     <div class="space-y-1.5">
-                      <label for="clan-da-rate" class="text-xs font-semibold text-on-surface-variant/60 block ml-1">{m.clan_da_rate_label()}</label>
+                      <label for="clan-da-rate" class="text-xs font-semibold text-on-surface-variant block ml-1">{m.clan_da_rate_label()}</label>
                       <input
                         id="clan-da-rate"
                         type="number"
@@ -1642,22 +1666,22 @@ savedBetSettings = {
                         class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold"
                         disabled={!canManageSettings}
                       />
-                      <p class="text-2xs text-on-surface-variant/50 ml-1">
+                      <p class="text-2xs text-on-surface-variant ml-1">
                         {m.clan_da_rate_hint()}
                       </p>
                     </div>
 
                     <div class="grid grid-cols-3 gap-3">
                       <div class="space-y-1.5">
-                        <label for="clan-da-top1" class="text-xs font-semibold text-on-surface-variant/60 block ml-1">🥇 {m.clan_da_bonus_label()}</label>
+                        <label for="clan-da-top1" class="text-xs font-semibold text-on-surface-variant block ml-1">🥇 {m.clan_da_bonus_label()}</label>
                         <input id="clan-da-top1" type="number" min="0" step="5" bind:value={bridge.clanPointsDailyAlgoTop1} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold" disabled={!canManageSettings} />
                       </div>
                       <div class="space-y-1.5">
-                        <label for="clan-da-top2" class="text-xs font-semibold text-on-surface-variant/60 block ml-1">🥈 {m.clan_da_bonus_label()}</label>
+                        <label for="clan-da-top2" class="text-xs font-semibold text-on-surface-variant block ml-1">🥈 {m.clan_da_bonus_label()}</label>
                         <input id="clan-da-top2" type="number" min="0" step="5" bind:value={bridge.clanPointsDailyAlgoTop2} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold" disabled={!canManageSettings} />
                       </div>
                       <div class="space-y-1.5">
-                        <label for="clan-da-top3" class="text-xs font-semibold text-on-surface-variant/60 block ml-1">🥉 {m.clan_da_bonus_label()}</label>
+                        <label for="clan-da-top3" class="text-xs font-semibold text-on-surface-variant block ml-1">🥉 {m.clan_da_bonus_label()}</label>
                         <input id="clan-da-top3" type="number" min="0" step="5" bind:value={bridge.clanPointsDailyAlgoTop3} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold" disabled={!canManageSettings} />
                       </div>
                     </div>
@@ -1690,7 +1714,7 @@ savedBetSettings = {
 
             <div class="space-y-4">
               <div class="space-y-1.5">
-                <label for="manual-points-clan-select" class="text-xs font-semibold text-on-surface-variant/60 block ml-1">{m.clan_select_clan_label()}</label>
+                <label for="manual-points-clan-select" class="text-xs font-semibold text-on-surface-variant block ml-1">{m.clan_select_clan_label()}</label>
                 <SearchableSelect
                   id="manual-points-clan-select"
                   bind:value={selectedClanIdForPoints}
@@ -1701,7 +1725,7 @@ savedBetSettings = {
               </div>
 
               <div class="space-y-1.5">
-                <label for="manual-points-clan-amount" class="text-xs font-semibold text-on-surface-variant/60 block ml-1">{m.clan_xp_amount_label()}</label>
+                <label for="manual-points-clan-amount" class="text-xs font-semibold text-on-surface-variant block ml-1">{m.clan_xp_amount_label()}</label>
                 <input
                   id="manual-points-clan-amount"
                   type="number"
@@ -1746,7 +1770,7 @@ savedBetSettings = {
 
             <div class="space-y-4">
               <div class="space-y-1.5">
-                <label for="manual-points-member-user-id" class="text-xs font-semibold text-on-surface-variant/60 block ml-1">{m.clan_member_id_label()}</label>
+                <label for="manual-points-member-user-id" class="text-xs font-semibold text-on-surface-variant block ml-1">{m.clan_member_id_label()}</label>
                 <MemberSearchSelect
                   id="manual-points-member-user-id"
                   bind:value={manualPointsMemberUserId}
@@ -1756,7 +1780,7 @@ savedBetSettings = {
               </div>
 
               <div class="space-y-1.5">
-                <label for="manual-points-member-amount" class="text-xs font-semibold text-on-surface-variant/60 block ml-1">{m.clan_xp_amount_label()}</label>
+                <label for="manual-points-member-amount" class="text-xs font-semibold text-on-surface-variant block ml-1">{m.clan_xp_amount_label()}</label>
                 <input
                   id="manual-points-member-amount"
                   type="number"
@@ -1775,7 +1799,7 @@ savedBetSettings = {
                     type="button"
                     onclick={() => handleMemberPoints(1)}
                     class="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-primary hover:bg-primary/80 text-white font-semibold text-xs rounded-lg transition-colors cursor-pointer"
-                    disabled={!manualPointsMemberUserId}
+                    use:explainDisabled={(!manualPointsMemberUserId) ? m.common_reason_fill_field() : ''}
                   >
                     <Papicon icon="Sparkles" size={14} /> {m.clan_adjust_member_points_btn()}
                   </button>
@@ -1783,7 +1807,7 @@ savedBetSettings = {
                     type="button"
                     onclick={() => handleMemberPoints(-1)}
                     class="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-error/10 hover:bg-error/20 text-error border border-error/20 font-semibold text-xs rounded-lg transition-colors cursor-pointer"
-                    disabled={!manualPointsMemberUserId}
+                    use:explainDisabled={(!manualPointsMemberUserId) ? m.common_reason_fill_field() : ''}
                   >
                     <Papicon icon="Minus" size={14} /> {m.clan_remove_member_points_btn()}
                   </button>
@@ -1802,7 +1826,7 @@ savedBetSettings = {
           <div class="flex items-start justify-between gap-4 border-b border-outline-variant/15 pb-3">
             <div>
               <h3 class="text-lg font-semibold flex items-center gap-2"><Papicon icon="Coins" size={18} /> {m.clan_bets_heading()}</h3>
-              <p class="text-xs text-on-surface-variant/70 mt-1">{m.clan_bets_desc()}</p>
+              <p class="text-xs text-on-surface-variant mt-1">{m.clan_bets_desc()}</p>
             </div>
             <ToggleSwitch checked={betSettings.betsEnabled} onToggle={(v) => betSettings.betsEnabled = v} disabled={!canManageSettings} />
           </div>
@@ -1815,7 +1839,7 @@ savedBetSettings = {
 
           <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div class="space-y-1.5">
-              <label for="bet-channel" class="text-xs font-semibold text-on-surface-variant/60 ml-1">{m.clan_bets_channel_label()}</label>
+              <label for="bet-channel" class="text-xs font-semibold text-on-surface-variant ml-1">{m.clan_bets_channel_label()}</label>
               <SearchableSelect
                 id="bet-channel"
                 bind:value={betSettings.betChannelId}
@@ -1823,11 +1847,11 @@ savedBetSettings = {
                 placeholder={m.clan_select_channel_placeholder()}
                 disabled={!canManageSettings}
               />
-              <p class="text-2xs text-on-surface-variant/60 mt-1">{m.clan_bets_channel_desc()}</p>
+              <p class="text-2xs text-on-surface-variant mt-1">{m.clan_bets_channel_desc()}</p>
             </div>
 
             <div class="space-y-1.5">
-              <label for="bet-announcement-channel" class="text-xs font-semibold text-on-surface-variant/60 ml-1">{m.clan_bets_announcement_label()}</label>
+              <label for="bet-announcement-channel" class="text-xs font-semibold text-on-surface-variant ml-1">{m.clan_bets_announcement_label()}</label>
               <SearchableSelect
                 id="bet-announcement-channel"
                 bind:value={betSettings.betAnnouncementChannelId}
@@ -1835,13 +1859,13 @@ savedBetSettings = {
                 placeholder={m.clan_select_channel_placeholder()}
                 disabled={!canManageSettings}
               />
-              <p class="text-2xs text-on-surface-variant/60 mt-1">{m.clan_bets_announcement_desc()}</p>
+              <p class="text-2xs text-on-surface-variant mt-1">{m.clan_bets_announcement_desc()}</p>
             </div>
           </div>
 
           <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 pt-2 border-t border-outline-variant/10">
             <div class="space-y-1.5">
-              <label for="bet-min-stake" class="text-xs font-semibold text-on-surface-variant/60 ml-1">{m.clan_bets_min_stake_label()}</label>
+              <label for="bet-min-stake" class="text-xs font-semibold text-on-surface-variant ml-1">{m.clan_bets_min_stake_label()}</label>
               <input
                 id="bet-min-stake"
                 type="number"
@@ -1853,7 +1877,7 @@ savedBetSettings = {
               />
             </div>
             <div class="space-y-1.5">
-              <label for="bet-max-stake" class="text-xs font-semibold text-on-surface-variant/60 ml-1">{m.clan_bets_max_stake_label()}</label>
+              <label for="bet-max-stake" class="text-xs font-semibold text-on-surface-variant ml-1">{m.clan_bets_max_stake_label()}</label>
               <input
                 id="bet-max-stake"
                 type="number"
@@ -1865,7 +1889,7 @@ savedBetSettings = {
               />
             </div>
             <div class="space-y-1.5">
-              <label for="bet-max-open" class="text-xs font-semibold text-on-surface-variant/60 ml-1">{m.clan_bets_max_open_label()}</label>
+              <label for="bet-max-open" class="text-xs font-semibold text-on-surface-variant ml-1">{m.clan_bets_max_open_label()}</label>
               <input
                 id="bet-max-open"
                 type="number"
@@ -1877,7 +1901,7 @@ savedBetSettings = {
               />
             </div>
             <div class="space-y-1.5">
-              <label for="bet-window" class="text-xs font-semibold text-on-surface-variant/60 ml-1">{m.clan_bets_window_label()}</label>
+              <label for="bet-window" class="text-xs font-semibold text-on-surface-variant ml-1">{m.clan_bets_window_label()}</label>
               <input
                 id="bet-window"
                 type="number"
@@ -1895,10 +1919,10 @@ savedBetSettings = {
         <section class="bg-surface-container-low/40 border border-outline-variant/30 p-6 rounded-xl space-y-5">
           <div class="border-b border-outline-variant/15 pb-3">
             <h3 class="text-lg font-semibold flex items-center gap-2"><Papicon icon="Shield" size={18} /> {m.clan_bets_managers_heading()}</h3>
-            <p class="text-xs text-on-surface-variant/70 mt-1">{m.clan_bets_managers_desc()}</p>
+            <p class="text-xs text-on-surface-variant mt-1">{m.clan_bets_managers_desc()}</p>
           </div>
 
-          <ul class="text-xs text-on-surface-variant/70 space-y-1 list-disc list-inside">
+          <ul class="text-xs text-on-surface-variant space-y-1 list-disc list-inside">
             <li>{m.clan_bets_managers_scope_winner()}</li>
             <li>{m.clan_bets_managers_scope_cancel()}</li>
           </ul>
@@ -1912,7 +1936,7 @@ savedBetSettings = {
                     type="button"
                     class="cursor-pointer hover:text-on-surface disabled:opacity-40"
                     aria-label={m.clan_bets_managers_remove({ role: role.name })}
-                    disabled={!canManageSettings}
+                    use:explainDisabled={(!canManageSettings) ? m.common_reason_no_permission() : ''}
                     onclick={() => removeBetManagerRole(role.id)}
                   >
                     ×
@@ -1927,7 +1951,7 @@ savedBetSettings = {
           {/if}
 
           <div class="space-y-1.5">
-            <label for="bet-manager-add" class="text-xs font-semibold text-on-surface-variant/60 ml-1">{m.clan_bets_managers_add_label()}</label>
+            <label for="bet-manager-add" class="text-xs font-semibold text-on-surface-variant ml-1">{m.clan_bets_managers_add_label()}</label>
             <SearchableSelect
               id="bet-manager-add"
               bind:value={roleToAdd}
@@ -1937,21 +1961,21 @@ savedBetSettings = {
               placeholder={m.clan_bets_managers_add_placeholder()}
               disabled={!canManageSettings}
             />
-            <p class="text-2xs text-on-surface-variant/60 mt-1">{m.clan_bets_managers_admin_note()}</p>
+            <p class="text-2xs text-on-surface-variant mt-1">{m.clan_bets_managers_admin_note()}</p>
           </div>
         </section>
 
         <section class="bg-surface-container-low/40 border border-outline-variant/30 p-6 rounded-xl space-y-6">
           <div class="border-b border-outline-variant/15 pb-3">
             <h3 class="text-lg font-semibold flex items-center gap-2"><Papicon icon="Users" size={18} /> {m.clan_bets_shapes_heading()}</h3>
-            <p class="text-xs text-on-surface-variant/70 mt-1">{m.clan_bets_shapes_desc()}</p>
+            <p class="text-xs text-on-surface-variant mt-1">{m.clan_bets_shapes_desc()}</p>
           </div>
 
           <div class="space-y-4">
             <div class="flex items-center justify-between gap-4">
               <div>
                 <span class="text-sm font-medium text-on-surface">{m.clan_bets_allow_pool_title()}</span>
-                <p class="text-xs text-on-surface-variant/70">{m.clan_bets_allow_pool_desc()}</p>
+                <p class="text-xs text-on-surface-variant">{m.clan_bets_allow_pool_desc()}</p>
               </div>
               <ToggleSwitch checked={betSettings.betAllowPool} onToggle={(v) => betSettings.betAllowPool = v} disabled={!canManageSettings} />
             </div>
@@ -1959,7 +1983,7 @@ savedBetSettings = {
             <div class="flex items-center justify-between gap-4">
               <div>
                 <span class="text-sm font-medium text-on-surface">{m.clan_bets_allow_teams_title()}</span>
-                <p class="text-xs text-on-surface-variant/70">{m.clan_bets_allow_teams_desc()}</p>
+                <p class="text-xs text-on-surface-variant">{m.clan_bets_allow_teams_desc()}</p>
               </div>
               <ToggleSwitch checked={betSettings.betAllowTeams} onToggle={(v) => betSettings.betAllowTeams = v} disabled={!canManageSettings} />
             </div>
@@ -1967,14 +1991,14 @@ savedBetSettings = {
             <div class="flex items-center justify-between gap-4">
               <div>
                 <span class="text-sm font-medium text-on-surface">{m.clan_bets_allow_open_title()}</span>
-                <p class="text-xs text-on-surface-variant/70">{m.clan_bets_allow_open_desc()}</p>
+                <p class="text-xs text-on-surface-variant">{m.clan_bets_allow_open_desc()}</p>
               </div>
               <ToggleSwitch checked={betSettings.betAllowOpen} onToggle={(v) => betSettings.betAllowOpen = v} disabled={!canManageSettings} />
             </div>
           </div>
 
           <div class="space-y-1.5">
-            <label for="bet-stake-mode" class="text-xs font-semibold text-on-surface-variant/60 ml-1">{m.clan_bets_stake_mode_label()}</label>
+            <label for="bet-stake-mode" class="text-xs font-semibold text-on-surface-variant ml-1">{m.clan_bets_stake_mode_label()}</label>
             <select
               id="bet-stake-mode"
               bind:value={betSettings.betStakeMode}
@@ -1984,12 +2008,12 @@ savedBetSettings = {
               <option value="PER_MEMBER">{m.clan_bets_stake_mode_per_member()}</option>
               <option value="PER_SIDE">{m.clan_bets_stake_mode_per_side()}</option>
             </select>
-            <p class="text-2xs text-on-surface-variant/60 mt-1">{m.clan_bets_stake_mode_desc()}</p>
+            <p class="text-2xs text-on-surface-variant mt-1">{m.clan_bets_stake_mode_desc()}</p>
           </div>
 
           <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div class="space-y-1.5">
-              <label for="bet-max-participants" class="text-xs font-semibold text-on-surface-variant/60 ml-1">{m.clan_bets_max_participants_label()}</label>
+              <label for="bet-max-participants" class="text-xs font-semibold text-on-surface-variant ml-1">{m.clan_bets_max_participants_label()}</label>
               <input
                 id="bet-max-participants"
                 type="number"
@@ -1999,11 +2023,11 @@ savedBetSettings = {
                 class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold"
                 disabled={!canManageSettings}
               />
-              <p class="text-2xs text-on-surface-variant/60 mt-1">{m.clan_bets_max_participants_desc()}</p>
+              <p class="text-2xs text-on-surface-variant mt-1">{m.clan_bets_max_participants_desc()}</p>
             </div>
 
             <div class="space-y-1.5">
-              <label for="bet-max-sides" class="text-xs font-semibold text-on-surface-variant/60 ml-1">{m.clan_bets_max_sides_label()}</label>
+              <label for="bet-max-sides" class="text-xs font-semibold text-on-surface-variant ml-1">{m.clan_bets_max_sides_label()}</label>
               <input
                 id="bet-max-sides"
                 type="number"
@@ -2013,7 +2037,7 @@ savedBetSettings = {
                 class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold"
                 disabled={!canManageSettings || !betSettings.betAllowTeams}
               />
-              <p class="text-2xs text-on-surface-variant/60 mt-1">{m.clan_bets_max_sides_desc()}</p>
+              <p class="text-2xs text-on-surface-variant mt-1">{m.clan_bets_max_sides_desc()}</p>
             </div>
           </div>
         </section>
@@ -2022,13 +2046,13 @@ savedBetSettings = {
           <div class="flex items-start justify-between gap-4 border-b border-outline-variant/15 pb-3">
             <div>
               <h3 class="text-lg font-semibold flex items-center gap-2"><Papicon icon="Trophy" size={18} /> {m.clan_bets_reward_heading()}</h3>
-              <p class="text-xs text-on-surface-variant/70 mt-1">{m.clan_bets_reward_desc()}</p>
+              <p class="text-xs text-on-surface-variant mt-1">{m.clan_bets_reward_desc()}</p>
             </div>
             <ToggleSwitch checked={betSettings.betSeasonRewardEnabled} onToggle={(v) => betSettings.betSeasonRewardEnabled = v} disabled={!canManageSettings} />
           </div>
 
           <div class="space-y-1.5">
-            <label for="bet-reward-role" class="text-xs font-semibold text-on-surface-variant/60 ml-1">{m.clan_bets_reward_role_label()}</label>
+            <label for="bet-reward-role" class="text-xs font-semibold text-on-surface-variant ml-1">{m.clan_bets_reward_role_label()}</label>
             <SearchableSelect
               id="bet-reward-role"
               bind:value={betSettings.betSeasonRewardRoleId}
@@ -2036,12 +2060,12 @@ savedBetSettings = {
               placeholder={m.clan_bets_reward_role_placeholder()}
               disabled={!canManageSettings || !betSettings.betSeasonRewardEnabled}
             />
-            <p class="text-2xs text-on-surface-variant/60 mt-1">{m.clan_bets_reward_role_desc()}</p>
+            <p class="text-2xs text-on-surface-variant mt-1">{m.clan_bets_reward_role_desc()}</p>
           </div>
 
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div class="space-y-1.5">
-              <label for="bet-reward-1" class="text-xs font-semibold text-on-surface-variant/60 ml-1">{m.clan_bets_reward_top1_label()}</label>
+              <label for="bet-reward-1" class="text-xs font-semibold text-on-surface-variant ml-1">{m.clan_bets_reward_top1_label()}</label>
               <input
                 id="bet-reward-1"
                 type="number"
@@ -2053,7 +2077,7 @@ savedBetSettings = {
               />
             </div>
             <div class="space-y-1.5">
-              <label for="bet-reward-2" class="text-xs font-semibold text-on-surface-variant/60 ml-1">{m.clan_bets_reward_top2_label()}</label>
+              <label for="bet-reward-2" class="text-xs font-semibold text-on-surface-variant ml-1">{m.clan_bets_reward_top2_label()}</label>
               <input
                 id="bet-reward-2"
                 type="number"
@@ -2065,7 +2089,7 @@ savedBetSettings = {
               />
             </div>
             <div class="space-y-1.5">
-              <label for="bet-reward-3" class="text-xs font-semibold text-on-surface-variant/60 ml-1">{m.clan_bets_reward_top3_label()}</label>
+              <label for="bet-reward-3" class="text-xs font-semibold text-on-surface-variant ml-1">{m.clan_bets_reward_top3_label()}</label>
               <input
                 id="bet-reward-3"
                 type="number"
@@ -2077,21 +2101,21 @@ savedBetSettings = {
               />
             </div>
           </div>
-          <p class="text-2xs text-on-surface-variant/60">{m.clan_bets_reward_amounts_desc()}</p>
+          <p class="text-2xs text-on-surface-variant">{m.clan_bets_reward_amounts_desc()}</p>
         </section>
 
         <section class="bg-surface-container-low/40 border border-outline-variant/30 p-6 rounded-xl space-y-6">
           <div class="flex items-start justify-between gap-4 border-b border-outline-variant/15 pb-3">
             <div>
               <h3 class="text-lg font-semibold flex items-center gap-2"><Papicon icon="AlertTriangle" size={18} class="text-warning" /> {m.clan_bets_debt_heading()}</h3>
-              <p class="text-xs text-on-surface-variant/70 mt-1">{m.clan_bets_debt_desc()}</p>
+              <p class="text-xs text-on-surface-variant mt-1">{m.clan_bets_debt_desc()}</p>
             </div>
             <ToggleSwitch checked={betSettings.betAllowDebt} onToggle={(v) => betSettings.betAllowDebt = v} disabled={!canManageSettings} />
           </div>
 
           <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div class="space-y-1.5">
-              <label for="bet-max-debt" class="text-xs font-semibold text-on-surface-variant/60 ml-1">{m.clan_bets_max_debt_label()}</label>
+              <label for="bet-max-debt" class="text-xs font-semibold text-on-surface-variant ml-1">{m.clan_bets_max_debt_label()}</label>
               <input
                 id="bet-max-debt"
                 type="number"
@@ -2101,13 +2125,13 @@ savedBetSettings = {
                 class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold"
                 disabled={!canManageSettings || !betSettings.betAllowDebt}
               />
-              <p class="text-2xs text-on-surface-variant/60 mt-1">{m.clan_bets_max_debt_desc()}</p>
+              <p class="text-2xs text-on-surface-variant mt-1">{m.clan_bets_max_debt_desc()}</p>
             </div>
 
             <div class="flex items-center justify-between gap-4">
               <div>
                 <span class="text-sm font-medium text-on-surface">{m.clan_bets_debt_reset_title()}</span>
-                <p class="text-xs text-on-surface-variant/70">{m.clan_bets_debt_reset_desc()}</p>
+                <p class="text-xs text-on-surface-variant">{m.clan_bets_debt_reset_desc()}</p>
               </div>
               <ToggleSwitch checked={betSettings.betDebtResetOnSeason} onToggle={(v) => betSettings.betDebtResetOnSeason = v} disabled={!canManageSettings || !betSettings.betAllowDebt} />
             </div>
@@ -2115,7 +2139,7 @@ savedBetSettings = {
 
           {#if debts.length > 0}
             <div class="space-y-2 pt-2 border-t border-outline-variant/10">
-              <p class="text-xs font-semibold text-on-surface-variant/60">{m.clan_bets_debt_list_label()}</p>
+              <p class="text-xs font-semibold text-on-surface-variant">{m.clan_bets_debt_list_label()}</p>
               {#each debts as debt (debt.userId)}
                 <div class="flex items-center justify-between gap-4 bg-surface-container-high/30 rounded-lg px-4 py-2.5">
                   <span class="text-sm text-on-surface truncate">{debt.displayName ?? debt.userId}</span>
@@ -2123,7 +2147,7 @@ savedBetSettings = {
                     <span class="text-sm font-bold text-warning text-right">
                       {debt.amount.toLocaleString(dateLocale())} pts
                       {#if debt.engaged > 0}
-                        <span class="block text-2xs font-medium text-on-surface-variant/60">
+                        <span class="block text-2xs font-medium text-on-surface-variant">
                           {m.clan_bets_debt_engaged_hint({ amount: debt.engaged.toLocaleString(dateLocale()) })}
                         </span>
                       {/if}
@@ -2131,7 +2155,7 @@ savedBetSettings = {
                     <button
                       type="button"
                       class="text-xs font-semibold text-error hover:underline cursor-pointer disabled:opacity-40"
-                      disabled={!canManageSettings}
+                      use:explainDisabled={(!canManageSettings) ? m.common_reason_no_permission() : ''}
                       onclick={() => openDebtClear(debt)}
                     >
                       {m.clan_bets_debt_clear()}
@@ -2140,13 +2164,13 @@ savedBetSettings = {
                 </div>
               {/each}
               {#if debtCount > debts.length}
-                <p class="text-2xs text-on-surface-variant/60 italic pt-1">
+                <p class="text-2xs text-on-surface-variant italic pt-1">
                   {m.clan_bets_list_truncated({ shown: debts.length, total: debtCount })}
                 </p>
               {/if}
             </div>
           {:else}
-            <p class="text-xs text-on-surface-variant/60 pt-2 border-t border-outline-variant/10">{m.clan_bets_debt_empty()}</p>
+            <p class="text-xs text-on-surface-variant pt-2 border-t border-outline-variant/10">{m.clan_bets_debt_empty()}</p>
           {/if}
         </section>
 
@@ -2156,7 +2180,7 @@ savedBetSettings = {
           {#if betsLoading}
             <Skeleton height="160px" />
           {:else if bets.length === 0}
-            <p class="text-xs text-on-surface-variant/60">{m.clan_bets_history_empty()}</p>
+            <p class="text-xs text-on-surface-variant">{m.clan_bets_history_empty()}</p>
           {:else}
             <div class="space-y-2">
               {#each bets as bet (bet.id)}
@@ -2167,7 +2191,7 @@ savedBetSettings = {
                       {betStatusLabels[bet.status] ?? bet.status}
                     </span>
                   </div>
-                  <div class="text-xs text-on-surface-variant/70 space-y-0.5">
+                  <div class="text-xs text-on-surface-variant space-y-0.5">
                     {#each bet.sides as side (side.id)}
                       <p class:font-semibold={side.won} class:text-primary={side.won}>
                         {#if side.won}<Papicon icon="Crown" size={12} class="inline-block align-[-0.2em] mr-0.5" />{/if}{side.label}{side.capacity ? ` (${side.members.length}/${side.capacity})` : ''} ·
@@ -2181,7 +2205,7 @@ savedBetSettings = {
                       </p>
                     {/each}
                   </div>
-                  <p class="text-2xs text-on-surface-variant/60">
+                  <p class="text-2xs text-on-surface-variant">
                     {m.clan_bets_history_line({
                       stake: bet.stake.toLocaleString(dateLocale()),
                       pot: bet.pot.toLocaleString(dateLocale()),
@@ -2192,7 +2216,7 @@ savedBetSettings = {
                 </div>
               {/each}
               {#if betCount > bets.length}
-                <p class="text-2xs text-on-surface-variant/60 italic pt-1">
+                <p class="text-2xs text-on-surface-variant italic pt-1">
                   {m.clan_bets_list_truncated({ shown: bets.length, total: betCount })}
                 </p>
               {/if}
@@ -2285,7 +2309,7 @@ savedBetSettings = {
 
       <form onsubmit={(e) => { e.preventDefault(); handleSaveClan(); }} class="space-y-4">
         <div class="space-y-1.5">
-          <label for="clan-name" class="text-xs font-semibold text-on-surface-variant/60 ml-1">{m.clan_name_label()}</label>
+          <label for="clan-name" class="text-xs font-semibold text-on-surface-variant ml-1">{m.clan_name_label()}</label>
           <input
             id="clan-name"
             type="text"
@@ -2298,7 +2322,7 @@ savedBetSettings = {
         </div>
 
         <div class="space-y-1.5">
-          <label for="clan-desc" class="text-xs font-semibold text-on-surface-variant/60 ml-1">{m.clan_desc_label()}</label>
+          <label for="clan-desc" class="text-xs font-semibold text-on-surface-variant ml-1">{m.clan_desc_label()}</label>
           <textarea
             id="clan-desc"
             bind:value={formDescription}
@@ -2309,7 +2333,7 @@ savedBetSettings = {
         </div>
 
         <div class="space-y-1.5">
-          <label for="clan-role" class="text-xs font-semibold text-on-surface-variant/60 ml-1">{m.clan_role_label()}</label>
+          <label for="clan-role" class="text-xs font-semibold text-on-surface-variant ml-1">{m.clan_role_label()}</label>
           <SearchableSelect
             id="clan-role"
             bind:value={formRoleId}
@@ -2320,7 +2344,7 @@ savedBetSettings = {
         </div>
 
         <div class="space-y-1.5">
-          <label for="clan-channel" class="text-xs font-semibold text-on-surface-variant/60 ml-1">{m.clan_general_channel_label()}</label>
+          <label for="clan-channel" class="text-xs font-semibold text-on-surface-variant ml-1">{m.clan_general_channel_label()}</label>
           <SearchableSelect
             id="clan-channel"
             bind:value={formGeneralChannelId}
@@ -2331,7 +2355,7 @@ savedBetSettings = {
         </div>
 
         <div class="space-y-1.5">
-          <label for="clan-leader-role" class="text-xs font-semibold text-on-surface-variant/60 ml-1">{m.clan_leader_role_label()}</label>
+          <label for="clan-leader-role" class="text-xs font-semibold text-on-surface-variant ml-1">{m.clan_leader_role_label()}</label>
           <SearchableSelect
             id="clan-leader-role"
             bind:value={formLeaderRoleId}
@@ -2451,7 +2475,7 @@ savedBetSettings = {
 
       <div class="space-y-4">
         <div class="space-y-1.5">
-          <label for="confirm-word" class="text-xs font-semibold text-on-surface-variant/60 ml-1">
+          <label for="confirm-word" class="text-xs font-semibold text-on-surface-variant ml-1">
             {m.clan_type_to_confirm_label({ word: confirmWordFor(confirmActionType) })}
           </label>
           <input

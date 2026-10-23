@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { explainDisabled } from '../lib/actions/explainDisabled';
   import { onMount } from 'svelte';
   import Papicon from '../lib/components/Papicon.svelte';
   import ModulePage from '../lib/components/ModulePage.svelte';
@@ -394,7 +395,7 @@
     FAILED: { label: () => m.wf_exec_status_failed(), color: 'bg-error/15 text-error' },
     WAITING: { label: () => m.wf_exec_status_waiting(), color: 'bg-warning/15 text-warning' },
     RUNNING: { label: () => m.wf_exec_status_running(), color: 'bg-sky-500/15 text-sky-700 dark:text-sky-300' },
-    CANCELLED: { label: () => m.wf_exec_status_cancelled(), color: 'bg-surface-container-highest text-on-surface-variant/70' },
+    CANCELLED: { label: () => m.wf_exec_status_cancelled(), color: 'bg-surface-container-highest text-on-surface-variant' },
   };
 </script>
 
@@ -416,7 +417,8 @@
           >{m.wf_back()}</button>
           <button
             onclick={save}
-            disabled={saving || hasBlockingIssue(issues) || graph.nodes.length === 0}
+            disabled={saving || hasBlockingIssue(issues)}
+            use:explainDisabled={(graph.nodes.length === 0) ? m.common_reason_select_one() : ''}
             class="px-5 py-2.5 rounded-xl text-xs font-semibold bg-primary text-on-primary hover:opacity-90 transition-all disabled:opacity-40 flex items-center gap-2"
           >
             <Papicon icon={saving ? 'Loader' : 'Check'} size={14} class={saving ? 'animate-spin' : ''} />
@@ -458,7 +460,7 @@
     <div class="space-y-5">
       <div class="space-y-1">
         <h2 class="text-sm font-bold text-on-surface">{m.wf_start_title()}</h2>
-        <p class="text-xs text-on-surface-variant/70">
+        <p class="text-xs text-on-surface-variant">
           {m.wf_start_desc()}
         </p>
       </div>
@@ -476,7 +478,7 @@
             </span>
             <span class="min-w-0 space-y-1">
               <span class="block text-sm font-semibold text-on-surface">{labels?.name()}</span>
-              <span class="block text-xs text-on-surface-variant/70 leading-snug">{labels?.description()}</span>
+              <span class="block text-xs text-on-surface-variant leading-snug">{labels?.description()}</span>
             </span>
           </button>
         {/each}
@@ -486,12 +488,12 @@
           onclick={() => openEditor('', { nodes: [], edges: [] })}
           class="flex items-start gap-3 p-4 rounded-2xl text-left border border-dashed border-outline-variant/30 hover:border-primary/40 transition-all"
         >
-          <span class="p-2.5 rounded-xl bg-surface-container-highest text-on-surface-variant/70 shrink-0">
+          <span class="p-2.5 rounded-xl bg-surface-container-highest text-on-surface-variant shrink-0">
             <Papicon icon="Plus" size={16} />
           </span>
           <span class="min-w-0 space-y-1">
             <span class="block text-sm font-semibold text-on-surface">{m.wf_start_blank()}</span>
-            <span class="block text-xs text-on-surface-variant/70 leading-snug">{m.wf_start_blank_desc()}</span>
+            <span class="block text-xs text-on-surface-variant leading-snug">{m.wf_start_blank_desc()}</span>
           </span>
         </button>
       </div>
@@ -569,7 +571,7 @@
                       : 'bg-success/15 text-success'}"
                 >{stepStatus}</span>
               </div>
-              <p class="text-2xs text-on-surface-variant/70">{m.wf_replay_duration({ n: replayStep.durationMs })}</p>
+              <p class="text-2xs text-on-surface-variant">{m.wf_replay_duration({ n: replayStep.durationMs })}</p>
               {#if replayStep.error}
                 <p class="px-2.5 py-1.5 rounded-lg bg-error/10 text-2xs text-error border border-error/20">{replayStep.error}</p>
               {/if}
@@ -581,9 +583,9 @@
             ] as slot (slot.label)}
               {@const entries = Object.entries(slot.values ?? {})}
               <div class="p-3 rounded-2xl bg-surface-container-high/50 border border-outline-variant/10 space-y-2">
-                <h3 class="text-xs font-semibold text-on-surface-variant/70">{slot.label}</h3>
+                <h3 class="text-xs font-semibold text-on-surface-variant">{slot.label}</h3>
                 {#if entries.length === 0}
-                  <p class="text-2xs text-on-surface-variant/70">{m.wf_replay_no_value()}</p>
+                  <p class="text-2xs text-on-surface-variant">{m.wf_replay_no_value()}</p>
                 {:else}
                   <dl class="space-y-1.5">
                     {#each entries as [key, value] (key)}
@@ -606,7 +608,7 @@
     <div class="space-y-4">
       <div class="flex flex-wrap items-end gap-3">
         <div class="flex-1 min-w-56 space-y-1.5">
-          <label for="wf-name" class="text-xs font-semibold text-on-surface-variant/70">{m.wf_name()}</label>
+          <label for="wf-name" class="text-xs font-semibold text-on-surface-variant">{m.wf_name()}</label>
           <input
             id="wf-name"
             bind:value={form.name}
@@ -626,13 +628,13 @@
             disabled={advancedOnly}
             class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all disabled:opacity-30 {tab === 'steps'
               ? 'bg-primary text-on-primary'
-              : 'text-on-surface-variant/70 hover:text-on-surface'}"
+              : 'text-on-surface-variant hover:text-on-surface'}"
           >{m.wf_tab_steps()}</button>
           <button
             onclick={() => (tab = 'graph')}
             class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all {tab === 'graph'
               ? 'bg-primary text-on-primary'
-              : 'text-on-surface-variant/70 hover:text-on-surface'}"
+              : 'text-on-surface-variant hover:text-on-surface'}"
           >{m.wf_tab_graph()}</button>
         </div>
       </div>
@@ -681,13 +683,13 @@
               onclick={() => (statusFilter = filter.key)}
               class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all {statusFilter === filter.key
                 ? 'bg-primary text-on-primary shadow-sm'
-                : 'text-on-surface-variant/70 hover:text-on-surface'}"
+                : 'text-on-surface-variant hover:text-on-surface'}"
             >{filter.label} ({filter.count})</button>
           {/each}
         </div>
 
         <div class="relative min-w-64">
-          <Papicon icon="Search" size={14} class="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant/70" />
+          <Papicon icon="Search" size={14} class="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant" />
           <input
             type="text"
             bind:value={searchFilter}
@@ -699,14 +701,14 @@
 
       {#if filteredWorkflows.length === 0}
         <div class="p-10 text-center rounded-2xl bg-surface-container-high/30 space-y-3">
-          <div class="p-3 rounded-2xl bg-surface-container-highest/60 w-fit mx-auto text-on-surface-variant/70">
+          <div class="p-3 rounded-2xl bg-surface-container-highest/60 w-fit mx-auto text-on-surface-variant">
             <Papicon icon="Workflow" size={24} />
           </div>
           <div class="space-y-1">
             <p class="text-sm font-semibold text-on-surface">
               {workflows.length === 0 ? m.wf_empty_title() : m.wf_no_result()}
             </p>
-            <p class="text-xs text-on-surface-variant/70">
+            <p class="text-xs text-on-surface-variant">
               {workflows.length === 0 ? m.wf_empty_desc() : m.wf_try_other()}
             </p>
           </div>
@@ -725,18 +727,18 @@
               <div class="flex items-start justify-between gap-3">
                 <div class="min-w-0 space-y-1">
                   <h3 class="text-sm font-bold text-on-surface truncate">{workflow.name}</h3>
-                  <p class="flex items-center gap-1.5 text-xs text-on-surface-variant/70">
+                  <p class="flex items-center gap-1.5 text-xs text-on-surface-variant">
                     <Papicon icon={trigger?.icon ?? 'Warning'} size={11} class="{trigger ? 'text-primary' : 'text-warning'} shrink-0" />
                     {trigger?.sentence ?? m.wf_trigger_unknown({ type: workflow.triggerType })}
                   </p>
                   {#if workflow.description}
-                    <p class="text-2xs text-on-surface-variant/70 line-clamp-2">{workflow.description}</p>
+                    <p class="text-2xs text-on-surface-variant line-clamp-2">{workflow.description}</p>
                   {/if}
                 </div>
                 <span
                   class="px-2.5 py-1 rounded-full text-2xs font-bold shrink-0 {workflow.enabled
                     ? 'bg-success/15 text-success border border-success/30'
-                    : 'bg-surface-container-highest text-on-surface-variant/70'}"
+                    : 'bg-surface-container-highest text-on-surface-variant'}"
                 >{workflow.enabled ? m.wf_status_active() : m.wf_status_paused()}</span>
               </div>
 
@@ -749,7 +751,7 @@
                 </p>
               {/if}
 
-              <div class="flex flex-wrap items-center gap-3 text-2xs text-on-surface-variant/70 pt-1 border-t border-outline-variant/10">
+              <div class="flex flex-wrap items-center gap-3 text-2xs text-on-surface-variant pt-1 border-t border-outline-variant/10">
                 <span>{m.wf_runs({ n: workflow.runCount })}</span>
                 {#if workflow.runCount > 0}
                   <span class="text-success font-medium">{m.wf_success_rate({ n: successRate(workflow) })}</span>
@@ -784,7 +786,7 @@
                     >{m.wf_duplicate()}</button>
                     <button
                       onclick={() => toggle(workflow)}
-                      class="px-3 py-1.5 rounded-xl text-xs font-medium bg-surface-container-highest text-on-surface-variant/70 hover:text-on-surface transition-all"
+                      class="px-3 py-1.5 rounded-xl text-xs font-medium bg-surface-container-highest text-on-surface-variant hover:text-on-surface transition-all"
                     >{workflow.enabled ? m.wf_pause() : m.wf_activate()}</button>
                   {/if}
                   {#if canDelete}
@@ -806,7 +808,7 @@
           <div class="space-y-0.5">
             <h2 class="text-sm font-bold text-on-surface">{m.wf_executions()}</h2>
             {#if executions.length > 0}
-              <p class="text-2xs text-on-surface-variant/70">{m.wf_executions_hint()}</p>
+              <p class="text-2xs text-on-surface-variant">{m.wf_executions_hint()}</p>
             {/if}
           </div>
           <div class="flex flex-wrap items-center gap-2">
@@ -835,7 +837,7 @@
           </div>
         </div>
         {#if executions.length === 0}
-          <p class="text-xs text-on-surface-variant/70">
+          <p class="text-xs text-on-surface-variant">
             {execStatus || execWorkflow ? m.wf_executions_empty_filtered() : m.wf_executions_empty()}
           </p>
         {:else}
@@ -857,8 +859,8 @@
                   {#if execution.resumeAt && execution.status === 'WAITING'}
                     <span class="text-warning">{m.wf_exec_resume_at({ date: formatDate(execution.resumeAt) })}</span>
                   {/if}
-                  <span class="text-on-surface-variant/70 ml-auto">{formatDate(execution.startedAt)}</span>
-                  <Papicon icon="ChevronRight" size={12} class="text-on-surface-variant/70 shrink-0" />
+                  <span class="text-on-surface-variant ml-auto">{formatDate(execution.startedAt)}</span>
+                  <Papicon icon="ChevronRight" size={12} class="text-on-surface-variant shrink-0" />
                   {#if execution.error}
                     <span class="basis-full text-2xs leading-snug text-error line-clamp-2">
                       {#if failedAt}<strong>{m.wf_exec_failed_step({ step: failedAt })}</strong> {/if}{execution.error}

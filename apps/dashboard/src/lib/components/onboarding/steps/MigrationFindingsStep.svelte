@@ -93,7 +93,7 @@
 >
   {#if loading}
     <div class="space-y-3" aria-live="polite">
-      <p class="flex items-center gap-2 text-body-sm text-on-surface-variant/60">
+      <p class="flex items-center gap-2 text-body-sm text-on-surface-variant">
         <Papicon icon="radar" size={14} class="text-primary animate-pulse" />
         {m.onb_migration_scanning()}
       </p>
@@ -116,7 +116,7 @@
             {#if finding.entities.length}
               <p class="mt-2 flex flex-wrap gap-1.5">
                 {#each finding.entities.slice(0, 6) as entity (entity.id)}
-                  <span class="rounded-md bg-surface-container/70 px-1.5 py-0.5 text-2xs text-on-surface-variant/60">
+                  <span class="rounded-md bg-surface-container/70 px-1.5 py-0.5 text-2xs text-on-surface-variant">
                     {entity.name}
                   </span>
                 {/each}
@@ -142,7 +142,7 @@
   {#if manualSteps.length > 0}
     <section class="mt-8">
       <h2 class="text-body-sm font-semibold text-on-surface">{m.onb_migration_manual_title()}</h2>
-      <p class="mt-1 text-xs text-on-surface-variant/50 leading-relaxed">
+      <p class="mt-1 text-xs text-on-surface-variant leading-relaxed">
         {m.onb_migration_manual_hint()}
       </p>
 
@@ -152,7 +152,7 @@
             <Papicon icon="alert-triangle" size={13} class="mt-0.5 shrink-0 text-warning/70" />
             <div class="min-w-0">
               <p class="text-body-sm font-medium text-on-surface-variant/80">{step.label}</p>
-              <p class="mt-0.5 text-xs text-on-surface-variant/50 leading-relaxed">{step.why}</p>
+              <p class="mt-0.5 text-xs text-on-surface-variant leading-relaxed">{step.why}</p>
             </div>
           </li>
         {/each}
@@ -164,7 +164,7 @@
     <button
       type="button"
       onclick={skip}
-      class="text-body-sm font-medium text-on-surface-variant/50 hover:text-on-surface transition-colors"
+      class="text-body-sm font-medium text-on-surface-variant hover:text-on-surface transition-colors"
     >
       Passer
     </button>

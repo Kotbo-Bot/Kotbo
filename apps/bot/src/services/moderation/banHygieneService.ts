@@ -23,7 +23,7 @@ import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
 import { isGuildActivated } from '../../utils/activation.js';
 import { queueAuditLog } from '../../utils/auditLogger.js';
-import { createNotification } from '../staff/staffLeadershipService.js';
+import { notifyMany } from '../notifications/notifyService.js';
 
 const SCAN_PAGE_SIZE = 1000;
 const MAX_LISTED_IN_EMBED = 15;
@@ -148,19 +148,14 @@ async function notifyStaff(
     where: { guildId, grade: { in: ['Manager', 'Admin', 'Administrateur', 'Fondateur', 'Direction'] } },
   }).catch(() => []);
 
-  await Promise.all(
-    managers.map((m) =>
-      createNotification(
-        guildId,
-        m.userId,
-        '🧹 Comptes bannis supprimés détectés',
-        `${fresh.length} compte(s) banni(s) sont des comptes supprimés par Discord. La liste de bans peut être nettoyée.`,
-        'INFO',
-        '/sanctions',
-        false,
-      ).catch(() => null),
-    ),
-  );
+  await notifyMany(managers.map((m) => m.userId), {
+    guildId,
+    kind: 'moderation.ban_hygiene',
+    title: '🧹 Comptes bannis supprimés détectés',
+    message: `${fresh.length} compte(s) banni(s) sont des comptes supprimés par Discord. La liste de bans peut être nettoyée.`,
+    link: '/sanctions',
+    dm: false,
+  });
 }
 
 /** Cron quotidien : scanne toutes les guildes actives avec l'hygiène activée. */

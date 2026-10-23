@@ -43,7 +43,7 @@
     <div class="sticky top-0 p-4 bg-surface-container border-b border-outline-variant/15 space-y-3">
       <div class="flex items-center justify-between">
         <h3 class="text-sm font-bold text-on-surface">{m.wf_step_picker_title()}</h3>
-        <button type="button" onclick={onClose} class="p-1.5 rounded-lg text-on-surface-variant/70 hover:text-on-surface" aria-label={m.wf_close()}>
+        <button type="button" onclick={onClose} class="p-1.5 rounded-lg text-on-surface-variant hover:text-on-surface" aria-label={m.wf_close()}>
           <Papicon icon="Cross" size={14} />
         </button>
       </div>
@@ -58,7 +58,7 @@
     <div class="p-4 space-y-5">
       {#each groups as group (group)}
         <section class="space-y-2">
-          <h4 class="text-xs font-semibold text-on-surface-variant/70">
+          <h4 class="text-xs font-semibold text-on-surface-variant">
             {ACTION_GROUP_LABELS[group]}
           </h4>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -79,7 +79,7 @@
       {/each}
 
       <section class="space-y-2 pt-2 border-t border-outline-variant/15">
-        <h4 class="text-xs font-semibold text-on-surface-variant/70">{m.wf_group_organize()}</h4>
+        <h4 class="text-xs font-semibold text-on-surface-variant">{m.wf_group_organize()}</h4>
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
           <button
             type="button"
@@ -89,7 +89,7 @@
             <span class="p-2 rounded-xl bg-warning/10 text-warning shrink-0"><Papicon icon="GitBranch" size={14} /></span>
             <span class="min-w-0">
               <span class="block text-xs font-medium text-on-surface">{m.wf_add_condition()}</span>
-              <span class="block text-2xs text-on-surface-variant/70">{m.wf_add_condition_desc()}</span>
+              <span class="block text-2xs text-on-surface-variant">{m.wf_add_condition_desc()}</span>
             </span>
           </button>
           <button
@@ -100,7 +100,7 @@
             <span class="p-2 rounded-xl bg-sky-500/10 text-sky-700 dark:text-sky-300 shrink-0"><Papicon icon="Clock" size={14} /></span>
             <span class="min-w-0">
               <span class="block text-xs font-medium text-on-surface">{m.wf_add_wait()}</span>
-              <span class="block text-2xs text-on-surface-variant/70">{m.wf_add_wait_desc()}</span>
+              <span class="block text-2xs text-on-surface-variant">{m.wf_add_wait_desc()}</span>
             </span>
           </button>
         </div>

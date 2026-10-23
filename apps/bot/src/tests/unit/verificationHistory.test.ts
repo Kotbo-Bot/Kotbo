@@ -44,6 +44,7 @@ for (const suffix of ['../../utils/db.ts', '../../utils/db.js']) {
     default: mockDb,
     prisma: mockDb,
     prismaRead: mockDb,
+    upsertRetryingRace: (upsert: () => Promise<unknown>) => upsert(),
   }));
 }
 

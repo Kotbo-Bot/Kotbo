@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { explainDisabled } from '../lib/actions/explainDisabled';
   import { m } from '../lib/i18n';
   import { onMount, onDestroy, untrack } from 'svelte';
   import { router } from 'tinro';
@@ -35,7 +36,8 @@
   import { confirmDialog } from '../lib/stores/confirmDialog.svelte';
   import { downloadSingleSheetXlsx } from '../lib/xlsxExport';
 
-  const sanctionTabs = ['sanctions', 'settings'] as const;
+  // « appeals » est rendu par la page enveloppe (security/Sanctions) : il figure ici pour que l'onglet existe.
+  const sanctionTabs = ['sanctions', 'settings', 'appeals'] as const;
   let activeTab = $state('sanctions');
 
   $effect(() => {
@@ -1292,7 +1294,7 @@
               </td>
               <td class="px-4 py-4 text-xs">
                 <button 
-                  disabled={!canOpenMemberCase}
+                  use:explainDisabled={(!canOpenMemberCase) ? m.common_reason_no_permission() : ''}
                   onclick={() => openCaseModal(entry.targetUserId, entry.targetTag)}
                   class="hover:text-primary transition-colors font-bold text-left"
                 >
@@ -1301,7 +1303,7 @@
               </td>
               <td class="px-4 py-4 text-xs">
                 <button 
-                  disabled={!canOpenMemberCase}
+                  use:explainDisabled={(!canOpenMemberCase) ? m.common_reason_no_permission() : ''}
                   onclick={() => openCaseModal(entry.moderatorUserId, entry.moderatorTag)}
                   class="hover:text-primary transition-colors font-bold text-left"
                 >
@@ -1366,7 +1368,7 @@
             <div class="space-y-4" data-guide="sanctions-moderator-role">
               <div>
                 <p class="text-sm font-semibold text-on-surface">{m.sc_mod_role()}</p>
-                <p class="text-xs text-on-surface-variant/70 mt-1">{m.sc_mod_role_desc()}</p>
+                <p class="text-xs text-on-surface-variant mt-1">{m.sc_mod_role_desc()}</p>
               </div>
               <SearchableSelect bind:value={guildSettings.moderatorRoleId} options={availableRoles.map(r => ({ id: r.id, name: `@${r.name}` }))} placeholder={m.sc_no_role_ph()} className="w-full rounded-lg bg-surface-container-high/40 border border-outline-variant/10 px-4 py-3 text-sm text-on-surface focus:ring-2 focus:ring-primary/30 transition-all" />
             </div>
@@ -1374,7 +1376,7 @@
             <div class="space-y-4" data-guide="sanctions-alert-channel">
               <div>
                 <p class="text-sm font-semibold text-on-surface">{m.sc_alert_channel()}</p>
-                <p class="text-xs text-on-surface-variant/70 mt-1">{m.sc_alert_channel_desc()}</p>
+                <p class="text-xs text-on-surface-variant mt-1">{m.sc_alert_channel_desc()}</p>
               </div>
               <SearchableSelect bind:value={guildSettings.sanctionAlertChannelId} options={(dashboardStore.state.discordChannels || []).map(c => ({ id: c.id, name: channelDisplayName(c) }))} placeholder={m.sc_alert_channel_ph()} className="w-full rounded-lg bg-surface-container-high/40 border border-outline-variant/10 px-4 py-3 text-sm text-on-surface focus:ring-2 focus:ring-primary/30 transition-all" />
             </div>
@@ -1383,7 +1385,7 @@
               <div class="flex items-center justify-between">
                 <div>
                   <p class="text-sm font-semibold text-on-surface">{m.sc_propagation()}</p>
-                  <p class="text-xs text-on-surface-variant/70 mt-1">{m.sc_propagation_desc()}</p>
+                  <p class="text-xs text-on-surface-variant mt-1">{m.sc_propagation_desc()}</p>
                 </div>
                  <ToggleSwitch
                   checked={guildSettings.propagateSanctions}
@@ -1398,7 +1400,7 @@
               <div class="flex items-center justify-between">
                 <div>
                   <p class="text-sm font-semibold text-on-surface">{m.sc_reports()}</p>
-                  <p class="text-xs text-on-surface-variant/70 mt-1">{m.sc_reports_desc()}</p>
+                  <p class="text-xs text-on-surface-variant mt-1">{m.sc_reports_desc()}</p>
                 </div>
                 <ToggleSwitch
                   checked={guildSettings.sanctionReportEnabled}
@@ -1411,7 +1413,7 @@
               <div class="flex items-center justify-between">
                 <div>
                   <p class="text-sm font-semibold text-on-surface">{m.sc_skip_bots()}</p>
-                  <p class="text-xs text-on-surface-variant/70 mt-1">
+                  <p class="text-xs text-on-surface-variant mt-1">
                     {m.sc_skip_bots_desc()}
                   </p>
                 </div>
@@ -1428,7 +1430,7 @@
               <div class="flex items-center justify-between">
                 <div>
                   <p class="text-sm font-semibold text-on-surface">{m.sc_dm_appeal()}</p>
-                  <p class="text-xs text-on-surface-variant/70 mt-1">
+                  <p class="text-xs text-on-surface-variant mt-1">
                     {m.sc_dm_appeal_desc()}
                     {m.sc_same_setting()}
                   </p>
@@ -1465,7 +1467,7 @@
       <section class="section-card-flush font-inter mt-8">
         <div class="px-6 py-5 border-b border-outline-variant">
           <h3 class="text-lg font-semibold">{m.sc_scales_title()}</h3>
-          <p class="text-xs text-on-surface-variant/70 mt-1">{m.sc_scales_desc()}</p>
+          <p class="text-xs text-on-surface-variant mt-1">{m.sc_scales_desc()}</p>
         </div>
 
         <div class="premium-card p-10 rounded-xl">
@@ -1473,7 +1475,7 @@
             <!-- Left panel: scales list -->
             <div class="w-full lg:w-1/3 space-y-4 border-r border-outline-variant/10 lg:pr-8">
               <div class="flex items-center justify-between">
-                <span class="text-xs font-semibold text-on-surface-variant/60">{m.sc_my_scales()}</span>
+                <span class="text-xs font-semibold text-on-surface-variant">{m.sc_my_scales()}</span>
                 {#if !showAddTableField}
                   <button 
                     onclick={() => showAddTableField = true}
@@ -1499,7 +1501,7 @@
                   </button>
                   <button 
                     onclick={() => { showAddTableField = false; newTableName = ''; }}
-                    class="px-2 text-on-surface-variant/70 text-xs"
+                    class="px-2 text-on-surface-variant text-xs"
                   >
                     {m.common_cancel()}
                   </button>
@@ -1537,7 +1539,7 @@
                 <div class="h-full min-h-[200px] flex flex-col items-center justify-center text-center space-y-2">
                   <Papicon icon="alert-triangle" size={32} class="text-on-surface-variant/40 animate-pulse" />
                   <p class="text-sm font-bold text-on-surface-variant">{m.sc_no_scales()}</p>
-                  <p class="text-xs text-on-surface-variant/60">{m.sc_add_scale_hint()}</p>
+                  <p class="text-xs text-on-surface-variant">{m.sc_add_scale_hint()}</p>
                 </div>
               {:else}
                 {@const currentTable = guildSettings.sanctionTables[selectedTableIndex]}
@@ -1548,12 +1550,12 @@
                         bind:value={currentTable.name} 
                         className="text-lg font-semibold bg-transparent border-none text-on-surface focus:ring-0 px-0 py-0 w-60"
                       />
-                      <span class="text-xs text-on-surface-variant/60 italic font-medium">{m.sc_click_rename()}</span>
+                      <span class="text-xs text-on-surface-variant italic font-medium">{m.sc_click_rename()}</span>
                     </div>
 
                     <!-- Exporter -->
                     <div class="flex items-center gap-2">
-                      <span class="text-xs font-semibold text-on-surface-variant/60 mr-2">{m.sc_export_scale()}</span>
+                      <span class="text-xs font-semibold text-on-surface-variant mr-2">{m.sc_export_scale()}</span>
                       <button 
                         onclick={() => exportTableToImage(currentTable)}
                         class="p-2 rounded-xl bg-surface-container-high/40 hover:bg-primary/10 hover:text-primary transition-all text-on-surface-variant flex items-center justify-center cursor-pointer"
@@ -1590,7 +1592,7 @@
                     <div class="overflow-x-auto rounded-lg border border-outline-variant/10 bg-surface-container-low/20">
                       <table class="w-full text-left border-collapse font-inter text-xs">
                         <thead>
-                          <tr class="bg-surface-container-high/40 text-xs font-semibold text-on-surface-variant/70 border-b border-outline-variant/15 select-none">
+                          <tr class="bg-surface-container-high/40 text-xs font-semibold text-on-surface-variant border-b border-outline-variant/15 select-none">
                             <th class="py-3 px-4 w-20 text-center border-r border-outline-variant/10">{m.sc_col_tier()}</th>
                             <th class="py-3 px-4 w-48 border-r border-outline-variant/10">{m.sc_col_action()}</th>
                             <th class="py-3 px-4 w-48 border-r border-outline-variant/10">{m.sc_col_duration()}</th>
@@ -1729,13 +1731,13 @@
           <div>
             <p class="text-xs font-semibold text-primary">{m.sc_sanction_file()}</p>
             <h3 id="modal-title" class="text-2xl font-semibold text-on-surface mt-1">{typeLabel(selectedSanction.type)}</h3>
-            <p class="text-xs font-bold text-on-surface-variant/60 mt-1">
+            <p class="text-xs font-bold text-on-surface-variant mt-1">
               {m.sc_applied_to()}
-              <button disabled={!canOpenMemberCase} onclick={() => openCaseModal(selectedSanction.targetUserId, selectedSanction.targetTag)} class="text-on-surface transition-colors font-semibold enabled:hover:text-primary disabled:cursor-default">
+              <button use:explainDisabled={(!canOpenMemberCase) ? m.common_reason_no_permission() : ''} onclick={() => openCaseModal(selectedSanction.targetUserId, selectedSanction.targetTag)} class="text-on-surface transition-colors font-semibold enabled:hover:text-primary disabled:cursor-default">
                 @{selectedSanction.targetTag}
               </button>
               {m.sc_by()}
-              <button disabled={!canOpenMemberCase} onclick={() => openCaseModal(selectedSanction.moderatorUserId, selectedSanction.moderatorTag)} class="text-on-surface transition-colors font-semibold enabled:hover:text-primary disabled:cursor-default">
+              <button use:explainDisabled={(!canOpenMemberCase) ? m.common_reason_no_permission() : ''} onclick={() => openCaseModal(selectedSanction.moderatorUserId, selectedSanction.moderatorTag)} class="text-on-surface transition-colors font-semibold enabled:hover:text-primary disabled:cursor-default">
                 @{selectedSanction.moderatorTag}
               </button>
             </p>
@@ -1798,7 +1800,7 @@
             {#if selectedReport.additionalNotes}
               <div class="space-y-3">
                 <p class="text-xs font-medium text-on-surface-variant/40 px-1">{m.sc_additional_notes()}</p>
-                <p class="text-sm text-on-surface-variant/70 leading-relaxed bg-surface-container-low p-4 rounded-lg border border-outline-variant/10">{selectedReport.additionalNotes}</p>
+                <p class="text-sm text-on-surface-variant leading-relaxed bg-surface-container-low p-4 rounded-lg border border-outline-variant/10">{selectedReport.additionalNotes}</p>
               </div>
             {/if}
 
@@ -1806,7 +1808,7 @@
               <p class="text-2xs font-bold text-on-surface-variant/30 text-center">
                 {m.sc_report_by()}
                 <button 
-                  disabled={!canOpenMemberCase}
+                  use:explainDisabled={(!canOpenMemberCase) ? m.common_reason_no_permission() : ''}
                   onclick={() => openCaseModal(selectedReport.createdByUserId, selectedReport.createdByTag || selectedReport.createdByUserId)}
                   class="hover:text-primary transition-colors font-bold"
                 >

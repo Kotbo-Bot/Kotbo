@@ -1,6 +1,9 @@
 // En tête, avant tout le reste : en démonstration, le faux back-end doit
 // remplacer `fetch` avant que le store de session ne lise la sienne.
 import './lib/demo/install'
+// Avant les stores : le serveur demande par un lien (?guild=) doit etre pose
+// avant que la session ne lise le serveur courant.
+import './lib/guildFromUrl'
 import { mount } from 'svelte'
 import './app.css'
 import App from './App.svelte'

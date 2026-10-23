@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { explainDisabled } from '../../lib/actions/explainDisabled';
+  import { m } from '../../lib/i18n';
   /**
    * Console d'annonces globales.
    *
@@ -182,7 +184,7 @@
       mediaLibrary = media;
       templates = tpl.templates;
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Erreur de chargement');
+      toast.error(err instanceof Error ? err.message : 'Impossible de charger. Réessaie.');
     } finally {
       loading = false;
     }
@@ -295,7 +297,7 @@
     try {
       deliveries = (await fetchBroadcastDeliveries(log.id)).deliveries;
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Erreur de chargement du rapport');
+      toast.error(err instanceof Error ? err.message : 'Impossible de charger le rapport. Réessaie.');
       deliveries = [];
     } finally {
       deliveriesLoading = false;
@@ -320,7 +322,7 @@
       history = history.filter((log) => log.id !== id);
       toast.success('Entrée supprimée');
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Erreur de suppression');
+      toast.error(err instanceof Error ? err.message : 'Impossible de supprimer. Réessaie.');
     }
   }
 
@@ -360,7 +362,7 @@
       templates = templates.filter((t) => t.id !== id);
       toast.success('Modèle supprimé');
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Erreur de suppression');
+      toast.error(err instanceof Error ? err.message : 'Impossible de supprimer. Réessaie.');
     }
   }
 
@@ -375,7 +377,7 @@
       mediaLibrary = await fetchBroadcastMedia();
       toast.success('Image supprimée');
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Erreur de suppression');
+      toast.error(err instanceof Error ? err.message : 'Impossible de supprimer. Réessaie.');
     }
   }
 
@@ -779,7 +781,7 @@
               <button
                 type="button"
                 onclick={() => { showTemplateModal = true; }}
-                disabled={!message.trim()}
+                use:explainDisabled={(!message.trim()) ? m.common_reason_fill_field() : ''}
                 class="h-10 rounded-xl bg-on-surface/6 hover:bg-on-surface/10 border border-outline-variant/25 text-body-sm font-semibold text-on-surface-variant hover:text-on-surface transition disabled:opacity-40 inline-flex items-center justify-center gap-2"
               >
                 <Papicon icon="Bookmark" size={13} />

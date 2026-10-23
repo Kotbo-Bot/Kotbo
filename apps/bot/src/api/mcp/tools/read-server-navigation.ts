@@ -2,7 +2,7 @@
 import prisma from '../../../utils/db.js';
 import { ChannelType } from 'discord.js';
 import { z } from 'zod';
-import { type McpToolContext, err, ok } from '../toolkit.js';
+import { type McpToolContext, err, ok, toolError } from '../toolkit.js';
 
 export function registerReadServerNavigationTools(ctx: McpToolContext) {
   const { server, guildId, client, shouldRegister, guard, toolMeta } = ctx;
@@ -72,7 +72,7 @@ export function registerReadServerNavigationTools(ctx: McpToolContext) {
           });
           return ok({ subscriptions, activeCount: subscriptions.filter((s) => s.enabled).length });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );

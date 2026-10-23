@@ -52,7 +52,7 @@
       {autocomplete}
       oninput={oninput}
       onchange={onchange}
-      class={className}
+      class="input {className}"
     />
   </label>
 {:else}
@@ -67,6 +67,6 @@
     {autocomplete}
     oninput={oninput}
     onchange={onchange}
-    class={className}
+    class="input {className}"
   />
 {/if}

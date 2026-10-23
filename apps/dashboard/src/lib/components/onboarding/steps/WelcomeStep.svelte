@@ -42,7 +42,7 @@
       {#if guildIconUrl}
         <img src={guildIconUrl} alt="" class="w-[72px] h-[72px] rounded-[22%] object-cover" />
       {:else}
-        <div class="w-[72px] h-[72px] rounded-[22%] bg-surface-container flex items-center justify-center text-xl font-bold text-on-surface-variant/60">
+        <div class="w-[72px] h-[72px] rounded-[22%] bg-surface-container flex items-center justify-center text-xl font-bold text-on-surface-variant">
           {(selectedGuild?.name ?? '?').slice(0, 1).toUpperCase()}
         </div>
       {/if}
@@ -58,7 +58,7 @@
 
     <div class="mt-4 inline-flex items-center gap-2 rounded-full border border-outline-variant/35 bg-surface-container-low/40 px-3 py-1.5">
       <Papicon icon="clock" size={13} class="text-primary" />
-      <span class="text-xs font-medium text-on-surface-variant/70">À partir de 3 minutes</span>
+      <span class="text-xs font-medium text-on-surface-variant">À partir de 3 minutes</span>
     </div>
   </div>
 

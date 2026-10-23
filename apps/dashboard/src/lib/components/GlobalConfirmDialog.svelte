@@ -12,6 +12,7 @@
   cancelLabel={confirmDialog.options.cancelLabel ?? m.d7_cancel()}
   variant={confirmDialog.options.variant ?? 'default'}
   requireInput={confirmDialog.options.requireInput ?? ''}
+  impacts={confirmDialog.options.impacts ?? []}
   onConfirm={() => confirmDialog.resolve(true)}
   onCancel={() => confirmDialog.resolve(false)}
 />

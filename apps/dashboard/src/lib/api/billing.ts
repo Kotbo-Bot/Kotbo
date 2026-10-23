@@ -42,6 +42,10 @@ export interface BillingStatus {
    */
   trial: TrialInfo;
   plans: PlanCard[];
+  /** Membres du serveur, tels que l'API les compte pour choisir l'offre. */
+  memberCount?: number;
+  /** Offre faite pour la taille actuelle du serveur. */
+  eligiblePlan?: PlanKey | null;
 }
 
 export async function fetchBillingStatus(guildId = authStore.selectedGuildId ?? undefined): Promise<BillingStatus | null> {

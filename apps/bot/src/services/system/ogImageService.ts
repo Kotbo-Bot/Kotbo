@@ -1,22 +1,26 @@
-import { createCanvas, loadImage, type SKRSContext2D } from '@napi-rs/canvas';
-import { ensureCanvasFonts, canvasFont } from '../../utils/canvasFonts.js';
-import { BRAND } from '../../utils/brandPalette.js';
+import { fileURLToPath } from 'node:url';
+import { createCanvas, GlobalFonts, loadImage, Path2D, type SKRSContext2D } from '@napi-rs/canvas';
 import { logger } from '../../utils/logger.js';
 
 // ============================================================================
 // CARTES D'APERÇU OPEN GRAPH
 //
-// Une image 1200x630 par lien partageable, dans la charte « tableau noir » du
-// bot (cf. brandPalette). Discord, Slack, Twitter et consorts affichent cette
-// image dans l'embed : c'est le seul rendu visuel qu'un lien Kotbo obtient hors
-// du dashboard, il doit donc raconter la page a lui seul.
+// Une image 1200x630 par lien partageable. Discord, Slack, Twitter et consorts
+// affichent cette image dans l'embed : c'est le seul rendu visuel qu'un lien
+// Kotbo obtient hors du dashboard, il doit donc raconter la page a lui seul.
+//
+// La carte reprend le theme sombre du dashboard (cf. apps/dashboard/src/app.css) :
+// surfaces zinc, indigo, Outfit pour les titres et Inter pour le texte, sans
+// halo ni libelle en capitales. Un lien partage doit ressembler a la page sur
+// laquelle il ouvre.
 //
 // Deux regles structurent ce module :
 //
-//  1. **Rendu deterministe.** Toutes les irregularites « craie » sont tirees
-//     d'un PRNG seede par l'identifiant de la carte. Une meme URL rend donc
-//     toujours les memes octets, ce qui rend l'ETag stable et evite que les
-//     CDN des reseaux sociaux gardent deux versions d'une meme carte.
+//  1. **Rendu deterministe.** Les seules variations (largeur des bulles d'une
+//     conversation caviardee) sont tirees d'un PRNG seede par l'identifiant de
+//     la carte. Une meme URL rend donc toujours les memes octets, ce qui rend
+//     l'ETag stable et evite que les CDN des reseaux sociaux gardent deux
+//     versions d'une meme carte.
 //  2. **Aucune donnee privee.** Une carte est servie sans authentification :
 //     ce qui n'est pas deja public sur la page ne doit pas y figurer. Les
 //     ressources protegees (transcriptions, preuves) sont rendues
@@ -25,6 +29,30 @@ import { logger } from '../../utils/logger.js';
 
 const W = 1200;
 const H = 630;
+
+/** Theme sombre du dashboard, recopie de apps/dashboard/src/app.css. */
+const UI = {
+  background: '#09090b',
+  card: '#18181b',
+  cardRaised: '#27272a',
+  border: '#27272a',
+  borderStrong: '#3f3f46',
+  text: '#fafafa',
+  textSecondary: '#d4d4d8',
+  textMuted: '#a1a1aa',
+  textFaint: '#71717a',
+} as const;
+
+/**
+ * Version du dessin des cartes, portee par l'URL de l'image et par l'ETag.
+ * Les URL et ETag ne dependent sinon que des donnees : apres un changement de
+ * dessin, le proxy d'images de Discord et les CDN garderaient l'ancienne carte.
+ * A incrementer a chaque changement visible du rendu.
+ */
+export const OG_CARD_VERSION = 2;
+
+/** Indigo du dashboard en theme sombre : accent par defaut des cartes et barre de l'embed. */
+export const OG_ACCENT = '#818cf8';
 
 /** Bandeau d'illustration a droite de la carte. */
 export type OgCardArt =
@@ -41,22 +69,57 @@ export type OgCardArt =
 export interface OgCardSpec {
   /** Cle de cache et graine du PRNG : doit identifier la carte de facon stable. */
   cacheKey: string;
-  /** Sur-titre en petites capitales (type de ressource). */
+  /** Pastille au-dessus du titre (type de ressource). */
   kicker: string;
   title: string;
   subtitle?: string;
-  /** Nom du serveur, affiche en tete avec son icone. */
+  /** Nom du serveur, affiche dans l'en-tete avec son icone. */
   guildName?: string;
   guildIconUrl?: string;
-  /** Couleur d'accent (#rrggbb). Par defaut : le bleu de la charte. */
+  /** Couleur d'accent (#rrggbb). Par defaut : l'indigo du dashboard. */
   accent?: string;
-  /** Jusqu'a trois post-its de chiffres cles. */
+  /** Jusqu'a trois tuiles de chiffres cles. */
   stats?: { value: string; label: string }[];
   /** Pastilles d'etat (« Ouvert », « Connexion requise »...). */
   badges?: string[];
   art?: OgCardArt;
   /** Mention en bas a droite (date, statut...). */
   footerRight?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Polices
+//
+// Une famille par graisse : @napi-rs/canvas choisit mal entre plusieurs
+// graisses enregistrees sous un meme nom. DejaVu Sans reste en repli pour les
+// caracteres hors du sous-ensemble latin (cf. assets/og-fonts/NOTICE.md).
+// ---------------------------------------------------------------------------
+const FONT_DIR = fileURLToPath(new URL('../../../assets/og-fonts/', import.meta.url));
+const FONTS = {
+  title: ['outfit-latin-700-normal.woff2', 'Kotbo OG Outfit'],
+  text: ['inter-latin-400-normal.woff2', 'Kotbo OG Inter'],
+  medium: ['inter-latin-500-normal.woff2', 'Kotbo OG Inter Medium'],
+  semibold: ['inter-latin-600-normal.woff2', 'Kotbo OG Inter SemiBold'],
+} as const;
+type FontRole = keyof typeof FONTS;
+
+let fontsReady = false;
+
+function ensureFonts(): void {
+  if (fontsReady) return;
+  fontsReady = true;
+  (GlobalFonts as { loadSystemFonts?: () => void }).loadSystemFonts?.();
+  for (const [file, family] of Object.values(FONTS)) {
+    try {
+      GlobalFonts.registerFromPath(`${FONT_DIR}${file}`, family);
+    } catch (err) {
+      logger.warn('OpenGraph', `Police ${file} illisible`, err);
+    }
+  }
+}
+
+function font(size: number, role: FontRole): string {
+  return `${size}px "${FONTS[role][1]}", "DejaVu Sans", Arial, sans-serif`;
 }
 
 // ---------------------------------------------------------------------------
@@ -146,7 +209,7 @@ function roundRect(
   }
   if (stroke) {
     ctx.strokeStyle = stroke;
-    ctx.lineWidth = 1.2;
+    ctx.lineWidth = 1.5;
     ctx.stroke();
   }
 }
@@ -154,6 +217,14 @@ function roundRect(
 function truncate(value: string, max: number): string {
   const clean = value.replace(/\s+/g, ' ').trim();
   return clean.length > max ? `${clean.slice(0, max - 1)}…` : clean;
+}
+
+/** Tronque un texte a la largeur disponible, avec la police deja posee sur le contexte. */
+function fitText(ctx: SKRSContext2D, value: string, maxWidth: number): string {
+  let text = value.replace(/\s+/g, ' ').trim();
+  if (ctx.measureText(text).width <= maxWidth) return text;
+  while (text.length > 1 && ctx.measureText(`${text}…`).width > maxWidth) text = text.slice(0, -1);
+  return `${text}…`;
 }
 
 /** Decoupe un texte en lignes tenant dans `maxWidth`, au plus `maxLines`. */
@@ -189,38 +260,41 @@ function wrapText(ctx: SKRSContext2D, text: string, maxWidth: number, maxLines: 
   return lines;
 }
 
-function drawChalkLine(
-  ctx: SKRSContext2D,
-  rand: () => number,
-  x1: number,
-  y1: number,
-  x2: number,
-  y2: number,
-  color: string,
-  width = 2,
-) {
-  ctx.beginPath();
-  ctx.moveTo(x1, y1);
-  const segments = 14;
-  for (let i = 1; i <= segments; i++) {
-    const t = i / segments;
-    ctx.lineTo(x1 + (x2 - x1) * t + (rand() - 0.5) * 1.6, y1 + (y2 - y1) * t + (rand() - 0.5) * 1.6);
-  }
-  ctx.strokeStyle = color;
-  ctx.lineWidth = width;
-  ctx.globalAlpha = 0.75 + rand() * 0.25;
-  ctx.stroke();
-  ctx.globalAlpha = 1;
-}
-
-function hexToRgba(hex: string, alpha: number): string {
+function hexToRgb(hex: string): [number, number, number] {
   const normalized = hex.replace('#', '');
   const full = normalized.length === 3
     ? normalized.split('').map((c) => c + c).join('')
     : normalized.slice(0, 6);
   const int = Number.parseInt(full, 16);
-  if (!Number.isFinite(int)) return `rgba(168, 200, 255, ${alpha})`;
-  return `rgba(${(int >> 16) & 255}, ${(int >> 8) & 255}, ${int & 255}, ${alpha})`;
+  if (!Number.isFinite(int)) return [129, 140, 248];
+  return [(int >> 16) & 255, (int >> 8) & 255, int & 255];
+}
+
+function hexToRgba(hex: string, alpha: number): string {
+  const [r, g, b] = hexToRgb(hex);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+/**
+ * Accent lisible sur le fond sombre.
+ *
+ * L'accent d'un formulaire est choisi par le serveur pour son propre theme : un
+ * bleu nuit ou un noir y sont legitimes mais disparaitraient ici. On le melange
+ * au blanc jusqu'a ce qu'il se detache, sans changer sa teinte.
+ */
+function readableAccent(hex: string): string {
+  const luminance = (rgb: number[]) => {
+    const [r, g, b] = rgb.map((c) => {
+      const v = c / 255;
+      return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+    });
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  };
+  let rgb = hexToRgb(hex);
+  for (let i = 0; i < 6 && luminance(rgb) < 0.2; i++) {
+    rgb = rgb.map((c) => Math.round(c + (255 - c) * 0.3)) as [number, number, number];
+  }
+  return `#${rgb.map((c) => c.toString(16).padStart(2, '0')).join('')}`;
 }
 
 /** Normalise une couleur venue de la base vers un `#rrggbb` sur lequel on peut compter. */
@@ -241,35 +315,29 @@ export function normalizeAccent(value: string | null | undefined, fallback: stri
   return fallback;
 }
 
-function drawBackdrop(ctx: SKRSContext2D, rand: () => number, accent: string) {
-  const bg = ctx.createLinearGradient(0, 0, W, H);
-  bg.addColorStop(0, BRAND.bg1);
-  bg.addColorStop(0.5, BRAND.bg2);
-  bg.addColorStop(1, BRAND.bg1);
-  ctx.fillStyle = bg;
-  ctx.fillRect(0, 0, W, H);
+// Le « K » du logo (motion/src/ui.tsx sur la landing), dans son repere 160 x 160.
+const LOGO_GLYPH = [
+  'M72 60 h0 a7 7 0 0 1 7 7 v66 a7 7 0 0 1 -14 0 v-66 a7 7 0 0 1 7 -7 Z',
+  'M79 85 C 95 85, 120 70, 120 70 C 120 70, 125 80, 110 95 C 100 105, 79 110, 79 110 Z',
+  'M79 115 C 95 115, 125 130, 125 130 C 125 130, 120 145, 105 140 C 95 135, 79 125, 79 125 Z',
+];
 
-  // Halo d'accent en haut a gauche : ancre le regard sur le sur-titre.
-  const glow = ctx.createRadialGradient(W * 0.18, H * 0.1, 0, W * 0.18, H * 0.1, W * 0.5);
-  glow.addColorStop(0, hexToRgba(accent, 0.1));
-  glow.addColorStop(1, 'rgba(0,0,0,0)');
-  ctx.fillStyle = glow;
-  ctx.fillRect(0, 0, W, H);
-
-  // Poussiere de craie.
-  for (let i = 0; i < 90; i++) {
-    ctx.beginPath();
-    ctx.arc(rand() * W, rand() * H, rand() * 1.6 + 0.3, 0, Math.PI * 2);
-    ctx.fillStyle = `rgba(232, 228, 217, ${rand() * 0.08})`;
-    ctx.fill();
-  }
-
-  // Filets de craie haut/bas.
-  drawChalkLine(ctx, rand, 48, 26, W - 48, 26, BRAND.chalkDim, 2);
-  drawChalkLine(ctx, rand, 48, H - 26, W - 48, H - 26, BRAND.chalkDim, 1.5);
-
-  // Trait d'accent vertical : rappelle la couleur du serveur / du formulaire.
-  roundRect(ctx, 48, 96, 6, 132, 3, accent);
+function drawLogo(ctx: SKRSContext2D, x: number, y: number, size: number) {
+  const scale = size / 160;
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(scale, scale);
+  roundRect(ctx, 0, 0, 160, 160, 40, '#00264d');
+  ctx.strokeStyle = 'rgba(0, 229, 255, 0.7)';
+  ctx.lineWidth = 4;
+  ctx.stroke();
+  ctx.translate(-20, -20);
+  ctx.fillStyle = '#ffffff';
+  for (const d of LOGO_GLYPH) ctx.fill(new Path2D(d));
+  ctx.beginPath();
+  ctx.arc(135, 100, 7, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
 }
 
 async function drawGuildAvatar(
@@ -277,21 +345,18 @@ async function drawGuildAvatar(
   url: string | undefined,
   x: number,
   y: number,
-  radius: number,
+  size: number,
   fallbackName: string,
-  accent: string,
 ) {
   ctx.save();
-  ctx.beginPath();
-  ctx.arc(x, y, radius, 0, Math.PI * 2);
-  ctx.closePath();
+  roundRect(ctx, x, y, size, size, size * 0.28);
   ctx.clip();
 
   let drawn = false;
   if (url) {
     try {
       const img = await loadImage(url);
-      ctx.drawImage(img, x - radius, y - radius, radius * 2, radius * 2);
+      ctx.drawImage(img, x, y, size, size);
       drawn = true;
     } catch {
       // Icone indisponible (serveur sans avatar, CDN en erreur) : on retombe
@@ -300,98 +365,72 @@ async function drawGuildAvatar(
   }
 
   if (!drawn) {
-    ctx.fillStyle = hexToRgba(accent, 0.28);
-    ctx.fillRect(x - radius, y - radius, radius * 2, radius * 2);
-    ctx.fillStyle = accent;
-    ctx.font = canvasFont(Math.round(radius), 'bold');
+    ctx.fillStyle = UI.cardRaised;
+    ctx.fillRect(x, y, size, size);
+    ctx.fillStyle = UI.textSecondary;
+    ctx.font = font(Math.round(size * 0.45), 'semibold');
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText((fallbackName.trim()[0] ?? 'K').toUpperCase(), x, y + 1);
+    ctx.fillText((fallbackName.trim()[0] ?? 'K').toUpperCase(), x + size / 2, y + size / 2 + 1);
     ctx.textAlign = 'left';
     ctx.textBaseline = 'alphabetic';
   }
   ctx.restore();
-
-  ctx.beginPath();
-  ctx.arc(x, y, radius, 0, Math.PI * 2);
-  ctx.strokeStyle = hexToRgba(accent, 0.55);
-  ctx.lineWidth = 2;
-  ctx.stroke();
 }
 
-const POST_IT_COLORS = [BRAND.postItYellow, BRAND.postItBlue, BRAND.postItGreen, BRAND.postItPink];
+// Grille de la carte : en-tete sur un filet, colonne de texte a gauche,
+// illustration a droite, tuiles et illustration alignees en bas.
+const PAD = 72;
+const HEADER_LINE = 124;
+const ART_X = 704;
+const ART_W = W - PAD - ART_X;
+const ART_TOP = 160;
+const ART_H = H - 56 - ART_TOP;
+const STAT_H = 108;
+/** Les tuiles finissent a la meme hauteur que l'illustration, a 56 px du bas. */
+const STATS_TOP = H - 56 - STAT_H;
 
-function drawPostIt(
+/** Pastille arrondie ; renvoie sa largeur. */
+function drawPill(
   ctx: SKRSContext2D,
-  rand: () => number,
-  index: number,
+  label: string,
   x: number,
   y: number,
-  w: number,
-  h: number,
-  value: string,
-  label: string,
-) {
-  const tilt = (rand() - 0.5) * 3.2;
-  ctx.save();
-  ctx.translate(x + w / 2, y + h / 2);
-  ctx.rotate((tilt * Math.PI) / 180);
-
-  ctx.shadowColor = 'rgba(0, 0, 0, 0.28)';
-  ctx.shadowBlur = 10;
-  ctx.shadowOffsetY = 4;
-  roundRect(ctx, -w / 2, -h / 2, w, h, 4, POST_IT_COLORS[index % POST_IT_COLORS.length]);
-  ctx.shadowColor = 'transparent';
-  ctx.shadowBlur = 0;
-  ctx.shadowOffsetY = 0;
-
-  // Adhesif au sommet.
-  ctx.save();
-  ctx.translate(0, -h / 2);
-  ctx.rotate((-tilt * 0.6 * Math.PI) / 180);
-  ctx.fillStyle = BRAND.tape;
-  ctx.fillRect(-26, -8, 52, 14);
-  ctx.restore();
-
-  // Coin corne.
-  ctx.beginPath();
-  ctx.moveTo(w / 2 - 16, h / 2);
-  ctx.lineTo(w / 2, h / 2 - 16);
-  ctx.lineTo(w / 2, h / 2);
-  ctx.closePath();
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.08)';
-  ctx.fill();
-
-  ctx.fillStyle = '#2C2C2C';
-  ctx.font = canvasFont(34, 'bold');
-  ctx.fillText(truncate(value, 9), -w / 2 + 18, 4);
-
-  ctx.fillStyle = '#5A5A5A';
-  ctx.font = canvasFont(14, 'normal');
-  ctx.fillText(truncate(label.toUpperCase(), 18), -w / 2 + 18, 30);
-
-  ctx.restore();
+  colors: { fill: string; stroke?: string; text: string },
+): number {
+  ctx.font = font(19, 'semibold');
+  const text = truncate(label, 32);
+  const width = ctx.measureText(text).width + 32;
+  roundRect(ctx, x, y, width, 38, 19, colors.fill, colors.stroke);
+  ctx.fillStyle = colors.text;
+  ctx.fillText(text, x + 16, y + 26);
+  return width;
 }
 
-function drawBadges(ctx: SKRSContext2D, badges: string[], x: number, y: number, accent: string) {
-  let cursor = x;
-  ctx.font = canvasFont(16, 'bold');
-  for (const badge of badges.slice(0, 3)) {
-    const label = truncate(badge.toUpperCase(), 26);
-    const width = ctx.measureText(label).width + 34;
-    roundRect(ctx, cursor, y, width, 34, 17, hexToRgba(accent, 0.14), hexToRgba(accent, 0.5));
-    ctx.fillStyle = accent;
-    ctx.fillText(label, cursor + 17, y + 23);
-    cursor += width + 12;
-  }
+/** Tuile de chiffre cle, comme les tuiles de l'accueil du dashboard. */
+function drawStat(ctx: SKRSContext2D, x: number, y: number, w: number, value: string, label: string) {
+  roundRect(ctx, x, y, w, STAT_H, 16, UI.card, UI.border);
+  ctx.fillStyle = UI.textMuted;
+  ctx.font = font(18, 'medium');
+  ctx.fillText(fitText(ctx, label, w - 44), x + 22, y + 38);
+  ctx.fillStyle = UI.text;
+  ctx.font = font(40, 'title');
+  ctx.fillText(fitText(ctx, value, w - 44), x + 22, y + 84);
 }
 
 // ---------------------------------------------------------------------------
 // Panneaux d'illustration
 // ---------------------------------------------------------------------------
 
-const ART_X = 700;
-const ART_W = 452;
+function drawPanel(ctx: SKRSContext2D, top = ART_TOP, height = ART_H) {
+  roundRect(ctx, ART_X, top, ART_W, height, 20, UI.card, UI.border);
+}
+
+function drawPanelLabel(ctx: SKRSContext2D, label: string, top = ART_TOP) {
+  ctx.fillStyle = UI.textMuted;
+  ctx.font = font(18, 'semibold');
+  ctx.fillText(label, ART_X + 28, top + 44);
+}
 
 /**
  * Silhouette de conversation caviardee.
@@ -403,137 +442,135 @@ const ART_W = 452;
  * pourquoi il ne voit rien.
  */
 function drawRedactedChat(ctx: SKRSContext2D, rand: () => number, accent: string, rows: number) {
-  const top = 150;
-  const height = 340;
-  roundRect(ctx, ART_X, top, ART_W, height, 18, BRAND.card, BRAND.border);
+  drawPanel(ctx);
 
-  let y = top + 40;
+  let y = ART_TOP + 48;
   for (let i = 0; i < rows; i++) {
     const mine = rand() > 0.6;
-    const avatarX = mine ? ART_X + ART_W - 34 : ART_X + 34;
+    const avatarX = mine ? ART_X + ART_W - 40 : ART_X + 40;
     ctx.beginPath();
     ctx.arc(avatarX, y, 14, 0, Math.PI * 2);
-    ctx.fillStyle = mine ? hexToRgba(accent, 0.35) : 'rgba(232, 228, 217, 0.16)';
+    ctx.fillStyle = mine ? hexToRgba(accent, 0.35) : UI.borderStrong;
     ctx.fill();
 
-    const bubbleW = 150 + rand() * 170;
+    const bubbleW = 140 + rand() * 150;
     const bubbleX = mine ? avatarX - 26 - bubbleW : avatarX + 26;
-    roundRect(ctx, bubbleX, y - 18, bubbleW, 36, 12, mine ? hexToRgba(accent, 0.18) : 'rgba(232, 228, 217, 0.08)');
+    roundRect(ctx, bubbleX, y - 18, bubbleW, 36, 12, mine ? hexToRgba(accent, 0.16) : UI.cardRaised);
 
     // Deux barres de « texte » par bulle : la longueur varie, le contenu non.
-    roundRect(ctx, bubbleX + 14, y - 9, (bubbleW - 28) * (0.6 + rand() * 0.35), 7, 3, 'rgba(232, 228, 217, 0.22)');
-    roundRect(ctx, bubbleX + 14, y + 3, (bubbleW - 28) * (0.35 + rand() * 0.4), 7, 3, 'rgba(232, 228, 217, 0.14)');
+    roundRect(ctx, bubbleX + 14, y - 9, (bubbleW - 28) * (0.6 + rand() * 0.35), 7, 3, 'rgba(250, 250, 250, 0.18)');
+    roundRect(ctx, bubbleX + 14, y + 3, (bubbleW - 28) * (0.35 + rand() * 0.4), 7, 3, 'rgba(250, 250, 250, 0.1)');
 
     y += 54;
-    if (y > top + height - 60) break;
+    if (y > ART_TOP + ART_H - 60) break;
   }
 
   // Voile + cadenas : l'illustration doit se lire comme « verrouille ».
-  const veil = ctx.createLinearGradient(0, top + height * 0.35, 0, top + height);
-  veil.addColorStop(0, 'rgba(26, 35, 33, 0)');
-  veil.addColorStop(1, 'rgba(26, 35, 33, 0.92)');
-  roundRect(ctx, ART_X, top, ART_W, height, 18, veil);
+  const veil = ctx.createLinearGradient(0, ART_TOP + ART_H * 0.35, 0, ART_TOP + ART_H);
+  veil.addColorStop(0, 'rgba(24, 24, 27, 0)');
+  veil.addColorStop(1, 'rgba(24, 24, 27, 0.95)');
+  roundRect(ctx, ART_X, ART_TOP, ART_W, ART_H, 20, veil);
 
-  const lockY = top + height - 62;
+  const lockY = ART_TOP + ART_H - 62;
   ctx.strokeStyle = accent;
   ctx.lineWidth = 4;
   ctx.beginPath();
   ctx.arc(ART_X + ART_W / 2, lockY - 12, 11, Math.PI, 0);
   ctx.stroke();
-  roundRect(ctx, ART_X + ART_W / 2 - 17, lockY - 12, 34, 26, 5, accent);
+  roundRect(ctx, ART_X + ART_W / 2 - 17, lockY - 12, 34, 26, 6, accent);
 }
 
 /** Trois intitules de questions : ce que le visiteur devra reellement remplir. */
 function drawQuestions(ctx: SKRSContext2D, accent: string, items: string[], more: number) {
-  const top = 150;
-  const height = 340;
-  roundRect(ctx, ART_X, top, ART_W, height, 18, BRAND.card, BRAND.border);
+  drawPanel(ctx);
+  drawPanelLabel(ctx, 'Au programme');
 
-  ctx.font = canvasFont(15, 'bold');
-  ctx.fillStyle = BRAND.textMuted;
-  ctx.fillText('AU PROGRAMME', ART_X + 28, top + 40);
-
-  let y = top + 82;
+  let y = ART_TOP + 96;
   items.slice(0, 3).forEach((item, index) => {
-    roundRect(ctx, ART_X + 28, y - 22, 30, 30, 8, hexToRgba(accent, 0.18));
+    roundRect(ctx, ART_X + 28, y - 23, 32, 32, 9, hexToRgba(accent, 0.16));
     ctx.fillStyle = accent;
-    ctx.font = canvasFont(16, 'bold');
-    ctx.fillText(String(index + 1), ART_X + 39, y - 1);
+    ctx.font = font(17, 'semibold');
+    ctx.textAlign = 'center';
+    ctx.fillText(String(index + 1), ART_X + 44, y - 1);
+    ctx.textAlign = 'left';
 
-    ctx.fillStyle = BRAND.textPrimary;
-    ctx.font = canvasFont(19, 'normal');
-    const lines = wrapText(ctx, item, ART_W - 100, 2);
-    lines.forEach((line, lineIndex) => ctx.fillText(line, ART_X + 72, y + lineIndex * 26));
-    y += 34 + lines.length * 26;
+    ctx.fillStyle = UI.text;
+    ctx.font = font(20, 'text');
+    const lines = wrapText(ctx, item, ART_W - 104, 2);
+    lines.forEach((line, lineIndex) => ctx.fillText(line, ART_X + 76, y + lineIndex * 28));
+    y += 34 + lines.length * 28;
   });
 
   if (more > 0) {
-    ctx.fillStyle = BRAND.textMuted;
-    ctx.font = canvasFont(17, 'normal');
+    ctx.fillStyle = UI.textMuted;
+    ctx.font = font(18, 'text');
     const label = `+ ${more} autre${more > 1 ? 's' : ''} question${more > 1 ? 's' : ''}`;
-    ctx.fillText(label, ART_X + 28, Math.min(y + 6, top + height - 28));
+    ctx.fillText(label, ART_X + 28, Math.min(y + 6, ART_TOP + ART_H - 28));
   }
 }
 
 /** Grand compteur : le temps restant est l'information utile d'un giveaway. */
 function drawCountdown(ctx: SKRSContext2D, accent: string, label: string, value: string, ended: boolean) {
-  const top = 170;
-  const height = 300;
-  const color = ended ? BRAND.textMuted : accent;
-  roundRect(ctx, ART_X, top, ART_W, height, 18, BRAND.card, hexToRgba(color, 0.4));
+  const color = ended ? UI.textMuted : accent;
+  drawPanel(ctx);
 
+  const center = ART_X + ART_W / 2;
+  const middle = ART_TOP + ART_H / 2;
   ctx.textAlign = 'center';
-  ctx.fillStyle = BRAND.textMuted;
-  ctx.font = canvasFont(17, 'bold');
-  ctx.fillText(truncate(label.toUpperCase(), 28), ART_X + ART_W / 2, top + 66);
+  ctx.fillStyle = UI.textMuted;
+  ctx.font = font(20, 'semibold');
+  ctx.fillText(truncate(label, 28), center, middle - 72);
 
   ctx.fillStyle = color;
-  ctx.font = canvasFont(value.length > 8 ? 52 : 68, 'bold');
-  ctx.fillText(truncate(value, 14), ART_X + ART_W / 2, top + 175);
+  ctx.font = font(value.length > 8 ? 56 : 76, 'title');
+  ctx.fillText(fitText(ctx, value, ART_W - 56), center, middle + 28);
 
-  ctx.fillStyle = BRAND.textSecondary;
-  ctx.font = canvasFont(18, 'normal');
-  ctx.fillText(ended ? 'Tirage termine' : 'Avant le tirage', ART_X + ART_W / 2, top + 232);
+  ctx.fillStyle = UI.textSecondary;
+  ctx.font = font(19, 'text');
+  ctx.fillText(ended ? 'Tirage terminé' : 'Avant le tirage', center, middle + 80);
   ctx.textAlign = 'left';
 }
 
 /** Podium : un classement se resume a ses trois premieres places. */
 function drawPodium(ctx: SKRSContext2D, accent: string, entries: { name: string; score: string }[]) {
-  const top = 150;
-  const height = 340;
-  roundRect(ctx, ART_X, top, ART_W, height, 18, BRAND.card, BRAND.border);
+  drawPanel(ctx);
 
   if (entries.length === 0) {
-    ctx.fillStyle = BRAND.textMuted;
-    ctx.font = canvasFont(20, 'normal');
-    ctx.fillText('Classement en construction', ART_X + 40, top + height / 2);
+    ctx.fillStyle = UI.textMuted;
+    ctx.font = font(20, 'text');
+    ctx.fillText('Classement en construction', ART_X + 40, ART_TOP + ART_H / 2);
     return;
   }
 
-  const medals = ['#FFD479', '#D6DDE3', '#D9A06B'];
-  let y = top + 62;
+  drawPanelLabel(ctx, 'Podium');
+  const medals = ['#facc15', '#d4d4d8', '#d97706'];
+  let y = ART_TOP + 118;
   entries.slice(0, 3).forEach((entry, index) => {
+    roundRect(ctx, ART_X + 20, y - 38, ART_W - 40, 64, 14, index === 0 ? UI.cardRaised : undefined);
+
     ctx.beginPath();
-    ctx.arc(ART_X + 48, y - 6, 18, 0, Math.PI * 2);
+    ctx.arc(ART_X + 56, y - 6, 17, 0, Math.PI * 2);
     ctx.fillStyle = medals[index];
     ctx.fill();
-    ctx.fillStyle = '#2C2C2C';
-    ctx.font = canvasFont(17, 'bold');
+    ctx.fillStyle = '#18181b';
+    ctx.font = font(17, 'semibold');
     ctx.textAlign = 'center';
-    ctx.fillText(String(index + 1), ART_X + 48, y);
+    ctx.fillText(String(index + 1), ART_X + 56, y);
     ctx.textAlign = 'left';
-
-    ctx.fillStyle = BRAND.textPrimary;
-    ctx.font = canvasFont(22, 'bold');
-    ctx.fillText(truncate(entry.name, 20), ART_X + 82, y + 2);
 
     ctx.fillStyle = accent;
-    ctx.font = canvasFont(18, 'normal');
+    ctx.font = font(19, 'medium');
     ctx.textAlign = 'right';
-    ctx.fillText(truncate(entry.score, 12), ART_X + ART_W - 28, y + 2);
+    const score = truncate(entry.score, 14);
+    ctx.fillText(score, ART_X + ART_W - 40, y + 1);
+    const scoreWidth = ctx.measureText(score).width;
     ctx.textAlign = 'left';
 
-    y += 62;
+    ctx.fillStyle = UI.text;
+    ctx.font = font(22, 'semibold');
+    ctx.fillText(fitText(ctx, entry.name, ART_W - 150 - scoreWidth), ART_X + 88, y + 1);
+
+    y += 84;
   });
 }
 
@@ -541,71 +578,94 @@ function drawPodium(ctx: SKRSContext2D, accent: string, entries: { name: string;
 // Rendu principal
 // ---------------------------------------------------------------------------
 
+/**
+ * En-tete facon barre du dashboard : le logo, puis le serveur comme dans le
+ * selecteur de serveur (« Kotbo / Atelier Nova »), sur un filet pleine largeur.
+ */
+async function drawHeader(ctx: SKRSContext2D, spec: OgCardSpec) {
+  ctx.fillStyle = UI.textFaint;
+  ctx.font = font(20, 'medium');
+  ctx.textAlign = 'right';
+  ctx.fillText('kotbo.fr', W - PAD, 81);
+  ctx.textAlign = 'left';
+  const siteWidth = ctx.measureText('kotbo.fr').width;
+
+  drawLogo(ctx, PAD, 48, 48);
+  ctx.fillStyle = UI.text;
+  ctx.font = font(30, 'title');
+  ctx.fillText('Kotbo', PAD + 64, 83);
+  let cursor = PAD + 64 + ctx.measureText('Kotbo').width;
+
+  if (spec.guildName) {
+    ctx.fillStyle = UI.borderStrong;
+    ctx.font = font(30, 'text');
+    ctx.fillText('/', cursor + 18, 83);
+    cursor += 18 + ctx.measureText('/').width + 18;
+
+    await drawGuildAvatar(ctx, spec.guildIconUrl, cursor, 52, 40, spec.guildName);
+    ctx.fillStyle = UI.textSecondary;
+    ctx.font = font(24, 'semibold');
+    ctx.fillText(fitText(ctx, spec.guildName, W - PAD - siteWidth - 40 - cursor - 54), cursor + 54, 81);
+  }
+
+  ctx.fillStyle = UI.border;
+  ctx.fillRect(0, HEADER_LINE, W, 1.5);
+}
+
 export async function renderOgCard(spec: OgCardSpec): Promise<Buffer> {
   const cached = readCache(spec.cacheKey);
   if (cached) return cached;
 
-  ensureCanvasFonts();
+  ensureFonts();
   const rand = seededRandom(spec.cacheKey);
-  const accent = normalizeAccent(spec.accent, BRAND.blurple);
+  const accent = readableAccent(normalizeAccent(spec.accent, OG_ACCENT));
   const canvas = createCanvas(W, H);
   const ctx = canvas.getContext('2d');
 
-  drawBackdrop(ctx, rand, accent);
+  ctx.fillStyle = UI.background;
+  ctx.fillRect(0, 0, W, H);
+
+  await drawHeader(ctx, spec);
 
   const hasArt = Boolean(spec.art && spec.art.type !== 'none');
-  const textWidth = hasArt ? ART_X - 120 : W - 160;
+  const textWidth = hasArt ? ART_X - PAD - 48 : W - PAD * 2;
 
-  // En-tete : serveur + type de ressource.
-  if (spec.guildName) {
-    await drawGuildAvatar(ctx, spec.guildIconUrl, 100, 96, 32, spec.guildName, accent);
-    ctx.fillStyle = BRAND.textSecondary;
-    ctx.font = canvasFont(22, 'bold');
-    ctx.fillText(truncate(spec.guildName, 34), 148, 92);
-    ctx.fillStyle = BRAND.textMuted;
-    ctx.font = canvasFont(15, 'normal');
-    ctx.fillText('sur Kotbo', 148, 116);
+  // Pastille du type de ressource, teintee de l'accent, puis les pastilles
+  // d'etat sur la meme ligne : la colonne garde sa hauteur pour le titre.
+  let pillX = PAD + drawPill(ctx, spec.kicker, PAD, ART_TOP, { fill: hexToRgba(accent, 0.14), text: accent }) + 10;
+  for (const badge of spec.badges?.slice(0, 2) ?? []) {
+    pillX += drawPill(ctx, badge, pillX, ART_TOP, { fill: UI.card, stroke: UI.borderStrong, text: UI.textSecondary }) + 10;
   }
 
-  ctx.fillStyle = accent;
-  ctx.font = canvasFont(19, 'bold');
-  ctx.fillText(truncate(spec.kicker.toUpperCase(), 46), 78, spec.guildName ? 176 : 120);
-
   // Titre.
-  ctx.fillStyle = BRAND.textPrimary;
-  ctx.font = canvasFont(56, 'bold');
+  ctx.fillStyle = UI.text;
+  ctx.font = font(58, 'title');
   const titleLines = wrapText(ctx, spec.title, textWidth, 2);
-  let cursorY = spec.guildName ? 244 : 190;
+  let cursorY = ART_TOP + 38 + 70;
   for (const line of titleLines) {
-    ctx.fillText(line, 78, cursorY);
+    ctx.fillText(line, PAD, cursorY);
     cursorY += 66;
   }
 
-  // Sous-titre.
+  // Sous-titre. Avec un titre sur deux lignes, les tuiles de chiffres ne
+  // laissent la place qu'a une ligne.
+  const hasStats = Boolean(spec.stats?.length);
   if (spec.subtitle) {
-    ctx.fillStyle = BRAND.textSecondary;
-    ctx.font = canvasFont(24, 'normal');
-    for (const line of wrapText(ctx, spec.subtitle, textWidth, 2)) {
-      ctx.fillText(line, 78, cursorY + 8);
-      cursorY += 34;
+    ctx.fillStyle = UI.textMuted;
+    ctx.font = font(25, 'text');
+    const maxLines = hasStats && titleLines.length > 1 ? 1 : 2;
+    for (const line of wrapText(ctx, spec.subtitle, textWidth, maxLines)) {
+      ctx.fillText(line, PAD, cursorY + 6);
+      cursorY += 36;
     }
   }
 
-  // Pastilles d'etat.
-  if (spec.badges?.length) {
-    drawBadges(ctx, spec.badges, 78, cursorY + 22, accent);
-    cursorY += 66;
-  }
-
-  // Post-its de chiffres cles, ancres en bas de la colonne de texte.
-  if (spec.stats?.length) {
-    const stats = spec.stats.slice(0, 3);
-    const boxW = hasArt ? 178 : 200;
-    const boxH = 104;
-    const top = Math.max(cursorY + 26, H - 190);
-    stats.forEach((stat, index) => {
-      drawPostIt(ctx, rand, index, 78 + index * (boxW + 18), top, boxW, boxH, stat.value, stat.label);
-    });
+  // Tuiles de chiffres cles, posees en bas de la colonne de texte.
+  if (hasStats) {
+    const stats = spec.stats!.slice(0, 3);
+    const gap = 16;
+    const tileW = hasArt ? Math.floor((textWidth - gap * (stats.length - 1)) / stats.length) : 220;
+    stats.forEach((stat, index) => drawStat(ctx, PAD + index * (tileW + gap), STATS_TOP, tileW, stat.value, stat.label));
   }
 
   // Illustration.
@@ -626,15 +686,12 @@ export async function renderOgCard(spec: OgCardSpec): Promise<Buffer> {
       break;
   }
 
-  // Pied de carte.
-  ctx.fillStyle = BRAND.chalkDim;
-  ctx.font = canvasFont(16, 'bold');
-  ctx.fillText('KOTBO', 78, H - 48);
-  ctx.font = canvasFont(15, 'normal');
-  ctx.fillText('kotbo.fr', 152, H - 48);
+  // Mention en bas a droite, dans la marge sous l'illustration.
   if (spec.footerRight) {
+    ctx.fillStyle = UI.textFaint;
+    ctx.font = font(18, 'medium');
     ctx.textAlign = 'right';
-    ctx.fillText(truncate(spec.footerRight, 60), W - 78, H - 48);
+    ctx.fillText(truncate(spec.footerRight, 60), W - PAD, H - 22);
     ctx.textAlign = 'left';
   }
 

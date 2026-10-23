@@ -41,7 +41,7 @@
             id: 'recidivism',
             label: m.anx_modt_recidivism(),
             hint: m.anx_modt_recidivism_hint(),
-            value: data.recidivism.rate === null ? '—' : fmtPct(data.recidivism.rate),
+            value: data.recidivism.rate === null ? '–' : fmtPct(data.recidivism.rate),
             delta: data.recidivism.rate !== null && data.recidivism.previousRate ? relativeDelta(data.recidivism.rate, data.recidivism.previousRate) : undefined,
             invert: true,
             color: SERIES[0],

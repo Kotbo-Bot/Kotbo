@@ -124,8 +124,9 @@ import {
 } from './rpgTowerMap.js';
 import { heatsFromMask } from './rpgTowerContent.js';
 import { renderTowerImage } from './rpgTowerRender.js';
+import { UserFacingError } from '../../../utils/userFacingError.js';
 
-export class TowerError extends Error {
+export class TowerError extends UserFacingError {
   constructor(message: string, readonly status: number) {
     super(message);
     this.name = 'TowerError';
@@ -153,7 +154,7 @@ export type TowerRefusal =
   | { kind: 'clan_done'; next: Date | null };
 
 /** Refus d'une action de joueur, traduit par le panneau dans la langue du joueur. */
-export class TowerRefused extends Error {
+export class TowerRefused extends UserFacingError {
   constructor(readonly refusal: TowerRefusal) {
     super(`Tour refusée : ${refusal.kind}`);
     this.name = 'TowerRefused';

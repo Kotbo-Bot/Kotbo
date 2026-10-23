@@ -58,11 +58,11 @@ import { statsCommand } from './commands/utility/stats.js';
 import { statusCommand } from './commands/admin/status.js';
 import { suggestCommand } from './commands/utility/suggest.js';
 import { ticketCommand } from './commands/utility/ticket.js';
-import { partnershipCommand } from './commands/community/partenariat.js';
 import { transcriptCommand } from './commands/moderation/transcript.js';
 import { suggestionConfigCommand } from './commands/utility/suggestion-config.js';
 import { clearCommand } from './commands/moderation/clear.js';
 import { channelCommand } from './commands/moderation/channel.js';
+import { threadCommand } from './commands/utility/thread.js';
 import { signalCommand, signalContextCommand } from './commands/moderation/signal.js';
 import { dashboardCommand } from './commands/utility/dashboard.js';
 import { linkCommand } from './commands/admin/link.js';
@@ -71,6 +71,7 @@ import { channelhealthCommand } from './commands/admin/channelhealth.js';
 import { simulationCommand } from './commands/admin/simulation.js';
 import { repCommand } from './commands/community/rep.js';
 import { marketCommand } from './commands/economy/market.js';
+import { boutiqueCommand } from './commands/economy/boutique.js';
 import { towerCommand } from './commands/economy/tower.js';
 import { questsCommand } from './commands/community/quests.js';
 import { clanCommand } from './commands/community/clan.js';
@@ -88,6 +89,7 @@ import { messageHubContextCommand, userHubContextCommand } from './commands/cont
 import { protectionCommand } from './commands/admin/protection.js';
 import { auditCommand } from './commands/admin/audit.js';
 import { reportCommand, reportMessageContextCommand } from './commands/moderation/report.js';
+import { wikiCommand } from './commands/community/wiki.js';
 
 export type SlashCommandDefinition = {
   data: { name: string; description: string; toJSON: () => unknown };
@@ -137,7 +139,6 @@ export const commands: SlashCommandDefinition[] = [
   activateCommand,
   transcriptCommand,
   ticketCommand,
-  partnershipCommand,
   sayCommand,
   mpsayCommand,
   demissionCommand,
@@ -149,6 +150,7 @@ export const commands: SlashCommandDefinition[] = [
   suggestionConfigCommand,
   clearCommand,
   channelCommand,
+  threadCommand,
   signalCommand,
   roleCommand,
   dashboardCommand,
@@ -174,6 +176,7 @@ export const commands: SlashCommandDefinition[] = [
   simulationCommand,
   repCommand,
   marketCommand,
+  boutiqueCommand,
   towerCommand,
   questsCommand,
   clanCommand,
@@ -192,6 +195,7 @@ export const commands: SlashCommandDefinition[] = [
   reportCommand,
   optOutCommand,
   privacyCommand,
+  wikiCommand,
 ];
 
 /**
@@ -284,9 +288,9 @@ export const COMMAND_MODULES = new Map<ApplicationCommandDefinition, string>([
   // Communauté
   [dailyAlgoCommand, 'daily_algo'],
   [ticketCommand, 'tickets'],
-  [partnershipCommand, 'partnerships'],
   [giveawayCommand, 'giveaways'],
   [suggestCommand, 'suggestions'],
+  [wikiCommand, 'site_wiki'],
   [suggestionConfigCommand, 'suggestions'],
   [eventCommand, 'events'],
   [ctfCommand, 'events'],
@@ -299,6 +303,7 @@ export const COMMAND_MODULES = new Map<ApplicationCommandDefinition, string>([
   [questsCommand, 'quests'],
   [repCommand, 'reputation'],
   [marketCommand, 'marketplace'],
+  [boutiqueCommand, 'economy'],
   [rpgCommand, 'economy'],
   [raidCommand, 'economy'],
   [towerCommand, 'economy'],
@@ -322,6 +327,7 @@ export const COMMAND_MODULES = new Map<ApplicationCommandDefinition, string>([
 
   // Contenu & intégrations
   [channelCommand, 'auto_thread'],
+  [threadCommand, 'auto_thread'],
   [channelhealthCommand, 'channel_health'],
   [serverstatsCommand, 'analytics'],
   [statsCommand, 'analytics'],

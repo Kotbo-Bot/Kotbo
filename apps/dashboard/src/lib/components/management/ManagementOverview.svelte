@@ -80,7 +80,7 @@
       <span class="bg-warning/10 p-2 rounded-lg text-warning shrink-0"><Papicon icon="Warning" size={18} /></span>
       <span>
         <span class="block text-xs font-semibold text-warning">{m.mgmt_incomplete_config()}</span>
-        <span class="block text-xs text-on-surface-variant/60 mt-1">
+        <span class="block text-xs text-on-surface-variant mt-1">
           {m.mgmt_missing_channels({ list: missingChannels.map((c) => c.label).join(', ') })}
           <b>{m.mgmt_tab_channels_roles()}</b> {m.mgmt_to_configure()}
         </span>
@@ -99,7 +99,7 @@
     <div class="space-y-6">
       {#each groupedFeatures as group}
         <section class="space-y-2">
-          <p class="text-xs font-semibold text-on-surface-variant/50">{categoryLabel(group.category)}</p>
+          <p class="text-xs font-semibold text-on-surface-variant">{categoryLabel(group.category)}</p>
           <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2">
             {#each group.items as { feature } (feature.featureKey)}
               {@const moduleActive = featureModuleState(modulesById, feature.featureKey)}

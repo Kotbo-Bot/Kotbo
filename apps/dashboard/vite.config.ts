@@ -1,10 +1,25 @@
 import { existsSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { defineConfig } from 'vite'
+import { defineConfig, type Plugin } from 'vite'
 import { svelte } from '@sveltejs/vite-plugin-svelte'
 import tailwindcss from '@tailwindcss/vite'
 import { paraglideVitePlugin } from '@inlang/paraglide-js'
+import { applyDemoHead } from './scripts/demo-head.mjs'
+
+/** Titre, description et canonique de la démo publique (cf. scripts/demo-head.mjs). */
+function demoHead(): Plugin {
+  let isDemo = false
+  return {
+    name: 'kotbo-demo-head',
+    configResolved(config) {
+      isDemo = config.mode === 'demo'
+    },
+    transformIndexHtml(html) {
+      return isDemo ? applyDemoHead(html) : html
+    },
+  }
+}
 
 
 const dashboardDir = dirname(fileURLToPath(import.meta.url))
@@ -27,7 +42,25 @@ export default defineConfig({
       outdir: './src/lib/paraglide',
       strategy: ['localStorage', 'preferredLanguage', 'baseLocale'],
     }),
+    demoHead(),
   ],
+  server: {
+    // Sites communautaires en développement : même relais que nginx en
+    // production, l'API ne servant le site qu'à un dashboard connu.
+    proxy: {
+      '/s/': {
+        target: process.env.VITE_API_URL || 'http://localhost:8787',
+        changeOrigin: true,
+        rewrite: (path) => `/api/site/render${path}`,
+        headers: { 'X-Forwarded-Host': 'localhost:5173', 'X-Forwarded-Proto': 'http' },
+      },
+      '/robots.txt': {
+        target: process.env.VITE_API_URL || 'http://localhost:8787',
+        changeOrigin: true,
+        rewrite: () => '/api/site/robots.txt',
+      },
+    },
+  },
   optimizeDeps: {
     include: [
       'monaco-editor/esm/vs/editor/editor.api.js',

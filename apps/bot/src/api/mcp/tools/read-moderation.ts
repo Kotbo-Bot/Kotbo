@@ -2,7 +2,7 @@
 import { getAppealConfig, getAppealDetail } from '../../../services/moderation/banAppealService.js';
 import prisma from '../../../utils/db.js';
 import { z } from 'zod';
-import { type McpToolContext, err, ok } from '../toolkit.js';
+import { type McpToolContext, err, ok, toolError } from '../toolkit.js';
 
 export function registerReadModerationTools(ctx: McpToolContext) {
   const { server, guildId, shouldRegister, guard, toolMeta } = ctx;
@@ -159,7 +159,7 @@ export function registerReadModerationTools(ctx: McpToolContext) {
           });
           return ok(appeals);
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -179,7 +179,7 @@ export function registerReadModerationTools(ctx: McpToolContext) {
           if (!detail) return err('Appel introuvable');
           return ok(detail);
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -196,7 +196,7 @@ export function registerReadModerationTools(ctx: McpToolContext) {
           const config = await getAppealConfig(guildId);
           return ok(config);
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );

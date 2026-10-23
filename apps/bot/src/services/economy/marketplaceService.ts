@@ -1,5 +1,6 @@
 import prisma, { prismaRead } from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
+import { publishGuildSignal } from '../site/siteLive.js';
 import { isModuleEnabled } from '../core/moduleGate.js';
 import { equippedItemIds } from '../features/rpg/rpgEquipment.js';
 import type { MarketplaceListing, Prisma, RpgItem } from '@prisma/client';
@@ -19,8 +20,9 @@ import {
   takeInventoryQuantity,
   takeItemInstance,
 } from '../features/rpg/rpgInventoryWrites.js';
+import { UserFacingError } from '../../utils/userFacingError.js';
 
-class MarketplacePurchaseError extends Error {}
+class MarketplacePurchaseError extends UserFacingError {}
 
 /** Durées proposées à la mise en vente, en heures. */
 export const LISTING_DURATION_RANGE = { min: 1, max: 168 } as const;
@@ -222,6 +224,7 @@ export async function buyListing(
       };
     });
 
+    publishGuildSignal(guildId, 'module:marketplace');
     return { success: true, listing: purchased };
   } catch (error) {
     if (error instanceof MarketplacePurchaseError) {

@@ -18,6 +18,7 @@ import {
   type RebalanceMode,
   type SeasonWindow,
 } from './clanRebalancePolicy.js';
+import { UserFacingError } from '../../utils/userFacingError.js';
 
 export interface RebalanceRequest {
   targetClanIds: string[];
@@ -127,7 +128,7 @@ async function fetchAllMembers(guild: Guild) {
 /** Délai entre deux appels Discord, le même que pour la distribution. */
 const ROLE_CHANGE_DELAY_MS = 450;
 
-export class RebalanceInputError extends Error {}
+export class RebalanceInputError extends UserFacingError {}
 
 /**
  * Regroupe les comptes liés, comme `getAllLinkedUserIds` mais pour tout le serveur d'un

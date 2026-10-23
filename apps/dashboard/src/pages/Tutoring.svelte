@@ -527,7 +527,7 @@
                   </div>
                   
                   <div class="flex flex-col gap-2">
-                    <div class="flex justify-between text-body-sm font-medium text-on-surface-variant/70 px-2">
+                    <div class="flex justify-between text-body-sm font-medium text-on-surface-variant px-2">
                       <span>{m.tutoring_progress_label()}</span>
                       <span>{getProgressPercentage(apprentice.checklistProgress)}%</span>
                     </div>
@@ -574,7 +574,7 @@
                     {#if authStore.isAdmin}
                       <button 
                         onclick={() => handleDeleteTutoring(apprentice.id)}
-                        class="w-full py-2 text-on-surface-variant/50 hover:text-error text-xs font-medium transition-all"
+                        class="w-full py-2 text-on-surface-variant hover:text-error text-xs font-medium transition-all"
                       >
                         {m.tutoring_delete_btn()}
                       </button>
@@ -733,7 +733,7 @@
                         <Papicon icon={cat.icon} size={20} class="text-{cat.color}" />
                       </div>
                       <div>
-                        <div class="text-xs font-semibold uppercase text-on-surface-variant/60">{cat.label}</div>
+                        <div class="text-xs font-semibold uppercase text-on-surface-variant">{cat.label}</div>
                         <div class="text-lg font-semibold text-on-surface">{catProgress}%</div>
                       </div>
                     </div>

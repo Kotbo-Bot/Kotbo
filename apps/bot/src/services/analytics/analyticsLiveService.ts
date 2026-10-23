@@ -121,6 +121,15 @@ export function liveLeave(guildId: string, at = Date.now()): void {
   windowOf(guildId).leave(at);
 }
 
+/**
+ * Résumé de la fenêtre d'un serveur sans la créer : nul quand rien n'a été
+ * compté depuis 30 minutes (ou que le serveur ne collecte pas).
+ */
+export function peekLiveSummary(guildId: string, now = Date.now()): ReturnType<LiveWindow['summary']> | null {
+  const w = windows.get(guildId);
+  return w ? w.summary(now) : null;
+}
+
 export function addLiveSubscriber(guildId: string): void {
   subscribers.set(guildId, (subscribers.get(guildId) ?? 0) + 1);
 }

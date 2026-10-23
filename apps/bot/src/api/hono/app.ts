@@ -17,6 +17,11 @@ import { createChangelogRouter } from './routes/public/changelog.js';
 import { createPublicFeaturePagesRouter } from './routes/public/featurePages.js';
 import { createOgRouter } from './routes/public/og.js';
 import { createBillingRouter } from './routes/billing.js';
+import { createSiteRenderRouter } from './routes/public/siteRender.js';
+import { createSiteApiRouter } from './routes/public/siteApi.js';
+import { createSiteAdminRouter } from './routes/siteAdmin.js';
+import { createShopAdminRouter } from './routes/shopAdmin.js';
+import { createAdminSitesRouter } from './routes/adminSites.js';
 import { logger } from '../../utils/logger.js';
 
 /**
@@ -60,6 +65,12 @@ export function createHonoApp(client: Client): OpenAPIHono {
   app.route('/', createPublicFeaturePagesRouter());
   app.route('/', createOgRouter(client));
   app.route('/', createBillingRouter(client));
+  // Sites communautaires : le rendu avant l'API, dont le préfixe /api/site/:siteId l'engloberait.
+  app.route('/', createSiteRenderRouter(client));
+  app.route('/', createSiteApiRouter(client));
+  app.route('/', createSiteAdminRouter(client));
+  app.route('/', createShopAdminRouter(client));
+  app.route('/', createAdminSitesRouter(client));
 
   // ---------------------------------------------------------------------------
   // OpenAPI / Swagger UI (uniquement en développement)

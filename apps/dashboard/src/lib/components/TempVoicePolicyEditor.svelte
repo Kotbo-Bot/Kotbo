@@ -11,6 +11,7 @@
   import SearchableSelect from './SearchableSelect.svelte';
   import Papicon from './Papicon.svelte';
   import { m } from '../i18n';
+  import { MAX_USER_LIMIT, userLimitDisplayFix } from '../tempVoiceUi';
   import type { TempVoicePolicy, TempVoiceOwnerPower, TempVoiceTextChatMode } from '@kotbo/shared';
 
   let {
@@ -23,8 +24,7 @@
     idPrefix?: string;
   } = $props();
 
-  /** Le bot applique la même borne : au-delà, Discord refuse la valeur. */
-  const MAX_USER_LIMIT = 99;
+  // Le bot applique la même borne (MAX_USER_LIMIT) : au-delà, Discord refuse la valeur.
   const MAX_AUTO_ALLOW_ROLES = 10;
 
   const OWNER_POWERS: Array<{ key: TempVoiceOwnerPower; label: () => string; hint: () => string }> = [
@@ -38,7 +38,9 @@
   const TEXT_CHAT_MODES: Array<{ key: TempVoiceTextChatMode; label: () => string; hint: () => string }> = [
     { key: 'inherit', label: () => m.cm_tv_chat_inherit(), hint: () => m.cm_tv_chat_inherit_hint() },
     { key: 'open', label: () => m.cm_tv_chat_open(), hint: () => m.cm_tv_chat_open_hint() },
+    { key: 'inVoice', label: () => m.cm_tv_chat_inVoice(), hint: () => m.cm_tv_chat_inVoice_hint() },
     { key: 'locked', label: () => m.cm_tv_chat_locked(), hint: () => m.cm_tv_chat_locked_hint() },
+    { key: 'nobody', label: () => m.cm_tv_chat_nobody(), hint: () => m.cm_tv_chat_nobody_hint() },
   ];
 
   /** Choix de rôle restants : un rôle déjà autorisé n'a pas à être reproposé. */
@@ -71,8 +73,18 @@
   }
 
   function onUserLimitInput(event: Event) {
-    const raw = Number.parseInt((event.currentTarget as HTMLInputElement).value, 10);
+    const input = event.currentTarget as HTMLInputElement;
+    const raw = Number.parseInt(input.value, 10);
     policy.userLimit = Number.isFinite(raw) ? Math.min(Math.max(raw, 0), MAX_USER_LIMIT) : 0;
+    // Si la valeur retenue est déjà celle de l'état (99 enregistré, « 150 »
+    // tapé), Svelte ne réécrit pas le champ : on le corrige à la main.
+    const fix = userLimitDisplayFix(input.value);
+    if (fix !== null) input.value = fix;
+  }
+
+  /** Champ vidé ou laissé en cours de frappe : il reprend la valeur enregistrée. */
+  function resyncUserLimit(event: Event) {
+    (event.currentTarget as HTMLInputElement).value = String(policy.userLimit);
   }
 </script>
 
@@ -82,7 +94,7 @@
       <Papicon icon="shield" size={14} />
       {m.cm_tv_policy_title()}
     </h5>
-    <p class="text-2xs text-on-surface-variant/60 mt-1">{m.cm_tv_policy_desc()}</p>
+    <p class="text-2xs text-on-surface-variant mt-1">{m.cm_tv_policy_desc()}</p>
   </div>
 
   <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -98,6 +110,7 @@
         max={MAX_USER_LIMIT}
         value={policy.userLimit}
         oninput={onUserLimitInput}
+        onblur={resyncUserLimit}
         class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/30 transition-all"
       />
       <p class="text-2xs text-on-surface-variant/40">{m.cm_tv_user_limit_hint()}</p>
@@ -116,7 +129,7 @@
           bind:checked={policy.lockOnCreate}
           class="mt-0.5 accent-primary w-4 h-4 shrink-0"
         />
-        <span class="text-2xs text-on-surface-variant/70 leading-relaxed">{m.cm_tv_lock_hint()}</span>
+        <span class="text-2xs text-on-surface-variant leading-relaxed">{m.cm_tv_lock_hint()}</span>
       </label>
     </div>
   </div>
@@ -124,7 +137,7 @@
   <!-- Chat textuel du salon -->
   <div class="space-y-2">
     <span class="text-xs font-bold text-on-surface/80 block">{m.cm_tv_chat_label()}</span>
-    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
       {#each TEXT_CHAT_MODES as mode (mode.key)}
         <label
           for="{idPrefix}-chat-{mode.key}"
@@ -142,7 +155,7 @@
             />
             {mode.label()}
           </span>
-          <span class="text-2xs text-on-surface-variant/60 leading-relaxed">{mode.hint()}</span>
+          <span class="text-2xs text-on-surface-variant leading-relaxed">{mode.hint()}</span>
         </label>
       {/each}
     </div>
@@ -174,7 +187,7 @@
     {/if}
 
     {#if policy.autoAllowRoleIds.length >= MAX_AUTO_ALLOW_ROLES}
-      <p class="text-2xs text-on-surface-variant/60">{m.cm_tv_auto_allow_full({ max: MAX_AUTO_ALLOW_ROLES })}</p>
+      <p class="text-2xs text-on-surface-variant">{m.cm_tv_auto_allow_full({ max: MAX_AUTO_ALLOW_ROLES })}</p>
     {:else}
       <SearchableSelect
         id="{idPrefix}-auto-allow"
@@ -205,7 +218,7 @@
           />
           <span class="flex flex-col gap-0.5">
             <span class="text-xs font-bold text-on-surface">{power.label()}</span>
-            <span class="text-2xs text-on-surface-variant/60 leading-relaxed">{power.hint()}</span>
+            <span class="text-2xs text-on-surface-variant leading-relaxed">{power.hint()}</span>
           </span>
         </label>
       {/each}

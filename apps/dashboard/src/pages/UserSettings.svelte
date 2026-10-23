@@ -1,4 +1,5 @@
 <script lang="ts">
+  import NotificationPreferencesGrid from '../lib/components/NotificationPreferencesGrid.svelte';
   import { router } from 'tinro';
   import { authStore } from '../lib/stores/auth.svelte';
   import { resolveTabFromUrl, gotoTab } from '../lib/tabRouting';
@@ -12,16 +13,10 @@
   import Papicon from '../lib/components/Papicon.svelte';
   import ToggleSwitch from '../lib/components/ToggleSwitch.svelte';
   import { m } from '../lib/i18n';
-  import { memberAvatarSrc } from '../lib/discordMedia';
+  import { desktopPermission, requestDesktopPermission, sendTestNotification } from '../lib/notificationAlerts';
+  import { playNotificationSound, type NotificationTone } from '../lib/notificationSounds';
 
   import type { DateFormat, Language, SidebarBehavior } from '../lib/stores/userPreferences.svelte';
-
-  const getUserAvatar = () => {
-    const hash = authStore.user?.avatar;
-    const id = authStore.user?.id;
-    const url = id && hash ? `https://cdn.discordapp.com/avatars/${id}/${hash}.png` : null;
-    return memberAvatarSrc(url, authStore.user?.username, id);
-  };
 
   const SETTINGS_BASE = '/userSettings';
   const settingsTabs = ['preferences', 'widget'] as const;
@@ -113,48 +108,48 @@
   }
 
   async function testNotifications() {
-    if (typeof window === 'undefined' || !('Notification' in window)) {
+    const permission = await sendTestNotification();
+    permissionState = permission;
+    if (permission === 'unsupported') {
       toast.warning(m.us_notif_unavailable());
-      return;
-    }
-
-    const permission = Notification.permission === 'granted'
-      ? 'granted'
-      : await Notification.requestPermission();
-
-    if (permission !== 'granted') {
+    } else if (permission !== 'granted') {
       toast.error(m.us_notif_denied());
-      return;
+    } else {
+      toast.success(m.us_notif_preview_sent());
     }
+  }
 
-    new Notification('Kotbo', {
-      body: m.us_notif_preview_body(),
-    });
+  let permissionState = $state(desktopPermission());
 
-    if (userPrefs.prefs.soundNotifications) {
-      try {
-        const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-        if (AudioContextClass) {
-          const context = new AudioContextClass();
-          const oscillator = context.createOscillator();
-          const gain = context.createGain();
-
-          oscillator.type = 'sine';
-          oscillator.frequency.value = 880;
-          gain.gain.value = 0.02;
-
-          oscillator.connect(gain);
-          gain.connect(context.destination);
-          oscillator.start();
-          oscillator.stop(context.currentTime + 0.12);
-        }
-      } catch {
-        // Ignore audio preview errors.
+  /**
+   * Activer les notifications bureau sans la permission du navigateur
+   * laisserait un interrupteur allume qui ne fait rien : on la demande au
+   * moment du clic, seul moment ou le navigateur accepte d'afficher la demande.
+   */
+  async function handleNotificationToggle(key: 'soundNotifications' | 'desktopNotifications', value: boolean) {
+    if (key === 'desktopNotifications' && value) {
+      const permission = await requestDesktopPermission();
+      permissionState = permission;
+      if (permission === 'unsupported') {
+        toast.warning(m.us_notif_unavailable());
+        return;
+      }
+      if (permission !== 'granted') {
+        toast.error(m.us_notif_denied());
+        return;
       }
     }
-
-    toast.success(m.us_notif_preview_sent());
+    handleToggle(key, value);
+    // Un retour immediat : sans lui, activer le son ne produit rien d'audible.
+    if (key === 'soundNotifications' && value) playNotificationSound('INFO', { force: true });
   }
+
+  const soundPreviews = $derived<{ tone: NotificationTone; label: string }[]>([
+    { tone: 'INFO', label: m.us_sound_type_info() },
+    { tone: 'SUCCESS', label: m.us_sound_type_success() },
+    { tone: 'WARNING', label: m.us_sound_type_warning() },
+    { tone: 'ERROR', label: m.us_sound_type_error() },
+  ]);
 
   const activeThemeLabel = $derived(
     THEME_PRESETS.find(p => p.id === themeStore.themeId)?.label ?? 'Custom'
@@ -209,42 +204,32 @@
 
 <div class="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700 pb-12">
 
-  <!-- Header -->
-  <header class="relative overflow-hidden flex flex-col md:flex-row md:items-center gap-4 bg-surface-container-low/40 p-5 rounded-xl border border-outline-variant/30">
-    <div class="relative flex items-center gap-4 flex-1">
-      <div class="relative shrink-0">
-        <div class="relative w-11 h-11 rounded-lg border border-white/20 shadow-sm overflow-hidden">
-          <img src={getUserAvatar()} alt="Avatar" class="w-full h-full object-cover" />
-        </div>
-      </div>
-      <div>
-        <h1 class="text-lg font-semibold tracking-tight leading-tight">{m.us_title()}</h1>
-        <p class="text-sm text-on-surface-variant/70 font-medium">
-          {m.us_subtitle()}
-          {#if authStore.user?.username}
-            · <span class="text-primary font-bold">{authStore.user.username}</span>
-          {/if}
-        </p>
-      </div>
+  <header class="flex flex-col md:flex-row md:items-end justify-between gap-x-6 gap-y-3">
+    <div class="min-w-0">
+      <h1 class="text-2xl font-semibold tracking-tight text-on-surface font-headline leading-tight">{m.us_title()}</h1>
+      <p class="mt-1 max-w-prose text-sm text-on-surface-variant">
+        {m.us_subtitle()}
+        {#if authStore.user?.username}
+          · <span class="font-medium text-on-surface">{authStore.user.username}</span>
+        {/if}
+      </p>
     </div>
 
-    <!-- Save feedback badge -->
+    <!-- Les preferences s'enregistrent seules : une ligne discrete le dit,
+         et confirme chaque enregistrement, sans prendre la place d'un bouton. -->
     {#if activeTab === 'preferences'}
-      <div class="relative shrink-0">
-        <div class="flex items-center gap-2 px-5 py-2.5 rounded-lg font-bold text-sm transition-all duration-500 {savedFeedback ? 'bg-success/20 border border-success/40 text-success' : 'bg-surface-container-high/30 border border-outline-variant/20 text-on-surface-variant/50'}">
-          {#if savedFeedback}
-            <Papicon icon="check" size={16} />
-            {m.us_saved_auto()}
-          {:else}
-            <Papicon icon="Gears" size={16} />
-            {m.us_autosave()}
-          {/if}
-        </div>
-      </div>
+      <p class="flex shrink-0 items-center gap-1.5 text-xs {savedFeedback ? 'text-success' : 'text-on-surface-variant'}" aria-live="polite">
+        {#if savedFeedback}
+          <Papicon icon="check" size={14} />
+          {m.us_saved_auto()}
+        {:else}
+          {m.us_autosave()}
+        {/if}
+      </p>
     {/if}
   </header>
 
-  <div class="flex justify-center">
+  <div class="flex">
     <Tabs
       label={m.nav_user_settings()}
       {tabs}
@@ -260,7 +245,7 @@
   <section class="bg-surface-container-low/30 border border-outline-variant/10 p-6 rounded-xl space-y-5">
     <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
       <div>
-        <p class="text-xs font-semibold text-on-surface-variant/60">{m.us_quick_overview()}</p>
+        <p class="text-xs font-semibold text-on-surface-variant">{m.us_quick_overview()}</p>
         <h2 class="text-lg font-semibold mt-1">{m.us_active_settings()}</h2>
       </div>
       <div class="flex flex-wrap gap-2">
@@ -286,7 +271,7 @@
     <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
       {#each activeSummary as item}
         <div class="rounded-lg border border-outline-variant/20 bg-surface-container-high/20 p-4">
-          <p class="text-xs font-semibold text-on-surface-variant/50">{item.label}</p>
+          <p class="text-xs font-semibold text-on-surface-variant">{item.label}</p>
           <p class="mt-2 text-sm font-semibold text-on-surface truncate">{item.value}</p>
         </div>
       {/each}
@@ -314,7 +299,7 @@
 
       <!-- Theme Presets -->
       <div class="space-y-3">
-        <p class="text-xs font-semibold text-on-surface-variant/60">{m.us_theme()}</p>
+        <p class="text-xs font-semibold text-on-surface-variant">{m.us_theme()}</p>
         <div class="grid grid-cols-3 gap-2.5">
           {#each THEME_PRESETS as preset}
             <button
@@ -422,7 +407,7 @@
 
       <!-- Accent Color -->
       <div class="space-y-3">
-        <p class="text-xs font-semibold text-on-surface-variant/60">{m.us_accent_color()}</p>
+        <p class="text-xs font-semibold text-on-surface-variant">{m.us_accent_color()}</p>
         <div class="flex flex-wrap gap-3">
           {#each accentColors as color}
             <button
@@ -445,7 +430,7 @@
       <div class="flex items-center justify-between p-4 rounded-lg bg-surface-container-high/20 border border-outline-variant/5 hover:bg-surface-container-high/40 transition-colors">
         <div>
           <p class="text-sm font-bold">{m.us_compact_mode()}</p>
-          <p class="text-2xs text-on-surface-variant/50">{m.us_compact_mode_desc()}</p>
+          <p class="text-2xs text-on-surface-variant">{m.us_compact_mode_desc()}</p>
         </div>
         <ToggleSwitch
           checked={userPrefs.prefs.compactMode}
@@ -457,7 +442,7 @@
       <div class="flex items-center justify-between p-4 rounded-lg bg-surface-container-high/20 border border-outline-variant/5 hover:bg-surface-container-high/40 transition-colors">
         <div>
           <p class="text-sm font-bold">{m.us_animations()}</p>
-          <p class="text-2xs text-on-surface-variant/50">{m.us_animations_desc()}</p>
+          <p class="text-2xs text-on-surface-variant">{m.us_animations_desc()}</p>
         </div>
         <ToggleSwitch
           checked={userPrefs.prefs.animationsEnabled}
@@ -478,7 +463,7 @@
 
         <!-- Language -->
         <div class="space-y-3">
-          <p class="text-xs font-semibold text-on-surface-variant/60">{m.us_interface_language()}</p>
+          <p class="text-xs font-semibold text-on-surface-variant">{m.us_interface_language()}</p>
           <div class="grid grid-cols-2 gap-3">
             {#each languages as lang}
               <button
@@ -497,7 +482,7 @@
 
         <!-- Date format -->
         <div class="space-y-3">
-          <p class="text-xs font-semibold text-on-surface-variant/60">{m.us_date_format()}</p>
+          <p class="text-xs font-semibold text-on-surface-variant">{m.us_date_format()}</p>
           <div class="space-y-2">
             {#each dateFormats as fmt}
               <button
@@ -515,7 +500,7 @@
                 </div>
                 <div>
                   <p class="text-sm font-bold">{fmt.label}</p>
-                  <p class="text-2xs text-on-surface-variant/50">{fmt.example}</p>
+                  <p class="text-2xs text-on-surface-variant">{fmt.example}</p>
                 </div>
               </button>
             {/each}
@@ -524,7 +509,7 @@
 
         <!-- Fuseau horaire des statistiques -->
         <div class="space-y-3">
-          <p class="text-xs font-semibold text-on-surface-variant/60">{m.us_timezone()}</p>
+          <p class="text-xs font-semibold text-on-surface-variant">{m.us_timezone()}</p>
           <select
             value={timezoneChoice}
             onchange={(e) => handleTimezone((e.currentTarget as HTMLSelectElement).value)}
@@ -535,7 +520,7 @@
               <option value={zone}>{zone.replace(/_/g, ' ')}</option>
             {/each}
           </select>
-          <p class="text-2xs text-on-surface-variant/50">
+          <p class="text-2xs text-on-surface-variant">
             {m.us_timezone_desc({ zone: timezoneStore.displayTimezone })}
           </p>
         </div>
@@ -553,7 +538,7 @@
 
       <!-- Sidebar behavior -->
       <div class="space-y-3">
-        <p class="text-xs font-semibold text-on-surface-variant/60">{m.us_sidebar_behavior()}</p>
+        <p class="text-xs font-semibold text-on-surface-variant">{m.us_sidebar_behavior()}</p>
         <div class="space-y-2">
           {#each sidebarBehaviors as behavior}
             <button
@@ -571,7 +556,7 @@
               </div>
               <div>
                 <p class="text-sm font-bold">{behavior.label}</p>
-                <p class="text-2xs text-on-surface-variant/50">{behavior.desc}</p>
+                <p class="text-2xs text-on-surface-variant">{behavior.desc}</p>
               </div>
             </button>
           {/each}
@@ -589,36 +574,76 @@
       </h2>
 
       <div class="space-y-3">
-        {#each [
-          { key: 'soundNotifications', label: m.us_sound_notif(), desc: m.us_sound_notif_desc(), color: 'rose' },
-          { key: 'desktopNotifications', label: m.us_desktop_notif(), desc: m.us_desktop_notif_desc(), color: 'rose' },
-          { key: 'showOnlineStatus', label: m.us_online_status(), desc: m.us_online_status_desc(), color: 'rose' },
-        ] as item}
-          <div class="flex items-center justify-between p-4 rounded-lg bg-surface-container-high/20 border border-outline-variant/5 hover:bg-surface-container-high/40 transition-colors">
+        <div class="p-4 rounded-lg bg-surface-container-high/20 border border-outline-variant/5 hover:bg-surface-container-high/40 transition-colors space-y-3">
+          <div class="flex items-center justify-between gap-4">
             <div>
-              <p class="text-sm font-bold">{item.label}</p>
-              <p class="text-2xs text-on-surface-variant/50">{item.desc}</p>
+              <p class="text-sm font-bold">{m.us_sound_notif()}</p>
+              <p class="text-2xs text-on-surface-variant">{m.us_sound_notif_desc()}</p>
             </div>
             <ToggleSwitch
-              checked={(userPrefs.prefs as any)[item.key]}
-              onToggle={(v: boolean) => handleToggle(item.key as any, v)}
+              checked={userPrefs.prefs.soundNotifications}
+              onToggle={(v: boolean) => handleNotificationToggle('soundNotifications', v)}
             />
           </div>
-        {/each}
+          {#if userPrefs.prefs.soundNotifications}
+            <div class="flex flex-wrap items-center gap-2">
+              <span class="text-2xs text-on-surface-variant">{m.us_sound_preview()}</span>
+              {#each soundPreviews as preview}
+                <button
+                  type="button"
+                  onclick={() => playNotificationSound(preview.tone, { force: true })}
+                  class="flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-outline-variant/20 bg-surface-container-high/20 text-2xs font-medium hover:border-primary/30 hover:bg-primary/5 transition-colors"
+                >
+                  <Papicon icon="Play" size={10} />
+                  {preview.label}
+                </button>
+              {/each}
+            </div>
+          {/if}
+        </div>
+
+        <div class="p-4 rounded-lg bg-surface-container-high/20 border border-outline-variant/5 hover:bg-surface-container-high/40 transition-colors space-y-2">
+          <div class="flex items-center justify-between gap-4">
+            <div>
+              <p class="text-sm font-bold">{m.us_desktop_notif()}</p>
+              <p class="text-2xs text-on-surface-variant">{m.us_desktop_notif_desc()}</p>
+            </div>
+            <ToggleSwitch
+              checked={userPrefs.prefs.desktopNotifications && permissionState === 'granted'}
+              onToggle={(v: boolean) => handleNotificationToggle('desktopNotifications', v)}
+            />
+          </div>
+          {#if permissionState === 'denied'}
+            <p class="text-2xs text-warning">{m.us_notif_blocked_hint()}</p>
+          {/if}
+        </div>
+
+        <NotificationPreferencesGrid />
+
+        <div class="flex items-center justify-between p-4 rounded-lg bg-surface-container-high/20 border border-outline-variant/5 hover:bg-surface-container-high/40 transition-colors">
+          <div>
+            <p class="text-sm font-bold">{m.us_online_status()}</p>
+            <p class="text-2xs text-on-surface-variant">{m.us_online_status_desc()}</p>
+          </div>
+          <ToggleSwitch
+            checked={userPrefs.prefs.showOnlineStatus}
+            onToggle={(v: boolean) => handleToggle('showOnlineStatus', v)}
+          />
+        </div>
       </div>
 
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
         <a href="https://kotbo.fr/terms" target="_blank" rel="noopener noreferrer" class="p-4 rounded-lg border border-outline-variant/10 bg-surface-container-high/20 hover:bg-surface-container-high/40 transition-colors">
           <p class="text-sm font-bold">{m.us_privacy_policy()}</p>
-          <p class="text-2xs text-on-surface-variant/50 mt-1">{m.us_privacy_policy_desc()}</p>
+          <p class="text-2xs text-on-surface-variant mt-1">{m.us_privacy_policy_desc()}</p>
         </a>
         <a href="https://kotbo.fr/cookies" target="_blank" rel="noopener noreferrer" class="p-4 rounded-lg border border-outline-variant/10 bg-surface-container-high/20 hover:bg-surface-container-high/40 transition-colors">
           <p class="text-sm font-bold">{m.us_cookies()}</p>
-          <p class="text-2xs text-on-surface-variant/50 mt-1">{m.us_cookies_desc()}</p>
+          <p class="text-2xs text-on-surface-variant mt-1">{m.us_cookies_desc()}</p>
         </a>
         <a href="mailto:privacy@kotbo.fr?subject=Demande%20RGPD%20Kotbo" class="sm:col-span-2 p-4 rounded-lg border border-primary/20 bg-primary/5 hover:bg-primary/10 transition-colors">
           <p class="text-sm font-bold text-primary">{m.us_gdpr_rights()}</p>
-          <p class="text-2xs text-on-surface-variant/60 mt-1">{m.us_gdpr_rights_desc()}</p>
+          <p class="text-2xs text-on-surface-variant mt-1">{m.us_gdpr_rights_desc()}</p>
         </a>
       </div>
     </section>
@@ -630,7 +655,7 @@
       <Papicon icon="AlertTriangle" size={20} />
       {m.us_reset_zone()}
     </h2>
-    <p class="text-sm text-on-surface-variant/70">
+    <p class="text-sm text-on-surface-variant">
       {m.us_reset_desc()}
     </p>
     <button

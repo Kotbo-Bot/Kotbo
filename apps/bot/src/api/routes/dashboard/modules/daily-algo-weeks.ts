@@ -97,7 +97,7 @@ export async function handleDailyAlgoWeeksRoutes(ctx: ModuleRouteContext): Promi
         json(res, 200, { ok: true, ...result });
       } catch (err) {
         logger.error('DailyAlgoAPI', 'Erreur lors de la clôture manuelle de la semaine:', err);
-        jsonFailure(res, err, err instanceof Error ? err.message : 'Erreur lors de la clôture de la semaine', 'DailyAlgoAPI');
+        jsonFailure(res, err, 'Erreur lors de la clôture de la semaine', 'DailyAlgoAPI');
       }
       return true;
     }

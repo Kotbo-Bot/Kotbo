@@ -10,6 +10,7 @@ import { JWT_SECRET, json } from '../shared.js';
 import { getActiveMcpKeyById, verifyMcpKey, verifyMcpKeyByClientCredentials } from './mcpKeyService.js';
 import { registerMcpTools } from './mcpTools.js';
 import { logger } from '../../utils/logger.js';
+import { GENERIC_ERROR_MESSAGE, publicErrorMessage } from '../../utils/publicError.js';
 
 // ── In-memory OAuth state (ephemeral, single-instance) ────────────────────
 
@@ -413,7 +414,11 @@ async function sendToolCallCompat(server: McpServer, parsedBody: unknown, res: S
     reply({ jsonrpc: '2.0', id: jsonRpcId(parsedBody), result });
   } catch (error: unknown) {
     const code = (error as { code?: number })?.code ?? -32603;
-    const message = error instanceof Error ? error.message : String(error);
+    // Une erreur JSON-RPC (code numérique : paramètres invalides…) s'adresse à
+    // l'agent et garde son message ; toute autre panne reste dans les journaux.
+    const message = typeof (error as { code?: unknown })?.code === 'number' && error instanceof Error
+      ? error.message
+      : publicErrorMessage(error, GENERIC_ERROR_MESSAGE, 'MCP');
     reply({ jsonrpc: '2.0', id: jsonRpcId(parsedBody), error: { code, message } });
   }
 }

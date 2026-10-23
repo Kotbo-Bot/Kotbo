@@ -4,7 +4,7 @@
  */
 
 import { z } from 'zod';
-import { type McpToolContext, err, ok } from '../toolkit.js';
+import { type McpToolContext, err, ok, toolError } from '../toolkit.js';
 import {
   getClanTowerConfig,
   getClanTowerDashboard,
@@ -29,7 +29,7 @@ import {
 } from '../../../services/features/rpg/rpgTowerMap.js';
 import { appendFailed, compactTowerSettings, editTowerFloors, floorSchema, roomSchema, towerCardsReadSchema, towerFloorsSaved, towerSettingsSaved } from './rpg-tower.js';
 
-const fail = (e: unknown) => err(e instanceof Error ? e.message : String(e));
+const fail = (e: unknown) => toolError(e);
 
 const range = (key: keyof typeof CLAN_TOWER_RANGES) =>
   z.number().int().min(CLAN_TOWER_RANGES[key].min).max(CLAN_TOWER_RANGES[key].max);

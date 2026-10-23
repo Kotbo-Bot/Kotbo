@@ -10,6 +10,7 @@ import type { Prisma } from '@prisma/client';
 import { extractTrackingInfo, resolveModuleFromCommand } from '../../utils/moduleTracking.js';
 import { separator, v2Message } from '@arcscord/components';
 import { fetchExternal } from '../../utils/http.js';
+import { publicErrorMessage } from '../../utils/publicError.js';
 
 const MAX_BACKUPS_PER_GUILD = 3;
 
@@ -299,7 +300,7 @@ async function handleRestore(interaction: ChatInputCommandInteraction, guildId: 
     console.error('Erreur lors de la restauration:', error);
     await interaction.followUp(v2Message(
       { flags: MessageFlags.Ephemeral },
-      errorContainer('Erreur de restauration', `Erreur lors de la restauration: ${error instanceof Error ? error.message : 'Erreur inconnue'}`),
+      errorContainer('Erreur de restauration', `Erreur lors de la restauration: ${publicErrorMessage(error, 'Erreur inconnue')}`),
     ));
   }
 }
@@ -458,7 +459,7 @@ async function handleImport(interaction: ChatInputCommandInteraction, guildId: s
     await interaction.editReply(v2Message(
       errorContainer(
         'Sauvegarde invalide',
-        error instanceof Error ? error.message : 'Le fichier de sauvegarde est invalide.',
+        publicErrorMessage(error, 'Le fichier de sauvegarde est invalide.'),
       ),
     ));
     return;
@@ -533,7 +534,7 @@ async function handleImport(interaction: ChatInputCommandInteraction, guildId: s
   } catch (error) {
     console.error("Erreur lors de l'import:", error);
     await interaction.editReply(v2Message(
-      errorContainer('Erreur d\'import', `Erreur lors de l'import: ${error instanceof Error ? error.message : 'Erreur inconnue'}`),
+      errorContainer('Erreur d\'import', `Erreur lors de l'import: ${publicErrorMessage(error, 'Erreur inconnue')}`),
     ));
   }
 }

@@ -49,7 +49,7 @@
 <button
   bind:this={button}
   type="button"
-  class="inline-flex items-center justify-center rounded-full text-on-surface-variant/60 hover:text-on-surface focus-visible:outline-2 focus-visible:outline-primary"
+  class="inline-flex items-center justify-center rounded-full text-on-surface-variant hover:text-on-surface focus-visible:outline-2 focus-visible:outline-primary"
   aria-label={text}
   aria-expanded={open}
   aria-describedby={open ? id : undefined}

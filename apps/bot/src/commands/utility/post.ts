@@ -4,15 +4,13 @@ import { sendDailyAlgo } from '../../services/progression/dailyAlgoService.js';
 import { formatDailyAlgoDate } from '../../services/progression/dailyAlgoService.js';
 import { successEmbed, errorEmbed, infoEmbed } from '../../utils/embeds.js';
 import { logger } from '../../utils/logger.js';
+import { publicErrorMessage } from '../../utils/publicError.js';
 import { getEffectiveLocale, getCommandMetadata } from '../../utils/i18n.js';
 import * as m from '../../lib/paraglide/messages.js';
 
 function formatPostError(error: unknown, locale: 'fr' | 'en'): string {
-  if (error instanceof Error) {
-    return error.message.split('\n').map((line) => line.trim()).find(Boolean) ?? m.b5_unknown_error({}, { locale });
-  }
-
-  return String(error ?? m.b5_unknown_error({}, { locale }));
+  const fallback = m.b5_unknown_error({}, { locale });
+  return publicErrorMessage(error, fallback, 'Post').split('\n').map((line) => line.trim()).find(Boolean) ?? fallback;
 }
 
 const meta = getCommandMetadata('b5_post');

@@ -21,6 +21,7 @@ import {
 } from '../../services/progression/levelingService.js';
 import { getEffectiveLocale, getCommandMetadata } from '../../utils/i18n.js';
 import * as m from '../../lib/paraglide/messages.js';
+import { publicErrorMessage } from '../../utils/publicError.js';
 
 const meta = getCommandMetadata('c2_leveling');
 
@@ -319,7 +320,7 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
     }
   } catch (err: unknown) {
     await interaction.reply({
-      ...v2(errorContainer(m.c2_leveling_error_title({}, { locale }), err instanceof Error ? err.message : m.c2_leveling_generic_error({}, { locale }))),
+      ...v2(errorContainer(m.c2_leveling_error_title({}, { locale }), publicErrorMessage(err, m.c2_leveling_generic_error({}, { locale })))),
       flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
     });
   }

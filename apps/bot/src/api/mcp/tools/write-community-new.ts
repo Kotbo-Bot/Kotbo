@@ -8,7 +8,7 @@ import { sanitizeCustomCss, sanitizeFormTheme } from '../../../utils/formCustomi
 import { Prisma } from '@prisma/client';
 import { ChannelType, EmbedBuilder } from 'discord.js';
 import { z } from 'zod';
-import { type McpToolContext, err, ok, resolveChannel } from '../toolkit.js';
+import { type McpToolContext, err, ok, resolveChannel, toolError } from '../toolkit.js';
 
 export function registerWriteCommunityNewTools(ctx: McpToolContext) {
   const { server, guildId, client, shouldRegister, guard, audit, toolMeta, ownerId } = ctx;
@@ -61,7 +61,7 @@ export function registerWriteCommunityNewTools(ctx: McpToolContext) {
           await audit(key_name, 'Création événement MCP', title, `Type: CUSTOM | Début: ${start_time}`);
           return ok({ ok: true, eventId: event?.id ?? null, title });
         } catch (e) {
-          return err(`Erreur lors de la création de l'événement: ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e, "Erreur lors de la création de l'événement");
         }
       })
     );
@@ -130,7 +130,7 @@ export function registerWriteCommunityNewTools(ctx: McpToolContext) {
           await audit(key_name, 'Création formulaire MCP', name, `Questions: ${questions.length}`);
           return ok({ ok: true, formId: form.id, name, fieldsCreated: mappedFields.length });
         } catch (e) {
-          return err(`Erreur lors de la création du formulaire: ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e, 'Erreur lors de la création du formulaire');
         }
       })
     );
@@ -184,7 +184,7 @@ export function registerWriteCommunityNewTools(ctx: McpToolContext) {
           await audit(key_name, 'Annonce MCP', title, `Salon: #${resolved.channel.name}`);
           return ok({ ok: true, messageId: sent.id, channelId: resolved.channel.id });
         } catch (e) {
-          return err(`Erreur lors de l'envoi de l'annonce : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e, "Erreur lors de l'envoi de l'annonce");
         }
       })
     );
@@ -231,7 +231,7 @@ export function registerWriteCommunityNewTools(ctx: McpToolContext) {
         await audit(key_name, 'Création giveaway MCP', prize, `Salon: #${resolved.channel.name}`);
         return ok({ ok: true, giveawayId: giveaway.id, prize });
       } catch (e) {
-        return err(`Erreur lors du lancement du giveaway : ${e instanceof Error ? e.message : String(e)}`);
+        return toolError(e, 'Erreur lors du lancement du giveaway');
       }
     });
 
@@ -272,7 +272,7 @@ export function registerWriteCommunityNewTools(ctx: McpToolContext) {
           await audit(key_name, 'Annulation giveaway MCP', giveaway_id, '');
           return ok({ ok: true, giveawayId: giveaway_id });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -295,7 +295,7 @@ export function registerWriteCommunityNewTools(ctx: McpToolContext) {
           await audit(key_name, 'Reroll giveaway MCP', giveaway_id, '');
           return ok({ ok: true, giveawayId: giveaway_id });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -337,7 +337,7 @@ export function registerWriteCommunityNewTools(ctx: McpToolContext) {
           await audit(key_name, 'Création quête MCP', name, `Target: ${target} | XP: ${reward_xp}`);
           return ok({ ok: true, questId: quest.id, name });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -411,7 +411,7 @@ export function registerWriteCommunityNewTools(ctx: McpToolContext) {
           await audit(key_name, 'Création AutoResponse MCP', trigger, `Type: ${trigger_type}`);
           return ok({ ok: true, autoResponseId: autoRes.id });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -446,7 +446,7 @@ export function registerWriteCommunityNewTools(ctx: McpToolContext) {
           await audit(key_name, 'Création tâche planifiée MCP', name, `Cron: ${cron}`);
           return ok({ ok: true, taskId: task.id, name });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -533,7 +533,7 @@ export function registerWriteCommunityNewTools(ctx: McpToolContext) {
           await audit(key_name, 'Mise à jour formulaire MCP', name || (existing as any).name, `ID: ${form_id}`);
           return ok({ ok: true, formId: form_id });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -557,7 +557,7 @@ export function registerWriteCommunityNewTools(ctx: McpToolContext) {
           await audit(key_name, 'Suppression formulaire MCP', existing.name, `ID: ${form_id}`);
           return ok({ ok: true });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -606,7 +606,7 @@ export function registerWriteCommunityNewTools(ctx: McpToolContext) {
           await audit(key_name, 'Mise à jour événement MCP', title || existing.title, `ID: ${event_id}`);
           return ok({ ok: true, eventId: event_id });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -630,7 +630,7 @@ export function registerWriteCommunityNewTools(ctx: McpToolContext) {
           await audit(key_name, 'Suppression événement MCP', existing.title, `ID: ${event_id}`);
           return ok({ ok: true });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -681,7 +681,7 @@ export function registerWriteCommunityNewTools(ctx: McpToolContext) {
           await audit(key_name, 'Mise à jour giveaway MCP', prize || existing.prize, `ID: ${giveaway_id}`);
           return ok({ ok: true, giveawayId: giveaway_id });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -707,7 +707,7 @@ export function registerWriteCommunityNewTools(ctx: McpToolContext) {
           await audit(key_name, 'Suppression giveaway MCP', existing.prize, `ID: ${giveaway_id}`);
           return ok({ ok: true });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -754,7 +754,7 @@ export function registerWriteCommunityNewTools(ctx: McpToolContext) {
           await audit(key_name, 'Mise à jour quête MCP', name || existing.name, `ID: ${quest_id}`);
           return ok({ ok: true, questId: quest_id });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -779,7 +779,7 @@ export function registerWriteCommunityNewTools(ctx: McpToolContext) {
           await audit(key_name, 'Suppression quête MCP', existing.name, `ID: ${quest_id}`);
           return ok({ ok: true });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -859,7 +859,7 @@ export function registerWriteCommunityNewTools(ctx: McpToolContext) {
           await audit(key_name, 'Mise à jour AutoResponse MCP', trigger || existing.trigger, `ID: ${auto_response_id}`);
           return ok({ ok: true, autoResponseId: auto_response_id });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -883,7 +883,7 @@ export function registerWriteCommunityNewTools(ctx: McpToolContext) {
           await audit(key_name, 'Suppression AutoResponse MCP', existing.trigger, `ID: ${auto_response_id}`);
           return ok({ ok: true });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -923,7 +923,7 @@ export function registerWriteCommunityNewTools(ctx: McpToolContext) {
           await audit(key_name, 'Mise à jour tâche planifiée MCP', name || existing.name, `ID: ${task_id}`);
           return ok({ ok: true, taskId: task_id });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -947,7 +947,7 @@ export function registerWriteCommunityNewTools(ctx: McpToolContext) {
           await audit(key_name, 'Suppression tâche planifiée MCP', existing.name, `ID: ${task_id}`);
           return ok({ ok: true });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );

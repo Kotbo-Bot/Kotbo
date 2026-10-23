@@ -517,7 +517,23 @@ export async function dashboardMutation(path: string, options: RequestOptions = 
     const error = asApiError(err, path, method);
     recordFailure(error, errorContext);
     if (!options.silent && !isExpectedRefusal(error)) {
-      toast.error(error.userMessage);
+      // Une erreur qui guide : quand la demande n'a pas ete traitee (reseau
+      // coupe, service indisponible, trop de requetes), le message propose de
+      // la rejouer telle quelle. Pas pour un delai depasse : le serveur a pu
+      // enregistrer quand meme, et rejouer creerait un doublon.
+      // Un conflit ou une reponse illisible demandent de recharger la page :
+      // le bouton est dans le message plutot que de laisser chercher F5.
+      const replayable = error.retryable && error.kind !== 'timeout';
+      const needsReload = error.kind === 'conflict' || error.kind === 'parse';
+      toast.error(
+        error.userMessage,
+        undefined,
+        replayable
+          ? { label: m.common_retry(), onClick: () => { void dashboardMutation(path, options); } }
+          : needsReload
+            ? { label: m.common_refresh(), onClick: () => window.location.reload() }
+            : undefined,
+      );
     }
     return false;
   }
@@ -567,6 +583,41 @@ export async function dashboardRequest<T = any>(
       path,
       { ...options, method },
     );
+  } catch (err) {
+    const error = asApiError(err, path, method);
+    recordFailure(error, errorContext);
+    throw error;
+  }
+
+  if (options.successMessage && !options.silent) {
+    toast.success(options.successMessage);
+  }
+
+  try {
+    return (await response.json()) as T;
+  } catch (err) {
+    const error = new DashboardApiError({ kind: 'parse', status: response.status, path, method, cause: err });
+    recordFailure(error, errorContext);
+    throw error;
+  }
+}
+
+/**
+ * Comme dashboardRequest, pour une route de l'API qui ne vit pas sous
+ * `/api/dashboard/guilds/<id>` (sites communautaires, par exemple) : `path`
+ * part de la racine de l'API. Même délai, mêmes rejeux, mêmes erreurs.
+ */
+export async function apiRequest<T = any>(path: string, options: RequestOptions = {}): Promise<T> {
+  const method = (options.method ?? 'GET').toUpperCase();
+  const errorContext = options.errorContext || 'API Error';
+
+  if (!isReadMethod(method) && !backendHealth.canWrite) {
+    throw new DashboardApiError({ kind: 'unavailable', serverMessage: offlineWriteMessage(), path, method });
+  }
+
+  let response: Response;
+  try {
+    response = await performRequest(`${API_BASE_URL}${path}`, path, { ...options, method });
   } catch (err) {
     const error = asApiError(err, path, method);
     recordFailure(error, errorContext);

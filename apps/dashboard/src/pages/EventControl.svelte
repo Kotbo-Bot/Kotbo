@@ -100,7 +100,7 @@
         toast.success(m.evc_reg_removed_toast());
         await loadRegistrations();
       } else {
-        toast.error('Erreur lors de la suppression');
+        toast.error('Impossible de supprimer. Réessaie.');
       }
     } catch {
       toast.error('Erreur réseau');
@@ -271,7 +271,7 @@
         <div class="flex gap-2 bg-surface-container-low/50 p-1.5 rounded-lg w-fit border border-outline-variant/10">
           <button
             onclick={() => activeTab = 'registrations'}
-            class="px-6 py-2.5 rounded-xl text-xs font-medium transition-all {activeTab === 'registrations' ? 'bg-surface-container-highest text-on-surface shadow-sm' : 'text-on-surface-variant/40 hover:text-on-surface-variant/60'}"
+            class="px-6 py-2.5 rounded-xl text-xs font-medium transition-all {activeTab === 'registrations' ? 'bg-surface-container-highest text-on-surface shadow-sm' : 'text-on-surface-variant/40 hover:text-on-surface-variant'}"
           >
             {m.evc_tab_registrations({ count: registrations.length })}
           </button>
@@ -280,13 +280,13 @@
         <div class="flex gap-2 bg-surface-container-low/50 p-1.5 rounded-lg w-fit border border-outline-variant/10">
           <button
             onclick={() => activeTab = 'stats'}
-            class="px-6 py-2.5 rounded-xl text-xs font-medium transition-all {activeTab === 'stats' ? 'bg-surface-container-highest text-on-surface shadow-sm' : 'text-on-surface-variant/40 hover:text-on-surface-variant/60'}"
+            class="px-6 py-2.5 rounded-xl text-xs font-medium transition-all {activeTab === 'stats' ? 'bg-surface-container-highest text-on-surface shadow-sm' : 'text-on-surface-variant/40 hover:text-on-surface-variant'}"
           >
             {event.type === 'CTF' ? m.evc_tab_challenges() : m.evc_tab_chart()}
           </button>
           <button
             onclick={() => activeTab = 'participants'}
-            class="px-6 py-2.5 rounded-xl text-xs font-medium transition-all {activeTab === 'participants' ? 'bg-surface-container-highest text-on-surface shadow-sm' : 'text-on-surface-variant/40 hover:text-on-surface-variant/60'}"
+            class="px-6 py-2.5 rounded-xl text-xs font-medium transition-all {activeTab === 'participants' ? 'bg-surface-container-highest text-on-surface shadow-sm' : 'text-on-surface-variant/40 hover:text-on-surface-variant'}"
           >
             {m.evc_tab_participants()}
           </button>
@@ -326,7 +326,7 @@
                         onClick={(userId) => router.goto(`/profile/${userId}`)}
                       />
                     </td>
-                    <td class="px-8 py-5 text-sm text-on-surface-variant/60">
+                    <td class="px-8 py-5 text-sm text-on-surface-variant">
                       {new Date(reg.createdAt).toLocaleString('fr-FR')}
                     </td>
                     {#if event.formId}
@@ -334,7 +334,7 @@
                         {#if reg.formData && typeof reg.formData === 'object'}
                           <div class="space-y-1 text-xs text-on-surface-variant/80">
                             {#each Object.entries(reg.formData) as [key, value]}
-                              <div><span class="font-semibold text-on-surface-variant/50">{key}:</span> {value}</div>
+                              <div><span class="font-semibold text-on-surface-variant">{key}:</span> {value}</div>
                             {/each}
                           </div>
                         {:else}
@@ -489,7 +489,7 @@
                           {/if}
                           <span class={isCorrect ? 'text-success' : 'text-on-surface'}>{optionText}</span>
                         </div>
-                        <span class="text-on-surface-variant/60">{value} ({percentage}%)</span>
+                        <span class="text-on-surface-variant">{value} ({percentage}%)</span>
                       </div>
                       <div class="h-3 w-full bg-surface-container-highest/20 rounded-full overflow-hidden">
                         <div 
@@ -542,7 +542,7 @@
                   <td class="px-8 py-5">
                     {#if event.type === 'CTF'}
                       {#if p.lastSolveAt}
-                        <span class="text-xs text-on-surface-variant/60">
+                        <span class="text-xs text-on-surface-variant">
                           {new Date(p.lastSolveAt).toLocaleString()}
                         </span>
                       {:else}

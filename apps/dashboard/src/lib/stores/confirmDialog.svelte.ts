@@ -5,6 +5,12 @@ export interface ConfirmDialogOptions {
   cancelLabel?: string;
   variant?: 'danger' | 'warning' | 'default';
   requireInput?: string;
+  /**
+   * Ce que l'action va entrainer, une ligne par consequence : « 4 projets
+   * actifs perdent leur responsable ». On valide en connaissant les effets en
+   * cascade, au lieu de les decouvrir apres coup.
+   */
+  impacts?: string[];
 }
 
 /**
@@ -32,8 +38,8 @@ class ConfirmDialogStore {
   }
 
   /** Raccourci pour les suppressions et actions destructives. */
-  danger(title: string, description = '', confirmLabel = 'Supprimer'): Promise<boolean> {
-    return this.ask({ title, description, confirmLabel, variant: 'danger' });
+  danger(title: string, description = '', confirmLabel = 'Supprimer', impacts: string[] = []): Promise<boolean> {
+    return this.ask({ title, description, confirmLabel, variant: 'danger', impacts });
   }
 
   resolve(value: boolean): void {

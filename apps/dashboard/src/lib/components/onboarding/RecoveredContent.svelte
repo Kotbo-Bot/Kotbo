@@ -12,6 +12,7 @@
    */
   import type { InspectionPayload } from '../../stores/onboardingData.svelte';
   import Papicon from '../Papicon.svelte';
+  import EmojiText from '../EmojiText.svelte';
 
   const { payload }: { payload: InspectionPayload } = $props();
 
@@ -38,7 +39,7 @@
   <button
     type="button"
     onclick={() => (open = !open)}
-    class="inline-flex items-center gap-1.5 text-2xs font-medium text-on-surface-variant/70
+    class="inline-flex items-center gap-1.5 text-2xs font-medium text-on-surface-variant
            hover:text-on-surface transition-colors focus:outline-none focus-visible:ring-2
            focus-visible:ring-primary/40 rounded"
     aria-expanded={open}
@@ -55,7 +56,7 @@
         <p class="whitespace-pre-wrap break-words font-mono text-2xs leading-relaxed text-on-surface-variant/85">
           {payload.message}
         </p>
-        <p class="mt-2 text-2xs text-on-surface-variant/50">
+        <p class="mt-2 text-2xs text-on-surface-variant">
           <code class="text-primary/70">{'{user}'}</code> devient la mention de l'arrivant,
           <code class="text-primary/70">{'{server}'}</code> le nom du serveur.
         </p>
@@ -69,11 +70,11 @@
               </span>
               <div class="min-w-0">
                 <p class="text-xs font-medium text-on-surface">
-                  {#if article.emoji}<span class="mr-1">{article.emoji}</span>{/if}{article.title}
+                  {#if article.emoji}<span class="mr-1"><EmojiText value={article.emoji} /></span>{/if}<EmojiText value={article.title} />
                 </p>
                 {#if article.description !== article.title}
-                  <p class="mt-0.5 whitespace-pre-wrap break-words text-2xs leading-relaxed text-on-surface-variant/60">
-                    {article.description}
+                  <p class="mt-0.5 whitespace-pre-wrap break-words text-2xs leading-relaxed text-on-surface-variant">
+                    <EmojiText value={article.description} />
                   </p>
                 {/if}
               </div>
@@ -89,7 +90,7 @@
           ></span>
           <div class="min-w-0">
             <p class="text-xs font-semibold text-on-surface">{payload.title}</p>
-            <p class="mt-0.5 whitespace-pre-wrap break-words text-2xs leading-relaxed text-on-surface-variant/60">
+            <p class="mt-0.5 whitespace-pre-wrap break-words text-2xs leading-relaxed text-on-surface-variant">
               {payload.description}
             </p>
           </div>
@@ -102,13 +103,13 @@
                 class="rounded-md bg-surface-container/70 px-1.5 py-0.5 text-2xs text-on-surface-variant/75"
                 title={type.description || undefined}
               >
-                {type.emoji} {type.label}
+                <EmojiText value={type.emoji} /> {type.label}
               </li>
             {/each}
           </ul>
         {:else}
-          <p class="mt-2.5 text-2xs text-on-surface-variant/50">
-            Bouton « {payload.buttonText} » — aucun sujet à récupérer.
+          <p class="mt-2.5 text-2xs text-on-surface-variant">
+            Bouton « {payload.buttonText} » : aucun sujet à récupérer.
           </p>
         {/if}
 
@@ -117,7 +118,7 @@
         <ul class="mt-1.5 space-y-1">
           {#each payload.options as option (option.roleId)}
             <li class="flex items-center gap-2 text-xs text-on-surface-variant/75">
-              <span class="w-5 text-center">{option.emoji}</span>
+              <span class="w-5 text-center"><EmojiText value={option.emoji} /></span>
               <span class="text-on-surface-variant/40">→</span>
               <span class="truncate">{option.label}</span>
             </li>

@@ -143,6 +143,7 @@ import {
   type TowerRoomType,
 } from './rpgTowerMap.js';
 import { towerFloorLayout } from './rpgTowerGen.js';
+import { UserFacingError } from '../../../utils/userFacingError.js';
 
 export type TowerPhase = 'DOORS' | 'COMBAT' | 'LOOT' | 'BLESSING' | 'MERCHANT' | 'EVENT' | 'MERCENARY' | 'MENTOR' | 'ENTRY' | 'TOLL' | 'FOUNTAIN' | 'ORACLE';
 
@@ -509,7 +510,7 @@ export type TowerActionError =
   | 'no_auto'
   | 'fountain_dry';
 
-export class TowerActionRefused extends Error {
+export class TowerActionRefused extends UserFacingError {
   constructor(readonly reason: TowerActionError) {
     super(`Action de Tour refusée : ${reason}`);
     this.name = 'TowerActionRefused';

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { explainDisabled } from '../lib/actions/explainDisabled';
   import { m } from '../lib/i18n';
   import { onMount, onDestroy, untrack } from 'svelte';
   import { unsavedChanges } from '../lib/stores/unsavedChanges.svelte';
@@ -322,7 +323,7 @@
       </div>
 
       <div class="relative w-full sm:w-64 shrink-0">
-        <Papicon icon="Search" size={15} class="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant/50" />
+        <Papicon icon="Search" size={15} class="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant" />
         <input
           type="text"
           bind:value={commandSearch}
@@ -333,7 +334,7 @@
     </div>
 
     {#if bulkAvailable}
-      <div class="flex flex-wrap items-center justify-between gap-3 text-xs text-on-surface-variant/70">
+      <div class="flex flex-wrap items-center justify-between gap-3 text-xs text-on-surface-variant">
         <span>{m.commands_bulk_shown({ count: filteredCommands.length, disabled: shownDisabledCount })}</span>
         <div class="flex items-center gap-2">
           <button
@@ -360,7 +361,7 @@
     {#if filteredCommands.length === 0}
       <div class="section-card flex flex-col items-center justify-center py-14 text-center">
         <Papicon icon="Search" size={28} class="text-on-surface-variant/30 mb-2" />
-        <p class="text-sm text-on-surface-variant/60">{m.commands_no_results()}</p>
+        <p class="text-sm text-on-surface-variant">{m.commands_no_results()}</p>
       </div>
     {:else}
       <div class="flex flex-col gap-3">
@@ -420,14 +421,14 @@
                   </span>
                   <span class="min-w-0 flex-1">
                     <span class="block text-sm font-semibold text-on-surface">{m.commands_roles_allowed()}</span>
-                    <span class="mt-0.5 block truncate text-xs text-on-surface-variant/70">
+                    <span class="mt-0.5 block truncate text-xs text-on-surface-variant">
                       {summaryFor(rule.allowedRoleIds, roleName, m.commands_roles_all())}
                     </span>
                   </span>
                   <Papicon
                     icon="ChevronDown"
                     size={16}
-                    class="shrink-0 text-on-surface-variant/50 transition-transform duration-200 {expanded.has(rolesKey) ? 'rotate-180' : ''}"
+                    class="shrink-0 text-on-surface-variant transition-transform duration-200 {expanded.has(rolesKey) ? 'rotate-180' : ''}"
                   />
                 </div>
 
@@ -437,7 +438,7 @@
                       {#each availableRoles as role (role.id)}
                         <button
                           type="button"
-                          disabled={!canManageSettings}
+                          use:explainDisabled={(!canManageSettings) ? m.common_reason_no_permission() : ''}
                           onclick={() => toggleId(command.name, 'allowedRoleIds', role.id)}
                           class="cmd-option {rule.allowedRoleIds.includes(role.id) ? 'cmd-option--on' : ''}"
                         >
@@ -476,14 +477,14 @@
                   </span>
                   <span class="min-w-0 flex-1">
                     <span class="block text-sm font-semibold text-on-surface">{m.commands_advanced()}</span>
-                    <span class="mt-0.5 block truncate text-xs text-on-surface-variant/70">
+                    <span class="mt-0.5 block truncate text-xs text-on-surface-variant">
                       {summaryFor(rule.allowedChannelIds, channelName, m.commands_advanced_summary())}
                     </span>
                   </span>
                   <Papicon
                     icon="ChevronDown"
                     size={16}
-                    class="shrink-0 text-on-surface-variant/50 transition-transform duration-200 {expanded.has(advKey) ? 'rotate-180' : ''}"
+                    class="shrink-0 text-on-surface-variant transition-transform duration-200 {expanded.has(advKey) ? 'rotate-180' : ''}"
                   />
                 </div>
 
@@ -497,7 +498,7 @@
                           {#each availableChannels as channel (channel.id)}
                             <button
                               type="button"
-                              disabled={!canManageSettings}
+                              use:explainDisabled={(!canManageSettings) ? m.common_reason_no_permission() : ''}
                               onclick={() => toggleId(command.name, 'allowedChannelIds', channel.id)}
                               class="cmd-option {rule.allowedChannelIds.includes(channel.id) ? 'cmd-option--on' : ''}"
                             >
@@ -518,7 +519,7 @@
                           {#each availableRoles as role (role.id)}
                             <button
                               type="button"
-                              disabled={!canManageSettings}
+                              use:explainDisabled={(!canManageSettings) ? m.common_reason_no_permission() : ''}
                               onclick={() => toggleId(command.name, 'blockedRoleIds', role.id)}
                               class="cmd-option {rule.blockedRoleIds.includes(role.id) ? 'cmd-option--off' : ''}"
                             >
@@ -551,7 +552,7 @@
                         />
                         <button
                           type="button"
-                          disabled={!canManageSettings}
+                          use:explainDisabled={(!canManageSettings) ? m.common_reason_no_permission() : ''}
                           onclick={() => addUserId(command.name, 'allowedUserIds')}
                           class="cmd-mini-btn"
                         >
@@ -559,7 +560,7 @@
                         </button>
                         <button
                           type="button"
-                          disabled={!canManageSettings}
+                          use:explainDisabled={(!canManageSettings) ? m.common_reason_no_permission() : ''}
                           onclick={() => addUserId(command.name, 'blockedUserIds')}
                           class="cmd-mini-btn cmd-mini-btn--danger"
                         >
@@ -572,7 +573,7 @@
                           {#each rule.allowedUserIds as userId (userId)}
                             <button
                               type="button"
-                              disabled={!canManageSettings}
+                              use:explainDisabled={(!canManageSettings) ? m.common_reason_no_permission() : ''}
                               onclick={() => toggleId(command.name, 'allowedUserIds', userId)}
                               class="cmd-tag cmd-tag--allow"
                             >
@@ -583,7 +584,7 @@
                           {#each rule.blockedUserIds as userId (userId)}
                             <button
                               type="button"
-                              disabled={!canManageSettings}
+                              use:explainDisabled={(!canManageSettings) ? m.common_reason_no_permission() : ''}
                               onclick={() => toggleId(command.name, 'blockedUserIds', userId)}
                               class="cmd-tag cmd-tag--block"
                             >
@@ -598,7 +599,7 @@
                     {#if restrictionCount(rule) > 0}
                       <button
                         type="button"
-                        disabled={!canManageSettings}
+                        use:explainDisabled={(!canManageSettings) ? m.common_reason_no_permission() : ''}
                         onclick={() => resetCommand(command.name)}
                         class="cmd-mini-btn cmd-mini-btn--danger self-start"
                       >
@@ -630,14 +631,14 @@
                     </span>
                     <span class="min-w-0 flex-1">
                       <span class="block text-sm font-semibold text-on-surface">{m.commands_tab_structure()}</span>
-                      <span class="mt-0.5 block truncate text-xs text-on-surface-variant/70">
+                      <span class="mt-0.5 block truncate text-xs text-on-surface-variant">
                         {m.commands_params_count({ count: (command.options || []).length })}
                       </span>
                     </span>
                     <Papicon
                       icon="ChevronDown"
                       size={16}
-                      class="shrink-0 text-on-surface-variant/50 transition-transform duration-200 {expanded.has(docKey) ? 'rotate-180' : ''}"
+                      class="shrink-0 text-on-surface-variant transition-transform duration-200 {expanded.has(docKey) ? 'rotate-180' : ''}"
                     />
                   </div>
 
@@ -648,7 +649,7 @@
                           <div>
                             <div class="cmd-sig">{buildSignature(command.name, sub.name, sub.options)}</div>
                             {#if sub.description}
-                              <p class="mt-1 text-xs text-on-surface-variant/70">{sub.description}</p>
+                              <p class="mt-1 text-xs text-on-surface-variant">{sub.description}</p>
                             {/if}
                           </div>
                         {/each}
@@ -675,7 +676,8 @@
         {/if}
         <button
           type="button"
-          disabled={!isDirty || saveAction.state.loading}
+          disabled={saveAction.state.loading}
+          use:explainDisabled={(!isDirty) ? m.common_reason_no_changes() : ''}
           onclick={save}
           class="btn-primary"
         >

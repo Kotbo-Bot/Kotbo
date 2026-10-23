@@ -240,7 +240,7 @@
 
     {#if messages === 0}
       <SectionCard>
-        <EmptyState icon="message-square" title={m.anx_content_empty_title()} description={m.anx_content_empty_desc()} />
+        <EmptyState icon="message-square" title={m.anx_content_empty_title()} description={m.anx_content_empty_desc()} reason="accumulating" />
       </SectionCard>
     {:else if view === 'content'}
       <div class="kpi-grid kpi-grid--5">

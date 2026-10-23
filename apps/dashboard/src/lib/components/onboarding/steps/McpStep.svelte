@@ -162,7 +162,7 @@
         <p class="text-body-sm font-semibold text-on-surface mb-2">{m.onb_mcp_try()}</p>
         <ul class="space-y-1.5">
           {#each [m.onb_mcp_example_1(), m.onb_mcp_example_2(), m.onb_mcp_example_3()] as example (example)}
-            <li class="flex items-start gap-2 text-body-sm text-on-surface-variant/70">
+            <li class="flex items-start gap-2 text-body-sm text-on-surface-variant">
               <Papicon icon="message-circle" size={12} class="mt-1 shrink-0 text-primary/60" />
               <span>« {example} »</span>
             </li>
@@ -202,7 +202,7 @@
       <button
         type="button"
         onclick={skip}
-        class="text-body-sm font-medium text-on-surface-variant/50 hover:text-on-surface transition-colors"
+        class="text-body-sm font-medium text-on-surface-variant hover:text-on-surface transition-colors"
       >
         Passer
       </button>

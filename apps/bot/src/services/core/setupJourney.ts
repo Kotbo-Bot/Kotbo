@@ -72,6 +72,18 @@ export async function computeSetupJourney(guildId: string): Promise<SetupJourney
 
   const steps: SetupStep[] = [
     {
+      // Toujours fait, et c'est voulu : ajouter le bot est bien le premier pas,
+      // et une progression qui part de « 1 sur 10 » se termine plus souvent
+      // qu'une qui part de zero (effet de gradient d'objectif). Le serveur
+      // n'existe en base que si le bot y a ete ajoute.
+      key: 'installed',
+      group: 'essentiel',
+      label: 'Kotbo ajouté au serveur',
+      why: "C'est fait : le bot est sur le serveur et ce tableau de bord y est relié.",
+      done: true,
+      href: '/',
+    },
+    {
       key: 'logs',
       group: 'essentiel',
       label: 'Salon de logs',
@@ -97,7 +109,9 @@ export async function computeSetupJourney(guildId: string): Promise<SetupJourney
       // `timezone` a une valeur par defaut : le point est fait, il est
       // rappele pour que personne ne decouvre le decalage apres coup.
       done: filled(guild.timezone),
-      href: '/settings',
+      // `/settings` n'est pas une page du dashboard : le lien tombait dans le
+      // vide. Le fuseau se regle dans « Reglages du serveur ».
+      href: '/management',
       detail: guild.timezone ?? undefined,
     },
     {

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { stripCustomEmoji } from '../lib/emojiParser';
   import { onMount } from 'svelte';
   import { router } from 'tinro';
   import { resolveTabFromUrl, gotoTab } from '../lib/tabRouting';
@@ -92,7 +93,7 @@
 
   /** Nom lisible d'un objet vendu, avec son niveau de forge pour un exemplaire forgé. */
   function itemLabel(entry: { itemId: string; upgrade?: number; item?: { name: string; emoji: string } | null }): string {
-    const name = entry.item ? `${entry.item.emoji} ${entry.item.name}` : entry.itemId;
+    const name = entry.item ? `${stripCustomEmoji(entry.item.emoji)} ${entry.item.name}` : entry.itemId;
     return entry.upgrade && entry.upgrade > 0 ? `${name} +${entry.upgrade}` : name;
   }
 
@@ -120,7 +121,7 @@
 
 <!-- ======================== CONTENT ======================== -->
 {#if loading}
-  <div class="flex flex-col items-center justify-center py-16 text-on-surface-variant/50 gap-4">
+  <div class="flex flex-col items-center justify-center py-16 text-on-surface-variant gap-4">
     <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
     <p class="text-sm">{m.mar_loading()}</p>
   </div>
@@ -133,7 +134,7 @@
       </div>
       <div class="flex flex-col">
         <span class="text-2xl font-bold">{data.activeListings.length}</span>
-        <span class="text-xs font-medium text-on-surface-variant/60 mt-0.5">{m.mar_active_listings_stat()}</span>
+        <span class="text-xs font-medium text-on-surface-variant mt-0.5">{m.mar_active_listings_stat()}</span>
       </div>
     </div>
     <div class="bg-surface-container-low/30 border border-outline-variant/10 rounded-xl p-4 flex items-center gap-3">
@@ -142,7 +143,7 @@
       </div>
       <div class="flex flex-col">
         <span class="text-2xl font-bold">{data.totalTransactions}</span>
-        <span class="text-xs font-medium text-on-surface-variant/60 mt-0.5">{m.mar_total_tx_stat()}</span>
+        <span class="text-xs font-medium text-on-surface-variant mt-0.5">{m.mar_total_tx_stat()}</span>
       </div>
     </div>
     <div class="bg-surface-container-low/30 border border-outline-variant/10 rounded-xl p-4 flex items-center gap-3">
@@ -151,7 +152,7 @@
       </div>
       <div class="flex flex-col">
         <span class="text-2xl font-bold">{data.totalVolume.toLocaleString()}</span>
-        <span class="text-xs font-medium text-on-surface-variant/60 mt-0.5">{m.mar_total_volume_stat()}</span>
+        <span class="text-xs font-medium text-on-surface-variant mt-0.5">{m.mar_total_volume_stat()}</span>
       </div>
     </div>
   </div>
@@ -170,7 +171,7 @@
   <!-- ======================== TAB: LISTINGS ======================== -->
   {#if tab === 'listings'}
     {#if data.activeListings.length === 0}
-      <div class="flex flex-col items-center justify-center py-16 text-on-surface-variant/50 gap-4">
+      <div class="flex flex-col items-center justify-center py-16 text-on-surface-variant gap-4">
         <Papicon icon="shopping-bag" size={48} />
         <p class="text-sm">{m.mar_empty_listings_title()}</p>
         <p class="text-xs text-on-surface-variant/40">{m.mar_empty_listings_desc()}</p>
@@ -191,7 +192,7 @@
                 <Papicon icon="dollar-sign" size={14} />
                 {m.mar_price_coins({ price: listing.price.toLocaleString() })}
               </span>
-              <span class="text-xs text-on-surface-variant/60 font-medium">x{listing.quantity}</span>
+              <span class="text-xs text-on-surface-variant font-medium">x{listing.quantity}</span>
             </div>
 
             <!-- Auction bid -->
@@ -205,7 +206,7 @@
             <!-- Meta: type + time left -->
             <div class="flex items-center gap-3">
               <span class="px-2 py-0.5 rounded-lg text-xs font-medium bg-surface-container-high/40 text-on-surface-variant">{getTypeLabel(listing.type)}</span>
-              <span class="flex items-center gap-1 text-xs text-on-surface-variant/60">
+              <span class="flex items-center gap-1 text-xs text-on-surface-variant">
                 <Papicon icon="clock" size={12} />
                 {formatTimeLeft(listing.expiresAt)}
               </span>
@@ -229,7 +230,7 @@
   <!-- ======================== TAB: HISTORY ======================== -->
   {:else}
     {#if data.recentTransactions.length === 0}
-      <div class="flex flex-col items-center justify-center py-16 text-on-surface-variant/50 gap-4">
+      <div class="flex flex-col items-center justify-center py-16 text-on-surface-variant gap-4">
         <Papicon icon="clock" size={48} />
         <p class="text-sm">{m.mar_empty_history_title()}</p>
         <p class="text-xs text-on-surface-variant/40">{m.mar_empty_history_desc()}</p>
@@ -241,7 +242,7 @@
             <!-- Item info -->
             <div class="flex items-baseline gap-2 min-w-30">
               <span class="text-sm font-semibold text-on-surface">{itemLabel(tx)}</span>
-              <span class="text-xs text-on-surface-variant/60">x{tx.quantity}</span>
+              <span class="text-xs text-on-surface-variant">x{tx.quantity}</span>
             </div>
 
             <!-- Flow: seller -> buyer -->
@@ -271,7 +272,7 @@
                 <Papicon icon="dollar-sign" size={13} />
                 {m.mar_price_coins({ price: tx.price.toLocaleString() })}
               </span>
-              <span class="text-2xs text-on-surface-variant/60">{new Date(tx.createdAt).toLocaleDateString('fr-FR')}</span>
+              <span class="text-2xs text-on-surface-variant">{new Date(tx.createdAt).toLocaleDateString('fr-FR')}</span>
             </div>
           </div>
         {/each}

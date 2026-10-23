@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { explainDisabled } from '../../actions/explainDisabled';
   import { untrack } from 'svelte';
   import { SvelteFlow, Background, BackgroundVariant, Controls, type Edge, type Node } from '@xyflow/svelte';
   import '@xyflow/svelte/dist/style.css';
@@ -600,7 +601,7 @@
 
       <button
         onclick={rearrange}
-        disabled={nodes.length === 0}
+        use:explainDisabled={(nodes.length === 0) ? m.common_reason_select_one() : ''}
         title={m.wf_rearrange_title()}
         class="px-3 py-2 rounded-xl text-xs font-semibold bg-surface-container-highest text-on-surface hover:bg-surface-container-highest/70 disabled:opacity-30 transition-all flex items-center gap-1.5"
       >
@@ -610,7 +611,7 @@
 
       {#if edgeAnimationOff}
         <span
-          class="px-2.5 py-1.5 rounded-xl text-2xs text-on-surface-variant/70 bg-surface-container-highest/60 border border-outline-variant/15 flex items-center gap-1.5"
+          class="px-2.5 py-1.5 rounded-xl text-2xs text-on-surface-variant bg-surface-container-highest/60 border border-outline-variant/15 flex items-center gap-1.5"
           title={m.wf_edges_static_hint({ n: ANIMATED_EDGE_NODE_LIMIT })}
         >
           <Papicon icon="Info" size={12} />
@@ -624,7 +625,7 @@
           onclick={() => (selectedCategoryFilter = 'all')}
           class="px-2.5 py-1 rounded-lg text-2xs font-medium transition-all {selectedCategoryFilter === 'all'
             ? 'bg-primary text-on-primary shadow-sm'
-            : 'text-on-surface-variant/70 hover:text-on-surface'}"
+            : 'text-on-surface-variant hover:text-on-surface'}"
         >
           {m.wf_filter_all_blocks()}
         </button>
@@ -633,7 +634,7 @@
             onclick={() => (selectedCategoryFilter = cat)}
             class="px-2.5 py-1 rounded-lg text-2xs font-medium transition-all flex items-center gap-1 {selectedCategoryFilter === cat
               ? 'bg-primary text-on-primary shadow-sm'
-              : 'text-on-surface-variant/70 hover:text-on-surface'}"
+              : 'text-on-surface-variant hover:text-on-surface'}"
           >
             <Papicon icon={CATEGORY_ICONS[cat]} size={11} />
             <span>{CATEGORY_LABELS[cat]()}</span>
@@ -644,7 +645,7 @@
 
     <!-- Barre de recherche palette -->
     <div class="relative min-w-48">
-      <Papicon icon="Search" size={13} class="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant/70" />
+      <Papicon icon="Search" size={13} class="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant" />
       <input
         type="text"
         bind:value={searchQuery}
@@ -660,12 +661,12 @@
     {#if !readonly}
     <aside class="w-60 shrink-0 overflow-y-auto rounded-2xl bg-surface-container-high/50 border border-outline-variant/10 p-3 space-y-3">
       <div>
-        <h3 class="text-xs font-semibold text-on-surface-variant/70 mb-0.5">{m.wf_palette()}</h3>
-        <p class="text-2xs text-on-surface-variant/70">{m.wf_palette_hint()}</p>
+        <h3 class="text-xs font-semibold text-on-surface-variant mb-0.5">{m.wf_palette()}</h3>
+        <p class="text-2xs text-on-surface-variant">{m.wf_palette_hint()}</p>
       </div>
 
       {#if filteredCatalog.length === 0}
-        <p class="text-xs text-on-surface-variant/70 text-center py-4">{m.wf_no_block_found()}</p>
+        <p class="text-xs text-on-surface-variant text-center py-4">{m.wf_no_block_found()}</p>
       {:else}
         <div class="space-y-1.5">
           {#each filteredCatalog as def}
@@ -691,7 +692,7 @@
                   </span>
                   <span class="font-medium truncate text-2xs">{def.label}</span>
                 </div>
-                <Papicon icon="Plus" size={12} class="text-on-surface-variant/70 group-hover:text-primary shrink-0 transition-colors" />
+                <Papicon icon="Plus" size={12} class="text-on-surface-variant group-hover:text-primary shrink-0 transition-colors" />
               </button>
             </div>
           {/each}
@@ -745,7 +746,7 @@
       {#if selectedEdge}
         <div class="p-3 rounded-xl bg-surface-container-highest/60 border border-outline-variant/20 space-y-2">
           <div class="flex items-center justify-between">
-            <h3 class="text-xs font-semibold text-on-surface-variant/70">{m.wf_edge_selected()}</h3>
+            <h3 class="text-xs font-semibold text-on-surface-variant">{m.wf_edge_selected()}</h3>
             <button
               onclick={deleteSelectedEdge}
               class="px-2 py-1 rounded-lg text-xs font-semibold text-error bg-error/10 hover:bg-error/20 transition-colors flex items-center gap-1"
@@ -761,12 +762,12 @@
               target: getNodeDef((selectedEdgeTargetNode?.data as any)?.nodeType)?.label ?? selectedEdge?.target ?? '',
             })}
           </p>
-          <p class="text-2xs text-on-surface-variant/70">{m.wf_edge_delete_hint()}</p>
+          <p class="text-2xs text-on-surface-variant">{m.wf_edge_delete_hint()}</p>
         </div>
       {:else if selectedNode && selectedDef}
         <div>
           <div class="flex items-center justify-between mb-2">
-            <h3 class="text-xs font-semibold text-on-surface-variant/70">{m.wf_node_config()}</h3>
+            <h3 class="text-xs font-semibold text-on-surface-variant">{m.wf_node_config()}</h3>
             <button
               onclick={deleteSelected}
               class="p-1 rounded text-error hover:bg-error/10 transition-colors"
@@ -776,11 +777,11 @@
             </button>
           </div>
           <p class="text-xs font-semibold text-on-surface">{selectedDef.label}</p>
-          <p class="text-2xs text-on-surface-variant/70 mb-3">{selectedDef.description}</p>
+          <p class="text-2xs text-on-surface-variant mb-3">{selectedDef.description}</p>
 
           {#each selectedDef.config ?? [] as field}
             <div class="space-y-1 mb-2.5">
-              <label for="cfg-{field.key}" class="text-xs font-semibold text-on-surface-variant/70">
+              <label for="cfg-{field.key}" class="text-xs font-semibold text-on-surface-variant">
                 {field.label}
               </label>
 
@@ -800,7 +801,7 @@
                   {/each}
                   <button
                     onclick={addCase}
-                    class="w-full px-2 py-1 rounded-lg text-2xs bg-surface-container-highest text-on-surface-variant/70 hover:text-on-surface"
+                    class="w-full px-2 py-1 rounded-lg text-2xs bg-surface-container-highest text-on-surface-variant hover:text-on-surface"
                   >{m.wf_switch_add_case()}</button>
                 </div>
               {:else if field.type === 'boolean'}
@@ -882,7 +883,7 @@
             <Papicon icon="Info" size={13} />
             <span>{m.wf_tips_title()}</span>
           </h3>
-          <ul class="text-2xs text-on-surface-variant/70 space-y-1.5 list-disc pl-3">
+          <ul class="text-2xs text-on-surface-variant space-y-1.5 list-disc pl-3">
             <li><strong>{m.wf_tip_direct_label()}</strong> {m.wf_tip_direct()}</li>
             <li><strong>{m.wf_tip_wysiwyg_label()}</strong> {m.wf_tip_wysiwyg()}</li>
             <li><strong>{m.wf_tip_dnd_label()}</strong> {m.wf_tip_dnd()}</li>
@@ -892,7 +893,7 @@
 
       <!-- Problèmes de validation -->
       <div>
-        <h3 class="text-xs font-semibold text-on-surface-variant/70 mb-2">{m.wf_issues()}</h3>
+        <h3 class="text-xs font-semibold text-on-surface-variant mb-2">{m.wf_issues()}</h3>
         {#if issues.length === 0}
           <p class="text-2xs text-success flex items-center gap-1.5">
             <Papicon icon="Check" size={12} /> {m.wf_no_issues()}
@@ -926,12 +927,12 @@
           </div>
           <div>
             <h3 class="text-sm font-bold text-on-surface">{m.wf_templates_modal_title()}</h3>
-            <p class="text-2xs text-on-surface-variant/70">{m.wf_templates_modal_desc()}</p>
+            <p class="text-2xs text-on-surface-variant">{m.wf_templates_modal_desc()}</p>
           </div>
         </div>
         <button
           onclick={() => (showTemplateModal = false)}
-          class="p-1.5 rounded-lg text-on-surface-variant/70 hover:text-on-surface hover:bg-surface-container-highest transition-colors"
+          class="p-1.5 rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-container-highest transition-colors"
         >
           <Papicon icon="Cross" size={16} />
         </button>
@@ -952,11 +953,11 @@
                 </span>
                 <h4 class="text-xs font-bold text-on-surface group-hover:text-warning transition-colors">{template.name}</h4>
               </div>
-              <span class="px-2 py-0.5 rounded text-xs font-semibold bg-surface-container-highest text-on-surface-variant/70">
+              <span class="px-2 py-0.5 rounded text-xs font-semibold bg-surface-container-highest text-on-surface-variant">
                 {template.category}
               </span>
             </div>
-            <p class="text-2xs text-on-surface-variant/70 leading-relaxed">{template.description}</p>
+            <p class="text-2xs text-on-surface-variant leading-relaxed">{template.description}</p>
             <div class="pt-1 flex items-center text-2xs font-semibold text-warning group-hover:underline">
               <span>{m.wf_templates_apply()} →</span>
             </div>

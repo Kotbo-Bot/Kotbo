@@ -59,6 +59,8 @@ function alertText(alert: PulseAlert, locale: 'fr' | 'en'): string {
     case 'growth_churn': return m.c1_pulse_alert_growth_churn({ left: num('left'), joined: num('joined') }, { locale });
     case 'engagement_low': return m.c1_pulse_alert_engagement_low({}, { locale });
     case 'tickets_backlog': return m.c1_pulse_alert_tickets_backlog({ count: num('count') }, { locale });
+    case 'toxicity_high': return m.c1_pulse_alert_toxicity_high({ pct: num('pct') }, { locale });
+    case 'responses_low': return m.c1_pulse_alert_responses_low({ pct: num('pct') }, { locale });
     case 'channels_unhealthy': return m.c1_pulse_alert_channels_unhealthy({ count: num('count') }, { locale });
     case 'excellent': return m.c1_pulse_alert_excellent({}, { locale });
     default: return alert.message;

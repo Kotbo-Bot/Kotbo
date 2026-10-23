@@ -3,6 +3,7 @@ import { Collection, SlashCommandBuilder, PermissionFlagsBits, MessageFlags, typ
 import { errorEmbed, successEmbed } from '../../utils/embeds.js';
 import { getEffectiveLocale, getCommandMetadata } from '../../utils/i18n.js';
 import * as m from '../../lib/paraglide/messages.js';
+import { publicErrorMessage } from '../../utils/publicError.js';
 
 const meta = getCommandMetadata('b2_clear');
 
@@ -93,7 +94,7 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
       embeds: [
         errorEmbed(
           m.b2_err_title({}, { locale }),
-          m.b2_clear_error({ error: error instanceof Error ? error.message : String(error) }, { locale }),
+          m.b2_clear_error({ error: publicErrorMessage(error) }, { locale }),
         ),
       ],
     });

@@ -1,7 +1,7 @@
 /** Outils MCP - read server assets (permission READ_STATS). */
 import { PermissionFlagsBits } from 'discord.js';
 import { z } from 'zod';
-import { type McpToolContext, SNOWFLAKE, err, ok, resolveChannel } from '../toolkit.js';
+import { type McpToolContext, SNOWFLAKE, err, ok, resolveChannel, toolError } from '../toolkit.js';
 
 export function registerReadServerAssetsTools(ctx: McpToolContext) {
   const { server, guildId, client, shouldRegister, guard, toolMeta } = ctx;
@@ -72,7 +72,7 @@ export function registerReadServerAssetsTools(ctx: McpToolContext) {
             }))
           );
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -161,7 +161,7 @@ export function registerReadServerAssetsTools(ctx: McpToolContext) {
             }))
           );
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );

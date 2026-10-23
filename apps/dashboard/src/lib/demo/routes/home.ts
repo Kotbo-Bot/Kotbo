@@ -4,13 +4,29 @@
  * Formes reprises de `homeTasks.ts` et
  * `general.ts` côté bot, réduites aux champs que les pages lisent.
  */
-import type { HomeTasksData } from '@kotbo/contracts';
+import { NOTIFICATION_CATEGORIES, type HomeTasksData } from '@kotbo/contracts';
 import { route } from '../backend';
 import { demoDb } from '../db';
 import { HOUR, PEOPLE, ago, personByName, role } from '../fixtures';
 
 const DAY_MS = 86_400_000;
 const DAY = 24 * HOUR;
+
+/** Mêmes étapes que `setupJourney.ts` côté bot : un serveur à moitié réglé. */
+function setupJourney() {
+  const steps = [
+    { key: 'logs', group: 'essentiel', label: 'Salon de logs', why: "Sans lui, aucune trace de ce que fait le bot ni de ce qui se passe sur le serveur.", done: true, href: '/logs/config' },
+    { key: 'moderator-role', group: 'essentiel', label: 'Rôle modérateur', why: "Il décide qui peut sanctionner et prendre en charge un ticket. Sans lui, seuls les administrateurs le peuvent.", done: true, href: '/security/sanctions/settings' },
+    { key: 'timezone', group: 'essentiel', label: 'Fuseau horaire', why: "Le bot tourne en UTC : sans fuseau, toute date affichée ou saisie est décalée.", done: true, href: '/management', detail: 'Europe/Paris' },
+    { key: 'regulation', group: 'moderation', label: 'Règlement publié', why: "Une sanction sans règle écrite se conteste. Le règlement sert aussi de référence aux rapports.", done: false, href: '/regulation' },
+    { key: 'security', group: 'moderation', label: 'Protection activée', why: "Filtres AutoMod et anti-raid. Un niveau de protection les règle tous d'un coup.", done: true, href: '/security/quick-setup' },
+    { key: 'sanction-alerts', group: 'moderation', label: 'Salon des alertes de sanction', why: "Le staff voit passer les sanctions au lieu de les découvrir dans le casier.", done: false, href: '/security/sanctions/settings' },
+    { key: 'tickets', group: 'engagement', label: 'Tickets opérationnels', why: "Catégorie, rôle du staff et salon du panneau : sans les trois, un membre ne peut pas ouvrir de ticket.", done: true, href: '/tickets/config' },
+    { key: 'ticket-quotas', group: 'engagement', label: 'Quotas de tickets', why: "Sans quota, rien n'empêche un membre d'ouvrir dix tickets d'affilée.", done: false, href: '/tickets/config' },
+    { key: 'welcome', group: 'engagement', label: 'Accueil des arrivants', why: "Un serveur qui n'accueille pas perd la moitié de ses arrivants dans la première heure.", done: true, href: '/announcement/welcome' },
+  ];
+  return { steps, progress: { done: steps.filter((s) => s.done).length, total: steps.length } };
+}
 
 function homeTasks(): HomeTasksData {
   return {
@@ -158,7 +174,14 @@ export function registerHomeRoutes(): void {
   route('GET', '/api/config', () => ({ discordClientId: '0' }));
 
   route('GET', '/api/dashboard/guilds/:guildId/home-tasks', () => homeTasks());
-  route('GET', '/api/dashboard/guilds/:guildId/notifications', () => ({ notifications: [] }));
+  // Le parcours « Bien demarrer » : sans cette route, la page de demo
+  // n'affichait qu'un « Parcours indisponible », alors que c'est par elle que
+  // l'ecran de bienvenue fait commencer.
+  route('GET', '/api/dashboard/guilds/:guildId/setup', () => setupJourney());
+  route('GET', '/api/dashboard/notifications', () => ({ notifications: [], nextCursor: null, unread: 0, unreadByGuild: {} }));
+  route('GET', '/api/dashboard/notifications/preferences', () => ({
+    categories: NOTIFICATION_CATEGORIES.map((category) => ({ category, dashboard: true, dm: true, digest: false })),
+  }));
   route('GET', '/api/dashboard/guilds/:guildId/tutoring/apprentice-progress', () => ({ progress: null }));
 
   route('GET', '/api/dashboard/guilds/:guildId/user-settings', () => demoDb.get(USER_SETTINGS, () => ({})));

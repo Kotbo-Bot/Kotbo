@@ -1,5 +1,6 @@
 <script lang="ts">
   import { m, dateLocale } from '../lib/i18n';
+  import { removeWithUndo, orThrow } from '../lib/undoRemoval';
   import { memberAvatarSrc } from '../lib/discordMedia';
   import { router } from 'tinro';
   import { resolveTabFromUrl, gotoTab } from '../lib/tabRouting';
@@ -182,7 +183,7 @@
         }
       }
     } catch (err) {
-      console.error('Erreur lors du chargement du profil:', err);
+      console.error('Impossible de charger le profil :', err);
       // Un membre sans fiche staff ni profil de serveur n'a rien a afficher ici,
       // mais sa carte de rang ne depend d'aucun des deux : sur son propre profil
       // on garde la page accessible au lieu de la remplacer par une erreur.
@@ -191,7 +192,7 @@
         publicProfile = null;
         applyDefaultTab('rank_card');
       } else {
-        error = errorMessage(err) || 'Erreur lors du chargement du profil';
+        error = errorMessage(err) || 'Impossible de charger le profil. Réessaie.';
       }
     } finally {
       loading = false;
@@ -263,7 +264,7 @@
         })
       });
 
-      if (!res.ok) throw new Error('Erreur lors de la création de la clé API');
+      if (!res.ok) throw new Error('Impossible de créer la clé API. Réessaie.');
 
       const data = await res.json();
       newKeyCreatedValue = data.fullKey;
@@ -325,17 +326,17 @@
   }
 
   async function removeNote(noteId: string) {
-    if (!staffMember || !(await confirmDialog.danger(m.pf_delete_note_q()))) return;
-    try {
-      const success = await deleteManagerNote(staffMember.userId, noteId, staffMember.guildId);
-      if (success) {
-        toast.success(m.pf_note_deleted());
-        notesAbout = await fetchManagerNotes(staffMember.userId, staffMember.guildId);
-      }
-    } catch (err) {
-      console.error(err);
-      toast.error(m.home_delete_error());
-    }
+    if (!staffMember) return;
+    const { userId, guildId } = staffMember;
+    await removeWithUndo({
+      get: () => notesAbout,
+      set: (next) => (notesAbout = next),
+      match: (note) => note.id === noteId,
+      message: m.pf_note_deleted(),
+      // dashboardMutation annonce deja son echec.
+      commit: () => orThrow(deleteManagerNote(userId, noteId, guildId)),
+      quietError: true,
+    });
   }
 
   async function loadPendingResignation(guildId: string) {
@@ -366,7 +367,7 @@
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || 'Erreur lors de la soumission');
+        throw new Error(err.error || 'Impossible d\'envoyer. Réessaie.');
       }
       const data = await res.json();
       pendingResignation = data.resignation;
@@ -531,7 +532,7 @@
             <MetricCard label="Messages" value={`${stats?.totalMessages ?? 0}`} note={m.pf_total_sent()} icon="MessageSquare" toneClass={NEUTRAL_TONE} />
             <MetricCard label={m.home_opt_voice()} value={`${Math.round((stats?.totalVoiceMinutes ?? 0))}m`} note={m.pf_time_spent()} icon="Mic" toneClass={NEUTRAL_TONE} />
             {#if visibility.discipline}
-              <MetricCard label="Sanctions" value={`${stats?.sanctionsIssued ?? 0}`} note="Warns + blacklist" icon="Hammer" toneClass={NEUTRAL_TONE} />
+              <MetricCard label="Sanctions" value={`${stats?.sanctionsIssued ?? 0}`} note="Avertissements et liste noire" icon="Hammer" toneClass={NEUTRAL_TONE} />
               <MetricCard label={m.pf_warnings_label()} value={`${stats?.activeWarnings ?? 0}`} note={m.pf_active_received()} icon="ShieldAlert" toneClass={NEUTRAL_TONE} />
             {/if}
           </div>
@@ -737,7 +738,7 @@
                       placeholder={m.pf_resignation_ph()}
                       maxlength={500}
                       rows={4}
-                      class="w-full rounded-lg border border-outline-variant bg-surface-container-lowest px-3 py-2 text-sm text-on-surface placeholder:text-on-surface-variant/60 focus:outline-none focus:border-primary resize-none"
+                      class="w-full rounded-lg border border-outline-variant bg-surface-container-lowest px-3 py-2 text-sm text-on-surface placeholder:text-on-surface-variant focus:outline-none focus:border-primary resize-none"
                     ></textarea>
                     <p class="mt-1 text-right text-xs text-on-surface-variant">{resignationReason.length}/500</p>
                   </div>

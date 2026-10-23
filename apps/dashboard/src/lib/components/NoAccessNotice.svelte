@@ -36,7 +36,7 @@
 </script>
 
 <div class="max-w-lg mx-auto px-4 py-24 text-center space-y-5">
-  <div class="w-14 h-14 mx-auto rounded-2xl bg-surface-container text-on-surface-variant/60 flex items-center justify-center">
+  <div class="w-14 h-14 mx-auto rounded-2xl bg-surface-container text-on-surface-variant flex items-center justify-center">
     <Papicon icon="Lock" size={26} />
   </div>
 

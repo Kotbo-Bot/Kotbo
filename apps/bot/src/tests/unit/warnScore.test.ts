@@ -17,7 +17,7 @@ const prismaMock = {
 };
 
 const moduleMocks: Array<[string, () => Record<string, unknown>]> = [
-  ['../../utils/db', () => ({ default: prismaMock, prisma: prismaMock, prismaRead: prismaMock })],
+  ['../../utils/db', () => ({ default: prismaMock, prisma: prismaMock, prismaRead: prismaMock, upsertRetryingRace: (upsert: () => Promise<unknown>) => upsert() })],
   ['../../utils/logger', () => ({
     logger: {
       info: mock(() => undefined), warn: mock(() => undefined),

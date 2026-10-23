@@ -23,7 +23,7 @@
       const res = await fetch(`${API_BASE_URL}/api/public/profile/${userId}`);
       if (!res.ok) {
         if (res.status === 404) throw new Error('Utilisateur introuvable');
-        throw new Error('Erreur lors de la récupération du profil');
+        throw new Error('Impossible de récupérer le profil. Réessaie.');
       }
       profile = await res.json();
     } catch (err) {
@@ -112,7 +112,7 @@
           <Papicon icon="AlertTriangle" size={36} />
         </div>
         <h3 class="text-lg font-semibold tracking-tight text-on-surface font-headline">Profil Introuvable</h3>
-        <p class="mt-4 text-base font-bold text-on-surface-variant/60 leading-relaxed">
+        <p class="mt-4 text-base font-bold text-on-surface-variant leading-relaxed">
           {error}. Vérifiez que l'identifiant est correct ou que le compte n'a pas été restreint.
         </p>
         <button onclick={() => router.goto('/')} class="mt-10 inline-flex items-center gap-3 rounded-lg bg-primary px-8 py-4 text-body-sm font-medium text-on-primary shadow-sm shadow-primary/20 active:scale-[0.98] transition-all">
@@ -163,7 +163,7 @@
                   {profile.displayName || profile.username}
                 </h1>
                 <div class="flex flex-wrap items-center justify-center md:justify-start gap-2.5">
-                  <p class="text-base text-on-surface-variant/70 font-bold">@{profile.username}</p>
+                  <p class="text-base text-on-surface-variant font-bold">@{profile.username}</p>
                   {#if profile.isPrivate}
                     <span class="inline-flex items-center gap-1.5 rounded-lg bg-warning/10 border border-warning/20 px-2.5 py-1 text-xs font-semibold text-warning">
                       <Papicon icon="Lock" size={10} /> Privé
@@ -193,7 +193,7 @@
             <Papicon icon="Lock" size={28} />
           </div>
           <h3 class="text-xl font-semibold text-on-surface font-headline">Ce profil est privé</h3>
-          <p class="mt-2 text-sm text-on-surface-variant/60 max-w-md mx-auto leading-relaxed">
+          <p class="mt-2 text-sm text-on-surface-variant max-w-md mx-auto leading-relaxed">
             L'utilisateur a choisi de masquer ses statistiques et informations d'activité. Seuls les membres de l'équipe staff peuvent consulter ce dossier.
           </p>
         </div>
@@ -249,23 +249,23 @@
               <h4 class="text-sm font-semibold text-primary mb-6">Dossier</h4>
               <div class="space-y-6">
                 <div class="flex items-center justify-between border-b border-outline-variant/5 pb-3">
-                  <span class="text-xs font-semibold text-on-surface-variant/50">Compte Discord créé</span>
+                  <span class="text-xs font-semibold text-on-surface-variant">Compte Discord créé</span>
                   <span class="text-xs font-bold text-on-surface">{formatDate(profile.accountCreatedAt)}</span>
                 </div>
                 <div class="flex items-center justify-between border-b border-outline-variant/5 pb-3">
-                  <span class="text-xs font-semibold text-on-surface-variant/50">Arrivée sur le serveur</span>
+                  <span class="text-xs font-semibold text-on-surface-variant">Arrivée sur le serveur</span>
                   <span class="text-xs font-bold text-on-surface">{formatDate(profile.guildJoinedAt)}</span>
                 </div>
                 <div class="flex items-center justify-between border-b border-outline-variant/5 pb-3">
-                  <span class="text-xs font-semibold text-on-surface-variant/50">Dernier message</span>
+                  <span class="text-xs font-semibold text-on-surface-variant">Dernier message</span>
                   <span class="text-xs font-bold text-on-surface">{formatTimeAgo(profile.lastSeenAt)}</span>
                 </div>
                 <div class="flex items-center justify-between border-b border-outline-variant/5 pb-3">
-                  <span class="text-xs font-semibold text-on-surface-variant/50">Messages envoyés</span>
+                  <span class="text-xs font-semibold text-on-surface-variant">Messages envoyés</span>
                   <span class="text-xs font-bold text-on-surface">{profile.messageCount?.toLocaleString() || 0}</span>
                 </div>
                 <div class="flex items-center justify-between">
-                  <span class="text-xs font-semibold text-on-surface-variant/50">Temps en vocal</span>
+                  <span class="text-xs font-semibold text-on-surface-variant">Temps en vocal</span>
                   <span class="text-xs font-bold text-on-surface">{Math.round((profile.voiceTimeSeconds || 0) / 60)} min</span>
                 </div>
               </div>
@@ -331,7 +331,7 @@
           <div class="rounded-xl bg-linear-to-br from-indigo-950/40 via-purple-950/20 to-surface-container-low border border-outline-variant/10 p-10 text-center relative overflow-hidden shadow-sm">
             <div class="absolute -right-6 -bottom-6 w-36 h-36 bg-primary/5 rounded-full blur-none hidden pointer-events-none"></div>
             <h3 class="text-2xl font-semibold text-on-surface font-headline tracking-tight leading-none mb-3">Vous faites partie de l'équipe staff ?</h3>
-            <p class="text-sm text-on-surface-variant/70 max-w-lg mx-auto mb-8 font-bold leading-relaxed">
+            <p class="text-sm text-on-surface-variant max-w-lg mx-auto mb-8 font-bold leading-relaxed">
               Connectez-vous à votre compte Discord pour accéder aux dossiers internes, statistiques détaillées d'activité, absences et outils d'administration.
             </p>
             <a href={`${API_BASE_URL}/api/auth/discord/login?returnTo=${encodeURIComponent(window.location.pathname)}`} class="inline-flex items-center gap-3 rounded-lg bg-primary hover:bg-primary-hover px-10 py-5 text-sm font-semibold text-on-primary shadow-sm shadow-primary/20 active:scale-[0.98] transition-all">

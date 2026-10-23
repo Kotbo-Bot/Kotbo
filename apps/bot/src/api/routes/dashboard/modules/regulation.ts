@@ -6,6 +6,7 @@ import { getGuildName, json, pushAudit, readJsonBody } from '../../../shared.js'
 import { type ModuleRouteContext } from './_shared.js';
 
 import { jsonFailure } from '../../../shared/failure.js';
+import { publicErrorMessage } from '../../../../utils/publicError.js';
 export async function handleRegulationRoutes(ctx: ModuleRouteContext): Promise<boolean> {
   const { req, res, parts, client, guildId, method, auditUser, moduleKey } = ctx;
 
@@ -285,7 +286,7 @@ export async function handleRegulationRoutes(ctx: ModuleRouteContext): Promise<b
       } catch (error) {
         logger.error('RegulationAPI', `Erreur lors de la publication du règlement pour la guilde ${guildId}:`, error);
         json(res, 400, {
-          error: error instanceof Error ? error.message : 'Impossible de publier le règlement.',
+          error: publicErrorMessage(error, 'Impossible de publier le règlement.'),
         });
       }
       return true;

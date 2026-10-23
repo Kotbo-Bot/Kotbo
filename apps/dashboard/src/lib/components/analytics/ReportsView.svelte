@@ -6,6 +6,7 @@
 -->
 <script lang="ts">
   import { Button, Callout, Modal, SectionCard, ToggleSwitch } from '../ui';
+  import { removeWithUndo } from '../../undoRemoval';
   import FormSelect from '../FormSelect.svelte';
   import AnalyticsSkeleton from './AnalyticsSkeleton.svelte';
   import RecipientsField, { loadRecipientOptions } from './RecipientsField.svelte';
@@ -20,7 +21,6 @@
     type ReportSection,
   } from '../../api';
   import { authStore } from '../../stores/auth.svelte';
-  import { confirmDialog } from '../../stores/confirmDialog.svelte';
   import { dashboardStore } from '../../stores/dashboard.svelte';
   import { toast } from '../../stores/toast.svelte';
   import { m, dateLocale } from '../../i18n';
@@ -49,9 +49,9 @@
     void loadRecipientOptions(authStore.selectedGuildId).then((o) => (channelNames = new Map(o.channels.map((c) => [c.id, c.name]))));
   });
 
-  const SECTIONS: ReportSection[] = ['overview', 'top_members', 'top_channels', 'anomalies', 'moderation', 'responses'];
+  const SECTIONS: ReportSection[] = ['kotbo_work', 'overview', 'top_members', 'top_channels', 'anomalies', 'moderation', 'responses'];
   const sectionLabel = (s: ReportSection) =>
-    ({ overview: m.anx_rep_s_overview(), top_members: m.anx_top_members_messages(), top_channels: m.anx_top_channels_messages(), anomalies: m.anx_rep_s_anomalies(), moderation: m.anx_fact_sanctions(), responses: m.anx_tab_responses() })[s];
+    ({ kotbo_work: m.anx_rep_s_kotbo_work(), overview: m.anx_rep_s_overview(), top_members: m.anx_top_members_messages(), top_channels: m.anx_top_channels_messages(), anomalies: m.anx_rep_s_anomalies(), moderation: m.anx_fact_sanctions(), responses: m.anx_tab_responses() })[s];
   const DAYS = $derived([m.anx_rep_day_0(), m.anx_rep_day_1(), m.anx_rep_day_2(), m.anx_rep_day_3(), m.anx_rep_day_4(), m.anx_rep_day_5(), m.anx_rep_day_6()]);
 
   function describe(s: ReportScheduleInput): string {
@@ -71,7 +71,7 @@
   let form = $state<FormState>(blank());
 
   function blank(): FormState {
-    return { frequency: 'weekly', weekday: '1', monthDay: '1', hour: '9', channelId: null, userIds: [], sections: ['overview', 'top_members', 'top_channels', 'anomalies'], enabled: true };
+    return { frequency: 'weekly', weekday: '1', monthDay: '1', hour: '9', channelId: null, userIds: [], sections: ['kotbo_work', 'overview', 'top_members', 'top_channels', 'anomalies'], enabled: true };
   }
 
   function openForm(s?: ReportSchedule) {
@@ -131,13 +131,13 @@
   }
 
   async function remove(s: ReportSchedule) {
-    if (!(await confirmDialog.danger(m.anx_rep_confirm_delete(), '', m.anx_alert_delete()))) return;
-    try {
-      await deleteReportSchedule(s.id);
-      schedules = schedules.filter((x) => x.id !== s.id);
-    } catch (e) {
-      toast.error(errorMessage(e) || m.an_error_generic());
-    }
+    await removeWithUndo({
+      get: () => schedules,
+      set: (next) => (schedules = next),
+      match: (x) => x.id === s.id,
+      message: m.anx_rep_deleted(),
+      commit: () => deleteReportSchedule(s.id),
+    });
   }
 </script>
 
@@ -228,7 +228,7 @@
     {#if formError}<p class="text-body-sm text-error">{formError}</p>{/if}
     <div class="flex justify-end gap-2">
       <Button variant="ghost" onclick={() => (open = false)}>{m.anx_note_cancel()}</Button>
-      <Button variant="primary" type="submit" loading={saving} disabled={Boolean(formError)}>{m.anx_alert_save()}</Button>
+      <Button variant="primary" type="submit" loading={saving} disabled={Boolean(formError)} disabledReason={formError}>{m.anx_alert_save()}</Button>
     </div>
   </form>
 </Modal>

@@ -9,10 +9,11 @@
 import prisma from '../../../utils/db.js';
 import { guildMemberCapacity, prepareGuildEdit } from './rpgGuildDirectoryService.js';
 import { currentTier, getGuildBuilding } from './rpgGuildBuildings.js';
+import { UserFacingError } from '../../../utils/userFacingError.js';
 
 export const RPG_GUILD_TREASURY_RANGE = { min: 0, max: 100_000_000 };
 
-export class RpgGuildAdminError extends Error {
+export class RpgGuildAdminError extends UserFacingError {
   constructor(message: string, readonly status: number) {
     super(message);
     this.name = 'RpgGuildAdminError';

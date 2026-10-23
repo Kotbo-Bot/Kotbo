@@ -101,7 +101,7 @@
       class="absolute left-0 right-0 mt-2 z-30 rounded-lg border border-outline-variant/20 bg-surface-container-high shadow-sm max-h-52 overflow-y-auto"
     >
       {#if filtered.length === 0}
-        <div class="px-4 py-3 text-xs text-on-surface-variant/50 italic">
+        <div class="px-4 py-3 text-xs text-on-surface-variant italic">
           {query ? m.d4_no_result_for({ query }) : m.d4_all_selected()}
         </div>
       {:else}

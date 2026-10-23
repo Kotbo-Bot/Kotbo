@@ -1,4 +1,3 @@
-import { errorMessage } from '../utils/errors.js';
 import { type Interaction, type Client, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, ModalSubmitInteraction, MessageFlags, type AnySelectMenuInteraction, PermissionFlagsBits, type GuildMember, TextInputBuilder, TextInputStyle, ModalBuilder, StringSelectMenuBuilder } from 'discord.js';
 import prisma from '../utils/db.js';
 import { getCachedGuild } from '../utils/cache.js';
@@ -17,17 +16,19 @@ import { buildMemberCasePanel, type MemberCaseSection } from '../services/modera
 import { handleRecruitmentButton } from '../services/staff/recruitmentService.js';
 import { handleTicketButton, handleTicketModalSubmit, handleTicketSelectMenu } from '../services/features/ticketService.js';
 import { canManageGiveaways } from '../services/features/giveawayConfigService.js';
-import { resolveGuildLocale } from '../utils/i18n.js';
+import { getLocale, resolveGuildLocale } from '../utils/i18n.js';
 import * as gvwMessages from '../lib/paraglide/messages.js';
 import { handleRpgButton, handleRpgModalSubmit, handleRpgSelectMenu } from '../services/features/rpgPanelService.js';
 import { DROP_CLAIM_PREFIX, handleDropClaim } from '../services/features/dropService.js';
-import { checkInMeeting, createNotification } from '../services/staff/staffLeadershipService.js';
+import { checkInMeeting } from '../services/staff/staffLeadershipService.js';
+import { notifyMany } from '../services/notifications/notifyService.js';
 import { handleDCInteraction } from '../services/moderation/dcDetectionService.js';
 import { memberProfileIdentity } from '../services/moderation/memberIdentityService.js';
 import { handleVerifyButtonClick, handleVerificationStaffAction } from '../services/moderation/securityVerificationService.js';
 import { showModeratorNoteModal } from '../commands/moderation/note.js';
 import { sendReportToAdmin } from '../commands/moderation/signal.js';
 import { parseDurationToMs, registerBanSanction, registerKickSanction, registerTimeoutSanction, registerWarnSanction, runGuildBan } from '../services/moderation/sanctionService.js';
+import { publicErrorMessage } from '../utils/publicError.js';
 
 
 /** Modal de saisie de raison (et durée pour timeout) partagé entre le select historique et les boutons rapides du casier. */
@@ -128,6 +129,42 @@ export async function handleButton(interaction: Interaction, client: Client): Pr
   if (customId.startsWith('help_')) {
     const { handleHelpInteraction } = await import('../commands/utility/help.js');
     await handleHelpInteraction(interaction);
+    return;
+  }
+
+  // ── Relances aux administrateurs : « Ne plus recevoir ces rappels » ──
+  // Le bouton vit dans un message privé envoyé au payeur ou au propriétaire ;
+  // il coupe les relances pour le serveur qu'il nomme.
+  if (customId.startsWith('lifecycle:optout:')) {
+    const targetGuildId = customId.slice('lifecycle:optout:'.length);
+    if (!/^\d{17,20}$/.test(targetGuildId)) return;
+    const { disableLifecycleReminders } = await import('../services/core/adminLifecycleService.js');
+    await disableLifecycleReminders(targetGuildId).catch((error) => {
+      logger.warn('LifecycleReminders', `Désactivation impossible pour ${targetGuildId}: ${String(error)}`);
+    });
+    const locale = await resolveGuildLocale(targetGuildId);
+    const guildName = client.guilds.cache.get(targetGuildId)?.name ?? targetGuildId;
+    await interaction.reply({
+      content: gvwMessages.lcr_optout_done({ guild: guildName }, { locale }),
+      flags: [MessageFlags.Ephemeral],
+    });
+    return;
+  }
+
+  // ── Notifications en MP : « Ne plus recevoir ce type » (notif:mute:<famille>)
+  if (customId.startsWith('notif:mute:')) {
+    const category = customId.slice('notif:mute:'.length);
+    const { isNotificationCategory } = await import('@kotbo/contracts');
+    if (!isNotificationCategory(category)) return;
+    const { muteCategoryDm, categoryLabel } = await import('../services/notifications/notifyService.js');
+    await muteCategoryDm(user.id, category).catch((error) => {
+      logger.warn('Notification', `Coupure impossible pour ${user.id}/${category}: ${String(error)}`);
+    });
+    const locale = getLocale(interaction);
+    await interaction.reply({
+      content: gvwMessages.ntf_mute_done({ category: categoryLabel(category, locale) }, { locale }),
+      flags: [MessageFlags.Ephemeral],
+    });
     return;
   }
 
@@ -328,7 +365,7 @@ export async function handleButton(interaction: Interaction, client: Client): Pr
       }).catch(() => null);
 
     } catch (err: unknown) {
-      const errMsg = err instanceof Error ? err.message : 'Impossible de réclamer le drop.';
+      const errMsg = publicErrorMessage(err, 'Impossible de réclamer le drop.');
       await interaction.followUp({
         content: `❌ ${errMsg}`,
         flags: [MessageFlags.Ephemeral]
@@ -636,6 +673,13 @@ export async function handleButton(interaction: Interaction, client: Client): Pr
     return;
   }
 
+  // Boutique du serveur (/boutique) - fiche d'une offre, achat, cadeau, code promo
+  if (customId.startsWith('shop:')) {
+    const { handleShopButton } = await import('../services/shop/shopPanel.js');
+    await handleShopButton(client, customId, interaction);
+    return;
+  }
+
   // Hôtel des ventes (/market) - étal, fiche d'annonce, achat, retrait, mise en vente
   if (customId.startsWith('mkt:')) {
     const { handleMarketButton } = await import('../services/economy/marketplacePanel.js');
@@ -885,6 +929,18 @@ export async function handleButton(interaction: Interaction, client: Client): Pr
     }
     const { handleBanHygieneButton } = await import('../services/moderation/banHygieneService.js');
     await handleBanHygieneButton(interaction);
+    return;
+  }
+
+  // ── Kotbo × AegisAI (cartes du staff) ───────────────────────────────
+  if (customId.startsWith('aegis:')) {
+    const member = await resolveGuildMemberByUserId(interaction, user.id);
+    if (!(await canModerate(member, guildId!))) {
+      await interaction.reply({ content: "❌ Tu n'as pas les permissions nécessaires.", flags: [MessageFlags.Ephemeral] });
+      return;
+    }
+    const { handleAegisButton } = await import('../services/moderation/aegis/aegisButtons.js');
+    await handleAegisButton(interaction);
     return;
   }
 
@@ -1463,6 +1519,13 @@ export async function handleSelectMenu(interaction: AnySelectMenuInteraction, cl
     return;
   }
 
+  if (customId.startsWith('shop:')) {
+    if (!interaction.isStringSelectMenu() && !interaction.isUserSelectMenu()) return;
+    const { handleShopSelect } = await import('../services/shop/shopPanel.js');
+    await handleShopSelect(client, customId, interaction);
+    return;
+  }
+
   if (customId.startsWith('mkt:')) {
     if (!interaction.isStringSelectMenu()) return;
     const { handleMarketSelect } = await import('../services/economy/marketplacePanel.js');
@@ -1644,6 +1707,12 @@ export async function handleModalSubmit(interaction: ModalSubmitInteraction, cli
     return;
   }
 
+  if (customId.startsWith('shop:')) {
+    const { handleShopModal } = await import('../services/shop/shopPanel.js');
+    await handleShopModal(client, customId, interaction);
+    return;
+  }
+
   if (customId.startsWith('mkt:')) {
     const { handleMarketModal } = await import('../services/economy/marketplacePanel.js');
     await handleMarketModal(client, customId, interaction);
@@ -1733,7 +1802,7 @@ export async function handleModalSubmit(interaction: ModalSubmitInteraction, cli
       });
     } catch (err: unknown) {
       await interaction.reply({
-        content: `❌ Impossible de publier la suggestion : ${errorMessage(err) || 'erreur inconnue'}`,
+        content: `❌ Impossible de publier la suggestion : ${publicErrorMessage(err, 'erreur inconnue')}`,
         flags: [MessageFlags.Ephemeral],
       });
     }
@@ -1797,39 +1866,16 @@ export async function handleModalSubmit(interaction: ModalSubmitInteraction, cli
       });
 
       if (managers.length > 0) {
-        await Promise.all(managers.map(async (m: { userId: string; username: string | null }) => {
-          // Notif dashboard
-          await createNotification(
-            guildId,
-            m.userId,
-            '🔔 Demande de démission',
-            `${interaction.user.username} a soumis une demande de démission.\nMotif : ${reason}`,
-            'WARNING',
-            '/staff-management?tab=resignations',
-            true
-          ).catch(() => null);
-
-          // MP Discord aux managers
-          try {
-            const managerDiscordUser = await client.users.fetch(m.userId).catch(() => null);
-            if (managerDiscordUser) {
-              const serverName = interaction.guild?.name || '';
-              const managerEmbed = new EmbedBuilder()
-                .setTitle('🔔 Nouvelle demande de démission')
-                .setDescription(
-                  `**${interaction.user.username}** (${interaction.user.id}) a soumis une demande de démission.\n\n` +
-                  `**Motif :**\n> ${reason}\n\n` +
-                  `Rendez-vous sur le dashboard pour approuver ou refuser cette demande.`
-                )
-                .setColor(COLORS.warning)
-                .setTimestamp()
-                .setFooter({ text: `Référence : ${resignation.id}${serverName ? ` · Serveur : ${serverName}` : ''}` });
-              await managerDiscordUser.send({ embeds: [managerEmbed] }).catch(() => null);
-            }
-          } catch {
-            // Silent fail
-          }
-        }));
+        await notifyMany(managers.map((m: { userId: string }) => m.userId), {
+          guildId,
+          kind: 'staff.resignation_requested',
+          title: 'Demande de démission',
+          message: `**${interaction.user.username}** (${interaction.user.id}) a soumis une demande de démission.\n\n**Motif :**\n> ${reason}`,
+          severity: 'WARNING',
+          link: '/staff-management?tab=resignations',
+          actorId: interaction.user.id,
+          data: { resignationId: resignation.id },
+        });
       }
 
       await interaction.reply({
@@ -2011,7 +2057,7 @@ export async function handleModalSubmit(interaction: ModalSubmitInteraction, cli
         await interaction.editReply({ embeds: [successEmbed('Bannissement appliqué', `L'utilisateur a été banni.`)] });
       }
     } catch (error) {
-      await interaction.editReply({ embeds: [errorEmbed('Erreur', error instanceof Error ? error.message : 'Une erreur est survenue.')] });
+      await interaction.editReply({ embeds: [errorEmbed('Erreur', publicErrorMessage(error, 'Une erreur est survenue.'))] });
     }
     return;
   }
@@ -2080,7 +2126,7 @@ export async function handleModalSubmit(interaction: ModalSubmitInteraction, cli
         scores: { correctness, comments, compactness, optimization, readability },
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Impossible de valider cette soumission.';
+      const message = publicErrorMessage(error, 'Impossible de valider cette soumission.');
       await interaction.editReply({ content: `❌ ${message}` });
       return;
     }
@@ -2137,7 +2183,7 @@ export async function handleModalSubmit(interaction: ModalSubmitInteraction, cli
         feedback,
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Impossible de valider cette soumission.';
+      const message = publicErrorMessage(error, 'Impossible de valider cette soumission.');
       await interaction.editReply({ content: `❌ ${message}` });
       return;
     } finally {

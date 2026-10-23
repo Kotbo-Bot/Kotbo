@@ -3,7 +3,7 @@ import path from 'node:path';
 
 // Le module charge la base au démarrage : ce test n'en a pas besoin.
 for (const file of ['../../utils/db.ts', '../../utils/db.js']) {
-  mock.module(path.resolve(import.meta.dir, file), () => ({ default: {}, prisma: {}, prismaRead: {} }));
+  mock.module(path.resolve(import.meta.dir, file), () => ({ default: {}, prisma: {}, prismaRead: {}, upsertRetryingRace: (upsert: () => Promise<unknown>) => upsert() }));
 }
 
 const { generateActivationCode } = await import('../../utils/activation.js');

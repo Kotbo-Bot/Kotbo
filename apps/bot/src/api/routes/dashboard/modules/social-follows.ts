@@ -1,5 +1,5 @@
 /** Routes dashboard du module `social-follows`. */
-import { normalizeGithubBranch, normalizeGithubRepo, resolveGithubRepo } from '../../../../services/integrations/githubService.js';
+import { type GithubRepoFailure, normalizeGithubBranch, normalizeGithubRepo, resolveGithubRepo } from '../../../../services/integrations/githubService.js';
 import { HF_KINDS, huggingFaceTargetExists, normalizeHuggingFaceTarget } from '../../../../services/integrations/huggingFaceService.js';
 import { getTwitchUserId, normalizeTwitchLogin } from '../../../../services/integrations/twitchService.js';
 import { resolveYoutubeChannel } from '../../../../services/integrations/youtubeService.js';
@@ -17,6 +17,15 @@ import { type ModuleRouteContext } from './_shared.js';
 const MAX_GITHUB_FOLLOWS = 15;
 const MAX_HUGGINGFACE_FOLLOWS = 25;
 const MAX_MESSAGE_LENGTH = 500;
+
+/** Seul `not_found` est imputable à la saisie : le reste vient de GitHub ou de notre jeton. */
+const GITHUB_RESOLVE_ERRORS: Record<GithubRepoFailure, { status: number; error: string }> = {
+  not_found: { status: 400, error: 'Dépôt GitHub introuvable ou privé' },
+  rate_limited: { status: 503, error: "Quota de l'API GitHub atteint, réessaie dans quelques minutes" },
+  unauthorized: { status: 503, error: "Le jeton GitHub du bot est refusé par GitHub, préviens l'équipe Kotbo" },
+  forbidden: { status: 400, error: "GitHub refuse l'accès à ce dépôt (organisation à SSO ou jeton restreint)" },
+  unavailable: { status: 502, error: 'GitHub ne répond pas, réessaie dans quelques minutes' },
+};
 
 /** Modèle de message : vide = message par défaut, borné pour tenir dans Discord. */
 function followMessage(value: string | null | undefined): string | null {
@@ -244,8 +253,9 @@ export async function handleSocialFollowsRoutes(ctx: ModuleRouteContext): Promis
         // Le nom canonique d'abord : un dépôt renommé ou saisi avec une autre
         // casse doit retomber sur son suivi existant.
         const resolved = await resolveGithubRepo(repo);
-        if (!resolved) {
-          json(res, 400, { error: 'Dépôt GitHub introuvable ou privé' });
+        if (!resolved.ok) {
+          const failure = GITHUB_RESOLVE_ERRORS[resolved.reason];
+          json(res, failure.status, { error: failure.error });
           return true;
         }
 

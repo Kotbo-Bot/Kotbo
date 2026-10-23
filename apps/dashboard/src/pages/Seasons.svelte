@@ -149,7 +149,7 @@
 
 <!-- ======================== CONTENT ======================== -->
 {#if loading}
-  <div class="flex flex-col items-center justify-center py-16 text-on-surface-variant/50 gap-4">
+  <div class="flex flex-col items-center justify-center py-16 text-on-surface-variant gap-4">
     <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
     <p class="text-sm">{m.sea_loading()}</p>
   </div>
@@ -165,7 +165,7 @@
             <h2 class="text-xl font-bold text-on-surface">{data.activeSeason.name}</h2>
             <span class="px-2.5 py-0.5 bg-success/10 text-success text-xs font-medium rounded-full">{m.sea_status_active()}</span>
           </div>
-          <p class="flex items-center gap-1.5 text-xs text-on-surface-variant/60">
+          <p class="flex items-center gap-1.5 text-xs text-on-surface-variant">
             <Papicon icon="calendar" size={14} />
             {new Date(data.activeSeason.startDate).toLocaleDateString('fr-FR')}
             &mdash;
@@ -190,7 +190,7 @@
                       <span class="font-semibold text-on-surface-variant">#{entry.rank}</span>
                       <UserDisplay userId={entry.userId} name={entry.displayName} avatarUrl={entry.avatarUrl} size="xs" class="min-w-0" />
                       <span class="text-primary font-medium text-xs">Niv. {entry.level}</span>
-                      <span class="text-right text-xs text-on-surface-variant/60">{entry.xp.toLocaleString()} XP</span>
+                      <span class="text-right text-xs text-on-surface-variant">{entry.xp.toLocaleString()} XP</span>
                     </div>
                   {/each}
                 </div>
@@ -210,11 +210,11 @@
                       <span class="font-semibold text-on-surface-variant">#{entry.rank}</span>
                       <UserDisplay userId={entry.userId} name={entry.displayName} avatarUrl={entry.avatarUrl} size="xs" class="min-w-0" />
                       <span class="font-medium text-xs truncate" style="color:{entry.tier.color}">{entry.tier.name}</span>
-                      <span class="text-right text-xs text-on-surface-variant/60">{entry.rp.toLocaleString()} RP</span>
+                      <span class="text-right text-xs text-on-surface-variant">{entry.rp.toLocaleString()} RP</span>
                     </div>
                   {/each}
                 </div>
-                <p class="text-2xs text-on-surface-variant/50">{m.sea_ranking_rp_hint()}</p>
+                <p class="text-2xs text-on-surface-variant">{m.sea_ranking_rp_hint()}</p>
               </div>
             {/if}
           </div>
@@ -254,7 +254,7 @@
               <h4 class="text-sm font-semibold text-on-surface">#{season.number} &mdash; {season.name}</h4>
               <span class="px-2.5 py-0.5 text-xs font-medium rounded-full {badge.cls}">{badge.label}</span>
             </div>
-            <div class="flex flex-wrap gap-4 text-xs text-on-surface-variant/60">
+            <div class="flex flex-wrap gap-4 text-xs text-on-surface-variant">
               <span class="flex items-center gap-1">
                 <Papicon icon="calendar" size={13} />
                 {new Date(season.startDate).toLocaleDateString('fr-FR')} &mdash; {new Date(season.endDate).toLocaleDateString('fr-FR')}
@@ -281,7 +281,7 @@
     </div>
   {:else}
     <!-- Empty state -->
-    <EmptyState icon="flag" title={m.sea_empty_title()} description={m.sea_empty_desc()} />
+    <EmptyState icon="flag" title={m.sea_empty_title()} description={m.sea_empty_desc()} actionLabel={m.sea_empty_cta()} onAction={() => (showCreate = true)} />
   {/if}
 {/if}
 </ModulePage>

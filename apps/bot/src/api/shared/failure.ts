@@ -17,6 +17,7 @@ import { logger } from '../../utils/logger.js';
 import { errorMessage } from '../../utils/errors.js';
 import { captureException } from '../../observability/sentry.js';
 import { classifyFailure } from '../../utils/failureKind.js';
+import { isUserFacing } from '../../utils/publicError.js';
 
 export { classifyFailure, type FailureCode } from '../../utils/failureKind.js';
 
@@ -44,5 +45,9 @@ export function jsonFailure(
     captureException(err, `${scope}:${code}`);
   }
 
-  json(res, status, { error: message ?? fallbackMessage, code });
+  // Une erreur de domaine (« Ce salon n'existe plus ») est écrite pour
+  // l'utilisateur et vaut mieux que le texte générique de la route ; tout autre
+  // message (requête Prisma, trace réseau) reste dans les journaux.
+  const exposed = isUserFacing(err) ? err.message : undefined;
+  json(res, status, { error: message ?? exposed ?? fallbackMessage, code });
 }

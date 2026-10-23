@@ -21,6 +21,7 @@ import type { SlashCommandDefinition } from '../../commands.js';
 import { v2Message } from '@arcscord/components';
 import { getEffectiveLocale, getCommandMetadata } from '../../utils/i18n.js';
 import * as m from '../../lib/paraglide/messages.js';
+import { publicErrorMessage } from '../../utils/publicError.js';
 
 const meta = getCommandMetadata('c1_absent');
 
@@ -294,7 +295,7 @@ async function execute(interaction: ChatInputCommandInteraction) {
       }
     } catch (err) {
       await replyInteraction.editReply(v2Message(
-        errorContainer(m.c1_absent_generic_error_title({}, { locale }), err instanceof Error ? err.message : m.c1_absent_generic_error_desc({}, { locale }))
+        errorContainer(m.c1_absent_generic_error_title({}, { locale }), publicErrorMessage(err, m.c1_absent_generic_error_desc({}, { locale })))
       ));
     }
     return;

@@ -15,7 +15,7 @@ import { getEffectiveLocale, getCommandMetadata } from '../../utils/i18n.js';
 import { formatInTimezone, resolveGuildTimezone } from '../../utils/timezone.js';
 import * as m from '../../lib/paraglide/messages.js';
 
-import { errorMessage } from '@kotbo/shared';
+import { publicErrorMessage } from '../../utils/publicError.js';
 const meta = getCommandMetadata('c6_rappel');
 const createMeta = getCommandMetadata('c6_rappel_create');
 const createTempsMeta = getCommandMetadata('c6_rappel_create_temps');
@@ -244,7 +244,7 @@ async function execute(interaction: ChatInputCommandInteraction) {
       });
     } catch (error) {
       await interaction.editReply({
-        embeds: [errorEmbed(m.c6_rappel_error_title({}, { locale }), errorMessage(error) || m.c6_rappel_delete_error({}, { locale }))]
+        embeds: [errorEmbed(m.c6_rappel_error_title({}, { locale }), publicErrorMessage(error, m.c6_rappel_delete_error({}, { locale })))]
       });
     }
   }

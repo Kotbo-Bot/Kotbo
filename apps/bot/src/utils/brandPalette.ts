@@ -35,5 +35,3 @@ export const BRAND = {
   tape: 'rgba(200, 190, 160, 0.45)',
 } as const;
 
-/** Couleur d'accent Discord (embed sidebar) alignee sur la charte. */
-export const BRAND_THEME_COLOR = '#A8C8FF';

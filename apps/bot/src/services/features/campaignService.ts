@@ -22,6 +22,7 @@ import { CampaignStatus, CampaignStepStatus } from '@prisma/client';
 import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
 import { isModuleEnabled } from '../core/moduleGate.js';
+import { publicErrorMessage } from '../../utils/publicError.js';
 
 /** Pause entre deux MP. Discord ferme le robinet bien avant, sans cela. */
 const DM_THROTTLE_MS = 1_100;
@@ -187,7 +188,7 @@ async function sendChannelStep(client: Client, campaign: Campaign, step: Campaig
       if (guildId === campaign.guildId) messageId = message.id;
     } catch (err) {
       failed += 1;
-      if (guildId === campaign.guildId) error = err instanceof Error ? err.message : 'Envoi refusé';
+      if (guildId === campaign.guildId) error = publicErrorMessage(err, 'Envoi refusé');
       logger.error('Campaign', `Étape ${step.id} refusée sur ${guildId}`, err);
     }
   }
@@ -319,7 +320,7 @@ export async function runCampaignCycle(client: Client): Promise<void> {
           data: {
             status: CampaignStepStatus.FAILED,
             sentAt: new Date(),
-            lastError: err instanceof Error ? err.message : 'Erreur inconnue',
+            lastError: publicErrorMessage(err, 'Erreur inconnue'),
           },
         }).catch(() => null);
       }

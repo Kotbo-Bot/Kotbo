@@ -5,7 +5,7 @@ import {
 } from '../../../services/core/moduleActivationService.js';
 import prisma from '../../../utils/db.js';
 import { z } from 'zod';
-import { type McpToolContext, err, ok } from '../toolkit.js';
+import { type McpToolContext, err, ok, toolError } from '../toolkit.js';
 
 export function registerWriteCommunity2Tools(ctx: McpToolContext) {
   const { server, guildId, shouldRegister, guard, toolMeta } = ctx;
@@ -50,7 +50,7 @@ export function registerWriteCommunity2Tools(ctx: McpToolContext) {
             disabledDependents: result.disabledDependents,
           });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );

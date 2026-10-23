@@ -17,6 +17,8 @@ import { HISTORY_SIZE, type RecentMessage } from './types.js';
 type MemberActivity = {
   messages: RecentMessage[];
   lastTypingAt: number | null;
+  /** Premier `typingStart` de la saisie en cours, remis à zéro à chaque message. */
+  typingSessionStartAt: number | null;
   updatedAt: number;
 };
 
@@ -30,6 +32,13 @@ const activity = new Map<string, MemberActivity>();
  * frappe n'a été vue sur une guilde, le signal est neutralisé.
  */
 const typingObserved = new Set<string>();
+
+/**
+ * Au-delà de ce silence entre deux `typingStart`, la frappe suivante ouvre une
+ * nouvelle saisie : un brouillon abandonné il y a une heure ne doit pas faire
+ * passer un collage d'aujourd'hui pour une longue rédaction.
+ */
+const TYPING_SESSION_GAP_MS = 3 * 60 * 1000;
 
 /** Entrées inactives évincées au-delà de ce délai. */
 const ENTRY_TTL_MS = 15 * 60 * 1000;
@@ -73,6 +82,10 @@ export function getLastTypingAt(guildId: string, userId: string): number | null 
   return activity.get(key(guildId, userId))?.lastTypingAt ?? null;
 }
 
+export function getTypingSessionStartAt(guildId: string, userId: string): number | null {
+  return activity.get(key(guildId, userId))?.typingSessionStartAt ?? null;
+}
+
 /** true si le bot reçoit effectivement les événements de frappe sur cette guilde. */
 export function isTypingObservable(guildId: string): boolean {
   return typingObserved.has(guildId);
@@ -84,23 +97,35 @@ export function recordTyping(guildId: string, userId: string, at = Date.now()): 
   const k = key(guildId, userId);
   const entry = activity.get(k);
   if (entry) {
+    const resumed =
+      entry.typingSessionStartAt !== null &&
+      entry.lastTypingAt !== null &&
+      at - entry.lastTypingAt <= TYPING_SESSION_GAP_MS;
+    if (!resumed) entry.typingSessionStartAt = at;
     entry.lastTypingAt = at;
     entry.updatedAt = at;
     return;
   }
-  activity.set(k, { messages: [], lastTypingAt: at, updatedAt: at });
+  activity.set(k, { messages: [], lastTypingAt: at, typingSessionStartAt: at, updatedAt: at });
 }
 
 /** Enregistre un message dans le tampon du membre, après évaluation. */
 export function recordMessage(guildId: string, userId: string, message: RecentMessage): void {
   const k = key(guildId, userId);
-  const entry = activity.get(k) ?? { messages: [], lastTypingAt: null, updatedAt: message.at };
+  const entry = activity.get(k) ?? {
+    messages: [],
+    lastTypingAt: null,
+    typingSessionStartAt: null,
+    updatedAt: message.at,
+  };
 
   entry.messages.push(message);
   if (entry.messages.length > HISTORY_SIZE) {
     entry.messages.splice(0, entry.messages.length - HISTORY_SIZE);
   }
   entry.updatedAt = message.at;
+  // Le message est parti : la prochaine frappe commence une nouvelle saisie.
+  entry.typingSessionStartAt = null;
 
   activity.set(k, entry);
   prune(message.at);

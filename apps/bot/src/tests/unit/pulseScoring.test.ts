@@ -6,13 +6,17 @@ import {
   computeGrowthScore,
   computeHealthScore,
   computeModerationScore,
+  computePulseBreakdown,
   computePulseScores,
   generateAlerts,
   hasEnoughSignal,
   median,
+  percentileRank,
   resolveTrend,
   saturate,
   saturateInverse,
+  sizeFactor,
+  trendAgainst,
   type PulseScoreInput,
 } from '../../services/analytics/pulseScoring.js';
 
@@ -226,5 +230,115 @@ describe('tendance', () => {
     expect(resolveTrend(-3)).toBe('STABLE');
     expect(resolveTrend(4)).toBe('UP');
     expect(resolveTrend(-4)).toBe('DOWN');
+  });
+
+  test('se mesure face à la médiane de la semaine, pas face à la seule veille', () => {
+    // Veille exceptionnellement basse : la journée n'est pas « en hausse » pour autant.
+    expect(trendAgainst(70, [40, 70, 71, 69, 70, 72, 70])).toEqual({ trend: 'STABLE', delta: 0 });
+    expect(trendAgainst(60, [70, 71, 69])).toEqual({ trend: 'DOWN', delta: -10 });
+    expect(trendAgainst(60, [])).toEqual({ trend: 'STABLE', delta: 0 });
+  });
+});
+
+describe('modèle v3', () => {
+  const baseline = { messagesPerHuman: 2, voicePerHuman: 4, participationRate: 0.2, sampleDays: 28 };
+
+  test('un jour se compare aux mêmes jours de semaine quand il y en a assez', () => {
+    // Le mardi est calme d'habitude : 50 messages un mardi, c'est la norme.
+    const sameWeekday = { messagesPerHuman: 0.5, voicePerHuman: 4, participationRate: 0.2, samples: 4 };
+    const quietTuesday = input({ messages: 50, baseline: { ...baseline, sameWeekday } });
+    const asAnyDay = input({ messages: 50, baseline });
+    expect(computeActivityScore(quietTuesday)).toBeGreaterThan(computeActivityScore(asAnyDay));
+    // Trop peu de mardis observés : on retombe sur tous les jours.
+    const fewSamples = input({ messages: 50, baseline: { ...baseline, sameWeekday: { ...sameWeekday, samples: 2 } } });
+    expect(computeActivityScore(fewSamples)).toBe(computeActivityScore(asAnyDay));
+  });
+
+  test('les repères absolus suivent la taille du serveur', () => {
+    expect(sizeFactor(100)).toBeCloseTo(1, 6);
+    expect(sizeFactor(1000)).toBeLessThan(1);
+    expect(sizeFactor(10)).toBeGreaterThan(1);
+    // 6 % d'actifs : faible sur 100 humains, honorable sur 5 000.
+    const small = computeEngagementScore(input({ humans: 100, activeMembers: 6, messages: 48 }));
+    const large = computeEngagementScore(input({ humans: 5000, activeMembers: 300, messages: 2400 }));
+    expect(large).toBeGreaterThan(small);
+  });
+
+  test('un serveur sans vocal n’est pas pénalisé pour son absence', () => {
+    const noVoice = input({ voiceMinutes: 0, activeVoiceMembers: 0, baseline: { ...baseline, voicePerHuman: 0 } });
+    const factors = computePulseBreakdown(noVoice).factors.map((f) => f.key);
+    expect(factors).not.toContain('voice');
+    expect(factors).not.toContain('voiceParticipation');
+    // Le vocal habituel qui disparaît, lui, se voit.
+    const voiceStopped = input({ voiceMinutes: 0, activeVoiceMembers: 0, baseline });
+    expect(computePulseBreakdown(voiceStopped).factors.map((f) => f.key)).toContain('voice');
+  });
+
+  test('les messages sans réponse et la toxicité pèsent sur leur sous-score', () => {
+    const answered = computeEngagementScore(input({ responses: { answered: 90, unanswered: 10, fast: 70 } }));
+    const ignored = computeEngagementScore(input({ responses: { answered: 10, unanswered: 90, fast: 5 } }));
+    expect(answered).toBeGreaterThan(ignored);
+
+    const calm = computeModerationScore(input({ activeMembers: 50, toxicity: { analyzed: 400, toxic: 4 } }));
+    const tense = computeModerationScore(input({ activeMembers: 50, toxicity: { analyzed: 400, toxic: 80 } }));
+    expect(calm).toBeGreaterThan(tense);
+    // Échantillon trop petit : pas de facteur.
+    const tiny = computePulseBreakdown(input({ toxicity: { analyzed: 5, toxic: 5 } }));
+    expect(tiny.factors.some((f) => f.key === 'toxicity')).toBe(false);
+  });
+
+  test('l’adhérence DAU/MAU récompense les membres qui reviennent', () => {
+    const loyal = computeEngagementScore(input({ audience: { daily: 30, monthly: 60 } }));
+    const passing = computeEngagementScore(input({ audience: { daily: 30, monthly: 600 } }));
+    expect(loyal).toBeGreaterThan(passing);
+  });
+
+  test('la croissance lisse un jour isolé avec la semaine', () => {
+    // Même journée à 6 départs, mais l'une s'inscrit dans une semaine calme.
+    const isolated = computeGrowthScore(input({ membersJoined: 0, membersLeft: 6, week: { joined: 7, left: 7, days: 7 } }));
+    const raw = computeGrowthScore(input({ membersJoined: 0, membersLeft: 6 }));
+    expect(isolated).toBeGreaterThan(raw);
+  });
+
+  test('les impacts des facteurs expliquent l’écart du score à 50', () => {
+    const candidate = input({
+      baseline,
+      audience: { daily: 20, monthly: 80 },
+      responses: { answered: 40, unanswered: 20, fast: 30 },
+      toxicity: { analyzed: 200, toxic: 6 },
+      week: { joined: 10, left: 6, days: 7 },
+    });
+    const { scores, factors } = computePulseBreakdown(candidate);
+    const explained = 50 + factors.reduce((sum, f) => sum + f.impact, 0);
+    // Arrondis des facteurs : l'écart reste de l'ordre du point.
+    expect(Math.abs(explained - scores.score)).toBeLessThan(2);
+    for (const dimension of ['activity', 'engagement', 'growth', 'moderation', 'health'] as const) {
+      const weights = factors.filter((f) => f.dimension === dimension).reduce((s, f) => s + f.weight, 0);
+      expect(weights).toBeCloseTo(1, 2);
+    }
+  });
+
+  test('la confiance croît avec le volume, l’historique et la couverture', () => {
+    const thin = computePulseBreakdown(input({ humans: 8, activeMembers: 2, messages: 4 })).confidence;
+    const rich = computePulseBreakdown(
+      input({ humans: 400, activeMembers: 80, baseline, audience: { daily: 80, monthly: 200 }, responses: { answered: 50, unanswered: 10, fast: 40 } }),
+    ).confidence;
+    expect(rich).toBeGreaterThan(thin);
+    expect(rich).toBeLessThanOrEqual(100);
+    expect(thin).toBeGreaterThanOrEqual(0);
+  });
+
+  test('le rang centile exige assez de pairs et compte les ex æquo pour moitié', () => {
+    expect(percentileRank(70, [10, 20, 30])).toBeNull();
+    expect(percentileRank(70, [10, 20, 30, 40, 50, 60, 70, 80])).toBe(81);
+    expect(percentileRank(0, Array(10).fill(50))).toBe(0);
+    expect(percentileRank(100, Array(10).fill(50))).toBe(100);
+  });
+
+  test('les nouvelles alertes portent leur pourcentage', () => {
+    const tense = input({ messages: 300, activeMembers: 30, toxicity: { analyzed: 300, toxic: 30 }, responses: { answered: 10, unanswered: 40, fast: 2 } });
+    const alerts = generateAlerts(computePulseScores(tense), tense);
+    expect(alerts.find((a) => a.code === 'toxicity_high')?.params?.pct).toBe(10);
+    expect(alerts.find((a) => a.code === 'responses_low')?.params?.pct).toBe(80);
   });
 });

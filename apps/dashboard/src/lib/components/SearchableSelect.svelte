@@ -18,6 +18,15 @@
    * la place au detriment du nom.
    */
   export let showId: boolean = true;
+  /**
+   * Creation sur place quand la recherche ne trouve rien : le champ propose
+   * « Créer « saisie » » au lieu d'un mur « aucun résultat », et l'utilisateur
+   * reste dans son formulaire. La fonction cree l'element et rend l'option a
+   * selectionner (null si la creation n'a pas abouti).
+   */
+  export let onCreate: ((name: string) => Promise<{ id: string; name: string } | null>) | null = null;
+
+  let creating = false;
 
   const dispatch = createEventDispatcher();
 
@@ -87,6 +96,19 @@
     dispatch('input', { value });
   }
 
+  $: canCreate = !!onCreate && query.trim().length > 0 && filtered.length === 0;
+
+  async function create() {
+    if (!onCreate || creating || disabled) return;
+    creating = true;
+    try {
+      const created = await onCreate(query.trim());
+      if (created) select(created);
+    } finally {
+      creating = false;
+    }
+  }
+
   function handleKeydown(e: KeyboardEvent) {
     if (disabled) return;
     if (e.key === 'ArrowDown') {
@@ -100,6 +122,8 @@
       e.preventDefault();
       if (open && filtered[highlighted]) {
         select(filtered[highlighted]);
+      } else if (open && canCreate) {
+        void create();
       }
     } else if (e.key === 'Escape') {
       open = false;
@@ -160,7 +184,7 @@
          sa ligne de base, ce qui le décentrait verticalement dans le champ. -->
     <button
       type="button"
-      class="absolute right-3 top-1/2 -translate-y-1/2 flex h-5 w-5 items-center justify-center rounded-md text-on-surface-variant/60 hover:text-on-surface hover:bg-surface-container-highest/60 transition-colors"
+      class="absolute right-3 top-1/2 -translate-y-1/2 flex h-5 w-5 items-center justify-center rounded-md text-on-surface-variant hover:text-on-surface hover:bg-surface-container-highest/60 transition-colors"
       aria-label={m.common_clear()}
       title={m.common_clear()}
       on:click|preventDefault={clear}
@@ -171,7 +195,18 @@
 
   {#if open}
     <div use:dropdown class="app-popover rounded-lg border border-outline-variant/20 bg-surface-container-high text-on-surface p-2 shadow-lg overflow-auto">
-      {#if filtered.length === 0}
+      {#if canCreate}
+        <!-- mousedown : le clic doit passer avant le blur du champ, qui ferme la liste. -->
+        <button
+          type="button"
+          class="w-full text-left text-on-surface px-4 py-2 rounded-xl bg-surface-container-low ring-1 ring-inset ring-primary flex items-center gap-2 disabled:opacity-60"
+          disabled={creating}
+          on:mousedown|preventDefault={create}
+        >
+          <Papicon icon="plus" size={14} class="shrink-0 text-primary" />
+          <span class="truncate">{m.searchable_select_create({ name: query.trim() })}</span>
+        </button>
+      {:else if filtered.length === 0}
         <div class="px-4 py-2 text-xs text-on-surface-variant">{m.e6_searchable_select_no_results()}</div>
       {/if}
       {#each filtered as opt, i (opt.id)}

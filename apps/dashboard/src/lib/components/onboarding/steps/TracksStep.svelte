@@ -89,7 +89,7 @@
       </section>
     {/each}
 
-    <p class="text-xs text-on-surface-variant/50 leading-relaxed">
+    <p class="text-xs text-on-surface-variant leading-relaxed">
       {m.onb_tracks_group_hint()}
     </p>
   </div>
@@ -100,14 +100,14 @@
     <button
       type="button"
       onclick={() => { picked = TRACKS.map((track) => track.key); celebrateStep(); }}
-      class="text-body-sm font-medium text-on-surface-variant/50 hover:text-on-surface transition-colors"
+      class="text-body-sm font-medium text-on-surface-variant hover:text-on-surface transition-colors"
     >
       {m.onb_tracks_all()}
     </button>
     <button
       type="button"
       onclick={() => { picked = defaultTracks(kind); celebrateStep(); }}
-      class="text-body-sm font-medium text-on-surface-variant/50 hover:text-on-surface transition-colors"
+      class="text-body-sm font-medium text-on-surface-variant hover:text-on-surface transition-colors"
     >
       {m.onb_tracks_essentials()}
     </button>

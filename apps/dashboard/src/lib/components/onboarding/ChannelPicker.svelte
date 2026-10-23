@@ -91,7 +91,7 @@
   </select>
 
   {#if hint}
-    <p class="mt-1.5 text-xs text-on-surface-variant/50 leading-relaxed">{hint}</p>
+    <p class="mt-1.5 text-xs text-on-surface-variant leading-relaxed">{hint}</p>
   {/if}
 
   {#if !value}

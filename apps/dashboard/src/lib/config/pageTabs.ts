@@ -34,14 +34,6 @@ export const PAGE_TABS: Record<string, PageTabConfig[]> = {
     { id: 'predictions', label: () => m.pulse_tab_predictions(), icon: 'trending-up' },
   ],
 
-  '/inbox': [
-    { id: 'tous', label: () => m.inbox_tab_all(), icon: 'layers' },
-    { id: 'modération', label: () => m.inbox_tab_moderation(), icon: 'shield' },
-    { id: 'recrutement', label: () => m.inbox_tab_recruitment(), icon: 'users' },
-    { id: 'staff', label: () => m.inbox_tab_staff(), icon: 'user-check' },
-    { id: 'système', label: () => m.inbox_tab_system(), icon: 'cpu' },
-  ],
-
   '/analytics': [
     { id: 'overview', label: () => m.an_tab_overview(), icon: 'Grid' },
     { id: 'messages', label: () => m.an_tab_messages(), icon: 'ChatCircleDots' },
@@ -79,6 +71,7 @@ export const PAGE_TABS: Record<string, PageTabConfig[]> = {
     { id: 'staff', label: () => m.an_tab_staff_directory(), icon: 'Users' },
     { id: 'performance', label: () => m.an_tab_staff_performance(), icon: 'TrendUp' },
     { id: 'tickets', label: () => m.anx_tab_tickets(), icon: 'Ticket' },
+    { id: 'website', label: () => m.ste_analytics_tab(), icon: 'Globe' },
     { id: 'alerts', label: () => m.anx_tab_alerts(), icon: 'Bell' },
     { id: 'reports', label: () => m.anx_tab_reports(), icon: 'Mail' },
   ],
@@ -111,6 +104,10 @@ export const PAGE_TABS: Record<string, PageTabConfig[]> = {
     { id: 'security', label: () => m.am_tab_security(), icon: 'lock' },
     { id: 'behavioral', label: () => m.am_tab_behavioral(), icon: 'activity' },
     { id: 'exceptions', label: () => m.am_tab_exceptions(), icon: 'filter' },
+    { id: 'simulator', label: () => m.sim_tab_label(), icon: 'history' },
+    // Page a part (/security/filters/nicknames), rangee ici en onglet : elle
+    // n'occupe plus de ligne dans le menu, qui depassait sept entrees.
+    { id: 'nicknames', label: () => m.nav_nicknames(), icon: 'user' },
   ],
 
   '/security/filters/nicknames': [
@@ -129,6 +126,8 @@ export const PAGE_TABS: Record<string, PageTabConfig[]> = {
   '/security/sanctions': [
     { id: 'sanctions', label: () => m.sc_tab_history(), icon: 'alert-triangle' },
     { id: 'settings', label: () => m.sc_tab_configuration(), icon: 'settings' },
+    // Meme raison que les pseudos : /security/sanctions/appeals devient un onglet.
+    { id: 'appeals', label: () => m.nav_ban_appeals(), icon: 'gavel' },
   ],
 
   // ── Progression ───────────────────────────────────────────────────────────
@@ -154,6 +153,7 @@ export const PAGE_TABS: Record<string, PageTabConfig[]> = {
   '/economy': [
     { id: 'config', label: () => m.eco_tab_config(), icon: 'settings' },
     { id: 'items', label: () => m.eco_tab_items(), icon: 'package' },
+    { id: 'boutique', label: () => m.eco_tab_shop(), icon: 'shopping-bag' },
     { id: 'blackmarket', label: () => m.eco_tab_blackmarket(), icon: 'moon' },
     { id: 'players', label: () => m.eco_tab_players(), icon: 'users' },
   ],
@@ -177,6 +177,12 @@ export const PAGE_TABS: Record<string, PageTabConfig[]> = {
   ],
 
   // ── Communauté ────────────────────────────────────────────────────────────
+  '/regulation': [
+    { id: 'articles', label: () => m.regulation_tab_articles(), icon: 'ListBullets' },
+    { id: 'verification', label: () => m.regulation_tab_verification(), icon: 'ShieldCheck' },
+    { id: 'acces', label: () => m.regulation_tab_access(), icon: 'Key' },
+  ],
+
   '/giveaways': [
     { id: 'concours', label: () => m.giv_tab_giveaways(), icon: 'Sparkles' },
     { id: 'modeles', label: () => m.giv_tab_templates(), icon: 'Copy' },
@@ -189,6 +195,15 @@ export const PAGE_TABS: Record<string, PageTabConfig[]> = {
     { id: 'boost', label: () => m.announcements_tab_boost(), icon: 'Zap' },
     { id: 'autoroles', label: () => m.announcements_tab_autoroles(), icon: 'Shield' },
     { id: 'thread', label: () => m.announcements_tab_thread(), icon: 'chat' },
+    { id: 'experiments', label: () => m.wx_tab(), icon: 'git-branch' },
+  ],
+
+  '/site': [
+    { id: 'apercu', label: () => m.ste_tab_overview(), icon: 'layout' },
+    { id: 'contenu', label: () => m.ste_tab_content(), icon: 'file-text' },
+    { id: 'apparence', label: () => m.ste_tab_appearance(), icon: 'palette' },
+    { id: 'croissance', label: () => m.ste_tab_growth(), icon: 'trending-up' },
+    { id: 'reglages', label: () => m.ste_tab_settings(), icon: 'settings' },
   ],
 
   '/news': [
@@ -217,6 +232,7 @@ export const PAGE_TABS: Record<string, PageTabConfig[]> = {
 
   '/tickets': [
     { id: 'tickets', label: () => m.e1_tickets_tab_tickets(), icon: 'message-square' },
+    { id: 'performance', label: () => m.th_tab_performance(), icon: 'trending-up' },
     { id: 'transcripts', label: () => m.e1_tickets_tab_transcripts(), icon: 'file-text' },
     { id: 'satisfaction', label: () => m.e1_tickets_tab_satisfaction(), icon: 'star' },
     { id: 'macros', label: () => m.e1_tickets_tab_macros(), icon: 'message-circle' },

@@ -8,9 +8,11 @@ import {
   levelingItems,
   economyItems,
   communityItems,
+  communicationItems,
   staffItems,
   crossServerItems,
   configItems,
+  integrationItems,
   resolveLegacyHref,
   type PageConfig,
 } from '../config/pages';
@@ -25,7 +27,7 @@ import {
 } from './navigationStorage';
 import { dashboardStore } from './dashboard.svelte';
 
-export type NavGroup = { key: string; label: string; items: PageConfig[] };
+export type NavGroup = { key: string; label: string; icon: string; items: PageConfig[] };
 
 const MAX_FAVORITES = 80;
 const MAX_RECENTS = 6;
@@ -197,6 +199,10 @@ class NavigationStore {
     this.isStaffServer ? [] : communityItems.filter(this.#isReachable),
   );
 
+  readonly #visibleCommunication = $derived(
+    this.isStaffServer ? [] : communicationItems.filter(this.#isReachable),
+  );
+
   readonly #visibleStaff = $derived.by((): PageConfig[] => {
     if (this.isAdmin) return staffItems.filter(this.#isReachable);
 
@@ -220,22 +226,35 @@ class NavigationStore {
     this.isAdmin ? configItems.filter(this.#isReachable) : [],
   );
 
+  readonly #visibleIntegrations = $derived(
+    this.isAdmin ? integrationItems.filter(this.#isReachable) : [],
+  );
+
   /** Navigation groups in reading order, empty groups removed. */
   readonly groups = $derived.by((): NavGroup[] => {
-    const general = { key: 'general', label: m.nav_group_general(), items: this.#visibleGeneral };
-    const moderation = { key: 'moderation', label: m.nav_group_moderation(), items: this.#visibleModeration };
-    const security = { key: 'security', label: m.nav_group_security(), items: this.#visibleSecurity };
-    const leveling = { key: 'leveling', label: m.nav_group_xp(), items: this.#visibleLeveling };
-    const economy = { key: 'economy', label: m.nav_group_economy(), items: this.#visibleEconomy };
-    const community = { key: 'community', label: m.nav_group_community(), items: this.#visibleCommunity };
-    const staff = { key: 'staff', label: m.nav_group_staff(), items: this.#visibleStaff };
-    const crossserver = { key: 'crossserver', label: m.nav_group_crossserver(), items: this.#visibleCrossServer };
-    const config = { key: 'config', label: m.nav_group_config(), items: this.#visibleConfig };
+    const general = { key: 'general', label: m.nav_group_general(), icon: 'home', items: this.#visibleGeneral };
+    const moderation = { key: 'moderation', label: m.nav_group_moderation(), icon: 'users', items: this.#visibleModeration };
+    const security = { key: 'security', label: m.nav_group_security(), icon: 'shieldcheck', items: this.#visibleSecurity };
+    const leveling = { key: 'leveling', label: m.nav_group_xp(), icon: 'trophy', items: this.#visibleLeveling };
+    const economy = { key: 'economy', label: m.nav_group_economy(), icon: 'coins', items: this.#visibleEconomy };
+    const community = { key: 'community', label: m.nav_group_community(), icon: 'sparkles', items: this.#visibleCommunity };
+    const communication = { key: 'communication', label: m.nav_group_communication(), icon: 'megaphone', items: this.#visibleCommunication };
+    const staff = { key: 'staff', label: m.nav_group_staff(), icon: 'message-square', items: this.#visibleStaff };
+    // Sept lignes au plus par groupe : les reglages du serveur d'un cote, ce
+    // qui le relie a l'exterieur de l'autre. Les outils multi-serveurs,
+    // reserves aux memes administrateurs, rejoignent les integrations.
+    const config = { key: 'config', label: m.nav_group_config(), icon: 'settings', items: this.#visibleConfig };
+    const integrations = {
+      key: 'integrations',
+      label: m.nav_group_integrations(),
+      icon: 'link',
+      items: [...this.#visibleIntegrations, ...this.#visibleCrossServer],
+    };
 
     // On a staff server the staff tooling is the reason people are here.
     const ordered = this.isStaffServer
-      ? [general, staff, moderation, security, leveling, economy, community, crossserver, config]
-      : [general, moderation, security, leveling, economy, community, staff, crossserver, config];
+      ? [general, staff, moderation, security, leveling, economy, community, communication, config, integrations]
+      : [general, moderation, security, leveling, economy, community, communication, staff, config, integrations];
 
     return ordered.filter((group) => group.items.length > 0);
   });
@@ -244,10 +263,14 @@ class NavigationStore {
    * Groupes affiches dans le menu (barre laterale, menu mobile) : sans les
    * pages marquees `hidden`, que l'on atteint depuis un hub. La palette garde
    * `groups` et les propose toujours.
+   *
+   * Les pages en chantier (`wip`) quittent aussi le menu : elles n'ouvraient
+   * sur rien d'autre qu'un ecran « bientot disponible », et occupaient une
+   * ligne de chaque serveur pour le dire.
    */
   readonly menuGroups = $derived(
     this.groups
-      .map((group) => ({ ...group, items: group.items.filter((item) => !item.hidden) }))
+      .map((group) => ({ ...group, items: group.items.filter((item) => !item.hidden && !item.wip) }))
       .filter((group) => group.items.length > 0),
   );
 
@@ -367,8 +390,12 @@ export const navigationStore = new NavigationStore();
 
 onNavigationStorageCleared(() => navigationStore.reset());
 
-/** Adresses du menu, sans leur eventuelle requete. Fixes : calculees une fois. */
-const NAV_BASE_PATHS = allPages.map((page) => page.href.split('?')[0]);
+/**
+ * Adresses du menu, sans leur eventuelle requete. Fixes : calculees une fois.
+ * Sans les pages `hidden` : absentes du menu, elles eteignaient leur parente
+ * (Filtres sur /security/filters/nicknames) sans rien allumer a sa place.
+ */
+const NAV_BASE_PATHS = allPages.filter((page) => !page.hidden).map((page) => page.href.split('?')[0]);
 
 /**
  * Shared active-route test so sidebar and sheet always agree on highlighting.

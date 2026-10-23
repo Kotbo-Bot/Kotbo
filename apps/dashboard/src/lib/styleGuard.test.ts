@@ -42,6 +42,12 @@ const PATTERNS = {
   shoutingLabel: { regex: /uppercase[^"'`\n]*tracking-(?:widest|wider)|tracking-(?:widest|wider)[^"'`\n]*uppercase/g, max: 37 },
   /** Onglet ecrit a la main plutot qu'avec <Tabs>. */
   handMadeTab: { regex: /class="[^"]*\btab-button\b/g, max: 0 },
+  /**
+   * Texte secondaire attenue sous 80 % : il tombe sous 4,5:1 (AA) sur les
+   * fonds clairs comme sombres. Garder la couleur pleine ; /30 et /40 restent
+   * pour les icones decoratives et les elements desactives.
+   */
+  dimSecondaryText: { regex: /text-on-surface-variant\/(?:50|60|70)(?![\w])/g, max: 0 },
 } as const;
 
 function svelteFiles(dir: string): string[] {

@@ -1,7 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Client } from 'discord.js';
 import type { AuthClaims, DashboardAccess } from '../../../shared.js';
-import { errorMessage } from '../../../../utils/errors.js';
 import { logger } from '../../../../utils/logger.js';
 import { jsonFailure } from '../../../shared/failure.js';
 import {
@@ -48,6 +47,7 @@ import {
   updateTask,
   deleteTask,
 } from '../../../../services/staff/staffLeadershipService.js';
+import { publicErrorMessage } from '../../../../utils/publicError.js';
 
 export async function handleTaskRoutes(
   req: IncomingMessage,
@@ -116,7 +116,7 @@ export async function handleTaskRoutes(
           json(res, 201, { task });
         } catch (err: unknown) {
           logger.error('StaffAPI', 'Error creating task:', err);
-          json(res, 500, { error: errorMessage(err) || 'Erreur lors de la création de la tâche' });
+          json(res, 500, { error: publicErrorMessage(err, 'Erreur lors de la création de la tâche') });
         }
         return true;
       }

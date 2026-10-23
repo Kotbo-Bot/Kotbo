@@ -34,6 +34,7 @@ import {
   mcpProtectedResourceMetadata,
 } from '../mcp/mcpServer.js';
 import { generateRssXml } from '../../services/core/newsService.js';
+import { stripLegacyAvatarBackground } from '../../services/features/transcriptService.js';
 import { isModuleEnabled } from '../../services/core/moduleGate.js';
 import { handleFormTrigger } from '../../services/features/autoResponseService.js';
 import { submitCustomForm } from '../../services/features/customFormService.js';
@@ -2381,7 +2382,8 @@ export async function handlePublicRoutes(
       return true;
     }
 
-    const etag = `"transcript-${transcriptId}"`;
+    // Suffixe a changer quand le HTML servi change (fond des avatars : v2).
+    const etag = `"transcript-${transcriptId}-v2"`;
     const maxAge = Math.max(0, Math.min(3600, parseInt(expires, 10) - Math.floor(Date.now() / 1000)));
     if (req.headers['if-none-match'] === etag) {
       res.statusCode = 304;
@@ -2401,6 +2403,7 @@ export async function handlePublicRoutes(
         json(res, 404, { error: 'Transcription introuvable' });
         return true;
       }
+      const html = stripLegacyAvatarBackground(transcript.html);
 
       res.removeHeader('X-Frame-Options');
       res.setHeader(
@@ -2424,13 +2427,13 @@ export async function handlePublicRoutes(
       // compression générique du pont HTTP ne concernait que le JSON ; on
       // compresse ici de façon asynchrone pour ne pas bloquer l'event loop.
       if (/\bgzip\b/.test(String(req.headers['accept-encoding'] ?? ''))) {
-        const compressed = await gzipAsync(Buffer.from(transcript.html));
+        const compressed = await gzipAsync(Buffer.from(html));
         res.setHeader('Content-Encoding', 'gzip');
         res.setHeader('Content-Length', String(compressed.byteLength));
         res.setHeader('Vary', 'Accept-Encoding');
         res.end(compressed);
       } else {
-        res.end(transcript.html);
+        res.end(html);
       }
     } catch (err: unknown) {
       const errMessage = err instanceof Error ? err.message : String(err);

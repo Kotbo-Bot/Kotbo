@@ -32,6 +32,17 @@ function toInviteRow(invite: Invite): InviteRow {
   };
 }
 
+/**
+ * Provenance d'une invitation créée par un autre bot (Disboard au bump, bots de
+ * partenariat...). Celles de Kotbo sont exclues : chaque fonctionnalité pose la
+ * sienne via `recordBotInvite`, plus précise que le simple nom du bot.
+ */
+function otherBotSourceLabel(invite: Invite, selfId: string | undefined): string | null {
+  const inviter = invite.inviter;
+  if (!inviter?.bot || inviter.id === selfId) return null;
+  return buildInviteSourceLabel('Bot', inviter.username);
+}
+
 function sameInviteRow(a: InviteRow, b: InviteRow): boolean {
   return a.uses === b.uses
     && a.maxUses === b.maxUses
@@ -80,17 +91,21 @@ export async function syncGuildInvites(guild: Guild, options: { maxAgeMs?: numbe
           inviterTag: true,
           isTemporary: true,
           isDeleted: true,
+          sourceLabel: true,
         },
       })
       : [];
     const existingByCode = new Map(existing.map(({ code, ...row }) => [code, row]));
 
-    const toCreate: Array<InviteRow & { guildId: string; code: string }> = [];
-    const toUpdate: Array<{ code: string; row: InviteRow }> = [];
+    const toCreate: Array<InviteRow & { guildId: string; code: string; sourceLabel: string | null }> = [];
+    const toUpdate: Array<{ code: string; row: InviteRow & { sourceLabel?: string } }> = [];
     for (const invite of invites.values()) {
       const row = toInviteRow(invite);
+      const botLabel = otherBotSourceLabel(invite, guild.client.user?.id);
       const stored = existingByCode.get(invite.code);
-      if (!stored) toCreate.push({ guildId: guild.id, code: invite.code, ...row });
+      if (!stored) toCreate.push({ guildId: guild.id, code: invite.code, ...row, sourceLabel: botLabel });
+      // Une provenance nommée à la main n'est jamais remplacée.
+      else if (botLabel && !stored.sourceLabel) toUpdate.push({ code: invite.code, row: { ...row, sourceLabel: botLabel } });
       else if (!sameInviteRow(stored, row)) toUpdate.push({ code: invite.code, row });
     }
 
@@ -120,7 +135,7 @@ export async function syncInvite(guildId: string, invite: Invite): Promise<void>
     await prisma.guildInvite.upsert({
       where: { code: invite.code },
       update: row,
-      create: { guildId, code: invite.code, ...row },
+      create: { guildId, code: invite.code, ...row, sourceLabel: otherBotSourceLabel(invite, invite.client.user?.id) },
     });
   } catch (error) {
     logger.warn('Invites', `Erreur lors de l'enregistrement de l'invitation ${invite.code}: ${String(error)}`);

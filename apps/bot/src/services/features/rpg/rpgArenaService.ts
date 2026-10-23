@@ -33,9 +33,10 @@ import {
   ratingExchange,
   type ArenaCandidate,
 } from './rpgArenaPolicy.js';
+import { UserFacingError } from '../../../utils/userFacingError.js';
 
 /** Erreur attendue : elle se dit au joueur, elle ne part pas au journal. */
-export class ArenaError extends Error {}
+export class ArenaError extends UserFacingError {}
 
 const PROFILE_FOR_DUEL = {
   id: true, guildId: true, userId: true, rpgGuildId: true,

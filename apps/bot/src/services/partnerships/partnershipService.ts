@@ -31,6 +31,7 @@ import { logger } from '../../utils/logger.js';
 import { getPartnershipSettings } from './partnershipSettings.js';
 import { recordPartnershipEvent, sendPartnershipAlert, auditPartnershipAction } from './partnershipEvents.js';
 import { applyPartnershipBenefits, revokePartnershipBenefits } from './partnershipBenefitService.js';
+import { UserFacingError } from '../../utils/userFacingError.js';
 
 export interface PartnershipActor {
   userId: string;
@@ -39,7 +40,7 @@ export interface PartnershipActor {
   source?: 'dashboard' | 'discord' | 'bot' | 'guest_portal' | 'bridge';
 }
 
-export class PartnershipRuleError extends Error {
+export class PartnershipRuleError extends UserFacingError {
   constructor(
     message: string,
     readonly code: string,

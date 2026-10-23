@@ -28,6 +28,7 @@ import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
 import { getCachedGuild } from '../../utils/cache.js';
 import { getRaidProtectionConfig } from './raidProtectionService.js';
+import { publicErrorMessage } from '../../utils/publicError.js';
 
 // ─── Types ──────────────────────────────────────────────────────────────────────
 
@@ -412,16 +413,26 @@ function checkPermissions(guild: Guild, c: AuditCollector): { adminRoles: Role[]
     (r) => r.mentionable && r.id !== guild.id && DANGEROUS_PERMISSIONS.some((p) => p.critical && r.permissions.has(p.flag))
   );
   if (mentionableDangerous.length > 0) {
+    // Le correctif ne propose que les rôles que Kotbo peut réellement modifier :
+    // un rôle géré par une intégration ou placé au-dessus du sien ferait échouer
+    // le correctif sans rien changer.
+    const editable = mentionableDangerous.filter((r) => r.editable);
+    const outOfReach = mentionableDangerous.filter((r) => !r.editable);
+    const reachNote = outOfReach.length > 0
+      ? ` Kotbo ne peut pas modifier ${listNames(outOfReach.map((r) => r.name))} (rôle géré par une intégration ou placé au-dessus du sien) : à corriger à la main.`
+      : '';
     c.add({
       id: 'permissions.mentionable_privileged',
       category: 'PERMISSIONS',
       severity: 'WARNING',
       title: 'Rôles privilégiés mentionnables par tout le monde',
-      detail: `${listNames(mentionableDangerous.map((r) => r.name))}. Ces rôles sont une cible directe de harcèlement et de ping-spam.`,
+      detail: `${listNames(mentionableDangerous.map((r) => r.name))}. Ces rôles sont une cible directe de harcèlement et de ping-spam.${reachNote}`,
       recommendation: 'Désactiver « Autoriser tout le monde à mentionner ce rôle ».',
       weight: 4,
       entities: mentionableDangerous.map(entityFromRole),
-      fix: { action: 'unmention_roles', label: 'Rendre ces rôles non mentionnables', payload: { roleIds: mentionableDangerous.map((r) => r.id) } },
+      fix: editable.length > 0
+        ? { action: 'unmention_roles', label: 'Rendre ces rôles non mentionnables', payload: { roleIds: editable.map((r) => r.id) } }
+        : undefined,
     });
   }
 
@@ -1471,13 +1482,25 @@ async function executeAuditFix(guild: Guild, finding: AuditFinding, reason: stri
       case 'unmention_roles': {
         const roleIds = Array.isArray(payload.roleIds) ? (payload.roleIds as string[]) : [];
         let changed = 0;
+        const skipped: string[] = [];
         for (const roleId of roleIds) {
           const role = guild.roles.cache.get(roleId);
-          if (!role || !role.editable) continue;
+          if (!role || !role.mentionable) continue;
+          if (!role.editable) {
+            skipped.push(role.name);
+            continue;
+          }
           await role.setMentionable(false, reason);
           changed++;
         }
-        return { ok: changed > 0, message: `${changed} rôle(s) rendus non mentionnables.` };
+        if (skipped.length > 0) {
+          const done = changed > 0 ? `${changed} rôle(s) rendus non mentionnables. ` : '';
+          return {
+            ok: changed > 0,
+            message: `${done}Kotbo ne peut pas modifier ${listNames(skipped)} : rôle géré par une intégration ou placé au-dessus du sien.`,
+          };
+        }
+        return { ok: true, message: changed > 0 ? `${changed} rôle(s) rendus non mentionnables.` : 'Rien à changer.' };
       }
 
       case 'strip_everyone_permissions': {
@@ -1495,6 +1518,6 @@ async function executeAuditFix(guild: Guild, finding: AuditFinding, reason: stri
     }
   } catch (err) {
     logger.error('SecurityAudit', `Correctif ${findingId} échoué sur ${guild.id}`, err);
-    return { ok: false, message: err instanceof Error ? err.message : 'Le correctif a échoué.' };
+    return { ok: false, message: publicErrorMessage(err, 'Le correctif a échoué.') };
   }
 }

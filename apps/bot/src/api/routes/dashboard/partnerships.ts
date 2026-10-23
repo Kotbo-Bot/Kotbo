@@ -114,6 +114,7 @@ import {
   proposeBridge,
   removeBridge,
 } from '../../../services/partnerships/partnershipBridgeService.js';
+import { publicErrorMessage } from '../../../utils/publicError.js';
 
 /** Segments servis par ce routeur. */
 const SEGMENTS = new Set(['partnerships', 'partners', 'partner-applications', 'partnership-directory']);
@@ -335,7 +336,7 @@ async function handlePartnerships(
       // Les permissions manquantes sont dites telles quelles : c'est la seule
       // chose que la personne peut corriger elle-meme, et elle doit savoir
       // laquelle.
-      json(res, 400, { error: error instanceof Error ? error.message : 'Mise en service impossible.' });
+      json(res, 400, { error: publicErrorMessage(error, 'Mise en service impossible.') });
     }
     return true;
   }
@@ -1176,7 +1177,7 @@ async function handleDirectory(
       });
       json(res, 201, { proposal });
     } catch (error) {
-      json(res, 400, { error: error instanceof Error ? error.message : 'Proposition refusée.' });
+      json(res, 400, { error: publicErrorMessage(error, 'Proposition refusée.') });
     }
     return true;
   }
@@ -1217,7 +1218,7 @@ async function handleDirectory(
         return true;
       }
     } catch (error) {
-      json(res, 400, { error: error instanceof Error ? error.message : 'Réponse impossible.' });
+      json(res, 400, { error: publicErrorMessage(error, 'Réponse impossible.') });
       return true;
     }
     return false;

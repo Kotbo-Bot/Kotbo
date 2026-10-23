@@ -16,6 +16,7 @@
   import DiscordPreview from '../DiscordPreview.svelte';
   import DiscordEmbed from '../DiscordEmbed.svelte';
   import Papicon from '../../Papicon.svelte';
+  import EmojiText from '../../EmojiText.svelte';
   import WizardShell from '../WizardShell.svelte';
 
   import { errorMessage } from '@kotbo/shared';
@@ -143,7 +144,7 @@
           <li class="flex items-start gap-2 text-body-sm text-on-surface-variant/55">
             <Papicon icon="check" size={12} class="mt-1 shrink-0 text-success/60" />
             <span class="min-w-0">
-              {#if rule.emoji}<span class="mr-1">{rule.emoji}</span>{/if}{rule.title}
+              {#if rule.emoji}<span class="mr-1"><EmojiText value={rule.emoji} /></span>{/if}{rule.title}
             </span>
           </li>
         {/each}
@@ -173,7 +174,7 @@
 
           <div class="min-w-0 flex-1">
             <div class="flex items-center gap-2">
-              <span class="text-[15px] leading-none">{rule.emoji}</span>
+              <EmojiText value={rule.emoji} class="text-[15px] leading-none shrink-0" />
               <p class="text-sm font-semibold text-on-surface">{rule.title}</p>
               {#if rule.selected}
                 <button
@@ -229,7 +230,7 @@
         />
       </DiscordPreview>
     {:else}
-      <p class="rounded-xl border border-outline-variant/30 bg-surface-container-low/30 px-4 py-3 text-body-sm text-on-surface-variant/60 leading-relaxed">
+      <p class="rounded-xl border border-outline-variant/30 bg-surface-container-low/30 px-4 py-3 text-body-sm text-on-surface-variant leading-relaxed">
         Aucun article retenu : rien ne sera publié. Tu pourras écrire ton règlement
         depuis le tableau de bord.
       </p>
@@ -240,7 +241,7 @@
     <button
       type="button"
       onclick={skip}
-      class="text-body-sm font-medium text-on-surface-variant/50 hover:text-on-surface transition-colors"
+      class="text-body-sm font-medium text-on-surface-variant hover:text-on-surface transition-colors"
     >
       Passer
     </button>

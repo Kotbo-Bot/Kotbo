@@ -205,7 +205,7 @@
   }
 </script>
 
-<Modal bind:open title={m.sev_modal_title()} size="full">
+<Modal flush bind:open title={m.sev_modal_title()} size="full">
   {#if step === 'search'}
     <form class="flex flex-col gap-6 p-6 sm:p-8" onsubmit={(event) => { event.preventDefault(); loadMessages(); }}>
       <div class="max-w-2xl">
@@ -231,7 +231,7 @@
             bind:value={messageLimit}
             class="min-w-0 flex-1 rounded-lg border border-outline-variant/15 bg-surface-container-lowest px-4 py-3 text-lg font-semibold tabular-nums text-on-surface outline-none transition-colors focus:border-primary/60 focus:ring-2 focus:ring-primary/15"
           />
-          <span class="shrink-0 text-xs font-medium text-on-surface-variant/50">{m.sev_limit_max()}</span>
+          <span class="shrink-0 text-xs font-medium text-on-surface-variant">{m.sev_limit_max()}</span>
         </div>
       </div>
 
@@ -241,7 +241,7 @@
             <div class="h-20 animate-pulse rounded-xl bg-surface-container-high/35"></div>
           {/each}
         </div>
-        <p class="text-xs font-medium text-on-surface-variant/60">
+        <p class="text-xs font-medium text-on-surface-variant">
           {m.sev_searching_hint()}
         </p>
       {/if}
@@ -253,7 +253,7 @@
       {/if}
 
       <div class="flex justify-end gap-3 pt-1">
-        <button type="button" onclick={closeModal} class="rounded-lg px-6 py-3 text-xs font-semibold text-on-surface-variant/60 transition-colors hover:text-on-surface focus-visible:outline-2 focus-visible:outline-primary">
+        <button type="button" onclick={closeModal} class="rounded-lg px-6 py-3 text-xs font-semibold text-on-surface-variant transition-colors hover:text-on-surface focus-visible:outline-2 focus-visible:outline-primary">
           {m.common_cancel()}
         </button>
         <button
@@ -328,7 +328,7 @@
 
           <section class="flex min-h-0 flex-col" aria-label={m.sev_messages_found_aria()}>
             <div class="flex items-center justify-between gap-3 border-b border-outline-variant/10 px-4 py-3">
-              <p class="text-xs font-medium text-on-surface-variant/60">
+              <p class="text-xs font-medium text-on-surface-variant">
                 {visibleMessages.length > 1 ? m.sev_displayed_other({ count: visibleMessages.length }) : m.sev_displayed_one({ count: visibleMessages.length })}
               </p>
               <button type="button" onclick={toggleSelectVisible} class="rounded-md px-2 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/8 focus-visible:outline-2 focus-visible:outline-primary">
@@ -406,10 +406,10 @@
         {/if}
 
         <div class="flex flex-wrap justify-end gap-3 border-t border-outline-variant/10 px-5 py-4">
-          <p class="mr-auto self-center text-2xs text-on-surface-variant/50">
+          <p class="mr-auto self-center text-2xs text-on-surface-variant">
             {m.sev_one_transcript_per_channel()}
           </p>
-          <button type="button" onclick={() => (step = 'search')} class="rounded-lg px-5 py-3 text-xs font-semibold text-on-surface-variant/60 transition-colors hover:text-on-surface focus-visible:outline-2 focus-visible:outline-primary">
+          <button type="button" onclick={() => (step = 'search')} class="rounded-lg px-5 py-3 text-xs font-semibold text-on-surface-variant transition-colors hover:text-on-surface focus-visible:outline-2 focus-visible:outline-primary">
             {m.sev_edit_search()}
           </button>
           <button
@@ -431,7 +431,7 @@
         <div class="h-14 animate-pulse rounded-xl bg-surface-container-high/40"></div>
         <div class="h-14 animate-pulse rounded-xl bg-surface-container-high/25"></div>
       </div>
-      <p class="text-body-sm font-medium text-on-surface-variant/60">
+      <p class="text-body-sm font-medium text-on-surface-variant">
         {m.sev_generating_transcript()}
       </p>
     </div>

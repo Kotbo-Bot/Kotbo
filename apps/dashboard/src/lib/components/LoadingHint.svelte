@@ -137,7 +137,7 @@
 </script>
 
 {#if currentHint}
-  <p class="text-xs text-on-surface-variant/50 mt-2 animate-fade-hint {className}" role="status">
+  <p class="text-xs text-on-surface-variant mt-2 animate-fade-hint {className}" role="status">
     {currentHint}
   </p>
 {/if}

@@ -113,7 +113,7 @@
 
   {#if macros.length > 0}
     <div class="mt-2 flex flex-wrap items-center gap-1.5">
-      <span class="text-2xs text-on-surface-variant/70 mr-1">{m.macro_field_insert()}</span>
+      <span class="text-2xs text-on-surface-variant mr-1">{m.macro_field_insert()}</span>
       {#each macros as macro (macro.token)}
         <button
           type="button"

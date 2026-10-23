@@ -44,6 +44,12 @@ export function escapeHtml(text: string): string {
     .replace(/'/g, '&#039;');
 }
 
+/**
+ * Classes `dc-*` : le dashboard les met en forme dans son CSS global. Les
+ * classes Tailwind posées ici ne sont jamais générées par le dashboard (son
+ * Tailwind ne lit pas le code du bot) : sans `dc-*`, un émoji personnalisé
+ * s'affichait à sa taille d'origine, 48 px.
+ */
 export function parseDiscordMarkdown(text: string, guild?: Guild | null): string {
   if (!text) return '';
   let escaped = escapeHtml(text);
@@ -52,23 +58,37 @@ export function parseDiscordMarkdown(text: string, guild?: Guild | null): string
   escaped = escaped.replace(/\*(.*?)\*/g, '<em>$1</em>');
   escaped = escaped.replace(/__(.*?)__/g, '<u>$1</u>');
   escaped = escaped.replace(/~~(.*?)~~/g, '<del>$1</del>');
-  escaped = escaped.replace(/`(.*?)`/g, '<code class="px-1.5 py-0.5 rounded bg-zinc-800 font-mono text-sm">$1</code>');
+  escaped = escaped.replace(/`(.*?)`/g, '<code class="dc-code px-1.5 py-0.5 rounded bg-zinc-800 font-mono text-sm">$1</code>');
 
   escaped = escaped.replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) => {
     const safeLang = escapeHtml(lang || 'plaintext');
     const safeCode = escapeHtml(code);
-    return `<pre class="p-3 my-2 rounded bg-zinc-800 font-mono text-sm overflow-x-auto"><code class="language-${safeLang}">${safeCode}</code></pre>`;
+    return `<pre class="dc-pre p-3 my-2 rounded bg-zinc-800 font-mono text-sm overflow-x-auto"><code class="language-${safeLang}">${safeCode}</code></pre>`;
   });
+
+  // Titres et sous-texte, très employés par les messages en Components V2 du
+  // bot (`### Titre`, `-# pied de page`). Une ligne entière à la fois.
+  escaped = escaped.replace(/^(#{1,3}) (.+)$/gm, (_, hashes: string, title: string) => {
+    const size = hashes.length === 1 ? 'text-lg' : hashes.length === 2 ? 'text-base' : 'text-sm';
+    return `<span class="dc-heading dc-h${hashes.length} block font-bold ${size} text-white">${title}</span>`;
+  });
+  escaped = escaped.replace(/^-# (.+)$/gm, '<span class="dc-subtext block text-xs text-white/50">$1</span>');
+  escaped = escaped.replace(/^&gt; (.+)$/gm, '<span class="dc-quote block border-l-4 border-white/20 pl-2">$1</span>');
+
+  // Liens masqués [texte](https://…) : seuls http(s) sont acceptés, et le texte
+  // est déjà échappé, l'URL aussi (ni guillemet ni chevron ne peuvent sortir).
+  escaped = escaped.replace(/\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g,
+    '<a href="$2" target="_blank" rel="noopener noreferrer" class="dc-link text-sky-400 hover:underline">$1</a>');
 
   escaped = escaped.replace(/&lt;:([a-zA-Z0-9_]+):(\d+)&gt;/g, (_, name, id) => {
     const safeName = escapeHtml(name);
     const safeId = escapeHtml(id);
-    return `<img class="inline-block h-[1.375em] w-auto align-middle mx-[0.15em]" src="https://cdn.discordapp.com/emojis/${safeId}.png?size=48&quality=lossless" alt=":${safeName}:" title=":${safeName}:" />`;
+    return `<img class="dc-emoji inline-block h-[1.375em] w-auto align-middle mx-[0.15em]" src="https://cdn.discordapp.com/emojis/${safeId}.png?size=48&quality=lossless" alt=":${safeName}:" title=":${safeName}:" />`;
   });
   escaped = escaped.replace(/&lt;a:([a-zA-Z0-9_]+):(\d+)&gt;/g, (_, name, id) => {
     const safeName = escapeHtml(name);
     const safeId = escapeHtml(id);
-    return `<img class="inline-block h-[1.375em] w-auto align-middle mx-[0.15em]" src="https://cdn.discordapp.com/emojis/${safeId}.gif?size=48&quality=lossless" alt=":${safeName}:" title=":${safeName}:" />`;
+    return `<img class="dc-emoji inline-block h-[1.375em] w-auto align-middle mx-[0.15em]" src="https://cdn.discordapp.com/emojis/${safeId}.gif?size=48&quality=lossless" alt=":${safeName}:" title=":${safeName}:" />`;
   });
 
   if (guild) {
@@ -77,22 +97,22 @@ export function parseDiscordMarkdown(text: string, guild?: Guild | null): string
       const user = guild.client.users.cache.get(id);
       const name = member?.displayName || user?.username || 'Utilisateur';
       const safeName = escapeHtml(name);
-      return `<span class="font-semibold text-sky-400 px-1.5 py-0.5 bg-sky-500/10 rounded hover:bg-sky-500 hover:text-white transition-colors cursor-pointer">@${safeName}</span>`;
+      return `<span class="dc-mention font-semibold text-sky-400 px-1.5 py-0.5 bg-sky-500/10 rounded hover:bg-sky-500 hover:text-white transition-colors cursor-pointer">@${safeName}</span>`;
     });
     escaped = escaped.replace(/&lt;#(\d+)&gt;/g, (_, id) => {
       const ch = guild.channels.cache.get(id);
       const safeName = escapeHtml(ch ? ch.name : 'salon-inconnu');
-      return `<span class="font-semibold text-sky-400 px-1.5 py-0.5 bg-sky-500/10 rounded hover:bg-sky-500 hover:text-white transition-colors cursor-pointer">#${safeName}</span>`;
+      return `<span class="dc-mention font-semibold text-sky-400 px-1.5 py-0.5 bg-sky-500/10 rounded hover:bg-sky-500 hover:text-white transition-colors cursor-pointer">#${safeName}</span>`;
     });
     escaped = escaped.replace(/&lt;@&amp;(\d+)&gt;/g, (_, id) => {
       const role = guild.roles.cache.get(id);
       const safeName = escapeHtml(role ? role.name : 'rôle-inconnu');
-      return `<span class="font-semibold text-sky-400 px-1.5 py-0.5 bg-sky-500/10 rounded hover:bg-sky-500 hover:text-white transition-colors cursor-pointer">@${safeName}</span>`;
+      return `<span class="dc-mention font-semibold text-sky-400 px-1.5 py-0.5 bg-sky-500/10 rounded hover:bg-sky-500 hover:text-white transition-colors cursor-pointer">@${safeName}</span>`;
     });
   } else {
-    escaped = escaped.replace(/&lt;@!?(\d+)&gt;/g, '<span class="font-semibold text-sky-400 px-1.5 py-0.5 bg-sky-500/10 rounded cursor-pointer">@Utilisateur</span>');
-    escaped = escaped.replace(/&lt;#(\d+)&gt;/g, '<span class="font-semibold text-sky-400 px-1.5 py-0.5 bg-sky-500/10 rounded cursor-pointer">#salon</span>');
-    escaped = escaped.replace(/&lt;@&amp;(\d+)&gt;/g, '<span class="font-semibold text-sky-400 px-1.5 py-0.5 bg-sky-500/10 rounded cursor-pointer">@Rôle</span>');
+    escaped = escaped.replace(/&lt;@!?(\d+)&gt;/g, '<span class="dc-mention font-semibold text-sky-400 px-1.5 py-0.5 bg-sky-500/10 rounded cursor-pointer">@Utilisateur</span>');
+    escaped = escaped.replace(/&lt;#(\d+)&gt;/g, '<span class="dc-mention font-semibold text-sky-400 px-1.5 py-0.5 bg-sky-500/10 rounded cursor-pointer">#salon</span>');
+    escaped = escaped.replace(/&lt;@&amp;(\d+)&gt;/g, '<span class="dc-mention font-semibold text-sky-400 px-1.5 py-0.5 bg-sky-500/10 rounded cursor-pointer">@Rôle</span>');
   }
 
   return escaped;

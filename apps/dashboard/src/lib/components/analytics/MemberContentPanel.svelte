@@ -90,7 +90,7 @@
   {:else if error}
     <Callout variant="danger" title={m.an_error_generic()}>{error}</Callout>
   {:else if messages === 0}
-    <EmptyState icon="message-square" title={m.anx_member_content_empty()} description={m.anx_content_empty_desc()} />
+    <EmptyState icon="message-square" title={m.anx_member_content_empty()} description={m.anx_content_empty_desc()} reason="accumulating" />
   {:else}
     <div class="member-facts">
       <div class="member-fact">

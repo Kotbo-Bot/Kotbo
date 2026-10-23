@@ -30,11 +30,12 @@ import {
   type RpgQuestInput,
   type RpgQuestObjective,
 } from './rpgQuestPolicy.js';
+import { UserFacingError } from '../../../utils/userFacingError.js';
 
 /** Valeur de `teamKey` d'une contribution personnelle : une clé ne peut pas être nulle. */
 const NO_TEAM = '';
 
-export class QuestError extends Error {
+export class QuestError extends UserFacingError {
   constructor(message: string, readonly status: number = 400) {
     super(message);
     this.name = 'QuestError';

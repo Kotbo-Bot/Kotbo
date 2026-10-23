@@ -183,7 +183,7 @@
       responses = [...responses, ...(data.submissions || [])];
       responseTotal = data.total ?? responseTotal;
     } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : 'Erreur de chargement');
+      toast.error(e instanceof Error ? e.message : 'Impossible de charger. Réessaie.');
     } finally {
       loadingMore = false;
     }
@@ -230,13 +230,13 @@
     <!-- Top bar -->
     <div class="flex flex-wrap items-center gap-3">
       <button onclick={() => router.goto('/forms')}
-        class="flex items-center gap-2 text-sm font-semibold text-on-surface-variant/60 hover:text-primary transition-colors">
+        class="flex items-center gap-2 text-sm font-semibold text-on-surface-variant hover:text-primary transition-colors">
         <Papicon icon="arrow_back" size={16} />
         Retour aux formulaires
       </button>
       <div class="flex-1"></div>
       {#if form}
-        <span class="text-xs font-semibold text-on-surface-variant/50 bg-surface-container px-3 py-1.5 rounded-full">
+        <span class="text-xs font-semibold text-on-surface-variant bg-surface-container px-3 py-1.5 rounded-full">
           {responseTotal} soumission{responseTotal !== 1 ? 's' : ''}
         </span>
       {/if}
@@ -299,17 +299,17 @@
             <table class="w-full text-sm">
               <thead>
                 <tr class="bg-surface-container-low/60 border-b border-outline-variant/10">
-                  <th class="text-left px-5 py-3 font-semibold text-on-surface-variant/60 text-xs">ID</th>
-                  <th class="text-left px-5 py-3 font-semibold text-on-surface-variant/60 text-xs">Utilisateur Discord</th>
-                  <th class="text-left px-5 py-3 font-semibold text-on-surface-variant/60 text-xs">Date de Soumission</th>
-                  <th class="text-left px-5 py-3 font-semibold text-on-surface-variant/60 text-xs"></th>
+                  <th class="text-left px-5 py-3 font-semibold text-on-surface-variant text-xs">ID</th>
+                  <th class="text-left px-5 py-3 font-semibold text-on-surface-variant text-xs">Utilisateur Discord</th>
+                  <th class="text-left px-5 py-3 font-semibold text-on-surface-variant text-xs">Date de Soumission</th>
+                  <th class="text-left px-5 py-3 font-semibold text-on-surface-variant text-xs"></th>
                 </tr>
               </thead>
               <tbody>
                 {#each filtered as r}
                   <tr class="border-b border-outline-variant/5 hover:bg-surface-container-low/40 transition-colors cursor-pointer"
                     onclick={() => selectedResponse = r}>
-                    <td class="px-5 py-3 font-mono text-xs text-on-surface-variant/50">{r.id.slice(0,8)}…</td>
+                    <td class="px-5 py-3 font-mono text-xs text-on-surface-variant">{r.id.slice(0,8)}…</td>
                     <td class="px-5 py-3">
                       {#if r.username || r.userId}
                         <UserDisplay
@@ -323,7 +323,7 @@
                         <span class="text-on-surface-variant/30 italic font-sans">Anonyme</span>
                       {/if}
                     </td>
-                    <td class="px-5 py-3 text-xs text-on-surface-variant/50 font-sans">{formatDate(r.createdAt)}</td>
+                    <td class="px-5 py-3 text-xs text-on-surface-variant font-sans">{formatDate(r.createdAt)}</td>
                     <td class="px-5 py-3 text-right">
                       <Papicon icon="chevron_right" size={16} class="text-on-surface-variant/30 inline-block" />
                     </td>
@@ -342,7 +342,7 @@
               <div>
                 <div class="flex items-start justify-between border-b border-outline-variant/5 pb-2 mb-4">
                   <h4 class="font-semibold text-on-surface font-sans text-sm">{item.label}</h4>
-                  <span class="text-xs font-semibold text-on-surface-variant/50 bg-surface-container px-2.5 py-1 rounded-full shrink-0 ml-2">
+                  <span class="text-xs font-semibold text-on-surface-variant bg-surface-container px-2.5 py-1 rounded-full shrink-0 ml-2">
                     {item.totalResponses} réponse{item.totalResponses !== 1 ? 's' : ''}
                   </span>
                 </div>
@@ -365,15 +365,15 @@
                 {:else if item.type === 'number'}
                   <div class="grid grid-cols-3 gap-3 text-center my-4">
                     <div class="bg-surface-container/30 border border-outline-variant/5 rounded-xl p-3">
-                      <span class="text-body-sm text-on-surface-variant/50 font-semibold block mb-1">Moyenne</span>
+                      <span class="text-body-sm text-on-surface-variant font-semibold block mb-1">Moyenne</span>
                       <span class="text-lg font-bold text-primary">{item.average ?? 0}</span>
                     </div>
                     <div class="bg-surface-container/30 border border-outline-variant/5 rounded-xl p-3">
-                      <span class="text-body-sm text-on-surface-variant/50 font-semibold block mb-1">Min</span>
+                      <span class="text-body-sm text-on-surface-variant font-semibold block mb-1">Min</span>
                       <span class="text-lg font-bold text-on-surface">{item.min ?? 0}</span>
                     </div>
                     <div class="bg-surface-container/30 border border-outline-variant/5 rounded-xl p-3">
-                      <span class="text-body-sm text-on-surface-variant/50 font-semibold block mb-1">Max</span>
+                      <span class="text-body-sm text-on-surface-variant font-semibold block mb-1">Max</span>
                       <span class="text-lg font-bold text-on-surface">{item.max ?? 0}</span>
                     </div>
                   </div>
@@ -430,29 +430,29 @@
         <div class="grid grid-cols-2 gap-3 text-sm">
           {#if selectedResponse.userId}
             <div class="bg-surface-container rounded-xl p-3">
-              <p class="text-xs text-on-surface-variant/50 font-semibold mb-1 font-sans">Discord ID</p>
+              <p class="text-xs text-on-surface-variant font-semibold mb-1 font-sans">Discord ID</p>
               <p class="font-mono text-xs text-on-surface">{selectedResponse.userId}</p>
             </div>
           {/if}
           {#if selectedResponse.username}
             <div class="bg-surface-container rounded-xl p-3">
-              <p class="text-xs text-on-surface-variant/50 font-semibold mb-1 font-sans">Pseudo / Tag</p>
+              <p class="text-xs text-on-surface-variant font-semibold mb-1 font-sans">Pseudo / Tag</p>
               <p class="text-on-surface font-sans">{selectedResponse.username}{selectedResponse.userTag ? ` (${selectedResponse.userTag})` : ''}</p>
             </div>
           {/if}
           <div class="bg-surface-container rounded-xl p-3 col-span-2">
-            <p class="text-xs text-on-surface-variant/50 font-semibold mb-1 font-sans">Date de soumission</p>
+            <p class="text-xs text-on-surface-variant font-semibold mb-1 font-sans">Date de soumission</p>
             <p class="text-xs text-on-surface font-sans">{formatDate(selectedResponse.createdAt)}</p>
           </div>
         </div>
 
         <!-- Answers -->
         <div>
-          <h3 class="text-sm font-semibold text-on-surface-variant/60 mb-3 font-sans">Réponses aux questions</h3>
+          <h3 class="text-sm font-semibold text-on-surface-variant mb-3 font-sans">Réponses aux questions</h3>
           <div class="space-y-3">
             {#each Object.entries(selectedResponse.data || {}) as [key, value]}
               <div class="bg-surface-container/60 rounded-xl p-3">
-                <p class="text-xs font-bold text-on-surface-variant/50 mb-1 font-sans">{fieldLabelMap[key] || key}</p>
+                <p class="text-xs font-bold text-on-surface-variant mb-1 font-sans">{fieldLabelMap[key] || key}</p>
                 <p class="text-sm text-on-surface font-sans">
                   {Array.isArray(value) ? value.join(', ') : typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value ?? '-')}
                 </p>

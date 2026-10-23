@@ -3,6 +3,7 @@
   import { portal } from '../../actions/portal';
   import { scrollLock } from '../../scrollLock';
   import { prefersReducedMotion } from '../../stores/media.svelte';
+  import { m } from '../../i18n';
   import Papicon from '../Papicon.svelte';
 
   type Props = {
@@ -145,7 +146,7 @@
       type="button"
       class="sheet__scrim"
       style:opacity={dragging ? Math.max(0.15, 1 - dragOffset / 320) : undefined}
-      aria-label="Fermer"
+      aria-label={m.common_close()}
       onclick={onclose}
     ></button>
 
@@ -178,7 +179,7 @@
           {@render header()}
         {/if}
 
-        <button type="button" class="sheet__close" onclick={onclose} aria-label="Fermer">
+        <button type="button" class="sheet__close" onclick={onclose} aria-label={m.common_close()}>
           <Papicon icon="x" size={18} />
         </button>
       </header>
@@ -243,7 +244,7 @@
   .sheet__grabber {
     width: 2.25rem;
     height: 0.25rem;
-    margin: 0.625rem auto 0;
+    margin: 0.5rem auto 0;
     flex: none;
     border-radius: 999px;
     background: var(--outline-variant);
@@ -252,8 +253,9 @@
   .sheet__header {
     display: flex;
     align-items: center;
-    gap: 0.75rem;
-    padding: 0.625rem 0.75rem 0.75rem 1.125rem;
+    gap: 0.5rem;
+    /* Le titre s'aligne sur le contenu des lignes (16px de marge + 12px). */
+    padding: 0.5rem 0.5rem 0.75rem 1.75rem;
   }
 
   .sheet__heading {
@@ -274,7 +276,7 @@
   }
 
   .sheet__subtitle {
-    margin-top: 0.125rem;
+    margin-top: 0.25rem;
     overflow: hidden;
     color: var(--on-surface-variant);
     font-size: 0.75rem;
@@ -284,8 +286,8 @@
 
   .sheet__close {
     display: grid;
-    width: 2.5rem;
-    height: 2.5rem;
+    width: 2.75rem;
+    height: 2.75rem;
     flex: none;
     place-items: center;
     border-radius: 999px;

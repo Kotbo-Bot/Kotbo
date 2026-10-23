@@ -11,6 +11,7 @@ import {
 } from 'discord.js';
 import { COLORS_RAW, kotboContainer, truncate } from '../../utils/embeds.js';
 import { separator, v2Message } from '@arcscord/components';
+import { publicErrorMessage } from '../../utils/publicError.js';
 
 /**
  * Registre déclaratif des actions des menus contextuels.
@@ -182,7 +183,7 @@ const messageActions: MessageAction[] = [
       } catch (error) {
         return fail(
           'Action impossible',
-          error instanceof Error ? error.message : "Impossible de modifier l'épinglage de ce message.",
+          publicErrorMessage(error, "Impossible de modifier l'épinglage de ce message."),
         );
       }
 
@@ -225,7 +226,7 @@ const messageActions: MessageAction[] = [
         });
         return ok('Thread créé', `Le fil <#${thread.id}> a été ouvert depuis [ce message](${messageLink(ctx.message)}).`);
       } catch (error) {
-        return fail('Création impossible', error instanceof Error ? error.message : 'Impossible de créer le thread.');
+        return fail('Création impossible', publicErrorMessage(error, 'Impossible de créer le thread.'));
       }
     },
   },
@@ -264,7 +265,7 @@ const messageActions: MessageAction[] = [
           }`,
         );
       } catch (error) {
-        return fail('Purge impossible', error instanceof Error ? error.message : 'Impossible de purger ce salon.');
+        return fail('Purge impossible', publicErrorMessage(error, 'Impossible de purger ce salon.'));
       }
     },
   },
@@ -364,7 +365,7 @@ const messageActions: MessageAction[] = [
         await ctx.message.delete();
         deleted = true;
       } catch (error) {
-        return fail('Suppression impossible', error instanceof Error ? error.message : 'Impossible de supprimer ce message.');
+        return fail('Suppression impossible', publicErrorMessage(error, 'Impossible de supprimer ce message.'));
       }
 
       let dmSent = true;
@@ -544,7 +545,7 @@ const userActions: UserAction[] = [
       try {
         await member.timeout(durationMs, `${input.reason} - par ${ctx.invoker.user.tag}`);
       } catch (error) {
-        return fail('Timeout impossible', error instanceof Error ? error.message : 'Discord a refusé le timeout.');
+        return fail('Timeout impossible', publicErrorMessage(error, 'Discord a refusé le timeout.'));
       }
 
       const until = Math.floor((Date.now() + durationMs) / 1000);
@@ -653,7 +654,7 @@ const userActions: UserAction[] = [
       try {
         await member.setNickname(next, `Renommé via menu contextuel par ${ctx.invoker.user.tag}`);
       } catch (error) {
-        return fail('Renommage impossible', error instanceof Error ? error.message : 'Discord a refusé le changement de pseudo.');
+        return fail('Renommage impossible', publicErrorMessage(error, 'Discord a refusé le changement de pseudo.'));
       }
 
       return ok(

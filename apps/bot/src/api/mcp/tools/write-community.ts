@@ -5,7 +5,7 @@ import { publishSuggestionResolved } from '../../../services/features/suggestion
 import prisma from '../../../utils/db.js';
 import { type NewsChannel, TextChannel } from 'discord.js';
 import { z } from 'zod';
-import { type McpToolContext, err, ok, resolveChannel } from '../toolkit.js';
+import { type McpToolContext, err, ok, resolveChannel, toolError } from '../toolkit.js';
 
 export function registerWriteCommunityTools(ctx: McpToolContext) {
   const { server, guildId, client, shouldRegister, guard, audit, toolMeta } = ctx;
@@ -135,7 +135,7 @@ export function registerWriteCommunityTools(ctx: McpToolContext) {
           await audit(key_name, 'Création saison MCP', name, `ID: ${season.id}`);
           return ok({ ok: true, season });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -157,7 +157,7 @@ export function registerWriteCommunityTools(ctx: McpToolContext) {
           await audit(key_name, 'Démarrage saison MCP', season_id, '');
           return ok({ ok: true, seasonId: season_id });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -179,7 +179,7 @@ export function registerWriteCommunityTools(ctx: McpToolContext) {
           await audit(key_name, 'Fin de saison MCP', season_id, '');
           return ok({ ok: true, seasonId: season_id });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -228,7 +228,7 @@ export function registerWriteCommunityTools(ctx: McpToolContext) {
           await audit(key_name, 'Config Channel Health MCP', '', JSON.stringify(updatePayload));
           return ok(config);
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -252,7 +252,7 @@ export function registerWriteCommunityTools(ctx: McpToolContext) {
           await audit(key_name, 'Résolution alerte Channel Health MCP', alert_id, action);
           return ok({ ok: true, alertId: alert_id, action });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -277,7 +277,7 @@ export function registerWriteCommunityTools(ctx: McpToolContext) {
           await audit(key_name, 'Split salon MCP', resolved.channel.name, `Nouveau salon: ${newChannelId}`);
           return ok({ ok: true, sourceChannelId: resolved.channel.id, newChannelId });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -302,7 +302,7 @@ export function registerWriteCommunityTools(ctx: McpToolContext) {
           await audit(key_name, 'Archivage salon MCP', resolved.channel.name, resolved.channel.id);
           return ok({ ok: true, channelId: resolved.channel.id });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );

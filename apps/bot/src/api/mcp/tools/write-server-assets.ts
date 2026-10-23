@@ -5,7 +5,7 @@ import { MAX_XP } from '@kotbo/shared';
 import prisma from '../../../utils/db.js';
 import { PermissionFlagsBits } from 'discord.js';
 import { z } from 'zod';
-import { MENTION_CHANNEL, type McpToolContext, SNOWFLAKE, err, ok, resolveChannel, resolveMember } from '../toolkit.js';
+import { MENTION_CHANNEL, type McpToolContext, SNOWFLAKE, err, ok, resolveChannel, resolveMember, toolError } from '../toolkit.js';
 import { INVITE_SOURCE, recordBotInvite } from '../../../services/analytics/inviteService.js';
 import { annoncerIntentionVocale } from '../../../services/moderation/voiceIntentRegistry.js';
 
@@ -84,7 +84,7 @@ export function registerWriteServerAssetsTools(ctx: McpToolContext) {
           await audit(key_name, 'Permissions rôle MCP', discordRole.name, `allow: [${allow}] | deny: [${deny}]`);
           return ok({ ok: true, roleId: discordRole.id, name: discordRole.name, permissions: newPerms });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -133,7 +133,7 @@ export function registerWriteServerAssetsTools(ctx: McpToolContext) {
           await audit(key_name, 'Déplacement vocal MCP', rm.label, `Vers #${targetChannel.name}`);
           return ok({ ok: true, userId: rm.userId, channelId: targetChannel.id, channelName: targetChannel.name });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -167,7 +167,7 @@ export function registerWriteServerAssetsTools(ctx: McpToolContext) {
           await audit(key_name, muted ? 'Mute vocal MCP' : 'Démute vocal MCP', rm.label, '');
           return ok({ ok: true, userId: rm.userId, muted });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -201,7 +201,7 @@ export function registerWriteServerAssetsTools(ctx: McpToolContext) {
           await audit(key_name, deafened ? 'Deafen vocal MCP' : 'Undeafen vocal MCP', rm.label, '');
           return ok({ ok: true, userId: rm.userId, deafened });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -240,7 +240,7 @@ export function registerWriteServerAssetsTools(ctx: McpToolContext) {
           await audit(key_name, 'Déconnexion vocale MCP', rm.label, '');
           return ok({ ok: true, userId: rm.userId });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -298,7 +298,7 @@ export function registerWriteServerAssetsTools(ctx: McpToolContext) {
             expiresAt: invite.expiresAt?.toISOString() ?? null,
           });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -328,7 +328,7 @@ export function registerWriteServerAssetsTools(ctx: McpToolContext) {
           await audit(key_name, 'Suppression invitation MCP', code, `Salon: ${invite.channel?.name ?? '?'}`);
           return ok({ ok: true, code });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -357,7 +357,7 @@ export function registerWriteServerAssetsTools(ctx: McpToolContext) {
           await audit(key_name, 'Création emoji MCP', name, `ID: ${emoji.id}`);
           return ok({ ok: true, emojiId: emoji.id, name: emoji.name, url: emoji.url });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -391,7 +391,7 @@ export function registerWriteServerAssetsTools(ctx: McpToolContext) {
           await audit(key_name, 'Modification emoji MCP', `${emoji} → ${name}`, `ID: ${target.id}`);
           return ok({ ok: true, emojiId: updated.id, name: updated.name });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -425,7 +425,7 @@ export function registerWriteServerAssetsTools(ctx: McpToolContext) {
           await audit(key_name, 'Suppression emoji MCP', emojiName ?? emoji, `ID: ${target.id}`);
           return ok({ ok: true });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -460,7 +460,7 @@ export function registerWriteServerAssetsTools(ctx: McpToolContext) {
           await audit(key_name, 'Création sticker MCP', name, `ID: ${sticker.id}`);
           return ok({ ok: true, stickerId: sticker.id, name: sticker.name, url: sticker.url });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -501,7 +501,7 @@ export function registerWriteServerAssetsTools(ctx: McpToolContext) {
           await audit(key_name, 'Modification sticker MCP', target.name, `ID: ${target.id}`);
           return ok({ ok: true, stickerId: updated.id, name: updated.name });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -535,7 +535,7 @@ export function registerWriteServerAssetsTools(ctx: McpToolContext) {
           await audit(key_name, 'Suppression sticker MCP', stickerName, `ID: ${target.id}`);
           return ok({ ok: true });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -565,7 +565,7 @@ export function registerWriteServerAssetsTools(ctx: McpToolContext) {
           await audit(key_name, 'Suppression thread MCP', threadName, `ID: ${thread}`);
           return ok({ ok: true });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -594,7 +594,7 @@ export function registerWriteServerAssetsTools(ctx: McpToolContext) {
           await audit(key_name, 'Création webhook MCP', name, `ID: ${webhook.id} dans #${resolved.channel.name}`);
           return ok({ ok: true, webhookId: webhook.id, name: webhook.name, url: webhook.url, channelId: resolved.channel.id });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -634,7 +634,7 @@ export function registerWriteServerAssetsTools(ctx: McpToolContext) {
           await audit(key_name, 'Modification webhook MCP', target.name ?? webhook, `ID: ${webhook}`);
           return ok({ ok: true, webhookId: updated.id, name: updated.name, channelId: updated.channelId });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -665,7 +665,7 @@ export function registerWriteServerAssetsTools(ctx: McpToolContext) {
           await audit(key_name, 'Suppression webhook MCP', webhookName ?? webhook, `ID: ${webhook}`);
           return ok({ ok: true });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -733,7 +733,7 @@ export function registerWriteServerAssetsTools(ctx: McpToolContext) {
           await audit(key_name, 'Réglages serveur MCP', changes, `Modifié : ${changes}`);
           return ok({ ok: true, modified: Object.keys(editData) });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -765,7 +765,7 @@ export function registerWriteServerAssetsTools(ctx: McpToolContext) {
             : '';
           return ok({ ok: true, message: `L'économie (${component}) a été réinitialisée avec succès.${restitution}` });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -810,7 +810,7 @@ export function registerWriteServerAssetsTools(ctx: McpToolContext) {
           await audit(key_name, 'Ajustement monnaie MCP', resolved.label, `Montant: ${amount}`);
           return ok({ ok: true, userId: resolved.userId, newBalance: profile.balance });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -847,7 +847,7 @@ export function registerWriteServerAssetsTools(ctx: McpToolContext) {
           await audit(key_name, 'Ajustement XP MCP', resolved.label, `XP: ${amount}`);
           return ok({ ok: true, userId: resolved.userId, level: currentLevel?.level, xp: currentLevel?.xp });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -878,7 +878,7 @@ export function registerWriteServerAssetsTools(ctx: McpToolContext) {
           await audit(key_name, 'AutoMod règle MCP', word, 'Règle regex ajoutée');
           return ok({ ok: true, word });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -906,7 +906,7 @@ export function registerWriteServerAssetsTools(ctx: McpToolContext) {
           await audit(key_name, 'AutoMod règle MCP', word, 'Règle regex retirée');
           return ok({ ok: true, word });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );

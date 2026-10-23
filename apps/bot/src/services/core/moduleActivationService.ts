@@ -31,6 +31,7 @@ import { invalidateRankedConfigCache } from '../progression/ranked/rankedConfigS
 import { invalidateStarboardCache } from '../features/starboardService.js';
 import { type KotboModule, setModuleActivation } from '../analytics/moduleStatsService.js';
 import { getModuleStates, invalidateModuleStates } from './moduleGate.js';
+import { UserFacingError } from '../../utils/userFacingError.js';
 
 const KOTBO_MODULE_BY_KEY: Record<string, KotboModule> = {
   'codepolice': 'codePolice',
@@ -87,7 +88,7 @@ export function resolveModuleKey(name: string): string | undefined {
   return KEY_BY_NORMALIZED_NAME.get(normalizeModuleName(trimmed));
 }
 
-export class CoreModuleError extends Error {
+export class CoreModuleError extends UserFacingError {
   constructor(moduleKey: string) {
     super(`Le module « ${moduleKey} » fait partie du cœur du bot et ne peut pas être désactivé.`);
     this.name = 'CoreModuleError';
@@ -105,7 +106,7 @@ export class CoreModuleError extends Error {
  * l'interface n'est qu'un client parmi d'autres (outils MCP, appels directs à
  * l'API), et un client ne se garde pas lui-même.
  */
-export class PlanLockedError extends Error {
+export class PlanLockedError extends UserFacingError {
   constructor(
     readonly moduleKey: string,
     readonly currentPlan: PlanKey,
@@ -320,6 +321,16 @@ export async function setDashboardModuleStatus(
   // seulement etre refusees a l'execution. La republication est differee et
   // groupee : appliquer un preset bascule une dizaine de modules d'affilee.
   scheduleCommandSync(guildId);
+
+  // Site automatique : un module allumé reçoit sa page sur le site, s'il en a une.
+  if (enabled) {
+    void import('../site/siteAutoService.js')
+      .then(async ({ scheduleAutoModulePages }) => {
+        const { getClient } = await import('../../utils/client.js');
+        scheduleAutoModulePages(getClient(), guildId);
+      })
+      .catch(() => null);
+  }
 
   return { moduleKey: key, enabled, enabledRequirements, disabledDependents, preparedOnly };
 }

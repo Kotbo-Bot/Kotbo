@@ -214,7 +214,7 @@
           <Papicon icon="GitCompare" size={22} class="text-primary" />
           {m.audit_title()}
         </h2>
-        <p class="text-sm text-on-surface-variant/70 mt-1 max-w-2xl">{m.audit_subtitle()}</p>
+        <p class="text-sm text-on-surface-variant mt-1 max-w-2xl">{m.audit_subtitle()}</p>
       </div>
       {#if canManageSettings}
         <button
@@ -258,7 +258,7 @@
           </div>
 
           <div class="space-y-1.5">
-            <label for="audit-retention" class="text-xs font-semibold text-on-surface-variant/70">
+            <label for="audit-retention" class="text-xs font-semibold text-on-surface-variant">
               {m.audit_retention_days()}
             </label>
             <input
@@ -269,13 +269,13 @@
               bind:value={form.retentionDays}
               class="w-full px-3 py-2 rounded-xl bg-surface-container-highest border border-outline-variant/20 text-sm text-on-surface focus:border-primary/50 focus:outline-none"
             />
-            <p class="text-2xs text-on-surface-variant/50">{m.audit_retention_help()}</p>
+            <p class="text-2xs text-on-surface-variant">{m.audit_retention_help()}</p>
           </div>
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div class="space-y-1.5">
-            <label for="audit-ignored-channels" class="text-xs font-semibold text-on-surface-variant/70">
+            <label for="audit-ignored-channels" class="text-xs font-semibold text-on-surface-variant">
               {m.audit_ignored_channels()}
             </label>
             <MultiSelect
@@ -286,7 +286,7 @@
             />
           </div>
           <div class="space-y-1.5">
-            <label for="audit-ignored-roles" class="text-xs font-semibold text-on-surface-variant/70">
+            <label for="audit-ignored-roles" class="text-xs font-semibold text-on-surface-variant">
               {m.audit_ignored_users()}
             </label>
             <MultiSelect
@@ -295,7 +295,7 @@
               options={availableRoles.map((r: any) => ({ id: r.id, name: `@${r.name}` }))}
               accentClass="bg-error/20 text-rose-300 border-error/40"
             />
-            <p class="text-2xs text-on-surface-variant/50">{m.audit_ignored_help()}</p>
+            <p class="text-2xs text-on-surface-variant">{m.audit_ignored_help()}</p>
           </div>
         </div>
 
@@ -347,7 +347,7 @@
           {/each}
         </select>
 
-        <label class="flex items-center gap-2 text-xs text-on-surface-variant/60">
+        <label class="flex items-center gap-2 text-xs text-on-surface-variant">
           {m.audit_filter_from()}
           <input
             type="date"
@@ -357,7 +357,7 @@
           />
         </label>
 
-        <label class="flex items-center gap-2 text-xs text-on-surface-variant/60">
+        <label class="flex items-center gap-2 text-xs text-on-surface-variant">
           {m.audit_filter_to()}
           <input
             type="date"
@@ -369,10 +369,10 @@
 
         <button
           onclick={resetFilters}
-          class="px-3 py-2 rounded-xl text-xs font-medium bg-surface-container-highest text-on-surface-variant/70 hover:text-on-surface transition-all"
+          class="px-3 py-2 rounded-xl text-xs font-medium bg-surface-container-highest text-on-surface-variant hover:text-on-surface transition-all"
         >{m.audit_filter_reset()}</button>
       </div>
-      <p class="mt-3 text-xs text-on-surface-variant/50">{m.audit_total_events({ n: total })}</p>
+      <p class="mt-3 text-xs text-on-surface-variant">{m.audit_total_events({ n: total })}</p>
     </section>
 
     <!-- Journal -->
@@ -383,7 +383,7 @@
         {/each}
       </div>
     {:else if events.length === 0}
-      <div class="p-10 text-center text-sm text-on-surface-variant/50 rounded-2xl bg-surface-container-high/30">
+      <div class="p-10 text-center text-sm text-on-surface-variant rounded-2xl bg-surface-container-high/30">
         {m.audit_no_events()}
       </div>
     {:else}
@@ -400,9 +400,9 @@
                 <div class="min-w-0">
                   <div class="flex items-center gap-2 flex-wrap">
                     <span class="text-sm font-semibold text-on-surface">{meta.label()}</span>
-                    <span class="text-sm text-on-surface-variant/70 truncate">{event.targetName || event.targetId}</span>
+                    <span class="text-sm text-on-surface-variant truncate">{event.targetName || event.targetId}</span>
                   </div>
-                  <div class="text-2xs text-on-surface-variant/50 mt-0.5">
+                  <div class="text-2xs text-on-surface-variant mt-0.5">
                     {formatDateTime(event.createdAt)}
                     · {m.audit_by()} {event.executorName || m.audit_unknown_executor()}
                     {#if event.channelName}· #{event.channelName}{/if}
@@ -412,7 +412,7 @@
 
               <button
                 onclick={() => toggleExpanded(event.id)}
-                class="px-3 py-1.5 rounded-lg text-xs font-medium bg-surface-container-highest text-on-surface-variant/70 hover:text-on-surface transition-all flex items-center gap-1.5 shrink-0"
+                class="px-3 py-1.5 rounded-lg text-xs font-medium bg-surface-container-highest text-on-surface-variant hover:text-on-surface transition-all flex items-center gap-1.5 shrink-0"
               >
                 <Papicon icon={isOpen ? 'ChevronUp' : 'ChevronDown'} size={13} />
                 {isOpen ? m.audit_hide_diff() : m.audit_view_diff()}
@@ -422,14 +422,14 @@
             {#if isOpen}
               <div class="px-4 pb-4 space-y-4 border-t border-outline-variant/10 pt-4">
                 {#if event.reason}
-                  <p class="text-xs text-on-surface-variant/70">
+                  <p class="text-xs text-on-surface-variant">
                     <span class="font-semibold">{m.audit_reason()} :</span> {event.reason}
                   </p>
                 {/if}
 
                 {#each event.changes as change}
                   <div class="space-y-2">
-                    <h4 class="text-xs font-semibold text-on-surface-variant/60">
+                    <h4 class="text-xs font-semibold text-on-surface-variant">
                       {change.label}
                     </h4>
 
@@ -438,7 +438,7 @@
                       {@const lines = diffLines(String(change.before ?? ''), String(change.after ?? ''))}
                       {@const stats = diffStats(lines)}
                       {@const rows = toSideBySide(lines)}
-                      <p class="text-2xs text-on-surface-variant/50">
+                      <p class="text-2xs text-on-surface-variant">
                         <span class="text-success">+{stats.added}</span>
                         <span class="text-error ml-2">−{stats.removed}</span>
                       </p>
@@ -453,10 +453,10 @@
                           <tbody>
                             {#each rows as row}
                               <tr>
-                                <td class="px-3 py-1 align-top whitespace-pre-wrap wrap-break-word {row.before?.type === 'removed' ? 'bg-error/10 text-red-300' : 'text-on-surface-variant/70'}">
+                                <td class="px-3 py-1 align-top whitespace-pre-wrap wrap-break-word {row.before?.type === 'removed' ? 'bg-error/10 text-red-300' : 'text-on-surface-variant'}">
                                   {#if row.before}<span class="select-none text-on-surface-variant/30 mr-2">{row.before.beforeLine ?? ''}</span>{row.before.content}{/if}
                                 </td>
-                                <td class="px-3 py-1 align-top whitespace-pre-wrap wrap-break-word border-l border-outline-variant/10 {row.after?.type === 'added' ? 'bg-success/10 text-emerald-300' : 'text-on-surface-variant/70'}">
+                                <td class="px-3 py-1 align-top whitespace-pre-wrap wrap-break-word border-l border-outline-variant/10 {row.after?.type === 'added' ? 'bg-success/10 text-emerald-300' : 'text-on-surface-variant'}">
                                   {#if row.after}<span class="select-none text-on-surface-variant/30 mr-2">{row.after.afterLine ?? ''}</span>{row.after.content}{/if}
                                 </td>
                               </tr>
@@ -478,7 +478,7 @@
                           </span>
                         {/each}
                         {#each change.reset ?? [] as item}
-                          <span class="px-2 py-1 rounded-md text-2xs font-mono bg-surface-container-highest text-on-surface-variant/60 border border-outline-variant/20">
+                          <span class="px-2 py-1 rounded-md text-2xs font-mono bg-surface-container-highest text-on-surface-variant border border-outline-variant/20">
                             ± {item}
                           </span>
                         {/each}
@@ -505,17 +505,17 @@
       </div>
 
       <div class="flex items-center justify-between">
-        <span class="text-xs text-on-surface-variant/50">{m.audit_page_of({ page, pages: totalPages })}</span>
+        <span class="text-xs text-on-surface-variant">{m.audit_page_of({ page, pages: totalPages })}</span>
         <div class="flex gap-2">
           <button
             onclick={() => changePage(-1)}
             disabled={page <= 1}
-            class="px-3 py-1.5 rounded-lg text-xs font-medium bg-surface-container-highest text-on-surface-variant/70 hover:text-on-surface disabled:opacity-30 transition-all"
+            class="px-3 py-1.5 rounded-lg text-xs font-medium bg-surface-container-highest text-on-surface-variant hover:text-on-surface disabled:opacity-30 transition-all"
           >{m.audit_previous()}</button>
           <button
             onclick={() => changePage(1)}
             disabled={page >= totalPages}
-            class="px-3 py-1.5 rounded-lg text-xs font-medium bg-surface-container-highest text-on-surface-variant/70 hover:text-on-surface disabled:opacity-30 transition-all"
+            class="px-3 py-1.5 rounded-lg text-xs font-medium bg-surface-container-highest text-on-surface-variant hover:text-on-surface disabled:opacity-30 transition-all"
           >{m.audit_next()}</button>
         </div>
       </div>

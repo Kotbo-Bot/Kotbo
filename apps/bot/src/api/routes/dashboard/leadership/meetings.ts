@@ -51,6 +51,7 @@ import {
   
   MeetingValidationError,
 } from '../../../../services/staff/staffLeadershipService.js';
+import { publicErrorMessage } from '../../../../utils/publicError.js';
 
 export async function handleMeetingRoutes(
   req: IncomingMessage,
@@ -165,7 +166,7 @@ export async function handleMeetingRoutes(
           } else {
             logger.error('StaffAPI', 'Error creating meeting:', err);
           }
-          json(res, isValidationError ? 400 : 500, { error: errorMessage(err) || 'Erreur lors de la création de la réunion' });
+          json(res, isValidationError ? 400 : 500, { error: publicErrorMessage(err, 'Erreur lors de la création de la réunion') });
         }
         return true;
       }
@@ -212,7 +213,7 @@ export async function handleMeetingRoutes(
           json(res, 200, { meeting });
         } catch (err: unknown) {
           logger.error('StaffAPI', `Error updating meeting ${meetingId}: ${errorMessage(err)}`, errorStack(err));
-          json(res, 500, { error: 'Erreur lors de la mise à jour de la réunion', details: errorMessage(err) });
+          json(res, 500, { error: publicErrorMessage(err, 'Erreur lors de la mise à jour de la réunion') });
         }
         return true;
       }

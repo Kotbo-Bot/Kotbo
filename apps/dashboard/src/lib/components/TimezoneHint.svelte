@@ -24,7 +24,7 @@
   }
 </script>
 
-<div class="flex flex-wrap items-center gap-1.5 text-2xs text-on-surface-variant/70">
+<div class="flex flex-wrap items-center gap-1.5 text-2xs text-on-surface-variant">
   <span>{m.timezone_hint_prefix({ zone: effective })}</span>
   {#if !picking}
     <button
@@ -38,7 +38,7 @@
       <button
         type="button"
         onclick={() => (value = null)}
-        class="text-on-surface-variant/60 hover:text-on-surface-variant hover:underline cursor-pointer"
+        class="text-on-surface-variant hover:text-on-surface-variant hover:underline cursor-pointer"
       >
         {m.timezone_hint_reset()}
       </button>
@@ -57,7 +57,7 @@
     <button
       type="button"
       onclick={() => (picking = false)}
-      class="text-on-surface-variant/60 hover:text-on-surface-variant hover:underline cursor-pointer"
+      class="text-on-surface-variant hover:text-on-surface-variant hover:underline cursor-pointer"
     >
       {m.common_cancel()}
     </button>

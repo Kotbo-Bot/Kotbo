@@ -76,8 +76,9 @@ const { logger } = await import('../../utils/logger.js');
  * par `instanceof TextChannel`, et un objet nu échouerait ce filtre — le test
  * passerait alors sans jamais atteindre l'envoi, donc sans rien prouver.
  */
-function salonDeTicket(envoiEchoue: boolean) {
+function salonDeTicket(envoiEchoue: boolean | Error) {
   const send = mock(async () => {
+    if (envoiEchoue instanceof Error) throw envoiEchoue;
     if (envoiEchoue) throw new Error('Missing Permissions');
     return { id: 'message-1' };
   });
@@ -100,14 +101,22 @@ function clientAvec(salon: unknown): Client {
   } as unknown as Client;
 }
 
+/** Refus Discord tel que discord.js le leve : un message et un `code` numerique. */
+function refusDiscord(code: number): Error {
+  return Object.assign(new Error(code === 50001 ? 'Missing Access' : 'Missing Permissions'), { code, status: 403 });
+}
+
 const erreurOrigine = logger.error;
 const infoOrigine = logger.info;
+const warnOrigine = logger.warn;
 let erreurs: string[] = [];
 let infos: string[] = [];
+let avertissements: string[] = [];
 
 beforeEach(() => {
   erreurs = [];
   infos = [];
+  avertissements = [];
   mises.clear();
   ticketRow = {
     id: TICKET_ID,
@@ -124,11 +133,15 @@ beforeEach(() => {
   logger.info = (tag: string, ...args: unknown[]) => {
     infos.push(`${tag} ${args.map((a) => String(a)).join(' ')}`);
   };
+  logger.warn = (tag: string, ...args: unknown[]) => {
+    avertissements.push(`${tag} ${args.map((a) => String(a)).join(' ')}`);
+  };
 });
 
 afterEach(() => {
   logger.error = erreurOrigine;
   logger.info = infoOrigine;
+  logger.warn = warnOrigine;
 });
 
 describe('checkTicketInactivity', () => {
@@ -162,5 +175,39 @@ describe('checkTicketInactivity', () => {
     expect(ticketRow.inactivityAlertSent).toBe(true);
     expect(mises.get(TICKET_ID)).toEqual({ inactivityAlertSent: true });
     expect(erreurs).toEqual([]);
+  });
+
+  test("salon fermé au bot : « Missing Access » signalé une fois, sans erreur à chaque tour", async () => {
+    // Ticket distinct : le registre des salons deja signales vit dans le module.
+    ticketRow.id = 'ticket-ferme';
+    const { salon, send } = salonDeTicket(refusDiscord(50001));
+
+    await checkTicketInactivity(clientAvec(salon));
+    await checkTicketInactivity(clientAvec(salon));
+
+    // Le ticket reste dans la file : il sera relancé quand l'accès reviendra.
+    expect(ticketRow.inactivityAlertSent).toBe(false);
+    // Un 403 de droits n'est pas une panne du bot : pas d'erreur, et un seul
+    // avertissement pour deux tours au lieu d'une ligne rouge à chaque passage.
+    expect(erreurs).toEqual([]);
+    expect(avertissements).toHaveLength(1);
+    expect(avertissements[0]).toContain('ticket-ferme');
+    expect(send).toHaveBeenCalledTimes(2);
+  });
+
+  test("droits manquants vus d'avance : rien n'est tenté dans le salon", async () => {
+    ticketRow.id = 'ticket-sans-droit';
+    const { salon, send } = salonDeTicket(false);
+    const fetchMessages = (salon.messages as { fetch: ReturnType<typeof mock> }).fetch;
+    salon.guild = { members: { me: { id: 'kotbo' } } };
+    salon.permissionsFor = () => ({ missing: () => ['ViewChannel', 'SendMessages'] });
+
+    await checkTicketInactivity(clientAvec(salon));
+
+    expect(send).not.toHaveBeenCalled();
+    expect(fetchMessages).not.toHaveBeenCalled();
+    expect(ticketRow.inactivityAlertSent).toBe(false);
+    expect(erreurs).toEqual([]);
+    expect(avertissements).toHaveLength(1);
   });
 });

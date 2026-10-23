@@ -161,7 +161,7 @@
       <button
         type="button"
         onclick={addLink}
-        class="flex flex-1 min-w-[130px] items-center justify-center gap-2 rounded-lg border-2 border-dashed border-outline-variant/20 py-3 text-xs font-medium text-on-surface-variant/60 hover:border-primary/40 hover:bg-primary/5 hover:text-primary transition-all active:scale-[0.99]"
+        class="flex flex-1 min-w-[130px] items-center justify-center gap-2 rounded-lg border-2 border-dashed border-outline-variant/20 py-3 text-xs font-medium text-on-surface-variant hover:border-primary/40 hover:bg-primary/5 hover:text-primary transition-all active:scale-[0.99]"
       >
         <Papicon icon="plus" size={14} />
         {m.sei_add_link()}
@@ -171,7 +171,7 @@
         type="button"
         onclick={() => fileInput?.click()}
         disabled={uploadBusy}
-        class="flex flex-1 min-w-[130px] items-center justify-center gap-2 rounded-lg border-2 border-dashed border-outline-variant/20 py-3 text-xs font-medium text-on-surface-variant/60 hover:border-primary/40 hover:bg-primary/5 hover:text-primary transition-all active:scale-[0.99] disabled:opacity-50"
+        class="flex flex-1 min-w-[130px] items-center justify-center gap-2 rounded-lg border-2 border-dashed border-outline-variant/20 py-3 text-xs font-medium text-on-surface-variant hover:border-primary/40 hover:bg-primary/5 hover:text-primary transition-all active:scale-[0.99] disabled:opacity-50"
       >
         {#if uploadBusy}
           <div class="animate-spin w-3.5 h-3.5 border-2 border-primary border-t-transparent rounded-full"></div>
@@ -185,7 +185,7 @@
       <button
         type="button"
         onclick={() => (transcriptPickerOpen = true)}
-        class="flex flex-1 min-w-[130px] items-center justify-center gap-2 rounded-lg border-2 border-dashed border-outline-variant/20 py-3 text-xs font-medium text-on-surface-variant/60 hover:border-primary/40 hover:bg-primary/5 hover:text-primary transition-all active:scale-[0.99]"
+        class="flex flex-1 min-w-[130px] items-center justify-center gap-2 rounded-lg border-2 border-dashed border-outline-variant/20 py-3 text-xs font-medium text-on-surface-variant hover:border-primary/40 hover:bg-primary/5 hover:text-primary transition-all active:scale-[0.99]"
       >
         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
         {m.sei_attach_transcript()}
@@ -195,7 +195,7 @@
         <button
           type="button"
           onclick={() => (pickerOpen = true)}
-          class="flex flex-1 min-w-[130px] items-center justify-center gap-2 rounded-lg border-2 border-dashed border-outline-variant/20 py-3 text-xs font-medium text-on-surface-variant/60 hover:border-primary/40 hover:bg-primary/5 hover:text-primary transition-all active:scale-[0.99]"
+          class="flex flex-1 min-w-[130px] items-center justify-center gap-2 rounded-lg border-2 border-dashed border-outline-variant/20 py-3 text-xs font-medium text-on-surface-variant hover:border-primary/40 hover:bg-primary/5 hover:text-primary transition-all active:scale-[0.99]"
         >
           <Papicon icon="message-square" size={14} />
           {m.sei_import_from_discord()}

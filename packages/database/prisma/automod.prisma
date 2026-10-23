@@ -23,6 +23,10 @@ model AutoModConfig {
   spamLimit            Int      @default(5)     // Max messages in interval
   spamIntervalSeconds  Int      @default(5)
   spamAction           String   @default("TIMEOUT") // WARN, TIMEOUT
+  // Spam à plusieurs dans un même salon : mode lent au lieu des sanctions individuelles
+  spamGroupSlowmodeEnabled Boolean @default(false)
+  spamGroupSlowmodeSeconds Int     @default(10)
+  spamGroupSlowmodeMinutes Int     @default(5)
 
   linksEnabled         Boolean  @default(false)
   linksAction          String   @default("DELETE_AND_WARN")

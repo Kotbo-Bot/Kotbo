@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { explainDisabled } from '../lib/actions/explainDisabled';
   import { onMount } from 'svelte';
   import { authStore } from '../lib/stores/auth.svelte';
   import { toast } from '../lib/stores/toast.svelte';
@@ -28,6 +29,8 @@
     { value: 'WRITE_MEMBERS',   label: m.mcp_perm_write_members_label(),  desc: m.mcp_perm_write_members_desc() },
     { value: 'READ_WORKFLOWS',  label: m.mcp_perm_read_workflows_label(), desc: m.mcp_perm_read_workflows_desc() },
     { value: 'WRITE_WORKFLOWS', label: m.mcp_perm_write_workflows_label(),desc: m.mcp_perm_write_workflows_desc() },
+    { value: 'READ_SITE',       label: m.mcp_perm_read_site_label(),      desc: m.mcp_perm_read_site_desc() },
+    { value: 'WRITE_SITE',      label: m.mcp_perm_write_site_label(),     desc: m.mcp_perm_write_site_desc() },
   ]);
 
   type McpKey = {
@@ -718,7 +721,8 @@
 
       <button
         onclick={handleCreate}
-        disabled={!newKeyName.trim() || newKeyPerms.length === 0 || creating}
+        disabled={creating}
+        use:explainDisabled={(!newKeyName.trim()) ? m.common_reason_fill_field() : (newKeyPerms.length === 0) ? m.common_reason_select_one() : ''}
         class="w-full py-2.5 rounded-lg bg-primary hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-medium transition-colors"
       >
         {creating ? m.mcp_btn_creating() : m.mcp_btn_generate_key()}
@@ -729,7 +733,7 @@
 
 <!-- ── AI setup helper ───────────────────────────────────────────────────── -->
 <Modal bind:open={helpOpen} onClose={() => { helpOpen = false; }} title={m.mcp_help_modal_title()} size="xl">
-  <div class="space-y-5 p-5">
+  <div class="space-y-5">
     <div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
       {#each Object.entries(aiGuides) as [id, guide]}
         <button
@@ -805,7 +809,7 @@
           <div class="mb-2 flex items-center justify-between gap-2">
             <p class="text-xs font-medium text-gray-500">{m.mcp_help_mcp_url()}</p>
             <button
-              disabled={!endpointUrl}
+              use:explainDisabled={(!endpointUrl) ? m.common_reason_fill_field() : ''}
               onclick={() => copy(endpointUrl, 'help-endpoint')}
               class="shrink-0 rounded-md border border-white/10 px-2 py-1 text-xs text-gray-400 transition-colors hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
             >
@@ -852,12 +856,13 @@
 </Modal>
 
 <Modal bind:open={diagOpen} onClose={() => { diagOpen = false; }} title={m.mcp_logs_modal_title()} size="xl">
-  <div class="space-y-3 p-5">
+  <div class="space-y-3">
     <div class="flex items-center justify-between gap-3">
       <p class="text-sm text-gray-400">{m.mcp_logs_subtitle()}</p>
       <button
         onclick={refreshMcpLogs}
-        disabled={diagRunning || !guildId}
+        disabled={diagRunning}
+        use:explainDisabled={(!guildId) ? m.common_reason_fill_field() : ''}
         class="px-3 py-2 rounded-lg border border-white/10 text-sm text-gray-300 hover:text-white disabled:opacity-40"
       >
         {diagRunning ? m.mcp_logs_btn_refreshing() : m.mcp_logs_btn_refresh()}

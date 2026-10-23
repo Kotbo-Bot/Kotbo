@@ -80,7 +80,7 @@
         </h3>
         <button
           onclick={onClose}
-          class="p-1.5 rounded-lg text-on-surface-variant/70 hover:text-on-surface hover:bg-surface-container-highest transition-colors"
+          class="p-1.5 rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-container-highest transition-colors"
           aria-label={m.wf_close()}
         ><Papicon icon="Cross" size={15} /></button>
       </div>
@@ -94,12 +94,12 @@
 
     <div class="p-3 space-y-1.5">
       {#if candidates.length === 0}
-        <p class="text-xs text-on-surface-variant/70 text-center py-6">{m.wf_no_block_found()}</p>
+        <p class="text-xs text-on-surface-variant text-center py-6">{m.wf_no_block_found()}</p>
       {:else}
         {#each [{ items: exact, label: '' }, { items: coerced, label: m.wf_connect_coerced() }] as group (group.label)}
           {#if group.items.length > 0}
             {#if group.label}
-              <p class="pt-3 pb-1 text-xs font-semibold text-on-surface-variant/70">{group.label}</p>
+              <p class="pt-3 pb-1 text-xs font-semibold text-on-surface-variant">{group.label}</p>
             {/if}
             {#each group.items as entry (entry.def.type)}
               <button
@@ -109,9 +109,9 @@
               >
                 <span class="min-w-0 space-y-0.5">
                   <span class="block text-xs font-semibold text-on-surface">{entry.def.label}</span>
-                  <span class="block text-2xs text-on-surface-variant/70 leading-snug">{entry.def.description}</span>
+                  <span class="block text-2xs text-on-surface-variant leading-snug">{entry.def.description}</span>
                 </span>
-                <span class="shrink-0 flex items-center gap-1.5 text-2xs text-on-surface-variant/70">
+                <span class="shrink-0 flex items-center gap-1.5 text-2xs text-on-surface-variant">
                   <span class="w-2 h-2 rounded-full" style="background: {PORT_COLORS[entry.port.type]}"></span>
                   {entry.port.label || entry.port.type}
                 </span>

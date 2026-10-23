@@ -1,7 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Client } from 'discord.js';
 import type { AuthClaims, DashboardAccess } from '../../../shared.js';
-import { errorMessage } from '../../../../utils/errors.js';
 import { logger } from '../../../../utils/logger.js';
 import { formatGuildDateTime } from '../../../../utils/timezone.js';
 import { jsonFailure } from '../../../shared/failure.js';
@@ -49,6 +48,7 @@ import {
   
   
 } from '../../../../services/staff/staffLeadershipService.js';
+import { publicErrorMessage } from '../../../../utils/publicError.js';
 
 export async function handleCallRoutes(
   req: IncomingMessage,
@@ -139,7 +139,7 @@ export async function handleCallRoutes(
           json(res, 201, { call });
         } catch (err: unknown) {
           logger.error('StaffAPI', 'Error creating call:', err);
-          json(res, 500, { error: errorMessage(err) || "Erreur lors de la planification de l'appel" });
+          json(res, 500, { error: publicErrorMessage(err, "Erreur lors de la planification de l'appel") });
         }
         return true;
       }
@@ -180,7 +180,7 @@ export async function handleCallRoutes(
           json(res, 200, { call });
         } catch (err: unknown) {
           logger.error('StaffAPI', 'Error updating call:', err);
-          json(res, 500, { error: errorMessage(err) || "Erreur lors de la mise à jour de l'appel" });
+          json(res, 500, { error: publicErrorMessage(err, "Erreur lors de la mise à jour de l'appel") });
         }
         return true;
       }

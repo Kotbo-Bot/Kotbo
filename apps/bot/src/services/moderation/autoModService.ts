@@ -1,4 +1,4 @@
-import { type AutoModerationActionOptions, Message, PermissionFlagsBits, EmbedBuilder, Client, PartialMessage, User, Role, Collection, AuditLogEvent, AutoModerationRuleTriggerType, AutoModerationRuleEventType, AutoModerationActionType, AutoModerationRuleKeywordPresetType, GuildMember } from 'discord.js';
+import { type AutoModerationActionExecution, type AutoModerationActionOptions, Message, PermissionFlagsBits, EmbedBuilder, Client, PartialMessage, User, Role, Collection, AuditLogEvent, AutoModerationRuleTriggerType, AutoModerationRuleEventType, AutoModerationActionType, AutoModerationRuleKeywordPresetType, GuildMember } from 'discord.js';
 import type { AutoModConfig } from '@prisma/client';
 import { kotboEventBus } from '@kotbo/core';
 import prisma from '../../utils/db.js';
@@ -9,6 +9,9 @@ import { loadBannedWords, loadGlobalWords, loadCustomWords } from './bannedWords
 import { isReservedByNicknameModeration } from './nicknameModerationService.js';
 import { mirrorModlogToStaffServer } from '../staff/staffServerService.js';
 import { getUppercasePercentage } from './capsDetection.js';
+import { classifyLink, findKeywordRanges, findLiteralRanges, INVITE_KEYWORDS, LINK_KEYWORDS, type CensorKind, type CensorRange } from './censorship.js';
+import { queueCensoredRepost, repostCensored } from './censorService.js';
+import { handleGroupSpam } from './groupSpamSlowmode.js';
 
 // Cache for AutoMod configs: key is guildId, value is the config object
 const autoModConfigsCache = new Map<string, AutoModConfig>();
@@ -87,13 +90,49 @@ export async function getOrCreateAutoModConfig(guildId: string): Promise<AutoMod
   return config;
 }
 
+/**
+ * Noms des règles natives créées par Kotbo : ils servent aussi à retrouver,
+ * lors d'une exécution, quelle option du dashboard l'a déclenchée.
+ */
+const NATIVE_RULE_NAMES = {
+  spam: 'Kotbo AutoMod - Spam',
+  mentions: 'Kotbo AutoMod - Mentions',
+  links: 'Kotbo AutoMod - Liens',
+  customWords: 'Kotbo AutoMod - Mots personnalisés',
+  profanity: 'Kotbo AutoMod - Profanités',
+  invites: 'Kotbo AutoMod - Invitations',
+} as const;
+
+/**
+ * Le message est bloqué par Discord puis republié censuré par le bot : le
+ * membre ne voit cet avis que le temps de voir apparaître la version masquée.
+ */
+const CENSOR_BLOCK_MESSAGE = 'Un passage de ton message est interdit : Kotbo le republie en le masquant.';
+
+/** Mots-clés de la règle « Liens » : toute URL, invitations Discord comprises. */
+function linksRuleKeywords(): string[] {
+  return ['*discord.gg/*', '*discord.com/invite/*', ...LINK_KEYWORDS];
+}
+
+function linksAllowList(config: AutoModConfig): string[] {
+  return (config.linksWhitelist || []).map((domain: string) => `*${domain}*`).slice(0, 100);
+}
+
+function inviteAllowList(config: AutoModConfig): string[] {
+  return (config.inviteFilterAllowedGuilds || [])
+    .map((g: string) => g.trim())
+    .filter(Boolean)
+    .map((g: string) => `*discord.gg/${g}*`)
+    .slice(0, 100);
+}
+
 function buildNativeActions(action: string, timeoutSec: number, logChannelId: string | null, blockMessage: string): AutoModerationActionOptions[] {
   const actions: AutoModerationActionOptions[] = [];
 
-  if (action === 'BLOCK' || action === 'TIMEOUT') {
+  if (action === 'BLOCK' || action === 'TIMEOUT' || action === 'CENSOR') {
     actions.push({
       type: AutoModerationActionType.BlockMessage,
-      metadata: { customMessage: blockMessage }
+      metadata: { customMessage: action === 'CENSOR' ? CENSOR_BLOCK_MESSAGE : blockMessage }
     });
   }
 
@@ -201,14 +240,7 @@ export async function syncDiscordAutoModRules(client: Client, guildId: string, c
     const exemptRoles = (config.bypassRoles || []).slice(0, 20);
     const exemptChannels = (config.bypassChannels || []).slice(0, 50);
 
-    const ruleNames = {
-      spam: 'Kotbo AutoMod - Spam',
-      mentions: 'Kotbo AutoMod - Mentions',
-      links: 'Kotbo AutoMod - Liens',
-      customWords: 'Kotbo AutoMod - Mots personnalisés',
-      profanity: 'Kotbo AutoMod - Profanités',
-      invites: 'Kotbo AutoMod - Invitations',
-    };
+    const ruleNames = NATIVE_RULE_NAMES;
 
     const deleteRuleIfExists = async (ruleName: string) => {
       const existing = existingRules.find(r => r.name === ruleName);
@@ -334,7 +366,9 @@ export async function syncDiscordAutoModRules(client: Client, guildId: string, c
         {
           type: AutoModerationActionType.BlockMessage,
           metadata: {
-            customMessage: "Message bloqué par l'AutoMod Kotbo (Lien ou invitation non autorisé)."
+            customMessage: config.linksAction === 'CENSOR'
+              ? CENSOR_BLOCK_MESSAGE
+              : "Message bloqué par l'AutoMod Kotbo (Lien ou invitation non autorisé)."
           }
         }
       ];
@@ -348,10 +382,10 @@ export async function syncDiscordAutoModRules(client: Client, guildId: string, c
       }
 
       // Préparer les filtres de mots-clés pour les liens et invitations
-      const keywordFilter = ['*discord.gg/*', '*discord.com/invite/*', '*http://*', '*https://*'];
+      const keywordFilter = linksRuleKeywords();
       
       // La whitelist des domaines autorisés
-      const allowList = (config.linksWhitelist || []).map((domain: string) => `*${domain}*`).slice(0, 100);
+      const allowList = linksAllowList(config);
 
       const ruleData = {
         name: ruleNames.links,
@@ -483,11 +517,8 @@ export async function syncDiscordAutoModRules(client: Client, guildId: string, c
       const existingInvites = existingRules.find(r => r.name === ruleNames.invites);
       const actions = buildNativeActions(config.inviteFilterAction, config.inviteFilterTimeoutSec, logChannelId, "Message bloqué par l'AutoMod Kotbo (Invitation Discord non autorisée).");
 
-      const keywordFilter = ['*discord.gg/*', '*discord.com/invite/*', '*discordapp.com/invite/*'];
-      const allowList = (config.inviteFilterAllowedGuilds || [])
-        .map((g: string) => `*discord.gg/${g.trim()}*`)
-        .filter(Boolean)
-        .slice(0, 100);
+      const keywordFilter = INVITE_KEYWORDS;
+      const allowList = inviteAllowList(config);
 
       const ruleData = {
         name: ruleNames.invites,
@@ -686,6 +717,12 @@ export async function handleAutoMod(message: Message, client: Client): Promise<b
       if (recentTimes.length > config.spamLimit) {
         // Déclencher sanction de Spam
         await deleteMessage(message);
+        if (
+          config.spamGroupSlowmodeEnabled
+          && await handleGroupSpam(message, config.spamGroupSlowmodeSeconds, config.spamGroupSlowmodeMinutes)
+        ) {
+          return true;
+        }
         await applySanction(
           message,
           config.spamAction,
@@ -705,6 +742,12 @@ export async function handleAutoMod(message: Message, client: Client): Promise<b
         const isWhitelisted = domains.some((domain: string) => content.includes(domain));
 
         if (!isWhitelisted) {
+          if (config.linksAction === 'CENSOR') {
+            const ranges: CensorRange[] = [...content.matchAll(INVITE_LINK_REGEX)]
+              .map(m => ({ start: m.index, end: m.index + m[0].length, kind: 'invite' as const }));
+            await censorPostedMessage(message, ranges, "Partage d'invitation Discord non autorisé");
+            return true;
+          }
           await deleteMessage(message);
           await applySanction(
             message,
@@ -798,6 +841,129 @@ export async function handleAutoMod(message: Message, client: Client): Promise<b
  */
 async function deleteMessage(message: Message) {
   await message.delete().catch(e => logger.warn('AutoModService', 'Impossible de supprimer le message :', e));
+}
+
+/** Une invitation, protocole compris, sans déborder sur la suite de la phrase. */
+const INVITE_LINK_REGEX = /\S*(?:discord\.(?:gg|io|me|li)\/|discord(?:app)?\.com\/invite\/)\S*/gi;
+
+function publishCensorEvent(guildId: string, userId: string, channelId: string, rule: string, matchedContent: string | null) {
+  kotboEventBus.publish('automod:triggered', {
+    guildId,
+    userId,
+    channelId,
+    rule,
+    matchedContent: matchedContent ? matchedContent.slice(0, 1000) : null,
+    action: 'CENSOR',
+    timestamp: Date.now(),
+  });
+}
+
+/**
+ * Censure d'un message déjà publié (détection côté bot) : la version masquée
+ * est republiée avant la suppression, pour recopier les pièces jointes tant
+ * qu'elles existent. Si la republication échoue, le message est tout de même
+ * supprimé : il enfreint la règle.
+ */
+async function censorPostedMessage(message: Message, ranges: CensorRange[], rule: string) {
+  publishCensorEvent(message.guild!.id, message.author.id, message.channelId, rule, message.content);
+
+  if (ranges.length > 0) {
+    await repostCensored({
+      guild: message.guild!,
+      channelId: message.channelId,
+      userId: message.author.id,
+      content: message.content,
+      ranges,
+      files: message.attachments.map(a => a.url),
+    }).catch(err => logger.warn('AutoModService', 'Republication censurée impossible :', err));
+  }
+  await deleteMessage(message);
+}
+
+/**
+ * Plages à masquer pour une règle native réglée sur « Censurer », ou `null`
+ * si la règle n'est pas une règle Kotbo en mode censure.
+ *
+ * Discord ne signale que la première correspondance d'une règle : on
+ * recherche nous-mêmes toutes les occurrences pour que la version republiée
+ * ne laisse rien passer (un webhook échappe à l'AutoMod).
+ */
+function censorRangesForRule(
+  ruleName: string,
+  config: AutoModConfig,
+  content: string,
+): { ranges: CensorRange[]; matchedKind: (text: string) => CensorKind; rule: string } | null {
+  const asWord = () => 'word' as const;
+
+  switch (ruleName) {
+    case NATIVE_RULE_NAMES.customWords:
+      if (config.customWordsAction !== 'CENSOR') return null;
+      return {
+        ranges: findKeywordRanges(content, config.customWords ?? [], config.customWordsAllowList ?? [], 'word'),
+        matchedKind: asWord,
+        rule: 'Mot interdit',
+      };
+
+    case NATIVE_RULE_NAMES.profanity:
+      if (config.profanityAction !== 'CENSOR') return null;
+      // Les listes des préréglages Discord ne sont pas publiques : seul le
+      // passage signalé par Discord est connu.
+      return { ranges: [], matchedKind: asWord, rule: 'Contenu inapproprié' };
+
+    case NATIVE_RULE_NAMES.invites:
+      if (config.inviteFilterAction !== 'CENSOR') return null;
+      return {
+        ranges: findKeywordRanges(content, INVITE_KEYWORDS, inviteAllowList(config), 'invite'),
+        matchedKind: classifyLink,
+        rule: 'Invitation Discord non autorisée',
+      };
+
+    case NATIVE_RULE_NAMES.links: {
+      if (config.linksAction !== 'CENSOR') return null;
+      const allowList = linksAllowList(config);
+      return {
+        ranges: [
+          ...findKeywordRanges(content, LINK_KEYWORDS, allowList, 'link'),
+          ...findKeywordRanges(content, INVITE_KEYWORDS, allowList, 'invite'),
+        ],
+        matchedKind: classifyLink,
+        rule: 'Lien non autorisé',
+      };
+    }
+
+    default:
+      return null;
+  }
+}
+
+/**
+ * Exécution d'une règle native Discord. Seules les règles Kotbo réglées sur
+ * « Censurer » sont traitées ici : Discord a déjà bloqué le message, le bot
+ * le republie avec les passages interdits masqués.
+ */
+export async function handleAutoModExecution(execution: AutoModerationActionExecution): Promise<void> {
+  if (execution.action.type !== AutoModerationActionType.BlockMessage) return;
+
+  const { guild, channelId, content, userId } = execution;
+  if (!channelId || !content) return;
+
+  const rule = execution.autoModerationRule
+    ?? await guild.autoModerationRules.fetch(execution.ruleId).catch(() => null);
+  if (!rule) return;
+
+  const config = await getOrCreateAutoModConfig(guild.id);
+  const censor = censorRangesForRule(rule.name, config, content);
+  if (!censor) return;
+
+  const ranges = [...censor.ranges];
+  if (execution.matchedContent) {
+    ranges.push(...findLiteralRanges(content, execution.matchedContent, censor.matchedKind(execution.matchedContent)));
+  }
+  // Sans plage, republier reviendrait à relayer le message tel quel.
+  if (ranges.length === 0) return;
+
+  publishCensorEvent(guild.id, userId, channelId, censor.rule, execution.matchedContent);
+  queueCensoredRepost({ guild, channelId, userId, content, ranges });
 }
 
 /**
@@ -1036,6 +1202,9 @@ export async function handleGhostPingUpdate(
   }
 }
 
+// Passé ce délai, la mention a eu le temps d'être vue : retirer le message n'est plus un ghost ping
+const GHOST_PING_MAX_AGE_MS = 60 * 60 * 1000;
+
 /**
  * Déclenche l'alerte et la sanction de ghost ping
  */
@@ -1048,6 +1217,15 @@ async function triggerGhostPingAlert(
   config: AutoModConfig,
   client: Client
 ) {
+  if (Date.now() - message.createdTimestamp > GHOST_PING_MAX_AGE_MS) return;
+
+  // Une cible qui a écrit dans le salon après la mention l'a vue : on la retire
+  if (targetUsers.size > 0) {
+    const after = await message.channel.messages.fetch({ after: message.id, limit: 100 }).catch(() => null);
+    if (after) targetUsers = targetUsers.filter(u => !after.some(m => m.author.id === u.id));
+  }
+  if (targetUsers.size === 0 && targetRoles.size === 0 && !hasEveryone) return;
+
   const guildId = message.guild!.id;
   const author = message.author;
   const action = config.ghostPingAction || 'ALERT';
@@ -1218,16 +1396,15 @@ export async function handleAntiBotAdd(member: GuildMember, client: Client): Pro
 
     // Notifier la personne qui a ajouté le bot (si identifiable)
     if (addedById) {
-      try {
-        const adder = await client.users.fetch(addedById).catch(() => null);
-        if (adder) {
-          await adder.send(
-            `⚠️ Le bot **${member.user.tag}** que vous avez ajouté sur **${member.guild.name}** a été ${action === 'BAN' ? 'banni' : 'expulsé'} automatiquement. Ce serveur est en **mode sécurisé** : seul le propriétaire peut ajouter des bots.`
-          ).catch(() => null);
-        }
-      } catch {
-        // DM fermés, pas grave
-      }
+      const { notify } = await import('../notifications/notifyService.js');
+      await notify({
+        guildId: member.guild.id,
+        userId: addedById,
+        kind: 'security.admin_lock',
+        title: 'Bot retiré automatiquement',
+        message: `Le bot **${member.user.tag}** que vous avez ajouté sur **${member.guild.name}** a été ${action === 'BAN' ? 'banni' : 'expulsé'} automatiquement. Ce serveur est en **mode sécurisé** : seul le propriétaire peut ajouter des bots.`,
+        severity: 'WARNING',
+      }).catch(() => null);
     }
 
     return true;

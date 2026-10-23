@@ -20,6 +20,7 @@ import {
   type ContextAction,
   type ContextActionScope,
 } from './contextActionRegistry.js';
+import { publicErrorMessage } from '../../utils/publicError.js';
 
 /**
  * Hub des menus contextuels.
@@ -212,7 +213,7 @@ async function runAndRender(params: {
     }
   } catch (error) {
     logger.error('ContextHub', `Action "${action.scope}:${action.id}" en échec`, error);
-    await interaction.editReply(v2Message(denyContainer(error instanceof Error ? error.message : 'Une erreur inattendue est survenue.')));
+    await interaction.editReply(v2Message(denyContainer(publicErrorMessage(error, 'Une erreur inattendue est survenue.'))));
     return;
   }
 

@@ -19,7 +19,7 @@ export async function fetchPublicNews(guildId: string) {
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
-    throw new Error(error.error || 'Erreur lors du chargement des actualités publiques');
+    throw new Error(error.error || 'Impossible de charger les actualités publiques. Réessaie.');
   }
 
   return response.json();
@@ -34,7 +34,7 @@ export async function fetchPublicRanked(guildId: string) {
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
-    throw new Error(error.error || 'Erreur lors du chargement du classement de prestige');
+    throw new Error(error.error || 'Impossible de charger le classement de prestige. Réessaie.');
   }
 
   return response.json();
@@ -48,7 +48,7 @@ export async function fetchPublicLeveling(guildId: string) {
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
-    throw new Error(error.error || 'Erreur lors du chargement du classement de leveling');
+    throw new Error(error.error || 'Impossible de charger le classement de leveling. Réessaie.');
   }
 
   return response.json();
@@ -153,11 +153,12 @@ export async function addYoutubeFollow(payload: { query?: string; channelId?: st
   });
 }
 
-export async function deleteYoutubeFollow(id: string, guildId = authStore.selectedGuildId) {
+export async function deleteYoutubeFollow(id: string, guildId = authStore.selectedGuildId, { silent = false }: { silent?: boolean } = {}) {
   return dashboardRequest(`/social-follows/youtube/${id}`, {
     method: 'DELETE',
     successMessage: m.api_ok_delete_youtube_follow(),
     guildId,
+    silent,
     errorContext: 'API Error (Delete Youtube Follow):'
   });
 }
@@ -172,11 +173,12 @@ export async function addTwitchFollow(payload: { streamerName: string; discordCh
   });
 }
 
-export async function deleteTwitchFollow(id: string, guildId = authStore.selectedGuildId) {
+export async function deleteTwitchFollow(id: string, guildId = authStore.selectedGuildId, { silent = false }: { silent?: boolean } = {}) {
   return dashboardRequest(`/social-follows/twitch/${id}`, {
     method: 'DELETE',
     successMessage: m.api_ok_delete_twitch_follow(),
     guildId,
+    silent,
     errorContext: 'API Error (Delete Twitch Follow):'
   });
 }
@@ -207,11 +209,12 @@ export async function saveGithubFollow(payload: GithubFollowPayload, guildId = a
   });
 }
 
-export async function deleteGithubFollow(id: string, guildId = authStore.selectedGuildId) {
+export async function deleteGithubFollow(id: string, guildId = authStore.selectedGuildId, { silent = false }: { silent?: boolean } = {}) {
   return dashboardRequest(`/social-follows/github/${id}`, {
     method: 'DELETE',
     successMessage: m.api_ok_delete_github_follow(),
     guildId,
+    silent,
     errorContext: 'API Error (Delete Github Follow):'
   });
 }
@@ -232,11 +235,12 @@ export async function saveHuggingFaceFollow(
   });
 }
 
-export async function deleteHuggingFaceFollow(id: string, guildId = authStore.selectedGuildId) {
+export async function deleteHuggingFaceFollow(id: string, guildId = authStore.selectedGuildId, { silent = false }: { silent?: boolean } = {}) {
   return dashboardRequest(`/social-follows/huggingface/${id}`, {
     method: 'DELETE',
     successMessage: m.api_ok_delete_huggingface_follow(),
     guildId,
+    silent,
     errorContext: 'API Error (Delete Hugging Face Follow):'
   });
 }

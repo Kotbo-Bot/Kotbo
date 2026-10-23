@@ -19,9 +19,9 @@
 import type { Guild } from 'discord.js';
 import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
-import { errorMessage } from '../../utils/errors.js';
 import { getClient } from '../../utils/client.js';
 import { flushConversationStats, queueInteraction, queueTurnEvents, ResponseTracker } from './conversationStatsService.js';
+import { publicErrorMessage } from '../../utils/publicError.js';
 
 const BATCH_SIZE = 1000;
 const PAUSE_BETWEEN_BATCHES_MS = 250;
@@ -146,7 +146,7 @@ export async function runPendingConversationBackfills(): Promise<void> {
       await setStatus(row.id, {
         ...status,
         status: 'FAILED',
-        error: String(errorMessage(err) ?? err).slice(0, 500),
+        error: publicErrorMessage(err).slice(0, 500),
         completedAt: new Date().toISOString(),
       });
     }

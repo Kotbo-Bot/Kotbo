@@ -423,7 +423,7 @@
       <div class="grid grid-cols-7 h-full overflow-y-auto custom-scrollbar">
         <!-- Day headers -->
         {#each weekDaysShort as day}
-          <div class="p-3 text-center text-xs font-semibold text-on-surface-variant/70 border-b border-r border-outline-variant/10 last:border-r-0 bg-surface-container-lowest/50 sticky top-0 z-10">
+          <div class="p-3 text-center text-xs font-semibold text-on-surface-variant border-b border-r border-outline-variant/10 last:border-r-0 bg-surface-container-lowest/50 sticky top-0 z-10">
             {day}
           </div>
         {/each}
@@ -462,7 +462,7 @@
                 >
                   <span class="w-1.5 h-1.5 rounded-full shrink-0 {getEventDotColor(event.type)}"></span>
                   {#if !event.isAllDay}
-                    <span class="text-on-surface-variant/60 font-medium shrink-0">{formatTime(event.start)}</span>
+                    <span class="text-on-surface-variant font-medium shrink-0">{formatTime(event.start)}</span>
                   {/if}
                   <span class="font-semibold text-on-surface truncate">{event.title}</span>
                 </button>
@@ -489,7 +489,7 @@
           <div class="border-r border-outline-variant/10"></div>
           {#each calendarDays as { date }}
             <div class="py-2.5 px-2 text-center border-r border-outline-variant/10 last:border-r-0 {isToday(date) ? 'bg-primary/5' : ''}">
-              <p class="text-xs font-semibold text-on-surface-variant/60">{weekDaysShort[(date.getDay() + 6) % 7]}</p>
+              <p class="text-xs font-semibold text-on-surface-variant">{weekDaysShort[(date.getDay() + 6) % 7]}</p>
               <p class="text-lg font-bold {isToday(date) ? 'text-primary' : 'text-on-surface'} leading-tight">
                 {#if isToday(date)}
                   <span class="inline-flex items-center justify-center w-8 h-8 bg-primary text-white rounded-full">{date.getDate()}</span>
@@ -503,7 +503,7 @@
 
         <!-- All-day events -->
         <div class="grid shrink-0 border-b border-outline-variant/20 bg-surface-container-lowest/30" style="grid-template-columns: 56px repeat({colCount}, 1fr)">
-          <div class="px-1 py-1.5 text-2xs font-semibold uppercase text-on-surface-variant/50 flex items-center justify-center border-r border-outline-variant/10">
+          <div class="px-1 py-1.5 text-2xs font-semibold uppercase text-on-surface-variant flex items-center justify-center border-r border-outline-variant/10">
             Journée
           </div>
           {#each calendarDays as { date }}
@@ -610,7 +610,7 @@
                       </span>
                       <span class="text-2xs font-semibold text-on-surface truncate leading-tight mt-0.5">{event.title}</span>
                       {#if event.staffName && styles.height > 4}
-                        <span class="text-2xs text-on-surface-variant/60 truncate mt-auto flex items-center gap-1">
+                        <span class="text-2xs text-on-surface-variant truncate mt-auto flex items-center gap-1">
                           {#if event.avatarUrl}
                             <img src={event.avatarUrl} alt="" class="w-3 h-3 rounded-full" />
                           {/if}

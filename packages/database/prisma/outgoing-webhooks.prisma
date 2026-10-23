@@ -1,0 +1,60 @@
+// Webhooks sortants : les événements du serveur envoyés, signés, vers une URL
+// choisie par ses administrateurs (CRM, tableur, n8n, backend maison).
+
+model OutgoingWebhook {
+  id String @id @default(cuid())
+
+  guildId String
+  name    String
+  url     String
+  // Secret de signature HMAC, chiffré au repos (utils/secretBox).
+  secret  String
+  // Noms publics des événements souscrits (« member.joined », « ticket.closed »…).
+  events  String[]
+  enabled Boolean @default(true)
+
+  // Échecs d'affilée, remis à zéro au premier envoi réussi. Au-delà du seuil
+  // du service, le webhook se coupe tout seul et `disabledReason` dit pourquoi.
+  consecutiveFailures Int     @default(0)
+  disabledReason      String?
+  lastDeliveryAt      DateTime?
+  lastStatusCode      Int?
+
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  guild      Guild                     @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  deliveries OutgoingWebhookDelivery[]
+
+  @@index([guildId])
+  @@map("outgoing_webhooks")
+}
+
+model OutgoingWebhookDelivery {
+  id String @id @default(cuid())
+
+  webhookId String
+  guildId   String
+  event     String
+  payload   Json
+
+  // PENDING (à envoyer ou à relancer), SUCCESS, FAILED (relances épuisées).
+  status       String    @default("PENDING")
+  attempts     Int       @default(0)
+  nextAttemptAt DateTime?
+  responseStatus Int?
+  // Début de la réponse, ou message d'erreur réseau, tronqué.
+  responseBody String?
+  durationMs   Int?
+  deliveredAt  DateTime?
+
+  createdAt DateTime @default(now())
+
+  webhook OutgoingWebhook @relation(fields: [webhookId], references: [id], onDelete: Cascade)
+
+  @@index([webhookId, createdAt])
+  @@index([status, nextAttemptAt])
+  @@index([guildId, createdAt])
+  @@map("outgoing_webhook_deliveries")
+}

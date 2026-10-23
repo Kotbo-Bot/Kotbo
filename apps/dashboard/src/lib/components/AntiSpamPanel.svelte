@@ -29,6 +29,7 @@
     bypassRoleIds: string[];
     bypassChannelIds: string[];
     typingSignalEnabled: boolean;
+    pasteSignalEnabled: boolean;
     crossChannelEnabled: boolean;
     duplicateEnabled: boolean;
     cadenceEnabled: boolean;
@@ -76,6 +77,7 @@
     bypassRoleIds: [],
     bypassChannelIds: [],
     typingSignalEnabled: true,
+    pasteSignalEnabled: true,
     crossChannelEnabled: true,
     duplicateEnabled: true,
     cadenceEnabled: true,
@@ -88,6 +90,7 @@
 
   const SIGNAL_LABELS: Record<string, string> = {
     no_typing: 'Posté sans indicateur de frappe',
+    paste_burst: 'Copier-coller',
     inhuman_rate: 'Débit inhumain',
     regular_intervals: 'Intervalles réguliers',
     cross_channel_burst: 'Diffusion multi-salons',
@@ -107,6 +110,11 @@
       field: 'typingSignalEnabled',
       label: 'Absence d\'indicateur de frappe',
       help: 'Un client Discord réel émet un événement de frappe avant un message conséquent. Les scripts et les comptes pilotés par token volé ne le font pratiquement jamais. Le signal se neutralise automatiquement si le bot ne reçoit pas ces événements.',
+    },
+    {
+      field: 'pasteSignalEnabled',
+      label: 'Copier-coller',
+      help: 'Gros message (200 caractères et plus) envoyé après une frappe bien trop courte pour l\'avoir écrit : le geste du spammeur qui recopie la même arnaque de serveur en serveur. Coller un texte reste courant, le signal pèse peu seul et compte surtout en concordance. Les blocs de code sont ignorés.',
     },
     {
       field: 'crossChannelEnabled',
@@ -272,24 +280,23 @@
 </script>
 
 <div class="space-y-8 animate-in fade-in duration-300">
-  <header class="flex flex-wrap items-start justify-between gap-3">
+  <header class="flex flex-col md:flex-row md:items-end justify-between gap-x-6 gap-y-3">
     <div class="min-w-0">
-      <h2 class="text-[15px] font-semibold text-on-surface flex items-center gap-2">
-        <Papicon icon="ShieldAlert" size={16} />
-        Anti-spam comportemental
-      </h2>
-      <p class="text-xs text-on-surface-variant mt-0.5 leading-relaxed max-w-2xl">
-        Moteur de score multi-signaux, distinct des filtres à seuil ci-dessus : il combine des indices
-        d'automatisation, de diffusion et de répétition plutôt que de compter les messages.
+      <h2 class="text-lg font-semibold tracking-tight text-on-surface font-headline leading-tight">Anti-spam comportemental</h2>
+      <p class="mt-1 max-w-prose text-sm text-on-surface-variant">
+        Repère les comptes qui agissent comme des robots : messages répétés, liens postés partout,
+        rythme anormal. Il complète les filtres au-dessus, qui comptent seulement les messages.
       </p>
     </div>
-    <RefreshButton onclick={load} loading={loading} />
+    <div class="flex items-center gap-2 shrink-0">
+      <RefreshButton onclick={load} loading={loading} />
+    </div>
   </header>
 
   {#if loading}
     <LoadingHint context="config" />
   {:else if error}
-    <EmptyState icon="AlertTriangle" title="Configuration indisponible" description={error} />
+    <EmptyState icon="AlertTriangle" title="Configuration indisponible" description={error} actionLabel="Réessayer" actionIcon="RefreshCw" onAction={load} />
   {:else}
     <!-- ── Activation ─────────────────────────────────────────────────── -->
     <SectionCard
@@ -372,7 +379,7 @@
           <div class="flex items-end gap-1 h-24">
             {#each stats.histogram as band (band.from)}
               <div class="flex-1 flex flex-col items-center justify-end gap-1 group relative">
-                <span class="text-2xs text-on-surface-variant/60 tabular-nums opacity-0 group-hover:opacity-100 transition-opacity">
+                <span class="text-2xs text-on-surface-variant tabular-nums opacity-0 group-hover:opacity-100 transition-opacity">
                   {band.count}
                 </span>
                 <div
@@ -380,7 +387,7 @@
                   style="height: {Math.max(2, (band.count / histogramMax) * 76)}px"
                   title="{band.count} message(s) entre {band.from} et {band.to}"
                 ></div>
-                <span class="text-2xs text-on-surface-variant/50 tabular-nums">{band.from}</span>
+                <span class="text-2xs text-on-surface-variant tabular-nums">{band.from}</span>
               </div>
             {/each}
           </div>
@@ -404,7 +411,7 @@
                 <div class="text-2xs text-on-surface-variant">bannis</div>
               </div>
             </div>
-            <p class="mt-2 text-xs text-on-surface-variant/70 text-center">
+            <p class="mt-2 text-xs text-on-surface-variant text-center">
               Projection sur les {stats.total} évaluations des 14 derniers jours avec les seuils actuels.
             </p>
           {/if}
@@ -435,7 +442,7 @@
               bind:value={config[row.field]}
               class="w-full mt-1 {row.color}"
             />
-            <p class="text-xs text-on-surface-variant/70">{row.help}</p>
+            <p class="text-xs text-on-surface-variant">{row.help}</p>
           </div>
         {/each}
       </div>
@@ -451,6 +458,7 @@
         {#each SIGNAL_TOGGLES as toggle (toggle.field)}
           {@const usage = stats?.signals.find((s) =>
             toggle.field === 'typingSignalEnabled' ? s.type === 'no_typing'
+            : toggle.field === 'pasteSignalEnabled' ? s.type === 'paste_burst'
             : toggle.field === 'crossChannelEnabled' ? s.type === 'cross_channel_burst'
             : toggle.field === 'duplicateEnabled' ? s.type === 'near_duplicate'
             : toggle.field === 'cadenceEnabled' ? s.type === 'inhuman_rate'
@@ -516,7 +524,7 @@
           <p class="text-xs font-medium text-on-surface-variant mb-2">
             Rôles exemptés
             {#if config.bypassRoleIds.length > 0}
-              <span class="text-on-surface-variant/60">({config.bypassRoleIds.length})</span>
+              <span class="text-on-surface-variant">({config.bypassRoleIds.length})</span>
             {/if}
           </p>
           <div class="flex flex-wrap gap-1.5">
@@ -539,10 +547,10 @@
           <p class="text-xs font-medium text-on-surface-variant mb-2">
             Salons exemptés
             {#if config.bypassChannelIds.length > 0}
-              <span class="text-on-surface-variant/60">({config.bypassChannelIds.length})</span>
+              <span class="text-on-surface-variant">({config.bypassChannelIds.length})</span>
             {/if}
           </p>
-          <p class="text-2xs text-on-surface-variant/70 mb-2">
+          <p class="text-2xs text-on-surface-variant mb-2">
             Utile pour les salons de spam assumé (mèmes, bots, tests) où la répétition est la norme.
           </p>
           <div class="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto">
@@ -600,8 +608,7 @@
           title="Aucune détection"
           description={pendingOnly
             ? 'Rien à trancher pour le moment.'
-            : 'Le moteur n\'a encore rien évalué au-dessus du seuil de journalisation.'}
-        />
+            : 'Le moteur n\'a encore rien évalué au-dessus du seuil de journalisation.'} reason="all-clear" />
       {:else}
         <div class="space-y-2.5">
           {#each samples as sample (sample.id)}
@@ -634,7 +641,7 @@
                         {sample.label === 'TRUE_POSITIVE' ? 'vrai positif' : 'faux positif'}
                       </span>
                     {/if}
-                    <span class="text-2xs text-on-surface-variant/60 ml-auto">{formatRelative(sample.createdAt)}</span>
+                    <span class="text-2xs text-on-surface-variant ml-auto">{formatRelative(sample.createdAt)}</span>
                   </div>
 
                   {#if sample.contentPreview}

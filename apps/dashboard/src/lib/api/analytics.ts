@@ -407,6 +407,11 @@ export interface CategoryDetail {
     voiceShare: number;
   };
   daily: Array<{ dateKey: string; textOnly: number; voiceOnly: number; both: number }>;
+  /** Messages et vocal par jour, la période et celle d'avant alignées jour pour jour. */
+  series: {
+    current: Array<{ dateKey: string; messages: number; voiceMinutes: number }>;
+    previous: Array<{ dateKey: string; messages: number; voiceMinutes: number }>;
+  };
   voiceHistoryDays: number;
   channels: ChannelTreeChannel[];
   topMembers: Array<{ userId: string; name: string | null; avatarUrl: string | null; messages: number; voiceMinutes: number }>;
@@ -728,7 +733,7 @@ export const fetchModerationTrends = (query: AnalyticsQuery, guildId = authStore
 export const fetchStaffInsights = (query: AnalyticsQuery, guildId = authStore.selectedGuildId) => insightsRequest<StaffInsights>('staff', query, guildId);
 export const fetchRisingWords = (query: AnalyticsQuery, guildId = authStore.selectedGuildId) => insightsRequest<RisingWords>('words', query, guildId);
 
-export type AlertMetric = 'messages' | 'voiceMinutes' | 'activeMembers' | 'joins' | 'leaves' | 'netJoins' | 'sanctions' | 'channelRate' | 'unansweredRate';
+export type AlertMetric = 'messages' | 'voiceMinutes' | 'activeMembers' | 'joins' | 'leaves' | 'netJoins' | 'sanctions' | 'channelRate' | 'unansweredRate' | 'pulseScore';
 export type AlertCondition = 'drop_pct' | 'rise_pct' | 'above' | 'below';
 export type AlertWindow = 'hour' | 'day' | 'week';
 
@@ -754,7 +759,7 @@ export interface AlertRule extends AlertRuleInput {
 
 export interface AlertEvent { id: string; ruleId: string; periodKey: string; value: number; baseline: number | null; delivered: boolean; triggeredAt: string }
 
-export type ReportSection = 'overview' | 'top_members' | 'top_channels' | 'anomalies' | 'moderation' | 'responses';
+export type ReportSection = 'kotbo_work' | 'overview' | 'top_members' | 'top_channels' | 'anomalies' | 'moderation' | 'responses';
 
 export interface ReportScheduleInput {
   frequency: 'weekly' | 'monthly';

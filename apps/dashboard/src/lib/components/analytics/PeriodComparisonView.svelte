@@ -168,7 +168,7 @@
                   <th scope="row">{labelOf(k)}</th>
                   <td class="num">{formatOf(k)(current(k))}</td>
                   <td class="num">{formatOf(k)(k === 'activeMembers' ? data.activeMembers.previousToDate : data.lastWeekToDate[k])}</td>
-                  <td class="num">{k === 'activeMembers' ? '—' : formatOf(k)(data.lastWeek[k])}</td>
+                  <td class="num">{k === 'activeMembers' ? '–' : formatOf(k)(data.lastWeek[k])}</td>
                   <td class="num">{fmtDelta(relativeDelta(current(k), reference(k)), 'pct')}</td>
                 </tr>
               {/each}

@@ -226,7 +226,7 @@
   </div>
 </div>
 
-<p class="mt-2.5 text-xs leading-relaxed text-on-surface-variant/60">
+<p class="mt-2.5 text-xs leading-relaxed text-on-surface-variant">
   {CAPTIONS[level]()}
 </p>
 

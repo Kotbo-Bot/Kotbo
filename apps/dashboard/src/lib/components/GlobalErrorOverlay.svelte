@@ -38,15 +38,11 @@
 </script>
 
 <div class="fixed inset-0 z-[10000] flex items-center justify-center bg-background p-6 md:p-12 overflow-y-auto">
-  <!-- Dynamic mesh-like background grid to make it look premium -->
-  <div class="absolute inset-0 opacity-[0.03] dark:opacity-[0.05] pointer-events-none bg-[radial-gradient(#3b82f6_1px,transparent_1px)] [background-size:24px_24px]"></div>
-  
-  <div class="relative w-full max-w-2xl bg-surface-container-lowest border border-outline-variant rounded-xl p-8 md:p-10 shadow-sm flex flex-col items-center text-center gap-5 animate-in fade-in">
+  <div class="relative w-full max-w-lg bg-surface-container-lowest border border-outline-variant rounded-xl p-8 md:p-10 shadow-sm flex flex-col items-center text-center gap-5">
     <div class="w-12 h-12 rounded-lg bg-error/10 text-error flex items-center justify-center">
       <Papicon icon="warning" size={28} />
     </div>
 
-    <!-- Title and Subtitle -->
     <div>
       <h1 class="text-xl md:text-2xl font-semibold text-on-surface tracking-tight">
         {m.d6_error_title()}
@@ -56,32 +52,24 @@
       </p>
     </div>
 
-    <!-- Error Message Snippet -->
-    <div class="w-full text-left bg-surface-container border border-outline-variant rounded-lg p-4 overflow-hidden">
-      <div class="flex items-center justify-between border-b border-outline-variant/50 pb-2 mb-3">
-        <span class="text-xs font-medium text-on-surface-variant">{m.d6_error_details()}</span>
-        <span class="text-xs text-error font-semibold font-mono text-right">CRITICAL</span>
+    <!-- Le message brut et la pile d'appels servent au support, pas a la
+         personne devant l'ecran : ils restent consultables, mais replies,
+         sans l'etiquette « CRITICAL » en rouge qui n'aidait personne. -->
+    <details class="group w-full text-left">
+      <summary class="text-xs font-medium text-on-surface-variant cursor-pointer select-none hover:text-on-surface transition-colors inline-flex items-center gap-1.5">
+        <Papicon icon="chevron-right" size={14} class="transition-transform group-open:rotate-90" />
+        {m.d6_error_details()}
+      </summary>
+      <div class="mt-3 bg-surface-container border border-outline-variant rounded-lg p-3">
+        <p class="font-mono text-xs text-on-surface break-words whitespace-pre-wrap leading-relaxed">{errorMsg}</p>
+        {#if errorStack}
+          <pre class="mt-2 text-2xs font-mono text-on-surface-variant overflow-x-auto max-h-40 whitespace-pre">{errorStack}</pre>
+        {/if}
       </div>
-      <p class="font-mono text-xs md:text-sm text-error break-words whitespace-pre-wrap font-semibold leading-relaxed">
-        {errorMsg}
-      </p>
-      {#if errorStack}
-        <div class="mt-4 pt-3 border-t border-outline-variant/30">
-          <details class="group">
-            <summary class="text-xs font-semibold text-on-surface-variant cursor-pointer select-none hover:text-on-surface transition-colors flex items-center gap-2">
-              <Papicon icon="chevron-right" size={14} class="transition-transform group-open:rotate-90" />
-              Stack Trace
-            </summary>
-            <pre class="mt-2 text-2xs md:text-xs font-mono text-on-surface-variant/80 overflow-x-auto max-h-40 bg-surface-container-low border border-outline-variant/30 rounded-lg p-3 whitespace-pre scrollbar-thin">
-              {errorStack}
-            </pre>
-          </details>
-        </div>
-      {/if}
-    </div>
+    </details>
 
     <!-- Actions -->
-    <div class="flex flex-col sm:flex-row items-center gap-3 w-full justify-center mt-4">
+    <div class="flex flex-col sm:flex-row items-center gap-3 w-full justify-center mt-2">
       <button
         onclick={handleRefresh}
         class="w-full sm:w-auto px-5 py-2.5 bg-primary hover:opacity-90 text-on-primary font-medium text-sm rounded-lg transition-opacity cursor-pointer flex items-center justify-center gap-2"

@@ -141,7 +141,7 @@
         {/if}
       </select>
       {#if localTime}
-        <span class="shrink-0 text-body-sm font-medium text-on-surface-variant/60 tabular-nums">
+        <span class="shrink-0 text-body-sm font-medium text-on-surface-variant tabular-nums">
           il est {localTime}
         </span>
       {/if}

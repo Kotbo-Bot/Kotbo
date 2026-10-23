@@ -273,8 +273,8 @@
 </script>
 
 <ModulePage
-  title="Vue d'ensemble"
-  description="Analyse complète de la configuration du serveur, catégorie par catégorie"
+  title="Bilan"
+  description="Ce qui protège ton serveur, et ce qu'il reste à régler."
   icon="ShieldCheck"
   featureKey="raid_protection"
 >
@@ -295,7 +295,7 @@
   {#if loading && !report}
     <LoadingHint context="config" />
   {:else if error}
-    <EmptyState icon="AlertTriangle" title="Audit indisponible" description={error} />
+    <EmptyState icon="AlertTriangle" title="Audit indisponible" description={error} actionLabel="Réessayer" actionIcon="RefreshCw" onAction={() => load()} />
   {:else if report}
     <!-- ── Synthese ───────────────────────────────────────────────────── -->
     <div class="grid gap-4 lg:grid-cols-[minmax(0,320px)_1fr]">
@@ -318,7 +318,7 @@
             </svg>
             <div class="absolute inset-0 flex flex-col items-center justify-center">
               <span class="text-4xl font-bold tracking-tight {scoreColor(report.score)}">{report.score}</span>
-              <span class="text-xs text-on-surface-variant/70">Note {report.grade}</span>
+              <span class="text-xs text-on-surface-variant">Note {report.grade}</span>
             </div>
           </div>
 
@@ -366,7 +366,7 @@
             </p>
           {/if}
 
-          <p class="text-2xs text-on-surface-variant/60 text-center">
+          <p class="text-2xs text-on-surface-variant text-center">
             Audit effectué en {formatDuration(report.durationMs)} ·
             {new Date(report.generatedAt).toLocaleString('fr-FR')}
           </p>
@@ -443,7 +443,7 @@
                 <li class="text-xs text-on-surface-variant">• {item}</li>
               {/each}
             </ul>
-            <p class="mt-1.5 text-xs text-on-surface-variant/70">
+            <p class="mt-1.5 text-xs text-on-surface-variant">
               Le score ne tient pas compte de ces contrôles : il peut être optimiste.
             </p>
           </div>
@@ -505,7 +505,10 @@
         <EmptyState
           icon="ShieldCheck"
           title="Aucun constat pour ce filtre"
-          description="Élargissez le filtre ou lancez une nouvelle analyse."
+          description="Aucun point à corriger dans cette catégorie et ce niveau de gravité."
+          actionLabel="Afficher tous les constats"
+          actionIcon="Eraser"
+          onAction={() => { severityFilter = 'ALL'; categoryFilter = 'ALL'; }}
         />
       {:else}
         <!--
@@ -558,7 +561,7 @@
                     </span>
                   {/each}
                   {#if finding.entities.length > cap}
-                    <span class="text-2xs px-1.5 py-0.5 text-on-surface-variant/60">
+                    <span class="text-2xs px-1.5 py-0.5 text-on-surface-variant">
                       +{finding.entities.length - cap}
                     </span>
                   {/if}

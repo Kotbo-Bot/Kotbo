@@ -3,6 +3,7 @@
   import { confirmDialog } from '../stores/confirmDialog.svelte';
   import Papicon from './Papicon.svelte';
   import { floatingPanel } from '../actions/floatingPanel';
+  import EmojiPanel from './EmojiPanel.svelte';
   import { m } from '../i18n';
 
   let {
@@ -31,32 +32,6 @@
   let emojiPickerEl = $state<HTMLDivElement | null>(null);
   let emojiButtonEl = $state<HTMLButtonElement | null>(null);
   let emojiPanelEl = $state<HTMLDivElement | null>(null);
-  let emojiSearch = $state('');
-  let emojiCategory = $state('smileys');
-
-  const emojiCategories = [
-    { id: 'smileys', icon: '😀', name: m.d1_emoji_cat_smileys() },
-    { id: 'objects', icon: '💡', name: m.d1_emoji_cat_objects() },
-    { id: 'symbols', icon: '❤️', name: m.d1_emoji_cat_symbols() },
-    { id: 'flags', icon: '🏁', name: m.d1_emoji_cat_flags() },
-  ];
-
-  const emojiMap: Record<string, string[]> = {
-    smileys: ['😀','😃','😄','😁','😆','😅','😂','🤣','😊','😇','🙂','😉','😌','😍','🥰','😘','😎','🥳','😏','🤔','🤗','🤭','😤','😡','🤯','😱','😢','😭','🥺','😴','🤒','😈','👻','💀','🤖','👽','👹'],
-    objects: ['📋','📝','📌','📎','✏️','📅','📊','📈','🔔','💡','⚙️','🔑','🔗','📁','📂','🗂️','📄','📃','📜','📰','🏷️','💼','📤','📥','📦','🔒','🔓','🔨','🧰','🧲'],
-    symbols: ['✅','❌','⚠️','❗','❓','💬','💭','🔴','🟡','🟢','🔵','⭐','💥','🔥','💯','⏰','⏳','🔄','➡️','⬅️','⬆️','⬇️','↗️','↘️','🔸','🔹','▪️','▫️','◽','◾'],
-    flags: ['🏁','🏳️','🏴','🇫🇷','🇬🇧','🇺🇸','🇩🇪','🇪🇸','🇮🇹','🇯🇵','🇨🇦','🇧🇷','🇷🇺','🇨🇳','🇮🇳'],
-  };
-
-  const filteredEmojis = $derived.by(() => {
-    const term = emojiSearch.trim().toLowerCase();
-    if (!term) return emojiMap[emojiCategory] || [];
-    const results: string[] = [];
-    for (const key of Object.keys(emojiMap)) {
-      results.push(...emojiMap[key].filter(e => e.includes(term)));
-    }
-    return [...new Set(results)].slice(0, 60);
-  });
 
   const agendaTemplates = [
     {
@@ -239,7 +214,7 @@
           type="button"
           {disabled}
           onclick={() => insertFormat(action)}
-          class="w-7 h-7 flex items-center justify-center rounded-md text-on-surface-variant/70 hover:bg-surface-container-high/60 hover:text-on-surface transition-all disabled:opacity-30 disabled:pointer-events-none"
+          class="w-7 h-7 flex items-center justify-center rounded-md text-on-surface-variant hover:bg-surface-container-high/60 hover:text-on-surface transition-all disabled:opacity-30 disabled:pointer-events-none"
           title="{action.label}{action.icon === 'bold' ? ' (Ctrl+B)' : action.icon === 'italic' ? ' (Ctrl+I)' : action.icon === 'underline' ? ' (Ctrl+U)' : ''}"
         >
           <Papicon icon={action.icon} size={14} />
@@ -256,7 +231,7 @@
           type="button"
           {disabled}
           onclick={() => insertFormat(action)}
-          class="h-7 px-1.5 flex items-center justify-center rounded-md text-on-surface-variant/70 hover:bg-surface-container-high/60 hover:text-on-surface transition-all text-xs font-medium disabled:opacity-30 disabled:pointer-events-none"
+          class="h-7 px-1.5 flex items-center justify-center rounded-md text-on-surface-variant hover:bg-surface-container-high/60 hover:text-on-surface transition-all text-xs font-medium disabled:opacity-30 disabled:pointer-events-none"
           title={action.label}
         >
           {#if action.heading}{action.heading}
@@ -284,35 +259,9 @@
         <div
           bind:this={emojiPanelEl}
           use:floatingPanel={{ anchor: emojiButtonEl, placement: 'bottom', align: 'start' }}
-          class="z-100 w-64 overflow-y-auto bg-surface-container-lowest border border-outline-variant/20 rounded-xl p-3 shadow-xl flex flex-col gap-2 animate-in fade-in duration-150"
+          class="flex w-[22rem] max-w-[calc(100vw-1rem)] flex-col overflow-hidden rounded-xl border border-outline-variant bg-surface-container-lowest shadow-lg animate-in fade-in duration-150"
         >
-          <input
-            type="text"
-            placeholder={m.d1_emoji_search()}
-            bind:value={emojiSearch}
-            class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary/30 text-on-surface"
-          />
-          {#if !emojiSearch.trim()}
-            <div class="flex gap-1 overflow-x-auto pb-0.5 select-none">
-              {#each emojiCategories as cat}
-                <button
-                  type="button"
-                  onclick={() => emojiCategory = cat.id}
-                  class="p-1 rounded-lg hover:bg-surface-container-high/40 text-sm transition-all shrink-0 {emojiCategory === cat.id ? 'bg-primary/15 text-primary' : ''}"
-                  title={cat.name}
-                >{cat.icon}</button>
-              {/each}
-            </div>
-          {/if}
-          <div class="grid grid-cols-7 gap-0.5 max-h-32 overflow-y-auto pr-1 text-lg select-none">
-            {#each filteredEmojis as emoji}
-              <button
-                type="button"
-                onclick={() => insertEmoji(emoji)}
-                class="flex h-7 w-7 items-center justify-center rounded-md hover:bg-primary/10 active:scale-95 transition-all cursor-pointer"
-              >{emoji}</button>
-            {/each}
-          </div>
+          <EmojiPanel onpick={insertEmoji} onclose={() => { showEmojiPicker = false; emojiButtonEl?.focus(); }} />
         </div>
       {/if}
     </div>
@@ -326,12 +275,12 @@
         <button
           type="button"
           onclick={() => activeTab = 'editor'}
-          class="px-3 py-1 rounded-md text-xs font-medium transition-all {activeTab === 'editor' ? 'bg-primary/15 text-primary' : 'text-on-surface-variant/60 hover:text-on-surface-variant'}"
+          class="px-3 py-1 rounded-md text-xs font-medium transition-all {activeTab === 'editor' ? 'bg-primary/15 text-primary' : 'text-on-surface-variant hover:text-on-surface-variant'}"
         >{m.d1_dme_editor()}</button>
         <button
           type="button"
           onclick={() => activeTab = 'preview'}
-          class="px-3 py-1 rounded-md text-xs font-medium transition-all {activeTab === 'preview' ? 'bg-primary/15 text-primary' : 'text-on-surface-variant/60 hover:text-on-surface-variant'}"
+          class="px-3 py-1 rounded-md text-xs font-medium transition-all {activeTab === 'preview' ? 'bg-primary/15 text-primary' : 'text-on-surface-variant hover:text-on-surface-variant'}"
         >{m.d1_dme_preview()}</button>
       </div>
     {/if}
@@ -343,7 +292,7 @@
   <!-- Agenda templates -->
   {#if agendaMode}
     <div class="flex items-center gap-2 px-3 py-2 border-b border-outline-variant/10 bg-surface-container-high/10 overflow-x-auto">
-      <span class="text-xs font-semibold text-on-surface-variant/50 shrink-0">{m.d1_dme_templates()}</span>
+      <span class="text-xs font-semibold text-on-surface-variant shrink-0">{m.d1_dme_templates()}</span>
       {#each agendaTemplates as template}
         <button
           type="button"

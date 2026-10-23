@@ -13,6 +13,18 @@ const cacheStub = { ...(await import('../../utils/cache.js')), getCachedGuild: a
 mock.module(cachePath, () => cacheStub);
 mock.module(cacheJsPath, () => cacheStub);
 
+// L'accueil lit les totaux publies par les instances. Le reste des chemins
+// testes ne touche pas a la base : seul ce modele est fourni.
+const dbPath = path.resolve(import.meta.dir, '../../utils/db.ts');
+const dbJsPath = path.resolve(import.meta.dir, '../../utils/db.js');
+const dbStub = {
+  default: {
+    botInstanceStats: { aggregate: async () => ({ _sum: { guildCount: 63, userCount: 20969 } }) },
+  },
+};
+mock.module(dbPath, () => dbStub);
+mock.module(dbJsPath, () => dbStub);
+
 const { normalizeOgPath, resolveOgMetadata } = await import('../../services/system/ogMetadataService.js');
 const { escapeHtml, renderPreviewHtml } = await import('../../api/hono/routes/public/og.js');
 const { normalizeAccent, renderOgCard } = await import('../../services/system/ogImageService.js');
@@ -86,6 +98,22 @@ describe('resolveOgMetadata - pages du dashboard', () => {
     const meta = await resolveOgMetadata(emptyClient, '/route-qui-nexiste-pas');
     expect(meta.title).toBeTruthy();
     expect(meta.card).not.toBeNull();
+  });
+});
+
+describe('resolveOgMetadata - accueil', () => {
+  test('présente Kotbo en français, indexable', async () => {
+    const meta = await resolveOgMetadata(emptyClient, '/');
+    expect(meta.locale).toBe('fr');
+    expect(meta.robots).toBe('index, follow');
+    expect(meta.title).toContain('Discord');
+  });
+
+  test('affiche les totaux publiés par les instances', async () => {
+    const meta = await resolveOgMetadata(emptyClient, '/');
+    expect(meta.card?.stats?.map((stat) => stat.label)).toEqual(['Serveurs', 'Membres']);
+    // La version de l'image suit les totaux : un CDN ne garde pas d'anciens chiffres.
+    expect(meta.imagePath).toMatch(/v=\d+\.63/);
   });
 });
 

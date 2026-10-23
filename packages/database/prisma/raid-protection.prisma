@@ -83,7 +83,14 @@ model RaidProtectionConfig {
   scamQrFilterEnabled     Boolean  @default(false)
   // Au-delà de ce nombre de messages, un membre est considéré comme installé
   // et ses codes QR ne sont plus bloqués (partage légitime : wifi, 2FA, jeu).
+  // Le même seuil réserve la lecture OCR aux comptes sans historique.
   scamQrTrustedMessages   Int      @default(50)
+
+  // ── Lecture du texte des images (OCR local) ────────────────────────────────
+  // Rattrape les captures photographiées ou recadrées que le hash ne reconnaît
+  // pas : le domaine ou le texte lu dans l'image est comparé au jeu de données.
+  // Coûteux en CPU, d'où l'activation explicite par serveur.
+  scamOcrEnabled          Boolean  @default(false)
 
   // ── Invite Guard (contrôle des invitations) ────────────────────────────────
   inviteGuardEnabled      Boolean  @default(false)
@@ -170,6 +177,11 @@ model ScamImageHash {
   source   String @default("HONEYPOT") // HONEYPOT | MANUAL | QR
   addedBy  String? // userId du membre à l'origine (auteur du scam ou staff)
 
+  // Texte lu dans l'image (OCR local), normalisé. Une capture photographiée ou
+  // recadrée échappe au hash, mais son texte (« Withdrawal Success », nom de
+  // domaine, code promo) reste identique : c'est ce qui sert de jeu d'exemples.
+  ocrText String?
+
   createdAt DateTime @default(now())
 
   guild Guild? @relation(fields: [guildId], references: [id], onDelete: Cascade)
@@ -178,6 +190,52 @@ model ScamImageHash {
   @@index([hash])
   @@index([guildId, phash])
   @@map("scam_image_hashes")
+}
+
+// Domaines vus dans des messages piégés par le honeypot. Une ligne locale
+// (guildId renseigné) devient une ligne globale (guildId null) quand le domaine
+// a été vu sur assez de serveurs distincts : un seul honeypot mal configuré ne
+// peut donc pas bloquer un domaine légitime pour tout le monde.
+model ScamDomain {
+  id      String  @id @default(cuid())
+  guildId String? // null = domaine global (partagé entre tous les serveurs)
+
+  domain String // en minuscules, sans schéma ni chemin
+  source String @default("HONEYPOT") // HONEYPOT | MANUAL | PROMOTED | OCR
+  hits   Int    @default(1)
+
+  firstSeenAt DateTime @default(now())
+  lastSeenAt  DateTime @default(now())
+
+  guild Guild? @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  @@unique([guildId, domain])
+  @@index([domain])
+  @@map("scam_domains")
+}
+
+// Textes d'arnaque (normalisés) vus dans le honeypot. L'empreinte sert à
+// reconnaître un copier-coller ; l'échantillon et les signaux alimentent le jeu
+// de données pour affiner les heuristiques.
+model ScamTextSample {
+  id      String  @id @default(cuid())
+  guildId String? // null = empreinte globale
+
+  fingerprint String // SHA-256 du texte normalisé
+  sample      String // texte normalisé, tronqué
+  signals     String[] @default([]) // signaux heuristiques déclenchés (giveaway, crypto_casino…)
+  domains     String[] @default([]) // domaines trouvés dans le message
+  source      String   @default("HONEYPOT") // HONEYPOT | MANUAL | PROMOTED | OCR
+  hits        Int      @default(1)
+
+  firstSeenAt DateTime @default(now())
+  lastSeenAt  DateTime @default(now())
+
+  guild Guild? @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  @@unique([guildId, fingerprint])
+  @@index([fingerprint])
+  @@map("scam_text_samples")
 }
 
 // Demande de validation d'invitation : l'invitation d'origine est supprimée,

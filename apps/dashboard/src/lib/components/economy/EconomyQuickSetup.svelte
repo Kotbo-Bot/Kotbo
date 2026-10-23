@@ -141,7 +141,7 @@
 {#if loading}
   <Skeleton height="350px" radius="2.5rem" />
 {:else if loadFailed || !config}
-  <p class="text-sm text-on-surface-variant/70 bg-surface-container-high/30 border border-outline-variant/10 rounded-xl px-6 py-8 text-center leading-relaxed">
+  <p class="text-sm text-on-surface-variant bg-surface-container-high/30 border border-outline-variant/10 rounded-xl px-6 py-8 text-center leading-relaxed">
     {m.eco_config_load_failed()}
   </p>
 {:else}

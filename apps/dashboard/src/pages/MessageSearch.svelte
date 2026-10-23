@@ -268,13 +268,13 @@
       <div class="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-surface-container-low/60 border border-outline-variant/20 rounded-xl">
         <div class="flex items-center gap-3 flex-1">
           <div class="w-10 h-10 rounded-lg flex items-center justify-center shrink-0 {stats?.enabled ? 'bg-primary/10' : 'bg-surface-container'}">
-            <Papicon icon="message" size={18} class={stats?.enabled ? 'text-primary' : 'text-on-surface-variant/50'} />
+            <Papicon icon="message" size={18} class={stats?.enabled ? 'text-primary' : 'text-on-surface-variant'} />
           </div>
           <div>
             <p class="text-sm font-semibold text-on-surface">
               {m.ms_logging_label()} {stats?.enabled ? m.common_enabled() : m.common_disabled()}
             </p>
-            <p class="text-xs text-on-surface-variant/60">
+            <p class="text-xs text-on-surface-variant">
               {stats ? m.ms_messages_recorded({ count: stats.total }) : m.common_loading()}
             </p>
           </div>
@@ -283,7 +283,7 @@
         {#if isAdmin}
           <div class="flex items-center gap-4">
             <div class="flex items-center gap-2">
-              <label for="retention" class="text-xs text-on-surface-variant/70">{m.ms_retention_days()}</label>
+              <label for="retention" class="text-xs text-on-surface-variant">{m.ms_retention_days()}</label>
               <input
                 id="retention"
                 type="number"
@@ -326,7 +326,7 @@
             disabled={savingConfig}
             accentClass="bg-error/20 text-rose-300 border-error/40"
           />
-          <p class="text-2xs text-on-surface-variant/50">{m.ms_ignored_channels_help()}</p>
+          <p class="text-2xs text-on-surface-variant">{m.ms_ignored_channels_help()}</p>
         </div>
       {/if}
 
@@ -341,7 +341,7 @@
             <p class="text-on-surface-variant/80 mt-0.5">
               {m.ms_indexing_desc({ days: stats.retentionDays })}
             </p>
-            <div class="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-on-surface-variant/60 font-medium">
+            <div class="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-on-surface-variant font-medium">
               <span>{m.ms_current_channel()} <strong>#{stats.status.currentChannelName || '...'}</strong></span>
               <span>{m.ms_channels_scraped()} <strong>{stats.status.scrapedChannelsCount} / {stats.status.totalChannelsCount}</strong></span>
               <span>{m.ms_messages_imported()} <strong>{stats.status.scrapedMessagesCount.toLocaleString(dateLocale())}</strong></span>
@@ -374,7 +374,7 @@
         </div>
       {:else if enabledLowData}
         <div class="flex items-start gap-3 p-3 bg-surface-container-low/60 border border-outline-variant/20 rounded-xl">
-          <div class="shrink-0 mt-0.5 text-on-surface-variant/60">
+          <div class="shrink-0 mt-0.5 text-on-surface-variant">
             <Papicon icon="info" size={16} />
           </div>
           <p class="text-xs text-on-surface-variant/80">
@@ -386,7 +386,7 @@
       <!-- Search bar -->
       <div class="flex items-center gap-3">
         <div class="relative flex-1">
-          <div class="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant/50">
+          <div class="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant">
             <Papicon icon="search" size={18} />
           </div>
           <input
@@ -394,7 +394,7 @@
             bind:value={query}
             oninput={onQueryInput}
             placeholder={m.ms_search_placeholder()}
-            class="w-full pl-10 pr-4 py-2.5 bg-surface-container-low border border-outline-variant/30 rounded-lg text-sm text-on-surface placeholder:text-on-surface-variant/50 focus:outline-none focus:border-primary/60 transition-colors"
+            class="w-full pl-10 pr-4 py-2.5 bg-surface-container-low border border-outline-variant/30 rounded-lg text-sm text-on-surface placeholder:text-on-surface-variant focus:outline-none focus:border-primary/60 transition-colors"
           />
         </div>
         <button
@@ -483,7 +483,7 @@
       {/if}
 
       <div class="flex items-center justify-between">
-        <p class="text-sm text-on-surface-variant/70">{m.ms_results_count({ count: formatMessageSearchTotal({ total, totalCapped }) })}</p>
+        <p class="text-sm text-on-surface-variant">{m.ms_results_count({ count: formatMessageSearchTotal({ total, totalCapped }) })}</p>
       </div>
 
       <!-- Results -->
@@ -497,7 +497,7 @@
             <Papicon icon="message" size={32} class="text-on-surface-variant/40" />
           </div>
           <h3 class="text-lg font-semibold text-on-surface mb-1">{m.ms_no_message_title()}</h3>
-          <p class="text-sm text-on-surface-variant/60 max-w-sm">
+          <p class="text-sm text-on-surface-variant max-w-sm">
             {#if !stats?.enabled}
               {m.ms_empty_disabled()}
             {:else if enabledButEmpty}
@@ -517,7 +517,7 @@
                 <img src={message.authorAvatar} alt="" class="w-9 h-9 rounded-full shrink-0" />
               {:else}
                 <div class="w-9 h-9 rounded-full bg-surface-container flex items-center justify-center shrink-0">
-                  <Papicon icon="user" size={16} class="text-on-surface-variant/50" />
+                  <Papicon icon="user" size={16} class="text-on-surface-variant" />
                 </div>
               {/if}
 
@@ -527,7 +527,7 @@
                   {#if message.isBot}
                     <span class="px-1.5 py-0.5 text-2xs font-bold bg-primary/20 text-primary rounded">BOT</span>
                   {/if}
-                  <span class="text-xs text-on-surface-variant/50">#{message.channelName}</span>
+                  <span class="text-xs text-on-surface-variant">#{message.channelName}</span>
                   <span class="text-xs text-on-surface-variant/40">· {formatDate(message.createdAt)}</span>
                   {#if message.editedAt}
                     <span class="text-xs text-on-surface-variant/40">{m.ms_edited()}</span>

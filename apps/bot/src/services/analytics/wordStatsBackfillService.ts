@@ -1,5 +1,4 @@
 import type { Prisma } from '@prisma/client';
-import { errorMessage } from '../../utils/errors.js';
 /**
  * wordStatsBackfillService.ts
  *
@@ -18,6 +17,7 @@ import { errorMessage } from '../../utils/errors.js';
 import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
 import { tokenize } from './wordStatsService.js';
+import { publicErrorMessage } from '../../utils/publicError.js';
 
 const BATCH_SIZE = 2000;
 /** Nombre de messages traités avant d'écrire les compteurs accumulés. */
@@ -83,7 +83,7 @@ export async function startWordStatsBackfill(guildId: string, force = false): Pr
     logger.error('WordStatsBackfill', `Échec de l'indexation pour ${guildId}:`, err);
     await setStatus(guildId, {
       status: 'FAILED',
-      error: String(errorMessage(err) ?? err).slice(0, 500),
+      error: publicErrorMessage(err).slice(0, 500),
       completedAt: new Date().toISOString(),
     });
   });

@@ -267,29 +267,23 @@
       <button
         type="button"
         onclick={() => authStore.logout()}
-        class="text-body-sm font-medium text-on-surface-variant/60 hover:text-on-surface transition-colors"
+        class="text-body-sm font-medium text-on-surface-variant hover:text-on-surface transition-colors"
       >
         Se déconnecter
       </button>
     </div>
 
     <div class="flex flex-col gap-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-  <header class="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-surface-container-low/40 p-5 rounded-xl border border-outline-variant/30 relative overflow-hidden">
-    <div class="absolute -top-24 -right-24 w-48 h-48 bg-primary/8 rounded-full blur-[60px]"></div>
-
-    <div class="flex min-w-0 items-center gap-4 relative">
-      <div class="w-11 h-11 shrink-0 bg-linear-to-br from-primary to-primary-container rounded-lg flex items-center justify-center shadow-md shadow-primary/15">
-        <Papicon icon="Grid" size={22} class="text-white" />
-      </div>
-      <div class="min-w-0">
-        <h1 class="text-lg font-semibold tracking-tight text-on-surface font-headline leading-tight">Mes serveurs</h1>
-        <p class="text-sm text-on-surface-variant/70 font-medium">
-          Les serveurs que tu administres, et ceux où Kotbo reste à inviter
-        </p>
-      </div>
+  <header class="flex flex-col md:flex-row md:items-end justify-between gap-x-6 gap-y-3">
+    <div class="min-w-0">
+      <h1 class="text-2xl font-semibold tracking-tight text-on-surface font-headline leading-tight">Mes serveurs</h1>
+      <p class="mt-1 max-w-prose text-sm text-on-surface-variant">
+        Les serveurs que tu administres, et ceux où Kotbo reste à inviter.
+      </p>
     </div>
 
-    <div class="flex items-center gap-2 relative">
+    <div class="flex items-center flex-wrap md:justify-end gap-2 shrink-0">
+      <RefreshButton onclick={() => void load(true)} {loading} />
       {#if canInvite}
         <a
           href={inviteUrl()}
@@ -300,7 +294,6 @@
           Ajouter à un serveur
         </a>
       {/if}
-      <RefreshButton onclick={() => void load(true)} {loading} />
     </div>
   </header>
 
@@ -315,7 +308,7 @@
       <KotboMark size={44} halo />
       <div class="text-center">
         <p class="text-sm font-semibold text-on-surface">Nous demandons tes serveurs à Discord…</p>
-        <p class="mt-1 text-body-sm text-on-surface-variant/60">Quelques secondes, le temps de savoir où Kotbo est déjà là.</p>
+        <p class="mt-1 text-body-sm text-on-surface-variant">Quelques secondes, le temps de savoir où Kotbo est déjà là.</p>
       </div>
     </div>
 
@@ -389,7 +382,7 @@
 
                 <div class="min-w-0 flex-1">
                   <p class="text-body-sm font-medium text-on-surface truncate">{server.name}</p>
-                  <p class="text-2xs text-on-surface-variant/60">
+                  <p class="text-2xs text-on-surface-variant">
                     {server.owner ? 'Propriétaire' : 'Administrateur'}
                   </p>
                 </div>
@@ -447,7 +440,7 @@
                       <span class="text-xs font-medium px-1 py-0.5 rounded bg-primary/10 text-primary">Actuel</span>
                     {/if}
                   </p>
-                  <p class="text-2xs {server.activated ? 'text-on-surface-variant/60' : 'text-warning'}">
+                  <p class="text-2xs {server.activated ? 'text-on-surface-variant' : 'text-warning'}">
                     {server.activated ? (server.owner ? 'Propriétaire' : 'Administrateur') : "En attente d'activation"}
                   </p>
                 </div>

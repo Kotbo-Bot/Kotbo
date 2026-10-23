@@ -21,6 +21,7 @@ import {
   type MonsterInput,
   type NormalizedDrop,
 } from './rpgBestiaryPolicy.js';
+import { UserFacingError } from '../../../utils/userFacingError.js';
 
 export type MonsterScope = 'GLOBAL' | 'GUILD';
 
@@ -93,7 +94,7 @@ export async function findGuildMonsterById(guildId: string, monsterId: string): 
   return { ...monster, scope: 'GUILD', overridesGlobal: globalTwin !== null };
 }
 
-export class BestiaryError extends Error {
+export class BestiaryError extends UserFacingError {
   constructor(message: string, readonly status: number) {
     super(message);
     this.name = 'BestiaryError';

@@ -72,7 +72,7 @@
       const data = await res.json();
       events = data.events || [];
     } catch (err) {
-      toast.error('Erreur lors du chargement des événements');
+      toast.error('Impossible de charger les événements. Réessaie.');
     } finally {
       isFetching = false;
     }
@@ -91,12 +91,12 @@
 
   function getStatusColor(status: string) {
     switch (status) {
-      case 'DRAFT': return 'bg-on-surface/5 text-on-surface-variant/60';
+      case 'DRAFT': return 'bg-on-surface/5 text-on-surface-variant';
       case 'PUBLISHED': return 'bg-blue-500/10 text-blue-500';
       case 'ONGOING': return 'bg-success/10 text-success';
       case 'COMPLETED': return 'bg-purple-500/10 text-purple-500';
       case 'CANCELLED': return 'bg-error/10 text-error';
-      default: return 'bg-on-surface/5 text-on-surface-variant/60';
+      default: return 'bg-on-surface/5 text-on-surface-variant';
     }
   }
 
@@ -122,7 +122,7 @@
         router.goto(`/events/edit/${data.event.id}`);
       }
     } catch (err) {
-      toast.error('Erreur lors de la création');
+      toast.error('Impossible de créer. Réessaie.');
     } finally {
       isCreating = false;
     }
@@ -147,10 +147,10 @@
         await loadEvents();
       } else {
         const data = await res.json();
-        toast.error(data.error || 'Erreur lors de la suppression');
+        toast.error(data.error || 'Impossible de supprimer. Réessaie.');
       }
     } catch (err) {
-      toast.error('Erreur de connexion avec le serveur');
+      toast.error('Impossible de se connecter avec le serveur. Réessaie.');
     }
   }
 </script>
@@ -181,11 +181,11 @@
       <div class="flex items-start justify-between gap-4">
         <div>
           <h2 id="modal-title" class="text-2xl font-semibold text-on-surface">{m.ev_select_type_title()}</h2>
-          <p class="text-on-surface-variant/50 text-sm mt-1">{m.ev_select_type_desc()}</p>
+          <p class="text-on-surface-variant text-sm mt-1">{m.ev_select_type_desc()}</p>
         </div>
         <button
           onclick={() => showTypeModal = false}
-          class="w-10 h-10 rounded-lg bg-on-surface/5 hover:bg-on-surface/10 flex items-center justify-center text-on-surface-variant/60 hover:text-on-surface transition-colors shrink-0"
+          class="w-10 h-10 rounded-lg bg-on-surface/5 hover:bg-on-surface/10 flex items-center justify-center text-on-surface-variant hover:text-on-surface transition-colors shrink-0"
           aria-label="Fermer la modale"
           disabled={isCreating}
         >
@@ -216,7 +216,7 @@
                   {et.tag}
                 </span>
               </div>
-              <p class="text-on-surface-variant/60 text-sm leading-relaxed">{et.description}</p>
+              <p class="text-on-surface-variant text-sm leading-relaxed">{et.description}</p>
             </div>
 
             <!-- Arrow indicator -->
@@ -228,7 +228,7 @@
       </div>
 
       {#if isCreating}
-        <p class="text-center text-on-surface-variant/50 text-sm animate-pulse">{m.ev_creating()}</p>
+        <p class="text-center text-on-surface-variant text-sm animate-pulse">{m.ev_creating()}</p>
       {/if}
     </div>
   </div>
@@ -300,7 +300,7 @@
                     {event.type === 'CTF' ? 'CTF' : event.type === 'CUSTOM' ? 'Custom' : 'Quiz'}
                   </span>
                 </div>
-                <p class="text-on-surface-variant/60 mt-1 line-clamp-1">{event.description || m.ev_no_description()}</p>
+                <p class="text-on-surface-variant mt-1 line-clamp-1">{event.description || m.ev_no_description()}</p>
                 <div class="flex items-center flex-wrap gap-4 mt-3">
                   {#if event.type === 'CTF'}
                     <span class="text-2xs font-bold text-on-surface-variant/40 flex items-center gap-1.5">
@@ -370,7 +370,7 @@
             <div class="w-20 h-20 bg-on-surface/5 rounded-full flex items-center justify-center mx-auto mb-6 text-on-surface-variant/20">
               <Papicon icon="Zap" size={40} />
             </div>
-            <p class="text-on-surface-variant/60 font-semibold text-xl">{m.ev_no_event_title()}</p>
+            <p class="text-on-surface-variant font-semibold text-xl">{m.ev_no_event_title()}</p>
             {#if canManageEvents}
               <button onclick={() => showTypeModal = true} class="mt-6 text-primary font-semibold text-xs hover:underline">
                 {m.ev_create_first()}

@@ -1,7 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Client } from 'discord.js';
 import type { AuthClaims, DashboardAccess } from '../../../shared.js';
-import { errorMessage } from '../../../../utils/errors.js';
 import { logger } from '../../../../utils/logger.js';
 import {
   json,
@@ -50,6 +49,7 @@ import * as tutoringService from '../../../../services/core/tutoringService.js';
 import { TutoringItemState } from '@prisma/client';
 
 import { jsonFailure } from '../../../shared/failure.js';
+import { publicErrorMessage } from '../../../../utils/publicError.js';
 export async function handleTutoringRoutes(
   req: IncomingMessage,
   res: ServerResponse,
@@ -221,7 +221,7 @@ export async function handleTutoringRoutes(
           json(res, 201, { period });
         } catch (err: unknown) {
           logger.error('TutoringAPI', 'Error creating period:', err);
-          json(res, 500, { error: errorMessage(err) || 'Erreur création tutorat' });
+          json(res, 500, { error: publicErrorMessage(err, 'Erreur création tutorat') });
         }
         return true;
       }

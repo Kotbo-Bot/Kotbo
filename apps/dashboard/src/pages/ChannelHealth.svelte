@@ -1,5 +1,6 @@
 <script lang="ts">
 import { m } from '../lib/i18n';
+import EmptyState from '../lib/components/EmptyState.svelte';
 import { onMount, onDestroy, untrack } from 'svelte';
 import { unsavedChanges } from '../lib/stores/unsavedChanges.svelte';
 import { router } from 'tinro';
@@ -263,12 +264,12 @@ onMount(async () => {
 
 <!-- ======================== CONTENT ======================== -->
 {#if loading}
-  <div class="flex flex-col items-center justify-center py-16 text-on-surface-variant/50 gap-4">
+  <div class="flex flex-col items-center justify-center py-16 text-on-surface-variant gap-4">
     <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
     <p class="text-sm">{m.common_loading()}</p>
   </div>
 {:else if error}
-  <div class="flex flex-col items-center justify-center py-16 text-on-surface-variant/50 gap-4">
+  <div class="flex flex-col items-center justify-center py-16 text-on-surface-variant gap-4">
     <Papicon icon="alert-circle" size={32} />
     <p class="text-sm">{error}</p>
     <button class="px-4 py-2 bg-primary text-on-primary text-body-sm font-medium rounded-xl shadow-sm active:scale-[0.98] transition-all flex items-center gap-2" onclick={load}>{m.common_retry()}</button>
@@ -297,7 +298,7 @@ onMount(async () => {
       <div class="bg-surface-container-low/30 border border-outline-variant/10 rounded-xl p-10 flex flex-col items-center justify-center text-center gap-4">
         <Papicon icon="activity" size={48} />
         <h3 class="text-base font-semibold text-on-surface">{m.channel_health_monitor_disabled_title()}</h3>
-        <p class="text-sm text-on-surface-variant/60 max-w-md">{m.channel_health_monitor_disabled_desc()}</p>
+        <p class="text-sm text-on-surface-variant max-w-md">{m.channel_health_monitor_disabled_desc()}</p>
         <button
           class="px-4 py-2 bg-primary text-on-primary text-body-sm font-medium rounded-xl shadow-sm active:scale-[0.98] transition-all flex items-center gap-2"
           onclick={() => { gotoTab('/channel-health', 'config', DEFAULT_TAB); if (configDraft) configDraft.enabled = true; }}
@@ -316,7 +317,7 @@ onMount(async () => {
             </div>
             <div>
               <span class="text-2xl font-bold text-on-surface block">{count}</span>
-              <span class="text-xs font-medium text-on-surface-variant/60">{info.label()}</span>
+              <span class="text-xs font-medium text-on-surface-variant">{info.label()}</span>
             </div>
           </div>
         {/each}
@@ -332,14 +333,14 @@ onMount(async () => {
           <table class="w-full">
             <thead>
               <tr class="border-b border-outline-variant/10">
-                <th class="px-3 py-2.5 text-left text-xs font-medium text-on-surface-variant/60">{m.channel_health_th_channel()}</th>
-                <th class="px-3 py-2.5 text-left text-xs font-medium text-on-surface-variant/60">{m.channel_health_th_status()}</th>
-                <th class="px-3 py-2.5 text-left text-xs font-medium text-on-surface-variant/60">{m.channel_health_th_msg_day()}</th>
-                <th class="px-3 py-2.5 text-left text-xs font-medium text-on-surface-variant/60">{m.channel_health_th_users()}</th>
-                <th class="px-3 py-2.5 text-left text-xs font-medium text-on-surface-variant/60">{m.channel_health_th_total_msgs()}</th>
-                <th class="px-3 py-2.5 text-left text-xs font-medium text-on-surface-variant/60">{m.channel_health_th_trend()}</th>
-                <th class="px-3 py-2.5 text-left text-xs font-medium text-on-surface-variant/60">{m.channel_health_th_confidence()}</th>
-                <th class="px-3 py-2.5 text-left text-xs font-medium text-on-surface-variant/60">{m.channel_health_th_actions()}</th>
+                <th class="px-3 py-2.5 text-left text-xs font-medium text-on-surface-variant">{m.channel_health_th_channel()}</th>
+                <th class="px-3 py-2.5 text-left text-xs font-medium text-on-surface-variant">{m.channel_health_th_status()}</th>
+                <th class="px-3 py-2.5 text-left text-xs font-medium text-on-surface-variant">{m.channel_health_th_msg_day()}</th>
+                <th class="px-3 py-2.5 text-left text-xs font-medium text-on-surface-variant">{m.channel_health_th_users()}</th>
+                <th class="px-3 py-2.5 text-left text-xs font-medium text-on-surface-variant">{m.channel_health_th_total_msgs()}</th>
+                <th class="px-3 py-2.5 text-left text-xs font-medium text-on-surface-variant">{m.channel_health_th_trend()}</th>
+                <th class="px-3 py-2.5 text-left text-xs font-medium text-on-surface-variant">{m.channel_health_th_confidence()}</th>
+                <th class="px-3 py-2.5 text-left text-xs font-medium text-on-surface-variant">{m.channel_health_th_actions()}</th>
               </tr>
             </thead>
             <tbody>
@@ -363,7 +364,7 @@ onMount(async () => {
                   <td class="px-3 py-2.5 text-sm">
                     {#if ch.trend === 'UP'}<Papicon icon="trendup" size={16} class="text-success" />
                     {:else if ch.trend === 'DOWN'}<Papicon icon="trenddown" size={16} class="text-error" />
-                    {:else}<Papicon icon="arrow-right" size={16} class="text-on-surface-variant/60" />
+                    {:else}<Papicon icon="arrow-right" size={16} class="text-on-surface-variant" />
                     {/if}
                   </td>
                   <td class="px-3 py-2.5 text-sm">{ch.confidence}%</td>
@@ -381,11 +382,16 @@ onMount(async () => {
         </div>
       </div>
     {:else}
-      <!-- No analysis yet -->
-      <div class="bg-surface-container-low/30 border border-outline-variant/10 rounded-xl p-10 flex flex-col items-center justify-center text-center gap-4">
-        <Papicon icon="bar-chart" size={48} />
-        <h3 class="text-base font-semibold text-on-surface">{m.channel_health_no_analysis_title()}</h3>
-        <p class="text-sm text-on-surface-variant/60 max-w-md">{m.channel_health_no_analysis_desc()}</p>
+      <!-- Pas encore d'analyse : le bouton est dans le message, pas en haut de page. -->
+      <div class="bg-surface-container-low/30 border border-outline-variant/10 rounded-xl">
+        <EmptyState
+          icon="bar-chart"
+          title={m.channel_health_no_analysis_title()}
+          description={m.channel_health_no_analysis_desc()}
+          actionLabel={m.channel_health_run_analysis_btn()}
+          actionIcon="RefreshCw"
+          onAction={runAnalysis}
+        />
       </div>
     {/if}
   {/if}
@@ -396,7 +402,7 @@ onMount(async () => {
       <div class="bg-surface-container-low/30 border border-outline-variant/10 rounded-xl p-10 flex flex-col items-center justify-center text-center gap-4">
         <Papicon icon="check-circle" size={48} />
         <h3 class="text-base font-semibold text-on-surface">{m.channel_health_no_alerts_title()}</h3>
-        <p class="text-sm text-on-surface-variant/60 max-w-md">{m.channel_health_no_alerts_desc()}</p>
+        <p class="text-sm text-on-surface-variant max-w-md">{m.channel_health_no_alerts_desc()}</p>
       </div>
     {:else}
       {#if data?.pendingAlerts?.length > 0}
@@ -419,8 +425,8 @@ onMount(async () => {
                   title={m.channel_health_open_details()}
                 >#{alert.channelName ?? alert.channelId}</button>
               </h4>
-              <p class="text-xs text-on-surface-variant/60">{alert.reason}</p>
-              <div class="flex gap-4 text-xs font-medium text-on-surface-variant/60">
+              <p class="text-xs text-on-surface-variant">{alert.reason}</p>
+              <div class="flex gap-4 text-xs font-medium text-on-surface-variant">
                 <span>{m.channel_health_msg_per_day({ count: alert.avgMsgPerDay?.toFixed(1) })}</span>
                 <span>{m.channel_health_users_avg({ count: alert.uniqueUsersAvg?.toFixed(0) })}</span>
                 <span>{m.channel_health_analysis_period({ days: alert.analysisPeriod })}</span>
@@ -448,11 +454,11 @@ onMount(async () => {
             <table class="w-full">
               <thead>
                 <tr class="border-b border-outline-variant/10">
-                  <th class="px-3 py-2.5 text-left text-xs font-medium text-on-surface-variant/60">{m.channel_health_th_date()}</th>
-                  <th class="px-3 py-2.5 text-left text-xs font-medium text-on-surface-variant/60">{m.channel_health_th_channel()}</th>
-                  <th class="px-3 py-2.5 text-left text-xs font-medium text-on-surface-variant/60">{m.channel_health_th_type()}</th>
-                  <th class="px-3 py-2.5 text-left text-xs font-medium text-on-surface-variant/60">{m.channel_health_th_status()}</th>
-                  <th class="px-3 py-2.5 text-left text-xs font-medium text-on-surface-variant/60">{m.channel_health_th_confidence()}</th>
+                  <th class="px-3 py-2.5 text-left text-xs font-medium text-on-surface-variant">{m.channel_health_th_date()}</th>
+                  <th class="px-3 py-2.5 text-left text-xs font-medium text-on-surface-variant">{m.channel_health_th_channel()}</th>
+                  <th class="px-3 py-2.5 text-left text-xs font-medium text-on-surface-variant">{m.channel_health_th_type()}</th>
+                  <th class="px-3 py-2.5 text-left text-xs font-medium text-on-surface-variant">{m.channel_health_th_status()}</th>
+                  <th class="px-3 py-2.5 text-left text-xs font-medium text-on-surface-variant">{m.channel_health_th_confidence()}</th>
                 </tr>
               </thead>
               <tbody>
@@ -535,7 +541,7 @@ onMount(async () => {
             options={availableChannels.map((c) => ({ id: c.id, name: `#${c.name}` }))}
             accentClass="bg-error/20 text-rose-300 border-error/40"
           />
-          <p class="text-2xs text-on-surface-variant/50">{m.channel_health_field_excluded_channels_help()}</p>
+          <p class="text-2xs text-on-surface-variant">{m.channel_health_field_excluded_channels_help()}</p>
         </div>
 
         <!-- Divider: Overload thresholds -->
@@ -613,7 +619,7 @@ onMount(async () => {
         <Papicon icon="settings" size={18} />
         {m.channel_health_config_heading()}
       </h3>
-      <p class="text-sm text-on-surface-variant/60">{m.channel_health_not_configured_desc()}</p>
+      <p class="text-sm text-on-surface-variant">{m.channel_health_not_configured_desc()}</p>
       <button
         class="px-4 py-2 bg-primary text-on-primary text-body-sm font-medium rounded-xl shadow-sm active:scale-[0.98] transition-all flex items-center gap-2"
         onclick={() => { configDraft = { ...CHANNEL_HEALTH_DEFAULT_CONFIG, excludedChannelIds: [] }; }}

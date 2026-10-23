@@ -126,11 +126,11 @@
             {#if guildIconUrl}
               <img src={guildIconUrl} alt="" class="w-5 h-5 rounded-md shrink-0" />
             {:else}
-              <span class="w-5 h-5 rounded-md shrink-0 bg-surface-container text-on-surface-variant/60 text-[10px] font-bold flex items-center justify-center">
+              <span class="w-5 h-5 rounded-md shrink-0 bg-surface-container text-on-surface-variant text-[10px] font-bold flex items-center justify-center">
                 {selectedGuild.name.slice(0, 1).toUpperCase()}
               </span>
             {/if}
-            <span class="text-body-sm font-medium text-on-surface-variant/70 truncate">
+            <span class="text-body-sm font-medium text-on-surface-variant truncate">
               {selectedGuild.name}
             </span>
           </span>
@@ -142,7 +142,7 @@
           <button
             type="button"
             onclick={onEditTracks}
-            class="inline-flex items-center gap-1.5 text-body-sm font-medium text-on-surface-variant/50 hover:text-on-surface transition-colors"
+            class="inline-flex items-center gap-1.5 text-body-sm font-medium text-on-surface-variant hover:text-on-surface transition-colors"
           >
             <Papicon icon="list-checks" size={13} />
             <span class="hidden md:inline">{m.onb_tracks_edit()}</span>
@@ -164,7 +164,7 @@
 
         <a
           href="/servers"
-          class="inline-flex items-center gap-1.5 text-body-sm font-medium text-on-surface-variant/50 hover:text-on-surface transition-colors"
+          class="inline-flex items-center gap-1.5 text-body-sm font-medium text-on-surface-variant hover:text-on-surface transition-colors"
         >
           <Papicon icon="arrow-left-right" size={13} />
           <span class="hidden sm:inline">Changer de serveur</span>
@@ -289,7 +289,7 @@
         <button
           type="button"
           onclick={() => wizard.back()}
-          class="inline-flex items-center gap-1.5 text-body-sm font-medium text-on-surface-variant/60 hover:text-on-surface transition-colors"
+          class="inline-flex items-center gap-1.5 text-body-sm font-medium text-on-surface-variant hover:text-on-surface transition-colors"
         >
           <Papicon icon="ChevronLeft" size={14} />
           Retour

@@ -40,6 +40,6 @@ export async function updateEmojiRiddle(id: string, riddle: { emojis: string; an
   return dashboardRequest(`/fun/emoji-riddles/${encodeURIComponent(id)}`, { method: 'PATCH', successMessage: m.api_ok_update_emoji_riddle(), payload: riddle, guildId, errorContext: 'API Error (Update Emoji Riddle):' });
 }
 
-export async function deleteEmojiRiddle(id: string, guildId = authStore.selectedGuildId) {
-  return dashboardRequest(`/fun/emoji-riddles/${encodeURIComponent(id)}`, { method: 'DELETE', successMessage: m.api_ok_delete_emoji_riddle(), guildId, errorContext: 'API Error (Delete Emoji Riddle):' });
+export async function deleteEmojiRiddle(id: string, guildId = authStore.selectedGuildId, { silent = false }: { silent?: boolean } = {}) {
+  return dashboardRequest(`/fun/emoji-riddles/${encodeURIComponent(id)}`, { method: 'DELETE', successMessage: m.api_ok_delete_emoji_riddle(), guildId, silent, errorContext: 'API Error (Delete Emoji Riddle):' });
 }

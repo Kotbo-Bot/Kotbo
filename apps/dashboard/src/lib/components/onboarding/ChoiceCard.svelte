@@ -55,7 +55,7 @@
     {#if icon}
       <div
         class="icon w-10 h-10 shrink-0 rounded-xl flex items-center justify-center transition-colors
-        {selected ? 'bg-primary/15 text-primary' : 'bg-surface-container text-on-surface-variant/70'}"
+        {selected ? 'bg-primary/15 text-primary' : 'bg-surface-container text-on-surface-variant'}"
       >
         <Papicon {icon} size={18} />
       </div>
@@ -75,7 +75,7 @@
         <p class="mt-0.5 text-body-sm font-medium text-on-surface-variant/75">{pitch}</p>
       {/if}
       {#if detail}
-        <p class="mt-2 text-body-sm text-on-surface-variant/60 leading-relaxed">{detail}</p>
+        <p class="mt-2 text-body-sm text-on-surface-variant leading-relaxed">{detail}</p>
       {/if}
     </div>
   </div>

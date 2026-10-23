@@ -58,7 +58,7 @@
           </div>
           <div>
             <h2 id="keyboard-shortcuts-title" class="text-xl font-semibold">{m.ksm_title()}</h2>
-            <p class="text-sm text-on-surface-variant/60">{m.ksm_subtitle()}</p>
+            <p class="text-sm text-on-surface-variant">{m.ksm_subtitle()}</p>
           </div>
         </div>
         <button
@@ -74,7 +74,7 @@
       <div class="p-6 overflow-y-auto max-h-[60vh]">
         {#each categories as cat}
           <div class="mb-6 last:mb-0">
-            <h3 class="text-xs font-semibold text-on-surface-variant/60 mb-3">{cat.label}</h3>
+            <h3 class="text-xs font-semibold text-on-surface-variant mb-3">{cat.label}</h3>
             <div class="space-y-2">
               {#each shortcuts.filter(s => s.category === cat.id) as shortcut}
                 <div class="keyboard-shortcuts-modal__row flex items-center justify-between gap-3 p-3 rounded-xl bg-surface-container-high/10 hover:bg-surface-container-high/20 transition-colors">
@@ -82,7 +82,7 @@
                   <div class="keyboard-shortcuts-modal__keys flex items-center gap-1">
                     {#each shortcut.keys as key}
                       {#if key === 'ou'}
-                        <span class="text-xs font-bold text-on-surface-variant/60 mx-1">{m.ksm_or()}</span>
+                        <span class="text-xs font-bold text-on-surface-variant mx-1">{m.ksm_or()}</span>
                       {:else}
                         <kbd class="px-2 py-1 rounded-lg bg-surface-container-high border border-outline-variant/20 text-xs font-bold text-on-surface-variant shadow-sm">
                           {key}
@@ -99,7 +99,7 @@
 
       <!-- Footer -->
       <div class="p-4 border-t border-outline-variant/10 bg-surface-container-high/10">
-        <p class="text-xs text-center text-on-surface-variant/50">
+        <p class="text-xs text-center text-on-surface-variant">
           {m.ksm_footer_before()} <kbd class="px-1.5 py-0.5 rounded bg-surface-container-high border border-outline-variant/20 text-xs font-bold">Escape</kbd> {m.ksm_footer_after()}
         </p>
       </div>

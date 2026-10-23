@@ -17,6 +17,7 @@ import { logger } from '../../utils/logger.js';
 import { getClient } from '../../utils/client.js';
 import { queueAuditLog } from '../../utils/auditLogger.js';
 import { getPartnershipSettings } from './partnershipSettings.js';
+import { notifyMany } from '../notifications/notifyService.js';
 
 /** Teintes reprises de `COLORS_RAW`, sans importer le module d'embeds v2. */
 const TONE_COLORS = {
@@ -114,15 +115,11 @@ export async function sendPartnershipAlert(input: PartnershipAlertInput): Promis
     });
   }
 
-  if (settings.notifyDashboard) {
-    await notifyDashboard(input, tone).catch((error) => {
-      logger.warn('Partenariats : notification dashboard non creee', { error, guildId: input.guildId });
-    });
-  }
-
-  if (settings.notifyOwnerDm && input.ownerUserId) {
-    await dmOwner(input, tone).catch(() => {
-      // Messages privés fermés : cas courant, sans conséquence sur le reste.
+  // Le MP ne vise que le responsable : sans lui, la boîte de l'équipe suffit.
+  const dm = settings.notifyOwnerDm && !!input.ownerUserId;
+  if (settings.notifyDashboard || dm) {
+    await notifyDashboard(input, tone, { inbox: settings.notifyDashboard, dm }).catch((error) => {
+      logger.warn('Partenariats : notification non creee', { error, guildId: input.guildId });
     });
   }
 }
@@ -174,7 +171,11 @@ async function postToStaffChannel(
  * notifié : inonder l'équipe entière pour chaque changement d'étape reviendrait
  * à faire couper le canal.
  */
-async function notifyDashboard(input: PartnershipAlertInput, tone: PartnershipAlertTone): Promise<void> {
+async function notifyDashboard(
+  input: PartnershipAlertInput,
+  tone: PartnershipAlertTone,
+  channels: { inbox: boolean; dm: boolean },
+): Promise<void> {
   const type = tone === 'danger' ? 'ERROR' : tone === 'warning' ? 'WARNING' : tone === 'success' ? 'SUCCESS' : 'INFO';
 
   const recipients = new Set<string>();
@@ -189,26 +190,17 @@ async function notifyDashboard(input: PartnershipAlertInput, tone: PartnershipAl
     for (const member of staff) recipients.add(member.userId);
   }
 
-  if (recipients.size === 0) return;
-
-  await prisma.notification.createMany({
-    data: Array.from(recipients).map((userId) => ({
-      guildId: input.guildId,
-      userId,
-      title: input.title.slice(0, 200),
-      message: input.description.slice(0, 1000),
-      type,
-      link: input.link ?? '/partnerships',
-    })),
+  const fields = (input.fields ?? []).slice(0, 10).map((f) => `**${f.name}** : ${f.value}`);
+  await notifyMany(recipients, {
+    guildId: input.guildId,
+    kind: 'partnerships.alert',
+    title: input.title.slice(0, 200),
+    message: [input.description.slice(0, 1500), ...fields].join('\n').slice(0, 3000),
+    severity: type,
+    link: input.link ?? '/partnerships',
+    inbox: channels.inbox,
+    dm: channels.dm,
   });
-}
-
-async function dmOwner(input: PartnershipAlertInput, tone: PartnershipAlertTone): Promise<void> {
-  if (!input.ownerUserId) return;
-  const client = input.client ?? getClient();
-  const user = await client.users.fetch(input.ownerUserId).catch(() => null);
-  if (!user) return;
-  await user.send({ embeds: [buildEmbed(input, tone)] });
 }
 
 /**

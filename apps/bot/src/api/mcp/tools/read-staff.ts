@@ -4,7 +4,7 @@ import { getAbsences, getCallPermissionConfig, getCalls, getMeetings, getNotific
 import { getAPIKeys, getStaffHierarchies, getStaffRoles } from '../../../services/staff/staffManagementService.js';
 import prisma from '../../../utils/db.js';
 import { z } from 'zod';
-import { type McpToolContext, err, ok, resolveMember } from '../toolkit.js';
+import { type McpToolContext, err, ok, resolveMember, toolError } from '../toolkit.js';
 
 export function registerReadStaffTools(ctx: McpToolContext) {
   const { server, guildId, shouldRegister, guard, toolMeta } = ctx;
@@ -122,7 +122,7 @@ export function registerReadStaffTools(ctx: McpToolContext) {
           const data = await getEvaluationsDashboardData(guildId);
           return ok(data);
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -139,7 +139,7 @@ export function registerReadStaffTools(ctx: McpToolContext) {
           const config = await getCallPermissionConfig(guildId);
           return ok(config);
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -155,7 +155,7 @@ export function registerReadStaffTools(ctx: McpToolContext) {
         try {
           return ok(await getAbsences(guildId));
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -171,7 +171,7 @@ export function registerReadStaffTools(ctx: McpToolContext) {
         try {
           return ok(await getMeetings(guildId));
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -192,7 +192,7 @@ export function registerReadStaffTools(ctx: McpToolContext) {
         try {
           return ok(await getNotifications(guildId, resolved.userId));
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -208,7 +208,7 @@ export function registerReadStaffTools(ctx: McpToolContext) {
         try {
           return ok(await getPolls(guildId));
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -224,7 +224,7 @@ export function registerReadStaffTools(ctx: McpToolContext) {
         try {
           return ok(await getCalls(guildId));
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -248,7 +248,7 @@ export function registerReadStaffTools(ctx: McpToolContext) {
           if (assignee && !assigneeId) return err('Membre introuvable');
           return ok(await getTasks(guildId, assigneeId ?? undefined));
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -264,7 +264,7 @@ export function registerReadStaffTools(ctx: McpToolContext) {
         try {
           return ok(await getStaffRoles(guildId));
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -280,7 +280,7 @@ export function registerReadStaffTools(ctx: McpToolContext) {
         try {
           return ok(await getStaffHierarchies(guildId));
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -296,7 +296,7 @@ export function registerReadStaffTools(ctx: McpToolContext) {
         try {
           return ok(await getAPIKeys(guildId));
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -312,7 +312,7 @@ export function registerReadStaffTools(ctx: McpToolContext) {
         try {
           return ok(await getStaffAlertsAndProgression(guildId));
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -338,7 +338,7 @@ export function registerReadStaffTools(ctx: McpToolContext) {
         try {
           return ok(await getStaffCalendarData(guildId, startDate, endDate, staff_ids));
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );

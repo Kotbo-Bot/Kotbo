@@ -65,15 +65,15 @@
   });
 </script>
 
-<Modal bind:open title={m.sta_modal_title()} size="lg">
+<Modal flush bind:open title={m.sta_modal_title()} size="lg">
   <div class="flex flex-col gap-5 p-6">
-    <div class="text-xs text-on-surface-variant/70 leading-relaxed">
+    <div class="text-xs text-on-surface-variant leading-relaxed">
       {m.sta_intro()}
     </div>
 
     <!-- Search input -->
     <div class="relative">
-      <div class="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant/50">
+      <div class="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant">
         <Papicon icon="search" size={16} />
       </div>
       <input
@@ -81,7 +81,7 @@
         bind:value={query}
         oninput={handleSearchInput}
         placeholder={m.sta_search_placeholder()}
-        class="w-full pl-10 pr-4 py-2.5 bg-surface-container-low border border-outline-variant/30 rounded-lg text-xs text-on-surface placeholder:text-on-surface-variant/50 focus:outline-none focus:border-primary/60 transition-colors"
+        class="w-full pl-10 pr-4 py-2.5 bg-surface-container-low border border-outline-variant/30 rounded-lg text-xs text-on-surface placeholder:text-on-surface-variant focus:outline-none focus:border-primary/60 transition-colors"
       />
     </div>
 
@@ -92,7 +92,7 @@
           <div class="animate-spin w-5 h-5 border-2 border-primary border-t-transparent rounded-full"></div>
         </div>
       {:else if transcripts.length === 0}
-        <div class="text-center py-8 text-xs text-on-surface-variant/50">
+        <div class="text-center py-8 text-xs text-on-surface-variant">
           {m.sta_empty()}
         </div>
       {:else}
@@ -103,7 +103,7 @@
                 <span class="text-primary font-bold">#</span>
                 <span>{t.channelName}</span>
               </div>
-              <div class="text-2xs text-on-surface-variant/50 mt-0.5">
+              <div class="text-2xs text-on-surface-variant mt-0.5">
                 {m.sta_generated_on({ date: formatDate(t.createdAt) })} <span class="font-mono">{t.id}</span>
               </div>
             </div>
@@ -123,7 +123,7 @@
       <button
         type="button"
         onclick={() => (open = false)}
-        class="px-4 py-2.5 text-xs font-medium text-on-surface-variant/60 hover:text-on-surface transition-colors"
+        class="px-4 py-2.5 text-xs font-medium text-on-surface-variant hover:text-on-surface transition-colors"
       >
         {m.common_cancel()}
       </button>

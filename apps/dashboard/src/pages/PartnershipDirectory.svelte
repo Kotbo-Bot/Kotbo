@@ -298,8 +298,8 @@
 </script>
 
 <ModulePage
-  title="Annuaire partenaires"
-  description="Se faire trouver par les serveurs Kotbo, et trouver ceux qui te correspondent"
+  title="Annuaire des partenaires"
+  description="Trouve des serveurs partenaires, et fais-toi trouver par eux."
   icon="compass"
   featureKey="partnerships"
 >
@@ -537,8 +537,7 @@
         <EmptyState
           icon="compass"
           title="Rien à afficher"
-          description="Publie ta vitrine et active les suggestions dans les réglages pour que l'annuaire te propose des partenaires compatibles."
-        />
+          description="Publie ta vitrine et active les suggestions dans les réglages pour que l'annuaire te propose des partenaires compatibles." reason="instruction" />
       {/if}
     </div>
   {:else if tab === 'proposals'}

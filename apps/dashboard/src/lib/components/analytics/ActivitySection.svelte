@@ -63,7 +63,7 @@
     <DailyAlgoAnalyticsCard data={algo} />
   {:else}
     <SectionCard>
-      <EmptyState icon="Code" title={m.anx_algo_empty_title()} description={m.anx_algo_empty_desc()} />
+      <EmptyState icon="Code" title={m.anx_algo_empty_title()} description={m.anx_algo_empty_desc()} reason="accumulating" />
     </SectionCard>
   {/if}
 {/if}

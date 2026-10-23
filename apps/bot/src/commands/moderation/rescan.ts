@@ -11,6 +11,7 @@ import { scanGuildMembersForYoungAccounts } from '../../services/moderation/dcDe
 import { scanAndModeratePseudos } from '../../services/moderation/nicknameModerationService.js';
 import { getEffectiveLocale, getCommandMetadata } from '../../utils/i18n.js';
 import * as m from '../../lib/paraglide/messages.js';
+import { publicErrorMessage } from '../../utils/publicError.js';
 
 const meta = getCommandMetadata('b4_rescan');
 const dcMeta = getCommandMetadata('b4_rescan_dc');
@@ -233,7 +234,7 @@ async function execute(interaction: ChatInputCommandInteraction) {
         embeds: [
           errorEmbed(
             m.b4_error({}, { locale }),
-            m.b4_rescan_stats_error({ error: err instanceof Error ? err.message : String(err) }, { locale })
+            m.b4_rescan_stats_error({ error: publicErrorMessage(err) }, { locale })
           ),
         ],
       });

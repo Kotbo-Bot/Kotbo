@@ -14,7 +14,7 @@ import { COLORS_RAW } from '../../utils/embeds.js';
 import { getEffectiveLocale, getCommandMetadata } from '../../utils/i18n.js';
 import * as m from '../../lib/paraglide/messages.js';
 
-import { errorMessage } from '@kotbo/shared';
+import { publicErrorMessage } from '../../utils/publicError.js';
 const meta = getCommandMetadata('c4_clan');
 
 export const data = new SlashCommandBuilder()
@@ -358,7 +358,7 @@ export async function execute(interaction: ChatInputCommandInteraction) {
         const message = await runDistribution(guildId, interaction.client, initiator);
         await interaction.editReply(message);
       } catch (err) {
-        await interaction.editReply(m.c4_clan_error({ message: errorMessage(err) }, { locale }));
+        await interaction.editReply(m.c4_clan_error({ message: publicErrorMessage(err) }, { locale }));
       }
       return;
     }
@@ -381,7 +381,7 @@ export async function execute(interaction: ChatInputCommandInteraction) {
         const message = await runClear(guildId, interaction.client, initiator);
         await interaction.editReply(message);
       } catch (err) {
-        await interaction.editReply(m.c4_clan_error({ message: errorMessage(err) }, { locale }));
+        await interaction.editReply(m.c4_clan_error({ message: publicErrorMessage(err) }, { locale }));
       }
       return;
     }
@@ -404,7 +404,7 @@ export async function execute(interaction: ChatInputCommandInteraction) {
         const message = await runDeduplicate(guildId, interaction.client, initiator);
         await interaction.editReply(message);
       } catch (err) {
-        await interaction.editReply(m.c4_clan_error({ message: errorMessage(err) }, { locale }));
+        await interaction.editReply(m.c4_clan_error({ message: publicErrorMessage(err) }, { locale }));
       }
       return;
     }

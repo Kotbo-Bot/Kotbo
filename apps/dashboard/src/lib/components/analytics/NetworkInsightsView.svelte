@@ -39,7 +39,7 @@
     return [
       { id: 'members', label: m.anx_net_members(), value: fmtNumber(t.members), color: SERIES[0], hint: m.anx_net_members_hint() },
       { id: 'links', label: m.anx_net_links(), value: fmtNumber(t.links), color: SERIES[0] },
-      { id: 'reciprocity', label: m.anx_net_reciprocity(), value: t.reciprocity === null ? '—' : fmtPct(t.reciprocity), color: SERIES[0], hint: m.anx_net_reciprocity_hint() },
+      { id: 'reciprocity', label: m.anx_net_reciprocity(), value: t.reciprocity === null ? '–' : fmtPct(t.reciprocity), color: SERIES[0], hint: m.anx_net_reciprocity_hint() },
       { id: 'isolated', label: m.anx_net_isolated(), value: fmtNumber(t.isolatedCount), color: SERIES[0], hint: m.anx_net_isolated_hint() },
     ];
   });

@@ -16,7 +16,7 @@ import {
   setWorkflowEnabled,
   updateWorkflow,
 } from '../../../services/features/workflow/workflowService.js';
-import { type McpToolContext, err, ok } from '../toolkit.js';
+import { type McpToolContext, err, ok, toolError } from '../toolkit.js';
 import { z } from 'zod';
 
 /**
@@ -146,7 +146,7 @@ function reportFailure(error: unknown) {
   if (error instanceof WorkflowValidationError) {
     return err('Automatisation invalide', { issues: error.issues });
   }
-  return err(`Erreur : ${error instanceof Error ? error.message : String(error)}`);
+  return toolError(error);
 }
 
 export function registerWriteWorkflowsTools(ctx: McpToolContext) {

@@ -298,7 +298,7 @@
                       <td class="px-5 py-3.5">
                         <span class="font-semibold font-mono text-sm {shard.ping > 200 ? 'text-warning' : shard.ping > 100 ? 'text-warning' : 'text-success'}">{shard.ping} ms</span>
                       </td>
-                      <td class="px-5 py-3.5 font-medium text-sm text-on-surface-variant/60">{formatShardUptime(shard.uptime)}</td>
+                      <td class="px-5 py-3.5 font-medium text-sm text-on-surface-variant">{formatShardUptime(shard.uptime)}</td>
                       <td class="px-5 py-3.5 text-right">
                         <button
                           type="button"

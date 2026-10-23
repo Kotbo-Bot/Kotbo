@@ -227,7 +227,7 @@
         {:else}
           <div class="flex flex-col items-center py-8 gap-1.5 text-center">
             <Papicon icon="SearchX" size={24} class="text-on-surface-variant/30" />
-            <p class="text-sm text-on-surface-variant/50">{m.d7_no_server_found()}</p>
+            <p class="text-sm text-on-surface-variant">{m.d7_no_server_found()}</p>
           </div>
         {/each}
       </div>
@@ -238,7 +238,7 @@
           onclick={goToServers}
           class="w-full flex items-center gap-2.5 px-2 py-2 rounded-lg text-left text-on-surface-variant hover:bg-surface-container transition-colors duration-100"
         >
-          <span class="w-6 h-6 rounded border border-dashed border-outline-variant flex items-center justify-center text-on-surface-variant/60">
+          <span class="w-6 h-6 rounded border border-dashed border-outline-variant flex items-center justify-center text-on-surface-variant">
             <Papicon icon="Plus" size={13} />
           </span>
           <span class="min-w-0 flex-1">

@@ -34,6 +34,7 @@ import {
   type MessageValue,
   type RoleValue,
 } from './values.js';
+import { UserFacingError } from '../../../utils/userFacingError.js';
 
 /**
  * Pont entre le moteur de workflows et Discord.
@@ -96,7 +97,7 @@ export function toMessageValue(message: {
 // ============================================================================
 
 /** Une action refusée par Discord doit remonter un message exploitable. */
-class WorkflowActionError extends Error {
+class WorkflowActionError extends UserFacingError {
   constructor(action: string, detail: string) {
     super(`${action} : ${detail}`);
     this.name = 'WorkflowActionError';

@@ -67,7 +67,8 @@ describe('Contrats des features', () => {
     const registrySource = readModuleSource(registryPath);
     const commandFiles = listSourceFiles('commands');
 
-    const unregistered = new Set(['backup']);
+    // Hors registre volontairement : `partenariat` est déréférencée tant que le module est en pause.
+    const unregistered = new Set(['backup', 'partenariat']);
 
     for (const file of commandFiles) {
       const normalized = file.replace(/\\/g, '/');

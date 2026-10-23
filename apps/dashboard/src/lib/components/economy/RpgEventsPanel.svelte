@@ -159,7 +159,7 @@
   <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-outline-variant/15 pb-4">
     <div>
       <h3 class="text-lg font-semibold">{m.eco_events_title()}</h3>
-      <p class="text-xs text-on-surface-variant/60 mt-1 leading-relaxed max-w-2xl">{m.eco_events_desc()}</p>
+      <p class="text-xs text-on-surface-variant mt-1 leading-relaxed max-w-2xl">{m.eco_events_desc()}</p>
     </div>
     {#if canManage}
       <button
@@ -180,7 +180,7 @@
       <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
     </div>
   {:else if sorted.length === 0}
-    <p class="text-center py-8 text-on-surface-variant/50 italic text-xs">{m.eco_events_empty()}</p>
+    <p class="text-center py-8 text-on-surface-variant italic text-xs">{m.eco_events_empty()}</p>
   {:else}
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
       {#each sorted as event (event.id)}
@@ -190,7 +190,7 @@
               <EmojiText value={event.emoji} size="1.125rem" class="text-lg" />
               <div class="min-w-0">
                 <h4 class="font-semibold text-sm truncate">{event.title}</h4>
-                <span class="text-2xs font-semibold uppercase tracking-widest px-2 py-0.5 rounded-full inline-block mt-1 {event.scope === 'GLOBAL' ? 'bg-outline-variant/15 text-on-surface-variant/70' : event.overridesGlobal ? 'bg-warning/10 text-warning' : 'bg-primary/10 text-primary'}">
+                <span class="text-2xs font-semibold uppercase tracking-widest px-2 py-0.5 rounded-full inline-block mt-1 {event.scope === 'GLOBAL' ? 'bg-outline-variant/15 text-on-surface-variant' : event.overridesGlobal ? 'bg-warning/10 text-warning' : 'bg-primary/10 text-primary'}">
                   {event.scope === 'GLOBAL' ? m.eco_events_scope_global() : event.overridesGlobal ? (event.enabled ? m.eco_events_scope_override() : m.eco_events_scope_disabled()) : m.eco_events_scope_guild()}
                 </span>
               </div>
@@ -205,7 +205,7 @@
             {/if}
           </div>
 
-          <p class="text-xs text-on-surface-variant/70 leading-relaxed">{event.description}</p>
+          <p class="text-xs text-on-surface-variant leading-relaxed">{event.description}</p>
 
           {#if event.choices.length > 0}
             <ul class="space-y-1.5">
@@ -215,7 +215,7 @@
                   {#if choice.hpEffect}<span class="{choice.hpEffect < 0 ? 'text-error' : 'text-success'} font-bold">{effectLabel(choice.hpEffect, m.eco_events_unit_hp())}</span>{/if}
                   {#if choice.coinEffect}<span class="{choice.coinEffect < 0 ? 'text-error' : 'text-warning'} font-bold">{effectLabel(choice.coinEffect, m.eco_events_unit_coins())}</span>{/if}
                   {#if choice.xpEffect}<span class="text-sky-400 font-bold">{effectLabel(choice.xpEffect, 'XP')}</span>{/if}
-                  {#if choice.minLevel > 1}<span class="text-on-surface-variant/50">{m.eco_events_min_level({ level: choice.minLevel })}</span>{/if}
+                  {#if choice.minLevel > 1}<span class="text-on-surface-variant">{m.eco_events_min_level({ level: choice.minLevel })}</span>{/if}
                   {#if titleOf(choice.titleId)}
                     <span class="font-bold flex items-center gap-1" style="color: {titleOf(choice.titleId)?.color}"><Papicon icon="award" size={11} /> {titleOf(choice.titleId)?.name}</span>
                   {/if}
@@ -261,16 +261,16 @@
       <h3 class="text-xl font-semibold">{editing.id ? m.eco_events_modal_edit() : m.eco_events_modal_new()}</h3>
 
       {#if editing.titleLocked}
-        <p class="text-2xs text-on-surface-variant/60 bg-surface-container-high/40 rounded-lg px-3 py-2 leading-relaxed">{m.eco_events_title_locked_hint()}</p>
+        <p class="text-2xs text-on-surface-variant bg-surface-container-high/40 rounded-lg px-3 py-2 leading-relaxed">{m.eco_events_title_locked_hint()}</p>
       {/if}
 
       <div class="grid grid-cols-3 gap-3">
         <div class="col-span-2 space-y-1">
-          <label for="eventTitle" class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.eco_events_field_title()}</label>
+          <label for="eventTitle" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_events_field_title()}</label>
           <input id="eventTitle" type="text" maxlength={limits.titleMax} disabled={editing.titleLocked} bind:value={editing.title} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs focus:outline-none disabled:opacity-60" />
         </div>
         <div class="space-y-1">
-          <label for="eventEmoji" class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.eco_item_emoji()}</label>
+          <label for="eventEmoji" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_item_emoji()}</label>
           <div class="flex gap-2">
             <input id="eventEmoji" type="text" bind:value={editing.emoji} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs focus:outline-none" />
             <EmojiPicker bind:value={editing.emoji} />
@@ -279,12 +279,12 @@
       </div>
 
       <div class="space-y-1">
-        <label for="eventDesc" class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.eco_events_field_description()}</label>
+        <label for="eventDesc" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_events_field_description()}</label>
         <textarea id="eventDesc" maxlength={limits.descriptionMax} bind:value={editing.description} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs focus:outline-none h-20 resize-none"></textarea>
       </div>
 
       <fieldset class="border border-outline-variant/10 p-4 rounded-lg space-y-4">
-        <legend class="text-xs font-semibold text-on-surface-variant/50 px-2">{m.eco_events_choices_legend({ max: limits.choicesMax })}</legend>
+        <legend class="text-xs font-semibold text-on-surface-variant px-2">{m.eco_events_choices_legend({ max: limits.choicesMax })}</legend>
 
         {#each editing.choices as choice, index}
           <div class="space-y-2 bg-surface-container-high/20 rounded-lg p-3">
@@ -308,24 +308,24 @@
               </button>
             </div>
             <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              <label class="space-y-1 text-xs font-semibold text-on-surface-variant/60">
+              <label class="space-y-1 text-xs font-semibold text-on-surface-variant">
                 {m.eco_events_field_hp()}
                 <input type="number" bind:value={choice.hpEffect} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs font-normal normal-case tracking-normal focus:outline-none" />
               </label>
-              <label class="space-y-1 text-xs font-semibold text-on-surface-variant/60">
+              <label class="space-y-1 text-xs font-semibold text-on-surface-variant">
                 {m.eco_events_field_coins()}
                 <input type="number" bind:value={choice.coinEffect} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs font-normal normal-case tracking-normal focus:outline-none" />
               </label>
-              <label class="space-y-1 text-xs font-semibold text-on-surface-variant/60">
+              <label class="space-y-1 text-xs font-semibold text-on-surface-variant">
                 XP
                 <input type="number" min="0" bind:value={choice.xpEffect} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs font-normal normal-case tracking-normal focus:outline-none" />
               </label>
-              <label class="space-y-1 text-xs font-semibold text-on-surface-variant/60">
+              <label class="space-y-1 text-xs font-semibold text-on-surface-variant">
                 {m.eco_events_field_min_level()}
                 <input type="number" min="0" bind:value={choice.minLevel} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs font-normal normal-case tracking-normal focus:outline-none" />
               </label>
             </div>
-            <label class="block space-y-1 text-xs font-semibold text-on-surface-variant/60">
+            <label class="block space-y-1 text-xs font-semibold text-on-surface-variant">
               {m.eco_events_field_reward_title()}
               <select bind:value={choice.titleId} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs font-normal normal-case tracking-normal focus:outline-none">
                 <option value={null}>{titles.length > 0 ? m.eco_bestiary_title_none() : m.eco_bestiary_title_empty()}</option>
@@ -345,7 +345,7 @@
         >
           <Papicon icon="Plus" size={12} /> {m.eco_events_add_choice()}
         </button>
-        <p class="text-2xs text-on-surface-variant/50 leading-relaxed">{m.eco_events_effects_hint()}</p>
+        <p class="text-2xs text-on-surface-variant leading-relaxed">{m.eco_events_effects_hint()}</p>
       </fieldset>
 
       <div class="flex justify-end gap-3 pt-4 border-t border-outline-variant/10">

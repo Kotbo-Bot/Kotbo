@@ -13,6 +13,7 @@ import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
 import { resolveEmojiShortcodes, resolveEmojiShortcodesToUnicode } from '../../utils/emojis.js';
 import { checkEmbedImageUrl, markBroadcastMediaUsed } from './broadcastMediaService.js';
+import { UserFacingError } from '../../utils/userFacingError.js';
 
 export type BroadcastTarget = 'ALL' | 'ACTIVATED' | 'CUSTOM';
 export type BroadcastChannelPref = 'AUTO' | 'NEWS' | 'PUBLIC' | 'STAFF' | 'FALLBACK';
@@ -50,7 +51,7 @@ export interface DeliveryResult {
   messageId: string | null;
 }
 
-export class BroadcastValidationError extends Error {
+export class BroadcastValidationError extends UserFacingError {
   constructor(message: string, readonly field?: string) {
     super(message);
     this.name = 'BroadcastValidationError';

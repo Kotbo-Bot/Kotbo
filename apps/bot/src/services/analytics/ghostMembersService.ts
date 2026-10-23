@@ -1,6 +1,7 @@
 import { Client, Guild, GuildMember, PermissionsBitField } from 'discord.js';
 import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
+import { UserFacingError } from '../../utils/userFacingError.js';
 
 /**
  * Ghost Members Analyzer - audit de présence silencieuse.
@@ -653,7 +654,7 @@ export interface GhostPruneResult {
   failures: { userId: string; username: string; error: string }[];
 }
 
-export class GhostPruneValidationError extends Error {
+export class GhostPruneValidationError extends UserFacingError {
   constructor(message: string) {
     super(message);
     this.name = 'GhostPruneValidationError';

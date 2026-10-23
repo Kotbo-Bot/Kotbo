@@ -105,7 +105,7 @@
           </div>
           <div>
             <h3 class="text-xl md:text-2xl font-semibold text-on-surface">{title}</h3>
-            <p class="text-xs font-bold text-on-surface-variant/60">{subtitle} {m.d7_dam_results_of({ count: filteredData.length, total: data.length })}</p>
+            <p class="text-xs font-bold text-on-surface-variant">{subtitle} {m.d7_dam_results_of({ count: filteredData.length, total: data.length })}</p>
           </div>
         </div>
         <button 
@@ -291,7 +291,7 @@
                         <span class="px-2 py-0.5 rounded-lg text-xs font-semibold" style="background: {getSanctionColor(item.type)}20; color: {getSanctionColor(item.type)}">{item.type}</span>
                       {/if}
                     </div>
-                    <p class="text-xs font-medium text-on-surface-variant/60 mt-0.5 line-clamp-1">{item.reason || m.d7_dam_no_reason()}</p>
+                    <p class="text-xs font-medium text-on-surface-variant mt-0.5 line-clamp-1">{item.reason || m.d7_dam_no_reason()}</p>
                     <p class="text-2xs text-on-surface-variant/40 mt-1">{new Date(item.createdAt).toLocaleString(dateLocale())}</p>
                   </div>
                 </div>
@@ -328,7 +328,7 @@
               <Papicon icon="CaretLeft" size={14} />
               {m.d7_dam_prev()}
             </button>
-            <span class="text-xs font-bold text-on-surface-variant/60">{m.d7_dam_page({ current: currentPage, total: totalPages })}</span>
+            <span class="text-xs font-bold text-on-surface-variant">{m.d7_dam_page({ current: currentPage, total: totalPages })}</span>
             <button 
               onclick={() => currentPage = Math.min(totalPages, currentPage + 1)}
               disabled={currentPage === totalPages}

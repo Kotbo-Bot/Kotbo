@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { stripCustomEmoji } from '../../emojiParser';
+  import { explainDisabled } from '../../actions/explainDisabled';
   /** La Tour (mode roguelite du RPG) et la Tour de clan, dans une coque façon Analytics. */
   import { onMount } from 'svelte';
   import { m } from '../../i18n';
@@ -241,7 +243,7 @@
     for (const item of items) {
       if (!byName.has(item.name) || item.guildId) byName.set(item.name, item);
     }
-    return [...byName.values()].map((item) => ({ id: item.name, name: `${item.emoji} ${item.name}` }));
+    return [...byName.values()].map((item) => ({ id: item.name, name: `${stripCustomEmoji(item.emoji)} ${item.name}` }));
   });
   const shopRewards = $derived(rewards.filter((reward) => reward.kind === 'SHOP'));
   const milestones = $derived(rewards.filter((reward) => reward.kind === 'MILESTONE').sort((a, b) => a.floor - b.floor));
@@ -832,7 +834,7 @@
             <td class="py-1.5 pl-2">
               <div class="flex items-center gap-2">
                 <div class="flex-1 h-2 rounded-full bg-surface-container overflow-hidden"><div class="h-full bg-error/70" style="width: {rate}%"></div></div>
-                <span class="w-9 text-right font-mono">{card.arrivals > 0 ? `${rate} %` : '—'}</span>
+                <span class="w-9 text-right font-mono">{card.arrivals > 0 ? `${rate} %` : '–'}</span>
               </div>
             </td>
           </tr>
@@ -1144,8 +1146,8 @@
           <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
             {@render kpi(m.eco_tower_stat_players(), stats.players.toLocaleString(), m.eco_tower_kpi_active({ count: stats.activeRuns }), 'user', m.eco_tower_stat_players_tip())}
             {@render kpi(m.eco_tower_stat_runs(), stats.runs.toLocaleString(), m.eco_tower_kpi_best({ floor: stats.bestFloor }), 'walk', m.eco_tower_stat_runs_tip())}
-            {@render kpi(m.eco_tower_insight_average(), insights && insights.finishedRuns > 0 ? insights.averageFloor : '—', '', 'grades', m.eco_tower_insight_average_tip())}
-            {@render kpi(m.eco_tower_insight_deaths(), insights && insights.finishedRuns > 0 ? `${insights.deathRate} %` : '—', '', 'ghost', m.eco_tower_insight_deaths_tip())}
+            {@render kpi(m.eco_tower_insight_average(), insights && insights.finishedRuns > 0 ? insights.averageFloor : '–', '', 'grades', m.eco_tower_insight_average_tip())}
+            {@render kpi(m.eco_tower_insight_deaths(), insights && insights.finishedRuns > 0 ? `${insights.deathRate} %` : '–', '', 'ghost', m.eco_tower_insight_deaths_tip())}
           </div>
 
           {#if !settings.enabled}
@@ -1185,7 +1187,7 @@
                   {/each}
                 </ol>
               {:else}
-                <p class="text-body-sm text-on-surface-variant">—</p>
+                <p class="text-body-sm text-on-surface-variant">–</p>
               {/if}
             </SectionCard>
           </div>
@@ -1307,7 +1309,7 @@
                       { mode: 'COMPRESSED' as EntryMode, title: m.eco_tower_mode_compressed(), desc: m.eco_tower_mode_compressed_desc() },
                       { mode: 'RESET' as EntryMode, title: m.eco_tower_mode_reset(), desc: m.eco_tower_mode_reset_desc() },
                     ] as option}
-                      <button type="button" disabled={!canManage || disabled} aria-pressed={settings.entryMode === option.mode} onclick={() => { settings.entryMode = option.mode; }}
+                      <button type="button" disabled={disabled} use:explainDisabled={(!canManage) ? m.common_reason_no_permission() : ''} aria-pressed={settings.entryMode === option.mode} onclick={() => { settings.entryMode = option.mode; }}
                         class="{choiceClass} {settings.entryMode === option.mode ? 'border-primary bg-primary/10' : 'border-outline-variant hover:bg-surface-container-low'}">
                         <p class="text-sm font-semibold {settings.entryMode === option.mode ? 'text-primary' : ''}">{option.title}</p>
                         <p class="text-2xs text-on-surface-variant mt-1 leading-relaxed">{option.desc}</p>
@@ -1340,7 +1342,7 @@
                       { value: 'GENERATE' as const, title: m.eco_tower_floors_after_generate(), desc: m.eco_tower_floors_after_generate_desc() },
                       { value: 'LOOP' as const, title: m.eco_tower_floors_after_loop(), desc: m.eco_tower_floors_after_loop_desc() },
                     ] as option}
-                      <button type="button" disabled={!canManage || disabled} aria-pressed={settings.floorsAfter === option.value} onclick={() => { settings.floorsAfter = option.value; }}
+                      <button type="button" disabled={disabled} use:explainDisabled={(!canManage) ? m.common_reason_no_permission() : ''} aria-pressed={settings.floorsAfter === option.value} onclick={() => { settings.floorsAfter = option.value; }}
                         class="{choiceClass} {settings.floorsAfter === option.value ? 'border-primary bg-primary/10' : 'border-outline-variant hover:bg-surface-container-low'}">
                         <p class="text-sm font-semibold {settings.floorsAfter === option.value ? 'text-primary' : ''}">{option.title}</p>
                         <p class="text-2xs text-on-surface-variant mt-1 leading-relaxed">{option.desc}</p>
@@ -1444,7 +1446,7 @@
               <SectionCard title={m.eco_tower_upgrades_title()} description={m.eco_tower_upgrades_desc()} flush>
                 {#snippet actions()}
                   {#if canManage}
-                    <Button variant="primary" size="sm" icon="plus" disabled={disabled || settings.upgrades.length >= UPGRADES_MAX} title={m.eco_tower_upgrades_max({ max: UPGRADES_MAX })} onclick={addUpgrade}>{m.eco_tower_upgrade_add()}</Button>
+                    <Button variant="primary" size="sm" icon="plus" disabled={disabled || settings.upgrades.length >= UPGRADES_MAX} disabledReason={settings.upgrades.length >= UPGRADES_MAX ? m.eco_tower_upgrades_max({ max: UPGRADES_MAX }) : ''} title={m.eco_tower_upgrades_max({ max: UPGRADES_MAX })} onclick={addUpgrade}>{m.eco_tower_upgrade_add()}</Button>
                   {/if}
                 {/snippet}
                 {#if settings.upgrades.length === 0}
@@ -1540,7 +1542,7 @@
               <SectionCard title={m.eco_tower_items_title()} description={m.eco_tower_items_desc()} flush>
                 {#snippet actions()}
                   {#if canManage}
-                    <Button variant="primary" size="sm" icon="plus" disabled={disabled || rewards.length >= limits.rewardsMax} onclick={() => openNew('SHOP')}>{m.eco_tower_new_shop_btn()}</Button>
+                    <Button variant="primary" size="sm" icon="plus" disabled={disabled || rewards.length >= limits.rewardsMax} disabledReason={rewards.length >= limits.rewardsMax ? m.eco_tower_rewards_reason_limit({ max: limits.rewardsMax }) : ''} onclick={() => openNew('SHOP')}>{m.eco_tower_new_shop_btn()}</Button>
                   {/if}
                 {/snippet}
                 {#if shopRewards.length === 0}
@@ -1557,7 +1559,7 @@
               <SectionCard title={m.eco_tower_milestones_title()} description={m.eco_tower_guide_milestones()} flush>
                 {#snippet actions()}
                   {#if canManage}
-                    <Button variant="primary" size="sm" icon="plus" disabled={disabled || rewards.length >= limits.rewardsMax} onclick={() => openNew('MILESTONE')}>{m.eco_tower_new_milestone_btn()}</Button>
+                    <Button variant="primary" size="sm" icon="plus" disabled={disabled || rewards.length >= limits.rewardsMax} disabledReason={rewards.length >= limits.rewardsMax ? m.eco_tower_rewards_reason_limit({ max: limits.rewardsMax }) : ''} onclick={() => openNew('MILESTONE')}>{m.eco_tower_new_milestone_btn()}</Button>
                   {/if}
                 {/snippet}
                 {#if milestones.length === 0}
@@ -1689,7 +1691,7 @@
                         <span class="w-8 text-right font-mono">{entry.deaths}</span>
                       </div>
                     {:else}
-                      <p class="text-2xs text-on-surface-variant">—</p>
+                      <p class="text-2xs text-on-surface-variant">–</p>
                     {/each}
                   </div>
                   <div class="rounded-xl border border-outline-variant p-4">
@@ -1698,7 +1700,7 @@
                       {#each simResult.topKillers as killer}
                         <li class="flex justify-between gap-2"><span class="truncate font-semibold">{killer.name}</span><span class="text-on-surface-variant">{killer.deaths}</span></li>
                       {:else}
-                        <li class="text-on-surface-variant">—</li>
+                        <li class="text-on-surface-variant">–</li>
                       {/each}
                     </ol>
                   </div>

@@ -45,7 +45,7 @@
     
     await saveAction.run(async () => {
       const ok = await updateRoleAccess(featureKey, payload);
-      if (!ok) throw new Error('Erreur API');
+      if (!ok) throw new Error("Ça n'a pas marché. Réessaie.");
       await dashboardStore.refresh();
       return true;
     }, { successMessage: m.rp_updated_toast() });
@@ -77,7 +77,7 @@
   >
     <div>
       <h3 class="text-sm font-semibold text-on-surface">{title}</h3>
-      <p class="text-xs text-on-surface-variant/70 mt-1">{description}</p>
+      <p class="text-xs text-on-surface-variant mt-1">{description}</p>
     </div>
     <div class="flex items-center gap-3 shrink-0">
       {#if configuredCount > 0}
@@ -85,7 +85,7 @@
           {m.rp_configured_count({ count: configuredCount })}
         </span>
       {/if}
-      <Papicon icon="chevron-down" size={16} class="text-on-surface-variant/60 transition-transform {open ? 'rotate-180' : ''}" />
+      <Papicon icon="chevron-down" size={16} class="text-on-surface-variant transition-transform {open ? 'rotate-180' : ''}" />
     </div>
   </button>
 
@@ -93,7 +93,7 @@
   {#if localRoleAccess.length === 0}
     <div class="py-10 text-center bg-surface-container-low/20 rounded-xl border border-dashed border-outline-variant/20">
       <Papicon icon="lock" size={40} class="text-on-surface-variant/20 mb-3 mx-auto" />
-      <p class="text-xs font-bold text-on-surface-variant/60">{m.rp_empty_state()}</p>
+      <p class="text-xs font-bold text-on-surface-variant">{m.rp_empty_state()}</p>
     </div>
   {:else}
     <div class="space-y-3">

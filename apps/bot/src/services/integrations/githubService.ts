@@ -115,14 +115,14 @@ export function resetGithubStateForTests(): void {
   rateLimitedUntil = 0;
 }
 
-type GithubResult<T> = { ok: true; data: T } | { ok: false; status: number };
+type GithubResult<T> = { ok: true; data: T } | { ok: false; status: number; rateLimited: boolean };
 
 /**
  * GET JSON sur l'API GitHub, avec ETag. Un 304 rend la dernière réponse
  * connue. Un quota épuisé suspend toutes les requêtes jusqu'à sa remise à zéro.
  */
 export async function githubGet<T>(path: string, fetchImpl: FetchLike = fetch): Promise<GithubResult<T>> {
-  if (Date.now() < rateLimitedUntil) return { ok: false, status: 429 };
+  if (Date.now() < rateLimitedUntil) return { ok: false, status: 429, rateLimited: true };
 
   const url = `${API}${path}`;
   const headers: Record<string, string> = {
@@ -142,37 +142,76 @@ export async function githubGet<T>(path: string, fetchImpl: FetchLike = fetch): 
     res = await fetchImpl(url, { headers, signal: controller.signal });
   } catch (error) {
     logger.warn('GithubService', `Appel ${path} en échec : ${error instanceof Error ? error.message : String(error)}`);
-    return { ok: false, status: 0 };
+    return { ok: false, status: 0, rateLimited: false };
   } finally {
     clearTimeout(timeoutId);
   }
 
   if (res.status === 304 && cached) return { ok: true, data: cached.data as T };
 
-  if ((res.status === 403 || res.status === 429) && res.headers.get('x-ratelimit-remaining') === '0') {
-    const reset = Number(res.headers.get('x-ratelimit-reset'));
-    rateLimitedUntil = Number.isFinite(reset) && reset > 0 ? reset * 1000 : Date.now() + 15 * 60_000;
-    logger.warn('GithubService', `Quota GitHub épuisé jusqu'à ${new Date(rateLimitedUntil).toISOString()}${token ? '' : ' (aucun GITHUB_TOKEN configuré)'}.`);
-    return { ok: false, status: res.status };
+  if (res.status === 403 || res.status === 429) {
+    // Quota horaire (remaining à 0) ou limite secondaire (Retry-After) : deux
+    // pauses différentes. Tout autre 403 est un refus d'accès, pas un quota.
+    const retryAfter = Number(res.headers.get('retry-after'));
+    if (res.headers.get('x-ratelimit-remaining') === '0') {
+      const reset = Number(res.headers.get('x-ratelimit-reset'));
+      rateLimitedUntil = Number.isFinite(reset) && reset > 0 ? reset * 1000 : Date.now() + 15 * 60_000;
+      // Une limite de 60 trahit un appel anonyme : jeton absent ou ignoré.
+      const limit = res.headers.get('x-ratelimit-limit') ?? '?';
+      logger.warn('GithubService', `Quota GitHub épuisé (${limit} requêtes/h, ${token ? 'avec' : 'sans'} GITHUB_TOKEN) jusqu'à ${new Date(rateLimitedUntil).toISOString()}.`);
+      return { ok: false, status: res.status, rateLimited: true };
+    }
+    if (res.status === 429 || Number.isFinite(retryAfter) && retryAfter > 0) {
+      rateLimitedUntil = Date.now() + (retryAfter > 0 ? retryAfter : 60) * 1000;
+      logger.warn('GithubService', `Limite secondaire GitHub atteinte, pause jusqu'à ${new Date(rateLimitedUntil).toISOString()}.`);
+      return { ok: false, status: res.status, rateLimited: true };
+    }
   }
 
-  if (!res.ok) return { ok: false, status: res.status };
+  if (!res.ok) {
+    if (res.status === 401 || res.status === 403) {
+      const body = await res.json().catch(() => null) as { message?: string } | null;
+      logger.warn('GithubService', `Accès refusé par GitHub (${res.status}, ${token ? 'avec' : 'sans'} GITHUB_TOKEN) sur ${path} : ${body?.message ?? 'sans détail'}`);
+    }
+    return { ok: false, status: res.status, rateLimited: false };
+  }
 
   const data = await res.json().catch(() => null) as T | null;
-  if (data === null) return { ok: false, status: res.status };
+  if (data === null) return { ok: false, status: res.status, rateLimited: false };
   const etag = res.headers.get('etag');
   if (etag) etagCache.set(url, { etag, data });
   return { ok: true, data };
 }
 
-/** Dépôt existant et public : nom canonique et branche par défaut. */
-export async function resolveGithubRepo(
-  repo: string,
-  fetchImpl: FetchLike = fetch,
-): Promise<{ repo: string; defaultBranch: string } | null> {
+export type GithubRepoFailure = 'not_found' | 'rate_limited' | 'unauthorized' | 'forbidden' | 'unavailable';
+
+export type ResolvedGithubRepo =
+  | { ok: true; repo: string; defaultBranch: string }
+  | { ok: false; reason: GithubRepoFailure };
+
+/**
+ * Dépôt existant et public : nom canonique et branche par défaut. En cas
+ * d'échec, la cause est gardée : un quota épuisé ou un jeton refusé ne doit
+ * pas se faire passer pour un dépôt inexistant.
+ */
+export async function resolveGithubRepo(repo: string, fetchImpl: FetchLike = fetch): Promise<ResolvedGithubRepo> {
   const res = await githubGet<{ full_name: string; default_branch: string; private?: boolean }>(`/repos/${repo}`, fetchImpl);
-  if (!res.ok || res.data.private) return null;
-  return { repo: res.data.full_name.toLowerCase(), defaultBranch: res.data.default_branch };
+  if (res.ok) {
+    if (res.data.private) return { ok: false, reason: 'not_found' };
+    return { ok: true, repo: res.data.full_name.toLowerCase(), defaultBranch: res.data.default_branch };
+  }
+  if (res.rateLimited) return { ok: false, reason: 'rate_limited' };
+  switch (res.status) {
+    case 404:
+    case 451:
+      return { ok: false, reason: 'not_found' };
+    case 401:
+      return { ok: false, reason: 'unauthorized' };
+    case 403:
+      return { ok: false, reason: 'forbidden' };
+    default:
+      return { ok: false, reason: 'unavailable' };
+  }
 }
 
 // ==================== MESSAGES ====================

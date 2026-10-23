@@ -70,7 +70,7 @@
         Ce qu'on a lu
       </span>
       {#each template.maturity.reasons as reason (reason)}
-        <span class="text-xs font-medium px-2 py-1 rounded-lg bg-surface-container-low/60 border border-outline-variant/30 text-on-surface-variant/70">
+        <span class="text-xs font-medium px-2 py-1 rounded-lg bg-surface-container-low/60 border border-outline-variant/30 text-on-surface-variant">
           {reason}
         </span>
       {/each}

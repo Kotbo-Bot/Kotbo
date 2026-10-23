@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { explainDisabled } from '../lib/actions/explainDisabled';
   import { m, dateLocale } from '../lib/i18n';
   import { channelDisplayName } from '../lib/channelUtils';
   import { onMount } from 'svelte';
@@ -1023,7 +1024,7 @@
 
             <div class="grid grid-cols-7 gap-0">
               {#each [m.planning_weekday_mon(), m.planning_weekday_tue(), m.planning_weekday_wed(), m.planning_weekday_thu(), m.planning_weekday_fri(), m.planning_weekday_sat(), m.planning_weekday_sun()] as day}
-                <div class="text-center text-2xs font-semibold text-on-surface-variant/50 py-1">{day}</div>
+                <div class="text-center text-2xs font-semibold text-on-surface-variant py-1">{day}</div>
               {/each}
               {#each miniCalDays as { date, isCurrentMonth }}
                 <button
@@ -1041,7 +1042,7 @@
 
           <!-- Calendars / Type Filters -->
           <div class="bg-surface-container-low p-4 rounded-xl border border-outline-variant/30 shadow-sm">
-            <h3 class="text-xs font-semibold text-on-surface-variant/60 mb-3">{m.planning_my_calendars()}</h3>
+            <h3 class="text-xs font-semibold text-on-surface-variant mb-3">{m.planning_my_calendars()}</h3>
             <div class="flex flex-col gap-1">
               {#each [
                 { key: 'meeting', label: m.planning_cal_meetings(), color: 'emerald' },
@@ -1072,10 +1073,10 @@
           <!-- Staff Members -->
           <div class="bg-surface-container-low p-4 rounded-xl border border-outline-variant/30 shadow-sm">
             <div class="flex items-center justify-between mb-3">
-              <h3 class="text-xs font-semibold text-on-surface-variant/60">{m.planning_people()}</h3>
+              <h3 class="text-xs font-semibold text-on-surface-variant">{m.planning_people()}</h3>
               <button
                 onclick={toggleEveryone}
-                class="text-2xs font-semibold uppercase px-2 py-0.5 rounded transition-all {selectedStaffIds.length === activeStaff.length ? 'bg-primary/20 text-primary' : 'text-on-surface-variant/50 hover:text-on-surface-variant'}"
+                class="text-2xs font-semibold uppercase px-2 py-0.5 rounded transition-all {selectedStaffIds.length === activeStaff.length ? 'bg-primary/20 text-primary' : 'text-on-surface-variant hover:text-on-surface-variant'}"
               >
                 {selectedStaffIds.length === activeStaff.length ? m.planning_select_none() : m.planning_select_all()}
               </button>
@@ -1135,7 +1136,7 @@
                 </div>
                 <div>
                   <h3 class="text-xs font-bold text-on-surface leading-tight">{m.planning_my_day()}</h3>
-                  <p class="text-2xs text-on-surface-variant/60 font-medium">
+                  <p class="text-2xs text-on-surface-variant font-medium">
                     {new Date().toLocaleDateString(dateLocale(), { weekday: 'long', day: 'numeric', month: 'long' })}
                   </p>
                 </div>
@@ -1144,7 +1145,7 @@
                 onclick={() => showTaskPanel = false}
                 class="w-6 h-6 rounded flex items-center justify-center hover:bg-surface-hover transition-colors"
               >
-                <Papicon icon="x" size={14} class="text-on-surface-variant/50" />
+                <Papicon icon="x" size={14} class="text-on-surface-variant" />
               </button>
             </div>
 
@@ -1184,7 +1185,7 @@
                       >
                         <p class="text-2xs font-semibold text-on-surface leading-tight {task.status === 'COMPLETED' ? 'line-through text-on-surface-variant' : ''}">{task.title}</p>
                         {#if task.description}
-                          <p class="text-2xs text-on-surface-variant/60 line-clamp-1 mt-0.5">{task.description}</p>
+                          <p class="text-2xs text-on-surface-variant line-clamp-1 mt-0.5">{task.description}</p>
                         {/if}
                         <div class="flex items-center gap-2 mt-1.5">
                           {#if task.priority === 'HIGH'}
@@ -1193,7 +1194,7 @@
                             </span>
                           {/if}
                           {#if task.dueDate}
-                            <span class="text-2xs text-on-surface-variant/50 flex items-center gap-0.5 font-medium">
+                            <span class="text-2xs text-on-surface-variant flex items-center gap-0.5 font-medium">
                               <Papicon icon="calendar" size={9} />
                               {new Date(task.dueDate).toLocaleDateString(dateLocale(), { day: 'numeric', month: 'short' })}
                             </span>
@@ -1273,7 +1274,7 @@
 
           <!-- Dates -->
           <div class="flex items-center gap-3">
-            <Papicon icon="clock" size={16} class="text-on-surface-variant/50 shrink-0" />
+            <Papicon icon="clock" size={16} class="text-on-surface-variant shrink-0" />
             <div class="flex-1 flex flex-wrap items-center gap-2">
               <input
                 type="datetime-local"
@@ -1297,7 +1298,7 @@
               <TimezoneHint bind:value={() => formTimezone, (zone) => applyFormTimezone(zone)} />
             </div>
           {:else if timezoneStore.loaded}
-            <p class="pl-7 text-2xs text-on-surface-variant/70">
+            <p class="pl-7 text-2xs text-on-surface-variant">
               {#if timezoneStore.differsFromBrowser}
                 {m.planning_datetime_hint_diff({ server: timezoneStore.timezone, browser: timezoneStore.browserTimezone })}
               {:else}
@@ -1308,14 +1309,14 @@
 
           <!-- Description -->
           <div class="flex items-start gap-3">
-            <Papicon icon="align-left" size={16} class="text-on-surface-variant/50 shrink-0 mt-2" />
+            <Papicon icon="align-left" size={16} class="text-on-surface-variant shrink-0 mt-2" />
             <FormTextarea bind:value={formDescription} placeholder={currentTab === 'absence' ? m.planning_absence_reason_ph() : m.planning_description_ph()} rows={2} className="w-full resize-none text-xs!" />
           </div>
 
           <!-- Absence-specific fields -->
           {#if currentTab === 'absence'}
             <div class="flex items-center gap-3">
-              <Papicon icon="tag" size={16} class="text-on-surface-variant/50 shrink-0" />
+              <Papicon icon="tag" size={16} class="text-on-surface-variant shrink-0" />
               <div class="flex-1 grid grid-cols-2 gap-3">
                 <FormSelect bind:value={formAbsenceType} className="w-full text-xs! py-1.5!">
                   <option value="Vacances">{m.planning_absence_type_holidays()}</option>
@@ -1336,7 +1337,7 @@
           <!-- Call-specific fields -->
           {#if currentTab === 'call'}
             <div class="border border-outline-variant/15 rounded-lg p-4 bg-surface-container/30 space-y-3">
-              <div class="flex items-center gap-2 text-xs font-semibold text-on-surface-variant/60">
+              <div class="flex items-center gap-2 text-xs font-semibold text-on-surface-variant">
                 <Papicon icon="headphones" size={12} />
                 {m.planning_discord_config()}
               </div>
@@ -1372,7 +1373,7 @@
               {/if}
 
               <div>
-                <span class="block text-xs font-semibold text-on-surface-variant/60 mb-2">{m.planning_guests_staff()}</span>
+                <span class="block text-xs font-semibold text-on-surface-variant mb-2">{m.planning_guests_staff()}</span>
                 <div class="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto custom-scrollbar">
                   {#each activeStaff.filter(s => s.id !== myStaffRecord?.id) as staff}
                     <label class="inline-flex items-center gap-1.5 px-2.5 py-1 bg-surface-container-high/30 rounded-md cursor-pointer hover:bg-surface-container-high/50 transition-colors">
@@ -1393,7 +1394,7 @@
 
               <!-- Members search section -->
               <div>
-                <span class="block text-xs font-semibold text-on-surface-variant/60 mb-2">{m.planning_guests_members()}</span>
+                <span class="block text-xs font-semibold text-on-surface-variant mb-2">{m.planning_guests_members()}</span>
 
                 <!-- Selected members chips -->
                 {#if formInviteeMemberIds.length > 0}
@@ -1446,7 +1447,7 @@
                         <div class="flex-1 min-w-0">
                           <span class="text-2xs font-semibold text-on-surface truncate block">{member.displayName || member.username}</span>
                           {#if member.username !== member.displayName}
-                            <span class="text-2xs text-on-surface-variant/50">@{member.username}</span>
+                            <span class="text-2xs text-on-surface-variant">@{member.username}</span>
                           {/if}
                         </div>
                         {#if formInviteeMemberIds.includes(member.id)}
@@ -1469,7 +1470,7 @@
           <!-- Task-specific fields -->
           {#if currentTab === 'task'}
             <div class="flex items-center gap-3">
-              <Papicon icon="flag" size={16} class="text-on-surface-variant/50 shrink-0" />
+              <Papicon icon="flag" size={16} class="text-on-surface-variant shrink-0" />
               <div class="flex-1 grid grid-cols-2 gap-3">
                 <FormSelect bind:value={formPriority} className="w-full text-xs! py-1.5!">
                   <option value="LOW">{m.planning_priority_low()}</option>
@@ -1620,14 +1621,14 @@
               <!-- Attendance List -->
               {#if raw.presences && raw.presences.length > 0}
                 <div class="space-y-2">
-                  <span class="block text-xs font-semibold text-on-surface-variant/60 px-1">{m.meetings_presence_list_title()}</span>
+                  <span class="block text-xs font-semibold text-on-surface-variant px-1">{m.meetings_presence_list_title()}</span>
                   <div class="grid grid-cols-1 gap-1.5 max-h-48 overflow-y-auto custom-scrollbar pr-1">
                     {#each raw.presences as presence}
                       <div class="flex items-center justify-between p-2 bg-surface-container-low/50 rounded-lg border border-outline-variant/10 hover:bg-surface-container-low transition-colors group">
                         <div class="flex items-center gap-2.5 min-w-0">
                           <button 
                             type="button"
-                            disabled={!canOpenMemberCase}
+                            use:explainDisabled={(!canOpenMemberCase) ? m.common_reason_no_permission() : ''}
                             onclick={() => openMemberCase(presence.staffUserId, presence.staffMember?.displayName || presence.staffMember?.username || m.planning_member_fallback())}
                             class="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-2xs font-semibold text-primary overflow-hidden transition-transform shrink-0"
                           >
@@ -1640,7 +1641,7 @@
                           <div class="min-w-0">
                             <button 
                               type="button"
-                              disabled={!canOpenMemberCase}
+                              use:explainDisabled={(!canOpenMemberCase) ? m.common_reason_no_permission() : ''}
                               onclick={() => openMemberCase(presence.staffUserId, presence.staffMember?.displayName || presence.staffMember?.username || m.planning_member_fallback())}
                               class="text-xs font-bold text-on-surface hover:text-primary transition-colors text-left block truncate"
                             >
@@ -1785,7 +1786,7 @@
                       class="w-full bg-surface-container-high border border-outline-variant/20 rounded px-2 py-1 text-xs text-on-surface outline-none"
                     />
                     {#if timezoneStore.loaded && timezoneStore.differsFromBrowser}
-                      <p class="mt-1 text-2xs text-on-surface-variant/70">
+                      <p class="mt-1 text-2xs text-on-surface-variant">
                         {m.planning_datetime_hint_diff_short({ server: timezoneStore.timezone })}
                       </p>
                     {/if}
@@ -1874,7 +1875,7 @@
 
           {#if permMode === 'RESTRICTED'}
             <div>
-              <span class="block text-xs font-semibold text-on-surface-variant/60 mb-2">{m.planning_perm_roles()}</span>
+              <span class="block text-xs font-semibold text-on-surface-variant mb-2">{m.planning_perm_roles()}</span>
               {#if (dashboardStore.state.discordRoles || []).length === 0}
                 <p class="text-2xs text-on-surface-variant/40">{m.planning_perm_no_roles()}</p>
               {:else}
@@ -1892,7 +1893,7 @@
             </div>
 
             <div>
-              <span class="block text-xs font-semibold text-on-surface-variant/60 mb-2">{m.planning_perm_members()}</span>
+              <span class="block text-xs font-semibold text-on-surface-variant mb-2">{m.planning_perm_members()}</span>
 
               {#if permUserIds.length > 0}
                 <div class="flex flex-wrap gap-1.5 mb-2">
@@ -1947,7 +1948,7 @@
               {/if}
             </div>
           {:else}
-            <p class="text-2xs text-on-surface-variant/60">{m.planning_perm_everyone_hint()}</p>
+            <p class="text-2xs text-on-surface-variant">{m.planning_perm_everyone_hint()}</p>
           {/if}
 
           {#if permError}
@@ -2149,7 +2150,8 @@
             </button>
             <button 
               onclick={saveMeetingEdit}
-              disabled={savingMeetingEdit || !editMeetingTitle || !editMeetingDate}
+              disabled={savingMeetingEdit || !editMeetingTitle}
+              use:explainDisabled={(!editMeetingDate) ? m.common_reason_fill_field() : ''}
               class="px-8 py-2.5 bg-primary text-white rounded-xl font-semibold shadow-sm hover:shadow-primary/40 disabled:opacity-50 disabled:grayscale transition-all flex items-center gap-2"
             >
               {#if savingMeetingEdit}

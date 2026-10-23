@@ -11,8 +11,12 @@
  */
 import prisma from '../../utils/db.js';
 
-/** Statuts qui font qu'un ticket occupe encore une place dans le quota. */
-export const ACTIVE_TICKET_STATUSES = ['PENDING', 'OPEN', 'CLAIMED'] as const;
+/**
+ * Statuts qui font qu'un ticket occupe encore une place dans le quota. Un
+ * ticket en file d'attente en fait partie : sans cela, un membre pressé
+ * empilerait les demandes pendant que le serveur est plein.
+ */
+export const ACTIVE_TICKET_STATUSES = ['PENDING', 'QUEUED', 'OPEN', 'CLAIMED'] as const;
 
 export type StaffLoadMode = 'OFF' | 'WARN' | 'BLOCK';
 
@@ -136,7 +140,7 @@ export async function checkMemberTicketQuota(params: {
     if (active.length >= quotas.openMax) {
       // Une demande en attente de validation merite son propre message : le
       // membre n'a pas de salon a rejoindre, il n'a qu'a patienter.
-      const pending = active.find((t) => t.status === 'PENDING') ?? null;
+      const pending = active.find((t) => t.status === 'PENDING' || t.status === 'QUEUED') ?? null;
       return { ok: false, kind: 'OPEN', max: quotas.openMax, blocking: pending ?? active[0] ?? null };
     }
   }

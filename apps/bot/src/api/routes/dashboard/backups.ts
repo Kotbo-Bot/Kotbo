@@ -13,6 +13,7 @@ import {
   pushAudit,
   type AuthClaims,
 } from '../../shared.js';
+import { publicErrorMessage } from '../../../utils/publicError.js';
 
 export async function handleBackupRoutes(
   req: IncomingMessage,
@@ -250,7 +251,7 @@ export async function handleBackupRoutes(
         backupData = parseBackupImport(body.file);
       } catch (error) {
         json(res, 400, {
-          error: error instanceof Error ? error.message : 'Le fichier de sauvegarde est invalide',
+          error: publicErrorMessage(error, 'Le fichier de sauvegarde est invalide'),
         });
         return true;
       }

@@ -23,7 +23,7 @@
 <div class="space-y-5">
   {#each groups as group (group)}
     <section class="space-y-2">
-      <h4 class="text-xs font-semibold text-on-surface-variant/70">
+      <h4 class="text-xs font-semibold text-on-surface-variant">
         {TRIGGER_GROUP_LABELS[group]}
       </h4>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
@@ -40,7 +40,7 @@
             </span>
             <span class="min-w-0 space-y-0.5">
               <span class="block text-xs font-semibold text-on-surface">{trigger.sentence}</span>
-              <span class="block text-2xs text-on-surface-variant/70 leading-snug">{trigger.example}</span>
+              <span class="block text-2xs text-on-surface-variant leading-snug">{trigger.example}</span>
             </span>
           </button>
         {/each}

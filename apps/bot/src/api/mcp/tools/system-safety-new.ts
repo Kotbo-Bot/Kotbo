@@ -2,7 +2,7 @@
 import prisma from '../../../utils/db.js';
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, type NewsChannel, PermissionFlagsBits, TextChannel } from 'discord.js';
 import { z } from 'zod';
-import { type McpToolContext, err, ok, resolveChannel } from '../toolkit.js';
+import { type McpToolContext, err, ok, resolveChannel, toolError } from '../toolkit.js';
 
 export function registerSystemSafetyNewTools(ctx: McpToolContext) {
   const { server, guildId, client, shouldRegister, guard, audit, toolMeta } = ctx;
@@ -86,7 +86,7 @@ export function registerSystemSafetyNewTools(ctx: McpToolContext) {
 
           return ok({ ok: true, pendingApproval: true, requestId, message: "La demande d'approbation a été envoyée au staff." });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -119,7 +119,7 @@ export function registerSystemSafetyNewTools(ctx: McpToolContext) {
           await audit(key_name, 'Publication Digest MCP', title, `Salon: #${resolved.channel.name}`);
           return ok({ ok: true, messageId: sent.id });
         } catch (e) {
-          return err(`Erreur d'envoi : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e, "Erreur d'envoi");
         }
       })
     );
@@ -149,7 +149,7 @@ export function registerSystemSafetyNewTools(ctx: McpToolContext) {
           await audit(key_name, 'Épinglage message MCP', `#${resolved.channel.name}`, `Message: ${message_id}`);
           return ok({ ok: true, messageId: message_id, channelId: resolved.channel.id });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -177,7 +177,7 @@ export function registerSystemSafetyNewTools(ctx: McpToolContext) {
           await audit(key_name, 'Désépinglage message MCP', `#${resolved.channel.name}`, `Message: ${message_id}`);
           return ok({ ok: true, messageId: message_id, channelId: resolved.channel.id });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -222,7 +222,7 @@ export function registerSystemSafetyNewTools(ctx: McpToolContext) {
           await audit(key_name, 'Création thread MCP', name, `ID: ${thread.id} dans #${resolved.channel.name}`);
           return ok({ ok: true, threadId: thread.id, name: thread.name, channelId: resolved.channel.id });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -252,7 +252,7 @@ export function registerSystemSafetyNewTools(ctx: McpToolContext) {
           await audit(key_name, archived ? 'Archivage thread MCP' : 'Désarchivage thread MCP', threadChannel.name, `ID: ${thread}`);
           return ok({ ok: true, threadId: thread, archived });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -282,7 +282,7 @@ export function registerSystemSafetyNewTools(ctx: McpToolContext) {
           await audit(key_name, locked ? 'Verrouillage thread MCP' : 'Déverrouillage thread MCP', threadChannel.name, `ID: ${thread}`);
           return ok({ ok: true, threadId: thread, locked });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );

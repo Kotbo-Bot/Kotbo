@@ -291,7 +291,7 @@
           {@const connected = isInputConnected(inputPort.id)}
           {#if !connected}
             <div class="px-2 py-1.5 rounded-lg bg-surface-container-highest/30 border border-outline-variant/10 space-y-1 nodrag">
-              <label for="direct-input-{id}-{inputPort.id}" class="text-xs font-semibold text-on-surface-variant/70 block">
+              <label for="direct-input-{id}-{inputPort.id}" class="text-xs font-semibold text-on-surface-variant block">
                 {getDataPortLabel(inputPort)} (Direct)
               </label>
 

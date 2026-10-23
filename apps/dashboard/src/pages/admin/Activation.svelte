@@ -179,7 +179,7 @@
         <div class="flex flex-wrap items-end gap-5">
           <!-- Type d'accès accordé par le code -->
           <div class="space-y-2">
-            <span class="block text-xs font-semibold text-on-surface-variant/60">
+            <span class="block text-xs font-semibold text-on-surface-variant">
               Type d'accès
             </span>
             <div role="group" aria-label="Type d'accès" class="inline-flex rounded-xl border border-outline-variant/30 bg-surface-container-high p-1 gap-1">
@@ -200,7 +200,7 @@
 
           {#if grantType !== 'PERMANENT'}
             <div class="space-y-2 animate-in fade-in">
-              <label for="grant-amount" class="block text-xs font-semibold text-on-surface-variant/60">
+              <label for="grant-amount" class="block text-xs font-semibold text-on-surface-variant">
                 Durée
               </label>
               <div class="flex items-center gap-2">
@@ -236,7 +236,7 @@
           {/if}
 
           <div class="space-y-2 flex-1 min-w-[220px]">
-            <label for="grant-label" class="block text-xs font-semibold text-on-surface-variant/60">
+            <label for="grant-label" class="block text-xs font-semibold text-on-surface-variant">
               Note interne <span class="normal-case tracking-normal text-on-surface-variant/40">(optionnel)</span>
             </label>
             <input
@@ -259,7 +259,7 @@
         </div>
 
         <!-- Une seule ligne d'aide, qui décrit ce que le code choisi va réellement faire. -->
-        <p class="text-xs text-on-surface-variant/50 leading-relaxed border-t border-outline-variant/20 pt-4">
+        <p class="text-xs text-on-surface-variant leading-relaxed border-t border-outline-variant/20 pt-4">
           {#if grantType === 'PERMANENT'}
             Accès sans expiration. Un code ne vaut que pour un seul serveur à la fois.
           {:else}
@@ -296,12 +296,12 @@
                         {item.code}
                       </span>
                       {#if item.label}
-                        <p class="text-2xs text-on-surface-variant/50 mt-1.5">{item.label}</p>
+                        <p class="text-2xs text-on-surface-variant mt-1.5">{item.label}</p>
                       {/if}
                     </td>
                     <td class="px-6 py-5">
                       {#if item.accessType === 'PERMANENT'}
-                        <span class="text-xs text-on-surface-variant/60 font-medium">{accessLabel(item)}</span>
+                        <span class="text-xs text-on-surface-variant font-medium">{accessLabel(item)}</span>
                       {:else}
                         <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-primary/10 text-primary border border-primary/20">
                           <Papicon icon="Clock" size={12} />
@@ -312,7 +312,7 @@
                             Expiré le {formatDate(item.accessExpiredAt)}
                           </p>
                         {:else if item.accessExpiresAt}
-                          <p class="text-2xs text-on-surface-variant/50 mt-1.5">
+                          <p class="text-2xs text-on-surface-variant mt-1.5">
                             {formatDuration(minutesLeft(item.accessExpiresAt))} restantes · {formatDate(item.accessExpiresAt)}
                           </p>
                         {/if}
@@ -341,7 +341,7 @@
                           Disponible
                         </span>
                       {:else}
-                        <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-on-surface/5 text-on-surface-variant/60 border border-outline-variant/30">
+                        <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-on-surface/5 text-on-surface-variant border border-outline-variant/30">
                           <span class="w-1.5 h-1.5 rounded-full bg-on-surface-variant/40"></span>
                           Désactivé
                         </span>
@@ -360,7 +360,7 @@
                 {/each}
                 {#if activationCodes.length === 0}
                   <tr>
-                    <td colspan="4" class="px-6 py-12 text-center text-sm text-on-surface-variant/50">
+                    <td colspan="4" class="px-6 py-12 text-center text-sm text-on-surface-variant">
                       Aucun code pour le moment. Générez-en un ci-dessus pour activer un serveur.
                     </td>
                   </tr>

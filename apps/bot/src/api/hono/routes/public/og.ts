@@ -5,7 +5,7 @@ import { logger } from '../../../../utils/logger.js';
 import { getApiUrl, getDashboardUrl } from '../../../shared.js';
 import { getAllInstances } from '../../../../utils/instanceResolver.js';
 import { normalizeOgPath, resolveOgMetadata, type OgMetadata } from '../../../../services/system/ogMetadataService.js';
-import { tryRenderOgCard } from '../../../../services/system/ogImageService.js';
+import { OG_CARD_VERSION, tryRenderOgCard } from '../../../../services/system/ogImageService.js';
 
 // ============================================================================
 // APERCU DES LIENS POUR LES ROBOTS SOCIAUX
@@ -211,7 +211,7 @@ export function createOgRouter(client: Client): OpenAPIHono {
     const meta = await resolveOgMetadata(client, path);
     if (!meta.card) return c.json({ error: 'Aucune carte pour cette page' }, 404);
 
-    const etag = `"og-${Buffer.from(meta.card.cacheKey).toString('base64url')}"`;
+    const etag = `"og${OG_CARD_VERSION}-${Buffer.from(meta.card.cacheKey).toString('base64url')}"`;
     // L'`Access-Control-Allow-Origin: *` est pose par le middleware CORS pour
     // tout `/api/og/` ; il reste a autoriser le chargement cross-origin de la
     // ressource elle-meme, que les CDN sociaux servent depuis leur domaine.
@@ -272,8 +272,9 @@ export function createOgRouter(client: Client): OpenAPIHono {
       provider_name: meta.siteName,
       provider_url: getDashboardUrl().replace(/\/$/, ''),
       title: meta.title,
-      author_name: meta.authorName ?? meta.siteName,
-      author_url: target.toString(),
+      // Sans serveur a nommer, pas de ligne auteur : Discord afficherait
+      // « Kotbo » deux fois, une fois comme fournisseur et une fois comme auteur.
+      ...(meta.authorName ? { author_name: meta.authorName, author_url: target.toString() } : {}),
       ...(meta.imagePath
         ? {
             thumbnail_url: `${apiOrigin}${meta.imagePath}`,

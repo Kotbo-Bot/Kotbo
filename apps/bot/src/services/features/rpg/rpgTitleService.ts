@@ -6,8 +6,9 @@ import type { Prisma, RpgTitle } from '@prisma/client';
 import prisma from '../../../utils/db.js';
 import { NO_PERMANENT_BONUSES, type PermanentBonuses } from './rpgStats.js';
 import { normalizeTitleInput, type TitleInput } from './rpgTitlePolicy.js';
+import { UserFacingError } from '../../../utils/userFacingError.js';
 
-export class TitleError extends Error {
+export class TitleError extends UserFacingError {
   constructor(message: string, readonly status: number) {
     super(message);
     this.name = 'TitleError';

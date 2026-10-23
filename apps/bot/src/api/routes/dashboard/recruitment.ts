@@ -234,7 +234,7 @@ export async function handleRecruitmentRoutes(
       json(res, 400, { error: 'Action de candidature non reconnue.' });
     } catch (err) {
       logger.error('RecruitmentAPI', 'Error updating candidature:', err);
-      jsonFailure(res, err, err instanceof Error ? err.message : 'Erreur lors de la mise à jour de la candidature', 'RecruitmentAPI');
+      jsonFailure(res, err, 'Erreur lors de la mise à jour de la candidature', 'RecruitmentAPI');
     }
     return true;
   }

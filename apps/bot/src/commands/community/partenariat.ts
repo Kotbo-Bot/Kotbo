@@ -26,13 +26,13 @@ import {
 import { PARTNERSHIP_STAGE_META, getPartnershipStage, getPartnershipType } from '@kotbo/contracts';
 import type { SlashCommandDefinition } from '../../commands.js';
 import prisma from '../../utils/db.js';
-import { errorMessage } from '../../utils/errors.js';
 import { getCommandMetadata } from '../../utils/i18n.js';
 import * as m from '../../lib/paraglide/messages.js';
 import { isPartnershipsActive, getPartnershipSettings } from '../../services/partnerships/partnershipSettings.js';
 import { listPartnerships, getPartnershipDetail } from '../../services/partnerships/partnershipService.js';
 import { getPartnershipReport } from '../../services/partnerships/partnershipAttributionService.js';
 import { publishPromotion, refreshShowcase } from '../../services/partnerships/partnershipPromotionService.js';
+import { publicErrorMessage } from '../../utils/publicError.js';
 
 const meta = getCommandMetadata('c_partenariat');
 
@@ -162,7 +162,7 @@ async function execute(interaction: ChatInputCommandInteraction) {
         return interaction.reply({ content: 'Sous-commande inconnue.', flags: MessageFlags.Ephemeral });
     }
   } catch (error) {
-    return interaction.reply({ content: errorMessage(error), flags: MessageFlags.Ephemeral }).catch(() => null);
+    return interaction.reply({ content: publicErrorMessage(error), flags: MessageFlags.Ephemeral }).catch(() => null);
   }
 }
 

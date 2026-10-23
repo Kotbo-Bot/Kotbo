@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { explainDisabled } from '../../lib/actions/explainDisabled';
+  import { m } from '../../lib/i18n';
   import { onMount } from 'svelte';
   import {
     detachAdminGuildBilling,
@@ -200,7 +202,7 @@
                 <p>Essai : {guild.trial ? (guild.trial.consumed ? `consommé par ${guild.trial.discordUserId}` : `réservé par ${guild.trial.discordUserId}`) : `disponible (${billingState?.trialDays ?? 15} jours)`}</p>
               </div>
               <div class="flex flex-wrap gap-2">
-                <button onclick={() => resync(guild)} disabled={busyIds.includes(guild.id) || !guild.stripeSubscriptionId || !billingState?.enabled} class="h-9 px-3 rounded-lg bg-on-surface/6 hover:bg-on-surface/10 text-xs font-medium text-on-surface disabled:opacity-40">Resynchroniser</button>
+                <button onclick={() => resync(guild)} disabled={busyIds.includes(guild.id) || !billingState?.enabled} use:explainDisabled={(!guild.stripeSubscriptionId) ? m.common_reason_fill_field() : ''} class="h-9 px-3 rounded-lg bg-on-surface/6 hover:bg-on-surface/10 text-xs font-medium text-on-surface disabled:opacity-40">Resynchroniser</button>
                 <button onclick={() => resetTrial(guild)} disabled={busyIds.includes(guild.id) || !guild.trial} class="h-9 px-3 rounded-lg bg-warning/10 hover:bg-warning/15 text-xs font-medium text-warning disabled:opacity-40">Rendre l'essai</button>
                 <button onclick={() => detach(guild)} disabled={busyIds.includes(guild.id) || (!guild.stripeCustomerId && !guild.stripeSubscriptionId)} class="h-9 px-3 rounded-lg bg-error/10 hover:bg-error/15 text-xs font-medium text-error disabled:opacity-40">Détacher Stripe</button>
               </div>

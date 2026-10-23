@@ -309,7 +309,7 @@
         }
       }
     } catch {
-      if (!silent) toast.error('Erreur lors de la sauvegarde');
+      if (!silent) toast.error('Impossible d\'enregistrer. Réessaie.');
     } finally {
       saving = false;
     }
@@ -357,7 +357,7 @@
             <img src={theme.logoUrl} alt="Logo" class="w-14 h-14 rounded-2xl object-cover mb-3 shadow" />
           {/if}
           <h1 class="text-2xl font-semibold text-on-surface" style={theme.textColor ? `color:${theme.textColor}` : ''}>{formName}</h1>
-          {#if formDescription}<p class="text-on-surface-variant/70 mt-2 text-sm">{formDescription}</p>{/if}
+          {#if formDescription}<p class="text-on-surface-variant mt-2 text-sm">{formDescription}</p>{/if}
           {#if theme.welcomeText}<p class="mt-3 text-sm" style="color:var(--form-color)">{theme.welcomeText}</p>{/if}
         </div>
       </div>
@@ -367,7 +367,7 @@
           <div class="bg-surface border border-outline-variant/20 rounded-lg p-5 shadow">
             <div class="h-1 rounded-full mb-4" style="background:{headerColor}"></div>
             <h2 class="text-lg font-semibold text-on-surface">{section.title}</h2>
-            {#if section.description}<p class="text-sm text-on-surface-variant/70 mt-1">{section.description}</p>{/if}
+            {#if section.description}<p class="text-sm text-on-surface-variant mt-1">{section.description}</p>{/if}
           </div>
         {/if}
         {#each sectionFields(sIdx) as field (field.id)}
@@ -376,7 +376,7 @@
               <span class="block font-semibold text-on-surface mb-1">
                 {field.label}{#if field.required}<span class="text-error ml-1">*</span>{/if}
               </span>
-              {#if field.description}<p class="text-xs text-on-surface-variant/60 mb-3">{field.description}</p>{/if}
+              {#if field.description}<p class="text-xs text-on-surface-variant mb-3">{field.description}</p>{/if}
 
               {#if field.type === 'short_text' || field.type === 'email' || field.type === 'number'}
                 <input type={field.type === 'email' ? 'email' : field.type === 'number' ? 'number' : 'text'}
@@ -412,7 +412,7 @@
                 </select>
               {:else if field.type === 'linear_scale'}
                 <div class="flex items-center gap-4 mt-2">
-                  {#if field.scaleMinLabel}<span class="text-xs text-on-surface-variant/60">{field.scaleMinLabel}</span>{/if}
+                  {#if field.scaleMinLabel}<span class="text-xs text-on-surface-variant">{field.scaleMinLabel}</span>{/if}
                   <div class="flex gap-3 flex-1 justify-center">
                     {#each Array.from({ length: (field.scaleMax ?? 5) - (field.scaleMin ?? 1) + 1 }, (_, i) => (field.scaleMin ?? 1) + i) as n}
                       <label class="flex flex-col items-center gap-1 cursor-pointer">
@@ -421,7 +421,7 @@
                       </label>
                     {/each}
                   </div>
-                  {#if field.scaleMaxLabel}<span class="text-xs text-on-surface-variant/60">{field.scaleMaxLabel}</span>{/if}
+                  {#if field.scaleMaxLabel}<span class="text-xs text-on-surface-variant">{field.scaleMaxLabel}</span>{/if}
                 </div>
               {:else if field.type === 'date'}
                 <input type="date" class="w-full bg-surface-container rounded-xl px-4 py-2.5 text-sm outline-none border border-outline-variant/30" />
@@ -432,9 +432,9 @@
                   <table class="w-full text-sm">
                     <thead>
                       <tr>
-                        <th class="text-left py-1 pr-4 text-on-surface-variant/60"></th>
+                        <th class="text-left py-1 pr-4 text-on-surface-variant"></th>
                         {#each field.columns || [] as col}
-                          <th class="text-center py-1 px-2 text-xs font-semibold text-on-surface-variant/70">{col.label}</th>
+                          <th class="text-center py-1 px-2 text-xs font-semibold text-on-surface-variant">{col.label}</th>
                         {/each}
                       </tr>
                     </thead>
@@ -457,7 +457,7 @@
           {:else}
             <div class="bg-surface border-l-4 rounded-lg p-5 shadow" style="border-left-color:{headerColor}">
               <h3 class="font-semibold text-on-surface text-lg">{field.label}</h3>
-              {#if field.description}<p class="text-sm text-on-surface-variant/70 mt-1">{field.description}</p>{/if}
+              {#if field.description}<p class="text-sm text-on-surface-variant mt-1">{field.description}</p>{/if}
             </div>
           {/if}
         {/each}
@@ -554,7 +554,7 @@
 
         <!-- Header color picker -->
         <div class="p-4 border-b border-outline-variant/10">
-          <p class="text-body-sm font-medium text-on-surface-variant/60 mb-2">{m.fb_header_color()}</p>
+          <p class="text-body-sm font-medium text-on-surface-variant mb-2">{m.fb_header_color()}</p>
           <div class="flex flex-wrap gap-2">
             {#each PALETTE as color}
               <button onclick={() => headerColor = color}
@@ -571,7 +571,7 @@
           <div class="border-b border-outline-variant/10">
             <button onclick={() => showAppearance = !showAppearance}
               class="w-full p-4 flex items-center justify-between hover:bg-surface-container/50 transition-colors">
-              <p class="text-body-sm font-medium text-on-surface-variant/60 flex items-center gap-2">
+              <p class="text-body-sm font-medium text-on-surface-variant flex items-center gap-2">
                 <Papicon icon="palette" size={14} /> {m.fb_appearance()}
               </p>
               <Papicon icon={showAppearance ? 'expand_less' : 'expand_more'} size={16} />
@@ -579,43 +579,43 @@
             {#if showAppearance}
               <div class="px-4 pb-4 space-y-3">
                 <div>
-                  <p class="text-2xs font-semibold text-on-surface-variant/60 mb-1">{m.fb_banner_url()}</p>
+                  <p class="text-2xs font-semibold text-on-surface-variant mb-1">{m.fb_banner_url()}</p>
                   <input bind:value={theme.bannerUrl} placeholder="https://…/banniere.png"
                     class="w-full bg-surface-container rounded-lg px-3 py-2 text-xs outline-none border border-outline-variant/20 focus:border-primary" />
                 </div>
                 <div>
-                  <p class="text-2xs font-semibold text-on-surface-variant/60 mb-1">{m.fb_logo_url()}</p>
+                  <p class="text-2xs font-semibold text-on-surface-variant mb-1">{m.fb_logo_url()}</p>
                   <input bind:value={theme.logoUrl} placeholder="https://…/logo.png"
                     class="w-full bg-surface-container rounded-lg px-3 py-2 text-xs outline-none border border-outline-variant/20 focus:border-primary" />
                 </div>
                 <div class="grid grid-cols-2 gap-2">
                   <div>
-                    <p class="text-2xs font-semibold text-on-surface-variant/60 mb-1">{m.fb_accent()}</p>
+                    <p class="text-2xs font-semibold text-on-surface-variant mb-1">{m.fb_accent()}</p>
                     <input type="color" value={theme.accentColor || headerColor}
                       oninput={(e) => theme.accentColor = (e.currentTarget as HTMLInputElement).value}
                       class="w-full h-8 rounded-lg bg-surface-container border border-outline-variant/20 cursor-pointer" />
                   </div>
                   <div>
-                    <p class="text-2xs font-semibold text-on-surface-variant/60 mb-1">{m.fb_background()}</p>
+                    <p class="text-2xs font-semibold text-on-surface-variant mb-1">{m.fb_background()}</p>
                     <input type="color" value={theme.backgroundColor || '#0b0d12'}
                       oninput={(e) => theme.backgroundColor = (e.currentTarget as HTMLInputElement).value}
                       class="w-full h-8 rounded-lg bg-surface-container border border-outline-variant/20 cursor-pointer" />
                   </div>
                   <div>
-                    <p class="text-2xs font-semibold text-on-surface-variant/60 mb-1">{m.fb_cards()}</p>
+                    <p class="text-2xs font-semibold text-on-surface-variant mb-1">{m.fb_cards()}</p>
                     <input type="color" value={theme.cardColor || '#151823'}
                       oninput={(e) => theme.cardColor = (e.currentTarget as HTMLInputElement).value}
                       class="w-full h-8 rounded-lg bg-surface-container border border-outline-variant/20 cursor-pointer" />
                   </div>
                   <div>
-                    <p class="text-2xs font-semibold text-on-surface-variant/60 mb-1">{m.fb_text()}</p>
+                    <p class="text-2xs font-semibold text-on-surface-variant mb-1">{m.fb_text()}</p>
                     <input type="color" value={theme.textColor || '#e5e7eb'}
                       oninput={(e) => theme.textColor = (e.currentTarget as HTMLInputElement).value}
                       class="w-full h-8 rounded-lg bg-surface-container border border-outline-variant/20 cursor-pointer" />
                   </div>
                 </div>
                 <div>
-                  <p class="text-2xs font-semibold text-on-surface-variant/60 mb-1">{m.fb_font()}</p>
+                  <p class="text-2xs font-semibold text-on-surface-variant mb-1">{m.fb_font()}</p>
                   <select value={theme.fontFamily || ''}
                     onchange={(e) => { const v = (e.currentTarget as HTMLSelectElement).value; theme.fontFamily = v || undefined; if (v) loadGoogleFont(v); }}
                     class="w-full bg-surface-container rounded-lg px-3 py-2 text-xs outline-none border border-outline-variant/20">
@@ -626,7 +626,7 @@
                   </select>
                 </div>
                 <div>
-                  <p class="text-2xs font-semibold text-on-surface-variant/60 mb-1">
+                  <p class="text-2xs font-semibold text-on-surface-variant mb-1">
                     {m.fb_border_radius({ px: theme.borderRadius ?? 12 })}
                   </p>
                   <input type="range" min="0" max="32" value={theme.borderRadius ?? 12}
@@ -640,17 +640,17 @@
                   <span class="text-xs text-on-surface/80">{m.fb_glassmorphism()}</span>
                 </label>
                 <div>
-                  <p class="text-2xs font-semibold text-on-surface-variant/60 mb-1">{m.fb_welcome_text()}</p>
+                  <p class="text-2xs font-semibold text-on-surface-variant mb-1">{m.fb_welcome_text()}</p>
                   <textarea bind:value={theme.welcomeText} rows="2" placeholder={m.fb_welcome_text_ph()}
                     class="w-full bg-surface-container rounded-lg px-3 py-2 text-xs outline-none border border-outline-variant/20 focus:border-primary resize-none"></textarea>
                 </div>
                 <div>
-                  <p class="text-2xs font-semibold text-on-surface-variant/60 mb-1">{m.fb_confirmation_text()}</p>
+                  <p class="text-2xs font-semibold text-on-surface-variant mb-1">{m.fb_confirmation_text()}</p>
                   <textarea bind:value={theme.confirmationText} rows="2" placeholder={m.fb_confirmation_text_ph()}
                     class="w-full bg-surface-container rounded-lg px-3 py-2 text-xs outline-none border border-outline-variant/20 focus:border-primary resize-none"></textarea>
                 </div>
                 <div>
-                  <p class="text-2xs font-semibold text-on-surface-variant/60 mb-1">{m.fb_custom_css()}</p>
+                  <p class="text-2xs font-semibold text-on-surface-variant mb-1">{m.fb_custom_css()}</p>
                   <textarea bind:value={customCss} rows="6" spellcheck="false"
                     placeholder={'.pf-card { border: 1px solid gold; }'}
                     class="w-full bg-surface-container rounded-lg px-3 py-2 text-2xs font-mono outline-none border border-outline-variant/20 focus:border-primary resize-y"></textarea>
@@ -663,7 +663,7 @@
         <!-- Sections -->
         <div class="p-4 border-b border-outline-variant/10">
           <div class="flex items-center justify-between mb-2">
-            <p class="text-body-sm font-medium text-on-surface-variant/60">{m.fb_sections()}</p>
+            <p class="text-body-sm font-medium text-on-surface-variant">{m.fb_sections()}</p>
             <button onclick={addSection}
               class="p-1 rounded-lg hover:bg-surface-container transition-colors text-primary">
               <Papicon icon="add" size={16} />
@@ -689,7 +689,7 @@
 
         <!-- Add question types -->
         <div class="p-4 flex-1">
-          <p class="text-body-sm font-medium text-on-surface-variant/60 mb-3">{m.fb_add_question()}</p>
+          <p class="text-body-sm font-medium text-on-surface-variant mb-3">{m.fb_add_question()}</p>
           <div class="grid grid-cols-1 gap-1">
             {#each FIELD_TYPES as ft}
               <button onclick={() => addField(ft.type)}
@@ -788,7 +788,7 @@
                     <input value={field.label} oninput={(e) => updateField(field.id, 'label', (e.target as HTMLInputElement).value)}
                       class="flex-1 text-base font-semibold bg-transparent outline-none border-b-2 border-transparent focus:border-primary/50 pb-1"
                       placeholder={m.fb_question_default_title()} />
-                    <label class="flex items-center gap-1.5 text-xs font-semibold text-on-surface-variant/60 shrink-0 cursor-pointer mt-1">
+                    <label class="flex items-center gap-1.5 text-xs font-semibold text-on-surface-variant shrink-0 cursor-pointer mt-1">
                       <input type="checkbox" checked={field.required} onchange={(e) => updateField(field.id, 'required', (e.target as HTMLInputElement).checked)}
                         class="accent-primary" />
                       {m.fb_required()}
@@ -798,17 +798,17 @@
                   <!-- Preview of field type -->
                   {#if field.type === 'short_text' || field.type === 'email' || field.type === 'number'}
                     <input disabled placeholder={field.placeholder || m.fb_short_response_ph()}
-                      class="w-full bg-surface-container/50 rounded-lg px-3 py-2 text-sm text-on-surface-variant/50 border-b border-outline-variant/30" />
+                      class="w-full bg-surface-container/50 rounded-lg px-3 py-2 text-sm text-on-surface-variant border-b border-outline-variant/30" />
                   {:else if field.type === 'paragraph'}
                     <div class="w-full bg-surface-container/50 rounded-lg px-3 py-2 text-sm text-on-surface-variant/40 border-b border-outline-variant/30 h-14">
                       {m.fb_long_response_ph()}
                     </div>
                   {:else if field.type === 'date'}
-                    <input type="date" disabled class="bg-surface-container/50 rounded-lg px-3 py-2 text-sm text-on-surface-variant/50 border border-outline-variant/20" />
+                    <input type="date" disabled class="bg-surface-container/50 rounded-lg px-3 py-2 text-sm text-on-surface-variant border border-outline-variant/20" />
                   {:else if field.type === 'time'}
-                    <input type="time" disabled class="bg-surface-container/50 rounded-lg px-3 py-2 text-sm text-on-surface-variant/50 border border-outline-variant/20" />
+                    <input type="time" disabled class="bg-surface-container/50 rounded-lg px-3 py-2 text-sm text-on-surface-variant border border-outline-variant/20" />
                   {:else if field.type === 'linear_scale'}
-                    <div class="flex items-center gap-2 text-xs text-on-surface-variant/60">
+                    <div class="flex items-center gap-2 text-xs text-on-surface-variant">
                       <span>{field.scaleMin ?? 1}</span>
                       <div class="flex-1 h-1 bg-primary/20 rounded-full"></div>
                       <span>{field.scaleMax ?? 5}</span>
@@ -837,7 +837,7 @@
                   {:else if field.type === 'multiple_choice_grid' || field.type === 'checkbox_grid'}
                     <div class="grid grid-cols-2 gap-4 text-xs">
                       <div>
-                        <p class="font-bold text-on-surface-variant/60 mb-1">Lignes</p>
+                        <p class="font-bold text-on-surface-variant mb-1">Lignes</p>
                         {#each field.rows || [] as row}
                           <input value={row.label} oninput={(e) => { const rows = [...(field.rows||[])]; rows[rows.indexOf(row)].label = (e.target as HTMLInputElement).value; updateField(field.id,'rows',rows); }}
                             class="block w-full bg-transparent border-b border-outline-variant/20 focus:border-primary/50 outline-none py-0.5 mb-1" />
@@ -845,7 +845,7 @@
                         <button onclick={() => addGridRow(field.id)} class="text-primary/70 hover:text-primary font-semibold">{m.fb_add_row()}</button>
                       </div>
                       <div>
-                        <p class="font-bold text-on-surface-variant/60 mb-1">Colonnes</p>
+                        <p class="font-bold text-on-surface-variant mb-1">Colonnes</p>
                         {#each field.columns || [] as col}
                           <input value={col.label} oninput={(e) => { const cols = [...(field.columns||[])]; cols[cols.indexOf(col)].label = (e.target as HTMLInputElement).value; updateField(field.id,'columns',cols); }}
                             class="block w-full bg-transparent border-b border-outline-variant/20 focus:border-primary/50 outline-none py-0.5 mb-1" />
@@ -891,20 +891,20 @@
                       {#if (field.type === 'multiple_choice' || field.type === 'dropdown') && sections.length > 1}
                         <div class="border-t border-outline-variant/10 pt-3">
                           <div class="flex items-center justify-between mb-2">
-                            <span class="text-xs font-bold text-on-surface-variant/60">{m.fb_conditional_logic()}</span>
+                            <span class="text-xs font-bold text-on-surface-variant">{m.fb_conditional_logic()}</span>
                             <button onclick={() => addLogicRule(field.id)}
                               class="text-xs text-primary/70 hover:text-primary font-semibold transition-colors">{m.fb_add_rule()}</button>
                           </div>
                           {#each field.logic || [] as rule, rIdx}
                             <div class="flex items-center gap-2 text-xs mb-2 flex-wrap">
-                              <span class="text-on-surface-variant/60">{m.fb_if_answer_is()}</span>
+                              <span class="text-on-surface-variant">{m.fb_if_answer_is()}</span>
                               <select value={rule.value} onchange={(e) => { const logic=[...(field.logic||[])]; logic[rIdx]={...rule,value:(e.target as HTMLSelectElement).value}; updateField(field.id,'logic',logic); }}
                                 class="bg-surface-container rounded-lg px-2 py-1 outline-none text-xs">
                                 {#each field.options || [] as opt}
                                   <option value={opt}>{opt}</option>
                                 {/each}
                               </select>
-                              <span class="text-on-surface-variant/60">{m.fb_go_to_section()}</span>
+                              <span class="text-on-surface-variant">{m.fb_go_to_section()}</span>
                               <select value={rule.targetSectionIndex} onchange={(e) => { const logic=[...(field.logic||[])]; logic[rIdx]={...rule,targetSectionIndex:+(e.target as HTMLSelectElement).value}; updateField(field.id,'logic',logic); }}
                                 class="bg-surface-container rounded-lg px-2 py-1 outline-none text-xs">
                                 {#each sections as s, si}

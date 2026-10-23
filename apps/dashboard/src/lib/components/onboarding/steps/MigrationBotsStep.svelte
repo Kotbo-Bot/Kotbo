@@ -40,7 +40,7 @@
 >
   {#if loading}
     <div class="space-y-3" aria-live="polite">
-      <p class="flex items-center gap-2 text-body-sm text-on-surface-variant/60">
+      <p class="flex items-center gap-2 text-body-sm text-on-surface-variant">
         <Papicon icon="radar" size={14} class="text-primary animate-pulse" />
         {m.onb_migration_scanning()}
       </p>
@@ -74,7 +74,7 @@
               </div>
 
               {#if bot.covers.length}
-                <p class="mt-1 text-xs text-on-surface-variant/60">
+                <p class="mt-1 text-xs text-on-surface-variant">
                   <span class="text-on-surface-variant/40">{m.onb_migration_bots_covers()} :</span>
                   {bot.covers.join(', ')}
                 </p>
@@ -86,9 +86,9 @@
                      Tickets, 14 salons » se verifie d'un coup d'oeil. -->
                 <ul class="mt-2 space-y-1">
                   {#each bot.activeFeatures.slice(0, 3) as feature (feature.feature)}
-                    <li class="flex items-start gap-1.5 text-xs text-on-surface-variant/50">
+                    <li class="flex items-start gap-1.5 text-xs text-on-surface-variant">
                       <Papicon icon="corner-down-right" size={11} class="mt-0.5 shrink-0 text-on-surface-variant/30" />
-                      <span><span class="text-on-surface-variant/70">{feature.feature}</span> - {feature.evidence}</span>
+                      <span><span class="text-on-surface-variant">{feature.feature}</span> - {feature.evidence}</span>
                     </li>
                   {/each}
                 </ul>

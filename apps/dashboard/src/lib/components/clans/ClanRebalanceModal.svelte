@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { explainDisabled } from '../../actions/explainDisabled';
   import { untrack } from 'svelte';
   import { fade, scale } from 'svelte/transition';
   import Papicon from '../Papicon.svelte';
@@ -200,7 +201,7 @@
     <!-- 1. Réglages -->
     <section class="space-y-4">
       <div class="space-y-2">
-        <p class="text-xs font-semibold text-on-surface-variant/60 ml-1">{m.clan_rebalance_mode_label()}</p>
+        <p class="text-xs font-semibold text-on-surface-variant ml-1">{m.clan_rebalance_mode_label()}</p>
         <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
           {#each modes as option (option.id)}
             <button
@@ -211,7 +212,7 @@
                 : 'border-outline-variant/15 bg-surface-container-high/30 hover:bg-surface-container-high/60'}"
             >
               <span class="block text-sm font-semibold {mode === option.id ? 'text-secondary' : 'text-on-surface'}">{option.label()}</span>
-              <span class="block text-2xs text-on-surface-variant/70 mt-0.5">{option.hint()}</span>
+              <span class="block text-2xs text-on-surface-variant mt-0.5">{option.hint()}</span>
             </button>
           {/each}
         </div>
@@ -223,7 +224,7 @@
       </div>
 
       <div class="space-y-2">
-        <p class="text-xs font-semibold text-on-surface-variant/60 ml-1">{m.clan_rebalance_targets_label()}</p>
+        <p class="text-xs font-semibold text-on-surface-variant ml-1">{m.clan_rebalance_targets_label()}</p>
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
           {#each clans as clan (clan.id)}
             <label class="flex items-center justify-between gap-3 px-3 py-2 rounded-lg border border-outline-variant/15 bg-surface-container-high/30 cursor-pointer hover:bg-surface-container-high/60 transition-colors">
@@ -236,16 +237,16 @@
                 />
                 <span class="truncate">{clan.name}</span>
               </span>
-              <span class="text-xs text-on-surface-variant/70 shrink-0">{m.clan_rebalance_members_count({ count: clan.memberCount })}</span>
+              <span class="text-xs text-on-surface-variant shrink-0">{m.clan_rebalance_members_count({ count: clan.memberCount })}</span>
             </label>
           {/each}
         </div>
-        <p class="text-2xs text-on-surface-variant/60 ml-1">{m.clan_rebalance_targets_hint()}</p>
+        <p class="text-2xs text-on-surface-variant ml-1">{m.clan_rebalance_targets_hint()}</p>
       </div>
 
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div class="space-y-1.5">
-          <label for="rebalance-size" class="text-xs font-semibold text-on-surface-variant/60 ml-1">{m.clan_rebalance_size_label()}</label>
+          <label for="rebalance-size" class="text-xs font-semibold text-on-surface-variant ml-1">{m.clan_rebalance_size_label()}</label>
           <input
             id="rebalance-size"
             type="number"
@@ -255,10 +256,10 @@
             placeholder={preview ? String(preview.defaultTargetSize) : m.clan_rebalance_size_auto()}
             class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
           />
-          <p class="text-2xs text-on-surface-variant/60 ml-1">{m.clan_rebalance_size_hint()}</p>
+          <p class="text-2xs text-on-surface-variant ml-1">{m.clan_rebalance_size_hint()}</p>
         </div>
         <div class="space-y-1.5">
-          <label for="rebalance-protect" class="text-xs font-semibold text-on-surface-variant/60 ml-1">{m.clan_rebalance_protect_label()}</label>
+          <label for="rebalance-protect" class="text-xs font-semibold text-on-surface-variant ml-1">{m.clan_rebalance_protect_label()}</label>
           <input
             id="rebalance-protect"
             type="number"
@@ -268,7 +269,7 @@
             placeholder={m.clan_rebalance_protect_placeholder()}
             class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
           />
-          <p class="text-2xs text-on-surface-variant/60 ml-1">{m.clan_rebalance_protect_hint()}</p>
+          <p class="text-2xs text-on-surface-variant ml-1">{m.clan_rebalance_protect_hint()}</p>
         </div>
       </div>
 
@@ -286,7 +287,8 @@
         <button
           type="button"
           onclick={computePreview}
-          disabled={loadingPreview || targetClanIds.length === 0}
+          disabled={loadingPreview}
+          use:explainDisabled={(targetClanIds.length === 0) ? m.common_reason_select_one() : ''}
           class="flex items-center gap-1.5 px-4 py-2 bg-secondary/15 hover:bg-secondary/25 text-secondary text-xs font-bold rounded-lg transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
         >
           <Papicon icon="Refresh" size={12} /> {loadingPreview ? m.clan_rebalance_computing() : m.clan_rebalance_preview_btn()}
@@ -315,7 +317,7 @@
         <div class="overflow-x-auto">
           <table class="w-full text-left text-sm border-collapse">
             <thead>
-              <tr class="text-xs text-on-surface-variant/60">
+              <tr class="text-xs text-on-surface-variant">
                 <th class="py-1.5 font-bold">{m.clan_rebalance_col_clan()}</th>
                 <th class="py-1.5 font-bold text-right">{m.clan_rebalance_col_before()}</th>
                 <th class="py-1.5 font-bold text-right">{m.clan_rebalance_col_after()}</th>
@@ -349,10 +351,10 @@
         {/if}
 
         {#if preview.moves.length === 0}
-          <p class="text-sm text-on-surface-variant/70 text-center py-4">{m.clan_rebalance_no_moves()}</p>
+          <p class="text-sm text-on-surface-variant text-center py-4">{m.clan_rebalance_no_moves()}</p>
         {:else}
           <div class="space-y-1.5">
-            <p class="text-xs font-semibold text-on-surface-variant/60 ml-1">
+            <p class="text-xs font-semibold text-on-surface-variant ml-1">
               {m.clan_rebalance_moves_heading({ count: preview.moves.length })}
             </p>
             <ul class="divide-y divide-outline-variant/10 border border-outline-variant/15 rounded-lg max-h-72 overflow-y-auto">
@@ -365,16 +367,16 @@
                     <p class="text-sm font-medium text-on-surface truncate">
                       {move.displayName}
                       {#if move.userIds.length > 1}
-                        <span class="text-2xs text-on-surface-variant/60">{m.clan_rebalance_linked_accounts({ count: move.userIds.length })}</span>
+                        <span class="text-2xs text-on-surface-variant">{m.clan_rebalance_linked_accounts({ count: move.userIds.length })}</span>
                       {/if}
                     </p>
-                    <p class="text-2xs text-on-surface-variant/70 flex items-center gap-1">
+                    <p class="text-2xs text-on-surface-variant flex items-center gap-1">
                       {clanName(move.clanId)} <Papicon icon="ArrowRight" size={10} /> <span class="text-secondary font-semibold">{clanName(move.toClanId)}</span>
                     </p>
                   </div>
                   <div class="text-right shrink-0">
                     <p class="text-xs font-semibold tabular-nums">{m.clan_rebalance_points({ points: formatNumber(move.points), days: move.presenceDays })}</p>
-                    <p class="text-2xs text-on-surface-variant/60">{basisLabel(move)}</p>
+                    <p class="text-2xs text-on-surface-variant">{basisLabel(move)}</p>
                   </div>
                   <button
                     type="button"
@@ -393,7 +395,7 @@
 
         {#if preview.excludedMembers.length > 0}
           <div class="space-y-1.5">
-            <p class="text-xs font-semibold text-on-surface-variant/60 ml-1">{m.clan_rebalance_excluded_heading()}</p>
+            <p class="text-xs font-semibold text-on-surface-variant ml-1">{m.clan_rebalance_excluded_heading()}</p>
             <div class="flex flex-wrap gap-1.5">
               {#each preview.excludedMembers as member (member.key)}
                 <button
@@ -416,7 +418,7 @@
         <section class="space-y-3 border-t border-outline-variant/15 pt-5">
           <p class="text-xs text-on-surface-variant/80">{m.clan_rebalance_confirm_desc({ count: preview.moves.length })}</p>
           <div class="space-y-1.5">
-            <label for="rebalance-confirm" class="text-xs font-semibold text-on-surface-variant/60 ml-1">
+            <label for="rebalance-confirm" class="text-xs font-semibold text-on-surface-variant ml-1">
               {m.clan_type_to_confirm_label({ word: confirmWord })}
             </label>
             <input

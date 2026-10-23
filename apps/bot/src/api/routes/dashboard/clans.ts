@@ -11,6 +11,7 @@ import { memberProfileIdentity } from '../../../services/moderation/memberIdenti
 import { setDashboardModuleStatus } from '../../../services/core/moduleActivationService.js';
 import { jsonFailure } from '../../shared/failure.js';
 import { BET_ACCEPT_WINDOW_HOURS_MAX, BET_ACCEPT_WINDOW_HOURS_MIN, BET_DEBT_CEILING, BET_OPEN_PER_MEMBER_CEILING, BET_PARTICIPANTS_CEILING, BET_PARTICIPANTS_MIN, BET_SEASON_REWARD_CEILING, BET_SIDES_CEILING, BET_SIDES_MIN, BET_STAKE_MODES, CLAN_BET_SETTINGS_SELECT, MAX_CLAN_POINTS_PER_LEVEL_UP, MIN_CLAN_REFERENCE_LEVEL, errorMessage, firmDebtOf, normalizeClanBetSettings, type BetStakeMode } from '@kotbo/shared';
+import { publicErrorMessage } from '../../../utils/publicError.js';
 
 /** Garde-fou sur les ajustements manuels : au-delà, c'est une faute de frappe. */
 const MAX_MANUAL_POINTS = 1_000_000;
@@ -599,7 +600,7 @@ export async function handleClansRoutes(
       json(res, 200, { message });
     } catch (err) {
       logger.error('ClansAPI', 'Error launching distribution:', err);
-      json(res, errorMessage(err).includes('en cours') || errorMessage(err).includes('configurer') ? 400 : 500, { error: errorMessage(err) });
+      json(res, errorMessage(err).includes('en cours') || errorMessage(err).includes('configurer') ? 400 : 500, { error: publicErrorMessage(err) });
     }
     return true;
   }
@@ -611,7 +612,7 @@ export async function handleClansRoutes(
       json(res, 200, { message });
     } catch (err) {
       logger.error('ClansAPI', 'Error launching clear:', err);
-      json(res, errorMessage(err).includes('en cours') || errorMessage(err).includes('Aucun clan') ? 400 : 500, { error: errorMessage(err) });
+      json(res, errorMessage(err).includes('en cours') || errorMessage(err).includes('Aucun clan') ? 400 : 500, { error: publicErrorMessage(err) });
     }
     return true;
   }
@@ -673,7 +674,7 @@ export async function handleClansRoutes(
     } catch (err) {
       logger.error('ClansAPI', `Error during rebalance${isPreview ? ' preview' : ''}:`, err);
       const isInputError = err instanceof RebalanceInputError || errorMessage(err).includes('en cours');
-      json(res, isInputError ? 400 : 500, { error: errorMessage(err) || 'Erreur lors du rééquilibrage.' });
+      json(res, isInputError ? 400 : 500, { error: publicErrorMessage(err, 'Erreur lors du rééquilibrage.') });
     }
     return true;
   }

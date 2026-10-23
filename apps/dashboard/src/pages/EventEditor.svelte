@@ -340,7 +340,7 @@
             <div class="flex items-center justify-between bg-surface-container-high/20 border border-outline-variant/10 rounded-lg p-5">
               <div>
                 <span class="text-sm font-bold text-on-surface font-sans">{m.eve_create_discord_event()}</span>
-                <p class="text-xs text-on-surface-variant/60 font-sans">{m.eve_create_discord_event_desc()}</p>
+                <p class="text-xs text-on-surface-variant font-sans">{m.eve_create_discord_event_desc()}</p>
               </div>
               <ToggleSwitch
                 checked={event.config.createDiscordEvent}
@@ -351,7 +351,7 @@
             <div class="flex items-center justify-between bg-surface-container-high/20 border border-outline-variant/10 rounded-lg p-5">
               <div>
                 <span class="text-sm font-bold text-on-surface font-sans">{m.eve_send_announcement_embed()}</span>
-                <p class="text-xs text-on-surface-variant/60 font-sans">{m.eve_send_announcement_embed_desc()}</p>
+                <p class="text-xs text-on-surface-variant font-sans">{m.eve_send_announcement_embed_desc()}</p>
               </div>
               <ToggleSwitch
                 checked={event.config.sendEmbed}

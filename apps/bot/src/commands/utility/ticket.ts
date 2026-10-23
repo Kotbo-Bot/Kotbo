@@ -1,4 +1,3 @@
-import { errorMessage } from '../../utils/errors.js';
 import type { SlashCommandDefinition } from '../../commands.js';
 import { ActionRowBuilder, SlashCommandBuilder, type ChatInputCommandInteraction, PermissionFlagsBits, MessageFlags, TextChannel, Role, User, type GuildMember, ModalBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder } from 'discord.js';
 import prisma from '../../utils/db.js';
@@ -14,12 +13,14 @@ import {
   unlockTicketDeletion,
 } from '../../services/features/ticketLifecycleService.js';
 import { buildMemberCasePanel } from '../../services/moderation/memberCaseService.js';
+import { ACTIVE_TICKET_STATUSES } from '../../services/features/ticketQuotaService.js';
 import { generateTranscript } from '../../services/features/transcriptService.js';
 import { successEmbed } from '../../utils/embeds.js';
 import { isGuildActivated } from '../../utils/activation.js';
 import { isModuleEnabled } from '../../services/core/moduleGate.js';
 import { getEffectiveLocale, getCommandMetadata } from '../../utils/i18n.js';
 import * as m from '../../lib/paraglide/messages.js';
+import { publicErrorMessage } from '../../utils/publicError.js';
 
 const meta = getCommandMetadata('c7_ticket');
 
@@ -355,7 +356,7 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
         await interaction.editReply({ content: m.c7_ticket_unarchive_success({}, { locale }) });
       }
     } catch (error: unknown) {
-      await interaction.editReply({ content: `❌ ${errorMessage(error) || m.c7_ticket_unknown_error({}, { locale })}` });
+      await interaction.editReply({ content: `❌ ${publicErrorMessage(error, m.c7_ticket_unknown_error({}, { locale }))}` });
     }
     return;
   }
@@ -496,7 +497,7 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
       }, 3000);
     } catch (error: unknown) {
       await interaction.editReply({
-        content: m.c7_ticket_delete_err_failed({ error: errorMessage(error) || m.c7_ticket_unknown_error({}, { locale }) }, { locale }),
+        content: m.c7_ticket_delete_err_failed({ error: publicErrorMessage(error, m.c7_ticket_unknown_error({}, { locale })) }, { locale }),
       });
     }
     return;
@@ -544,7 +545,7 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
         content: m.c7_ticket_add_success({ mention: mentionString }, { locale }),
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : m.c7_ticket_unknown_error({}, { locale });
+      const message = publicErrorMessage(error, m.c7_ticket_unknown_error({}, { locale }));
       await interaction.editReply({
         content: m.c7_ticket_add_err_failed({ error: message }, { locale }),
       });
@@ -596,7 +597,7 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
         content: m.c7_ticket_remove_success({ mention: mentionString }, { locale }),
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : m.c7_ticket_unknown_error({}, { locale });
+      const message = publicErrorMessage(error, m.c7_ticket_unknown_error({}, { locale }));
       await interaction.editReply({
         content: m.c7_ticket_remove_err_failed({ error: message }, { locale }),
       });
@@ -641,7 +642,7 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
     });
   } catch (error: unknown) {
     await interaction.editReply({
-      content: m.c7_ticket_rename_err_failed({ error: errorMessage(error) || m.c7_ticket_unknown_error({}, { locale }) }, { locale }),
+      content: m.c7_ticket_rename_err_failed({ error: publicErrorMessage(error, m.c7_ticket_unknown_error({}, { locale })) }, { locale }),
     });
   }
 }
@@ -753,7 +754,7 @@ async function handleOpen(interaction: ChatInputCommandInteraction): Promise<voi
     where: {
       guildId: targetGuildId!,
       userId: interaction.user.id,
-      status: { in: ['PENDING', 'OPEN', 'CLAIMED'] },
+      status: { in: [...ACTIVE_TICKET_STATUSES] },
     },
   });
 
@@ -761,7 +762,9 @@ async function handleOpen(interaction: ChatInputCommandInteraction): Promise<voi
     await interaction.reply({
       content: existingTicket.status === 'PENDING'
         ? m.c7_ticket_open_err_pending_request({ guildName: guild.name }, { locale })
-        : m.c7_ticket_open_err_existing_ticket({ guildName: guild.name }, { locale }),
+        : existingTicket.status === 'QUEUED'
+          ? m.c7_ticket_open_err_queued({ guildName: guild.name }, { locale })
+          : m.c7_ticket_open_err_existing_ticket({ guildName: guild.name }, { locale }),
       flags: [MessageFlags.Ephemeral],
     });
     return;

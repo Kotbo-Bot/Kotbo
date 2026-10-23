@@ -207,7 +207,7 @@
 
       <div>
         <p class="text-body-sm font-semibold text-on-surface mb-1">{m.onb_staff_poles_label()}</p>
-        <p class="text-xs text-on-surface-variant/60 leading-relaxed mb-3">
+        <p class="text-xs text-on-surface-variant leading-relaxed mb-3">
           {m.onb_staff_poles_hint()}
         </p>
         <div class="grid gap-2.5 sm:grid-cols-2">
@@ -303,13 +303,13 @@
               ></span>
               <div class="min-w-0 flex-1">
                 <p class="text-body-sm font-medium text-on-surface truncate">{role.name}</p>
-                <p class="text-2xs text-on-surface-variant/50 leading-snug">{role.duty}</p>
+                <p class="text-2xs text-on-surface-variant leading-snug">{role.duty}</p>
               </div>
             </div>
           {/each}
         </div>
 
-        <p class="mt-4 pt-3 border-t border-outline-variant/20 text-xs text-on-surface-variant/50 leading-relaxed">
+        <p class="mt-4 pt-3 border-t border-outline-variant/20 text-xs text-on-surface-variant leading-relaxed">
           {m.onb_staff_ladder_hint()}
         </p>
       </div>
@@ -332,7 +332,7 @@
           {/each}
         </div>
 
-        <p class="mt-4 pt-3 border-t border-outline-variant/20 text-xs text-on-surface-variant/50 leading-relaxed">
+        <p class="mt-4 pt-3 border-t border-outline-variant/20 text-xs text-on-surface-variant leading-relaxed">
           {m.onb_staff_preview_hint()}
         </p>
       </div>
@@ -343,7 +343,7 @@
     <button
       type="button"
       onclick={skip}
-      class="text-body-sm font-medium text-on-surface-variant/50 hover:text-on-surface transition-colors"
+      class="text-body-sm font-medium text-on-surface-variant hover:text-on-surface transition-colors"
     >
       Passer
     </button>

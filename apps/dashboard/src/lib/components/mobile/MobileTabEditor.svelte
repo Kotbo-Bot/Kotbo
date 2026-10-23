@@ -20,9 +20,13 @@
 
   let query = $state('');
 
-  /** Groups with their already-chosen pages removed, empty groups dropped. */
+  /**
+   * Groups with their already-chosen pages removed, empty groups dropped. Read
+   * from the menu, not the full list: a page in progress only opens on a
+   * "coming soon" screen, a poor thing to pin to the bar.
+   */
   const addableGroups = $derived(
-    navigationStore.groups
+    navigationStore.menuGroups
       .map((group) => ({
         key: group.key,
         label: group.label,
@@ -33,7 +37,7 @@
 
   const searchResults = $derived(
     query.trim()
-      ? navigationStore.search(query).filter((item) => !chosenHrefs.has(item.href))
+      ? navigationStore.search(query).filter((item) => !item.wip && !chosenHrefs.has(item.href))
       : [],
   );
 
@@ -91,7 +95,7 @@
       <p class="editor__hint">{m.nav_tabbar_hint()}</p>
       {#if mobileTabs.isCustomized}
         <button type="button" class="editor__reset" onclick={() => mobileTabs.reset()}>
-          <Papicon icon="refresh-cw" size={15} />
+          <Papicon icon="refresh-cw" size={16} />
           <span>{m.nav_tabbar_reset()}</span>
         </button>
       {/if}
@@ -123,7 +127,7 @@
     <ul class="editor__slots">
       {#each chosen as item, index (item.href)}
         <li class="editor__slot">
-          <span class="editor__slot-icon"><Papicon icon={item.icon ?? 'circle'} size={17} /></span>
+          <span class="editor__slot-icon"><Papicon icon={item.icon ?? 'circle'} size={20} /></span>
           <span class="editor__slot-label">{item.name}</span>
 
           <button
@@ -178,7 +182,7 @@
         />
         {#if query}
           <button type="button" onclick={() => (query = '')} aria-label={m.common_clear()}>
-            <Papicon icon="x" size={14} />
+            <Papicon icon="x" size={16} />
           </button>
         {/if}
       </div>
@@ -210,9 +214,9 @@
 {#snippet candidate(item: PageConfig)}
   <li>
     <button type="button" class="editor__candidate" onclick={() => add(item.href)}>
-      <span class="editor__slot-icon"><Papicon icon={item.icon ?? 'circle'} size={17} /></span>
+      <span class="editor__slot-icon"><Papicon icon={item.icon ?? 'circle'} size={20} /></span>
       <span class="editor__slot-label">{item.name}</span>
-      <span class="editor__add" aria-hidden="true"><Papicon icon="plus" size={15} /></span>
+      <span class="editor__add" aria-hidden="true"><Papicon icon="plus" size={16} /></span>
       <span class="editor__sr">{m.nav_tabbar_add_one({ page: item.name })}</span>
     </button>
   </li>
@@ -230,7 +234,7 @@
     grid-auto-columns: minmax(0, 1fr);
     grid-auto-flow: column;
     align-items: stretch;
-    padding: 0.375rem 0.25rem;
+    padding: 0.25rem;
     border: 1px solid var(--outline-variant);
     border-radius: 1rem;
     background: var(--surface-container);
@@ -243,8 +247,8 @@
     align-items: center;
     justify-content: center;
     gap: 0.25rem;
-    padding: 0.25rem 0.125rem;
-    border-radius: 0.625rem;
+    padding: 0.25rem 0;
+    border-radius: 0.75rem;
     color: var(--on-surface);
     transition: background-color 300ms ease, color 300ms ease;
   }
@@ -262,10 +266,8 @@
   .editor__preview-label {
     max-width: 100%;
     overflow: hidden;
-    font-family: var(--font-label);
-    font-size: 0.5625rem;
-    font-weight: 650;
-    letter-spacing: -0.01em;
+    font-size: 0.6875rem;
+    font-weight: 500;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
@@ -277,17 +279,14 @@
     align-items: baseline;
     justify-content: space-between;
     gap: 0.5rem;
-    margin: 1.25rem 0 0.375rem;
+    margin: 1.25rem 0 0.25rem;
   }
 
   .editor__label {
-    padding-left: 0.25rem;
+    padding-left: 0.75rem;
     color: var(--on-surface-variant);
-    font-family: var(--font-label);
-    font-size: 0.6875rem;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
+    font-size: 0.75rem;
+    font-weight: 500;
   }
 
   .editor__label--spaced {
@@ -297,9 +296,9 @@
   .editor__count {
     flex: none;
     color: var(--on-surface-variant);
-    font-family: var(--font-label);
+    padding-right: 0.75rem;
     font-size: 0.75rem;
-    font-weight: 700;
+    font-weight: 500;
   }
 
   .editor__count--full {
@@ -310,7 +309,7 @@
   .editor__list {
     display: flex;
     flex-direction: column;
-    gap: 0.125rem;
+    gap: 0.25rem;
   }
 
   .editor__slot,
@@ -320,7 +319,7 @@
     min-height: 3rem;
     align-items: center;
     gap: 0.25rem;
-    padding: 0 0.25rem 0 0.625rem;
+    padding: 0 0 0 0.75rem;
     border-radius: 0.75rem;
     color: var(--on-surface);
     text-align: left;
@@ -338,10 +337,11 @@
 
   .editor__slot-icon {
     display: grid;
-    width: 1.5rem;
+    width: 1.25rem;
     flex: none;
+    margin-right: 0.5rem;
     place-items: center;
-    opacity: 0.75;
+    color: var(--on-surface-variant);
   }
 
   .editor__slot-label {
@@ -349,19 +349,18 @@
     flex: 1 1 auto;
     overflow: hidden;
     margin-right: 0.5rem;
-    font-size: 0.9375rem;
-    font-weight: 500;
+    font-size: 1rem;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
   .editor__ghost {
     display: grid;
-    width: 2.5rem;
-    height: 2.5rem;
+    width: 2.75rem;
+    height: 2.75rem;
     flex: none;
     place-items: center;
-    border-radius: 0.625rem;
+    border-radius: 0.75rem;
     color: var(--on-surface-variant);
     -webkit-tap-highlight-color: transparent;
   }
@@ -375,11 +374,7 @@
   }
 
   .editor__ghost--remove {
-    color: #dc2626;
-  }
-
-  :global(.dark) .editor__ghost--remove {
-    color: #f87171;
+    color: var(--error-color);
   }
 
   .editor__add {
@@ -404,17 +399,17 @@
 
   .editor__search :global(.editor__search-icon) {
     position: absolute;
-    left: 0.875rem;
+    left: 0.75rem;
     color: var(--on-surface-variant);
     pointer-events: none;
   }
 
   .editor__search input {
     width: 100%;
-    min-height: 2.875rem;
-    padding: 0 2.5rem;
+    min-height: 2.75rem;
+    padding: 0 2.75rem 0 2.5rem;
     border: 1px solid var(--outline-variant);
-    border-radius: 0.875rem;
+    border-radius: 0.75rem;
     background: var(--surface-container);
     color: var(--on-surface);
     /* 16px keeps iOS Safari from zooming the page when the field is focused. */
@@ -432,10 +427,10 @@
 
   .editor__search > button {
     position: absolute;
-    right: 0.5rem;
+    right: 0;
     display: grid;
-    width: 2rem;
-    height: 2rem;
+    width: 2.75rem;
+    height: 2.75rem;
     place-items: center;
     border-radius: 999px;
     color: var(--on-surface-variant);
@@ -443,17 +438,16 @@
 
   .editor__group {
     margin: 0.75rem 0 0.25rem;
-    padding-left: 0.625rem;
+    padding-left: 0.75rem;
     color: var(--on-surface-variant);
     font-size: 0.75rem;
-    font-weight: 650;
-    opacity: 0.8;
+    font-weight: 500;
   }
 
   .editor__notice {
-    padding: 0.75rem 0.625rem;
+    padding: 0.75rem;
     color: var(--on-surface-variant);
-    font-size: 0.8125rem;
+    font-size: 0.875rem;
     line-height: 1.4;
   }
 
@@ -474,16 +468,16 @@
 
   .editor__reset {
     display: flex;
-    min-height: 2.5rem;
+    min-height: 2.75rem;
     flex: none;
     align-items: center;
-    gap: 0.375rem;
+    gap: 0.5rem;
     padding: 0 0.75rem;
     border: 1px solid var(--outline-variant);
     border-radius: 0.75rem;
     color: var(--on-surface);
-    font-size: 0.8125rem;
-    font-weight: 600;
+    font-size: 0.875rem;
+    font-weight: 500;
     -webkit-tap-highlight-color: transparent;
   }
 

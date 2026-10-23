@@ -41,11 +41,12 @@ import {
 } from './rpgRaidPolicy.js';
 import { resyncScheduledRaidBoss } from './rpgRaidService.js';
 import { MARKETPLACE_TAX_RANGE } from '../../economy/marketplacePolicy.js';
+import { UserFacingError } from '../../../utils/userFacingError.js';
 
 export const ANNOUNCE_MODE_VALUES = ['NONE', 'CHANNEL', 'CHANNEL_ROLE'] as const;
 export const ANNOUNCE_MODES = new Set<string>(ANNOUNCE_MODE_VALUES);
 
-export class EconomyConfigError extends Error {
+export class EconomyConfigError extends UserFacingError {
   readonly status = 400;
   constructor(message: string) {
     super(message);

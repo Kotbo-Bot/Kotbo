@@ -29,6 +29,7 @@
   import { router } from 'tinro';
   import { authStore } from '../lib/stores/auth.svelte';
   import { wizard } from '../lib/stores/onboardingWizard.svelte';
+  import ResumePrompt from '../lib/components/onboarding/ResumePrompt.svelte';
   import { onboardingData } from '../lib/stores/onboardingData.svelte';
   import { globalNotice } from '../lib/stores/globalNotice.svelte';
   import KotboMark from '../lib/components/onboarding/KotboMark.svelte';
@@ -242,3 +243,5 @@
 {:else}
   <CheckoutStep onEditTracks={editTracks} />
 {/if}
+
+<ResumePrompt />

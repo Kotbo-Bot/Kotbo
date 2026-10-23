@@ -1,7 +1,7 @@
 /** Outils MCP - read stats 2 (permission READ_STATS). */
 import prisma from '../../../utils/db.js';
 import { z } from 'zod';
-import { type McpToolContext, err, ok } from '../toolkit.js';
+import { type McpToolContext, ok, toolError } from '../toolkit.js';
 
 export function registerReadStats2Tools(ctx: McpToolContext) {
   const { server, guildId, shouldRegister, guard, toolMeta } = ctx;
@@ -45,7 +45,7 @@ export function registerReadStats2Tools(ctx: McpToolContext) {
             timestamp: l.dateIso.toISOString(),
           })));
         } catch (e) {
-          return err(`Erreur de recherche : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e, 'Erreur de recherche');
         }
       })
     );

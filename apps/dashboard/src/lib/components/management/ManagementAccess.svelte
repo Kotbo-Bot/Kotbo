@@ -182,7 +182,7 @@
     {:else}
       <div class="space-y-4">
         <div class="flex items-center justify-between gap-4 flex-wrap">
-          <p class="text-xs text-on-surface-variant/60">{m.ma_roles_loaded({ count: roleEntries.length })}</p>
+          <p class="text-xs text-on-surface-variant">{m.ma_roles_loaded({ count: roleEntries.length })}</p>
 
           <div class="flex items-center gap-2">
             <div class="flex gap-1 p-1 rounded-lg bg-surface-container-high/40 border border-outline-variant/10">
@@ -216,7 +216,7 @@
         <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 p-4 rounded-xl border border-outline-variant/10 bg-surface-container-high/10">
           {#each permissions as perm}
             <div class="flex items-start gap-2.5">
-              <span class="mt-0.5 text-on-surface-variant/50 shrink-0"><Papicon icon={perm.icon} size={13} /></span>
+              <span class="mt-0.5 text-on-surface-variant shrink-0"><Papicon icon={perm.icon} size={13} /></span>
               <div class="min-w-0">
                 <dt class="text-body-sm font-medium text-on-surface">{perm.label}</dt>
                 <dd class="text-xs leading-relaxed text-on-surface-variant/75">{perm.desc}</dd>
@@ -230,7 +230,7 @@
             {@const items = group.items.filter(({ feature }) => matches(feature))}
             {#if items.length > 0}
               <section class="space-y-1">
-                <p class="flex items-center gap-2 px-1 pt-2 text-xs font-semibold text-on-surface-variant/50">
+                <p class="flex items-center gap-2 px-1 pt-2 text-xs font-semibold text-on-surface-variant">
                   <Papicon icon={categoryIcons[group.category] || 'Grid'} size={12} />
                   {categoryLabel(group.category)}
                 </p>
@@ -261,13 +261,13 @@
 
                       {#if expanded}
                         <div class="px-4 pb-4 space-y-3">
-                          <p class="text-xs text-on-surface-variant/60 leading-relaxed">
+                          <p class="text-xs text-on-surface-variant leading-relaxed">
                             {isOpen(feature) ? m.ma_hint_open() : m.ma_hint_restricted()}
                           </p>
                           <div class="overflow-x-auto">
                             <table class="w-full text-left border-collapse min-w-[26rem]">
                               <thead>
-                                <tr class="text-2xs font-medium text-on-surface-variant/50">
+                                <tr class="text-2xs font-medium text-on-surface-variant">
                                   <th class="py-2 pr-4 font-medium">{m.ma_col_role()}</th>
                                   {#each permissions as perm}
                                     <th class="py-2 px-2 text-center font-medium" title={perm.desc}>
@@ -306,7 +306,7 @@
                                         <button
                                           type="button"
                                           onclick={() => removeRule(idx, role.id)}
-                                          class="text-2xs font-medium text-on-surface-variant/50 hover:text-error transition-colors"
+                                          class="text-2xs font-medium text-on-surface-variant hover:text-error transition-colors"
                                         >
                                           {m.ma_remove_rule()}
                                         </button>
@@ -352,11 +352,11 @@
 
                 {#if expanded}
                   <div class="px-4 pb-4 space-y-3">
-                    <p class="text-xs text-on-surface-variant/60 leading-relaxed">{m.ma_role_hint()}</p>
+                    <p class="text-xs text-on-surface-variant leading-relaxed">{m.ma_role_hint()}</p>
                     <div class="overflow-x-auto">
                       <table class="w-full text-left border-collapse min-w-[26rem]">
                         <thead>
-                          <tr class="text-2xs font-medium text-on-surface-variant/50">
+                          <tr class="text-2xs font-medium text-on-surface-variant">
                             <th class="py-2 pr-4 font-medium">{m.ma_col_module()}</th>
                             {#each permissions as perm}
                               <th class="py-2 px-2 text-center font-medium" title={perm.desc}>
@@ -373,7 +373,7 @@
                             <tbody class="divide-y divide-outline-variant/5">
                               <tr>
                                 <th colspan={permissions.length + 2} class="pt-4 pb-1 text-left">
-                                  <span class="flex items-center gap-2 text-xs font-semibold text-on-surface-variant/50">
+                                  <span class="flex items-center gap-2 text-xs font-semibold text-on-surface-variant">
                                     <Papicon icon={categoryIcons[group.category] || 'Grid'} size={12} />
                                     {categoryLabel(group.category)}
                                   </span>
@@ -411,7 +411,7 @@
                                       <button
                                         type="button"
                                         onclick={() => removeRule(idx, role.id)}
-                                        class="text-2xs font-medium text-on-surface-variant/50 hover:text-error transition-colors"
+                                        class="text-2xs font-medium text-on-surface-variant hover:text-error transition-colors"
                                       >
                                         {m.ma_remove_rule()}
                                       </button>

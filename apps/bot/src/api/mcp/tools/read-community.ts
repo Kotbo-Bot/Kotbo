@@ -3,7 +3,7 @@ import { getModuleActivationStats, getModulePerformanceStats, getModuleStatsSumm
 import { getSeasonLeaderboard, getSeasonsDashboardData } from '../../../services/progression/seasonService.js';
 import prisma from '../../../utils/db.js';
 import { z } from 'zod';
-import { type McpToolContext, err, ok, resolveMember } from '../toolkit.js';
+import { type McpToolContext, err, ok, resolveMember, toolError } from '../toolkit.js';
 
 export function registerReadCommunityTools(ctx: McpToolContext) {
   const { server, guildId, shouldRegister, guard, toolMeta } = ctx;
@@ -298,7 +298,7 @@ export function registerReadCommunityTools(ctx: McpToolContext) {
           });
           return ok(forms);
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -320,7 +320,7 @@ export function registerReadCommunityTools(ctx: McpToolContext) {
           if (!form) return err('Formulaire introuvable');
           return ok(form);
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -344,7 +344,7 @@ export function registerReadCommunityTools(ctx: McpToolContext) {
           });
           return ok(submissions);
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -364,7 +364,7 @@ export function registerReadCommunityTools(ctx: McpToolContext) {
           });
           return ok(tasks);
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -381,7 +381,7 @@ export function registerReadCommunityTools(ctx: McpToolContext) {
           const data = await getSeasonsDashboardData(guildId);
           return ok(data);
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -401,7 +401,7 @@ export function registerReadCommunityTools(ctx: McpToolContext) {
           const leaderboard = await getSeasonLeaderboard(guildId, season_id, limit);
           return ok({ seasonId: season_id, leaderboard });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -417,7 +417,7 @@ export function registerReadCommunityTools(ctx: McpToolContext) {
         try {
           return ok(await getModuleActivationStats(guildId));
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -445,7 +445,7 @@ export function registerReadCommunityTools(ctx: McpToolContext) {
           });
           return ok(data);
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -473,7 +473,7 @@ export function registerReadCommunityTools(ctx: McpToolContext) {
           });
           return ok(data);
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -491,7 +491,7 @@ export function registerReadCommunityTools(ctx: McpToolContext) {
         try {
           return ok(await getModuleStatsSummary({ guildId, periodDays: period_days }));
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );

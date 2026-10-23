@@ -250,7 +250,7 @@
                 <p class="text-sm font-semibold text-on-surface">@{sanction.targetTag}</p>
                 <span class="px-2 py-0.5 rounded-lg text-xs font-semibold" style="background: {getSanctionColor(sanction.type)}20; color: {getSanctionColor(sanction.type)}">{sanction.type}</span>
               </div>
-              <p class="text-xs font-medium text-on-surface-variant/60 mt-0.5 line-clamp-1">{sanction.reason || m.d4_no_reason_specified()}</p>
+              <p class="text-xs font-medium text-on-surface-variant mt-0.5 line-clamp-1">{sanction.reason || m.d4_no_reason_specified()}</p>
             </div>
           </div>
           <div class="flex items-center justify-between md:justify-end gap-6 border-t md:border-t-0 border-outline-variant/5 pt-3 md:pt-0 shrink-0">

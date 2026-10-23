@@ -20,10 +20,35 @@
   import type { BillingInterval, BillingStatus, PlanCard, PlanKey } from '../lib/api/billing';
   import { toast } from '../lib/stores/toast.svelte';
   import Papicon from '../lib/components/Papicon.svelte';
+  import Callout from '../lib/components/ui/Callout.svelte';
+  import Button from '../lib/components/ui/Button.svelte';
+  import { confetti } from '../lib/onboarding/celebrate';
 
   let status = $state<BillingStatus | null>(null);
   let loading = $state(true);
   let interval = $state<BillingInterval>('month');
+  /**
+   * Retour de paiement reussi. C'est le moment ou l'on est le plus convaincu
+   * du parcours : un simple toast le gaspillait. L'encadre confirme le choix,
+   * dit ce qui change, et propose une seule suite.
+   */
+  let justPaid = $state(false);
+  /**
+   * Le serveur a grandi au-dela de la tranche de son offre. C'est un des trois
+   * moments ou proposer l'offre superieure ne force rien : la limite est
+   * franchie, on dit ce que l'offre adaptee lui apporte au lieu de bloquer.
+   */
+  const outgrown = $derived.by(() => {
+    if (!status?.hasSubscription || !status.eligiblePlan) return null;
+    if (rank(status.eligiblePlan) <= rank(currentPlan)) return null;
+    const current = (status.plans ?? []).find((plan) => plan.key === currentPlan);
+    const next = (status.plans ?? []).find((plan) => plan.key === status?.eligiblePlan);
+    if (!current?.memberRange || !next) return null;
+    return { current, next, members: status.memberCount ?? null };
+  });
+
+  const paidPlan = $derived((status?.plans ?? []).find((plan) => plan.key === status?.plan && plan.key !== 'FREE') ?? null);
+
   /** Offre dont le bouton est en cours de traitement, pour ne pas figer toute la page. */
   let pending = $state<PlanKey | 'portal' | null>(null);
 
@@ -137,7 +162,8 @@
     const checkout = params.get('checkout');
 
     if (checkout === 'success') {
-      toast.success('Paiement accepté, merci ! Ton offre est en cours d\'activation.');
+      justPaid = true;
+      confetti();
       setTimeout(load, 2500);
     } else if (checkout === 'cancelled') {
       toast.info('Paiement annulé, aucun montant n\'a été débité.');
@@ -148,20 +174,40 @@
   });
 </script>
 
-<div class="max-w-6xl mx-auto px-4 md:px-8 pb-24 space-y-6">
-  <header class="pt-6 space-y-5">
-    <div class="flex items-start gap-3 min-w-0">
-      <div class="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
-        <Papicon name="CreditCard" size={20} />
-      </div>
-      <div class="min-w-0">
-        <h1 class="text-xl font-semibold text-on-surface tracking-tight leading-tight">Facturation</h1>
-        <p class="text-body-sm text-on-surface-variant leading-relaxed max-w-xl">
-          L'offre de ce serveur détermine les modules disponibles. Paiement et factures sont gérés par Stripe.
-        </p>
-      </div>
+<div class="pb-24 space-y-6">
+  <header class="flex flex-col md:flex-row md:items-end justify-between gap-x-6 gap-y-3">
+    <div class="min-w-0">
+      <h1 class="text-2xl font-semibold tracking-tight text-on-surface font-headline leading-tight">Facturation</h1>
+      <p class="mt-1 max-w-prose text-sm text-on-surface-variant">
+        L'offre de ce serveur décide des modules disponibles. Le paiement et les factures passent par Stripe.
+      </p>
     </div>
   </header>
+
+  {#if outgrown && !justPaid}
+    <Callout variant="info" icon="trending-up" title="Ton serveur a grandi">
+      {outgrown.members !== null
+        ? `Il compte ${outgrown.members.toLocaleString('fr-FR')} membres, au-delà de la tranche de l'offre ${outgrown.current.name}.`
+        : `Il a dépassé la tranche de l'offre ${outgrown.current.name}.`}
+      L'offre {outgrown.next.name} est faite pour sa taille : {outgrown.next.description}
+      {#snippet actions()}
+        <Button variant="primary" size="sm" iconRight="ArrowRight" loading={pending === 'portal'} onclick={manage}>Passer à l'offre {outgrown.next.name}</Button>
+      {/snippet}
+    </Callout>
+  {/if}
+
+  {#if justPaid}
+    <Callout
+      variant="success"
+      icon="sparkles"
+      title={paidPlan ? `Merci ! Ton serveur passe à l'offre ${paidPlan.name}.` : 'Merci ! Ton paiement est accepté.'}
+    >
+      {#if paidPlan}{paidPlan.description} {/if}Les modules de l'offre s'ouvrent dans quelques secondes, sans rien à réinstaller.
+      {#snippet actions()}
+        <Button href="/modules" variant="primary" size="sm" iconRight="ArrowRight">Voir mes nouveaux modules</Button>
+      {/snippet}
+    </Callout>
+  {/if}
 
   {#if loading}
     <div class="space-y-3">
@@ -310,7 +356,7 @@
                 </span>
                 <span class="text-xs text-on-surface-variant">/{interval === 'month' ? 'mois' : 'an'}</span>
               </div>
-              <p class="text-2xs text-on-surface-variant/70 mt-0.5">
+              <p class="text-2xs text-on-surface-variant mt-0.5">
                 TTC, par serveur Discord{#if trialAvailable && plan.purchasable}&nbsp;- après l'essai{/if}
               </p>
             {:else if plan.key === 'FREE'}
@@ -378,7 +424,7 @@
                  toutes : un serveur sous accord sur mesure a déjà tout, une
                  offre inférieure n'est pas un achat, et un prix Stripe manquant
                  est une erreur de configuration de l'instance. -->
-            <button disabled class="h-9 rounded-lg text-sm font-medium bg-surface-container text-on-surface-variant/50 cursor-default">
+            <button disabled class="h-9 rounded-lg text-sm font-medium bg-surface-container text-on-surface-variant cursor-default">
               {currentPlan === 'CUSTOM'
                 ? 'Compris dans ton accord'
                 : !isUpgrade
@@ -390,7 +436,7 @@
       {/each}
     </section>
 
-    <p class="text-xs text-on-surface-variant/70 text-center leading-relaxed max-w-2xl mx-auto">
+    <p class="text-xs text-on-surface-variant text-center leading-relaxed max-w-2xl mx-auto">
       Paiement sécurisé par Stripe. Résiliable à tout moment depuis « Gérer mon abonnement » ;
       l'accès est conservé jusqu'à la fin de la période déjà réglée.{#if trialAvailable}{' '}
         Résilier pendant l'essai n'entraîne aucun prélèvement.{/if}

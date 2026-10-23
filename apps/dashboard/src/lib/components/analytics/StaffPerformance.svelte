@@ -21,13 +21,13 @@
           <Papicon icon="TrendUp" size={20} class="text-primary" />
           {m.sp_title()}
         </h3>
-        <p class="text-xs text-on-surface-variant/50 mt-1 font-semibold">{m.sp_subtitle()}</p>
+        <p class="text-xs text-on-surface-variant mt-1 font-semibold">{m.sp_subtitle()}</p>
       </div>
     </div>
 
     <div class="overflow-x-auto no-scrollbar rounded-lg border border-outline-variant/5">
       <table class="w-full text-left border-collapse">
-        <thead class="bg-surface-container-high/40 text-xs font-medium text-on-surface-variant/60">
+        <thead class="bg-surface-container-high/40 text-xs font-medium text-on-surface-variant">
           <tr>
             <th class="px-6 py-4">{m.sp_col_staff_member()}</th>
             {#each metrics as metric}

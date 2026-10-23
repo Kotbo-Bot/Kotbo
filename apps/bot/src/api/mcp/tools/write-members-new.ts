@@ -9,7 +9,7 @@ import { addStaffMember, removeStaffMember } from '../../../services/staff/staff
 import prisma from '../../../utils/db.js';
 import { PermissionFlagsBits } from 'discord.js';
 import { z } from 'zod';
-import { type McpToolContext, SNOWFLAKE, err, ok, resolveMember } from '../toolkit.js';
+import { type McpToolContext, SNOWFLAKE, err, ok, resolveMember, toolError } from '../toolkit.js';
 
 import { RPG_ITEM_RARITIES, RPG_ITEM_TYPES, type RpgItemPayload } from '@kotbo/contracts';
 import { saveGuildShopItem } from '../../../services/features/rpg/rpgShopItemService.js';
@@ -111,7 +111,7 @@ export function registerWriteMembersNewTools(ctx: McpToolContext) {
           await audit(key_name, 'Modification pseudo MCP', resolved.label, `Pseudo appliqué: "${nickname || '(pseudo réinitialisé)'}"`);
           return ok({ ok: true, userId: resolved.userId, nickname: nickname || null });
         } catch (e) {
-          return err(`Impossible de renommer le membre : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e, 'Impossible de renommer le membre');
         }
       })
     );
@@ -196,7 +196,7 @@ export function registerWriteMembersNewTools(ctx: McpToolContext) {
             return ok({ ok: true, userId: resolved.userId, roles: resolvedRoles.map(r => ({ id: r.id, name: r.name })) });
           }
         } catch (e) {
-          return err(`Erreur lors de l'assignation de rôles : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e, "Erreur lors de l'assignation de rôles");
         }
       })
     );
@@ -240,7 +240,7 @@ export function registerWriteMembersNewTools(ctx: McpToolContext) {
           await audit(key_name, 'Promotion Staff MCP', resolved.label, `Grade appliqué: ${grade}`);
           return ok({ ok: true, userId: resolved.userId, grade, staffId: staffRecord?.id ?? null });
         } catch (e) {
-          return err(`Erreur lors de la promotion staff : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e, 'Erreur lors de la promotion staff');
         }
       })
     );
@@ -267,7 +267,7 @@ export function registerWriteMembersNewTools(ctx: McpToolContext) {
           await audit(key_name, 'Destitution Staff MCP', resolved.label, 'Membre retiré du staff');
           return ok({ ok: true, userId: resolved.userId });
         } catch (e) {
-          return err(`Erreur lors de la destitution staff : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e, 'Erreur lors de la destitution staff');
         }
       })
     );
@@ -296,7 +296,7 @@ export function registerWriteMembersNewTools(ctx: McpToolContext) {
           await audit(key_name, 'Évaluations staff MCP (batch)', '', `${evaluations.length} évaluation(s)`);
           return ok({ ok: true, count: evaluations.length, evaluations });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -320,7 +320,7 @@ export function registerWriteMembersNewTools(ctx: McpToolContext) {
           await audit(key_name, 'Note évaluation staff MCP', evaluation_id, manager_note.slice(0, 200));
           return ok({ ok: true, evaluation: updated });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -347,7 +347,7 @@ export function registerWriteMembersNewTools(ctx: McpToolContext) {
           await audit(key_name, 'Config permissions appels MCP', mode, `Rôles: ${config.allowedRoleIds.length}, Membres: ${config.allowedUserIds.length}`);
           return ok({ ok: true, config });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -376,7 +376,7 @@ export function registerWriteMembersNewTools(ctx: McpToolContext) {
           await audit(key_name, 'Activation widget MCP', resolved.label, result.ok ? 'OK' : 'Échec push');
           return ok({ ok: true, userId: resolved.userId, pushResult: result });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -404,7 +404,7 @@ export function registerWriteMembersNewTools(ctx: McpToolContext) {
           await audit(key_name, 'Désactivation widget MCP', resolved.label, '');
           return ok({ ok: true, userId: resolved.userId, clearResult: result });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -428,7 +428,7 @@ export function registerWriteMembersNewTools(ctx: McpToolContext) {
           await audit(key_name, 'Refresh widget MCP', resolved.label, result.ok ? 'OK' : 'Échec');
           return ok({ ok: true, userId: resolved.userId, pushResult: result });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -448,7 +448,7 @@ export function registerWriteMembersNewTools(ctx: McpToolContext) {
           await audit(key_name, 'Refresh widgets MCP (global)', guildId, `${result.success ?? 0} succès`);
           return ok({ ok: true, ...result });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -511,7 +511,7 @@ export function registerWriteMembersNewTools(ctx: McpToolContext) {
           await audit(key_name, 'Configuration pseudos MCP', 'Mise à jour des paramètres de modération de pseudos', '');
           return ok({ ok: true });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -542,7 +542,7 @@ export function registerWriteMembersNewTools(ctx: McpToolContext) {
           await audit(key_name, 'Blacklist pseudos MCP', word, `Catégorie: ${category}`);
           return ok({ ok: true, wordId: bw.id, word });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -566,7 +566,7 @@ export function registerWriteMembersNewTools(ctx: McpToolContext) {
           await audit(key_name, 'Whitelist pseudos MCP', word, 'Retiré de la blacklist');
           return ok({ ok: true, word });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -592,7 +592,7 @@ export function registerWriteMembersNewTools(ctx: McpToolContext) {
           await audit(key_name, 'Rescan pseudos MCP', 'Scan manuel déclenché par l\'IA', `Scannés: ${scanRes.scannedCount} | Renommés: ${scanRes.renamedCount}`);
           return ok(scanRes);
         } catch (e) {
-          return err(`Erreur rescan: ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e, 'Erreur rescan');
         }
       })
     );
@@ -663,7 +663,7 @@ export function registerWriteMembersNewTools(ctx: McpToolContext) {
           await audit(key_name, 'Configuration progression MCP', 'Mise à jour de la config de progression', '');
           return ok({ ok: true });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -696,7 +696,7 @@ export function registerWriteMembersNewTools(ctx: McpToolContext) {
           await audit(key_name, 'Configuration progression MCP', `Récompense niveau ${level}`, `Rôle: ${discordRole.name}`);
           return ok({ ok: true, rewardId: reward.id, level, roleName: discordRole.name });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -720,7 +720,7 @@ export function registerWriteMembersNewTools(ctx: McpToolContext) {
           await audit(key_name, 'Configuration progression MCP', `Suppression récompense niveau ${level}`, '');
           return ok({ ok: true, level });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -760,7 +760,7 @@ export function registerWriteMembersNewTools(ctx: McpToolContext) {
           await audit(key_name, 'Configuration économie MCP', 'Mise à jour des paramètres d\'économie', `Économie active: ${config.enabled}, RPG: ${config.rpgEnabled}`);
           return ok({ ok: true });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -791,7 +791,7 @@ export function registerWriteMembersNewTools(ctx: McpToolContext) {
           await audit(key_name, 'Jeux d\'argent MCP', 'Mise à jour des jeux d\'argent', closed.length > 0 ? `Fermés : ${closed.join(', ')}` : 'Tous ouverts');
           return ok({ ok: true, games: state });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -895,7 +895,7 @@ export function registerWriteMembersNewTools(ctx: McpToolContext) {
           await audit(key_name, 'Configuration économie MCP', `${created ? 'Nouvel' : 'Modification'} objet boutique RPG : ${item.name}`, `Type: ${item.type} | Prix: ${item.price}`);
           return ok({ ok: true, itemId: item.id, name: item.name, created });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -917,7 +917,7 @@ export function registerWriteMembersNewTools(ctx: McpToolContext) {
           await audit(key_name, 'Configuration économie MCP', `Objet boutique RPG supprimé: ${item.name}`, `ID: ${id}${unequippedCount > 0 ? ` | Déséquipé de ${unequippedCount} profil(s)` : ''}`);
           return ok({ ok: true });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -993,7 +993,7 @@ export function registerWriteMembersNewTools(ctx: McpToolContext) {
           await audit(key_name, 'Création rôle MCP', name, `ID: ${role.id}`);
           return ok({ ok: true, roleId: role.id, name: role.name });
         } catch (e) {
-          return err(`Erreur lors de la création du rôle : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e, 'Erreur lors de la création du rôle');
         }
       })
     );
@@ -1036,7 +1036,7 @@ export function registerWriteMembersNewTools(ctx: McpToolContext) {
           await audit(key_name, 'Mise à jour rôle MCP', discordRole.name, `ID: ${discordRole.id}`);
           return ok({ ok: true, roleId: discordRole.id, name: updated.name });
         } catch (e) {
-          return err(`Erreur lors de la modification du rôle : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e, 'Erreur lors de la modification du rôle');
         }
       })
     );
@@ -1069,7 +1069,7 @@ export function registerWriteMembersNewTools(ctx: McpToolContext) {
           await audit(key_name, 'Suppression rôle MCP', discordRole.name, `ID: ${discordRole.id}`);
           return ok({ ok: true });
         } catch (e) {
-          return err(`Erreur lors de la suppression du rôle : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e, 'Erreur lors de la suppression du rôle');
         }
       })
     );

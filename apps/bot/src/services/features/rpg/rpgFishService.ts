@@ -21,8 +21,9 @@ import {
   type FishRarity,
   type ResolvedFish,
 } from './rpgFishCatalog.js';
+import { UserFacingError } from '../../../utils/userFacingError.js';
 
-export class FishCatalogError extends Error {
+export class FishCatalogError extends UserFacingError {
   constructor(message: string, readonly status: number) {
     super(message);
     this.name = 'FishCatalogError';

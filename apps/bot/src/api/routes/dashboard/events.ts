@@ -131,7 +131,7 @@ export async function handleEventsRoutes(
         json(res, 200, { event });
       } catch (err) {
         logger.error('EventsAPI', err);
-        jsonFailure(res, err, (err as Error).message, 'EventsAPI');
+        jsonFailure(res, err, "Impossible de publier l'événement.", 'EventsAPI');
       }
       return true;
     }
@@ -144,7 +144,7 @@ export async function handleEventsRoutes(
         json(res, 200, result);
       } catch (err) {
         logger.error('EventsAPI', err);
-        jsonFailure(res, err, (err as Error).message, 'EventsAPI');
+        jsonFailure(res, err, "Impossible de passer à l'étape suivante.", 'EventsAPI');
       }
       return true;
     }
@@ -157,7 +157,7 @@ export async function handleEventsRoutes(
         json(res, 200, result);
       } catch (err) {
         logger.error('EventsAPI', err);
-        jsonFailure(res, err, (err as Error).message, 'EventsAPI');
+        jsonFailure(res, err, "Impossible de revenir à l'étape précédente.", 'EventsAPI');
       }
       return true;
     }
@@ -170,7 +170,7 @@ export async function handleEventsRoutes(
         json(res, 200, result);
       } catch (err) {
         logger.error('EventsAPI', err);
-        jsonFailure(res, err, (err as Error).message, 'EventsAPI');
+        jsonFailure(res, err, "Impossible de terminer l'événement.", 'EventsAPI');
       }
       return true;
     }
@@ -279,7 +279,7 @@ export async function handleEventsRoutes(
         json(res, 200, { event });
       } catch (err) {
         logger.error('EventsAPI', err);
-        jsonFailure(res, err, (err as Error).message, 'EventsAPI');
+        jsonFailure(res, err, "Impossible d'enregistrer l'événement.", 'EventsAPI');
       }
       return true;
     }

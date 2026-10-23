@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { explainDisabled } from '../../../actions/explainDisabled';
+  import { m } from '../../../i18n';
   /**
    * Le premier message qu'un arrivant lit.
    *
@@ -119,7 +121,8 @@
     <button
       type="button"
       onclick={apply}
-      disabled={onboardingData.busy || !message.trim()}
+      disabled={onboardingData.busy}
+      use:explainDisabled={(!message.trim()) ? m.common_reason_fill_field() : ''}
       class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-on-primary text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-40"
     >
       {onboardingData.busy ? 'Enregistrement…' : 'Enregistrer'}

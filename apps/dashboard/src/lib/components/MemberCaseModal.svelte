@@ -1,15 +1,18 @@
 <script lang="ts">
-  import { Tabs } from './ui';
+  import { Tabs, Button, Callout, SectionCard, EmptyState, Field } from './ui';
+  import { memberAvatarSrc } from '../discordMedia';
   import MemberContentPanel from './analytics/MemberContentPanel.svelte';
+  import MetricTabs from './analytics/MetricTabs.svelte';
+  import TimeSeriesChart from './analytics/TimeSeriesChart.svelte';
+  import { fmtMinutes, fmtNumber, shortDate, SERIES } from './analytics/analyticsFormat';
+  import { relativeDelta } from './analytics/analyticsFilters.svelte';
   import type { MemberCaseResponse } from '@kotbo/contracts';
-  import FormInput from './FormInput.svelte';
   import { dashboardStore } from '../stores/dashboard.svelte';
   import { canModerateFeature, canViewFeature } from '../permissions.svelte';
   import { authStore } from '../stores/auth.svelte';
   import { toast } from '../stores/toast.svelte';
   import { confirmDialog } from '../stores/confirmDialog.svelte';
   import Papicon from './Papicon.svelte';
-  import Chart from './charts/Chart.svelte';
   import { inviteDetailsModal } from '../stores/inviteDetailsModal.svelte';
   import { channelDetailsModal } from '../stores/channelDetailsModal.svelte';
   import { fetchMemberCase, fetchMemberDetailedAnalytics, updateSanctionReport, linkMemberAccount, unlinkMemberAccount, updateMemberNote, runMemberCaseAction, searchMessages, formatMessageSearchTotal, fetchMessageLogChannels } from '../api';
@@ -22,10 +25,10 @@
   import InteractionTree from './charts/InteractionTree.svelte';
   import Modal from './Modal.svelte';
   import { m, dateLocale } from '../i18n';
-  import { renderLogHtml } from '../logDetails';
+  import LogDetails from './logs/LogDetails.svelte';
 
   import { errorMessage } from '@kotbo/shared';
-  type MemberCaseTab = 'resume' | 'identite' | 'activite' | 'messages' | 'logs' | 'sanctions' | 'invites' | 'connexions' | 'analytics' | 'contenu' | 'candidatures' | 'linked_accounts' | 'notes';
+  type MemberCaseTab = 'extra' | 'resume' | 'identite' | 'activite' | 'messages' | 'logs' | 'sanctions' | 'invites' | 'connexions' | 'analytics' | 'contenu' | 'candidatures' | 'linked_accounts' | 'notes';
 
   type MemberAnalyticsResponse = {
     totalMessages: number;
@@ -49,6 +52,9 @@
     actionIsError = false,
     onClose = () => {},
     onSelectUser = (_userId: string) => {},
+    initialTab = 'resume' as MemberCaseTab,
+    showProfileLink = true,
+    extraTab = null,
   } = $props<{
     open?: boolean;
     userName?: string;
@@ -64,11 +70,24 @@
     onClose?: (e: MouseEvent) => void;
     onAction?: (action: 'WARN' | 'KICK' | 'TIMEOUT' | 'BAN') => void;
     onSelectUser?: (userId: string) => void;
+    /** Onglet affiché à l'ouverture : la fiche complète ouvre directement les actions. */
+    initialTab?: MemberCaseTab;
+    /** Lien vers la fiche complète, masqué quand le dossier s'ouvre depuis elle. */
+    showProfileLink?: boolean;
+    /**
+     * Onglet propre a la page qui ouvre le dossier, place en tete : la gestion
+     * du staff y montre grade, discipline et parcours. `initialTab: 'extra'`
+     * l'ouvre directement.
+     */
+    extraTab?: { label: string; icon: string; content: import('svelte').Snippet } | null;
   }>();
 
   let activeTab = $state<MemberCaseTab>('resume');
   let analyticsData = $state<MemberAnalyticsResponse | null>(null);
+  /** Les 30 jours d'avant, jour par jour : la courbe les montre en pointilles, comme Analytics. */
+  let previousTrend = $state<Array<{ dateKey: string; messages: number; voiceMinutes: number }>>([]);
   let analyticsLoading = $state(false);
+  let trendMetric = $state<'messages' | 'voice'>('messages');
 
   // --- NOUVEAUX ÉTATS POUR L'ONGLET MESSAGES ---
   let messageQuery = $state('');
@@ -160,6 +179,41 @@
     if (ageDays > 7) return m.mcm_seniority_recent();
     return m.mcm_seniority_newcomer();
   });
+
+  /** Tuiles d'Analytics : messages et vocal sur 30 jours, avec l'ecart a la periode d'avant. */
+  const memberMetrics = $derived.by(() => {
+    if (!analyticsData) return [];
+    const cur = analyticsData.dailyTrend;
+    const prev = previousTrend;
+    const sum = (rows: typeof cur, key: 'messages' | 'voiceMinutes') => rows.reduce((total, d) => total + d[key], 0);
+    return [
+      {
+        id: 'messages',
+        label: m.mcm_messages(),
+        color: SERIES[0]!,
+        format: fmtNumber,
+        value: fmtNumber(sum(cur, 'messages')),
+        delta: relativeDelta(sum(cur, 'messages'), sum(prev, 'messages')),
+        spark: cur.map((d) => d.messages),
+        daily: cur.map((d) => d.messages),
+        prevDaily: prev.map((d) => d.messages),
+      },
+      {
+        id: 'voice',
+        label: m.mcm_voice(),
+        color: SERIES[2]!,
+        format: fmtMinutes,
+        value: fmtMinutes(sum(cur, 'voiceMinutes')),
+        delta: relativeDelta(sum(cur, 'voiceMinutes'), sum(prev, 'voiceMinutes')),
+        spark: cur.map((d) => d.voiceMinutes),
+        daily: cur.map((d) => d.voiceMinutes),
+        prevDaily: prev.map((d) => d.voiceMinutes),
+      },
+    ];
+  });
+  const selectedMetric = $derived(memberMetrics.find((metric) => metric.id === trendMetric) ?? memberMetrics[0]);
+  const trendLabels = $derived(analyticsData?.dailyTrend.map((d) => shortDate(d.dateKey)) ?? []);
+  const hasTrend = $derived(!!analyticsData && analyticsData.dailyTrend.some((d) => d.messages > 0 || d.voiceMinutes > 0));
 
   const topChannels = $derived.by(() => {
     if (!caseData?.messagesByChannel) return [];
@@ -350,10 +404,10 @@
   }
 
   const VERIFICATION_STATUS_STYLES: Record<string, string> = {
-    VERIFIED: 'bg-success/10 text-success border-success/20',
-    PENDING: 'bg-warning/10 text-warning border-warning/20',
-    FLAGGED: 'bg-error/10 text-error border-error/20',
-    EXPIRED: 'bg-on-surface/5 text-on-surface-variant/60 border-outline-variant/20',
+    VERIFIED: 'badge-success',
+    PENDING: 'badge-warning',
+    FLAGGED: 'badge-danger',
+    EXPIRED: 'badge-neutral',
   };
 
   function verificationStatusLabel(status: string): string {
@@ -596,13 +650,13 @@
   // Icône Papicon + classes de couleur (statiques pour Tailwind) par type de sanction.
   function getSanctionTypeStyle(type: string): { icon: string; tile: string; dot: string } {
     switch (type.toUpperCase()) {
-      case 'WARN': return { icon: 'alert-triangle', tile: 'bg-warning/10 text-warning', dot: 'bg-amber-500' };
-      case 'TIMEOUT': return { icon: 'clock', tile: 'bg-sky-500/10 text-sky-500', dot: 'bg-sky-500' };
-      case 'KICK': return { icon: 'log-out', tile: 'bg-orange-500/10 text-orange-500', dot: 'bg-orange-500' };
-      case 'TEMP_BAN': return { icon: 'ban', tile: 'bg-error/10 text-error', dot: 'bg-rose-500' };
-      case 'BAN': return { icon: 'gavel', tile: 'bg-error/10 text-error', dot: 'bg-rose-600' };
-      case 'SOFTBAN': return { icon: 'eraser', tile: 'bg-slate-500/10 text-on-surface-variant', dot: 'bg-slate-500' };
-      default: return { icon: 'shield', tile: 'bg-slate-500/10 text-on-surface-variant', dot: 'bg-slate-500' };
+      case 'WARN': return { icon: 'alert-triangle', tile: 'bg-warning/10 text-warning', dot: 'bg-warning' };
+      case 'TIMEOUT': return { icon: 'clock', tile: 'bg-primary/10 text-primary', dot: 'bg-primary' };
+      case 'KICK': return { icon: 'log-out', tile: 'bg-warning/10 text-warning', dot: 'bg-warning' };
+      case 'TEMP_BAN': return { icon: 'ban', tile: 'bg-error/10 text-error', dot: 'bg-error' };
+      case 'BAN': return { icon: 'gavel', tile: 'bg-error/10 text-error', dot: 'bg-error' };
+      case 'SOFTBAN': return { icon: 'eraser', tile: 'bg-surface-container-high text-on-surface-variant', dot: 'bg-on-surface-variant' };
+      default: return { icon: 'shield', tile: 'bg-surface-container-high text-on-surface-variant', dot: 'bg-on-surface-variant' };
     }
   }
 
@@ -623,6 +677,7 @@
   );
 
   const tabs: { id: MemberCaseTab; label: string; icon: string; count?: () => number }[] = $derived([
+    ...(extraTab ? [{ id: 'extra' as const, label: extraTab.label, icon: extraTab.icon }] : []),
     { id: 'resume', label: m.mcm_tab_summary(), icon: 'layout' },
     { id: 'identite', label: m.mcm_tab_identity(), icon: 'user' },
     { id: 'activite', label: m.mcm_tab_activity(), icon: 'trending-up' },
@@ -637,6 +692,14 @@
     { id: 'linked_accounts', label: m.mcm_tab_linked(), icon: 'link-2', count: () => (caseData?.linkedAccounts?.length ?? 0) + pendingCrossServerLinks.length },
     { id: 'notes', label: m.mcm_tab_notes(), icon: 'edit-3' },
   ]);
+
+  const displayName = $derived(caseData?.profile?.displayName || caseData?.profile?.globalName || userName);
+  const activeSanctionCount = $derived(sanctions.filter((s) => s.status === 'ACTIVE').length);
+  const riskTone = $derived(moderationRiskScore < 30 ? 'success' : moderationRiskScore < 70 ? 'warning' : 'error');
+  const visibleTabs = $derived(tabs.map((tab) => {
+    const count = tab.count && caseData ? tab.count() : 0;
+    return { id: tab.id, label: tab.label, icon: tab.icon, badge: count > 0 ? count : undefined };
+  }));
 
   function formatDateTime(value: string | null | undefined) {
     if (!value) return 'Inconnu';
@@ -707,13 +770,11 @@
 
 
   function getPresenceColor(status: string | null | undefined) {
-    if (!status) return 'bg-slate-400';
-    const s = status.toLowerCase();
-    if (s === 'left') return 'bg-rose-500';
-    if (s === 'online') return 'bg-emerald-500';
-    if (s === 'idle') return 'bg-amber-500';
-    if (s === 'dnd') return 'bg-red-500';
-    return 'bg-slate-400';
+    const s = status?.toLowerCase();
+    if (s === 'online') return 'bg-success';
+    if (s === 'idle') return 'bg-warning';
+    if (s === 'dnd' || s === 'left') return 'bg-error';
+    return 'bg-on-surface-variant/50';
   }
 
   function getPresenceLabel(status: string | null | undefined) {
@@ -726,18 +787,13 @@
     return m.mcm_presence_offline();
   }
 
-  const logSnippetLabels = $derived({
-    unknownChannel: m.lg_unknown_channel_name(),
-    unknownRole: 'role-inconnu',
-  });
-
   /**
-   * `log.details` reprend mot pour mot ce qu'un membre a ecrit : le fragment
-   * doit etre echappe avant de rejoindre le `{@html}` du journal.
+   * Les mentions des journaux ne portent que des identifiants : on nomme celles
+   * des contacts deja connus du dossier, les autres restent `@utilisateur`.
    */
-  function renderLogSnippet(value: string) {
-    return renderLogHtml(value.replace(/^Contenu:\s*/i, '').trim(), logSnippetLabels);
-  }
+  const logUserNames = $derived(Object.fromEntries(
+    (caseData?.interactionGraph?.nodes ?? []).map((node: { id: string; label: string }) => [node.id, node.label]),
+  ));
 
   function getConnectionIcon(type: string) {
     const t = type.toLowerCase();
@@ -768,7 +824,27 @@
     if (!userId || !authStore.selectedGuildId) return;
     analyticsLoading = true;
     try {
-      analyticsData = await fetchMemberDetailedAnalytics(userId, 30);
+      // 60 jours d'un coup, coupes en deux fenetres de 30 : la periode et celle
+      // d'avant. L'API ne renvoie que les jours actifs, on remet les jours vides.
+      const raw = await fetchMemberDetailedAnalytics(userId, 60) as MemberAnalyticsResponse | null;
+      const byDay = new Map((raw?.dailyTrend ?? []).map((d) => [d.dateKey, d]));
+      const lastDays = (offset: number) => Array.from({ length: 30 }, (_, i) => {
+        const day = new Date();
+        day.setDate(day.getDate() - offset - (29 - i));
+        const dateKey = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`;
+        const hit = byDay.get(dateKey);
+        return { dateKey, messages: hit?.messages ?? 0, voiceMinutes: hit?.voiceMinutes ?? 0 };
+      });
+      const current = lastDays(0);
+      previousTrend = lastDays(30);
+      analyticsData = raw ? {
+        ...raw,
+        period: 30,
+        dailyTrend: current,
+        totalMessages: current.reduce((sum, d) => sum + d.messages, 0),
+        totalVoiceMinutes: current.reduce((sum, d) => sum + d.voiceMinutes, 0),
+        activeDays: current.filter((d) => d.messages > 0 || d.voiceMinutes > 0).length,
+      } : null;
     } catch (e) {
       console.error('Failed to load member analytics:', e);
     } finally {
@@ -778,7 +854,7 @@
 
   $effect(() => {
     if (open) {
-      activeTab = 'resume';
+      activeTab = initialTab;
       messageQuery = '';
       messageChannelId = '';
       messageIncludeDeleted = true;
@@ -814,2057 +890,1304 @@
   });
 </script>
 
+<!-- Vide qui est une bonne nouvelle ou un simple constat : pas de bouton a inventer. -->
+{#snippet quietEmpty(icon: string, title: string, description = '')}
+  <div class="section-card flex flex-col items-center gap-1.5 px-6 py-12 text-center">
+    <span class="mb-2 flex h-11 w-11 items-center justify-center rounded-full bg-surface-container text-on-surface-variant"><Papicon {icon} size={20} /></span>
+    <p class="text-sm font-medium text-on-surface">{title}</p>
+    {#if description}<p class="max-w-sm text-sm text-on-surface-variant">{description}</p>{/if}
+  </div>
+{/snippet}
+
+{#snippet facts(rows: Array<{ label: string; value: string; tone?: string }>)}
+  <dl class="mc-facts">
+    {#each rows as row (row.label)}
+      <div>
+        <dt>{row.label}</dt>
+        <dd class={row.tone ?? ''}>{row.value}</dd>
+      </div>
+    {/each}
+  </dl>
+{/snippet}
+
+{#snippet inviter(compact = false)}
+  {#if caseData?.invite?.inviterTag}
+    {@const tag = caseData.invite.inviterTag}
+    {#if caseData.invite.inviterId}
+      <button
+        type="button"
+        class="mc-person"
+        onclick={() => caseData?.invite?.inviterId && onSelectUser(caseData.invite.inviterId)}
+        title={m.mcm_open_inviter()}
+      >
+        <img src={memberAvatarSrc(caseData.invite.inviterAvatarUrl, tag, caseData.invite.inviterId)} alt="" class="{compact ? 'h-5 w-5' : 'h-6 w-6'} rounded-full object-cover" />
+        <span class="truncate">@{tag}</span>
+      </button>
+    {:else}
+      <span class="mc-person mc-person--static">
+        <img src={memberAvatarSrc(caseData.invite.inviterAvatarUrl, tag, null)} alt="" class="{compact ? 'h-5 w-5' : 'h-6 w-6'} rounded-full object-cover" />
+        <span class="truncate">@{tag}</span>
+      </span>
+    {/if}
+  {:else}
+    <span class="text-sm text-on-surface-variant">{m.mcm_unknown_origin()}</span>
+  {/if}
+{/snippet}
+
+{#snippet inviteCode()}
+  {#if caseData?.invite?.code}
+    <button type="button" class="mc-code" onclick={() => inviteDetailsModal.show(caseData.invite.code)} title={m.mcm_open_invites_view()}>
+      {caseData.invite.code}
+    </button>
+  {:else}
+    <span class="text-sm text-on-surface-variant">-</span>
+  {/if}
+{/snippet}
+
+{#snippet roleChip(role: { name: string; color?: string | null })}
+  <span class="mc-role">
+    <span class="h-2 w-2 shrink-0 rounded-full" style="background: {role.color && role.color !== '#000000' ? role.color : 'var(--outline-variant)'}"></span>
+    {role.name}
+  </span>
+{/snippet}
+
+{#snippet toolbarSelect(value: string, onchange: (v: string) => void, options: Array<{ value: string; label: string }>, label: string)}
+  <select class="input mc-select" aria-label={label} {value} onchange={(e) => onchange((e.currentTarget as HTMLSelectElement).value)}>
+    {#each options as option (option.value)}
+      <option value={option.value}>{option.label}</option>
+    {/each}
+  </select>
+{/snippet}
+
 <Modal
+  flush
   open={open && canViewMembers}
   onClose={onClose}
   size="screen"
   showCloseButton={false}
 >
-  <div class="font-body" role="dialog" tabindex="-1" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
-
-    <!-- ── Hero Section ──────────────────────────────────────── -->
-    <div class="relative overflow-hidden" style="min-height: 180px;">
+  <div class="mc" role="presentation" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
+    <!-- ── Identite ───────────────────────────────────────── -->
+    <header class="mc-header">
       {#if caseData?.profile?.bannerUrl}
-        <div class="absolute inset-0" style="background-image: linear-gradient(to bottom, transparent 30%, var(--surface-container-lowest) 100%), url('{caseData.profile.bannerUrl}'); background-size: cover; background-position: center;"></div>
-      {:else}
-        <!-- Vagues colorées style kotbo.fr -->
-        <div class="absolute inset-0" style="background: linear-gradient(135deg, #f97316 0%, #f472b6 35%, #a855f7 65%, #7c3aed 100%);"></div>
-        <svg class="absolute inset-0 h-full w-full" viewBox="0 0 900 200" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
-          <defs>
-            <linearGradient id="hero-w1" x1="0" y1="0" x2="1" y2="0.8">
-              <stop offset="0%" stop-color="#fdba74" />
-              <stop offset="100%" stop-color="#f9a8d4" />
-            </linearGradient>
-            <linearGradient id="hero-w2" x1="0" y1="0" x2="1" y2="0.5">
-              <stop offset="0%" stop-color="#e879f9" stop-opacity="0.6" />
-              <stop offset="100%" stop-color="#8b5cf6" stop-opacity="0.8" />
-            </linearGradient>
-            <linearGradient id="hero-w3" x1="0.2" y1="0" x2="0.8" y2="1">
-              <stop offset="0%" stop-color="#c084fc" stop-opacity="0.4" />
-              <stop offset="100%" stop-color="#6d28d9" stop-opacity="0.7" />
-            </linearGradient>
-          </defs>
-          <path d="M0,40 C100,80 250,10 400,55 C550,100 720,25 900,65 L900,0 L0,0 Z" fill="url(#hero-w1)" opacity="0.7" />
-          <path d="M0,110 C180,60 320,140 520,85 C700,30 820,95 900,55 L900,200 L0,200 Z" fill="url(#hero-w2)" />
-          <path d="M0,155 C200,125 380,165 580,130 C740,100 850,145 900,115 L900,200 L0,200 Z" fill="url(#hero-w3)" />
-        </svg>
+        <div class="mc-banner" style="background-image: url('{caseData.profile.bannerUrl}')" aria-hidden="true"></div>
       {/if}
-      <div class="absolute inset-0 bg-linear-to-b from-transparent via-transparent to-(--surface-container-lowest)"></div>
-
-      <!-- Avatar + Identity block -->
-      <div class="relative z-10 flex items-end gap-5 px-8 pb-5 pt-20">
+      <div class="mc-identity">
         <div class="relative shrink-0">
-          <div class="absolute -inset-1.5 rounded-xl bg-white/20 blur-lg animate-pulse"></div>
-          {#if caseData?.profile?.avatarUrl}
-            <img
-              src={caseData?.profile?.avatarUrl}
-              alt={m.mcm_avatar_alt()}
-              class="relative h-20 w-20 rounded-lg border-4 border-(--surface-container-lowest) object-cover shadow-sm"
-            />
-          {:else}
-            <div class="relative flex h-20 w-20 items-center justify-center rounded-lg border-4 border-(--surface-container-lowest) bg-(--surface-container-high) text-2xl font-semibold text-primary shadow-sm">
-              {userName.slice(0, 1).toUpperCase()}
-            </div>
-          {/if}
-          <!-- Presence indicator -->
-          <div class="absolute -bottom-1 -right-1 h-5 w-5 rounded-full border-3 border-(--surface-container-lowest) {getPresenceColor(caseData?.profile?.presenceStatus)}" title={getPresenceLabel(caseData?.profile?.presenceStatus)}></div>
+          <img
+            src={memberAvatarSrc(caseData?.profile?.avatarUrl, displayName, userId)}
+            alt={m.mcm_avatar_alt()}
+            class="h-14 w-14 rounded-xl object-cover bg-surface-container"
+          />
+          <span
+            class="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-surface-container-lowest {getPresenceColor(caseData?.profile?.presenceStatus)}"
+            title={getPresenceLabel(caseData?.profile?.presenceStatus)}
+          ></span>
         </div>
-
-        <div class="min-w-0 pb-1">
-          <h3 id="member-case-title" class="text-2xl font-semibold text-on-surface tracking-tight truncate font-headline">
-            {caseData?.profile?.displayName || caseData?.profile?.globalName || userName}
-          </h3>
-          <div class="mt-1 flex flex-wrap items-center gap-2">
-            <span class="text-sm font-semibold text-on-surface-variant/80">
-              @{caseData?.profile?.username || userName}
-            </span>
+        <div class="min-w-0 flex-1">
+          <div class="flex flex-wrap items-center gap-2">
+            <h2 id="modal-title" class="truncate text-xl font-semibold tracking-tight text-on-surface">{displayName}</h2>
+            {#if caseData?.profile?.staffGrade}
+              <span class="badge badge-info"><Papicon icon="star" size={11} />{caseData.profile.staffGrade}</span>
+            {/if}
+            {#if caseData?.profile?.isTutor}
+              <span class="badge badge-info"><Papicon icon="user-check" size={11} />{m.mcm_tutor_badge()}</span>
+            {/if}
             {#if caseData?.profile?.isBot}
-              <span class="badge badge-info">Bot</span>
+              <span class="badge badge-neutral">Bot</span>
             {/if}
-            {#if caseData?.profile?.pronouns}
-              <span class="badge badge-neutral">{caseData?.profile?.pronouns}</span>
+            {#if verificationPending}
+              <span class="badge badge-warning"><Papicon icon="clock" size={11} />{m.mcm_verif_badge_pending()}</span>
+            {:else if verifications?.lastVerifiedAt}
+              <span class="badge badge-success"><Papicon icon="check-circle" size={11} />{m.mcm_verif_badge_done()}</span>
             {/if}
-            <span class="badge badge-neutral">
+          </div>
+          <p class="mt-0.5 flex flex-wrap items-center gap-x-2 text-sm text-on-surface-variant">
+            <span>@{caseData?.profile?.username || userName}</span>
+            <span aria-hidden="true">·</span>
+            <span class="inline-flex items-center gap-1.5">
               <span class="h-2 w-2 rounded-full {getPresenceColor(caseData?.profile?.presenceStatus)}"></span>
               {getPresenceLabel(caseData?.profile?.presenceStatus)}
             </span>
-            {#if caseData?.profile?.isTutor}
-              <span class="badge bg-indigo-500/15 text-indigo-400 border border-indigo-500/30 shadow-sm animate-in zoom-in-95 duration-500">
-                <Papicon icon="shield" size={12} class="mr-1" />
-                {m.mcm_tutor_badge()}
-              </span>
+            {#if caseData?.profile?.pronouns}
+              <span aria-hidden="true">·</span>
+              <span>{caseData.profile.pronouns}</span>
             {/if}
-            {#if caseData?.profile?.staffGrade}
-              <span class="badge bg-warning/15 text-warning border border-warning/30 shadow-sm animate-in zoom-in-95 duration-500">
-                <Papicon icon="star" size={12} class="mr-1" />
-                {caseData?.profile?.staffGrade}
-              </span>
-            {/if}
-            {#if userId}
-              <div class="ml-auto flex items-center gap-2">
-                <!-- Un collègue est peut-être déjà passé par là : l'état saute
-                     aux yeux avant même d'ouvrir l'onglet Identité. -->
-                {#if verificationPending}
-                  <span class="badge border border-warning/30 bg-warning/20 text-amber-100 shadow-sm">
-                    <Papicon icon="clock" size={12} class="mr-1" />
-                    {m.mcm_verif_badge_pending()}
-                  </span>
-                {:else if verifications?.lastVerifiedAt}
-                  <span class="badge border border-success/30 bg-success/20 text-emerald-100 shadow-sm">
-                    <Papicon icon="check-circle" size={12} class="mr-1" />
-                    {m.mcm_verif_badge_done()}
-                  </span>
-                {/if}
-                {#if canModerateMembers}
-                <button
-                  type="button"
-                  onclick={handleRequestVerification}
-                  disabled={requestVerificationBusy || verificationBlocked}
-                  title={verificationPending
-                    ? m.mcm_verif_already_pending()
-                    : verificationBlocked
-                      ? m.mcm_verif_cooldown()
-                      : verifications?.lastRequestedAt
-                        ? m.mcm_verif_requested_on({ date: formatVerificationDate(verifications.lastRequestedAt) })
-                        : m.mcm_request_verification()}
-                  class="inline-flex items-center gap-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 disabled:bg-amber-800 disabled:opacity-50 disabled:cursor-not-allowed px-3 py-1.5 text-xs font-semibold text-white transition-all hover:scale-[1.02] active:scale-[0.98] shadow-sm cursor-pointer"
-                >
-                  {#if requestVerificationBusy}
-                    <div class="h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
-                    <span>{m.mcm_sending()}</span>
-                  {:else}
-                    <Papicon icon="shield-alert" size={14} />
-                    <span>{m.mcm_request_verification()}</span>
-                  {/if}
-                </button>
-                {/if}
-                <a
-                  href="/profile/{userId}"
-                  class="inline-flex items-center gap-1.5 rounded-lg bg-white/15 px-3 py-1.5 text-xs font-semibold text-white/80 transition-all hover:bg-white/25 hover:text-white hover:scale-[1.02] active:scale-[0.98] shadow-sm"
-                >
-                  <Papicon icon="external-link" size={14} />
-                  {m.mcm_profile()}
-                </a>
-              </div>
-            {/if}
-          </div>
+          </p>
+        </div>
+        <div class="mc-header-actions">
+          {#if userId && canModerateMembers}
+            <Button
+              size="sm"
+              icon="shield-alert"
+              loading={requestVerificationBusy}
+              disabled={verificationBlocked}
+              disabledReason={verificationPending ? m.mcm_verif_already_pending() : m.mcm_verif_cooldown()}
+              title={verifications?.lastRequestedAt ? m.mcm_verif_requested_on({ date: formatVerificationDate(verifications.lastRequestedAt) }) : undefined}
+              onclick={handleRequestVerification}
+            >{requestVerificationBusy ? m.mcm_sending() : m.mcm_request_verification()}</Button>
+          {/if}
+          {#if showProfileLink && userId}
+            <Button size="sm" variant="ghost" icon="maximize-2" href={`/members/${userId}`}>{m.mcm_open_profile()}</Button>
+          {/if}
+          <Button size="sm" variant="ghost" icon="x" aria-label={m.mcm_close_case()} onclick={onClose} />
         </div>
       </div>
+    </header>
+
+    <!-- ── Onglets ────────────────────────────────────────── -->
+    <div class="mc-tabs">
+      <Tabs label={m.nav_members()} class="max-w-full" tabs={visibleTabs} active={activeTab} onchange={(id) => (activeTab = id as typeof activeTab)} />
     </div>
 
-    <!-- ── Tab Navigation ────────────────────────────────────── -->
-    <div class="sticky top-0 z-30 flex items-center gap-3 border-b border-outline-variant/10 bg-surface-container-lowest/95 px-6 pt-4 pb-2 backdrop-blur-sm">
-      <Tabs
-        label={m.nav_members()}
-        class="min-w-0 flex-1 max-w-full"
-        tabs={tabs.map((tab) => {
-          const count = tab.count && caseData ? tab.count() : 0;
-          return { id: tab.id, label: tab.label, icon: tab.icon, badge: count > 0 ? count : undefined };
-        })}
-        active={activeTab}
-        onchange={(id) => (activeTab = id as typeof activeTab)}
-      />
-
-        <button
-          type="button"
-          onclick={onClose}
-          aria-label={m.mcm_close_case()}
-          class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-on-surface/5 text-on-surface-variant transition-colors hover:bg-on-surface/10 hover:text-on-surface"
-        >
-          <Papicon icon="x" size={16} />
-        </button>
-      </div>
-
-      <!-- ── Content Area ──────────────────────────────────────── -->
-      <div class="px-6 pb-6 pt-2">
-        {#if !userId}
-          <div class="flex flex-col items-center justify-center py-20 text-center bg-warning/5 rounded-xl border-2 border-dashed border-warning/20">
-            <div class="flex h-16 w-16 items-center justify-center rounded-xl bg-warning/10 text-warning mb-6">
-              <Papicon icon="alert-triangle" size={32} />
+    <!-- ── Contenu ────────────────────────────────────────── -->
+    <div class="mc-body">
+      {#if !userId}
+        {@render quietEmpty('user-x', m.mcm_user_not_found(), m.mcm_user_not_found_desc())}
+      {:else if loading}
+        <div class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]" aria-busy="true">
+          <div class="space-y-4">
+            <div class="section-card h-28 animate-pulse"></div>
+            <div class="grid gap-4 md:grid-cols-2">
+              <div class="section-card h-48 animate-pulse"></div>
+              <div class="section-card h-48 animate-pulse"></div>
             </div>
-            <h3 class="text-xl font-semibold text-warning font-headline">{m.mcm_user_not_found()}</h3>
-            <p class="mt-2 text-sm text-warning/60 max-w-sm">
-              {m.mcm_user_not_found_desc()}
-            </p>
           </div>
-        {:else if loading}
-          <div class="grid gap-6 md:grid-cols-2 lg:grid-cols-3 animate-pulse">
-            <div class="h-48 bg-surface-container-high/30 rounded-xl"></div>
-            <div class="h-48 bg-surface-container-high/30 rounded-xl"></div>
-            <div class="h-48 bg-surface-container-high/30 rounded-xl"></div>
-            <div class="md:col-span-2 h-80 bg-surface-container-high/30 rounded-xl"></div>
-            <div class="h-80 bg-surface-container-high/30 rounded-xl"></div>
-          </div>
-        {:else if error}
-          <div class="flex flex-col items-center justify-center py-20 text-center bg-error/5 rounded-xl border-2 border-dashed border-error/20">
-            <div class="flex h-16 w-16 items-center justify-center rounded-xl bg-error/10 text-error mb-6">
-              <Papicon icon="alert-circle" size={32} />
-            </div>
-            <h3 class="text-xl font-semibold text-error font-headline">{m.mcm_load_error()}</h3>
-            <p class="mt-2 text-sm text-error/60 max-w-sm">{error}</p>
-          </div>
-        {:else if !caseData}
-          <div class="flex flex-col items-center justify-center py-20 text-center bg-surface-container-low rounded-xl border-2 border-dashed border-outline-variant/30">
-            <div class="flex h-16 w-16 items-center justify-center rounded-xl bg-surface-container-high text-on-surface-variant/30 mb-6">
-              <Papicon icon="user-x" size={32} />
-            </div>
-            <h3 class="text-xl font-semibold text-on-surface-variant font-headline">{m.mcm_no_data()}</h3>
-            <p class="mt-2 text-sm text-on-surface-variant/60 max-w-sm">
-              {m.mcm_no_data_desc()}
-            </p>
-          </div>
-        {:else}
-          <div class="grid grid-cols-1 lg:grid-cols-4 gap-6 items-start animate-in fade-in slide-in-from-bottom-4 duration-700">
-            <!-- Colonne Principale (Gauche, 3/4) -->
-            <div class="lg:col-span-3 space-y-8">
-            
+          <div class="section-card h-80 animate-pulse"></div>
+        </div>
+      {:else if error}
+        <Callout variant="danger" title={m.mcm_load_error()}>{error}</Callout>
+      {:else if !caseData}
+        {@render quietEmpty('user-x', m.mcm_no_data(), m.mcm_no_data_desc())}
+      {:else}
+        <div class="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
+          <div class="min-w-0 space-y-4">
             {#if caseData?.isSuspectedDC}
-              <div class="rounded-xl bg-error/10 border-2 border-error/20 p-6 flex items-center gap-6 animate-in zoom-in-95 duration-500">
-                <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-error/20 text-error shadow-sm">
-                  <Papicon icon="alert-octagon" size={24} />
-                </div>
-                <div class="min-w-0 flex-1">
-                  <h4 class="text-sm font-semibold text-error">{m.mcm_dc_title()}</h4>
-                  <p class="text-xs font-bold text-error/70 mt-1">
-                    {m.mcm_dc_desc()}
-                  </p>
-                </div>
-                <div class="flex gap-2">
-                  <span class="badge badge-danger">{m.mcm_suspect()}</span>
-                </div>
-              </div>
+              <Callout variant="danger" icon="alert-octagon" title={m.mcm_dc_title()}>{m.mcm_dc_desc()}</Callout>
             {/if}
 
-            {#if activeTab === 'resume'}
-              <!-- ── Bento Layout ────────────────── -->
-              <div class="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {#if activeTab === 'extra' && extraTab}
+              {@render extraTab.content()}
 
-                <!-- Account Identity Card (Bento Large) -->
-                <div class="md:col-span-2 rounded-xl bg-surface-container-low/50 p-8 border border-outline-variant/10 shadow-sm transition-all hover:shadow-xl hover:bg-surface-container-low duration-500 group">
-                   <div class="flex items-center justify-between mb-8">
-                     <div class="flex items-center gap-3">
-                       <div class="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10 text-primary group-hover:scale-110 transition-transform">
-                         <Papicon icon="user" size={24} />
-                       </div>
-                       <div>
-                         <p class="text-xs font-semibold text-primary">{m.mcm_account_info()}</p>
-                         <p class="text-lg font-semibold text-on-surface">{m.mcm_identity_seniority()}</p>
-                       </div>
-                     </div>
-                   </div>
-
-                   <div class="grid grid-cols-2 gap-8">
-                     <div class="space-y-1">
-                       <p class="text-xs font-medium text-on-surface-variant/40">{m.mcm_account_age()}</p>
-                       <p class="text-lg font-semibold text-on-surface">{getDurationSince(caseData?.profile?.accountCreatedAt)}</p>
-                       <p class="text-2xs font-bold text-on-surface-variant/60">{m.mcm_created_on({ date: formatDateShort(caseData?.profile?.accountCreatedAt) })}</p>
-                     </div>
-                     <div class="space-y-1">
-                       <p class="text-xs font-medium text-on-surface-variant/40">{m.mcm_server_presence()}</p>
-                       <p class="text-lg font-semibold text-on-surface">{getDurationSince(caseData?.profile?.guildJoinedAt)}</p>
-                       <p class="text-2xs font-bold text-on-surface-variant/60">{m.mcm_joined_on({ date: formatDateShort(caseData?.profile?.guildJoinedAt) })}</p>
-                     </div>
-                     <div class="space-y-1">
-                       <p class="text-xs font-medium text-on-surface-variant/40">{m.mcm_invited_by()}</p>
-                        {#if caseData?.invite?.inviterTag}
-                          {#if caseData?.invite?.inviterId}
-                            <button
-                              type="button"
-                              onclick={() => caseData?.invite?.inviterId && onSelectUser(caseData.invite.inviterId)}
-                              class="flex items-center gap-2 text-left hover:text-primary transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-primary/20 rounded-xl p-1 -ml-1 group/inviter w-full"
-                              title={m.mcm_open_inviter()}
-                            >
-                              {#if caseData.invite.inviterAvatarUrl}
-                                <img
-                                  src={caseData.invite.inviterAvatarUrl}
-                                  alt={caseData.invite.inviterTag}
-                                  class="h-6 w-6 rounded-full object-cover border border-primary/10 group-hover/inviter:border-primary transition-all duration-300"
-                                />
-                              {:else}
-                                <div class="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center text-[10px] font-bold text-primary group-hover/inviter:bg-primary group-hover/inviter:text-on-primary transition-all duration-300">
-                                  {caseData.invite.inviterTag.slice(0, 1).toUpperCase()}
-                                </div>
-                              {/if}
-                              <p class="text-sm font-semibold text-on-surface group-hover/inviter:text-primary truncate transition-colors">@{caseData.invite.inviterTag}</p>
-                            </button>
-                          {:else}
-                            <div class="flex items-center gap-2">
-                              {#if caseData.invite.inviterAvatarUrl}
-                                <img
-                                  src={caseData.invite.inviterAvatarUrl}
-                                  alt={caseData.invite.inviterTag}
-                                  class="h-6 w-6 rounded-full object-cover border border-primary/10"
-                                />
-                              {:else}
-                                <div class="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center text-[10px] font-bold text-primary">
-                                  {caseData.invite.inviterTag.slice(0, 1).toUpperCase()}
-                                </div>
-                              {/if}
-                              <p class="text-sm font-semibold text-on-surface truncate">@{caseData.invite.inviterTag}</p>
-                            </div>
-                          {/if}
-                        {:else}
-                          <p class="text-sm font-bold text-on-surface-variant/40 italic">{m.mcm_unknown_origin()}</p>
-                        {/if}
-                     </div>
-                     <div class="space-y-1">
-                       <p class="text-xs font-medium text-on-surface-variant/40">{m.mcm_invite_code()}</p>
-                       {#if caseData?.invite?.code}
-                         <button
-                           type="button"
-                           class="text-sm font-semibold text-primary bg-primary/10 px-3 py-1 rounded-xl hover:bg-primary/20 transition-colors"
-                           onclick={() => inviteDetailsModal.show(caseData.invite.code)}
-                           title={m.mcm_open_invites_view()}
-                         >
-                           {caseData.invite.code}
-                         </button>
-                       {:else}
-                         <p class="text-sm font-semibold text-on-surface">-</p>
-                       {/if}
-                     </div>
-                   </div>
-                </div>
-
-                <!-- Sanctions Status Card -->
-                <div class="rounded-xl {sanctions.filter(s => s.status === 'ACTIVE').length > 0 ? 'bg-error/5 border-error/20 shadow-rose-500/5' : 'bg-surface-container-low/50 border-outline-variant/10 shadow-sm'} p-8 border transition-all hover:shadow-xl duration-500 group">
-                   <div class="flex items-center gap-3 mb-8">
-                     <div class="flex h-12 w-12 items-center justify-center rounded-lg {sanctions.filter(s => s.status === 'ACTIVE').length > 0 ? 'bg-error/10 text-error' : 'bg-warning/10 text-warning'} group-hover:rotate-12 transition-transform">
-                       <Papicon icon="hammer" size={24} />
-                     </div>
-                     <div>
-                       <p class="text-2xs font-semibold uppercase tracking-wider {sanctions.filter(s => s.status === 'ACTIVE').length > 0 ? 'text-error' : 'text-warning'}">{m.mcm_record()}</p>
-                       <p class="text-lg font-semibold text-on-surface">{m.mcm_sanctions()}</p>
-                     </div>
-                   </div>
-
-                   <div class="space-y-4">
-                     <div class="flex items-end justify-between">
-                        <span class="text-4xl font-semibold text-on-surface">{sanctions.length}</span>
-                        <span class="text-xs font-medium text-on-surface-variant/40 pb-1">{m.mcm_total()}</span>
-                     </div>
-                     <div class="h-2 w-full rounded-full bg-on-surface/5 overflow-hidden">
-                        <div class="h-full bg-rose-500 transition-all duration-1000" style="width: {sanctions.length > 0 ? (sanctions.filter(s => s.status === 'ACTIVE').length / sanctions.length) * 100 : 0}%"></div>
-                     </div>
-                     <p class="text-xs font-bold {sanctions.filter(s => s.status === 'ACTIVE').length > 0 ? 'text-error' : 'text-on-surface-variant/60'}">
-                        {m.mcm_active_sanctions({ count: sanctions.filter(s => s.status === 'ACTIVE').length })}
-                     </p>
-                   </div>
-                </div>
-
-                <!-- Activity Summary Card -->
-                <div class="rounded-xl bg-surface-container-low/50 p-8 border border-outline-variant/10 shadow-sm transition-all hover:shadow-xl duration-500 group">
-                   <div class="flex items-center gap-3 mb-8">
-                     <div class="flex h-12 w-12 items-center justify-center rounded-lg bg-secondary/10 text-secondary group-hover:scale-110 transition-transform">
-                       <Papicon icon="activity" size={24} />
-                     </div>
-                     <div>
-                       <p class="text-xs font-semibold text-secondary">{m.mcm_activity()}</p>
-                       <p class="text-lg font-semibold text-on-surface">{m.mcm_engagement()}</p>
-                     </div>
-                   </div>
-
-                   <div class="grid grid-cols-1 gap-4">
-                     <div class="flex items-center justify-between">
-                       <span class="text-xs font-bold text-on-surface-variant/60">{m.mcm_messages()}</span>
-                       <span class="text-sm font-semibold text-on-surface">{caseData?.profile?.messageCount?.toLocaleString(dateLocale()) ?? 0}</span>
-                     </div>
-                     <div class="flex items-center justify-between">
-                       <span class="text-xs font-bold text-on-surface-variant/60">{m.mcm_voice()}</span>
-                       <span class="text-sm font-semibold text-on-surface">{formatDurationFromSeconds(caseData?.profile?.voiceTimeSeconds)}</span>
-                     </div>
-                     <div class="flex items-center justify-between">
-                       <span class="text-xs font-bold text-on-surface-variant/60">{m.mcm_last_pass()}</span>
-                       <span class="text-sm font-semibold text-on-surface">{formatRelative(caseData?.profile?.lastSeenAt)}</span>
-                     </div>
-                   </div>
-                </div>
-
-                <!-- Activity Chart (Bento Large) -->
-                {#if analyticsData && analyticsData.dailyTrend && analyticsData.dailyTrend.length > 0}
-                  <div class="md:col-span-3 rounded-xl bg-surface-container-low/30 p-10 border border-outline-variant/10 shadow-sm group">
-                    <div class="flex items-center justify-between mb-8">
-                       <div class="flex items-center gap-4">
-                         <div class="flex h-14 w-14 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                           <Papicon icon="trending-up" size={28} />
-                         </div>
-                         <div>
-                           <p class="text-xs font-semibold text-primary">{m.mcm_statistics()}</p>
-                           <h4 class="text-2xl font-semibold text-on-surface font-headline">{m.mcm_activity_trend()}</h4>
-                         </div>
-                       </div>
-                       <div class="flex gap-2">
-                         <div class="flex flex-col items-end">
-                           <p class="text-2xl font-semibold text-primary">{analyticsData.totalMessages.toLocaleString('fr-FR')}</p>
-                           <p class="text-xs font-medium text-on-surface-variant/40">{m.mcm_total_messages()}</p>
-                         </div>
-                         <div class="h-8 w-px bg-outline-variant/20 mx-4"></div>
-                         <div class="flex flex-col items-end">
-                           <p class="text-2xl font-semibold text-secondary">{Math.round(analyticsData.totalVoiceMinutes)}m</p>
-                           <p class="text-xs font-medium text-on-surface-variant/40">{m.mcm_voice_time()}</p>
-                         </div>
-                       </div>
-                    </div>
-                    <div class="h-[200px] w-full">
-                       <Chart 
-                         data={{
-                           labels: analyticsData.dailyTrend.map(d => d.dateKey.slice(5)),
-                           datasets: [
-                             {
-                               label: m.mcm_messages(),
-                               data: analyticsData.dailyTrend.map(d => d.messages),
-                               borderColor: '#6366f1',
-                               backgroundColor: 'rgba(99, 102, 241, 0.1)',
-                               fill: true,
-                               tension: 0.4,
-                               pointRadius: 0,
-                               gradient: {
-                                 backgroundColor: {
-                                   axis: 'y',
-                                   colors: { 0: 'rgba(99, 102, 241, 0)', 100: 'rgba(99, 102, 241, 0.2)' }
-                                 }
-                               }
-                             },
-                             {
-                               label: m.mcm_voice_min_series(),
-                               data: analyticsData.dailyTrend.map(d => d.voiceMinutes || 0),
-                               borderColor: '#ec4899',
-                               backgroundColor: 'rgba(236, 72, 153, 0.1)',
-                               fill: true,
-                               tension: 0.4,
-                               pointRadius: 0,
-                               gradient: {
-                                 backgroundColor: {
-                                   axis: 'y',
-                                   colors: { 0: 'rgba(236, 72, 153, 0)', 100: 'rgba(236, 72, 153, 0.2)' }
-                                 }
-                               }
-                             }
-                           ]
-                         }} 
-                         height={200} 
-                       />
-                     </div>
+            {:else if activeTab === 'resume'}
+              <!-- Chiffres -->
+              <section class="section-card p-5" aria-label={m.mcm_tab_summary()}>
+                <dl class="mc-kpis">
+                  <div>
+                    <dt><Papicon icon="calendar" size={13} />{m.mcm_server_presence()}</dt>
+                    <dd>{getDurationSince(caseData?.profile?.guildJoinedAt)}</dd>
+                    <span>{m.mcm_joined_on({ date: formatDateShort(caseData?.profile?.guildJoinedAt) })}</span>
                   </div>
-                {:else if analyticsLoading}
-                  <div class="md:col-span-3 rounded-xl bg-surface-container-low/30 p-10 border border-outline-variant/10 shadow-sm animate-pulse flex flex-col justify-center items-center">
-                    <Papicon icon="loader" size={32} class="animate-spin text-primary/20 mb-4" />
-                    <p class="text-body-sm font-medium text-on-surface-variant/20">{m.mcm_computing_stats()}</p>
+                  <div>
+                    <dt><Papicon icon="user" size={13} />{m.mcm_account_age()}</dt>
+                    <dd>{getDurationSince(caseData?.profile?.accountCreatedAt)}</dd>
+                    <span>{m.mcm_created_on({ date: formatDateShort(caseData?.profile?.accountCreatedAt) })}</span>
+                  </div>
+                  <div>
+                    <dt><Papicon icon="message-square" size={13} />{m.mcm_messages()}</dt>
+                    <dd class="tabular-nums">{caseData?.profile?.messageCount?.toLocaleString(dateLocale()) ?? 0}</dd>
+                    <span>{m.mcm_voice()} : {formatDurationFromSeconds(caseData?.profile?.voiceTimeSeconds)}</span>
+                  </div>
+                  <div>
+                    <dt><Papicon icon="hammer" size={13} />{m.mcm_sanctions()}</dt>
+                    <dd class="tabular-nums {activeSanctionCount ? 'text-error' : ''}">{sanctions.length}</dd>
+                    <span class={activeSanctionCount ? 'text-error' : ''}>{m.mcm_active_sanctions({ count: activeSanctionCount })}</span>
+                  </div>
+                </dl>
+              </section>
+
+              <!-- Activite -->
+              <SectionCard title={m.mcm_activity_trend()} description={m.mcx_trend_desc()}>
+                {#snippet actions()}
+                  <Button size="sm" variant="ghost" iconRight="arrow-right" onclick={() => (activeTab = 'analytics')}>{m.mcm_tab_analytics()}</Button>
+                {/snippet}
+                {#if analyticsLoading && !analyticsData}
+                  <div class="space-y-3" aria-busy="true">
+                    <div class="h-[5.25rem] animate-pulse rounded-xl bg-surface-container"></div>
+                    <div class="h-[180px] animate-pulse rounded-lg bg-surface-container"></div>
+                  </div>
+                {:else if hasTrend && selectedMetric}
+                  <div class="space-y-3">
+                    <MetricTabs metrics={memberMetrics} active={selectedMetric.id} onchange={(id) => (trendMetric = id as 'messages' | 'voice')} compare label={m.mcm_activity_trend()} />
+                    <TimeSeriesChart
+                      labels={trendLabels}
+                      mode="line"
+                      main={{ label: selectedMetric.label, color: selectedMetric.color, values: selectedMetric.daily }}
+                      previous={{ label: m.anx_trend_previous(), values: selectedMetric.prevDaily }}
+                      format={selectedMetric.format}
+                      height={190}
+                    />
                   </div>
                 {:else}
-                  <div class="md:col-span-3 rounded-xl bg-surface-container-low/10 p-10 border border-dashed border-outline-variant/20 flex flex-col justify-center items-center text-center">
-                    <div class="h-12 w-12 rounded-lg bg-on-surface/5 flex items-center justify-center text-on-surface-variant/20 mb-4">
-                      <Papicon icon="bar-chart-2" size={24} />
-                    </div>
-                    <p class="text-sm font-semibold text-on-surface-variant/40">{m.mcm_stats_unavailable()}</p>
-                    <p class="text-xs font-semibold text-on-surface-variant/20 mt-1">{m.mcm_low_activity()}</p>
-                  </div>
+                  <p class="py-6 text-center text-sm text-on-surface-variant">{m.mcm_stats_unavailable()} {m.mcm_low_activity()}</p>
                 {/if}
+              </SectionCard>
 
-                <!-- Role & Permissions (Bento Side) -->
-                <div class="rounded-xl bg-surface-container-low/50 p-8 border border-outline-variant/10 shadow-sm transition-all hover:shadow-xl duration-500 group overflow-hidden relative">
-                   <div class="absolute -right-10 -bottom-10 opacity-[0.03] rotate-12 pointer-events-none">
-                     <Papicon icon="shield" size={160} />
-                   </div>
-                   <div class="flex items-center gap-3 mb-8">
-                     <div class="flex h-12 w-12 items-center justify-center rounded-lg bg-success/10 text-success group-hover:scale-110 transition-transform">
-                       <Papicon icon="shield" size={24} />
-                     </div>
-                     <div>
-                       <p class="text-xs font-semibold text-success">{m.mcm_permissions()}</p>
-                       <p class="text-lg font-semibold text-on-surface">{m.mcm_roles_access()}</p>
-                     </div>
-                   </div>
+              <div class="grid gap-4 md:grid-cols-2">
+                <SectionCard title={m.mcx_arrival()}>
+                  <dl class="mc-facts">
+                    <div><dt>{m.mcm_invited_by()}</dt><dd>{@render inviter(true)}</dd></div>
+                    <div><dt>{m.mcm_invite_code()}</dt><dd>{@render inviteCode()}</dd></div>
+                    <div><dt>{m.mcm_last_pass()}</dt><dd>{formatRelative(caseData?.profile?.lastSeenAt)}</dd></div>
+                  </dl>
+                </SectionCard>
 
-                   <div class="space-y-6">
-                     <div>
-                        <p class="text-xs font-semibold text-on-surface-variant/40 mb-3">{m.mcm_main_roles()}</p>
-                        <div class="flex flex-wrap gap-2">
-                          {#each caseData?.roles.slice(0, 4) as role}
-                            <span class="px-3 py-1.5 rounded-xl bg-surface-container-high text-2xs font-bold text-on-surface border border-outline-variant/20 flex items-center gap-1.5">
-                              {#if role.color && role.color !== '#000000'}
-                                <span class="w-1.5 h-1.5 rounded-full shrink-0" style="background-color: {role.color}"></span>
-                              {/if}
-                              {role.name}
-                            </span>
-                          {/each}
-                          {#if caseData?.roles.length > 4}
-                            <span class="px-3 py-1.5 rounded-xl bg-primary/5 text-2xs font-semibold text-primary border border-primary/10">+{caseData?.roles.length - 4}</span>
-                          {/if}
-                        </div>
-                     </div>
-                     <div>
-                        <p class="text-xs font-semibold text-on-surface-variant/40 mb-3">{m.mcm_key_permissions()}</p>
-                        <div class="flex flex-wrap gap-1.5">
-                          {#each caseData?.effectivePermissions.slice(0, 3) as perm}
-                            <span class="text-2xs font-semibold text-success uppercase tracking-tighter flex items-center gap-1.5">
-                              <Papicon icon="check-circle" size={10} /> {perm}
-                            </span>
-                          {/each}
-                        </div>
-                     </div>
-                   </div>
-                </div>
-
-                <!-- Recent Activity Feed (Wide Footer) -->
-                <div class="md:col-span-4 rounded-xl bg-surface-container-low/20 p-10 border border-outline-variant/10 group">
-                  <div class="flex items-center justify-between mb-10">
-                    <div class="flex items-center gap-4">
-                       <div class="flex h-14 w-14 items-center justify-center rounded-lg bg-on-surface/5 text-on-surface-variant">
-                         <Papicon icon="history" size={28} />
-                       </div>
-                       <div>
-                         <p class="text-xs font-semibold text-on-surface-variant/40">{m.mcm_timeline()}</p>
-                         <h4 class="text-2xl font-semibold text-on-surface font-headline">{m.mcm_recent_activities()}</h4>
-                       </div>
+                <SectionCard title={m.mcm_roles_count({ count: caseData?.roles.length })}>
+                  {#if caseData?.roles.length}
+                    <div class="flex flex-wrap gap-1.5">
+                      {#each caseData.roles.slice(0, 12) as role, ri (ri)}
+                        {@render roleChip(role)}
+                      {/each}
+                      {#if caseData.roles.length > 12}
+                        <button type="button" class="mc-role text-primary" onclick={() => (activeTab = 'identite')}>+{caseData.roles.length - 12}</button>
+                      {/if}
                     </div>
-                    <button onclick={() => activeTab = 'logs'} class="group/btn inline-flex items-center gap-2 rounded-lg bg-white/5 px-6 py-3 text-xs font-semibold text-on-surface-variant transition-all hover:bg-white/10 hover:text-on-surface">
-                      {m.mcm_see_all_logs()}
-                      <Papicon icon="arrow-right" size={14} class="group-hover/btn:translate-x-1 transition-transform" />
-                    </button>
-                  </div>
-
-                  <div class="grid gap-6 md:grid-cols-2">
-                    <div class="space-y-4">
-                       <p class="text-xs font-semibold text-primary px-2 mb-4">{m.mcm_last_messages()}</p>
-                       {#each caseData?.messagesByChannel.slice(0, 3).flatMap(c => c.recentMessages.slice(0, 1)) as msg}
-                         <div class="rounded-xl bg-surface-container-low/60 p-5 border border-outline-variant/5 transition-all hover:border-primary/20">
-                            <div class="flex items-center justify-between mb-2">
-                               <span class="text-2xs font-bold text-primary">#{msg.channelName}</span>
-                               <span class="text-2xs font-bold text-on-surface-variant/40">{formatRelative(msg.dateIso)}</span>
-                            </div>
-                            <p class="text-sm text-on-surface line-clamp-2 leading-relaxed italic">"{msg.content || m.mcm_empty_content()}"</p>
-                         </div>
-                       {/each}
-                       {#if caseData?.messagesByChannel.length === 0}
-                         <p class="text-xs text-on-surface-variant/40 px-2">{m.mcm_no_recent_message()}</p>
-                       {/if}
-                    </div>
-
-                    <div class="space-y-4">
-                       <p class="text-xs font-semibold text-secondary px-2 mb-4">{m.mcm_last_logs()}</p>
-                       <div class="space-y-3 relative pl-4 border-l border-outline-variant/20 ml-2">
-                         {#each caseData?.logs.slice(0, 3) as log}
-                           <div class="relative pb-6">
-                              <div class="absolute -left-[calc(1rem+4.5px)] top-1 h-2 w-2 rounded-full bg-secondary border border-surface"></div>
-                              <p class="text-xs font-semibold text-on-surface">{log.action}</p>
-                              <p class="text-2xs font-bold text-on-surface-variant/40 mt-0.5">{log.module} · {formatRelative(log.dateIso)}</p>
-                           </div>
-                         {/each}
-                       </div>
-                    </div>
-                  </div>
-                </div>
-
-                <!-- Basic Profile Card -->
-                <div class="md:col-span-4 grid gap-6 md:grid-cols-2">
-                  <div class="rounded-xl bg-surface-container-low/50 p-6 border border-outline-variant/10">
-                    <p class="text-xs font-semibold text-primary mb-6">{m.mcm_discord_profile()}</p>
-                    <dl class="space-y-4">
-                      <div class="flex items-center justify-between"><dt class="text-xs font-bold text-on-surface-variant/60">{m.mcm_username()}</dt><dd class="text-sm font-semibold text-on-surface">@{caseData?.profile?.username ?? m.mcm_unknown()}</dd></div>
-                      <div class="flex items-center justify-between"><dt class="text-xs font-bold text-on-surface-variant/60">{m.mcm_global_name()}</dt><dd class="text-sm font-semibold text-on-surface">{caseData?.profile?.globalName ?? m.mcm_unknown()}</dd></div>
-                      <div class="flex items-center justify-between"><dt class="text-xs font-bold text-on-surface-variant/60">{m.mcm_server_display()}</dt><dd class="text-sm font-semibold text-on-surface">{caseData?.profile?.displayName ?? m.mcm_unknown()}</dd></div>
-                      <div class="flex items-center justify-between"><dt class="text-xs font-bold text-on-surface-variant/60">{m.mcm_language()}</dt><dd class="text-sm font-semibold text-on-surface">{caseData?.profile?.locale ?? m.mcm_unknown_f()}</dd></div>
-                      <div class="flex items-center justify-between"><dt class="text-xs font-bold text-on-surface-variant/60">{m.mcm_pronouns()}</dt><dd class="text-sm font-semibold text-on-surface">{caseData?.profile?.pronouns ?? m.mcm_not_specified_plural()}</dd></div>
-                    </dl>
-                  </div>
-                  <div class="rounded-xl bg-surface-container-low/50 p-6 border border-outline-variant/10 space-y-6">
-                    <p class="text-xs font-semibold text-secondary mb-6">{m.mcm_visuals()}</p>
-                    {#if caseData?.profile?.avatarUrl}
-                      <div class="flex items-center gap-4">
-                        <img src={caseData?.profile?.avatarUrl} alt={m.mcm_avatar_alt()} class="h-16 w-16 rounded-lg object-cover shadow-lg border-2 border-surface" />
-                        <span class="text-xs font-bold text-on-surface-variant/60">{m.mcm_custom_avatar()}</span>
-                      </div>
-                    {/if}
-                    {#if caseData?.profile?.bannerUrl}
-                      <img src={caseData?.profile?.bannerUrl} alt={m.mcm_banner_alt()} class="w-full h-24 rounded-lg object-cover border border-outline-variant/10 shadow-sm" />
-                    {/if}
-                    {#if caseData?.profile?.accentColor}
-                      <div class="flex items-center gap-3">
-                        <div class="h-8 w-8 rounded-lg shadow-inner" style="background-color: #{caseData?.profile?.accentColor.toString(16).padStart(6, '0')};"></div>
-                        <span class="text-xs font-bold text-on-surface-variant/60">{m.mcm_accent_color({ hex: caseData?.profile?.accentColor.toString(16).padStart(6, '0') })}</span>
-                      </div>
-                    {/if}
-                  </div>
-                </div>
+                  {:else}
+                    <p class="text-sm text-on-surface-variant">{m.mcm_no_role()}</p>
+                  {/if}
+                  {#if caseData?.effectivePermissions?.length}
+                    <p class="mt-4 text-xs text-on-surface-variant">{m.mcm_key_permissions()}</p>
+                    <p class="mt-1 text-sm text-on-surface">{caseData.effectivePermissions.slice(0, 4).join(' · ')}</p>
+                  {/if}
+                </SectionCard>
               </div>
 
-            {:else if activeTab === 'identite'}
-              <div class="grid gap-6 md:grid-cols-2">
-                <!-- Profile details -->
-                <div class="rounded-xl bg-surface-container-low/50 p-8 border border-outline-variant/10 shadow-sm hover:bg-surface-container-low transition-all duration-500 group">
-                   <div class="flex items-center gap-3 mb-8">
-                     <div class="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10 text-primary group-hover:scale-110 transition-transform">
-                       <Papicon icon="user" size={24} />
-                     </div>
-                     <div>
-                       <p class="text-xs font-semibold text-primary">{m.mcm_account_data()}</p>
-                       <p class="text-lg font-semibold text-on-surface">{m.mcm_full_profile()}</p>
-                     </div>
-                   </div>
-                   <dl class="space-y-5">
-                     <div class="flex items-center justify-between border-b border-outline-variant/5 pb-2">
-                       <dt class="text-xs font-medium text-on-surface-variant/40">{m.mcm_discord_id()}</dt>
-                       <dd class="text-sm font-semibold text-on-surface select-all">{caseData?.profile?.userId ?? userId}</dd>
-                     </div>
-                     <div class="flex items-center justify-between border-b border-outline-variant/5 pb-2">
-                       <dt class="text-xs font-medium text-on-surface-variant/40">{m.mcm_username()}</dt>
-                       <dd class="text-sm font-semibold text-on-surface">@{caseData?.profile?.username ?? m.mcm_unknown()}</dd>
-                     </div>
-                     <div class="flex items-center justify-between border-b border-outline-variant/5 pb-2">
-                       <dt class="text-xs font-medium text-on-surface-variant/40">{m.mcm_global_name_cap()}</dt>
-                       <dd class="text-sm font-semibold text-on-surface">{caseData?.profile?.globalName ?? m.mcm_unknown()}</dd>
-                     </div>
-                     <div class="flex items-center justify-between border-b border-outline-variant/5 pb-2">
-                       <dt class="text-xs font-medium text-on-surface-variant/40">{m.mcm_server_nickname()}</dt>
-                       <dd class="text-sm font-semibold text-on-surface">{caseData?.profile?.displayName ?? m.mcm_unknown()}</dd>
-                     </div>
-                     <div class="flex items-center justify-between border-b border-outline-variant/5 pb-2">
-                       <dt class="text-xs font-medium text-on-surface-variant/40">{m.mcm_pronouns()}</dt>
-                       <dd class="text-sm font-semibold text-on-surface">{caseData?.profile?.pronouns ?? m.mcm_not_specified_plural()}</dd>
-                     </div>
-                     <div class="flex items-center justify-between">
-                       <dt class="text-xs font-medium text-on-surface-variant/40">{m.mcm_language_locale()}</dt>
-                       <dd class="text-sm font-semibold text-on-surface">{caseData?.profile?.locale ?? m.mcm_unknown_f()}</dd>
-                     </div>
-                   </dl>
-                </div>
-
-                <!-- Vérifications de sécurité : trace partagée entre modérateurs
-                     pour ne pas redemander ce qu'un collègue a déjà lancé. -->
-                <div class="rounded-xl bg-surface-container-low/50 p-8 border border-outline-variant/10 shadow-sm">
-                  <div class="flex items-center gap-3 mb-8">
-                    <div class="flex h-12 w-12 items-center justify-center rounded-lg bg-secondary/10 text-secondary">
-                      <Papicon icon="shield-alert" size={24} />
-                    </div>
-                    <div class="min-w-0">
-                      <p class="text-xs font-semibold text-secondary">{m.mcm_verif_history_title()}</p>
-                      <p class="text-lg font-semibold text-on-surface">{m.mcm_verif_history_count({ count: verificationCount })}</p>
-                    </div>
-                  </div>
-
-                  {#if verificationEntries.length === 0}
-                    <p class="text-sm text-on-surface-variant/50">{m.mcm_verif_history_empty()}</p>
+              <div class="grid gap-4 md:grid-cols-2">
+                <SectionCard title={m.mcm_last_messages()} flush>
+                  {#snippet actions()}
+                    <Button size="sm" variant="ghost" iconRight="arrow-right" onclick={() => (activeTab = 'messages')}>{m.mcm_tab_messages()}</Button>
+                  {/snippet}
+                  {@const recent = caseData?.messagesByChannel.slice(0, 3).flatMap((c) => c.recentMessages.slice(0, 1)) ?? []}
+                  {#if recent.length}
+                    <ul class="divide-y divide-outline-variant">
+                      {#each recent as msg, i (i)}
+                        <li class="px-5 py-3">
+                          <div class="flex items-center justify-between gap-2 text-xs text-on-surface-variant">
+                            <span class="font-medium text-primary">#{msg.channelName}</span>
+                            <span>{formatRelative(msg.dateIso)}</span>
+                          </div>
+                          <p class="mt-1 line-clamp-2 text-sm text-on-surface">{msg.content || m.mcm_empty_content()}</p>
+                        </li>
+                      {/each}
+                    </ul>
                   {:else}
-                    <dl class="space-y-4 mb-6">
-                      <div class="flex items-center justify-between border-b border-outline-variant/5 pb-2">
-                        <dt class="text-xs font-medium text-on-surface-variant/40">{m.mcm_verif_last_request()}</dt>
-                        <dd class="text-sm font-semibold text-on-surface">{formatVerificationDate(verifications?.lastRequestedAt)}</dd>
-                      </div>
-                      <div class="flex items-center justify-between border-b border-outline-variant/5 pb-2">
-                        <dt class="text-xs font-medium text-on-surface-variant/40">{m.mcm_verif_last_verified()}</dt>
-                        <dd class="text-sm font-semibold text-on-surface">{formatVerificationDate(verifications?.lastVerifiedAt)}</dd>
-                      </div>
-                    </dl>
+                    <p class="px-5 py-6 text-sm text-on-surface-variant">{m.mcm_no_recent_message()}</p>
+                  {/if}
+                </SectionCard>
 
-                    <ul class="space-y-3">
+                <SectionCard title={m.mcm_last_logs()} flush>
+                  {#snippet actions()}
+                    <Button size="sm" variant="ghost" iconRight="arrow-right" onclick={() => (activeTab = 'logs')}>{m.mcm_see_all_logs()}</Button>
+                  {/snippet}
+                  {#if caseData?.logs.length}
+                    <ul class="divide-y divide-outline-variant">
+                      {#each caseData.logs.slice(0, 4) as log, i (i)}
+                        <li class="px-5 py-3">
+                          <p class="text-sm text-on-surface">{log.action}</p>
+                          <p class="text-xs text-on-surface-variant">{log.module} · {formatRelative(log.dateIso)}</p>
+                        </li>
+                      {/each}
+                    </ul>
+                  {:else}
+                    <p class="px-5 py-6 text-sm text-on-surface-variant">{m.mcm_no_log()}</p>
+                  {/if}
+                </SectionCard>
+              </div>
+
+              <SectionCard title={m.mcm_discord_profile()}>
+                <div class="grid gap-6 {caseData?.profile?.bannerUrl || caseData?.profile?.accentColor ? 'md:grid-cols-[minmax(0,1fr)_16rem]' : 'max-w-xl'}">
+                  {@render facts([
+                    { label: m.mcm_username(), value: `@${caseData?.profile?.username ?? m.mcm_unknown()}` },
+                    { label: m.mcm_global_name(), value: caseData?.profile?.globalName ?? m.mcm_unknown() },
+                    { label: m.mcm_server_display(), value: caseData?.profile?.displayName ?? m.mcm_unknown() },
+                    { label: m.mcm_language(), value: caseData?.profile?.locale ?? m.mcm_unknown_f() },
+                    { label: m.mcm_pronouns(), value: caseData?.profile?.pronouns ?? m.mcm_not_specified_plural() },
+                  ])}
+                  {#if caseData?.profile?.bannerUrl || caseData?.profile?.accentColor}
+                    <div class="space-y-3">
+                      {#if caseData?.profile?.bannerUrl}
+                        <img src={caseData.profile.bannerUrl} alt={m.mcm_banner_alt()} class="h-20 w-full rounded-lg object-cover" />
+                      {/if}
+                      {#if caseData?.profile?.accentColor}
+                        {@const hex = caseData.profile.accentColor.toString(16).padStart(6, '0')}
+                        <p class="flex items-center gap-2 text-xs text-on-surface-variant">
+                          <span class="h-4 w-4 rounded" style="background: #{hex}"></span>
+                          {m.mcm_accent_color({ hex })}
+                        </p>
+                      {/if}
+                    </div>
+                  {/if}
+                </div>
+              </SectionCard>
+
+            {:else if activeTab === 'identite'}
+              <div class="grid gap-4 md:grid-cols-2">
+                <SectionCard title={m.mcm_full_profile()}>
+                  {@render facts([
+                    { label: m.mcm_discord_id(), value: caseData?.profile?.userId ?? userId ?? '' },
+                    { label: m.mcm_username(), value: `@${caseData?.profile?.username ?? m.mcm_unknown()}` },
+                    { label: m.mcm_global_name_cap(), value: caseData?.profile?.globalName ?? m.mcm_unknown() },
+                    { label: m.mcm_server_nickname(), value: caseData?.profile?.displayName ?? m.mcm_unknown() },
+                    { label: m.mcm_pronouns(), value: caseData?.profile?.pronouns ?? m.mcm_not_specified_plural() },
+                    { label: m.mcm_language_locale(), value: caseData?.profile?.locale ?? m.mcm_unknown_f() },
+                  ])}
+                </SectionCard>
+
+                <SectionCard title={m.mcm_key_dates()}>
+                  {@render facts([
+                    { label: m.mcm_account_creation(), value: formatDateTime(caseData?.profile?.accountCreatedAt) },
+                    { label: m.mcm_server_join(), value: formatDateTime(caseData?.profile?.guildJoinedAt) },
+                    ...(caseData?.profile?.guildLeftAt ? [{ label: m.mcm_last_leave(), value: formatDateTime(caseData.profile.guildLeftAt), tone: 'text-error' }] : []),
+                    { label: m.mcm_first_seen(), value: formatDateTime(caseData?.profile?.firstSeenAt) },
+                    { label: m.mcm_last_seen(), value: formatDateTime(caseData?.profile?.lastSeenAt) },
+                  ])}
+                </SectionCard>
+
+                <!-- Verifications : trace partagee entre moderateurs pour ne pas
+                     redemander ce qu'un collegue a deja lance. -->
+                <SectionCard title={m.mcm_verif_history_title()} description={m.mcm_verif_history_count({ count: verificationCount })}>
+                  {#if verificationEntries.length === 0}
+                    <p class="text-sm text-on-surface-variant">{m.mcm_verif_history_empty()}</p>
+                  {:else}
+                    {@render facts([
+                      { label: m.mcm_verif_last_request(), value: formatVerificationDate(verifications?.lastRequestedAt) },
+                      { label: m.mcm_verif_last_verified(), value: formatVerificationDate(verifications?.lastVerifiedAt) },
+                    ])}
+                    <ul class="mt-4 space-y-2">
                       {#each verificationEntries as entry (entry.id)}
-                        <li class="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-surface-container-high/20 px-4 py-3">
+                        <li class="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-surface-container px-3 py-2.5">
                           <div class="min-w-0">
-                            <p class="text-xs font-semibold text-on-surface">
-                              {m.mcm_verif_requested_on({ date: formatVerificationDate(entry.requestedAt) })}
-                            </p>
+                            <p class="text-sm text-on-surface">{m.mcm_verif_requested_on({ date: formatVerificationDate(entry.requestedAt) })}</p>
                             {#if entry.verifiedAt}
-                              <p class="text-2xs font-medium text-on-surface-variant/50 mt-0.5">
-                                {m.mcm_verif_verified_on({ date: formatVerificationDate(entry.verifiedAt) })}
-                              </p>
+                              <p class="text-xs text-on-surface-variant">{m.mcm_verif_verified_on({ date: formatVerificationDate(entry.verifiedAt) })}</p>
                             {/if}
                           </div>
-                          <span class="shrink-0 rounded-full border px-2.5 py-0.5 text-xs font-semibold {VERIFICATION_STATUS_STYLES[entry.status] ?? VERIFICATION_STATUS_STYLES.EXPIRED}">
-                            {verificationStatusLabel(entry.status)}
-                          </span>
+                          <span class="badge {VERIFICATION_STATUS_STYLES[entry.status] ?? VERIFICATION_STATUS_STYLES.EXPIRED}">{verificationStatusLabel(entry.status)}</span>
                         </li>
                       {/each}
                     </ul>
                   {/if}
-                </div>
+                </SectionCard>
 
                 {#if caseData?.profile?.staffGrade}
-                  <!-- Staff Role Section -->
-                  <div class="rounded-xl bg-warning/5 p-8 border border-warning/20 shadow-sm hover:bg-warning/10 transition-all duration-500 group">
-                     <div class="flex items-center gap-3 mb-8">
-                       <div class="flex h-12 w-12 items-center justify-center rounded-lg bg-amber-500 text-white group-hover:scale-110 transition-transform shadow-sm">
-                         <Papicon icon="star" size={24} />
-                       </div>
-                       <div>
-                         <p class="text-xs font-semibold text-warning">{m.mcm_administration()}</p>
-                         <p class="text-lg font-semibold text-on-surface">{m.mcm_staff_status()}</p>
-                       </div>
-                     </div>
-                     <dl class="space-y-5">
-                       <div class="flex items-center justify-between border-b border-warning/15 pb-2">
-                         <dt class="text-xs font-medium text-on-surface-variant/40">{m.mcm_current_grade()}</dt>
-                         <dd class="text-sm font-semibold text-warning">{caseData?.profile?.staffGrade}</dd>
-                       </div>
-                       <div class="flex items-center justify-between">
-                         <dt class="text-xs font-medium text-on-surface-variant/40">{m.mcm_tutor_status()}</dt>
-                         <dd class="text-sm font-semibold text-on-surface">
-                           {caseData?.profile?.isTutor ? m.mcm_tutor_yes() : m.mcm_tutor_no()}
-                         </dd>
-                       </div>
-                     </dl>
-                  </div>
+                  <SectionCard title={m.mcm_staff_status()}>
+                    {@render facts([
+                      { label: m.mcm_current_grade(), value: caseData.profile.staffGrade },
+                      { label: m.mcm_tutor_status(), value: caseData.profile.isTutor ? m.mcm_tutor_yes() : m.mcm_tutor_no() },
+                    ])}
+                  </SectionCard>
                 {/if}
 
-                <!-- Timeline -->
-                <div class="rounded-xl bg-surface-container-low/50 p-8 border border-outline-variant/10 shadow-sm hover:bg-surface-container-low transition-all duration-500 group">
-                   <div class="flex items-center gap-3 mb-8">
-                     <div class="flex h-12 w-12 items-center justify-center rounded-lg bg-secondary/10 text-secondary group-hover:scale-110 transition-transform">
-                       <Papicon icon="calendar" size={24} />
-                     </div>
-                     <div>
-                       <p class="text-xs font-semibold text-secondary">{m.mcm_chronology()}</p>
-                       <p class="text-lg font-semibold text-on-surface">{m.mcm_key_dates()}</p>
-                     </div>
-                   </div>
-                   <dl class="space-y-5">
-                     <div class="flex items-center justify-between border-b border-outline-variant/5 pb-2">
-                       <dt class="text-xs font-medium text-on-surface-variant/40">{m.mcm_account_creation()}</dt>
-                       <dd class="text-sm font-semibold text-on-surface">{formatDateTime(caseData?.profile?.accountCreatedAt)}</dd>
-                     </div>
-                     <div class="flex items-center justify-between border-b border-outline-variant/5 pb-2">
-                       <dt class="text-xs font-medium text-on-surface-variant/40">{m.mcm_server_join()}</dt>
-                       <dd class="text-sm font-semibold text-on-surface">{formatDateTime(caseData?.profile?.guildJoinedAt)}</dd>
-                     </div>
-                     {#if caseData?.profile?.guildLeftAt}
-                       <div class="flex items-center justify-between border-b border-outline-variant/5 pb-2">
-                         <dt class="text-xs font-medium text-error/60">{m.mcm_last_leave()}</dt>
-                         <dd class="text-sm font-semibold text-error">{formatDateTime(caseData?.profile?.guildLeftAt)}</dd>
-                       </div>
-                     {/if}
-                     <div class="flex items-center justify-between border-b border-outline-variant/5 pb-2">
-                       <dt class="text-xs font-medium text-on-surface-variant/40">{m.mcm_first_seen()}</dt>
-                       <dd class="text-sm font-semibold text-on-surface">{formatDateTime(caseData?.profile?.firstSeenAt)}</dd>
-                     </div>
-                     <div class="flex items-center justify-between">
-                       <dt class="text-xs font-medium text-on-surface-variant/40">{m.mcm_last_seen()}</dt>
-                       <dd class="text-sm font-semibold text-on-surface">{formatDateTime(caseData?.profile?.lastSeenAt)}</dd>
-                     </div>
-                   </dl>
-                </div>
-
-                <!-- Roles Detailed -->
-                <div class="md:col-span-2 rounded-xl bg-surface-container-low/50 p-8 border border-outline-variant/10 shadow-sm hover:bg-surface-container-low transition-all duration-500 group">
-                   <div class="flex items-center gap-3 mb-8">
-                     <div class="flex h-12 w-12 items-center justify-center rounded-lg bg-success/10 text-success group-hover:rotate-12 transition-transform">
-                       <Papicon icon="shield" size={24} />
-                     </div>
-                     <div>
-                       <p class="text-xs font-semibold text-success">{m.mcm_permissions()}</p>
-                       <p class="text-lg font-semibold text-on-surface">{m.mcm_roles_count({ count: caseData?.roles.length })}</p>
-                     </div>
-                   </div>
-                   <div class="flex flex-wrap gap-3">
-                     {#each caseData?.roles as role}
-                       <span class="px-5 py-2.5 rounded-lg bg-surface-container-high text-xs font-semibold text-on-surface border border-outline-variant/20 shadow-sm transition-all hover:bg-surface-container-highest flex items-center gap-2">
-                         {#if role.color && role.color !== '#000000'}
-                           <span class="w-2.5 h-2.5 rounded-full shrink-0" style="background-color: {role.color}"></span>
-                         {/if}
-                         {role.name}
-                       </span>
-                     {/each}
-                     {#if caseData?.roles.length === 0}
-                        <div class="w-full py-10 text-center bg-surface-container-low rounded-xl border border-dashed border-outline-variant/20">
-                          <p class="text-sm font-semibold text-on-surface-variant/40">{m.mcm_no_role()}</p>
-                        </div>
-                     {/if}
-                   </div>
+                <div class="md:col-span-2">
+                  <SectionCard title={m.mcm_roles_count({ count: caseData?.roles.length })}>
+                    {#if caseData?.roles.length}
+                      <div class="flex flex-wrap gap-1.5">
+                        {#each caseData.roles as role, ri (ri)}
+                          {@render roleChip(role)}
+                        {/each}
+                      </div>
+                    {:else}
+                      <p class="text-sm text-on-surface-variant">{m.mcm_no_role()}</p>
+                    {/if}
+                  </SectionCard>
                 </div>
               </div>
 
             {:else if activeTab === 'activite'}
-                <div class="space-y-8">
-                  <div class="grid gap-6 md:grid-cols-3">
-                    <div class="rounded-xl bg-primary/5 p-6 border border-primary/10 text-center">
-                      <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary mx-auto mb-4">
-                        <Papicon icon="message-square" size={20} />
-                      </div>
-                      <p class="text-2xl font-semibold text-on-surface">{caseData?.profile?.messageCount ?? 0}</p>
-                      <p class="text-xs font-semibold text-primary/60 mt-1">{m.mcm_messages()}</p>
-                    </div>
-                    <div class="rounded-xl bg-secondary/5 p-6 border border-secondary/10 text-center">
-                      <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-secondary/10 text-secondary mx-auto mb-4">
-                        <Papicon icon="mic" size={20} />
-                      </div>
-                      <p class="text-2xl font-semibold text-on-surface">{formatDurationFromSeconds(caseData?.profile?.voiceTimeSeconds)}</p>
-                      <p class="text-xs font-semibold text-secondary/60 mt-1">{m.mcm_voice_time()}</p>
-                    </div>
-                    <div class="rounded-xl bg-success/5 p-6 border border-success/10 text-center">
-                      <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-success/10 text-success mx-auto mb-4">
-                        <Papicon icon="eye" size={20} />
-                      </div>
-                      <p class="text-lg font-semibold text-on-surface">{formatDateShort(caseData?.profile?.lastSeenAt)}</p>
-                      <p class="text-xs font-semibold text-success/60 mt-1">{m.mcm_last_activity()}</p>
-                    </div>
+              <section class="section-card p-5">
+                <dl class="mc-kpis mc-kpis--3">
+                  <div>
+                    <dt><Papicon icon="message-square" size={13} />{m.mcm_messages()}</dt>
+                    <dd class="tabular-nums">{(caseData?.profile?.messageCount ?? 0).toLocaleString(dateLocale())}</dd>
                   </div>
-
-                  <div class="rounded-xl bg-surface-container-low/50 p-8 border border-outline-variant/10">
-                    <p class="text-xs font-semibold text-primary mb-8 px-2">{m.mcm_by_channel()}</p>
-                    <div class="space-y-6">
-                      {#each caseData?.messagesByChannel || [] as channel}
-                        {@const max = Math.max(...(caseData?.messagesByChannel || []).map(c => c.count), 1)}
-                        <div class="space-y-2">
-                          <div class="flex items-center justify-between px-1">
-                            <span class="text-sm font-semibold text-on-surface">{channel.channelName}</span>
-                            <span class="text-xs font-bold text-on-surface-variant/60">{channel.count} messages</span>
-                          </div>
-                          <div class="h-2 w-full rounded-full bg-surface-container-high overflow-hidden">
-                            <div class="h-full bg-linear-to-r from-primary to-secondary transition-all duration-1000" style="width: {(channel.count / max) * 100}%"></div>
-                          </div>
-                        </div>
-                      {/each}
-                    </div>
+                  <div>
+                    <dt><Papicon icon="mic" size={13} />{m.mcm_voice_time()}</dt>
+                    <dd>{formatDurationFromSeconds(caseData?.profile?.voiceTimeSeconds)}</dd>
                   </div>
+                  <div>
+                    <dt><Papicon icon="eye" size={13} />{m.mcm_last_activity()}</dt>
+                    <dd>{formatDateShort(caseData?.profile?.lastSeenAt)}</dd>
+                  </div>
+                </dl>
+              </section>
+              <SectionCard title={m.mcm_by_channel()}>
+                {#if caseData?.messagesByChannel?.length}
+                  {@const max = Math.max(...caseData.messagesByChannel.map((c) => c.count), 1)}
+                  <ul class="space-y-3">
+                    {#each caseData.messagesByChannel as channel, ci (ci)}
+                      <li>
+                        <button type="button" class="mc-bar-row" onclick={() => channelDetailsModal.show(channel.channelId, channel.channelName)} title={m.mcm_open_channel_details()}>
+                          <span class="flex items-center justify-between gap-3 text-sm">
+                            <span class="truncate text-on-surface">#{channel.channelName}</span>
+                            <span class="shrink-0 tabular-nums text-on-surface-variant">{channel.count.toLocaleString(dateLocale())}</span>
+                          </span>
+                          <span class="mc-bar"><span style="width: {(channel.count / max) * 100}%"></span></span>
+                        </button>
+                      </li>
+                    {/each}
+                  </ul>
+                {:else}
+                  <p class="text-sm text-on-surface-variant">{m.mcm_no_recent_message()}</p>
+                {/if}
+              </SectionCard>
+
+            {:else if activeTab === 'analytics'}
+              {#if analyticsLoading}
+                <div class="grid gap-4 lg:grid-cols-2">
+                  <div class="section-card h-64 animate-pulse"></div>
+                  <div class="section-card h-64 animate-pulse"></div>
                 </div>
-
-              {:else if activeTab === 'analytics'}
-                <div class="space-y-8">
-                  {#if analyticsLoading}
-                    <div class="flex flex-col items-center justify-center py-24 bg-surface-container-low/30 rounded-xl border border-outline-variant/10">
-                      <div class="relative mb-6">
-                        <div class="absolute -inset-4 rounded-full bg-primary/10 blur-xl animate-pulse"></div>
-                        <Papicon icon="loader" size={48} class="animate-spin text-primary" />
-                      </div>
-                      <p class="text-body-sm font-medium text-on-surface-variant/60">{m.mcm_analyzing_behavior()}</p>
-                    </div>
-                  {:else if analyticsData && analyticsData.dailyTrend && analyticsData.dailyTrend.length > 0}
-                    <div class="grid gap-6 lg:grid-cols-2">
-                       <div class="rounded-xl bg-surface-container-low/50 p-8 border border-outline-variant/10 shadow-sm group">
-                         <div class="flex items-center justify-between mb-8">
-                            <div>
-                              <p class="text-xs font-medium text-primary mb-1">{m.mcm_activity()}</p>
-                              <h4 class="text-sm font-semibold text-on-surface">{m.mcm_message_volume()}</h4>
-                            </div>
-                            <span class="text-2xs font-bold text-on-surface-variant/40 bg-surface-container-high px-3 py-1 rounded-lg">{m.mcm_last_30_days()}</span>
-                         </div>
-                          <Chart 
-                            data={{
-                              labels: analyticsData.dailyTrend.map(d => d.dateKey.slice(5)),
-                              datasets: [{
-                                label: m.mcm_messages(),
-                                data: analyticsData.dailyTrend.map(d => d.messages),
-                                borderColor: '#6366f1',
-                                backgroundColor: 'rgba(99, 102, 241, 0.1)',
-                                fill: true,
-                                tension: 0.4,
-                                pointRadius: 0,
-                                gradient: {
-                                  backgroundColor: {
-                                    axis: 'y',
-                                    colors: { 0: 'rgba(99, 102, 241, 0)', 100: 'rgba(99, 102, 241, 0.2)' }
-                                  }
-                                }
-                              }]
-                            }} 
-                            height={180} 
-                          />
-                       </div>
-                       <div class="rounded-xl bg-surface-container-low/50 p-8 border border-outline-variant/10 shadow-sm group">
-                         <div class="flex items-center justify-between mb-8">
-                            <div>
-                              <p class="text-xs font-medium text-secondary mb-1">{m.mcm_engagement()}</p>
-                              <h4 class="text-sm font-semibold text-on-surface">{m.mcm_voice_activity()}</h4>
-                            </div>
-                            <span class="text-2xs font-bold text-on-surface-variant/40 bg-surface-container-high px-3 py-1 rounded-lg">{m.mcm_minutes_per_day()}</span>
-                         </div>
-                          <Chart 
-                            data={{
-                              labels: analyticsData.dailyTrend.map(d => d.dateKey.slice(5)),
-                              datasets: [{
-                                label: m.mcm_voice_min_series(),
-                                data: analyticsData.dailyTrend.map(d => d.voiceMinutes),
-                                borderColor: '#ec4899',
-                                backgroundColor: 'rgba(236, 72, 153, 0.1)',
-                                fill: true,
-                                tension: 0.4,
-                                pointRadius: 0,
-                                gradient: {
-                                  backgroundColor: {
-                                    axis: 'y',
-                                    colors: { 0: 'rgba(236, 72, 153, 0)', 100: 'rgba(236, 72, 153, 0.2)' }
-                                  }
-                                }
-                              }]
-                            }} 
-                            height={180} 
-                          />
-                       </div>
-                    </div>
-                  {:else}
-                    <div class="flex flex-col items-center justify-center py-24 text-center bg-surface-container-low/30 rounded-xl border-2 border-dashed border-outline-variant/20">
-                      <div class="flex h-20 w-20 items-center justify-center rounded-xl bg-surface-container-high text-on-surface-variant/20 mb-8">
-                        <Papicon icon="bar-chart-2" size={40} />
-                      </div>
-                      <h3 class="text-2xl font-semibold text-on-surface-variant font-headline">{m.mcm_no_analytics()}</h3>
-                      <p class="mt-2 text-sm text-on-surface-variant/60 max-w-sm mx-auto px-6">
-                        {m.mcm_no_analytics_desc()}
-                      </p>
-                    </div>
-                  {/if}
-                </div>
-
-              {:else if activeTab === 'contenu' && userId}
-                <MemberContentPanel {userId} />
-
-              {:else if activeTab === 'messages'}
-                <div class="space-y-6">
-                  <!-- Barre de Filtres Ergonomique -->
-                  <div class="flex flex-col gap-4 rounded-xl bg-surface-container-low/50 p-4 border border-outline-variant/10 md:flex-row md:items-center">
-                    <div class="relative flex-1">
-                      <span class="pointer-events-none absolute inset-y-0 left-3.5 flex items-center text-on-surface-variant/40">
-                        <Papicon icon="search" size={16} />
-                      </span>
-                      <input
-                        type="search"
-                        bind:value={messageQuery}
-                        oninput={() => { messageOffset = 0; }}
-                        placeholder={m.mcm_search_messages()}
-                        class="w-full rounded-lg border border-outline-variant/10 bg-surface-container-high/40 py-2 pl-10 pr-10 text-xs text-on-surface placeholder:text-on-surface-variant/30 outline-hidden transition-all focus:border-primary/30 focus:bg-surface-container-high"
-                      />
-                    </div>
-
-                    <div class="flex flex-wrap items-center gap-3">
-                      <!-- Select Salon -->
-                      <div class="relative">
-                        <select
-                          bind:value={messageChannelId}
-                          onchange={() => { messageOffset = 0; }}
-                          class="appearance-none rounded-lg border border-outline-variant/10 bg-surface-container-high/40 py-2 pl-3 pr-8 text-xs font-bold text-on-surface-variant focus:border-primary/30 focus:outline-hidden"
-                        >
-                          <option value="">{m.mcm_all_channels()}</option>
-                          {#each messagesChannels as channel}
-                            <option value={channel.channelId}>#{channel.channelName} ({channel.count})</option>
-                          {/each}
-                        </select>
-                        <span class="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-on-surface-variant/40">
-                          <Papicon icon="chevron-down" size={12} />
+              {:else if hasTrend}
+                <div class="grid gap-4 lg:grid-cols-2">
+                  {#each memberMetrics as metric (metric.id)}
+                    <SectionCard title={metric.id === 'messages' ? m.mcm_message_volume() : m.mcm_voice_activity()} description={metric.id === 'messages' ? m.mcm_last_30_days() : m.mcm_minutes_per_day()}>
+                      {#snippet actions()}
+                        <span class="text-right">
+                          <span class="block text-lg font-semibold tabular-nums text-on-surface">{metric.value}</span>
+                          {#if metric.delta !== null && metric.delta !== undefined}
+                            <span class="block text-xs {metric.delta >= 0 ? 'text-success' : 'text-error'}">{metric.delta >= 0 ? '+' : ''}{Math.round(metric.delta)} %</span>
+                          {/if}
                         </span>
-                      </div>
+                      {/snippet}
+                      <TimeSeriesChart
+                        labels={trendLabels}
+                        mode="line"
+                        main={{ label: metric.label, color: metric.color, values: metric.daily }}
+                        previous={{ label: m.anx_trend_previous(), values: metric.prevDaily }}
+                        format={metric.format}
+                        height={200}
+                      />
+                    </SectionCard>
+                  {/each}
+                </div>
+              {:else}
+                {@render quietEmpty('bar-chart-2', m.mcm_no_analytics(), m.mcm_no_analytics_desc())}
+              {/if}
 
-                      <!-- Dates -->
-                      <div class="flex items-center gap-1.5 text-xs text-on-surface-variant/60">
-                        <span>{m.mcm_date_from()}</span>
-                        <input
-                          type="date"
-                          bind:value={messageFrom}
-                          onchange={() => { messageOffset = 0; }}
-                          class="rounded-lg border border-outline-variant/10 bg-surface-container-high/40 px-2 py-1.5 text-xs font-bold text-on-surface outline-hidden focus:border-primary/30"
-                        />
-                        <span>{m.mcm_date_to()}</span>
-                        <input
-                          type="date"
-                          bind:value={messageTo}
-                          onchange={() => { messageOffset = 0; }}
-                          class="rounded-lg border border-outline-variant/10 bg-surface-container-high/40 px-2 py-1.5 text-xs font-bold text-on-surface outline-hidden focus:border-primary/30"
-                        />
-                      </div>
+            {:else if activeTab === 'contenu' && userId}
+              <MemberContentPanel {userId} />
 
-                      <!-- Deleted toggle -->
-                      <label class="inline-flex items-center gap-2 cursor-pointer select-none text-xs font-bold text-on-surface-variant/70">
-                        <input
-                          type="checkbox"
-                          bind:checked={messageIncludeDeleted}
-                          onchange={() => { messageOffset = 0; }}
-                          class="rounded border-outline-variant/30 text-primary focus:ring-primary/20 h-4 w-4 bg-surface-container-high/40"
-                        />
-                        <span>{m.mcm_show_deleted()}</span>
-                      </label>
+            {:else if activeTab === 'messages'}
+              <div class="mc-toolbar">
+                <div class="mc-search relative">
+                  <span class="pointer-events-none absolute inset-y-0 left-3 flex items-center text-on-surface-variant"><Papicon icon="search" size={15} /></span>
+                  <input type="search" class="input" style="padding-left: 2.25rem;" placeholder={m.mcm_search_messages()} aria-label={m.mcm_search_messages()} bind:value={messageQuery} oninput={() => { messageOffset = 0; }} />
+                </div>
+                {@render toolbarSelect(messageChannelId, (v) => { messageChannelId = v; messageOffset = 0; }, [
+                  { value: '', label: m.mcm_all_channels() },
+                  ...messagesChannels.map((c) => ({ value: c.channelId, label: `#${c.channelName} (${c.count})` })),
+                ], m.mcm_all_channels())}
+                <label class="mc-date">
+                  <span>{m.mcm_date_from()}</span>
+                  <input type="date" class="input" bind:value={messageFrom} onchange={() => { messageOffset = 0; }} />
+                </label>
+                <label class="mc-date">
+                  <span>{m.mcm_date_to()}</span>
+                  <input type="date" class="input" bind:value={messageTo} onchange={() => { messageOffset = 0; }} />
+                </label>
+                <label class="inline-flex cursor-pointer select-none items-center gap-2 text-sm text-on-surface-variant">
+                  <input type="checkbox" class="h-4 w-4 accent-[var(--primary-color)]" bind:checked={messageIncludeDeleted} onchange={() => { messageOffset = 0; }} />
+                  {m.mcm_show_deleted()}
+                </label>
+              </div>
+
+              {#if messagesLoading}
+                <div class="section-card divide-y divide-outline-variant overflow-hidden" aria-busy="true">
+                  {#each Array(4) as _}
+                    <div class="space-y-2 px-5 py-4">
+                      <div class="h-3 w-1/4 animate-pulse rounded bg-surface-container-high"></div>
+                      <div class="h-3 w-5/6 animate-pulse rounded bg-surface-container-high"></div>
                     </div>
-                  </div>
-
-                  <!-- Fil de messages -->
-                  {#if messagesLoading}
-                    <div class="space-y-4 animate-pulse">
-                      {#each Array(4) as _}
-                        <div class="rounded-xl border border-outline-variant/10 bg-surface-container-low/40 p-5">
-                          <div class="flex justify-between items-center mb-3">
-                            <div class="h-3.5 w-1/4 rounded bg-on-surface/5"></div>
-                            <div class="h-3 w-20 rounded bg-on-surface/5"></div>
-                          </div>
-                          <div class="space-y-2">
-                            <div class="h-3 w-full rounded bg-on-surface/5"></div>
-                            <div class="h-3 w-5/6 rounded bg-on-surface/5"></div>
-                          </div>
+                  {/each}
+                </div>
+              {:else if messagesList.length === 0}
+                <div class="section-card">
+                  <EmptyState icon="message-square" title={m.mcm_no_message_found()} description={m.mcm_no_message_found_desc()} actionLabel={m.mcx_clear_filters()} actionIcon="rotate-ccw" onAction={() => { messageQuery = ''; messageChannelId = ''; messageFrom = ''; messageTo = ''; messageIncludeDeleted = true; messageOffset = 0; }} />
+                </div>
+              {:else}
+                <ul class="section-card divide-y divide-outline-variant overflow-hidden">
+                  {#each messagesList as msg (msg.id)}
+                    <li class="px-5 py-4 {msg.deletedAt ? 'bg-error/5' : ''}">
+                      <div class="flex flex-wrap items-center justify-between gap-2">
+                        <div class="flex flex-wrap items-center gap-2 text-xs text-on-surface-variant">
+                          <span class="font-medium text-primary">#{msg.channelName}</span>
+                          <span>{formatDateTime(msg.createdAt)}</span>
+                          {#if msg.editedAt}
+                            <span class="badge badge-warning" title={m.mcm_edited_on({ date: formatDateTime(msg.editedAt) })}>{m.mcm_edited()}</span>
+                          {/if}
+                          {#if msg.deletedAt}
+                            <span class="badge badge-danger" title={m.mcm_deleted_on({ date: formatDateTime(msg.deletedAt) })}>{m.mcm_deleted()}</span>
+                          {/if}
                         </div>
-                      {/each}
-                    </div>
-                  {:else if messagesList.length === 0}
-                    <div class="flex flex-col items-center justify-center py-20 text-center bg-surface-container-low/30 rounded-xl border-2 border-dashed border-outline-variant/20">
-                      <div class="flex h-16 w-16 items-center justify-center rounded-xl bg-surface-container-high text-on-surface-variant/20 mb-6">
-                        <Papicon icon="message-square" size={32} />
+                        {#if !msg.deletedAt}
+                          <Button size="sm" variant="ghost" icon="arrow-up-right" aria-label={m.mcx_open_in_discord()} title={m.mcx_open_in_discord()} href="https://discord.com/channels/{authStore.selectedGuildId}/{msg.channelId}/{msg.messageId}" target="_blank" />
+                        {/if}
                       </div>
-                      <h3 class="text-lg font-semibold text-on-surface font-headline">{m.mcm_no_message_found()}</h3>
-                      <p class="mt-2 text-xs text-on-surface-variant/60 max-w-sm mx-auto px-6">
-                        {m.mcm_no_message_found_desc()}
+                      <p class="mt-1.5 whitespace-pre-wrap text-sm leading-relaxed text-on-surface">
+                        {msg.content || (msg.hasAttachment ? m.mcm_empty_with_attachments() : m.mcm_empty_content())}
                       </p>
-                    </div>
-                  {:else}
-                    <div class="space-y-4">
-                      {#each messagesList as msg (msg.id)}
-                        <div class="group rounded-xl border p-5 transition-all duration-300 {msg.deletedAt ? 'border-error/10 bg-error/5' : 'border-outline-variant/10 bg-surface-container-low/50 hover:bg-surface-container-low hover:border-outline-variant/25'}">
-                          <div class="flex flex-wrap items-center justify-between gap-3 mb-3 pb-2.5 border-b border-outline-variant/5">
-                            <div class="flex items-center gap-2.5">
-                              <span class="inline-flex items-center gap-1.5 text-xs font-semibold text-primary bg-primary/10 px-2.5 py-1 rounded-lg">
-                                <Papicon icon="tag" size={12} />
-                                #{msg.channelName}
-                              </span>
-                              <span class="text-2xs font-bold text-on-surface-variant/40">{formatDateTime(msg.createdAt)}</span>
-                              
-                              {#if msg.editedAt}
-                                <span class="badge bg-warning/10 text-warning text-2xs" title={m.mcm_edited_on({ date: formatDateTime(msg.editedAt) })}>{m.mcm_edited()}</span>
-                              {/if}
-                              {#if msg.deletedAt}
-                                <span class="badge bg-error/15 text-error text-2xs border border-error/30" title={m.mcm_deleted_on({ date: formatDateTime(msg.deletedAt) })}>{m.mcm_deleted()}</span>
-                              {/if}
-                            </div>
-                            
-                            {#if !msg.deletedAt}
-                              <a
-                                href="https://discord.com/channels/{authStore.selectedGuildId}/{msg.channelId}/{msg.messageId}"
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                class="inline-flex items-center gap-1 text-xs font-semibold text-on-surface-variant/40 hover:text-primary transition-colors"
-                              >
-                                Jump
-                                <Papicon icon="arrow-up-right" size={10} />
+                      {#if Array.isArray(msg.attachments) && msg.attachments.length > 0}
+                        <div class="mt-3 flex flex-wrap gap-2">
+                          {#each msg.attachments as att, ai (ai)}
+                            {#if att.contentType?.startsWith('image/')}
+                              <a href={att.url} target="_blank" rel="noopener noreferrer" class="block max-h-40 max-w-60 overflow-hidden rounded-lg border border-outline-variant">
+                                <img src={att.url} alt={att.name} class="h-full w-full object-cover" />
+                              </a>
+                            {:else}
+                              <a href={att.url} target="_blank" rel="noopener noreferrer" class="mc-role text-primary">
+                                <Papicon icon="file" size={13} /><span class="max-w-40 truncate" title={att.name}>{att.name}</span>
                               </a>
                             {/if}
-                          </div>
+                          {/each}
+                        </div>
+                      {/if}
+                    </li>
+                  {/each}
+                </ul>
+                {#if messageOffset > 0 || messagesHasMore}
+                  <div class="flex items-center justify-between gap-3">
+                    <span class="text-xs text-on-surface-variant">
+                      {m.mcm_pagination_range({ from: messageOffset + 1, to: messageOffset + messagesList.length, total: formatMessageSearchTotal({ total: messagesTotalCount, totalCapped: messagesTotalCapped }) })}
+                    </span>
+                    <div class="flex items-center gap-1">
+                      <Button size="sm" icon="chevron-left" aria-label={m.mcx_previous()} disabled={messageOffset === 0} onclick={() => { messageOffset = Math.max(0, messageOffset - messageLimit); }} />
+                      <Button size="sm" icon="chevron-right" aria-label={m.mcx_next()} disabled={!messagesHasMore} onclick={() => { messageOffset = messageOffset + messageLimit; }} />
+                    </div>
+                  </div>
+                {/if}
+              {/if}
 
-                          <p class="text-sm text-on-surface leading-relaxed whitespace-pre-wrap select-text">
-                            {msg.content || (msg.hasAttachment ? m.mcm_empty_with_attachments() : m.mcm_empty_content())}
+            {:else if activeTab === 'logs'}
+              <!-- Meme barre que l'onglet Messages, appliquee ici cote client :
+                   les logs sont deja tous charges. -->
+              <div class="mc-toolbar">
+                <div class="mc-search relative">
+                  <span class="pointer-events-none absolute inset-y-0 left-3 flex items-center text-on-surface-variant"><Papicon icon="search" size={15} /></span>
+                  <input type="search" class="input" style="padding-left: 2.25rem;" placeholder={m.mcm_search_logs()} aria-label={m.mcm_search_logs()} bind:value={logQuery} />
+                </div>
+                {@render toolbarSelect(logModule, (v) => (logModule = v), [{ value: '', label: m.mcm_all_modules() }, ...logModules.map((x: any) => ({ value: String(x), label: String(x) }))], m.mcm_all_modules())}
+                {@render toolbarSelect(logSource, (v) => (logSource = v), [{ value: '', label: m.mcm_all_sources() }, ...logSources.map((x: any) => ({ value: String(x), label: String(x) }))], m.mcm_all_sources())}
+                <label class="mc-date"><span>{m.mcm_date_from()}</span><input type="date" class="input" bind:value={logFrom} /></label>
+                <label class="mc-date"><span>{m.mcm_date_to()}</span><input type="date" class="input" bind:value={logTo} /></label>
+                {@render toolbarSelect(logOrder, (v) => (logOrder = v as 'asc' | 'desc'), [{ value: 'desc', label: m.mcm_sort_newest() }, { value: 'asc', label: m.mcm_sort_oldest() }], m.mcm_sort_newest())}
+              </div>
+              <p class="text-xs text-on-surface-variant">{m.mcm_logs_shown({ shown: filteredLogs.length, total: caseData?.logs?.length ?? 0 })}</p>
+
+              {#if filteredLogs.length === 0}
+                <div>
+                  {#if (caseData?.logs?.length ?? 0) === 0}
+                    {@render quietEmpty('history', m.mcm_no_log())}
+                  {:else}
+                    <div class="section-card"><EmptyState icon="search" title={m.mcm_no_log_match()} actionLabel={m.mcx_clear_filters()} actionIcon="rotate-ccw" onAction={() => { logQuery = ''; logModule = ''; logSource = ''; logFrom = ''; logTo = ''; }} /></div>
+                  {/if}
+                </div>
+              {:else}
+                <ol class="section-card mc-timeline">
+                  {#each filteredLogs as log, i (i)}
+                    <li class="mc-event">
+                      <span class="mc-event__dot" aria-hidden="true"></span>
+                      <div class="min-w-0 flex-1">
+                        <div class="flex flex-wrap items-baseline justify-between gap-x-3">
+                          <p class="text-sm font-medium text-on-surface">{log.action}</p>
+                          <time class="text-xs tabular-nums text-on-surface-variant" datetime={log.dateIso}>{formatDateTime(log.dateIso)}</time>
+                        </div>
+                        <p class="text-xs text-on-surface-variant">{log.module} · {log.source}</p>
+                        {#if log.details}
+                          <div class="mt-2 rounded-lg bg-surface-container px-3 py-2.5">
+                            <LogDetails details={log.details} channelId={log.channelId} userNames={logUserNames} showChannel />
+                          </div>
+                        {/if}
+                      </div>
+                    </li>
+                  {/each}
+                </ol>
+              {/if}
+
+            {:else if activeTab === 'sanctions'}
+              {#if crossServer?.enabled && crossServer.total > 0}
+                <SectionCard
+                  icon="globe"
+                  title={m.mcm_cross_server_record()}
+                  description="{crossServer.total > 1 ? m.mcm_cross_server_count_other({ count: crossServer.total }) : m.mcm_cross_server_count_one({ count: crossServer.total })} {crossServer.serverCount > 1 ? m.mcm_cross_server_on_other({ count: crossServer.serverCount }) : m.mcm_cross_server_on_one({ count: crossServer.serverCount })}"
+                  flush
+                >
+                  {#snippet actions()}
+                    <div class="hidden flex-wrap justify-end gap-1.5 md:flex">
+                      {#each crossServerBreakdown as [type, count] (type)}
+                        <span class="badge badge-neutral"><span class="h-1.5 w-1.5 rounded-full {getSanctionTypeStyle(type).dot}"></span>{formatTypeLabel(type)} {count}</span>
+                      {/each}
+                    </div>
+                  {/snippet}
+                  <ul class="divide-y divide-outline-variant">
+                    {#each crossServer.recent as entry, i (i)}
+                      {@const style = getSanctionTypeStyle(entry.type)}
+                      <li class="flex items-center gap-3 px-5 py-3">
+                        <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg {style.tile}"><Papicon icon={style.icon} size={15} /></span>
+                        <div class="min-w-0 flex-1">
+                          <p class="text-sm text-on-surface">
+                            <span class="font-medium">{formatTypeLabel(entry.type)}</span>
+                            {#if entry.durationSeconds}<span class="text-on-surface-variant"> · {formatDurationFromSeconds(entry.durationSeconds)}</span>{/if}
                           </p>
-
-                          <!-- Rendu riche des pièces jointes -->
-                          {#if msg.attachments && Array.isArray(msg.attachments) && msg.attachments.length > 0}
-                            <div class="mt-4 flex flex-wrap gap-2.5">
-                              {#each msg.attachments as att}
-                                {#if att.contentType?.startsWith('image/')}
-                                  <a
-                                    href={att.url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    class="block max-w-[240px] max-h-[160px] overflow-hidden rounded-lg border border-outline-variant/15 hover:opacity-90 transition-opacity"
-                                  >
-                                    <img src={att.url} alt={att.name} class="w-full h-full object-cover" />
-                                  </a>
-                                {:else}
-                                  <a
-                                    href={att.url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    class="inline-flex items-center gap-2 rounded-lg bg-surface-container-high/50 border border-outline-variant/10 px-3.5 py-2 text-xs font-bold text-primary hover:bg-surface-container-high transition-colors"
-                                  >
-                                    <Papicon icon="file" size={14} />
-                                    <span class="truncate max-w-[160px]" title={att.name}>{att.name}</span>
-                                  </a>
-                                {/if}
-                              {/each}
-                            </div>
-                          {/if}
+                          {#if entry.reason?.trim()}<p class="truncate text-xs text-on-surface-variant" title={entry.reason}>{entry.reason}</p>{/if}
+                          <p class="truncate text-xs text-on-surface-variant" title={entry.guildName}>{entry.guildName}</p>
                         </div>
-                      {/each}
-                    </div>
-
-                    <!-- Pagination -->
-                    {#if messageOffset > 0 || messagesHasMore}
-                      <div class="flex items-center justify-between border-t border-outline-variant/10 pt-6">
-                        <span class="text-xs font-bold text-on-surface-variant/40">
-                          {m.mcm_pagination_range({ from: messageOffset + 1, to: messageOffset + messagesList.length, total: formatMessageSearchTotal({ total: messagesTotalCount, totalCapped: messagesTotalCapped }) })}
-                        </span>
-
-                        <div class="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onclick={() => { messageOffset = Math.max(0, messageOffset - messageLimit); }}
-                            disabled={messageOffset === 0}
-                            class="flex h-9 w-9 items-center justify-center rounded-lg bg-surface-container-high text-on-surface-variant hover:bg-surface-container-high-hover transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                          >
-                            <Papicon icon="chevron-left" size={14} />
-                          </button>
-
-                          <button
-                            type="button"
-                            onclick={() => { messageOffset = messageOffset + messageLimit; }}
-                            disabled={!messagesHasMore}
-                            class="flex h-9 w-9 items-center justify-center rounded-lg bg-surface-container-high text-on-surface-variant hover:bg-surface-container-high-hover transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                          >
-                            <Papicon icon="chevron-right" size={14} />
-                          </button>
-                        </div>
-                      </div>
-                    {/if}
-                  {/if}
-                </div>
-
-              {:else if activeTab === 'logs'}
-                <!-- Meme barre de filtres que l'onglet Messages, appliquee ici
-                     cote client : les logs sont deja tous charges. -->
-                <div class="mb-6 flex flex-col gap-4 rounded-xl bg-surface-container-low/50 p-4 border border-outline-variant/10 md:flex-row md:items-center">
-                  <div class="relative flex-1">
-                    <span class="pointer-events-none absolute inset-y-0 left-3.5 flex items-center text-on-surface-variant/40">
-                      <Papicon icon="search" size={16} />
-                    </span>
-                    <input
-                      type="search"
-                      bind:value={logQuery}
-                      placeholder={m.mcm_search_logs()}
-                      class="w-full rounded-lg border border-outline-variant/10 bg-surface-container-high/40 py-2 pl-10 pr-4 text-xs text-on-surface placeholder:text-on-surface-variant/30 outline-hidden transition-all focus:border-primary/30 focus:bg-surface-container-high"
-                    />
-                  </div>
-
-                  <div class="flex flex-wrap items-center gap-3">
-                    <div class="relative">
-                      <select
-                        bind:value={logModule}
-                        class="appearance-none rounded-lg border border-outline-variant/10 bg-surface-container-high/40 py-2 pl-3 pr-8 text-xs font-bold text-on-surface-variant focus:border-primary/30 focus:outline-hidden"
-                      >
-                        <option value="">{m.mcm_all_modules()}</option>
-                        {#each logModules as moduleName}
-                          <option value={moduleName}>{moduleName}</option>
-                        {/each}
-                      </select>
-                      <span class="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-on-surface-variant/40">
-                        <Papicon icon="chevron-down" size={12} />
-                      </span>
-                    </div>
-
-                    <div class="relative">
-                      <select
-                        bind:value={logSource}
-                        class="appearance-none rounded-lg border border-outline-variant/10 bg-surface-container-high/40 py-2 pl-3 pr-8 text-xs font-bold text-on-surface-variant focus:border-primary/30 focus:outline-hidden"
-                      >
-                        <option value="">{m.mcm_all_sources()}</option>
-                        {#each logSources as sourceName}
-                          <option value={sourceName}>{sourceName}</option>
-                        {/each}
-                      </select>
-                      <span class="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-on-surface-variant/40">
-                        <Papicon icon="chevron-down" size={12} />
-                      </span>
-                    </div>
-
-                    <div class="flex items-center gap-1.5 text-xs text-on-surface-variant/60">
-                      <span>{m.mcm_date_from()}</span>
-                      <input
-                        type="date"
-                        bind:value={logFrom}
-                        class="rounded-lg border border-outline-variant/10 bg-surface-container-high/40 px-2 py-1.5 text-xs font-bold text-on-surface outline-hidden focus:border-primary/30"
-                      />
-                      <span>{m.mcm_date_to()}</span>
-                      <input
-                        type="date"
-                        bind:value={logTo}
-                        class="rounded-lg border border-outline-variant/10 bg-surface-container-high/40 px-2 py-1.5 text-xs font-bold text-on-surface outline-hidden focus:border-primary/30"
-                      />
-                    </div>
-
-                    <div class="relative">
-                      <select
-                        bind:value={logOrder}
-                        class="appearance-none rounded-lg border border-outline-variant/10 bg-surface-container-high/40 py-2 pl-3 pr-8 text-xs font-bold text-on-surface-variant focus:border-primary/30 focus:outline-hidden"
-                      >
-                        <option value="desc">{m.mcm_sort_newest()}</option>
-                        <option value="asc">{m.mcm_sort_oldest()}</option>
-                      </select>
-                      <span class="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-on-surface-variant/40">
-                        <Papicon icon="chevron-down" size={12} />
-                      </span>
-                    </div>
-
-                    <span class="text-xs font-semibold text-on-surface-variant/40">
-                      {m.mcm_logs_shown({ shown: filteredLogs.length, total: caseData?.logs?.length ?? 0 })}
-                    </span>
-                  </div>
-                </div>
-
-                <div class="rounded-xl bg-surface-container-low/50 p-8 border border-outline-variant/10">
-                  <div class="space-y-8 relative pl-6 border-l-2 border-outline-variant/20 ml-4">
-                    {#each filteredLogs as log}
-                      <div class="relative">
-                        <div class="absolute -left-[calc(1.5rem+5px)] top-1.5 h-3 w-3 rounded-full bg-primary border-2 border-surface shadow-sm"></div>
-                        <div class="flex items-start justify-between gap-4 mb-2">
-                          <div>
-                            <p class="text-sm font-semibold text-on-surface tracking-tight">{log.action}</p>
-                            <p class="text-xs font-medium text-on-surface-variant/40 mt-1">{log.module} · {log.source}</p>
-                          </div>
-                          <span class="text-xs font-semibold text-on-surface-variant/30">{formatDateTime(log.dateIso)}</span>
-                        </div>
-                        <div class="rounded-lg bg-surface-container-high/30 p-4 text-xs text-on-surface-variant/80 italic leading-relaxed">
-                          {@html renderLogSnippet(log.details)}
-                        </div>
-                      </div>
+                        <span class="badge {entry.status === 'ACTIVE' ? 'badge-danger' : 'badge-success'}">{getSanctionStatusLabel(entry.status)}</span>
+                        <span class="hidden w-20 shrink-0 text-right text-xs text-on-surface-variant sm:block">{formatRelative(entry.createdAt)}</span>
+                      </li>
                     {/each}
-                    {#if filteredLogs.length === 0}
-                      <div class="flex flex-col items-center justify-center py-10 text-on-surface-variant/20">
-                         <Papicon icon="history" size={48} />
-                         <p class="mt-4 text-sm font-semibold">
-                           {(caseData?.logs?.length ?? 0) === 0 ? m.mcm_no_log() : m.mcm_no_log_match()}
-                         </p>
-                      </div>
+                  </ul>
+                  <div class="flex items-center justify-between gap-3 border-t border-outline-variant px-5 py-2.5 text-xs text-on-surface-variant">
+                    <span class="inline-flex items-center gap-1.5"><Papicon icon="lock" size={12} />{m.mcm_same_instance()}</span>
+                    {#if crossServer.total > crossServer.recent.length}
+                      <span>{crossServer.total - crossServer.recent.length > 1 ? m.mcm_cross_server_more_other({ count: crossServer.total - crossServer.recent.length }) : m.mcm_cross_server_more_one({ count: crossServer.total - crossServer.recent.length })}</span>
                     {/if}
                   </div>
-                </div>
+                </SectionCard>
+              {/if}
 
-              {:else if activeTab === 'sanctions'}
-                {#if crossServer?.enabled && crossServer.total > 0}
-                  <div class="mb-6 rounded-xl bg-surface-container-low/50 border border-outline-variant/10 overflow-hidden shadow-sm">
-                    <!-- En-tête -->
-                    <div class="flex items-center gap-4 px-6 py-5 border-b border-outline-variant/10">
-                      <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-warning/10 text-warning">
-                        <Papicon icon="globe" size={22} />
-                      </div>
-                      <div class="min-w-0 flex-1">
-                        <p class="text-xs font-semibold text-warning">{m.mcm_cross_server_record()}</p>
-                        <p class="text-sm font-semibold text-on-surface">
-                          {crossServer.total > 1 ? m.mcm_cross_server_count_other({ count: crossServer.total }) : m.mcm_cross_server_count_one({ count: crossServer.total })}
-                          <span class="text-on-surface-variant/50 font-medium">{crossServer.serverCount > 1 ? m.mcm_cross_server_on_other({ count: crossServer.serverCount }) : m.mcm_cross_server_on_one({ count: crossServer.serverCount })}</span>
-                        </p>
-                      </div>
-                      <div class="hidden md:flex flex-wrap items-center justify-end gap-1.5">
-                        {#each crossServerBreakdown as [type, count]}
-                          {@const style = getSanctionTypeStyle(type)}
-                          <span class="inline-flex items-center gap-1.5 rounded-lg bg-surface-container-high px-2.5 py-1 text-2xs font-semibold text-on-surface-variant">
-                            <span class="h-1.5 w-1.5 rounded-full {style.dot}"></span>
-                            {formatTypeLabel(type)}
-                            <span class="text-on-surface-variant/50">{count}</span>
-                          </span>
-                        {/each}
-                      </div>
-                    </div>
-
-                    <!-- Liste -->
-                    <ul class="divide-y divide-outline-variant/10">
-                      {#each crossServer.recent as entry}
-                        {@const style = getSanctionTypeStyle(entry.type)}
-                        <li class="flex items-center gap-4 px-6 py-3.5 hover:bg-surface-container-high/20 transition-colors">
-                          <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg {style.tile}">
-                            <Papicon icon={style.icon} size={16} />
-                          </div>
-                          <div class="min-w-0 flex-1">
-                            <div class="flex items-center gap-2">
-                              <span class="text-sm font-semibold text-on-surface">{formatTypeLabel(entry.type)}</span>
-                              {#if entry.durationSeconds}
-                                <span class="text-2xs font-medium text-on-surface-variant/50">· {formatDurationFromSeconds(entry.durationSeconds)}</span>
-                              {/if}
-                            </div>
-                            {#if entry.reason?.trim()}
-                              <p class="mt-0.5 text-xs text-on-surface-variant/80 truncate" title={entry.reason}>{entry.reason}</p>
-                            {/if}
-                            <p class="mt-0.5 flex items-center gap-1 text-2xs font-medium text-on-surface-variant/50 truncate" title={entry.guildName}>
-                              <Papicon icon="map-pin" size={11} class="shrink-0 opacity-50" />
-                              <span class="truncate">{entry.guildName}</span>
-                            </p>
-                          </div>
-                          <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-2xs font-semibold uppercase tracking-widest shrink-0 {entry.status === 'ACTIVE' ? 'bg-error/10 text-error' : 'bg-success/10 text-success'}">
-                            <span class="h-1.5 w-1.5 rounded-full {entry.status === 'ACTIVE' ? 'bg-rose-500' : 'bg-emerald-500'}"></span>
-                            {getSanctionStatusLabel(entry.status)}
-                          </span>
-                          <span class="text-2xs font-medium text-on-surface-variant/40 w-24 text-right shrink-0 hidden sm:block">{formatRelative(entry.createdAt)}</span>
-                        </li>
-                      {/each}
-                    </ul>
-
-                    <!-- Pied -->
-                    <div class="flex items-center justify-between gap-3 px-6 py-3 border-t border-outline-variant/10 bg-surface-container-low/30">
-                      <p class="flex items-center gap-1.5 text-2xs font-medium text-on-surface-variant/40">
-                        <Papicon icon="lock" size={12} class="shrink-0" />
-                        {m.mcm_same_instance()}
-                      </p>
-                      {#if crossServer.total > crossServer.recent.length}
-                        <span class="text-2xs font-semibold text-on-surface-variant/50 shrink-0">{crossServer.total - crossServer.recent.length > 1 ? m.mcm_cross_server_more_other({ count: crossServer.total - crossServer.recent.length }) : m.mcm_cross_server_more_one({ count: crossServer.total - crossServer.recent.length })}</span>
-                      {/if}
-                    </div>
-                  </div>
-                {/if}
-                <div class="rounded-xl bg-surface-container-low/50 overflow-hidden border border-outline-variant/10 shadow-sm">
-                  <table class="w-full text-left border-collapse">
-                    <thead>
-                      <tr class="bg-surface-container-high/30">
-                        <th class="px-6 py-4 text-xs font-medium text-on-surface-variant/40">{m.mcm_col_date()}</th>
-                        <th class="px-6 py-4 text-xs font-medium text-on-surface-variant/40">{m.mcm_col_action()}</th>
-                        <th class="px-6 py-4 text-xs font-medium text-on-surface-variant/40">{m.mcm_col_status()}</th>
-                        <th class="px-6 py-4 text-xs font-medium text-on-surface-variant/40">{m.mcm_col_reason()}</th>
-                        <th class="px-6 py-4 text-xs font-medium text-on-surface-variant/40">{m.mcm_col_report()}</th>
-                      </tr>
-                    </thead>
-                    <tbody class="divide-y divide-outline-variant/10">
-                      {#each sanctions as sanction}
-                        {@const hasReport = [...(dashboardStore.state.sanctionReports || []), ...(caseData?.sanctionReports || [])].some(r => r.sanctionId === sanction.id)}
-                        <tr class="hover:bg-surface-container-high/20 transition-colors">
-                          <td class="px-6 py-4 text-xs font-bold text-on-surface-variant/60">{formatDateShort(sanction.createdAt)}</td>
-                          <td class="px-6 py-4">
-                            <span class="text-xs font-semibold text-primary">{formatTypeLabel(sanction.type)}</span>
-                            <p class="text-2xs font-bold text-on-surface-variant/40 mt-0.5">{m.mcm_by_moderator({ moderator: sanction.moderatorTag })}</p>
-                          </td>
-                          <td class="px-6 py-4">
-                            <span class="px-3 py-1 rounded-lg text-xs font-medium {sanction.status === 'ACTIVE' ? 'bg-error/10 text-error' : 'bg-success/10 text-success'}">
-                              {getSanctionStatusLabel(sanction.status)}
-                            </span>
-                          </td>
-                          <td class="px-6 py-4 text-xs text-on-surface-variant max-w-xs truncate">{sanction.reason}</td>
-                          <td class="px-6 py-4">
-                            {#if hasReport}
-                              <button
-                                onclick={() => viewingReportSanctionId = sanction.id}
-                                class="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-on-primary transition-all hover:bg-primary-container hover:scale-[1.02] active:scale-[0.98] shadow-xs cursor-pointer"
-                              >
-                                <Papicon icon="file-text" size={12} />
-                                {m.mcm_see_more()}
-                              </button>
-                            {:else}
-                              <span class="text-2xs font-bold text-on-surface-variant/30 italic">{m.mcm_no_report()}</span>
-                            {/if}
-                          </td>
+              {#if sanctions.length === 0}
+                {@render quietEmpty('check-circle', m.mcm_clean_record())}
+              {:else}
+                <div class="section-card overflow-hidden">
+                  <div class="overflow-x-auto">
+                    <table class="mc-table">
+                      <thead>
+                        <tr>
+                          <th scope="col">{m.mcm_col_date()}</th>
+                          <th scope="col">{m.mcm_col_action()}</th>
+                          <th scope="col">{m.mcm_col_status()}</th>
+                          <th scope="col">{m.mcm_col_reason()}</th>
+                          <th scope="col"><span class="sr-only">{m.mcm_col_report()}</span></th>
                         </tr>
-                      {/each}
-                    </tbody>
-                  </table>
-                  {#if sanctions.length === 0}
-                    <div class="flex flex-col items-center py-20 text-on-surface-variant/30">
-                      <Papicon icon="check-circle" size={48} />
-                      <p class="mt-4 text-sm font-semibold">{m.mcm_clean_record()}</p>
-                    </div>
-                  {/if}
-                </div>
-
-              {:else if activeTab === 'invites'}
-                <div class="grid gap-6 md:grid-cols-2">
-                   <div class="rounded-xl bg-surface-container-low/50 p-6 border border-outline-variant/10">
-                     <p class="text-xs font-semibold text-primary mb-6">{m.mcm_invite_source()}</p>
-                     <dl class="space-y-4">
-                       <div class="flex items-center justify-between">
-                         <dt class="text-xs font-bold text-on-surface-variant/60">{m.mcm_code_used()}</dt>
-                         {#if caseData?.invite?.code}
-                           <button
-                             type="button"
-                             class="text-sm font-semibold text-primary bg-primary/10 px-3 py-1 rounded-xl hover:bg-primary/20 transition-colors font-mono"
-                             onclick={() => inviteDetailsModal.show(caseData.invite.code)}
-                             title={m.mcm_open_invites_view()}
-                           >
-                             {caseData.invite.code}
-                           </button>
-                         {:else}
-                           <dd class="text-sm font-semibold text-on-surface font-mono">{m.mcm_unknown()}</dd>
-                         {/if}
-                       </div>
-                       <div class="flex items-center justify-between">
-                          <dt class="text-xs font-bold text-on-surface-variant/60">{m.mcm_creator()}</dt>
-                          <dd class="text-sm font-semibold text-on-surface">
-                            {#if caseData?.invite?.inviterTag}
-                              <div class="flex items-center gap-2">
-                                {#if caseData.invite.inviterAvatarUrl}
-                                  <img
-                                    src={caseData.invite.inviterAvatarUrl}
-                                    alt={caseData.invite.inviterTag}
-                                    class="h-5 w-5 rounded-full object-cover border border-primary/10"
-                                  />
-                                {/if}
-                                {#if caseData?.invite?.inviterId}
-                                  <button
-                                    type="button"
-                                    onclick={() => caseData?.invite?.inviterId && onSelectUser(caseData.invite.inviterId)}
-                                    class="text-primary hover:underline focus:outline-none font-semibold text-left"
-                                    title={m.mcm_open_inviter()}
-                                  >
-                                    @{caseData.invite.inviterTag}
-                                  </button>
-                                {:else}
-                                  @{caseData.invite.inviterTag}
-                                {/if}
-                              </div>
-                            {:else}
-                              {m.mcm_unknown()}
-                            {/if}
-                          </dd>
-                        </div>
-                       <div class="flex items-center justify-between"><dt class="text-xs font-bold text-on-surface-variant/60">{m.mcm_use_date()}</dt><dd class="text-sm font-semibold text-on-surface">{formatDateTime(caseData?.invite?.joinedAt ?? caseData?.profile?.guildJoinedAt)}</dd></div>
-                     </dl>
-                   </div>
-                   <div class="rounded-xl bg-surface-container-low/50 p-6 border border-outline-variant/10">
-                     <p class="text-xs font-semibold text-secondary mb-6">{m.mcm_server_moves()}</p>
-                     <dl class="space-y-4">
-                       <div class="flex items-center justify-between"><dt class="text-xs font-bold text-on-surface-variant/60">{m.mcm_last_join()}</dt><dd class="text-sm font-semibold text-on-surface">{formatDateTime(caseData?.profile?.guildJoinedAt)}</dd></div>
-                       <div class="flex items-center justify-between"><dt class="text-xs font-bold text-on-surface-variant/60">{m.mcm_last_leave_row()}</dt><dd class="text-sm font-semibold text-on-surface">{formatDateTime(caseData?.profile?.guildLeftAt)}</dd></div>
-                       <div class="flex items-center justify-between"><dt class="text-xs font-bold text-on-surface-variant/60">{m.mcm_first_observation()}</dt><dd class="text-sm font-semibold text-on-surface">{formatDateTime(caseData?.profile?.firstSeenAt)}</dd></div>
-                     </dl>
-                   </div>
-                </div>
-
-              {:else if activeTab === 'connexions'}
-                <div class="space-y-6">
-                  <div class="flex items-center justify-between px-2">
-                    <div>
-                      <p class="text-xs font-semibold text-primary mb-1">{m.mcm_social_network()}</p>
-                      <h4 class="text-sm font-semibold text-on-surface">{m.mcm_interaction_graph()}</h4>
-                    </div>
-                    <div class="flex items-center gap-2">
-                      <span class="text-2xs font-bold text-on-surface-variant/40 bg-surface-container-high px-3 py-1 rounded-lg">{m.mcm_top_contacts({ count: (caseData?.interactionGraph?.nodes?.length ?? 1) - 1 })}</span>
-                    </div>
-                  </div>
-                  
-                  <div class="w-full h-[520px]">
-                    <InteractionTree 
-                      nodes={caseData?.interactionGraph?.nodes || []} 
-                      edges={caseData?.interactionGraph?.edges || []} 
-                      onSelectNode={onSelectUser}
-                    />
-                  </div>
-
-                  <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                    {#each caseData?.connections as connection}
-                      <div class="flex items-center gap-4 rounded-xl bg-surface-container-low/50 p-4 border border-outline-variant/10 hover:border-primary/30 transition-all group">
-                        <div class="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10 text-primary group-hover:scale-110 transition-transform">
-                          <Papicon icon={getConnectionIcon(connection.type)} size={20} />
-                        </div>
-                        <div class="min-w-0">
-                          <p class="text-sm font-semibold text-on-surface truncate">{connection.name}</p>
-                          <p class="text-xs font-semibold text-on-surface-variant/40 mt-0.5">{connection.type}</p>
-                        </div>
-                      </div>
-                    {/each}
-                    {#if caseData?.connections.length === 0 && (caseData?.interactionGraph?.nodes || []).length === 0}
-                      <div class="md:col-span-2 lg:col-span-3 flex flex-col items-center py-20 text-on-surface-variant/30 bg-surface-container-low/30 rounded-xl">
-                        <Papicon icon="link-2" size={48} />
-                        <p class="mt-4 text-sm font-semibold">{m.mcm_no_external_link()}</p>
-                      </div>
-                    {/if}
-                  </div>
-                </div>
-
-              {:else if activeTab === 'candidatures'}
-                <div class="space-y-6">
-                  {#each (caseData?.candidatures || []) as cand}
-                    <div class="rounded-xl bg-surface-container-low/50 p-8 border border-outline-variant/10 space-y-6">
-                      <div class="flex items-start justify-between">
-                         <div>
-                            <span class="text-xs font-medium text-primary mb-2 block">{formatDateShort(cand.createdAt)}</span>
-                            <span class="px-4 py-1.5 rounded-xl text-body-sm font-medium {cand.status === 'APPROVED' ? 'bg-success/10 text-success' : 'bg-error/10 text-error'}">
-                              {cand.status}
-                            </span>
-                         </div>
-                         {#if cand.oralResult}
-                           <div class="flex flex-col items-end">
-                              <span class="text-xs font-semibold text-on-surface-variant/40 mb-1">{m.mcm_oral_result()}</span>
-                              <span class="text-sm font-semibold text-on-surface">{cand.oralResult}</span>
-                           </div>
-                         {/if}
-                      </div>
-                      {#if cand.notes}
-                        <div class="rounded-lg bg-surface-container-high/30 p-5 border-l-4 border-primary italic text-sm text-on-surface-variant leading-relaxed">
-                          "{cand.notes}"
-                        </div>
-                      {/if}
-                    </div>
-                  {/each}
-                  {#if (caseData?.candidatures?.length ?? 0) === 0}
-                    <div class="flex flex-col items-center py-20 text-on-surface-variant/30 bg-surface-container-low/30 rounded-xl">
-                      <Papicon icon="user-check" size={48} />
-                      <p class="mt-4 text-sm font-semibold">{m.mcm_no_candidature()}</p>
-                    </div>
-                  {/if}
-                </div>
-
-              {:else if activeTab === 'linked_accounts'}
-                {#if crossServerLinks?.enabled && crossServerLinkSuggestions.length > 0}
-                  <div class="mb-6 rounded-xl bg-surface-container-low/50 border border-outline-variant/10 overflow-hidden shadow-sm">
-                    <!-- En-tête -->
-                    <div class="flex items-center gap-4 px-6 py-5 border-b border-outline-variant/10">
-                      <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-warning/10 text-warning">
-                        <Papicon icon="globe" size={22} />
-                      </div>
-                      <div class="min-w-0 flex-1">
-                        <p class="text-xs font-semibold text-warning">{m.mcm_xlink_title()}</p>
-                        <p class="text-sm font-semibold text-on-surface">
-                          {crossServerLinkSuggestions.length > 1 ? m.mcm_xlink_count_other({ count: crossServerLinkSuggestions.length }) : m.mcm_xlink_count_one({ count: crossServerLinkSuggestions.length })}
-                          <span class="text-on-surface-variant/50 font-medium">{crossServerLinks.serverCount > 1 ? m.mcm_xlink_on_other({ count: crossServerLinks.serverCount }) : m.mcm_xlink_on_one({ count: crossServerLinks.serverCount })}</span>
-                        </p>
-                      </div>
-                    </div>
-
-                    <!-- Liste -->
-                    <ul class="divide-y divide-outline-variant/10">
-                      {#each crossServerLinkSuggestions as suggestion}
-                        <li class="flex flex-wrap items-center gap-4 px-6 py-4 hover:bg-surface-container-high/20 transition-colors">
-                          {#if suggestion.avatarUrl}
-                            <img src={suggestion.avatarUrl} alt={m.mcm_avatar_alt()} class="h-11 w-11 shrink-0 rounded-lg object-cover border-2 border-surface" />
-                          {:else}
-                            <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-surface-container-high text-sm font-semibold text-primary">
-                              {(suggestion.userTag ?? '?').slice(0, 1).toUpperCase()}
-                            </div>
-                          {/if}
-
-                          <div class="min-w-0 flex-1">
-                            <div class="flex flex-wrap items-center gap-2">
-                              <span class="text-sm font-semibold text-on-surface truncate">{suggestion.userTag ?? m.mcm_xlink_unknown_user({ id: suggestion.userId })}</span>
-                              <span class="inline-flex items-center gap-1.5 rounded-lg bg-surface-container-high px-2 py-0.5 text-xs font-semibold text-on-surface-variant">
-                                {suggestion.serverCount > 1 ? m.mcm_xlink_servers_other({ count: suggestion.serverCount }) : m.mcm_xlink_servers_one({ count: suggestion.serverCount })}
-                              </span>
-                              {#if !suggestion.presentOnGuild}
-                                <span class="inline-flex items-center rounded-lg bg-surface-container-high px-2 py-0.5 text-xs font-semibold text-on-surface-variant/50">
-                                  {m.mcm_xlink_absent()}
+                      </thead>
+                      <tbody>
+                        {#each sanctions as sanction (sanction.id)}
+                          {@const style = getSanctionTypeStyle(sanction.type)}
+                          {@const hasReport = [...(dashboardStore.state.sanctionReports || []), ...(caseData?.sanctionReports || [])].some((r) => r.sanctionId === sanction.id)}
+                          <tr>
+                            <td class="whitespace-nowrap text-on-surface-variant">{formatDateShort(sanction.createdAt)}</td>
+                            <td>
+                              <span class="inline-flex items-center gap-2">
+                                <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg {style.tile}"><Papicon icon={style.icon} size={13} /></span>
+                                <span>
+                                  <span class="block font-medium text-on-surface">{formatTypeLabel(sanction.type)}</span>
+                                  <span class="block text-xs text-on-surface-variant">{m.mcm_by_moderator({ moderator: sanction.moderatorTag })}</span>
                                 </span>
+                              </span>
+                            </td>
+                            <td><span class="badge {sanction.status === 'ACTIVE' ? 'badge-danger' : 'badge-success'}">{getSanctionStatusLabel(sanction.status)}</span></td>
+                            <td class="max-w-xs"><span class="line-clamp-2 text-on-surface-variant" title={sanction.reason}>{sanction.reason}</span></td>
+                            <td class="whitespace-nowrap text-right">
+                              {#if hasReport}
+                                <Button size="sm" icon="file-text" onclick={() => (viewingReportSanctionId = sanction.id)}>{m.mcx_report()}</Button>
+                              {:else}
+                                <span class="text-xs text-on-surface-variant">{m.mcm_no_report()}</span>
                               {/if}
-                            </div>
-                            <p class="mt-0.5 text-2xs font-bold text-on-surface-variant/40">ID: {suggestion.userId}</p>
-                            <div class="mt-1.5 flex flex-wrap items-center gap-1.5">
-                              {#each suggestion.guilds as guild}
-                                <span
-                                  class="inline-flex items-center gap-1 rounded-lg px-2 py-0.5 text-2xs font-medium {guild.status === 'VALIDATED' ? 'bg-success/10 text-success' : 'bg-warning/10 text-warning'}"
-                                  title={guild.reason ?? ''}
-                                >
-                                  <Papicon icon="map-pin" size={11} class="shrink-0 opacity-60" />
-                                  <span class="truncate max-w-[14rem]">{guild.guildName}</span>
-                                  <span class="opacity-60">· {guild.type === 'MANUAL' ? m.mcm_xlink_manual() : m.mcm_xlink_automatic()}</span>
-                                </span>
-                              {/each}
-                            </div>
-                          </div>
-
-                          <div class="flex shrink-0 items-center gap-2">
-                            <span class="inline-flex items-center rounded-lg bg-surface-container-high px-2.5 py-1 text-2xs font-semibold text-on-surface-variant" title={m.mcm_xlink_score_hint()}>
-                              {m.mcm_xlink_score({ score: suggestion.score })}
-                            </span>
-                            {#if suggestion.alreadyLinkedHere}
-                              <span class="inline-flex items-center gap-1.5 rounded-lg bg-success/10 px-2.5 py-1 text-xs font-semibold text-success">
-                                <Papicon icon="check" size={12} />
-                                {m.mcm_xlink_already_linked()}
-                              </span>
-                            {:else if canModerateMembers}
-                              <button
-                                class="px-4 py-2 rounded-xl text-2xs font-semibold uppercase tracking-widest transition-all duration-300 {applyingSuggestionId !== null ? 'bg-surface-container-high text-on-surface-variant/50 cursor-not-allowed' : 'bg-primary text-on-primary hover:bg-primary/90 hover:scale-[1.02] active:scale-95 cursor-pointer'}"
-                                onclick={() => handleApplySuggestedLink(suggestion)}
-                                disabled={applyingSuggestionId !== null}
-                              >
-                                {#if applyingSuggestionId === suggestion.userId}
-                                  <div class="h-3.5 w-3.5 animate-spin rounded-full border-2 border-on-surface-variant border-t-transparent"></div>
-                                {:else}
-                                  {m.mcm_xlink_apply()}
-                                {/if}
-                              </button>
-                            {/if}
-                          </div>
-                        </li>
-                      {/each}
-                    </ul>
-
-                    <!-- Pied -->
-                    <div class="flex items-center justify-between gap-3 px-6 py-3 border-t border-outline-variant/10 bg-surface-container-low/30">
-                      <p class="flex items-center gap-1.5 text-2xs font-medium text-on-surface-variant/40">
-                        <Papicon icon="lock" size={12} class="shrink-0" />
-                        {m.mcm_same_instance()}
-                      </p>
-                      <p class="text-2xs font-medium text-on-surface-variant/40 text-right">{m.mcm_xlink_footer_hint()}</p>
-                    </div>
-                  </div>
-                {/if}
-
-                {#if canModerateMembers}
-                <div class="mb-8 rounded-xl bg-surface-container-low/50 p-6 border border-outline-variant/10">
-                  <h3 class="text-sm font-semibold text-on-surface mb-4 flex items-center gap-2"><Papicon icon="link-2" size={16} /> {m.mcm_link_account_manually()}</h3>
-                  <div class="grid gap-4 md:grid-cols-2">
-                    <FormInput 
-                      id="targetAccountId" 
-                      label={m.mcm_target_account_id()} 
-                      bind:value={targetAccountId} 
-                      placeholder="Ex: 123456789012345678" 
-                      icon="user-plus" 
-                      required 
-                    />
-                    <FormInput 
-                      id="linkReason" 
-                      label={m.mcm_link_reason_label()} 
-                      bind:value={linkReason} 
-                      placeholder={m.mcm_link_reason_placeholder()} 
-                      icon="file-text" 
-                    />
-                  </div>
-                  
-                  {#if linkFeedback}
-                    <div class="mt-4 p-3 rounded-xl text-sm font-bold {linkIsError ? 'bg-error/10 text-error' : 'bg-success/10 text-success'}">
-                      {linkFeedback}
-                    </div>
-                  {/if}
-                  
-                  <div class="mt-4 flex justify-end">
-                    <button 
-                      class="px-6 py-2 rounded-xl text-sm font-semibold tracking-widest uppercase transition-all duration-300 {linkBusy || !targetAccountId ? 'bg-surface-container-high text-on-surface-variant/50 cursor-not-allowed' : 'bg-primary text-on-primary hover:bg-primary/90 hover:scale-[1.02] active:scale-95'}"
-                      onclick={handleLinkAccount}
-                      disabled={linkBusy || !targetAccountId}
-                    >
-                      {#if linkBusy}
-                        <div class="flex items-center gap-2">
-                          <div class="h-4 w-4 animate-spin rounded-full border-2 border-on-primary border-t-transparent"></div>
-                          <span>{m.mcm_linking()}</span>
-                        </div>
-                      {:else}
-                        {m.mcm_link_accounts()}
-                      {/if}
-                    </button>
+                            </td>
+                          </tr>
+                        {/each}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
-                {/if}
+              {/if}
 
-                <div class="grid gap-6 md:grid-cols-2">
-                  {#each caseData?.linkedAccounts || [] as link}
-                    <div class="rounded-xl bg-surface-container-low/50 p-6 border border-outline-variant/10 shadow-sm hover:bg-surface-container-low transition-all duration-500 group flex items-center gap-4">
-                      {#if link.avatarUrl}
-                        <img src={link.avatarUrl} alt={m.mcm_avatar_alt()} class="h-16 w-16 rounded-lg object-cover shadow-lg border-2 border-surface" />
-                      {:else}
-                        <div class="flex h-16 w-16 items-center justify-center rounded-lg bg-surface-container-high text-xl font-semibold text-primary">
-                          {link.userTag?.slice(0, 1).toUpperCase()}
-                        </div>
-                      {/if}
-                      <div class="min-w-0 flex-1">
-                        <div class="flex items-center justify-between">
-                           <p class="text-sm font-semibold text-on-surface truncate">{link.userTag}</p>
-                           <div class="flex items-center gap-2">
-                             <span class="px-2 py-0.5 rounded-lg text-2xs font-semibold uppercase tracking-widest {link.status === 'VALIDATED' ? 'bg-success/10 text-success' : 'bg-warning/10 text-warning'}">
-                               {link.status}
-                             </span>
-                             {#if dashboardStore.state.access.level === 'admin' && canModerateMembers}
-                               <button 
-                                 class="p-1.5 rounded-lg text-error hover:bg-error/10 transition-colors cursor-pointer disabled:opacity-50"
-                                 title={m.mcm_unlink_account()}
-                                 onclick={() => handleUnlinkAccount(link.userId)}
-                                 disabled={unlinkingAccountId === link.userId}
-                               >
-                                 {#if unlinkingAccountId === link.userId}
-                                   <div class="h-3.5 w-3.5 animate-spin rounded-full border-2 border-error border-t-transparent"></div>
-                                 {:else}
-                                   <Papicon icon="trash-2" size={14} />
-                                 {/if}
-                               </button>
-                             {/if}
-                           </div>
-                        </div>
-                        <p class="text-2xs font-bold text-on-surface-variant/40 mt-1">ID: {link.userId}</p>
-                        <p class="text-xs font-semibold text-primary mt-1">{link.type}</p>
-                      </div>
+            {:else if activeTab === 'invites'}
+              <div class="grid gap-4 md:grid-cols-2">
+                <SectionCard title={m.mcm_invite_source()}>
+                  <dl class="mc-facts">
+                    <div><dt>{m.mcm_code_used()}</dt><dd>{@render inviteCode()}</dd></div>
+                    <div><dt>{m.mcm_creator()}</dt><dd>{@render inviter(true)}</dd></div>
+                    <div><dt>{m.mcm_use_date()}</dt><dd>{formatDateTime(caseData?.invite?.joinedAt ?? caseData?.profile?.guildJoinedAt)}</dd></div>
+                  </dl>
+                </SectionCard>
+                <SectionCard title={m.mcm_server_moves()}>
+                  {@render facts([
+                    { label: m.mcm_last_join(), value: formatDateTime(caseData?.profile?.guildJoinedAt) },
+                    { label: m.mcm_last_leave_row(), value: formatDateTime(caseData?.profile?.guildLeftAt) },
+                    { label: m.mcm_first_observation(), value: formatDateTime(caseData?.profile?.firstSeenAt) },
+                  ])}
+                </SectionCard>
+              </div>
+
+            {:else if activeTab === 'connexions'}
+              <SectionCard title={m.mcm_interaction_graph()} description={m.mcm_top_contacts({ count: (caseData?.interactionGraph?.nodes?.length ?? 1) - 1 })} flush>
+                <div class="h-[480px] w-full">
+                  <InteractionTree nodes={caseData?.interactionGraph?.nodes || []} edges={caseData?.interactionGraph?.edges || []} onSelectNode={onSelectUser} />
+                </div>
+              </SectionCard>
+              {#if caseData?.connections.length}
+                <div class="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+                  {#each caseData.connections as connection, i (i)}
+                    <div class="section-card flex items-center gap-3 p-4">
+                      <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-surface-container text-on-surface-variant"><Papicon icon={getConnectionIcon(connection.type)} size={16} /></span>
+                      <span class="min-w-0">
+                        <span class="block truncate text-sm font-medium text-on-surface">{connection.name}</span>
+                        <span class="block text-xs text-on-surface-variant">{connection.type}</span>
+                      </span>
                     </div>
                   {/each}
-                  {#if (caseData?.linkedAccounts || []).length === 0}
-                    <div class="md:col-span-2 flex flex-col items-center py-20 text-on-surface-variant/30 bg-surface-container-low/30 rounded-xl">
-                      <div class="flex h-16 w-16 items-center justify-center rounded-xl bg-surface-container-high text-on-surface-variant/20 mb-6">
-                        <Papicon icon="user-plus" size={32} />
-                      </div>
-                      <p class="mt-4 text-sm font-semibold">{m.mcm_no_linked_account()}</p>
-                    </div>
-                  {/if}
                 </div>
-              {:else if activeTab === 'notes'}
-                <div class="space-y-6">
-                  <div class="rounded-xl bg-surface-container-low/50 p-8 border border-outline-variant/10 shadow-sm">
-                    <div class="flex items-center gap-3 mb-6">
-                      <div class="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                        <Papicon icon="edit-3" size={24} />
-                      </div>
-                      <div>
-                        <p class="text-xs font-semibold text-primary">{m.mcm_moderation()}</p>
-                        <p class="text-lg font-semibold text-on-surface">{m.mcm_mod_notes()}</p>
-                      </div>
-                    </div>
-
-                    <p class="text-sm text-on-surface-variant/70 mb-6 leading-relaxed">
-                      {m.mcm_mod_notes_desc()}
-                    </p>
-
-                    <div class="relative group">
-                      <label for="moderator-note-textarea" class="sr-only">{m.mcm_mod_notes_sr()}</label>
-                      <textarea
-                        id="moderator-note-textarea"
-                        bind:value={moderatorNote}
-                        readonly={!canModerateMembers}
-                        placeholder={m.mcm_add_note_placeholder()}
-                        class="w-full min-h-[300px] rounded-xl bg-surface-container-high/50 p-6 text-sm text-on-surface placeholder:text-on-surface-variant/30 border-2 border-transparent focus:border-primary/30 focus:bg-surface-container-high transition-all outline-hidden resize-none"
-                      ></textarea>
-                    </div>
-
-                    <div class="mt-6 flex items-center justify-between">
-                      <div class="flex items-center gap-2">
-                        {#if noteFeedback}
-                          <span class="text-xs font-bold {noteFeedback.includes('Erreur') ? 'text-error' : 'text-success'} animate-in fade-in slide-in-from-left-2">
-                            {noteFeedback}
-                          </span>
-                        {/if}
-                      </div>
-                      {#if canModerateMembers}
-                      <button
-                        onclick={handleSaveNote}
-                        disabled={noteBusy}
-                        class="flex items-center gap-2 px-8 py-3 rounded-lg bg-primary text-on-primary text-sm font-semibold transition-all hover:bg-primary/90 hover:scale-[1.02] active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
-                      >
-                        {#if noteBusy}
-                          <div class="h-4 w-4 animate-spin rounded-full border-2 border-on-primary border-t-transparent"></div>
-                          <span>{m.mcm_saving()}</span>
-                        {:else}
-                          <Papicon icon="save" size={18} />
-                          <span>{m.mcm_save()}</span>
-                        {/if}
-                      </button>
-                      {/if}
-                    </div>
-                  </div>
-                </div>
+              {:else if (caseData?.interactionGraph?.nodes || []).length === 0}
+                {@render quietEmpty('link-2', m.mcm_no_external_link())}
               {/if}
-            </div> <!-- Fin Colonne Principale -->
 
-            <!-- Colonne Latérale (Statistiques & Actions de modération) -->
-            <aside class="lg:col-span-1 space-y-6 lg:sticky lg:top-16">
-              
-              <!-- 1. Carte Score de Risque & Ancienneté -->
-              <div class="rounded-xl bg-surface-container-low/50 p-6 border border-outline-variant/10 shadow-sm space-y-5">
-                <div class="flex items-center justify-between border-b border-outline-variant/5 pb-3">
-                  <span class="text-xs font-semibold text-on-surface-variant/60">{m.mcm_risk_score()}</span>
-                  <span class="text-xs font-semibold text-primary">{memberSeniority}</span>
-                </div>
+            {:else if activeTab === 'candidatures'}
+              {#each (caseData?.candidatures || []) as cand, i (i)}
+                <SectionCard title={formatDateShort(cand.createdAt)}>
+                  {#snippet actions()}
+                    <span class="badge {cand.status === 'APPROVED' ? 'badge-success' : 'badge-danger'}">{cand.status}</span>
+                  {/snippet}
+                  {#if cand.oralResult}
+                    {@render facts([{ label: m.mcm_oral_result(), value: cand.oralResult }])}
+                  {/if}
+                  {#if cand.notes}
+                    <p class="mt-3 rounded-lg bg-surface-container px-4 py-3 text-sm leading-relaxed text-on-surface-variant">{cand.notes}</p>
+                  {/if}
+                </SectionCard>
+              {:else}
+                <div class="section-card"><EmptyState icon="user-check" title={m.mcm_no_candidature()} actionLabel={m.mcx_see_recruitment()} actionIcon="arrow-right" actionHref="/recruitment" /></div>
+              {/each}
 
-                <!-- Jauge de risque -->
-                <div class="flex items-center gap-4">
-                  <div class="relative flex items-center justify-center shrink-0">
-                    <svg class="h-16 w-16 transform -rotate-90">
-                      <circle cx="32" cy="32" r="28" class="stroke-on-surface/5 fill-transparent" stroke-width="6" />
-                      <circle cx="32" cy="32" r="28" 
-                        class="transition-all duration-1000 ease-out {moderationRiskScore < 30 ? 'stroke-emerald-500' : moderationRiskScore < 70 ? 'stroke-amber-500' : 'stroke-red-500'} fill-transparent" 
-                        stroke-width="6" 
-                        stroke-dasharray="{2 * Math.PI * 28}" 
-                        stroke-dashoffset="{(1 - moderationRiskScore / 100) * (2 * Math.PI * 28)}" 
-                        stroke-linecap="round"
-                      />
-                    </svg>
-                    <span class="absolute text-sm font-bold text-on-surface">{moderationRiskScore}%</span>
-                  </div>
-
-                  <div class="min-w-0">
-                    <h5 class="text-xs font-bold text-on-surface truncate">
-                      {#if moderationRiskScore < 30}
-                        {m.mcm_risk_low()}
-                      {:else if moderationRiskScore < 70}
-                        {m.mcm_risk_high()}
-                      {:else}
-                        {m.mcm_risk_critical()}
-                      {/if}
-                    </h5>
-                    <p class="text-2xs text-on-surface-variant/60 mt-0.5 leading-relaxed">
-                      {m.mcm_risk_desc()}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <!-- 2. Carte Top Salons d'Activité -->
-              {#if topChannels.length > 0}
-                <div class="rounded-xl bg-surface-container-low/50 p-6 border border-outline-variant/10 shadow-sm space-y-4">
-                  <span class="text-xs font-semibold text-on-surface-variant/60 block border-b border-outline-variant/5 pb-3">{m.mcm_top_channels()}</span>
-                  
-                  <div class="space-y-3.5">
-                    {#each topChannels as chan}
-                      {@const totalMsg = caseData?.profile?.messageCount || 1}
-                      {@const pct = Math.round((chan.count / totalMsg) * 100)}
-                      <button
-                        type="button"
-                        onclick={() => channelDetailsModal.show(chan.channelId, chan.channelName)}
-                        class="w-full space-y-1.5 text-left group/chan"
-                        title={m.mcm_open_channel_details()}
-                      >
-                        <div class="flex items-center justify-between text-xs">
-                          <span class="font-semibold text-on-surface truncate max-w-[120px] group-hover/chan:text-primary transition-colors">#{chan.channelName}</span>
-                          <span class="font-bold text-on-surface-variant/60">{chan.count} msg ({pct}%)</span>
+            {:else if activeTab === 'linked_accounts'}
+              {#if crossServerLinks?.enabled && crossServerLinkSuggestions.length > 0}
+                <SectionCard
+                  icon="globe"
+                  title={m.mcm_xlink_title()}
+                  description="{crossServerLinkSuggestions.length > 1 ? m.mcm_xlink_count_other({ count: crossServerLinkSuggestions.length }) : m.mcm_xlink_count_one({ count: crossServerLinkSuggestions.length })} {crossServerLinks.serverCount > 1 ? m.mcm_xlink_on_other({ count: crossServerLinks.serverCount }) : m.mcm_xlink_on_one({ count: crossServerLinks.serverCount })}"
+                  flush
+                >
+                  <ul class="divide-y divide-outline-variant">
+                    {#each crossServerLinkSuggestions as suggestion (suggestion.userId)}
+                      <li class="flex flex-wrap items-center gap-3 px-5 py-3.5">
+                        <img src={memberAvatarSrc(suggestion.avatarUrl, suggestion.userTag, suggestion.userId)} alt="" class="h-9 w-9 shrink-0 rounded-full object-cover" />
+                        <div class="min-w-0 flex-1">
+                          <div class="flex flex-wrap items-center gap-2">
+                            <span class="truncate text-sm font-medium text-on-surface">{suggestion.userTag ?? m.mcm_xlink_unknown_user({ id: suggestion.userId })}</span>
+                            <span class="badge badge-neutral">{suggestion.serverCount > 1 ? m.mcm_xlink_servers_other({ count: suggestion.serverCount }) : m.mcm_xlink_servers_one({ count: suggestion.serverCount })}</span>
+                            {#if !suggestion.presentOnGuild}<span class="badge badge-neutral">{m.mcm_xlink_absent()}</span>{/if}
+                          </div>
+                          <div class="mt-1 flex flex-wrap items-center gap-1.5">
+                            {#each suggestion.guilds as guild, gi (gi)}
+                              <span class="badge {guild.status === 'VALIDATED' ? 'badge-success' : 'badge-warning'}" title={guild.reason ?? ''}>
+                                <span class="max-w-[14rem] truncate">{guild.guildName}</span>
+                                <span class="opacity-70">· {guild.type === 'MANUAL' ? m.mcm_xlink_manual() : m.mcm_xlink_automatic()}</span>
+                              </span>
+                            {/each}
+                          </div>
                         </div>
-                        <div class="h-1.5 w-full rounded-full bg-on-surface/5 overflow-hidden">
-                          <div class="h-full bg-primary/70 transition-all duration-500" style="width: {pct}%"></div>
+                        <div class="flex shrink-0 items-center gap-2">
+                          <span class="badge badge-neutral" title={m.mcm_xlink_score_hint()}>{m.mcm_xlink_score({ score: suggestion.score })}</span>
+                          {#if suggestion.alreadyLinkedHere}
+                            <span class="badge badge-success"><Papicon icon="check" size={11} />{m.mcm_xlink_already_linked()}</span>
+                          {:else if canModerateMembers}
+                            <Button size="sm" variant="primary" loading={applyingSuggestionId === suggestion.userId} disabled={applyingSuggestionId !== null && applyingSuggestionId !== suggestion.userId} onclick={() => handleApplySuggestedLink(suggestion)}>{m.mcm_xlink_apply()}</Button>
+                          {/if}
                         </div>
-                      </button>
+                      </li>
                     {/each}
+                  </ul>
+                  <div class="flex flex-wrap items-center justify-between gap-3 border-t border-outline-variant px-5 py-2.5 text-xs text-on-surface-variant">
+                    <span class="inline-flex items-center gap-1.5"><Papicon icon="lock" size={12} />{m.mcm_same_instance()}</span>
+                    <span>{m.mcm_xlink_footer_hint()}</span>
                   </div>
-                </div>
+                </SectionCard>
               {/if}
 
-              <!-- 3. Actions de modération -->
               {#if canModerateMembers}
-              <div class="rounded-xl bg-surface-container-low/50 p-6 border border-outline-variant/10 shadow-sm space-y-5">
-                <span class="text-xs font-semibold text-on-surface-variant/60 block border-b border-outline-variant/5 pb-3">{m.mcm_mod_actions()}</span>
-
-                <!-- Raison -->
-                <div class="space-y-1.5">
-                  <label for="mod-reason" class="text-xs font-semibold text-on-surface-variant/50">{m.mcm_sanction_reason()}</label>
-                  <textarea
-                    id="mod-reason"
-                    bind:value={actionReason}
-                    rows="3"
-                    placeholder={m.mcm_reason_placeholder()}
-                    class="w-full rounded-lg bg-surface-container-high/40 px-3 py-2 text-xs font-semibold text-on-surface border border-outline-variant/10 focus:border-primary/50 outline-hidden transition-all resize-none"
-                  ></textarea>
-                </div>
-
-                <!-- Durée (pour Timeout) -->
-                <div class="space-y-1.5">
-                  <label for="mod-duration" class="text-xs font-semibold text-on-surface-variant/50">{m.mcm_duration_timeout()}</label>
-                  <div class="relative">
-                    <select
-                      id="mod-duration"
-                      bind:value={actionDuration}
-                      class="w-full appearance-none rounded-lg border border-outline-variant/10 bg-surface-container-high/40 py-2 pl-3 pr-8 text-xs font-bold text-on-surface focus:border-primary/30 focus:outline-hidden"
-                    >
-                      <option value="30m">{m.mcm_duration_30m()}</option>
-                      <option value="1h">{m.mcm_duration_1h()}</option>
-                      <option value="1d">{m.mcm_duration_1d()}</option>
-                      <option value="7d">{m.mcm_duration_7d()}</option>
-                      <option value="28d">{m.mcm_duration_28d()}</option>
-                    </select>
-                    <span class="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-on-surface-variant/40">
-                      <Papicon icon="chevron-down" size={12} />
-                    </span>
+                <SectionCard icon="link-2" title={m.mcm_link_account_manually()}>
+                  <div class="grid gap-4 md:grid-cols-2">
+                    <Field label={m.mcm_target_account_id()} required>
+                      {#snippet children(id)}
+                        <input {id} class="input" placeholder="123456789012345678" bind:value={targetAccountId} />
+                      {/snippet}
+                    </Field>
+                    <Field label={m.mcm_link_reason_label()}>
+                      {#snippet children(id)}
+                        <input {id} class="input" placeholder={m.mcm_link_reason_placeholder()} bind:value={linkReason} />
+                      {/snippet}
+                    </Field>
                   </div>
-                </div>
-
-                <!-- Grille d'actions boutons -->
-                <div class="grid grid-cols-2 gap-2.5 pt-2">
-                  <button
-                    type="button"
-                    onclick={() => executeModerationAction('WARN')}
-                    disabled={actionBusy}
-                    class="flex items-center justify-center gap-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 active:scale-95 disabled:opacity-50 disabled:pointer-events-none px-3 py-2.5 text-xs font-bold text-white transition-all shadow-xs cursor-pointer"
-                  >
-                    <Papicon icon="alert-triangle" size={14} />
-                    {m.mcm_action_warn()}
-                  </button>
-
-                  <button
-                    type="button"
-                    onclick={() => executeModerationAction('TIMEOUT')}
-                    disabled={actionBusy}
-                    class="flex items-center justify-center gap-1.5 rounded-lg bg-sky-500 hover:bg-sky-600 active:scale-95 disabled:opacity-50 disabled:pointer-events-none px-3 py-2.5 text-xs font-bold text-white transition-all shadow-xs cursor-pointer"
-                  >
-                    <Papicon icon="clock" size={14} />
-                    {m.mcm_action_timeout()}
-                  </button>
-
-                  <button
-                    type="button"
-                    onclick={() => executeModerationAction('KICK')}
-                    disabled={actionBusy}
-                    class="flex items-center justify-center gap-1.5 rounded-lg bg-orange-500 hover:bg-orange-600 active:scale-95 disabled:opacity-50 disabled:pointer-events-none px-3 py-2.5 text-xs font-bold text-white transition-all shadow-xs cursor-pointer col-span-1"
-                  >
-                    <Papicon icon="log-out" size={14} />
-                    {m.mcm_action_kick()}
-                  </button>
-
-                  <button
-                    type="button"
-                    onclick={() => executeModerationAction('BAN')}
-                    disabled={actionBusy}
-                    class="flex items-center justify-center gap-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 active:scale-95 disabled:opacity-50 disabled:pointer-events-none px-3 py-2.5 text-xs font-bold text-white transition-all shadow-xs cursor-pointer col-span-1"
-                  >
-                    <Papicon icon="gavel" size={14} />
-                    {m.mcm_action_ban()}
-                  </button>
-                </div>
-
-                <!-- Feedback / Status box -->
-                {#if actionFeedback}
-                  <div class="rounded-lg border p-3 text-xs font-medium {actionIsError ? 'border-error/20 bg-error/5 text-error' : 'border-success/20 bg-success/5 text-success'} flex items-center gap-2">
-                    <Papicon icon={actionIsError ? 'alert-circle' : 'check-circle'} size={14} />
-                    <span>{actionFeedback}</span>
+                  {#if linkFeedback}
+                    <p class="mt-3 text-sm {linkIsError ? 'text-error' : 'text-success'}">{linkFeedback}</p>
+                  {/if}
+                  <div class="mt-4 flex justify-end">
+                    <Button variant="primary" icon="link-2" loading={linkBusy} disabled={!targetAccountId} disabledReason={m.mcm_error_id_required()} onclick={handleLinkAccount}>{m.mcm_link_accounts()}</Button>
                   </div>
-                {/if}
-              </div>
+                </SectionCard>
               {/if}
-            </aside>
-          </div>
-        {/if}
-      </div>
 
-    </div>
-
-    {#if viewingReportSanctionId && selectedSanctionForReport}
-      <!-- svelte-ignore a11y_click_events_have_key_events -->
-      <!-- svelte-ignore a11y_no_static_element_interactions -->
-      <div 
-        class="member-case-overlay fixed inset-0 flex items-center justify-center bg-surface-container-lowest/90 animate-in fade-in duration-300"
-        onclick={(e) => e.stopPropagation()}
-      >
-        <!-- svelte-ignore a11y_click_events_have_key_events -->
-        <!-- svelte-ignore a11y_no_static_element_interactions -->
-        <div 
-          class="w-full max-w-2xl bg-surface-container-low rounded-xl border border-outline-variant/10 shadow-sm p-8 max-h-[90%] overflow-y-auto relative"
-          onclick={(e) => e.stopPropagation()}
-        >
-          <button
-            onclick={() => viewingReportSanctionId = null}
-            class="absolute top-6 right-6 h-10 w-10 flex items-center justify-center rounded-xl bg-on-surface/5 text-on-surface-variant transition-all hover:bg-on-surface/10 hover:text-on-surface"
-          >
-            <Papicon icon="x" size={20} />
-          </button>
-
-          <div class="mb-8">
-            <p class="text-xs font-semibold text-primary mb-1">{m.mcm_sanction_report()}</p>
-            <h4 class="text-2xl font-semibold text-on-surface font-headline">{formatTypeLabel(selectedSanctionForReport.type)}</h4>
-            <p class="text-xs text-on-surface-variant/60 mt-1">{m.mcm_applied_on({ date: formatDateTime(selectedSanctionForReport.createdAt), moderator: selectedSanctionForReport.moderatorTag })}</p>
-          </div>
-
-          {#if selectedReport}
-            {#if isEditingReport}
-              <!-- Edit Form -->
-               <div class="space-y-6 animate-in fade-in duration-300">
-                 <div class="grid grid-cols-2 gap-4">
-                   <div class="space-y-1.5">
-                     <p class="text-xs font-medium text-on-surface-variant/40 px-1">{m.mcm_incident_date()}</p>
-                     <input 
-                       type="datetime-local" 
-                       bind:value={editReportData.incidentAt} 
-                       class="w-full rounded-lg bg-surface-container-high px-4 py-3 text-xs font-bold text-on-surface border border-outline-variant/10 focus:border-primary/50 outline-hidden transition-all"
-                     />
-                   </div>
-                   <div class="space-y-1.5">
-                     <p class="text-xs font-medium text-on-surface-variant/40 px-1">{m.mcm_applied_duration()}</p>
-                     <input 
-                       type="text" 
-                       bind:value={editReportData.sanctionDurationLabel} 
-                       placeholder={m.mcm_duration_placeholder()} 
-                       class="w-full rounded-lg bg-surface-container-high px-4 py-3 text-xs font-bold text-on-surface border border-outline-variant/10 focus:border-primary/50 outline-hidden transition-all"
-                     />
-                   </div>
-                 </div>
-
-                 <div class="space-y-1.5">
-                   <p class="text-xs font-medium text-on-surface-variant/40 px-1">{m.mcm_broken_rules()}</p>
-                   <ReportRuleSelector
-                     id="member-case-report-rules"
-                     options={reportRuleOptions}
-                     selectedIds={editReportData.selectedRuleIds}
-                     onToggle={(id, checked) => {
-                       if (checked) {
-                         editReportData.selectedRuleIds = [...new Set([...editReportData.selectedRuleIds, id])];
-                       } else {
-                         editReportData.selectedRuleIds = editReportData.selectedRuleIds.filter(v => v !== id);
-                       }
-                     }}
-                   />
-                   <SelectedRuleChips selectedRules={editDraftRules} />
-                 </div>
-
-                 <div class="space-y-1.5">
-                   <p class="text-xs font-medium text-on-surface-variant/40 px-1">{m.mcm_detailed_reason()}</p>
-                   <textarea 
-                     bind:value={editReportData.detailedReason} 
-                     rows="4"
-                     placeholder={m.mcm_detailed_reason_placeholder()} 
-                     class="w-full rounded-lg bg-surface-container-high px-4 py-3 text-xs font-bold text-on-surface border border-outline-variant/10 focus:border-primary/50 outline-hidden transition-all resize-none"
-                   ></textarea>
-                 </div>
-
-                 <div class="space-y-1.5">
-                   <p class="text-xs font-medium text-on-surface-variant/40 px-1">Preuves (URLs)</p>
-                   <EvidenceInputList bind:links={editReportData.evidenceLinks} sanctionId={viewingReportSanctionId} />
-                 </div>
-
-                 <div class="space-y-1.5">
-                   <p class="text-xs font-medium text-on-surface-variant/40 px-1">{m.mcm_extra_notes()}</p>
-                   <textarea 
-                     bind:value={editReportData.additionalNotes} 
-                     rows="2"
-                     placeholder={m.mcm_extra_notes_placeholder()} 
-                     class="w-full rounded-lg bg-surface-container-high px-4 py-3 text-xs font-bold text-on-surface border border-outline-variant/10 focus:border-primary/50 outline-hidden transition-all resize-none"
-                   ></textarea>
-                 </div>
-
-                 <div class="flex gap-3 pt-4">
-                   <button
-                     onclick={() => isEditingReport = false}
-                     class="flex-1 py-3 rounded-xl bg-on-surface/5 text-body-sm font-medium text-on-surface-variant transition-all hover:bg-on-surface/10"
-                   >
-                     {m.common_cancel()}
-                   </button>
-                   <button
-                     onclick={handleUpdateReport}
-                     disabled={updateReportBusy}
-                     class="flex-1 py-3 rounded-xl bg-primary text-on-primary text-body-sm font-medium transition-all hover:bg-primary-container hover:text-primary disabled:opacity-50"
-                   >
-                     {updateReportBusy ? m.mcm_saving() : m.common_save()}
-                   </button>
-                 </div>
-               </div>
-            {:else}
-              <!-- View Mode -->
-              <div class="space-y-6">
-                <div class="grid grid-cols-2 gap-4">
-                  <div class="space-y-1">
-                    <p class="text-xs font-medium text-on-surface-variant/40">{m.mcm_incident()}</p>
-                    <p class="text-sm font-bold text-on-surface">{formatDateTime(selectedReport.incidentAt)}</p>
-                  </div>
-                  <div class="space-y-1">
-                    <p class="text-xs font-medium text-on-surface-variant/40">{m.mcm_duration()}</p>
-                    <p class="text-sm font-bold text-on-surface">{selectedReport.sanctionDurationLabel || 'N/A'}</p>
-                  </div>
-                </div>
-
-                <div class="space-y-2">
-                  <p class="text-xs font-medium text-on-surface-variant/40">{m.mcm_broken_rules()}</p>
-                  <SelectedRuleChips selectedRules={selectedReportRules} />
-                </div>
-
-                <div class="space-y-2">
-                  <p class="text-xs font-medium text-on-surface-variant/40">{m.mcm_detailed_reason()}</p>
-                  <div class="rounded-lg bg-surface-container-high/30 p-4 text-sm text-on-surface-variant leading-relaxed italic">
-                    "{selectedReport.detailedReason}"
-                  </div>
-                </div>
-
-                {#if selectedReport.evidenceLinks && selectedReport.evidenceLinks.length > 0}
-                  <div class="space-y-2">
-                    <p class="text-xs font-medium text-on-surface-variant/40">{m.mcm_evidence()}</p>
-                    <div class="flex flex-wrap gap-2">
-                      {#each selectedReport.evidenceLinks as link}
-                        <a href={link} target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-2 rounded-xl bg-on-surface/5 px-4 py-2 text-xs font-bold text-primary transition-all hover:bg-primary/10">
-                          <Papicon icon="external-link" size={14} />
-                          {m.mcm_evidence_link()}
-                        </a>
-                      {/each}
+              {#if (caseData?.linkedAccounts || []).length > 0}
+                <div class="grid gap-3 md:grid-cols-2">
+                  {#each caseData?.linkedAccounts || [] as link, li (li)}
+                    <div class="section-card flex items-center gap-3 p-4">
+                      <img src={memberAvatarSrc(link.avatarUrl, link.userTag, link.userId)} alt="" class="h-10 w-10 shrink-0 rounded-full object-cover" />
+                      <div class="min-w-0 flex-1">
+                        <div class="flex items-center gap-2">
+                          <span class="truncate text-sm font-medium text-on-surface">{link.userTag}</span>
+                          <span class="badge {link.status === 'VALIDATED' ? 'badge-success' : 'badge-warning'}">{link.status}</span>
+                        </div>
+                        <p class="text-xs text-on-surface-variant">{link.type} · {link.userId}</p>
+                      </div>
+                      {#if dashboardStore.state.access.level === 'admin' && canModerateMembers}
+                        <Button size="sm" variant="ghost" icon="trash-2" aria-label={m.mcm_unlink_account()} title={m.mcm_unlink_account()} loading={unlinkingAccountId === link.userId} onclick={() => handleUnlinkAccount(link.userId)} />
+                      {/if}
                     </div>
-                  </div>
-                {/if}
+                  {/each}
+                </div>
+              {:else}
+                {@render quietEmpty('user-plus', m.mcm_no_linked_account())}
+              {/if}
 
-                {#if selectedReport.additionalNotes}
-                  <div class="space-y-2">
-                    <p class="text-xs font-medium text-on-surface-variant/40">{m.mcm_extra_notes()}</p>
-                    <p class="text-xs text-on-surface-variant/70 leading-relaxed">{selectedReport.additionalNotes}</p>
-                  </div>
-                {/if}
-
-                <div class="pt-4 flex flex-col items-center gap-4 border-t border-outline-variant/10">
-                  <p class="text-2xs font-bold text-on-surface-variant/30 text-center">{m.mcm_report_by({ author: selectedReport.createdByTag || selectedReport.createdByUserId })}</p>
-                  
-                  {#if canModerateSanctions && (selectedReport.createdByUserId === authStore.user?.id || authStore.isAdmin)}
-                    <button
-                      onclick={() => startEditingReport(selectedReport)}
-                      class="inline-flex items-center gap-2 rounded-xl bg-primary px-6 py-2.5 text-xs font-semibold text-on-primary transition-all hover:bg-primary-container hover:scale-[1.02] active:scale-[0.98] shadow-xs cursor-pointer"
-                    >
-                      <Papicon icon="edit-3" size={14} />
-                      {m.mcm_edit_report()}
-                    </button>
+            {:else if activeTab === 'notes'}
+              <SectionCard title={m.mcm_mod_notes()} description={m.mcm_mod_notes_desc()}>
+                <label for="moderator-note-textarea" class="sr-only">{m.mcm_mod_notes_sr()}</label>
+                <textarea
+                  id="moderator-note-textarea"
+                  class="input min-h-[260px] resize-y"
+                  bind:value={moderatorNote}
+                  readonly={!canModerateMembers}
+                  placeholder={m.mcm_add_note_placeholder()}
+                ></textarea>
+                <div class="mt-4 flex items-center justify-between gap-3">
+                  <span class="text-sm {noteFeedback === m.mcm_note_saved() ? 'text-success' : 'text-error'}" aria-live="polite">{noteFeedback}</span>
+                  {#if canModerateMembers}
+                    <Button variant="primary" icon="save" loading={noteBusy} onclick={handleSaveNote}>{noteBusy ? m.mcm_saving() : m.mcm_save()}</Button>
                   {/if}
                 </div>
+              </SectionCard>
+            {/if}
+          </div>
+
+          <!-- ── Colonne de moderation ───────────────────────── -->
+          <aside class="space-y-4 lg:sticky lg:top-20">
+            <section class="section-card p-5" aria-labelledby="mc-risk">
+              <div class="flex items-baseline justify-between gap-2">
+                <h3 id="mc-risk" class="text-sm font-semibold text-on-surface">{m.mcm_risk_score()}</h3>
+                <span class="text-xs text-on-surface-variant">{memberSeniority}</span>
               </div>
+              <div class="mt-3 flex items-baseline gap-2">
+                <span class="text-2xl font-semibold tabular-nums tracking-tight {riskTone === 'success' ? 'text-success' : riskTone === 'warning' ? 'text-warning' : 'text-error'}">{moderationRiskScore}</span>
+                <span class="text-sm text-on-surface-variant">/100</span>
+                <span class="ml-auto badge {riskTone === 'success' ? 'badge-success' : riskTone === 'warning' ? 'badge-warning' : 'badge-danger'}">
+                  {moderationRiskScore < 30 ? m.mcm_risk_low() : moderationRiskScore < 70 ? m.mcm_risk_high() : m.mcm_risk_critical()}
+                </span>
+              </div>
+              <div class="mc-meter mt-2" aria-hidden="true"><span class={riskTone === 'success' ? 'bg-success' : riskTone === 'warning' ? 'bg-warning' : 'bg-error'} style="width: {moderationRiskScore}%"></span></div>
+              <p class="mt-2 text-xs leading-relaxed text-on-surface-variant">{m.mcm_risk_desc()}</p>
+            </section>
+
+            {#if topChannels.length > 0}
+              <section class="section-card p-5" aria-labelledby="mc-channels">
+                <h3 id="mc-channels" class="text-sm font-semibold text-on-surface">{m.mcm_top_channels()}</h3>
+                <ul class="mt-3 space-y-3">
+                  {#each topChannels as chan, ci (ci)}
+                    {@const pct = Math.round((chan.count / (caseData?.profile?.messageCount || 1)) * 100)}
+                    <li>
+                      <button type="button" class="mc-bar-row" onclick={() => channelDetailsModal.show(chan.channelId, chan.channelName)} title={m.mcm_open_channel_details()}>
+                        <span class="flex items-center justify-between gap-2 text-sm">
+                          <span class="truncate text-on-surface">#{chan.channelName}</span>
+                          <span class="shrink-0 tabular-nums text-xs text-on-surface-variant">{chan.count} · {pct} %</span>
+                        </span>
+                        <span class="mc-bar"><span style="width: {pct}%"></span></span>
+                      </button>
+                    </li>
+                  {/each}
+                </ul>
+              </section>
             {/if}
 
-          {:else}
-            <div class="flex flex-col items-center justify-center py-10 text-center">
-              <div class="h-16 w-16 rounded-full bg-warning/10 text-warning flex items-center justify-center mb-4">
-                <Papicon icon="alert-triangle" size={32} />
-              </div>
-              <p class="text-sm font-semibold text-on-surface-variant">{m.mcm_report_missing()}</p>
-              <p class="text-xs text-on-surface-variant/40 mt-1 max-w-xs">{m.mcm_report_missing_desc()}</p>
-            </div>
-          {/if}
-
-          <button
-            onclick={() => viewingReportSanctionId = null}
-            class="w-full mt-8 py-4 rounded-lg bg-on-surface/5 text-sm font-semibold text-on-surface-variant transition-all hover:bg-on-surface/10 hover:text-on-surface"
-          >
-            {m.mcm_close_details()}
-          </button>
+            {#if canModerateMembers}
+              <section class="section-card p-5" aria-labelledby="mc-actions">
+                <h3 id="mc-actions" class="text-sm font-semibold text-on-surface">{m.mcm_mod_actions()}</h3>
+                <div class="mt-3 space-y-3">
+                  <Field label={m.mcm_sanction_reason()} id="mod-reason">
+                    {#snippet children(id)}
+                      <textarea {id} class="input resize-none" rows="3" placeholder={m.mcm_reason_placeholder()} bind:value={actionReason}></textarea>
+                    {/snippet}
+                  </Field>
+                  <Field label={m.mcm_duration_timeout()}>
+                    {#snippet children(id)}
+                      <select {id} class="input" bind:value={actionDuration}>
+                        <option value="30m">{m.mcm_duration_30m()}</option>
+                        <option value="1h">{m.mcm_duration_1h()}</option>
+                        <option value="1d">{m.mcm_duration_1d()}</option>
+                        <option value="7d">{m.mcm_duration_7d()}</option>
+                        <option value="28d">{m.mcm_duration_28d()}</option>
+                      </select>
+                    {/snippet}
+                  </Field>
+                  <div class="space-y-2 pt-1">
+                    <Button fullWidth icon="alert-triangle" disabled={actionBusy} onclick={() => executeModerationAction('WARN')}>{m.mcm_action_warn()}</Button>
+                    <Button fullWidth icon="clock" disabled={actionBusy} onclick={() => executeModerationAction('TIMEOUT')}>{m.mcm_action_timeout()}</Button>
+                    <div class="grid grid-cols-2 gap-2">
+                      <Button variant="danger" icon="log-out" disabled={actionBusy} onclick={() => executeModerationAction('KICK')}>{m.mcm_action_kick()}</Button>
+                      <Button variant="danger" icon="gavel" disabled={actionBusy} onclick={() => executeModerationAction('BAN')}>{m.mcm_action_ban()}</Button>
+                    </div>
+                  </div>
+                  {#if actionFeedback}
+                    <p class="flex items-center gap-2 text-sm {actionIsError ? 'text-error' : 'text-success'}">
+                      <Papicon icon={actionIsError ? 'alert-circle' : 'check-circle'} size={14} />{actionFeedback}
+                    </p>
+                  {/if}
+                </div>
+              </section>
+            {/if}
+          </aside>
         </div>
-      </div>
-    {/if}
-
+      {/if}
+    </div>
+  </div>
 </Modal>
+
+<!-- Rapport de sanction : une fenetre du dashboard, au-dessus du dossier. -->
+<Modal
+  aboveCase
+  open={!!(viewingReportSanctionId && selectedSanctionForReport)}
+  onClose={() => { viewingReportSanctionId = null; isEditingReport = false; }}
+  size="lg"
+  title={selectedSanctionForReport ? formatTypeLabel(selectedSanctionForReport.type) : m.mcm_sanction_report()}
+  subtitle={selectedSanctionForReport ? m.mcm_applied_on({ date: formatDateTime(selectedSanctionForReport.createdAt), moderator: selectedSanctionForReport.moderatorTag }) : ''}
+>
+  <div class="space-y-5">
+    {#if selectedReport}
+      {#if isEditingReport}
+        <div class="grid gap-4 sm:grid-cols-2">
+          <Field label={m.mcm_incident_date()}>
+            {#snippet children(id)}<input {id} type="datetime-local" class="input" bind:value={editReportData.incidentAt} />{/snippet}
+          </Field>
+          <Field label={m.mcm_applied_duration()}>
+            {#snippet children(id)}<input {id} type="text" class="input" placeholder={m.mcm_duration_placeholder()} bind:value={editReportData.sanctionDurationLabel} />{/snippet}
+          </Field>
+        </div>
+        <div class="field">
+          <span class="field-label">{m.mcm_broken_rules()}</span>
+          <ReportRuleSelector
+            id="member-case-report-rules"
+            options={reportRuleOptions}
+            selectedIds={editReportData.selectedRuleIds}
+            onToggle={(id, checked) => {
+              editReportData.selectedRuleIds = checked
+                ? [...new Set([...editReportData.selectedRuleIds, id])]
+                : editReportData.selectedRuleIds.filter((v) => v !== id);
+            }}
+          />
+          <SelectedRuleChips selectedRules={editDraftRules} />
+        </div>
+        <Field label={m.mcm_detailed_reason()}>
+          {#snippet children(id)}<textarea {id} class="input resize-none" rows="4" placeholder={m.mcm_detailed_reason_placeholder()} bind:value={editReportData.detailedReason}></textarea>{/snippet}
+        </Field>
+        <div class="field">
+          <span class="field-label">{m.mcm_evidence()}</span>
+          <EvidenceInputList bind:links={editReportData.evidenceLinks} sanctionId={viewingReportSanctionId} />
+        </div>
+        <Field label={m.mcm_extra_notes()}>
+          {#snippet children(id)}<textarea {id} class="input resize-none" rows="2" placeholder={m.mcm_extra_notes_placeholder()} bind:value={editReportData.additionalNotes}></textarea>{/snippet}
+        </Field>
+      {:else}
+        {@render facts([
+          { label: m.mcm_incident(), value: formatDateTime(selectedReport.incidentAt) },
+          { label: m.mcm_duration(), value: selectedReport.sanctionDurationLabel || '-' },
+        ])}
+        <div>
+          <p class="field-label">{m.mcm_broken_rules()}</p>
+          <SelectedRuleChips selectedRules={selectedReportRules} />
+        </div>
+        <div>
+          <p class="field-label">{m.mcm_detailed_reason()}</p>
+          <p class="rounded-lg bg-surface-container px-4 py-3 text-sm leading-relaxed text-on-surface">{selectedReport.detailedReason}</p>
+        </div>
+        {#if selectedReport.evidenceLinks?.length}
+          <div>
+            <p class="field-label">{m.mcm_evidence()}</p>
+            <div class="flex flex-wrap gap-2">
+              {#each selectedReport.evidenceLinks as link, li (li)}
+                <Button size="sm" icon="external-link" href={link} target="_blank">{m.mcm_evidence_link()} {li + 1}</Button>
+              {/each}
+            </div>
+          </div>
+        {/if}
+        {#if selectedReport.additionalNotes}
+          <div>
+            <p class="field-label">{m.mcm_extra_notes()}</p>
+            <p class="text-sm leading-relaxed text-on-surface-variant">{selectedReport.additionalNotes}</p>
+          </div>
+        {/if}
+        <p class="text-xs text-on-surface-variant">{m.mcm_report_by({ author: selectedReport.createdByTag || selectedReport.createdByUserId })}</p>
+      {/if}
+    {:else}
+      <EmptyState icon="alert-triangle" title={m.mcm_report_missing()} description={m.mcm_report_missing_desc()} actionLabel={m.mcx_open_sanctions()} actionIcon="arrow-right" actionHref="/security/sanctions" />
+    {/if}
+  </div>
+  {#snippet footer()}
+    <div class="flex justify-end gap-2">
+      {#if selectedReport && isEditingReport}
+        <Button variant="ghost" onclick={() => (isEditingReport = false)}>{m.common_cancel()}</Button>
+        <Button variant="primary" loading={updateReportBusy} onclick={handleUpdateReport}>{m.common_save()}</Button>
+      {:else}
+        {#if selectedReport && canModerateSanctions && (selectedReport.createdByUserId === authStore.user?.id || authStore.isAdmin)}
+          <Button icon="edit-3" onclick={() => startEditingReport(selectedReport)}>{m.mcm_edit_report()}</Button>
+        {/if}
+        <Button variant="secondary" onclick={() => (viewingReportSanctionId = null)}>{m.mcm_close_details()}</Button>
+      {/if}
+    </div>
+  {/snippet}
+</Modal>
+
+<style>
+  .mc {
+    display: flex;
+    flex-direction: column;
+    min-height: 100%;
+    background: var(--surface);
+  }
+
+  .mc-header {
+    position: relative;
+    background: var(--surface-container-lowest);
+    border-bottom: 1px solid var(--outline-variant);
+  }
+  .mc-banner {
+    height: 5.5rem;
+    background-size: cover;
+    background-position: center;
+  }
+  .mc-identity {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 1rem;
+    padding: 1.25rem 1.5rem;
+  }
+  .mc-header-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    margin-left: auto;
+  }
+
+  .mc-tabs {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    padding: 0.75rem 1.5rem;
+    background: color-mix(in srgb, var(--surface) 92%, transparent);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--outline-variant);
+  }
+
+  .mc-body {
+    padding: 1.25rem 1.5rem 1.5rem;
+  }
+
+  @media (max-width: 640px) {
+    .mc-identity, .mc-tabs, .mc-body {
+      padding-left: 1rem;
+      padding-right: 1rem;
+    }
+    .mc-header-actions {
+      margin-left: 0;
+      width: 100%;
+    }
+  }
+
+  /* Chiffres alignes, separes par un filet : le meme bandeau que l'accueil. */
+  .mc-kpis {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem 1.5rem;
+  }
+  @media (min-width: 900px) {
+    .mc-kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .mc-kpis--3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .mc-kpis > div + div {
+      border-left: 1px solid var(--outline-variant);
+      padding-left: 1.25rem;
+    }
+  }
+  .mc-kpis dt {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    font-size: 0.75rem;
+    color: var(--on-surface-variant);
+  }
+  .mc-kpis dd {
+    margin-top: 0.125rem;
+    font-size: 1.375rem;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    color: var(--on-surface);
+  }
+  .mc-kpis span {
+    display: block;
+    font-size: 0.75rem;
+    color: var(--on-surface-variant);
+  }
+
+  .mc-facts {
+    display: flex;
+    flex-direction: column;
+  }
+  .mc-facts > div {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.5rem 0;
+    border-top: 1px solid color-mix(in srgb, var(--outline-variant) 60%, transparent);
+  }
+  .mc-facts > div:first-child {
+    border-top: none;
+    padding-top: 0;
+  }
+  .mc-facts dt {
+    font-size: 0.8125rem;
+    color: var(--on-surface-variant);
+  }
+  .mc-facts dd {
+    min-width: 0;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--on-surface);
+    text-align: right;
+    overflow-wrap: anywhere;
+  }
+
+  .mc-person {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    max-width: 100%;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--primary-color);
+  }
+  .mc-person:hover:not(.mc-person--static) { text-decoration: underline; }
+  .mc-person--static { color: var(--on-surface); }
+
+  .mc-code {
+    padding: 0.125rem 0.5rem;
+    border-radius: 0.375rem;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 0.8125rem;
+    color: var(--primary-color);
+    background: color-mix(in srgb, var(--primary-color) 10%, transparent);
+  }
+  .mc-code:hover { background: color-mix(in srgb, var(--primary-color) 16%, transparent); }
+
+  .mc-role {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.1875rem 0.5rem;
+    border-radius: 0.375rem;
+    border: 1px solid var(--outline-variant);
+    font-size: 0.75rem;
+    color: var(--on-surface);
+    background: var(--surface-container-lowest);
+  }
+
+  .mc-bar-row {
+    display: block;
+    width: 100%;
+    text-align: left;
+  }
+  .mc-bar-row:hover .truncate { color: var(--primary-color); }
+  .mc-bar {
+    display: block;
+    height: 0.375rem;
+    margin-top: 0.375rem;
+    border-radius: 9999px;
+    background: var(--surface-container-high);
+    overflow: hidden;
+  }
+  .mc-bar > span {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--series-1);
+  }
+
+  .mc-meter {
+    height: 0.375rem;
+    border-radius: 9999px;
+    background: var(--surface-container-high);
+    overflow: hidden;
+  }
+  .mc-meter > span {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    transition: width 0.4s ease;
+  }
+
+  .mc-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .mc-toolbar .mc-select { width: auto; max-width: 14rem; }
+  .mc-search { flex: 1 1 16rem; min-width: 0; }
+  .mc-date {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    font-size: 0.8125rem;
+    color: var(--on-surface-variant);
+  }
+  .mc-date .input { width: auto; }
+
+  .mc-timeline {
+    padding: 1rem 1.25rem;
+  }
+  .mc-event {
+    position: relative;
+    display: flex;
+    gap: 0.875rem;
+    padding-bottom: 1rem;
+  }
+  .mc-event:last-child { padding-bottom: 0; }
+  .mc-event:not(:last-child)::before {
+    content: '';
+    position: absolute;
+    left: 4px;
+    top: 14px;
+    bottom: 0;
+    width: 1px;
+    background: var(--outline-variant);
+  }
+  .mc-event__dot {
+    flex-shrink: 0;
+    width: 9px;
+    height: 9px;
+    margin-top: 6px;
+    border-radius: 9999px;
+    background: var(--primary-color);
+  }
+
+  .mc-table {
+    width: 100%;
+    min-width: 640px;
+    border-collapse: collapse;
+    text-align: left;
+    font-size: 0.875rem;
+  }
+  .mc-table th {
+    padding: 0.625rem 1rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--on-surface-variant);
+    background: var(--surface-container);
+    border-bottom: 1px solid var(--outline-variant);
+  }
+  .mc-table td {
+    padding: 0.625rem 1rem;
+    vertical-align: middle;
+    border-bottom: 1px solid var(--outline-variant);
+  }
+  .mc-table tbody tr:last-child td { border-bottom: none; }
+  .mc-table tbody tr:hover { background: var(--surface-hover); }
+</style>

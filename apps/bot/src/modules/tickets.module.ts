@@ -12,10 +12,18 @@ import { Events, type Message, ActionRowBuilder, ButtonBuilder, ButtonStyle, Emb
 import { subscribeForModule } from '../services/core/moduleScope.js';
 import prisma from '../utils/db.js';
 import { COLORS } from '../utils/embeds.js';
-import { autoClaimTicketOnStaffMessage, markTicketOrphaned, recordTicketFirstResponse, relayDmToThread, relayThreadToDm } from '../services/features/ticketService.js';
+import { autoClaimTicketOnStaffMessage, markTicketOrphaned, recordTicketFirstResponse, recordTicketTurn, relayDmToThread, relayThreadToDm } from '../services/features/ticketService.js';
 import { logger } from '../utils/logger.js';
+import { drainAllTicketQueues, onTicketCapacityFreed } from '../services/features/ticketQueueService.js';
 
 const MODULE_NAME = 'tickets';
+
+/**
+ * Balayage de la file d'attente des tickets. Local a chaque shard, et non
+ * confie a la file Redis : un job de file ne tourne que sur un shard, qui ne
+ * voit pas les serveurs des autres.
+ */
+const TICKET_QUEUE_SWEEP_MS = 2 * 60_000;
 
 export function registerTicketsBusSubscribers(client: Client): void {
   // ── Inactivity reset: creator speaks in ticket → reset flag ───
@@ -51,6 +59,26 @@ export function registerTicketsBusSubscribers(client: Client): void {
     const guild = client.guilds.cache.get(payload.guildId) ?? null;
     await markTicketOrphaned(client, guild, ticket, payload.channelId);
   }, MODULE_NAME);
+
+  // ── File d'attente : une place a pu se liberer ────────────────
+  // Un salon supprime libere une place dans le serveur et dans sa categorie ;
+  // un fil archive ou supprime libere une place parmi les fils actifs.
+  subscribeForModule('tickets', 'channel:delete', async (payload) => {
+    await onTicketCapacityFreed(client, payload.guildId);
+  }, MODULE_NAME);
+
+  client.on(Events.ThreadDelete, (thread) => {
+    onTicketCapacityFreed(client, thread.guildId).catch((err) => logger.error('TicketQueue', 'Erreur reprise de file :', err));
+  });
+
+  client.on(Events.ThreadUpdate, (oldThread, newThread) => {
+    if (oldThread.archived || !newThread.archived) return;
+    onTicketCapacityFreed(client, newThread.guildId).catch((err) => logger.error('TicketQueue', 'Erreur reprise de file :', err));
+  });
+
+  setInterval(() => {
+    drainAllTicketQueues(client).catch((err) => logger.error('TicketQueue', 'Erreur balayage de la file :', err));
+  }, TICKET_QUEUE_SWEEP_MS).unref?.();
 
   // ── Leave follow-up: member leaves with open tickets ──────────
   subscribeForModule('tickets', 'member:leave', async (payload) => {
@@ -131,6 +159,7 @@ export function registerTicketsBusSubscribers(client: Client): void {
 
       if (message.guild) {
         await recordTicketFirstResponse(message);
+        await recordTicketTurn(message);
         await autoClaimTicketOnStaffMessage(client, message);
       }
 

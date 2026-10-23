@@ -4,6 +4,7 @@
  * Les bornes suivent ce que Discord accepte sur l'écran de voyage : cinq boutons par
  * rangée, quatre-vingts caractères par libellé. Au-delà, l'écran entier serait refusé.
  */
+import { UserFacingError } from '../../../utils/userFacingError.js';
 
 export const ADVENTURE_TITLE_MAX = 100;
 export const ADVENTURE_DESCRIPTION_MAX = 1_000;
@@ -33,7 +34,7 @@ export type AdventureEventInput = {
   choices?: unknown;
 };
 
-export class AdventureEventError extends Error {
+export class AdventureEventError extends UserFacingError {
   constructor(message: string, readonly status: number) {
     super(message);
     this.name = 'AdventureEventError';

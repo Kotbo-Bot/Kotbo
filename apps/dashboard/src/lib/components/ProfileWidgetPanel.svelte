@@ -45,7 +45,7 @@
         syncServiceWorkerConfig();
       }
     } catch {
-      toast.error('Erreur lors de la régénération du token');
+      toast.error('Impossible de régénérer le token. Réessaie.');
     } finally {
       rotatingToken = false;
     }
@@ -57,7 +57,7 @@
       data = await fetchWidgetData();
       syncServiceWorkerConfig();
     } catch {
-      toast.error('Erreur lors du chargement');
+      toast.error('Impossible de charger. Réessaie.');
     } finally {
       loading = false;
     }
@@ -98,10 +98,10 @@
     acting = true;
     try {
       await deactivateWidget();
-      toast.success('Widget désactivé avec succès.');
+      toast.success('Widget désactivé.');
       await load();
     } catch {
-      toast.error('Erreur lors de la désactivation');
+      toast.error('Impossible de désactiver. Réessaie.');
     } finally {
       acting = false;
     }
@@ -115,7 +115,7 @@
         toast.success('Widget rafraîchi !');
       }
     } catch {
-      toast.error('Erreur lors du rafraîchissement');
+      toast.error('Impossible d\'actualiser. Réessaie.');
     } finally {
       acting = false;
     }
@@ -132,7 +132,7 @@
         toast.success(`Widgets rafraîchis : ${result?.success ?? 0} OK`);
       }
     } catch {
-      toast.error('Erreur lors du rafraîchissement global');
+      toast.error('Impossible de tout actualiser. Réessaie.');
     } finally {
       acting = false;
     }
@@ -143,7 +143,7 @@
 
 <!-- ======================== CONTENT ======================== -->
 {#if loading}
-  <div class="flex flex-col items-center justify-center py-16 text-on-surface-variant/50 gap-4">
+  <div class="flex flex-col items-center justify-center py-16 text-on-surface-variant gap-4">
     <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
     <p class="text-sm">Chargement...</p>
   </div>
@@ -151,12 +151,12 @@
   <!-- ======================== STATS ROW ======================== -->
   <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
     <div class="bg-surface-container-low/30 border border-outline-variant/10 rounded-xl p-4 flex items-center gap-3">
-      <div class="w-10 h-10 rounded-xl flex items-center justify-center {isActive ? 'bg-success/10 text-success' : 'bg-surface-container-high/30 text-on-surface-variant/50'}">
+      <div class="w-10 h-10 rounded-xl flex items-center justify-center {isActive ? 'bg-success/10 text-success' : 'bg-surface-container-high/30 text-on-surface-variant'}">
         <Papicon icon={isActive ? 'check-circle' : 'x-circle'} size={20} />
       </div>
       <div class="flex flex-col">
         <span class="text-2xl font-bold">{isActive ? 'Actif' : 'Inactif'}</span>
-        <span class="text-xs font-medium text-on-surface-variant/60 mt-0.5">Ton widget</span>
+        <span class="text-xs font-medium text-on-surface-variant mt-0.5">Ton widget</span>
       </div>
     </div>
     <div class="bg-surface-container-low/30 border border-outline-variant/10 rounded-xl p-4 flex items-center gap-3">
@@ -165,7 +165,7 @@
       </div>
       <div class="flex flex-col">
         <span class="text-2xl font-bold">{subscriptionCount}</span>
-        <span class="text-xs font-medium text-on-surface-variant/60 mt-0.5">Widgets actifs</span>
+        <span class="text-xs font-medium text-on-surface-variant mt-0.5">Widgets actifs</span>
       </div>
     </div>
   </div>
@@ -275,7 +275,7 @@
               href="/kotbo-widget-discord-v2.js"
               target="_blank"
               rel="noreferrer"
-              class="text-center text-2xs text-on-surface-variant/70 underline decoration-outline-variant underline-offset-4 hover:text-on-surface"
+              class="text-center text-2xs text-on-surface-variant underline decoration-outline-variant underline-offset-4 hover:text-on-surface"
             >Voir le fichier avant de l’exécuter</a>
           </div>
         </div>
@@ -290,14 +290,14 @@
             <Papicon icon="smartphone" size={18} />
             Widgets téléphone & PC
           </h3>
-          <p class="mt-1 text-xs text-on-surface-variant/60">
+          <p class="mt-1 text-xs text-on-surface-variant">
             Installe Kotbo comme application (PWA) et affiche tes stats sur ton écran d'accueil ou de verrouillage.
           </p>
         </div>
 
         <!-- Token widget -->
         <div class="rounded-lg border border-outline-variant/10 bg-surface-container-high/20 p-4 space-y-2">
-          <p class="text-xs font-semibold text-on-surface-variant/60">Token widget (lecture seule)</p>
+          <p class="text-xs font-semibold text-on-surface-variant">Token widget (lecture seule)</p>
           <div class="flex items-center gap-2">
             <code class="flex-1 min-w-0 truncate rounded-lg border border-outline-variant/10 bg-surface-container-highest/40 px-3 py-2 font-mono text-xs text-on-surface">
               {showToken ? (widgetToken ?? '-') : '••••••••••••••••••••••••••••••••'}
@@ -322,7 +322,7 @@
               <Papicon icon="refresh-cw" size={14} />
             </button>
           </div>
-          <p class="text-2xs text-on-surface-variant/50">
+          <p class="text-2xs text-on-surface-variant">
             Ce token permet uniquement de lire tes stats (niveau, messages, vocal, staff score). Régénère-le si tu penses qu'il a fuité.
           </p>
         </div>
@@ -351,7 +351,7 @@
                 Télécharger le script
               </a>
               <button
-                class="text-2xs text-on-surface-variant/70 underline decoration-outline-variant underline-offset-4 hover:text-on-surface"
+                class="text-2xs text-on-surface-variant underline decoration-outline-variant underline-offset-4 hover:text-on-surface"
                 onclick={() => widgetToken && copy(`${widgetToken}|${apiOrigin}`, 'ios-param')}
               >{copiedField === 'ios-param' ? 'Copié !' : 'Copier le paramètre'}</button>
             </div>
@@ -379,7 +379,7 @@
                 Voir le guide
               </a>
               <button
-                class="text-2xs text-on-surface-variant/70 underline decoration-outline-variant underline-offset-4 hover:text-on-surface"
+                class="text-2xs text-on-surface-variant underline decoration-outline-variant underline-offset-4 hover:text-on-surface"
                 onclick={() => copy(widgetDataUrl, 'android-url')}
               >{copiedField === 'android-url' ? 'Copié !' : 'Copier l\'URL de données'}</button>
             </div>
@@ -396,7 +396,7 @@
               <li>Menu ⋯ → Applications → « Installer ce site en tant qu'application »</li>
               <li>Clic droit sur l'icône Kotbo installée → « Ajouter au panneau Widgets »</li>
             </ol>
-            <p class="text-2xs text-on-surface-variant/50">
+            <p class="text-2xs text-on-surface-variant">
               Le widget se synchronise automatiquement dès que tu ouvres l'app installée - aucune configuration de token nécessaire.
             </p>
           </div>
@@ -423,7 +423,7 @@
                 Voir le guide
               </a>
               <button
-                class="text-2xs text-on-surface-variant/70 underline decoration-outline-variant underline-offset-4 hover:text-on-surface"
+                class="text-2xs text-on-surface-variant underline decoration-outline-variant underline-offset-4 hover:text-on-surface"
                 onclick={() => copy(widgetDataUrl, 'linux-url')}
               >{copiedField === 'linux-url' ? 'Copié !' : 'Copier l\'URL de données'}</button>
             </div>
@@ -443,7 +443,7 @@
           {#each data.subscriptions.filter((s: any) => s.enabled) as sub}
             <div class="flex items-center gap-4 py-3">
               <span class="flex-1 font-mono text-sm text-on-surface">{sub.userId}</span>
-              <span class="text-xs text-on-surface-variant/60">{new Date(sub.createdAt).toLocaleDateString('fr-FR')}</span>
+              <span class="text-xs text-on-surface-variant">{new Date(sub.createdAt).toLocaleDateString('fr-FR')}</span>
               <span class="px-2.5 py-0.5 rounded-full text-xs font-medium bg-success/10 text-success border border-success/15">Actif</span>
             </div>
           {/each}

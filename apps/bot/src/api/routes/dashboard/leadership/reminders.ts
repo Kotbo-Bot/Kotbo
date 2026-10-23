@@ -15,6 +15,7 @@ import {
   
   
 } from '../../../shared.js';
+import { publicErrorMessage } from '../../../../utils/publicError.js';
 
 export async function handleReminderRoutes(
   req: IncomingMessage,
@@ -94,7 +95,7 @@ export async function handleReminderRoutes(
           json(res, 200, { ok: true });
         } catch (err) {
           logger.error('RemindersAPI', 'Error deleting reminder:', err);
-          json(res, errorMessage(err)?.includes('non autorisé') ? 403 : 500, { error: errorMessage(err) || 'Erreur lors de la suppression du rappel' });
+          json(res, errorMessage(err)?.includes('non autorisé') ? 403 : 500, { error: publicErrorMessage(err, 'Erreur lors de la suppression du rappel') });
         }
         return true;
       }

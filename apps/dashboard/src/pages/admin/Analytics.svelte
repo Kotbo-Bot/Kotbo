@@ -1153,7 +1153,7 @@
       </div>
     {:else if drawerGuilds.length === 0}
       <div class="py-16 text-center text-on-surface-variant">
-        <Papicon icon="Server" size={24} class="mx-auto mb-2 text-on-surface-variant/50" />
+        <Papicon icon="Server" size={24} class="mx-auto mb-2 text-on-surface-variant" />
         <p class="text-sm font-medium">Aucun serveur dans cette sélection.</p>
       </div>
     {:else}

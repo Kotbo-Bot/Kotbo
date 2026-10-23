@@ -57,7 +57,7 @@
     ></div>
     <span class="font-mono font-bold text-on-surface uppercase tracking-wider">{value || 'Aucune'}</span>
   </div>
-  <Papicon icon="chevron-down" size={16} class="text-on-surface-variant/50" />
+  <Papicon icon="chevron-down" size={16} class="text-on-surface-variant" />
 </button>
 
 <!-- svelte-ignore a11y_click_events_have_key_events -->

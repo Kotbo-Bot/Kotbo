@@ -28,7 +28,6 @@ import {
   type UserSelectMenuInteraction,
 } from 'discord.js';
 import prisma from '../../utils/db.js';
-import { errorMessage } from '../../utils/errors.js';
 import { logger } from '../../utils/logger.js';
 import { errorEmbed, joinFieldEntries, successEmbed, truncate, COLORS } from '../../utils/embeds.js';
 import { getEffectiveLocale, type BotLocale } from '../../utils/i18n.js';
@@ -232,6 +231,7 @@ import {
   getMemberBlackMarketOffers,
   type BlackMarketOfferView,
 } from './rpg/rpgBlackMarketService.js';
+import { publicErrorMessage } from '../../utils/publicError.js';
 
 export type Locale = BotLocale;
 export type PanelInteraction = ButtonInteraction | StringSelectMenuInteraction | UserSelectMenuInteraction | ModalSubmitInteraction;
@@ -342,7 +342,7 @@ export async function ensureOwner(interaction: PanelInteraction, ownerId: string
 }
 
 export async function replyPanelError(interaction: PanelInteraction, err: unknown, locale: Locale): Promise<void> {
-  const embed = errorEmbed(m.rpg_generic_error_title({}, { locale }), errorMessage(err));
+  const embed = errorEmbed(m.rpg_generic_error_title({}, { locale }), publicErrorMessage(err));
 
   // Les écrans qui défèrent l'interaction (combat, boss) ne peuvent plus utiliser `reply` :
   // l'appel échouait alors en silence et le joueur ne voyait jamais l'erreur.

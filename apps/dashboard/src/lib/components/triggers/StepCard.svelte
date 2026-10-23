@@ -142,7 +142,7 @@
         </div>
 
         {#each action.fields.filter((f) => f.option) as option (option.key)}
-          <div class="flex items-center gap-2 text-xs text-on-surface-variant/70">
+          <div class="flex items-center gap-2 text-xs text-on-surface-variant">
             <span>{option.label}</span>
             <ValueField
               kind={option.kind}
@@ -218,13 +218,13 @@
                   onclick={() => updateTest(test.id, { negate: !test.negate })}
                   class="px-2 py-0.5 rounded-lg text-2xs font-medium border transition-colors {test.negate
                     ? 'bg-error/15 border-error/30 text-error'
-                    : 'bg-surface-container-highest border-outline-variant/20 text-on-surface-variant/70 hover:text-on-surface'}"
+                    : 'bg-surface-container-highest border-outline-variant/20 text-on-surface-variant hover:text-on-surface'}"
                   title={m.wf_invert_title()}
                 >{m.wf_invert()}</button>
                 <button
                   type="button"
                   onclick={() => removeTest(test.id)}
-                  class="p-1 rounded-lg text-on-surface-variant/70 hover:text-error transition-colors"
+                  class="p-1 rounded-lg text-on-surface-variant hover:text-error transition-colors"
                   aria-label={m.wf_remove_test()}
                 ><Papicon icon="Trash" size={12} /></button>
               </div>
@@ -246,20 +246,20 @@
         type="button"
         disabled={!canMoveUp}
         onclick={() => onMove(step.id, -1)}
-        class="p-1.5 rounded-lg text-on-surface-variant/70 hover:text-on-surface hover:bg-surface-container-highest disabled:opacity-20 disabled:hover:bg-transparent transition-colors"
+        class="p-1.5 rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-container-highest disabled:opacity-20 disabled:hover:bg-transparent transition-colors"
         aria-label={m.wf_move_up()}
       ><Papicon icon="ChevronUp" size={13} /></button>
       <button
         type="button"
         disabled={!canMoveDown}
         onclick={() => onMove(step.id, 1)}
-        class="p-1.5 rounded-lg text-on-surface-variant/70 hover:text-on-surface hover:bg-surface-container-highest disabled:opacity-20 disabled:hover:bg-transparent transition-colors"
+        class="p-1.5 rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-container-highest disabled:opacity-20 disabled:hover:bg-transparent transition-colors"
         aria-label={m.wf_move_down()}
       ><Papicon icon="ChevronDown" size={13} /></button>
       <button
         type="button"
         onclick={() => onRemove(step.id)}
-        class="p-1.5 rounded-lg text-on-surface-variant/70 hover:text-error hover:bg-error/10 transition-colors"
+        class="p-1.5 rounded-lg text-on-surface-variant hover:text-error hover:bg-error/10 transition-colors"
         aria-label={m.wf_remove_step()}
       ><Papicon icon="Trash" size={13} /></button>
     </div>
@@ -269,7 +269,7 @@
     {#each [{ key: 'then' as const, label: m.wf_then() }, { key: 'otherwise' as const, label: m.wf_else() }] as branch (branch.key)}
       <div class="px-3 pb-3">
         <div class="pl-3 border-l border-dashed border-outline-variant/25 space-y-2">
-          <p class="text-xs font-semibold text-on-surface-variant/70">{branch.label}</p>
+          <p class="text-xs font-semibold text-on-surface-variant">{branch.label}</p>
 
           {#each (step as ConditionStep)[branch.key] as child, index (child.id)}
             {@const movable = movableSteps((step as ConditionStep)[branch.key], index)}
@@ -292,13 +292,13 @@
             <button
               type="button"
               onclick={() => onAddInside(branch.key, step.id)}
-              class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-2xs font-medium text-on-surface-variant/70 border border-dashed border-outline-variant/25 hover:text-on-surface hover:border-primary/40 transition-colors"
+              class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-2xs font-medium text-on-surface-variant border border-dashed border-outline-variant/25 hover:text-on-surface hover:border-primary/40 transition-colors"
             >
               <Papicon icon="Plus" size={11} />
               {m.wf_add_step()}
             </button>
           {:else}
-            <p class="text-2xs text-on-surface-variant/70 leading-snug">{m.wf_condition_closes()}</p>
+            <p class="text-2xs text-on-surface-variant leading-snug">{m.wf_condition_closes()}</p>
           {/if}
         </div>
       </div>

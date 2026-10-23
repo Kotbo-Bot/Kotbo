@@ -1,6 +1,7 @@
 import { Client } from 'discord.js';
 import { addXp, getOrCreateLevelConfig } from '../services/progression/levelingService.js';
 import { handleUserActivity } from '../services/features/economyService.js';
+import { isProgressionBlocked } from '../services/progression/progressionBlacklist.js';
 import { logger } from '../utils/logger.js';
 
 
@@ -49,6 +50,7 @@ export function registerLevelingListener(client: Client) {
 
             // Vérifier si le membre possède un rôle exclu
             if (config.ignoredRoles && (config.ignoredRoles as string[]).some(roleId => member.roles.cache.has(roleId))) continue;
+            if (await isProgressionBlocked(guildId, { userId: member.id, roleIds: member.roles.cache.keys(), channelIds: [channel.id, channel.parentId] })) continue;
 
             // Calculer le multiplicateur d'XP par rôle
             let multiplier = 1.0;

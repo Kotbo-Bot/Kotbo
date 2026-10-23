@@ -98,6 +98,15 @@ function parseEmbedFromHtml(embedHtml: string): ParsedTranscriptEmbed {
   };
 }
 
+/**
+ * Les transcriptions générées avant le correctif posaient un fond bleu sous
+ * chaque avatar, visible à travers les avatars transparents (celui de Kotbo
+ * en tête). Le HTML étant stocké tel quel, on retire ce fond au service.
+ */
+export function stripLegacyAvatarBackground(html: string): string {
+  return html.replace(/(\.avatar\s*\{[^}]*?)background-color:\s*#5865F2;\s*/i, '$1');
+}
+
 export function parseTranscriptHtml(html: string): ParsedTranscriptMessage[] {
   const messages: ParsedTranscriptMessage[] = [];
 
@@ -767,7 +776,7 @@ export async function generateTranscriptFromMessages(channel: TextChannel | News
       width: 40px;
       height: 40px;
       border-radius: 50%;
-      background-color: #5865F2;
+      object-fit: cover;
       flex-shrink: 0;
     }
     .message-content {

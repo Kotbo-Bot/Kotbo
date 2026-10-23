@@ -13,6 +13,7 @@ import { upsertRetryingRace } from '../../utils/upsertRetry.js';
 import { logger } from '../../utils/logger.js';
 import { getModuleStatsSummary, getModuleActivationStats, getModuleUsageStats, getModulePerformanceStats , KOTBO_MODULES, type KotboModule } from '../../services/analytics/moduleStatsService.js';
 import { separator, v2Message } from '@arcscord/components';
+import { publicErrorMessage } from '../../utils/publicError.js';
 
 
 
@@ -458,7 +459,7 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
     } catch (err) {
       console.error('Error starting historical scraping from admin:', err);
       await interaction.editReply(v2Message(
-        errorContainer('Erreur', `Impossible de démarrer le scraping : ${err instanceof Error ? err.message : String(err)}`),
+        errorContainer('Erreur', `Impossible de démarrer le scraping : ${publicErrorMessage(err)}`),
       ));
     }
   }

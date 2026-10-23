@@ -718,7 +718,7 @@
           <p class="text-sm font-semibold text-on-surface">
             {isTakeover ? 'Serveur déjà en activité : reprise' : 'Serveur neuf : création complète'}
           </p>
-          <p class="text-body-sm text-on-surface-variant/70 leading-relaxed">
+          <p class="text-body-sm text-on-surface-variant leading-relaxed">
             {#if isTakeover}
               Seuls les modules sont cochés. Créer la maquette complète ici doublerait des
               salons dont tes membres se servent déjà - à cocher toi-même, salon par salon,
@@ -729,7 +729,7 @@
             {/if}
           </p>
           {#if maturity.reasons.length > 0}
-            <p class="text-xs text-on-surface-variant/50">
+            <p class="text-xs text-on-surface-variant">
               Constaté : {maturity.reasons.join(' · ')}.
             </p>
           {/if}
@@ -753,7 +753,7 @@
         </div>
         <div class="space-y-0.5">
           <p class="text-sm font-semibold text-on-surface">{m.st_applied_title()}</p>
-          <p class="text-body-sm text-on-surface-variant/70">
+          <p class="text-body-sm text-on-surface-variant">
             {m.st_applied_by({
               user: alreadyApplied.by ?? '-',
               date: new Date(alreadyApplied.at).toLocaleDateString(),
@@ -769,7 +769,7 @@
         </div>
         <div class="space-y-0.5">
           <p class="text-sm font-semibold text-on-surface">{m.st_perm_missing_title()}</p>
-          <p class="text-body-sm text-on-surface-variant/70">
+          <p class="text-body-sm text-on-surface-variant">
             {m.st_perm_missing_desc({ permissions: missingPermissions.join(', ') })}
             {m.st_perm_admin_hint()}
           </p>
@@ -778,7 +778,7 @@
     {:else if template?.isAdministrator}
       <div class="flex items-center gap-3 bg-surface-container-low/30 border border-outline-variant/10 rounded-xl px-5 py-3.5">
         <Papicon icon="ShieldCheck" size={16} class="text-primary shrink-0" />
-        <p class="text-body-sm text-on-surface-variant/70">{m.st_perm_ok()}</p>
+        <p class="text-body-sm text-on-surface-variant">{m.st_perm_ok()}</p>
       </div>
     {/if}
 
@@ -793,7 +793,7 @@
           </div>
           <div class="min-w-0 space-y-0.5">
             <h3 class="text-base font-semibold text-on-surface">{m.home_botlanguage()}</h3>
-            <p class="text-body-sm text-on-surface-variant/60">
+            <p class="text-body-sm text-on-surface-variant">
               {#if alreadyApplied}
                 {m.home_botlanguage_hint()}
               {:else}
@@ -818,7 +818,7 @@
         <div class="flex flex-wrap items-center justify-between gap-2">
           <!-- Ce que vaudrait le mode automatique : sans cette ligne, le bouton
                qui y renvoie ne dit pas ou il mene. -->
-          <p class="text-xs text-on-surface-variant/50">
+          <p class="text-xs text-on-surface-variant">
             {#if language.detected}
               {m.home_botlanguage_detected({ lang: languageLabel(language.detected) })}
             {:else}
@@ -844,15 +844,15 @@
         <header class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-6 py-5 border-b border-outline-variant/10">
           <div class="space-y-0.5">
             <h3 class="text-base font-semibold text-on-surface">{m.st_options_title()}</h3>
-            <p class="text-body-sm text-on-surface-variant/60">{m.st_options_hint()}</p>
+            <p class="text-body-sm text-on-surface-variant">{m.st_options_hint()}</p>
           </div>
           <!-- Verrouilles des que la selection ne peut plus partir : la modifier
                laisserait croire qu'elle sera appliquee. -->
           <div class="flex items-center gap-1.5 shrink-0">
-            <button type="button" onclick={selectAll} disabled={selectionLocked} class="px-3 py-1.5 text-xs font-medium rounded-lg text-on-surface-variant/70 hover:bg-surface-container-high/40 hover:text-on-surface transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-on-surface-variant/70">
+            <button type="button" onclick={selectAll} disabled={selectionLocked} class="px-3 py-1.5 text-xs font-medium rounded-lg text-on-surface-variant hover:bg-surface-container-high/40 hover:text-on-surface transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-on-surface-variant">
               {m.st_select_all()}
             </button>
-            <button type="button" onclick={selectNone} disabled={selectionLocked} class="px-3 py-1.5 text-xs font-medium rounded-lg text-on-surface-variant/70 hover:bg-surface-container-high/40 hover:text-on-surface transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-on-surface-variant/70">
+            <button type="button" onclick={selectNone} disabled={selectionLocked} class="px-3 py-1.5 text-xs font-medium rounded-lg text-on-surface-variant hover:bg-surface-container-high/40 hover:text-on-surface transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-on-surface-variant">
               {m.st_select_none()}
             </button>
             <button type="button" onclick={resetSelection} disabled={selectionLocked} class="px-3 py-1.5 text-xs font-medium rounded-lg text-primary hover:bg-primary/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent">
@@ -901,7 +901,7 @@
                       <span class="w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors {isChecked(group.category.key) ? 'bg-primary/80 border-primary/80 text-on-primary' : `border-outline-variant/40 text-transparent ${checkboxHover}`}">
                         <Papicon icon="Check" size={10} />
                       </span>
-                      <span class="text-xs font-semibold text-on-surface-variant/50">
+                      <span class="text-xs font-semibold text-on-surface-variant">
                         {group.category.name}
                       </span>
                     </button>
@@ -925,7 +925,7 @@
               <div class="space-y-0.5">
                 <h4 class="text-sm font-semibold text-on-surface">{m.st_verification_title()}</h4>
                 {#if hasMemberRole}
-                  <p class="text-xs text-on-surface-variant/60">
+                  <p class="text-xs text-on-surface-variant">
                     {m.st_verification_hint({ role: `@${memberRole?.name ?? '-'}` })}
                   </p>
                 {:else}
@@ -946,7 +946,7 @@
               {#if captchaOn}
                 <ul class="pl-1 space-y-1">
                   {#each captchaItems as entry (entry.key)}
-                    <li class="flex items-center gap-1.5 text-xs text-on-surface-variant/60">
+                    <li class="flex items-center gap-1.5 text-xs text-on-surface-variant">
                       <Papicon
                         icon={entry.kind === 'voice' ? 'Mic' : entry.kind === 'role' ? 'Shield' : entry.kind === 'category' ? 'ChevronDown' : 'Hash'}
                         size={11}
@@ -956,7 +956,7 @@
                     </li>
                   {/each}
                 </ul>
-                <p class="flex items-start gap-2 text-xs text-on-surface-variant/60">
+                <p class="flex items-start gap-2 text-xs text-on-surface-variant">
                   <Papicon icon="Info" size={13} class="shrink-0 mt-0.5 opacity-60" />
                   {m.st_verification_captcha_notice()}
                 </p>
@@ -984,7 +984,7 @@
                 </span>
                 <span class="min-w-0">
                   <span class="block text-sm font-semibold text-on-surface">{m.st_modules_title()}</span>
-                  <span class="block text-xs text-on-surface-variant/60">{m.st_modules_hint()}</span>
+                  <span class="block text-xs text-on-surface-variant">{m.st_modules_hint()}</span>
                 </span>
               </button>
 
@@ -1031,12 +1031,12 @@
       <aside class="lg:sticky lg:top-6 space-y-4">
         <div class="space-y-0.5 px-1">
           <h3 class="text-base font-semibold text-on-surface">{m.st_preview_title()}</h3>
-          <p class="text-body-sm text-on-surface-variant/60">{m.st_preview_hint()}</p>
+          <p class="text-body-sm text-on-surface-variant">{m.st_preview_hint()}</p>
         </div>
 
         <div class="rounded-xl border border-outline-variant/15 bg-surface-container-high/30 p-3 space-y-3 min-h-[200px]">
           {#if selectedCount === 0}
-            <p class="text-body-sm text-on-surface-variant/50 text-center py-10">{m.st_empty_selection()}</p>
+            <p class="text-body-sm text-on-surface-variant text-center py-10">{m.st_empty_selection()}</p>
           {:else}
             <!-- Les salons hors catégorie ouvrent la colonne, comme sur Discord. -->
             {#if looseChannels.length > 0}
@@ -1070,7 +1070,7 @@
                   {m.st_roles_title()}
                 </p>
                 {#each selectedRoles as role (role.key)}
-                  <div class="flex items-center gap-1.5 px-2 py-1.5 rounded-md text-on-surface-variant/70">
+                  <div class="flex items-center gap-1.5 px-2 py-1.5 rounded-md text-on-surface-variant">
                     <Papicon icon="Shield" size={13} class="shrink-0 opacity-60" />
                     <span class="text-body-sm font-medium truncate">@{role.name}</span>
                   </div>
@@ -1084,7 +1084,7 @@
                   {m.st_section_modules()}
                 </p>
                 {#each selectedModules as mod (mod.key)}
-                  <div class="flex items-center gap-1.5 px-2 py-1.5 rounded-md text-on-surface-variant/70">
+                  <div class="flex items-center gap-1.5 px-2 py-1.5 rounded-md text-on-surface-variant">
                     <Papicon icon="Package" size={13} class="shrink-0 opacity-60" />
                     <span class="text-body-sm font-medium truncate">{moduleName(mod)}</span>
                   </div>
@@ -1097,7 +1097,7 @@
         <!-- Le seul element du plan qui demande une suite : le dire ici evite
              qu'on cherche son reglement dans un salon reste vide. -->
         {#if isChecked('welcome.rules')}
-          <p class="flex items-start gap-2 px-1 text-xs text-on-surface-variant/60">
+          <p class="flex items-start gap-2 px-1 text-xs text-on-surface-variant">
             <Papicon icon="Info" size={13} class="shrink-0 mt-0.5 opacity-60" />
             {m.st_rules_notice()}
           </p>
@@ -1112,7 +1112,7 @@
           <Papicon icon="Sparkles" size={16} />
           {applyAction.state.loading ? m.st_applying() : m.st_apply()}
         </button>
-        <p class="text-center text-xs text-on-surface-variant/50">
+        <p class="text-center text-xs text-on-surface-variant">
           {m.st_count_channels({ count: selectedChannelsCount })} · {m.st_count_roles({ count: selectedRoles.length })}
           {#if selectedModules.length > 0}
             · {m.st_modules_count({ count: selectedModules.length })}
@@ -1125,7 +1125,7 @@
 
 {#snippet previewChannel(channel: ServerTemplatePlanItem)}
   {@const icon = accessIcon(channel)}
-  <div class="flex items-center gap-1.5 px-2 py-1.5 rounded-md text-on-surface-variant/70 hover:bg-surface-container-highest/40 transition-colors">
+  <div class="flex items-center gap-1.5 px-2 py-1.5 rounded-md text-on-surface-variant hover:bg-surface-container-highest/40 transition-colors">
     <Papicon icon={channel.kind === 'voice' ? 'Mic' : 'Hash'} size={13} class="shrink-0 opacity-60" />
     <span class="text-body-sm font-medium truncate">{channel.name}</span>
     {#if icon}
@@ -1185,7 +1185,7 @@
   {@const icon = accessIcon(item)}
   <div class="space-y-1.5">
     {#if heading}
-      <p class="text-xs font-semibold text-on-surface-variant/50">{heading}</p>
+      <p class="text-xs font-semibold text-on-surface-variant">{heading}</p>
     {/if}
     <button
       type="button"

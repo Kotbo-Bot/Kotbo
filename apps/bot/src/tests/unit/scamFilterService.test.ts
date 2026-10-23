@@ -42,6 +42,35 @@ describe('detectScam', () => {
     expect(detectScam('clique https://sub.evil.com/x', config).matched).toBe(true);
   });
 
+  it('détecte le faux giveaway crypto-casino MrBeast sans lien suspect connu', () => {
+    const text =
+      'MrBeast launches his own cryptocurrency casino and is giving away $3,500 to everyone who registers. ' +
+      'Go to sedowin.com, enter the special promo code TAKE and withdraw the bonus immediately. ' +
+      'This post will be deleted soon, hurry!';
+    const result = detectScam(text, makeConfig());
+    expect(result.matched).toBe(true);
+    expect(result.matched && result.pattern).toContain('fake_giveaway');
+  });
+
+  it('détecte le faux recrutement sans aucun lien', () => {
+    const text =
+      "J'ai préparé quelques informations pour les personnes sans emploi ou à la recherche d'un revenu complémentaire. " +
+      "Il vous suffit d'un ordinateur. Merci de m'envoyer un message privé en précisant votre nationalité.";
+    const result = detectScam(text, makeConfig());
+    expect(result.matched && result.pattern).toContain('recruitment_scam');
+  });
+
+  it('ne bloque pas une annonce de giveaway de serveur', () => {
+    const text = 'Giveaway de la semaine : un bonus de 500 XP pour tous, tirage vendredi sur https://youtube.com/live';
+    expect(detectScam(text, makeConfig()).matched).toBe(false);
+  });
+
+  it('la whitelist désarme aussi le contrôle de faux giveaway', () => {
+    const text =
+      'MrBeast casino crypto giveaway $3,500 to everyone who registers, promo code TAKE on sedowin.com, hurry limited time';
+    expect(detectScam(text, makeConfig({ scamFilterWhitelist: ['sedowin.com'] })).matched).toBe(false);
+  });
+
   it('respecte la whitelist', () => {
     const config = makeConfig({ scamFilterWhitelist: ['d1scord-nitro.xyz'] });
     expect(detectScam('https://d1scord-nitro.xyz/legit', config).matched).toBe(false);

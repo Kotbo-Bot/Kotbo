@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { explainDisabled } from '../../lib/actions/explainDisabled';
+  import { m } from '../../lib/i18n';
   import { onMount } from 'svelte';
   import { authStore } from '../../lib/stores/auth.svelte';
   import { dashboardStore } from '../../lib/stores/dashboard.svelte';
@@ -22,8 +24,10 @@
   import { confirmDialog } from '../../lib/stores/confirmDialog.svelte';
   import SecurityPage, { type SecurityTab } from '../../lib/components/security/SecurityPage.svelte';
   import SectionCard from '../../lib/components/SectionCard.svelte';
+  import CaptchaFields from '../../lib/components/security/CaptchaFields.svelte';
   import ToggleSwitch from '../../lib/components/ToggleSwitch.svelte';
   import RefreshButton from '../../lib/components/RefreshButton.svelte';
+  import Button from '../../lib/components/ui/Button.svelte';
   import EmptyState from '../../lib/components/EmptyState.svelte';
   import LoadingHint from '../../lib/components/LoadingHint.svelte';
 
@@ -93,7 +97,6 @@
   const dirty = $derived(JSON.stringify(config) !== JSON.stringify(original));
 
   const channels = $derived((dashboardStore.state.discordChannels ?? []) as { id: string; name: string }[]);
-  const voiceChannels = $derived((dashboardStore.state.discordVoiceChannels ?? []) as { id: string; name: string }[]);
   const roles = $derived((dashboardStore.state.discordRoles ?? []) as { id: string; name: string }[]);
 
   // « Captcha d'entree » et non « Verification » : la verification d'identite
@@ -326,7 +329,7 @@
         <option value={item.id}>{item.name}</option>
       {/each}
     </select>
-    {#if help}<p class="text-2xs text-on-surface-variant/70 mt-1">{help}</p>{/if}
+    {#if help}<p class="text-2xs text-on-surface-variant mt-1">{help}</p>{/if}
   </label>
 {/snippet}
 
@@ -342,7 +345,7 @@
         <option value={role.id}>{role.name}</option>
       {/each}
     </select>
-    {#if help}<p class="text-2xs text-on-surface-variant/70 mt-1">{help}</p>{/if}
+    {#if help}<p class="text-2xs text-on-surface-variant mt-1">{help}</p>{/if}
   </label>
 {/snippet}
 
@@ -354,7 +357,7 @@
       bind:value={config[field]}
       class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface"
     />
-    {#if help}<p class="text-2xs text-on-surface-variant/70 mt-1">{help}</p>{/if}
+    {#if help}<p class="text-2xs text-on-surface-variant mt-1">{help}</p>{/if}
   </label>
 {/snippet}
 
@@ -383,9 +386,12 @@
   {#if loading}
     <LoadingHint context="config" />
   {:else if error}
-    <EmptyState icon="AlertTriangle" title="Configuration indisponible" description={error} />
+    <EmptyState icon="AlertTriangle" title="Configuration indisponible" description={error} actionLabel="Réessayer" actionIcon="RefreshCw" onAction={load} />
   {:else}
     <!-- ── Barre d'etat & actions d'urgence ───────────────────────────── -->
+    <!-- Seulement sur l'onglet des verrous : repetee sur chaque onglet, elle
+         repoussait le contenu propre a l'onglet sous la ligne de flottaison. -->
+    {#if activeTab === 'detection'}
     <SectionCard
       title="État du serveur"
       description="Ces bascules s'appliquent immédiatement, sans passer par l'enregistrement."
@@ -465,6 +471,7 @@
         </div>
       </div>
     </SectionCard>
+    {/if}
 
     {#if activeTab === 'detection'}
       <SectionCard
@@ -490,7 +497,7 @@
               <option value="CAPTCHA">Forcer le captcha pour tous les arrivants</option>
               <option value="KICK">Expulser automatiquement les arrivants</option>
             </select>
-            <p class="text-2xs text-on-surface-variant/70 mt-1">
+            <p class="text-2xs text-on-surface-variant mt-1">
               « Expulser » est la plus brutale : elle rejette aussi les arrivées légitimes pendant toute la durée du mode raid.
             </p>
           </label>
@@ -556,7 +563,7 @@
                 bind:value={config.accountAgeMessage}
                 class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface resize-y"
               ></textarea>
-              <p class="text-2xs text-on-surface-variant/70 mt-1">Envoyé avant l'expulsion ou le bannissement.</p>
+              <p class="text-2xs text-on-surface-variant mt-1">Envoyé avant l'expulsion ou le bannissement.</p>
             </label>
           </div>
 
@@ -569,7 +576,7 @@
               placeholder="123456789012345678"
               class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface font-mono resize-y"
             ></textarea>
-            <p class="text-2xs text-on-surface-variant/70 mt-1">Un identifiant par ligne. Permet de laisser entrer un compte récent légitime.</p>
+            <p class="text-2xs text-on-surface-variant mt-1">Un identifiant par ligne. Permet de laisser entrer un compte récent légitime.</p>
           </label>
         </div>
       </SectionCard>
@@ -645,79 +652,31 @@
         description="Filtre les comptes automatisés à l'entrée."
         icon="UserCheck"
       >
-        <div class="space-y-3">
-          {@render switchRow('captchaEnabled', 'Captcha', 'Les arrivants doivent résoudre un code avant d\'accéder au serveur.')}
-
-          <label class="block">
-            <span class="text-xs font-medium text-on-surface-variant">Mode</span>
-            <select
-              bind:value={config.captchaMode}
-              class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface"
-            >
-              <option value="IMAGE">Image - le code est affiché</option>
-              <option value="VOICE">Vocal - le code est énoncé en salon vocal</option>
-            </select>
-            <p class="text-2xs text-on-surface-variant/70 mt-1">
-              Le vocal est bien plus difficile à automatiser, mais la diffusion est sérielle : au-delà de la file configurée, les arrivants suivants basculent sur l'image.
-            </p>
-          </label>
-
-          <div class="grid sm:grid-cols-2 gap-3">
-            {@render channelSelect('captchaChannelId', 'Salon de vérification')}
-            {@render roleSelect('captchaUnverifiedRoleId', 'Rôle « non vérifié »', 'Appliqué à l\'arrivée, retiré après réussite.')}
-            {@render roleSelect('captchaVerifiedRoleId', 'Rôle « vérifié »', 'Accordé après réussite.')}
-            {@render channelSelect('captchaLogChannelId', 'Salon de logs du captcha')}
-          </div>
-
-          {#if config.captchaMode === 'VOICE'}
-            <div class="grid sm:grid-cols-3 gap-3 rounded-xl border border-outline-variant/30 p-3">
-              {@render channelSelect('captchaVoiceChannelId', 'Salon vocal', '', voiceChannels)}
-              <label class="block">
-                <span class="text-xs font-medium text-on-surface-variant">Langue d'énonciation</span>
-                <select
-                  bind:value={config.captchaVoiceLocale}
-                  class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface"
-                >
-                  <option value="FR">Français</option>
-                  <option value="EN">Anglais</option>
-                </select>
-              </label>
-              {@render numberField('captchaVoiceQueueLimit', 'Limite de file', 1, 200, 'Au-delà, bascule sur l\'image.')}
-            </div>
-          {/if}
-
-          <div class="grid sm:grid-cols-3 gap-3">
-            {@render numberField('captchaTimeoutMinutes', 'Délai (minutes)', 1, 120)}
-            {@render numberField('captchaMaxAttempts', 'Tentatives', 1, 10)}
-            <label class="block">
-              <span class="text-xs font-medium text-on-surface-variant">Échec</span>
-              <select
-                bind:value={config.captchaFailAction}
-                class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface"
-              >
-                <option value="KICK">Expulser</option>
-                <option value="BAN">Bannir</option>
-              </select>
-            </label>
-          </div>
-        </div>
+        <CaptchaFields bind:config />
       </SectionCard>
     {/if}
 
     {#if activeTab === 'scams'}
       <SectionCard
         title="Filtre anti-arnaque"
-        description="Bloque les liens de phishing (faux Nitro, faux Steam) et les images d'arnaque connues."
+        description="Bloque les liens de phishing (faux Nitro, faux Steam), les faux giveaways crypto/casino, les faux recrutements « revenu facile » et les images d'arnaque connues."
         icon="Fishing"
       >
+        {#snippet actions()}
+          <!-- Le simulateur vit dans les filtres AutoMod : il rejoue l'analyse
+               de texte et de domaines sur les messages passés. -->
+          <Button size="sm" variant="ghost" icon="history" href="/security/filters/simulator?rule=scam">Tester sur l'historique</Button>
+        {/snippet}
         <div class="space-y-3">
           {@render switchRow('scamFilterEnabled', 'Filtre anti-arnaque', 'Analyse les domaines et les combinaisons de texte typiques des campagnes de phishing.')}
           {@render switchRow('scamImageFilterEnabled', 'Filtre d\'images', 'Compare les images postées aux empreintes d\'arnaques déjà identifiées sur le serveur, alimentées automatiquement par le honeypot. La comparaison est perceptuelle : une capture recompressée ou légèrement recadrée reste reconnue.')}
           {@render switchRow('scamQrFilterEnabled', 'Filtre de codes QR', 'Le phishing par QR de connexion Discord ne contient aucun lien : aucun filtre de domaine ne peut l\'attraper. Les images porteuses d\'un code QR envoyées par un compte sans historique sont bloquées.')}
 
-          {#if config.scamQrFilterEnabled}
+          {@render switchRow('scamOcrEnabled', 'Lecture du texte des images', 'Lit le texte des images postées par un compte sans historique (lecture locale, aucune image n\'est envoyée à un tiers) et le compare aux domaines et textes d\'arnaque connus. Rattrape les captures photographiées ou recadrées que la comparaison d\'empreintes ne reconnaît pas. Consomme du processeur : à activer si le serveur est visé par ces campagnes.')}
+
+          {#if config.scamQrFilterEnabled || config.scamOcrEnabled}
             <div class="rounded-xl border border-outline-variant/30 p-3">
-              {@render numberField('scamQrTrustedMessages', 'Messages avant d\'être considéré comme installé', 0, 10000, 'Au-delà, les codes QR du membre ne sont plus bloqués : partager un QR wifi ou 2FA est légitime.')}
+              {@render numberField('scamQrTrustedMessages', 'Messages avant d\'être considéré comme installé', 0, 10000, 'Au-delà, le membre n\'est plus concerné par le filtre de codes QR ni par la lecture du texte des images : partager un QR wifi ou 2FA est légitime.')}
             </div>
           {/if}
 
@@ -835,7 +794,7 @@
         {/snippet}
 
         {#if reports.length === 0}
-          <EmptyState icon="ShieldCheck" title="Aucun signalement en attente" description="La file est vide." />
+          <EmptyState icon="ShieldCheck" title="Aucun signalement en attente" description="La file est vide." reason="all-clear" />
         {:else}
           <div class="space-y-2.5">
             {#each reports as report (report.id)}
@@ -845,7 +804,7 @@
                     <p class="text-body-sm text-on-surface">
                       <code class="text-2xs">{report.reporterId}</code> signale
                       <code class="text-2xs">{report.targetId}</code>
-                      <span class="text-on-surface-variant/60 ml-1">· {formatRelative(report.createdAt)}</span>
+                      <span class="text-on-surface-variant ml-1">· {formatRelative(report.createdAt)}</span>
                     </p>
                     <p class="mt-1 text-xs text-on-surface-variant leading-relaxed">{report.reason}</p>
                     {#if report.messageContent}
@@ -854,7 +813,7 @@
                       </p>
                     {/if}
                     {#if report.channelId}
-                      <p class="mt-1 text-2xs text-on-surface-variant/60">dans #{channelName(report.channelId)}</p>
+                      <p class="mt-1 text-2xs text-on-surface-variant">dans #{channelName(report.channelId)}</p>
                     {/if}
                   </div>
                   <div class="flex flex-col gap-1.5 shrink-0">
@@ -884,7 +843,7 @@
 
       <SectionCard title="Invitations à valider" icon="Link">
         {#if inviteRequests.length === 0}
-          <EmptyState icon="ShieldCheck" title="Aucune demande" description="Aucune invitation en attente de validation." />
+          <EmptyState icon="ShieldCheck" title="Aucune demande" description="Aucune invitation en attente de validation." reason="all-clear" />
         {:else}
           <div class="space-y-2.5">
             {#each inviteRequests as request (request.id)}
@@ -941,7 +900,8 @@
           <button
             type="button"
             class="px-3 py-2 rounded-lg text-xs font-medium bg-primary/15 text-primary border border-primary/30 hover:bg-primary/25 disabled:opacity-50 transition-colors"
-            disabled={!lineageUserId.trim() || lineageLoading}
+            disabled={lineageLoading}
+            use:explainDisabled={(!lineageUserId.trim()) ? m.common_reason_fill_field() : ''}
             onclick={loadLineage}
           >
             {lineageLoading ? 'Analyse…' : 'Analyser'}
@@ -1018,7 +978,7 @@
                   </button>
                 {/if}
               </div>
-              <p class="text-2xs text-on-surface-variant/70">
+              <p class="text-2xs text-on-surface-variant">
                 La quarantaine pose un rôle restrictif ou une exclusion de 24 h - jamais un bannissement.
                 Le staff n'est jamais touché. La décision définitive reste humaine.
               </p>
@@ -1033,14 +993,14 @@
         icon="Fingerprint"
       >
         {#if scamImages.length === 0}
-          <EmptyState icon="Image" title="Aucune empreinte" description="Le honeypot n'a encore capté aucune image d'arnaque." />
+          <EmptyState icon="Image" title="Aucune empreinte" description="Le honeypot n'a encore capté aucune image d'arnaque." reason="accumulating" />
         {:else}
           <div class="space-y-1.5">
             {#each scamImages as image (image.id)}
               <div class="flex items-center justify-between gap-3 rounded-lg border border-outline-variant/30 px-3 py-2">
                 <div class="min-w-0">
                   <p class="text-xs text-on-surface truncate">{image.filename ?? 'sans nom'}</p>
-                  <p class="text-2xs text-on-surface-variant/60 font-mono truncate">
+                  <p class="text-2xs text-on-surface-variant font-mono truncate">
                     {image.hash.slice(0, 24)}… · {image.source}{image.guildId === null ? ' · global' : ''}
                   </p>
                 </div>

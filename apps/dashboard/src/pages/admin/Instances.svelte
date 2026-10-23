@@ -200,8 +200,7 @@
           title={instances.length === 0 ? 'Aucune instance n’a encore pingué' : 'Aucune instance ne correspond'}
           description={instances.length === 0
             ? 'Les bots envoient leurs statistiques au démarrage puis toutes les 15 minutes.'
-            : 'Change de filtre ou de recherche.'}
-        />
+            : 'Change de filtre ou de recherche.'} reason="accumulating" />
       {:else}
         <div class="overflow-x-auto">
           <table class="w-full text-left text-body-sm">
@@ -244,7 +243,7 @@
                   </td>
                   <td class="px-5 py-3 tabular-nums text-on-surface">{nf.format(inst.guildCount)}</td>
                   <td class="px-5 py-3 tabular-nums text-on-surface">{nf.format(inst.userCount)}</td>
-                  <td class="px-5 py-3 font-mono text-xs text-on-surface-variant">{inst.version ?? '—'}</td>
+                  <td class="px-5 py-3 font-mono text-xs text-on-surface-variant">{inst.version ?? '–'}</td>
                   <td class="px-5 py-3">
                     <span class="badge {inst.status === 'online' ? 'badge-success' : 'badge-neutral'}" title={formatDate(inst.lastPingAt)}>
                       {inst.status === 'online' ? 'En ligne' : 'Silencieuse'}
@@ -325,7 +324,7 @@
   title={banTarget ? `Bannir ${banTarget.botName}` : 'Bannir'}
   subtitle={banTarget?.botClientId}
 >
-  <div class="p-5 space-y-5">
+  <div class="space-y-5">
     {#if banTarget && !banTarget.isSelfHosted}
       <Callout variant="warning" title="Cette instance se déclare officielle">
         Vérifie qu’il ne s’agit pas d’un bot Kotbo que tu héberges : le mode « Arrêt du bot » le couperait. Ce

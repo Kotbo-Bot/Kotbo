@@ -366,7 +366,7 @@
         <div class="space-y-4">
           <!-- Title -->
           <div class="space-y-1.5">
-            <label for="news-title" class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.news_field_title_label()}</label>
+            <label for="news-title" class="text-xs font-semibold text-on-surface-variant ml-2">{m.news_field_title_label()}</label>
             <input 
               id="news-title" 
               type="text" 
@@ -379,7 +379,7 @@
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <!-- Category -->
             <div class="space-y-1.5">
-              <label for="news-category" class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.news_field_category_label()}</label>
+              <label for="news-category" class="text-xs font-semibold text-on-surface-variant ml-2">{m.news_field_category_label()}</label>
               <input 
                 id="news-category" 
                 type="text"
@@ -397,7 +397,7 @@
 
             <!-- Subcategory -->
             <div class="space-y-1.5">
-              <label for="news-subcategory" class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.news_field_subcategory_label()}</label>
+              <label for="news-subcategory" class="text-xs font-semibold text-on-surface-variant ml-2">{m.news_field_subcategory_label()}</label>
               <input 
                 id="news-subcategory" 
                 type="text"
@@ -411,7 +411,7 @@
             <div class="flex items-center justify-between p-4 rounded-lg bg-surface-container-high/20 border border-outline-variant/5">
               <div>
                 <p class="text-xs font-bold leading-tight">{m.news_publish_now_label()}</p>
-                <p class="text-2xs text-on-surface-variant/50">{m.news_publish_now_sub()}</p>
+                <p class="text-2xs text-on-surface-variant">{m.news_publish_now_sub()}</p>
               </div>
               <input 
                 type="checkbox" 
@@ -422,7 +422,7 @@
           </div>
 
           <div class="space-y-2 rounded-lg border border-outline-variant/10 bg-surface-container-high/20 p-4">
-            <p class="text-xs font-semibold text-on-surface-variant/70">{m.news_publish_mode_label()}</p>
+            <p class="text-xs font-semibold text-on-surface-variant">{m.news_publish_mode_label()}</p>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <button
                 type="button"
@@ -439,14 +439,14 @@
                 {m.news_publish_mode_full()}
               </button>
             </div>
-            <p class="text-2xs text-on-surface-variant/70">
+            <p class="text-2xs text-on-surface-variant">
               {m.news_publish_mode_sub()}
             </p>
           </div>
 
           <!-- Image URL -->
           <div class="space-y-1.5">
-            <label for="news-image" class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.news_field_image_label()}</label>
+            <label for="news-image" class="text-xs font-semibold text-on-surface-variant ml-2">{m.news_field_image_label()}</label>
             <input 
               id="news-image" 
               type="text" 
@@ -458,7 +458,7 @@
 
           <!-- Summary -->
           <div class="space-y-1.5">
-            <label for="news-summary" class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.news_field_summary_label()}</label>
+            <label for="news-summary" class="text-xs font-semibold text-on-surface-variant ml-2">{m.news_field_summary_label()}</label>
             <textarea 
               id="news-summary" 
               bind:value={summary} 
@@ -470,7 +470,7 @@
 
           <!-- Content (Markdown) -->
           <div class="space-y-1.5">
-            <label for="news-content" class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.news_field_content_label()}</label>
+            <label for="news-content" class="text-xs font-semibold text-on-surface-variant ml-2">{m.news_field_content_label()}</label>
             <textarea 
               id="news-content" 
               bind:value={content} 
@@ -581,7 +581,7 @@
             </div>
 
             <div class="flex items-center gap-2">
-              <label for="filter-category" class="text-xs font-semibold text-on-surface-variant/50">{m.news_filter_label()}</label>
+              <label for="filter-category" class="text-xs font-semibold text-on-surface-variant">{m.news_filter_label()}</label>
               <select 
                 id="filter-category" 
                 bind:value={categoryFilter} 
@@ -619,7 +619,7 @@
                         <span class="text-xs font-semibold">{m.news_forum_view_badge()}</span>
                       </div>
                       <h4 class="text-lg font-semibold text-on-surface">{m.news_forum_view_title()}</h4>
-                      <p class="text-xs text-on-surface-variant/70 max-w-2xl">
+                      <p class="text-xs text-on-surface-variant max-w-2xl">
                         {m.news_forum_view_desc()}
                       </p>
                     </div>
@@ -662,7 +662,7 @@
                                 <Papicon icon="hash" size={14} />
                                 {subcategorySection.subcategoryName}
                               </div>
-                              <p class="text-2xs text-on-surface-variant/60">
+                              <p class="text-2xs text-on-surface-variant">
                                 {m.news_forum_articles_count({ n: subcategorySection.totalCount })}
                               </p>
                             </div>
@@ -708,7 +708,7 @@
                                       </div>
                                     </div>
 
-                                    <div class="flex shrink-0 flex-wrap items-center gap-3 text-2xs text-on-surface-variant/70">
+                                    <div class="flex shrink-0 flex-wrap items-center gap-3 text-2xs text-on-surface-variant">
                                       <div class="flex items-center gap-2 rounded-full bg-surface-container-high/55 px-3 py-1.5">
                                         {#if art.authorAvatar}
                                           <img src={art.authorAvatar} alt="" class="h-5 w-5 rounded-full" />
@@ -732,7 +732,7 @@
               <div class="overflow-x-auto rounded-xl border border-outline-variant/10">
                 <table class="w-full border-collapse text-left">
                   <thead>
-                    <tr class="bg-surface-container-high/40 text-xs font-medium text-on-surface-variant/60">
+                    <tr class="bg-surface-container-high/40 text-xs font-medium text-on-surface-variant">
                       <th class="px-6 py-4">{m.news_table_col_article()}</th>
                       <th class="px-6 py-4">{m.news_table_col_category()}</th>
                       <th class="px-6 py-4">{m.news_table_col_author()}</th>
@@ -827,7 +827,7 @@
                 <Papicon icon="rss" size={32} />
               </div>
               <h4 class="text-base font-semibold text-on-surface">{m.news_empty_title()}</h4>
-              <p class="text-xs text-on-surface-variant/60 font-medium mt-1">{m.news_empty_desc()}</p>
+              <p class="text-xs text-on-surface-variant font-medium mt-1">{m.news_empty_desc()}</p>
               {#if canEdit}
                 <button 
                   onclick={openCreate}
@@ -880,7 +880,7 @@
                     </span>
                     {m.news_config_new_title()}
                   </h4>
-                  <p class="text-xs text-on-surface-variant/70 leading-relaxed">
+                  <p class="text-xs text-on-surface-variant leading-relaxed">
                     {m.news_config_new_desc()}
                   </p>
                 </div>
@@ -888,7 +888,7 @@
                 <div class="space-y-4">
                   <!-- Category Input -->
                   <div class="space-y-1.5">
-                    <label for="config-category" class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.news_config_rubric_label()}</label>
+                    <label for="config-category" class="text-xs font-semibold text-on-surface-variant ml-2">{m.news_config_rubric_label()}</label>
                     <input
                       id="config-category"
                       type="text"
@@ -906,7 +906,7 @@
 
                   <!-- Subcategory Input -->
                   <div class="space-y-1.5">
-                    <label for="config-subcategory" class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.news_config_subrubric_label()}</label>
+                    <label for="config-subcategory" class="text-xs font-semibold text-on-surface-variant ml-2">{m.news_config_subrubric_label()}</label>
                     <input
                       id="config-subcategory"
                       type="text"
@@ -918,7 +918,7 @@
 
                   <!-- Discord Channel Selector -->
                   <div class="space-y-1.5">
-                    <label for="config-channel" class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.news_config_channel_label()}</label>
+                    <label for="config-channel" class="text-xs font-semibold text-on-surface-variant ml-2">{m.news_config_channel_label()}</label>
                     <SearchableSelect id="config-channel" bind:value={configChannelId} options={(dashboardStore.state.discordChannels || []).map(channel => ({ id: channel.id, name: channelDisplayName(channel) }))} placeholder={m.news_config_channel_ph()} className="w-full bg-surface-container-high/45 border border-outline-variant/10 rounded-lg px-5 py-3 text-sm focus:ring-2 focus:ring-primary/30 outline-none transition-all" />
                   </div>
 
@@ -1009,7 +1009,7 @@
                           <p class="font-mono text-2xs text-on-surface break-all">
                             {API_BASE_URL}/api/public/rss/{currentGuildId}/{encodeURIComponent(config.category)}{config.subcategory ? `/${encodeURIComponent(config.subcategory)}` : ''}
                           </p>
-                          <span class="text-2xs font-medium text-on-surface-variant/60">
+                          <span class="text-2xs font-medium text-on-surface-variant">
                             {m.news_config_rss_ready()}
                           </span>
                         </div>
@@ -1023,7 +1023,7 @@
                     <Papicon icon="rss" size={32} />
                   </div>
                   <h4 class="text-base font-semibold text-on-surface">{m.news_config_empty_title()}</h4>
-                  <p class="text-xs text-on-surface-variant/60 font-medium mt-1 text-center max-w-md">{m.news_config_empty_desc()}</p>
+                  <p class="text-xs text-on-surface-variant font-medium mt-1 text-center max-w-md">{m.news_config_empty_desc()}</p>
                 </div>
               {/if}
             </section>

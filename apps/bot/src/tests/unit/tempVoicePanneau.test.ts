@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { PermissionFlagsBits } from 'discord.js';
+import { PermissionFlagsBits, PermissionsBitField } from 'discord.js';
+import { deduireModeEcriture, modeDuSalon } from '../../events/tempVoice.js';
 import {
   normaliserHistoriqueRenommage,
   normaliserEtatDemandes,
@@ -24,7 +25,7 @@ import {
   historiqueRenommageElague,
   libelleActionMembre,
   libelleRenommer,
-  LIBELLES_MODES_ECRITURE,
+  libelleModeEcriture,
   MODES_ECRITURE,
   modeEcritureDepuisTextChat,
   nettoyagePresenceAuDemarrage,
@@ -47,6 +48,10 @@ import {
   SILENCE_APRES_REFUS_MS,
   surchargesModeEcriture,
   textChatDepuisModeEcriture,
+  MODE_ECRITURE_PAR_TEXT_CHAT,
+  TEMP_VOICE_TEXT_CHAT_MODES,
+  buildCreationOverwrites,
+  defaultTempVoicePolicy,
   transitionModeEcriture,
   type CibleMembre,
   type ModeEcriture,
@@ -109,11 +114,26 @@ describe('modes d’écriture — CHANNEL_PATCHES', () => {
     }
   });
 
-  test('chaque mode porte le libellé de la maquette', () => {
-    expect(LIBELLES_MODES_ECRITURE.everyone.libelle).toBe('Everyone');
-    expect(LIBELLES_MODES_ECRITURE.inVoice.libelle).toBe('Those in voice');
-    expect(LIBELLES_MODES_ECRITURE.ownerOnly.libelle).toBe('Me only');
-    expect(LIBELLES_MODES_ECRITURE.nobody.libelle).toBe('No one');
+  test('chaque mode porte le libellé de la maquette, dans les deux langues', () => {
+    expect(libelleModeEcriture('everyone', 'fr').libelle).toBe('Tout le monde');
+    expect(libelleModeEcriture('inVoice', 'fr').libelle).toBe('Ceux qui sont en vocal');
+    expect(libelleModeEcriture('ownerOnly', 'fr').libelle).toBe('Moi seul');
+    expect(libelleModeEcriture('nobody', 'fr').libelle).toBe('Personne');
+
+    expect(libelleModeEcriture('everyone', 'en').libelle).toBe('Everyone');
+    expect(libelleModeEcriture('inVoice', 'en').libelle).toBe('Those in voice');
+    expect(libelleModeEcriture('ownerOnly', 'en').libelle).toBe('Me only');
+    expect(libelleModeEcriture('nobody', 'en').libelle).toBe('No one');
+
+    // La description suit la même langue que le libellé : un menu moitié
+    // français moitié anglais serait pire que le bug d'origine.
+    expect(libelleModeEcriture('nobody', 'fr').description).toBe(
+      "Y compris moi. Le salon devient un mur d'affichage.",
+    );
+    expect(libelleModeEcriture('nobody', 'en').description).toBe(
+      'Including me. The channel becomes a display-only board.',
+    );
+
     // L'ordre du menu est celui de la maquette, pas l'ordre alphabétique.
     expect([...MODES_ECRITURE]).toEqual(['everyone', 'inVoice', 'ownerOnly', 'nobody']);
   });
@@ -190,17 +210,68 @@ describe('normalisation et pont vers l’ancien réglage', () => {
     expect(estModeEcriture('locked')).toBe(false);
   });
 
-  test('le repli vers trois valeurs ne rouvre jamais un salon fermé', () => {
-    // `inVoice` et `nobody` refusent @everyone : ils se rangent sous `locked`.
-    // Les ranger sous `open` ouvrirait le chat d'une base pas encore migrée.
-    expect(textChatDepuisModeEcriture('everyone')).toBe('open');
-    expect(textChatDepuisModeEcriture('inVoice')).toBe('locked');
-    expect(textChatDepuisModeEcriture('ownerOnly')).toBe('locked');
-    expect(textChatDepuisModeEcriture('nobody')).toBe('locked');
-
+  test('la table réglage ↔ mode est bijective sur les cinq valeurs', () => {
+    expect(modeEcritureDepuisTextChat('inherit')).toBeNull();
     expect(modeEcritureDepuisTextChat('open')).toBe('everyone');
+    expect(modeEcritureDepuisTextChat('inVoice')).toBe('inVoice');
     expect(modeEcritureDepuisTextChat('locked')).toBe('ownerOnly');
-    expect(modeEcritureDepuisTextChat('inherit')).toBe('everyone');
+    expect(modeEcritureDepuisTextChat('nobody')).toBe('nobody');
+
+    for (const textChat of TEMP_VOICE_TEXT_CHAT_MODES) {
+      expect(textChatDepuisModeEcriture(modeEcritureDepuisTextChat(textChat))).toBe(textChat);
+    }
+    expect(Object.keys(MODE_ECRITURE_PAR_TEXT_CHAT)).toHaveLength(5);
+  });
+
+  test('un salon créé avec chacun des cinq réglages affiche le mode correspondant', () => {
+    const EVERY = '100000000000000000';
+    const OWN = '200000000000000000';
+    // Lu sur les surcharges seules, `inVoice` a la forme de « Personne » (le propriétaire
+    // entre ensuite par présence) : c'est `writeMode`, enregistré à la création, qui le distingue.
+    const attendu = { inherit: 'everyone', open: 'everyone', inVoice: 'nobody', locked: 'ownerOnly', nobody: 'nobody' } as const;
+
+    for (const textChat of TEMP_VOICE_TEXT_CHAT_MODES) {
+      const ow = buildCreationOverwrites({
+        everyoneRoleId: EVERY, ownerId: OWN, inherited: [], policy: { ...defaultTempVoicePolicy(), textChat },
+      }) as unknown as Array<{ id: string; allow?: bigint; deny?: bigint }>;
+      const lire = (id: string) => {
+        const o = ow.find((x) => x.id === id);
+        const a = o?.allow ?? 0n;
+        const d = o?.deny ?? 0n;
+        return { allow: { has: (b: bigint) => (a & b) === b }, deny: { has: (b: bigint) => (d & b) === b } };
+      };
+      expect(deduireModeEcriture(lire(EVERY), lire(OWN), undefined)).toBe(attendu[textChat]);
+      expect(MODE_ECRITURE_PAR_TEXT_CHAT[textChat]).toBe(
+        ({ inherit: null, open: 'everyone', inVoice: 'inVoice', locked: 'ownerOnly', nobody: 'nobody' } as Record<string, string | null>)[textChat] as never,
+      );
+    }
+  });
+
+  test('panneau : aucune surcharge mais @everyone sans SendMessages réel → Personne', () => {
+    const rien = { allow: { has: () => false }, deny: { has: () => false } };
+    expect(deduireModeEcriture(rien, rien, false)).toBe('nobody');
+    expect(deduireModeEcriture(rien, rien, true)).toBe('everyone');
+    expect(deduireModeEcriture(rien, rien, undefined)).toBe('everyone');
+    const proprio = { allow: { has: () => true }, deny: { has: () => false } };
+    expect(deduireModeEcriture(rien, proprio, false)).toBe('ownerOnly');
+  });
+
+  test('Hérité : le refus vient du rôle @everyone du serveur, sans surcharge → la lecture réelle ne rend pas « Tout le monde »', () => {
+    // Réglage Hérité : aucun mode mémorisé qui court-circuiterait la lecture des permissions.
+    expect(modeEcritureDepuisTextChat('inherit')).toBeNull();
+    // Droits de base du rôle sans SendMessages ; aucune surcharge sur le salon, rien dans la catégorie.
+    const droitsDeBase = new PermissionsBitField(PermissionFlagsBits.ViewChannel | PermissionFlagsBits.Connect);
+    const salon = (permissionsFor: unknown) =>
+      ({
+        guild: { id: 'g1', roles: { everyone: { id: 'g1' } } },
+        permissionOverwrites: { cache: new Map() },
+        permissionsFor,
+      }) as never;
+    const entree = { creatorId: 'proprio' } as never;
+
+    expect(modeDuSalon(salon(() => droitsDeBase), entree)).toBe('nobody');
+    // Contre-épreuve : si le rôle peut écrire, c'est bien « Tout le monde ».
+    expect(modeDuSalon(salon(() => new PermissionsBitField(PermissionFlagsBits.SendMessages)), entree)).toBe('everyone');
   });
 });
 
@@ -253,16 +324,22 @@ describe('quotaRenommage', () => {
 
 describe('libelleRenommer', () => {
   test('affiche le quota restant, puis le décompte, comme la maquette', () => {
-    expect(libelleRenommer(quotaRenommage([], T0), T0)).toBe('✏️ Rename (2/2)');
+    expect(libelleRenommer(quotaRenommage([], T0), T0, 'fr')).toBe('✏️ Renommer (2/2)');
+    expect(libelleRenommer(quotaRenommage([], T0), T0, 'en')).toBe('✏️ Rename (2/2)');
 
     const epuise = quotaRenommage([T0 - 4 * MINUTE, T0 - MINUTE], T0);
-    expect(libelleRenommer(epuise, T0)).toBe('✏️ Rename (0/2 · 6 min)');
+    expect(libelleRenommer(epuise, T0, 'fr')).toBe('✏️ Renommer (0/2 · 6 min)');
+    expect(libelleRenommer(epuise, T0, 'en')).toBe('✏️ Rename (0/2 · 6 min)');
   });
 
   test('un reste de quelques secondes n’annonce jamais « 0 min »', () => {
     // Un bouton grisé qui affiche zéro minute passe pour un blocage.
-    expect(libelleRenommer({ restants: 0, libereA: T0 + 1 }, T0)).toBe('✏️ Rename (0/2 · 1 min)');
-    expect(libelleRenommer({ restants: 0, libereA: T0 + 5 * MINUTE + 30_000 }, T0)).toBe(
+    expect(libelleRenommer({ restants: 0, libereA: T0 + 1 }, T0, 'fr')).toBe('✏️ Renommer (0/2 · 1 min)');
+    expect(libelleRenommer({ restants: 0, libereA: T0 + 1 }, T0, 'en')).toBe('✏️ Rename (0/2 · 1 min)');
+    expect(libelleRenommer({ restants: 0, libereA: T0 + 5 * MINUTE + 30_000 }, T0, 'fr')).toBe(
+      '✏️ Renommer (0/2 · 6 min)',
+    );
+    expect(libelleRenommer({ restants: 0, libereA: T0 + 5 * MINUTE + 30_000 }, T0, 'en')).toBe(
       '✏️ Rename (0/2 · 6 min)',
     );
   });
@@ -489,46 +566,82 @@ describe('normaliserReglagesAdmin', () => {
 
 describe('raisonAdminsSeulement', () => {
   test('reprend la phrase de la maquette, au singulier comme au pluriel', () => {
-    expect(raisonAdminsSeulement(['modeEcriture', 'reserver'])).toBe(
+    expect(raisonAdminsSeulement(['modeEcriture', 'reserver'], 'fr')).toBe(
+      "Le mode d'écriture et la réservation sont réservés aux admins sur ce serveur.",
+    );
+    expect(raisonAdminsSeulement(['modeEcriture', 'reserver'], 'en')).toBe(
       'The chat mode and reservations are reserved for admins on this server.',
     );
-    expect(raisonAdminsSeulement(['modeEcriture'])).toBe(
+
+    expect(raisonAdminsSeulement(['modeEcriture'], 'fr')).toBe(
+      "Le mode d'écriture est réservé aux admins sur ce serveur.",
+    );
+    expect(raisonAdminsSeulement(['modeEcriture'], 'en')).toBe(
       'The chat mode is reserved for admins on this server.',
     );
-    // Le sujet « reservations » reste au singulier verbal (« is »), même seul : l'anglais n'a pas d'accord de genre.
-    expect(raisonAdminsSeulement(['reserver'])).toBe(
+
+    // Le français accorde en GENRE (« la réservation » est féminin singulier,
+    // donc « est réservée ») là où l'anglais compte le NOMBRE
+    // (« reservations » est pluriel, donc « are ») : la phrase entière est
+    // écrite dans chaque langue, aucune n'est assemblée depuis l'autre.
+    expect(raisonAdminsSeulement(['reserver'], 'fr')).toBe(
+      'La réservation est réservée aux admins sur ce serveur.',
+    );
+    expect(raisonAdminsSeulement(['reserver'], 'en')).toBe(
       'Reservations are reserved for admins on this server.',
     );
+
+    // Que des sujets féminins : le pluriel s'accorde au féminin. Un seul
+    // masculin dans la liste (cas du dessus) et le masculin l'emporte.
+    expect(raisonAdminsSeulement(['limite', 'reserver'], 'fr')).toBe(
+      'La limite de places et la réservation sont réservées aux admins sur ce serveur.',
+    );
+    expect(raisonAdminsSeulement(['limite', 'reserver'], 'en')).toBe(
+      'The member limit and reservations are reserved for admins on this server.',
+    );
+
     // Une ligne qui couvre deux actions reste au pluriel, même seule.
-    expect(raisonAdminsSeulement(['expulserBannir'])).toBe(
+    expect(raisonAdminsSeulement(['expulserBannir'], 'fr')).toBe(
+      "L'expulsion et le bannissement sont réservés aux admins sur ce serveur.",
+    );
+    expect(raisonAdminsSeulement(['expulserBannir'], 'en')).toBe(
       'Kicking and banning are reserved for admins on this server.',
     );
   });
 
   test('l’ordre des arguments ne change pas la phrase', () => {
-    expect(raisonAdminsSeulement(['reserver', 'modeEcriture'])).toBe(
-      raisonAdminsSeulement(['modeEcriture', 'reserver']),
+    expect(raisonAdminsSeulement(['reserver', 'modeEcriture'], 'fr')).toBe(
+      raisonAdminsSeulement(['modeEcriture', 'reserver'], 'fr'),
+    );
+    expect(raisonAdminsSeulement(['reserver', 'modeEcriture'], 'en')).toBe(
+      raisonAdminsSeulement(['modeEcriture', 'reserver'], 'en'),
     );
   });
 
   test('rien à dire ne produit pas une phrase vide à moitié écrite', () => {
-    expect(raisonAdminsSeulement([])).toBe('');
+    expect(raisonAdminsSeulement([], 'fr')).toBe('');
+    expect(raisonAdminsSeulement([], 'en')).toBe('');
   });
 });
 
 describe('peutAgir', () => {
   test('le propriétaire fait tout chez lui, sauf ce qui n’a pas de sens', () => {
-    expect(peutAgir('proprietaire', 'modeEcriture', { modeEcriture: false }).autorise).toBe(true);
-    expect(peutAgir('proprietaire', 'reserver', { reserver: false }).autorise).toBe(true);
+    expect(peutAgir('proprietaire', 'modeEcriture', { modeEcriture: false }, 'en').autorise).toBe(true);
+    expect(peutAgir('proprietaire', 'reserver', { reserver: false }, 'en').autorise).toBe(true);
 
     // Jamais un bouton mort : ces deux-là sont refusés avec leur motif.
-    const recuperer = peutAgir('proprietaire', 'recuperer', TOUT_AUTORISE);
+    const recuperer = peutAgir('proprietaire', 'recuperer', TOUT_AUTORISE, 'en');
     expect(recuperer).toEqual({
       autorise: false,
       motif: 'dejaProprietaire',
       raison: 'You already own this channel.',
     });
-    expect(peutAgir('proprietaire', 'demanderAcces', TOUT_AUTORISE).autorise).toBe(false);
+    expect(peutAgir('proprietaire', 'recuperer', TOUT_AUTORISE, 'fr')).toEqual({
+      autorise: false,
+      motif: 'dejaProprietaire',
+      raison: 'Tu es déjà propriétaire de ce salon.',
+    });
+    expect(peutAgir('proprietaire', 'demanderAcces', TOUT_AUTORISE, 'en').autorise).toBe(false);
   });
 
   test('un admin n’est jamais arrêté par les réglages des modérateurs', () => {
@@ -541,23 +654,28 @@ describe('peutAgir', () => {
         renommer: false,
         limite: false,
         verrouiller: false,
-      });
+      }, 'en');
       expect(verdict.autorise).toBe(true);
     }
   });
 
   test('un modérateur garde tout tant qu’un admin n’a rien fermé', () => {
     for (const action of ACTIONS_PANNEAU) {
-      expect(peutAgir('moderateur', action, TOUT_AUTORISE).autorise).toBe(true);
+      expect(peutAgir('moderateur', action, TOUT_AUTORISE, 'en').autorise).toBe(true);
     }
   });
 
   test('un réglage fermé refuse le modérateur en disant pourquoi', () => {
-    const verdict = peutAgir('moderateur', 'modeEcriture', { modeEcriture: 'adminsSeulement' });
+    const verdict = peutAgir('moderateur', 'modeEcriture', { modeEcriture: 'adminsSeulement' }, 'en');
     expect(verdict).toEqual({
       autorise: false,
       motif: 'adminsSeulement',
       raison: 'The chat mode is reserved for admins on this server.',
+    });
+    expect(peutAgir('moderateur', 'modeEcriture', { modeEcriture: 'adminsSeulement' }, 'fr')).toEqual({
+      autorise: false,
+      motif: 'adminsSeulement',
+      raison: "Le mode d'écriture est réservé aux admins sur ce serveur.",
     });
     // Un refus sans motif redonnerait le panneau d'aujourd'hui : on découvre
     // l'interdiction après le clic.
@@ -567,72 +685,97 @@ describe('peutAgir', () => {
 
   test('la ligne « Expulser / bannir » gouverne bien les deux actions', () => {
     const reglages = { expulserBannir: 'adminsSeulement' };
-    expect(peutAgir('moderateur', 'expulser', reglages).autorise).toBe(false);
-    expect(peutAgir('moderateur', 'bannir', reglages).autorise).toBe(false);
+    expect(peutAgir('moderateur', 'expulser', reglages, 'en').autorise).toBe(false);
+    expect(peutAgir('moderateur', 'bannir', reglages, 'en').autorise).toBe(false);
     // ... et rien d'autre.
-    expect(peutAgir('moderateur', 'renommer', reglages).autorise).toBe(true);
+    expect(peutAgir('moderateur', 'renommer', reglages, 'en').autorise).toBe(true);
   });
 
   test('fermer une ligne n’en ferme aucune autre', () => {
-    const verrouille = peutAgir('moderateur', 'transferer', { transferer: false });
+    const verrouille = peutAgir('moderateur', 'transferer', { transferer: false }, 'en');
     expect(verrouille.autorise).toBe(false);
-    expect(peutAgir('moderateur', 'recuperer', { transferer: false }).autorise).toBe(true);
+    expect(peutAgir('moderateur', 'recuperer', { transferer: false }, 'en').autorise).toBe(true);
   });
 });
 
 describe('peutAgirSurCible', () => {
   test('le staff ne peut être ni expulsé ni banni, et la raison le nomme', () => {
     const bob = cible({ nom: 'Bob', estStaff: true });
-    const verdict = peutAgirSurCible('proprietaire', 'expulser', TOUT_AUTORISE, bob);
+    const verdict = peutAgirSurCible('proprietaire', 'expulser', TOUT_AUTORISE, bob, 'en');
 
     expect(verdict).toEqual({
       autorise: false,
       motif: 'cibleStaff',
       raison: "Bob is part of the staff: they can't be kicked or banned.",
     });
-    expect(peutAgirSurCible('proprietaire', 'bannir', TOUT_AUTORISE, bob).autorise).toBe(false);
+    expect(peutAgirSurCible('proprietaire', 'bannir', TOUT_AUTORISE, bob, 'en').autorise).toBe(false);
     // Le staff reste transférable : on peut lui donner le salon.
-    expect(peutAgirSurCible('proprietaire', 'transferer', TOUT_AUTORISE, bob).autorise).toBe(true);
+    expect(peutAgirSurCible('proprietaire', 'transferer', TOUT_AUTORISE, bob, 'en').autorise).toBe(true);
+
+    // La même règle, la même cible, l'autre langue : seul le texte change.
+    expect(peutAgirSurCible('proprietaire', 'expulser', TOUT_AUTORISE, bob, 'fr')).toEqual({
+      autorise: false,
+      motif: 'cibleStaff',
+      raison: 'Bob fait partie du staff : ni expulsion ni bannissement possible.',
+    });
   });
 
   test('sans nom, la raison reste lisible', () => {
-    const verdict = peutAgirSurCible('proprietaire', 'expulser', TOUT_AUTORISE, cible({ estStaff: true }));
+    const verdict = peutAgirSurCible('proprietaire', 'expulser', TOUT_AUTORISE, cible({ estStaff: true }), 'en');
     if (verdict.autorise) throw new Error('verdict inattendu');
     expect(verdict.raison).toBe(
       "This person is part of the staff: they can't be kicked or banned.",
+    );
+
+    const sansNomFr = peutAgirSurCible('proprietaire', 'expulser', TOUT_AUTORISE, cible({ estStaff: true }), 'fr');
+    if (sansNomFr.autorise) throw new Error('verdict inattendu');
+    expect(sansNomFr.raison).toBe(
+      'Cette personne fait partie du staff : elle ne peut être ni expulsée ni bannie.',
     );
   });
 
   test('on bannit quelqu’un d’absent, on ne l’expulse pas', () => {
     const absent = cible({ nom: 'Alice', dansLeSalon: false });
-    const expulser = peutAgirSurCible('proprietaire', 'expulser', TOUT_AUTORISE, absent);
+    const expulser = peutAgirSurCible('proprietaire', 'expulser', TOUT_AUTORISE, absent, 'en');
 
     expect(expulser).toEqual({
       autorise: false,
       motif: 'cibleHorsSalon',
       raison: 'Alice is not in the channel.',
     });
+    expect(peutAgirSurCible('proprietaire', 'expulser', TOUT_AUTORISE, absent, 'fr')).toEqual({
+      autorise: false,
+      motif: 'cibleHorsSalon',
+      raison: "Alice n'est pas dans le salon.",
+    });
     // Bannir un absent a du sens : il ne verra plus le salon.
-    expect(peutAgirSurCible('proprietaire', 'bannir', TOUT_AUTORISE, absent).autorise).toBe(true);
+    expect(peutAgirSurCible('proprietaire', 'bannir', TOUT_AUTORISE, absent, 'en').autorise).toBe(true);
   });
 
   test('on ne se transfère pas le salon à soi-même, ni à son propriétaire', () => {
     expect(
-      peutAgirSurCible('proprietaire', 'transferer', TOUT_AUTORISE, cible({ estSoiMeme: true })),
+      peutAgirSurCible('proprietaire', 'transferer', TOUT_AUTORISE, cible({ estSoiMeme: true }), 'en'),
     ).toMatchObject({ autorise: false, motif: 'cibleSoiMeme' });
 
     expect(
-      peutAgirSurCible('moderateur', 'transferer', TOUT_AUTORISE, cible({ nom: 'Toji', estProprietaire: true })),
+      peutAgirSurCible('moderateur', 'transferer', TOUT_AUTORISE, cible({ nom: 'Toji', estProprietaire: true }), 'en'),
     ).toEqual({
       autorise: false,
       motif: 'cibleDejaProprietaire',
       raison: 'Toji already owns the channel.',
     });
+    expect(
+      peutAgirSurCible('moderateur', 'transferer', TOUT_AUTORISE, cible({ nom: 'Toji', estProprietaire: true }), 'fr'),
+    ).toEqual({
+      autorise: false,
+      motif: 'cibleDejaProprietaire',
+      raison: 'Toji est déjà propriétaire du salon.',
+    });
   });
 
   test('on ne s’expulse pas soi-même', () => {
     expect(
-      peutAgirSurCible('proprietaire', 'expulser', TOUT_AUTORISE, cible({ estSoiMeme: true })),
+      peutAgirSurCible('proprietaire', 'expulser', TOUT_AUTORISE, cible({ estSoiMeme: true }), 'en'),
     ).toMatchObject({ autorise: false, motif: 'cibleSoiMeme' });
   });
 
@@ -644,16 +787,23 @@ describe('peutAgirSurCible', () => {
       'expulser',
       { expulserBannir: false },
       cible({ estStaff: true }),
+      'en',
     );
     expect(verdict).toMatchObject({ autorise: false, motif: 'adminsSeulement' });
   });
 
   test('le même bouton dit l’état de la personne', () => {
-    expect(libelleActionMembre('autoriser', cible())).toBe('Allow');
-    expect(libelleActionMembre('autoriser', cible({ autorise: true }))).toBe('Remove access');
-    expect(libelleActionMembre('transferer', cible())).toBe('Transfer the channel');
-    expect(libelleActionMembre('expulser', cible())).toBe('Kick');
-    expect(libelleActionMembre('bannir', cible())).toBe('Ban');
+    expect(libelleActionMembre('autoriser', cible(), 'en')).toBe('Allow');
+    expect(libelleActionMembre('autoriser', cible({ autorise: true }), 'en')).toBe('Remove access');
+    expect(libelleActionMembre('transferer', cible(), 'en')).toBe('Transfer the channel');
+    expect(libelleActionMembre('expulser', cible(), 'en')).toBe('Kick');
+    expect(libelleActionMembre('bannir', cible(), 'en')).toBe('Ban');
+
+    expect(libelleActionMembre('autoriser', cible(), 'fr')).toBe('Autoriser');
+    expect(libelleActionMembre('autoriser', cible({ autorise: true }), 'fr')).toBe("Retirer l'accès");
+    expect(libelleActionMembre('transferer', cible(), 'fr')).toBe('Lui donner le salon');
+    expect(libelleActionMembre('expulser', cible(), 'fr')).toBe('Expulser');
+    expect(libelleActionMembre('bannir', cible(), 'fr')).toBe('Bannir');
   });
 });
 
@@ -698,12 +848,36 @@ describe('origine des surcharges — entrées et sorties', () => {
     // Le point dur de toute la refonte. Sans la distinction d'origine, ce
     // départ effacerait un droit donné à la main par le propriétaire, et
     // personne ne comprendrait pourquoi l'accès a disparu.
-    for (const mode of MODES_ECRITURE) {
+    for (const mode of MODES_ECRITURE.filter((m) => m !== 'inVoice')) {
       expect(decisionSortieVocal(mode, 'autorisation')).toEqual({
         action: 'conserver',
         motif: 'autorisationExplicite',
       });
     }
+    // En « en vocal », l'accès reste mais l'écriture suit la présence : seul le
+    // bit part, la marque d'autorisation reste.
+    expect(decisionSortieVocal('inVoice', 'autorisation')).toEqual({
+      action: 'retirer',
+      patch: { SendMessages: null },
+      garderOrigine: true,
+    });
+  });
+
+  test('entrer : un autorisé SANS écriture nominative la reçoit, en gardant sa marque', () => {
+    // La cause du « mon ami est en vocal et ne peut pas écrire » : une
+    // autorisation donnée en catégorie muette ou en mode réservé n'accorde pas
+    // `SendMessages`, et l'origine seule faisait croire le bit posé.
+    expect(decisionEntreeVocal('inVoice', 'autorisation', false)).toEqual({
+      action: 'poser',
+      origine: 'autorisation',
+      patch: { SendMessages: true },
+    });
+    expect(decisionEntreeVocal('inVoice', 'presence', false)).toEqual({
+      action: 'poser',
+      origine: 'presence',
+      patch: { SendMessages: true },
+    });
+    expect(decisionEntreeVocal('inVoice', null, true)).toEqual({ action: 'conserver', motif: 'dejaPosee' });
   });
 
   test('une présence laissée par un ancien mode se nettoie à la sortie', () => {
@@ -744,9 +918,9 @@ describe('origine des surcharges — entrées et sorties', () => {
     registre.marquer(GUILD, SALON, ALICE, 'autorisation');
     expect(registre.origine(GUILD, SALON, ALICE)).toBe('autorisation');
 
-    // 3. Alice quitte le vocal : son autorisation survit.
+    // 3. Alice quitte le vocal : son autorisation survit, seule l'écriture part.
     const sortie = decisionSortieVocal('inVoice', registre.origine(GUILD, SALON, ALICE));
-    expect(sortie).toEqual({ action: 'conserver', motif: 'autorisationExplicite' });
+    expect(sortie).toEqual({ action: 'retirer', patch: { SendMessages: null }, garderOrigine: true });
     expect(registre.origine(GUILD, SALON, ALICE)).toBe('autorisation');
   });
 });
@@ -765,6 +939,21 @@ describe('transitionModeEcriture', () => {
     const origines = new Map<string, OrigineSurcharge>([[ALICE, 'autorisation']]);
     expect(transitionModeEcriture('ownerOnly', 'inVoice', [ALICE, BOB], origines)).toEqual({
       aPoser: [BOB],
+      aRetirer: [],
+    });
+  });
+
+  test("entrer dans « en vocal » : ce qui décide, c'est l'écriture nominative, pas la marque", () => {
+    // Alice est autorisée sans écriture (catégorie muette) : elle la reçoit ;
+    // Bob écrit déjà : rien à poser.
+    const origines = new Map<string, OrigineSurcharge>([[ALICE, 'autorisation']]);
+    expect(transitionModeEcriture('ownerOnly', 'inVoice', [ALICE, BOB], origines, new Set([BOB]))).toEqual({
+      aPoser: [ALICE],
+      aRetirer: [],
+    });
+    // Même mode choisi de nouveau : la passe répare un présent oublié.
+    expect(transitionModeEcriture('inVoice', 'inVoice', [ALICE], new Map(), new Set())).toEqual({
+      aPoser: [ALICE],
       aRetirer: [],
     });
   });
@@ -928,24 +1117,30 @@ describe('normaliserConfigDemandes', () => {
 describe('peutRepondreDemande', () => {
   test('le propriétaire et l’admin tranchent quel que soit le réglage', () => {
     for (const repondeurs of REPONDEURS_DEMANDE) {
-      expect(peutRepondreDemande('proprietaire', repondeurs).autorise).toBe(true);
-      expect(peutRepondreDemande('admin', repondeurs).autorise).toBe(true);
+      expect(peutRepondreDemande('proprietaire', repondeurs, 'en').autorise).toBe(true);
+      expect(peutRepondreDemande('admin', repondeurs, 'en').autorise).toBe(true);
     }
   });
 
   test('un modérateur ne répond que si le serveur ouvre au staff, avec une raison sinon', () => {
-    expect(peutRepondreDemande('moderateur', 'OWNER_AND_STAFF').autorise).toBe(true);
+    expect(peutRepondreDemande('moderateur', 'OWNER_AND_STAFF', 'en').autorise).toBe(true);
 
-    const verdict = peutRepondreDemande('moderateur', 'OWNER');
+    const verdict = peutRepondreDemande('moderateur', 'OWNER', 'en');
     expect(verdict.autorise).toBe(false);
     // La maquette affiche cette raison : un refus muet serait un bouton mort.
     if (verdict.autorise) throw new Error('verdict inattendu');
-    expect(verdict.raison.length).toBeGreaterThan(0);
+    expect(verdict.raison).toBe('On this server, only the channel owner can respond to access requests.');
+
+    const verdictFr = peutRepondreDemande('moderateur', 'OWNER', 'fr');
+    if (verdictFr.autorise) throw new Error('verdict inattendu');
+    expect(verdictFr.raison).toBe(
+      "Sur ce serveur, seul le propriétaire du salon répond aux demandes d'accès.",
+    );
   });
 
   test('sur les six couples rôle × réglage, un seul est refusé', () => {
     const combinaisons = ROLES_AGISSANTS.flatMap((role) =>
-      REPONDEURS_DEMANDE.map((repondeurs) => ({ role, repondeurs, verdict: peutRepondreDemande(role, repondeurs) })),
+      REPONDEURS_DEMANDE.map((repondeurs) => ({ role, repondeurs, verdict: peutRepondreDemande(role, repondeurs, 'en') })),
     );
     const refus = combinaisons.filter(({ verdict }) => !verdict.autorise);
 
@@ -994,10 +1189,10 @@ describe('nettoyagePresenceAuDemarrage', () => {
     // L'invariant qui compte le plus : un droit donné à la main ne s'efface
     // jamais tout seul — que la personne soit présente ou absente.
     const absente = nettoyagePresenceAuDemarrage('inVoice', [autorisationAlice], []);
-    expect(absente).toEqual({ aRetirer: [], aMarquerPresence: [] });
+    expect(absente).toEqual({ aRetirer: [], aMarquerPresence: [], aPoser: [] });
 
     const presente = nettoyagePresenceAuDemarrage('inVoice', [autorisationAlice], [ALICE]);
-    expect(presente).toEqual({ aRetirer: [], aMarquerPresence: [] });
+    expect(presente).toEqual({ aRetirer: [], aMarquerPresence: [], aPoser: [] });
   });
 
   test('hors « en vocal », toute surcharge de présence part, jamais de réinscription', () => {
@@ -1010,14 +1205,18 @@ describe('nettoyagePresenceAuDemarrage', () => {
   });
 
   test('rien ne casse sur une liste vide, personne de présent, ou une présence sans surcharge', () => {
-    expect(nettoyagePresenceAuDemarrage('inVoice', [], [])).toEqual({ aRetirer: [], aMarquerPresence: [] });
-    expect(nettoyagePresenceAuDemarrage('inVoice', [], [ALICE])).toEqual({ aRetirer: [], aMarquerPresence: [] });
+    expect(nettoyagePresenceAuDemarrage('inVoice', [], [])).toEqual({ aRetirer: [], aMarquerPresence: [], aPoser: [] });
+    // Un présent sans écriture nominative (entré pendant l'arrêt) est à poser.
+    expect(nettoyagePresenceAuDemarrage('inVoice', [], [ALICE])).toEqual({ aRetirer: [], aMarquerPresence: [], aPoser: [ALICE] });
 
     const sansSurcharge: SurchargeMembreLue = { userId: ALICE, accordeEcriture: false, accordeConnexion: false };
     expect(nettoyagePresenceAuDemarrage('inVoice', [sansSurcharge], [ALICE])).toEqual({
       aRetirer: [],
       aMarquerPresence: [],
+      aPoser: [ALICE],
     });
+    // Hors « en vocal », la présence ne pose rien.
+    expect(nettoyagePresenceAuDemarrage('everyone', [sansSurcharge], [ALICE]).aPoser).toEqual([]);
   });
 
   test('les deux listes sont toujours disjointes', () => {
@@ -1043,18 +1242,25 @@ describe("Retirer l'acces au proprietaire", () => {
     // Signale en conditions reelles : le bouton repondait sans rien changer.
     // L'acces du proprietaire vient de SA surcharge, pas d'une autorisation -
     // et « retirer » supprimait cette surcharge, donc ses propres droits.
-    const verdict = peutAgirSurCible('proprietaire', 'autoriser', undefined, cibleProprietaire);
+    const verdict = peutAgirSurCible('proprietaire', 'autoriser', undefined, cibleProprietaire, 'en');
     expect(verdict.autorise).toBe(false);
     if (!verdict.autorise) {
       expect(verdict.motif).toBe('cibleDejaProprietaire');
-      expect(verdict.raison).toContain('owns the channel');
+      expect(verdict.raison).toBe("Toji owns the channel: their access doesn't come from a permission.");
     }
+
+    const verdictFr = peutAgirSurCible('proprietaire', 'autoriser', undefined, cibleProprietaire, 'fr');
+    if (verdictFr.autorise) throw new Error('verdict inattendu');
+    expect(verdictFr.motif).toBe('cibleDejaProprietaire');
+    expect(verdictFr.raison).toBe(
+      "Toji est propriétaire du salon : son accès ne vient pas d'une autorisation.",
+    );
   });
 
   test('un moderateur et un admin se heurtent a la meme garde', () => {
     // Elle tient a la cible, pas au role de qui clique.
     for (const role of ['moderateur', 'admin'] as const) {
-      expect(peutAgirSurCible(role, 'autoriser', undefined, cibleProprietaire).autorise).toBe(false);
+      expect(peutAgirSurCible(role, 'autoriser', undefined, cibleProprietaire, 'en').autorise).toBe(false);
     }
   });
 
@@ -1063,7 +1269,7 @@ describe("Retirer l'acces au proprietaire", () => {
     const verdict = peutAgirSurCible('proprietaire', 'autoriser', undefined, {
       ...cibleProprietaire,
       estProprietaire: false,
-    });
+    }, 'en');
     expect(verdict.autorise).toBe(true);
   });
 });

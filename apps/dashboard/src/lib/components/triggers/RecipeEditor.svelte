@@ -282,7 +282,7 @@
   <!-- ── Déclencheur ──────────────────────────────────────────────────── -->
   <section class="rounded-2xl bg-surface-container-high/60 border border-outline-variant/15 border-l-[3px] border-l-emerald-400/60 p-4 space-y-3">
     <div class="flex items-center justify-between gap-3">
-      <h3 class="text-xs font-semibold text-on-surface-variant/70">{m.wf_when()}</h3>
+      <h3 class="text-xs font-semibold text-on-surface-variant">{m.wf_when()}</h3>
       {#if trigger && !changingTrigger}
         <button
           type="button"
@@ -336,10 +336,10 @@
   <!-- ── Étapes ───────────────────────────────────────────────────────── -->
   {#if trigger && !changingTrigger}
     <section class="space-y-2">
-      <h3 class="text-xs font-semibold text-on-surface-variant/70 px-1">{m.wf_then()}</h3>
+      <h3 class="text-xs font-semibold text-on-surface-variant px-1">{m.wf_then()}</h3>
 
       {#if recipe.steps.length === 0}
-        <p class="px-4 py-6 rounded-2xl bg-surface-container-high/30 text-center text-xs text-on-surface-variant/70">
+        <p class="px-4 py-6 rounded-2xl bg-surface-container-high/30 text-center text-xs text-on-surface-variant">
           {m.wf_no_steps()}
         </p>
       {/if}
@@ -364,7 +364,7 @@
           <button
             type="button"
             onclick={() => addTest(step as ConditionStep)}
-            class="ml-4 flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-2xs font-medium text-on-surface-variant/70 hover:text-primary transition-colors"
+            class="ml-4 flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-2xs font-medium text-on-surface-variant hover:text-primary transition-colors"
           >
             <Papicon icon="Plus" size={10} />
             {m.wf_add_test()}
@@ -376,13 +376,13 @@
         <button
           type="button"
           onclick={() => (adding = { parentId: null, branch: 'then' })}
-          class="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-2xl text-xs font-semibold text-on-surface-variant/70 border border-dashed border-outline-variant/30 hover:text-on-surface hover:border-primary/40 hover:bg-surface-container-high/40 transition-all"
+          class="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-2xl text-xs font-semibold text-on-surface-variant border border-dashed border-outline-variant/30 hover:text-on-surface hover:border-primary/40 hover:bg-surface-container-high/40 transition-all"
         >
           <Papicon icon="Plus" size={13} />
           {m.wf_add_step()}
         </button>
       {:else}
-        <p class="flex items-start gap-2 px-4 py-3 rounded-2xl text-2xs text-on-surface-variant/70 border border-dashed border-outline-variant/20">
+        <p class="flex items-start gap-2 px-4 py-3 rounded-2xl text-2xs text-on-surface-variant border border-dashed border-outline-variant/20">
           <Papicon icon="Info" size={12} class="mt-0.5 shrink-0" />
           <span>{m.wf_condition_closes()}</span>
         </p>

@@ -228,7 +228,7 @@
 
 <ModulePage
   title="Partenariats"
-  description="Partenaires, accords, avantages accordés et retombées mesurées"
+  description="Tes partenariats, ce que vous vous apportez et les membres qu'ils t'amènent."
   icon="handshake"
   featureKey="partnerships"
 >

@@ -18,6 +18,7 @@ import {
   applyJoinAutoRole,
 } from '../services/features/welcomeGoodbyeService.js';
 import { handleWelcomeThread } from '../services/features/welcomeThreadService.js';
+import { assignWelcomeVariant } from '../services/features/welcomeExperimentService.js';
 import { checkMemberCountTriggers } from '../services/core/ctfTriggerService.js';
 import { syncMemberClanFromDcLink, autoAssignClanOnJoin, awardClanPointsOnBoost } from '../services/community/clanService.js';
 import { logger } from '../utils/logger.js';
@@ -39,8 +40,10 @@ export function registerWelcomeGoodbyeBusSubscribers(client: Client): void {
     await applyJoinAutoRole(member);
     await syncMemberClanFromDcLink(payload.guildId, payload.userId, null);
     await autoAssignClanOnJoin(payload.guildId, member);
-    await handleGuildMemberAdd(member, client);
-    await handleWelcomeThread(member, client);
+    // Version du test A/B d'accueil en cours, s'il y en a un.
+    const variant = await assignWelcomeVariant(payload.guildId, payload.userId);
+    await handleGuildMemberAdd(member, client, variant);
+    if (variant?.threadEnabled !== false) await handleWelcomeThread(member, client);
     await checkMemberCountTriggers(guild, client);
   }, MODULE_NAME);
 

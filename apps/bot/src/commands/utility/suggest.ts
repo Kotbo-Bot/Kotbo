@@ -1,9 +1,9 @@
-import { errorMessage } from '../../utils/errors.js';
 import type { SlashCommandDefinition } from '../../commands.js';
 import { SlashCommandBuilder, MessageFlags, type ChatInputCommandInteraction } from 'discord.js';
 import { createSuggestion } from '../../services/features/suggestionService.js';
 import { getEffectiveLocale, getCommandMetadata } from '../../utils/i18n.js';
 import * as m from '../../lib/paraglide/messages.js';
+import { publicErrorMessage } from '../../utils/publicError.js';
 
 const meta = getCommandMetadata('b5_suggest');
 
@@ -45,7 +45,7 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
     );
     await interaction.editReply(m.b5_suggest_success({ id: suggestion.id }, { locale }));
   } catch (err: unknown) {
-    await interaction.editReply(m.b5_suggest_error({ error: errorMessage(err) || m.b5_unknown_error({}, { locale }) }, { locale }));
+    await interaction.editReply(m.b5_suggest_error({ error: publicErrorMessage(err, m.b5_unknown_error({}, { locale })) }, { locale }));
   }
 }
 

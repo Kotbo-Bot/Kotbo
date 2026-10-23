@@ -19,7 +19,7 @@
 <div class="relative">
   <button
     onclick={() => open = !open}
-    class="p-2 rounded-lg bg-surface-container-high/40 hover:bg-surface-container-high border border-outline-variant/10 text-on-surface-variant/60 hover:text-on-surface transition-all"
+    class="p-2 rounded-lg bg-surface-container-high/40 hover:bg-surface-container-high border border-outline-variant/10 text-on-surface-variant hover:text-on-surface transition-all"
     title={m.an_export_button()}
   >
     <Papicon icon="DownloadSimple" size={16} />

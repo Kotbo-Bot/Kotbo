@@ -86,7 +86,7 @@
         <span class="text-2xs font-bold text-on-surface-variant/40 uppercase">{m.d7_challenges()}</span>
       </div>
       <p class="text-2xl font-semibold text-on-surface">{data.metrics.totalRuns}</p>
-      <p class="text-2xs font-bold text-on-surface-variant/60">{m.d7_algo_launched()}</p>
+      <p class="text-2xs font-bold text-on-surface-variant">{m.d7_algo_launched()}</p>
     </div>
 
     <div class="premium-card p-6 rounded-xl space-y-3">
@@ -95,7 +95,7 @@
         <span class="text-2xs font-bold text-on-surface-variant/40 uppercase">{m.d7_submissions()}</span>
       </div>
       <p class="text-2xl font-semibold text-on-surface">{data.metrics.totalSubmissions}</p>
-      <p class="text-2xs font-bold text-on-surface-variant/60">{m.d7_algo_submitted()}</p>
+      <p class="text-2xs font-bold text-on-surface-variant">{m.d7_algo_submitted()}</p>
     </div>
 
     <div class="premium-card p-6 rounded-xl space-y-3">
@@ -104,7 +104,7 @@
         <span class="text-2xs font-bold text-on-surface-variant/40 uppercase">{m.d7_algo_completed()}</span>
       </div>
       <p class="text-2xl font-semibold text-on-surface">{data.metrics.completedSubmissions}</p>
-      <p class="text-2xs font-bold text-on-surface-variant/60">{m.d7_algo_validated_lc()}</p>
+      <p class="text-2xs font-bold text-on-surface-variant">{m.d7_algo_validated_lc()}</p>
     </div>
 
     <div class="premium-card p-6 rounded-xl space-y-3">
@@ -113,7 +113,7 @@
         <span class="text-2xs font-bold text-on-surface-variant/40 uppercase">{m.d7_algo_average()}</span>
       </div>
       <p class="text-2xl font-semibold text-on-surface">{data.metrics.avgSubmissionsPerRun}</p>
-      <p class="text-2xs font-bold text-on-surface-variant/60">{m.d7_algo_per_challenge()}</p>
+      <p class="text-2xs font-bold text-on-surface-variant">{m.d7_algo_per_challenge()}</p>
     </div>
 
     <div class="premium-card p-6 rounded-xl space-y-3 bg-success/5 border-success/20">
@@ -122,7 +122,7 @@
         <span class="text-2xs font-bold text-on-surface-variant/40 uppercase">{m.d7_algo_rate()}</span>
       </div>
       <p class="text-2xl font-semibold text-success">{data.metrics.completionRate}%</p>
-      <p class="text-2xs font-bold text-on-surface-variant/60">{m.d7_algo_completed_lc()}</p>
+      <p class="text-2xs font-bold text-on-surface-variant">{m.d7_algo_completed_lc()}</p>
     </div>
   </div>
 
@@ -181,17 +181,17 @@
       <table class="w-full text-sm">
         <thead>
           <tr class="border-b border-outline-variant/10">
-            <th class="text-left px-4 py-3 font-semibold text-on-surface-variant/60 text-2xs uppercase">#</th>
-            <th class="text-left px-4 py-3 font-semibold text-on-surface-variant/60 text-2xs uppercase">{m.d7_algo_participant()}</th>
-            <th class="text-center px-4 py-3 font-semibold text-on-surface-variant/60 text-2xs uppercase">{m.d7_submissions()}</th>
-            <th class="text-center px-4 py-3 font-semibold text-on-surface-variant/60 text-2xs uppercase">{m.d7_algo_validated()}</th>
-            <th class="text-center px-4 py-3 font-semibold text-on-surface-variant/60 text-2xs uppercase">{m.d7_algo_avg_score_col()}</th>
+            <th class="text-left px-4 py-3 font-semibold text-on-surface-variant text-2xs uppercase">#</th>
+            <th class="text-left px-4 py-3 font-semibold text-on-surface-variant text-2xs uppercase">{m.d7_algo_participant()}</th>
+            <th class="text-center px-4 py-3 font-semibold text-on-surface-variant text-2xs uppercase">{m.d7_submissions()}</th>
+            <th class="text-center px-4 py-3 font-semibold text-on-surface-variant text-2xs uppercase">{m.d7_algo_validated()}</th>
+            <th class="text-center px-4 py-3 font-semibold text-on-surface-variant text-2xs uppercase">{m.d7_algo_avg_score_col()}</th>
           </tr>
         </thead>
         <tbody>
           {#each data.topPerformers.slice(0, 20) as performer, idx}
             <tr class="border-b border-outline-variant/5 hover:bg-surface-container-high/20 transition-colors">
-              <td class="px-4 py-3 font-bold text-on-surface-variant/60">{idx + 1}</td>
+              <td class="px-4 py-3 font-bold text-on-surface-variant">{idx + 1}</td>
               <td class="px-4 py-3 font-bold text-on-surface">{performer.name}</td>
               <td class="px-4 py-3 text-center text-on-surface">{performer.submissions}</td>
               <td class="px-4 py-3 text-center font-bold text-success">{performer.validated}</td>

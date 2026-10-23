@@ -3,7 +3,7 @@ import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
 import { type Client  } from 'discord.js';
 import * as sanctionService from './sanctionService.js';
-import { createNotification } from '../staff/staffLeadershipService.js';
+import { notify } from '../notifications/notifyService.js';
 import { syncMemberClanFromDcLink } from '../community/clanService.js';
 import { recordDecision } from './dc/learning.js';
 
@@ -166,9 +166,14 @@ export async function linkAccounts(params: {
     // confirme les détections en attente sur ces comptes : le modèle en apprend.
     if (linkedByUserId) void recordDecision(guildId, [idA, idB], 'TRUE_POSITIVE', linkedByUserId);
 
+    const linked = (userId: string, other: string) => notify({
+      guildId, userId, kind: 'security.alt_linked', title: '🔗 Comptes liés',
+      message: `Votre compte a été officiellement lié à <@${other}>.`, severity: 'SUCCESS', link: '/profile',
+      actorId: linkedByUserId,
+    });
     await Promise.all([
-      createNotification(guildId, idA, '🔗 Comptes liés', `Votre compte a été officiellement lié à <@${idB}>.`, 'SUCCESS', '/profile'),
-      createNotification(guildId, idB, '🔗 Comptes liés', `Votre compte a été officiellement lié à <@${idA}>.`, 'SUCCESS', '/profile'),
+      linked(idA, idB),
+      linked(idB, idA),
       syncMemberClanFromDcLink(guildId, idA, idB)
     ].map(p => p.catch(() => null)));
   }
@@ -191,10 +196,11 @@ export async function unlinkAccounts(guildId: string, user1Id: string, user2Id: 
   });
 
   // Notifier les deux utilisateurs
-  await Promise.all([
-    createNotification(guildId, idA, '🔗 Liaison supprimée', `La liaison avec le compte <@${idB}> a été supprimée.`, 'INFO', '/profile'),
-    createNotification(guildId, idB, '🔗 Liaison supprimée', `La liaison avec le compte <@${idA}> a été supprimée.`, 'INFO', '/profile')
-  ].map(p => p.catch(() => null)));
+  const unlinked = (userId: string, other: string) => notify({
+    guildId, userId, kind: 'security.alt_unlinked', title: '🔗 Liaison supprimée',
+    message: `La liaison avec le compte <@${other}> a été supprimée.`, link: '/profile',
+  });
+  await Promise.all([unlinked(idA, idB), unlinked(idB, idA)].map(p => p.catch(() => null)));
 
   return result;
 }

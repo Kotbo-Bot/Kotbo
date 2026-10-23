@@ -15,7 +15,7 @@ const prismaMock = {
   staffMember: { findMany: mock(async () => [] as Array<{ userId: string }>) },
 };
 
-const createNotificationMock = mock(async () => null);
+const notifyManyMock = mock(async (_userIds: Iterable<string>, _input: { title: string; dm?: boolean }) => undefined);
 
 const moduleMocks: Array<[string, () => Record<string, unknown>]> = [
   ['../../utils/db', () => ({ default: prismaMock, prisma: prismaMock, prismaRead: prismaMock })],
@@ -27,7 +27,7 @@ const moduleMocks: Array<[string, () => Record<string, unknown>]> = [
       debug: mock(() => undefined),
     },
   })],
-  ['../../services/staff/staffLeadershipService', () => ({ createNotification: createNotificationMock })],
+  ['../../services/notifications/notifyService', () => ({ notifyMany: notifyManyMock })],
 ];
 
 for (const [relativePath, factory] of moduleMocks) {
@@ -119,7 +119,7 @@ beforeEach(() => {
   prismaMock.securityVerification.update = mock(async () => ({}));
   prismaMock.ticket.create = mock(async () => ({ id: 'ticket-1' }));
   prismaMock.staffMember.findMany = mock(async () => []);
-  createNotificationMock.mockClear();
+  notifyManyMock.mockClear();
 });
 
 const baseConfig = {
@@ -305,9 +305,10 @@ describe('deliverVerification - notification des managers', () => {
       client: h.client, guildId, user: h.user, member: h.member, embed, row, reason: 'Test',
     });
 
-    expect(createNotificationMock).toHaveBeenCalledTimes(2);
-    const [, notifiedUser, title] = createNotificationMock.mock.calls[0] as unknown as string[];
-    expect(notifiedUser).toBe('manager-1');
-    expect(title).toContain('MP de vérification non délivré');
+    expect(notifyManyMock).toHaveBeenCalledTimes(1);
+    const [notifiedUsers, input] = notifyManyMock.mock.calls[0];
+    expect([...notifiedUsers]).toEqual(['manager-1', 'manager-2']);
+    expect(input.title).toContain('MP de vérification non délivré');
+    expect(input.dm).toBe(false);
   });
 });

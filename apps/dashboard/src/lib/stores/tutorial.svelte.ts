@@ -33,16 +33,6 @@ export interface SetupTask {
 
 export type GuideTab = 'discover' | 'setup';
 
-export interface PageTip {
-  pageId: string;
-  /** Route pattern (exact or startsWith) */
-  routes: string[];
-  title: string;
-  description: string;
-  highlights: string[];
-  icon: string;
-}
-
 export interface OnboardingState {
   welcomeSeen: boolean;
   checklistDismissed: boolean;
@@ -323,431 +313,6 @@ export const setupTasks: SetupTask[] = [
 export const essentialSetupTasks = setupTasks.filter(t => t.essential);
 export const optionalSetupTasks = setupTasks.filter(t => !t.essential);
 
-// ─── Page Tips ──────────────────────────────────────────────────────────────
-
-export const pageTips: PageTip[] = [
-  {
-    pageId: 'overview',
-    routes: ['/'],
-    title: m.tip_overview_title(),
-    description: m.tip_overview_desc(),
-    highlights: [
-      m.tip_overview_h1(),
-      m.tip_overview_h2(),
-      m.tip_overview_h3(),
-    ],
-    icon: 'layout-grid',
-  },
-  {
-    pageId: 'inbox',
-    routes: ['/inbox'],
-    title: m.tip_inbox_title(),
-    description: m.tip_inbox_desc(),
-    highlights: [
-      m.tip_inbox_h1(),
-      m.tip_inbox_h2(),
-      m.tip_inbox_h3(),
-    ],
-    icon: 'inbox',
-  },
-  {
-    pageId: 'analytics',
-    routes: ['/analytics'],
-    title: m.tip_analytics_title(),
-    description: m.tip_analytics_desc(),
-    highlights: [
-      m.tip_analytics_h1(),
-      m.tip_analytics_h2(),
-      m.tip_analytics_h3(),
-    ],
-    icon: 'pie-chart',
-  },
-  {
-    pageId: 'members',
-    routes: ['/members'],
-    title: m.tip_members_title(),
-    description: m.tip_members_desc(),
-    highlights: [
-      m.tip_members_h1(),
-      m.tip_members_h2(),
-      m.tip_members_h3(),
-    ],
-    icon: 'users',
-  },
-  {
-    pageId: 'sanctions',
-    routes: ['/security/sanctions'],
-    title: m.tip_sanctions_title(),
-    description: m.tip_sanctions_desc(),
-    highlights: [
-      m.tip_sanctions_h1(),
-      m.tip_sanctions_h2(),
-      m.tip_sanctions_h3(),
-    ],
-    icon: 'alert-triangle',
-  },
-  {
-    pageId: 'automod',
-    routes: ['/security/filters'],
-    title: m.tip_automod_title(),
-    description: m.tip_automod_desc(),
-    highlights: [
-      m.tip_automod_h1(),
-      m.tip_automod_h2(),
-      m.tip_automod_h3(),
-    ],
-    icon: 'shield-alert',
-  },
-  {
-    pageId: 'logs',
-    routes: ['/logs'],
-    title: m.tip_logs_title(),
-    description: m.tip_logs_desc(),
-    highlights: [
-      m.tip_logs_h1(),
-      m.tip_logs_h2(),
-      m.tip_logs_h3(),
-    ],
-    icon: 'file-text',
-  },
-  {
-    pageId: 'activity',
-    routes: ['/activity'],
-    title: m.tip_activity_title(),
-    description: m.tip_activity_desc(),
-    highlights: [
-      m.tip_activity_h1(),
-      m.tip_activity_h2(),
-      m.tip_activity_h3(),
-    ],
-    icon: 'history',
-  },
-  {
-    pageId: 'invitations',
-    routes: ['/invitations'],
-    title: m.tip_invitations_title(),
-    description: m.tip_invitations_desc(),
-    highlights: [
-      m.tip_invitations_h1(),
-      m.tip_invitations_h2(),
-      m.tip_invitations_h3(),
-    ],
-    icon: 'link',
-  },
-  {
-    pageId: 'events',
-    routes: ['/events'],
-    title: m.tip_events_title(),
-    description: m.tip_events_desc(),
-    highlights: [
-      m.tip_events_h1(),
-      m.tip_events_h2(),
-      m.tip_events_h3(),
-    ],
-    icon: 'zap',
-  },
-  {
-    pageId: 'leveling',
-    routes: ['/leveling'],
-    title: m.tip_leveling_title(),
-    description: m.tip_leveling_desc(),
-    highlights: [
-      m.tip_leveling_h1(),
-      m.tip_leveling_h2(),
-      m.tip_leveling_h3(),
-    ],
-    icon: 'trophy',
-  },
-  {
-    pageId: 'economy',
-    routes: ['/economy'],
-    title: m.tip_economy_title(),
-    description: m.tip_economy_desc(),
-    highlights: [
-      m.tip_economy_h1(),
-      m.tip_economy_h2(),
-      m.tip_economy_h3(),
-    ],
-    icon: 'coins',
-  },
-  {
-    pageId: 'giveaways',
-    routes: ['/giveaways'],
-    title: m.tip_giveaways_title(),
-    description: m.tip_giveaways_desc(),
-    highlights: [
-      m.tip_giveaways_h1(),
-      m.tip_giveaways_h2(),
-      m.tip_giveaways_h3(),
-    ],
-    icon: 'sparkles',
-  },
-  {
-    pageId: 'announcement',
-    routes: ['/welcome', '/announcement'],
-    title: m.tip_announcement_title(),
-    description: m.tip_announcement_desc(),
-    highlights: [
-      m.tip_announcement_h1(),
-      m.tip_announcement_h2(),
-      m.tip_announcement_h3(),
-    ],
-    icon: 'megaphone',
-  },
-  {
-    pageId: 'reaction-roles',
-    routes: ['/reaction-roles'],
-    title: m.tip_reaction_roles_title(),
-    description: m.tip_reaction_roles_desc(),
-    highlights: [
-      m.tip_reaction_roles_h1(),
-      m.tip_reaction_roles_h2(),
-      m.tip_reaction_roles_h3(),
-    ],
-    icon: 'mouse-pointer',
-  },
-  {
-    pageId: 'triggers',
-    routes: ['/triggers'],
-    title: m.tip_triggers_title(),
-    description: m.tip_triggers_desc(),
-    highlights: [
-      m.tip_triggers_h1(),
-      m.tip_triggers_h2(),
-      m.tip_triggers_h3(),
-    ],
-    icon: 'message-square',
-  },
-  {
-    pageId: 'suggestions',
-    routes: ['/suggestions'],
-    title: m.tip_suggestions_title(),
-    description: m.tip_suggestions_desc(),
-    highlights: [
-      m.tip_suggestions_h1(),
-      m.tip_suggestions_h2(),
-      m.tip_suggestions_h3(),
-    ],
-    icon: 'thumbs-up',
-  },
-  {
-    pageId: 'embed-builder',
-    routes: ['/embed-builder'],
-    title: m.tip_embed_builder_title(),
-    description: m.tip_embed_builder_desc(),
-    highlights: [
-      m.tip_embed_builder_h1(),
-      m.tip_embed_builder_h2(),
-      m.tip_embed_builder_h3(),
-    ],
-    icon: 'file-plus',
-  },
-  {
-    pageId: 'regulation',
-    routes: ['/regulation'],
-    title: m.tip_regulation_title(),
-    description: m.tip_regulation_desc(),
-    highlights: [
-      m.tip_regulation_h1(),
-      m.tip_regulation_h2(),
-      m.tip_regulation_h3(),
-    ],
-    icon: 'book',
-  },
-  {
-    pageId: 'news',
-    routes: ['/news'],
-    title: m.tip_news_title(),
-    description: m.tip_news_desc(),
-    highlights: [
-      m.tip_news_h1(),
-      m.tip_news_h2(),
-      m.tip_news_h3(),
-    ],
-    icon: 'rss',
-  },
-  {
-    pageId: 'staff-management',
-    routes: ['/staff-management'],
-    title: m.tip_staff_management_title(),
-    description: m.tip_staff_management_desc(),
-    highlights: [
-      m.tip_staff_management_h1(),
-      m.tip_staff_management_h2(),
-      m.tip_staff_management_h3(),
-    ],
-    icon: 'user-check',
-  },
-  {
-    pageId: 'recruitment',
-    routes: ['/recruitment'],
-    title: m.tip_recruitment_title(),
-    description: m.tip_recruitment_desc(),
-    highlights: [
-      m.tip_recruitment_h1(),
-      m.tip_recruitment_h2(),
-      m.tip_recruitment_h3(),
-    ],
-    icon: 'user-plus',
-  },
-  {
-    pageId: 'tickets',
-    routes: ['/tickets'],
-    title: m.tip_tickets_title(),
-    description: m.tip_tickets_desc(),
-    highlights: [
-      m.tip_tickets_h1(),
-      m.tip_tickets_h2(),
-      m.tip_tickets_h3(),
-    ],
-    icon: 'message-square',
-  },
-  {
-    pageId: 'tutoring',
-    routes: ['/tutoring'],
-    title: m.tip_tutoring_title(),
-    description: m.tip_tutoring_desc(),
-    highlights: [
-      m.tip_tutoring_h1(),
-      m.tip_tutoring_h2(),
-      m.tip_tutoring_h3(),
-    ],
-    icon: 'book-open',
-  },
-  {
-    pageId: 'planning',
-    routes: ['/planning'],
-    title: m.tip_planning_title(),
-    description: m.tip_planning_desc(),
-    highlights: [
-      m.tip_planning_h1(),
-      m.tip_planning_h2(),
-      m.tip_planning_h3(),
-    ],
-    icon: 'calendar',
-  },
-  {
-    pageId: 'modules',
-    routes: ['/modules'],
-    title: m.tip_modules_title(),
-    description: m.tip_modules_desc(),
-    highlights: [
-      m.tip_modules_h1(),
-      m.tip_modules_h2(),
-      m.tip_modules_h3(),
-    ],
-    icon: 'package',
-  },
-  {
-    pageId: 'channels-management',
-    routes: ['/channels-management'],
-    title: m.tip_channels_management_title(),
-    description: m.tip_channels_management_desc(),
-    highlights: [
-      m.tip_channels_management_h1(),
-      m.tip_channels_management_h2(),
-      m.tip_channels_management_h3(),
-    ],
-    icon: 'hash',
-  },
-  {
-    pageId: 'command-access',
-    routes: ['/command-access'],
-    title: m.tip_command_access_title(),
-    description: m.tip_command_access_desc(),
-    highlights: [
-      m.tip_command_access_h1(),
-      m.tip_command_access_h2(),
-      m.tip_command_access_h3(),
-    ],
-    icon: 'terminal',
-  },
-  {
-    pageId: 'nickname-moderation',
-    routes: ['/security/filters/nicknames'],
-    title: m.tip_nickname_moderation_title(),
-    description: m.tip_nickname_moderation_desc(),
-    highlights: [
-      m.tip_nickname_moderation_h1(),
-      m.tip_nickname_moderation_h2(),
-      m.tip_nickname_moderation_h3(),
-    ],
-    icon: 'filter',
-  },
-  {
-    pageId: 'double-accounts',
-    routes: ['/security/accounts'],
-    title: m.tip_double_accounts_title(),
-    description: m.tip_double_accounts_desc(),
-    highlights: [
-      m.tip_double_accounts_h1(),
-      m.tip_double_accounts_h2(),
-      m.tip_double_accounts_h3(),
-    ],
-    icon: 'shield',
-  },
-  {
-    pageId: 'forms',
-    routes: ['/forms'],
-    title: m.tip_forms_title(),
-    description: m.tip_forms_desc(),
-    highlights: [
-      m.tip_forms_h1(),
-      m.tip_forms_h2(),
-      m.tip_forms_h3(),
-    ],
-    icon: 'clipboard',
-  },
-  {
-    pageId: 'fun',
-    routes: ['/fun'],
-    title: m.tip_fun_title(),
-    description: m.tip_fun_desc(),
-    highlights: [
-      m.tip_fun_h1(),
-      m.tip_fun_h2(),
-      m.tip_fun_h3(),
-    ],
-    icon: 'smile',
-  },
-  {
-    pageId: 'social-networks',
-    routes: ['/social-networks'],
-    title: m.tip_social_networks_title(),
-    description: m.tip_social_networks_desc(),
-    highlights: [
-      m.tip_social_networks_h1(),
-      m.tip_social_networks_h2(),
-      m.tip_social_networks_h3(),
-    ],
-    icon: 'share-2',
-  },
-  {
-    pageId: 'backups',
-    routes: ['/backups'],
-    title: m.tip_backups_title(),
-    description: m.tip_backups_desc(),
-    highlights: [
-      m.tip_backups_h1(),
-      m.tip_backups_h2(),
-      m.tip_backups_h3(),
-    ],
-    icon: 'archive',
-  },
-  {
-    pageId: 'schedules',
-    routes: ['/schedules'],
-    title: m.tip_schedules_title(),
-    description: m.tip_schedules_desc(),
-    highlights: [
-      m.tip_schedules_h1(),
-      m.tip_schedules_h2(),
-      m.tip_schedules_h3(),
-    ],
-    icon: 'calendar',
-  },
-];
-
 // ─── Defaults & Storage ─────────────────────────────────────────────────────
 
 const DEFAULT_STATE: OnboardingState = {
@@ -784,7 +349,7 @@ function readState(guildId: string): OnboardingState {
           checklistDismissed: true,
           completedTasks: checklistTasks.map(t => t.id),
           completedSetupTasks: setupTasks.map(t => t.id),
-          visitedPages: pageTips.map(p => p.pageId),
+          visitedPages: [],
           startedAt: parsed.startedAt ?? Date.now(),
           completedAt: parsed.completedAt ?? Date.now(),
         };
@@ -801,7 +366,7 @@ function readState(guildId: string): OnboardingState {
           checklistDismissed: true,
           completedTasks: checklistTasks.map(t => t.id),
           completedSetupTasks: setupTasks.map(t => t.id),
-          visitedPages: pageTips.map(p => p.pageId),
+          visitedPages: [],
           startedAt: parsed.startedAt ?? Date.now(),
           completedAt: parsed.completedAt ?? Date.now(),
         };
@@ -830,10 +395,6 @@ let state = $state<OnboardingState>({ ...DEFAULT_STATE });
 // Welcome modal visibility
 let showWelcome = $state(false);
 
-// Active page tip
-let activePageTip = $state<PageTip | null>(null);
-let pageTipDismissed = $state(false);
-
 // ─── Store ──────────────────────────────────────────────────────────────────
 
 export const onboardingStore = {
@@ -845,8 +406,6 @@ export const onboardingStore = {
   get checklistMinimized() { return state.checklistMinimized; },
   get completedTasks() { return state.completedTasks; },
   get visitedPages() { return state.visitedPages; },
-  get activePageTip() { return activePageTip; },
-  get pageTipDismissed() { return pageTipDismissed; },
   get activeTab() { return state.activeTab; },
 
   get completedCount() {
@@ -987,9 +546,7 @@ export const onboardingStore = {
   },
 
   // Page tips
-  onPageVisit(path: string, queryString: string = '') {
-    const fullUrl = path + (queryString ? `?${queryString}` : '');
-
+  onPageVisit(path: string, _queryString: string = '') {
     // Auto-complete discover checklist tasks
     for (const task of checklistTasks) {
       if (!task.autoCompleteRoute) continue;
@@ -1004,31 +561,6 @@ export const onboardingStore = {
         this.completeSetupTask(task.id);
       }
     }
-
-    // Find matching page tip
-    const tip = pageTips.find(p =>
-      p.routes.some(r => {
-        if (r === '/') return path === '/';
-        return path === r || path.startsWith(r + '/') || fullUrl.includes(r);
-      })
-    );
-
-    if (tip && !state.visitedPages.includes(tip.pageId)) {
-      activePageTip = tip;
-      pageTipDismissed = false;
-    } else {
-      activePageTip = null;
-      pageTipDismissed = false;
-    }
-  },
-
-  dismissPageTip() {
-    if (activePageTip) {
-      state.visitedPages = [...state.visitedPages, activePageTip.pageId];
-      writeState(guildId, state);
-    }
-    pageTipDismissed = true;
-    activePageTip = null;
   },
 
   // Complete reset
@@ -1038,8 +570,6 @@ export const onboardingStore = {
       startedAt: Date.now(),
     };
     showWelcome = true;
-    activePageTip = null;
-    pageTipDismissed = false;
     writeState(guildId, state);
   },
 
@@ -1051,8 +581,6 @@ export const onboardingStore = {
       startedAt: Date.now(),
     };
     showWelcome = true;
-    activePageTip = null;
-    pageTipDismissed = false;
     writeState(guildId, state);
   },
 

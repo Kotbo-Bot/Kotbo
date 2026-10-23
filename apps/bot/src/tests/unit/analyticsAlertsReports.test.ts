@@ -4,8 +4,8 @@ import path from 'node:path';
 const mockDb = {};
 const dbPath = path.resolve(import.meta.dir, '../../utils/db.ts');
 const dbJsPath = path.resolve(import.meta.dir, '../../utils/db.js');
-mock.module(dbPath, () => ({ default: mockDb, prisma: mockDb, prismaRead: mockDb }));
-mock.module(dbJsPath, () => ({ default: mockDb, prisma: mockDb, prismaRead: mockDb }));
+mock.module(dbPath, () => ({ default: mockDb, prisma: mockDb, prismaRead: mockDb, upsertRetryingRace: (upsert: () => Promise<unknown>) => upsert() }));
+mock.module(dbJsPath, () => ({ default: mockDb, prisma: mockDb, prismaRead: mockDb, upsertRetryingRace: (upsert: () => Promise<unknown>) => upsert() }));
 
 const { periodKeyOf, evaluateCondition, inCooldown, validateAlertRule, supportsWindow } = await import('../../services/analytics/analyticsAlertsService');
 const { computeNextRun, reportRange, validateReportSchedule } = await import('../../services/analytics/analyticsReportService');
@@ -66,7 +66,7 @@ describe('rapports', () => {
 
   test('validation : sections par défaut, bornes des réglages', () => {
     const r = validateReportSchedule({ frequency: 'weekly', hour: 40, channelId: '123456789012345678' });
-    expect(r).toMatchObject({ hour: 23, sections: ['overview', 'top_members', 'top_channels', 'anomalies'] });
+    expect(r).toMatchObject({ hour: 23, sections: ['kotbo_work', 'overview', 'top_members', 'top_channels', 'anomalies'] });
     expect(validateReportSchedule({ frequency: 'daily', channelId: '123456789012345678' })).toBe('frequency');
   });
 });

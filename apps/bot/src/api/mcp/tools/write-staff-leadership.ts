@@ -3,7 +3,7 @@ import { castPollVote, createAbsence, createCall, createManagerNote, createMeeti
 import { addMemberToHierarchy, createAPIKey, createStaffHierarchy, createStaffRole, deleteAPIKey, deleteStaffHierarchy, deleteStaffRole, generateAPIKey, hashAPIKey, importRoleMembers, removeMemberFromHierarchy, reorderStaffRoles, syncStaffHierarchyMemberships, updateStaffHierarchy, updateStaffRole } from '../../../services/staff/staffManagementService.js';
 import prisma from '../../../utils/db.js';
 import { z } from 'zod';
-import { type McpToolContext, err, ok, resolveMember, resolveStaffMemberRecord } from '../toolkit.js';
+import { type McpToolContext, err, ok, resolveMember, resolveStaffMemberRecord, toolError } from '../toolkit.js';
 
 export function registerWriteStaffLeadershipTools(ctx: McpToolContext) {
   const { server, guildId, client, shouldRegister, guard, toolMeta } = ctx;
@@ -52,7 +52,7 @@ export function registerWriteStaffLeadershipTools(ctx: McpToolContext) {
           });
           return ok({ ok: true, absence });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -73,7 +73,7 @@ export function registerWriteStaffLeadershipTools(ctx: McpToolContext) {
           const absence = await updateAbsenceStatus(guildId, absence_id, status, 'mcp_agent', note);
           return ok({ ok: true, absence });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -90,7 +90,7 @@ export function registerWriteStaffLeadershipTools(ctx: McpToolContext) {
           await deleteAbsence(guildId, absence_id);
           return ok({ ok: true, absenceId: absence_id });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -122,7 +122,7 @@ export function registerWriteStaffLeadershipTools(ctx: McpToolContext) {
           const meeting = await createMeeting(client, guildId, creator.staffMember.userId, title, description ?? '', scheduledAt, parsedEndedAt);
           return ok({ ok: true, meeting });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -152,7 +152,7 @@ export function registerWriteStaffLeadershipTools(ctx: McpToolContext) {
           const meeting = await updateMeeting(client, guildId, meeting_id, data);
           return ok({ ok: true, meeting });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -178,7 +178,7 @@ export function registerWriteStaffLeadershipTools(ctx: McpToolContext) {
           });
           return ok({ ok: true, meetingId: meeting_id });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -200,7 +200,7 @@ export function registerWriteStaffLeadershipTools(ctx: McpToolContext) {
           await markNotificationRead(notification_id, resolved.userId);
           return ok({ ok: true, notificationId: notification_id });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -219,7 +219,7 @@ export function registerWriteStaffLeadershipTools(ctx: McpToolContext) {
           await markAllNotificationsRead(guildId, resolved.userId);
           return ok({ ok: true, userId: resolved.userId });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -254,7 +254,7 @@ export function registerWriteStaffLeadershipTools(ctx: McpToolContext) {
           );
           return ok({ ok: true, poll });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -278,7 +278,7 @@ export function registerWriteStaffLeadershipTools(ctx: McpToolContext) {
           const vote = await castPollVote(guildId, poll_id, voter.staffMember.id, option_id);
           return ok({ ok: true, vote });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -296,7 +296,7 @@ export function registerWriteStaffLeadershipTools(ctx: McpToolContext) {
           if (result.count === 0) return err('Sondage introuvable');
           return ok({ ok: true, pollId: poll_id });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -333,7 +333,7 @@ export function registerWriteStaffLeadershipTools(ctx: McpToolContext) {
           );
           return ok({ ok: true, task });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -369,7 +369,7 @@ export function registerWriteStaffLeadershipTools(ctx: McpToolContext) {
           const task = await updateTask(guildId, task_id, updateData);
           return ok({ ok: true, task });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -386,7 +386,7 @@ export function registerWriteStaffLeadershipTools(ctx: McpToolContext) {
           await deleteTask(guildId, task_id);
           return ok({ ok: true, taskId: task_id });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -431,7 +431,7 @@ export function registerWriteStaffLeadershipTools(ctx: McpToolContext) {
           );
           return ok({ ok: true, call });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -463,7 +463,7 @@ export function registerWriteStaffLeadershipTools(ctx: McpToolContext) {
           const call = await updateCall(client, guildId, call_id, data);
           return ok({ ok: true, call });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -480,7 +480,7 @@ export function registerWriteStaffLeadershipTools(ctx: McpToolContext) {
           await deleteCall(client, guildId, call_id);
           return ok({ ok: true, callId: call_id });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -505,7 +505,7 @@ export function registerWriteStaffLeadershipTools(ctx: McpToolContext) {
           });
           return ok({ ok: true, config });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -529,7 +529,7 @@ export function registerWriteStaffLeadershipTools(ctx: McpToolContext) {
           const role = await createStaffRole(guildId, name, level, discord_role_id, color, hierarchy_id, is_responsable);
           return ok({ ok: true, role });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -556,7 +556,7 @@ export function registerWriteStaffLeadershipTools(ctx: McpToolContext) {
           if (!role) return err('Rôle staff introuvable');
           return ok({ ok: true, role });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -573,7 +573,7 @@ export function registerWriteStaffLeadershipTools(ctx: McpToolContext) {
           await reorderStaffRoles(guildId, ordered_role_ids);
           return ok({ ok: true, count: ordered_role_ids.length });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -591,7 +591,7 @@ export function registerWriteStaffLeadershipTools(ctx: McpToolContext) {
           if (!deleted) return err('Rôle staff introuvable');
           return ok({ ok: true, role: deleted });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -616,7 +616,7 @@ export function registerWriteStaffLeadershipTools(ctx: McpToolContext) {
           const hierarchy = await createStaffHierarchy(guildId, name, description, color, icon, discord_role_id, responsable_user_id, parent_hierarchy_id ?? null);
           return ok({ ok: true, hierarchy });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -645,7 +645,7 @@ export function registerWriteStaffLeadershipTools(ctx: McpToolContext) {
           if (!hierarchy) return err('Hiérarchie introuvable');
           return ok({ ok: true, hierarchy });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -663,7 +663,7 @@ export function registerWriteStaffLeadershipTools(ctx: McpToolContext) {
           if (!deleted) return err('Hiérarchie introuvable');
           return ok({ ok: true, hierarchy: deleted });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -686,7 +686,7 @@ export function registerWriteStaffLeadershipTools(ctx: McpToolContext) {
           const result = await addMemberToHierarchy(guildId, resolved.userId, hierarchy_id ?? null, grade ?? null);
           return ok({ ok: true, result });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -708,7 +708,7 @@ export function registerWriteStaffLeadershipTools(ctx: McpToolContext) {
           const result = await removeMemberFromHierarchy(guildId, resolved.userId, hierarchy_id);
           return ok({ ok: true, result });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -729,7 +729,7 @@ export function registerWriteStaffLeadershipTools(ctx: McpToolContext) {
           const result = await importRoleMembers(guildId, hierarchy_id, discord_role_id, grade);
           return ok({ ok: true, result });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -746,7 +746,7 @@ export function registerWriteStaffLeadershipTools(ctx: McpToolContext) {
           const result = await syncStaffHierarchyMemberships(guildId);
           return ok({ ok: true, result });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -779,7 +779,7 @@ export function registerWriteStaffLeadershipTools(ctx: McpToolContext) {
           );
           return ok({ ok: true, apiKey, fullKey });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -796,7 +796,7 @@ export function registerWriteStaffLeadershipTools(ctx: McpToolContext) {
           const key = await deleteAPIKey(guildId, key_id);
           return ok({ ok: true, key });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -822,7 +822,7 @@ export function registerWriteStaffLeadershipTools(ctx: McpToolContext) {
           const note = await createManagerNote(guildId, target.userId, creator.userId, content);
           return ok({ ok: true, note });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -839,7 +839,7 @@ export function registerWriteStaffLeadershipTools(ctx: McpToolContext) {
           await deleteManagerNote(guildId, note_id);
           return ok({ ok: true, noteId: note_id });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );

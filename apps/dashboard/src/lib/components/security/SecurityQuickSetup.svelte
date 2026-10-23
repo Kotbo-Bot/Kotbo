@@ -185,6 +185,6 @@
       ondetail={openDetail}
     />
   {:else}
-    <p class="text-sm text-on-surface-variant/70">{m.sec_quick_setup_unavailable()}</p>
+    <p class="text-sm text-on-surface-variant">{m.sec_quick_setup_unavailable()}</p>
   {/if}
 </section>

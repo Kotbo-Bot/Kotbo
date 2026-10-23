@@ -29,6 +29,7 @@ import {
   type StringSelectMenuInteraction,
 } from 'discord.js';
 import prisma from '../../utils/db.js';
+import { notify } from '../notifications/notifyService.js';
 import { Prisma, AppealItemOutcome, BanAppealStatus, SanctionType } from '@prisma/client';
 import { logger } from '../../utils/logger.js';
 import { INVITE_SOURCE, recordBotInvite } from '../analytics/inviteService.js';
@@ -552,7 +553,9 @@ async function notifyIssuingModerators(
         ...lines,
         '',
         `Tu peux apporter ton contexte au staff avant le verdict : ${DASHBOARD_URL}/security/sanctions/appeals`,
-      ].join('\n')
+      ].join('\n'),
+      guildId,
+      'moderation.sanction_contested',
     );
   }
 }
@@ -962,11 +965,24 @@ export async function createReturnInvite(client: Client, guildId: string, invite
   return null;
 }
 
-export async function sendMemberDM(client: Client, userId: string, content: string): Promise<boolean> {
+const MEMBER_DM_TITLES = {
+  'moderation.sanction_notice': 'Sanction',
+  'moderation.sanction_contested': 'Sanction contestée',
+  'moderation.appeal_update': 'Ta demande de recours',
+  'security.verification_notice': 'Vérification',
+} as const;
+
+/** MP au membre via le gabarit des notifications ; `true` s'il est parti (ou en file). */
+export async function sendMemberDM(
+  _client: Client,
+  userId: string,
+  content: string,
+  guildId: string,
+  kind: keyof typeof MEMBER_DM_TITLES = 'moderation.appeal_update',
+): Promise<boolean> {
   try {
-    const user = await client.users.fetch(userId);
-    await user.send({ content });
-    return true;
+    const { dm } = await notify({ guildId, userId, kind, title: MEMBER_DM_TITLES[kind], message: content });
+    return dm === 'sent' || dm === 'queued';
   } catch {
     return false;
   }
@@ -989,7 +1005,8 @@ export async function sendBanAppealNotificationDM(client: Client, guildId: strin
   return sendMemberDM(
     client,
     userId,
-    `Tu as été banni définitivement de **${serverName}**.\n\nSi tu penses qu'il s'agit d'une erreur, tu peux soumettre une demande de débannissement ici : ${link}`
+    `Tu as été banni définitivement de **${serverName}**.\n\nSi tu penses qu'il s'agit d'une erreur, tu peux soumettre une demande de débannissement ici : ${link}`,
+    guildId, 'moderation.sanction_notice',
   );
 }
 
@@ -1031,7 +1048,8 @@ export async function sendPreActionAppealDM(
   return sendMemberDM(
     client,
     userId,
-    `${intro} **${serverName}**.\n\nSi tu penses qu'il s'agit d'une erreur, tu peux la contester ici : ${link}`
+    `${intro} **${serverName}**.\n\nSi tu penses qu'il s'agit d'une erreur, tu peux la contester ici : ${link}`,
+    guildId, 'moderation.sanction_notice',
   );
 }
 
@@ -1065,7 +1083,8 @@ export async function sendSanctionAppealDM(
       `**Raison :** ${sanction.reason.slice(0, 500)}`,
       '',
       `Si tu estimes que c'est une erreur, tu peux la contester ici : ${link}`,
-    ].join('\n')
+    ].join('\n'),
+    guildId, 'moderation.sanction_notice',
   );
 }
 
@@ -1149,7 +1168,7 @@ export async function decideAppeal(
       );
       const verifyUrl = buildVerificationUrl(DASHBOARD_URL, params.guildId, token);
       const message = `Bonne nouvelle ! Ta demande de débannissement sur **${serverName}** a été acceptée par le staff.\n\nPour pouvoir rejoindre le serveur, tu dois d'abord authentifier ton compte en complétant la vérification de sécurité en cliquant sur ce lien : ${verifyUrl}`;
-      dmDelivered = await sendMemberDM(client, appeal.userId, message);
+      dmDelivered = await sendMemberDM(client, appeal.userId, message, params.guildId);
     } else {
       // 1. Unban via l'API Discord
       if (guild) {
@@ -1175,7 +1194,7 @@ export async function decideAppeal(
         invite: inviteUrl || '(invitation indisponible - contacte un membre du staff)',
         reason: params.reason || '',
       });
-      dmDelivered = await sendMemberDM(client, appeal.userId, message);
+      dmDelivered = await sendMemberDM(client, appeal.userId, message, params.guildId);
     }
   } else if (params.decision === 'ACCEPTED') {
     // Appel portant sur des sanctions : le verdict a déjà été appliqué ligne par
@@ -1204,7 +1223,8 @@ export async function decideAppeal(
         inviteUrl ? `\nTu peux revenir avec cette invitation : ${inviteUrl}` : '',
       ]
         .filter(Boolean)
-        .join('\n')
+        .join('\n'),
+      params.guildId,
     );
   } else {
     if (params.decision === 'DENIED_PERMANENT') {
@@ -1237,7 +1257,7 @@ export async function decideAppeal(
       params.decision === 'DENIED_PERMANENT'
         ? '\n\n⛔ Cette décision est définitive : aucun nouvel appel ne sera accepté.'
         : `\n\nTu pourras soumettre un nouvel appel dans ${cooldownDays} jours : ${DASHBOARD_URL}/appeal/${params.guildId}`;
-    dmDelivered = await sendMemberDM(client, appeal.userId, denyBase + suffix);
+    dmDelivered = await sendMemberDM(client, appeal.userId, denyBase + suffix, params.guildId);
   }
 
   const updated = await prisma.banAppeal.update({
@@ -1307,7 +1327,8 @@ export async function requestAppealInfo(
   await sendMemberDM(
     client,
     appeal.userId,
-    `Le staff de **${guild?.name || 'ce serveur'}** a besoin de plus d'informations sur ta demande de débannissement :\n> ${params.question}\n\nRéponds ici : ${DASHBOARD_URL}/appeal/${params.guildId}`
+    `Le staff de **${guild?.name || 'ce serveur'}** a besoin de plus d'informations sur ta demande de débannissement :\n> ${params.question}\n\nRéponds ici : ${DASHBOARD_URL}/appeal/${params.guildId}`,
+    params.guildId,
   );
 
   await refreshStaffEmbed(client, updated);

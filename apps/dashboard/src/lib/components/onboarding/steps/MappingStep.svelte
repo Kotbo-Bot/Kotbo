@@ -201,7 +201,7 @@
         </div>
 
         {#if skipped}
-          <p class="text-body-sm text-on-surface-variant/60 leading-relaxed">
+          <p class="text-body-sm text-on-surface-variant leading-relaxed">
             Aucun salon à y ranger : Kotbo ne créera pas de catégorie.
           </p>
         {:else}
@@ -214,7 +214,7 @@
             <optgroup label="Catégories du serveur">
               {#each candidatesFor(category) as option (option.id)}
                 <option value="adopt:{option.id}" disabled={option.disabled}>
-                  {option.name}{option.note ? ` — ${option.note}` : ''}
+                  {option.name}{option.note ? ` (${option.note})` : ''}
                 </option>
               {/each}
             </optgroup>
@@ -255,7 +255,7 @@
                      ne pas s'en contenter : c'est exactement ce rapprochement
                      silencieux qui produisait les doublons quand il ratait. -->
                 <p class="mt-1 text-2xs text-on-surface-variant/55">
-                  Détecté sur ton serveur — confirme ou corrige.
+                  Détecté sur ton serveur. Confirme ou corrige.
                 </p>
               {:else if decision.mode === 'create'}
                 <p class="mt-1 text-2xs text-on-surface-variant/45">
@@ -273,7 +273,7 @@
               <optgroup label={line.kind === 'role' ? 'Rôles du serveur' : 'Salons du serveur'}>
                 {#each candidatesFor(line) as option (option.id)}
                   <option value="adopt:{option.id}" disabled={option.disabled}>
-                    {option.name}{option.note ? ` — ${option.note}` : ''}
+                    {option.name}{option.note ? ` (${option.note})` : ''}
                   </option>
                 {/each}
               </optgroup>
@@ -294,7 +294,7 @@
            s'eteint avec elle ne l'est pas. -->
       <div class="rounded-xl border border-outline-variant/30 bg-surface-container-low/30 px-4 py-3">
         <p class="text-xs text-on-surface-variant leading-relaxed">
-          <Papicon icon="info" size={12} class="inline text-on-surface-variant/50 mr-1" />
+          <Papicon icon="info" size={12} class="inline text-on-surface-variant mr-1" />
           {#each dormant as entry, index (entry.key)}{index > 0 ? ', ' : ''}<span class="font-medium text-on-surface">{entry.name}</span>{/each}
           {dormant.length > 1 ? 'resteront éteints' : 'restera éteint'} : le salon qui
           {dormant.length > 1 ? 'les porte' : 'le porte'} a été écarté. Tu pourras

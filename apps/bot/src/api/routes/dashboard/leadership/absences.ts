@@ -314,7 +314,7 @@ export async function handleAbsenceRoutes(
           json(res, 201, { absence });
         } catch (err) {
           logger.error('StaffAPI', 'Error creating absence:', err);
-          jsonFailure(res, err, err instanceof Error ? err.message : "Erreur lors de la création de l'absence", 'StaffAPI');
+          jsonFailure(res, err, "Erreur lors de la création de l'absence", 'StaffAPI');
         }
         return true;
       }

@@ -6,7 +6,7 @@ import { getPredictionData } from '../../../services/analytics/predictionService
 import { getPulseDashboardData } from '../../../services/analytics/pulseService.js';
 import prisma from '../../../utils/db.js';
 import { z } from 'zod';
-import { type McpToolContext, err, ok, resolveMember } from '../toolkit.js';
+import { type McpToolContext, ok, resolveMember, toolError } from '../toolkit.js';
 
 export function registerReadAnalyticsTools(ctx: McpToolContext) {
   const { server, guildId, client, shouldRegister, guard, toolMeta } = ctx;
@@ -155,7 +155,7 @@ export function registerReadAnalyticsTools(ctx: McpToolContext) {
           const data = await getChannelHealthDashboardData(guildId);
           return ok(data);
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -172,7 +172,7 @@ export function registerReadAnalyticsTools(ctx: McpToolContext) {
           const summary = await analyzeGuildChannelHealth(client, guildId);
           return ok(summary ?? { channels: [], overloaded: [], underused: [], dead: [], healthy: [] });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );

@@ -8,6 +8,7 @@
 import prisma from '../../../utils/db.js';
 import { adminRemoveItem, adminSpawnItem } from '../economyService.js';
 import { slotHoldingItem } from './rpgEquipment.js';
+import { UserFacingError } from '../../../utils/userFacingError.js';
 
 /**
  * Bornes des valeurs qu'un administrateur peut fixer sur un profil. Le niveau part de un :
@@ -35,7 +36,7 @@ export type PlayerStatsInput = Partial<Record<PlayerStatField, number | null>>;
 /** Plus gros don d'objets en une fois. */
 export const INVENTORY_GRANT_MAX = 999;
 
-export class PlayerAdminError extends Error {
+export class PlayerAdminError extends UserFacingError {
   constructor(message: string, readonly status: number) {
     super(message);
     this.name = 'PlayerAdminError';

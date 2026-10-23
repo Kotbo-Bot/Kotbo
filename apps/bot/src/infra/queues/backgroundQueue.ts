@@ -48,13 +48,21 @@ export type BackgroundJobName =
   | 'member-role-snapshots-prune'
   | 'billing-events-prune'
   | 'billing-renewal-notice'
+  | 'admin-lifecycle-reminders'
   | 'analytics-daily-snapshot'
   | 'acquisition-events-prune'
   | 'dashboard-telemetry-prune'
+  | 'site-analytics-prune'
+  | 'site-scheduled-publish'
+  | 'notification-dm-flush'
+  | 'site-vote-reminders'
+  | 'shop-renewals'
+  | 'site-weekly-summary'
   | 'acquisition-abandon-scan'
   | 'acquisition-alerts-check'
   | 'acquisition-weekly-recap'
   | 'word-stats-prune'
+  | 'aegis-prune'
   | 'workflow-executions-prune'
   | 'ban-hygiene-scan'
   | 'warn-auto-archive'
@@ -77,13 +85,7 @@ export type BackgroundJobName =
   | 'tower-daily-podium'
   | 'clan-tower-cycle'
   | 'clan-weekly-digest'
-  | 'campaign-cycle'
-  // Meme oubli pour les partenariats : quatre crons planifies sans handler, donc
-  // quatre echecs par heure et un cycle qui n'a jamais tourne.
-  | 'partnerships-hourly'
-  | 'partnerships-daily'
-  | 'partnerships-digest-weekly'
-  | 'partnerships-digest-monthly';
+  | 'campaign-cycle';
 
 
 

@@ -18,7 +18,7 @@ import {
   clampStepDelay,
   getOrCreateWelcomeThreadConfig,
 } from '../../../services/features/welcomeThreadService.js';
-import { type McpToolContext, err, ok, resolveChannel } from '../toolkit.js';
+import { type McpToolContext, err, ok, resolveChannel, toolError } from '../toolkit.js';
 
 const ACTION_TYPES = ['EMBED', 'ROLE', 'LINK'] as const;
 const ROLE_ACTIONS = ['ADD', 'REMOVE', 'TOGGLE', 'EXCLUSIVE'] as const;
@@ -241,7 +241,7 @@ export function registerWriteWelcomeThreadTools(ctx: McpToolContext) {
         try {
           return await snapshot();
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -343,7 +343,7 @@ export function registerWriteWelcomeThreadTools(ctx: McpToolContext) {
 
         return await snapshot({ ok: true });
       } catch (e) {
-        return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+        return toolError(e);
       }
     })
   );
@@ -403,7 +403,7 @@ export function registerWriteWelcomeThreadTools(ctx: McpToolContext) {
         await audit(key_name, "Ajout message accueil MCP", 'WelcomeThread', `Position ${index} - ${content.slice(0, 80)}`);
         return await snapshot({ ok: true, stepId: created.id, position: index });
       } catch (e) {
-        return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+        return toolError(e);
       }
     })
   );
@@ -454,7 +454,7 @@ export function registerWriteWelcomeThreadTools(ctx: McpToolContext) {
         await audit(key_name, "Modification message accueil MCP", 'WelcomeThread', `Step ${step_id}`);
         return await snapshot({ ok: true, stepId: step_id });
       } catch (e) {
-        return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+        return toolError(e);
       }
     })
   );
@@ -487,7 +487,7 @@ export function registerWriteWelcomeThreadTools(ctx: McpToolContext) {
         await audit(key_name, "Suppression message accueil MCP", 'WelcomeThread', `Step ${step_id}`);
         return await snapshot({ ok: true, deletedStepId: step_id });
       } catch (e) {
-        return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+        return toolError(e);
       }
     })
   );
@@ -520,7 +520,7 @@ export function registerWriteWelcomeThreadTools(ctx: McpToolContext) {
         await audit(key_name, "Réordonnancement séquence accueil MCP", 'WelcomeThread', `${step_ids.length} message(s)`);
         return await snapshot({ ok: true });
       } catch (e) {
-        return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+        return toolError(e);
       }
     })
   );
@@ -648,7 +648,7 @@ export function registerWriteWelcomeThreadTools(ctx: McpToolContext) {
           ...(groupCheck.warnings.length > 0 ? { warnings: groupCheck.warnings } : {}),
         });
       } catch (e) {
-        return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+        return toolError(e);
       }
     })
   );
@@ -758,7 +758,7 @@ export function registerWriteWelcomeThreadTools(ctx: McpToolContext) {
           ...(groupCheck.warnings.length > 0 ? { warnings: groupCheck.warnings } : {}),
         });
       } catch (e) {
-        return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+        return toolError(e);
       }
     })
   );
@@ -804,7 +804,7 @@ export function registerWriteWelcomeThreadTools(ctx: McpToolContext) {
           ...(groupCheck.ok && groupCheck.warnings.length > 0 ? { warnings: groupCheck.warnings } : {}),
         });
       } catch (e) {
-        return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+        return toolError(e);
       }
     })
   );
@@ -837,7 +837,7 @@ export function registerWriteWelcomeThreadTools(ctx: McpToolContext) {
         await audit(key_name, "Réordonnancement menu accueil MCP", 'WelcomeThread', `${page_ids.length} page(s)`);
         return await snapshot({ ok: true });
       } catch (e) {
-        return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+        return toolError(e);
       }
     })
   );

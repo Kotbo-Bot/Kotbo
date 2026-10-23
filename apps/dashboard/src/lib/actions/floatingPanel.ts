@@ -21,6 +21,8 @@ export interface FloatingPanelOptions {
 export function floatingPanel(node: HTMLElement, options: FloatingPanelOptions) {
   let current = options;
   const portalled = portal(node);
+  // Plan des popovers : au-dessus des modales, d'où ces panneaux s'ouvrent souvent.
+  node.classList.add('app-popover');
 
   function clamp(value: number, min: number, max: number) {
     return Math.min(Math.max(value, min), Math.max(min, max));

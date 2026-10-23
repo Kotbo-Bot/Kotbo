@@ -2,7 +2,8 @@
 import { embedToV2 } from '../../../utils/patchV2.js';
 import { type APIMessageTopLevelComponent, ComponentType, type GuildForumTagData, MessageFlags, TextDisplayBuilder } from 'discord.js';
 import { z } from 'zod';
-import { type McpToolContext, buildApiEmbed, buildV2MessageComponents, err, mcpEmbedSchema, ok, resolveChannel, resolveForum, resolveForumPost, resolveForumTagIds, resolveMember, serializeDiscordMessage } from '../toolkit.js';
+import { type McpToolContext, buildApiEmbed, buildV2MessageComponents, err, mcpEmbedSchema, ok, resolveChannel, resolveForum, resolveForumPost, resolveForumTagIds, resolveMember, serializeDiscordMessage, publicErrorMessage } from '../toolkit.js';
+import { GENERIC_ERROR_MESSAGE } from '../../../utils/publicError.js';
 
 export function registerWriteMessagesTools(ctx: McpToolContext) {
   const { server, guildId, client, shouldRegister, guard, audit, toolMeta } = ctx;
@@ -49,8 +50,7 @@ export function registerWriteMessagesTools(ctx: McpToolContext) {
             allowedMentions: { parse: [] },
           });
         })().catch((e) => {
-          const msg = e instanceof Error ? e.message : String(e);
-          return msg;
+          return publicErrorMessage(e, GENERIC_ERROR_MESSAGE, 'MCP');
         });
         if (typeof sent === 'string') return err(`Impossible d'envoyer le message : ${sent}`);
 

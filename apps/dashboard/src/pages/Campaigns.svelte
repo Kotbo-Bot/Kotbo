@@ -275,7 +275,7 @@
 
 <ModulePage
   title="Campagnes"
-  description="Une suite de messages programmés, adressée à une audience choisie, dont on mesure la portée"
+  description="Envoie une série de messages programmés à un groupe de membres, et vois qui ils touchent."
   icon="megaphone"
   featureKey="campaigns"
 >
@@ -291,6 +291,8 @@
       icon="megaphone"
       title="Aucune campagne"
       description="Une campagne enchaîne plusieurs messages autour d'une date : un teaser, l'annonce, une relance."
+      actionLabel="Créer ma première campagne"
+      onAction={openNew}
     />
   {:else}
     <div class="grid grid-cols-1 xl:grid-cols-2 gap-3 items-start">
@@ -326,10 +328,10 @@
             <div class="space-y-1.5">
               {#each campaign.steps as step, i (step.id ?? i)}
                 <div class="flex items-center gap-2.5 rounded-lg border border-outline-variant/20 bg-surface-container-low/40 px-3 py-2">
-                  <span class="text-2xs font-semibold tabular-nums text-on-surface-variant/70 w-14 shrink-0">
+                  <span class="text-2xs font-semibold tabular-nums text-on-surface-variant w-14 shrink-0">
                     {offsetLabel(step.offsetMinutes)}
                   </span>
-                  <Papicon icon={step.delivery === 'DM' ? 'mail' : 'hash'} size={13} class="text-on-surface-variant/60 shrink-0" />
+                  <Papicon icon={step.delivery === 'DM' ? 'mail' : 'hash'} size={13} class="text-on-surface-variant shrink-0" />
                   <p class="text-xs text-on-surface truncate flex-1 min-w-0">{step.content}</p>
                   {#if step.status === 'SENT'}
                     <span class="flex items-center gap-1 text-2xs text-success shrink-0">
@@ -398,7 +400,7 @@
   size="xl"
   closeOnBackdropClick={!saving}
 >
-  <div class="p-5 space-y-4">
+  <div class="space-y-4">
     <!-- ── Général ────────────────────────────────────────────────────── -->
     <div class="campaign-section">
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -452,7 +454,7 @@
               {#if form.steps.length > 1}
                 <button
                   type="button"
-                  class="p-1.5 rounded-lg hover:bg-error/10 text-on-surface-variant/70 hover:text-error transition-colors"
+                  class="p-1.5 rounded-lg hover:bg-error/10 text-on-surface-variant hover:text-error transition-colors"
                   onclick={() => (form.steps = form.steps.filter((_, i) => i !== index))}
                   title="Retirer l'étape"
                 >
@@ -585,7 +587,7 @@
         <label class="block">
           <span class="text-xs font-bold text-on-surface-variant/80 ml-1 mb-2 block">Code d'invitation à créditer</span>
           <FormInput type="text" bind:value={form.inviteCode} placeholder="ex. saison3" className="w-full" />
-          <span class="text-2xs text-on-surface-variant/60 ml-1 mt-1 block">
+          <span class="text-2xs text-on-surface-variant ml-1 mt-1 block">
             Les arrivées passées par ce code depuis la date pivot sont comptées comme conversions.
             Sans lui, aucune arrivée n'est attribuable à la campagne.
           </span>
@@ -603,7 +605,7 @@
             placeholder="1234…, 5678…"
             className="w-full"
           />
-          <span class="text-2xs text-on-surface-variant/60 ml-1 mt-1 block">
+          <span class="text-2xs text-on-surface-variant ml-1 mt-1 block">
             Serveurs partenaires où Kotbo est présent. Les étapes en salon y sont postées si le salon
             y existe sous le même identifiant ; les serveurs injoignables comptent comme des échecs.
           </span>

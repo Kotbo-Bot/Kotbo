@@ -20,6 +20,7 @@ import {
   type MemberValue,
   type RoleValue,
 } from './values.js';
+import { UserFacingError } from '../../../utils/userFacingError.js';
 
 /**
  * Interpréteur de workflows.
@@ -127,7 +128,7 @@ export interface RunOptions {
 // MOTEUR
 // ============================================================================
 
-class BudgetExceededError extends Error {}
+class BudgetExceededError extends UserFacingError {}
 
 export async function runWorkflow(options: RunOptions): Promise<ExecutionOutcome> {
   const { graph, effects } = options;

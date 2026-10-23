@@ -17,6 +17,7 @@ import { randomBytes } from 'node:crypto';
 import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
 import { getApiUrl } from '../../api/shared/core.js';
+import { UserFacingError } from '../../utils/userFacingError.js';
 
 /** Types acceptes par les embeds Discord pour `image` et `thumbnail`. */
 export const BROADCAST_IMAGE_MIME_TYPES = [
@@ -45,7 +46,7 @@ export interface StoredBroadcastMedia {
   createdAt: string;
 }
 
-export class BroadcastMediaError extends Error {
+export class BroadcastMediaError extends UserFacingError {
   constructor(readonly statusCode: number, message: string) {
     super(message);
     this.name = 'BroadcastMediaError';

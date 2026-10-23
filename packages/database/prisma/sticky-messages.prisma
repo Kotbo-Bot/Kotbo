@@ -26,6 +26,22 @@ model StickyMessage {
   embedTitle   String?
   embedColor   String  @default("#5865F2")
 
+  // ── Payload Discord brut (optionnel) ───────────────────────────────────────
+  /// Active `jsonPayload` à la place du texte et de l'embed : contenu, embeds
+  /// et composants tels que l'API Discord les attend.
+  jsonEnabled Boolean @default(false)
+  jsonPayload String?
+
+  // ── Identité personnalisée via webhook (optionnel) ─────────────────────────
+  /// Publie par un webhook du salon, sous le nom et l'avatar choisis.
+  /// Demande la permission Gérer les webhooks.
+  webhookEnabled   Boolean @default(false)
+  webhookName      String?
+  webhookAvatarUrl String?
+  webhookId        String?
+  /// Jeton scellé (utils/secretBox) : il permet d'écrire dans le salon.
+  webhookToken     String?
+
   // ── Politique de renvoi ────────────────────────────────────────────────────
   /// Nombre de messages postés dans le salon avant que le sticky ne soit renvoyé.
   messageThreshold Int @default(5)

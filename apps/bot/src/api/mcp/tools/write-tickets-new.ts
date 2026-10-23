@@ -2,7 +2,7 @@
 import prisma from '../../../utils/db.js';
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, EmbedBuilder, PermissionFlagsBits } from 'discord.js';
 import { z } from 'zod';
-import { type McpToolContext, err, ok, resolveMember } from '../toolkit.js';
+import { type McpToolContext, err, ok, resolveMember, toolError } from '../toolkit.js';
 import { clampCommentTimeout } from '../../../services/features/ticketSatisfactionService.js';
 
 export function registerWriteTicketsNewTools(ctx: McpToolContext) {
@@ -147,7 +147,7 @@ export function registerWriteTicketsNewTools(ctx: McpToolContext) {
           await audit(key_name, 'Création ticket MCP', ticket.id, `Cible: ${openerMember.user.tag} | Salon: #${ticketChannel.name}`);
           return ok({ ok: true, ticketId: ticket.id, channelId: ticketChannel.id, channelName: ticketChannel.name });
         } catch (e) {
-          return err(`Erreur lors de la création du ticket : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e, 'Erreur lors de la création du ticket');
         }
       })
     );
@@ -243,7 +243,7 @@ export function registerWriteTicketsNewTools(ctx: McpToolContext) {
           await audit(key_name, 'Configuration tickets MCP', 'Mise à jour des paramètres globaux', '');
           return ok({ ok: true });
         } catch (e) {
-          return err(`Erreur de mise à jour: ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e, 'Erreur de mise à jour');
         }
       })
     );
@@ -298,7 +298,7 @@ export function registerWriteTicketsNewTools(ctx: McpToolContext) {
           await audit(key_name, 'Configuration tickets MCP', `Nouveau type de ticket: ${label}`, `ID: ${id}`);
           return ok({ ok: true, ticketTypes: filtered });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -321,7 +321,7 @@ export function registerWriteTicketsNewTools(ctx: McpToolContext) {
           await audit(key_name, 'Configuration tickets MCP', 'Embed d\'ouverture de tickets envoyé', '');
           return ok({ ok: true });
         } catch (e) {
-          return err(`Erreur d'envoi du panel : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e, "Erreur d'envoi du panel");
         }
       })
     );
@@ -351,7 +351,7 @@ export function registerWriteTicketsNewTools(ctx: McpToolContext) {
           await audit(key_name, 'Configuration tickets MCP', `Type de ticket supprimé: ${id}`, `ID: ${id}`);
           return ok({ ok: true, ticketTypes: filtered });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );

@@ -18,6 +18,7 @@ import {
 } from '@kotbo/shared';
 import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
+import { UserFacingError } from '../../utils/userFacingError.js';
 
 /**
  * Staff Simulator - orchestration d'une session d'entraînement.
@@ -76,7 +77,7 @@ export function sanitizeSimulationConfigPatch(body: Record<string, unknown>): Re
   return patch;
 }
 
-export class ScenarioValidationError extends Error {
+export class ScenarioValidationError extends UserFacingError {
   constructor(public readonly issues: { code: string; message: string }[]) {
     super(issues.map((i) => i.message).join(' '));
     this.name = 'ScenarioValidationError';
@@ -207,7 +208,7 @@ async function getSimulationWebhook(channel: TextChannel, client: Client): Promi
 // SESSIONS
 // ============================================================================
 
-export class SimulationError extends Error {}
+export class SimulationError extends UserFacingError {}
 
 /** Une seule session à la fois par personne, pour ne pas mélanger les réponses. */
 async function assertNoRunningSession(guildId: string, traineeId: string): Promise<void> {

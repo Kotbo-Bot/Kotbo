@@ -477,7 +477,8 @@ describe('création d\'un salon temporaire', () => {
     // Le câblage complet : gabarit de nom, nombre de places, et surcharges
     // calculées à partir de la catégorie. Sans lui, le panneau du dashboard
     // n'a aucun effet sur les salons créés.
-    guildConfig = generatorConfig({ userLimit: 7, ownerPowers: ['mute'] });
+    // Serveur en français : le gabarit par défaut suit la langue du serveur.
+    guildConfig = { ...generatorConfig({ userLimit: 7, ownerPowers: ['mute'] }), language: 'fr' };
 
     const inherited = new Map<string, unknown>([
       // La catégorie refuse nommément l'accès à un membre : le salon temporaire
@@ -527,6 +528,45 @@ describe('création d\'un salon temporaire', () => {
     ]);
 
     expect(created).toHaveLength(1);
+    tempChannels.delete(CHANNEL);
+  });
+
+  test('« Ceux qui sont en vocal » : le créateur déplacé dans son salon peut écrire, pas un absent', async () => {
+    // Le créateur n'a aucune surcharge d'écriture à la naissance (@everyone est
+    // refusé) : s'il n'est pas traité comme présent, il est muet chez lui.
+    guildConfig = generatorConfig({ textChat: 'inVoice' });
+
+    const { guild, created } = fakeCreationGuild(fakeCategory());
+    const { newState, oldState } = fakeJoiningMember(guild);
+
+    // Le salon créé garde trace des écritures de permissions, et le déplacement
+    // du créateur le fait apparaître dans ses occupants.
+    const ecritures: Array<{ id: string; patch: Record<string, unknown> }> = [];
+    let salonCree: { members: Map<string, unknown>; permissionOverwrites: Record<string, unknown> } | undefined;
+    const creerSalon = guild.channels.create;
+    guild.channels.create = mock(async (payload: Record<string, unknown>) => {
+      const salon = await creerSalon(payload) as unknown as NonNullable<typeof salonCree>;
+      salon.permissionOverwrites.edit = mock(async (cible: string | { id: string }, patch: Record<string, unknown>) => {
+        ecritures.push({ id: typeof cible === 'string' ? cible : cible.id, patch });
+      });
+      // OTHER est sur le serveur, hors du salon : sans lui l'assertion finale ne prouverait rien.
+      (salon as unknown as { guild: { members: { cache: Map<string, unknown> } } }).guild.members.cache = new Map([[OTHER, { id: OTHER }]]);
+      salonCree = salon;
+      return salon;
+    }) as typeof guild.channels.create;
+    newState.setChannel = mock(async () => { salonCree!.members.set(OWNER, {}); });
+
+    const { client, listeners } = fakeClient();
+    registerTempVoiceListener(client);
+    await listeners.get(Events.VoiceStateUpdate)?.(oldState, newState);
+
+    expect(created).toHaveLength(1);
+    expect(ecritures.filter((e) => e.id === OWNER && e.patch.SendMessages === true)).toHaveLength(1);
+    expect(ecritures.some((e) => e.id === OTHER)).toBe(false);
+    const overwrites = created[0]?.permissionOverwrites as Array<{ id: string; deny: bigint }>;
+    const everyone = overwrites.find((entry) => entry.id === GUILD);
+    expect((everyone!.deny & PermissionFlagsBits.SendMessages) === PermissionFlagsBits.SendMessages).toBe(true);
+
     tempChannels.delete(CHANNEL);
   });
 
@@ -1732,7 +1772,8 @@ describe('chat textuel du salon', () => {
     // @everyone retrouve sa catégorie, et le propriétaire aussi : lui laisser
     // la surcharge posée à la fermeture ferait du salon rouvert un endroit où
     // lui seul garde un droit explicite.
-    expect(edits.map((entry) => entry.id)).toEqual([GUILD, OWNER]);
+    // Le propriétaire d'abord : un appel refusé entre les deux ne le laisse pas muet.
+    expect(edits.map((entry) => entry.id)).toEqual([OWNER, GUILD]);
     expect(edits[0]?.patch.SendMessages).toBe(true);
     expect(edits[1]?.patch.SendMessages).toBe(true);
     tempChannels.delete(CHANNEL);
@@ -2149,8 +2190,10 @@ describe('câblage du panneau refondu', () => {
     channel.members.set(OWNER, {});
     await listeners.get(Events.VoiceStateUpdate)?.(...sortieVocale(channel, invite));
 
-    // Rien de plus n'a été écrit : la surcharge d'« Autoriser » est intacte.
-    expect(edits).toHaveLength(ecrituresApresAutorisation);
+    // En « ceux qui sont en vocal », seule l'écriture suit la présence : le
+    // départ retire ce bit et rien d'autre — l'accès d'« Autoriser » reste.
+    expect(edits).toHaveLength(ecrituresApresAutorisation + 1);
+    expect(edits.at(-1)).toEqual({ id: INVITE, patch: { SendMessages: null } });
     tempChannels.delete(CHANNEL);
   });
 
@@ -2431,6 +2474,23 @@ describe('configuration des demandes d\'accès', () => {
     await scene.trancher('ok');
 
     expect(scene.edits.filter((e) => e.id === demandeur.id)).not.toHaveLength(0);
+    scene.ranger();
+  });
+
+  test("demande acceptée en « Personne » : le demandeur entre sans obtenir l'écriture", async () => {
+    const demandeur = fakeTarget('733000000000000000', false);
+    const scene = await demandeDeposee({
+      ligne: ligneDemandes(),
+      demandeur,
+      repondeur: fakeTarget(OWNER, false),
+    });
+    tempChannels.get(CHANNEL)!.modeEcriture = 'nobody';
+
+    await scene.trancher('ok');
+
+    const patch = scene.edits.filter((e) => e.id === demandeur.id).at(-1)?.patch;
+    expect(patch?.Connect).toBe(true);
+    expect(patch?.SendMessages).not.toBe(true);
     scene.ranger();
   });
 
@@ -2956,7 +3016,8 @@ describe('Vitesse de réécriture du panneau', () => {
 
   test('la mention du propriétaire survit à la réécriture', async () => {
     // Une édition remplace tous les composants : sans repasser la mention, la
-    // ligne « @propriétaire » disparaissait au premier changement d'état.
+    // ligne « @propriétaire » disparaissait au premier changement d'état. Par
+    // défaut (`panel`, V2), elle vit dans la carte, pas dans un `content`.
     const { channel, message } = panneauDeSalon('930000000000000002');
     const { client, listeners } = fakeClient();
     registerTempVoiceListener(client);
@@ -2970,8 +3031,9 @@ describe('Vitesse de réécriture du panneau', () => {
     await new Promise((resolve) => setTimeout(resolve, 300));
 
     const appels = message.edit.mock.calls as unknown as unknown[][];
-    const charge = appels[0]?.[0] as { content?: string } | undefined;
-    expect(charge?.content).toBe(`<@${OWNER}>`);
+    const charge = appels[0]?.[0] as { content?: string; embeds?: Array<{ data: { description?: string } }> } | undefined;
+    expect(charge?.content).toBeUndefined();
+    expect(charge?.embeds?.[0]?.data.description).toContain(`<@${OWNER}>`);
 
     tempChannels.delete('930000000000000002');
   }, 10_000);
@@ -3046,6 +3108,12 @@ describe('Modes d\'écriture : ce que le libellé promet', () => {
   function dernierPatch(edits: Array<{ id: string; patch: Record<string, unknown> }>, id: string) {
     return [...edits].reverse().find((e) => e.id === id)?.patch;
   }
+
+  test('« Hérité » retire les surcharges d\'écriture du mode, la catégorie décide de nouveau', async () => {
+    const edits = await basculerVers('inherit');
+    expect(dernierPatch(edits, OWNER)).toEqual({ SendMessages: null });
+    expect(dernierPatch(edits, GUILD)).toEqual({ SendMessages: null });
+  });
 
   test('« Personne » fait taire aussi ceux qui ont été autorisés', async () => {
     // « Personne — y compris moi. Le salon devient un mur d'affichage. » Couper
@@ -3126,7 +3194,7 @@ describe('Sous-panneau « Membres » : deux portes', () => {
     tempChannels.delete(CHANNEL);
     guildConfig = null;
 
-    const appels = (interaction.reply as unknown as { mock: { calls: unknown[][] } }).mock.calls;
+    const appels = (interaction.editReply as unknown as { mock: { calls: unknown[][] } }).mock.calls;
     return (appels[0]?.[0] ?? {}) as { components?: Array<{ components: Array<{ data: Record<string, unknown> }> }> };
   }
 
@@ -3224,7 +3292,7 @@ describe('Verite des presents : le cache de discord.js ment par omission', () =>
     expect(recuperes.flat()).toContain(ABSENT);
 
     // ...et il figure dans le menu des presents.
-    const appels = (interaction.reply as unknown as { mock: { calls: unknown[][] } }).mock.calls;
+    const appels = (interaction.editReply as unknown as { mock: { calls: unknown[][] } }).mock.calls;
     const charge = (appels[0]?.[0] ?? {}) as {
       components?: Array<{ components: Array<{ data: Record<string, unknown>; options?: unknown[] }> }>;
     };
@@ -3266,25 +3334,20 @@ describe('Les trois portes : ouvrir a cote, ou reprendre le sous-panneau', () =>
 
     tempChannels.delete(CHANNEL);
     guildConfig = null;
-    return scene.interaction as unknown as {
-      reply: { mock: { calls: unknown[][] } };
-      update: { mock: { calls: unknown[][] } };
-    };
+    return scene;
   }
 
   test('depuis le panneau public, un ephemere s ouvre a cote', async () => {
     // L'editer effacerait le panneau pour tout le serveur.
-    const interaction = await cliquerPorte(false);
-    expect(interaction.reply.mock.calls.length).toBeGreaterThan(0);
-    expect(interaction.update.mock.calls).toHaveLength(0);
+    const { calls } = await cliquerPorte(false);
+    expect(calls).toEqual(['defer', 'editReply']);
   }, 10_000);
 
   test('depuis un sous-panneau, le message existant est repris', async () => {
     // C'est le cas du bouton « Retour » du mode compact : sans cela, il empilait
     // un ephemere de plus a chaque retour - exactement ce que ce mode evite.
-    const interaction = await cliquerPorte(true);
-    expect(interaction.update.mock.calls.length).toBeGreaterThan(0);
-    expect(interaction.reply.mock.calls).toHaveLength(0);
+    const { calls } = await cliquerPorte(true);
+    expect(calls).toEqual(['deferUpdate', 'editReply']);
   }, 10_000);
 });
 
@@ -3336,7 +3399,7 @@ describe('Limites de Discord : depassees, le message entier est rejete', () => {
     tempChannels.delete(CHANNEL);
     guildConfig = null;
 
-    const appels = (scene.interaction.reply as unknown as { mock: { calls: unknown[][] } }).mock.calls;
+    const appels = (scene.interaction.editReply as unknown as { mock: { calls: unknown[][] } }).mock.calls;
     return appels[0]?.[0];
   }
 
@@ -3360,6 +3423,12 @@ describe('Limites de Discord : depassees, le message entier est rejete', () => {
         expect(rangee.composants.length).toBeLessThanOrEqual(5);
         for (const composant of rangee.composants) {
           expect(optionsDe(composant).length).toBeLessThanOrEqual(25);
+          for (const option of optionsDe(composant)) {
+            const o = ((option as { data?: unknown }).data ?? option) as { label?: string; description?: string; value?: string };
+            expect((o.label ?? '').length).toBeLessThanOrEqual(100);
+            expect((o.description ?? '').length).toBeLessThanOrEqual(100);
+            expect((o.value ?? '').length).toBeLessThanOrEqual(100);
+          }
         }
       }
     }
@@ -3553,7 +3622,7 @@ describe('Ephemeres : jamais de content brut', () => {
     tempChannels.delete(CHANNEL);
     guildConfig = null;
 
-    const appels = (scene.interaction.reply as unknown as { mock: { calls: unknown[][] } }).mock.calls;
+    const appels = (scene.interaction.editReply as unknown as { mock: { calls: unknown[][] } }).mock.calls;
     return appels.map((appel) => appel[0] as { content?: unknown; embeds?: unknown[] } | undefined);
   }
 
@@ -3799,7 +3868,7 @@ describe('Reglages admin, depuis « Salon »', () => {
     tempChannels.delete(CHANNEL);
     guildConfig = null;
 
-    const appels = (scene.interaction.reply as unknown as { mock: { calls: unknown[][] } }).mock.calls;
+    const appels = (scene.interaction.editReply as unknown as { mock: { calls: unknown[][] } }).mock.calls;
     const charge = (appels[0]?.[0] ?? {}) as {
       components?: Array<{ components: Array<{ data: Record<string, unknown> }> }>;
     };

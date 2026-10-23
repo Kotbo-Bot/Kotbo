@@ -3,6 +3,7 @@ import { SlashCommandBuilder, PermissionFlagsBits, MessageFlags, type ChatInputC
 import { errorEmbed, successEmbed } from '../../utils/embeds.js';
 import { getCommandMetadata } from '../../utils/i18n.js';
 import * as m from '../../lib/paraglide/messages.js';
+import { publicErrorMessage } from '../../utils/publicError.js';
 
 const meta = getCommandMetadata('b4_channel');
 const clearMeta = getCommandMetadata('b4_channel_clear');
@@ -97,7 +98,7 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
         embeds: [
           errorEmbed(
             'Erreur',
-            `Une erreur est survenue lors du nettoyage du salon : ${error instanceof Error ? error.message : String(error)}`
+            `Une erreur est survenue lors du nettoyage du salon : ${publicErrorMessage(error)}`
           ),
         ],
         flags: [MessageFlags.Ephemeral],
@@ -144,7 +145,7 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
         embeds: [
           errorEmbed(
             'Erreur',
-            `Une erreur est survenue lors de la duplication : ${error instanceof Error ? error.message : String(error)}`
+            `Une erreur est survenue lors de la duplication : ${publicErrorMessage(error)}`
           ),
         ],
       });

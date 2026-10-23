@@ -7,6 +7,7 @@ import prisma from '../../utils/db.js';
 import { extractTrackingInfo, resolveModuleFromCommand, wrapModuleTracking } from '../../utils/moduleTracking.js';
 import { getCommandMetadata, getEffectiveLocale, getLocale } from '../../utils/i18n.js';
 import * as m from '../../lib/paraglide/messages.js';
+import { publicErrorMessage } from '../../utils/publicError.js';
 
 // Noms et descriptions localises par Discord selon le client de chaque membre.
 // Le code lit les options par leur nom par defaut, celui de `meta.name`.
@@ -184,7 +185,7 @@ async function executeInternal(interaction: ChatInputCommandInteraction): Promis
       await interaction.editReply(m.gvw_cmd_created({ id: `\`${giveaway.id}\`` }, { locale }));
     } catch (err) {
       await interaction.editReply(
-        err instanceof Error ? err.message : m.gvw_cmd_create_failed({}, { locale }),
+        publicErrorMessage(err, m.gvw_cmd_create_failed({}, { locale })),
       );
     }
   }

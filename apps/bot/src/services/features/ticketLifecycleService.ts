@@ -190,7 +190,7 @@ export async function archiveTicket(
   const ticket = await prisma.ticket.findUnique({ where: { id: ticketId } });
   if (!ticket) throw new Error('Ticket introuvable.');
   if (ticket.status === 'ARCHIVED') throw new Error('Ce ticket est deja archive.');
-  if (ticket.status === 'PENDING' || ticket.status === 'REJECTED') {
+  if (ticket.status === 'PENDING' || ticket.status === 'QUEUED' || ticket.status === 'REJECTED') {
     throw new Error("Une demande qui n'a jamais donne lieu a un salon ne s'archive pas.");
   }
 

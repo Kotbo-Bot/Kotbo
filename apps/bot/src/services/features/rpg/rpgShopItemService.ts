@@ -28,12 +28,13 @@ import { clampInt } from './rpgBlackMarketPolicy.js';
 import { slotForItemType } from './rpgEquipment.js';
 import { syncDropReferences } from './rpgBestiaryService.js';
 import { syncRecipeReferences } from './rpgRecipeService.js';
+import { UserFacingError } from '../../../utils/userFacingError.js';
 
 /** Bornes des statistiques d'un objet : de quoi équilibrer, pas de quoi casser le combat. */
 export const ITEM_STAT_RANGE = { min: 0, max: 10_000 };
 export const ITEM_LEVEL_RANGE = { min: 0, max: 1_000 };
 
-export class ShopItemError extends Error {
+export class ShopItemError extends UserFacingError {
   constructor(message: string, readonly status: number) {
     super(message);
     this.name = 'ShopItemError';

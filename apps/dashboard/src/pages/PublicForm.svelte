@@ -167,7 +167,7 @@
       });
       if (!res.ok) {
         const err = await res.json();
-        submitError = err.error || 'Erreur lors de la soumission';
+        submitError = err.error || 'Impossible d\'envoyer. Réessaie.';
         return;
       }
       submitted = true;
@@ -240,7 +240,7 @@
     <div class="flex items-center justify-center min-h-[60vh]">
       <div class="text-center">
         <div class="w-12 h-12 rounded-full border-4 border-primary/20 border-t-primary animate-spin mx-auto mb-4"></div>
-        <p class="text-on-surface-variant/60">Chargement du formulaire…</p>
+        <p class="text-on-surface-variant">Chargement du formulaire…</p>
       </div>
     </div>
 
@@ -248,7 +248,7 @@
     <div class="max-w-lg mx-auto text-center py-24">
       <div class="flex justify-center mb-6 text-on-surface-variant/40"><Papicon icon="search" size={56} /></div>
       <h1 class="text-2xl font-semibold text-on-surface mb-3">Formulaire introuvable</h1>
-      <p class="text-on-surface-variant/60 text-sm">Ce formulaire n'existe pas ou n'est plus actif.</p>
+      <p class="text-on-surface-variant text-sm">Ce formulaire n'existe pas ou n'est plus actif.</p>
     </div>
 
   {:else if submitted}
@@ -265,7 +265,7 @@
             </svg>
           </div>
           <h1 class="text-2xl font-semibold text-on-surface mb-3">Réponse envoyée !</h1>
-          <p class="text-on-surface-variant/70 text-sm leading-relaxed">
+          <p class="text-on-surface-variant text-sm leading-relaxed">
             {theme?.confirmationText || 'Votre réponse a bien été reçue. Vous serez contacté prochainement par notre équipe.'}
           </p>
           <div class="mt-8 text-xs text-on-surface-variant/40">
@@ -284,7 +284,7 @@
           <div class="flex-1 h-1.5 bg-surface-container rounded-full overflow-hidden">
             <div class="h-full rounded-full transition-all duration-500" style="width:{progress}%;background:var(--form-color)"></div>
           </div>
-          <span class="text-xs font-semibold text-on-surface-variant/60 shrink-0">
+          <span class="text-xs font-semibold text-on-surface-variant shrink-0">
             {currentSection + 1} / {totalSections}
           </span>
         </div>
@@ -306,7 +306,7 @@
           {/if}
           <h1 class="text-2xl font-semibold text-on-surface">{form.name}</h1>
           {#if form.description}
-            <p class="text-on-surface-variant/70 mt-2 text-sm leading-relaxed">{form.description}</p>
+            <p class="text-on-surface-variant mt-2 text-sm leading-relaxed">{form.description}</p>
           {/if}
           {#if theme?.welcomeText}
             <p class="mt-3 text-sm leading-relaxed" style="color:var(--form-color)">{theme.welcomeText}</p>
@@ -315,7 +315,7 @@
             <div class="mt-4 pt-4 border-t border-outline-variant/10">
               <h2 class="text-lg font-bold text-on-surface">{sections[currentSection]?.title}</h2>
               {#if sections[currentSection]?.description}
-                <p class="text-sm text-on-surface-variant/60 mt-1">{sections[currentSection].description}</p>
+                <p class="text-sm text-on-surface-variant mt-1">{sections[currentSection].description}</p>
               {/if}
             </div>
           {/if}
@@ -337,7 +337,7 @@
               <h4 class="font-semibold text-on-surface text-sm">
                 {authRequired ? 'Connexion Discord obligatoire' : 'Connexion Discord recommandée'}
               </h4>
-              <p class="text-xs text-on-surface-variant/70 mt-0.5">
+              <p class="text-xs text-on-surface-variant mt-0.5">
                 {authRequired
                   ? 'Ce formulaire nécessite de se connecter avec Discord avant de pouvoir être rempli.'
                   : 'Associez votre compte Discord pour préremplir votre ID et votre pseudo automatiquement.'}
@@ -368,7 +368,7 @@
             {/if}
             <div>
               <h4 class="font-semibold text-on-surface text-sm">Connecté avec Discord</h4>
-              <p class="text-xs text-on-surface-variant/70 mt-0.5">En tant que <span class="font-bold text-success">{authStore.user?.username}</span> (ID: {authStore.user?.id})</p>
+              <p class="text-xs text-on-surface-variant mt-0.5">En tant que <span class="font-bold text-success">{authStore.user?.username}</span> (ID: {authStore.user?.id})</p>
             </div>
           </div>
           <button
@@ -392,7 +392,7 @@
             {#if field.required}<span class="text-error ml-1">*</span>{/if}
           </label>
           {#if field.description}
-            <p class="text-xs text-on-surface-variant/60 mb-3 leading-relaxed">{field.description}</p>
+            <p class="text-xs text-on-surface-variant mb-3 leading-relaxed">{field.description}</p>
           {/if}
 
           {#if field.type === 'short_text'}
@@ -477,14 +477,14 @@
             <div class="mt-2">
               <div class="flex items-center gap-2">
                 {#if field.scaleMinLabel}
-                  <span class="text-xs text-on-surface-variant/60 shrink-0">{field.scaleMinLabel}</span>
+                  <span class="text-xs text-on-surface-variant shrink-0">{field.scaleMinLabel}</span>
                 {/if}
                 <div class="flex gap-1 flex-1 justify-center flex-wrap">
                   {#each scale as n}
                     {@const selected = answers[field.id] === String(n)}
                     <label class="flex flex-col items-center gap-1 cursor-pointer">
                       <div class="w-9 h-9 rounded-full border-2 flex items-center justify-center text-sm font-bold transition-all
- {selected ? 'text-white scale-110' : 'border-outline-variant/40 hover:border-primary/50 text-on-surface-variant/70'}"
+ {selected ? 'text-white scale-110' : 'border-outline-variant/40 hover:border-primary/50 text-on-surface-variant'}"
                         style={selected ? `background:var(--form-color);border-color:var(--form-color)` : ''}>
                         {n}
                       </div>
@@ -494,7 +494,7 @@
                   {/each}
                 </div>
                 {#if field.scaleMaxLabel}
-                  <span class="text-xs text-on-surface-variant/60 shrink-0">{field.scaleMaxLabel}</span>
+                  <span class="text-xs text-on-surface-variant shrink-0">{field.scaleMaxLabel}</span>
                 {/if}
               </div>
             </div>
@@ -515,9 +515,9 @@
               <table class="w-full text-sm min-w-max">
                 <thead>
                   <tr>
-                    <th class="text-left py-2 pr-4 text-xs text-on-surface-variant/50 font-semibold"></th>
+                    <th class="text-left py-2 pr-4 text-xs text-on-surface-variant font-semibold"></th>
                     {#each field.columns || [] as col}
-                      <th class="text-center py-2 px-3 text-xs text-on-surface-variant/60 font-semibold">{col.label}</th>
+                      <th class="text-center py-2 px-3 text-xs text-on-surface-variant font-semibold">{col.label}</th>
                     {/each}
                   </tr>
                 </thead>

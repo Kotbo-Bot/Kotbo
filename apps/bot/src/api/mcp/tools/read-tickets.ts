@@ -12,7 +12,7 @@ export function registerReadTicketsTools(ctx: McpToolContext) {
       {
         description: 'Liste les tickets de support du serveur.',
         inputSchema: {
-          status: z.enum(['PENDING', 'OPEN', 'CLAIMED', 'CLOSED', 'REJECTED']).optional(),
+          status: z.enum(['PENDING', 'QUEUED', 'OPEN', 'CLAIMED', 'CLOSED', 'REJECTED']).optional(),
           limit: z.number().int().min(1).max(50).default(20),
           offset: z.number().int().min(0).default(0),
         },

@@ -5,6 +5,7 @@ import { getLocale, resolveGuildLocale, type BotLocale } from '../../utils/i18n.
 import * as m from '../../lib/paraglide/messages.js';
 import { Client, EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder, MessageFlags, type ButtonInteraction, type ColorResolvable, type Guild, type Message, type MessageMentionOptions } from 'discord.js';
 import prisma from '../../utils/db.js';
+import { publishGuildSignal } from '../site/siteLive.js';
 import { upsertRetryingRace } from '../../utils/upsertRetry.js';
 import { logger } from '../../utils/logger.js';
 import { resolveEmojiShortcodes } from '../../utils/emojis.js';
@@ -35,6 +36,7 @@ import {
   type GiveawayGeneratedLabels,
   type GiveawayTextContext,
 } from './giveawayAppearance.js';
+import { publicErrorMessage } from '../../utils/publicError.js';
 
 // Cooldown map to prevent spamming/double clicks on the join button
 const joinCooldowns = new Map<string, number>();
@@ -419,7 +421,7 @@ export async function createGiveaway(
     // Ne pas conserver un concours impossible à rejoindre dans le dashboard.
     await publishedMessage?.delete().catch(() => undefined);
     await prisma.giveaway.delete({ where: { id: giveaway.id } }).catch(() => undefined);
-    throw new Error(m.gvw_err_publish({ reason: errorMessage(error) }, { locale }));
+    throw new Error(m.gvw_err_publish({ reason: publicErrorMessage(error) }, { locale }));
   }
 
   return giveaway;
@@ -428,20 +430,32 @@ export async function createGiveaway(
 /**
  * Gère l'action de clic sur le bouton d'inscription d'un giveaway
  */
-export async function handleGiveawayJoin(interaction: ButtonInteraction) {
-  const giveawayId = interaction.customId.split(':')[1];
-  const userId = interaction.user.id;
-  const guildId = interaction.guildId;
+/** Qui demande à entrer dans un concours, et d'où l'on sait ce qu'il est. */
+export type GiveawayParticipant = {
+  userId: string;
+  roleIds: string[];
+  accountCreatedAt: Date | null;
+  joinedAt: Date | null;
+  guildName: string;
+};
 
-  // Un concours vit dans un salon de serveur : hors serveur, ni les réglages ni
-  // les rôles du membre ne sont lisibles, et le tirage n'a plus de sens.
-  if (!guildId) {
-    return interaction.reply({
-      // Hors serveur, la seule langue connue est celle du client Discord.
-      content: m.gvw_guild_only({}, { locale: getLocale(interaction) }),
-      flags: [MessageFlags.Ephemeral],
-    });
-  }
+export type GiveawayToggleResult =
+  | { ok: true; joined: boolean; message: string }
+  | { ok: false; reason: 'cooldown' | 'denied' | 'linked' | 'ended' | 'error'; message: string };
+
+/**
+ * Entrée ou retrait d'un concours, quelle que soit la porte : bouton Discord
+ * ou site communautaire. Toutes les règles vivent ici (délai anti double clic,
+ * filtre de participation, comptes liés, verrou de la ligne), ainsi que la
+ * mise à jour de l'annonce et l'événement « nouveau participant ».
+ */
+export async function toggleGiveawayParticipation(
+  client: Client,
+  guildId: string,
+  giveawayId: string,
+  participant: GiveawayParticipant,
+): Promise<GiveawayToggleResult> {
+  const { userId } = participant;
 
   // Anti-double-clic / Anti-spam : Cooldown de 2 secondes par utilisateur et par giveaway
   const cooldownKey = `${userId}:${giveawayId}`;
@@ -449,10 +463,7 @@ export async function handleGiveawayJoin(interaction: ButtonInteraction) {
   const lastClick = joinCooldowns.get(cooldownKey);
 
   if (lastClick && now - lastClick < 2000) {
-    return interaction.reply({
-      content: m.gvw_cooldown({}, { locale: await resolveGuildLocale(guildId) }),
-      flags: [MessageFlags.Ephemeral],
-    });
+    return { ok: false, reason: 'cooldown', message: m.gvw_cooldown({}, { locale: await resolveGuildLocale(guildId) }) };
   }
   joinCooldowns.set(cooldownKey, now);
 
@@ -470,16 +481,13 @@ export async function handleGiveawayJoin(interaction: ButtonInteraction) {
   if (hasParticipationRules(config)) {
     const check = await checkParticipation(guildId, {
       userId,
-      roleIds: memberRoleIds(interaction),
-      accountCreatedAt: interaction.user.createdAt ?? null,
-      joinedAt: memberJoinedAt(interaction),
-      guildName: interaction.guild?.name,
+      roleIds: participant.roleIds,
+      accountCreatedAt: participant.accountCreatedAt,
+      joinedAt: participant.joinedAt,
+      guildName: participant.guildName,
     }, config);
     if (!check.allowed) {
-      return interaction.reply({
-        content: resolveEmojiShortcodes(check.reason).slice(0, 2000),
-        flags: [MessageFlags.Ephemeral],
-      });
+      return { ok: false, reason: 'denied', message: resolveEmojiShortcodes(check.reason).slice(0, 2000) };
     }
   }
 
@@ -502,7 +510,8 @@ export async function handleGiveawayJoin(interaction: ButtonInteraction) {
         where: { id: giveawayId },
       });
 
-      if (!giveaway || giveaway.ended) {
+      // Le serveur est revérifié : le site désigne le concours par son seul identifiant.
+      if (!giveaway || giveaway.ended || giveaway.guildId !== guildId) {
         throw new Error('ENDED_OR_NOT_FOUND');
       }
 
@@ -525,7 +534,7 @@ export async function handleGiveawayJoin(interaction: ButtonInteraction) {
         participantCount: updatedParticipants.length,
         endsAt: giveaway.endsAt,
         host: giveaway.createdById ? `<@${giveaway.createdById}>` : '',
-        guildName: interaction.guild?.name ?? '',
+        guildName: participant.guildName,
       });
 
       if (isParticipant) {
@@ -557,7 +566,7 @@ export async function handleGiveawayJoin(interaction: ButtonInteraction) {
 
     // 4. Mettre à jour l'embed Discord en temps réel
     if (giveaway.messageId) {
-      const channel = interaction.channel;
+      const channel = await client.channels.fetch(giveaway.channelId).catch(() => null);
       if (channel?.isTextBased()) {
         const message = await channel.messages.fetch(giveaway.messageId).catch(() => null);
         if (message) {
@@ -596,31 +605,50 @@ export async function handleGiveawayJoin(interaction: ButtonInteraction) {
       });
     }
 
-    return interaction.reply({
-      content: resolveEmojiShortcodes(responseText).slice(0, 2000),
-      flags: [MessageFlags.Ephemeral],
-    });
+    publishGuildSignal(guildId, 'module:giveaways');
+    return { ok: true, joined, message: resolveEmojiShortcodes(responseText).slice(0, 2000) };
   } catch (err: unknown) {
     if (errorMessage(err) === 'LINKED_ACCOUNT') {
-      return interaction.reply({
-        content: resolveEmojiShortcodes(
-          deniedLinkedAccountText(config, interaction.guild?.name ?? ''),
-        ).slice(0, 2000),
-        flags: [MessageFlags.Ephemeral],
-      });
+      return {
+        ok: false,
+        reason: 'linked',
+        message: resolveEmojiShortcodes(deniedLinkedAccountText(config, participant.guildName)).slice(0, 2000),
+      };
     }
     if (errorMessage(err) === 'ENDED_OR_NOT_FOUND') {
-      return interaction.reply({
-        content: m.gvw_join_ended({}, { locale: config.locale }),
-        flags: [MessageFlags.Ephemeral],
-      });
+      return { ok: false, reason: 'ended', message: m.gvw_join_ended({}, { locale: config.locale }) };
     }
-    logger.error('GiveawayService', 'Erreur lors de handleGiveawayJoin :', err);
+    logger.error('GiveawayService', 'Erreur lors de toggleGiveawayParticipation :', err);
+    return { ok: false, reason: 'error', message: m.gvw_join_error({}, { locale: config.locale }) };
+  }
+}
+
+export async function handleGiveawayJoin(interaction: ButtonInteraction) {
+  const giveawayId = interaction.customId.split(':')[1];
+  const guildId = interaction.guildId;
+
+  // Un concours vit dans un salon de serveur : hors serveur, ni les réglages ni
+  // les rôles du membre ne sont lisibles, et le tirage n'a plus de sens.
+  if (!guildId) {
     return interaction.reply({
-      content: m.gvw_join_error({}, { locale: config.locale }),
+      // Hors serveur, la seule langue connue est celle du client Discord.
+      content: m.gvw_guild_only({}, { locale: getLocale(interaction) }),
       flags: [MessageFlags.Ephemeral],
     });
   }
+
+  const result = await toggleGiveawayParticipation(interaction.client, guildId, giveawayId, {
+    userId: interaction.user.id,
+    roleIds: memberRoleIds(interaction),
+    accountCreatedAt: interaction.user.createdAt ?? null,
+    joinedAt: memberJoinedAt(interaction),
+    guildName: interaction.guild?.name ?? '',
+  });
+
+  return interaction.reply({
+    content: result.message,
+    flags: [MessageFlags.Ephemeral],
+  });
 }
 
 /**

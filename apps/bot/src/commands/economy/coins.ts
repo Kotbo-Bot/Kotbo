@@ -6,6 +6,7 @@ import { E } from '../../utils/emojis.js';
 import { v2Message } from '@arcscord/components';
 import { getEffectiveLocale, getCommandMetadata } from '../../utils/i18n.js';
 import * as m from '../../lib/paraglide/messages.js';
+import { publicErrorMessage } from '../../utils/publicError.js';
 
 const meta = getCommandMetadata('b3_coins');
 const membreMeta = getCommandMetadata('b3_coins_membre');
@@ -54,7 +55,7 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
   } catch (err: unknown) {
     await interaction.reply(v2Message(
       { flags: MessageFlags.Ephemeral },
-      errorContainer(m.b3_error_title({}, { locale }), err instanceof Error ? err.message : m.b3_coins_error_desc({}, { locale })),
+      errorContainer(m.b3_error_title({}, { locale }), publicErrorMessage(err, m.b3_coins_error_desc({}, { locale }))),
     ));
   }
 }

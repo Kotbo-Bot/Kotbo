@@ -2,11 +2,10 @@ import type { Client } from 'discord.js';
 import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
 import { cache } from '../../utils/cache.js';
-import { BRAND_THEME_COLOR } from '../../utils/brandPalette.js';
 import { resolveGuildLocale, type BotLocale, FALLBACK_LOCALE } from '../../utils/i18n.js';
 import { sanitizeFormTheme } from '../../utils/formCustomization.js';
 import type { CustomFormStructure } from '../features/customFormService.js';
-import { normalizeAccent, type OgCardSpec } from './ogImageService.js';
+import { OG_ACCENT, OG_CARD_VERSION, normalizeAccent, type OgCardSpec } from './ogImageService.js';
 import * as m from '../../lib/paraglide/messages.js';
 
 // ============================================================================
@@ -94,7 +93,7 @@ function guildIdentity(client: Client, guildId: string): { name: string; iconUrl
 
 /** Chemin de l'image de carte pour un chemin de page donne. */
 function imagePathFor(path: string, version: string): string {
-  return `/api/og/image?path=${encodeURIComponent(path)}&v=${encodeURIComponent(version)}`;
+  return `/api/og/image?path=${encodeURIComponent(path)}&v=${OG_CARD_VERSION}.${encodeURIComponent(version)}`;
 }
 
 /**
@@ -141,7 +140,8 @@ async function transcriptMessageCount(transcriptId: string): Promise<number | nu
 const DASHBOARD_SECTIONS: { prefix: string; fr: string; en: string }[] = [
   { prefix: '/analytics', fr: 'Analytique', en: 'Analytics' },
   { prefix: '/pulse', fr: 'Pulse', en: 'Pulse' },
-  { prefix: '/inbox', fr: 'Boite de reception', en: 'Inbox' },
+  { prefix: '/notifications', fr: 'Notifications', en: 'Notifications' },
+  { prefix: '/alerts', fr: 'Alertes du serveur', en: 'Server alerts' },
   { prefix: '/members', fr: 'Membres', en: 'Members' },
   { prefix: '/invitations', fr: 'Invitations', en: 'Invites' },
   { prefix: '/logs', fr: 'Journaux Discord', en: 'Discord logs' },
@@ -154,6 +154,7 @@ const DASHBOARD_SECTIONS: { prefix: string; fr: string; en: string }[] = [
   { prefix: '/security/quick-setup', fr: 'Securite - Demarrage rapide', en: 'Security - Quick setup' },
   { prefix: '/security/anti-raid', fr: 'Securite - Anti-raid', en: 'Security - Anti-raid' },
   { prefix: '/security/filters', fr: 'Securite - Filtres', en: 'Security - Filters' },
+  { prefix: '/security/aegis', fr: 'Securite - AegisAI', en: 'Security - AegisAI' },
   { prefix: '/security/accounts', fr: 'Securite - Comptes', en: 'Security - Accounts' },
   { prefix: '/security/sanctions', fr: 'Securite - Sanctions', en: 'Security - Sanctions' },
   { prefix: '/security', fr: 'Securite', en: 'Security' },
@@ -223,7 +224,7 @@ function baseMetadata(locale: BotLocale): OgMetadata {
     description: m.og_default_desc({}, { locale }),
     imagePath: null,
     imageAlt: SITE_NAME,
-    themeColor: BRAND_THEME_COLOR,
+    themeColor: OG_ACCENT,
     siteName: SITE_NAME,
     authorName: null,
     ogType: 'website',
@@ -300,7 +301,45 @@ function dashboardMetadata(path: string, section: string, locale: BotLocale): Og
   return meta;
 }
 
+/**
+ * Accueil du dashboard (`dash.kotbo.fr/`).
+ *
+ * C'est le lien que l'on colle le plus souvent pour presenter Kotbo : il porte
+ * la marque, en francais (la langue de la communaute), et les deux totaux que
+ * kotbo.fr affiche deja - lus a la meme source, `botInstanceStats`. Sans ces
+ * chiffres la carte reste une carte de marque : ils ne sont jamais inventes.
+ */
+async function homeMetadata(): Promise<OgMetadata> {
+  const locale: BotLocale = 'fr';
+  const meta = baseMetadata(locale);
+  meta.title = m.og_home_title({}, { locale });
+  meta.description = m.og_home_desc({}, { locale });
+  meta.imageAlt = meta.title;
+
+  const stats: { value: string; label: string }[] = [];
+  try {
+    const { _sum } = await prisma.botInstanceStats.aggregate({ _sum: { guildCount: true, userCount: true } });
+    if (_sum.guildCount) stats.push({ value: formatNumber(_sum.guildCount, locale), label: m.og_stat_servers({}, { locale }) });
+    if (_sum.userCount) stats.push({ value: formatNumber(_sum.userCount, locale), label: m.og_stat_community_members({}, { locale }) });
+  } catch (err) {
+    logger.warn('OpenGraph', `Totaux indisponibles pour la carte d'accueil: ${String(err)}`);
+  }
+
+  const version = stats.map((stat) => stat.value).join('-') || 'brand';
+  meta.imagePath = imagePathFor('/', version);
+  meta.card = {
+    cacheKey: `home:${version}`,
+    kicker: m.og_kicker_dashboard({}, { locale }),
+    title: m.og_home_card_title({}, { locale }),
+    subtitle: m.og_home_card_subtitle({}, { locale }),
+    stats,
+  };
+  return meta;
+}
+
 async function resolveByRoute(client: Client, path: string, segments: string[]): Promise<OgMetadata | null> {
+  if (segments.length === 0) return homeMetadata();
+
   // ── Ressources identifiees par un id ────────────────────────────────────
   if (segments[0] === 'transcripts' && segments[1] && !segments[2]) {
     return transcriptMetadata(client, path, segments[1]);
@@ -442,7 +481,7 @@ async function formMetadata(client: Client, path: string, formId: string): Promi
   );
 
   const theme = sanitizeFormTheme(form.theme);
-  const accent = normalizeAccent(theme?.accentColor, BRAND_THEME_COLOR);
+  const accent = normalizeAccent(theme?.accentColor, OG_ACCENT);
 
   const title = structure.title?.trim() || form.name;
   const description = form.description?.trim() || structure.description?.trim() || '';

@@ -445,24 +445,6 @@ const GUILD_TASK_BUILDERS: Partial<Record<HomeTaskKey, GuildTaskBuilder>> = {
     }, '/recruitment', ageMs(oldestAt, now) > 3 * DAY_MS ? 'warning' : 'info');
   },
 
-  async partner_applications_pending({ guildId }) {
-    const where = { guildId, status: { in: ['PENDING', 'REVIEWING'] as Array<'PENDING' | 'REVIEWING'> } };
-    const [count, rows] = await Promise.all([
-      prisma.partnerApplication.count({ where }),
-      prisma.partnerApplication.findMany({
-        where,
-        orderBy: { createdAt: 'asc' },
-        take: PREVIEW_SIZE,
-        select: { id: true, projectName: true, createdAt: true },
-      }),
-    ]);
-    return task('partner_applications_pending', {
-      count,
-      oldestAt: iso(rows[0]?.createdAt),
-      preview: rows.map((row) => ({ id: row.id, label: truncate(row.projectName), at: iso(row.createdAt) })),
-    }, '/partnerships', 'info');
-  },
-
   async suggestions_pending({ guildId }) {
     const where = { guildId, status: 'PENDING' };
     const [count, rows] = await Promise.all([

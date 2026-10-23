@@ -13,6 +13,7 @@ import type { Client } from 'discord.js';
 import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
 import { errorMessage } from '../../utils/errors.js';
+import { publicErrorMessage } from '../../utils/publicError.js';
 
 /** Le prereglage mis en avant par la page AutoMod, celui qui convient a un serveur qui debute. */
 export function recommendedAutomodPreset(): AutomodPreset {
@@ -68,7 +69,7 @@ export async function applyRecommendedAutomod(client: Client, guildId: string): 
     if (config) await syncDiscordAutoModRules(client, guildId, config);
   } catch (err) {
     logger.warn('ModuleProvisioning', `Synchronisation AutoMod Discord impossible sur ${guildId} : ${errorMessage(err)}`);
-    return errorMessage(err);
+    return publicErrorMessage(err);
   }
 
   return null;

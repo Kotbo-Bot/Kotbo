@@ -137,7 +137,7 @@
     <h1 class="mt-6 text-3xl sm:text-[38px] leading-tight font-semibold tracking-tight text-on-surface font-headline">
       {m.onb_recap_title()}
     </h1>
-    <p class="mt-3 text-[15.5px] text-on-surface-variant/70">
+    <p class="mt-3 text-[15.5px] text-on-surface-variant">
       {m.onb_recap_lead({ server: selectedGuild?.name ?? 'ton serveur' })}
     </p>
   </div>
@@ -189,7 +189,7 @@
   {#if dormant.length}
     <section class="mt-10">
       <h2 class="text-body-sm font-semibold text-on-surface">Laissé de côté</h2>
-      <p class="mt-1 text-xs text-on-surface-variant/50">
+      <p class="mt-1 text-xs text-on-surface-variant">
         Tu as écarté le salon qui les porte. Rien n'est perdu : chacun s'allume depuis
         sa page du tableau de bord, le jour où tu lui donnes un salon.
       </p>
@@ -202,7 +202,7 @@
             </span>
             <div class="min-w-0 flex-1">
               <p class="text-body-sm font-semibold text-on-surface-variant/75">{entry.name}</p>
-              <p class="mt-0.5 text-xs text-on-surface-variant/50 leading-relaxed">
+              <p class="mt-0.5 text-xs text-on-surface-variant leading-relaxed">
                 {entry.because} n'a pas été mis en place.
               </p>
             </div>
@@ -217,7 +217,7 @@
          ne savait pas encore ce que Kotbo faisait ; ici, il le sait. -->
     <section class="mt-10">
       <h2 class="text-body-sm font-semibold text-on-surface">{m.onb_recap_missing_title()}</h2>
-      <p class="mt-1 text-xs text-on-surface-variant/50">{m.onb_recap_missing_hint()}</p>
+      <p class="mt-1 text-xs text-on-surface-variant">{m.onb_recap_missing_hint()}</p>
 
       <div class="mt-3 grid gap-2.5 sm:grid-cols-2">
         {#each missing as track (track.key)}
@@ -227,7 +227,7 @@
             </span>
             <div class="min-w-0 flex-1">
               <p class="text-body-sm font-semibold text-on-surface-variant/75">{track.label()}</p>
-              <p class="mt-0.5 text-xs text-on-surface-variant/50 leading-relaxed">{track.outcome()}</p>
+              <p class="mt-0.5 text-xs text-on-surface-variant leading-relaxed">{track.outcome()}</p>
             </div>
             <button
               type="button"

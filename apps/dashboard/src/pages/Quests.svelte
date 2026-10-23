@@ -133,7 +133,7 @@
   <div class="bg-surface-container-low/30 border border-outline-variant/10 rounded-xl p-6 space-y-4 mb-4">
     <div>
       <h3 class="text-base font-semibold flex items-center gap-2.5">{m.que_choose_template()}</h3>
-      <p class="text-xs text-on-surface-variant/60 mt-1">{m.que_template_subtitle()}</p>
+      <p class="text-xs text-on-surface-variant mt-1">{m.que_template_subtitle()}</p>
     </div>
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
       {#each questTemplates as tpl}
@@ -146,7 +146,7 @@
           </div>
           <div class="flex flex-col gap-0.5">
             <span class="font-semibold text-sm text-on-surface">{tpl.name}</span>
-            <span class="text-xs text-on-surface-variant/60">{tpl.description}</span>
+            <span class="text-xs text-on-surface-variant">{tpl.description}</span>
           </div>
           <div class="flex items-center gap-2 flex-wrap">
             {#if tpl.frequency === 'DAILY'}
@@ -167,7 +167,7 @@
         </div>
         <div class="flex flex-col gap-0.5">
           <span class="font-semibold text-sm text-on-surface">{m.que_custom_title()}</span>
-          <span class="text-xs text-on-surface-variant/60">{m.que_custom_desc()}</span>
+          <span class="text-xs text-on-surface-variant">{m.que_custom_desc()}</span>
         </div>
       </button>
     </div>
@@ -242,7 +242,7 @@
 
 <!-- Loading -->
 {#if loading}
-  <div class="flex flex-col items-center justify-center py-16 text-on-surface-variant/50 gap-4">
+  <div class="flex flex-col items-center justify-center py-16 text-on-surface-variant gap-4">
     <div class="h-8 w-8 animate-spin rounded-full border-3 border-primary border-t-transparent"></div>
     <p class="text-sm">{m.que_loading()}</p>
   </div>
@@ -255,7 +255,7 @@
       </div>
       <div class="flex flex-col">
         <span class="text-xl font-bold text-on-surface">{data.definitions.length}</span>
-        <span class="text-xs font-medium text-on-surface-variant/60">{m.que_stat_configured()}</span>
+        <span class="text-xs font-medium text-on-surface-variant">{m.que_stat_configured()}</span>
       </div>
     </div>
     <div class="bg-surface-container-high/30 rounded-xl p-4 flex items-center gap-3">
@@ -264,7 +264,7 @@
       </div>
       <div class="flex flex-col">
         <span class="text-xl font-bold text-on-surface">{data.definitions.filter((q: any) => q.enabled).length}</span>
-        <span class="text-xs font-medium text-on-surface-variant/60">{m.que_stat_active()}</span>
+        <span class="text-xs font-medium text-on-surface-variant">{m.que_stat_active()}</span>
       </div>
     </div>
     <div class="bg-surface-container-high/30 rounded-xl p-4 flex items-center gap-3">
@@ -273,14 +273,14 @@
       </div>
       <div class="flex flex-col">
         <span class="text-xl font-bold text-on-surface">{data.totalClaimed}</span>
-        <span class="text-xs font-medium text-on-surface-variant/60">{m.que_stat_claimed()}</span>
+        <span class="text-xs font-medium text-on-surface-variant">{m.que_stat_claimed()}</span>
       </div>
     </div>
   </div>
 
   <!-- Quest List or Empty State -->
   {#if data.definitions.length === 0}
-    <EmptyState icon="compass" title={m.que_empty_title()} description={m.que_empty_desc()} />
+    <EmptyState icon="compass" title={m.que_empty_title()} description={m.que_empty_desc()} actionLabel={m.que_empty_cta()} actionIcon="sparkles" onAction={openTemplates} />
   {:else}
     <div class="space-y-3">
       {#each data.definitions as quest}
@@ -291,7 +291,7 @@
           <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
             <div>
               <h4 class="text-sm font-semibold text-on-surface">{quest.name}</h4>
-              <p class="text-xs text-on-surface-variant/60 mt-0.5">{quest.description}</p>
+              <p class="text-xs text-on-surface-variant mt-0.5">{quest.description}</p>
             </div>
             <div class="flex items-center gap-2 shrink-0">
               {#if quest.frequency === 'DAILY'}
@@ -299,12 +299,12 @@
               {:else}
                 <span class="px-2.5 py-0.5 bg-pink-500/10 text-pink-500 text-xs font-medium rounded-full">{m.que_freq_weekly()}</span>
               {/if}
-              <span class="px-2.5 py-0.5 bg-surface-container-high/40 text-on-surface-variant/60 text-xs font-medium rounded-full">{questTypes[quest.type] ?? quest.type}</span>
+              <span class="px-2.5 py-0.5 bg-surface-container-high/40 text-on-surface-variant text-xs font-medium rounded-full">{questTypes[quest.type] ?? quest.type}</span>
             </div>
           </div>
 
           <!-- Quest Details -->
-          <div class="flex flex-wrap gap-4 text-xs text-on-surface-variant/60">
+          <div class="flex flex-wrap gap-4 text-xs text-on-surface-variant">
             <div class="flex items-center gap-1.5">
               <Papicon icon="Flag" size={14} />
               <span>{m.que_target_label()} <strong class="text-on-surface">{quest.target}</strong></span>
@@ -321,7 +321,7 @@
 
           <!-- Progress -->
           <div class="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-            <div class="flex items-center gap-1.5 text-xs text-on-surface-variant/60 shrink-0">
+            <div class="flex items-center gap-1.5 text-xs text-on-surface-variant shrink-0">
               <Papicon icon="Users" size={14} />
               <span>{m.que_participations({ count: quest._count?.progress ?? 0 })}</span>
             </div>

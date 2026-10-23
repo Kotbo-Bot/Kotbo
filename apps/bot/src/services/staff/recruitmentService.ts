@@ -2,7 +2,8 @@ import type { Prisma } from '@prisma/client';
 import type { CandidatureStatus } from '@prisma/client';
 import { type ButtonInteraction, type Client, EmbedBuilder, TextChannel } from 'discord.js';
 import prisma from '../../utils/db.js';
-import { createNotification } from './staffLeadershipService.js';
+import { upsertHierarchyGradeRow, upsertStaffMemberRow } from './staffRowUpsert.js';
+import { notify } from '../notifications/notifyService.js';
 import { logger } from '../../utils/logger.js';
 import { COLORS } from '../../utils/embeds.js';
 import { createTicketWorkspace, type TicketPanelTypeConfig } from '../features/ticketService.js';
@@ -205,19 +206,20 @@ export async function createCandidature(
       }
     });
 
-    if (managers.length > 0) {
-      await Promise.all(managers.map(m => {
-        const isAdmin = ['Admin', 'Administrateur', 'Fondateur', 'Direction'].includes(m.grade);
-        return createNotification(
-          guildId,
-          m.userId,
-          isAdmin ? 'ALERTE : Nouveau Formulaire Recrutement' : 'Nouvelle candidature',
-          `Une nouvelle candidature a été reçue de ${candidature.username}.`,
-          isAdmin ? 'WARNING' : 'INFO',
-          '/recruitment'
-        ).catch(() => null);
-      }));
-    }
+    await Promise.all(managers.map(m => {
+      const isAdmin = ['Admin', 'Administrateur', 'Fondateur', 'Direction'].includes(m.grade);
+      return notify({
+        guildId,
+        userId: m.userId,
+        kind: 'recruitment.application_received',
+        title: isAdmin ? 'ALERTE : Nouveau Formulaire Recrutement' : 'Nouvelle candidature',
+        message: `Une nouvelle candidature a été reçue de ${candidature.username}.`,
+        severity: isAdmin ? 'WARNING' : 'INFO',
+        link: '/recruitment',
+        groupKey: 'recruitment.application_received',
+        data: { candidatureId: candidature.id },
+      }).catch(() => null);
+    }));
 
     // Notifier le salon configuré sur le serveur staff lié
     if (options?.client) {
@@ -340,6 +342,9 @@ export async function approveCandidature(
     reason: 'Entretien de recrutement',
     description: `Entretien oral pour la candidature de ${pseudo} (ID: ${candidatureId}).`,
     locale,
+    // La suite ecrit dans le salon : sans place, mieux vaut une erreur
+    // franche qu'une candidature passee a l'oral sans salon d'entretien.
+    queueWhenFull: false,
   });
 
   const ticket = await prisma.ticket.findUnique({ where: { id: ticketId }, select: { channelId: true } });
@@ -378,14 +383,16 @@ export async function approveCandidature(
   logger.success('Recruitment', `Ticket créé (${ticketId}) pour ${pseudo} (${targetDiscordUserId})`);
 
   if (targetDiscordUserId) {
-    await createNotification(
+    await notify({
       guildId,
-      targetDiscordUserId,
-      'Candidature validée',
-      `Félicitations ! Votre candidature a été validée pour un entretien oral. Un ticket a été ouvert.`,
-      'SUCCESS',
-      '/recruitment'
-    ).catch(() => null);
+      userId: targetDiscordUserId,
+      kind: 'recruitment.application_accepted',
+      title: 'Candidature validée',
+      message: 'Félicitations ! Votre candidature a été validée pour un entretien oral. Un ticket a été ouvert.',
+      severity: 'SUCCESS',
+      link: '/recruitment',
+      actorId: processedByUserId,
+    }).catch(() => null);
   }
 
   return updated;
@@ -407,31 +414,6 @@ export async function rejectCandidature(
 
   const discordGuild = client.guilds.cache.get(guildId) ?? await client.guilds.fetch(guildId).catch(() => null);
 
-  // Send DM if we have a discord ID and there's a reason
-  if (candidature.discordId && discordGuild) {
-    try {
-      const member = await discordGuild.members.fetch(candidature.discordId).catch(() => null);
-      if (member) {
-        const embed = new EmbedBuilder()
-          .setColor(0xed4245)
-          .setTitle('❌ Candidature Refusée')
-          .setDescription(
-            reason
-              ? `Votre candidature sur **${discordGuild.name}** a été refusée.\n\n**Raison :** ${reason}`
-              : `Votre candidature sur **${discordGuild.name}** a été refusée. Aucune raison spécifique n'a été communiquée.`
-          )
-          .setFooter({ text: `Kotbo · Recrutement · ${discordGuild.name}` })
-          .setTimestamp();
-
-        await member.send({ embeds: [embed], allowedMentions: { parse: [] } }).catch(err => {
-          logger.warn('Recruitment', `Impossible d'envoyer un MP à ${candidature.discordId}: ${err.message}`);
-        });
-      }
-    } catch (err) {
-      logger.warn('Recruitment', `Erreur lors de l'envoi du MP de refus: ${err}`);
-    }
-  }
-
   const result = await prisma.recruitmentCandidature.update({
     where: { id: candidatureId },
     data: {
@@ -442,51 +424,21 @@ export async function rejectCandidature(
   });
 
   if (candidature.discordId) {
-    await createNotification(
+    await notify({
       guildId,
-      candidature.discordId,
-      'Candidature refusée',
-      `Votre candidature a été refusée pour la raison suivante : ${reason || 'Aucune raison spécifiée.'}`,
-      'ERROR',
-      '/recruitment'
-    ).catch(() => null);
+      userId: candidature.discordId,
+      kind: 'recruitment.application_rejected',
+      title: 'Candidature refusée',
+      message: reason
+        ? `Votre candidature sur **${discordGuild?.name ?? guildId}** a été refusée.\n\n**Raison :** ${reason}`
+        : `Votre candidature sur **${discordGuild?.name ?? guildId}** a été refusée. Aucune raison spécifique n'a été communiquée.`,
+      severity: 'ERROR',
+      link: '/recruitment',
+      actorId: processedByUserId,
+    }).catch(() => null);
   }
 
   return result;
-}
-
-// ============================================================================
-// SEND AUTO-REJECT DM
-// ============================================================================
-
-export async function sendAutoRejectDM(
-  client: Client,
-  guildId: string,
-  discordId: string | null,
-  reason: string,
-) {
-  if (!discordId) return;
-
-  const discordGuild = client.guilds.cache.get(guildId) ?? await client.guilds.fetch(guildId).catch(() => null);
-  if (!discordGuild) return;
-
-  try {
-    const member = await discordGuild.members.fetch(discordId).catch(() => null);
-    if (member) {
-      const embed = new EmbedBuilder()
-        .setColor(0xed4245)
-        .setTitle('❌ Candidature Automatiquement Refusée')
-        .setDescription(`Votre candidature sur **${discordGuild.name}** a été automatiquement refusée.\n\n**Raison :** ${reason}`)
-        .setFooter({ text: `Kotbo · Recrutement Automatique · ${discordGuild.name}` })
-        .setTimestamp();
-
-      await member.send({ embeds: [embed], allowedMentions: { parse: [] } }).catch(err => {
-        logger.warn('Recruitment', `Impossible d'envoyer le MP d'auto-refus à ${discordId}: ${err.message}`);
-      });
-    }
-  } catch (err) {
-    logger.warn('Recruitment', `Erreur lors de l'envoi du MP d'auto-refus: ${err}`);
-  }
 }
 
 // ============================================================================
@@ -517,29 +469,20 @@ export async function completeOral(
     reapplyDate.setMonth(reapplyDate.getMonth() + 1);
     const reapplyTimestamp = Math.floor(reapplyDate.getTime() / 1000);
 
-    // Send DM with reapply date
-    if (candidature.discordId && discordGuild) {
-      try {
-        const member = await discordGuild.members.fetch(candidature.discordId).catch(() => null);
-        if (member) {
-          const embed = new EmbedBuilder()
-            .setColor(0xed4245)
-            .setTitle('❌ Entretien Oral Non Concluant')
-            .setDescription(
-              `Votre entretien oral sur **${discordGuild.name}** n'a malheureusement pas été concluant.\n\n` +
-              (reason ? `**Raison :** ${reason}\n\n` : '') +
-              `Vous pourrez re-candidater à partir du <t:${reapplyTimestamp}:f> (<t:${reapplyTimestamp}:R>).`
-            )
-            .setFooter({ text: `Kotbo · Recrutement · ${discordGuild.name}` })
-            .setTimestamp();
-
-          await member.send({ embeds: [embed], allowedMentions: { parse: [] } }).catch(err => {
-            logger.warn('Recruitment', `Impossible d'envoyer le MP oral échoué à ${candidature.discordId}: ${err.message}`);
-          });
-        }
-      } catch (err) {
-        logger.warn('Recruitment', `Erreur lors de l'envoi du MP oral: ${err}`);
-      }
+    if (candidature.discordId) {
+      await notify({
+        guildId,
+        userId: candidature.discordId,
+        kind: 'recruitment.application_rejected',
+        title: 'Entretien oral non concluant',
+        message:
+          `Votre entretien oral sur **${discordGuild?.name ?? guildId}** n'a malheureusement pas été concluant.\n\n` +
+          (reason ? `**Raison :** ${reason}\n\n` : '') +
+          `Vous pourrez re-candidater à partir du <t:${reapplyTimestamp}:f> (<t:${reapplyTimestamp}:R>).`,
+        severity: 'ERROR',
+        link: '/recruitment',
+        actorId: processedByUserId,
+      }).catch(() => null);
     }
 
     return await prisma.recruitmentCandidature.update({
@@ -597,8 +540,7 @@ export async function completeOral(
   }
 
   // Create the staff member
-  const staffMember = await prisma.staffMember.upsert({
-    where: { guildId_userId: { guildId, userId: candidature.discordId } },
+  const staffMember = await upsertStaffMemberRow(guildId, candidature.discordId, {
     update: {
       grade: gradeName,
       userTag,
@@ -607,8 +549,6 @@ export async function completeOral(
       avatarUrl,
     },
     create: {
-      guildId,
-      userId: candidature.discordId,
       grade: gradeName,
       userTag,
       username,
@@ -619,11 +559,7 @@ export async function completeOral(
 
   // Associate with hierarchy if specified (explicit override or derived from the source form)
   if (effectiveHierarchyId && effectiveHierarchyGrade) {
-    await prisma.staffMemberHierarchyGrade.upsert({
-      where: { staffMemberId_hierarchyId: { staffMemberId: staffMember.id, hierarchyId: effectiveHierarchyId } },
-      update: { grade: effectiveHierarchyGrade },
-      create: { staffMemberId: staffMember.id, hierarchyId: effectiveHierarchyId, grade: effectiveHierarchyGrade },
-    }).catch(() => null);
+    await upsertHierarchyGradeRow(staffMember.id, effectiveHierarchyId, effectiveHierarchyGrade).catch(() => null);
   }
 
   // Create a testing period
@@ -674,14 +610,16 @@ export async function completeOral(
   logger.success('Recruitment', `Candidature ${candidatureId} APPROVED → StaffMember ${staffMember.id} créé (${gradeName})`);
 
   if (candidature.discordId) {
-    await createNotification(
+    await notify({
       guildId,
-      candidature.discordId,
-      'Promotion Staff !',
-      `Félicitations ! Vous avez réussi votre entretien oral et rejoignez l'équipe en tant que ${gradeName}.`,
-      'SUCCESS',
-      '/'
-    ).catch(() => null);
+      userId: candidature.discordId,
+      kind: 'recruitment.promoted',
+      title: 'Promotion Staff !',
+      message: `Félicitations ! Vous avez réussi votre entretien oral et rejoignez l'équipe en tant que ${gradeName}.`,
+      severity: 'SUCCESS',
+      link: '/',
+      actorId: processedByUserId,
+    }).catch(() => null);
   }
 
   return updated;
@@ -751,14 +689,14 @@ export async function assignTutor(candidatureId: string, tutorUserId: string) {
   });
 
   // Notifier le tuteur
-  await createNotification(
-    candidature.guildId,
-    tutorUserId,
-    'Nouveau tutoré assigné',
-    `Vous avez été assigné comme tuteur pour ${candidature.username}.`,
-    'INFO',
-    '/recruitment'
-  ).catch(() => null);
+  await notify({
+    guildId: candidature.guildId,
+    userId: tutorUserId,
+    kind: 'recruitment.tutor_assigned',
+    title: 'Nouveau tutoré assigné',
+    message: `Vous avez été assigné comme tuteur pour ${candidature.username}.`,
+    link: '/recruitment',
+  }).catch(() => null);
 
   return updated;
 }

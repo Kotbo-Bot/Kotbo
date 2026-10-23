@@ -5,7 +5,7 @@ import type { ItemCatalogEntry } from '../../services/features/rpg/rpgItemCatalo
 
 // Le module charge la base au démarrage : ces tests n'en ont pas besoin.
 for (const file of ['../../utils/db.ts', '../../utils/db.js']) {
-  mock.module(path.resolve(import.meta.dir, file), () => ({ default: {}, prisma: {}, prismaRead: {} }));
+  mock.module(path.resolve(import.meta.dir, file), () => ({ default: {}, prisma: {}, prismaRead: {}, upsertRetryingRace: (upsert: () => Promise<unknown>) => upsert() }));
 }
 
 const { isUnavailableItem, isUniqueItem, matchesSourceFilter } = await import('../../services/features/rpg/rpgItemCatalogService.js');

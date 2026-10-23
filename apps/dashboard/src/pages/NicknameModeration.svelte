@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { explainDisabled } from '../lib/actions/explainDisabled';
   import { onMount, onDestroy, untrack } from 'svelte';
   import { router } from 'tinro';
   import { resolveTabFromUrl, gotoTab } from '../lib/tabRouting';
@@ -6,6 +7,9 @@
   import { Tabs } from '../lib/components/ui';
   import ModulePage from '../lib/components/ModulePage.svelte';
   import ToggleSwitch from '../lib/components/ToggleSwitch.svelte';
+  import Callout from '../lib/components/ui/Callout.svelte';
+  import Button from '../lib/components/ui/Button.svelte';
+  import { dashboardStore } from '../lib/stores/dashboard.svelte';
   import InlineFeedback from '../lib/components/InlineFeedback.svelte';
   import Papicon from '../lib/components/Papicon.svelte';
   import LoadingHint from '../lib/components/LoadingHint.svelte';
@@ -19,6 +23,7 @@
   import {
     fetchNicknameModerationConfig,
     updateNicknameModerationConfig,
+    updateModuleStatus,
     fetchBannedWords,
     addBannedWord,
     deleteBannedWord,
@@ -184,18 +189,25 @@
   // Actions
   // ---------------------------------------------------------------------------
 
-  async function saveToggle(nextValue: boolean) {
-    const previousValue = enabled;
-    enabled = nextValue;
-    const saved = await saveToggleAction.run(
+  // `enabled` est la colonne du module (`autoNicknameModerationEnabled`) : le
+  // menu de ModulePage la bascule avec la ligne du module. L'ancien
+  // interrupteur de la page n'ecrivait que la colonne, et a pu laisser des
+  // serveurs avec un module « actif » dont le bot ne verifie plus rien. Ce cas
+  // s'affiche en encadre, et se repare par la bascule de module.
+  const moduleActive = $derived(
+    (dashboardStore.state.modules as any[]).find((mod) => mod.id === 'nickname_moderation')?.status === 'active'
+  );
+
+  async function resumeModule() {
+    await saveToggleAction.run(
       async () => {
-        const ok = await updateNicknameModerationConfig({ enabled: nextValue });
+        const ok = await updateModuleStatus('nickname_moderation', 'active');
         if (!ok) throw new Error(m.nm_error_api());
+        await loadData(false);
         return true;
       },
-      { successMessage: nextValue ? m.nm_module_enabled() : m.nm_module_disabled() }
+      { successMessage: m.nm_module_enabled() }
     );
-    if (!saved) enabled = previousValue;
   }
 
   async function saveGranularToggle(field: 'onJoin' | 'onUpdate' | 'checkInvisible' | 'checkGlobal' | 'checkCustom' | 'discordAutoModSync', value: boolean) {
@@ -421,6 +433,15 @@
   icon="filter"
   featureKey="nickname_moderation"
 >
+  <!-- Onglet de Filtres rendu comme une page a part : sans la barre de Filtres,
+       on perdait le chemin du retour. -->
+  <Tabs
+    label={m.am_page_title()}
+    tabs={pageTabItems('/security/filters')}
+    active="nicknames"
+    onchange={(id) => gotoTab('/security/filters', id, 'bot')}
+  />
+
   <InlineFeedback state={saveToggleAction} />
 
   {#if loading}
@@ -439,22 +460,30 @@
     </div>
   {:else}
     <div class="flex flex-col gap-8">
+      {#if moduleActive && !enabled}
+        <Callout variant="warning" title={m.nm_paused_title()}>
+          {m.nm_paused_desc()}
+          {#snippet actions()}
+            <Button variant="primary" size="sm" icon="power" loading={saveToggleAction.state.loading} onclick={resumeModule}>
+              {m.nm_paused_action()}
+            </Button>
+          {/snippet}
+        </Callout>
+      {/if}
+
       <!-- ============================================================ -->
-      <!-- Section 1 - Toggle principal                                   -->
+      <!-- Section 1 - Ce que le bot verifie                               -->
     <!-- ============================================================ -->
     <section class="bg-surface-container-low/40 rounded-xl border border-outline-variant/30 p-8 flex flex-col gap-6">
       <div class="flex items-start justify-between gap-6">
         <div class="flex flex-col gap-1">
           <h2 class="text-base font-semibold tracking-tight text-on-surface">{m.nm_activation()}</h2>
-          <p class="text-sm text-on-surface-variant/70">
+          <p class="text-sm text-on-surface-variant">
             {m.nm_activation_desc_1()}
             <code class="font-mono text-primary dark:text-blue-300 bg-primary/10 dark:bg-blue-500/15 px-1.5 py-0.5 rounded-lg text-xs">{m.nm_safe_nickname({}, { locale: botLocale })}</code>.
             <br />
             {m.nm_activation_desc_2()} <code class="font-mono text-primary bg-primary/10 px-1.5 py-0.5 rounded-lg text-xs">/rescan pseudo rescan</code>
           </p>
-        </div>
-        <div class="flex-shrink-0">
-          <ToggleSwitch checked={enabled} onToggle={saveToggle} disabled={saveToggleAction.state.loading} />
         </div>
       </div>
 
@@ -463,14 +492,14 @@
              En liste plate, on ne voyait pas que couper un groupe entier eteint
              le module sans eteindre son interrupteur principal. -->
         <div class="flex flex-col gap-2">
-          <p class="text-body-sm font-medium text-on-surface-variant/50">{m.nm_group_when()}</p>
+          <p class="text-body-sm font-medium text-on-surface-variant">{m.nm_group_when()}</p>
           <div class="flex items-center justify-between gap-4 py-1.5 px-2 rounded-xl hover:bg-surface-container-high/30 transition-colors">
             <span class="text-sm text-on-surface-variant/80">{m.nm_watch_join()}</span>
-            <ToggleSwitch checked={onJoin} onToggle={(value) => saveGranularToggle('onJoin', value)} disabled={!enabled || saveToggleAction.state.loading} />
+            <ToggleSwitch checked={onJoin} onToggle={(value) => saveGranularToggle('onJoin', value)} disabled={saveToggleAction.state.loading} />
           </div>
           <div class="flex items-center justify-between gap-4 py-1.5 px-2 rounded-xl hover:bg-surface-container-high/30 transition-colors">
             <span class="text-sm text-on-surface-variant/80">{m.nm_watch_update()}</span>
-            <ToggleSwitch checked={onUpdate} onToggle={(value) => saveGranularToggle('onUpdate', value)} disabled={!enabled || saveToggleAction.state.loading} />
+            <ToggleSwitch checked={onUpdate} onToggle={(value) => saveGranularToggle('onUpdate', value)} disabled={saveToggleAction.state.loading} />
           </div>
           {#if enabled && !onJoin && !onUpdate}
             <p class="text-xs text-tertiary flex items-start gap-2 px-2">
@@ -481,18 +510,18 @@
         </div>
 
         <div class="flex flex-col gap-2">
-          <p class="text-body-sm font-medium text-on-surface-variant/50">{m.nm_group_what()}</p>
+          <p class="text-body-sm font-medium text-on-surface-variant">{m.nm_group_what()}</p>
           <div class="flex items-center justify-between gap-4 py-1.5 px-2 rounded-xl hover:bg-surface-container-high/30 transition-colors">
             <span class="text-sm text-on-surface-variant/80">{m.nm_watch_invisible()}</span>
-            <ToggleSwitch checked={checkInvisible} onToggle={(value) => saveGranularToggle('checkInvisible', value)} disabled={!enabled || saveToggleAction.state.loading} />
+            <ToggleSwitch checked={checkInvisible} onToggle={(value) => saveGranularToggle('checkInvisible', value)} disabled={saveToggleAction.state.loading} />
           </div>
           <div class="flex items-center justify-between gap-4 py-1.5 px-2 rounded-xl hover:bg-surface-container-high/30 transition-colors">
             <span class="text-sm text-on-surface-variant/80">{m.nm_watch_global()}</span>
-            <ToggleSwitch checked={checkGlobal} onToggle={(value) => saveGranularToggle('checkGlobal', value)} disabled={!enabled || saveToggleAction.state.loading} />
+            <ToggleSwitch checked={checkGlobal} onToggle={(value) => saveGranularToggle('checkGlobal', value)} disabled={saveToggleAction.state.loading} />
           </div>
           <div class="flex items-center justify-between gap-4 py-1.5 px-2 rounded-xl hover:bg-surface-container-high/30 transition-colors">
             <span class="text-sm text-on-surface-variant/80">{m.nm_watch_custom()}</span>
-            <ToggleSwitch checked={checkCustom} onToggle={(value) => saveGranularToggle('checkCustom', value)} disabled={!enabled || saveToggleAction.state.loading} />
+            <ToggleSwitch checked={checkCustom} onToggle={(value) => saveGranularToggle('checkCustom', value)} disabled={saveToggleAction.state.loading} />
           </div>
           {#if enabled && !checkInvisible && !checkGlobal && !checkCustom}
             <p class="text-xs text-tertiary flex items-start gap-2 px-2">
@@ -505,9 +534,9 @@
         <div class="flex items-center justify-between gap-4 py-3 px-2 rounded-xl hover:bg-surface-container-high/30 transition-colors border-t border-outline-variant/10">
           <div class="flex flex-col gap-0.5">
             <span class="text-sm font-semibold text-on-surface">{m.nm_discord_automod()}</span>
-            <span class="text-xs text-on-surface-variant/60">{m.nm_discord_automod_desc()}</span>
+            <span class="text-xs text-on-surface-variant">{m.nm_discord_automod_desc()}</span>
           </div>
-          <ToggleSwitch checked={discordAutoModSync} onToggle={(value) => saveGranularToggle('discordAutoModSync', value)} disabled={!enabled || saveToggleAction.state.loading} />
+          <ToggleSwitch checked={discordAutoModSync} onToggle={(value) => saveGranularToggle('discordAutoModSync', value)} disabled={saveToggleAction.state.loading} />
         </div>
 
         <p class="text-xs text-on-surface-variant/40 italic mt-1">
@@ -522,7 +551,7 @@
     <section class="bg-surface-container-low/40 rounded-xl border border-outline-variant/30 p-8 flex flex-col gap-6">
       <div class="flex flex-col gap-1">
         <h2 class="text-base font-semibold tracking-tight text-on-surface">{m.nm_banned_words()}</h2>
-        <p class="text-sm text-on-surface-variant/70">
+        <p class="text-sm text-on-surface-variant">
           {m.nm_banned_words_desc_1()} <strong>{m.nm_banned_words_global()}</strong> {m.nm_banned_words_desc_2()}
           <strong>{m.nm_banned_words_custom()}</strong> {m.nm_banned_words_desc_3()}
         </p>
@@ -550,7 +579,7 @@
           <button
             type="button"
             onclick={() => saveGranularToggle(activeTab === 'custom' ? 'checkCustom' : 'checkGlobal', true)}
-            disabled={!enabled || saveToggleAction.state.loading}
+            disabled={saveToggleAction.state.loading}
             class="shrink-0 px-4 py-2 rounded-lg text-xs font-bold bg-tertiary/20 text-tertiary hover:bg-tertiary/30 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
             {m.nm_enable_it()}
@@ -583,7 +612,8 @@
           </select>
           <button
             onclick={addWord}
-            disabled={!newWord.trim() || wordAction.state.loading}
+            disabled={wordAction.state.loading}
+            use:explainDisabled={(!newWord.trim()) ? m.common_reason_fill_field() : ''}
             class="flex items-center gap-2 px-5 py-3.5 bg-primary text-white rounded-lg text-sm font-bold transition-all hover:bg-primary/90 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <Papicon icon="plus" size={16} />
@@ -648,7 +678,7 @@
         <!-- Liste globale (read-only) -->
         {#if globalWords.length > 0}
           <div class="section-card-flush">
-            <div class="bg-surface-container/30 px-5 py-3 flex items-center gap-2 text-xs text-on-surface-variant/50 border-b border-outline-variant/10">
+            <div class="bg-surface-container/30 px-5 py-3 flex items-center gap-2 text-xs text-on-surface-variant border-b border-outline-variant/10">
               <Papicon icon="lock" size={12} />
               <span>{m.nm_global_readonly()}</span>
             </div>
@@ -699,7 +729,7 @@
     <section class="bg-surface-container-low/40 rounded-xl border border-outline-variant/30 p-8 flex flex-col gap-6">
       <div class="flex flex-col gap-1">
         <h2 class="text-base font-semibold tracking-tight text-on-surface">{m.nm_exceptions()}</h2>
-        <p class="text-sm text-on-surface-variant/70">
+        <p class="text-sm text-on-surface-variant">
           {m.nm_exceptions_desc()}
         </p>
       </div>
@@ -711,7 +741,7 @@
         <div class="flex flex-col gap-4">
           <div class="flex flex-col gap-1">
             <h3 class="text-sm font-bold text-on-surface">{m.nm_allowed_nicks()}</h3>
-            <p class="text-xs text-on-surface-variant/50">
+            <p class="text-xs text-on-surface-variant">
               {m.nm_allowed_nicks_desc()}
             </p>
           </div>
@@ -726,7 +756,8 @@
             />
             <button
               onclick={addWhitelistItem}
-              disabled={!newWhitelistItem.trim() || exceptionAction.state.loading}
+              disabled={exceptionAction.state.loading}
+              use:explainDisabled={(!newWhitelistItem.trim()) ? m.common_reason_fill_field() : ''}
               class="shrink-0 px-5 py-3 bg-primary text-white rounded-lg text-sm font-bold transition-all hover:bg-primary/90 active:scale-95 disabled:opacity-40"
             >
               {m.nm_add()}
@@ -760,7 +791,7 @@
         <div class="flex flex-col gap-4">
           <div class="flex flex-col gap-1">
             <h3 class="text-sm font-bold text-on-surface">{m.nm_bypass_members()}</h3>
-            <p class="text-xs text-on-surface-variant/50">
+            <p class="text-xs text-on-surface-variant">
               {m.nm_bypass_members_desc()}
             </p>
           </div>

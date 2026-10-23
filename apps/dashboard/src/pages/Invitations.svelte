@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { explainDisabled } from '../lib/actions/explainDisabled';
   import { onMount } from 'svelte';
   import { memberAvatarSrc } from '../lib/discordMedia';
   import { router } from 'tinro';
@@ -269,7 +270,7 @@
       case 'active': return 'bg-success/10 text-success';
       case 'suspended': return 'bg-warning/10 text-warning';
       case 'deleted': return 'bg-error/10 text-error';
-      case 'expired': return 'bg-slate-500/10 text-on-surface-variant/60';
+      case 'expired': return 'bg-slate-500/10 text-on-surface-variant';
     }
   }
 
@@ -525,23 +526,23 @@
         {/each}
       {:else}
         <div class="premium-card p-4 rounded-lg">
-          <p class="text-xs font-semibold text-on-surface-variant/50">{m.iv_tab_invites()}</p>
+          <p class="text-xs font-semibold text-on-surface-variant">{m.iv_tab_invites()}</p>
           <p class="text-2xl font-semibold text-primary">{totalInvites}</p>
         </div>
         <div class="premium-card p-4 rounded-lg">
-          <p class="text-xs font-semibold text-on-surface-variant/50">{m.iv_sources_count()}</p>
+          <p class="text-xs font-semibold text-on-surface-variant">{m.iv_sources_count()}</p>
           <p class="text-2xl font-semibold text-cyan-500">{sourceStats.length}</p>
         </div>
         <div class="premium-card p-4 rounded-lg">
-          <p class="text-xs font-semibold text-on-surface-variant/50">{m.iv_attributed_joins()}</p>
+          <p class="text-xs font-semibold text-on-surface-variant">{m.iv_attributed_joins()}</p>
           <p class="text-2xl font-semibold text-primary">{sourceCoverage}%</p>
         </div>
         <div class="premium-card p-4 rounded-lg">
-          <p class="text-xs font-semibold text-on-surface-variant/50">{m.iv_total_joins()}</p>
+          <p class="text-xs font-semibold text-on-surface-variant">{m.iv_total_joins()}</p>
           <p class="text-2xl font-semibold text-success">{totalJoins}</p>
         </div>
         <div class="premium-card p-4 rounded-lg">
-          <p class="text-xs font-semibold text-on-surface-variant/50">{m.iv_retention()}</p>
+          <p class="text-xs font-semibold text-on-surface-variant">{m.iv_retention()}</p>
           <p class="text-2xl font-semibold text-cyan-500">{retentionRate}%</p>
         </div>
       {/if}
@@ -621,7 +622,7 @@
           {:else}
             <table class="w-full">
               <thead>
-                <tr class="text-left text-xs font-medium text-on-surface-variant/50 border-b border-outline-variant/10">
+                <tr class="text-left text-xs font-medium text-on-surface-variant border-b border-outline-variant/10">
                   <th class="pb-3 pr-4">{m.iv_col_code()}</th>
                   <th class="pb-3 pr-4">{m.iv_col_source()}</th>
                   <th class="pb-3 pr-4">{m.iv_col_creator()}</th>
@@ -662,12 +663,12 @@
                           </button>
                         </div>
                       {:else if invite.sourceLabel}
-                        <button type="button" class="source-chip" disabled={!canManageInvites} onclick={() => beginSourceEdit(invite)}>
+                        <button type="button" class="source-chip" use:explainDisabled={(!canManageInvites) ? m.common_reason_no_permission() : ''} onclick={() => beginSourceEdit(invite)}>
                           <span class="h-1.5 w-1.5 rounded-full bg-cyan-500"></span>
                           {invite.sourceLabel}
                         </button>
                       {:else if canManageInvites}
-                        <button type="button" class="text-2xs font-semibold text-on-surface-variant/50 hover:text-primary transition-colors inline-flex items-center gap-1" onclick={() => beginSourceEdit(invite)}>
+                        <button type="button" class="text-2xs font-semibold text-on-surface-variant hover:text-primary transition-colors inline-flex items-center gap-1" onclick={() => beginSourceEdit(invite)}>
                           <Papicon icon="Plus" size={13} /> {m.iv_name()}
                         </button>
                       {:else}
@@ -677,7 +678,7 @@
                     <td class="py-3 pr-4">
                       <div class="flex flex-col">
                         <span class="font-bold text-on-surface">{invite.inviterTag || invite.inviterId || m.iv_unknown()}</span>
-                        <span class="text-2xs text-on-surface-variant/50">{formatDate(invite.createdAt)}</span>
+                        <span class="text-2xs text-on-surface-variant">{formatDate(invite.createdAt)}</span>
                       </div>
                     </td>
                     <td class="py-3 pr-4">
@@ -689,7 +690,7 @@
                           <span class="px-2 py-0.5 rounded-full text-2xs font-semibold bg-error/10 text-error">{m.iv_inviter_suspended_badge()}</span>
                         {/if}
                         {#if isDormant(invite)}
-                          <span class="px-2 py-0.5 rounded-full text-2xs font-semibold bg-slate-500/10 text-on-surface-variant/60">{m.iv_dormant()}</span>
+                          <span class="px-2 py-0.5 rounded-full text-2xs font-semibold bg-slate-500/10 text-on-surface-variant">{m.iv_dormant()}</span>
                         {/if}
                       </div>
                     </td>
@@ -702,7 +703,7 @@
                     <td class="py-3 pr-4 text-right">
                       <span class="font-semibold {invite.retention >= 70 ? 'text-success' : invite.retention >= 40 ? 'text-warning' : 'text-error'}">{invite.retention}%</span>
                     </td>
-                    <td class="py-3 pr-4 text-right text-2xs text-on-surface-variant/60">
+                    <td class="py-3 pr-4 text-right text-2xs text-on-surface-variant">
                       {formatRelative(invite.lastJoinedAt)}
                     </td>
                     <td class="py-3">
@@ -712,7 +713,7 @@
                           class="p-1.5 rounded-lg hover:bg-surface-container-high/50 transition-colors"
                           onclick={(e) => toggleActionMenu(invite.code, e)}
                         >
-                          <Papicon icon="MoreVertical" size={16} class="text-on-surface-variant/70" />
+                          <Papicon icon="MoreVertical" size={16} class="text-on-surface-variant" />
                         </button>
                         {#if actionMenuOpen === invite.code}
                           <div class="absolute right-0 top-full mt-1 z-[9999] min-w-[160px] bg-surface-container rounded-xl shadow-sm border border-outline-variant/20 overflow-hidden">
@@ -772,7 +773,7 @@
               </tbody>
             </table>
             {#if filteredInvites.length === 0}
-              <div class="text-center py-12 text-on-surface-variant/60">
+              <div class="text-center py-12 text-on-surface-variant">
                 {m.iv_no_match_filters()}
               </div>
             {/if}
@@ -788,17 +789,17 @@
               <span class="text-xs font-semibold">{m.iv_join_attribution()}</span>
             </div>
             <h3 class="text-xl font-semibold text-on-surface">{m.iv_channel_growth_question()}</h3>
-            <p class="mt-2 text-sm text-on-surface-variant/60 leading-relaxed">
+            <p class="mt-2 text-sm text-on-surface-variant leading-relaxed">
               {m.iv_attribution_hint()}
             </p>
           </div>
           <div class="source-overview-metric">
             {#if leadingSource}
-              <span class="text-xs text-on-surface-variant/50">{m.iv_best_source()}</span>
+              <span class="text-xs text-on-surface-variant">{m.iv_best_source()}</span>
               <strong class="text-lg text-on-surface mt-1">{leadingSource.name}</strong>
               <span class="text-xs text-success mt-1">{leadingSource.joinedCount > 1 ? m.iv_join_other({ count: leadingSource.joinedCount }) : m.iv_join_one({ count: leadingSource.joinedCount })}</span>
             {:else}
-              <span class="text-sm text-on-surface-variant/60">{m.iv_name_first_link()}</span>
+              <span class="text-sm text-on-surface-variant">{m.iv_name_first_link()}</span>
             {/if}
           </div>
         </section>
@@ -807,7 +808,7 @@
           <section class="source-editor" aria-label={m.iv_edit_source_aria()}>
             <div class="min-w-0">
               <p class="text-xs font-semibold text-on-surface">{m.iv_naming_code({ code: editingInvite.code })}</p>
-              <p class="text-2xs text-on-surface-variant/50 mt-1">{m.iv_reuse_name_hint()}</p>
+              <p class="text-2xs text-on-surface-variant mt-1">{m.iv_reuse_name_hint()}</p>
             </div>
             <div class="flex items-center gap-2 w-full md:w-auto">
               <input
@@ -831,7 +832,7 @@
           <div class="px-5 py-4 border-b border-outline-variant/10 flex items-center justify-between gap-4">
             <div>
               <h3 class="text-sm font-semibold text-on-surface">{m.iv_source_performance()}</h3>
-              <p class="text-xs text-on-surface-variant/50 mt-1">{trackedInvites > 1 ? m.iv_named_link_other({ count: trackedInvites, joins: trackedJoins }) : m.iv_named_link_one({ count: trackedInvites, joins: trackedJoins })}</p>
+              <p class="text-xs text-on-surface-variant mt-1">{trackedInvites > 1 ? m.iv_named_link_other({ count: trackedInvites, joins: trackedJoins }) : m.iv_named_link_one({ count: trackedInvites, joins: trackedJoins })}</p>
             </div>
             <span class="text-xs font-semibold text-primary">{m.iv_coverage({ percent: sourceCoverage })}</span>
           </div>
@@ -865,7 +866,7 @@
                       <td class="px-4 py-4">
                         <div class="flex flex-wrap gap-1.5">
                           {#each source.invites as invite}
-                            <button type="button" class="invite-code-chip" disabled={!canManageInvites} onclick={() => beginSourceEdit(invite)} title={canManageInvites ? `Renommer ${invite.code}` : invite.code}>{invite.code}</button>
+                            <button type="button" class="invite-code-chip" use:explainDisabled={(!canManageInvites) ? m.common_reason_no_permission() : ''} onclick={() => beginSourceEdit(invite)} title={canManageInvites ? `Renommer ${invite.code}` : invite.code}>{invite.code}</button>
                           {/each}
                         </div>
                       </td>
@@ -883,7 +884,7 @@
             <div class="px-6 py-12 text-center">
               <Papicon icon="Tags" size={30} class="mx-auto text-on-surface-variant/25" />
               <p class="mt-3 text-sm font-semibold text-on-surface">{m.iv_no_named_source()}</p>
-              <p class="mt-1 text-xs text-on-surface-variant/50">{m.iv_assign_hint()}</p>
+              <p class="mt-1 text-xs text-on-surface-variant">{m.iv_assign_hint()}</p>
             </div>
           {/if}
         </section>
@@ -893,11 +894,11 @@
             <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div>
                 <h3 class="text-sm font-semibold text-on-surface">{m.iv_unnamed_links()}</h3>
-                <p class="text-xs text-on-surface-variant/50 mt-1">{untrackedInvites > 1 ? m.iv_untracked_other({ count: untrackedInvites }) : m.iv_untracked_one({ count: untrackedInvites })}</p>
+                <p class="text-xs text-on-surface-variant mt-1">{untrackedInvites > 1 ? m.iv_untracked_other({ count: untrackedInvites }) : m.iv_untracked_one({ count: untrackedInvites })}</p>
               </div>
               <div class="flex flex-wrap gap-2 md:justify-end">
                 {#each invitesWithStats.filter((invite) => !invite.sourceLabel?.trim()) as invite}
-                  <button type="button" class="untracked-invite" disabled={!canManageInvites} onclick={() => beginSourceEdit(invite)}>
+                  <button type="button" class="untracked-invite" use:explainDisabled={(!canManageInvites) ? m.common_reason_no_permission() : ''} onclick={() => beginSourceEdit(invite)}>
                     <code>{invite.code}</code>
                     {#if canManageInvites}<Papicon icon="Plus" size={13} />{/if}
                   </button>
@@ -915,7 +916,7 @@
           </div>
           <div>
             <h3 class="text-lg font-semibold">{m.iv_tab_top()}</h3>
-            <p class="text-xs text-on-surface-variant/60">{m.iv_ranking_by_joins()}</p>
+            <p class="text-xs text-on-surface-variant">{m.iv_ranking_by_joins()}</p>
           </div>
         </div>
 
@@ -952,14 +953,14 @@
                   </div>
                   <div>
                     <p class="text-sm font-semibold text-on-surface">{inviter.inviterTag}</p>
-                    <p class="text-2xs text-on-surface-variant/50">{m.iv_last_join_short()} {formatRelative(inviter.lastJoinedAt)}</p>
+                    <p class="text-2xs text-on-surface-variant">{m.iv_last_join_short()} {formatRelative(inviter.lastJoinedAt)}</p>
                   </div>
                 </div>
                 <span class="text-lg font-semibold text-success">{inviter.joinedCount}</span>
               </div>
             {/each}
             {#if topInviters.length === 0}
-              <p class="text-xs text-on-surface-variant/60 text-center py-8">{m.iv_no_data()}</p>
+              <p class="text-xs text-on-surface-variant text-center py-8">{m.iv_no_data()}</p>
             {/if}
           {/if}
         </div>
@@ -974,7 +975,7 @@
             </div>
             <div>
               <h3 class="text-lg font-semibold">{m.iv_suspend_inviter()}</h3>
-              <p class="text-xs text-on-surface-variant/60">{m.iv_suspend_inviter_desc()}</p>
+              <p class="text-xs text-on-surface-variant">{m.iv_suspend_inviter_desc()}</p>
             </div>
           </div>
 
@@ -1003,7 +1004,7 @@
                 bind:value={suspendReason}
                 className="w-full px-4 py-2.5 rounded-xl bg-surface-container-high/30 border border-outline-variant/20 text-sm"
               />
-              <label class="flex items-center gap-2 text-sm font-bold text-on-surface-variant/70 cursor-pointer">
+              <label class="flex items-center gap-2 text-sm font-bold text-on-surface-variant cursor-pointer">
                 <input type="checkbox" bind:checked={suspendCascade} class="rounded" />
                 {m.iv_cascade_purge_label()}
               </label>
@@ -1026,7 +1027,7 @@
             </div>
             <div>
               <h3 class="text-lg font-semibold">{m.iv_suspended_inviters()}</h3>
-              <p class="text-xs text-on-surface-variant/60">{m.iv_suspended_inviters_desc()}</p>
+              <p class="text-xs text-on-surface-variant">{m.iv_suspended_inviters_desc()}</p>
             </div>
           </div>
 
@@ -1053,7 +1054,7 @@
                   <div class="flex items-start justify-between gap-3">
                     <div class="flex-1">
                       <p class="text-sm font-semibold text-on-surface">{inviter.userTag || inviter.userId}</p>
-                      <p class="text-2xs text-on-surface-variant/50 mt-1">{inviter.reason || m.iv_no_reason()}</p>
+                      <p class="text-2xs text-on-surface-variant mt-1">{inviter.reason || m.iv_no_reason()}</p>
                       <p class="text-2xs text-on-surface-variant/40">{formatDate(inviter.createdAt)}</p>
                     </div>
                     {#if canModerate}
@@ -1066,7 +1067,7 @@
                 </div>
               {/each}
               {#if suspendedInviters.length === 0}
-                <p class="text-xs text-on-surface-variant/60 text-center py-8">{m.iv_no_suspended_inviter()}</p>
+                <p class="text-xs text-on-surface-variant text-center py-8">{m.iv_no_suspended_inviter()}</p>
               {/if}
             {/if}
           </div>

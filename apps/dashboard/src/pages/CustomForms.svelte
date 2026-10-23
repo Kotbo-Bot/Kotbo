@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { explainDisabled } from '../lib/actions/explainDisabled';
   import { onMount } from 'svelte';
   import { router } from 'tinro';
   import { authStore } from '../lib/stores/auth.svelte';
@@ -71,7 +72,7 @@
 
       if (!res.ok) {
         const err = await res.json();
-        throw new Error(err.error || 'Erreur lors de la création du formulaire');
+        throw new Error(err.error || 'Impossible de créer le formulaire. Réessaie.');
       }
 
       const createdData = await res.json();
@@ -93,7 +94,7 @@
       const res = await dashboardFetch(`/custom-forms/${formId}`, {
         method: 'DELETE'
         });
-      if (!res.ok) throw new Error('Erreur lors de la suppression');
+      if (!res.ok) throw new Error('Impossible de supprimer. Réessaie.');
       await fetchForms();
       return true;
     }, { successMessage: m.cf_delete_success() });
@@ -254,7 +255,7 @@
               </div>
 
               <div class="space-y-4 mb-6 pt-2 border-t border-outline-variant/5">
-                <div class="flex items-center justify-between text-xs text-on-surface-variant/60 font-sans">
+                <div class="flex items-center justify-between text-xs text-on-surface-variant font-sans">
                   <span class="flex items-center gap-2">
                     <Papicon icon="link" size={14} />
                     {m.cf_public_link()}
@@ -274,7 +275,7 @@
                   </div>
                 </div>
 
-                <div class="flex items-center justify-between text-xs text-on-surface-variant/60 font-sans">
+                <div class="flex items-center justify-between text-xs text-on-surface-variant font-sans">
                   <span class="flex items-center gap-2">
                     <Papicon icon="assignment_turned_in" size={14} />
                     {m.cf_submissions_label()}
@@ -282,7 +283,7 @@
                   <span class="font-bold text-on-surface">{form._count?.submissions || 0}</span>
                 </div>
 
-                <div class="flex items-center justify-between text-xs text-on-surface-variant/60 font-sans">
+                <div class="flex items-center justify-between text-xs text-on-surface-variant font-sans">
                   <span class="flex items-center gap-2">
                     <Papicon icon="work" size={14} />
                     {m.cf_recruitment_link()}
@@ -293,7 +294,7 @@
                   />
                 </div>
 
-                <div class="flex items-center justify-between text-xs text-on-surface-variant/60 font-sans">
+                <div class="flex items-center justify-between text-xs text-on-surface-variant font-sans">
                   <span class="flex items-center gap-2">
                     <Papicon icon="lock" size={14} />
                     {m.cf_discord_auth_label()}
@@ -309,7 +310,7 @@
                     {m.cf_discord_auth_always()}
                   </p>
 
-                  <div class="flex items-center justify-between text-xs text-on-surface-variant/60 font-sans gap-3">
+                  <div class="flex items-center justify-between text-xs text-on-surface-variant font-sans gap-3">
                     <span class="flex items-center gap-2 shrink-0">
                       <Papicon icon="account_tree" size={14} />
                       {m.cf_target_hierarchy()}
@@ -332,7 +333,7 @@
                   {/if}
                 {/if}
 
-                <div class="flex items-center justify-between text-xs text-on-surface-variant/60 font-sans">
+                <div class="flex items-center justify-between text-xs text-on-surface-variant font-sans">
                   <span class="flex items-center gap-2">
                     <Papicon icon="visibility" size={14} />
                     {m.cf_active_label()}
@@ -394,7 +395,7 @@
       
       <div class="p-8 space-y-6">
         <div>
-          <label for="form-name" class="block text-body-sm font-medium text-on-surface-variant/60 mb-2 font-sans">{m.cf_field_name_label()}</label>
+          <label for="form-name" class="block text-body-sm font-medium text-on-surface-variant mb-2 font-sans">{m.cf_field_name_label()}</label>
           <FormInput 
             id="form-name"
             type="text" 
@@ -404,12 +405,12 @@
           />
         </div>
         <div>
-          <label for="form-description" class="block text-body-sm font-medium text-on-surface-variant/60 mb-2 font-sans">{m.cf_field_desc_label()}</label>
+          <label for="form-description" class="block text-body-sm font-medium text-on-surface-variant mb-2 font-sans">{m.cf_field_desc_label()}</label>
           <textarea 
             id="form-description"
             bind:value={newFormDescription}
             placeholder={m.cf_field_desc_ph()}
-            class="w-full bg-surface-container rounded-lg p-4 text-sm text-on-surface placeholder:text-on-surface-variant/60 focus:outline-hidden border border-outline-variant/10 focus:border-primary/50 transition-all resize-none h-24 font-sans"
+            class="w-full bg-surface-container rounded-lg p-4 text-sm text-on-surface placeholder:text-on-surface-variant focus:outline-hidden border border-outline-variant/10 focus:border-primary/50 transition-all resize-none h-24 font-sans"
           ></textarea>
         </div>
       </div>
@@ -418,7 +419,8 @@
         <button onclick={() => showCreateModal = false} class="flex-1 py-3.5 rounded-xl font-bold bg-surface hover:bg-surface-hover transition-colors font-sans">{m.cf_btn_cancel()}</button>
         <button 
           onclick={createForm}
-          disabled={createAction.state.loading || !newFormName.trim()}
+          disabled={createAction.state.loading}
+          use:explainDisabled={(!newFormName.trim()) ? m.common_reason_fill_field() : ''}
           class="flex-1 py-3.5 rounded-xl font-semibold bg-primary text-on-primary active:scale-[0.98] transition-all disabled:opacity-50 disabled:scale-100 font-sans"
         >
           {createAction.state.loading ? m.cf_btn_creating() : m.cf_btn_create_submit()}

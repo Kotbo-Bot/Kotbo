@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { explainDisabled } from '../lib/actions/explainDisabled';
   import { onMount } from 'svelte';
   import { API_BASE_URL } from '../lib/api';
   import { authStore } from '../lib/stores/auth.svelte';
@@ -258,7 +259,7 @@
     <div class="flex items-center justify-center min-h-[60vh]">
       <div class="text-center">
         <div class="w-12 h-12 rounded-full border-4 border-primary/20 border-t-primary animate-spin mx-auto mb-4"></div>
-        <p class="text-on-surface-variant/60">{m.pa_loading()}</p>
+        <p class="text-on-surface-variant">{m.pa_loading()}</p>
       </div>
     </div>
 
@@ -268,7 +269,7 @@
         <Papicon icon="lock" size={56} />
       </div>
       <h1 class="text-2xl font-semibold text-on-surface mb-3">{m.pa_unavailable()}</h1>
-      <p class="text-on-surface-variant/60 text-sm">{m.pa_unavailable_desc()}</p>
+      <p class="text-on-surface-variant text-sm">{m.pa_unavailable_desc()}</p>
     </div>
 
   {:else if data}
@@ -290,7 +291,7 @@
           {/if}
           <div class="min-w-0">
             <h1 class="text-2xl font-semibold text-on-surface truncate">{data.guildName}</h1>
-            <p class="text-on-surface-variant/70 text-sm mt-1">{m.pa_title()}</p>
+            <p class="text-on-surface-variant text-sm mt-1">{m.pa_title()}</p>
             {#if data.welcomeText || theme?.welcomeText}
               <p class="mt-2 text-sm leading-relaxed" style="color:var(--form-color)">{data.welcomeText || theme?.welcomeText}</p>
             {/if}
@@ -305,7 +306,7 @@
             <Papicon icon="lock" size={48} />
           </div>
           <h2 class="text-lg font-semibold text-on-surface mb-2">{m.pa_login_required()}</h2>
-          <p class="text-sm text-on-surface-variant/70 mb-6 leading-relaxed">
+          <p class="text-sm text-on-surface-variant mb-6 leading-relaxed">
             {m.pa_login_desc()}
           </p>
           <button onclick={loginWithDiscord}
@@ -325,7 +326,7 @@
             </svg>
           </div>
           <h2 class="text-2xl font-semibold text-on-surface mb-3">{m.pa_sent_title()}</h2>
-          <p class="text-on-surface-variant/70 text-sm leading-relaxed">
+          <p class="text-on-surface-variant text-sm leading-relaxed">
             {theme?.confirmationText || m.pa_sent_desc()}
           </p>
         </div>
@@ -339,7 +340,7 @@
             </span>
             <div>
               <h2 class="font-semibold text-on-surface">{m.pa_needs_info_title()}</h2>
-              <p class="text-xs text-on-surface-variant/60 mt-0.5">{m.pa_needs_info_desc()}</p>
+              <p class="text-xs text-on-surface-variant mt-0.5">{m.pa_needs_info_desc()}</p>
             </div>
           </div>
 
@@ -347,7 +348,7 @@
             <div class="space-y-3 max-h-80 overflow-y-auto pr-1">
               {#each viewer.latestAppeal.messages as msg}
                 <div class="flex flex-col p-3 rounded-lg text-sm border {msg.author === 'staff' ? 'bg-blue-500/5 border-blue-500/20' : 'bg-surface border-outline-variant/15'}">
-                  <div class="flex items-center justify-between text-xs font-semibold text-on-surface-variant/60 mb-1">
+                  <div class="flex items-center justify-between text-xs font-semibold text-on-surface-variant mb-1">
                     <span>{msg.author === 'staff' ? m.pa_staff() : m.pa_you()}</span>
                     <span>{formatDateTime(msg.createdAt)}</span>
                   </div>
@@ -368,7 +369,7 @@
             <p class="pf-error text-xs text-error">{submitError}</p>
           {/if}
           <div class="flex justify-end">
-            <button onclick={sendInfoResponse} disabled={submitting || !infoResponseText.trim()}
+            <button onclick={sendInfoResponse} disabled={submitting} use:explainDisabled={(!infoResponseText.trim()) ? m.common_reason_fill_field() : ''}
               class="pf-submit px-6 py-2.5 rounded-xl text-white font-semibold text-sm shadow disabled:opacity-50"
               style="background:var(--form-color)">
               {submitting ? m.pa_sending() : m.pa_send_response()}
@@ -385,7 +386,7 @@
               <Papicon icon="clock" size={48} />
             </div>
             <h2 class="text-lg font-semibold text-on-surface mb-2">{m.pa_pending_title()}</h2>
-            <p class="text-sm text-on-surface-variant/70 leading-relaxed mb-0">
+            <p class="text-sm text-on-surface-variant leading-relaxed mb-0">
               {#if infoResponseSent}
                 {m.pa_response_forwarded()}
               {/if}
@@ -404,7 +405,7 @@
                 {#if appeal.messages && appeal.messages.length > 0}
                   {#each appeal.messages as msg}
                     <div class="flex flex-col p-3 rounded-lg text-sm border {msg.author === 'staff' ? 'bg-blue-500/5 border-blue-500/20' : 'bg-surface border-outline-variant/15'}">
-                      <div class="flex items-center justify-between text-xs font-semibold text-on-surface-variant/60 mb-1">
+                      <div class="flex items-center justify-between text-xs font-semibold text-on-surface-variant mb-1">
                         <span>{msg.author === 'staff' ? m.pa_staff() : m.pa_you()}</span>
                         <span>{formatDateTime(msg.createdAt)}</span>
                       </div>
@@ -413,14 +414,14 @@
                   {/each}
                 {:else if appeal.infoRequest}
                   <div class="flex flex-col p-3 rounded-lg text-sm border bg-blue-500/5 border-blue-500/20">
-                    <div class="flex items-center justify-between text-xs font-semibold text-on-surface-variant/60 mb-1">
+                    <div class="flex items-center justify-between text-xs font-semibold text-on-surface-variant mb-1">
                       <span>{m.pa_staff()}</span>
                     </div>
                     <p class="whitespace-pre-wrap">{appeal.infoRequest}</p>
                   </div>
                   {#if appeal.infoResponse}
                     <div class="flex flex-col p-3 rounded-lg text-sm border bg-surface border-outline-variant/15">
-                      <div class="flex items-center justify-between text-xs font-semibold text-on-surface-variant/60 mb-1">
+                      <div class="flex items-center justify-between text-xs font-semibold text-on-surface-variant mb-1">
                         <span>{m.pa_you()}</span>
                       </div>
                       <p class="whitespace-pre-wrap">{appeal.infoResponse}</p>
@@ -443,7 +444,7 @@
                 <Papicon icon="check" size={48} />
               </div>
               <h2 class="text-lg font-semibold text-on-surface mb-2">{m.pa_not_banned()}</h2>
-              <p class="text-sm text-on-surface-variant/70">
+              <p class="text-sm text-on-surface-variant">
                 Le compte <span class="font-semibold">{viewer.username || viewer.userId}</span> {m.pa_not_banned_desc()}
                 {#if lastAppeal && lastAppeal.status === 'ACCEPTED'}
                   {m.pa_accepted_on({ date: lastAppeal.decidedAt ? formatDate(lastAppeal.decidedAt) : '' })}
@@ -456,11 +457,11 @@
                 <Papicon icon="block" size={48} />
               </div>
               <h2 class="text-lg font-semibold text-on-surface mb-2">{m.pa_not_allowed()}</h2>
-              <p class="text-sm text-on-surface-variant/70">
+              <p class="text-sm text-on-surface-variant">
                 {m.pa_not_allowed_desc()}
               </p>
               {#if lastAppeal?.decisionReason}
-                <p class="mt-3 text-xs text-on-surface-variant/50">{m.pa_reason({ reason: lastAppeal.decisionReason })}</p>
+                <p class="mt-3 text-xs text-on-surface-variant">{m.pa_reason({ reason: lastAppeal.decisionReason })}</p>
               {/if}
             </div>
           {:else if blocked.blockedBy === 'cooldown'}
@@ -469,7 +470,7 @@
                 <Papicon icon="clock" size={48} />
               </div>
               <h2 class="text-lg font-semibold text-on-surface mb-2">{m.pa_denied_recently()}</h2>
-              <p class="text-sm text-on-surface-variant/70 leading-relaxed">
+              <p class="text-sm text-on-surface-variant leading-relaxed">
                 {lastAppeal?.decisionReason ? m.pa_denied_recently_desc_reason({ reason: lastAppeal.decisionReason }) : m.pa_denied_recently_desc()}
                 {#if blocked.cooldownEndsAt}
                   {m.pa_cooldown_until()}
@@ -483,7 +484,7 @@
                 <Papicon icon="check" size={48} />
               </div>
               <h2 class="text-lg font-semibold text-on-surface mb-2">{m.pa_nothing_title()}</h2>
-              <p class="text-sm text-on-surface-variant/70">{m.pa_nothing_desc()}</p>
+              <p class="text-sm text-on-surface-variant">{m.pa_nothing_desc()}</p>
             </div>
           {:else}
             <div class="text-center flex flex-col items-center justify-center">
@@ -491,7 +492,7 @@
                 <Papicon icon="clock" size={48} />
               </div>
               <h2 class="text-lg font-semibold text-on-surface mb-2">{m.pa_already_pending()}</h2>
-              <p class="text-sm text-on-surface-variant/70">{m.pa_already_pending_desc()}</p>
+              <p class="text-sm text-on-surface-variant">{m.pa_already_pending_desc()}</p>
             </div>
           {/if}
         </div>
@@ -504,7 +505,7 @@
             alt="" class="w-10 h-10 rounded-full border border-outline-variant/30 {authStore.user?.avatar ? '' : 'hidden'}" />
           <div class="flex-1 min-w-0">
             <p class="text-sm font-semibold text-on-surface">{m.pa_logged_in_as({ name: viewer.username || authStore.user?.username })}</p>
-            <p class="text-xs text-on-surface-variant/60 mt-0.5">
+            <p class="text-xs text-on-surface-variant mt-0.5">
               {#if viewer.eligibility.banReason}
                 {m.pa_ban_confirmed_reason({ reason: viewer.eligibility.banReason })}
               {:else if selectionRequired}
@@ -526,7 +527,7 @@
               <p class="font-semibold text-on-surface text-[15px]">
                 {m.pa_pick_sanctions()}{#if selectionRequired}<span class="text-error ml-1">*</span>{/if}
               </p>
-              <p class="text-xs text-on-surface-variant/60 mt-1">
+              <p class="text-xs text-on-surface-variant mt-1">
                 {m.pa_pick_sanctions_desc({ count: maxSelectable })}
               </p>
             </div>
@@ -541,7 +542,7 @@
                     <span class="min-w-0 flex-1">
                       <span class="block text-sm font-semibold text-on-surface">
                         {sanction.typeLabel}
-                        <span class="font-normal text-xs text-on-surface-variant/60">
+                        <span class="font-normal text-xs text-on-surface-variant">
                           · {formatDate(sanction.createdAt)}{sanction.moderatorTag ? ` · ${sanction.moderatorTag}` : ''}
                         </span>
                       </span>
@@ -569,7 +570,7 @@
               {field.label}{#if field.required}<span class="text-error ml-1">*</span>{/if}
             </label>
             {#if field.description}
-              <p class="text-xs text-on-surface-variant/60 mb-3">{field.description}</p>
+              <p class="text-xs text-on-surface-variant mb-3">{field.description}</p>
             {/if}
 
             {#if field.type === 'paragraph'}
@@ -642,7 +643,7 @@
           <div class="mb-4 text-on-surface-variant/30">
             <Papicon icon="settings" size={48} />
           </div>
-          <p class="text-sm text-on-surface-variant/70">{m.pa_no_form()}</p>
+          <p class="text-sm text-on-surface-variant">{m.pa_no_form()}</p>
         </div>
       {/if}
 

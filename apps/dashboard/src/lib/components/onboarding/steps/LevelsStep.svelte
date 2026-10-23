@@ -165,9 +165,9 @@
     <p class="flex items-center gap-2 text-body-sm font-semibold text-on-surface mb-1">
       <Papicon icon="award" size={14} class="text-primary" />
       Des rôles à débloquer
-      <span class="font-normal text-on-surface-variant/50">- facultatif</span>
+      <span class="font-normal text-on-surface-variant">- facultatif</span>
     </p>
-    <p class="text-xs text-on-surface-variant/60 leading-relaxed mb-3">
+    <p class="text-xs text-on-surface-variant leading-relaxed mb-3">
       Le rôle est donné automatiquement au passage du niveau. C'est ce qui fait qu'on
       regarde sa progression.
     </p>
@@ -215,20 +215,20 @@
                      focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40
                      {count === option
                        ? 'border-primary bg-primary/[0.07] text-primary'
-                       : 'border-outline-variant/40 text-on-surface-variant/70 hover:border-primary/45'}"
+                       : 'border-outline-variant/40 text-on-surface-variant hover:border-primary/45'}"
             >
               {option}
             </button>
           {/each}
         </div>
-        <p class="mt-2 text-xs text-on-surface-variant/50 leading-relaxed">
+        <p class="mt-2 text-xs text-on-surface-variant leading-relaxed">
           <!-- Le dernier palier est ce qui se lit en premier : c'est lui qui dit
                si l'échelle couvre un mois ou deux ans. -->
           Du niveau {ladderAscending[0]?.level} au niveau {ladderAscending[ladderAscending.length - 1]?.level}.
         </p>
       </div>
     {:else if roles.length === 0}
-      <p class="rounded-xl border border-outline-variant/30 bg-surface-container-low/30 px-4 py-3 text-body-sm text-on-surface-variant/60">
+      <p class="rounded-xl border border-outline-variant/30 bg-surface-container-low/30 px-4 py-3 text-body-sm text-on-surface-variant">
         Aucun rôle attribuable n'a été trouvé. Choisis « Créer l'échelle pour moi », ou
         ajoute tes paliers plus tard depuis la page Niveaux.
       </p>
@@ -306,7 +306,7 @@
     <button
       type="button"
       onclick={skip}
-      class="text-body-sm font-medium text-on-surface-variant/50 hover:text-on-surface transition-colors"
+      class="text-body-sm font-medium text-on-surface-variant hover:text-on-surface transition-colors"
     >
       Passer
     </button>

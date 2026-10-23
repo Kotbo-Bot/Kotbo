@@ -1,0 +1,47 @@
+// Tests A/B de l'accueil : plusieurs versions du message de bienvenue (et du
+// fil d'accueil) réparties au hasard entre les arrivants, puis comparées sur
+// la rétention et l'activation.
+
+model WelcomeExperiment {
+  id String @id @default(cuid())
+
+  guildId    String
+  name       String
+  hypothesis String?
+  // DRAFT | RUNNING | STOPPED
+  status     String  @default("DRAFT")
+  // retained_d1 | retained_d7 | retained_d30 | activated_d7
+  primaryMetric String @default("retained_d7")
+  // [{ key, name, weight, message, imageEnabled, threadEnabled }]
+  variants   Json
+  winnerKey  String?
+
+  startedAt DateTime?
+  stoppedAt DateTime?
+
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  guild       Guild                         @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  assignments WelcomeExperimentAssignment[]
+
+  @@index([guildId, status])
+  @@map("welcome_experiments")
+}
+
+model WelcomeExperimentAssignment {
+  id String @id @default(cuid())
+
+  experimentId String
+  guildId      String
+  userId       String
+  variantKey   String
+  assignedAt   DateTime @default(now())
+
+  experiment WelcomeExperiment @relation(fields: [experimentId], references: [id], onDelete: Cascade)
+
+  @@unique([experimentId, userId])
+  @@index([experimentId, variantKey])
+  @@map("welcome_experiment_assignments")
+}

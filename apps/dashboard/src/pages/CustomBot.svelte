@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { explainDisabled } from '../lib/actions/explainDisabled';
+  import { m } from '../lib/i18n';
   import { onMount } from 'svelte';
   import { toast } from '../lib/stores/toast.svelte';
   import {
@@ -9,6 +11,7 @@
     stopCustomBot,
   } from '../lib/api';
   import Papicon from '../lib/components/Papicon.svelte';
+  import Button from '../lib/components/ui/Button.svelte';
 
   import { errorMessage } from '@kotbo/shared';
   let config = $state<any>(null);
@@ -167,44 +170,31 @@
 </script>
 
 <div class="space-y-6 max-w-4xl">
-  <!-- Header -->
-  <div class="flex items-center justify-between">
-    <div class="flex items-center gap-3">
-      <div class="w-10 h-10 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center">
-        <Papicon icon="bot" size={20} class="text-primary" />
-      </div>
-      <div>
-        <h2 class="text-xl font-semibold text-on-surface">Custom Bot</h2>
-        <p class="text-sm text-on-surface-variant">Lance ton propre bot avec les fonctionnalités Kotbo</p>
-      </div>
+  <header class="flex flex-col md:flex-row md:items-end justify-between gap-x-6 gap-y-3">
+    <div class="min-w-0">
+      <h1 class="text-2xl font-semibold tracking-tight text-on-surface font-headline leading-tight">Bot personnalisé</h1>
+      <p class="mt-1 max-w-prose text-sm text-on-surface-variant">Lance ton propre bot, avec les fonctions de Kotbo.</p>
     </div>
 
     {#if config}
-      <div class="flex items-center gap-3">
+      <div class="flex items-center flex-wrap md:justify-end gap-3 shrink-0">
+        <span class="flex items-center gap-2 text-sm {config.isRunning ? 'text-success' : 'text-on-surface-variant'}">
+          <span class="w-2 h-2 rounded-full {config.isRunning ? 'bg-success' : 'bg-on-surface-variant/40'}"></span>
+          {config.isRunning ? 'En ligne' : 'Hors ligne'}
+        </span>
         {#if config.isRunning}
-          <div class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-success/10 border border-success/20">
-            <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            <span class="text-xs font-medium text-success">En ligne</span>
-          </div>
-          <button onclick={handleStop} class="px-3 py-1.5 bg-error/10 text-error rounded-lg text-sm font-medium hover:bg-error/20 transition-colors">
-            Arreter
-          </button>
+          <Button variant="danger" onclick={handleStop}>Arrêter</Button>
         {:else}
-          <div class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-gray-500/10 border border-gray-500/20">
-            <span class="w-2 h-2 rounded-full bg-gray-500"></span>
-            <span class="text-xs font-medium text-on-surface-variant">Hors ligne</span>
-          </div>
-          <button
+          <Button
+            variant="primary"
+            icon="play"
             onclick={handleStart}
             disabled={!config.botToken || !config.enabled}
-            class="px-3 py-1.5 bg-emerald-500 text-white rounded-lg text-sm font-medium hover:bg-emerald-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            Demarrer
-          </button>
+          >Démarrer</Button>
         {/if}
       </div>
     {/if}
-  </div>
+  </header>
 
   {#if loading}
     <div class="flex items-center justify-center py-16">
@@ -274,14 +264,16 @@
         </div>
         <button
           onclick={handleValidateToken}
-          disabled={validating || !tokenInput.trim()}
+          disabled={validating}
+          use:explainDisabled={(!tokenInput.trim()) ? m.common_reason_fill_field() : ''}
           class="px-4 py-2.5 bg-surface-container border border-outline-variant rounded-lg text-sm font-medium text-on-surface hover:bg-surface-container-high transition-colors disabled:opacity-50"
         >
           {validating ? 'Test...' : 'Tester'}
         </button>
         <button
           onclick={handleSaveToken}
-          disabled={saving || !tokenInput.trim()}
+          disabled={saving}
+          use:explainDisabled={(!tokenInput.trim()) ? m.common_reason_fill_field() : ''}
           class="px-4 py-2.5 bg-primary text-on-primary rounded-lg text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
         >
           Sauvegarder

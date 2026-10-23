@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { explainDisabled } from '../lib/actions/explainDisabled';
   import { m } from '../lib/i18n';
   import { channelDisplayName } from '../lib/channelUtils';
   import { onMount, onDestroy, untrack } from 'svelte';
@@ -12,6 +13,7 @@
   import ModulePage from '../lib/components/ModulePage.svelte';
   import { createAsyncActionState } from '../lib/asyncAction.svelte';
   import Papicon from '../lib/components/Papicon.svelte';
+  import EmojiText from '../lib/components/EmojiText.svelte';
   import InlineFeedback from '../lib/components/InlineFeedback.svelte';
   import ToggleSwitch from '../lib/components/ToggleSwitch.svelte';
   import SearchableSelect from '../lib/components/SearchableSelect.svelte';
@@ -19,6 +21,7 @@
   import LoadingHint from '../lib/components/LoadingHint.svelte';
   import ActionButton from '../lib/components/ActionButton.svelte';
   import EmojiPicker from '../lib/components/EmojiPicker.svelte';
+  import WelcomeExperiments from '../lib/components/welcome/WelcomeExperiments.svelte';
   import {
     fetchWelcomeConfig,
     updateWelcomeConfig,
@@ -72,7 +75,7 @@
   let showWelcomePresets = $state(false);
   let showLeavePresets   = $state(false);
   let showBoostPresets   = $state(false);
-  const announcementTabs = ['welcome', 'leave', 'boost', 'autoroles', 'thread'] as const;
+  const announcementTabs = ['welcome', 'leave', 'boost', 'autoroles', 'thread', 'experiments'] as const;
   type AnnouncementTab = typeof announcementTabs[number];
   const ANNOUNCE_BASE = window.location.pathname.startsWith('/welcome') ? '/welcome' : '/announcement';
   let activeTab = $state<AnnouncementTab>('welcome');
@@ -651,6 +654,11 @@
     <!-- Tab Contents -->
     <div class="space-y-6">
       
+      <!-- Tests A/B de l'accueil -->
+      {#if activeTab === 'experiments'}
+        <WelcomeExperiments />
+      {/if}
+
       <!-- Welcome Tab -->
       {#if activeTab === 'welcome'}
         <section data-guide="welcome-message" class="bg-surface-container-low/30 border border-outline-variant/10 p-8 rounded-xl space-y-6 max-w-4xl">
@@ -670,7 +678,7 @@
             <div class="space-y-4 animate-in fade-in duration-300">
               <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div class="space-y-1.5">
-                  <label for="wChannel" class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.announcements_broadcast_channel()}</label>
+                  <label for="wChannel" class="text-xs font-semibold text-on-surface-variant ml-2">{m.announcements_broadcast_channel()}</label>
                   <SearchableSelect 
                     id="wChannel"
                     bind:value={config.welcomeChannelId} 
@@ -684,11 +692,11 @@
 
               <div class="space-y-1.5">
                 <div class="flex items-center justify-between ml-2 mb-1">
-                  <label for="wMsg" class="text-xs font-semibold text-on-surface-variant/60">{m.announcements_message_content()}</label>
+                  <label for="wMsg" class="text-xs font-semibold text-on-surface-variant">{m.announcements_message_content()}</label>
                   <button
                     onclick={() => showWelcomePresets = !showWelcomePresets}
                     class="text-2xs font-bold text-primary/70 hover:text-primary flex items-center gap-1.5 transition-colors"
-                    disabled={!canManageSettings}
+                    use:explainDisabled={(!canManageSettings) ? m.common_reason_no_permission() : ''}
                   >
                     <Papicon icon="Sparkles" size={12} />
                     <span>{m.announcements_presets()}</span>
@@ -701,7 +709,7 @@
                       <button
                         onclick={() => { config.welcomeMessage = preset.text; showWelcomePresets = false; }}
                         class="text-2xs font-bold px-3 py-1.5 rounded-xl border border-primary/20 bg-primary/5 hover:bg-primary/15 text-primary transition-all flex items-center gap-1.5"
-                        disabled={!canManageSettings}
+                        use:explainDisabled={(!canManageSettings) ? m.common_reason_no_permission() : ''}
                       >
                         <Papicon icon={preset.icon} size={12} />
                         {preset.label}
@@ -722,7 +730,7 @@
                 <div class="flex items-center justify-between">
                   <div>
                     <p class="text-sm font-bold">{m.announcements_welcome_image_enable()}</p>
-                    <p class="text-2xs text-on-surface-variant/50">{m.announcements_welcome_image_desc()}</p>
+                    <p class="text-2xs text-on-surface-variant">{m.announcements_welcome_image_desc()}</p>
                   </div>
                   <ToggleSwitch 
                     checked={config.welcomeImageEnabled} 
@@ -733,7 +741,7 @@
 
                 {#if config.welcomeImageEnabled}
                   <div class="space-y-1.5 pt-2 animate-in fade-in duration-300">
-                    <label for="wImgUrl" class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.announcements_welcome_image_url_label()}</label>
+                    <label for="wImgUrl" class="text-xs font-semibold text-on-surface-variant ml-2">{m.announcements_welcome_image_url_label()}</label>
                     <input 
                       id="wImgUrl"
                       type="url" 
@@ -747,10 +755,10 @@
               </div>
 
               <div class="space-y-1.5">
-                <span class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.announcements_discord_preview()}</span>
+                <span class="text-xs font-semibold text-on-surface-variant ml-2">{m.announcements_discord_preview()}</span>
                 <div class="p-5 rounded-lg bg-surface-container-high/35 border border-outline-variant/15 text-sm text-on-surface font-semibold font-sans whitespace-pre-wrap select-none relative overflow-hidden">
                   <div class="flex items-start gap-4">
-                    <div class="w-10 h-10 rounded-full bg-outline-variant/30 flex items-center justify-center text-xs font-semibold text-on-surface-variant/60">BOT</div>
+                    <div class="w-10 h-10 rounded-full bg-outline-variant/30 flex items-center justify-center text-xs font-semibold text-on-surface-variant">BOT</div>
                     <div>
                       <div class="flex items-center gap-2">
                         <span class="font-bold text-primary">Kotbo</span>
@@ -779,7 +787,7 @@
               </div>
             </div>
           {:else}
-            <p class="text-xs text-on-surface-variant/50 italic text-center py-6">{m.announcements_welcome_disabled()}</p>
+            <p class="text-xs text-on-surface-variant italic text-center py-6">{m.announcements_welcome_disabled()}</p>
           {/if}
         </section>
       {/if}
@@ -803,7 +811,7 @@
             <div class="space-y-4 animate-in fade-in duration-300">
               <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div class="space-y-1.5">
-                  <label for="lChannel" class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.announcements_broadcast_channel()}</label>
+                  <label for="lChannel" class="text-xs font-semibold text-on-surface-variant ml-2">{m.announcements_broadcast_channel()}</label>
                   <SearchableSelect 
                     id="lChannel"
                     bind:value={config.leaveChannelId} 
@@ -817,11 +825,11 @@
 
               <div class="space-y-1.5">
                 <div class="flex items-center justify-between ml-2 mb-1">
-                  <label for="lMsg" class="text-xs font-semibold text-on-surface-variant/60">{m.announcements_message_content()}</label>
+                  <label for="lMsg" class="text-xs font-semibold text-on-surface-variant">{m.announcements_message_content()}</label>
                   <button
                     onclick={() => showLeavePresets = !showLeavePresets}
                     class="text-2xs font-bold text-primary/70 hover:text-primary flex items-center gap-1.5 transition-colors"
-                    disabled={!canManageSettings}
+                    use:explainDisabled={(!canManageSettings) ? m.common_reason_no_permission() : ''}
                   >
                     <Papicon icon="Sparkles" size={12} />
                     <span>{m.announcements_presets()}</span>
@@ -834,7 +842,7 @@
                       <button
                         onclick={() => { config.leaveMessage = preset.text; showLeavePresets = false; }}
                         class="text-2xs font-bold px-3 py-1.5 rounded-xl border border-primary/20 bg-primary/5 hover:bg-primary/15 text-primary transition-all flex items-center gap-1.5"
-                        disabled={!canManageSettings}
+                        use:explainDisabled={(!canManageSettings) ? m.common_reason_no_permission() : ''}
                       >
                         <Papicon icon={preset.icon} size={12} />
                         {preset.label}
@@ -852,10 +860,10 @@
               </div>
 
               <div class="space-y-1.5 pt-4">
-                <span class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.announcements_discord_preview()}</span>
+                <span class="text-xs font-semibold text-on-surface-variant ml-2">{m.announcements_discord_preview()}</span>
                 <div class="p-5 rounded-lg bg-surface-container-high/35 border border-outline-variant/15 text-sm text-on-surface font-semibold font-sans whitespace-pre-wrap select-none relative overflow-hidden">
                   <div class="flex items-start gap-4">
-                    <div class="w-10 h-10 rounded-full bg-outline-variant/30 flex items-center justify-center text-xs font-semibold text-on-surface-variant/60">BOT</div>
+                    <div class="w-10 h-10 rounded-full bg-outline-variant/30 flex items-center justify-center text-xs font-semibold text-on-surface-variant">BOT</div>
                     <div>
                       <div class="flex items-center gap-2">
                         <span class="font-bold text-primary">Kotbo</span>
@@ -871,7 +879,7 @@
               </div>
             </div>
           {:else}
-            <p class="text-xs text-on-surface-variant/50 italic text-center py-6">{m.announcements_leave_disabled()}</p>
+            <p class="text-xs text-on-surface-variant italic text-center py-6">{m.announcements_leave_disabled()}</p>
           {/if}
         </section>
       {/if}
@@ -895,7 +903,7 @@
             <div class="space-y-4 animate-in fade-in duration-300">
               <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div class="space-y-1.5">
-                  <label for="bChannel" class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.announcements_broadcast_channel()}</label>
+                  <label for="bChannel" class="text-xs font-semibold text-on-surface-variant ml-2">{m.announcements_broadcast_channel()}</label>
                   <SearchableSelect 
                     id="bChannel"
                     bind:value={config.boostChannelId} 
@@ -909,11 +917,11 @@
 
               <div class="space-y-1.5">
                 <div class="flex items-center justify-between ml-2 mb-1">
-                  <label for="bMsg" class="text-xs font-semibold text-on-surface-variant/60">{m.announcements_boost_content_label()}</label>
+                  <label for="bMsg" class="text-xs font-semibold text-on-surface-variant">{m.announcements_boost_content_label()}</label>
                   <button
                     onclick={() => showBoostPresets = !showBoostPresets}
                     class="text-2xs font-bold text-primary/70 hover:text-primary flex items-center gap-1.5 transition-colors"
-                    disabled={!canManageSettings}
+                    use:explainDisabled={(!canManageSettings) ? m.common_reason_no_permission() : ''}
                   >
                     <Papicon icon="Sparkles" size={12} />
                     <span>{m.announcements_presets()}</span>
@@ -926,7 +934,7 @@
                       <button
                         onclick={() => { config.boostMessage = preset.text; showBoostPresets = false; }}
                         class="text-2xs font-bold px-3 py-1.5 rounded-xl border border-primary/20 bg-primary/5 hover:bg-primary/15 text-primary transition-all flex items-center gap-1.5"
-                        disabled={!canManageSettings}
+                        use:explainDisabled={(!canManageSettings) ? m.common_reason_no_permission() : ''}
                       >
                         <Papicon icon={preset.icon} size={12} />
                         {preset.label}
@@ -947,7 +955,7 @@
                 <div class="flex items-center justify-between">
                   <div>
                     <p class="text-sm font-bold">{m.announcements_boost_image_enable()}</p>
-                    <p class="text-2xs text-on-surface-variant/50">{m.announcements_boost_image_desc()}</p>
+                    <p class="text-2xs text-on-surface-variant">{m.announcements_boost_image_desc()}</p>
                   </div>
                   <ToggleSwitch 
                     checked={config.boostImageEnabled} 
@@ -958,7 +966,7 @@
 
                 {#if config.boostImageEnabled}
                   <div class="space-y-1.5 pt-2 animate-in fade-in duration-300">
-                    <label for="bImgUrl" class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.announcements_boost_image_url_label()}</label>
+                    <label for="bImgUrl" class="text-xs font-semibold text-on-surface-variant ml-2">{m.announcements_boost_image_url_label()}</label>
                     <input 
                       id="bImgUrl"
                       type="url" 
@@ -972,10 +980,10 @@
               </div>
 
               <div class="space-y-1.5">
-                <span class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.announcements_discord_preview()}</span>
+                <span class="text-xs font-semibold text-on-surface-variant ml-2">{m.announcements_discord_preview()}</span>
                 <div class="p-5 rounded-lg bg-surface-container-high/35 border border-outline-variant/15 text-sm text-on-surface font-semibold font-sans whitespace-pre-wrap select-none relative overflow-hidden">
                   <div class="flex items-start gap-4">
-                    <div class="w-10 h-10 rounded-full bg-outline-variant/30 flex items-center justify-center text-xs font-semibold text-on-surface-variant/60">BOT</div>
+                    <div class="w-10 h-10 rounded-full bg-outline-variant/30 flex items-center justify-center text-xs font-semibold text-on-surface-variant">BOT</div>
                     <div>
                       <div class="flex items-center gap-2">
                         <span class="font-bold text-primary">Kotbo</span>
@@ -1004,7 +1012,7 @@
               </div>
             </div>
           {:else}
-            <p class="text-xs text-on-surface-variant/50 italic text-center py-6">{m.announcements_boost_disabled()}</p>
+            <p class="text-xs text-on-surface-variant italic text-center py-6">{m.announcements_boost_disabled()}</p>
           {/if}
         </section>
       {/if}
@@ -1019,10 +1027,10 @@
               <Papicon icon="User" size={20} class="text-primary" />
               {m.announcements_autorole_join_title()}
             </h3>
-            <p class="text-xs text-on-surface-variant/70 font-medium">{m.announcements_autorole_join_desc()}</p>
+            <p class="text-xs text-on-surface-variant font-medium">{m.announcements_autorole_join_desc()}</p>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
               <div class="space-y-1.5">
-                <label for="joinRole" class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.announcements_autorole_assigned_role()}</label>
+                <label for="joinRole" class="text-xs font-semibold text-on-surface-variant ml-2">{m.announcements_autorole_assigned_role()}</label>
                 <SearchableSelect 
                   id="joinRole"
                   bind:value={config.joinRoleId} 
@@ -1051,12 +1059,12 @@
                 disabled={!canManageSettings}
               />
             </div>
-            <p class="text-xs text-on-surface-variant/70 font-medium">
+            <p class="text-xs text-on-surface-variant font-medium">
               {m.announcements_autorole_tag_desc()}
             </p>
             <div class="flex items-start gap-2 p-3 rounded-lg bg-surface-container-high/20 border border-outline-variant/10">
               <span class="text-primary mt-0.5 shrink-0"><Papicon icon="Info" size={14} /></span>
-              <p class="text-2xs text-on-surface-variant/70 font-medium leading-relaxed">
+              <p class="text-2xs text-on-surface-variant font-medium leading-relaxed">
                 {m.announcements_autorole_tag_info()}
               </p>
             </div>
@@ -1064,7 +1072,7 @@
             {#if config.tagAutoRoleEnabled}
               <div class="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2 animate-in fade-in duration-300">
                 <div class="space-y-1.5">
-                  <label for="tagRole" class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.announcements_autorole_tag_role_label()}</label>
+                  <label for="tagRole" class="text-xs font-semibold text-on-surface-variant ml-2">{m.announcements_autorole_tag_role_label()}</label>
                   <SearchableSelect
                     id="tagRole"
                     bind:value={config.tagAutoRoleId}
@@ -1091,12 +1099,12 @@
                 disabled={!canManageSettings}
               />
             </div>
-            <p class="text-xs text-on-surface-variant/70 font-medium">
+            <p class="text-xs text-on-surface-variant font-medium">
               {m.announcements_autorole_status_desc()}
             </p>
             <div class="flex items-start gap-2 p-3 rounded-lg bg-surface-container-high/20 border border-outline-variant/10">
               <span class="text-primary mt-0.5 shrink-0"><Papicon icon="Info" size={14} /></span>
-              <p class="text-2xs text-on-surface-variant/70 font-medium leading-relaxed">
+              <p class="text-2xs text-on-surface-variant font-medium leading-relaxed">
                 {m.announcements_autorole_status_info()}
               </p>
             </div>
@@ -1104,7 +1112,7 @@
             {#if config.statusScanEnabled}
               <div class="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2 animate-in fade-in duration-300">
                 <div class="space-y-1.5">
-                  <label for="statusKeyword" class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.announcements_autorole_status_keyword_label()}</label>
+                  <label for="statusKeyword" class="text-xs font-semibold text-on-surface-variant ml-2">{m.announcements_autorole_status_keyword_label()}</label>
                   <input
                     id="statusKeyword"
                     type="text"
@@ -1117,7 +1125,7 @@
                 </div>
 
                 <div class="space-y-1.5">
-                  <label for="statusScope" class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.announcements_autorole_status_scope_label()}</label>
+                  <label for="statusScope" class="text-xs font-semibold text-on-surface-variant ml-2">{m.announcements_autorole_status_scope_label()}</label>
                   <select
                     id="statusScope"
                     bind:value={config.statusScanScope}
@@ -1131,7 +1139,7 @@
                 </div>
 
                 <div class="space-y-1.5 md:col-span-2">
-                  <label for="statusRole" class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.announcements_autorole_status_role_label()}</label>
+                  <label for="statusRole" class="text-xs font-semibold text-on-surface-variant ml-2">{m.announcements_autorole_status_role_label()}</label>
                   <SearchableSelect
                     id="statusRole"
                     bind:value={config.statusScanRoleId}
@@ -1152,13 +1160,14 @@
           {#if config.tagAutoRoleEnabled || config.statusScanEnabled}
             <InlineFeedback message={rescanState.state.message} error={rescanState.state.error} />
             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-6 border-t border-outline-variant/15">
-              <p class="text-2xs text-on-surface-variant/60 font-medium leading-relaxed max-w-xl">
+              <p class="text-2xs text-on-surface-variant font-medium leading-relaxed max-w-xl">
                 {m.announcements_autorole_rescan_desc()}
               </p>
               <button
                 type="button"
                 onclick={handleAutoRoleRescan}
-                disabled={!canManageSettings || rescanState.state.loading}
+                disabled={rescanState.state.loading}
+                use:explainDisabled={(!canManageSettings) ? m.common_reason_no_permission() : ''}
                 class="px-4 py-2.5 bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 text-xs font-bold rounded-lg transition-all inline-flex items-center gap-2 shrink-0 disabled:opacity-50"
               >
                 <Papicon icon="refresh" size={14} class={rescanState.state.loading ? 'animate-spin' : ''} />
@@ -1195,7 +1204,7 @@
                 />
               </div>
 
-              <p class="text-xs text-on-surface-variant/70 font-medium">
+              <p class="text-xs text-on-surface-variant font-medium">
                 {m.announcements_thread_desc()}
               </p>
 
@@ -1203,7 +1212,7 @@
                 <div class="space-y-5 animate-in fade-in duration-300">
                   <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div class="space-y-1.5">
-                      <label for="threadChannel" class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.announcements_thread_parent_channel()}</label>
+                      <label for="threadChannel" class="text-xs font-semibold text-on-surface-variant ml-2">{m.announcements_thread_parent_channel()}</label>
                       <SearchableSelect
                         id="threadChannel"
                         bind:value={threadConfig.channelId}
@@ -1214,21 +1223,21 @@
                       />
                     </div>
                     <div class="space-y-1.5">
-                      <span class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.announcements_thread_mode_label()}</span>
+                      <span class="text-xs font-semibold text-on-surface-variant ml-2">{m.announcements_thread_mode_label()}</span>
                       <div class="inline-flex w-full rounded-lg border border-outline-variant/10 bg-surface-container-high/40 p-1 gap-1">
                         <button
                           type="button"
                           onclick={() => threadConfig.threadMode = 'public'}
-                          disabled={!canManageSettings}
-                          class="flex-1 px-4 py-2.5 rounded-md text-body-sm font-medium transition-all {threadConfig.threadMode === 'public' ? 'bg-primary text-on-primary' : 'text-on-surface-variant/60 hover:text-on-surface'}"
+                          use:explainDisabled={(!canManageSettings) ? m.common_reason_no_permission() : ''}
+                          class="flex-1 px-4 py-2.5 rounded-md text-body-sm font-medium transition-all {threadConfig.threadMode === 'public' ? 'bg-primary text-on-primary' : 'text-on-surface-variant hover:text-on-surface'}"
                         >
                           {m.announcements_thread_mode_public()}
                         </button>
                         <button
                           type="button"
                           onclick={() => threadConfig.threadMode = 'private'}
-                          disabled={!canManageSettings}
-                          class="flex-1 px-4 py-2.5 rounded-md text-body-sm font-medium transition-all {threadConfig.threadMode === 'private' ? 'bg-primary text-on-primary' : 'text-on-surface-variant/60 hover:text-on-surface'}"
+                          use:explainDisabled={(!canManageSettings) ? m.common_reason_no_permission() : ''}
+                          class="flex-1 px-4 py-2.5 rounded-md text-body-sm font-medium transition-all {threadConfig.threadMode === 'private' ? 'bg-primary text-on-primary' : 'text-on-surface-variant hover:text-on-surface'}"
                         >
                           {m.announcements_thread_mode_private()}
                         </button>
@@ -1237,7 +1246,7 @@
                   </div>
 
                   <div class="space-y-1.5">
-                    <label for="threadNameTemplate" class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.announcements_thread_name_template_label()}</label>
+                    <label for="threadNameTemplate" class="text-xs font-semibold text-on-surface-variant ml-2">{m.announcements_thread_name_template_label()}</label>
                     <input
                       id="threadNameTemplate"
                       type="text"
@@ -1250,7 +1259,7 @@
 
                   <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div class="space-y-1.5">
-                      <label for="autoArchive" class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.announcements_thread_auto_archive_label()}</label>
+                      <label for="autoArchive" class="text-xs font-semibold text-on-surface-variant ml-2">{m.announcements_thread_auto_archive_label()}</label>
                       <select
                         id="autoArchive"
                         bind:value={threadConfig.autoArchiveMinutes}
@@ -1265,7 +1274,7 @@
                     <div class="flex items-center justify-between p-4 rounded-lg bg-surface-container-high/20 border border-outline-variant/5">
                       <div>
                         <p class="text-sm font-bold">{m.announcements_thread_typing_label()}</p>
-                        <p class="text-2xs text-on-surface-variant/50">{m.announcements_thread_typing_desc()}</p>
+                        <p class="text-2xs text-on-surface-variant">{m.announcements_thread_typing_desc()}</p>
                       </div>
                       <ToggleSwitch
                         checked={threadConfig.typingEnabled}
@@ -1279,7 +1288,7 @@
                     <div class="flex items-center justify-between gap-4">
                       <div>
                         <p class="text-sm font-bold">{m.announcements_thread_inactivity_delete_label()}</p>
-                        <p class="text-2xs text-on-surface-variant/50">{m.announcements_thread_inactivity_delete_desc()}</p>
+                        <p class="text-2xs text-on-surface-variant">{m.announcements_thread_inactivity_delete_desc()}</p>
                       </div>
                       <ToggleSwitch
                         checked={threadConfig.inactivityDeleteEnabled}
@@ -1289,7 +1298,7 @@
                     </div>
                     {#if threadConfig.inactivityDeleteEnabled}
                       <div class="space-y-1.5">
-                        <label for="inactivityDeleteHours" class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.announcements_thread_inactivity_delete_hours_label()}</label>
+                        <label for="inactivityDeleteHours" class="text-xs font-semibold text-on-surface-variant ml-2">{m.announcements_thread_inactivity_delete_hours_label()}</label>
                         <input
                           id="inactivityDeleteHours"
                           type="number"
@@ -1311,7 +1320,7 @@
                     </h4>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div class="space-y-1.5">
-                        <label for="webhookName" class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.announcements_thread_webhook_name_label()}</label>
+                        <label for="webhookName" class="text-xs font-semibold text-on-surface-variant ml-2">{m.announcements_thread_webhook_name_label()}</label>
                         <input
                           id="webhookName"
                           type="text"
@@ -1322,7 +1331,7 @@
                         />
                       </div>
                       <div class="space-y-1.5">
-                        <label for="webhookAvatar" class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.announcements_thread_webhook_avatar_label()}</label>
+                        <label for="webhookAvatar" class="text-xs font-semibold text-on-surface-variant ml-2">{m.announcements_thread_webhook_avatar_label()}</label>
                         <input
                           id="webhookAvatar"
                           type="url"
@@ -1333,7 +1342,7 @@
                         />
                       </div>
                     </div>
-                    <p class="text-2xs text-on-surface-variant/60">{m.announcements_thread_persona_override_note()}</p>
+                    <p class="text-2xs text-on-surface-variant">{m.announcements_thread_persona_override_note()}</p>
                   </div>
 
                   <!-- Final menu embed -->
@@ -1353,21 +1362,21 @@
                     {#if threadConfig.menuEnabled}
                       <div class="space-y-4 animate-in fade-in duration-300">
                         <div class="space-y-1.5">
-                          <span class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.announcements_thread_menu_style_label()}</span>
+                          <span class="text-xs font-semibold text-on-surface-variant ml-2">{m.announcements_thread_menu_style_label()}</span>
                           <div class="inline-flex w-full rounded-lg border border-outline-variant/10 bg-surface-container-high/40 p-1 gap-1">
                             <button
                               type="button"
                               onclick={() => threadConfig.menuStyle = 'buttons'}
-                              disabled={!canManageSettings}
-                              class="flex-1 px-4 py-2.5 rounded-md text-body-sm font-medium transition-all {threadConfig.menuStyle === 'buttons' ? 'bg-primary text-on-primary' : 'text-on-surface-variant/60 hover:text-on-surface'}"
+                              use:explainDisabled={(!canManageSettings) ? m.common_reason_no_permission() : ''}
+                              class="flex-1 px-4 py-2.5 rounded-md text-body-sm font-medium transition-all {threadConfig.menuStyle === 'buttons' ? 'bg-primary text-on-primary' : 'text-on-surface-variant hover:text-on-surface'}"
                             >
                               {m.announcements_thread_menu_style_buttons()}
                             </button>
                             <button
                               type="button"
                               onclick={() => threadConfig.menuStyle = 'select'}
-                              disabled={!canManageSettings}
-                              class="flex-1 px-4 py-2.5 rounded-md text-body-sm font-medium transition-all {threadConfig.menuStyle === 'select' ? 'bg-primary text-on-primary' : 'text-on-surface-variant/60 hover:text-on-surface'}"
+                              use:explainDisabled={(!canManageSettings) ? m.common_reason_no_permission() : ''}
+                              class="flex-1 px-4 py-2.5 rounded-md text-body-sm font-medium transition-all {threadConfig.menuStyle === 'select' ? 'bg-primary text-on-primary' : 'text-on-surface-variant hover:text-on-surface'}"
                             >
                               {m.announcements_thread_menu_style_select()}
                             </button>
@@ -1376,7 +1385,7 @@
 
                         {#if threadConfig.menuStyle === 'select'}
                           <div class="space-y-1.5 animate-in fade-in duration-200">
-                            <label for="menuPlaceholder" class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.announcements_thread_placeholder_label()}</label>
+                            <label for="menuPlaceholder" class="text-xs font-semibold text-on-surface-variant ml-2">{m.announcements_thread_placeholder_label()}</label>
                             <input
                               id="menuPlaceholder"
                               type="text"
@@ -1389,7 +1398,7 @@
                         {/if}
 
                         <div class="space-y-1.5">
-                          <label for="menuEmbedTitle" class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.announcements_thread_embed_title_label()}</label>
+                          <label for="menuEmbedTitle" class="text-xs font-semibold text-on-surface-variant ml-2">{m.announcements_thread_embed_title_label()}</label>
                           <input
                             id="menuEmbedTitle"
                             type="text"
@@ -1401,7 +1410,7 @@
                         </div>
 
                         <div class="space-y-1.5">
-                          <label for="menuEmbedDesc" class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.announcements_thread_embed_desc_label()}</label>
+                          <label for="menuEmbedDesc" class="text-xs font-semibold text-on-surface-variant ml-2">{m.announcements_thread_embed_desc_label()}</label>
                           <textarea
                             id="menuEmbedDesc"
                             bind:value={threadConfig.embedDescription}
@@ -1412,7 +1421,7 @@
 
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                           <div class="space-y-1.5">
-                            <label for="menuEmbedColor" class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.announcements_thread_embed_color_label()}</label>
+                            <label for="menuEmbedColor" class="text-xs font-semibold text-on-surface-variant ml-2">{m.announcements_thread_embed_color_label()}</label>
                             <div class="flex gap-2">
                               <input
                                 id="menuEmbedColor"
@@ -1431,7 +1440,7 @@
                             </div>
                           </div>
                           <div class="space-y-1.5">
-                            <label for="menuEmbedImg" class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.announcements_thread_embed_image_label()}</label>
+                            <label for="menuEmbedImg" class="text-xs font-semibold text-on-surface-variant ml-2">{m.announcements_thread_embed_image_label()}</label>
                             <input
                               id="menuEmbedImg"
                               type="url"
@@ -1443,7 +1452,7 @@
                           </div>
                         </div>
                         <div class="space-y-1.5">
-                          <label for="menuEmbedThumb" class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.announcements_thread_embed_thumb_label()}</label>
+                          <label for="menuEmbedThumb" class="text-xs font-semibold text-on-surface-variant ml-2">{m.announcements_thread_embed_thumb_label()}</label>
                           <input
                             id="menuEmbedThumb"
                             type="url"
@@ -1456,7 +1465,7 @@
 
                         <!-- Preview -->
                         <div class="space-y-1.5">
-                          <span class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.announcements_thread_embed_preview_label()}</span>
+                          <span class="text-xs font-semibold text-on-surface-variant ml-2">{m.announcements_thread_embed_preview_label()}</span>
                           <div class="p-5 rounded-lg bg-surface-container-high/35 border-l-4 relative overflow-hidden" style="border-left-color: {threadConfig.embedColor || '#5865F2'}">
                             <div class="flex gap-4">
                               {#if threadConfig.embedThumbnailUrl}
@@ -1474,12 +1483,12 @@
                               <div class="flex flex-wrap gap-2 mt-4">
                                 {#each (threadPages.length > 0 ? threadPages : [{ localId: 'x', label: m.announcements_thread_example(), emoji: '', actionType: 'EMBED' }]) as page}
                                   <span class="text-2xs font-semibold px-3 py-2 rounded-lg border {page.actionType === 'ROLE' ? 'bg-success/10 border-success/20 text-success' : page.actionType === 'LINK' ? 'bg-sky-500/10 border-sky-500/20 text-sky-500' : 'bg-surface-container-high border-outline-variant/15 text-on-surface-variant/80'}">
-                                    {#if page.emoji}{page.emoji} {/if}{page.label || m.announcements_thread_nameless_page()}{#if page.actionType === 'ROLE'}<Papicon icon="user" size={11} class="inline-block ml-1 align-[-1px]" />{:else if page.actionType === 'LINK'}<Papicon icon="link" size={11} class="inline-block ml-1 align-[-1px]" />{/if}
+                                    {#if page.emoji}<EmojiText value={page.emoji} /> {/if}{page.label || m.announcements_thread_nameless_page()}{#if page.actionType === 'ROLE'}<Papicon icon="user" size={11} class="inline-block ml-1 align-[-1px]" />{:else if page.actionType === 'LINK'}<Papicon icon="link" size={11} class="inline-block ml-1 align-[-1px]" />{/if}
                                   </span>
                                 {/each}
                               </div>
                             {:else}
-                              <div class="mt-4 text-2xs font-semibold px-3 py-2.5 rounded-lg bg-surface-container-high border border-outline-variant/15 text-on-surface-variant/60 max-w-xs">
+                              <div class="mt-4 text-2xs font-semibold px-3 py-2.5 rounded-lg bg-surface-container-high border border-outline-variant/15 text-on-surface-variant max-w-xs">
                                 <span class="flex items-center justify-between gap-2">
                                   {threadConfig.menuPlaceholder || m.announcements_thread_placeholder_default()}
                                   <Papicon icon="chevron-down" size={13} />
@@ -1514,7 +1523,7 @@
                     <Papicon icon="List" size={20} class="text-primary" />
                     {m.announcements_thread_sequence_title()}
                   </h3>
-                  <p class="text-xs text-on-surface-variant/60 font-medium mt-1">{m.announcements_thread_sequence_desc()} {threadSteps.length}/{MAX_THREAD_STEPS}</p>
+                  <p class="text-xs text-on-surface-variant font-medium mt-1">{m.announcements_thread_sequence_desc()} {threadSteps.length}/{MAX_THREAD_STEPS}</p>
                 </div>
                 <ActionButton
                   onClick={addStep}
@@ -1527,21 +1536,21 @@
               </div>
 
               {#if threadSteps.length === 0}
-                <p class="text-xs text-on-surface-variant/50 italic text-center py-6">{m.announcements_thread_sequence_empty()}</p>
+                <p class="text-xs text-on-surface-variant italic text-center py-6">{m.announcements_thread_sequence_empty()}</p>
               {:else}
                 <div class="space-y-4">
                   {#each threadSteps as step, index (step.localId)}
                     <div class="p-5 rounded-lg bg-surface-container-high/20 border border-outline-variant/10 space-y-3">
                       <div class="flex items-center justify-between">
-                        <span class="text-xs font-semibold text-on-surface-variant/60">{m.announcements_thread_message_num({ n: index + 1 })}</span>
+                        <span class="text-xs font-semibold text-on-surface-variant">{m.announcements_thread_message_num({ n: index + 1 })}</span>
                         <div class="flex items-center gap-1">
-                          <button type="button" onclick={() => moveStep(index, -1)} disabled={!canManageSettings || index === 0} class="p-2 rounded-lg hover:bg-surface-container-high text-on-surface-variant/60 disabled:opacity-30 transition-all" title={m.announcements_move_up()}>
+                          <button type="button" onclick={() => moveStep(index, -1)} disabled={index === 0} use:explainDisabled={(!canManageSettings) ? m.common_reason_no_permission() : ''} class="p-2 rounded-lg hover:bg-surface-container-high text-on-surface-variant disabled:opacity-30 transition-all" title={m.announcements_move_up()}>
                             <Papicon icon="ArrowUp" size={14} />
                           </button>
-                          <button type="button" onclick={() => moveStep(index, 1)} disabled={!canManageSettings || index === threadSteps.length - 1} class="p-2 rounded-lg hover:bg-surface-container-high text-on-surface-variant/60 disabled:opacity-30 transition-all" title={m.announcements_move_down()}>
+                          <button type="button" onclick={() => moveStep(index, 1)} disabled={index === threadSteps.length - 1} use:explainDisabled={(!canManageSettings) ? m.common_reason_no_permission() : ''} class="p-2 rounded-lg hover:bg-surface-container-high text-on-surface-variant disabled:opacity-30 transition-all" title={m.announcements_move_down()}>
                             <Papicon icon="ArrowDown" size={14} />
                           </button>
-                          <button type="button" onclick={() => removeStep(index)} disabled={!canManageSettings} class="p-2 rounded-lg hover:bg-error-container/20 hover:text-error text-on-surface-variant/60 transition-all" title={m.common_delete()}>
+                          <button type="button" onclick={() => removeStep(index)} use:explainDisabled={(!canManageSettings) ? m.common_reason_no_permission() : ''} class="p-2 rounded-lg hover:bg-error-container/20 hover:text-error text-on-surface-variant transition-all" title={m.common_delete()}>
                             <Papicon icon="Trash" size={14} />
                           </button>
                         </div>
@@ -1557,7 +1566,7 @@
 
                       <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
                         <div class="space-y-1">
-                          <label for="step-name-{index}" class="text-xs font-semibold text-on-surface-variant/50 ml-1">{m.announcements_thread_step_name_label()}</label>
+                          <label for="step-name-{index}" class="text-xs font-semibold text-on-surface-variant ml-1">{m.announcements_thread_step_name_label()}</label>
                           <input
                             id="step-name-{index}"
                             type="text"
@@ -1568,7 +1577,7 @@
                           />
                         </div>
                         <div class="space-y-1">
-                          <label for="step-avatar-{index}" class="text-xs font-semibold text-on-surface-variant/50 ml-1">{m.announcements_thread_step_avatar_label()}</label>
+                          <label for="step-avatar-{index}" class="text-xs font-semibold text-on-surface-variant ml-1">{m.announcements_thread_step_avatar_label()}</label>
                           <input
                             id="step-avatar-{index}"
                             type="url"
@@ -1579,7 +1588,7 @@
                           />
                         </div>
                         <div class="space-y-1">
-                          <label for="step-delay-{index}" class="text-xs font-semibold text-on-surface-variant/50 ml-1">{m.announcements_thread_step_delay_label()}</label>
+                          <label for="step-delay-{index}" class="text-xs font-semibold text-on-surface-variant ml-1">{m.announcements_thread_step_delay_label()}</label>
                           <input
                             id="step-delay-{index}"
                             type="number"
@@ -1617,7 +1626,7 @@
                     <Papicon icon="menu" size={20} class="text-primary" />
                     {m.announcements_thread_pages_title()}
                   </h3>
-                  <p class="text-xs text-on-surface-variant/60 font-medium mt-1">{m.announcements_thread_pages_desc()} {threadPages.length}/{MAX_MENU_PAGES}</p>
+                  <p class="text-xs text-on-surface-variant font-medium mt-1">{m.announcements_thread_pages_desc()} {threadPages.length}/{MAX_MENU_PAGES}</p>
                 </div>
                 <ActionButton
                   onClick={addPage}
@@ -1630,21 +1639,21 @@
               </div>
 
               {#if threadPages.length === 0}
-                <p class="text-xs text-on-surface-variant/50 italic text-center py-6">{m.announcements_thread_pages_empty()}</p>
+                <p class="text-xs text-on-surface-variant italic text-center py-6">{m.announcements_thread_pages_empty()}</p>
               {:else}
                 <div class="space-y-4">
                   {#each threadPages as page, index (page.localId)}
                     <div class="p-5 rounded-lg bg-surface-container-high/20 border border-outline-variant/10 space-y-3">
                       <div class="flex items-center justify-between">
-                        <span class="text-xs font-semibold text-on-surface-variant/60">{m.announcements_thread_page_num({ n: index + 1 })}</span>
+                        <span class="text-xs font-semibold text-on-surface-variant">{m.announcements_thread_page_num({ n: index + 1 })}</span>
                         <div class="flex items-center gap-1">
-                          <button type="button" onclick={() => movePage(index, -1)} disabled={!canManageSettings || index === 0} class="p-2 rounded-lg hover:bg-surface-container-high text-on-surface-variant/60 disabled:opacity-30 transition-all" title={m.announcements_move_up()}>
+                          <button type="button" onclick={() => movePage(index, -1)} disabled={index === 0} use:explainDisabled={(!canManageSettings) ? m.common_reason_no_permission() : ''} class="p-2 rounded-lg hover:bg-surface-container-high text-on-surface-variant disabled:opacity-30 transition-all" title={m.announcements_move_up()}>
                             <Papicon icon="ArrowUp" size={14} />
                           </button>
-                          <button type="button" onclick={() => movePage(index, 1)} disabled={!canManageSettings || index === threadPages.length - 1} class="p-2 rounded-lg hover:bg-surface-container-high text-on-surface-variant/60 disabled:opacity-30 transition-all" title={m.announcements_move_down()}>
+                          <button type="button" onclick={() => movePage(index, 1)} disabled={index === threadPages.length - 1} use:explainDisabled={(!canManageSettings) ? m.common_reason_no_permission() : ''} class="p-2 rounded-lg hover:bg-surface-container-high text-on-surface-variant disabled:opacity-30 transition-all" title={m.announcements_move_down()}>
                             <Papicon icon="ArrowDown" size={14} />
                           </button>
-                          <button type="button" onclick={() => removePage(index)} disabled={!canManageSettings} class="p-2 rounded-lg hover:bg-error-container/20 hover:text-error text-on-surface-variant/60 transition-all" title={m.common_delete()}>
+                          <button type="button" onclick={() => removePage(index)} use:explainDisabled={(!canManageSettings) ? m.common_reason_no_permission() : ''} class="p-2 rounded-lg hover:bg-error-container/20 hover:text-error text-on-surface-variant transition-all" title={m.common_delete()}>
                             <Papicon icon="Trash" size={14} />
                           </button>
                         </div>
@@ -1652,7 +1661,7 @@
 
                       <div class="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] gap-3">
                         <div class="space-y-1">
-                          <label for="page-label-{index}" class="text-xs font-semibold text-on-surface-variant/50 ml-1">{m.announcements_thread_page_label()}</label>
+                          <label for="page-label-{index}" class="text-xs font-semibold text-on-surface-variant ml-1">{m.announcements_thread_page_label()}</label>
                           <input
                             id="page-label-{index}"
                             type="text"
@@ -1664,11 +1673,11 @@
                           />
                         </div>
                         <div class="space-y-1">
-                          <span class="text-xs font-semibold text-on-surface-variant/50 ml-1 block">{m.announcements_thread_page_emoji()}</span>
+                          <span class="text-xs font-semibold text-on-surface-variant ml-1 block">{m.announcements_thread_page_emoji()}</span>
                           <EmojiPicker bind:value={page.emoji} disabled={!canManageSettings} />
                         </div>
                         <div class="space-y-1">
-                          <label for="page-summary-{index}" class="text-xs font-semibold text-on-surface-variant/50 ml-1">{m.announcements_thread_page_summary()}</label>
+                          <label for="page-summary-{index}" class="text-xs font-semibold text-on-surface-variant ml-1">{m.announcements_thread_page_summary()}</label>
                           <input
                             id="page-summary-{index}"
                             type="text"
@@ -1682,29 +1691,29 @@
                       </div>
 
                       <div class="space-y-1.5">
-                        <span class="text-xs font-semibold text-on-surface-variant/50 ml-1">{m.announcements_thread_page_action()}</span>
+                        <span class="text-xs font-semibold text-on-surface-variant ml-1">{m.announcements_thread_page_action()}</span>
                         <div class="inline-flex w-full rounded-lg border border-outline-variant/10 bg-surface-container-high/40 p-1 gap-1">
                           <button
                             type="button"
                             onclick={() => page.actionType = 'EMBED'}
-                            disabled={!canManageSettings}
-                            class="flex-1 px-3 py-2 rounded-md text-xs font-medium transition-all {page.actionType === 'EMBED' ? 'bg-primary text-on-primary' : 'text-on-surface-variant/60 hover:text-on-surface'}"
+                            use:explainDisabled={(!canManageSettings) ? m.common_reason_no_permission() : ''}
+                            class="flex-1 px-3 py-2 rounded-md text-xs font-medium transition-all {page.actionType === 'EMBED' ? 'bg-primary text-on-primary' : 'text-on-surface-variant hover:text-on-surface'}"
                           >
                             {m.announcements_thread_action_embed()}
                           </button>
                           <button
                             type="button"
                             onclick={() => page.actionType = 'ROLE'}
-                            disabled={!canManageSettings}
-                            class="flex-1 px-3 py-2 rounded-md text-xs font-medium transition-all {page.actionType === 'ROLE' ? 'bg-primary text-on-primary' : 'text-on-surface-variant/60 hover:text-on-surface'}"
+                            use:explainDisabled={(!canManageSettings) ? m.common_reason_no_permission() : ''}
+                            class="flex-1 px-3 py-2 rounded-md text-xs font-medium transition-all {page.actionType === 'ROLE' ? 'bg-primary text-on-primary' : 'text-on-surface-variant hover:text-on-surface'}"
                           >
                             {m.announcements_thread_action_role()}
                           </button>
                           <button
                             type="button"
                             onclick={() => page.actionType = 'LINK'}
-                            disabled={!canManageSettings}
-                            class="flex-1 px-3 py-2 rounded-md text-xs font-medium transition-all {page.actionType === 'LINK' ? 'bg-primary text-on-primary' : 'text-on-surface-variant/60 hover:text-on-surface'}"
+                            use:explainDisabled={(!canManageSettings) ? m.common_reason_no_permission() : ''}
+                            class="flex-1 px-3 py-2 rounded-md text-xs font-medium transition-all {page.actionType === 'LINK' ? 'bg-primary text-on-primary' : 'text-on-surface-variant hover:text-on-surface'}"
                           >
                             {m.announcements_thread_action_link()}
                           </button>
@@ -1714,7 +1723,7 @@
                       {#if page.actionType === 'EMBED'}
                         <div class="space-y-3 animate-in fade-in duration-200">
                           <div class="space-y-1">
-                            <label for="page-embed-title-{index}" class="text-xs font-semibold text-on-surface-variant/50 ml-1">{m.announcements_thread_embed_title_label()}</label>
+                            <label for="page-embed-title-{index}" class="text-xs font-semibold text-on-surface-variant ml-1">{m.announcements_thread_embed_title_label()}</label>
                             <input
                               id="page-embed-title-{index}"
                               type="text"
@@ -1725,7 +1734,7 @@
                             />
                           </div>
                           <div class="space-y-1">
-                            <label for="page-embed-desc-{index}" class="text-xs font-semibold text-on-surface-variant/50 ml-1">{m.announcements_thread_page_embed_desc()}</label>
+                            <label for="page-embed-desc-{index}" class="text-xs font-semibold text-on-surface-variant ml-1">{m.announcements_thread_page_embed_desc()}</label>
                             <textarea
                               id="page-embed-desc-{index}"
                               bind:value={page.embedDescription}
@@ -1736,18 +1745,18 @@
  
                           <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
                             <div class="space-y-1">
-                              <span class="text-xs font-semibold text-on-surface-variant/50 ml-1 block">{m.announcements_thread_embed_color_label()}</span>
+                              <span class="text-xs font-semibold text-on-surface-variant ml-1 block">{m.announcements_thread_embed_color_label()}</span>
                               <div class="flex gap-2">
                                 <input type="color" bind:value={page.embedColor} class="w-9 h-9 border-0 bg-transparent rounded-lg cursor-pointer shrink-0" disabled={!canManageSettings} aria-label={m.announcements_thread_embed_color_label()} />
                                 <input type="text" bind:value={page.embedColor} placeholder="#5865F2" class="flex-1 bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs focus:outline-none font-mono" disabled={!canManageSettings} aria-label={m.announcements_thread_embed_color_label()} />
                               </div>
                             </div>
                             <div class="space-y-1">
-                              <label for="page-embed-image-{index}" class="text-xs font-semibold text-on-surface-variant/50 ml-1">{m.announcements_thread_embed_image_label()}</label>
+                              <label for="page-embed-image-{index}" class="text-xs font-semibold text-on-surface-variant ml-1">{m.announcements_thread_embed_image_label()}</label>
                               <input id="page-embed-image-{index}" type="url" bind:value={page.embedImageUrl} placeholder="https://..." class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs focus:outline-none" disabled={!canManageSettings} />
                             </div>
                             <div class="space-y-1">
-                              <label for="page-embed-thumbnail-{index}" class="text-xs font-semibold text-on-surface-variant/50 ml-1">{m.announcements_thread_embed_thumb_label()}</label>
+                              <label for="page-embed-thumbnail-{index}" class="text-xs font-semibold text-on-surface-variant ml-1">{m.announcements_thread_embed_thumb_label()}</label>
                               <input id="page-embed-thumbnail-{index}" type="url" bind:value={page.embedThumbnailUrl} placeholder="https://..." class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs focus:outline-none" disabled={!canManageSettings} />
                             </div>
                           </div>
@@ -1756,7 +1765,7 @@
                         <div class="space-y-3 animate-in fade-in duration-200">
                           <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                             <div class="space-y-1">
-                              <span class="text-xs font-semibold text-on-surface-variant/50 ml-1 block">{m.announcements_thread_page_role_label()}</span>
+                              <span class="text-xs font-semibold text-on-surface-variant ml-1 block">{m.announcements_thread_page_role_label()}</span>
                               <SearchableSelect
                                 bind:value={page.roleId}
                                 options={availableRoles.map(r => ({ id: r.id, name: `@${r.name}` }))}
@@ -1766,12 +1775,12 @@
                               />
                             </div>
                             <div class="space-y-1">
-                              <span class="text-xs font-semibold text-on-surface-variant/50 ml-1 block">{m.announcements_thread_page_role_behavior()}</span>
+                              <span class="text-xs font-semibold text-on-surface-variant ml-1 block">{m.announcements_thread_page_role_behavior()}</span>
                               <div class="grid grid-cols-2 sm:grid-cols-4 w-full rounded-lg border border-outline-variant/10 bg-surface-container-high/40 p-1 gap-1">
-                                <button type="button" onclick={() => page.roleAction = 'ADD'} disabled={!canManageSettings} class="flex-1 px-2 py-2 rounded-md text-xs font-medium transition-all {page.roleAction === 'ADD' ? 'bg-primary text-on-primary' : 'text-on-surface-variant/60 hover:text-on-surface'}">{m.announcements_role_action_add()}</button>
-                                <button type="button" onclick={() => page.roleAction = 'REMOVE'} disabled={!canManageSettings} class="flex-1 px-2 py-2 rounded-md text-xs font-medium transition-all {page.roleAction === 'REMOVE' ? 'bg-primary text-on-primary' : 'text-on-surface-variant/60 hover:text-on-surface'}">{m.announcements_role_action_remove()}</button>
-                                <button type="button" onclick={() => page.roleAction = 'TOGGLE'} disabled={!canManageSettings} class="flex-1 px-2 py-2 rounded-md text-xs font-medium transition-all {page.roleAction === 'TOGGLE' ? 'bg-primary text-on-primary' : 'text-on-surface-variant/60 hover:text-on-surface'}">{m.announcements_role_action_toggle()}</button>
-                                <button type="button" onclick={() => page.roleAction = 'EXCLUSIVE'} disabled={!canManageSettings} class="flex-1 px-2 py-2 rounded-md text-xs font-medium transition-all {page.roleAction === 'EXCLUSIVE' ? 'bg-amber-500 text-white' : 'text-on-surface-variant/60 hover:text-on-surface'}">{m.announcements_role_action_exclusive()}</button>
+                                <button type="button" onclick={() => page.roleAction = 'ADD'} use:explainDisabled={(!canManageSettings) ? m.common_reason_no_permission() : ''} class="flex-1 px-2 py-2 rounded-md text-xs font-medium transition-all {page.roleAction === 'ADD' ? 'bg-primary text-on-primary' : 'text-on-surface-variant hover:text-on-surface'}">{m.announcements_role_action_add()}</button>
+                                <button type="button" onclick={() => page.roleAction = 'REMOVE'} use:explainDisabled={(!canManageSettings) ? m.common_reason_no_permission() : ''} class="flex-1 px-2 py-2 rounded-md text-xs font-medium transition-all {page.roleAction === 'REMOVE' ? 'bg-primary text-on-primary' : 'text-on-surface-variant hover:text-on-surface'}">{m.announcements_role_action_remove()}</button>
+                                <button type="button" onclick={() => page.roleAction = 'TOGGLE'} use:explainDisabled={(!canManageSettings) ? m.common_reason_no_permission() : ''} class="flex-1 px-2 py-2 rounded-md text-xs font-medium transition-all {page.roleAction === 'TOGGLE' ? 'bg-primary text-on-primary' : 'text-on-surface-variant hover:text-on-surface'}">{m.announcements_role_action_toggle()}</button>
+                                <button type="button" onclick={() => page.roleAction = 'EXCLUSIVE'} use:explainDisabled={(!canManageSettings) ? m.common_reason_no_permission() : ''} class="flex-1 px-2 py-2 rounded-md text-xs font-medium transition-all {page.roleAction === 'EXCLUSIVE' ? 'bg-amber-500 text-white' : 'text-on-surface-variant hover:text-on-surface'}">{m.announcements_role_action_exclusive()}</button>
                               </div>
                             </div>
                           </div>
@@ -1797,7 +1806,7 @@
                                 </datalist>
                               </div>
                               <div class="flex flex-wrap items-center gap-2">
-                                <span class="text-2xs font-semibold text-on-surface-variant/60">{m.announcements_role_linked_choices()}</span>
+                                <span class="text-2xs font-semibold text-on-surface-variant">{m.announcements_role_linked_choices()}</span>
                                 {#if groupMembers.length > 0}
                                   {#each groupMembers as memberPage}
                                     <span class="rounded-md border border-warning/15 bg-warning/10 px-2 py-1 text-2xs font-semibold text-warning">
@@ -1811,22 +1820,22 @@
                               {#if normalizeRoleGroupName(page.roleGroup) && groupMembers.length < 2}
                                 <p class="text-2xs text-warning">{m.announcements_role_exclusive_warning()}</p>
                               {:else if groupMembers.length >= 2}
-                                <p class="text-2xs text-on-surface-variant/60">{m.announcements_role_exclusive_info()}</p>
+                                <p class="text-2xs text-on-surface-variant">{m.announcements_role_exclusive_info()}</p>
                               {/if}
                             </div>
                           {:else}
-                            <p class="text-2xs text-on-surface-variant/60">{m.announcements_role_toggle_info()}</p>
+                            <p class="text-2xs text-on-surface-variant">{m.announcements_role_toggle_info()}</p>
                           {/if}
                         </div>
                       {:else if page.actionType === 'LINK'}
                         <div class="space-y-3 animate-in fade-in duration-200">
                           <div class="inline-flex w-full rounded-lg border border-outline-variant/10 bg-surface-container-high/40 p-1 gap-1">
-                            <button type="button" onclick={() => page.linkMode = 'channel'} disabled={!canManageSettings} class="flex-1 px-3 py-2 rounded-md text-xs font-medium transition-all {page.linkMode === 'channel' ? 'bg-primary text-on-primary' : 'text-on-surface-variant/60 hover:text-on-surface'}" aria-label={m.announcements_link_server_channel()}>{m.announcements_link_server_channel()}</button>
-                            <button type="button" onclick={() => page.linkMode = 'url'} disabled={!canManageSettings} class="flex-1 px-3 py-2 rounded-md text-xs font-medium transition-all {page.linkMode === 'url' ? 'bg-primary text-on-primary' : 'text-on-surface-variant/60 hover:text-on-surface'}" aria-label={m.announcements_link_external_url()}>{m.announcements_link_external_url()}</button>
+                            <button type="button" onclick={() => page.linkMode = 'channel'} use:explainDisabled={(!canManageSettings) ? m.common_reason_no_permission() : ''} class="flex-1 px-3 py-2 rounded-md text-xs font-medium transition-all {page.linkMode === 'channel' ? 'bg-primary text-on-primary' : 'text-on-surface-variant hover:text-on-surface'}" aria-label={m.announcements_link_server_channel()}>{m.announcements_link_server_channel()}</button>
+                            <button type="button" onclick={() => page.linkMode = 'url'} use:explainDisabled={(!canManageSettings) ? m.common_reason_no_permission() : ''} class="flex-1 px-3 py-2 rounded-md text-xs font-medium transition-all {page.linkMode === 'url' ? 'bg-primary text-on-primary' : 'text-on-surface-variant hover:text-on-surface'}" aria-label={m.announcements_link_external_url()}>{m.announcements_link_external_url()}</button>
                           </div>
                           {#if page.linkMode === 'channel'}
                             <div class="space-y-1">
-                              <span class="text-xs font-semibold text-on-surface-variant/50 ml-1 block">{m.announcements_channel_label()}</span>
+                              <span class="text-xs font-semibold text-on-surface-variant ml-1 block">{m.announcements_channel_label()}</span>
                               <SearchableSelect
                                 bind:value={page.linkChannelId}
                                 options={availableChannels.map(c => ({ id: c.id, name: channelDisplayName(c) }))}
@@ -1837,7 +1846,7 @@
                             </div>
                           {:else}
                             <div class="space-y-1">
-                              <label for="page-link-url-{index}" class="text-xs font-semibold text-on-surface-variant/50 ml-1">{m.announcements_link_external_url()}</label>
+                              <label for="page-link-url-{index}" class="text-xs font-semibold text-on-surface-variant ml-1">{m.announcements_link_external_url()}</label>
                               <input
                                 id="page-link-url-{index}"
                                 type="url"
@@ -1848,7 +1857,7 @@
                               />
                             </div>
                           {/if}
-                          <p class="text-2xs text-on-surface-variant/60">{m.announcements_link_note()}</p>
+                          <p class="text-2xs text-on-surface-variant">{m.announcements_link_note()}</p>
                         </div>
                       {/if}
                     </div>

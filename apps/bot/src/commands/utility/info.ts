@@ -1,53 +1,31 @@
 import type { SlashCommandDefinition } from '../../commands.js';
-import { SlashCommandBuilder, type ChatInputCommandInteraction, MessageFlags } from 'discord.js';
+import { SlashCommandBuilder, type ChatInputCommandInteraction, ChannelType, MessageFlags } from 'discord.js';
+import { MODULE_REGISTRY } from '@kotbo/contracts';
 import { errorEmbed, COLORS, baseEmbed } from '../../utils/embeds.js';
-import prisma from '../../utils/db.js';
-import fs from 'fs/promises';
 import { getEffectiveLocale, getCommandMetadata } from '../../utils/i18n.js';
+import { getModuleStates } from '../../services/core/moduleGate.js';
 import * as m from '../../lib/paraglide/messages.js';
 
-const packagePath = new URL('../../package.json', import.meta.url);
-
 const meta = getCommandMetadata('c6_info');
+const FIELD_MAX = 1024;
 
-async function getVersion() {
-  try {
-    const raw = await fs.readFile(packagePath, 'utf8');
-    const pkg = JSON.parse(raw);
-    return pkg.version ?? 'unknown';
-  } catch {
-    return 'unknown';
+/** Joint les éléments tant qu'ils tiennent dans `max` caractères, puis ajoute « et N autres ». */
+export function joinWithin(items: string[], separator: string, max: number, more: (count: number) => string): string {
+  let out = '';
+  for (let i = 0; i < items.length; i += 1) {
+    const next = out ? `${out}${separator}${items[i]}` : items[i]!;
+    const left = items.length - i - 1;
+    // Place gardée pour la mention « et N autres » si la liste ne tient pas en entier.
+    if (next.length + (left > 0 ? more(left).length + separator.length : 0) > max) {
+      const suffix = more(items.length - i);
+      return out ? `${out}${separator}${suffix}` : suffix;
+    }
+    out = next;
   }
+  return out;
 }
 
-function formatUptime(totalSeconds: number): string {
-  const days = Math.floor(totalSeconds / 86_400);
-  const hours = Math.floor((totalSeconds % 86_400) / 3_600);
-  const minutes = Math.floor((totalSeconds % 3_600) / 60);
-  const seconds = Math.floor(totalSeconds % 60);
-
-  const parts: string[] = [];
-  if (days > 0) parts.push(`${days}j`);
-  parts.push(`${hours}h`, `${minutes}m`, `${seconds}s`);
-  return parts.join(' ');
-}
-
-function formatMb(bytes: number): string {
-  return `${Math.round(bytes / 1024 / 1024)} MB`;
-}
-
-function boolChip(enabled: boolean, locale: 'fr' | 'en'): string {
-  return enabled ? m.c6_bool_enabled({}, { locale }) : m.c6_bool_disabled({}, { locale });
-}
-
-function channelRef(channelId: string | null | undefined, locale: 'fr' | 'en'): string {
-  return channelId ? `<#${channelId}>` : m.c6_info_not_set({}, { locale });
-}
-
-function truncate(value: string, max = 120): string {
-  if (value.length <= max) return value;
-  return `${value.slice(0, max - 3)}...`;
-}
+const timestamp = (ms: number, style: 'D' | 'R') => `<t:${Math.floor(ms / 1000)}:${style}>`;
 
 const data = new SlashCommandBuilder()
   .setName(meta.name)
@@ -57,8 +35,7 @@ const data = new SlashCommandBuilder()
 
 async function execute(interaction: ChatInputCommandInteraction) {
   const locale = await getEffectiveLocale(interaction);
-  const guildId = interaction.guildId;
-  if (!guildId) {
+  if (!interaction.inCachedGuild()) {
     await interaction.reply({
       embeds: [errorEmbed(m.c6_info_no_guild_title({}, { locale }), m.c6_info_no_guild_desc({}, { locale }))],
       flags: [MessageFlags.Ephemeral]
@@ -66,100 +43,90 @@ async function execute(interaction: ChatInputCommandInteraction) {
     return;
   }
 
-  const [
-    guild,
-    version,
-    dailyAlgoRuns,
-    dailyAlgoSubmissions,
-  ] = await Promise.all([
-    prisma.guild.findUnique({ where: { id: guildId } }),
-    getVersion(),
-    prisma.dailyAlgoRun.count({ where: { guildId } }),
-    prisma.dailyAlgoSubmission.count({ where: { run: { guildId } } }),
+  // Guild#fetch passe par l'API avec les compteurs approximatifs : seul moyen fiable d'avoir le nombre en ligne.
+  const [guild, states] = await Promise.all([
+    interaction.guild.fetch().catch(() => interaction.guild),
+    getModuleStates(interaction.guildId),
   ]);
+  const more = (count: number) => m.c6_info_and_more({ count }, { locale });
 
-  const uptime = process.uptime();
-  const memory = process.memoryUsage();
+  const channels = guild.channels.cache;
+  const countType = (...types: ChannelType[]) => channels.filter((c) => types.includes(c.type)).size;
+  const roles = guild.roles.cache
+    .filter((role) => role.id !== guild.id)
+    .sort((a, b) => b.position - a.position)
+    .map((role) => role.toString());
+  const emojis = guild.emojis.cache.map((emoji) => emoji.toString());
+  // Le cache des membres n'est complet que s'il a été chargé en entier : sinon le nombre de bots serait faux.
+  const bots = guild.members.cache.size >= guild.memberCount
+    ? guild.members.cache.filter((member) => member.user.bot).size
+    : null;
 
-  const guildCreated = interaction.guild?.createdTimestamp
-    ? `<t:${Math.floor(interaction.guild.createdTimestamp / 1000)}:R>`
-    : m.c6_info_unknown({}, { locale });
+  const activeModules = MODULE_REGISTRY
+    .filter((mod) => !mod.core && states[mod.key] !== false)
+    .map((mod) => mod.name);
 
-  const reposPreview = guild?.githubRepositories?.length
-    ? truncate(guild.githubRepositories.slice(0, 3).join(' • '), 140)
-    : m.c6_info_no_repos({}, { locale });
+  const summary = [
+    guild.description,
+    [
+      m.c6_info_members({ count: guild.memberCount }, { locale }),
+      guild.approximatePresenceCount != null ? m.c6_info_online({ count: guild.approximatePresenceCount }, { locale }) : null,
+      bots != null ? m.c6_info_bots({ count: bots }, { locale }) : null,
+    ].filter(Boolean).join(' · '),
+    m.c6_info_created({ date: timestamp(guild.createdTimestamp, 'D'), ago: timestamp(guild.createdTimestamp, 'R') }, { locale }),
+  ].filter(Boolean).join('\n');
+
+  const stats = [
+    m.c6_info_stat_roles({ count: roles.length }, { locale }),
+    m.c6_info_stat_channels({
+      text: countType(ChannelType.GuildText, ChannelType.GuildAnnouncement, ChannelType.GuildForum, ChannelType.GuildMedia),
+      voice: countType(ChannelType.GuildVoice, ChannelType.GuildStageVoice),
+      categories: countType(ChannelType.GuildCategory),
+    }, { locale }),
+    m.c6_info_stat_threads({ count: channels.filter((c) => c.isThread()).size }, { locale }),
+    m.c6_info_stat_emojis({ emojis: emojis.length, stickers: guild.stickers.cache.size }, { locale }),
+    guild.rulesChannelId ? m.c6_info_stat_rules({ channel: `<#${guild.rulesChannelId}>` }, { locale }) : null,
+  ].filter(Boolean).join('\n');
 
   const embed = baseEmbed(COLORS.info, { user: interaction.user })
-    .setTitle(m.c6_info_title({}, { locale }))
-    .setDescription(m.c6_info_desc({}, { locale }))
-    .setThumbnail(interaction.client.user?.displayAvatarURL() ?? null)
+    .setTitle(guild.name)
+    .setDescription(summary)
+    .setThumbnail(guild.iconURL({ size: 256 }))
+    .setImage(guild.bannerURL({ size: 1024 }))
     .addFields(
       {
-        name: m.c6_info_field_runtime_title({}, { locale }),
-        value: m.c6_info_field_runtime_body({
-          version,
-          node: process.version,
-          uptime: formatUptime(uptime),
-          ping: interaction.client.ws.ping,
-          heapUsed: formatMb(memory.heapUsed),
-          heapTotal: formatMb(memory.heapTotal),
-          platform: process.platform,
+        name: m.c6_info_details_title({}, { locale }),
+        value: m.c6_info_details_body({
+          owner: `<@${guild.ownerId}>`,
+          ownerId: guild.ownerId,
+          tier: guild.premiumTier,
+          boosts: guild.premiumSubscriptionCount ?? 0,
+          id: guild.id,
         }, { locale }),
         inline: true,
       },
+      { name: m.c6_info_stats_title({}, { locale }), value: stats, inline: true },
       {
-        name: m.c6_info_field_server_title({}, { locale }),
-        value: m.c6_info_field_server_body({
-          name: interaction.guild?.name ?? m.c6_info_unknown({}, { locale }),
-          created: guildCreated,
-          memberCount: interaction.guild?.memberCount ?? 0,
-          guildCount: interaction.client.guilds.cache.size,
-          userCount: interaction.client.users.cache.size,
-        }, { locale }),
+        name: m.c6_info_roles_title({ count: roles.length }, { locale }),
+        value: roles.length ? joinWithin(roles, ', ', FIELD_MAX, more) : m.c6_info_none({}, { locale }),
+      },
+      {
+        name: m.c6_info_emojis_title({ count: emojis.length }, { locale }),
+        value: emojis.length ? joinWithin(emojis, ' ', FIELD_MAX, more) : m.c6_info_none({}, { locale }),
+      },
+      {
+        name: m.c6_info_kotbo_since({}, { locale }),
+        value: guild.members.me?.joinedTimestamp ? timestamp(guild.members.me.joinedTimestamp, 'D') : m.c6_info_unknown({}, { locale }),
         inline: true,
       },
       {
-        name: m.c6_info_field_modules_title({}, { locale }),
-        value: m.c6_info_field_modules_body({
-          translation: boolChip(guild?.translationEnabled ?? false, locale),
-          translateTo: guild?.defaultTranslateTo ?? 'FR',
-          codePolice: boolChip(guild?.codePoliceEnabled ?? false, locale),
-          dailyAlgo: boolChip(guild?.dailyAlgoEnabled ?? false, locale),
-          githubReleases: boolChip(guild?.githubReleasesEnabled ?? false, locale),
-        }, { locale }),
-        inline: false,
-      },
-      {
-        name: m.c6_info_field_metrics_title({}, { locale }),
-        value: m.c6_info_field_metrics_body({
-          runs: dailyAlgoRuns,
-          submissions: dailyAlgoSubmissions,
-        }, { locale }),
+        name: m.c6_info_field_modules_title({ count: activeModules.length }, { locale }),
+        value: activeModules.length ? joinWithin(activeModules, ' • ', FIELD_MAX, more) : m.c6_info_no_modules({}, { locale }),
         inline: true,
       },
-      {
-        name: m.c6_info_field_channels_title({}, { locale }),
-        value: m.c6_info_field_channels_body({
-          dailyAlgo: channelRef(guild?.dailyAlgoChannelId, locale),
-          dailyAlgoValidation: channelRef(guild?.dailyAlgoValidationChannelId, locale),
-          statusCheck: channelRef(guild?.statusCheckChannelId, locale),
-        }, { locale }),
-        inline: true,
-      },
-      {
-        name: m.c6_info_field_github_title({}, { locale }),
-        value: m.c6_info_field_github_body({
-          channel: channelRef(guild?.githubReleasesChannelId, locale),
-          repoCount: guild?.githubRepositories?.length ?? 0,
-          preview: reposPreview,
-        }, { locale }),
-        inline: false,
-      }
-    )
-    .setFooter({ text: m.c6_info_footer({}, { locale }), iconURL: interaction.guild?.iconURL() ?? undefined })
-    .setTimestamp();
+    );
 
-  await interaction.reply({ embeds: [embed], flags: [MessageFlags.Ephemeral] });
+  await interaction.reply({ embeds: [embed], allowedMentions: { parse: [] } });
 }
 
 export const infoCommand = { data, execute } satisfies SlashCommandDefinition;

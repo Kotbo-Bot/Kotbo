@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { explainDisabled } from '../../../actions/explainDisabled';
+  import { m } from '../../../i18n';
   /**
    * La mise en service.
    *
@@ -18,6 +20,7 @@
   import { wizard } from '../../../stores/onboardingWizard.svelte';
   import { onboardingData } from '../../../stores/onboardingData.svelte';
   import { activateGuildWithCode, completeOnboarding, startCheckout } from '../../../api';
+  import type { BillingInterval } from '../../../api/billing';
   import KotboMark from '../KotboMark.svelte';
   import Papicon from '../../Papicon.svelte';
   import WizardShell from '../WizardShell.svelte';
@@ -83,6 +86,27 @@
 
   const trialDays = $derived(billing?.trial.available ? billing.trial.days : 0);
 
+  /**
+   * Periodicite de l'abonnement. Le mensuel reste le choix par defaut : c'est
+   * le plus petit engagement a cote d'un essai. L'annuel n'est propose que si
+   * l'offre a vraiment un prix annuel - sinon le bouton menerait a une session
+   * Stripe sans tarif.
+   */
+  let interval = $state<BillingInterval>('month');
+  const yearlyAvailable = $derived((offer?.priceCents?.year ?? 0) > 0);
+  const yearlySavingPercent = $derived.by(() => {
+    const price = offer?.priceCents;
+    if (!price || price.month <= 0 || price.year <= 0) return 0;
+    return Math.round((1 - price.year / (price.month * 12)) * 100);
+  });
+  /** Ce que l'annuel fait gagner sur douze mensualites. */
+  const yearlySavedCents = $derived.by(() => {
+    const price = offer?.priceCents;
+    if (!price || price.month <= 0 || price.year <= 0) return 0;
+    return Math.max(0, price.month * 12 - price.year);
+  });
+  const effectiveInterval =$derived<BillingInterval>(yearlyAvailable ? interval : 'month');
+
   function formatPrice(cents: number): string {
     return (cents / 100).toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' });
   }
@@ -90,7 +114,7 @@
   async function goToCheckout() {
     if (onboardingData.busy || !offer) return;
     onboardingData.busy = true;
-    const url = await startCheckout(offer.key as 'PLUS' | 'PRO' | 'ULTIMATE', 'month');
+    const url = await startCheckout(offer.key as 'PLUS' | 'PRO' | 'ULTIMATE', effectiveInterval);
     onboardingData.busy = false;
     if (!url) {
       toast.error("La page de paiement n'a pas pu être ouverte. Réessaie dans un instant.");
@@ -134,13 +158,13 @@
     {#if guildIconUrl}
       <img src={guildIconUrl} alt="" class="w-12 h-12 rounded-2xl object-cover shrink-0" />
     {:else}
-      <div class="w-12 h-12 rounded-2xl bg-surface-container flex items-center justify-center text-base font-bold text-on-surface-variant/60 shrink-0">
+      <div class="w-12 h-12 rounded-2xl bg-surface-container flex items-center justify-center text-base font-bold text-on-surface-variant shrink-0">
         {(selectedGuild?.name ?? '?').slice(0, 1).toUpperCase()}
       </div>
     {/if}
     <div class="min-w-0">
       <p class="text-[15px] font-semibold text-on-surface truncate">{selectedGuild?.name ?? 'Ton serveur'}</p>
-      <p class="text-xs text-on-surface-variant/60">Configuré avec Kotbo</p>
+      <p class="text-xs text-on-surface-variant">Configuré avec Kotbo</p>
     </div>
     <KotboMark size={28} class="ml-auto shrink-0" />
   </div>
@@ -163,14 +187,56 @@
     </div>
   {:else if offer}
     <div class="rounded-2xl border border-outline-variant/35 bg-surface-container-low/40 p-5">
-      <div class="flex items-baseline justify-between gap-4 mb-2">
-        <p class="text-sm font-semibold text-on-surface">{offer.name}</p>
+      <div class="flex items-start justify-between gap-4 mb-2">
+        <p class="text-sm font-semibold text-on-surface pt-1">{offer.name}</p>
         {#if offer.priceCents}
-          <p class="text-lg font-bold tracking-tight text-on-surface">
-            {formatPrice(offer.priceCents.month)}<span class="text-body-sm font-medium text-on-surface-variant/60">/mois</span>
-          </p>
+          <div class="text-right">
+            <p class="text-lg font-bold tracking-tight text-on-surface">
+              {formatPrice(effectiveInterval === 'year' ? offer.priceCents.year : offer.priceCents.month)}<span class="text-body-sm font-medium text-on-surface-variant">/{effectiveInterval === 'year' ? 'an' : 'mois'}</span>
+            </p>
+            {#if effectiveInterval === 'year'}
+              <p class="text-xs text-on-surface-variant">
+                soit {formatPrice(Math.round(offer.priceCents.year / 12))}/mois
+                {#if yearlySavedCents > 0}
+                  <span class="ml-1 line-through text-on-surface-variant/45">{formatPrice(offer.priceCents.month)}</span>
+                {/if}
+              </p>
+              {#if yearlySavedCents > 0}
+                <p class="text-xs font-medium text-success">{formatPrice(yearlySavedCents)} d'économie par an</p>
+              {/if}
+            {/if}
+          </div>
         {/if}
       </div>
+      {#if yearlyAvailable}
+        <div class="mb-3 inline-flex gap-1 p-1 rounded-lg bg-surface-container-low border border-outline-variant/40">
+          <button
+            type="button"
+            onclick={() => (interval = 'month')}
+            aria-pressed={interval === 'month'}
+            class="px-3.5 h-7 rounded-md text-xs font-medium transition-colors {interval === 'month'
+              ? 'bg-primary text-on-primary'
+              : 'text-on-surface-variant hover:text-on-surface'}"
+          >
+            Mensuel
+          </button>
+          <button
+            type="button"
+            onclick={() => (interval = 'year')}
+            aria-pressed={interval === 'year'}
+            class="px-3.5 h-7 rounded-md text-xs font-medium transition-colors flex items-center gap-1.5 {interval === 'year'
+              ? 'bg-primary text-on-primary'
+              : 'text-on-surface-variant hover:text-on-surface'}"
+          >
+            Annuel
+            {#if yearlySavingPercent > 0}
+              <span class="text-2xs px-1.5 py-0.5 rounded bg-success/20 text-success font-semibold">
+                −{yearlySavingPercent}%
+              </span>
+            {/if}
+          </button>
+        </div>
+      {/if}
       <p class="text-body-sm text-on-surface-variant leading-relaxed">
         {offer.description}
       </p>
@@ -197,7 +263,7 @@
         <button
           type="button"
           onclick={() => (codeOpen = true)}
-          class="inline-flex items-center gap-1.5 text-body-sm font-medium text-on-surface-variant/60 hover:text-on-surface transition-colors"
+          class="inline-flex items-center gap-1.5 text-body-sm font-medium text-on-surface-variant hover:text-on-surface transition-colors"
         >
           <Papicon icon="ticket" size={13} />
           Tu as un code&nbsp;? Partenaire, essai offert…
@@ -217,7 +283,8 @@
             <button
               type="button"
               onclick={redeemCode}
-              disabled={codeBusy || !codeValue.trim()}
+              disabled={codeBusy}
+              use:explainDisabled={(!codeValue.trim()) ? m.common_reason_fill_field() : ''}
               class="shrink-0 px-3.5 py-2 rounded-lg bg-primary text-on-primary text-body-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-40"
             >
               {codeBusy ? 'Vérification…' : 'Activer'}

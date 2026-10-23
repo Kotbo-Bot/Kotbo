@@ -19,6 +19,10 @@ enum TicketStatus {
   // reagir. Distinct de CLOSED, dont l'invariant est qu'il reste soit le
   // salon, soit un transcript.
   ORPHANED
+  // Ticket accepte mais sans salon ni fil : le serveur a atteint une limite
+  // Discord (500 salons, 50 par categorie, 1000 fils actifs). Il sera cree
+  // des qu'une place se libere, dans l'ordre d'arrivee.
+  QUEUED
 }
 
 model Ticket {
@@ -49,7 +53,18 @@ model Ticket {
   // Premier message d'une autre personne que l'auteur : sert au délai de première réponse.
   firstResponseAt DateTime?
   firstResponderId String?
+  // Dernier message de l'auteur et dernier message du staff : disent à qui
+  // revient la parole (« en attente du staff ») sans relire le salon.
+  lastMemberMessageAt DateTime?
+  lastStaffMessageAt  DateTime?
+  // LOW | NORMAL | HIGH | URGENT
+  priority      String       @default("NORMAL")
+  tags          String[]     @default([])
   inactivityAlertSent Boolean  @default(false)
+  // Dernière relance du staff (membre resté sans réponse) et leur nombre :
+  // une relance par attente, le compteur alimente les statistiques.
+  staffReminderSentAt DateTime?
+  staffReminderCount  Int      @default(0)
   isAnonymous         Boolean  @default(false)
   staffServerGuildId  String?  // Si relay sur serveur staff, l'ID du serveur staff
 
@@ -64,6 +79,13 @@ model Ticket {
   reviewedByName   String?
   reviewedAt       DateTime?
   rejectionReason  String?
+
+  // ── File d'attente (limite Discord atteinte) ──────────────────────────────
+  // `queuedAt` fixe l'ordre de passage et n'est pas reecrit quand une nouvelle
+  // tentative echoue : le ticket garde sa place. `queueScope` dit quelle limite
+  // le bloque (GUILD_CHANNELS, CATEGORY_CHANNELS:<id>, ACTIVE_THREADS:<id>).
+  queuedAt         DateTime?
+  queueScope       String?
 
   // ── Archivage ─────────────────────────────────────────────────────────────
   // Le salon reste en place, verrouille en lecture seule. `archivedFromCategoryId`
@@ -82,6 +104,13 @@ model Ticket {
   deletionLockedByName String?
   deletionLockReason   String?
 
+  // ── Humeur (Kotbo × AegisAI) ──────────────────────────────────────────────
+  // Dernière émotion marquée de l'auteur et pic de toxicité de ses messages.
+  moodLabel     String?
+  moodScore     Float?
+  peakToxicity  Float?
+  moodUpdatedAt DateTime?
+
   guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
 
   @@index([guildId, createdAt])
@@ -93,6 +122,9 @@ model Ticket {
   // du Pulse sont déjà couverts : (guildId, status) est un préfixe de
   // (guildId, status, createdAt), et (guildId, createdAt) existe ci-dessus.
   @@index([guildId, closedAt])
+  @@index([guildId, claimedById, status])
+  // Balayage de la file d'attente, tous serveurs confondus.
+  @@index([status, queuedAt])
   @@map("tickets")
 }
 

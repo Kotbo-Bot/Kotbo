@@ -118,7 +118,7 @@
         return true;
       },
       {
-        successMessage: 'Paramètres enregistrés avec succès.',
+        successMessage: 'Paramètres enregistrés.',
         failureMessage: 'Impossible d\'enregistrer les paramètres pour le moment.'
       }
     );
@@ -296,9 +296,9 @@
             />
           </div>
           <div>
-            <div class="text-lg font-semibold font-headline">{dashboardStore.state.error ? 'Erreur' : 'Connecté'}</div>
+            <div class="text-lg font-semibold font-headline">{dashboardStore.state.error ? 'Hors ligne' : 'En ligne'}</div>
             <div class="text-xs font-bold opacity-70">
-              {dashboardStore.state.error ? 'API Bot inaccessible' : 'Communication API stable'}
+              {dashboardStore.state.error ? 'Kotbo ne répond pas' : 'Kotbo répond normalement'}
             </div>
           </div>
         </div>

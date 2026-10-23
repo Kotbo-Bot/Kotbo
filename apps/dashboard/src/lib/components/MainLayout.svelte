@@ -5,8 +5,6 @@
   import ServerSwitcherModal from './ServerSwitcherModal.svelte';
   import UnsavedChangesBar from './UnsavedChangesBar.svelte';
   import TutorialWelcome from './TutorialWelcome.svelte';
-  import TutorialChecklist from './TutorialChecklist.svelte';
-  import PageTip from './PageTip.svelte';
   import GuideSpotlight from './GuideSpotlight.svelte';
   import MobileTopBar from './mobile/MobileTopBar.svelte';
   import MobileTabBar from './mobile/MobileTabBar.svelte';
@@ -15,8 +13,7 @@
   import MobileTabEditor from './mobile/MobileTabEditor.svelte';
   import DemoBanner from './DemoBanner.svelte';
   import DemoTour from './DemoTour.svelte';
-  import { DEMO_MODE, appPathname } from '../demo/mode';
-  import { demoTour } from '../demo/tour.svelte';
+  import { DEMO_MODE } from '../demo/mode';
 
   import { onMount, untrack } from 'svelte';
   import type { Snippet } from 'svelte';
@@ -41,8 +38,6 @@
   import { getMobilePageLayout, getPageKey } from '../mobilePageContext';
 
   const { children }: { children?: Snippet } = $props();
-
-  const demoPageToured = $derived(DEMO_MODE && ($router.path, demoTour.coversPage(appPathname())));
 
   onMount(() => {
     dashboardLifecycle.init();
@@ -108,13 +103,6 @@
   const pageStatus = $derived(getPageStatus($router.path, $router.url));
   const mobilePageLayout = $derived(getMobilePageLayout($router.path));
   const pageKey = $derived(getPageKey($router.path));
-
-  // Local state to keep track of dismissed beta banners in the current session
-  let dismissedBanners = $state<Record<string, boolean>>({});
-
-  function dismissBanner(pageName: string) {
-    dismissedBanners = { ...dismissedBanners, [pageName]: true };
-  }
 
   function handleGlobalKeyDown(e: KeyboardEvent) {
     const activeEl = document.activeElement;
@@ -231,37 +219,9 @@
           </div>
         </div>
       {:else}
-        {#if pageStatus?.beta && !dismissedBanners[pageStatus.name]}
-          <div class="mb-5 px-4 py-3 rounded-lg bg-purple-50 dark:bg-purple-500/10 border border-purple-200 dark:border-purple-500/20 flex items-center gap-3">
-            <div class="shrink-0 text-purple-600 dark:text-purple-400">
-              <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
-
-            <p class="flex-1 text-xs text-on-surface-variant">
-              <strong>{pageStatus.name}</strong> {m.banner_beta_suffix()}
-              <button type="button" onclick={() => feedbackModal.show()} class="text-purple-600 dark:text-purple-400 font-medium hover:underline cursor-pointer ml-1">{m.banner_report_issue()}</button>
-            </p>
-
-            <button
-              type="button"
-              onclick={() => dismissBanner(pageStatus.name)}
-              class="shrink-0 p-1 text-on-surface-variant/50 hover:text-on-surface-variant transition-colors rounded"
-              aria-label={m.common_close()}
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-        {/if}
-        
-        <!-- En demo, la fiche de la page pousserait l'element montre hors de
-             la bulle, et une page qui a sa visite guidee n'en a pas besoin. -->
-        {#if !demoTour.active && !demoPageToured}
-          <PageTip />
-        {/if}
+        <!-- Ni bandeau « bêta » ni fiche « Guide » au-dessus des pages : le
+             premier repetait le menu, la seconde le titre et la description
+             de la page. Le statut bêta se lit a cote du titre (ModulePage). -->
         {@render children?.()}
       {/if}
     </main>
@@ -277,7 +237,6 @@
   <ServerSwitcherModal />
   <UnsavedChangesBar />
   <TutorialWelcome />
-  <TutorialChecklist />
   <GuideSpotlight />
   {#if DEMO_MODE}
     <DemoTour />

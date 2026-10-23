@@ -154,7 +154,7 @@
       {/if}
       <div>
         <h1 class="text-2xl font-semibold font-headline">{m.rpg_public_title()}</h1>
-        <p class="text-sm text-on-surface-variant/70">{data?.guildName ?? ''}</p>
+        <p class="text-sm text-on-surface-variant">{data?.guildName ?? ''}</p>
       </div>
     </header>
 
@@ -163,11 +163,11 @@
     {:else if !data}
       <!-- Un serveur injoignable et un module eteint ne sont pas la meme chose : les
            confondre enverrait chercher un reglage la ou il n'y a qu'une panne. -->
-      <p class="text-sm text-on-surface-variant/70 bg-surface-container-high/30 border border-outline-variant/10 rounded-xl px-6 py-8 text-center">
+      <p class="text-sm text-on-surface-variant bg-surface-container-high/30 border border-outline-variant/10 rounded-xl px-6 py-8 text-center">
         {m.rpg_public_unavailable()}
       </p>
     {:else if !data.enabled}
-      <p class="text-sm text-on-surface-variant/70 bg-surface-container-high/30 border border-outline-variant/10 rounded-xl px-6 py-8 text-center">
+      <p class="text-sm text-on-surface-variant bg-surface-container-high/30 border border-outline-variant/10 rounded-xl px-6 py-8 text-center">
         {m.rpg_public_disabled()}
       </p>
     {:else}
@@ -181,7 +181,7 @@
             </h2>
             <span class="text-body-sm font-semibold text-error">{m.rpg_public_raid_closes({ time: countdown(raid.closesAt) })}</span>
           </div>
-          <p class="text-xs text-on-surface-variant/60">
+          <p class="text-xs text-on-surface-variant">
             {raidIsClanWide ? m.rpg_public_raid_open({ level: raid.bossLevel }) : m.rpg_public_raid_guild_mode({ level: raid.bossLevel })}
           </p>
         {:else if raid?.status === 'SCHEDULED'}
@@ -192,10 +192,10 @@
             </h2>
             <span class="text-body-sm font-semibold text-primary">{m.rpg_public_raid_opens({ time: countdown(raid.opensAt) })}</span>
           </div>
-          <p class="text-xs text-on-surface-variant/60">{m.rpg_public_raid_scheduled({ level: raid.bossLevel })}</p>
+          <p class="text-xs text-on-surface-variant">{m.rpg_public_raid_scheduled({ level: raid.bossLevel })}</p>
         {:else}
           <h2 class="text-lg font-semibold">{m.rpg_public_raid_none_title()}</h2>
-          <p class="text-xs text-on-surface-variant/60">{m.rpg_public_raid_none()}</p>
+          <p class="text-xs text-on-surface-variant">{m.rpg_public_raid_none()}</p>
         {/if}
       </section>
 
@@ -213,25 +213,25 @@
 
       {#if effectiveMode === 'solo'}
         <section class="space-y-3">
-          <h2 class="text-xs font-semibold text-on-surface-variant/60 flex items-center gap-1.5">
+          <h2 class="text-xs font-semibold text-on-surface-variant flex items-center gap-1.5">
             <Papicon icon="Grades" size={12} />
             {m.rpg_public_solo_title()}
           </h2>
 
           {#if (solo?.leaderboard ?? []).length === 0}
-            <p class="text-sm text-on-surface-variant/60 italic">{m.rpg_public_solo_empty()}</p>
+            <p class="text-sm text-on-surface-variant italic">{m.rpg_public_solo_empty()}</p>
           {:else}
             <div class="bg-surface-container-low/40 border border-outline-variant/10 rounded-2xl divide-y divide-outline-variant/10 overflow-hidden">
               {#each solo.leaderboard as player (player.userId)}
                 <div class="flex items-center gap-3 px-5 py-3">
-                  <span class="w-7 text-body-sm font-bold text-on-surface-variant/50 tabular-nums">{player.rank}</span>
+                  <span class="w-7 text-body-sm font-bold text-on-surface-variant tabular-nums">{player.rank}</span>
                   {#if player.avatarUrl}
                     <img src={player.avatarUrl} alt="" class="w-8 h-8 rounded-full shrink-0" />
                   {:else}
                     <span class="w-8 h-8 rounded-full bg-outline-variant/15 shrink-0"></span>
                   {/if}
                   <span class="text-body-sm font-semibold truncate flex-1 min-w-0">{player.displayName}</span>
-                  <span class="text-2xs text-on-surface-variant/60 shrink-0">
+                  <span class="text-2xs text-on-surface-variant shrink-0">
                     {m.rpg_public_solo_line({
                       level: player.level,
                       monsters: player.monstersKilled,
@@ -244,7 +244,7 @@
           {/if}
 
           {#if (solo?.quests ?? []).length > 0}
-            <h2 class="text-xs font-semibold text-on-surface-variant/60 pt-2 flex items-center gap-1.5">
+            <h2 class="text-xs font-semibold text-on-surface-variant pt-2 flex items-center gap-1.5">
               <Papicon icon="Tasks" size={12} />
               {m.rpg_public_solo_quests()}
             </h2>
@@ -253,13 +253,13 @@
                 <div class="bg-surface-container-low/40 border border-outline-variant/10 rounded-xl px-5 py-4">
                   <div class="flex flex-wrap items-baseline justify-between gap-2">
                     <span class="text-body-sm font-semibold flex items-center gap-1.5">
-                      <Papicon icon={questIcon(quest.objective)} size={14} class="text-on-surface-variant/70" />
+                      <Papicon icon={questIcon(quest.objective)} size={14} class="text-on-surface-variant" />
                       {quest.name}
                     </span>
-                    <span class="text-2xs text-on-surface-variant/50">{m.rpg_public_quest_resets({ time: countdown(quest.windowEndsAt) })}</span>
+                    <span class="text-2xs text-on-surface-variant">{m.rpg_public_quest_resets({ time: countdown(quest.windowEndsAt) })}</span>
                   </div>
-                  <p class="text-2xs text-on-surface-variant/60 mt-1 leading-relaxed">{quest.description}</p>
-                  <p class="text-2xs text-on-surface-variant/50 mt-1">
+                  <p class="text-2xs text-on-surface-variant mt-1 leading-relaxed">{quest.description}</p>
+                  <p class="text-2xs text-on-surface-variant mt-1">
                     {m.eco_quest_goal({ target: quest.target, objective: objectiveLabel(quest.objective), hours: quest.windowHours })}
                   </p>
                 </div>
@@ -270,7 +270,7 @@
       {:else}
       {#if quests.length > 0}
         <section class="space-y-2">
-          <h2 class="text-xs font-semibold text-on-surface-variant/60 flex items-center gap-1.5">
+          <h2 class="text-xs font-semibold text-on-surface-variant flex items-center gap-1.5">
             <Papicon icon="Tasks" size={12} />
             {m.rpg_public_quests_title()}
           </h2>
@@ -279,13 +279,13 @@
               <div class="bg-surface-container-low/40 border border-outline-variant/10 rounded-xl px-5 py-4">
                 <div class="flex flex-wrap items-baseline justify-between gap-2">
                   <span class="text-body-sm font-semibold flex items-center gap-1.5">
-                    <Papicon icon={questIcon(quest.objective)} size={14} class="text-on-surface-variant/70" />
+                    <Papicon icon={questIcon(quest.objective)} size={14} class="text-on-surface-variant" />
                     {quest.name}
                   </span>
-                  <span class="text-2xs text-on-surface-variant/50">{m.rpg_public_quest_resets({ time: countdown(quest.windowEndsAt) })}</span>
+                  <span class="text-2xs text-on-surface-variant">{m.rpg_public_quest_resets({ time: countdown(quest.windowEndsAt) })}</span>
                 </div>
-                <p class="text-2xs text-on-surface-variant/60 mt-1 leading-relaxed">{quest.description}</p>
-                <p class="text-2xs text-on-surface-variant/50 mt-1">
+                <p class="text-2xs text-on-surface-variant mt-1 leading-relaxed">{quest.description}</p>
+                <p class="text-2xs text-on-surface-variant mt-1">
                   {m.eco_quest_goal({ target: quest.target, objective: objectiveLabel(quest.objective), hours: quest.windowHours })}
                 </p>
               </div>
@@ -296,12 +296,12 @@
 
       <section class="space-y-3">
         <div class="flex flex-wrap items-baseline justify-between gap-2">
-          <h2 class="text-xs font-semibold text-on-surface-variant/60 flex items-center gap-1.5">
+          <h2 class="text-xs font-semibold text-on-surface-variant flex items-center gap-1.5">
             <Papicon icon="Grades" size={12} />
             {m.rpg_public_clans_title()}
           </h2>
           {#if rankedClans.length > 0}
-            <p class="text-2xs text-on-surface-variant/50">
+            <p class="text-2xs text-on-surface-variant">
               {m.rpg_public_summary({ engaged: clansEngaged, total: rankedClans.length })}
               {#if raid?.status === 'OPEN' && raidIsClanWide && bossesDown > 0}
                 {' · '}{m.rpg_public_summary_bosses({ count: bossesDown })}
@@ -319,14 +319,14 @@
                 <span class="w-2.5 h-2.5 rounded-full shrink-0" style={`background:${clan.roleColor ?? 'var(--color-outline-variant)'}`}></span>
                 <h3 class="text-base font-semibold truncate">{clan.name}</h3>
               </div>
-              <span class="text-2xs text-on-surface-variant/50">{m.rpg_public_members({ count: clan.memberCount })}</span>
+              <span class="text-2xs text-on-surface-variant">{m.rpg_public_members({ count: clan.memberCount })}</span>
             </div>
 
             {#if raid?.status === 'OPEN' && raidIsClanWide}
               <div class="space-y-1">
                 <div class="flex flex-wrap items-baseline justify-between gap-2 text-xs">
                   <span class="font-semibold">{m.rpg_public_raid_bar()}</span>
-                  <span class="text-on-surface-variant/60">
+                  <span class="text-on-surface-variant">
                     {#if !clan.raid}
                       {m.rpg_public_raid_not_engaged()}
                     {:else if clan.raid.defeated}
@@ -354,10 +354,10 @@
                 <div class="space-y-1">
                   <div class="flex flex-wrap items-baseline justify-between gap-2 text-xs">
                     <span class="font-semibold flex items-center gap-1.5">
-                      <Papicon icon={questIcon(quest.objective)} size={12} class="text-on-surface-variant/60" />
+                      <Papicon icon={questIcon(quest.objective)} size={12} class="text-on-surface-variant" />
                       {quest.name}
                     </span>
-                    <span class="text-on-surface-variant/60">
+                    <span class="text-on-surface-variant">
                       {progress.current.toLocaleString()} / {progress.target.toLocaleString()}
                       {#if progress.completed}<span class="text-success ml-1">{m.rpg_public_quest_done()}</span>{/if}
                     </span>
@@ -374,11 +374,11 @@
             </div>
 
             {#if quests.length === 0 && !(raid?.status === 'OPEN' && raidIsClanWide)}
-              <p class="text-2xs text-on-surface-variant/50 italic">{m.rpg_public_clan_idle()}</p>
+              <p class="text-2xs text-on-surface-variant italic">{m.rpg_public_clan_idle()}</p>
             {/if}
           </article>
         {:else}
-          <p class="text-sm text-on-surface-variant/60 italic">{m.rpg_public_no_clan()}</p>
+          <p class="text-sm text-on-surface-variant italic">{m.rpg_public_no_clan()}</p>
         {/each}
         </div>
       </section>

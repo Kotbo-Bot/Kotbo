@@ -277,7 +277,7 @@
                     {#each parsed.badges as item}
                       {#if item.key}
                         <div class="inline-flex items-center gap-1 bg-surface-container-high border border-outline-variant/10 rounded-lg px-2 py-0.5 text-2xs text-on-surface-variant font-medium">
-                          <span class="text-on-surface-variant/70 font-semibold">{item.key}:</span>
+                          <span class="text-on-surface-variant font-semibold">{item.key}:</span>
                           <span class="text-on-surface break-all">{@html item.value}</span>
                         </div>
                       {:else}

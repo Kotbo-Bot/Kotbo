@@ -64,7 +64,7 @@
         <Papicon icon="Cross" size={10} class="opacity-50 group-hover:opacity-90" />
       </button>
     {:else}
-      <span class="text-2xs text-on-surface-variant/70">{m.wf_channel_filter_all()}</span>
+      <span class="text-2xs text-on-surface-variant">{m.wf_channel_filter_all()}</span>
     {/each}
   </div>
 

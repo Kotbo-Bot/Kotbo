@@ -242,7 +242,7 @@
             <Papicon icon="shield" size={32} class="text-on-surface-variant/40" />
           </div>
           <h3 class="text-lg font-semibold text-on-surface mb-1">{m.staff_server_empty_title()}</h3>
-          <p class="text-sm text-on-surface-variant/60 max-w-sm">
+          <p class="text-sm text-on-surface-variant max-w-sm">
             {m.staff_server_empty_desc()}
           </p>
         </div>
@@ -258,7 +258,7 @@
                       <img src={link.otherGuildIcon} alt="" class="w-10 h-10 rounded-lg" />
                     {:else}
                       <div class="w-10 h-10 rounded-lg bg-surface-container flex items-center justify-center">
-                        <Papicon icon="server" size={20} class="text-on-surface-variant/50" />
+                        <Papicon icon="server" size={20} class="text-on-surface-variant" />
                       </div>
                     {/if}
                     <div>
@@ -325,7 +325,7 @@
                   </div>
 
                   {#if link.roleMappings.length === 0}
-                    <p class="text-sm text-on-surface-variant/50 text-center py-4">
+                    <p class="text-sm text-on-surface-variant text-center py-4">
                       {m.staff_server_no_mappings_desc()}
                     </p>
                   {:else}
@@ -361,7 +361,7 @@
                   {#if link.isMain}
                     <div class="mt-5 pt-4 border-t border-outline-variant/10">
                       <h5 class="text-sm font-semibold text-on-surface mb-1">{m.staff_server_cross_notifs_heading()}</h5>
-                      <p class="text-xs text-on-surface-variant/50 mb-4">
+                      <p class="text-xs text-on-surface-variant mb-4">
                         {m.staff_server_cross_notifs_desc()}
                       </p>
 
@@ -433,7 +433,7 @@
                   {/if}
 
                   <div class="mt-4 pt-3 border-t border-outline-variant/10">
-                    <p class="text-xs text-on-surface-variant/50">
+                    <p class="text-xs text-on-surface-variant">
                       Mode : {syncModeDescriptions[link.syncMode]?.() ?? link.syncMode}
                     </p>
                     <p class="text-xs text-on-surface-variant/40 mt-1">
@@ -450,7 +450,7 @@
 
     <!-- Create Link Modal -->
       <Modal bind:open={showCreateModal} title={m.staff_server_modal_create_title()}>
-        <div class="flex flex-col gap-5 p-1">
+        <div class="flex flex-col gap-5">
           <div>
             <label for="new-staff-guild-id" class="block text-sm font-medium text-on-surface mb-1.5">{m.staff_server_field_staff_guild_id()}</label>
             <input
@@ -460,7 +460,7 @@
               placeholder="Ex: 123456789012345678"
               class="w-full px-3 py-2 rounded-lg bg-surface-container border border-outline-variant/30 text-on-surface text-sm focus:ring-2 focus:ring-primary/30 focus:border-primary/50 outline-none placeholder:text-on-surface-variant/30"
             />
-            <p class="text-xs text-on-surface-variant/50 mt-1">{m.staff_server_hint_bot_present()}</p>
+            <p class="text-xs text-on-surface-variant mt-1">{m.staff_server_hint_bot_present()}</p>
           </div>
 
           <div>
@@ -474,7 +474,7 @@
               <option value="STAFF_TO_MAIN">{m.staff_server_mode_staff_to_main()}</option>
               <option value="BIDIRECTIONAL">{m.channel_links_direction_bidirectional()}</option>
             </select>
-            <p class="text-xs text-on-surface-variant/50 mt-1">{syncModeDescriptions[newSyncMode]?.() ?? newSyncMode}</p>
+            <p class="text-xs text-on-surface-variant mt-1">{syncModeDescriptions[newSyncMode]?.() ?? newSyncMode}</p>
           </div>
 
           <div>
@@ -517,7 +517,7 @@
 
     <!-- Mapping Modal -->
       <Modal bind:open={showMappingModal} title={m.staff_server_modal_mapping_title()}>
-        <div class="flex flex-col gap-5 p-1">
+        <div class="flex flex-col gap-5">
           <div>
             <label for="new-main-role-id" class="block text-sm font-medium text-on-surface mb-1.5">{m.staff_server_field_main_role()}</label>
             <select
@@ -559,7 +559,7 @@
 
     <!-- Delete Confirm Modal -->
       <Modal bind:open={showDeleteModal} title={m.staff_server_delete_modal_title()}>
-        <div class="flex flex-col gap-4 p-1">
+        <div class="flex flex-col gap-4">
           <p class="text-sm text-on-surface-variant">
             {m.staff_server_delete_modal_desc()}
           </p>

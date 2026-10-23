@@ -11,6 +11,8 @@
     showCloseButton = true,
     closeOnBackdropClick = true,
     closeOnEscape = true,
+    aboveCase = false,
+    flush = false,
     children,
     footer
   } = $props<{
@@ -22,6 +24,10 @@
     showCloseButton?: boolean;
     closeOnBackdropClick?: boolean;
     closeOnEscape?: boolean;
+    /** Ouverte depuis le dossier membre : passe au-dessus de lui au lieu de dessous. */
+    aboveCase?: boolean;
+    /** Le contenu gère lui-même ses marges (fiche plein écran, dossier membre). */
+    flush?: boolean;
     children?: any;
     /** Barre d'actions fixe sous le contenu défilant (ex : Annuler / Enregistrer). */
     footer?: any;
@@ -67,7 +73,7 @@
 {#if open}
   <div
     use:portal
-    class="app-modal fixed inset-0 flex items-center justify-center {isScreen ? 'p-0 sm:p-4' : 'p-4'}"
+    class="app-modal {aboveCase ? 'app-modal--above-case' : ''} fixed inset-0 flex items-center justify-center {isScreen ? 'p-0 sm:p-4' : 'p-4'}"
     role="dialog"
     aria-modal="true"
     aria-labelledby="modal-title"
@@ -118,7 +124,7 @@
 
       <!-- Content - the modal's single scroll container. Children must not nest
            another overflow-y:auto full-height wrapper here, or two scrollbars appear. -->
-      <div class="app-modal__body flex-1 min-h-0 overflow-y-auto">
+      <div class="app-modal__body flex-1 min-h-0 overflow-y-auto {flush ? '' : 'p-5'}">
         {@render children?.()}
       </div>
 

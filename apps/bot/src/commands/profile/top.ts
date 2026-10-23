@@ -12,6 +12,7 @@ import { errorEmbed, COLORS } from '../../utils/embeds.js';
 import prisma from '../../utils/db.js';
 import { getCommandMetadata } from '../../utils/i18n.js';
 import * as m from '../../lib/paraglide/messages.js';
+import { publicErrorMessage } from '../../utils/publicError.js';
 
 const meta = getCommandMetadata('c5_top');
 
@@ -155,7 +156,7 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
 
     await interaction.editReply({ embeds: [embed] });
   } catch (err: unknown) {
-    const errMsg = err instanceof Error ? err.message : 'Impossible de charger le classement.';
+    const errMsg = publicErrorMessage(err, 'Impossible de charger le classement.');
     await interaction.editReply({ embeds: [errorEmbed('Erreur', errMsg)] });
   }
 }

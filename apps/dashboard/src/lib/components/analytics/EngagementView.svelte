@@ -1,6 +1,6 @@
 <!--
   Engagement : membres actifs par jour (DAU), sur 7 jours glissants (WAU) et
-  sur 30 jours glissants (MAU), et l'adhérence DAU/MAU — la part des actifs
+  sur 30 jours glissants (MAU), et l'adhérence DAU/MAU : la part des actifs
   du mois qui reviennent un jour donné. Même carte de courbe que Messages.
 -->
 <script lang="ts">

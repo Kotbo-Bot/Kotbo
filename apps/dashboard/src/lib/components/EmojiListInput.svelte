@@ -88,7 +88,7 @@
       <Papicon icon="x" size={12} class="opacity-40 group-hover:opacity-90" />
     </button>
   {:else}
-    <span class="text-xs text-on-surface-variant/50 self-center px-1">{m.starboard_emoji_empty()}</span>
+    <span class="text-xs text-on-surface-variant self-center px-1">{m.starboard_emoji_empty()}</span>
   {/each}
 </div>
 

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { explainDisabled } from '../lib/actions/explainDisabled';
   import { onDestroy, onMount, untrack } from 'svelte';
   import { fade } from 'svelte/transition';
   import { dashboardStore } from '../lib/stores/dashboard.svelte';
@@ -8,12 +9,15 @@
   import { unsavedChanges } from '../lib/stores/unsavedChanges.svelte';
   import { subscribeRealtime } from '../lib/stores/realtime.svelte';
   import Papicon from '../lib/components/Papicon.svelte';
+  import EmojiText from '../lib/components/EmojiText.svelte';
   import InlineFeedback from '../lib/components/InlineFeedback.svelte';
   import SearchableSelect from '../lib/components/SearchableSelect.svelte';
   import Skeleton from '../lib/components/Skeleton.svelte';
   import LoadingHint from '../lib/components/LoadingHint.svelte';
   import ModulePage from '../lib/components/ModulePage.svelte';
   import ToggleSwitch from '../lib/components/ToggleSwitch.svelte';
+  import Callout from '../lib/components/ui/Callout.svelte';
+  import Button from '../lib/components/ui/Button.svelte';
   import { m, dateLocale } from '../lib/i18n';
   import {
     fetchDiscordChannels,
@@ -21,6 +25,7 @@
     fetchRpgItems,
     fetchEconomyConfig,
     updateDropGlobalSettings,
+    updateModuleStatus,
     updateDropTypeSettings,
     type DropConfigEntry,
     type DropHistoryEntry,
@@ -263,6 +268,7 @@
         };
         globalSettings = { ...loadedGlobal };
         savedGlobalSettings = { ...loadedGlobal };
+        dropsLoaded = true;
 
         for (const type of DROP_TYPES) {
           const loaded = res.configs.find((config) => config.type === type) ?? blankConfig(type);
@@ -306,8 +312,12 @@
 
     await actionState.run(async () => {
       if (JSON.stringify(globalSettings) !== JSON.stringify(savedGlobalSettings)) {
+        // `dropsEnabled` reste hors de l'envoi : c'est la colonne du module, que
+        // seul le menu de ModulePage bascule. La renvoyer telle que chargee au
+        // montage pouvait rallumer ou eteindre le module dans son dos.
+        const { dropsEnabled: _moduleState, ...editable } = globalSettings;
         const res = await updateDropGlobalSettings({
-          ...globalSettings,
+          ...editable,
           dropChannelId: globalSettings.dropChannelId || null,
           dropMentionRoleId: globalSettings.dropMentionRoleId || null,
         });
@@ -385,6 +395,24 @@
     unsubscribeRealtime?.();
     unsavedChanges.release('drops');
   });
+
+  // `dropsEnabled` est la colonne du module : la bascule du menu de ModulePage
+  // l'ecrit avec la ligne du module. Un serveur ou les deux divergent (ligne
+  // ecrite avant que la colonne ne suive) aurait un module « actif » qui ne
+  // fait rien tomber, sans aucun interrupteur pour le rattraper : l'encadre le
+  // dit, et la bascule de module repare.
+  let dropsLoaded = $state(false);
+  const dropsModuleActive = $derived(moduleEntry('drops')?.status === 'active');
+
+  async function resumeDrops() {
+    await actionState.run(async () => {
+      const ok = await updateModuleStatus('drops', 'active');
+      if (!ok) throw new Error(m.drop_save_error());
+      globalSettings.dropsEnabled = true;
+      savedGlobalSettings.dropsEnabled = true;
+      return true;
+    });
+  }
 </script>
 
 <ModulePage
@@ -395,17 +423,30 @@
 >
   <InlineFeedback state={actionState} />
 
+  {#if dropsLoaded && dropsModuleActive && !globalSettings.dropsEnabled}
+    <Callout variant="warning" title={m.drop_paused_title()}>
+      {m.drop_paused_desc()}
+      {#snippet actions()}
+        {#if canManageSettings}
+          <Button variant="primary" size="sm" icon="power" loading={actionState.state.loading} onclick={resumeDrops}>
+            {m.drop_paused_action()}
+          </Button>
+        {/if}
+      {/snippet}
+    </Callout>
+  {/if}
+
   <!-- Navigation par Onglets -->
   <div class="flex flex-wrap border-b border-outline-variant/15 mb-6">
     <button
-      class="px-5 py-3 text-sm font-semibold border-b-2 transition-all cursor-pointer inline-flex items-center gap-2 {activeTab === 'global' ? 'border-primary text-primary font-bold bg-primary/5 rounded-t-lg' : 'border-transparent text-on-surface-variant/70 hover:text-on-surface hover:bg-surface-container-low/30'}"
+      class="px-5 py-3 text-sm font-semibold border-b-2 transition-all cursor-pointer inline-flex items-center gap-2 {activeTab === 'global' ? 'border-primary text-primary font-bold bg-primary/5 rounded-t-lg' : 'border-transparent text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low/30'}"
       onclick={() => activeTab = 'global'}
     >
       <Papicon icon="Gears" size={15} /> {m.drop_tab_global()}
     </button>
     {#each DROP_TYPES as type}
       <button
-        class="px-5 py-3 text-sm font-semibold border-b-2 transition-all cursor-pointer inline-flex items-center gap-2 {activeTab === type ? 'border-primary text-primary font-bold bg-primary/5 rounded-t-lg' : 'border-transparent text-on-surface-variant/70 hover:text-on-surface hover:bg-surface-container-low/30'}"
+        class="px-5 py-3 text-sm font-semibold border-b-2 transition-all cursor-pointer inline-flex items-center gap-2 {activeTab === type ? 'border-primary text-primary font-bold bg-primary/5 rounded-t-lg' : 'border-transparent text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low/30'}"
         onclick={() => activeTab = type}
       >
         <Papicon icon={TYPE_ICONS[type]} size={15} /> {TYPE_LABELS[type]()}
@@ -427,16 +468,13 @@
         <div class="flex items-start justify-between gap-4 border-b border-outline-variant/15 pb-3">
           <div>
             <h3 class="text-lg font-semibold flex items-center gap-2"><Papicon icon="Gears" size={18} /> {m.drop_global_heading()}</h3>
-            <p class="text-xs text-on-surface-variant/70 mt-1">{m.drop_global_desc()}</p>
+            <p class="text-xs text-on-surface-variant mt-1">{m.drop_global_desc()}</p>
           </div>
-          <ToggleSwitch checked={globalSettings.dropsEnabled} onToggle={(v) => globalSettings.dropsEnabled = v} disabled={!canManageSettings} />
         </div>
-
-        <p class="text-xs text-on-surface-variant/70">{m.drop_enable_desc()}</p>
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div class="space-y-1.5">
-            <label for="drop-default-channel" class="text-xs font-semibold text-on-surface-variant/60 ml-1">{m.drop_default_channel_label()}</label>
+            <label for="drop-default-channel" class="text-xs font-semibold text-on-surface-variant ml-1">{m.drop_default_channel_label()}</label>
             <SearchableSelect
               id="drop-default-channel"
               bind:value={globalSettings.dropChannelId}
@@ -444,11 +482,11 @@
               placeholder={m.drop_select_channel_placeholder()}
               disabled={!canManageSettings}
             />
-            <p class="text-2xs text-on-surface-variant/60 mt-1">{m.drop_default_channel_desc()}</p>
+            <p class="text-2xs text-on-surface-variant mt-1">{m.drop_default_channel_desc()}</p>
           </div>
 
           <div class="space-y-1.5">
-            <label for="drop-mention-role" class="text-xs font-semibold text-on-surface-variant/60 ml-1">{m.drop_mention_role_label()}</label>
+            <label for="drop-mention-role" class="text-xs font-semibold text-on-surface-variant ml-1">{m.drop_mention_role_label()}</label>
             <SearchableSelect
               id="drop-mention-role"
               bind:value={globalSettings.dropMentionRoleId}
@@ -456,11 +494,11 @@
               placeholder={m.drop_select_role_placeholder()}
               disabled={!canManageSettings}
             />
-            <p class="text-2xs text-on-surface-variant/60 mt-1">{m.drop_mention_role_desc()}</p>
+            <p class="text-2xs text-on-surface-variant mt-1">{m.drop_mention_role_desc()}</p>
           </div>
 
           <div class="space-y-1.5">
-            <label for="drop-lifetime" class="text-xs font-semibold text-on-surface-variant/60 ml-1">{m.drop_lifetime_label()}</label>
+            <label for="drop-lifetime" class="text-xs font-semibold text-on-surface-variant ml-1">{m.drop_lifetime_label()}</label>
             <input
               id="drop-lifetime"
               type="number"
@@ -470,12 +508,12 @@
               class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold"
               disabled={!canManageSettings}
             />
-            <p class="text-2xs text-on-surface-variant/60 mt-1">{m.drop_lifetime_desc()}</p>
-            <p class="text-2xs text-on-surface-variant/60">{m.drop_min_open_hint()}</p>
+            <p class="text-2xs text-on-surface-variant mt-1">{m.drop_lifetime_desc()}</p>
+            <p class="text-2xs text-on-surface-variant">{m.drop_min_open_hint()}</p>
           </div>
 
           <div class="space-y-1.5">
-            <label for="drop-delete-after" class="text-xs font-semibold text-on-surface-variant/60 ml-1">{m.drop_delete_after_label()}</label>
+            <label for="drop-delete-after" class="text-xs font-semibold text-on-surface-variant ml-1">{m.drop_delete_after_label()}</label>
             <select
               id="drop-delete-after"
               bind:value={globalSettings.dropDeleteAfterMinutes}
@@ -486,7 +524,7 @@
                 <option value={choice.value}>{choice.label}</option>
               {/each}
             </select>
-            <p class="text-2xs text-on-surface-variant/60 mt-1">{m.drop_delete_after_desc()}</p>
+            <p class="text-2xs text-on-surface-variant mt-1">{m.drop_delete_after_desc()}</p>
           </div>
         </div>
       </section>
@@ -494,13 +532,13 @@
       <section class="bg-surface-container-low/40 border border-outline-variant/30 p-6 rounded-xl space-y-4">
         <div class="border-b border-outline-variant/15 pb-3">
           <h3 class="text-lg font-semibold flex items-center gap-2"><Papicon icon="List" size={18} /> {m.drop_overview_heading()}</h3>
-          <p class="text-xs text-on-surface-variant/70 mt-1">{m.drop_overview_desc()}</p>
+          <p class="text-xs text-on-surface-variant mt-1">{m.drop_overview_desc()}</p>
         </div>
 
         <div class="overflow-x-auto">
           <table class="w-full text-left border-collapse">
             <thead>
-              <tr class="text-xs font-semibold text-on-surface-variant/50">
+              <tr class="text-xs font-semibold text-on-surface-variant">
                 <th class="py-2 pr-4">{m.drop_overview_col_type()}</th>
                 <th class="py-2 pr-4">{m.drop_overview_col_state()}</th>
                 <th class="py-2 pr-4">{m.drop_overview_col_channel()}</th>
@@ -517,7 +555,7 @@
                     </span>
                   </td>
                   <td class="py-2.5 pr-4">
-                    <span class="text-2xs font-bold uppercase tracking-wider px-2 py-0.5 rounded-full {configs[type].enabled && globalSettings.dropsEnabled ? 'bg-success/10 text-success border border-success/20' : 'bg-surface-container-high/60 text-on-surface-variant/60'}">
+                    <span class="text-2xs font-bold uppercase tracking-wider px-2 py-0.5 rounded-full {configs[type].enabled && globalSettings.dropsEnabled ? 'bg-success/10 text-success border border-success/20' : 'bg-surface-container-high/60 text-on-surface-variant'}">
                       {configs[type].enabled && globalSettings.dropsEnabled ? m.drop_state_on() : m.drop_state_off()}
                     </span>
                   </td>
@@ -534,16 +572,16 @@
       <section class="bg-surface-container-low/40 border border-outline-variant/30 p-6 rounded-xl space-y-4">
         <div class="border-b border-outline-variant/15 pb-3">
           <h3 class="text-lg font-semibold flex items-center gap-2"><Papicon icon="Clock" size={18} /> {m.drop_history_heading()}</h3>
-          <p class="text-xs text-on-surface-variant/70 mt-1">{m.drop_history_desc()}</p>
+          <p class="text-xs text-on-surface-variant mt-1">{m.drop_history_desc()}</p>
         </div>
 
         {#if recentDrops.length === 0}
-          <p class="py-8 text-center text-xs text-on-surface-variant/60 italic">{m.drop_history_empty()}</p>
+          <p class="py-8 text-center text-xs text-on-surface-variant italic">{m.drop_history_empty()}</p>
         {:else}
           <div class="overflow-x-auto">
             <table class="w-full text-left border-collapse">
               <thead>
-                <tr class="text-xs font-semibold text-on-surface-variant/50">
+                <tr class="text-xs font-semibold text-on-surface-variant">
                   <th class="py-2 pr-4">{m.drop_history_col_date()}</th>
                   <th class="py-2 pr-4">{m.drop_history_col_type()}</th>
                   <th class="py-2 pr-4">{m.drop_history_col_mode()}</th>
@@ -580,18 +618,12 @@
             <h3 class="text-lg font-semibold flex items-center gap-2">
               <Papicon icon={TYPE_ICONS[type]} size={18} /> {TYPE_LABELS[type]()}
             </h3>
-            <p class="text-xs text-on-surface-variant/70 mt-1">{TYPE_DESCRIPTIONS[type]()}</p>
+            <p class="text-xs text-on-surface-variant mt-1">{TYPE_DESCRIPTIONS[type]()}</p>
           </div>
           <ToggleSwitch checked={configs[type].enabled} onToggle={(v) => configs[type].enabled = v} disabled={!canManageSettings} />
         </div>
 
-        <p class="text-xs text-on-surface-variant/70">{m.drop_type_enable_desc()}</p>
-
-        {#if !globalSettings.dropsEnabled}
-          <p class="text-xs text-warning bg-warning/10 border border-warning/20 rounded-lg px-4 py-3">
-            {m.drop_enable_desc()}
-          </p>
-        {/if}
+        <p class="text-xs text-on-surface-variant">{m.drop_type_enable_desc()}</p>
 
         {#if !configs[type].channelId && !globalSettings.dropChannelId}
           <p class="text-xs text-warning bg-warning/10 border border-warning/20 rounded-lg px-4 py-3">
@@ -614,7 +646,7 @@
           <div class="space-y-2 border border-outline-variant/15 rounded-xl p-4">
             <div>
               <h4 class="text-sm font-semibold">{m.drop_item_pool_title()}</h4>
-              <p class="text-xs text-on-surface-variant/70 mt-0.5">{m.drop_item_pool_desc()}</p>
+              <p class="text-xs text-on-surface-variant mt-0.5">{m.drop_item_pool_desc()}</p>
             </div>
 
             {#if !rpgEnabled}
@@ -629,13 +661,14 @@
                 <button
                   type="button"
                   onclick={() => toggleDropItem(item.id)}
-                  disabled={!canManageSettings || (!picked && configs[type].items.length >= DROP_ITEM_POOL_MAX)}
+                  disabled={(!picked && configs[type].items.length >= DROP_ITEM_POOL_MAX)}
+                  use:explainDisabled={(!canManageSettings) ? m.common_reason_no_permission() : ''}
                   aria-pressed={picked}
                   class="px-3 py-1.5 rounded-lg border text-2xs font-medium transition-all disabled:opacity-40 disabled:cursor-not-allowed {picked
                     ? 'bg-primary/10 border-primary/40 text-primary'
                     : 'bg-surface-container-high/30 border-outline-variant/15 text-on-surface-variant/80 hover:border-outline-variant/40'}"
                 >
-                  {item.emoji} {item.name}
+                  <EmojiText value={item.emoji} /> {item.name}
                 </button>
               {/each}
             </div>
@@ -657,7 +690,7 @@
                       disabled={!canManageSettings}
                       class="w-20 bg-surface-container-high/40 border border-outline-variant/15 rounded-lg px-3 py-1.5 text-2xs text-right focus:outline-none disabled:opacity-50"
                     />
-                    <span class="text-2xs text-on-surface-variant/50 w-4">%</span>
+                    <span class="text-2xs text-on-surface-variant w-4">%</span>
                   </div>
                 {/each}
 
@@ -668,7 +701,7 @@
                   <button
                     type="button"
                     onclick={balanceDropItems}
-                    disabled={!canManageSettings}
+                    use:explainDisabled={(!canManageSettings) ? m.common_reason_no_permission() : ''}
                     class="text-2xs font-medium px-3 py-1.5 rounded-lg border border-outline-variant/20 hover:border-outline-variant/40 transition-all disabled:opacity-40"
                   >
                     {m.drop_item_balance()}
@@ -677,18 +710,18 @@
               </div>
             {/if}
 
-            <p class="text-2xs text-on-surface-variant/60">
+            <p class="text-2xs text-on-surface-variant">
               {configs[type].items.length === 0
                 ? m.drop_item_pool_empty()
                 : m.drop_item_pool_full({ max: DROP_ITEM_POOL_MAX })}
             </p>
-            <p class="text-2xs text-on-surface-variant/60">{m.drop_item_quantity_hint()}</p>
+            <p class="text-2xs text-on-surface-variant">{m.drop_item_quantity_hint()}</p>
           </div>
         {/if}
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div class="space-y-1.5">
-            <label for="drop-channel-{type}" class="text-xs font-semibold text-on-surface-variant/60 ml-1">{m.drop_channel_label()}</label>
+            <label for="drop-channel-{type}" class="text-xs font-semibold text-on-surface-variant ml-1">{m.drop_channel_label()}</label>
             <SearchableSelect
               id="drop-channel-{type}"
               bind:value={configs[type].channelId}
@@ -696,11 +729,11 @@
               placeholder={m.drop_select_channel_placeholder()}
               disabled={!canManageSettings}
             />
-            <p class="text-2xs text-on-surface-variant/60 mt-1">{m.drop_channel_desc()}</p>
+            <p class="text-2xs text-on-surface-variant mt-1">{m.drop_channel_desc()}</p>
           </div>
 
           <div class="space-y-1.5">
-            <label for="drop-interval-{type}" class="text-xs font-semibold text-on-surface-variant/60 ml-1">{m.drop_interval_label()}</label>
+            <label for="drop-interval-{type}" class="text-xs font-semibold text-on-surface-variant ml-1">{m.drop_interval_label()}</label>
             <input
               id="drop-interval-{type}"
               type="number"
@@ -711,8 +744,8 @@
               disabled={!canManageSettings}
             />
             <p class="text-2xs text-primary font-semibold mt-1">{m.drop_interval_hint({ count: dropsPerDay(configs[type].intervalMinutes) })}</p>
-            <p class="text-2xs text-on-surface-variant/60">{m.drop_interval_desc()}</p>
-            <p class="text-2xs text-on-surface-variant/60">{m.drop_min_gap_hint()}</p>
+            <p class="text-2xs text-on-surface-variant">{m.drop_interval_desc()}</p>
+            <p class="text-2xs text-on-surface-variant">{m.drop_min_gap_hint()}</p>
           </div>
         </div>
       </section>
@@ -720,7 +753,7 @@
       <section class="bg-surface-container-low/40 border border-outline-variant/30 p-6 rounded-xl space-y-5">
         <div class="border-b border-outline-variant/15 pb-3">
           <h3 class="text-lg font-semibold flex items-center gap-2"><Papicon icon="Tasks" size={18} /> {m.drop_modes_heading()}</h3>
-          <p class="text-xs text-on-surface-variant/70 mt-1">{m.drop_modes_desc()}</p>
+          <p class="text-xs text-on-surface-variant mt-1">{m.drop_modes_desc()}</p>
         </div>
 
         {#if enabledDropModes(configs[type]).length === 0}
@@ -733,14 +766,14 @@
           <div class="flex items-start justify-between gap-4">
             <div>
               <h4 class="text-sm font-bold">{m.drop_mode_first_title()}</h4>
-              <p class="text-2xs text-on-surface-variant/70 mt-0.5">{m.drop_mode_first_desc()}</p>
+              <p class="text-2xs text-on-surface-variant mt-0.5">{m.drop_mode_first_desc()}</p>
             </div>
             <ToggleSwitch checked={configs[type].first.enabled} onToggle={(v) => configs[type].first.enabled = v} disabled={!canManageSettings} />
           </div>
 
           <div class="grid grid-cols-2 gap-4">
             <div class="space-y-1.5">
-              <label for="drop-first-min-{type}" class="text-xs font-semibold text-on-surface-variant/60 ml-1">{m.drop_mode_min_label()}</label>
+              <label for="drop-first-min-{type}" class="text-xs font-semibold text-on-surface-variant ml-1">{m.drop_mode_min_label()}</label>
               <input
                 id="drop-first-min-{type}"
                 type="number"
@@ -752,7 +785,7 @@
               />
             </div>
             <div class="space-y-1.5">
-              <label for="drop-first-max-{type}" class="text-xs font-semibold text-on-surface-variant/60 ml-1">{m.drop_mode_max_label()}</label>
+              <label for="drop-first-max-{type}" class="text-xs font-semibold text-on-surface-variant ml-1">{m.drop_mode_max_label()}</label>
               <input
                 id="drop-first-max-{type}"
                 type="number"
@@ -770,14 +803,14 @@
           <div class="flex items-start justify-between gap-4">
             <div>
               <h4 class="text-sm font-bold">{m.drop_mode_race_title()}</h4>
-              <p class="text-2xs text-on-surface-variant/70 mt-0.5">{m.drop_mode_race_desc()}</p>
+              <p class="text-2xs text-on-surface-variant mt-0.5">{m.drop_mode_race_desc()}</p>
             </div>
             <ToggleSwitch checked={configs[type].race.enabled} onToggle={(v) => configs[type].race.enabled = v} disabled={!canManageSettings} />
           </div>
 
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div class="space-y-1.5">
-              <label for="drop-race-winners-{type}" class="text-xs font-semibold text-on-surface-variant/60 ml-1">{m.drop_race_winners_label()}</label>
+              <label for="drop-race-winners-{type}" class="text-xs font-semibold text-on-surface-variant ml-1">{m.drop_race_winners_label()}</label>
               <input
                 id="drop-race-winners-{type}"
                 type="number"
@@ -789,7 +822,7 @@
               />
             </div>
             <div class="space-y-1.5">
-              <label for="drop-race-min-{type}" class="text-xs font-semibold text-on-surface-variant/60 ml-1">{m.drop_mode_min_label()}</label>
+              <label for="drop-race-min-{type}" class="text-xs font-semibold text-on-surface-variant ml-1">{m.drop_mode_min_label()}</label>
               <input
                 id="drop-race-min-{type}"
                 type="number"
@@ -801,7 +834,7 @@
               />
             </div>
             <div class="space-y-1.5">
-              <label for="drop-race-max-{type}" class="text-xs font-semibold text-on-surface-variant/60 ml-1">{m.drop_mode_max_label()}</label>
+              <label for="drop-race-max-{type}" class="text-xs font-semibold text-on-surface-variant ml-1">{m.drop_mode_max_label()}</label>
               <input
                 id="drop-race-max-{type}"
                 type="number"
@@ -819,14 +852,14 @@
           <div class="flex items-start justify-between gap-4">
             <div>
               <h4 class="text-sm font-bold">{m.drop_mode_window_title()}</h4>
-              <p class="text-2xs text-on-surface-variant/70 mt-0.5">{m.drop_mode_window_desc()}</p>
+              <p class="text-2xs text-on-surface-variant mt-0.5">{m.drop_mode_window_desc()}</p>
             </div>
             <ToggleSwitch checked={configs[type].window.enabled} onToggle={(v) => configs[type].window.enabled = v} disabled={!canManageSettings} />
           </div>
 
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div class="space-y-1.5">
-              <label for="drop-window-duration-{type}" class="text-xs font-semibold text-on-surface-variant/60 ml-1">{m.drop_window_duration_label()}</label>
+              <label for="drop-window-duration-{type}" class="text-xs font-semibold text-on-surface-variant ml-1">{m.drop_window_duration_label()}</label>
               <input
                 id="drop-window-duration-{type}"
                 type="number"
@@ -836,10 +869,10 @@
                 class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold"
                 disabled={!canManageSettings}
               />
-              <p class="text-2xs text-on-surface-variant/60 mt-1">{m.drop_min_open_hint()}</p>
+              <p class="text-2xs text-on-surface-variant mt-1">{m.drop_min_open_hint()}</p>
             </div>
             <div class="space-y-1.5">
-              <label for="drop-window-min-{type}" class="text-xs font-semibold text-on-surface-variant/60 ml-1">{m.drop_mode_min_label()}</label>
+              <label for="drop-window-min-{type}" class="text-xs font-semibold text-on-surface-variant ml-1">{m.drop_mode_min_label()}</label>
               <input
                 id="drop-window-min-{type}"
                 type="number"
@@ -851,7 +884,7 @@
               />
             </div>
             <div class="space-y-1.5">
-              <label for="drop-window-max-{type}" class="text-xs font-semibold text-on-surface-variant/60 ml-1">{m.drop_mode_max_label()}</label>
+              <label for="drop-window-max-{type}" class="text-xs font-semibold text-on-surface-variant ml-1">{m.drop_mode_max_label()}</label>
               <input
                 id="drop-window-max-{type}"
                 type="number"

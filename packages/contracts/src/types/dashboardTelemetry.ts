@@ -45,6 +45,12 @@ export const DASHBOARD_TELEMETRY_EVENTS = [
   'palette',
   /** Changements non enregistrés au départ d'une page. `dimension` : save, discard, stay. */
   'unsaved_prompt',
+  /**
+   * Réponse en un clic à une question posée au bon moment dans le produit.
+   * `dimension` : `<contexte>:<réponse>`, choisie dans une liste fermée par
+   * l'écran - jamais un texte saisi.
+   */
+  'micro_feedback',
 ] as const;
 
 export type DashboardTelemetryEvent = (typeof DASHBOARD_TELEMETRY_EVENTS)[number];

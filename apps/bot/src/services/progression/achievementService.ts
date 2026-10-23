@@ -13,6 +13,7 @@ import prisma, { prismaRead } from '../../utils/db.js';
 import { upsertRetryingRace } from '../../utils/upsertRetry.js';
 import { cache } from '../../utils/cache.js';
 import { logger } from '../../utils/logger.js';
+import { UserFacingError } from '../../utils/userFacingError.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const MONTH_MS = 30 * DAY_MS;
@@ -338,7 +339,7 @@ export function refreshAchievementsInBackground(userId: string): void {
     });
 }
 
-export class ManualAchievementError extends Error {
+export class ManualAchievementError extends UserFacingError {
   constructor(message: string, readonly status: number) {
     super(message);
   }

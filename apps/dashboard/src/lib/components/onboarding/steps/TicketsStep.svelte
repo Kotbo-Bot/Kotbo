@@ -118,7 +118,7 @@
         Déjà repris
       </span>
       {#each inherited as type (type.id)}
-        <span class="rounded-md bg-surface-container/70 px-1.5 py-0.5 text-xs text-on-surface-variant/70">
+        <span class="rounded-md bg-surface-container/70 px-1.5 py-0.5 text-xs text-on-surface-variant">
           {type.emoji ?? '🎫'} {type.label}
         </span>
       {/each}
@@ -146,7 +146,7 @@
             </span>
           {/if}
         </div>
-        <p class="mt-1 text-xs text-on-surface-variant/60 leading-relaxed">{preset.description}</p>
+        <p class="mt-1 text-xs text-on-surface-variant leading-relaxed">{preset.description}</p>
       </button>
     {/each}
   </div>
@@ -201,7 +201,7 @@
     <button
       type="button"
       onclick={skip}
-      class="text-body-sm font-medium text-on-surface-variant/50 hover:text-on-surface transition-colors"
+      class="text-body-sm font-medium text-on-surface-variant hover:text-on-surface transition-colors"
     >
       Passer
     </button>

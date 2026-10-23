@@ -19,6 +19,16 @@ const TYPING_MIN_LENGTH = 40;
 /** Un indicateur de frappe Discord vit ~10 s ; on laisse une marge confortable. */
 const TYPING_MAX_AGE_MS = 60_000;
 
+/** En dessous, un message part vite sans que ce soit suspect : on ne parle de collage qu'au-delà. */
+const PASTE_MIN_LENGTH = 200;
+/**
+ * Vitesse de frappe soutenue au-delà de laquelle le texte n'a pas pu être tapé.
+ * 15 caractères/s, c'est ~180 mots/min : au-dessus des meilleurs dactylos.
+ */
+const MAX_HUMAN_CHARS_PER_SECOND = 15;
+/** Au-delà, le texte est apparu d'un bloc : collage quasi certain. */
+const INSTANT_PASTE_CHARS_PER_SECOND = 50;
+
 function windowOf(ctx: SpamEvaluationContext): RecentMessage[] {
   const cutoff = ctx.now - ctx.tuning.windowSeconds * 1000;
   return ctx.history.filter((m) => m.at >= cutoff);
@@ -47,6 +57,38 @@ export function signalNoTyping(ctx: SpamEvaluationContext): SpamSignal | null {
     score: 40,
     label: 'Message posté sans indicateur de frappe',
     detail: `${ctx.content.length} caractères, aucune frappe observée dans les ${TYPING_MAX_AGE_MS / 1000} s précédentes`,
+  };
+}
+
+/**
+ * Gros message apparu après une frappe bien trop courte : copier-coller.
+ *
+ * Complète `no_typing` : un humain qui colle un texte depuis un vrai client
+ * déclenche bien un `typingStart`, mais une ou deux secondes avant d'envoyer
+ * 600 caractères. C'est le geste du spammeur manuel qui recopie la même
+ * arnaque de serveur en serveur. Coller n'a rien d'illégitime en soi (citation,
+ * annonce relayée…) : le score reste modeste et compte surtout en concordance.
+ */
+export function signalPasteBurst(ctx: SpamEvaluationContext): SpamSignal | null {
+  if (!ctx.tuning.pasteSignalEnabled) return null;
+  if (!ctx.typingObservable) return null;
+  if (ctx.content.length < PASTE_MIN_LENGTH) return null;
+  // Du code se colle par nature : ce n'est pas ce qu'on cherche.
+  if (ctx.content.includes('```')) return null;
+
+  // Sans frappe récente, c'est le cas de `no_typing`, pas un collage.
+  if (ctx.typingSessionStartAt === null || ctx.lastTypingAt === null) return null;
+  if (ctx.now - ctx.lastTypingAt > TYPING_MAX_AGE_MS) return null;
+
+  const typingMs = Math.max(0, ctx.now - ctx.typingSessionStartAt);
+  const charsPerSecond = ctx.content.length / Math.max(1, typingMs / 1000);
+  if (charsPerSecond <= MAX_HUMAN_CHARS_PER_SECOND) return null;
+
+  return {
+    type: 'paste_burst',
+    score: charsPerSecond >= INSTANT_PASTE_CHARS_PER_SECOND ? 35 : 25,
+    label: 'Gros message collé sans temps de frappe',
+    detail: `${ctx.content.length} caractères après ${(typingMs / 1000).toFixed(1)} s de frappe (${Math.round(charsPerSecond)} car./s)`,
   };
 }
 
@@ -270,6 +312,7 @@ export function collectSignals(ctx: SpamEvaluationContext): SpamSignal[] {
 
   const candidates = [
     signalNoTyping(ctx),
+    signalPasteBurst(ctx),
     signalInhumanRate(ctx),
     signalRegularIntervals(ctx),
     signalCrossChannelBurst(ctx, normalized),

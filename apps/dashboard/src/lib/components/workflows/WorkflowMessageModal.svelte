@@ -59,13 +59,13 @@
           </div>
           <div>
             <h3 class="text-sm font-bold text-on-surface">{title}</h3>
-            <p class="text-2xs text-on-surface-variant/70">Éditeur avec aperçu Discord en temps réel</p>
+            <p class="text-2xs text-on-surface-variant">Éditeur avec aperçu Discord en temps réel</p>
           </div>
         </div>
         <button
           onclick={onClose}
           aria-label="Fermer"
-          class="p-1.5 rounded-lg text-on-surface-variant/70 hover:text-on-surface hover:bg-surface-container-highest transition-colors"
+          class="p-1.5 rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-container-highest transition-colors"
         >
           <Papicon icon="Cross" size={16} />
         </button>
@@ -75,7 +75,7 @@
       <div class="p-5 space-y-4 overflow-y-auto">
         <!-- Boutons d'insertion rapide de variables -->
         <div class="space-y-1.5">
-          <p id="msg-modal-variables" class="text-xs font-semibold text-on-surface-variant/70">
+          <p id="msg-modal-variables" class="text-xs font-semibold text-on-surface-variant">
             Insérer une variable dynamique
           </p>
           <div class="flex flex-wrap gap-2" role="group" aria-labelledby="msg-modal-variables">
@@ -108,7 +108,7 @@
 
         <!-- Zone de texte -->
         <div class="space-y-1.5">
-          <label for="msg-modal-input" class="text-xs font-semibold text-on-surface-variant/70">
+          <label for="msg-modal-input" class="text-xs font-semibold text-on-surface-variant">
             Contenu du message
           </label>
           <textarea
@@ -122,7 +122,7 @@
 
         <!-- Aperçu Discord WYSIWYG -->
         <div class="space-y-1.5">
-          <p class="text-xs font-semibold text-on-surface-variant/70 flex items-center gap-1.5">
+          <p class="text-xs font-semibold text-on-surface-variant flex items-center gap-1.5">
             <Papicon icon="Camera" size={12} />
             <span>Aperçu Discord (WYSIWYG)</span>
           </p>

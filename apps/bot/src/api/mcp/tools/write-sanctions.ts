@@ -7,7 +7,7 @@ import { MAX_EVIDENCE_MESSAGES, parseEvidenceLinks } from '../../evidence.js';
 import { type SanctionStatus, type SanctionType } from '@prisma/client';
 import { type Message } from 'discord.js';
 import { z } from 'zod';
-import { type McpToolContext, err, ok, resolveChannel, resolveMember } from '../toolkit.js';
+import { type McpToolContext, err, ok, resolveChannel, resolveMember, toolError } from '../toolkit.js';
 
 export function registerWriteSanctionsTools(ctx: McpToolContext) {
   const { server, guildId, client, shouldRegister, guard, audit, toolMeta } = ctx;
@@ -104,8 +104,7 @@ export function registerWriteSanctionsTools(ctx: McpToolContext) {
 
           return ok({ ok: true, sanctionId: sanction?.id ?? null, type, targetId: member_id });
         } catch (e) {
-          const msg = e instanceof Error ? e.message : String(e);
-          return err(`Erreur lors de l'application de la sanction : ${msg}`);
+          return toolError(e, "Erreur lors de l'application de la sanction");
         }
       })
     );
@@ -209,7 +208,7 @@ export function registerWriteSanctionsTools(ctx: McpToolContext) {
           await audit(key_name, 'Appel de ban tranché', `ID: ${appeal_id} | Décision: ${decision}`, reason || '(sans raison)');
           return ok({ ok: true, appealId: appeal_id, status: res.appeal.status });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -243,7 +242,7 @@ export function registerWriteSanctionsTools(ctx: McpToolContext) {
           await audit(key_name, 'Infos d\'appel demandées', `ID: ${appeal_id}`, question);
           return ok({ ok: true, appealId: appeal_id, status: res.appeal.status });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -283,7 +282,7 @@ export function registerWriteSanctionsTools(ctx: McpToolContext) {
           await audit(key_name, 'Membre blacklisté des appels', `ID: ${user_id}`, reason || '(sans motif)');
           return ok({ ok: true, blacklist });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -307,7 +306,7 @@ export function registerWriteSanctionsTools(ctx: McpToolContext) {
           await audit(key_name, 'Membre retiré de la blacklist des appels', `ID: ${user_id}`, '');
           return ok({ ok: true, count: deleted.count });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -327,7 +326,7 @@ export function registerWriteSanctionsTools(ctx: McpToolContext) {
           });
           return ok({ entries, count: entries.length });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -359,7 +358,7 @@ export function registerWriteSanctionsTools(ctx: McpToolContext) {
           );
           return ok({ ok: true, sanctionId: sanction.id });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -412,7 +411,7 @@ export function registerWriteSanctionsTools(ctx: McpToolContext) {
           await audit(key_name, 'Configuration appels mise à jour', '', JSON.stringify(updateData));
           return ok(config);
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -468,7 +467,7 @@ export function registerWriteSanctionsTools(ctx: McpToolContext) {
           await audit(key_name, 'Création rapport sanction MCP', sanction.targetTag ?? sanction.targetUserId, `Rapport ${report.id}`);
           return ok({ ok: true, reportId: report.id });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -505,7 +504,7 @@ export function registerWriteSanctionsTools(ctx: McpToolContext) {
           await audit(key_name, 'Mise à jour rapport sanction MCP', report_id, '');
           return ok({ ok: true, report });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -575,7 +574,7 @@ export function registerWriteSanctionsTools(ctx: McpToolContext) {
           await audit(key_name, 'Import preuves Discord MCP', sanction_id, `${results.length} transcription(s)`);
           return ok({ results, errors });
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );

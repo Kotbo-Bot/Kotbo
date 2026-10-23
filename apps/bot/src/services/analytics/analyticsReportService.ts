@@ -22,9 +22,9 @@ import { getModerationTrends } from './sectionInsightsService.js';
 import { getResponseTimes } from './conversationInsightsService.js';
 import { BucketZoner } from './zonedBuckets.js';
 
-export const REPORT_SECTIONS = ['overview', 'top_members', 'top_channels', 'anomalies', 'moderation', 'responses'] as const;
+export const REPORT_SECTIONS = ['kotbo_work', 'overview', 'top_members', 'top_channels', 'anomalies', 'moderation', 'responses'] as const;
 export type ReportSection = (typeof REPORT_SECTIONS)[number];
-export const DEFAULT_SECTIONS: ReportSection[] = ['overview', 'top_members', 'top_channels', 'anomalies'];
+export const DEFAULT_SECTIONS: ReportSection[] = ['kotbo_work', 'overview', 'top_members', 'top_channels', 'anomalies'];
 
 const EMPTY_SCOPE: AnalyticsScope = { channelIds: null, userIds: null, excludeUserIds: [], channelFilter: null, roleFilter: null, excludeStaff: false };
 
@@ -74,6 +74,29 @@ function duration(sec: number | null, locale: BotLocale): string {
   return `${nf(locale).format(sec / 3600)} h`;
 }
 
+/** Bornes UTC d'une periode de rapport, comme les autres sections. */
+const rangeDates = (range: DateRange) => ({
+  gte: new Date(`${range.start}T00:00:00Z`),
+  lte: new Date(`${range.end}T23:59:59.999Z`),
+});
+
+/**
+ * Ce que le bot a fait sur la periode, en chiffres : le rapport rappelle la
+ * valeur de l'outil avec les resultats du serveur lui-meme, au lieu de ne
+ * montrer que l'activite des membres. Seules les lignes non nulles s'affichent.
+ */
+export async function getKotboWork(client: Client, guildId: string, range: DateRange) {
+  const createdAt = rangeDates(range);
+  const botId = client.user?.id ?? null;
+  const [spam, aegis, sanctions, tickets] = await Promise.all([
+    prisma.spamDetectionSample.count({ where: { guildId, createdAt, shadow: false, action: { not: 'NONE' } } }),
+    prisma.aegisDetection.count({ where: { guildId, createdAt, action: { notIn: ['NONE', 'REVIEW'] }, status: { not: 'DISMISSED' } } }),
+    botId ? prisma.sanction.count({ where: { guildId, createdAt, moderatorUserId: botId } }) : Promise.resolve(0),
+    prisma.ticket.count({ where: { guildId, closedAt: createdAt } }),
+  ]);
+  return { spam, aegis, sanctions, tickets };
+}
+
 export async function buildReportEmbed(client: Client, guildId: string, frequency: string, sections: ReportSection[], locale: BotLocale, timezone: string): Promise<EmbedBuilder> {
   const guild = client.guilds.cache.get(guildId);
   const today = new BucketZoner(timezone).fromDate(new Date()).dateKey;
@@ -87,6 +110,24 @@ export async function buildReportEmbed(client: Client, guildId: string, frequenc
     .setTimestamp();
 
   const wants = new Set(sections.length > 0 ? sections : DEFAULT_SECTIONS);
+
+  if (wants.has('kotbo_work')) {
+    const work = await getKotboWork(client, guildId, range).catch((error) => {
+      logger.warn(`[AnalyticsReport] Bilan Kotbo indisponible pour ${guildId}: ${String(error)}`);
+      return null;
+    });
+    const lines = work
+      ? [
+          work.spam > 0 ? m.anr_work_spam({ n: n.format(work.spam) }, o) : null,
+          work.aegis > 0 ? m.anr_work_aegis({ n: n.format(work.aegis) }, o) : null,
+          work.sanctions > 0 ? m.anr_work_sanctions({ n: n.format(work.sanctions) }, o) : null,
+          work.tickets > 0 ? m.anr_work_tickets({ n: n.format(work.tickets) }, o) : null,
+        ].filter((line) => line !== null)
+      : [];
+    if (lines.length > 0) {
+      embed.addFields({ name: m.anr_work_title({}, o), value: lines.map((line) => `• ${line}`).join('\n') });
+    }
+  }
   const activity = wants.has('overview') || wants.has('anomalies') ? await getActivityInsights(client, guildId, range, EMPTY_SCOPE) : null;
 
   if (activity && wants.has('overview')) {

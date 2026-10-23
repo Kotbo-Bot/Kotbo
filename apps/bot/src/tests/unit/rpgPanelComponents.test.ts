@@ -16,7 +16,7 @@ import {
 const mockDb = new Proxy({}, { get: () => new Proxy({}, { get: () => async () => null }) });
 for (const ext of ['ts', 'js']) {
   const target = path.resolve(import.meta.dir, `../../utils/db.${ext}`);
-  mock.module(target, () => ({ default: mockDb, prisma: mockDb, prismaRead: mockDb }));
+  mock.module(target, () => ({ default: mockDb, prisma: mockDb, prismaRead: mockDb, upsertRetryingRace: (upsert: () => Promise<unknown>) => upsert() }));
 }
 
 const { countComponents, MAX_MESSAGE_COMPONENTS } = await import('../../services/features/rpgPanelService.js');

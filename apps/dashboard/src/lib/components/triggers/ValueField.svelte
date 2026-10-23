@@ -110,7 +110,7 @@
     />
     {#if textTokens.length > 0}
       <span class="flex flex-wrap items-center gap-1">
-        <span class="text-xs text-on-surface-variant/70">{m.wf_insert()}</span>
+        <span class="text-xs text-on-surface-variant">{m.wf_insert()}</span>
         {#each textTokens.slice(0, 8) as token (token.path)}
           <button
             type="button"
@@ -174,7 +174,7 @@
     <Papicon
       icon="ChevronDown"
       size={12}
-      class="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-on-surface-variant/70"
+      class="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-on-surface-variant"
     />
   </span>
 {/if}

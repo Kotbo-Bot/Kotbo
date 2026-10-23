@@ -1,4 +1,7 @@
 <script lang="ts">
+  import { stripCustomEmoji } from '../../emojiParser';
+  import { explainDisabled } from '../../actions/explainDisabled';
+  import { untrack } from 'svelte';
   /**
    * Éditeur des étages de la Tour.
    *
@@ -402,7 +405,7 @@
 
   const actionState = createAsyncActionState();
   // L'éditeur est recréé à chaque chargement : il part des étages enregistrés à ce moment-là.
-  const seeded = initialFloors.length > 0 ? initialFloors.map((floor) => cloneLayout(floor)) : [cloneLayout(null)];
+  const seeded = untrack(() => (initialFloors.length > 0 ? initialFloors.map((floor) => cloneLayout(floor)) : [cloneLayout(null)]));
   // `floors` garde une copie de chaque étage ; `layout` est l'étage ouvert, recopié à chaque changement d'étage.
   let floors = $state<Layout[]>(seeded);
   let current = $state(0);
@@ -1166,7 +1169,7 @@
     // Errant et geôlier sont des monstres ordinaires, renforcés par la Tour.
     return foes
       .filter((foe) => foe.isBoss === wantBoss)
-      .map((foe) => ({ id: foe.name, name: `${foe.emoji} ${foe.name}${foe.enabled ? '' : ` · ${m.eco_tower_map_foe_disabled()}`}` }));
+      .map((foe) => ({ id: foe.name, name: `${stripCustomEmoji(foe.emoji)} ${foe.name}${foe.enabled ? '' : ` · ${m.eco_tower_map_foe_disabled()}`}` }));
   });
 
   // ── Édition ─────────────────────────────────────────────────────
@@ -1322,14 +1325,14 @@
 
 {#snippet powerSettings(room: Room)}
   <div class="space-y-1">
-    <span class="text-xs font-semibold text-on-surface-variant/60" title={m.eco_tower_map_power_tip()}>{m.eco_tower_map_power()} · <span class="font-mono">×{room.powerPercent / 100}</span></span>
+    <span class="text-xs font-semibold text-on-surface-variant" title={m.eco_tower_map_power_tip()}>{m.eco_tower_map_power()} · <span class="font-mono">×{room.powerPercent / 100}</span></span>
     <div class="flex flex-wrap gap-1.5">
       {#each POWERS as power}
-        <button type="button" disabled={!canManage || disabled} onclick={() => updateSelected({ powerPercent: power })}
+        <button type="button" disabled={disabled} use:explainDisabled={(!canManage) ? m.common_reason_no_permission() : ''} onclick={() => updateSelected({ powerPercent: power })}
           class="px-2 py-1 rounded-lg text-2xs font-bold border font-mono {room.powerPercent === power ? (power > 100 ? 'border-error bg-error/15 text-error' : power < 100 ? 'border-success bg-success/15 text-success' : 'border-primary bg-primary/15') : 'border-outline-variant/15'}">×{power / 100}</button>
       {/each}
     </div>
-    <p class="text-2xs text-on-surface-variant/50">{m.eco_tower_map_power_hint()}</p>
+    <p class="text-2xs text-on-surface-variant">{m.eco_tower_map_power_hint()}</p>
     {#if room.powerPercent !== 100}
       <label class="flex items-start gap-2 text-xs pt-1" title={m.eco_tower_map_power_reward_tip()}>
         <input type="checkbox" class="mt-0.5" checked={room.powerReward} disabled={!canManage || disabled}
@@ -1348,7 +1351,7 @@
   <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-outline-variant/15 pb-4">
     <div>
       <h3 class="text-lg font-semibold">{m.eco_tower_map_title()}</h3>
-      <p class="text-xs text-on-surface-variant/60 mt-1 leading-relaxed max-w-2xl">{m.eco_tower_map_desc()}</p>
+      <p class="text-xs text-on-surface-variant mt-1 leading-relaxed max-w-2xl">{m.eco_tower_map_desc()}</p>
     </div>
   </div>
 
@@ -1365,19 +1368,19 @@
   {#if canManage}
     <div class="flex flex-wrap items-end gap-3">
       <div class="space-y-1">
-        <label for="floorName" class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.eco_tower_floor_name()} · {floorTitle(current)}</label>
+        <label for="floorName" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_tower_floor_name()} · {floorTitle(current)}</label>
         <input id="floorName" type="text" maxlength="40" bind:value={layout.name} disabled={disabled} oninput={() => { dirty = true; }}
           placeholder={m.eco_tower_floor_name_placeholder()}
           class="w-56 bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs focus:outline-none" />
       </div>
       <div class="space-y-1">
-        <label for="mapWidth" class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.eco_tower_map_width()}</label>
+        <label for="mapWidth" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_tower_map_width()}</label>
         <input id="mapWidth" type="number" min={sizeLimits.min} max={sizeLimits.max} value={layout.width} disabled={disabled}
           onchange={(e) => resize(Number((e.currentTarget as HTMLInputElement).value), layout.height)}
           class="w-20 bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs focus:outline-none" />
       </div>
       <div class="space-y-1">
-        <label for="mapHeight" class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.eco_tower_map_height()}</label>
+        <label for="mapHeight" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_tower_map_height()}</label>
         <input id="mapHeight" type="number" min={sizeLimits.min} max={sizeLimits.max} value={layout.height} disabled={disabled}
           onchange={(e) => resize(layout.width, Number((e.currentTarget as HTMLInputElement).value))}
           class="w-20 bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs focus:outline-none" />
@@ -1389,14 +1392,14 @@
         <Papicon icon="trash" size={12} /> {m.eco_tower_map_clear()}
       </button>
       <div class="flex items-center gap-1 px-1 py-1 rounded-lg bg-outline-variant/10">
-        <button type="button" onclick={() => transform('FLIP_X')} disabled={disabled || layout.rooms.length === 0} title={m.eco_tower_map_flip_x()} aria-label={m.eco_tower_map_flip_x()}
+        <button type="button" onclick={() => transform('FLIP_X')} disabled={disabled} use:explainDisabled={(layout.rooms.length === 0) ? m.common_reason_select_one() : ''} title={m.eco_tower_map_flip_x()} aria-label={m.eco_tower_map_flip_x()}
           class="p-1.5 rounded-md hover:bg-outline-variant/25 flex disabled:opacity-40"><Papicon icon="ArrowLeftRight" size={13} /></button>
-        <button type="button" onclick={() => transform('FLIP_Y')} disabled={disabled || layout.rooms.length === 0} title={m.eco_tower_map_flip_y()} aria-label={m.eco_tower_map_flip_y()}
+        <button type="button" onclick={() => transform('FLIP_Y')} disabled={disabled} use:explainDisabled={(layout.rooms.length === 0) ? m.common_reason_select_one() : ''} title={m.eco_tower_map_flip_y()} aria-label={m.eco_tower_map_flip_y()}
           class="p-1.5 rounded-md hover:bg-outline-variant/25 flex disabled:opacity-40"><span class="flex rotate-90"><Papicon icon="ArrowLeftRight" size={13} /></span></button>
-        <button type="button" onclick={() => transform('ROTATE')} disabled={disabled || layout.rooms.length === 0} title={m.eco_tower_map_rotate()} aria-label={m.eco_tower_map_rotate()}
+        <button type="button" onclick={() => transform('ROTATE')} disabled={disabled} use:explainDisabled={(layout.rooms.length === 0) ? m.common_reason_select_one() : ''} title={m.eco_tower_map_rotate()} aria-label={m.eco_tower_map_rotate()}
           class="p-1.5 rounded-md hover:bg-outline-variant/25 flex disabled:opacity-40"><Papicon icon="RefreshCw" size={13} /></button>
         <span class="w-px h-5 bg-outline-variant/25 mx-0.5" aria-hidden="true"></span>
-        <button type="button" onclick={exportFloor} disabled={layout.rooms.length === 0} title={m.eco_tower_map_export_tip()} aria-label={m.eco_tower_map_export()}
+        <button type="button" onclick={exportFloor} use:explainDisabled={(layout.rooms.length === 0) ? m.common_reason_select_one() : ''} title={m.eco_tower_map_export_tip()} aria-label={m.eco_tower_map_export()}
           class="p-1.5 rounded-md hover:bg-outline-variant/25 flex disabled:opacity-40"><Papicon icon="Download" size={13} /></button>
         <label title={m.eco_tower_map_import_tip()} aria-label={m.eco_tower_map_import()}
           class="p-1.5 rounded-md hover:bg-outline-variant/25 flex {disabled ? 'opacity-40 pointer-events-none' : 'cursor-pointer'}">
@@ -1418,14 +1421,14 @@
       </div>
       {#if floorTags[current]?.variant}
         <div class="space-y-1" title={m.eco_tower_floor_weight_tip()}>
-          <label for="floorWeight" class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.eco_tower_floor_weight({ chance: floorTags[current].chance })}</label>
+          <label for="floorWeight" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_tower_floor_weight({ chance: floorTags[current].chance })}</label>
           <input id="floorWeight" type="number" min={WEIGHT.min} max={WEIGHT.max} value={layout.weight} disabled={disabled}
             onchange={(e) => { remember(); layout.weight = Math.min(WEIGHT.max, Math.max(WEIGHT.min, Math.trunc(Number((e.currentTarget as HTMLInputElement).value)) || WEIGHT.default)); dirty = true; }}
             class="w-20 bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs focus:outline-none" />
         </div>
       {/if}
       <div class="space-y-1" title={m.eco_tower_modifier_tip()}>
-        <label for="floorModifier" class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.eco_tower_modifier()}</label>
+        <label for="floorModifier" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_tower_modifier()}</label>
         <select id="floorModifier" value={layout.modifier} disabled={disabled}
           onchange={(e) => { remember(); layout.modifier = (e.currentTarget as HTMLSelectElement).value as Modifier; dirty = true; }}
           class="bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs focus:outline-none">
@@ -1433,7 +1436,7 @@
         </select>
       </div>
       <div class="space-y-1" title={m.eco_tower_theme_tip()}>
-        <label for="floorTheme" class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.eco_tower_theme()}</label>
+        <label for="floorTheme" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_tower_theme()}</label>
         <select id="floorTheme" value={layout.theme} disabled={disabled}
           onchange={(e) => { remember(); layout.theme = (e.currentTarget as HTMLSelectElement).value as Theme; dirty = true; }}
           class="bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs focus:outline-none">
@@ -1444,7 +1447,7 @@
         class="px-3 py-2 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 disabled:opacity-50 {showDeaths ? 'bg-error/20 text-error' : 'bg-outline-variant/10 hover:bg-outline-variant/25'}">
         <Papicon icon="Skull" size={12} /> {m.eco_tower_death_map({ count: deathsTotal })}
       </button>
-      <button type="button" onclick={openPreview} disabled={previewing || problems.length > 0 || layout.rooms.length === 0} title={m.eco_tower_preview_tip()}
+      <button type="button" onclick={openPreview} disabled={previewing || problems.length > 0} use:explainDisabled={(layout.rooms.length === 0) ? m.common_reason_select_one() : ''} title={m.eco_tower_preview_tip()}
         class="px-3 py-2 bg-primary/10 hover:bg-primary/20 text-primary text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 disabled:opacity-50">
         <Papicon icon="Image" size={12} /> {m.eco_tower_preview_btn()}
       </button>
@@ -1459,11 +1462,11 @@
         <button type="button" onclick={() => pickTool('ERASE')} title={m.eco_tower_map_tool_erase_tip()} class="px-3 py-1.5 rounded-lg text-xs font-bold border transition-all flex items-center gap-1.5 {tool === 'ERASE' ? 'border-error bg-error/15 text-error' : 'border-transparent hover:bg-outline-variant/10'}">
           <Papicon icon="Eraser" size={12} /> {m.eco_tower_map_tool_erase()}
         </button>
-        <button type="button" onclick={undo} disabled={disabled || past.length === 0} title={m.eco_tower_map_undo_tip()} aria-label={m.eco_tower_map_undo()}
+        <button type="button" onclick={undo} disabled={disabled} use:explainDisabled={(past.length === 0) ? m.common_reason_select_one() : ''} title={m.eco_tower_map_undo_tip()} aria-label={m.eco_tower_map_undo()}
           class="p-1.5 rounded-lg border border-transparent hover:bg-outline-variant/10 transition-all flex items-center disabled:opacity-35">
           <Papicon icon="RotateCcw" size={13} />
         </button>
-        <button type="button" onclick={redo} disabled={disabled || future.length === 0} title={m.eco_tower_map_redo_tip()} aria-label={m.eco_tower_map_redo()}
+        <button type="button" onclick={redo} disabled={disabled} use:explainDisabled={(future.length === 0) ? m.common_reason_select_one() : ''} title={m.eco_tower_map_redo_tip()} aria-label={m.eco_tower_map_redo()}
           class="p-1.5 rounded-lg border border-transparent hover:bg-outline-variant/10 transition-all flex items-center disabled:opacity-35">
           <span class="flex -scale-x-100"><Papicon icon="RotateCcw" size={13} /></span>
         </button>
@@ -1495,19 +1498,19 @@
                 <Papicon icon={ICON[type]} size={14} />
               </span>
               <span class="min-w-0">
-                <span class="flex items-center gap-1 text-xs font-bold">{label(type)}{#if counts[type] > 0}<span class="text-2xs text-on-surface-variant/50 font-mono">×{counts[type]}</span>{/if}</span>
+                <span class="flex items-center gap-1 text-xs font-bold">{label(type)}{#if counts[type] > 0}<span class="text-2xs text-on-surface-variant font-mono">×{counts[type]}</span>{/if}</span>
                 <span class="block text-2xs text-on-surface-variant/55 leading-snug line-clamp-2">{tip(type)}</span>
               </span>
             </button>
           {/each}
         </div>
         {#if entry.id === 'EXITS'}
-          <p class="px-3 pb-2 text-2xs text-on-surface-variant/60 flex items-start gap-1.5"><Papicon icon="Info" size={11} /> {m.eco_tower_category_exits_rule()}</p>
+          <p class="px-3 pb-2 text-2xs text-on-surface-variant flex items-start gap-1.5"><Papicon icon="Info" size={11} /> {m.eco_tower_category_exits_rule()}</p>
         {/if}
       {/each}
       <p class="px-3 py-1.5 border-t border-outline-variant/10 text-2xs text-on-surface-variant/55 flex items-center gap-1.5"><Papicon icon="Keyboard" size={11} /> {m.eco_tower_map_shortcuts()}</p>
     </div>
-    <p class="text-2xs text-on-surface-variant/50">{m.eco_tower_map_hint()}</p>
+    <p class="text-2xs text-on-surface-variant">{m.eco_tower_map_hint()}</p>
   {/if}
 
   <div class="grid grid-cols-1 xl:grid-cols-[220px_1fr_300px] gap-6">
@@ -1515,7 +1518,7 @@
     <div class="space-y-3">
       <div>
         <p class="text-sm font-bold flex items-center gap-2"><Papicon icon="Building" size={14} /> {m.eco_tower_floors_title()}</p>
-        <p class="text-2xs text-on-surface-variant/60 leading-relaxed mt-1">{m.eco_tower_floors_desc()}</p>
+        <p class="text-2xs text-on-surface-variant leading-relaxed mt-1">{m.eco_tower_floors_desc()}</p>
       </div>
       <div>
         <div class="flex justify-between px-0.5" aria-hidden="true">
@@ -1536,9 +1539,9 @@
                 <button type="button" data-index={entry.index} onclick={() => selectFloor(entry.index)}
                   title={valid ? '' : m.eco_tower_floor_invalid()}
                   class="w-full text-left rounded-md px-2 py-1 border transition-all flex items-center gap-2 {entry.index === current ? 'border-primary bg-primary/15' : 'border-outline-variant/15 bg-surface-container-high/40 hover:border-outline-variant/40'}">
-                  <span class="text-2xs font-mono text-on-surface-variant/60 shrink-0">{floorTitle(entry.index)}</span>
-                  <span class="text-2xs font-semibold truncate flex-1">{entry.floor.name || '—'}</span>
-                  {#if floorTags[entry.index]?.variant}<span class="text-2xs text-on-surface-variant/50 shrink-0">{floorTags[entry.index].chance} %</span>{/if}
+                  <span class="text-2xs font-mono text-on-surface-variant shrink-0">{floorTitle(entry.index)}</span>
+                  <span class="text-2xs font-semibold truncate flex-1">{entry.floor.name || '–'}</span>
+                  {#if floorTags[entry.index]?.variant}<span class="text-2xs text-on-surface-variant shrink-0">{floorTags[entry.index].chance} %</span>{/if}
                   {#if !valid}<span class="text-warning flex shrink-0"><Papicon icon="AlertTriangle" size={11} /></span>{/if}
                 </button>
               {:else}
@@ -1546,7 +1549,7 @@
                   title={valid ? '' : m.eco_tower_floor_invalid()}
                   class="w-full text-left rounded-md px-2.5 py-2 border transition-all {entry.index === current ? 'border-primary bg-primary/15' : 'border-outline-variant/15 bg-surface-container-high/40 hover:border-outline-variant/40'}">
                   <span class="flex items-center justify-between gap-2">
-                    <span class="text-2xs font-mono text-on-surface-variant/60">{floorTitle(entry.index)}{#if floorTags[entry.index]?.variant} · {floorTags[entry.index].chance} %{/if}</span>
+                    <span class="text-2xs font-mono text-on-surface-variant">{floorTitle(entry.index)}{#if floorTags[entry.index]?.variant} · {floorTags[entry.index].chance} %{/if}</span>
                     {#if !valid}<span class="text-warning flex"><Papicon icon="AlertTriangle" size={11} /></span>{/if}
                   </span>
                   <span class="flex items-center gap-2">
@@ -1557,8 +1560,8 @@
                       {/each}
                     </svg>
                     <span class="min-w-0">
-                      <span class="block text-xs font-semibold truncate">{entry.floor.name || '—'}</span>
-                      <span class="block text-2xs text-on-surface-variant/50">{m.eco_tower_map_summary({ rooms: entry.floor.rooms.length, max: roomsMax })}</span>
+                      <span class="block text-xs font-semibold truncate">{entry.floor.name || '–'}</span>
+                      <span class="block text-2xs text-on-surface-variant">{m.eco_tower_map_summary({ rooms: entry.floor.rooms.length, max: roomsMax })}</span>
                     </span>
                   </span>
                 </button>
@@ -1568,7 +1571,7 @@
         </div>
         <div class="h-2 mx-[-6px] rounded-sm bg-outline-variant/35" aria-hidden="true"></div>
       </div>
-      <p class="text-2xs text-on-surface-variant/60">{m.eco_tower_floors_count({ cards: floors.length, floors: floorCount, max: floorsMax })}</p>
+      <p class="text-2xs text-on-surface-variant">{m.eco_tower_floors_count({ cards: floors.length, floors: floorCount, max: floorsMax })}</p>
       {#if floors.length > 1}
         <div class="flex items-center gap-1.5">
           <input type="number" min="1" max={floorCount} bind:value={jumpTo} placeholder={m.eco_tower_floor_jump_placeholder()} aria-label={m.eco_tower_floor_jump()}
@@ -1583,7 +1586,7 @@
           {/if}
         </div>
       {/if}
-      <p class="text-2xs text-on-surface-variant/50 leading-relaxed">
+      <p class="text-2xs text-on-surface-variant leading-relaxed">
         {floorsAfter === 'GENERATE' ? m.eco_tower_floors_after_generate_note() : m.eco_tower_floors_after_loop_note()}
       </p>
       {#if canManage}
@@ -1624,6 +1627,7 @@
         viewBox="0 0 {frameW} {frameH + CRENEL}"
         class="w-full max-w-[720px] mx-auto select-none touch-none"
         role="grid"
+        tabindex="-1"
         aria-label={m.eco_tower_map_title()}
         oncontextmenu={(event) => { if (canManage && !disabled) event.preventDefault(); }}
       >
@@ -1697,7 +1701,7 @@
               </text>
             {/if}
             {#if reachable && !isEntry(room.type)}
-              <text x={room.x * CELL + 11} y={room.y * CELL + 17} font-size="10" font-weight="700" fill="currentColor" class="text-on-surface-variant/70" pointer-events="none">
+              <text x={room.x * CELL + 11} y={room.y * CELL + 17} font-size="10" font-weight="700" fill="currentColor" class="text-on-surface-variant" pointer-events="none">
                 {distances.get(room.id)}
               </text>
             {/if}
@@ -1749,10 +1753,10 @@
     <div class="space-y-4">
       <div class="bg-surface-container-high/30 border border-outline-variant/10 rounded-xl p-4 space-y-2 text-xs">
         <p class="font-semibold">{m.eco_tower_map_summary({ rooms: layout.rooms.length, max: roomsMax })}</p>
-        <p class="text-on-surface-variant/70">
+        <p class="text-on-surface-variant">
           {bossDepth !== null ? m.eco_tower_map_exit_depth({ rooms: bossDepth }) : m.eco_tower_map_no_path()}
         </p>
-        <div class="flex flex-wrap gap-x-3 gap-y-1 text-2xs text-on-surface-variant/70">
+        <div class="flex flex-wrap gap-x-3 gap-y-1 text-2xs text-on-surface-variant">
           {#each ROOM_TYPES as type}
             {#if counts[type] > 0}<span class="flex items-center gap-1" title={label(type)}><span style="color: {COLOR[type]}" class="flex"><Papicon icon={ICON[type]} size={11} /></span> {counts[type]}</span>{/if}
           {/each}
@@ -1764,17 +1768,17 @@
             {/each}
           </ul>
         {/if}
-        <p class="text-2xs text-on-surface-variant/70 flex items-start gap-1.5 pt-1" title={m.eco_tower_difficulty_estimate_tip()}>
+        <p class="text-2xs text-on-surface-variant flex items-start gap-1.5 pt-1" title={m.eco_tower_difficulty_estimate_tip()}>
           <Papicon icon="Skull" size={11} />
           {m.eco_tower_difficulty_estimate({ from: difficulty.from, to: difficulty.to, hpFrom: difficulty.healthFrom, hpTo: difficulty.healthTo })}
         </p>
         {#if powered}
-          <p class="text-2xs text-on-surface-variant/70 flex items-start gap-1.5" title={m.eco_tower_map_power_tip()}>
+          <p class="text-2xs text-on-surface-variant flex items-start gap-1.5" title={m.eco_tower_map_power_tip()}>
             <Papicon icon="Zap" size={11} />
             {m.eco_tower_difficulty_power({ count: powered.count, factor: powered.factor, hpFrom: powered.hpFrom, hpTo: powered.hpTo })}
           </p>
         {/if}
-        <p class="text-2xs text-on-surface-variant/50 leading-relaxed pt-1">{m.eco_tower_map_rules()}</p>
+        <p class="text-2xs text-on-surface-variant leading-relaxed pt-1">{m.eco_tower_map_rules()}</p>
       </div>
 
       {#if selected}
@@ -1782,7 +1786,7 @@
         <div class="bg-surface-container-high/30 border border-outline-variant/10 rounded-xl p-4 space-y-3">
           <div class="flex items-center justify-between">
             <p class="text-sm font-bold flex items-center gap-2" title={tip(selected.type)}><span style="color: {COLOR[selected.type]}" class="flex"><Papicon icon={ICON[selected.type]} size={16} /></span> {label(selected.type)}</p>
-            <span class="text-2xs text-on-surface-variant/50 font-mono">{selected.x},{selected.y}</span>
+            <span class="text-2xs text-on-surface-variant font-mono">{selected.x},{selected.y}</span>
           </div>
           {#if canManage && !isEntry(selected.type) && !isExit(selected.type) && !isWarp(selected.type)}
             <button type="button" onclick={() => pickTemplate(selected!)} disabled={disabled} title={m.eco_tower_map_pipette_tip()}
@@ -1794,22 +1798,22 @@
           {#if selected.type === 'MONSTER' || selected.type === 'ELITE' || selected.type === 'BOSS' || selected.type === 'COLLAPSE' || selected.type === 'WANDERER' || selected.type === 'PRISONER'}
             {#if selected.type === 'WANDERER'}
               <div class="space-y-1">
-                <span class="text-xs font-semibold text-on-surface-variant/60">{m.eco_tower_map_wander_radius()} · <span class="font-mono">{selected.wanderRadius}</span></span>
+                <span class="text-xs font-semibold text-on-surface-variant">{m.eco_tower_map_wander_radius()} · <span class="font-mono">{selected.wanderRadius}</span></span>
                 <div class="flex flex-wrap gap-1.5">
                   {#each [1, 2, 3, 4, 5, 6] as radius}
-                    <button type="button" disabled={!canManage || disabled} onclick={() => updateSelected({ wanderRadius: radius })}
+                    <button type="button" disabled={disabled} use:explainDisabled={(!canManage) ? m.common_reason_no_permission() : ''} onclick={() => updateSelected({ wanderRadius: radius })}
                       class="px-2.5 py-1 rounded-lg text-2xs font-bold border font-mono {selected.wanderRadius === radius ? 'border-primary bg-primary/15' : 'border-outline-variant/15'}">{radius}</button>
                   {/each}
                 </div>
-                <p class="text-2xs text-on-surface-variant/50">{m.eco_tower_map_wander_hint({ rooms: wanderCells.size })}</p>
+                <p class="text-2xs text-on-surface-variant">{m.eco_tower_map_wander_hint({ rooms: wanderCells.size })}</p>
               </div>
             {/if}
             {#if selected.type === 'PRISONER'}
               <div class="space-y-1">
-                <span class="text-xs font-semibold text-on-surface-variant/60">{m.eco_tower_map_captive()}</span>
+                <span class="text-xs font-semibold text-on-surface-variant">{m.eco_tower_map_captive()}</span>
                 <div class="flex flex-wrap gap-1.5">
                   {#each CAPTIVES as captive}
-                    <button type="button" disabled={!canManage || disabled} onclick={() => updateSelected({ captive })}
+                    <button type="button" disabled={disabled} use:explainDisabled={(!canManage) ? m.common_reason_no_permission() : ''} onclick={() => updateSelected({ captive })}
                       class="px-2 py-1 rounded-lg text-2xs font-bold border {selected.captive === captive ? 'border-primary bg-primary/15' : 'border-outline-variant/15'}">{captiveLabel(captive)}</button>
                   {/each}
                 </div>
@@ -1817,16 +1821,16 @@
             {/if}
             {#if selected.type === 'COLLAPSE'}
               <div class="space-y-1">
-                <label for="roomCollapse" class="text-xs font-semibold text-on-surface-variant/60">{m.eco_tower_map_collapse_steps()}</label>
+                <label for="roomCollapse" class="text-xs font-semibold text-on-surface-variant">{m.eco_tower_map_collapse_steps()}</label>
                 <input id="roomCollapse" type="number" min="3" max="40" value={selected.collapseSteps} disabled={!canManage || disabled}
                   onchange={(e) => updateSelected({ collapseSteps: Math.min(40, Math.max(3, Number((e.currentTarget as HTMLInputElement).value) || 10)) })}
                   class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs focus:outline-none" />
-                <p class="text-2xs text-on-surface-variant/50">{m.eco_tower_map_collapse_hint({ shortest: bossDepth ?? 0 })}</p>
+                <p class="text-2xs text-on-surface-variant">{m.eco_tower_map_collapse_hint({ shortest: bossDepth ?? 0 })}</p>
               </div>
               <p class="text-xs font-semibold pt-1">{m.eco_tower_map_collapse_guardian()}</p>
             {/if}
             <div class="space-y-1">
-              <span class="text-xs font-semibold text-on-surface-variant/60">{m.eco_tower_map_foe()}</span>
+              <span class="text-xs font-semibold text-on-surface-variant">{m.eco_tower_map_foe()}</span>
               <SearchableSelect
                 value={selected.foe}
                 options={foeOptions}
@@ -1839,21 +1843,21 @@
             </div>
             {@render powerSettings(selected)}
             <div class="space-y-1">
-              <span class="text-xs font-semibold text-on-surface-variant/60" title={m.eco_tower_map_traits_tip()}>{m.eco_tower_map_traits({ max: TRAITS_MAX })}</span>
+              <span class="text-xs font-semibold text-on-surface-variant" title={m.eco_tower_map_traits_tip()}>{m.eco_tower_map_traits({ max: TRAITS_MAX })}</span>
               <div class="flex flex-wrap gap-1.5">
                 {#each TRAITS as trait}
-                  <button type="button" disabled={!canManage || disabled || (!selected.traits.includes(trait) && selected.traits.length >= TRAITS_MAX)} title={traitTip(trait)} onclick={() => toggleTrait(trait)}
+                  <button type="button" disabled={disabled || (!selected.traits.includes(trait) && selected.traits.length >= TRAITS_MAX)} use:explainDisabled={(!canManage) ? m.common_reason_no_permission() : ''} title={traitTip(trait)} onclick={() => toggleTrait(trait)}
                     class="px-2 py-1 rounded-lg text-2xs font-bold border disabled:opacity-40 {selected.traits.includes(trait) ? 'border-error bg-error/15 text-error' : 'border-outline-variant/15'}">{traitLabel(trait)}</button>
                 {/each}
               </div>
-              <p class="text-2xs text-on-surface-variant/50">{m.eco_tower_map_traits_hint()}</p>
+              <p class="text-2xs text-on-surface-variant">{m.eco_tower_map_traits_hint()}</p>
             </div>
             {#if selected.type === 'BOSS' || selected.type === 'COLLAPSE'}
               <div class="space-y-1">
-                <span class="text-xs font-semibold text-on-surface-variant/60">{m.eco_tower_map_mechanic()}</span>
+                <span class="text-xs font-semibold text-on-surface-variant">{m.eco_tower_map_mechanic()}</span>
                 <div class="flex flex-wrap gap-1.5">
                   {#each MECHANICS as mechanic}
-                    <button type="button" disabled={!canManage || disabled} title={mechanicTip(mechanic)} onclick={() => updateSelected({ mechanic })}
+                    <button type="button" disabled={disabled} use:explainDisabled={(!canManage) ? m.common_reason_no_permission() : ''} title={mechanicTip(mechanic)} onclick={() => updateSelected({ mechanic })}
                       class="px-2 py-1 rounded-lg text-2xs font-bold border {selected.mechanic === mechanic ? 'border-primary bg-primary/15' : 'border-outline-variant/15'}">{mechanicLabel(mechanic)}</button>
                   {/each}
                 </div>
@@ -1863,22 +1867,22 @@
             {@render powerSettings(selected)}
           {:else if selected.type === 'TOLL'}
             <div class="space-y-1">
-              <label for="roomToll" class="text-xs font-semibold text-on-surface-variant/60">{m.eco_tower_map_toll_gold()}</label>
+              <label for="roomToll" class="text-xs font-semibold text-on-surface-variant">{m.eco_tower_map_toll_gold()}</label>
               <input id="roomToll" type="number" min="1" max="10000" value={selected.tollGold} disabled={!canManage || disabled}
                 onchange={(e) => updateSelected({ tollGold: Math.min(10000, Math.max(1, Number((e.currentTarget as HTMLInputElement).value) || 60)) })}
                 class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs focus:outline-none" />
-              <p class="text-2xs text-on-surface-variant/50">{m.eco_tower_map_toll_hint()}</p>
+              <p class="text-2xs text-on-surface-variant">{m.eco_tower_map_toll_hint()}</p>
             </div>
           {:else if selected.type === 'TRIAL'}
             <div class="space-y-1">
-              <span class="text-xs font-semibold text-on-surface-variant/60">{m.eco_tower_map_waves()}</span>
+              <span class="text-xs font-semibold text-on-surface-variant">{m.eco_tower_map_waves()}</span>
               <div class="flex flex-wrap gap-1.5">
                 {#each WAVES as waves}
-                  <button type="button" disabled={!canManage || disabled} onclick={() => updateSelected({ waves })}
+                  <button type="button" disabled={disabled} use:explainDisabled={(!canManage) ? m.common_reason_no_permission() : ''} onclick={() => updateSelected({ waves })}
                     class="px-2.5 py-1 rounded-lg text-2xs font-bold border font-mono {selected.waves === waves ? 'border-primary bg-primary/15' : 'border-outline-variant/15'}">{waves}</button>
                 {/each}
               </div>
-              <p class="text-2xs text-on-surface-variant/50">{m.eco_tower_map_waves_hint()}</p>
+              <p class="text-2xs text-on-surface-variant">{m.eco_tower_map_waves_hint()}</p>
             </div>
             {@render powerSettings(selected)}
             <label class="flex items-start gap-2 text-xs" title={m.eco_tower_map_trial_reward_tip()}>
@@ -1888,34 +1892,34 @@
             </label>
           {:else if selected.type === 'EVENT'}
             <div class="space-y-1">
-              <span class="text-xs font-semibold text-on-surface-variant/60">{m.eco_tower_map_event()}</span>
+              <span class="text-xs font-semibold text-on-surface-variant">{m.eco_tower_map_event()}</span>
               <div class="flex flex-wrap gap-1.5">
                 {#each EVENTS as event}
-                  <button type="button" disabled={!canManage || disabled} title={eventTip(event)} onclick={() => updateSelected({ event })}
+                  <button type="button" disabled={disabled} use:explainDisabled={(!canManage) ? m.common_reason_no_permission() : ''} title={eventTip(event)} onclick={() => updateSelected({ event })}
                     class="px-2 py-1 rounded-lg text-2xs font-bold border {selected.event === event ? 'border-primary bg-primary/15' : 'border-outline-variant/15'}">{eventLabel(event)}</button>
                 {/each}
               </div>
             </div>
           {:else if selected.type === 'CHEST'}
             <div class="space-y-1">
-              <span class="text-xs font-semibold text-on-surface-variant/60">{m.eco_tower_map_chest()}</span>
+              <span class="text-xs font-semibold text-on-surface-variant">{m.eco_tower_map_chest()}</span>
               <div class="flex gap-1.5">
                 {#each [['BOTH', m.eco_tower_map_chest_both()], ['GOLD', m.eco_tower_map_chest_gold()], ['GEAR', m.eco_tower_map_chest_gear()]] as [kind, text]}
-                  <button type="button" disabled={!canManage || disabled} onclick={() => updateSelected({ chest: kind as ChestKind })}
+                  <button type="button" disabled={disabled} use:explainDisabled={(!canManage) ? m.common_reason_no_permission() : ''} onclick={() => updateSelected({ chest: kind as ChestKind })}
                     class="flex-1 px-2 py-1.5 rounded-lg text-2xs font-bold border {selected.chest === kind ? 'border-primary bg-primary/15' : 'border-outline-variant/15'}">{text}</button>
                 {/each}
               </div>
             </div>
           {:else if selected.type === 'CAMPFIRE'}
             <div class="space-y-1">
-              <label for="roomHeal" class="text-xs font-semibold text-on-surface-variant/60">{m.eco_tower_map_heal()}</label>
+              <label for="roomHeal" class="text-xs font-semibold text-on-surface-variant">{m.eco_tower_map_heal()}</label>
               <input id="roomHeal" type="number" min="5" max="100" value={selected.healPercent} disabled={!canManage || disabled}
                 onchange={(e) => updateSelected({ healPercent: Math.min(100, Math.max(5, Number((e.currentTarget as HTMLInputElement).value) || 35)) })}
                 class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs focus:outline-none" />
             </div>
           {:else if selected.type === 'MERCHANT'}
             <div class="space-y-2">
-              <span class="text-xs font-semibold text-on-surface-variant/60">{m.eco_tower_map_offers()}</span>
+              <span class="text-xs font-semibold text-on-surface-variant">{m.eco_tower_map_offers()}</span>
               <div class="flex flex-col gap-1.5">
                 {#each OFFERS as offer}
                   <label class="flex items-center gap-2 text-xs">
@@ -1924,26 +1928,26 @@
                   </label>
                 {/each}
               </div>
-              <label for="roomPrice" class="text-xs font-semibold text-on-surface-variant/60">{m.eco_tower_map_price()}</label>
+              <label for="roomPrice" class="text-xs font-semibold text-on-surface-variant">{m.eco_tower_map_price()}</label>
               <input id="roomPrice" type="number" min="10" max="500" value={selected.pricePercent} disabled={!canManage || disabled}
                 onchange={(e) => updateSelected({ pricePercent: Math.min(500, Math.max(10, Number((e.currentTarget as HTMLInputElement).value) || 100)) })}
                 class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs focus:outline-none" />
             </div>
           {:else}
-            <p class="text-2xs text-on-surface-variant/60">{m.eco_tower_map_no_option()}</p>
+            <p class="text-2xs text-on-surface-variant">{m.eco_tower_map_no_option()}</p>
           {/if}
           {#if selected.type === 'ELITE' || selected.type === 'CHEST' || selected.type === 'TRIAL'}
             <label class="flex items-start gap-2 text-xs pt-1" title={m.eco_tower_map_key_tip()}>
               <input type="checkbox" checked={selected.key} disabled={!canManage || disabled} onchange={() => updateSelected({ key: !selected!.key })} />
               <span><span class="font-semibold flex items-center gap-1"><Papicon icon="Lock" size={11} /> {m.eco_tower_map_key()}</span>
-                <span class="block text-2xs text-on-surface-variant/50">{m.eco_tower_map_key_tip()}</span></span>
+                <span class="block text-2xs text-on-surface-variant">{m.eco_tower_map_key_tip()}</span></span>
             </label>
           {/if}
-          <p class="text-2xs text-on-surface-variant/50 leading-relaxed">{tip(selected.type)}</p>
+          <p class="text-2xs text-on-surface-variant leading-relaxed">{tip(selected.type)}</p>
         </div>
         {/key}
       {:else}
-        <p class="text-2xs text-on-surface-variant/50 italic px-1">{m.eco_tower_map_select_hint()}</p>
+        <p class="text-2xs text-on-surface-variant italic px-1">{m.eco_tower_map_select_hint()}</p>
       {/if}
     </div>
   </div>
@@ -1973,7 +1977,7 @@
         <button type="button" onclick={() => { preview = null; }} class="px-3 py-1.5 bg-outline-variant/10 hover:bg-outline-variant/25 text-xs font-bold rounded-lg">{m.eco_btn_cancel()}</button>
       </div>
       <img src={preview} alt={m.eco_tower_preview_title()} class="w-full rounded-lg" />
-      <p class="text-2xs text-on-surface-variant/60">{m.eco_tower_preview_hint()}</p>
+      <p class="text-2xs text-on-surface-variant">{m.eco_tower_preview_hint()}</p>
     </div>
   </div>
 {/if}

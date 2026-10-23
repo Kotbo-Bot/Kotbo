@@ -29,10 +29,11 @@ import {
   type ClanTowerSettings,
   type ClanTowerStanding,
 } from './rpgClanTowerPolicy.js';
+import { UserFacingError } from '../../../utils/userFacingError.js';
 
 export type ClanTowerConfigView = ClanTowerSettings & { floors: TowerLayout[] };
 
-export class ClanTowerError extends Error {
+export class ClanTowerError extends UserFacingError {
   constructor(message: string, readonly status: number) {
     super(message);
     this.name = 'ClanTowerError';

@@ -66,7 +66,7 @@ const mockDb: any = new Proxy({}, {
 });
 
 for (const file of ['../../utils/db.ts', '../../utils/db.js']) {
-  mock.module(path.resolve(import.meta.dir, file), () => ({ default: mockDb, prisma: mockDb, prismaRead: mockDb }));
+  mock.module(path.resolve(import.meta.dir, file), () => ({ default: mockDb, prisma: mockDb, prismaRead: mockDb, upsertRetryingRace: (upsert: () => Promise<unknown>) => upsert() }));
 }
 
 const { handleEventsRoutes } = await import('../../api/routes/dashboard/events.js');

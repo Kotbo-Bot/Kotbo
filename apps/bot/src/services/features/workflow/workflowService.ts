@@ -13,6 +13,7 @@ import { RUN_INFO_KEY, runWorkflow, type ExecutionOutcome, type ExecutionState, 
 import { matchesTriggerChannelFilter } from './channelFilter.js';
 import { matchesTriggerRoleFilter } from './roleFilter.js';
 import { matchesTriggerReactionFilter } from './reactionFilter.js';
+import { UserFacingError } from '../../../utils/userFacingError.js';
 
 /**
  * Orchestration des workflows : déclenchement depuis le bus d'événements,
@@ -91,7 +92,7 @@ export interface SaveWorkflowInput {
   graph: WorkflowGraph;
 }
 
-export class WorkflowValidationError extends Error {
+export class WorkflowValidationError extends UserFacingError {
   constructor(public readonly issues: { code: string; message: string }[]) {
     super(issues.map((i) => i.message).join(' '));
     this.name = 'WorkflowValidationError';

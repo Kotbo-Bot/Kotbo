@@ -1,5 +1,5 @@
 /** Moderation : pseudos, salons, mots bannis. */
-import type { TempVoicePolicy } from '@kotbo/shared';
+import type { AutoThreadConfigData, TempVoicePolicy, TempVoiceOwnershipSettings } from '@kotbo/shared';
 import { authStore } from '../stores/auth.svelte';
 import { API_BASE_URL, JSON_HEADERS, authorizedFetch, dashboardMutation, dashboardRequest } from './client';
 
@@ -41,24 +41,72 @@ export async function updateNicknameModerationConfig(
 // ==========================================
 // AUTO-THREAD & CHANNELS MANAGEMENT
 // ==========================================
-export async function fetchAutoThreadConfig(guildId = authStore.selectedGuildId) {
-  return dashboardRequest('/auto-thread', {
+/** Configuration Auto-Thread telle que l'API la renvoie (ligne de base). */
+export interface AutoThreadConfigRow extends AutoThreadConfigData {
+  id: string;
+  channelId: string;
+  position: number;
+  threadCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type AutoThreadConfigPayload = AutoThreadConfigData & { channelId: string };
+
+export async function fetchAutoThreadConfigs(guildId = authStore.selectedGuildId) {
+  return dashboardRequest<{ configs?: AutoThreadConfigRow[]; error?: string }>('/auto-thread/configs', {
     method: 'GET',
     guildId,
-    errorContext: 'API Error (Fetch Auto Thread Config):',
+    errorContext: 'API Error (Fetch Auto Thread Configs):',
     silent: true,
   });
 }
 
-export async function updateAutoThreadConfig(
-  payload: { enabled: boolean; channels: string[]; botsEnabled?: boolean },
-  guildId = authStore.selectedGuildId
-) {
-  return dashboardMutation('/auto-thread', {
-    method: 'PATCH',
+export async function createAutoThreadConfig(payload: AutoThreadConfigPayload, guildId = authStore.selectedGuildId) {
+  return dashboardRequest<{ ok?: boolean; config?: AutoThreadConfigRow; error?: string }>('/auto-thread/configs', {
+    method: 'POST',
     payload,
     guildId,
-    errorContext: 'API Error (Update Auto Thread Config):'
+    errorContext: 'API Error (Create Auto Thread Config):',
+    silent: true,
+  });
+}
+
+export async function updateAutoThreadConfig(id: string, payload: AutoThreadConfigPayload, guildId = authStore.selectedGuildId) {
+  return dashboardRequest<{ ok?: boolean; config?: AutoThreadConfigRow; error?: string }>(`/auto-thread/configs/${id}`, {
+    method: 'PUT',
+    payload,
+    guildId,
+    errorContext: 'API Error (Update Auto Thread Config):',
+    silent: true,
+  });
+}
+
+export async function duplicateAutoThreadConfig(id: string, guildId = authStore.selectedGuildId) {
+  return dashboardRequest<{ ok?: boolean; config?: AutoThreadConfigRow; error?: string }>(`/auto-thread/configs/${id}/duplicate`, {
+    method: 'POST',
+    guildId,
+    errorContext: 'API Error (Duplicate Auto Thread Config):',
+    silent: true,
+  });
+}
+
+export async function deleteAutoThreadConfig(id: string, guildId = authStore.selectedGuildId) {
+  return dashboardRequest<{ ok?: boolean; error?: string }>(`/auto-thread/configs/${id}`, {
+    method: 'DELETE',
+    guildId,
+    errorContext: 'API Error (Delete Auto Thread Config):',
+    silent: true,
+  });
+}
+
+export async function reorderAutoThreadConfigs(channelId: string, ids: string[], guildId = authStore.selectedGuildId) {
+  return dashboardRequest<{ ok?: boolean; configs?: AutoThreadConfigRow[]; error?: string }>('/auto-thread/configs/reorder', {
+    method: 'POST',
+    payload: { channelId, ids },
+    guildId,
+    errorContext: 'API Error (Reorder Auto Thread Configs):',
+    silent: true,
   });
 }
 
@@ -68,7 +116,7 @@ interface TempVoiceGeneratorFields {
   nameTemplate?: string;
   requiredRoleId?: string | null;
   /**
-   * Surcharges de présentation du panneau POUR CE GÉNÉRATEUR — mêmes noms et
+   * Surcharges de présentation du panneau POUR CE GÉNÉRATEUR : mêmes noms et
    * mêmes unions que les cinq réglages de `tempVoiceModPermissions` plus bas.
    * Absente ou `null` : hérite du réglage serveur. N'a aucun effet tant que
    * `tempVoiceModPermissions.perGeneratorPresentation` est faux (voir sa doc).
@@ -213,11 +261,13 @@ export async function updateChannelsManagementConfig(
        * L'interrupteur de secours de la personnalisation par générateur.
        * Défaut `false` : au déploiement, aucun serveur existant ne change de
        * comportement. Le couper IGNORE les surcharges des générateurs, il ne
-       * les EFFACE PAS — elles restent dans `tempVoiceGenerators` et reviennent
+       * les EFFACE PAS : elles restent dans `tempVoiceGenerators` et reviennent
        * telles quelles au rallumage.
        */
       perGeneratorPresentation: boolean;
-    };
+      /** Où se trouve la mention qui notifie le propriétaire : panneau, message au-dessus ou aucune. */
+      ownerMentionPlacement: 'panel' | 'message' | 'none';
+    } & TempVoiceOwnershipSettings;
     honeypotEnabled?: boolean;
     honeypotChannelId?: string | null;
     honeypotSanction?: string;
@@ -303,6 +353,11 @@ export async function saveStickyMessage(
     embedColor?: string;
     messageThreshold?: number;
     cooldownSeconds?: number;
+    jsonEnabled?: boolean;
+    jsonPayload?: string | null;
+    webhookEnabled?: boolean;
+    webhookName?: string | null;
+    webhookAvatarUrl?: string | null;
   },
   guildId = authStore.selectedGuildId
 ) {
@@ -427,7 +482,7 @@ export async function deleteBannedWord(id: string, guildId = authStore.selectedG
 
 export async function fetchGlobalBannedWords() {
   const response = await authorizedFetch(`${API_BASE_URL}/api/admin/banned-words`, { method: 'GET' });
-  if (!response.ok) throw new Error('Erreur lors du chargement des mots globaux');
+  if (!response.ok) throw new Error('Impossible de charger les mots globaux. Réessaie.');
   return response.json();
 }
 
@@ -474,7 +529,7 @@ export async function updateGlobalBannedWord(
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
-    throw new Error(error.error || 'Erreur lors de la mise à jour du mot global');
+    throw new Error(error.error || 'Impossible de mettre à jour le mot global. Réessaie.');
   }
 
   return response.json();
@@ -486,6 +541,6 @@ export async function toggleGlobalBannedWord(id: string, enabled: boolean) {
 
 export async function deleteGlobalBannedWord(id: string) {
   const response = await authorizedFetch(`${API_BASE_URL}/api/admin/banned-words/${id}`, { method: 'DELETE' });
-  if (!response.ok) throw new Error('Erreur lors de la suppression du mot global');
+  if (!response.ok) throw new Error('Impossible de supprimer le mot global. Réessaie.');
   return response.json();
 }

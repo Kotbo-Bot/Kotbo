@@ -1,6 +1,6 @@
 /** Outils MCP - read members voice pins threads (permission READ_MEMBERS). */
 import { z } from 'zod';
-import { type McpToolContext, err, ok, resolveChannel, resolveMember } from '../toolkit.js';
+import { type McpToolContext, err, ok, resolveChannel, resolveMember, toolError } from '../toolkit.js';
 
 export function registerReadMembersVoicePinsThreadsTools(ctx: McpToolContext) {
   const { server, guildId, client, shouldRegister, guard, toolMeta } = ctx;
@@ -72,7 +72,7 @@ export function registerReadMembersVoicePinsThreadsTools(ctx: McpToolContext) {
             }))
           );
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );
@@ -122,7 +122,7 @@ export function registerReadMembersVoicePinsThreadsTools(ctx: McpToolContext) {
 
           return ok(threads);
         } catch (e) {
-          return err(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+          return toolError(e);
         }
       })
     );

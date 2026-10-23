@@ -6,6 +6,7 @@
 -->
 <script lang="ts">
   import { Button, Callout, Modal, SectionCard, ToggleSwitch } from '../ui';
+  import { removeWithUndo } from '../../undoRemoval';
   import FormSelect from '../FormSelect.svelte';
   import SearchableSelect from '../SearchableSelect.svelte';
   import AnalyticsSkeleton from './AnalyticsSkeleton.svelte';
@@ -23,7 +24,6 @@
     type AlertWindow,
   } from '../../api';
   import { authStore } from '../../stores/auth.svelte';
-  import { confirmDialog } from '../../stores/confirmDialog.svelte';
   import { dashboardStore } from '../../stores/dashboard.svelte';
   import { toast } from '../../stores/toast.svelte';
   import { m, dateLocale } from '../../i18n';
@@ -57,12 +57,12 @@
     void loadRecipientOptions(authStore.selectedGuildId).then((o) => (channelNames = new Map(o.channels.map((c) => [c.id, c.name]))));
   });
 
-  const METRICS: AlertMetric[] = ['messages', 'activeMembers', 'voiceMinutes', 'joins', 'leaves', 'netJoins', 'sanctions', 'unansweredRate', 'channelRate'];
+  const METRICS: AlertMetric[] = ['messages', 'activeMembers', 'voiceMinutes', 'joins', 'leaves', 'netJoins', 'sanctions', 'unansweredRate', 'pulseScore', 'channelRate'];
   const metricLabel = (x: AlertMetric) =>
     ({
       messages: m.anx_metric_messages(), activeMembers: m.anx_alert_m_active(), voiceMinutes: m.anx_alert_m_voice(), joins: m.anx_live_joins(),
       leaves: m.anx_growth_left(), netJoins: m.anx_metric_net_joins(), sanctions: m.anx_fact_sanctions(), unansweredRate: m.anx_resp_unanswered(),
-      channelRate: m.anx_alert_m_channel_rate(),
+      channelRate: m.anx_alert_m_channel_rate(), pulseScore: m.pulse_alert_metric(),
     })[x];
   const conditionLabel = (c: AlertCondition) =>
     ({ drop_pct: m.anx_alert_c_drop(), rise_pct: m.anx_alert_c_rise(), above: m.anx_alert_c_above(), below: m.anx_alert_c_below() })[c];
@@ -145,13 +145,13 @@
   }
 
   async function remove(rule: AlertRule) {
-    if (!(await confirmDialog.danger(m.anx_alert_confirm_delete({ name: rule.name }), '', m.anx_alert_delete()))) return;
-    try {
-      await deleteAlertRule(rule.id);
-      rules = rules.filter((r) => r.id !== rule.id);
-    } catch (e) {
-      toast.error(errorMessage(e) || m.an_error_generic());
-    }
+    await removeWithUndo({
+      get: () => rules,
+      set: (next) => (rules = next),
+      match: (r) => r.id === rule.id,
+      message: m.anx_alert_deleted(),
+      commit: () => deleteAlertRule(rule.id),
+    });
   }
 
   const ruleName = (id: string) => rules.find((r) => r.id === id)?.name ?? m.anx_alert_deleted();
@@ -266,7 +266,7 @@
     {#if formError}<p class="text-body-sm text-error">{formError}</p>{/if}
     <div class="flex justify-end gap-2">
       <Button variant="ghost" onclick={() => (open = false)}>{m.anx_note_cancel()}</Button>
-      <Button variant="primary" type="submit" loading={saving} disabled={Boolean(formError)}>{m.anx_alert_save()}</Button>
+      <Button variant="primary" type="submit" loading={saving} disabled={Boolean(formError)} disabledReason={formError}>{m.anx_alert_save()}</Button>
     </div>
   </form>
 </Modal>

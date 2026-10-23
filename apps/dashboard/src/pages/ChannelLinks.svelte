@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { explainDisabled } from '../lib/actions/explainDisabled';
   import { m } from '../lib/i18n';
   import { onMount } from 'svelte';
   import { dashboardStore } from '../lib/stores/dashboard.svelte';
@@ -329,8 +330,8 @@
         <Papicon icon="shield" size={20} class="text-success shrink-0 mt-0.5" />
         <div class="space-y-2 min-w-0">
           <h3 class="text-sm font-semibold text-success">{m.channel_links_guest_banner_title()}</h3>
-          <p class="text-xs text-on-surface-variant/70 leading-relaxed">{m.channel_links_guest_banner_desc()}</p>
-          <ol class="text-xs text-on-surface-variant/60 leading-relaxed list-decimal list-inside space-y-0.5">
+          <p class="text-xs text-on-surface-variant leading-relaxed">{m.channel_links_guest_banner_desc()}</p>
+          <ol class="text-xs text-on-surface-variant leading-relaxed list-decimal list-inside space-y-0.5">
             <li>{m.channel_links_guest_step_1()}</li>
             <li>{m.channel_links_guest_step_2()}</li>
             <li>{m.channel_links_guest_step_3()}</li>
@@ -361,7 +362,7 @@
             <Papicon icon="link" size={32} class="text-on-surface-variant/40" />
           </div>
           <h3 class="text-lg font-semibold text-on-surface mb-1">{m.channel_links_empty_title()}</h3>
-          <p class="text-sm text-on-surface-variant/60 max-w-sm">
+          <p class="text-sm text-on-surface-variant max-w-sm">
             {m.channel_links_empty_desc()}
           </p>
         </div>
@@ -374,7 +375,7 @@
                 <div class="flex-1 min-w-0">
                   <div class="flex items-center gap-2 mb-3">
                     <h4 class="text-sm font-semibold text-on-surface">{groupTitle(group)}</h4>
-                    <span class="text-xs text-on-surface-variant/50">
+                    <span class="text-xs text-on-surface-variant">
                       {m.channel_links_group_servers_count({ count: group.remoteGuildCount + 1 })}
                     </span>
                   </div>
@@ -387,16 +388,16 @@
                           <img src={member.guildIcon} alt="" class="w-5 h-5 rounded shrink-0" />
                         {:else}
                           <div class="w-5 h-5 rounded bg-surface-container flex items-center justify-center shrink-0">
-                            <Papicon icon="server" size={11} class="text-on-surface-variant/50" />
+                            <Papicon icon="server" size={11} class="text-on-surface-variant" />
                           </div>
                         {/if}
-                        <span class="text-xs text-on-surface-variant/70 truncate">
+                        <span class="text-xs text-on-surface-variant truncate">
                           {member.isLocal ? m.channel_links_this_server() : member.guildName}
                         </span>
                         <span class="text-xs font-medium text-on-surface">#{member.channelName}</span>
                         <span class="text-xs text-on-surface-variant/40" title={modeLabel(member.mode)}>{modeArrow(member.mode)}</span>
                         {#if !member.enabled}
-                          <span class="text-2xs px-1.5 py-0.5 rounded-full bg-surface-container text-on-surface-variant/60">
+                          <span class="text-2xs px-1.5 py-0.5 rounded-full bg-surface-container text-on-surface-variant">
                             {m.channel_links_member_paused()}
                           </span>
                         {/if}
@@ -458,7 +459,7 @@
 
     <!-- Create Group Modal -->
     <Modal bind:open={showCreateModal} title={m.channel_links_modal_create_title()}>
-      <div class="flex flex-col gap-5 p-4">
+      <div class="flex flex-col gap-5">
         <div>
           <label for="new-group-name" class="block text-sm font-medium text-on-surface mb-1.5">{m.channel_links_group_name_label()}</label>
           <input
@@ -487,7 +488,7 @@
         <!-- Step 2: Target servers (plusieurs) -->
         <div>
           <span class="block text-sm font-medium text-on-surface mb-1.5">{m.channel_links_targets_label()}</span>
-          <p class="text-xs text-on-surface-variant/50 mb-2">{m.channel_links_targets_hint()}</p>
+          <p class="text-xs text-on-surface-variant mb-2">{m.channel_links_targets_hint()}</p>
           {#if loadingGuilds}
             <div class="flex items-center gap-2 px-3 py-2 rounded-lg bg-surface-container border border-outline-variant/30">
               <div class="animate-spin w-4 h-4 border-2 border-primary border-t-transparent rounded-full"></div>
@@ -495,7 +496,7 @@
             </div>
           {:else if otherGuilds.length === 0}
             <div class="px-3 py-3 rounded-lg bg-surface-container/40 border border-outline-variant/20 text-center">
-              <p class="text-sm text-on-surface-variant/60">{m.channel_links_no_guilds_title()}</p>
+              <p class="text-sm text-on-surface-variant">{m.channel_links_no_guilds_title()}</p>
               <p class="text-xs text-on-surface-variant/40 mt-1">{m.channel_links_no_guilds_desc()}</p>
             </div>
           {:else}
@@ -512,12 +513,12 @@
                       <img src={guild.icon} alt="" class="w-8 h-8 rounded-lg shrink-0" />
                     {:else}
                       <div class="w-8 h-8 rounded-lg bg-surface-container flex items-center justify-center shrink-0">
-                        <Papicon icon="server" size={16} class="text-on-surface-variant/50" />
+                        <Papicon icon="server" size={16} class="text-on-surface-variant" />
                       </div>
                     {/if}
                     <div class="flex-1 min-w-0">
                       <p class="text-sm font-medium text-on-surface truncate">{guild.name}</p>
-                      <p class="text-xs text-on-surface-variant/50">{m.channel_links_guild_channel_count({ count: guild.channels.length })}</p>
+                      <p class="text-xs text-on-surface-variant">{m.channel_links_guild_channel_count({ count: guild.channels.length })}</p>
                     </div>
                     {#if selected}
                       <Papicon icon="check" size={16} class="text-primary shrink-0" />
@@ -575,7 +576,7 @@
         <div class="flex items-center justify-between px-3 py-2.5 rounded-lg bg-surface-container/40 border border-outline-variant/10">
           <div>
             <span class="text-sm text-on-surface">{m.channel_links_option_invite_title()}</span>
-            <p class="text-xs text-on-surface-variant/50 mt-0.5">{m.channel_links_option_invite_desc()}</p>
+            <p class="text-xs text-on-surface-variant mt-0.5">{m.channel_links_option_invite_desc()}</p>
           </div>
           <ToggleSwitch checked={newCreateServerInvite} onToggle={(v) => newCreateServerInvite = v} size="sm" />
         </div>
@@ -591,7 +592,7 @@
               {@const channel = guildChannels(target.guildId).find((c: any) => c.id === target.channelId)}
               <span class="text-sm font-medium text-on-surface">
                 {i > 0 ? '+ ' : ''}#{channel?.name}
-                <span class="text-xs text-on-surface-variant/50">({guild?.name})</span>
+                <span class="text-xs text-on-surface-variant">({guild?.name})</span>
               </span>
             {/each}
           </div>
@@ -604,7 +605,7 @@
               <Papicon icon="check-circle" size={16} class="text-success" />
               <span class="text-sm font-semibold text-success">{m.channel_links_invite_created_badge()}</span>
             </div>
-            <p class="text-xs text-on-surface-variant/70">{m.channel_links_invite_created_hint()}</p>
+            <p class="text-xs text-on-surface-variant">{m.channel_links_invite_created_hint()}</p>
             <div class="flex items-center gap-2">
               <code class="flex-1 text-sm font-mono bg-surface-container px-3 py-1.5 rounded-lg text-on-surface select-all break-all">{createdInviteUrl}</code>
               <button
@@ -626,7 +627,8 @@
         {:else}
           <button
             onclick={handleCreateDirect}
-            disabled={saveAction.state.loading || !newSourceChannelId || newTargets.length === 0 || newTargets.some((t) => !t.channelId)}
+            disabled={saveAction.state.loading || newTargets.some((t) => !t.channelId)}
+            use:explainDisabled={(!newSourceChannelId) ? m.common_reason_pick_channel() : (newTargets.length === 0) ? m.common_reason_select_one() : ''}
             class="w-full px-4 py-2.5 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors text-sm font-medium disabled:opacity-50"
           >
             {saveAction.state.loading ? m.channel_links_creating() : m.channel_links_create_submit()}
@@ -638,7 +640,7 @@
     <!-- Config Modal -->
     <Modal bind:open={showConfigModal} title={m.channel_links_modal_config_title()}>
       {#if configGroup}
-        <div class="flex flex-col gap-5 p-4">
+        <div class="flex flex-col gap-5">
           <div>
             <label for="config-group-name" class="block text-sm font-medium text-on-surface mb-1.5">{m.channel_links_group_name_label()}</label>
             <input
@@ -659,14 +661,14 @@
                     <img src={member.guildIcon} alt="" class="w-6 h-6 rounded shrink-0" />
                   {:else}
                     <div class="w-6 h-6 rounded bg-surface-container flex items-center justify-center shrink-0">
-                      <Papicon icon="server" size={12} class="text-on-surface-variant/50" />
+                      <Papicon icon="server" size={12} class="text-on-surface-variant" />
                     </div>
                   {/if}
                   <div class="flex-1 min-w-0">
                     <p class="text-sm text-on-surface truncate">
                       {member.isLocal ? m.channel_links_this_server() : member.guildName}
                     </p>
-                    <p class="text-xs text-on-surface-variant/50">#{member.channelName}</p>
+                    <p class="text-xs text-on-surface-variant">#{member.channelName}</p>
                   </div>
 
                   <select
@@ -716,7 +718,7 @@
             <!-- Un pont réduit à un seul salon n'a plus d'objet : le dire ici évite
                  la surprise d'un pont qui disparaît en retirant l'avant-dernier. -->
             {#if configGroup.members.length <= 2}
-              <p class="mt-2 text-2xs text-on-surface-variant/50">{m.channel_links_last_members_notice()}</p>
+              <p class="mt-2 text-2xs text-on-surface-variant">{m.channel_links_last_members_notice()}</p>
             {/if}
 
             <!-- Ajout d'un salon -->
@@ -756,7 +758,8 @@
                 <button
                   type="button"
                   onclick={handleAddMember}
-                  disabled={addingMember || !addGuildId || !addChannelId}
+                  disabled={addingMember}
+                  use:explainDisabled={(!addGuildId) ? m.common_reason_fill_field() : (!addChannelId) ? m.common_reason_pick_channel() : ''}
                   class="px-4 py-2 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
                 >
                   {addingMember ? m.channel_links_adding_member() : m.channel_links_add_member_btn()}
@@ -788,7 +791,7 @@
                  base : le dire ici, à l'endroit où on les coche, évite d'avoir à
                  le chercher ailleurs. -->
             {#if configGroup.relayEdits || configGroup.relayDeletes || configGroup.relayReactions || configGroup.relayPins}
-              <p class="mt-3 text-2xs text-on-surface-variant/50 leading-relaxed">
+              <p class="mt-3 text-2xs text-on-surface-variant leading-relaxed">
                 {m.channel_links_storage_notice_on()}
               </p>
             {:else}
@@ -801,7 +804,7 @@
           <!-- Invitation Discord -->
           <div class="border-t border-outline-variant/20 pt-4">
             <span class="block text-sm font-medium text-on-surface mb-2">{m.channel_links_invite_section_title()}</span>
-            <p class="text-xs text-on-surface-variant/50 mb-3">{m.channel_links_invite_section_desc()}</p>
+            <p class="text-xs text-on-surface-variant mb-3">{m.channel_links_invite_section_desc()}</p>
 
             {#if configInviteUrl}
               <div class="flex flex-col gap-2 px-3 py-3 rounded-lg bg-success/10 border border-success/30">
@@ -812,7 +815,7 @@
                   </span>
                 </div>
                 {#if !configInviteTopicUpdated}
-                  <p class="text-xs text-on-surface-variant/60">{m.channel_links_invite_manual_hint()}</p>
+                  <p class="text-xs text-on-surface-variant">{m.channel_links_invite_manual_hint()}</p>
                 {/if}
                 <div class="flex items-center gap-2">
                   <code class="flex-1 text-xs font-mono bg-surface-container px-2.5 py-1.5 rounded-lg text-on-surface select-all break-all">{configInviteUrl}</code>
@@ -857,7 +860,7 @@
 
     <!-- Delete Confirm Modal -->
     <Modal bind:open={showDeleteModal} title={m.channel_links_delete_modal_title()}>
-      <div class="flex flex-col gap-4 p-4">
+      <div class="flex flex-col gap-4">
         <p class="text-sm text-on-surface-variant">
           {m.channel_links_delete_modal_desc()}
         </p>

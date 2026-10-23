@@ -1,5 +1,6 @@
 <script lang="ts">
   import HierarchyNode from './HierarchyNode.svelte';
+  import Papicon from './Papicon.svelte';
   import { m } from '../i18n';
 
   export type HierarchyTreeNode = {
@@ -52,18 +53,23 @@
     
     <div class="node-icon-wrapper flex items-center justify-center w-14 h-14 rounded-2xl mb-4 transition-all duration-300 group-hover:scale-110"
          style="background: color-mix(in srgb, var(--node-color) 12%, transparent); color: var(--node-color); border: 1px solid color-mix(in srgb, var(--node-color) 25%, transparent); box-shadow: 0 4px 12px color-mix(in srgb, var(--node-color) 6%, transparent);">
-      <span class="text-2xl">{node.icon || '📁'}</span>
+      {#if node.icon && /^[A-Za-z][\w-]*$/.test(node.icon)}
+        <!-- Nom d'icone (« Shield ») plutot qu'emoji : il s'affichait en toutes lettres. -->
+        <Papicon icon={node.icon} size={26} />
+      {:else}
+        <span class="text-2xl">{node.icon || '📁'}</span>
+      {/if}
     </div>
     
     <h3 class="text-base font-bold text-on-surface tracking-tight">{node.name}</h3>
     
     {#if node.description}
-      <p class="text-xs text-on-surface-variant/70 mt-1.5 leading-relaxed max-w-[260px]">{node.description}</p>
+      <p class="text-xs text-on-surface-variant mt-1.5 leading-relaxed max-w-[260px]">{node.description}</p>
     {/if}
 
     {#if node.responsable && node.responsable.name}
       <div class="mt-4 px-3.5 py-1 rounded-full bg-surface-container-high/40 border border-outline-variant/10 flex items-center gap-1.5 transition-all duration-200 hover:bg-surface-container-high/70 cursor-default">
-        <span class="text-xs font-semibold text-on-surface-variant/50">{m.staff_orgchart_resp_badge()}</span>
+        <span class="text-xs font-semibold text-on-surface-variant">{m.staff_orgchart_resp_badge()}</span>
         <span class="text-xs font-semibold text-on-surface">{node.responsable.name}</span>
       </div>
     {/if}

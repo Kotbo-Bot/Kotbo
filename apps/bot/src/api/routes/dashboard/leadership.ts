@@ -91,7 +91,6 @@ import { handleApiKeyRoutes } from './leadership/apiKeys.js';
 import { handleStaffRoutes } from './leadership/staff.js';
 import { handleTestingPeriodRoutes } from './leadership/testingPeriods.js';
 import { handleMentorReportRoutes } from './leadership/mentorReports.js';
-import { handleNotificationRoutes } from './leadership/notifications.js';
 import { handleTutoringRoutes } from './leadership/tutoring.js';
 import { handleReminderRoutes } from './leadership/reminders.js';
 
@@ -306,7 +305,6 @@ const LEADERSHIP_ROUTE_HANDLERS: Record<string, (
   'staff': handleStaffRoutes,
   'testing-periods': handleTestingPeriodRoutes,
   'mentor-reports': handleMentorReportRoutes,
-  'notifications': handleNotificationRoutes,
   'tutoring': handleTutoringRoutes,
   'reminders': handleReminderRoutes,
 };

@@ -1,5 +1,7 @@
 <script lang="ts">
   import { Tabs } from '../lib/components/ui';
+  import { pageTabItems } from '../lib/config/pageTabs';
+  import { gotoTab } from '../lib/tabRouting';
   import { onMount } from 'svelte';
   import { API_BASE_URL, dashboardFetch } from '../lib/api';
   import { authStore } from '../lib/stores/auth.svelte';
@@ -99,6 +101,11 @@
   const queue = $derived(appeals.filter(a => a.status === 'PENDING' || a.status === 'NEEDS_INFO'));
   const history = $derived(appeals.filter(a => a.status !== 'PENDING' && a.status !== 'NEEDS_INFO'));
   const publicUrl = $derived(`${window.location.origin}/appeal/${authStore.selectedGuildId}`);
+  // Meme garde que l'onglet Configuration de Sanctions.svelte.
+  const canManageSanctionSettings = $derived(
+    !!dashboardStore.state.featureAccess?.settings?.canConfigure
+      || !!dashboardStore.state.access?.canManageSettings
+  );
 
   // Verdict choisi (mais pas encore appliqué) pour chaque sanction contestée.
   let itemOutcomes = $state<Record<string, Outcome>>({});
@@ -401,6 +408,14 @@
     </button>
   {/snippet}
 
+  <!-- Meme montage que les pseudos dans Filtres : la barre de Sanctions reste. -->
+  <Tabs
+    label={m.nav_security_sanctions()}
+    tabs={pageTabItems('/security/sanctions', (id) => id !== 'settings' || canManageSanctionSettings)}
+    active="appeals"
+    onchange={(id) => gotoTab('/security/sanctions', id, 'sanctions')}
+  />
+
   <Tabs
     label={m.nav_ban_appeals()}
     tabs={[
@@ -421,7 +436,7 @@
   {:else if tab === 'queue' || tab === 'history'}
     {@const list = tab === 'queue' ? queue : history}
     {#if list.length === 0}
-      <div class="text-center py-16 text-on-surface-variant/50 flex flex-col items-center justify-center">
+      <div class="text-center py-16 text-on-surface-variant flex flex-col items-center justify-center">
         <div class="mb-4 text-on-surface-variant/30">
           <Papicon icon={tab === 'queue' ? 'check' : 'inbox'} size={48} />
         </div>
@@ -444,7 +459,7 @@
               {/if}
               <div class="flex-1 min-w-0">
                 <p class="font-semibold text-on-surface text-sm truncate">{appeal.userTag || appeal.userId}</p>
-                <p class="text-xs text-on-surface-variant/60 mt-0.5 truncate">
+                <p class="text-xs text-on-surface-variant mt-0.5 truncate">
                   {formatDate(appeal.createdAt)}
                   {#if appeal.sanctions && appeal.sanctions.length > 0}
                     · {m.ba_contested_count({ count: appeal.sanctions.length })}
@@ -467,7 +482,7 @@
                   {#if detail.appeal.sanctions && detail.appeal.sanctions.length > 0}
                     {@const decided = detail.appeal.status !== 'PENDING' && detail.appeal.status !== 'NEEDS_INFO'}
                     <div>
-                      <p class="text-body-sm font-medium text-on-surface-variant/50 mb-2">
+                      <p class="text-body-sm font-medium text-on-surface-variant mb-2">
                         {m.ba_contested_sanctions({ count: detail.appeal.sanctions.length })}
                       </p>
                       <div class="space-y-2">
@@ -478,7 +493,7 @@
                               <div class="min-w-0">
                                 <p class="text-sm font-bold text-on-surface">
                                   {TYPE_LABELS[item.sanctionType] ?? item.sanctionType}
-                                  <span class="text-xs font-normal text-on-surface-variant/50">
+                                  <span class="text-xs font-normal text-on-surface-variant">
                                     · {formatDate(item.sanctionCreatedAt)}{item.moderatorTag ? ` · ${item.moderatorTag}` : ''}
                                   </span>
                                 </p>
@@ -491,7 +506,7 @@
                             </div>
 
                             {#if item.memberStatement}
-                              <p class="text-xs text-on-surface-variant/70 italic border-l-2 border-outline-variant/30 pl-2.5">
+                              <p class="text-xs text-on-surface-variant italic border-l-2 border-outline-variant/30 pl-2.5">
                                 {item.memberStatement}
                               </p>
                             {/if}
@@ -511,22 +526,22 @@
                                 </button>
                               </div>
                             {:else if item.outcomeNote}
-                              <p class="text-2xs text-on-surface-variant/60">{item.outcomeNote}</p>
+                              <p class="text-2xs text-on-surface-variant">{item.outcomeNote}</p>
                             {/if}
                           </div>
                         {/each}
                       </div>
-                      <p class="text-2xs text-on-surface-variant/50 mt-2">{m.ba_contested_hint()}</p>
+                      <p class="text-2xs text-on-surface-variant mt-2">{m.ba_contested_hint()}</p>
                     </div>
                   {/if}
 
                   <!-- Réponses du formulaire -->
                   <div>
-                    <p class="text-body-sm font-medium text-on-surface-variant/50 mb-2">{m.ba_answers()}</p>
+                    <p class="text-body-sm font-medium text-on-surface-variant mb-2">{m.ba_answers()}</p>
                     <div class="space-y-2">
                       {#each Object.entries(detail.appeal.data || {}) as [key, value]}
                         <div class="rounded-lg bg-surface border border-outline-variant/15 p-3">
-                          <p class="text-2xs font-semibold text-on-surface-variant/60">{key.replace(/^appeal_/, '').replace(/_/g, ' ')}</p>
+                          <p class="text-2xs font-semibold text-on-surface-variant">{key.replace(/^appeal_/, '').replace(/_/g, ' ')}</p>
                           <p class="text-sm text-on-surface mt-1 whitespace-pre-wrap break-words">{Array.isArray(value) ? value.join(', ') : String(value)}</p>
                         </div>
                       {/each}
@@ -544,7 +559,7 @@
                         <div class="space-y-3">
                           {#each detail.appeal.messages as msg}
                             <div class="p-3 rounded-lg border text-sm {msg.author === 'staff' ? 'bg-blue-500/5 border-blue-500/20' : 'bg-surface border-outline-variant/15'}">
-                              <div class="flex items-center justify-between text-xs font-semibold text-on-surface-variant/60 mb-1">
+                              <div class="flex items-center justify-between text-xs font-semibold text-on-surface-variant mb-1">
                                 <span>{msg.author === 'staff' ? m.ba_staff_named({ tag: msg.authorTag || m.ba_unknown() }) : m.ba_member()}</span>
                                 <span>{formatDate(msg.createdAt)}</span>
                               </div>
@@ -556,14 +571,14 @@
                         <!-- Fallback pour les anciens appels sans messages -->
                         <div class="space-y-3">
                           <div class="p-3 rounded-lg border text-sm bg-blue-500/5 border-blue-500/20">
-                            <div class="flex items-center justify-between text-xs font-semibold text-on-surface-variant/60 mb-1">
+                            <div class="flex items-center justify-between text-xs font-semibold text-on-surface-variant mb-1">
                               <span>{m.ba_staff()}</span>
                             </div>
                             <p class="whitespace-pre-wrap text-on-surface">{detail.appeal.infoRequest}</p>
                           </div>
                           {#if detail.appeal.infoResponse}
                             <div class="p-3 rounded-lg border text-sm bg-surface border-outline-variant/15">
-                              <div class="flex items-center justify-between text-xs font-semibold text-on-surface-variant/60 mb-1">
+                              <div class="flex items-center justify-between text-xs font-semibold text-on-surface-variant mb-1">
                                 <span>{m.ba_member()}</span>
                               </div>
                               <p class="whitespace-pre-wrap text-on-surface">{detail.appeal.infoResponse}</p>
@@ -573,7 +588,7 @@
                       {/if}
 
                       {#if detail.appeal.status === 'NEEDS_INFO' && (!detail.appeal.messages || detail.appeal.messages.length === 0 || detail.appeal.messages[detail.appeal.messages.length - 1]?.author === 'staff')}
-                        <p class="text-xs text-on-surface-variant/50 mt-2 italic">{m.ba_waiting_member()}</p>
+                        <p class="text-xs text-on-surface-variant mt-2 italic">{m.ba_waiting_member()}</p>
                       {/if}
                     </div>
                   {/if}
@@ -581,17 +596,17 @@
                   <!-- Contexte -->
                   <div class="grid md:grid-cols-2 gap-4">
                     <div>
-                      <p class="text-body-sm font-medium text-on-surface-variant/50 mb-2">
+                      <p class="text-body-sm font-medium text-on-surface-variant mb-2">
                         {m.ba_sanction_history({ count: detail.sanctions.length })}
                       </p>
                       {#if detail.sanctions.length === 0}
-                        <p class="text-xs text-on-surface-variant/50 italic">{m.ba_no_sanction()}</p>
+                        <p class="text-xs text-on-surface-variant italic">{m.ba_no_sanction()}</p>
                       {:else}
                         <div class="space-y-1.5 max-h-48 overflow-y-auto pr-1">
                           {#each detail.sanctions as s}
                             <div class="rounded-lg bg-surface border border-outline-variant/15 px-3 py-2 text-xs {s.archivedAt ? 'opacity-60' : ''}">
                               <span class="font-bold">{TYPE_LABELS[s.type] ?? s.type}</span>
-                              <span class="text-on-surface-variant/50"> · {formatDate(s.createdAt)}{s.moderatorTag ? ` · ${s.moderatorTag}` : ''}</span>
+                              <span class="text-on-surface-variant"> · {formatDate(s.createdAt)}{s.moderatorTag ? ` · ${s.moderatorTag}` : ''}</span>
                               {#if s.archivedAt}<span class="ml-1 text-success font-semibold">· {m.ba_badge_archived()}</span>{/if}
                               {#if !s.appealable}<span class="ml-1 text-error font-semibold">· {m.ba_badge_locked()}</span>{/if}
                               <p class="text-on-surface-variant/80 mt-0.5 truncate">{s.reason}</p>
@@ -601,17 +616,17 @@
                       {/if}
                     </div>
                     <div>
-                      <p class="text-body-sm font-medium text-on-surface-variant/50 mb-2">
+                      <p class="text-body-sm font-medium text-on-surface-variant mb-2">
                         {m.ba_previous_appeals({ count: detail.previousAppeals.length })}
                       </p>
                       {#if detail.previousAppeals.length === 0}
-                        <p class="text-xs text-on-surface-variant/50 italic">{m.ba_first_appeal()}</p>
+                        <p class="text-xs text-on-surface-variant italic">{m.ba_first_appeal()}</p>
                       {:else}
                         <div class="space-y-1.5 max-h-48 overflow-y-auto pr-1">
                           {#each detail.previousAppeals as pa}
                             {@const pmeta = STATUS_META[pa.status] ?? STATUS_META.PENDING}
                             <div class="rounded-lg bg-surface border border-outline-variant/15 px-3 py-2 text-xs flex items-center justify-between gap-2">
-                              <span class="text-on-surface-variant/70">{formatDate(pa.createdAt)}</span>
+                              <span class="text-on-surface-variant">{formatDate(pa.createdAt)}</span>
                               <span class="px-2 py-0.5 rounded-full text-2xs font-bold border {pmeta.classes}">{pmeta.label}</span>
                             </div>
                           {/each}
@@ -644,7 +659,7 @@
                           <Papicon icon="message-square" size={14} /> {m.ba_request_info()}
                         </button>
                       </div>
-                      <p class="text-2xs text-on-surface-variant/50">
+                      <p class="text-2xs text-on-surface-variant">
                         {m.ba_decision_hint({ days: config?.cooldownDays ?? 30 })}
                       </p>
                     </div>
@@ -652,8 +667,8 @@
                     <div class="rounded-lg bg-surface border border-outline-variant/15 p-3 text-sm">
                       <p class="font-semibold text-on-surface">
                         {m.ba_decision_label({ status: STATUS_META[detail.appeal.status]?.label })}
-                        {#if detail.appeal.decidedByTag}<span class="text-on-surface-variant/60 font-normal">{m.ba_decided_by({ tag: detail.appeal.decidedByTag })}</span>{/if}
-                        {#if detail.appeal.decidedAt}<span class="text-on-surface-variant/60 font-normal">{m.ba_decided_at({ date: formatDate(detail.appeal.decidedAt) })}</span>{/if}
+                        {#if detail.appeal.decidedByTag}<span class="text-on-surface-variant font-normal">{m.ba_decided_by({ tag: detail.appeal.decidedByTag })}</span>{/if}
+                        {#if detail.appeal.decidedAt}<span class="text-on-surface-variant font-normal">{m.ba_decided_at({ date: formatDate(detail.appeal.decidedAt) })}</span>{/if}
                       </p>
                       {#if detail.appeal.decisionReason}
                         <p class="text-on-surface-variant/80 mt-1">{detail.appeal.decisionReason}</p>
@@ -683,14 +698,14 @@
         <label class="flex items-center justify-between rounded-xl border border-outline-variant/20 bg-surface p-4 cursor-pointer">
           <div>
             <p class="font-semibold text-on-surface text-sm">{m.ba_enable()}</p>
-            <p class="text-xs text-on-surface-variant/60 mt-0.5">{m.ba_enable_desc({ url: publicUrl })}</p>
+            <p class="text-xs text-on-surface-variant mt-0.5">{m.ba_enable_desc({ url: publicUrl })}</p>
           </div>
           <input type="checkbox" bind:checked={config.enabled} class="accent-primary w-5 h-5" />
         </label>
 
         <div class="rounded-xl border border-outline-variant/20 bg-surface p-4 space-y-4">
           <div>
-            <p class="text-xs font-semibold text-on-surface-variant/60 mb-1.5">{m.ba_appeal_form()}</p>
+            <p class="text-xs font-semibold text-on-surface-variant mb-1.5">{m.ba_appeal_form()}</p>
             <div class="flex gap-2">
               <select bind:value={config.formId}
                 class="flex-1 bg-surface-container rounded-lg px-3 py-2.5 text-sm outline-none border border-outline-variant/20">
@@ -706,14 +721,14 @@
                 </button>
               {/if}
             </div>
-            <p class="text-2xs text-on-surface-variant/50 mt-1.5">
+            <p class="text-2xs text-on-surface-variant mt-1.5">
               {m.ba_form_hint()}
             </p>
           </div>
 
           <div class="grid sm:grid-cols-2 gap-4">
             <div>
-              <p class="text-xs font-semibold text-on-surface-variant/60 mb-1.5">{m.ba_staff_channel()}</p>
+              <p class="text-xs font-semibold text-on-surface-variant mb-1.5">{m.ba_staff_channel()}</p>
               <select bind:value={config.staffChannelId}
                 class="w-full bg-surface-container rounded-lg px-3 py-2.5 text-sm outline-none border border-outline-variant/20">
                 <option value={null}>{m.ba_none()}</option>
@@ -735,13 +750,13 @@
                 {/if}
               </select>
               {#if staffServerChannels.length > 0}
-                <p class="text-2xs text-on-surface-variant/50 mt-1.5">
+                <p class="text-2xs text-on-surface-variant mt-1.5">
                   {m.ba_staff_channel_hint()}
                 </p>
               {/if}
             </div>
             <div>
-              <p class="text-xs font-semibold text-on-surface-variant/60 mb-1.5">{m.ba_invite_channel()}</p>
+              <p class="text-xs font-semibold text-on-surface-variant mb-1.5">{m.ba_invite_channel()}</p>
               <select bind:value={config.inviteChannelId}
                 class="w-full bg-surface-container rounded-lg px-3 py-2.5 text-sm outline-none border border-outline-variant/20">
                 <option value={null}>{m.ba_auto()}</option>
@@ -754,7 +769,7 @@
           <label class="flex items-center justify-between rounded-xl border border-outline-variant/10 bg-surface-container/40 p-3.5 cursor-pointer">
             <div>
               <p class="font-semibold text-on-surface text-sm">{m.ba_dm_on_ban()}</p>
-              <p class="text-xs text-on-surface-variant/60 mt-0.5">
+              <p class="text-xs text-on-surface-variant mt-0.5">
                 {m.ba_dm_on_ban_desc({ url: publicUrl })}
               </p>
             </div>
@@ -766,7 +781,7 @@
             <label class="flex items-center justify-between cursor-pointer">
               <div>
                 <p class="font-semibold text-on-surface text-sm">{m.ba_verification_required()}</p>
-                <p class="text-xs text-on-surface-variant/60 mt-0.5">
+                <p class="text-xs text-on-surface-variant mt-0.5">
                   {m.ba_verification_desc()}
                 </p>
               </div>
@@ -776,7 +791,7 @@
             {#if config.appealVerification}
               <div class="grid gap-4 grid-cols-1 sm:grid-cols-2 pt-2 border-t border-outline-variant/10">
                 <label class="space-y-1.5">
-                  <span class="text-xs font-semibold text-on-surface-variant/60">{m.ba_verification_level()}</span>
+                  <span class="text-xs font-semibold text-on-surface-variant">{m.ba_verification_level()}</span>
                   <select bind:value={config.appealVerificationLevel} class="w-full bg-surface-container rounded-lg px-3 py-2.5 text-sm outline-none border border-outline-variant/20">
                     <option value="LOW">{m.ba_level_low()}</option>
                     <option value="MEDIUM">{m.ba_level_medium()}</option>
@@ -786,7 +801,7 @@
                 <label class="flex items-center justify-between cursor-pointer pt-4">
                   <div>
                     <p class="font-semibold text-on-surface text-sm">{m.ba_save_ip()}</p>
-                    <p class="text-xs text-on-surface-variant/60">
+                    <p class="text-xs text-on-surface-variant">
                       {m.ba_save_ip_desc()}
                     </p>
                   </div>
@@ -795,7 +810,7 @@
                 <label class="flex items-center justify-between cursor-pointer pt-4">
                   <div>
                     <p class="font-semibold text-on-surface text-sm">{m.ba_save_device()}</p>
-                    <p class="text-xs text-on-surface-variant/60">
+                    <p class="text-xs text-on-surface-variant">
                       {m.ba_save_device_desc()}
                     </p>
                   </div>
@@ -805,7 +820,7 @@
             {/if}
           </div>
           <div>
-            <p class="text-xs font-semibold text-on-surface-variant/60 mb-1.5">
+            <p class="text-xs font-semibold text-on-surface-variant mb-1.5">
               {config.cooldownDays > 1 ? m.ba_cooldown_other({ days: config.cooldownDays }) : m.ba_cooldown_one({ days: config.cooldownDays })}
             </p>
             <input type="range" min="0" max="180" bind:value={config.cooldownDays} class="w-full accent-primary" />
@@ -815,7 +830,7 @@
           <div class="space-y-4 p-4 rounded-xl border border-outline-variant/10 bg-surface-container/40">
             <div>
               <p class="font-semibold text-on-surface text-sm">{m.ba_scope_title()}</p>
-              <p class="text-xs text-on-surface-variant/60 mt-0.5">{m.ba_scope_desc()}</p>
+              <p class="text-xs text-on-surface-variant mt-0.5">{m.ba_scope_desc()}</p>
             </div>
 
             <div class="space-y-2">
@@ -831,7 +846,7 @@
                   {#if active}
                     <div class="grid sm:grid-cols-2 gap-3 mt-3 pt-3 border-t border-outline-variant/10">
                       <label class="space-y-1">
-                        <span class="text-2xs font-semibold text-on-surface-variant/60">{m.ba_type_cooldown()}</span>
+                        <span class="text-2xs font-semibold text-on-surface-variant">{m.ba_type_cooldown()}</span>
                         <input type="number" min="0" max="365"
                           placeholder={String(config.cooldownDays)}
                           value={config.cooldownByType?.[type] ?? ''}
@@ -839,7 +854,7 @@
                           class="w-full bg-surface-container rounded-lg px-3 py-2 text-sm outline-none border border-outline-variant/20" />
                       </label>
                       <label class="space-y-1">
-                        <span class="text-2xs font-semibold text-on-surface-variant/60">{m.ba_type_form()}</span>
+                        <span class="text-2xs font-semibold text-on-surface-variant">{m.ba_type_form()}</span>
                         <select value={config.formIdByType?.[type] ?? ''}
                           onchange={(e) => setTypeForm(type, e.currentTarget.value)}
                           class="w-full bg-surface-container rounded-lg px-3 py-2 text-sm outline-none border border-outline-variant/20">
@@ -857,12 +872,12 @@
 
             <div class="grid sm:grid-cols-2 gap-4 pt-2 border-t border-outline-variant/10">
               <label class="space-y-1.5">
-                <span class="text-xs font-semibold text-on-surface-variant/60">{m.ba_max_sanctions()}</span>
+                <span class="text-xs font-semibold text-on-surface-variant">{m.ba_max_sanctions()}</span>
                 <input type="number" min="1" max="10" bind:value={config.maxSanctionsPerAppeal}
                   class="w-full bg-surface-container rounded-lg px-3 py-2.5 text-sm outline-none border border-outline-variant/20" />
               </label>
               <label class="space-y-1.5">
-                <span class="text-xs font-semibold text-on-surface-variant/60">{m.ba_appeal_window()}</span>
+                <span class="text-xs font-semibold text-on-surface-variant">{m.ba_appeal_window()}</span>
                 <input type="number" min="0" max="3650" placeholder={m.ba_appeal_window_none()}
                   value={config.appealWindowDays ?? ''}
                   oninput={(e) => { if (config) config.appealWindowDays = e.currentTarget.value === '' ? null : Number(e.currentTarget.value); }}
@@ -873,7 +888,7 @@
             <label class="flex items-center justify-between cursor-pointer pt-2 border-t border-outline-variant/10">
               <div>
                 <p class="font-semibold text-on-surface text-sm">{m.ba_dm_on_sanction()}</p>
-                <p class="text-xs text-on-surface-variant/60 mt-0.5">{m.ba_dm_on_sanction_desc()}</p>
+                <p class="text-xs text-on-surface-variant mt-0.5">{m.ba_dm_on_sanction_desc()}</p>
               </div>
               <input type="checkbox" bind:checked={config.notifyOnSanctionDM} class="accent-primary w-5 h-5 shrink-0 ml-4" />
             </label>
@@ -881,7 +896,7 @@
             <label class="flex items-center justify-between cursor-pointer">
               <div>
                 <p class="font-semibold text-on-surface text-sm">{m.ba_exclude_moderator()}</p>
-                <p class="text-xs text-on-surface-variant/60 mt-0.5">{m.ba_exclude_moderator_desc()}</p>
+                <p class="text-xs text-on-surface-variant mt-0.5">{m.ba_exclude_moderator_desc()}</p>
               </div>
               <input type="checkbox" bind:checked={config.excludeIssuingModerator} class="accent-primary w-5 h-5 shrink-0 ml-4" />
             </label>
@@ -889,7 +904,7 @@
             <label class="flex items-center justify-between cursor-pointer">
               <div>
                 <p class="font-semibold text-on-surface text-sm">{m.ba_notify_moderator()}</p>
-                <p class="text-xs text-on-surface-variant/60 mt-0.5">{m.ba_notify_moderator_desc()}</p>
+                <p class="text-xs text-on-surface-variant mt-0.5">{m.ba_notify_moderator_desc()}</p>
               </div>
               <input type="checkbox" bind:checked={config.notifyIssuingModerator} class="accent-primary w-5 h-5 shrink-0 ml-4" />
             </label>
@@ -901,13 +916,13 @@
             <div class="space-y-2 p-4 rounded-xl border border-outline-variant/10 bg-surface-container/40">
               <div>
                 <p class="font-semibold text-on-surface text-sm">{m.ba_mod_stats_title()}</p>
-                <p class="text-xs text-on-surface-variant/60 mt-0.5">{m.ba_mod_stats_desc()}</p>
+                <p class="text-xs text-on-surface-variant mt-0.5">{m.ba_mod_stats_desc()}</p>
               </div>
               <div class="space-y-1.5 max-h-64 overflow-y-auto pr-1">
                 {#each moderatorStats as stat (stat.moderatorUserId)}
                   <div class="rounded-lg bg-surface border border-outline-variant/15 px-3 py-2 text-xs flex items-center justify-between gap-3">
                     <span class="font-semibold text-on-surface truncate">{stat.moderatorTag || stat.moderatorUserId}</span>
-                    <span class="text-on-surface-variant/60 shrink-0">
+                    <span class="text-on-surface-variant shrink-0">
                       {m.ba_mod_stats_row({ contested: stat.contested, overturned: stat.overturned, rate: stat.overturnRate })}
                     </span>
                   </div>
@@ -917,26 +932,26 @@
           {/if}
 
           <div>
-            <p class="text-xs font-semibold text-on-surface-variant/60 mb-1.5">{m.ba_welcome_text()}</p>
+            <p class="text-xs font-semibold text-on-surface-variant mb-1.5">{m.ba_welcome_text()}</p>
             <textarea bind:value={config.welcomeText} rows="2"
               placeholder={m.ba_welcome_placeholder()}
               class="w-full bg-surface-container rounded-lg px-3 py-2.5 text-sm outline-none border border-outline-variant/20 resize-none"></textarea>
           </div>
           <div class="grid sm:grid-cols-2 gap-4">
             <div>
-              <p class="text-xs font-semibold text-on-surface-variant/60 mb-1.5">{m.ba_dm_accepted()}</p>
+              <p class="text-xs font-semibold text-on-surface-variant mb-1.5">{m.ba_dm_accepted()}</p>
               <textarea bind:value={config.acceptMessage} rows="3"
                 placeholder={m.ba_dm_accepted_placeholder({ server: '{server}', invite: '{invite}' })}
                 class="w-full bg-surface-container rounded-lg px-3 py-2.5 text-xs outline-none border border-outline-variant/20 resize-none"></textarea>
             </div>
             <div>
-              <p class="text-xs font-semibold text-on-surface-variant/60 mb-1.5">{m.ba_dm_denied()}</p>
+              <p class="text-xs font-semibold text-on-surface-variant mb-1.5">{m.ba_dm_denied()}</p>
               <textarea bind:value={config.denyMessage} rows="3"
                 placeholder={m.ba_dm_denied_placeholder({ server: '{server}', reason: '{reason}' })}
                 class="w-full bg-surface-container rounded-lg px-3 py-2.5 text-xs outline-none border border-outline-variant/20 resize-none"></textarea>
             </div>
           </div>
-          <p class="text-2xs text-on-surface-variant/50">
+          <p class="text-2xs text-on-surface-variant">
             {m.ba_variables()} {'{server}'}, {'{reason}'}, {'{invite}'} {m.ba_variables_invite_only()}
           </p>
         </div>
@@ -946,7 +961,7 @@
 
   {:else if tab === 'blacklist'}
     {#if blacklist.length === 0}
-      <div class="text-center py-16 text-on-surface-variant/50 flex flex-col items-center justify-center">
+      <div class="text-center py-16 text-on-surface-variant flex flex-col items-center justify-center">
         <div class="mb-4 text-on-surface-variant/30">
           <Papicon icon="user" size={48} />
         </div>
@@ -958,7 +973,7 @@
           <div class="rounded-xl border border-outline-variant/20 bg-surface p-4 flex items-center gap-4">
             <div class="flex-1 min-w-0">
               <p class="font-semibold text-on-surface text-sm">{m.ba_blacklist_id({ id: entry.userId })}</p>
-              <p class="text-xs text-on-surface-variant/60 mt-0.5 truncate">
+              <p class="text-xs text-on-surface-variant mt-0.5 truncate">
                 {entry.reason || m.ba_no_reason()} {entry.addedByTag ? m.ba_blacklist_added_by({ tag: entry.addedByTag, date: formatDate(entry.createdAt) }) : m.ba_blacklist_added({ date: formatDate(entry.createdAt) })}
               </p>
             </div>

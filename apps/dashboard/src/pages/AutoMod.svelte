@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { explainDisabled } from '../lib/actions/explainDisabled';
   import { channelDisplayName } from '../lib/channelUtils';
   import { m } from '../lib/i18n';
   import { onMount, onDestroy, untrack } from 'svelte';
@@ -17,6 +18,9 @@
   import Skeleton from '../lib/components/Skeleton.svelte';
   import LoadingHint from '../lib/components/LoadingHint.svelte';
   import AntiSpamPanel from '../lib/components/AntiSpamPanel.svelte';
+  import RuleSimulator from '../lib/components/automod/RuleSimulator.svelte';
+  import Button from '../lib/components/ui/Button.svelte';
+  import type { SimulatedRule, SimulatedRuleKind } from '../lib/api';
   import {
     fetchAutoModConfig,
     updateAutoModConfig
@@ -24,7 +28,8 @@
 
   const actionState = createAsyncActionState();
   let loading = $state(false);
-  const FILTER_TABS = ['bot', 'discord', 'security', 'behavioral', 'exceptions'] as const;
+  // « nicknames » est rendu par la page enveloppe (security/Filters) : il figure ici pour que l'onglet existe.
+  const FILTER_TABS = ['bot', 'discord', 'security', 'behavioral', 'exceptions', 'simulator', 'nicknames'] as const;
   let activeTab = $state<string>('bot');
 
   // L'onglet vit dans l'URL, comme ailleurs : la palette de commandes propose
@@ -50,6 +55,9 @@
     spamLimit: 5,
     spamIntervalSeconds: 5,
     spamAction: 'TIMEOUT',
+    spamGroupSlowmodeEnabled: false,
+    spamGroupSlowmodeSeconds: 10,
+    spamGroupSlowmodeMinutes: 5,
 
     linksEnabled: false,
     linksAction: 'DELETE_AND_WARN',
@@ -113,6 +121,7 @@
   let savedConfig = $state(JSON.parse(JSON.stringify({
     discordAutoModEnabled: true,
     spamEnabled: false, spamLimit: 5, spamIntervalSeconds: 5, spamAction: 'TIMEOUT',
+    spamGroupSlowmodeEnabled: false, spamGroupSlowmodeSeconds: 10, spamGroupSlowmodeMinutes: 5,
     linksEnabled: false, linksAction: 'DELETE_AND_WARN', linksWhitelist: [],
     capsEnabled: false, capsThresholdPercent: 80, capsMinLength: 10,
     emojisEnabled: false, emojisLimit: 10,
@@ -282,6 +291,47 @@
     config.adminLockSecurityRoleIds = config.adminLockSecurityRoleIds.filter(id => id !== roleId);
   }
 
+  // ── Simulateur ─────────────────────────────────────────
+  // Le simulateur teste le brouillon de la page, listes saisies comprises,
+  // avant tout enregistrement.
+  const parseLines = (text: string) => text.split('\n').map((line) => line.trim().toLowerCase()).filter((line) => line.length > 0);
+  const simulatorDraft = $derived({
+    ...config,
+    linksWhitelist: parseLines(whitelistInput),
+    customWords: parseLines(customWordsInput),
+    customWordsAllowList: parseLines(customWordsAllowInput),
+  });
+  // `?rule=scam` : le lien « Tester » d'une autre page ouvre directement sa règle.
+  const SIMULATOR_KINDS: SimulatedRuleKind[] = ['keywords', 'links', 'caps', 'emojis', 'mentions', 'everyone', 'spam', 'scam', 'regex'];
+  const requestedRule = typeof window === 'undefined' ? null : new URLSearchParams(window.location.search).get('rule');
+  let simulatorKind = $state<SimulatedRuleKind>(
+    SIMULATOR_KINDS.includes(requestedRule as SimulatedRuleKind) ? requestedRule as SimulatedRuleKind : 'keywords',
+  );
+
+  function openSimulator(kind: SimulatedRuleKind) {
+    simulatorKind = kind;
+    gotoTab('/security/filters', 'simulator', 'bot');
+  }
+
+  /** Reporte dans la page les réglages trouvés dans le simulateur. */
+  function applySimulation(rule: SimulatedRule) {
+    switch (rule.kind) {
+      case 'spam': config.spamEnabled = true; config.spamLimit = rule.limit; config.spamIntervalSeconds = rule.intervalSeconds; break;
+      case 'links': config.linksEnabled = true; whitelistInput = rule.whitelist.join('\n'); config.linksWhitelist = rule.whitelist; break;
+      case 'caps': config.capsEnabled = true; config.capsThresholdPercent = rule.thresholdPercent; config.capsMinLength = rule.minLength; break;
+      case 'emojis': config.emojisEnabled = true; config.emojisLimit = rule.limit; break;
+      case 'mentions': config.mentionsEnabled = true; config.mentionsLimit = rule.limit; break;
+      case 'keywords':
+        config.customWordsEnabled = true;
+        customWordsInput = rule.keywords.join('\n');
+        customWordsAllowInput = rule.allowList.join('\n');
+        config.customWords = rule.keywords;
+        config.customWordsAllowList = rule.allowList;
+        break;
+      default: break;
+    }
+  }
+
   // Les niveaux de protection vivent desormais dans Securite > Vue d'ensemble :
   // ils deplacent aussi les seuils anti-raid, que cette page n'affiche pas, et
   // les proposer ici laissait croire qu'ils ne touchaient qu'aux filtres.
@@ -322,17 +372,20 @@
                 <Papicon icon="Clock" size={20} class="text-primary" />
                 {m.am_spam_title()}
               </h3>
+              <div class="flex items-center gap-2">
+                <Button size="sm" variant="ghost" icon="history" onclick={() => openSimulator('spam')}>{m.sim_test_button()}</Button>
               <ToggleSwitch 
                 checked={config.spamEnabled} 
                 onToggle={(v: boolean) => config.spamEnabled = v} 
                 disabled={!canManageSettings}
               />
+              </div>
             </div>
 
             {#if config.spamEnabled}
               <div class="grid grid-cols-2 gap-4 animate-in fade-in duration-300" data-tour="automod-spam-threshold">
                 <div class="space-y-1.5">
-                  <label for="spamLimit" class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.am_spam_max_messages()}</label>
+                  <label for="spamLimit" class="text-xs font-semibold text-on-surface-variant ml-2">{m.am_spam_max_messages()}</label>
                   <input 
                     id="spamLimit"
                     type="number" 
@@ -345,7 +398,7 @@
                 </div>
 
                 <div class="space-y-1.5">
-                  <label for="spamInterval" class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.am_spam_interval()}</label>
+                  <label for="spamInterval" class="text-xs font-semibold text-on-surface-variant ml-2">{m.am_spam_interval()}</label>
                   <input 
                     id="spamInterval"
                     type="number" 
@@ -358,7 +411,7 @@
                 </div>
 
                 <div class="col-span-2 space-y-1.5">
-                  <label for="spamAction" class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.am_spam_action_label()}</label>
+                  <label for="spamAction" class="text-xs font-semibold text-on-surface-variant ml-2">{m.am_spam_action_label()}</label>
                   <select 
                     id="spamAction"
                     bind:value={config.spamAction}
@@ -369,6 +422,46 @@
                     <option value="TIMEOUT">{m.am_action_timeout_10()}</option>
                   </select>
                 </div>
+
+                <div class="col-span-2 flex items-center justify-between pt-2 border-t border-outline-variant/10">
+                  <div>
+                    <span class="text-xs font-semibold text-on-surface-variant ml-2">{m.am_spam_group_title()}</span>
+                    <p class="text-xs text-on-surface-variant ml-2 mt-1">{m.am_spam_group_desc()}</p>
+                  </div>
+                  <ToggleSwitch
+                    checked={config.spamGroupSlowmodeEnabled}
+                    onToggle={(v: boolean) => config.spamGroupSlowmodeEnabled = v}
+                    disabled={!canManageSettings}
+                  />
+                </div>
+
+                {#if config.spamGroupSlowmodeEnabled}
+                  <div class="space-y-1.5">
+                    <label for="spamGroupSlowmodeSeconds" class="text-xs font-semibold text-on-surface-variant ml-2">{m.am_spam_group_slowmode()}</label>
+                    <input
+                      id="spamGroupSlowmodeSeconds"
+                      type="number"
+                      min="1"
+                      max="21600"
+                      bind:value={config.spamGroupSlowmodeSeconds}
+                      class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none"
+                      disabled={!canManageSettings}
+                    />
+                  </div>
+
+                  <div class="space-y-1.5">
+                    <label for="spamGroupSlowmodeMinutes" class="text-xs font-semibold text-on-surface-variant ml-2">{m.am_spam_group_duration()}</label>
+                    <input
+                      id="spamGroupSlowmodeMinutes"
+                      type="number"
+                      min="1"
+                      max="1440"
+                      bind:value={config.spamGroupSlowmodeMinutes}
+                      class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none"
+                      disabled={!canManageSettings}
+                    />
+                  </div>
+                {/if}
               </div>
             {/if}
           </section>
@@ -380,17 +473,20 @@
                 <Papicon icon="Link" size={20} class="text-secondary" />
                 {m.am_links_title()}
               </h3>
+              <div class="flex items-center gap-2">
+                <Button size="sm" variant="ghost" icon="history" onclick={() => openSimulator('links')}>{m.sim_test_button()}</Button>
               <ToggleSwitch 
                 checked={config.linksEnabled} 
                 onToggle={(v: boolean) => config.linksEnabled = v} 
                 disabled={!canManageSettings}
               />
+              </div>
             </div>
 
             {#if config.linksEnabled}
               <div class="space-y-4 animate-in fade-in duration-300">
                 <div class="space-y-1.5">
-                  <label for="linksAction" class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.am_links_action_label()}</label>
+                  <label for="linksAction" class="text-xs font-semibold text-on-surface-variant ml-2">{m.am_links_action_label()}</label>
                   <select 
                     id="linksAction"
                     bind:value={config.linksAction}
@@ -399,11 +495,15 @@
                   >
                     <option value="DELETE_AND_WARN">{m.am_action_delete_warn()}</option>
                     <option value="DELETE_ONLY">{m.am_action_delete_silent()}</option>
+                    <option value="CENSOR">{m.am_action_censor()}</option>
                   </select>
+                  {#if config.linksAction === 'CENSOR'}
+                    <p class="text-2xs text-on-surface-variant ml-2">{m.am_action_censor_hint()}</p>
+                  {/if}
                 </div>
 
                 <div class="space-y-1.5">
-                  <label for="whitelist" class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.am_links_whitelist_label()}</label>
+                  <label for="whitelist" class="text-xs font-semibold text-on-surface-variant ml-2">{m.am_links_whitelist_label()}</label>
                   <textarea 
                     id="whitelist"
                     bind:value={whitelistInput} 
@@ -423,17 +523,20 @@
                 <Papicon icon="Font" size={20} class="text-tertiary" />
                 {m.am_caps_title()}
               </h3>
+              <div class="flex items-center gap-2">
+                <Button size="sm" variant="ghost" icon="history" onclick={() => openSimulator('caps')}>{m.sim_test_button()}</Button>
               <ToggleSwitch 
                 checked={config.capsEnabled} 
                 onToggle={(v: boolean) => config.capsEnabled = v} 
                 disabled={!canManageSettings}
               />
+              </div>
             </div>
 
             {#if config.capsEnabled}
               <div class="grid grid-cols-2 gap-4 animate-in fade-in duration-300">
                 <div class="space-y-1.5">
-                  <label for="capsThresh" class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.am_caps_threshold()}</label>
+                  <label for="capsThresh" class="text-xs font-semibold text-on-surface-variant ml-2">{m.am_caps_threshold()}</label>
                   <input 
                     id="capsThresh"
                     type="number" 
@@ -446,7 +549,7 @@
                 </div>
 
                 <div class="space-y-1.5">
-                  <label for="capsMin" class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.am_caps_minlength()}</label>
+                  <label for="capsMin" class="text-xs font-semibold text-on-surface-variant ml-2">{m.am_caps_minlength()}</label>
                   <input 
                     id="capsMin"
                     type="number" 
@@ -472,16 +575,19 @@
                   <Papicon icon="Emoji" size={18} class="text-warning" />
                   {m.am_emojis_title()}
                 </h3>
+                <div class="flex items-center gap-2">
+                  <Button size="sm" variant="ghost" icon="history" onclick={() => openSimulator('emojis')}>{m.sim_test_button()}</Button>
                 <ToggleSwitch 
                   checked={config.emojisEnabled} 
                   onToggle={(v: boolean) => config.emojisEnabled = v} 
                   disabled={!canManageSettings}
                 />
+                </div>
               </div>
 
               {#if config.emojisEnabled}
                 <div class="space-y-1.5 animate-in fade-in duration-300">
-                  <label for="emojisLim" class="text-xs font-semibold text-on-surface-variant/60 ml-1">{m.am_limit_per_message()}</label>
+                  <label for="emojisLim" class="text-xs font-semibold text-on-surface-variant ml-1">{m.am_limit_per_message()}</label>
                   <input 
                     id="emojisLim"
                     type="number" 
@@ -492,7 +598,7 @@
                   />
                 </div>
               {:else}
-                <p class="text-xs text-on-surface-variant/50">{m.am_emojis_disabled()}</p>
+                <p class="text-xs text-on-surface-variant">{m.am_emojis_disabled()}</p>
               {/if}
             </section>
 
@@ -503,16 +609,19 @@
                   <Papicon icon="User" size={18} class="text-purple-400" />
                   {m.am_mentions_title()}
                 </h3>
+                <div class="flex items-center gap-2">
+                  <Button size="sm" variant="ghost" icon="history" onclick={() => openSimulator('mentions')}>{m.sim_test_button()}</Button>
                 <ToggleSwitch 
                   checked={config.mentionsEnabled} 
                   onToggle={(v: boolean) => config.mentionsEnabled = v} 
                   disabled={!canManageSettings}
                 />
+                </div>
               </div>
 
               {#if config.mentionsEnabled}
                 <div class="space-y-1.5 animate-in fade-in duration-300">
-                  <label for="mentionsLim" class="text-xs font-semibold text-on-surface-variant/60 ml-1">{m.am_limit_per_message()}</label>
+                  <label for="mentionsLim" class="text-xs font-semibold text-on-surface-variant ml-1">{m.am_limit_per_message()}</label>
                   <input 
                     id="mentionsLim"
                     type="number" 
@@ -523,7 +632,7 @@
                   />
                 </div>
               {:else}
-                <p class="text-xs text-on-surface-variant/50">{m.am_mentions_disabled()}</p>
+                <p class="text-xs text-on-surface-variant">{m.am_mentions_disabled()}</p>
               {/if}
             </section>
           </div>
@@ -544,14 +653,14 @@
                 />
               </div>
 
-              <p class="text-2xs text-on-surface-variant/70 leading-relaxed">
+              <p class="text-2xs text-on-surface-variant leading-relaxed">
                 {m.am_ghostping_desc()}
                 <span class="text-warning/90 font-medium block mt-1">{m.am_ghostping_cache_warning()}</span>
               </p>
 
               {#if config.ghostPingEnabled}
                 <div class="space-y-1.5 animate-in fade-in duration-300">
-                  <label for="ghostPingAction" class="text-xs font-semibold text-on-surface-variant/60 ml-1">{m.am_sanction_label()}</label>
+                  <label for="ghostPingAction" class="text-xs font-semibold text-on-surface-variant ml-1">{m.am_sanction_label()}</label>
                   <select 
                     id="ghostPingAction"
                     bind:value={config.ghostPingAction}
@@ -572,20 +681,23 @@
                   <Papicon icon="ShieldAlert" size={18} class="text-error" />
                   {m.am_everyone_title()}
                 </h3>
+                <div class="flex items-center gap-2">
+                  <Button size="sm" variant="ghost" icon="history" onclick={() => openSimulator('everyone')}>{m.sim_test_button()}</Button>
                 <ToggleSwitch 
                   checked={config.antiEveryoneEnabled} 
                   onToggle={(v: boolean) => config.antiEveryoneEnabled = v} 
                   disabled={!canManageSettings}
                 />
+                </div>
               </div>
 
-              <p class="text-2xs text-on-surface-variant/70 leading-relaxed">
+              <p class="text-2xs text-on-surface-variant leading-relaxed">
                 {m.am_everyone_desc()}
               </p>
 
               {#if config.antiEveryoneEnabled}
                 <div class="space-y-1.5 animate-in fade-in duration-300">
-                  <label for="antiEveryoneAction" class="text-xs font-semibold text-on-surface-variant/60 ml-1">{m.am_sanction_label()}</label>
+                  <label for="antiEveryoneAction" class="text-xs font-semibold text-on-surface-variant ml-1">{m.am_sanction_label()}</label>
                   <select 
                     id="antiEveryoneAction"
                     bind:value={config.antiEveryoneAction}
@@ -614,7 +726,7 @@
             <h2 class="text-sm font-semibold text-on-surface flex items-center gap-2">
               {m.am_discord_native_title()}
             </h2>
-            <p class="text-xs text-on-surface-variant/70 mt-1">
+            <p class="text-xs text-on-surface-variant mt-1">
               {m.am_discord_native_desc()}
             </p>
           </div>
@@ -628,21 +740,24 @@
                 <Papicon icon="Filter" size={20} class="text-orange-400" />
                 {m.am_customwords_title()}
               </h3>
+              <div class="flex items-center gap-2">
+                <Button size="sm" variant="ghost" icon="history" onclick={() => openSimulator('keywords')}>{m.sim_test_button()}</Button>
               <ToggleSwitch
                 checked={config.customWordsEnabled}
                 onToggle={(v: boolean) => config.customWordsEnabled = v}
                 disabled={!canManageSettings}
               />
+              </div>
             </div>
 
-            <p class="text-xs text-on-surface-variant/70 leading-relaxed">
+            <p class="text-xs text-on-surface-variant leading-relaxed">
               {m.am_customwords_desc()}
             </p>
 
             {#if config.customWordsEnabled}
               <div class="space-y-4 animate-in fade-in duration-300">
                 <div class="space-y-1.5">
-                  <label for="customWordsAction" class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.am_action_label()}</label>
+                  <label for="customWordsAction" class="text-xs font-semibold text-on-surface-variant ml-2">{m.am_action_label()}</label>
                   <select
                     id="customWordsAction"
                     bind:value={config.customWordsAction}
@@ -652,12 +767,16 @@
                     <option value="BLOCK">{m.am_action_block()}</option>
                     <option value="TIMEOUT">{m.am_action_block_timeout()}</option>
                     <option value="ALERT">{m.am_action_alert_only()}</option>
+                    <option value="CENSOR">{m.am_action_censor()}</option>
                   </select>
+                  {#if config.customWordsAction === 'CENSOR'}
+                    <p class="text-2xs text-on-surface-variant ml-2">{m.am_action_censor_hint()}</p>
+                  {/if}
                 </div>
 
                 {#if config.customWordsAction === 'TIMEOUT'}
                   <div class="space-y-1.5">
-                    <label for="customWordsTimeout" class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.am_timeout_duration_sec()}</label>
+                    <label for="customWordsTimeout" class="text-xs font-semibold text-on-surface-variant ml-2">{m.am_timeout_duration_sec()}</label>
                     <input
                       id="customWordsTimeout"
                       type="number" min="5" max="2419200"
@@ -669,7 +788,7 @@
                 {/if}
 
                 <div class="space-y-1.5">
-                  <label for="customWords" class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.am_customwords_list_label()}</label>
+                  <label for="customWords" class="text-xs font-semibold text-on-surface-variant ml-2">{m.am_customwords_list_label()}</label>
                   <textarea
                     id="customWords"
                     bind:value={customWordsInput}
@@ -677,11 +796,11 @@
                     class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none h-32 resize-none font-mono"
                     disabled={!canManageSettings}
                   ></textarea>
-                  <p class="text-2xs text-on-surface-variant/50 ml-2">{m.am_customwords_wildcard_hint()}</p>
+                  <p class="text-2xs text-on-surface-variant ml-2">{m.am_customwords_wildcard_hint()}</p>
                 </div>
 
                 <div class="space-y-1.5">
-                  <label for="customWordsAllow" class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.am_customwords_allow_label()}</label>
+                  <label for="customWordsAllow" class="text-xs font-semibold text-on-surface-variant ml-2">{m.am_customwords_allow_label()}</label>
                   <textarea
                     id="customWordsAllow"
                     bind:value={customWordsAllowInput}
@@ -708,41 +827,41 @@
               />
             </div>
 
-            <p class="text-xs text-on-surface-variant/70 leading-relaxed">
+            <p class="text-xs text-on-surface-variant leading-relaxed">
               {m.am_profanity_desc()}
             </p>
 
             {#if config.profanityEnabled}
               <div class="space-y-4 animate-in fade-in duration-300">
                 <div class="space-y-3">
-                  <span class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.am_profanity_categories()}</span>
+                  <span class="text-xs font-semibold text-on-surface-variant ml-2">{m.am_profanity_categories()}</span>
                   <div class="space-y-2">
                     <label class="flex items-center gap-3 p-3 bg-surface-container-high/30 rounded-lg cursor-pointer hover:bg-surface-container-high/50 transition-colors">
                       <input type="checkbox" bind:checked={config.profanityPresetProfanity} disabled={!canManageSettings} class="rounded border-outline-variant/30" />
                       <div>
                         <span class="text-sm font-medium">{m.am_profanity_cat_insults()}</span>
-                        <p class="text-2xs text-on-surface-variant/50">{m.am_profanity_cat_insults_desc()}</p>
+                        <p class="text-2xs text-on-surface-variant">{m.am_profanity_cat_insults_desc()}</p>
                       </div>
                     </label>
                     <label class="flex items-center gap-3 p-3 bg-surface-container-high/30 rounded-lg cursor-pointer hover:bg-surface-container-high/50 transition-colors">
                       <input type="checkbox" bind:checked={config.profanityPresetSexual} disabled={!canManageSettings} class="rounded border-outline-variant/30" />
                       <div>
                         <span class="text-sm font-medium">{m.am_profanity_cat_sexual()}</span>
-                        <p class="text-2xs text-on-surface-variant/50">{m.am_profanity_cat_sexual_desc()}</p>
+                        <p class="text-2xs text-on-surface-variant">{m.am_profanity_cat_sexual_desc()}</p>
                       </div>
                     </label>
                     <label class="flex items-center gap-3 p-3 bg-surface-container-high/30 rounded-lg cursor-pointer hover:bg-surface-container-high/50 transition-colors">
                       <input type="checkbox" bind:checked={config.profanityPresetSlurs} disabled={!canManageSettings} class="rounded border-outline-variant/30" />
                       <div>
                         <span class="text-sm font-medium">{m.am_profanity_cat_slurs()}</span>
-                        <p class="text-2xs text-on-surface-variant/50">{m.am_profanity_cat_slurs_desc()}</p>
+                        <p class="text-2xs text-on-surface-variant">{m.am_profanity_cat_slurs_desc()}</p>
                       </div>
                     </label>
                   </div>
                 </div>
 
                 <div class="space-y-1.5">
-                  <label for="profanityAction" class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.am_action_label()}</label>
+                  <label for="profanityAction" class="text-xs font-semibold text-on-surface-variant ml-2">{m.am_action_label()}</label>
                   <select
                     id="profanityAction"
                     bind:value={config.profanityAction}
@@ -752,12 +871,16 @@
                     <option value="BLOCK">{m.am_action_block()}</option>
                     <option value="TIMEOUT">{m.am_action_block_timeout()}</option>
                     <option value="ALERT">{m.am_action_alert_only()}</option>
+                    <option value="CENSOR">{m.am_action_censor()}</option>
                   </select>
+                  {#if config.profanityAction === 'CENSOR'}
+                    <p class="text-2xs text-on-surface-variant ml-2">{m.am_action_censor_hint()}</p>
+                  {/if}
                 </div>
 
                 {#if config.profanityAction === 'TIMEOUT'}
                   <div class="space-y-1.5">
-                    <label for="profanityTimeout" class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.am_timeout_duration_sec()}</label>
+                    <label for="profanityTimeout" class="text-xs font-semibold text-on-surface-variant ml-2">{m.am_timeout_duration_sec()}</label>
                     <input
                       id="profanityTimeout"
                       type="number" min="5" max="2419200"
@@ -769,7 +892,7 @@
                 {/if}
 
                 <div class="space-y-1.5">
-                  <label for="profanityAllow" class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.am_profanity_allow_label()}</label>
+                  <label for="profanityAllow" class="text-xs font-semibold text-on-surface-variant ml-2">{m.am_profanity_allow_label()}</label>
                   <textarea
                     id="profanityAllow"
                     bind:value={profanityAllowInput}
@@ -796,14 +919,14 @@
               />
             </div>
 
-            <p class="text-xs text-on-surface-variant/70 leading-relaxed">
+            <p class="text-xs text-on-surface-variant leading-relaxed">
               {m.am_invitefilter_desc()}
             </p>
 
             {#if config.inviteFilterEnabled}
               <div class="space-y-4 animate-in fade-in duration-300">
                 <div class="space-y-1.5">
-                  <label for="inviteFilterAction" class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.am_action_label()}</label>
+                  <label for="inviteFilterAction" class="text-xs font-semibold text-on-surface-variant ml-2">{m.am_action_label()}</label>
                   <select
                     id="inviteFilterAction"
                     bind:value={config.inviteFilterAction}
@@ -813,12 +936,16 @@
                     <option value="BLOCK">{m.am_action_block()}</option>
                     <option value="TIMEOUT">{m.am_action_block_timeout()}</option>
                     <option value="ALERT">{m.am_action_alert_only()}</option>
+                    <option value="CENSOR">{m.am_action_censor()}</option>
                   </select>
+                  {#if config.inviteFilterAction === 'CENSOR'}
+                    <p class="text-2xs text-on-surface-variant ml-2">{m.am_action_censor_hint()}</p>
+                  {/if}
                 </div>
 
                 {#if config.inviteFilterAction === 'TIMEOUT'}
                   <div class="space-y-1.5">
-                    <label for="inviteFilterTimeout" class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.am_timeout_duration_sec()}</label>
+                    <label for="inviteFilterTimeout" class="text-xs font-semibold text-on-surface-variant ml-2">{m.am_timeout_duration_sec()}</label>
                     <input
                       id="inviteFilterTimeout"
                       type="number" min="5" max="2419200"
@@ -830,7 +957,7 @@
                 {/if}
 
                 <div class="space-y-1.5">
-                  <label for="inviteAllowed" class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.am_invitefilter_allowed_label()}</label>
+                  <label for="inviteAllowed" class="text-xs font-semibold text-on-surface-variant ml-2">{m.am_invitefilter_allowed_label()}</label>
                   <textarea
                     id="inviteAllowed"
                     bind:value={inviteAllowedGuildsInput}
@@ -838,7 +965,7 @@
                     class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none h-20 resize-none font-mono"
                     disabled={!canManageSettings}
                   ></textarea>
-                  <p class="text-2xs text-on-surface-variant/50 ml-2">{m.am_invitefilter_allowed_hint()}</p>
+                  <p class="text-2xs text-on-surface-variant ml-2">{m.am_invitefilter_allowed_hint()}</p>
                 </div>
               </div>
             {/if}
@@ -870,14 +997,14 @@
             </div>
           {/if}
 
-          <p class="text-xs text-on-surface-variant/70 leading-relaxed">
+          <p class="text-xs text-on-surface-variant leading-relaxed">
             {m.am_antibot_desc()}
           </p>
 
           {#if config.antiBotEnabled}
             <div class="space-y-5 animate-in fade-in duration-300">
               <div class="space-y-1.5">
-                <label for="antiBotAction" class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.am_antibot_action_label()}</label>
+                <label for="antiBotAction" class="text-xs font-semibold text-on-surface-variant ml-2">{m.am_antibot_action_label()}</label>
                 <select
                   id="antiBotAction"
                   bind:value={config.antiBotAction}
@@ -891,8 +1018,8 @@
 
               <!-- Bypass users -->
               <div class="space-y-3 pt-2 border-t border-outline-variant/10">
-                <span class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.am_antibot_bypass_title()}</span>
-                <p class="text-xs text-on-surface-variant/50 ml-2">{m.am_antibot_bypass_desc()}</p>
+                <span class="text-xs font-semibold text-on-surface-variant ml-2">{m.am_antibot_bypass_title()}</span>
+                <p class="text-xs text-on-surface-variant ml-2">{m.am_antibot_bypass_desc()}</p>
                 {#if isOwner}
                   <div class="flex gap-2">
                     <input
@@ -905,7 +1032,7 @@
                     <button
                       type="button"
                       onclick={addAntiBotBypassUser}
-                      disabled={!antiBotBypassInput.trim() || !/^\d{17,20}$/.test(antiBotBypassInput.trim())}
+                      use:explainDisabled={(!antiBotBypassInput.trim()) ? m.common_reason_fill_field() : (!/^\d{17,20}$/.test(antiBotBypassInput.trim())) ? m.common_reason_fill_field() : ''}
                       class="px-4 py-2.5 bg-outline-variant/20 hover:bg-outline-variant/35 text-xs font-bold rounded-xl transition-all disabled:opacity-50"
                     >
                       {m.common_add()}
@@ -958,8 +1085,8 @@
             </div>
           {/if}
 
-          <p class="text-xs text-on-surface-variant/70 leading-relaxed">
-            {m.am_adminlock_desc_before()}<strong>ADMINISTRATOR</strong>{m.am_adminlock_desc_after()}
+          <p class="text-xs text-on-surface-variant leading-relaxed">
+            {m.am_adminlock_desc_before()}{m.am_adminlock_desc_after()}
           </p>
 
           {#if config.adminLockEnabled}
@@ -970,8 +1097,8 @@
 
               <!-- Rôles sécurité -->
               <div class="space-y-3 pt-2 border-t border-outline-variant/10">
-                <span class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.am_adminlock_security_roles()}</span>
-                <p class="text-xs text-on-surface-variant/50 ml-2">{m.am_adminlock_security_roles_desc()}</p>
+                <span class="text-xs font-semibold text-on-surface-variant ml-2">{m.am_adminlock_security_roles()}</span>
+                <p class="text-xs text-on-surface-variant ml-2">{m.am_adminlock_security_roles_desc()}</p>
                 {#if isOwner}
                   <div class="flex gap-2">
                     <div class="flex-1">
@@ -986,7 +1113,7 @@
                     <button
                       type="button"
                       onclick={addAdminLockSecurityRole}
-                      disabled={!selectedAdminLockSecurityRole}
+                      use:explainDisabled={(!selectedAdminLockSecurityRole) ? m.common_reason_pick_role() : ''}
                       class="px-4 py-2.5 bg-outline-variant/20 hover:bg-outline-variant/35 text-xs font-bold rounded-xl transition-all disabled:opacity-50"
                     >
                       {m.common_add()}
@@ -1010,8 +1137,8 @@
 
               <!-- Salon de notification -->
               <div class="space-y-1.5 pt-2 border-t border-outline-variant/10">
-                <label for="adminLockNotifyChannel" class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.am_adminlock_notify_channel()}</label>
-                <p class="text-xs text-on-surface-variant/50 ml-2 mb-1">{m.am_adminlock_notify_channel_desc()}</p>
+                <label for="adminLockNotifyChannel" class="text-xs font-semibold text-on-surface-variant ml-2">{m.am_adminlock_notify_channel()}</label>
+                <p class="text-xs text-on-surface-variant ml-2 mb-1">{m.am_adminlock_notify_channel_desc()}</p>
                 <select
                   id="adminLockNotifyChannel"
                   bind:value={config.adminLockNotifyChannelId}
@@ -1029,8 +1156,8 @@
               <div class="space-y-4 pt-2 border-t border-outline-variant/10">
                 <div class="flex items-center justify-between">
                   <div>
-                    <span class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.am_burst_title()}</span>
-                    <p class="text-xs text-on-surface-variant/50 ml-2 mt-1">
+                    <span class="text-xs font-semibold text-on-surface-variant ml-2">{m.am_burst_title()}</span>
+                    <p class="text-xs text-on-surface-variant ml-2 mt-1">
                       {m.am_burst_desc()}
                     </p>
                   </div>
@@ -1044,25 +1171,25 @@
                 {#if config.burstSuspendEnabled}
                   <div class="grid grid-cols-2 gap-4 animate-in fade-in duration-300">
                     <div class="space-y-1.5">
-                      <label for="burstFastLimit" class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.am_burst_fast()}</label>
+                      <label for="burstFastLimit" class="text-xs font-semibold text-on-surface-variant ml-2">{m.am_burst_fast()}</label>
                       <div class="flex items-center gap-2">
                         <input id="burstFastLimit" type="number" min="1" max="100" bind:value={config.burstSuspendFastLimit} disabled={!isOwner}
                           class="w-full bg-surface-container-high/45 border border-outline-variant/10 rounded-lg px-3 py-2.5 text-sm text-on-surface focus:outline-none" />
-                        <span class="text-xs text-on-surface-variant/50 whitespace-nowrap">{m.am_burst_act_per()}</span>
+                        <span class="text-xs text-on-surface-variant whitespace-nowrap">{m.am_burst_act_per()}</span>
                         <input type="number" min="1" max="3600" bind:value={config.burstSuspendFastWindowSec} disabled={!isOwner}
                           class="w-20 bg-surface-container-high/45 border border-outline-variant/10 rounded-lg px-3 py-2.5 text-sm text-on-surface focus:outline-none" />
-                        <span class="text-xs text-on-surface-variant/50">s</span>
+                        <span class="text-xs text-on-surface-variant">s</span>
                       </div>
                     </div>
                     <div class="space-y-1.5">
-                      <label for="burstSlowLimit" class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.am_burst_slow()}</label>
+                      <label for="burstSlowLimit" class="text-xs font-semibold text-on-surface-variant ml-2">{m.am_burst_slow()}</label>
                       <div class="flex items-center gap-2">
                         <input id="burstSlowLimit" type="number" min="1" max="500" bind:value={config.burstSuspendSlowLimit} disabled={!isOwner}
                           class="w-full bg-surface-container-high/45 border border-outline-variant/10 rounded-lg px-3 py-2.5 text-sm text-on-surface focus:outline-none" />
-                        <span class="text-xs text-on-surface-variant/50 whitespace-nowrap">{m.am_burst_act_per()}</span>
+                        <span class="text-xs text-on-surface-variant whitespace-nowrap">{m.am_burst_act_per()}</span>
                         <input type="number" min="1" max="3600" bind:value={config.burstSuspendSlowWindowSec} disabled={!isOwner}
                           class="w-20 bg-surface-container-high/45 border border-outline-variant/10 rounded-lg px-3 py-2.5 text-sm text-on-surface focus:outline-none" />
-                        <span class="text-xs text-on-surface-variant/50">s</span>
+                        <span class="text-xs text-on-surface-variant">s</span>
                       </div>
                     </div>
                   </div>
@@ -1090,10 +1217,10 @@
           <Papicon icon="ShieldAlert" size={20} class="text-orange-400" />
           <div>
             <p class="text-sm font-semibold text-on-surface">Captcha, détection de raid et verrous d'urgence</p>
-            <p class="text-xs text-on-surface-variant/70">Regroupés dans la page Anti-raid.</p>
+            <p class="text-xs text-on-surface-variant">Regroupés dans la page Anti-raid.</p>
           </div>
         </div>
-        <Papicon icon="chevron-right" size={16} class="shrink-0 text-on-surface-variant/60" />
+        <Papicon icon="chevron-right" size={16} class="shrink-0 text-on-surface-variant" />
       </a>
 
     {:else if activeTab === 'behavioral'}
@@ -1101,6 +1228,16 @@
            il s'appuie sur SpamDetectionConfig, pas sur AutoModConfig. -->
       <AntiSpamPanel />
 
+    {:else if activeTab === 'simulator'}
+      <div class="mt-6">
+        <RuleSimulator
+          draft={simulatorDraft}
+          saved={savedConfig}
+          bind:kind={simulatorKind}
+          canApply={canManageSettings}
+          onapply={applySimulation}
+        />
+      </div>
     {:else if activeTab === 'exceptions'}
       <div class="animate-in fade-in duration-300">
         <!-- Exempt rules (Bypass) -->
@@ -1113,7 +1250,7 @@
           <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
             <!-- Ignored roles -->
             <div class="space-y-3">
-              <span class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.am_exempt_roles()}</span>
+              <span class="text-xs font-semibold text-on-surface-variant ml-2">{m.am_exempt_roles()}</span>
               {#if canManageSettings}
                 <div class="flex gap-2">
                   <div class="flex-1">
@@ -1128,7 +1265,7 @@
                   <button 
                     type="button"
                     onclick={addBypassRole}
-                    disabled={!selectedBypassRole}
+                    use:explainDisabled={(!selectedBypassRole) ? m.common_reason_pick_role() : ''}
                     class="px-4 py-2.5 bg-outline-variant/20 hover:bg-outline-variant/35 text-xs font-bold rounded-xl transition-all disabled:opacity-50"
                   >
                     {m.common_add()}
@@ -1152,7 +1289,7 @@
 
             <!-- Ignored channels -->
             <div class="space-y-3 lg:border-l lg:border-outline-variant/10 lg:pl-8">
-              <span class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.am_exempt_channels()}</span>
+              <span class="text-xs font-semibold text-on-surface-variant ml-2">{m.am_exempt_channels()}</span>
               {#if canManageSettings}
                 <div class="flex gap-2">
                   <div class="flex-1">
@@ -1167,7 +1304,7 @@
                   <button 
                     type="button"
                     onclick={addBypassChannel}
-                    disabled={!selectedBypassChannel}
+                    use:explainDisabled={(!selectedBypassChannel) ? m.common_reason_pick_channel() : ''}
                     class="px-4 py-2.5 bg-outline-variant/20 hover:bg-outline-variant/35 text-xs font-bold rounded-xl transition-all disabled:opacity-50"
                   >
                     {m.common_add()}

@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { stripCustomEmoji } from '../../emojiParser';
+  import { explainDisabled } from '../../actions/explainDisabled';
   /**
    * Donjons du RPG : suites de boss du bestiaire, à enchaîner sans repos.
    *
@@ -109,7 +111,7 @@
   const bossByName = $derived(new Map(bosses.map((boss) => [boss.name, boss])));
   const bossOptions = $derived(bosses.map((boss) => ({
     id: boss.name,
-    name: `${boss.emoji} ${boss.name} · ${m.eco_dungeon_level_short({ level: boss.level })}${boss.enabled ? '' : ` · ${m.eco_dungeon_boss_exclusive()}`}`,
+    name: `${stripCustomEmoji(boss.emoji)} ${boss.name} · ${m.eco_dungeon_level_short({ level: boss.level })}${boss.enabled ? '' : ` · ${m.eco_dungeon_boss_exclusive()}`}`,
   })));
   const roles = $derived((dashboardStore.state.discordRoles || []).map((role: any) => ({ id: role.id, name: `@${role.name}` })));
   const titleOptions = $derived(titles.map((title) => ({ id: title.id, name: title.name })));
@@ -118,7 +120,7 @@
     for (const item of items) {
       if (!byName.has(item.name) || item.guildId) byName.set(item.name, item);
     }
-    return [...byName.values()].map((item) => ({ id: item.name, name: `${item.emoji} ${item.name}` }));
+    return [...byName.values()].map((item) => ({ id: item.name, name: `${stripCustomEmoji(item.emoji)} ${item.name}` }));
   });
 
   // Ce que les boss rapportent au minimum sur une partie complète, coffre compris : l'aléa
@@ -315,13 +317,14 @@
     <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-outline-variant/15 pb-4">
       <div>
         <h3 class="text-lg font-semibold">{m.eco_dungeon_title()}</h3>
-        <p class="text-xs text-on-surface-variant/60 mt-1 leading-relaxed max-w-2xl">{m.eco_dungeon_desc()}</p>
+        <p class="text-xs text-on-surface-variant mt-1 leading-relaxed max-w-2xl">{m.eco_dungeon_desc()}</p>
       </div>
       {#if canManage}
         <button
           type="button"
           onclick={openNew}
-          disabled={disabled || dungeons.length >= limits.dungeonsMax || bosses.length === 0}
+          disabled={disabled || dungeons.length >= limits.dungeonsMax}
+          use:explainDisabled={(bosses.length === 0) ? m.common_reason_select_one() : ''}
           class="px-4 py-2.5 bg-primary hover:bg-primary-hover text-on-primary text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <Papicon icon="Plus" size={14} /> {m.eco_dungeon_new_btn()}
@@ -334,9 +337,9 @@
         <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
       </div>
     {:else if bosses.length === 0}
-      <p class="text-xs text-on-surface-variant/60 italic">{m.eco_dungeon_no_boss()}</p>
+      <p class="text-xs text-on-surface-variant italic">{m.eco_dungeon_no_boss()}</p>
     {:else if dungeons.length === 0}
-      <p class="text-xs text-on-surface-variant/60 italic">{m.eco_dungeon_empty()}</p>
+      <p class="text-xs text-on-surface-variant italic">{m.eco_dungeon_empty()}</p>
     {:else}
       <div class="grid grid-cols-1 xl:grid-cols-2 gap-3">
         {#each dungeons as dungeon (dungeon.id)}
@@ -348,7 +351,7 @@
                 <div class="min-w-0">
                   <p class="font-semibold text-sm truncate">{dungeon.name}</p>
                   {#if dungeon.description}
-                    <p class="text-2xs text-on-surface-variant/60 line-clamp-2">{dungeon.description}</p>
+                    <p class="text-2xs text-on-surface-variant line-clamp-2">{dungeon.description}</p>
                   {/if}
                 </div>
               </div>
@@ -371,11 +374,11 @@
             <ol class="space-y-1">
               {#each dungeon.floors as floor, index}
                 <li class="flex items-center gap-2 text-xs">
-                  <span class="w-5 text-right text-on-surface-variant/50 font-mono">{index + 1}.</span>
+                  <span class="w-5 text-right text-on-surface-variant font-mono">{index + 1}.</span>
                   {#if floor.found}
                     <EmojiText value={floor.emoji ?? ''} size="0.875rem" />
                     <span class="font-semibold truncate">{floor.bossName}</span>
-                    <span class="text-on-surface-variant/50">{m.eco_dungeon_level_short({ level: floor.level ?? 0 })}</span>
+                    <span class="text-on-surface-variant">{m.eco_dungeon_level_short({ level: floor.level ?? 0 })}</span>
                     {#if floor.bossEnabled === false}
                       <span class="text-2xs font-semibold px-1.5 py-0.5 rounded-full bg-primary/10 text-primary">{m.eco_dungeon_boss_exclusive()}</span>
                     {/if}
@@ -386,26 +389,26 @@
               {/each}
             </ol>
 
-            <div class="flex flex-wrap gap-x-3 gap-y-1 text-2xs text-on-surface-variant/70">
+            <div class="flex flex-wrap gap-x-3 gap-y-1 text-2xs text-on-surface-variant">
               <span class="flex items-center gap-1"><Papicon icon="lock" size={11} /> {m.eco_dungeon_level_short({ level: dungeon.levelRequired })}</span>
               <span class="flex items-center gap-1"><Papicon icon="zap" size={11} /> {dungeon.energyCost}</span>
               <span class="flex items-center gap-1"><Papicon icon="clock" size={11} /> {dungeon.cooldownHours > 0 ? m.eco_dungeon_cooldown_value({ hours: dungeon.cooldownHours }) : m.eco_dungeon_cooldown_none()}</span>
             </div>
 
             <div class="flex flex-wrap gap-x-3 gap-y-1 text-2xs">
-              <span class="text-on-surface-variant/60">{m.eco_dungeon_chest()}</span>
+              <span class="text-on-surface-variant">{m.eco_dungeon_chest()}</span>
               {#if dungeon.completionCoins > 0}<span class="text-warning font-bold">+{dungeon.completionCoins} {currencyName}</span>{/if}
               {#if dungeon.completionXp > 0}<span class="text-sky-400 font-bold">+{dungeon.completionXp} {m.eco_dungeon_rpg_xp()}</span>{/if}
               {#if dungeon.completionItemName}<span class="font-semibold flex items-center gap-1"><Papicon icon="package" size={11} /> {dungeon.completionItemName}</span>{/if}
               {#if dungeon.completionTitle}<span class="font-semibold text-amber-300 flex items-center gap-1"><Papicon icon="award" size={11} /> {dungeon.completionTitle.name}</span>{/if}
               {#if dungeon.completionRoleId}<span class="font-semibold text-primary">{roleName(dungeon.completionRoleId)}</span>{/if}
               {#if !dungeon.completionCoins && !dungeon.completionXp && !dungeon.completionItemName && !dungeon.completionTitle && !dungeon.completionRoleId}
-                <span class="text-on-surface-variant/50 italic">{m.eco_dungeon_chest_empty()}</span>
+                <span class="text-on-surface-variant italic">{m.eco_dungeon_chest_empty()}</span>
               {/if}
             </div>
 
             <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs">
-              <span class="text-on-surface-variant/60">{m.eco_dungeon_first_clear()}</span>
+              <span class="text-on-surface-variant">{m.eco_dungeon_first_clear()}</span>
               {#if dungeon.firstClear}
                 <span class="font-semibold flex items-center gap-1"><Papicon icon="Trophy" size={11} /> {dungeon.firstClear.displayName ?? dungeon.firstClear.userId}</span>
                 {#if canManage}
@@ -425,12 +428,12 @@
                 {#if dungeon.firstClearTitle}<span class="font-semibold text-amber-300 flex items-center gap-1"><Papicon icon="award" size={11} /> {dungeon.firstClearTitle.name}</span>{/if}
                 {#if dungeon.firstClearRoleId}<span class="font-semibold text-primary">{roleName(dungeon.firstClearRoleId)}</span>{/if}
                 {#if !dungeon.firstClearCoins && !dungeon.firstClearXp && !dungeon.firstClearItemName && !dungeon.firstClearTitle && !dungeon.firstClearRoleId}
-                  <span class="text-on-surface-variant/50 italic">{m.eco_dungeon_first_clear_none()}</span>
+                  <span class="text-on-surface-variant italic">{m.eco_dungeon_first_clear_none()}</span>
                 {/if}
               {/if}
             </div>
 
-            <p class="text-2xs text-on-surface-variant/50">
+            <p class="text-2xs text-on-surface-variant">
               {m.eco_dungeon_stats({ runs: dungeon.runs, completions: dungeon.completions, defeats: dungeon.defeats })}
             </p>
 
@@ -468,57 +471,57 @@
 
       <div class="grid grid-cols-3 gap-3">
         <div class="col-span-2 space-y-1">
-          <label for="dungeonName" class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.eco_dungeon_field_name()}</label>
+          <label for="dungeonName" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_dungeon_field_name()}</label>
           <input id="dungeonName" type="text" maxlength="50" bind:value={editing.name} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs focus:outline-none" />
         </div>
         <div class="space-y-1">
-          <label for="dungeonEmoji" class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.eco_item_emoji()}</label>
+          <label for="dungeonEmoji" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_item_emoji()}</label>
           <div class="flex gap-2">
             <input id="dungeonEmoji" type="text" bind:value={editing.emoji} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs focus:outline-none" />
             <EmojiPicker bind:value={editing.emoji} />
           </div>
         </div>
         <div class="col-span-3 space-y-1">
-          <label for="dungeonDescription" class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.eco_dungeon_field_description()}</label>
+          <label for="dungeonDescription" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_dungeon_field_description()}</label>
           <textarea id="dungeonDescription" rows="2" maxlength="300" bind:value={editing.description} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs focus:outline-none resize-none"></textarea>
         </div>
       </div>
 
       <div class="grid grid-cols-3 gap-3">
         <div class="space-y-1">
-          <label for="dungeonLevel" class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.eco_dungeon_field_level()}</label>
+          <label for="dungeonLevel" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_dungeon_field_level()}</label>
           <input id="dungeonLevel" type="number" min="1" bind:value={editing.levelRequired} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2.5 text-xs focus:outline-none" />
         </div>
         <div class="space-y-1">
-          <label for="dungeonEnergy" class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.eco_dungeon_field_energy()}</label>
+          <label for="dungeonEnergy" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_dungeon_field_energy()}</label>
           <input id="dungeonEnergy" type="number" min="0" bind:value={editing.energyCost} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2.5 text-xs focus:outline-none" />
         </div>
         <div class="space-y-1">
-          <label for="dungeonCooldown" class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.eco_dungeon_field_cooldown()}</label>
+          <label for="dungeonCooldown" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_dungeon_field_cooldown()}</label>
           <input id="dungeonCooldown" type="number" min="0" max="720" bind:value={editing.cooldownHours} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2.5 text-xs focus:outline-none" />
         </div>
       </div>
-      <p class="text-2xs text-on-surface-variant/50 leading-relaxed -mt-3">{m.eco_dungeon_field_cooldown_hint()}</p>
+      <p class="text-2xs text-on-surface-variant leading-relaxed -mt-3">{m.eco_dungeon_field_cooldown_hint()}</p>
 
       <div class="space-y-3 pt-2 border-t border-outline-variant/5">
         <div>
           <h4 class="text-sm font-bold">{m.eco_dungeon_floors_title({ count: editing.bossNames.length, max: limits.floorsMax })}</h4>
-          <p class="text-xs text-on-surface-variant/60 mt-0.5 leading-relaxed">{m.eco_dungeon_floors_hint()}</p>
+          <p class="text-xs text-on-surface-variant mt-0.5 leading-relaxed">{m.eco_dungeon_floors_hint()}</p>
         </div>
 
         {#if editing.bossNames.length === 0}
-          <p class="text-2xs text-on-surface-variant/50 italic">{m.eco_dungeon_floors_empty()}</p>
+          <p class="text-2xs text-on-surface-variant italic">{m.eco_dungeon_floors_empty()}</p>
         {:else}
           <ol class="space-y-1.5">
             {#each editing.bossNames as bossName, index (`${index}:${bossName}`)}
               {@const boss = bossByName.get(bossName)}
               <li class="flex items-center gap-2 bg-surface-container-high/30 border border-outline-variant/10 rounded-lg px-3 py-2">
-                <span class="w-5 text-right text-xs text-on-surface-variant/50 font-mono">{index + 1}.</span>
+                <span class="w-5 text-right text-xs text-on-surface-variant font-mono">{index + 1}.</span>
                 <div class="flex-1 min-w-0 flex items-center gap-2 text-xs">
                   {#if boss}
                     <EmojiText value={boss.emoji} size="0.875rem" />
                     <span class="font-semibold truncate">{boss.name}</span>
-                    <span class="text-on-surface-variant/50 whitespace-nowrap">{m.eco_dungeon_level_short({ level: boss.level })} · {m.eco_dungeon_boss_hp({ hp: boss.health })}</span>
+                    <span class="text-on-surface-variant whitespace-nowrap">{m.eco_dungeon_level_short({ level: boss.level })} · {m.eco_dungeon_boss_hp({ hp: boss.health })}</span>
                     {#if !boss.enabled}
                       <span class="text-2xs font-semibold px-1.5 py-0.5 rounded-full bg-primary/10 text-primary whitespace-nowrap">{m.eco_dungeon_boss_exclusive()}</span>
                     {/if}
@@ -555,7 +558,7 @@
         {/if}
 
         {#if draftTotals && editing.bossNames.length > 0}
-          <p class="text-2xs text-on-surface-variant/60 leading-relaxed">
+          <p class="text-2xs text-on-surface-variant leading-relaxed">
             {m.eco_dungeon_totals({ health: draftTotals.health, level: draftTotals.topLevel, xp: draftTotals.xp, coins: draftTotals.coins, currency: currencyName })}
           </p>
         {/if}
@@ -564,19 +567,19 @@
       <div class="space-y-3 pt-2 border-t border-outline-variant/5">
         <div>
           <h4 class="text-sm font-bold">{m.eco_dungeon_chest()}</h4>
-          <p class="text-xs text-on-surface-variant/60 mt-0.5 leading-relaxed">{m.eco_dungeon_chest_hint()}</p>
+          <p class="text-xs text-on-surface-variant mt-0.5 leading-relaxed">{m.eco_dungeon_chest_hint()}</p>
         </div>
         <div class="grid grid-cols-2 gap-3">
           <div class="space-y-1">
-            <label for="dungeonCoins" class="text-xs font-semibold text-on-surface-variant/60 ml-2">{currencyName || m.eco_fish_field_value()}</label>
+            <label for="dungeonCoins" class="text-xs font-semibold text-on-surface-variant ml-2">{currencyName || m.eco_fish_field_value()}</label>
             <input id="dungeonCoins" type="number" min="0" bind:value={editing.completionCoins} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2.5 text-xs focus:outline-none" />
           </div>
           <div class="space-y-1">
-            <label for="dungeonXp" class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.eco_dungeon_rpg_xp()}</label>
+            <label for="dungeonXp" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_dungeon_rpg_xp()}</label>
             <input id="dungeonXp" type="number" min="0" bind:value={editing.completionXp} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2.5 text-xs focus:outline-none" />
           </div>
           <div class="col-span-2 space-y-1">
-            <span class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.eco_fish_reward_item()}</span>
+            <span class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_fish_reward_item()}</span>
             <SearchableSelect
               value={editing.completionItemName || null}
               options={itemOptions}
@@ -588,7 +591,7 @@
             />
           </div>
           <div class="space-y-1">
-            <span class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.eco_fish_reward_title()}</span>
+            <span class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_fish_reward_title()}</span>
             <SearchableSelect
               value={editing.completionTitleId || null}
               options={titleOptions}
@@ -600,7 +603,7 @@
             />
           </div>
           <div class="space-y-1">
-            <span class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.eco_fish_reward_role()}</span>
+            <span class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_fish_reward_role()}</span>
             <SearchableSelect
               value={editing.completionRoleId || null}
               options={roles}
@@ -617,7 +620,7 @@
         <div class="flex items-start justify-between gap-4">
           <div>
             <h4 class="text-sm font-bold">{m.eco_dungeon_first_clear()}</h4>
-            <p class="text-xs text-on-surface-variant/60 mt-0.5 leading-relaxed">{m.eco_dungeon_first_clear_hint()}</p>
+            <p class="text-xs text-on-surface-variant mt-0.5 leading-relaxed">{m.eco_dungeon_first_clear_hint()}</p>
           </div>
           <ToggleSwitch
             checked={editing.firstClearOn}
@@ -628,15 +631,15 @@
         {#if editing.firstClearOn}
         <div class="grid grid-cols-2 gap-3">
           <div class="space-y-1">
-            <label for="firstClearCoins" class="text-xs font-semibold text-on-surface-variant/60 ml-2">{currencyName || m.eco_fish_field_value()}</label>
+            <label for="firstClearCoins" class="text-xs font-semibold text-on-surface-variant ml-2">{currencyName || m.eco_fish_field_value()}</label>
             <input id="firstClearCoins" type="number" min="0" bind:value={editing.firstClearCoins} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2.5 text-xs focus:outline-none" />
           </div>
           <div class="space-y-1">
-            <label for="firstClearXp" class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.eco_dungeon_rpg_xp()}</label>
+            <label for="firstClearXp" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_dungeon_rpg_xp()}</label>
             <input id="firstClearXp" type="number" min="0" bind:value={editing.firstClearXp} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2.5 text-xs focus:outline-none" />
           </div>
           <div class="col-span-2 space-y-1">
-            <span class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.eco_fish_reward_item()}</span>
+            <span class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_fish_reward_item()}</span>
             <SearchableSelect
               value={editing.firstClearItemName || null}
               options={itemOptions}
@@ -648,7 +651,7 @@
             />
           </div>
           <div class="space-y-1">
-            <span class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.eco_fish_reward_title()}</span>
+            <span class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_fish_reward_title()}</span>
             <SearchableSelect
               value={editing.firstClearTitleId || null}
               options={titleOptions}
@@ -660,7 +663,7 @@
             />
           </div>
           <div class="space-y-1">
-            <span class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.eco_fish_reward_role()}</span>
+            <span class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_fish_reward_role()}</span>
             <SearchableSelect
               value={editing.firstClearRoleId || null}
               options={roles}
@@ -671,14 +674,14 @@
             />
           </div>
         </div>
-        <p class="text-2xs text-on-surface-variant/50 leading-relaxed">{m.eco_bestiary_first_kill_role_hint()}</p>
+        <p class="text-2xs text-on-surface-variant leading-relaxed">{m.eco_bestiary_first_kill_role_hint()}</p>
         {/if}
       </div>
 
       <div class="flex items-center justify-between pt-2 border-t border-outline-variant/5">
         <div>
           <h4 class="text-sm font-bold">{m.eco_dungeon_enabled_title()}</h4>
-          <p class="text-xs text-on-surface-variant/60 mt-0.5">{m.eco_dungeon_enabled_desc()}</p>
+          <p class="text-xs text-on-surface-variant mt-0.5">{m.eco_dungeon_enabled_desc()}</p>
         </div>
         <ToggleSwitch checked={editing.enabled} onToggle={(value: boolean) => { if (editing) editing.enabled = value; }} />
       </div>
@@ -690,7 +693,8 @@
         <button
           type="button"
           onclick={save}
-          disabled={actionState.state.loading || editing.bossNames.length === 0 || !editing.name.trim()}
+          disabled={actionState.state.loading}
+          use:explainDisabled={(editing.bossNames.length === 0) ? m.common_reason_select_one() : (!editing.name.trim()) ? m.common_reason_fill_field() : ''}
           class="px-4 py-2 bg-primary hover:bg-primary-hover text-on-primary text-body-sm font-medium rounded-lg transition-all disabled:opacity-50"
         >
           {m.eco_btn_save()}

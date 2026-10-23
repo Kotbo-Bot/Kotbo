@@ -258,7 +258,7 @@ export async function updateSidebarFavorites(sidebarFavorites: string[], guildId
     });
 
     if (!response.ok) {
-      let message = 'Erreur lors de la sauvegarde des favoris';
+      let message = 'Impossible d\'enregistrer les favoris. Réessaie.';
       try {
         const data = await response.json();
         message = data.error || data.message || message;
@@ -364,7 +364,7 @@ export interface GuildEmoji {
   available: boolean;
   /** Image du CDN Discord, en 64px : ce que le sélecteur affiche. */
   url: string;
-  /** `<:nom:id>` — la forme que Discord rend dans un message. */
+  /** `<:nom:id>` : la forme que Discord rend dans un message. */
   mention: string;
 }
 

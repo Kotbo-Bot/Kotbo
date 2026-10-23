@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { explainDisabled } from '../lib/actions/explainDisabled';
   import { m } from '../lib/i18n';
   import { channelDisplayName } from '../lib/channelUtils';
   import { onMount } from 'svelte';
@@ -257,7 +258,7 @@
             </div>
           {/if}
           {#if savedTemplates.length === 0}
-            <p class="text-xs text-on-surface-variant/50 font-medium">{m.embed_builder_no_templates()}</p>
+            <p class="text-xs text-on-surface-variant font-medium">{m.embed_builder_no_templates()}</p>
           {:else}
             <ul class="space-y-2 max-h-40 overflow-y-auto pr-1">
               {#each savedTemplates as tpl (tpl.id)}
@@ -296,7 +297,7 @@
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div class="space-y-1.5">
-            <label for="targetChan" class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.embed_builder_channel_label()}</label>
+            <label for="targetChan" class="text-xs font-semibold text-on-surface-variant ml-2">{m.embed_builder_channel_label()}</label>
             <SearchableSelect 
               id="targetChan"
               bind:value={targetChannelId} 
@@ -308,7 +309,7 @@
           </div>
 
           <div class="space-y-1.5">
-            <label for="msgId" class="text-xs font-semibold text-on-surface-variant/60 ml-2">{m.embed_builder_msg_id_label()}</label>
+            <label for="msgId" class="text-xs font-semibold text-on-surface-variant ml-2">{m.embed_builder_msg_id_label()}</label>
             <input 
               id="msgId"
               type="text" 
@@ -323,7 +324,7 @@
         <div class="space-y-4 pt-4 border-t border-outline-variant/10">
           <h4 class="text-xs font-semibold text-on-surface-variant/80">{m.embed_builder_msg_text_header()}</h4>
           <div class="space-y-1.5">
-            <label for="msgContent" class="text-2xs font-bold text-on-surface-variant/60 ml-2 uppercase">{m.embed_builder_content_label()}</label>
+            <label for="msgContent" class="text-2xs font-bold text-on-surface-variant ml-2 uppercase">{m.embed_builder_content_label()}</label>
             <textarea 
               id="msgContent"
               bind:value={content} 
@@ -338,7 +339,7 @@
           <h4 class="text-xs font-semibold text-on-surface-variant/80">{m.embed_builder_author_header()}</h4>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div class="space-y-1.5">
-              <label for="authorName" class="text-2xs font-bold text-on-surface-variant/60 ml-2 uppercase">{m.embed_builder_author_name_label()}</label>
+              <label for="authorName" class="text-2xs font-bold text-on-surface-variant ml-2 uppercase">{m.embed_builder_author_name_label()}</label>
               <input 
                 id="authorName"
                 type="text" 
@@ -349,7 +350,7 @@
               />
             </div>
             <div class="space-y-1.5">
-              <label for="authorIcon" class="text-2xs font-bold text-on-surface-variant/60 ml-2 uppercase">{m.embed_builder_author_icon_label()}</label>
+              <label for="authorIcon" class="text-2xs font-bold text-on-surface-variant ml-2 uppercase">{m.embed_builder_author_icon_label()}</label>
               <input 
                 id="authorIcon"
                 type="url" 
@@ -360,7 +361,7 @@
               />
             </div>
             <div class="space-y-1.5 sm:col-span-2">
-              <label for="authorUrl" class="text-2xs font-bold text-on-surface-variant/60 ml-2 uppercase">{m.embed_builder_author_url_label()}</label>
+              <label for="authorUrl" class="text-2xs font-bold text-on-surface-variant ml-2 uppercase">{m.embed_builder_author_url_label()}</label>
               <input 
                 id="authorUrl"
                 type="url" 
@@ -376,7 +377,7 @@
         <div class="space-y-4 pt-4 border-t border-outline-variant/10">
           <h4 class="text-xs font-semibold text-on-surface-variant/80">{m.embed_builder_main_content_header()}</h4>
           <div class="space-y-1.5">
-            <label for="embedTitle" class="text-2xs font-bold text-on-surface-variant/60 ml-2 uppercase">{m.embed_builder_embed_title_label()}</label>
+            <label for="embedTitle" class="text-2xs font-bold text-on-surface-variant ml-2 uppercase">{m.embed_builder_embed_title_label()}</label>
             <input 
               id="embedTitle"
               type="text" 
@@ -388,7 +389,7 @@
           </div>
 
           <div class="space-y-1.5">
-            <label for="embedUrl" class="text-2xs font-bold text-on-surface-variant/60 ml-2 uppercase">{m.embed_builder_embed_url_label()}</label>
+            <label for="embedUrl" class="text-2xs font-bold text-on-surface-variant ml-2 uppercase">{m.embed_builder_embed_url_label()}</label>
             <input 
               id="embedUrl"
               type="url" 
@@ -400,7 +401,7 @@
           </div>
 
           <div class="space-y-1.5">
-            <label for="embedDesc" class="text-2xs font-bold text-on-surface-variant/60 ml-2 uppercase">{m.embed_builder_desc_label()}</label>
+            <label for="embedDesc" class="text-2xs font-bold text-on-surface-variant ml-2 uppercase">{m.embed_builder_desc_label()}</label>
             <textarea 
               id="embedDesc"
               bind:value={embed.description} 
@@ -412,7 +413,7 @@
 
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div class="space-y-1.5">
-              <label for="embedColor" class="text-2xs font-bold text-on-surface-variant/60 ml-2 uppercase">{m.embed_builder_color_label()}</label>
+              <label for="embedColor" class="text-2xs font-bold text-on-surface-variant ml-2 uppercase">{m.embed_builder_color_label()}</label>
               <div class="flex gap-2">
                 <input 
                   id="embedColor"
@@ -432,7 +433,7 @@
             </div>
             
             <div class="space-y-1.5">
-              <label for="embedThumbnail" class="text-2xs font-bold text-on-surface-variant/60 ml-2 uppercase">{m.embed_builder_thumbnail_label()}</label>
+              <label for="embedThumbnail" class="text-2xs font-bold text-on-surface-variant ml-2 uppercase">{m.embed_builder_thumbnail_label()}</label>
               <input 
                 id="embedThumbnail"
                 type="url" 
@@ -445,7 +446,7 @@
           </div>
 
           <div class="space-y-1.5">
-            <label for="embedImage" class="text-2xs font-bold text-on-surface-variant/60 ml-2 uppercase">{m.embed_builder_image_label()}</label>
+            <label for="embedImage" class="text-2xs font-bold text-on-surface-variant ml-2 uppercase">{m.embed_builder_image_label()}</label>
             <input 
               id="embedImage"
               type="url" 
@@ -464,7 +465,8 @@
             <button 
               type="button" 
               onclick={addField} 
-              disabled={embed.fields.length >= 25 || !canManageSettings}
+              disabled={embed.fields.length >= 25}
+              use:explainDisabled={(!canManageSettings) ? m.common_reason_no_permission() : ''}
               class="text-xs font-bold text-primary hover:text-primary/80 transition-colors flex items-center gap-1"
             >
               <Papicon icon="Plus" size={14} /> {m.embed_builder_add_field_btn()}
@@ -476,7 +478,7 @@
               <div class="p-4 rounded-lg bg-surface-container-high/20 border border-outline-variant/5 space-y-3 relative group">
                 <div class="flex gap-2">
                   <div class="flex-1 space-y-1">
-                    <label for={`fldName-${idx}`} class="text-2xs font-bold text-on-surface-variant/50 ml-1 uppercase">{m.embed_builder_field_title_label()}</label>
+                    <label for={`fldName-${idx}`} class="text-2xs font-bold text-on-surface-variant ml-1 uppercase">{m.embed_builder_field_title_label()}</label>
                     <input 
                       id={`fldName-${idx}`}
                       type="text" 
@@ -500,7 +502,7 @@
                 </div>
 
                 <div class="space-y-1">
-                  <label for={`fldVal-${idx}`} class="text-2xs font-bold text-on-surface-variant/50 ml-1 uppercase">{m.embed_builder_field_val_label()}</label>
+                  <label for={`fldVal-${idx}`} class="text-2xs font-bold text-on-surface-variant ml-1 uppercase">{m.embed_builder_field_val_label()}</label>
                   <textarea 
                     id={`fldVal-${idx}`}
                     bind:value={fld.value} 
@@ -519,7 +521,7 @@
                     class="rounded border-outline-variant/20 text-primary focus:ring-primary/20"
                     disabled={!canManageSettings}
                   />
-                  <label for={`fldInline-${idx}`} class="text-2xs font-bold text-on-surface-variant/60 uppercase">{m.embed_builder_field_inline_label()}</label>
+                  <label for={`fldInline-${idx}`} class="text-2xs font-bold text-on-surface-variant uppercase">{m.embed_builder_field_inline_label()}</label>
                 </div>
               </div>
             {/each}
@@ -530,7 +532,7 @@
           <h4 class="text-xs font-semibold text-on-surface-variant/80">{m.embed_builder_footer_header()}</h4>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div class="space-y-1.5">
-              <label for="footerText" class="text-2xs font-bold text-on-surface-variant/60 ml-2 uppercase">{m.embed_builder_footer_text_label()}</label>
+              <label for="footerText" class="text-2xs font-bold text-on-surface-variant ml-2 uppercase">{m.embed_builder_footer_text_label()}</label>
               <input 
                 id="footerText"
                 type="text" 
@@ -541,7 +543,7 @@
               />
             </div>
             <div class="space-y-1.5">
-              <label for="footerIcon" class="text-2xs font-bold text-on-surface-variant/60 ml-2 uppercase">{m.embed_builder_footer_icon_label()}</label>
+              <label for="footerIcon" class="text-2xs font-bold text-on-surface-variant ml-2 uppercase">{m.embed_builder_footer_icon_label()}</label>
               <input 
                 id="footerIcon"
                 type="url" 
@@ -559,7 +561,7 @@
                 class="rounded border-outline-variant/20 text-primary focus:ring-primary/20"
                 disabled={!canManageSettings}
               />
-              <label for="embedTimestamp" class="text-2xs font-bold text-on-surface-variant/60 uppercase">{m.embed_builder_timestamp_label()}</label>
+              <label for="embedTimestamp" class="text-2xs font-bold text-on-surface-variant uppercase">{m.embed_builder_timestamp_label()}</label>
             </div>
           </div>
         </div>
@@ -568,7 +570,8 @@
           <div class="pt-6 border-t border-outline-variant/15 flex justify-end">
             <button 
               onclick={handleSend}
-              disabled={actionState.state.loading || !targetChannelId}
+              disabled={actionState.state.loading}
+              use:explainDisabled={(!targetChannelId) ? m.common_reason_pick_channel() : ''}
               class="px-8 py-3.5 bg-primary text-on-primary font-medium text-body-sm rounded-lg transition-all disabled:opacity-50"
             >
               {targetMessageId.trim() ? m.embed_builder_edit_btn() : m.embed_builder_publish_btn()}
@@ -586,7 +589,7 @@
 
         <div class="p-6 rounded-xl bg-surface-container-low/30 border border-outline-variant/10 flex flex-col gap-4 select-none relative overflow-hidden">
           <div class="flex items-start gap-4">
-            <div class="w-10 h-10 rounded-full bg-outline-variant/30 flex items-center justify-center text-xs font-semibold text-on-surface-variant/60">
+            <div class="w-10 h-10 rounded-full bg-outline-variant/30 flex items-center justify-center text-xs font-semibold text-on-surface-variant">
               BOT
             </div>
             <div class="flex-1 min-w-0">

@@ -1,4 +1,3 @@
-import { errorMessage } from '../../utils/errors.js';
 import type { SlashCommandDefinition } from '../../commands.js';
 import { SlashCommandBuilder, type ChatInputCommandInteraction, EmbedBuilder, MessageFlags } from 'discord.js';
 import prisma from '../../utils/db.js';
@@ -6,6 +5,7 @@ import { getOrCreateRpgProfile, getOrCreateEconomyConfig, registerGambleAttempt,
 import { errorEmbed, COLORS } from '../../utils/embeds.js';
 import { getCommandMetadata } from '../../utils/i18n.js';
 import * as m from '../../lib/paraglide/messages.js';
+import { publicErrorMessage } from '../../utils/publicError.js';
 
 const meta = getCommandMetadata('b3_roulette');
 
@@ -122,7 +122,7 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
     await interaction.reply({ embeds: [embed] });
   } catch (err: unknown) {
     await interaction.reply({
-      embeds: [errorEmbed('Erreur', errorMessage(err) || 'Impossible de jouer à la roulette.')],
+      embeds: [errorEmbed('Erreur', publicErrorMessage(err, 'Impossible de jouer à la roulette.'))],
       flags: [MessageFlags.Ephemeral]
     });
   }

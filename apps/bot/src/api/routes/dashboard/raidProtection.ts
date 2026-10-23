@@ -31,7 +31,7 @@ const SPAM_PATCHABLE_FIELDS = [
   'logThreshold', 'deleteThreshold', 'timeoutThreshold', 'banThreshold',
   'timeoutMinutes', 'alertChannelId',
   'bypassRoleIds', 'bypassChannelIds',
-  'typingSignalEnabled', 'crossChannelEnabled', 'duplicateEnabled',
+  'typingSignalEnabled', 'pasteSignalEnabled', 'crossChannelEnabled', 'duplicateEnabled',
   'cadenceEnabled', 'contentEnabled', 'trustEnabled',
   'windowSeconds', 'crossChannelThreshold', 'duplicateSimilarity',
 ] as const;
@@ -51,7 +51,7 @@ const PATCHABLE_FIELDS = [
   'rolePersistEnabled', 'rolePersistMode', 'rolePersistRoleIds', 'rolePersistMaxDays',
   'scamFilterEnabled', 'scamFilterAction', 'scamFilterTimeoutMin', 'scamFilterCustomDomains',
   'scamFilterWhitelist', 'scamFilterAlertChannelId', 'scamImageFilterEnabled',
-  'scamQrFilterEnabled', 'scamQrTrustedMessages',
+  'scamQrFilterEnabled', 'scamQrTrustedMessages', 'scamOcrEnabled',
   'inviteGuardEnabled', 'inviteRequireUnitary', 'inviteValidationEnabled',
   'inviteSpamThreshold', 'inviteSpamWindowSec', 'inviteAlertChannelId', 'inviteBypassRoleIds',
 ] as const;
