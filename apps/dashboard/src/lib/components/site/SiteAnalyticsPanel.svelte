@@ -15,6 +15,8 @@
   import { toast } from '../../stores/toast.svelte';
   import { m } from '../../i18n';
   import { fetchSiteAnalytics, type SiteAnalyticsReport } from '../../api/site';
+  import { isDashboardApiError } from '../../api/errors';
+  import EmptyState from '../EmptyState.svelte';
   import { siteErrorMessage } from './siteErrors';
   import SiteFunnelCard from './SiteFunnelCard.svelte';
 
@@ -23,6 +25,7 @@
   let days = $state('30');
   let report = $state<SiteAnalyticsReport | null>(null);
   let loading = $state(true);
+  let siteMissing = $state(false);
   let metric = $state<'views' | 'visitors'>('views');
 
   const periods: FilterOption[] = [
@@ -36,7 +39,9 @@
     try {
       report = (await fetchSiteAnalytics(Number(days), guildId)).report;
     } catch (err) {
-      toast.error(siteErrorMessage(err));
+      // L'onglet Analytics s'affiche aussi sur un serveur sans site : pas une erreur.
+      if (isDashboardApiError(err) && (err.data as { error?: string } | undefined)?.error === 'site_missing') siteMissing = true;
+      else toast.error(siteErrorMessage(err));
     } finally {
       loading = false;
     }
@@ -60,6 +65,9 @@
   const DEVICE_LABELS: Record<string, () => string> = { mobile: () => m.ste_device_mobile(), tablet: () => m.ste_device_tablet(), desktop: () => m.ste_device_desktop() };
 </script>
 
+{#if siteMissing}
+  <EmptyState icon="globe" title={m.ste_err_site_missing()} description={m.ste_create_desc()} actionLabel={m.ste_create_title()} actionHref="/site" />
+{:else}
 <div class="space-y-4">
   <div class="flex justify-end">
     <FilterPills label={m.ste_period()} options={periods} value={days} onchange={(value) => { days = value; void load(); }} />
@@ -101,3 +109,4 @@
     </div>
   {/if}
 </div>
+{/if}
