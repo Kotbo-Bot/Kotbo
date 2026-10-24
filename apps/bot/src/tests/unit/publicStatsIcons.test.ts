@@ -1,12 +1,23 @@
-import { afterEach, describe, expect, test } from 'bun:test';
+import { afterEach, describe, expect, mock, test } from 'bun:test';
 import type { Client } from 'discord.js';
+
+const FEATURED = '506029988680695818';
+const featuredRows = [
+  { guildId: FEATURED, iconUrl: `https://cdn.discordapp.com/icons/${FEATURED}/6fbbb2b172d8677d849cee9c80485cf8.webp?size=128` },
+];
+const db = {
+  featuredGuild: {
+    findUnique: async ({ where }: { where: { guildId: string } }) =>
+      featuredRows.find((row) => row.guildId === where.guildId) ?? null,
+  },
+};
+mock.module('../../utils/db.js', () => ({ default: db, prisma: db, prismaRead: db }));
 
 const { createPublicStatsRouter } = await import('../../api/hono/routes/public/stats.js');
 
 // Aucun serveur en cache : la route retombe sur les icônes de repli, ce qui
 // garde le test hors-ligne une fois `fetch` remplacé.
 const emptyClient = { guilds: { cache: new Map() } } as unknown as Client;
-const FEATURED = '506029988680695818';
 const realFetch = globalThis.fetch;
 
 afterEach(() => {
