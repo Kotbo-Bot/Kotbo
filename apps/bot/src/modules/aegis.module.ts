@@ -23,7 +23,7 @@ import { isAnalyticsCollectionEnabled } from '../services/analytics/analyticsCon
 import { getAegisConfig, type AegisRuntimeConfig } from '../services/moderation/aegis/aegisConfig.js';
 import { enqueueAegisJob, startAegisQueue, type AegisJob } from '../services/moderation/aegis/aegisQueue.js';
 import { processAegisJob, setAegisDiscordClient } from '../services/moderation/aegis/aegisProcessor.js';
-import { restoreDueSlowmodes } from '../services/moderation/aegis/aegisModules.js';
+import { isTicketChannel, restoreDueSlowmodes } from '../services/moderation/aegis/aegisModules.js';
 import { excerptOf, prepareText } from '../services/moderation/aegis/aegisText.js';
 import { getAegisClient } from '../services/moderation/aegis/aegisClient.js';
 
@@ -31,9 +31,9 @@ const MODULE_NAME = 'aegis';
 const RESTORE_SWEEP_MS = 60_000;
 
 /**
- * Membre exempté : admin, ou exempté par AutoMod ou par AegisAI. Son message
- * est noté comme les autres (aucun angle mort), mais le bot ne le sanctionne
- * jamais seul : au-dessus du seuil, il part en revue.
+ * Membre exempté : admin, ou exempté par AutoMod ou par AegisAI. Sauf
+ * `analyzeExempt` coupé, son message est noté comme les autres, mais le bot ne
+ * le sanctionne jamais seul : au-dessus du seuil, il part en revue.
  */
 async function isExempt(member: GuildMember | null, channelId: string, parentId: string | null, config: AegisRuntimeConfig): Promise<boolean> {
   if (!member) return false;
@@ -57,15 +57,26 @@ function parentOf(message: Message): string | null {
   return message.channel.isThread() ? message.channel.parentId : null;
 }
 
+/** Portée réglée au dashboard. Un ticket suit son propre réglage, même hors portée. */
+async function inScope(message: Message, config: AegisRuntimeConfig): Promise<boolean> {
+  const channel = message.channel;
+  if (config.analyzeMessages
+    && (config.analyzeThreads || !channel.isThread())
+    && (config.analyzeVoiceChats || !channel.isVoiceBased())) return true;
+  return config.analyzeTickets && isTicketChannel(message.guildId!, message.channelId);
+}
+
 async function onMessage(message: Message): Promise<void> {
   if (!message.guild || message.author.bot || message.system || message.webhookId) return;
   const text = prepareText(message.content);
   if (!text) return;
   const config = await getAegisConfig(message.guild.id);
   if (!config || !getAegisClient().configured) return;
+  if (!(await inScope(message, config))) return;
 
   const parentId = parentOf(message);
   const exempt = await isExempt(message.member, message.channelId, parentId, config);
+  if (exempt && !config.analyzeExempt) return;
   const job: AegisJob = {
     source: 'MESSAGE',
     guildId: message.guild.id,
@@ -93,7 +104,10 @@ async function onMessageUpdate(oldMessage: Message | PartialMessage, newMessage:
   if (!oldMessage.partial && oldMessage.content === message.content) return;
   const text = prepareText(message.content);
   if (!text) return;
+  if (!(await inScope(message, config))) return;
   const parentId = parentOf(message);
+  const exempt = await isExempt(message.member, message.channelId, parentId, config);
+  if (exempt && !config.analyzeExempt) return;
 
   await enqueueAegisJob({
     source: 'EDIT',
@@ -105,7 +119,7 @@ async function onMessageUpdate(oldMessage: Message | PartialMessage, newMessage:
     text,
     excerpt: excerptOf(message.content),
     targetUserId: targetOf(message),
-    exempt: await isExempt(message.member, message.channelId, parentId, config),
+    exempt,
     countStats: false,
     enqueuedAt: Date.now(),
   });
@@ -118,6 +132,8 @@ async function checkNickname(member: GuildMember): Promise<void> {
   const name = member.nickname ?? member.user.globalName ?? member.user.username;
   const text = prepareText(name);
   if (!text) return;
+  const exempt = await isExempt(member, '', null, config);
+  if (exempt && !config.analyzeExempt) return;
 
   await enqueueAegisJob({
     source: 'NICKNAME',
@@ -129,7 +145,7 @@ async function checkNickname(member: GuildMember): Promise<void> {
     text,
     excerpt: excerptOf(name, 100),
     targetUserId: null,
-    exempt: await isExempt(member, '', null, config),
+    exempt,
     countStats: false,
     enqueuedAt: Date.now(),
   });

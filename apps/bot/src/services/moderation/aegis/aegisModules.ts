@@ -300,7 +300,11 @@ async function ticketOfChannel(guildId: string, channelId: string): Promise<Tick
   });
 }
 
-const BOOSTABLE_PRIORITIES = new Set(['LOW', 'NORMAL']);
+export async function isTicketChannel(guildId: string, channelId: string): Promise<boolean> {
+  return (await ticketOfChannel(guildId, channelId)).id !== null;
+}
+
+const BOOSTABLE_PRIORITIES =new Set(['LOW', 'NORMAL']);
 
 /**
  * Humeur de l'auteur d'un ticket : dernière émotion marquée et pic de
