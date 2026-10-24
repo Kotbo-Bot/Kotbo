@@ -64,11 +64,6 @@ const ICON_CACHE_TTL = 6 * 60 * 60 * 1000; // 6 heures
 /** Indexé par URL source : une icône changée sur Discord change de clé. */
 const iconCache = new Map<string, { body: ArrayBuffer; type: string; at: number }>();
 
-function featuredIconSource(client: Client, featured: { guildId: string; iconUrl: string | null }): string | null {
-  const guild = client.guilds.cache.get(featured.guildId);
-  return guild?.iconURL({ size: 128 }) || featured.iconUrl || null;
-}
-
 /** Chemin de l'icône relayée, relatif à l'origine de l'API. */
 function featuredIconPath(guildId: string): string {
   return `/api/public/stats/icons/${guildId}`;
@@ -236,26 +231,14 @@ export function createPublicStatsRouter(_client: Client) {
         isSelfHosted: b.isSelfHosted,
       }));
 
-      // Retrieve dynamic server stats
-      const featured = await prisma.featuredGuild.findMany({ orderBy: { position: 'asc' } });
-      const servers = featured.map((f) => {
-        const guild = _client.guilds.cache.get(f.guildId);
-        const iconUrl = featuredIconSource(_client, f) ? featuredIconPath(f.guildId) : null;
-        if (guild) {
-          return {
-            name: guild.name,
-            iconUrl,
-            memberCount: guild.memberCount,
-            description: guild.description || f.description,
-          };
-        }
-        return {
-          name: f.name,
-          iconUrl,
-          memberCount: f.memberCount,
-          description: f.description,
-        };
-      });
+      // Serveurs de 1000 membres et plus, tenus à jour par syncFeaturedGuilds
+      const featured = await prisma.featuredGuild.findMany({ orderBy: { memberCount: 'desc' } });
+      const servers = featured.map((f) => ({
+        name: f.name,
+        iconUrl: f.iconUrl ? featuredIconPath(f.guildId) : null,
+        memberCount: f.memberCount,
+        description: f.description,
+      }));
 
       return c.json({
         totalGuilds,
@@ -274,9 +257,9 @@ export function createPublicStatsRouter(_client: Client) {
     const guildId = c.req.param('guildId');
     const featured = await prisma.featuredGuild.findUnique({
       where: { guildId },
-      select: { guildId: true, iconUrl: true },
+      select: { iconUrl: true },
     }).catch(() => null);
-    const source = featured ? featuredIconSource(_client, featured) : null;
+    const source = featured?.iconUrl;
     if (!source) return c.json({ error: 'Not found' }, 404);
 
     let entry = iconCache.get(source);
