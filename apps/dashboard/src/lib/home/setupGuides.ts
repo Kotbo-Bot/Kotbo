@@ -70,12 +70,18 @@ const SETUP_GUIDES: Record<string, SetupGuide> = {
   },
 };
 
+/** Etapes sans champ a montrer : seuls leur nom et leur raison sont traduits ici. */
+const STEP_TEXTS: Record<string, { title: () => string; why: () => string }> = {
+  installed: { title: m.setup_step_installed_title, why: m.setup_step_installed_why },
+  timezone: { title: m.setup_step_timezone_title, why: m.setup_step_timezone_why },
+};
+
 export function setupStepTitle(gap: Pick<HomeSetupGap, 'key' | 'label'>): string {
-  return SETUP_GUIDES[gap.key]?.title() ?? gap.label;
+  return (SETUP_GUIDES[gap.key] ?? STEP_TEXTS[gap.key])?.title() ?? gap.label;
 }
 
 export function setupStepWhy(gap: Pick<HomeSetupGap, 'key' | 'why'>): string | undefined {
-  return SETUP_GUIDES[gap.key]?.why() ?? gap.why;
+  return (SETUP_GUIDES[gap.key] ?? STEP_TEXTS[gap.key])?.why() ?? gap.why;
 }
 
 /** Ouvre la page de l'etape et, quand on sait ou, montre le champ. */
