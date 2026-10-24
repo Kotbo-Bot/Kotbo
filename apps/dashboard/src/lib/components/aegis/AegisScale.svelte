@@ -18,6 +18,20 @@
   } = $props();
 
   const clamp = (v: number) => Math.min(100, Math.max(0, v));
+
+  /** Écart en points sous lequel deux étiquettes se chevauchent. */
+  const MIN_GAP = 8;
+
+  // Seuils proches : une seule étiquette « 80–84 ». Seuil auto contre 100 : la borne s'efface.
+  const labels = $derived.by(() => {
+    const r = clamp(review);
+    const a = clamp(auto);
+    const out = [{ at: 0, text: '0' }];
+    if (a - r < MIN_GAP) out.push({ at: (r + a) / 2, text: `${review}–${auto}` });
+    else out.push({ at: r, text: String(review) }, { at: a, text: String(auto) });
+    if (100 - a >= MIN_GAP) out.push({ at: 100, text: '100' });
+    return out;
+  });
 </script>
 
 <div class="scale" role="img" aria-label={`${m.aegis_scale_label()} : ${m.aegis_zone_review()} ${review}, ${m.aegis_zone_auto()} ${auto}${marker !== null ? `, ${marker}` : ''}`}>
@@ -30,10 +44,10 @@
     {/if}
   </div>
   <div class="scale__labels" aria-hidden="true">
-    <span style="left: 0;">0</span>
-    <span style="left: {clamp(review)}%;">{review}</span>
-    <span style="left: {clamp(auto)}%;">{auto}</span>
-    <span style="left: 100%;">100</span>
+    <!-- Le décalage suit la position : collée à gauche à 0, centrée à 50, collée à droite à 100. -->
+    {#each labels as label (label.text)}
+      <span style="left: {label.at}%; transform: translateX(-{label.at}%);">{label.text}</span>
+    {/each}
   </div>
   <div class="scale__legend" aria-hidden="true">
     <span><i class="dot dot--none"></i>{m.aegis_zone_none()}</span>
@@ -98,15 +112,7 @@
 
   .scale__labels span {
     position: absolute;
-    transform: translateX(-50%);
-  }
-
-  .scale__labels span:first-child {
-    transform: none;
-  }
-
-  .scale__labels span:last-child {
-    transform: translateX(-100%);
+    white-space: nowrap;
   }
 
   .scale__legend {
