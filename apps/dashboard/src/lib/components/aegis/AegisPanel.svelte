@@ -327,6 +327,20 @@
         <div class="col">
           <SectionCard title={m.aegis_scope_title()} description={m.aegis_scope_desc()} icon="search">
             <div class="rows">
+              <SettingsRow label={m.aegis_messages()} description={m.aegis_messages_desc()}>
+                <ToggleSwitch checked={config.analyzeMessages} onToggle={(v: boolean) => (config!.analyzeMessages = v)} disabled={!canEdit} ariaLabel={m.aegis_messages()} />
+              </SettingsRow>
+              {#if config.analyzeMessages}
+                <SettingsRow label={m.aegis_threads()} description={m.aegis_threads_desc()}>
+                  <ToggleSwitch checked={config.analyzeThreads} onToggle={(v: boolean) => (config!.analyzeThreads = v)} disabled={!canEdit} ariaLabel={m.aegis_threads()} />
+                </SettingsRow>
+                <SettingsRow label={m.aegis_voice_chats()} description={m.aegis_voice_chats_desc()}>
+                  <ToggleSwitch checked={config.analyzeVoiceChats} onToggle={(v: boolean) => (config!.analyzeVoiceChats = v)} disabled={!canEdit} ariaLabel={m.aegis_voice_chats()} />
+                </SettingsRow>
+              {/if}
+              <SettingsRow label={m.aegis_exempt_scope()} description={m.aegis_exempt_scope_desc()}>
+                <ToggleSwitch checked={config.analyzeExempt} onToggle={(v: boolean) => (config!.analyzeExempt = v)} disabled={!canEdit} ariaLabel={m.aegis_exempt_scope()} />
+              </SettingsRow>
               <SettingsRow label={m.aegis_edits()} description={m.aegis_edits_desc()}>
                 <ToggleSwitch checked={config.analyzeEdits} onToggle={(v: boolean) => (config!.analyzeEdits = v)} disabled={!canEdit} ariaLabel={m.aegis_edits()} />
               </SettingsRow>
