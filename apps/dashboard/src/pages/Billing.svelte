@@ -23,6 +23,7 @@
   import Callout from '../lib/components/ui/Callout.svelte';
   import Button from '../lib/components/ui/Button.svelte';
   import { confetti } from '../lib/onboarding/celebrate';
+  import { m, dateLocale } from '../lib/i18n';
 
   let status = $state<BillingStatus | null>(null);
   let loading = $state(true);
@@ -78,12 +79,12 @@
   }
 
   function formatPrice(cents: number): string {
-    return (cents / 100).toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' });
+    return (cents / 100).toLocaleString(dateLocale(), { style: 'currency', currency: 'EUR' });
   }
 
   function formatDate(iso: string | null): string {
     if (!iso) return '-';
-    return new Date(iso).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
+    return new Date(iso).toLocaleDateString(dateLocale(), { day: 'numeric', month: 'long', year: 'numeric' });
   }
 
   /**
@@ -91,15 +92,15 @@
    * l'administrateur d'un serveur Discord n'a pas à connaître le vocabulaire
    * interne d'un prestataire de paiement.
    */
-  const STATUS_LABELS: Record<string, { label: string; tone: 'ok' | 'warn' | 'bad' }> = {
-    active: { label: 'Actif', tone: 'ok' },
-    trialing: { label: "Période d'essai", tone: 'ok' },
-    past_due: { label: 'Paiement en échec', tone: 'warn' },
-    unpaid: { label: 'Impayé', tone: 'bad' },
-    canceled: { label: 'Résilié', tone: 'bad' },
-    incomplete: { label: 'Paiement incomplet', tone: 'warn' },
-    incomplete_expired: { label: 'Paiement abandonné', tone: 'bad' },
-    paused: { label: 'En pause', tone: 'warn' },
+  const STATUS_LABELS: Record<string, { label: () => string; tone: 'ok' | 'warn' | 'bad' }> = {
+    active: { label: m.bill_status_active, tone: 'ok' },
+    trialing: { label: m.bill_status_trialing, tone: 'ok' },
+    past_due: { label: m.bill_status_past_due, tone: 'warn' },
+    unpaid: { label: m.bill_status_unpaid, tone: 'bad' },
+    canceled: { label: m.bill_status_canceled, tone: 'bad' },
+    incomplete: { label: m.bill_status_incomplete, tone: 'warn' },
+    incomplete_expired: { label: m.bill_status_incomplete_expired, tone: 'bad' },
+    paused: { label: m.bill_status_paused, tone: 'warn' },
   };
 
   const statusInfo = $derived(status?.status ? STATUS_LABELS[status.status] ?? null : null);
@@ -113,14 +114,14 @@
    * disparaître la mention : un administrateur qui a lu « 15 jours offerts » sur
    * le site et ne voit rien ici doit comprendre d'où vient la différence.
    */
-  const TRIAL_REASONS: Record<string, string> = {
-    already_used_by_user: "Tu as déjà utilisé ton essai gratuit sur un serveur. Il est offert une seule fois par compte Discord.",
-    already_used_by_guild: "Ce serveur a déjà bénéficié de son essai gratuit.",
-    guild_has_subscription: "Ce serveur est déjà abonné : le changement d'offre se fait au prorata depuis le portail Stripe.",
-    plan_not_eligible: "Cette offre ne comporte pas d'essai gratuit.",
+  const TRIAL_REASONS: Record<string, () => string> = {
+    already_used_by_user: m.bill_trial_used_by_user,
+    already_used_by_guild: m.bill_trial_used_by_guild,
+    guild_has_subscription: m.bill_trial_has_subscription,
+    plan_not_eligible: m.bill_trial_not_eligible,
   };
 
-  const trialReasonText = $derived(trial && !trial.available && trial.reason ? TRIAL_REASONS[trial.reason] ?? null : null);
+  const trialReasonText = $derived(trial && !trial.available && trial.reason ? TRIAL_REASONS[trial.reason]?.() ?? null : null);
 
   async function load() {
     loading = true;
@@ -135,7 +136,7 @@
     pending = null;
 
     if (!url) {
-      toast.error("Impossible d'ouvrir la page de paiement. Réessaie dans un instant.");
+      toast.error(m.bill_err_checkout());
       return;
     }
     // Redirection dans l'onglet courant : Stripe nous renverra sur /billing.
@@ -148,7 +149,7 @@
     pending = null;
 
     if (!url) {
-      toast.error("Impossible d'ouvrir le portail de facturation.");
+      toast.error(m.bill_err_portal());
       return;
     }
     window.location.href = url;
@@ -166,7 +167,7 @@
       confetti();
       setTimeout(load, 2500);
     } else if (checkout === 'cancelled') {
-      toast.info('Paiement annulé, aucun montant n\'a été débité.');
+      toast.info(m.bill_cancelled());
     }
 
     if (checkout) window.history.replaceState({}, '', window.location.pathname);
@@ -177,21 +178,21 @@
 <div class="pb-24 space-y-6">
   <header class="flex flex-col md:flex-row md:items-end justify-between gap-x-6 gap-y-3">
     <div class="min-w-0">
-      <h1 class="text-2xl font-semibold tracking-tight text-on-surface font-headline leading-tight">Facturation</h1>
+      <h1 class="text-2xl font-semibold tracking-tight text-on-surface font-headline leading-tight">{m.bill_title()}</h1>
       <p class="mt-1 max-w-prose text-sm text-on-surface-variant">
-        L'offre de ce serveur décide des modules disponibles. Le paiement et les factures passent par Stripe.
+        {m.bill_desc()}
       </p>
     </div>
   </header>
 
   {#if outgrown && !justPaid}
-    <Callout variant="info" icon="trending-up" title="Ton serveur a grandi">
+    <Callout variant="info" icon="trending-up" title={m.bill_grown_title()}>
       {outgrown.members !== null
-        ? `Il compte ${outgrown.members.toLocaleString('fr-FR')} membres, au-delà de la tranche de l'offre ${outgrown.current.name}.`
-        : `Il a dépassé la tranche de l'offre ${outgrown.current.name}.`}
-      L'offre {outgrown.next.name} est faite pour sa taille : {outgrown.next.description}
+        ? m.bill_grown_members({ members: outgrown.members.toLocaleString(dateLocale()), plan: outgrown.current.name })
+        : m.bill_grown_no_count({ plan: outgrown.current.name })}
+      {m.bill_grown_next({ plan: outgrown.next.name, description: outgrown.next.description })}
       {#snippet actions()}
-        <Button variant="primary" size="sm" iconRight="ArrowRight" loading={pending === 'portal'} onclick={manage}>Passer à l'offre {outgrown.next.name}</Button>
+        <Button variant="primary" size="sm" iconRight="ArrowRight" loading={pending === 'portal'} onclick={manage}>{m.bill_switch_to_plan({ plan: outgrown.next.name })}</Button>
       {/snippet}
     </Callout>
   {/if}
@@ -200,11 +201,11 @@
     <Callout
       variant="success"
       icon="sparkles"
-      title={paidPlan ? `Merci ! Ton serveur passe à l'offre ${paidPlan.name}.` : 'Merci ! Ton paiement est accepté.'}
+      title={paidPlan ? m.bill_thanks_plan({ plan: paidPlan.name }) : m.bill_thanks()}
     >
-      {#if paidPlan}{paidPlan.description} {/if}Les modules de l'offre s'ouvrent dans quelques secondes, sans rien à réinstaller.
+      {#if paidPlan}{paidPlan.description} {/if}{m.bill_thanks_modules()}
       {#snippet actions()}
-        <Button href="/modules" variant="primary" size="sm" iconRight="ArrowRight">Voir mes nouveaux modules</Button>
+        <Button href="/modules" variant="primary" size="sm" iconRight="ArrowRight">{m.bill_see_modules()}</Button>
       {/snippet}
     </Callout>
   {/if}
@@ -217,15 +218,13 @@
     </div>
   {:else if !status}
     <div class="rounded-xl border border-outline-variant/40 bg-surface-container-low p-6 text-sm text-on-surface-variant">
-      Impossible de charger l'état de facturation. Réessaie dans un instant.
+      {m.bill_err_load()}
     </div>
   {:else if !status.enabled}
     <div class="rounded-xl border border-outline-variant/40 bg-surface-container-low p-6 space-y-2">
-      <h2 class="text-sm font-semibold text-on-surface">Facturation non activée sur cette instance</h2>
+      <h2 class="text-sm font-semibold text-on-surface">{m.bill_disabled_title()}</h2>
       <p class="text-body-sm text-on-surface-variant leading-relaxed max-w-2xl">
-        Cette installation de Kotbo n'a pas de clé Stripe configurée : tous les modules suivent
-        la configuration du serveur, sans offre commerciale. C'est le fonctionnement normal
-        d'une instance auto-hébergée ou en marque blanche.
+        {m.bill_disabled_desc()}
       </p>
     </div>
   {:else}
@@ -233,7 +232,7 @@
     <section class="rounded-xl border border-outline-variant/40 bg-surface-container-low p-5 space-y-4">
       <div class="flex flex-wrap items-start justify-between gap-4">
         <div class="space-y-1">
-          <span class="text-xs text-on-surface-variant font-medium">Offre en cours</span>
+          <span class="text-xs text-on-surface-variant font-medium">{m.bill_current_plan()}</span>
           <div class="flex items-center gap-2.5">
             <h2 class="text-lg font-semibold text-on-surface">{status.planName}</h2>
             {#if statusInfo}
@@ -244,7 +243,7 @@
                     ? 'bg-warning/10 text-warning border-warning/20'
                     : 'bg-error/10 text-error border-error/20'}"
               >
-                {statusInfo.label}
+                {statusInfo.label()}
               </span>
             {/if}
           </div>
@@ -252,9 +251,9 @@
           {#if status.currentPeriodEnd}
             <p class="text-body-sm text-on-surface-variant">
               {#if status.cancelAtPeriodEnd}
-                Résiliation demandée - accès conservé jusqu'au {formatDate(status.currentPeriodEnd)}.
+                {m.bill_cancel_requested({ date: formatDate(status.currentPeriodEnd) })}
               {:else}
-                Prochain renouvellement le {formatDate(status.currentPeriodEnd)}.
+                {m.bill_next_renewal({ date: formatDate(status.currentPeriodEnd) })}
               {/if}
             </p>
           {/if}
@@ -267,15 +266,14 @@
             class="flex items-center gap-2 h-9 px-3 rounded-lg bg-primary/10 text-primary border border-primary/20 hover:bg-primary/15 transition-colors disabled:opacity-50 text-sm font-medium"
           >
             <Papicon name="Settings" size={16} />
-            {pending === 'portal' ? 'Ouverture…' : 'Gérer mon abonnement'}
+            {pending === 'portal' ? m.bill_opening() : m.bill_manage()}
           </button>
         {/if}
       </div>
 
       {#if status.status === 'past_due'}
         <div class="rounded-lg bg-warning/10 border border-warning/20 p-3 text-body-sm text-warning leading-relaxed">
-          Le dernier prélèvement a échoué. Ton serveur garde son accès pendant que Stripe
-          réessaie, mais mets à jour ton moyen de paiement pour éviter une coupure.
+          {m.bill_past_due()}
         </div>
       {/if}
     </section>
@@ -287,11 +285,9 @@
           <Papicon name="Gift" size={16} />
         </div>
         <div class="space-y-1 min-w-0">
-          <h2 class="text-sm font-semibold text-on-surface">{trial.days} jours d'essai gratuit</h2>
+          <h2 class="text-sm font-semibold text-on-surface">{m.bill_trial_title({ days: trial.days })}</h2>
           <p class="text-body-sm text-on-surface-variant leading-relaxed">
-            Choisis une offre ci-dessous : les {trial.days} premiers jours ne sont pas facturés. Une carte
-            est demandée par Stripe mais n'est débitée qu'à la fin de l'essai, et tu peux résilier avant
-            sans rien payer. L'essai est offert une fois par compte Discord.
+            {m.bill_trial_desc({ days: trial.days })}
           </p>
         </div>
       </div>
@@ -308,7 +304,7 @@
             ? 'bg-primary text-on-primary'
             : 'text-on-surface-variant hover:text-on-surface'}"
         >
-          Mensuel
+          {m.bill_monthly()}
         </button>
         <button
           onclick={() => (interval = 'year')}
@@ -316,7 +312,8 @@
             ? 'bg-primary text-on-primary'
             : 'text-on-surface-variant hover:text-on-surface'}"
         >
-          Annuel
+          {m.bill_yearly()}
+
           {#if yearlySavingPercent > 0}
             <span class="text-2xs px-1.5 py-0.5 rounded bg-success/20 text-success font-semibold">
               −{yearlySavingPercent}%
@@ -341,7 +338,7 @@
               <h3 class="text-base font-semibold text-on-surface">{plan.name}</h3>
               {#if isCurrent}
                 <span class="text-xs font-semibold px-2 py-0.5 rounded bg-primary/15 text-primary">
-                  Actuel
+                  {m.bill_current()}
                 </span>
               {/if}
             </div>
@@ -354,15 +351,15 @@
                 <span class="text-2xl font-semibold text-on-surface tracking-tight">
                   {formatPrice(interval === 'month' ? plan.priceCents.month : plan.priceCents.year)}
                 </span>
-                <span class="text-xs text-on-surface-variant">/{interval === 'month' ? 'mois' : 'an'}</span>
+                <span class="text-xs text-on-surface-variant">/{interval === 'month' ? m.bill_per_month() : m.bill_per_year()}</span>
               </div>
               <p class="text-2xs text-on-surface-variant mt-0.5">
-                TTC, par serveur Discord{#if trialAvailable && plan.purchasable}&nbsp;- après l'essai{/if}
+                {m.bill_price_note()}{#if trialAvailable && plan.purchasable}&nbsp;- {m.bill_after_trial()}{/if}
               </p>
             {:else if plan.key === 'FREE'}
-              <div class="text-2xl font-semibold text-on-surface tracking-tight">Gratuit</div>
+              <div class="text-2xl font-semibold text-on-surface tracking-tight">{m.bill_free()}</div>
             {:else}
-              <div class="text-base font-semibold text-on-surface">Sur devis</div>
+              <div class="text-base font-semibold text-on-surface">{m.bill_on_quote()}</div>
             {/if}
           </div>
 
@@ -373,19 +370,19 @@
             {#if plan.memberRange}
               <span>
                 {plan.memberRange.max === null
-                  ? `Au-delà de ${plan.memberRange.min.toLocaleString('fr-FR')} membres`
+                  ? m.bill_members_above({ min: plan.memberRange.min.toLocaleString(dateLocale()) })
                   : plan.memberRange.min === 0
-                    ? `Jusqu'à ${plan.memberRange.max.toLocaleString('fr-FR')} membres`
-                    : `De ${plan.memberRange.min.toLocaleString('fr-FR')} à ${plan.memberRange.max.toLocaleString('fr-FR')} membres`}
+                    ? m.bill_members_up_to({ max: plan.memberRange.max.toLocaleString(dateLocale()) })
+                    : m.bill_members_range({ min: plan.memberRange.min.toLocaleString(dateLocale()), max: plan.memberRange.max.toLocaleString(dateLocale()) })}
               </span>
             {:else}
-              <span>Aucun module actif</span>
+              <span>{m.bill_no_module()}</span>
             {/if}
           </div>
 
           {#if isCurrent}
             <button disabled class="h-9 rounded-lg text-sm font-medium bg-surface-container text-on-surface-variant cursor-default">
-              Ton offre
+              {m.bill_your_plan()}
             </button>
           {:else if plan.key === 'CUSTOM'}
             <a
@@ -394,7 +391,7 @@
               rel="noopener noreferrer"
               class="h-9 rounded-lg text-sm font-medium border border-outline-variant/40 text-on-surface hover:bg-surface-container transition-colors flex items-center justify-center"
             >
-              Nous contacter
+              {m.bill_contact()}
             </a>
           {:else if plan.purchasable && isUpgrade}
             <button
@@ -403,10 +400,10 @@
               class="h-9 rounded-lg text-sm font-medium bg-primary text-on-primary hover:opacity-90 transition-opacity disabled:opacity-50"
             >
               {pending === plan.key
-                ? 'Ouverture…'
+                ? m.bill_opening()
                 : trialAvailable
-                  ? `Essayer ${plan.name} ${trial?.days} jours`
-                  : `Passer à ${plan.name}`}
+                  ? m.bill_try_plan({ plan: plan.name, days: trial?.days ?? 0 })
+                  : m.bill_switch_to({ plan: plan.name })}
             </button>
           {:else if status.hasSubscription}
             <!-- Rétrograder ou changer d'offre en cours d'abonnement se fait
@@ -416,7 +413,7 @@
               disabled={pending !== null}
               class="h-9 rounded-lg text-sm font-medium border border-outline-variant/40 text-on-surface-variant hover:bg-surface-container transition-colors disabled:opacity-50"
             >
-              Changer d'offre
+              {m.bill_change_plan()}
             </button>
           {:else}
             <!-- Aucun geste possible sur cette carte. Trois raisons très
@@ -426,10 +423,10 @@
                  est une erreur de configuration de l'instance. -->
             <button disabled class="h-9 rounded-lg text-sm font-medium bg-surface-container text-on-surface-variant cursor-default">
               {currentPlan === 'CUSTOM'
-                ? 'Compris dans ton accord'
+                ? m.bill_in_agreement()
                 : !isUpgrade
-                  ? 'Offre inférieure'
-                  : 'Bientôt disponible'}
+                  ? m.bill_lower_plan()
+                  : m.bill_coming_soon()}
             </button>
           {/if}
         </article>
@@ -437,9 +434,7 @@
     </section>
 
     <p class="text-xs text-on-surface-variant text-center leading-relaxed max-w-2xl mx-auto">
-      Paiement sécurisé par Stripe. Résiliable à tout moment depuis « Gérer mon abonnement » ;
-      l'accès est conservé jusqu'à la fin de la période déjà réglée.{#if trialAvailable}{' '}
-        Résilier pendant l'essai n'entraîne aucun prélèvement.{/if}
+      {m.bill_footer()}{#if trialAvailable}{' '}{m.bill_footer_trial()}{/if}
     </p>
   {/if}
 </div>
