@@ -243,6 +243,7 @@ model MemberInvite {
   @@index([guildId, inviterId])
   @@index([guildId, joinedAt])
   @@index([guildId, inviteCode])
+  @@index([guildId, userId, joinedAt])
   @@map("member_invites")
 }
 
