@@ -34,6 +34,11 @@ const CONFIG_TTL_SECONDS = 300;
 
 /** Compteur de messages depuis le dernier envoi, par salon. */
 const pendingCounts = new Map<string, number>();
+/**
+ * Renvoi après inactivité, par salon : chaque message réarme le minuteur.
+ * shortcut: perdu au redémarrage (comme le compteur), le prochain message le réarme.
+ */
+const idleTimers = new Map<string, ReturnType<typeof setTimeout>>();
 /** Salons dont un renvoi est en cours : évite les doublons sur les rafales. */
 const reposting = new Set<string>();
 /**
@@ -98,6 +103,8 @@ export async function invalidateStickyCache(guildId: string): Promise<void> {
 /** Remet à zéro le compteur mémoire d'un salon (suppression, renvoi manuel). */
 export function resetStickyCounter(channelId: string): void {
   pendingCounts.delete(channelId);
+  clearTimeout(idleTimers.get(channelId));
+  idleTimers.delete(channelId);
 }
 
 // ── Payload JSON Discord ────────────────────────────────────────────────────
@@ -349,11 +356,34 @@ export async function handleStickyMessage(
   // renvoi du sticky compterait comme un message et le relancerait.
   if (sticky.webhookId && authorId === sticky.webhookId) return;
 
+  if (sticky.idleRepostMinutes > 0) {
+    clearTimeout(idleTimers.get(channelId));
+    idleTimers.set(channelId, setTimeout(() => {
+      idleTimers.delete(channelId);
+      void repostAfterIdle(client, guildId, channelId);
+    }, sticky.idleRepostMinutes * 60_000));
+    return;
+  }
+
   const count = (pendingCounts.get(channelId) ?? 0) + 1;
   pendingCounts.set(channelId, count);
   if (count < Math.max(1, sticky.messageThreshold)) return;
 
   await repostSticky(client, sticky);
+}
+
+/**
+ * Fin du délai d'inactivité : relit la configuration, qui a pu changer depuis
+ * l'armement. Le délai espace déjà les renvois, d'où le `force`.
+ */
+async function repostAfterIdle(client: Client, guildId: string, channelId: string): Promise<void> {
+  try {
+    const sticky = (await getGuildStickies(guildId)).find((s) => s.channelId === channelId);
+    if (!sticky?.enabled || sticky.idleRepostMinutes <= 0) return;
+    await repostSticky(client, sticky, { force: true });
+  } catch (err) {
+    logger.error('Sticky', `Renvoi après inactivité impossible dans ${channelId}`, err);
+  }
 }
 
 /** Client du webhook enregistré, sans appel à Discord. Null s'il n'y en a pas. */

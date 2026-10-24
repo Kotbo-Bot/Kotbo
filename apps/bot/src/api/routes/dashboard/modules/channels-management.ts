@@ -1186,6 +1186,7 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
         embedColor?: string;
         messageThreshold?: number;
         cooldownSeconds?: number;
+        idleRepostMinutes?: number;
         jsonEnabled?: boolean;
         jsonPayload?: string | null;
         webhookEnabled?: boolean;
@@ -1239,6 +1240,8 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
 
       const threshold = Math.min(200, Math.max(1, Math.floor(Number(body?.messageThreshold ?? 5) || 5)));
       const cooldown = Math.min(3600, Math.max(0, Math.floor(Number(body?.cooldownSeconds ?? 10) || 0)));
+      // Une semaine au plus : setTimeout plafonne vers 24 jours.
+      const idleRepostMinutes = Math.min(10080, Math.max(0, Math.floor(Number(body?.idleRepostMinutes ?? 0) || 0)));
       const embedColor = /^#[0-9a-fA-F]{6}$/.test(body?.embedColor ?? '') ? body!.embedColor! : '#5865F2';
 
       const payload = {
@@ -1249,6 +1252,7 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
         embedColor,
         messageThreshold: threshold,
         cooldownSeconds: cooldown,
+        idleRepostMinutes,
         jsonEnabled,
         jsonPayload: jsonPayload || null,
         webhookEnabled,
@@ -1315,7 +1319,7 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
         context: getGuildName(client, guildId),
         module: 'Gestion des salons',
         eventType: 'Manuel',
-        details: `Sticky ${sticky.enabled ? 'actif' : 'désactivé'}, renvoi tous les ${threshold} message(s).`,
+        details: `Sticky ${sticky.enabled ? 'actif' : 'désactivé'}, ${idleRepostMinutes > 0 ? `renvoi ${idleRepostMinutes} min après le dernier message` : `renvoi tous les ${threshold} message(s)`}.`,
         channelId,
       });
 
