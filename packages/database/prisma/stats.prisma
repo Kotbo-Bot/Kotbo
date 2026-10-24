@@ -20,20 +20,20 @@ model BotInstanceStats {
   @@map("bot_instance_stats")
 }
 
-// Serveurs mis en avant sur kotbo.fr (GET /api/public/stats). Les champs
-// servent de repli quand le bot n'est pas sur le serveur ; sinon le nom, la
-// description, l'icône et le nombre de membres viennent du cache Discord.
+// Serveurs mis en avant sur kotbo.fr (GET /api/public/stats) : ceux d'au moins
+// 1000 membres, tenus à jour par chaque shard (featuredGuildsService.ts). Une
+// ligne que plus aucun shard ne rafraîchit expire.
 model FeaturedGuild {
   guildId     String   @id
   name        String
   description String   @default("")
   iconUrl     String?
   memberCount Int      @default(0)
-  position    Int      @default(0)
+  lastSeenAt  DateTime @default(now())
   createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
 
-  @@index([position])
+  @@index([memberCount])
+  @@index([lastSeenAt])
   @@map("featured_guilds")
 }
 
