@@ -2049,6 +2049,8 @@
   "cm_sticky_threshold_hint": "Nombre de messages postés dans le salon avant que le message épinglé ne redescende en bas.",
   "cm_sticky_cooldown_label": "Délai minimum entre deux renvois (secondes)",
   "cm_sticky_cooldown_hint": "Protège des limites d'envoi de Discord quand le salon s'emballe. 0 pour désactiver.",
+  "cm_sticky_idle_label": "Renvoyer après inactivité (minutes)",
+  "cm_sticky_idle_hint": "Le message revient ce délai après le dernier message du salon, à la place du seuil. 60 pour 1 h, 0 pour désactiver.",
   "cm_sticky_embed_label": "Afficher en message enrichi",
   "cm_sticky_embed_desc": "Envoie le message dans un encadré coloré plutôt qu'en texte brut.",
   "cm_sticky_embed_title_label": "Titre du message",

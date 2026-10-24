@@ -2049,6 +2049,8 @@
   "cm_sticky_threshold_hint": "Number of messages posted in the channel before the sticky moves back to the bottom.",
   "cm_sticky_cooldown_label": "Minimum delay between two reposts (seconds)",
   "cm_sticky_cooldown_hint": "Protects against Discord rate limits when the channel gets busy. 0 to disable.",
+  "cm_sticky_idle_label": "Repost after inactivity (minutes)",
+  "cm_sticky_idle_hint": "The sticky comes back this long after the channel's last message, instead of the threshold. 60 for 1 h, 0 to disable.",
   "cm_sticky_embed_label": "Display as an embed",
   "cm_sticky_embed_desc": "Sends the message in a coloured box instead of plain text.",
   "cm_sticky_embed_title_label": "Embed title",
