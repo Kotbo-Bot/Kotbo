@@ -64,6 +64,7 @@ import { checkTranslationProviderHealth } from './services/integrations/translat
 import { startDashboardApi } from './api/dashboardApi.js';
 import { broadcastDashboardEventAcrossShards } from './api/shared/sharding.js';
 import { initBotSentry, captureException } from './observability/sentry.js';
+import { startEventLoopLagMonitor } from './observability/eventLoopLag.js';
 import { initRedis, assertRedisConnection } from './infra/redis.js';
 import { startBackgroundQueueWorker } from './infra/queues/backgroundQueue.js';
 import botPackageJson from '../package.json';
@@ -115,6 +116,7 @@ import { scopeClientToModule } from './services/core/moduleScope.js';
 import { reconcileGuildCommands } from './services/core/commandDeployment.js';
 
 initBotSentry();
+startEventLoopLagMonitor();
 
 // Resolve white-label instance from launcher args
 const instanceId = parseInstanceIdFromArgs();
