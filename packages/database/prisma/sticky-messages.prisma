@@ -48,6 +48,9 @@ model StickyMessage {
   /// Délai plancher entre deux renvois, quelle que soit l'activité. Protège des
   /// rate limits Discord quand un salon s'emballe.
   cooldownSeconds  Int @default(10)
+  /// Renvoi après inactivité : le sticky revient `idleRepostMinutes` après le
+  /// dernier message du salon, à la place du seuil. 0 = désactivé.
+  idleRepostMinutes Int @default(0)
 
   // ── État d'exécution ───────────────────────────────────────────────────────
   /// Dernier message envoyé par le bot, à supprimer avant le prochain renvoi.
