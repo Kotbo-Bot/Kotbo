@@ -15026,5 +15026,13 @@
   "bill_coming_soon": "Bientôt disponible",
   "bill_footer": "Paiement sécurisé par Stripe. Résiliable à tout moment depuis « Gérer mon abonnement » ; l'accès est conservé jusqu'à la fin de la période déjà réglée.",
   "bill_footer_trial": "Résilier pendant l'essai n'entraîne aucun prélèvement.",
-  "mp_disable_confirm_title": "Désactiver « {module} » ?"
+  "mp_disable_confirm_title": "Désactiver « {module} » ?",
+  "mps_active_sanction": "{count} sanction(s) en cours",
+  "mps_suspected_alt": "Suspecté de double compte",
+  "mps_reports": "{count} signalement(s) en attente",
+  "mps_warns": "{count} avertissements en 30 jours",
+  "mps_young_account": "Compte créé moins de {count} jours avant son arrivée",
+  "mps_linked": "{count} compte(s) lié(s)",
+  "mps_rejoins": "Arrivé {count} fois sur le serveur",
+  "mps_invite_churn": "La moitié de ses invités repartent en moins d'une semaine"
 }

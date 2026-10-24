@@ -22,6 +22,8 @@ export interface MemberSignal {
   key: string;
   label: string;
   tone: 'info' | 'warning' | 'danger';
+  /** Le nombre qui figure dans le libellé, quand il y en a un. */
+  count?: number;
 }
 
 export interface MemberSummary {

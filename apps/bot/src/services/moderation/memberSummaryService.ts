@@ -13,8 +13,11 @@ export type SignalTone = 'info' | 'warning' | 'danger';
 
 export interface MemberSignal {
   key: string;
+  /** Libellé français, gardé pour l'API et le MCP ; le dashboard traduit d'après `key` et `count`. */
   label: string;
   tone: SignalTone;
+  /** Le nombre qui figure dans le libellé, quand il y en a un. */
+  count?: number;
 }
 
 export interface MemberSummary {
@@ -58,17 +61,17 @@ export interface SignalInputs {
  */
 export function buildSignals(input: SignalInputs): MemberSignal[] {
   const signals: MemberSignal[] = [];
-  if (input.activeSanctions > 0) signals.push({ key: 'active_sanction', label: `${input.activeSanctions} sanction(s) en cours`, tone: 'danger' });
+  if (input.activeSanctions > 0) signals.push({ key: 'active_sanction', label: `${input.activeSanctions} sanction(s) en cours`, tone: 'danger', count: input.activeSanctions });
   if (input.isSuspectedDC) signals.push({ key: 'suspected_alt', label: 'Suspecté de double compte', tone: 'danger' });
-  if (input.pendingReports > 0) signals.push({ key: 'reports', label: `${input.pendingReports} signalement(s) en attente`, tone: 'warning' });
-  if (input.recentWarns >= 2) signals.push({ key: 'warns', label: `${input.recentWarns} avertissements en 30 jours`, tone: 'warning' });
+  if (input.pendingReports > 0) signals.push({ key: 'reports', label: `${input.pendingReports} signalement(s) en attente`, tone: 'warning', count: input.pendingReports });
+  if (input.recentWarns >= 2) signals.push({ key: 'warns', label: `${input.recentWarns} avertissements en 30 jours`, tone: 'warning', count: input.recentWarns });
   if (input.accountCreatedAt && input.joinedAt) {
     const ageAtJoin = input.joinedAt.getTime() - input.accountCreatedAt.getTime();
-    if (ageAtJoin < 7 * DAY) signals.push({ key: 'young_account', label: 'Compte créé moins de 7 jours avant son arrivée', tone: 'warning' });
-    else if (ageAtJoin < 30 * DAY) signals.push({ key: 'young_account', label: 'Compte créé moins de 30 jours avant son arrivée', tone: 'info' });
+    if (ageAtJoin < 7 * DAY) signals.push({ key: 'young_account', label: 'Compte créé moins de 7 jours avant son arrivée', tone: 'warning', count: 7 });
+    else if (ageAtJoin < 30 * DAY) signals.push({ key: 'young_account', label: 'Compte créé moins de 30 jours avant son arrivée', tone: 'info', count: 30 });
   }
-  if (input.linkedAccounts > 0) signals.push({ key: 'linked', label: `${input.linkedAccounts} compte(s) lié(s)`, tone: 'info' });
-  if (input.joins >= 3) signals.push({ key: 'rejoins', label: `Arrivé ${input.joins} fois sur le serveur`, tone: 'info' });
+  if (input.linkedAccounts > 0) signals.push({ key: 'linked', label: `${input.linkedAccounts} compte(s) lié(s)`, tone: 'info', count: input.linkedAccounts });
+  if (input.joins >= 3) signals.push({ key: 'rejoins', label: `Arrivé ${input.joins} fois sur le serveur`, tone: 'info', count: input.joins });
   if (input.invitedTotal >= 5 && input.invitedLeftWithinWeek / input.invitedTotal >= 0.5) {
     signals.push({ key: 'invite_churn', label: 'La moitié de ses invités repartent en moins d’une semaine', tone: 'warning' });
   }

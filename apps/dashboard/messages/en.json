@@ -15026,5 +15026,13 @@
   "bill_coming_soon": "Coming soon",
   "bill_footer": "Payment secured by Stripe. Cancel anytime from \"Manage my subscription\"; access is kept until the end of the period already paid.",
   "bill_footer_trial": "Cancelling during the trial costs nothing.",
-  "mp_disable_confirm_title": "Turn off \"{module}\"?"
+  "mp_disable_confirm_title": "Turn off \"{module}\"?",
+  "mps_active_sanction": "{count} active sanction(s)",
+  "mps_suspected_alt": "Suspected alt account",
+  "mps_reports": "{count} pending report(s)",
+  "mps_warns": "{count} warnings in 30 days",
+  "mps_young_account": "Account created less than {count} days before joining",
+  "mps_linked": "{count} linked account(s)",
+  "mps_rejoins": "Joined the server {count} times",
+  "mps_invite_churn": "Half of their invitees leave within a week"
 }
