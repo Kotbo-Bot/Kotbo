@@ -30,6 +30,11 @@ model AegisConfig {
   exemptChannelIds String[] @default([])
   exemptRoleIds    String[] @default([])
 
+  // Portée. Un salon de ticket reste noté si `analyzeTickets`, même hors portée.
+  analyzeMessages     Boolean @default(true) // messages des salons, interrupteur général
+  analyzeThreads      Boolean @default(true) // fils et posts de forum
+  analyzeVoiceChats   Boolean @default(true) // salons textuels des vocaux
+  analyzeExempt       Boolean @default(true) // false : staff et exemptions jamais envoyés à l'API
   analyzeEdits        Boolean @default(true)
   analyzeNicknames    Boolean @default(false)
   analyzeTickets      Boolean @default(true)
