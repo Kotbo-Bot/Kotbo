@@ -303,16 +303,16 @@
    */
   const configBlockers = $derived(
     [
-      { key: 'category', label: 'la catégorie', ok: !!ticketCategoryId },
-      { key: 'staffRole', label: 'le rôle du staff', ok: !!ticketStaffRoleId },
-      { key: 'panelChannel', label: 'le salon du panneau', ok: !!ticketChannelId },
+      { key: 'category', label: m.tq_blocker_category(), ok: !!ticketCategoryId },
+      { key: 'staffRole', label: m.tq_blocker_staff_role(), ok: !!ticketStaffRoleId },
+      { key: 'panelChannel', label: m.tq_blocker_panel_channel(), ok: !!ticketChannelId },
     ].filter((item) => !item.ok)
   );
 
   const STAFF_LOAD_MODES = [
-    { value: 'OFF', label: 'Désactivé' },
-    { value: 'WARN', label: 'Avertir' },
-    { value: 'BLOCK', label: 'Bloquer' },
+    { value: 'OFF', label: m.tq_load_off() },
+    { value: 'WARN', label: m.tq_load_warn() },
+    { value: 'BLOCK', label: m.tq_load_block() },
   ] as const;
 
   /** Badge de l'accordeon : combien de quotas imposent effectivement une limite. */
@@ -925,12 +925,13 @@
         <Papicon icon="alert-triangle" size={16} class="text-warning mt-0.5 shrink-0" />
         <div class="min-w-0">
           <p class="text-body-sm font-semibold text-on-surface">
-            Les tickets ne sont pas encore opérationnels
+            {m.tq_not_ready_title()}
           </p>
           <p class="text-xs text-on-surface-variant mt-1 leading-relaxed">
-            Il manque {configBlockers.length === 1 ? 'un réglage' : `${configBlockers.length} réglages`} :
-            {configBlockers.map((b) => b.label).join(', ')}.
-            Un membre qui clique sur le panneau n'obtiendra rien tant qu'ils ne sont pas remplis.
+            {configBlockers.length === 1
+              ? m.tq_not_ready_one({ list: configBlockers.map((b) => b.label).join(', ') })
+              : m.tq_not_ready_many({ count: configBlockers.length, list: configBlockers.map((b) => b.label).join(', ') })}
+            {m.tq_not_ready_hint()}
           </p>
           <button
             type="button"
@@ -939,7 +940,7 @@
             onclick={() => (expandedConfigSection = 'channels')}
           >
             <Papicon icon="arrow-right" size={13} />
-            Compléter
+            {m.tq_complete()}
           </button>
         </div>
       </div>
@@ -948,7 +949,7 @@
     <div class="rounded-xl border border-success/25 bg-success/5 px-4 py-3 flex items-center gap-3">
       <Papicon icon="check-circle" size={16} class="text-success shrink-0" />
       <p class="text-xs text-on-surface">
-        Les tickets sont opérationnels. Le reste de cette page en affine le comportement.
+        {m.tq_ready()}
       </p>
     </div>
   {/if}
@@ -1462,14 +1463,14 @@
           <Papicon icon="gauge" size={18} />
         </div>
         <div>
-          <p class="text-sm font-semibold text-on-surface">Quotas</p>
-          <p class="text-2xs text-on-surface-variant mt-0.5">Limites d'ouverture côté membre, plafond de charge côté staff</p>
+          <p class="text-sm font-semibold text-on-surface">{m.tq_title()}</p>
+          <p class="text-2xs text-on-surface-variant mt-0.5">{m.tq_desc()}</p>
         </div>
       </div>
       <div class="flex items-center gap-2 shrink-0">
         {#if activeQuotaCount > 0}
           <span class="px-2 py-0.5 rounded-full text-2xs font-semibold uppercase bg-success/10 text-success border border-success/20">
-            {activeQuotaCount} actif{activeQuotaCount > 1 ? 's' : ''}
+            {activeQuotaCount > 1 ? m.tq_active_many({ count: activeQuotaCount }) : m.tq_active_one()}
           </span>
         {/if}
         <Papicon icon={expandedConfigSection === 'quotas' ? 'chevron-up' : 'chevron-down'} size={16} class="text-on-surface-variant/40" />
@@ -1478,21 +1479,20 @@
     {#if expandedConfigSection === 'quotas'}
       <div class="px-4 lg:px-5 pb-5 space-y-4 border-t border-outline-variant/10 pt-4">
         <p class="text-2xs text-on-surface-variant leading-relaxed">
-          Chaque quota s'active indépendamment. Décoché, il n'impose aucune limite.
-          Un type de ticket peut ajuster le seuil depuis l'onglet Types.
+          {m.tq_intro()}
         </p>
 
         <div class="border-t border-outline-variant/10 pt-4 space-y-3">
           <label class="flex items-center gap-3 cursor-pointer p-2.5 hover:bg-white/5 rounded-xl transition-colors">
             <input type="checkbox" bind:checked={ticketQuotaOpenEnabled} class="w-4 h-4 rounded text-primary focus:ring-primary border-outline-variant/30" />
             <div>
-              <span class="text-xs font-bold text-on-surface">Tickets ouverts simultanément</span>
-              <p class="text-2xs text-on-surface-variant">Nombre de tickets qu'un membre peut avoir en cours en même temps.</p>
+              <span class="text-xs font-bold text-on-surface">{m.tq_open_title()}</span>
+              <p class="text-2xs text-on-surface-variant">{m.tq_open_desc()}</p>
             </div>
           </label>
           {#if ticketQuotaOpenEnabled}
             <label class="block ml-7 max-w-[220px]">
-              <span class="text-xs font-bold text-on-surface-variant/80 ml-1 mb-2 block">Maximum par membre</span>
+              <span class="text-xs font-bold text-on-surface-variant/80 ml-1 mb-2 block">{m.tq_open_max()}</span>
               <input type="number" bind:value={ticketQuotaOpenMax} min={1} max={50} class="w-full bg-surface-container-high text-sm px-4 py-2.5 rounded-xl border border-outline-variant/10 focus:ring-1 ring-primary/30 transition-all outline-none" />
             </label>
           {/if}
@@ -1502,13 +1502,13 @@
           <label class="flex items-center gap-3 cursor-pointer p-2.5 hover:bg-white/5 rounded-xl transition-colors">
             <input type="checkbox" bind:checked={ticketQuotaCooldownEnabled} class="w-4 h-4 rounded text-primary focus:ring-primary border-outline-variant/30" />
             <div>
-              <span class="text-xs font-bold text-on-surface">Délai entre deux ouvertures</span>
-              <p class="text-2xs text-on-surface-variant">Empêche d'enchaîner les tickets sans laisser le temps de répondre.</p>
+              <span class="text-xs font-bold text-on-surface">{m.tq_cooldown_title()}</span>
+              <p class="text-2xs text-on-surface-variant">{m.tq_cooldown_desc()}</p>
             </div>
           </label>
           {#if ticketQuotaCooldownEnabled}
             <label class="block ml-7 max-w-[220px]">
-              <span class="text-xs font-bold text-on-surface-variant/80 ml-1 mb-2 block">Délai (minutes)</span>
+              <span class="text-xs font-bold text-on-surface-variant/80 ml-1 mb-2 block">{m.tq_cooldown_minutes()}</span>
               <input type="number" bind:value={ticketQuotaCooldownMinutes} min={1} max={10080} class="w-full bg-surface-container-high text-sm px-4 py-2.5 rounded-xl border border-outline-variant/10 focus:ring-1 ring-primary/30 transition-all outline-none" />
             </label>
           {/if}
@@ -1518,18 +1518,18 @@
           <label class="flex items-center gap-3 cursor-pointer p-2.5 hover:bg-white/5 rounded-xl transition-colors">
             <input type="checkbox" bind:checked={ticketQuotaPeriodEnabled} class="w-4 h-4 rounded text-primary focus:ring-primary border-outline-variant/30" />
             <div>
-              <span class="text-xs font-bold text-on-surface">Quota sur une période</span>
-              <p class="text-2xs text-on-surface-variant">Plafonne le nombre d'ouvertures sur une fenêtre glissante.</p>
+              <span class="text-xs font-bold text-on-surface">{m.tq_period_title()}</span>
+              <p class="text-2xs text-on-surface-variant">{m.tq_period_desc()}</p>
             </div>
           </label>
           {#if ticketQuotaPeriodEnabled}
             <div class="ml-7 grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-[460px]">
               <label class="block">
-                <span class="text-xs font-bold text-on-surface-variant/80 ml-1 mb-2 block">Tickets maximum</span>
+                <span class="text-xs font-bold text-on-surface-variant/80 ml-1 mb-2 block">{m.tq_period_max()}</span>
                 <input type="number" bind:value={ticketQuotaPeriodMax} min={1} max={500} class="w-full bg-surface-container-high text-sm px-4 py-2.5 rounded-xl border border-outline-variant/10 focus:ring-1 ring-primary/30 transition-all outline-none" />
               </label>
               <label class="block">
-                <span class="text-xs font-bold text-on-surface-variant/80 ml-1 mb-2 block">Sur (heures)</span>
+                <span class="text-xs font-bold text-on-surface-variant/80 ml-1 mb-2 block">{m.tq_period_hours()}</span>
                 <input type="number" bind:value={ticketQuotaPeriodHours} min={1} max={720} class="w-full bg-surface-container-high text-sm px-4 py-2.5 rounded-xl border border-outline-variant/10 focus:ring-1 ring-primary/30 transition-all outline-none" />
               </label>
             </div>
@@ -1538,9 +1538,9 @@
 
         <div class="border-t border-outline-variant/10 pt-4 space-y-3">
           <div>
-            <p class="text-xs font-bold text-on-surface">Charge maximale par modérateur</p>
+            <p class="text-xs font-bold text-on-surface">{m.tq_load_title()}</p>
             <p class="text-2xs text-on-surface-variant mt-0.5">
-              Tickets pris en charge et encore ouverts. Au-delà, le staff est averti ou refusé.
+              {m.tq_load_desc()}
             </p>
           </div>
           <div class="flex flex-wrap gap-2">
@@ -1560,18 +1560,18 @@
           {#if ticketQuotaStaffLoadMode !== 'OFF'}
             <div class="space-y-3">
               <label class="block max-w-[220px]">
-                <span class="text-xs font-bold text-on-surface-variant/80 ml-1 mb-2 block">Tickets par modérateur</span>
+                <span class="text-xs font-bold text-on-surface-variant/80 ml-1 mb-2 block">{m.tq_load_max()}</span>
                 <input type="number" bind:value={ticketQuotaStaffLoadMax} min={1} max={200} class="w-full bg-surface-container-high text-sm px-4 py-2.5 rounded-xl border border-outline-variant/10 focus:ring-1 ring-primary/30 transition-all outline-none" />
               </label>
               <div>
-                <span class="text-xs font-bold text-on-surface-variant/80 ml-1 mb-1 block">Rôles qui passent outre</span>
+                <span class="text-xs font-bold text-on-surface-variant/80 ml-1 mb-1 block">{m.tq_load_bypass()}</span>
                 <p class="text-2xs text-on-surface-variant ml-1 mb-2">
-                  Sans eux, un serveur dont tout le staff est plein ne peut plus prendre aucun ticket.
+                  {m.tq_load_bypass_hint()}
                 </p>
                 <MultiSelect
                   bind:values={ticketQuotaStaffLoadBypassRoleIds}
                   options={discordRoles.map(r => ({ id: r.id, name: `@${r.name}` }))}
-                  placeholder="Aucun rôle"
+                  placeholder={m.tq_no_role()}
                 />
               </div>
             </div>
@@ -1582,16 +1582,15 @@
           <label class="flex items-center gap-3 cursor-pointer p-2.5 hover:bg-white/5 rounded-xl transition-colors">
             <input type="checkbox" bind:checked={ticketQuotaReopenEnabled} class="w-4 h-4 rounded text-primary focus:ring-primary border-outline-variant/30" />
             <div>
-              <span class="text-xs font-bold text-on-surface">Limiter les réouvertures</span>
+              <span class="text-xs font-bold text-on-surface">{m.tq_reopen_title()}</span>
               <p class="text-2xs text-on-surface-variant">
-                Nombre de fois qu'un même ticket peut être rouvert. Les délais entre deux réouvertures
-                (24 h, puis 7 jours) s'appliquent quoi qu'il arrive.
+                {m.tq_reopen_desc()}
               </p>
             </div>
           </label>
           {#if ticketQuotaReopenEnabled}
             <label class="block ml-7 max-w-[220px]">
-              <span class="text-xs font-bold text-on-surface-variant/80 ml-1 mb-2 block">Réouvertures maximum</span>
+              <span class="text-xs font-bold text-on-surface-variant/80 ml-1 mb-2 block">{m.tq_reopen_max()}</span>
               <input type="number" bind:value={ticketQuotaReopenMax} min={1} max={50} class="w-full bg-surface-container-high text-sm px-4 py-2.5 rounded-xl border border-outline-variant/10 focus:ring-1 ring-primary/30 transition-all outline-none" />
             </label>
           {/if}
