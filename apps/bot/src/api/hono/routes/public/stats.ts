@@ -49,40 +49,6 @@ const StatsResponseSchema = z.object({
   servers: z.array(PublicServerStatsSchema),
 });
 
-const FEATURED_GUILD_IDS = [
-  '506029988680695818', // Minecraft Fr
-  '913791560615854120', // Jojo
-  '1386848639732809759', // Zenode
-  '1477350874740424986'  // Les nerds
-];
-
-const GUILD_FALLBACKS: Record<string, { name: string; description: string; iconUrl: string; memberCount: number }> = {
-  '506029988680695818': {
-    name: "Communauté Minecraft Fr",
-    description: "Le plus grand serveur communautaire Minecraft francophone. Survie, mini-jeux et entraide au quotidien.",
-    iconUrl: "https://cdn.discordapp.com/icons/506029988680695818/6fbbb2b172d8677d849cee9c80485cf8.webp?size=128",
-    memberCount: 7690,
-  },
-  '913791560615854120': {
-    name: "Jojo - Communauté",
-    description: "La communauté de Jojo est très accueillante ! Ici, vous pouvez discuter, échanger des idées ou même jouer ensemble.",
-    iconUrl: "https://cdn.discordapp.com/icons/913791560615854120/051ac19a35c8692f2ae8889ffa1fe7bf.webp?size=128",
-    memberCount: 4375,
-  },
-  '1386848639732809759': {
-    name: "Zenode",
-    description: "Zenode - Serveur de Développement De Bots et Serveurs Discord, entraide autour de Discord.",
-    iconUrl: "https://cdn.discordapp.com/icons/1386848639732809759/e3e252b02264eb99b526afb1c8d93eb0.webp?size=128",
-    memberCount: 1846,
-  },
-  '1477350874740424986': {
-    name: "Les nerds",
-    description: "Espace d'échange et d'entraide pour passionnés d'informatique, de programmation et de technologies.",
-    iconUrl: "https://cdn.discordapp.com/icons/1477350874740424986/61bd3237903270c5db2581a313f6a701.webp?size=128",
-    memberCount: 1109,
-  }
-};
-
 // ===========================================================================
 // Icônes des serveurs mis en avant, relayées
 // ===========================================================================
@@ -91,16 +57,16 @@ const GUILD_FALLBACKS: Record<string, { name: string; description: string; iconU
 // elles donnaient à Discord l'adresse IP de chaque visiteur et lui laissaient
 // poser un cookie (`__cf_bm`), alors que la landing promet de ne parler à aucun
 // tiers. L'API va donc les chercher elle-même et les sert depuis son domaine.
-// Seuls les serveurs de `FEATURED_GUILD_IDS` sont servis : ce n'est pas un
-// proxy ouvert vers le CDN de Discord.
+// Seuls les serveurs de la table `featured_guilds` sont servis : ce n'est pas
+// un proxy ouvert vers le CDN de Discord.
 
 const ICON_CACHE_TTL = 6 * 60 * 60 * 1000; // 6 heures
 /** Indexé par URL source : une icône changée sur Discord change de clé. */
 const iconCache = new Map<string, { body: ArrayBuffer; type: string; at: number }>();
 
-function featuredIconSource(client: Client, guildId: string): string | null {
-  const guild = client.guilds.cache.get(guildId);
-  return guild?.iconURL({ size: 128 }) || GUILD_FALLBACKS[guildId]?.iconUrl || null;
+function featuredIconSource(client: Client, featured: { guildId: string; iconUrl: string | null }): string | null {
+  const guild = client.guilds.cache.get(featured.guildId);
+  return guild?.iconURL({ size: 128 }) || featured.iconUrl || null;
 }
 
 /** Chemin de l'icône relayée, relatif à l'origine de l'API. */
@@ -271,23 +237,23 @@ export function createPublicStatsRouter(_client: Client) {
       }));
 
       // Retrieve dynamic server stats
-      const servers = FEATURED_GUILD_IDS.map((id) => {
-        const guild = _client.guilds.cache.get(id);
-        const fallback = GUILD_FALLBACKS[id];
-        const iconUrl = featuredIconSource(_client, id) ? featuredIconPath(id) : null;
+      const featured = await prisma.featuredGuild.findMany({ orderBy: { position: 'asc' } });
+      const servers = featured.map((f) => {
+        const guild = _client.guilds.cache.get(f.guildId);
+        const iconUrl = featuredIconSource(_client, f) ? featuredIconPath(f.guildId) : null;
         if (guild) {
           return {
             name: guild.name,
             iconUrl,
             memberCount: guild.memberCount,
-            description: guild.description || fallback?.description || "",
+            description: guild.description || f.description,
           };
         }
         return {
-          name: fallback?.name || "Unknown Server",
+          name: f.name,
           iconUrl,
-          memberCount: fallback?.memberCount || 0,
-          description: fallback?.description || "",
+          memberCount: f.memberCount,
+          description: f.description,
         };
       });
 
@@ -306,7 +272,11 @@ export function createPublicStatsRouter(_client: Client) {
   // GET /api/public/stats/icons/:guildId
   router.get('/api/public/stats/icons/:guildId', async (c) => {
     const guildId = c.req.param('guildId');
-    const source = FEATURED_GUILD_IDS.includes(guildId) ? featuredIconSource(_client, guildId) : null;
+    const featured = await prisma.featuredGuild.findUnique({
+      where: { guildId },
+      select: { guildId: true, iconUrl: true },
+    }).catch(() => null);
+    const source = featured ? featuredIconSource(_client, featured) : null;
     if (!source) return c.json({ error: 'Not found' }, 404);
 
     let entry = iconCache.get(source);
