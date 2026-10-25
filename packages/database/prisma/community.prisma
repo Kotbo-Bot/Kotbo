@@ -2,6 +2,11 @@ model FunGameState {
   guildId            String   @id
   countingCurrent    Int      @default(0)
   countingLastUserId String?
+  /** Plus haut nombre jamais atteint, conservé à travers les remises à zéro. */
+  countingRecord     Int      @default(0)
+  countingUpdatedAt  DateTime?
+  /** Message d'état reposté en bas du salon de comptage, supprimé à chaque nouvelle version. */
+  countingStatusMessageId String?
   oneWordStoryLastUserId String?
   guessNumberTarget  Int      @default(0)
   wordChainLastWord    String?
@@ -13,6 +18,22 @@ model FunGameState {
   guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
 
   @@map("fun_game_states")
+}
+
+/// Bilan d'un joueur au comptage. score = bons nombres - 100 par erreur,
+/// tenu en colonne pour trier le classement en base.
+model FunCountingPlayer {
+  guildId String
+  userId  String
+  correct Int @default(0)
+  failed  Int @default(0)
+  score   Int @default(0)
+
+  guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  @@id([guildId, userId])
+  @@index([guildId, score])
+  @@map("fun_counting_players")
 }
 
 /// Rébus écrits par le staff pour le salon « Rébus emoji ».
