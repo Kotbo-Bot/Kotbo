@@ -685,6 +685,7 @@ model Guild {
   funEmojiRiddleUseDefaults Boolean @default(true)
   funGameState             FunGameState?
   funEmojiRiddles          FunEmojiRiddle[]
+  funCountingPlayers       FunCountingPlayer[]
 
   // Economy & RPG Module
   economyEnabled           Boolean  @default(false)

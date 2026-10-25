@@ -291,6 +291,7 @@ export async function handleAdminRoutes(
           statsConfig: true,
           serverTemplateAppliedAt: true,
           serverTemplateAppliedBy: true,
+          onboardingCompletedAt: true,
         }
       });
       const dbGuildsMap = new Map(dbGuilds.map((guild) => [guild.id, guild] as const));
@@ -317,6 +318,7 @@ export async function handleAdminRoutes(
           statsConfig: dbGuild?.statsConfig ?? null,
           serverTemplateAppliedAt: dbGuild?.serverTemplateAppliedAt?.toISOString() ?? null,
           serverTemplateAppliedBy: dbGuild?.serverTemplateAppliedBy ?? null,
+          onboardingCompletedAt: dbGuild?.onboardingCompletedAt?.toISOString() ?? null,
           shardId: g.shardId ?? 0,
         };
       });
@@ -2255,6 +2257,46 @@ export async function handleAdminRoutes(
     } catch (error) {
       logger.error('AdminAPI', 'POST reset-server-template error:', error);
       jsonFailure(res, error, 'Erreur lors de la réinitialisation de la mise en place.', 'AdminAPI');
+    }
+    return true;
+  }
+
+  // POST /api/admin/guilds/:guildId/skip-onboarding : sort le serveur du parcours
+  if (parts.length === 5 && parts[2] === 'guilds' && parts[4] === 'skip-onboarding' && method === 'POST') {
+    const guildId = parts[3];
+
+    try {
+      const guildRow = await prisma.guild.findUnique({
+        where: { id: guildId },
+        select: { onboardingCompletedAt: true },
+      });
+      if (!guildRow) {
+        json(res, 404, { error: 'Serveur introuvable' });
+        return true;
+      }
+      if (guildRow.onboardingCompletedAt) {
+        json(res, 409, { error: 'Ce serveur a déjà terminé son parcours de configuration.' });
+        return true;
+      }
+
+      // Ne touche pas a l'offre : le serveur sort du parcours avec l'acces
+      // qu'il a, FREE compris.
+      const { markOnboardingComplete } = await import('../../services/core/onboardingGate.js');
+      await markOnboardingComplete(guildId, 'admin_skip');
+
+      await recordAdminAudit({
+        actorId: user.userId,
+        action: 'guild.onboarding.skip',
+        targetType: 'guild',
+        targetId: guildId,
+        summary: `Parcours de configuration passé pour ${await getGuildName(client, guildId)}`,
+        ip: resolveRequestIp(req),
+      });
+
+      json(res, 200, { ok: true, message: 'Parcours de configuration passé.' });
+    } catch (error) {
+      logger.error('AdminAPI', 'POST skip-onboarding error:', error);
+      jsonFailure(res, error, 'Erreur lors du passage du parcours.', 'AdminAPI');
     }
     return true;
   }

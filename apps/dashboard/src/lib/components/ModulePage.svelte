@@ -85,7 +85,7 @@
    */
   async function askDisable() {
     const confirmed = await confirmDialog.ask({
-      title: `Désactiver « ${title} » ?`,
+      title: m.mp_disable_confirm_title({ module: title }),
       description: m.mp_disable_confirm_desc(),
       confirmLabel: m.mp_disable_confirm_action(),
       variant: 'warning',

@@ -37,7 +37,7 @@
   import { navigationStore } from '../lib/stores/navigation.svelte';
   import { toast } from '../lib/stores/toast.svelte';
   import { fetchSetupJourney } from '../lib/api';
-  import { startSetupGuide } from '../lib/home/setupGuides';
+  import { setupStepTitle, setupStepWhy, startSetupGuide } from '../lib/home/setupGuides';
   import ModulePage from '../lib/components/ModulePage.svelte';
   import SectionCard from '../lib/components/SectionCard.svelte';
   import RefreshButton from '../lib/components/RefreshButton.svelte';
@@ -80,23 +80,23 @@
   // verrait qu'un formulaire refuse.
   const canBuildServer = $derived(navigationStore.isAdmin);
 
-  const GROUPS: { key: Step['group']; title: string; description: string; icon: string }[] = [
+  const GROUPS: { key: Step['group']; title: () => string; description: () => string; icon: string }[] = [
     {
       key: 'essentiel',
-      title: 'Essentiel',
-      description: "Sans ces trois réglages, le reste marche mal.",
+      title: m.setup_group_essential,
+      description: m.setup_group_essential_desc,
       icon: 'star',
     },
     {
       key: 'moderation',
-      title: 'Modération',
-      description: 'Pour encadrer le serveur et garder une trace des décisions.',
+      title: m.setup_group_moderation,
+      description: m.setup_group_moderation_desc,
       icon: 'shield',
     },
     {
       key: 'engagement',
-      title: 'Vie du serveur',
-      description: "Accueil, entraide et réponses aux demandes : ce qui fait revenir les membres.",
+      title: m.setup_group_engagement,
+      description: m.setup_group_engagement_desc,
       icon: 'users',
     },
   ];
@@ -165,7 +165,7 @@
       steps = data?.steps ?? [];
       progress = data?.progress ?? { done: 0, total: 0 };
     } catch (err) {
-      toast.error(errorMessage(err) || 'Impossible de charger la liste. Réessaie.');
+      toast.error(errorMessage(err) || m.setup_err_load());
       steps = [];
     } finally {
       loading = false;
@@ -203,8 +203,8 @@
 </script>
 
 <ModulePage
-  title="Bien démarrer"
-  description="Ce qu'il reste à régler, dans l'ordre."
+  title={m.setup_page_title()}
+  description={m.setup_page_desc()}
   icon="compass"
   featureKey="settings"
 >
@@ -215,7 +215,7 @@
   {#if loading && steps.length === 0}
     <LoadingHint context="config" />
   {:else if steps.length === 0}
-    <EmptyState icon="compass" title="Liste indisponible" description="La liste des étapes n'a pas pu se charger." actionLabel="Réessayer" actionIcon="RefreshCw" onAction={load} />
+    <EmptyState icon="compass" title={m.setup_unavailable_title()} description={m.setup_unavailable_desc()} actionLabel={m.setup_retry()} actionIcon="RefreshCw" onAction={load} />
   {:else}
     <div class="space-y-4">
       <!-- Une ligne d'avancement plutot qu'un anneau de 110px : l'anneau
@@ -228,15 +228,15 @@
           aria-valuemin={0}
           aria-valuemax={progress.total}
           aria-valuenow={progress.done}
-          aria-label="Avancement"
+          aria-label={m.setup_progress()}
         >
           <div class="h-full rounded-full bg-primary transition-[width] duration-500" style="width: {percent}%"></div>
         </div>
         <p class="shrink-0 text-body-sm text-on-surface-variant">
           {#if remaining.length === 0}
-            <span class="font-medium text-success">Tout est réglé</span>
+            <span class="font-medium text-success">{m.setup_all_done()}</span>
           {:else}
-            <span class="font-medium text-on-surface">{progress.done} sur {progress.total}</span> réglés
+            <span class="font-medium text-on-surface">{m.setup_progress_count({ done: progress.done, total: progress.total })}</span>
           {/if}
         </p>
       </div>
@@ -260,16 +260,16 @@
                 </span>
                 {#if index === 0}
                   <span class="text-xs font-semibold text-primary">
-                    À faire maintenant
+                    {m.setup_do_now()}
                   </span>
                 {/if}
               </div>
 
-              <p class="text-sm font-semibold text-on-surface leading-tight">{action.label}</p>
-              <p class="mt-1 text-xs text-on-surface-variant leading-relaxed">{action.why}</p>
+              <p class="text-sm font-semibold text-on-surface leading-tight">{setupStepTitle(action)}</p>
+              <p class="mt-1 text-xs text-on-surface-variant leading-relaxed">{setupStepWhy(action)}</p>
               {#if action.detail}
                 <p class="mt-2 text-2xs px-1.5 py-0.5 rounded bg-error/10 text-error inline-block">
-                  Il manque : {action.detail}
+                  {m.setup_missing({ detail: action.detail })}
                 </p>
               {/if}
             </a>
@@ -292,15 +292,14 @@
                   onclick={() => (templateOpen = !templateOpen)}
                   class="px-3 py-1.5 text-xs font-medium rounded-lg text-primary hover:bg-primary/10 transition-colors"
                 >
-                  {templateOpen ? 'Masquer' : 'Revoir'}
+                  {templateOpen ? m.setup_hide() : m.setup_review()}
                 </button>
               {/if}
             {/snippet}
 
             {#if templateApplied && !templateOpen}
               <p class="text-body-sm text-on-surface-variant leading-relaxed">
-                Les salons et les rôles sont créés. « Revoir » affiche ce qui a été
-                créé.
+                {m.setup_structure_done()}
               </p>
             {/if}
 
@@ -318,7 +317,7 @@
         {@const groupSteps = steps.filter((s) => s.group === group.key)}
         {#if groupSteps.length > 0}
           {@const groupDone = groupSteps.filter((s) => s.done).length}
-          <SectionCard title={group.title} description={group.description} icon={group.icon}>
+          <SectionCard title={group.title()} description={group.description()} icon={group.icon}>
             {#snippet actions()}
               <span class="text-2xs px-2 py-0.5 rounded-full font-semibold
                 {groupDone === groupSteps.length ? 'bg-success/10 text-success' : 'bg-surface-container text-on-surface-variant'}">
@@ -345,11 +344,11 @@
                     <div class="min-w-0 flex-1">
                       <div class="flex items-center gap-2 flex-wrap">
                         <span class="text-body-sm font-semibold {step.done ? 'text-on-surface-variant' : 'text-on-surface'}">
-                          {step.label}
+                          {setupStepTitle(step)}
                         </span>
                         {#if !step.done && step.detail}
                           <span class="text-2xs px-1.5 py-0.5 rounded bg-error/10 text-error">
-                            Il manque : {step.detail}
+                            {m.setup_missing({ detail: step.detail })}
                           </span>
                         {:else if step.done && step.detail}
                           <span class="text-2xs px-1.5 py-0.5 rounded bg-surface-container text-on-surface-variant">
@@ -357,7 +356,7 @@
                           </span>
                         {/if}
                       </div>
-                      <p class="mt-0.5 text-xs text-on-surface-variant leading-relaxed">{step.why}</p>
+                      <p class="mt-0.5 text-xs text-on-surface-variant leading-relaxed">{setupStepWhy(step)}</p>
                     </div>
                   </a>
                 </li>
@@ -374,8 +373,8 @@
              decoche « L'economie » le premier jour ne savait pas encore ce que
              Kotbo faisait ; ici, il le sait, et personne ne le lui reproposait. -->
         <SectionCard
-          title="Ce que tu n'as pas encore configuré"
-          description="Tu l'avais laissé de côté au départ. Rien ne presse : voici ce que ça t'apporterait."
+          title={m.setup_skipped_title()}
+          description={m.setup_skipped_desc()}
           icon="package"
         >
           <div class="grid gap-2.5 sm:grid-cols-2">

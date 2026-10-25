@@ -2,6 +2,7 @@ import { Client, Message } from 'discord.js';
 import { kotboEventBus, type FunGameKey } from '@kotbo/core';
 import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
+import { recordCountingMistake, recordCountingSuccess, scheduleCountingStatus } from './countingStatsService.js';
 
 /**
  * Gets or creates the Fun Game State for a guild.
@@ -100,6 +101,8 @@ export async function handleCountingMessage(message: Message, guildId: string, p
 
   // Rule 1: Incorrect number resets the game
   if (num !== nextNumber) {
+    await recordCountingMistake(guildId, message.author.id);
+    scheduleCountingStatus(message.client, guildId, message.channelId);
     if (punitiveMode) {
       await resetCounting(guildId);
       await message.react('❌').catch(() => null);
@@ -112,6 +115,8 @@ export async function handleCountingMessage(message: Message, guildId: string, p
 
   // Rule 2: Same user cannot count twice in a row
   if (gameState.countingLastUserId === message.author.id) {
+    await recordCountingMistake(guildId, message.author.id);
+    scheduleCountingStatus(message.client, guildId, message.channelId);
     if (punitiveMode) {
       await resetCounting(guildId);
       await message.react('❌').catch(() => null);
@@ -128,7 +133,8 @@ export async function handleCountingMessage(message: Message, guildId: string, p
     where: { guildId, countingCurrent: gameState.countingCurrent },
     data: {
       countingCurrent: nextNumber,
-      countingLastUserId: message.author.id
+      countingLastUserId: message.author.id,
+      countingUpdatedAt: new Date()
     }
   });
 
@@ -137,6 +143,8 @@ export async function handleCountingMessage(message: Message, guildId: string, p
     return;
   }
 
+  await recordCountingSuccess(guildId, message.author.id, nextNumber);
+  scheduleCountingStatus(message.client, guildId, message.channelId);
   await message.react('✅').catch(() => null);
 
   // Celebratory milestones

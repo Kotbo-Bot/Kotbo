@@ -528,6 +528,17 @@ export async function resetAdminGuildServerTemplate(guildId: string) {
   return response.json();
 }
 
+export async function skipAdminGuildOnboarding(guildId: string) {
+  const response = await authorizedFetch(`${API_BASE_URL}/api/admin/guilds/${guildId}/skip-onboarding`, {
+    method: 'POST',
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => null);
+    throw new Error(error?.error || 'Impossible de passer le parcours. Réessaie.');
+  }
+  return response.json();
+}
+
 export async function activateGuildWithCode(code: string, guildId = authStore.selectedGuildId) {
   const token = authStore.token;
   if (!token) {

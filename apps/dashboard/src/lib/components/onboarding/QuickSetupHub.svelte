@@ -11,37 +11,38 @@
   import Papicon from '../Papicon.svelte';
   import SectionCard from '../SectionCard.svelte';
   import { navigationStore } from '../../stores/navigation.svelte';
+  import { m } from '../../i18n';
 
   const ASSISTANTS = [
     {
       href: '/security/quick-setup',
       icon: 'shield',
-      title: 'Sécurité',
-      description: 'Un niveau de protection règle d\'un coup les filtres et l\'anti-raid.',
+      title: m.qsh_security,
+      description: m.qsh_security_desc,
     },
     {
       href: '/economy-setup',
       icon: 'coins',
-      title: 'Économie',
-      description: 'Un rythme fixe les gains, le délai du daily et l\'énergie.',
+      title: m.qsh_economy,
+      description: m.qsh_economy_desc,
     },
     {
       href: '/leveling',
       icon: 'trophy',
-      title: 'Niveaux',
-      description: 'Une courbe d\'XP toute prête, à ajuster ensuite si besoin.',
+      title: m.qsh_levels,
+      description: m.qsh_levels_desc,
     },
     {
       href: '/prestige',
       icon: 'crown',
-      title: 'Prestige',
-      description: 'Une échelle de rangs et ses gains, en un choix.',
+      title: m.qsh_prestige,
+      description: m.qsh_prestige_desc,
     },
     {
       href: '/channel-health',
       icon: 'activity',
-      title: 'Santé des salons',
-      description: 'Des seuils d\'alerte adaptés à la taille du serveur.',
+      title: m.qsh_channel_health,
+      description: m.qsh_channel_health_desc,
     },
   ];
 
@@ -53,8 +54,8 @@
 
 {#if available.length > 0}
   <SectionCard
-    title="Configurations rapides"
-    description="Des réglages complets en un seul choix. Tu pourras tout affiner ensuite, module par module."
+    title={m.qsh_title()}
+    description={m.qsh_desc()}
     icon="sparkles"
   >
     <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -68,10 +69,11 @@
           </span>
           <span class="min-w-0">
             <span class="flex items-center gap-1 text-sm font-semibold text-on-surface">
-              {assistant.title}
+              {assistant.title()}
+
               <Papicon icon="arrow-right" size={13} class="text-on-surface-variant transition-transform group-hover:translate-x-0.5" />
             </span>
-            <span class="mt-0.5 block text-body-sm leading-relaxed text-on-surface-variant">{assistant.description}</span>
+            <span class="mt-0.5 block text-body-sm leading-relaxed text-on-surface-variant">{assistant.description()}</span>
           </span>
         </a>
       {/each}

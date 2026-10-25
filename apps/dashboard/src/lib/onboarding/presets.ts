@@ -11,7 +11,7 @@
  * part de quelque chose de deja juste, et c'est de l'avoir ajuste qui fait
  * qu'on le considere comme sien.
  */
-import type { ServerTemplateSection, StaffRolePower } from '../api';
+import type { ServerTemplateSection, StaffRolePower } from '../api/serverTemplateTypes';
 
 export type ServerKind = 'new' | 'existing';
 export type ThemeKey = 'gaming' | 'communaute' | 'entraide' | 'creation';

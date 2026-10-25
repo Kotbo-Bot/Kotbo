@@ -157,6 +157,23 @@
     changes: 'edit',
   };
 
+    /** Le bot rédige ses signaux en français ; on les traduit d'après leur clé, son libellé en repli. */
+  const SIGNAL_LABELS: Record<string, (count: number) => string> = {
+    active_sanction: (count) => m.mps_active_sanction({ count }),
+    suspected_alt: () => m.mps_suspected_alt(),
+    reports: (count) => m.mps_reports({ count }),
+    warns: (count) => m.mps_warns({ count }),
+    young_account: (count) => m.mps_young_account({ count }),
+    linked: (count) => m.mps_linked({ count }),
+    rejoins: (count) => m.mps_rejoins({ count }),
+    invite_churn: () => m.mps_invite_churn(),
+  };
+
+  function signalLabel(signal: { key: string; label: string; count?: number }): string {
+    const translate = SIGNAL_LABELS[signal.key];
+    return translate && (signal.count !== undefined || translate.length === 0) ? translate(signal.count ?? 0) : signal.label;
+  }
+
   const SIGNAL_CLASS = {
     danger: 'bg-error/10 text-error',
     warning: 'bg-warning/10 text-warning',
@@ -263,7 +280,7 @@
       {#each summary.signals as signal (signal.key + signal.label)}
         <span class="mp-chip {SIGNAL_CLASS[signal.tone]}">
           <Papicon icon={signal.tone === 'info' ? 'info' : 'alert-triangle'} size={12} />
-          {signal.label}
+          {signalLabel(signal)}
         </span>
       {/each}
     </div>
