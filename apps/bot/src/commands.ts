@@ -12,6 +12,7 @@ import { epochCommand } from './commands/utility/epoch.js';
 import { eventCommand } from './commands/utility/event.js';
 import { ctfCommand } from './commands/fun/ctf.js';
 import { excuseCommand } from './commands/fun/excuse.js';
+import { countingStatsCommand } from './commands/fun/countingStats.js';
 import { giveawayCommand } from './commands/fun/giveaway.js';
 import { helpCommand } from './commands/utility/help.js';
 import { infoCommand } from './commands/utility/info.js';
@@ -113,6 +114,7 @@ export const commands: SlashCommandDefinition[] = [
   languageCommand,
   infoCommand,
   excuseCommand,
+  countingStatsCommand,
   epochCommand,
   devutilsCommand,
   statusCommand,
@@ -324,6 +326,7 @@ export const COMMAND_MODULES = new Map<ApplicationCommandDefinition, string>([
   [spawnItemCommand, 'economy'],
   [workCommand, 'economy'],
   [excuseCommand, 'fun'],
+  [countingStatsCommand, 'fun'],
 
   // Contenu & intégrations
   [channelCommand, 'auto_thread'],

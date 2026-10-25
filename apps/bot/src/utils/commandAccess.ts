@@ -25,6 +25,7 @@ export const COMMAND_CATALOG: CommandCatalogEntry[] = [
   { name: 'ping', label: 'Ping', description: 'Vérification de la latence du bot.', defaultAccess: 'tout_le_monde' },
   { name: 'info', label: "Infos serveur", description: "Résumé de l'état et des métriques du serveur.", defaultAccess: "tout_le_monde" },
   { name: 'excuse', label: 'Excuse dev', description: 'Affiche une excuse de développeur aléatoire.', defaultAccess: 'tout_le_monde' },
+  { name: 'counting-stats', label: 'Stats compteur', description: 'Statistiques et classement du jeu de comptage.', defaultAccess: 'tout_le_monde' },
   { name: 'epoch', label: 'Epoch', description: 'Convertit les dates et les timestamps.', defaultAccess: 'tout_le_monde' },
   { name: 'devutils', label: 'Outils dev', description: 'Utilitaires de développement.', defaultAccess: 'tout_le_monde' },
   { name: 'status', label: "Statut", description: "Affichage d'un statut synthétique.", defaultAccess: "tout_le_monde" },
