@@ -49,6 +49,9 @@ model DashboardAuditLog {
   // l'index, Postgres remonte l'historique complet du serveur et filtre ligne a
   // ligne : le cout grandit avec l'age du serveur, pas avec la page affichee.
   @@index([guildId, eventType, dateIso])
+  // La passe hors « Discord » (`eventType <> 'Discord'`) a son propre index
+  // partiel, posé en SQL par la migration 20261128110000 : Prisma ne sait pas
+  // les déclarer ici.
   @@map("dashboard_audit_logs")
 }
 
