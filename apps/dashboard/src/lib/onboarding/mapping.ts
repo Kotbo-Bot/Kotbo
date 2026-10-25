@@ -180,11 +180,15 @@ export function isSkippable(item: ServerTemplatePlanItem): boolean {
  * le corriger. Les decisions deja prises sont conservees telles quelles : on
  * revient souvent en arriere d'un ecran, et retrouver ses reponses effacees par
  * la detection serait le meilleur moyen de ne plus y toucher.
+ *
+ * Sauf une adoption dont le salon ou le role a disparu du serveur depuis : le
+ * mappage survit au rechargement, et le bot refuserait la pose a chaque essai.
  */
 export function defaultMapping(
   plan: ServerTemplatePlanItem[],
   theme: ThemeKey,
   matches: ServerTemplateState['matches'],
+  inventory: ServerTemplateState['inventory'],
   previous: MappingState = {},
 ): MappingState {
   const wanted = sectionsOf(theme);
@@ -194,7 +198,13 @@ export function defaultMapping(
     if (item.kind === 'module' || !wanted.has(item.section)) continue;
 
     const kept = previous[item.key];
-    if (kept) {
+    // `matches` couvre les salons au-dela de la borne de l'inventaire.
+    const stale = kept?.mode === 'adopt'
+      && kept.id !== matches[item.key]?.id
+      && !(item.kind === 'role'
+        ? inventory.roles.some((role) => role.id === kept.id)
+        : inventory.channels.some((channel) => channel.id === kept.id && channel.kind === item.kind));
+    if (kept && !stale) {
       next[item.key] = kept;
       continue;
     }

@@ -149,6 +149,7 @@
       template.plan,
       (wizard.theme ?? 'communaute') as ThemeKey,
       template.matches,
+      template.inventory,
       wizard.mapping,
     );
     if (!sameMapping(next, wizard.mapping)) wizard.seedMapping(next);
