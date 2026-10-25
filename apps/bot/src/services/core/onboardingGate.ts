@@ -17,7 +17,8 @@
  * Le parcours ne se termine donc plus que de deux manieres, toutes deux ecrites
  * cote serveur : le paiement (`syncSubscription`), ou le dernier ecran lorsqu'il
  * n'y a rien a payer - instance sans facturation, ou serveur dont l'acces a deja
- * ete accorde. Les deux passent par `markOnboardingComplete`.
+ * ete accorde. Les deux passent par `markOnboardingComplete`, comme le passage
+ * force depuis le panneau d'administration (`admin_skip`).
  *
  * Ce module sert aussi a decider si une route de configuration doit s'ouvrir
  * alors que son module est eteint par l'offre. Le parcours demande a

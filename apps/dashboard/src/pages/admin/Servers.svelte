@@ -24,6 +24,7 @@
     resyncAdminGuildData,
     reconcileStaffServers,
     resetAdminGuildServerTemplate,
+    skipAdminGuildOnboarding,
   } from '../../lib/api';
   import Papicon from '../../lib/components/Papicon.svelte';
   import AdminShell from '../../lib/components/admin/AdminShell.svelte';
@@ -46,6 +47,7 @@
     activationCode: string | null;
     serverTemplateAppliedAt: string | null;
     serverTemplateAppliedBy: string | null;
+    onboardingCompletedAt: string | null;
     statsConfig?: {
       historicalScrapeStatus?: ScrapeStatus;
       historicalScrapedMessages?: number;
@@ -299,6 +301,16 @@
       variant: 'warning',
     }))) return;
     await run(guild.id, () => resetAdminGuildServerTemplate(guild.id));
+  }
+
+  async function handleSkipOnboarding(guild: AdminGuild) {
+    if (!(await confirmDialog.ask({
+      title: `Passer le parcours de « ${guild.name} » ?`,
+      description: 'Le serveur arrive directement sur le dashboard. Son offre ne change pas, et la mise en place reste disponible depuis ses réglages.',
+      confirmLabel: 'Passer le parcours',
+      variant: 'warning',
+    }))) return;
+    await run(guild.id, () => skipAdminGuildOnboarding(guild.id));
   }
 
   async function handleReconcile() {
@@ -614,6 +626,12 @@
             {guild.serverTemplateAppliedAt ? formatDate(guild.serverTemplateAppliedAt) : 'Jamais faite'}
           </span>
         </div>
+        <div class="flex items-center justify-between gap-3">
+          <span class="text-body-sm text-on-surface-variant">Parcours de configuration</span>
+          <span class="text-body-sm text-on-surface">
+            {guild.onboardingCompletedAt ? `Terminé le ${formatDate(guild.onboardingCompletedAt)}` : 'En cours'}
+          </span>
+        </div>
       </div>
 
       <!-- Actions -->
@@ -658,6 +676,18 @@
           <Papicon icon="Layers" size={14} />
           Rouvrir la mise en place du serveur
         </button>
+
+        {#if !guild.onboardingCompletedAt}
+          <button
+            type="button"
+            onclick={() => handleSkipOnboarding(guild)}
+            disabled={busy}
+            class="w-full h-10 rounded-xl bg-on-surface/6 hover:bg-on-surface/10 text-body-sm font-semibold text-on-surface transition disabled:opacity-50 inline-flex items-center justify-center gap-2"
+          >
+            <Papicon icon="SkipForward" size={14} />
+            Passer le parcours de configuration
+          </button>
+        {/if}
 
         {#if guild.activated}
           <button
