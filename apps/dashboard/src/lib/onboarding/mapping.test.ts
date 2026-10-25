@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import type { ServerTemplatePlanItem, ServerTemplateState } from '../api';
+import type { ServerTemplatePlanItem, ServerTemplateState } from '../api/serverTemplateTypes';
 import { defaultMapping } from './mapping';
 
 const plan = [

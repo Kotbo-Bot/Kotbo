@@ -20,7 +20,7 @@
  * categorie - ou est-ce que ca vit ? - parce que ranger vingt salons apres coup
  * est le genre de corvee qu'on ne fait jamais.
  */
-import type { ServerTemplatePlanItem, ServerTemplateSection, ServerTemplateState } from '../api';
+import type { ServerTemplatePlanItem, ServerTemplateSection, ServerTemplateState } from '../api/serverTemplateTypes';
 import type { ThemeKey } from './presets';
 import { THEMES } from './presets';
 import type { WizardStep } from './steps';
