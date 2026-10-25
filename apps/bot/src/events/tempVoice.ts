@@ -4091,8 +4091,6 @@ function rangeeRetour(onglet: OngletPanneau, locale: BotLocale): ActionRowBuilde
 
 /** Un jeton d'interaction vaut 15 minutes : le sous-panneau est lâché un peu avant. */
 export const DUREE_SOUS_PANNEAU_MS = 14 * 60 * 1000;
-/** Message fermé, webhook inconnu, jeton mort : le sous-panneau n'est plus éditable. */
-const SOUS_PANNEAU_PERDU = new Set([10008, 10015, 50027]);
 
 /** Le dernier sous-panneau éphémère de chaque membre, clé `${salonId}:${membreId}`. */
 const sousPanneaux = new Map<string, { interaction: RepliableInteraction; messageId: string; expireA: number }>();
@@ -4152,9 +4150,10 @@ type Methode = (charge?: unknown) => Promise<unknown>;
  *
  * - Clic dans un sous-panneau : toute réponse le remplace (deferUpdate, update,
  *   editReply), y compris confirmations et refus.
- * - Clic sur le panneau public : acquitté sans le toucher (deferUpdate), puis le
- *   sous-panneau mémorisé est réécrit. Aucun, jeton expiré ou message fermé
- *   (10008/10015/50027) : un éphémère neuf s'ouvre et devient le sous-panneau.
+ * - Clic sur le panneau public : acquitté sans le toucher (deferUpdate), puis un
+ *   éphémère neuf s'ouvre et l'ancien sous-panneau est supprimé. Le réécrire ne
+ *   suffit pas : « Ignorer ce message » ne se voit pas côté API, l'édition
+ *   réussit sur un message que la personne ne voit plus, et l'aide est perdue.
  *
  * Hors du salon (MP, carte postée ailleurs) l'interaction passe telle quelle.
  */
@@ -4207,16 +4206,14 @@ function brancherSurSousPanneau<T extends RepliableInteraction>(
     const afficher = async (charge: unknown): Promise<unknown> => {
       if (!acquittee()) await i.deferUpdate();
       const memo = sousPanneaux.get(cle);
-      if (memo && memo.expireA > Date.now()) {
-        try {
-          return await (memo.interaction as unknown as { editReply: Methode }).editReply(forme(charge, false, true, memo.messageId));
-        } catch (err) {
-          if (!SOUS_PANNEAU_PERDU.has((err as { code?: number } | null)?.code ?? 0)) throw err;
-        }
-      }
       sousPanneaux.delete(cle);
       const message = (await i.followUp(forme(charge, true, true))) as Message;
       memoriserSousPanneau(cle, interaction, message.id);
+      // Après l'envoi du neuf : jamais un instant sans sous-panneau. Déjà fermé ou jeton mort : rien à faire.
+      if (memo && memo.expireA > Date.now()) {
+        await (memo.interaction as unknown as { deleteReply: (m: string) => Promise<unknown> })
+          .deleteReply(memo.messageId).catch(() => null);
+      }
       return message;
     };
     remplacements = {

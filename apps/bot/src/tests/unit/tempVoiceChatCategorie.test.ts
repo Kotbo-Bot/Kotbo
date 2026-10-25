@@ -803,23 +803,23 @@ describe('D — le panneau public et UN sous-panneau par membre', () => {
       expect(contient(sc.monde.messages.get(r.crees[0]), 'tempvoice:rename')).toBe(true);
     });
 
-    test(`D2 ${format} ${mode} — une autre porte publique réécrit le MÊME sous-panneau`, async () => {
+    test(`D2 ${format} ${mode} — une autre porte publique : un sous-panneau neuf, l'ancien supprimé`, async () => {
       const sc = await monter({ format, mode });
       const sous = (await cliquerSur(sc, panneauPublic(sc), 'tempvoice:salon')).crees[0];
       const r2 = await cliquerSur(sc, panneauPublic(sc), 'tempvoice:membres');
       expect(r2.erreurs).toEqual([]);
-      expect(r2.crees).toEqual([]);
+      expect(r2.crees).toHaveLength(1);
       expect(r2.publicEdite).toBe(false);
+      expect(sc.monde.messages.has(sous)).toBe(false);
       // Le fil de navigation : le titre est celui de la porte choisie.
-      expect(contient(sc.monde.messages.get(sous), 'tempvoice:rename')).toBe(false);
-      expect(textesVisibles(sc.monde.messages.get(sous)).join(' ')).toContain(m.panel_tempvoice_who_title({}, { locale: 'fr' }));
+      expect(textesVisibles(sc.monde.messages.get(r2.crees[0])).join(' ')).toContain(m.panel_tempvoice_who_title({}, { locale: 'fr' }));
       const r3 = await cliquerSur(sc, panneauPublic(sc), 'tempvoice:propriete');
-      expect(r3.crees).toEqual([]);
+      expect(r3.crees).toHaveLength(1);
       expect(visibles(sc)).toEqual({ [IDS.PROPRIO]: 1 });
     });
   }
 
-  test('D3 — jeton expiré (> 14 min) : un nouveau sous-panneau, et c\'est lui qu\'on réécrit ensuite', async () => {
+  test('D3 — jeton expiré (> 14 min) : un nouveau sous-panneau, sans tenter de supprimer l\'ancien', async () => {
     const sc = await monter({ format: 'V2' });
     const r1 = await cliquerSur(sc, panneauPublic(sc), 'tempvoice:salon');
     avancer(tv.DUREE_SOUS_PANNEAU_MS + 60_000);
@@ -828,8 +828,9 @@ describe('D — le panneau public et UN sous-panneau par membre', () => {
     expect(r2.crees).toHaveLength(1);
     expect(r2.crees[0]).not.toBe(r1.crees[0]);
     const r3 = await cliquerSur(sc, panneauPublic(sc), 'tempvoice:salon');
-    expect(r3.crees).toEqual([]);
-    expect(contient(sc.monde.messages.get(r2.crees[0]), 'tempvoice:rename')).toBe(true);
+    expect(r3.crees).toHaveLength(1);
+    expect(sc.monde.messages.has(r2.crees[0])).toBe(false);
+    expect(contient(sc.monde.messages.get(r3.crees[0]), 'tempvoice:rename')).toBe(true);
   });
 
   test('D3b — sous-panneau fermé par la personne (10008) : un nouveau s\'ouvre', async () => {
@@ -837,7 +838,21 @@ describe('D — le panneau public et UN sous-panneau par membre', () => {
     const r1 = await cliquerSur(sc, panneauPublic(sc), 'tempvoice:salon');
     sc.monde.messages.delete(r1.crees[0]);
     const r2 = await cliquerSur(sc, panneauPublic(sc), 'tempvoice:membres');
+    // Seule erreur admise : la suppression de l'ancien, déjà fermé (10008), ignorée par le code.
+    expect(r2.erreurs.filter((e) => !e.endsWith(' 10008'))).toEqual([]);
     expect(r2.crees).toHaveLength(1);
+    expect(visibles(sc)).toEqual({ [IDS.PROPRIO]: 1 });
+  });
+
+  test('D3c — sous-panneau ignoré côté client (encore là pour l\'API) : le clic en rouvre un visible', async () => {
+    const sc = await monter({ format: 'V2' });
+    const r1 = await cliquerSur(sc, panneauPublic(sc), 'tempvoice:salon');
+    // « Ignorer ce message » n'envoie rien au bot : le message existe toujours côté API.
+    const r2 = await cliquerSur(sc, panneauPublic(sc), 'tempvoice:salon');
+    expect(r2.erreurs).toEqual([]);
+    expect(r2.crees).toHaveLength(1);
+    expect(r2.crees[0]).not.toBe(r1.crees[0]);
+    expect(sc.monde.messages.has(r1.crees[0])).toBe(false);
     expect(visibles(sc)).toEqual({ [IDS.PROPRIO]: 1 });
   });
 
@@ -883,7 +898,7 @@ describe('D — le panneau public et UN sous-panneau par membre', () => {
     expect(visibles(sc)).toEqual({ [AMI]: 1 });
   });
 
-  test('D5 — deux membres : deux sous-panneaux, chacun réécrit le sien', async () => {
+  test('D5 — deux membres : deux sous-panneaux, chacun remplace le sien', async () => {
     const sc = await monter({ format: 'V2' });
     const a = await cliquerSur(sc, panneauPublic(sc), 'tempvoice:salon');
     const b = await cliquerSur(sc, panneauPublic(sc), 'tempvoice:propriete', { acteur: AMI });
@@ -892,8 +907,8 @@ describe('D — le panneau public et UN sous-panneau par membre', () => {
     expect(a.crees[0]).not.toBe(b.crees[0]);
     const a2 = await cliquerSur(sc, panneauPublic(sc), 'tempvoice:membres');
     const b2 = await cliquerSur(sc, panneauPublic(sc), 'tempvoice:propriete', { acteur: AMI });
-    expect([a2.crees, b2.crees]).toEqual([[], []]);
-    expect(textesVisibles(sc.monde.messages.get(a.crees[0])).join(' ')).toContain(m.panel_tempvoice_who_title({}, { locale: 'fr' }));
+    expect([a2.crees.length, b2.crees.length]).toEqual([1, 1]);
+    expect(textesVisibles(sc.monde.messages.get(a2.crees[0])).join(' ')).toContain(m.panel_tempvoice_who_title({}, { locale: 'fr' }));
     expect(visibles(sc)).toEqual({ [IDS.PROPRIO]: 1, [AMI]: 1 });
   });
 
@@ -975,7 +990,7 @@ describe('R — revue adversariale', () => {
     });
   }
 
-  test('R4 — fenêtre ouverte depuis le sous-panneau puis fermée : la porte publique réécrit le même sous-panneau', async () => {
+  test('R4 — fenêtre ouverte depuis le sous-panneau puis fermée : la porte publique remplace le sous-panneau, sans en laisser deux', async () => {
     const sc = await monter({ format: 'V2' });
     const w = sc.monde;
     const sous = (await cliquerSur(sc, panneauPublic(sc), 'tempvoice:salon')).crees[0];
@@ -983,8 +998,9 @@ describe('R — revue adversariale', () => {
     expect(modale.erreurs).toEqual([]);
     const r = await cliquerSur(sc, panneauPublic(sc), 'tempvoice:membres');
     expect(r.erreurs).toEqual([]);
-    expect(r.crees).toEqual([]);
-    expect(textesVisibles(w.messages.get(sous)).join(' ')).toContain(m.panel_tempvoice_who_title({}, { locale: 'fr' }));
+    expect(r.crees).toHaveLength(1);
+    expect(w.messages.has(sous)).toBe(false);
+    expect(textesVisibles(w.messages.get(r.crees[0])).join(' ')).toContain(m.panel_tempvoice_who_title({}, { locale: 'fr' }));
     expect(visibles(sc)).toEqual({ [IDS.PROPRIO]: 1 });
   });
 });
