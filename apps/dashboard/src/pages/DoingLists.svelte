@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { router } from 'tinro';
   import {
     DOING_LIST_MODULES,
     DOING_LIST_PRIORITIES,
@@ -45,9 +46,12 @@
   const canDelete = $derived(isAdmin || !!rights?.canDelete);
   const myId = $derived((authStore.user as { id?: string } | null)?.id);
 
+  // Sans listId : l'index des listes. Avec : la liste elle-même, en pleine page.
+  const { listId = null }: { listId?: string | null } = $props();
+  const selectedId = $derived(listId);
+
   let loading = $state(true);
   let lists = $state<DoingList[]>([]);
-  let selectedId = $state<string | null>(null);
   let columns = $state<DoingListColumn[]>([]);
   let items = $state<DoingListItem[]>([]);
   let assignees = $state<DoingListAssignee[]>([]);
@@ -138,7 +142,6 @@
   async function loadLists() {
     const res = await fetchDoingLists();
     lists = res.lists ?? [];
-    if (!selectedId || !lists.some((list) => list.id === selectedId)) selectedId = lists[0]?.id ?? null;
   }
 
   async function loadBoard(listId: string) {
@@ -161,9 +164,7 @@
   }
 
   onMount(async () => {
-    const params = new URLSearchParams(window.location.search);
-    selectedId = params.get('list');
-    pendingCardId = params.get('card');
+    pendingCardId = new URLSearchParams(window.location.search).get('card');
     try {
       await loadLists();
     } catch (err) {
@@ -230,7 +231,7 @@
       } else {
         const { list } = await createDoingList({ ...payload, columns: [m.dl_status_todo(), m.dl_status_doing(), m.dl_status_done()] });
         lists = [...lists, list];
-        selectedId = list.id;
+        router.goto(`/doing-lists/${list.id}`);
       }
       formOpen = false;
     } catch (err) {
@@ -247,7 +248,7 @@
     try {
       await deleteDoingList(list.id);
       lists = lists.filter((entry) => entry.id !== list.id);
-      if (selectedId === list.id) selectedId = lists[0]?.id ?? null;
+      if (selectedId === list.id) router.goto('/doing-lists');
     } catch (err) {
       toast.error(errorText(err, m.dl_save_error()));
     }
@@ -256,7 +257,7 @@
   function listMenu(list: DoingList): MenuItem[] {
     return [
       { label: m.dl_edit(), icon: 'edit', onselect: () => openForm(list) },
-      { label: m.dl_column_add(), icon: 'plus', onselect: () => openColumnForm() },
+      ...(listId ? [{ label: m.dl_column_add(), icon: 'plus', onselect: () => openColumnForm() }] : []),
       ...(canDelete ? [{ label: m.common_delete(), icon: 'delete', onselect: () => void removeList(list) }] : []),
     ];
   }
@@ -573,15 +574,193 @@
   }
 </script>
 
-<ModulePage title={m.dl_page_title()} description={m.dl_page_desc()} icon="list-checks" featureKey="doing_lists">
+<ModulePage
+  title={selected?.name ?? m.dl_page_title()}
+  description={selected ? (selected.description ?? '') : m.dl_page_desc()}
+  icon="list-checks"
+  featureKey="doing_lists"
+>
   {#snippet actions()}
-    {#if canEdit}
+    {#if listId}
+      <Button variant="ghost" icon="arrow-left" onclick={() => router.goto('/doing-lists')}>{m.dl_all_lists()}</Button>
+      {#if selected && canEdit}
+        <Menu items={listMenu(selected)} label={m.dl_list_options({ name: selected.name })} />
+      {/if}
+    {:else if canEdit}
       <Button variant="primary" icon="plus" onclick={() => openForm()}>{m.dl_new_list()}</Button>
     {/if}
   {/snippet}
 
   {#if loading}
     <Skeleton height="320px" radius="1rem" />
+  {:else if listId && !selected}
+    <div class="section-card">
+      <EmptyState icon="list-checks" title={m.dl_not_found_title()} description={m.dl_not_found_desc()} actionLabel={m.dl_all_lists()} onAction={() => router.goto('/doing-lists')} />
+    </div>
+  {:else if selected}
+    <div class="space-y-4 min-w-0">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div class="flex flex-wrap gap-1.5">
+          {#each selected.modules as module (module)}
+            <span class="dl-chip">{moduleName(module, module)}</span>
+          {:else}
+            <span class="text-2xs text-on-surface-variant">{m.dl_no_module()}</span>
+          {/each}
+        </div>
+        <div class="flex items-center gap-3">
+          <input class="input text-body-sm w-48" type="search" bind:value={search} placeholder={m.dl_search_ph()} aria-label={m.dl_search_ph()} />
+          <label class="flex items-center gap-1.5 text-body-sm text-on-surface whitespace-nowrap">
+            <input type="checkbox" bind:checked={onlyMine} /> {m.dl_only_mine()}
+          </label>
+        </div>
+      </div>
+
+      {#if canEdit && filtering}
+        <p class="text-2xs text-on-surface-variant">{m.dl_drag_disabled_filter()}</p>
+      {/if}
+
+      {#if loadingBoard && columns.length === 0}
+        <Skeleton height="240px" radius="1rem" />
+      {:else}
+        <div class="dl-board" role="list">
+          {#each board as column, columnIndex (column.id)}
+            {@const full = !!column.wipLimit && column.count >= column.wipLimit}
+            {@const over = !!column.wipLimit && column.count > column.wipLimit}
+            <div
+              class="dl-column {dropColumnAt === columnIndex && drag?.kind === 'column' ? 'dl-column--drop' : ''} {drag?.kind === 'column' && drag.id === column.id ? 'opacity-50' : ''}"
+              role="listitem"
+              ondragover={(event) => overColumn(event, column.id, columnIndex, column.items.length)}
+              ondrop={dropOnColumn}
+            >
+              <!-- svelte-ignore a11y_no_static_element_interactions -->
+              <header
+                class="dl-column-head {canEdit ? 'cursor-grab' : ''}"
+                draggable={canEdit}
+                ondragstart={(event) => startDrag(event, 'column', column.id)}
+                ondragend={endDrag}
+              >
+                <h3 class="min-w-0 flex-1 truncate text-2xs font-semibold uppercase tracking-wide text-on-surface-variant">
+                  {#if column.isDone}<Papicon icon="check" size={12} class="inline -mt-0.5" />{/if}
+                  {column.name}
+                </h3>
+                <span
+                  class="text-2xs font-semibold {over ? 'text-error' : full ? 'text-warning' : 'text-on-surface-variant'}"
+                  title={column.wipLimit ? m.dl_column_limit_hint({ limit: column.wipLimit }) : undefined}
+                >
+                  {column.count}{column.wipLimit ? ` / ${column.wipLimit}` : ''}
+                </span>
+                {#if canEdit}
+                  <Menu items={columnMenu(column, columnIndex)} label={m.dl_column_options({ name: column.name })} />
+                {/if}
+              </header>
+
+              <div class="dl-column-body">
+                {#each column.items as item, index (item.id)}
+                  {@const done = column.isDone}
+                  {@const checks = item.checklist.length}
+                  {@const checked = item.checklist.filter((entry) => entry.done).length}
+                  <div
+                    class="dl-card {dropAt?.columnId === column.id && dropAt.index === index && drag?.kind === 'item' ? 'dl-card--drop' : ''} {drag?.kind === 'item' && drag.id === item.id ? 'opacity-40' : ''}"
+                    draggable={canDrag}
+                    ondragstart={(event) => startDrag(event, 'item', item.id)}
+                    ondragend={endDrag}
+                    ondragover={(event) => overCard(event, column.id, index)}
+                    role="button"
+                    tabindex="0"
+                    aria-label={m.dl_card_open({ title: item.title })}
+                    onclick={() => openCard(item)}
+                    onkeydown={(event) => { if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); openCard(item); } }}
+                  >
+                    {#if item.labels.length > 0}
+                      <div class="flex flex-wrap gap-1">
+                        {#each item.labels as label (label)}
+                          <span class="dl-chip"><span class="dl-dot" style="background: hsl({labelHue(label)} 65% 50%)"></span>{label}</span>
+                        {/each}
+                      </div>
+                    {/if}
+                    <div class="flex items-start gap-2">
+                      <p class="min-w-0 flex-1 text-body-sm text-on-surface wrap-break-word {done ? 'line-through opacity-60' : ''}">{item.title}</p>
+                      {#if canEdit}
+                        <!-- Le menu ne doit pas ouvrir la fiche de la carte. -->
+                        <!-- svelte-ignore a11y_no_static_element_interactions -->
+                        <div onclick={(event) => event.stopPropagation()} onkeydown={(event) => event.stopPropagation()}>
+                          <Menu items={itemMenu(item)} label={m.dl_item_options({ title: item.title })} />
+                        </div>
+                      {/if}
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2 text-2xs text-on-surface-variant">
+                      {#if item.priority}
+                        <span class="badge {PRIORITY_BADGE[item.priority]}">{PRIORITY_LABEL[item.priority]()}</span>
+                      {/if}
+                      {#if item.dueDate}
+                        <span class="inline-flex items-center gap-1 {isOverdue(item) ? 'text-error font-semibold' : ''}">
+                          <Papicon icon="calendar" size={12} /> {formatDue(item.dueDate)}
+                        </span>
+                      {/if}
+                      {#if checks > 0}
+                        <span class="inline-flex items-center gap-1 {checked === checks ? 'text-success' : ''}">
+                          <Papicon icon="check-square" size={12} /> {checked}/{checks}
+                        </span>
+                      {/if}
+                      {#if item.description}
+                        <Papicon icon="align-left" size={12} />
+                      {/if}
+                      {#if item.sourceModule}
+                        <span class="dl-chip">{sourceName(item.sourceModule)}</span>
+                      {/if}
+                      {#if item.staffTask?.assignee}
+                        <img
+                          class="ml-auto h-5 w-5 rounded-full"
+                          src={memberAvatar(item.staffTask.assignee)}
+                          alt={memberName(item.staffTask.assignee)}
+                          title={memberName(item.staffTask.assignee)}
+                        />
+                      {/if}
+                    </div>
+                  </div>
+                {:else}
+                  <p class="text-2xs text-on-surface-variant px-1 py-3">{filtering ? m.dl_column_no_match() : m.dl_column_empty()}</p>
+                {/each}
+                {#if dropAt?.columnId === column.id && dropAt.index === column.items.length && drag?.kind === 'item'}
+                  <div class="dl-drop-end" aria-hidden="true"></div>
+                {/if}
+              </div>
+
+              {#if canEdit}
+                {#if addingIn === column.id}
+                  <form class="space-y-2" onsubmit={(event) => addItem(event, column.id)}>
+                    <!-- svelte-ignore a11y_autofocus -->
+                    <input
+                      class="input w-full text-body-sm"
+                      maxlength="200"
+                      bind:value={newTitle}
+                      placeholder={m.dl_add_item_ph()}
+                      aria-label={m.dl_add_item_ph()}
+                      autofocus
+                      onkeydown={(event) => { if (event.key === 'Escape') addingIn = null; }}
+                    />
+                    <div class="flex gap-2">
+                      <Button type="submit" size="sm" icon="plus" disabled={!newTitle.trim()} disabledReason={m.common_reason_fill_field()}>{m.dl_add_item()}</Button>
+                      <Button size="sm" variant="ghost" onclick={() => (addingIn = null)}>{m.common_cancel()}</Button>
+                    </div>
+                  </form>
+                {:else}
+                  <Button variant="ghost" size="sm" icon="plus" fullWidth onclick={() => { addingIn = column.id; newTitle = ''; }}>{m.dl_add_card()}</Button>
+                {/if}
+              {/if}
+            </div>
+          {/each}
+          {#if canEdit}
+            <button type="button" class="dl-column-add" onclick={() => openColumnForm()}>
+              <Papicon icon="plus" size={14} /> {m.dl_column_add()}
+            </button>
+          {/if}
+        </div>
+        {#if selected.modules.length > 0}
+          <p class="text-2xs text-on-surface-variant">{m.dl_pin_hint()}</p>
+        {/if}
+      {/if}
+    </div>
   {:else if lists.length === 0}
     <div class="section-card">
       {#if canEdit}
@@ -591,195 +770,31 @@
       {/if}
     </div>
   {:else}
-    <div class="space-y-4">
-      <nav class="flex gap-2 overflow-x-auto pb-1" aria-label={m.dl_page_title()}>
-        {#each lists as list (list.id)}
-          <button
-            type="button"
-            class="dl-list {list.id === selectedId ? 'dl-list--active' : ''}"
-            aria-current={list.id === selectedId ? 'true' : undefined}
-            onclick={() => (selectedId = list.id)}
-          >
-            <span class="text-body-sm font-medium text-on-surface truncate">{list.name}</span>
-            <span class="text-2xs text-on-surface-variant">{m.dl_list_progress({ done: list.counts?.done ?? 0, total: list.counts?.total ?? 0 })}</span>
-          </button>
-        {/each}
-      </nav>
-
-      {#if selected}
-        <section class="section-card p-5 space-y-4 min-w-0">
-          <header class="flex flex-wrap items-start justify-between gap-3">
-            <div class="min-w-0 space-y-1">
-              <h2 class="text-base font-semibold text-on-surface">{selected.name}</h2>
-              {#if selected.description}
-                <p class="text-body-sm text-on-surface-variant whitespace-pre-wrap">{selected.description}</p>
-              {/if}
-              <div class="flex flex-wrap gap-1.5 pt-1">
-                {#each selected.modules as module (module)}
-                  <span class="dl-chip">{moduleName(module, module)}</span>
-                {:else}
-                  <span class="text-2xs text-on-surface-variant">{m.dl_no_module()}</span>
-                {/each}
-              </div>
-            </div>
-            <div class="flex items-center gap-2">
-              <input class="input text-body-sm w-48" type="search" bind:value={search} placeholder={m.dl_search_ph()} aria-label={m.dl_search_ph()} />
-              <label class="flex items-center gap-1.5 text-body-sm text-on-surface whitespace-nowrap">
-                <input type="checkbox" bind:checked={onlyMine} /> {m.dl_only_mine()}
-              </label>
-              {#if canEdit}
-                <Menu items={listMenu(selected)} label={m.dl_list_options({ name: selected.name })} />
-              {/if}
-            </div>
-          </header>
-
-          {#if canEdit && filtering}
-            <p class="text-2xs text-on-surface-variant">{m.dl_drag_disabled_filter()}</p>
-          {/if}
-
-          {#if loadingBoard && columns.length === 0}
-            <Skeleton height="240px" radius="1rem" />
-          {:else}
-            <div class="dl-board" role="list">
-              {#each board as column, columnIndex (column.id)}
-                {@const full = !!column.wipLimit && column.count >= column.wipLimit}
-                {@const over = !!column.wipLimit && column.count > column.wipLimit}
-                <div
-                  class="dl-column {dropColumnAt === columnIndex && drag?.kind === 'column' ? 'dl-column--drop' : ''} {drag?.kind === 'column' && drag.id === column.id ? 'opacity-50' : ''}"
-                  role="listitem"
-                  ondragover={(event) => overColumn(event, column.id, columnIndex, column.items.length)}
-                  ondrop={dropOnColumn}
-                >
-                  <!-- svelte-ignore a11y_no_static_element_interactions -->
-                  <header
-                    class="dl-column-head {canEdit ? 'cursor-grab' : ''}"
-                    draggable={canEdit}
-                    ondragstart={(event) => startDrag(event, 'column', column.id)}
-                    ondragend={endDrag}
-                  >
-                    <h3 class="min-w-0 flex-1 truncate text-2xs font-semibold uppercase tracking-wide text-on-surface-variant">
-                      {#if column.isDone}<Papicon icon="check" size={12} class="inline -mt-0.5" />{/if}
-                      {column.name}
-                    </h3>
-                    <span
-                      class="text-2xs font-semibold {over ? 'text-error' : full ? 'text-warning' : 'text-on-surface-variant'}"
-                      title={column.wipLimit ? m.dl_column_limit_hint({ limit: column.wipLimit }) : undefined}
-                    >
-                      {column.count}{column.wipLimit ? ` / ${column.wipLimit}` : ''}
-                    </span>
-                    {#if canEdit}
-                      <Menu items={columnMenu(column, columnIndex)} label={m.dl_column_options({ name: column.name })} />
-                    {/if}
-                  </header>
-
-                  <div class="dl-column-body">
-                    {#each column.items as item, index (item.id)}
-                      {@const done = column.isDone}
-                      {@const checks = item.checklist.length}
-                      {@const checked = item.checklist.filter((entry) => entry.done).length}
-                      <div
-                        class="dl-card {dropAt?.columnId === column.id && dropAt.index === index && drag?.kind === 'item' ? 'dl-card--drop' : ''} {drag?.kind === 'item' && drag.id === item.id ? 'opacity-40' : ''}"
-                        draggable={canDrag}
-                        ondragstart={(event) => startDrag(event, 'item', item.id)}
-                        ondragend={endDrag}
-                        ondragover={(event) => overCard(event, column.id, index)}
-                        role="button"
-                        tabindex="0"
-                        aria-label={m.dl_card_open({ title: item.title })}
-                        onclick={() => openCard(item)}
-                        onkeydown={(event) => { if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); openCard(item); } }}
-                      >
-                        {#if item.labels.length > 0}
-                          <div class="flex flex-wrap gap-1">
-                            {#each item.labels as label (label)}
-                              <span class="dl-chip"><span class="dl-dot" style="background: hsl({labelHue(label)} 65% 50%)"></span>{label}</span>
-                            {/each}
-                          </div>
-                        {/if}
-                        <div class="flex items-start gap-2">
-                          <p class="min-w-0 flex-1 text-body-sm text-on-surface wrap-break-word {done ? 'line-through opacity-60' : ''}">{item.title}</p>
-                          {#if canEdit}
-                            <!-- Le menu ne doit pas ouvrir la fiche de la carte. -->
-                            <!-- svelte-ignore a11y_no_static_element_interactions -->
-                            <div onclick={(event) => event.stopPropagation()} onkeydown={(event) => event.stopPropagation()}>
-                              <Menu items={itemMenu(item)} label={m.dl_item_options({ title: item.title })} />
-                            </div>
-                          {/if}
-                        </div>
-                        <div class="flex flex-wrap items-center gap-2 text-2xs text-on-surface-variant">
-                          {#if item.priority}
-                            <span class="badge {PRIORITY_BADGE[item.priority]}">{PRIORITY_LABEL[item.priority]()}</span>
-                          {/if}
-                          {#if item.dueDate}
-                            <span class="inline-flex items-center gap-1 {isOverdue(item) ? 'text-error font-semibold' : ''}">
-                              <Papicon icon="calendar" size={12} /> {formatDue(item.dueDate)}
-                            </span>
-                          {/if}
-                          {#if checks > 0}
-                            <span class="inline-flex items-center gap-1 {checked === checks ? 'text-success' : ''}">
-                              <Papicon icon="check-square" size={12} /> {checked}/{checks}
-                            </span>
-                          {/if}
-                          {#if item.description}
-                            <Papicon icon="align-left" size={12} />
-                          {/if}
-                          {#if item.sourceModule}
-                            <span class="dl-chip">{sourceName(item.sourceModule)}</span>
-                          {/if}
-                          {#if item.staffTask?.assignee}
-                            <img
-                              class="ml-auto h-5 w-5 rounded-full"
-                              src={memberAvatar(item.staffTask.assignee)}
-                              alt={memberName(item.staffTask.assignee)}
-                              title={memberName(item.staffTask.assignee)}
-                            />
-                          {/if}
-                        </div>
-                      </div>
-                    {:else}
-                      <p class="text-2xs text-on-surface-variant px-1 py-3">{filtering ? m.dl_column_no_match() : m.dl_column_empty()}</p>
-                    {/each}
-                    {#if dropAt?.columnId === column.id && dropAt.index === column.items.length && drag?.kind === 'item'}
-                      <div class="dl-drop-end" aria-hidden="true"></div>
-                    {/if}
-                  </div>
-
-                  {#if canEdit}
-                    {#if addingIn === column.id}
-                      <form class="space-y-2" onsubmit={(event) => addItem(event, column.id)}>
-                        <!-- svelte-ignore a11y_autofocus -->
-                        <input
-                          class="input w-full text-body-sm"
-                          maxlength="200"
-                          bind:value={newTitle}
-                          placeholder={m.dl_add_item_ph()}
-                          aria-label={m.dl_add_item_ph()}
-                          autofocus
-                          onkeydown={(event) => { if (event.key === 'Escape') addingIn = null; }}
-                        />
-                        <div class="flex gap-2">
-                          <Button type="submit" size="sm" icon="plus" disabled={!newTitle.trim()} disabledReason={m.common_reason_fill_field()}>{m.dl_add_item()}</Button>
-                          <Button size="sm" variant="ghost" onclick={() => (addingIn = null)}>{m.common_cancel()}</Button>
-                        </div>
-                      </form>
-                    {:else}
-                      <Button variant="ghost" size="sm" icon="plus" fullWidth onclick={() => { addingIn = column.id; newTitle = ''; }}>{m.dl_add_card()}</Button>
-                    {/if}
-                  {/if}
-                </div>
-              {/each}
-              {#if canEdit}
-                <button type="button" class="dl-column-add" onclick={() => openColumnForm()}>
-                  <Papicon icon="plus" size={14} /> {m.dl_column_add()}
-                </button>
-              {/if}
-            </div>
-            {#if selected.modules.length > 0}
-              <p class="text-2xs text-on-surface-variant">{m.dl_pin_hint()}</p>
+    <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+      {#each lists as list (list.id)}
+        {@const total = list.counts?.total ?? 0}
+        {@const done = list.counts?.done ?? 0}
+        <div class="dl-list-card section-card">
+          <a class="dl-list-link" href={`/doing-lists/${list.id}`}>
+            <span class="pr-8 text-base font-semibold text-on-surface wrap-break-word">{list.name}</span>
+            {#if list.description}
+              <span class="line-clamp-2 text-body-sm text-on-surface-variant">{list.description}</span>
             {/if}
+            <span class="dl-progress mt-auto" aria-hidden="true"><span style="width: {total ? (done / total) * 100 : 0}%"></span></span>
+            <span class="flex flex-wrap items-center gap-1.5 text-2xs text-on-surface-variant">
+              {m.dl_list_progress({ done, total })}
+              {#each list.modules as module (module)}
+                <span class="dl-chip">{moduleName(module, module)}</span>
+              {/each}
+            </span>
+          </a>
+          {#if canEdit}
+            <div class="absolute right-3 top-3">
+              <Menu items={listMenu(list)} label={m.dl_list_options({ name: list.name })} />
+            </div>
           {/if}
-        </section>
-      {/if}
+        </div>
+      {/each}
     </div>
   {/if}
 </ModulePage>
@@ -978,23 +993,26 @@
 </Modal>
 
 <style>
-  .dl-list {
-    display: flex;
-    flex: none;
-    flex-direction: column;
-    gap: 0.125rem;
-    min-width: 10rem;
-    max-width: 16rem;
-    text-align: left;
-    padding: 0.625rem 1rem;
-    border-radius: 0.75rem;
-    border: 1px solid color-mix(in srgb, var(--color-outline-variant) 15%, transparent);
-    background: var(--color-surface-container-low);
+  .dl-list-card {
+    position: relative;
     transition: border-color 0.15s ease;
   }
-  .dl-list:hover,
-  .dl-list--active {
+  .dl-list-card:hover,
+  .dl-list-card:focus-within {
     border-color: var(--color-primary);
+  }
+  .dl-list-link {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    height: 100%;
+    min-height: 8rem;
+    padding: 1.25rem;
+    border-radius: inherit;
+  }
+  .dl-list-link:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
   }
   .dl-board {
     display: flex;
@@ -1095,6 +1113,7 @@
     border-radius: 999px;
   }
   .dl-progress {
+    display: block;
     height: 0.25rem;
     border-radius: 999px;
     background: var(--color-surface-container-high);

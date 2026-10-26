@@ -1120,6 +1120,11 @@
               load={() => import("./pages/DoingLists.svelte")}
             />
             <LazyRoute
+              path="/doing-lists/:listId"
+              load={() => import("./pages/DoingLists.svelte")}
+              props={(meta) => ({ listId: meta.params.listId })}
+            />
+            <LazyRoute
               path="/leveling/*"
               load={() => import("./pages/Leveling.svelte")}
             />

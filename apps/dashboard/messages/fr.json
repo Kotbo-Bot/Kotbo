@@ -15396,5 +15396,8 @@
   "dl_card_assigned": "Carte attribuée à {name}, elle est dans son planning.",
   "dl_card_remove_title": "Retirer « {title} » de la liste ?",
   "dl_card_remove_desc": "La carte et ses détails sont supprimés.",
-  "dl_card_remove_task_kept": "La tâche reste dans le planning de {name}"
+  "dl_card_remove_task_kept": "La tâche reste dans le planning de {name}",
+  "dl_all_lists": "Toutes les listes",
+  "dl_not_found_title": "Liste introuvable",
+  "dl_not_found_desc": "Elle a peut-être été supprimée, ou elle appartient à un autre serveur."
 }

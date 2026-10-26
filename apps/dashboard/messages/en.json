@@ -15396,5 +15396,8 @@
   "dl_card_assigned": "Card assigned to {name}, it is in their planning.",
   "dl_card_remove_title": "Remove “{title}” from the list?",
   "dl_card_remove_desc": "The card and its details are deleted.",
-  "dl_card_remove_task_kept": "The task stays in {name}'s planning"
+  "dl_card_remove_task_kept": "The task stays in {name}'s planning",
+  "dl_all_lists": "All lists",
+  "dl_not_found_title": "List not found",
+  "dl_not_found_desc": "It may have been deleted, or it belongs to another server."
 }
