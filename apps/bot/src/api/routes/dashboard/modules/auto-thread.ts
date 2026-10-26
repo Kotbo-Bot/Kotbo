@@ -12,6 +12,7 @@ import {
 } from '../../../../services/features/autoThreadService.js';
 
 import { jsonFailure } from '../../../shared/failure.js';
+import { handleThreadPanelRoutes } from './auto-thread-panels.js';
 
 /** Plafonds : au-delà, l'ordre d'évaluation devient illisible. */
 const MAX_CONFIGS_PER_CHANNEL = 10;
@@ -52,6 +53,7 @@ async function listConfigs(guildId: string) {
 export async function handleAutoThreadRoutes(ctx: ModuleRouteContext): Promise<boolean> {
   const { req, res, parts, client, guildId, method, auditUser, moduleKey } = ctx;
   if (moduleKey !== 'auto-thread') return false;
+  if (await handleThreadPanelRoutes(ctx)) return true;
 
   const audit = (action: string, details: string, channelId: string | null) => pushAudit(guildId, {
     user: auditUser,
