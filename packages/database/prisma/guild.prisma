@@ -455,6 +455,7 @@ model Guild {
   commandUsageDailyStats CommandUsageDailyStat[]
   contentItemDailyStats ContentItemDailyStat[]
   outgoingWebhooks OutgoingWebhook[]
+  doingLists       DoingList[]
   communitySite    CommunitySite?
 
   // Kotbo × AegisAI (toxicité et émotions)

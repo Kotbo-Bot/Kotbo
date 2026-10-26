@@ -1,0 +1,52 @@
+// Listes de suivi (« doing lists ») : le staff tient plusieurs listes de travail
+// par serveur ou par projet, chacune reliée à des modules (suggestions,
+// tickets…) dont on peut y épingler les éléments un par un.
+
+model DoingList {
+  id String @id @default(cuid())
+
+  guildId     String
+  name        String
+  description String?
+  // Clés des modules reliés (« suggestions », « tickets ») : seuls leurs
+  // éléments peuvent être épinglés dans la liste.
+  modules     String[]
+
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  guild Guild           @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  items DoingListItem[]
+
+  @@index([guildId])
+  @@map("doing_lists")
+}
+
+model DoingListItem {
+  id String @id @default(cuid())
+
+  listId  String
+  guildId String
+  title   String
+  // TODO, DOING, DONE
+  status   String @default("TODO")
+  position Int    @default(0)
+
+  // Élément d'un module relié ; nuls pour une tâche libre. Le titre est une
+  // copie prise à l'épinglage : la liste reste lisible si la source disparaît.
+  sourceModule String?
+  sourceId     String?
+
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  list DoingList @relation(fields: [listId], references: [id], onDelete: Cascade)
+
+  @@unique([listId, sourceModule, sourceId])
+  @@index([listId, status, position])
+  // « Dans quelles listes est ce ticket ? », posé depuis la page du module.
+  @@index([guildId, sourceModule, sourceId])
+  @@map("doing_list_items")
+}
