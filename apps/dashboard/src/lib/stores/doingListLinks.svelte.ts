@@ -5,7 +5,7 @@
  * carte relirait les mêmes listes. Une lecture par module et par serveur, que
  * chaque épinglage met à jour sur place.
  */
-import type { DoingListModule } from '@kotbo/contracts';
+import type { DoingListSource } from '@kotbo/contracts';
 import { addDoingListItem, fetchDoingListLinks, removeDoingListItem, type DoingListLinks } from '../api/doingLists';
 import { authStore } from './auth.svelte';
 
@@ -13,15 +13,15 @@ class DoingListLinksStore {
   byModule = $state<Record<string, DoingListLinks>>({});
   private pending = new Map<string, Promise<void>>();
 
-  private key(module: DoingListModule) {
+  private key(module: DoingListSource) {
     return `${authStore.selectedGuildId}:${module}`;
   }
 
-  get(module: DoingListModule): DoingListLinks | undefined {
+  get(module: DoingListSource): DoingListLinks | undefined {
     return this.byModule[this.key(module)];
   }
 
-  load(module: DoingListModule, force = false): Promise<void> {
+  load(module: DoingListSource, force = false): Promise<void> {
     const key = this.key(module);
     if (!force && (this.byModule[key] || this.pending.has(key))) return this.pending.get(key) ?? Promise.resolve();
     const run = fetchDoingListLinks(module)
@@ -33,7 +33,7 @@ class DoingListLinksStore {
     return run;
   }
 
-  async toggle(module: DoingListModule, listId: string, sourceId: string): Promise<'added' | 'removed'> {
+  async toggle(module: DoingListSource, listId: string, sourceId: string): Promise<'added' | 'removed'> {
     const links = this.get(module);
     const existing = links?.items.find((item) => item.listId === listId && item.sourceId === sourceId);
     if (existing) {
@@ -42,7 +42,7 @@ class DoingListLinksStore {
       return 'removed';
     }
     const { item } = await addDoingListItem(listId, { sourceModule: module, sourceId });
-    links?.items.push({ id: item.id, listId, sourceId, status: item.status });
+    links?.items.push({ id: item.id, listId, sourceId });
     return 'added';
   }
 }

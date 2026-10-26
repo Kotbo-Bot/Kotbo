@@ -44,6 +44,7 @@
   import Skeleton from '../lib/components/Skeleton.svelte';
   import MemberCaseModal from '../lib/components/MemberCaseModal.svelte';
   import DiscordMarkdownEditor from '../lib/components/DiscordMarkdownEditor.svelte';
+  import DoingListPin from '../lib/components/doingLists/DoingListPin.svelte';
   import { Button, Callout, Field, FilterPills, Modal, ToggleSwitch, type FilterOption } from '../lib/components/ui';
   import { localInitialAvatar } from '../lib/discordMedia';
   import { errorMessage } from '@kotbo/shared';
@@ -1513,6 +1514,7 @@
               {memberName(raw.assignee)}
             </span>
           {/if}
+          <DoingListPin module="tasks" sourceId={raw.id} />
         </div>
         <Button size="sm" icon={raw.status === 'COMPLETED' ? 'rotate-ccw' : 'check'} onclick={() => toggleTaskCompletion(raw)}>
           {raw.status === 'COMPLETED' ? m.planning_task_mark_todo() : m.planning_task_mark_done()}

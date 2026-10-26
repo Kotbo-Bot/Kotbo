@@ -6,14 +6,14 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { router } from 'tinro';
-  import type { DoingListModule } from '@kotbo/contracts';
+  import type { DoingListSource } from '@kotbo/contracts';
   import { Menu, type MenuItem } from '../ui';
   import { m } from '../../i18n';
   import { dashboardStore } from '../../stores/dashboard.svelte';
   import { doingListLinks } from '../../stores/doingListLinks.svelte';
   import { toast } from '../../stores/toast.svelte';
 
-  const { module, sourceId }: { module: DoingListModule; sourceId: string } = $props();
+  const { module, sourceId }: { module: DoingListSource; sourceId: string } = $props();
 
   const available = $derived.by(() => {
     const state = dashboardStore.state;
@@ -47,7 +47,7 @@
     })),
     {
       label: m.dl_pin_manage(),
-      description: links?.lists.length ? undefined : m.dl_pin_none_linked(),
+      description: links?.lists.length ? undefined : module === 'tasks' ? m.dl_pin_no_list() : m.dl_pin_none_linked(),
       icon: 'list-checks',
       onselect: () => router.goto('/doing-lists'),
     },
