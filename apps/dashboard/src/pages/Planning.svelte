@@ -14,6 +14,10 @@
     fetchStaffCalendarData,
     fetchAbsenceSuperiors,
     fetchPlanningExtras,
+    fetchPlanningIcalLink,
+    fetchStaffRoles,
+    rsvpMeeting,
+    updateCall,
     dashboardFetch,
     createCall,
     deleteCall,
@@ -41,7 +45,10 @@
   import { formatWallClockInTimezone, parseDateTimeInTimezone } from '@kotbo/contracts';
   import TimezoneHint from '../lib/components/TimezoneHint.svelte';
   import Papicon from '../lib/components/Papicon.svelte';
-  import Calendar, { EVENT_TYPE_COLOR, CALENDAR_VIEWS, type CalendarEvent, type CalendarView } from '../lib/components/Calendar.svelte';
+  import Calendar, { EVENT_TYPE_COLOR, CALENDAR_VIEWS, PHONE_VIEWS, type CalendarEvent, type CalendarView } from '../lib/components/Calendar.svelte';
+  import { isPhone } from '../lib/stores/media.svelte';
+  import { MAX_REPEAT, repeatDates } from '../lib/planningRepeat';
+  import { API_BASE_URL } from '../lib/api/client';
   import AnchoredPopover from '../lib/components/planning/AnchoredPopover.svelte';
   import ModulePage from '../lib/components/ModulePage.svelte';
   import SearchableSelect from '../lib/components/SearchableSelect.svelte';
@@ -54,7 +61,9 @@
   import { errorMessage } from '@kotbo/shared';
 
   type ServerKind = PlanningExtra['kind'];
-  type PlanningType = 'meeting' | 'absence' | 'call' | 'task' | ServerKind;
+  /** Calques calcules par la page : presence en vocal et alertes de couverture. */
+  type DerivedKind = 'voice' | 'coverage';
+  type PlanningType = 'meeting' | 'absence' | 'call' | 'task' | ServerKind | DerivedKind;
   type CalendarData = { absences: any[]; voiceSessions: any[]; meetings: any[]; calls: any[]; tasks: any[] };
   const emptyCalendarData = (): CalendarData => ({ absences: [], voiceSessions: [], meetings: [], calls: [], tasks: [] });
   const normalize = (data: any): CalendarData => ({
@@ -66,22 +75,32 @@
   });
 
   const TYPES: PlanningType[] = ['meeting', 'call', 'absence', 'task'];
+  /** Calques du groupe « Staff » : les types creables, puis ce que la page deduit. */
+  const STAFF_LAYERS: PlanningType[] = [...TYPES, 'coverage', 'voice'];
   // Ce que le serveur a deja de date ; lecture seule, gere dans sa propre page.
-  const SERVER_TYPES: ServerKind[] = ['server_event', 'giveaway', 'schedule'];
+  const SERVER_TYPES: ServerKind[] = ['server_event', 'giveaway', 'schedule', 'testing_end', 'sanction_end'];
   const TYPE_META: Record<PlanningType, { label: () => string; calendar: () => string; icon: string }> = {
     meeting: { label: m.planning_type_meeting, calendar: m.planning_cal_meetings, icon: 'calendar' },
     call: { label: m.planning_type_call, calendar: m.planning_cal_calls, icon: 'phone' },
     absence: { label: m.planning_type_absence, calendar: m.planning_cal_absences, icon: 'sun' },
     task: { label: m.planning_type_task, calendar: m.planning_cal_tasks, icon: 'check-square' },
+    coverage: { label: m.planning_type_coverage, calendar: m.planning_cal_coverage, icon: 'alert-triangle' },
+    voice: { label: m.planning_type_voice, calendar: m.planning_cal_voice, icon: 'mic' },
     server_event: { label: m.planning_type_server_event, calendar: m.planning_cal_server_events, icon: 'megaphone' },
     giveaway: { label: m.planning_type_giveaway, calendar: m.planning_cal_giveaways, icon: 'gift' },
     schedule: { label: m.planning_type_schedule, calendar: m.planning_cal_schedules, icon: 'send' },
+    testing_end: { label: m.planning_type_testing_end, calendar: m.planning_cal_testing_end, icon: 'graduation-cap' },
+    sanction_end: { label: m.planning_type_sanction_end, calendar: m.planning_cal_sanction_end, icon: 'ban' },
   };
   const SERVER_LINK_LABEL: Record<ServerKind, () => string> = {
     server_event: m.planning_extra_open_events,
     giveaway: m.planning_extra_open_giveaways,
     schedule: m.planning_extra_open_schedules,
+    testing_end: m.planning_extra_open_tutoring,
+    sanction_end: m.planning_extra_open_sanctions,
   };
+  /** Couleurs du mode « par personne » : une par membre, dans l'ordre de la liste. */
+  const PERSON_PALETTE = ['#4f46e5', '#0891b2', '#16a34a', '#ca8a04', '#db2777', '#7c3aed', '#ea580c', '#0d9488', '#be123c', '#2563eb'];
   const EVENT_STATUS_LABEL: Record<string, { label: () => string; badge: string }> = {
     SCHEDULED: { label: m.planning_event_status_scheduled, badge: 'badge-info' },
     ACTIVE: { label: m.planning_event_status_active, badge: 'badge-warning' },
@@ -94,12 +113,12 @@
     DATA_EXPORT: m.planning_schedule_type_data_export,
   };
   const isServerKind = (type: string): type is ServerKind => (SERVER_TYPES as string[]).includes(type);
-  const VIEW_META: Record<CalendarView, { label: () => string; short?: () => string; icon: string }> = {
+  const VIEW_META: Record<CalendarView, { label: () => string; icon: string }> = {
     day: { label: m.cal_view_day, icon: 'calendar' },
-    workweek: { label: m.cal_view_workweek, short: m.cal_view_workweek_short, icon: 'briefcase' },
+    twodays: { label: m.cal_view_twodays, icon: 'grid' },
     week: { label: m.cal_view_week, icon: 'calendar-days' },
     month: { label: m.cal_view_month, icon: 'layout-grid' },
-    agenda: { label: m.cal_view_agenda, icon: 'list' },
+    agenda: { label: m.cal_view_list, icon: 'list' },
   };
   const PRIORITY_LABEL: Record<string, () => string> = {
     LOW: m.planning_priority_low,
@@ -121,7 +140,7 @@
     SCHEDULED: 'badge-info',
     IN_PROGRESS: 'badge-warning',
     COMPLETED: 'badge-success',
-    CANCELLED: 'badge-danger',
+    CANCELED: 'badge-danger',
     PRESENT: 'badge-success',
     EXCUSED: 'badge-warning',
     ABSENT_CHECKED: 'badge-warning',
@@ -137,7 +156,11 @@
   let todayData = $state<CalendarData>(emptyCalendarData());
   let extras = $state<PlanningExtra[]>([]);
   let todayExtras = $state<PlanningExtra[]>([]);
+  // Absences de toute l'equipe sur la periode, pour l'alerte de couverture.
+  let teamAbsences = $state<Array<{ staffName: string; start: string; end: string | null }>>([]);
+  let allRoles = $state<any[]>([]);
   let userTasks = $state<any[]>([]);
+  let loadError = $state(false);
 
   // ── Affichage ───────────────────────────────────────────
   let calendarView = $state<CalendarView>('week');
@@ -147,8 +170,31 @@
   let rangeKnown = false;
   let miniCalDate = $state(new Date());
   let selectedStaffIds = $state<string[]>([]);
-  let visibleTypes = $state<string[]>([...TYPES, ...SERVER_TYPES]);
+  // La presence vocale est nombreuse : elle se coche quand on la cherche.
+  let visibleTypes = $state<string[]>([...TYPES, 'coverage', ...SERVER_TYPES]);
   let peopleQuery = $state('');
+  let searchQuery = $state('');
+  // Preferences d'affichage du lecteur, gardees dans son navigateur.
+  let colorMode = $state<'type' | 'person'>(readPref('kotbo.planning.colorMode', 'type'));
+  let showWeekend = $state<'auto' | 'always'>(readPref('kotbo.planning.weekend', 'auto'));
+  let icalOpen = $state(false);
+  let icalUrl = $state('');
+
+  function readPref<T extends string>(key: string, fallback: T): T {
+    try {
+      return (localStorage.getItem(key) as T | null) ?? fallback;
+    } catch {
+      return fallback;
+    }
+  }
+
+  function writePref(key: string, value: string) {
+    try {
+      localStorage.setItem(key, value);
+    } catch {
+      /* navigation privee : la preference vaut pour la visite */
+    }
+  }
   let leftPaneOpen = $state(true);
   let myDayOpen = $state(true);
   let myDayTab = $state<'agenda' | 'tasks'>('agenda');
@@ -185,6 +231,9 @@
   let formDiscordChannelId = $state('');
   let formIsTempChannel = $state(true);
   let formInviteeUserIds = $state<string[]>([]);
+  // Repetition d'une reunion ou d'un appel : chaque occurrence est creee a part.
+  let formRepeat = $state<'none' | 'weekly' | 'biweekly' | 'monthly'>('none');
+  let formRepeatCount = $state(4);
   let formLocation = $state('');
   let formError = $state('');
   let saving = $state(false);
@@ -267,6 +316,33 @@
     return q ? activeStaff.filter(s => `${s.displayName ?? ''} ${s.username ?? ''}`.toLowerCase().includes(q)) : activeStaff;
   });
 
+  /** Personnes rangees par grade, du plus haut au plus bas, comme la liste du staff. */
+  const staffGroups = $derived.by(() => {
+    const rank = (grade: string) => allRoles.find(r => r.name === grade)?.sortOrder ?? Number.MAX_SAFE_INTEGER;
+    const groups = new Map<string, any[]>();
+    for (const s of filteredStaff) {
+      const grade = s.grade || m.planning_no_grade();
+      groups.set(grade, [...(groups.get(grade) ?? []), s]);
+    }
+    return [...groups.entries()]
+      .map(([grade, members]) => ({ grade, members }))
+      .sort((a, b) => rank(a.grade) - rank(b.grade) || a.grade.localeCompare(b.grade));
+  });
+
+  const personColor = (staffId: string | null | undefined) => {
+    const index = activeStaff.findIndex(s => s.id === staffId);
+    return index === -1 ? undefined : PERSON_PALETTE[index % PERSON_PALETTE.length];
+  };
+
+  /** Membre a qui appartient l'element, pour la couleur par personne. */
+  function ownerOf(event: CalendarEvent): string | null {
+    const raw = event.raw ?? {};
+    if (event.type === 'absence' || event.type === 'voice') return raw.staffUserId ?? null;
+    if (event.type === 'task') return raw.assigneeId ?? null;
+    if (event.type === 'call') return raw.creatorId ?? null;
+    return null;
+  }
+
   const superiorLabel = (s: AbsenceSuperior) =>
     `${s.displayName} · ${s.reason === 'tutor' ? m.planning_superior_tutor() : s.reason === 'owner' ? m.planning_superior_owner() : s.grade ?? ''}`;
   const superiorOptions = $derived(superiors.map(s => ({ id: s.userId, name: superiorLabel(s) })));
@@ -298,14 +374,56 @@
     return { id: x.id, title: x.title, start, end, type: x.kind, isAllDay: false, details: x.description ?? undefined, raw: x };
   }
 
+  /** Une session vocale du staff : qui etait en vocal, et quand. */
+  function voiceToEvent(raw: any): CalendarEvent {
+    const start = new Date(raw.joinedAt);
+    const end = raw.leftAt ? new Date(raw.leftAt) : new Date();
+    const name = memberName(raw.staffMember);
+    return { id: raw.id, title: name, start, end, type: 'voice', isAllDay: false, staffName: raw.channelName ?? undefined, raw };
+  }
+
+  /** A partir de combien d'absents le meme jour on previent : un quart de l'equipe, deux au minimum. */
+  const coverageThreshold = $derived(Math.max(2, Math.ceil(activeStaff.length * 0.25)));
+
+  /** Jours ou trop de staff sont absents, d'apres les absences de toute l'equipe. */
+  const coverageEvents = $derived.by((): CalendarEvent[] => {
+    const result: CalendarEvent[] = [];
+    const day = new Date(rangeStart);
+    day.setHours(0, 0, 0, 0);
+    for (; day.getTime() <= rangeEnd.getTime(); day.setDate(day.getDate() + 1)) {
+      const from = day.getTime();
+      const to = from + 86400000;
+      const names = [...new Set(teamAbsences
+        .filter(a => new Date(a.start).getTime() < to && (a.end === null || new Date(a.end).getTime() >= from))
+        .map(a => a.staffName))];
+      if (names.length < coverageThreshold) continue;
+      result.push({
+        id: `coverage-${from}`,
+        title: m.planning_coverage_title({ count: names.length }),
+        start: new Date(from),
+        end: new Date(to - 1),
+        type: 'coverage',
+        isAllDay: true,
+        raw: { names },
+      });
+    }
+    return result;
+  });
+
   const calendarEvents = $derived.by(() => {
     const events: CalendarEvent[] = [];
     if (visibleTypes.includes('meeting')) calendarData.meetings.forEach(x => events.push(toEvent('meeting', x)));
     if (visibleTypes.includes('absence')) calendarData.absences.forEach(x => events.push(toEvent('absence', x)));
     if (visibleTypes.includes('call')) calendarData.calls.forEach(x => events.push(toEvent('call', x)));
     if (visibleTypes.includes('task')) calendarData.tasks.filter(t => t.dueDate).forEach(x => events.push(toEvent('task', x)));
+    if (visibleTypes.includes('voice')) calendarData.voiceSessions.forEach(x => events.push(voiceToEvent(x)));
+    if (visibleTypes.includes('coverage')) events.push(...coverageEvents);
     extras.filter(x => visibleTypes.includes(x.kind)).forEach(x => events.push(extraToEvent(x)));
-    return events;
+
+    const q = searchQuery.trim().toLowerCase();
+    const shown = q ? events.filter(e => `${e.title ?? ''} ${e.staffName ?? ''}`.toLowerCase().includes(q)) : events;
+    if (colorMode === 'type') return shown;
+    return shown.map(e => ({ ...e, color: personColor(ownerOf(e)) }));
   });
 
   const typeCounts = $derived<Record<string, number>>({
@@ -313,12 +431,20 @@
     call: calendarData.calls.length,
     absence: calendarData.absences.length,
     task: calendarData.tasks.filter(t => t.dueDate).length,
+    voice: calendarData.voiceSessions.length,
+    coverage: coverageEvents.length,
     ...Object.fromEntries(SERVER_TYPES.map(k => [k, extras.filter(x => x.kind === k).length])),
   });
 
   // Calques que le role peut voir : les memes droits que la page de chaque section.
-  const canSeeServerKind = (kind: ServerKind) =>
-    kind === 'schedule' ? canManageSettings : canViewFeature(kind === 'server_event' ? 'events' : 'giveaways');
+  const SERVER_FEATURE: Record<ServerKind, string> = {
+    server_event: 'events',
+    giveaway: 'giveaways',
+    schedule: 'settings',
+    testing_end: 'tutoring',
+    sanction_end: 'sanctions',
+  };
+  const canSeeServerKind = (kind: ServerKind) => (kind === 'schedule' ? canManageSettings : canViewFeature(SERVER_FEATURE[kind]));
   const canCreateServerEvent = $derived(canManageSettings && canViewFeature('events'));
 
   const todayAgenda = $derived(
@@ -328,6 +454,8 @@
       ...todayExtras.map(extraToEvent),
     ].sort((a, b) => a.start.getTime() - b.start.getTime()),
   );
+  /** Ce qui vient ensuite aujourd'hui, comme la carte « Prochain cours » de Tafac. */
+  const nextUp = $derived(todayAgenda.find(e => (e.end ?? e.start).getTime() > Date.now()) ?? null);
   const absentToday = $derived(todayData.absences.filter(a => a.status !== 'REJECTED'));
   const pendingTasks = $derived(userTasks.filter(t => t.status !== 'COMPLETED'));
   const doneTasks = $derived(userTasks.filter(t => t.status === 'COMPLETED'));
@@ -346,10 +474,30 @@
 
   function formatSpan(start: Date, end: Date | undefined, type: string) {
     const day = capitalize(start.toLocaleDateString(dateLocale(), { weekday: 'long', day: 'numeric', month: 'long' }));
-    // Echeance, tirage ou publication : un instant, pas une plage.
-    if (type === 'task' || type === 'giveaway' || type === 'schedule' || !end) return `${day} · ${formatTime(start)}`;
+    // Echeance, tirage, publication ou fin de periode : un instant, pas une plage.
+    if (INSTANT_TYPES.includes(type) || !end) return `${day} · ${formatTime(start)}`;
+    if (type === 'coverage') return day;
     if (isSameDay(start, end)) return `${day} · ${formatTime(start)} – ${formatTime(end)}`;
     return `${day} ${formatTime(start)} – ${end.toLocaleDateString(dateLocale(), { day: 'numeric', month: 'long' })} ${formatTime(end)}`;
+  }
+
+  const INSTANT_TYPES = ['task', 'giveaway', 'schedule', 'testing_end', 'sanction_end'];
+
+  /** « 45 min », « 1 h 30 » : la duree se lit sans calcul, comme dans Tafac. */
+  function formatDuration(start: Date, end: Date | undefined): string {
+    if (!end) return '';
+    const minutes = Math.round((end.getTime() - start.getTime()) / 60000);
+    if (minutes <= 0 || minutes >= 24 * 60) return '';
+    const h = Math.floor(minutes / 60);
+    const rest = minutes % 60;
+    return h === 0 ? `${rest} min` : rest === 0 ? `${h} h` : `${h} h ${String(rest).padStart(2, '0')}`;
+  }
+
+  /** « dans 25 min », « dans 2 h » : pour la carte « A suivre ». */
+  function formatCountdown(start: Date): string {
+    const minutes = Math.max(0, Math.round((start.getTime() - Date.now()) / 60000));
+    if (minutes === 0) return m.planning_next_now();
+    return m.planning_next_in({ delay: minutes < 60 ? `${minutes} min` : `${Math.round(minutes / 60)} h` });
   }
 
   const miniCalDays = $derived.by(() => {
@@ -405,13 +553,15 @@
   async function loadData() {
     loading = true;
     try {
-      const [membersData, callPermData, superiorsData] = await Promise.all([
+      const [membersData, callPermData, superiorsData, rolesData] = await Promise.all([
         fetchStaffMembers(),
         fetchCallPermissionConfig().catch(() => null),
         fetchAbsenceSuperiors().catch(() => null),
+        fetchStaffRoles().catch(() => null),
       ]);
       allStaff = membersData?.members || [];
       superiors = superiorsData?.superiors || [];
+      allRoles = rolesData?.roles || [];
 
       if (callPermData) {
         callPermConfig = callPermData.config;
@@ -445,8 +595,11 @@
       ]);
       calendarData = normalize(data);
       extras = extra?.items ?? [];
+      teamAbsences = extra?.teamAbsences ?? [];
+      loadError = false;
     } catch (e) {
       console.error('Failed to load calendar data:', e);
+      loadError = true;
     }
   }
 
@@ -507,6 +660,8 @@
   // ── Bulles et fiches ────────────────────────────────────
   function handleEventClick(event: CalendarEvent, anchor: DOMRect) {
     quickAnchor = null;
+    rsvpExcuseOpen = false;
+    rsvpNote = '';
     peek = { event, anchor };
   }
 
@@ -569,7 +724,103 @@
     selectedMembers = new Map();
     memberSearchQuery = '';
     memberSearchResults = [];
+    formRepeat = 'none';
+    formRepeatCount = 4;
     formError = '';
+  }
+
+  // ── Disponibilites du creneau ───────────────────────────
+  // Avant de poser une reunion ou un appel : qui est absent, et ce qui tombe deja a cette heure.
+  let slotBusy = $state<{ absents: string[]; conflicts: string[] }>({ absents: [], conflicts: [] });
+  let slotRequest = 0;
+
+  $effect(() => {
+    const active = (creationModalOpen || !!quickAnchor) && (createType === 'meeting' || createType === 'call');
+    const start = selectedStartDate;
+    const end = selectedEndDate;
+    if (!active || end <= start) {
+      slotBusy = { absents: [], conflicts: [] };
+      return;
+    }
+    const request = ++slotRequest;
+    const timer = setTimeout(async () => {
+      // Six heures avant : une reunion commencee plus tot peut encore couvrir le creneau.
+      const data = await fetchStaffCalendarData(new Date(start.getTime() - 6 * 3600000), end).catch(() => null);
+      if (request !== slotRequest || !data) return;
+      const day = normalize(data);
+      const overlaps = (e: CalendarEvent) => e.start < end && (e.end ?? e.start) > start;
+      slotBusy = {
+        absents: [...new Set(day.absences.filter(a => a.status !== 'REJECTED').map(a => memberName(a.staffMember)))],
+        conflicts: [...day.meetings.map(x => toEvent('meeting', x)), ...day.calls.map(x => toEvent('call', x))]
+          .filter(overlaps)
+          .map(e => `${e.title} (${formatTime(e.start)})`),
+      };
+    }, 300);
+    return () => clearTimeout(timer);
+  });
+
+  // ── Reponse a une reunion ───────────────────────────────
+  let rsvpExcuseOpen = $state(false);
+  let rsvpNote = $state('');
+  let rsvpSaving = $state(false);
+  const myPresence = (meeting: any): string | null =>
+    meeting?.presences?.find((p: any) => p.staffUserId === myStaffRecord?.id)?.status ?? null;
+
+  async function answerMeeting(meetingId: string, status: 'PRESENT' | 'EXCUSED' | 'ABSENT') {
+    // S'excuser demande une raison, comme le bouton du message Discord.
+    if (status === 'EXCUSED' && !rsvpNote.trim()) {
+      rsvpExcuseOpen = true;
+      return;
+    }
+    rsvpSaving = true;
+    if (await rsvpMeeting(meetingId, status, status === 'EXCUSED' ? rsvpNote.trim() : undefined)) {
+      toast.success(m.planning_rsvp_saved());
+      rsvpExcuseOpen = false;
+      rsvpNote = '';
+      await refreshAll();
+    }
+    rsvpSaving = false;
+  }
+
+  // ── Glisser-deposer ─────────────────────────────────────
+  const isMine = (staffId: string | undefined) => !!staffId && staffId === myStaffRecord?.id;
+  const canMoveEvent = (e: CalendarEvent) =>
+    (e.type === 'meeting' && canManageMeetings && e.raw?.status === 'SCHEDULED')
+    || (e.type === 'call' && (canManageSettings || isMine(e.raw?.creatorId)))
+    || (e.type === 'task' && (canManageSettings || isMine(e.raw?.assigneeId) || isMine(e.raw?.creatorId)));
+  const canResizeEvent = (e: CalendarEvent) => (e.type === 'meeting' || e.type === 'call') && canMoveEvent(e);
+
+  async function handleEventMove(event: CalendarEvent, start: Date, end: Date) {
+    peek = null;
+    try {
+      if (event.type === 'meeting') {
+        if (start.getTime() <= Date.now()) {
+          toast.error(m.planning_err_meeting_in_past());
+          return;
+        }
+        await updateMeeting(event.id, { scheduledAt: start.toISOString(), endedAt: end.toISOString() });
+      } else if (event.type === 'call') {
+        await updateCall(event.id, { scheduledAt: start.toISOString(), endedAt: end.toISOString() });
+      } else if (event.type === 'task') {
+        await updateTask(event.id, { dueDate: start.toISOString() });
+      }
+    } catch (err) {
+      toast.error(errorMessage(err) || m.planning_err_move());
+    }
+    await refreshAll();
+  }
+
+  // ── Abonnement iCal ─────────────────────────────────────
+  async function openIcal() {
+    const link = await fetchPlanningIcalLink().catch(() => null);
+    if (!link?.path) return;
+    icalUrl = `${API_BASE_URL || window.location.origin}${link.path}`;
+    icalOpen = true;
+  }
+
+  function copyIcal() {
+    void navigator.clipboard.writeText(icalUrl);
+    toast.success(m.planning_ical_copied());
   }
 
   /** Creneau choisi dans la grille : bulle de creation rapide, comme Outlook. */
@@ -626,8 +877,13 @@
           formError = m.meetings_err_end_before_start();
           return;
         }
-        const ok = await createMeeting(formTitle.trim(), formDescription, selectedStartDate.toISOString(), selectedEndDate.toISOString(), formTimezone);
-        if (!ok) throw new Error(m.planning_err_create_meeting());
+        const occurrences = repeatDates(selectedStartDate, selectedEndDate, formRepeat, formRepeatCount);
+        for (const [index, [start, end]] of occurrences.entries()) {
+          const ok = await createMeeting(formTitle.trim(), formDescription, start.toISOString(), end.toISOString(), formTimezone);
+          // Une occurrence refusee arrete la serie : on dit combien sont deja posees.
+          if (!ok) throw new Error(index === 0 ? m.planning_err_create_meeting() : m.planning_err_repeat_partial({ done: index }));
+        }
+        if (occurrences.length > 1) toast.success(m.planning_repeat_created({ count: occurrences.length }));
       } else if (createType === 'absence') {
         if (!myStaffRecord) { formError = m.planning_err_not_staff(); return; }
         if (!formDescription.trim()) { formError = m.planning_err_absence_reason(); return; }
@@ -644,16 +900,25 @@
         });
       } else if (createType === 'call') {
         if (!callPermCanCreate) { formError = m.planning_err_no_call_permission(); return; }
-        await createCall({
-          title: formTitle.trim(),
-          description: formDescription,
-          scheduledAt: selectedStartDate.toISOString(),
-          channelMode: formChannelMode,
-          channelType: formChannelMode === 'CREATE_NEW' ? formChannelType : null,
-          discordChannelId: formChannelMode === 'EXISTING' ? formDiscordChannelId : null,
-          isTempChannel: formIsTempChannel,
-          inviteeUserIds: [...formInviteeUserIds, ...formInviteeMemberIds],
-        });
+        const occurrences = repeatDates(selectedStartDate, selectedEndDate, formRepeat, formRepeatCount);
+        for (const [index, [start]] of occurrences.entries()) {
+          try {
+            await createCall({
+              title: formTitle.trim(),
+              description: formDescription,
+              scheduledAt: start.toISOString(),
+              channelMode: formChannelMode,
+              channelType: formChannelMode === 'CREATE_NEW' ? formChannelType : null,
+              discordChannelId: formChannelMode === 'EXISTING' ? formDiscordChannelId : null,
+              isTempChannel: formIsTempChannel,
+              inviteeUserIds: [...formInviteeUserIds, ...formInviteeMemberIds],
+            });
+          } catch (err) {
+            if (index === 0) throw err;
+            throw new Error(m.planning_err_repeat_partial({ done: index }));
+          }
+        }
+        if (occurrences.length > 1) toast.success(m.planning_repeat_created({ count: occurrences.length }));
       } else if (createType === 'server_event') {
         // Discord refuse un evenement planifie dans le passe.
         if (selectedStartDate.getTime() <= Date.now()) { formError = m.planning_err_event_in_past(); return; }
@@ -712,9 +977,26 @@
     })),
   );
 
-  const moreMenu = $derived<MenuItem[]>(
-    isAdmin ? [{ label: m.planning_call_perms_btn(), description: m.planning_call_perms_tooltip(), icon: 'shield', onselect: openPermissionModal }] : [],
-  );
+  const moreMenu = $derived<MenuItem[]>([
+    ...(myStaffRecord ? [{ label: m.planning_ical_menu(), description: m.planning_ical_menu_desc(), icon: 'link', onselect: () => void openIcal() }] : []),
+    {
+      label: colorMode === 'type' ? m.planning_color_by_person() : m.planning_color_by_type(),
+      icon: 'palette',
+      onselect: () => {
+        colorMode = colorMode === 'type' ? 'person' : 'type';
+        writePref('kotbo.planning.colorMode', colorMode);
+      },
+    },
+    {
+      label: showWeekend === 'auto' ? m.planning_weekend_always() : m.planning_weekend_auto(),
+      icon: 'calendar-days',
+      onselect: () => {
+        showWeekend = showWeekend === 'auto' ? 'always' : 'auto';
+        writePref('kotbo.planning.weekend', showWeekend);
+      },
+    },
+    ...(isAdmin ? [{ label: m.planning_call_perms_btn(), description: m.planning_call_perms_tooltip(), icon: 'shield', onselect: openPermissionModal }] : []),
+  ]);
 
   // ── Recherche de membres (invites, permissions) ─────────
   async function searchMembers(query: string) {
@@ -846,7 +1128,7 @@
       case 'SCHEDULED': return m.meetings_status_scheduled();
       case 'IN_PROGRESS': return m.meetings_status_in_progress();
       case 'COMPLETED': return m.meetings_status_completed();
-      case 'CANCELLED': return m.meetings_status_cancelled();
+      case 'CANCELED': return m.meetings_status_cancelled();
       case 'PRESENT': return m.meetings_presence_present();
       case 'EXCUSED': return m.meetings_presence_excused();
       case 'ABSENT_CHECKED': return m.planning_presence_excused_checked();
@@ -1117,6 +1399,19 @@
   </div>
 {/snippet}
 
+{#snippet availability()}
+  {#if (createType === 'meeting' || createType === 'call') && (slotBusy.absents.length > 0 || slotBusy.conflicts.length > 0)}
+    <div class="pl-avail" role="status">
+      {#if slotBusy.absents.length > 0}
+        <p><Papicon icon="sun" size={13} /> {m.planning_avail_absents({ names: slotBusy.absents.join(', ') })}</p>
+      {/if}
+      {#if slotBusy.conflicts.length > 0}
+        <p><Papicon icon="calendar" size={13} /> {m.planning_avail_conflicts({ items: slotBusy.conflicts.join(', ') })}</p>
+      {/if}
+    </div>
+  {/if}
+{/snippet}
+
 {#snippet memberSearch(query: string, busy: boolean, results: any[], onInput: (v: string) => void, onPick: (member: any) => void, picked: string[])}
   <div class="relative">
     <Papicon icon="search" size={14} class="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant pointer-events-none" />
@@ -1161,22 +1456,29 @@
 
         <span class="pl-sep" aria-hidden="true"></span>
 
-        <div class="hidden md:flex items-center gap-0.5" role="group" aria-label={m.planning_view_aria()} title={m.planning_shortcuts_hint()}>
-          {#each CALENDAR_VIEWS as v (v)}
+        <!-- Peu de vues, comme Tafac : quatre sur ordinateur, trois sur telephone. -->
+        <div class="flex items-center gap-0.5" role="group" aria-label={m.planning_view_aria()} title={m.planning_shortcuts_hint()}>
+          {#each $isPhone ? PHONE_VIEWS : CALENDAR_VIEWS as v (v)}
             <button type="button" class="pl-view {calendarView === v ? 'pl-view--active' : ''}" aria-pressed={calendarView === v} onclick={() => (calendarView = v)}>
               <Papicon icon={VIEW_META[v].icon} size={15} />
-              <span class="hidden xl:inline">{VIEW_META[v].label()}</span>
-              <span class="xl:hidden">{(VIEW_META[v].short ?? VIEW_META[v].label)()}</span>
+              <span class="hidden sm:inline">{VIEW_META[v].label()}</span>
+              <span class="sr-only sm:hidden">{VIEW_META[v].label()}</span>
             </button>
           {/each}
         </div>
-        <select class="input w-auto md:hidden text-body-sm" bind:value={calendarView} aria-label={m.planning_view_aria()}>
-          {#each CALENDAR_VIEWS as v (v)}
-            <option value={v}>{VIEW_META[v].label()}</option>
-          {/each}
-        </select>
 
         <div class="ml-auto flex items-center gap-1">
+          <div class="pl-search">
+            <Papicon icon="search" size={14} class="absolute left-2.5 top-1/2 -translate-y-1/2 text-on-surface-variant pointer-events-none" />
+            <input
+              type="search"
+              class="input pl-8 py-1.5 text-body-sm"
+              bind:value={searchQuery}
+              placeholder={m.planning_search_ph()}
+              aria-label={m.planning_search_ph()}
+              onkeydown={(e) => e.key === 'Escape' && (searchQuery = '')}
+            />
+          </div>
           <Button variant="ghost" icon="refresh" aria-label={m.planning_refresh()} title={m.planning_refresh()} onclick={refreshAll} />
           <button type="button" class="pl-view {myDayOpen ? 'pl-view--active' : ''}" aria-pressed={myDayOpen} onclick={() => (myDayOpen = !myDayOpen)}>
             <Papicon icon="clipboard-list" size={15} />
@@ -1229,9 +1531,9 @@
             <section class="pl-left-section">
               <h3 class="pl-left-title">{m.planning_my_calendars()}</h3>
               <ul>
-                {#each TYPES as type (type)}
+                {#each STAFF_LAYERS as type (type)}
                   <li>
-                    <label class="pl-filter" style="--evt: {EVENT_TYPE_COLOR[type]}">
+                    <label class="pl-filter" style="--evt: {EVENT_TYPE_COLOR[type]}" title={type === 'coverage' ? m.planning_coverage_hint({ count: coverageThreshold }) : undefined}>
                       <input type="checkbox" class="pl-check" checked={visibleTypes.includes(type)} onchange={() => toggleType(type)} />
                       <span class="flex-1 text-body-sm text-on-surface">{TYPE_META[type].calendar()}</span>
                       <span class="text-2xs text-on-surface-variant tabular-nums">{typeCounts[type]}</span>
@@ -1259,45 +1561,82 @@
             {/if}
 
             <section class="pl-left-section flex-1 min-h-0 flex flex-col">
-              <div class="flex items-center justify-between gap-2">
-                <h3 class="pl-left-title">{m.planning_people()}</h3>
-                <span class="flex gap-0.5">
-                  {#if myStaffRecord}
-                    <button type="button" class="pl-link" onclick={() => setStaff([myStaffRecord.id])}>{m.planning_only_me()}</button>
-                  {/if}
-                  <button type="button" class="pl-link" onclick={() => setStaff(selectedStaffIds.length === activeStaff.length ? [] : activeStaff.map(s => s.id))}>
-                    {selectedStaffIds.length === activeStaff.length ? m.planning_select_none() : m.planning_select_all()}
-                  </button>
-                </span>
+              <!-- Titre seul sur sa ligne, raccourcis dessous : rien ne se replie dans un volet etroit. -->
+              <h3 class="pl-left-title">{m.planning_people()}</h3>
+              <div class="flex flex-wrap gap-x-1 mb-1">
+                {#if myStaffRecord}
+                  <button type="button" class="pl-link" onclick={() => setStaff([myStaffRecord.id])}>{m.planning_only_me()}</button>
+                {/if}
+                <button type="button" class="pl-link" onclick={() => setStaff(selectedStaffIds.length === activeStaff.length ? [] : activeStaff.map(s => s.id))}>
+                  {selectedStaffIds.length === activeStaff.length ? m.planning_select_none() : m.planning_select_all()}
+                </button>
               </div>
               {#if activeStaff.length > 8}
                 <input type="search" class="input my-1 text-body-sm" bind:value={peopleQuery} placeholder={m.planning_people_search_ph()} aria-label={m.planning_people_search_ph()} />
               {/if}
-              <ul class="flex-1 min-h-0 overflow-y-auto">
-                {#each filteredStaff as staff (staff.id)}
-                  <li>
-                    <label class="pl-filter">
-                      <input type="checkbox" class="pl-check" checked={selectedStaffIds.includes(staff.id)} onchange={() => toggleStaff(staff.id)} />
-                      {@render avatar(staff.avatarUrl, staff.username)}
-                      <span class="flex-1 min-w-0 truncate text-body-sm text-on-surface">{memberName(staff)}</span>
+              <div class="flex-1 min-h-0 overflow-y-auto">
+                {#each staffGroups as group (group.grade)}
+                  {@const ids = group.members.map(s => s.id)}
+                  {@const allIn = ids.every(id => selectedStaffIds.includes(id))}
+                  <div class="mt-1">
+                    <!-- Un grade entier se coche d'un clic. -->
+                    <label class="pl-filter pl-filter--group">
+                      <input
+                        type="checkbox"
+                        class="pl-check"
+                        checked={allIn}
+                        indeterminate={!allIn && ids.some(id => selectedStaffIds.includes(id))}
+                        onchange={() => setStaff(allIn ? selectedStaffIds.filter(id => !ids.includes(id)) : [...new Set([...selectedStaffIds, ...ids])])}
+                      />
+                      <span class="flex-1 min-w-0 truncate text-2xs font-semibold text-on-surface-variant">{group.grade}</span>
+                      <span class="text-2xs text-on-surface-variant tabular-nums">{group.members.length}</span>
                     </label>
-                  </li>
+                    <ul>
+                      {#each group.members as staff (staff.id)}
+                        <li>
+                          <label class="pl-filter pl-4">
+                            <input type="checkbox" class="pl-check" style={colorMode === 'person' ? `--evt: ${personColor(staff.id)}` : ''} checked={selectedStaffIds.includes(staff.id)} onchange={() => toggleStaff(staff.id)} />
+                            {@render avatar(staff.avatarUrl, staff.username)}
+                            <span class="flex-1 min-w-0 truncate text-body-sm text-on-surface">{memberName(staff)}</span>
+                          </label>
+                        </li>
+                      {/each}
+                    </ul>
+                  </div>
                 {/each}
-              </ul>
+              </div>
             </section>
           </aside>
         {/if}
 
         <!-- ===== Calendrier ===== -->
         <div class="pl-main">
+          {#if loadError}
+            <div class="m-3">
+              <Callout variant="danger" title={m.planning_load_error()}>
+                {#snippet actions()}
+                  <Button size="sm" icon="refresh" onclick={refreshAll}>{m.planning_retry()}</Button>
+                {/snippet}
+              </Callout>
+            </div>
+          {/if}
+          {#if searchQuery.trim()}
+            <p class="px-4 py-1.5 text-2xs text-on-surface-variant border-b border-outline-variant">
+              {m.planning_search_results({ count: calendarEvents.length, q: searchQuery.trim() })}
+            </p>
+          {/if}
           <Calendar
             bind:view={calendarView}
             bind:currentDate={calendarCurrentDate}
             events={calendarEvents}
             selectedKey={eventKey(peek?.event)}
+            {showWeekend}
             onRangeChange={handleRangeChange}
             onEventClick={handleEventClick}
             onSlotSelect={handleSlotSelect}
+            onEventMove={handleEventMove}
+            canMove={canMoveEvent}
+            canResize={canResizeEvent}
           />
         </div>
 
@@ -1327,6 +1666,18 @@
 
             <div class="flex-1 min-h-0 overflow-y-auto px-3 py-3 space-y-5">
               {#if myDayTab === 'agenda'}
+                {#if nextUp}
+                  <!-- « A suivre » : comme la carte « Prochain cours » de Tafac, aux couleurs du calendrier. -->
+                  <button type="button" class="pl-next" style="--evt: {EVENT_TYPE_COLOR[nextUp.type]}" onclick={(e) => handleEventClick(nextUp, e.currentTarget.getBoundingClientRect())}>
+                    <span class="text-2xs font-semibold" style="color: var(--evt)">
+                      {m.planning_next_title()} · {nextUp.start.getTime() <= Date.now() ? m.planning_next_now() : formatCountdown(nextUp.start)}
+                    </span>
+                    <span class="block text-base font-semibold text-on-surface truncate">{nextUp.title}</span>
+                    <span class="block text-2xs text-on-surface-variant">
+                      {formatTime(nextUp.start)}{nextUp.end && !INSTANT_TYPES.includes(nextUp.type) ? ` – ${formatTime(nextUp.end)}` : ''} · {TYPE_META[nextUp.type as PlanningType].label()}
+                    </span>
+                  </button>
+                {/if}
                 {#if todayAgenda.length === 0}
                   <p class="px-1 text-body-sm text-on-surface-variant">{m.planning_today_empty()}</p>
                 {:else}
@@ -1426,6 +1777,7 @@
       <input class="input text-base font-semibold" bind:value={formTitle} placeholder={m.planning_title_ph()} aria-label={m.planning_title_ph()} />
     {/if}
     {@render dateFields(true)}
+    {@render availability()}
     {#if formError}
       <Callout variant="danger">{formError}</Callout>
     {/if}
@@ -1442,12 +1794,13 @@
     {@const event = peek.event}
     {@const raw = event.raw}
     {@const type = event.type as PlanningType}
-    <div class="pl-peek" style="--evt: {EVENT_TYPE_COLOR[type]}">
+    {@const readOnly = isServerKind(type) || type === 'voice' || type === 'coverage'}
+    <div class="pl-peek" style="--evt: {event.color ?? EVENT_TYPE_COLOR[type]}">
       <div class="flex items-center justify-end gap-0.5 px-2 pt-2">
         {#if type === 'meeting' && canManageMeetings}
           <Button variant="ghost" size="sm" icon="edit-2" aria-label={m.planning_detail_edit()} title={m.planning_detail_edit()} onclick={() => openEditMeeting(raw)} />
         {/if}
-        {#if !isServerKind(type)}
+        {#if !readOnly}
           <Button variant="ghost" size="sm" icon="trash-2" aria-label={m.planning_detail_delete()} title={m.planning_detail_delete()} onclick={() => deleteItem(event)} />
         {/if}
         <Button variant="ghost" size="sm" icon="x" aria-label={m.planning_close_aria()} onclick={() => (peek = null)} />
@@ -1457,18 +1810,51 @@
           <span class="pl-peek__square" aria-hidden="true"></span>
           <div class="min-w-0">
             <h3 class="text-base font-semibold text-on-surface wrap-break-word">{event.title}</h3>
-            <p class="text-body-sm text-on-surface-variant">{formatSpan(event.start, event.end, type)}</p>
+            <p class="text-body-sm text-on-surface-variant">
+              {formatSpan(event.start, event.end, type)}
+              {#if !INSTANT_TYPES.includes(type) && formatDuration(event.start, event.end)}
+                <span class="whitespace-nowrap">· {formatDuration(event.start, event.end)}</span>
+              {/if}
+            </p>
           </div>
         </div>
 
         {#if type === 'meeting'}
           {@const stats = getAttendanceStats(raw)}
+          {@const mine = myPresence(raw)}
           <div class="flex flex-wrap items-center gap-2">
             <span class="badge {MEETING_BADGE[raw.status] ?? 'badge-neutral'}">{formatStatus(raw.status)}</span>
             {#if raw.presences?.length > 0}
               <span class="text-2xs text-on-surface-variant">{m.planning_presences_summary(stats)}</span>
             {/if}
           </div>
+          {#if myStaffRecord && (raw.status === 'SCHEDULED' || raw.status === 'IN_PROGRESS')}
+            <!-- Sa reponse, comme les boutons du message Discord de la reunion. -->
+            <div class="space-y-2">
+              <p class="text-2xs text-on-surface-variant">
+                {mine ? m.planning_rsvp_current({ status: formatStatus(mine) }) : m.planning_rsvp_question()}
+              </p>
+              <div class="flex flex-wrap gap-1.5" role="group" aria-label={m.planning_rsvp_question()}>
+                {#each [['PRESENT', m.planning_rsvp_present()], ['EXCUSED', m.planning_rsvp_excused()], ['ABSENT', m.planning_rsvp_absent()]] as [value, label] (value)}
+                  <button
+                    type="button"
+                    class="pl-chip {mine === value ? 'pl-chip--active' : ''}"
+                    aria-pressed={mine === value}
+                    disabled={rsvpSaving}
+                    onclick={() => answerMeeting(raw.id, value as 'PRESENT' | 'EXCUSED' | 'ABSENT')}
+                  >
+                    {label}
+                  </button>
+                {/each}
+              </div>
+              {#if rsvpExcuseOpen}
+                <form class="flex gap-2" onsubmit={(e) => { e.preventDefault(); void answerMeeting(raw.id, 'EXCUSED'); }}>
+                  <input class="input flex-1 text-body-sm" bind:value={rsvpNote} maxlength="500" placeholder={m.planning_rsvp_reason_ph()} aria-label={m.planning_rsvp_reason_ph()} />
+                  <Button type="submit" size="sm" loading={rsvpSaving} disabled={!rsvpNote.trim()} disabledReason={m.common_reason_fill_field()}>{m.planning_rsvp_send()}</Button>
+                </form>
+              {/if}
+            </div>
+          {/if}
           {#if canModerateMeetings && raw.status === 'SCHEDULED'}
             <Button size="sm" icon="play" onclick={() => updateMeetingStatus(raw.id, 'IN_PROGRESS')}>{m.meetings_start_btn()}</Button>
           {:else if canModerateMeetings && raw.status === 'IN_PROGRESS'}
@@ -1529,13 +1915,41 @@
             <span class="badge badge-neutral">{SCHEDULE_TYPE_LABEL[String(raw.meta.taskType)]?.() ?? raw.meta.taskType}</span>
             {#if raw.meta.channelId}<span>{m.planning_schedule_in_channel({ channel: channelName(String(raw.meta.channelId)) })}</span>{/if}
           </p>
+        {:else if type === 'testing_end'}
+          <p class="text-body-sm text-on-surface-variant">
+            {m.planning_testing_end_desc()}
+            {#if raw.meta.targetGrade}· {m.planning_testing_target({ grade: String(raw.meta.targetGrade) })}{/if}
+          </p>
+          {#if raw.meta.mentor}
+            <p class="text-body-sm text-on-surface-variant">{m.planning_testing_mentor({ name: String(raw.meta.mentor) })}</p>
+          {/if}
+        {:else if type === 'sanction_end'}
+          <p class="flex flex-wrap items-center gap-2 text-body-sm text-on-surface-variant">
+            <span class="badge badge-danger">{raw.meta.sanctionType === 'TEMP_BAN' ? m.planning_sanction_tempban() : m.planning_sanction_timeout()}</span>
+            <span>{m.planning_sanction_end_desc()}</span>
+          </p>
+        {:else if type === 'voice'}
+          <p class="flex items-center gap-2 text-body-sm text-on-surface-variant">
+            <Papicon icon="mic" size={14} />
+            {raw.channelName ? `#${raw.channelName}` : m.planning_type_voice()}
+            {#if !raw.leftAt}<span class="badge badge-success">{m.planning_voice_live()}</span>{/if}
+          </p>
+        {:else if type === 'coverage'}
+          <p class="text-body-sm text-on-surface-variant">{m.planning_coverage_desc({ count: coverageThreshold })}</p>
+          <ul class="flex flex-wrap gap-1.5">
+            {#each raw.names as name (name)}
+              <li class="pl-chip">{name}</li>
+            {/each}
+          </ul>
         {/if}
 
         {#if raw.description && type !== 'absence'}
           <p class="text-body-sm text-on-surface-variant line-clamp-3 whitespace-pre-wrap">{raw.description}</p>
         {/if}
 
-        {#if isServerKind(type)}
+        {#if type === 'voice' || type === 'coverage'}
+          <!-- Calques deduits : rien a ouvrir ni a modifier. -->
+        {:else if isServerKind(type)}
           <p class="text-2xs text-on-surface-variant">{m.planning_extra_readonly()}</p>
           <div class="flex flex-wrap gap-2">
             <Button size="sm" iconRight="arrow-right" href={raw.href}>{SERVER_LINK_LABEL[type]()}</Button>
@@ -1561,6 +1975,26 @@
     {/if}
 
     {@render dateFields(false)}
+
+    {#if createType === 'meeting' || createType === 'call'}
+      <div class="flex flex-wrap items-center gap-2 pl-6">
+        <Papicon icon="refresh" size={14} class="text-on-surface-variant" />
+        <select class="input w-auto text-body-sm" bind:value={formRepeat} aria-label={m.planning_repeat_aria()}>
+          <option value="none">{m.planning_repeat_none()}</option>
+          <option value="weekly">{m.planning_repeat_weekly()}</option>
+          <option value="biweekly">{m.planning_repeat_biweekly()}</option>
+          <option value="monthly">{m.planning_repeat_monthly()}</option>
+        </select>
+        {#if formRepeat !== 'none'}
+          <label class="flex items-center gap-2 text-body-sm text-on-surface">
+            <input type="number" class="input w-20 text-body-sm" min="2" max={MAX_REPEAT} bind:value={formRepeatCount} />
+            {m.planning_repeat_times()}
+          </label>
+        {/if}
+      </div>
+    {/if}
+
+    {@render availability()}
 
     <textarea
       class="input resize-none"
@@ -1842,6 +2276,25 @@
       <Button icon="edit-2" onclick={() => { detailModalOpen = false; openEditMeeting(currentItemDetail?.raw); }}>{m.planning_detail_edit()}</Button>
     {/if}
     <Button variant="ghost" onclick={() => (detailModalOpen = false)}>{m.planning_detail_close()}</Button>
+  {/snippet}
+</Modal>
+
+<!-- ===== Abonnement iCal ===== -->
+<Modal bind:open={icalOpen} title={m.planning_ical_title()} subtitle={m.planning_ical_subtitle()}>
+  <div class="space-y-4">
+    <div class="flex items-center gap-2">
+      <code class="flex-1 min-w-0 truncate bg-surface-container rounded-lg px-3 py-2 text-2xs font-mono text-on-surface select-all">{icalUrl}</code>
+      <Button icon="content_copy" onclick={copyIcal}>{m.recruit_copy_btn()}</Button>
+    </div>
+    <ul class="space-y-2 text-body-sm text-on-surface-variant">
+      <li><strong class="text-on-surface">Google Agenda</strong> · {m.planning_ical_google()}</li>
+      <li><strong class="text-on-surface">Outlook</strong> · {m.planning_ical_outlook()}</li>
+      <li><strong class="text-on-surface">iPhone</strong> · {m.planning_ical_iphone()}</li>
+    </ul>
+    <Callout variant="warning">{m.planning_ical_private()}</Callout>
+  </div>
+  {#snippet footer()}
+    <Button variant="primary" onclick={() => (icalOpen = false)}>{m.planning_detail_close()}</Button>
   {/snippet}
 </Modal>
 
@@ -2244,5 +2697,45 @@
     border-color: var(--color-primary);
     background: color-mix(in srgb, var(--color-primary) 12%, transparent);
     color: var(--color-primary);
+  }
+  .pl-search {
+    position: relative;
+    width: 13rem;
+  }
+  @media (max-width: 767px) {
+    .pl-search {
+      width: 8.5rem;
+    }
+  }
+  .pl-filter--group {
+    padding-top: 0.125rem;
+    padding-bottom: 0.125rem;
+  }
+  .pl-next {
+    display: block;
+    width: 100%;
+    padding: 0.75rem;
+    border-radius: 0.5rem;
+    border-left: 4px solid var(--evt);
+    background: color-mix(in srgb, var(--evt) 10%, var(--color-surface-container-lowest));
+    text-align: left;
+  }
+  .pl-next:hover {
+    background: color-mix(in srgb, var(--evt) 18%, var(--color-surface-container-lowest));
+  }
+  .pl-avail {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    padding: 0.5rem 0.75rem;
+    border-radius: 0.5rem;
+    background: color-mix(in srgb, var(--color-warning) 10%, transparent);
+    font-size: 0.75rem;
+    color: var(--color-on-surface);
+  }
+  .pl-avail p {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.375rem;
   }
 </style>

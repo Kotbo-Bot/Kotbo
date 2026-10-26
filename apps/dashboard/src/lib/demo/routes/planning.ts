@@ -177,6 +177,10 @@ export function registerPlanningRoutes(): void {
     ],
   }));
 
+  // La demo n'a pas de flux iCal reel : le lien montre la forme, sans contenu.
+  route('GET', `${base}/absences/ical-link`, () => ({ path: '/api/public/planning/demo.ics' }));
+  route('POST', `${base}/meetings/:meetingId/rsvp`, () => ({ ok: true }));
+
   route('GET', `${base}/absences/superiors`, () => ({
     superiors: staffMembers()
       .filter((s) => s.userId !== ME.id)

@@ -83,7 +83,7 @@ export type AbsenceSuperior = {
 };
 
 export type PlanningExtra = {
-  kind: 'server_event' | 'giveaway' | 'schedule';
+  kind: 'server_event' | 'giveaway' | 'schedule' | 'testing_end' | 'sanction_end';
   id: string;
   title: string;
   start: string;
@@ -95,8 +95,22 @@ export type PlanningExtra = {
 };
 
 /** Evenements du serveur, fins de giveaways et taches planifiees de la periode, selon les droits du role. */
-export async function fetchPlanningExtras(start: Date, end: Date, guildId = authStore.selectedGuildId): Promise<{ items: PlanningExtra[] } | null> {
+export async function fetchPlanningExtras(
+  start: Date,
+  end: Date,
+  guildId = authStore.selectedGuildId,
+): Promise<{ items: PlanningExtra[]; teamAbsences?: Array<{ staffName: string; start: string; end: string | null }> } | null> {
   return dashboardRequest(`/absences/planning-extras?start=${start.toISOString()}&end=${end.toISOString()}`, { method: 'GET', guildId });
+}
+
+/** Sa propre reponse a une reunion : present, excuse (avec raison) ou absent. */
+export async function rsvpMeeting(meetingId: string, status: 'PRESENT' | 'EXCUSED' | 'ABSENT', note?: string, guildId = authStore.selectedGuildId) {
+  return dashboardMutation(`/meetings/${meetingId}/rsvp`, { method: 'POST', payload: { status, note }, guildId });
+}
+
+/** Chemin du flux iCal personnel (a coller apres l'origine de l'API). */
+export async function fetchPlanningIcalLink(guildId = authStore.selectedGuildId): Promise<{ path: string } | null> {
+  return dashboardRequest('/absences/ical-link', { method: 'GET', guildId });
 }
 
 /** A qui l'utilisateur connecte peut declarer son absence : tuteur, fondateur, grades egaux ou superieurs. */
