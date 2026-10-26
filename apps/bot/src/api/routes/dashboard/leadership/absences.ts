@@ -31,7 +31,8 @@ import {
   
   
   getStaffCalendarData,
-  
+  getAbsenceSuperiorCandidates,
+
   
   
   
@@ -135,6 +136,18 @@ export async function handleAbsenceRoutes(
         } catch (err) {
           logger.error('StaffAPI', `Error getting calendar data for guild ${guildId}:`, err);
           jsonFailure(res, err, 'Erreur lors de la récupération des données du calendrier', 'StaffAPI');
+        }
+        return true;
+      }
+
+      // GET /api/dashboard/guilds/:guildId/absences/superiors
+      // A qui l'utilisateur connecte peut declarer son absence.
+      if (parts.length === 6 && parts[5] === 'superiors' && method === 'GET') {
+        try {
+          json(res, 200, { superiors: await getAbsenceSuperiorCandidates(guildId, user.userId) });
+        } catch (err) {
+          logger.error('StaffAPI', 'Error getting absence superiors:', err);
+          jsonFailure(res, err, 'Erreur lors de la récupération des destinataires', 'StaffAPI');
         }
         return true;
       }
@@ -265,12 +278,8 @@ export async function handleAbsenceRoutes(
             return true;
           }
 
-          const superiorStaff = await getStaffMember(guildId, superiorUserId);
-          if (!superiorStaff) {
-            json(res, 400, { error: 'Le supérieur indiqué ne fait pas partie du staff' });
-            return true;
-          }
-
+          // Le destinataire (tuteur, fondateur ou grade egal/superieur) est
+          // verifie par createAbsence : le fondateur peut ne pas etre au staff.
           const startDate = new Date(body.startDate);
           const endDate = body.endDate ? new Date(body.endDate) : undefined;
 

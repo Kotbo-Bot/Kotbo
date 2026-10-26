@@ -18,6 +18,7 @@ import { notify, notifyMany } from '../notifications/notifyService.js';
 import { getClient } from '../../utils/client.js';
 import { formatGuildDateTime, formatInTimezone } from '../../utils/timezone.js';
 import { UserFacingError } from '../../utils/userFacingError.js';
+import { pickAbsenceSuperiors } from './absenceSuperiors.js';
 import { syncDoingListItemFromTask } from './doingListTaskSync.js';
 
 type AbsenceMutableStatus = 'PENDING' | 'ACKNOWLEDGED' | 'APPROVED' | 'REJECTED' | 'CANCELED' | 'ENDED';
@@ -206,7 +207,41 @@ const sendAbsenceDiscordRelay = async (params: {
   }
 };
 
+/** Destinataires possibles d'une absence pour ce staff (voir absenceSuperiors.ts). */
+export const getAbsenceSuperiorCandidates = async (guildId: string, requesterUserId: string) => {
+  const guild = getClient()?.guilds.cache.get(guildId);
+  const [requester, staff, roles, ownerMember] = await Promise.all([
+    prisma.staffMember.findUnique({
+      where: { guildId_userId: { guildId, userId: requesterUserId } },
+      include: { testingPeriods: { where: { status: 'ONGOING' }, select: { mentorId: true } } },
+    }),
+    prisma.staffMember.findMany({
+      where: { guildId, suspendedAt: null, blacklistEntries: { none: { isActive: true } } },
+      include: { testingPeriods: { where: { status: 'ONGOING' }, select: { id: true } } },
+    }),
+    prisma.staffRole.findMany({ where: { guildId, enabled: true }, select: { name: true, sortOrder: true } }),
+    guild ? guild.fetchOwner().catch(() => null) : Promise.resolve(null),
+  ]);
 
+  return pickAbsenceSuperiors({
+    requesterUserId,
+    requesterGrade: requester?.grade ?? null,
+    mentorIds: (requester?.testingPeriods ?? []).map((t) => t.mentorId).filter((id): id is string => !!id),
+    staff: staff.map((s) => ({
+      id: s.id,
+      userId: s.userId,
+      username: s.username,
+      displayName: s.displayName,
+      avatarUrl: s.avatarUrl,
+      grade: s.grade,
+      inTesting: s.testingPeriods.length > 0,
+    })),
+    roles,
+    owner: ownerMember
+      ? { userId: ownerMember.id, displayName: ownerMember.displayName, avatarUrl: ownerMember.displayAvatarURL() }
+      : null,
+  });
+};
 
 export const createAbsence = async (
   params: {
@@ -221,7 +256,7 @@ export const createAbsence = async (
     notifyOnMention?: boolean;
   }
 ) => {
-  const [requester, superior, allRoles] = await Promise.all([
+  const [requester, superior] = await Promise.all([
     prisma.staffMember.findUnique({ where: { id: params.staffMemberId } }),
     prisma.staffMember.findUnique({
       where: {
@@ -230,25 +265,15 @@ export const createAbsence = async (
           userId: params.superiorUserId
         }
       },
-      include: { testingPeriods: { where: { status: 'ONGOING' } } }
     }),
-    prisma.staffRole.findMany({ where: { guildId: params.guildId, enabled: true } })
   ]);
 
-  if (superior && superior.testingPeriods && superior.testingPeriods.length > 0) {
-    throw new Error('Le responsable sélectionné ne doit pas être en tutorat.');
-  }
-
-  if (requester && superior && allRoles.length > 0) {
-    const myRole = allRoles.find(r => r.name === requester.grade);
-    const sRole = allRoles.find(r => r.name === superior.grade);
-    
-    if (myRole && sRole) {
-      const isSuperior = sRole.sortOrder >= myRole.sortOrder;
-      
-      if (!isSuperior) {
-        throw new Error('Le responsable sélectionné doit avoir un grade supérieur ou égal au vôtre.');
-      }
+  if (requester) {
+    const candidates = await getAbsenceSuperiorCandidates(params.guildId, requester.userId);
+    if (!candidates.some((c) => c.userId === params.superiorUserId)) {
+      throw new UserFacingError(
+        "Ce destinataire ne peut pas recevoir ton absence : choisis ton tuteur, le fondateur ou un staff de grade égal ou supérieur au tien.",
+      );
     }
   }
 

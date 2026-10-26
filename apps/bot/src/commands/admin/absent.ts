@@ -215,8 +215,9 @@ async function execute(interaction: ChatInputCommandInteraction) {
       return;
     }
 
+    // Le fondateur peut recevoir une absence sans etre inscrit au staff.
     const superiorStaff = await getStaffMember(interaction.guildId, superior.id);
-    if (!superiorStaff) {
+    if (!superiorStaff && superior.id !== interaction.guild?.ownerId) {
       await interaction.reply(v2Message(
         { flags: MessageFlags.Ephemeral },
         errorContainer(m.c1_absent_superior_notstaff_title({}, { locale }), m.c1_absent_superior_notstaff_desc({}, { locale }))
