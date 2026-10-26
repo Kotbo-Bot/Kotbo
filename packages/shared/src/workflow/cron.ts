@@ -224,18 +224,51 @@ export function cronMatches(expression: string, date: Date, timezone: string): b
   if (!cron) return false;
 
   const now = zonedParts(date, timezone);
+  return cron.minutes.has(now.minute) && hourMatches(cron, now);
+}
 
-  if (!cron.minutes.has(now.minute)) return false;
-  if (!cron.hours.has(now.hour)) return false;
-  if (!cron.months.has(now.month)) return false;
+/** L'heure murale tombe-t-elle dans le motif, minutes mises a part ? */
+function hourMatches(cron: ParsedCron, at: ZonedParts): boolean {
+  if (!cron.hours.has(at.hour)) return false;
+  if (!cron.months.has(at.month)) return false;
 
-  const dayOfMonthMatches = cron.daysOfMonth.has(now.day);
-  const dayOfWeekMatches = cron.daysOfWeek.has(now.weekday);
+  const dayOfMonthMatches = cron.daysOfMonth.has(at.day);
+  const dayOfWeekMatches = cron.daysOfWeek.has(at.weekday);
 
   if (cron.dayOfMonthWildcard || cron.dayOfWeekWildcard) {
     return dayOfMonthMatches && dayOfWeekMatches;
   }
   return dayOfMonthMatches || dayOfWeekMatches;
+}
+
+/**
+ * Instants ou le motif tombe entre `from` et `to` inclus, au plus `limit` :
+ * sert a placer une planification dans un calendrier.
+ *
+ * Avance heure murale par heure murale plutot que minute par minute : six
+ * semaines tiennent en un millier de pas.
+ * shortcut: les heures sautees ou doublees au changement d'heure sont lues une
+ * seule fois, a refaire si un calendrier doit montrer ces nuits-la a la minute.
+ */
+export function cronOccurrences(expression: string, from: Date, to: Date, timezone: string, limit = 200): Date[] {
+  const cron = parseCron(expression);
+  if (!cron || to.getTime() < from.getTime()) return [];
+
+  const minutes = [...cron.minutes].sort((a, b) => a - b);
+  const result: Date[] = [];
+  const first = new Date(from.getTime() - (from.getTime() % 60000));
+  let hourStart = first.getTime() - zonedParts(first, timezone).minute * 60000;
+
+  for (; hourStart <= to.getTime() && result.length < limit; hourStart += 3600000) {
+    if (!hourMatches(cron, zonedParts(new Date(hourStart), timezone))) continue;
+    for (const minute of minutes) {
+      const at = hourStart + minute * 60000;
+      if (at < from.getTime() || at > to.getTime()) continue;
+      result.push(new Date(at));
+      if (result.length >= limit) break;
+    }
+  }
+  return result;
 }
 
 // ============================================================================
