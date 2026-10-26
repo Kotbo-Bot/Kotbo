@@ -702,7 +702,7 @@
                       {#each answers as [key, value] (key)}
                         <div class="py-3">
                           <dt class="text-2xs font-medium text-on-surface-variant">{fieldLabels[key] || key}</dt>
-                          <dd class="mt-1 text-body-sm text-on-surface whitespace-pre-wrap break-words">{formatValue(value)}</dd>
+                          <dd class="mt-1 text-body-sm text-on-surface whitespace-pre-wrap wrap-break-word">{formatValue(value)}</dd>
                         </div>
                       {/each}
                     </dl>
