@@ -12,6 +12,7 @@ import { createPublicInviteRouter } from './routes/public/invite.js';
 import { createPublicStatsRouter } from './routes/public/stats.js';
 import { createPublicFunnelRouter } from './routes/public/funnel.js';
 import { createPublicWidgetDataRouter } from './routes/public/widgetData.js';
+import { createPublicPlanningCalendarRouter } from './routes/public/planningCalendar.js';
 import { createVerificationRouter } from './routes/verification.js';
 import { createChangelogRouter } from './routes/public/changelog.js';
 import { createPublicFeaturePagesRouter } from './routes/public/featurePages.js';
@@ -60,6 +61,7 @@ export function createHonoApp(client: Client): OpenAPIHono {
   app.route('/', createPublicStatsRouter(client));
   app.route('/', createPublicFunnelRouter());
   app.route('/', createPublicWidgetDataRouter(client));
+  app.route('/', createPublicPlanningCalendarRouter(client));
   app.route('/', createVerificationRouter(client));
   app.route('/', createChangelogRouter());
   app.route('/', createPublicFeaturePagesRouter());

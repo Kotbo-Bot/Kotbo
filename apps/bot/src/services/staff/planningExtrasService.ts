@@ -9,7 +9,14 @@ import prisma from '../../utils/db.js';
 import { cache } from '../../utils/cache.js';
 import { getClient } from '../../utils/client.js';
 
-export type PlanningExtraKind = 'server_event' | 'giveaway' | 'schedule';
+export type PlanningExtraKind = 'server_event' | 'giveaway' | 'schedule' | 'testing_end' | 'sanction_end';
+
+/** Absence de l'equipe entiere, pour l'alerte de couverture : le calendrier n'a que les personnes cochees. */
+export interface TeamAbsence {
+  staffName: string;
+  start: string;
+  end: string | null;
+}
 
 export interface PlanningExtra {
   kind: PlanningExtraKind;
@@ -70,8 +77,8 @@ export async function getPlanningExtras(
   guildId: string,
   start: Date,
   end: Date,
-  scope: { events: boolean; giveaways: boolean; schedules: boolean },
-): Promise<PlanningExtra[]> {
+  scope: { events: boolean; giveaways: boolean; schedules: boolean; tutoring: boolean; sanctions: boolean },
+): Promise<{ items: PlanningExtra[]; teamAbsences: TeamAbsence[] }> {
   const inRange = (from: Date, to: Date | null) => from.getTime() <= end.getTime() && (to ?? from).getTime() >= start.getTime();
   const items: PlanningExtra[] = [];
 
@@ -181,5 +188,68 @@ export async function getPlanningExtras(
     }
   }
 
-  return items;
+  if (scope.tutoring) {
+    const periods = await prisma.testingPeriod.findMany({
+      where: { guildId, status: 'ONGOING' },
+      select: {
+        id: true, startDate: true, endDate: true, plannedDurationDays: true, targetGrade: true,
+        staffMember: { select: { displayName: true, username: true, userId: true } },
+        mentor: { select: { displayName: true, username: true } },
+      },
+    });
+    for (const p of periods) {
+      // Fin fixee si elle existe, sinon la duree prevue depuis le debut.
+      const due = p.endDate ?? new Date(p.startDate.getTime() + p.plannedDurationDays * 86400000);
+      if (!inRange(due, null)) continue;
+      items.push({
+        kind: 'testing_end',
+        id: p.id,
+        title: p.staffMember.displayName || p.staffMember.username || p.staffMember.userId,
+        start: due.toISOString(),
+        end: null,
+        description: null,
+        href: '/tutoring',
+        externalUrl: null,
+        meta: { mentor: p.mentor ? (p.mentor.displayName || p.mentor.username) : null, targetGrade: p.targetGrade },
+      });
+    }
+  }
+
+  if (scope.sanctions) {
+    const sanctions = await prisma.sanction.findMany({
+      where: { guildId, status: 'ACTIVE', type: { in: ['TIMEOUT', 'TEMP_BAN'] }, expiresAt: { gte: start, lte: end } },
+      select: { id: true, type: true, targetUserId: true, targetTag: true, reason: true, expiresAt: true },
+      take: 200,
+    });
+    for (const s of sanctions) {
+      items.push({
+        kind: 'sanction_end',
+        id: s.id,
+        title: s.targetTag || s.targetUserId,
+        start: s.expiresAt!.toISOString(),
+        end: null,
+        description: s.reason,
+        href: '/security/sanctions',
+        externalUrl: null,
+        meta: { sanctionType: s.type },
+      });
+    }
+  }
+
+  const absences = await prisma.staffAbsence.findMany({
+    where: {
+      guildId,
+      status: { in: ['APPROVED', 'ACKNOWLEDGED', 'PENDING'] },
+      startDate: { lte: end },
+      OR: [{ endDate: { gte: start } }, { isIndefinite: true }],
+    },
+    select: { startDate: true, endDate: true, staffMember: { select: { displayName: true, username: true, userId: true } } },
+  });
+  const teamAbsences = absences.map((a) => ({
+    staffName: a.staffMember.displayName || a.staffMember.username || a.staffMember.userId,
+    start: a.startDate.toISOString(),
+    end: a.endDate?.toISOString() ?? null,
+  }));
+
+  return { items, teamAbsences };
 }

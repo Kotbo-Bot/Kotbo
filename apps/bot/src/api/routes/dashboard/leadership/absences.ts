@@ -7,6 +7,8 @@ import { logger } from '../../../../utils/logger.js';
 import { jsonFailure } from '../../../shared/failure.js';
 import { canViewFeatureSection } from '../featureGate.js';
 import { getPlanningExtras } from '../../../../services/staff/planningExtrasService.js';
+import { signIcalToken } from '../../../../services/staff/planningIcal.js';
+import { getJwtSecret } from '../../../shared/core.js';
 import {
   json,
   readJsonBody,
@@ -153,16 +155,29 @@ export async function handleAbsenceRoutes(
           return true;
         }
         try {
-          const [events, giveaways] = await Promise.all([
-            canViewFeatureSection(client, guildId, access, user.userId, 'events'),
-            canViewFeatureSection(client, guildId, access, user.userId, 'giveaways'),
-          ]);
-          const items = await getPlanningExtras(guildId, start, end, { events, giveaways, schedules: access.canManageSettings });
-          json(res, 200, { items });
+          const [events, giveaways, tutoring, sanctions] = await Promise.all(
+            ['events', 'giveaways', 'tutoring', 'sanctions'].map((key) => canViewFeatureSection(client, guildId, access, user.userId, key)),
+          );
+          const extras = await getPlanningExtras(guildId, start, end, {
+            events, giveaways, tutoring, sanctions, schedules: access.canManageSettings,
+          });
+          json(res, 200, extras);
         } catch (err) {
           logger.error('StaffAPI', 'Error getting planning extras:', err);
           jsonFailure(res, err, 'Erreur lors de la récupération des événements du serveur', 'StaffAPI');
         }
+        return true;
+      }
+
+      // GET /api/dashboard/guilds/:guildId/absences/ical-link
+      // Lien d'abonnement iCal au planning de l'utilisateur connecte (membres du staff).
+      if (parts.length === 6 && parts[5] === 'ical-link' && method === 'GET') {
+        const staffMember = await getStaffMember(guildId, user.userId);
+        if (!staffMember) {
+          json(res, 403, { error: "Tu ne fais pas partie de l'équipe staff de ce serveur." });
+          return true;
+        }
+        json(res, 200, { path: `/api/public/planning/${signIcalToken(guildId, user.userId, getJwtSecret())}.ics` });
         return true;
       }
 
