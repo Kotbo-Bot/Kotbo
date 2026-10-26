@@ -15473,5 +15473,10 @@
   "dl_ev_unassigned": "{name} a retiré l'attribution",
   "dl_ev_updated": "{name} a modifié : {fields}",
   "dl_ev_linked": "{name} a lié {from} {link} {to}",
-  "dl_ev_unlinked": "{name} a retiré le lien {from} {link} {to}"
+  "dl_ev_unlinked": "{name} a retiré le lien {from} {link} {to}",
+  "dl_autosave_hint": "Tout est enregistré au fur et à mesure.",
+  "dl_autosave_saving": "Enregistrement…",
+  "dl_autosave_saved": "Enregistré",
+  "dl_autosave_error": "Pas enregistré, voir l'erreur.",
+  "dl_card_more_fields": "Plus de champs"
 }

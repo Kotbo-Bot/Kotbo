@@ -15473,5 +15473,10 @@
   "dl_ev_unassigned": "{name} removed the assignee",
   "dl_ev_updated": "{name} changed: {fields}",
   "dl_ev_linked": "{name} linked {from} {link} {to}",
-  "dl_ev_unlinked": "{name} removed the link {from} {link} {to}"
+  "dl_ev_unlinked": "{name} removed the link {from} {link} {to}",
+  "dl_autosave_hint": "Everything is saved as you go.",
+  "dl_autosave_saving": "Saving…",
+  "dl_autosave_saved": "Saved",
+  "dl_autosave_error": "Not saved, see the error.",
+  "dl_card_more_fields": "More fields"
 }

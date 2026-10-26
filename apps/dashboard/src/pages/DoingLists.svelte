@@ -564,8 +564,9 @@
   let linkTimer: ReturnType<typeof setTimeout> | undefined;
   let newLabel = $state('');
   let newCheck = $state('');
-  let cardSaving = $state(false);
   let cardError = $state('');
+  // Les champs secondaires restent repliés tant qu'ils sont vides.
+  let showMore = $state(false);
 
   const checklistDone = $derived(cardChecklist.filter((entry) => entry.done).length);
   const cardChildren = $derived(card ? childrenOf(card.id) : []);
@@ -596,10 +597,12 @@
     return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
   }
 
-  function openCard(item: DoingListItem) {
-    card = item;
-    cardTitle = item.title;
-    cardDescription = item.description ?? '';
+  /** Remplit la fiche depuis une carte ; keepText garde ce qui est en cours de frappe. */
+  function fillCard(item: DoingListItem, keepText = false) {
+    if (!keepText) {
+      cardTitle = item.title;
+      cardDescription = item.description ?? '';
+    }
     cardColumnId = item.columnId;
     cardAssigneeId = item.staffTask?.assignee?.id ?? '';
     cardPriority = item.priority ?? '';
@@ -609,6 +612,16 @@
     cardType = item.type;
     cardEstimate = item.estimate;
     cardParentId = item.parentId ?? '';
+  }
+
+  function openCard(item: DoingListItem) {
+    // Ce qui restait à enregistrer sur la carte précédente part avant de changer.
+    if (card && card.id !== item.id && Object.keys(cardChanges()).length > 0) void saveChanges();
+    card = item;
+    fillCard(item);
+    lastSent = '';
+    saveState = 'idle';
+    showMore = false;
     newSubtask = '';
     linkQuery = '';
     linkResults = [];
@@ -634,39 +647,81 @@
     newCheck = '';
   }
 
-  async function saveCard(event: SubmitEvent) {
-    event.preventDefault();
+  /** Ce qui diffère entre la fiche et la carte enregistrée, dans la forme que l'API renvoie. */
+  function cardChanges(): Parameters<typeof updateDoingListItem>[2] {
+    if (!card) return {};
+    const changes: Parameters<typeof updateDoingListItem>[2] = {};
+    const title = cardTitle.trim();
+    if (title && title !== card.title) changes.title = title;
+    const description = cardDescription.trim() || null;
+    if (description !== (card.description ?? null)) changes.description = description;
+    if ((cardPriority || null) !== card.priority) changes.priority = cardPriority || null;
+    // Midi, heure locale : la date reste la même quel que soit le fuseau.
+    const due = cardDue ? new Date(`${cardDue}T12:00:00`).toISOString() : null;
+    if (toDateInput(due) !== toDateInput(card.dueDate)) changes.dueDate = due;
+    if (JSON.stringify(cardLabels) !== JSON.stringify(card.labels)) changes.labels = cardLabels;
+    if (JSON.stringify(cardChecklist) !== JSON.stringify(card.checklist)) changes.checklist = cardChecklist;
+    if (cardType !== card.type) changes.type = cardType;
+    const estimate = cardEstimate === null || (cardEstimate as unknown) === '' ? null : Math.max(0, Math.floor(Number(cardEstimate)));
+    if (estimate !== card.estimate) changes.estimate = estimate;
+    if (cardParentId !== (card.parentId ?? '')) changes.parentId = cardParentId || null;
+    if (cardColumnId !== card.columnId) changes.columnId = cardColumnId;
+    if (cardAssigneeId !== (card.staffTask?.assignee?.id ?? '')) changes.assigneeId = cardAssigneeId || null;
+    return changes;
+  }
+
+  // Enregistrement au fil de l'eau : pas de bouton, chaque changement part tout
+  // seul, le texte une fois qu'on a fini de taper.
+  let saveTimer: ReturnType<typeof setTimeout> | undefined;
+  let saveState = $state<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  let saving = false;
+  let saveQueued = false;
+  // Garde-fou : un champ que l'API normalise autrement ne doit pas renvoyer en boucle.
+  let lastSent = '';
+
+  $effect(() => {
+    if (!cardOpen || !card || !canEdit) return;
+    const changes = cardChanges();
+    const payload = JSON.stringify(changes);
+    if (payload === '{}' || payload === lastSent) return;
+    clearTimeout(saveTimer);
+    const typing = 'title' in changes || 'description' in changes;
+    saveTimer = setTimeout(() => void saveChanges(), typing ? 700 : 0);
+  });
+
+  async function saveChanges() {
+    clearTimeout(saveTimer);
     if (!selectedId || !card) return;
-    if (!cardTitle.trim()) {
-      cardError = m.dl_card_title_required();
+    const changes = cardChanges();
+    if (Object.keys(changes).length === 0) return;
+    if (saving) {
+      saveQueued = true;
       return;
     }
-    cardSaving = true;
+    saving = true;
+    saveState = 'saving';
     cardError = '';
-    const previousAssignee = card.staffTask?.assignee?.id ?? '';
+    const id = card.id;
+    const base = card;
+    lastSent = JSON.stringify(changes);
     try {
-      const { item } = await updateDoingListItem(selectedId, card.id, {
-        title: cardTitle,
-        description: cardDescription || null,
-        priority: cardPriority || null,
-        // Midi, heure locale : la date reste la même quel que soit le fuseau.
-        dueDate: cardDue ? new Date(`${cardDue}T12:00:00`).toISOString() : null,
-        labels: cardLabels,
-        checklist: cardChecklist,
-        type: cardType,
-        estimate: cardEstimate === null || (cardEstimate as unknown) === '' ? null : Math.max(0, Math.floor(cardEstimate)),
-        ...(cardParentId !== (card.parentId ?? '') ? { parentId: cardParentId || null } : {}),
-        ...(cardColumnId !== card.columnId ? { columnId: cardColumnId } : {}),
-        ...(cardAssigneeId !== previousAssignee ? { assigneeId: cardAssigneeId || null } : {}),
-      });
+      const { item } = await updateDoingListItem(selectedId, id, changes);
       replaceItem(item);
       syncCounts();
-      if (cardAssigneeId && cardAssigneeId !== previousAssignee) toast.success(m.dl_card_assigned({ name: memberName(item.staffTask?.assignee) }));
-      cardOpen = false;
+      if (card?.id === id) card = item;
+      if (changes.assigneeId) toast.success(m.dl_card_assigned({ name: memberName(item.staffTask?.assignee) }));
+      saveState = 'saved';
     } catch (err) {
       cardError = errorText(err, m.dl_save_error());
+      saveState = 'error';
+      // Étape pleine, parente refusée… : la fiche revient à ce qui est enregistré.
+      if (card?.id === id) fillCard(base, true);
     } finally {
-      cardSaving = false;
+      saving = false;
+      if (saveQueued) {
+        saveQueued = false;
+        void saveChanges();
+      }
     }
   }
 
@@ -785,14 +840,7 @@
     </div>
   {:else if selected}
     <div class="space-y-4 min-w-0">
-      <div class="flex flex-wrap items-center justify-between gap-3">
-        <div class="flex flex-wrap gap-1.5">
-          {#each selected.modules as module (module)}
-            <span class="dl-chip">{moduleName(module, module)}</span>
-          {:else}
-            <span class="text-2xs text-on-surface-variant">{m.dl_no_module()}</span>
-          {/each}
-        </div>
+      <div class="flex flex-wrap items-center justify-end gap-3">
         <div class="flex items-center gap-3">
           <input class="input text-body-sm w-48" type="search" bind:value={search} placeholder={m.dl_search_ph()} aria-label={m.dl_search_ph()} />
           <label class="flex items-center gap-1.5 text-body-sm text-on-surface whitespace-nowrap">
@@ -978,7 +1026,7 @@
             </button>
           {/if}
         </div>
-        {#if selected.modules.length > 0}
+        {#if selected.modules.length > 0 && items.length === 0}
           <p class="text-2xs text-on-surface-variant">{m.dl_pin_hint()}</p>
         {/if}
       {/if}
@@ -1098,7 +1146,7 @@
   {#if card}
     <div class="grid gap-6 lg:grid-cols-[minmax(0,1fr)_15rem]">
       <div class="min-w-0 space-y-6">
-        <form id="dl-card-form" class="space-y-4" onsubmit={saveCard}>
+        <form id="dl-card-form" class="space-y-4" onsubmit={(event) => { event.preventDefault(); void saveChanges(); }}>
           <Field label={m.dl_card_field_title()} required>
             {#snippet children(id, describedBy)}
               <input {id} aria-describedby={describedBy} class="input w-full" maxlength="200" bind:value={cardTitle} disabled={!canEdit} />
@@ -1240,6 +1288,7 @@
             </select>
           {/snippet}
         </Field>
+        {#if showMore || cardType !== 'TASK'}
         <Field label={m.dl_card_field_type()}>
           {#snippet children(id, describedBy)}
             <select {id} aria-describedby={describedBy} class="input w-full" bind:value={cardType} disabled={!canEdit}>
@@ -1249,6 +1298,7 @@
             </select>
           {/snippet}
         </Field>
+        {/if}
         <Field label={m.dl_card_field_assignee()} hint={m.dl_card_assignee_hint()}>
           {#snippet children(id, describedBy)}
             <select {id} aria-describedby={describedBy} class="input w-full" bind:value={cardAssigneeId} disabled={!canEdit}>
@@ -1261,6 +1311,12 @@
             </select>
           {/snippet}
         </Field>
+        <Field label={m.dl_card_field_due()}>
+          {#snippet children(id, describedBy)}
+            <input {id} aria-describedby={describedBy} class="input w-full" type="date" bind:value={cardDue} disabled={!canEdit} />
+          {/snippet}
+        </Field>
+        {#if showMore || cardPriority}
         <Field label={m.dl_card_field_priority()}>
           {#snippet children(id, describedBy)}
             <select {id} aria-describedby={describedBy} class="input w-full" bind:value={cardPriority} disabled={!canEdit}>
@@ -1271,16 +1327,15 @@
             </select>
           {/snippet}
         </Field>
+        {/if}
+        {#if showMore || cardEstimate !== null}
         <Field label={m.dl_card_field_estimate()} hint={m.dl_card_estimate_hint()}>
           {#snippet children(id, describedBy)}
             <input {id} aria-describedby={describedBy} class="input w-full" type="number" min="0" max="999" bind:value={cardEstimate} disabled={!canEdit} />
           {/snippet}
         </Field>
-        <Field label={m.dl_card_field_due()}>
-          {#snippet children(id, describedBy)}
-            <input {id} aria-describedby={describedBy} class="input w-full" type="date" bind:value={cardDue} disabled={!canEdit} />
-          {/snippet}
-        </Field>
+        {/if}
+        {#if showMore || cardParentId}
         <Field label={m.dl_card_field_parent()}>
           {#snippet children(id, describedBy)}
             <select {id} aria-describedby={describedBy} class="input w-full" bind:value={cardParentId} disabled={!canEdit}>
@@ -1291,6 +1346,8 @@
             </select>
           {/snippet}
         </Field>
+        {/if}
+        {#if showMore || cardLabels.length > 0}
         <Field label={m.dl_card_field_labels()} hint={canEdit ? m.dl_card_labels_hint() : undefined}>
           {#snippet children(id, describedBy)}
             <div class="space-y-2">
@@ -1314,6 +1371,12 @@
             </div>
           {/snippet}
         </Field>
+        {/if}
+        {#if canEdit && (!showMore && (cardType === 'TASK' || !cardPriority || cardEstimate === null || !cardParentId || cardLabels.length === 0))}
+          <button type="button" class="inline-flex items-center gap-1 text-2xs font-medium text-on-surface-variant hover:text-on-surface" onclick={() => (showMore = true)}>
+            <Papicon icon="plus" size={12} /> {m.dl_card_more_fields()}
+          </button>
+        {/if}
 
         {#if card.sourceModule && card.sourceId}
           <a class="inline-flex items-center gap-1 text-body-sm text-primary hover:underline" href={SOURCE_HREF[card.sourceModule](card.sourceId)}>
@@ -1332,12 +1395,11 @@
   {#snippet footer()}
     {#if canEdit}
       <Button variant="ghost" icon="delete" onclick={removeCard}>{m.dl_item_remove()}</Button>
-      <span class="flex-1"></span>
-      <Button variant="ghost" onclick={() => (cardOpen = false)}>{m.common_cancel()}</Button>
-      <Button variant="primary" type="submit" form="dl-card-form" loading={cardSaving}>{m.common_save()}</Button>
-    {:else}
-      <Button variant="ghost" onclick={() => (cardOpen = false)}>{m.common_close()}</Button>
     {/if}
+    <span class="flex-1 text-2xs {saveState === 'error' ? 'text-error' : 'text-on-surface-variant'}" aria-live="polite">
+      {saveState === 'saving' ? m.dl_autosave_saving() : saveState === 'saved' ? m.dl_autosave_saved() : saveState === 'error' ? m.dl_autosave_error() : canEdit ? m.dl_autosave_hint() : ''}
+    </span>
+    <Button variant="primary" onclick={() => { void saveChanges(); cardOpen = false; }}>{m.common_close()}</Button>
   {/snippet}
 </Modal>
 
@@ -1385,6 +1447,16 @@
   }
   .dl-column--drop {
     border-color: var(--color-primary);
+  }
+  /* Sur téléphone, un glissement passe d'une étape à la suivante. */
+  @media (max-width: 640px) {
+    .dl-board {
+      scroll-snap-type: x mandatory;
+    }
+    .dl-column,
+    .dl-column-add {
+      scroll-snap-align: start;
+    }
   }
   .dl-column-head {
     display: flex;
