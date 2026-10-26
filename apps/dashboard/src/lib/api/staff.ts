@@ -74,6 +74,19 @@ export async function fetchAbsences(guildId = authStore.selectedGuildId) {
   return dashboardRequest('/absences', { method: 'GET', guildId });
 }
 
+export type AbsenceSuperior = {
+  userId: string;
+  displayName: string;
+  avatarUrl: string | null;
+  grade: string | null;
+  reason: 'tutor' | 'owner' | 'rank';
+};
+
+/** A qui l'utilisateur connecte peut declarer son absence : tuteur, fondateur, grades egaux ou superieurs. */
+export async function fetchAbsenceSuperiors(guildId = authStore.selectedGuildId): Promise<{ superiors: AbsenceSuperior[] } | null> {
+  return dashboardRequest('/absences/superiors', { method: 'GET', guildId });
+}
+
 export async function fetchStaffCalendarData(start: Date, end: Date, staffIds?: string[], guildId = authStore.selectedGuildId) {
   let path = `/absences/calendar-data?start=${start.toISOString()}&end=${end.toISOString()}`;
   if (staffIds && staffIds.length > 0) {

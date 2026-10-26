@@ -157,6 +157,19 @@ export function registerPlanningRoutes(): void {
     };
   });
 
+  route('GET', `${base}/absences/superiors`, () => ({
+    superiors: staffMembers()
+      .filter((s) => s.userId !== ME.id)
+      .slice(0, 4)
+      .map((s, i) => ({
+        userId: s.userId,
+        displayName: s.displayName ?? s.username,
+        avatarUrl: s.avatarUrl ?? null,
+        grade: s.grade ?? null,
+        reason: i === 0 ? 'tutor' : i === 1 ? 'owner' : 'rank',
+      })),
+  }));
+
   route('GET', `${base}/absences/config`, () => ({
     config: { enabled: true, requireApproval: true, maxDurationDays: 30, notifyChannelId: '900000000000000318', roleAccess: [], roleAccessByRole: [], notificationTargets: [] },
   }));
