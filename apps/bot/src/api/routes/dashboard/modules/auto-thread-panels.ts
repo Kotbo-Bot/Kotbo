@@ -82,7 +82,16 @@ export async function handleThreadPanelRoutes(ctx: ModuleRouteContext): Promise<
   if (parts.length === 6 && method === 'GET') {
     try {
       const rows = await prisma.threadPanel.findMany({ where: { guildId }, orderBy: { createdAt: 'asc' } });
-      json(res, 200, { panels: await withStats(rows) });
+      // Les tags des forums : l'état du serveur ne les porte pas, et seuls les
+      // boutons « post de forum » en ont besoin.
+      const forums = [...(client.guilds.cache.get(guildId)?.channels.cache.values() ?? [])]
+        .filter((channel) => channel.type === ChannelType.GuildForum || channel.type === ChannelType.GuildMedia)
+        .map((channel) => ({
+          id: channel.id,
+          name: channel.name,
+          tags: channel.availableTags.map((tag) => ({ id: tag.id, name: tag.name, emoji: tag.emoji?.name ?? null })),
+        }));
+      json(res, 200, { panels: await withStats(rows), forums });
     } catch (err) {
       jsonFailure(res, err, 'Erreur lors du chargement des panneaux', 'ThreadPanelAPI');
     }
