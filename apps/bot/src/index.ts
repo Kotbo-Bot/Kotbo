@@ -50,6 +50,7 @@ import { registerAdvancedLogsListener } from './events/advancedLogs.js';
 import { registerCloseSourceWarningListener } from './events/closeSourceWarning.js';
 import { registerNicknameModerationListener } from './events/nicknameModeration.js';
 import { registerTempVoiceListener } from './events/tempVoice.js';
+import { registerThreadPanelListener } from './events/threadPanel.js';
 import { registerHoneypotListener } from './events/honeypot.js';
 import { registerMessageLoggingListener } from './events/messageLogging.js';
 import { registerAuditEventsListener } from './events/auditEvents.js';
@@ -507,6 +508,7 @@ client.once(Events.ClientReady, async (c) => {
   registerCloseSourceWarningListener(client);
   registerNicknameModerationListener(scopeClientToModule(client, 'nickname_moderation'));
   registerTempVoiceListener(scopeClientToModule(client, 'auto_thread'));
+  registerThreadPanelListener(scopeClientToModule(client, 'auto_thread'));
   registerStarboardListener(scopeClientToModule(client, 'starboard'));
   registerHoneypotListener(scopeClientToModule(client, 'automod'));
   registerMessageLoggingListener(scopeClientToModule(client, 'logs'));
