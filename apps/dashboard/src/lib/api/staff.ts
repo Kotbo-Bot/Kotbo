@@ -82,6 +82,23 @@ export type AbsenceSuperior = {
   reason: 'tutor' | 'owner' | 'rank';
 };
 
+export type PlanningExtra = {
+  kind: 'server_event' | 'giveaway' | 'schedule';
+  id: string;
+  title: string;
+  start: string;
+  end: string | null;
+  description: string | null;
+  href: string;
+  externalUrl: string | null;
+  meta: Record<string, string | number | boolean | null>;
+};
+
+/** Evenements du serveur, fins de giveaways et taches planifiees de la periode, selon les droits du role. */
+export async function fetchPlanningExtras(start: Date, end: Date, guildId = authStore.selectedGuildId): Promise<{ items: PlanningExtra[] } | null> {
+  return dashboardRequest(`/absences/planning-extras?start=${start.toISOString()}&end=${end.toISOString()}`, { method: 'GET', guildId });
+}
+
 /** A qui l'utilisateur connecte peut declarer son absence : tuteur, fondateur, grades egaux ou superieurs. */
 export async function fetchAbsenceSuperiors(guildId = authStore.selectedGuildId): Promise<{ superiors: AbsenceSuperior[] } | null> {
   return dashboardRequest('/absences/superiors', { method: 'GET', guildId });

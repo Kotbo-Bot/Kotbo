@@ -13,6 +13,8 @@
     fetchStaffMembers,
     fetchStaffCalendarData,
     fetchAbsenceSuperiors,
+    fetchPlanningExtras,
+    dashboardFetch,
     createCall,
     deleteCall,
     fetchTasks,
@@ -32,6 +34,7 @@
     createReminder,
     deleteReminder,
     type AbsenceSuperior,
+    type PlanningExtra,
   } from '../lib/api';
   import { parseDiscordEmojisAndMarkdown } from '../lib/emojiParser';
   import { timezoneStore } from '../lib/stores/timezone.svelte';
@@ -50,7 +53,8 @@
   import { localInitialAvatar } from '../lib/discordMedia';
   import { errorMessage } from '@kotbo/shared';
 
-  type PlanningType = 'meeting' | 'absence' | 'call' | 'task';
+  type ServerKind = PlanningExtra['kind'];
+  type PlanningType = 'meeting' | 'absence' | 'call' | 'task' | ServerKind;
   type CalendarData = { absences: any[]; voiceSessions: any[]; meetings: any[]; calls: any[]; tasks: any[] };
   const emptyCalendarData = (): CalendarData => ({ absences: [], voiceSessions: [], meetings: [], calls: [], tasks: [] });
   const normalize = (data: any): CalendarData => ({
@@ -62,12 +66,34 @@
   });
 
   const TYPES: PlanningType[] = ['meeting', 'call', 'absence', 'task'];
+  // Ce que le serveur a deja de date ; lecture seule, gere dans sa propre page.
+  const SERVER_TYPES: ServerKind[] = ['server_event', 'giveaway', 'schedule'];
   const TYPE_META: Record<PlanningType, { label: () => string; calendar: () => string; icon: string }> = {
     meeting: { label: m.planning_type_meeting, calendar: m.planning_cal_meetings, icon: 'calendar' },
     call: { label: m.planning_type_call, calendar: m.planning_cal_calls, icon: 'phone' },
     absence: { label: m.planning_type_absence, calendar: m.planning_cal_absences, icon: 'sun' },
     task: { label: m.planning_type_task, calendar: m.planning_cal_tasks, icon: 'check-square' },
+    server_event: { label: m.planning_type_server_event, calendar: m.planning_cal_server_events, icon: 'megaphone' },
+    giveaway: { label: m.planning_type_giveaway, calendar: m.planning_cal_giveaways, icon: 'gift' },
+    schedule: { label: m.planning_type_schedule, calendar: m.planning_cal_schedules, icon: 'send' },
   };
+  const SERVER_LINK_LABEL: Record<ServerKind, () => string> = {
+    server_event: m.planning_extra_open_events,
+    giveaway: m.planning_extra_open_giveaways,
+    schedule: m.planning_extra_open_schedules,
+  };
+  const EVENT_STATUS_LABEL: Record<string, { label: () => string; badge: string }> = {
+    SCHEDULED: { label: m.planning_event_status_scheduled, badge: 'badge-info' },
+    ACTIVE: { label: m.planning_event_status_active, badge: 'badge-warning' },
+    COMPLETED: { label: m.planning_event_status_completed, badge: 'badge-success' },
+  };
+  const SCHEDULE_TYPE_LABEL: Record<string, () => string> = {
+    SEND_MESSAGE: m.planning_schedule_type_send_message,
+    CHANNEL_RESET: m.planning_schedule_type_channel_reset,
+    SERVER_BACKUP: m.planning_schedule_type_server_backup,
+    DATA_EXPORT: m.planning_schedule_type_data_export,
+  };
+  const isServerKind = (type: string): type is ServerKind => (SERVER_TYPES as string[]).includes(type);
   const VIEW_META: Record<CalendarView, { label: () => string; short?: () => string; icon: string }> = {
     day: { label: m.cal_view_day, icon: 'calendar' },
     workweek: { label: m.cal_view_workweek, short: m.cal_view_workweek_short, icon: 'briefcase' },
@@ -109,6 +135,8 @@
   let calendarData = $state<CalendarData>(emptyCalendarData());
   // Journee en cours pour toute l'equipe, quel que soit le filtre ou la periode affichee.
   let todayData = $state<CalendarData>(emptyCalendarData());
+  let extras = $state<PlanningExtra[]>([]);
+  let todayExtras = $state<PlanningExtra[]>([]);
   let userTasks = $state<any[]>([]);
 
   // ── Affichage ───────────────────────────────────────────
@@ -119,7 +147,7 @@
   let rangeKnown = false;
   let miniCalDate = $state(new Date());
   let selectedStaffIds = $state<string[]>([]);
-  let visibleTypes = $state<string[]>([...TYPES]);
+  let visibleTypes = $state<string[]>([...TYPES, ...SERVER_TYPES]);
   let peopleQuery = $state('');
   let leftPaneOpen = $state(true);
   let myDayOpen = $state(true);
@@ -157,6 +185,7 @@
   let formDiscordChannelId = $state('');
   let formIsTempChannel = $state(true);
   let formInviteeUserIds = $state<string[]>([]);
+  let formLocation = $state('');
   let formError = $state('');
   let saving = $state(false);
 
@@ -262,25 +291,42 @@
     return { id: raw.id, title: raw.title, start, end, type, isAllDay: false, details: raw.description, raw };
   }
 
+  /** Un element du serveur : une fin de giveaway ou une publication tient sur une demi-heure. */
+  function extraToEvent(x: PlanningExtra): CalendarEvent {
+    const start = new Date(x.start);
+    const end = x.end ? new Date(x.end) : new Date(start.getTime() + (x.kind === 'server_event' ? 3600000 : 1800000));
+    return { id: x.id, title: x.title, start, end, type: x.kind, isAllDay: false, details: x.description ?? undefined, raw: x };
+  }
+
   const calendarEvents = $derived.by(() => {
     const events: CalendarEvent[] = [];
     if (visibleTypes.includes('meeting')) calendarData.meetings.forEach(x => events.push(toEvent('meeting', x)));
     if (visibleTypes.includes('absence')) calendarData.absences.forEach(x => events.push(toEvent('absence', x)));
     if (visibleTypes.includes('call')) calendarData.calls.forEach(x => events.push(toEvent('call', x)));
     if (visibleTypes.includes('task')) calendarData.tasks.filter(t => t.dueDate).forEach(x => events.push(toEvent('task', x)));
+    extras.filter(x => visibleTypes.includes(x.kind)).forEach(x => events.push(extraToEvent(x)));
     return events;
   });
 
-  const typeCounts = $derived<Record<PlanningType, number>>({
+  const typeCounts = $derived<Record<string, number>>({
     meeting: calendarData.meetings.length,
     call: calendarData.calls.length,
     absence: calendarData.absences.length,
     task: calendarData.tasks.filter(t => t.dueDate).length,
+    ...Object.fromEntries(SERVER_TYPES.map(k => [k, extras.filter(x => x.kind === k).length])),
   });
 
+  // Calques que le role peut voir : les memes droits que la page de chaque section.
+  const canSeeServerKind = (kind: ServerKind) =>
+    kind === 'schedule' ? canManageSettings : canViewFeature(kind === 'server_event' ? 'events' : 'giveaways');
+  const canCreateServerEvent = $derived(canManageSettings && canViewFeature('events'));
+
   const todayAgenda = $derived(
-    [...todayData.meetings.map(x => toEvent('meeting', x)), ...todayData.calls.map(x => toEvent('call', x))]
-      .sort((a, b) => a.start.getTime() - b.start.getTime()),
+    [
+      ...todayData.meetings.map(x => toEvent('meeting', x)),
+      ...todayData.calls.map(x => toEvent('call', x)),
+      ...todayExtras.map(extraToEvent),
+    ].sort((a, b) => a.start.getTime() - b.start.getTime()),
   );
   const absentToday = $derived(todayData.absences.filter(a => a.status !== 'REJECTED'));
   const pendingTasks = $derived(userTasks.filter(t => t.status !== 'COMPLETED'));
@@ -294,11 +340,14 @@
   const isOverdue = (task: any) => task.dueDate && task.status !== 'COMPLETED' && new Date(task.dueDate).getTime() < Date.now();
   const formatTime = (date: Date) => date.toLocaleTimeString(dateLocale(), { hour: '2-digit', minute: '2-digit' });
   const memberName = (x: any) => x?.displayName || x?.username || m.planning_member_fallback();
+  const channelName = (id: string) =>
+    [...dashboardStore.state.discordChannels, ...dashboardStore.state.discordVoiceChannels].find(c => c.id === id)?.name ?? id;
   const eventKey = (e: CalendarEvent | null | undefined) => (e ? `${e.type}:${e.id}` : null);
 
   function formatSpan(start: Date, end: Date | undefined, type: string) {
     const day = capitalize(start.toLocaleDateString(dateLocale(), { weekday: 'long', day: 'numeric', month: 'long' }));
-    if (type === 'task' || !end) return `${day} · ${formatTime(start)}`;
+    // Echeance, tirage ou publication : un instant, pas une plage.
+    if (type === 'task' || type === 'giveaway' || type === 'schedule' || !end) return `${day} · ${formatTime(start)}`;
     if (isSameDay(start, end)) return `${day} · ${formatTime(start)} – ${formatTime(end)}`;
     return `${day} ${formatTime(start)} – ${end.toLocaleDateString(dateLocale(), { day: 'numeric', month: 'long' })} ${formatTime(end)}`;
   }
@@ -390,7 +439,12 @@
     // La periode n'est connue qu'une fois le calendrier affiche, qui la signale lui-meme.
     if (!rangeKnown) return;
     try {
-      calendarData = normalize(await fetchStaffCalendarData(rangeStart, rangeEnd, selectedStaffIds));
+      const [data, extra] = await Promise.all([
+        fetchStaffCalendarData(rangeStart, rangeEnd, selectedStaffIds),
+        fetchPlanningExtras(rangeStart, rangeEnd).catch(() => null),
+      ]);
+      calendarData = normalize(data);
+      extras = extra?.items ?? [];
     } catch (e) {
       console.error('Failed to load calendar data:', e);
     }
@@ -402,7 +456,13 @@
     const end = new Date(start);
     end.setHours(23, 59, 59, 999);
     try {
-      todayData = normalize(await fetchStaffCalendarData(start, end));
+      const [data, extra] = await Promise.all([
+        fetchStaffCalendarData(start, end),
+        fetchPlanningExtras(start, end).catch(() => null),
+      ]);
+      todayData = normalize(data);
+      // Les taches planifiees restent dans le calendrier : la journee montre ce qui implique des gens.
+      todayExtras = (extra?.items ?? []).filter(x => x.kind !== 'schedule');
     } catch (e) {
       console.error('Failed to load today data:', e);
     }
@@ -488,7 +548,8 @@
   }
 
   function resetForm(start: Date, end: Date | undefined, type: PlanningType) {
-    createType = type === 'call' && !callPermCanCreate ? 'meeting' : type;
+    createType = creatableTypes.includes(type) ? type : 'meeting';
+    formLocation = '';
     selectedStartDate = start;
     selectedEndDate = end || new Date(start.getTime() + 3600000);
     formTitle = '';
@@ -593,6 +654,26 @@
           isTempChannel: formIsTempChannel,
           inviteeUserIds: [...formInviteeUserIds, ...formInviteeMemberIds],
         });
+      } else if (createType === 'server_event') {
+        // Discord refuse un evenement planifie dans le passe.
+        if (selectedStartDate.getTime() <= Date.now()) { formError = m.planning_err_event_in_past(); return; }
+        if (selectedEndDate.getTime() <= selectedStartDate.getTime()) { formError = m.meetings_err_end_before_start(); return; }
+        // Un evenement Kotbo personnalise, avec son evenement Discord natif : il se retrouve dans la page Evenements.
+        const res = await dashboardFetch('/events', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: 'CUSTOM',
+            title: formTitle.trim(),
+            description: formDescription || undefined,
+            startTime: selectedStartDate.toISOString(),
+            endTime: selectedEndDate.toISOString(),
+            location: formLocation.trim() || undefined,
+            createDiscordEvent: true,
+          }),
+        });
+        if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || m.planning_err_create_generic());
+        toast.success(m.planning_server_event_created());
       } else {
         await createTask({
           title: formTitle.trim(),
@@ -614,12 +695,17 @@
     }
   }
 
+  const creatableTypes = $derived<PlanningType[]>([
+    ...TYPES.filter(t => t !== 'call' || callPermCanCreate),
+    ...(canCreateServerEvent ? (['server_event'] as const) : []),
+  ]);
+
   const typeOptions = $derived<FilterOption<PlanningType>[]>(
-    TYPES.filter(t => t !== 'call' || callPermCanCreate).map(t => ({ value: t, label: TYPE_META[t].label() })),
+    creatableTypes.map(t => ({ value: t, label: TYPE_META[t].label() })),
   );
 
   const newEventMenu = $derived<MenuItem[]>(
-    TYPES.filter(t => t !== 'call' || callPermCanCreate).map(t => ({
+    creatableTypes.map(t => ({
       label: TYPE_META[t].label(),
       icon: TYPE_META[t].icon,
       onselect: () => openFullCreate(t),
@@ -1012,7 +1098,7 @@
         <input type="datetime-local" class="input w-auto {compact ? 'text-body-sm' : ''}" aria-label={m.meetings_field_end_label()} value={formatLocal(selectedEndDate)} onchange={(e) => (selectedEndDate = parseLocal((e.target as HTMLInputElement).value))} />
       {/if}
     </div>
-    {#if createType === 'meeting' || createType === 'call'}
+    {#if createType === 'meeting' || createType === 'call' || createType === 'server_event'}
       <div class="flex flex-wrap items-center gap-1.5 pl-6" role="group" aria-label={m.planning_duration()}>
         {#each [30, 60, 120] as minutes (minutes)}
           <button type="button" class="pl-chip {durationMinutes === minutes ? 'pl-chip--active' : ''}" aria-pressed={durationMinutes === minutes} onclick={() => setDuration(minutes)}>
@@ -1155,6 +1241,23 @@
               </ul>
             </section>
 
+            {#if SERVER_TYPES.some(canSeeServerKind)}
+              <section class="pl-left-section">
+                <h3 class="pl-left-title">{m.planning_server_section()}</h3>
+                <ul>
+                  {#each SERVER_TYPES.filter(canSeeServerKind) as type (type)}
+                    <li>
+                      <label class="pl-filter" style="--evt: {EVENT_TYPE_COLOR[type]}">
+                        <input type="checkbox" class="pl-check" checked={visibleTypes.includes(type)} onchange={() => toggleType(type)} />
+                        <span class="flex-1 text-body-sm text-on-surface">{TYPE_META[type].calendar()}</span>
+                        <span class="text-2xs text-on-surface-variant tabular-nums">{typeCounts[type]}</span>
+                      </label>
+                    </li>
+                  {/each}
+                </ul>
+              </section>
+            {/if}
+
             <section class="pl-left-section flex-1 min-h-0 flex flex-col">
               <div class="flex items-center justify-between gap-2">
                 <h3 class="pl-left-title">{m.planning_people()}</h3>
@@ -1230,7 +1333,7 @@
                   <ul class="space-y-1">
                     {#each todayAgenda as event (eventKey(event))}
                       <li>
-                        <button type="button" class="pl-agenda-item {event.end && event.end.getTime() < Date.now() ? 'opacity-60' : ''}" onclick={() => openDetail(event)}>
+                        <button type="button" class="pl-agenda-item {event.end && event.end.getTime() < Date.now() ? 'opacity-60' : ''}" onclick={(e) => handleEventClick(event, e.currentTarget.getBoundingClientRect())}>
                           <span class="w-11 shrink-0 text-2xs text-on-surface-variant tabular-nums leading-snug">
                             {formatTime(event.start)}<br />{event.end ? formatTime(event.end) : ''}
                           </span>
@@ -1344,7 +1447,9 @@
         {#if type === 'meeting' && canManageMeetings}
           <Button variant="ghost" size="sm" icon="edit-2" aria-label={m.planning_detail_edit()} title={m.planning_detail_edit()} onclick={() => openEditMeeting(raw)} />
         {/if}
-        <Button variant="ghost" size="sm" icon="trash-2" aria-label={m.planning_detail_delete()} title={m.planning_detail_delete()} onclick={() => deleteItem(event)} />
+        {#if !isServerKind(type)}
+          <Button variant="ghost" size="sm" icon="trash-2" aria-label={m.planning_detail_delete()} title={m.planning_detail_delete()} onclick={() => deleteItem(event)} />
+        {/if}
         <Button variant="ghost" size="sm" icon="x" aria-label={m.planning_close_aria()} onclick={() => (peek = null)} />
       </div>
       <div class="px-4 pb-4 space-y-3">
@@ -1402,13 +1507,45 @@
               <Button size="sm" variant="danger" icon="x" onclick={() => decideAbsence(raw.id, 'REJECTED')}>{m.planning_absence_reject()}</Button>
             </div>
           {/if}
+        {:else if type === 'server_event'}
+          {@const status = EVENT_STATUS_LABEL[String(raw.meta.status)]}
+          <div class="flex flex-wrap items-center gap-2 text-body-sm text-on-surface-variant">
+            {#if status}<span class="badge {status.badge}">{status.label()}</span>{/if}
+            {#if raw.meta.interested !== null}<span>{m.planning_event_interested({ count: Number(raw.meta.interested) })}</span>{/if}
+          </div>
+          {#if raw.meta.location || raw.meta.channelId}
+            <p class="flex items-center gap-2 text-body-sm text-on-surface-variant">
+              <Papicon icon="map-pin" size={14} />
+              {raw.meta.location || `#${channelName(String(raw.meta.channelId))}`}
+            </p>
+          {/if}
+        {:else if type === 'giveaway'}
+          <div class="flex flex-wrap items-center gap-2 text-body-sm text-on-surface-variant">
+            <span class="badge {raw.meta.ended ? 'badge-success' : 'badge-info'}">{raw.meta.ended ? m.planning_giveaway_ended() : m.planning_giveaway_ends()}</span>
+            <span>{m.planning_giveaway_participants({ count: Number(raw.meta.participants), winners: Number(raw.meta.winnerCount) })}</span>
+          </div>
+        {:else if type === 'schedule'}
+          <p class="flex flex-wrap items-center gap-2 text-body-sm text-on-surface-variant">
+            <span class="badge badge-neutral">{SCHEDULE_TYPE_LABEL[String(raw.meta.taskType)]?.() ?? raw.meta.taskType}</span>
+            {#if raw.meta.channelId}<span>{m.planning_schedule_in_channel({ channel: channelName(String(raw.meta.channelId)) })}</span>{/if}
+          </p>
         {/if}
 
         {#if raw.description && type !== 'absence'}
           <p class="text-body-sm text-on-surface-variant line-clamp-3 whitespace-pre-wrap">{raw.description}</p>
         {/if}
 
-        <Button variant="ghost" size="sm" iconRight="arrow-right" onclick={() => openDetail(event)}>{m.planning_peek_open()}</Button>
+        {#if isServerKind(type)}
+          <p class="text-2xs text-on-surface-variant">{m.planning_extra_readonly()}</p>
+          <div class="flex flex-wrap gap-2">
+            <Button size="sm" iconRight="arrow-right" href={raw.href}>{SERVER_LINK_LABEL[type]()}</Button>
+            {#if raw.externalUrl}
+              <Button variant="ghost" size="sm" icon="external-link" href={raw.externalUrl} target="_blank">{m.planning_extra_discord()}</Button>
+            {/if}
+          </div>
+        {:else}
+          <Button variant="ghost" size="sm" iconRight="arrow-right" onclick={() => openDetail(event)}>{m.planning_peek_open()}</Button>
+        {/if}
       </div>
     </div>
   {/if}
@@ -1446,6 +1583,14 @@
       {#if superiors.length === 0}
         <Callout variant="warning">{m.planning_superior_none()}</Callout>
       {/if}
+    {/if}
+
+    {#if createType === 'server_event'}
+      <div class="relative">
+        <Papicon icon="map-pin" size={14} class="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant pointer-events-none" />
+        <input class="input pl-9" bind:value={formLocation} maxlength="100" placeholder={m.planning_location_ph()} aria-label={m.planning_location_ph()} />
+      </div>
+      <p class="text-2xs text-on-surface-variant">{m.planning_server_event_hint()}</p>
     {/if}
 
     {#if createType === 'call'}

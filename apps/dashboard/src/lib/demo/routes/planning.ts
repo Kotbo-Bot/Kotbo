@@ -157,6 +157,26 @@ export function registerPlanningRoutes(): void {
     };
   });
 
+  route('GET', `${base}/absences/planning-extras`, () => ({
+    items: [
+      {
+        kind: 'server_event', id: 'demo-event-1', title: 'Soirée jeux communautaire', start: at(2, 21), end: at(2, 23),
+        description: 'Among Us et Gartic Phone en vocal.', href: '/events', externalUrl: null,
+        meta: { status: 'SCHEDULED', location: 'Salon vocal Événements', channelId: null, interested: 34, managedByKotbo: true },
+      },
+      {
+        kind: 'giveaway', id: 'demo-giveaway-1', title: 'Nitro 1 mois', start: at(4, 18), end: null,
+        description: null, href: '/giveaways', externalUrl: null,
+        meta: { ended: false, participants: 128, winnerCount: 1, channelId: null },
+      },
+      ...[0, 7].map((d) => ({
+        kind: 'schedule', id: `demo-schedule-${d}`, title: 'Rappel du règlement', start: at(d + 1, 10), end: null,
+        description: 'Pense à relire le règlement épinglé.', href: '/schedules', externalUrl: null,
+        meta: { taskType: 'SEND_MESSAGE', channelId: null, runOnce: false },
+      })),
+    ],
+  }));
+
   route('GET', `${base}/absences/superiors`, () => ({
     superiors: staffMembers()
       .filter((s) => s.userId !== ME.id)

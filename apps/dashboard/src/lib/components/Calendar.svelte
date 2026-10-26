@@ -5,6 +5,10 @@
     call: 'var(--color-success)',
     absence: 'var(--color-warning)',
     task: 'var(--color-tertiary)',
+    // Calques du serveur : couleurs de categorie, comme les calendriers d'Outlook.
+    server_event: '#0891b2',
+    giveaway: '#db2777',
+    schedule: '#64748b',
   };
 
   export type CalendarView = 'day' | 'workweek' | 'week' | 'month' | 'agenda';
@@ -188,6 +192,9 @@
       case 'call': return 'phone';
       case 'absence': return 'sun';
       case 'task': return 'check-square';
+      case 'server_event': return 'megaphone';
+      case 'giveaway': return 'gift';
+      case 'schedule': return 'send';
       default: return 'circle';
     }
   }
