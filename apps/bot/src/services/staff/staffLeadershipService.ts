@@ -18,6 +18,7 @@ import { notify, notifyMany } from '../notifications/notifyService.js';
 import { getClient } from '../../utils/client.js';
 import { formatGuildDateTime, formatInTimezone } from '../../utils/timezone.js';
 import { UserFacingError } from '../../utils/userFacingError.js';
+import { syncDoingListItemFromTask } from './doingListTaskSync.js';
 
 type AbsenceMutableStatus = 'PENDING' | 'ACKNOWLEDGED' | 'APPROVED' | 'REJECTED' | 'CANCELED' | 'ENDED';
 
@@ -1728,7 +1729,7 @@ export const createCall = async (
         description,
         scheduledAt,
         status: 'SCHEDULED',
-        creatorId: creator.id,
+        creatorId,
         channelMode,
         channelType: channelType ?? null,
         discordChannelId: finalChannelId ?? null,
@@ -1912,12 +1913,16 @@ export const createTask = async (
   description: string | null,
   priority: 'LOW' | 'MEDIUM' | 'HIGH',
   dueDate: Date | null,
-  assigneeStaffId: string
+  assigneeStaffId: string,
+  // Une carte de liste de suivi peut être attribuée par un admin hors staff :
+  // la tâche est alors créée au nom de la personne attitrée.
+  fallbackCreatorStaffId?: string
 ) => {
   const creator = await prisma.staffMember.findUnique({
     where: { guildId_userId: { guildId, userId: createdByUserId } }
   });
-  if (!creator) throw new Error("Le créateur n'est pas un membre du staff.");
+  const creatorId = creator?.id ?? fallbackCreatorStaffId;
+  if (!creatorId) throw new Error("Le créateur n'est pas un membre du staff.");
 
   const task = await prisma.staffTask.create({
     data: {
@@ -1964,7 +1969,7 @@ export const updateTask = async (
     assigneeId?: string;
   }
 ) => {
-  return prisma.staffTask.update({
+  const task = await prisma.staffTask.update({
     where: { id, guildId },
     data,
     include: {
@@ -1972,6 +1977,8 @@ export const updateTask = async (
       creator: true
     }
   });
+  await syncDoingListItemFromTask(task).catch((err) => logger.warn('StaffTasks', 'Carte de liste de suivi non mise à jour :', err));
+  return task;
 };
 
 export const deleteTask = async (guildId: string, id: string) => {

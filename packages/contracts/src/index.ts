@@ -72,11 +72,17 @@ export type {
 
 export {
   DOING_LIST_MODULES,
-  DOING_LIST_STATUSES,
+  DOING_LIST_PRIORITIES,
   isDoingListModule,
-  isDoingListStatus,
+  isDoingListPriority,
+  isDoingListSource,
 } from './types/doingLists.js';
-export type { DoingListModule, DoingListStatus } from './types/doingLists.js';
+export type {
+  DoingListChecklistEntry,
+  DoingListModule,
+  DoingListPriority,
+  DoingListSource,
+} from './types/doingLists.js';
 
 export {
   DiscordSnowflake,
