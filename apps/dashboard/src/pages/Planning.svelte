@@ -12,6 +12,7 @@
   import {
     fetchStaffMembers,
     fetchStaffCalendarData,
+    fetchAbsenceSuperiors,
     createCall,
     deleteCall,
     fetchTasks,
@@ -24,28 +25,27 @@
     deleteMeeting,
     updateMeeting,
     deleteAbsence,
-    fetchStaffRoles,
     searchDiscordMembers,
     fetchCallPermissionConfig,
     updateCallPermissionConfig,
     fetchMemberCase,
     createReminder,
     deleteReminder,
+    type AbsenceSuperior,
   } from '../lib/api';
   import { parseDiscordEmojisAndMarkdown } from '../lib/emojiParser';
-  import RefreshButton from '../lib/components/RefreshButton.svelte';
   import { timezoneStore } from '../lib/stores/timezone.svelte';
   import { formatWallClockInTimezone, parseDateTimeInTimezone } from '@kotbo/contracts';
   import TimezoneHint from '../lib/components/TimezoneHint.svelte';
   import Papicon from '../lib/components/Papicon.svelte';
-  import Calendar, { EVENT_TYPE_COLOR } from '../lib/components/Calendar.svelte';
+  import Calendar, { EVENT_TYPE_COLOR, CALENDAR_VIEWS, type CalendarEvent, type CalendarView } from '../lib/components/Calendar.svelte';
+  import AnchoredPopover from '../lib/components/planning/AnchoredPopover.svelte';
   import ModulePage from '../lib/components/ModulePage.svelte';
   import SearchableSelect from '../lib/components/SearchableSelect.svelte';
   import Skeleton from '../lib/components/Skeleton.svelte';
   import MemberCaseModal from '../lib/components/MemberCaseModal.svelte';
   import DiscordMarkdownEditor from '../lib/components/DiscordMarkdownEditor.svelte';
-  import DoingListPin from '../lib/components/doingLists/DoingListPin.svelte';
-  import { Button, Callout, Field, FilterPills, Modal, ToggleSwitch, type FilterOption } from '../lib/components/ui';
+  import { Button, Callout, Field, FilterPills, Menu, Modal, ToggleSwitch, type FilterOption, type MenuItem } from '../lib/components/ui';
   import { localInitialAvatar } from '../lib/discordMedia';
   import { errorMessage } from '@kotbo/shared';
 
@@ -60,14 +60,20 @@
     tasks: data?.tasks || [],
   });
 
+  const TYPES: PlanningType[] = ['meeting', 'call', 'absence', 'task'];
   const TYPE_META: Record<PlanningType, { label: () => string; calendar: () => string; icon: string }> = {
     meeting: { label: m.planning_type_meeting, calendar: m.planning_cal_meetings, icon: 'calendar' },
     call: { label: m.planning_type_call, calendar: m.planning_cal_calls, icon: 'phone' },
     absence: { label: m.planning_type_absence, calendar: m.planning_cal_absences, icon: 'sun' },
     task: { label: m.planning_type_task, calendar: m.planning_cal_tasks, icon: 'check-square' },
   };
-  const TYPES: PlanningType[] = ['meeting', 'call', 'absence', 'task'];
-
+  const VIEW_META: Record<CalendarView, { label: () => string; short?: () => string; icon: string }> = {
+    day: { label: m.cal_view_day, icon: 'calendar' },
+    workweek: { label: m.cal_view_workweek, short: m.cal_view_workweek_short, icon: 'briefcase' },
+    week: { label: m.cal_view_week, icon: 'calendar-days' },
+    month: { label: m.cal_view_month, icon: 'layout-grid' },
+    agenda: { label: m.cal_view_agenda, icon: 'list' },
+  };
   const PRIORITY_LABEL: Record<string, () => string> = {
     LOW: m.planning_priority_low,
     MEDIUM: m.planning_priority_medium,
@@ -95,52 +101,55 @@
     ABSENT: 'badge-danger',
   };
 
-  // ── Etat ────────────────────────────────────────────────
+  // ── Donnees ─────────────────────────────────────────────
   let loading = $state(true);
   let allStaff = $state<any[]>([]);
-  let allRoles = $state<any[]>([]);
+  let superiors = $state<AbsenceSuperior[]>([]);
   let calendarData = $state<CalendarData>(emptyCalendarData());
   // Journee en cours pour toute l'equipe, quel que soit le filtre ou la periode affichee.
   let todayData = $state<CalendarData>(emptyCalendarData());
   let userTasks = $state<any[]>([]);
 
-  let calendarView = $state<string>('week');
+  // ── Affichage ───────────────────────────────────────────
+  let calendarView = $state<CalendarView>('week');
   let calendarCurrentDate = $state(new Date());
-
+  let rangeStart = $state(new Date());
+  let rangeEnd = $state(new Date());
+  let rangeKnown = false;
+  let miniCalDate = $state(new Date());
   let selectedStaffIds = $state<string[]>([]);
   let visibleTypes = $state<string[]>([...TYPES]);
   let peopleQuery = $state('');
-
-  let showTaskPanel = $state(true);
-  let sidebarCollapsed = $state(false);
+  let leftPaneOpen = $state(true);
+  let myDayOpen = $state(true);
+  let myDayTab = $state<'agenda' | 'tasks'>('agenda');
   let showDoneTasks = $state(false);
   let quickTaskTitle = $state('');
   let quickTaskSaving = $state(false);
 
-  let creationModalOpen = $state(false);
-  let detailModalOpen = $state(false);
-  const planningTabs = ['meeting', 'absence', 'call', 'task'] as const;
-  // L'onglet de l'URL (/planning/absence...) choisit le type propose par defaut a la creation.
-  let currentTab = $state<PlanningType>('meeting');
-  let createType = $state<PlanningType>('meeting');
+  // ── Bulles ──────────────────────────────────────────────
+  let peek = $state<{ event: CalendarEvent; anchor: DOMRect } | null>(null);
+  let quickAnchor = $state<DOMRect | null>(null);
 
+  // ── Creation ────────────────────────────────────────────
+  const planningTabs = ['meeting', 'absence', 'call', 'task'] as const;
+  // L'onglet de l'URL (/planning/absence...) choisit le type propose a la creation.
+  let createType = $state<PlanningType>('meeting');
   $effect(() => {
     const _path = $router.path;
-    currentTab = resolveTabFromUrl('/planning', planningTabs, 'meeting') as PlanningType;
+    createType = resolveTabFromUrl('/planning', planningTabs, 'meeting') as PlanningType;
   });
 
+  let creationModalOpen = $state(false);
   let selectedStartDate = $state(new Date());
   let selectedEndDate = $state(new Date(Date.now() + 3600000));
-  // Fuseau choisi par l'organisateur pour la reunion en cours de creation ;
-  // reset a `null` a chaque ouverture du formulaire.
+  // Fuseau choisi pour la reunion en cours de creation ; remis a `null` a chaque ouverture.
   let formTimezone = $state<string | null>(null);
-  let currentItemDetail = $state<any>(null);
-
   let formTitle = $state('');
   let formDescription = $state('');
   let formPriority = $state<'LOW' | 'MEDIUM' | 'HIGH'>('MEDIUM');
   let formAssigneeId = $state('');
-  let formSuperiorId = $state('');
+  let formSuperiorId = $state<string | null>('');
   let formAbsenceType = $state('Autre');
   let formChannelMode = $state('CREATE_NEW');
   let formChannelType = $state('VOICE');
@@ -150,10 +159,6 @@
   let formError = $state('');
   let saving = $state(false);
 
-  let newReminderTime = $state('');
-  let newReminderMessage = $state('');
-  let newReminderChannel = $state('DM');
-
   let memberSearchQuery = $state('');
   let memberSearchResults = $state<any[]>([]);
   let memberSearchLoading = $state(false);
@@ -161,7 +166,14 @@
   let formInviteeMemberIds = $state<string[]>([]);
   let selectedMembers = $state<Map<string, any>>(new Map());
 
-  // Qui peut creer des appels
+  // ── Fiche complete ──────────────────────────────────────
+  let detailModalOpen = $state(false);
+  let currentItemDetail = $state<CalendarEvent | null>(null);
+  let newReminderTime = $state('');
+  let newReminderMessage = $state('');
+  let newReminderChannel = $state('DM');
+
+  // ── Qui peut creer des appels ───────────────────────────
   let callPermConfig = $state<any>(null);
   let callPermCanCreate = $state(true);
   let permissionModalOpen = $state(false);
@@ -176,6 +188,7 @@
   let permError = $state('');
   let permSaving = $state(false);
 
+  // ── Droits ──────────────────────────────────────────────
   const isAdmin = $derived(authStore.guilds.find(g => g.id === authStore.selectedGuildId)?.accessLevel === 'admin');
   const canManageSettings = $derived(isAdmin || !!dashboardStore.state.access?.canManageSettings);
   const meetingsFeatureAccess = $derived((dashboardStore.state.featureAccess as any)?.meetings || {});
@@ -183,8 +196,13 @@
   const canModerateMeetings = $derived(canManageMeetings || !!meetingsFeatureAccess.canModerate);
   const absencesFeatureAccess = $derived((dashboardStore.state.featureAccess as any)?.absences || {});
   const canModerateAbsences = $derived(canManageSettings || !!absencesFeatureAccess.canModerate || !!absencesFeatureAccess.canConfigure);
+  /**
+   * Le dossier membre est la fiche de la section Membres : un role a qui le
+   * centre de gestion l'a fermee ne doit pas la rouvrir depuis cette page.
+   */
+  const canOpenMemberCase = $derived(canViewFeature('members'));
 
-  // Dossier membre
+  // ── Dossier membre ──────────────────────────────────────
   let userCaseModalOpen = $state(false);
   let selectedUserIdForCase = $state<string | null>(null);
   let selectedUserNameForCase = $state('');
@@ -192,7 +210,7 @@
   let loadingCase = $state(false);
   let caseError = $state('');
 
-  // Suppression de reunion
+  // ── Reunions : suppression et edition ───────────────────
   let meetingDeleteModalOpen = $state(false);
   let meetingToDeleteId = $state<string | null>(null);
   let deleteDiscordEvent = $state(true);
@@ -200,8 +218,8 @@
   let deleteDiscordNotification = $state(true);
   let deletingMeeting = $state(false);
 
-  // Edition de reunion
   let meetingEditModalOpen = $state(false);
+  let editMeetingId = $state<string | null>(null);
   let editMeetingTitle = $state('');
   let editMeetingDesc = $state('');
   let editMeetingDate = $state('');
@@ -210,11 +228,234 @@
   let editMeetingTimezone = $state<string | null>(null);
   let savingMeetingEdit = $state(false);
 
+  // ── Derives ─────────────────────────────────────────────
+  const myId = $derived((authStore.user as any)?.id);
+  const myStaffRecord = $derived(allStaff.find(s => s.userId === myId));
+  const activeStaff = $derived(allStaff.filter(s => !s.blacklistEntries || s.blacklistEntries.length === 0));
+  const filteredStaff = $derived.by(() => {
+    const q = peopleQuery.trim().toLowerCase();
+    return q ? activeStaff.filter(s => `${s.displayName ?? ''} ${s.username ?? ''}`.toLowerCase().includes(q)) : activeStaff;
+  });
+
+  const superiorLabel = (s: AbsenceSuperior) =>
+    `${s.displayName} · ${s.reason === 'tutor' ? m.planning_superior_tutor() : s.reason === 'owner' ? m.planning_superior_owner() : s.grade ?? ''}`;
+  const superiorOptions = $derived(superiors.map(s => ({ id: s.userId, name: superiorLabel(s) })));
+
+  /** Forme commune d'un element du planning, pour le calendrier comme pour les listes. */
+  function toEvent(type: PlanningType, raw: any): CalendarEvent {
+    if (type === 'absence') {
+      const start = new Date(raw.startDate);
+      const end = raw.endDate ? new Date(raw.endDate) : (raw.isIndefinite ? new Date(start.getTime() + 86400000 * 30) : start);
+      const durationHours = (end.getTime() - start.getTime()) / 3600000;
+      return {
+        id: raw.id, title: raw.reason, start, end, type, raw,
+        isAllDay: raw.isIndefinite || durationHours >= 12,
+        staffName: raw.staffMember?.displayName || raw.staffMember?.username,
+        avatarUrl: raw.staffMember?.avatarUrl,
+      };
+    }
+    const startRaw = type === 'task' ? raw.dueDate : raw.scheduledAt;
+    const start = startRaw ? new Date(startRaw) : new Date();
+    const fallback = type === 'meeting' ? 3600000 : 1800000;
+    const end = type !== 'task' && raw.endedAt ? new Date(raw.endedAt) : new Date(start.getTime() + fallback);
+    return { id: raw.id, title: raw.title, start, end, type, isAllDay: false, details: raw.description, raw };
+  }
+
+  const calendarEvents = $derived.by(() => {
+    const events: CalendarEvent[] = [];
+    if (visibleTypes.includes('meeting')) calendarData.meetings.forEach(x => events.push(toEvent('meeting', x)));
+    if (visibleTypes.includes('absence')) calendarData.absences.forEach(x => events.push(toEvent('absence', x)));
+    if (visibleTypes.includes('call')) calendarData.calls.forEach(x => events.push(toEvent('call', x)));
+    if (visibleTypes.includes('task')) calendarData.tasks.filter(t => t.dueDate).forEach(x => events.push(toEvent('task', x)));
+    return events;
+  });
+
+  const typeCounts = $derived<Record<PlanningType, number>>({
+    meeting: calendarData.meetings.length,
+    call: calendarData.calls.length,
+    absence: calendarData.absences.length,
+    task: calendarData.tasks.filter(t => t.dueDate).length,
+  });
+
+  const todayAgenda = $derived(
+    [...todayData.meetings.map(x => toEvent('meeting', x)), ...todayData.calls.map(x => toEvent('call', x))]
+      .sort((a, b) => a.start.getTime() - b.start.getTime()),
+  );
+  const absentToday = $derived(todayData.absences.filter(a => a.status !== 'REJECTED'));
+  const pendingTasks = $derived(userTasks.filter(t => t.status !== 'COMPLETED'));
+  const doneTasks = $derived(userTasks.filter(t => t.status === 'COMPLETED'));
+
+  const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+  const isSameDay = (a: Date, b: Date) =>
+    a.getDate() === b.getDate() && a.getMonth() === b.getMonth() && a.getFullYear() === b.getFullYear();
+  const isToday = (d: Date) => isSameDay(d, new Date());
+  const inRange = (d: Date) => d.getTime() >= rangeStart.getTime() && d.getTime() <= rangeEnd.getTime();
+  const isOverdue = (task: any) => task.dueDate && task.status !== 'COMPLETED' && new Date(task.dueDate).getTime() < Date.now();
+  const formatTime = (date: Date) => date.toLocaleTimeString(dateLocale(), { hour: '2-digit', minute: '2-digit' });
+  const memberName = (x: any) => x?.displayName || x?.username || m.planning_member_fallback();
+  const eventKey = (e: CalendarEvent | null | undefined) => (e ? `${e.type}:${e.id}` : null);
+
+  function formatSpan(start: Date, end: Date | undefined, type: string) {
+    const day = capitalize(start.toLocaleDateString(dateLocale(), { weekday: 'long', day: 'numeric', month: 'long' }));
+    if (type === 'task' || !end) return `${day} · ${formatTime(start)}`;
+    if (isSameDay(start, end)) return `${day} · ${formatTime(start)} – ${formatTime(end)}`;
+    return `${day} ${formatTime(start)} – ${end.toLocaleDateString(dateLocale(), { day: 'numeric', month: 'long' })} ${formatTime(end)}`;
+  }
+
+  const miniCalDays = $derived.by(() => {
+    const year = miniCalDate.getFullYear();
+    const month = miniCalDate.getMonth();
+    const offset = (new Date(year, month, 1).getDay() + 6) % 7;
+    return Array.from({ length: 42 }, (_, i) => {
+      const date = new Date(year, month, 1 - offset + i);
+      return { date, isCurrentMonth: date.getMonth() === month };
+    });
+  });
+
+  // Le mini calendrier suit la periode affichee.
+  $effect(() => {
+    const d = calendarCurrentDate;
+    miniCalDate = new Date(d.getFullYear(), d.getMonth(), 1);
+  });
+
+  // ── Fuseaux ─────────────────────────────────────────────
+  // Seule une reunion porte son propre fuseau. Le retenir au-dela ferait lire
+  // une absence, un appel ou une tache dans le fuseau d'une reunion creee juste
+  // avant, alors que le libelle sous le champ annonce celui du serveur.
+  const activeTimezone = $derived(
+    meetingEditModalOpen
+      ? (editMeetingTimezone ?? timezoneStore.timezone)
+      : (creationModalOpen || quickAnchor) && createType === 'meeting'
+        ? (formTimezone ?? timezoneStore.timezone)
+        : timezoneStore.timezone,
+  );
+  const formatLocal = (date: Date) => formatWallClockInTimezone(date, activeTimezone);
+  const parseLocal = (input: string): Date => parseDateTimeInTimezone(input, activeTimezone) ?? new Date();
+  /** Un rappel ne porte pas de fuseau propre : il se lit toujours dans celui du serveur. */
+  const parseServerLocal = (input: string): Date => parseDateTimeInTimezone(input, timezoneStore.timezone) ?? new Date();
+
+  function reinterpretWallClock(date: Date, from: string, to: string): Date {
+    return parseDateTimeInTimezone(formatWallClockInTimezone(date, from), to) ?? date;
+  }
+
   /**
-   * Le dossier membre est la fiche de la section Membres : un role a qui le
-   * centre de gestion l'a fermee ne doit pas la rouvrir depuis cette page.
+   * Changer le fuseau reinterprete l'heure affichee, il ne la reecrit pas :
+   * 15:00 tape puis « Montreal » choisi doit donner 15:00 a Montreal.
    */
-  const canOpenMemberCase = $derived(canViewFeature('members'));
+  function applyFormTimezone(zone: string | null): void {
+    const previous = formTimezone ?? timezoneStore.timezone;
+    const next = zone ?? timezoneStore.timezone;
+    formTimezone = zone;
+    if (previous === next) return;
+    selectedStartDate = reinterpretWallClock(selectedStartDate, previous, next);
+    selectedEndDate = reinterpretWallClock(selectedEndDate, previous, next);
+  }
+
+  // ── Chargement ──────────────────────────────────────────
+  async function loadData() {
+    loading = true;
+    try {
+      const [membersData, callPermData, superiorsData] = await Promise.all([
+        fetchStaffMembers(),
+        fetchCallPermissionConfig().catch(() => null),
+        fetchAbsenceSuperiors().catch(() => null),
+      ]);
+      allStaff = membersData?.members || [];
+      superiors = superiorsData?.superiors || [];
+
+      if (callPermData) {
+        callPermConfig = callPermData.config;
+        callPermCanCreate = callPermData.canCreate;
+        const usersMap = new Map();
+        for (const uid of callPermData.config?.allowedUserIds || []) {
+          const staff = allStaff.find((s: any) => s.userId === uid);
+          if (staff) usersMap.set(uid, { id: uid, username: staff.username, displayName: staff.displayName, avatarUrl: staff.avatarUrl });
+        }
+        permSelectedUsersMap = usersMap;
+      }
+
+      if (myStaffRecord) selectedStaffIds = [myStaffRecord.id];
+      else if (allStaff.length > 0) selectedStaffIds = [allStaff[0].id];
+
+      await refreshAll();
+    } catch (e) {
+      console.error('Failed to load initial data:', e);
+    } finally {
+      loading = false;
+    }
+  }
+
+  async function refreshCalendar() {
+    // La periode n'est connue qu'une fois le calendrier affiche, qui la signale lui-meme.
+    if (!rangeKnown) return;
+    try {
+      calendarData = normalize(await fetchStaffCalendarData(rangeStart, rangeEnd, selectedStaffIds));
+    } catch (e) {
+      console.error('Failed to load calendar data:', e);
+    }
+  }
+
+  async function refreshToday() {
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(start);
+    end.setHours(23, 59, 59, 999);
+    try {
+      todayData = normalize(await fetchStaffCalendarData(start, end));
+    } catch (e) {
+      console.error('Failed to load today data:', e);
+    }
+  }
+
+  async function refreshTasks() {
+    try {
+      if (myStaffRecord) userTasks = (await fetchTasks(myStaffRecord.id)).tasks || [];
+    } catch (e) {
+      console.error('Failed to load tasks:', e);
+    }
+  }
+
+  async function refreshAll() {
+    await Promise.all([refreshCalendar(), refreshTasks(), refreshToday()]);
+    syncDetail();
+  }
+
+  /** Relit l'element ouvert apres un rechargement, pour que la fiche et l'apercu suivent. */
+  function syncDetail() {
+    const find = (type: string, id: string) =>
+      ((calendarData as any)[type + 's'] as any[] | undefined)?.find(x => x.id === id)
+      || ((todayData as any)[type + 's'] as any[] | undefined)?.find(x => x.id === id)
+      || userTasks.find(x => x.id === id);
+    if (currentItemDetail) {
+      const updated = find(currentItemDetail.type, currentItemDetail.id);
+      if (updated) currentItemDetail = toEvent(currentItemDetail.type as PlanningType, updated);
+    }
+    if (peek) {
+      const updated = find(peek.event.type, peek.event.id);
+      if (updated) peek = { ...peek, event: toEvent(peek.event.type as PlanningType, updated) };
+    }
+  }
+
+  function handleRangeChange(start: Date, end: Date) {
+    rangeKnown = true;
+    rangeStart = start;
+    rangeEnd = end;
+    void refreshCalendar();
+  }
+
+  // ── Bulles et fiches ────────────────────────────────────
+  function handleEventClick(event: CalendarEvent, anchor: DOMRect) {
+    quickAnchor = null;
+    peek = { event, anchor };
+  }
+
+  function openDetail(event: CalendarEvent) {
+    peek = null;
+    currentItemDetail = event;
+    newReminderMessage = '';
+    newReminderTime = '';
+    detailModalOpen = true;
+  }
 
   async function openMemberCase(userId: string, name: string) {
     if (!authStore.selectedGuildId || !canOpenMemberCase) return;
@@ -233,126 +474,162 @@
     }
   }
 
-  // ── Reunions ────────────────────────────────────────────
-  async function updateMeetingStatus(id: string, status: string) {
-    if (!canModerateMeetings) return;
+  // ── Creation ────────────────────────────────────────────
+  /**
+   * Prochaine demi-heure, au moins une heure plus tard : partir de l'instant
+   * d'ouverture laissait passer l'heure le temps de saisir un titre, et
+   * Discord refuse un evenement planifie dans le passe.
+   */
+  function defaultStart(): Date {
+    const d = new Date(Date.now() + 3600000);
+    d.setMinutes(d.getMinutes() < 30 ? 30 : 60, 0, 0);
+    return d;
+  }
+
+  function resetForm(start: Date, end: Date | undefined, type: PlanningType) {
+    createType = type === 'call' && !callPermCanCreate ? 'meeting' : type;
+    selectedStartDate = start;
+    selectedEndDate = end || new Date(start.getTime() + 3600000);
+    formTitle = '';
+    formDescription = '';
+    formTimezone = null;
+    formPriority = 'MEDIUM';
+    formAssigneeId = myStaffRecord?.id || '';
+    // Le tuteur d'abord : c'est lui qui suit le staff au quotidien.
+    formSuperiorId = superiors.find(s => s.reason === 'tutor')?.userId ?? '';
+    formAbsenceType = 'Autre';
+    formChannelMode = 'CREATE_NEW';
+    formChannelType = 'VOICE';
+    formDiscordChannelId = '';
+    formIsTempChannel = true;
+    formInviteeUserIds = [];
+    formInviteeMemberIds = [];
+    selectedMembers = new Map();
+    memberSearchQuery = '';
+    memberSearchResults = [];
+    formError = '';
+  }
+
+  /** Creneau choisi dans la grille : bulle de creation rapide, comme Outlook. */
+  function handleSlotSelect(start: Date, end: Date, anchor: DOMRect) {
+    peek = null;
+    resetForm(start, end, createType);
+    quickAnchor = anchor;
+  }
+
+  function openFullCreate(type: PlanningType = createType, start = defaultStart()) {
+    peek = null;
+    quickAnchor = null;
+    resetForm(start, undefined, type);
+    creationModalOpen = true;
+  }
+
+  /** « Plus d'options » : la saisie de la bulle passe dans la fenetre complete. */
+  function expandQuickCreate() {
+    quickAnchor = null;
+    creationModalOpen = true;
+  }
+
+  function setDuration(minutes: number) {
+    selectedEndDate = new Date(selectedStartDate.getTime() + minutes * 60000);
+  }
+
+  const durationMinutes = $derived(Math.round((selectedEndDate.getTime() - selectedStartDate.getTime()) / 60000));
+
+  function onStartChange(value: string) {
+    const duration = selectedEndDate.getTime() - selectedStartDate.getTime();
+    selectedStartDate = parseLocal(value);
+    // Deplacer le debut garde la duree, comme dans un agenda.
+    if (duration > 0) selectedEndDate = new Date(selectedStartDate.getTime() + duration);
+  }
+
+  async function handleCreateItem(event?: SubmitEvent) {
+    event?.preventDefault();
+    if (!formTitle.trim() && createType !== 'absence') {
+      formError = m.planning_err_title_required();
+      return;
+    }
+    saving = true;
+    formError = '';
+
     try {
-      await updateMeeting(id, { status });
-      if (currentItemDetail?.id === id) currentItemDetail.raw.status = status;
-      await refreshAll();
-    } catch (e) {
-      console.error('Failed to update status:', e);
-    }
-  }
-
-  function getAttendanceStats(meeting: any) {
-    const presences = meeting.presences || [];
-    return {
-      present: presences.filter((p: any) => p.status === 'PRESENT').length,
-      excused: presences.filter((p: any) => p.status === 'EXCUSED' || p.status === 'ABSENT_CHECKED').length,
-      absent: presences.filter((p: any) => p.status === 'ABSENT').length,
-    };
-  }
-
-  function openEditMeeting(meeting: any) {
-    if (!canManageMeetings) return;
-    editMeetingTitle = meeting.title;
-    editMeetingDesc = meeting.description || '';
-    // Le fuseau est passe explicitement : `formatLocal` suit `activeTimezone`,
-    // qui ne bascule sur celui de l'edition qu'une fois la modale marquee comme
-    // ouverte - c'est-a-dire apres ces deux lignes. Nommer la zone ici evite de
-    // dependre de l'ordre des affectations.
-    editMeetingTimezone = meeting.timezone ?? null;
-    const editZone = editMeetingTimezone ?? timezoneStore.timezone;
-    editMeetingDate = formatWallClockInTimezone(new Date(meeting.scheduledAt), editZone);
-    editMeetingEndDate = formatWallClockInTimezone(
-      meeting.endedAt ? new Date(meeting.endedAt) : new Date(new Date(meeting.scheduledAt).getTime() + 3600000),
-      editZone,
-    );
-    editMeetingError = '';
-    meetingEditModalOpen = true;
-  }
-
-  async function saveMeetingEdit() {
-    if (!editMeetingTitle || !editMeetingDate) {
-      editMeetingError = m.meetings_err_required();
-      return;
-    }
-    const start = parseLocal(editMeetingDate);
-    const end = parseLocal(editMeetingEndDate);
-    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
-      editMeetingError = m.planning_err_dates_invalid();
-      return;
-    }
-    if (end <= start) {
-      editMeetingError = m.meetings_err_end_before_start();
-      return;
-    }
-
-    savingMeetingEdit = true;
-    editMeetingError = '';
-    try {
-      const payload: any = {
-        title: editMeetingTitle,
-        description: editMeetingDesc,
-        scheduledAt: start.toISOString(),
-        endedAt: end.toISOString(),
-        timezone: editMeetingTimezone,
-      };
-      if (currentItemDetail?.id) {
-        await updateMeeting(currentItemDetail.id, payload);
-        meetingEditModalOpen = false;
-        currentItemDetail.title = editMeetingTitle;
-        currentItemDetail.start = start;
-        currentItemDetail.end = end;
-        currentItemDetail.raw.title = editMeetingTitle;
-        currentItemDetail.raw.description = editMeetingDesc;
-        currentItemDetail.raw.scheduledAt = start.toISOString();
-        currentItemDetail.raw.endedAt = end.toISOString();
-        await refreshAll();
+      if (createType === 'meeting') {
+        // Un creneau du calendrier peut etre deja passe : le dire ici vaut mieux
+        // que le refus brut de Discord.
+        if (selectedStartDate.getTime() <= Date.now()) {
+          formError = m.planning_err_meeting_in_past();
+          return;
+        }
+        if (selectedEndDate.getTime() <= selectedStartDate.getTime()) {
+          formError = m.meetings_err_end_before_start();
+          return;
+        }
+        const ok = await createMeeting(formTitle.trim(), formDescription, selectedStartDate.toISOString(), selectedEndDate.toISOString(), formTimezone);
+        if (!ok) throw new Error(m.planning_err_create_meeting());
+      } else if (createType === 'absence') {
+        if (!myStaffRecord) { formError = m.planning_err_not_staff(); return; }
+        if (!formDescription.trim()) { formError = m.planning_err_absence_reason(); return; }
+        if (!formSuperiorId) { formError = m.planning_err_superior_required(); return; }
+        if (selectedEndDate < selectedStartDate) { formError = m.planning_err_end_before_start(); return; }
+        await createAbsence({
+          staffUserId: myStaffRecord.userId,
+          startDate: selectedStartDate.toISOString(),
+          endDate: selectedEndDate.toISOString(),
+          reason: formDescription.trim(),
+          type: formAbsenceType,
+          superiorUserId: formSuperiorId,
+          confirmIndefinite: false,
+        });
+      } else if (createType === 'call') {
+        if (!callPermCanCreate) { formError = m.planning_err_no_call_permission(); return; }
+        await createCall({
+          title: formTitle.trim(),
+          description: formDescription,
+          scheduledAt: selectedStartDate.toISOString(),
+          channelMode: formChannelMode,
+          channelType: formChannelMode === 'CREATE_NEW' ? formChannelType : null,
+          discordChannelId: formChannelMode === 'EXISTING' ? formDiscordChannelId : null,
+          isTempChannel: formIsTempChannel,
+          inviteeUserIds: [...formInviteeUserIds, ...formInviteeMemberIds],
+        });
+      } else {
+        await createTask({
+          title: formTitle.trim(),
+          description: formDescription,
+          priority: formPriority,
+          dueDate: selectedStartDate.toISOString(),
+          assigneeId: formAssigneeId,
+        });
       }
-    } catch (e) {
-      console.error('Failed to save meeting:', e);
-      editMeetingError = m.meetings_err_save();
-    } finally {
-      savingMeetingEdit = false;
-    }
-  }
 
-  async function confirmDeleteMeeting() {
-    if (!meetingToDeleteId) return;
-    deletingMeeting = true;
-    try {
-      await deleteMeeting(meetingToDeleteId, {
-        deleteEvent: deleteDiscordEvent,
-        deleteMessage: deleteDiscordMessage,
-        deleteNotifications: deleteDiscordNotification,
-      });
-      meetingDeleteModalOpen = false;
-      detailModalOpen = false;
+      creationModalOpen = false;
+      quickAnchor = null;
       await refreshAll();
-    } catch (e) {
-      console.error('Failed to delete meeting:', e);
+    } catch (err) {
+      console.error(err);
+      formError = errorMessage(err) || m.planning_err_create_generic();
     } finally {
-      deletingMeeting = false;
+      saving = false;
     }
   }
 
-  function formatStatus(status: string) {
-    switch (status) {
-      case 'SCHEDULED': return m.meetings_status_scheduled();
-      case 'IN_PROGRESS': return m.meetings_status_in_progress();
-      case 'COMPLETED': return m.meetings_status_completed();
-      case 'CANCELLED': return m.meetings_status_cancelled();
-      case 'PRESENT': return m.meetings_presence_present();
-      case 'EXCUSED': return m.meetings_presence_excused();
-      case 'ABSENT_CHECKED': return m.planning_presence_excused_checked();
-      case 'ABSENT': return m.meetings_presence_absent();
-      default: return status;
-    }
-  }
+  const typeOptions = $derived<FilterOption<PlanningType>[]>(
+    TYPES.filter(t => t !== 'call' || callPermCanCreate).map(t => ({ value: t, label: TYPE_META[t].label() })),
+  );
 
-  // ── Recherche de membres (invites d'appel, permissions) ─
+  const newEventMenu = $derived<MenuItem[]>(
+    TYPES.filter(t => t !== 'call' || callPermCanCreate).map(t => ({
+      label: TYPE_META[t].label(),
+      icon: TYPE_META[t].icon,
+      onselect: () => openFullCreate(t),
+    })),
+  );
+
+  const moreMenu = $derived<MenuItem[]>(
+    isAdmin ? [{ label: m.planning_call_perms_btn(), description: m.planning_call_perms_tooltip(), icon: 'shield', onselect: openPermissionModal }] : [],
+  );
+
+  // ── Recherche de membres (invites, permissions) ─────────
   async function searchMembers(query: string) {
     if (!query.trim()) {
       memberSearchResults = [];
@@ -362,7 +639,7 @@
     try {
       const data = await searchDiscordMembers(query, 15);
       memberSearchResults = (data?.members || []).filter(
-        (mem: any) => !activeStaff.some(s => s.userId === mem.id) && mem.id !== (authStore.user as any)?.id,
+        (mem: any) => !activeStaff.some(s => s.userId === mem.id) && mem.id !== myId,
       );
     } catch (e) {
       console.error('Member search error:', e);
@@ -457,390 +734,147 @@
     }
   }
 
-  // ── Periode, filtres et evenements ──────────────────────
-  let currentRangeStart = new Date();
-  let currentRangeEnd = new Date();
-  let miniCalDate = $state(new Date());
-
-  const myId = $derived((authStore.user as any)?.id);
-  const myStaffRecord = $derived(allStaff.find(s => s.userId === myId));
-  const activeStaff = $derived(allStaff.filter(s => !s.blacklistEntries || s.blacklistEntries.length === 0));
-  const filteredStaff = $derived.by(() => {
-    const q = peopleQuery.trim().toLowerCase();
-    return q ? activeStaff.filter(s => `${s.displayName ?? ''} ${s.username ?? ''}`.toLowerCase().includes(q)) : activeStaff;
-  });
-
-  const eligibleSuperiors = $derived.by(() => {
-    if (!myStaffRecord || allRoles.length === 0) return [];
-    const myRole = allRoles.find(r => r.name === myStaffRecord.grade);
-    if (!myRole) return activeStaff;
-    return activeStaff.filter(s => {
-      if (s.userId === myId) return false;
-      if (s.testingPeriods && s.testingPeriods.length > 0) return false;
-      const sRole = allRoles.find(r => r.name === s.grade);
-      if (!sRole) return false;
-      return (sRole.sortOrder ?? 0) >= (myRole.sortOrder ?? 0);
-    });
-  });
-
-  /** Forme commune d'un element du planning, pour le calendrier comme pour les listes. */
-  function toEvent(type: PlanningType, raw: any) {
-    if (type === 'absence') {
-      const start = new Date(raw.startDate);
-      const end = raw.endDate ? new Date(raw.endDate) : (raw.isIndefinite ? new Date(start.getTime() + 86400000 * 30) : start);
-      const durationHours = (end.getTime() - start.getTime()) / 3600000;
-      return {
-        id: raw.id, title: raw.reason, start, end, type, raw,
-        isAllDay: raw.isIndefinite || durationHours >= 12,
-        staffName: raw.staffMember?.displayName || raw.staffMember?.username,
-        avatarUrl: raw.staffMember?.avatarUrl,
-      };
-    }
-    const startRaw = type === 'task' ? raw.dueDate : raw.scheduledAt;
-    const start = startRaw ? new Date(startRaw) : new Date();
-    const fallback = type === 'meeting' ? 3600000 : 1800000;
-    const end = type !== 'task' && raw.endedAt ? new Date(raw.endedAt) : new Date(start.getTime() + fallback);
-    return { id: raw.id, title: raw.title, start, end, type, isAllDay: false, details: raw.description, raw };
-  }
-
-  const calendarEvents = $derived.by(() => {
-    const events: any[] = [];
-    if (visibleTypes.includes('meeting')) calendarData.meetings.forEach(x => events.push(toEvent('meeting', x)));
-    if (visibleTypes.includes('absence')) calendarData.absences.forEach(x => events.push(toEvent('absence', x)));
-    if (visibleTypes.includes('call')) calendarData.calls.forEach(x => events.push(toEvent('call', x)));
-    if (visibleTypes.includes('task')) calendarData.tasks.filter(t => t.dueDate).forEach(x => events.push(toEvent('task', x)));
-    return events;
-  });
-
-  const typeCounts = $derived<Record<PlanningType, number>>({
-    meeting: calendarData.meetings.length,
-    call: calendarData.calls.length,
-    absence: calendarData.absences.length,
-    task: calendarData.tasks.filter(t => t.dueDate).length,
-  });
-
-  const todayAgenda = $derived(
-    [...todayData.meetings.map(x => toEvent('meeting', x)), ...todayData.calls.map(x => toEvent('call', x))]
-      .sort((a, b) => a.start.getTime() - b.start.getTime()),
-  );
-  const absentToday = $derived(todayData.absences.filter(a => a.status !== 'REJECTED'));
-  const pendingTasks = $derived(userTasks.filter(t => t.status !== 'COMPLETED'));
-  const doneTasks = $derived(userTasks.filter(t => t.status === 'COMPLETED'));
-
-  // Mini calendrier
-  const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
-
-  function isToday(date: Date) {
-    return isSameDay(date, new Date());
-  }
-
-  function isSameDay(a: Date, b: Date) {
-    return a.getDate() === b.getDate() && a.getMonth() === b.getMonth() && a.getFullYear() === b.getFullYear();
-  }
-
-  function isOverdue(task: any) {
-    return task.dueDate && task.status !== 'COMPLETED' && new Date(task.dueDate).getTime() < Date.now();
-  }
-
-  const miniCalDays = $derived.by(() => {
-    const year = miniCalDate.getFullYear();
-    const month = miniCalDate.getMonth();
-    const firstDay = new Date(year, month, 1).getDay();
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
-    const offset = firstDay === 0 ? 6 : firstDay - 1;
-    const days: { date: Date; isCurrentMonth: boolean }[] = [];
-    const prevDays = new Date(year, month, 0).getDate();
-    for (let i = offset - 1; i >= 0; i--) days.push({ date: new Date(year, month - 1, prevDays - i), isCurrentMonth: false });
-    for (let i = 1; i <= daysInMonth; i++) days.push({ date: new Date(year, month, i), isCurrentMonth: true });
-    while (days.length % 7 !== 0) {
-      const nextDay = days.length - offset - daysInMonth + 1;
-      days.push({ date: new Date(year, month + 1, nextDay), isCurrentMonth: false });
-    }
-    return days;
-  });
-
-  // ── Fuseaux ─────────────────────────────────────────────
-  // Fuseau utilise pour lire et rendre les inputs `datetime-local` du formulaire
-  // de creation et de la modale d'edition.
-  //
-  // Seule une reunion porte son propre fuseau, et le selecteur n'apparait que
-  // pour ce type-la. Le retenir au-dela ferait lire une absence, un appel ou
-  // une tache dans le fuseau d'une reunion creee juste avant, alors que le
-  // libelle affiche sous le champ annonce celui du serveur.
-  const activeTimezone = $derived(
-    meetingEditModalOpen
-      ? (editMeetingTimezone ?? timezoneStore.timezone)
-      : creationModalOpen && createType === 'meeting'
-        ? (formTimezone ?? timezoneStore.timezone)
-        : timezoneStore.timezone,
-  );
-  const formatLocal = (date: Date) => formatWallClockInTimezone(date, activeTimezone);
-  const parseLocal = (input: string): Date => parseDateTimeInTimezone(input, activeTimezone) ?? new Date();
-
-  /**
-   * Un rappel ne porte pas de fuseau propre : il se lit toujours dans celui du
-   * serveur. Il vit hors des deux modales, donc `activeTimezone` ne le decrit
-   * pas - c'est ce qui le faisait heriter du fuseau de la derniere reunion.
-   */
-  const parseServerLocal = (input: string): Date => parseDateTimeInTimezone(input, timezoneStore.timezone) ?? new Date();
-
-  /** Meme heure au mur, relue dans un autre fuseau. */
-  function reinterpretWallClock(date: Date, from: string, to: string): Date {
-    return parseDateTimeInTimezone(formatWallClockInTimezone(date, from), to) ?? date;
-  }
-
-  /**
-   * Changer le fuseau reinterprete l'heure affichee, il ne la reecrit pas :
-   * declarer une reunion sur Montreal apres avoir tape 15:00 doit donner 15:00
-   * a Montreal. Passe par le binding plutot que par un effet sur `formTimezone` :
-   * seul un choix explicite dans le selecteur doit deplacer les dates.
-   */
-  function applyFormTimezone(zone: string | null): void {
-    const previous = formTimezone ?? timezoneStore.timezone;
-    const next = zone ?? timezoneStore.timezone;
-    formTimezone = zone;
-    if (previous === next) return;
-    selectedStartDate = reinterpretWallClock(selectedStartDate, previous, next);
-    selectedEndDate = reinterpretWallClock(selectedEndDate, previous, next);
-  }
-
-  // ── Chargement ──────────────────────────────────────────
-  async function loadData() {
-    loading = true;
+  // ── Actions sur un element ──────────────────────────────
+  async function updateMeetingStatus(id: string, status: string) {
+    if (!canModerateMeetings) return;
     try {
-      const [membersData, rolesData, callPermData] = await Promise.all([
-        fetchStaffMembers(),
-        fetchStaffRoles(),
-        fetchCallPermissionConfig().catch(() => null),
-      ]);
-      allStaff = membersData?.members || [];
-      allRoles = rolesData?.roles || [];
-
-      if (callPermData) {
-        callPermConfig = callPermData.config;
-        callPermCanCreate = callPermData.canCreate;
-        const usersMap = new Map();
-        for (const uid of callPermData.config?.allowedUserIds || []) {
-          const staff = allStaff.find((s: any) => s.userId === uid);
-          if (staff) usersMap.set(uid, { id: uid, username: staff.username, displayName: staff.displayName, avatarUrl: staff.avatarUrl });
-        }
-        permSelectedUsersMap = usersMap;
-      }
-
-      if (myStaffRecord) selectedStaffIds = [myStaffRecord.id];
-      else if (allStaff.length > 0) selectedStaffIds = [allStaff[0].id];
-
+      await updateMeeting(id, { status });
       await refreshAll();
     } catch (e) {
-      console.error('Failed to load initial data:', e);
-    } finally {
-      loading = false;
+      console.error('Failed to update status:', e);
     }
   }
 
-  async function refreshCalendar() {
-    try {
-      calendarData = normalize(await fetchStaffCalendarData(currentRangeStart, currentRangeEnd, selectedStaffIds));
-    } catch (e) {
-      console.error('Failed to load calendar data:', e);
+  function getAttendanceStats(meeting: any) {
+    const presences = meeting.presences || [];
+    return {
+      present: presences.filter((p: any) => p.status === 'PRESENT').length,
+      excused: presences.filter((p: any) => p.status === 'EXCUSED' || p.status === 'ABSENT_CHECKED').length,
+      absent: presences.filter((p: any) => p.status === 'ABSENT').length,
+    };
+  }
+
+  function formatStatus(status: string) {
+    switch (status) {
+      case 'SCHEDULED': return m.meetings_status_scheduled();
+      case 'IN_PROGRESS': return m.meetings_status_in_progress();
+      case 'COMPLETED': return m.meetings_status_completed();
+      case 'CANCELLED': return m.meetings_status_cancelled();
+      case 'PRESENT': return m.meetings_presence_present();
+      case 'EXCUSED': return m.meetings_presence_excused();
+      case 'ABSENT_CHECKED': return m.planning_presence_excused_checked();
+      case 'ABSENT': return m.meetings_presence_absent();
+      default: return status;
     }
   }
 
-  async function refreshToday() {
-    const start = new Date();
-    start.setHours(0, 0, 0, 0);
-    const end = new Date(start);
-    end.setHours(23, 59, 59, 999);
-    try {
-      todayData = normalize(await fetchStaffCalendarData(start, end));
-    } catch (e) {
-      console.error('Failed to load today data:', e);
-    }
+  function openEditMeeting(meeting: any) {
+    if (!canManageMeetings) return;
+    peek = null;
+    editMeetingId = meeting.id;
+    editMeetingTitle = meeting.title;
+    editMeetingDesc = meeting.description || '';
+    // Le fuseau est nomme ici : `formatLocal` ne bascule sur celui de
+    // l'edition qu'une fois la modale ouverte, apres ces lignes.
+    editMeetingTimezone = meeting.timezone ?? null;
+    const editZone = editMeetingTimezone ?? timezoneStore.timezone;
+    editMeetingDate = formatWallClockInTimezone(new Date(meeting.scheduledAt), editZone);
+    editMeetingEndDate = formatWallClockInTimezone(
+      meeting.endedAt ? new Date(meeting.endedAt) : new Date(new Date(meeting.scheduledAt).getTime() + 3600000),
+      editZone,
+    );
+    editMeetingError = '';
+    meetingEditModalOpen = true;
   }
 
-  async function refreshTasks() {
-    try {
-      if (myStaffRecord) userTasks = (await fetchTasks(myStaffRecord.id)).tasks || [];
-    } catch (e) {
-      console.error('Failed to load tasks:', e);
-    }
-  }
-
-  async function refreshAll() {
-    await Promise.all([refreshCalendar(), refreshTasks(), refreshToday()]);
-  }
-
-  /** Relit l'element ouvert apres un rechargement, pour que la fiche suive. */
-  function syncDetail() {
-    if (!currentItemDetail) return;
-    const list = (calendarData as any)[currentItemDetail.type + 's'] as any[] | undefined;
-    const updated = list?.find(x => x.id === currentItemDetail.raw.id) || userTasks.find(x => x.id === currentItemDetail.raw.id);
-    if (updated) currentItemDetail = { ...currentItemDetail, raw: updated };
-  }
-
-  // ── Rappels ─────────────────────────────────────────────
-  async function handleAddReminder(event: SubmitEvent) {
-    event.preventDefault();
-    if (!newReminderTime || !newReminderMessage.trim()) {
-      toast.error(m.planning_reminder_required());
+  async function saveMeetingEdit() {
+    if (!editMeetingTitle || !editMeetingDate) {
+      editMeetingError = m.meetings_err_required();
       return;
     }
-    try {
-      const payload: any = {
-        message: newReminderMessage,
-        targetTime: parseServerLocal(newReminderTime).toISOString(),
-        channelId: newReminderChannel === 'CURRENT' ? currentItemDetail.raw.discordChannelId || null : null,
-      };
-      if (currentItemDetail.type === 'task') payload.taskId = currentItemDetail.raw.id;
-      else if (currentItemDetail.type === 'call') payload.callId = currentItemDetail.raw.id;
-      else if (currentItemDetail.type === 'meeting') payload.meetingId = currentItemDetail.raw.id;
-
-      await createReminder(payload);
-      toast.success(m.planning_reminder_created());
-      newReminderMessage = '';
-      newReminderTime = '';
-      await refreshAll();
-      syncDetail();
-    } catch (e) {
-      console.error('Failed to create reminder:', e);
-      toast.error(errorMessage(e) || m.planning_reminder_err_create());
-    }
-  }
-
-  async function handleDeleteReminder(reminderId: string) {
-    try {
-      await deleteReminder(reminderId);
-      toast.success(m.planning_reminder_deleted());
-      await refreshAll();
-      syncDetail();
-    } catch (e) {
-      console.error('Failed to delete reminder:', e);
-      toast.error(errorMessage(e) || m.planning_reminder_err_delete());
-    }
-  }
-
-  async function handleRangeChange(start: Date, end: Date) {
-    currentRangeStart = start;
-    currentRangeEnd = end;
-    await refreshCalendar();
-  }
-
-  function handleEventClick(event: any) {
-    currentItemDetail = event;
-    newReminderMessage = '';
-    newReminderTime = '';
-    detailModalOpen = true;
-  }
-
-  /**
-   * Creneau propose a l'ouverture du formulaire : une heure d'avance. Partir
-   * de l'instant d'ouverture laissait passer l'heure le temps de saisir un
-   * titre, et Discord refuse un evenement planifie dans le passe.
-   */
-  function defaultStart(): Date {
-    return new Date(Date.now() + 3600000);
-  }
-
-  function openCreateModal(start: Date, end?: Date, type: PlanningType = currentTab) {
-    createType = type === 'call' && !callPermCanCreate ? 'meeting' : type;
-    selectedStartDate = start;
-    selectedEndDate = end || new Date(start.getTime() + 3600000);
-    formTitle = '';
-    formDescription = '';
-    formTimezone = null;
-    formPriority = 'MEDIUM';
-    formAssigneeId = myStaffRecord?.id || '';
-    formSuperiorId = eligibleSuperiors[0]?.userId || '';
-    formAbsenceType = 'Autre';
-    formChannelMode = 'CREATE_NEW';
-    formChannelType = 'VOICE';
-    formDiscordChannelId = '';
-    formIsTempChannel = true;
-    formInviteeUserIds = [];
-    formInviteeMemberIds = [];
-    selectedMembers = new Map();
-    memberSearchQuery = '';
-    memberSearchResults = [];
-    formError = '';
-    creationModalOpen = true;
-  }
-
-  function setDuration(minutes: number) {
-    selectedEndDate = new Date(selectedStartDate.getTime() + minutes * 60000);
-  }
-
-  const durationMinutes = $derived(Math.round((selectedEndDate.getTime() - selectedStartDate.getTime()) / 60000));
-
-  async function handleCreateItem(event?: SubmitEvent) {
-    event?.preventDefault();
-    if (!formTitle && createType !== 'absence') {
-      formError = m.planning_err_title_required();
+    const start = parseLocal(editMeetingDate);
+    const end = parseLocal(editMeetingEndDate);
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+      editMeetingError = m.planning_err_dates_invalid();
       return;
     }
-    saving = true;
-    formError = '';
-
+    if (end <= start) {
+      editMeetingError = m.meetings_err_end_before_start();
+      return;
+    }
+    savingMeetingEdit = true;
+    editMeetingError = '';
     try {
-      if (createType === 'meeting') {
-        // Un creneau du calendrier peut lui aussi etre deja passe. Le dire ici
-        // vaut mieux que de laisser remonter le refus brut de Discord.
-        if (selectedStartDate.getTime() <= Date.now()) {
-          formError = m.planning_err_meeting_in_past();
-          return;
-        }
-        if (selectedEndDate.getTime() <= selectedStartDate.getTime()) {
-          formError = m.meetings_err_end_before_start();
-          return;
-        }
-        const ok = await createMeeting(formTitle, formDescription, selectedStartDate.toISOString(), selectedEndDate.toISOString(), formTimezone);
-        if (!ok) throw new Error(m.planning_err_create_meeting());
-      } else if (createType === 'absence') {
-        if (!myStaffRecord) { formError = m.planning_err_not_staff(); return; }
-        if (!formDescription.trim()) { formError = m.planning_err_absence_reason(); return; }
-        if (!formSuperiorId) { formError = m.planning_err_superior_required(); return; }
-        if (selectedEndDate && selectedEndDate < selectedStartDate) { formError = m.planning_err_end_before_start(); return; }
-        await createAbsence({
-          staffUserId: myStaffRecord.userId,
-          startDate: selectedStartDate.toISOString(),
-          endDate: selectedEndDate ? selectedEndDate.toISOString() : undefined,
-          reason: formDescription.trim(),
-          type: formAbsenceType,
-          superiorUserId: formSuperiorId,
-          confirmIndefinite: !selectedEndDate,
-        });
-      } else if (createType === 'call') {
-        if (!callPermCanCreate) { formError = m.planning_err_no_call_permission(); return; }
-        await createCall({
-          title: formTitle,
-          description: formDescription,
-          scheduledAt: selectedStartDate.toISOString(),
-          channelMode: formChannelMode,
-          channelType: formChannelMode === 'CREATE_NEW' ? formChannelType : null,
-          discordChannelId: formChannelMode === 'EXISTING' ? formDiscordChannelId : null,
-          isTempChannel: formIsTempChannel,
-          inviteeUserIds: [...formInviteeUserIds, ...formInviteeMemberIds],
-        });
-      } else {
-        await createTask({
-          title: formTitle,
-          description: formDescription,
-          priority: formPriority,
-          dueDate: selectedStartDate ? selectedStartDate.toISOString() : null,
-          assigneeId: formAssigneeId,
-        });
+      if (editMeetingId) {
+        await updateMeeting(editMeetingId, {
+          title: editMeetingTitle,
+          description: editMeetingDesc,
+          scheduledAt: start.toISOString(),
+          endedAt: end.toISOString(),
+          timezone: editMeetingTimezone,
+        } as any);
+        meetingEditModalOpen = false;
+        await refreshAll();
       }
-
-      creationModalOpen = false;
-      await refreshAll();
-    } catch (err) {
-      console.error(err);
-      formError = errorMessage(err) || m.planning_err_create_generic();
+    } catch (e) {
+      console.error('Failed to save meeting:', e);
+      editMeetingError = m.meetings_err_save();
     } finally {
-      saving = false;
+      savingMeetingEdit = false;
     }
   }
 
-  // ── Taches ──────────────────────────────────────────────
+  async function confirmDeleteMeeting() {
+    if (!meetingToDeleteId) return;
+    deletingMeeting = true;
+    try {
+      await deleteMeeting(meetingToDeleteId, {
+        deleteEvent: deleteDiscordEvent,
+        deleteMessage: deleteDiscordMessage,
+        deleteNotifications: deleteDiscordNotification,
+      });
+      meetingDeleteModalOpen = false;
+      detailModalOpen = false;
+      await refreshAll();
+    } catch (e) {
+      console.error('Failed to delete meeting:', e);
+    } finally {
+      deletingMeeting = false;
+    }
+  }
+
+  async function deleteItem(event: CalendarEvent) {
+    peek = null;
+    if (event.type === 'meeting') {
+      meetingToDeleteId = event.id;
+      deleteDiscordEvent = true;
+      deleteDiscordMessage = false;
+      deleteDiscordNotification = true;
+      meetingDeleteModalOpen = true;
+      return;
+    }
+    if (!(await confirmDialog.danger(m.planning_confirm_delete_item()))) return;
+    try {
+      if (event.type === 'absence') await deleteAbsence(event.id);
+      else if (event.type === 'call') await deleteCall(event.id);
+      else if (event.type === 'task') await deleteTask(event.id);
+      detailModalOpen = false;
+      await refreshAll();
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+  async function toggleTaskCompletion(task: any) {
+    const nextStatus = task.status === 'COMPLETED' ? 'PENDING' : 'COMPLETED';
+    try {
+      await updateTask(task.id, { status: nextStatus });
+      await refreshAll();
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
   async function addQuickTask(event: SubmitEvent) {
     event.preventDefault();
     const title = quickTaskTitle.trim();
@@ -857,83 +891,72 @@
     }
   }
 
-  async function toggleTaskCompletion(task: any) {
-    const nextStatus = task.status === 'COMPLETED' ? 'PENDING' : 'COMPLETED';
-    try {
-      await updateTask(task.id, { status: nextStatus });
-      if (currentItemDetail?.raw?.id === task.id) currentItemDetail.raw.status = nextStatus;
-      await refreshAll();
-    } catch (e) {
-      console.error(e);
-    }
-  }
-
-  // ── Absences ────────────────────────────────────────────
-  async function decideAbsence(status: 'APPROVED' | 'REJECTED') {
-    const id = currentItemDetail?.raw?.id;
-    if (!id) return;
+  async function decideAbsence(id: string, status: 'APPROVED' | 'REJECTED') {
     if (await updateAbsenceStatus(id, status, undefined)) {
       toast.success(m.planning_absence_decided());
-      currentItemDetail.raw.status = status;
       await refreshAll();
     }
   }
 
-  async function handleDeleteDetail() {
+  async function handleAddReminder(event: SubmitEvent) {
+    event.preventDefault();
     if (!currentItemDetail) return;
-    const { id, type } = currentItemDetail;
-    if (type === 'meeting') {
-      meetingToDeleteId = id;
-      deleteDiscordEvent = true;
-      deleteDiscordMessage = false;
-      deleteDiscordNotification = true;
-      meetingDeleteModalOpen = true;
+    if (!newReminderTime || !newReminderMessage.trim()) {
+      toast.error(m.planning_reminder_required());
       return;
     }
-    if (!(await confirmDialog.danger(m.planning_confirm_delete_item()))) return;
     try {
-      if (type === 'absence') await deleteAbsence(id);
-      else if (type === 'call') await deleteCall(id);
-      else if (type === 'task') await deleteTask(id);
-      detailModalOpen = false;
+      const raw = currentItemDetail.raw;
+      const payload: any = {
+        message: newReminderMessage,
+        targetTime: parseServerLocal(newReminderTime).toISOString(),
+        channelId: newReminderChannel === 'CURRENT' ? raw.discordChannelId || null : null,
+      };
+      if (currentItemDetail.type === 'task') payload.taskId = raw.id;
+      else if (currentItemDetail.type === 'call') payload.callId = raw.id;
+      else if (currentItemDetail.type === 'meeting') payload.meetingId = raw.id;
+      await createReminder(payload);
+      toast.success(m.planning_reminder_created());
+      newReminderMessage = '';
+      newReminderTime = '';
       await refreshAll();
     } catch (e) {
-      console.error(e);
+      console.error('Failed to create reminder:', e);
+      toast.error(errorMessage(e) || m.planning_reminder_err_create());
     }
   }
 
+  async function handleDeleteReminder(reminderId: string) {
+    try {
+      await deleteReminder(reminderId);
+      toast.success(m.planning_reminder_deleted());
+      await refreshAll();
+    } catch (e) {
+      console.error('Failed to delete reminder:', e);
+      toast.error(errorMessage(e) || m.planning_reminder_err_delete());
+    }
+  }
+
+  // ── Filtres ─────────────────────────────────────────────
   function toggleType(type: string) {
     visibleTypes = visibleTypes.includes(type) ? visibleTypes.filter(t => t !== type) : [...visibleTypes, type];
   }
 
+  function setStaff(ids: string[]) {
+    selectedStaffIds = ids;
+    void refreshCalendar();
+  }
+
   function toggleStaff(staffId: string) {
-    selectedStaffIds = selectedStaffIds.includes(staffId) ? selectedStaffIds.filter(id => id !== staffId) : [...selectedStaffIds, staffId];
-    void refreshCalendar();
+    setStaff(selectedStaffIds.includes(staffId) ? selectedStaffIds.filter(id => id !== staffId) : [...selectedStaffIds, staffId]);
   }
-
-  function toggleEveryone() {
-    selectedStaffIds = selectedStaffIds.length === activeStaff.length ? [] : activeStaff.map(s => s.id);
-    void refreshCalendar();
-  }
-
-  function onlyMe() {
-    if (!myStaffRecord) return;
-    selectedStaffIds = [myStaffRecord.id];
-    void refreshCalendar();
-  }
-
-  const typeOptions = $derived<FilterOption<PlanningType>[]>(
-    (['meeting', 'call', 'absence', 'task'] as PlanningType[])
-      .filter(t => t !== 'call' || callPermCanCreate)
-      .map(t => ({ value: t, label: TYPE_META[t].label() })),
-  );
-
-  const formatTime = (date: Date) => date.toLocaleTimeString(dateLocale(), { hour: '2-digit', minute: '2-digit' });
-  const memberName = (x: any) => x?.displayName || x?.username || m.planning_member_fallback();
 
   onMount(() => {
     const handleDashboardRefresh = () => loadData();
     window.addEventListener('kotbo-dashboard-refresh-request', handleDashboardRefresh);
+    // Volets lateraux replies sur petit ecran : le calendrier prend la place.
+    if (window.matchMedia('(max-width: 1023px)').matches) leftPaneOpen = false;
+    if (window.matchMedia('(max-width: 1279px)').matches) myDayOpen = false;
     // Fuseau du serveur avant loadData : les formulaires seedent sinon leurs
     // dates en heure navigateur, puis basculent au chargement du store.
     void timezoneStore.ensureLoaded();
@@ -942,233 +965,16 @@
   });
 </script>
 
-{#snippet typeDot(type: string)}
-  <span class="pl-dot" style="--evt: {EVENT_TYPE_COLOR[type]}" aria-hidden="true"></span>
-{/snippet}
-
 {#snippet avatar(src: string | null | undefined, name: string, size = 'w-6 h-6')}
-  <img src={src || localInitialAvatar(name)} alt="" class="{size} rounded-full shrink-0" />
+  <img src={src || localInitialAvatar(name)} alt="" class="{size} rounded-full shrink-0 object-cover" />
 {/snippet}
 
-<ModulePage title={m.planning_page_title()} description={m.planning_page_desc()} icon="calendar" featureKey="absences">
-  {#snippet actions()}
-    <RefreshButton onClick={refreshAll} {loading} label={m.planning_refresh()} />
-    <Button variant={showTaskPanel ? 'secondary' : 'ghost'} icon="sun" aria-pressed={showTaskPanel} onclick={() => (showTaskPanel = !showTaskPanel)}>
-      {m.planning_my_day()}
-      {#if pendingTasks.length > 0}
-        <span class="badge badge-info ml-1">{pendingTasks.length}</span>
-      {/if}
-    </Button>
-    {#if isAdmin}
-      <Button variant="ghost" icon="shield" title={m.planning_call_perms_tooltip()} onclick={openPermissionModal}>{m.planning_call_perms_btn()}</Button>
-    {/if}
-    <Button variant="primary" icon="plus" onclick={() => openCreateModal(defaultStart())}>{m.planning_new_event()}</Button>
-  {/snippet}
-
-  {#if loading && allStaff.length === 0}
-    <div class="flex flex-col xl:flex-row gap-4">
-      <Skeleton height="560px" radius="1rem" width="w-full xl:w-60" />
-      <Skeleton height="560px" radius="1rem" />
-    </div>
-  {:else}
-    <div class="flex flex-col xl:flex-row gap-4">
-      <!-- ===== Colonne gauche : mini calendrier, calendriers, personnes ===== -->
-      <aside class="w-full flex flex-col gap-4 shrink-0 {sidebarCollapsed ? 'xl:w-10' : 'xl:w-64'}">
-        {#if !sidebarCollapsed}
-          <section class="section-card p-4">
-            <div class="flex items-center justify-between mb-2">
-              <Button variant="ghost" size="sm" icon="chevron-left" aria-label={m.cal_prev()} onclick={() => (miniCalDate = new Date(miniCalDate.getFullYear(), miniCalDate.getMonth() - 1, 1))} />
-              <span class="text-body-sm font-semibold text-on-surface">
-                {capitalize(miniCalDate.toLocaleDateString(dateLocale(), { month: 'long', year: 'numeric' }))}
-              </span>
-              <Button variant="ghost" size="sm" icon="chevron-right" aria-label={m.cal_next()} onclick={() => (miniCalDate = new Date(miniCalDate.getFullYear(), miniCalDate.getMonth() + 1, 1))} />
-            </div>
-            <div class="grid grid-cols-7 text-center">
-              {#each [m.planning_weekday_mon(), m.planning_weekday_tue(), m.planning_weekday_wed(), m.planning_weekday_thu(), m.planning_weekday_fri(), m.planning_weekday_sat(), m.planning_weekday_sun()] as day, i (i)}
-                <span class="text-2xs font-semibold text-on-surface-variant py-1">{day}</span>
-              {/each}
-              {#each miniCalDays as { date, isCurrentMonth } (date.toDateString())}
-                <button
-                  type="button"
-                  onclick={() => (calendarCurrentDate = new Date(date))}
-                  aria-label={date.toLocaleDateString(dateLocale(), { day: 'numeric', month: 'long' })}
-                  class="pl-mini-day {isCurrentMonth ? 'text-on-surface' : 'text-on-surface-variant opacity-40'} {isToday(date) ? 'pl-mini-day--today' : ''} {isSameDay(date, calendarCurrentDate) && !isToday(date) ? 'pl-mini-day--selected' : ''}"
-                >
-                  {date.getDate()}
-                </button>
-              {/each}
-            </div>
-          </section>
-
-          <section class="section-card p-4">
-            <h3 class="text-body-sm font-semibold text-on-surface mb-2">{m.planning_my_calendars()}</h3>
-            <ul class="flex flex-col gap-0.5">
-              {#each TYPES as type (type)}
-                <li>
-                  <label class="pl-filter" style="--evt: {EVENT_TYPE_COLOR[type]}">
-                    <input type="checkbox" class="pl-check" checked={visibleTypes.includes(type)} onchange={() => toggleType(type)} />
-                    <span class="flex-1 text-body-sm text-on-surface">{TYPE_META[type].calendar()}</span>
-                    <span class="text-2xs text-on-surface-variant tabular-nums">{typeCounts[type]}</span>
-                  </label>
-                </li>
-              {/each}
-            </ul>
-          </section>
-
-          <section class="section-card p-4">
-            <div class="flex items-center justify-between gap-2 mb-2">
-              <h3 class="text-body-sm font-semibold text-on-surface">{m.planning_people()}</h3>
-              <div class="flex gap-1">
-                {#if myStaffRecord}
-                  <Button variant="ghost" size="sm" onclick={onlyMe}>{m.planning_only_me()}</Button>
-                {/if}
-                <Button variant="ghost" size="sm" onclick={toggleEveryone}>
-                  {selectedStaffIds.length === activeStaff.length ? m.planning_select_none() : m.planning_select_all()}
-                </Button>
-              </div>
-            </div>
-            {#if activeStaff.length > 8}
-              <input type="search" class="input mb-2 text-body-sm" bind:value={peopleQuery} placeholder={m.planning_people_search_ph()} aria-label={m.planning_people_search_ph()} />
-            {/if}
-            <ul class="flex flex-col gap-0.5 max-h-64 overflow-y-auto pr-1">
-              {#each filteredStaff as staff (staff.id)}
-                <li>
-                  <label class="pl-filter">
-                    <input type="checkbox" class="pl-check" checked={selectedStaffIds.includes(staff.id)} onchange={() => toggleStaff(staff.id)} />
-                    {@render avatar(staff.avatarUrl, staff.username)}
-                    <span class="flex-1 min-w-0 truncate text-body-sm text-on-surface">{memberName(staff)}</span>
-                  </label>
-                </li>
-              {/each}
-            </ul>
-          </section>
-        {/if}
-
-        <Button
-          variant="ghost"
-          size="sm"
-          class="hidden xl:inline-flex"
-          icon={sidebarCollapsed ? 'chevrons-right' : 'chevrons-left'}
-          aria-label={sidebarCollapsed ? m.planning_sidebar_expand() : m.planning_sidebar_collapse()}
-          onclick={() => (sidebarCollapsed = !sidebarCollapsed)}
-        />
-      </aside>
-
-      <!-- ===== Calendrier ===== -->
-      <main class="flex-1 min-w-0 space-y-2">
-        <Calendar
-          bind:view={calendarView}
-          bind:currentDate={calendarCurrentDate}
-          events={calendarEvents}
-          onRangeChange={handleRangeChange}
-          onEventClick={handleEventClick}
-          onDateClick={(start: any, end: any) => openCreateModal(start, end)}
-        />
-        <p class="hidden md:block text-2xs text-on-surface-variant">{m.planning_shortcuts_hint()}</p>
-      </main>
-
-      <!-- ===== Ma journee ===== -->
-      {#if showTaskPanel}
-        <aside class="w-full xl:w-80 shrink-0">
-          <div class="section-card flex flex-col xl:max-h-[75vh] overflow-hidden">
-            <header class="px-4 py-3 border-b border-outline-variant flex items-center justify-between">
-              <div>
-                <h2 class="text-body-sm font-semibold text-on-surface">{m.planning_my_day()}</h2>
-                <p class="text-2xs text-on-surface-variant">
-                  {capitalize(new Date().toLocaleDateString(dateLocale(), { weekday: 'long', day: 'numeric', month: 'long' }))}
-                </p>
-              </div>
-              <Button variant="ghost" size="sm" icon="x" aria-label={m.planning_close_aria()} onclick={() => (showTaskPanel = false)} />
-            </header>
-
-            <div class="flex-1 overflow-y-auto px-4 py-3 space-y-5">
-              <section>
-                <h3 class="pl-section-title">{m.planning_today_title()}</h3>
-                {#if todayAgenda.length === 0}
-                  <p class="text-2xs text-on-surface-variant">{m.planning_today_empty()}</p>
-                {:else}
-                  <ul class="space-y-1">
-                    {#each todayAgenda as event (event.type + event.id)}
-                      <li>
-                        <button type="button" class="pl-row" onclick={() => handleEventClick(event)}>
-                          <span class="w-11 shrink-0 text-2xs font-medium text-on-surface-variant tabular-nums">{formatTime(event.start)}</span>
-                          {@render typeDot(event.type)}
-                          <span class="flex-1 min-w-0 truncate text-body-sm text-on-surface {event.end.getTime() < Date.now() ? 'opacity-60' : ''}">{event.title}</span>
-                        </button>
-                      </li>
-                    {/each}
-                  </ul>
-                {/if}
-              </section>
-
-              {#if absentToday.length > 0}
-                <section>
-                  <h3 class="pl-section-title">{m.planning_absent_today()} · {absentToday.length}</h3>
-                  <ul class="space-y-1">
-                    {#each absentToday as absence (absence.id)}
-                      <li>
-                        <button type="button" class="pl-row" onclick={() => handleEventClick(toEvent('absence', absence))}>
-                          {@render avatar(absence.staffMember?.avatarUrl, absence.staffMember?.username ?? '', 'w-5 h-5')}
-                          <span class="flex-1 min-w-0 truncate text-body-sm text-on-surface">{memberName(absence.staffMember)}</span>
-                          <span class="text-2xs text-on-surface-variant truncate max-w-24">{absence.type || ''}</span>
-                        </button>
-                      </li>
-                    {/each}
-                  </ul>
-                </section>
-              {/if}
-
-              <section>
-                <h3 class="pl-section-title">{m.planning_my_tasks()} · {pendingTasks.length}</h3>
-                {#if myStaffRecord}
-                  <form class="mb-2" onsubmit={addQuickTask}>
-                    <input
-                      class="input text-body-sm"
-                      bind:value={quickTaskTitle}
-                      maxlength="200"
-                      disabled={quickTaskSaving}
-                      placeholder={m.planning_quick_task_ph()}
-                      aria-label={m.planning_add_task()}
-                    />
-                  </form>
-                {/if}
-                {#if pendingTasks.length === 0}
-                  <p class="text-2xs text-on-surface-variant">{m.planning_no_task()} · {m.planning_day_free()}</p>
-                {:else}
-                  <ul class="space-y-0.5">
-                    {#each pendingTasks as task (task.id)}
-                      {@render taskRow(task)}
-                    {/each}
-                  </ul>
-                {/if}
-                {#if doneTasks.length > 0}
-                  <button type="button" class="mt-2 inline-flex items-center gap-1 text-2xs font-medium text-on-surface-variant hover:text-on-surface" aria-expanded={showDoneTasks} onclick={() => (showDoneTasks = !showDoneTasks)}>
-                    <Papicon icon={showDoneTasks ? 'chevron-down' : 'chevron-right'} size={12} />
-                    {m.planning_tasks_done({ count: doneTasks.length })}
-                  </button>
-                  {#if showDoneTasks}
-                    <ul class="space-y-0.5 mt-1">
-                      {#each doneTasks as task (task.id)}
-                        {@render taskRow(task)}
-                      {/each}
-                    </ul>
-                  {/if}
-                {/if}
-              </section>
-            </div>
-
-            <footer class="px-4 py-2 border-t border-outline-variant">
-              <Button variant="ghost" size="sm" icon="plus" fullWidth onclick={() => openCreateModal(defaultStart(), undefined, 'task')}>{m.planning_add_task()}</Button>
-            </footer>
-          </div>
-        </aside>
-      {/if}
-    </div>
-  {/if}
-</ModulePage>
+{#snippet bar(type: string)}
+  <span class="pl-bar" style="--evt: {EVENT_TYPE_COLOR[type]}" aria-hidden="true"></span>
+{/snippet}
 
 {#snippet taskRow(task: any)}
-  <li class="flex items-start gap-2 rounded-lg px-1 py-1.5 hover:bg-surface-container">
+  <li class="pl-task">
     <input
       type="checkbox"
       class="pl-check mt-0.5"
@@ -1177,7 +983,7 @@
       onchange={() => toggleTaskCompletion(task)}
       aria-label={task.status === 'COMPLETED' ? m.planning_task_mark_todo() : m.planning_task_mark_done()}
     />
-    <button type="button" class="flex-1 min-w-0 text-left" onclick={() => handleEventClick(toEvent('task', task))}>
+    <button type="button" class="flex-1 min-w-0 text-left" onclick={() => openDetail(toEvent('task', task))}>
       <span class="block text-body-sm text-on-surface wrap-break-word {task.status === 'COMPLETED' ? 'line-through text-on-surface-variant' : ''}">{task.title}</span>
       {#if task.priority === 'HIGH' || task.dueDate}
         <span class="flex flex-wrap items-center gap-2 mt-0.5 text-2xs">
@@ -1195,194 +1001,34 @@
   </li>
 {/snippet}
 
-<!-- ===== Creation ===== -->
-<Modal bind:open={creationModalOpen} title={m.planning_new_event()} size="lg">
-  <form id="pl-create" class="space-y-4" onsubmit={handleCreateItem}>
-    <FilterPills label={m.planning_type_aria()} options={typeOptions} value={createType} onchange={(v) => { createType = v; formError = ''; }} />
-
-    {#if createType !== 'absence'}
-      <input class="input text-base font-semibold" bind:value={formTitle} placeholder={m.planning_title_ph()} aria-label={m.planning_title_ph()} />
-    {/if}
-
-    <div class="space-y-2">
-      <div class="flex flex-wrap items-center gap-2">
-        <Papicon icon="clock" size={16} class="text-on-surface-variant shrink-0" />
-        <input
-          type="datetime-local"
-          class="input w-auto"
-          aria-label={m.meetings_field_start_label()}
-          value={formatLocal(selectedStartDate)}
-          onchange={(e) => {
-            const duration = selectedEndDate.getTime() - selectedStartDate.getTime();
-            selectedStartDate = parseLocal((e.target as HTMLInputElement).value);
-            // Deplacer le debut garde la duree, comme dans un agenda.
-            if (duration > 0) selectedEndDate = new Date(selectedStartDate.getTime() + duration);
-          }}
-        />
-        {#if createType !== 'task'}
-          <span class="text-on-surface-variant">–</span>
-          <input
-            type="datetime-local"
-            class="input w-auto"
-            aria-label={m.meetings_field_end_label()}
-            value={formatLocal(selectedEndDate)}
-            onchange={(e) => (selectedEndDate = parseLocal((e.target as HTMLInputElement).value))}
-          />
-        {/if}
-      </div>
-      {#if createType === 'meeting' || createType === 'call'}
-        <div class="flex flex-wrap items-center gap-1.5 pl-6" role="group" aria-label={m.planning_duration()}>
-          {#each [30, 60, 120] as minutes (minutes)}
-            <button
-              type="button"
-              class="pl-chip {durationMinutes === minutes ? 'pl-chip--active' : ''}"
-              aria-pressed={durationMinutes === minutes}
-              onclick={() => setDuration(minutes)}
-            >
-              {minutes === 30 ? m.planning_duration_30() : minutes === 60 ? m.planning_duration_60() : m.planning_duration_120()}
-            </button>
-          {/each}
-        </div>
-      {/if}
-      {#if timezoneStore.loaded && createType === 'meeting'}
-        <div class="pl-6">
-          <TimezoneHint bind:value={() => formTimezone, (zone) => applyFormTimezone(zone)} />
-        </div>
-      {:else if timezoneStore.loaded}
-        <p class="pl-6 text-2xs text-on-surface-variant">
-          {#if timezoneStore.differsFromBrowser}
-            {m.planning_datetime_hint_diff({ server: timezoneStore.timezone, browser: timezoneStore.browserTimezone })}
-          {:else}
-            {m.planning_datetime_hint_same({ zone: timezoneStore.timezone })}
-          {/if}
-        </p>
+{#snippet dateFields(compact: boolean)}
+  <div class="space-y-2">
+    <div class="flex flex-wrap items-center gap-2">
+      <Papicon icon="clock" size={16} class="text-on-surface-variant shrink-0" />
+      <input type="datetime-local" class="input w-auto {compact ? 'text-body-sm' : ''}" aria-label={m.meetings_field_start_label()} value={formatLocal(selectedStartDate)} onchange={(e) => onStartChange((e.target as HTMLInputElement).value)} />
+      {#if createType !== 'task'}
+        <span class="text-on-surface-variant">–</span>
+        <input type="datetime-local" class="input w-auto {compact ? 'text-body-sm' : ''}" aria-label={m.meetings_field_end_label()} value={formatLocal(selectedEndDate)} onchange={(e) => (selectedEndDate = parseLocal((e.target as HTMLInputElement).value))} />
       {/if}
     </div>
-
-    <textarea
-      class="input resize-none"
-      rows="3"
-      bind:value={formDescription}
-      aria-label={createType === 'absence' ? m.planning_absence_reason_ph() : m.planning_description_ph()}
-      placeholder={createType === 'absence' ? m.planning_absence_reason_ph() : m.planning_description_ph()}
-    ></textarea>
-
-    {#if createType === 'absence'}
-      <div class="grid gap-3 sm:grid-cols-2">
-        <select class="input" bind:value={formAbsenceType} aria-label={m.planning_absence_type_default()}>
-          <option value="Vacances">{m.planning_absence_type_holidays()}</option>
-          <option value="Maladie">{m.planning_absence_type_sick()}</option>
-          <option value="Examens">{m.planning_absence_type_exams()}</option>
-          <option value="Autre">{m.planning_absence_type_other()}</option>
-        </select>
-        <SearchableSelect
-          bind:value={formSuperiorId}
-          options={eligibleSuperiors.map(s => ({ id: s.userId, name: memberName(s) }))}
-          placeholder={m.planning_superior_ph()}
-          showId={false}
-          className="w-full"
-        />
+    {#if createType === 'meeting' || createType === 'call'}
+      <div class="flex flex-wrap items-center gap-1.5 pl-6" role="group" aria-label={m.planning_duration()}>
+        {#each [30, 60, 120] as minutes (minutes)}
+          <button type="button" class="pl-chip {durationMinutes === minutes ? 'pl-chip--active' : ''}" aria-pressed={durationMinutes === minutes} onclick={() => setDuration(minutes)}>
+            {minutes === 30 ? m.planning_duration_30() : minutes === 60 ? m.planning_duration_60() : m.planning_duration_120()}
+          </button>
+        {/each}
       </div>
     {/if}
-
-    {#if createType === 'call'}
-      <fieldset class="rounded-lg border border-outline-variant p-4 space-y-3">
-        <legend class="px-1 text-body-sm font-medium text-on-surface">{m.planning_discord_config()}</legend>
-        <div class="grid gap-3 sm:grid-cols-2">
-          <select class="input" bind:value={formChannelMode} aria-label={m.planning_discord_config()}>
-            <option value="CREATE_NEW">{m.planning_channel_temp()}</option>
-            <option value="EXISTING">{m.planning_channel_existing()}</option>
-          </select>
-          {#if formChannelMode === 'CREATE_NEW'}
-            <select class="input" bind:value={formChannelType} aria-label={m.planning_channel_voice()}>
-              <option value="VOICE">{m.planning_channel_voice()}</option>
-              <option value="STAGE">{m.planning_channel_stage()}</option>
-            </select>
-          {:else}
-            <SearchableSelect
-              bind:value={formDiscordChannelId}
-              options={[
-                ...dashboardStore.state.discordVoiceChannels.map(c => ({ id: c.id, name: `🔊 ${c.name}` })),
-                ...dashboardStore.state.discordChannels.map(c => ({ id: c.id, name: channelDisplayName(c) })),
-              ]}
-              placeholder={m.planning_select_ph()}
-              className="w-full"
-            />
-          {/if}
-        </div>
-
-        {#if formChannelMode === 'CREATE_NEW'}
-          <label class="flex items-center justify-between gap-3 text-body-sm text-on-surface">
-            {m.planning_auto_delete_empty()}
-            <ToggleSwitch checked={formIsTempChannel} onToggle={(v: boolean) => (formIsTempChannel = v)} />
-          </label>
-        {/if}
-
-        <div>
-          <p class="text-body-sm font-medium text-on-surface mb-2">{m.planning_guests_staff()}</p>
-          <div class="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto">
-            {#each activeStaff.filter(s => s.id !== myStaffRecord?.id) as staff (staff.id)}
-              {@const on = formInviteeUserIds.includes(staff.id)}
-              <button
-                type="button"
-                class="pl-chip {on ? 'pl-chip--active' : ''}"
-                aria-pressed={on}
-                onclick={() => (formInviteeUserIds = on ? formInviteeUserIds.filter(id => id !== staff.id) : [...formInviteeUserIds, staff.id])}
-              >
-                {@render avatar(staff.avatarUrl, staff.username, 'w-4 h-4')}
-                {memberName(staff)}
-              </button>
-            {/each}
-          </div>
-        </div>
-
-        <div>
-          <p class="text-body-sm font-medium text-on-surface mb-2">{m.planning_guests_members()}</p>
-          {#if formInviteeMemberIds.length > 0}
-            <div class="flex flex-wrap gap-1.5 mb-2">
-              {#each formInviteeMemberIds as memberId (memberId)}
-                {@const member = selectedMembers.get(memberId)}
-                {#if member}
-                  <button type="button" class="pl-chip pl-chip--active" onclick={() => toggleMemberInvitee(member)} aria-label="{memberName(member)} ×">
-                    {@render avatar(member.avatarUrl, memberName(member), 'w-4 h-4')}
-                    {memberName(member)}
-                    <Papicon icon="x" size={10} />
-                  </button>
-                {/if}
-              {/each}
-            </div>
-          {/if}
-          {@render memberSearch(memberSearchQuery, memberSearchLoading, memberSearchResults, handleMemberSearchInput, toggleMemberInvitee, formInviteeMemberIds)}
-        </div>
-      </fieldset>
-    {/if}
-
-    {#if createType === 'task'}
-      <div class="grid gap-3 sm:grid-cols-2">
-        <select class="input" bind:value={formPriority} aria-label={m.planning_priority_medium()}>
-          <option value="LOW">{m.planning_priority_low()}</option>
-          <option value="MEDIUM">{m.planning_priority_medium()}</option>
-          <option value="HIGH">{m.planning_priority_high()}</option>
-        </select>
-        <SearchableSelect
-          bind:value={formAssigneeId}
-          options={activeStaff.map(s => ({ id: s.id, name: memberName(s) }))}
-          placeholder={m.planning_assign_ph()}
-          showId={false}
-          className="w-full"
-        />
+    {#if timezoneStore.loaded && createType === 'meeting' && !compact}
+      <div class="pl-6">
+        <TimezoneHint bind:value={() => formTimezone, (zone) => applyFormTimezone(zone)} />
       </div>
+    {:else if timezoneStore.loaded && timezoneStore.differsFromBrowser}
+      <p class="pl-6 text-2xs text-on-surface-variant">{m.planning_datetime_hint_diff_short({ server: timezoneStore.timezone })}</p>
     {/if}
-
-    {#if formError}
-      <Callout variant="danger">{formError}</Callout>
-    {/if}
-  </form>
-  {#snippet footer()}
-    <Button variant="ghost" onclick={() => (creationModalOpen = false)}>{m.common_cancel()}</Button>
-    <Button variant="primary" type="submit" form="pl-create" loading={saving}>{m.common_save()}</Button>
-  {/snippet}
-</Modal>
+  </div>
+{/snippet}
 
 {#snippet memberSearch(query: string, busy: boolean, results: any[], onInput: (v: string) => void, onPick: (member: any) => void, picked: string[])}
   <div class="relative">
@@ -1413,21 +1059,490 @@
   {/if}
 {/snippet}
 
-<!-- ===== Fiche d'un element ===== -->
+<ModulePage title={m.planning_page_title()} icon="calendar" featureKey="absences">
+  {#if loading && allStaff.length === 0}
+    <Skeleton height="640px" radius="0.75rem" />
+  {:else}
+    <div class="pl-shell">
+      <!-- ===== Ruban ===== -->
+      <div class="pl-ribbon" role="toolbar" aria-label={m.planning_ribbon_aria()}>
+        <Button variant="ghost" icon="menu" aria-label={m.planning_toggle_left()} aria-pressed={leftPaneOpen} onclick={() => (leftPaneOpen = !leftPaneOpen)} />
+        <div class="pl-split">
+          <Button variant="primary" icon="plus" onclick={() => openFullCreate()}>{m.planning_new_event()}</Button>
+          <Menu items={newEventMenu} label={m.planning_new_type_menu()} icon="chevron-down" />
+        </div>
+
+        <span class="pl-sep" aria-hidden="true"></span>
+
+        <div class="hidden md:flex items-center gap-0.5" role="group" aria-label={m.planning_view_aria()}>
+          {#each CALENDAR_VIEWS as v (v)}
+            <button type="button" class="pl-view {calendarView === v ? 'pl-view--active' : ''}" aria-pressed={calendarView === v} onclick={() => (calendarView = v)}>
+              <Papicon icon={VIEW_META[v].icon} size={15} />
+              <span class="hidden xl:inline">{VIEW_META[v].label()}</span>
+              <span class="xl:hidden">{(VIEW_META[v].short ?? VIEW_META[v].label)()}</span>
+            </button>
+          {/each}
+        </div>
+        <select class="input w-auto md:hidden text-body-sm" bind:value={calendarView} aria-label={m.planning_view_aria()}>
+          {#each CALENDAR_VIEWS as v (v)}
+            <option value={v}>{VIEW_META[v].label()}</option>
+          {/each}
+        </select>
+
+        <div class="ml-auto flex items-center gap-1">
+          <Button variant="ghost" icon="refresh" aria-label={m.planning_refresh()} title={m.planning_refresh()} onclick={refreshAll} />
+          <button type="button" class="pl-view {myDayOpen ? 'pl-view--active' : ''}" aria-pressed={myDayOpen} onclick={() => (myDayOpen = !myDayOpen)}>
+            <Papicon icon="clipboard-list" size={15} />
+            <span class="hidden sm:inline">{m.planning_my_day()}</span>
+            {#if pendingTasks.length > 0}
+              <span class="pl-count">{pendingTasks.length}</span>
+            {/if}
+          </button>
+          {#if moreMenu.length > 0}
+            <Menu items={moreMenu} label={m.planning_more_actions()} />
+          {/if}
+        </div>
+      </div>
+
+      <div class="pl-body">
+        <!-- ===== Volet gauche ===== -->
+        {#if leftPaneOpen}
+          <aside class="pl-left">
+            <section class="px-3 pt-3 pb-2">
+              <div class="flex items-center justify-between mb-1">
+                <span class="text-body-sm font-semibold text-on-surface pl-1">
+                  {capitalize(miniCalDate.toLocaleDateString(dateLocale(), { month: 'long', year: 'numeric' }))}
+                </span>
+                <span class="flex">
+                  <button type="button" class="pl-icon-btn" aria-label={m.cal_prev()} onclick={() => (miniCalDate = new Date(miniCalDate.getFullYear(), miniCalDate.getMonth() - 1, 1))}>
+                    <Papicon icon="chevron-up" size={14} />
+                  </button>
+                  <button type="button" class="pl-icon-btn" aria-label={m.cal_next()} onclick={() => (miniCalDate = new Date(miniCalDate.getFullYear(), miniCalDate.getMonth() + 1, 1))}>
+                    <Papicon icon="chevron-down" size={14} />
+                  </button>
+                </span>
+              </div>
+              <div class="grid grid-cols-7 text-center">
+                {#each [m.planning_weekday_mon(), m.planning_weekday_tue(), m.planning_weekday_wed(), m.planning_weekday_thu(), m.planning_weekday_fri(), m.planning_weekday_sat(), m.planning_weekday_sun()] as day, i (i)}
+                  <span class="text-2xs text-on-surface-variant py-1">{day}</span>
+                {/each}
+                {#each miniCalDays as { date, isCurrentMonth } (date.getTime())}
+                  <button
+                    type="button"
+                    onclick={() => (calendarCurrentDate = new Date(date))}
+                    aria-label={date.toLocaleDateString(dateLocale(), { day: 'numeric', month: 'long' })}
+                    class="pl-mini-day {isCurrentMonth ? '' : 'pl-mini-day--out'} {inRange(date) && calendarView !== 'month' && calendarView !== 'agenda' ? 'pl-mini-day--range' : ''} {isToday(date) ? 'pl-mini-day--today' : ''}"
+                  >
+                    {date.getDate()}
+                  </button>
+                {/each}
+              </div>
+            </section>
+
+            <section class="pl-left-section">
+              <h3 class="pl-left-title">{m.planning_my_calendars()}</h3>
+              <ul>
+                {#each TYPES as type (type)}
+                  <li>
+                    <label class="pl-filter" style="--evt: {EVENT_TYPE_COLOR[type]}">
+                      <input type="checkbox" class="pl-check" checked={visibleTypes.includes(type)} onchange={() => toggleType(type)} />
+                      <span class="flex-1 text-body-sm text-on-surface">{TYPE_META[type].calendar()}</span>
+                      <span class="text-2xs text-on-surface-variant tabular-nums">{typeCounts[type]}</span>
+                    </label>
+                  </li>
+                {/each}
+              </ul>
+            </section>
+
+            <section class="pl-left-section flex-1 min-h-0 flex flex-col">
+              <div class="flex items-center justify-between gap-2">
+                <h3 class="pl-left-title">{m.planning_people()}</h3>
+                <span class="flex gap-0.5">
+                  {#if myStaffRecord}
+                    <button type="button" class="pl-link" onclick={() => setStaff([myStaffRecord.id])}>{m.planning_only_me()}</button>
+                  {/if}
+                  <button type="button" class="pl-link" onclick={() => setStaff(selectedStaffIds.length === activeStaff.length ? [] : activeStaff.map(s => s.id))}>
+                    {selectedStaffIds.length === activeStaff.length ? m.planning_select_none() : m.planning_select_all()}
+                  </button>
+                </span>
+              </div>
+              {#if activeStaff.length > 8}
+                <input type="search" class="input my-1 text-body-sm" bind:value={peopleQuery} placeholder={m.planning_people_search_ph()} aria-label={m.planning_people_search_ph()} />
+              {/if}
+              <ul class="flex-1 min-h-0 overflow-y-auto">
+                {#each filteredStaff as staff (staff.id)}
+                  <li>
+                    <label class="pl-filter">
+                      <input type="checkbox" class="pl-check" checked={selectedStaffIds.includes(staff.id)} onchange={() => toggleStaff(staff.id)} />
+                      {@render avatar(staff.avatarUrl, staff.username)}
+                      <span class="flex-1 min-w-0 truncate text-body-sm text-on-surface">{memberName(staff)}</span>
+                    </label>
+                  </li>
+                {/each}
+              </ul>
+            </section>
+          </aside>
+        {/if}
+
+        <!-- ===== Calendrier ===== -->
+        <div class="pl-main">
+          <Calendar
+            bind:view={calendarView}
+            bind:currentDate={calendarCurrentDate}
+            events={calendarEvents}
+            selectedKey={eventKey(peek?.event)}
+            onRangeChange={handleRangeChange}
+            onEventClick={handleEventClick}
+            onSlotSelect={handleSlotSelect}
+          />
+        </div>
+
+        <!-- ===== Ma journee ===== -->
+        {#if myDayOpen}
+          <aside class="pl-right">
+            <header class="flex items-center justify-between px-4 pt-3">
+              <div>
+                <h2 class="text-base font-semibold text-on-surface">{m.planning_my_day()}</h2>
+                <p class="text-2xs text-on-surface-variant">
+                  {capitalize(new Date().toLocaleDateString(dateLocale(), { weekday: 'long', day: 'numeric', month: 'long' }))}
+                </p>
+              </div>
+              <Button variant="ghost" size="sm" icon="x" aria-label={m.planning_close_aria()} onclick={() => (myDayOpen = false)} />
+            </header>
+            <div class="px-4 pt-2 pb-2 border-b border-outline-variant">
+              <FilterPills
+                label={m.planning_my_day()}
+                options={[
+                  { value: 'agenda', label: m.planning_tab_agenda(), count: todayAgenda.length },
+                  { value: 'tasks', label: m.planning_tab_tasks(), count: pendingTasks.length },
+                ]}
+                value={myDayTab}
+                onchange={(v) => (myDayTab = v as typeof myDayTab)}
+              />
+            </div>
+
+            <div class="flex-1 min-h-0 overflow-y-auto px-3 py-3 space-y-5">
+              {#if myDayTab === 'agenda'}
+                {#if todayAgenda.length === 0}
+                  <p class="px-1 text-body-sm text-on-surface-variant">{m.planning_today_empty()}</p>
+                {:else}
+                  <ul class="space-y-1">
+                    {#each todayAgenda as event (eventKey(event))}
+                      <li>
+                        <button type="button" class="pl-agenda-item {event.end && event.end.getTime() < Date.now() ? 'opacity-60' : ''}" onclick={() => openDetail(event)}>
+                          <span class="w-11 shrink-0 text-2xs text-on-surface-variant tabular-nums leading-snug">
+                            {formatTime(event.start)}<br />{event.end ? formatTime(event.end) : ''}
+                          </span>
+                          {@render bar(event.type)}
+                          <span class="min-w-0 flex-1">
+                            <span class="block truncate text-body-sm font-medium text-on-surface">{event.title}</span>
+                            <span class="block text-2xs text-on-surface-variant">{TYPE_META[event.type as PlanningType].label()}</span>
+                          </span>
+                        </button>
+                      </li>
+                    {/each}
+                  </ul>
+                {/if}
+
+                {#if absentToday.length > 0}
+                  <section>
+                    <h3 class="pl-left-title mb-1">{m.planning_absent_today()} · {absentToday.length}</h3>
+                    <ul class="space-y-0.5">
+                      {#each absentToday as absence (absence.id)}
+                        <li>
+                          <button type="button" class="pl-row" onclick={() => openDetail(toEvent('absence', absence))}>
+                            {@render avatar(absence.staffMember?.avatarUrl, absence.staffMember?.username ?? '', 'w-6 h-6')}
+                            <span class="flex-1 min-w-0 truncate text-body-sm text-on-surface">{memberName(absence.staffMember)}</span>
+                            <span class="text-2xs text-on-surface-variant truncate max-w-24">{absence.type || ''}</span>
+                          </button>
+                        </li>
+                      {/each}
+                    </ul>
+                  </section>
+                {/if}
+              {:else}
+                {#if myStaffRecord}
+                  <form onsubmit={addQuickTask}>
+                    <div class="relative">
+                      <Papicon icon="plus" size={14} class="absolute left-3 top-1/2 -translate-y-1/2 text-primary pointer-events-none" />
+                      <input class="input pl-9 text-body-sm" bind:value={quickTaskTitle} maxlength="200" disabled={quickTaskSaving} placeholder={m.planning_quick_task_ph()} aria-label={m.planning_add_task()} />
+                    </div>
+                  </form>
+                {/if}
+                {#if pendingTasks.length === 0}
+                  <p class="px-1 text-body-sm text-on-surface-variant">{m.planning_no_task()} · {m.planning_day_free()}</p>
+                {:else}
+                  <ul class="space-y-0.5">
+                    {#each pendingTasks as task (task.id)}
+                      {@render taskRow(task)}
+                    {/each}
+                  </ul>
+                {/if}
+                {#if doneTasks.length > 0}
+                  <div>
+                    <button type="button" class="inline-flex items-center gap-1 px-1 text-2xs font-medium text-on-surface-variant hover:text-on-surface" aria-expanded={showDoneTasks} onclick={() => (showDoneTasks = !showDoneTasks)}>
+                      <Papicon icon={showDoneTasks ? 'chevron-down' : 'chevron-right'} size={12} />
+                      {m.planning_tasks_done({ count: doneTasks.length })}
+                    </button>
+                    {#if showDoneTasks}
+                      <ul class="space-y-0.5 mt-1">
+                        {#each doneTasks as task (task.id)}
+                          {@render taskRow(task)}
+                        {/each}
+                      </ul>
+                    {/if}
+                  </div>
+                {/if}
+              {/if}
+            </div>
+          </aside>
+        {/if}
+      </div>
+    </div>
+    <p class="hidden md:block mt-2 text-2xs text-on-surface-variant">{m.planning_shortcuts_hint()}</p>
+  {/if}
+</ModulePage>
+
+<!-- ===== Bulle de creation rapide ===== -->
+<AnchoredPopover anchor={quickAnchor} onClose={() => (quickAnchor = null)} label={m.planning_new_event()} width={400}>
+  <form class="p-4 space-y-3" onsubmit={handleCreateItem}>
+    <FilterPills label={m.planning_type_aria()} options={typeOptions} value={createType} onchange={(v) => { createType = v; formError = ''; }} />
+    {#if createType === 'absence'}
+      <input class="input text-base font-semibold" bind:value={formDescription} placeholder={m.planning_quick_reason_ph()} aria-label={m.planning_quick_reason_ph()} />
+      {#if superiors.length === 0}
+        <Callout variant="warning">{m.planning_superior_none()}</Callout>
+      {:else}
+        <select class="input text-body-sm" bind:value={formSuperiorId} aria-label={m.planning_superior_ph()}>
+          <option value="">{m.planning_superior_ph()}</option>
+          {#each superiors as s (s.userId)}
+            <option value={s.userId}>{superiorLabel(s)}</option>
+          {/each}
+        </select>
+      {/if}
+    {:else}
+      <input class="input text-base font-semibold" bind:value={formTitle} placeholder={m.planning_title_ph()} aria-label={m.planning_title_ph()} />
+    {/if}
+    {@render dateFields(true)}
+    {#if formError}
+      <Callout variant="danger">{formError}</Callout>
+    {/if}
+    <div class="flex items-center justify-between gap-2 pt-1">
+      <Button variant="ghost" size="sm" onclick={expandQuickCreate}>{m.planning_quick_more()}</Button>
+      <Button variant="primary" size="sm" type="submit" loading={saving}>{m.common_save()}</Button>
+    </div>
+  </form>
+</AnchoredPopover>
+
+<!-- ===== Apercu d'un element ===== -->
+<AnchoredPopover anchor={peek?.anchor ?? null} onClose={() => (peek = null)} label={peek?.event.title ?? ''} width={360}>
+  {#if peek}
+    {@const event = peek.event}
+    {@const raw = event.raw}
+    {@const type = event.type as PlanningType}
+    <div class="pl-peek" style="--evt: {EVENT_TYPE_COLOR[type]}">
+      <div class="flex items-center justify-end gap-0.5 px-2 pt-2">
+        {#if type === 'meeting' && canManageMeetings}
+          <Button variant="ghost" size="sm" icon="edit-2" aria-label={m.planning_detail_edit()} title={m.planning_detail_edit()} onclick={() => openEditMeeting(raw)} />
+        {/if}
+        <Button variant="ghost" size="sm" icon="trash-2" aria-label={m.planning_detail_delete()} title={m.planning_detail_delete()} onclick={() => deleteItem(event)} />
+        <Button variant="ghost" size="sm" icon="x" aria-label={m.planning_close_aria()} onclick={() => (peek = null)} />
+      </div>
+      <div class="px-4 pb-4 space-y-3">
+        <div class="flex gap-3">
+          <span class="pl-peek__square" aria-hidden="true"></span>
+          <div class="min-w-0">
+            <h3 class="text-base font-semibold text-on-surface wrap-break-word">{event.title}</h3>
+            <p class="text-body-sm text-on-surface-variant">{formatSpan(event.start, event.end, type)}</p>
+          </div>
+        </div>
+
+        {#if type === 'meeting'}
+          {@const stats = getAttendanceStats(raw)}
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="badge {MEETING_BADGE[raw.status] ?? 'badge-neutral'}">{formatStatus(raw.status)}</span>
+            {#if raw.presences?.length > 0}
+              <span class="text-2xs text-on-surface-variant">{m.planning_presences_summary(stats)}</span>
+            {/if}
+          </div>
+          {#if canModerateMeetings && raw.status === 'SCHEDULED'}
+            <Button size="sm" icon="play" onclick={() => updateMeetingStatus(raw.id, 'IN_PROGRESS')}>{m.meetings_start_btn()}</Button>
+          {:else if canModerateMeetings && raw.status === 'IN_PROGRESS'}
+            <Button size="sm" icon="check" onclick={() => updateMeetingStatus(raw.id, 'COMPLETED')}>{m.meetings_finish_btn()}</Button>
+          {/if}
+        {:else if type === 'call'}
+          <p class="flex items-center gap-2 text-body-sm text-on-surface-variant">
+            <Papicon icon="headphones" size={14} />
+            {raw.channelMode === 'CREATE_NEW' ? m.planning_channel_temp() : m.planning_channel_existing()}
+            {#if raw.invitees?.length}· {m.planning_invitees_count({ count: raw.invitees.length })}{/if}
+          </p>
+        {:else if type === 'task'}
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="badge {raw.priority === 'HIGH' ? 'badge-danger' : raw.priority === 'MEDIUM' ? 'badge-warning' : 'badge-neutral'}">{PRIORITY_LABEL[raw.priority]?.() ?? raw.priority}</span>
+            <span class="badge {raw.status === 'COMPLETED' ? 'badge-success' : 'badge-info'}">{TASK_STATUS_LABEL[raw.status]?.() ?? raw.status}</span>
+            {#if raw.assignee}
+              <span class="inline-flex items-center gap-1.5 text-body-sm">{@render avatar(raw.assignee.avatarUrl, memberName(raw.assignee), 'w-5 h-5')} {memberName(raw.assignee)}</span>
+            {/if}
+          </div>
+          <Button size="sm" icon={raw.status === 'COMPLETED' ? 'rotate-ccw' : 'check'} onclick={() => toggleTaskCompletion(raw)}>
+            {raw.status === 'COMPLETED' ? m.planning_task_mark_todo() : m.planning_task_mark_done()}
+          </Button>
+        {:else if type === 'absence'}
+          {@const status = ABSENCE_STATUS[raw.status]}
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="inline-flex items-center gap-1.5 text-body-sm font-medium text-on-surface">
+              {@render avatar(event.avatarUrl, event.staffName ?? '', 'w-6 h-6')}
+              {event.staffName || m.planning_unknown_member()}
+            </span>
+            <span class="badge badge-neutral">{raw.type || m.planning_absence_type_default()}</span>
+            <span class="badge {status?.badge ?? 'badge-neutral'}">{status?.label() ?? raw.status}</span>
+          </div>
+          {#if canModerateAbsences && (raw.status === 'PENDING' || raw.status === 'ACKNOWLEDGED')}
+            <div class="flex gap-2">
+              <Button size="sm" variant="primary" icon="check" onclick={() => decideAbsence(raw.id, 'APPROVED')}>{m.planning_absence_approve()}</Button>
+              <Button size="sm" variant="danger" icon="x" onclick={() => decideAbsence(raw.id, 'REJECTED')}>{m.planning_absence_reject()}</Button>
+            </div>
+          {/if}
+        {/if}
+
+        {#if raw.description && type !== 'absence'}
+          <p class="text-body-sm text-on-surface-variant line-clamp-3 whitespace-pre-wrap">{raw.description}</p>
+        {/if}
+
+        <Button variant="ghost" size="sm" iconRight="arrow-right" onclick={() => openDetail(event)}>{m.planning_peek_open()}</Button>
+      </div>
+    </div>
+  {/if}
+</AnchoredPopover>
+
+<!-- ===== Creation complete ===== -->
+<Modal bind:open={creationModalOpen} title={m.planning_new_event()} size="lg">
+  <form id="pl-create" class="space-y-4" onsubmit={handleCreateItem}>
+    <FilterPills label={m.planning_type_aria()} options={typeOptions} value={createType} onchange={(v) => { createType = v; formError = ''; }} />
+
+    {#if createType !== 'absence'}
+      <input class="input text-base font-semibold" bind:value={formTitle} placeholder={m.planning_title_ph()} aria-label={m.planning_title_ph()} />
+    {/if}
+
+    {@render dateFields(false)}
+
+    <textarea
+      class="input resize-none"
+      rows="3"
+      bind:value={formDescription}
+      aria-label={createType === 'absence' ? m.planning_absence_reason_ph() : m.planning_description_ph()}
+      placeholder={createType === 'absence' ? m.planning_absence_reason_ph() : m.planning_description_ph()}
+    ></textarea>
+
+    {#if createType === 'absence'}
+      <div class="grid gap-3 sm:grid-cols-2">
+        <select class="input" bind:value={formAbsenceType} aria-label={m.planning_absence_type_default()}>
+          <option value="Vacances">{m.planning_absence_type_holidays()}</option>
+          <option value="Maladie">{m.planning_absence_type_sick()}</option>
+          <option value="Examens">{m.planning_absence_type_exams()}</option>
+          <option value="Autre">{m.planning_absence_type_other()}</option>
+        </select>
+        <SearchableSelect bind:value={formSuperiorId} options={superiorOptions} placeholder={m.planning_superior_ph()} showId={false} className="w-full" />
+      </div>
+      {#if superiors.length === 0}
+        <Callout variant="warning">{m.planning_superior_none()}</Callout>
+      {/if}
+    {/if}
+
+    {#if createType === 'call'}
+      <fieldset class="rounded-lg border border-outline-variant p-4 space-y-3">
+        <legend class="px-1 text-body-sm font-medium text-on-surface">{m.planning_discord_config()}</legend>
+        <div class="grid gap-3 sm:grid-cols-2">
+          <select class="input" bind:value={formChannelMode} aria-label={m.planning_discord_config()}>
+            <option value="CREATE_NEW">{m.planning_channel_temp()}</option>
+            <option value="EXISTING">{m.planning_channel_existing()}</option>
+          </select>
+          {#if formChannelMode === 'CREATE_NEW'}
+            <select class="input" bind:value={formChannelType} aria-label={m.planning_channel_voice()}>
+              <option value="VOICE">{m.planning_channel_voice()}</option>
+              <option value="STAGE">{m.planning_channel_stage()}</option>
+            </select>
+          {:else}
+            <SearchableSelect
+              bind:value={formDiscordChannelId}
+              options={[
+                ...dashboardStore.state.discordVoiceChannels.map(c => ({ id: c.id, name: `🔊 ${c.name}` })),
+                ...dashboardStore.state.discordChannels.map(c => ({ id: c.id, name: channelDisplayName(c) })),
+              ]}
+              placeholder={m.planning_select_ph()}
+              className="w-full"
+            />
+          {/if}
+        </div>
+        {#if formChannelMode === 'CREATE_NEW'}
+          <label class="flex items-center justify-between gap-3 text-body-sm text-on-surface">
+            {m.planning_auto_delete_empty()}
+            <ToggleSwitch checked={formIsTempChannel} onToggle={(v: boolean) => (formIsTempChannel = v)} />
+          </label>
+        {/if}
+        <div>
+          <p class="text-body-sm font-medium text-on-surface mb-2">{m.planning_guests_staff()}</p>
+          <div class="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto">
+            {#each activeStaff.filter(s => s.id !== myStaffRecord?.id) as staff (staff.id)}
+              {@const on = formInviteeUserIds.includes(staff.id)}
+              <button type="button" class="pl-chip {on ? 'pl-chip--active' : ''}" aria-pressed={on} onclick={() => (formInviteeUserIds = on ? formInviteeUserIds.filter(id => id !== staff.id) : [...formInviteeUserIds, staff.id])}>
+                {@render avatar(staff.avatarUrl, staff.username, 'w-4 h-4')}
+                {memberName(staff)}
+              </button>
+            {/each}
+          </div>
+        </div>
+        <div>
+          <p class="text-body-sm font-medium text-on-surface mb-2">{m.planning_guests_members()}</p>
+          {#if formInviteeMemberIds.length > 0}
+            <div class="flex flex-wrap gap-1.5 mb-2">
+              {#each formInviteeMemberIds as memberId (memberId)}
+                {@const member = selectedMembers.get(memberId)}
+                {#if member}
+                  <button type="button" class="pl-chip pl-chip--active" onclick={() => toggleMemberInvitee(member)} aria-label="{memberName(member)} ×">
+                    {@render avatar(member.avatarUrl, memberName(member), 'w-4 h-4')}
+                    {memberName(member)}
+                    <Papicon icon="x" size={10} />
+                  </button>
+                {/if}
+              {/each}
+            </div>
+          {/if}
+          {@render memberSearch(memberSearchQuery, memberSearchLoading, memberSearchResults, handleMemberSearchInput, toggleMemberInvitee, formInviteeMemberIds)}
+        </div>
+      </fieldset>
+    {/if}
+
+    {#if createType === 'task'}
+      <div class="grid gap-3 sm:grid-cols-2">
+        <select class="input" bind:value={formPriority} aria-label={m.planning_priority_medium()}>
+          <option value="LOW">{m.planning_priority_low()}</option>
+          <option value="MEDIUM">{m.planning_priority_medium()}</option>
+          <option value="HIGH">{m.planning_priority_high()}</option>
+        </select>
+        <SearchableSelect bind:value={formAssigneeId} options={activeStaff.map(s => ({ id: s.id, name: memberName(s) }))} placeholder={m.planning_assign_ph()} showId={false} className="w-full" />
+      </div>
+    {/if}
+
+    {#if formError}
+      <Callout variant="danger">{formError}</Callout>
+    {/if}
+  </form>
+  {#snippet footer()}
+    <Button variant="ghost" onclick={() => (creationModalOpen = false)}>{m.common_cancel()}</Button>
+    <Button variant="primary" type="submit" form="pl-create" loading={saving}>{m.common_save()}</Button>
+  {/snippet}
+</Modal>
+
+<!-- ===== Fiche complete ===== -->
 <Modal open={detailModalOpen && !!currentItemDetail} onClose={() => (detailModalOpen = false)} title={currentItemDetail?.title ?? ''} size="md">
   {#if currentItemDetail}
-    {@const raw = currentItemDetail.raw}
-    {@const type = currentItemDetail.type as PlanningType}
+    {@const detail = currentItemDetail}
+    {@const raw = detail.raw}
+    {@const type = detail.type as PlanningType}
     <div class="space-y-4">
       <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-body-sm text-on-surface-variant">
-        <span class="inline-flex items-center gap-1.5 font-medium text-on-surface">{@render typeDot(type)} {TYPE_META[type]?.label() ?? type}</span>
-        <span class="inline-flex items-center gap-1.5">
-          <Papicon icon="clock" size={14} />
-          {new Date(currentItemDetail.start).toLocaleString(dateLocale(), { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
-          {#if currentItemDetail.end && type !== 'task'}
-            – {new Date(currentItemDetail.end).toLocaleString(dateLocale(), { hour: '2-digit', minute: '2-digit' })}
-          {/if}
-        </span>
+        <span class="inline-flex items-center gap-1.5 font-medium text-on-surface">{@render bar(type)} {TYPE_META[type]?.label() ?? type}</span>
+        <span>{formatSpan(detail.start, detail.end, type)}</span>
       </div>
 
       {#if raw.description || raw.reason}
@@ -1446,12 +1561,10 @@
         {@const stats = getAttendanceStats(raw)}
         <div class="flex flex-wrap items-center justify-between gap-2">
           <span class="badge {MEETING_BADGE[raw.status] ?? 'badge-neutral'}">{formatStatus(raw.status)}</span>
-          {#if canModerateMeetings}
-            {#if raw.status === 'SCHEDULED'}
-              <Button size="sm" icon="play" onclick={() => updateMeetingStatus(currentItemDetail.id, 'IN_PROGRESS')}>{m.meetings_start_btn()}</Button>
-            {:else if raw.status === 'IN_PROGRESS'}
-              <Button size="sm" icon="check" onclick={() => updateMeetingStatus(currentItemDetail.id, 'COMPLETED')}>{m.meetings_finish_btn()}</Button>
-            {/if}
+          {#if canModerateMeetings && raw.status === 'SCHEDULED'}
+            <Button size="sm" icon="play" onclick={() => updateMeetingStatus(raw.id, 'IN_PROGRESS')}>{m.meetings_start_btn()}</Button>
+          {:else if canModerateMeetings && raw.status === 'IN_PROGRESS'}
+            <Button size="sm" icon="check" onclick={() => updateMeetingStatus(raw.id, 'COMPLETED')}>{m.meetings_finish_btn()}</Button>
           {/if}
         </div>
         <dl class="grid grid-cols-3 gap-2 text-center">
@@ -1461,16 +1574,11 @@
         </dl>
         {#if raw.presences?.length > 0}
           <div>
-            <h4 class="pl-section-title">{m.meetings_presence_list_title()}</h4>
+            <h4 class="pl-left-title mb-1">{m.meetings_presence_list_title()}</h4>
             <ul class="max-h-56 overflow-y-auto divide-y divide-outline-variant">
               {#each raw.presences as presence (presence.id ?? presence.staffUserId)}
                 <li class="flex items-center gap-2.5 py-2">
-                  <button
-                    type="button"
-                    class="flex items-center gap-2.5 min-w-0 flex-1 text-left hover:text-primary disabled:hover:text-on-surface"
-                    disabled={!canOpenMemberCase}
-                    onclick={() => openMemberCase(presence.staffUserId, memberName(presence.staffMember))}
-                  >
+                  <button type="button" class="flex items-center gap-2.5 min-w-0 flex-1 text-left hover:text-primary disabled:hover:text-on-surface" disabled={!canOpenMemberCase} onclick={() => openMemberCase(presence.staffUserId, memberName(presence.staffMember))}>
                     {@render avatar(presence.staffMember?.avatarUrl, memberName(presence.staffMember), 'w-7 h-7')}
                     <span class="min-w-0">
                       <span class="block truncate text-body-sm font-medium">{memberName(presence.staffMember)}</span>
@@ -1495,10 +1603,7 @@
         {#if raw.invitees?.length > 0}
           <div class="flex flex-wrap gap-1.5">
             {#each raw.invitees as invitee, i (invitee.id ?? i)}
-              <span class="pl-chip">
-                {@render avatar(invitee.staffMember?.avatarUrl, memberName(invitee.staffMember), 'w-4 h-4')}
-                {memberName(invitee.staffMember)}
-              </span>
+              <span class="pl-chip">{@render avatar(invitee.staffMember?.avatarUrl, memberName(invitee.staffMember), 'w-4 h-4')} {memberName(invitee.staffMember)}</span>
             {/each}
           </div>
         {/if}
@@ -1509,12 +1614,8 @@
           <span class="badge {raw.priority === 'HIGH' ? 'badge-danger' : raw.priority === 'MEDIUM' ? 'badge-warning' : 'badge-neutral'}">{PRIORITY_LABEL[raw.priority]?.() ?? raw.priority}</span>
           <span class="badge {raw.status === 'COMPLETED' ? 'badge-success' : 'badge-info'}">{TASK_STATUS_LABEL[raw.status]?.() ?? raw.status}</span>
           {#if raw.assignee}
-            <span class="inline-flex items-center gap-1.5 text-body-sm text-on-surface">
-              {@render avatar(raw.assignee.avatarUrl, memberName(raw.assignee), 'w-5 h-5')}
-              {memberName(raw.assignee)}
-            </span>
+            <span class="inline-flex items-center gap-1.5 text-body-sm text-on-surface">{@render avatar(raw.assignee.avatarUrl, memberName(raw.assignee), 'w-5 h-5')} {memberName(raw.assignee)}</span>
           {/if}
-          <DoingListPin module="tasks" sourceId={raw.id} />
         </div>
         <Button size="sm" icon={raw.status === 'COMPLETED' ? 'rotate-ccw' : 'check'} onclick={() => toggleTaskCompletion(raw)}>
           {raw.status === 'COMPLETED' ? m.planning_task_mark_todo() : m.planning_task_mark_done()}
@@ -1525,16 +1626,16 @@
         {@const status = ABSENCE_STATUS[raw.status]}
         <div class="flex flex-wrap items-center gap-2">
           <span class="inline-flex items-center gap-2 text-body-sm font-medium text-on-surface">
-            {@render avatar(currentItemDetail.avatarUrl, currentItemDetail.staffName || raw.staffMember?.username || '', 'w-7 h-7')}
-            {currentItemDetail.staffName || raw.staffMember?.username || m.planning_unknown_member()}
+            {@render avatar(detail.avatarUrl, detail.staffName || '', 'w-7 h-7')}
+            {detail.staffName || m.planning_unknown_member()}
           </span>
           <span class="badge badge-neutral">{raw.type || m.planning_absence_type_default()}</span>
           <span class="badge {status?.badge ?? 'badge-neutral'}">{status?.label() ?? raw.status}</span>
         </div>
         {#if canModerateAbsences && (raw.status === 'PENDING' || raw.status === 'ACKNOWLEDGED')}
           <div class="flex gap-2">
-            <Button size="sm" variant="primary" icon="check" onclick={() => decideAbsence('APPROVED')}>{m.planning_absence_approve()}</Button>
-            <Button size="sm" variant="danger" icon="x" onclick={() => decideAbsence('REJECTED')}>{m.planning_absence_reject()}</Button>
+            <Button size="sm" variant="primary" icon="check" onclick={() => decideAbsence(raw.id, 'APPROVED')}>{m.planning_absence_approve()}</Button>
+            <Button size="sm" variant="danger" icon="x" onclick={() => decideAbsence(raw.id, 'REJECTED')}>{m.planning_absence_reject()}</Button>
           </div>
         {/if}
       {/if}
@@ -1563,7 +1664,6 @@
           {:else}
             <p class="text-2xs text-on-surface-variant">{m.planning_no_reminder()}</p>
           {/if}
-
           <form class="rounded-lg border border-outline-variant p-3 space-y-2" onsubmit={handleAddReminder}>
             <p class="text-body-sm font-medium text-on-surface">{m.planning_schedule_reminder()}</p>
             <div class="grid gap-2 sm:grid-cols-2">
@@ -1591,9 +1691,9 @@
     </div>
   {/if}
   {#snippet footer()}
-    <Button variant="ghost" icon="trash-2" class="mr-auto text-error" onclick={handleDeleteDetail}>{m.planning_detail_delete()}</Button>
+    <Button variant="ghost" icon="trash-2" class="mr-auto text-error" onclick={() => currentItemDetail && deleteItem(currentItemDetail)}>{m.planning_detail_delete()}</Button>
     {#if currentItemDetail?.type === 'meeting' && canManageMeetings}
-      <Button icon="edit-2" onclick={() => openEditMeeting(currentItemDetail.raw)}>{m.planning_detail_edit()}</Button>
+      <Button icon="edit-2" onclick={() => { detailModalOpen = false; openEditMeeting(currentItemDetail?.raw); }}>{m.planning_detail_edit()}</Button>
     {/if}
     <Button variant="ghost" onclick={() => (detailModalOpen = false)}>{m.planning_detail_close()}</Button>
   {/snippet}
@@ -1608,7 +1708,6 @@
       value={permMode}
       onchange={(v) => (permMode = v as typeof permMode)}
     />
-
     {#if permMode === 'RESTRICTED'}
       <div>
         <p class="text-body-sm font-medium text-on-surface mb-2">{m.planning_perm_roles()}</p>
@@ -1617,14 +1716,11 @@
         {:else}
           <div class="flex flex-wrap gap-1.5 max-h-40 overflow-y-auto">
             {#each dashboardStore.state.discordRoles as role (role.id)}
-              <button type="button" class="pl-chip {permRoleIds.includes(role.id) ? 'pl-chip--active' : ''}" aria-pressed={permRoleIds.includes(role.id)} onclick={() => togglePermRole(role.id)}>
-                @{role.name}
-              </button>
+              <button type="button" class="pl-chip {permRoleIds.includes(role.id) ? 'pl-chip--active' : ''}" aria-pressed={permRoleIds.includes(role.id)} onclick={() => togglePermRole(role.id)}>@{role.name}</button>
             {/each}
           </div>
         {/if}
       </div>
-
       <div>
         <p class="text-body-sm font-medium text-on-surface mb-2">{m.planning_perm_members()}</p>
         {#if permUserIds.length > 0}
@@ -1644,7 +1740,6 @@
     {:else}
       <p class="text-body-sm text-on-surface-variant">{m.planning_perm_everyone_hint()}</p>
     {/if}
-
     {#if permError}
       <Callout variant="danger">{permError}</Callout>
     {/if}
@@ -1738,13 +1833,197 @@
 </Modal>
 
 <style>
-  .pl-dot {
-    display: inline-block;
-    width: 0.5rem;
-    height: 0.5rem;
+  /* Coque facon Outlook : un seul cadre, des volets separes par des filets. */
+  .pl-shell {
+    display: flex;
+    flex-direction: column;
+    height: calc(100dvh - 10rem);
+    min-height: 36rem;
+    border: 1px solid var(--color-outline-variant);
+    border-radius: 0.75rem;
+    overflow: hidden;
+    background: var(--color-surface-container-lowest);
+  }
+  .pl-ribbon {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--color-outline-variant);
+    background: var(--color-surface-container-low);
+  }
+  .pl-sep {
+    width: 1px;
+    height: 1.5rem;
+    background: var(--color-outline-variant);
+  }
+  /* Bouton scinde : l'action par defaut, puis la fleche des autres types. */
+  .pl-split {
+    display: flex;
+    align-items: stretch;
+  }
+  .pl-split > :global(.btn:first-child) {
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+  }
+  .pl-split > :global(.btn + .btn) {
+    height: auto;
+    align-self: stretch;
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+    border-left: 1px solid color-mix(in srgb, var(--color-on-primary) 30%, transparent);
+    background: var(--color-primary);
+    color: var(--color-on-primary);
+  }
+  .pl-view {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.375rem 0.625rem;
+    border-radius: 0.375rem;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: var(--color-on-surface);
+    white-space: nowrap;
+  }
+  .pl-view:hover {
+    background: var(--color-surface-container-high);
+  }
+  .pl-view--active {
+    background: color-mix(in srgb, var(--color-primary) 16%, transparent);
+    color: var(--color-primary);
+  }
+  .pl-count {
+    min-width: 1.125rem;
+    padding: 0 0.3125rem;
     border-radius: 999px;
+    background: var(--color-primary);
+    color: var(--color-on-primary);
+    font-size: 0.6875rem;
+    font-weight: 600;
+    line-height: 1.125rem;
+    text-align: center;
+  }
+  .pl-body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    position: relative;
+  }
+  .pl-left {
+    width: 15.5rem;
     flex-shrink: 0;
-    background: var(--evt);
+    display: flex;
+    flex-direction: column;
+    border-right: 1px solid var(--color-outline-variant);
+    overflow-y: auto;
+  }
+  .pl-main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .pl-right {
+    width: 20rem;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    border-left: 1px solid var(--color-outline-variant);
+    background: var(--color-surface-container-low);
+  }
+  /* Sur petit ecran, les volets passent par-dessus le calendrier. */
+  @media (max-width: 1023px) {
+    .pl-left,
+    .pl-right {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      z-index: 20;
+      background: var(--color-surface-container-lowest);
+      box-shadow: 0 8px 24px rgb(0 0 0 / 0.3);
+    }
+    .pl-left {
+      left: 0;
+    }
+    .pl-right {
+      right: 0;
+      width: min(20rem, 90vw);
+    }
+  }
+  .pl-left-section {
+    padding: 0.75rem;
+    border-top: 1px solid var(--color-outline-variant);
+  }
+  .pl-left-title {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--color-on-surface);
+    padding: 0 0.25rem 0.25rem;
+  }
+  .pl-link {
+    padding: 0.125rem 0.375rem;
+    border-radius: 0.25rem;
+    font-size: 0.75rem;
+    color: var(--color-primary);
+  }
+  .pl-link:hover {
+    background: var(--color-surface-container);
+  }
+  .pl-icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    border-radius: 0.375rem;
+    color: var(--color-on-surface-variant);
+  }
+  .pl-icon-btn:hover {
+    background: var(--color-surface-container);
+  }
+  .pl-mini-day {
+    aspect-ratio: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    color: var(--color-on-surface);
+    border-radius: 0.25rem;
+  }
+  .pl-mini-day:hover {
+    background: var(--color-surface-container-high);
+  }
+  .pl-mini-day--out {
+    color: var(--color-on-surface-variant);
+  }
+  .pl-mini-day--range {
+    background: color-mix(in srgb, var(--color-primary) 14%, transparent);
+    border-radius: 0;
+  }
+  .pl-mini-day--today {
+    background: var(--color-primary);
+    color: var(--color-on-primary);
+    font-weight: 600;
+    border-radius: 999px;
+  }
+  .pl-mini-day--today:hover {
+    background: var(--color-primary);
+  }
+  .pl-filter {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    padding: 0.3125rem 0.375rem;
+    border-radius: 0.375rem;
+    cursor: pointer;
+  }
+  .pl-filter:hover,
+  .pl-row:hover,
+  .pl-agenda-item:hover,
+  .pl-task:hover {
+    background: var(--color-surface-container);
   }
   .pl-check {
     width: 1rem;
@@ -1752,56 +2031,50 @@
     flex-shrink: 0;
     accent-color: var(--evt, var(--color-primary));
   }
-  .pl-filter {
-    display: flex;
-    align-items: center;
-    gap: 0.625rem;
-    padding: 0.375rem 0.5rem;
-    border-radius: 0.5rem;
-    cursor: pointer;
-  }
-  .pl-filter:hover,
-  .pl-row:hover {
-    background: var(--color-surface-container);
-  }
   .pl-row {
     display: flex;
     align-items: center;
     gap: 0.5rem;
     width: 100%;
     padding: 0.375rem 0.5rem;
-    border-radius: 0.5rem;
+    border-radius: 0.375rem;
     text-align: left;
   }
-  .pl-section-title {
-    font-size: 0.8125rem;
-    font-weight: 600;
-    color: var(--color-on-surface);
-    margin-bottom: 0.5rem;
-  }
-  .pl-mini-day {
-    aspect-ratio: 1;
+  .pl-agenda-item {
     display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 999px;
-    font-size: 0.75rem;
+    align-items: stretch;
+    gap: 0.625rem;
+    width: 100%;
+    padding: 0.375rem;
+    border-radius: 0.375rem;
+    text-align: left;
   }
-  .pl-mini-day:hover {
-    background: var(--color-surface-container-high);
+  .pl-task {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+    padding: 0.375rem;
+    border-radius: 0.375rem;
   }
-  .pl-mini-day--today {
-    background: var(--color-primary);
-    color: var(--color-on-primary);
-    font-weight: 600;
+  .pl-bar {
+    width: 3px;
+    flex-shrink: 0;
+    align-self: stretch;
+    min-height: 1rem;
+    border-radius: 2px;
+    background: var(--evt);
   }
-  .pl-mini-day--today:hover {
-    background: var(--color-primary);
+  .pl-peek {
+    border-top: 4px solid var(--evt);
+    border-radius: 0.75rem;
   }
-  .pl-mini-day--selected {
-    box-shadow: inset 0 0 0 1.5px var(--color-primary);
-    color: var(--color-primary);
-    font-weight: 600;
+  .pl-peek__square {
+    width: 0.875rem;
+    height: 0.875rem;
+    margin-top: 0.375rem;
+    flex-shrink: 0;
+    border-radius: 0.1875rem;
+    background: var(--evt);
   }
   .pl-chip {
     display: inline-flex;
@@ -1813,7 +2086,6 @@
     font-size: 0.75rem;
     font-weight: 500;
     color: var(--color-on-surface-variant);
-    transition: background-color 0.15s ease, border-color 0.15s ease;
   }
   button.pl-chip:hover {
     background: var(--color-surface-container);
