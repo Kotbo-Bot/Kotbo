@@ -1,5 +1,5 @@
 /** Moderation : pseudos, salons, mots bannis. */
-import type { AutoThreadConfigData, TempVoicePolicy, TempVoiceOwnershipSettings } from '@kotbo/shared';
+import type { AutoThreadConfigData, ThreadPanelData, TempVoicePolicy, TempVoiceOwnershipSettings } from '@kotbo/shared';
 import { authStore } from '../stores/auth.svelte';
 import { API_BASE_URL, JSON_HEADERS, authorizedFetch, dashboardMutation, dashboardRequest } from './client';
 
@@ -106,6 +106,58 @@ export async function reorderAutoThreadConfigs(channelId: string, ids: string[],
     payload: { channelId, ids },
     guildId,
     errorContext: 'API Error (Reorder Auto Thread Configs):',
+    silent: true,
+  });
+}
+
+/** Panneau de discussion tel que l'API le renvoie (ligne de base + compteurs). */
+export interface ThreadPanelRow extends ThreadPanelData {
+  id: string;
+  channelId: string;
+  messageId: string | null;
+  stats: { total: number; open: number };
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type ThreadPanelPayload = ThreadPanelData & { channelId: string };
+
+export interface ThreadPanelForum {
+  id: string;
+  name: string;
+  tags: Array<{ id: string; name: string; emoji: string | null }>;
+}
+
+export async function fetchThreadPanels(guildId = authStore.selectedGuildId) {
+  return dashboardRequest<{ panels?: ThreadPanelRow[]; forums?: ThreadPanelForum[]; error?: string }>('/auto-thread/panels', {
+    method: 'GET',
+    guildId,
+    errorContext: 'API Error (Fetch Thread Panels):',
+    silent: true,
+  });
+}
+
+export async function saveThreadPanel(id: string | null, payload: ThreadPanelPayload, guildId = authStore.selectedGuildId) {
+  return dashboardRequest<{ ok?: boolean; panel?: ThreadPanelRow; publishError?: string | null; error?: string }>(
+    id ? `/auto-thread/panels/${id}` : '/auto-thread/panels',
+    { method: id ? 'PUT' : 'POST', payload, guildId, errorContext: 'API Error (Save Thread Panel):', silent: true },
+  );
+}
+
+export async function publishThreadPanel(id: string, guildId = authStore.selectedGuildId) {
+  return dashboardRequest<{ ok?: boolean; messageId?: string; error?: string }>(`/auto-thread/panels/${id}/publish`, {
+    method: 'POST',
+    guildId,
+    errorContext: 'API Error (Publish Thread Panel):',
+    silent: true,
+  });
+}
+
+export async function deleteThreadPanel(id: string, guildId = authStore.selectedGuildId) {
+  return dashboardRequest<{ ok?: boolean; error?: string }>(`/auto-thread/panels/${id}`, {
+    method: 'DELETE',
+    guildId,
+    errorContext: 'API Error (Delete Thread Panel):',
     silent: true,
   });
 }
