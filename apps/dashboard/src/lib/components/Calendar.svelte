@@ -9,11 +9,18 @@
     server_event: '#0891b2',
     giveaway: '#db2777',
     schedule: '#64748b',
+    testing_end: '#ea580c',
+    sanction_end: '#be123c',
+    voice: '#0d9488',
+    coverage: 'var(--color-error)',
   };
 
-  export type CalendarView = 'day' | 'workweek' | 'week' | 'month' | 'agenda';
+  export type CalendarView = 'day' | 'twodays' | 'week' | 'month' | 'agenda';
 
-  export const CALENDAR_VIEWS: CalendarView[] = ['day', 'workweek', 'week', 'month', 'agenda'];
+  /** Peu de vues, comme Tafac : la semaine par defaut, le jour, le mois et la liste. */
+  export const CALENDAR_VIEWS: CalendarView[] = ['day', 'week', 'month', 'agenda'];
+  /** Sur telephone, une ou deux colonnes et la liste : une semaine n'y tient pas. */
+  export const PHONE_VIEWS: CalendarView[] = ['day', 'twodays', 'agenda'];
 
   export interface CalendarEvent {
     id: string;
@@ -21,6 +28,8 @@
     start: Date;
     end?: Date;
     type: string;
+    /** Remplace la couleur du type (couleur par personne). */
+    color?: string;
     isAllDay?: boolean;
     staffName?: string;
     avatarUrl?: string;
@@ -40,19 +49,29 @@
     currentDate = $bindable(new Date()),
     events = [] as CalendarEvent[],
     selectedKey = null as string | null,
+    showWeekend = 'auto' as 'auto' | 'always',
     onRangeChange,
     onEventClick,
     onSlotSelect,
+    onEventMove = undefined,
+    canMove = () => false,
+    canResize = () => false,
   }: {
     view?: CalendarView;
     currentDate?: Date;
     events?: CalendarEvent[];
     /** Evenement dont l'apercu est ouvert : reste en surbrillance. */
     selectedKey?: string | null;
+    /** `auto` : la semaine cache samedi et dimanche quand ils sont vides. */
+    showWeekend?: 'auto' | 'always';
     onRangeChange: (start: Date, end: Date) => void;
     onEventClick: (event: CalendarEvent, anchor: DOMRect) => void;
     /** Creneau choisi au clic ou au glisser ; `anchor` sert a placer la bulle de creation. */
     onSlotSelect: (start: Date, end: Date, anchor: DOMRect) => void;
+    /** Evenement deplace ou allonge a la souris dans la grille horaire. */
+    onEventMove?: (event: CalendarEvent, start: Date, end: Date) => void;
+    canMove?: (event: CalendarEvent) => boolean;
+    canResize?: (event: CalendarEvent) => boolean;
   } = $props();
 
   const HOUR = 48;
@@ -63,7 +82,7 @@
 
   const hours = Array.from({ length: 24 }, (_, i) => i);
   const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
-  const typeColor = (type: string) => EVENT_TYPE_COLOR[type] ?? 'var(--color-outline)';
+  const colorOf = (e: CalendarEvent) => e.color ?? EVENT_TYPE_COLOR[e.type] ?? 'var(--color-outline)';
   const keyOf = (e: CalendarEvent) => `${e.type}:${e.id}`;
 
   let timeGridEl = $state<HTMLElement | undefined>(undefined);
@@ -94,9 +113,10 @@
   const isToday = (d: Date) => isSameDay(d, now);
   const isWeekend = (d: Date) => d.getDay() === 0 || d.getDay() === 6;
 
-  const days = $derived.by((): Date[] => {
+  /** Toute la periode : c'est elle qu'on charge, meme quand le week-end est masque. */
+  const rangeDays = $derived.by((): Date[] => {
     if (view === 'day') return [startOfDay(currentDate)];
-    if (view === 'workweek') return Array.from({ length: 5 }, (_, i) => addDays(getMonday(currentDate), i));
+    if (view === 'twodays') return [startOfDay(currentDate), addDays(startOfDay(currentDate), 1)];
     if (view === 'week') return Array.from({ length: 7 }, (_, i) => addDays(getMonday(currentDate), i));
     const first = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
     if (view === 'agenda') {
@@ -107,11 +127,18 @@
     return Array.from({ length: 42 }, (_, i) => addDays(getMonday(first), i));
   });
 
-  const isTimeView = $derived(view === 'day' || view === 'workweek' || view === 'week');
+  // Comme Tafac : un week-end vide prend de la place pour rien.
+  const days = $derived(
+    view === 'week' && showWeekend === 'auto'
+      ? rangeDays.filter((d) => !isWeekend(d) || eventsOn(d).length > 0)
+      : rangeDays,
+  );
+
+  const isTimeView = $derived(view === 'day' || view === 'twodays' || view === 'week');
 
   $effect(() => {
-    const first = days[0];
-    const last = days[days.length - 1];
+    const first = rangeDays[0];
+    const last = rangeDays[rangeDays.length - 1];
     if (!first || !last) return;
     const end = new Date(last);
     end.setHours(23, 59, 59, 999);
@@ -131,7 +158,8 @@
 
   function shift(direction: 1 | -1) {
     if (view === 'day') currentDate = addDays(currentDate, direction);
-    else if (view === 'week' || view === 'workweek') currentDate = addDays(currentDate, 7 * direction);
+    else if (view === 'twodays') currentDate = addDays(currentDate, 2 * direction);
+    else if (view === 'week') currentDate = addDays(currentDate, 7 * direction);
     else currentDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + direction, 1);
   }
 
@@ -200,7 +228,69 @@
   }
 
   function openEvent(event: CalendarEvent, target: EventTarget | null) {
+    // Le clic qui termine un glisser-deposer n'ouvre pas l'apercu.
+    if (suppressClick) {
+      suppressClick = false;
+      return;
+    }
     onEventClick(event, (target as HTMLElement).getBoundingClientRect());
+  }
+
+  // ── Glisser-deposer a la souris ─────────────────────────
+  const SNAP = 15;
+  let drag = $state<{ key: string; event: CalendarEvent; day: number; start: number; end: number } | null>(null);
+  let suppressClick = false;
+
+  function startDrag(item: { event: CalendarEvent; key: string; start: number; end: number }, dayIndex: number, e: PointerEvent, mode: 'move' | 'resize') {
+    e.stopPropagation();
+    if (e.pointerType !== 'mouse' || e.button !== 0 || !onEventMove) return;
+    if (mode === 'move' ? !canMove(item.event) : !canResize(item.event)) return;
+    e.preventDefault();
+    const x0 = e.clientX;
+    const y0 = e.clientY;
+    const duration = item.end - item.start;
+    let moved = false;
+
+    const move = (ev: PointerEvent) => {
+      if (!moved && Math.hypot(ev.clientX - x0, ev.clientY - y0) < 4) return;
+      moved = true;
+      const delta = Math.round(((ev.clientY - y0) / HOUR) * 60 / SNAP) * SNAP;
+      if (mode === 'resize') {
+        drag = { key: item.key, event: item.event, day: dayIndex, start: item.start, end: Math.max(item.start + SNAP, Math.min(1440, item.end + delta)) };
+        return;
+      }
+      const column = (document.elementFromPoint(ev.clientX, ev.clientY) as HTMLElement | null)?.closest<HTMLElement>('[data-day-index]');
+      const day = column ? Number(column.dataset.dayIndex) : dayIndex;
+      const start = Math.max(0, Math.min(1440 - duration, item.start + delta));
+      drag = { key: item.key, event: item.event, day, start, end: start + duration };
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      const done = drag;
+      drag = null;
+      if (!moved || !done) return;
+      suppressClick = true;
+      onEventMove?.(done.event, slotDate(days[done.day], done.start), slotDate(days[done.day], done.end));
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  }
+
+  // ── Balayage au doigt ───────────────────────────────────
+  // Un geste franc et horizontal change de periode ; le defilement vertical reste libre.
+  function handleSwipeStart(e: PointerEvent) {
+    if (e.pointerType === 'mouse') return;
+    const x0 = e.clientX;
+    const y0 = e.clientY;
+    const t0 = Date.now();
+    const up = (ev: PointerEvent) => {
+      window.removeEventListener('pointerup', up);
+      const dx = ev.clientX - x0;
+      const dy = ev.clientY - y0;
+      if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5 && Date.now() - t0 < 800) shift(dx < 0 ? 1 : -1);
+    };
+    window.addEventListener('pointerup', up);
   }
 
   // ── Selection de creneau ────────────────────────────────
@@ -305,8 +395,8 @@
   }
 
   onMount(() => {
-    // Sur telephone, une liste se lit mieux qu'une grille de sept colonnes.
-    if (window.matchMedia('(max-width: 640px)').matches && (view === 'week' || view === 'workweek')) view = 'agenda';
+    // Sur telephone, une semaine ou un mois ne tiennent pas : on ouvre la journee.
+    if (window.matchMedia('(max-width: 640px)').matches && !PHONE_VIEWS.includes(view)) view = 'day';
     const clock = setInterval(() => (now = new Date()), 60000);
     window.addEventListener('keydown', handleShortcut);
     return () => {
@@ -320,7 +410,7 @@
   <button
     type="button"
     class="cal-chip {selectedKey === keyOf(event) ? 'cal-chip--selected' : ''} {isPast(event) ? 'cal-chip--past' : ''}"
-    style="--evt: {typeColor(event.type)}"
+    style="--evt: {colorOf(event)}"
     onclick={(e) => { e.stopPropagation(); openEvent(event, e.currentTarget); }}
     onpointerdown={(e) => e.stopPropagation()}
   >
@@ -344,7 +434,7 @@
     <h2 class="ml-2 min-w-0 truncate text-base font-semibold text-on-surface">{title}</h2>
   </div>
 
-  <div class="flex-1 min-h-0 flex flex-col">
+  <div class="cal-body flex-1 min-h-0 flex flex-col" onpointerdown={handleSwipeStart} role="presentation">
     {#if view === 'agenda'}
       <div class="flex-1 overflow-y-auto">
         {#each agendaDays as day (day.date.getTime())}
@@ -359,7 +449,7 @@
                   <button
                     type="button"
                     onclick={(e) => openEvent(event, e.currentTarget)}
-                    style="--evt: {typeColor(event.type)}"
+                    style="--evt: {colorOf(event)}"
                     class="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-surface-container transition-colors {isPast(event) ? 'opacity-60' : ''}"
                   >
                     <span class="w-28 shrink-0 text-2xs font-medium text-on-surface-variant tabular-nums">
@@ -480,6 +570,7 @@
           {#each days as day, i (day.getTime())}
             <div
               class="cal-col"
+              data-day-index={i}
               role="button"
               tabindex="0"
               aria-label={day.toLocaleDateString(dateLocale(), { weekday: 'long', day: 'numeric', month: 'long' })}
@@ -502,10 +593,10 @@
                 {@const height = ((item.end - item.start) / 60) * HOUR}
                 <button
                   type="button"
-                  class="cal-event {selectedKey === item.key ? 'cal-event--selected' : ''} {isPast(item.event) ? 'cal-event--past' : ''}"
-                  style="--evt: {typeColor(item.event.type)}; top: {(item.start / 60) * HOUR}px; height: {height - 2}px; left: calc({(item.col / item.cols) * 100}% + 1px); width: calc({100 / item.cols}% - 4px);"
+                  class="cal-event {selectedKey === item.key ? 'cal-event--selected' : ''} {isPast(item.event) ? 'cal-event--past' : ''} {drag?.key === item.key ? 'cal-event--dragging' : ''} {canMove(item.event) ? 'cal-event--movable' : ''}"
+                  style="--evt: {colorOf(item.event)}; top: {(item.start / 60) * HOUR}px; height: {height - 2}px; left: calc({(item.col / item.cols) * 100}% + 1px); width: calc({100 / item.cols}% - 4px);"
                   onclick={(e) => { e.stopPropagation(); openEvent(item.event, e.currentTarget); }}
-                  onpointerdown={(e) => e.stopPropagation()}
+                  onpointerdown={(e) => startDrag(item, i, e, 'move')}
                 >
                   <span class="cal-event__title">{item.event.title}</span>
                   {#if height >= 36}
@@ -514,8 +605,23 @@
                   {#if height >= 56 && item.event.staffName}
                     <span class="cal-event__meta">{item.event.staffName}</span>
                   {/if}
+                  {#if canResize(item.event)}
+                    <span class="cal-event__resize" aria-hidden="true" onpointerdown={(e) => startDrag(item, i, e, 'resize')}></span>
+                  {/if}
                 </button>
               {/each}
+
+              <!-- Apercu de l'emplacement pendant un glisser-deposer -->
+              {#if drag && drag.day === i}
+                <div
+                  class="cal-event cal-event--ghost"
+                  style="--evt: {colorOf(drag.event)}; top: {(drag.start / 60) * HOUR}px; height: {((drag.end - drag.start) / 60) * HOUR - 2}px; left: 1px; width: calc(100% - 4px);"
+                  aria-hidden="true"
+                >
+                  <span class="cal-event__title">{drag.event.title}</span>
+                  <span class="cal-event__meta">{formatTime(slotDate(day, drag.start))} – {formatTime(slotDate(day, drag.end))}</span>
+                </div>
+              {/if}
 
               {#if isToday(day)}
                 <div class="cal-now" style="top: {((now.getHours() * 60 + now.getMinutes()) / 60) * HOUR}px" aria-hidden="true"></div>
@@ -679,6 +785,29 @@
   }
   .cal-event--past {
     opacity: 0.6;
+  }
+  .cal-event--movable {
+    cursor: grab;
+  }
+  .cal-event--dragging {
+    opacity: 0.35;
+  }
+  .cal-event--ghost {
+    z-index: 7;
+    pointer-events: none;
+    box-shadow: 0 6px 16px rgb(0 0 0 / 0.3);
+    outline: 2px solid var(--evt);
+  }
+  .cal-event__resize {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 6px;
+    cursor: ns-resize;
+  }
+  .cal-body {
+    touch-action: pan-y;
   }
   .cal-event__title {
     font-size: 0.75rem;
