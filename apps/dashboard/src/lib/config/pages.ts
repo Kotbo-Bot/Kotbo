@@ -188,6 +188,7 @@ export const staffItems: PageConfig[] = [
 // { name: m.nav_staff_evaluations(),   icon: "award",         href: "/evaluations",      featureKey: "staff_directory", beta: true, wip: false },
   { name: m.nav_tutoring(),             icon: "book-open",     href: "/tutoring",         featureKey: "tutoring", beta: false, wip: false },
   { name: m.nav_planning(),            icon: "calendar",      href: "/planning",         featureKey: "absences", beta: false, wip: false },
+  { name: m.nav_doing_lists(),         icon: "list-checks",   href: "/doing-lists",      featureKey: "doing_lists", beta: true, wip: false },
   // Sondages et Discipline sont des onglets de la page staff : ils quittent le
   // menu (huit lignes, une de trop) mais restent dans la palette et les onglets.
   { name: m.nav_polls(),            icon: "bar-chart",     href: "/staff-management/polls",    featureKey: "polls", beta: false, wip: false, hidden: true },

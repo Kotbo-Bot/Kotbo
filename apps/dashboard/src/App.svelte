@@ -202,6 +202,7 @@
     if (path.startsWith("/recruitment")) return "recruitment";
     if (path.startsWith("/tickets")) return "tickets";
     if (path.startsWith("/tutoring")) return "tutoring";
+    if (path.startsWith("/doing-lists")) return "doing_lists";
     if (path.startsWith("/meetings")) return "meetings";
     if (path.startsWith("/absences")) return "absences";
     if (path.startsWith("/planning")) return "absences";
@@ -1113,6 +1114,10 @@
             <LazyRoute
               path="/tutoring"
               load={() => import("./pages/Tutoring.svelte")}
+            />
+            <LazyRoute
+              path="/doing-lists"
+              load={() => import("./pages/DoingLists.svelte")}
             />
             <LazyRoute
               path="/leveling/*"
