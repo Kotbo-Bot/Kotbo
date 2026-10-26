@@ -10,7 +10,7 @@ for (const dbPath of ['../../utils/db.ts', '../../utils/db.js']) {
   mock.module(path.resolve(__dirname, dbPath), () => ({ default: mockDb, prisma: mockDb, prismaRead: mockDb }));
 }
 
-const { itemAppliesTo, nextReportDue, tutoringReadiness, tutoringRole } = await import('../../services/staff/tutoringOverview.js');
+const { itemAppliesTo, nextReportDue, reportReminderDue, tutoringReadiness, tutoringRole } = await import('../../services/staff/tutoringOverview.js');
 
 const period = { staffUserId: 'apprentice', mentorId: 'mentor' };
 
@@ -49,6 +49,17 @@ describe("points d'étape et validation", () => {
   test("le prochain point se compte depuis le dernier, sinon depuis le début", () => {
     expect(nextReportDue({ startDate: start, lastReportAt: null }, 7).toISOString()).toBe('2026-10-08T10:00:00.000Z');
     expect(nextReportDue({ startDate: start, lastReportAt: new Date('2026-10-10T10:00:00Z') }, 7).toISOString()).toBe('2026-10-17T10:00:00.000Z');
+  });
+
+  test("le tuteur est relancé avant l'échéance, puis tous les trois jours de retard", () => {
+    const due = new Date('2026-10-20T10:00:00Z');
+    const at = (iso: string) => new Date(iso).getTime();
+    expect(reportReminderDue(due, 2, at('2026-10-15T10:00:00Z'))).toBeNull();
+    expect(reportReminderDue(due, 2, at('2026-10-19T10:00:00Z'))).toBe('soon');
+    expect(reportReminderDue(due, 0, at('2026-10-19T10:00:00Z'))).toBeNull();
+    expect(reportReminderDue(due, 2, at('2026-10-20T10:00:00Z'))).toBe('overdue');
+    expect(reportReminderDue(due, 2, at('2026-10-21T10:00:00Z'))).toBeNull();
+    expect(reportReminderDue(due, 2, at('2026-10-23T10:00:00Z'))).toBe('overdue');
   });
 
   test('seule la durée minimale bloque, les objectifs et les points éclairent', () => {

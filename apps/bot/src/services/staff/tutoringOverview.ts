@@ -10,6 +10,7 @@ import type { Prisma, TutoringItem, TutoringItemState } from '@prisma/client';
 import prisma from '../../utils/db.js';
 import { getTutoringConfig } from '../core/tutoringService.js';
 import { deriveListKey, freeListKey } from './doingListBoard.js';
+import { notify } from '../notifications/notifyService.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -200,6 +201,55 @@ export async function getTutoringDetail(guildId: string, periodId: string) {
     }),
     config: { minTestDays: config.minTestDays, reportIntervalDays: config.reportIntervalDays },
   };
+}
+
+/**
+ * Faut-il relancer le tuteur aujourd'hui ? Oui dans les jours qui précèdent le
+ * point d'étape, puis tous les trois jours tant qu'il est en retard.
+ */
+export function reportReminderDue(nextDue: Date, reminderDaysBefore: number, now = Date.now()): 'soon' | 'overdue' | null {
+  const daysLeft = Math.ceil((nextDue.getTime() - now) / DAY_MS);
+  if (daysLeft > 0) return reminderDaysBefore > 0 && daysLeft <= reminderDaysBefore ? 'soon' : null;
+  return Math.abs(daysLeft) % 3 === 0 ? 'overdue' : null;
+}
+
+/** Tâche quotidienne : prévient chaque tuteur dont un point d'étape approche ou traîne. */
+export async function sendTutoringReportReminders(): Promise<number> {
+  const periods = await prisma.testingPeriod.findMany({
+    where: { status: 'ONGOING', mentorId: { not: null } },
+    select: {
+      id: true,
+      guildId: true,
+      startDate: true,
+      lastReportAt: true,
+      mentor: { select: { userId: true } },
+      staffMember: { select: { username: true, displayName: true, userId: true } },
+    },
+  });
+  const configs = new Map<string, Awaited<ReturnType<typeof getTutoringConfig>>>();
+  let sent = 0;
+  for (const period of periods) {
+    if (!period.mentor) continue;
+    const config = configs.get(period.guildId) ?? (await getTutoringConfig(period.guildId));
+    configs.set(period.guildId, config);
+    const due = nextReportDue(period, config.reportIntervalDays);
+    const when = reportReminderDue(due, config.reminderDaysBefore);
+    if (!when) continue;
+    const name = period.staffMember.displayName || period.staffMember.username || period.staffMember.userId;
+    await notify({
+      guildId: period.guildId,
+      userId: period.mentor.userId,
+      kind: 'staff.mentor_report_due',
+      title: when === 'overdue' ? "Point d'étape en retard" : "Point d'étape à venir",
+      message: when === 'overdue'
+        ? `Le point d'étape avec ${name} est en retard.`
+        : `Le point d'étape avec ${name} est attendu d'ici ${Math.max(1, Math.ceil((due.getTime() - Date.now()) / DAY_MS))} j.`,
+      severity: when === 'overdue' ? 'WARNING' : 'INFO',
+      link: `/tutoring/${period.id}`,
+    }).catch(() => null);
+    sent += 1;
+  }
+  return sent;
 }
 
 /** Liste de suivi des missions d'un tutorat, avec ses trois étapes de départ. */
