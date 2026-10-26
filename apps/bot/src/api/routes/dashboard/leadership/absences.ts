@@ -5,6 +5,8 @@ import type { Prisma } from '@prisma/client';
 import prisma from '../../../../utils/db.js';
 import { logger } from '../../../../utils/logger.js';
 import { jsonFailure } from '../../../shared/failure.js';
+import { canViewFeatureSection } from '../featureGate.js';
+import { getPlanningExtras } from '../../../../services/staff/planningExtrasService.js';
 import {
   json,
   readJsonBody,
@@ -136,6 +138,30 @@ export async function handleAbsenceRoutes(
         } catch (err) {
           logger.error('StaffAPI', `Error getting calendar data for guild ${guildId}:`, err);
           jsonFailure(res, err, 'Erreur lors de la récupération des données du calendrier', 'StaffAPI');
+        }
+        return true;
+      }
+
+      // GET /api/dashboard/guilds/:guildId/absences/planning-extras?start&end
+      // Evenements du serveur, fins de giveaways et taches planifiees, chacun
+      // seulement si le role peut deja voir la section qui les gere.
+      if (parts.length === 6 && parts[5] === 'planning-extras' && method === 'GET') {
+        const start = new Date(url.searchParams.get('start') ?? '');
+        const end = new Date(url.searchParams.get('end') ?? '');
+        if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start || end.getTime() - start.getTime() > 62 * 86400000) {
+          json(res, 400, { error: 'La période du calendrier est invalide' });
+          return true;
+        }
+        try {
+          const [events, giveaways] = await Promise.all([
+            canViewFeatureSection(client, guildId, access, user.userId, 'events'),
+            canViewFeatureSection(client, guildId, access, user.userId, 'giveaways'),
+          ]);
+          const items = await getPlanningExtras(guildId, start, end, { events, giveaways, schedules: access.canManageSettings });
+          json(res, 200, { items });
+        } catch (err) {
+          logger.error('StaffAPI', 'Error getting planning extras:', err);
+          jsonFailure(res, err, 'Erreur lors de la récupération des événements du serveur', 'StaffAPI');
         }
         return true;
       }
