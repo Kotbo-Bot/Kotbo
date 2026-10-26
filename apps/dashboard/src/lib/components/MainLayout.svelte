@@ -103,6 +103,8 @@
   const pageStatus = $derived(getPageStatus($router.path, $router.url));
   const mobilePageLayout = $derived(getMobilePageLayout($router.path));
   const pageKey = $derived(getPageKey($router.path));
+  // Le Planning est l'outil lui-meme, comme Outlook : il occupe toute la zone, sans marge ni fil d'Ariane.
+  const fullBleed = $derived(pageKey === 'planning');
 
   function handleGlobalKeyDown(e: KeyboardEvent) {
     const activeEl = document.activeElement;
@@ -180,10 +182,10 @@
       use:responsiveTables
       data-mobile-layout={mobilePageLayout}
       data-page={pageKey}
-      class="app-main px-8 py-6 pb-20 max-w-[1400px] w-full mx-auto"
+      class="app-main w-full {fullBleed ? 'app-main--bleed' : 'px-8 py-6 pb-20 max-w-[1400px] mx-auto'}"
     >
       <DemoBanner />
-      {#if !$isPhone}
+      {#if !$isPhone && !fullBleed}
         <Breadcrumbs />
       {/if}
       {#if pageStatus?.wip}

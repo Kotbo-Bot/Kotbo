@@ -1060,9 +1060,9 @@
   {/if}
 {/snippet}
 
-<ModulePage title={m.planning_page_title()} icon="calendar" featureKey="absences">
+<ModulePage title={m.planning_page_title()} icon="calendar" featureKey="absences" bare>
   {#if loading && allStaff.length === 0}
-    <Skeleton height="640px" radius="0.75rem" />
+    <div class="pl-shell"><Skeleton height="h-full" radius="0" /></div>
   {:else}
     <div class="pl-shell">
       <!-- ===== Ruban ===== -->
@@ -1075,7 +1075,7 @@
 
         <span class="pl-sep" aria-hidden="true"></span>
 
-        <div class="hidden md:flex items-center gap-0.5" role="group" aria-label={m.planning_view_aria()}>
+        <div class="hidden md:flex items-center gap-0.5" role="group" aria-label={m.planning_view_aria()} title={m.planning_shortcuts_hint()}>
           {#each CALENDAR_VIEWS as v (v)}
             <button type="button" class="pl-view {calendarView === v ? 'pl-view--active' : ''}" aria-pressed={calendarView === v} onclick={() => (calendarView = v)}>
               <Papicon icon={VIEW_META[v].icon} size={15} />
@@ -1300,7 +1300,6 @@
         {/if}
       </div>
     </div>
-    <p class="hidden md:block mt-2 text-2xs text-on-surface-variant">{m.planning_shortcuts_hint()}</p>
   {/if}
 </ModulePage>
 
@@ -1839,12 +1838,16 @@
   .pl-shell {
     display: flex;
     flex-direction: column;
-    height: calc(100dvh - 10rem);
-    min-height: 36rem;
-    border: 1px solid var(--color-outline-variant);
-    border-radius: 0.75rem;
+    /* Toute la hauteur sous la barre du haut (h-14). */
+    height: calc(100dvh - 3.5rem);
+    min-height: 30rem;
     overflow: hidden;
     background: var(--color-surface-container-lowest);
+  }
+  @media (max-width: 767px) {
+    .pl-shell {
+      height: calc(100dvh - var(--mobile-topbar-height) - var(--mobile-tabbar-clearance));
+    }
   }
   .pl-ribbon {
     display: flex;
