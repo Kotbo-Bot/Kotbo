@@ -133,6 +133,11 @@ export async function handleTestingPeriodRoutes(
             json(res, 400, { error: 'status est obligatoire' });
             return true;
           }
+          // Un identifiant d'un autre serveur ne doit pas se clôturer d'ici.
+          if (!(await prisma.testingPeriod.findFirst({ where: { id: periodId, guildId }, select: { id: true } }))) {
+            json(res, 404, { error: 'Période de test introuvable' });
+            return true;
+          }
 
           if (body.status === 'PASSED') {
             const period = await prisma.testingPeriod.findUnique({

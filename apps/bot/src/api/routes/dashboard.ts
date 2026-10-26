@@ -340,6 +340,11 @@ export async function handleDashboardRoutes(
     // handleDoingListRoutes.
     const isDoingListAction = parts[4] === 'doing-lists' && method !== 'GET';
 
+    // Tutorat : le tuteur coche les objectifs et fait ses points d'étape, le
+    // tutoré tient son carnet de bord, sans droit de configuration. Le rôle
+    // exact sur chaque tutorat est revérifié dans handleTutoringRoutes.
+    const isTutoringAction = parts[4] === 'tutoring' && method !== 'GET';
+
     const isMemberModerationAction = parts.length === 7
       && parts[4] === 'members'
       && ((parts[6] === 'note' && method === 'PATCH') || (parts[6] === 'actions' && method === 'POST'));
@@ -406,7 +411,7 @@ export async function handleDashboardRoutes(
       ? { ...access, canManageSettings: true }
       : access;
 
-    if (!access.canManageSettings && method !== 'GET' && !hasFeatureWriteRight && !isSanctionAction && !isDailyAlgoReviewAction && !isStaffAbsenceAction && !isStaffResignationAction && !isNotificationAction && !isMeetingAction && !isNewsAction && !isMemberModerationAction && !isGiveawayManagerAction && !isAnalyticsAnnotationAction && !isAegisReviewAction && !isDoingListAction) {
+    if (!access.canManageSettings && method !== 'GET' && !hasFeatureWriteRight && !isSanctionAction && !isDailyAlgoReviewAction && !isStaffAbsenceAction && !isStaffResignationAction && !isNotificationAction && !isMeetingAction && !isNewsAction && !isMemberModerationAction && !isGiveawayManagerAction && !isAnalyticsAnnotationAction && !isAegisReviewAction && !isDoingListAction && !isTutoringAction) {
       json(res, 403, { error: 'Action réservée aux administrateurs du dashboard.' });
       return true;
     }
