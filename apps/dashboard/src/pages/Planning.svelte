@@ -1,12 +1,11 @@
 <script lang="ts">
-  import { explainDisabled } from '../lib/actions/explainDisabled';
   import { m, dateLocale } from '../lib/i18n';
   import { channelDisplayName } from '../lib/channelUtils';
   import { onMount } from 'svelte';
+  import { router } from 'tinro';
   import { toast } from '../lib/stores/toast.svelte';
   import { confirmDialog } from '../lib/stores/confirmDialog.svelte';
-  import { router } from 'tinro';
-  import { resolveTabFromUrl, gotoTab } from '../lib/tabRouting';
+  import { resolveTabFromUrl } from '../lib/tabRouting';
   import { authStore } from '../lib/stores/auth.svelte';
   import { canViewFeature } from '../lib/permissions.svelte';
   import { dashboardStore } from '../lib/stores/dashboard.svelte';
@@ -20,6 +19,7 @@
     updateTask,
     deleteTask,
     createAbsence,
+    updateAbsenceStatus,
     createMeeting,
     deleteMeeting,
     updateMeeting,
@@ -37,62 +37,104 @@
   import { timezoneStore } from '../lib/stores/timezone.svelte';
   import { formatWallClockInTimezone, parseDateTimeInTimezone } from '@kotbo/contracts';
   import TimezoneHint from '../lib/components/TimezoneHint.svelte';
-  import ActionButton from '../lib/components/ActionButton.svelte';
   import Papicon from '../lib/components/Papicon.svelte';
-  import Calendar from '../lib/components/Calendar.svelte';
+  import Calendar, { EVENT_TYPE_COLOR } from '../lib/components/Calendar.svelte';
   import ModulePage from '../lib/components/ModulePage.svelte';
-  import FormInput from '../lib/components/FormInput.svelte';
-  import FormTextarea from '../lib/components/FormTextarea.svelte';
-  import FormSelect from '../lib/components/FormSelect.svelte';
   import SearchableSelect from '../lib/components/SearchableSelect.svelte';
-  import ToggleSwitch from '../lib/components/ToggleSwitch.svelte';
-  import LoadingHint from '../lib/components/LoadingHint.svelte';
+  import Skeleton from '../lib/components/Skeleton.svelte';
   import MemberCaseModal from '../lib/components/MemberCaseModal.svelte';
   import DiscordMarkdownEditor from '../lib/components/DiscordMarkdownEditor.svelte';
+  import { Button, Callout, Field, FilterPills, Modal, ToggleSwitch, type FilterOption } from '../lib/components/ui';
   import { localInitialAvatar } from '../lib/discordMedia';
-
   import { errorMessage } from '@kotbo/shared';
-  // State
+
+  type PlanningType = 'meeting' | 'absence' | 'call' | 'task';
+  type CalendarData = { absences: any[]; voiceSessions: any[]; meetings: any[]; calls: any[]; tasks: any[] };
+  const emptyCalendarData = (): CalendarData => ({ absences: [], voiceSessions: [], meetings: [], calls: [], tasks: [] });
+  const normalize = (data: any): CalendarData => ({
+    absences: data?.absences || [],
+    voiceSessions: data?.voiceSessions || [],
+    meetings: data?.meetings || [],
+    calls: data?.calls || [],
+    tasks: data?.tasks || [],
+  });
+
+  const TYPE_META: Record<PlanningType, { label: () => string; calendar: () => string; icon: string }> = {
+    meeting: { label: m.planning_type_meeting, calendar: m.planning_cal_meetings, icon: 'calendar' },
+    call: { label: m.planning_type_call, calendar: m.planning_cal_calls, icon: 'phone' },
+    absence: { label: m.planning_type_absence, calendar: m.planning_cal_absences, icon: 'sun' },
+    task: { label: m.planning_type_task, calendar: m.planning_cal_tasks, icon: 'check-square' },
+  };
+  const TYPES: PlanningType[] = ['meeting', 'call', 'absence', 'task'];
+
+  const PRIORITY_LABEL: Record<string, () => string> = {
+    LOW: m.planning_priority_low,
+    MEDIUM: m.planning_priority_medium,
+    HIGH: m.planning_priority_high,
+  };
+  const TASK_STATUS_LABEL: Record<string, () => string> = {
+    PENDING: m.planning_task_status_pending,
+    IN_PROGRESS: m.planning_task_status_in_progress,
+    COMPLETED: m.planning_task_status_completed,
+  };
+  const ABSENCE_STATUS: Record<string, { label: () => string; badge: string }> = {
+    PENDING: { label: m.planning_absence_pending, badge: 'badge-warning' },
+    ACKNOWLEDGED: { label: m.planning_absence_acknowledged, badge: 'badge-info' },
+    APPROVED: { label: m.planning_absence_approved, badge: 'badge-success' },
+    REJECTED: { label: m.planning_absence_rejected, badge: 'badge-danger' },
+  };
+  const MEETING_BADGE: Record<string, string> = {
+    SCHEDULED: 'badge-info',
+    IN_PROGRESS: 'badge-warning',
+    COMPLETED: 'badge-success',
+    CANCELLED: 'badge-danger',
+    PRESENT: 'badge-success',
+    EXCUSED: 'badge-warning',
+    ABSENT_CHECKED: 'badge-warning',
+    ABSENT: 'badge-danger',
+  };
+
+  // ── Etat ────────────────────────────────────────────────
   let loading = $state(true);
   let allStaff = $state<any[]>([]);
   let allRoles = $state<any[]>([]);
-  type CalendarData = { absences: any[], voiceSessions: any[], meetings: any[], calls: any[], tasks: any[] };
-  const emptyCalendarData = (): CalendarData => ({ absences: [], voiceSessions: [], meetings: [], calls: [], tasks: [] });
   let calendarData = $state<CalendarData>(emptyCalendarData());
+  // Journee en cours pour toute l'equipe, quel que soit le filtre ou la periode affichee.
+  let todayData = $state<CalendarData>(emptyCalendarData());
   let userTasks = $state<any[]>([]);
 
-  // Calendar binding
   let calendarView = $state<string>('week');
   let calendarCurrentDate = $state(new Date());
 
-  // Filtering
   let selectedStaffIds = $state<string[]>([]);
-  let visibleTypes = $state<string[]>(['meeting', 'absence', 'call', 'task']);
+  let visibleTypes = $state<string[]>([...TYPES]);
+  let peopleQuery = $state('');
 
-  // Panels
   let showTaskPanel = $state(true);
   let sidebarCollapsed = $state(false);
+  let showDoneTasks = $state(false);
+  let quickTaskTitle = $state('');
+  let quickTaskSaving = $state(false);
 
-  // Modals
   let creationModalOpen = $state(false);
   let detailModalOpen = $state(false);
   const planningTabs = ['meeting', 'absence', 'call', 'task'] as const;
-  let currentTab = $state<'meeting' | 'absence' | 'call' | 'task'>('meeting');
+  // L'onglet de l'URL (/planning/absence...) choisit le type propose par defaut a la creation.
+  let currentTab = $state<PlanningType>('meeting');
+  let createType = $state<PlanningType>('meeting');
 
   $effect(() => {
     const _path = $router.path;
-    currentTab = resolveTabFromUrl('/planning', planningTabs, 'meeting') as typeof currentTab;
+    currentTab = resolveTabFromUrl('/planning', planningTabs, 'meeting') as PlanningType;
   });
 
-  // Selection dates
   let selectedStartDate = $state(new Date());
   let selectedEndDate = $state(new Date(Date.now() + 3600000));
   // Fuseau choisi par l'organisateur pour la reunion en cours de creation ;
-  // reset a `null` au switch de tab et apres soumission.
+  // reset a `null` a chaque ouverture du formulaire.
   let formTimezone = $state<string | null>(null);
   let currentItemDetail = $state<any>(null);
 
-  // Forms Fields
   let formTitle = $state('');
   let formDescription = $state('');
   let formPriority = $state<'LOW' | 'MEDIUM' | 'HIGH'>('MEDIUM');
@@ -104,16 +146,13 @@
   let formDiscordChannelId = $state('');
   let formIsTempChannel = $state(true);
   let formInviteeUserIds = $state<string[]>([]);
-
   let formError = $state('');
   let saving = $state(false);
 
-  // Reminders form state
   let newReminderTime = $state('');
   let newReminderMessage = $state('');
   let newReminderChannel = $state('DM');
 
-  // Member search for call invitees
   let memberSearchQuery = $state('');
   let memberSearchResults = $state<any[]>([]);
   let memberSearchLoading = $state(false);
@@ -121,7 +160,7 @@
   let formInviteeMemberIds = $state<string[]>([]);
   let selectedMembers = $state<Map<string, any>>(new Map());
 
-  // Call creation permissions ("qui peut créer des appels")
+  // Qui peut creer des appels
   let callPermConfig = $state<any>(null);
   let callPermCanCreate = $state(true);
   let permissionModalOpen = $state(false);
@@ -135,14 +174,16 @@
   let permMemberSearchTimeout: ReturnType<typeof setTimeout> | null = null;
   let permError = $state('');
   let permSaving = $state(false);
+
   const isAdmin = $derived(authStore.guilds.find(g => g.id === authStore.selectedGuildId)?.accessLevel === 'admin');
-
-  // Meetings Feature Access & Permissions
-  const meetingsFeatureAccess = $derived(dashboardStore.state.featureAccess?.meetings || {});
-  const canManageMeetings = $derived(isAdmin || !!dashboardStore.state.access?.canManageSettings || !!meetingsFeatureAccess.canConfigure);
+  const canManageSettings = $derived(isAdmin || !!dashboardStore.state.access?.canManageSettings);
+  const meetingsFeatureAccess = $derived((dashboardStore.state.featureAccess as any)?.meetings || {});
+  const canManageMeetings = $derived(canManageSettings || !!meetingsFeatureAccess.canConfigure);
   const canModerateMeetings = $derived(canManageMeetings || !!meetingsFeatureAccess.canModerate);
+  const absencesFeatureAccess = $derived((dashboardStore.state.featureAccess as any)?.absences || {});
+  const canModerateAbsences = $derived(canManageSettings || !!absencesFeatureAccess.canModerate || !!absencesFeatureAccess.canConfigure);
 
-  // Member Case Modal States
+  // Dossier membre
   let userCaseModalOpen = $state(false);
   let selectedUserIdForCase = $state<string | null>(null);
   let selectedUserNameForCase = $state('');
@@ -150,7 +191,7 @@
   let loadingCase = $state(false);
   let caseError = $state('');
 
-  // Meeting deletion states
+  // Suppression de reunion
   let meetingDeleteModalOpen = $state(false);
   let meetingToDeleteId = $state<string | null>(null);
   let deleteDiscordEvent = $state(true);
@@ -158,7 +199,7 @@
   let deleteDiscordNotification = $state(true);
   let deletingMeeting = $state(false);
 
-  // Meeting edition states
+  // Edition de reunion
   let meetingEditModalOpen = $state(false);
   let editMeetingTitle = $state('');
   let editMeetingDesc = $state('');
@@ -182,24 +223,22 @@
     loadingCase = true;
     caseError = '';
     caseData = null;
-
     try {
       caseData = await fetchMemberCase(userId, authStore.selectedGuildId);
     } catch (err) {
-      caseError = err instanceof Error ? err.message : 'Impossible de charger le dossier';
+      caseError = err instanceof Error ? err.message : m.planning_case_err();
     } finally {
       loadingCase = false;
     }
   }
 
+  // ── Reunions ────────────────────────────────────────────
   async function updateMeetingStatus(id: string, status: string) {
     if (!canModerateMeetings) return;
     try {
       await updateMeeting(id, { status });
-      await refreshCalendar();
-      if (currentItemDetail && currentItemDetail.id === id) {
-        currentItemDetail.raw.status = status;
-      }
+      if (currentItemDetail?.id === id) currentItemDetail.raw.status = status;
+      await refreshAll();
     } catch (e) {
       console.error('Failed to update status:', e);
     }
@@ -210,7 +249,7 @@
     return {
       present: presences.filter((p: any) => p.status === 'PRESENT').length,
       excused: presences.filter((p: any) => p.status === 'EXCUSED' || p.status === 'ABSENT_CHECKED').length,
-      absent: presences.filter((p: any) => p.status === 'ABSENT').length
+      absent: presences.filter((p: any) => p.status === 'ABSENT').length,
     };
   }
 
@@ -241,7 +280,7 @@
     const start = parseLocal(editMeetingDate);
     const end = parseLocal(editMeetingEndDate);
     if (isNaN(start.getTime()) || isNaN(end.getTime())) {
-      editMeetingError = 'Les dates fournies sont invalides.';
+      editMeetingError = m.planning_err_dates_invalid();
       return;
     }
     if (end <= start) {
@@ -259,12 +298,9 @@
         endedAt: end.toISOString(),
         timezone: editMeetingTimezone,
       };
-
       if (currentItemDetail?.id) {
         await updateMeeting(currentItemDetail.id, payload);
         meetingEditModalOpen = false;
-        
-        // Update local state so details update immediately
         currentItemDetail.title = editMeetingTitle;
         currentItemDetail.start = start;
         currentItemDetail.end = end;
@@ -272,8 +308,7 @@
         currentItemDetail.raw.description = editMeetingDesc;
         currentItemDetail.raw.scheduledAt = start.toISOString();
         currentItemDetail.raw.endedAt = end.toISOString();
-        
-        await refreshCalendar();
+        await refreshAll();
       }
     } catch (e) {
       console.error('Failed to save meeting:', e);
@@ -290,30 +325,15 @@
       await deleteMeeting(meetingToDeleteId, {
         deleteEvent: deleteDiscordEvent,
         deleteMessage: deleteDiscordMessage,
-        deleteNotifications: deleteDiscordNotification
+        deleteNotifications: deleteDiscordNotification,
       });
       meetingDeleteModalOpen = false;
       detailModalOpen = false;
-      await Promise.all([refreshCalendar(), refreshTasks()]);
+      await refreshAll();
     } catch (e) {
       console.error('Failed to delete meeting:', e);
     } finally {
       deletingMeeting = false;
-    }
-  }
-
-  function getStatusColor(status: string) {
-    switch (status) {
-      case 'SCHEDULED': return 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300';
-      case 'IN_PROGRESS': return 'bg-warning/10 text-warning animate-pulse';
-      case 'COMPLETED': return 'bg-success/10 text-success';
-      case 'CANCELLED': return 'bg-error/10 text-error';
-      // Presence statuses
-      case 'PRESENT': return 'bg-success/10 text-success';
-      case 'EXCUSED': 
-      case 'ABSENT_CHECKED': return 'bg-warning/10 text-warning';
-      case 'ABSENT': return 'bg-error/10 text-error';
-      default: return 'bg-surface-container text-on-surface';
     }
   }
 
@@ -323,7 +343,6 @@
       case 'IN_PROGRESS': return m.meetings_status_in_progress();
       case 'COMPLETED': return m.meetings_status_completed();
       case 'CANCELLED': return m.meetings_status_cancelled();
-      // Presence statuses
       case 'PRESENT': return m.meetings_presence_present();
       case 'EXCUSED': return m.meetings_presence_excused();
       case 'ABSENT_CHECKED': return m.planning_presence_excused_checked();
@@ -332,6 +351,7 @@
     }
   }
 
+  // ── Recherche de membres (invites d'appel, permissions) ─
   async function searchMembers(query: string) {
     if (!query.trim()) {
       memberSearchResults = [];
@@ -341,7 +361,7 @@
     try {
       const data = await searchDiscordMembers(query, 15);
       memberSearchResults = (data?.members || []).filter(
-        (mem: any) => !activeStaff.some(s => s.userId === mem.id) && mem.id !== (authStore.user as any)?.id
+        (mem: any) => !activeStaff.some(s => s.userId === mem.id) && mem.id !== (authStore.user as any)?.id,
       );
     } catch (e) {
       console.error('Member search error:', e);
@@ -358,36 +378,31 @@
   }
 
   function toggleMemberInvitee(member: any) {
+    const next = new Map(selectedMembers);
     if (formInviteeMemberIds.includes(member.id)) {
       formInviteeMemberIds = formInviteeMemberIds.filter(id => id !== member.id);
-      const next = new Map(selectedMembers);
       next.delete(member.id);
-      selectedMembers = next;
     } else {
       formInviteeMemberIds = [...formInviteeMemberIds, member.id];
-      const next = new Map(selectedMembers);
       next.set(member.id, member);
-      selectedMembers = next;
     }
+    selectedMembers = next;
   }
 
-  // Call creation permissions
   function togglePermRole(roleId: string) {
     permRoleIds = permRoleIds.includes(roleId) ? permRoleIds.filter(id => id !== roleId) : [...permRoleIds, roleId];
   }
 
   function togglePermUser(member: any) {
+    const next = new Map(permSelectedUsersMap);
     if (permUserIds.includes(member.id)) {
       permUserIds = permUserIds.filter(id => id !== member.id);
-      const next = new Map(permSelectedUsersMap);
       next.delete(member.id);
-      permSelectedUsersMap = next;
     } else {
       permUserIds = [...permUserIds, member.id];
-      const next = new Map(permSelectedUsersMap);
       next.set(member.id, member);
-      permSelectedUsersMap = next;
     }
+    permSelectedUsersMap = next;
   }
 
   async function searchPermMembers(query: string) {
@@ -441,23 +456,25 @@
     }
   }
 
-  // Time boundaries
+  // ── Periode, filtres et evenements ──────────────────────
   let currentRangeStart = new Date();
   let currentRangeEnd = new Date();
-
-  // Mini calendar
   let miniCalDate = $state(new Date());
 
-  // Derived
-  const myStaffRecord = $derived(allStaff.find(s => s.userId === (authStore.user as any)?.id));
+  const myId = $derived((authStore.user as any)?.id);
+  const myStaffRecord = $derived(allStaff.find(s => s.userId === myId));
   const activeStaff = $derived(allStaff.filter(s => !s.blacklistEntries || s.blacklistEntries.length === 0));
+  const filteredStaff = $derived.by(() => {
+    const q = peopleQuery.trim().toLowerCase();
+    return q ? activeStaff.filter(s => `${s.displayName ?? ''} ${s.username ?? ''}`.toLowerCase().includes(q)) : activeStaff;
+  });
 
   const eligibleSuperiors = $derived.by(() => {
     if (!myStaffRecord || allRoles.length === 0) return [];
     const myRole = allRoles.find(r => r.name === myStaffRecord.grade);
     if (!myRole) return activeStaff;
     return activeStaff.filter(s => {
-      if (s.userId === (authStore.user as any)?.id) return false;
+      if (s.userId === myId) return false;
       if (s.testingPeriods && s.testingPeriods.length > 0) return false;
       const sRole = allRoles.find(r => r.name === s.grade);
       if (!sRole) return false;
@@ -465,89 +482,63 @@
     });
   });
 
-  // Events for calendar (no type prefix - Outlook uses color, not text labels)
+  /** Forme commune d'un element du planning, pour le calendrier comme pour les listes. */
+  function toEvent(type: PlanningType, raw: any) {
+    if (type === 'absence') {
+      const start = new Date(raw.startDate);
+      const end = raw.endDate ? new Date(raw.endDate) : (raw.isIndefinite ? new Date(start.getTime() + 86400000 * 30) : start);
+      const durationHours = (end.getTime() - start.getTime()) / 3600000;
+      return {
+        id: raw.id, title: raw.reason, start, end, type, raw,
+        isAllDay: raw.isIndefinite || durationHours >= 12,
+        staffName: raw.staffMember?.displayName || raw.staffMember?.username,
+        avatarUrl: raw.staffMember?.avatarUrl,
+      };
+    }
+    const startRaw = type === 'task' ? raw.dueDate : raw.scheduledAt;
+    const start = startRaw ? new Date(startRaw) : new Date();
+    const fallback = type === 'meeting' ? 3600000 : 1800000;
+    const end = type !== 'task' && raw.endedAt ? new Date(raw.endedAt) : new Date(start.getTime() + fallback);
+    return { id: raw.id, title: raw.title, start, end, type, isAllDay: false, details: raw.description, raw };
+  }
+
   const calendarEvents = $derived.by(() => {
     const events: any[] = [];
-
-    if (visibleTypes.includes('meeting') && calendarData.meetings) {
-      calendarData.meetings.forEach((mtg: any) => {
-        events.push({
-          id: mtg.id,
-          title: mtg.title,
-          start: new Date(mtg.scheduledAt),
-          end: mtg.endedAt ? new Date(mtg.endedAt) : new Date(new Date(mtg.scheduledAt).getTime() + 3600000),
-          type: 'meeting',
-          isAllDay: false,
-          details: mtg.description,
-          raw: mtg
-        });
-      });
-    }
-
-    if (visibleTypes.includes('absence') && calendarData.absences) {
-      calendarData.absences.forEach((abs: any) => {
-        const start = new Date(abs.startDate);
-        const end = abs.endDate ? new Date(abs.endDate) : (abs.isIndefinite ? new Date(start.getTime() + 86400000 * 30) : start);
-        const durationHours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
-        events.push({
-          id: abs.id,
-          title: abs.reason,
-          start,
-          end,
-          type: 'absence',
-          isAllDay: abs.isIndefinite || durationHours >= 12,
-          staffName: abs.staffMember?.displayName || abs.staffMember?.username,
-          avatarUrl: abs.staffMember?.avatarUrl,
-          raw: abs
-        });
-      });
-    }
-
-    if (visibleTypes.includes('call') && calendarData.calls) {
-      calendarData.calls.forEach((call: any) => {
-        events.push({
-          id: call.id,
-          title: call.title,
-          start: new Date(call.scheduledAt),
-          end: call.endedAt ? new Date(call.endedAt) : new Date(new Date(call.scheduledAt).getTime() + 1800000),
-          type: 'call',
-          isAllDay: false,
-          details: call.description,
-          raw: call
-        });
-      });
-    }
-
-    if (visibleTypes.includes('task') && calendarData.tasks) {
-      calendarData.tasks.forEach((task: any) => {
-        if (task.dueDate) {
-          events.push({
-            id: task.id,
-            title: task.title,
-            start: new Date(task.dueDate),
-            end: new Date(new Date(task.dueDate).getTime() + 1800000),
-            type: 'task',
-            isAllDay: false,
-            details: task.description,
-            raw: task
-          });
-        }
-      });
-    }
-
+    if (visibleTypes.includes('meeting')) calendarData.meetings.forEach(x => events.push(toEvent('meeting', x)));
+    if (visibleTypes.includes('absence')) calendarData.absences.forEach(x => events.push(toEvent('absence', x)));
+    if (visibleTypes.includes('call')) calendarData.calls.forEach(x => events.push(toEvent('call', x)));
+    if (visibleTypes.includes('task')) calendarData.tasks.filter(t => t.dueDate).forEach(x => events.push(toEvent('task', x)));
     return events;
   });
 
-  // Mini calendar helpers
+  const typeCounts = $derived<Record<PlanningType, number>>({
+    meeting: calendarData.meetings.length,
+    call: calendarData.calls.length,
+    absence: calendarData.absences.length,
+    task: calendarData.tasks.filter(t => t.dueDate).length,
+  });
+
+  const todayAgenda = $derived(
+    [...todayData.meetings.map(x => toEvent('meeting', x)), ...todayData.calls.map(x => toEvent('call', x))]
+      .sort((a, b) => a.start.getTime() - b.start.getTime()),
+  );
+  const absentToday = $derived(todayData.absences.filter(a => a.status !== 'REJECTED'));
+  const pendingTasks = $derived(userTasks.filter(t => t.status !== 'COMPLETED'));
+  const doneTasks = $derived(userTasks.filter(t => t.status === 'COMPLETED'));
+
+  // Mini calendrier
   const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
   function isToday(date: Date) {
-    const t = new Date();
-    return date.getDate() === t.getDate() && date.getMonth() === t.getMonth() && date.getFullYear() === t.getFullYear();
+    return isSameDay(date, new Date());
   }
 
   function isSameDay(a: Date, b: Date) {
     return a.getDate() === b.getDate() && a.getMonth() === b.getMonth() && a.getFullYear() === b.getFullYear();
+  }
+
+  function isOverdue(task: any) {
+    return task.dueDate && task.status !== 'COMPLETED' && new Date(task.dueDate).getTime() < Date.now();
   }
 
   const miniCalDays = $derived.by(() => {
@@ -556,15 +547,10 @@
     const firstDay = new Date(year, month, 1).getDay();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     const offset = firstDay === 0 ? 6 : firstDay - 1;
-
     const days: { date: Date; isCurrentMonth: boolean }[] = [];
     const prevDays = new Date(year, month, 0).getDate();
-    for (let i = offset - 1; i >= 0; i--) {
-      days.push({ date: new Date(year, month - 1, prevDays - i), isCurrentMonth: false });
-    }
-    for (let i = 1; i <= daysInMonth; i++) {
-      days.push({ date: new Date(year, month, i), isCurrentMonth: true });
-    }
+    for (let i = offset - 1; i >= 0; i--) days.push({ date: new Date(year, month - 1, prevDays - i), isCurrentMonth: false });
+    for (let i = 1; i <= daysInMonth; i++) days.push({ date: new Date(year, month, i), isCurrentMonth: true });
     while (days.length % 7 !== 0) {
       const nextDay = days.length - offset - daysInMonth + 1;
       days.push({ date: new Date(year, month + 1, nextDay), isCurrentMonth: false });
@@ -572,43 +558,30 @@
     return days;
   });
 
-  function navigateToDate(date: Date) {
-    calendarCurrentDate = new Date(date);
-  }
-
-  function miniCalPrev() {
-    miniCalDate = new Date(miniCalDate.getFullYear(), miniCalDate.getMonth() - 1, 1);
-  }
-
-  function miniCalNext() {
-    miniCalDate = new Date(miniCalDate.getFullYear(), miniCalDate.getMonth() + 1, 1);
-  }
-
+  // ── Fuseaux ─────────────────────────────────────────────
   // Fuseau utilise pour lire et rendre les inputs `datetime-local` du formulaire
   // de creation et de la modale d'edition.
   //
   // Seule une reunion porte son propre fuseau, et le selecteur n'apparait que
-  // sur cet onglet-la. Le retenir au-dela ferait lire une absence, un appel ou
+  // pour ce type-la. Le retenir au-dela ferait lire une absence, un appel ou
   // une tache dans le fuseau d'une reunion creee juste avant, alors que le
   // libelle affiche sous le champ annonce celui du serveur.
   const activeTimezone = $derived(
     meetingEditModalOpen
       ? (editMeetingTimezone ?? timezoneStore.timezone)
-      : creationModalOpen && currentTab === 'meeting'
+      : creationModalOpen && createType === 'meeting'
         ? (formTimezone ?? timezoneStore.timezone)
         : timezoneStore.timezone,
   );
   const formatLocal = (date: Date) => formatWallClockInTimezone(date, activeTimezone);
-  const parseLocal = (input: string): Date =>
-    parseDateTimeInTimezone(input, activeTimezone) ?? new Date();
+  const parseLocal = (input: string): Date => parseDateTimeInTimezone(input, activeTimezone) ?? new Date();
 
   /**
    * Un rappel ne porte pas de fuseau propre : il se lit toujours dans celui du
    * serveur. Il vit hors des deux modales, donc `activeTimezone` ne le decrit
    * pas - c'est ce qui le faisait heriter du fuseau de la derniere reunion.
    */
-  const parseServerLocal = (input: string): Date =>
-    parseDateTimeInTimezone(input, timezoneStore.timezone) ?? new Date();
+  const parseServerLocal = (input: string): Date => parseDateTimeInTimezone(input, timezoneStore.timezone) ?? new Date();
 
   /** Meme heure au mur, relue dans un autre fuseau. */
   function reinterpretWallClock(date: Date, from: string, to: string): Date {
@@ -616,38 +589,28 @@
   }
 
   /**
-   * Changer le fuseau reinterprete l'heure affichee, il ne la reecrit pas.
-   *
-   * L'etiquette sous les champs annonce « Heure interpretee dans {zone} » :
+   * Changer le fuseau reinterprete l'heure affichee, il ne la reecrit pas :
    * declarer une reunion sur Montreal apres avoir tape 15:00 doit donner 15:00
-   * a Montreal. Or ces champs portent un instant, pas une heure au mur, et le
-   * rendu suit le fuseau courant : l'affichage sautait donc a 09:00 - le meme
-   * instant vu d'ailleurs - et la reunion restait a l'heure d'origine. Le
-   * formulaire d'edition, lui, garde des chaines et se comportait deja ainsi.
-   *
-   * Passe par le binding plutot que par un effet sur `formTimezone` : seul un
-   * choix explicite dans le selecteur doit deplacer les dates. Un effet aurait
-   * aussi reagi a l'arrivee du fuseau du serveur et a la reinitialisation du
-   * formulaire, qui ne doivent rien deplacer du tout.
+   * a Montreal. Passe par le binding plutot que par un effet sur `formTimezone` :
+   * seul un choix explicite dans le selecteur doit deplacer les dates.
    */
   function applyFormTimezone(zone: string | null): void {
     const previous = formTimezone ?? timezoneStore.timezone;
     const next = zone ?? timezoneStore.timezone;
     formTimezone = zone;
     if (previous === next) return;
-
     selectedStartDate = reinterpretWallClock(selectedStartDate, previous, next);
     selectedEndDate = reinterpretWallClock(selectedEndDate, previous, next);
   }
 
-  // Data loading
+  // ── Chargement ──────────────────────────────────────────
   async function loadData() {
     loading = true;
     try {
       const [membersData, rolesData, callPermData] = await Promise.all([
         fetchStaffMembers(),
         fetchStaffRoles(),
-        fetchCallPermissionConfig().catch(() => null)
+        fetchCallPermissionConfig().catch(() => null),
       ]);
       allStaff = membersData?.members || [];
       allRoles = rolesData?.roles || [];
@@ -655,7 +618,6 @@
       if (callPermData) {
         callPermConfig = callPermData.config;
         callPermCanCreate = callPermData.canCreate;
-
         const usersMap = new Map();
         for (const uid of callPermData.config?.allowedUserIds || []) {
           const staff = allStaff.find((s: any) => s.userId === uid);
@@ -664,13 +626,10 @@
         permSelectedUsersMap = usersMap;
       }
 
-      if (myStaffRecord) {
-        selectedStaffIds = [myStaffRecord.id];
-      } else if (allStaff.length > 0) {
-        selectedStaffIds = [allStaff[0].id];
-      }
+      if (myStaffRecord) selectedStaffIds = [myStaffRecord.id];
+      else if (allStaff.length > 0) selectedStaffIds = [allStaff[0].id];
 
-      await Promise.all([refreshCalendar(), refreshTasks()]);
+      await refreshAll();
     } catch (e) {
       console.error('Failed to load initial data:', e);
     } finally {
@@ -680,43 +639,57 @@
 
   async function refreshCalendar() {
     try {
-      const data = await fetchStaffCalendarData(currentRangeStart, currentRangeEnd, selectedStaffIds);
-      calendarData = {
-        absences: data?.absences || [],
-        voiceSessions: data?.voiceSessions || [],
-        meetings: data?.meetings || [],
-        calls: data?.calls || [],
-        tasks: data?.tasks || []
-      };
+      calendarData = normalize(await fetchStaffCalendarData(currentRangeStart, currentRangeEnd, selectedStaffIds));
     } catch (e) {
       console.error('Failed to load calendar data:', e);
     }
   }
 
+  async function refreshToday() {
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(start);
+    end.setHours(23, 59, 59, 999);
+    try {
+      todayData = normalize(await fetchStaffCalendarData(start, end));
+    } catch (e) {
+      console.error('Failed to load today data:', e);
+    }
+  }
+
   async function refreshTasks() {
     try {
-      if (myStaffRecord) {
-        const data = await fetchTasks(myStaffRecord.id);
-        userTasks = data.tasks || [];
-      }
+      if (myStaffRecord) userTasks = (await fetchTasks(myStaffRecord.id)).tasks || [];
     } catch (e) {
       console.error('Failed to load tasks:', e);
     }
   }
 
-  async function handleAddReminder() {
+  async function refreshAll() {
+    await Promise.all([refreshCalendar(), refreshTasks(), refreshToday()]);
+  }
+
+  /** Relit l'element ouvert apres un rechargement, pour que la fiche suive. */
+  function syncDetail() {
+    if (!currentItemDetail) return;
+    const list = (calendarData as any)[currentItemDetail.type + 's'] as any[] | undefined;
+    const updated = list?.find(x => x.id === currentItemDetail.raw.id) || userTasks.find(x => x.id === currentItemDetail.raw.id);
+    if (updated) currentItemDetail = { ...currentItemDetail, raw: updated };
+  }
+
+  // ── Rappels ─────────────────────────────────────────────
+  async function handleAddReminder(event: SubmitEvent) {
+    event.preventDefault();
     if (!newReminderTime || !newReminderMessage.trim()) {
-      toast.error('Date/heure et message requis');
+      toast.error(m.planning_reminder_required());
       return;
     }
-
     try {
       const payload: any = {
         message: newReminderMessage,
         targetTime: parseServerLocal(newReminderTime).toISOString(),
         channelId: newReminderChannel === 'CURRENT' ? currentItemDetail.raw.discordChannelId || null : null,
       };
-
       if (currentItemDetail.type === 'task') payload.taskId = currentItemDetail.raw.id;
       else if (currentItemDetail.type === 'call') payload.callId = currentItemDetail.raw.id;
       else if (currentItemDetail.type === 'meeting') payload.meetingId = currentItemDetail.raw.id;
@@ -725,15 +698,8 @@
       toast.success(m.planning_reminder_created());
       newReminderMessage = '';
       newReminderTime = '';
-      
-      await Promise.all([refreshCalendar(), refreshTasks()]);
-      
-      // Update currentItemDetail to show the new reminder immediately
-      const updatedItem = calendarData[currentItemDetail.type + 's']?.find((x: any) => x.id === currentItemDetail.raw.id)
-        || userTasks.find((x: any) => x.id === currentItemDetail.raw.id);
-      if (updatedItem) {
-        currentItemDetail = { ...currentItemDetail, raw: updatedItem };
-      }
+      await refreshAll();
+      syncDetail();
     } catch (e) {
       console.error('Failed to create reminder:', e);
       toast.error(errorMessage(e) || m.planning_reminder_err_create());
@@ -744,18 +710,11 @@
     try {
       await deleteReminder(reminderId);
       toast.success(m.planning_reminder_deleted());
-      
-      await Promise.all([refreshCalendar(), refreshTasks()]);
-      
-      // Update currentItemDetail to remove the reminder immediately
-      const updatedItem = calendarData[currentItemDetail.type + 's']?.find((x: any) => x.id === currentItemDetail.raw.id)
-        || userTasks.find((x: any) => x.id === currentItemDetail.raw.id);
-      if (updatedItem) {
-        currentItemDetail = { ...currentItemDetail, raw: updatedItem };
-      }
+      await refreshAll();
+      syncDetail();
     } catch (e) {
       console.error('Failed to delete reminder:', e);
-      toast.error(errorMessage(e) || 'Impossible de supprimer le rappel');
+      toast.error(errorMessage(e) || m.planning_reminder_err_delete());
     }
   }
 
@@ -767,23 +726,22 @@
 
   function handleEventClick(event: any) {
     currentItemDetail = event;
+    newReminderMessage = '';
+    newReminderTime = '';
     detailModalOpen = true;
   }
 
   /**
-   * Creneau propose a l'ouverture du formulaire.
-   *
-   * Il partait de l'instant d'ouverture de la modale. Le temps de saisir un
-   * titre, cet instant etait passe : Discord refuse un evenement planifie dans
-   * le passe, et la creation echouait sur un « Invalid Form Body » que rien ne
-   * reliait a la cause. Une heure d'avance, comme le formulaire de la page
-   * Reunions.
+   * Creneau propose a l'ouverture du formulaire : une heure d'avance. Partir
+   * de l'instant d'ouverture laissait passer l'heure le temps de saisir un
+   * titre, et Discord refuse un evenement planifie dans le passe.
    */
   function defaultStart(): Date {
     return new Date(Date.now() + 3600000);
   }
 
-  function openCreateModal(start: Date, end?: Date) {
+  function openCreateModal(start: Date, end?: Date, type: PlanningType = currentTab) {
+    createType = type === 'call' && !callPermCanCreate ? 'meeting' : type;
     selectedStartDate = start;
     selectedEndDate = end || new Date(start.getTime() + 3600000);
     formTitle = '';
@@ -806,8 +764,15 @@
     creationModalOpen = true;
   }
 
-  async function handleCreateItem() {
-    if (!formTitle && currentTab !== 'absence') {
+  function setDuration(minutes: number) {
+    selectedEndDate = new Date(selectedStartDate.getTime() + minutes * 60000);
+  }
+
+  const durationMinutes = $derived(Math.round((selectedEndDate.getTime() - selectedStartDate.getTime()) / 60000));
+
+  async function handleCreateItem(event?: SubmitEvent) {
+    event?.preventDefault();
+    if (!formTitle && createType !== 'absence') {
       formError = m.planning_err_title_required();
       return;
     }
@@ -815,28 +780,24 @@
     formError = '';
 
     try {
-      if (currentTab === 'meeting') {
+      if (createType === 'meeting') {
         // Un creneau du calendrier peut lui aussi etre deja passe. Le dire ici
         // vaut mieux que de laisser remonter le refus brut de Discord.
         if (selectedStartDate.getTime() <= Date.now()) {
           formError = m.planning_err_meeting_in_past();
-          saving = false;
           return;
         }
-        // Seul l'onglet Absence testait l'ordre des deux dates. La page
-        // Reunions le fait aussi, avec ce meme libelle et ce meme test.
         if (selectedEndDate.getTime() <= selectedStartDate.getTime()) {
           formError = m.meetings_err_end_before_start();
-          saving = false;
           return;
         }
         const ok = await createMeeting(formTitle, formDescription, selectedStartDate.toISOString(), selectedEndDate.toISOString(), formTimezone);
         if (!ok) throw new Error(m.planning_err_create_meeting());
-      } else if (currentTab === 'absence') {
-        if (!myStaffRecord) { formError = m.planning_err_not_staff(); saving = false; return; }
-        if (!formDescription.trim()) { formError = m.planning_err_absence_reason(); saving = false; return; }
-        if (!formSuperiorId) { formError = m.planning_err_superior_required(); saving = false; return; }
-        if (selectedEndDate && selectedEndDate < selectedStartDate) { formError = m.planning_err_end_before_start(); saving = false; return; }
+      } else if (createType === 'absence') {
+        if (!myStaffRecord) { formError = m.planning_err_not_staff(); return; }
+        if (!formDescription.trim()) { formError = m.planning_err_absence_reason(); return; }
+        if (!formSuperiorId) { formError = m.planning_err_superior_required(); return; }
+        if (selectedEndDate && selectedEndDate < selectedStartDate) { formError = m.planning_err_end_before_start(); return; }
         await createAbsence({
           staffUserId: myStaffRecord.userId,
           startDate: selectedStartDate.toISOString(),
@@ -844,10 +805,10 @@
           reason: formDescription.trim(),
           type: formAbsenceType,
           superiorUserId: formSuperiorId,
-          confirmIndefinite: !selectedEndDate
+          confirmIndefinite: !selectedEndDate,
         });
-      } else if (currentTab === 'call') {
-        if (!callPermCanCreate) { formError = m.planning_err_no_call_permission(); saving = false; return; }
+      } else if (createType === 'call') {
+        if (!callPermCanCreate) { formError = m.planning_err_no_call_permission(); return; }
         await createCall({
           title: formTitle,
           description: formDescription,
@@ -856,20 +817,20 @@
           channelType: formChannelMode === 'CREATE_NEW' ? formChannelType : null,
           discordChannelId: formChannelMode === 'EXISTING' ? formDiscordChannelId : null,
           isTempChannel: formIsTempChannel,
-          inviteeUserIds: [...formInviteeUserIds, ...formInviteeMemberIds]
+          inviteeUserIds: [...formInviteeUserIds, ...formInviteeMemberIds],
         });
-      } else if (currentTab === 'task') {
+      } else {
         await createTask({
           title: formTitle,
           description: formDescription,
           priority: formPriority,
           dueDate: selectedStartDate ? selectedStartDate.toISOString() : null,
-          assigneeId: formAssigneeId
+          assigneeId: formAssigneeId,
         });
       }
 
       creationModalOpen = false;
-      await Promise.all([refreshCalendar(), refreshTasks()]);
+      await refreshAll();
     } catch (err) {
       console.error(err);
       formError = errorMessage(err) || m.planning_err_create_generic();
@@ -878,12 +839,43 @@
     }
   }
 
+  // ── Taches ──────────────────────────────────────────────
+  async function addQuickTask(event: SubmitEvent) {
+    event.preventDefault();
+    const title = quickTaskTitle.trim();
+    if (!title || !myStaffRecord) return;
+    quickTaskSaving = true;
+    try {
+      await createTask({ title, priority: 'MEDIUM', dueDate: null, assigneeId: myStaffRecord.id });
+      quickTaskTitle = '';
+      await refreshAll();
+    } catch (e) {
+      toast.error(errorMessage(e) || m.planning_err_create_generic());
+    } finally {
+      quickTaskSaving = false;
+    }
+  }
+
   async function toggleTaskCompletion(task: any) {
     const nextStatus = task.status === 'COMPLETED' ? 'PENDING' : 'COMPLETED';
     try {
       await updateTask(task.id, { status: nextStatus });
-      await Promise.all([refreshCalendar(), refreshTasks()]);
-    } catch (e) { console.error(e); }
+      if (currentItemDetail?.raw?.id === task.id) currentItemDetail.raw.status = nextStatus;
+      await refreshAll();
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+  // ── Absences ────────────────────────────────────────────
+  async function decideAbsence(status: 'APPROVED' | 'REJECTED') {
+    const id = currentItemDetail?.raw?.id;
+    if (!id) return;
+    if (await updateAbsenceStatus(id, status, undefined)) {
+      toast.success(m.planning_absence_decided());
+      currentItemDetail.raw.status = status;
+      await refreshAll();
+    }
   }
 
   async function handleDeleteDetail() {
@@ -903,8 +895,10 @@
       else if (type === 'call') await deleteCall(id);
       else if (type === 'task') await deleteTask(id);
       detailModalOpen = false;
-      await Promise.all([refreshCalendar(), refreshTasks()]);
-    } catch (e) { console.error(e); }
+      await refreshAll();
+    } catch (e) {
+      console.error(e);
+    }
   }
 
   function toggleType(type: string) {
@@ -913,36 +907,28 @@
 
   function toggleStaff(staffId: string) {
     selectedStaffIds = selectedStaffIds.includes(staffId) ? selectedStaffIds.filter(id => id !== staffId) : [...selectedStaffIds, staffId];
-    refreshCalendar();
+    void refreshCalendar();
   }
 
   function toggleEveryone() {
     selectedStaffIds = selectedStaffIds.length === activeStaff.length ? [] : activeStaff.map(s => s.id);
-    refreshCalendar();
+    void refreshCalendar();
   }
 
-  function getTypeLabel(type: string) {
-    switch (type) {
-      case 'meeting': return m.planning_type_meeting();
-      case 'call': return m.planning_type_call();
-      case 'absence': return m.planning_type_absence();
-      case 'task': return m.planning_type_task();
-      default: return type;
-    }
+  function onlyMe() {
+    if (!myStaffRecord) return;
+    selectedStaffIds = [myStaffRecord.id];
+    void refreshCalendar();
   }
 
-  function getTypeColor(type: string) {
-    switch (type) {
-      case 'meeting': return 'emerald';
-      case 'call': return 'green';
-      case 'absence': return 'amber';
-      case 'task': return 'purple';
-      default: return 'slate';
-    }
-  }
+  const typeOptions = $derived<FilterOption<PlanningType>[]>(
+    (['meeting', 'call', 'absence', 'task'] as PlanningType[])
+      .filter(t => t !== 'call' || callPermCanCreate)
+      .map(t => ({ value: t, label: TYPE_META[t].label() })),
+  );
 
-  // Pending task count
-  const pendingTaskCount = $derived(userTasks.filter(t => t.status !== 'COMPLETED').length);
+  const formatTime = (date: Date) => date.toLocaleTimeString(dateLocale(), { hour: '2-digit', minute: '2-digit' });
+  const memberName = (x: any) => x?.displayName || x?.username || m.planning_member_fallback();
 
   onMount(() => {
     const handleDashboardRefresh = () => loadData();
@@ -950,170 +936,125 @@
     // Fuseau du serveur avant loadData : les formulaires seedent sinon leurs
     // dates en heure navigateur, puis basculent au chargement du store.
     void timezoneStore.ensureLoaded();
-    loadData();
+    void loadData();
     return () => window.removeEventListener('kotbo-dashboard-refresh-request', handleDashboardRefresh);
   });
 </script>
 
-<ModulePage
-  title={m.planning_page_title()}
-  description={m.planning_page_desc()}
-  icon="calendar"
-  featureKey="absences"
->
+{#snippet typeDot(type: string)}
+  <span class="pl-dot" style="--evt: {EVENT_TYPE_COLOR[type]}" aria-hidden="true"></span>
+{/snippet}
+
+{#snippet avatar(src: string | null | undefined, name: string, size = 'w-6 h-6')}
+  <img src={src || localInitialAvatar(name)} alt="" class="{size} rounded-full shrink-0" />
+{/snippet}
+
+<ModulePage title={m.planning_page_title()} description={m.planning_page_desc()} icon="calendar" featureKey="absences">
   {#snippet actions()}
-    <RefreshButton onClick={async () => { await Promise.all([refreshCalendar(), refreshTasks()]); }} loading={loading} label={m.planning_refresh()} />
-
-    <!-- Task panel toggle (Outlook "My Day") -->
-    <button
-      onclick={() => showTaskPanel = !showTaskPanel}
-      class="inline-flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold transition-all border {showTaskPanel ? 'bg-purple-500/10 border-purple-500/30 text-purple-400' : 'bg-surface-container border-outline-variant/20 text-on-surface-variant hover:text-on-surface'}"
-    >
-      <Papicon icon="check-square" size={14} />
+    <RefreshButton onClick={refreshAll} {loading} label={m.planning_refresh()} />
+    <Button variant={showTaskPanel ? 'secondary' : 'ghost'} icon="sun" aria-pressed={showTaskPanel} onclick={() => (showTaskPanel = !showTaskPanel)}>
       {m.planning_my_day()}
-      {#if pendingTaskCount > 0}
-        <span class="w-5 h-5 rounded-full bg-purple-500 text-white text-[10px] font-bold flex items-center justify-center">{pendingTaskCount}</span>
+      {#if pendingTasks.length > 0}
+        <span class="badge badge-info ml-1">{pendingTasks.length}</span>
       {/if}
-    </button>
-
+    </Button>
     {#if isAdmin}
-      <button
-        onclick={openPermissionModal}
-        class="inline-flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold transition-all border bg-surface-container border-outline-variant/20 text-on-surface-variant hover:text-on-surface"
-        title={m.planning_call_perms_tooltip()}
-      >
-        <Papicon icon="shield" size={14} />
-        {m.planning_call_perms_btn()}
-      </button>
+      <Button variant="ghost" icon="shield" title={m.planning_call_perms_tooltip()} onclick={openPermissionModal}>{m.planning_call_perms_btn()}</Button>
     {/if}
-
-    <ActionButton
-      onClick={() => openCreateModal(defaultStart())}
-      variant="primary"
-      icon="plus"
-      label={m.planning_new_event()}
-    />
+    <Button variant="primary" icon="plus" onclick={() => openCreateModal(defaultStart())}>{m.planning_new_event()}</Button>
   {/snippet}
 
   {#if loading && allStaff.length === 0}
-    <div class="flex flex-col items-center justify-center py-20 bg-surface-container-lowest rounded-xl border border-outline-variant/30">
-      <div class="w-12 h-12 border-4 border-primary/20 border-t-primary rounded-full animate-spin"></div>
-      <p class="mt-4 text-on-surface-variant font-medium">{m.planning_loading()}</p>
-      <LoadingHint context="data" />
+    <div class="flex flex-col xl:flex-row gap-4">
+      <Skeleton height="560px" radius="1rem" width="w-full xl:w-60" />
+      <Skeleton height="560px" radius="1rem" />
     </div>
   {:else}
-    <div class="flex flex-col xl:flex-row gap-5">
-
-      <!-- ===== LEFT SIDEBAR (Outlook-style: mini calendar + filters) ===== -->
-      <aside class="w-full xl:w-60 flex flex-col gap-4 shrink-0 {sidebarCollapsed ? 'xl:w-12' : ''}">
-
+    <div class="flex flex-col xl:flex-row gap-4">
+      <!-- ===== Colonne gauche : mini calendrier, calendriers, personnes ===== -->
+      <aside class="w-full flex flex-col gap-4 shrink-0 {sidebarCollapsed ? 'xl:w-10' : 'xl:w-64'}">
         {#if !sidebarCollapsed}
-          <!-- Mini Month Calendar -->
-          <div class="bg-surface-container-low p-4 rounded-xl border border-outline-variant/30 shadow-sm">
-            <div class="flex items-center justify-between mb-3">
-              <button onclick={miniCalPrev} class="w-6 h-6 flex items-center justify-center rounded hover:bg-surface-hover transition-colors">
-                <Papicon icon="chevron-left" size={14} class="text-on-surface-variant" />
-              </button>
-              <span class="text-2xs font-semibold text-on-surface capitalize">
+          <section class="section-card p-4">
+            <div class="flex items-center justify-between mb-2">
+              <Button variant="ghost" size="sm" icon="chevron-left" aria-label={m.cal_prev()} onclick={() => (miniCalDate = new Date(miniCalDate.getFullYear(), miniCalDate.getMonth() - 1, 1))} />
+              <span class="text-body-sm font-semibold text-on-surface">
                 {capitalize(miniCalDate.toLocaleDateString(dateLocale(), { month: 'long', year: 'numeric' }))}
               </span>
-              <button onclick={miniCalNext} class="w-6 h-6 flex items-center justify-center rounded hover:bg-surface-hover transition-colors">
-                <Papicon icon="chevron-right" size={14} class="text-on-surface-variant" />
-              </button>
+              <Button variant="ghost" size="sm" icon="chevron-right" aria-label={m.cal_next()} onclick={() => (miniCalDate = new Date(miniCalDate.getFullYear(), miniCalDate.getMonth() + 1, 1))} />
             </div>
-
-            <div class="grid grid-cols-7 gap-0">
-              {#each [m.planning_weekday_mon(), m.planning_weekday_tue(), m.planning_weekday_wed(), m.planning_weekday_thu(), m.planning_weekday_fri(), m.planning_weekday_sat(), m.planning_weekday_sun()] as day}
-                <div class="text-center text-2xs font-semibold text-on-surface-variant py-1">{day}</div>
+            <div class="grid grid-cols-7 text-center">
+              {#each [m.planning_weekday_mon(), m.planning_weekday_tue(), m.planning_weekday_wed(), m.planning_weekday_thu(), m.planning_weekday_fri(), m.planning_weekday_sat(), m.planning_weekday_sun()] as day, i (i)}
+                <span class="text-2xs font-semibold text-on-surface-variant py-1">{day}</span>
               {/each}
-              {#each miniCalDays as { date, isCurrentMonth }}
+              {#each miniCalDays as { date, isCurrentMonth } (date.toDateString())}
                 <button
-                  onclick={() => navigateToDate(date)}
-                  class="text-center text-2xs w-full aspect-square rounded-full flex items-center justify-center transition-all
- {isCurrentMonth ? 'text-on-surface hover:bg-primary/15' : 'text-on-surface-variant/25'}
-                    {isToday(date) ? 'bg-primary text-white font-bold hover:bg-primary/90' : ''}
-                    {isSameDay(date, calendarCurrentDate) && !isToday(date) ? 'ring-1.5 ring-primary/50 text-primary font-semibold' : ''}"
+                  type="button"
+                  onclick={() => (calendarCurrentDate = new Date(date))}
+                  aria-label={date.toLocaleDateString(dateLocale(), { day: 'numeric', month: 'long' })}
+                  class="pl-mini-day {isCurrentMonth ? 'text-on-surface' : 'text-on-surface-variant opacity-40'} {isToday(date) ? 'pl-mini-day--today' : ''} {isSameDay(date, calendarCurrentDate) && !isToday(date) ? 'pl-mini-day--selected' : ''}"
                 >
                   {date.getDate()}
                 </button>
               {/each}
             </div>
-          </div>
+          </section>
 
-          <!-- Calendars / Type Filters -->
-          <div class="bg-surface-container-low p-4 rounded-xl border border-outline-variant/30 shadow-sm">
-            <h3 class="text-xs font-semibold text-on-surface-variant mb-3">{m.planning_my_calendars()}</h3>
-            <div class="flex flex-col gap-1">
-              {#each [
-                { key: 'meeting', label: m.planning_cal_meetings(), color: 'emerald' },
-                { key: 'call', label: m.planning_cal_calls(), color: 'green' },
-                { key: 'absence', label: m.planning_cal_absences(), color: 'amber' },
-                { key: 'task', label: m.planning_cal_tasks(), color: 'purple' }
-              ] as { key, label, color }}
-                <button
-                  onclick={() => toggleType(key)}
-                  class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg transition-all text-left group {visibleTypes.includes(key) ? 'hover:bg-surface-hover' : 'opacity-40 hover:opacity-60'}"
-                >
-                  <div class="w-3.5 h-3.5 rounded flex items-center justify-center border transition-colors
- {color === 'emerald' ? (visibleTypes.includes(key) ? 'bg-emerald-500 border-success' : 'border-success/40') : ''}
-                    {color === 'green' ? (visibleTypes.includes(key) ? 'bg-green-500 border-success' : 'border-success/40') : ''}
-                    {color === 'amber' ? (visibleTypes.includes(key) ? 'bg-amber-500 border-warning' : 'border-warning/40') : ''}
-                    {color === 'purple' ? (visibleTypes.includes(key) ? 'bg-purple-500 border-purple-600' : 'border-purple-500/40') : ''}"
-                  >
-                    {#if visibleTypes.includes(key)}
-                      <Papicon icon="check" size={10} class="text-white" />
-                    {/if}
-                  </div>
-                  <span class="text-2xs font-semibold text-on-surface">{label}</span>
-                </button>
+          <section class="section-card p-4">
+            <h3 class="text-body-sm font-semibold text-on-surface mb-2">{m.planning_my_calendars()}</h3>
+            <ul class="flex flex-col gap-0.5">
+              {#each TYPES as type (type)}
+                <li>
+                  <label class="pl-filter" style="--evt: {EVENT_TYPE_COLOR[type]}">
+                    <input type="checkbox" class="pl-check" checked={visibleTypes.includes(type)} onchange={() => toggleType(type)} />
+                    <span class="flex-1 text-body-sm text-on-surface">{TYPE_META[type].calendar()}</span>
+                    <span class="text-2xs text-on-surface-variant tabular-nums">{typeCounts[type]}</span>
+                  </label>
+                </li>
               {/each}
-            </div>
-          </div>
+            </ul>
+          </section>
 
-          <!-- Staff Members -->
-          <div class="bg-surface-container-low p-4 rounded-xl border border-outline-variant/30 shadow-sm">
-            <div class="flex items-center justify-between mb-3">
-              <h3 class="text-xs font-semibold text-on-surface-variant">{m.planning_people()}</h3>
-              <button
-                onclick={toggleEveryone}
-                class="text-2xs font-semibold uppercase px-2 py-0.5 rounded transition-all {selectedStaffIds.length === activeStaff.length ? 'bg-primary/20 text-primary' : 'text-on-surface-variant hover:text-on-surface-variant'}"
-              >
-                {selectedStaffIds.length === activeStaff.length ? m.planning_select_none() : m.planning_select_all()}
-              </button>
+          <section class="section-card p-4">
+            <div class="flex items-center justify-between gap-2 mb-2">
+              <h3 class="text-body-sm font-semibold text-on-surface">{m.planning_people()}</h3>
+              <div class="flex gap-1">
+                {#if myStaffRecord}
+                  <Button variant="ghost" size="sm" onclick={onlyMe}>{m.planning_only_me()}</Button>
+                {/if}
+                <Button variant="ghost" size="sm" onclick={toggleEveryone}>
+                  {selectedStaffIds.length === activeStaff.length ? m.planning_select_none() : m.planning_select_all()}
+                </Button>
+              </div>
             </div>
-
-            <div class="flex flex-col gap-0.5 max-h-60 overflow-y-auto pr-1 custom-scrollbar">
-              {#each activeStaff as staff}
-                <button
-                  onclick={() => toggleStaff(staff.id)}
-                  class="flex items-center gap-2.5 px-2 py-1.5 rounded-lg transition-all hover:bg-surface-hover group {selectedStaffIds.includes(staff.id) ? '' : 'opacity-40'}"
-                >
-                  <div class="relative shrink-0">
-                    <img src={staff.avatarUrl || localInitialAvatar(staff.username)} alt="" class="w-6 h-6 rounded-full" />
-                    {#if selectedStaffIds.includes(staff.id)}
-                      <div class="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-primary rounded-full border-2 border-surface-container-low"></div>
-                    {/if}
-                  </div>
-                  <div class="flex-1 text-left min-w-0">
-                    <div class="text-2xs font-semibold text-on-surface truncate">{staff.displayName || staff.username}</div>
-                  </div>
-                </button>
+            {#if activeStaff.length > 8}
+              <input type="search" class="input mb-2 text-body-sm" bind:value={peopleQuery} placeholder={m.planning_people_search_ph()} aria-label={m.planning_people_search_ph()} />
+            {/if}
+            <ul class="flex flex-col gap-0.5 max-h-64 overflow-y-auto pr-1">
+              {#each filteredStaff as staff (staff.id)}
+                <li>
+                  <label class="pl-filter">
+                    <input type="checkbox" class="pl-check" checked={selectedStaffIds.includes(staff.id)} onchange={() => toggleStaff(staff.id)} />
+                    {@render avatar(staff.avatarUrl, staff.username)}
+                    <span class="flex-1 min-w-0 truncate text-body-sm text-on-surface">{memberName(staff)}</span>
+                  </label>
+                </li>
               {/each}
-            </div>
-          </div>
+            </ul>
+          </section>
         {/if}
 
-        <!-- Sidebar collapse toggle -->
-        <button
-          onclick={() => sidebarCollapsed = !sidebarCollapsed}
-          class="hidden xl:flex items-center justify-center w-full py-1.5 text-on-surface-variant/40 hover:text-on-surface-variant transition-colors rounded-lg hover:bg-surface-hover"
-        >
-          <Papicon icon={sidebarCollapsed ? 'chevrons-right' : 'chevrons-left'} size={14} />
-        </button>
+        <Button
+          variant="ghost"
+          size="sm"
+          class="hidden xl:inline-flex"
+          icon={sidebarCollapsed ? 'chevrons-right' : 'chevrons-left'}
+          aria-label={sidebarCollapsed ? m.planning_sidebar_expand() : m.planning_sidebar_collapse()}
+          onclick={() => (sidebarCollapsed = !sidebarCollapsed)}
+        />
       </aside>
 
-      <!-- ===== MAIN CALENDAR ===== -->
-      <main class="flex-1 min-w-0">
+      <!-- ===== Calendrier ===== -->
+      <main class="flex-1 min-w-0 space-y-2">
         <Calendar
           bind:view={calendarView}
           bind:currentDate={calendarCurrentDate}
@@ -1122,1060 +1063,762 @@
           onEventClick={handleEventClick}
           onDateClick={(start: any, end: any) => openCreateModal(start, end)}
         />
+        <p class="hidden md:block text-2xs text-on-surface-variant">{m.planning_shortcuts_hint()}</p>
       </main>
 
-      <!-- ===== RIGHT PANEL: Tasks / "Ma Journée" (Outlook-style) ===== -->
+      <!-- ===== Ma journee ===== -->
       {#if showTaskPanel}
-        <aside class="w-full xl:w-72 flex flex-col gap-0 shrink-0">
-          <div class="bg-surface-container-low rounded-xl border border-outline-variant/30 shadow-sm flex flex-col overflow-hidden" style="height: 75vh; min-height: 600px;">
-            <!-- Panel Header -->
-            <div class="px-5 py-3.5 border-b border-outline-variant/20 flex items-center justify-between shrink-0">
-              <div class="flex items-center gap-2.5">
-                <div class="w-7 h-7 bg-purple-500/15 rounded-lg flex items-center justify-center">
-                  <Papicon icon="sun" size={14} class="text-purple-400" />
-                </div>
-                <div>
-                  <h3 class="text-xs font-bold text-on-surface leading-tight">{m.planning_my_day()}</h3>
-                  <p class="text-2xs text-on-surface-variant font-medium">
-                    {new Date().toLocaleDateString(dateLocale(), { weekday: 'long', day: 'numeric', month: 'long' })}
-                  </p>
-                </div>
+        <aside class="w-full xl:w-80 shrink-0">
+          <div class="section-card flex flex-col xl:max-h-[75vh] overflow-hidden">
+            <header class="px-4 py-3 border-b border-outline-variant flex items-center justify-between">
+              <div>
+                <h2 class="text-body-sm font-semibold text-on-surface">{m.planning_my_day()}</h2>
+                <p class="text-2xs text-on-surface-variant">
+                  {capitalize(new Date().toLocaleDateString(dateLocale(), { weekday: 'long', day: 'numeric', month: 'long' }))}
+                </p>
               </div>
-              <button
-                onclick={() => showTaskPanel = false}
-                class="w-6 h-6 rounded flex items-center justify-center hover:bg-surface-hover transition-colors"
-              >
-                <Papicon icon="x" size={14} class="text-on-surface-variant" />
-              </button>
-            </div>
+              <Button variant="ghost" size="sm" icon="x" aria-label={m.planning_close_aria()} onclick={() => (showTaskPanel = false)} />
+            </header>
 
-            <!-- Tasks List -->
-            <div class="flex-1 overflow-y-auto custom-scrollbar px-3 py-3">
-              {#if userTasks.length === 0}
-                <div class="flex flex-col items-center justify-center h-full text-center p-6 text-on-surface-variant/30">
-                  <Papicon icon="check-circle" size={40} class="mb-3" />
-                  <p class="text-xs font-semibold">{m.planning_no_task()}</p>
-                  <p class="text-2xs mt-1">{m.planning_day_free()}</p>
-                </div>
-              {:else}
-                <div class="flex flex-col gap-1.5">
-                  {#each userTasks as task}
-                    <div class="group flex items-start gap-2.5 p-2.5 rounded-lg transition-all hover:bg-surface-hover/50 {task.status === 'COMPLETED' ? 'opacity-50' : ''}">
-                      <button
-                        onclick={() => toggleTaskCompletion(task)}
-                        class="mt-0.5 w-4.5 h-4.5 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors
- {task.status === 'COMPLETED' ? 'border-purple-500 bg-purple-500' : 'border-on-surface-variant/30 hover:border-purple-500'}"
-                      >
-                        {#if task.status === 'COMPLETED'}
-                          <Papicon icon="check" size={10} class="text-white" />
-                        {/if}
-                      </button>
-                      <button
-                        onclick={() => handleEventClick({
-                          id: task.id,
-                          title: task.title,
-                          start: task.dueDate ? new Date(task.dueDate) : new Date(),
-                          end: task.dueDate ? new Date(new Date(task.dueDate).getTime() + 1800000) : new Date(Date.now() + 1800000),
-                          type: 'task',
-                          isAllDay: false,
-                          details: task.description,
-                          raw: task
-                        })}
-                        class="text-left flex-1 min-w-0 border-none bg-transparent cursor-pointer p-0 block w-full focus:outline-none"
-                      >
-                        <p class="text-2xs font-semibold text-on-surface leading-tight {task.status === 'COMPLETED' ? 'line-through text-on-surface-variant' : ''}">{task.title}</p>
-                        {#if task.description}
-                          <p class="text-2xs text-on-surface-variant line-clamp-1 mt-0.5">{task.description}</p>
-                        {/if}
-                        <div class="flex items-center gap-2 mt-1.5">
-                          {#if task.priority === 'HIGH'}
-                            <span class="text-xs font-semibold text-error flex items-center gap-0.5">
-                              <Papicon icon="alert-triangle" size={9} /> {m.planning_task_important()}
-                            </span>
-                          {/if}
-                          {#if task.dueDate}
-                            <span class="text-2xs text-on-surface-variant flex items-center gap-0.5 font-medium">
-                              <Papicon icon="calendar" size={9} />
-                              {new Date(task.dueDate).toLocaleDateString(dateLocale(), { day: 'numeric', month: 'short' })}
-                            </span>
-                          {/if}
-                        </div>
-                      </button>
-                    </div>
-                  {/each}
-                </div>
+            <div class="flex-1 overflow-y-auto px-4 py-3 space-y-5">
+              <section>
+                <h3 class="pl-section-title">{m.planning_today_title()}</h3>
+                {#if todayAgenda.length === 0}
+                  <p class="text-2xs text-on-surface-variant">{m.planning_today_empty()}</p>
+                {:else}
+                  <ul class="space-y-1">
+                    {#each todayAgenda as event (event.type + event.id)}
+                      <li>
+                        <button type="button" class="pl-row" onclick={() => handleEventClick(event)}>
+                          <span class="w-11 shrink-0 text-2xs font-medium text-on-surface-variant tabular-nums">{formatTime(event.start)}</span>
+                          {@render typeDot(event.type)}
+                          <span class="flex-1 min-w-0 truncate text-body-sm text-on-surface {event.end.getTime() < Date.now() ? 'opacity-60' : ''}">{event.title}</span>
+                        </button>
+                      </li>
+                    {/each}
+                  </ul>
+                {/if}
+              </section>
+
+              {#if absentToday.length > 0}
+                <section>
+                  <h3 class="pl-section-title">{m.planning_absent_today()} · {absentToday.length}</h3>
+                  <ul class="space-y-1">
+                    {#each absentToday as absence (absence.id)}
+                      <li>
+                        <button type="button" class="pl-row" onclick={() => handleEventClick(toEvent('absence', absence))}>
+                          {@render avatar(absence.staffMember?.avatarUrl, absence.staffMember?.username ?? '', 'w-5 h-5')}
+                          <span class="flex-1 min-w-0 truncate text-body-sm text-on-surface">{memberName(absence.staffMember)}</span>
+                          <span class="text-2xs text-on-surface-variant truncate max-w-24">{absence.type || ''}</span>
+                        </button>
+                      </li>
+                    {/each}
+                  </ul>
+                </section>
               {/if}
+
+              <section>
+                <h3 class="pl-section-title">{m.planning_my_tasks()} · {pendingTasks.length}</h3>
+                {#if myStaffRecord}
+                  <form class="mb-2" onsubmit={addQuickTask}>
+                    <input
+                      class="input text-body-sm"
+                      bind:value={quickTaskTitle}
+                      maxlength="200"
+                      disabled={quickTaskSaving}
+                      placeholder={m.planning_quick_task_ph()}
+                      aria-label={m.planning_add_task()}
+                    />
+                  </form>
+                {/if}
+                {#if pendingTasks.length === 0}
+                  <p class="text-2xs text-on-surface-variant">{m.planning_no_task()} · {m.planning_day_free()}</p>
+                {:else}
+                  <ul class="space-y-0.5">
+                    {#each pendingTasks as task (task.id)}
+                      {@render taskRow(task)}
+                    {/each}
+                  </ul>
+                {/if}
+                {#if doneTasks.length > 0}
+                  <button type="button" class="mt-2 inline-flex items-center gap-1 text-2xs font-medium text-on-surface-variant hover:text-on-surface" aria-expanded={showDoneTasks} onclick={() => (showDoneTasks = !showDoneTasks)}>
+                    <Papicon icon={showDoneTasks ? 'chevron-down' : 'chevron-right'} size={12} />
+                    {m.planning_tasks_done({ count: doneTasks.length })}
+                  </button>
+                  {#if showDoneTasks}
+                    <ul class="space-y-0.5 mt-1">
+                      {#each doneTasks as task (task.id)}
+                        {@render taskRow(task)}
+                      {/each}
+                    </ul>
+                  {/if}
+                {/if}
+              </section>
             </div>
 
-            <!-- Add Task -->
-            <div class="px-3 py-3 border-t border-outline-variant/15 shrink-0">
-              <button
-                onclick={() => { gotoTab('/planning', 'task', 'meeting'); openCreateModal(defaultStart()); }}
-                class="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-2xs font-semibold text-purple-400 hover:bg-purple-500/10 transition-colors"
-              >
-                <Papicon icon="plus" size={14} />
-                {m.planning_add_task()}
-              </button>
-            </div>
+            <footer class="px-4 py-2 border-t border-outline-variant">
+              <Button variant="ghost" size="sm" icon="plus" fullWidth onclick={() => openCreateModal(defaultStart(), undefined, 'task')}>{m.planning_add_task()}</Button>
+            </footer>
           </div>
         </aside>
       {/if}
     </div>
   {/if}
+</ModulePage>
 
-  <!-- ===== CREATION MODAL ===== -->
-  {#if creationModalOpen}
-    <div class="fixed inset-0 z-100 flex items-center justify-center p-4">
-      <button type="button" class="absolute inset-0 bg-black/50 border-none cursor-default" onclick={() => creationModalOpen = false} aria-label={m.planning_close_aria()}></button>
+{#snippet taskRow(task: any)}
+  <li class="flex items-start gap-2 rounded-lg px-1 py-1.5 hover:bg-surface-container">
+    <input
+      type="checkbox"
+      class="pl-check mt-0.5"
+      style="--evt: {EVENT_TYPE_COLOR.task}"
+      checked={task.status === 'COMPLETED'}
+      onchange={() => toggleTaskCompletion(task)}
+      aria-label={task.status === 'COMPLETED' ? m.planning_task_mark_todo() : m.planning_task_mark_done()}
+    />
+    <button type="button" class="flex-1 min-w-0 text-left" onclick={() => handleEventClick(toEvent('task', task))}>
+      <span class="block text-body-sm text-on-surface wrap-break-word {task.status === 'COMPLETED' ? 'line-through text-on-surface-variant' : ''}">{task.title}</span>
+      {#if task.priority === 'HIGH' || task.dueDate}
+        <span class="flex flex-wrap items-center gap-2 mt-0.5 text-2xs">
+          {#if task.priority === 'HIGH'}
+            <span class="text-error font-medium">{m.planning_task_important()}</span>
+          {/if}
+          {#if task.dueDate}
+            <span class={isOverdue(task) ? 'text-error font-medium' : 'text-on-surface-variant'}>
+              {new Date(task.dueDate).toLocaleDateString(dateLocale(), { day: 'numeric', month: 'short' })}{isOverdue(task) ? ` · ${m.planning_task_overdue()}` : ''}
+            </span>
+          {/if}
+        </span>
+      {/if}
+    </button>
+  </li>
+{/snippet}
 
-      <div class="relative w-full max-w-xl bg-surface-container-lowest rounded-xl shadow-2xl overflow-hidden border border-outline-variant/30 animate-in fade-in duration-200">
+<!-- ===== Creation ===== -->
+<Modal bind:open={creationModalOpen} title={m.planning_new_event()} size="lg">
+  <form id="pl-create" class="space-y-4" onsubmit={handleCreateItem}>
+    <FilterPills label={m.planning_type_aria()} options={typeOptions} value={createType} onchange={(v) => { createType = v; formError = ''; }} />
 
-        <!-- Header -->
-        <div class="px-6 py-4 border-b border-outline-variant/15 bg-surface-container-low flex justify-between items-center">
-          <h3 class="text-sm font-bold text-on-surface">{m.planning_new_event()}</h3>
-          <button onclick={() => creationModalOpen = false} class="w-7 h-7 rounded-md hover:bg-surface-hover flex items-center justify-center transition-colors">
-            <Papicon icon="x" size={16} />
-          </button>
+    {#if createType !== 'absence'}
+      <input class="input text-base font-semibold" bind:value={formTitle} placeholder={m.planning_title_ph()} aria-label={m.planning_title_ph()} />
+    {/if}
+
+    <div class="space-y-2">
+      <div class="flex flex-wrap items-center gap-2">
+        <Papicon icon="clock" size={16} class="text-on-surface-variant shrink-0" />
+        <input
+          type="datetime-local"
+          class="input w-auto"
+          aria-label={m.meetings_field_start_label()}
+          value={formatLocal(selectedStartDate)}
+          onchange={(e) => {
+            const duration = selectedEndDate.getTime() - selectedStartDate.getTime();
+            selectedStartDate = parseLocal((e.target as HTMLInputElement).value);
+            // Deplacer le debut garde la duree, comme dans un agenda.
+            if (duration > 0) selectedEndDate = new Date(selectedStartDate.getTime() + duration);
+          }}
+        />
+        {#if createType !== 'task'}
+          <span class="text-on-surface-variant">–</span>
+          <input
+            type="datetime-local"
+            class="input w-auto"
+            aria-label={m.meetings_field_end_label()}
+            value={formatLocal(selectedEndDate)}
+            onchange={(e) => (selectedEndDate = parseLocal((e.target as HTMLInputElement).value))}
+          />
+        {/if}
+      </div>
+      {#if createType === 'meeting' || createType === 'call'}
+        <div class="flex flex-wrap items-center gap-1.5 pl-6" role="group" aria-label={m.planning_duration()}>
+          {#each [30, 60, 120] as minutes (minutes)}
+            <button
+              type="button"
+              class="pl-chip {durationMinutes === minutes ? 'pl-chip--active' : ''}"
+              aria-pressed={durationMinutes === minutes}
+              onclick={() => setDuration(minutes)}
+            >
+              {minutes === 30 ? m.planning_duration_30() : minutes === 60 ? m.planning_duration_60() : m.planning_duration_120()}
+            </button>
+          {/each}
+        </div>
+      {/if}
+      {#if timezoneStore.loaded && createType === 'meeting'}
+        <div class="pl-6">
+          <TimezoneHint bind:value={() => formTimezone, (zone) => applyFormTimezone(zone)} />
+        </div>
+      {:else if timezoneStore.loaded}
+        <p class="pl-6 text-2xs text-on-surface-variant">
+          {#if timezoneStore.differsFromBrowser}
+            {m.planning_datetime_hint_diff({ server: timezoneStore.timezone, browser: timezoneStore.browserTimezone })}
+          {:else}
+            {m.planning_datetime_hint_same({ zone: timezoneStore.timezone })}
+          {/if}
+        </p>
+      {/if}
+    </div>
+
+    <textarea
+      class="input resize-none"
+      rows="3"
+      bind:value={formDescription}
+      aria-label={createType === 'absence' ? m.planning_absence_reason_ph() : m.planning_description_ph()}
+      placeholder={createType === 'absence' ? m.planning_absence_reason_ph() : m.planning_description_ph()}
+    ></textarea>
+
+    {#if createType === 'absence'}
+      <div class="grid gap-3 sm:grid-cols-2">
+        <select class="input" bind:value={formAbsenceType} aria-label={m.planning_absence_type_default()}>
+          <option value="Vacances">{m.planning_absence_type_holidays()}</option>
+          <option value="Maladie">{m.planning_absence_type_sick()}</option>
+          <option value="Examens">{m.planning_absence_type_exams()}</option>
+          <option value="Autre">{m.planning_absence_type_other()}</option>
+        </select>
+        <SearchableSelect
+          bind:value={formSuperiorId}
+          options={eligibleSuperiors.map(s => ({ id: s.userId, name: memberName(s) }))}
+          placeholder={m.planning_superior_ph()}
+          showId={false}
+          className="w-full"
+        />
+      </div>
+    {/if}
+
+    {#if createType === 'call'}
+      <fieldset class="rounded-lg border border-outline-variant p-4 space-y-3">
+        <legend class="px-1 text-body-sm font-medium text-on-surface">{m.planning_discord_config()}</legend>
+        <div class="grid gap-3 sm:grid-cols-2">
+          <select class="input" bind:value={formChannelMode} aria-label={m.planning_discord_config()}>
+            <option value="CREATE_NEW">{m.planning_channel_temp()}</option>
+            <option value="EXISTING">{m.planning_channel_existing()}</option>
+          </select>
+          {#if formChannelMode === 'CREATE_NEW'}
+            <select class="input" bind:value={formChannelType} aria-label={m.planning_channel_voice()}>
+              <option value="VOICE">{m.planning_channel_voice()}</option>
+              <option value="STAGE">{m.planning_channel_stage()}</option>
+            </select>
+          {:else}
+            <SearchableSelect
+              bind:value={formDiscordChannelId}
+              options={[
+                ...dashboardStore.state.discordVoiceChannels.map(c => ({ id: c.id, name: `🔊 ${c.name}` })),
+                ...dashboardStore.state.discordChannels.map(c => ({ id: c.id, name: channelDisplayName(c) })),
+              ]}
+              placeholder={m.planning_select_ph()}
+              className="w-full"
+            />
+          {/if}
         </div>
 
-        <!-- Type Tabs (Outlook segment control) -->
-        <div class="px-6 pt-4 pb-0">
-          <div class="flex bg-surface-container/50 p-0.5 rounded-lg border border-outline-variant/15 gap-0.5">
-            {#each [
-              { key: 'meeting', label: m.planning_type_meeting(), icon: 'calendar', color: 'emerald' },
-              { key: 'call', label: m.planning_type_call(), icon: 'phone', color: 'green' },
-              { key: 'absence', label: m.planning_type_absence(), icon: 'sun', color: 'amber' },
-              { key: 'task', label: m.planning_type_task(), icon: 'check-square', color: 'purple' }
-            ].filter(t => t.key !== 'call' || callPermCanCreate) as { key, label, icon, color }}
+        {#if formChannelMode === 'CREATE_NEW'}
+          <label class="flex items-center justify-between gap-3 text-body-sm text-on-surface">
+            {m.planning_auto_delete_empty()}
+            <ToggleSwitch checked={formIsTempChannel} onToggle={(v: boolean) => (formIsTempChannel = v)} />
+          </label>
+        {/if}
+
+        <div>
+          <p class="text-body-sm font-medium text-on-surface mb-2">{m.planning_guests_staff()}</p>
+          <div class="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto">
+            {#each activeStaff.filter(s => s.id !== myStaffRecord?.id) as staff (staff.id)}
+              {@const on = formInviteeUserIds.includes(staff.id)}
               <button
-                onclick={() => gotoTab('/planning', key, 'meeting')}
-                class="flex-1 py-2 text-2xs font-semibold rounded-md transition-all flex items-center justify-center gap-1.5 whitespace-nowrap
- {currentTab === key
-                    ? (color === 'emerald' ? 'bg-emerald-500 text-white shadow-sm' :
-                       color === 'green' ? 'bg-green-600 text-white shadow-sm' :
-                       color === 'amber' ? 'bg-amber-500 text-white shadow-sm' :
-                       'bg-purple-600 text-white shadow-sm')
-                    : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-hover'}"
+                type="button"
+                class="pl-chip {on ? 'pl-chip--active' : ''}"
+                aria-pressed={on}
+                onclick={() => (formInviteeUserIds = on ? formInviteeUserIds.filter(id => id !== staff.id) : [...formInviteeUserIds, staff.id])}
               >
-                <Papicon icon={icon} size={12} />
-                {label}
+                {@render avatar(staff.avatarUrl, staff.username, 'w-4 h-4')}
+                {memberName(staff)}
               </button>
             {/each}
           </div>
         </div>
 
-        <div class="px-6 py-5 space-y-4 max-h-[55vh] overflow-y-auto custom-scrollbar">
-          <!-- Title -->
-          {#if currentTab !== 'absence'}
-            <div>
-              <FormInput bind:value={formTitle} placeholder={m.planning_title_ph()} className="w-full text-sm font-semibold border-0! border-b! border-outline-variant/20! rounded-none! px-0! py-2! focus:border-primary! bg-transparent!" />
-            </div>
-          {/if}
-
-          <!-- Dates -->
-          <div class="flex items-center gap-3">
-            <Papicon icon="clock" size={16} class="text-on-surface-variant shrink-0" />
-            <div class="flex-1 flex flex-wrap items-center gap-2">
-              <input
-                type="datetime-local"
-                value={formatLocal(selectedStartDate)}
-                onchange={(e) => selectedStartDate = parseLocal((e.target as HTMLInputElement).value)}
-                class="bg-transparent text-xs font-medium px-2 py-1.5 rounded-md border border-outline-variant/20 focus:border-primary outline-none transition-all"
-              />
-              {#if currentTab !== 'task'}
-                <span class="text-on-surface-variant/40 text-xs">–</span>
-                <input
-                  type="datetime-local"
-                  value={formatLocal(selectedEndDate)}
-                  onchange={(e) => selectedEndDate = parseLocal((e.target as HTMLInputElement).value)}
-                  class="bg-transparent text-xs font-medium px-2 py-1.5 rounded-md border border-outline-variant/20 focus:border-primary outline-none transition-all"
-                />
-              {/if}
-            </div>
-          </div>
-          {#if timezoneStore.loaded && currentTab === 'meeting'}
-            <div class="pl-7">
-              <TimezoneHint bind:value={() => formTimezone, (zone) => applyFormTimezone(zone)} />
-            </div>
-          {:else if timezoneStore.loaded}
-            <p class="pl-7 text-2xs text-on-surface-variant">
-              {#if timezoneStore.differsFromBrowser}
-                {m.planning_datetime_hint_diff({ server: timezoneStore.timezone, browser: timezoneStore.browserTimezone })}
-              {:else}
-                {m.planning_datetime_hint_same({ zone: timezoneStore.timezone })}
-              {/if}
-            </p>
-          {/if}
-
-          <!-- Description -->
-          <div class="flex items-start gap-3">
-            <Papicon icon="align-left" size={16} class="text-on-surface-variant shrink-0 mt-2" />
-            <FormTextarea bind:value={formDescription} placeholder={currentTab === 'absence' ? m.planning_absence_reason_ph() : m.planning_description_ph()} rows={2} className="w-full resize-none text-xs!" />
-          </div>
-
-          <!-- Absence-specific fields -->
-          {#if currentTab === 'absence'}
-            <div class="flex items-center gap-3">
-              <Papicon icon="tag" size={16} class="text-on-surface-variant shrink-0" />
-              <div class="flex-1 grid grid-cols-2 gap-3">
-                <FormSelect bind:value={formAbsenceType} className="w-full text-xs! py-1.5!">
-                  <option value="Vacances">{m.planning_absence_type_holidays()}</option>
-                  <option value="Maladie">{m.planning_absence_type_sick()}</option>
-                  <option value="Examens">{m.planning_absence_type_exams()}</option>
-                  <option value="Autre">{m.planning_absence_type_other()}</option>
-                </FormSelect>
-                <SearchableSelect
-                  bind:value={formSuperiorId}
-                  options={eligibleSuperiors.map(s => ({ id: s.userId, name: s.displayName || s.username }))}
-                  placeholder={m.planning_superior_ph()}
-                  className="w-full text-xs!"
-                />
-              </div>
-            </div>
-          {/if}
-
-          <!-- Call-specific fields -->
-          {#if currentTab === 'call'}
-            <div class="border border-outline-variant/15 rounded-lg p-4 bg-surface-container/30 space-y-3">
-              <div class="flex items-center gap-2 text-xs font-semibold text-on-surface-variant">
-                <Papicon icon="headphones" size={12} />
-                {m.planning_discord_config()}
-              </div>
-
-              <div class="grid grid-cols-2 gap-3">
-                <FormSelect bind:value={formChannelMode} className="w-full text-xs! py-1.5!">
-                  <option value="CREATE_NEW">{m.planning_channel_temp()}</option>
-                  <option value="EXISTING">{m.planning_channel_existing()}</option>
-                </FormSelect>
-                {#if formChannelMode === 'CREATE_NEW'}
-                  <FormSelect bind:value={formChannelType} className="w-full text-xs! py-1.5!">
-                    <option value="VOICE">{m.planning_channel_voice()}</option>
-                    <option value="STAGE">{m.planning_channel_stage()}</option>
-                  </FormSelect>
-                {:else}
-                  <SearchableSelect
-                    bind:value={formDiscordChannelId}
-                    options={[
-                      ...dashboardStore.state.discordVoiceChannels.map(c => ({ id: c.id, name: `🔊 ${c.name}` })),
-                      ...dashboardStore.state.discordChannels.map(c => ({ id: c.id, name: channelDisplayName(c) }))
-                    ]}
-                    placeholder={m.planning_select_ph()}
-                    className="w-full text-xs!"
-                  />
+        <div>
+          <p class="text-body-sm font-medium text-on-surface mb-2">{m.planning_guests_members()}</p>
+          {#if formInviteeMemberIds.length > 0}
+            <div class="flex flex-wrap gap-1.5 mb-2">
+              {#each formInviteeMemberIds as memberId (memberId)}
+                {@const member = selectedMembers.get(memberId)}
+                {#if member}
+                  <button type="button" class="pl-chip pl-chip--active" onclick={() => toggleMemberInvitee(member)} aria-label="{memberName(member)} ×">
+                    {@render avatar(member.avatarUrl, memberName(member), 'w-4 h-4')}
+                    {memberName(member)}
+                    <Papicon icon="x" size={10} />
+                  </button>
                 {/if}
-              </div>
-
-              {#if formChannelMode === 'CREATE_NEW'}
-                <div class="flex items-center justify-between py-2 px-3 rounded-md bg-surface-container-high/30">
-                  <span class="text-2xs font-medium text-on-surface-variant">{m.planning_auto_delete_empty()}</span>
-                  <ToggleSwitch checked={formIsTempChannel} onToggle={(v: boolean) => formIsTempChannel = v} />
-                </div>
-              {/if}
-
-              <div>
-                <span class="block text-xs font-semibold text-on-surface-variant mb-2">{m.planning_guests_staff()}</span>
-                <div class="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto custom-scrollbar">
-                  {#each activeStaff.filter(s => s.id !== myStaffRecord?.id) as staff}
-                    <label class="inline-flex items-center gap-1.5 px-2.5 py-1 bg-surface-container-high/30 rounded-md cursor-pointer hover:bg-surface-container-high/50 transition-colors">
-                      <input
-                        type="checkbox"
-                        checked={formInviteeUserIds.includes(staff.id)}
-                        onchange={(e) => {
-                          if ((e.target as HTMLInputElement).checked) formInviteeUserIds = [...formInviteeUserIds, staff.id];
-                          else formInviteeUserIds = formInviteeUserIds.filter(id => id !== staff.id);
-                        }}
-                        class="rounded border-outline-variant text-primary focus:ring-primary w-3 h-3"
-                      />
-                      <span class="text-2xs font-semibold text-on-surface">{staff.displayName || staff.username}</span>
-                    </label>
-                  {/each}
-                </div>
-              </div>
-
-              <!-- Members search section -->
-              <div>
-                <span class="block text-xs font-semibold text-on-surface-variant mb-2">{m.planning_guests_members()}</span>
-
-                <!-- Selected members chips -->
-                {#if formInviteeMemberIds.length > 0}
-                  <div class="flex flex-wrap gap-1.5 mb-2">
-                    {#each formInviteeMemberIds as memberId}
-                      {@const member = selectedMembers.get(memberId)}
-                      {#if member}
-                        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 bg-cyan-500/15 border border-cyan-500/25 rounded-md text-2xs font-semibold text-cyan-300">
-                          <img src={member.avatarUrl || localInitialAvatar(member.displayName || member.username)} alt="" class="w-3.5 h-3.5 rounded-full" />
-                          {member.displayName || member.username}
-                          <button
-                            onclick={() => toggleMemberInvitee(member)}
-                            class="ml-0.5 w-3.5 h-3.5 rounded-full hover:bg-cyan-500/30 flex items-center justify-center transition-colors"
-                          >
-                            <Papicon icon="x" size={8} />
-                          </button>
-                        </span>
-                      {/if}
-                    {/each}
-                  </div>
-                {/if}
-
-                <!-- Search input -->
-                <div class="relative">
-                  <div class="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none">
-                    {#if memberSearchLoading}
-                      <div class="w-3.5 h-3.5 border-2 border-primary/20 border-t-primary rounded-full animate-spin"></div>
-                    {:else}
-                      <Papicon icon="search" size={12} class="text-on-surface-variant/40" />
-                    {/if}
-                  </div>
-                  <input
-                    type="text"
-                    value={memberSearchQuery}
-                    oninput={(e) => handleMemberSearchInput((e.target as HTMLInputElement).value)}
-                    placeholder={m.planning_search_member_ph()}
-                    class="w-full pl-8 pr-3 py-2 bg-surface-container-high/30 rounded-md border border-outline-variant/15 text-2xs font-medium text-on-surface placeholder:text-on-surface-variant/40 outline-none focus:border-primary/50 transition-colors"
-                  />
-                </div>
-
-                <!-- Search results -->
-                {#if memberSearchResults.length > 0}
-                  <div class="mt-2 max-h-32 overflow-y-auto custom-scrollbar rounded-md border border-outline-variant/15 bg-surface-container/50">
-                    {#each memberSearchResults as member}
-                      <button
-                        onclick={() => toggleMemberInvitee(member)}
-                        class="w-full flex items-center gap-2.5 px-3 py-2 text-left transition-all hover:bg-surface-hover/50 {formInviteeMemberIds.includes(member.id) ? 'bg-cyan-500/10' : ''}"
-                      >
-                        <img src={member.avatarUrl || localInitialAvatar(member.displayName || member.username)} alt="" class="w-5 h-5 rounded-full shrink-0" />
-                        <div class="flex-1 min-w-0">
-                          <span class="text-2xs font-semibold text-on-surface truncate block">{member.displayName || member.username}</span>
-                          {#if member.username !== member.displayName}
-                            <span class="text-2xs text-on-surface-variant">@{member.username}</span>
-                          {/if}
-                        </div>
-                        {#if formInviteeMemberIds.includes(member.id)}
-                          <div class="w-4 h-4 rounded bg-cyan-500 flex items-center justify-center shrink-0">
-                            <Papicon icon="check" size={10} class="text-white" />
-                          </div>
-                        {:else}
-                          <div class="w-4 h-4 rounded border border-outline-variant/30 shrink-0"></div>
-                        {/if}
-                      </button>
-                    {/each}
-                  </div>
-                {:else if memberSearchQuery.trim() && !memberSearchLoading}
-                  <p class="mt-2 text-2xs text-on-surface-variant/40 text-center py-2">{m.planning_no_member_found()}</p>
-                {/if}
-              </div>
+              {/each}
             </div>
           {/if}
-
-          <!-- Task-specific fields -->
-          {#if currentTab === 'task'}
-            <div class="flex items-center gap-3">
-              <Papicon icon="flag" size={16} class="text-on-surface-variant shrink-0" />
-              <div class="flex-1 grid grid-cols-2 gap-3">
-                <FormSelect bind:value={formPriority} className="w-full text-xs! py-1.5!">
-                  <option value="LOW">{m.planning_priority_low()}</option>
-                  <option value="MEDIUM">{m.planning_priority_medium()}</option>
-                  <option value="HIGH">{m.planning_priority_high()}</option>
-                </FormSelect>
-                <SearchableSelect
-                  bind:value={formAssigneeId}
-                  options={activeStaff.map(s => ({ id: s.id, name: s.displayName || s.username }))}
-                  placeholder={m.planning_assign_ph()}
-                  className="w-full text-xs!"
-                />
-              </div>
-            </div>
-          {/if}
-
-          {#if formError}
-            <div class="flex items-center gap-2 p-3 bg-error/10 border border-error/20 rounded-lg text-error text-2xs font-semibold">
-              <Papicon icon="alert-circle" size={14} />
-              {formError}
-            </div>
-          {/if}
+          {@render memberSearch(memberSearchQuery, memberSearchLoading, memberSearchResults, handleMemberSearchInput, toggleMemberInvitee, formInviteeMemberIds)}
         </div>
+      </fieldset>
+    {/if}
 
-        <!-- Footer -->
-        <div class="px-6 py-3.5 border-t border-outline-variant/15 bg-surface-container-low flex justify-end gap-2">
-          <button onclick={() => creationModalOpen = false} class="px-4 py-2 rounded-lg text-2xs font-semibold text-on-surface-variant hover:bg-surface-hover transition-colors">
-            {m.common_cancel()}
-          </button>
-          <button
-            onclick={handleCreateItem}
-            disabled={saving}
-            class="px-5 py-2 rounded-lg text-2xs font-semibold text-white bg-primary hover:bg-primary-hover disabled:opacity-50 transition-colors flex items-center gap-1.5 shadow-md"
-          >
-            {#if saving}
-              <div class="w-3.5 h-3.5 border-2 border-white/20 border-t-white rounded-full animate-spin"></div>
-            {/if}
-            {m.common_save()}
-          </button>
-        </div>
+    {#if createType === 'task'}
+      <div class="grid gap-3 sm:grid-cols-2">
+        <select class="input" bind:value={formPriority} aria-label={m.planning_priority_medium()}>
+          <option value="LOW">{m.planning_priority_low()}</option>
+          <option value="MEDIUM">{m.planning_priority_medium()}</option>
+          <option value="HIGH">{m.planning_priority_high()}</option>
+        </select>
+        <SearchableSelect
+          bind:value={formAssigneeId}
+          options={activeStaff.map(s => ({ id: s.id, name: memberName(s) }))}
+          placeholder={m.planning_assign_ph()}
+          showId={false}
+          className="w-full"
+        />
       </div>
-    </div>
-  {/if}
+    {/if}
 
-  <!-- ===== DETAIL MODAL ===== -->
-  {#if detailModalOpen && currentItemDetail}
-    {@const raw = currentItemDetail.raw}
-    {@const typeColor = getTypeColor(currentItemDetail.type)}
-    <div class="fixed inset-0 z-100 flex items-center justify-center p-4">
-      <button type="button" class="absolute inset-0 bg-black/50 border-none cursor-default" onclick={() => detailModalOpen = false} aria-label={m.planning_close_aria()}></button>
+    {#if formError}
+      <Callout variant="danger">{formError}</Callout>
+    {/if}
+  </form>
+  {#snippet footer()}
+    <Button variant="ghost" onclick={() => (creationModalOpen = false)}>{m.common_cancel()}</Button>
+    <Button variant="primary" type="submit" form="pl-create" loading={saving}>{m.common_save()}</Button>
+  {/snippet}
+</Modal>
 
-      <div class="relative w-full max-w-md max-h-[85vh] bg-surface-container-lowest rounded-xl shadow-2xl overflow-hidden border border-outline-variant/30 animate-in fade-in duration-200 text-on-surface flex flex-col">
-
-        <!-- Colored top bar (Outlook-style) -->
-        <div class="h-1 shrink-0 {typeColor === 'emerald' ? 'bg-emerald-500' : typeColor === 'green' ? 'bg-green-500' : typeColor === 'amber' ? 'bg-amber-500' : 'bg-purple-500'}"></div>
-
-        <div class="p-5 overflow-y-auto custom-scrollbar flex-1 min-h-0">
-          <!-- Header -->
-          <div class="flex justify-between items-start mb-4">
-            <div class="flex-1 min-w-0">
-              <span class="text-2xs font-bold uppercase tracking-wider
- {typeColor === 'emerald' ? 'text-success' : typeColor === 'green' ? 'text-success' : typeColor === 'amber' ? 'text-warning' : 'text-purple-400'}">
-                {getTypeLabel(currentItemDetail.type)}
-              </span>
-              <h3 class="text-base font-bold mt-0.5 leading-tight">{currentItemDetail.title}</h3>
-            </div>
-            <button onclick={() => detailModalOpen = false} class="w-7 h-7 rounded-md hover:bg-surface-hover flex items-center justify-center transition-colors shrink-0 ml-2">
-              <Papicon icon="x" size={16} />
-            </button>
-          </div>
-
-          <!-- Time -->
-          <div class="flex items-center gap-2.5 text-xs text-on-surface-variant mb-4">
-            <Papicon icon="clock" size={14} class="shrink-0" />
-            <span class="font-medium">
-              {new Date(currentItemDetail.start).toLocaleString(dateLocale(), { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
-              {#if currentItemDetail.end}
-                <span class="text-on-surface-variant/40 mx-1">–</span>
-                {new Date(currentItemDetail.end).toLocaleString(dateLocale(), { hour: '2-digit', minute: '2-digit' })}
+{#snippet memberSearch(query: string, busy: boolean, results: any[], onInput: (v: string) => void, onPick: (member: any) => void, picked: string[])}
+  <div class="relative">
+    <Papicon icon="search" size={14} class="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant pointer-events-none" />
+    <input type="search" class="input pl-9 text-body-sm" value={query} oninput={(e) => onInput((e.target as HTMLInputElement).value)} placeholder={m.planning_search_member_ph()} aria-label={m.planning_search_member_ph()} />
+  </div>
+  {#if results.length > 0}
+    <ul class="mt-2 max-h-36 overflow-y-auto rounded-lg border border-outline-variant">
+      {#each results as member (member.id)}
+        <li>
+          <button type="button" class="pl-row px-3" aria-pressed={picked.includes(member.id)} onclick={() => onPick(member)}>
+            {@render avatar(member.avatarUrl, memberName(member), 'w-5 h-5')}
+            <span class="flex-1 min-w-0 text-left">
+              <span class="block truncate text-body-sm text-on-surface">{memberName(member)}</span>
+              {#if member.username !== member.displayName}
+                <span class="text-2xs text-on-surface-variant">@{member.username}</span>
               {/if}
             </span>
-          </div>
+            {#if picked.includes(member.id)}
+              <Papicon icon="check" size={14} class="text-primary" />
+            {/if}
+          </button>
+        </li>
+      {/each}
+    </ul>
+  {:else if query.trim() && !busy}
+    <p class="mt-2 text-2xs text-on-surface-variant text-center py-2">{m.planning_no_member_found()}</p>
+  {/if}
+{/snippet}
 
-          <!-- Description -->
-          {#if raw.description || raw.reason}
-            {#if currentItemDetail.type === 'meeting'}
-              <div class="p-4 bg-[#2f3136] rounded-lg border border-white/5 text-xs mb-4">
-                <div class="text-[#dcddde] leading-relaxed whitespace-pre-wrap break-words discord-preview">
-                  {@html parseDiscordEmojisAndMarkdown(raw.description || '')}
-                </div>
-              </div>
-            {:else}
-              <div class="p-3 bg-surface-container/50 rounded-lg text-xs text-on-surface-variant leading-relaxed mb-4">
-                {raw.description || raw.reason}
-              </div>
+<!-- ===== Fiche d'un element ===== -->
+<Modal open={detailModalOpen && !!currentItemDetail} onClose={() => (detailModalOpen = false)} title={currentItemDetail?.title ?? ''} size="md">
+  {#if currentItemDetail}
+    {@const raw = currentItemDetail.raw}
+    {@const type = currentItemDetail.type as PlanningType}
+    <div class="space-y-4">
+      <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-body-sm text-on-surface-variant">
+        <span class="inline-flex items-center gap-1.5 font-medium text-on-surface">{@render typeDot(type)} {TYPE_META[type]?.label() ?? type}</span>
+        <span class="inline-flex items-center gap-1.5">
+          <Papicon icon="clock" size={14} />
+          {new Date(currentItemDetail.start).toLocaleString(dateLocale(), { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+          {#if currentItemDetail.end && type !== 'task'}
+            – {new Date(currentItemDetail.end).toLocaleString(dateLocale(), { hour: '2-digit', minute: '2-digit' })}
+          {/if}
+        </span>
+      </div>
+
+      {#if raw.description || raw.reason}
+        {#if type === 'meeting'}
+          <div class="p-4 bg-[#2f3136] rounded-lg text-body-sm">
+            <div class="text-[#dcddde] leading-relaxed whitespace-pre-wrap wrap-break-word discord-preview">
+              {@html parseDiscordEmojisAndMarkdown(raw.description || '')}
+            </div>
+          </div>
+        {:else}
+          <p class="p-3 bg-surface-container rounded-lg text-body-sm text-on-surface whitespace-pre-wrap wrap-break-word">{raw.description || raw.reason}</p>
+        {/if}
+      {/if}
+
+      {#if type === 'meeting'}
+        {@const stats = getAttendanceStats(raw)}
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <span class="badge {MEETING_BADGE[raw.status] ?? 'badge-neutral'}">{formatStatus(raw.status)}</span>
+          {#if canModerateMeetings}
+            {#if raw.status === 'SCHEDULED'}
+              <Button size="sm" icon="play" onclick={() => updateMeetingStatus(currentItemDetail.id, 'IN_PROGRESS')}>{m.meetings_start_btn()}</Button>
+            {:else if raw.status === 'IN_PROGRESS'}
+              <Button size="sm" icon="check" onclick={() => updateMeetingStatus(currentItemDetail.id, 'COMPLETED')}>{m.meetings_finish_btn()}</Button>
             {/if}
           {/if}
-
-          <!-- Type-specific details -->
-          {#if currentItemDetail.type === 'meeting'}
-            {@const stats = getAttendanceStats(raw)}
-            <div class="space-y-4 mb-4">
-              <!-- Meeting Status and Moderation Actions -->
-              <div class="flex items-center justify-between gap-3">
-                <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold {getStatusColor(raw.status)}">
-                  {formatStatus(raw.status)}
-                </span>
-                
-                {#if canModerateMeetings}
-                  <div class="flex items-center gap-2">
-                    {#if raw.status === 'SCHEDULED'}
-                      <button 
-                        onclick={() => updateMeetingStatus(currentItemDetail.id, 'IN_PROGRESS')} 
-                        class="text-2xs font-bold text-primary bg-primary/10 px-2.5 py-1 hover:bg-primary/20 rounded-md transition-colors flex items-center gap-1"
-                      >
-                        <Papicon icon="play" size={10} />
-                        {m.meetings_start_btn()}
-                      </button>
-                    {:else if raw.status === 'IN_PROGRESS'}
-                      <button 
-                        onclick={() => updateMeetingStatus(currentItemDetail.id, 'COMPLETED')} 
-                        class="text-2xs font-bold text-success bg-success/10 px-2.5 py-1 hover:bg-success/20 rounded-md transition-colors flex items-center gap-1"
-                      >
-                        <Papicon icon="check" size={10} />
-                        {m.meetings_finish_btn()}
-                      </button>
-                    {/if}
-                  </div>
-                {/if}
-              </div>
-
-              <!-- Attendance Stats -->
-              <div class="grid grid-cols-3 gap-2 p-3 bg-surface-container-low rounded-lg text-center">
-                <div>
-                  <p class="text-xs font-semibold text-on-surface-variant">{m.meetings_stat_present()}</p>
-                  <p class="text-base font-bold text-success">{stats.present}</p>
-                </div>
-                <div class="border-x border-outline-variant/30">
-                  <p class="text-xs font-semibold text-on-surface-variant">{m.meetings_stat_excused()}</p>
-                  <p class="text-base font-bold text-warning">{stats.excused}</p>
-                </div>
-                <div>
-                  <p class="text-xs font-semibold text-on-surface-variant">{m.meetings_stat_absent()}</p>
-                  <p class="text-base font-bold text-error">{stats.absent}</p>
-                </div>
-              </div>
-
-              <!-- Attendance List -->
-              {#if raw.presences && raw.presences.length > 0}
-                <div class="space-y-2">
-                  <span class="block text-xs font-semibold text-on-surface-variant px-1">{m.meetings_presence_list_title()}</span>
-                  <div class="grid grid-cols-1 gap-1.5 max-h-48 overflow-y-auto custom-scrollbar pr-1">
-                    {#each raw.presences as presence}
-                      <div class="flex items-center justify-between p-2 bg-surface-container-low/50 rounded-lg border border-outline-variant/10 hover:bg-surface-container-low transition-colors group">
-                        <div class="flex items-center gap-2.5 min-w-0">
-                          <button 
-                            type="button"
-                            use:explainDisabled={(!canOpenMemberCase) ? m.common_reason_no_permission() : ''}
-                            onclick={() => openMemberCase(presence.staffUserId, presence.staffMember?.displayName || presence.staffMember?.username || m.planning_member_fallback())}
-                            class="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-2xs font-semibold text-primary overflow-hidden transition-transform shrink-0"
-                          >
-                            {#if presence.staffMember?.avatarUrl}
-                              <img src={presence.staffMember.avatarUrl} alt="" class="w-full h-full object-cover" />
-                            {:else}
-                              {presence.staffMember?.displayName?.slice(0, 2).toUpperCase() || presence.staffMember?.username?.slice(0, 2).toUpperCase() || "??"}
-                            {/if}
-                          </button>
-                          <div class="min-w-0">
-                            <button 
-                              type="button"
-                              use:explainDisabled={(!canOpenMemberCase) ? m.common_reason_no_permission() : ''}
-                              onclick={() => openMemberCase(presence.staffUserId, presence.staffMember?.displayName || presence.staffMember?.username || m.planning_member_fallback())}
-                              class="text-xs font-bold text-on-surface hover:text-primary transition-colors text-left block truncate"
-                            >
-                              {presence.staffMember?.displayName || presence.staffMember?.username || m.planning_member_fallback()}
-                            </button>
-                            {#if presence.note}
-                              <p class="text-2xs text-on-surface-variant leading-tight mt-0.5 truncate" title={presence.note}>{presence.note}</p>
-                            {/if}
-                          </div>
-                        </div>
-                        <div class="shrink-0">
-                          <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold {getStatusColor(presence.status)}">
-                            {formatStatus(presence.status)}
-                          </span>
-                        </div>
-                      </div>
-                    {/each}
-                  </div>
-                </div>
-              {/if}
-            </div>
-          {/if}
-
-          {#if currentItemDetail.type === 'call'}
-            <div class="space-y-2 text-xs mb-4">
-              <div class="flex items-center gap-2 text-on-surface-variant">
-                <Papicon icon="headphones" size={12} />
-                <span class="font-medium">{raw.channelMode === 'CREATE_NEW' ? m.planning_channel_temp() : m.planning_channel_existing()}</span>
-              </div>
-              {#if raw.invitees && raw.invitees.length > 0}
-                <div class="flex items-start gap-2">
-                  <Papicon icon="users" size={12} class="mt-1 text-on-surface-variant" />
-                  <div class="flex flex-wrap gap-1.5">
-                    {#each raw.invitees as invitee}
-                      <span class="flex items-center gap-1.5 pl-1 pr-2 py-0.5 rounded-full bg-surface-container-high text-2xs font-semibold">
-                        <img
-                          src={invitee.staffMember?.avatarUrl || localInitialAvatar(invitee.staffMember?.displayName || invitee.staffMember?.username)}
-                          alt=""
-                          class="w-4 h-4 rounded-full"
-                        />
-                        {invitee.staffMember?.displayName || invitee.staffMember?.username || m.planning_member_fallback()}
-                      </span>
-                    {/each}
-                  </div>
-                </div>
-              {/if}
-            </div>
-          {/if}
-
-          {#if currentItemDetail.type === 'task'}
-            <div class="flex items-center gap-4 text-xs mb-4">
-              <div class="flex items-center gap-1.5">
-                <Papicon icon="flag" size={12} class="text-on-surface-variant" />
-                <span class="font-semibold {raw.priority === 'HIGH' ? 'text-error' : raw.priority === 'MEDIUM' ? 'text-warning' : 'text-blue-400'}">{raw.priority}</span>
-              </div>
-              <div class="flex items-center gap-1.5">
-                <Papicon icon="activity" size={12} class="text-on-surface-variant" />
-                <span class="font-semibold text-purple-400">{raw.status}</span>
-              </div>
-              {#if raw.assignee}
-                <div class="flex items-center gap-1.5">
-                  <img
-                    src={raw.assignee.avatarUrl || localInitialAvatar(raw.assignee.displayName || raw.assignee.username)}
-                    alt=""
-                    class="w-4 h-4 rounded-full"
-                  />
-                  <span class="font-medium">{raw.assignee.displayName || raw.assignee.username}</span>
-                </div>
-              {/if}
-            </div>
-          {/if}
-
-          {#if currentItemDetail.type === 'absence'}
-            <div class="flex items-center gap-2.5 mb-3">
-              <img
-                src={currentItemDetail.avatarUrl || localInitialAvatar(currentItemDetail.staffName || raw.staffMember?.username)}
-                alt=""
-                class="w-7 h-7 rounded-full border border-outline-variant/20"
-              />
-              <span class="text-xs font-bold text-on-surface">{currentItemDetail.staffName || raw.staffMember?.username || m.planning_unknown_member()}</span>
-            </div>
-            <div class="flex items-center gap-4 text-xs mb-4">
-              <div class="flex items-center gap-1.5">
-                <Papicon icon="tag" size={12} class="text-on-surface-variant" />
-                <span class="font-semibold text-warning">{raw.type || m.planning_absence_type_default()}</span>
-              </div>
-              <div class="flex items-center gap-1.5">
-                <Papicon icon="info" size={12} class="text-on-surface-variant" />
-                <span class="font-semibold {raw.status === 'APPROVED' ? 'text-success' : 'text-warning'}">
-                  {raw.status === 'APPROVED' ? m.planning_absence_approved() : raw.status === 'PENDING' ? m.planning_absence_pending() : raw.status}
-                </span>
-              </div>
-            </div>
-          {/if}
-
-          {#if currentItemDetail.type !== 'absence'}
-            <div class="mt-4 border-t border-outline-variant/15 pt-4 text-left">
-              <h4 class="text-xs font-bold text-on-surface mb-2 flex items-center gap-1.5">
-                <Papicon icon="bell" size={12} class="text-warning" />
-                {m.planning_reminders_title({ count: raw.reminders?.length || 0 })}
-              </h4>
-
-              {#if raw.reminders && raw.reminders.length > 0}
-                <div class="space-y-1.5 max-h-32 overflow-y-auto mb-3 custom-scrollbar">
-                  {#each raw.reminders as reminder}
-                    <div class="flex items-center justify-between p-2 rounded bg-surface-container/60 text-2xs border border-outline-variant/5">
-                      <div class="flex-1 min-w-0 pr-2">
-                        <div class="font-medium text-on-surface truncate">{reminder.message}</div>
-                        <div class="text-2xs text-on-surface-variant">
-                          {m.planning_reminder_at({ date: new Date(reminder.targetTime).toLocaleString(dateLocale(), { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) })}
-                          {#if reminder.fired}
-                            <span class="text-success ml-1">{m.planning_reminder_sent()}</span>
-                          {:else}
-                            <span class="text-warning ml-1">{m.planning_reminder_scheduled()}</span>
-                          {/if}
-                        </div>
-                      </div>
-                      <button
-                        onclick={() => handleDeleteReminder(reminder.id)}
-                        class="p-1 rounded hover:bg-error/10 text-error border-none bg-transparent transition-colors cursor-pointer shrink-0"
-                        title={m.planning_reminder_delete_tooltip()}
-                      >
-                        <Papicon icon="trash-2" size={10} />
-                      </button>
-                    </div>
-                  {/each}
-                </div>
-              {:else}
-                <p class="text-2xs text-on-surface-variant italic mb-3">{m.planning_no_reminder()}</p>
-              {/if}
-
-              <!-- Add Reminder Form -->
-              <div class="flex flex-col gap-2 p-2.5 rounded bg-surface-container/30 border border-outline-variant/10 text-xs">
-                <div class="font-semibold text-2xs uppercase text-on-surface-variant">{m.planning_schedule_reminder()}</div>
-                <div class="grid grid-cols-2 gap-2">
-                  <div>
-                    <label for="new-reminder-time" class="block text-2xs text-on-surface-variant font-medium mb-1">{m.planning_reminder_datetime()}</label>
-                    <input
-                      id="new-reminder-time"
-                      type="datetime-local"
-                      bind:value={newReminderTime}
-                      class="w-full bg-surface-container-high border border-outline-variant/20 rounded px-2 py-1 text-xs text-on-surface outline-none"
-                    />
-                    {#if timezoneStore.loaded && timezoneStore.differsFromBrowser}
-                      <p class="mt-1 text-2xs text-on-surface-variant">
-                        {m.planning_datetime_hint_diff_short({ server: timezoneStore.timezone })}
-                      </p>
-                    {/if}
-                  </div>
-                  <div>
-                    <label for="new-reminder-channel" class="block text-2xs text-on-surface-variant font-medium mb-1">{m.planning_reminder_channel()}</label>
-                    <select
-                      id="new-reminder-channel"
-                      bind:value={newReminderChannel}
-                      class="w-full bg-surface-container-high border border-outline-variant/20 rounded px-2 py-1 text-xs text-on-surface outline-none"
-                    >
-                      <option value="DM">{m.planning_reminder_channel_dm()}</option>
-                      <option value="CURRENT">{m.planning_reminder_channel_current()}</option>
-                    </select>
-                  </div>
-                </div>
-                <div class="flex gap-2 items-center">
-                  <input
-                    type="text"
-                    placeholder={m.planning_reminder_note_ph()}
-                    bind:value={newReminderMessage}
-                    class="flex-1 bg-surface-container-high border border-outline-variant/20 rounded px-2.5 py-1 text-xs text-on-surface outline-none"
-                  />
+        </div>
+        <dl class="grid grid-cols-3 gap-2 text-center">
+          <div class="rounded-lg bg-surface-container p-2"><dt class="text-2xs text-on-surface-variant">{m.meetings_stat_present()}</dt><dd class="text-base font-semibold text-success">{stats.present}</dd></div>
+          <div class="rounded-lg bg-surface-container p-2"><dt class="text-2xs text-on-surface-variant">{m.meetings_stat_excused()}</dt><dd class="text-base font-semibold text-warning">{stats.excused}</dd></div>
+          <div class="rounded-lg bg-surface-container p-2"><dt class="text-2xs text-on-surface-variant">{m.meetings_stat_absent()}</dt><dd class="text-base font-semibold text-error">{stats.absent}</dd></div>
+        </dl>
+        {#if raw.presences?.length > 0}
+          <div>
+            <h4 class="pl-section-title">{m.meetings_presence_list_title()}</h4>
+            <ul class="max-h-56 overflow-y-auto divide-y divide-outline-variant">
+              {#each raw.presences as presence (presence.id ?? presence.staffUserId)}
+                <li class="flex items-center gap-2.5 py-2">
                   <button
-                    onclick={handleAddReminder}
-                    class="px-3 py-1 rounded bg-amber-500 hover:bg-amber-600 text-white font-medium transition-colors shrink-0 text-xs cursor-pointer border-none"
+                    type="button"
+                    class="flex items-center gap-2.5 min-w-0 flex-1 text-left hover:text-primary disabled:hover:text-on-surface"
+                    disabled={!canOpenMemberCase}
+                    onclick={() => openMemberCase(presence.staffUserId, memberName(presence.staffMember))}
                   >
-                    {m.planning_reminder_add()}
-                  </button>
-                </div>
-              </div>
-            </div>
-          {/if}
-        </div>
-
-        <!-- Footer actions -->
-        <div class="px-5 py-3 border-t border-outline-variant/15 bg-surface-container-low/50 flex justify-between items-center shrink-0">
-          <div class="flex gap-2">
-            <button onclick={handleDeleteDetail} class="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-2xs font-semibold text-error hover:bg-error/10 transition-colors">
-              <Papicon icon="trash-2" size={12} />
-              {m.planning_detail_delete()}
-            </button>
-            {#if currentItemDetail.type === 'meeting' && canManageMeetings}
-              <button onclick={() => openEditMeeting(raw)} class="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-2xs font-semibold text-primary hover:bg-primary/10 transition-colors">
-                <Papicon icon="edit-2" size={12} />
-                {m.planning_detail_edit()}
-              </button>
-            {/if}
-          </div>
-          <button onclick={() => detailModalOpen = false} class="px-4 py-1.5 rounded-md text-2xs font-semibold text-on-surface-variant hover:bg-surface-hover transition-colors">
-            {m.planning_detail_close()}
-          </button>
-        </div>
-      </div>
-    </div>
-  {/if}
-
-  <!-- ===== CALL PERMISSIONS MODAL ===== -->
-  {#if permissionModalOpen}
-    <div class="fixed inset-0 z-100 flex items-center justify-center p-4">
-      <button type="button" class="absolute inset-0 bg-black/50 border-none cursor-default" onclick={() => permissionModalOpen = false} aria-label={m.planning_close_aria()}></button>
-
-      <div class="relative w-full max-w-lg bg-surface-container-lowest rounded-xl shadow-2xl overflow-hidden border border-outline-variant/30 animate-in fade-in duration-200">
-        <div class="px-6 py-4 border-b border-outline-variant/15 bg-surface-container-low flex justify-between items-center">
-          <h3 class="text-sm font-bold text-on-surface">{m.planning_call_perms_tooltip()}</h3>
-          <button onclick={() => permissionModalOpen = false} class="w-7 h-7 rounded-md hover:bg-surface-hover flex items-center justify-center transition-colors">
-            <Papicon icon="x" size={16} />
-          </button>
-        </div>
-
-        <div class="px-6 py-5 space-y-4 max-h-[60vh] overflow-y-auto custom-scrollbar">
-          <div class="flex bg-surface-container/50 p-0.5 rounded-lg border border-outline-variant/15 gap-0.5">
-            <button
-              onclick={() => permMode = 'EVERYONE'}
-              class="flex-1 py-2 text-2xs font-semibold rounded-md transition-all {permMode === 'EVERYONE' ? 'bg-primary text-white shadow-sm' : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-hover'}"
-            >
-              {m.planning_perm_everyone()}
-            </button>
-            <button
-              onclick={() => permMode = 'RESTRICTED'}
-              class="flex-1 py-2 text-2xs font-semibold rounded-md transition-all {permMode === 'RESTRICTED' ? 'bg-primary text-white shadow-sm' : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-hover'}"
-            >
-              {m.planning_perm_restricted()}
-            </button>
-          </div>
-
-          {#if permMode === 'RESTRICTED'}
-            <div>
-              <span class="block text-xs font-semibold text-on-surface-variant mb-2">{m.planning_perm_roles()}</span>
-              {#if (dashboardStore.state.discordRoles || []).length === 0}
-                <p class="text-2xs text-on-surface-variant/40">{m.planning_perm_no_roles()}</p>
-              {:else}
-                <div class="flex flex-wrap gap-1.5">
-                  {#each dashboardStore.state.discordRoles as role}
-                    <button
-                      onclick={() => togglePermRole(role.id)}
-                      class="px-2.5 py-1 rounded-md text-2xs font-semibold border transition-colors {permRoleIds.includes(role.id) ? 'bg-primary/15 border-primary/30 text-primary' : 'bg-surface-container-high/30 border-outline-variant/15 text-on-surface-variant hover:bg-surface-container-high/50'}"
-                    >
-                      @{role.name}
-                    </button>
-                  {/each}
-                </div>
-              {/if}
-            </div>
-
-            <div>
-              <span class="block text-xs font-semibold text-on-surface-variant mb-2">{m.planning_perm_members()}</span>
-
-              {#if permUserIds.length > 0}
-                <div class="flex flex-wrap gap-1.5 mb-2">
-                  {#each permUserIds as uid}
-                    {@const u = permSelectedUsersMap.get(uid)}
-                    <span class="inline-flex items-center gap-1.5 px-2.5 py-1 bg-cyan-500/15 border border-cyan-500/25 rounded-md text-2xs font-semibold text-cyan-300">
-                      {#if u}
-                        <img src={u.avatarUrl || localInitialAvatar(u.displayName || u.username)} alt="" class="w-3.5 h-3.5 rounded-full" />
+                    {@render avatar(presence.staffMember?.avatarUrl, memberName(presence.staffMember), 'w-7 h-7')}
+                    <span class="min-w-0">
+                      <span class="block truncate text-body-sm font-medium">{memberName(presence.staffMember)}</span>
+                      {#if presence.note}
+                        <span class="block truncate text-2xs text-on-surface-variant" title={presence.note}>{presence.note}</span>
                       {/if}
-                      {u ? (u.displayName || u.username) : uid}
-                      <button onclick={() => togglePermUser({ id: uid, ...(u || {}) })} class="ml-0.5 w-3.5 h-3.5 rounded-full hover:bg-cyan-500/30 flex items-center justify-center transition-colors">
-                        <Papicon icon="x" size={8} />
-                      </button>
                     </span>
-                  {/each}
-                </div>
-              {/if}
+                  </button>
+                  <span class="badge {MEETING_BADGE[presence.status] ?? 'badge-neutral'}">{formatStatus(presence.status)}</span>
+                </li>
+              {/each}
+            </ul>
+          </div>
+        {/if}
+      {/if}
 
-              <div class="relative">
-                <div class="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none">
-                  {#if permMemberSearchLoading}
-                    <div class="w-3.5 h-3.5 border-2 border-primary/20 border-t-primary rounded-full animate-spin"></div>
-                  {:else}
-                    <Papicon icon="search" size={12} class="text-on-surface-variant/40" />
-                  {/if}
-                </div>
-                <input
-                  type="text"
-                  value={permMemberSearchQuery}
-                  oninput={(e) => handlePermMemberSearchInput((e.target as HTMLInputElement).value)}
-                  placeholder={m.planning_search_member_ph()}
-                  class="w-full pl-8 pr-3 py-2 bg-surface-container-high/30 rounded-md border border-outline-variant/15 text-2xs font-medium text-on-surface placeholder:text-on-surface-variant/40 outline-none focus:border-primary/50 transition-colors"
-                />
-              </div>
+      {#if type === 'call'}
+        <p class="flex items-center gap-2 text-body-sm text-on-surface-variant">
+          <Papicon icon="headphones" size={14} />
+          {raw.channelMode === 'CREATE_NEW' ? m.planning_channel_temp() : m.planning_channel_existing()}
+        </p>
+        {#if raw.invitees?.length > 0}
+          <div class="flex flex-wrap gap-1.5">
+            {#each raw.invitees as invitee, i (invitee.id ?? i)}
+              <span class="pl-chip">
+                {@render avatar(invitee.staffMember?.avatarUrl, memberName(invitee.staffMember), 'w-4 h-4')}
+                {memberName(invitee.staffMember)}
+              </span>
+            {/each}
+          </div>
+        {/if}
+      {/if}
 
-              {#if permMemberSearchResults.length > 0}
-                <div class="mt-2 max-h-32 overflow-y-auto custom-scrollbar rounded-md border border-outline-variant/15 bg-surface-container/50">
-                  {#each permMemberSearchResults as member}
-                    <button
-                      onclick={() => togglePermUser(member)}
-                      class="w-full flex items-center gap-2.5 px-3 py-2 text-left transition-all hover:bg-surface-hover/50"
-                    >
-                      <img src={member.avatarUrl || localInitialAvatar(member.displayName || member.username)} alt="" class="w-5 h-5 rounded-full shrink-0" />
-                      <div class="flex-1 min-w-0">
-                        <span class="text-2xs font-semibold text-on-surface truncate block">{member.displayName || member.username}</span>
-                      </div>
-                    </button>
-                  {/each}
-                </div>
-              {:else if permMemberSearchQuery.trim() && !permMemberSearchLoading}
-                <p class="mt-2 text-2xs text-on-surface-variant/40 text-center py-2">{m.planning_no_member_found()}</p>
-              {/if}
-            </div>
+      {#if type === 'task'}
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="badge {raw.priority === 'HIGH' ? 'badge-danger' : raw.priority === 'MEDIUM' ? 'badge-warning' : 'badge-neutral'}">{PRIORITY_LABEL[raw.priority]?.() ?? raw.priority}</span>
+          <span class="badge {raw.status === 'COMPLETED' ? 'badge-success' : 'badge-info'}">{TASK_STATUS_LABEL[raw.status]?.() ?? raw.status}</span>
+          {#if raw.assignee}
+            <span class="inline-flex items-center gap-1.5 text-body-sm text-on-surface">
+              {@render avatar(raw.assignee.avatarUrl, memberName(raw.assignee), 'w-5 h-5')}
+              {memberName(raw.assignee)}
+            </span>
+          {/if}
+        </div>
+        <Button size="sm" icon={raw.status === 'COMPLETED' ? 'rotate-ccw' : 'check'} onclick={() => toggleTaskCompletion(raw)}>
+          {raw.status === 'COMPLETED' ? m.planning_task_mark_todo() : m.planning_task_mark_done()}
+        </Button>
+      {/if}
+
+      {#if type === 'absence'}
+        {@const status = ABSENCE_STATUS[raw.status]}
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="inline-flex items-center gap-2 text-body-sm font-medium text-on-surface">
+            {@render avatar(currentItemDetail.avatarUrl, currentItemDetail.staffName || raw.staffMember?.username || '', 'w-7 h-7')}
+            {currentItemDetail.staffName || raw.staffMember?.username || m.planning_unknown_member()}
+          </span>
+          <span class="badge badge-neutral">{raw.type || m.planning_absence_type_default()}</span>
+          <span class="badge {status?.badge ?? 'badge-neutral'}">{status?.label() ?? raw.status}</span>
+        </div>
+        {#if canModerateAbsences && (raw.status === 'PENDING' || raw.status === 'ACKNOWLEDGED')}
+          <div class="flex gap-2">
+            <Button size="sm" variant="primary" icon="check" onclick={() => decideAbsence('APPROVED')}>{m.planning_absence_approve()}</Button>
+            <Button size="sm" variant="danger" icon="x" onclick={() => decideAbsence('REJECTED')}>{m.planning_absence_reject()}</Button>
+          </div>
+        {/if}
+      {/if}
+
+      {#if type !== 'absence'}
+        <section class="border-t border-outline-variant pt-4 space-y-3">
+          <h4 class="flex items-center gap-1.5 text-body-sm font-semibold text-on-surface">
+            <Papicon icon="bell" size={14} />
+            {m.planning_reminders_title({ count: raw.reminders?.length || 0 })}
+          </h4>
+          {#if raw.reminders?.length > 0}
+            <ul class="space-y-1.5 max-h-36 overflow-y-auto">
+              {#each raw.reminders as reminder (reminder.id)}
+                <li class="flex items-center gap-2 rounded-lg bg-surface-container px-3 py-2">
+                  <div class="flex-1 min-w-0">
+                    <p class="truncate text-body-sm text-on-surface">{reminder.message}</p>
+                    <p class="text-2xs text-on-surface-variant">
+                      {m.planning_reminder_at({ date: new Date(reminder.targetTime).toLocaleString(dateLocale(), { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) })}
+                      <span class={reminder.fired ? 'text-success' : 'text-warning'}>{reminder.fired ? m.planning_reminder_sent() : m.planning_reminder_scheduled()}</span>
+                    </p>
+                  </div>
+                  <Button variant="ghost" size="sm" icon="trash-2" aria-label={m.planning_reminder_delete_tooltip()} onclick={() => handleDeleteReminder(reminder.id)} />
+                </li>
+              {/each}
+            </ul>
           {:else}
-            <p class="text-2xs text-on-surface-variant">{m.planning_perm_everyone_hint()}</p>
+            <p class="text-2xs text-on-surface-variant">{m.planning_no_reminder()}</p>
           {/if}
 
-          {#if permError}
-            <div class="flex items-center gap-2 p-3 bg-error/10 border border-error/20 rounded-lg text-error text-2xs font-semibold">
-              <Papicon icon="alert-circle" size={14} />
-              {permError}
+          <form class="rounded-lg border border-outline-variant p-3 space-y-2" onsubmit={handleAddReminder}>
+            <p class="text-body-sm font-medium text-on-surface">{m.planning_schedule_reminder()}</p>
+            <div class="grid gap-2 sm:grid-cols-2">
+              <Field label={m.planning_reminder_datetime()} hint={timezoneStore.loaded && timezoneStore.differsFromBrowser ? m.planning_datetime_hint_diff_short({ server: timezoneStore.timezone }) : ''}>
+                {#snippet children(id, describedBy)}
+                  <input {id} aria-describedby={describedBy} type="datetime-local" class="input text-body-sm" bind:value={newReminderTime} />
+                {/snippet}
+              </Field>
+              <Field label={m.planning_reminder_channel()}>
+                {#snippet children(id)}
+                  <select {id} class="input text-body-sm" bind:value={newReminderChannel}>
+                    <option value="DM">{m.planning_reminder_channel_dm()}</option>
+                    <option value="CURRENT">{m.planning_reminder_channel_current()}</option>
+                  </select>
+                {/snippet}
+              </Field>
             </div>
-          {/if}
-        </div>
-
-        <div class="px-6 py-3.5 border-t border-outline-variant/15 bg-surface-container-low flex justify-end gap-2">
-          <button onclick={() => permissionModalOpen = false} class="px-4 py-2 rounded-lg text-2xs font-semibold text-on-surface-variant hover:bg-surface-hover transition-colors">
-            {m.common_cancel()}
-          </button>
-          <button
-            onclick={savePermissionConfig}
-            disabled={permSaving}
-            class="px-5 py-2 rounded-lg text-2xs font-semibold text-white bg-primary hover:bg-primary-hover disabled:opacity-50 transition-colors flex items-center gap-1.5 shadow-md"
-          >
-            {#if permSaving}
-              <div class="w-3.5 h-3.5 border-2 border-white/20 border-t-white rounded-full animate-spin"></div>
-            {/if}
-            {m.common_save()}
-          </button>
-        </div>
-      </div>
-    </div>
-  {/if}
-
-  <MemberCaseModal
-    open={userCaseModalOpen}
-    userId={selectedUserIdForCase}
-    userName={selectedUserNameForCase}
-    {caseData}
-    loading={loadingCase}
-    error={caseError}
-    onClose={() => {
-      userCaseModalOpen = false;
-    }}
-    onSelectUser={(newUserId) => {
-      const foundNode = caseData?.interactionGraph?.nodes?.find((n: any) => n.id === newUserId);
-      const label = foundNode?.label || 'Membre';
-      openMemberCase(newUserId, label);
-    }}
-  />
-
-  {#if meetingDeleteModalOpen}
-    <div class="fixed inset-0 z-100 flex items-center justify-center p-4">
-      <div 
-        class="absolute inset-0 bg-black/60" 
-        onclick={() => meetingDeleteModalOpen = false}
-        onkeydown={(e) => e.key === 'Escape' && (meetingDeleteModalOpen = false)}
-        role="button"
-        tabindex="0"
-        aria-label={m.meetings_close_modal_aria()}
-      ></div>
-      
-      <div class="relative w-full max-w-md bg-surface-container-lowest rounded-xl shadow-2xl overflow-hidden border border-outline-variant/30 font-inter text-on-surface">
-        <div class="p-8 border-b border-outline-variant/30 bg-error/5 flex items-center justify-between">
-          <div>
-            <h3 class="text-xl font-semibold text-on-surface">{m.meetings_delete_modal_title()}</h3>
-            <p class="text-on-surface-variant text-sm">{m.meetings_delete_modal_subtitle()}</p>
-          </div>
-          <button onclick={() => meetingDeleteModalOpen = false} class="w-10 h-10 rounded-full flex items-center justify-center hover:bg-surface-hover transition-colors">
-            <Papicon icon="x" size={24} />
-          </button>
-        </div>
-
-        <div class="p-8 space-y-6">
-          <p class="text-sm text-on-surface-variant leading-relaxed">
-            {m.meetings_delete_question()}
-          </p>
-
-          <div class="space-y-4">
-            <label class="flex items-center gap-3 p-4 bg-surface-container-low rounded-lg border border-outline-variant/10 cursor-pointer hover:bg-surface-container-low transition-colors">
-              <input type="checkbox" bind:checked={deleteDiscordEvent} class="w-5 h-5 rounded-lg border-outline-variant text-primary focus:ring-primary" />
-              <div>
-                <p class="text-sm font-bold text-on-surface">{m.meetings_delete_event_label()}</p>
-                <p class="text-2xs text-on-surface-variant">{m.meetings_delete_event_desc()}</p>
-              </div>
-            </label>
-
-            <label class="flex items-center gap-3 p-4 bg-surface-container-low rounded-lg border border-outline-variant/10 cursor-pointer hover:bg-surface-container-low transition-colors">
-              <input type="checkbox" bind:checked={deleteDiscordMessage} class="w-5 h-5 rounded-lg border-outline-variant text-primary focus:ring-primary" />
-              <div>
-                <p class="text-sm font-bold text-on-surface">{m.meetings_delete_message_label()}</p>
-                <p class="text-2xs text-on-surface-variant">{m.meetings_delete_message_desc()}</p>
-              </div>
-            </label>
-
-            <label class="flex items-center gap-3 p-4 bg-surface-container-low rounded-lg border border-outline-variant/10 cursor-pointer hover:bg-surface-container-low transition-colors">
-              <input type="checkbox" bind:checked={deleteDiscordNotification} class="w-5 h-5 rounded-lg border-outline-variant text-primary focus:ring-primary" />
-              <div>
-                <p class="text-sm font-bold text-on-surface">{m.meetings_delete_notif_label()}</p>
-                <p class="text-2xs text-on-surface-variant">{m.meetings_delete_notif_desc()}</p>
-              </div>
-            </label>
-          </div>
-
-          <div class="flex items-center justify-end gap-4 pt-4 border-t border-outline-variant/30">
-            <button onclick={() => meetingDeleteModalOpen = false} class="px-6 py-2.5 font-bold text-on-surface-variant hover:bg-surface-hover rounded-xl transition-colors">
-              {m.common_cancel()}
-            </button>
-            <button 
-              onclick={confirmDeleteMeeting}
-              disabled={deletingMeeting}
-              class="px-8 py-2.5 bg-red-500 text-white rounded-xl font-semibold shadow-sm hover:shadow-red-500/40 disabled:opacity-50 transition-all flex items-center gap-2"
-            >
-              {#if deletingMeeting}
-                <div class="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin"></div>
-              {/if}
-              {m.planning_detail_delete()}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  {/if}
-
-  {#if meetingEditModalOpen}
-    <div class="fixed inset-0 z-100 flex items-center justify-center p-4">
-      <div 
-        class="absolute inset-0 bg-black/60" 
-        onclick={() => meetingEditModalOpen = false}
-        onkeydown={(e) => e.key === 'Escape' && (meetingEditModalOpen = false)}
-        role="button"
-        tabindex="0"
-        aria-label={m.meetings_close_modal_aria()}
-      ></div>
-      
-      <div class="relative w-full max-w-3xl bg-surface-container-lowest rounded-xl shadow-2xl overflow-hidden border border-outline-variant/30 font-inter text-on-surface">
-        <div class="p-8 border-b border-outline-variant/30 flex items-center justify-between bg-primary/5">
-          <div>
-            <h3 class="text-2xl font-semibold text-on-surface">{m.planning_edit_meeting_title()}</h3>
-            <p class="text-on-surface-variant text-sm">{m.meetings_modal_subtitle()}</p>
-          </div>
-          <button onclick={() => meetingEditModalOpen = false} class="w-10 h-10 rounded-full flex items-center justify-center hover:bg-surface-hover transition-colors">
-            <Papicon icon="x" size={24} />
-          </button>
-        </div>
-
-        <div class="p-8 space-y-6 max-h-[70vh] overflow-y-auto custom-scrollbar">
-          <div>
-            <label for="edit-meeting-title" class="block text-xs font-semibold text-on-surface-variant mb-2">{m.meetings_field_title_label()}</label>
-            <FormInput 
-              id="edit-meeting-title"
-              bind:value={editMeetingTitle}
-              placeholder={m.meetings_field_title_ph()}
-              className="w-full text-lg font-bold"
-            />
-          </div>
-
-          <div>
-            <label for="edit-meeting-date" class="block text-xs font-semibold text-on-surface-variant mb-2">{m.meetings_field_start_label()}</label>
-            <FormInput 
-              id="edit-meeting-date"
-              type="datetime-local"
-              bind:value={editMeetingDate}
-              className="w-full"
-            />
-          </div>
-
-          <div>
-            <label for="edit-meeting-end-date" class="block text-xs font-semibold text-on-surface-variant mb-2">{m.meetings_field_end_label()}</label>
-            <FormInput 
-              id="edit-meeting-end-date"
-              type="datetime-local"
-              bind:value={editMeetingEndDate}
-              className="w-full"
-            />
-            {#if timezoneStore.loaded}
-              <div class="mt-1.5">
-                <TimezoneHint bind:value={editMeetingTimezone} />
-              </div>
-            {/if}
-          </div>
-
-          <div>
-            <DiscordMarkdownEditor
-              id="edit-meeting-desc"
-              bind:value={editMeetingDesc}
-              label={m.meetings_field_agenda_label()}
-              placeholder={m.meetings_field_agenda_ph()}
-              rows={10}
-              agendaMode={true}
-              disabled={savingMeetingEdit}
-            />
-          </div>
-
-          {#if editMeetingError}
-            <div class="bg-error/10 border border-error/30 rounded-lg p-3 mt-3">
-              <p class="text-sm text-error">{editMeetingError}</p>
+            <div class="flex gap-2">
+              <input class="input flex-1 text-body-sm" bind:value={newReminderMessage} placeholder={m.planning_reminder_note_ph()} aria-label={m.planning_reminder_note_ph()} />
+              <Button type="submit" size="sm" icon="plus" disabled={!newReminderTime || !newReminderMessage.trim()} disabledReason={m.planning_reminder_required()}>{m.planning_reminder_add()}</Button>
             </div>
-          {/if}
-
-          <div class="flex items-center justify-end gap-4 pt-4 mt-6 border-t border-outline-variant/30">
-            <button onclick={() => meetingEditModalOpen = false} class="px-6 py-2.5 font-bold text-on-surface-variant hover:bg-surface-hover rounded-xl transition-colors">
-              {m.common_cancel()}
-            </button>
-            <button 
-              onclick={saveMeetingEdit}
-              disabled={savingMeetingEdit || !editMeetingTitle}
-              use:explainDisabled={(!editMeetingDate) ? m.common_reason_fill_field() : ''}
-              class="px-8 py-2.5 bg-primary text-white rounded-xl font-semibold shadow-sm hover:shadow-primary/40 disabled:opacity-50 disabled:grayscale transition-all flex items-center gap-2"
-            >
-              {#if savingMeetingEdit}
-                <div class="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin"></div>
-              {/if}
-              {m.common_save()}
-            </button>
-          </div>
-        </div>
-      </div>
+          </form>
+        </section>
+      {/if}
     </div>
   {/if}
+  {#snippet footer()}
+    <Button variant="ghost" icon="trash-2" class="mr-auto text-error" onclick={handleDeleteDetail}>{m.planning_detail_delete()}</Button>
+    {#if currentItemDetail?.type === 'meeting' && canManageMeetings}
+      <Button icon="edit-2" onclick={() => openEditMeeting(currentItemDetail.raw)}>{m.planning_detail_edit()}</Button>
+    {/if}
+    <Button variant="ghost" onclick={() => (detailModalOpen = false)}>{m.planning_detail_close()}</Button>
+  {/snippet}
+</Modal>
 
-</ModulePage>
+<!-- ===== Qui peut creer des appels ===== -->
+<Modal bind:open={permissionModalOpen} title={m.planning_call_perms_tooltip()}>
+  <div class="space-y-4">
+    <FilterPills
+      label={m.planning_call_perms_tooltip()}
+      options={[{ value: 'EVERYONE', label: m.planning_perm_everyone() }, { value: 'RESTRICTED', label: m.planning_perm_restricted() }]}
+      value={permMode}
+      onchange={(v) => (permMode = v as typeof permMode)}
+    />
+
+    {#if permMode === 'RESTRICTED'}
+      <div>
+        <p class="text-body-sm font-medium text-on-surface mb-2">{m.planning_perm_roles()}</p>
+        {#if (dashboardStore.state.discordRoles || []).length === 0}
+          <p class="text-2xs text-on-surface-variant">{m.planning_perm_no_roles()}</p>
+        {:else}
+          <div class="flex flex-wrap gap-1.5 max-h-40 overflow-y-auto">
+            {#each dashboardStore.state.discordRoles as role (role.id)}
+              <button type="button" class="pl-chip {permRoleIds.includes(role.id) ? 'pl-chip--active' : ''}" aria-pressed={permRoleIds.includes(role.id)} onclick={() => togglePermRole(role.id)}>
+                @{role.name}
+              </button>
+            {/each}
+          </div>
+        {/if}
+      </div>
+
+      <div>
+        <p class="text-body-sm font-medium text-on-surface mb-2">{m.planning_perm_members()}</p>
+        {#if permUserIds.length > 0}
+          <div class="flex flex-wrap gap-1.5 mb-2">
+            {#each permUserIds as uid (uid)}
+              {@const u = permSelectedUsersMap.get(uid)}
+              <button type="button" class="pl-chip pl-chip--active" onclick={() => togglePermUser({ id: uid, ...(u || {}) })} aria-label="{u ? memberName(u) : uid} ×">
+                {#if u}{@render avatar(u.avatarUrl, memberName(u), 'w-4 h-4')}{/if}
+                {u ? memberName(u) : uid}
+                <Papicon icon="x" size={10} />
+              </button>
+            {/each}
+          </div>
+        {/if}
+        {@render memberSearch(permMemberSearchQuery, permMemberSearchLoading, permMemberSearchResults, handlePermMemberSearchInput, togglePermUser, permUserIds)}
+      </div>
+    {:else}
+      <p class="text-body-sm text-on-surface-variant">{m.planning_perm_everyone_hint()}</p>
+    {/if}
+
+    {#if permError}
+      <Callout variant="danger">{permError}</Callout>
+    {/if}
+  </div>
+  {#snippet footer()}
+    <Button variant="ghost" onclick={() => (permissionModalOpen = false)}>{m.common_cancel()}</Button>
+    <Button variant="primary" loading={permSaving} onclick={savePermissionConfig}>{m.common_save()}</Button>
+  {/snippet}
+</Modal>
+
+<MemberCaseModal
+  open={userCaseModalOpen}
+  userId={selectedUserIdForCase}
+  userName={selectedUserNameForCase}
+  {caseData}
+  loading={loadingCase}
+  error={caseError}
+  onClose={() => { userCaseModalOpen = false; }}
+  onSelectUser={(newUserId) => {
+    const foundNode = caseData?.interactionGraph?.nodes?.find((n: any) => n.id === newUserId);
+    openMemberCase(newUserId, foundNode?.label || m.planning_member_fallback());
+  }}
+/>
+
+<!-- ===== Suppression d'une reunion ===== -->
+<Modal bind:open={meetingDeleteModalOpen} title={m.meetings_delete_modal_title()} subtitle={m.meetings_delete_modal_subtitle()}>
+  <div class="space-y-3">
+    <p class="text-body-sm text-on-surface-variant">{m.meetings_delete_question()}</p>
+    {#each [
+      { label: m.meetings_delete_event_label(), desc: m.meetings_delete_event_desc(), get: () => deleteDiscordEvent, set: (v: boolean) => (deleteDiscordEvent = v) },
+      { label: m.meetings_delete_message_label(), desc: m.meetings_delete_message_desc(), get: () => deleteDiscordMessage, set: (v: boolean) => (deleteDiscordMessage = v) },
+      { label: m.meetings_delete_notif_label(), desc: m.meetings_delete_notif_desc(), get: () => deleteDiscordNotification, set: (v: boolean) => (deleteDiscordNotification = v) },
+    ] as option, i (i)}
+      <label class="flex items-start gap-3 p-3 rounded-lg border border-outline-variant cursor-pointer hover:bg-surface-container">
+        <input type="checkbox" class="mt-0.5" checked={option.get()} onchange={(e) => option.set((e.target as HTMLInputElement).checked)} />
+        <span>
+          <span class="block text-body-sm font-medium text-on-surface">{option.label}</span>
+          <span class="block text-2xs text-on-surface-variant">{option.desc}</span>
+        </span>
+      </label>
+    {/each}
+  </div>
+  {#snippet footer()}
+    <Button variant="ghost" onclick={() => (meetingDeleteModalOpen = false)}>{m.common_cancel()}</Button>
+    <Button variant="danger" loading={deletingMeeting} onclick={confirmDeleteMeeting}>{m.planning_detail_delete()}</Button>
+  {/snippet}
+</Modal>
+
+<!-- ===== Edition d'une reunion ===== -->
+<Modal bind:open={meetingEditModalOpen} title={m.planning_edit_meeting_title()} subtitle={m.meetings_modal_subtitle()} size="xl">
+  <form id="pl-edit-meeting" class="space-y-4" onsubmit={(e) => { e.preventDefault(); void saveMeetingEdit(); }}>
+    <Field label={m.meetings_field_title_label()} required>
+      {#snippet children(id, describedBy)}
+        <input {id} aria-describedby={describedBy} class="input text-base font-semibold" bind:value={editMeetingTitle} placeholder={m.meetings_field_title_ph()} />
+      {/snippet}
+    </Field>
+    <div class="grid gap-4 sm:grid-cols-2">
+      <Field label={m.meetings_field_start_label()} required>
+        {#snippet children(id)}
+          <input {id} type="datetime-local" class="input" bind:value={editMeetingDate} />
+        {/snippet}
+      </Field>
+      <Field label={m.meetings_field_end_label()}>
+        {#snippet children(id)}
+          <input {id} type="datetime-local" class="input" bind:value={editMeetingEndDate} />
+        {/snippet}
+      </Field>
+    </div>
+    {#if timezoneStore.loaded}
+      <TimezoneHint bind:value={editMeetingTimezone} />
+    {/if}
+    <DiscordMarkdownEditor
+      id="edit-meeting-desc"
+      bind:value={editMeetingDesc}
+      label={m.meetings_field_agenda_label()}
+      placeholder={m.meetings_field_agenda_ph()}
+      rows={10}
+      agendaMode={true}
+      disabled={savingMeetingEdit}
+    />
+    {#if editMeetingError}
+      <Callout variant="danger">{editMeetingError}</Callout>
+    {/if}
+  </form>
+  {#snippet footer()}
+    <Button variant="ghost" onclick={() => (meetingEditModalOpen = false)}>{m.common_cancel()}</Button>
+    <Button variant="primary" type="submit" form="pl-edit-meeting" loading={savingMeetingEdit} disabled={!editMeetingTitle || !editMeetingDate} disabledReason={m.common_reason_fill_field()}>
+      {m.common_save()}
+    </Button>
+  {/snippet}
+</Modal>
 
 <style>
-  .custom-scrollbar::-webkit-scrollbar {
-    width: 4px;
+  .pl-dot {
+    display: inline-block;
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 999px;
+    flex-shrink: 0;
+    background: var(--evt);
   }
-  .custom-scrollbar::-webkit-scrollbar-track {
-    background: transparent;
+  .pl-check {
+    width: 1rem;
+    height: 1rem;
+    flex-shrink: 0;
+    accent-color: var(--evt, var(--color-primary));
   }
-  .custom-scrollbar::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.06);
-    border-radius: 10px;
+  .pl-filter {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    padding: 0.375rem 0.5rem;
+    border-radius: 0.5rem;
+    cursor: pointer;
+  }
+  .pl-filter:hover,
+  .pl-row:hover {
+    background: var(--color-surface-container);
+  }
+  .pl-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    width: 100%;
+    padding: 0.375rem 0.5rem;
+    border-radius: 0.5rem;
+    text-align: left;
+  }
+  .pl-section-title {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--color-on-surface);
+    margin-bottom: 0.5rem;
+  }
+  .pl-mini-day {
+    aspect-ratio: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    font-size: 0.75rem;
+  }
+  .pl-mini-day:hover {
+    background: var(--color-surface-container-high);
+  }
+  .pl-mini-day--today {
+    background: var(--color-primary);
+    color: var(--color-on-primary);
+    font-weight: 600;
+  }
+  .pl-mini-day--today:hover {
+    background: var(--color-primary);
+  }
+  .pl-mini-day--selected {
+    box-shadow: inset 0 0 0 1.5px var(--color-primary);
+    color: var(--color-primary);
+    font-weight: 600;
+  }
+  .pl-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.25rem 0.625rem;
+    border-radius: 999px;
+    border: 1px solid var(--color-outline-variant);
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--color-on-surface-variant);
+    transition: background-color 0.15s ease, border-color 0.15s ease;
+  }
+  button.pl-chip:hover {
+    background: var(--color-surface-container);
+  }
+  .pl-chip--active {
+    border-color: var(--color-primary);
+    background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+    color: var(--color-primary);
   }
 </style>
