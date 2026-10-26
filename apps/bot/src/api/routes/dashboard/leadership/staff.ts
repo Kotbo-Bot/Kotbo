@@ -87,6 +87,7 @@ import { canViewFeatureSection } from '../featureGate.js';
 import { type OverwriteResolvable, Client, ChannelType, PermissionFlagsBits, EmbedBuilder, TextChannel } from 'discord.js';
 
 import { jsonFailure } from '../../../shared/failure.js';
+import { deleteStaffListPanel, saveStaffListPanel } from '../../../../services/staff/staffListPanelService.js';
 import { publicErrorMessage } from '../../../../utils/publicError.js';
 export async function handleStaffRoutes(
   req: IncomingMessage,
@@ -140,7 +141,7 @@ export async function handleStaffRoutes(
 
           if (parts[5] === 'roles') {
             hasConfigurePermission = right(featureAccess.staff_roles);
-          } else if (parts[5] === 'members') {
+          } else if (parts[5] === 'members' || parts[5] === 'list-panels') {
             hasConfigurePermission = right(featureAccess.staff_directory);
           } else if (parts[5] === 'warnings') {
             hasConfigurePermission = right(featureAccess.discipline);
@@ -159,6 +160,34 @@ export async function handleStaffRoutes(
               ? 'Accès administrateur ou permission de suppression requise'
               : 'Accès administrateur ou permission de configuration requise',
           });
+          return true;
+        }
+      }
+
+      // Panneaux « liste du staff » : GET|POST /staff/list-panels, PATCH|DELETE /staff/list-panels/:id
+      if (parts[5] === 'list-panels' && (parts.length === 6 || parts.length === 7)) {
+        const panelId = parts[6];
+        try {
+          if (!panelId && method === 'GET') {
+            json(res, 200, { panels: await prisma.staffListPanel.findMany({ where: { guildId }, orderBy: { createdAt: 'asc' } }) });
+            return true;
+          }
+          if (!panelId && method === 'POST') {
+            json(res, 201, { panel: await saveStaffListPanel(guildId, (await readJsonBody<Record<string, unknown>>(req)) ?? {}) });
+            return true;
+          }
+          if (panelId && method === 'PATCH') {
+            json(res, 200, { panel: await saveStaffListPanel(guildId, (await readJsonBody<Record<string, unknown>>(req)) ?? {}, panelId) });
+            return true;
+          }
+          if (panelId && method === 'DELETE') {
+            const deleted = await deleteStaffListPanel(guildId, panelId);
+            json(res, deleted ? 200 : 404, deleted ? { ok: true } : { error: 'Panneau introuvable' });
+            return true;
+          }
+        } catch (err) {
+          logger.error('StaffAPI', 'Error on staff list panel:', err);
+          jsonFailure(res, err, 'Erreur sur le panneau de la liste du staff', 'StaffAPI');
           return true;
         }
       }

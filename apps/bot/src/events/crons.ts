@@ -809,6 +809,15 @@ export async function registerCrons(client: Client): Promise<void> {
     });
   });
 
+  // Panneaux « liste du staff » : re-rendus toutes les 10 minutes, le message
+  // n'est édité que si le contenu a changé.
+  cron.schedule('*/10 * * * *', async () => {
+    await runLocalSweep('staff-list-panels', async () => {
+      const { refreshStaffListPanels } = await import('../services/staff/staffListPanelService.js');
+      await refreshStaffListPanels();
+    });
+  });
+
   // Workflows : purge du journal des exécutions (tous les jours à 04:25). En
   // file, contrairement aux balayages : elle porte sur toute la base, un seul
   // processus suffit.

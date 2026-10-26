@@ -441,6 +441,7 @@ model Guild {
   candidatures RecruitmentCandidature[]
   recruitmentForms RecruitmentForm[]
   recruitmentPanels RecruitmentPanel[]
+  staffListPanels StaffListPanel[]
   notifications Notification[]
   guildDailyStats GuildDailyStat[]
   guildHourlyStats GuildHourlyStat[]
