@@ -2,9 +2,13 @@
   import { onMount } from 'svelte';
   import { router } from 'tinro';
   import {
+    DOING_LIST_ITEM_TYPES,
+    DOING_LIST_KEY_PATTERN,
     DOING_LIST_MODULES,
     DOING_LIST_PRIORITIES,
     type DoingListChecklistEntry,
+    type DoingListItemType,
+    type DoingListLinkType,
     type DoingListModule,
     type DoingListPriority,
     type DoingListSource,
@@ -12,6 +16,7 @@
   import ModulePage from '../lib/components/ModulePage.svelte';
   import Papicon from '../lib/components/Papicon.svelte';
   import Skeleton from '../lib/components/Skeleton.svelte';
+  import DoingListActivity from '../lib/components/doingLists/DoingListActivity.svelte';
   import { Button, Callout, EmptyState, Field, Menu, Modal, type MenuItem } from '../lib/components/ui';
   import { m, dateLocale } from '../lib/i18n';
   import { moduleName } from '../lib/moduleLabels';
@@ -22,6 +27,7 @@
   import { toast } from '../lib/stores/toast.svelte';
   import {
     addDoingListItem,
+    addDoingListLink,
     createDoingList,
     createDoingListColumn,
     deleteDoingList,
@@ -30,7 +36,9 @@
     fetchDoingListAssignees,
     fetchDoingLists,
     removeDoingListItem,
+    removeDoingListLink,
     reorderDoingListColumns,
+    searchDoingListItems,
     updateDoingList,
     updateDoingListColumn,
     updateDoingListItem,
@@ -38,6 +46,8 @@
     type DoingListAssignee,
     type DoingListColumn,
     type DoingListItem,
+    type DoingListLink,
+    type DoingListRef,
   } from '../lib/api';
 
   const rights = $derived(dashboardStore.state.featureAccess?.doing_lists);
@@ -54,6 +64,7 @@
   let lists = $state<DoingList[]>([]);
   let columns = $state<DoingListColumn[]>([]);
   let items = $state<DoingListItem[]>([]);
+  let links = $state<DoingListLink[]>([]);
   let assignees = $state<DoingListAssignee[]>([]);
   let loadingBoard = $state(false);
   let search = $state('');
@@ -66,6 +77,56 @@
   const filtering = $derived(!!search.trim() || onlyMine);
   // Glisser une carte dans une vue filtrée la poserait à une place qu'on ne voit pas.
   const canDrag = $derived(canEdit && !filtering);
+
+  const TYPE_META: Record<DoingListItemType, { label: () => string; icon: string; color: string }> = {
+    TASK: { label: m.dl_type_task, icon: 'check-square', color: 'var(--color-primary)' },
+    BUG: { label: m.dl_type_bug, icon: 'bug', color: 'var(--color-error)' },
+    STORY: { label: m.dl_type_story, icon: 'bookmark', color: 'var(--color-success)' },
+    EPIC: { label: m.dl_type_epic, icon: 'zap', color: 'var(--color-warning)' },
+  };
+
+  // Relations vues depuis une carte : « out » quand elle est la source du lien.
+  const LINK_KINDS: Array<{ value: string; type: DoingListLinkType; inward: boolean; label: () => string }> = [
+    { value: 'BLOCKS:out', type: 'BLOCKS', inward: false, label: m.dl_link_blocks },
+    { value: 'BLOCKS:in', type: 'BLOCKS', inward: true, label: m.dl_link_blocked_by },
+    { value: 'RELATES:out', type: 'RELATES', inward: false, label: m.dl_link_relates },
+    { value: 'DUPLICATES:out', type: 'DUPLICATES', inward: false, label: m.dl_link_duplicates },
+    { value: 'DUPLICATES:in', type: 'DUPLICATES', inward: true, label: m.dl_link_duplicated_by },
+  ];
+
+  function linkLabel(type: string, inward = false) {
+    return (LINK_KINDS.find((kind) => kind.type === type && kind.inward === (type !== 'RELATES' && inward)) ?? LINK_KINDS[2]).label();
+  }
+
+  function itemKey(item: { number: number }) {
+    return `${selected?.key ?? ''}-${item.number}`;
+  }
+
+  const itemsById = $derived(new Map(items.map((item) => [item.id, item])));
+
+  function childrenOf(id: string) {
+    return items.filter((item) => item.parentId === id);
+  }
+
+  /** Cartes qui bloquent celle-ci et ne sont pas terminées. */
+  function blockersOf(id: string) {
+    return links.filter((link) => link.type === 'BLOCKS' && link.to.id === id && !link.from.done);
+  }
+
+  function descendantsOf(id: string): Set<string> {
+    const found = new Set<string>();
+    const queue = [id];
+    while (queue.length > 0) {
+      const current = queue.shift() as string;
+      for (const child of childrenOf(current)) {
+        if (!found.has(child.id)) {
+          found.add(child.id);
+          queue.push(child.id);
+        }
+      }
+    }
+    return found;
+  }
 
   const PRIORITY_LABEL: Record<DoingListPriority, () => string> = {
     LOW: m.dl_priority_low,
@@ -124,6 +185,7 @@
     const query = search.trim().toLowerCase();
     if (!query) return true;
     return item.title.toLowerCase().includes(query)
+      || itemKey(item).toLowerCase().includes(query)
       || item.labels.some((label) => label.toLowerCase().includes(query))
       || memberName(item.staffTask?.assignee).toLowerCase().includes(query);
   }
@@ -134,6 +196,7 @@
       return {
         ...column,
         count: all.length,
+        points: all.reduce((sum, item) => sum + (item.estimate ?? 0), 0),
         items: all.filter(matches).sort((a, b) => a.position - b.position),
       };
     }),
@@ -151,6 +214,7 @@
       if (selectedId !== listId) return;
       columns = res.columns ?? [];
       items = res.items ?? [];
+      links = res.links ?? [];
       if (pendingCardId) {
         const card = items.find((item) => item.id === pendingCardId);
         pendingCardId = null;
@@ -191,12 +255,17 @@
 
   function replaceItem(item: DoingListItem) {
     items = items.map((entry) => (entry.id === item.id ? item : entry));
+    // Les liens portent l'état de leurs deux bouts : « bloquée » en dépend.
+    const done = isDoneColumn(item.columnId);
+    const patch = (ref: DoingListRef) => (ref.id === item.id ? { ...ref, done, title: item.title, type: item.type } : ref);
+    links = links.map((link) => ({ ...link, from: patch(link.from), to: patch(link.to) }));
   }
 
   // ── Création / modification d'une liste ──────────────────────
   let formOpen = $state(false);
   let formEditingId = $state<string | null>(null);
   let formName = $state('');
+  let formKey = $state('');
   let formDescription = $state('');
   let formModules = $state<DoingListModule[]>([]);
   let formSaving = $state(false);
@@ -205,6 +274,7 @@
   function openForm(list: DoingList | null = null) {
     formEditingId = list?.id ?? null;
     formName = list?.name ?? '';
+    formKey = list?.key ?? '';
     formDescription = list?.description ?? '';
     formModules = [...(list?.modules ?? [])];
     formError = '';
@@ -221,9 +291,14 @@
       formError = m.dl_form_name_required();
       return;
     }
+    const key = formKey.trim().toUpperCase();
+    if (key && !DOING_LIST_KEY_PATTERN.test(key)) {
+      formError = m.dl_form_key_invalid();
+      return;
+    }
     formSaving = true;
     formError = '';
-    const payload = { name: formName, description: formDescription || null, modules: formModules };
+    const payload = { name: formName, description: formDescription || null, modules: formModules, ...(key ? { key } : {}) };
     try {
       if (formEditingId) {
         const { list } = await updateDoingList(formEditingId, payload);
@@ -479,12 +554,40 @@
   let cardDue = $state('');
   let cardLabels = $state<string[]>([]);
   let cardChecklist = $state<DoingListChecklistEntry[]>([]);
+  let cardType = $state<DoingListItemType>('TASK');
+  let cardEstimate = $state<number | null>(null);
+  let cardParentId = $state('');
+  let newSubtask = $state('');
+  let linkKind = $state('BLOCKS:out');
+  let linkQuery = $state('');
+  let linkResults = $state<DoingListRef[]>([]);
+  let linkTimer: ReturnType<typeof setTimeout> | undefined;
   let newLabel = $state('');
   let newCheck = $state('');
   let cardSaving = $state(false);
   let cardError = $state('');
 
   const checklistDone = $derived(cardChecklist.filter((entry) => entry.done).length);
+  const cardChildren = $derived(card ? childrenOf(card.id) : []);
+  const cardChildrenDone = $derived(cardChildren.filter((child) => isDoneColumn(child.columnId)).length);
+  // Une carte ne peut pas passer sous elle-même ni sous l'une de ses sous-tâches.
+  const parentChoices = $derived.by(() => {
+    if (!card) return [];
+    const excluded = descendantsOf(card.id);
+    excluded.add(card.id);
+    return items.filter((item) => !excluded.has(item.id)).sort((a, b) => a.number - b.number);
+  });
+  // Liens de la carte, vus depuis elle : relation puis carte d'en face.
+  const cardLinks = $derived(
+    card
+      ? links
+          .filter((link) => link.from.id === card?.id || link.to.id === card?.id)
+          .map((link) => {
+            const outward = link.from.id === card?.id;
+            return { link, label: linkLabel(link.type, !outward), other: outward ? link.to : link.from };
+          })
+      : [],
+  );
 
   function toDateInput(value: string | null) {
     if (!value) return '';
@@ -503,6 +606,12 @@
     cardDue = toDateInput(item.dueDate);
     cardLabels = [...item.labels];
     cardChecklist = item.checklist.map((entry) => ({ ...entry }));
+    cardType = item.type;
+    cardEstimate = item.estimate;
+    cardParentId = item.parentId ?? '';
+    newSubtask = '';
+    linkQuery = '';
+    linkResults = [];
     newLabel = '';
     newCheck = '';
     cardError = '';
@@ -544,6 +653,9 @@
         dueDate: cardDue ? new Date(`${cardDue}T12:00:00`).toISOString() : null,
         labels: cardLabels,
         checklist: cardChecklist,
+        type: cardType,
+        estimate: cardEstimate === null || (cardEstimate as unknown) === '' ? null : Math.max(0, Math.floor(cardEstimate)),
+        ...(cardParentId !== (card.parentId ?? '') ? { parentId: cardParentId || null } : {}),
         ...(cardColumnId !== card.columnId ? { columnId: cardColumnId } : {}),
         ...(cardAssigneeId !== previousAssignee ? { assigneeId: cardAssigneeId || null } : {}),
       });
@@ -558,6 +670,77 @@
     }
   }
 
+  /** Ouvre une carte citée : dans ce tableau, ou sur la page de sa liste. */
+  function openRef(ref: DoingListRef) {
+    const local = itemsById.get(ref.id);
+    if (local) {
+      openCard(local);
+      return;
+    }
+    cardOpen = false;
+    pendingCardId = ref.id;
+    router.goto(`/doing-lists/${ref.listId}?card=${ref.id}`);
+  }
+
+  async function addSubtask(event: SubmitEvent) {
+    event.preventDefault();
+    if (!selectedId || !card || !newSubtask.trim()) return;
+    try {
+      const { item } = await addDoingListItem(selectedId, { title: newSubtask, parentId: card.id });
+      items = [...items, item];
+      newSubtask = '';
+      syncCounts();
+    } catch (err) {
+      toast.error(errorText(err, m.dl_save_error()));
+    }
+  }
+
+  function onLinkQuery() {
+    clearTimeout(linkTimer);
+    const query = linkQuery.trim();
+    if (!query) {
+      linkResults = [];
+      return;
+    }
+    linkTimer = setTimeout(async () => {
+      try {
+        const res = await searchDoingListItems(query);
+        linkResults = res.items.filter((ref) => ref.id !== card?.id);
+      } catch {
+        linkResults = [];
+      }
+    }, 250);
+  }
+
+  async function addLink(target: DoingListRef) {
+    if (!selectedId || !card) return;
+    const kind = LINK_KINDS.find((entry) => entry.value === linkKind) ?? LINK_KINDS[0];
+    try {
+      const { link } = await addDoingListLink(selectedId, card.id, { type: kind.type, targetId: target.id, inward: kind.inward });
+      links = [...links, link];
+      linkQuery = '';
+      linkResults = [];
+    } catch (err) {
+      toast.error(errorText(err, m.dl_save_error()));
+    }
+  }
+
+  async function removeLink(link: DoingListLink) {
+    if (!selectedId || !card) return;
+    try {
+      await removeDoingListLink(selectedId, card.id, link.id);
+      links = links.filter((entry) => entry.id !== link.id);
+    } catch (err) {
+      toast.error(errorText(err, m.dl_save_error()));
+    }
+  }
+
+  function setCommentCount(count: number) {
+    if (!card) return;
+    const id = card.id;
+    items = items.map((item) => (item.id === id ? { ...item, _count: { events: count } } : item));
+  }
+
   async function removeCard() {
     if (!selectedId || !card) return;
     const target = card;
@@ -565,7 +748,10 @@
     if (!(await confirmDialog.danger(m.dl_card_remove_title({ title: target.title }), target.sourceModule ? m.dl_item_remove_hint() : m.dl_card_remove_desc(), m.dl_item_remove(), impacts))) return;
     try {
       await removeDoingListItem(selectedId, target.id);
-      items = items.filter((entry) => entry.id !== target.id);
+      items = items
+        .filter((entry) => entry.id !== target.id)
+        .map((entry) => (entry.parentId === target.id ? { ...entry, parentId: null } : entry));
+      links = links.filter((link) => link.from.id !== target.id && link.to.id !== target.id);
       syncCounts();
       cardOpen = false;
     } catch (err) {
@@ -649,6 +835,9 @@
                 >
                   {column.count}{column.wipLimit ? ` / ${column.wipLimit}` : ''}
                 </span>
+                {#if column.points > 0}
+                  <span class="dl-points" title={m.dl_points_hint()}>{column.points}</span>
+                {/if}
                 {#if canEdit}
                   <Menu items={columnMenu(column, columnIndex)} label={m.dl_column_options({ name: column.name })} />
                 {/if}
@@ -659,6 +848,11 @@
                   {@const done = column.isDone}
                   {@const checks = item.checklist.length}
                   {@const checked = item.checklist.filter((entry) => entry.done).length}
+                  {@const parent = item.parentId ? itemsById.get(item.parentId) : undefined}
+                  {@const children = childrenOf(item.id)}
+                  {@const childrenDone = children.filter((child) => isDoneColumn(child.columnId)).length}
+                  {@const blocked = !done && blockersOf(item.id).length > 0}
+                  {@const comments = item._count?.events ?? 0}
                   <div
                     class="dl-card {dropAt?.columnId === column.id && dropAt.index === index && drag?.kind === 'item' ? 'dl-card--drop' : ''} {drag?.kind === 'item' && drag.id === item.id ? 'opacity-40' : ''}"
                     draggable={canDrag}
@@ -671,6 +865,21 @@
                     onclick={() => openCard(item)}
                     onkeydown={(event) => { if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); openCard(item); } }}
                   >
+                    <div class="flex items-center gap-1.5 text-2xs text-on-surface-variant">
+                      <span style="color: {TYPE_META[item.type].color}" title={TYPE_META[item.type].label()}><Papicon icon={TYPE_META[item.type].icon} size={12} /></span>
+                      <span class="font-mono font-semibold {done ? 'line-through' : ''}">{itemKey(item)}</span>
+                      {#if parent}
+                        <span class="dl-chip min-w-0 max-w-[10rem]" title={parent.title}>
+                          <span style="color: {TYPE_META[parent.type].color}"><Papicon icon={TYPE_META[parent.type].icon} size={10} /></span>
+                          <span class="truncate">{parent.title}</span>
+                        </span>
+                      {/if}
+                      {#if blocked}
+                        <span class="badge badge-danger ml-auto" title={blockersOf(item.id).map((link) => link.from.key).join(', ')}>
+                          <Papicon icon="ban" size={10} /> {m.dl_blocked()}
+                        </span>
+                      {/if}
+                    </div>
                     {#if item.labels.length > 0}
                       <div class="flex flex-wrap gap-1">
                         {#each item.labels as label (label)}
@@ -702,8 +911,21 @@
                           <Papicon icon="check-square" size={12} /> {checked}/{checks}
                         </span>
                       {/if}
+                      {#if children.length > 0}
+                        <span class="inline-flex items-center gap-1 {childrenDone === children.length ? 'text-success' : ''}" title={m.dl_card_subtasks()}>
+                          <Papicon icon="git-branch" size={12} /> {childrenDone}/{children.length}
+                        </span>
+                      {/if}
+                      {#if comments > 0}
+                        <span class="inline-flex items-center gap-1" title={m.dl_activity_comments()}>
+                          <Papicon icon="message-square" size={12} /> {comments}
+                        </span>
+                      {/if}
                       {#if item.description}
                         <Papicon icon="align-left" size={12} />
+                      {/if}
+                      {#if item.estimate !== null}
+                        <span class="dl-points" title={m.dl_card_field_estimate()}>{item.estimate}</span>
                       {/if}
                       {#if item.sourceModule}
                         <span class="dl-chip">{sourceName(item.sourceModule)}</span>
@@ -776,7 +998,9 @@
         {@const done = list.counts?.done ?? 0}
         <div class="dl-list-card section-card">
           <a class="dl-list-link" href={`/doing-lists/${list.id}`}>
-            <span class="pr-8 text-base font-semibold text-on-surface wrap-break-word">{list.name}</span>
+            <span class="pr-8 text-base font-semibold text-on-surface wrap-break-word">
+              <span class="mr-1 font-mono text-2xs text-on-surface-variant">{list.key}</span>{list.name}
+            </span>
             {#if list.description}
               <span class="line-clamp-2 text-body-sm text-on-surface-variant">{list.description}</span>
             {/if}
@@ -804,6 +1028,11 @@
     <Field label={m.dl_form_name()} required>
       {#snippet children(id, describedBy)}
         <input {id} aria-describedby={describedBy} class="input w-full" maxlength="80" bind:value={formName} placeholder={m.dl_form_name_ph()} />
+      {/snippet}
+    </Field>
+    <Field label={m.dl_form_key()} hint={formEditingId ? m.dl_form_key_edit_hint() : m.dl_form_key_hint()}>
+      {#snippet children(id, describedBy)}
+        <input {id} aria-describedby={describedBy} class="input w-40 font-mono uppercase" maxlength="10" bind:value={formKey} placeholder="BOUT" />
       {/snippet}
     </Field>
     <Field label={m.dl_form_description()}>
@@ -865,21 +1094,157 @@
   {/snippet}
 </Modal>
 
-<Modal bind:open={cardOpen} title={m.dl_card_title()} size="lg">
+<Modal bind:open={cardOpen} title={card ? `${itemKey(card)} · ${TYPE_META[card.type].label()}` : m.dl_card_title()} size="xl">
   {#if card}
-    <form id="dl-card-form" class="space-y-4" onsubmit={saveCard}>
-      <Field label={m.dl_card_field_title()} required>
-        {#snippet children(id, describedBy)}
-          <input {id} aria-describedby={describedBy} class="input w-full" maxlength="200" bind:value={cardTitle} disabled={!canEdit} />
-        {/snippet}
-      </Field>
+    <div class="grid gap-6 lg:grid-cols-[minmax(0,1fr)_15rem]">
+      <div class="min-w-0 space-y-6">
+        <form id="dl-card-form" class="space-y-4" onsubmit={saveCard}>
+          <Field label={m.dl_card_field_title()} required>
+            {#snippet children(id, describedBy)}
+              <input {id} aria-describedby={describedBy} class="input w-full" maxlength="200" bind:value={cardTitle} disabled={!canEdit} />
+            {/snippet}
+          </Field>
 
-      <div class="grid gap-4 sm:grid-cols-2">
+          <Field label={m.dl_card_field_description()}>
+            {#snippet children(id, describedBy)}
+              <textarea {id} aria-describedby={describedBy} class="input w-full h-32 resize-y" maxlength="4000" bind:value={cardDescription} disabled={!canEdit} placeholder={m.dl_card_description_ph()}></textarea>
+            {/snippet}
+          </Field>
+
+          <fieldset class="space-y-2">
+            <legend class="text-body-sm font-medium text-on-surface mb-1">
+              {m.dl_card_field_checklist()}{cardChecklist.length > 0 ? ` · ${checklistDone}/${cardChecklist.length}` : ''}
+            </legend>
+            {#if cardChecklist.length > 0}
+              <div class="dl-progress" aria-hidden="true"><span style="width: {(checklistDone / cardChecklist.length) * 100}%"></span></div>
+            {/if}
+            {#each cardChecklist as entry (entry.id)}
+              <div class="flex items-center gap-2 text-body-sm text-on-surface">
+                <input type="checkbox" bind:checked={entry.done} disabled={!canEdit} aria-label={entry.text} />
+                <span class="min-w-0 flex-1 wrap-break-word {entry.done ? 'line-through text-on-surface-variant' : ''}">{entry.text}</span>
+                {#if canEdit}
+                  <button type="button" class="text-on-surface-variant hover:text-on-surface" aria-label={m.dl_card_check_remove({ text: entry.text })} onclick={() => (cardChecklist = cardChecklist.filter((other) => other.id !== entry.id))}>
+                    <Papicon icon="x" size={12} />
+                  </button>
+                {/if}
+              </div>
+            {/each}
+            {#if canEdit}
+              <input class="input w-full text-body-sm" maxlength="200" bind:value={newCheck} onkeydown={addCheck} placeholder={m.dl_card_check_ph()} aria-label={m.dl_card_check_ph()} />
+            {/if}
+          </fieldset>
+        </form>
+
+        <section class="space-y-2">
+          <h3 class="text-body-sm font-semibold text-on-surface">
+            {m.dl_card_subtasks()}{cardChildren.length > 0 ? ` · ${cardChildrenDone}/${cardChildren.length}` : ''}
+          </h3>
+          {#if cardChildren.length > 0}
+            <div class="dl-progress" aria-hidden="true"><span style="width: {(cardChildrenDone / cardChildren.length) * 100}%"></span></div>
+            <ul class="space-y-1">
+              {#each cardChildren as child (child.id)}
+                {@const childDone = isDoneColumn(child.columnId)}
+                <li>
+                  <button type="button" class="dl-ref" onclick={() => openCard(child)}>
+                    <span style="color: {TYPE_META[child.type].color}"><Papicon icon={TYPE_META[child.type].icon} size={12} /></span>
+                    <span class="font-mono text-2xs font-semibold text-on-surface-variant">{itemKey(child)}</span>
+                    <span class="min-w-0 flex-1 truncate {childDone ? 'line-through text-on-surface-variant' : ''}">{child.title}</span>
+                    <span class="dl-chip">{columns.find((column) => column.id === child.columnId)?.name ?? ''}</span>
+                  </button>
+                </li>
+              {/each}
+            </ul>
+          {:else}
+            <p class="text-2xs text-on-surface-variant">{m.dl_card_no_subtask()}</p>
+          {/if}
+          {#if canEdit}
+            <form class="flex gap-2" onsubmit={addSubtask}>
+              <input class="input flex-1 text-body-sm" maxlength="200" bind:value={newSubtask} placeholder={m.dl_card_subtask_ph()} aria-label={m.dl_card_subtask_ph()} />
+              <Button type="submit" size="sm" icon="plus" disabled={!newSubtask.trim()} disabledReason={m.common_reason_fill_field()}>{m.dl_add_item()}</Button>
+            </form>
+          {/if}
+        </section>
+
+        <section class="space-y-2">
+          <h3 class="text-body-sm font-semibold text-on-surface">{m.dl_card_links()}</h3>
+          {#if cardLinks.length > 0}
+            <ul class="space-y-1">
+              {#each cardLinks as entry (entry.link.id)}
+                <li class="flex items-center gap-2">
+                  <span class="w-28 shrink-0 text-2xs text-on-surface-variant">{entry.label}</span>
+                  <button type="button" class="dl-ref min-w-0 flex-1" onclick={() => openRef(entry.other)}>
+                    <span style="color: {TYPE_META[entry.other.type].color}"><Papicon icon={TYPE_META[entry.other.type].icon} size={12} /></span>
+                    <span class="font-mono text-2xs font-semibold text-on-surface-variant">{entry.other.key}</span>
+                    <span class="min-w-0 flex-1 truncate {entry.other.done ? 'line-through text-on-surface-variant' : ''}">{entry.other.title}</span>
+                  </button>
+                  {#if canEdit}
+                    <button type="button" class="text-on-surface-variant hover:text-on-surface" aria-label={m.dl_link_remove({ key: entry.other.key })} onclick={() => removeLink(entry.link)}>
+                      <Papicon icon="x" size={12} />
+                    </button>
+                  {/if}
+                </li>
+              {/each}
+            </ul>
+          {:else}
+            <p class="text-2xs text-on-surface-variant">{m.dl_card_no_link()}</p>
+          {/if}
+          {#if canEdit}
+            <div class="space-y-1">
+              <div class="flex gap-2">
+                <select class="input w-44 text-body-sm" bind:value={linkKind} aria-label={m.dl_link_kind()}>
+                  {#each LINK_KINDS as kind (kind.value)}
+                    <option value={kind.value}>{kind.label()}</option>
+                  {/each}
+                </select>
+                <input class="input flex-1 text-body-sm" maxlength="100" bind:value={linkQuery} oninput={onLinkQuery} placeholder={m.dl_link_search_ph()} aria-label={m.dl_link_search_ph()} />
+              </div>
+              {#if linkResults.length > 0}
+                <ul class="dl-results">
+                  {#each linkResults as ref (ref.id)}
+                    <li>
+                      <button type="button" class="dl-ref" onclick={() => addLink(ref)}>
+                        <span style="color: {TYPE_META[ref.type].color}"><Papicon icon={TYPE_META[ref.type].icon} size={12} /></span>
+                        <span class="font-mono text-2xs font-semibold text-on-surface-variant">{ref.key}</span>
+                        <span class="min-w-0 flex-1 truncate">{ref.title}</span>
+                      </button>
+                    </li>
+                  {/each}
+                </ul>
+              {:else if linkQuery.trim()}
+                <p class="text-2xs text-on-surface-variant">{m.dl_link_no_result()}</p>
+              {/if}
+            </div>
+          {/if}
+        </section>
+
+        {#key card.id}
+          <DoingListActivity
+            listId={selectedId ?? ''}
+            itemId={card.id}
+            {canEdit}
+            canModerateAll={isAdmin}
+            {myId}
+            linkLabel={(type) => linkLabel(type)}
+            oncommentcount={setCommentCount}
+          />
+        {/key}
+      </div>
+
+      <aside class="space-y-4">
         <Field label={m.dl_card_field_column()}>
           {#snippet children(id, describedBy)}
             <select {id} aria-describedby={describedBy} class="input w-full" bind:value={cardColumnId} disabled={!canEdit}>
               {#each sortedColumns as column (column.id)}
                 <option value={column.id}>{column.name}{column.wipLimit ? ` (${items.filter((item) => item.columnId === column.id).length}/${column.wipLimit})` : ''}</option>
+              {/each}
+            </select>
+          {/snippet}
+        </Field>
+        <Field label={m.dl_card_field_type()}>
+          {#snippet children(id, describedBy)}
+            <select {id} aria-describedby={describedBy} class="input w-full" bind:value={cardType} disabled={!canEdit}>
+              {#each DOING_LIST_ITEM_TYPES as type (type)}
+                <option value={type}>{TYPE_META[type].label()}</option>
               {/each}
             </select>
           {/snippet}
@@ -906,79 +1271,63 @@
             </select>
           {/snippet}
         </Field>
+        <Field label={m.dl_card_field_estimate()} hint={m.dl_card_estimate_hint()}>
+          {#snippet children(id, describedBy)}
+            <input {id} aria-describedby={describedBy} class="input w-full" type="number" min="0" max="999" bind:value={cardEstimate} disabled={!canEdit} />
+          {/snippet}
+        </Field>
         <Field label={m.dl_card_field_due()}>
           {#snippet children(id, describedBy)}
             <input {id} aria-describedby={describedBy} class="input w-full" type="date" bind:value={cardDue} disabled={!canEdit} />
           {/snippet}
         </Field>
-      </div>
+        <Field label={m.dl_card_field_parent()}>
+          {#snippet children(id, describedBy)}
+            <select {id} aria-describedby={describedBy} class="input w-full" bind:value={cardParentId} disabled={!canEdit}>
+              <option value="">{m.dl_card_no_parent()}</option>
+              {#each parentChoices as choice (choice.id)}
+                <option value={choice.id}>{itemKey(choice)} · {choice.title.slice(0, 60)}</option>
+              {/each}
+            </select>
+          {/snippet}
+        </Field>
+        <Field label={m.dl_card_field_labels()} hint={canEdit ? m.dl_card_labels_hint() : undefined}>
+          {#snippet children(id, describedBy)}
+            <div class="space-y-2">
+              {#if cardLabels.length > 0}
+                <div class="flex flex-wrap gap-1.5">
+                  {#each cardLabels as label (label)}
+                    <span class="dl-chip">
+                      <span class="dl-dot" style="background: hsl({labelHue(label)} 65% 50%)"></span>{label}
+                      {#if canEdit}
+                        <button type="button" class="hover:text-on-surface" aria-label={m.dl_card_label_remove({ label })} onclick={() => (cardLabels = cardLabels.filter((entry) => entry !== label))}>
+                          <Papicon icon="x" size={10} />
+                        </button>
+                      {/if}
+                    </span>
+                  {/each}
+                </div>
+              {/if}
+              {#if canEdit}
+                <input {id} aria-describedby={describedBy} class="input w-full" maxlength="30" bind:value={newLabel} onkeydown={addLabel} placeholder={m.dl_card_labels_ph()} />
+              {/if}
+            </div>
+          {/snippet}
+        </Field>
 
-      <Field label={m.dl_card_field_labels()} hint={canEdit ? m.dl_card_labels_hint() : undefined}>
-        {#snippet children(id, describedBy)}
-          <div class="space-y-2">
-            {#if cardLabels.length > 0}
-              <div class="flex flex-wrap gap-1.5">
-                {#each cardLabels as label (label)}
-                  <span class="dl-chip">
-                    <span class="dl-dot" style="background: hsl({labelHue(label)} 65% 50%)"></span>{label}
-                    {#if canEdit}
-                      <button type="button" class="hover:text-on-surface" aria-label={m.dl_card_label_remove({ label })} onclick={() => (cardLabels = cardLabels.filter((entry) => entry !== label))}>
-                        <Papicon icon="x" size={10} />
-                      </button>
-                    {/if}
-                  </span>
-                {/each}
-              </div>
-            {/if}
-            {#if canEdit}
-              <input {id} aria-describedby={describedBy} class="input w-full" maxlength="30" bind:value={newLabel} onkeydown={addLabel} placeholder={m.dl_card_labels_ph()} />
-            {/if}
-          </div>
-        {/snippet}
-      </Field>
-
-      <Field label={m.dl_card_field_description()}>
-        {#snippet children(id, describedBy)}
-          <textarea {id} aria-describedby={describedBy} class="input w-full h-32 resize-y" maxlength="4000" bind:value={cardDescription} disabled={!canEdit} placeholder={m.dl_card_description_ph()}></textarea>
-        {/snippet}
-      </Field>
-
-      <fieldset class="space-y-2">
-        <legend class="text-body-sm font-medium text-on-surface mb-1">
-          {m.dl_card_field_checklist()}{cardChecklist.length > 0 ? ` · ${checklistDone}/${cardChecklist.length}` : ''}
-        </legend>
-        {#if cardChecklist.length > 0}
-          <div class="dl-progress" aria-hidden="true"><span style="width: {(checklistDone / cardChecklist.length) * 100}%"></span></div>
+        {#if card.sourceModule && card.sourceId}
+          <a class="inline-flex items-center gap-1 text-body-sm text-primary hover:underline" href={SOURCE_HREF[card.sourceModule](card.sourceId)}>
+            <Papicon icon="external-link" size={12} /> {m.dl_card_open_source({ source: sourceName(card.sourceModule) })}
+          </a>
         {/if}
-        {#each cardChecklist as entry (entry.id)}
-          <div class="flex items-center gap-2 text-body-sm text-on-surface">
-            <input type="checkbox" bind:checked={entry.done} disabled={!canEdit} aria-label={entry.text} />
-            <span class="min-w-0 flex-1 wrap-break-word {entry.done ? 'line-through text-on-surface-variant' : ''}">{entry.text}</span>
-            {#if canEdit}
-              <button type="button" class="text-on-surface-variant hover:text-on-surface" aria-label={m.dl_card_check_remove({ text: entry.text })} onclick={() => (cardChecklist = cardChecklist.filter((other) => other.id !== entry.id))}>
-                <Papicon icon="x" size={12} />
-              </button>
-            {/if}
-          </div>
-        {/each}
-        {#if canEdit}
-          <input class="input w-full text-body-sm" maxlength="200" bind:value={newCheck} onkeydown={addCheck} placeholder={m.dl_card_check_ph()} aria-label={m.dl_card_check_ph()} />
+        {#if card.staffTask && card.sourceModule !== 'tasks'}
+          <p class="text-2xs text-on-surface-variant">{m.dl_card_in_planning({ name: memberName(card.staffTask.assignee) })}</p>
         {/if}
-      </fieldset>
-
-      {#if card.sourceModule && card.sourceId}
-        <a class="inline-flex items-center gap-1 text-body-sm text-primary hover:underline" href={SOURCE_HREF[card.sourceModule](card.sourceId)}>
-          <Papicon icon="external-link" size={12} /> {m.dl_card_open_source({ source: sourceName(card.sourceModule) })}
-        </a>
-      {/if}
-      {#if card.staffTask && card.sourceModule !== 'tasks'}
-        <p class="text-2xs text-on-surface-variant">{m.dl_card_in_planning({ name: memberName(card.staffTask.assignee) })}</p>
-      {/if}
-
-      {#if cardError}
-        <Callout variant="danger">{cardError}</Callout>
-      {/if}
-    </form>
+        {#if cardError}
+          <Callout variant="danger">{cardError}</Callout>
+        {/if}
+      </aside>
+    </div>
   {/if}
   {#snippet footer()}
     {#if canEdit}
@@ -1106,6 +1455,39 @@
     border-radius: 999px;
     background: var(--color-surface-container-high);
     color: var(--color-on-surface-variant);
+  }
+  .dl-points {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.25rem;
+    padding: 0 0.375rem;
+    border-radius: 999px;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    background: var(--color-surface-container-high);
+    color: var(--color-on-surface);
+  }
+  .dl-ref {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    width: 100%;
+    padding: 0.375rem 0.5rem;
+    border-radius: 0.5rem;
+    text-align: left;
+    font-size: 0.8125rem;
+    color: var(--color-on-surface);
+  }
+  .dl-ref:hover {
+    background: var(--color-surface-container);
+  }
+  .dl-results {
+    border: 1px solid var(--color-outline-variant);
+    border-radius: 0.5rem;
+    padding: 0.25rem;
+    max-height: 14rem;
+    overflow-y: auto;
   }
   .dl-dot {
     width: 0.5rem;

@@ -1,11 +1,19 @@
 /** Listes de suivi. */
-import type { DoingListChecklistEntry, DoingListModule, DoingListPriority, DoingListSource } from '@kotbo/contracts';
+import type {
+  DoingListChecklistEntry,
+  DoingListItemType,
+  DoingListLinkType,
+  DoingListModule,
+  DoingListPriority,
+  DoingListSource,
+} from '@kotbo/contracts';
 import { authStore } from '../stores/auth.svelte';
 import { dashboardRequest } from './client';
 
 export type DoingList = {
   id: string;
   name: string;
+  key: string;
   description: string | null;
   modules: DoingListModule[];
   counts?: { total: number; done: number };
@@ -33,6 +41,10 @@ export type DoingListItem = {
   columnId: string;
   title: string;
   position: number;
+  number: number;
+  type: DoingListItemType;
+  estimate: number | null;
+  parentId: string | null;
   description: string | null;
   priority: DoingListPriority | null;
   dueDate: string | null;
@@ -42,7 +54,24 @@ export type DoingListItem = {
   sourceId: string | null;
   staffTaskId: string | null;
   staffTask: { id: string; status: string; assignee: DoingListAssignee | null } | null;
+  _count?: { events: number };
   createdAt: string;
+};
+
+/** Carte citée ailleurs : lien, résultat de recherche. */
+export type DoingListRef = { id: string; listId: string; key: string; title: string; type: DoingListItemType; done: boolean };
+
+export type DoingListLink = { id: string; type: DoingListLinkType; from: DoingListRef; to: DoingListRef };
+
+export type DoingListEvent = {
+  id: string;
+  actorId: string;
+  actorName: string;
+  kind: 'comment' | 'created' | 'moved' | 'assigned' | 'unassigned' | 'updated' | 'linked' | 'unlinked';
+  body: string | null;
+  data: Record<string, unknown> | null;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type DoingListLinks = {
@@ -50,7 +79,7 @@ export type DoingListLinks = {
   items: Array<{ id: string; listId: string; sourceId: string }>;
 };
 
-type ListInput = { name?: string; description?: string | null; modules?: DoingListModule[]; columns?: string[] };
+type ListInput = { name?: string; key?: string; description?: string | null; modules?: DoingListModule[]; columns?: string[] };
 type ColumnInput = { name?: string; wipLimit?: number | null; isDone?: boolean };
 type ItemInput = {
   title?: string;
@@ -62,6 +91,9 @@ type ItemInput = {
   columnId?: string;
   index?: number;
   assigneeId?: string | null;
+  type?: DoingListItemType;
+  estimate?: number | null;
+  parentId?: string | null;
   sourceModule?: DoingListSource;
   sourceId?: string;
 };
@@ -70,7 +102,7 @@ export async function fetchDoingLists(guildId = authStore.selectedGuildId): Prom
   return dashboardRequest('/doing-lists', { method: 'GET', guildId });
 }
 
-export async function fetchDoingList(listId: string, guildId = authStore.selectedGuildId): Promise<{ list: DoingList; columns: DoingListColumn[]; items: DoingListItem[] }> {
+export async function fetchDoingList(listId: string, guildId = authStore.selectedGuildId): Promise<{ list: DoingList; columns: DoingListColumn[]; items: DoingListItem[]; links: DoingListLink[] }> {
   return dashboardRequest(`/doing-lists/${listId}`, { method: 'GET', guildId });
 }
 
@@ -120,4 +152,38 @@ export async function updateDoingListItem(listId: string, itemId: string, payloa
 
 export async function removeDoingListItem(listId: string, itemId: string, guildId = authStore.selectedGuildId) {
   return dashboardRequest(`/doing-lists/${listId}/items/${itemId}`, { method: 'DELETE', guildId });
+}
+
+export async function searchDoingListItems(query: string, guildId = authStore.selectedGuildId): Promise<{ items: DoingListRef[] }> {
+  return dashboardRequest(`/doing-lists/search?q=${encodeURIComponent(query)}`, { method: 'GET', guildId });
+}
+
+export async function fetchDoingListEvents(listId: string, itemId: string, guildId = authStore.selectedGuildId): Promise<{ events: DoingListEvent[] }> {
+  return dashboardRequest(`/doing-lists/${listId}/items/${itemId}/events`, { method: 'GET', guildId });
+}
+
+export async function addDoingListComment(listId: string, itemId: string, body: string, guildId = authStore.selectedGuildId): Promise<{ event: DoingListEvent }> {
+  return dashboardRequest(`/doing-lists/${listId}/items/${itemId}/comments`, { method: 'POST', payload: { body }, guildId });
+}
+
+export async function updateDoingListComment(listId: string, itemId: string, eventId: string, body: string, guildId = authStore.selectedGuildId): Promise<{ event: DoingListEvent }> {
+  return dashboardRequest(`/doing-lists/${listId}/items/${itemId}/comments/${eventId}`, { method: 'PATCH', payload: { body }, guildId });
+}
+
+export async function deleteDoingListComment(listId: string, itemId: string, eventId: string, guildId = authStore.selectedGuildId) {
+  return dashboardRequest(`/doing-lists/${listId}/items/${itemId}/comments/${eventId}`, { method: 'DELETE', guildId });
+}
+
+/** inward : la carte est la cible du lien (« est bloquée par », « est dupliquée par »). */
+export async function addDoingListLink(
+  listId: string,
+  itemId: string,
+  payload: { type: DoingListLinkType; targetId: string; inward: boolean },
+  guildId = authStore.selectedGuildId,
+): Promise<{ link: DoingListLink }> {
+  return dashboardRequest(`/doing-lists/${listId}/items/${itemId}/links`, { method: 'POST', payload, guildId });
+}
+
+export async function removeDoingListLink(listId: string, itemId: string, linkId: string, guildId = authStore.selectedGuildId) {
+  return dashboardRequest(`/doing-lists/${listId}/items/${itemId}/links/${linkId}`, { method: 'DELETE', guildId });
 }
