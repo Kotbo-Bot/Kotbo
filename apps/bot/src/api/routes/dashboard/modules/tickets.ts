@@ -16,7 +16,7 @@ import { clampCommentTimeout } from '../../../../services/features/ticketSatisfa
 import { INBOX_VIEWS, computeSla, normalizeView, viewWhere, waitingOn, type SlaConfig } from '../../../../services/features/ticketHelpdesk.js';
 import { handleTicketHelpdeskRoutes } from './ticketHelpdesk.js';
 import { noticeSeconds } from '../../../../services/features/ticketRecordingNotice.js';
-import { parseMacroInput } from '../../../../services/features/ticketMacroService.js';
+import { getStaffSignature, parseMacroInput, SIGNATURE_MAX_LENGTH } from '../../../../services/features/ticketMacroService.js';
 
 import { jsonFailure } from '../../../shared/failure.js';
 import { publicErrorMessage } from '../../../../utils/publicError.js';
@@ -619,6 +619,28 @@ export async function handleTicketsRoutes(ctx: ModuleRouteContext): Promise<bool
 
     // Les routes `blacklist` et `macros` passent avant `/tickets/:ticketId` :
     // sans cela, elles seraient lues comme des identifiants de ticket.
+
+    // GET|PUT /api/dashboard/guilds/:guildId/tickets/signature : celle du staff connecte.
+    if (parts.length === 6 && parts[5] === 'signature' && (method === 'GET' || method === 'PUT')) {
+      try {
+        if (method === 'PUT') {
+          const body = (await readJsonBody<{ content?: unknown; sendAsMe?: unknown }>(req)) ?? {};
+          const content = typeof body.content === 'string' ? body.content.trim().slice(0, SIGNATURE_MAX_LENGTH) : '';
+          const sendAsMe = body.sendAsMe === true;
+          await prisma.ticketStaffSignature.upsert({
+            where: { guildId_userId: { guildId, userId: user.userId } },
+            create: { guildId, userId: user.userId, content, sendAsMe },
+            update: { content, sendAsMe },
+          });
+        }
+        const signature = await getStaffSignature(guildId, user.userId);
+        json(res, 200, { content: signature.content ?? '', sendAsMe: signature.sendAsMe });
+      } catch (err: unknown) {
+        logger.error('TicketsAPI', `Error on ticket signature: ${errorMessage(err)}`);
+        json(res, 500, { error: 'Erreur lors de l’enregistrement de la signature' });
+      }
+      return true;
+    }
 
     // GET /api/dashboard/guilds/:guildId/tickets/macros
     if (parts.length === 6 && parts[5] === 'macros' && method === 'GET') {

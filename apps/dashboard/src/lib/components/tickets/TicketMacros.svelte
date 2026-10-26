@@ -19,6 +19,7 @@
   import FormTextarea from '../FormTextarea.svelte';
   import FormSelect from '../FormSelect.svelte';
   import MultiSelect from '../MultiSelect.svelte';
+  import ToggleSwitch from '../ToggleSwitch.svelte';
   import { m } from '../../i18n';
 
   const {
@@ -193,13 +194,53 @@
     }
   }
 
+  // ── Signature du staff connecte ───────────────────────────────────────────
+  let signature = $state({ content: '', sendAsMe: false });
+  let signatureSaving = $state(false);
+
+  async function loadSignature() {
+    if (!authStore.selectedGuildId) return;
+    const res = await dashboardFetch(`/tickets/signature`).catch(() => null);
+    if (res?.ok) signature = await res.json();
+  }
+
+  async function saveSignature() {
+    if (signatureSaving) return;
+    signatureSaving = true;
+    try {
+      const res = await dashboardFetch(`/tickets/signature`, { method: 'PUT', payload: signature });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || m.tmac_sig_err());
+      toast.success(m.tmac_sig_saved());
+    } catch (err) {
+      toast.error(errorMessage(err) || m.tmac_sig_err());
+    } finally {
+      signatureSaving = false;
+    }
+  }
+
   $effect(() => {
     void refreshToken;
     void loadMacros();
+    void loadSignature();
   });
 </script>
 
 <div class="max-w-4xl mx-auto space-y-4">
+  <div class="rounded-xl border border-outline-variant/10 bg-surface-container-low/40 p-4 space-y-3">
+    <div>
+      <h3 class="text-sm font-semibold text-on-surface">{m.tmac_sig_title()}</h3>
+      <p class="text-on-surface-variant text-xs mt-0.5">{m.tmac_sig_desc()}</p>
+    </div>
+    <FormTextarea bind:value={signature.content} rows={3} placeholder={'✅ • {staff} - Modérateur\n🎧 • Support de {server}'} />
+    <div class="flex items-center justify-between gap-3 flex-wrap">
+      <label class="flex items-center gap-2 text-xs text-on-surface-variant">
+        <ToggleSwitch size="sm" checked={signature.sendAsMe} onToggle={(v) => (signature.sendAsMe = v)} ariaLabel={m.tmac_sig_send_as_me()} />
+        {m.tmac_sig_send_as_me()}
+      </label>
+      <ActionButton variant="primary" icon="check" label={signatureSaving ? m.tmac_saving() : m.common_save()} onclick={saveSignature} disabled={signatureSaving} />
+    </div>
+  </div>
+
   <div class="flex items-start justify-between gap-4 pb-2">
     <div>
       <h3 class="text-lg font-semibold text-on-surface">{m.tmac_title()}</h3>
