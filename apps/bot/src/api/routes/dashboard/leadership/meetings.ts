@@ -3,6 +3,7 @@ import type { Client } from 'discord.js';
 import type { AuthClaims, DashboardAccess } from '../../../shared.js';
 import { errorMessage, errorStack } from '../../../../utils/errors.js';
 import { logger } from '../../../../utils/logger.js';
+import prisma from '../../../../utils/db.js';
 import { formatGuildDateTime, formatInTimezone } from '../../../../utils/timezone.js';
 import { isValidTimezone } from '@kotbo/contracts';
 import { jsonFailure } from '../../../shared/failure.js';
@@ -27,7 +28,8 @@ import {
   createMeeting,
   updateMeeting,
   deleteMeeting,
-  
+  checkInMeeting,
+
   
   
   
@@ -68,6 +70,44 @@ export async function handleMeetingRoutes(
 
     // 3. Meetings routes
     if (parts[4] === 'meetings') {
+      // POST /api/dashboard/guilds/:guildId/meetings/:meetingId/rsvp
+      // Sa propre reponse a une reunion, comme les boutons du message Discord :
+      // pas besoin du droit de gerer les reunions, et rien d'autre n'est touche.
+      if (parts.length === 7 && parts[6] === 'rsvp' && method === 'POST') {
+        const meetingId = parts[5];
+        try {
+          const body = await readJsonBody<{ status?: string; note?: string }>(req);
+          const status = body?.status;
+          if (status !== 'PRESENT' && status !== 'EXCUSED' && status !== 'ABSENT') {
+            json(res, 400, { error: 'Réponse invalide' });
+            return true;
+          }
+          const note = typeof body?.note === 'string' ? body.note.trim().slice(0, 500) : '';
+          if (status === 'EXCUSED' && !note) {
+            json(res, 400, { error: 'Indique la raison de ton absence.' });
+            return true;
+          }
+          const [meeting, staffMember] = await Promise.all([
+            prisma.staffMeeting.findFirst({ where: { id: meetingId, guildId }, select: { id: true } }),
+            prisma.staffMember.findFirst({ where: { guildId, userId: user.userId }, select: { id: true } }),
+          ]);
+          if (!meeting) {
+            json(res, 404, { error: 'Réunion introuvable' });
+            return true;
+          }
+          if (!staffMember) {
+            json(res, 403, { error: "Tu ne fais pas partie de l'équipe staff de ce serveur." });
+            return true;
+          }
+          await checkInMeeting(client, meetingId, staffMember.id, status, note || undefined);
+          json(res, 200, { ok: true });
+        } catch (err) {
+          logger.error('StaffAPI', 'Error saving meeting RSVP:', err);
+          jsonFailure(res, err, "Impossible d'enregistrer ta réponse", 'StaffAPI');
+        }
+        return true;
+      }
+
       if (method !== 'GET' && !access.canManageSettings) {
         const guild = client.guilds.cache.get(guildId)
           ?? await client.guilds.fetch(guildId).catch(() => null);
