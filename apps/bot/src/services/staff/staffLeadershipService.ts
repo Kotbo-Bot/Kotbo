@@ -1754,7 +1754,7 @@ export const createCall = async (
         description,
         scheduledAt,
         status: 'SCHEDULED',
-        creatorId,
+        creatorId: creator.id,
         channelMode,
         channelType: channelType ?? null,
         discordChannelId: finalChannelId ?? null,
@@ -1957,7 +1957,7 @@ export const createTask = async (
       priority,
       dueDate,
       assigneeId: assigneeStaffId,
-      creatorId: creator.id,
+      creatorId,
       status: 'PENDING'
     },
     include: {
