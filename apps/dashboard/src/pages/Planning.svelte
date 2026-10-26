@@ -1528,8 +1528,8 @@
               </div>
             </section>
 
-            <section class="pl-left-section">
-              <h3 class="pl-left-title">{m.planning_my_calendars()}</h3>
+            <details class="pl-left-section" open>
+              <summary class="pl-left-title">{m.planning_my_calendars()}</summary>
               <ul>
                 {#each STAFF_LAYERS as type (type)}
                   <li>
@@ -1541,11 +1541,11 @@
                   </li>
                 {/each}
               </ul>
-            </section>
+            </details>
 
             {#if SERVER_TYPES.some(canSeeServerKind)}
-              <section class="pl-left-section">
-                <h3 class="pl-left-title">{m.planning_server_section()}</h3>
+              <details class="pl-left-section" open>
+                <summary class="pl-left-title">{m.planning_server_section()}</summary>
                 <ul>
                   {#each SERVER_TYPES.filter(canSeeServerKind) as type (type)}
                     <li>
@@ -1557,12 +1557,13 @@
                     </li>
                   {/each}
                 </ul>
-              </section>
+              </details>
             {/if}
 
-            <section class="pl-left-section flex-1 min-h-0 flex flex-col">
-              <!-- Titre seul sur sa ligne, raccourcis dessous : rien ne se replie dans un volet etroit. -->
-              <h3 class="pl-left-title">{m.planning_people()}</h3>
+            <!-- Hauteur naturelle : c'est le volet entier qui defile, sinon la liste etait ecrasee a zero. -->
+            <details class="pl-left-section" open>
+              <!-- Titre seul sur sa ligne, raccourcis dessous : rien ne passe a la ligne dans un volet etroit. -->
+              <summary class="pl-left-title">{m.planning_people()}</summary>
               <div class="flex flex-wrap gap-x-1 mb-1">
                 {#if myStaffRecord}
                   <button type="button" class="pl-link" onclick={() => setStaff([myStaffRecord.id])}>{m.planning_only_me()}</button>
@@ -1574,7 +1575,7 @@
               {#if activeStaff.length > 8}
                 <input type="search" class="input my-1 text-body-sm" bind:value={peopleQuery} placeholder={m.planning_people_search_ph()} aria-label={m.planning_people_search_ph()} />
               {/if}
-              <div class="flex-1 min-h-0 overflow-y-auto">
+              <div>
                 {#each staffGroups as group (group.grade)}
                   {@const ids = group.members.map(s => s.id)}
                   {@const allIn = ids.every(id => selectedStaffIds.includes(id))}
@@ -1605,7 +1606,7 @@
                   </div>
                 {/each}
               </div>
-            </section>
+            </details>
           </aside>
         {/if}
 
@@ -2564,6 +2565,34 @@
     font-weight: 600;
     color: var(--color-on-surface);
     padding: 0 0.25rem 0.25rem;
+  }
+  /* Sections repliables du volet : depliees par defaut, une fleche indique l'etat. */
+  summary.pl-left-title {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+    list-style: none;
+    border-radius: 0.25rem;
+  }
+  summary.pl-left-title::-webkit-details-marker {
+    display: none;
+  }
+  summary.pl-left-title::after {
+    content: '';
+    width: 0.4rem;
+    height: 0.4rem;
+    border-right: 1.5px solid var(--color-on-surface-variant);
+    border-bottom: 1.5px solid var(--color-on-surface-variant);
+    transform: rotate(-45deg);
+    transition: transform 0.15s ease;
+  }
+  details[open] > summary.pl-left-title::after {
+    transform: rotate(45deg);
+  }
+  summary.pl-left-title:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
   }
   .pl-link {
     padding: 0.125rem 0.375rem;
