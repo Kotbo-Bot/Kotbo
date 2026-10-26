@@ -103,6 +103,19 @@ export type MemberCaseInviteInfo = {
   joinedAt: string | null;
 };
 
+/** Une invitation créée par le membre, avec ce qu'elle a rapporté. */
+export type MemberCaseCreatedInvite = {
+  code: string;
+  sourceLabel: string | null;
+  uses: number;
+  joined: number;
+  left: number;
+  createdAt: string | null;
+  expiresAt: string | null;
+  isDeleted: boolean;
+  isSuspended: boolean;
+};
+
 export type MemberCaseProfile = {
   id: string;
   userId: string;
@@ -263,6 +276,7 @@ export type MemberCaseVerifications = {
 export type MemberCaseResponse = {
   profile: MemberCaseProfile | null;
   invite: MemberCaseInviteInfo | null;
+  createdInvites: MemberCaseCreatedInvite[];
   roles: DashboardRole[];
   effectivePermissions: string[];
   sanctions: SanctionItem[];

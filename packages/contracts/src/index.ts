@@ -31,6 +31,7 @@ export type {
   MemberCaseChannelMessage,
   MemberCaseChannelSummary,
   MemberCaseInviteInfo,
+  MemberCaseCreatedInvite,
   MemberCaseProfile,
   LinkedAccountItem,
   MemberCaseInteractionNode,

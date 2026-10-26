@@ -687,7 +687,7 @@
     { id: 'logs', label: m.mcm_tab_logs(), icon: 'history', count: () => caseData?.recentLogCount ?? 0 },
     { id: 'sanctions', label: m.mcm_tab_sanctions(), icon: 'hammer', count: () => sanctions.length },
     { id: 'candidatures', label: m.mcm_tab_candidates(), icon: 'user-check', count: () => caseData?.candidatures?.length ?? 0 },
-    { id: 'invites', label: m.mcm_tab_invites(), icon: 'mail' },
+    { id: 'invites', label: m.mcm_tab_invites(), icon: 'mail', count: () => caseData?.createdInvites?.length ?? 0 },
     { id: 'connexions', label: m.mcm_tab_connections(), icon: 'link' },
     { id: 'linked_accounts', label: m.mcm_tab_linked(), icon: 'link-2', count: () => (caseData?.linkedAccounts?.length ?? 0) + pendingCrossServerLinks.length },
     { id: 'notes', label: m.mcm_tab_notes(), icon: 'edit-3' },
@@ -1593,6 +1593,7 @@
               {/if}
 
             {:else if activeTab === 'invites'}
+              {@const created = caseData?.createdInvites ?? []}
               <div class="grid gap-4 md:grid-cols-2">
                 <SectionCard title={m.mcm_invite_source()}>
                   <dl class="mc-facts">
@@ -1609,6 +1610,49 @@
                   ])}
                 </SectionCard>
               </div>
+              <SectionCard
+                title={m.mcm_created_invites()}
+                description={created.length ? m.mcm_created_invites_desc({ count: created.reduce((n, i) => n + i.joined, 0), left: created.reduce((n, i) => n + i.left, 0) }) : ''}
+                flush={created.length > 0}
+              >
+                {#if created.length}
+                  <div class="overflow-x-auto">
+                    <table class="w-full min-w-[640px] text-sm">
+                      <thead>
+                        <tr class="text-left text-xs font-medium text-on-surface-variant border-b border-outline-variant/10">
+                          <th class="px-4 py-3">{m.iv_col_code()}</th>
+                          <th class="px-4 py-3">{m.iv_col_source()}</th>
+                          <th class="px-4 py-3">{m.iv_col_status()}</th>
+                          <th class="px-4 py-3 text-right">{m.iv_col_joins()}</th>
+                          <th class="px-4 py-3 text-right">{m.mcm_col_left()}</th>
+                          <th class="px-4 py-3 text-right">{m.iv_col_uses()}</th>
+                          <th class="px-4 py-3">{m.iv_col_creation()}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {#each created as inv (inv.code)}
+                          {@const expired = !!inv.expiresAt && new Date(inv.expiresAt).getTime() < Date.now()}
+                          <tr class="border-b border-outline-variant/5 last:border-0">
+                            <td class="px-4 py-3">
+                              <button type="button" class="mc-code" onclick={() => inviteDetailsModal.show(inv.code)} title={m.mcm_open_invites_view()}>{inv.code}</button>
+                            </td>
+                            <td class="px-4 py-3 text-on-surface-variant">{inv.sourceLabel || '-'}</td>
+                            <td class="px-4 py-3 text-on-surface-variant">
+                              {inv.isDeleted ? m.iv_status_deleted() : inv.isSuspended ? m.iv_status_suspended() : expired ? m.iv_status_expired() : m.iv_status_active()}
+                            </td>
+                            <td class="px-4 py-3 text-right font-semibold text-success">{inv.joined}</td>
+                            <td class="px-4 py-3 text-right text-on-surface-variant">{inv.left}</td>
+                            <td class="px-4 py-3 text-right text-on-surface-variant">{inv.uses}</td>
+                            <td class="px-4 py-3 text-on-surface-variant">{formatDateShort(inv.createdAt)}</td>
+                          </tr>
+                        {/each}
+                      </tbody>
+                    </table>
+                  </div>
+                {:else}
+                  <p class="text-sm text-on-surface-variant">{m.mcm_no_created_invite()}</p>
+                {/if}
+              </SectionCard>
 
             {:else if activeTab === 'connexions'}
               <SectionCard title={m.mcm_interaction_graph()} description={m.mcm_top_contacts({ count: (caseData?.interactionGraph?.nodes?.length ?? 1) - 1 })} flush>
