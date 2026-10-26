@@ -660,6 +660,13 @@ export async function handleButton(interaction: Interaction, client: Client): Pr
     return;
   }
 
+  // Convocations : créneaux, disponibilité, décision du staff, clôture
+  if (customId.startsWith('convoc:')) {
+    const { handleConvocationButton } = await import('../services/moderation/convocationService.js');
+    await handleConvocationButton(interaction);
+    return;
+  }
+
   // Hub RPG (/rpg) - navigation, voyage, combat, guilde, boutons Payer/Vendre/Admin
   if (customId.startsWith('rpg:')) {
     await handleRpgButton(client, customId, interaction);
@@ -1902,6 +1909,11 @@ export async function handleModalSubmit(interaction: ModalSubmitInteraction, cli
   }
   if (customId.startsWith('modal:ticket:')) {
     await handleTicketModalSubmit(client, customId, interaction);
+    return;
+  }
+  if (customId.startsWith('modal:convoc:')) {
+    const { handleConvocationModal } = await import('../services/moderation/convocationService.js');
+    await handleConvocationModal(interaction);
     return;
   }
 

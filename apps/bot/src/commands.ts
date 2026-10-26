@@ -21,6 +21,7 @@ import { languageCommand } from './commands/utility/language.js';
 import { leaderboardCommand } from './commands/profile/leaderboard.js';
 import { meetingCommand } from './commands/admin/meeting.js';
 import { noteCommand, noteContextCommand } from './commands/moderation/note.js';
+import { convoquerCommand } from './commands/moderation/convoquer.js';
 import { optOutCommand } from './commands/utility/optout.js';
 import { privacyCommand } from './commands/utility/privacy.js';
 import { pingCommand } from './commands/utility/ping.js';
@@ -136,6 +137,7 @@ export const commands: SlashCommandDefinition[] = [
   leaderboardCommand,
   serverstatsCommand,
   noteCommand,
+  convoquerCommand,
   eventCommand,
   ctfCommand,
   activateCommand,
@@ -266,6 +268,7 @@ export const COMMAND_MODULES = new Map<ApplicationCommandDefinition, string>([
   [casierContextCommand, 'sanctions'],
   [noteCommand, 'sanctions'],
   [noteContextCommand, 'sanctions'],
+  [convoquerCommand, 'sanctions'],
   [reportCommand, 'sanctions'],
   [reportMessageContextCommand, 'sanctions'],
   [signalCommand, 'sanctions'],

@@ -75,6 +75,7 @@ import { registerBumpReminderListener } from './events/bumpReminderEvents.js';
 import { registerSiteListeners } from './events/siteEvents.js';
 import { registerChannelLinkListener } from './events/channelLinkEvents.js';
 import { registerStarboardListener } from './events/starboardEvents.js';
+import { registerConvocationListener } from './events/convocationEvents.js';
 import { registerStaffServerListener } from './events/staffServerEvents.js';
 import { registerAbsenceMentionListener } from './events/absenceMentionEvents.js';
 import { registerRaidProtectionListener } from './events/raidProtection.js';
@@ -510,6 +511,7 @@ client.once(Events.ClientReady, async (c) => {
   registerTempVoiceListener(scopeClientToModule(client, 'auto_thread'));
   registerThreadPanelListener(scopeClientToModule(client, 'auto_thread'));
   registerStarboardListener(scopeClientToModule(client, 'starboard'));
+  registerConvocationListener(scopeClientToModule(client, 'sanctions'));
   registerHoneypotListener(scopeClientToModule(client, 'automod'));
   registerMessageLoggingListener(scopeClientToModule(client, 'logs'));
   registerAuditEventsListener(scopeClientToModule(client, 'logs'));
