@@ -24,6 +24,8 @@ model DoingList {
   guild   Guild             @relation(fields: [guildId], references: [id], onDelete: Cascade)
   columns DoingListColumn[]
   items   DoingListItem[]
+  // Tutorats dont cette liste porte les missions.
+  testingPeriods TestingPeriod[]
 
   @@unique([guildId, key])
   @@index([guildId])
