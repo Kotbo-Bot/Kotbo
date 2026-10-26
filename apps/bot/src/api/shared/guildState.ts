@@ -71,6 +71,7 @@ export async function resolveFeatureAccessMap(
     'meetings',
     'absences',
     'polls',
+    'doing_lists',
     'discipline',
     'events',
     // Formulaires et Evaluations passaient auparavant par « Evenements » et

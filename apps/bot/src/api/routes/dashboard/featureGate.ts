@@ -104,6 +104,7 @@ export const SEGMENT_FEATURE_KEYS: Record<string, string | string[]> = {
   recruitment: 'recruitment',
   evaluations: 'evaluations',
   meetings: 'meetings',
+  'doing-lists': 'doing_lists',
   absences: 'absences',
   tutoring: 'tutoring',
   'mentor-reports': 'tutoring',
