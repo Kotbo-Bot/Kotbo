@@ -227,7 +227,11 @@ model TicketMacro {
 model TicketStaffSignature {
   guildId String
   userId  String
-  content String
+  /// Vide = pas de signature : la ligne peut n'exister que pour `sendAsMe`.
+  content String  @default("")
+  /// Poste au nom du staff (pseudo, avatar) via un webhook du salon plutot
+  /// qu'au nom du bot. Retombe sur le bot quand le webhook est impossible.
+  sendAsMe Boolean @default(false)
 
   guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
 

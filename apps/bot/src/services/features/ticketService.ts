@@ -1,5 +1,5 @@
 import type { Ticket, TicketMacro } from '@prisma/client';
-import type { ColorResolvable } from 'discord.js';
+import type { ColorResolvable, GuildTextBasedChannel, MessageMentionOptions } from 'discord.js';
 import { AuditLogEvent } from 'discord.js';
 import { type Client, type APIInteractionGuildMember, type ButtonInteraction, type ModalSubmitInteraction, type StringSelectMenuInteraction, TextChannel, ChannelType, PermissionFlagsBits, PermissionsBitField, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags, ContainerBuilder, TextDisplayBuilder, SeparatorBuilder, SeparatorSpacingSize, type Guild, type GuildMember, type ThreadChannel, Message, ComponentType } from 'discord.js';
 import { kotboEventBus } from '@kotbo/core';
@@ -976,9 +976,12 @@ async function buildStaffPanel(ticket: Ticket, member: GuildMember) {
       : suggested.size > 0
         ? `⚡ ${macros.length} macro(s) disponibles - ${suggested.size} suggérée(s) d'après la demande du membre.`
         : `⚡ ${macros.length} macro(s) disponibles.`,
-    signature
+    signature.content
       ? '🖋️ Votre signature est ajoutée sous vos macros et vos réponses.'
       : '🖋️ Aucune signature : ajoutez-en une pour signer vos macros et vos réponses.',
+    signature.sendAsMe
+      ? '👤 Vos messages partent à votre nom (pseudo et avatar).'
+      : '🤖 Vos messages partent au nom du bot.',
   ];
 
   const components: ActionRowBuilder<StringSelectMenuBuilder | ButtonBuilder>[] = [];
@@ -1003,9 +1006,80 @@ async function buildStaffPanel(ticket: Ticket, member: GuildMember) {
   components.push(new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder().setCustomId(`ticket:reply:${ticket.id}`).setLabel('Répondre').setStyle(ButtonStyle.Primary).setEmoji('✍️'),
     new ButtonBuilder().setCustomId(`ticket:signature:${ticket.id}`).setLabel('Ma signature').setStyle(ButtonStyle.Secondary).setEmoji('🖋️'),
+    new ButtonBuilder()
+      .setCustomId(`ticket:sendas:${ticket.id}`)
+      .setLabel(signature.sendAsMe ? 'Envoyer via le bot' : 'Envoyer à mon nom')
+      .setStyle(ButtonStyle.Secondary)
+      .setEmoji(signature.sendAsMe ? '🤖' : '👤'),
   ));
 
   return { content: lines.join('\n'), components };
+}
+
+/**
+ * Poste un message du staff dans un ticket : signature collee dessous, envoi a
+ * son nom par webhook s'il l'a choisi, et tour de parole enregistre. Le suivi
+ * des messages ignore bots et webhooks, comme pour la reponse du dashboard.
+ */
+async function postStaffMessage(params: {
+  channel: { send: (options: { content: string; allowedMentions?: MessageMentionOptions }) => Promise<{ id: string }> };
+  ticket: Ticket;
+  staff: GuildMember;
+  /** Texte deja rendu. */
+  content: string;
+  vars: Parameters<typeof renderMacroContent>[1];
+  allowedMentions?: MessageMentionOptions;
+}): Promise<string> {
+  const settings = await getStaffSignature(params.ticket.guildId, params.staff.id);
+  const signature = settings.content ? renderMacroContent(settings.content, params.vars) : null;
+
+  let messageId = '';
+  for (const part of withSignature(params.content, signature)) {
+    const options = { content: part, allowedMentions: params.allowedMentions };
+    const viaWebhook = settings.sendAsMe ? await sendAsStaff(params.channel, params.staff, options) : null;
+    const sent = viaWebhook ?? await params.channel.send(options);
+    messageId ||= sent.id;
+  }
+
+  const now = new Date();
+  await prisma.ticket.update({
+    where: { id: params.ticket.id },
+    data: { lastStaffMessageAt: now, ...(params.ticket.firstResponseAt ? {} : { firstResponseAt: now, firstResponderId: params.staff.id }) },
+  }).catch(() => null);
+
+  return messageId;
+}
+
+/**
+ * Envoie au nom du staff via un webhook du salon (celui du parent pour un fil).
+ * Null quand c'est impossible (permission, type de salon, pseudo refuse par
+ * Discord) : l'appelant retombe alors sur un envoi par le bot.
+ */
+async function sendAsStaff(
+  channel: unknown,
+  staff: GuildMember,
+  options: { content: string; allowedMentions?: MessageMentionOptions },
+): Promise<{ id: string } | null> {
+  const target = channel as GuildTextBasedChannel;
+  const thread = target.isThread() ? target : null;
+  const parent = thread ? thread.parent : target;
+  if (!parent || !('fetchWebhooks' in parent)) return null;
+
+  const me = parent.guild.members.me;
+  if (!me?.permissionsIn(parent).has(PermissionFlagsBits.ManageWebhooks)) return null;
+
+  // Discord ne rend le jeton que des webhooks crees par le bot : rien a stocker.
+  const hooks = await parent.fetchWebhooks().catch(() => null);
+  const hook = hooks?.find((h) => h.owner?.id === me.id && h.token !== null)
+    ?? await parent.createWebhook({ name: 'Kotbo · tickets', reason: 'Réponses de ticket au nom du staff' }).catch(() => null);
+  if (!hook?.token) return null;
+
+  return hook.send({
+    ...options,
+    username: staff.displayName.slice(0, 80),
+    avatarURL: staff.displayAvatarURL(),
+    ...(thread ? { threadId: thread.id } : {}),
+  }).catch(() => null);
 }
 
 async function showMacroPicker(
@@ -1043,20 +1117,16 @@ export async function postMacroInTicket(params: {
   channel: { send: (options: { content: string }) => Promise<{ id: string }> };
   actor: { id: string; username: string };
   staffTag: string;
-  /** Signature brute du staff, rendue avec les memes variables que la macro. */
-  signature?: string | null;
+  /** Staff qui envoie : sa signature et son choix d'expediteur s'appliquent. Absent pour le MCP. */
+  staff?: GuildMember;
 }): Promise<{ content: string; messageId: string; applied: string[]; closed: boolean }> {
   const { client, guild, macro, ticket, actor } = params;
 
   const vars = { ticket, staffTag: params.staffTag, guildName: guild.name };
   const content = renderMacroContent(macro.content, vars);
-  const signature = params.signature ? renderMacroContent(params.signature, vars) : null;
-
-  let messageId = '';
-  for (const part of withSignature(content, signature)) {
-    const sent = await params.channel.send({ content: part });
-    messageId ||= sent.id;
-  }
+  const messageId = params.staff
+    ? await postStaffMessage({ channel: params.channel, ticket, staff: params.staff, content, vars })
+    : (await params.channel.send({ content })).id;
   await markMacroUsed(macro.id);
 
   const applied = await applyMacroActions({ client, guild, macro, ticket, actor });
@@ -1120,7 +1190,7 @@ async function sendChosenMacro(
     channel,
     actor: { id: member.id, username: member.user.username },
     staffTag: `<@${member.id}>`,
-    signature: await getStaffSignature(guildId, member.id),
+    staff: member,
   });
 
   await interaction.update({
@@ -1649,10 +1719,21 @@ export async function handleTicketButton(client: Client, customId: string, inter
     return;
   }
 
-  // 2 ter. Panneau staff : réponse libre signée et édition de la signature.
-  if (action === 'reply' || action === 'signature') {
+  // 2 ter. Panneau staff : réponse libre signée, signature et expéditeur.
+  if (action === 'reply' || action === 'signature' || action === 'sendas') {
     if (!canManageTicket(member as GuildMember, guildConfig, ticket.staffRoleId)) {
       await interaction.reply({ content: '❌ Seuls les membres du personnel peuvent utiliser ce panneau.', flags: [MessageFlags.Ephemeral] });
+      return;
+    }
+
+    if (action === 'sendas') {
+      const { sendAsMe } = await getStaffSignature(guildId, user.id);
+      await prisma.ticketStaffSignature.upsert({
+        where: { guildId_userId: { guildId, userId: user.id } },
+        create: { guildId, userId: user.id, sendAsMe: !sendAsMe },
+        update: { sendAsMe: !sendAsMe },
+      });
+      await interaction.update(await buildStaffPanel(ticket, member as GuildMember));
       return;
     }
 
@@ -1671,7 +1752,7 @@ export async function handleTicketButton(client: Client, customId: string, inter
       return;
     }
 
-    const current = await getStaffSignature(guildId, user.id);
+    const current = (await getStaffSignature(guildId, user.id)).content;
     const input = new TextInputBuilder()
       .setCustomId('signature')
       .setLabel('Signature (vide = supprimer)')
@@ -2975,16 +3056,12 @@ export async function handleTicketModalSubmit(client: Client, customId: string, 
   // ─── Signature du staff ──────────
   if (customId === 'modal:ticket:signature') {
     const content = interaction.fields.getTextInputValue('signature').trim().slice(0, SIGNATURE_MAX_LENGTH);
-    const key = { guildId_userId: { guildId, userId: interaction.user.id } };
-    if (content) {
-      await prisma.ticketStaffSignature.upsert({
-        where: key,
-        create: { guildId, userId: interaction.user.id, content },
-        update: { content },
-      });
-    } else {
-      await prisma.ticketStaffSignature.deleteMany({ where: { guildId, userId: interaction.user.id } });
-    }
+    // Une signature videe garde la ligne : elle porte aussi le choix d'expediteur.
+    await prisma.ticketStaffSignature.upsert({
+      where: { guildId_userId: { guildId, userId: interaction.user.id } },
+      create: { guildId, userId: interaction.user.id, content },
+      update: { content },
+    });
     await interaction.reply({
       content: content ? `✅ Signature enregistrée. Aperçu :\n\n${content}` : '🗑️ Signature supprimée.',
       allowedMentions: { parse: [] },
@@ -3011,11 +3088,14 @@ export async function handleTicketModalSubmit(client: Client, customId: string, 
     }
 
     const vars = { ticket, staffTag: `<@${member.id}>`, guildName: guild.name };
-    const signature = await getStaffSignature(guildId, member.id);
-    const content = renderMacroContent(interaction.fields.getTextInputValue('content').trim(), vars);
-    for (const part of withSignature(content, signature ? renderMacroContent(signature, vars) : null)) {
-      await channel.send({ content: part, allowedMentions: { parse: ['users'] } });
-    }
+    await postStaffMessage({
+      channel,
+      ticket,
+      staff: member,
+      content: renderMacroContent(interaction.fields.getTextInputValue('content').trim(), vars),
+      vars,
+      allowedMentions: { parse: ['users'] },
+    });
 
     await interaction.editReply({ content: '✅ Réponse envoyée.' });
     return;

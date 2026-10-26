@@ -48,10 +48,10 @@ export function renderMacroContent(
 /** Longueur maximale d'une signature : elle doit tenir sous une macro sans l'ecraser. */
 export const SIGNATURE_MAX_LENGTH = 1000;
 
-/** Signature du staff sur ce serveur, ou null s'il n'en a pas. */
-export async function getStaffSignature(guildId: string, userId: string): Promise<string | null> {
+/** Signature du staff sur ce serveur (null si vide) et son choix d'expediteur. */
+export async function getStaffSignature(guildId: string, userId: string): Promise<{ content: string | null; sendAsMe: boolean }> {
   const row = await prisma.ticketStaffSignature.findUnique({ where: { guildId_userId: { guildId, userId } } });
-  return row?.content || null;
+  return { content: row?.content || null, sendAsMe: row?.sendAsMe ?? false };
 }
 
 /**
