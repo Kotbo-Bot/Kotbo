@@ -1,6 +1,7 @@
-// Listes de suivi (« doing lists ») : le staff tient plusieurs listes de travail
-// par serveur ou par projet, chacune reliée à des modules (suggestions,
-// tickets…) dont on peut y épingler les éléments un par un.
+// Listes de suivi (« doing lists ») : le staff tient plusieurs tableaux de
+// travail par serveur ou par projet, découpés en étapes qu'il choisit, chacun
+// relié à des modules (suggestions, tickets…) dont on peut y épingler les
+// éléments un par un.
 
 model DoingList {
   id String @id @default(cuid())
@@ -16,36 +17,73 @@ model DoingList {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  guild Guild           @relation(fields: [guildId], references: [id], onDelete: Cascade)
-  items DoingListItem[]
+  guild   Guild             @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  columns DoingListColumn[]
+  items   DoingListItem[]
 
   @@index([guildId])
   @@map("doing_lists")
 }
 
+// Étape d'une liste (« À faire », « En revue »…), dans l'ordre de `position`.
+model DoingListColumn {
+  id String @id @default(cuid())
+
+  listId   String
+  guildId  String
+  name     String
+  position Int    @default(0)
+  // Nombre de cartes au plus dans l'étape ; nul = sans limite.
+  wipLimit Int?
+  // Une carte posée ici est terminée : sa tâche du planning passe à « fait ».
+  isDone   Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  list  DoingList       @relation(fields: [listId], references: [id], onDelete: Cascade)
+  items DoingListItem[]
+
+  @@index([listId, position])
+  @@map("doing_list_columns")
+}
+
 model DoingListItem {
   id String @id @default(cuid())
 
-  listId  String
-  guildId String
-  title   String
-  // TODO, DOING, DONE
-  status   String @default("TODO")
+  listId   String
+  guildId  String
+  columnId String
+  title    String
   position Int    @default(0)
+
+  description String?
+  // LOW, MEDIUM, HIGH ; nul = sans priorité.
+  priority    String?
+  dueDate     DateTime?
+  labels      String[]  @default([])
+  // [{ id, text, done }]
+  checklist   Json      @default("[]")
 
   // Élément d'un module relié ; nuls pour une tâche libre. Le titre est une
   // copie prise à l'épinglage : la liste reste lisible si la source disparaît.
   sourceModule String?
   sourceId     String?
 
+  // Tâche du planning qui porte l'attribution : la carte attribuée à quelqu'un
+  // apparaît dans son planning, et inversement. Une tâche n'est que sur une carte.
+  staffTaskId String?    @unique
+  staffTask   StaffTask? @relation(fields: [staffTaskId], references: [id], onDelete: SetNull)
+
   createdById String
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  list DoingList @relation(fields: [listId], references: [id], onDelete: Cascade)
+  list   DoingList       @relation(fields: [listId], references: [id], onDelete: Cascade)
+  column DoingListColumn @relation(fields: [columnId], references: [id], onDelete: Cascade)
 
   @@unique([listId, sourceModule, sourceId])
-  @@index([listId, status, position])
+  @@index([columnId, position])
   // « Dans quelles listes est ce ticket ? », posé depuis la page du module.
   @@index([guildId, sourceModule, sourceId])
   @@map("doing_list_items")

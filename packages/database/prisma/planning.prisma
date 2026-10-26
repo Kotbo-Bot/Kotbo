@@ -30,6 +30,8 @@ model StaffTask {
   creator     StaffMember  @relation("CreatedTasks", fields: [creatorId], references: [id], onDelete: Cascade)
   guild       Guild        @relation(fields: [guildId], references: [id], onDelete: Cascade)
   reminders   StaffReminder[]
+  // Carte de liste de suivi qui porte cette tâche, s'il y en a une.
+  doingListItem DoingListItem?
 
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
