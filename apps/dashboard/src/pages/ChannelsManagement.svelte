@@ -12,6 +12,7 @@
   import SearchableSelect from '../lib/components/SearchableSelect.svelte';
   import TempVoicePolicyEditor from '../lib/components/TempVoicePolicyEditor.svelte';
   import AutoThreadPanel from '../lib/components/channels/AutoThreadPanel.svelte';
+  import ThreadPanelsPanel from '../lib/components/channels/ThreadPanelsPanel.svelte';
   import { ToggleSwitch } from '../lib/components/ui';
   import { TEMP_VOICE_HANDOVER_DELAY_BOUNDS, TEMP_VOICE_OWNER_MENTION_DEFAULT, TEMP_VOICE_OWNERSHIP_DEFAULTS, type TempVoiceClaimWho, type TempVoiceOwnerMentionPlacement, type TempVoiceOwnershipSettings, type TempVoicePolicy } from '@kotbo/shared';
   import { clampInt, selectableGeneratorChannels, takenGeneratorChannelIds, tempVoiceSubFromSearch, withTempVoiceSub, type TempVoiceSubTab } from '../lib/tempVoiceUi';
@@ -1269,6 +1270,9 @@
         <!-- AUTO-THREAD TAB -->
         <section class="bg-surface-container-low/30 border border-outline-variant/10 p-5 sm:p-8 rounded-xl">
           <AutoThreadPanel channels={autoThreadChannelOptions} roles={roleOptions} />
+        </section>
+        <section class="mt-6 bg-surface-container-low/30 border border-outline-variant/10 p-5 sm:p-8 rounded-xl">
+          <ThreadPanelsPanel channels={autoThreadChannelOptions} roles={roleOptions} />
         </section>
 
       {:else if activeTab === 'sticky'}
