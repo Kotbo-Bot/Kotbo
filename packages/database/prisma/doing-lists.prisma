@@ -12,6 +12,10 @@ model DoingList {
   // Clés des modules reliés (« suggestions », « tickets ») : seuls leurs
   // éléments peuvent être épinglés dans la liste.
   modules     String[]
+  // Préfixe des clés de cartes (« BOUT » → BOUT-12), unique sur le serveur.
+  key         String
+  // Prochain numéro de carte : un numéro n'est jamais réattribué.
+  nextNumber  Int      @default(1)
 
   createdById String
   createdAt   DateTime @default(now())
@@ -21,6 +25,7 @@ model DoingList {
   columns DoingListColumn[]
   items   DoingListItem[]
 
+  @@unique([guildId, key])
   @@index([guildId])
   @@map("doing_lists")
 }
@@ -56,6 +61,17 @@ model DoingListItem {
   columnId String
   title    String
   position Int    @default(0)
+  // Numéro dans la liste : avec la clé de la liste, la référence BOUT-12.
+  number   Int
+  // TASK, BUG, STORY, EPIC
+  type     String @default("TASK")
+  // Points d'estimation.
+  estimate Int?
+
+  // Carte parente (sous-tâche d'une story, story d'une epic), dans la même liste.
+  parentId String?
+  parent   DoingListItem?  @relation("DoingListItemParent", fields: [parentId], references: [id], onDelete: SetNull)
+  children DoingListItem[] @relation("DoingListItemParent")
 
   description String?
   // LOW, MEDIUM, HIGH ; nul = sans priorité.
@@ -82,9 +98,59 @@ model DoingListItem {
   list   DoingList       @relation(fields: [listId], references: [id], onDelete: Cascade)
   column DoingListColumn @relation(fields: [columnId], references: [id], onDelete: Cascade)
 
+  linksFrom DoingListItemLink[] @relation("DoingListLinkFrom")
+  linksTo   DoingListItemLink[] @relation("DoingListLinkTo")
+  events    DoingListEvent[]
+
   @@unique([listId, sourceModule, sourceId])
+  @@unique([listId, number])
   @@index([columnId, position])
+  @@index([parentId])
   // « Dans quelles listes est ce ticket ? », posé depuis la page du module.
   @@index([guildId, sourceModule, sourceId])
   @@map("doing_list_items")
+}
+
+// Lien entre deux cartes du serveur, d'une liste à l'autre : `from` BLOCKS,
+// RELATES ou DUPLICATES `to`. Le sens inverse (« est bloquée par ») se lit
+// depuis `to`.
+model DoingListItemLink {
+  id String @id @default(cuid())
+
+  guildId String
+  fromId  String
+  toId    String
+  type    String
+
+  createdById String
+  createdAt   DateTime @default(now())
+
+  from DoingListItem @relation("DoingListLinkFrom", fields: [fromId], references: [id], onDelete: Cascade)
+  to   DoingListItem @relation("DoingListLinkTo", fields: [toId], references: [id], onDelete: Cascade)
+
+  @@unique([fromId, toId, type])
+  @@index([toId])
+  @@map("doing_list_item_links")
+}
+
+// Fil d'une carte : commentaires et historique (créée, déplacée, attribuée…).
+model DoingListEvent {
+  id String @id @default(cuid())
+
+  guildId   String
+  itemId    String
+  actorId   String
+  actorName String
+  // comment, created, moved, assigned, unassigned, updated, linked, unlinked
+  kind      String
+  body      String?
+  data      Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  item DoingListItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@index([itemId, createdAt])
+  @@map("doing_list_events")
 }
