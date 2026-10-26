@@ -604,6 +604,7 @@ model Guild {
   tickets                Ticket[]
   ticketBlacklist        TicketBlacklist[]
   ticketMacros           TicketMacro[]
+  ticketStaffSignatures  TicketStaffSignature[]
   campaigns              Campaign[]
 
   autoThreadEnabled  Boolean   @default(false)
@@ -816,6 +817,7 @@ model Guild {
   // Sticky bot - message collé en bas de salon
   stickyMessages StickyMessage[]
   autoThreadConfigs AutoThreadConfig[]
+  threadPanels      ThreadPanel[]
 
   // Starlight - mise en avant des messages plébiscités
   starboardConfig StarboardConfig?
