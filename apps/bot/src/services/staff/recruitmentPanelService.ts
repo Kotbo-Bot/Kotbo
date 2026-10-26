@@ -9,8 +9,8 @@ import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ContainerBuilder, Separat
 import type { RecruitmentPanel } from '@prisma/client';
 import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
-import { getClient } from '../../utils/client.js';
 import { getDashboardUrl } from '../../api/shared.js';
+import { deletePanelMessage, isGuildChannel, upsertPanelMessage } from '../../utils/panelMessage.js';
 import { COLORS_RAW, v2 } from '../../utils/embeds.js';
 import { UserFacingError } from '../../utils/userFacingError.js';
 import { decideFormAvailability } from './recruitmentFormAvailability.js';
@@ -102,22 +102,9 @@ export async function publishRecruitmentPanel(panelId: string): Promise<Recruitm
   const panel = await prisma.recruitmentPanel.findUnique({ where: { id: panelId } });
   if (!panel) throw new UserFacingError('Panneau introuvable.');
 
-  const channel = await getClient().channels.fetch(panel.channelId).catch(() => null);
-  if (!channel || !channel.isTextBased() || !channel.isSendable()) {
-    throw new UserFacingError('Salon introuvable, ou le bot ne peut pas y écrire.');
-  }
-
-  const payload = await renderPanel(panel);
-  if (panel.messageId) {
-    const message = await channel.messages.fetch(panel.messageId).catch(() => null);
-    if (message) {
-      await message.edit(payload);
-      return panel;
-    }
-  }
-
-  const sent = await channel.send(payload);
-  return prisma.recruitmentPanel.update({ where: { id: panel.id }, data: { messageId: sent.id } });
+  const messageId = await upsertPanelMessage(panel.channelId, panel.messageId, await renderPanel(panel));
+  if (messageId === panel.messageId) return panel;
+  return prisma.recruitmentPanel.update({ where: { id: panel.id }, data: { messageId } });
 }
 
 /**
@@ -133,8 +120,7 @@ export async function saveRecruitmentPanel(
   if (!title) throw new UserFacingError('Le titre du panneau est obligatoire.');
 
   const channelId = typeof body.channelId === 'string' ? body.channelId.trim() : '';
-  const channel = /^\d{15,25}$/.test(channelId) ? await getClient().channels.fetch(channelId).catch(() => null) : null;
-  if (!channel || !('guildId' in channel) || channel.guildId !== guildId) throw new UserFacingError('Salon introuvable sur ce serveur.');
+  if (!(await isGuildChannel(guildId, channelId))) throw new UserFacingError('Salon introuvable sur ce serveur.');
 
   const wanted = Array.isArray(body.formIds) ? body.formIds.filter((id): id is string => typeof id === 'string').slice(0, 25) : [];
   const valid = new Set((await prisma.customForm.findMany({
@@ -148,7 +134,7 @@ export async function saveRecruitmentPanel(
     const existing = await prisma.recruitmentPanel.findFirst({ where: { id: panelId, guildId } });
     if (!existing) throw new UserFacingError('Panneau introuvable.');
     // Changer de salon : l'ancien message est retire, un nouveau est poste.
-    if (existing.channelId !== channelId) await deletePanelMessage(existing);
+    if (existing.channelId !== channelId) await deletePanelMessage(existing.channelId, existing.messageId);
     panel = await prisma.recruitmentPanel.update({
       where: { id: panelId },
       data: { title, channelId, formIds, ...(existing.channelId !== channelId ? { messageId: null } : {}) },
@@ -162,15 +148,9 @@ export async function saveRecruitmentPanel(
 export async function deleteRecruitmentPanel(guildId: string, panelId: string): Promise<boolean> {
   const panel = await prisma.recruitmentPanel.findFirst({ where: { id: panelId, guildId } });
   if (!panel) return false;
-  await deletePanelMessage(panel);
+  await deletePanelMessage(panel.channelId, panel.messageId);
   await prisma.recruitmentPanel.delete({ where: { id: panel.id } });
   return true;
-}
-
-async function deletePanelMessage(panel: RecruitmentPanel): Promise<void> {
-  if (!panel.messageId) return;
-  const channel = await getClient().channels.fetch(panel.channelId).catch(() => null);
-  if (channel?.isTextBased()) await channel.messages.delete(panel.messageId).catch(() => null);
 }
 
 /** Re-rend les panneaux du serveur, ou seulement ceux qui affichent ce poste. */
