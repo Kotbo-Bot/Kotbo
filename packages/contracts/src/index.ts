@@ -70,6 +70,14 @@ export type {
 } from './types/modules.js';
 
 export {
+  DOING_LIST_MODULES,
+  DOING_LIST_STATUSES,
+  isDoingListModule,
+  isDoingListStatus,
+} from './types/doingLists.js';
+export type { DoingListModule, DoingListStatus } from './types/doingLists.js';
+
+export {
   DiscordSnowflake,
   GuildIdParam,
   PaginationQuery,
