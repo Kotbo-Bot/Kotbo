@@ -19,6 +19,30 @@ export type DoingListPriority = (typeof DOING_LIST_PRIORITIES)[number];
 
 export type DoingListChecklistEntry = { id: string; text: string; done: boolean };
 
+export const DOING_LIST_ITEM_TYPES = ['TASK', 'BUG', 'STORY', 'EPIC'] as const;
+export type DoingListItemType = (typeof DOING_LIST_ITEM_TYPES)[number];
+
+/** Liens stockés dans un seul sens ; « est bloquée par » est un BLOCKS vu depuis la carte bloquée. */
+export const DOING_LIST_LINK_TYPES = ['BLOCKS', 'RELATES', 'DUPLICATES'] as const;
+export type DoingListLinkType = (typeof DOING_LIST_LINK_TYPES)[number];
+
+/** Clé d'une liste : une lettre puis lettres ou chiffres, 2 à 10 en tout (BOUT, S3, KOTBO). */
+export const DOING_LIST_KEY_PATTERN = /^[A-Z][A-Z0-9]{1,9}$/;
+
+/** « bout-12 » → { key: 'BOUT', number: 12 } ; null si ce n'est pas une référence. */
+export function parseDoingListRef(value: string): { key: string; number: number } | null {
+  const match = /^([A-Za-z][A-Za-z0-9]{1,9})-(\d{1,6})$/.exec(value.trim());
+  return match ? { key: match[1].toUpperCase(), number: Number(match[2]) } : null;
+}
+
+export function isDoingListItemType(value: unknown): value is DoingListItemType {
+  return typeof value === 'string' && (DOING_LIST_ITEM_TYPES as readonly string[]).includes(value);
+}
+
+export function isDoingListLinkType(value: unknown): value is DoingListLinkType {
+  return typeof value === 'string' && (DOING_LIST_LINK_TYPES as readonly string[]).includes(value);
+}
+
 export function isDoingListModule(value: unknown): value is DoingListModule {
   return typeof value === 'string' && (DOING_LIST_MODULES as readonly string[]).includes(value);
 }

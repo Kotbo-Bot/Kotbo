@@ -231,6 +231,72 @@ const messageActions: MessageAction[] = [
     },
   },
   {
+    id: 'doing_card',
+    scope: 'message',
+    label: 'Créer une carte de suivi',
+    emoji: '📋',
+    description: 'Ajoute ce message comme carte dans une liste de suivi',
+    category: 'Staff',
+    modal: {
+      title: 'Carte de suivi',
+      fields: [
+        { id: 'list', label: 'Clé de la liste (vide : la première)', style: TextInputStyle.Short, placeholder: 'BOUT', required: false, maxLength: 10 },
+        { id: 'title', label: 'Titre (vide : début du message)', style: TextInputStyle.Short, required: false, maxLength: 200 },
+      ],
+    },
+    async run(ctx, input) {
+      const [{ isModuleEnabled }, { default: prisma }, { createFreeCard }, { dashboardLink }] = await Promise.all([
+        import('./moduleGate.js'),
+        import('../../utils/db.js'),
+        import('../staff/doingListBoard.js'),
+        import('../notifications/notifyService.js'),
+      ]);
+      if (!(await isModuleEnabled(ctx.guild.id, 'doing_lists'))) {
+        return fail('Listes de suivi éteintes', "Le module Listes de suivi n'est pas activé sur ce serveur.");
+      }
+      // Même public que le dashboard : le staff du serveur, ou qui le gère.
+      const staff = await prisma.staffMember.findUnique({
+        where: { guildId_userId: { guildId: ctx.guild.id, userId: ctx.invoker.id } },
+        select: { id: true },
+      });
+      if (!staff && !ctx.invoker.permissions.has(PermissionFlagsBits.ManageGuild)) {
+        return fail('Réservé au staff', 'Seul le staff du serveur peut créer des cartes de suivi.');
+      }
+
+      const key = input.list?.trim().toUpperCase();
+      const list = await prisma.doingList.findFirst({
+        where: { guildId: ctx.guild.id, ...(key ? { key } : {}) },
+        orderBy: { createdAt: 'asc' },
+        select: { id: true, key: true, name: true },
+      });
+      if (!list) {
+        const keys = (await prisma.doingList.findMany({ where: { guildId: ctx.guild.id }, select: { key: true }, take: 25 })).map((entry) => `\`${entry.key}\``);
+        return fail(
+          'Liste introuvable',
+          keys.length ? `Aucune liste n'a la clé \`${key}\`. Listes du serveur : ${keys.join(', ')}.` : "Ce serveur n'a encore aucune liste de suivi : crée-la depuis le dashboard.",
+        );
+      }
+
+      const content = ctx.message.content?.trim() ?? '';
+      const title = input.title?.trim() || truncate(content.split('\n')[0] ?? '', 200) || `Message de ${ctx.message.author.username}`;
+      const description = truncate(`${content}\n\nMessage d'origine : ${messageLink(ctx.message)} (${ctx.message.author.username})`.trim(), 4000);
+      try {
+        const item = await createFreeCard({
+          guildId: ctx.guild.id,
+          listId: list.id,
+          title,
+          description,
+          actorId: ctx.invoker.id,
+          actorName: ctx.invoker.user.username,
+        });
+        const link = dashboardLink(`/doing-lists/${list.id}?card=${item.id}`, ctx.guild.id);
+        return ok('📋 Carte créée', `**${list.key}-${item.number}** · ${title}\nDans « ${list.name} ». [Ouvrir la carte](${link})`);
+      } catch (error) {
+        return fail('Création impossible', publicErrorMessage(error, 'Impossible de créer la carte.'));
+      }
+    },
+  },
+  {
     id: 'purge_here',
     scope: 'message',
     label: 'Purger jusqu\'ici',

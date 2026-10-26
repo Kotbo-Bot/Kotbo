@@ -2,9 +2,12 @@ import { IncomingMessage, ServerResponse } from 'node:http';
 import { Client } from 'discord.js';
 import {
   DOING_LIST_MODULES,
+  isDoingListItemType,
+  isDoingListLinkType,
   isDoingListModule,
   isDoingListPriority,
   isDoingListSource,
+  parseDoingListRef,
   type DoingListChecklistEntry,
   type DoingListModule,
   type DoingListSource,
@@ -17,6 +20,14 @@ import { jsonFailure } from '../../shared/failure.js';
 import { getCachedFeatureAccess } from './featureGate.js';
 import { createTask } from '../../../services/staff/staffLeadershipService.js';
 import { columnForTaskStatus, pushListProgressToTasks, taskStatusForColumn } from '../../../services/staff/doingListTaskSync.js';
+import {
+  deriveListKey,
+  freeListKey,
+  fullColumnMessage,
+  logDoingListEvent,
+  nextItemNumber,
+  type DoingListEventKind,
+} from '../../../services/staff/doingListBoard.js';
 
 const SEGMENT = 'doing-lists';
 const LOG = 'DoingListsAPI';
@@ -40,9 +51,35 @@ const ITEM_INCLUDE = {
       assignee: { select: { id: true, userId: true, username: true, displayName: true, avatarUrl: true } },
     },
   },
+  _count: { select: { events: { where: { kind: 'comment' } } } },
 } satisfies Prisma.DoingListItemInclude;
 
+// Ce qu'on montre d'une carte citée ailleurs (lien, résultat de recherche).
+const REF_SELECT = {
+  id: true,
+  listId: true,
+  number: true,
+  title: true,
+  type: true,
+  list: { select: { key: true } },
+  column: { select: { isDone: true } },
+} satisfies Prisma.DoingListItemSelect;
+
+type RefRow = Prisma.DoingListItemGetPayload<{ select: typeof REF_SELECT }>;
+
+function toRef(row: RefRow) {
+  return { id: row.id, listId: row.listId, key: `${row.list.key}-${row.number}`, title: row.title, type: row.type, done: row.column.isDone };
+}
+
 type ColumnRow = { id: string; name: string; position: number; wipLimit: number | null; isDone: boolean };
+
+const MAX_LINKS_PER_ITEM = 50;
+const COMMENT_MAX = 4000;
+
+function readEstimate(raw: unknown): number | null | undefined {
+  if (raw === null || raw === '') return null;
+  return typeof raw === 'number' && Number.isInteger(raw) && raw >= 0 && raw <= 999 ? raw : undefined;
+}
 
 function readText(raw: unknown, max: number): string | null {
   if (typeof raw !== 'string') return null;
@@ -171,12 +208,9 @@ export async function handleDoingListRoutes(
     orderBy: { position: 'asc' },
     select: { id: true, name: true, position: true, wipLimit: true, isDone: true },
   });
-  /** Message d'erreur si l'étape est pleine pour une carte de plus, sinon null. */
-  const fullColumnError = async (column: ColumnRow, excludingItemId?: string) => {
-    if (!column.wipLimit) return null;
-    const count = await prisma.doingListItem.count({ where: { columnId: column.id, ...(excludingItemId ? { id: { not: excludingItemId } } : {}) } });
-    return count >= column.wipLimit ? `L'étape « ${column.name} » est pleine (${column.wipLimit} au plus).` : null;
-  };
+  const fullColumnError = fullColumnMessage;
+  const logEvent = (itemId: string, kind: DoingListEventKind, data?: Prisma.InputJsonValue, body?: string | null) =>
+    logDoingListEvent({ guildId, itemId, actorId: user.userId, actorName: auditUser, kind, data, body });
 
   try {
     // GET /doing-lists : les listes et leur avancement.
@@ -205,7 +239,7 @@ export async function handleDoingListRoutes(
 
     // POST /doing-lists : création, avec ses étapes de départ.
     if (parts.length === 5 && method === 'POST') {
-      const body = (await readJsonBody<{ name?: unknown; description?: unknown; modules?: unknown; columns?: unknown }>(req)) ?? {};
+      const body = (await readJsonBody<{ name?: unknown; description?: unknown; modules?: unknown; columns?: unknown; key?: unknown }>(req)) ?? {};
       const name = readText(body.name, NAME_MAX);
       if (!name) {
         json(res, 400, { error: 'Donne un nom à la liste.' });
@@ -213,6 +247,12 @@ export async function handleDoingListRoutes(
       }
       if (await prisma.doingList.count({ where: { guildId } }) >= MAX_LISTS_PER_GUILD) {
         json(res, 400, { error: `${MAX_LISTS_PER_GUILD} listes au plus par serveur.` });
+        return true;
+      }
+      // Une clé demandée déjà prise est suffixée plutôt que refusée.
+      const key = await freeListKey(guildId, readText(body.key, 10) ?? deriveListKey(name));
+      if (!key) {
+        json(res, 400, { error: 'La clé fait 2 à 10 lettres ou chiffres et commence par une lettre (ex. BOUT).' });
         return true;
       }
       const names = Array.isArray(body.columns)
@@ -223,6 +263,7 @@ export async function handleDoingListRoutes(
         data: {
           guildId,
           name,
+          key,
           description: readText(body.description, DESCRIPTION_MAX),
           modules: readModules(body.modules),
           createdById: user.userId,
@@ -250,6 +291,31 @@ export async function handleDoingListRoutes(
         orderBy: { username: 'asc' },
       });
       json(res, 200, { members });
+      return true;
+    }
+
+    // GET /doing-lists/search?q= : cartes du serveur par référence (BOUT-12) ou
+    // par titre, pour lier une carte à une autre.
+    if (parts.length === 6 && parts[5] === 'search' && method === 'GET') {
+      const query = (url.searchParams.get('q') ?? '').trim().slice(0, 100);
+      if (!query) {
+        json(res, 200, { items: [] });
+        return true;
+      }
+      const ref = parseDoingListRef(query);
+      const rows = await prisma.doingListItem.findMany({
+        where: {
+          guildId,
+          OR: [
+            { title: { contains: query, mode: 'insensitive' } },
+            ...(ref ? [{ number: ref.number, list: { key: ref.key } }] : []),
+          ],
+        },
+        orderBy: { updatedAt: 'desc' },
+        take: 10,
+        select: REF_SELECT,
+      });
+      json(res, 200, { items: rows.map(toRef) });
       return true;
     }
 
@@ -292,15 +358,25 @@ export async function handleDoingListRoutes(
         json(res, 404, { error: 'Liste introuvable.' });
         return true;
       }
-      const [columns, items] = await Promise.all([
+      const [columns, items, links] = await Promise.all([
         findColumns(),
         prisma.doingListItem.findMany({
           where: { listId },
           orderBy: [{ position: 'asc' }, { createdAt: 'asc' }],
           include: ITEM_INCLUDE,
         }),
+        // Liens touchant une carte de la liste, l'autre bout pouvant être ailleurs.
+        prisma.doingListItemLink.findMany({
+          where: { guildId, OR: [{ from: { listId } }, { to: { listId } }] },
+          select: { id: true, type: true, from: { select: REF_SELECT }, to: { select: REF_SELECT } },
+        }),
       ]);
-      json(res, 200, { list, columns, items });
+      json(res, 200, {
+        list,
+        columns,
+        items,
+        links: links.map((link) => ({ id: link.id, type: link.type, from: toRef(link.from), to: toRef(link.to) })),
+      });
       return true;
     }
 
@@ -311,8 +387,23 @@ export async function handleDoingListRoutes(
         json(res, 404, { error: 'Liste introuvable.' });
         return true;
       }
-      const body = (await readJsonBody<{ name?: unknown; description?: unknown; modules?: unknown }>(req)) ?? {};
-      const data: { name?: string; description?: string | null; modules?: DoingListModule[] } = {};
+      const body = (await readJsonBody<{ name?: unknown; description?: unknown; modules?: unknown; key?: unknown }>(req)) ?? {};
+      const data: { name?: string; description?: string | null; modules?: DoingListModule[]; key?: string } = {};
+      // Changer la clé renomme toutes les références (BOUT-12 → SHOP-12) : les
+      // liens tiennent par identifiant, rien ne casse.
+      if (body.key !== undefined) {
+        const wanted = readText(body.key, 10)?.toUpperCase() ?? '';
+        const key = await freeListKey(guildId, wanted, listId);
+        if (!key) {
+          json(res, 400, { error: 'La clé fait 2 à 10 lettres ou chiffres et commence par une lettre (ex. BOUT).' });
+          return true;
+        }
+        if (key !== wanted) {
+          json(res, 409, { error: `La clé ${wanted} est déjà prise sur ce serveur.` });
+          return true;
+        }
+        data.key = key;
+      }
       if (body.name !== undefined) {
         const name = readText(body.name, NAME_MAX);
         if (!name) {
@@ -469,8 +560,19 @@ export async function handleDoingListRoutes(
         json(res, 400, { error: `${MAX_ITEMS_PER_LIST} éléments au plus par liste.` });
         return true;
       }
-      const body = (await readJsonBody<{ title?: unknown; sourceModule?: unknown; sourceId?: unknown; columnId?: unknown }>(req)) ?? {};
+      const body = (await readJsonBody<{ title?: unknown; sourceModule?: unknown; sourceId?: unknown; columnId?: unknown; type?: unknown; parentId?: unknown }>(req)) ?? {};
       let title = readText(body.title, TITLE_MAX);
+      const type = isDoingListItemType(body.type) ? body.type : 'TASK';
+      // Sous-tâche créée depuis la fiche de sa parente : même liste seulement.
+      let parentId: string | null = null;
+      if (typeof body.parentId === 'string') {
+        const parent = await prisma.doingListItem.findFirst({ where: { id: body.parentId, listId }, select: { id: true } });
+        if (!parent) {
+          json(res, 400, { error: 'Carte parente introuvable dans cette liste.' });
+          return true;
+        }
+        parentId = parent.id;
+      }
       let source: SourceRead | null = null;
       let sourceModule: DoingListSource | null = null;
       let sourceId: string | null = null;
@@ -519,11 +621,14 @@ export async function handleDoingListRoutes(
 
       const last = await prisma.doingListItem.findFirst({ where: { columnId: column.id }, orderBy: { position: 'desc' }, select: { position: true } });
       const staffTaskId = sourceModule === 'tasks' ? sourceId : null;
-      const item = await prisma.doingListItem.create({
+      const item = await prisma.$transaction(async (tx) => tx.doingListItem.create({
         data: {
           listId,
           guildId,
           columnId: column.id,
+          number: await nextItemNumber(listId, tx),
+          type,
+          parentId,
           title,
           position: (last?.position ?? -1) + 1,
           description: source?.description ?? null,
@@ -535,7 +640,8 @@ export async function handleDoingListRoutes(
           createdById: user.userId,
         },
         include: ITEM_INCLUDE,
-      });
+      }));
+      await logEvent(item.id, 'created', sourceModule ? { source: sourceModule } : undefined);
       if (staffTaskId && item.staffTask && item.staffTask.status !== taskStatusForColumn(columns, column.id)) {
         await prisma.staffTask.update({ where: { id: staffTaskId }, data: { status: taskStatusForColumn(columns, column.id) } });
       }
@@ -544,12 +650,140 @@ export async function handleDoingListRoutes(
     }
 
     const itemId = parts[7];
-    if (parts.length !== 8 || !itemId) return false;
+    if (parts.length < 8 || !itemId) return false;
     const existingItem = await prisma.doingListItem.findFirst({ where: { id: itemId, listId, guildId } });
     if (!existingItem) {
       json(res, 404, { error: 'Élément introuvable.' });
       return true;
     }
+
+    // ── Fil de la carte : commentaires et historique ───────────
+    // GET /doing-lists/:id/items/:itemId/events
+    if (parts.length === 9 && parts[8] === 'events' && method === 'GET') {
+      const events = await prisma.doingListEvent.findMany({ where: { itemId }, orderBy: { createdAt: 'asc' }, take: 500 });
+      json(res, 200, { events });
+      return true;
+    }
+
+    if (parts[8] === 'comments') {
+      // POST /doing-lists/:id/items/:itemId/comments
+      if (parts.length === 9 && method === 'POST') {
+        const body = (await readJsonBody<{ body?: unknown }>(req)) ?? {};
+        const text = readText(body.body, COMMENT_MAX);
+        if (!text) {
+          json(res, 400, { error: 'Le commentaire est vide.' });
+          return true;
+        }
+        const event = await prisma.doingListEvent.create({
+          data: { guildId, itemId, actorId: user.userId, actorName: auditUser, kind: 'comment', body: text },
+        });
+        json(res, 201, { event });
+        return true;
+      }
+      // PATCH / DELETE /doing-lists/:id/items/:itemId/comments/:eventId :
+      // son auteur seulement, ou un admin pour la suppression.
+      const eventId = parts[9];
+      if (parts.length !== 10 || !eventId) return false;
+      const comment = await prisma.doingListEvent.findFirst({ where: { id: eventId, itemId, kind: 'comment' } });
+      if (!comment) {
+        json(res, 404, { error: 'Commentaire introuvable.' });
+        return true;
+      }
+      const isAuthor = comment.actorId === user.userId;
+      if (method === 'PATCH') {
+        if (!isAuthor) {
+          json(res, 403, { error: 'Seul son auteur peut modifier ce commentaire.' });
+          return true;
+        }
+        const body = (await readJsonBody<{ body?: unknown }>(req)) ?? {};
+        const text = readText(body.body, COMMENT_MAX);
+        if (!text) {
+          json(res, 400, { error: 'Le commentaire est vide.' });
+          return true;
+        }
+        json(res, 200, { event: await prisma.doingListEvent.update({ where: { id: eventId }, data: { body: text } }) });
+        return true;
+      }
+      if (method === 'DELETE') {
+        if (!isAuthor && !access.canManageSettings) {
+          json(res, 403, { error: 'Seul son auteur peut supprimer ce commentaire.' });
+          return true;
+        }
+        await prisma.doingListEvent.delete({ where: { id: eventId } });
+        json(res, 200, { ok: true });
+        return true;
+      }
+      return false;
+    }
+
+    // ── Liens entre cartes ─────────────────────────────────────
+    if (parts[8] === 'links') {
+      // POST /doing-lists/:id/items/:itemId/links { type, targetId, inward } :
+      // inward = la carte est la cible (« est bloquée par », « est dupliquée par »).
+      if (parts.length === 9 && method === 'POST') {
+        const body = (await readJsonBody<{ type?: unknown; targetId?: unknown; inward?: unknown }>(req)) ?? {};
+        if (!isDoingListLinkType(body.type)) {
+          json(res, 400, { error: 'Type de lien inconnu.' });
+          return true;
+        }
+        const target = typeof body.targetId === 'string'
+          ? await prisma.doingListItem.findFirst({ where: { id: body.targetId, guildId }, select: REF_SELECT })
+          : null;
+        if (!target) {
+          json(res, 404, { error: 'Carte à lier introuvable sur ce serveur.' });
+          return true;
+        }
+        if (target.id === itemId) {
+          json(res, 400, { error: 'Une carte ne se lie pas à elle-même.' });
+          return true;
+        }
+        const [fromId, toId] = body.inward === true ? [target.id, itemId] : [itemId, target.id];
+        const existing = await prisma.doingListItemLink.findFirst({
+          where: {
+            type: body.type,
+            // « Liée à » n'a pas de sens : A–B et B–A sont le même lien.
+            OR: body.type === 'RELATES' ? [{ fromId, toId }, { fromId: toId, toId: fromId }] : [{ fromId, toId }],
+          },
+          select: { id: true },
+        });
+        if (existing) {
+          json(res, 409, { error: 'Ce lien existe déjà.' });
+          return true;
+        }
+        if (await prisma.doingListItemLink.count({ where: { OR: [{ fromId: itemId }, { toId: itemId }] } }) >= MAX_LINKS_PER_ITEM) {
+          json(res, 400, { error: `${MAX_LINKS_PER_ITEM} liens au plus par carte.` });
+          return true;
+        }
+        const link = await prisma.doingListItemLink.create({
+          data: { guildId, fromId, toId, type: body.type, createdById: user.userId },
+          select: { id: true, type: true, from: { select: REF_SELECT }, to: { select: REF_SELECT } },
+        });
+        const ref = { type: body.type, from: toRef(link.from).key, to: toRef(link.to).key };
+        await Promise.all([logEvent(itemId, 'linked', ref), logEvent(target.id, 'linked', ref)]);
+        json(res, 201, { link: { id: link.id, type: link.type, from: toRef(link.from), to: toRef(link.to) } });
+        return true;
+      }
+      // DELETE /doing-lists/:id/items/:itemId/links/:linkId
+      const linkId = parts[9];
+      if (parts.length === 10 && linkId && method === 'DELETE') {
+        const link = await prisma.doingListItemLink.findFirst({
+          where: { id: linkId, OR: [{ fromId: itemId }, { toId: itemId }] },
+          select: { id: true, type: true, from: { select: REF_SELECT }, to: { select: REF_SELECT } },
+        });
+        if (!link) {
+          json(res, 404, { error: 'Lien introuvable.' });
+          return true;
+        }
+        await prisma.doingListItemLink.delete({ where: { id: linkId } });
+        const ref = { type: link.type, from: toRef(link.from).key, to: toRef(link.to).key };
+        await Promise.all([logEvent(link.from.id, 'unlinked', ref), logEvent(link.to.id, 'unlinked', ref)]);
+        json(res, 200, { ok: true });
+        return true;
+      }
+      return false;
+    }
+
+    if (parts.length !== 8) return false;
 
     // PATCH /doing-lists/:id/items/:itemId : détails, étape et place
     // ({ columnId, index }), attribution ({ assigneeId } : membre du staff ou null).
@@ -564,6 +798,9 @@ export async function handleDoingListRoutes(
         columnId?: unknown;
         index?: unknown;
         assigneeId?: unknown;
+        type?: unknown;
+        estimate?: unknown;
+        parentId?: unknown;
       }>(req)) ?? {};
 
       const data: Prisma.DoingListItemUncheckedUpdateInput = {};
@@ -593,6 +830,43 @@ export async function handleDoingListRoutes(
       }
       if (body.labels !== undefined) data.labels = readLabels(body.labels);
       if (body.checklist !== undefined) data.checklist = readChecklist(body.checklist);
+      if (body.type !== undefined) {
+        if (!isDoingListItemType(body.type)) {
+          json(res, 400, { error: 'Type de carte inconnu.' });
+          return true;
+        }
+        data.type = body.type;
+      }
+      if (body.estimate !== undefined) {
+        const estimate = readEstimate(body.estimate);
+        if (estimate === undefined) {
+          json(res, 400, { error: "L'estimation est un nombre entier entre 0 et 999." });
+          return true;
+        }
+        data.estimate = estimate;
+      }
+      if (body.parentId !== undefined) {
+        if (body.parentId === null) data.parentId = null;
+        else {
+          const parent = typeof body.parentId === 'string'
+            ? await prisma.doingListItem.findFirst({ where: { id: body.parentId, listId }, select: { id: true } })
+            : null;
+          if (!parent) {
+            json(res, 400, { error: 'Carte parente introuvable dans cette liste.' });
+            return true;
+          }
+          // Remonte la lignée de la future parente : y trouver la carte ferait une boucle.
+          let cursor: string | null = parent.id;
+          for (let depth = 0; cursor && depth < 50; depth += 1) {
+            if (cursor === itemId) {
+              json(res, 400, { error: 'Une carte ne peut pas devenir la sous-tâche de sa propre sous-tâche.' });
+              return true;
+            }
+            cursor = (await prisma.doingListItem.findUnique({ where: { id: cursor }, select: { parentId: true } }))?.parentId ?? null;
+          }
+          data.parentId = parent.id;
+        }
+      }
 
       let targetColumnId = existingItem.columnId;
       if (body.columnId !== undefined) {
@@ -612,7 +886,7 @@ export async function handleDoingListRoutes(
       }
       const index = typeof body.index === 'number' && Number.isInteger(body.index) ? body.index : null;
 
-      let assignee: { id: string } | null | undefined;
+      let assignee: { id: string; username: string | null; displayName: string | null } | null | undefined;
       if (body.assigneeId === null) {
         if (existingItem.sourceModule === 'tasks') {
           json(res, 400, { error: 'Une tâche du planning garde toujours une personne attitrée.' });
@@ -620,7 +894,7 @@ export async function handleDoingListRoutes(
         }
         assignee = null;
       } else if (typeof body.assigneeId === 'string') {
-        assignee = await prisma.staffMember.findFirst({ where: { id: body.assigneeId, guildId }, select: { id: true } });
+        assignee = await prisma.staffMember.findFirst({ where: { id: body.assigneeId, guildId }, select: { id: true, username: true, displayName: true } });
         if (!assignee) {
           json(res, 400, { error: 'Cette personne ne fait pas partie du staff.' });
           return true;
@@ -653,6 +927,16 @@ export async function handleDoingListRoutes(
         staffTaskId = task.id;
         await audit('Carte attribuée', `« ${item.title} » dans « ${list.name} ».`);
       }
+
+      // Fil de la carte : ce qui a bougé, sans le simple réordonnancement.
+      if (item.columnId !== existingItem.columnId) {
+        const name = (id: string) => columns.find((column) => column.id === id)?.name ?? '?';
+        await logEvent(itemId, 'moved', { from: name(existingItem.columnId), to: name(item.columnId) });
+      }
+      if (assignee) await logEvent(itemId, 'assigned', { name: assignee.displayName || assignee.username || '' });
+      else if (assignee === null && existingItem.staffTaskId) await logEvent(itemId, 'unassigned');
+      const changed = Object.keys(data);
+      if (changed.length > 0) await logEvent(itemId, 'updated', { fields: changed });
 
       // La tâche suit la carte : titre, détails, avancement.
       if (staffTaskId) {

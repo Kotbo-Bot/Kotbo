@@ -19,23 +19,39 @@ let ticketRow: { reason: string; username: string } | null = null;
 let columnRows: Column[] = [];
 let itemCount = 0;
 let itemRow: Record<string, unknown> | null = null;
+// Autres cartes du serveur, par identifiant (cible d'un lien, parente).
+let otherRows: Record<string, Record<string, unknown>> = {};
+let existingLink: { id: string } | null = null;
 let featureRights: Record<string, { canView: boolean; canModerate: boolean; canConfigure: boolean; canDelete: boolean }> = {};
 
 const createItem = mock(async ({ data }: { data: Record<string, unknown> }) => ({ id: 'item-1', ...data }));
 const updateItem = mock(async ({ data }: { data: Record<string, unknown> }) => ({ id: 'item-1', ...data }));
 const updateTask = mock(async ({ data }: { data: Record<string, unknown> }) => ({ id: 'task-1', ...data }));
 const createTask = mock(async () => ({ id: 'task-1' }));
+const createLink = mock(async ({ data }: { data: Record<string, unknown> }) => ({
+  id: 'link-1',
+  type: data.type,
+  from: refRow(data.fromId as string),
+  to: refRow(data.toId as string),
+}));
+const findRow = (id?: string) => (id === 'item-1' ? itemRow : id ? otherRows[id] ?? null : null);
+function refRow(id: string) {
+  return { id, listId: 'list-1', number: 1, title: id, type: 'TASK', list: { key: 'BOUT' }, column: { isDone: false } };
+}
 const mockDb: Record<string, unknown> = {
-  doingList: { findFirst: mock(async () => listRow) },
+  doingList: { findFirst: mock(async () => listRow), update: mock(async () => ({ nextNumber: 8 })) },
   doingListColumn: { findMany: mock(async () => columnRows) },
   doingListItem: {
     count: mock(async () => itemCount),
-    findFirst: mock(async ({ where }: { where: { id?: string } }) => (where.id ? itemRow : null)),
+    findFirst: mock(async ({ where }: { where: { id?: string } }) => findRow(where.id)),
+    findUnique: mock(async ({ where }: { where: { id?: string } }) => findRow(where.id)),
     findMany: mock(async () => []),
     findUniqueOrThrow: mock(async () => itemRow),
     create: createItem,
     update: updateItem,
   },
+  doingListEvent: { create: mock(async () => ({})) },
+  doingListItemLink: { findFirst: mock(async () => existingLink), count: mock(async () => 0), create: createLink },
   staffMember: { findFirst: mock(async ({ where }: { where: { id: string } }) => (where.id === 'staff-2' ? { id: 'staff-2' } : null)) },
   staffTask: { update: updateTask, delete: mock(async () => ({})) },
   ticket: { findFirst: mock(async () => ticketRow) },
@@ -103,15 +119,18 @@ beforeEach(() => {
   columnRows = BOARD.map((column) => ({ ...column }));
   itemCount = 0;
   itemRow = null;
+  otherRows = {};
+  existingLink = null;
   featureRights = {};
-  for (const fn of [createItem, updateItem, updateTask, createTask]) fn.mockClear();
+  for (const fn of [createItem, updateItem, updateTask, createTask, createLink]) fn.mockClear();
 });
 
 describe('épingler un élément', () => {
   test("reprend le titre de la source et l'épingle dans la première étape", async () => {
     const res = await call(DASHBOARD_ACCESS_ADMIN, pin);
     expect(res.statusCode).toBe(201);
-    expect(createItem.mock.calls[0][0].data).toMatchObject({ title: 'Bug boutique (alice)', sourceModule: 'tickets', sourceId: 'ticket-1', columnId: 'col-todo' });
+    // Numéro réservé sur la liste : nextNumber passait de 7 à 8.
+    expect(createItem.mock.calls[0][0].data).toMatchObject({ title: 'Bug boutique (alice)', sourceModule: 'tickets', sourceId: 'ticket-1', columnId: 'col-todo', number: 7 });
   });
 
   test("refuse un module que la liste ne relie pas", async () => {
@@ -153,6 +172,37 @@ describe('attribution', () => {
     itemRow = { id: 'item-1', columnId: 'col-todo', title: 'X', sourceModule: null, staffTaskId: null };
     expect((await call(DASHBOARD_ACCESS_ADMIN, { assigneeId: 'inconnu' }, 'PATCH', itemPath)).statusCode).toBe(400);
     expect(createTask).not.toHaveBeenCalled();
+  });
+});
+
+describe('liens et sous-tâches', () => {
+  const itemPath = [...itemsPath, 'item-1'];
+  const base = { id: 'item-1', listId: 'list-1', guildId: 'guild-1', columnId: 'col-todo', title: 'A', sourceModule: null, staffTaskId: null, parentId: null };
+
+  test("« est bloquée par » enregistre le lien depuis la carte qui bloque", async () => {
+    itemRow = { ...base };
+    otherRows = { 'item-2': refRow('item-2') };
+    const res = await call(DASHBOARD_ACCESS_ADMIN, { type: 'BLOCKS', targetId: 'item-2', inward: true }, 'POST', [...itemPath, 'links']);
+    expect(res.statusCode).toBe(201);
+    expect(createLink.mock.calls[0][0].data).toMatchObject({ fromId: 'item-2', toId: 'item-1', type: 'BLOCKS' });
+  });
+
+  test("refuse un lien vers soi-même et un lien qui existe déjà", async () => {
+    itemRow = { ...base };
+    otherRows = { 'item-1': refRow('item-1'), 'item-2': refRow('item-2') };
+    expect((await call(DASHBOARD_ACCESS_ADMIN, { type: 'RELATES', targetId: 'item-1' }, 'POST', [...itemPath, 'links'])).statusCode).toBe(400);
+    existingLink = { id: 'link-0' };
+    expect((await call(DASHBOARD_ACCESS_ADMIN, { type: 'RELATES', targetId: 'item-2' }, 'POST', [...itemPath, 'links'])).statusCode).toBe(409);
+    expect(createLink).not.toHaveBeenCalled();
+  });
+
+  test("refuse de faire d'une carte la sous-tâche de sa propre sous-tâche", async () => {
+    itemRow = { ...base };
+    // item-3 est la sous-tâche de item-1 : item-1 ne peut pas passer sous item-3.
+    otherRows = { 'item-3': { id: 'item-3', parentId: 'item-1' } };
+    const res = await call(DASHBOARD_ACCESS_ADMIN, { parentId: 'item-3' }, 'PATCH', itemPath);
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toContain('sous-tâche');
   });
 });
 
