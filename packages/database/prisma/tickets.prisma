@@ -221,3 +221,18 @@ model TicketMacro {
   @@index([guildId, position])
   @@map("ticket_macros")
 }
+
+/// Signature d'un membre du staff, collee sous ses macros et ses reponses de
+/// ticket. Accepte les memes variables que les macros ({staff}, {server}...).
+model TicketStaffSignature {
+  guildId String
+  userId  String
+  content String
+
+  guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  updatedAt DateTime @updatedAt
+
+  @@id([guildId, userId])
+  @@map("ticket_staff_signatures")
+}
