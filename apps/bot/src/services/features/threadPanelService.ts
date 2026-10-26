@@ -173,16 +173,28 @@ export type ThreadPanelOpenRefusal =
   | { code: 'cooldown'; seconds: number }
   | { code: 'limit'; limit: number };
 
-/** Fils encore ouverts du membre pour ce bouton ; ceux fermés entre-temps sont soldés au passage. */
+/**
+ * Fils encore ouverts du membre pour ce bouton. Un message suffit à relancer
+ * un fil archivé : `closedAt` n'est qu'un indice, recalé ici sur ce que
+ * Discord montre. Les fils actifs sont dans le cache ; un fil absent du cache
+ * et déjà marqué fermé l'est encore, seuls les autres coûtent un appel.
+ */
 async function countOpenThreads(client: Client, panelId: string, buttonId: string, ownerId: string): Promise<number> {
-  const rows = await prisma.panelThread.findMany({ where: { panelId, buttonId, ownerId, closedAt: null }, select: { threadId: true } });
+  const rows = await prisma.panelThread.findMany({
+    where: { panelId, buttonId, ownerId },
+    orderBy: { createdAt: 'desc' },
+    take: 100,
+    select: { threadId: true, closedAt: true },
+  });
   let open = 0;
   for (const row of rows) {
-    const thread = await fetchThread(client, row.threadId);
+    const cached = client.channels.cache.get(row.threadId);
+    const thread = cached?.isThread() ? cached : row.closedAt ? 'gone' : await fetchThread(client, row.threadId);
     // Sans réponse de Discord, le fil compte : mieux vaut refuser un fil de
     // trop que dépasser la limite.
-    if (thread === null || (thread !== 'gone' && !thread.archived)) open += 1;
-    else await markClosed(row.threadId, true);
+    const isOpen = thread === null || (thread !== 'gone' && !thread.archived);
+    if (isOpen) open += 1;
+    if (thread !== null && isOpen === !!row.closedAt) await markClosed(row.threadId, !isOpen);
   }
   return open;
 }
@@ -516,12 +528,15 @@ function bansKey(guildId: string): string {
   return `guild:${guildId}:tpanel:bans`;
 }
 
-/** Fils ouverts qui ont des bannis : seul ce petit ensemble est lu à chaque message. */
+/**
+ * Fils qui ont des bannis : seul ce petit ensemble est lu à chaque message.
+ * Les fils fermés en font partie, un message suffisant à les relancer.
+ */
 export async function getThreadBans(guildId: string): Promise<Record<string, string[]>> {
   const cached = await cache.get<Record<string, string[]>>(bansKey(guildId));
   if (cached) return cached;
   const rows = await prisma.panelThread.findMany({
-    where: { guildId, closedAt: null, bannedIds: { isEmpty: false } },
+    where: { guildId, bannedIds: { isEmpty: false } },
     select: { threadId: true, bannedIds: true },
   }).catch(() => []);
   const bans = Object.fromEntries(rows.map((row) => [row.threadId, row.bannedIds]));
