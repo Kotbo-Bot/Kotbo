@@ -84,7 +84,7 @@
   </div>
 
   {#if panels.length === 0}
-    <p class="text-xs text-on-surface-variant/70">{forms.length === 0 ? m.rpan_no_forms() : m.rpan_empty()}</p>
+    <p class="text-xs text-on-surface-variant">{forms.length === 0 ? m.rpan_no_forms() : m.rpan_empty()}</p>
   {:else}
     <div class="space-y-2">
       {#each panels as panel (panel.id)}

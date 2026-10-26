@@ -368,7 +368,7 @@
                       </select>
                     {/if}
                     {#if form.autoClosedReason}
-                      <p class="text-2xs text-amber-400">
+                      <p class="text-2xs text-warning">
                         {form.autoClosedReason === 'ACCEPTED' ? m.cf_autoclose_closed_accepted() : m.cf_autoclose_closed_pending()}
                       </p>
                     {/if}

@@ -84,7 +84,7 @@
   </div>
 
   {#if panels.length === 0}
-    <p class="text-xs text-on-surface-variant/70">{m.slp_empty()}</p>
+    <p class="text-xs text-on-surface-variant">{m.slp_empty()}</p>
   {:else}
     <div class="space-y-2">
       {#each panels as panel (panel.id)}
