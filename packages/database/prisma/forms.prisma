@@ -27,6 +27,21 @@ model CustomForm {
   // null = comportement historique (rôle le plus bas toutes hiérarchies confondues).
   hierarchyId String?
 
+  // ── Fermeture automatique (formulaires de recrutement) ───────────────────
+  // Ferme le poste a X candidatures en attente ; il rouvre quand l'une d'elles
+  // est tranchee (retenue pour l'oral ou refusee).
+  maxPendingCandidatures  Int?
+  // Ferme le poste a X candidats recrutes (oral reussi).
+  maxAcceptedCandidatures Int?
+  // RESET : le compteur d'acceptes repart a 0 a chaque reouverture manuelle.
+  // TOTAL : tous les acceptes du formulaire comptent, depuis toujours.
+  acceptedCapMode         String  @default("RESET")
+  acceptedCount           Int     @default(0)
+  // PENDING | ACCEPTED quand Kotbo a ferme le poste lui-meme. Seule une
+  // fermeture automatique se rouvre automatiquement : une fermeture a la main
+  // n'est jamais annulee par le bot.
+  autoClosedReason        String?
+
   // Relation optionnelle vers un Event (événement d'inscription)
   events      Event[]
   candidatures RecruitmentCandidature[]

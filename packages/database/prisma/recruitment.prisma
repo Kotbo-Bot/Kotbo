@@ -95,3 +95,24 @@ model RecruitmentForm {
   @@index([guildId, isActive])
   @@map("recruitment_forms")
 }
+
+/// Panneau Discord « statut des recrutements » : une ligne par formulaire de
+/// recrutement (OPEN/CLOSED) et un bouton pour postuler aux postes ouverts.
+/// Re-rendu a chaque ouverture ou fermeture d'un de ses postes.
+model RecruitmentPanel {
+  id        String  @id @default(cuid())
+  guildId   String
+  channelId String
+  messageId String?
+  title     String
+  /// Formulaires (CustomForm isRecruitment) affiches, dans l'ordre.
+  formIds   String[] @default([])
+
+  guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([guildId])
+  @@map("recruitment_panels")
+}

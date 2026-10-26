@@ -8,6 +8,7 @@ import { logger } from '../../utils/logger.js';
 import { COLORS } from '../../utils/embeds.js';
 import { createTicketWorkspace, type TicketPanelTypeConfig } from '../features/ticketService.js';
 import { resolveGuildLocale } from '../../utils/i18n.js';
+import { recordAcceptedCandidature, syncRecruitmentFormAvailability } from './recruitmentPanelService.js';
 
 // ============================================================================
 // FIELD DETECTION HELPERS
@@ -264,19 +265,25 @@ async function notifyStaffServerNewCandidature(
 }
 
 export async function updateCandidatureStatus(id: string, status: CandidatureStatus, notes?: string) {
-  return await prisma.recruitmentCandidature.update({
+  const before = await prisma.recruitmentCandidature.findUnique({ where: { id }, select: { status: true } });
+  const updated = await prisma.recruitmentCandidature.update({
     where: { id },
     data: {
       status,
       ...(notes !== undefined ? { notes } : {}),
     },
   });
+  if (status === 'APPROVED' && before?.status !== 'APPROVED') await recordAcceptedCandidature(updated.customFormId);
+  else await syncRecruitmentFormAvailability(updated.customFormId);
+  return updated;
 }
 
 export async function deleteCandidature(id: string) {
-  return await prisma.recruitmentCandidature.delete({
+  const deleted = await prisma.recruitmentCandidature.delete({
     where: { id },
   });
+  await syncRecruitmentFormAvailability(deleted.customFormId);
+  return deleted;
 }
 
 // ============================================================================
@@ -381,6 +388,8 @@ export async function approveCandidature(
   });
 
   logger.success('Recruitment', `Ticket créé (${ticketId}) pour ${pseudo} (${targetDiscordUserId})`);
+  // Une candidature de moins en attente : le poste peut rouvrir.
+  await syncRecruitmentFormAvailability(updated.customFormId);
 
   if (targetDiscordUserId) {
     await notify({
@@ -422,6 +431,7 @@ export async function rejectCandidature(
       processedByUserId: processedByUserId || null,
     },
   });
+  await syncRecruitmentFormAvailability(result.customFormId);
 
   if (candidature.discordId) {
     await notify({
@@ -608,6 +618,7 @@ export async function completeOral(
   });
 
   logger.success('Recruitment', `Candidature ${candidatureId} APPROVED → StaffMember ${staffMember.id} créé (${gradeName})`);
+  await recordAcceptedCandidature(updated.customFormId);
 
   if (candidature.discordId) {
     await notify({
