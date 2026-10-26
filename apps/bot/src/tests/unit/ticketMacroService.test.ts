@@ -6,7 +6,22 @@ const mockDb = {};
 mock.module(path.resolve(__dirname, '../../utils/db.ts'), () => ({ default: mockDb, prisma: mockDb, prismaRead: mockDb }));
 mock.module(path.resolve(__dirname, '../../utils/db.js'), () => ({ default: mockDb, prisma: mockDb, prismaRead: mockDb }));
 
-import { parseMacroInput } from '../../services/features/ticketMacroService.js';
+import { parseMacroInput, withSignature } from '../../services/features/ticketMacroService.js';
+
+describe('withSignature', () => {
+  test('sans signature, le texte part seul', () => {
+    expect(withSignature('Bonjour', null)).toEqual(['Bonjour']);
+  });
+
+  test('la signature est collée sous le texte', () => {
+    expect(withSignature('Bonjour', '— Mito')).toEqual(['Bonjour\n\n— Mito']);
+  });
+
+  test('au-delà de 2000 caractères, la signature part dans un second message', () => {
+    const long = 'a'.repeat(1995);
+    expect(withSignature(long, '— Mito')).toEqual([long, '— Mito']);
+  });
+});
 
 describe('parseMacroInput', () => {
   test('nom et contenu sont obligatoires', () => {

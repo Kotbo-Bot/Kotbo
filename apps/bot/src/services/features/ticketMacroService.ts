@@ -45,6 +45,26 @@ export function renderMacroContent(
   );
 }
 
+/** Longueur maximale d'une signature : elle doit tenir sous une macro sans l'ecraser. */
+export const SIGNATURE_MAX_LENGTH = 1000;
+
+/** Signature du staff sur ce serveur, ou null s'il n'en a pas. */
+export async function getStaffSignature(guildId: string, userId: string): Promise<string | null> {
+  const row = await prisma.ticketStaffSignature.findUnique({ where: { guildId_userId: { guildId, userId } } });
+  return row?.content || null;
+}
+
+/**
+ * Colle la signature sous le texte. Si l'ensemble depasse les 2000 caracteres
+ * d'un message Discord, la signature part dans un second message plutot que
+ * de faire echouer l'envoi.
+ */
+export function withSignature(content: string, signature: string | null): string[] {
+  if (!signature) return [content];
+  const joined = `${content}\n\n${signature}`;
+  return joined.length <= 2000 ? [joined] : [content, signature];
+}
+
 /** Champs acceptes pour une macro, valides un par un plutot qu'en bloc. */
 export type MacroData = {
   name: string;
