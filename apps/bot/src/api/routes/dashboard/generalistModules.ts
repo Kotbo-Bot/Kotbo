@@ -2731,6 +2731,8 @@ export async function handleGeneralistModulesRoutes(
             funNeverSayChannelId: true,
             funEmojiOnlyChannelId: true,
             funImageOfDayChannelId: true,
+            funConfessionChannelId: true,
+            funConfessionLogChannelId: true,
             funPunitiveMode: true,
             funEmojiRiddleUseDefaults: true,
           }
@@ -2775,6 +2777,8 @@ export async function handleGeneralistModulesRoutes(
           funNeverSayChannelId?: string | null;
           funEmojiOnlyChannelId?: string | null;
           funImageOfDayChannelId?: string | null;
+          funConfessionChannelId?: string | null;
+          funConfessionLogChannelId?: string | null;
           funPunitiveMode?: boolean;
           funEmojiRiddleUseDefaults?: boolean;
         }>(req);
@@ -2806,6 +2810,8 @@ export async function handleGeneralistModulesRoutes(
             funNeverSayChannelId: body.funNeverSayChannelId,
             funEmojiOnlyChannelId: body.funEmojiOnlyChannelId,
             funImageOfDayChannelId: body.funImageOfDayChannelId,
+            funConfessionChannelId: body.funConfessionChannelId,
+            funConfessionLogChannelId: body.funConfessionLogChannelId,
             funPunitiveMode: body.funPunitiveMode,
             funEmojiRiddleUseDefaults: typeof body.funEmojiRiddleUseDefaults === 'boolean'
               ? body.funEmojiRiddleUseDefaults
@@ -2855,6 +2861,8 @@ export async function handleGeneralistModulesRoutes(
             funNeverSayChannelId: updatedGuild.funNeverSayChannelId,
             funEmojiOnlyChannelId: updatedGuild.funEmojiOnlyChannelId,
             funImageOfDayChannelId: updatedGuild.funImageOfDayChannelId,
+            funConfessionChannelId: updatedGuild.funConfessionChannelId,
+            funConfessionLogChannelId: updatedGuild.funConfessionLogChannelId,
             funPunitiveMode: updatedGuild.funPunitiveMode,
             funEmojiRiddleUseDefaults: updatedGuild.funEmojiRiddleUseDefaults,
           },
@@ -2871,6 +2879,24 @@ export async function handleGeneralistModulesRoutes(
       } catch (err) {
         logger.error('FunAPI', 'Error updating fun config:', err);
         jsonFailure(res, err, 'Erreur lors de la mise à jour de la configuration fun', 'FunAPI');
+      }
+      return true;
+    }
+
+    // GET /api/dashboard/guilds/:guildId/fun/confessions
+    // L'auteur n'est jamais renvoyé : seule la commande /confession reveler le montre.
+    if (parts[5] === 'confessions' && parts.length === 6 && method === 'GET') {
+      try {
+        const confessions = await prisma.confession.findMany({
+          where: { guildId },
+          orderBy: { number: 'desc' },
+          take: 50,
+          select: { number: true, content: true, createdAt: true, revealedAt: true },
+        });
+        json(res, 200, { confessions });
+      } catch (err) {
+        logger.error('FunAPI', 'Error fetching confessions:', err);
+        jsonFailure(res, err, 'Erreur lors de la récupération des confessions', 'FunAPI');
       }
       return true;
     }

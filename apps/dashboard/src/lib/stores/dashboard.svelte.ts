@@ -150,6 +150,8 @@ class DashboardStore {
     funNeverSayChannelId: '',
     funEmojiOnlyChannelId: '',
     funImageOfDayChannelId: '',
+    funConfessionChannelId: '',
+    funConfessionLogChannelId: '',
     funPunitiveMode: true,
     commandRestrictions: [] as CommandRestrictionRule[],
     sidebarFavorites: [] as string[],
@@ -448,6 +450,8 @@ class DashboardStore {
         this.state.funNeverSayChannelId = data.funNeverSayChannelId || '';
         this.state.funEmojiOnlyChannelId = data.funEmojiOnlyChannelId || '';
         this.state.funImageOfDayChannelId = data.funImageOfDayChannelId || '';
+        this.state.funConfessionChannelId = data.funConfessionChannelId || '';
+        this.state.funConfessionLogChannelId = data.funConfessionLogChannelId || '';
         this.state.funPunitiveMode = data.funPunitiveMode ?? true;
         this.state.commandRestrictions = data.commandRestrictions || [];
         this.state.sidebarFavorites = data.sidebarFavorites || [];

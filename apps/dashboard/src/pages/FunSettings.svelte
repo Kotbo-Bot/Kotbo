@@ -17,6 +17,7 @@
   import EmojiRiddleEditor from '../lib/components/fun/EmojiRiddleEditor.svelte';
   import {
     fetchFunConfig,
+    fetchConfessions,
     updateFunConfig,
     resetCountingGame,
     resetGuessNumberGame,
@@ -43,6 +44,8 @@
     funNeverSayChannelId: null as string | null,
     funEmojiOnlyChannelId: null as string | null,
     funImageOfDayChannelId: null as string | null,
+    funConfessionChannelId: null as string | null,
+    funConfessionLogChannelId: null as string | null,
     funPunitiveMode: true,
     funEmojiRiddleUseDefaults: true
   });
@@ -56,9 +59,13 @@
     funNeverSayChannelId: null as string | null,
     funEmojiOnlyChannelId: null as string | null,
     funImageOfDayChannelId: null as string | null,
+    funConfessionChannelId: null as string | null,
+    funConfessionLogChannelId: null as string | null,
     funPunitiveMode: true,
     funEmojiRiddleUseDefaults: true
   });
+
+  let confessions = $state<{ number: number; content: string; createdAt: string; revealedAt: string | null }[]>([]);
 
   let gameState = $state({
     countingCurrent: 0,
@@ -106,6 +113,8 @@
       funNeverSayChannelId: source.funNeverSayChannelId ?? null,
       funEmojiOnlyChannelId: source.funEmojiOnlyChannelId ?? null,
       funImageOfDayChannelId: source.funImageOfDayChannelId ?? null,
+      funConfessionChannelId: source.funConfessionChannelId ?? null,
+      funConfessionLogChannelId: source.funConfessionLogChannelId ?? null,
       funPunitiveMode: source.funPunitiveMode ?? true,
       funEmojiRiddleUseDefaults: source.funEmojiRiddleUseDefaults ?? true
     };
@@ -127,7 +136,8 @@
     loading = true;
     try {
       await dashboardStore.refresh();
-      const res = await fetchFunConfig();
+      const [res, confRes] = await Promise.all([fetchFunConfig(), fetchConfessions()]);
+      confessions = confRes?.confessions ?? [];
       if (res && res.config) {
         const loaded = mapConfig(res.config);
         config = loaded;
@@ -572,6 +582,69 @@
 
         <div class="text-2xs text-on-surface-variant/40 italic text-center py-2 leading-relaxed font-medium">
           {m.fun_imageofday_hint()}
+        </div>
+      </section>
+
+      <!-- Confessions Card -->
+      <section class="bg-surface-container-low/40 border border-outline-variant/30 p-8 rounded-xl flex flex-col justify-between gap-6 hover:bg-surface-container-low/60 transition-all duration-300 md:col-span-2">
+        <div class="space-y-4">
+          <div class="flex items-center gap-3 pb-3 border-b border-outline-variant/15">
+            <div class="w-10 h-10 rounded-xl bg-violet-500/10 text-violet-500 flex items-center justify-center">
+              <Papicon icon="MessageCircle" size={20} />
+            </div>
+            <div>
+              <h3 class="text-lg font-semibold tracking-tight text-on-surface">{m.fun_confession_title()}</h3>
+              <p class="text-xs text-on-surface-variant/55 font-semibold">{m.fun_confession_subtitle()}</p>
+            </div>
+          </div>
+
+          <div class="grid gap-4 md:grid-cols-2">
+            <div class="space-y-1.5">
+              <label for="confessionChannel" class="text-xs font-semibold text-on-surface-variant ml-2">{m.fun_channel_label()}</label>
+              <SearchableSelect
+                id="confessionChannel"
+                bind:value={config.funConfessionChannelId}
+                options={availableChannels.map(c => ({ id: c.id, name: channelDisplayName(c) }))}
+                placeholder={m.fun_no_channel()}
+                className="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-violet-500/30 transition-all"
+                disabled={!canManageSettings}
+              />
+            </div>
+            <div class="space-y-1.5">
+              <label for="confessionLogChannel" class="text-xs font-semibold text-on-surface-variant ml-2">{m.fun_confession_log_label()}</label>
+              <SearchableSelect
+                id="confessionLogChannel"
+                bind:value={config.funConfessionLogChannelId}
+                options={availableChannels.map(c => ({ id: c.id, name: channelDisplayName(c) }))}
+                placeholder={m.fun_no_channel()}
+                className="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-violet-500/30 transition-all"
+                disabled={!canManageSettings}
+              />
+            </div>
+          </div>
+
+          <div class="space-y-2">
+            <h4 class="text-xs font-semibold text-on-surface-variant ml-2">{m.fun_confession_recent_title()}</h4>
+            {#if confessions.length === 0}
+              <p class="text-xs text-on-surface-variant/50 ml-2">{m.fun_confession_empty()}</p>
+            {:else}
+              <ul class="space-y-2 max-h-72 overflow-y-auto">
+                {#each confessions as c (c.number)}
+                  <li class="bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm">
+                    <div class="flex items-center justify-between text-2xs text-on-surface-variant/55 font-semibold mb-1">
+                      <span>#{c.number}</span>
+                      <span>{new Date(c.createdAt).toLocaleString()}{c.revealedAt ? ` · ${m.fun_confession_revealed()}` : ''}</span>
+                    </div>
+                    <p class="text-on-surface whitespace-pre-wrap break-words">{c.content}</p>
+                  </li>
+                {/each}
+              </ul>
+            {/if}
+          </div>
+        </div>
+
+        <div class="text-2xs text-on-surface-variant/40 italic text-center py-2 leading-relaxed font-medium">
+          {m.fun_confession_hint()}
         </div>
       </section>
     </div>
