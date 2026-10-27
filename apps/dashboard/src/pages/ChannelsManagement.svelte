@@ -743,6 +743,7 @@
     embedColor: string;
     messageThreshold: number;
     cooldownSeconds: number;
+    idleRepostMinutes: number;
     jsonEnabled: boolean;
     jsonPayload: string;
     webhookEnabled: boolean;
@@ -772,6 +773,7 @@
       embedColor: raw.embedColor ?? '#5865F2',
       messageThreshold: raw.messageThreshold ?? 5,
       cooldownSeconds: raw.cooldownSeconds ?? 10,
+      idleRepostMinutes: raw.idleRepostMinutes ?? 0,
       jsonEnabled: raw.jsonEnabled ?? false,
       jsonPayload: raw.jsonPayload ?? '',
       webhookEnabled: raw.webhookEnabled ?? false,
@@ -814,6 +816,7 @@
         embedColor: '#5865F2',
         messageThreshold: 5,
         cooldownSeconds: 10,
+        idleRepostMinutes: 0,
         jsonEnabled: false,
         jsonPayload: '',
         webhookEnabled: false,
@@ -860,6 +863,7 @@
         embedColor: sticky.embedColor,
         messageThreshold: sticky.messageThreshold,
         cooldownSeconds: sticky.cooldownSeconds,
+        idleRepostMinutes: sticky.idleRepostMinutes,
         jsonEnabled: sticky.jsonEnabled,
         jsonPayload: sticky.jsonPayload || null,
         webhookEnabled: sticky.webhookEnabled,
@@ -1424,8 +1428,9 @@
                         type="number"
                         min="1"
                         max="200"
+                        disabled={sticky.idleRepostMinutes > 0}
                         bind:value={sticky.messageThreshold}
-                        class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm outline-none focus:ring-1 focus:ring-primary/30 transition-all"
+                        class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm outline-none focus:ring-1 focus:ring-primary/30 transition-all disabled:opacity-50"
                       />
                       <p class="text-2xs text-on-surface-variant/40">{m.cm_sticky_threshold_hint()}</p>
                     </div>
@@ -1441,6 +1446,19 @@
                         class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm outline-none focus:ring-1 focus:ring-primary/30 transition-all"
                       />
                       <p class="text-2xs text-on-surface-variant/40">{m.cm_sticky_cooldown_hint()}</p>
+                    </div>
+
+                    <div class="space-y-1.5">
+                      <label for="sticky-idle-{index}" class="text-xs font-bold text-on-surface/80 block">{m.cm_sticky_idle_label()}</label>
+                      <input
+                        id="sticky-idle-{index}"
+                        type="number"
+                        min="0"
+                        max="10080"
+                        bind:value={sticky.idleRepostMinutes}
+                        class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm outline-none focus:ring-1 focus:ring-primary/30 transition-all"
+                      />
+                      <p class="text-2xs text-on-surface-variant/40">{m.cm_sticky_idle_hint()}</p>
                     </div>
                   </div>
 

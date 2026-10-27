@@ -3,7 +3,8 @@ import { fileURLToPath } from 'node:url';
 import { config as loadEnv } from 'dotenv';
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
-import { queryMetricsExtension } from '../observability/queryMetrics.js';
+import pg from 'pg';
+import { queryMetricsExtension, trackQueryPool } from '../observability/queryMetrics.js';
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
 
@@ -22,7 +23,10 @@ const poolSize = Number.parseInt(process.env.DATABASE_POOL_SIZE ?? '30', 10) || 
 // (TCP puis authentification), ce qui coute bien plus cher que la requete.
 const POOL_IDLE_TIMEOUT_MS = 5 * 60 * 1000;
 
-const adapter = new PrismaPg({ connectionString, max: poolSize, idleTimeoutMillis: POOL_IDLE_TIMEOUT_MS });
+// Pool construit ici plutôt que par l'adaptateur pour pouvoir lire ses compteurs.
+const pool = new pg.Pool({ connectionString, max: poolSize, idleTimeoutMillis: POOL_IDLE_TIMEOUT_MS });
+trackQueryPool(pool);
+const adapter = new PrismaPg(pool);
 
 const globalForPrisma = globalThis as unknown as { prisma: PrismaClient };
 

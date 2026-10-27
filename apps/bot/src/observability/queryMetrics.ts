@@ -44,6 +44,31 @@ const SLOW_QUERY_MS = parsePositiveInt(process.env.SLOW_QUERY_MS, 200);
 const SLOW_LOG_COOLDOWN_MS = parsePositiveInt(process.env.SLOW_QUERY_LOG_COOLDOWN_MS, 60_000);
 const lastSlowLogAt = new Map<string, number>();
 
+/** Vue minimale d'un `pg.Pool`, pour ne pas importer `pg` ici. */
+interface PoolCounters {
+  totalCount: number;
+  idleCount: number;
+  waitingCount: number;
+  options: { max?: number };
+}
+
+let trackedPool: PoolCounters | null = null;
+
+/**
+ * Le chronomètre englobe l'attente d'une connexion libre : sans l'état du pool
+ * dans le message, une requête lente parce que les 30 connexions étaient prises
+ * ne se distingue pas d'une requête lente parce que mal indexée.
+ */
+export function trackQueryPool(pool: PoolCounters): void {
+  trackedPool = pool;
+}
+
+function describePool(): string {
+  if (!trackedPool) return '';
+  const busy = trackedPool.totalCount - trackedPool.idleCount;
+  return `, pool ${busy}/${trackedPool.options.max ?? '?'} occupées, ${trackedPool.waitingCount} en attente`;
+}
+
 /**
  * Le nombre de couples modèle+opération est borné par le schéma (280 modèles,
  * une poignée d'opérations chacun), mais une clé inattendue ne doit pas pouvoir
@@ -75,7 +100,7 @@ function record(key: string, durationMs: number, failed: boolean): void {
   lastSlowLogAt.set(key, now);
   logger.warn(
     'Prisma',
-    `Requête lente: ${key} a pris ${Math.round(durationMs)}ms (seuil ${SLOW_QUERY_MS}ms, ${stat.slowCount} dépassement(s) cumulé(s)).`,
+    `Requête lente: ${key} a pris ${Math.round(durationMs)}ms (seuil ${SLOW_QUERY_MS}ms, ${stat.slowCount} dépassement(s) cumulé(s)${describePool()}).`,
   );
 }
 

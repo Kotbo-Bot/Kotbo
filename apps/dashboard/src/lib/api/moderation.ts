@@ -405,6 +405,7 @@ export async function saveStickyMessage(
     embedColor?: string;
     messageThreshold?: number;
     cooldownSeconds?: number;
+    idleRepostMinutes?: number;
     jsonEnabled?: boolean;
     jsonPayload?: string | null;
     webhookEnabled?: boolean;

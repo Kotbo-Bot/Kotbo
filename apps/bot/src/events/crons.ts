@@ -1218,5 +1218,14 @@ export async function registerCrons(client: Client): Promise<void> {
       .catch((err) => logger.error('Cron', 'Failed to run startup stats ping:', err));
   }, 10_000);
 
+  // ⭐ Serveurs mis en avant sur kotbo.fr : toutes les heures et au démarrage.
+  // Hors runCronJob exprès : la file confierait le job à un seul worker, qui ne
+  // voit que les serveurs de son shard. Chaque shard synchronise les siens.
+  const syncFeatured = () => import('../services/system/featuredGuildsService.js')
+    .then(({ syncFeaturedGuilds }) => syncFeaturedGuilds(client))
+    .catch((err) => logger.error('Cron', 'Échec de la synchro des serveurs mis en avant :', err));
+  cron.schedule('17 * * * *', syncFeatured);
+  setTimeout(syncFeatured, 15_000);
+
   logger.success('Cron', "Tous les jobs cron sont enregistrés (Suivi d'activité minute activé)");
 }

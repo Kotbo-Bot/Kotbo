@@ -20,6 +20,23 @@ model BotInstanceStats {
   @@map("bot_instance_stats")
 }
 
+// Serveurs mis en avant sur kotbo.fr (GET /api/public/stats) : ceux d'au moins
+// 1000 membres, tenus à jour par chaque shard (featuredGuildsService.ts). Une
+// ligne que plus aucun shard ne rafraîchit expire.
+model FeaturedGuild {
+  guildId     String   @id
+  name        String
+  description String   @default("")
+  iconUrl     String?
+  memberCount Int      @default(0)
+  lastSeenAt  DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  @@index([memberCount])
+  @@index([lastSeenAt])
+  @@map("featured_guilds")
+}
+
 // Identifiant persistant et unique par installation (une ligne par base de
 // donnees). Sert d'empreinte machine pour les instances self-host : stocke
 // en base plutot que dans un fichier local pour survivre aux redeploiements

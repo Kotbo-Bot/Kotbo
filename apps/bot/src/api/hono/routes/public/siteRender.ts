@@ -17,9 +17,6 @@ import { handleSiteRequest, robotsTxt } from '../../../../services/site/sitePage
 // depuis celle de l'API, du contenu écrit par un serveur vivrait à côté du
 // cookie de session. Une requête qui n'arrive pas par le proxy d'un dashboard
 // connu est donc renvoyée vers lui.
-//
-// Les réponses portent `X-Kotbo-Handled` : une page introuvable répond 404,
-// et le répartiteur ne doit pas la prendre pour une route absente de Hono.
 // ============================================================================
 
 const RATE_WINDOW_MS = 60_000;
@@ -115,18 +112,18 @@ export function createSiteRenderRouter(client: Client): OpenAPIHono {
       // vers le dashboard reviendrait ici en boucle.
       if (c.req.header('x-kotbo-site-host')) {
         logger.warn(`[Site] Dashboard relais inconnu : ${relayHost(c)} (attendu : ${getDashboardUrl()})`);
-        return c.body('Ce dashboard ne peut pas servir les sites communautaires.', 421, { 'Content-Type': 'text/plain; charset=utf-8', 'X-Kotbo-Handled': '1' });
+        return c.body('Ce dashboard ne peut pas servir les sites communautaires.', 421, { 'Content-Type': 'text/plain; charset=utf-8' });
       }
       return c.redirect(`${getDashboardUrl().replace(/\/$/, '')}/s${rest}${url.search}`, 302);
     }
 
     const ip = clientIp(c);
     if (rateLimited(ip)) {
-      return c.body('Trop de requêtes', 429, { 'Content-Type': 'text/plain; charset=utf-8', 'Retry-After': '60', 'X-Kotbo-Handled': '1' });
+      return c.body('Trop de requêtes', 429, { 'Content-Type': 'text/plain; charset=utf-8', 'Retry-After': '60' });
     }
 
     const segments = decodeSegments(rest);
-    if (!segments) return c.body('Chemin invalide', 400, { 'Content-Type': 'text/plain; charset=utf-8', 'X-Kotbo-Handled': '1' });
+    if (!segments) return c.body('Chemin invalide', 400, { 'Content-Type': 'text/plain; charset=utf-8' });
 
     try {
       const response = await handleSiteRequest({
@@ -142,7 +139,7 @@ export function createSiteRenderRouter(client: Client): OpenAPIHono {
         ip,
         cookie: c.req.header('cookie') ?? null,
       });
-      const headers = new Headers({ ...response.headers, 'X-Kotbo-Handled': '1', Vary: 'Accept-Language' });
+      const headers = new Headers({ ...response.headers, Vary: 'Accept-Language' });
       // Les en-têtes communs de l'API (CSP `default-src 'self'`, X-Frame-Options)
       // ne s'appliquent pas : chaque réponse du site porte les siens.
       if (!headers.has('Content-Security-Policy')) headers.set('Content-Security-Policy', "default-src 'none'");
@@ -153,7 +150,7 @@ export function createSiteRenderRouter(client: Client): OpenAPIHono {
       return new Response(c.req.method === 'HEAD' ? null : body, { status: response.status, headers });
     } catch (err) {
       logger.error('SiteRender', `Rendu de ${rest} impossible :`, err);
-      return c.body('Erreur interne', 500, { 'Content-Type': 'text/plain; charset=utf-8', 'X-Kotbo-Handled': '1' });
+      return c.body('Erreur interne', 500, { 'Content-Type': 'text/plain; charset=utf-8' });
     }
   });
 

@@ -69,7 +69,7 @@ function ids(value: unknown, label: string): string[] {
 }
 
 const BOOLEAN_FIELDS = [
-  'enabled', 'notifyMember', 'analyzeEdits', 'analyzeNicknames', 'analyzeTickets', 'ticketPriorityBoost',
+  'enabled', 'notifyMember', 'analyzeMessages', 'analyzeThreads', 'analyzeVoiceChats', 'analyzeExempt', 'analyzeEdits', 'analyzeNicknames', 'analyzeTickets', 'ticketPriorityBoost',
   'conflictEnabled', 'harassmentEnabled', 'distressEnabled',
 ] as const;
 

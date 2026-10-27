@@ -25,6 +25,10 @@ export interface AegisConfig {
   reviewChannelId: string | null;
   exemptChannelIds: string[];
   exemptRoleIds: string[];
+  analyzeMessages: boolean;
+  analyzeThreads: boolean;
+  analyzeVoiceChats: boolean;
+  analyzeExempt: boolean;
   analyzeEdits: boolean;
   analyzeNicknames: boolean;
   analyzeTickets: boolean;

@@ -106,8 +106,9 @@ export function createHonoApp(client: Client): OpenAPIHono {
   });
 
   app.notFound((c) => {
-    // Retourner 404 pour signaler au fallback legacy que la route n'est pas gérée
-    return c.json({ error: 'Route introuvable' }, 404);
+    // Seule cette réponse renvoie au fallback legacy : un 404 rendu par une route
+    // Hono (site absent, page supprimée) doit atteindre le client tel quel.
+    return c.json({ error: 'Route introuvable' }, 404, { 'X-Kotbo-Unrouted': '1' });
   });
 
   return app;

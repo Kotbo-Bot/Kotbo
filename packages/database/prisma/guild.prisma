@@ -1005,6 +1005,7 @@ model MemberProfile {
   @@index([guildId, messageCount])
   @@index([guildId, username])
   @@index([guildId, ghostStatus])
+  @@index([userId])
   @@map("member_profiles")
 }
 

@@ -277,9 +277,9 @@ export const startDashboardApi = async (client: Client) => {
       // -----------------------------------------------------------------------
       try {
         const honoResponse = await honoApp.fetch(request.clone());
-        // Une route Hono peut répondre 404 pour de bon (page de site
-        // introuvable) : `X-Kotbo-Handled` la distingue d'une route absente.
-        if (honoResponse.status !== 404 || honoResponse.headers.get('X-Kotbo-Handled') === '1') {
+        // `X-Kotbo-Unrouted` vient du notFound de Hono : tout autre 404 est une
+        // vraie réponse de route (site absent, page supprimée).
+        if (honoResponse.headers.get('X-Kotbo-Unrouted') !== '1') {
           return honoResponse;
         }
       } catch (honoErr) {
