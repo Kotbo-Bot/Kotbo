@@ -158,14 +158,14 @@
     document.querySelectorAll('[data-viewer-slot]').forEach(function (slot) {
       slot.textContent = '';
       if (viewer) {
-        var chip = el('a', { class: 'viewer-chip', href: root.getAttribute('data-base') + '/me' });
+        var chip = el('a', { class: 'viewer-chip', href: root.getAttribute('data-base') + '/me', title: viewer.displayName, 'aria-label': viewer.displayName });
         if (viewer.avatarUrl) {
           chip.appendChild(el('img', { class: 'avatar avatar-sm', src: viewer.avatarUrl, alt: '', referrerpolicy: 'no-referrer' }));
         }
         chip.appendChild(el('span', null, viewer.displayName));
         slot.appendChild(chip);
       } else {
-        var login = el('a', { class: 'btn btn-primary btn-sm', href: loginUrl() }, T.login || 'Login');
+        var login = el('a', { class: 'viewer-login', href: loginUrl(), title: T.login || 'Login', 'aria-label': T.login || 'Login' });
         slot.appendChild(login);
       }
     });
