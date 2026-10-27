@@ -49,7 +49,7 @@ const UI = {
  * dessin, le proxy d'images de Discord et les CDN garderaient l'ancienne carte.
  * A incrementer a chaque changement visible du rendu.
  */
-export const OG_CARD_VERSION = 2;
+export const OG_CARD_VERSION = 3;
 
 /** Indigo du dashboard en theme sombre : accent par defaut des cartes et barre de l'embed. */
 export const OG_ACCENT = '#818cf8';
@@ -64,7 +64,9 @@ export type OgCardArt =
   /** Compte a rebours d'un giveaway. */
   | { type: 'countdown'; label: string; value: string; ended?: boolean }
   /** Podium d'un classement. */
-  | { type: 'podium'; entries: { name: string; score: string }[] };
+  | { type: 'podium'; entries: { name: string; score: string }[] }
+  /** Menu du dashboard : la page ouverte, surlignee parmi ses voisines, et un bouton. */
+  | { type: 'sections'; label: string; items: string[]; active: number; cta: string };
 
 export interface OgCardSpec {
   /** Cle de cache et graine du PRNG : doit identifier la carte de facon stable. */
@@ -574,6 +576,42 @@ function drawPodium(ctx: SKRSContext2D, accent: string, entries: { name: string;
   });
 }
 
+/**
+ * Menu du dashboard : la forme de la barre laterale, avec la page du lien
+ * surlignee. Ne depend que des libelles de sections, jamais d'une donnee de serveur.
+ */
+function drawSections(ctx: SKRSContext2D, accent: string, label: string, items: string[], active: number, cta: string) {
+  drawPanel(ctx);
+  drawPanelLabel(ctx, label);
+
+  let y = ART_TOP + 68;
+  items.slice(0, 5).forEach((item, index) => {
+    const on = index === active;
+    if (on) {
+      roundRect(ctx, ART_X + 16, y, ART_W - 32, 46, 12, hexToRgba(accent, 0.16));
+      roundRect(ctx, ART_X + 16, y + 11, 4, 24, 2, accent);
+    }
+    ctx.beginPath();
+    ctx.arc(ART_X + 46, y + 23, 5, 0, Math.PI * 2);
+    ctx.fillStyle = on ? accent : UI.borderStrong;
+    ctx.fill();
+    ctx.fillStyle = on ? UI.text : UI.textMuted;
+    ctx.font = font(21, on ? 'semibold' : 'text');
+    ctx.fillText(fitText(ctx, item, ART_W - 110), ART_X + 68, y + 30);
+    y += 52;
+  });
+
+  // Faux bouton : l'image entiere est cliquable, il dit simplement ou mene le lien.
+  const btnW = ART_W - 56;
+  const btnY = ART_TOP + ART_H - 68;
+  roundRect(ctx, ART_X + 28, btnY, btnW, 44, 22, accent);
+  ctx.fillStyle = UI.background;
+  ctx.font = font(20, 'semibold');
+  ctx.textAlign = 'center';
+  ctx.fillText(truncate(cta, 30), ART_X + 28 + btnW / 2, btnY + 29);
+  ctx.textAlign = 'left';
+}
+
 // ---------------------------------------------------------------------------
 // Rendu principal
 // ---------------------------------------------------------------------------
@@ -681,6 +719,9 @@ export async function renderOgCard(spec: OgCardSpec): Promise<Buffer> {
       break;
     case 'podium':
       drawPodium(ctx, accent, spec.art.entries);
+      break;
+    case 'sections':
+      drawSections(ctx, accent, spec.art.label, spec.art.items, spec.art.active, spec.art.cta);
       break;
     default:
       break;

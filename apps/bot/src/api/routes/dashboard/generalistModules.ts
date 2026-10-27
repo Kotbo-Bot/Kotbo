@@ -2548,7 +2548,15 @@ export async function handleGeneralistModulesRoutes(
           channelId: null
         });
 
-        json(res, 200, { suggestion });
+        // Meme enrichissement que la liste : sans lui la photo disparait de la carte.
+        const identity = (await getMemberIdentities(client, guildId, [suggestion.userId])).get(suggestion.userId);
+        json(res, 200, {
+          suggestion: {
+            ...suggestion,
+            username: identity?.displayName || suggestion.username,
+            avatarUrl: identity?.avatarUrl || null,
+          },
+        });
       } catch (err) {
         logger.error('SuggestionsAPI', 'Error resolving suggestion:', err);
         jsonFailure(res, err, 'Erreur lors de la résolution de la suggestion', 'SuggestionsAPI');

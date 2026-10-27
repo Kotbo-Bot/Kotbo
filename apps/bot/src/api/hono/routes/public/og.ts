@@ -118,6 +118,47 @@ function metaTag(property: string, content: string, kind: 'property' | 'name' = 
 }
 
 /**
+ * « Component embed » de Discord : remplace l'embed classique par une carte a
+ * boutons. Seuls les boutons-liens (style 5) existent ; la charge utile est
+ * limitee a 3 000 octets et toute cle inconnue l'invalide en entier. Les balises
+ * Open Graph restent dans la page : Discord s'en sert si celle-ci est rejetee.
+ */
+export function buildComponentEmbed(
+  meta: OgMetadata,
+  canonicalUrl: string,
+  apiOrigin: string,
+  imageUrl: string | null,
+): string {
+  const fr = meta.locale === 'fr';
+  // Titre et description viennent d'utilisateurs Discord (nom de serveur,
+  // formulaire) : on retire ce qui casserait le lien Markdown.
+  const title = meta.title.replace(/[[\]()]/g, '').slice(0, 120);
+  const description = meta.description.slice(0, 300);
+
+  const buttons: { type: 2; style: 5; url: string; label: string }[] = [
+    { type: 2, style: 5, url: canonicalUrl, label: fr ? 'Ouvrir' : 'Open' },
+  ];
+  // Les pages de marque (accueil, sections du dashboard) servent aussi a recruter.
+  if (meta.ogType === 'website' && !meta.authorName) {
+    buttons.push({ type: 2, style: 5, url: `${apiOrigin}/api/public/invite`, label: fr ? 'Inviter Kotbo' : 'Invite Kotbo' });
+  }
+
+  const payload = {
+    component: {
+      type: 17,
+      accent_color: parseInt(meta.themeColor.replace('#', ''), 16) || 0x818cf8,
+      components: [
+        { type: 10, content: `# [${title}](${canonicalUrl})\n${description}` },
+        ...(imageUrl ? [{ type: 12, items: [{ media: { url: imageUrl }, description: meta.imageAlt.slice(0, 200) }] }] : []),
+        { type: 1, components: buttons },
+      ],
+    },
+  };
+  // `<` echappe : le JSON vit dans un <script>, `</script>` le refermerait.
+  return JSON.stringify(payload).replace(/</g, '\\u003c');
+}
+
+/**
  * Page servie aux robots.
  *
  * Elle n'a pas vocation a etre lue par un humain : si un navigateur y atterrit
@@ -166,6 +207,7 @@ export function renderPreviewHtml(meta: OgMetadata, canonicalUrl: string, apiOri
 ${tags.join('\n')}
     <link rel="canonical" href="${escapeHtml(canonicalUrl)}" />
     <link rel="alternate" type="application/json+oembed" href="${escapeHtml(oembedUrl)}" title="${escapeHtml(meta.title)}" />
+    <script id="discord:component-embed" type="application/json">${buildComponentEmbed(meta, canonicalUrl, apiOrigin, imageUrl)}</script>
     <meta http-equiv="refresh" content="0; url=${escapeHtml(canonicalUrl)}" />
   </head>
   <body>

@@ -186,6 +186,25 @@ describe('renderPreviewHtml', () => {
     expect(html).toContain('content="summary"');
     expect(html).not.toContain('og:image');
   });
+
+  test('ajoute un component embed valide pour Discord', () => {
+    const html = renderPreviewHtml({ ...meta, title: 'A [b] </script>', authorName: null }, 'https://dash.kotbo.fr/x', 'https://api.kotbo.fr');
+    const raw = html.match(/<script id="discord:component-embed" type="application\/json">(.*?)<\/script>/s)?.[1] ?? '';
+    // Le titre ne referme pas le <script> et la charge reste sous la limite de 3 000 octets.
+    expect(raw).not.toContain('</script>');
+    expect(Buffer.byteLength(raw)).toBeLessThan(3000);
+    const { component } = JSON.parse(raw);
+    expect(component.type).toBe(17);
+    const buttons = component.components.at(-1).components;
+    // Page de marque : « Ouvrir » + « Inviter Kotbo », uniquement des boutons-liens.
+    expect(buttons.map((b: { label: string }) => b.label)).toEqual(['Ouvrir', 'Inviter Kotbo']);
+    expect(buttons.every((b: { style: number }) => b.style === 5)).toBe(true);
+  });
+
+  test('pas de bouton d\'invitation sur la page d\'un serveur', () => {
+    const html = renderPreviewHtml(meta, 'https://dash.kotbo.fr/form/abc', 'https://api.kotbo.fr');
+    expect(html).not.toContain('Inviter Kotbo');
+  });
 });
 
 describe('normalizeAccent', () => {

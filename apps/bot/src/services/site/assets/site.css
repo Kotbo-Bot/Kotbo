@@ -89,7 +89,7 @@ h1, h2, h3, h4 { font-family: var(--site-heading-font), var(--site-font), sans-s
 .brand-fallback { display: inline-grid; place-items: center; background: var(--site-accent); color: var(--site-on-accent); font-weight: 700; }
 .brand-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-.nav { display: flex; align-items: center; gap: 4px; flex: 1; min-width: 0; }
+.nav { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; flex: 1; min-width: 0; }
 .nav a, .nav summary {
   display: flex;
   align-items: center;
@@ -123,7 +123,7 @@ h1, h2, h3, h4 { font-family: var(--site-heading-font), var(--site-font), sans-s
 }
 .nav details > div a { opacity: 1; font-weight: 500; }
 .nav details > div a:hover { background: var(--site-surface-strong); }
-.header-actions { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+.header-actions { display: flex; align-items: center; gap: 6px; margin-left: auto; flex: none; }
 .icon-btn {
   display: inline-grid;
   place-items: center;
