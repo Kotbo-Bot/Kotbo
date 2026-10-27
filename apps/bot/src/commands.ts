@@ -12,6 +12,7 @@ import { epochCommand } from './commands/utility/epoch.js';
 import { eventCommand } from './commands/utility/event.js';
 import { ctfCommand } from './commands/fun/ctf.js';
 import { excuseCommand } from './commands/fun/excuse.js';
+import { confessionCommand } from './commands/fun/confession.js';
 import { countingStatsCommand } from './commands/fun/countingStats.js';
 import { giveawayCommand } from './commands/fun/giveaway.js';
 import { helpCommand } from './commands/utility/help.js';
@@ -200,6 +201,7 @@ export const commands: SlashCommandDefinition[] = [
   optOutCommand,
   privacyCommand,
   wikiCommand,
+  confessionCommand,
 ];
 
 /**
@@ -330,6 +332,7 @@ export const COMMAND_MODULES = new Map<ApplicationCommandDefinition, string>([
   [workCommand, 'economy'],
   [excuseCommand, 'fun'],
   [countingStatsCommand, 'fun'],
+  [confessionCommand, 'fun'],
 
   // Contenu & intégrations
   [channelCommand, 'auto_thread'],

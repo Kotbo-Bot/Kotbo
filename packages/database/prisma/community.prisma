@@ -330,3 +330,29 @@ model ReactionRoleMenu {
   @@index([guildId])
   @@map("reaction_role_menus")
 }
+
+// ============================================================================
+// CONFESSIONS ANONYMES
+// ============================================================================
+// Le message publié ne porte aucun nom. `authorId` reste en base pour qu'un
+// administrateur puisse révéler l'auteur en cas d'abus (/confession reveler) :
+// chaque révélation est tracée dans le salon staff.
+model Confession {
+  id        String  @id @default(cuid())
+  guildId   String
+  /// Numéro affiché (« Confession #12 »), propre à chaque serveur.
+  number    Int
+  authorId  String
+  content   String
+  messageId String?
+  revealedAt DateTime?
+  revealedBy String?
+
+  guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([guildId, number])
+  @@index([guildId, authorId, createdAt])
+  @@map("confessions")
+}
