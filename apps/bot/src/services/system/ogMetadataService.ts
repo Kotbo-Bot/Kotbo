@@ -365,6 +365,7 @@ function dashboardMetadata(path: string, entry: DashboardEntry, locale: BotLocal
   meta.title = `${entry.label} · ${SITE_NAME}`;
   meta.description = fr ? group.descFr : group.descEn;
   meta.themeColor = group.accent;
+  meta.imageAlt = meta.title;
   // Le dashboard est un espace d'administration : rien a indexer.
   meta.robots = 'noindex, nofollow';
   meta.imagePath = imagePathFor(path, `section-${locale}`);
