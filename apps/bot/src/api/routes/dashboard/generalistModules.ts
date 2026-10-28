@@ -2249,10 +2249,37 @@ export async function handleGeneralistModulesRoutes(
         }
 
         if (adminLockFieldsProvided) {
-          const guild = client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId).catch(() => null);
-          if (!guild || guild.ownerId !== user.userId) {
-            json(res, 403, { error: "Seul le propriétaire du serveur peut modifier les paramètres d'Admin Permission Lock." });
-            return true;
+          // La page Filtres renvoie toute la config : on ne bloque que si une valeur change vraiment.
+          const existing = await prisma.autoModConfig.findUnique({
+            where: { guildId },
+            select: {
+              adminLockEnabled: true, adminLockAction: true, adminLockSecurityRoleIds: true, adminLockNotifyChannelId: true,
+              burstSuspendEnabled: true, burstSuspendFastLimit: true, burstSuspendFastWindowSec: true,
+              burstSuspendSlowLimit: true, burstSuspendSlowWindowSec: true,
+            },
+          });
+          const current = {
+            adminLockEnabled: existing?.adminLockEnabled ?? false,
+            adminLockAction: existing?.adminLockAction ?? 'BLOCK',
+            adminLockNotifyChannelId: existing?.adminLockNotifyChannelId ?? null,
+            burstSuspendEnabled: existing?.burstSuspendEnabled ?? false,
+            burstSuspendFastLimit: existing?.burstSuspendFastLimit ?? 5,
+            burstSuspendFastWindowSec: existing?.burstSuspendFastWindowSec ?? 1,
+            burstSuspendSlowLimit: existing?.burstSuspendSlowLimit ?? 10,
+            burstSuspendSlowWindowSec: existing?.burstSuspendSlowWindowSec ?? 60,
+          };
+          const adminLockChanged =
+            (Object.keys(current) as (keyof typeof current)[]).some(
+              (k) => body[k] !== undefined && (body[k] ?? null) !== current[k],
+            ) ||
+            (body.adminLockSecurityRoleIds !== undefined &&
+              JSON.stringify([...body.adminLockSecurityRoleIds].sort()) !== JSON.stringify([...(existing?.adminLockSecurityRoleIds ?? [])].sort()));
+          if (adminLockChanged) {
+            const guild = client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId).catch(() => null);
+            if (!guild || guild.ownerId !== user.userId) {
+              json(res, 403, { error: "Seul le propriétaire du serveur peut modifier les paramètres d'Admin Permission Lock." });
+              return true;
+            }
           }
         }
 
