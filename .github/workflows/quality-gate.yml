@@ -102,31 +102,10 @@ jobs:
       - name: Lint bot
         run: bun run lint:bot
 
-  bot-tests:
-    name: Bot / Tests
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v5
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
-
-      - name: Generate Prisma client
-        run: bun run db:generate
-
-      - name: Run bot tests
-        env:
-          DATABASE_URL: postgresql://kotbo:kotbo@127.0.0.1:5432/kotbo_test
-        run: bun run test:bot
-
+  # Ce job fait aussi office de job de tests : coverage-gate echoue des qu'un
+  # test echoue. Un job de tests separe relancait toute la suite une 2e fois.
   bot-coverage:
-    name: Bot / Coverage
+    name: Bot / Tests & coverage
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -162,7 +141,6 @@ jobs:
       - dashboard-typecheck
       - dashboard-tests
       - bot-lint
-      - bot-tests
       - bot-coverage
     runs-on: ubuntu-latest
     steps:
@@ -172,12 +150,10 @@ jobs:
           DASHBOARD_TYPECHECK_RESULT: ${{ needs.dashboard-typecheck.result }}
           DASHBOARD_TESTS_RESULT: ${{ needs.dashboard-tests.result }}
           BOT_LINT_RESULT: ${{ needs.bot-lint.result }}
-          BOT_TESTS_RESULT: ${{ needs.bot-tests.result }}
           BOT_COVERAGE_RESULT: ${{ needs.bot-coverage.result }}
         run: |
           test "$BOT_TYPECHECK_RESULT" = "success"
           test "$DASHBOARD_TYPECHECK_RESULT" = "success"
           test "$DASHBOARD_TESTS_RESULT" = "success"
           test "$BOT_LINT_RESULT" = "success"
-          test "$BOT_TESTS_RESULT" = "success"
           test "$BOT_COVERAGE_RESULT" = "success"
