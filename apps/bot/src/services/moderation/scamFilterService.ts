@@ -41,10 +41,19 @@ export function detectScam(content: string, config: RaidProtectionConfig): ScamD
   const whitelist = new Set(config.scamFilterWhitelist.map((d) => d.toLowerCase()));
   const customBlocked = config.scamFilterCustomDomains.map((d) => d.toLowerCase());
 
+  // Un sous-domaine d'un domaine autorisé l'est aussi (cdn.discordapp.com, media.discordapp.net).
+  const isTrusted = (domain: string): boolean => {
+    const labels = domain.split('.');
+    return labels.some((_, i) => {
+      const parent = labels.slice(i).join('.');
+      return whitelist.has(parent) || LEGIT_DOMAINS.has(parent);
+    });
+  };
+
   // 1. Analyse des domaines présents dans le message
   for (const match of content.matchAll(URL_REGEX)) {
     const domain = match[1].toLowerCase();
-    if (whitelist.has(domain) || LEGIT_DOMAINS.has(domain)) continue;
+    if (isTrusted(domain)) continue;
 
     if (customBlocked.some((blocked) => domain === blocked || domain.endsWith(`.${blocked}`))) {
       return { matched: true, domain, pattern: 'custom_domain' };

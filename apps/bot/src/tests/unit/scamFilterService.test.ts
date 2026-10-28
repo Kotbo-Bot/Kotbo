@@ -31,6 +31,13 @@ describe('detectScam', () => {
     expect(detectScam('mon profil https://steamcommunity.com/id/foo', makeConfig()).matched).toBe(false);
   });
 
+  it('ne bloque pas les sous-domaines officiels (CDN Discord)', () => {
+    expect(detectScam('https://cdn.discordapp.com/attachments/1/2/a.png', makeConfig()).matched).toBe(false);
+    expect(detectScam('https://media.discordapp.net/attachments/1/2/a.gif', makeConfig()).matched).toBe(false);
+    // Le domaine officiel doit être la fin de l'hôte, pas un simple préfixe.
+    expect(detectScam('https://discordapp.com.evil.xyz/x', makeConfig()).matched).toBe(true);
+  });
+
   it('ne bloque pas un message ordinaire avec lien', () => {
     const result = detectScam('regarde cette vidéo https://youtube.com/watch?v=abc', makeConfig());
     expect(result.matched).toBe(false);
