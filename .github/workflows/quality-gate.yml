@@ -2,11 +2,19 @@ name: Quality Gate
 
 on:
   pull_request:
+  # Les autres branches passent par leur PR : un push sur une branche avec PR
+  # declenchait sinon deux fois toute la CI.
   push:
+    branches: [main, recette]
   workflow_dispatch:
 
 permissions:
   contents: read
+
+# Un nouveau push annule la CI encore en cours sur la meme branche ou PR.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   bot-typecheck:
