@@ -436,6 +436,10 @@
                 <h3 class="truncate text-sm font-semibold text-on-surface group-hover:text-primary transition-colors">{member.displayName || m.mb_no_name()}</h3>
                 <p class="truncate text-xs text-on-surface-variant">@{member.username || member.id.slice(0, 8)}</p>
               </div>
+              <!-- Indique que la carte s'ouvre sur la fiche -->
+              <span class="shrink-0 text-on-surface-variant transition-colors group-hover:text-primary" aria-hidden="true">
+                <Papicon icon="chevron-right" size={16} />
+              </span>
             </div>
 
             <!-- Valeurs lisibles, libelles en retrait : on lit « il y a 2 min »,
