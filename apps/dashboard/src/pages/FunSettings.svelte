@@ -626,7 +626,7 @@
           <div class="space-y-2">
             <h4 class="text-xs font-semibold text-on-surface-variant ml-2">{m.fun_confession_recent_title()}</h4>
             {#if confessions.length === 0}
-              <p class="text-xs text-on-surface-variant/50 ml-2">{m.fun_confession_empty()}</p>
+              <p class="text-xs text-on-surface-variant ml-2">{m.fun_confession_empty()}</p>
             {:else}
               <ul class="space-y-2 max-h-72 overflow-y-auto">
                 {#each confessions as c (c.number)}
