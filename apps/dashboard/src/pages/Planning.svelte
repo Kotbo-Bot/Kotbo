@@ -200,7 +200,6 @@
   let myDayTab = $state<'agenda' | 'tasks'>('agenda');
   let showDoneTasks = $state(false);
   let quickTaskTitle = $state('');
-  let quickTaskSaving = $state(false);
 
   // ── Bulles ──────────────────────────────────────────────
   let peek = $state<{ event: CalendarEvent; anchor: DOMRect } | null>(null);
@@ -236,7 +235,6 @@
   let formRepeatCount = $state(4);
   let formLocation = $state('');
   let formError = $state('');
-  let saving = $state(false);
 
   let memberSearchQuery = $state('');
   let memberSearchResults = $state<any[]>([]);
@@ -295,7 +293,6 @@
   let deleteDiscordEvent = $state(true);
   let deleteDiscordMessage = $state(false);
   let deleteDiscordNotification = $state(true);
-  let deletingMeeting = $state(false);
 
   let meetingEditModalOpen = $state(false);
   let editMeetingId = $state<string | null>(null);
@@ -650,6 +647,55 @@
     }
   }
 
+  // ── Mises a jour immediates ─────────────────────────────
+  /**
+   * L'ecran change tout de suite, sans attendre le serveur. S'il refuse, les
+   * listes reviennent a l'etat d'avant. `run` echoue en levant, ou en rendant
+   * `false` (dashboardMutation, qui a deja affiche l'erreur).
+   */
+  async function optimistic(
+    apply: () => void,
+    run: () => Promise<unknown>,
+    onError: (err: unknown) => void = err => toast.error(errorMessage(err) || m.common_error()),
+  ): Promise<boolean> {
+    const before = { calendarData, todayData, userTasks };
+    apply();
+    syncDetail();
+    let ok = true;
+    try {
+      ok = (await run()) !== false;
+    } catch (err) {
+      ok = false;
+      onError(err);
+    }
+    if (!ok) {
+      calendarData = before.calendarData;
+      todayData = before.todayData;
+      userTasks = before.userTasks;
+      syncDetail();
+    }
+    await refreshAll();
+    return ok;
+  }
+
+  /** Modifie un element partout ou il s'affiche ; sans `change`, le retire. */
+  function patchLocal(type: PlanningType, id: string, change?: (raw: any) => any) {
+    const key = `${type}s` as keyof CalendarData;
+    const edit = (list: any[]) => (change ? list.map(x => (x.id === id ? change(x) : x)) : list.filter(x => x.id !== id));
+    calendarData = { ...calendarData, [key]: edit(calendarData[key]) };
+    todayData = { ...todayData, [key]: edit(todayData[key]) };
+    if (type === 'task') userTasks = edit(userTasks);
+  }
+
+  /** Brouillon affiche le temps que le serveur cree l'element ; le rechargement le remplace. */
+  function addLocal(type: PlanningType, raw: any) {
+    const key = `${type}s` as keyof CalendarData;
+    calendarData = { ...calendarData, [key]: [...calendarData[key], raw] };
+    const when = raw.scheduledAt ?? raw.startDate ?? raw.dueDate;
+    if (when && isToday(new Date(when))) todayData = { ...todayData, [key]: [...todayData[key], raw] };
+    if (type === 'task' && raw.assigneeId === myStaffRecord?.id) userTasks = [raw, ...userTasks];
+  }
+
   function handleRangeChange(start: Date, end: Date) {
     rangeKnown = true;
     rangeStart = start;
@@ -792,22 +838,21 @@
 
   async function handleEventMove(event: CalendarEvent, start: Date, end: Date) {
     peek = null;
-    try {
-      if (event.type === 'meeting') {
-        if (start.getTime() <= Date.now()) {
-          toast.error(m.planning_err_meeting_in_past());
-          return;
-        }
-        await updateMeeting(event.id, { scheduledAt: start.toISOString(), endedAt: end.toISOString() });
-      } else if (event.type === 'call') {
-        await updateCall(event.id, { scheduledAt: start.toISOString(), endedAt: end.toISOString() });
-      } else if (event.type === 'task') {
-        await updateTask(event.id, { dueDate: start.toISOString() });
-      }
-    } catch (err) {
-      toast.error(errorMessage(err) || m.planning_err_move());
+    if (event.type === 'meeting' && start.getTime() <= Date.now()) {
+      toast.error(m.planning_err_meeting_in_past());
+      return;
     }
-    await refreshAll();
+    const span = { scheduledAt: start.toISOString(), endedAt: end.toISOString() };
+    const type = event.type as PlanningType;
+    await optimistic(
+      () => patchLocal(type, event.id, raw => ({ ...raw, ...(type === 'task' ? { dueDate: span.scheduledAt } : span) })),
+      async () => {
+        if (type === 'meeting') return updateMeeting(event.id, span);
+        if (type === 'call') return updateCall(event.id, span);
+        if (type === 'task') return updateTask(event.id, { dueDate: span.scheduledAt });
+      },
+      err => toast.error(errorMessage(err) || m.planning_err_move()),
+    );
   }
 
   // ── Abonnement iCal ─────────────────────────────────────
@@ -856,107 +901,125 @@
     if (duration > 0) selectedEndDate = new Date(selectedStartDate.getTime() + duration);
   }
 
+  /** Ce qui se verifie sans le serveur : l'erreur reste dans le formulaire, encore ouvert. */
+  function createFormError(): string {
+    if (!formTitle.trim() && createType !== 'absence') return m.planning_err_title_required();
+    if (createType === 'meeting') {
+      // Un creneau du calendrier peut etre deja passe : le dire ici vaut mieux
+      // que le refus brut de Discord.
+      if (selectedStartDate.getTime() <= Date.now()) return m.planning_err_meeting_in_past();
+      if (selectedEndDate.getTime() <= selectedStartDate.getTime()) return m.meetings_err_end_before_start();
+    } else if (createType === 'absence') {
+      if (!myStaffRecord) return m.planning_err_not_staff();
+      if (!formDescription.trim()) return m.planning_err_absence_reason();
+      if (!formSuperiorId) return m.planning_err_superior_required();
+      if (selectedEndDate < selectedStartDate) return m.planning_err_end_before_start();
+    } else if (createType === 'call') {
+      if (!callPermCanCreate) return m.planning_err_no_call_permission();
+    } else if (createType === 'server_event') {
+      // Discord refuse un evenement planifie dans le passe.
+      if (selectedStartDate.getTime() <= Date.now()) return m.planning_err_event_in_past();
+      if (selectedEndDate.getTime() <= selectedStartDate.getTime()) return m.meetings_err_end_before_start();
+    }
+    return '';
+  }
+
   async function handleCreateItem(event?: SubmitEvent) {
     event?.preventDefault();
-    if (!formTitle.trim() && createType !== 'absence') {
-      formError = m.planning_err_title_required();
-      return;
-    }
-    saving = true;
-    formError = '';
+    formError = createFormError();
+    if (formError) return;
 
-    try {
-      if (createType === 'meeting') {
-        // Un creneau du calendrier peut etre deja passe : le dire ici vaut mieux
-        // que le refus brut de Discord.
-        if (selectedStartDate.getTime() <= Date.now()) {
-          formError = m.planning_err_meeting_in_past();
-          return;
-        }
-        if (selectedEndDate.getTime() <= selectedStartDate.getTime()) {
-          formError = m.meetings_err_end_before_start();
-          return;
-        }
-        const occurrences = repeatDates(selectedStartDate, selectedEndDate, formRepeat, formRepeatCount);
-        for (const [index, [start, end]] of occurrences.entries()) {
-          const ok = await createMeeting(formTitle.trim(), formDescription, start.toISOString(), end.toISOString(), formTimezone);
+    // Tout est lu maintenant : la fenetre se ferme sans attendre le serveur et peut resservir entre-temps.
+    const type = createType;
+    const title = formTitle.trim();
+    const description = formDescription;
+    const start = selectedStartDate;
+    const end = selectedEndDate;
+    const occurrences = repeatDates(start, end, formRepeat, formRepeatCount);
+    let drafts: any[] = [];
+    let run: () => Promise<unknown>;
+
+    if (type === 'meeting') {
+      const timezone = formTimezone;
+      drafts = occurrences.map(([s, e]) => ({ title, description, scheduledAt: s.toISOString(), endedAt: e.toISOString(), status: 'SCHEDULED', presences: [] }));
+      run = async () => {
+        for (const [index, [s, e]] of occurrences.entries()) {
+          const ok = await createMeeting(title, description, s.toISOString(), e.toISOString(), timezone);
           // Une occurrence refusee arrete la serie : on dit combien sont deja posees.
           if (!ok) throw new Error(index === 0 ? m.planning_err_create_meeting() : m.planning_err_repeat_partial({ done: index }));
         }
         if (occurrences.length > 1) toast.success(m.planning_repeat_created({ count: occurrences.length }));
-      } else if (createType === 'absence') {
-        if (!myStaffRecord) { formError = m.planning_err_not_staff(); return; }
-        if (!formDescription.trim()) { formError = m.planning_err_absence_reason(); return; }
-        if (!formSuperiorId) { formError = m.planning_err_superior_required(); return; }
-        if (selectedEndDate < selectedStartDate) { formError = m.planning_err_end_before_start(); return; }
-        await createAbsence({
-          staffUserId: myStaffRecord.userId,
-          startDate: selectedStartDate.toISOString(),
-          endDate: selectedEndDate.toISOString(),
-          reason: formDescription.trim(),
-          type: formAbsenceType,
-          superiorUserId: formSuperiorId,
-          confirmIndefinite: false,
-        });
-      } else if (createType === 'call') {
-        if (!callPermCanCreate) { formError = m.planning_err_no_call_permission(); return; }
-        const occurrences = repeatDates(selectedStartDate, selectedEndDate, formRepeat, formRepeatCount);
-        for (const [index, [start]] of occurrences.entries()) {
+      };
+    } else if (type === 'absence') {
+      const me = myStaffRecord!;
+      const payload = {
+        staffUserId: me.userId,
+        startDate: start.toISOString(),
+        endDate: end.toISOString(),
+        reason: description.trim(),
+        type: formAbsenceType,
+        superiorUserId: formSuperiorId,
+        confirmIndefinite: false,
+      };
+      drafts = [{ ...payload, staffUserId: me.id, staffMember: me, status: 'PENDING' }];
+      run = () => createAbsence(payload);
+    } else if (type === 'call') {
+      const base = {
+        title,
+        description,
+        channelMode: formChannelMode,
+        channelType: formChannelMode === 'CREATE_NEW' ? formChannelType : null,
+        discordChannelId: formChannelMode === 'EXISTING' ? formDiscordChannelId : null,
+        isTempChannel: formIsTempChannel,
+        inviteeUserIds: [...formInviteeUserIds, ...formInviteeMemberIds],
+      };
+      drafts = occurrences.map(([s]) => ({ title, description, scheduledAt: s.toISOString(), creatorId: myStaffRecord?.id, status: 'SCHEDULED' }));
+      run = async () => {
+        for (const [index, [s]] of occurrences.entries()) {
           try {
-            await createCall({
-              title: formTitle.trim(),
-              description: formDescription,
-              scheduledAt: start.toISOString(),
-              channelMode: formChannelMode,
-              channelType: formChannelMode === 'CREATE_NEW' ? formChannelType : null,
-              discordChannelId: formChannelMode === 'EXISTING' ? formDiscordChannelId : null,
-              isTempChannel: formIsTempChannel,
-              inviteeUserIds: [...formInviteeUserIds, ...formInviteeMemberIds],
-            });
+            await createCall({ ...base, scheduledAt: s.toISOString() });
           } catch (err) {
             if (index === 0) throw err;
             throw new Error(m.planning_err_repeat_partial({ done: index }));
           }
         }
         if (occurrences.length > 1) toast.success(m.planning_repeat_created({ count: occurrences.length }));
-      } else if (createType === 'server_event') {
-        // Discord refuse un evenement planifie dans le passe.
-        if (selectedStartDate.getTime() <= Date.now()) { formError = m.planning_err_event_in_past(); return; }
-        if (selectedEndDate.getTime() <= selectedStartDate.getTime()) { formError = m.meetings_err_end_before_start(); return; }
-        // Un evenement Kotbo personnalise, avec son evenement Discord natif : il se retrouve dans la page Evenements.
-        const res = await dashboardFetch('/events', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            type: 'CUSTOM',
-            title: formTitle.trim(),
-            description: formDescription || undefined,
-            startTime: selectedStartDate.toISOString(),
-            endTime: selectedEndDate.toISOString(),
-            location: formLocation.trim() || undefined,
-            createDiscordEvent: true,
-          }),
-        });
+      };
+    } else if (type === 'server_event') {
+      // Un evenement Kotbo personnalise, avec son evenement Discord natif : il se retrouve dans la page Evenements.
+      const body = JSON.stringify({
+        type: 'CUSTOM',
+        title,
+        description: description || undefined,
+        startTime: start.toISOString(),
+        endTime: end.toISOString(),
+        location: formLocation.trim() || undefined,
+        createDiscordEvent: true,
+      });
+      run = async () => {
+        const res = await dashboardFetch('/events', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
         if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || m.planning_err_create_generic());
         toast.success(m.planning_server_event_created());
-      } else {
-        await createTask({
-          title: formTitle.trim(),
-          description: formDescription,
-          priority: formPriority,
-          dueDate: selectedStartDate.toISOString(),
-          assigneeId: formAssigneeId,
-        });
-      }
+      };
+    } else {
+      const payload = { title, description, priority: formPriority, dueDate: start.toISOString(), assigneeId: formAssigneeId };
+      drafts = [{ ...payload, status: 'PENDING' }];
+      run = () => createTask(payload);
+    }
 
-      creationModalOpen = false;
-      quickAnchor = null;
-      await refreshAll();
-    } catch (err) {
-      console.error(err);
-      formError = errorMessage(err) || m.planning_err_create_generic();
-    } finally {
-      saving = false;
+    creationModalOpen = false;
+    quickAnchor = null;
+    const stamp = Date.now();
+    let failure = '';
+    const ok = await optimistic(
+      () => drafts.forEach((d, i) => addLocal(type as PlanningType, { ...d, id: `draft-${stamp}-${i}` })),
+      run,
+      err => { failure = errorMessage(err) || m.planning_err_create_generic(); },
+    );
+    // Refuse : la saisie revient telle quelle, avec la raison.
+    if (!ok) {
+      formError = failure;
+      creationModalOpen = true;
     }
   }
 
@@ -1106,12 +1169,7 @@
   // ── Actions sur un element ──────────────────────────────
   async function updateMeetingStatus(id: string, status: string) {
     if (!canModerateMeetings) return;
-    try {
-      await updateMeeting(id, { status });
-      await refreshAll();
-    } catch (e) {
-      console.error('Failed to update status:', e);
-    }
+    await optimistic(() => patchLocal('meeting', id, raw => ({ ...raw, status })), () => updateMeeting(id, { status }));
   }
 
   function getAttendanceStats(meeting: any) {
@@ -1195,21 +1253,11 @@
 
   async function confirmDeleteMeeting() {
     if (!meetingToDeleteId) return;
-    deletingMeeting = true;
-    try {
-      await deleteMeeting(meetingToDeleteId, {
-        deleteEvent: deleteDiscordEvent,
-        deleteMessage: deleteDiscordMessage,
-        deleteNotifications: deleteDiscordNotification,
-      });
-      meetingDeleteModalOpen = false;
-      detailModalOpen = false;
-      await refreshAll();
-    } catch (e) {
-      console.error('Failed to delete meeting:', e);
-    } finally {
-      deletingMeeting = false;
-    }
+    const id = meetingToDeleteId;
+    const options = { deleteEvent: deleteDiscordEvent, deleteMessage: deleteDiscordMessage, deleteNotifications: deleteDiscordNotification };
+    meetingDeleteModalOpen = false;
+    detailModalOpen = false;
+    await optimistic(() => patchLocal('meeting', id), () => deleteMeeting(id, options));
   }
 
   async function deleteItem(event: CalendarEvent) {
@@ -1223,48 +1271,44 @@
       return;
     }
     if (!(await confirmDialog.danger(m.planning_confirm_delete_item()))) return;
-    try {
-      if (event.type === 'absence') await deleteAbsence(event.id);
-      else if (event.type === 'call') await deleteCall(event.id);
-      else if (event.type === 'task') await deleteTask(event.id);
-      detailModalOpen = false;
-      await refreshAll();
-    } catch (e) {
-      console.error(e);
-    }
+    const type = event.type as PlanningType;
+    detailModalOpen = false;
+    await optimistic(
+      () => patchLocal(type, event.id),
+      async () => {
+        if (type === 'absence') return deleteAbsence(event.id);
+        if (type === 'call') return deleteCall(event.id);
+        if (type === 'task') return deleteTask(event.id);
+      },
+    );
   }
 
   async function toggleTaskCompletion(task: any) {
     const nextStatus = task.status === 'COMPLETED' ? 'PENDING' : 'COMPLETED';
-    try {
-      await updateTask(task.id, { status: nextStatus });
-      await refreshAll();
-    } catch (e) {
-      console.error(e);
-    }
+    await optimistic(
+      () => patchLocal('task', task.id, raw => ({ ...raw, status: nextStatus })),
+      () => updateTask(task.id, { status: nextStatus }),
+    );
   }
 
   async function addQuickTask(event: SubmitEvent) {
     event.preventDefault();
     const title = quickTaskTitle.trim();
     if (!title || !myStaffRecord) return;
-    quickTaskSaving = true;
-    try {
-      await createTask({ title, priority: 'MEDIUM', dueDate: null, assigneeId: myStaffRecord.id });
-      quickTaskTitle = '';
-      await refreshAll();
-    } catch (e) {
-      toast.error(errorMessage(e) || m.planning_err_create_generic());
-    } finally {
-      quickTaskSaving = false;
-    }
+    const payload = { title, priority: 'MEDIUM' as const, dueDate: null, assigneeId: myStaffRecord.id };
+    quickTaskTitle = '';
+    const ok = await optimistic(
+      () => addLocal('task', { ...payload, id: `draft-${Date.now()}`, status: 'PENDING' }),
+      () => createTask(payload),
+      err => toast.error(errorMessage(err) || m.planning_err_create_generic()),
+    );
+    // Refuse : le titre revient dans le champ, sauf si on en a deja tape un autre.
+    if (!ok && !quickTaskTitle) quickTaskTitle = title;
   }
 
   async function decideAbsence(id: string, status: 'APPROVED' | 'REJECTED') {
-    if (await updateAbsenceStatus(id, status, undefined)) {
-      toast.success(m.planning_absence_decided());
-      await refreshAll();
-    }
+    const ok = await optimistic(() => patchLocal('absence', id, raw => ({ ...raw, status })), () => updateAbsenceStatus(id, status, undefined));
+    if (ok) toast.success(m.planning_absence_decided());
   }
 
   async function handleAddReminder(event: SubmitEvent) {
@@ -1721,7 +1765,7 @@
                   <form onsubmit={addQuickTask}>
                     <div class="relative">
                       <Papicon icon="plus" size={14} class="absolute left-3 top-1/2 -translate-y-1/2 text-primary pointer-events-none" />
-                      <input class="input pl-9 text-body-sm" bind:value={quickTaskTitle} maxlength="200" disabled={quickTaskSaving} placeholder={m.planning_quick_task_ph()} aria-label={m.planning_add_task()} />
+                      <input class="input pl-9 text-body-sm" bind:value={quickTaskTitle} maxlength="200" placeholder={m.planning_quick_task_ph()} aria-label={m.planning_add_task()} />
                     </div>
                   </form>
                 {/if}
@@ -1784,7 +1828,7 @@
     {/if}
     <div class="flex items-center justify-between gap-2 pt-1">
       <Button variant="ghost" size="sm" onclick={expandQuickCreate}>{m.planning_quick_more()}</Button>
-      <Button variant="primary" size="sm" type="submit" loading={saving}>{m.common_save()}</Button>
+      <Button variant="primary" size="sm" type="submit">{m.common_save()}</Button>
     </div>
   </form>
 </AnchoredPopover>
@@ -2109,7 +2153,7 @@
   </form>
   {#snippet footer()}
     <Button variant="ghost" onclick={() => (creationModalOpen = false)}>{m.common_cancel()}</Button>
-    <Button variant="primary" type="submit" form="pl-create" loading={saving}>{m.common_save()}</Button>
+    <Button variant="primary" type="submit" form="pl-create">{m.common_save()}</Button>
   {/snippet}
 </Modal>
 
@@ -2384,7 +2428,7 @@
   </div>
   {#snippet footer()}
     <Button variant="ghost" onclick={() => (meetingDeleteModalOpen = false)}>{m.common_cancel()}</Button>
-    <Button variant="danger" loading={deletingMeeting} onclick={confirmDeleteMeeting}>{m.planning_detail_delete()}</Button>
+    <Button variant="danger" onclick={confirmDeleteMeeting}>{m.planning_detail_delete()}</Button>
   {/snippet}
 </Modal>
 
