@@ -30,16 +30,16 @@ const DARK_DECOR = new Set([
 
 const PATTERNS = {
   /** Texte sous 11px. Restent les pastilles de taille fixe (compteurs, initiales). */
-  tinyText: { regex: /text-\[(?:[0-9]|10(?:\.5)?)px\]/g, max: 12 },
+  tinyText: { regex: /text-\[(?:[0-9]|10(?:\.5)?)px\]/g, max: 11 },
   /** Couleur de statut brute la ou un jeton existe. */
   rawStatusColor: {
     regex: /(?<![\w-])(?:[a-z-]+:)*(?:text-(?:emerald|green|amber|yellow|red|rose)-(?:400|500|600|700)|border-(?:emerald|green|amber|yellow|red|rose)-(?:200|300|400|500|600)|bg-(?:emerald|green|amber|yellow|red|rose)-(?:400|500|600)\/\d+)(?![\w-])/g,
     max: 0,
   },
   /** Variante dark: : les jetons portent deja le theme sombre. */
-  darkVariant: { regex: /(?<![\w-])dark:/g, max: 83 },
+  darkVariant: { regex: /(?<![\w-])dark:/g, max: 81 },
   /** Micro-libelle en majuscules espacees. */
-  shoutingLabel: { regex: /uppercase[^"'`\n]*tracking-(?:widest|wider)|tracking-(?:widest|wider)[^"'`\n]*uppercase/g, max: 37 },
+  shoutingLabel: { regex: /uppercase[^"'`\n]*tracking-(?:widest|wider)|tracking-(?:widest|wider)[^"'`\n]*uppercase/g, max: 35 },
   /** Onglet ecrit a la main plutot qu'avec <Tabs>. */
   handMadeTab: { regex: /class="[^"]*\btab-button\b/g, max: 0 },
   /**

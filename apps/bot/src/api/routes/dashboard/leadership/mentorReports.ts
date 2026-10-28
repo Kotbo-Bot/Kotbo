@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Client } from 'discord.js';
 import type { AuthClaims, DashboardAccess } from '../../../shared.js';
+import prisma from '../../../../utils/db.js';
 import { logger } from '../../../../utils/logger.js';
 import { jsonFailure } from '../../../shared/failure.js';
 import {
@@ -78,6 +79,10 @@ export async function handleMentorReportRoutes(
 
           if (!body?.testingPeriodId || !body?.type || !body?.content) {
             json(res, 400, { error: 'testingPeriodId, type et content sont obligatoires' });
+            return true;
+          }
+          if (!(await prisma.testingPeriod.findFirst({ where: { id: body.testingPeriodId, guildId }, select: { id: true } }))) {
+            json(res, 404, { error: 'Période de test introuvable' });
             return true;
           }
 

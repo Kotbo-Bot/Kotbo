@@ -21,8 +21,7 @@
   import { m } from '../../i18n';
   import { errorMessage } from '@kotbo/shared';
   import type { ActivityRankingItem, ActivityRankings } from '../../api';
-  import { fmtDelta, fmtNumber } from './analyticsFormat';
-  import { relativeDelta } from './analyticsFilters.svelte';
+  import { fmtNumber } from './analyticsFormat';
 
   const {
     title,
@@ -147,12 +146,6 @@
   const barItems = $derived(
     (data?.items ?? []).map((item) => ({ id: item.id, label: displayName(item), value: item.value, display: format(item.value), raw: item })),
   );
-
-  function deltaTone(item: ActivityRankingItem): string {
-    const d = relativeDelta(item.value, item.previous);
-    if (d === null || Math.abs(d) < 0.05) return 'text-on-surface-variant';
-    return d > 0 ? 'text-success' : 'text-error';
-  }
 </script>
 
 {#snippet identity(item: ActivityRankingItem)}
@@ -164,7 +157,6 @@
 {/snippet}
 
 {#snippet row(item: ActivityRankingItem, rank: number, scale: number)}
-  {@const delta = relativeDelta(item.value, item.previous)}
   <button
     type="button"
     class="top-row"
@@ -182,7 +174,7 @@
     {/if}
     <span class="top-row__value">{format(item.value)}</span>
     {#if compare}
-      <span class="top-row__delta {deltaTone(item)}" title={m.anx_delta_title()}>{fmtDelta(delta, 'pct')}</span>
+      <span class="top-row__delta text-on-surface-variant" title={m.anx_delta_title()}>{format(item.previous)}</span>
     {/if}
   </button>
 {/snippet}
@@ -224,7 +216,7 @@
         <div class="top-head" aria-hidden="true">
           <span class="min-w-0 flex-1">{kind === 'members' ? m.anx_top_member() : m.anx_top_channel()}</span>
           <span class="top-head__value">{m.anx_top_value()}</span>
-          {#if compare}<span class="top-head__delta">{m.anx_table_delta()}</span>{/if}
+          {#if compare}<span class="top-head__delta">{m.anx_table_previous()}</span>{/if}
         </div>
         <ol class="top-rows">
           {#each data.items as item, i (item.id)}
@@ -240,7 +232,7 @@
         <span class="text-body-sm text-on-surface-variant">
           {m.anx_top_total({ value: format(data.total) })}
           {#if compare && data.prevTotal > 0}
-            · {fmtDelta(relativeDelta(data.total, data.prevTotal), 'pct')}
+            · {m.anx_previous_period({ value: format(data.prevTotal) })}
           {/if}
         </span>
         <Button size="sm" variant="ghost" iconRight="chevron-right" onclick={openFull}>{m.anx_top_see_all()}</Button>
@@ -355,7 +347,7 @@
   }
 
   .top-head__delta {
-    min-width: 3.75rem;
+    min-width: 4.5rem;
     text-align: right;
   }
 
@@ -444,7 +436,7 @@
 
   .top-row__delta {
     flex-shrink: 0;
-    min-width: 3.75rem;
+    min-width: 4.5rem;
     text-align: right;
     font-size: 0.75rem;
     font-weight: 500;

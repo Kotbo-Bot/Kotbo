@@ -587,7 +587,8 @@
         icon="UserPlus"
       >
         <div class="space-y-3">
-          {@render switchRow('rolePersistEnabled', 'Rôles persistants', 'Les rôles sont mémorisés au départ et rendus à l\'arrivée, après le captcha s\'il est actif. Les rôles de modération ou d\'administration, ceux gérés par une intégration, ceux placés au-dessus du bot et ceux du captcha ou de la vérification ne sont jamais rendus.')}
+          {@render switchRow('rolePersistEnabled', 'Rôles persistants', 'Les rôles sont mémorisés au départ et rendus à l\'arrivée, après le captcha s\'il est actif. Les rôles de modération ou d\'administration ne sont rendus que si l\'option ci-dessous est active ; ceux gérés par une intégration, ceux placés au-dessus du bot et ceux du captcha ou de la vérification ne le sont jamais.')}
+          {@render switchRow('rolePersistStaff', 'Rendre aussi les rôles staff et admin', 'Un membre du staff qui revient retrouve ses rôles à permissions (donc son accès à la configuration) et son entrée dans l\'annuaire du staff. Ignoré pour un membre suspendu ou blacklisté.')}
 
           <div class="grid sm:grid-cols-2 gap-3">
             <label class="block">

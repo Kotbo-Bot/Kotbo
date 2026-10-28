@@ -10,6 +10,7 @@
   import ToggleSwitch from '../lib/components/ToggleSwitch.svelte';
   import { createAsyncActionState } from '../lib/asyncAction.svelte';
   import ModulePage from '../lib/components/ModulePage.svelte';
+  import RecruitmentPanels from '../lib/components/recruitment/RecruitmentPanels.svelte';
   import { toast } from '../lib/stores/toast.svelte';
   import { confirmDialog } from '../lib/stores/confirmDialog.svelte';
   import { m } from '../lib/i18n';
@@ -146,6 +147,16 @@
       }
     } catch {
       toast.error('Erreur réseau');
+    }
+  }
+
+  async function patchForm(formId: string, payload: Record<string, unknown>) {
+    const res = await dashboardFetch(`/custom-forms/${formId}`, { method: 'PATCH', payload }).catch(() => null);
+    if (res?.ok) {
+      toast.success(m.cf_autoclose_saved());
+      await fetchForms();
+    } else {
+      toast.error((await res?.json().catch(() => null))?.error || m.cf_config_error());
     }
   }
 
@@ -331,6 +342,37 @@
                       {m.cf_hierarchy_hint()}
                     </p>
                   {/if}
+
+                  <div class="space-y-2 rounded-lg bg-surface-container/40 p-3 text-xs text-on-surface-variant font-sans">
+                    <p class="flex items-center gap-2 font-semibold text-on-surface"><Papicon icon="lock_clock" size={14} />{m.cf_autoclose_title()}</p>
+                    <label class="flex items-center justify-between gap-3">
+                      <span>{m.cf_autoclose_pending()}</span>
+                      <input type="number" min="0" max="10000" value={form.maxPendingCandidatures ?? ''} placeholder="∞"
+                        onchange={(e) => patchForm(form.id, { maxPendingCandidatures: Number((e.currentTarget as HTMLInputElement).value) || null })}
+                        class="w-20 bg-surface-container rounded-lg px-2 py-1 text-2xs font-semibold outline-none border border-outline-variant/20 focus:border-primary" />
+                    </label>
+                    <label class="flex items-center justify-between gap-3">
+                      <span>{m.cf_autoclose_accepted()}</span>
+                      <input type="number" min="0" max="10000" value={form.maxAcceptedCandidatures ?? ''} placeholder="∞"
+                        onchange={(e) => patchForm(form.id, { maxAcceptedCandidatures: Number((e.currentTarget as HTMLInputElement).value) || null })}
+                        class="w-20 bg-surface-container rounded-lg px-2 py-1 text-2xs font-semibold outline-none border border-outline-variant/20 focus:border-primary" />
+                    </label>
+                    {#if form.maxAcceptedCandidatures}
+                      <select
+                        value={form.acceptedCapMode}
+                        onchange={(e) => patchForm(form.id, { acceptedCapMode: (e.currentTarget as HTMLSelectElement).value })}
+                        class="w-full bg-surface-container rounded-lg px-2 py-1.5 text-2xs font-semibold outline-none border border-outline-variant/20 focus:border-primary"
+                      >
+                        <option value="RESET">{m.cf_autoclose_mode_reset()}</option>
+                        <option value="TOTAL">{m.cf_autoclose_mode_total()}</option>
+                      </select>
+                    {/if}
+                    {#if form.autoClosedReason}
+                      <p class="text-2xs text-warning">
+                        {form.autoClosedReason === 'ACCEPTED' ? m.cf_autoclose_closed_accepted() : m.cf_autoclose_closed_pending()}
+                      </p>
+                    {/if}
+                  </div>
                 {/if}
 
                 <div class="flex items-center justify-between text-xs text-on-surface-variant font-sans">
@@ -375,6 +417,10 @@
           </div>
         {/each}
       </div>
+    {/if}
+
+    {#if !loading && !error}
+      <RecruitmentPanels forms={forms.filter((f) => f.isRecruitment).map((f) => ({ id: f.id, name: f.name }))} />
     {/if}
   </div>
 </ModulePage>

@@ -440,6 +440,9 @@ model Guild {
   staffProcedures StaffProcedure[]
   candidatures RecruitmentCandidature[]
   recruitmentForms RecruitmentForm[]
+  recruitmentPanels RecruitmentPanel[]
+  staffListPanels StaffListPanel[]
+  convocations Convocation[]
   notifications Notification[]
   guildDailyStats GuildDailyStat[]
   guildHourlyStats GuildHourlyStat[]
@@ -455,6 +458,7 @@ model Guild {
   commandUsageDailyStats CommandUsageDailyStat[]
   contentItemDailyStats ContentItemDailyStat[]
   outgoingWebhooks OutgoingWebhook[]
+  doingLists       DoingList[]
   communitySite    CommunitySite?
 
   // Kotbo × AegisAI (toxicité et émotions)
@@ -604,6 +608,7 @@ model Guild {
   tickets                Ticket[]
   ticketBlacklist        TicketBlacklist[]
   ticketMacros           TicketMacro[]
+  ticketStaffSignatures  TicketStaffSignature[]
   campaigns              Campaign[]
 
   autoThreadEnabled  Boolean   @default(false)
@@ -677,6 +682,9 @@ model Guild {
   funNeverSayChannelId     String?
   funEmojiOnlyChannelId    String?
   funImageOfDayChannelId    String?
+  // Confessions anonymes : salon public, et salon staff où l'auteur est consigné.
+  funConfessionChannelId    String?
+  funConfessionLogChannelId String?
   // Comptage et chaîne de mots : une erreur remet le jeu à zéro quand actif ;
   // sinon le message fautif est juste supprimé, sans casser la progression.
   funPunitiveMode          Boolean  @default(true)
@@ -686,6 +694,7 @@ model Guild {
   funGameState             FunGameState?
   funEmojiRiddles          FunEmojiRiddle[]
   funCountingPlayers       FunCountingPlayer[]
+  confessions              Confession[]
 
   // Economy & RPG Module
   economyEnabled           Boolean  @default(false)
@@ -816,6 +825,7 @@ model Guild {
   // Sticky bot - message collé en bas de salon
   stickyMessages StickyMessage[]
   autoThreadConfigs AutoThreadConfig[]
+  threadPanels      ThreadPanel[]
 
   // Starlight - mise en avant des messages plébiscités
   starboardConfig StarboardConfig?

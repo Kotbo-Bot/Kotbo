@@ -110,6 +110,21 @@
     });
   });
 
+  // Trop d'onglets pour la pilule, quelle que soit la largeur de l'écran :
+  // on mesure le menu et on le replie en panneau quand il déborde.
+  var header = document.querySelector('.site-header');
+  var topNav = header && header.querySelector('.nav');
+  function fitNav() {
+    if (!topNav) return;
+    header.classList.remove('nav-collapsed');
+    if (topNav.scrollWidth > topNav.clientWidth + 1) header.classList.add('nav-collapsed');
+  }
+  if (topNav) {
+    fitNav();
+    window.addEventListener('resize', fitNav);
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitNav);
+  }
+
   // ─── Mode clair / sombre ───────────────────────────────────────────────
   // Le mode par défaut vient du thème (`data-default-mode`, éventuellement
   // `auto`) ; le choix du visiteur est retenu par site, et appliqué avant le
@@ -158,14 +173,14 @@
     document.querySelectorAll('[data-viewer-slot]').forEach(function (slot) {
       slot.textContent = '';
       if (viewer) {
-        var chip = el('a', { class: 'viewer-chip', href: root.getAttribute('data-base') + '/me' });
+        var chip = el('a', { class: 'viewer-chip', href: root.getAttribute('data-base') + '/me', title: viewer.displayName, 'aria-label': viewer.displayName });
         if (viewer.avatarUrl) {
           chip.appendChild(el('img', { class: 'avatar avatar-sm', src: viewer.avatarUrl, alt: '', referrerpolicy: 'no-referrer' }));
         }
         chip.appendChild(el('span', null, viewer.displayName));
         slot.appendChild(chip);
       } else {
-        var login = el('a', { class: 'btn btn-primary btn-sm', href: loginUrl() }, T.login || 'Login');
+        var login = el('a', { class: 'viewer-login', href: loginUrl(), title: T.login || 'Login', 'aria-label': T.login || 'Login' });
         slot.appendChild(login);
       }
     });

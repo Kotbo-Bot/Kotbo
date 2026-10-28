@@ -2249,10 +2249,37 @@ export async function handleGeneralistModulesRoutes(
         }
 
         if (adminLockFieldsProvided) {
-          const guild = client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId).catch(() => null);
-          if (!guild || guild.ownerId !== user.userId) {
-            json(res, 403, { error: "Seul le propriétaire du serveur peut modifier les paramètres d'Admin Permission Lock." });
-            return true;
+          // La page Filtres renvoie toute la config : on ne bloque que si une valeur change vraiment.
+          const existing = await prisma.autoModConfig.findUnique({
+            where: { guildId },
+            select: {
+              adminLockEnabled: true, adminLockAction: true, adminLockSecurityRoleIds: true, adminLockNotifyChannelId: true,
+              burstSuspendEnabled: true, burstSuspendFastLimit: true, burstSuspendFastWindowSec: true,
+              burstSuspendSlowLimit: true, burstSuspendSlowWindowSec: true,
+            },
+          });
+          const current = {
+            adminLockEnabled: existing?.adminLockEnabled ?? false,
+            adminLockAction: existing?.adminLockAction ?? 'BLOCK',
+            adminLockNotifyChannelId: existing?.adminLockNotifyChannelId ?? null,
+            burstSuspendEnabled: existing?.burstSuspendEnabled ?? false,
+            burstSuspendFastLimit: existing?.burstSuspendFastLimit ?? 5,
+            burstSuspendFastWindowSec: existing?.burstSuspendFastWindowSec ?? 1,
+            burstSuspendSlowLimit: existing?.burstSuspendSlowLimit ?? 10,
+            burstSuspendSlowWindowSec: existing?.burstSuspendSlowWindowSec ?? 60,
+          };
+          const adminLockChanged =
+            (Object.keys(current) as (keyof typeof current)[]).some(
+              (k) => body[k] !== undefined && (body[k] ?? null) !== current[k],
+            ) ||
+            (body.adminLockSecurityRoleIds !== undefined &&
+              JSON.stringify([...body.adminLockSecurityRoleIds].sort()) !== JSON.stringify([...(existing?.adminLockSecurityRoleIds ?? [])].sort()));
+          if (adminLockChanged) {
+            const guild = client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId).catch(() => null);
+            if (!guild || guild.ownerId !== user.userId) {
+              json(res, 403, { error: "Seul le propriétaire du serveur peut modifier les paramètres d'Admin Permission Lock." });
+              return true;
+            }
           }
         }
 
@@ -2548,7 +2575,15 @@ export async function handleGeneralistModulesRoutes(
           channelId: null
         });
 
-        json(res, 200, { suggestion });
+        // Meme enrichissement que la liste : sans lui la photo disparait de la carte.
+        const identity = (await getMemberIdentities(client, guildId, [suggestion.userId])).get(suggestion.userId);
+        json(res, 200, {
+          suggestion: {
+            ...suggestion,
+            username: identity?.displayName || suggestion.username,
+            avatarUrl: identity?.avatarUrl || null,
+          },
+        });
       } catch (err) {
         logger.error('SuggestionsAPI', 'Error resolving suggestion:', err);
         jsonFailure(res, err, 'Erreur lors de la résolution de la suggestion', 'SuggestionsAPI');
@@ -2723,6 +2758,8 @@ export async function handleGeneralistModulesRoutes(
             funNeverSayChannelId: true,
             funEmojiOnlyChannelId: true,
             funImageOfDayChannelId: true,
+            funConfessionChannelId: true,
+            funConfessionLogChannelId: true,
             funPunitiveMode: true,
             funEmojiRiddleUseDefaults: true,
           }
@@ -2767,6 +2804,8 @@ export async function handleGeneralistModulesRoutes(
           funNeverSayChannelId?: string | null;
           funEmojiOnlyChannelId?: string | null;
           funImageOfDayChannelId?: string | null;
+          funConfessionChannelId?: string | null;
+          funConfessionLogChannelId?: string | null;
           funPunitiveMode?: boolean;
           funEmojiRiddleUseDefaults?: boolean;
         }>(req);
@@ -2798,6 +2837,8 @@ export async function handleGeneralistModulesRoutes(
             funNeverSayChannelId: body.funNeverSayChannelId,
             funEmojiOnlyChannelId: body.funEmojiOnlyChannelId,
             funImageOfDayChannelId: body.funImageOfDayChannelId,
+            funConfessionChannelId: body.funConfessionChannelId,
+            funConfessionLogChannelId: body.funConfessionLogChannelId,
             funPunitiveMode: body.funPunitiveMode,
             funEmojiRiddleUseDefaults: typeof body.funEmojiRiddleUseDefaults === 'boolean'
               ? body.funEmojiRiddleUseDefaults
@@ -2847,6 +2888,8 @@ export async function handleGeneralistModulesRoutes(
             funNeverSayChannelId: updatedGuild.funNeverSayChannelId,
             funEmojiOnlyChannelId: updatedGuild.funEmojiOnlyChannelId,
             funImageOfDayChannelId: updatedGuild.funImageOfDayChannelId,
+            funConfessionChannelId: updatedGuild.funConfessionChannelId,
+            funConfessionLogChannelId: updatedGuild.funConfessionLogChannelId,
             funPunitiveMode: updatedGuild.funPunitiveMode,
             funEmojiRiddleUseDefaults: updatedGuild.funEmojiRiddleUseDefaults,
           },
@@ -2863,6 +2906,24 @@ export async function handleGeneralistModulesRoutes(
       } catch (err) {
         logger.error('FunAPI', 'Error updating fun config:', err);
         jsonFailure(res, err, 'Erreur lors de la mise à jour de la configuration fun', 'FunAPI');
+      }
+      return true;
+    }
+
+    // GET /api/dashboard/guilds/:guildId/fun/confessions
+    // L'auteur n'est jamais renvoyé : seule la commande /confession reveler le montre.
+    if (parts[5] === 'confessions' && parts.length === 6 && method === 'GET') {
+      try {
+        const confessions = await prisma.confession.findMany({
+          where: { guildId },
+          orderBy: { number: 'desc' },
+          take: 50,
+          select: { number: true, content: true, createdAt: true, revealedAt: true },
+        });
+        json(res, 200, { confessions });
+      } catch (err) {
+        logger.error('FunAPI', 'Error fetching confessions:', err);
+        jsonFailure(res, err, 'Erreur lors de la récupération des confessions', 'FunAPI');
       }
       return true;
     }

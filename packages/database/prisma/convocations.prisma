@@ -1,0 +1,39 @@
+// ============================================================================
+// CONVOCATIONS
+// ============================================================================
+
+/// Convocation d'un membre par la moderation : message a accuser (✅), fil
+/// d'echange avec propositions de creneau, et action a l'echeance si le membre
+/// n'a jamais repondu.
+model Convocation {
+  id        String   @id @default(cuid())
+  guildId   String
+  userId    String
+  staffId   String
+  reason    String
+  deadline  DateTime
+  /// ALERT (prevenir le staff) | WARN | TIMEOUT (24 h) | NONE
+  expiryAction     String  @default("ALERT")
+  /// Salon vocal ou le membre attend qu'on le prenne, une fois un creneau accepte.
+  waitingChannelId String?
+
+  channelId String
+  messageId String?
+  threadId  String?  @unique
+
+  /// PENDING (aucun signe du membre) | ANSWERED (accuse, message ou creneau) | EXPIRED | CLOSED
+  status         String    @default("PENDING")
+  acknowledgedAt DateTime?
+  answeredAt     DateTime?
+  closedAt       DateTime?
+
+  guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, deadline])
+  @@index([guildId, userId])
+  @@index([messageId])
+  @@map("convocations")
+}

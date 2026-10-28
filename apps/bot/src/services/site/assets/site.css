@@ -65,15 +65,33 @@ h1, h2, h3, h4 { font-family: var(--site-heading-font), var(--site-font), sans-s
 
 /* ─── Barre de navigation ───────────────────────────────────────────────── */
 
+/* Pilule flottante : le bandeau ne touche plus les bords, le menu est centré. */
 .site-header {
   position: sticky;
   top: 0;
   z-index: 5;
-  background: var(--site-header);
+  padding: 12px 12px 0;
+  background: transparent;
   color: var(--site-header-text);
-  border-bottom: 1px solid var(--site-border);
+  pointer-events: none;
 }
-.site-header-inner { display: flex; align-items: center; gap: 24px; min-height: 64px; }
+.site-header .site-header-inner {
+  position: relative;
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-height: 54px;
+  max-width: min(1100px, 100%);
+  margin: 0 auto;
+  padding: 6px 8px 6px 14px;
+  background: color-mix(in srgb, var(--site-header) 82%, transparent);
+  -webkit-backdrop-filter: blur(14px) saturate(1.4);
+  backdrop-filter: blur(14px) saturate(1.4);
+  border: 1px solid var(--site-border);
+  border-radius: 999px;
+  box-shadow: 0 8px 28px rgb(0 0 0 / 0.14);
+}
 .brand {
   display: flex;
   align-items: center;
@@ -89,13 +107,13 @@ h1, h2, h3, h4 { font-family: var(--site-heading-font), var(--site-font), sans-s
 .brand-fallback { display: inline-grid; place-items: center; background: var(--site-accent); color: var(--site-on-accent); font-weight: 700; }
 .brand-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-.nav { display: flex; align-items: center; gap: 4px; flex: 1; min-width: 0; }
+.nav { display: flex; align-items: center; justify-content: center; gap: 2px; flex: 1; min-width: 0; }
 .nav a, .nav summary {
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 8px 12px;
-  border-radius: calc(var(--site-radius) * 0.6);
+  padding: 7px 12px;
+  border-radius: 999px;
   color: inherit;
   opacity: 0.78;
   text-decoration: none;
@@ -106,8 +124,8 @@ h1, h2, h3, h4 { font-family: var(--site-heading-font), var(--site-font), sans-s
   white-space: nowrap;
 }
 .nav summary::-webkit-details-marker { display: none; }
-.nav a:hover, .nav summary:hover { opacity: 1; }
-.site-header .nav a[aria-current="page"], .site-header .nav details[data-current] > summary { opacity: 1; color: var(--site-accent); }
+.nav a:hover, .nav summary:hover { opacity: 1; background: color-mix(in srgb, currentColor 8%, transparent); }
+.site-header .nav a[aria-current="page"], .site-header .nav details[data-current] > summary { opacity: 1; color: var(--site-accent); background: color-mix(in srgb, var(--site-accent) 12%, transparent); }
 .nav details { position: relative; }
 .nav details > div {
   position: absolute;
@@ -123,7 +141,7 @@ h1, h2, h3, h4 { font-family: var(--site-heading-font), var(--site-font), sans-s
 }
 .nav details > div a { opacity: 1; font-weight: 500; }
 .nav details > div a:hover { background: var(--site-surface-strong); }
-.header-actions { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+.header-actions { display: flex; align-items: center; gap: 6px; margin-left: auto; flex: none; }
 .icon-btn {
   display: inline-grid;
   place-items: center;
@@ -146,13 +164,45 @@ h1, h2, h3, h4 { font-family: var(--site-heading-font), var(--site-font), sans-s
 :root[data-effective="dark"] .mode-toggle .icon-moon { display: none; }
 
 .menu-toggle { display: none; }
-@media (max-width: 900px) {
-  .site-header-inner { flex-wrap: wrap; gap: 8px 16px; padding-top: 10px; padding-bottom: 10px; }
+/* Trop d'onglets pour la pilule : le menu devient un panneau déroulant. Sous
+   1180 px d'office, au-dessus dès que le script mesure un débordement. */
+.site-header.nav-collapsed .menu-toggle { display: inline-grid; }
+.site-header.nav-collapsed .nav {
+  display: none;
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  padding: 8px;
+  background: var(--site-header);
+  border: 1px solid var(--site-border);
+  border-radius: 24px;
+  box-shadow: 0 12px 28px rgb(0 0 0 / 0.18);
+}
+.site-header.nav-collapsed .nav[data-open="1"] { display: flex; }
+.site-header.nav-collapsed .nav details > div { position: static; box-shadow: none; border: 0; padding: 0 0 0 12px; background: transparent; color: inherit; }
+@media (max-width: 1180px) {
   .menu-toggle { display: inline-grid; }
-  .nav { order: 3; display: none; flex-basis: 100%; flex-direction: column; align-items: stretch; }
-  .nav[data-open="1"] { display: flex; }
+  .site-header .nav {
+    display: none;
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 0;
+    right: 0;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
+    padding: 8px;
+    background: var(--site-header);
+    border: 1px solid var(--site-border);
+    border-radius: 24px;
+    box-shadow: 0 12px 28px rgb(0 0 0 / 0.18);
+  }
+  .site-header .nav[data-open="1"] { display: flex; }
   .nav details > div { position: static; box-shadow: none; border: 0; padding: 0 0 0 12px; background: transparent; color: inherit; }
-  .viewer-slot .btn { padding: 7px 12px; }
 }
 
 /* Menu latéral (thème Documentation) */
@@ -660,6 +710,12 @@ dialog.kotbo-dialog h2 { margin: 0 0 6px; font-size: 1.2rem; }
 dialog.kotbo-dialog p { margin: 0 0 14px; color: var(--site-muted); }
 
 .viewer-slot { display: inline-flex; }
+/* Connexion en un rond (logo Discord) ; le pseudo n'est plus affiché, seule la photo reste. */
+.viewer-login { display: inline-grid; place-items: center; width: 38px; height: 38px; border-radius: 50%; background: var(--site-accent); color: var(--site-on-accent); text-decoration: none; }
+.viewer-login::before { content: ""; width: 20px; height: 20px; background: currentColor; -webkit-mask: var(--discord-logo) center / contain no-repeat; mask: var(--discord-logo) center / contain no-repeat; }
+.viewer-slot .viewer-chip { padding: 3px; }
+.viewer-slot .viewer-chip span { display: none; }
+.viewer-slot .viewer-chip .avatar-sm { width: 32px; height: 32px; }
 .viewer-chip { display: inline-flex; align-items: center; gap: 8px; padding: 4px 12px 4px 4px; border-radius: 999px; background: color-mix(in srgb, currentColor 10%, transparent); color: inherit; text-decoration: none; font-size: 0.9rem; font-weight: 600; }
 
 @media print {

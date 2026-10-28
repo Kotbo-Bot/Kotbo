@@ -1,7 +1,7 @@
 import { IncomingMessage, ServerResponse } from 'node:http';
 import { Client, ActivityType, PresenceStatusData } from 'discord.js';
 import type { CustomBotConfig } from '@prisma/client';
-import { normalizePlanKey } from '@kotbo/contracts';
+import { comparePlans, normalizePlanKey } from '@kotbo/contracts';
 import prisma from '../../../utils/db.js';
 import { upsertRetryingRace } from '../../../utils/upsertRetry.js';
 import { logger } from '../../../utils/logger.js';
@@ -67,13 +67,12 @@ function serializeConfig(config: CustomBotConfig) {
 }
 
 /**
- * Le Custom Bot est un service sur mesure : seul un serveur à l'offre CUSTOM,
- * posée depuis l'administration, y a accès. Le verrou « WIP » du dashboard ne
- * protège que l'affichage, la route doit se garder elle-même.
+ * L'identité du bot est réservée aux offres payantes (PLUS et au-delà). Le
+ * dashboard ne verrouille que l'affichage, la route doit se garder elle-même.
  */
 async function hasCustomPlan(guildId: string): Promise<boolean> {
   const guild = await prisma.guild.findUnique({ where: { id: guildId }, select: { plan: true } });
-  return normalizePlanKey(guild?.plan) === 'CUSTOM';
+  return comparePlans(normalizePlanKey(guild?.plan), 'PLUS') >= 0;
 }
 
 export async function handleCustomBotRoutes(
@@ -105,7 +104,7 @@ export async function handleCustomBotRoutes(
 
   if (!allowed && !(parts.length === 5 && method === 'GET') && !isStop) {
     json(res, 403, {
-      error: 'Le Custom Bot est réservé à l\'offre sur mesure. Contactez l\'équipe Kotbo pour l\'activer.',
+      error: 'L\'identité du bot est réservée aux offres payantes (Plus, Pro, Ultimate, Custom).',
       code: 'plan_required',
     });
     return true;
@@ -311,6 +310,10 @@ export async function handleCustomBotRoutes(
           activityText: config.activityText,
           activityUrl: config.activityUrl,
           botName: config.botName,
+          botAvatarUrl: config.botAvatarUrl,
+          botBannerUrl: config.botBannerUrl,
+          botBio: config.botBio,
+          applyProfile: true,
         },
       });
 

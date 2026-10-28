@@ -259,6 +259,7 @@ export function registerMembersRoutes(): void {
         inviterAvatarUrl: null,
         joinedAt: ago(person.joinedMinutesAgo),
       },
+      createdInvites: [],
       roles: memberRoles,
       effectivePermissions: [...new Set(memberRoles.flatMap((r) => r.permissions ?? []).concat(['ViewChannel', 'SendMessages', 'ReadMessageHistory', 'Connect', 'Speak']))],
       sanctions: memberSanctions,

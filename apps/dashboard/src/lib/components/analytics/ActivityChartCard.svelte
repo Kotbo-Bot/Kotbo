@@ -20,6 +20,8 @@
     /** Valeur affichée dans la tuile (total ou moyenne de la période). */
     value: string;
     delta?: number | null;
+    /** Valeur de la période d'avant, affichée à la place de l'écart en %. */
+    previous?: string;
     invert?: boolean;
     hint?: string;
     aggregate: Aggregate;
@@ -44,7 +46,6 @@
   import { errorMessage } from '@kotbo/shared';
   import type { ActivityAnomaly, ActivityBreakdown, ActivityHourly, AnalyticsAnnotation } from '../../api';
   import { fmtDelta, fmtNumber, shortDate, SERIES, SERIES_NEUTRAL } from './analyticsFormat';
-  import { relativeDelta } from './analyticsFilters.svelte';
   import {
     aggregate,
     bucketDays,
@@ -518,7 +519,6 @@
               <th scope="col" class="num">{metric.label}</th>
               {#if compare}
                 <th scope="col" class="num">{m.anx_table_previous()}</th>
-                <th scope="col" class="num">{m.anx_table_delta()}</th>
               {/if}
             </tr>
           </thead>
@@ -529,7 +529,6 @@
                 <td class="num">{metric.format(shaped.values[i] ?? 0)}</td>
                 {#if compare}
                   <td class="num text-on-surface-variant">{metric.format(shaped.previous[i] ?? 0)}</td>
-                  <td class="num">{fmtDelta(relativeDelta(shaped.values[i] ?? 0, shaped.previous[i] ?? 0), 'pct')}</td>
                 {/if}
               </tr>
             {/each}

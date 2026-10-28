@@ -2,15 +2,25 @@ name: Quality Gate
 
 on:
   pull_request:
+  # Les autres branches passent par leur PR : un push sur une branche avec PR
+  # declenchait sinon deux fois toute la CI.
   push:
+    branches: [main, recette]
   workflow_dispatch:
 
 permissions:
   contents: read
 
+# Un nouveau push annule la CI encore en cours sur la meme branche ou PR.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  # Typecheck et lint partagent la meme preparation (install, Prisma, i18n) :
+  # un seul job evite de la refaire.
   bot-typecheck:
-    name: Bot / Typecheck
+    name: Bot / Typecheck & lint
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -20,6 +30,13 @@ jobs:
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
+
+      - name: Cache Bun packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
@@ -33,6 +50,11 @@ jobs:
       - name: Typecheck bot
         run: bun run --filter @kotbo/bot typecheck
 
+      # Lance meme si le typecheck echoue, pour voir les deux rapports d'un coup.
+      - name: Lint bot
+        if: ${{ !cancelled() }}
+        run: bun run lint:bot
+
   dashboard-typecheck:
     name: Dashboard / Typecheck
     runs-on: ubuntu-latest
@@ -44,6 +66,13 @@ jobs:
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
+
+      - name: Cache Bun packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
@@ -69,6 +98,13 @@ jobs:
         with:
           bun-version: latest
 
+      - name: Cache Bun packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
@@ -78,55 +114,10 @@ jobs:
       - name: Run dashboard tests
         run: bun run --filter @kotbo/dashboard test
 
-  bot-lint:
-    name: Bot / Lint
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v5
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
-
-      - name: Generate Prisma client
-        run: bun run db:generate
-
-      - name: Generate translations
-        run: bun run --filter @kotbo/bot build:i18n
-
-      - name: Lint bot
-        run: bun run lint:bot
-
-  bot-tests:
-    name: Bot / Tests
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v5
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
-
-      - name: Generate Prisma client
-        run: bun run db:generate
-
-      - name: Run bot tests
-        env:
-          DATABASE_URL: postgresql://kotbo:kotbo@127.0.0.1:5432/kotbo_test
-        run: bun run test:bot
-
+  # Ce job fait aussi office de job de tests : coverage-gate echoue des qu'un
+  # test echoue. Un job de tests separe relancait toute la suite une 2e fois.
   bot-coverage:
-    name: Bot / Coverage
+    name: Bot / Tests & coverage
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -136,6 +127,13 @@ jobs:
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
+
+      - name: Cache Bun packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
@@ -161,8 +159,6 @@ jobs:
       - bot-typecheck
       - dashboard-typecheck
       - dashboard-tests
-      - bot-lint
-      - bot-tests
       - bot-coverage
     runs-on: ubuntu-latest
     steps:
@@ -171,13 +167,9 @@ jobs:
           BOT_TYPECHECK_RESULT: ${{ needs.bot-typecheck.result }}
           DASHBOARD_TYPECHECK_RESULT: ${{ needs.dashboard-typecheck.result }}
           DASHBOARD_TESTS_RESULT: ${{ needs.dashboard-tests.result }}
-          BOT_LINT_RESULT: ${{ needs.bot-lint.result }}
-          BOT_TESTS_RESULT: ${{ needs.bot-tests.result }}
           BOT_COVERAGE_RESULT: ${{ needs.bot-coverage.result }}
         run: |
           test "$BOT_TYPECHECK_RESULT" = "success"
           test "$DASHBOARD_TYPECHECK_RESULT" = "success"
           test "$DASHBOARD_TESTS_RESULT" = "success"
-          test "$BOT_LINT_RESULT" = "success"
-          test "$BOT_TESTS_RESULT" = "success"
           test "$BOT_COVERAGE_RESULT" = "success"

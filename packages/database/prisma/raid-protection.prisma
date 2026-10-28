@@ -112,6 +112,8 @@ model RaidProtectionConfig {
   rolePersistMode    String   @default("ALL") // ALL (sauf les rôles listés) | LIST (seulement les rôles listés)
   rolePersistRoleIds String[] @default([])
   rolePersistMaxDays Int      @default(90)
+  // Rend aussi les rôles à permissions (staff, admin) et réinscrit le membre à l'annuaire staff
+  rolePersistStaff   Boolean  @default(false)
 
   guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
 

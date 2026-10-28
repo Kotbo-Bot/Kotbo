@@ -109,6 +109,9 @@ const backupDataSchema = z.object({
   emojis: z.array(emojiSchema).max(500),
   stickers: z.array(stickerSchema).max(100),
   messages: z.array(messageSchema).max(25_000).optional(),
+  // Accepté pour relire nos propres exports, mais jamais conservé : une config Kotbo
+  // venue d'un fichier pourrait viser les lignes d'un autre serveur.
+  kotbo: z.unknown().optional(),
 }).strict();
 
 const optionsSchema = z.object({
@@ -196,7 +199,7 @@ export function parseBackupImport(rawJson: string): ValidatedBackupImport {
   }
 
   const backup = result.data.backup;
-  const data = backup.data as BackupData;
+  const { kotbo: _kotbo, ...data } = backup.data as BackupData;
   return {
     name: backup.name,
     description: backup.description,

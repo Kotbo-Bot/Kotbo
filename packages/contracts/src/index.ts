@@ -31,6 +31,7 @@ export type {
   MemberCaseChannelMessage,
   MemberCaseChannelSummary,
   MemberCaseInviteInfo,
+  MemberCaseCreatedInvite,
   MemberCaseProfile,
   LinkedAccountItem,
   MemberCaseInteractionNode,
@@ -68,6 +69,28 @@ export type {
   ModuleDefinition,
   ModuleKey,
 } from './types/modules.js';
+
+export {
+  DOING_LIST_ITEM_TYPES,
+  DOING_LIST_KEY_PATTERN,
+  DOING_LIST_LINK_TYPES,
+  DOING_LIST_MODULES,
+  DOING_LIST_PRIORITIES,
+  isDoingListItemType,
+  isDoingListLinkType,
+  isDoingListModule,
+  isDoingListPriority,
+  isDoingListSource,
+  parseDoingListRef,
+} from './types/doingLists.js';
+export type {
+  DoingListChecklistEntry,
+  DoingListItemType,
+  DoingListLinkType,
+  DoingListModule,
+  DoingListPriority,
+  DoingListSource,
+} from './types/doingLists.js';
 
 export {
   DiscordSnowflake,

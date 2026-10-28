@@ -16,6 +16,7 @@
   import SearchableSelect from '../lib/components/SearchableSelect.svelte';
   import Skeleton from '../lib/components/Skeleton.svelte';
   import UserDisplay from '../lib/components/UserDisplay.svelte';
+  import DoingListPin from '../lib/components/doingLists/DoingListPin.svelte';
   import {
     fetchSuggestions,
     fetchSuggestionsConfig,
@@ -253,6 +254,7 @@
               <span class="px-4 py-1.5 rounded-full text-body-sm font-medium border {statusColors[suggestion.status]}">
                 {statusLabels[suggestion.status]}
               </span>
+              <DoingListPin module="suggestions" sourceId={suggestion.id} />
             </div>
           </div>
 

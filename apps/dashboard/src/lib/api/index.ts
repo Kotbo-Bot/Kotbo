@@ -62,3 +62,4 @@ export * from './memberProfile';
 export * from './ticketHelpdesk';
 export * from './welcomeExperiments';
 export * from './aegis';
+export * from './doingLists';

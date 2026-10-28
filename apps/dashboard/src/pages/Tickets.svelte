@@ -26,6 +26,7 @@
   import { errorMessage } from '@kotbo/shared';
   import TicketInboxList from '../lib/components/tickets/TicketInboxList.svelte';
   import TicketProperties from '../lib/components/tickets/TicketProperties.svelte';
+  import DoingListPin from '../lib/components/doingLists/DoingListPin.svelte';
   import TicketPerformance from '../lib/components/tickets/TicketPerformance.svelte';
   import TicketBlacklist from '../lib/components/tickets/TicketBlacklist.svelte';
   import TicketTranscripts from '../lib/components/tickets/TicketTranscripts.svelte';
@@ -656,6 +657,9 @@
 
   onMount(async () => {
     await loadTicketsAndConfig();
+    // Lien profond depuis une liste de suivi : /tickets?ticket=<id>.
+    const linkedTicketId = new URLSearchParams(window.location.search).get('ticket');
+    if (linkedTicketId) selectTicket(linkedTicketId);
 
     unsubscribeRealtime = subscribeRealtime({
       reasons: ['tickets_updated'],
@@ -927,6 +931,10 @@
                     <Papicon icon="refresh-ccw" size={12} /> {m.e1_tickets_btn_restore({ left: restoresLeft })}
                   </button>
                 {/if}
+              {/if}
+
+              {#if selectedTicketId}
+                <DoingListPin module="tickets" sourceId={selectedTicketId} />
               {/if}
 
               {#if selectedTicketDetail?.transcriptId}

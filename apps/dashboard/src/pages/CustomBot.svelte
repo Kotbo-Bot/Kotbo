@@ -172,8 +172,8 @@
 <div class="space-y-6 max-w-4xl">
   <header class="flex flex-col md:flex-row md:items-end justify-between gap-x-6 gap-y-3">
     <div class="min-w-0">
-      <h1 class="text-2xl font-semibold tracking-tight text-on-surface font-headline leading-tight">Bot personnalisé</h1>
-      <p class="mt-1 max-w-prose text-sm text-on-surface-variant">Lance ton propre bot, avec les fonctions de Kotbo.</p>
+      <h1 class="text-2xl font-semibold tracking-tight text-on-surface font-headline leading-tight">Identité</h1>
+      <p class="mt-1 max-w-prose text-sm text-on-surface-variant">Donne à ton serveur son propre bot : nom, avatar, bannière, bio et statut.</p>
     </div>
 
     {#if config}
@@ -202,7 +202,7 @@
     </div>
   {:else if !allowed}
     <div class="section-card p-5 text-sm text-on-surface-variant">
-      Le bot personnalisé est réservé à l'offre sur mesure. Contacte l'équipe Kotbo pour l'activer sur ce serveur.
+      L'identité du bot est réservée aux offres Plus, Pro, Ultimate et Custom. Passe à une offre payante pour l'activer sur ce serveur.
       {#if runningWithoutPlan}
         <div class="flex items-center justify-between gap-3 mt-3">
           <span>Un bot personnalise lance auparavant tourne encore.</span>

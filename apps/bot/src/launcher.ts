@@ -9,6 +9,8 @@ import prisma from './utils/db.js';
 import { logger } from './utils/logger.js';
 import { loadAllInstances, type ResolvedInstance } from './utils/instanceResolver.js';
 import { openSecret } from './utils/secretBox.js';
+import { applyCustomBotProfile } from './services/system/customBotProfile.js';
+import { comparePlans, normalizePlanKey } from '@kotbo/contracts';
 
 /**
  * Messages IPC echanges entre le gestionnaire de shards et les shards.
@@ -49,6 +51,11 @@ async function startCustomBot(guildId: string, config: {
   activityText?: string;
   activityUrl?: string;
   botName?: string;
+  botAvatarUrl?: string;
+  botBannerUrl?: string;
+  botBio?: string;
+  /** Faux à la restauration après redémarrage : Discord limite les changements de profil. */
+  applyProfile?: boolean;
 }) {
   if (customBotClients.has(guildId)) {
     const existing = customBotClients.get(guildId)!;
@@ -76,9 +83,12 @@ async function startCustomBot(guildId: string, config: {
 
     c.user.setPresence({ status, activities });
 
+    const profileErrors = config.applyProfile === false ? [] : await applyCustomBotProfile(c, config);
+    if (profileErrors.length > 0) logger.warn('CustomBot', `[${guildId}] Profil partiellement appliqué : ${profileErrors.join(' | ')}`);
+
     await prisma.customBotConfig.update({
       where: { guildId },
-      data: { isRunning: true, lastStartedAt: new Date(), lastError: null },
+      data: { isRunning: true, lastStartedAt: new Date(), lastError: profileErrors.length ? profileErrors.join(' | ').slice(0, 500) : null },
     }).catch(() => {});
   });
 
@@ -117,11 +127,13 @@ async function stopCustomBot(guildId: string) {
 
 async function bootCustomBots() {
   try {
-    // Un serveur sorti de l'offre CUSTOM pendant l'arrêt ne voit pas son bot
-    // relancé : l'accès se vérifie aussi ici, pas seulement dans le dashboard.
-    const configs = await prisma.customBotConfig.findMany({
-      where: { enabled: true, isRunning: true, botToken: { not: null }, guild: { plan: { equals: 'CUSTOM', mode: 'insensitive' } } },
+    // Un serveur repassé en FREE pendant l'arrêt ne voit pas son bot relancé :
+    // l'accès se vérifie aussi ici, pas seulement dans le dashboard.
+    const candidates = await prisma.customBotConfig.findMany({
+      where: { enabled: true, isRunning: true, botToken: { not: null } },
+      include: { guild: { select: { plan: true } } },
     });
+    const configs = candidates.filter((cfg) => comparePlans(normalizePlanKey(cfg.guild.plan), 'PLUS') >= 0);
 
     if (configs.length === 0) return;
 
@@ -151,6 +163,7 @@ async function bootCustomBots() {
         activityText: cfg.activityText || undefined,
         activityUrl: cfg.activityUrl || undefined,
         botName: cfg.botName || undefined,
+        applyProfile: false,
       });
     }
   } catch (err) {

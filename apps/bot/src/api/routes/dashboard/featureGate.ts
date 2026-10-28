@@ -104,6 +104,7 @@ export const SEGMENT_FEATURE_KEYS: Record<string, string | string[]> = {
   recruitment: 'recruitment',
   evaluations: 'evaluations',
   meetings: 'meetings',
+  'doing-lists': 'doing_lists',
   absences: 'absences',
   tutoring: 'tutoring',
   'mentor-reports': 'tutoring',
@@ -116,9 +117,10 @@ export const SEGMENT_FEATURE_KEYS: Record<string, string | string[]> = {
  *
  * Trois cas, tous des lectures qu'une page emprunte a une autre section :
  *
- * - `tutoring/apprentice-progress` : un apprenti lit sa propre progression a
- *   chaque ouverture du dashboard. La fermer avec la section Tutorat privait
- *   l'apprenti de son parcours au motif qu'il n'a pas acces a celui des autres.
+ * - `tutoring/apprentice-progress`, `tutoring/overview` et `tutoring/periods` :
+ *   un tuteur ou un tutoré lit son propre tutorat. La fermer avec la section
+ *   Tutorat privait l'apprenti de son parcours au motif qu'il n'a pas acces a
+ *   celui des autres. handleTutoringRoutes ne rend que ce qui le concerne.
  * - `staff-server/channels` : le selecteur de salons du serveur staff lie, que
  *   les pages Staff, Reunions, Tickets et Appels de ban affichent dans leurs
  *   listes deroulantes. Comme `channels` ou `roles`, le fermer casse des
@@ -130,6 +132,8 @@ export const SEGMENT_FEATURE_KEYS: Record<string, string | string[]> = {
  */
 const UNGATED_SUBROUTES = new Set([
   'tutoring/apprentice-progress',
+  'tutoring/overview',
+  'tutoring/periods',
   'staff-server/channels',
   'notifications/features',
 ]);

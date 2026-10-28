@@ -2,6 +2,7 @@ import { type APIEmbed, Guild, Role, ButtonStyle, ActionRowBuilder, ButtonBuilde
 
 import { BackupData, RoleData, ChannelData, MemberData, EmojiData, StickerData , type MessageData } from './backupService.js';
 import { fetchExternal } from '../../utils/http.js';
+import { restoreKotboConfig } from './kotboConfigBackup.js';
 
 export interface RestoreOptions {
   fullRestore: boolean;
@@ -11,6 +12,8 @@ export interface RestoreOptions {
   includeEmojis: boolean;
   includeStickers: boolean;
   includeMessages: boolean;
+  /** Uniquement pour une sauvegarde créée par le bot sur ce même serveur. */
+  includeKotbo?: boolean;
   conflictResolution: 'ask' | 'ignore' | 'replace' | 'replace_all';
 }
 
@@ -61,6 +64,12 @@ export async function restoreBackup(
   // Restaurer les messages (optionnel)
   if (options.includeMessages && backupData.messages && backupData.messages.length > 0) {
     await restoreMessages(guild, backupData.messages, channelIdMap);
+  }
+
+  // En dernier : la config pointe vers des rôles et salons qui viennent peut-être d'être recréés.
+  if (options.includeKotbo && backupData.kotbo) {
+    const { restored, failed } = await restoreKotboConfig(guild.id, backupData.kotbo, new Map([...roleIdMap, ...channelIdMap]));
+    console.log(`⚙️ Configuration Kotbo restaurée : ${restored} éléments, ${failed} échecs`);
   }
 
   console.log(`✅ Restauration terminée pour le serveur ${guild.name}`);

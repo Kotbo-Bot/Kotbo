@@ -985,6 +985,13 @@ button[aria-disabled="true"]:not(.btn) { opacity: 0.5; cursor: not-allowed; }
    container. Sticky headers, scroll restoration and the browser's own
    URL-bar collapse all depend on the page being the scroller. */
 
+/* Page qui est l'outil lui-meme (Planning) : toute la zone, sans marge. Plus
+   specifique que les marges mobiles ci-dessous : la page gere sa hauteur. */
+.app-main.app-main--bleed {
+  max-width: none;
+  padding: 0;
+}
+
 @media (max-width: 767px) {
   .app-main {
     padding-top: 1rem;
@@ -1450,47 +1457,9 @@ button[aria-disabled="true"]:not(.btn) { opacity: 0.5; cursor: not-allowed; }
     order: -1;
   }
 
-  .app-main[data-mobile-layout="planner"] .calendar-container {
-    height: calc(100dvh - var(--mobile-topbar-height) - var(--mobile-tabbar-clearance) - 6rem);
-    min-height: 28rem;
-    border-radius: 0.875rem;
-  }
-
-  .app-main[data-mobile-layout="planner"] .calendar-header {
-    align-items: stretch;
-    flex-direction: column;
-    gap: 0.625rem;
-    padding: 0.75rem;
-  }
-
-  .app-main[data-mobile-layout="planner"] .calendar-header__leading {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
-  }
-
-  .app-main[data-mobile-layout="planner"] .calendar-header__title {
-    margin: 0.25rem 0 0;
-    overflow: hidden;
-    grid-column: 1 / -1;
-    grid-row: 2;
-    font-size: 0.875rem;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .app-main[data-mobile-layout="planner"] .calendar-view-tabs {
-    width: 100%;
-    overflow-x: auto;
-    scrollbar-width: none;
-  }
-
-  .app-main[data-mobile-layout="planner"] .calendar-view-tabs > button {
-    min-height: 2.5rem;
-    flex: 1 0 auto;
-  }
-
-  /* The planner's side panels become a swipeable rail under the calendar. */
-  .app-main[data-mobile-layout="planner"] aside {
+  /* The planner's side panels become a swipeable rail under the calendar.
+     Le Planning a ses propres volets superposes : il n'est pas concerne. */
+  .app-main[data-mobile-layout="planner"]:not([data-page="planning"]) aside {
     display: flex;
     width: 100%;
     max-width: 100%;
@@ -1503,11 +1472,11 @@ button[aria-disabled="true"]:not(.btn) { opacity: 0.5; cursor: not-allowed; }
     scrollbar-width: none;
   }
 
-  .app-main[data-mobile-layout="planner"] aside::-webkit-scrollbar {
+  .app-main[data-mobile-layout="planner"]:not([data-page="planning"]) aside::-webkit-scrollbar {
     display: none;
   }
 
-  .app-main[data-mobile-layout="planner"] aside > * {
+  .app-main[data-mobile-layout="planner"]:not([data-page="planning"]) aside > * {
     min-width: min(78vw, 19rem);
     max-height: 12rem;
     flex: 0 0 auto;

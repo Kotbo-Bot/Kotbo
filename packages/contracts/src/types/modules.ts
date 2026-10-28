@@ -392,6 +392,16 @@ export const MODULE_REGISTRY: ModuleDefinition[] = [
     paths: ['/planning/absences'],
   },
   {
+    key: 'doing_lists',
+    name: 'Listes de suivi',
+    description: 'Listes de travail par projet, reliées aux suggestions et aux tickets.',
+    category: 'staff',
+    icon: 'ListChecks',
+    defaultEnabled: true,
+    apiSegments: ['doing-lists'],
+    paths: ['/doing-lists'],
+  },
+  {
     key: 'polls',
     name: 'Sondages staff',
     description: "Consultations internes à l'équipe avec vote et clôture.",

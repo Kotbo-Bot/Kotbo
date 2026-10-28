@@ -974,7 +974,7 @@ export const createTestingPeriod = async (
       kind: 'staff.testing_started',
       title: 'Nouvelle période de test',
       message: `Votre période de test pour le grade ${targetGrade || 'Staff'} a commencé !`,
-      link: '/profile',
+      link: `/tutoring/${period.id}`,
     }).catch(() => null);
   }
 
@@ -985,7 +985,7 @@ export const createTestingPeriod = async (
       kind: 'staff.mentor_assigned',
       title: 'Nouveau tutorat',
       message: `Vous avez été assigné comme mentor pour ${member?.username || 'un nouveau staff'}.`,
-      link: '/staff-management',
+      link: `/tutoring/${period.id}`,
     }).catch(() => null);
   }
 
@@ -1020,6 +1020,9 @@ export const addMentorReport = async (
       content,
     },
   });
+  // Le prochain point d'étape se compte depuis celui-ci : sans cette date, les
+  // rappels partaient toujours du début du tutorat.
+  await prisma.testingPeriod.update({ where: { id: testingPeriodId }, data: { lastReportAt: report.createdAt } });
 
   // Notifier le membre en test
   if (period.staffMember) {
@@ -1027,10 +1030,10 @@ export const addMentorReport = async (
       guildId: period.guildId,
       userId: period.staffMember.userId,
       kind: 'staff.mentor_report',
-      title: 'Nouveau rapport de tutorat',
-      message: 'Un nouveau rapport a été posté sur votre période de test.',
+      title: 'Nouveau point d\'étape',
+      message: 'Ton tuteur a posté un point d\'étape sur ton tutorat.',
       severity: type === 'POSITIVE' ? 'SUCCESS' : (type === 'NEGATIVE' ? 'ERROR' : 'INFO'),
-      link: '/profile',
+      link: `/tutoring/${testingPeriodId}`,
     }).catch(() => null);
   }
 
@@ -1063,7 +1066,7 @@ export const endTestingPeriod = async (
         ? `Félicitations ! Vous avez validé votre période de test. Bienvenue officiellement dans l'équipe !`
         : `Votre période de test s'est terminée. Un manager reviendra vers vous pour plus de détails.`,
       severity: isPassed ? 'SUCCESS' : 'WARNING',
-      link: '/profile',
+      link: `/tutoring/${updated.id}`,
     }).catch(() => null);
   }
 

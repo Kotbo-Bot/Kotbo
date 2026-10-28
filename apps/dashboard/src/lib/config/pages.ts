@@ -29,6 +29,9 @@ export function isPageWip(page: PageConfig): boolean {
 
 export const generalItems: PageConfig[] = [
   { name: m.nav_home(),           icon: "home",      href: "/",          featureKey: "dashboard", beta: false, wip: false },
+  // Identité du bot juste après l'accueil : c'est ce qui fait que le bot est
+  // celui du serveur. Réservée aux offres payantes, verrou porté par l'API.
+  { name: m.nav_custom_bot(),     icon: "bot",       href: "/custom-bot", featureKey: "settings", beta: false, wip: false },
   // Prise en main juste apres l'accueil : c'est la page qu'on ouvre en
   // arrivant, et celle vers laquelle on revient pour verifier qu'il ne
   // manque rien.
@@ -188,6 +191,7 @@ export const staffItems: PageConfig[] = [
 // { name: m.nav_staff_evaluations(),   icon: "award",         href: "/evaluations",      featureKey: "staff_directory", beta: true, wip: false },
   { name: m.nav_tutoring(),             icon: "book-open",     href: "/tutoring",         featureKey: "tutoring", beta: false, wip: false },
   { name: m.nav_planning(),            icon: "calendar",      href: "/planning",         featureKey: "absences", beta: false, wip: false },
+  { name: m.nav_doing_lists(),         icon: "list-checks",   href: "/doing-lists",      featureKey: "doing_lists", beta: true, wip: false },
   // Sondages et Discipline sont des onglets de la page staff : ils quittent le
   // menu (huit lignes, une de trop) mais restent dans la palette et les onglets.
   { name: m.nav_polls(),            icon: "bar-chart",     href: "/staff-management/polls",    featureKey: "polls", beta: false, wip: false, hidden: true },
@@ -213,7 +217,6 @@ export const configItems: PageConfig[] = [
 export const integrationItems: PageConfig[] = [
   { name: m.nav_mcp_api(),             icon: "cpu",           href: "/mcp-settings",         featureKey: "settings", beta: false, wip: false },
   { name: m.nav_outgoing_webhooks(),   icon: "send",          href: "/webhooks",             featureKey: "settings", beta: true, wip: false },
-  { name: m.nav_custom_bot(),          icon: "bot",           href: "/custom-bot",           featureKey: "settings", beta: false, wip: true, wipMessage: m.nav_custom_bot_wip() },
 ];
 
 export const otherPages: PageConfig[] = [

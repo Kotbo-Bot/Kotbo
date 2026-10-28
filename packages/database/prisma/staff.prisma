@@ -81,6 +81,28 @@ model StaffRole {
   @@map("staff_roles")
 }
 
+/// Panneau Discord listant le staff par grade (« ## grade » puis « - @membre »).
+/// Re-rendu par un balayage periodique ; `renderHash` evite d'editer un
+/// message dont le contenu n'a pas change.
+model StaffListPanel {
+  id          String  @id @default(cuid())
+  guildId     String
+  channelId   String
+  messageId   String?
+  title       String
+  /// Restreint aux grades d'une hierarchie. Vide = grades principaux de tout le staff.
+  hierarchyId String?
+  renderHash  String?
+
+  guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([guildId])
+  @@map("staff_list_panels")
+}
+
 // ============================================================================
 // HIÉRARCHIES MULTIPLES STAFF
 // ============================================================================

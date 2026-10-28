@@ -40,6 +40,7 @@ import { handleCampaignRoutes } from './dashboard/campaigns.js';
 import { handleSetupRoutes } from './dashboard/setup.js';
 import { handleMCPKeyRoutes } from './dashboard/mcp.js';
 import { handleOutgoingWebhookRoutes } from './dashboard/outgoingWebhooks.js';
+import { handleDoingListRoutes } from './dashboard/doingLists.js';
 import { handleAutomodSimulationRoute } from './dashboard/automodSimulation.js';
 import { handleWelcomeExperimentRoutes } from './dashboard/welcomeExperiments.js';
 import { handleAegisRoutes } from './dashboard/aegis.js';
@@ -334,6 +335,16 @@ export async function handleDashboardRoutes(
     const isAegisReviewAction = parts[4] === 'aegis' && method === 'POST'
       && (parts[5] === 'test' || (parts[5] === 'detections' && parts.length === 8));
 
+    // Listes de suivi : déplacer ou épingler un élément est le travail du
+    // staff, pas un réglage. Le droit exact est revérifié dans
+    // handleDoingListRoutes.
+    const isDoingListAction = parts[4] === 'doing-lists' && method !== 'GET';
+
+    // Tutorat : le tuteur coche les objectifs et fait ses points d'étape, le
+    // tutoré tient son carnet de bord, sans droit de configuration. Le rôle
+    // exact sur chaque tutorat est revérifié dans handleTutoringRoutes.
+    const isTutoringAction = parts[4] === 'tutoring' && method !== 'GET';
+
     const isMemberModerationAction = parts.length === 7
       && parts[4] === 'members'
       && ((parts[6] === 'note' && method === 'PATCH') || (parts[6] === 'actions' && method === 'POST'));
@@ -400,7 +411,7 @@ export async function handleDashboardRoutes(
       ? { ...access, canManageSettings: true }
       : access;
 
-    if (!access.canManageSettings && method !== 'GET' && !hasFeatureWriteRight && !isSanctionAction && !isDailyAlgoReviewAction && !isStaffAbsenceAction && !isStaffResignationAction && !isNotificationAction && !isMeetingAction && !isNewsAction && !isMemberModerationAction && !isGiveawayManagerAction && !isAnalyticsAnnotationAction && !isAegisReviewAction) {
+    if (!access.canManageSettings && method !== 'GET' && !hasFeatureWriteRight && !isSanctionAction && !isDailyAlgoReviewAction && !isStaffAbsenceAction && !isStaffResignationAction && !isNotificationAction && !isMeetingAction && !isNewsAction && !isMemberModerationAction && !isGiveawayManagerAction && !isAnalyticsAnnotationAction && !isAegisReviewAction && !isDoingListAction && !isTutoringAction) {
       json(res, 403, { error: 'Action réservée aux administrateurs du dashboard.' });
       return true;
     }
@@ -573,6 +584,9 @@ export async function handleDashboardRoutes(
     }
     if (await handleOutgoingWebhookRoutes(req, res, parts, url, client, user, guildId, effectiveAccess)) {
       if (method !== 'GET') await cache.invalidateGuild(guildId);
+      return true;
+    }
+    if (await handleDoingListRoutes(req, res, parts, url, client, user, guildId, effectiveAccess)) {
       return true;
     }
     if (await handleCustomBotRoutes(req, res, parts, url, client, user)) {

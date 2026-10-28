@@ -81,3 +81,69 @@ model AutoThreadCreated {
   @@index([configId])
   @@map("auto_thread_created")
 }
+
+// ============================================================================
+// PANNEAUX DE DISCUSSION
+// ============================================================================
+// Un message du bot porte un ou plusieurs boutons ; chacun ouvre, après un
+// formulaire, un fil public, un fil privé ou un post de forum dont l'auteur
+// devient propriétaire (renommer, fermer, membres, transfert...).
+//
+// Les boutons vivent en JSON : leur forme est validée par
+// `normalizeThreadPanel` (@kotbo/shared), partagée par le bot et le dashboard.
+
+model ThreadPanel {
+  id String @id @default(cuid())
+
+  guildId   String
+  channelId String
+  /// Message publié. Vide tant que le panneau n'a pas été envoyé.
+  messageId String?
+
+  /// Nom affiché dans le dashboard.
+  name         String  @default("Panneau de discussion")
+  enabled      Boolean @default(true)
+  title        String
+  description  String  @default("")
+  color        String  @default("#5865f2")
+  imageUrl     String?
+  /// Salon des journaux de création et d'actions. Vide : aucun journal.
+  logChannelId String?
+  buttons      Json
+
+  guild   Guild         @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  threads PanelThread[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([guildId])
+  @@map("thread_panels")
+}
+
+/// Fil ouvert par un panneau : son propriétaire, ses membres de confiance et
+/// ses bannis. `closedAt` est posé quand le fil est fermé ou disparu, ce qui
+/// libère la limite de fils ouverts par membre.
+model PanelThread {
+  threadId String @id
+  guildId  String
+  panelId  String
+  /// Identifiant du bouton dans `ThreadPanel.buttons`.
+  buttonId String
+  parentId String
+  ownerId  String
+
+  trustedIds String[] @default([])
+  bannedIds  String[] @default([])
+  /// Annonce publique d'un fil privé ouvert aux demandes d'accès.
+  announceMessageId String?
+
+  closedAt  DateTime?
+  createdAt DateTime  @default(now())
+
+  panel ThreadPanel @relation(fields: [panelId], references: [id], onDelete: Cascade)
+
+  @@index([panelId, buttonId, ownerId])
+  @@index([guildId])
+  @@map("panel_threads")
+}

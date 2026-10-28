@@ -275,6 +275,10 @@ export function registerTicketsRoutes(): void {
   // GET /api/dashboard/guilds/:id/tickets/macros
   route('GET', '/api/dashboard/guilds/:id/tickets/macros', () => []);
 
+  // GET|PUT /api/dashboard/guilds/:id/tickets/signature
+  route('GET', '/api/dashboard/guilds/:id/tickets/signature', () => ({ content: '', sendAsMe: false }));
+  route('PUT', '/api/dashboard/guilds/:id/tickets/signature', () => ({ content: '', sendAsMe: false }));
+
   // GET /api/dashboard/guilds/:id/tickets/transcripts
   route('GET', '/api/dashboard/guilds/:id/tickets/transcripts', () => []);
 

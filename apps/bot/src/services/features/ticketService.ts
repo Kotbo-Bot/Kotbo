@@ -1,5 +1,5 @@
 import type { Ticket, TicketMacro } from '@prisma/client';
-import type { ColorResolvable } from 'discord.js';
+import type { ColorResolvable, GuildTextBasedChannel, MessageMentionOptions } from 'discord.js';
 import { AuditLogEvent } from 'discord.js';
 import { type Client, type APIInteractionGuildMember, type ButtonInteraction, type ModalSubmitInteraction, type StringSelectMenuInteraction, TextChannel, ChannelType, PermissionFlagsBits, PermissionsBitField, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags, ContainerBuilder, TextDisplayBuilder, SeparatorBuilder, SeparatorSpacingSize, type Guild, type GuildMember, type ThreadChannel, Message, ComponentType } from 'discord.js';
 import { kotboEventBus } from '@kotbo/core';
@@ -24,12 +24,15 @@ import * as m from '../../lib/paraglide/messages.js';
 import { isModuleEnabled } from '../core/moduleGate.js';
 import {
   applyMacroActions,
+  getStaffSignature,
   listUsableMacros,
   MACRO_SELECT_LIMIT,
   markMacroUsed,
   renderMacroContent,
   sendAutoMacros,
+  SIGNATURE_MAX_LENGTH,
   suggestMacros,
+  withSignature,
 } from './ticketMacroService.js';
 import {
   ACTIVE_TICKET_STATUSES,
@@ -944,16 +947,144 @@ export async function handleTicketSelectMenu(client: Client, customId: string, i
 // ─── Macros ──────────────────────────────────────────────────────────────────
 
 /**
- * Selecteur ephemere des macros utilisables dans ce ticket.
+ * Panneau ephemere du staff dans un ticket : ses macros, une reponse libre et
+ * sa signature. Envoye a la prise en charge et rouvert par le bouton Macros.
  *
  * Le selecteur ne montre que ce que ce membre du staff peut envoyer ici : les
  * macros restreintes a d'autres types de ticket ou a d'autres roles n'y
  * apparaissent pas, plutot que d'echouer au moment du clic.
  */
+async function buildStaffPanel(ticket: Ticket, member: GuildMember) {
+  const [macros, signature] = await Promise.all([
+    listUsableMacros({
+      guildId: ticket.guildId,
+      ticketTypeId: ticket.ticketTypeId,
+      staffRoleIds: [...member.roles.cache.keys()],
+    }),
+    getStaffSignature(ticket.guildId, member.id),
+  ]);
+
+  // Les macros suggerees remontent en tete : c'est tout l'interet de la
+  // suggestion, qui ne sert a rien si elle reste noyee au milieu du menu.
+  const suggested = new Set(suggestMacros(macros, `${ticket.reason} ${ticket.description}`).map((m) => m.id));
+  const ordered = [...macros].sort((a, b) => Number(suggested.has(b.id)) - Number(suggested.has(a.id)));
+
+  const lines = [
+    '🛠️ **Panneau du ticket** · visible par vous seul.',
+    macros.length === 0
+      ? 'ℹ️ Aucune macro disponible pour ce ticket. Elles se créent depuis le dashboard, onglet Tickets › Macros.'
+      : suggested.size > 0
+        ? `⚡ ${macros.length} macro(s) disponibles - ${suggested.size} suggérée(s) d'après la demande du membre.`
+        : `⚡ ${macros.length} macro(s) disponibles.`,
+    signature.content
+      ? '🖋️ Votre signature est ajoutée sous vos macros et vos réponses.'
+      : '🖋️ Aucune signature : ajoutez-en une pour signer vos macros et vos réponses.',
+    signature.sendAsMe
+      ? '👤 Vos messages partent à votre nom (pseudo et avatar).'
+      : '🤖 Vos messages partent au nom du bot.',
+  ];
+
+  const components: ActionRowBuilder<StringSelectMenuBuilder | ButtonBuilder>[] = [];
+  if (macros.length > 0) {
+    components.push(new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
+      new StringSelectMenuBuilder()
+        .setCustomId(`ticket:macro_send:${ticket.id}`)
+        .setPlaceholder('Choisir une réponse')
+        .addOptions(
+          ordered.slice(0, MACRO_SELECT_LIMIT).map((macro) => ({
+            label: macro.name.slice(0, 100),
+            value: macro.id,
+            description: [suggested.has(macro.id) ? '★ suggérée' : null, macro.category]
+              .filter(Boolean)
+              .join(' · ')
+              .slice(0, 100) || undefined,
+            emoji: macro.emoji || undefined,
+          })),
+        ),
+    ));
+  }
+  components.push(new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder().setCustomId(`ticket:reply:${ticket.id}`).setLabel('Répondre').setStyle(ButtonStyle.Primary).setEmoji('✍️'),
+    new ButtonBuilder().setCustomId(`ticket:signature:${ticket.id}`).setLabel('Ma signature').setStyle(ButtonStyle.Secondary).setEmoji('🖋️'),
+    new ButtonBuilder()
+      .setCustomId(`ticket:sendas:${ticket.id}`)
+      .setLabel(signature.sendAsMe ? 'Envoyer via le bot' : 'Envoyer à mon nom')
+      .setStyle(ButtonStyle.Secondary)
+      .setEmoji(signature.sendAsMe ? '🤖' : '👤'),
+  ));
+
+  return { content: lines.join('\n'), components };
+}
+
+/**
+ * Poste un message du staff dans un ticket : signature collee dessous, envoi a
+ * son nom par webhook s'il l'a choisi, et tour de parole enregistre. Le suivi
+ * des messages ignore bots et webhooks, comme pour la reponse du dashboard.
+ */
+async function postStaffMessage(params: {
+  channel: { send: (options: { content: string; allowedMentions?: MessageMentionOptions }) => Promise<{ id: string }> };
+  ticket: Ticket;
+  staff: GuildMember;
+  /** Texte deja rendu. */
+  content: string;
+  vars: Parameters<typeof renderMacroContent>[1];
+  allowedMentions?: MessageMentionOptions;
+}): Promise<string> {
+  const settings = await getStaffSignature(params.ticket.guildId, params.staff.id);
+  const signature = settings.content ? renderMacroContent(settings.content, params.vars) : null;
+
+  let messageId = '';
+  for (const part of withSignature(params.content, signature)) {
+    const options = { content: part, allowedMentions: params.allowedMentions };
+    const viaWebhook = settings.sendAsMe ? await sendAsStaff(params.channel, params.staff, options) : null;
+    const sent = viaWebhook ?? await params.channel.send(options);
+    messageId ||= sent.id;
+  }
+
+  const now = new Date();
+  await prisma.ticket.update({
+    where: { id: params.ticket.id },
+    data: { lastStaffMessageAt: now, ...(params.ticket.firstResponseAt ? {} : { firstResponseAt: now, firstResponderId: params.staff.id }) },
+  }).catch(() => null);
+
+  return messageId;
+}
+
+/**
+ * Envoie au nom du staff via un webhook du salon (celui du parent pour un fil).
+ * Null quand c'est impossible (permission, type de salon, pseudo refuse par
+ * Discord) : l'appelant retombe alors sur un envoi par le bot.
+ */
+async function sendAsStaff(
+  channel: unknown,
+  staff: GuildMember,
+  options: { content: string; allowedMentions?: MessageMentionOptions },
+): Promise<{ id: string } | null> {
+  const target = channel as GuildTextBasedChannel;
+  const thread = target.isThread() ? target : null;
+  const parent = thread ? thread.parent : target;
+  if (!parent || !('fetchWebhooks' in parent)) return null;
+
+  const me = parent.guild.members.me;
+  if (!me?.permissionsIn(parent).has(PermissionFlagsBits.ManageWebhooks)) return null;
+
+  // Discord ne rend le jeton que des webhooks crees par le bot : rien a stocker.
+  const hooks = await parent.fetchWebhooks().catch(() => null);
+  const hook = hooks?.find((h) => h.owner?.id === me.id && h.token !== null)
+    ?? await parent.createWebhook({ name: 'Kotbo · tickets', reason: 'Réponses de ticket au nom du staff' }).catch(() => null);
+  if (!hook?.token) return null;
+
+  return hook.send({
+    ...options,
+    username: staff.displayName.slice(0, 80),
+    avatarURL: staff.displayAvatarURL(),
+    ...(thread ? { threadId: thread.id } : {}),
+  }).catch(() => null);
+}
+
 async function showMacroPicker(
   interaction: ButtonInteraction,
   ticketId: string,
-  guildId: string,
   member: GuildMember,
   guildConfig: Record<string, unknown>,
 ): Promise<void> {
@@ -968,47 +1099,7 @@ async function showMacroPicker(
     return;
   }
 
-  const macros = await listUsableMacros({
-    guildId,
-    ticketTypeId: ticket.ticketTypeId,
-    staffRoleIds: [...member.roles.cache.keys()],
-  });
-
-  if (macros.length === 0) {
-    await interaction.reply({
-      content: 'ℹ️ Aucune macro disponible pour ce ticket. Elles se créent depuis le dashboard, onglet Tickets › Macros.',
-      flags: [MessageFlags.Ephemeral],
-    });
-    return;
-  }
-
-  // Les macros suggerees remontent en tete : c'est tout l'interet de la
-  // suggestion, qui ne sert a rien si elle reste noyee au milieu du menu.
-  const suggested = new Set(suggestMacros(macros, `${ticket.reason} ${ticket.description}`).map((m) => m.id));
-  const ordered = [...macros].sort((a, b) => Number(suggested.has(b.id)) - Number(suggested.has(a.id)));
-
-  const select = new StringSelectMenuBuilder()
-    .setCustomId(`ticket:macro_send:${ticketId}`)
-    .setPlaceholder('Choisir une réponse')
-    .addOptions(
-      ordered.slice(0, MACRO_SELECT_LIMIT).map((macro) => ({
-        label: macro.name.slice(0, 100),
-        value: macro.id,
-        description: [suggested.has(macro.id) ? '★ suggérée' : null, macro.category]
-          .filter(Boolean)
-          .join(' · ')
-          .slice(0, 100) || undefined,
-        emoji: macro.emoji || undefined,
-      })),
-    );
-
-  await interaction.reply({
-    content: suggested.size > 0
-      ? `⚡ ${macros.length} macro(s) disponibles - ${suggested.size} suggérée(s) d'après la demande du membre.`
-      : `⚡ ${macros.length} macro(s) disponibles.`,
-    components: [new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select)],
-    flags: [MessageFlags.Ephemeral],
-  });
+  await interaction.reply({ ...(await buildStaffPanel(ticket, member)), flags: [MessageFlags.Ephemeral] });
 }
 
 /**
@@ -1026,16 +1117,16 @@ export async function postMacroInTicket(params: {
   channel: { send: (options: { content: string }) => Promise<{ id: string }> };
   actor: { id: string; username: string };
   staffTag: string;
+  /** Staff qui envoie : sa signature et son choix d'expediteur s'appliquent. Absent pour le MCP. */
+  staff?: GuildMember;
 }): Promise<{ content: string; messageId: string; applied: string[]; closed: boolean }> {
   const { client, guild, macro, ticket, actor } = params;
 
-  const content = renderMacroContent(macro.content, {
-    ticket,
-    staffTag: params.staffTag,
-    guildName: guild.name,
-  });
-
-  const sent = await params.channel.send({ content });
+  const vars = { ticket, staffTag: params.staffTag, guildName: guild.name };
+  const content = renderMacroContent(macro.content, vars);
+  const messageId = params.staff
+    ? await postStaffMessage({ channel: params.channel, ticket, staff: params.staff, content, vars })
+    : (await params.channel.send({ content })).id;
   await markMacroUsed(macro.id);
 
   const applied = await applyMacroActions({ client, guild, macro, ticket, actor });
@@ -1053,7 +1144,7 @@ export async function postMacroInTicket(params: {
     }
   }
 
-  return { content, messageId: sent.id, applied, closed };
+  return { content, messageId, applied, closed };
 }
 
 /** Poste la macro choisie dans le salon du ticket, puis applique ses actions. */
@@ -1099,6 +1190,7 @@ async function sendChosenMacro(
     channel,
     actor: { id: member.id, username: member.user.username },
     staffTag: `<@${member.id}>`,
+    staff: member,
   });
 
   await interaction.update({
@@ -1458,7 +1550,7 @@ export async function handleTicketButton(client: Client, customId: string, inter
 
   // 1 ter. Macros : selecteur ephemere des reponses pre-ecrites du serveur.
   if (customId.startsWith('ticket:macros:')) {
-    await showMacroPicker(interaction, customId.split(':')[2] ?? '', guildId, member as GuildMember, guildConfig);
+    await showMacroPicker(interaction, customId.split(':')[2] ?? '', member as GuildMember, guildConfig);
     return;
   }
 
@@ -1618,8 +1710,62 @@ export async function handleTicketButton(client: Client, customId: string, inter
       await announceTicketClaim(ticketChannel, successEmbed('Pris en charge', `Ce ticket est désormais pris en charge par <@${user.id}>.`), { mentionUserIds: [user.id] });
     }
 
+    // Panneau personnel du staff qui vient de prendre le ticket.
+    await interaction.followUp({ ...(await buildStaffPanel(ticket, member as GuildMember)), flags: [MessageFlags.Ephemeral] })
+      .catch((err) => logger.error('Ticket', 'Panneau staff non envoyé après prise en charge:', err));
+
     // Logger
     await logTicketEvent(client, guildConfig, 'CLAIMED', ticket, user);
+    return;
+  }
+
+  // 2 ter. Panneau staff : réponse libre signée, signature et expéditeur.
+  if (action === 'reply' || action === 'signature' || action === 'sendas') {
+    if (!canManageTicket(member as GuildMember, guildConfig, ticket.staffRoleId)) {
+      await interaction.reply({ content: '❌ Seuls les membres du personnel peuvent utiliser ce panneau.', flags: [MessageFlags.Ephemeral] });
+      return;
+    }
+
+    if (action === 'sendas') {
+      const { sendAsMe } = await getStaffSignature(guildId, user.id);
+      await prisma.ticketStaffSignature.upsert({
+        where: { guildId_userId: { guildId, userId: user.id } },
+        create: { guildId, userId: user.id, sendAsMe: !sendAsMe },
+        update: { sendAsMe: !sendAsMe },
+      });
+      await interaction.update(await buildStaffPanel(ticket, member as GuildMember));
+      return;
+    }
+
+    if (action === 'reply') {
+      await interaction.showModal(new ModalBuilder()
+        .setCustomId(`modal:ticket:reply:${ticketId}`)
+        .setTitle('Répondre au ticket')
+        .addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(
+          new TextInputBuilder()
+            .setCustomId('content')
+            .setLabel('Message (votre signature sera ajoutée)')
+            .setStyle(TextInputStyle.Paragraph)
+            .setMaxLength(2000)
+            .setRequired(true),
+        )));
+      return;
+    }
+
+    const current = (await getStaffSignature(guildId, user.id)).content;
+    const input = new TextInputBuilder()
+      .setCustomId('signature')
+      .setLabel('Signature (vide = supprimer)')
+      .setStyle(TextInputStyle.Paragraph)
+      .setMaxLength(SIGNATURE_MAX_LENGTH)
+      .setRequired(false)
+      .setPlaceholder('✅ • {staff} - Modérateur\n🎧 • Support de {server}');
+    if (current) input.setValue(current);
+
+    await interaction.showModal(new ModalBuilder()
+      .setCustomId('modal:ticket:signature')
+      .setTitle('Ma signature de ticket')
+      .addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(input)));
     return;
   }
 
@@ -2904,6 +3050,54 @@ export async function handleTicketModalSubmit(client: Client, customId: string, 
   const guildConfig = await prisma.guild.findUnique({ where: { id: guildId } });
   if (!guildConfig) {
     await interaction.reply({ content: '❌ Configuration du serveur introuvable.', flags: [MessageFlags.Ephemeral] });
+    return;
+  }
+
+  // ─── Signature du staff ──────────
+  if (customId === 'modal:ticket:signature') {
+    const content = interaction.fields.getTextInputValue('signature').trim().slice(0, SIGNATURE_MAX_LENGTH);
+    // Une signature videe garde la ligne : elle porte aussi le choix d'expediteur.
+    await prisma.ticketStaffSignature.upsert({
+      where: { guildId_userId: { guildId, userId: interaction.user.id } },
+      create: { guildId, userId: interaction.user.id, content },
+      update: { content },
+    });
+    await interaction.reply({
+      content: content ? `✅ Signature enregistrée. Aperçu :\n\n${content}` : '🗑️ Signature supprimée.',
+      allowedMentions: { parse: [] },
+      flags: [MessageFlags.Ephemeral],
+    });
+    return;
+  }
+
+  // ─── Réponse libre signée, depuis le panneau staff ──────────
+  if (customId.startsWith('modal:ticket:reply:')) {
+    await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
+
+    const ticket = await prisma.ticket.findFirst({ where: { id: customId.split(':')[3], guildId } });
+    const member = interaction.member as GuildMember | null;
+    if (!ticket || !member || !canManageTicket(member, guildConfig, ticket.staffRoleId)) {
+      await interaction.editReply({ content: '❌ Ticket introuvable ou accès refusé.' });
+      return;
+    }
+
+    const channel = interaction.channel;
+    if (!channel || !channel.isTextBased() || !('send' in channel)) {
+      await interaction.editReply({ content: '❌ Ce salon ne permet pas d’envoyer la réponse.' });
+      return;
+    }
+
+    const vars = { ticket, staffTag: `<@${member.id}>`, guildName: guild.name };
+    await postStaffMessage({
+      channel,
+      ticket,
+      staff: member,
+      content: renderMacroContent(interaction.fields.getTextInputValue('content').trim(), vars),
+      vars,
+      allowedMentions: { parse: ['users'] },
+    });
+
+    await interaction.editReply({ content: '✅ Réponse envoyée.' });
     return;
   }
 

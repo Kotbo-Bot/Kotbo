@@ -3,6 +3,7 @@ import prisma from '../../utils/db.js';
 import { errorContainer, infoContainer, kotboContainer, successContainer } from '../../utils/embeds.js';
 import { E } from '../../utils/emojis.js';
 import { createBackup } from '../../services/system/backupService.js';
+import { countKotboConfigRows } from '../../services/system/kotboConfigBackup.js';
 import { restoreBackup, RestoreOptions } from '../../services/system/restoreService.js';
 import type { BackupData } from '../../services/system/backupService.js';
 import { MAX_BACKUP_IMPORT_BYTES, parseBackupImport } from '../../services/system/backupImportValidation.js';
@@ -16,7 +17,7 @@ const MAX_BACKUPS_PER_GUILD = 3;
 
 export const data = new SlashCommandBuilder()
   .setName('backup')
-  .setDescription('Gère les sauvegardes du serveur (roles, salons, permissions, emojis, stickers)')
+  .setDescription('Gère les sauvegardes du serveur (rôles, salons, emojis, stickers et config Kotbo)')
   .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
   .addSubcommand((sub) =>
     sub
@@ -45,6 +46,9 @@ export const data = new SlashCommandBuilder()
       )
       .addBooleanOption((option) =>
         option.setName('inclure_stickers').setDescription('Inclure les stickers (défaut: true)').setRequired(false),
+      )
+      .addBooleanOption((option) =>
+        option.setName('inclure_config').setDescription('Inclure la configuration Kotbo : modules, staff, formulaires… (défaut: true)').setRequired(false),
       ),
   )
   .addSubcommand((sub) =>
@@ -145,6 +149,7 @@ async function handleCreate(
   const includeChannels = interaction.options.getBoolean('inclure_salons') ?? true;
   const includeEmojis = interaction.options.getBoolean('inclure_emojis') ?? true;
   const includeStickers = interaction.options.getBoolean('inclure_stickers') ?? true;
+  const includeKotbo = interaction.options.getBoolean('inclure_config') ?? true;
 
   // Vérifier le nombre de backups existants
   const existingBackups = await prisma.serverBackup.count({
@@ -175,6 +180,7 @@ async function handleCreate(
     includeChannels,
     includeEmojis,
     includeStickers,
+    includeKotbo,
     createdByUserId: interaction.user.id,
     createdByUsername: interaction.user.username,
     createdByTag: interaction.user.discriminator ?? '0000',
@@ -195,6 +201,7 @@ async function handleCreate(
           `${E.arrow} Messages: ${backup.messagesCount}`,
           `${E.arrow} Emojis: ${backup.emojisCount}`,
           `${E.arrow} Stickers: ${backup.stickersCount}`,
+          `${E.arrow} Config Kotbo: ${countKotboConfigRows((backup.data as unknown as BackupData).kotbo)} éléments`,
           `${E.arrow} Taille: ${(backup.sizeBytes / 1024).toFixed(2)} KB`,
         ].join('\n'),
       ],
@@ -279,6 +286,8 @@ async function handleRestore(interaction: ChatInputCommandInteraction, guildId: 
     includeEmojis: backup.includeEmojis,
     includeStickers: backup.includeStickers,
     includeMessages: backup.includeMessages,
+    // Sûr : la sauvegarde appartient à ce serveur (vérifié plus haut) et un import n'en porte jamais.
+    includeKotbo: true,
     conflictResolution: 'ask',
   };
 

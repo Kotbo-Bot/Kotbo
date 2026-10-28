@@ -35,7 +35,7 @@ export class AegisRequestError extends Error {
   }
 }
 
-const DEFAULT_BASE_URL = 'https://aegisai.marvideo.fr';
+const DEFAULT_BASE_URL = 'https://aegisai.kotbo.fr';
 const FAILURES_BEFORE_OPEN = 5;
 const OPEN_DURATION_MS = 30_000;
 const LATENCY_SAMPLES = 200;

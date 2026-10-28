@@ -263,6 +263,10 @@ export async function registerCrons(client: Client): Promise<void> {
     'meeting-notifications': async () => {
       await processMeetingNotifications();
     },
+    'tutoring-report-reminders': async () => {
+      const { sendTutoringReportReminders } = await import('../services/staff/tutoringOverview.js');
+      await sendTutoringReportReminders();
+    },
     'channel-health-analysis': async () => {
       logger.debug('Cron', 'Analyse de santé des salons...');
       const { runChannelHealthAnalysis } = await import('../services/analytics/channelHealthService.js');
@@ -809,6 +813,24 @@ export async function registerCrons(client: Client): Promise<void> {
     });
   });
 
+  // Convocations restées sans réponse à l'échéance : alerte, sanction ou rien,
+  // selon ce que le staff a choisi. Chaque échéance est réservée avant d'agir.
+  cron.schedule('* * * * *', async () => {
+    await runLocalSweep('convocations', async () => {
+      const { processExpiredConvocations } = await import('../services/moderation/convocationService.js');
+      await processExpiredConvocations();
+    });
+  });
+
+  // Panneaux « liste du staff » : re-rendus toutes les 10 minutes, le message
+  // n'est édité que si le contenu a changé.
+  cron.schedule('*/10 * * * *', async () => {
+    await runLocalSweep('staff-list-panels', async () => {
+      const { refreshStaffListPanels } = await import('../services/staff/staffListPanelService.js');
+      await refreshStaffListPanels();
+    });
+  });
+
   // Workflows : purge du journal des exécutions (tous les jours à 04:25). En
   // file, contrairement aux balayages : elle porte sur toute la base, un seul
   // processus suffit.
@@ -886,6 +908,14 @@ export async function registerCrons(client: Client): Promise<void> {
     await runCronJob('meeting-notifications', async () => {
       await processMeetingNotifications();
     }, 3000);
+  });
+
+  // 🎓 Tutorat : relance des tuteurs dont un point d'étape approche ou traîne (une fois par jour)
+  cron.schedule('0 10 * * *', async () => {
+    await runCronJob('tutoring-report-reminders', async () => {
+      const { sendTutoringReportReminders } = await import('../services/staff/tutoringOverview.js');
+      await sendTutoringReportReminders();
+    }, 5000);
   });
 
   // ⏰ Rappels Staff: Toutes les minutes

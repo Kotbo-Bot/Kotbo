@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import {
   cronMatches,
+  cronOccurrences,
   cronToSchedule,
   isValidCron,
   parseCron,
@@ -187,5 +188,36 @@ describe('structure analysee', () => {
   test('parseCron distingue l etoile d une enumeration complete', () => {
     expect(parseCron('* * * * *')!.dayOfWeekWildcard).toBeTrue();
     expect(parseCron('* * * * 0-6')!.dayOfWeekWildcard).toBeFalse();
+  });
+});
+
+describe('cronOccurrences', () => {
+  const iso = (dates: Date[]) => dates.map((d) => d.toISOString());
+
+  test('tous les jours a 9h30 UTC sur trois jours', () => {
+    expect(iso(cronOccurrences('30 9 * * *', at('2026-10-26T00:00:00'), at('2026-10-28T23:59:00'), 'UTC'))).toEqual([
+      '2026-10-26T09:30:00.000Z',
+      '2026-10-27T09:30:00.000Z',
+      '2026-10-28T09:30:00.000Z',
+    ]);
+  });
+
+  test('lit le motif dans le fuseau donne', () => {
+    // 9h a Paris en hiver = 8h UTC.
+    expect(iso(cronOccurrences('0 9 * * 1', at('2026-11-01T00:00:00'), at('2026-11-08T00:00:00'), 'Europe/Paris'))).toEqual([
+      '2026-11-02T08:00:00.000Z',
+    ]);
+  });
+
+  test('borne au debut et a la fin, et respecte la limite', () => {
+    expect(iso(cronOccurrences('*/15 10 * * *', at('2026-10-26T10:20:00'), at('2026-10-26T10:45:00'), 'UTC'))).toEqual([
+      '2026-10-26T10:30:00.000Z',
+      '2026-10-26T10:45:00.000Z',
+    ]);
+    expect(cronOccurrences('* * * * *', at('2026-10-26T00:00:00'), at('2026-10-27T00:00:00'), 'UTC', 5)).toHaveLength(5);
+  });
+
+  test('motif invalide ou a six champs : aucune occurrence', () => {
+    expect(cronOccurrences('0 0 9 * * *', at('2026-10-26T00:00:00'), at('2026-10-27T00:00:00'), 'UTC')).toEqual([]);
   });
 });

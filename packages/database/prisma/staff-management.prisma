@@ -78,12 +78,16 @@ model TestingPeriod {
   plannedDurationDays Int @default(14)
   targetGrade String?
   hierarchyId String? // Hiérarchie ciblée, détermine quelle checklist de tutorat s'applique
+  // Liste de suivi des missions confiées pendant le tutorat : ses cartes sont
+  // attribuées au tutoré et apparaissent dans son planning.
+  doingListId String?
 
   notes String?
 
   staffMember StaffMember @relation("StaffMemberTestingPeriods", fields: [staffUserId], references: [id], onDelete: Cascade)
   mentor StaffMember? @relation("StaffMemberMentor", fields: [mentorId], references: [id], onDelete: SetNull)
   hierarchy StaffHierarchy? @relation("HierarchyTestingPeriods", fields: [hierarchyId], references: [id], onDelete: SetNull)
+  doingList DoingList? @relation(fields: [doingListId], references: [id], onDelete: SetNull)
   reports MentorReport[]
 
   lastReportAt DateTime?

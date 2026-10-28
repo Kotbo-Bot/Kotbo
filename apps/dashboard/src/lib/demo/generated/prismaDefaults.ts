@@ -3717,6 +3717,7 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "rolePersistMode": "ALL",
     "rolePersistRoleIds": [],
     "rolePersistMaxDays": 90,
+    "rolePersistStaff": false,
     "createdAt": "__NOW__",
     "updatedAt": "__NOW__"
   },

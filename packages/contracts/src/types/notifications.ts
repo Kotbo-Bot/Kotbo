@@ -40,6 +40,7 @@ export const NOTIFICATION_KINDS = {
   'staff.testing_ended': { category: 'staff', mandatory: true },
   'staff.mentor_assigned': { category: 'staff' },
   'staff.mentor_report': { category: 'staff' },
+  'staff.mentor_report_due': { category: 'staff' },
   'staff.manager_note': { category: 'staff' },
   'staff.procedure_published': { category: 'staff' },
   'staff.poll_created': { category: 'staff' },

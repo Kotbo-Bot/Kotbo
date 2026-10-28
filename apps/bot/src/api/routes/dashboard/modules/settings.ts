@@ -441,15 +441,20 @@ export async function handleSettingsRoutes(ctx: ModuleRouteContext): Promise<boo
         });
       }
 
-      await pushAudit(guildId, {
-        user: auditUser,
-        action: 'Sauvegarde paramètres globaux',
-        context: getGuildName(client, guildId),
-        module: 'Dashboard',
-        eventType: 'Manuel',
-        details: 'Paramètres globaux mis à jour.',
-        channelId: null
-      });
+      // Les favoris de la barre laterale sont une preference d'interface, resynchronisee
+      // a chaque changement de serveur : ils ne meritent pas une ligne d'audit.
+      const onlySidebarFavorites = Object.keys(body).every((key) => key === 'sidebarFavorites');
+      if (!onlySidebarFavorites) {
+        await pushAudit(guildId, {
+          user: auditUser,
+          action: 'Sauvegarde paramètres globaux',
+          context: getGuildName(client, guildId),
+          module: 'Dashboard',
+          eventType: 'Manuel',
+          details: 'Paramètres globaux mis à jour.',
+          channelId: null
+        });
+      }
 
       json(res, 200, { ok: true });
     } catch (err) {

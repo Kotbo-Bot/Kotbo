@@ -38,5 +38,6 @@ export * from './automod/presets.js';
 export * from './tempVoice/types.js';
 export * from './tempVoice/diff.js';
 export * from './autoThread/index.js';
+export * from './threadPanel/index.js';
 export * from './errors.js';
 export * from './site/index.js';

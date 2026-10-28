@@ -12,6 +12,10 @@ export async function updateFunConfig(config, guildId = authStore.selectedGuildI
   return dashboardRequest('/fun', { method: 'PATCH', successMessage: m.api_ok_update_fun_config(), payload: config, guildId, errorContext: 'API Error (Update Fun Config):' });
 }
 
+export async function fetchConfessions(guildId = authStore.selectedGuildId) {
+  return dashboardRequest('/fun/confessions', { method: 'GET', guildId, errorContext: 'API Error (Fetch Confessions):' });
+}
+
 export async function resetCountingGame(guildId = authStore.selectedGuildId) {
   return dashboardRequest('/fun/counting/reset', { method: 'POST', successMessage: m.api_ok_reset_counting_game(), guildId, errorContext: 'API Error (Reset Counting):' });
 }

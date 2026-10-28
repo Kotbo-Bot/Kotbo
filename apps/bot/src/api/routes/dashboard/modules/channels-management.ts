@@ -68,6 +68,7 @@ const CHANNEL_FEATURES = {
   funNeverSay: { kind: 'single', field: 'funNeverSayChannelId', label: 'Ni oui ni non' },
   funEmojiOnly: { kind: 'single', field: 'funEmojiOnlyChannelId', label: 'Emoji uniquement' },
   funImageOfDay: { kind: 'single', field: 'funImageOfDayChannelId', label: 'Image du jour' },
+  funConfession: { kind: 'single', field: 'funConfessionChannelId', label: 'Confessions' },
 } as const;
 
 type ChannelFeatureKey = keyof typeof CHANNEL_FEATURES;

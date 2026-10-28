@@ -21,6 +21,8 @@
     description = '',
     icon: _icon = 'Grid',
     featureKey = '',
+    /** Sans en-tete ni espacement : la page est l'outil lui-meme (Planning). */
+    bare = false,
     children,
     actions = undefined
   } = $props();
@@ -110,9 +112,10 @@
   });
 </script>
 
-<div class="module-page flex flex-col gap-6">
+<div class="module-page flex flex-col {bare ? 'module-page--bare' : 'gap-6'}">
   <InlineFeedback state={saveAction} />
 
+  {#if !bare}
   <header class="module-page__header flex flex-col md:flex-row md:items-end justify-between gap-x-6 gap-y-3">
     <div class="module-page__identity min-w-0">
       <div class="flex items-center gap-2 min-w-0">
@@ -140,6 +143,7 @@
       {/if}
     </div>
   </header>
+  {/if}
 
   <!-- Un module eteint ferme ses routes API : la page ne peut ni charger ni
        enregistrer quoi que ce soit. Le dire ici, une fois, evite que chaque
@@ -147,7 +151,7 @@
   <!-- `data-guide-blocker` : un guidage vers un reglage de la page montre
        d'abord cet encadre, le reglage restant inerte tant qu'il est la. -->
   {#if module && !isFixed && lockedByPlan}
-    <div data-guide-blocker="plan">
+    <div data-guide-blocker="plan" class={bare ? "m-3" : ""}>
       <!-- Une vitrine, pas un mur : on dit ce que le module apporte, et la page
            reste visible en dessous pour qu'on voie ce qu'on debloque. -->
       <Callout variant="info" icon="Lock" title="« {title} » fait partie de l'offre {requiredPlanLabel}">
@@ -158,7 +162,7 @@
       </Callout>
     </div>
   {:else if module && !isFixed && !isModuleEnabled}
-    <div data-guide-blocker="module-off">
+    <div data-guide-blocker="module-off" class={bare ? "m-3" : ""}>
       <Callout variant="warning" title={m.mp_module_off_title()}>
         {m.mp_module_off_desc()}
         {#snippet actions()}
@@ -170,7 +174,7 @@
     </div>
   {/if}
 
-  <main class="module-page__body flex-1 space-y-8 {isModuleEnabled || isFixed || featureKey === 'sanctions' || featureKey === 'channel_links' || featureKey === 'staff_server' ? '' : 'opacity-40 pointer-events-none grayscale-[0.5] transition-all duration-500'}">
+  <main class="module-page__body flex-1 {bare ? '' : 'space-y-8'} {isModuleEnabled || isFixed || featureKey === 'sanctions' || featureKey === 'channel_links' || featureKey === 'staff_server' ? '' : 'opacity-40 pointer-events-none grayscale-[0.5] transition-all duration-500'}">
     {@render children()}
   </main>
 </div>

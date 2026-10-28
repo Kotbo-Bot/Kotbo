@@ -23,6 +23,7 @@ export type BackgroundJobName =
   | 'analytics-snapshot'
   | 'missing-reports-check'
   | 'meeting-notifications'
+  | 'tutoring-report-reminders'
   | 'dc-scan'
   | 'ticket-inactivity'
   | 'satisfaction-prompt-expiry'

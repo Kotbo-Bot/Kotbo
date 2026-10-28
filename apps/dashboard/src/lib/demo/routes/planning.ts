@@ -157,6 +157,43 @@ export function registerPlanningRoutes(): void {
     };
   });
 
+  route('GET', `${base}/absences/planning-extras`, () => ({
+    items: [
+      {
+        kind: 'server_event', id: 'demo-event-1', title: 'Soirée jeux communautaire', start: at(2, 21), end: at(2, 23),
+        description: 'Among Us et Gartic Phone en vocal.', href: '/events', externalUrl: null,
+        meta: { status: 'SCHEDULED', location: 'Salon vocal Événements', channelId: null, interested: 34, managedByKotbo: true },
+      },
+      {
+        kind: 'giveaway', id: 'demo-giveaway-1', title: 'Nitro 1 mois', start: at(4, 18), end: null,
+        description: null, href: '/giveaways', externalUrl: null,
+        meta: { ended: false, participants: 128, winnerCount: 1, channelId: null },
+      },
+      ...[0, 7].map((d) => ({
+        kind: 'schedule', id: `demo-schedule-${d}`, title: 'Rappel du règlement', start: at(d + 1, 10), end: null,
+        description: 'Pense à relire le règlement épinglé.', href: '/schedules', externalUrl: null,
+        meta: { taskType: 'SEND_MESSAGE', channelId: null, runOnce: false },
+      })),
+    ],
+  }));
+
+  // La demo n'a pas de flux iCal reel : le lien montre la forme, sans contenu.
+  route('GET', `${base}/absences/ical-link`, () => ({ path: '/api/public/planning/demo.ics' }));
+  route('POST', `${base}/meetings/:meetingId/rsvp`, () => ({ ok: true }));
+
+  route('GET', `${base}/absences/superiors`, () => ({
+    superiors: staffMembers()
+      .filter((s) => s.userId !== ME.id)
+      .slice(0, 4)
+      .map((s, i) => ({
+        userId: s.userId,
+        displayName: s.displayName ?? s.username,
+        avatarUrl: s.avatarUrl ?? null,
+        grade: s.grade ?? null,
+        reason: i === 0 ? 'tutor' : i === 1 ? 'owner' : 'rank',
+      })),
+  }));
+
   route('GET', `${base}/absences/config`, () => ({
     config: { enabled: true, requireApproval: true, maxDurationDays: 30, notifyChannelId: '900000000000000318', roleAccess: [], roleAccessByRole: [], notificationTargets: [] },
   }));

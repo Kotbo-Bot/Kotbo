@@ -422,6 +422,14 @@
         <div class="h-px bg-outline-variant my-2" aria-hidden="true"></div>
         {#each spaces as space (space.key)}
           {@render railLink(space.items[0].href, space.icon, space.label, activeSpaceKey === space.key)}
+          <!-- Sans cela, seule la première page de chaque espace serait atteignable replié. -->
+          {#if activeSpaceKey === space.key && space.items.length > 1}
+            <div class="flex flex-col gap-1 border-l border-outline-variant ml-2 pl-1">
+              {#each space.items as item (item.href)}
+                {@render railLink(item.href, item.icon ?? 'circle', item.name, isActiveNavItem(item.href))}
+              {/each}
+            </div>
+          {/if}
         {/each}
       </div>
     {:else}

@@ -24,6 +24,7 @@ import {
   completeOral,
   assignTutor,
 } from '../../../services/staff/recruitmentService.js';
+import { deleteRecruitmentPanel, saveRecruitmentPanel } from '../../../services/staff/recruitmentPanelService.js';
 
 /**
  * Handles Webhook candidature submissions (does NOT require user authentication)
@@ -101,6 +102,38 @@ export async function handleRecruitmentRoutes(
       jsonFailure(res, err, 'Erreur lors de la récupération des candidatures', 'RecruitmentAPI');
     }
     return true;
+  }
+
+  // Panneaux « statut des recrutements »
+  // GET|POST /recruitment/panels, PATCH|DELETE /recruitment/panels/:id
+  if (parts[5] === 'panels' && (parts.length === 6 || parts.length === 7)) {
+    const panelId = parts[6];
+    try {
+      if (parts.length === 6 && method === 'GET') {
+        const panels = await prisma.recruitmentPanel.findMany({ where: { guildId }, orderBy: { createdAt: 'asc' } });
+        json(res, 200, { panels });
+        return true;
+      }
+      if (parts.length === 6 && method === 'POST') {
+        const panel = await saveRecruitmentPanel(guildId, (await readJsonBody<Record<string, unknown>>(req)) ?? {});
+        json(res, 201, { panel });
+        return true;
+      }
+      if (panelId && method === 'PATCH') {
+        const panel = await saveRecruitmentPanel(guildId, (await readJsonBody<Record<string, unknown>>(req)) ?? {}, panelId);
+        json(res, 200, { panel });
+        return true;
+      }
+      if (panelId && method === 'DELETE') {
+        const deleted = await deleteRecruitmentPanel(guildId, panelId);
+        json(res, deleted ? 200 : 404, deleted ? { ok: true } : { error: 'Panneau introuvable' });
+        return true;
+      }
+    } catch (err) {
+      logger.error('RecruitmentAPI', 'Error on recruitment panel:', err);
+      jsonFailure(res, err, 'Erreur sur le panneau de recrutement', 'RecruitmentAPI');
+      return true;
+    }
   }
 
   // PATCH /api/dashboard/guilds/:guildId/recruitment/config - Update recruitment configuration

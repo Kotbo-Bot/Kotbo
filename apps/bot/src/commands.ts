@@ -12,6 +12,7 @@ import { epochCommand } from './commands/utility/epoch.js';
 import { eventCommand } from './commands/utility/event.js';
 import { ctfCommand } from './commands/fun/ctf.js';
 import { excuseCommand } from './commands/fun/excuse.js';
+import { confessionCommand } from './commands/fun/confession.js';
 import { countingStatsCommand } from './commands/fun/countingStats.js';
 import { giveawayCommand } from './commands/fun/giveaway.js';
 import { helpCommand } from './commands/utility/help.js';
@@ -21,6 +22,7 @@ import { languageCommand } from './commands/utility/language.js';
 import { leaderboardCommand } from './commands/profile/leaderboard.js';
 import { meetingCommand } from './commands/admin/meeting.js';
 import { noteCommand, noteContextCommand } from './commands/moderation/note.js';
+import { convoquerCommand } from './commands/moderation/convoquer.js';
 import { optOutCommand } from './commands/utility/optout.js';
 import { privacyCommand } from './commands/utility/privacy.js';
 import { pingCommand } from './commands/utility/ping.js';
@@ -136,6 +138,7 @@ export const commands: SlashCommandDefinition[] = [
   leaderboardCommand,
   serverstatsCommand,
   noteCommand,
+  convoquerCommand,
   eventCommand,
   ctfCommand,
   activateCommand,
@@ -198,6 +201,7 @@ export const commands: SlashCommandDefinition[] = [
   optOutCommand,
   privacyCommand,
   wikiCommand,
+  confessionCommand,
 ];
 
 /**
@@ -266,6 +270,7 @@ export const COMMAND_MODULES = new Map<ApplicationCommandDefinition, string>([
   [casierContextCommand, 'sanctions'],
   [noteCommand, 'sanctions'],
   [noteContextCommand, 'sanctions'],
+  [convoquerCommand, 'sanctions'],
   [reportCommand, 'sanctions'],
   [reportMessageContextCommand, 'sanctions'],
   [signalCommand, 'sanctions'],
@@ -327,6 +332,7 @@ export const COMMAND_MODULES = new Map<ApplicationCommandDefinition, string>([
   [workCommand, 'economy'],
   [excuseCommand, 'fun'],
   [countingStatsCommand, 'fun'],
+  [confessionCommand, 'fun'],
 
   // Contenu & intégrations
   [channelCommand, 'auto_thread'],

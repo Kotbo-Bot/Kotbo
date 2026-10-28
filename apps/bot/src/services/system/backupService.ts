@@ -2,6 +2,7 @@ import type { Prisma } from '@prisma/client';
 import { Guild } from 'discord.js';
 import prisma from '../../utils/db.js';
 import { fetchAllMembers } from '../../utils/discord.js';
+import { exportKotboConfig, type KotboConfigData } from './kotboConfigBackup.js';
 
 export interface BackupOptions {
   name: string;
@@ -12,6 +13,8 @@ export interface BackupOptions {
   includeChannels: boolean;
   includeEmojis: boolean;
   includeStickers: boolean;
+  /** Configuration Kotbo (modules, staff, formulaires…). Incluse par défaut. */
+  includeKotbo?: boolean;
   createdByUserId: string;
   createdByUsername: string;
   createdByTag?: string;
@@ -24,6 +27,7 @@ export interface BackupData {
   emojis: EmojiData[];
   stickers: StickerData[];
   messages?: MessageData[];
+  kotbo?: KotboConfigData;
 }
 
 export interface RoleData {
@@ -286,6 +290,10 @@ export async function createBackup(guild: Guild, options: BackupOptions) {
     }
     messagesCount = backupData.messages.length;
     console.log(`[BackupService] Messages fetched: ${messagesCount}`);
+  }
+
+  if (options.includeKotbo !== false) {
+    backupData.kotbo = await exportKotboConfig(guild.id);
   }
 
   // Calculer la taille du backup

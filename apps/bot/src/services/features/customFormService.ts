@@ -5,6 +5,7 @@ import { kotboEventBus } from '@kotbo/core';
 import { logger } from '../../utils/logger.js';
 import { handleFormTrigger } from './autoResponseService.js';
 import { labelFormAnswers } from './customFormAnswers.js';
+import { syncRecruitmentFormAvailability } from '../staff/recruitmentPanelService.js';
 
 
 // ============================================================================
@@ -194,6 +195,7 @@ async function processCustomFormSubmissionSideEffects(
           status: 'PENDING',
         },
       });
+      await syncRecruitmentFormAvailability(formId);
 
       if (client) {
         const guildConfig = await prisma.guild.findUnique({

@@ -14,6 +14,7 @@
   import { staff, STAFF_TABS, type StaffTab } from '../lib/components/staff/staffStore.svelte';
   import StaffDirectory from '../lib/components/staff/StaffDirectory.svelte';
   import StaffRoles from '../lib/components/staff/StaffRoles.svelte';
+  import StaffListPanels from '../lib/components/staff/StaffListPanels.svelte';
   import StaffWarnings from '../lib/components/staff/StaffWarnings.svelte';
   import StaffBlacklist from '../lib/components/staff/StaffBlacklist.svelte';
   import StaffPolls from '../lib/components/staff/StaffPolls.svelte';
@@ -222,6 +223,7 @@
           <StaffDirectory {openCase} />
         {:else if activeTab === 'roles'}
           <StaffRoles />
+          <StaffListPanels />
         {:else if activeTab === 'organigramme'}
           {#if staff.loading.organigramme && !staff.hierarchySchema}
             <div class="section-card h-[60vh] animate-pulse" aria-busy="true"></div>

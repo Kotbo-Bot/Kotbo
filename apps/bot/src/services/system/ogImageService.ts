@@ -49,7 +49,7 @@ const UI = {
  * dessin, le proxy d'images de Discord et les CDN garderaient l'ancienne carte.
  * A incrementer a chaque changement visible du rendu.
  */
-export const OG_CARD_VERSION = 2;
+export const OG_CARD_VERSION = 4;
 
 /** Indigo du dashboard en theme sombre : accent par defaut des cartes et barre de l'embed. */
 export const OG_ACCENT = '#818cf8';
@@ -64,7 +64,9 @@ export type OgCardArt =
   /** Compte a rebours d'un giveaway. */
   | { type: 'countdown'; label: string; value: string; ended?: boolean }
   /** Podium d'un classement. */
-  | { type: 'podium'; entries: { name: string; score: string }[] };
+  | { type: 'podium'; entries: { name: string; score: string }[] }
+  /** Menu du dashboard : la page ouverte, surlignee parmi ses voisines, et un bouton. */
+  | { type: 'sections'; label: string; items: string[]; active: number; cta: string };
 
 export interface OgCardSpec {
   /** Cle de cache et graine du PRNG : doit identifier la carte de facon stable. */
@@ -422,8 +424,39 @@ function drawStat(ctx: SKRSContext2D, x: number, y: number, w: number, value: st
 // Panneaux d'illustration
 // ---------------------------------------------------------------------------
 
-function drawPanel(ctx: SKRSContext2D, top = ART_TOP, height = ART_H) {
-  roundRect(ctx, ART_X, top, ART_W, height, 20, UI.card, UI.border);
+/** Panneau « verre » : fond translucide, contour et halo de la couleur de la page. */
+function drawPanel(ctx: SKRSContext2D, accent: string, top = ART_TOP, height = ART_H) {
+  ctx.save();
+  ctx.shadowColor = hexToRgba(accent, 0.45);
+  ctx.shadowBlur = 48;
+  roundRect(ctx, ART_X, top, ART_W, height, 24, 'rgba(24, 24, 27, 0.82)');
+  ctx.restore();
+  roundRect(ctx, ART_X, top, ART_W, height, 24, undefined, hexToRgba(accent, 0.55));
+}
+
+/** Fond : degrade teinte de l'accent, halos de lumiere et trame de points. */
+function drawBackground(ctx: SKRSContext2D, accent: string) {
+  const base = ctx.createLinearGradient(0, 0, W, H);
+  base.addColorStop(0, '#12122a');
+  base.addColorStop(0.55, '#0b0b14');
+  base.addColorStop(1, '#09090b');
+  ctx.fillStyle = base;
+  ctx.fillRect(0, 0, W, H);
+
+  const glow = (x: number, y: number, r: number, color: string, alpha: number) => {
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, hexToRgba(color, alpha));
+    g.addColorStop(1, hexToRgba(color, 0));
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+  };
+  glow(W - 120, 120, 620, accent, 0.5);
+  glow(120, H - 40, 520, '#00e5ff', 0.22);
+
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.07)';
+  for (let x = 24; x < W; x += 32) {
+    for (let y = 24; y < H; y += 32) ctx.fillRect(x, y, 2, 2);
+  }
 }
 
 function drawPanelLabel(ctx: SKRSContext2D, label: string, top = ART_TOP) {
@@ -442,7 +475,7 @@ function drawPanelLabel(ctx: SKRSContext2D, label: string, top = ART_TOP) {
  * pourquoi il ne voit rien.
  */
 function drawRedactedChat(ctx: SKRSContext2D, rand: () => number, accent: string, rows: number) {
-  drawPanel(ctx);
+  drawPanel(ctx, accent);
 
   let y = ART_TOP + 48;
   for (let i = 0; i < rows; i++) {
@@ -482,7 +515,7 @@ function drawRedactedChat(ctx: SKRSContext2D, rand: () => number, accent: string
 
 /** Trois intitules de questions : ce que le visiteur devra reellement remplir. */
 function drawQuestions(ctx: SKRSContext2D, accent: string, items: string[], more: number) {
-  drawPanel(ctx);
+  drawPanel(ctx, accent);
   drawPanelLabel(ctx, 'Au programme');
 
   let y = ART_TOP + 96;
@@ -512,7 +545,7 @@ function drawQuestions(ctx: SKRSContext2D, accent: string, items: string[], more
 /** Grand compteur : le temps restant est l'information utile d'un giveaway. */
 function drawCountdown(ctx: SKRSContext2D, accent: string, label: string, value: string, ended: boolean) {
   const color = ended ? UI.textMuted : accent;
-  drawPanel(ctx);
+  drawPanel(ctx, accent);
 
   const center = ART_X + ART_W / 2;
   const middle = ART_TOP + ART_H / 2;
@@ -533,7 +566,7 @@ function drawCountdown(ctx: SKRSContext2D, accent: string, label: string, value:
 
 /** Podium : un classement se resume a ses trois premieres places. */
 function drawPodium(ctx: SKRSContext2D, accent: string, entries: { name: string; score: string }[]) {
-  drawPanel(ctx);
+  drawPanel(ctx, accent);
 
   if (entries.length === 0) {
     ctx.fillStyle = UI.textMuted;
@@ -572,6 +605,66 @@ function drawPodium(ctx: SKRSContext2D, accent: string, entries: { name: string;
 
     y += 84;
   });
+}
+
+/**
+ * Grille « bento » des pages d'une famille : la page du lien en grande tuile
+ * coloree, ses voisines en tuiles de verre. Ne depend que des libelles de
+ * sections, jamais d'une donnee de serveur.
+ */
+function drawSections(ctx: SKRSContext2D, accent: string, label: string, items: string[], active: number) {
+  const gap = 16;
+  const tileW = (ART_W - gap) / 2;
+  const heroH = 178;
+  const smallH = (ART_H - heroH - gap * 2) / 2;
+
+  // Grande tuile : degrade de l'accent, halo, nom de la famille puis de la page.
+  ctx.save();
+  ctx.shadowColor = hexToRgba(accent, 0.55);
+  ctx.shadowBlur = 40;
+  const hero = ctx.createLinearGradient(ART_X, ART_TOP, ART_X + ART_W, ART_TOP + heroH);
+  hero.addColorStop(0, accent);
+  hero.addColorStop(1, hexToRgba(accent, 0.55));
+  roundRect(ctx, ART_X, ART_TOP, ART_W, heroH, 26, hero);
+  ctx.restore();
+  ctx.fillStyle = 'rgba(9, 9, 11, 0.7)';
+  ctx.font = font(19, 'semibold');
+  ctx.fillText(truncate(label, 30), ART_X + 28, ART_TOP + 46);
+  ctx.fillStyle = UI.background;
+  ctx.font = font(40, 'title');
+  ctx.fillText(fitText(ctx, items[active] ?? label, ART_W - 56), ART_X + 28, ART_TOP + heroH - 38);
+
+  // Tuiles voisines, en grille 2 x 2.
+  const others = items.filter((_, index) => index !== active).slice(0, 4);
+  others.forEach((item, index) => {
+    const x = ART_X + (index % 2) * (tileW + gap);
+    const y = ART_TOP + heroH + gap + Math.floor(index / 2) * (smallH + gap);
+    roundRect(ctx, x, y, tileW, smallH, 22, 'rgba(24, 24, 27, 0.8)', hexToRgba(accent, 0.4));
+    ctx.beginPath();
+    ctx.arc(x + 28, y + 22, 6, 0, Math.PI * 2);
+    ctx.fillStyle = accent;
+    ctx.fill();
+    ctx.fillStyle = UI.text;
+    ctx.font = font(20, 'semibold');
+    const lines = wrapText(ctx, item, tileW - 48, 2);
+    lines.forEach((line, i) => ctx.fillText(line, x + 24, y + smallH - 22 - (lines.length - 1 - i) * 25));
+  });
+}
+
+/** Gros bouton de la colonne de texte : dit ou mene le lien (l'image entiere est cliquable). */
+function drawCta(ctx: SKRSContext2D, accent: string, label: string) {
+  ctx.font = font(24, 'semibold');
+  const w = ctx.measureText(label).width + 96;
+  const y = H - 56 - 68;
+  ctx.save();
+  ctx.shadowColor = hexToRgba(accent, 0.55);
+  ctx.shadowBlur = 36;
+  roundRect(ctx, PAD, y, w, 68, 34, accent);
+  ctx.restore();
+  ctx.fillStyle = UI.background;
+  ctx.fillText(label, PAD + 36, y + 44);
+  ctx.font = font(30, 'semibold');
+  ctx.fillText('→', PAD + w - 52, y + 45);
 }
 
 // ---------------------------------------------------------------------------
@@ -622,8 +715,7 @@ export async function renderOgCard(spec: OgCardSpec): Promise<Buffer> {
   const canvas = createCanvas(W, H);
   const ctx = canvas.getContext('2d');
 
-  ctx.fillStyle = UI.background;
-  ctx.fillRect(0, 0, W, H);
+  drawBackground(ctx, accent);
 
   await drawHeader(ctx, spec);
 
@@ -632,19 +724,20 @@ export async function renderOgCard(spec: OgCardSpec): Promise<Buffer> {
 
   // Pastille du type de ressource, teintee de l'accent, puis les pastilles
   // d'etat sur la meme ligne : la colonne garde sa hauteur pour le titre.
-  let pillX = PAD + drawPill(ctx, spec.kicker, PAD, ART_TOP, { fill: hexToRgba(accent, 0.14), text: accent }) + 10;
+  let pillX = PAD + drawPill(ctx, spec.kicker, PAD, ART_TOP, { fill: accent, text: UI.background }) + 10;
   for (const badge of spec.badges?.slice(0, 2) ?? []) {
     pillX += drawPill(ctx, badge, pillX, ART_TOP, { fill: UI.card, stroke: UI.borderStrong, text: UI.textSecondary }) + 10;
   }
 
   // Titre.
   ctx.fillStyle = UI.text;
-  ctx.font = font(58, 'title');
+  const bento = spec.art?.type === 'sections';
+  ctx.font = font(bento ? 70 : 58, 'title');
   const titleLines = wrapText(ctx, spec.title, textWidth, 2);
   let cursorY = ART_TOP + 38 + 70;
   for (const line of titleLines) {
     ctx.fillText(line, PAD, cursorY);
-    cursorY += 66;
+    cursorY += bento ? 78 : 66;
   }
 
   // Sous-titre. Avec un titre sur deux lignes, les tuiles de chiffres ne
@@ -681,6 +774,10 @@ export async function renderOgCard(spec: OgCardSpec): Promise<Buffer> {
       break;
     case 'podium':
       drawPodium(ctx, accent, spec.art.entries);
+      break;
+    case 'sections':
+      drawSections(ctx, accent, spec.art.label, spec.art.items, spec.art.active);
+      drawCta(ctx, accent, spec.art.cta);
       break;
     default:
       break;

@@ -13,6 +13,7 @@ import type {
   
   MemberCaseChannelSummary,
   MemberCaseInviteInfo,
+  MemberCaseCreatedInvite,
   
   
   MemberCaseInteractionNode,
@@ -318,6 +319,35 @@ export async function buildMemberCaseData(client: Client, guildId: string, userI
     invite.inviterTag = `Utilisateur ${invite.inviterId}`;
   }
 
+  // Invitations créées par ce membre, avec arrivées/départs par code.
+  const createdInviteRows = await prisma.guildInvite.findMany({
+    where: { guildId, inviterId: actualUserId },
+    orderBy: { createdAt: 'desc' },
+    take: 100,
+  }).catch(() => []);
+  const createdInviteUsage = createdInviteRows.length
+    ? await prisma.memberInvite.groupBy({
+        by: ['inviteCode'],
+        where: { guildId, inviteCode: { in: createdInviteRows.map((row) => row.code) } },
+        _count: { _all: true, leftAt: true },
+      }).catch(() => [])
+    : [];
+  const createdInviteUsageByCode = new Map(createdInviteUsage.map((row) => [row.inviteCode, row._count]));
+  const createdInvites: MemberCaseCreatedInvite[] = createdInviteRows.map((row) => {
+    const usage = createdInviteUsageByCode.get(row.code);
+    return {
+      code: row.code,
+      sourceLabel: row.sourceLabel,
+      uses: row.uses,
+      joined: usage?._all ?? 0,
+      left: usage?.leftAt ?? 0,
+      createdAt: safeIsoDate(row.createdAt),
+      expiresAt: safeIsoDate(row.expiresAt),
+      isDeleted: row.isDeleted,
+      isSuspended: row.isSuspended,
+    };
+  });
+
     const messages = (auditLogs || [])
       .filter((entry) => {
         if (entry.module !== 'Messages' || entry.action !== 'Message envoyé') return false;
@@ -581,6 +611,7 @@ export async function buildMemberCaseData(client: Client, guildId: string, userI
             joinedAt: invite.joinedAt ?? safeIsoDate(member?.joinedAt ?? profile?.guildJoinedAt),
           }
         : null,
+      createdInvites,
       roles,
       effectivePermissions,
       sanctions: (sanctions || []).map((entry) => ({

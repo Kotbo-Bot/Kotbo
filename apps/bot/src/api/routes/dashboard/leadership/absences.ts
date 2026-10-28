@@ -5,6 +5,10 @@ import type { Prisma } from '@prisma/client';
 import prisma from '../../../../utils/db.js';
 import { logger } from '../../../../utils/logger.js';
 import { jsonFailure } from '../../../shared/failure.js';
+import { canViewFeatureSection } from '../featureGate.js';
+import { getPlanningExtras } from '../../../../services/staff/planningExtrasService.js';
+import { signIcalToken } from '../../../../services/staff/planningIcal.js';
+import { getJwtSecret } from '../../../shared/core.js';
 import {
   json,
   readJsonBody,
@@ -31,7 +35,8 @@ import {
   
   
   getStaffCalendarData,
-  
+  getAbsenceSuperiorCandidates,
+
   
   
   
@@ -135,6 +140,55 @@ export async function handleAbsenceRoutes(
         } catch (err) {
           logger.error('StaffAPI', `Error getting calendar data for guild ${guildId}:`, err);
           jsonFailure(res, err, 'Erreur lors de la récupération des données du calendrier', 'StaffAPI');
+        }
+        return true;
+      }
+
+      // GET /api/dashboard/guilds/:guildId/absences/planning-extras?start&end
+      // Evenements du serveur, fins de giveaways et taches planifiees, chacun
+      // seulement si le role peut deja voir la section qui les gere.
+      if (parts.length === 6 && parts[5] === 'planning-extras' && method === 'GET') {
+        const start = new Date(url.searchParams.get('start') ?? '');
+        const end = new Date(url.searchParams.get('end') ?? '');
+        if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start || end.getTime() - start.getTime() > 62 * 86400000) {
+          json(res, 400, { error: 'La période du calendrier est invalide' });
+          return true;
+        }
+        try {
+          const [events, giveaways, tutoring, sanctions] = await Promise.all(
+            ['events', 'giveaways', 'tutoring', 'sanctions'].map((key) => canViewFeatureSection(client, guildId, access, user.userId, key)),
+          );
+          const extras = await getPlanningExtras(guildId, start, end, {
+            events, giveaways, tutoring, sanctions, schedules: access.canManageSettings,
+          });
+          json(res, 200, extras);
+        } catch (err) {
+          logger.error('StaffAPI', 'Error getting planning extras:', err);
+          jsonFailure(res, err, 'Erreur lors de la récupération des événements du serveur', 'StaffAPI');
+        }
+        return true;
+      }
+
+      // GET /api/dashboard/guilds/:guildId/absences/ical-link
+      // Lien d'abonnement iCal au planning de l'utilisateur connecte (membres du staff).
+      if (parts.length === 6 && parts[5] === 'ical-link' && method === 'GET') {
+        const staffMember = await getStaffMember(guildId, user.userId);
+        if (!staffMember) {
+          json(res, 403, { error: "Tu ne fais pas partie de l'équipe staff de ce serveur." });
+          return true;
+        }
+        json(res, 200, { path: `/api/public/planning/${signIcalToken(guildId, user.userId, getJwtSecret())}.ics` });
+        return true;
+      }
+
+      // GET /api/dashboard/guilds/:guildId/absences/superiors
+      // A qui l'utilisateur connecte peut declarer son absence.
+      if (parts.length === 6 && parts[5] === 'superiors' && method === 'GET') {
+        try {
+          json(res, 200, { superiors: await getAbsenceSuperiorCandidates(guildId, user.userId) });
+        } catch (err) {
+          logger.error('StaffAPI', 'Error getting absence superiors:', err);
+          jsonFailure(res, err, 'Erreur lors de la récupération des destinataires', 'StaffAPI');
         }
         return true;
       }
@@ -265,12 +319,8 @@ export async function handleAbsenceRoutes(
             return true;
           }
 
-          const superiorStaff = await getStaffMember(guildId, superiorUserId);
-          if (!superiorStaff) {
-            json(res, 400, { error: 'Le supérieur indiqué ne fait pas partie du staff' });
-            return true;
-          }
-
+          // Le destinataire (tuteur, fondateur ou grade egal/superieur) est
+          // verifie par createAbsence : le fondateur peut ne pas etre au staff.
           const startDate = new Date(body.startDate);
           const endDate = body.endDate ? new Date(body.endDate) : undefined;
 

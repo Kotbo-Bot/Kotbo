@@ -147,71 +147,143 @@ const DASHBOARD_SECTIONS: { prefix: string; fr: string; en: string }[] = [
   { prefix: '/logs', fr: 'Journaux Discord', en: 'Discord logs' },
   { prefix: '/message-search', fr: 'Recherche de messages', en: 'Message search' },
   { prefix: '/transcripts-list', fr: 'Transcriptions', en: 'Transcripts' },
-  { prefix: '/activity', fr: "Journal d'activite", en: 'Activity log' },
-  { prefix: '/events', fr: 'Evenements', en: 'Events' },
+  { prefix: '/activity', fr: "Journal d'activité", en: 'Activity log' },
+  { prefix: '/events', fr: 'Événements', en: 'Events' },
   { prefix: '/forms', fr: 'Formulaires', en: 'Forms' },
   { prefix: '/dailyalgo', fr: 'Daily Algo', en: 'Daily Algo' },
-  { prefix: '/security/quick-setup', fr: 'Securite - Demarrage rapide', en: 'Security - Quick setup' },
-  { prefix: '/security/anti-raid', fr: 'Securite - Anti-raid', en: 'Security - Anti-raid' },
-  { prefix: '/security/filters', fr: 'Securite - Filtres', en: 'Security - Filters' },
-  { prefix: '/security/aegis', fr: 'Securite - AegisAI', en: 'Security - AegisAI' },
-  { prefix: '/security/accounts', fr: 'Securite - Comptes', en: 'Security - Accounts' },
-  { prefix: '/security/sanctions', fr: 'Securite - Sanctions', en: 'Security - Sanctions' },
-  { prefix: '/security', fr: 'Securite', en: 'Security' },
+  { prefix: '/security/quick-setup', fr: 'Sécurité - Démarrage rapide', en: 'Security - Quick setup' },
+  { prefix: '/security/anti-raid', fr: 'Sécurité - Anti-raid', en: 'Security - Anti-raid' },
+  { prefix: '/security/filters', fr: 'Sécurité - Filtres', en: 'Security - Filters' },
+  { prefix: '/security/aegis', fr: 'Sécurité - AegisAI', en: 'Security - AegisAI' },
+  { prefix: '/security/accounts', fr: 'Sécurité - Comptes', en: 'Security - Accounts' },
+  { prefix: '/security/sanctions', fr: 'Sécurité - Sanctions', en: 'Security - Sanctions' },
+  { prefix: '/security', fr: 'Sécurité', en: 'Security' },
   { prefix: '/leveling', fr: 'Niveaux', en: 'Leveling' },
   { prefix: '/prestige', fr: 'Prestige', en: 'Prestige' },
   { prefix: '/seasons', fr: 'Saisons', en: 'Seasons' },
-  { prefix: '/reputation', fr: 'Reputation', en: 'Reputation' },
+  { prefix: '/reputation', fr: 'Réputation', en: 'Reputation' },
   { prefix: '/clans', fr: 'Clans', en: 'Clans' },
   { prefix: '/drops', fr: 'Drops', en: 'Drops' },
-  { prefix: '/economy-setup', fr: 'Economie - Demarrage rapide', en: 'Economy - Quick setup' },
-  { prefix: '/economy', fr: 'Economie', en: 'Economy' },
-  { prefix: '/marketplace', fr: 'Marche', en: 'Marketplace' },
-  { prefix: '/quests', fr: 'Quetes', en: 'Quests' },
+  { prefix: '/economy-setup', fr: 'Économie - Démarrage rapide', en: 'Economy - Quick setup' },
+  { prefix: '/economy', fr: 'Économie', en: 'Economy' },
+  { prefix: '/marketplace', fr: 'Marché', en: 'Marketplace' },
+  { prefix: '/quests', fr: 'Quêtes', en: 'Quests' },
   { prefix: '/giveaways', fr: 'Giveaways', en: 'Giveaways' },
   { prefix: '/announcement', fr: 'Annonces', en: 'Announcements' },
-  { prefix: '/reaction-roles', fr: 'Roles par reaction', en: 'Reaction roles' },
-  { prefix: '/triggers', fr: 'Declencheurs', en: 'Triggers' },
+  { prefix: '/reaction-roles', fr: 'Rôles par reaction', en: 'Reaction roles' },
+  { prefix: '/triggers', fr: 'Déclencheurs', en: 'Triggers' },
   { prefix: '/suggestions', fr: 'Suggestions', en: 'Suggestions' },
   { prefix: '/embed-builder', fr: "Constructeur d'embeds", en: 'Embed builder' },
-  { prefix: '/regulation', fr: 'Reglement', en: 'Rules' },
-  { prefix: '/news', fr: 'Actualites', en: 'News' },
+  { prefix: '/regulation', fr: 'Règlement', en: 'Rules' },
+  { prefix: '/news', fr: 'Actualités', en: 'News' },
   { prefix: '/fun', fr: 'Salons fun', en: 'Fun channels' },
-  { prefix: '/social-networks', fr: 'Reseaux sociaux', en: 'Social networks' },
+  { prefix: '/social-networks', fr: 'Réseaux sociaux', en: 'Social networks' },
   { prefix: '/staff-management', fr: 'Gestion du staff', en: 'Staff management' },
   { prefix: '/recruitment', fr: 'Recrutement', en: 'Recruitment' },
   { prefix: '/tickets', fr: 'Tickets', en: 'Tickets' },
   { prefix: '/tutoring', fr: 'Tutorat', en: 'Tutoring' },
-  { prefix: '/meetings', fr: 'Reunions', en: 'Meetings' },
+  { prefix: '/meetings', fr: 'Réunions', en: 'Meetings' },
   { prefix: '/planning', fr: 'Planning', en: 'Planning' },
   { prefix: '/channel-links', fr: 'Liens de salons', en: 'Channel links' },
   { prefix: '/staff-server', fr: 'Serveurs staff', en: 'Staff servers' },
   { prefix: '/management', fr: 'Centre de gestion', en: 'Management center' },
   { prefix: '/modules', fr: 'Modules', en: 'Modules' },
-  { prefix: '/channel-health', fr: 'Sante des salons', en: 'Channel health' },
+  { prefix: '/channel-health', fr: 'Santé des salons', en: 'Channel health' },
   { prefix: '/channels-management', fr: 'Salons', en: 'Channels' },
   { prefix: '/command-access', fr: 'Commandes', en: 'Commands' },
-  { prefix: '/settings', fr: 'Parametres', en: 'Settings' },
+  { prefix: '/settings', fr: 'Paramètres', en: 'Settings' },
   { prefix: '/backups', fr: 'Sauvegardes', en: 'Backups' },
-  { prefix: '/schedules', fr: 'Taches planifiees', en: 'Scheduled tasks' },
+  { prefix: '/schedules', fr: 'Tâches planifiées', en: 'Scheduled tasks' },
   { prefix: '/mcp-settings', fr: 'API & MCP', en: 'API & MCP' },
   { prefix: '/custom-bot', fr: 'Bot personnalise', en: 'Custom bot' },
   { prefix: '/setup', fr: 'Prise en main', en: 'Getting started' },
   { prefix: '/admin', fr: 'Administration', en: 'Administration' },
   { prefix: '/profile', fr: 'Mon profil', en: 'My profile' },
-  { prefix: '/userSettings', fr: 'Preferences', en: 'Preferences' },
+  { prefix: '/userSettings', fr: 'Préférences', en: 'Preferences' },
 ];
 
-function resolveDashboardSection(path: string, locale: BotLocale): string | null {
+// Familles de pages : chacune donne sa couleur a l'embed et sa phrase de
+// presentation. Une section absente de la table retombe sur « Configuration ».
+const DASHBOARD_GROUPS: {
+  fr: string;
+  en: string;
+  descFr: string;
+  descEn: string;
+  accent: string;
+  prefixes: string[];
+}[] = [
+  {
+    fr: 'Analyse', en: 'Insights', accent: '#34d399',
+    descFr: 'Statistiques, tendances et historique de ton serveur.',
+    descEn: 'Stats, trends and history for your server.',
+    prefixes: ['/analytics', '/pulse', '/dailyalgo', '/activity', '/logs', '/message-search', '/transcripts-list', '/channel-health', '/alerts', '/notifications', '/members', '/invitations'],
+  },
+  {
+    fr: 'Sécurité', en: 'Security', accent: '#f87171',
+    descFr: 'Anti-raid, filtres, sanctions : protège ton serveur sans effort.',
+    descEn: 'Anti-raid, filters, sanctions: protect your server effortlessly.',
+    prefixes: ['/security', '/security/quick-setup', '/security/anti-raid', '/security/filters', '/security/aegis', '/security/accounts', '/security/sanctions'],
+  },
+  {
+    fr: 'Engagement', en: 'Engagement', accent: '#a78bfa',
+    descFr: 'Niveaux, clans, quêtes et événements pour faire vivre la communauté.',
+    descEn: 'Levels, clans, quests and events to keep your community alive.',
+    prefixes: ['/leveling', '/prestige', '/seasons', '/reputation', '/clans', '/drops', '/quests', '/giveaways', '/events', '/fun'],
+  },
+  {
+    fr: 'Économie', en: 'Economy', accent: '#fbbf24',
+    descFr: 'Monnaie, boutique et marché : une économie clé en main.',
+    descEn: 'Currency, shop and marketplace: a ready-made economy.',
+    prefixes: ['/economy-setup', '/economy', '/marketplace'],
+  },
+  {
+    fr: 'Communication', en: 'Communication', accent: '#38bdf8',
+    descFr: 'Annonces, embeds, formulaires et règlement, sans écrire une ligne de code.',
+    descEn: 'Announcements, embeds, forms and rules, no code required.',
+    prefixes: ['/announcement', '/reaction-roles', '/triggers', '/suggestions', '/embed-builder', '/regulation', '/news', '/social-networks', '/forms'],
+  },
+  {
+    fr: 'Équipe', en: 'Team', accent: '#2dd4bf',
+    descFr: 'Staff, tickets, recrutement et planning, au même endroit.',
+    descEn: 'Staff, tickets, recruitment and planning in one place.',
+    prefixes: ['/staff-management', '/recruitment', '/tickets', '/tutoring', '/meetings', '/planning', '/staff-server'],
+  },
+  {
+    fr: 'Configuration', en: 'Configuration', accent: OG_ACCENT,
+    descFr: 'Modules, salons, commandes et sauvegardes : ton serveur, à ta façon.',
+    descEn: 'Modules, channels, commands and backups: your server, your way.',
+    prefixes: [],
+  },
+];
+
+interface DashboardEntry {
+  label: string;
+  group: (typeof DASHBOARD_GROUPS)[number];
+  /** Libelles des sections de la meme famille, dans l'ordre du menu. */
+  siblings: string[];
+  index: number;
+}
+
+function resolveDashboardEntry(path: string, locale: BotLocale): DashboardEntry | null {
   // Le prefixe le plus long gagne, sinon `/security` capterait
   // `/security/anti-raid` et l'embed annoncerait la mauvaise page.
   const ordered = [...DASHBOARD_SECTIONS].sort((a, b) => b.prefix.length - a.prefix.length);
-  for (const section of ordered) {
-    if (path === section.prefix || path.startsWith(`${section.prefix}/`)) {
-      return locale === 'fr' ? section.fr : section.en;
-    }
-  }
-  return null;
+  const section = ordered.find((s) => path === s.prefix || path.startsWith(`${s.prefix}/`));
+  if (!section) return null;
+
+  const label = (s: { fr: string; en: string }) => (locale === 'fr' ? s.fr : s.en);
+  const fallbackGroup = DASHBOARD_GROUPS[DASHBOARD_GROUPS.length - 1];
+  const group = DASHBOARD_GROUPS.find((g) => g.prefixes.includes(section.prefix)) ?? fallbackGroup;
+  const members = DASHBOARD_SECTIONS.filter(
+    (s) => (DASHBOARD_GROUPS.find((g) => g.prefixes.includes(s.prefix)) ?? fallbackGroup) === group,
+  );
+  return {
+    label: label(section),
+    group,
+    // « Sécurité - Filtres » devient « Filtres » : la famille est deja dans le panneau.
+    siblings: members.map((s) => label(s).replace(/^.+ - /, '')),
+    index: members.findIndex((s) => s.prefix === section.prefix),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -272,8 +344,8 @@ export async function resolveOgMetadata(client: Client, rawPath: string): Promis
   // plutot qu'un embed nu, mais on ne pretend rien sur le contenu.
   const locale = FALLBACK_LOCALE;
   const fallback = baseMetadata(locale);
-  const section = resolveDashboardSection(path, locale);
-  if (section) return dashboardMetadata(path, section, locale);
+  const section = resolveDashboardEntry(path, 'fr');
+  if (section) return dashboardMetadata(path, section, 'fr');
   fallback.imagePath = imagePathFor(path, 'generic');
   fallback.card = {
     cacheKey: `generic:${path}`,
@@ -284,19 +356,33 @@ export async function resolveOgMetadata(client: Client, rawPath: string): Promis
   return fallback;
 }
 
-function dashboardMetadata(path: string, section: string, locale: BotLocale): OgMetadata {
+function dashboardMetadata(path: string, entry: DashboardEntry, locale: BotLocale): OgMetadata {
+  const { group } = entry;
+  const fr = locale === 'fr';
+  // Fenetre de cinq entrees qui garde la page courante visible.
+  const start = Math.max(0, Math.min(entry.index - 2, entry.siblings.length - 5));
   const meta = baseMetadata(locale);
-  meta.title = `${section} · ${SITE_NAME}`;
-  meta.description = m.og_dashboard_desc({ section }, { locale });
+  meta.title = `${entry.label} · ${SITE_NAME}`;
+  meta.description = fr ? group.descFr : group.descEn;
+  meta.themeColor = group.accent;
+  meta.imageAlt = meta.title;
   // Le dashboard est un espace d'administration : rien a indexer.
   meta.robots = 'noindex, nofollow';
-  meta.imagePath = imagePathFor(path, 'section');
+  meta.imagePath = imagePathFor(path, `section-${locale}`);
   meta.card = {
-    cacheKey: `dashboard:${path}`,
-    kicker: m.og_kicker_dashboard({}, { locale }),
-    title: section,
-    subtitle: m.og_dashboard_desc({ section }, { locale }),
+    cacheKey: `dashboard:${locale}:${path}`,
+    kicker: fr ? group.fr : group.en,
+    title: entry.label,
+    subtitle: meta.description,
+    accent: group.accent,
     badges: [m.og_badge_login_required({}, { locale })],
+    art: {
+      type: 'sections',
+      label: fr ? group.fr : group.en,
+      items: entry.siblings.slice(start, start + 5),
+      active: entry.index - start,
+      cta: fr ? 'Ouvrir dans Kotbo' : 'Open in Kotbo',
+    },
   };
   return meta;
 }
@@ -366,8 +452,8 @@ async function resolveByRoute(client: Client, path: string, segments: string[]):
   }
 
   // ── Pages du dashboard ──────────────────────────────────────────────────
-  const section = resolveDashboardSection(path, FALLBACK_LOCALE);
-  if (section) return dashboardMetadata(path, section, FALLBACK_LOCALE);
+  const section = resolveDashboardEntry(path, 'fr');
+  if (section) return dashboardMetadata(path, section, 'fr');
 
   return null;
 }
