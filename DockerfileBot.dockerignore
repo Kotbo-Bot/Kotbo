@@ -21,5 +21,7 @@ docs
 scratch
 apps/bot/scratch
 apps/bot/bot_logs.txt
+# Rien au runtime n'importe les tests, et l'image ne lance pas de typecheck.
+apps/bot/src/tests
 .github
 /*.md
