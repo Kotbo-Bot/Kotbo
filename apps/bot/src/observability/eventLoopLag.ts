@@ -21,6 +21,18 @@ const WARN_MS = parsePositiveInt(process.env.EVENT_LOOP_LAG_WARN_MS, 500);
 
 let timer: ReturnType<typeof setInterval> | null = null;
 
+const activeTasks = new Map<string, number>();
+
+/** Déclare un traitement de fond en cours ; l'appel renvoyé le retire. */
+export function trackActiveTask(name: string): () => void {
+  activeTasks.set(name, (activeTasks.get(name) ?? 0) + 1);
+  return () => {
+    const left = (activeTasks.get(name) ?? 1) - 1;
+    if (left > 0) activeTasks.set(name, left);
+    else activeTasks.delete(name);
+  };
+}
+
 export function startEventLoopLagMonitor(): void {
   if (timer) return;
   let expectedAt = performance.now() + INTERVAL_MS;
@@ -33,9 +45,11 @@ export function startEventLoopLagMonitor(): void {
 
     // Le tas aide à reconnaître une pause du ramasse-miettes d'un calcul bloquant.
     const heapMb = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
+    // shortcut: liste les jobs en cours à la fin du blocage, pas forcément le fautif ; recouper sur plusieurs lignes.
+    const active = activeTasks.size ? ` Jobs en cours : ${[...activeTasks.keys()].join(', ')}.` : '';
     logger.warn(
       'EventLoop',
-      `Boucle d'événements bloquée ${Math.round(lagMs)}ms (tas ${heapMb} Mo) : les requêtes lentes de cet instant attendaient le process, pas la base.`,
+      `Boucle d'événements bloquée ${Math.round(lagMs)}ms (tas ${heapMb} Mo) : les requêtes lentes de cet instant attendaient le process, pas la base.${active}`,
     );
   }, INTERVAL_MS);
 

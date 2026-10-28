@@ -2,6 +2,7 @@ import { Queue, Worker, type JobsOptions, type Processor } from 'bullmq';
 import type { Redis } from 'ioredis';
 import { createRedisForWorker } from '../redis.js';
 import { logger } from '../../utils/logger.js';
+import { trackActiveTask } from '../../observability/eventLoopLag.js';
 import { captureException } from '../../observability/sentry.js';
 
 export type BackgroundJobName =
@@ -129,7 +130,12 @@ function getProcessor(): Processor<BackgroundJobPayload, void, BackgroundJobName
       await delay(Math.floor(Math.random() * job.data.jitterMs));
     }
 
-    await handler();
+    const untrack = trackActiveTask(job.name);
+    try {
+      await handler();
+    } finally {
+      untrack();
+    }
   };
 }
 
