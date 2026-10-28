@@ -103,11 +103,13 @@ export async function restorePersistedRoles(member: GuildMember, config: RaidPro
     [config.captchaUnverifiedRoleId, config.captchaVerifiedRoleId, guildRow?.verificationRoleId].filter(Boolean),
   );
 
+  const restoreStaff = config.rolePersistStaff && !(await isStaffBarred(guild.id, member.id));
+
   const restorable = snapshot.roleIds.filter((roleId) => {
     const role = guild.roles.cache.get(roleId);
     if (!role || role.managed || role.id === guild.id) return false;
     if (verificationRoleIds.has(role.id)) return false;
-    if (isPrivileged(role)) return false;
+    if (isPrivileged(role) && !restoreStaff) return false;
     if (role.position >= me.roles.highest.position) return false;
     if (member.roles.cache.has(role.id)) return false;
     return matchesMode(config, role.id);
@@ -120,9 +122,54 @@ export async function restorePersistedRoles(member: GuildMember, config: RaidPro
       logger.error('RolePersistence', `Restauration des rôles impossible pour ${member.id} sur ${guild.id}`, err);
       return;
     }
+    if (restoreStaff) await reregisterStaff(member, restorable);
   }
 
   await forget();
+}
+
+/** Un staff suspendu ou blacklisté ne récupère pas ses rôles à permissions en revenant. */
+async function isStaffBarred(guildId: string, userId: string): Promise<boolean> {
+  const row = await prisma.staffMember.findFirst({
+    where: { guildId, userId },
+    select: {
+      suspendedAt: true,
+      blacklistEntries: {
+        where: { isActive: true, OR: [{ endDate: null }, { endDate: { gt: new Date() } }] },
+        select: { id: true },
+        take: 1,
+      },
+    },
+  });
+  return !!row && (!!row.suspendedAt || row.blacklistEntries.length > 0);
+}
+
+/**
+ * Remet au staff un membre dont un rôle de grade vient d'être rendu. Une ligne
+ * d'annuaire encore présente est laissée telle quelle (grade et ancienneté) ;
+ * son organigramme se resynchronise tout seul sur la mise à jour des rôles.
+ */
+async function reregisterStaff(member: GuildMember, restoredRoleIds: string[]): Promise<void> {
+  try {
+    const guildId = member.guild.id;
+    const [grade, existing] = await Promise.all([
+      prisma.staffRole.findFirst({
+        where: { guildId, enabled: true, discordRoleId: { in: restoredRoleIds } },
+        orderBy: { level: 'desc' },
+        select: { name: true },
+      }),
+      prisma.staffMember.findFirst({ where: { guildId, userId: member.id }, select: { id: true } }),
+    ]);
+    if (!grade || existing) return;
+
+    const { addStaffMember } = await import('../staff/staffManagementService.js');
+    await addStaffMember(
+      guildId, member.id, grade.name,
+      member.user.tag, member.user.username, member.displayName, member.user.displayAvatarURL(),
+    );
+  } catch (err) {
+    logger.error('RolePersistence', `Réinscription au staff impossible pour ${member.id} sur ${member.guild.id}`, err);
+  }
 }
 
 /** Oublie les traces trop anciennes, et celles des serveurs qui ont coupé la fonction. */

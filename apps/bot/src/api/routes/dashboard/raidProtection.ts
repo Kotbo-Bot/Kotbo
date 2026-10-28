@@ -48,7 +48,7 @@ const PATCHABLE_FIELDS = [
   'joinLockKick', 'joinLockMessage',
   'reportsEnabled', 'reportsChannelId', 'reportsCooldownSec', 'reportsAnonymous',
   'tagRoleEnabled', 'tagRoleId',
-  'rolePersistEnabled', 'rolePersistMode', 'rolePersistRoleIds', 'rolePersistMaxDays',
+  'rolePersistEnabled', 'rolePersistMode', 'rolePersistRoleIds', 'rolePersistMaxDays', 'rolePersistStaff',
   'scamFilterEnabled', 'scamFilterAction', 'scamFilterTimeoutMin', 'scamFilterCustomDomains',
   'scamFilterWhitelist', 'scamFilterAlertChannelId', 'scamImageFilterEnabled',
   'scamQrFilterEnabled', 'scamQrTrustedMessages', 'scamOcrEnabled',
