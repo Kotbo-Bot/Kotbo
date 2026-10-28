@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import Papicon from '../Papicon.svelte';
   import MultiSelect from '../MultiSelect.svelte';
+  import { Button, Callout, Field, SectionCard, SettingsRow, ToggleSwitch, EmptyState } from '../ui';
   import { dashboardStore } from '../../stores/dashboard.svelte';
   import { toast } from '../../stores/toast.svelte';
   import { m, dateLocale } from '../../i18n';
@@ -197,204 +198,146 @@
 {#if loading}
   <div class="space-y-3">
     {#each Array(5) as _}
-      <div class="h-20 rounded-2xl bg-surface-container-high/40 animate-pulse"></div>
+      <div class="h-20 rounded-xl bg-surface-container animate-pulse"></div>
     {/each}
   </div>
 {:else if error}
-  <div class="p-6 rounded-2xl bg-error/10 border border-error/20 text-red-300 flex items-center gap-3">
-    <Papicon icon="Warning" size={20} />
-    <span>{error}</span>
-  </div>
+  <Callout variant="danger">{error}</Callout>
 {:else}
-  <div class="space-y-5">
+  <div class="space-y-6">
     <!-- En-tête -->
     <div class="flex flex-wrap items-start justify-between gap-4">
       <div>
-        <h2 class="text-xl font-bold text-on-surface flex items-center gap-2">
-          <Papicon icon="GitCompare" size={22} class="text-primary" />
-          {m.audit_title()}
-        </h2>
-        <p class="text-sm text-on-surface-variant mt-1 max-w-2xl">{m.audit_subtitle()}</p>
+        <h2 class="text-base font-semibold text-on-surface">{m.audit_title()}</h2>
+        <p class="text-body-sm text-on-surface-variant mt-1 max-w-2xl">{m.audit_subtitle()}</p>
       </div>
       {#if canManageSettings}
-        <button
-          onclick={() => (showConfig = !showConfig)}
-          class="px-4 py-2.5 rounded-xl text-xs font-semibold bg-surface-container-high text-on-surface hover:bg-surface-container-highest transition-all flex items-center gap-2"
-        >
-          <Papicon icon="Settings" size={14} />
+        <Button icon="Settings" onclick={() => (showConfig = !showConfig)} aria-expanded={showConfig}>
           {m.audit_config_title()}
-        </button>
+        </Button>
       {/if}
     </div>
 
     {#if config && !config.enabled}
-      <div class="px-4 py-3 rounded-xl bg-warning/10 border border-warning/20 text-amber-300 text-xs flex items-center gap-2">
-        <Papicon icon="Warning" size={14} />
-        {m.audit_disabled_notice()}
-      </div>
+      <Callout variant="warning">{m.audit_disabled_notice()}</Callout>
     {/if}
 
     <!-- Configuration -->
     {#if showConfig && canManageSettings && config}
-      <section class="p-5 rounded-2xl bg-surface-container-high/50 border border-outline-variant/10 space-y-5">
-        <label class="flex items-center gap-3 cursor-pointer">
-          <input type="checkbox" bind:checked={form.enabled} class="w-4 h-4 rounded accent-primary" />
-          <span class="text-sm text-on-surface">{m.audit_config_enabled()}</span>
-        </label>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div class="space-y-3">
-            {#each [
-              { key: 'captureMessages' as const, label: m.audit_capture_messages() },
-              { key: 'captureMembers' as const, label: m.audit_capture_members() },
-              { key: 'captureRoles' as const, label: m.audit_capture_roles() },
-              { key: 'captureChannels' as const, label: m.audit_capture_channels() },
-            ] as toggle}
-              <label class="flex items-center gap-3 cursor-pointer">
-                <input type="checkbox" bind:checked={form[toggle.key]} class="w-4 h-4 rounded accent-primary" />
-                <span class="text-sm text-on-surface">{toggle.label}</span>
-              </label>
-            {/each}
+      <SectionCard title={m.audit_config_title()} icon="Settings" flush>
+        <div class="divide-y divide-outline-variant">
+          <SettingsRow label={m.audit_config_enabled()}>
+            <ToggleSwitch checked={form.enabled} ariaLabel={m.audit_config_enabled()} onToggle={(v: boolean) => (form.enabled = v)} />
+          </SettingsRow>
+          {#each [
+            { key: 'captureMessages' as const, label: m.audit_capture_messages() },
+            { key: 'captureMembers' as const, label: m.audit_capture_members() },
+            { key: 'captureRoles' as const, label: m.audit_capture_roles() },
+            { key: 'captureChannels' as const, label: m.audit_capture_channels() },
+          ] as toggle}
+            <SettingsRow label={toggle.label}>
+              <ToggleSwitch checked={form[toggle.key]} ariaLabel={toggle.label} onToggle={(v: boolean) => (form[toggle.key] = v)} />
+            </SettingsRow>
+          {/each}
+          <div class="grid grid-cols-1 gap-4 p-4 md:grid-cols-3">
+            <Field label={m.audit_retention_days()} hint={m.audit_retention_help()}>
+              {#snippet children(id, describedBy)}
+                <input {id} aria-describedby={describedBy} class="input" type="number" min="0" max="3650" bind:value={form.retentionDays} />
+              {/snippet}
+            </Field>
+            <Field label={m.audit_ignored_channels()}>
+              {#snippet children(id)}
+                <MultiSelect
+                  {id}
+                  bind:values={form.ignoredChannelIds}
+                  options={availableChannels.map((c: any) => ({ id: c.id, name: `#${c.name}` }))}
+                />
+              {/snippet}
+            </Field>
+            <Field label={m.audit_ignored_users()} hint={m.audit_ignored_help()}>
+              {#snippet children(id)}
+                <MultiSelect
+                  {id}
+                  bind:values={form.ignoredUserIds}
+                  options={availableRoles.map((r: any) => ({ id: r.id, name: `@${r.name}` }))}
+                />
+              {/snippet}
+            </Field>
           </div>
-
-          <div class="space-y-1.5">
-            <label for="audit-retention" class="text-xs font-semibold text-on-surface-variant">
-              {m.audit_retention_days()}
-            </label>
-            <input
-              id="audit-retention"
-              type="number"
-              min="0"
-              max="3650"
-              bind:value={form.retentionDays}
-              class="w-full px-3 py-2 rounded-xl bg-surface-container-highest border border-outline-variant/20 text-sm text-on-surface focus:border-primary/50 focus:outline-none"
-            />
-            <p class="text-2xs text-on-surface-variant">{m.audit_retention_help()}</p>
-          </div>
-        </div>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div class="space-y-1.5">
-            <label for="audit-ignored-channels" class="text-xs font-semibold text-on-surface-variant">
-              {m.audit_ignored_channels()}
-            </label>
-            <MultiSelect
-              id="audit-ignored-channels"
-              bind:values={form.ignoredChannelIds}
-              options={availableChannels.map((c: any) => ({ id: c.id, name: `#${c.name}` }))}
-              accentClass="bg-sky-500/20 text-sky-300 border-sky-500/40"
-            />
-          </div>
-          <div class="space-y-1.5">
-            <label for="audit-ignored-roles" class="text-xs font-semibold text-on-surface-variant">
-              {m.audit_ignored_users()}
-            </label>
-            <MultiSelect
-              id="audit-ignored-roles"
-              bind:values={form.ignoredUserIds}
-              options={availableRoles.map((r: any) => ({ id: r.id, name: `@${r.name}` }))}
-              accentClass="bg-error/20 text-rose-300 border-error/40"
-            />
-            <p class="text-2xs text-on-surface-variant">{m.audit_ignored_help()}</p>
+          <div class="flex justify-end p-4">
+            <Button variant="primary" icon="Check" loading={saving} onclick={saveConfig}>
+              {saving ? m.audit_saving() : m.audit_save()}
+            </Button>
           </div>
         </div>
-
-        <div class="flex justify-end">
-          <button
-            onclick={saveConfig}
-            disabled={saving}
-            class="px-5 py-2.5 rounded-xl text-xs font-semibold bg-primary text-on-primary hover:opacity-90 transition-all disabled:opacity-50 flex items-center gap-2"
-          >
-            <Papicon icon={saving ? 'Loader' : 'Check'} size={14} class={saving ? 'animate-spin' : ''} />
-            {saving ? m.audit_saving() : m.audit_save()}
-          </button>
-        </div>
-      </section>
+      </SectionCard>
     {/if}
 
     <!-- Filtres -->
-    <section class="p-4 rounded-2xl bg-surface-container-high/50 border border-outline-variant/10">
+    <div class="section-card p-4 space-y-3">
       <div class="flex flex-wrap items-end gap-3">
-        <div class="flex-1 min-w-48">
-          <input
-            type="search"
-            bind:value={filterSearch}
-            oninput={onSearchInput}
-            placeholder={m.audit_filter_search()}
-            class="w-full px-3 py-2 rounded-xl bg-surface-container-highest border border-outline-variant/20 text-sm text-on-surface focus:border-primary/50 focus:outline-none"
-          />
-        </div>
+        <input
+          type="search"
+          class="input flex-1 min-w-48"
+          bind:value={filterSearch}
+          oninput={onSearchInput}
+          placeholder={m.audit_filter_search()}
+          aria-label={m.audit_filter_search()}
+        />
 
-        <select
-          bind:value={filterType}
-          onchange={applyFilters}
-          class="px-3 py-2 rounded-xl bg-surface-container-highest border border-outline-variant/20 text-sm text-on-surface focus:border-primary/50 focus:outline-none"
-        >
+        <select class="input w-auto" bind:value={filterType} onchange={applyFilters} aria-label={m.audit_filter_all_types()}>
           <option value="">{m.audit_filter_all_types()}</option>
           {#each ALL_TYPES as type}
             <option value={type}>{TYPE_META[type].label()}</option>
           {/each}
         </select>
 
-        <select
-          bind:value={filterExecutor}
-          onchange={applyFilters}
-          class="px-3 py-2 rounded-xl bg-surface-container-highest border border-outline-variant/20 text-sm text-on-surface focus:border-primary/50 focus:outline-none"
-        >
+        <select class="input w-auto" bind:value={filterExecutor} onchange={applyFilters} aria-label={m.audit_filter_all_executors()}>
           <option value="">{m.audit_filter_all_executors()}</option>
           {#each executors as executor}
             <option value={executor.id}>{executor.name} ({executor.count})</option>
           {/each}
         </select>
 
-        <label class="flex items-center gap-2 text-xs text-on-surface-variant">
+        <label class="flex items-center gap-2 text-body-sm text-on-surface-variant">
           {m.audit_filter_from()}
-          <input
-            type="date"
-            bind:value={filterFrom}
-            onchange={applyFilters}
-            class="px-2 py-2 rounded-xl bg-surface-container-highest border border-outline-variant/20 text-sm text-on-surface focus:border-primary/50 focus:outline-none"
-          />
+          <input type="date" class="input w-auto" bind:value={filterFrom} onchange={applyFilters} />
         </label>
 
-        <label class="flex items-center gap-2 text-xs text-on-surface-variant">
+        <label class="flex items-center gap-2 text-body-sm text-on-surface-variant">
           {m.audit_filter_to()}
-          <input
-            type="date"
-            bind:value={filterTo}
-            onchange={applyFilters}
-            class="px-2 py-2 rounded-xl bg-surface-container-highest border border-outline-variant/20 text-sm text-on-surface focus:border-primary/50 focus:outline-none"
-          />
+          <input type="date" class="input w-auto" bind:value={filterTo} onchange={applyFilters} />
         </label>
 
-        <button
-          onclick={resetFilters}
-          class="px-3 py-2 rounded-xl text-xs font-medium bg-surface-container-highest text-on-surface-variant hover:text-on-surface transition-all"
-        >{m.audit_filter_reset()}</button>
+        <Button variant="ghost" icon="RotateCcw" onclick={resetFilters}>{m.audit_filter_reset()}</Button>
       </div>
-      <p class="mt-3 text-xs text-on-surface-variant">{m.audit_total_events({ n: total })}</p>
-    </section>
+      <p class="text-xs text-on-surface-variant">{m.audit_total_events({ n: total })}</p>
+    </div>
 
     <!-- Journal -->
     {#if loadingEvents}
       <div class="space-y-3">
         {#each Array(4) as _}
-          <div class="h-20 rounded-2xl bg-surface-container-high/40 animate-pulse"></div>
+          <div class="h-20 rounded-xl bg-surface-container animate-pulse"></div>
         {/each}
       </div>
     {:else if events.length === 0}
-      <div class="p-10 text-center text-sm text-on-surface-variant rounded-2xl bg-surface-container-high/30">
-        {m.audit_no_events()}
+      <div class="section-card">
+        <EmptyState
+          icon="GitCompare"
+          title={m.audit_no_events()}
+          reason={filterSearch || filterType || filterExecutor || filterFrom || filterTo ? 'nothing-matches' : 'accumulating'}
+        />
       </div>
     {:else}
       <div class="space-y-3">
         {#each events as event (event.id)}
           {@const meta = TYPE_META[event.eventType]}
           {@const isOpen = expanded.has(event.id)}
-          <article class="rounded-2xl bg-surface-container-high/50 border border-outline-variant/10 overflow-hidden">
+          <article class="section-card overflow-hidden">
             <header class="p-4 flex flex-wrap items-center justify-between gap-3">
               <div class="flex items-center gap-3 min-w-0">
-                <div class="p-2 rounded-xl shrink-0" style="background: {meta.color}18">
+                <div class="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style="background: {meta.color}18">
                   <Papicon icon={meta.icon} size={16} style="color: {meta.color}" />
                 </div>
                 <div class="min-w-0">
@@ -410,17 +353,13 @@
                 </div>
               </div>
 
-              <button
-                onclick={() => toggleExpanded(event.id)}
-                class="px-3 py-1.5 rounded-lg text-xs font-medium bg-surface-container-highest text-on-surface-variant hover:text-on-surface transition-all flex items-center gap-1.5 shrink-0"
-              >
-                <Papicon icon={isOpen ? 'ChevronUp' : 'ChevronDown'} size={13} />
+              <Button size="sm" variant="ghost" icon={isOpen ? 'ChevronUp' : 'ChevronDown'} aria-expanded={isOpen} onclick={() => toggleExpanded(event.id)}>
                 {isOpen ? m.audit_hide_diff() : m.audit_view_diff()}
-              </button>
+              </Button>
             </header>
 
             {#if isOpen}
-              <div class="px-4 pb-4 space-y-4 border-t border-outline-variant/10 pt-4">
+              <div class="px-4 pb-4 space-y-4 border-t border-outline-variant pt-4">
                 {#if event.reason}
                   <p class="text-xs text-on-surface-variant">
                     <span class="font-semibold">{m.audit_reason()} :</span> {event.reason}
@@ -442,21 +381,21 @@
                         <span class="text-success">+{stats.added}</span>
                         <span class="text-error ml-2">−{stats.removed}</span>
                       </p>
-                      <div class="rounded-xl border border-outline-variant/10 overflow-x-auto">
+                      <div class="rounded-lg border border-outline-variant overflow-x-auto">
                         <table class="w-full font-mono text-xs border-collapse">
                           <thead>
-                            <tr class="text-xs text-on-surface-variant/40">
-                              <th class="text-left font-bold px-3 py-2 w-1/2">{m.audit_before()}</th>
-                              <th class="text-left font-bold px-3 py-2 w-1/2 border-l border-outline-variant/10">{m.audit_after()}</th>
+                            <tr class="text-xs text-on-surface-variant bg-surface-container">
+                              <th class="text-left font-medium px-3 py-2 w-1/2">{m.audit_before()}</th>
+                              <th class="text-left font-medium px-3 py-2 w-1/2 border-l border-outline-variant">{m.audit_after()}</th>
                             </tr>
                           </thead>
                           <tbody>
                             {#each rows as row}
                               <tr>
-                                <td class="px-3 py-1 align-top whitespace-pre-wrap wrap-break-word {row.before?.type === 'removed' ? 'bg-error/10 text-red-300' : 'text-on-surface-variant'}">
+                                <td class="px-3 py-1 align-top whitespace-pre-wrap wrap-break-word {row.before?.type === 'removed' ? 'bg-error/10 text-error' : 'text-on-surface-variant'}">
                                   {#if row.before}<span class="select-none text-on-surface-variant/30 mr-2">{row.before.beforeLine ?? ''}</span>{row.before.content}{/if}
                                 </td>
-                                <td class="px-3 py-1 align-top whitespace-pre-wrap wrap-break-word border-l border-outline-variant/10 {row.after?.type === 'added' ? 'bg-success/10 text-emerald-300' : 'text-on-surface-variant'}">
+                                <td class="px-3 py-1 align-top whitespace-pre-wrap wrap-break-word border-l border-outline-variant {row.after?.type === 'added' ? 'bg-success/10 text-success' : 'text-on-surface-variant'}">
                                   {#if row.after}<span class="select-none text-on-surface-variant/30 mr-2">{row.after.afterLine ?? ''}</span>{row.after.content}{/if}
                                 </td>
                               </tr>
@@ -468,30 +407,24 @@
                       <!-- Listes : rôles gagnés/perdus, permissions accordées/refusées -->
                       <div class="flex flex-wrap gap-1.5">
                         {#each change.added ?? [] as item}
-                          <span class="px-2 py-1 rounded-md text-2xs font-mono bg-success/15 text-emerald-300 border border-success/25">
-                            + {item}
-                          </span>
+                          <span class="badge badge-success font-mono">+ {item}</span>
                         {/each}
                         {#each change.removed ?? [] as item}
-                          <span class="px-2 py-1 rounded-md text-2xs font-mono bg-error/15 text-red-300 border border-error/25">
-                            − {item}
-                          </span>
+                          <span class="badge badge-danger font-mono">− {item}</span>
                         {/each}
                         {#each change.reset ?? [] as item}
-                          <span class="px-2 py-1 rounded-md text-2xs font-mono bg-surface-container-highest text-on-surface-variant border border-outline-variant/20">
-                            ± {item}
-                          </span>
+                          <span class="badge badge-neutral font-mono">± {item}</span>
                         {/each}
                       </div>
                     {:else}
                       <!-- Champ scalaire : ancienne valeur barrée, nouvelle en vert -->
                       <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        <div class="px-3 py-2 rounded-xl bg-error/10 border border-error/20 text-xs text-red-300 wrap-break-word">
-                          <span class="block text-xs opacity-60 mb-0.5">{m.audit_before()}</span>
+                        <div class="px-3 py-2 rounded-lg bg-error/10 border border-error/20 text-xs text-error wrap-break-word">
+                          <span class="block text-xs text-on-surface-variant mb-0.5">{m.audit_before()}</span>
                           {displayValue(change.before)}
                         </div>
-                        <div class="px-3 py-2 rounded-xl bg-success/10 border border-success/20 text-xs text-emerald-300 wrap-break-word">
-                          <span class="block text-xs opacity-60 mb-0.5">{m.audit_after()}</span>
+                        <div class="px-3 py-2 rounded-lg bg-success/10 border border-success/20 text-xs text-success wrap-break-word">
+                          <span class="block text-xs text-on-surface-variant mb-0.5">{m.audit_after()}</span>
                           {displayValue(change.after)}
                         </div>
                       </div>
@@ -507,16 +440,8 @@
       <div class="flex items-center justify-between">
         <span class="text-xs text-on-surface-variant">{m.audit_page_of({ page, pages: totalPages })}</span>
         <div class="flex gap-2">
-          <button
-            onclick={() => changePage(-1)}
-            disabled={page <= 1}
-            class="px-3 py-1.5 rounded-lg text-xs font-medium bg-surface-container-highest text-on-surface-variant hover:text-on-surface disabled:opacity-30 transition-all"
-          >{m.audit_previous()}</button>
-          <button
-            onclick={() => changePage(1)}
-            disabled={page >= totalPages}
-            class="px-3 py-1.5 rounded-lg text-xs font-medium bg-surface-container-highest text-on-surface-variant hover:text-on-surface disabled:opacity-30 transition-all"
-          >{m.audit_next()}</button>
+          <Button size="sm" icon="ChevronLeft" disabled={page <= 1} onclick={() => changePage(-1)}>{m.audit_previous()}</Button>
+          <Button size="sm" iconRight="ChevronRight" disabled={page >= totalPages} onclick={() => changePage(1)}>{m.audit_next()}</Button>
         </div>
       </div>
     {/if}
