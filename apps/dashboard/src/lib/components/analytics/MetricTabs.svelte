@@ -13,6 +13,8 @@
     delta?: number | null;
     /** Une hausse est une mauvaise nouvelle (départs, sanctions). */
     invert?: boolean;
+    /** Valeur de la période d'avant : remplace l'écart en %, trop instable d'une semaine à l'autre. */
+    previous?: string;
     spark?: number[];
     color?: string;
     hint?: string;
@@ -78,7 +80,11 @@
       <Sparkline values={metric.spark} color={selected ? 'var(--metric-color)' : 'var(--series-neutral)'} width={64} height={22} />
     {/if}
   </span>
-  {#if compare && metric.delta !== undefined}
+  {#if compare && metric.previous !== undefined}
+    <span class="metric-tab__delta text-on-surface-variant font-normal">
+      {m.anx_previous_period({ value: metric.previous })}
+    </span>
+  {:else if compare && metric.delta !== undefined}
     <span
       class="metric-tab__delta {verdict === true ? 'text-success' : verdict === false ? 'text-error' : 'text-on-surface-variant'}"
     >
