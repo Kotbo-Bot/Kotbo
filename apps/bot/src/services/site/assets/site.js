@@ -110,6 +110,21 @@
     });
   });
 
+  // Trop d'onglets pour la pilule, quelle que soit la largeur de l'écran :
+  // on mesure le menu et on le replie en panneau quand il déborde.
+  var header = document.querySelector('.site-header');
+  var topNav = header && header.querySelector('.nav');
+  function fitNav() {
+    if (!topNav) return;
+    header.classList.remove('nav-collapsed');
+    if (topNav.scrollWidth > topNav.clientWidth + 1) header.classList.add('nav-collapsed');
+  }
+  if (topNav) {
+    fitNav();
+    window.addEventListener('resize', fitNav);
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitNav);
+  }
+
   // ─── Mode clair / sombre ───────────────────────────────────────────────
   // Le mode par défaut vient du thème (`data-default-mode`, éventuellement
   // `auto`) ; le choix du visiteur est retenu par site, et appliqué avant le
