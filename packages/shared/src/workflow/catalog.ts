@@ -29,7 +29,9 @@ export const SANCTION_TYPE_LABELS: Record<string, string> = {
   TEMP_BAN: 'Bannissement temporaire',
   BAN: 'Bannissement',
   SOFTBAN: 'Softban',
+  JAIL: 'Quarantaine (Jail)',
   UNBAN: 'Débannissement',
+  UNJAIL: 'Levée de quarantaine',
   UNTIMEOUT: "Retrait d'exclusion temporaire",
 };
 

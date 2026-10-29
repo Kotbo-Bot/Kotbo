@@ -115,12 +115,108 @@ model RaidProtectionConfig {
   // Rend aussi les rôles à permissions (staff, admin) et réinscrit le membre à l'annuaire staff
   rolePersistStaff   Boolean  @default(false)
 
+  // ── Jail (quarantaine par rôle) ────────────────────────────────────────────
+  // Le rôle Jail ne voit aucun salon, sauf celui réservé aux quarantaines s'il
+  // existe. Les rôles du membre lui sont retirés et rendus à la levée.
+  jailRoleId      String?
+  jailChannelId   String?
+  jailStripRoles  Boolean  @default(true)
+
+  // ── Kotbo Vision (filtre d'images d'arnaque) ───────────────────────────────────
+  // Indépendant du filtre de liens : actif par défaut, comme le catalogue
+  // global ne bloque que des images déjà confirmées sur plusieurs serveurs.
+  visionEnabled         Boolean @default(true)
+  // DELETE | WARN | TIMEOUT | KICK | SOFTBAN | BAN | JAIL
+  visionSanction        String  @default("TIMEOUT")
+  // Durée de la sanction en minutes ; null = permanente (BAN, JAIL).
+  visionDurationMin     Int?    @default(1440)
+  // Salon où sont signalées les correspondances incertaines du catalogue
+  // global. Les listes personnalisées ont leur propre salon.
+  visionReviewChannelId String?
+  // Message privé à l'auteur sanctionné.
+  visionNotifyMember    Boolean @default(true)
+
   guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@map("raid_protection_configs")
+}
+
+// Membre en quarantaine. Les rôles retirés à l'entrée sont rendus à la levée ;
+// la ligne survit à un départ pour reposer le rôle si le membre revient.
+model MemberJail {
+  guildId    String
+  userId     String
+  sanctionId String?
+  // MANUAL | SERVER_TAG | ACCOUNT_AGE | DISCORD_QUARANTINE | HONEYPOT | VISION
+  source     String   @default("MANUAL")
+  roleIds    String[] @default([])
+  reason     String?
+  // null = jusqu'à levée manuelle (ou disparition de la cause pour SERVER_TAG
+  // et DISCORD_QUARANTINE).
+  releaseAt  DateTime?
+  createdAt  DateTime @default(now())
+
+  guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  @@id([guildId, userId])
+  @@index([releaseAt])
+  @@index([guildId, source])
+  @@map("member_jails")
+}
+
+// Catalogue Kotbo Vision personnalisé : un registre d'images interdites, propre au
+// serveur. Une liste = un seul type de contenu, sinon les variantes rattachées
+// faussent la détection.
+model VisionList {
+  id              String   @id @default(cuid())
+  guildId         String
+  name            String
+  enabled         Boolean  @default(true)
+  // Salon où sont signalées les images proches mais non certaines.
+  reviewChannelId String?
+  // Sanction propre à la liste ; null = celle de Kotbo Vision.
+  sanction        String?
+  durationMin     Int?
+  createdBy       String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  guild  Guild            @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  images ScamImageHash[]
+
+  @@unique([guildId, name])
+  @@map("vision_lists")
+}
+
+// Image proche d'une image interdite, en attente de décision du staff.
+model VisionReview {
+  id       String  @id @default(cuid())
+  guildId  String
+  listId   String?
+  // Entrée du catalogue la plus proche.
+  matchId  String?
+  score    Float
+
+  authorId  String
+  channelId String
+  sha256    String
+  fingerprint String
+  thumb     String?
+
+  status          String    @default("PENDING") // PENDING | CONFIRMED | DISMISSED
+  reviewMessageId String?
+  handledBy       String?
+  handledAt       DateTime?
+  createdAt       DateTime  @default(now())
+
+  guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  @@index([guildId, status])
+  @@index([guildId, sha256])
+  @@map("vision_reviews")
 }
 
 // Rôles d'un membre au moment de son départ, rendus à son retour puis supprimés.
@@ -184,13 +280,31 @@ model ScamImageHash {
   // domaine, code promo) reste identique : c'est ce qui sert de jeu d'exemples.
   ocrText String?
 
+  // Empreinte Kotbo Vision v2 (cf. imageForensics.fingerprintImage) : dHash
+  // horizontal et vertical + pHash DCT, sur l'image débarrassée de ses bords et
+  // sur son centre. Absente des entrées antérieures, qui retombent sur phash.
+  fingerprint String?
+  // Vignette JPEG (data URL) pour le catalogue du dashboard. Les URL Discord
+  // expirent : sans elle, une liste serait une colonne de hash illisibles.
+  thumb       String?
+  // Liste personnalisée ; null = catalogue de détection (honeypot, global).
+  listId      String?
+  // Variante apprise d'une autre entrée (même image recadrée, recompressée).
+  parentId    String?
+  // BLOCKED = interdite ; ALLOWED = écartée par le staff, ne plus signaler.
+  status      String   @default("BLOCKED")
+  hits        Int      @default(0)
+  lastSeenAt  DateTime?
+
   createdAt DateTime @default(now())
 
-  guild Guild? @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  guild Guild?          @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  list  VisionList?  @relation(fields: [listId], references: [id], onDelete: Cascade)
 
   @@unique([guildId, hash])
   @@index([hash])
   @@index([guildId, phash])
+  @@index([listId])
   @@map("scam_image_hashes")
 }
 

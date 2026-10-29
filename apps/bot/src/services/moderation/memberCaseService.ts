@@ -216,6 +216,7 @@ const CROSS_SERVER_TYPE_LABELS: Record<SanctionType, string> = {
   TEMP_BAN: 'Tempban',
   BAN: 'Ban',
   SOFTBAN: 'Softban',
+  JAIL: 'Jail',
 };
 
 /**
@@ -375,6 +376,7 @@ const SANCTION_TYPE_EMOJI_KEY: Record<SanctionType, string> = {
   TEMP_BAN: 'ban',
   BAN: 'ban',
   SOFTBAN: 'ban',
+  JAIL: 'mute',
 };
 
 type CaseIdentity = {

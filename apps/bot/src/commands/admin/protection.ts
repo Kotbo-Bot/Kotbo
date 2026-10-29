@@ -29,6 +29,7 @@ import {
   type LockableChannel,
 } from '../../services/moderation/lockdownService.js';
 import { getReportStats } from '../../services/moderation/reportService.js';
+import { provisionJail } from '../../services/moderation/jailService.js';
 
 const LOCKDOWN_SCOPE_CHOICES = [
   { name: 'Le salon', value: 'salon' },
@@ -220,6 +221,16 @@ const data = new SlashCommandBuilder()
             opt.setName('portee').setDescription('Ce qui est rouvert (défaut : le salon)').addChoices(...LOCKDOWN_SCOPE_CHOICES))
           .addChannelOption((opt) =>
             opt.setName('salon').setDescription('Salon ou catégorie visé (défaut : le salon actuel)').addChannelTypes(...LOCKDOWN_CHANNEL_TYPES))))
+  .addSubcommandGroup((group) =>
+    group
+      .setName('jail')
+      .setDescription('Quarantaine par rôle : le membre reste sur le serveur sans rien y voir')
+      .addSubcommand((sub) =>
+        sub
+          .setName('setup')
+          .setDescription('Crée ou répare le rôle Jail et le masque sur tous les salons')
+          .addBooleanOption((opt) =>
+            opt.setName('salon').setDescription('Créer aussi un salon #quarantaine où le staff échange avec les membres en jail'))))
   .addSubcommand((sub) => sub.setName('status').setDescription('État de tous les modules de protection'));
 
 type LockdownScope = 'salon' | 'categorie' | 'serveur';
@@ -561,6 +572,30 @@ async function execute(interaction: ChatInputCommandInteraction) {
         await interaction.editReply({ embeds: [successEmbed('Rescan terminé', `➕ ${result.added} rôle(s) ajouté(s) · ➖ ${result.removed} retiré(s).`)] });
       }
     }
+    return;
+  }
+
+  // ── jail ────────────────────────────────────────────────────────────────────
+  if (group === 'jail') {
+    await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
+    const me = guild.members.me;
+    if (!me?.permissions.has([PermissionFlagsBits.ManageRoles, PermissionFlagsBits.ManageChannels])) {
+      await interaction.editReply({ embeds: [errorEmbed('Permissions manquantes', 'Kotbo a besoin de « Gérer les rôles » et « Gérer les salons ».')] });
+      return;
+    }
+    const result = await provisionJail(guild, { createChannel: interaction.options.getBoolean('salon') ?? false });
+    await interaction.editReply({
+      embeds: [
+        successEmbed(
+          'Jail prêt',
+          [
+            `Rôle : <@&${result.roleId}>, masqué sur ${result.channelsUpdated} salon(s).`,
+            result.channelId ? `Salon de quarantaine : <#${result.channelId}>.` : 'Aucun salon de quarantaine.',
+            'Les salons créés ensuite seront masqués automatiquement. Utilise `/sanction jail` pour mettre un membre en quarantaine.',
+          ].join('\n'),
+        ),
+      ],
+    });
     return;
   }
 

@@ -32,8 +32,10 @@ import {
   registerTimeoutSanction,
   registerWarnSanction,
   registerSoftbanSanction,
+  registerJailSanction,
   runGuildBan,
 } from '../../services/moderation/sanctionService.js';
+import { JailNotConfiguredError, releaseJail } from '../../services/moderation/jailService.js';
 import { applyProgressiveSanction, getOrCreateDefaultTables } from '../../services/moderation/sanctionTableService.js';
 import { sendBanAppealNotificationDM, sendPreActionAppealDM } from '../../services/moderation/banAppealService.js';
 import * as altAccountService from '../../services/moderation/altAccountService.js';
@@ -60,6 +62,8 @@ const kickMeta = getCommandMetadata('b1_sanction_kick');
 const banMeta = getCommandMetadata('b1_sanction_ban');
 const tempbanMeta = getCommandMetadata('b1_sanction_tempban');
 const softbanMeta = getCommandMetadata('b1_sanction_softban');
+const jailMeta = getCommandMetadata('b1_sanction_jail');
+const unjailMeta = getCommandMetadata('b1_sanction_unjail');
 const listMeta = getCommandMetadata('b1_sanction_list');
 const tableauMeta = getCommandMetadata('b1_sanction_tableau');
 const contextMeta = getCommandMetadata('b1_sanction_context');
@@ -145,6 +149,24 @@ const data = new SlashCommandBuilder()
       .setDescriptionLocalizations(softbanMeta.descriptionLocalizations)
       .addUserOption((option) => option.setName('membre').setDescription(describe('b1_sanction_softban_opt_membre').en).setDescriptionLocalizations({ fr: describe('b1_sanction_softban_opt_membre').fr }).setRequired(true))
       .addStringOption((option) => option.setName('raison').setDescription(describe('b1_sanction_softban_opt_raison').en).setDescriptionLocalizations({ fr: describe('b1_sanction_softban_opt_raison').fr }).setRequired(true)),
+  )
+  .addSubcommand((sub) =>
+    sub
+      .setName(jailMeta.name)
+      .setNameLocalizations(jailMeta.nameLocalizations)
+      .setDescription(jailMeta.description)
+      .setDescriptionLocalizations(jailMeta.descriptionLocalizations)
+      .addUserOption((option) => option.setName('membre').setDescription(describe('b1_sanction_jail_opt_membre').en).setDescriptionLocalizations({ fr: describe('b1_sanction_jail_opt_membre').fr }).setRequired(true))
+      .addStringOption((option) => option.setName('raison').setDescription(describe('b1_sanction_jail_opt_raison').en).setDescriptionLocalizations({ fr: describe('b1_sanction_jail_opt_raison').fr }).setRequired(true))
+      .addStringOption((option) => option.setName('duree').setDescription(describe('b1_sanction_jail_opt_duree').en).setDescriptionLocalizations({ fr: describe('b1_sanction_jail_opt_duree').fr }).setRequired(false)),
+  )
+  .addSubcommand((sub) =>
+    sub
+      .setName(unjailMeta.name)
+      .setNameLocalizations(unjailMeta.nameLocalizations)
+      .setDescription(unjailMeta.description)
+      .setDescriptionLocalizations(unjailMeta.descriptionLocalizations)
+      .addUserOption((option) => option.setName('membre').setDescription(describe('b1_sanction_unjail_opt_membre').en).setDescriptionLocalizations({ fr: describe('b1_sanction_unjail_opt_membre').fr }).setRequired(true)),
   )
   .addSubcommand((sub) =>
     sub
@@ -587,6 +609,80 @@ async function executeInternal(interaction: ChatInputCommandInteraction | UserCo
       await notifyModeratorDashboardReportReminder(interaction, {
         sanctionId: sanction.id,
         targetLabel: targetUser.tag,
+      });
+      return;
+    }
+
+    if (subcommand === 'jail') {
+      const reason = interaction.options.getString('raison', true).trim();
+
+      if (!targetMember) {
+        await replyError(interaction, m.b1_member_not_found({}, { locale }), m.b1_member_must_be_present_jail({}, { locale }));
+        return;
+      }
+      if (!targetMember.manageable) {
+        await replyError(interaction, m.b1_action_impossible({}, { locale }), m.b1_cannot_jail_member({}, { locale }));
+        return;
+      }
+
+      const durationInput = interaction.options.getString('duree');
+      const durationMs = durationInput ? parseDurationToMs(durationInput) : null;
+      if (durationInput && !durationMs) {
+        await replyError(interaction, m.b1_invalid_duration_title({}, { locale }), m.b1_invalid_duration_desc({ help: m.b1_duration_help({}, { locale }) }, { locale }));
+        return;
+      }
+
+      let sanction;
+      try {
+        sanction = await registerJailSanction({
+          guildId: interaction.guildId,
+          target,
+          moderator,
+          reason,
+          durationMs,
+          member: targetMember,
+          client: interaction.client,
+        });
+      } catch (err) {
+        if (err instanceof JailNotConfiguredError) {
+          await replyError(interaction, m.b1_action_impossible({}, { locale }), m.b1_jail_not_configured({}, { locale }));
+          return;
+        }
+        throw err;
+      }
+
+      await interaction.reply({
+        embeds: [
+          successEmbed(m.b1_jail_applied_title({}, { locale }), m.b1_jail_applied_desc({ user: `${targetUser}` }, { locale })).addFields(
+            { name: m.b1_duration({}, { locale }), value: durationMs ? formatDurationFr(durationMs) : m.b1_jail_permanent({}, { locale }), inline: true },
+            { name: m.b1_reason({}, { locale }), value: reason, inline: false },
+            { name: m.b1_sanction_id({}, { locale }), value: sanction.id, inline: false },
+          ),
+        ],
+        components: [buildMemberCaseActionRow(targetUser.id)],
+        flags: [MessageFlags.Ephemeral],
+      });
+
+      await notifyModeratorDashboardReportReminder(interaction, {
+        sanctionId: sanction.id,
+        targetLabel: targetUser.tag,
+      });
+      return;
+    }
+
+    if (subcommand === 'unjail') {
+      const released = await releaseJail(interaction.client, interaction.guildId, targetUser.id, {
+        note: `Quarantaine levée par ${interaction.user.tag}.`,
+        auditReason: `Quarantaine levée | Modération: ${interaction.user.tag}`,
+      });
+      if (!released) {
+        await replyError(interaction, m.b1_action_impossible({}, { locale }), m.b1_unjail_none({}, { locale }));
+        return;
+      }
+      await interaction.reply({
+        embeds: [successEmbed(m.b1_unjail_done_title({}, { locale }), m.b1_unjail_done_desc({ user: `${targetUser}` }, { locale }))],
+        components: [buildMemberCaseActionRow(targetUser.id)],
+        flags: [MessageFlags.Ephemeral],
       });
       return;
     }

@@ -151,7 +151,7 @@ export async function buildMemberCaseData(client: Client, guildId: string, userI
 
     // Résumé des sanctions sur les autres serveurs de l'instance (lancé en parallèle du reste).
     const crossServerPromise = getCrossServerSanctionSummary(client, guildId, linkedUserIds)
-      .catch(() => ({ enabled: false, serverCount: 0, total: 0, breakdown: { WARN: 0, KICK: 0, TIMEOUT: 0, TEMP_BAN: 0, BAN: 0, SOFTBAN: 0 }, recent: [] } as CrossServerSanctionSummary));
+      .catch(() => ({ enabled: false, serverCount: 0, total: 0, breakdown: { WARN: 0, KICK: 0, TIMEOUT: 0, TEMP_BAN: 0, BAN: 0, SOFTBAN: 0, JAIL: 0 }, recent: [] } as CrossServerSanctionSummary));
 
     // Liens de double compte déjà posés ailleurs : suggestions pour l'onglet « comptes liés ».
     const crossServerLinksPromise = getCrossServerLinkSummary(client, guildId, actualUserId)

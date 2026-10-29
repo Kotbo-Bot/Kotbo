@@ -13,6 +13,7 @@ import * as altAccountService from './altAccountService.js';
 import { getMissingReportReminderActions, type MissingReportReminderState } from './sanctionReportReminderPolicy.js';
 import { archiveScoreFilter } from './sanctionArchiveService.js';
 import { publicErrorMessage } from '../../utils/publicError.js';
+import { attachSanctionToJail, imprison, processJailReleases, type JailSource } from './jailService.js';
 
 const MAX_DISCORD_TIMEOUT_MS = 27 * 24 * 60 * 60 * 1000;
 const RENEWAL_BUFFER_MS = 60 * 1000;
@@ -525,6 +526,7 @@ function sanctionTypeLabel(type: string): string {
     TEMP_BAN: 'Bannissement temporaire',
     BAN: 'Bannissement définitif',
     SOFTBAN: 'Softban',
+    JAIL: 'Quarantaine (Jail)',
   }[type] || 'Sanction';
 }
 
@@ -1081,6 +1083,93 @@ export async function registerTimeoutSanction(params: {
   return sanction;
 }
 
+/**
+ * Met un membre en quarantaine (rôle Jail) et l'inscrit à son casier.
+ * `durationMs` null = quarantaine permanente, levée seulement à la main (ou à
+ * la disparition de sa cause pour les sources SERVER_TAG et DISCORD_QUARANTINE).
+ * Lève JailNotConfiguredError si le serveur n'a pas de rôle Jail.
+ */
+export async function registerJailSanction(params: {
+  guildId: string;
+  target: Target;
+  moderator: Actor;
+  reason: string;
+  durationMs: number | null;
+  member: GuildMember;
+  source?: JailSource;
+  client?: Client;
+  evidenceLinks?: string[];
+}) {
+  const existing = await findRecentSanction({
+    guildId: params.guildId,
+    type: SanctionType.JAIL,
+    targetUserId: params.target.id,
+    moderatorUserId: params.moderator.id,
+  });
+  if (existing) return existing;
+
+  const now = new Date();
+  const expiresAt = params.durationMs ? new Date(now.getTime() + params.durationMs) : null;
+
+  await imprison({
+    member: params.member,
+    source: params.source ?? 'MANUAL',
+    reason: params.reason,
+    releaseAt: expiresAt,
+    auditReason: buildActionReason(params.reason, params.moderator.tag),
+  });
+
+  // Une quarantaine qui remplace la précédente clôt l'ancienne sanction : un
+  // membre n'a qu'une ligne MemberJail, il ne doit avoir qu'un jail actif.
+  await prisma.sanction.updateMany({
+    where: { guildId: params.guildId, targetUserId: params.target.id, type: SanctionType.JAIL, status: SanctionStatus.ACTIVE },
+    data: { status: SanctionStatus.RESOLVED, resolvedAt: now, resolutionNote: 'Remplacée par une nouvelle quarantaine.' },
+  });
+
+  const sanction = await prisma.sanction.create({
+    data: {
+      guildId: params.guildId,
+      type: SanctionType.JAIL,
+      status: SanctionStatus.ACTIVE,
+      targetUserId: params.target.id,
+      targetTag: params.target.tag,
+      moderatorUserId: params.moderator.id,
+      moderatorTag: params.moderator.tag,
+      reason: params.reason,
+      durationSeconds: params.durationMs ? Math.floor(params.durationMs / 1000) : null,
+      expiresAt,
+      resolutionNote: expiresAt ? 'Quarantaine active.' : 'Quarantaine permanente.',
+    },
+  });
+  await attachSanctionToJail(params.guildId, params.target.id, sanction.id);
+
+  queueAuditLog({
+    guildId: params.guildId,
+    user: `${params.moderator.tag} (${params.moderator.id})`,
+    action: 'Sanction - Quarantaine (Jail)',
+    context: `${params.target.tag} (${params.target.id})`,
+    module: 'Modération',
+    eventType: 'Discord',
+    details: `Type: Jail | Durée: ${params.durationMs ? `${Math.floor(params.durationMs / 1000)}s` : 'permanente'} | Cible: ${params.target.tag} (${params.target.id}) | Modérateur: ${params.moderator.tag} | Raison: ${params.reason}`,
+  });
+
+  publishSanctionApplied(sanction);
+
+  void touchSanctionTargetIdentity({
+    guildId: params.guildId,
+    userId: params.target.id,
+    userTag: params.target.tag,
+  }).catch(() => null);
+
+  await emitSanctionReportReminder(
+    reportReminderPayload(sanction, { evidenceLinks: params.evidenceLinks }),
+  );
+  void notifyStaffOfSanction(params.guildId, sanction).catch(() => null);
+  notifyAppealableSanction(params.client, sanction);
+
+  return sanction;
+}
+
 export async function registerObservedTimeoutSanction(params: {
   guildId: string;
   target: Target;
@@ -1232,6 +1321,7 @@ export async function processScheduledSanctions(client: Client): Promise<void> {
   try {
     await processTimeoutRenewals(client);
     await processTempBans(client);
+    await processJailReleases(client);
 
     hasLoggedSanctionSchemaMismatch = false;
   } catch (error) {
@@ -1575,6 +1665,7 @@ export async function getSanctionTypeBreakdown(guildId: string, targetUserId: st
     TEMP_BAN: 0,
     BAN: 0,
     SOFTBAN: 0,
+    JAIL: 0,
   };
 
   for (const row of rows) {

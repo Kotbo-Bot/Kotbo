@@ -1,4 +1,5 @@
 /** Outils MCP - write sanctions (permission WRITE_SANCTIONS). */
+import { releaseJail } from '../../../services/moderation/jailService.js';
 import { generateTranscriptFromMessages } from '../../../services/features/transcriptService.js';
 import { decideAppeal, ensureDefaultAppealForm, getAppealConfig, requestAppealInfo, sendPreActionAppealDM, upsertAppealConfig } from '../../../services/moderation/banAppealService.js';
 import { registerBanSanction, registerKickSanction, registerTimeoutSanction, registerWarnSanction, runGuildBan } from '../../../services/moderation/sanctionService.js';
@@ -113,11 +114,11 @@ export function registerWriteSanctionsTools(ctx: McpToolContext) {
       'revoke_sanction',
       {
         description:
-          "Lève une sanction active d'un membre : déban et/ou retrait du timeout. Requiert la permission WRITE_SANCTIONS.",
+          "Lève une sanction active d'un membre : déban, retrait du timeout et/ou levée de quarantaine (Jail). Requiert la permission WRITE_SANCTIONS.",
         inputSchema: {
           member: z.string().describe('Nom, surnom, @mention ou ID Discord du membre'),
           type: z
-            .enum(['BAN', 'TIMEOUT'])
+            .enum(['BAN', 'TIMEOUT', 'JAIL'])
             .optional()
             .describe('Type de sanction à lever (si omis, lève tout ce qui est actif)'),
           reason: z.string().max(512).optional().describe('Raison de la levée (audit)'),
@@ -152,8 +153,14 @@ export function registerWriteSanctionsTools(ctx: McpToolContext) {
           }
         }
 
+        if (!type || type === 'JAIL') {
+          const released = await releaseJail(client, guildId, userId, { note: `Quarantaine levée via MCP : ${motif}`, auditReason: motif })
+            .catch(() => false);
+          if (released) actions.push('unjail');
+        }
+
         if (actions.length === 0) {
-          return err('Aucune sanction active à lever pour ce membre (ni ban ni timeout en cours).');
+          return err('Aucune sanction active à lever pour ce membre (ni ban, ni timeout, ni quarantaine en cours).');
         }
 
         const revokedTypes: SanctionType[] = actions.includes('unban')

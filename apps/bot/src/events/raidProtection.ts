@@ -1,4 +1,4 @@
-import { type Client, Events, type GuildMember, type Invite, type Message, type PartialGuildMember, type Typing, type VoiceState } from 'discord.js';
+import { type Client, Events, type GuildBasedChannel, type GuildMember, type Invite, type Message, type PartialGuildMember, type Typing, type VoiceState } from 'discord.js';
 import { logger } from '../utils/logger.js';
 import { getRaidProtectionConfig } from '../services/moderation/raidProtectionService.js';
 import { admitJoiningMember } from '../services/moderation/joinAdmissionService.js';
@@ -9,6 +9,7 @@ import { syncMemberTagRole } from '../services/moderation/tagRoleService.js';
 import { handleInviteCreate } from '../services/moderation/inviteGuardService.js';
 import { handleVoiceStateUpdate } from '../services/moderation/voiceCaptchaService.js';
 import { handleSpamMessage, handleTypingStart } from '../services/moderation/spam/index.js';
+import { applyJailOverwrite, reapplyJailOnJoin } from '../services/moderation/jailService.js';
 
 export function registerRaidProtectionListener(client: Client): void {
   // ── Arrivées : join lock → raid kick → détection de raid → ancienneté → captcha → rôles rendus → tag role
@@ -20,6 +21,10 @@ export function registerRaidProtectionListener(client: Client): void {
 
       const config = await getRaidProtectionConfig(member.guild.id);
       if (!config) return;
+
+      // Quarantaine toujours active : partir et revenir ne la lève pas. Ni
+      // captcha ni rôles rendus, ils annuleraient la quarantaine.
+      if (await reapplyJailOnJoin(member)) return;
 
       // 5. Captcha : activé en permanence, ou forcé par le raid mode (action CAPTCHA)
       const captchaForced = config.raidModeActive && config.antiRaidAction === 'CAPTCHA';
@@ -36,6 +41,19 @@ export function registerRaidProtectionListener(client: Client): void {
       await syncMemberTagRole(member, config);
     } catch (err) {
       logger.error('RaidProtection', `Erreur GuildMemberAdd pour ${member.id}`, err);
+    }
+  });
+
+  // ── Nouveaux salons : masqués aux membres en quarantaine ────────────────────
+  client.on(Events.ChannelCreate, async (channel: GuildBasedChannel) => {
+    try {
+      const config = await getRaidProtectionConfig(channel.guild.id);
+      if (!config?.jailRoleId) return;
+      // Un salon qui hérite de sa catégorie en a déjà le refus.
+      if ('permissionsLocked' in channel && channel.permissionsLocked && channel.parentId) return;
+      await applyJailOverwrite(channel, config.jailRoleId, config.jailChannelId);
+    } catch (err) {
+      logger.debug('RaidProtection', `Refus Jail non posé sur le salon ${channel.id}: ${String(err)}`);
     }
   });
 

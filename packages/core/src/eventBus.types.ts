@@ -137,7 +137,7 @@ export interface SanctionAppliedEvent {
   moderatorId: string;
   moderatorTag: string;
   /** Reprend l'énumération Prisma `SanctionType` sans la traduire. */
-  type: 'WARN' | 'KICK' | 'TIMEOUT' | 'TEMP_BAN' | 'BAN' | 'SOFTBAN';
+  type: 'WARN' | 'KICK' | 'TIMEOUT' | 'TEMP_BAN' | 'BAN' | 'SOFTBAN' | 'JAIL';
   reason: string | null;
   duration: number | null;
   sanctionId: string | null;
