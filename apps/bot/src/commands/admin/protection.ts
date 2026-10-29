@@ -170,7 +170,7 @@ const data = new SlashCommandBuilder()
           .addChannelOption((opt) =>
             opt.setName('salon-alertes').setDescription('Salon des alertes').addChannelTypes(ChannelType.GuildText))
           .addBooleanOption((opt) =>
-            opt.setName('images').setDescription('Bloquer aussi les images scam connues (base alimentée par le honeypot)')))
+            opt.setName('images').setDescription('Kotbo Vision : bloquer les images d\'arnaque connues (actif par défaut)')))
       .addSubcommand((sub) => sub.setName('desactiver').setDescription('Désactive le filtre anti-scam')))
   .addSubcommandGroup((group) =>
     group
@@ -345,8 +345,12 @@ async function execute(interaction: ChatInputCommandInteraction) {
         {
           name: '🎣 Anti-scam',
           value: config?.scamFilterEnabled
-            ? `${on} - action ${config.scamFilterAction}${config.scamImageFilterEnabled ? ' · images scam bloquées 🖼️' : ''}`
+            ? `${on} - action ${config.scamFilterAction}`
             : off,
+        },
+        {
+          name: '🔍 Kotbo Vision (images)',
+          value: config?.visionEnabled === false ? off : `${on} - sanction ${config?.visionSanction ?? 'TIMEOUT'}`,
         },
         {
           name: '🔗 Contrôle des invitations',
@@ -606,7 +610,7 @@ async function execute(interaction: ChatInputCommandInteraction) {
         scamFilterEnabled: true,
         scamFilterAction: interaction.options.getString('action') ?? 'DELETE_AND_TIMEOUT',
         scamFilterAlertChannelId: interaction.options.getChannel('salon-alertes')?.id ?? null,
-        scamImageFilterEnabled: interaction.options.getBoolean('images') ?? true,
+        visionEnabled: interaction.options.getBoolean('images') ?? true,
       });
       await interaction.reply({
         embeds: [successEmbed('Filtre anti-scam activé', 'Les liens d\'arnaques connus (faux Nitro, phishing Steam/Discord) seront supprimés automatiquement.')],

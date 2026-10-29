@@ -1,13 +1,21 @@
 import { describe, expect, test } from 'bun:test';
-import { createCanvas } from '@napi-rs/canvas';
+import { createCanvas, loadImage } from '@napi-rs/canvas';
 
 import {
   analyzeImage,
+  compareFingerprints,
+  compareWindows,
+  compareWithLegacy,
+  computeWindowHashes,
   detectQrCode,
   hammingDistance,
   isPerceptualMatch,
+  parseFingerprint,
+  parseLegacyHash,
   perceptualHash,
+  serializeFingerprint,
   toGrayscale,
+  windowShapesFor,
 } from '../../services/moderation/imageForensics.js';
 
 type Ctx = ReturnType<ReturnType<typeof createCanvas>['getContext']>;
@@ -182,5 +190,103 @@ describe('analyzeImage', () => {
   test('renvoie null sur un contenu illisible plutot que de lever', async () => {
     // Un fichier corrompu ne doit pas faire echouer la moderation du message.
     expect(await analyzeImage(Buffer.from('ceci n est pas une image'))).toBeNull();
+  });
+});
+
+// ── Empreinte Kotbo Vision v2 ──────────────────────────────────────────────────────
+
+/** Capture d'arnaque synthétique : bandeau, cartes colorées, texte. */
+function makeScamLikeImage(seed: number): Buffer {
+  let s = seed >>> 0;
+  const r = () => ((s = (s * 1664525 + 1013904223) >>> 0) / 2 ** 32);
+  const canvas = createCanvas(480, 600);
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = `hsl(${r() * 360}, 50%, 25%)`;
+  ctx.fillRect(0, 0, 480, 600);
+  for (let i = 0; i < 8; i++) {
+    ctx.fillStyle = `hsl(${r() * 360}, 65%, ${35 + r() * 40}%)`;
+    ctx.fillRect(r() * 400, r() * 520, 40 + r() * 200, 30 + r() * 160);
+  }
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 36px sans-serif';
+  ctx.fillText(`BONUS ${Math.floor(r() * 9000)}$`, 30, 300);
+  return canvas.toBuffer('image/png');
+}
+
+async function transformed(buffer: Buffer, draw: (ctx: Ctx, img: Awaited<ReturnType<typeof loadImage>>) => void, size?: [number, number]): Promise<Buffer> {
+  const img = await loadImage(buffer);
+  const canvas = createCanvas(size?.[0] ?? img.width, size?.[1] ?? img.height);
+  draw(canvas.getContext('2d'), img);
+  return canvas.encode('jpeg', 70);
+}
+
+describe('empreinte Kotbo Vision v2', () => {
+  test('la sérialisation fait un aller-retour exact', async () => {
+    const analysis = await analyzeImage(makeScamLikeImage(3));
+    const text = serializeFingerprint(analysis!.fingerprint);
+    expect(serializeFingerprint(parseFingerprint(text)!)).toBe(text);
+    expect(parseFingerprint('v1;nimporte;quoi')).toBeNull();
+  });
+
+  test('reconnaît avec certitude une recompression, une bordure et un miroir', async () => {
+    const original = makeScamLikeImage(7);
+    const known = (await analyzeImage(original))!.fingerprint;
+
+    const recompressed = await transformed(original, (ctx, img) => ctx.drawImage(img, 0, 0));
+    const bordered = await transformed(original, (ctx, img) => {
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, 640, 800);
+      ctx.drawImage(img, 80, 100);
+    }, [640, 800]);
+    const mirrored = await transformed(original, (ctx, img) => {
+      ctx.translate(img.width, 0);
+      ctx.scale(-1, 1);
+      ctx.drawImage(img, 0, 0);
+    });
+
+    for (const variant of [recompressed, bordered, mirrored]) {
+      const fp = (await analyzeImage(variant))!.fingerprint;
+      expect(compareFingerprints(fp, known).verdict).toBe('CERTAIN');
+    }
+  });
+
+  test('ne confond pas deux images sans rapport', async () => {
+    const a = (await analyzeImage(makeScamLikeImage(11)))!.fingerprint;
+    for (const seed of [12, 13, 14, 15]) {
+      const b = (await analyzeImage(makeScamLikeImage(seed)))!.fingerprint;
+      expect(compareFingerprints(a, b).verdict).toBeNull();
+    }
+  });
+
+  test('neutralise une image unie, dont les hash sont dégénérés', async () => {
+    const canvas = createCanvas(300, 300);
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#5865f2';
+    ctx.fillRect(0, 0, 300, 300);
+    const flat = (await analyzeImage(canvas.toBuffer('image/png')))!.fingerprint;
+    expect(flat.flat).toBe(true);
+    expect(compareFingerprints(flat, flat).verdict).toBeNull();
+  });
+
+  test('retrouve une image incrustée dans une capture plus large', async () => {
+    const original = makeScamLikeImage(21);
+    const known = (await analyzeImage(original))!.fingerprint;
+    const screenshot = await transformed(original, (ctx, img) => {
+      ctx.fillStyle = '#313338';
+      ctx.fillRect(0, 0, 600, 1100);
+      ctx.fillStyle = '#dbdee1';
+      ctx.font = '20px sans-serif';
+      for (let i = 0; i < 10; i++) ctx.fillText(`message ${i}`, 10, 30 + i * 26);
+      ctx.drawImage(img, 60, 300);
+    }, [600, 1100]);
+    const gray = (await analyzeImage(screenshot))!.gray;
+    const windows = computeWindowHashes(gray, windowShapesFor([known.rawAspect]));
+    expect(compareWindows(windows, known).verdict).not.toBeNull();
+  });
+
+  test('compare une entrée v1 (dHash seul) à une empreinte v2', async () => {
+    const analysis = (await analyzeImage(makeScamLikeImage(31)))!;
+    const legacy = parseLegacyHash(analysis.phash)!;
+    expect(compareWithLegacy(analysis.fingerprint, legacy).verdict).toBe('CERTAIN');
   });
 });

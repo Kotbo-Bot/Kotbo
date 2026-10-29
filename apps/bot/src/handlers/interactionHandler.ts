@@ -872,6 +872,34 @@ export async function handleButton(interaction: Interaction, client: Client): Pr
       return;
     }
 
+    if (action === 'vision_confirm' || action === 'vision_dismiss') {
+      await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
+      const { decideVisionReview } = await import('../services/moderation/visionService.js');
+      const confirm = action === 'vision_confirm';
+      const decision = await decideVisionReview(client, entityId, user.id, confirm);
+      if (!decision.ok) {
+        await interaction.editReply({ content: `ℹ️ ${decision.reason}` });
+        await interaction.message.edit({ components: [] }).catch(() => null);
+        return;
+      }
+      await interaction.editReply({
+        content: confirm
+          ? `✅ Image ajoutée au registre${decision.sanction ? `, auteur sanctionné (${decision.sanction})` : ''}.`
+          : '✅ Image écartée : elle ne sera plus signalée.',
+      });
+      const original = interaction.message.embeds[0];
+      if (original) {
+        const { EmbedBuilder } = await import('discord.js');
+        const updated = EmbedBuilder.from(original)
+          .setColor(confirm ? 0xed4245 : 0x57f287)
+          .addFields({ name: 'Décision', value: `${confirm ? 'Confirmée (interdite)' : 'Écartée (saine)'} par <@${user.id}>`, inline: false });
+        await interaction.message.edit({ embeds: [updated], components: [] }).catch(() => null);
+      } else {
+        await interaction.message.edit({ components: [] }).catch(() => null);
+      }
+      return;
+    }
+
     if (action === 'invite_approve' || action === 'invite_reject') {
       await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
       const { approveInviteRequest, rejectInviteRequest } = await import('../services/moderation/inviteGuardService.js');

@@ -6,7 +6,8 @@ import { COLORS, truncate } from '../../utils/embeds.js';
 import { fetchExternal } from '../../utils/http.js';
 import { getRaidProtectionConfig } from './raidProtectionService.js';
 import { registerWarnSanction, registerTimeoutSanction, registerBanSanction } from './sanctionService.js';
-import { analyzeImage, hammingDistance, PHASH_MATCH_THRESHOLD } from './imageForensics.js';
+import { analyzeImage, hammingDistance, PHASH_MATCH_THRESHOLD, serializeFingerprint } from './imageForensics.js';
+import { invalidateVisionCache } from './visionService.js';
 import { LEGIT_DOMAINS, compactOcrText, extractDomains, looksLikeFakeGiveaway, looksLikeRecruitmentScam } from './scamHeuristics.js';
 import { findKnownScamDomain, findKnownScamText, promoteImageIfWidespread, recordScamSignals } from './scamDatasetService.js';
 import { readImageText } from './ocrService.js';
@@ -116,6 +117,9 @@ type FetchedImage = {
   name: string;
   sha256: string;
   phash: string | null;
+  /** Empreinte Kotbo Vision v2 sérialisée. */
+  fingerprint: string | null;
+  thumb: string | null;
   qr: boolean;
   /** Texte lu dans l'image ; null si l'OCR n'a pas été demandé ou a échoué. */
   ocrText: string | null;
@@ -129,7 +133,7 @@ type FetchedImage = {
  * mode de rediffusion réel des captures d'arnaque. Le texte lu par OCR couvre
  * le reste : la capture photographiée, que ni l'un ni l'autre ne reconnaît.
  */
-async function fetchAndAnalyze(url: string, name: string, withOcr: boolean): Promise<FetchedImage | null> {
+async function fetchAndAnalyze(url: string, name: string, withOcr: boolean, withThumb = false): Promise<FetchedImage | null> {
   try {
     const res = await fetchExternal(url, {}, 5_000);
     if (!res.ok) return null;
@@ -138,13 +142,15 @@ async function fetchAndAnalyze(url: string, name: string, withOcr: boolean): Pro
 
     const buffer = Buffer.from(buf);
     const sha256 = createHash('sha256').update(buffer).digest('hex');
-    const analysis = await analyzeImage(buffer);
+    const analysis = await analyzeImage(buffer, { thumb: withThumb });
     const ocrText = withOcr ? await readImageText(buffer) : null;
 
     return {
       name,
       sha256,
       phash: analysis?.phash ?? null,
+      fingerprint: analysis ? serializeFingerprint(analysis.fingerprint) : null,
+      thumb: analysis?.thumb ?? null,
       qr: analysis?.qr.detected ?? false,
       ocrText,
     };
@@ -160,10 +166,10 @@ function imageAttachmentsOf(message: Message): { url: string; name: string }[] {
     .map((a) => ({ url: a.url, name: a.name }));
 }
 
-async function analyzeAttachments(message: Message, withOcr = false): Promise<FetchedImage[]> {
+async function analyzeAttachments(message: Message, withOcr = false, withThumb = false): Promise<FetchedImage[]> {
   const results: FetchedImage[] = [];
   for (const attachment of imageAttachmentsOf(message)) {
-    const analyzed = await fetchAndAnalyze(attachment.url, attachment.name, withOcr);
+    const analyzed = await fetchAndAnalyze(attachment.url, attachment.name, withOcr, withThumb);
     if (analyzed) results.push(analyzed);
   }
   return results;
@@ -196,18 +202,23 @@ async function storeScamImage(
         guildId,
         hash: image.sha256,
         phash: image.phash,
+        fingerprint: image.fingerprint,
+        thumb: image.thumb,
         filename: image.name,
         source,
         addedBy,
         ocrText,
       },
-      // Une entrée créée avant l'ajout du perceptuel ou de l'OCR peut être complétée.
+      // Une entrée créée avant l'ajout du perceptuel, de l'OCR ou de
+      // l'empreinte v2 peut être complétée.
       update: {
         ...(image.phash ? { phash: image.phash } : {}),
+        ...(image.fingerprint ? { fingerprint: image.fingerprint } : {}),
+        ...(image.thumb ? { thumb: image.thumb } : {}),
         ...(ocrText ? { ocrText } : {}),
       },
     });
-    await promoteImageIfWidespread(image.sha256, image.phash, image.name);
+    await promoteImageIfWidespread(image.sha256, image.phash, image.name, image.fingerprint, image.thumb);
     return true;
   } catch (err) {
     logger.error('ScamFilter', `Enregistrement du hash d'image impossible (${guildId})`, err);
@@ -228,12 +239,13 @@ export async function recordScamImagesFromMessage(
 
   // Le honeypot est rare et ses images sont par définition suspectes : on lit
   // toujours leur texte, sans le garde-fou de coût des contrôles en continu.
-  for (const image of await analyzeAttachments(message, true)) {
+  for (const image of await analyzeAttachments(message, true, true)) {
     if (await storeScamImage(message.guild.id, image, source, message.author.id, true)) recorded++;
   }
 
   if (recorded > 0) {
     invalidatePhashCache(message.guild.id);
+    invalidateVisionCache(message.guild.id);
     logger.info('ScamFilter', `${recorded} empreinte(s) d'image scam enregistrée(s) pour ${message.guild.id} (source: ${source})`);
   }
   return recorded;
@@ -244,7 +256,7 @@ export async function recordScamImagesFromMessage(
  * si l'image n'est plus téléchargeable (lien CDN expiré, message supprimé).
  */
 export async function recordScamImageFromUrl(guildId: string, url: string, name: string): Promise<boolean> {
-  const image = await fetchAndAnalyze(url, name, true);
+  const image = await fetchAndAnalyze(url, name, true, true);
   if (!image) return false;
   const stored = await storeScamImage(guildId, image, 'HONEYPOT', null, false);
   if (stored) invalidatePhashCache(guildId);
@@ -399,31 +411,18 @@ export async function handleScamMessage(message: Message): Promise<boolean> {
   let reason = reasonFor(detection);
 
   // Analyse d'image : une seule fois pour tous les contrôles qui en dépendent.
+  // Les images d'arnaque connues relèvent de Kotbo Vision (visionService), qui
+  // passe avant ce filtre ; restent ici le QR et la lecture du texte.
   const needsImageAnalysis =
     !detection.matched &&
     message.attachments.size > 0 &&
-    (config.scamImageFilterEnabled || config.scamQrFilterEnabled || config.scamOcrEnabled);
+    (config.scamQrFilterEnabled || config.scamOcrEnabled);
 
   if (needsImageAnalysis) {
     // La lecture du texte est le contrôle le plus coûteux : réservée aux
     // membres sans historique, qui sont aussi ceux qui postent ces captures.
     const withOcr = config.scamOcrEnabled && (await isNewcomer(message, config));
     const images = await analyzeAttachments(message, withOcr);
-
-    if (config.scamImageFilterEnabled) {
-      const imageMatch = await matchKnownScamImages(message.guild.id, images);
-      if (imageMatch) {
-        const label = imageMatch.filename ?? imageMatch.hash.slice(0, 12);
-        detection = {
-          matched: true,
-          pattern: `known_scam_image:${label}:${imageMatch.kind.toLowerCase()}`,
-        };
-        reason =
-          imageMatch.kind === 'PERCEPTUAL'
-            ? `Image d'arnaque connue détectée (variante recompressée, distance ${imageMatch.distance})`
-            : "Image d'arnaque connue détectée";
-      }
-    }
 
     if (!detection.matched && (await isSuspiciousQrSender(message, config, images))) {
       detection = { matched: true, pattern: 'qr_code_from_newcomer' };

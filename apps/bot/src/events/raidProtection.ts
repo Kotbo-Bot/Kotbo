@@ -5,6 +5,7 @@ import { admitJoiningMember } from '../services/moderation/joinAdmissionService.
 import { startCaptchaChallenge, handleCaptchaMessage, hasPendingCaptchaSession } from '../services/moderation/captchaService.js';
 import { restorePersistedRoles, snapshotDepartingMemberRoles } from '../services/moderation/rolePersistenceService.js';
 import { handleScamMessage } from '../services/moderation/scamFilterService.js';
+import { handleVision } from '../services/moderation/visionService.js';
 import { syncMemberTagRole } from '../services/moderation/tagRoleService.js';
 import { handleInviteCreate } from '../services/moderation/inviteGuardService.js';
 import { handleVoiceStateUpdate } from '../services/moderation/voiceCaptchaService.js';
@@ -74,8 +75,10 @@ export function registerRaidProtectionListener(client: Client): void {
     try {
       // Le salon captcha consomme le message (comparaison du code + nettoyage)
       if (await handleCaptchaMessage(message)) return;
-      // Le filtre anti-scam passe avant : un lien de phishing identifié est une
-      // certitude, là où le moteur anti-spam raisonne en probabilité.
+      // Kotbo Vision puis le filtre anti-scam passent avant : une image ou un lien
+      // d'arnaque identifié est une certitude, là où le moteur anti-spam
+      // raisonne en probabilité.
+      if (await handleVision(message)) return;
       if (await handleScamMessage(message)) return;
       await handleSpamMessage(message);
     } catch (err) {

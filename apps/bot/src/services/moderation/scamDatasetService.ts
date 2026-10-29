@@ -154,7 +154,13 @@ async function promoteTextIfWidespread(fingerprint: string, sample: string, sign
 }
 
 /** Même principe pour une image : le SHA-256 vu sur plusieurs serveurs devient global. */
-export async function promoteImageIfWidespread(hash: string, phash: string | null, filename: string | null): Promise<void> {
+export async function promoteImageIfWidespread(
+  hash: string,
+  phash: string | null,
+  filename: string | null,
+  fingerprint: string | null = null,
+  thumb: string | null = null
+): Promise<void> {
   const guilds = await prisma.scamImageHash.findMany({
     where: { hash, guildId: { not: null } },
     select: { guildId: true },
@@ -166,7 +172,7 @@ export async function promoteImageIfWidespread(hash: string, phash: string | nul
   if (existing) return;
 
   try {
-    await prisma.scamImageHash.create({ data: { guildId: null, hash, phash, filename, source: 'HONEYPOT' } });
+    await prisma.scamImageHash.create({ data: { guildId: null, hash, phash, fingerprint, thumb, filename, source: 'HONEYPOT' } });
     logger.info('ScamDataset', `Image promue en global: ${hash.slice(0, 12)} (${guilds.length} serveurs)`);
   } catch (err) {
     if (!isUniqueViolation(err)) throw err;
