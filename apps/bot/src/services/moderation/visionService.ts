@@ -53,6 +53,10 @@ import {
   type ParsedFingerprint,
 } from './imageForensics.js';
 import { applyAutoSanction, autoSanctionLabel, normalizeAutoSanction, type AutoSanction } from './autoSanction.js';
+import { readImageText } from './ocrService.js';
+import { compactOcrText } from './scamHeuristics.js';
+import { promoteImageIfWidespread, recordScamSignals } from './scamDatasetService.js';
+import { detectInImageText, reasonForScamDetection } from './phishingFeedService.js';
 
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 const MAX_IMAGES_PER_MESSAGE = 8;
@@ -350,6 +354,15 @@ async function learnVariant(guildId: string, parent: CatalogEntry, image: Analyz
       },
     })
     .catch(() => null); // Déjà connue (course entre deux messages identiques).
+  if (!parent.listId) {
+    await promoteImageIfWidespread(
+      image.sha256,
+      image.analysis.phash,
+      image.source.name,
+      serializeFingerprint(image.analysis.fingerprint),
+      thumbed?.analysis.thumb ?? null
+    ).catch(() => null);
+  }
 }
 
 async function recordHit(entryId: string): Promise<void> {
@@ -365,6 +378,175 @@ function isExempt(message: Message): boolean {
  * Point d'entrée : analyse les images d'un message et applique Kotbo Vision.
  * Retourne true si le message a été supprimé.
  */
+export type DeepImageDetection = {
+  image: AnalyzedImage;
+  via: 'qr' | 'ocr';
+  reason: string;
+};
+
+/**
+ * Auto-indexe dans le catalogue Kotbo Vision une image inédite piégée par QR ou OCR :
+ * la prochaine fois que la campagne la rediffuse (même recadrée ou transférée),
+ * elle sera bloquée dès l'étape d'empreinte visuelle en ~3 ms sans relancer l'OCR.
+ */
+async function autoIndexDetectedImage(
+  guildId: string,
+  addedBy: string,
+  image: AnalyzedImage,
+  source: 'QR' | 'OCR',
+  ocrText: string | null
+): Promise<void> {
+  if (image.analysis.fingerprint.flat) return;
+  const thumbed = image.analysis.thumb ? image : await analyzeBuffer(image.buffer, image.source, true);
+  const fingerprint = serializeFingerprint(image.analysis.fingerprint);
+  const thumb = thumbed?.analysis.thumb ?? null;
+  const compactText = ocrText ? compactOcrText(ocrText) : null;
+
+  await prisma.scamImageHash
+    .upsert({
+      where: { guildId_hash: { guildId, hash: image.sha256 } },
+      create: {
+        guildId,
+        hash: image.sha256,
+        phash: image.analysis.phash,
+        fingerprint,
+        thumb,
+        filename: image.source.name.slice(0, 200),
+        source,
+        status: 'BLOCKED',
+        addedBy,
+        ocrText: compactText,
+      },
+      update: {
+        phash: image.analysis.phash,
+        fingerprint,
+        ...(thumb ? { thumb } : {}),
+        ...(compactText ? { ocrText: compactText } : {}),
+      },
+    })
+    .catch(() => null);
+
+  await promoteImageIfWidespread(image.sha256, image.analysis.phash, image.source.name, fingerprint, thumb).catch(
+    () => null
+  );
+  invalidateVisionCache(guildId);
+}
+
+/**
+ * Seconde passe Kotbo Vision sur des images dont l'empreinte visuelle est encore inconnue :
+ * combine la détection de code QR (déjà calculée lors du décodage) et la lecture OCR
+ * couplée aux heuristiques, aux flux GitHub de phishing et au jeu de données honeypot.
+ */
+export async function inspectUnmatchedImages(
+  guildId: string,
+  authorId: string,
+  images: AnalyzedImage[],
+  config: RaidProtectionConfig
+): Promise<DeepImageDetection | null> {
+  if (images.length === 0) return null;
+  if (!config.scamQrFilterEnabled && !config.scamOcrEnabled) return null;
+
+  const profile = await prisma.memberProfile
+    .findUnique({
+      where: { guildId_userId: { guildId, userId: authorId } },
+      select: { messageCount: true },
+    })
+    .catch(() => null);
+
+  if ((profile?.messageCount ?? 0) > config.scamQrTrustedMessages) return null;
+
+  if (config.scamQrFilterEnabled) {
+    const qrImage = images.find((img) => img.analysis.qr.detected);
+    if (qrImage) {
+      await autoIndexDetectedImage(guildId, authorId, qrImage, 'QR', null);
+      return {
+        image: qrImage,
+        via: 'qr',
+        reason: 'Kotbo Vision : code QR posté par un compte sans historique (phishing par QR de connexion, auto-indexé)',
+      };
+    }
+  }
+
+  if (config.scamOcrEnabled) {
+    for (const image of images) {
+      const ocrText = await readImageText(image.buffer);
+      if (!ocrText) continue;
+      const found = await detectInImageText(guildId, ocrText, config).catch(() => null);
+      if (found?.matched) {
+        await recordScamSignals(guildId, ocrText, 'OCR', { countRepeat: true }).catch(() => null);
+        await autoIndexDetectedImage(guildId, authorId, image, 'OCR', ocrText);
+        return {
+          image,
+          via: 'ocr',
+          reason: `Kotbo Vision : ${reasonForScamDetection(found)} (lu par OCR et auto-indexé)`,
+        };
+      }
+    }
+  }
+
+  return null;
+}
+
+async function handleDeepImageInspection(
+  message: Message<true>,
+  images: AnalyzedImage[],
+  config: RaidProtectionConfig | null
+): Promise<boolean> {
+  if (!config || !message.member) return false;
+  const detected = await inspectUnmatchedImages(message.guild.id, message.author.id, images, config);
+  if (!detected) return false;
+
+  await message.delete().catch(() => null);
+  const { action, durationMin } = sanctionFor(config, undefined);
+  const result = await applyAutoSanction({
+    client: message.client,
+    guild: message.guild,
+    user: message.author,
+    member: message.member,
+    action,
+    durationMin,
+    reason: detected.reason,
+    jailSource: 'VISION',
+  });
+
+  logger.warn(
+    'Kotbo Vision',
+    `${message.guild.id} : image inédite bloquée et auto-indexée de ${message.author.id} (${detected.via}) - ${result.applied}`
+  );
+
+  const sanctionLabel = result.done ? autoSanctionLabel(result.applied, durationMin) : 'Message supprimé seulement';
+  if (config.visionNotifyMember && result.done && result.applied !== 'DELETE') {
+    await notifyAuthor(message.author, message.guild, detected.reason, sanctionLabel);
+  }
+  await logDeepBlocked(message, detected, sanctionLabel, config);
+  return true;
+}
+
+async function logDeepBlocked(
+  message: Message<true>,
+  detected: DeepImageDetection,
+  sanction: string,
+  config: RaidProtectionConfig
+): Promise<void> {
+  const channel = await logChannelFor(message.guild, config);
+  if (!channel || !('send' in channel)) return;
+  const file = new AttachmentBuilder(detected.image.buffer, { name: 'image.png' });
+  const embed = new EmbedBuilder()
+    .setColor(COLORS.danger)
+    .setTitle('🔍 Kotbo Vision : image d\'arnaque auto-apprise')
+    .addFields(
+      { name: 'Membre', value: `<@${message.author.id}> (\`${message.author.id}\`)`, inline: true },
+      { name: 'Salon', value: `<#${message.channelId}>`, inline: true },
+      { name: 'Sanction', value: sanction, inline: true },
+      { name: 'Détection', value: detected.via === 'qr' ? 'Code QR suspect' : 'Lecture OCR + heuristiques', inline: true },
+      { name: 'Apprentissage', value: 'Empreinte indexée dans le catalogue', inline: true },
+      { name: 'Motif', value: detected.reason, inline: false },
+    )
+    .setImage('attachment://image.png')
+    .setTimestamp();
+  await channel.send({ embeds: [embed], files: [file], allowedMentions: { parse: [] } }).catch(() => null);
+}
+
 export async function handleVision(message: Message): Promise<boolean> {
   if (!message.inGuild() || !message.member || message.author.bot) return false;
   if (message.attachments.size === 0 && message.embeds.length === 0 && message.stickers.size === 0 && !message.messageSnapshots?.size) return false;
@@ -378,7 +560,7 @@ export async function handleVision(message: Message): Promise<boolean> {
   if (sources.length === 0) return false;
   const images = await analyzeSources(sources);
   const match = await findVisionMatch(message.guild.id, images);
-  if (!match) return false;
+  if (!match) return handleDeepImageInspection(message, images, config);
 
   const effectiveConfig = config ?? (await prisma.raidProtectionConfig.upsert({ where: { guildId: message.guild.id }, create: { guildId: message.guild.id }, update: {} }));
   const catalog = await loadGuildCatalog(message.guild.id);
@@ -554,6 +736,9 @@ export async function decideVisionReview(client: Client, reviewId: string, decid
   invalidateVisionCache(review.guildId);
 
   if (!confirm) return { ok: true, status: 'DISMISSED' };
+  if (!review.listId) {
+    await promoteImageIfWidespread(review.sha256, null, null, review.fingerprint, review.thumb).catch(() => null);
+  }
 
   // Sanction tardive : l'image est confirmée, son auteur est traité comme s'il
   // avait été attrapé du premier coup.
@@ -625,6 +810,15 @@ export async function addImagesToCatalog(params: {
         select: ENTRY_SELECT,
       });
       known.push(toEntry(row));
+      if (!params.listId) {
+        await promoteImageIfWidespread(
+          image.sha256,
+          image.analysis.phash,
+          name.slice(0, 200),
+          serializeFingerprint(image.analysis.fingerprint),
+          image.analysis.thumb
+        ).catch(() => null);
+      }
       if (parent) result.variants++;
       else result.added++;
     } catch (err) {

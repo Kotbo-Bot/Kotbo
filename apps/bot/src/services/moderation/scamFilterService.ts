@@ -8,105 +8,19 @@ import { getRaidProtectionConfig } from './raidProtectionService.js';
 import { registerWarnSanction, registerTimeoutSanction, registerBanSanction } from './sanctionService.js';
 import { analyzeImage, hammingDistance, PHASH_MATCH_THRESHOLD, serializeFingerprint } from './imageForensics.js';
 import { invalidateVisionCache } from './visionService.js';
-import { LEGIT_DOMAINS, compactOcrText, extractDomains, looksLikeFakeGiveaway, looksLikeRecruitmentScam } from './scamHeuristics.js';
-import { findKnownScamDomain, findKnownScamText, promoteImageIfWidespread, recordScamSignals } from './scamDatasetService.js';
+import { compactOcrText } from './scamHeuristics.js';
+import { promoteImageIfWidespread, recordScamSignals } from './scamDatasetService.js';
+import {
+  detectInImageText,
+  detectKnownScam,
+  detectScam,
+  reasonForScamDetection,
+  type ScamDetection,
+} from './phishingFeedService.js';
 import { readImageText } from './ocrService.js';
 import type { RaidProtectionConfig } from '@prisma/client';
 
-// ── Heuristiques de détection d'arnaques (faux Nitro, phishing Steam/Discord…) ─
-
-// Patterns de domaines typiques des campagnes de scam
-const SCAM_DOMAIN_PATTERNS: RegExp[] = [
-  /d[il1]sc[o0]rd[a-z0-9-]*\.(?!com|gg)[a-z]{2,}/i,        // discörd lookalikes hors TLD officiels
-  /discord[a-z0-9-]*(nitro|gift|airdrop|app|steam)[a-z0-9-]*\./i,
-  /(nitro|gift)[a-z0-9-]*discord[a-z0-9-]*\./i,
-  /ste[a4]m[a-z0-9-]*c[o0]mmun[il1]ty(?!\.com)[a-z0-9-]*\./i, // steamcommunity lookalikes
-  /steamc?ommunlty\./i,
-  /free[-_]?nitro/i,
-  /nitro[-_]?(free|gen|drop)/i,
-  /(airdrop|giveaway)[-_]?(nitro|crypto|eth|btc)/i,
-];
-
-// Combinaisons texte suspectes (mention massive + appât)
-const SCAM_TEXT_PATTERNS: RegExp[] = [
-  /@everyone[\s\S]{0,120}(free|gratuit)[\s\S]{0,40}(nitro|steam|skin|robux)/i,
-  /(free|gratuit)\s+(discord\s+)?nitro[\s\S]{0,80}https?:\/\//i,
-  /(steam\s+gift|cs2?\s*skins?|trade\s*offer)[\s\S]{0,80}https?:\/\/(?!(?:[a-z0-9-]+\.)?steam(?:community|powered)\.com)/i,
-];
-
-const URL_REGEX = /https?:\/\/([a-z0-9.-]+)/gi;
-
-export type ScamDetection = { matched: true; domain?: string; pattern: string } | { matched: false };
-
-export function detectScam(content: string, config: RaidProtectionConfig): ScamDetection {
-  const whitelist = new Set(config.scamFilterWhitelist.map((d) => d.toLowerCase()));
-  const customBlocked = config.scamFilterCustomDomains.map((d) => d.toLowerCase());
-
-  // Un sous-domaine d'un domaine autorisé l'est aussi (cdn.discordapp.com, media.discordapp.net).
-  const isTrusted = (domain: string): boolean => {
-    const labels = domain.split('.');
-    return labels.some((_, i) => {
-      const parent = labels.slice(i).join('.');
-      return whitelist.has(parent) || LEGIT_DOMAINS.has(parent);
-    });
-  };
-
-  // 1. Analyse des domaines présents dans le message
-  for (const match of content.matchAll(URL_REGEX)) {
-    const domain = match[1].toLowerCase();
-    if (isTrusted(domain)) continue;
-
-    if (customBlocked.some((blocked) => domain === blocked || domain.endsWith(`.${blocked}`))) {
-      return { matched: true, domain, pattern: 'custom_domain' };
-    }
-    for (const pattern of SCAM_DOMAIN_PATTERNS) {
-      if (pattern.test(domain)) return { matched: true, domain, pattern: pattern.source };
-    }
-  }
-
-  // 2. Analyse des combinaisons de texte
-  for (const pattern of SCAM_TEXT_PATTERNS) {
-    if (pattern.test(content)) return { matched: true, pattern: pattern.source };
-  }
-
-  // 3. Faux giveaway crypto/casino (célébrité + bonus + code promo…). Un domaine
-  // que le serveur a explicitement autorisé désarme ce contrôle : le staff qui
-  // annonce un vrai partenariat ne doit pas être bloqué par un cumul de mots.
-  const mentionsWhitelisted = extractDomains(content).some((d) => whitelist.has(d));
-  if (!mentionsWhitelisted) {
-    const giveaway = looksLikeFakeGiveaway(content);
-    if (giveaway.matched) {
-      return { matched: true, pattern: `fake_giveaway:${giveaway.signals.join('+')}` };
-    }
-    // Faux recrutement (« revenu complémentaire, il suffit d'un ordinateur,
-    // MP avec ta nationalité ») : aucun lien, le piège se referme en privé.
-    const recruitment = looksLikeRecruitmentScam(content);
-    if (recruitment.matched) {
-      return { matched: true, pattern: `recruitment_scam:${recruitment.signals.join('+')}` };
-    }
-  }
-
-  return { matched: false };
-}
-
-/**
- * Contrôles qui interrogent le jeu de données (alimenté par le honeypot) :
- * domaine déjà vu dans une arnaque, texte copié-collé d'une arnaque connue.
- */
-async function detectKnownScam(guildId: string, content: string, config: RaidProtectionConfig): Promise<ScamDetection> {
-  const whitelist = new Set(config.scamFilterWhitelist.map((d) => d.toLowerCase()));
-
-  const domain = await findKnownScamDomain(guildId, content);
-  if (domain && !whitelist.has(domain)) {
-    return { matched: true, domain, pattern: 'known_scam_domain' };
-  }
-
-  if (await findKnownScamText(guildId, content)) {
-    return { matched: true, pattern: 'known_scam_text' };
-  }
-
-  return { matched: false };
-}
+export { detectScam, type ScamDetection };
 
 // ── Base d'images d'arnaques (hash exact + empreinte perceptuelle) ───────────
 
@@ -175,7 +89,7 @@ async function analyzeAttachments(message: Message, withOcr = false, withThumb =
   return results;
 }
 
-type ImageSource = 'HONEYPOT' | 'MANUAL' | 'QR';
+type ImageSource = 'HONEYPOT' | 'MANUAL' | 'QR' | 'OCR';
 
 /**
  * Enregistre une image analysée, ses empreintes et le texte qu'on y a lu.
@@ -259,7 +173,10 @@ export async function recordScamImageFromUrl(guildId: string, url: string, name:
   const image = await fetchAndAnalyze(url, name, true, true);
   if (!image) return false;
   const stored = await storeScamImage(guildId, image, 'HONEYPOT', null, false);
-  if (stored) invalidatePhashCache(guildId);
+  if (stored) {
+    invalidatePhashCache(guildId);
+    invalidateVisionCache(guildId);
+  }
   return stored;
 }
 
@@ -341,13 +258,6 @@ export async function findKnownScamImage(message: Message): Promise<ScamImageMat
   return matchKnownScamImages(message.guild.id, await analyzeAttachments(message));
 }
 
-/**
- * Un code QR posté par un membre sans historique est-il suspect ?
- *
- * Le phishing par QR de connexion Discord ne contient aucun lien : il échappe
- * intégralement aux filtres de domaine. Un membre installé qui partage un QR
- * (wifi, 2FA, jeu) n'est pas concerné - seul l'inconnu l'est.
- */
 async function isSuspiciousQrSender(
   message: Message,
   config: RaidProtectionConfig,
@@ -358,11 +268,6 @@ async function isSuspiciousQrSender(
   return isNewcomer(message, config);
 }
 
-/**
- * Le membre est-il sans historique sur ce serveur ? Seuil partagé par les
- * filtres QR et OCR : au-delà de `scamQrTrustedMessages` messages, un membre est
- * considéré comme installé.
- */
 async function isNewcomer(message: Message, config: RaidProtectionConfig): Promise<boolean> {
   const profile = await prisma.memberProfile
     .findUnique({
@@ -374,26 +279,35 @@ async function isNewcomer(message: Message, config: RaidProtectionConfig): Promi
   return (profile?.messageCount ?? 0) <= config.scamQrTrustedMessages;
 }
 
-function reasonFor(detection: ScamDetection): string {
-  if (!detection.matched) return '';
-  if (detection.pattern.startsWith('fake_giveaway')) return "Faux giveaway crypto/casino détecté (cumul d'indices : appât, code promo, célébrité…)";
-  if (detection.pattern.startsWith('recruitment_scam')) return "Faux recrutement détecté (promesse de revenu facile et invitation à poursuivre en privé)";
-  if (detection.pattern === 'known_scam_text') return "Texte d'arnaque connu détecté (copie d'une campagne repérée par un honeypot)";
-  if (detection.pattern === 'known_scam_domain') return `Domaine d'arnaque connu détecté${detection.domain ? ` (${detection.domain})` : ''}`;
-  return `Lien d'arnaque détecté${detection.domain ? ` (${detection.domain})` : ''}`;
-}
-
-/** Contrôles appliqués au texte lu dans une image (capture d'un faux giveaway, d'un faux site de retrait). */
-async function detectInImageText(guildId: string, text: string, config: RaidProtectionConfig): Promise<ScamDetection> {
-  const direct = detectScam(text, config);
-  if (direct.matched) return direct;
-  return detectKnownScam(guildId, text, config);
+/**
+ * Rassemble le texte d'un message, de ses embeds et des éventuels messages
+ * transférés (`messageSnapshots`) pour que le transfert d'une arnaque ne
+ * contourne pas le filtre textuel.
+ */
+function collectMessageText(message: Message): string {
+  const parts: string[] = [];
+  if (message.content) parts.push(message.content);
+  for (const embed of message.embeds) {
+    if (embed.title) parts.push(embed.title);
+    if (embed.description) parts.push(embed.description);
+    if (embed.url) parts.push(embed.url);
+  }
+  for (const snapshot of message.messageSnapshots?.values() ?? []) {
+    if (snapshot.content) parts.push(snapshot.content);
+    for (const embed of snapshot.embeds) {
+      if (embed.title) parts.push(embed.title);
+      if (embed.description) parts.push(embed.description);
+      if (embed.url) parts.push(embed.url);
+    }
+  }
+  return parts.join('\n').trim();
 }
 
 /** Traite un message : détection + action configurée. Retourne true si un scam a été traité. */
 export async function handleScamMessage(message: Message): Promise<boolean> {
   if (!message.guild || !message.member || message.author.bot) return false;
-  if (!message.content && message.attachments.size === 0) return false;
+  const fullText = collectMessageText(message);
+  if (!fullText && message.attachments.size === 0) return false;
 
   const config = await getRaidProtectionConfig(message.guild.id);
   if (!config?.scamFilterEnabled) return false;
@@ -401,30 +315,31 @@ export async function handleScamMessage(message: Message): Promise<boolean> {
   // Le staff et les admins sont exemptés
   if (message.member.permissions.has(PermissionFlagsBits.ManageMessages)) return false;
 
-  let detection: ScamDetection = message.content ? detectScam(message.content, config) : { matched: false };
-  if (!detection.matched && message.content) {
-    detection = await detectKnownScam(message.guild.id, message.content, config).catch((err) => {
+  let detection: ScamDetection = fullText ? detectScam(fullText, config) : { matched: false };
+  if (!detection.matched && fullText) {
+    detection = await detectKnownScam(message.guild.id, fullText, config).catch((err) => {
       logger.error('ScamFilter', `Contrôle du jeu de données impossible (${message.guild!.id})`, err);
       return { matched: false } as ScamDetection;
     });
   }
-  let reason = reasonFor(detection);
+  let reason = reasonForScamDetection(detection);
 
-  // Analyse d'image : une seule fois pour tous les contrôles qui en dépendent.
-  // Les images d'arnaque connues relèvent de Kotbo Vision (visionService), qui
-  // passe avant ce filtre ; restent ici le QR et la lecture du texte.
+  // Repli d'analyse d'image uniquement lorsque Kotbo Vision est désactivé :
+  // quand Vision est actif (par défaut), `handleVision` a déjà inspecté en une
+  // seule passe les empreintes visuelles, le QR et l'OCR de toutes les images.
   const needsImageAnalysis =
     !detection.matched &&
+    !config.visionEnabled &&
     message.attachments.size > 0 &&
     (config.scamQrFilterEnabled || config.scamOcrEnabled);
 
   if (needsImageAnalysis) {
-    // La lecture du texte est le contrôle le plus coûteux : réservée aux
-    // membres sans historique, qui sont aussi ceux qui postent ces captures.
     const withOcr = config.scamOcrEnabled && (await isNewcomer(message, config));
-    const images = await analyzeAttachments(message, withOcr);
+    const images = await analyzeAttachments(message, withOcr, true);
 
     if (!detection.matched && (await isSuspiciousQrSender(message, config, images))) {
+      const qrImg = images.find((i) => i.qr);
+      if (qrImg) await storeScamImage(message.guild.id, qrImg, 'QR', message.author.id, true);
       detection = { matched: true, pattern: 'qr_code_from_newcomer' };
       reason = 'Code QR posté par un compte sans historique (phishing par QR de connexion)';
     }
@@ -434,8 +349,9 @@ export async function handleScamMessage(message: Message): Promise<boolean> {
         if (!image.ocrText) continue;
         const found = await detectInImageText(message.guild.id, image.ocrText, config).catch(() => null);
         if (found?.matched) {
+          await storeScamImage(message.guild.id, image, 'OCR', message.author.id, true);
           detection = { ...found, pattern: `image_text:${found.pattern}` };
-          reason = `${reasonFor(found)} - lu dans une image`;
+          reason = `${reasonForScamDetection(found)} - lu dans une image`;
           break;
         }
       }
@@ -486,7 +402,7 @@ export async function handleScamMessage(message: Message): Promise<boolean> {
           { name: 'Membre', value: `<@${message.author.id}> (\`${message.author.id}\`)`, inline: true },
           { name: 'Salon', value: `<#${message.channelId}>`, inline: true },
           { name: 'Action', value: config.scamFilterAction, inline: true },
-          { name: 'Message', value: truncate(message.content, 1000), inline: false },
+          { name: 'Message', value: truncate(fullText || '[Image]', 1000), inline: false },
         )
         .setTimestamp();
       await (channel as TextChannel).send({ embeds: [embed] }).catch(() => null);

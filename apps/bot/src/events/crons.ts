@@ -26,6 +26,7 @@ import { dispatchScheduledWorkflows, pruneWorkflowExecutions, resumePendingExecu
 import { expireTemporaryRoles } from '../services/features/workflow/temporaryRoles.js';
 import { pruneOldWordStats } from '../services/analytics/wordStatsService.js';
 import { runBanHygieneScan } from '../services/moderation/banHygieneService.js';
+import { refreshPhishingFeeds } from '../services/moderation/phishingFeedService.js';
 import { isModuleEnabled } from '../services/core/moduleGate.js';
 
 const runningJobs = new Set<string>();
@@ -147,6 +148,14 @@ export async function registerCrons(client: Client): Promise<void> {
   logger.info('Cron', "Début de l'enregistrement des cron jobs...");
   // Initialiser le backup automatique de la base de données
   initializeDatabaseBackup();
+  void runLocalSweep('phishing-feeds-init', async () => {
+    await refreshPhishingFeeds();
+  });
+  cron.schedule('0 */6 * * *', () => {
+    void runLocalSweep('phishing-feeds', async () => {
+      await refreshPhishingFeeds();
+    });
+  });
   logger.info('Cron', 'Backup automatique initialisé');
 
   // Initialiser les planifications dynamiques de la base de données
