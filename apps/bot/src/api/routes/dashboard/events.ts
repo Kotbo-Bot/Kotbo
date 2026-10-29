@@ -346,7 +346,7 @@ export async function handleEventsRoutes(
         const identities = await getMemberIdentities(
           client,
           guildId,
-          registrations.map((registration) => registration.userId),
+          registrations.flatMap((registration) => [registration.userId, ...registration.teamMemberIds]),
         );
         json(res, 200, {
           registrations: registrations.map((registration) => {
@@ -355,6 +355,7 @@ export async function handleEventsRoutes(
               ...registration,
               username: identity?.displayName || registration.username,
               avatarUrl: identity?.avatarUrl || null,
+              teamMembers: registration.teamMemberIds.map((id) => ({ id, name: identities.get(id)?.displayName || id })),
             };
           }),
         });

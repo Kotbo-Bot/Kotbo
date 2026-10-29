@@ -81,13 +81,14 @@
 
   const isPublicPage = $derived(
     /^\/\d{17,19}\/news\/?$/.test($router.path) ||
-      /^\/\d{17,19}\/leveling\/classement\/?$/.test($router.path) ||
+      /^\/\d{17,19}\/leveling\/classement(\/\d{17,20})?\/?$/.test($router.path) ||
       /^\/\d{17,19}\/prestige\/classement\/?$/.test($router.path) ||
       /^\/\d{17,19}\/leveling\/clan\/?$/.test($router.path) ||
       /^\/\d{17,19}\/clan\/?$/.test($router.path) ||
       /^\/\d{17,19}\/rpg\/?$/.test($router.path) ||
       /^\/\d{17,19}\/clan-rpg\/?$/.test($router.path) ||
       /^\/\d{17,19}\/giveaways(\/[A-Za-z0-9_-]+)?\/?$/.test($router.path) ||
+      /^\/\d{17,19}\/tournaments\/[A-Za-z0-9_-]+\/?$/.test($router.path) ||
       // Un membre sans role de staff n'a pas de tableau de bord autour du
       // profil : il le voit comme un visiteur, depuis « Mon espace ».
       ($router.path.startsWith("/profile/") &&
@@ -616,6 +617,11 @@
         props={(meta) => ({ serverId: meta.params.serverId })}
       />
       <LazyRoute
+        path="/:serverId/leveling/classement/:userId"
+        load={() => import("./pages/LevelingPublic.svelte")}
+        props={(meta) => ({ serverId: meta.params.serverId, initialUserId: meta.params.userId })}
+      />
+      <LazyRoute
         path="/:serverId/prestige/classement"
         load={() => import("./pages/PrestigePublic.svelte")}
         props={(meta) => ({ serverId: meta.params.serverId })}
@@ -649,6 +655,11 @@
         path="/:serverId/giveaways/:giveawayId"
         load={() => import("./pages/GiveawaysPublic.svelte")}
         props={(meta) => ({ serverId: meta.params.serverId, giveawayId: meta.params.giveawayId })}
+      />
+      <LazyRoute
+        path="/:serverId/tournaments/:eventId"
+        load={() => import("./pages/TournamentPublic.svelte")}
+        props={(meta) => ({ serverId: meta.params.serverId, eventId: meta.params.eventId })}
       />
       <LazyRoute
         path="/partner-portal/:token"
