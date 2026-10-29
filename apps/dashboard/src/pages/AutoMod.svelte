@@ -29,7 +29,7 @@
   const actionState = createAsyncActionState();
   let loading = $state(false);
   // « nicknames » est rendu par la page enveloppe (security/Filters) : il figure ici pour que l'onglet existe.
-  const FILTER_TABS = ['bot', 'discord', 'security', 'behavioral', 'exceptions', 'simulator', 'nicknames'] as const;
+  const FILTER_TABS = ['bot', 'discord', 'security', 'behavioral', 'servers', 'exceptions', 'simulator', 'nicknames'] as const;
   let activeTab = $state<string>('bot');
 
   // L'onglet vit dans l'URL, comme ailleurs : la palette de commandes propose

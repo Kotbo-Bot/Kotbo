@@ -391,3 +391,51 @@ export async function applyAllSecurityFixes(guildId = authStore.selectedGuildId)
     errorContext: 'API Error (Security Fix All):'
   });
 }
+
+// ─────────────────────────────────────────────────────────────
+// Automod : autres serveurs et extensions de fichiers
+// ─────────────────────────────────────────────────────────────
+
+export type FileFilterRule = {
+  id: string;
+  targetId: string;
+  targetType: 'CHANNEL' | 'CATEGORY';
+  mode: 'BLACKLIST' | 'WHITELIST';
+  groups: string[];
+  extensions: string[];
+};
+
+/** Ajoute un serveur à la liste en collant une de ses invitations. */
+export async function addOtherServer(invite: string, guildId = authStore.selectedGuildId) {
+  return dashboardRequest<{ config: Record<string, any> }>('/raid-protection/other-servers', {
+    method: 'POST',
+    payload: { invite },
+    guildId,
+    errorContext: 'API Error (Other Servers):'
+  });
+}
+
+export async function fetchFileRules(guildId = authStore.selectedGuildId) {
+  return dashboardRequest<{ rules: FileFilterRule[]; groups: Record<string, string[]>; maxRules: number }>('/raid-protection/file-rules', {
+    method: 'GET',
+    guildId,
+    errorContext: 'API Error (File Rules):'
+  });
+}
+
+export async function saveFileRule(rule: Omit<FileFilterRule, 'id' | 'targetType'>, guildId = authStore.selectedGuildId) {
+  return dashboardRequest<{ rule: FileFilterRule }>('/raid-protection/file-rules', {
+    method: 'POST',
+    payload: rule,
+    guildId,
+    errorContext: 'API Error (File Rule):'
+  });
+}
+
+export async function deleteFileRule(ruleId: string, guildId = authStore.selectedGuildId) {
+  return dashboardMutation(`/raid-protection/file-rules/${ruleId}`, {
+    method: 'DELETE',
+    guildId,
+    errorContext: 'API Error (File Rule):'
+  });
+}

@@ -105,6 +105,7 @@ export const PAGE_TABS: Record<string, PageTabConfig[]> = {
     { id: 'discord', label: () => m.am_tab_discord_filters(), icon: 'shield' },
     { id: 'security', label: () => m.am_tab_security(), icon: 'lock' },
     { id: 'behavioral', label: () => m.am_tab_behavioral(), icon: 'activity' },
+    { id: 'servers', label: () => m.am_tab_servers(), icon: 'globe' },
     { id: 'exceptions', label: () => m.am_tab_exceptions(), icon: 'filter' },
     { id: 'simulator', label: () => m.sim_tab_label(), icon: 'history' },
     // Page a part (/security/filters/nicknames), rangee ici en onglet : elle
