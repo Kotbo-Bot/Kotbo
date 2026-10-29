@@ -587,7 +587,9 @@
               >
                 <option value="ALERT">Signaler uniquement</option>
                 <option value="KICK">Expulser</option>
-                <option value="BAN">Bannir</option>
+                <option value="JAIL">Quarantaine jusqu'à l'âge requis</option>
+                <option value="TEMPBAN">Bannir jusqu'à l'âge requis</option>
+                <option value="BAN">Bannir définitivement</option>
               </select>
             </label>
           </div>
@@ -595,6 +597,12 @@
           {#if (config.accountAgeMinUnit === 'MONTHS' ? config.accountAgeMinValue * 30 : config.accountAgeMinValue) >= 365}
             <p class="text-2xs text-warning leading-relaxed">
               Seuil d'un an ou plus : une grande partie des arrivées légitimes sera concernée. Vérifie l'unité.
+            </p>
+          {/if}
+
+          {#if config.accountAgeAction === 'JAIL'}
+            <p class="text-2xs text-on-surface-variant leading-relaxed">
+              Le compte entre sans rien voir (rôle Jail) et sort de quarantaine tout seul à la date où il atteint l'âge requis. Il est prévenu en MP de cette date.{#if !config.jailRoleId} Aucun rôle Jail configuré : ce sera un bannissement jusqu'à la même date.{/if}
             </p>
           {/if}
 

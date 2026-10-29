@@ -101,6 +101,7 @@
     antiBotEnabled: false,
     antiBotAction: 'KICK',
     antiBotBypassUsers: [] as string[],
+    antiBotRoleIds: [] as string[],
 
     adminLockEnabled: false,
     adminLockAction: 'BLOCK',
@@ -131,7 +132,7 @@
     customWordsEnabled: false, customWordsAction: 'BLOCK', customWords: [], customWordsAllowList: [], customWordsTimeoutSec: 60,
     profanityEnabled: false, profanityPresetProfanity: true, profanityPresetSexual: true, profanityPresetSlurs: true, profanityAction: 'BLOCK', profanityAllowList: [], profanityTimeoutSec: 60,
     inviteFilterEnabled: false, inviteFilterAction: 'BLOCK', inviteFilterAllowedGuilds: [], inviteFilterTimeoutSec: 60,
-    antiBotEnabled: false, antiBotAction: 'KICK', antiBotBypassUsers: [],
+    antiBotEnabled: false, antiBotAction: 'KICK', antiBotBypassUsers: [], antiBotRoleIds: [],
     adminLockEnabled: false, adminLockAction: 'BLOCK', adminLockSecurityRoleIds: [], adminLockNotifyChannelId: null,
     burstSuspendEnabled: false, burstSuspendFastLimit: 5, burstSuspendFastWindowSec: 1, burstSuspendSlowLimit: 10, burstSuspendSlowWindowSec: 60,
     bypassRoles: [], bypassChannels: []
@@ -1001,6 +1002,35 @@
             {m.am_antibot_desc()}
           </p>
 
+          <!-- Rôles des bots : donnés à chaque bot à son arrivée, à la place du rôle automatique. -->
+          <div class="space-y-2">
+            <span class="text-xs font-semibold text-on-surface-variant ml-2">Rôles des bots</span>
+            <p class="text-xs text-on-surface-variant ml-2">Donnés à chaque bot dès son arrivée, à la place du rôle automatique. Les rôles d'intégration, ceux au-dessus de Kotbo et ceux qui donnent Administrateur sont ignorés.</p>
+            <select
+              aria-label="Ajouter un rôle de bot"
+              class="w-full bg-surface-container-high/45 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none"
+              value=""
+              onchange={(e) => {
+                const id = e.currentTarget.value;
+                if (id && !(config.antiBotRoleIds ?? []).includes(id)) config.antiBotRoleIds = [...(config.antiBotRoleIds ?? []), id];
+                e.currentTarget.value = '';
+              }}
+            >
+              <option value="">Ajouter un rôle…</option>
+              {#each availableRoles as role (role.id)}<option value={role.id}>{role.name}</option>{/each}
+            </select>
+            <div class="flex flex-wrap gap-2">
+              {#each config.antiBotRoleIds ?? [] as roleId (roleId)}
+                <span class="inline-flex items-center gap-1 rounded-lg border border-outline-variant/30 px-2 py-1 text-xs text-on-surface">
+                  @{availableRoles.find((r: { id: string; name: string }) => r.id === roleId)?.name ?? roleId}
+                  <Button size="sm" variant="ghost" icon="X" onclick={() => (config.antiBotRoleIds = config.antiBotRoleIds.filter((id) => id !== roleId))} />
+                </span>
+              {:else}
+                <span class="text-xs text-on-surface-variant ml-2">Aucun : les bots reçoivent le rôle automatique.</span>
+              {/each}
+            </div>
+          </div>
+
           {#if config.antiBotEnabled}
             <div class="space-y-5 animate-in fade-in duration-300">
               <div class="space-y-1.5">
@@ -1059,6 +1089,7 @@
                   {m.am_antibot_notice()}
                 </p>
               </div>
+              <p class="text-xs text-on-surface-variant ml-2">Pour laisser entrer un bot ponctuellement : <code>/bypass bot</code> (propriétaire), valable une fois pendant 10 minutes.</p>
             </div>
           {/if}
         </section>
