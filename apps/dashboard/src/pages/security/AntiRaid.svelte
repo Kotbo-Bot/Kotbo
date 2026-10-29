@@ -31,6 +31,7 @@
   import EmptyState from '../../lib/components/EmptyState.svelte';
   import LoadingHint from '../../lib/components/LoadingHint.svelte';
   import VisionPanel from '../../lib/components/security/VisionPanel.svelte';
+  import ShieldCard from '../../lib/components/security/ShieldCard.svelte';
   import Callout from '../../lib/components/ui/Callout.svelte';
 
   type Config = Record<string, any>;
@@ -327,6 +328,24 @@
     }
   }
 
+  /**
+   * Champs modifiés côté serveur par une action immédiate (Shield) : reportés
+   * dans le formulaire et dans sa référence, sans écraser les autres saisies.
+   */
+  const SERVER_DRIVEN_FIELDS = [
+    'shieldLevel', 'shieldPanelChannelId', 'shieldPanelMessageId', 'shieldStatusChannelId', 'shieldChangedAt', 'shieldChangedBy',
+    'captchaEnabled', 'dmLockEnabled', 'dmLockUntil', 'raidModeActive', 'raidModeActivatedAt', 'raidModeManual', 'joinLockEnabled', 'joinLockUntil',
+  ];
+
+  function syncServerFields(fresh: Config) {
+    for (const field of SERVER_DRIVEN_FIELDS) {
+      if (field in fresh) {
+        config[field] = fresh[field];
+        original[field] = fresh[field];
+      }
+    }
+  }
+
   function toggleInList(field: string, value: string) {
     const list: string[] = config[field] ?? [];
     config[field] = list.includes(value) ? list.filter((v) => v !== value) : [...list, value];
@@ -421,6 +440,8 @@
     <!-- Seulement sur l'onglet des verrous : repetee sur chaque onglet, elle
          repoussait le contenu propre a l'onglet sous la ligne de flottaison. -->
     {#if activeTab === 'detection'}
+    <ShieldCard {config} {channels} onSynced={syncServerFields} />
+
     <SectionCard
       title="État du serveur"
       description="Ces bascules s'appliquent immédiatement, sans passer par l'enregistrement."
@@ -683,6 +704,35 @@
         icon="UserCheck"
       >
         <CaptchaFields bind:config />
+        <div class="grid sm:grid-cols-2 gap-3 mt-4">
+          <label class="block">
+            <span class="text-xs font-medium text-on-surface-variant">Déclenchement</span>
+            <select
+              bind:value={config.captchaTrigger}
+              class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface"
+            >
+              <option value="ALWAYS">En permanence : chaque arrivée</option>
+              <option value="AUTO">Automatique : pendant un raid ou une alerte Shield</option>
+              <option value="SMART">Intelligent : automatique + comptes au profil suspect</option>
+            </select>
+            <p class="text-2xs text-on-surface-variant mt-1">
+              {#if config.captchaTrigger === 'SMART'}
+                Suspect : compte très récent, avatar par défaut, pseudo généré, signalé spammeur ou mis en quarantaine par Discord. Un membre exempté par l'équipe n'est jamais suspect.
+              {:else if config.captchaTrigger === 'AUTO'}
+                Hors raid, les arrivants entrent directement. À partir de Shield 3, tout le monde passe le captcha.
+              {:else}
+                Chaque arrivant passe le captcha, raid ou pas.
+              {/if}
+            </p>
+          </label>
+          <div class="flex items-start justify-between gap-4 rounded-xl border border-outline-variant/30 px-4 py-3">
+            <div class="min-w-0">
+              <p class="text-body-sm font-medium text-on-surface">Captcha à l'image du serveur</p>
+              <p class="text-xs text-on-surface-variant mt-1 leading-relaxed">L'icône du serveur est incrustée dans l'image du captcha, et ses couleurs reprises.</p>
+            </div>
+            <ToggleSwitch checked={config.captchaUseServerIcon !== false} onToggle={(v) => (config.captchaUseServerIcon = v)} />
+          </div>
+        </div>
       </SectionCard>
     {/if}
 

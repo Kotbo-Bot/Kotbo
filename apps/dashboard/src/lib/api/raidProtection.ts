@@ -234,6 +234,36 @@ export async function decideVisionReview(reviewId: string, decision: 'confirm' |
   });
 }
 
+export type ShieldResult = { previous: number; level: number; warnings: string[]; config: Record<string, any> };
+
+export async function setShieldLevel(level: number, guildId = authStore.selectedGuildId) {
+  return dashboardRequest<ShieldResult>('/raid-protection/shield', {
+    method: 'POST',
+    payload: { level },
+    guildId,
+    errorContext: 'API Error (Shield):'
+  });
+}
+
+/** `create` : Kotbo crée un salon #shield invisible pour @everyone. */
+export async function publishShieldPanel(target: { channelId?: string; create?: boolean }, guildId = authStore.selectedGuildId) {
+  return dashboardRequest<{ channelId: string; config: Record<string, any> }>('/raid-protection/shield/panel', {
+    method: 'POST',
+    payload: target,
+    guildId,
+    errorContext: 'API Error (Shield Panel):'
+  });
+}
+
+export async function createShieldStatusChannel(guildId = authStore.selectedGuildId) {
+  return dashboardRequest<{ channelId: string; config: Record<string, any> }>('/raid-protection/shield/status', {
+    method: 'POST',
+    payload: {},
+    guildId,
+    errorContext: 'API Error (Shield Status):'
+  });
+}
+
 export async function provisionJailRole(createChannel: boolean, guildId = authStore.selectedGuildId) {
   return dashboardRequest<{ roleId: string; channelId: string | null; channelsUpdated: number }>('/raid-protection/jail/provision', {
     method: 'POST',
