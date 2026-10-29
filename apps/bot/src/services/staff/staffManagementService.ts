@@ -382,6 +382,9 @@ export const syncStaffDiscordRoles = async (
       rolesToRemove.push(guildConfig.testStaffRoleId);
     }
 
+    // De retour dans le staff : il n'est plus « ancien staff »
+    if (guildConfig.formerStaffRoleId) rolesToRemove.push(guildConfig.formerStaffRoleId);
+
     // Filter out roles that member already has / doesn't have to avoid unnecessary Discord API calls
     const currentRoleIds = discordMember.roles.cache.map(r => r.id);
     const finalRolesToRemove = rolesToRemove.filter(id => currentRoleIds.includes(id));
@@ -537,7 +540,12 @@ export const toggleTutorStatus = async (
  * rôles de grade). Utilisé aussi bien par le renvoi que par la suspension : la
  * différence entre les deux est la ligne en base, pas les rôles Discord.
  */
-const stripStaffDiscordRoles = async (guildId: string, userId: string, context: string) => {
+const stripStaffDiscordRoles = async (
+  guildId: string,
+  userId: string,
+  context: string,
+  options?: { markFormer?: boolean }
+) => {
   try {
     const client = getClient();
     const [guildConfig, staffRoles] = await Promise.all([
@@ -566,6 +574,13 @@ const stripStaffDiscordRoles = async (guildId: string, userId: string, context: 
     if (finalRolesToRemove.length > 0) {
       await discordMember.roles.remove(finalRolesToRemove).catch(err => {
         logger.error('StaffManagement', `Erreur retrait rôles lors ${context} de ${userId}: ${err.message}`);
+      });
+    }
+
+    const formerRoleId = guildConfig.formerStaffRoleId;
+    if (options?.markFormer && formerRoleId && !currentRoleIds.includes(formerRoleId)) {
+      await discordMember.roles.add(formerRoleId).catch(err => {
+        logger.error('StaffManagement', `Erreur ajout rôle ancien staff lors ${context} de ${userId}: ${err.message}`);
       });
     }
   } catch (err) {
@@ -636,7 +651,7 @@ export const setStaffSuspension = async (
 };
 
 export const removeStaffMember = async (guildId: string, userId: string) => {
-  await stripStaffDiscordRoles(guildId, userId, 'du renvoi');
+  await stripStaffDiscordRoles(guildId, userId, 'du renvoi', { markFormer: true });
 
   await cache.invalidateGuild(guildId);
 

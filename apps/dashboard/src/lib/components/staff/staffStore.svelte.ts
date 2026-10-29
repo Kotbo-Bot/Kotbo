@@ -78,6 +78,7 @@ export type DiscordOption = { id: string; name: string; color?: number | string 
 export type StaffConfig = {
   baseStaffRoleId: string | null;
   testStaffRoleId: string | null;
+  formerStaffRoleId: string | null;
   meetingAnnouncementChannelId: string | null;
   meetingVoiceChannelId: string | null;
   staffAnnouncementChannelId: string | null;
@@ -138,6 +139,7 @@ class StaffStore {
   config = $state<StaffConfig>({
     baseStaffRoleId: null,
     testStaffRoleId: null,
+    formerStaffRoleId: null,
     meetingAnnouncementChannelId: null,
     meetingVoiceChannelId: null,
     staffAnnouncementChannelId: null,
@@ -502,6 +504,7 @@ class StaffStore {
       this.config = {
         baseStaffRoleId: cfg.baseStaffRoleId ?? null,
         testStaffRoleId: cfg.testStaffRoleId ?? null,
+        formerStaffRoleId: cfg.formerStaffRoleId ?? null,
         meetingAnnouncementChannelId: cfg.meetingAnnouncementChannelId ?? null,
         meetingVoiceChannelId: cfg.meetingVoiceChannelId ?? null,
         staffAnnouncementChannelId: cfg.staffAnnouncementChannelId ?? null,

@@ -42,6 +42,7 @@ model Guild {
   moderatorRoleId   String?
   baseStaffRoleId   String?
   testStaffRoleId   String?
+  formerStaffRoleId String? // Donné à la sortie du staff, retiré au retour
 
   recruitmentCategoryId  String?
   recruitmentLogChannelId String?

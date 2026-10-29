@@ -61,6 +61,7 @@ function configSeed() {
   return {
     baseStaffRoleId: role('Helper').id,
     testStaffRoleId: null,
+    formerStaffRoleId: null,
     chiefStaffRoleId: role('Admin').id,
     chiefStaffUserId: personByName('Arka').id,
     meetingAnnouncementChannelId: '900000000000000318',

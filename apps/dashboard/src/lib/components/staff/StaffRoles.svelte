@@ -409,6 +409,14 @@
           </select>
         {/snippet}
       </Field>
+      <Field label={m.sm_field_former_role()} hint={m.sx_former_role_hint()}>
+        {#snippet children(id, describedBy)}
+          <select {id} aria-describedby={describedBy} class="input" disabled={!canEdit} value={staff.config.formerStaffRoleId ?? ''} onchange={(e) => staff.saveConfig({ formerStaffRoleId: (e.currentTarget as HTMLSelectElement).value || null })}>
+            <option value="">{m.sm_none_option()}</option>
+            {#each staff.discordRoles as dr (dr.id)}<option value={dr.id}>{dr.name}</option>{/each}
+          </select>
+        {/snippet}
+      </Field>
       <div class="field">
         <span class="field-label">{m.sm_field_staff_announce_channel()}</span>
         <SearchableSelect value={staff.config.staffAnnouncementChannelId} options={staff.textChannels.map((c) => ({ id: c.id, name: `#${c.name}` }))} placeholder={m.sm_none_option()} className="w-full" on:change={(e: CustomEvent) => staff.saveConfig({ staffAnnouncementChannelId: e.detail?.value ?? null })} />
