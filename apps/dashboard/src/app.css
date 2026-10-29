@@ -460,6 +460,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
   gap: 0.5rem;
   padding: 0.5rem 1rem;
   border-radius: 0.5rem;
@@ -807,7 +808,7 @@ button[aria-disabled="true"]:not(.btn) { opacity: 0.5; cursor: not-allowed; }
   min-width: 0;
 }
 
-.app-main :where(.flex, .grid) > * {
+.app-main :where(.flex, .grid) > :not(.btn) {
   min-width: 0;
 }
 
