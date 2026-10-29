@@ -5,7 +5,7 @@ import { logger } from '../utils/logger.js';
 import { SanctionStatus, SanctionType } from '@prisma/client';
 import { COLORS, successEmbed, errorEmbed, truncate } from '../utils/embeds.js';
 import { handleConfigChannelSelect, handleConfigModal, handleConfigSelectMenu } from './configHandler.js';
-import { sendSetupStep1, sendSetupStep2, sendSetupStep3, sendSetupFinish } from '../panels/setupPanel.js';
+import { sendSetupStep1, sendSetupStep2, sendSetupStep3, sendSetupStep4, sendSetupFinish, handleSetupSecurityAction } from '../panels/setupPanel.js';
 import { reviewDailyAlgoSubmission } from '../services/progression/dailyAlgoService.js';
 import { renderPanelBeside, renderPanelTarget } from '../utils/interactionResponses.js';
 import { parseSetupStep, parseUserCaseRoute, parseValidateRoute, parseEventQuizRoute, parseEventResultRoute } from './interactionRoutes.js';
@@ -1380,8 +1380,15 @@ export async function handleButton(interaction: Interaction, client: Client): Pr
     if (step === 'step1') await sendSetupStep1(client, guildId, interaction);
     else if (step === 'step2') await sendSetupStep2(client, guildId, interaction);
     else if (step === 'step3') await sendSetupStep3(client, guildId, interaction);
+    else if (step === 'step4') await sendSetupStep4(client, guildId, interaction);
     else if (step === 'finish') await sendSetupFinish(client, guildId, interaction);
-
+    else if (step === 'reset_mod_role') {
+      await prisma.guild.update({ where: { id: guildId }, data: { moderatorRoleId: null } }).catch(() => null);
+      await sendSetupStep2(client, guildId, interaction);
+    }
+    else if (step.startsWith('sec_')) {
+      await handleSetupSecurityAction(client, guildId, step, interaction);
+    }
     else if (step === 'trans_toggle') {
       await toggleGuildBoolean(guildId, 'translationEnabled');
       await sendSetupStep3(client, guildId, interaction);
@@ -1685,6 +1692,14 @@ export async function handleSelectMenu(interaction: AnySelectMenuInteraction, cl
         create: { id: guildId, defaultTranslateTo: targetLang },
       });
       await sendSetupStep3(client, guildId, interaction);
+    }
+    else if (step === 'select_log_channel') {
+      await prisma.guild.upsert({
+        where: { id: guildId },
+        update: { logChannelId: val },
+        create: { id: guildId, logChannelId: val },
+      });
+      await sendSetupStep4(client, guildId, interaction, `Salon de logs défini sur <#${val}>.`);
     }
     return;
   }
