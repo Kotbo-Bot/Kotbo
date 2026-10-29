@@ -15,9 +15,9 @@
     decideMemberReport,
     fetchInviteRequests,
     decideInviteRequest,
-    fetchScamImages,
-    deleteScamImage,
     fetchInviteLineage,
+    provisionJailRole,
+    fetchJailedMembers,
     quarantineInviteLineage,
   } from '../../lib/api';
   import { toast } from '../../lib/stores/toast.svelte';
@@ -30,6 +30,8 @@
   import Button from '../../lib/components/ui/Button.svelte';
   import EmptyState from '../../lib/components/EmptyState.svelte';
   import LoadingHint from '../../lib/components/LoadingHint.svelte';
+  import VisionPanel from '../../lib/components/security/VisionPanel.svelte';
+  import Callout from '../../lib/components/ui/Callout.svelte';
 
   type Config = Record<string, any>;
 
@@ -55,14 +57,34 @@
     createdAt: string;
   };
 
-  type ScamImage = {
-    id: string;
-    guildId: string | null;
-    hash: string;
-    filename: string | null;
-    source: string;
-    createdAt: string;
+  type Jailed = { userId: string; source: string; reason: string | null; releaseAt: string | null; createdAt: string };
+
+  const JAIL_SOURCES: Record<string, string> = {
+    MANUAL: 'Manuelle',
+    SERVER_TAG: "Tag d'un autre serveur",
+    ACCOUNT_AGE: 'Compte trop récent',
+    DISCORD_QUARANTINE: 'Quarantaine Discord',
+    HONEYPOT: 'Honeypot',
+    VISION: 'Kotbo Vision',
   };
+
+  const SANCTION_OPTIONS = [
+    { value: 'DELETE', label: 'Supprimer seulement' },
+    { value: 'WARN', label: 'Avertissement' },
+    { value: 'TIMEOUT', label: 'Timeout' },
+    { value: 'JAIL', label: 'Quarantaine (Jail)' },
+    { value: 'KICK', label: 'Expulsion' },
+    { value: 'SOFTBAN', label: 'Softban' },
+    { value: 'BAN', label: 'Bannissement' },
+  ];
+  const DURATION_OPTIONS: { value: number | null; label: string }[] = [
+    { value: 5, label: '5 minutes' },
+    { value: 60, label: '1 heure' },
+    { value: 1440, label: '1 jour' },
+    { value: 10080, label: '7 jours' },
+    { value: 43200, label: '30 jours' },
+    { value: null, label: 'Permanente' },
+  ];
 
   let config = $state<Config>({});
   let original = $state<Config>({});
@@ -72,7 +94,7 @@
 
   let reports = $state<Report[]>([]);
   let inviteRequests = $state<InviteRequest[]>([]);
-  let scamImages = $state<ScamImage[]>([]);
+  let jailed = $state<Jailed[]>([]);
 
   let loading = $state(true);
   let saving = $state(false);
@@ -106,6 +128,8 @@
     { key: 'detection', label: 'Détection & verrous', icon: 'ShieldAlert' },
     { key: 'captcha',   label: "Captcha d'entrée",    icon: 'UserCheck' },
     { key: 'scams',     label: 'Arnaques & tag',      icon: 'Fishing' },
+    { key: 'vision',  label: m.sec_tab_antiraid_vision(), icon: 'ImageOff' },
+    { key: 'jail',      label: m.sec_tab_antiraid_jail(), icon: 'Lock', count: jailed.length || undefined },
     { key: 'invites',   label: 'Invitations',         icon: 'Link' },
     {
       key: 'queues',
@@ -151,14 +175,14 @@
   async function loadQueues() {
     if (!authStore.selectedGuildId) return;
     try {
-      const [r, i, s] = await Promise.all([
+      const [r, i, j] = await Promise.all([
         fetchMemberReports('PENDING', authStore.selectedGuildId),
         fetchInviteRequests(authStore.selectedGuildId),
-        fetchScamImages(authStore.selectedGuildId),
+        fetchJailedMembers(authStore.selectedGuildId),
       ]);
       reports = r?.reports ?? [];
       inviteRequests = (i?.requests ?? []).filter((req: InviteRequest) => req.status === 'PENDING');
-      scamImages = s?.images ?? [];
+      jailed = j?.jails ?? [];
     } catch {
       toast.error('Impossible de charger les files d\'attente');
     }
@@ -238,15 +262,20 @@
     }
   }
 
-  async function removeScamImage(image: ScamImage) {
-    busyAction = image.id;
+  async function setupJail(createChannel: boolean) {
+    if (busyAction) return;
+    busyAction = 'jail';
     try {
-      await deleteScamImage(image.id, authStore.selectedGuildId);
-      scamImages = scamImages.filter((i) => i.id !== image.id);
-      scamImageCount = Math.max(0, scamImageCount - 1);
-      toast.success('Empreinte supprimée');
+      const res = await provisionJailRole(createChannel, authStore.selectedGuildId);
+      if (res) {
+        config.jailRoleId = res.roleId;
+        original.jailRoleId = res.roleId;
+        config.jailChannelId = res.channelId;
+        original.jailChannelId = res.channelId;
+        toast.success(`Rôle Jail prêt, masqué sur ${res.channelsUpdated} salon(s)`);
+      }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Suppression impossible');
+      toast.error(err instanceof Error ? err.message : 'Création impossible');
     } finally {
       busyAction = null;
     }
@@ -660,7 +689,7 @@
     {#if activeTab === 'scams'}
       <SectionCard
         title="Filtre anti-arnaque"
-        description="Bloque les liens de phishing (faux Nitro, faux Steam), les faux giveaways crypto/casino, les faux recrutements « revenu facile » et les images d'arnaque connues."
+        description="Bloque les liens de phishing (faux Nitro, faux Steam), les faux giveaways crypto/casino et les faux recrutements « revenu facile ». Les images d'arnaque connues relèvent de l'onglet Kotbo Vision."
         icon="Fishing"
       >
         {#snippet actions()}
@@ -670,7 +699,6 @@
         {/snippet}
         <div class="space-y-3">
           {@render switchRow('scamFilterEnabled', 'Filtre anti-arnaque', 'Analyse les domaines et les combinaisons de texte typiques des campagnes de phishing.')}
-          {@render switchRow('scamImageFilterEnabled', 'Filtre d\'images', 'Compare les images postées aux empreintes d\'arnaques déjà identifiées sur le serveur, alimentées automatiquement par le honeypot. La comparaison est perceptuelle : une capture recompressée ou légèrement recadrée reste reconnue.')}
           {@render switchRow('scamQrFilterEnabled', 'Filtre de codes QR', 'Le phishing par QR de connexion Discord ne contient aucun lien : aucun filtre de domaine ne peut l\'attraper. Les images porteuses d\'un code QR envoyées par un compte sans historique sont bloquées.')}
 
           {@render switchRow('scamOcrEnabled', 'Lecture du texte des images', 'Lit le texte des images postées par un compte sans historique (lecture locale, aucune image n\'est envoyée à un tiers) et le compare aux domaines et textes d\'arnaque connus. Rattrape les captures photographiées ou recadrées que la comparaison d\'empreintes ne reconnaît pas. Consomme du processeur : à activer si le serveur est visé par ces campagnes.')}
@@ -988,33 +1016,92 @@
         {/if}
       </SectionCard>
 
+    {/if}
+
+    {#if activeTab === 'vision'}
       <SectionCard
-        title="Empreintes d'arnaque"
-        description="Alimentées automatiquement par le honeypot. Les empreintes globales sont partagées entre serveurs et ne peuvent pas être supprimées ici."
-        icon="Fingerprint"
+        title="Kotbo Vision"
+        description="Compare chaque image postée (pièces jointes, embeds, messages transférés, stickers) aux images d'arnaque connues : catalogue global, catalogue du serveur et tes listes. Une variante recadrée, retournée, recompressée ou prise en capture reste reconnue."
+        icon="ImageOff"
       >
-        {#if scamImages.length === 0}
-          <EmptyState icon="Image" title="Aucune empreinte" description="Le honeypot n'a encore capté aucune image d'arnaque." reason="accumulating" />
+        <div class="space-y-3">
+          {@render switchRow('visionEnabled', 'Kotbo Vision', "Actif par défaut. Correspondance certaine : message supprimé et auteur sanctionné. Correspondance incertaine : message supprimé par précaution, sans sanction, et envoyé en vérification.")}
+          <div class="grid sm:grid-cols-3 gap-3">
+            <label class="block">
+              <span class="text-xs font-medium text-on-surface-variant">Sanction</span>
+              <select
+                bind:value={config.visionSanction}
+                class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface"
+              >
+                {#each SANCTION_OPTIONS as option (option.value)}
+                  <option value={option.value}>{option.label}</option>
+                {/each}
+              </select>
+            </label>
+            {#if ['TIMEOUT', 'BAN', 'JAIL'].includes(config.visionSanction)}
+              <label class="block">
+                <span class="text-xs font-medium text-on-surface-variant">Durée</span>
+                <select
+                  bind:value={config.visionDurationMin}
+                  class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface"
+                >
+                  {#each DURATION_OPTIONS as option (option.label)}
+                    {#if option.value !== null || config.visionSanction !== 'TIMEOUT'}
+                      <option value={option.value}>{option.label}</option>
+                    {/if}
+                  {/each}
+                </select>
+              </label>
+            {/if}
+            {@render channelSelect('visionReviewChannelId', 'Salon de vérification', "Pour le catalogue global et celui du serveur. Sans salon, les correspondances incertaines restent silencieuses.")}
+          </div>
+          {#if config.visionSanction === 'JAIL' && !config.jailRoleId}
+            <Callout variant="warning">Aucun rôle Jail configuré : la quarantaine sera remplacée par un timeout. Configure-le dans l'onglet Quarantaine.</Callout>
+          {/if}
+          {@render switchRow('visionNotifyMember', 'Prévenir le membre en MP', "Explique pourquoi le message a disparu et rappelle quoi faire si le compte a été piraté (mot de passe, double authentification).")}
+        </div>
+      </SectionCard>
+
+      <VisionPanel {channels} />
+    {/if}
+
+    {#if activeTab === 'jail'}
+      <SectionCard
+        title="Quarantaine (Jail)"
+        description="Le membre reste sur le serveur mais n'y voit plus rien. Ses rôles lui sont retirés puis rendus à la levée. Sert à /sanction jail, à Kotbo Vision, au honeypot et aux arrivées suspectes."
+        icon="Lock"
+      >
+        {#snippet actions()}
+          <Button size="sm" variant="secondary" icon="Wrench" disabled={busyAction !== null} onclick={() => setupJail(!config.jailChannelId)}>
+            {config.jailRoleId ? 'Réparer le rôle' : 'Créer le rôle Jail'}
+          </Button>
+        {/snippet}
+        <div class="space-y-3">
+          {#if !config.jailRoleId}
+            <Callout variant="info">Crée le rôle en un clic : Kotbo le masque sur tous les salons (y compris ceux créés plus tard) et ouvre un salon #quarantaine où le staff peut échanger avec les membres concernés.</Callout>
+          {/if}
+          <div class="grid sm:grid-cols-2 gap-3">
+            {@render roleSelect('jailRoleId', 'Rôle Jail', "Refusé sur tous les salons. « Réparer le rôle » repose le refus là où il manque.")}
+            {@render channelSelect('jailChannelId', 'Salon de quarantaine', "Le seul salon visible en quarantaine. Facultatif.")}
+          </div>
+          {@render switchRow('jailStripRoles', 'Retirer les rôles du membre', "Sans ça, un rôle qui ouvre un salon annulerait la quarantaine. Les rôles sont rendus à la levée.")}
+        </div>
+      </SectionCard>
+
+      <SectionCard title="Membres en quarantaine" description="Levée automatique à la date indiquée. Une quarantaine permanente se lève avec /sanction unjail." icon="Users">
+        {#if jailed.length === 0}
+          <EmptyState icon="CheckCircle" title="Personne en quarantaine" reason="all-clear" />
         {:else}
           <div class="space-y-1.5">
-            {#each scamImages as image (image.id)}
+            {#each jailed as jail (jail.userId)}
               <div class="flex items-center justify-between gap-3 rounded-lg border border-outline-variant/30 px-3 py-2">
                 <div class="min-w-0">
-                  <p class="text-xs text-on-surface truncate">{image.filename ?? 'sans nom'}</p>
-                  <p class="text-2xs text-on-surface-variant font-mono truncate">
-                    {image.hash.slice(0, 24)}… · {image.source}{image.guildId === null ? ' · global' : ''}
-                  </p>
+                  <p class="text-xs text-on-surface font-mono">{jail.userId}</p>
+                  <p class="text-xs text-on-surface-variant truncate">{JAIL_SOURCES[jail.source] ?? jail.source}{jail.reason ? ` · ${jail.reason}` : ''}</p>
                 </div>
-                {#if image.guildId !== null}
-                  <button
-                    type="button"
-                    class="px-2 py-1 rounded text-2xs text-error hover:bg-error/10 disabled:opacity-50 transition-colors shrink-0"
-                    disabled={busyAction !== null}
-                    onclick={() => removeScamImage(image)}
-                  >
-                    Supprimer
-                  </button>
-                {/if}
+                <span class="text-xs text-on-surface-variant shrink-0">
+                  {jail.releaseAt ? `jusqu'au ${new Date(jail.releaseAt).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })}` : 'permanente'}
+                </span>
               </div>
             {/each}
           </div>

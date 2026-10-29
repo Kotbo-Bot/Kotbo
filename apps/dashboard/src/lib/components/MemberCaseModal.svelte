@@ -656,6 +656,7 @@
       case 'TEMP_BAN': return { icon: 'ban', tile: 'bg-error/10 text-error', dot: 'bg-error' };
       case 'BAN': return { icon: 'gavel', tile: 'bg-error/10 text-error', dot: 'bg-error' };
       case 'SOFTBAN': return { icon: 'eraser', tile: 'bg-surface-container-high text-on-surface-variant', dot: 'bg-on-surface-variant' };
+      case 'JAIL': return { icon: 'lock', tile: 'bg-warning/10 text-warning', dot: 'bg-warning' };
       default: return { icon: 'shield', tile: 'bg-surface-container-high text-on-surface-variant', dot: 'bg-on-surface-variant' };
     }
   }

@@ -94,6 +94,8 @@ export const PAGE_TABS: Record<string, PageTabConfig[]> = {
     { id: 'detection', label: () => m.sec_tab_antiraid_detection(), icon: 'ShieldAlert' },
     { id: 'captcha', label: () => m.sec_tab_antiraid_captcha(), icon: 'UserCheck' },
     { id: 'scams', label: () => m.sec_tab_antiraid_scams(), icon: 'Fishing' },
+    { id: 'vision', label: () => m.sec_tab_antiraid_vision(), icon: 'ImageOff' },
+    { id: 'jail', label: () => m.sec_tab_antiraid_jail(), icon: 'Lock' },
     { id: 'invites', label: () => m.sec_tab_antiraid_invites(), icon: 'Link' },
     { id: 'queues', label: () => m.sec_tab_antiraid_queues(), icon: 'Inbox' },
   ],

@@ -6,6 +6,7 @@ export function typeLabel(value: string): string {
   if (value === 'TIMEOUT') return m.fmt_type_timeout();
   if (value === 'TEMP_BAN') return m.fmt_type_temp_ban();
   if (value === 'BAN') return m.fmt_type_ban();
+  if (value === 'JAIL') return m.fmt_type_jail();
   return value;
 }
 

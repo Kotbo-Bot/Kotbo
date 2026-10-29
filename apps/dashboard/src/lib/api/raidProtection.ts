@@ -106,19 +106,148 @@ export async function decideInviteRequest(requestId: string, approved: boolean, 
   });
 }
 
-export async function fetchScamImages(guildId = authStore.selectedGuildId) {
-  return dashboardRequest('/raid-protection/scam-images', {
+// ─────────────────────────────────────────────────────────────
+// Kotbo Vision (filtre d'images d'arnaque) et Jail
+// ─────────────────────────────────────────────────────────────
+
+export type VisionSanction = 'DELETE' | 'WARN' | 'TIMEOUT' | 'KICK' | 'SOFTBAN' | 'BAN' | 'JAIL';
+
+export type VisionList = {
+  id: string;
+  name: string;
+  enabled: boolean;
+  reviewChannelId: string | null;
+  sanction: VisionSanction | null;
+  durationMin: number | null;
+  imageCount: number;
+  createdAt: string;
+};
+
+export type VisionImage = {
+  id: string;
+  filename: string | null;
+  thumb: string | null;
+  source: string;
+  status: 'BLOCKED' | 'ALLOWED';
+  hits: number;
+  lastSeenAt: string | null;
+  parentId: string | null;
+  createdAt: string;
+};
+
+export type VisionReview = {
+  id: string;
+  listId: string | null;
+  score: number;
+  authorId: string;
+  channelId: string;
+  thumb: string | null;
+  createdAt: string;
+};
+
+export type VisionOverview = {
+  lists: VisionList[];
+  reviews: VisionReview[];
+  guildCatalogCount: number;
+  globalCatalogCount: number;
+  blockedTotal: number;
+  maxLists: number;
+};
+
+export type VisionAddResult = { added: number; variants: number; duplicates: number; refused: number };
+
+export async function fetchVision(guildId = authStore.selectedGuildId) {
+  return dashboardRequest<VisionOverview>('/raid-protection/vision', {
     method: 'GET',
     guildId,
-    errorContext: 'API Error (Scam Images):'
+    errorContext: 'API Error (Kotbo Vision):'
   });
 }
 
-export async function deleteScamImage(imageId: string, guildId = authStore.selectedGuildId) {
-  return dashboardMutation(`/raid-protection/scam-images/${imageId}`, {
+export async function createVisionList(payload: Partial<VisionList>, guildId = authStore.selectedGuildId) {
+  return dashboardRequest<{ list: VisionList }>('/raid-protection/vision/lists', {
+    method: 'POST',
+    payload,
+    guildId,
+    errorContext: 'API Error (Kotbo Vision List):'
+  });
+}
+
+export async function updateVisionList(listId: string, payload: Partial<VisionList>, guildId = authStore.selectedGuildId) {
+  return dashboardRequest<{ list: VisionList }>(`/raid-protection/vision/lists/${listId}`, {
+    method: 'PATCH',
+    payload,
+    guildId,
+    errorContext: 'API Error (Kotbo Vision List):'
+  });
+}
+
+export async function deleteVisionList(listId: string, guildId = authStore.selectedGuildId) {
+  return dashboardMutation(`/raid-protection/vision/lists/${listId}`, {
     method: 'DELETE',
     guildId,
-    errorContext: 'API Error (Delete Scam Image):'
+    errorContext: 'API Error (Kotbo Vision List):'
+  });
+}
+
+/** `listId` null = catalogue du serveur (honeypot, confirmations). */
+export async function fetchVisionImages(listId: string | null, guildId = authStore.selectedGuildId) {
+  return dashboardRequest<{ images: VisionImage[] }>(`/raid-protection/vision/images?list=${listId ?? 'server'}`, {
+    method: 'GET',
+    guildId,
+    errorContext: 'API Error (Kotbo Vision Images):'
+  });
+}
+
+export async function uploadVisionImage(listId: string | null, name: string, dataUrl: string, guildId = authStore.selectedGuildId) {
+  return dashboardRequest<VisionAddResult>('/raid-protection/vision/images', {
+    method: 'POST',
+    payload: { listId, name, data: dataUrl },
+    guildId,
+    errorContext: 'API Error (Kotbo Vision Upload):'
+  });
+}
+
+export async function setVisionImageStatus(imageId: string, status: 'BLOCKED' | 'ALLOWED', guildId = authStore.selectedGuildId) {
+  return dashboardMutation(`/raid-protection/vision/images/${imageId}`, {
+    method: 'PATCH',
+    payload: { status },
+    guildId,
+    errorContext: 'API Error (Kotbo Vision Image):'
+  });
+}
+
+export async function deleteVisionImage(imageId: string, guildId = authStore.selectedGuildId) {
+  return dashboardMutation(`/raid-protection/vision/images/${imageId}`, {
+    method: 'DELETE',
+    guildId,
+    errorContext: 'API Error (Kotbo Vision Image):'
+  });
+}
+
+export async function decideVisionReview(reviewId: string, decision: 'confirm' | 'dismiss', guildId = authStore.selectedGuildId) {
+  return dashboardRequest<{ ok: boolean; status: string; sanction?: string }>(`/raid-protection/vision/reviews/${reviewId}`, {
+    method: 'POST',
+    payload: { decision },
+    guildId,
+    errorContext: 'API Error (Kotbo Vision Review):'
+  });
+}
+
+export async function provisionJailRole(createChannel: boolean, guildId = authStore.selectedGuildId) {
+  return dashboardRequest<{ roleId: string; channelId: string | null; channelsUpdated: number }>('/raid-protection/jail/provision', {
+    method: 'POST',
+    payload: { createChannel },
+    guildId,
+    errorContext: 'API Error (Jail):'
+  });
+}
+
+export async function fetchJailedMembers(guildId = authStore.selectedGuildId) {
+  return dashboardRequest<{ jails: { userId: string; source: string; reason: string | null; releaseAt: string | null; createdAt: string }[] }>('/raid-protection/jail/members', {
+    method: 'GET',
+    guildId,
+    errorContext: 'API Error (Jail):'
   });
 }
 
