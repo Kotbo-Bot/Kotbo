@@ -11,8 +11,9 @@
 
   interface Props {
     serverId: string;
+    initialUserId?: string;
   }
-  const { serverId }: Props = $props();
+  const { serverId, initialUserId }: Props = $props();
 
   const currentLocale = getLocale();
   function switchLocale(loc: Locale) {
@@ -28,9 +29,18 @@
   let levels = $state<Array<{ userId: string; xp: number; level: number; username?: string; displayName?: string; avatarUrl?: string }>>([]);
   let searchQuery = $state('');
   let highlightedUserId = $state<string | null>(null);
+  let shareCopied = $state(false);
   let curve = $state<LevelCurve>(DEFAULT_LEVEL_CURVE);
 
   onMount(async () => {
+    const queryUser =
+      typeof window !== 'undefined'
+        ? new URLSearchParams(window.location.search).get('user') ??
+          new URLSearchParams(window.location.search).get('userId')
+        : null;
+    const focusUserId = initialUserId || queryUser;
+    if (focusUserId) highlightedUserId = focusUserId;
+
     try {
       const res = await fetchPublicLeveling(serverId);
       if (res) {
@@ -45,6 +55,14 @@
       errorMsg = errorMessage(err) || m.leveling_public_error_loading();
     } finally {
       loading = false;
+      if (focusUserId && typeof document !== 'undefined') {
+        requestAnimationFrame(() => {
+          document.getElementById(`member-row-${focusUserId}`)?.scrollIntoView({
+            behavior: 'smooth',
+            block: 'center',
+          });
+        });
+      }
     }
   });
 
@@ -66,6 +84,33 @@
   const totalXp = $derived(levels.reduce((sum, u) => sum + u.xp, 0));
   const avgLevel = $derived(levels.length > 0 ? Math.round(levels.reduce((sum, u) => sum + getLevelFromXp(u.xp), 0) / levels.length) : 0);
   const maxLevel = $derived(levels.length > 0 ? getLevelFromXp(levels[0]?.xp ?? 0) : 0);
+
+  const highlightedIndex = $derived(
+    highlightedUserId ? levels.findIndex((u) => u.userId === highlightedUserId) : -1
+  );
+  const highlightedMember = $derived(highlightedIndex >= 0 ? levels[highlightedIndex] : null);
+  const memberAhead = $derived(highlightedIndex > 0 ? levels[highlightedIndex - 1] : null);
+
+  function selectMember(userId: string) {
+    const next = highlightedUserId === userId ? null : userId;
+    highlightedUserId = next;
+    if (typeof window !== 'undefined') {
+      const nextPath = next
+        ? `/${serverId}/leveling/classement/${next}`
+        : `/${serverId}/leveling/classement`;
+      window.history.replaceState(null, '', nextPath);
+    }
+  }
+
+  async function copyMemberShareUrl(userId: string) {
+    if (typeof window === 'undefined') return;
+    const shareUrl = `${window.location.origin}/${serverId}/leveling/classement/${userId}`;
+    await navigator.clipboard.writeText(shareUrl).catch(() => null);
+    shareCopied = true;
+    setTimeout(() => {
+      shareCopied = false;
+    }, 2000);
+  }
 
   function formatXp(xp: number): string {
     if (xp >= 1_000_000) return `${(xp / 1_000_000).toFixed(1)}M`;
@@ -190,6 +235,53 @@
       </div>
 
     {:else}
+
+      {#if highlightedMember}
+        {@const hRank = highlightedIndex + 1}
+        {@const hLvl = getLevelFromXp(highlightedMember.xp)}
+        {@const gapAhead = memberAhead ? Math.max(1, memberAhead.xp - highlightedMember.xp) : 0}
+        <div class="clean-card rounded-xl p-5 sm:p-6 border-l-4 border-l-indigo-500 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div class="flex items-center gap-4 min-w-0">
+            <img
+              src={memberAvatarSrc(highlightedMember.avatarUrl, highlightedMember.displayName || highlightedMember.username, highlightedMember.userId)}
+              alt=""
+              class="w-12 h-12 rounded-full object-cover border border-slate-200 dark:border-slate-800 shrink-0"
+            />
+            <div class="min-w-0">
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="px-2 py-0.5 rounded-md bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 font-mono font-bold text-xs">
+                  #{hRank} / {levels.length}
+                </span>
+                <p class="font-bold text-slate-800 dark:text-slate-100 truncate text-base">
+                  {highlightedMember.displayName || highlightedMember.username || m.leveling_public_unknown_member()}
+                </p>
+                <span class="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                  · {m.leveling_public_level_n({ n: hLvl })} ({formatXp(highlightedMember.xp)} XP)
+                </span>
+              </div>
+              <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                {#if memberAhead}
+                  {currentLocale === 'fr'
+                    ? `À ${formatXp(gapAhead)} XP de #${hRank - 1} (${memberAhead.displayName || memberAhead.username})`
+                    : `${formatXp(gapAhead)} XP behind #${hRank - 1} (${memberAhead.displayName || memberAhead.username})`}
+                {:else}
+                  {currentLocale === 'fr' ? 'En tête du classement du serveur' : 'Leading the server leaderboard'}
+                {/if}
+              </p>
+            </div>
+          </div>
+          <div class="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onclick={() => copyMemberShareUrl(highlightedMember.userId)}
+              class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-300 transition-colors flex items-center gap-1.5"
+            >
+              <Papicon icon={shareCopied ? 'Check' : 'Share'} size={13} />
+              <span>{shareCopied ? (currentLocale === 'fr' ? 'Lien copié' : 'Link copied') : (currentLocale === 'fr' ? 'Partager ce rang' : 'Share standing')}</span>
+            </button>
+          </div>
+        </div>
+      {/if}
 
       <!-- ─── Cartes de statistiques globales épurées ─── -->
       {#if levels.length > 0}
@@ -367,9 +459,10 @@
                 {@const color = getRankColor(index)}
 
                 <tr
+                  id="member-row-{userLvl.userId}"
                   class="group hover:bg-slate-50/50 dark:hover:bg-[#142036]/30 transition-colors duration-150 cursor-pointer
- {highlightedUserId === userLvl.userId ? 'bg-indigo-50/30 dark:bg-indigo-950/10' : ''}"
-                  onclick={() => highlightedUserId = highlightedUserId === userLvl.userId ? null : userLvl.userId}
+ {highlightedUserId === userLvl.userId ? 'bg-indigo-50/30 dark:bg-indigo-950/10 ring-1 ring-inset ring-indigo-500/40' : ''}"
+                  onclick={() => selectMember(userLvl.userId)}
                 >
                   <!-- Rang -->
                   <td class="px-5 py-4 text-center font-bold text-slate-500 dark:text-slate-400 font-mono text-sm">

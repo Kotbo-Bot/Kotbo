@@ -49,10 +49,17 @@ const UI = {
  * dessin, le proxy d'images de Discord et les CDN garderaient l'ancienne carte.
  * A incrementer a chaque changement visible du rendu.
  */
-export const OG_CARD_VERSION = 4;
+export const OG_CARD_VERSION = 5;
 
 /** Indigo du dashboard en theme sombre : accent par defaut des cartes et barre de l'embed. */
 export const OG_ACCENT = '#818cf8';
+
+export interface OgPodiumEntry {
+  rank?: number;
+  name: string;
+  score: string;
+  highlight?: boolean;
+}
 
 /** Bandeau d'illustration a droite de la carte. */
 export type OgCardArt =
@@ -63,8 +70,8 @@ export type OgCardArt =
   | { type: 'questions'; items: string[]; more?: number }
   /** Compte a rebours d'un giveaway. */
   | { type: 'countdown'; label: string; value: string; ended?: boolean }
-  /** Podium d'un classement. */
-  | { type: 'podium'; entries: { name: string; score: string }[] }
+  /** Podium d'un classement ou position d'un membre par rapport au classement. */
+  | { type: 'podium'; label?: string; entries: OgPodiumEntry[] }
   /** Menu du dashboard : la page ouverte, surlignee parmi ses voisines, et un bouton. */
   | { type: 'sections'; label: string; items: string[]; active: number; cta: string };
 
@@ -564,8 +571,8 @@ function drawCountdown(ctx: SKRSContext2D, accent: string, label: string, value:
   ctx.textAlign = 'left';
 }
 
-/** Podium : un classement se resume a ses trois premieres places. */
-function drawPodium(ctx: SKRSContext2D, accent: string, entries: { name: string; score: string }[]) {
+/** Podium ou extrait cible d'un classement (jusqu'a 4 lignes, rang reel et ligne mise en avant). */
+function drawPodium(ctx: SKRSContext2D, accent: string, entries: OgPodiumEntry[], label = 'Podium') {
   drawPanel(ctx, accent);
 
   if (entries.length === 0) {
@@ -575,35 +582,49 @@ function drawPodium(ctx: SKRSContext2D, accent: string, entries: { name: string;
     return;
   }
 
-  drawPanelLabel(ctx, 'Podium');
-  const medals = ['#facc15', '#d4d4d8', '#d97706'];
-  let y = ART_TOP + 118;
-  entries.slice(0, 3).forEach((entry, index) => {
-    roundRect(ctx, ART_X + 20, y - 38, ART_W - 40, 64, 14, index === 0 ? UI.cardRaised : undefined);
+  drawPanelLabel(ctx, label);
+  const medals: Record<number, string> = { 1: '#facc15', 2: '#d4d4d8', 3: '#d97706' };
+  const visible = entries.slice(0, 4);
+  const compact = visible.length > 3;
+  const rowH = compact ? 58 : 64;
+  const stepY = compact ? 74 : 84;
+  let y = ART_TOP + (compact ? 106 : 118);
 
+  visible.forEach((entry, index) => {
+    const rank = entry.rank ?? index + 1;
+    const highlighted = Boolean(entry.highlight);
+    const rowFill = highlighted
+      ? hexToRgba(accent, 0.2)
+      : index === 0 && !visible.some((e) => e.highlight)
+        ? UI.cardRaised
+        : undefined;
+    const rowStroke = highlighted ? accent : undefined;
+    roundRect(ctx, ART_X + 20, y - 38, ART_W - 40, rowH, 14, rowFill, rowStroke);
+
+    const medalColor = medals[rank];
     ctx.beginPath();
-    ctx.arc(ART_X + 56, y - 6, 17, 0, Math.PI * 2);
-    ctx.fillStyle = medals[index];
+    ctx.arc(ART_X + 56, y - (compact ? 9 : 6), 17, 0, Math.PI * 2);
+    ctx.fillStyle = medalColor ?? (highlighted ? accent : UI.borderStrong);
     ctx.fill();
-    ctx.fillStyle = '#18181b';
-    ctx.font = font(17, 'semibold');
+    ctx.fillStyle = medalColor || highlighted ? '#18181b' : UI.textSecondary;
+    ctx.font = font(rank >= 100 ? 13 : 16, 'semibold');
     ctx.textAlign = 'center';
-    ctx.fillText(String(index + 1), ART_X + 56, y);
+    ctx.fillText(String(rank), ART_X + 56, y - (compact ? 3 : 0));
     ctx.textAlign = 'left';
 
-    ctx.fillStyle = accent;
-    ctx.font = font(19, 'medium');
+    ctx.fillStyle = highlighted ? UI.text : accent;
+    ctx.font = font(18, 'medium');
     ctx.textAlign = 'right';
-    const score = truncate(entry.score, 14);
-    ctx.fillText(score, ART_X + ART_W - 40, y + 1);
+    const score = truncate(entry.score, 20);
+    ctx.fillText(score, ART_X + ART_W - 36, y - (compact ? 2 : -1));
     const scoreWidth = ctx.measureText(score).width;
     ctx.textAlign = 'left';
 
     ctx.fillStyle = UI.text;
-    ctx.font = font(22, 'semibold');
-    ctx.fillText(fitText(ctx, entry.name, ART_W - 150 - scoreWidth), ART_X + 88, y + 1);
+    ctx.font = font(compact ? 20 : 22, 'semibold');
+    ctx.fillText(fitText(ctx, entry.name, ART_W - 146 - scoreWidth), ART_X + 88, y - (compact ? 2 : -1));
 
-    y += 84;
+    y += stepY;
   });
 }
 
@@ -773,7 +794,7 @@ export async function renderOgCard(spec: OgCardSpec): Promise<Buffer> {
       drawCountdown(ctx, accent, spec.art.label, spec.art.value, spec.art.ended ?? false);
       break;
     case 'podium':
-      drawPodium(ctx, accent, spec.art.entries);
+      drawPodium(ctx, accent, spec.art.entries, spec.art.label);
       break;
     case 'sections':
       drawSections(ctx, accent, spec.art.label, spec.art.items, spec.art.active);

@@ -1200,11 +1200,15 @@ async function processLevelUp(
     // Un message vide veut dire « celui par defaut », jamais « n'annonce
     // rien » : il est alors compose maintenant, dans la langue du serveur, et
     // suit donc le bot si celui-ci change de langue plus tard.
+    const { getDashboardUrl } = await import('../../api/shared.js');
+    const memberLeaderboardUrl = `${getDashboardUrl().replace(/\/$/, '')}/${guildId}/leveling/classement/${userId}`;
     const msgTemplate = config.levelUpMessage?.trim() || defaultLevelUpMessage(locale);
     const msg = msgTemplate
       .replace(/{user}/g, `<@${userId}>`)
       .replace(/{username}/g, member.user.username)
-      .replace(/{level}/g, String(newLevel)) + coinRewardText;
+      .replace(/{level}/g, String(newLevel))
+      .replace(/{leaderboard}/g, memberLeaderboardUrl)
+      .replace(new RegExp(`(/${guildId}/leveling/classement)/?(?![/\\w])`, 'g'), `$1/${userId}`) + coinRewardText;
 
     if (config.levelUpChannelId === 'DM') {
       const { notify } = await import('../notifications/notifyService.js');
