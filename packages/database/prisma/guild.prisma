@@ -667,6 +667,12 @@ model Guild {
   honeypotChannelId       String?
   honeypotSanction        SanctionType @default(TIMEOUT)
   honeypotReinvite        Boolean  @default(false)
+  // Délai avant sanction : le membre peut signaler son erreur par un bouton.
+  // 0 = sanction immédiate.
+  honeypotGraceSeconds    Int      @default(0)
+  // Durée de la sanction (TIMEOUT, BAN, JAIL) ; null = permanente (BAN, JAIL)
+  // ou 28 jours pour un timeout.
+  honeypotDurationMin     Int?
 
   // Backup system
   backups ServerBackup[]

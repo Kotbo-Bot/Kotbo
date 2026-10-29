@@ -847,6 +847,13 @@ export async function handleButton(interaction: Interaction, client: Client): Pr
     return;
   }
 
+  // ── Honeypot : « C'était une erreur » pendant le délai avant sanction ──
+  if (customId.startsWith('hp:mistake:') && interaction.isButton()) {
+    const { handleHoneypotMistake } = await import('../events/honeypot.js');
+    await handleHoneypotMistake(interaction);
+    return;
+  }
+
   // ── Shield : boutons du panneau ──────────────────────────────────────
   // Pas de contrôle de permission : le panneau vit dans un salon réservé à
   // l'équipe, l'accès au salon fait office de droit.

@@ -1,4 +1,4 @@
-import { Client, Events, Message, TextChannel, PermissionFlagsBits } from 'discord.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, Client, Events, Message, MessageFlags, TextChannel, PermissionFlagsBits, type ButtonInteraction } from 'discord.js';
 import { logger } from '../utils/logger.js';
 import { resolveLogChannel } from '../utils/logChannel.js';
 import { errorEmbed } from '../utils/embeds.js';
@@ -9,7 +9,12 @@ import {
   registerBanSanction,
   registerSoftbanSanction,
   registerTimeoutSanction,
+  registerJailSanction,
 } from '../services/moderation/sanctionService.js';
+import { isJailConfigured } from '../services/moderation/jailService.js';
+import { formatMinutes } from '../services/moderation/autoSanction.js';
+
+type GuildConfig = NonNullable<Awaited<ReturnType<typeof getCachedGuild>>>;
 import { generateTranscript } from '../services/features/transcriptService.js';
 import { getDashboardUrl } from '../api/shared.js';
 import { mirrorModlogToStaffServer } from '../services/staff/staffServerService.js';
@@ -19,42 +24,104 @@ import { scheduleScamDatasetBackfill } from '../services/moderation/scamBackfill
 import { INVITE_SOURCE, recordBotInvite } from '../services/analytics/inviteService.js';
 import { notifyJoinBlocked } from '../services/notifications/notifyService.js';
 
-export function registerHoneypotListener(client: Client): void {
-  client.on(Events.MessageCreate, async (message: Message) => {
-    const { guild, author, member, channelId } = message;
-    if (!guild || !member || author.bot) return;
+// ── Délai avant sanction ────────────────────────────────────────────────────
+//
+// Avec un délai, le message est retiré et le membre mentionné dans le salon
+// piège avec un bouton « C'était une erreur ». Sans clic à temps, la sanction
+// tombe. Un membre qui poste le même message ailleurs pendant le délai est
+// sanctionné tout de suite : c'est la signature des robots de spam.
+// shortcut: délais gardés en mémoire du shard, un redémarrage pendant le délai les perd (au pire 5 min sans sanction).
 
-    try {
-      const guildConfig = await getCachedGuild(guild.id);
+type PendingGrace = {
+  channelId: string;
+  content: string;
+  noticeId: string | null;
+  timer: ReturnType<typeof setTimeout>;
+  finalize: () => Promise<void>;
+};
 
-      if (!guildConfig || !guildConfig.honeypotEnabled || guildConfig.honeypotChannelId !== channelId) {
-        return;
-      }
+const pendingGrace = new Map<string, PendingGrace>();
 
-      // Check if the user is staff or administrator to bypass the trap
-      const isOwner = author.id === process.env.DISCORD_CLIENT_OWNER_ID;
-      const isAdmin = member.permissions.has(PermissionFlagsBits.Administrator);
-      
-      const hasStaffRole = (guildConfig.baseStaffRoleId && member.roles.cache.has(guildConfig.baseStaffRoleId)) ||
-                            (guildConfig.moderatorRoleId && member.roles.cache.has(guildConfig.moderatorRoleId)) ||
-                            (guildConfig.testStaffRoleId && member.roles.cache.has(guildConfig.testStaffRoleId));
+function graceKey(guildId: string, userId: string): string {
+  return `${guildId}:${userId}`;
+}
 
-      if (isOwner || isAdmin || hasStaffRole) {
-        // Staff bypassed the trap
-        return;
-      }
+function normalizeContent(content: string): string {
+  return content.trim().toLowerCase().replace(/\s+/g, ' ');
+}
 
-      // 1. Generate the transcript of the honeypot channel (which includes the spammer's messages)
-      let transcriptLink: string | null = null;
-      try {
-        const textChannel = message.channel as TextChannel;
-        const transcriptData = await generateTranscript(textChannel);
-        const dashboardUrl = getDashboardUrl();
-        transcriptLink = `${dashboardUrl.replace(/\/$/, '')}/transcripts/${transcriptData.id}`;
-      } catch (err) {
-        logger.error('Honeypot', `Impossible de générer le transcript pour la détection honeypot dans la guilde ${guild.id}:`, err);
-      }
+async function settleGrace(key: string, punishNow: boolean): Promise<void> {
+  const pending = pendingGrace.get(key);
+  if (!pending) return;
+  pendingGrace.delete(key);
+  clearTimeout(pending.timer);
+  if (punishNow) await pending.finalize();
+}
 
+async function startGrace(client: Client, message: Message, seconds: number, finalize: () => Promise<void>): Promise<void> {
+  const key = graceKey(message.guild!.id, message.author.id);
+  if (pendingGrace.has(key)) {
+    // Deuxième message dans le salon piège pendant le délai : pas un accident.
+    await message.delete().catch(() => null);
+    await settleGrace(key, true);
+    return;
+  }
+  const content = normalizeContent(message.content);
+  // Le message est retiré, mais l'objet garde ses pièces jointes : le jeu de
+  // données les lira si la sanction tombe.
+  await message.delete().catch(() => null);
+  const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder().setCustomId(`hp:mistake:${message.author.id}`).setLabel("C'était une erreur").setStyle(ButtonStyle.Secondary),
+  );
+  const notice = await (message.channel as TextChannel)
+    .send({
+      content: `<@${message.author.id}> ce salon est un piège à robots : personne ne doit y écrire. Si c'était une erreur, clique sur le bouton dans les ${seconds >= 60 ? `${seconds / 60} minute${seconds >= 120 ? 's' : ''}` : `${seconds} secondes`}, sinon une sanction s'appliquera.`,
+      components: [row],
+      allowedMentions: { users: [message.author.id] },
+    })
+    .catch(() => null);
+  const timer = setTimeout(() => {
+    void settleGrace(key, true).finally(() => notice?.delete().catch(() => null));
+  }, seconds * 1000);
+  pendingGrace.set(key, {
+    channelId: message.channelId,
+    content,
+    noticeId: notice?.id ?? null,
+    timer,
+    finalize: async () => {
+      await notice?.delete().catch(() => null);
+      await finalize();
+    },
+  });
+}
+
+/** Bouton « C'était une erreur » : seul le membre concerné peut s'en servir. */
+export async function handleHoneypotMistake(interaction: ButtonInteraction): Promise<void> {
+  const userId = interaction.customId.split(':')[2];
+  if (interaction.user.id !== userId || !interaction.guildId) {
+    await interaction.reply({ content: 'Ce bouton ne te concerne pas.', flags: [MessageFlags.Ephemeral] });
+    return;
+  }
+  const key = graceKey(interaction.guildId, userId);
+  if (!pendingGrace.has(key)) {
+    await interaction.reply({ content: 'Trop tard : le délai est écoulé.', flags: [MessageFlags.Ephemeral] });
+    return;
+  }
+  await settleGrace(key, false);
+  await interaction.reply({ content: "C'est noté, aucune sanction. N'écris plus dans ce salon.", flags: [MessageFlags.Ephemeral] });
+  await interaction.message.delete().catch(() => null);
+}
+
+/**
+ * Sanction d'un membre piégé : ses images et son texte rejoignent le jeu de
+ * données d'arnaques, puis la sanction configurée tombe et est journalisée.
+ */
+async function punish(client: Client, message: Message, guildConfig: GuildConfig, transcriptLink: string | null): Promise<void> {
+  const guild = message.guild!;
+  const author = message.author;
+  const member = message.member!;
+  const channelId = message.channelId;
+  try {
       // Enregistre les hash des images postées dans la base d'images scam
       // (le filtre anti-scam pourra ensuite les bloquer partout) - AVANT la
       // suppression du message, tant que les URLs CDN sont encore valides.
@@ -87,6 +154,9 @@ export function registerHoneypotListener(client: Client): void {
 
       const sanctionType = guildConfig.honeypotSanction || 'TIMEOUT';
 
+      // null = permanente pour BAN et JAIL, 28 jours (plafond Discord) pour un timeout.
+      const durationMin = guildConfig.honeypotDurationMin ?? null;
+      const durationLabel = durationMin ? formatMinutes(durationMin) : 'permanent';
       let actionText = 'exclu temporairement (Timeout 28 jours)';
       let logTitle = '🚨 Détection Honeypot : Timeout appliqué';
 
@@ -135,9 +205,10 @@ export function registerHoneypotListener(client: Client): void {
           reason,
           client,
           evidenceLinks,
+          temporaryDurationMs: durationMin ? durationMin * 60_000 : undefined,
         }).catch(() => null);
 
-        actionText = 'banni du serveur';
+        actionText = durationMin ? `banni du serveur (${durationLabel})` : 'banni du serveur (permanent)';
         logTitle = '🚨 Détection Honeypot : Compte banni';
         logger.warn('Honeypot', `Utilisateur banni car il a écrit dans le salon honeypot : ${author.tag} (${author.id})`);
       } else if (sanctionType === 'KICK') {
@@ -185,9 +256,25 @@ export function registerHoneypotListener(client: Client): void {
         actionText = 'averti (warn)';
         logTitle = '🚨 Détection Honeypot : Avertissement appliqué';
         logger.warn('Honeypot', `Utilisateur averti car il a écrit dans le salon honeypot : ${author.tag} (${author.id})`);
+      } else if (sanctionType === 'JAIL' && (await isJailConfigured(guild))) {
+        await registerJailSanction({
+          guildId: guild.id,
+          target,
+          moderator,
+          reason,
+          durationMs: durationMin ? durationMin * 60_000 : null,
+          member,
+          source: 'HONEYPOT',
+          client,
+          evidenceLinks,
+        }).catch(() => null);
+
+        actionText = `mis en quarantaine (${durationLabel})`;
+        logTitle = '🚨 Détection Honeypot : Quarantaine appliquée';
+        logger.warn('Honeypot', `Utilisateur mis en quarantaine car il a écrit dans le salon honeypot : ${author.tag} (${author.id})`);
       } else {
-        // TIMEOUT
-        const durationMs = 28 * 24 * 60 * 60 * 1000;
+        // TIMEOUT (et repli d'un Jail sans rôle configuré)
+        const durationMs = Math.min(durationMin ?? 28 * 24 * 60, 28 * 24 * 60 - 1) * 60_000;
         await registerTimeoutSanction({
           guildId: guild.id,
           target,
@@ -219,6 +306,60 @@ export function registerHoneypotListener(client: Client): void {
       }
 
       await mirrorModlogToStaffServer(client, guild.id, embed);
+  } catch (err) {
+    logger.error('Honeypot', `Sanction honeypot impossible (${guild.id}) :`, err);
+  }
+}
+
+export function registerHoneypotListener(client: Client): void {
+  client.on(Events.MessageCreate, async (message: Message) => {
+    const { guild, author, member, channelId } = message;
+    if (!guild || !member || author.bot) return;
+
+    try {
+      const pending = pendingGrace.get(graceKey(guild.id, author.id));
+      if (pending && channelId !== pending.channelId && pending.content && normalizeContent(message.content) === pending.content) {
+        await message.delete().catch(() => null);
+        await settleGrace(graceKey(guild.id, author.id), true);
+        return;
+      }
+
+      const guildConfig = await getCachedGuild(guild.id);
+
+      if (!guildConfig || !guildConfig.honeypotEnabled || guildConfig.honeypotChannelId !== channelId) {
+        return;
+      }
+
+      // Check if the user is staff or administrator to bypass the trap
+      const isOwner = author.id === process.env.DISCORD_CLIENT_OWNER_ID;
+      const isAdmin = member.permissions.has(PermissionFlagsBits.Administrator);
+      
+      const hasStaffRole = (guildConfig.baseStaffRoleId && member.roles.cache.has(guildConfig.baseStaffRoleId)) ||
+                            (guildConfig.moderatorRoleId && member.roles.cache.has(guildConfig.moderatorRoleId)) ||
+                            (guildConfig.testStaffRoleId && member.roles.cache.has(guildConfig.testStaffRoleId));
+
+      if (isOwner || isAdmin || hasStaffRole) {
+        // Staff bypassed the trap
+        return;
+      }
+
+      // 1. Generate the transcript of the honeypot channel (which includes the spammer's messages)
+      let transcriptLink: string | null = null;
+      try {
+        const textChannel = message.channel as TextChannel;
+        const transcriptData = await generateTranscript(textChannel);
+        const dashboardUrl = getDashboardUrl();
+        transcriptLink = `${dashboardUrl.replace(/\/$/, '')}/transcripts/${transcriptData.id}`;
+      } catch (err) {
+        logger.error('Honeypot', `Impossible de générer le transcript pour la détection honeypot dans la guilde ${guild.id}:`, err);
+      }
+
+      const graceSeconds = guildConfig.honeypotGraceSeconds ?? 0;
+      if (graceSeconds > 0) {
+        await startGrace(client, message, graceSeconds, () => punish(client, message, guildConfig, transcriptLink));
+        return;
+      }
+      await punish(client, message, guildConfig, transcriptLink);
     } catch (err) {
       logger.error('Honeypot', `Erreur lors de la gestion du message dans le honeypot (${guild?.id}) :`, err);
     }

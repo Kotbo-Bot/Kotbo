@@ -821,6 +821,8 @@ const CLES_NON_VOCALES = [
   'honeypotChannelId',
   'honeypotSanction',
   'honeypotReinvite',
+  'honeypotGraceSeconds',
+  'honeypotDurationMin',
   'wordStatsEnabled',
 ] as const;
 
@@ -1681,6 +1683,8 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
               honeypotChannelId: true,
               honeypotSanction: true,
               honeypotReinvite: true,
+              honeypotGraceSeconds: true,
+              honeypotDurationMin: true,
               wordStatsEnabled: true,
             },
           }),
@@ -1720,6 +1724,8 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
           honeypotChannelId: guild.honeypotChannelId,
           honeypotSanction: guild.honeypotSanction,
           honeypotReinvite: guild.honeypotReinvite,
+          honeypotGraceSeconds: guild.honeypotGraceSeconds,
+          honeypotDurationMin: guild.honeypotDurationMin,
           wordStatsEnabled: guild.wordStatsEnabled,
           // Toujours les défauts du schéma quand la ligne n'existe pas encore :
           // le formulaire d'accès du dashboard n'a pas à savoir ce que « jamais
@@ -1758,6 +1764,8 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
           honeypotChannelId?: string | null;
           honeypotSanction?: string;
           honeypotReinvite?: boolean;
+          honeypotGraceSeconds?: number;
+          honeypotDurationMin?: number | null;
           wordStatsEnabled?: boolean;
         }>(req);
 
@@ -1892,7 +1900,7 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
           data.honeypotChannelId = body.honeypotChannelId;
         }
         if (Object.prototype.hasOwnProperty.call(body, 'honeypotSanction')) {
-          if (['WARN', 'KICK', 'TIMEOUT', 'BAN', 'SOFTBAN'].includes(body.honeypotSanction as string)) {
+          if (['WARN', 'KICK', 'TIMEOUT', 'BAN', 'SOFTBAN', 'JAIL'].includes(body.honeypotSanction as string)) {
             data.honeypotSanction = body.honeypotSanction;
           } else {
             tvError(res, 400, 'Type de sanction honeypot invalide', 'tv_honeypot_sanction_invalid');
@@ -1901,6 +1909,15 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
         }
         if (Object.prototype.hasOwnProperty.call(body, 'honeypotReinvite')) {
           data.honeypotReinvite = !!body.honeypotReinvite;
+        }
+        if (Object.prototype.hasOwnProperty.call(body, 'honeypotGraceSeconds')) {
+          // 0, 30 s, 1, 2 ou 5 minutes : au-delà, un robot a tout le temps de nuire.
+          const seconds = Math.floor(Number(body.honeypotGraceSeconds) || 0);
+          data.honeypotGraceSeconds = [0, 30, 60, 120, 300].includes(seconds) ? seconds : 0;
+        }
+        if (Object.prototype.hasOwnProperty.call(body, 'honeypotDurationMin')) {
+          const minutes = body.honeypotDurationMin === null ? null : Math.floor(Number(body.honeypotDurationMin));
+          data.honeypotDurationMin = minutes && minutes >= 1 ? Math.min(minutes, 365 * 24 * 60) : null;
         }
         if (Object.prototype.hasOwnProperty.call(body, 'wordStatsEnabled')) {
           data.wordStatsEnabled = !!body.wordStatsEnabled;

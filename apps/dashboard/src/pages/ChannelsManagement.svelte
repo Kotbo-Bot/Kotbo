@@ -363,6 +363,8 @@
     honeypotChannelId: '',
     honeypotSanction: 'TIMEOUT',
     honeypotReinvite: false,
+    honeypotGraceSeconds: 0,
+    honeypotDurationMin: null as number | null,
   });
 
   // Snapshot of last-saved state
@@ -406,6 +408,8 @@
     honeypotChannelId: '',
     honeypotSanction: 'TIMEOUT',
     honeypotReinvite: false,
+    honeypotGraceSeconds: 0,
+    honeypotDurationMin: null as number | null,
   })));
 
   /**
@@ -1018,6 +1022,8 @@
         config.honeypotChannelId = res.honeypotChannelId ?? '';
         config.honeypotSanction = res.honeypotSanction ?? 'TIMEOUT';
         config.honeypotReinvite = res.honeypotReinvite ?? false;
+        config.honeypotGraceSeconds = res.honeypotGraceSeconds ?? 0;
+        config.honeypotDurationMin = res.honeypotDurationMin ?? null;
         savedConfig = JSON.parse(JSON.stringify(config));
       }
     } catch (err) {
@@ -1074,6 +1080,8 @@
         honeypotChannelId: config.honeypotChannelId || null,
         honeypotSanction: config.honeypotSanction,
         honeypotReinvite: config.honeypotReinvite,
+        honeypotGraceSeconds: config.honeypotGraceSeconds,
+        honeypotDurationMin: config.honeypotDurationMin,
       });
 
       // `res.error` d'abord : la route nomme le champ qu'elle refuse
@@ -3286,8 +3294,47 @@
                   <option value="SOFTBAN">{m.cm_opt_softban()}</option>
                   <option value="KICK">{m.cm_opt_kick_simple()}</option>
                   <option value="WARN">{m.cm_opt_warn_simple()}</option>
+                  <option value="JAIL">Quarantaine (Jail)</option>
                 </select>
                 <p class="text-2xs text-on-surface-variant/40 mt-1">{m.cm_sanction_select_hint()}</p>
+              </div>
+
+              {#if ['TIMEOUT', 'BAN', 'JAIL'].includes(config.honeypotSanction)}
+                <div class="space-y-1.5">
+                  <label for="honeypot-duration-select" class="text-xs font-bold text-on-surface/80 block">Durée de la sanction</label>
+                  <select
+                    id="honeypot-duration-select"
+                    value={config.honeypotDurationMin === null ? '' : String(config.honeypotDurationMin)}
+                    onchange={(e) => (config.honeypotDurationMin = e.currentTarget.value ? Number(e.currentTarget.value) : null)}
+                    class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs outline-none focus:ring-1 focus:ring-primary/30"
+                  >
+                    {#if config.honeypotSanction === 'TIMEOUT'}
+                      <option value="">28 jours (maximum Discord)</option>
+                    {:else}
+                      <option value="">Permanente : ne se lève pas d'elle-même</option>
+                    {/if}
+                    <option value="60">1 heure</option>
+                    <option value="1440">1 jour</option>
+                    <option value="10080">7 jours</option>
+                    {#if config.honeypotSanction !== 'TIMEOUT'}<option value="43200">30 jours</option>{/if}
+                  </select>
+                </div>
+              {/if}
+
+              <div class="space-y-1.5">
+                <label for="honeypot-grace-select" class="text-xs font-bold text-on-surface/80 block">Délai avant sanction</label>
+                <select
+                  id="honeypot-grace-select"
+                  bind:value={config.honeypotGraceSeconds}
+                  class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs outline-none focus:ring-1 focus:ring-primary/30"
+                >
+                  <option value={0}>Sanction immédiate</option>
+                  <option value={30}>Demander d'abord : 30 secondes</option>
+                  <option value={60}>Demander d'abord : 1 minute</option>
+                  <option value={120}>Demander d'abord : 2 minutes</option>
+                  <option value={300}>Demander d'abord : 5 minutes</option>
+                </select>
+                <p class="text-2xs text-on-surface-variant mt-1">Le membre est mentionné avec un bouton « C'était une erreur ». Sans clic à temps, la sanction tombe ; s'il poste le même message ailleurs entre-temps, elle tombe tout de suite.</p>
               </div>
 
               {#if config.honeypotSanction === 'KICK' || config.honeypotSanction === 'SOFTBAN'}
