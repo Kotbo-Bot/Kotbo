@@ -14,6 +14,7 @@ enum EventType {
   QUIZ
   CTF
   CUSTOM
+  TOURNAMENT
 }
 
 model Event {
@@ -43,6 +44,7 @@ model Event {
   ctfChallenges EventCtfChallenge[]
   participants EventParticipant[]
   registrations CustomEventRegistration[]
+  tournamentMatches EventTournamentMatch[]
   customForm CustomForm? @relation(fields: [formId], references: [id], onDelete: SetNull)
 
   createdAt DateTime @default(now())
@@ -63,6 +65,10 @@ model CustomEventRegistration {
   // Réponses au formulaire si un formulaire était lié
   formData  Json?
 
+  // Tournoi : tête de série posée à la génération de l'arbre (1 = la meilleure).
+  // null tant que l'arbre n'est pas généré ; un numéro absent devient une exemption.
+  seed      Int?
+
   event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now())
@@ -71,6 +77,28 @@ model CustomEventRegistration {
   @@index([eventId])
   @@index([guildId, userId])
   @@map("custom_event_registrations")
+}
+
+// Résultat d'un match de tournoi. L'arbre lui-même se recalcule depuis les têtes
+// de série : on ne stocke que les scores, avec les deux joueurs qui les ont
+// joués. Si un résultat en amont change, les joueurs ne correspondent plus et le
+// score devient caduc sans qu'il faille effacer quoi que ce soit en cascade.
+model EventTournamentMatch {
+  id        String   @id @default(cuid())
+  eventId   String
+  round     Int      // 1 = premier tour
+  position  Int      // 0 = match du haut de la colonne
+  player1Id String
+  player2Id String
+  score1    Int      @default(0) // manches gagnées
+  score2    Int      @default(0)
+
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  updatedAt DateTime @updatedAt
+
+  @@unique([eventId, round, position])
+  @@map("event_tournament_matches")
 }
 
 model EventQuizQuestion {
