@@ -25,6 +25,7 @@ import {
 import { getLineageReport, quarantineLineage } from '../../../services/moderation/inviteLineageService.js';
 
 import { jsonFailure } from '../../shared/failure.js';
+import { handleVisionRoutes } from './visionRoutes.js';
 // Champs anti-spam modifiables depuis le dashboard
 const SPAM_PATCHABLE_FIELDS = [
   'enabled', 'shadowMode',
@@ -72,6 +73,8 @@ export async function handleRaidProtectionRoutes(
   const method = req.method;
   const sub = parts[5];
   const auditUser = `${user.username ?? 'Utilisateur'} (${user.userId})`;
+
+  if (await handleVisionRoutes(req, res, parts, _url, client, user, guildId)) return true;
 
   // GET /raid-protection - config + compteurs
   //
@@ -325,48 +328,6 @@ export async function handleRaidProtectionRoutes(
     } catch (err) {
       logger.error('RaidProtectionAPI', 'Erreur decision invite:', err);
       jsonFailure(res, err, 'Erreur lors du traitement de la demande', 'RaidProtectionAPI');
-    }
-    return true;
-  }
-
-  // GET /raid-protection/scam-images
-  if (sub === 'scam-images' && !parts[6] && method === 'GET') {
-    try {
-      const images = await prisma.scamImageHash.findMany({
-        where: { OR: [{ guildId }, { guildId: null }] },
-        orderBy: { createdAt: 'desc' },
-        take: 200,
-      });
-      json(res, 200, { images });
-    } catch (err) {
-      logger.error('RaidProtectionAPI', 'Erreur GET scam-images:', err);
-      jsonFailure(res, err, 'Erreur lors de la récupération des images', 'RaidProtectionAPI');
-    }
-    return true;
-  }
-
-  // DELETE /raid-protection/scam-images/:id
-  if (sub === 'scam-images' && parts[6] && method === 'DELETE') {
-    try {
-      // On ne peut supprimer que les hash de SA guilde (pas les globaux)
-      const deleted = await prisma.scamImageHash.deleteMany({ where: { id: parts[6], guildId } });
-      if (deleted.count === 0) {
-        json(res, 404, { error: 'Hash introuvable (ou global, non supprimable)' });
-        return true;
-      }
-      await safePushAudit(guildId, {
-        user: auditUser,
-        action: 'Hash d\'image scam supprimé',
-        context: getGuildName(client, guildId),
-        module: 'RaidProtection',
-        eventType: 'Manuel',
-        details: '',
-        channelId: null,
-      }, 'RaidProtectionAPI');
-      json(res, 200, { success: true });
-    } catch (err) {
-      logger.error('RaidProtectionAPI', 'Erreur DELETE scam-image:', err);
-      jsonFailure(res, err, 'Erreur lors de la suppression', 'RaidProtectionAPI');
     }
     return true;
   }
