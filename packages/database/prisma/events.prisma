@@ -68,6 +68,9 @@ model CustomEventRegistration {
   // Tournoi : tête de série posée à la génération de l'arbre (1 = la meilleure).
   // null tant que l'arbre n'est pas généré ; un numéro absent devient une exemption.
   seed      Int?
+  // Tournoi par équipes : l'inscrit est le capitaine, ses coéquipiers à côté.
+  teamName      String?
+  teamMemberIds String[] @default([])
 
   event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
 
@@ -86,18 +89,22 @@ model CustomEventRegistration {
 model EventTournamentMatch {
   id        String   @id @default(cuid())
   eventId   String
+  // W arbre principal, L arbre des perdants, GF grande finale, P3 petite finale,
+  // G0..Gn poules, PO phase finale après les poules.
+  stage     String   @default("W")
   round     Int      // 1 = premier tour
   position  Int      // 0 = match du haut de la colonne
   player1Id String
   player2Id String
   score1    Int      @default(0) // manches gagnées
   score2    Int      @default(0)
+  sets      Json?    // détail des manches [[11, 7], [9, 11]] quand le tournoi le demande
 
   event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
 
   updatedAt DateTime @updatedAt
 
-  @@unique([eventId, round, position])
+  @@unique([eventId, stage, round, position])
   @@map("event_tournament_matches")
 }
 
