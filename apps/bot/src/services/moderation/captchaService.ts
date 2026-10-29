@@ -1,5 +1,6 @@
 import { type Client, type Guild, type GuildMember, type Message, type TextChannel, ActionRowBuilder, AttachmentBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, PermissionFlagsBits } from 'discord.js';
-import { createCanvas } from '@napi-rs/canvas';
+import { createCanvas, loadImage, type Image } from '@napi-rs/canvas';
+import { fetchExternal } from '../../utils/http.js';
 import crypto from 'node:crypto';
 import prisma from '../../utils/db.js';
 import { notifyJoinBlocked } from '../notifications/notifyService.js';
@@ -29,8 +30,14 @@ function generateCode(): string {
 }
 
 /** Génère l'image du captcha : lettres déformées + bruit (lignes, points). */
-export function renderCaptchaImage(code: string): Buffer {
-  const width = 360;
+/** Habillage du captcha aux couleurs du serveur : son icône et sa teinte dominante. */
+export type CaptchaBrand = { icon: Image; accent: [number, number, number] };
+
+const BRAND_BAND = 120;
+
+export function renderCaptchaImage(code: string, brand: CaptchaBrand | null = null): Buffer {
+  const codeWidth = 360;
+  const width = codeWidth + (brand ? BRAND_BAND : 0);
   const height = 140;
   const canvas = createCanvas(width, height);
   const ctx = canvas.getContext('2d');
@@ -38,6 +45,31 @@ export function renderCaptchaImage(code: string): Buffer {
   // Fond
   ctx.fillStyle = '#2b2d31';
   ctx.fillRect(0, 0, width, height);
+
+  if (brand) {
+    // Bandeau à gauche : la teinte du serveur en dégradé, l'icône en médaillon.
+    const [r, g, b] = brand.accent;
+    const gradient = ctx.createLinearGradient(0, 0, BRAND_BAND, 0);
+    gradient.addColorStop(0, `rgba(${r}, ${g}, ${b}, 0.55)`);
+    gradient.addColorStop(1, 'rgba(43, 45, 49, 1)');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, BRAND_BAND, height);
+    const size = 76;
+    const cx = BRAND_BAND / 2;
+    const cy = height / 2;
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx, cy, size / 2, 0, Math.PI * 2);
+    ctx.clip();
+    ctx.drawImage(brand.icon, cx - size / 2, cy - size / 2, size, size);
+    ctx.restore();
+    ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, 0.9)`;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(cx, cy, size / 2 + 2, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.translate(BRAND_BAND, 0);
+  }
 
   // Lignes de bruit
   for (let i = 0; i < 8; i++) {
@@ -54,7 +86,7 @@ export function renderCaptchaImage(code: string): Buffer {
   }
 
   // Lettres déformées
-  const step = width / (code.length + 1);
+  const step = codeWidth / (code.length + 1);
   for (let i = 0; i < code.length; i++) {
     const fontSize = 52 + crypto.randomInt(16);
     ctx.font = `bold ${fontSize}px sans-serif`;
@@ -73,10 +105,50 @@ export function renderCaptchaImage(code: string): Buffer {
   // Points de bruit
   for (let i = 0; i < 120; i++) {
     ctx.fillStyle = `rgba(${crypto.randomInt(255)}, ${crypto.randomInt(255)}, ${crypto.randomInt(255)}, 0.4)`;
-    ctx.fillRect(crypto.randomInt(width), crypto.randomInt(height), 2, 2);
+    ctx.fillRect(crypto.randomInt(codeWidth), crypto.randomInt(height), 2, 2);
   }
 
   return canvas.toBuffer('image/png');
+}
+
+const brandCache = new Map<string, CaptchaBrand | null>();
+
+/** Teinte dominante d'une image : moyenne des pixels opaques et assez saturés. */
+function dominantColor(icon: Image): [number, number, number] {
+  const canvas = createCanvas(32, 32);
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(icon, 0, 0, 32, 32);
+  const { data } = ctx.getImageData(0, 0, 32, 32);
+  let r = 0, g = 0, b = 0, n = 0;
+  for (let i = 0; i < data.length; i += 4) {
+    if (data[i + 3] < 200) continue;
+    const max = Math.max(data[i], data[i + 1], data[i + 2]);
+    const min = Math.min(data[i], data[i + 1], data[i + 2]);
+    if (max - min < 30) continue; // gris : ne dit rien de la couleur du serveur
+    r += data[i]; g += data[i + 1]; b += data[i + 2]; n++;
+  }
+  return n === 0 ? [88, 101, 242] : [Math.round(r / n), Math.round(g / n), Math.round(b / n)];
+}
+
+/** Icône du serveur et sa teinte, mises en cache par version de l'icône. */
+async function loadCaptchaBrand(member: GuildMember): Promise<CaptchaBrand | null> {
+  const url = member.guild.iconURL({ extension: 'png', size: 128, forceStatic: true });
+  if (!url) return null;
+  const key = `${member.guild.id}:${member.guild.icon}`;
+  if (brandCache.has(key)) return brandCache.get(key) ?? null;
+  let brand: CaptchaBrand | null = null;
+  try {
+    const res = await fetchExternal(url, {}, 4_000);
+    if (res.ok) {
+      const icon = await loadImage(Buffer.from(await res.arrayBuffer()));
+      brand = { icon, accent: dominantColor(icon) };
+    }
+  } catch {
+    brand = null;
+  }
+  if (brandCache.size > 500) brandCache.clear();
+  brandCache.set(key, brand);
+  return brand;
 }
 
 // ── Cycle de vie d'une session ────────────────────────────────────────────────
@@ -261,7 +333,8 @@ async function sendImageChallenge(member: GuildMember, config: RaidProtectionCon
   const channel = await member.guild.channels.fetch(config.captchaChannelId).catch(() => null);
   if (!channel?.isTextBased()) return;
 
-  const attachment = new AttachmentBuilder(renderCaptchaImage(session.code), { name: 'captcha.png' });
+  const brand = config.captchaUseServerIcon ? await loadCaptchaBrand(member) : null;
+  const attachment = new AttachmentBuilder(renderCaptchaImage(session.code, brand), { name: 'captcha.png' });
   const embed = new EmbedBuilder()
     .setColor(COLORS.primary)
     .setTitle('🔐 Vérification requise')
