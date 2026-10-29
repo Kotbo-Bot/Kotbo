@@ -58,6 +58,12 @@
     spamGroupSlowmodeEnabled: false,
     spamGroupSlowmodeSeconds: 10,
     spamGroupSlowmodeMinutes: 5,
+    preventiveSlowmodeEnabled: false,
+    preventiveSlowmodeMsgThreshold: 15,
+    preventiveSlowmodeMinUsers: 3,
+    preventiveSlowmodeWindowSec: 10,
+    preventiveSlowmodeSeconds: 5,
+    preventiveSlowmodeMinutes: 5,
 
     linksEnabled: false,
     linksAction: 'DELETE_AND_WARN',
@@ -123,6 +129,8 @@
     discordAutoModEnabled: true,
     spamEnabled: false, spamLimit: 5, spamIntervalSeconds: 5, spamAction: 'TIMEOUT',
     spamGroupSlowmodeEnabled: false, spamGroupSlowmodeSeconds: 10, spamGroupSlowmodeMinutes: 5,
+    preventiveSlowmodeEnabled: false, preventiveSlowmodeMsgThreshold: 15, preventiveSlowmodeMinUsers: 3,
+    preventiveSlowmodeWindowSec: 10, preventiveSlowmodeSeconds: 5, preventiveSlowmodeMinutes: 5,
     linksEnabled: false, linksAction: 'DELETE_AND_WARN', linksWhitelist: [],
     capsEnabled: false, capsThresholdPercent: 80, capsMinLength: 10,
     emojisEnabled: false, emojisLimit: 10,
@@ -458,6 +466,85 @@
                       min="1"
                       max="1440"
                       bind:value={config.spamGroupSlowmodeMinutes}
+                      class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none"
+                      disabled={!canManageSettings}
+                    />
+                  </div>
+                {/if}
+
+                <div class="col-span-2 flex items-center justify-between pt-2 border-t border-outline-variant/10">
+                  <div>
+                    <span class="text-xs font-semibold text-on-surface-variant ml-2">Mode lent préventif</span>
+                    <p class="text-xs text-on-surface-variant ml-2 mt-1">Active un mode lent temporaire dès que le salon s'emballe (plusieurs membres postent rapidement), avant toute sanction individuelle.</p>
+                  </div>
+                  <ToggleSwitch
+                    checked={config.preventiveSlowmodeEnabled}
+                    onToggle={(v: boolean) => config.preventiveSlowmodeEnabled = v}
+                    disabled={!canManageSettings}
+                  />
+                </div>
+
+                {#if config.preventiveSlowmodeEnabled}
+                  <div class="space-y-1.5">
+                    <label for="preventiveSlowmodeMsgThreshold" class="text-xs font-semibold text-on-surface-variant ml-2">Messages déclencheurs</label>
+                    <input
+                      id="preventiveSlowmodeMsgThreshold"
+                      type="number"
+                      min="3"
+                      max="200"
+                      bind:value={config.preventiveSlowmodeMsgThreshold}
+                      class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none"
+                      disabled={!canManageSettings}
+                    />
+                  </div>
+
+                  <div class="space-y-1.5">
+                    <label for="preventiveSlowmodeMinUsers" class="text-xs font-semibold text-on-surface-variant ml-2">Membres distincts min.</label>
+                    <input
+                      id="preventiveSlowmodeMinUsers"
+                      type="number"
+                      min="2"
+                      max="50"
+                      bind:value={config.preventiveSlowmodeMinUsers}
+                      class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none"
+                      disabled={!canManageSettings}
+                    />
+                  </div>
+
+                  <div class="space-y-1.5">
+                    <label for="preventiveSlowmodeWindowSec" class="text-xs font-semibold text-on-surface-variant ml-2">Fenêtre d'observation (s)</label>
+                    <input
+                      id="preventiveSlowmodeWindowSec"
+                      type="number"
+                      min="2"
+                      max="120"
+                      bind:value={config.preventiveSlowmodeWindowSec}
+                      class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none"
+                      disabled={!canManageSettings}
+                    />
+                  </div>
+
+                  <div class="space-y-1.5">
+                    <label for="preventiveSlowmodeSeconds" class="text-xs font-semibold text-on-surface-variant ml-2">Mode lent appliqué (s)</label>
+                    <input
+                      id="preventiveSlowmodeSeconds"
+                      type="number"
+                      min="1"
+                      max="21600"
+                      bind:value={config.preventiveSlowmodeSeconds}
+                      class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none"
+                      disabled={!canManageSettings}
+                    />
+                  </div>
+
+                  <div class="space-y-1.5">
+                    <label for="preventiveSlowmodeMinutes" class="text-xs font-semibold text-on-surface-variant ml-2">Durée du mode lent (min)</label>
+                    <input
+                      id="preventiveSlowmodeMinutes"
+                      type="number"
+                      min="1"
+                      max="1440"
+                      bind:value={config.preventiveSlowmodeMinutes}
                       class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none"
                       disabled={!canManageSettings}
                     />

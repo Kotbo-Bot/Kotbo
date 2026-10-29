@@ -212,7 +212,9 @@ const data = new SlashCommandBuilder()
           .addChannelOption((opt) =>
             opt.setName('salon').setDescription('Salon ou catégorie visé (défaut : le salon actuel)').addChannelTypes(...LOCKDOWN_CHANNEL_TYPES))
           .addStringOption((opt) =>
-            opt.setName('raison').setDescription('Affichée dans le salon et le journal d\'audit').setMaxLength(300)))
+            opt.setName('raison').setDescription('Affichée dans le salon et le journal d\'audit').setMaxLength(300))
+          .addBooleanOption((opt) =>
+            opt.setName('silencieux').setDescription('Ne publie aucun message dans le salon verrouillé')))
       .addSubcommand((sub) =>
         sub
           .setName('off')
@@ -220,7 +222,9 @@ const data = new SlashCommandBuilder()
           .addStringOption((opt) =>
             opt.setName('portee').setDescription('Ce qui est rouvert (défaut : le salon)').addChoices(...LOCKDOWN_SCOPE_CHOICES))
           .addChannelOption((opt) =>
-            opt.setName('salon').setDescription('Salon ou catégorie visé (défaut : le salon actuel)').addChannelTypes(...LOCKDOWN_CHANNEL_TYPES))))
+            opt.setName('salon').setDescription('Salon ou catégorie visé (défaut : le salon actuel)').addChannelTypes(...LOCKDOWN_CHANNEL_TYPES))
+          .addBooleanOption((opt) =>
+            opt.setName('silencieux').setDescription('Ne publie aucun message dans le salon rouvert'))))
   .addSubcommandGroup((group) =>
     group
       .setName('jail')
@@ -378,14 +382,15 @@ async function execute(interaction: ChatInputCommandInteraction) {
 
     if (sub === 'on') {
       const reason = interaction.options.getString('raison');
+      const silent = interaction.options.getBoolean('silencieux') ?? false;
       const counts = { locked: 0, already: 0, failed: 0 };
       for (const channel of target.channels) {
         counts[await lockChannel(channel, interaction.user.id, reason)]++;
       }
 
-      // Annonce seulement pour un salon seul : sur une catégorie ou un serveur,
-      // un message par salon noierait tout le monde.
-      const single = target.channels.length === 1 ? target.channels[0] : null;
+      // Annonce seulement pour un salon seul, et seulement si non silencieux :
+      // sur une catégorie ou un serveur, un message par salon noierait tout le monde.
+      const single = !silent && target.channels.length === 1 ? target.channels[0] : null;
       if (single && counts.locked === 1 && single.isSendable()) {
         await single.send({
           embeds: [new EmbedBuilder()
@@ -418,12 +423,13 @@ async function execute(interaction: ChatInputCommandInteraction) {
       return;
     }
 
+    const silent = interaction.options.getBoolean('silencieux') ?? false;
     const counts = { unlocked: 0, gone: 0, failed: 0 };
     for (const channelId of toUnlock) {
       counts[await unlockChannel(guild, channelId)]++;
     }
 
-    const single = toUnlock.length === 1 ? guild.channels.cache.get(toUnlock[0]) : null;
+    const single = !silent && toUnlock.length === 1 ? guild.channels.cache.get(toUnlock[0]) : null;
     if (single && counts.unlocked === 1 && single.isSendable()) {
       await single.send({
         embeds: [new EmbedBuilder().setColor(COLORS.success).setTitle('🔓 Salon rouvert')],

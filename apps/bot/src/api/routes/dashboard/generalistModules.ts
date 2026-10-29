@@ -2164,6 +2164,12 @@ export async function handleGeneralistModulesRoutes(
           spamGroupSlowmodeEnabled?: boolean;
           spamGroupSlowmodeSeconds?: number;
           spamGroupSlowmodeMinutes?: number;
+          preventiveSlowmodeEnabled?: boolean;
+          preventiveSlowmodeMsgThreshold?: number;
+          preventiveSlowmodeMinUsers?: number;
+          preventiveSlowmodeWindowSec?: number;
+          preventiveSlowmodeSeconds?: number;
+          preventiveSlowmodeMinutes?: number;
           linksEnabled?: boolean;
           linksAction?: string;
           linksWhitelist?: string[];
@@ -2297,6 +2303,12 @@ export async function handleGeneralistModulesRoutes(
           // Plafond Discord du mode lent : 6 h.
           spamGroupSlowmodeSeconds: clampInt(body.spamGroupSlowmodeSeconds, 1, 21_600),
           spamGroupSlowmodeMinutes: clampInt(body.spamGroupSlowmodeMinutes, 1, 1_440),
+          preventiveSlowmodeEnabled: typeof body.preventiveSlowmodeEnabled === 'boolean' ? body.preventiveSlowmodeEnabled : undefined,
+          preventiveSlowmodeMsgThreshold: clampInt(body.preventiveSlowmodeMsgThreshold, 3, 200),
+          preventiveSlowmodeMinUsers: clampInt(body.preventiveSlowmodeMinUsers, 2, 50),
+          preventiveSlowmodeWindowSec: clampInt(body.preventiveSlowmodeWindowSec, 2, 120),
+          preventiveSlowmodeSeconds: clampInt(body.preventiveSlowmodeSeconds, 1, 21_600),
+          preventiveSlowmodeMinutes: clampInt(body.preventiveSlowmodeMinutes, 1, 1_440),
           linksEnabled: body.linksEnabled,
           linksAction: body.linksAction,
           linksWhitelist: body.linksWhitelist,

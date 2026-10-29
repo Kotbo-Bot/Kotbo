@@ -27,6 +27,14 @@ model AutoModConfig {
   spamGroupSlowmodeEnabled Boolean @default(false)
   spamGroupSlowmodeSeconds Int     @default(10)
   spamGroupSlowmodeMinutes Int     @default(5)
+  // Mode lent préventif : s'active avant même qu'un membre dépasse sa limite individuelle
+  // quand le débit global du salon s'emballe (N messages de M membres en T secondes).
+  preventiveSlowmodeEnabled      Boolean @default(false)
+  preventiveSlowmodeMsgThreshold Int     @default(15)
+  preventiveSlowmodeMinUsers     Int     @default(3)
+  preventiveSlowmodeWindowSec    Int     @default(10)
+  preventiveSlowmodeSeconds      Int     @default(5)
+  preventiveSlowmodeMinutes      Int     @default(5)
 
   linksEnabled         Boolean  @default(false)
   linksAction          String   @default("DELETE_AND_WARN")

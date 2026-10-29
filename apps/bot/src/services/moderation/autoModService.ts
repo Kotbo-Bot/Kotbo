@@ -12,7 +12,7 @@ import { mirrorModlogToStaffServer } from '../staff/staffServerService.js';
 import { getUppercasePercentage } from './capsDetection.js';
 import { classifyLink, findKeywordRanges, findLiteralRanges, INVITE_KEYWORDS, LINK_KEYWORDS, type CensorKind, type CensorRange } from './censorship.js';
 import { queueCensoredRepost, repostCensored } from './censorService.js';
-import { handleGroupSpam } from './groupSpamSlowmode.js';
+import { handleGroupSpam, handlePreventiveSlowmode } from './groupSpamSlowmode.js';
 
 // Cache for AutoMod configs: key is guildId, value is the config object
 const autoModConfigsCache = new Map<string, AutoModConfig>();
@@ -702,6 +702,17 @@ export async function handleAutoMod(message: Message, client: Client): Promise<b
 
     const content = message.content;
     const userId = message.author.id;
+
+    // 0. Mode lent préventif (débit global du salon)
+    if (config.preventiveSlowmodeEnabled) {
+      await handlePreventiveSlowmode(message, {
+        msgThreshold: config.preventiveSlowmodeMsgThreshold,
+        minUsers: config.preventiveSlowmodeMinUsers,
+        windowSec: config.preventiveSlowmodeWindowSec,
+        slowmodeSec: config.preventiveSlowmodeSeconds,
+        durationMin: config.preventiveSlowmodeMinutes,
+      });
+    }
 
     // 1. Anti-Spam
     if (config.spamEnabled) {

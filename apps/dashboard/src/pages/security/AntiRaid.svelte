@@ -1143,6 +1143,7 @@
             {@render channelSelect('jailChannelId', 'Salon de quarantaine', "Le seul salon visible en quarantaine. Facultatif.")}
           </div>
           {@render switchRow('jailStripRoles', 'Retirer les rôles du membre', "Sans ça, un rôle qui ouvre un salon annulerait la quarantaine. Les rôles sont rendus à la levée.")}
+          {@render switchRow('discordQuarantineSyncEnabled', 'Synchroniser la quarantaine AutoMod Discord', "Quand l'AutoMod natif de Discord met un profil en quarantaine (pseudo, bio ou tag de serveur bloqué), Kotbo applique aussi la quarantaine Jail et la lève dès que le membre corrige son profil.")}
         </div>
       </SectionCard>
 

@@ -10,7 +10,7 @@ import { syncMemberTagRole } from '../services/moderation/tagRoleService.js';
 import { handleInviteCreate } from '../services/moderation/inviteGuardService.js';
 import { handleVoiceStateUpdate } from '../services/moderation/voiceCaptchaService.js';
 import { handleSpamMessage, handleTypingStart } from '../services/moderation/spam/index.js';
-import { applyJailOverwrite, reapplyJailOnJoin } from '../services/moderation/jailService.js';
+import { applyJailOverwrite, reapplyJailOnJoin, syncDiscordQuarantine } from '../services/moderation/jailService.js';
 import { decideCaptcha } from '../services/moderation/captchaTrigger.js';
 import { handleOtherServersMessage, syncServerTagQuarantine } from '../services/moderation/otherServersFilter.js';
 import { handleFileExtensionMessage } from '../services/moderation/fileExtensionFilter.js';
@@ -45,6 +45,7 @@ export function registerRaidProtectionListener(client: Client): void {
       // 7. Tag role (si le membre arrive déjà avec le tag du serveur)
       await syncMemberTagRole(member, config);
       await syncServerTagQuarantine(member, config);
+      await syncDiscordQuarantine(member, config);
     } catch (err) {
       logger.error('RaidProtection', `Erreur GuildMemberAdd pour ${member.id}`, err);
     }
@@ -123,6 +124,7 @@ export function registerRaidProtectionListener(client: Client): void {
     try {
       await syncMemberTagRole(member);
       await syncServerTagQuarantine(member);
+      await syncDiscordQuarantine(member);
     } catch (err) {
       logger.error('RaidProtection', `Erreur GuildMemberUpdate pour ${member.id}`, err);
     }
@@ -135,6 +137,7 @@ export function registerRaidProtectionListener(client: Client): void {
       if (member.partial) return;
       await syncMemberTagRole(member);
       await syncServerTagQuarantine(member);
+      await syncDiscordQuarantine(member);
     } catch (err) {
       logger.error('RaidProtection', `Erreur GuildMemberAvailable pour ${member.id}`, err);
     }

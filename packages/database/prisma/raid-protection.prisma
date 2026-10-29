@@ -162,9 +162,13 @@ model RaidProtectionConfig {
   // ── Jail (quarantaine par rôle) ────────────────────────────────────────────
   // Le rôle Jail ne voit aucun salon, sauf celui réservé aux quarantaines s'il
   // existe. Les rôles du membre lui sont retirés et rendus à la levée.
-  jailRoleId      String?
-  jailChannelId   String?
-  jailStripRoles  Boolean  @default(true)
+  jailRoleId                  String?
+  jailChannelId               String?
+  jailStripRoles              Boolean  @default(true)
+  // Si l'AutoMod natif de Discord met un profil en quarantaine (pseudo, bio ou
+  // tag bloqué), Kotbo synchronise avec sa quarantaine Jail et la lève dès que
+  // le membre corrige son profil.
+  discordQuarantineSyncEnabled Boolean @default(false)
 
   // ── Kotbo Vision (filtre d'images d'arnaque) ───────────────────────────────────
   // Indépendant du filtre de liens : actif par défaut, comme le catalogue

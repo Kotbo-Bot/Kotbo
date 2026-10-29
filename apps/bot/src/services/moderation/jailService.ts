@@ -13,6 +13,7 @@
 
 import {
   ChannelType,
+  GuildMemberFlags,
   PermissionFlagsBits,
   type Client,
   type Guild,
@@ -21,6 +22,7 @@ import {
   type Role,
 } from 'discord.js';
 import { SanctionStatus, SanctionType } from '@prisma/client';
+import type { RaidProtectionConfig } from '@prisma/client';
 import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
 import { getRaidProtectionConfig, upsertRaidProtectionConfig } from './raidProtectionService.js';
@@ -278,4 +280,68 @@ export async function reapplyJailOnJoin(member: GuildMember): Promise<boolean> {
     logger.warn('Jail', `Rôle Jail non reposé à ${member.id} (${member.guild.id}): ${String(err)}`)
   );
   return true;
+}
+
+/** Indique si Discord AutoMod a mis le profil du membre en quarantaine (pseudo, bio, tag). */
+export function isMemberDiscordQuarantined(member: GuildMember): { quarantined: boolean; reasons: string[] } {
+  const reasons: string[] = [];
+  if (member.flags.has(GuildMemberFlags.AutomodQuarantinedUsernameOrGuildNickname)) {
+    reasons.push('pseudo ou surnom');
+  }
+  if (member.flags.has(GuildMemberFlags.AutomodQuarantinedBio)) {
+    reasons.push('biographie');
+  }
+  if (member.flags.has(GuildMemberFlags.AutoModQuarantinedGuildTag)) {
+    reasons.push('tag de serveur');
+  }
+  return { quarantined: reasons.length > 0, reasons };
+}
+
+/**
+ * Synchronise la quarantaine AutoMod native de Discord avec le rôle Jail Kotbo :
+ * posé dès que Discord met le profil en quarantaine, levé dès que le membre a
+ * corrigé son profil (sans toucher aux quarantaines d'une autre origine).
+ */
+export async function syncDiscordQuarantine(member: GuildMember, config?: RaidProtectionConfig | null): Promise<void> {
+  if (member.user.bot || member.permissions.has(PermissionFlagsBits.Administrator)) return;
+  const cfg = config ?? (await getRaidProtectionConfig(member.guild.id));
+  if (!cfg) return;
+
+  const { quarantined, reasons } = isMemberDiscordQuarantined(member);
+  const active = cfg.discordQuarantineSyncEnabled && quarantined;
+  const jail = await getActiveJail(member.guild.id, member.id);
+
+  if (active && !jail) {
+    if (!(await isJailConfigured(member.guild))) {
+      logger.debug('Jail', `Quarantaine Discord sur ${member.guild.id} mais aucun rôle Jail configuré`);
+      return;
+    }
+    if (!member.manageable) return;
+    const reason = `Profil mis en quarantaine par l'AutoMod Discord (${reasons.join(', ')}) : quarantaine jusqu'à correction`;
+    const { registerJailSanction } = await import('./sanctionService.js');
+    await registerJailSanction({
+      guildId: member.guild.id,
+      target: { id: member.id, tag: member.user.tag },
+      moderator: { id: member.client.user.id, tag: member.client.user.tag },
+      reason,
+      durationMs: null,
+      member,
+      source: 'DISCORD_QUARANTINE',
+      client: member.client,
+    }).catch((err) => logger.warn('Jail', `Quarantaine Discord non synchronisée (${member.id}): ${String(err)}`));
+    await member
+      .send(
+        `Sur **${member.guild.name}**, l'AutoMod Discord a bloqué ton profil (${reasons.join(', ')}). ` +
+        `Tu es en quarantaine : elle sera levée automatiquement dès que tu auras modifié l'élément concerné.`
+      )
+      .catch(() => null);
+    return;
+  }
+
+  if (!active && jail?.source === 'DISCORD_QUARANTINE') {
+    await releaseJail(member.client, member.guild.id, member.id, {
+      note: 'Profil corrigé (quarantaine AutoMod Discord levée).',
+      onlySource: 'DISCORD_QUARANTINE',
+    });
+  }
 }
