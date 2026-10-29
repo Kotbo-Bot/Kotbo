@@ -30,7 +30,10 @@
     if (parts[0] === 'form' && parts.length === 2) return { formId: parts[1] };
     if (parts[0] === 'appeal' && parts.length === 2 && SNOWFLAKE.test(parts[1])) return { guildId: parts[1], kind: 'appeal' };
     if (parts.length >= 2 && SNOWFLAKE.test(parts[0])) {
-      const kind = BY_SUFFIX[parts.slice(1).join('/')];
+      const suffix = parts.slice(1).join('/');
+      const kind =
+        BY_SUFFIX[suffix] ??
+        (parts[1] === 'leveling' && parts[2] === 'classement' ? 'leaderboard-xp' : undefined);
       if (kind) return { guildId: parts[0], kind };
     }
     return null;

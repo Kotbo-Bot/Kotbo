@@ -2226,7 +2226,7 @@
               placeholder={m.lv_levelup_message_ph({ user: '{user}', level: '{level}' })}
               disabled={!canManageSettings}
             />
-            <p class="text-2xs text-on-surface-variant/40 ml-2">{m.lv_variables_label()} <code class="bg-surface-container px-1 py-0.5 rounded text-primary dark:text-blue-300">{`{user}`}</code> {m.lv_variables_mention()}, <code class="bg-surface-container px-1 py-0.5 rounded text-primary dark:text-blue-300">{`{username}`}</code>, <code class="bg-surface-container px-1 py-0.5 rounded text-primary dark:text-blue-300">{`{level}`}</code></p>
+            <p class="text-2xs text-on-surface-variant/40 ml-2">{m.lv_variables_label()} <code class="bg-surface-container px-1 py-0.5 rounded text-primary dark:text-blue-300">{`{user}`}</code> {m.lv_variables_mention()}, <code class="bg-surface-container px-1 py-0.5 rounded text-primary dark:text-blue-300">{`{username}`}</code>, <code class="bg-surface-container px-1 py-0.5 rounded text-primary dark:text-blue-300">{`{level}`}</code>, <code class="bg-surface-container px-1 py-0.5 rounded text-primary dark:text-blue-300">{`{leaderboard}`}</code> {m.lv_variables_leaderboard()}</p>
             <p class="text-2xs text-on-surface-variant/40 ml-2">{m.lv_levelup_message_hint()}</p>
           </div>
         </div>
