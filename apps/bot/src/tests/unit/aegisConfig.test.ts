@@ -1,10 +1,42 @@
 import { describe, expect, mock, test } from 'bun:test';
 
-mock.module('../../utils/db.js', () => ({ default: {}, prisma: {}, prismaRead: {} }));
+let row: Record<string, unknown> | null = null;
 
-const { AegisConfigError, sanitizeAegisPatch } = await import('../../services/moderation/aegis/aegisConfig');
+mock.module('../../utils/db.js', () => {
+  const db = { aegisConfig: { findUnique: async () => row } };
+  return { default: db, prisma: db, prismaRead: db };
+});
+
+mock.module('../../utils/cache.js', () => ({
+  cache: {
+    wrap: async (_k: string, _ttl: number, fn: () => Promise<unknown>) => fn(),
+    delete: async () => {},
+  },
+}));
+
+const { AegisConfigError, getAegisConfig, getAegisSendConfig, sanitizeAegisPatch } = await import('../../services/moderation/aegis/aegisConfig');
 
 const current = { reviewThreshold: 80, autoThreshold: 95 };
+
+describe('getAegisConfig / getAegisSendConfig', () => {
+  test('module éteint sans consentement : rien ne part', async () => {
+    row = { guildId: '1', enabled: false, trainingConsent: false };
+    expect(await getAegisConfig('1')).toBeNull();
+    expect(await getAegisSendConfig('1')).toBeNull();
+  });
+
+  test('module éteint mais partage accepté : envoi seul autorisé', async () => {
+    row = { guildId: '1', enabled: false, trainingConsent: true };
+    expect(await getAegisConfig('1')).toBeNull();
+    expect(await getAegisSendConfig('1')).toMatchObject({ guildId: '1', enabled: false, trainingConsent: true });
+  });
+
+  test('module allumé : actif dans les deux cas', async () => {
+    row = { guildId: '1', enabled: true, trainingConsent: false };
+    expect(await getAegisConfig('1')).toMatchObject({ guildId: '1', enabled: true });
+    expect(await getAegisSendConfig('1')).toMatchObject({ guildId: '1', enabled: true });
+  });
+});
 
 describe('sanitizeAegisPatch', () => {
   test('garde les champs valides', () => {

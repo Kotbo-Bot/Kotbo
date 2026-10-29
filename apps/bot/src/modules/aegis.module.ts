@@ -6,7 +6,8 @@
  * `MessageCreate` ne fait qu'un tri sans appel réseau.
  *
  * Reçoit la vue du client filtrée sur le module AutoMod, dont AegisAI fait
- * partie ; `AegisConfig.enabled` est la seconde clé.
+ * partie ; `AegisConfig.enabled` est la seconde clé. Module éteint, les messages
+ * partent encore si le serveur a accepté le partage pour l'entraînement.
  */
 import {
   Events,
@@ -20,7 +21,7 @@ import {
 import { logger } from '../utils/logger.js';
 import { getOrCreateAutoModConfig } from '../services/moderation/autoModService.js';
 import { isAnalyticsCollectionEnabled } from '../services/analytics/analyticsConsent.js';
-import { getAegisConfig, type AegisRuntimeConfig } from '../services/moderation/aegis/aegisConfig.js';
+import { getAegisConfig, getAegisSendConfig, type AegisRuntimeConfig } from '../services/moderation/aegis/aegisConfig.js';
 import { enqueueAegisJob, startAegisQueue, type AegisJob } from '../services/moderation/aegis/aegisQueue.js';
 import { processAegisJob, setAegisDiscordClient } from '../services/moderation/aegis/aegisProcessor.js';
 import { isTicketChannel, restoreDueSlowmodes } from '../services/moderation/aegis/aegisModules.js';
@@ -70,7 +71,7 @@ async function onMessage(message: Message): Promise<void> {
   if (!message.guild || message.author.bot || message.system || message.webhookId) return;
   const text = prepareText(message.content);
   if (!text) return;
-  const config = await getAegisConfig(message.guild.id);
+  const config = await getAegisSendConfig(message.guild.id);
   if (!config || !getAegisClient().configured) return;
   if (!(await inScope(message, config))) return;
 

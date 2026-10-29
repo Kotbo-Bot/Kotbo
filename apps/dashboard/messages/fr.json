@@ -13815,7 +13815,7 @@
   "aegis_privacy_sent": "Envoyé à AegisAI : le texte des messages, sans mentions, liens ni emojis. Jamais les pièces jointes ni l'identité des membres.",
   "aegis_privacy_kept": "Conservé par Kotbo : des compteurs par heure et par salon, et l'extrait des messages relevés, effacé à l'échéance de la rétention des logs.",
   "aegis_training_label": "Aider à entraîner AegisAI",
-  "aegis_training_desc": "Les messages analysés rejoignent le jeu d'entraînement d'AegisAI pour améliorer sa détection.",
+  "aegis_training_desc": "Les messages analysés rejoignent le jeu d'entraînement d'AegisAI pour améliorer sa détection. Avec Oui, ils continuent de partir même module éteint, sans rien déclencher.",
   "aegis_training_unset": "Pas encore choisi",
   "aegis_training_yes": "Oui",
   "aegis_training_no": "Non",

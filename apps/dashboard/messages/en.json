@@ -13815,7 +13815,7 @@
   "aegis_privacy_sent": "Sent to AegisAI: message text, without mentions, links or emojis. Never attachments or member identities.",
   "aegis_privacy_kept": "Kept by Kotbo: hourly counters per channel, and excerpts of flagged messages, erased when the log retention period ends.",
   "aegis_training_label": "Help train AegisAI",
-  "aegis_training_desc": "Analyzed messages join AegisAI's training set to improve its detection.",
+  "aegis_training_desc": "Analyzed messages join AegisAI's training set to improve its detection. With Yes, they keep being sent even while the module is off, without triggering anything.",
   "aegis_training_unset": "Not chosen yet",
   "aegis_training_yes": "Yes",
   "aegis_training_no": "No",
