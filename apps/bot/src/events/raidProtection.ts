@@ -12,6 +12,8 @@ import { handleVoiceStateUpdate } from '../services/moderation/voiceCaptchaServi
 import { handleSpamMessage, handleTypingStart } from '../services/moderation/spam/index.js';
 import { applyJailOverwrite, reapplyJailOnJoin } from '../services/moderation/jailService.js';
 import { decideCaptcha } from '../services/moderation/captchaTrigger.js';
+import { handleOtherServersMessage, syncServerTagQuarantine } from '../services/moderation/otherServersFilter.js';
+import { handleFileExtensionMessage } from '../services/moderation/fileExtensionFilter.js';
 
 export function registerRaidProtectionListener(client: Client): void {
   // ── Arrivées : join lock → raid kick → détection de raid → ancienneté → captcha → rôles rendus → tag role
@@ -42,6 +44,7 @@ export function registerRaidProtectionListener(client: Client): void {
 
       // 7. Tag role (si le membre arrive déjà avec le tag du serveur)
       await syncMemberTagRole(member, config);
+      await syncServerTagQuarantine(member, config);
     } catch (err) {
       logger.error('RaidProtection', `Erreur GuildMemberAdd pour ${member.id}`, err);
     }
@@ -80,6 +83,9 @@ export function registerRaidProtectionListener(client: Client): void {
       // Kotbo Vision puis le filtre anti-scam passent avant : une image ou un lien
       // d'arnaque identifié est une certitude, là où le moteur anti-spam
       // raisonne en probabilité.
+      // Filtres de l'Automod : invitations et liens d'autres serveurs, fichiers.
+      if (await handleOtherServersMessage(message)) return;
+      if (await handleFileExtensionMessage(message)) return;
       if (await handleVision(message)) return;
       if (await handleScamMessage(message)) return;
       await handleSpamMessage(message);
@@ -116,6 +122,7 @@ export function registerRaidProtectionListener(client: Client): void {
   client.on(Events.GuildMemberUpdate, async (_old: GuildMember | PartialGuildMember, member: GuildMember) => {
     try {
       await syncMemberTagRole(member);
+      await syncServerTagQuarantine(member);
     } catch (err) {
       logger.error('RaidProtection', `Erreur GuildMemberUpdate pour ${member.id}`, err);
     }
@@ -127,6 +134,7 @@ export function registerRaidProtectionListener(client: Client): void {
     try {
       if (member.partial) return;
       await syncMemberTagRole(member);
+      await syncServerTagQuarantine(member);
     } catch (err) {
       logger.error('RaidProtection', `Erreur GuildMemberAvailable pour ${member.id}`, err);
     }

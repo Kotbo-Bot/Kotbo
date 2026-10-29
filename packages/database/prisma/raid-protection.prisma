@@ -133,6 +133,32 @@ model RaidProtectionConfig {
   // Rend aussi les rôles à permissions (staff, admin) et réinscrit le membre à l'annuaire staff
   rolePersistStaff   Boolean  @default(false)
 
+  // ── Automod : autres serveurs ──────────────────────────────────────────────
+  // Chaque comportement : OFF | BLACKLIST (serveurs listés refusés) |
+  // WHITELIST (seuls les serveurs listés passent).
+  otherInvitesMode   String   @default("OFF")
+  // Invitations d'ami et de groupe : FOLLOW (suivent la liste) | ALLOW | BLOCK.
+  otherFriendInvites String   @default("FOLLOW")
+  // Messages transférés depuis un autre serveur, liens de salon ou d'événement.
+  otherForwardsMode  String   @default("OFF")
+  // Tag d'un autre serveur affiché sur le profil : quarantaine tant qu'il reste.
+  otherTagsMode      String   @default("OFF")
+  // Serveurs de la liste, « id|nom » (25 au plus). Le nom ne sert qu'à l'affichage.
+  otherServers       String[] @default([])
+  otherSanction      String   @default("DELETE")
+  otherDurationMin   Int?     @default(60)
+
+  // ── Automod : extensions de fichiers ───────────────────────────────────────
+  // Règle du serveur ; les règles de salon et de catégorie sont dans
+  // FileFilterRule et l'emportent (salon, puis catégorie, puis serveur).
+  fileFilterMode       String   @default("OFF") // OFF | BLACKLIST | WHITELIST
+  fileGroups           String[] @default([])    // EXECUTABLES | IMAGES | VIDEOS | AUDIO | ARCHIVES | DOCUMENTS
+  fileExtensions       String[] @default([])
+  // Fichier déguisé (un .exe renommé .png) supprimé même sans liste blanche.
+  fileRejectCorrupted  Boolean  @default(false)
+  fileSanction         String   @default("DELETE")
+  fileDurationMin      Int?     @default(60)
+
   // ── Jail (quarantaine par rôle) ────────────────────────────────────────────
   // Le rôle Jail ne voit aucun salon, sauf celui réservé aux quarantaines s'il
   // existe. Les rôles du membre lui sont retirés et rendus à la levée.
@@ -160,6 +186,24 @@ model RaidProtectionConfig {
   updatedAt DateTime @updatedAt
 
   @@map("raid_protection_configs")
+}
+
+// Règle d'extensions de fichiers propre à un salon, un fil ou une catégorie.
+// La plus précise l'emporte ; une extension qu'aucune règle ne nomme passe.
+model FileFilterRule {
+  id         String   @id @default(cuid())
+  guildId    String
+  targetId   String   // salon, fil ou catégorie
+  targetType String   @default("CHANNEL") // CHANNEL | CATEGORY
+  mode       String   @default("BLACKLIST") // BLACKLIST | WHITELIST
+  groups     String[] @default([])
+  extensions String[] @default([])
+  createdAt  DateTime @default(now())
+
+  guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  @@unique([guildId, targetId])
+  @@map("file_filter_rules")
 }
 
 // Membre en quarantaine. Les rôles retirés à l'entrée sont rendus à la levée ;

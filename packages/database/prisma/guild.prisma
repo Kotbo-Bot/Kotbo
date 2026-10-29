@@ -883,6 +883,7 @@ model Guild {
   visionLists       VisionList[]
   visionReviews     VisionReview[]
   memberJails          MemberJail[]
+  fileFilterRules      FileFilterRule[]
   scamDomains          ScamDomain[]
   scamTextSamples      ScamTextSample[]
   inviteApprovalRequests InviteApprovalRequest[]
