@@ -1,4 +1,4 @@
-import { type Client, type GuildMember, type Message, type TextChannel, ActionRowBuilder, AttachmentBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, PermissionFlagsBits } from 'discord.js';
+import { type Client, type Guild, type GuildMember, type Message, type TextChannel, ActionRowBuilder, AttachmentBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, PermissionFlagsBits } from 'discord.js';
 import { createCanvas } from '@napi-rs/canvas';
 import crypto from 'node:crypto';
 import prisma from '../../utils/db.js';
@@ -139,17 +139,48 @@ async function reportVoiceMisconfiguration(
 
 export async function hasPendingCaptchaSession(guildId: string, userId: string): Promise<boolean> {
   const session = await prisma.captchaSession.findFirst({
-    where: { guildId, userId, status: 'PENDING', expiresAt: { gt: new Date() } },
+    // Un captcha gelé (Shield 2 et 1) compte comme en cours : le membre est
+    // retenu, ses rôles ne doivent pas lui être rendus pour autant.
+    where: { guildId, userId, status: { in: ['PENDING', 'FROZEN'] }, expiresAt: { gt: new Date() } },
     select: { id: true },
   });
   return session !== null;
+}
+
+/** Durée de rétention d'un captcha gelé : l'alerte peut durer. */
+const FROZEN_SESSION_MS = 30 * 24 * 60 * 60 * 1000;
+
+/**
+ * Fin du gel (Shield redescendu à 3 ou plus) : chaque membre retenu reçoit
+ * son défi, dans l'ordre d'arrivée. Ceux qui sont partis entre-temps sont
+ * oubliés.
+ */
+export async function releaseFrozenCaptchas(guild: Guild): Promise<number> {
+  const config = await prisma.raidProtectionConfig.findUnique({ where: { guildId: guild.id } });
+  if (!config) return 0;
+  const frozen = await prisma.captchaSession.findMany({
+    where: { guildId: guild.id, status: 'FROZEN' },
+    orderBy: { createdAt: 'asc' },
+    take: 500,
+  });
+  let released = 0;
+  for (const session of frozen) {
+    const member = await guild.members.fetch(session.userId).catch(() => null);
+    if (!member) {
+      await prisma.captchaSession.update({ where: { id: session.id }, data: { status: 'EXPIRED' } });
+      continue;
+    }
+    await startCaptchaChallenge(member, config);
+    released++;
+  }
+  return released;
 }
 
 /**
  * À l'arrivée d'un membre : applique le rôle non-vérifié, crée la session et
  * envoie le défi (image ou vocal) dans le salon de vérification.
  */
-export async function startCaptchaChallenge(member: GuildMember, config: RaidProtectionConfig): Promise<void> {
+export async function startCaptchaChallenge(member: GuildMember, config: RaidProtectionConfig, opts: { frozen?: boolean } = {}): Promise<void> {
   if (member.user.bot) return;
 
   // Sans salon ni rôle, le captcha ne peut rien faire. Rester muet ici laisse
@@ -186,9 +217,25 @@ export async function startCaptchaChallenge(member: GuildMember, config: RaidPro
 
   // Expire les sessions précédentes du membre
   await prisma.captchaSession.updateMany({
-    where: { guildId: member.guild.id, userId: member.id, status: 'PENDING' },
+    where: { guildId: member.guild.id, userId: member.id, status: { in: ['PENDING', 'FROZEN'] } },
     data: { status: 'EXPIRED' },
   });
+
+  // Captcha gelé (Shield 2 et 1) : le membre attend derrière la porte, sans
+  // défi ni chrono. releaseFrozenCaptchas le lui enverra à la fin de l'alerte.
+  if (opts.frozen) {
+    await prisma.captchaSession.create({
+      data: {
+        guildId: member.guild.id,
+        userId: member.id,
+        code: generateCode(),
+        status: 'FROZEN',
+        mode: 'IMAGE',
+        expiresAt: new Date(Date.now() + FROZEN_SESSION_MS),
+      },
+    });
+    return;
+  }
 
   const useVoice = await shouldUseVoice(member, config);
   const session = await prisma.captchaSession.create({

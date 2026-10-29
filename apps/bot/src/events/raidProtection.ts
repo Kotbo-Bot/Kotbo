@@ -11,6 +11,7 @@ import { handleInviteCreate } from '../services/moderation/inviteGuardService.js
 import { handleVoiceStateUpdate } from '../services/moderation/voiceCaptchaService.js';
 import { handleSpamMessage, handleTypingStart } from '../services/moderation/spam/index.js';
 import { applyJailOverwrite, reapplyJailOnJoin } from '../services/moderation/jailService.js';
+import { decideCaptcha } from '../services/moderation/captchaTrigger.js';
 
 export function registerRaidProtectionListener(client: Client): void {
   // ── Arrivées : join lock → raid kick → détection de raid → ancienneté → captcha → rôles rendus → tag role
@@ -27,10 +28,11 @@ export function registerRaidProtectionListener(client: Client): void {
       // captcha ni rôles rendus, ils annuleraient la quarantaine.
       if (await reapplyJailOnJoin(member)) return;
 
-      // 5. Captcha : activé en permanence, ou forcé par le raid mode (action CAPTCHA)
-      const captchaForced = config.raidModeActive && config.antiRaidAction === 'CAPTCHA';
-      if (config.captchaEnabled || captchaForced) {
-        await startCaptchaChallenge(member, config);
+      // 5. Captcha : selon son déclenchement (permanent, automatique,
+      //    intelligent), le raid mode et le niveau Shield, qui passe avant.
+      const captcha = decideCaptcha(member, config);
+      if (captcha.challenge) {
+        await startCaptchaChallenge(member, config, { frozen: captcha.frozen });
       }
 
       // 6. Rôles rendus au retour : un captcha en cours les diffère jusqu'à sa réussite

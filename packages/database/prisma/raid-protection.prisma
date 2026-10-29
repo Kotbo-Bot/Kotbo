@@ -22,6 +22,24 @@ model RaidProtectionConfig {
   // basculent sur le captcha image : la diffusion audio est sérielle, elle ne
   // peut pas absorber un raid.
   captchaVoiceQueueLimit  Int     @default(25)
+  // Quand le captcha s'applique : ALWAYS (chaque arrivée), AUTO (raid ou
+  // alerte Shield 3 et plus), SMART (AUTO + comptes au profil suspect).
+  captchaTrigger          String  @default("ALWAYS")
+  // L'icône du serveur est incrustée dans l'image du captcha.
+  captchaUseServerIcon    Boolean @default(true)
+
+  // ── Shield (niveau d'alerte du serveur) ────────────────────────────────────
+  // 5 = tout va bien … 1 = catastrophe. Change seulement à la main.
+  shieldLevel           Int       @default(5)
+  shieldPanelChannelId  String?
+  shieldPanelMessageId  String?
+  // Salon vocal dont le nom affiche le niveau.
+  shieldStatusChannelId String?
+  // Ce que Shield a lui-même activé, pour ne défaire que ça au retour à 5 :
+  // { verificationBefore, captchaEnabled, dmLock, raidMode, lockedBits }.
+  shieldState           Json?
+  shieldChangedAt       DateTime?
+  shieldChangedBy       String?
 
   // ── Anti-raid (détection de vague de joins) ────────────────────────────────
   antiRaidEnabled            Boolean   @default(false)

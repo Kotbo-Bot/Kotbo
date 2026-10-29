@@ -26,6 +26,13 @@ import { getLineageReport, quarantineLineage } from '../../../services/moderatio
 
 import { jsonFailure } from '../../shared/failure.js';
 import { handleVisionRoutes } from './visionRoutes.js';
+import {
+  createShieldPanelChannel,
+  createShieldStatusChannel,
+  isShieldLevel,
+  postShieldPanel,
+  setShieldLevel,
+} from '../../../services/moderation/shieldService.js';
 // Champs anti-spam modifiables depuis le dashboard
 const SPAM_PATCHABLE_FIELDS = [
   'enabled', 'shadowMode',
@@ -42,6 +49,7 @@ const PATCHABLE_FIELDS = [
   'captchaEnabled', 'captchaChannelId', 'captchaUnverifiedRoleId', 'captchaVerifiedRoleId', 'captchaTimeoutMinutes',
   'captchaMaxAttempts', 'captchaFailAction', 'captchaLogChannelId',
   'captchaMode', 'captchaVoiceChannelId', 'captchaVoiceQueueLimit', 'captchaVoiceLocale',
+  'captchaTrigger', 'captchaUseServerIcon',
   'antiRaidEnabled', 'antiRaidJoinThreshold', 'antiRaidJoinWindowSec', 'antiRaidAction',
   'antiRaidAlertChannelId', 'antiRaidAutoDisableMinutes',
   'accountAgeGuardEnabled', 'accountAgeMinValue', 'accountAgeMinUnit', 'accountAgeAction',
@@ -75,6 +83,49 @@ export async function handleRaidProtectionRoutes(
   const auditUser = `${user.username ?? 'Utilisateur'} (${user.userId})`;
 
   if (await handleVisionRoutes(req, res, parts, _url, client, user, guildId)) return true;
+
+  // ── Shield ─────────────────────────────────────────────────────────────
+  // POST /raid-protection/shield {level} · /shield/panel {channelId | create} · /shield/status
+  if (sub === 'shield' && method === 'POST') {
+    try {
+      const guild = client.guilds.cache.get(guildId);
+      if (!guild) {
+        json(res, 404, { error: 'Serveur introuvable' });
+        return true;
+      }
+      const body = (await readJsonBody(req)) ?? {};
+      if (!parts[6]) {
+        const level = Number(body.level);
+        if (!isShieldLevel(level)) {
+          json(res, 400, { error: 'Niveau Shield invalide (1 à 5)' });
+          return true;
+        }
+        const result = await setShieldLevel(guild, level, user.userId);
+        await safePushAudit(guildId, { user: auditUser, action: `Shield ${result.previous} → ${result.level}`, context: getGuildName(client, guildId), module: 'RaidProtection', eventType: 'Manuel', details: result.warnings.join(' | '), channelId: null }, 'RaidProtectionAPI');
+        json(res, 200, { ...result, config: await getRaidProtectionConfig(guildId) });
+        return true;
+      }
+      if (parts[6] === 'panel') {
+        const channelId = body.create === true ? await createShieldPanelChannel(guild) : String(body.channelId ?? '');
+        const result = await postShieldPanel(guild, channelId);
+        if (!result.ok) {
+          json(res, 400, { error: result.reason });
+          return true;
+        }
+        json(res, 200, { channelId, config: await getRaidProtectionConfig(guildId) });
+        return true;
+      }
+      if (parts[6] === 'status') {
+        const channelId = await createShieldStatusChannel(guild);
+        json(res, 200, { channelId, config: await getRaidProtectionConfig(guildId) });
+        return true;
+      }
+    } catch (err) {
+      logger.error('RaidProtectionAPI', 'Erreur Shield:', err);
+      jsonFailure(res, err, 'Erreur Shield', 'RaidProtectionAPI');
+      return true;
+    }
+  }
 
   // GET /raid-protection - config + compteurs
   //
@@ -132,6 +183,12 @@ export async function handleRaidProtectionRoutes(
         data.accountAgeWhitelist = [...new Set(list.map((id) => String(id).trim()).filter((id) => /^\d{17,20}$/.test(id)))];
       }
       if ('rolePersistMode' in data && data.rolePersistMode !== 'LIST') data.rolePersistMode = 'ALL';
+      if ('captchaTrigger' in data && !['ALWAYS', 'AUTO', 'SMART'].includes(String(data.captchaTrigger))) data.captchaTrigger = 'ALWAYS';
+      if ('visionSanction' in data && !['DELETE', 'WARN', 'TIMEOUT', 'KICK', 'SOFTBAN', 'BAN', 'JAIL'].includes(String(data.visionSanction))) data.visionSanction = 'TIMEOUT';
+      if ('visionDurationMin' in data) {
+        const minutes = data.visionDurationMin === null || data.visionDurationMin === '' ? null : Math.floor(Number(data.visionDurationMin));
+        data.visionDurationMin = minutes && minutes > 0 ? Math.min(minutes, 365 * 24 * 60) : null;
+      }
       if ('rolePersistRoleIds' in data) {
         const list = Array.isArray(data.rolePersistRoleIds) ? data.rolePersistRoleIds : [];
         data.rolePersistRoleIds = [...new Set(list.map((id) => String(id).trim()).filter((id) => /^\d{17,20}$/.test(id)))];

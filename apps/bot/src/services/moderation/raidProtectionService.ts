@@ -4,7 +4,7 @@ import { cache } from '../../utils/cache.js';
 import { notifyJoinBlocked } from '../notifications/notifyService.js';
 import { logger } from '../../utils/logger.js';
 import { COLORS } from '../../utils/embeds.js';
-import type { RaidProtectionConfig } from '@prisma/client';
+import type { Prisma, RaidProtectionConfig } from '@prisma/client';
 
 // Fenêtre max des incident actions Discord (invites/DMs pause) : 24h.
 // On renouvelle par cron tant que le lock est actif.
@@ -22,14 +22,17 @@ export async function getRaidProtectionConfig(guildId: string): Promise<RaidProt
   return config;
 }
 
-export async function upsertRaidProtectionConfig(
-  guildId: string,
-  data: Partial<Omit<RaidProtectionConfig, 'guildId' | 'createdAt' | 'updatedAt'>>
-): Promise<RaidProtectionConfig> {
+// La colonne JSON de Shield ne se type pas comme les autres : Prisma veut une
+// valeur JSON en écriture, ou Prisma.DbNull pour la vider.
+type RaidProtectionPatch = Partial<Omit<RaidProtectionConfig, 'guildId' | 'createdAt' | 'updatedAt' | 'shieldState'>> & {
+  shieldState?: Prisma.InputJsonValue | typeof Prisma.DbNull;
+};
+
+export async function upsertRaidProtectionConfig(guildId: string, data: RaidProtectionPatch): Promise<RaidProtectionConfig> {
   const config = await prisma.raidProtectionConfig.upsert({
     where: { guildId },
-    create: { guildId, ...data },
-    update: data,
+    create: { guildId, ...data } as Prisma.RaidProtectionConfigUncheckedCreateInput,
+    update: data as Prisma.RaidProtectionConfigUncheckedUpdateInput,
   });
   await cache.delete(`guild:${guildId}:raidprotection`);
   return config;

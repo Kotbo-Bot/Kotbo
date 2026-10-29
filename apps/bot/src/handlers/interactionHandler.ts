@@ -847,6 +847,25 @@ export async function handleButton(interaction: Interaction, client: Client): Pr
     return;
   }
 
+  // ── Shield : boutons du panneau ──────────────────────────────────────
+  // Pas de contrôle de permission : le panneau vit dans un salon réservé à
+  // l'équipe, l'accès au salon fait office de droit.
+  if (customId.startsWith('shield:set:') && interaction.inCachedGuild()) {
+    const { isShieldLevel, setShieldLevel, SHIELD_LEVELS } = await import('../services/moderation/shieldService.js');
+    const level = Number(customId.split(':')[2]);
+    if (!isShieldLevel(level)) return;
+    await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
+    const result = await setShieldLevel(interaction.guild, level, user.id);
+    const meta = SHIELD_LEVELS[level];
+    await interaction.editReply({
+      content: [
+        `${meta.emoji} **Shield ${level} : ${meta.name}**. ${meta.summary}`,
+        ...(result.warnings.length ? ['', '⚠️ Appliqué en partie :', ...result.warnings.map((w) => `• ${w}`)] : []),
+      ].join('\n'),
+    });
+    return;
+  }
+
   // ── Protection anti-raid (raid mode, reports staff) ──────────────────
   if (customId.startsWith('rprot:')) {
     const member = await resolveGuildMemberByUserId(interaction, user.id);

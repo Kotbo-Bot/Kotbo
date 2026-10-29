@@ -90,6 +90,7 @@ import { rappelCommand } from './commands/utility/rappel.js';
 import { messageTranscriptContextCommand, messageTranscriptFromContextCommand } from './commands/moderation/messageTranscript.js';
 import { messageHubContextCommand, userHubContextCommand } from './commands/context/hub.js';
 import { protectionCommand } from './commands/admin/protection.js';
+import { shieldCommand } from './commands/admin/shield.js';
 import { auditCommand } from './commands/admin/audit.js';
 import { reportCommand, reportMessageContextCommand } from './commands/moderation/report.js';
 import { wikiCommand } from './commands/community/wiki.js';
@@ -196,6 +197,7 @@ export const commands: SlashCommandDefinition[] = [
   rappelCommand,
   levelingCommand,
   protectionCommand,
+  shieldCommand,
   auditCommand,
   reportCommand,
   optOutCommand,
@@ -278,6 +280,7 @@ export const COMMAND_MODULES = new Map<ApplicationCommandDefinition, string>([
   [dcCommand, 'double_accounts'],
   [rescanCommand, 'nickname_moderation'],
   [protectionCommand, 'raid_protection'],
+  [shieldCommand, 'raid_protection'],
   [requestVerificationCommand, 'security_verification'],
   [requestVerificationContextCommand, 'security_verification'],
   [transcriptCommand, 'logs'],
