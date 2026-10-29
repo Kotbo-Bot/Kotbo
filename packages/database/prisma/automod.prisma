@@ -73,6 +73,8 @@ model AutoModConfig {
   antiBotEnabled       Boolean  @default(false)
   antiBotAction        String   @default("KICK") // KICK, BAN
   antiBotBypassUsers   String[] @default([]) // User IDs autorisés à ajouter des bots
+  // Rôles donnés aux bots à leur arrivée, à la place du rôle automatique.
+  antiBotRoleIds       String[] @default([])
 
   bypassRoles          String[] @default([])
   bypassChannels       String[] @default([])

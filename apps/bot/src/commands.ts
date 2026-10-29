@@ -91,6 +91,7 @@ import { messageTranscriptContextCommand, messageTranscriptFromContextCommand } 
 import { messageHubContextCommand, userHubContextCommand } from './commands/context/hub.js';
 import { protectionCommand } from './commands/admin/protection.js';
 import { shieldCommand } from './commands/admin/shield.js';
+import { bypassCommand } from './commands/admin/bypass.js';
 import { auditCommand } from './commands/admin/audit.js';
 import { reportCommand, reportMessageContextCommand } from './commands/moderation/report.js';
 import { wikiCommand } from './commands/community/wiki.js';
@@ -198,6 +199,7 @@ export const commands: SlashCommandDefinition[] = [
   levelingCommand,
   protectionCommand,
   shieldCommand,
+  bypassCommand,
   auditCommand,
   reportCommand,
   optOutCommand,
@@ -281,6 +283,7 @@ export const COMMAND_MODULES = new Map<ApplicationCommandDefinition, string>([
   [rescanCommand, 'nickname_moderation'],
   [protectionCommand, 'raid_protection'],
   [shieldCommand, 'raid_protection'],
+  [bypassCommand, 'automod'],
   [requestVerificationCommand, 'security_verification'],
   [requestVerificationContextCommand, 'security_verification'],
   [transcriptCommand, 'logs'],

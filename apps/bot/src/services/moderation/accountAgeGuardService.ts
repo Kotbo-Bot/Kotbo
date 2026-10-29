@@ -3,11 +3,14 @@ import type { RaidProtectionConfig } from '@prisma/client';
 import { logger } from '../../utils/logger.js';
 import { COLORS } from '../../utils/embeds.js';
 import { notifyJoinBlocked } from '../notifications/notifyService.js';
-import { registerBanSanction, registerKickSanction } from './sanctionService.js';
+import { registerBanSanction, registerJailSanction, registerKickSanction } from './sanctionService.js';
+import { isJailConfigured } from './jailService.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-type GuardAction = 'ALERT' | 'KICK' | 'BAN';
+// JAIL : quarantaine jusqu'à l'âge requis ; TEMPBAN : banni jusqu'à cette date.
+type GuardAction = 'ALERT' | 'KICK' | 'BAN' | 'JAIL' | 'TEMPBAN';
+const GUARD_ACTIONS: GuardAction[] = ['ALERT', 'KICK', 'BAN', 'JAIL', 'TEMPBAN'];
 
 export function computeAccountAgeCutoff(value: number, unit: string, now = new Date()): Date {
   if (unit === 'MONTHS') {
@@ -21,6 +24,20 @@ export function computeAccountAgeCutoff(value: number, unit: string, now = new D
     return cutoff;
   }
   return new Date(now.getTime() - value * DAY_MS);
+}
+
+/** Date à laquelle un compte créé à `createdAt` atteint l'âge requis. */
+export function accountAgeReachedAt(createdAt: number, value: number, unit: string): Date {
+  if (unit === 'MONTHS') {
+    const reached = new Date(createdAt);
+    const day = reached.getUTCDate();
+    reached.setUTCDate(1);
+    reached.setUTCMonth(reached.getUTCMonth() + value);
+    const lastDay = new Date(Date.UTC(reached.getUTCFullYear(), reached.getUTCMonth() + 1, 0)).getUTCDate();
+    reached.setUTCDate(Math.min(day, lastDay));
+    return reached;
+  }
+  return new Date(createdAt + value * DAY_MS);
 }
 
 function thresholdLabel(value: number, unit: string): string {
@@ -49,13 +66,16 @@ export async function handleJoinAccountAgeGuard(member: GuildMember, config: Rai
 
   const guild = member.guild;
   const me = guild.members.me;
-  const requested: GuardAction = config.accountAgeAction === 'BAN' || config.accountAgeAction === 'KICK'
-    ? config.accountAgeAction
+  const requested: GuardAction = GUARD_ACTIONS.includes(config.accountAgeAction as GuardAction)
+    ? (config.accountAgeAction as GuardAction)
     : 'ALERT';
+  const reachedAt = accountAgeReachedAt(member.user.createdTimestamp, config.accountAgeMinValue, config.accountAgeMinUnit);
 
   // Sans la permission, on retombe sur l'alerte plutôt que d'échouer en silence.
+  // Sans rôle Jail, la quarantaine devient un bannissement jusqu'à la même date.
   let action: GuardAction = requested;
-  if (action === 'BAN' && (!me?.permissions.has(PermissionFlagsBits.BanMembers) || !member.bannable)) action = 'ALERT';
+  if (action === 'JAIL' && (!(await isJailConfigured(guild)) || !member.manageable)) action = 'TEMPBAN';
+  if ((action === 'BAN' || action === 'TEMPBAN') && (!me?.permissions.has(PermissionFlagsBits.BanMembers) || !member.bannable)) action = 'ALERT';
   if (action === 'KICK' && (!me?.permissions.has(PermissionFlagsBits.KickMembers) || !member.kickable)) action = 'ALERT';
 
   const threshold = thresholdLabel(config.accountAgeMinValue, config.accountAgeMinUnit);
@@ -68,11 +88,31 @@ export async function handleJoinAccountAgeGuard(member: GuildMember, config: Rai
   // principal. Il coupe aussi le MP au staff par sanction, qui inonderait pendant
   // un raid ; le salon d'alerte ci-dessous en tient lieu.
   try {
-    if (action !== 'ALERT') {
+    if (action === 'JAIL' || action === 'TEMPBAN') {
+      const when = `<t:${Math.floor(reachedAt.getTime() / 1000)}:F>`;
+      await notifyJoinBlocked(
+        guild.id,
+        member.id,
+        `${config.accountAgeMessage}\nTu pourras accéder à **${guild.name}** à partir du ${when}${action === 'TEMPBAN' ? ' : ton bannissement sera levé automatiquement.' : ', ta quarantaine sera levée automatiquement.'}`,
+      );
+    } else if (action !== 'ALERT') {
       await notifyJoinBlocked(guild.id, member.id, config.accountAgeMessage);
     }
 
-    if (action === 'BAN') {
+    if (action === 'JAIL') {
+      await registerJailSanction({
+        guildId: guild.id,
+        target,
+        moderator,
+        reason,
+        durationMs: Math.max(60_000, reachedAt.getTime() - Date.now()),
+        member,
+        source: 'ACCOUNT_AGE',
+      });
+    } else if (action === 'TEMPBAN') {
+      await member.ban({ reason });
+      await registerBanSanction({ guildId: guild.id, target, moderator, reason, isSync: true, temporaryDurationMs: Math.max(60_000, reachedAt.getTime() - Date.now()) }).catch(() => null);
+    } else if (action === 'BAN') {
       await member.ban({ reason });
       await registerBanSanction({ guildId: guild.id, target, moderator, reason, isSync: true }).catch(() => null);
     } else if (action === 'KICK') {
@@ -103,6 +143,8 @@ async function sendAccountAgeAlert(
     ALERT: 'Signalé uniquement',
     KICK: 'Expulsé',
     BAN: 'Banni',
+    JAIL: 'En quarantaine jusqu\'à l\'âge requis',
+    TEMPBAN: 'Banni jusqu\'à l\'âge requis',
   };
   const createdAt = Math.floor(member.user.createdTimestamp / 1000);
 

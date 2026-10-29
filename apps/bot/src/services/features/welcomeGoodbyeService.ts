@@ -1,4 +1,4 @@
-import { Client, AttachmentBuilder, GuildMember } from 'discord.js';
+import { Client, AttachmentBuilder, GuildMember, PermissionFlagsBits } from 'discord.js';
 import { createCanvas, loadImage } from '@napi-rs/canvas';
 import prisma from '../../utils/db.js';
 import { canvasFont, ensureCanvasFonts } from '../../utils/canvasFonts.js';
@@ -116,6 +116,28 @@ export async function handleGuildBoost(newMember: GuildMember, _client: Client) 
 }
 
 /**
+ * Rôles des bots (Automod > anti-bot). Sont écartés les rôles d'intégration,
+ * ceux au-dessus du rôle de Kotbo et ceux qui donnent Administrateur : un bot
+ * ne doit jamais tenir ses droits d'un rôle posé automatiquement.
+ * Retourne false si aucun rôle de bot n'est configuré.
+ */
+async function applyBotRoles(member: GuildMember): Promise<boolean> {
+  const config = await prisma.autoModConfig.findUnique({ where: { guildId: member.guild.id }, select: { antiBotRoleIds: true } });
+  const ids = config?.antiBotRoleIds ?? [];
+  if (ids.length === 0) return false;
+  const ceiling = member.guild.members.me?.roles.highest.position ?? 0;
+  const roles = ids
+    .map((id) => member.guild.roles.cache.get(id))
+    .filter((r): r is NonNullable<typeof r> => Boolean(r && !r.managed && r.position < ceiling && !r.permissions.has(PermissionFlagsBits.Administrator)));
+  if (roles.length > 0) {
+    await member.roles.add(roles, 'Rôles des bots à l\'arrivée').catch((err) =>
+      logger.error('WelcomeGoodbyeService', `Rôles de bot non attribués à ${member.id} sur ${member.guild.id} :`, err)
+    );
+  }
+  return true;
+}
+
+/**
  * Attribue le rôle automatique d'arrivée si configuré.
  *
  * Rien n'est avalé en silence : depuis la mise en place guidée, ce rôle est
@@ -124,6 +146,9 @@ export async function handleGuildBoost(newMember: GuildMember, _client: Client) 
  */
 export async function applyJoinAutoRole(member: GuildMember) {
   try {
+    // Un bot reçoit ses propres rôles, à la place du rôle automatique.
+    if (member.user.bot && (await applyBotRoles(member))) return;
+
     const config = await getOrCreateWelcomeConfig(member.guild.id);
     if (!config.joinRoleId) return;
 

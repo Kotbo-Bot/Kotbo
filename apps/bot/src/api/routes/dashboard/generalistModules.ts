@@ -2197,6 +2197,7 @@ export async function handleGeneralistModulesRoutes(
           antiBotEnabled?: boolean;
           antiBotAction?: string;
           antiBotBypassUsers?: string[];
+          antiBotRoleIds?: string[];
           bypassRoles?: string[];
           bypassChannels?: string[];
           adminLockEnabled?: boolean;
@@ -2329,6 +2330,7 @@ export async function handleGeneralistModulesRoutes(
           antiBotEnabled: body.antiBotEnabled,
           antiBotAction: body.antiBotAction,
           antiBotBypassUsers: body.antiBotBypassUsers,
+          antiBotRoleIds: body.antiBotRoleIds,
           bypassRoles: body.bypassRoles,
           bypassChannels: body.bypassChannels,
           adminLockEnabled: body.adminLockEnabled,
@@ -2385,6 +2387,7 @@ export async function handleGeneralistModulesRoutes(
             antiBotEnabled: body.antiBotEnabled ?? false,
             antiBotAction: body.antiBotAction ?? 'KICK',
             antiBotBypassUsers: body.antiBotBypassUsers ?? [],
+            antiBotRoleIds: body.antiBotRoleIds ?? [],
             bypassRoles: body.bypassRoles ?? [],
             bypassChannels: body.bypassChannels ?? [],
             adminLockEnabled: body.adminLockEnabled ?? false,

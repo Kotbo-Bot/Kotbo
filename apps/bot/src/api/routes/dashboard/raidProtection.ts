@@ -257,7 +257,7 @@ export async function handleRaidProtectionRoutes(
           data.accountAgeMinValue = Math.min(Math.max(value, 1), unit === 'MONTHS' ? 120 : 3650);
         }
       }
-      if ('accountAgeAction' in data && !['ALERT', 'KICK', 'BAN'].includes(String(data.accountAgeAction))) data.accountAgeAction = 'KICK';
+      if ('accountAgeAction' in data && !['ALERT', 'KICK', 'BAN', 'JAIL', 'TEMPBAN'].includes(String(data.accountAgeAction))) data.accountAgeAction = 'KICK';
       if ('accountAgeWhitelist' in data) {
         const list = Array.isArray(data.accountAgeWhitelist) ? data.accountAgeWhitelist : [];
         data.accountAgeWhitelist = [...new Set(list.map((id) => String(id).trim()).filter((id) => /^\d{17,20}$/.test(id)))];
