@@ -284,7 +284,7 @@ export async function loadEvents(ctx: BlockContext, limit: number): Promise<Even
       count: e._count.registrations,
       countKind: 'registrations',
       image: null,
-      registrable: e.type === 'CUSTOM' && e.status !== 'ONGOING',
+      registrable: (e.type === 'CUSTOM' || e.type === 'TOURNAMENT') && e.status !== 'ONGOING',
       formId: e.formId,
       url: null,
     };

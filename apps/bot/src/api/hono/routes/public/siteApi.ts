@@ -310,9 +310,15 @@ export function createSiteApiRouter(client: Client): OpenAPIHono {
         }
         case 'event-register': {
           if (!(await isModuleEnabled(guildId, 'events'))) return c.json({ error: m.site_err_unavailable({}, o) }, 403);
-          const event = CUID.test(id) ? await prisma.event.findFirst({ where: { id, guildId }, select: { id: true, type: true, status: true, formId: true } }) : null;
+          const event = CUID.test(id) ? await prisma.event.findFirst({ where: { id, guildId }, select: { id: true, type: true, status: true, formId: true, config: true } }) : null;
           if (!event) return c.json({ error: m.site_err_not_found({}, o) }, 404);
-          if (event.type !== 'CUSTOM' || event.status !== 'PUBLISHED' || event.formId) return c.json({ error: m.site_err_event_closed({}, o) }, 409);
+          if ((event.type !== 'CUSTOM' && event.type !== 'TOURNAMENT') || event.status !== 'PUBLISHED' || event.formId) return c.json({ error: m.site_err_event_closed({}, o) }, 409);
+          // Un tournoi par équipes s'inscrit depuis Discord, où le capitaine choisit ses coéquipiers.
+          if (event.type === 'TOURNAMENT') {
+            const { readTournamentSettings } = await import('../../../../services/features/tournament/bracket.js');
+            const { tournamentRegistrationBlocker } = await import('../../../../services/features/tournament/tournamentService.js');
+            if (readTournamentSettings(event.config).teamSize > 1 || (await tournamentRegistrationBlocker(event))) return c.json({ error: m.site_err_event_closed({}, o) }, 409);
+          }
           const created = await prisma.customEventRegistration
             .create({ data: { eventId: event.id, guildId, userId: viewer.userId, username: viewer.username, userTag: viewer.username } })
             .then(() => true)

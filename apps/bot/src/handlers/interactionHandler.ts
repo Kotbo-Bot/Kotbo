@@ -1825,6 +1825,12 @@ export async function handleModalSubmit(interaction: ModalSubmitInteraction, cli
     return;
   }
 
+  if (customId.startsWith('tournament-team-modal:')) {
+    const { handleTournamentTeamModal } = await import('../services/features/tournament/tournamentService.js');
+    await handleTournamentTeamModal(interaction, customId.split(':')[1]);
+    return;
+  }
+
   if (customId.startsWith('custom-form-modal:')) {
     const parts = customId.split(':');
     const formId = parts[1];
