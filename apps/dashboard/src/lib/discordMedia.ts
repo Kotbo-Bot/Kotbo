@@ -48,7 +48,8 @@ export function localInitialAvatar(
   name: string | null | undefined,
   seed?: string | null
 ): string {
-  const initial = (name?.trim().charAt(0) || '?').toUpperCase().replace(/[<>&"']/g, '');
+  // Premier point de code, pas charAt(0) : un emoji coupe en deux fait lever encodeURIComponent.
+  const initial = (Array.from(name?.trim() ?? '')[0] || '?').toUpperCase().replace(/[<>&"']/g, '');
   const key = seed?.trim() || name?.trim() || '';
   const background = key
     ? INITIAL_AVATAR_COLORS[seedHash(key) % INITIAL_AVATAR_COLORS.length]
