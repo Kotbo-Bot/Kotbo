@@ -124,7 +124,7 @@
   }
 
   /**
-   * Sortie du parcours quand il n'y a rien a payer.
+   * Sortie du parcours sans paiement : acces deja ouvert, ou offre gratuite.
    *
    * La cloture s'ecrit sur le serveur, pas dans le navigateur : c'est elle qui
    * ouvre le tableau de bord, et c'est le bot qui verifie qu'elle est due. Sans
@@ -150,8 +150,8 @@
 </script>
 
 <WizardShell
-  title="Il ne reste qu'à ouvrir le pilotage."
-  lead="Ton serveur tourne déjà. La mise en service te donne le tableau de bord : statistiques, historiques, réglages fins."
+  title="Ton serveur est prêt."
+  lead="Les modules gratuits tournent déjà. L'offre complète ouvre le reste : gestion du staff, IA de modération, site, saisons et clans."
   {onEditTracks}
 >
   <div class="flex items-center gap-3.5 rounded-2xl border border-primary/35 bg-primary/[0.04] px-5 py-4 mb-5">
@@ -297,6 +297,14 @@
 
   {#snippet footer()}
     {#if offer && !canFinishWithoutPayment}
+      <button
+        type="button"
+        onclick={finishWithoutBilling}
+        disabled={onboardingData.busy}
+        class="inline-flex items-center px-4 py-2.5 rounded-xl text-sm font-medium text-on-surface-variant hover:text-on-surface transition-colors disabled:opacity-40"
+      >
+        Continuer en gratuit
+      </button>
       <button
         type="button"
         onclick={goToCheckout}
