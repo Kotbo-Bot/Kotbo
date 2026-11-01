@@ -503,6 +503,13 @@ export async function handleButton(interaction: Interaction, client: Client): Pr
     return;
   }
 
+  // ── Sondage interserveur des annonces globales ──────────────────────
+  if (customId.startsWith('bcpoll:')) {
+    const { handleBroadcastPollVote } = await import('../services/system/broadcastService.js');
+    await handleBroadcastPollVote(interaction);
+    return;
+  }
+
   // ── Paris entre membres (points de clan) ────────────────────────────
   if (customId.startsWith('bet:')) {
     const { handleBetButton } = await import('../services/community/clanBetService.js');

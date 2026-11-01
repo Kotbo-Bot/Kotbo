@@ -50,6 +50,7 @@ import {
   BroadcastValidationError,
   deliverBroadcast,
   finalizeBroadcast,
+  getPollResults,
   loadGuildChannelMap,
   normalizeBroadcastContent,
   resolveTargetGuildIds,
@@ -87,6 +88,8 @@ interface BroadcastRequestBody {
   target?: BroadcastTarget;
   targetGuilds?: string[];
   channelPref?: BroadcastChannelPref;
+  pollOptions?: string[];
+  pollClosesAt?: string;
   dryRun?: boolean;
   /** ISO 8601. Present = annonce programmee au lieu d'un envoi immediat. */
   scheduledAt?: string;
@@ -1166,6 +1169,30 @@ export async function handleAdminRoutes(
       return true;
     }
 
+    // GET /api/admin/broadcast/:id/poll - Resultats du sondage, serveurs confondus
+    if (method === 'GET' && parts.length === 5 && parts[4] === 'poll') {
+      try {
+        const results = await getPollResults(parts[3]);
+        if (!results) {
+          json(res, 404, { error: "Cette annonce n'a pas de sondage." });
+          return true;
+        }
+        const names = await prisma.broadcastDelivery.findMany({
+          where: { broadcastId: parts[3], guildId: { in: results.byGuild.map((row) => row.guildId) } },
+          select: { guildId: true, guildName: true },
+        });
+        const nameById = new Map(names.map((row) => [row.guildId, row.guildName]));
+        json(res, 200, {
+          ...results,
+          byGuild: results.byGuild.map((row) => ({ ...row, guildName: nameById.get(row.guildId) ?? row.guildId })),
+        });
+      } catch (err) {
+        logger.error('AdminAPI', 'GET broadcast poll error:', err);
+        jsonFailure(res, err, 'Erreur lors du chargement des résultats', 'AdminAPI');
+      }
+      return true;
+    }
+
     // POST /api/admin/broadcast/:id/cancel - Annule une annonce programmee
     if (method === 'POST' && parts.length === 5 && parts[4] === 'cancel') {
       try {
@@ -1417,6 +1444,8 @@ export async function handleAdminRoutes(
             target: normalized.target,
             targetGuilds: normalized.targetGuilds,
             channelPref: normalized.channelPref,
+            pollOptions: normalized.pollOptions,
+            pollClosesAt: normalized.pollClosesAt,
             totalTargeted,
             status: scheduledAt ? 'SCHEDULED' : 'SENDING',
             scheduledAt,
@@ -1456,6 +1485,7 @@ export async function handleAdminRoutes(
           channelPref: normalized.channelPref,
           allowedIds: [...allowedGuildIds],
           channelMap,
+          poll: { broadcastId: record.id, options: normalized.pollOptions },
         });
 
         const { successCount, failCount } = await finalizeBroadcast(record.id, deliveries, totalTargeted);
