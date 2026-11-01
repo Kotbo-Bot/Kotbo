@@ -113,6 +113,7 @@ export {
 } from './types/timezone.js';
 
 export {
+  FREE_MODULES,
   GIFT_DURATIONS_MONTHS,
   PLAN_KEYS,
   PLAN_MEMBER_THRESHOLDS,

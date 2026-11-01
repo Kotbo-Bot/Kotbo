@@ -1,23 +1,23 @@
 /**
  * Registre des offres commerciales Kotbo - source de vérité unique.
  *
- * Kotbo est vendu **tout-en-un** : une offre payante ouvre l'intégralité du
- * catalogue, y compris les modules ajoutés plus tard. Ce fichier ne dit donc
- * plus *quels modules* sont vendus avec quelle offre - il n'y a plus de module
- * en plus ou en moins d'une offre à l'autre - mais *à quel serveur* s'adresse
- * quelle offre : le palier est décidé par la taille du serveur, pas par un
- * panier de fonctionnalités.
+ * Kotbo est **freemium** : l'offre gratuite ouvre ce que les autres bots
+ * donnent gratuitement (modération, sécurité, accueil, niveaux, tickets…), et
+ * une offre payante ouvre l'intégralité du catalogue, y compris les modules
+ * ajoutés plus tard. Entre offres payantes, il n'y a pas de module en plus ou
+ * en moins : le palier est décidé par la taille du serveur, pas par un panier
+ * de fonctionnalités.
  *
  *   jusqu'à 1 000 membres       → Plus
  *   de 1 001 à 10 000 membres   → Pro
  *   de 10 001 à 100 000 membres → Ultimate
  *   au-delà de 100 000 membres  → Sur mesure (rendez-vous commercial)
  *
- * La seule frontière fonctionnelle qui subsiste est celle de `FREE`, qui
- * n'ouvre **aucun** module : Kotbo est un outil professionnel, pas un bot
- * public que l'on branche pour trois commandes. Un serveur sans abonnement
- * garde uniquement les pages du cœur (tableau de bord, modules, réglages,
- * facturation), le temps de souscrire.
+ * La seule frontière fonctionnelle est celle de `FREE` (`FREE_MODULES`). Elle
+ * ne ferme jamais la sécurité d'un serveur : un raid subi faute d'abonnement
+ * ferait plus de tort à Kotbo que l'abonnement ne rapporte. Ce qui reste payant
+ * est ce qu'aucun bot gratuit ne fait : la gestion du staff, l'IA, le
+ * cross-serveur, le site, l'engagement poussé (saisons, clans, RPG).
  *
  * Le lien avec `MODULE_REGISTRY` se fait par `planIncludesModule`, consulté par
  * `moduleGate` côté bot (garde d'exécution) et par le dashboard (affichage du
@@ -35,8 +35,7 @@ import { MODULE_REGISTRY } from './modules.js';
  * Offres, de la plus faible à la plus forte. L'ordre du tableau fait foi pour
  * `comparePlans` : un plan situé plus loin inclut tout ce que porte le précédent.
  *
- * - `FREE`     : état d'un serveur sans abonnement. Aucun module ouvert : le
- *                bot est présent mais inerte tant que rien n'est souscrit.
+ * - `FREE`     : état d'un serveur sans abonnement. Ouvre `FREE_MODULES`.
  * - `PLUS`     : offre des petits serveurs, jusqu'à 1 000 membres. Même produit
  *                que les autres, au tarif de leur taille : c'est l'entrée de
  *                gamme, pas une version amputée.
@@ -105,14 +104,54 @@ export interface PlanDefinition {
   selfServe: boolean;
 }
 
+/**
+ * Modules ouverts sans abonnement, en plus du cœur. Une dépendance hors de
+ * cette liste éteindrait le module en cascade : `youtube` et `twitch` tirent
+ * `social_networks` avec eux (garde-fou dans `planRegistry.test.ts`).
+ */
+export const FREE_MODULES = [
+  // Modération et sécurité : jamais derrière un paiement.
+  'sanctions',
+  'automod',
+  'logs',
+  'raid_protection',
+  'security_verification',
+  'nickname_moderation',
+  // Accueil et contenu de base.
+  'welcome_goodbye',
+  'reaction_roles',
+  'regulation',
+  'embed_builder',
+  'auto_responses',
+  'auto_thread',
+  'news',
+  // Communauté.
+  'leveling',
+  'tickets',
+  'giveaways',
+  'events',
+  'suggestions',
+  'starboard',
+  'fun',
+  // Intégrations.
+  'analytics',
+  'workflows',
+  'social_networks',
+  'youtube',
+  'twitch',
+  'bump_reminder',
+  // Vitrine de la gestion du staff : le reste de la catégorie est payant.
+  'staff_directory',
+];
+
 export const PLAN_REGISTRY: PlanDefinition[] = [
   {
     key: 'FREE',
     name: 'Gratuit',
-    tagline: 'Le bot est là, rien n\'est ouvert.',
+    tagline: 'Tout ce qu\'un bot gratuit fait, en mieux.',
     description:
-      "État d'un serveur sans abonnement : aucun module n'est actif. Kotbo est un outil de gestion professionnel, pas un bot public - seules les pages de configuration restent accessibles, le temps de choisir une offre.",
-    modules: [],
+      "Modération, anti-raid, logs, accueil, niveaux, tickets, giveaways, analytics, notifications YouTube et Twitch : l'essentiel d'un serveur, sans carte bancaire et sans limite de durée.",
+    modules: FREE_MODULES,
     memberRange: null,
     priceEnv: null,
     displayPriceCents: null,
@@ -290,7 +329,7 @@ export function planIncludesModule(plan: PlanKey, moduleKey: string): boolean {
 
 /**
  * Offre la plus basse qui ouvre ce module. `null` si le module est déjà ouvert
- * sans abonnement - ce qui, désormais, ne concerne que les modules du cœur.
+ * sans abonnement (cœur et `FREE_MODULES`).
  *
  * Les offres payantes étant identiques, la réponse est toujours `PLUS` pour
  * un module verrouillé. Le dashboard n'affiche pas cette valeur telle quelle : il
