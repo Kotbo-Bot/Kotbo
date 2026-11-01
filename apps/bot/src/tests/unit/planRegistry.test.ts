@@ -9,8 +9,11 @@
  */
 import { describe, expect, test } from 'bun:test';
 import {
+  FREE_MODULES,
   MODULE_REGISTRY,
   PLAN_KEYS,
+  getModuleDefinition,
+  getModuleRequirements,
   PLAN_MEMBER_THRESHOLDS,
   PLAN_REGISTRY,
   canPurchasePlan,
@@ -98,6 +101,23 @@ describe('modules ouverts par une offre', () => {
     }
   });
 
+  test('chaque module gratuit existe et a ses dependances gratuites', () => {
+    // Une dependance payante eteindrait le module en cascade : la grille
+    // promettrait un module gratuit qui ne tourne jamais.
+    for (const key of FREE_MODULES) {
+      expect(getModuleDefinition(key)).toBeDefined();
+      for (const requirement of getModuleRequirements(key)) {
+        expect(planIncludesModule('FREE', requirement)).toBe(true);
+      }
+    }
+  });
+
+  test('la securite d un serveur ne passe jamais par un paiement', () => {
+    for (const key of ['sanctions', 'automod', 'raid_protection', 'security_verification', 'logs']) {
+      expect(planIncludesModule('FREE', key)).toBe(true);
+    }
+  });
+
   test('un module inconnu du registre est considere inclus', () => {
     // Meme regle que moduleGate : la garde ne ferme pas ce qu elle ne sait pas
     // decrire, sous peine d eteindre une fonctionnalite par simple oubli.
@@ -174,13 +194,10 @@ describe('palier decide par la taille du serveur', () => {
 });
 
 describe("offre a proposer pour debloquer un module", () => {
-  test('seuls les modules du coeur ne renvoient aucune offre', () => {
-    // Depuis que l offre gratuite n ouvre plus rien, « pas d offre a proposer »
-    // ne veut plus dire « module gratuit » mais « module du coeur » : ceux-la
-    // sont ouverts sans abonnement, sans quoi un serveur non abonne perdrait
-    // jusqu a la page qui lui permet de s abonner.
+  test('seuls le coeur et les modules gratuits ne renvoient aucune offre', () => {
+    const free = new Set<string>(FREE_MODULES);
     for (const mod of MODULE_REGISTRY) {
-      if (mod.core) expect(lowestPlanWithModule(mod.key)).toBeNull();
+      if (mod.core || free.has(mod.key)) expect(lowestPlanWithModule(mod.key)).toBeNull();
       else expect(lowestPlanWithModule(mod.key)).not.toBeNull();
     }
   });

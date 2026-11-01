@@ -349,9 +349,9 @@ describe('setDashboardModuleStatus', () => {
     expect(err.requiredPlan).toBe('PLUS');
   });
 
-  test('refuse aussi quand seule une dependance est hors offre', async () => {
-    // `tutoring` exige `staff_directory` : allumer le premier tire le second,
-    // et ecrire la dependance en douce ouvrirait une porte que l offre ferme.
+  test('refuse un module payant sans allumer sa dependance gratuite', async () => {
+    // `tutoring` exige `staff_directory`, ouvert en gratuit : le refus ne doit
+    // pas laisser derriere lui une dependance allumee en douce.
     guildRow = guild({ plan: 'FREE' });
 
     const err = await setDashboardModuleStatus(GUILD, 'tutoring', true).catch((e) => e);
@@ -412,22 +412,21 @@ describe('offre commerciale', () => {
     expect(await isModuleEnabled(GUILD, 'dashboard')).toBeTrue();
   });
 
-  test('rien d autre que le coeur n est ouvert sur l offre gratuite', async () => {
-    // L offre gratuite n est pas une version reduite du produit : c est l etat
-    // d un serveur qui n a rien achete, et aucun module ne s y execute. Une
-    // ligne de configuration disant le contraire ne suffit pas a rouvrir -
-    // c est precisement le cas qu un import ou une ecriture directe en base
-    // pourrait creer.
+  test('l offre gratuite ouvre ses modules et seulement eux', async () => {
+    // Une ligne de configuration qui allume un module payant ne suffit pas a
+    // le rouvrir - c est precisement le cas qu un import ou une ecriture
+    // directe en base pourrait creer.
     guildRow = guild({ plan: 'FREE' });
     featureRows = [
       { guildId: GUILD, featureKey: 'sanctions', enabled: true },
       { guildId: GUILD, featureKey: 'logs', enabled: true },
-      { guildId: GUILD, featureKey: 'welcome_goodbye', enabled: true },
+      { guildId: GUILD, featureKey: 'staff_directory', enabled: true },
+      { guildId: GUILD, featureKey: 'tutoring', enabled: true },
     ];
 
-    expect(await isModuleEnabled(GUILD, 'sanctions')).toBeFalse();
-    expect(await isModuleEnabled(GUILD, 'logs')).toBeFalse();
-    expect(await isModuleEnabled(GUILD, 'welcome_goodbye')).toBeFalse();
+    expect(await isModuleEnabled(GUILD, 'sanctions')).toBeTrue();
+    expect(await isModuleEnabled(GUILD, 'logs')).toBeTrue();
+    expect(await isModuleEnabled(GUILD, 'tutoring')).toBeFalse();
   });
 
   test('une offre inconnue en base ferme au lieu d ouvrir', async () => {
