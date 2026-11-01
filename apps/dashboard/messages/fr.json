@@ -15432,7 +15432,7 @@
   "bill_members_above": "Au-delà de {min} membres",
   "bill_members_up_to": "Jusqu'à {max} membres",
   "bill_members_range": "De {min} à {max} membres",
-  "bill_no_module": "Aucun module actif",
+  "bill_no_module": "Tous les serveurs, sans limite de durée",
   "bill_your_plan": "Ton offre",
   "bill_contact": "Nous contacter",
   "bill_try_plan": "Essayer {plan} {days} jours",
