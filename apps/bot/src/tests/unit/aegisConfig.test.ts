@@ -14,6 +14,9 @@ mock.module('../../utils/cache.js', () => ({
   },
 }));
 
+let plan = 'PRO';
+mock.module('../../services/system/planService.js', () => ({ getGuildPlan: async () => plan }));
+
 const { AegisConfigError, getAegisConfig, getAegisSendConfig, sanitizeAegisPatch } = await import('../../services/moderation/aegis/aegisConfig');
 
 const current = { reviewThreshold: 80, autoThreshold: 95 };
@@ -35,6 +38,17 @@ describe('getAegisConfig / getAegisSendConfig', () => {
     row = { guildId: '1', enabled: true, trainingConsent: false };
     expect(await getAegisConfig('1')).toMatchObject({ guildId: '1', enabled: true });
     expect(await getAegisSendConfig('1')).toMatchObject({ guildId: '1', enabled: true });
+  });
+
+  test('offre gratuite : l IA ne note rien, le partage accepte part encore', async () => {
+    plan = 'FREE';
+    row = { guildId: '1', enabled: true, trainingConsent: false };
+    expect(await getAegisConfig('1')).toBeNull();
+    expect(await getAegisSendConfig('1')).toBeNull();
+
+    row = { guildId: '1', enabled: true, trainingConsent: true };
+    expect(await getAegisSendConfig('1')).toMatchObject({ enabled: false, trainingConsent: true });
+    plan = 'PRO';
   });
 });
 
