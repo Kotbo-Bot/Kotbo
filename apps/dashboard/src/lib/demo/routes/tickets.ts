@@ -137,10 +137,35 @@ function ticketsSeed() {
   ];
 }
 
+type DemoTicket = ReturnType<typeof ticketsSeed>[number];
+
+/**
+ * Ligne de la boîte de réception (`InboxTicket`), tirée d'un ticket de démo.
+ * Le centre de support lit des champs que la graine n'a pas (`sla`, `tags`,
+ * `waitingOn`…) : ils se déduisent ici des messages, comme le fait l'API.
+ */
+export function toInboxRow(ticket: DemoTicket, types: Array<{ id: string; label: string }>) {
+  const last = (staff: boolean) => ticket.messages.filter((msg) => msg.isStaff === staff).at(-1)?.createdAt ?? null;
+  const lastMessage = ticket.messages.at(-1);
+  return {
+    ...ticket,
+    username: ticket.userName,
+    reason: ticket.subject,
+    claimedByName: ticket.claimedBy,
+    transcriptId: null,
+    ticketTypeLabel: types.find((type) => type.id === ticket.type)?.label ?? null,
+    tags: [],
+    firstResponseAt: ticket.messages.find((msg) => msg.isStaff)?.createdAt ?? null,
+    lastMemberMessageAt: last(false),
+    lastStaffMessageAt: last(true),
+    waitingOn: ticket.status === 'CLOSED' || !lastMessage ? null : lastMessage.isStaff ? 'member' : 'staff',
+    sla: { firstResponse: null, resolution: null, worst: null },
+  };
+}
+
 export function registerTicketsRoutes(): void {
   // GET /api/dashboard/guilds/:id/tickets
-  route('GET', '/api/dashboard/guilds/:id/tickets', () => {
-    const list = demoDb.get('tickets-list', ticketsSeed);
+  route('GET', '/api/dashboard/guilds/:id/tickets', ({ query }) => {
     const config = demoDb.get('tickets-config', () => ({
       ticketCategoryId: '900000000000000302',
       ticketStaffRoleId: role('Modérateur').id,
@@ -152,8 +177,28 @@ export function registerTicketsRoutes(): void {
       ],
     }));
 
+    const view = query.get('view') ?? 'open';
+    const search = (query.get('q') ?? '').toLowerCase();
+    const rows = demoDb
+      .get('tickets-list', ticketsSeed)
+      .map((ticket) => toInboxRow(ticket, config.ticketTypes))
+      .filter((row) => {
+        const closed = row.status === 'CLOSED';
+        if (search && !`${row.reason} ${row.username}`.toLowerCase().includes(search)) return false;
+        if (view === 'all') return true;
+        if (view === 'closed') return closed;
+        if (closed) return false;
+        if (view === 'unassigned') return !row.claimedById;
+        if (view === 'mine') return row.claimedById === ME.id;
+        if (view === 'waiting_staff') return row.waitingOn === 'staff';
+        // Aucun ticket de démo n'a d'échéance ni n'attend de validation.
+        if (view === 'breached' || view === 'pending') return false;
+        return true;
+      });
+    if (query.get('sort') === 'oldest') rows.reverse();
+
     return {
-      tickets: list,
+      tickets: rows,
       config,
       pagination: {
         limit: 50,
