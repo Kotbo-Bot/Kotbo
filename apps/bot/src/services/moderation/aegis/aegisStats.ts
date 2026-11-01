@@ -6,7 +6,6 @@
  * L'appelant décide si le message compte (`AegisJob.countStats`, qui suit
  * `Guild.analyticsEnabled`) : ici on additionne.
  */
-import prisma from '../../../utils/db.js';
 import { logger } from '../../../utils/logger.js';
 import { buildBulkRow, flushBulk, type BulkRow, type BulkTarget } from '../../analytics/analyticsBulkFlush.js';
 import type { AegisEmotion } from './aegisClient.js';
@@ -84,7 +83,6 @@ const HOURLY_TARGET: BulkTarget = {
     { name: 'channelId', type: 'text' },
   ],
   counterColumns: HOURLY_COLUMNS,
-  createMany: (data) => prisma.aegisHourlyStat.createMany({ data: data as never, skipDuplicates: true }),
 };
 
 const MEMBER_TARGET: BulkTarget = {
@@ -96,7 +94,6 @@ const MEMBER_TARGET: BulkTarget = {
     { name: 'userId', type: 'text' },
   ],
   counterColumns: MEMBER_COLUMNS,
-  createMany: (data) => prisma.aegisMemberDailyStat.createMany({ data: data as never, skipDuplicates: true }),
 };
 
 function drain(map: Map<string, Counters>, columns: readonly string[], intKeyIndex: number | null): BulkRow[] {

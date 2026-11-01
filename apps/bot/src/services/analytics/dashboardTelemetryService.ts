@@ -113,8 +113,6 @@ const STAT_TARGET: BulkTarget = {
     { name: 'dimension', type: 'text' },
   ],
   counterColumns: STAT_COLUMNS,
-  createMany: (data) =>
-    prisma.dashboardTelemetryDailyStat.createMany({ data: data as never, skipDuplicates: true }),
 };
 
 async function runFlush(): Promise<void> {

@@ -119,8 +119,6 @@ const GUILD_DAILY_TARGET: BulkTarget = {
     { name: 'dateKey', type: 'text' },
   ],
   counterColumns: GUILD_DAILY_COUNTERS,
-  createMany: (data) =>
-    prisma.guildDailyStat.createMany({ data: data as never, skipDuplicates: true }),
 };
 
 async function flushGuildDailyStats(): Promise<void> {
@@ -156,8 +154,6 @@ const GUILD_HOURLY_TARGET: BulkTarget = {
     { name: 'hour', type: 'int' },
   ],
   counterColumns: GUILD_HOURLY_COUNTERS,
-  createMany: (data) =>
-    prisma.guildHourlyStat.createMany({ data: data as never, skipDuplicates: true }),
 };
 
 async function flushGuildHourlyStats(): Promise<void> {
@@ -190,8 +186,6 @@ const CHANNEL_DAILY_TARGET: BulkTarget = {
   counterColumns: CHANNEL_DAILY_COUNTERS,
   // `uniqueAuthors` est un décompte du jour, pas un delta : il s'écrase.
   overwriteColumns: ['uniqueAuthors'],
-  createMany: (data) =>
-    prisma.channelDailyStat.createMany({ data: data as never, skipDuplicates: true }),
 };
 
 async function flushChannelDailyStats(): Promise<void> {
@@ -240,8 +234,6 @@ const MEMBER_DAILY_TARGET: BulkTarget = {
     { name: 'dateKey', type: 'text' },
   ],
   counterColumns: MEMBER_DAILY_COUNTERS,
-  createMany: (data) =>
-    prisma.memberDailyStat.createMany({ data: data as never, skipDuplicates: true }),
 };
 
 async function flushMemberDailyStats(): Promise<void> {
@@ -493,7 +485,7 @@ export const snapshotServerPopulation = async (
 
   if (stats.onlineMembers > daily.peakOnline) {
     await prisma.guildDailyStat.update({
-      where: { id: daily.id },
+      where: { guildId_dateKey: { guildId, dateKey } },
       data: { peakOnline: stats.onlineMembers },
     });
   }

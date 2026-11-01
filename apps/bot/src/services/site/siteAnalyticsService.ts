@@ -7,8 +7,8 @@
  * n'est jamais écrit : une fois expiré, plus rien ne relie un hash à une
  * adresse, ni deux jours entre eux. Les robots ne sont pas comptés.
  *
- * Les vues sont mises en tampon et écrites par lots (createMany puis un seul
- * UPDATE), comme les autres analytics.
+ * Les vues sont mises en tampon et écrites par lots (un seul
+ * INSERT ... ON CONFLICT), comme les autres analytics.
  */
 
 import crypto from 'node:crypto';
@@ -134,7 +134,6 @@ const VIEW_TARGET: BulkTarget = {
     { name: 'key', type: 'text' },
   ],
   counterColumns: ['views'],
-  createMany: (data) => prisma.siteDailyStat.createMany({ data: data as never, skipDuplicates: true }),
 };
 
 async function runFlush(): Promise<void> {

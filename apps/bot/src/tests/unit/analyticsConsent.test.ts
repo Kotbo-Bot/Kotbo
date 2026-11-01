@@ -13,15 +13,14 @@ type GuildRow = { id: string; analyticsEnabled: boolean } | null;
 let guildRow: GuildRow = null;
 const findUnique = mock((_args?: unknown) => Promise.resolve(guildRow));
 const upsert = mock((_args?: unknown) => Promise.resolve({ id: 'row', peakOnline: 0 }));
-const createMany = mock((_args?: unknown) => Promise.resolve({ count: 0 }));
 const executeRawUnsafe = mock((_sql?: string, ..._params: unknown[]) => Promise.resolve(0));
 const mockDb = {
   guild: { findUnique },
-  // Les flushes passent tous par createMany + UPDATE brut, pas par upsert.
-  guildDailyStat: { upsert, createMany },
-  guildHourlyStat: { upsert, createMany },
-  channelDailyStat: { upsert, createMany },
-  memberDailyStat: { upsert, createMany },
+  // Les flushes passent tous par un INSERT ... ON CONFLICT brut, pas par upsert.
+  guildDailyStat: { upsert },
+  guildHourlyStat: { upsert },
+  channelDailyStat: { upsert },
+  memberDailyStat: { upsert },
   $executeRawUnsafe: executeRawUnsafe,
   $transaction: mock((ops: unknown[]) => Promise.resolve(ops)),
 };
@@ -45,7 +44,6 @@ beforeEach(async () => {
   guildRow = null;
   findUnique.mockClear();
   upsert.mockClear();
-  createMany.mockClear();
   executeRawUnsafe.mockClear();
   // Le verrou lit la configuration via `getCachedGuild` : sans purge, un test
   // hériterait de la décision du précédent.
@@ -85,7 +83,6 @@ describe('collecte désactivée', () => {
     await flushAllAnalyticsStats();
 
     expect(upsert).not.toHaveBeenCalled();
-    expect(createMany).not.toHaveBeenCalled();
     expect(executeRawUnsafe).not.toHaveBeenCalled();
     expect(mockDb.$transaction).not.toHaveBeenCalled();
   });
@@ -98,7 +95,6 @@ describe('collecte activée', () => {
     await trackMessage('guild-analytics', 'salon-1', 'membre-1');
     await flushAllAnalyticsStats();
 
-    expect(createMany).toHaveBeenCalled();
     expect(executeRawUnsafe).toHaveBeenCalled();
   });
 });

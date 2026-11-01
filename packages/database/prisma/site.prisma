@@ -280,8 +280,6 @@ model SiteStaffProfile {
 // Fréquentation, agrégée par jour, sans cookie ni identifiant. `dimension`
 // vaut "all", "path", "referrer" ou "device" ; `key` porte la valeur.
 model SiteDailyStat {
-  id String @id @default(cuid())
-
   siteId    String
   guildId   String
   dateKey   String
@@ -292,7 +290,7 @@ model SiteDailyStat {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@unique([siteId, dateKey, dimension, key], map: "site_daily_stats_key")
+  @@id([siteId, dateKey, dimension, key])
   @@index([guildId, dateKey])
   @@map("site_daily_stats")
 }

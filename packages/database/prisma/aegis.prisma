@@ -125,8 +125,6 @@ model AegisDetection {
 
 /// Agrégats par heure (UTC) et par salon. Jamais de contenu.
 model AegisHourlyStat {
-  id String @id @default(cuid())
-
   guildId   String
   dateKey   String // YYYY-MM-DD (UTC)
   hour      Int // 0-23 (UTC)
@@ -150,15 +148,12 @@ model AegisHourlyStat {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@unique([guildId, dateKey, hour, channelId])
-  @@index([guildId, dateKey])
+  @@id([guildId, dateKey, hour, channelId])
   @@map("aegis_hourly_stats")
 }
 
 /// Agrégats par jour (UTC) et par membre, pour sa fiche. Jamais de contenu.
 model AegisMemberDailyStat {
-  id String @id @default(cuid())
-
   guildId String
   dateKey String // YYYY-MM-DD (UTC)
   userId  String
@@ -180,7 +175,7 @@ model AegisMemberDailyStat {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@unique([guildId, dateKey, userId])
+  @@id([guildId, dateKey, userId])
   @@index([guildId, userId, dateKey])
   @@map("aegis_member_daily_stats")
 }

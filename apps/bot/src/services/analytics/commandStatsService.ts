@@ -65,7 +65,6 @@ const TARGET: BulkTarget = {
     { name: 'userId', type: 'text' },
   ],
   counterColumns: COLUMNS,
-  createMany: (data) => prisma.commandUsageDailyStat.createMany({ data: data as never, skipDuplicates: true }),
 };
 
 let inFlight: Promise<void> | null = null;

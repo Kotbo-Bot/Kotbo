@@ -8,8 +8,6 @@
 // "" pour les pages hors serveur, et la purge suffit à nettoyer les départs.
 
 model DashboardTelemetryDailyStat {
-  id String @id @default(cuid())
-
   dateKey   String // YYYY-MM-DD (UTC)
   guildId   String // "" hors serveur
   page      String // gabarit normalisé, sans identifiant : /security/sanctions
@@ -26,7 +24,7 @@ model DashboardTelemetryDailyStat {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@unique([dateKey, guildId, page, tab, feature, event, dimension], map: "dashboard_telemetry_daily_stats_key")
+  @@id([dateKey, guildId, page, tab, feature, event, dimension])
   @@index([event, dateKey])
   @@index([guildId, dateKey])
   @@map("dashboard_telemetry_daily_stats")
