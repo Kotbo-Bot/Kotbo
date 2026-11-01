@@ -246,18 +246,19 @@ export async function renderForumPosts(ctx: BlockContext, category: SiteForumCat
 export function forumTopicJsonLd(input: {
   topic: Pick<SiteForumTopic, 'title' | 'solved' | 'acceptedPostId' | 'replyCount' | 'createdAt' | 'lastPostAt'>;
   url: string;
-  first: { text: string; author: string; createdAt: Date } | null;
-  replies: Array<{ id: string; text: string; author: string; createdAt: Date }>;
+  first: { text: string; author: string; authorUrl?: string | null; createdAt: Date } | null;
+  replies: Array<{ id: string; text: string; author: string; authorUrl?: string | null; createdAt: Date }>;
 }): Record<string, unknown> | null {
   const { topic, url, first, replies } = input;
   if (!first) return null;
-  const person = (name: string) => ({ '@type': 'Person', name });
+  // `url` est recommandé par Google ; un membre masqué n'a pas de profil à montrer.
+  const person = (name: string, url?: string | null) => ({ '@type': 'Person', name, ...(url ? { url } : {}) });
   const answer = (r: (typeof replies)[number]) => ({
     '@type': 'Answer',
     text: r.text,
     dateCreated: r.createdAt.toISOString(),
     url: `${url}#p-${r.id}`,
-    author: person(r.author),
+    author: person(r.author, r.authorUrl),
   });
   if (topic.solved && replies.length > 0) {
     const accepted = replies.find((r) => r.id === topic.acceptedPostId) ?? null;
@@ -271,7 +272,7 @@ export function forumTopicJsonLd(input: {
         text: first.text || topic.title,
         answerCount: topic.replyCount,
         dateCreated: first.createdAt.toISOString(),
-        author: person(first.author),
+        author: person(first.author, first.authorUrl),
         ...(accepted ? { acceptedAnswer: answer(accepted) } : {}),
         ...(suggested.length ? { suggestedAnswer: suggested.map(answer) } : {}),
       },
@@ -285,9 +286,9 @@ export function forumTopicJsonLd(input: {
     url,
     datePublished: first.createdAt.toISOString(),
     dateModified: topic.lastPostAt.toISOString(),
-    author: person(first.author),
+    author: person(first.author, first.authorUrl),
     interactionStatistic: { '@type': 'InteractionCounter', interactionType: 'https://schema.org/CommentAction', userInteractionCount: topic.replyCount },
-    comment: replies.slice(0, 10).map((r) => ({ '@type': 'Comment', text: r.text, datePublished: r.createdAt.toISOString(), url: `${url}#p-${r.id}`, author: person(r.author) })),
+    comment: replies.slice(0, 10).map((r) => ({ '@type': 'Comment', text: r.text, datePublished: r.createdAt.toISOString(), url: `${url}#p-${r.id}`, author: person(r.author, r.authorUrl) })),
   };
 }
 
@@ -332,17 +333,20 @@ export async function forumTopicPage(
   let jsonLd: Record<string, unknown> | null = null;
   if (firstPage && firstPage.posts.length > 0) {
     const hidden = await hiddenAuthors(ctx.site.guildId, firstPage.posts.map((p) => p.authorId));
-    const authorName = (p: SiteForumPost) => shownAuthor(p, hidden, ctx.basePath, ctx.locale).name;
+    const who = (p: SiteForumPost) => {
+      const a = shownAuthor(p, hidden, ctx.basePath, ctx.locale);
+      return { author: a.name, authorUrl: a.href && `${options.origin ?? ''}${a.href}` };
+    };
     const [first, ...rest] = firstPage.posts;
     const accepted = topic.acceptedPostId && !rest.some((p) => p.id === topic.acceptedPostId)
       ? await prisma.siteForumPost.findFirst({ where: { id: topic.acceptedPostId, topicId: topic.id, deletedAt: null } })
       : null;
-    const replies = [...(accepted ? [accepted] : []), ...rest].map((p) => ({ id: p.id, text: plainDiscordText(p.content, 1500), author: authorName(p), createdAt: p.createdAt }));
+    const replies = [...(accepted ? [accepted] : []), ...rest].map((p) => ({ id: p.id, text: plainDiscordText(p.content, 1500), ...who(p), createdAt: p.createdAt }));
     description = plainDiscordText(first.content, 155) || undefined;
     jsonLd = forumTopicJsonLd({
       topic,
       url: `${options.origin ?? ''}${base}`,
-      first: { text: plainDiscordText(first.content, 1500), author: authorName(first), createdAt: first.createdAt },
+      first: { text: plainDiscordText(first.content, 1500), ...who(first), createdAt: first.createdAt },
       replies,
     });
   }

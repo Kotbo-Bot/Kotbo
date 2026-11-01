@@ -33,7 +33,7 @@ describe('texte brut d’un message Discord', () => {
 describe('balisage du sujet', () => {
   const at = new Date('2026-10-11T10:00:00Z');
   const topic = { title: 'Le mod plante au lancement', solved: false, acceptedPostId: null, replyCount: 2, createdAt: at, lastPostAt: at };
-  const first = { text: 'Le jeu se ferme tout seul.', author: 'Ana', createdAt: at };
+  const first = { text: 'Le jeu se ferme tout seul.', author: 'Ana', authorUrl: 'https://x/u/1', createdAt: at };
   const replies = [
     { id: 'r1', text: 'Mets à jour Java.', author: 'Bob', createdAt: at },
     { id: 'r2', text: 'Supprime le cache.', author: 'Membre', createdAt: at },
@@ -43,6 +43,8 @@ describe('balisage du sujet', () => {
     const ld = forumTopicJsonLd({ topic, url: 'https://dash.kotbo.fr/s/x/forum/aide/t', first, replies });
     expect(ld?.['@type']).toBe('DiscussionForumPosting');
     expect((ld?.comment as unknown[]).length).toBe(2);
+    expect((ld?.author as Record<string, unknown>).url).toBe('https://x/u/1');
+    expect(((ld?.comment as Array<{ author: Record<string, unknown> }>)[1]).author.url).toBeUndefined();
   });
 
   test('questions-réponses une fois résolu, réponse acceptée à part', () => {
