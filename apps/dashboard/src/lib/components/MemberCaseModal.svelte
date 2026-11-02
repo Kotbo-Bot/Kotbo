@@ -68,7 +68,6 @@
     actionFeedback?: string;
     actionIsError?: boolean;
     onClose?: (e: MouseEvent) => void;
-    onAction?: (action: 'WARN' | 'KICK' | 'TIMEOUT' | 'BAN') => void;
     onSelectUser?: (userId: string) => void;
     /** Onglet affiché à l'ouverture : la fiche complète ouvre directement les actions. */
     initialTab?: MemberCaseTab;
@@ -346,7 +345,10 @@
       
       const res = await runMemberCaseAction(userId, action, payload);
       if (res?.ok) {
-        toast.success(m.mcm_action_done({ action }));
+        // Sanction appliquée sur Discord mais absente du casier : surtout pas un échec,
+        // le modérateur la relancerait.
+        if (res.recordFailed) toast.warning(m.mcm_action_record_failed({ action }), 10000);
+        else toast.success(m.mcm_action_done({ action }));
         actionReason = '';
         // Recharger le dossier membre
         const updatedCase = await fetchMemberCase(userId);

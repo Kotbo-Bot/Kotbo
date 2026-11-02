@@ -180,8 +180,8 @@ import {
 import { trackRpgObjective } from './rpg/rpgObjectiveTracker.js';
 import { isShopItemUnlocked, rpgGuildXpNeeded, type ShopModuleState } from './economyPolicy.js';
 import { lockRpgProfile, takeInventoryQuantity } from './rpg/rpgInventoryWrites.js';
-import { attackRaid, checkRaidAssaultGrant, getRaidPanelState, getRaidState, grantRaidAssaults, RaidError } from './rpg/rpgRaidService.js';
-import { buildAssaultEmbed, buildRaidEmbed, healthBar } from './rpg/rpgRaidPanel.js';
+import { attackRaid, checkRaidAssaultGrant, getRaidPanelState, getRaidState, grantRaidAssaults, RaidError, RaidRefused } from './rpg/rpgRaidService.js';
+import { buildAssaultEmbed, buildRaidEmbed, healthBar, raidRefusalText } from './rpg/rpgRaidPanel.js';
 import { computeAttack } from './rpg/rpgCombatMath.js';
 import {
   bossCooldownMs,
@@ -2612,7 +2612,9 @@ async function handleRaidAttack(interaction: ButtonInteraction, guildId: string,
     if (!(error instanceof RaidError)) {
       logger.error('RpgPanel', `Assaut de raid en échec sur ${guildId}:`, error);
     }
-    const reason = error instanceof RaidError ? error.message : m.rpg_raid_panel_attack_failed({}, { locale });
+    const reason = error instanceof RaidRefused ? raidRefusalText(error.refusal, locale)
+      : error instanceof RaidError ? error.message
+      : m.rpg_raid_panel_attack_failed({}, { locale });
     await interaction.editReply({
       embeds: [errorEmbed(m.rpg_raid_panel_attack_error({}, { locale }), reason)],
       components: [raidActionRow(ownerId, locale, false, 'raid')],

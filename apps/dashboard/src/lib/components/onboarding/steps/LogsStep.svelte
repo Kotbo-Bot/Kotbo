@@ -72,7 +72,7 @@
       celebrateStep();
       wizard.complete('logs');
     } catch (err) {
-      toast.error(errorMessage(err) || "La journalisation n'a pas pu être enregistrée.");
+      toast.error(errorMessage(err) || m.onb_logs_save_failed());
     } finally {
       onboardingData.busy = false;
     }

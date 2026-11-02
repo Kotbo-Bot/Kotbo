@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from '../../lib/i18n';
   import { onMount } from 'svelte';
   import { toast } from '../../lib/stores/toast.svelte';
   import { confirmDialog } from '../../lib/stores/confirmDialog.svelte';
@@ -92,7 +93,7 @@
     banning = true;
     try {
       await banBotInstance(banTarget.botClientId, { mode: banMode, reason: banReason.trim() || undefined });
-      toast.success(`${banTarget.botName} sera coupé à son prochain ping.`);
+      toast.success(m.ainst_banned({ name: banTarget.botName }));
       banModalOpen = false;
       await load();
     } catch (err) {
@@ -112,7 +113,7 @@
     unbanningId = botClientId;
     try {
       await unbanBotInstance(botClientId);
-      toast.success(`${name} est débanni.`);
+      toast.success(m.ainst_unbanned({ name }));
       await load();
     } catch (err) {
       toast.error(errorMessage(err));

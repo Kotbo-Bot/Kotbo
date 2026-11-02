@@ -55,12 +55,12 @@
     codeBusy = true;
     try {
       await activateGuildWithCode(trimmed);
-      toast.success('Code activé : ton accès est ouvert.');
+      toast.success(m.onb_checkout_code_activated());
       codeValue = '';
       codeOpen = false;
       await dashboardStore.refresh();
     } catch (err) {
-      toast.error(errorMessage(err) || "Le code n'a pas pu être activé.");
+      toast.error(errorMessage(err) || m.onb_checkout_code_failed());
     } finally {
       codeBusy = false;
     }
@@ -135,7 +135,7 @@
     }
     onboardingData.busy = false;
     if (!url) {
-      toast.error("La page de paiement n'a pas pu être ouverte. Réessaie dans un instant.");
+      toast.error(m.onb_checkout_open_failed());
       return;
     }
     window.location.href = url;
@@ -160,7 +160,7 @@
       await dashboardStore.refresh();
       router.goto('/');
     } catch (err) {
-      toast.error(errorMessage(err) || "La mise en service n'a pas pu être enregistrée.");
+      toast.error(errorMessage(err) || m.onb_checkout_save_failed());
     } finally {
       onboardingData.busy = false;
     }

@@ -234,7 +234,7 @@
       globalBannedWords = result.words ?? [];
       globalBannedWordsLoaded = true;
       globalBannedWordsPage = 1;
-      toast.success(`Mots globaux mis à jour (${result.createdCount ?? 0} créés, ${result.updatedCount ?? 0} mis à jour).`);
+      toast.success(m.acnt_global_words_updated({ created: result.createdCount ?? 0, updated: result.updatedCount ?? 0 }));
       resetGlobalImport();
     } catch (err) {
       toast.error(errorMessage(err));
@@ -288,7 +288,7 @@
 
       globalBannedWordsLoaded = true;
 
-      toast.success('Mot global mis à jour.');
+      toast.success(m.acnt_global_word_updated());
     } catch (err) {
       globalImportError = errorMessage(err);
       const refreshed = await fetchGlobalBannedWords().catch(() => null);
@@ -324,7 +324,7 @@
       globalBannedWords = result.words ?? [];
       globalBannedWordsLoaded = true;
       globalBannedWordsPage = 1;
-      toast.success(`Nettoyage terminé: ${result.cleanedCount ?? 0} mot(s) conservé(s), ${result.duplicateCount ?? 0} doublon(s) supprimé(s).`);
+      toast.success(m.acnt_cleanup_done({ kept: result.cleanedCount ?? 0, removed: result.duplicateCount ?? 0 }));
     } catch (err) {
       toast.error(errorMessage(err));
     } finally {

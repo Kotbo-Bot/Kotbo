@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from '../i18n';
   import { onMount } from 'svelte';
   import { fetchWidgetData, activateWidget, deactivateWidget, refreshWidget, refreshAllWidgets, rotateWidgetToken, API_BASE_URL } from '../api';
   import { toast } from '../stores/toast.svelte';
@@ -24,7 +25,7 @@
       copiedField = field;
       setTimeout(() => { if (copiedField === field) copiedField = null; }, 1500);
     } catch {
-      toast.error('Impossible de copier');
+      toast.error(m.pwp_copy_failed());
     }
   }
 
@@ -41,11 +42,11 @@
       const result = await rotateWidgetToken();
       if (result?.token && data?.mySubscription) {
         data = { ...data, mySubscription: { ...data.mySubscription, token: result.token } };
-        toast.success('Token régénéré. Pense à le mettre à jour dans Scriptable/KWGT.');
+        toast.success(m.pwp_token_rotated());
         syncServiceWorkerConfig();
       }
     } catch {
-      toast.error('Impossible de régénérer le token. Réessaie.');
+      toast.error(m.pwp_token_rotate_failed());
     } finally {
       rotatingToken = false;
     }
@@ -57,7 +58,7 @@
       data = await fetchWidgetData();
       syncServiceWorkerConfig();
     } catch {
-      toast.error('Impossible de charger. Réessaie.');
+      toast.error(m.d7_loading_error());
     } finally {
       loading = false;
     }
@@ -68,13 +69,13 @@
     try {
       const result = await activateWidget();
       if (result?.pushResult?.ok === false) {
-        toast.warning(result.pushResult.error || 'Widget activé mais la synchronisation Discord a échoué.');
+        toast.warning(result.pushResult.error || m.pwp_sync_failed());
       } else {
-        toast.success('Données synchronisées. Copie maintenant le script Vencord pour ajouter le widget à ton profil.');
+        toast.success(m.pwp_synced());
       }
       await load();
     } catch {
-      toast.error('Erreur lors de l\'activation');
+      toast.error(m.pwp_activate_failed());
     } finally {
       acting = false;
     }
@@ -86,9 +87,9 @@
       const response = await fetch('/kotbo-widget-discord-v2.js', { cache: 'no-store' });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       await navigator.clipboard.writeText(await response.text());
-      toast.success('Script copié. Colle-le dans la console DevTools de Discord/Vencord.');
+      toast.success(m.pwp_script_copied());
     } catch {
-      toast.error('Impossible de copier le script. Ouvre le fichier avec le lien puis copie son contenu.');
+      toast.error(m.pwp_script_copy_failed());
     } finally {
       copyingScript = false;
     }
@@ -98,10 +99,10 @@
     acting = true;
     try {
       await deactivateWidget();
-      toast.success('Widget désactivé.');
+      toast.success(m.pwp_disabled());
       await load();
     } catch {
-      toast.error('Impossible de désactiver. Réessaie.');
+      toast.error(m.pwp_disable_failed());
     } finally {
       acting = false;
     }
@@ -112,10 +113,10 @@
     try {
       const result = await refreshWidget();
       if (result?.pushResult?.ok) {
-        toast.success('Widget rafraîchi !');
+        toast.success(m.pwp_refreshed());
       }
     } catch {
-      toast.error('Impossible d\'actualiser. Réessaie.');
+      toast.error(m.pulse_refresh_error());
     } finally {
       acting = false;
     }
@@ -127,12 +128,12 @@
       const result = await refreshAllWidgets();
       const failures = Array.isArray(result?.failures) ? result.failures : [];
       if (failures.length > 0) {
-        toast.warning(`Widgets : ${result?.success ?? 0} OK, ${result?.failed ?? 0} échoués - ${failures.map((f: any) => `${f.userId}: ${f.error}`).join(' · ')}`);
+        toast.warning(m.pwp_refresh_all_partial({ success: result?.success ?? 0, failed: result?.failed ?? 0, details: failures.map((f: any) => `${f.userId}: ${f.error}`).join(' · ') }));
       } else {
-        toast.success(`Widgets rafraîchis : ${result?.success ?? 0} OK`);
+        toast.success(m.pwp_refresh_all_done({ success: result?.success ?? 0 }));
       }
     } catch {
-      toast.error('Impossible de tout actualiser. Réessaie.');
+      toast.error(m.pwp_refresh_all_failed());
     } finally {
       acting = false;
     }

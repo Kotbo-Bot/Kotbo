@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from '../../../i18n';
   /**
    * Le rythme des niveaux, et les roles a debloquer.
    *
@@ -100,7 +101,7 @@
     try {
       await addLevelingReward(level, roleId, undefined, { silent: true });
     } catch {
-      toast.info(`Le palier ${level} avait déjà une récompense : il n'a pas été remplacé.`);
+      toast.info(m.onb_levels_tier_kept({ level }));
     }
   }
 
@@ -124,7 +125,7 @@
 
         await onboardingData.loadGuild(true);
         const posed = result.roles.filter((entry) => entry.created).length;
-        if (posed > 0) toast.success(`${posed} rôle${posed > 1 ? 's' : ''} de palier créé${posed > 1 ? 's' : ''}.`);
+        if (posed > 0) toast.success(posed > 1 ? m.onb_levels_roles_created({ count: posed }) : m.onb_levels_role_created());
       } else {
         for (const level of REWARD_TIERS) {
           const roleId = rewards[level];
@@ -135,7 +136,7 @@
       celebrateStep();
       wizard.complete('levels');
     } catch (err) {
-      toast.error(errorMessage(err) || "La progression n'a pas pu être enregistrée.");
+      toast.error(errorMessage(err) || m.onb_levels_save_failed());
     } finally {
       onboardingData.busy = false;
     }

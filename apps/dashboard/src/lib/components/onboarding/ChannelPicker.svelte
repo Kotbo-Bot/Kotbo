@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from '../../i18n';
   /**
    * « Choisissez un salon » - et, quand il n'y en a pas, « je le crée ».
    *
@@ -61,11 +62,11 @@
       onpick(channel.id);
       toast.success(
         channel.created
-          ? `#${channel.name} a été créé sur ton serveur.`
-          : `#${channel.name} existait déjà : il a été retenu.`,
+          ? m.onb_channel_created({ name: channel.name })
+          : m.onb_channel_reused({ name: channel.name }),
       );
     } catch (err) {
-      toast.error(errorMessage(err) || "Le salon n'a pas pu être créé.");
+      toast.error(errorMessage(err) || m.onb_channel_create_failed());
     } finally {
       creating = false;
     }

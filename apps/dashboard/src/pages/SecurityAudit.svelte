@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from '../lib/i18n';
   import { onMount } from 'svelte';
   import { authStore } from '../lib/stores/auth.svelte';
   import { fetchSecurityAudit, applySecurityFix, applyAllSecurityFixes } from '../lib/api';
@@ -195,7 +196,7 @@
     try {
       const res = await fetchSecurityAudit(true, authStore.selectedGuildId);
       report = res?.report ?? null;
-      if (showToast) toast.success('Audit actualisé');
+      if (showToast) toast.success(m.sa_refreshed());
     } catch (err) {
       error = err instanceof Error ? err.message : "Impossible de lancer l'audit";
       report = null;
@@ -220,9 +221,9 @@
     try {
       const res = await applySecurityFix(finding.id, authStore.selectedGuildId);
       if (res?.report) report = res.report;
-      toast.success(res?.message ?? 'Correctif appliqué');
+      toast.success(res?.message ?? m.sa_fix_applied());
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Le correctif a échoué');
+      toast.error(err instanceof Error ? err.message : m.sa_fix_failed());
     } finally {
       fixingId = null;
     }
@@ -243,16 +244,16 @@
       const failed = res?.failed ?? [];
 
       if (failed.length === 0) {
-        toast.success(`${applied.length} correctif(s) appliqué(s)`);
+        toast.success(m.sa_fixes_applied({ count: applied.length }));
         bulkOpen = false;
       } else {
         // On garde la modale ouverte pour nommer les echecs : « 3 en echec »
         // sans dire lesquels n'aide personne a rattraper le coup.
         bulkResult = { applied, failed };
-        toast.warning(`${applied.length} appliqué(s), ${failed.length} en échec`);
+        toast.warning(m.sa_fixes_partial({ applied: applied.length, failed: failed.length }));
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "L'application des correctifs a échoué");
+      toast.error(err instanceof Error ? err.message : m.sa_fixes_failed());
     } finally {
       bulkRunning = false;
     }

@@ -132,7 +132,7 @@
       toast.success(m.onb_staff_created({ count: created }));
       celebrateStep();
     } catch (err) {
-      toast.error(errorMessage(err) || "Les rôles n'ont pas pu être créés.");
+      toast.error(errorMessage(err) || m.onb_staff_roles_create_failed());
     } finally {
       onboardingData.busy = false;
     }
@@ -155,7 +155,7 @@
       celebrateStep();
       wizard.complete('staff');
     } catch (err) {
-      toast.error(errorMessage(err) || "L'équipe n'a pas pu être enregistrée.");
+      toast.error(errorMessage(err) || m.onb_staff_save_failed());
     } finally {
       onboardingData.busy = false;
     }

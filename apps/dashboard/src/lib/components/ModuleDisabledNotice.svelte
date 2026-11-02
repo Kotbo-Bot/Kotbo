@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from '../i18n';
   /**
    * Écran affiché à la place d'une page dont le module est éteint.
    *
@@ -30,10 +31,10 @@
     const ok = await updateModuleStatus(moduleKey, 'active');
     enabling = false;
     if (!ok) {
-      toast.error('Activation impossible.');
+      toast.error(m.mdn_activation_failed());
       return;
     }
-    toast.success(`« ${definition?.name ?? moduleKey} » activé.`);
+    toast.success(m.mdn_module_enabled({ name: definition?.name ?? moduleKey }));
     await dashboardStore.refresh();
   }
 </script>

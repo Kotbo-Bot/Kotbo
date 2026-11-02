@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from '../../lib/i18n';
   import { onMount } from 'svelte';
   import { toast } from '../../lib/stores/toast.svelte';
   import { confirmDialog } from '../../lib/stores/confirmDialog.svelte';
@@ -80,7 +81,7 @@
       shardMode = shardState.config.mode;
       shardCount = shardState.config.shardCount ? String(shardState.config.shardCount) : '';
     } catch (err) {
-      toast.error(errorMessage(err) || 'Impossible de rafraîchir les shards.');
+      toast.error(errorMessage(err) || m.ashd_load_error());
     } finally {
       shardLoading = false;
     }
@@ -91,10 +92,10 @@
     try {
       shardActionLoading = `restart:${shardId}`;
       await restartAdminShard(shardId);
-      toast.success(`Shard ${shardId} redémarré.`);
+      toast.success(m.ashd_restarted({ id: shardId }));
       await refreshShards();
     } catch (err) {
-      toast.error(errorMessage(err) || 'Erreur lors du redémarrage du shard.');
+      toast.error(errorMessage(err) || m.ashd_restart_error());
     } finally {
       shardActionLoading = '';
     }
@@ -105,10 +106,10 @@
     try {
       shardActionLoading = 'restart-all';
       await restartAllAdminShards();
-      toast.success('Redémarrage global demandé.');
+      toast.success(m.ashd_restart_all());
       await refreshShards();
     } catch (err) {
-      toast.error(errorMessage(err) || 'Erreur lors du redémarrage global.');
+      toast.error(errorMessage(err) || m.ashd_restart_all_error());
     } finally {
       shardActionLoading = '';
     }
@@ -120,15 +121,15 @@
       shardCount: shardMode === 'fixed' ? Number(shardCount) : null,
     };
     if (payload.mode === 'fixed' && (!Number.isInteger(payload.shardCount) || (payload.shardCount ?? 0) < 1)) {
-      toast.error('Le nombre de shards doit être supérieur à zéro.');
+      toast.error(m.ashd_count_invalid());
       return;
     }
     try {
       shardActionLoading = 'reconfigure';
       await reconfigureAdminShards(payload);
-      toast.success('Configuration de sharding enregistrée. Le conteneur va redémarrer.');
+      toast.success(m.ashd_config_saved());
     } catch (err) {
-      toast.error(errorMessage(err) || 'Erreur lors de la reconfiguration des shards.');
+      toast.error(errorMessage(err) || m.ashd_reconfigure_error());
     } finally {
       shardActionLoading = '';
     }

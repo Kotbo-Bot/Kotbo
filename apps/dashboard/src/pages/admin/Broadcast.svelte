@@ -1,6 +1,6 @@
 <script lang="ts">
   import { explainDisabled } from '../../lib/actions/explainDisabled';
-  import { m } from '../../lib/i18n';
+  import { m, dateLocale } from '../../lib/i18n';
   /**
    * Console d'annonces globales.
    *
@@ -199,7 +199,7 @@
       mediaLibrary = media;
       templates = tpl.templates;
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Impossible de charger. Réessaie.');
+      toast.error(err instanceof Error ? err.message : m.d7_loading_error());
     } finally {
       loading = false;
     }
@@ -268,17 +268,16 @@
   }
 
   async function handleDryRun() {
-    if (!canSend) { toast.error('Complétez le formulaire avant la simulation'); return; }
+    if (!canSend) { toast.error(m.abc_form_incomplete()); return; }
     try {
       const result = await sendBroadcast(buildPayload(true));
       lastResult = result;
       for (const warning of result.warnings ?? []) toast.warning(warning);
-      toast.success(
-        `Simulation : ${result.totalTargeted} serveur(s) ciblé(s)`
-        + (result.unconfiguredCount ? `, dont ${result.unconfiguredCount} sans salon configuré` : ''),
-      );
+      toast.success(result.unconfiguredCount
+        ? m.abc_dry_run_result_unconfigured({ count: result.totalTargeted, unconfigured: result.unconfiguredCount })
+        : m.abc_dry_run_result({ count: result.totalTargeted }));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Erreur de simulation');
+      toast.error(err instanceof Error ? err.message : m.abc_dry_run_error());
     }
   }
 
@@ -290,16 +289,16 @@
       showConfirm = false;
 
       if (result.scheduled) {
-        toast.success(`Annonce programmée pour le ${new Date(result.scheduledAt!).toLocaleString('fr-FR')}`);
+        toast.success(m.abc_scheduled({ date: new Date(result.scheduledAt!).toLocaleString(dateLocale()) }));
       } else {
-        toast.success(`Envoyé : ${result.successCount} succès, ${result.failCount} échec(s) sur ${result.totalTargeted}`);
+        toast.success(m.abc_sent({ success: result.successCount, failed: result.failCount, total: result.totalTargeted }));
         message = '';
       }
 
       history = (await fetchBroadcastHistory(50)).logs;
       activeTab = 'history';
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erreur d'envoi");
+      toast.error(err instanceof Error ? err.message : m.abc_send_error());
     } finally {
       sending = false;
     }
@@ -318,7 +317,7 @@
         log.pollOptions?.length ? fetchBroadcastPoll(log.id) : Promise.resolve(null),
       ]);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Impossible de charger le rapport. Réessaie.');
+      toast.error(err instanceof Error ? err.message : m.abc_report_load_error());
       deliveries = [];
     } finally {
       deliveriesLoading = false;
@@ -330,9 +329,9 @@
     try {
       await cancelScheduledBroadcast(log.id);
       history = (await fetchBroadcastHistory(50)).logs;
-      toast.success('Annonce annulée');
+      toast.success(m.abc_cancelled());
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erreur d'annulation");
+      toast.error(err instanceof Error ? err.message : m.abc_cancel_error());
     }
   }
 
@@ -341,9 +340,9 @@
     try {
       await deleteBroadcastLog(id);
       history = history.filter((log) => log.id !== id);
-      toast.success('Entrée supprimée');
+      toast.success(m.abc_entry_deleted());
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Impossible de supprimer. Réessaie.');
+      toast.error(err instanceof Error ? err.message : m.home_delete_error());
     }
   }
 
@@ -363,20 +362,20 @@
     pollClosesAt = '';
     scheduleEnabled = false;
     activeTab = 'compose';
-    toast.success('Contenu chargé dans l’éditeur');
+    toast.success(m.abc_content_loaded());
   }
 
   // ── Modèles ───────────────────────────────────────────────────────────────
   async function saveTemplate() {
-    if (!templateName.trim()) { toast.error('Nom du modèle requis'); return; }
+    if (!templateName.trim()) { toast.error(m.abc_template_name_required()); return; }
     try {
       await createBroadcastTemplate({ ...buildPayload(false), name: templateName.trim() });
       templates = (await fetchBroadcastTemplates()).templates;
       showTemplateModal = false;
       templateName = '';
-      toast.success('Modèle enregistré');
+      toast.success(m.abc_template_saved());
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Erreur d’enregistrement');
+      toast.error(err instanceof Error ? err.message : m.abc_save_error());
     }
   }
 
@@ -385,9 +384,9 @@
     try {
       await deleteBroadcastTemplate(id);
       templates = templates.filter((t) => t.id !== id);
-      toast.success('Modèle supprimé');
+      toast.success(m.abc_template_deleted());
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Impossible de supprimer. Réessaie.');
+      toast.error(err instanceof Error ? err.message : m.home_delete_error());
     }
   }
 
@@ -400,18 +399,18 @@
     try {
       await deleteBroadcastMedia(media.id);
       mediaLibrary = await fetchBroadcastMedia();
-      toast.success('Image supprimée');
+      toast.success(m.abc_image_deleted());
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Impossible de supprimer. Réessaie.');
+      toast.error(err instanceof Error ? err.message : m.home_delete_error());
     }
   }
 
   async function copyMediaUrl(media: BroadcastMedia) {
     try {
       await navigator.clipboard.writeText(media.url);
-      toast.success('Lien copié');
+      toast.success(m.ste_link_copied());
     } catch {
-      toast.error('Copie impossible');
+      toast.error(m.abc_copy_failed());
     }
   }
 
@@ -429,9 +428,9 @@
           channelStatus: channelId ? ('OK' as const) : ('UNSET' as const),
         }
         : g);
-      toast.success(channelId ? `#${channel?.name} configuré pour ${guild.name}` : `Salon retiré pour ${guild.name}`);
+      toast.success(channelId ? m.abc_channel_set({ channel: channel?.name ?? '', guild: guild.name }) : m.abc_channel_removed({ guild: guild.name }));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Erreur de configuration');
+      toast.error(err instanceof Error ? err.message : m.abc_config_error());
     } finally {
       savingChannel = null;
     }
@@ -952,7 +951,7 @@
                 <div class="flex gap-1.5">
                   <button
                     type="button"
-                    onclick={() => { imageUrl = media.url; activeTab = 'compose'; toast.success('Image sélectionnée'); }}
+                    onclick={() => { imageUrl = media.url; activeTab = 'compose'; toast.success(m.abc_image_selected()); }}
                     class="flex-1 h-8 rounded-lg bg-primary/12 text-primary text-xs font-semibold hover:bg-primary/18 transition"
                   >
                     Utiliser

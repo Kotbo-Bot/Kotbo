@@ -4,8 +4,7 @@
   import { pageTabItems } from '../lib/config/pageTabs';
   import { Tabs, Button, Callout } from '../lib/components/ui';
   import { authStore } from '../lib/stores/auth.svelte';
-  import { canViewFeature } from '../lib/permissions.svelte';
-  import { fetchMemberCase } from '../lib/api';
+  import { MemberCaseState } from '../lib/memberCase.svelte';
   import ModulePage from '../lib/components/ModulePage.svelte';
   import Papicon from '../lib/components/Papicon.svelte';
   import MemberCaseModal from '../lib/components/MemberCaseModal.svelte';
@@ -22,7 +21,6 @@
   import StaffDialogs from '../lib/components/staff/StaffDialogs.svelte';
   import StaffCaseTab from '../lib/components/staff/StaffCaseTab.svelte';
   import { m } from '../lib/i18n';
-  import { errorMessage } from '@kotbo/shared';
 
   function isStaffTab(value: string | null | undefined): value is StaffTab {
     return !!value && STAFF_TABS.includes(value as StaffTab);
@@ -142,36 +140,17 @@
   );
 
   // ── Dossier membre ──
-  // Le dossier appartient a la section Membres, ici comme ailleurs.
-  const canOpenMemberCase = $derived(canViewFeature('members'));
-  let caseOpen = $state(false);
-  let caseUserId = $state<string | null>(null);
-  let caseUserName = $state('');
-  let caseData = $state<any>(null);
-  let caseLoading = $state(false);
-  let caseError = $state('');
+  // Fiche propre à la page : elle se charge sur le serveur du staff et gagne l'onglet « Staff ».
+  const memberCase = new MemberCaseState(() => staff.guildId);
 
-  async function openMemberCase(userId: string, userName: string) {
-    if (!staff.guildId || !userId || !canOpenMemberCase) return;
-    caseUserId = userId;
-    caseUserName = userName;
-    caseOpen = true;
-    caseLoading = true;
-    caseError = '';
-    caseData = null;
-    try {
-      caseData = await fetchMemberCase(userId, staff.guildId);
-    } catch (err) {
-      caseError = errorMessage(err) ?? 'Impossible de charger le dossier';
-    } finally {
-      caseLoading = false;
-    }
+  function openMemberCase(userId: string, userName: string) {
+    void memberCase.show(userId, userName);
   }
 
-  const openCase = $derived(canOpenMemberCase ? openMemberCase : undefined);
+  const openCase = $derived(memberCase.canOpen ? openMemberCase : undefined);
 
   /** Membre du staff ouvert dans le dossier : il gagne l'onglet « Staff », ouvert d'emblee. */
-  const caseIsStaff = $derived(!!caseUserId && !!staff.memberByUserId(caseUserId));
+  const caseIsStaff = $derived(!!memberCase.userId && !!staff.memberByUserId(memberCase.userId));
 </script>
 
 <svelte:head>
@@ -253,23 +232,20 @@
 <StaffDialogs />
 
 {#snippet staffCaseTab()}
-  {#if caseUserId}<StaffCaseTab userId={caseUserId} />{/if}
+  {#if memberCase.userId}<StaffCaseTab userId={memberCase.userId} />{/if}
 {/snippet}
 
 <MemberCaseModal
-  open={caseOpen}
+  open={memberCase.open}
   extraTab={caseIsStaff ? { label: m.sx_case_tab(), icon: 'shield', content: staffCaseTab } : null}
   initialTab={caseIsStaff ? 'extra' : 'resume'}
-  userId={caseUserId}
-  userName={caseUserName}
-  {caseData}
-  loading={caseLoading}
-  error={caseError}
-  onClose={() => (caseOpen = false)}
-  onSelectUser={(newUserId) => {
-    const node = caseData?.interactionGraph?.nodes?.find((n: any) => n.id === newUserId);
-    void openMemberCase(newUserId, node?.label || 'Membre');
-  }}
+  userId={memberCase.userId}
+  userName={memberCase.userName}
+  caseData={memberCase.caseData}
+  loading={memberCase.loading}
+  error={memberCase.error}
+  onClose={() => memberCase.close()}
+  onSelectUser={(userId) => memberCase.showFromGraph(userId)}
 />
 
 <style>

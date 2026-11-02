@@ -80,7 +80,7 @@
 
       wizard.complete('migration-findings');
     } catch (err) {
-      toast.error(errorMessage(err) || "La reprise n'a pas pu être appliquée.");
+      toast.error(errorMessage(err) || m.onb_migration_apply_failed());
     } finally {
       onboardingData.busy = false;
     }

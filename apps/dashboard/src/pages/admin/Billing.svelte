@@ -76,7 +76,7 @@
       toast.success(result.message);
       await load();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Erreur');
+      toast.error(err instanceof Error ? err.message : m.an_error_generic());
     } finally {
       setBusy(guild.id, false);
     }

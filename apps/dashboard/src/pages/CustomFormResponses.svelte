@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from '../lib/i18n';
   import { Tabs } from '../lib/components/ui';
   import { onMount } from 'svelte';
   import { router } from 'tinro';
@@ -183,7 +184,7 @@
       responses = [...responses, ...(data.submissions || [])];
       responseTotal = data.total ?? responseTotal;
     } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : 'Impossible de charger. Réessaie.');
+      toast.error(e instanceof Error ? e.message : m.d7_loading_error());
     } finally {
       loadingMore = false;
     }
@@ -211,7 +212,7 @@
     const a = document.createElement('a');
     a.href = url; a.download = `responses-${formId}.csv`; a.click();
     URL.revokeObjectURL(url);
-    toast.success('Export CSV téléchargé !');
+    toast.success(m.cfr_csv_exported());
   }
 
   function formatDate(iso: string) {

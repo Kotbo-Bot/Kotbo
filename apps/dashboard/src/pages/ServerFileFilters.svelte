@@ -99,7 +99,7 @@
       groups = fileRes?.groups ?? {};
       maxRules = fileRes?.maxRules ?? 20;
     } catch {
-      toast.error('Impossible de charger les filtres');
+      toast.error(m.sff_load_error());
     } finally {
       loading = false;
     }
@@ -112,9 +112,9 @@
       const res = await updateRaidProtection({ ...config }, authStore.selectedGuildId);
       config = { ...(res?.config ?? config) };
       original = { ...config };
-      toast.success('Filtres enregistrés');
+      toast.success(m.sff_saved());
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Enregistrement impossible');
+      toast.error(err instanceof Error ? err.message : m.tmac_err_save());
     } finally {
       saving = false;
     }
@@ -129,10 +129,10 @@
         config.otherServers = res.config.otherServers;
         original.otherServers = res.config.otherServers;
         invite = '';
-        toast.success('Serveur ajouté à la liste');
+        toast.success(m.sff_server_added());
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Ajout impossible');
+      toast.error(err instanceof Error ? err.message : m.sff_add_failed());
     } finally {
       busy = false;
     }
@@ -154,10 +154,10 @@
       if (res?.rule) {
         rules = [...rules.filter((r) => r.targetId !== res.rule.targetId), res.rule];
         draft = { targetId: '', mode: 'BLACKLIST', groups: [], extensions: '' };
-        toast.success('Règle enregistrée');
+        toast.success(m.sff_rule_saved());
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Enregistrement impossible');
+      toast.error(err instanceof Error ? err.message : m.tmac_err_save());
     } finally {
       busy = false;
     }

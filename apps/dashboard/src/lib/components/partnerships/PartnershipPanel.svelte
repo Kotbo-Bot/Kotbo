@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from '../../i18n';
   /**
    * Panneau des partenariats : ajouter et gerer au meme endroit.
    *
@@ -183,7 +184,7 @@
       // n'est deplie, le resume suffit a la plupart des visites.
       if (openSection === null && failing > 0) openSection = 'commitments';
     } catch (err) {
-      toast.error(errorMessage(err) || 'Chargement impossible');
+      toast.error(errorMessage(err) || m.tn_public_error_title());
     } finally {
       loading = false;
     }
@@ -198,7 +199,7 @@
       await load();
       await onchanged();
     } catch (err) {
-      toast.error(errorMessage(err) || 'Action impossible');
+      toast.error(errorMessage(err) || m.common_action_failed());
     } finally {
       busy = false;
     }
@@ -212,12 +213,12 @@
     try {
       const result = await lookupPartnerInvite(inviteInput.trim());
       if (!result?.lookup) {
-        toast.error('Invitation introuvable ou expiree');
+        toast.error(m.ptp_invite_not_found());
         return;
       }
       lookup = result.lookup;
     } catch (err) {
-      toast.error(errorMessage(err) || 'Lecture impossible');
+      toast.error(errorMessage(err) || m.common_read_failed());
     } finally {
       lookingUp = false;
     }
@@ -233,7 +234,7 @@
   async function add() {
     const name = (lookup?.displayName ?? manualName).trim();
     if (!name) {
-      toast.error('Colle un lien ou donne un nom.');
+      toast.error(m.ptp_link_or_name_required());
       return;
     }
 
@@ -254,11 +255,11 @@
       });
 
       for (const warning of result?.warnings ?? []) toast.error(warning);
-      toast.success(`${name} ajoute`);
+      toast.success(m.ptp_partner_added({ name }));
       await onchanged();
       if (result?.partnershipId) onopen(result.partnershipId);
     } catch (err) {
-      toast.error(errorMessage(err) || 'Creation impossible');
+      toast.error(errorMessage(err) || m.common_create_failed());
     } finally {
       busy = false;
     }
@@ -268,7 +269,7 @@
 
   async function confirmBreak() {
     if (!breakReason.trim()) {
-      toast.error('Une rupture demande un motif.');
+      toast.error(m.ptp_break_reason_required());
       return;
     }
     await run(
@@ -289,9 +290,9 @@
       // l'empreinte, il ne sera plus jamais montre.
       guestLink = `${window.location.origin}/partner-portal/${result.token}`;
       await navigator.clipboard?.writeText(guestLink).catch(() => null);
-      toast.success('Lien cree et copie');
+      toast.success(m.ptp_link_created_copied());
     } catch (err) {
-      toast.error(errorMessage(err) || 'Creation du lien impossible');
+      toast.error(errorMessage(err) || m.ptp_link_create_failed());
     } finally {
       busy = false;
     }

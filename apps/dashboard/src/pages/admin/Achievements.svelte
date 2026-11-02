@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from '../../lib/i18n';
   import { onMount } from 'svelte';
   import { RANK_CARD_ACHIEVEMENTS, RANK_CARD_BADGE_ICONS, RANK_CARD_TIER_COLORS, errorMessage, isManualRankCardAchievement } from '@kotbo/shared';
   import { toast } from '../../lib/stores/toast.svelte';
@@ -59,11 +60,11 @@
       const result = await grantManualAchievement(target, achievementId, note);
       profiles = { ...profiles, ...result.profiles };
       holders = { ...holders, [achievementId]: [result.holder, ...(holders[achievementId] ?? [])] };
-      toast.success(`Succès attribué à ${nameOf(target)}.`);
+      toast.success(m.aach_granted({ name: nameOf(target) }));
       userId = '';
       note = '';
     } catch (err) {
-      toast.error(errorMessage(err) ?? "Erreur lors de l'attribution du succès");
+      toast.error(errorMessage(err) ?? m.aach_grant_error());
     } finally {
       granting = false;
     }
@@ -76,9 +77,9 @@
     try {
       await revokeManualAchievement(holder.userId, id);
       holders = { ...holders, [id]: (holders[id] ?? []).filter((entry) => entry.userId !== holder.userId) };
-      toast.success('Succès retiré.');
+      toast.success(m.aach_revoked());
     } catch (err) {
-      toast.error(errorMessage(err) ?? 'Impossible de retirer le succès. Réessaie.');
+      toast.error(errorMessage(err) ?? m.aach_revoke_error());
     } finally {
       revoking = null;
     }

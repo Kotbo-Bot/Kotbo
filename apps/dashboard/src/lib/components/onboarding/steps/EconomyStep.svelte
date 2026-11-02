@@ -73,7 +73,7 @@
     if (onboardingData.busy) return;
     const trimmed = name.trim();
     if (!trimmed) {
-      toast.error('Donne un nom à ta monnaie.');
+      toast.error(m.onb_economy_currency_name_required());
       return;
     }
 
@@ -92,7 +92,7 @@
       celebrateStep();
       wizard.complete('economy');
     } catch (err) {
-      toast.error(errorMessage(err) || "L'économie n'a pas pu être enregistrée.");
+      toast.error(errorMessage(err) || m.onb_economy_save_failed());
     } finally {
       onboardingData.busy = false;
     }
