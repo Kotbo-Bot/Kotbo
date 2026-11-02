@@ -14,6 +14,7 @@
   import { relativeDelta } from '../analytics/analyticsFilters.svelte';
   import { m, dateLocale } from '../../i18n';
   import { fetchTicketStats, type TicketStats } from '../../api';
+  import { memberCaseModal } from '../../stores/memberCaseModal.svelte';
 
   type Period = '7' | '30' | '90';
   let period = $state<Period>('30');
@@ -195,7 +196,12 @@
                 {#each agents as agent (agent.userId)}
                   <tr>
                     <th scope="row">
-                      <a class="agent-name" href={`/members/${agent.userId}`}>{agent.name}</a>
+                      <!-- La fiche de l'agent, pour qui a accès à « Membres » ; son nom seul sinon. -->
+                      {#if memberCaseModal.canOpen}
+                        <button type="button" class="agent-name agent-name--link" onclick={() => memberCaseModal.show(agent.userId, agent.name)}>{agent.name}</button>
+                      {:else}
+                        <span class="agent-name">{agent.name}</span>
+                      {/if}
                       <span class="agent-bar" aria-hidden="true"><span style="width: {Math.max(2, (agent.handled / maxHandled) * 100)}%;"></span></span>
                     </th>
                     <td class="num">{fmtNumber(agent.handled)}</td>
@@ -292,7 +298,11 @@
     color: var(--color-on-surface);
   }
 
-  .agent-name:hover {
+  .agent-name--link {
+    text-align: left;
+  }
+
+  .agent-name--link:hover {
     text-decoration: underline;
   }
 

@@ -31,8 +31,13 @@
     type TimelineItem,
   } from '../../api';
   import type { MemberCaseResponse } from '@kotbo/contracts';
+  import { canModerateFeature } from '../../permissions.svelte';
 
   const { userId }: { userId: string } = $props();
+
+  // Voir un membre n'est pas le modérer : sans ce droit, la fiche s'ouvre en lecture seule,
+  // donc « Modérer » et « Modifier la note » ne sont pas proposés.
+  const canModerateMembers = $derived(canModerateFeature('members'));
 
   let caseData = $state<MemberCaseResponse | null>(null);
   let caseLoading = $state(true);
@@ -271,7 +276,9 @@
       <Button variant="ghost" size="sm" icon="arrow-left" href="/members">{m.mp_back()}</Button>
       <Button size="sm" icon="message-square" onclick={() => openCase('messages')}>{m.mp_messages()}</Button>
       <Button size="sm" icon="folder" onclick={() => openCase('resume')}>{m.mp_open_case()}</Button>
-      <Button size="sm" variant="primary" icon="shield" onclick={() => openCase('notes')}>{m.mp_moderate()}</Button>
+      {#if canModerateMembers}
+        <Button size="sm" variant="primary" icon="shield" onclick={() => openCase('notes')}>{m.mp_moderate()}</Button>
+      {/if}
     </div>
   </section>
 
@@ -287,9 +294,10 @@
   {/if}
 
   {#if profile?.moderatorNote}
-    <Callout variant="info" title={m.mp_note()} icon="edit" class="mt-4">
+    {#snippet editNoteAction()}<Button size="sm" variant="ghost" onclick={() => openCase('notes')}>{m.mp_edit_note()}</Button>{/snippet}
+    <!-- Passé seulement avec le droit de modération : un snippet vide laisserait un bloc d'actions vide. -->
+    <Callout variant="info" title={m.mp_note()} icon="edit" class="mt-4" actions={canModerateMembers ? editNoteAction : undefined}>
       <span class="whitespace-pre-line">{profile.moderatorNote}</span>
-      {#snippet actions()}<Button size="sm" variant="ghost" onclick={() => openCase('notes')}>{m.mp_edit_note()}</Button>{/snippet}
     </Callout>
   {/if}
 

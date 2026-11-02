@@ -12,6 +12,7 @@
   import { m, dateLocale } from '../../i18n';
   import { fetchMemberCase, fetchMemberSummary, type MemberSummary } from '../../api';
   import type { MemberCaseResponse } from '@kotbo/contracts';
+  import { memberCaseModal } from '../../stores/memberCaseModal.svelte';
 
   const {
     userId,
@@ -39,7 +40,9 @@
     caseData = null;
     summary = null;
     void Promise.all([
-      fetchMemberCase(id).catch(() => null),
+      // Le dossier est celui de la section Membres : l'API le refuse sans cet accès, inutile
+      // de le demander. Le panneau se contente alors du nom et du résumé du ticket.
+      memberCaseModal.canOpen ? fetchMemberCase(id).catch(() => null) : Promise.resolve(null),
       fetchMemberSummary(id).catch(() => null),
     ]).then(([caseResult, summaryResult]) => {
       if (requested !== id) return;
@@ -183,10 +186,12 @@
         </section>
       {/if}
 
-      <div class="flex flex-col gap-1.5 pt-1">
-        <Button size="sm" icon="folder" fullWidth onclick={() => onopencase(userId, name)}>{m.mp_open_case()}</Button>
-        <Button size="sm" variant="ghost" icon="user" fullWidth href={`/members/${userId}`}>{m.mcm_open_profile()}</Button>
-      </div>
+      {#if memberCaseModal.canOpen}
+        <div class="flex flex-col gap-1.5 pt-1">
+          <Button size="sm" icon="folder" fullWidth onclick={() => onopencase(userId, name)}>{m.mp_open_case()}</Button>
+          <Button size="sm" variant="ghost" icon="user" fullWidth href={`/members/${userId}`}>{m.mcm_open_profile()}</Button>
+        </div>
+      {/if}
     </div>
   {/if}
 </div>
