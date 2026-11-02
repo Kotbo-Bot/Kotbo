@@ -327,7 +327,8 @@ export function lowestPlanWithModule(moduleKey: string): PlanKey | null {
 // ─────────────────────────────────────────────────────────────
 
 /**
- * Durée de l'essai gratuit offert à la première souscription, en jours.
+ * Durée de l'essai gratuit, en jours. Il n'est offert qu'avec un code de
+ * parrainage : sans code, la souscription est payante dès le premier jour.
  *
  * Ici et pas dans une variable d'environnement : la durée est un engagement
  * commercial affiché sur la page tarifs et dans les CGU, elle doit être la même
@@ -346,6 +347,18 @@ export const TRIAL_DAYS = 15;
 export function planAllowsTrial(plan: PlanKey): boolean {
   return getPlanDefinition(plan).selfServe;
 }
+
+/**
+ * Remise du filleul, en pourcentage, sur sa première facture après l'essai.
+ * Elle s'ajoute aux `TRIAL_DAYS` jours offerts par le code de parrainage.
+ */
+export const REFERRAL_DISCOUNT_PERCENT = 10;
+
+/**
+ * Historique lisible dans Analytics sans abonnement, en jours. Assez pour voir
+ * que les stats existent, trop court pour suivre une tendance.
+ */
+export const FREE_ANALYTICS_DAYS = 7;
 
 // ─────────────────────────────────────────────────────────────
 // Offrir Kotbo

@@ -113,10 +113,12 @@ export {
 } from './types/timezone.js';
 
 export {
+  FREE_ANALYTICS_DAYS,
   FREE_MODULES,
   GIFT_DURATIONS_MONTHS,
   PLAN_KEYS,
   PLAN_REGISTRY,
+  REFERRAL_DISCOUNT_PERCENT,
   SALES_CONTACT_URL,
   TRIAL_DAYS,
   canPurchasePlan,
