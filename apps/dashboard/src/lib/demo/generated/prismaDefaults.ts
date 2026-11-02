@@ -175,7 +175,6 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "createdAt": "__NOW__"
   },
   "AegisHourlyStat": {
-    "id": "",
     "guildId": "",
     "dateKey": "",
     "hour": 0,
@@ -195,7 +194,6 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "updatedAt": "__NOW__"
   },
   "AegisMemberDailyStat": {
-    "id": "",
     "guildId": "",
     "dateKey": "",
     "userId": "",
@@ -213,7 +211,6 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "updatedAt": "__NOW__"
   },
   "GuildDailyStat": {
-    "id": "",
     "guildId": "",
     "dateKey": "",
     "totalMembers": 0,
@@ -242,7 +239,6 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "updatedAt": "__NOW__"
   },
   "ChannelDailyStat": {
-    "id": "",
     "guildId": "",
     "channelId": "",
     "dateKey": "",
@@ -253,14 +249,12 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "updatedAt": "__NOW__"
   },
   "GuildWordStat": {
-    "id": "",
     "guildId": "",
     "dateKey": "",
     "word": "",
     "count": 0
   },
   "MessageContentDailyStat": {
-    "id": "",
     "guildId": "",
     "dateKey": "",
     "channelId": "",
@@ -320,7 +314,6 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "updatedAt": "__NOW__"
   },
   "ContentItemDailyStat": {
-    "id": "",
     "guildId": "",
     "dateKey": "",
     "kind": "",
@@ -381,7 +374,6 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "updatedAt": "__NOW__"
   },
   "GuildHourlyStat": {
-    "id": "",
     "guildId": "",
     "dateKey": "",
     "hour": 0,
@@ -398,7 +390,6 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "updatedAt": "__NOW__"
   },
   "MemberDailyStat": {
-    "id": "",
     "guildId": "",
     "userId": "",
     "dateKey": "",
@@ -462,7 +453,6 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "createdAt": "__NOW__"
   },
   "MemberInteractionDailyStat": {
-    "id": "",
     "guildId": "",
     "dateKey": "",
     "userId": "",
@@ -473,7 +463,6 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "updatedAt": "__NOW__"
   },
   "ChannelResponseDailyStat": {
-    "id": "",
     "guildId": "",
     "dateKey": "",
     "channelId": "",
@@ -544,7 +533,6 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "createdAt": "__NOW__"
   },
   "CommandUsageDailyStat": {
-    "id": "",
     "guildId": "",
     "dateKey": "",
     "commandName": "",
@@ -903,7 +891,13 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "checkoutSessionId": null,
     "subscriptionId": null,
     "reservedAt": "__NOW__",
-    "startedAt": null
+    "startedAt": null,
+    "referralCode": null
+  },
+  "ReferralCode": {
+    "code": "",
+    "discordUserId": "",
+    "createdAt": "__NOW__"
   },
   "BillingGift": {
     "id": "",
@@ -994,6 +988,8 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "target": "ALL",
     "targetGuilds": [],
     "channelPref": "NEWS",
+    "pollOptions": [],
+    "pollClosesAt": null,
     "successCount": 0,
     "failCount": 0,
     "totalTargeted": 0,
@@ -1042,6 +1038,14 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "reason": null,
     "messageId": null,
     "createdAt": "__NOW__"
+  },
+  "BroadcastPollVote": {
+    "broadcastId": "",
+    "userId": "",
+    "guildId": "",
+    "optionIndex": 0,
+    "createdAt": "__NOW__",
+    "updatedAt": "__NOW__"
   },
   "AdminAuditLog": {
     "id": "",
@@ -1707,7 +1711,6 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "createdAt": "__NOW__"
   },
   "DashboardTelemetryDailyStat": {
-    "id": "",
     "dateKey": "",
     "guildId": "",
     "page": "",
@@ -4462,7 +4465,6 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "updatedAt": "__NOW__"
   },
   "SiteDailyStat": {
-    "id": "",
     "siteId": "",
     "guildId": "",
     "dateKey": "",

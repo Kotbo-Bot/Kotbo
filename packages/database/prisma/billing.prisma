@@ -72,9 +72,24 @@ model BillingTrial {
   reservedAt     DateTime @default(now())
   /// Date de démarrage effectif de l'essai côté Stripe.
   startedAt      DateTime?
+  /// Code de parrainage saisi : l'essai n'est offert qu'avec lui. Garde la
+  /// trace de qui a parrainé quel serveur.
+  referralCode   String?
 
   @@index([guildId])
+  @@index([referralCode])
   @@map("billing_trials")
+}
+
+/// Code de parrainage d'un utilisateur Discord, créé à la première visite de
+/// la page Facturation. Le serveur qui le saisit à sa première souscription
+/// a l'essai gratuit et une remise sur sa première facture.
+model ReferralCode {
+  code          String   @id
+  discordUserId String   @unique
+  createdAt     DateTime @default(now())
+
+  @@map("referral_codes")
 }
 
 /// Kotbo offert à un serveur.
