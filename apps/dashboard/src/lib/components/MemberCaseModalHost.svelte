@@ -12,8 +12,5 @@
   loading={memberCaseModal.loading}
   error={memberCaseModal.error}
   onClose={() => memberCaseModal.close()}
-  onSelectUser={(userId) => {
-    const node = memberCaseModal.caseData?.interactionGraph?.nodes?.find((n) => n.id === userId);
-    void memberCaseModal.show(userId, node?.label || userId);
-  }}
+  onSelectUser={(userId) => memberCaseModal.showFromGraph(userId)}
 />

@@ -8,7 +8,7 @@
   import { Tabs } from '../lib/components/ui';
   import { unsavedChanges } from '../lib/stores/unsavedChanges.svelte';
   import { dashboardStore } from '../lib/stores/dashboard.svelte';
-  import { canModerateFeature, canViewFeature } from '../lib/permissions.svelte';
+  import { canModerateFeature } from '../lib/permissions.svelte';
   import { subscribeRealtime } from '../lib/stores/realtime.svelte';
   import { portal } from '../lib/actions/portal';
   import { authStore } from '../lib/stores/auth.svelte';
@@ -20,7 +20,9 @@
   import ReportRuleSelector from '../lib/components/sanctions/ReportRuleSelector.svelte';
   import SelectedRuleChips from '../lib/components/sanctions/SelectedRuleChips.svelte';
   import ColumnSortFilter, { type ColumnFilterOption } from '../lib/components/sanctions/ColumnSortFilter.svelte';
-  import { createSanctionReport, deleteSanction, updateSanctionReport, fetchMemberCase, updateGlobalSettings, fetchFeatureConfigurations, updateSanctionTables, dashboardFetch } from '../lib/api';
+  import MemberCaseModal from '../lib/components/MemberCaseModal.svelte';
+  import { MemberCaseState } from '../lib/memberCase.svelte';
+  import { createSanctionReport, deleteSanction, updateSanctionReport, updateGlobalSettings, fetchFeatureConfigurations, updateSanctionTables, dashboardFetch } from '../lib/api';
   import ToggleSwitch from '../lib/components/ToggleSwitch.svelte';
   import SearchableSelect from '../lib/components/SearchableSelect.svelte';
   import { channelDisplayName } from '../lib/channelUtils';
@@ -436,51 +438,12 @@
   let isEditing = $state(false);
   let updateReportBusy = $state(false);
 
-  // Member Case Modal State
-  let caseModalOpen = $state(false);
-  let selectedCaseUser = $state<{ name: string; id: string | null } | null>(null);
-  let selectedCaseData = $state<any>(null);
-  let selectedCaseLoading = $state(false);
-  let selectedCaseError = $state('');
-  let memberActionReason = $state(m.sc_member_action_reason());
-  let memberActionDuration = $state('30m');
-  let memberActionBusy = $state(false);
-  let memberActionFeedback = $state('');
-  let memberActionIsError = $state(false);
-
-  async function loadMemberCase(userId: string) {
-    selectedCaseLoading = true;
-    selectedCaseError = '';
-    try {
-      selectedCaseData = await fetchMemberCase(userId);
-    } catch (error) {
-      selectedCaseError = error instanceof Error ? error.message : m.sc_member_load_error();
-      selectedCaseData = null;
-    } finally {
-      selectedCaseLoading = false;
-    }
-  }
-
-  /**
-   * Le dossier membre est la fiche de la section Membres : un role a qui le
-   * centre de gestion l'a fermee ne doit pas la rouvrir depuis une sanction.
-   */
-  const canOpenMemberCase = $derived(canViewFeature('members'));
+  // Fiche propre à la page : une sanction lancée depuis la fiche propose la raison par défaut
+  // de cette page.
+  const memberCase = new MemberCaseState();
 
   function openCaseModal(userId: string, userName: string) {
-    if (!canOpenMemberCase) return;
-    selectedCaseUser = { name: userName, id: userId };
-    selectedCaseData = null;
-    selectedCaseError = '';
-    memberActionReason = m.sc_member_action_reason();
-    memberActionDuration = '30m';
-    memberActionFeedback = '';
-    memberActionIsError = false;
-    caseModalOpen = true;
-
-    if (userId) {
-      void loadMemberCase(userId);
-    }
+    void memberCase.show(userId, userName, m.sc_member_action_reason());
   }
 
   const canManageSettings = $derived(
@@ -1294,7 +1257,7 @@
               </td>
               <td class="px-4 py-4 text-xs">
                 <button 
-                  use:explainDisabled={(!canOpenMemberCase) ? m.common_reason_no_permission() : ''}
+                  use:explainDisabled={(!memberCase.canOpen) ? m.common_reason_no_permission() : ''}
                   onclick={() => openCaseModal(entry.targetUserId, entry.targetTag)}
                   class="hover:text-primary transition-colors font-bold text-left"
                 >
@@ -1303,7 +1266,7 @@
               </td>
               <td class="px-4 py-4 text-xs">
                 <button 
-                  use:explainDisabled={(!canOpenMemberCase) ? m.common_reason_no_permission() : ''}
+                  use:explainDisabled={(!memberCase.canOpen) ? m.common_reason_no_permission() : ''}
                   onclick={() => openCaseModal(entry.moderatorUserId, entry.moderatorTag)}
                   class="hover:text-primary transition-colors font-bold text-left"
                 >
@@ -1733,11 +1696,11 @@
             <h3 id="modal-title" class="text-2xl font-semibold text-on-surface mt-1">{typeLabel(selectedSanction.type)}</h3>
             <p class="text-xs font-bold text-on-surface-variant mt-1">
               {m.sc_applied_to()}
-              <button use:explainDisabled={(!canOpenMemberCase) ? m.common_reason_no_permission() : ''} onclick={() => openCaseModal(selectedSanction.targetUserId, selectedSanction.targetTag)} class="text-on-surface transition-colors font-semibold enabled:hover:text-primary disabled:cursor-default">
+              <button use:explainDisabled={(!memberCase.canOpen) ? m.common_reason_no_permission() : ''} onclick={() => openCaseModal(selectedSanction.targetUserId, selectedSanction.targetTag)} class="text-on-surface transition-colors font-semibold enabled:hover:text-primary disabled:cursor-default">
                 @{selectedSanction.targetTag}
               </button>
               {m.sc_by()}
-              <button use:explainDisabled={(!canOpenMemberCase) ? m.common_reason_no_permission() : ''} onclick={() => openCaseModal(selectedSanction.moderatorUserId, selectedSanction.moderatorTag)} class="text-on-surface transition-colors font-semibold enabled:hover:text-primary disabled:cursor-default">
+              <button use:explainDisabled={(!memberCase.canOpen) ? m.common_reason_no_permission() : ''} onclick={() => openCaseModal(selectedSanction.moderatorUserId, selectedSanction.moderatorTag)} class="text-on-surface transition-colors font-semibold enabled:hover:text-primary disabled:cursor-default">
                 @{selectedSanction.moderatorTag}
               </button>
             </p>
@@ -1808,7 +1771,7 @@
               <p class="text-2xs font-bold text-on-surface-variant/30 text-center">
                 {m.sc_report_by()}
                 <button 
-                  use:explainDisabled={(!canOpenMemberCase) ? m.common_reason_no_permission() : ''}
+                  use:explainDisabled={(!memberCase.canOpen) ? m.common_reason_no_permission() : ''}
                   onclick={() => openCaseModal(selectedReport.createdByUserId, selectedReport.createdByTag || selectedReport.createdByUserId)}
                   class="hover:text-primary transition-colors font-bold"
                 >
@@ -1972,4 +1935,19 @@
 {/if}
 
 <ImportSanctionsModal bind:open={importModalOpen} />
+
+<!-- Fiche de la cible ou du modérateur d'une sanction, ouverte par-dessus son détail. -->
+{#if memberCase.open}
+  <MemberCaseModal
+    open={memberCase.open}
+    userId={memberCase.userId}
+    userName={memberCase.userName}
+    caseData={memberCase.caseData}
+    loading={memberCase.loading}
+    error={memberCase.error}
+    actionReason={memberCase.actionReason}
+    onClose={() => memberCase.close()}
+    onSelectUser={(userId) => memberCase.showFromGraph(userId)}
+  />
+{/if}
 </ModulePage>
