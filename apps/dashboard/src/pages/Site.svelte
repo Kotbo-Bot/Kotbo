@@ -25,6 +25,7 @@
   import SiteOverview from '../lib/components/site/SiteOverview.svelte';
   import SitePagesList from '../lib/components/site/SitePagesList.svelte';
   import SiteAppearance from '../lib/components/site/SiteAppearance.svelte';
+  import SiteTemplatesCard from '../lib/components/site/SiteTemplatesCard.svelte';
   import SiteNavigationEditor from '../lib/components/site/SiteNavigationEditor.svelte';
   import SiteComments from '../lib/components/site/SiteComments.svelte';
   import SiteAnalyticsPanel from '../lib/components/site/SiteAnalyticsPanel.svelte';
@@ -63,6 +64,12 @@
     void $router.path;
     return LEGACY_TABS[segment] ?? (resolveTabFromUrl('/site', TABS, 'apercu') as Tab);
   });
+
+  let templateVersion = $state(0);
+  async function reloadAfterTemplate() {
+    await load();
+    templateVersion += 1;
+  }
 
   async function load() {
     loading = true;
@@ -171,8 +178,12 @@
         {/if}
       {:else if active === 'apparence'}
         <div class="stack">
-          <SiteAppearance {siteState} {guildId} onChanged={load} />
-          <SiteNavigationEditor {siteState} {guildId} onChanged={load} />
+          <SiteTemplatesCard {siteState} {guildId} onChanged={reloadAfterTemplate} />
+          <!-- Un modèle appliqué ou annulé change thème et menu : ces éditeurs repartent du site rechargé. -->
+          {#key templateVersion}
+            <SiteAppearance {siteState} {guildId} onChanged={load} />
+            <SiteNavigationEditor {siteState} {guildId} onChanged={load} />
+          {/key}
         </div>
       {:else if active === 'croissance'}
         <div class="stack">
