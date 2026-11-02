@@ -14,6 +14,17 @@ import {
   SITE_THEME_KEYS,
   SITE_VOTE_PROVIDERS,
   siteModuleBotDependency,
+  sectionizeSiteDocument,
+  SITE_SECTION_ALIGNS,
+  SITE_SECTION_ANIMATIONS,
+  SITE_SECTION_BACKGROUNDS,
+  SITE_SECTION_DEFAULTS,
+  SITE_SECTION_GRADIENTS,
+  SITE_SECTION_HEIGHTS,
+  SITE_SECTION_LAYOUTS,
+  SITE_SECTION_PADDINGS,
+  SITE_SECTION_VISIBILITY,
+  SITE_SECTION_WIDTHS,
   type SiteDocument,
   type SiteNode,
 } from '@kotbo/shared';
@@ -177,7 +188,8 @@ export function registerSiteTools(ctx: McpToolContext) {
           const page = await getAdminPage(site.id, id);
           if (!page) return err('Page introuvable.');
           const raw = version === 'published' ? (await prisma.sitePage.findUnique({ where: { id }, select: { publishedContent: true } }))?.publishedContent : page.draftContent;
-          const doc = normalizeSiteDocument(raw);
+          // Brouillon vu en sections : les rangs donnés aux outils *_site_section sont ceux-là.
+          const doc = version === 'draft' ? sectionizeSiteDocument(normalizeSiteDocument(raw)) : normalizeSiteDocument(raw);
           const { draftContent: _draft, ...meta } = page;
           return ok({ page: { ...meta, url: pagePublicUrl(site.slug, page) }, version, markdown: siteDocumentToMarkdown(doc), document: doc });
         } catch (error) {
@@ -204,7 +216,8 @@ export function registerSiteTools(ctx: McpToolContext) {
         const states = await getModuleStates(guildId);
         return ok({
           document: {
-            root: '{ "type": "doc", "content": [ ...blocs ] }',
+            root: '{ "type": "doc", "content": [ ...sections ] } : une page est une pile de sections (bandes), chacune en colonnes de blocs. Des blocs posés hors section sont regroupés dans des sections neutres à l\'enregistrement.',
+            section: `{ type: "section", attrs: { layout: ${SITE_SECTION_LAYOUTS.join('|')} (part de chaque colonne), background: ${SITE_SECTION_BACKGROUNDS.join('|')}, bgColor: "#rrggbb", bgImage: "https://… ou /s/_/a/<id>.webp", bgGradient: ${SITE_SECTION_GRADIENTS.join('|')}, overlay: 0-80 (assombrit l'image), padding: ${SITE_SECTION_PADDINGS.join('|')}, width: contained|full (fond bord à bord)|edge (tout bord à bord), height: ${SITE_SECTION_HEIGHTS.join('|')}, align: ${SITE_SECTION_ALIGNS.join('|')}, animation: ${SITE_SECTION_ANIMATIONS.join('|')}, visibleOn: ${SITE_SECTION_VISIBILITY.join('|')}, anchor: "rejoindre" (lien #rejoindre) }, content: [{ type: "column", content: [blocs] }, …] } (1 à 4 colonnes ; outils add/update/move/delete_site_section)`,
             textBlocks: ['paragraph', 'heading (attrs.level 1-4)', 'blockquote', 'codeBlock (attrs.language)', 'bulletList > listItem', 'orderedList > listItem', 'taskList > taskItem (attrs.checked)', 'horizontalRule', 'table > tableRow > tableHeader|tableCell'],
             inline: ['text (marks: bold, italic, underline, strike, code, link{href}, highlight{color: accent|yellow|green|blue|pink|red}, subscript, superscript)', 'hardBreak'],
             siteBlocks: {
@@ -655,6 +668,187 @@ export function registerSiteTools(ctx: McpToolContext) {
         await resetCollabRoom(page_id);
         await audit(key_name, 'Bloc de module ajouté (MCP)', `/s/${site.slug}`, `${page.slug} : ${module}`);
         return ok({ block });
+      } catch (error) {
+        return failure(error);
+      }
+    }),
+  );
+
+  // ─── Sections (bandes à colonnes) ──────────────────────────────────────
+
+  const sectionStyle = {
+    layout: z.enum(SITE_SECTION_LAYOUTS).optional().describe('Part de chaque colonne ; par défaut selon le nombre de colonnes'),
+    background: z.enum(SITE_SECTION_BACKGROUNDS).optional(),
+    bg_color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional().describe('Avec background: color'),
+    bg_image: z.string().max(2000).optional().describe('Avec background: image ; https://… ou /s/_/a/<id>.webp (import_site_image)'),
+    bg_gradient: z.enum(SITE_SECTION_GRADIENTS).optional().describe('Avec background: gradient'),
+    overlay: z.number().int().min(0).max(80).optional().describe("Assombrissement de l'image de fond, en %"),
+    padding: z.enum(SITE_SECTION_PADDINGS).optional(),
+    width: z.enum(SITE_SECTION_WIDTHS).optional().describe('contained : dans la colonne du site ; full : fond bord à bord ; edge : tout bord à bord'),
+    height: z.enum(SITE_SECTION_HEIGHTS).optional(),
+    align: z.enum(SITE_SECTION_ALIGNS).optional(),
+    animation: z.enum(SITE_SECTION_ANIMATIONS).optional(),
+    visible_on: z.enum(SITE_SECTION_VISIBILITY).optional(),
+    anchor: z.string().max(60).optional().describe('Ancre pour les liens #ancre ; vide pour retirer'),
+  };
+  const columnsSchema = z
+    .array(z.object({ markdown: z.string().max(50_000).optional(), blocks: z.array(z.record(z.any())).optional() }))
+    .min(1)
+    .max(4)
+    .describe('Contenu de chaque colonne, en Markdown ou en blocs JSON (voir get_site_reference)');
+
+  type SectionStyleInput = { [K in keyof typeof sectionStyle]?: z.infer<(typeof sectionStyle)[K]> };
+
+  function styleAttrs(input: SectionStyleInput): Record<string, unknown> {
+    const map: Record<string, unknown> = {
+      layout: input.layout,
+      background: input.background,
+      bgColor: input.bg_color,
+      bgImage: input.bg_image,
+      bgGradient: input.bg_gradient,
+      overlay: input.overlay,
+      padding: input.padding,
+      width: input.width,
+      height: input.height,
+      align: input.align,
+      animation: input.animation,
+      visibleOn: input.visible_on,
+      anchor: input.anchor,
+    };
+    return Object.fromEntries(Object.entries(map).filter(([, value]) => value !== undefined));
+  }
+
+  function columnNodes(columns: z.infer<typeof columnsSchema>): SiteNode[] {
+    return columns.map((column) => {
+      const blocks = (column.markdown !== undefined ? markdownToSiteDocument(column.markdown).content : normalizeSiteDocument({ type: 'doc', content: column.blocks ?? [] }).content).filter(
+        (node) => node.type !== 'section',
+      );
+      return { type: 'column', content: blocks.length > 0 ? blocks : [{ type: 'paragraph' }] };
+    });
+  }
+
+  /** Brouillon lu en sections, transformé par `change`, réécrit ; l'édition à plusieurs repart de lui. */
+  async function editSections(pageId: string, keyName: string | undefined, activity: string, change: (sections: SiteNode[]) => SiteNode[]) {
+    const site = await requireSite();
+    lock(keyName, activity, pageId);
+    await flushCollabRoom(pageId);
+    const page = await getAdminPage(site.id, pageId);
+    if (!page) throw new SiteAdminError('page_missing', 404, 'Page introuvable.');
+    const sections = change(sectionizeSiteDocument(normalizeSiteDocument(page.draftContent)).content);
+    await updatePage(site, pageId, { draftContent: { type: 'doc', content: sections } }, actorId);
+    await resetCollabRoom(pageId);
+    return { site, page, sections };
+  }
+
+  function checkIndex(sections: SiteNode[], index: number) {
+    if (index >= sections.length) throw new SiteAdminError('section_missing', 404, `La page a ${sections.length} section(s), numérotées à partir de 0.`);
+  }
+
+  server.registerTool(
+    'add_site_section',
+    {
+      description:
+        "Ajoute une section (bande pleine largeur à 1-4 colonnes) à une page : contenu de chaque colonne, fond (couleur, image, dégradé), espacements, largeur, hauteur, animation d'apparition, visibilité mobile/ordinateur.",
+      inputSchema: {
+        page_id: z.string(),
+        columns: columnsSchema,
+        position: z.union([z.literal('start'), z.literal('end'), z.number().int().min(0)]).default('end'),
+        ...sectionStyle,
+        key_name: keyName,
+      },
+      _meta: toolMeta,
+    },
+    guard('WRITE_SITE', async ({ page_id, columns, position, key_name, ...style }) => {
+      try {
+        let at = 0;
+        const { site, page, sections } = await editSections(page_id, key_name, 'Ajout d\'une section', (current) => {
+          // Une page neuve n'a qu'une section vide : la nouvelle la remplace.
+          const blank = current.length === 1 && JSON.stringify(current[0].content) === JSON.stringify([{ type: 'column', content: [{ type: 'paragraph' }] }]);
+          const base = blank ? [] : current;
+          const section: SiteNode = { type: 'section', attrs: { ...SITE_SECTION_DEFAULTS, ...styleAttrs(style) }, content: columnNodes(columns) };
+          at = position === 'start' ? 0 : position === 'end' ? base.length : Math.min(position, base.length);
+          return [...base.slice(0, at), section, ...base.slice(at)];
+        });
+        await audit(key_name, 'Section ajoutée à une page (MCP)', `/s/${site.slug}`, `${page.slug} : section ${at}`);
+        return ok({ index: at, totalSections: sections.length });
+      } catch (error) {
+        return failure(error);
+      }
+    }),
+  );
+
+  server.registerTool(
+    'update_site_section',
+    {
+      description:
+        "Modifie une section d'une page (rang à partir de 0, voir get_site_page) : son style, et/ou le contenu de ses colonnes. Une disposition à moins de colonnes fusionne les colonnes en trop dans la dernière ; à plus, ajoute des colonnes vides.",
+      inputSchema: {
+        page_id: z.string(),
+        index: z.number().int().min(0),
+        columns: columnsSchema.optional().describe('Remplace le contenu de toutes les colonnes'),
+        ...sectionStyle,
+        key_name: keyName,
+      },
+      _meta: toolMeta,
+    },
+    guard('WRITE_SITE', async ({ page_id, index, columns, key_name, ...style }) => {
+      try {
+        const { site, page } = await editSections(page_id, key_name, 'Modification d\'une section', (current) => {
+          checkIndex(current, index);
+          const section = current[index];
+          let content = columns ? columnNodes(columns) : [...(section.content ?? [])];
+          const wanted = style.layout?.split('-').length;
+          if (wanted && wanted !== content.length) {
+            if (wanted < content.length) {
+              const merged = content.slice(wanted - 1).flatMap((column) => column.content ?? []);
+              content = [...content.slice(0, wanted - 1), { type: 'column', content: merged }];
+            } else {
+              content = [...content, ...Array.from({ length: wanted - content.length }, () => ({ type: 'column', content: [{ type: 'paragraph' }] }))];
+            }
+          }
+          const next = [...current];
+          next[index] = { type: 'section', attrs: { ...section.attrs, ...styleAttrs(style) }, content };
+          return next;
+        });
+        await audit(key_name, 'Section modifiée (MCP)', `/s/${site.slug}`, `${page.slug} : section ${index}`);
+        return ok({ index });
+      } catch (error) {
+        return failure(error);
+      }
+    }),
+  );
+
+  server.registerTool(
+    'move_site_section',
+    { description: "Déplace une section d'une page à un autre rang (à partir de 0).", inputSchema: { page_id: z.string(), from: z.number().int().min(0), to: z.number().int().min(0), key_name: keyName }, _meta: toolMeta },
+    guard('WRITE_SITE', async ({ page_id, from, to, key_name }) => {
+      try {
+        const { site, page } = await editSections(page_id, key_name, 'Déplacement d\'une section', (current) => {
+          checkIndex(current, from);
+          const next = [...current];
+          const [moved] = next.splice(from, 1);
+          next.splice(Math.min(to, next.length), 0, moved);
+          return next;
+        });
+        await audit(key_name, 'Section déplacée (MCP)', `/s/${site.slug}`, `${page.slug} : ${from} → ${to}`);
+        return ok({ from, to });
+      } catch (error) {
+        return failure(error);
+      }
+    }),
+  );
+
+  server.registerTool(
+    'delete_site_section',
+    { description: "Supprime une section d'une page et tout son contenu (le brouillon seulement ; la version publiée reste jusqu'à la prochaine publication).", inputSchema: { page_id: z.string(), index: z.number().int().min(0), key_name: keyName }, _meta: toolMeta },
+    guard('WRITE_SITE', async ({ page_id, index, key_name }) => {
+      try {
+        const { site, page, sections } = await editSections(page_id, key_name, 'Suppression d\'une section', (current) => {
+          checkIndex(current, index);
+          return current.filter((_, i) => i !== index);
+        });
+        await audit(key_name, 'Section supprimée (MCP)', `/s/${site.slug}`, `${page.slug} : section ${index}`);
+        return ok({ totalSections: sections.length });
       } catch (error) {
         return failure(error);
       }
