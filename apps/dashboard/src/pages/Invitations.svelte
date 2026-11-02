@@ -14,6 +14,7 @@
   import Papicon from '../lib/components/Papicon.svelte';
   import FormInput from '../lib/components/FormInput.svelte';
   import { inviteDetailsModal } from '../lib/stores/inviteDetailsModal.svelte';
+  import { memberCaseModal } from '../lib/stores/memberCaseModal.svelte';
   import {
     fetchInvitations,
     updateInvitationSource,
@@ -491,6 +492,20 @@
 
 </script>
 
+<!-- Pseudo qui ouvre la fiche membre, pour qui a accès à « Membres » ; du texte sinon. -->
+{#snippet memberName(userId: string | null | undefined, label: string, cls: string)}
+  {#if userId && memberCaseModal.canOpen}
+    <button
+      type="button"
+      class="{cls} text-left hover:text-primary transition-colors"
+      title={m.sx_open_member({ name: label })}
+      onclick={() => memberCaseModal.show(userId, label)}
+    >{label}</button>
+  {:else}
+    <span class={cls}>{label}</span>
+  {/if}
+{/snippet}
+
 <ModulePage
   title={m.iv_page_title()}
   description={m.iv_page_desc()}
@@ -677,7 +692,7 @@
                     </td>
                     <td class="py-3 pr-4">
                       <div class="flex flex-col">
-                        <span class="font-bold text-on-surface">{invite.inviterTag || invite.inviterId || m.iv_unknown()}</span>
+                        {@render memberName(invite.inviterId, invite.inviterTag || invite.inviterId || m.iv_unknown(), 'font-bold text-on-surface')}
                         <span class="text-2xs text-on-surface-variant">{formatDate(invite.createdAt)}</span>
                       </div>
                     </td>
@@ -952,7 +967,7 @@
                     </span>
                   </div>
                   <div>
-                    <p class="text-sm font-semibold text-on-surface">{inviter.inviterTag}</p>
+                    {@render memberName(inviter.inviterId, inviter.inviterTag, 'block text-sm font-semibold text-on-surface')}
                     <p class="text-2xs text-on-surface-variant">{m.iv_last_join_short()} {formatRelative(inviter.lastJoinedAt)}</p>
                   </div>
                 </div>
@@ -1053,7 +1068,7 @@
                 <div class="p-4 rounded-lg bg-surface-container-high/20 border border-outline-variant/10">
                   <div class="flex items-start justify-between gap-3">
                     <div class="flex-1">
-                      <p class="text-sm font-semibold text-on-surface">{inviter.userTag || inviter.userId}</p>
+                      {@render memberName(inviter.userId, inviter.userTag || inviter.userId, 'block text-sm font-semibold text-on-surface')}
                       <p class="text-2xs text-on-surface-variant mt-1">{inviter.reason || m.iv_no_reason()}</p>
                       <p class="text-2xs text-on-surface-variant/40">{formatDate(inviter.createdAt)}</p>
                     </div>
