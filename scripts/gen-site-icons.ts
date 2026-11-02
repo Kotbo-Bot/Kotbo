@@ -101,6 +101,16 @@ const WANTED: Record<string, string[]> = {
   palette: ['palette'],
   flame: ['flame'],
   heart: ['heart'],
+  grip: ['grip-vertical'],
+  'arrow-up': ['arrow-up'],
+  'arrow-down': ['arrow-down'],
+  'arrow-left': ['arrow-left'],
+  sliders: ['sliders-horizontal'],
+  monitor: ['monitor'],
+  smartphone: ['smartphone'],
+  plus: ['plus'],
+  'layout-template': ['layout-template', 'layout-panel-top'],
+  'app-grid': ['layout-grid'],
 };
 
 const out: string[] = [];
