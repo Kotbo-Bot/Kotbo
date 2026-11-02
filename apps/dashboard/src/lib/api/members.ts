@@ -1,4 +1,5 @@
 /** Dossiers membres, sanctions et comptes lies. */
+import type { MemberCaseResponse } from '@kotbo/contracts';
 import { authStore } from '../stores/auth.svelte';
 import { dashboardMutation, dashboardRequest } from './client';
 
@@ -71,10 +72,10 @@ export async function deleteSanction(sanctionId, guildId = authStore.selectedGui
   });
 }
 
-export async function fetchMemberCase(userId, guildId = authStore.selectedGuildId) {
-  return dashboardRequest(`/members/${userId}`, {
+export async function fetchMemberCase(userId: string, guildId: string | null = authStore.selectedGuildId) {
+  return dashboardRequest<MemberCaseResponse>(`/members/${userId}`, {
     method: 'GET',
-    guildId,
+    guildId: guildId ?? undefined,
     errorContext: 'API Error (Member Case):'
   });
 }
