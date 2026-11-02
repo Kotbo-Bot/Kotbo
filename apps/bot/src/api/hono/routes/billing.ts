@@ -89,7 +89,7 @@ declare module 'hono' {
 }
 
 /** Offres achetables en ligne. `CUSTOM` se négocie, il n'est pas proposé ici. */
-const PurchasablePlan = z.enum(['PLUS', 'PRO', 'ULTIMATE']);
+const PurchasablePlan = z.enum(['PLUS']);
 const Interval = z.enum(['month', 'year']);
 
 export function createBillingRouter(client: Client): OpenAPIHono {
@@ -421,9 +421,8 @@ export function createBillingRouter(client: Client): OpenAPIHono {
     const sellable = new Set(sellablePlans());
     const plan = normalizePlanKey(guild?.plan);
 
-    // La taille du serveur décide de l'offre : les fonctionnalités étant
-    // identiques d'une offre payante à l'autre, c'est le seul critère qui
-    // reste. `memberCount` vient du cache de discord.js, rempli à la connexion.
+    // Offre unique : Plus, quelle que soit la taille. `memberCount` reste
+    // renvoyé pour l'affichage.
     const memberCount = client.guilds.cache.get(guildId)?.memberCount ?? null;
     const eligiblePlan = planForMemberCount(memberCount);
 
@@ -432,13 +431,11 @@ export function createBillingRouter(client: Client): OpenAPIHono {
       listGiftsForGuild(guildId),
     ]);
 
-    // Éligibilité évaluée sur PRO : les offres vendues en ligne partagent la
-    // même règle, et l'essai se consomme une fois quelle que soit celle qui
-    // le déclenche. Elle dépend de l'utilisateur connecté, pas seulement du
+    // Éligibilité évaluée sur Plus, la seule offre vendue en ligne. Elle dépend de l'utilisateur connecté, pas seulement du
     // serveur - deux administrateurs du même serveur peuvent voir un bouton
     // différent, et c'est exactement ce que la règle « une fois par compte
     // Discord » implique.
-    const trial = await checkTrialEligibility(guildId, c.var.auth.userId, 'PRO');
+    const trial = await checkTrialEligibility(guildId, c.var.auth.userId, 'PLUS');
 
     return c.json({
       enabled: isBillingEnabled(),
@@ -457,16 +454,15 @@ export function createBillingRouter(client: Client): OpenAPIHono {
       // n'a pas d'abonnement Stripe, donc pas de `currentPeriodEnd`.
       accessExpiresAt: guild?.accessExpiresAt?.toISOString() ?? null,
       trial: { available: trial.eligible, days: trial.days, reason: trial.reason ?? null },
-      plans: PLAN_REGISTRY.map((definition) => ({
+      // Les offres retirées de la vente n'apparaissent que pour le serveur
+      // qui les a encore.
+      plans: PLAN_REGISTRY.filter((definition) => definition.listed || definition.key === plan).map((definition) => ({
         key: definition.key,
         name: definition.name,
         tagline: definition.tagline,
         description: definition.description,
         memberRange: definition.memberRange,
         priceCents: definition.displayPriceCents,
-        // Seule l'offre du palier est achetable : proposer les autres
-        // laisserait un serveur de 80 000 membres payer le tarif d'un serveur
-        // de 500, pour exactement les mêmes fonctionnalités.
         purchasable: sellable.has(definition.key) && definition.key === eligiblePlan,
       })),
       giftsPurchased,
@@ -517,16 +513,14 @@ export function createBillingRouter(client: Client): OpenAPIHono {
 
     const discordGuild = client.guilds.cache.get(guildId) ?? null;
 
-    // Le palier est une règle, pas une suggestion : le dashboard n'affiche
-    // qu'une offre achetable, mais la requête vient du navigateur et se
-    // rejoue. Sans ce contrôle, un serveur de 80 000 membres souscrirait le
-    // tarif d'un serveur de 500 en changeant un mot dans le corps JSON.
+    // La requête vient du navigateur et se rejoue : on revérifie que l'offre
+    // demandée est bien celle qui se vend.
     const memberCount = discordGuild?.memberCount ?? null;
     if (!canPurchasePlan(plan as PlanKey, memberCount)) {
       const expected = getPlanDefinition(planForMemberCount(memberCount));
       return c.json(
         {
-          error: `Avec ${memberCount ?? '?'} membres, ce serveur relève de l'offre ${expected.name}.`,
+          error: `Cette offre n'est plus vendue : choisis l'offre ${expected.name}.`,
         },
         409,
       );
@@ -725,32 +719,18 @@ export function createBillingRouter(client: Client): OpenAPIHono {
     if (!isBillingEnabled()) return c.json({ error: 'Facturation non configurée sur cette instance.' }, 503);
 
     const { guildId } = c.req.valid('param');
-    const { months, plan, targetGuildId, note } = c.req.valid('json');
+    // `plan` reste accepté pour les anciens clients, mais seule Plus s'offre.
+    const { months, targetGuildId, note } = c.req.valid('json');
 
-    // Cadeau destiné à un serveur précis : son offre est celle de sa taille,
-    // pas celle que l'acheteur aurait choisie. Le bot doit y être présent -
-    // sans quoi il n'y a ni taille connue, ni serveur à créditer.
-    let giftPlan: PlanKey;
-    if (targetGuildId) {
-      const target = client.guilds.cache.get(targetGuildId);
-      if (!target) {
-        return c.json(
-          { error: "Kotbo n'est pas présent sur ce serveur : invitez-le avant de lui offrir une offre." },
-          400,
-        );
-      }
-      giftPlan = planForMemberCount(target.memberCount);
-      if (giftPlan === 'CUSTOM') {
-        return c.json(
-          { error: "Ce serveur relève de l'offre sur mesure : elle se met en place après un rendez-vous." },
-          400,
-        );
-      }
-    } else {
-      // Sans destinataire, l'acheteur choisit le palier. Le code sera refusé à
-      // l'activation s'il vise un serveur plus grand que l'offre payée.
-      giftPlan = (plan ?? 'PRO') as PlanKey;
+    // Cadeau destiné à un serveur précis : le bot doit y être présent, sans
+    // quoi il n'y a pas de serveur à créditer.
+    if (targetGuildId && !client.guilds.cache.get(targetGuildId)) {
+      return c.json(
+        { error: "Kotbo n'est pas présent sur ce serveur : invitez-le avant de lui offrir une offre." },
+        400,
+      );
     }
+    const giftPlan: PlanKey = planForMemberCount();
 
     if (!giftPriceCents(giftPlan, months)) {
       return c.json({ error: 'Cette offre ne peut pas être offerte.' }, 400);
