@@ -29,6 +29,7 @@
   import { WebsocketProvider } from 'y-websocket';
   import {
     normalizeSiteDocument,
+    sectionizeSiteDocument,
     resolveSiteTheme,
     sanitizeSiteHref,
     siteFontStylesheetUrl,
@@ -46,6 +47,7 @@
   import {
     Banner,
     Callout,
+    Column,
     Faq,
     FaqItem,
     Gallery,
@@ -53,7 +55,9 @@
     GridCell,
     isAllowedSiteUri,
     ModuleNode,
+    Section,
     SiteButton,
+    SiteDocumentNode,
     SiteHighlight,
     SiteImage,
     SiteNodesBridge,
@@ -185,6 +189,7 @@
     if (!host || !bubble) return;
     const extensions = [
       StarterKit.configure({
+        document: false,
         heading: { levels: [1, 2, 3, 4] },
         undoRedo: mode === 'collab' ? false : undefined,
         link: { openOnClick: false, autolink: true, isAllowedUri: (url) => isAllowedSiteUri(url), HTMLAttributes: { rel: 'noopener noreferrer' } },
@@ -199,6 +204,9 @@
         placeholder: ({ node }) => (node.type.name === 'heading' ? m.ste_placeholder_heading() : m.ste_placeholder()),
         includeChildren: false,
       }),
+      SiteDocumentNode,
+      Section,
+      Column,
       SiteHighlight,
       SiteImage,
       Callout,
@@ -244,7 +252,7 @@
     const instance = new Editor({
       element: host,
       extensions,
-      content: mode === 'solo' ? (initialContent as JSONContent) : undefined,
+      content: mode === 'solo' ? (sectionizeSiteDocument(normalizeSiteDocument(initialContent)) as JSONContent) : undefined,
       editorProps: {
         attributes: { class: 'site-prose', spellcheck: 'true' },
         handlePaste: (_view, event) => {

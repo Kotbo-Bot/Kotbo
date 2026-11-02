@@ -8,7 +8,7 @@
  * `editor.storage.siteNodes.onConfigure`, que la page branche sur sa modale.
  */
 import { Extension, Mark, Node, mergeAttributes, type Editor } from '@tiptap/core';
-import { SITE_CALLOUT_VARIANTS, SITE_HIGHLIGHT_COLORS, SITE_IMAGE_WIDTHS, sanitizeSiteHref, siteIconSvg, type SiteIconName } from '@kotbo/shared';
+import { SITE_CALLOUT_VARIANTS, SITE_HIGHLIGHT_COLORS, SITE_IMAGE_WIDTHS, SITE_SECTION_DEFAULTS, sanitizeSiteHref, siteIconSvg, type SiteIconName } from '@kotbo/shared';
 
 /** Pictogramme de chaque style d'encadré, comme sur le site publié. */
 const CALLOUT_ICONS: Record<string, SiteIconName> = { info: 'info', success: 'circle-check', warning: 'alert', danger: 'octagon', note: 'note' };
@@ -332,6 +332,43 @@ export const GridCell = Node.create({
         },
       };
     };
+  },
+});
+
+// ─── Sections ───────────────────────────────────────────────────────────────
+
+/** Racine : une pile de sections, comme la liste blanche du serveur l'attend. */
+export const SiteDocumentNode = Node.create({
+  name: 'doc',
+  topNode: true,
+  content: 'section+',
+});
+
+export const Section = Node.create({
+  name: 'section',
+  content: 'column+',
+  isolating: true,
+  addAttributes() {
+    // Tous les réglages voyagent tels quels ; le serveur les valide.
+    return Object.fromEntries(Object.entries(SITE_SECTION_DEFAULTS).map(([key, value]) => [key, { default: value }]));
+  },
+  parseHTML() {
+    return [{ tag: 'div[data-section]' }];
+  },
+  renderHTML({ HTMLAttributes }) {
+    return ['div', { 'data-section': '', class: `sect bg-${HTMLAttributes.background} pad-${HTMLAttributes.padding}` }, ['div', { class: `sect-cols layout-${HTMLAttributes.layout}` }, 0]];
+  },
+});
+
+export const Column = Node.create({
+  name: 'column',
+  content: 'block+',
+  isolating: true,
+  parseHTML() {
+    return [{ tag: 'div[data-column]' }];
+  },
+  renderHTML() {
+    return ['div', { 'data-column': '', class: 'sect-col' }, 0];
   },
 });
 
