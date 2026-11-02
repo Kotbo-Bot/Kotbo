@@ -111,6 +111,59 @@ export const SITE_SECTION_DEFAULTS: SiteSectionAttrs = {
   anchor: '',
 };
 
+/** Image utilisable dans un `url()` de style : HTTPS ou image du site, sans caractère qui casse la règle. */
+const SAFE_CSS_IMAGE = /^(https:\/\/|\/s\/_\/a\/)[^"'()\s\\]+$/;
+
+/** Couleur de fond assez sombre pour passer le texte en clair (luminance relative). */
+export function isDarkSiteColor(hex: string): boolean {
+  const [r, g, b] = [1, 3, 5].map((i) => {
+    const c = parseInt(hex.slice(i, i + 2), 16) / 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b < 0.4;
+}
+
+export interface SiteSectionPresentation {
+  className: string;
+  /** Variables CSS du fond (`--sect-color`, `--sect-image`), à poser telles quelles en `style`. */
+  style: string;
+  anchor: string | null;
+  animation: string | null;
+}
+
+/**
+ * Classes et style d'une section, à partir de ses attributs : le rendu du site
+ * et le canevas de l'éditeur s'en servent tous deux, pour un aperçu exact.
+ */
+export function siteSectionPresentation(attrs: Record<string, unknown> | undefined): SiteSectionPresentation {
+  const a = attrs ?? {};
+  const pick = <T extends string>(value: unknown, allowed: readonly T[], fallback: T): T => oneOf(value, allowed, fallback);
+  const color = a.background === 'color' && typeof a.bgColor === 'string' && /^#[0-9a-f]{6}$/i.test(a.bgColor) ? a.bgColor : '';
+  const image = a.background === 'image' && typeof a.bgImage === 'string' && SAFE_CSS_IMAGE.test(a.bgImage) ? a.bgImage : '';
+  const requested = pick(a.background, SITE_SECTION_BACKGROUNDS, 'none');
+  const background = (requested === 'color' && !color) || (requested === 'image' && !image) ? 'none' : requested;
+  const inverse = background === 'dark' || background === 'gradient' || background === 'image' || (color !== '' && isDarkSiteColor(color));
+  const height = pick(a.height, SITE_SECTION_HEIGHTS, 'auto');
+  const align = pick(a.align, SITE_SECTION_ALIGNS, 'top');
+  const visibleOn = pick(a.visibleOn, SITE_SECTION_VISIBILITY, 'all');
+  const animation = pick(a.animation, SITE_SECTION_ANIMATIONS, 'none');
+  const overlay = int(a.overlay, 0, 80, SITE_SECTION_DEFAULTS.overlay) / 100;
+  const classes = [
+    'sect',
+    `bg-${background}`,
+    background === 'gradient' ? `grad-${pick(a.bgGradient, SITE_SECTION_GRADIENTS, 'accent')}` : '',
+    `pad-${pick(a.padding, SITE_SECTION_PADDINGS, 'medium')}`,
+    `w-${pick(a.width, SITE_SECTION_WIDTHS, 'contained')}`,
+    height !== 'auto' ? `h-${height}` : '',
+    align !== 'top' ? `va-${align}` : '',
+    visibleOn !== 'all' ? `only-${visibleOn}` : '',
+    inverse ? 'tone-inverse' : '',
+  ];
+  const style = [color && `--sect-color:${color}`, image && `--sect-image:url("${image}");--sect-overlay:${overlay}`].filter(Boolean).join(';');
+  const anchor = typeof a.anchor === 'string' && /^[a-z0-9][a-z0-9-]{0,59}$/.test(a.anchor) ? a.anchor : null;
+  return { className: classes.filter(Boolean).join(' '), style, anchor, animation: animation === 'none' ? null : animation };
+}
+
 /** Première disposition qui a ce nombre de colonnes. */
 export function sectionLayoutFor(columns: number): SiteSectionLayout {
   return SITE_SECTION_LAYOUTS.find((layout) => layout.split('-').length === columns) ?? '1';
