@@ -24,6 +24,8 @@ import { BucketZoner, ZONE_MARGIN_DAYS, shiftKey } from '../../../services/analy
 import { resolveViewTimezone } from '../../../utils/timezone.js';
 import { resolveOnlineMembersCount } from '../../../services/core/presenceDetectionService.js';
 import { canViewFeatureSection } from './featureGate.js';
+import { applyFreeAnalyticsLimits } from './analyticsFreeTier.js';
+import { getGuildPlan } from '../../../services/system/planService.js';
 
 export type LiveGuildCounts = {
   totalMembers: number;
@@ -98,6 +100,11 @@ export async function handleAnalyticsRoutes(
 
   if (parts[4] !== 'analytics') {
     return false;
+  }
+
+  if ((await getGuildPlan(guildId)) === 'FREE' && !applyFreeAnalyticsLimits(parts, method, url.searchParams)) {
+    json(res, 402, { error: 'plan_required', message: "Cette analyse fait partie de l'offre Plus." });
+    return true;
   }
 
   // POST /api/dashboard/guilds/:guildId/analytics/rescan-members
