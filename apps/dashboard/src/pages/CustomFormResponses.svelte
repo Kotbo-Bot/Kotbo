@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from '../lib/i18n';
   import { Tabs } from '../lib/components/ui';
   import { onMount } from 'svelte';
   import { router } from 'tinro';
@@ -211,7 +212,7 @@
     const a = document.createElement('a');
     a.href = url; a.download = `responses-${formId}.csv`; a.click();
     URL.revokeObjectURL(url);
-    toast.success('Export CSV téléchargé !');
+    toast.success(m.cfr_csv_exported());
   }
 
   function formatDate(iso: string) {

@@ -70,7 +70,7 @@
 
   async function handleValidateToken() {
     if (!tokenInput.trim()) {
-      toast.error('Saisis un token de bot');
+      toast.error(m.cb_token_required());
       return;
     }
     validating = true;
@@ -78,7 +78,7 @@
       const result = await validateCustomBotToken(tokenInput.trim());
       if (result.valid) {
         validatedBot = result.bot;
-        toast.success(`Token valide - Bot: ${result.bot.username} (${result.bot.id})`);
+        toast.success(m.cb_token_valid({ name: result.bot.username, id: result.bot.id }));
       } else {
         validatedBot = null;
         toast.error(result.error || 'Token invalide');
@@ -95,7 +95,7 @@
     saving = true;
     try {
       await updateCustomBotConfig({ botToken: tokenInput.trim() });
-      toast.success('Token enregistre');
+      toast.success(m.cb_token_saved());
       await loadConfig();
     } catch (err) {
       toast.error(errorMessage(err));
@@ -123,7 +123,7 @@
         customDashboardUrl: customDashboardUrl || null,
       });
       botClientSecret = '';
-      toast.success('Configuration sauvegardee');
+      toast.success(m.cb_config_saved());
       await loadConfig();
     } catch (err) {
       toast.error(errorMessage(err));
@@ -135,7 +135,7 @@
   async function handleStart() {
     try {
       await startCustomBot();
-      toast.success('Bot en cours de demarrage...');
+      toast.success(m.cb_bot_starting());
       await loadConfig();
     } catch (err) {
       toast.error(errorMessage(err));
@@ -145,7 +145,7 @@
   async function handleStop() {
     try {
       await stopCustomBot();
-      toast.success('Bot arrete');
+      toast.success(m.cb_bot_stopped());
       await loadConfig();
     } catch (err) {
       toast.error(errorMessage(err));

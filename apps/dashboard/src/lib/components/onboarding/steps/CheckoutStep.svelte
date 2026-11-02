@@ -46,7 +46,7 @@
     codeBusy = true;
     try {
       await activateGuildWithCode(trimmed);
-      toast.success('Code activé : ton accès est ouvert.');
+      toast.success(m.onb_checkout_code_activated());
       codeValue = '';
       codeOpen = false;
       await dashboardStore.refresh();
@@ -117,7 +117,7 @@
     const url = await startCheckout(offer.key as 'PLUS' | 'PRO' | 'ULTIMATE', effectiveInterval);
     onboardingData.busy = false;
     if (!url) {
-      toast.error("La page de paiement n'a pas pu être ouverte. Réessaie dans un instant.");
+      toast.error(m.onb_checkout_open_failed());
       return;
     }
     window.location.href = url;

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from '../../i18n';
   /**
    * Shield : niveau d'alerte du serveur, de 5 (tout va bien) à 1 (catastrophe).
    *
@@ -60,7 +61,7 @@
       if (res) {
         warnings = res.warnings;
         onSynced(res.config);
-        toast.success(`Shield ${level} appliqué${res.warnings.length ? ' en partie' : ''}`);
+        toast.success(res.warnings.length ? m.shc_level_applied_partial({ level }) : m.shc_level_applied({ level }));
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Changement impossible');
@@ -92,7 +93,7 @@
       const res = await createShieldStatusChannel(authStore.selectedGuildId);
       if (res) {
         onSynced(res.config);
-        toast.success('Salon de statut créé');
+        toast.success(m.shc_status_channel_created());
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Création impossible');

@@ -51,7 +51,7 @@
   async function apply() {
     if (onboardingData.busy) return;
     if (!channelId) {
-      toast.error('Choisis un salon où publier les drops.');
+      toast.error(m.onb_drops_channel_required());
       return;
     }
 

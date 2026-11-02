@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from '../lib/i18n';
   /**
    * Partenariats : les dossiers, leur avancement et ce qu'ils rapportent.
    *
@@ -211,7 +212,7 @@
     try {
       const result = await updatePartnershipSettings(patch);
       settings = result?.settings ?? settings;
-      toast.success('Réglages enregistrés');
+      toast.success(m.ste_settings_saved());
     } catch (err) {
       toast.error(errorMessage(err) || 'Enregistrement impossible');
     }

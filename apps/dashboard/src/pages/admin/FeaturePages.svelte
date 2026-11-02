@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from '../../lib/i18n';
   /**
    * Pages fonctionnalités du site vitrine (kotbo.fr), sur le modèle des pages
    * par plugin de MEE6 : une page par fonctionnalité, en français
@@ -209,7 +210,7 @@
       pages = pages.filter((page) => page.id !== draft?.id);
       drawerOpen = false;
       draft = null;
-      toast.success('Page supprimée.');
+      toast.success(m.afp_page_deleted());
     } catch (err) {
       toast.error(errorMessage(err) ?? 'Erreur lors de la suppression');
     } finally {

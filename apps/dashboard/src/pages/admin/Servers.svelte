@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from '../../lib/i18n';
   /**
    * Gestion des serveurs de l'instance.
    *
@@ -239,7 +240,7 @@
     try {
       const data = await fetchAdminGuildInvite(guild.id);
       if (data.url) window.open(data.url, '_blank', 'noopener');
-      else toast.error('Aucune invitation générée');
+      else toast.error(m.asrv_no_invite());
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erreur d'invitation");
     }
@@ -257,7 +258,7 @@
       await leaveAdminGuild(guild.id);
       guilds = guilds.filter((g) => g.id !== guild.id);
       if (selected?.id === guild.id) detailOpen = false;
-      toast.success(`Bot retiré de ${guild.name}`);
+      toast.success(m.asrv_bot_removed({ name: guild.name }));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Erreur');
     } finally {
@@ -317,7 +318,7 @@
     reconciling = true;
     try {
       const res = await reconcileStaffServers();
-      toast.success(`Serveurs staff synchronisés : ${res.checked} vérifié(s) · ${res.activated} activé(s) · ${res.deactivated} désactivé(s)`);
+      toast.success(m.asrv_staff_synced({ checked: res.checked, activated: res.activated, deactivated: res.deactivated }));
       await refreshGuilds();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Erreur');

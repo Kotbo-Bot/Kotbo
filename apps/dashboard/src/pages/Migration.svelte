@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from '../lib/i18n';
   /**
    * Reprise : ce que Kotbo peut recuperer d'un serveur deja equipe.
    *
@@ -95,8 +96,8 @@
 
       const applied = res?.applied?.length ?? 0;
       const skipped = res?.skipped?.length ?? 0;
-      if (skipped > 0) toast.warning(`${applied} réglage(s) repris, ${skipped} ignoré(s)`);
-      else toast.success(`${applied} réglage(s) repris`);
+      if (skipped > 0) toast.warning(m.mig_applied_partial({ applied, skipped }));
+      else toast.success(m.mig_applied({ applied }));
     } catch (err) {
       toast.error(errorMessage(err) || 'La reprise a échoué');
     } finally {
@@ -117,7 +118,7 @@
       assignments = {};
 
       if (candidates.length === 0) {
-        toast.info("Aucun identifiant de ce serveur n'a été trouvé dans le fichier.");
+        toast.info(m.mig_no_server_ids());
       }
     } catch (err) {
       toast.error(err instanceof SyntaxError ? "Ce fichier n'est pas un JSON valide" : (errorMessage(err) || 'Lecture impossible'));
@@ -134,7 +135,7 @@
 
     try {
       await assignMigrationValues(list);
-      toast.success(`${list.length} réglage(s) associé(s)`);
+      toast.success(m.mig_matched({ count: list.length }));
       assignments = {};
       await load();
     } catch (err) {

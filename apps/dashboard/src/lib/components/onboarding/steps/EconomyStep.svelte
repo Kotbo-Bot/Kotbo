@@ -73,7 +73,7 @@
     if (onboardingData.busy) return;
     const trimmed = name.trim();
     if (!trimmed) {
-      toast.error('Donne un nom à ta monnaie.');
+      toast.error(m.onb_economy_currency_name_required());
       return;
     }
 

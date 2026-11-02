@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from '../i18n';
   import { onMount } from 'svelte';
   import { authStore } from '../stores/auth.svelte';
   import { dashboardStore } from '../stores/dashboard.svelte';
@@ -218,7 +219,7 @@
       const res = await fetchSpamSamples({ pendingOnly }, authStore.selectedGuildId);
       samples = res?.samples ?? [];
     } catch {
-      toast.error('Impossible de charger les détections');
+      toast.error(m.asp_detections_load_error());
     }
   }
 
@@ -230,7 +231,7 @@
       const saved = { ...DEFAULTS, ...(res?.config ?? {}) } as SpamConfig;
       config = saved;
       original = { ...saved };
-      toast.success('Configuration enregistrée');
+      toast.success(m.ba_config_saved());
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Enregistrement impossible');
     } finally {

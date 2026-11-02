@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from '../../i18n';
   /**
    * Champ image d'un broadcast : upload hébergé, glisser-déposer, collage, ou
    * URL externe.
@@ -88,7 +89,7 @@
       const media = await uploadBroadcastMedia(file);
       value = media.url;
       previewFailed = false;
-      toast.success(`${media.fileName} hébergée (${Math.round(media.size / 1024)} Ko)`);
+      toast.success(m.bif_image_hosted({ file: media.fileName, size: Math.round(media.size / 1024) }));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erreur lors de l'upload");
     } finally {

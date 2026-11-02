@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from '../lib/i18n';
   /**
    * Annuaire inter-serveurs : se faire trouver, trouver les autres, et tenir
    * la liste de ceux avec qui on ne veut plus travailler.
@@ -137,7 +138,7 @@
       const result = await suggestPartnershipListing();
       const suggestion = result?.suggestion;
       if (!suggestion) {
-        toast.error('Informations du serveur indisponibles');
+        toast.error(m.pd_server_info_unavailable());
         return;
       }
 
@@ -147,7 +148,7 @@
       form.memberCount = Number(form.memberCount) || suggestion.memberCount || 0;
       if (!form.tags.trim() && suggestion.tags?.length) form.tags = suggestion.tags.join(', ');
 
-      toast.success('Fiche complétée depuis ton serveur');
+      toast.success(m.pd_filled_from_server());
     } catch (err) {
       toast.error(errorMessage(err) || 'Recuperation impossible');
     } finally {
@@ -168,11 +169,11 @@
     try {
       const result = await createShowcaseInvite();
       if (!result?.inviteUrl) {
-        toast.error("Aucune invitation n'a pu etre creee");
+        toast.error(m.pd_invite_create_failed());
         return;
       }
       form.inviteUrl = result.inviteUrl;
-      toast.success('Invitation creee');
+      toast.success(m.pd_invite_created());
     } catch (err) {
       toast.error(errorMessage(err) || 'Creation impossible');
     } finally {
@@ -199,9 +200,9 @@
       // Le serveur refuse la publication tant que le référencement n'a pas été
       // autorisé dans les réglages : on le dit plutôt que de laisser croire.
       if (form.published && listing?.published === false) {
-        toast.error("Active d'abord le référencement dans les réglages du module.");
+        toast.error(m.pd_listing_disabled());
       } else {
-        toast.success('Vitrine enregistrée');
+        toast.success(m.pd_showcase_saved());
       }
     } catch (err) {
       toast.error(errorMessage(err) || 'Enregistrement impossible');
@@ -248,7 +249,7 @@
         type: proposalType,
         message: proposalMessage.trim() || undefined,
       });
-      toast.success(`Proposition envoyée à ${proposing.name}`);
+      toast.success(m.pd_proposal_sent({ name: proposing.name }));
       proposing = null;
       await load();
     } catch (err) {
@@ -271,7 +272,7 @@
 
     try {
       await respondToPartnershipProposal(proposalId, action);
-      toast.success('Réponse enregistrée');
+      toast.success(m.pd_answer_saved());
       await load();
     } catch (err) {
       toast.error(errorMessage(err) || 'Réponse impossible');
@@ -281,7 +282,7 @@
   async function refreshMatches() {
     try {
       const result = await computePartnershipMatches();
-      toast.success(`${result?.computed ?? 0} suggestion(s) calculée(s)`);
+      toast.success(m.pd_suggestions_computed({ count: result?.computed ?? 0 }));
       await load();
     } catch (err) {
       toast.error(errorMessage(err) || 'Calcul impossible');

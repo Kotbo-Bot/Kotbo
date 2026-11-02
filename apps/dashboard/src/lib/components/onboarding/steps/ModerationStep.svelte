@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from '../../../i18n';
   /**
    * Le niveau de moderation, montre plutot que decrit.
    *
@@ -31,7 +32,7 @@
     if (onboardingData.busy) return;
     const preset = AUTOMOD_PRESETS.find((entry: AutomodPreset) => entry.id === level);
     if (!preset) {
-      toast.error('Niveau de protection inconnu.');
+      toast.error(m.onb_moderation_unknown_level());
       return;
     }
 

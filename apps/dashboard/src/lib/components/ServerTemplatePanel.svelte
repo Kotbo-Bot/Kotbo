@@ -664,9 +664,9 @@
       if (result.preparedModules?.length) {
         const names = result.preparedModules.map((id) => MODULE_LABELS[id]?.name() ?? id);
         toast.info(
-          `${names.length} module(s) configurés et prêts : ${names.join(', ')}. Ils s'activeront dès la souscription, sans rien avoir à refaire.`,
+          m.st_prepared_modules_info({ count: names.length, names: names.join(', ') }),
           12_000,
-          { label: 'Voir les offres', onClick: () => { window.location.href = '/billing'; } },
+          { label: m.st_prepared_modules_cta(), onClick: () => { window.location.href = '/billing'; } },
         );
       }
       if (result.panelSent) toast.success(m.st_panel_sent());

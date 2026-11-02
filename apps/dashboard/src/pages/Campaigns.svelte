@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from '../lib/i18n';
   /**
    * Campagnes marketing : une suite de messages programmes, adressee a une
    * audience choisie, dont on mesure la portee.
@@ -188,7 +189,7 @@
   async function save() {
     if (saving) return;
     if (!form.name.trim()) {
-      toast.error('Donne un nom à la campagne.');
+      toast.error(m.camp_name_required());
       return;
     }
 
@@ -241,7 +242,7 @@
     try {
       await setCampaignStatus(campaign.id, status);
       await load();
-      toast.success('Statut mis à jour');
+      toast.success(m.camp_status_updated());
     } catch (err) {
       toast.error(errorMessage(err) || 'Changement de statut impossible');
     }
@@ -258,7 +259,7 @@
 
     try {
       await deleteCampaign(campaign.id);
-      toast.success('Campagne supprimée');
+      toast.success(m.camp_deleted());
       await load();
     } catch (err) {
       toast.error(errorMessage(err) || 'Suppression impossible');

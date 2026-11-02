@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from '../../i18n';
   /**
    * Panneau des partenariats : ajouter et gerer au meme endroit.
    *
@@ -212,7 +213,7 @@
     try {
       const result = await lookupPartnerInvite(inviteInput.trim());
       if (!result?.lookup) {
-        toast.error('Invitation introuvable ou expiree');
+        toast.error(m.ptp_invite_not_found());
         return;
       }
       lookup = result.lookup;
@@ -233,7 +234,7 @@
   async function add() {
     const name = (lookup?.displayName ?? manualName).trim();
     if (!name) {
-      toast.error('Colle un lien ou donne un nom.');
+      toast.error(m.ptp_link_or_name_required());
       return;
     }
 
@@ -254,7 +255,7 @@
       });
 
       for (const warning of result?.warnings ?? []) toast.error(warning);
-      toast.success(`${name} ajoute`);
+      toast.success(m.ptp_partner_added({ name }));
       await onchanged();
       if (result?.partnershipId) onopen(result.partnershipId);
     } catch (err) {
@@ -268,7 +269,7 @@
 
   async function confirmBreak() {
     if (!breakReason.trim()) {
-      toast.error('Une rupture demande un motif.');
+      toast.error(m.ptp_break_reason_required());
       return;
     }
     await run(
@@ -289,7 +290,7 @@
       // l'empreinte, il ne sera plus jamais montre.
       guestLink = `${window.location.origin}/partner-portal/${result.token}`;
       await navigator.clipboard?.writeText(guestLink).catch(() => null);
-      toast.success('Lien cree et copie');
+      toast.success(m.ptp_link_created_copied());
     } catch (err) {
       toast.error(errorMessage(err) || 'Creation du lien impossible');
     } finally {

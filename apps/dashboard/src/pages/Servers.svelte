@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from '../lib/i18n';
   /**
    * Mes serveurs : la liste des serveurs Discord que la personne administre,
    * qu'ils aient Kotbo ou non.
@@ -62,7 +63,7 @@
   function applyServers(result: Awaited<ReturnType<typeof fetchManageableServers>>) {
     if (result.oauthUnavailable) {
       if (servers.length > 0) {
-        toast.error('Impossible d’actualiser la liste des serveurs auprès de Discord.');
+        toast.error(m.srv_refresh_failed());
         return;
       }
       oauthUnavailable = true;

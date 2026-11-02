@@ -185,7 +185,7 @@
       inviteRequests = (i?.requests ?? []).filter((req: InviteRequest) => req.status === 'PENDING');
       jailed = j?.jails ?? [];
     } catch {
-      toast.error('Impossible de charger les files d\'attente');
+      toast.error(m.ar_queues_load_error());
     }
   }
 
@@ -197,7 +197,7 @@
       const saved = res?.config ?? config;
       config = { ...saved };
       original = { ...saved };
-      toast.success('Configuration enregistrée');
+      toast.success(m.ba_config_saved());
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Enregistrement impossible');
     } finally {
@@ -273,7 +273,7 @@
         original.jailRoleId = res.roleId;
         config.jailChannelId = res.channelId;
         original.jailChannelId = res.channelId;
-        toast.success(`Rôle Jail prêt, masqué sur ${res.channelsUpdated} salon(s)`);
+        toast.success(m.ar_jail_role_ready({ count: res.channelsUpdated }));
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Création impossible');
@@ -318,7 +318,7 @@
       if (dryRun) {
         quarantinePreview = result?.targets?.length ?? 0;
       } else {
-        toast.success(`${result?.applied ?? 0} membre(s) mis en quarantaine, ${result?.skipped ?? 0} ignoré(s).`);
+        toast.success(m.ar_quarantine_applied({ applied: result?.applied ?? 0, skipped: result?.skipped ?? 0 }));
         quarantinePreview = null;
       }
     } catch (err) {

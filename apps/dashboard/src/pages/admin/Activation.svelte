@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from '../../lib/i18n';
   import { onMount } from 'svelte';
   import { toast } from '../../lib/stores/toast.svelte';
   import { confirmDialog } from '../../lib/stores/confirmDialog.svelte';
@@ -102,7 +103,7 @@
 
   async function handleGenerateCode() {
     if (grantType !== 'PERMANENT' && (!Number.isInteger(grantMinutes) || grantMinutes < 1)) {
-      toast.error('Indique une durée valide.');
+      toast.error(m.aact_duration_invalid());
       return;
     }
 
@@ -137,7 +138,7 @@
     if (!confirmed) return;
     try {
       await deleteActivationCode(codeId);
-      toast.success("Code d'activation supprimé.");
+      toast.success(m.aact_code_deleted());
       await loadActivationCodes();
     } catch (err) {
       toast.error(errorMessage(err));

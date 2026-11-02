@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from '../../../i18n';
   /**
    * Un reglement pret a publier, qu'on ajuste plutot qu'on ne redige.
    *
@@ -112,7 +113,7 @@
       try {
         await publishRegulation(undefined, { silent: true });
       } catch {
-        toast.info("Le règlement est enregistré. Il sera publié depuis le tableau de bord, une fois son salon choisi.");
+        toast.info(m.onb_rules_saved_publish_later());
       }
 
       celebrateStep();

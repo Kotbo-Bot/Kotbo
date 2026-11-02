@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from '../../i18n';
   /**
    * Kotbo Vision : file de vérification, listes personnalisées et catalogue.
    *
@@ -89,7 +90,7 @@
     try {
       overview = await fetchVision(authStore.selectedGuildId);
     } catch {
-      toast.error('Impossible de charger Kotbo Vision');
+      toast.error(m.vis_load_error());
     } finally {
       loading = false;
     }
@@ -102,7 +103,7 @@
       images = (await fetchVisionImages(listId, authStore.selectedGuildId))?.images ?? [];
     } catch {
       images = [];
-      toast.error('Impossible de charger les images');
+      toast.error(m.ste_assets_load_error());
     } finally {
       imagesLoading = false;
     }
@@ -117,7 +118,7 @@
       if (res?.list && overview) overview.lists = [...overview.lists, res.list];
       newListName = '';
       if (res?.list) await openList(res.list.id);
-      toast.success(`Liste « ${name} » créée`);
+      toast.success(m.vis_list_created({ name }));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Création impossible');
     } finally {
@@ -150,7 +151,7 @@
       await deleteVisionList(list.id, authStore.selectedGuildId);
       if (overview) overview.lists = overview.lists.filter((l) => l.id !== list.id);
       if (openedList === list.id) openedList = undefined;
-      toast.success('Liste supprimée');
+      toast.success(m.vis_list_deleted());
     } finally {
       busy = null;
     }
@@ -194,7 +195,7 @@
       uploading = { done: uploading.done + 1, total: list.length };
     }
     uploading = null;
-    toast.success(`${total.added} ajoutée(s), ${total.variants} variante(s) rattachée(s), ${total.duplicates} doublon(s) ignoré(s), ${total.refused} refusée(s)`);
+    toast.success(m.vis_import_summary({ added: total.added, variants: total.variants, duplicates: total.duplicates, refused: total.refused }));
     await Promise.all([openList(openedList), load()]);
   }
 

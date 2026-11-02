@@ -191,7 +191,7 @@
     link.download = `kotbo-audit-${new Date().toISOString().slice(0, 10)}.csv`;
     link.click();
     URL.revokeObjectURL(url);
-    toast.success(`${entries.length} entrée(s) exportée(s)`);
+    toast.success(m.aaud_exported({ count: entries.length }));
   }
 </script>
 

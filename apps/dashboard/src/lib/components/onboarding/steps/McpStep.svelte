@@ -83,7 +83,7 @@
     } catch {
       // Presse-papiers refuse - contexte non securise, permission bloquee : le
       // champ reste selectionnable a la main, ce qui est la seule alternative.
-      toast.info('Copie impossible : sélectionnez le texte pour le copier.');
+      toast.info(m.onb_mcp_copy_failed());
     }
   }
 </script>
