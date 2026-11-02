@@ -23,6 +23,12 @@ const PAGES = [
   'pages/Invitations.svelte',
   'lib/components/invitations/InviteDetailsModal.svelte',
   'pages/Reputation.svelte',
+  'pages/Marketplace.svelte',
+  'pages/Giveaways.svelte',
+  'pages/Planning.svelte',
+  'pages/Analytics.svelte',
+  'pages/DoubleAccounts.svelte',
+  'pages/Backups.svelte',
 ];
 
 describe('memberCaseModal', () => {

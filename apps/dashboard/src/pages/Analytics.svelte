@@ -12,16 +12,15 @@
    */
   import { untrack } from 'svelte';
   import { router } from 'tinro';
-  import { canViewFeature } from '../lib/permissions.svelte';
   import { authStore } from '../lib/stores/auth.svelte';
   import { toast } from '../lib/stores/toast.svelte';
   import { downloadXlsx } from '../lib/xlsxExport';
   import { gotoTab, resolveTabFromUrl } from '../lib/tabRouting';
   import { m, dateLocale } from '../lib/i18n';
   import { errorMessage } from '@kotbo/shared';
-  import { fetchAnalytics, fetchGlobalInteractions, fetchMemberCase } from '../lib/api';
+  import { fetchAnalytics, fetchGlobalInteractions } from '../lib/api';
   import Papicon from '../lib/components/Papicon.svelte';
-  import MemberCaseModal from '../lib/components/MemberCaseModal.svelte';
+  import { memberCaseModal } from '../lib/stores/memberCaseModal.svelte';
   import { Button, Callout, SectionCard, Tabs } from '../lib/components/ui';
   import ExportDropdown from '../lib/components/analytics/ExportDropdown.svelte';
   import AnalyticsFilterBar from '../lib/components/analytics/AnalyticsFilterBar.svelte';
@@ -321,31 +320,9 @@
   }
 
   // ── Fiche membre ───────────────────────────────────────────────────────────
-  let modalOpen = $state(false);
-  let selectedUserId = $state<string | null>(null);
-  let selectedUserName = $state('');
-  let caseData = $state<any>(null);
-  let loadingCase = $state(false);
-  let caseError = $state('');
-
-  /** La fiche membre appartient à la section Membres du centre de gestion. */
-  const canOpenMemberCase = $derived(canViewFeature('members'));
-
-  async function openMemberDetails(memberId: string, memberName: string) {
-    if (!canOpenMemberCase) return;
-    selectedUserId = memberId;
-    selectedUserName = memberName || m.an_member_fallback();
-    modalOpen = true;
-    loadingCase = true;
-    caseError = '';
-    caseData = null;
-    try {
-      caseData = await fetchMemberCase(memberId, authStore.selectedGuildId);
-    } catch (e) {
-      caseError = errorMessage(e) || m.an_case_load_error();
-    } finally {
-      loadingCase = false;
-    }
+  // Les vues exigent un gestionnaire de clic : sans accès à « Membres », il ne fait rien.
+  function openMemberDetails(memberId: string, memberName: string) {
+    if (memberCaseModal.canOpen) void memberCaseModal.show(memberId, memberName || m.an_member_fallback());
   }
 
   // ── Export ─────────────────────────────────────────────────────────────────
@@ -631,16 +608,6 @@
     </div>
   </div>
 
-  <MemberCaseModal
-    bind:open={modalOpen}
-    userId={selectedUserId}
-    userName={selectedUserName}
-    {caseData}
-    loading={loadingCase}
-    error={caseError}
-    onClose={() => (modalOpen = false)}
-    onSelectUser={(userId) => openMemberDetails(userId, m.an_loading_short())}
-  />
 </div>
 
 <style>

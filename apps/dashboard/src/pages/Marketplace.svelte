@@ -5,10 +5,8 @@
   import { resolveTabFromUrl, gotoTab } from '../lib/tabRouting';
   import { pageTabItems } from '../lib/config/pageTabs';
   import { Tabs } from '../lib/components/ui';
-  import { fetchMarketplaceData, fetchMemberCase } from '../lib/api';
-  import { authStore } from '../lib/stores/auth.svelte';
-  import { canViewFeature } from '../lib/permissions.svelte';
-  import MemberCaseModal from '../lib/components/MemberCaseModal.svelte';
+  import { fetchMarketplaceData } from '../lib/api';
+  import { memberCaseModal } from '../lib/stores/memberCaseModal.svelte';
   import { toast } from '../lib/stores/toast.svelte';
   import ModulePage from '../lib/components/ModulePage.svelte';
   import Papicon from '../lib/components/Papicon.svelte';
@@ -20,40 +18,14 @@
   const marketTabs = ['listings', 'history'] as const;
   let tab = $state<'listings' | 'history'>('listings');
 
-  // Fiche membre ouverte d'un clic sur un vendeur ou un acheteur. C'est la même fiche que
-  // la section Membres, avec ses sanctions : un rôle à qui le centre de gestion ferme
-  // « Membres » ne l'ouvre pas d'ici non plus (l'API la refuserait de toute façon).
-  const canOpenMemberCase = $derived(canViewFeature('members'));
-  let caseOpen = $state(false);
-  let caseUserId = $state('');
-  let caseUserName = $state('');
-  let caseData = $state<any>(null);
-  let caseLoading = $state(false);
-  let caseError = $state('');
-
   function memberName(userId: string): string {
     return data?.members?.[userId]?.displayName ?? userId;
   }
 
-  async function openMemberCase(userId: string, name = memberName(userId)) {
-    if (!authStore.selectedGuildId || !canOpenMemberCase) return;
-    caseUserId = userId;
-    caseUserName = name;
-    caseOpen = true;
-    caseLoading = true;
-    caseError = '';
-    caseData = null;
-    try {
-      caseData = await fetchMemberCase(userId, authStore.selectedGuildId);
-    } catch (err) {
-      caseError = err instanceof Error ? err.message : String(err);
-    } finally {
-      caseLoading = false;
-    }
-  }
-
   /** Clic sur un membre : ouvre sa fiche, seulement pour qui a accès à « Membres ». */
-  const onMemberClick = $derived(canOpenMemberCase ? (userId: string) => openMemberCase(userId) : null);
+  const onMemberClick = $derived(
+    memberCaseModal.canOpen ? (userId: string) => memberCaseModal.show(userId, memberName(userId)) : null,
+  );
 
   $effect(() => {
     const _path = $router.path;
@@ -281,17 +253,3 @@
   {/if}
 {/if}
 </ModulePage>
-
-<MemberCaseModal
-  open={caseOpen}
-  userId={caseUserId}
-  userName={caseUserName}
-  {caseData}
-  loading={caseLoading}
-  error={caseError}
-  onClose={() => { caseOpen = false; }}
-  onSelectUser={(newUserId) => {
-    const node = caseData?.interactionGraph?.nodes?.find((n: any) => n.id === newUserId);
-    openMemberCase(newUserId, node?.label || memberName(newUserId));
-  }}
-/>
