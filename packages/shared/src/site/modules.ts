@@ -79,6 +79,8 @@ export const SITE_MODULES = {
   memberInventory: { category: 'membre', botModule: 'economy', needsViewer: true, interactive: false, live: false, defaults: {} },
   memberQuests: { category: 'membre', botModule: 'quests', needsViewer: true, interactive: false, live: false, defaults: {} },
   memberApplications: { category: 'membre', botModule: null, needsViewer: true, interactive: false, live: false, defaults: {} },
+  // Espace membre en apps : grille d'accueil, liste d'une app ou fiche (`id`).
+  memberApp: { category: 'membre', botModule: null, needsViewer: true, interactive: true, live: false, defaults: { app: 'home', id: '' } },
 
   // Contenus
   wikiIndex: { category: 'contenus', botModule: null, needsViewer: false, interactive: false, live: false, defaults: { parentId: '' } },
@@ -155,9 +157,15 @@ export interface SitePartnerItem {
 }
 
 /** Configuration d'un bloc ramenée à des valeurs sûres et bornées. */
+/** Apps de l'espace membre ; `home` est la grille qui mène aux autres. */
+export const SITE_MEMBER_APPS = ['home', 'tickets', 'applications', 'progress', 'events', 'settings'] as const;
+export type SiteMemberApp = (typeof SITE_MEMBER_APPS)[number];
+
 export function normalizeModuleConfig(key: SiteModuleKey, raw: unknown): Record<string, unknown> {
   const input = isRecord(raw) ? raw : {};
   switch (key) {
+    case 'memberApp':
+      return { app: oneOf(input.app, SITE_MEMBER_APPS, 'home'), id: typeof input.id === 'string' && CUID.test(input.id) ? input.id : '' };
     case 'staff':
       return { layout: oneOf(input.layout, SITE_STAFF_LAYOUTS, 'grid'), hierarchyIds: ids(input.hierarchyIds, CUID) };
     case 'news':
