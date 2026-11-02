@@ -16,6 +16,7 @@
   import { shortDate } from '../analytics/analyticsFormat';
   import { fetchActivityAnalytics, type ActivityAnalytics } from '../../api';
   import { authStore } from '../../stores/auth.svelte';
+  import { dashboardStore } from '../../stores/dashboard.svelte';
   import { m } from '../../i18n';
 
   const {
@@ -49,6 +50,8 @@
     }
   });
 
+  const onFreePlan = $derived(dashboardStore.state.plan === 'FREE');
+
   let activity = $state<ActivityAnalytics | null>(null);
   let loading = $state(true);
   let failed = $state(false);
@@ -56,7 +59,8 @@
 
   $effect(() => {
     const guildId = authStore.selectedGuildId;
-    const days = Number(period);
+    // En gratuit, le bot ne rend que 7 jours : pas de choix trompeur.
+    const days = onFreePlan ? 7 : Number(period);
     void refreshKey;
     if (!guildId) return;
     const id = ++requestId;
@@ -89,9 +93,9 @@
       label={m.anx_period_facts_title()}
       options={[
         { value: '7' as Period, label: m.an_period_7d() },
-        { value: '30' as Period, label: m.an_period_30d() },
+        ...(onFreePlan ? [] : [{ value: '30' as Period, label: m.an_period_30d() }]),
       ]}
-      value={period}
+      value={onFreePlan ? '7' : period}
       onchange={(v) => (period = v)}
     />
     <a href="/analytics" class="inline-flex items-center gap-1 text-xs text-primary hover:underline shrink-0">

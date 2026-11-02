@@ -59,6 +59,8 @@
   import GlobalInteractionGraph from '../lib/components/charts/GlobalInteractionGraph.svelte';
   import { analyticsExport, analyticsFilters as filters } from '../lib/components/analytics/analyticsFilters.svelte';
   import { fmtNumber } from '../lib/components/analytics/analyticsFormat';
+  import { dashboardStore } from '../lib/stores/dashboard.svelte';
+  import { FREE_ANALYTICS_DAYS } from '@kotbo/contracts';
 
   /** Ce que suit un sous-onglet : tous les filtres, la période, ou sa propre fenêtre. */
   type Scope = 'full' | 'period' | 'own';
@@ -175,6 +177,17 @@
 
   const allTabIds = $derived(sections.flatMap((s) => s.tabs.map((t) => t.id)));
 
+  // ── Offre gratuite ─────────────────────────────────────────────────────────
+  // Les stats de base sur 7 jours ; le reste se montre verrouillé, avec la
+  // démo pour voir ce qu'il donne. Le bot applique les mêmes limites.
+  const FREE_TABS = new Set(['overview', 'messages', 'voice', 'heatmap', 'members', 'growth', 'moderation']);
+  const onFreePlan = $derived(dashboardStore.state.plan === 'FREE');
+  const isLocked = (id: string) => onFreePlan && !FREE_TABS.has(id);
+
+  $effect(() => {
+    filters.setLimit(onFreePlan ? FREE_ANALYTICS_DAYS : null);
+  });
+
   /** Anciens onglets partis sur leur propre page. */
   const MOVED_TO_PAGE: Record<string, string> = { invitations: '/invitations' };
 
@@ -248,7 +261,7 @@
   let legacyError = $state('');
 
   $effect(() => {
-    if (!tab.legacy) return;
+    if (!tab.legacy || isLocked(tab.id)) return;
     const period = filters.periodQuery;
     untrack(() => loadLegacy(period));
   });
@@ -298,7 +311,7 @@
   let interactionsError = $state('');
 
   $effect(() => {
-    if (activeTab !== 'interactions') return;
+    if (activeTab !== 'interactions' || isLocked(activeTab)) return;
     const period = filters.periodQuery;
     untrack(() => loadInteractions(period));
   });
@@ -424,10 +437,12 @@
       <h1 class="text-2xl font-semibold tracking-tight text-on-surface font-headline leading-tight">{m.anx_page_title()}</h1>
       <p class="mt-1 max-w-prose text-sm text-on-surface-variant">{section.description}</p>
     </div>
-    <div class="flex items-center flex-wrap md:justify-end gap-2 shrink-0">
-      <SavedViewsMenu {activeTab} onApply={goTab} />
-      <ExportDropdown onExportCSV={exportCSV} onExportXLSX={exportXLSX} onExportImage={exportImages} />
-    </div>
+    {#if !onFreePlan}
+      <div class="flex items-center flex-wrap md:justify-end gap-2 shrink-0">
+        <SavedViewsMenu {activeTab} onApply={goTab} />
+        <ExportDropdown onExportCSV={exportCSV} onExportXLSX={exportXLSX} onExportImage={exportImages} />
+      </div>
+    {/if}
   </header>
 
   <div class="analytics-v2__layout" class:analytics-v2__layout--collapsed={sidebarCollapsed}>
@@ -459,7 +474,9 @@
             {:else}
               <span class="truncate">{s.label}</span>
               {#if s.isNew}<span class="side-link__badge">{m.anx_badge_new()}</span>{/if}
-              {#if s.tabs.length > 1}<span class="side-link__count">{s.tabs.length}</span>{/if}
+              {#if s.tabs.every((t) => isLocked(t.id))}
+                <span class="side-link__count" title="Offre Plus"><Papicon icon="Lock" size={14} /></span>
+              {:else if s.tabs.length > 1}<span class="side-link__count">{s.tabs.length}</span>{/if}
             {/if}
           </button>
         {/each}
@@ -488,20 +505,31 @@
       {#if section.tabs.length > 1}
         <Tabs
           label={m.anx_subtabs_label({ section: section.label })}
-          tabs={section.tabs.map((t) => ({ id: t.id, label: t.label, icon: t.icon }))}
+          tabs={section.tabs.map((t) => ({ id: t.id, label: t.label, icon: isLocked(t.id) ? 'Lock' : t.icon }))}
           active={tab.id}
           onchange={goTab}
         />
       {/if}
 
-      {#if tab.scope === 'own'}
+      {#if isLocked(activeTab)}
+        <!-- Rien n'est chargé : le bot refuserait. On dit ce que l'onglet apporte et on montre la démo. -->
+        <Callout variant="info" icon="Lock" title="« {tab.label} » fait partie de l'offre Plus">
+          {section.description} En gratuit, Analytics montre les {FREE_ANALYTICS_DAYS} derniers jours : vue d'ensemble, messages, vocal, carte de chaleur, membres, croissance et modération. Plus ouvre tout l'historique, les filtres et toutes les analyses.
+          {#snippet actions()}
+            <Button href="https://kotbo.fr/demo/analytics/{tab.id}" target="_blank" variant="secondary" size="sm" icon="Eye">Voir un exemple rempli</Button>
+            <Button href="/billing" variant="primary" size="sm" iconRight="ArrowRight">Débloquer avec Plus</Button>
+          {/snippet}
+        </Callout>
+      {:else if tab.scope === 'own'}
         <Callout variant="info">{m.anx_filter_own_window()}</Callout>
       {:else}
         <AnalyticsFilterBar scopeSupport={tab.scope === 'full' ? 'full' : 'period'} />
       {/if}
 
       {#key activeTab}
-        {#if activeTab === 'overview'}
+        {#if isLocked(activeTab)}
+          <!-- Encadré ci-dessus. -->
+        {:else if activeTab === 'overview'}
           <OverviewSection onNavigate={goTab} {legacy} />
         {:else if ['messages', 'voice', 'heatmap', 'pulse', 'weekly', 'commands', 'algo'].includes(activeTab)}
           <ActivitySection view={activeTab as ActivityView} {legacy} {legacyLoading} onOpenMember={openMemberDetails} />
@@ -551,7 +579,7 @@
         {:else if activeTab === 'growth'}
           <div class="flex flex-col gap-4">
             <GrowthSection {legacy} {legacyLoading} onOpenMember={openMemberDetails} />
-            <GrowthInsightsView />
+            {#if !onFreePlan}<GrowthInsightsView />{/if}
           </div>
         {:else if activeTab === 'website'}
           <SiteAnalyticsPanel guildId={authStore.selectedGuildId ?? ''} />
@@ -594,7 +622,7 @@
               <KpiTile label={m.anx_mod_per_day()} value={fmtNumber(Math.round(((legacy.totals?.sanctions ?? 0) / Math.max(1, filters.days)) * 10) / 10)} />
               <KpiTile label={m.anx_mod_moderators()} value={fmtNumber(legacy.topModerators?.length ?? 0)} hint={m.anx_mod_moderators_hint()} />
             </div>
-            <ModerationTrendsView onOpenMember={openMemberDetails} />
+            {#if !onFreePlan}<ModerationTrendsView onOpenMember={openMemberDetails} />{/if}
             <ModerationAudit data={legacy} {chartLabels} onOpenMember={openMemberDetails} />
           </div>
         {:else if activeTab === 'staff'}
