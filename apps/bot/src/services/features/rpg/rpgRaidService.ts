@@ -711,9 +711,11 @@ export async function attackRaid(client: Client, guildId: string, userId: string
     const profile = await getOrCreateRpgProfile(guildId, userId);
     const stats = await loadEffectiveStats(profile);
 
+    // Chaque assaut part des PV max : il ne touche pas aux PV du profil, et un joueur
+    // blessé ailleurs (bestiaire, donjon) n'a pas à se soigner pour frapper à pleine force.
     const result = runRaidAssault({
       stats,
-      playerHealth: Math.max(1, profile.health),
+      playerHealth: stats.maxHealth,
       playerSkills: await loadAvailableSkills(profile),
       boss: {
         attack: raid.bossAttack,
