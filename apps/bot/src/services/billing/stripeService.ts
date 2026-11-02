@@ -166,7 +166,7 @@ export async function ensureCustomer(
  * incrémenter à chaque modification substantielle des CGV, en même temps que la
  * date affichée sur la page.
  */
-export const CGV_VERSION = '2026-09-05';
+export const CGV_VERSION = '2026-11-02';
 
 /**
  * Consentement recueilli sur la page de paiement.
