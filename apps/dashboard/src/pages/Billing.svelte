@@ -324,7 +324,7 @@
     </div>
 
     <!-- ── Grille des offres ─────────────────────────────────────────────── -->
-    <section class="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+    <section class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
       {#each orderedPlans as plan (plan.key)}
         {@const isCurrent = plan.key === currentPlan}
         {@const isUpgrade = rank(plan.key) > rank(currentPlan)}
