@@ -19,6 +19,7 @@ import {
   normalizeSiteThemeSettings,
   sanitizeSiteCss,
   sanitizeSiteImageSrc,
+  sectionizeSiteDocument,
   SITE_ASSET_PATH_PREFIX,
   SITE_CSS_MAX_LENGTH,
   slugify,
@@ -389,7 +390,7 @@ export async function createPage(
   const parentId = kind === 'WIKI' && typeof input.parentId === 'string' && CUID.test(input.parentId) ? input.parentId : null;
   await assertWikiParent(site.id, null, parentId);
   const slug = await uniquePageSlug(site.id, kind, typeof input.slug === 'string' && input.slug.trim() ? input.slug : title);
-  const content = normalizeSiteDocument(input.content ?? { type: 'doc', content: [] });
+  const content = sectionizeSiteDocument(normalizeSiteDocument(input.content ?? { type: 'doc', content: [] }));
   const settings = (site.settings ?? {}) as Record<string, unknown>;
   const last = await prisma.sitePage.findFirst({ where: { siteId: site.id, kind, parentId }, orderBy: { sortOrder: 'desc' }, select: { sortOrder: true } });
   return prisma.sitePage.create({
@@ -474,7 +475,7 @@ export async function updatePage(site: { id: string; guildId: string }, pageId: 
     structural = true;
   }
   if (patch.draftContent !== undefined) {
-    data.draftContent = normalizeSiteDocument(patch.draftContent) as unknown as Prisma.InputJsonValue;
+    data.draftContent = sectionizeSiteDocument(normalizeSiteDocument(patch.draftContent)) as unknown as Prisma.InputJsonValue;
     data.hasUnpublishedChanges = true;
     // Brouillon réécrit hors de la session à plusieurs : l'état Yjs enregistré
     // ne lui correspond plus, la prochaine session repartira du brouillon.

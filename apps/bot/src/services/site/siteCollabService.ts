@@ -20,7 +20,7 @@ import * as syncProtocol from 'y-protocols/sync';
 import * as awarenessProtocol from 'y-protocols/awareness';
 import * as encoding from 'lib0/encoding';
 import * as decoding from 'lib0/decoding';
-import { normalizeSiteDocument, type SiteDocument } from '@kotbo/shared';
+import { isSectionedDocument, normalizeSiteDocument, sectionizeSiteDocument, type SiteDocument } from '@kotbo/shared';
 import type { Prisma } from '@prisma/client';
 import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
@@ -110,11 +110,17 @@ function scheduleSave(room: Room): void {
 async function loadRoom(pageId: string, guildId: string): Promise<Room> {
   const page = await prisma.sitePage.findFirst({ where: { id: pageId, guildId }, select: { collabState: true, draftContent: true } });
   if (!page) throw new Error('page_missing');
-  const doc = new Y.Doc({ gc: true });
+  let doc = new Y.Doc({ gc: true });
+  let content: SiteDocument = normalizeSiteDocument(page.draftContent);
   if (page.collabState && page.collabState.byteLength > 0) {
     Y.applyUpdate(doc, new Uint8Array(page.collabState));
-  } else {
-    seedFragment(doc.getXmlFragment(COLLAB_FRAGMENT), normalizeSiteDocument(page.draftContent) as SiteDocument);
+    content = fragmentToDocument(doc.getXmlFragment(COLLAB_FRAGMENT));
+  }
+  // L'éditeur n'accepte que des sections au premier niveau : un état d'avant
+  // les sections repart d'un document neuf, même contenu, découpé en sections.
+  if (!page.collabState || page.collabState.byteLength === 0 || !isSectionedDocument(content)) {
+    doc = new Y.Doc({ gc: true });
+    seedFragment(doc.getXmlFragment(COLLAB_FRAGMENT), sectionizeSiteDocument(content));
   }
   const awareness = new awarenessProtocol.Awareness(doc);
   awareness.setLocalState(null);
