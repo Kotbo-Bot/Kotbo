@@ -87,7 +87,7 @@
     } catch (err) {
       // Un objet deja present - parcours rejoue, catalogue importe - fait
       // echouer sa seule creation. On le dit sans defaire ce qui est passe.
-      toast.info(errorMessage(err) || "Certains objets existaient déjà : ils n'ont pas été remplacés.");
+      toast.info(errorMessage(err) || m.onb_shop_items_kept());
       wizard.complete('economy-shop');
     } finally {
       onboardingData.busy = false;

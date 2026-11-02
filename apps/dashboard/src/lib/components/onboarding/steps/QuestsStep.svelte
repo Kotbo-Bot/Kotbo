@@ -71,7 +71,7 @@
       celebrateStep();
       wizard.complete('animation');
     } catch (err) {
-      toast.error(errorMessage(err) || "Les quêtes n'ont pas pu être enregistrées.");
+      toast.error(errorMessage(err) || m.onb_quests_save_failed());
     } finally {
       onboardingData.busy = false;
     }

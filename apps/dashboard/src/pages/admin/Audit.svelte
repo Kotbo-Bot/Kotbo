@@ -62,7 +62,7 @@
       entries = result.entries;
       nextCursor = result.nextCursor;
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Impossible de charger. Réessaie.');
+      toast.error(err instanceof Error ? err.message : m.d7_loading_error());
     } finally {
       loading = false;
     }
@@ -83,7 +83,7 @@
       entries = [...entries, ...result.entries];
       nextCursor = result.nextCursor;
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Impossible de charger. Réessaie.');
+      toast.error(err instanceof Error ? err.message : m.d7_loading_error());
     } finally {
       loadingMore = false;
     }

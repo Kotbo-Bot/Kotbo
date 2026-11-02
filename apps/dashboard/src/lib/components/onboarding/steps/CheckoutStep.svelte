@@ -51,7 +51,7 @@
       codeOpen = false;
       await dashboardStore.refresh();
     } catch (err) {
-      toast.error(errorMessage(err) || "Le code n'a pas pu être activé.");
+      toast.error(errorMessage(err) || m.onb_checkout_code_failed());
     } finally {
       codeBusy = false;
     }
@@ -142,7 +142,7 @@
       await dashboardStore.refresh();
       router.goto('/');
     } catch (err) {
-      toast.error(errorMessage(err) || "La mise en service n'a pas pu être enregistrée.");
+      toast.error(errorMessage(err) || m.onb_checkout_save_failed());
     } finally {
       onboardingData.busy = false;
     }

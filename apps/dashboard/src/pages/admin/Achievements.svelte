@@ -64,7 +64,7 @@
       userId = '';
       note = '';
     } catch (err) {
-      toast.error(errorMessage(err) ?? "Erreur lors de l'attribution du succès");
+      toast.error(errorMessage(err) ?? m.aach_grant_error());
     } finally {
       granting = false;
     }
@@ -79,7 +79,7 @@
       holders = { ...holders, [id]: (holders[id] ?? []).filter((entry) => entry.userId !== holder.userId) };
       toast.success(m.aach_revoked());
     } catch (err) {
-      toast.error(errorMessage(err) ?? 'Impossible de retirer le succès. Réessaie.');
+      toast.error(errorMessage(err) ?? m.aach_revoke_error());
     } finally {
       revoking = null;
     }

@@ -81,7 +81,7 @@
         toast.success(m.cb_token_valid({ name: result.bot.username, id: result.bot.id }));
       } else {
         validatedBot = null;
-        toast.error(result.error || 'Token invalide');
+        toast.error(result.error || m.cb_token_invalid());
       }
     } catch (err) {
       toast.error(errorMessage(err));

@@ -68,7 +68,7 @@
       wizard.answer({ mcpScope: scope });
       celebratePhase();
     } catch (err) {
-      toast.error(errorMessage(err) || "La clé n'a pas pu être créée.");
+      toast.error(errorMessage(err) || m.onb_mcp_key_create_failed());
     } finally {
       onboardingData.busy = false;
     }

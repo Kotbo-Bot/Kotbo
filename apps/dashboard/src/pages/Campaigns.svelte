@@ -137,7 +137,7 @@
           }),
       );
     } catch (err) {
-      toast.error(errorMessage(err) || 'Chargement des campagnes impossible');
+      toast.error(errorMessage(err) || m.camp_load_failed());
     } finally {
       loading = false;
     }
@@ -197,11 +197,11 @@
     try {
       if (editingId) await updateCampaign(editingId, payload());
       else await createCampaign(payload());
-      toast.success(editingId ? 'Campagne mise à jour' : 'Campagne créée');
+      toast.success(editingId ? m.camp_updated() : m.camp_created());
       modalOpen = false;
       await load();
     } catch (err) {
-      toast.error(errorMessage(err) || 'Enregistrement impossible');
+      toast.error(errorMessage(err) || m.tmac_err_save());
     } finally {
       saving = false;
     }
@@ -219,7 +219,7 @@
         audienceInactiveDays: form.audienceInactiveDays,
       });
     } catch (err) {
-      toast.error(errorMessage(err) || "Calcul de l'audience impossible");
+      toast.error(errorMessage(err) || m.camp_audience_failed());
     } finally {
       previewing = false;
     }
@@ -244,7 +244,7 @@
       await load();
       toast.success(m.camp_status_updated());
     } catch (err) {
-      toast.error(errorMessage(err) || 'Changement de statut impossible');
+      toast.error(errorMessage(err) || m.camp_status_failed());
     }
   }
 
@@ -262,7 +262,7 @@
       toast.success(m.camp_deleted());
       await load();
     } catch (err) {
-      toast.error(errorMessage(err) || 'Suppression impossible');
+      toast.error(errorMessage(err) || m.tmac_err_delete());
     }
   }
 

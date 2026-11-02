@@ -221,9 +221,9 @@
     try {
       const res = await applySecurityFix(finding.id, authStore.selectedGuildId);
       if (res?.report) report = res.report;
-      toast.success(res?.message ?? 'Correctif appliqué');
+      toast.success(res?.message ?? m.sa_fix_applied());
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Le correctif a échoué');
+      toast.error(err instanceof Error ? err.message : m.sa_fix_failed());
     } finally {
       fixingId = null;
     }
@@ -253,7 +253,7 @@
         toast.warning(m.sa_fixes_partial({ applied: applied.length, failed: failed.length }));
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "L'application des correctifs a échoué");
+      toast.error(err instanceof Error ? err.message : m.sa_fixes_failed());
     } finally {
       bulkRunning = false;
     }

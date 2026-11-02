@@ -81,7 +81,7 @@
       shardMode = shardState.config.mode;
       shardCount = shardState.config.shardCount ? String(shardState.config.shardCount) : '';
     } catch (err) {
-      toast.error(errorMessage(err) || 'Impossible de rafraîchir les shards.');
+      toast.error(errorMessage(err) || m.ashd_load_error());
     } finally {
       shardLoading = false;
     }
@@ -95,7 +95,7 @@
       toast.success(m.ashd_restarted({ id: shardId }));
       await refreshShards();
     } catch (err) {
-      toast.error(errorMessage(err) || 'Erreur lors du redémarrage du shard.');
+      toast.error(errorMessage(err) || m.ashd_restart_error());
     } finally {
       shardActionLoading = '';
     }
@@ -109,7 +109,7 @@
       toast.success(m.ashd_restart_all());
       await refreshShards();
     } catch (err) {
-      toast.error(errorMessage(err) || 'Erreur lors du redémarrage global.');
+      toast.error(errorMessage(err) || m.ashd_restart_all_error());
     } finally {
       shardActionLoading = '';
     }
@@ -129,7 +129,7 @@
       await reconfigureAdminShards(payload);
       toast.success(m.ashd_config_saved());
     } catch (err) {
-      toast.error(errorMessage(err) || 'Erreur lors de la reconfiguration des shards.');
+      toast.error(errorMessage(err) || m.ashd_reconfigure_error());
     } finally {
       shardActionLoading = '';
     }

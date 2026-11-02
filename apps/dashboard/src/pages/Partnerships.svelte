@@ -148,7 +148,7 @@
       finance = financeSummary?.summary ?? null;
       readiness = setupState?.readiness ?? null;
     } catch (err) {
-      toast.error(errorMessage(err) || 'Chargement des partenariats impossible');
+      toast.error(errorMessage(err) || m.pship_load_failed());
     } finally {
       loading = false;
     }
@@ -171,14 +171,14 @@
       const reused = (result?.entries ?? []).length - created;
       toast.success(
         created > 0
-          ? `Module en service : ${created} element(s) cree(s)${reused > 0 ? `, ${reused} repris` : ''}`
-          : 'Module en service : tout etait deja en place',
+          ? (reused > 0 ? m.pship_setup_done_reused({ created, reused }) : m.pship_setup_done({ created }))
+          : m.pship_setup_nothing(),
       );
 
       for (const warning of result?.warnings ?? []) toast.error(warning);
       await load();
     } catch (err) {
-      toast.error(errorMessage(err) || 'Mise en service impossible');
+      toast.error(errorMessage(err) || m.pship_setup_failed());
     } finally {
       settingUp = false;
     }
@@ -201,10 +201,10 @@
       await decidePartnerApplication(application.id, { status, reason });
       rejecting = null;
       rejectReason = '';
-      toast.success(status === 'ACCEPTED' ? 'Demande acceptée' : 'Demande refusée');
+      toast.success(status === 'ACCEPTED' ? m.pship_request_accepted() : m.pship_request_refused());
       await load();
     } catch (err) {
-      toast.error(errorMessage(err) || 'Décision impossible');
+      toast.error(errorMessage(err) || m.common_decision_failed());
     }
   }
 
@@ -214,7 +214,7 @@
       settings = result?.settings ?? settings;
       toast.success(m.ste_settings_saved());
     } catch (err) {
-      toast.error(errorMessage(err) || 'Enregistrement impossible');
+      toast.error(errorMessage(err) || m.tmac_err_save());
     }
   }
 

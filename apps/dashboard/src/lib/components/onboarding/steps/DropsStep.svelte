@@ -72,7 +72,7 @@
       celebrateStep();
       wizard.complete('animation-drops');
     } catch (err) {
-      toast.error(errorMessage(err) || "Les drops n'ont pas pu être enregistrés.");
+      toast.error(errorMessage(err) || m.onb_drops_save_failed());
     } finally {
       onboardingData.busy = false;
     }

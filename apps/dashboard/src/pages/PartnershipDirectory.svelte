@@ -101,7 +101,7 @@
         };
       }
     } catch (err) {
-      toast.error(errorMessage(err) || "Chargement de l'annuaire impossible");
+      toast.error(errorMessage(err) || m.pd_load_failed());
     } finally {
       loading = false;
     }
@@ -125,9 +125,9 @@
     try {
       const result = await updatePartnershipSettings({ [key]: value });
       settings = result?.settings ?? settings;
-      toast.success(value ? 'Activé' : 'Désactivé');
+      toast.success(value ? m.common_enabled() : m.common_disabled());
     } catch (err) {
-      toast.error(errorMessage(err) || 'Enregistrement impossible');
+      toast.error(errorMessage(err) || m.tmac_err_save());
     }
   }
 
@@ -150,7 +150,7 @@
 
       toast.success(m.pd_filled_from_server());
     } catch (err) {
-      toast.error(errorMessage(err) || 'Recuperation impossible');
+      toast.error(errorMessage(err) || m.pd_fetch_failed());
     } finally {
       filling = false;
     }
@@ -175,7 +175,7 @@
       form.inviteUrl = result.inviteUrl;
       toast.success(m.pd_invite_created());
     } catch (err) {
-      toast.error(errorMessage(err) || 'Creation impossible');
+      toast.error(errorMessage(err) || m.common_create_failed());
     } finally {
       creatingInvite = false;
     }
@@ -205,7 +205,7 @@
         toast.success(m.pd_showcase_saved());
       }
     } catch (err) {
-      toast.error(errorMessage(err) || 'Enregistrement impossible');
+      toast.error(errorMessage(err) || m.tmac_err_save());
     }
   }
 
@@ -215,7 +215,7 @@
       const data = await searchPartnershipDirectory({ q: query.trim() || undefined });
       results = data?.results ?? [];
     } catch (err) {
-      toast.error(errorMessage(err) || 'Recherche impossible');
+      toast.error(errorMessage(err) || m.pd_search_failed());
     } finally {
       searching = false;
     }
@@ -253,7 +253,7 @@
       proposing = null;
       await load();
     } catch (err) {
-      toast.error(errorMessage(err) || 'Proposition refusée');
+      toast.error(errorMessage(err) || m.pd_proposal_refused());
     } finally {
       sending = false;
     }
@@ -275,7 +275,7 @@
       toast.success(m.pd_answer_saved());
       await load();
     } catch (err) {
-      toast.error(errorMessage(err) || 'Réponse impossible');
+      toast.error(errorMessage(err) || m.pd_answer_failed());
     }
   }
 
@@ -285,7 +285,7 @@
       toast.success(m.pd_suggestions_computed({ count: result?.computed ?? 0 }));
       await load();
     } catch (err) {
-      toast.error(errorMessage(err) || 'Calcul impossible');
+      toast.error(errorMessage(err) || m.pd_compute_failed());
     }
   }
 

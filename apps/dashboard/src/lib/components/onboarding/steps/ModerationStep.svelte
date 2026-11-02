@@ -43,7 +43,7 @@
       celebrateStep();
       wizard.complete('moderation');
     } catch (err) {
-      toast.error(errorMessage(err) || "La protection n'a pas pu être enregistrée.");
+      toast.error(errorMessage(err) || m.onb_moderation_save_failed());
     } finally {
       onboardingData.busy = false;
     }

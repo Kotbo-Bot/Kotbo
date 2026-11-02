@@ -77,7 +77,7 @@
       plan = await fetchMigrationPlan();
       selected = {};
     } catch (err) {
-      toast.error(errorMessage(err) || "L'analyse du serveur a échoué");
+      toast.error(errorMessage(err) || m.mig_scan_failed());
       plan = null;
     } finally {
       loading = false;
@@ -99,7 +99,7 @@
       if (skipped > 0) toast.warning(m.mig_applied_partial({ applied, skipped }));
       else toast.success(m.mig_applied({ applied }));
     } catch (err) {
-      toast.error(errorMessage(err) || 'La reprise a échoué');
+      toast.error(errorMessage(err) || m.mig_apply_failed());
     } finally {
       applying = false;
     }
@@ -121,7 +121,7 @@
         toast.info(m.mig_no_server_ids());
       }
     } catch (err) {
-      toast.error(err instanceof SyntaxError ? "Ce fichier n'est pas un JSON valide" : (errorMessage(err) || 'Lecture impossible'));
+      toast.error(err instanceof SyntaxError ? m.mig_invalid_json() : (errorMessage(err) || m.common_read_failed()));
     } finally {
       inspecting = false;
     }
@@ -139,7 +139,7 @@
       assignments = {};
       await load();
     } catch (err) {
-      toast.error(errorMessage(err) || "L'association a échoué");
+      toast.error(errorMessage(err) || m.mig_match_failed());
     }
   }
 

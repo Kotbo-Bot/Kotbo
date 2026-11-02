@@ -91,7 +91,7 @@
       previewFailed = false;
       toast.success(m.bif_image_hosted({ file: media.fileName, size: Math.round(media.size / 1024) }));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erreur lors de l'upload");
+      toast.error(err instanceof Error ? err.message : m.bif_upload_failed());
     } finally {
       uploading = false;
       if (fileInput) fileInput.value = '';

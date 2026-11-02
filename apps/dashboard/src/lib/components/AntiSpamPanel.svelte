@@ -233,7 +233,7 @@
       original = { ...saved };
       toast.success(m.ba_config_saved());
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Enregistrement impossible');
+      toast.error(err instanceof Error ? err.message : m.tmac_err_save());
     } finally {
       saving = false;
     }
@@ -249,12 +249,12 @@
     try {
       await decideSpamSample(sample.id, truePositive, authStore.selectedGuildId);
       samples = samples.filter((s) => s.id !== sample.id);
-      toast.success(truePositive ? 'Marqué comme vrai positif' : 'Marqué comme faux positif');
+      toast.success(truePositive ? m.asp_marked_true_positive() : m.asp_marked_false_positive());
       // Les poids sont recalibrés côté serveur : on rafraîchit les statistiques.
       const res = await fetchSpamDetection(14, authStore.selectedGuildId);
       stats = res?.stats ?? stats;
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Décision impossible');
+      toast.error(err instanceof Error ? err.message : m.common_decision_failed());
     } finally {
       decidingId = null;
     }

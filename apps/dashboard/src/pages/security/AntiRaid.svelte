@@ -199,7 +199,7 @@
       original = { ...saved };
       toast.success(m.ba_config_saved());
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Enregistrement impossible');
+      toast.error(err instanceof Error ? err.message : m.tmac_err_save());
     } finally {
       saving = false;
     }
@@ -229,7 +229,7 @@
       }
       toast.success(successMessage);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Action impossible');
+      toast.error(err instanceof Error ? err.message : m.common_action_failed());
     } finally {
       busyAction = null;
     }
@@ -241,9 +241,9 @@
       await decideMemberReport(report.id, resolved, authStore.selectedGuildId);
       reports = reports.filter((r) => r.id !== report.id);
       if (reportStats) reportStats.pending = Math.max(0, reportStats.pending - 1);
-      toast.success(resolved ? 'Signalement traité' : 'Signalement rejeté');
+      toast.success(resolved ? m.ar_report_resolved() : m.ar_report_rejected());
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Décision impossible');
+      toast.error(err instanceof Error ? err.message : m.common_decision_failed());
     } finally {
       busyAction = null;
     }
@@ -255,9 +255,9 @@
       await decideInviteRequest(request.id, approved, authStore.selectedGuildId);
       inviteRequests = inviteRequests.filter((r) => r.id !== request.id);
       pendingInvites = Math.max(0, pendingInvites - 1);
-      toast.success(approved ? 'Invitation approuvée et recréée' : 'Demande rejetée');
+      toast.success(approved ? m.ar_invite_approved() : m.ar_request_rejected());
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Décision impossible');
+      toast.error(err instanceof Error ? err.message : m.common_decision_failed());
     } finally {
       busyAction = null;
     }
@@ -276,7 +276,7 @@
         toast.success(m.ar_jail_role_ready({ count: res.channelsUpdated }));
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Création impossible');
+      toast.error(err instanceof Error ? err.message : m.common_create_failed());
     } finally {
       busyAction = null;
     }
@@ -293,7 +293,7 @@
       lineage = res?.report ?? null;
     } catch (err) {
       lineage = null;
-      toast.error(err instanceof Error ? err.message : 'Analyse impossible');
+      toast.error(err instanceof Error ? err.message : m.ar_scan_failed());
     } finally {
       lineageLoading = false;
     }
@@ -322,7 +322,7 @@
         quarantinePreview = null;
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Quarantaine impossible');
+      toast.error(err instanceof Error ? err.message : m.ar_quarantine_failed());
     } finally {
       busyAction = null;
     }

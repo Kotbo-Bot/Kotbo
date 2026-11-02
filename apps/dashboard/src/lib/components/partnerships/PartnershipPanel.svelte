@@ -184,7 +184,7 @@
       // n'est deplie, le resume suffit a la plupart des visites.
       if (openSection === null && failing > 0) openSection = 'commitments';
     } catch (err) {
-      toast.error(errorMessage(err) || 'Chargement impossible');
+      toast.error(errorMessage(err) || m.tn_public_error_title());
     } finally {
       loading = false;
     }
@@ -199,7 +199,7 @@
       await load();
       await onchanged();
     } catch (err) {
-      toast.error(errorMessage(err) || 'Action impossible');
+      toast.error(errorMessage(err) || m.common_action_failed());
     } finally {
       busy = false;
     }
@@ -218,7 +218,7 @@
       }
       lookup = result.lookup;
     } catch (err) {
-      toast.error(errorMessage(err) || 'Lecture impossible');
+      toast.error(errorMessage(err) || m.common_read_failed());
     } finally {
       lookingUp = false;
     }
@@ -259,7 +259,7 @@
       await onchanged();
       if (result?.partnershipId) onopen(result.partnershipId);
     } catch (err) {
-      toast.error(errorMessage(err) || 'Creation impossible');
+      toast.error(errorMessage(err) || m.common_create_failed());
     } finally {
       busy = false;
     }
@@ -292,7 +292,7 @@
       await navigator.clipboard?.writeText(guestLink).catch(() => null);
       toast.success(m.ptp_link_created_copied());
     } catch (err) {
-      toast.error(errorMessage(err) || 'Creation du lien impossible');
+      toast.error(errorMessage(err) || m.ptp_link_create_failed());
     } finally {
       busy = false;
     }

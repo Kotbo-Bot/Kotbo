@@ -199,7 +199,7 @@
       mediaLibrary = media;
       templates = tpl.templates;
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Impossible de charger. Réessaie.');
+      toast.error(err instanceof Error ? err.message : m.d7_loading_error());
     } finally {
       loading = false;
     }
@@ -277,7 +277,7 @@
         ? m.abc_dry_run_result_unconfigured({ count: result.totalTargeted, unconfigured: result.unconfiguredCount })
         : m.abc_dry_run_result({ count: result.totalTargeted }));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Erreur de simulation');
+      toast.error(err instanceof Error ? err.message : m.abc_dry_run_error());
     }
   }
 
@@ -298,7 +298,7 @@
       history = (await fetchBroadcastHistory(50)).logs;
       activeTab = 'history';
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erreur d'envoi");
+      toast.error(err instanceof Error ? err.message : m.abc_send_error());
     } finally {
       sending = false;
     }
@@ -317,7 +317,7 @@
         log.pollOptions?.length ? fetchBroadcastPoll(log.id) : Promise.resolve(null),
       ]);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Impossible de charger le rapport. Réessaie.');
+      toast.error(err instanceof Error ? err.message : m.abc_report_load_error());
       deliveries = [];
     } finally {
       deliveriesLoading = false;
@@ -331,7 +331,7 @@
       history = (await fetchBroadcastHistory(50)).logs;
       toast.success(m.abc_cancelled());
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erreur d'annulation");
+      toast.error(err instanceof Error ? err.message : m.abc_cancel_error());
     }
   }
 
@@ -342,7 +342,7 @@
       history = history.filter((log) => log.id !== id);
       toast.success(m.abc_entry_deleted());
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Impossible de supprimer. Réessaie.');
+      toast.error(err instanceof Error ? err.message : m.home_delete_error());
     }
   }
 
@@ -375,7 +375,7 @@
       templateName = '';
       toast.success(m.abc_template_saved());
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Erreur d’enregistrement');
+      toast.error(err instanceof Error ? err.message : m.abc_save_error());
     }
   }
 
@@ -386,7 +386,7 @@
       templates = templates.filter((t) => t.id !== id);
       toast.success(m.abc_template_deleted());
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Impossible de supprimer. Réessaie.');
+      toast.error(err instanceof Error ? err.message : m.home_delete_error());
     }
   }
 
@@ -401,7 +401,7 @@
       mediaLibrary = await fetchBroadcastMedia();
       toast.success(m.abc_image_deleted());
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Impossible de supprimer. Réessaie.');
+      toast.error(err instanceof Error ? err.message : m.home_delete_error());
     }
   }
 
@@ -428,9 +428,9 @@
           channelStatus: channelId ? ('OK' as const) : ('UNSET' as const),
         }
         : g);
-      toast.success(channelId ? `#${channel?.name} configuré pour ${guild.name}` : `Salon retiré pour ${guild.name}`);
+      toast.success(channelId ? m.abc_channel_set({ channel: channel?.name ?? '', guild: guild.name }) : m.abc_channel_removed({ guild: guild.name }));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Erreur de configuration');
+      toast.error(err instanceof Error ? err.message : m.abc_config_error());
     } finally {
       savingChannel = null;
     }

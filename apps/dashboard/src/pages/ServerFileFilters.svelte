@@ -114,7 +114,7 @@
       original = { ...config };
       toast.success(m.sff_saved());
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Enregistrement impossible');
+      toast.error(err instanceof Error ? err.message : m.tmac_err_save());
     } finally {
       saving = false;
     }
@@ -132,7 +132,7 @@
         toast.success(m.sff_server_added());
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Ajout impossible');
+      toast.error(err instanceof Error ? err.message : m.sff_add_failed());
     } finally {
       busy = false;
     }
@@ -157,7 +157,7 @@
         toast.success(m.sff_rule_saved());
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Enregistrement impossible');
+      toast.error(err instanceof Error ? err.message : m.tmac_err_save());
     } finally {
       busy = false;
     }

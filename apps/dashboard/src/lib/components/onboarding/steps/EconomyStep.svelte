@@ -92,7 +92,7 @@
       celebrateStep();
       wizard.complete('economy');
     } catch (err) {
-      toast.error(errorMessage(err) || "L'économie n'a pas pu être enregistrée.");
+      toast.error(errorMessage(err) || m.onb_economy_save_failed());
     } finally {
       onboardingData.busy = false;
     }

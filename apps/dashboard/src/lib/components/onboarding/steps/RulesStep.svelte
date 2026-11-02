@@ -119,7 +119,7 @@
       celebrateStep();
       wizard.complete('rules');
     } catch (err) {
-      toast.error(errorMessage(err) || "Le règlement n'a pas pu être enregistré.");
+      toast.error(errorMessage(err) || m.onb_rules_save_failed());
     } finally {
       onboardingData.busy = false;
     }

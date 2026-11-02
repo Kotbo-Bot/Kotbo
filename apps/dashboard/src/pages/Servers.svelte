@@ -51,7 +51,7 @@
       const result = await fetchManageableServers({ refresh });
       applyServers(result);
     } catch (err) {
-      toast.error(errorMessage(err) || 'La liste des serveurs est indisponible');
+      toast.error(errorMessage(err) || m.srv_list_unavailable());
       if (servers.length === 0) {
         servers = [];
       }

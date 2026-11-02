@@ -136,7 +136,7 @@
       celebrateStep();
       wizard.complete('levels');
     } catch (err) {
-      toast.error(errorMessage(err) || "La progression n'a pas pu être enregistrée.");
+      toast.error(errorMessage(err) || m.onb_levels_save_failed());
     } finally {
       onboardingData.busy = false;
     }

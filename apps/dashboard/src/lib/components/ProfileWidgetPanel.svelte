@@ -69,7 +69,7 @@
     try {
       const result = await activateWidget();
       if (result?.pushResult?.ok === false) {
-        toast.warning(result.pushResult.error || 'Widget activé mais la synchronisation Discord a échoué.');
+        toast.warning(result.pushResult.error || m.pwp_sync_failed());
       } else {
         toast.success(m.pwp_synced());
       }

@@ -120,7 +120,7 @@
       if (res?.list) await openList(res.list.id);
       toast.success(m.vis_list_created({ name }));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Création impossible');
+      toast.error(err instanceof Error ? err.message : m.common_create_failed());
     } finally {
       busy = null;
     }
@@ -132,7 +132,7 @@
       await updateVisionList(list.id, patch, authStore.selectedGuildId);
       Object.assign(list, patch);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Modification impossible');
+      toast.error(err instanceof Error ? err.message : m.vis_update_failed());
     } finally {
       busy = null;
     }
@@ -225,9 +225,9 @@
     try {
       const res = await decideVisionReview(reviewId, decision, authStore.selectedGuildId);
       if (overview) overview.reviews = overview.reviews.filter((r) => r.id !== reviewId);
-      toast.success(decision === 'confirm' ? `Image interdite${res?.sanction ? `, auteur sanctionné (${res.sanction})` : ''}` : 'Image écartée');
+      toast.success(decision === 'confirm' ? (res?.sanction ? m.vis_image_banned_sanctioned({ sanction: res.sanction }) : m.vis_image_banned()) : m.vis_image_dismissed());
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Décision impossible');
+      toast.error(err instanceof Error ? err.message : m.common_decision_failed());
     } finally {
       busy = null;
     }

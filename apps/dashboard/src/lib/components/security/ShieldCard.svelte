@@ -64,7 +64,7 @@
         toast.success(res.warnings.length ? m.shc_level_applied_partial({ level }) : m.shc_level_applied({ level }));
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Changement impossible');
+      toast.error(err instanceof Error ? err.message : m.shc_change_failed());
     } finally {
       busy = false;
     }
@@ -77,10 +77,10 @@
       const res = await publishShieldPanel(create ? { create: true } : { channelId: panelChannel }, authStore.selectedGuildId);
       if (res) {
         onSynced(res.config);
-        toast.success(create ? 'Salon #shield créé et panneau publié : ouvre-le aux rôles de l\'équipe' : 'Panneau publié');
+        toast.success(create ? m.shc_channel_created_published() : m.slp_published());
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Publication impossible');
+      toast.error(err instanceof Error ? err.message : m.shc_publish_failed());
     } finally {
       busy = false;
     }
@@ -96,7 +96,7 @@
         toast.success(m.shc_status_channel_created());
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Création impossible');
+      toast.error(err instanceof Error ? err.message : m.common_create_failed());
     } finally {
       busy = false;
     }

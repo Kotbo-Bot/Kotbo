@@ -59,7 +59,7 @@
       items = page.notifications;
       nextCursor = page.nextCursor;
     } catch {
-      toast.error(notificationsStore.error ?? 'Erreur réseau');
+      toast.error(notificationsStore.error ?? m.cf_network_error());
     } finally {
       loading = false;
     }

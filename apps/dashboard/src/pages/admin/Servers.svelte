@@ -227,10 +227,10 @@
     setBusy(guildId, true);
     try {
       const result = (await action()) as { message?: string; code?: string } | undefined;
-      toast.success(successMessage ?? result?.message ?? 'Action effectuée');
+      toast.success(successMessage ?? result?.message ?? m.asrv_action_done());
       await refreshGuilds();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Erreur');
+      toast.error(err instanceof Error ? err.message : m.an_error_generic());
     } finally {
       setBusy(guildId, false);
     }
@@ -242,7 +242,7 @@
       if (data.url) window.open(data.url, '_blank', 'noopener');
       else toast.error(m.asrv_no_invite());
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erreur d'invitation");
+      toast.error(err instanceof Error ? err.message : m.asrv_invite_error());
     }
   }
 
@@ -260,7 +260,7 @@
       if (selected?.id === guild.id) detailOpen = false;
       toast.success(m.asrv_bot_removed({ name: guild.name }));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Erreur');
+      toast.error(err instanceof Error ? err.message : m.an_error_generic());
     } finally {
       setBusy(guild.id, false);
     }
@@ -321,7 +321,7 @@
       toast.success(m.asrv_staff_synced({ checked: res.checked, activated: res.activated, deactivated: res.deactivated }));
       await refreshGuilds();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Erreur');
+      toast.error(err instanceof Error ? err.message : m.an_error_generic());
     } finally {
       reconciling = false;
     }

@@ -116,8 +116,8 @@
       });
       toast.success(
         grantType === 'PERMANENT'
-          ? `Nouveau code généré : ${newCode.code}`
-          : `Code ${formatDuration(grantMinutes)} généré : ${newCode.code}`,
+          ? m.aact_code_generated({ code: newCode.code })
+          : m.aact_code_generated_duration({ duration: formatDuration(grantMinutes), code: newCode.code }),
       );
       grantLabel = '';
       await loadActivationCodes();
