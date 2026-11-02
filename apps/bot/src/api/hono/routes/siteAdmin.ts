@@ -61,6 +61,7 @@ import { isPubliclyVisible } from '../../../services/site/blocks/discordBlocks.j
 import { generateSiteVisuals } from '../../../services/site/siteVisuals.js';
 import { importStockImage, searchStockImages } from '../../../services/site/siteStockImages.js';
 import { rateLimit } from '../middleware/rateLimit.js';
+import { applyTemplate, deleteTemplate, keepTemplate, listGallery, publishTemplate, reportTemplate, undoTemplate } from '../../../services/site/siteTemplateGallery.js';
 
 /** Génération de visuels et banque d'images : coûteux (dessin) ou relayé chez un tiers. */
 const siteMediaRateLimiter = new Map<string, number[]>();
@@ -474,6 +475,72 @@ export function createSiteAdminRouter(client: Client): OpenAPIHono {
     const input = await body(c);
     try {
       return c.json({ asset: await importStockImage(current, typeof input.id === 'string' ? input.id : '', rights.userId) }, 201);
+    } catch (err) {
+      return fail(c, err);
+    }
+  });
+
+  // ── Galerie de modèles ────────────────────────────────────────────────────
+  app.get('/api/site-admin/:guildId/templates', async (c) => {
+    try {
+      return c.json({ templates: await listGallery(client, c.req.param('guildId'), { category: c.req.query('category'), q: c.req.query('q') }) });
+    } catch (err) {
+      return fail(c, err);
+    }
+  });
+
+  app.post('/api/site-admin/:guildId/templates', async (c) => {
+    if (!c.var.siteRights.manage) return c.json({ error: 'forbidden' }, 403);
+    try {
+      return c.json({ template: await publishTemplate(client, c.req.param('guildId'), c.var.siteRights.userId, await body(c)) }, 201);
+    } catch (err) {
+      return fail(c, err);
+    }
+  });
+
+  app.post('/api/site-admin/:guildId/templates/undo', async (c) => {
+    if (!c.var.siteRights.manage) return c.json({ error: 'forbidden' }, 403);
+    try {
+      await undoTemplate(c.req.param('guildId'));
+      return c.json({ ok: true });
+    } catch (err) {
+      return fail(c, err);
+    }
+  });
+
+  app.post('/api/site-admin/:guildId/templates/keep', async (c) => {
+    if (!c.var.siteRights.manage) return c.json({ error: 'forbidden' }, 403);
+    try {
+      await keepTemplate(c.req.param('guildId'));
+      return c.json({ ok: true });
+    } catch (err) {
+      return fail(c, err);
+    }
+  });
+
+  app.post('/api/site-admin/:guildId/templates/:templateId/apply', async (c) => {
+    if (!c.var.siteRights.manage) return c.json({ error: 'forbidden' }, 403);
+    try {
+      return c.json(await applyTemplate(client, c.req.param('guildId'), c.var.siteRights.userId, c.req.param('templateId')));
+    } catch (err) {
+      return fail(c, err);
+    }
+  });
+
+  app.post('/api/site-admin/:guildId/templates/:templateId/report', async (c) => {
+    try {
+      await reportTemplate(c.req.param('templateId'), c.var.siteRights.userId);
+      return c.json({ ok: true });
+    } catch (err) {
+      return fail(c, err);
+    }
+  });
+
+  app.delete('/api/site-admin/:guildId/templates/:templateId', async (c) => {
+    if (!c.var.siteRights.manage) return c.json({ error: 'forbidden' }, 403);
+    try {
+      await deleteTemplate(c.req.param('guildId'), c.req.param('templateId'));
+      return c.json({ ok: true });
     } catch (err) {
       return fail(c, err);
     }

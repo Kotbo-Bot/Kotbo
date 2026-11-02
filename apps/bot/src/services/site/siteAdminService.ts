@@ -213,6 +213,8 @@ function normalizeSiteSettings(current: unknown, patch: unknown): Record<string,
   if (typeof p.showMemberCount === 'boolean') base.showMemberCount = p.showMemberCount;
   if (typeof p.heroPulse === 'boolean') base.heroPulse = p.heroPulse;
   if (typeof p.legacyRedirect === 'boolean') base.legacyRedirect = p.legacyRedirect;
+  // Encart « essaie un modèle » fermé par le propriétaire.
+  if (typeof p.templatePromptDismissed === 'boolean') base.templatePromptDismissed = p.templatePromptDismissed;
   // Site automatique : relu en entier, fusionné sur ce qui est en place.
   if (p.auto !== undefined) base.auto = normalizeSiteAuto(mergeRecords(base.auto, p.auto));
   return base;
@@ -353,7 +355,7 @@ export async function getAdminPage(siteId: string, pageId: string) {
   });
 }
 
-async function uniquePageSlug(siteId: string, kind: SitePageKind, wanted: string, exceptId: string | null = null): Promise<string> {
+export async function uniquePageSlug(siteId: string, kind: SitePageKind, wanted: string, exceptId: string | null = null): Promise<string> {
   const base = slugify(wanted, 70) || 'page';
   const seed = validatePageSlug(base) === 'reserved' ? `${base}-page` : base;
   for (let i = 0; i < 200; i++) {
