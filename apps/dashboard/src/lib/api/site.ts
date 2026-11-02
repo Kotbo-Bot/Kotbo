@@ -251,6 +251,31 @@ export async function uploadSiteAsset(file: File, guildId?: string): Promise<Sit
   return data.asset;
 }
 
+export type SiteVisualKind = 'banner' | 'glow' | 'mesh' | 'pattern' | 'blur';
+
+/** Fonds générés depuis l'icône, la bannière et la couleur du serveur. */
+export function generateSiteVisuals(guildId?: string) {
+  return apiRequest<{ visuals: Array<{ kind: SiteVisualKind; url: string }> }>(`${base(gid(guildId))}/visuals`, { method: 'POST', errorContext: 'API Error (Site visuals):', timeoutMs: 60_000 });
+}
+
+export interface StockImage {
+  id: string;
+  title: string;
+  thumb: string;
+  creator: string | null;
+  width: number | null;
+  height: number | null;
+}
+
+/** Banque d'images libre (CC0 et domaine public). */
+export function searchStockImages(query: string, page = 1, guildId?: string) {
+  return apiRequest<{ images: StockImage[] }>(`${base(gid(guildId))}/stock?q=${encodeURIComponent(query)}&page=${page}`, { errorContext: 'API Error (Stock images):' });
+}
+
+export function importStockImage(id: string, guildId?: string) {
+  return apiRequest<{ asset: SiteAsset }>(`${base(gid(guildId))}/stock/import`, { method: 'POST', payload: { id }, errorContext: 'API Error (Stock import):', timeoutMs: 60_000 });
+}
+
 export function deleteSiteAsset(assetId: string, guildId?: string) {
   return apiRequest<{ ok: boolean }>(`${base(gid(guildId))}/assets/${assetId}`, { method: 'DELETE', errorContext: 'API Error (Delete asset):' });
 }

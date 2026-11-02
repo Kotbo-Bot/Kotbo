@@ -10,12 +10,17 @@
   import { onDestroy, onMount } from 'svelte';
   import { router } from 'tinro';
   import type { Editor } from '@tiptap/core';
-  import type { SiteDocument } from '@kotbo/shared';
-  import SiteEditor, { type CollabStatus, type Collaborator } from '../lib/components/site/editor/SiteEditor.svelte';
+  import { siteIconSvg, type SiteDocument } from '@kotbo/shared';
+  import SiteEditor, { type ActiveSection, type CollabStatus, type Collaborator } from '../lib/components/site/editor/SiteEditor.svelte';
   import AssetPicker from '../lib/components/site/editor/AssetPicker.svelte';
+  import AddPanel from '../lib/components/site/editor/AddPanel.svelte';
+  import SectionInspector from '../lib/components/site/editor/SectionInspector.svelte';
+  import { insertSection } from '../lib/components/site/editor/sectionCommands';
+  import type { SectionPreset } from '../lib/components/site/editor/sectionPresets';
+  import type { SlashItem } from '../lib/components/site/editor/slashMenu';
   import AgentLockBanner from '../lib/components/site/AgentLockBanner.svelte';
   import Skeleton from '../lib/components/Skeleton.svelte';
-  import { Button, Callout, EmptyState, Field, Modal } from '../lib/components/ui';
+  import { Button, Callout, EmptyState, Field, Modal, Tabs } from '../lib/components/ui';
   import { authStore } from '../lib/stores/auth.svelte';
   import { toast } from '../lib/stores/toast.svelte';
   import { confirmDialog } from '../lib/stores/confirmDialog.svelte';
@@ -58,7 +63,15 @@
   let peers = $state<Collaborator[]>([]);
   let saving = $state(false);
   let lastSavedAt = $state<Date | null>(null);
-  let panelOpen = $state(true);
+  // Plein écran façon constructeur : ajout à gauche, réglages à droite. Sur un
+  // écran étroit, les deux panneaux deviennent des tiroirs, un seul à la fois.
+  let addOpen = $state(true);
+  let rightOpen = $state(true);
+  let rightTab = $state<'section' | 'page'>('section');
+  let device = $state<'desktop' | 'mobile'>('desktop');
+  let activeSection = $state<ActiveSection | null>(null);
+  let siteEditor = $state<{ elementItems: () => SlashItem[]; runElement: (item: SlashItem) => void; configureFirst: (pos: number, type: string) => void } | null>(null);
+  let narrow = $state(false);
   let publishing = $state(false);
 
   let historyOpen = $state(false);
@@ -287,6 +300,54 @@
     setField('visibleRoleIds', next);
   }
 
+  onMount(() => {
+    const query = window.matchMedia('(max-width: 900px)');
+    const sync = () => {
+      narrow = query.matches;
+      // Au téléphone, les tiroirs partent fermés : la page d'abord.
+      if (narrow) addOpen = rightOpen = false;
+    };
+    sync();
+    query.addEventListener('change', sync);
+    return () => query.removeEventListener('change', sync);
+  });
+
+  function togglePanel(which: 'add' | 'right', tab?: 'section' | 'page') {
+    if (which === 'add') {
+      addOpen = !addOpen;
+      if (narrow && addOpen) rightOpen = false;
+    } else {
+      rightOpen = tab && tab !== rightTab ? true : !rightOpen;
+      if (tab) rightTab = tab;
+      if (narrow && rightOpen) addOpen = false;
+    }
+  }
+
+  const elements = $derived(addOpen && siteEditor && editor ? siteEditor.elementItems() : []);
+
+  function addSection(preset: SectionPreset) {
+    if (!editor) return;
+    const name = siteState?.site && 'name' in siteState.site ? (siteState.site.name ?? '') : '';
+    insertSection(editor, preset.build({ siteName: name || siteState?.guild?.name || 'notre serveur' }), activeSection?.pos ?? null);
+    if (narrow) addOpen = false;
+    // Une section à fond d'image s'ouvre sur ses réglages, pour choisir l'image.
+    if (preset.id === 'hero-image') {
+      rightTab = 'section';
+      rightOpen = true;
+    }
+  }
+
+  function addElement(item: SlashItem) {
+    siteEditor?.runElement(item);
+    if (narrow) addOpen = false;
+  }
+
+  function openSectionSettings() {
+    rightTab = 'section';
+    rightOpen = true;
+    if (narrow) addOpen = false;
+  }
+
   const wikiParents = $derived((siteState?.pages ?? []).filter((p) => p.kind === 'WIKI' && p.id !== page?.id));
   const minScheduleValue = $derived(new Date(Date.now() + 5 * 60_000).toISOString().slice(0, 16));
 </script>
@@ -327,14 +388,19 @@
           {#if peers.length > 5}<li class="spe-peers-more">+{peers.length - 5}</li>{/if}
         </ul>
       {/if}
+      {#if !narrow}
+        <div class="spe-devices" role="group" aria-label={m.ste_device()}>
+          <button type="button" aria-pressed={device === 'desktop'} title={m.ste_device_desktop()} aria-label={m.ste_device_desktop()} onclick={() => (device = 'desktop')}>{@html siteIconSvg('monitor', 18)}</button>
+          <button type="button" aria-pressed={device === 'mobile'} title={m.ste_device_mobile()} aria-label={m.ste_device_mobile()} onclick={() => (device = 'mobile')}>{@html siteIconSvg('smartphone', 18)}</button>
+        </div>
+      {/if}
       <div class="spe-actions">
-        <Button size="sm" variant="ghost" icon="sliders" aria-pressed={panelOpen} onclick={() => (panelOpen = !panelOpen)}>{m.ste_settings()}</Button>
-        <Button size="sm" variant="ghost" icon="history" onclick={openHistory}>{m.ste_history()}</Button>
-        <Button size="sm" variant="ghost" icon="eye" onclick={preview}>{m.ste_preview()}</Button>
-        {#if publicUrl && page.publishedAt}
+        <Button size="sm" variant="ghost" icon="history" onclick={openHistory}>{narrow ? '' : m.ste_history()}</Button>
+        <Button size="sm" variant="ghost" icon="eye" onclick={preview}>{narrow ? '' : m.ste_preview()}</Button>
+        {#if publicUrl && page.publishedAt && !narrow}
           <Button size="sm" variant="ghost" icon="external-link" href={publicUrl} target="_blank">{m.ste_view()}</Button>
         {/if}
-        <Button size="sm" icon="clock" onclick={() => (scheduleOpen = true)}>{m.ste_schedule()}</Button>
+        {#if !narrow}<Button size="sm" icon="clock" onclick={() => (scheduleOpen = true)}>{m.ste_schedule()}</Button>{/if}
         <Button size="sm" variant="primary" icon="send" loading={publishing} disabled={agentLocked || (!!page.publishedAt && !page.hasUnpublishedChanges)} disabledReason={agentLocked ? m.ste_reason_agent_locked() : m.ste_reason_nothing_to_publish()} onclick={publish}>
           {page.publishedAt ? m.ste_publish_changes() : m.ste_publish()}
         </Button>
@@ -344,12 +410,23 @@
     <AgentLockBanner bind:this={agentBanner} {guildId} siteId={siteState.site?.id ?? null} canManage={siteState.rights.manage} onChange={(locked) => (agentLocked = locked)} />
 
     {#if !siteState.modules.site}
-      <Callout variant="warning" title={m.ste_module_off_title()} class="mb-3">{m.ste_module_off_desc()}</Callout>
+      <Callout variant="warning" title={m.ste_module_off_title()} class="mx-3 mt-2">{m.ste_module_off_desc()}</Callout>
     {/if}
 
-    <div class="spe-body" class:has-panel={panelOpen}>
+    <div class="spe-body">
+      {#if addOpen}
+        <aside class="spe-left" aria-label={m.ste_add()} inert={agentLocked}>
+          <div class="spe-sheet-head">
+            <span>{m.ste_add()}</span>
+            <Button size="sm" variant="ghost" icon="x" aria-label={m.common_close()} onclick={() => (addOpen = false)} />
+          </div>
+          <AddPanel {catalog} {elements} onAddSection={addSection} onAddElement={addElement} />
+        </aside>
+      {/if}
+
       <div class="spe-canvas">
         <SiteEditor
+          bind:this={siteEditor}
           {guildId}
           pageId={page.id}
           initialContent={page.draftContent}
@@ -361,112 +438,138 @@
           themeSettings={siteState.site?.themeSettings ?? {}}
           canManageAssets={siteState.rights.manage}
           readOnly={agentLocked}
+          {device}
           bind:editor
+          bind:activeSection
           onChange={onDocChange}
           onStatus={(s) => (collabStatus = s)}
           onPeers={(list) => (peers = list)}
+          onSectionSettings={openSectionSettings}
         />
       </div>
 
-      {#if panelOpen}
-        <aside class="spe-panel" aria-label={m.ste_settings()} inert={agentLocked}>
-          <Field label={m.ste_slug()} hint={publicUrl ?? ''}>
-            {#snippet children(id, describedBy)}
-              <input {id} aria-describedby={describedBy} class="input w-full font-mono" maxlength="80" value={page!.slug} onchange={(e) => setField('slug', (e.currentTarget as HTMLInputElement).value)} />
-            {/snippet}
-          </Field>
-
-          <Field label={m.ste_visibility()}>
-            {#snippet children(id)}
-              <select {id} class="input w-full" value={page!.visibility} onchange={(e) => setField('visibility', (e.currentTarget as HTMLSelectElement).value as SiteVisibility)}>
-                {#each visibilityOptions as [value, label] (value)}<option {value}>{label()}</option>{/each}
-              </select>
-            {/snippet}
-          </Field>
-          {#if page.visibility === 'ROLES'}
-            <fieldset class="spe-roles">
-              <legend class="text-body-sm font-medium text-on-surface">{m.ste_vis_roles_pick()}</legend>
-              {#each catalog?.roles ?? [] as role (role.id)}
-                <label class="flex items-center gap-2 text-body-sm">
-                  <input type="checkbox" checked={page.visibleRoleIds.includes(role.id)} onchange={() => toggleRole(role.id)} />
-                  <span style="color:{role.color === '#000000' ? 'inherit' : role.color}">@{role.name}</span>
-                </label>
-              {/each}
-            </fieldset>
-          {/if}
-
-          {#if page.kind === 'WIKI'}
-            <Field label={m.ste_parent()}>
-              {#snippet children(id)}
-                <select {id} class="input w-full" value={page!.parentId ?? ''} onchange={(e) => setField('parentId', (e.currentTarget as HTMLSelectElement).value || null)}>
-                  <option value="">{m.ste_parent_root()}</option>
-                  {#each wikiParents as parent (parent.id)}<option value={parent.id}>{parent.title}</option>{/each}
-                </select>
-              {/snippet}
-            </Field>
-          {/if}
-
-          <Field label={m.ste_excerpt()} hint={page.kind === 'BLOG' ? m.ste_excerpt_hint_blog() : m.ste_excerpt_hint()}>
-            {#snippet children(id, describedBy)}
-              <textarea {id} aria-describedby={describedBy} class="input w-full" rows="3" maxlength="400" value={page!.excerpt ?? ''} oninput={(e) => setField('excerpt', (e.currentTarget as HTMLTextAreaElement).value)}></textarea>
-            {/snippet}
-          </Field>
-
-          {#if page.kind !== 'PAGE'}
-            <Field label={m.ste_tags()} hint={m.ste_tags_hint()}>
-              {#snippet children(id, describedBy)}
-                <input {id} aria-describedby={describedBy} class="input w-full" bind:value={tagsInput} onchange={commitTags} />
-              {/snippet}
-            </Field>
-          {/if}
-
-          <div class="spe-cover">
-            <p class="text-body-sm font-medium text-on-surface">{m.ste_cover()}</p>
-            {#if page.coverUrl}
-              <img src={page.coverUrl} alt="" />
-              <div class="flex gap-2">
-                <Button size="sm" onclick={() => (coverPickerOpen = true)}>{m.ste_cover_change()}</Button>
-                <Button size="sm" variant="ghost" onclick={() => setField('coverUrl', null)}>{m.ste_cover_remove()}</Button>
-              </div>
+      {#if rightOpen}
+        <aside class="spe-right" aria-label={m.ste_settings()} inert={agentLocked}>
+          <div class="spe-sheet-head">
+            <Tabs label={m.ste_settings()} active={rightTab} onchange={(id) => (rightTab = id as 'section' | 'page')} tabs={[
+              { id: 'section', label: m.ste_tab_section() },
+              { id: 'page', label: m.ste_tab_page() },
+            ]} />
+            <Button size="sm" variant="ghost" icon="x" aria-label={m.common_close()} onclick={() => (rightOpen = false)} />
+          </div>
+          {#if rightTab === 'section'}
+            {#if editor && activeSection}
+              <SectionInspector {editor} section={activeSection} {guildId} canManageAssets={siteState.rights.manage} />
             {:else}
-              <Button size="sm" icon="image" onclick={() => (coverPickerOpen = true)}>{m.ste_cover_add()}</Button>
+              <p class="text-body-sm text-on-surface-variant">{m.ste_section_pick()}</p>
             {/if}
-          </div>
+          {:else}
+            <div class="spe-page">
+              <Field label={m.ste_slug()} hint={publicUrl ?? ''}>
+                {#snippet children(id, describedBy)}
+                  <input {id} aria-describedby={describedBy} class="input w-full font-mono" maxlength="80" value={page!.slug} onchange={(e) => setField('slug', (e.currentTarget as HTMLInputElement).value)} />
+                {/snippet}
+              </Field>
 
-          <Field label={m.ste_icon()} hint={m.ste_icon_hint()}>
-            {#snippet children(id, describedBy)}
-              <input {id} aria-describedby={describedBy} class="input w-24" maxlength="8" value={page!.icon ?? ''} onchange={(e) => setField('icon', (e.currentTarget as HTMLInputElement).value || null)} />
-            {/snippet}
-          </Field>
+              <Field label={m.ste_visibility()}>
+                {#snippet children(id)}
+                  <select {id} class="input w-full" value={page!.visibility} onchange={(e) => setField('visibility', (e.currentTarget as HTMLSelectElement).value as SiteVisibility)}>
+                    {#each visibilityOptions as [value, label] (value)}<option {value}>{label()}</option>{/each}
+                  </select>
+                {/snippet}
+              </Field>
+              {#if page.visibility === 'ROLES'}
+                <fieldset class="spe-roles">
+                  <legend class="text-body-sm font-medium text-on-surface">{m.ste_vis_roles_pick()}</legend>
+                  {#each catalog?.roles ?? [] as role (role.id)}
+                    <label class="flex items-center gap-2 text-body-sm">
+                      <input type="checkbox" checked={page.visibleRoleIds.includes(role.id)} onchange={() => toggleRole(role.id)} />
+                      <span style="color:{role.color === '#000000' ? 'inherit' : role.color}">@{role.name}</span>
+                    </label>
+                  {/each}
+                </fieldset>
+              {/if}
 
-          {#if page.kind === 'BLOG'}
-            <label class="flex items-center gap-2 text-body-sm text-on-surface">
-              <input type="checkbox" checked={page.commentsEnabled} onchange={(e) => setField('commentsEnabled', (e.currentTarget as HTMLInputElement).checked)} />
-              {m.ste_comments_enabled()}
-            </label>
+              {#if page.kind === 'WIKI'}
+                <Field label={m.ste_parent()}>
+                  {#snippet children(id)}
+                    <select {id} class="input w-full" value={page!.parentId ?? ''} onchange={(e) => setField('parentId', (e.currentTarget as HTMLSelectElement).value || null)}>
+                      <option value="">{m.ste_parent_root()}</option>
+                      {#each wikiParents as parent (parent.id)}<option value={parent.id}>{parent.title}</option>{/each}
+                    </select>
+                  {/snippet}
+                </Field>
+              {/if}
+
+              <Field label={m.ste_excerpt()} hint={page.kind === 'BLOG' ? m.ste_excerpt_hint_blog() : m.ste_excerpt_hint()}>
+                {#snippet children(id, describedBy)}
+                  <textarea {id} aria-describedby={describedBy} class="input w-full" rows="3" maxlength="400" value={page!.excerpt ?? ''} oninput={(e) => setField('excerpt', (e.currentTarget as HTMLTextAreaElement).value)}></textarea>
+                {/snippet}
+              </Field>
+
+              {#if page.kind !== 'PAGE'}
+                <Field label={m.ste_tags()} hint={m.ste_tags_hint()}>
+                  {#snippet children(id, describedBy)}
+                    <input {id} aria-describedby={describedBy} class="input w-full" bind:value={tagsInput} onchange={commitTags} />
+                  {/snippet}
+                </Field>
+              {/if}
+
+              <div class="spe-cover">
+                <p class="text-body-sm font-medium text-on-surface">{m.ste_cover()}</p>
+                {#if page.coverUrl}
+                  <img src={page.coverUrl} alt="" />
+                  <div class="flex gap-2">
+                    <Button size="sm" onclick={() => (coverPickerOpen = true)}>{m.ste_cover_change()}</Button>
+                    <Button size="sm" variant="ghost" onclick={() => setField('coverUrl', null)}>{m.ste_cover_remove()}</Button>
+                  </div>
+                {:else}
+                  <Button size="sm" icon="image" onclick={() => (coverPickerOpen = true)}>{m.ste_cover_add()}</Button>
+                {/if}
+              </div>
+
+              <Field label={m.ste_icon()} hint={m.ste_icon_hint()}>
+                {#snippet children(id, describedBy)}
+                  <input {id} aria-describedby={describedBy} class="input w-24" maxlength="8" value={page!.icon ?? ''} onchange={(e) => setField('icon', (e.currentTarget as HTMLInputElement).value || null)} />
+                {/snippet}
+              </Field>
+
+              {#if page.kind === 'BLOG'}
+                <label class="flex items-center gap-2 text-body-sm text-on-surface">
+                  <input type="checkbox" checked={page.commentsEnabled} onchange={(e) => setField('commentsEnabled', (e.currentTarget as HTMLInputElement).checked)} />
+                  {m.ste_comments_enabled()}
+                </label>
+              {/if}
+
+              <details class="spe-seo">
+                <summary>{m.ste_seo()}</summary>
+                <Field label={m.ste_seo_title()} hint={m.ste_seo_title_hint()}>
+                  {#snippet children(id, describedBy)}
+                    <input {id} aria-describedby={describedBy} class="input w-full" maxlength="70" value={page!.seoTitle ?? ''} oninput={(e) => setField('seoTitle', (e.currentTarget as HTMLInputElement).value || null)} />
+                  {/snippet}
+                </Field>
+                <Field label={m.ste_seo_description()} hint={m.ste_seo_description_hint()}>
+                  {#snippet children(id, describedBy)}
+                    <textarea {id} aria-describedby={describedBy} class="input w-full" rows="3" maxlength="200" value={page!.seoDescription ?? ''} oninput={(e) => setField('seoDescription', (e.currentTarget as HTMLTextAreaElement).value || null)}></textarea>
+                  {/snippet}
+                </Field>
+              </details>
+
+              <div class="spe-danger">
+                {#if page.publishedAt}<Button size="sm" variant="ghost" icon="eye-off" onclick={unpublish}>{m.ste_unpublish()}</Button>{/if}
+                <Button size="sm" variant="danger" icon="trash-2" onclick={remove}>{m.ste_delete_page()}</Button>
+              </div>
+            </div>
           {/if}
-
-          <details class="spe-seo">
-            <summary>{m.ste_seo()}</summary>
-            <Field label={m.ste_seo_title()} hint={m.ste_seo_title_hint()}>
-              {#snippet children(id, describedBy)}
-                <input {id} aria-describedby={describedBy} class="input w-full" maxlength="70" value={page!.seoTitle ?? ''} oninput={(e) => setField('seoTitle', (e.currentTarget as HTMLInputElement).value || null)} />
-              {/snippet}
-            </Field>
-            <Field label={m.ste_seo_description()} hint={m.ste_seo_description_hint()}>
-              {#snippet children(id, describedBy)}
-                <textarea {id} aria-describedby={describedBy} class="input w-full" rows="3" maxlength="200" value={page!.seoDescription ?? ''} oninput={(e) => setField('seoDescription', (e.currentTarget as HTMLTextAreaElement).value || null)}></textarea>
-              {/snippet}
-            </Field>
-          </details>
-
-          <div class="spe-danger">
-            {#if page.publishedAt}<Button size="sm" variant="ghost" icon="eye-off" onclick={unpublish}>{m.ste_unpublish()}</Button>{/if}
-            <Button size="sm" variant="danger" icon="trash-2" onclick={remove}>{m.ste_delete_page()}</Button>
-          </div>
         </aside>
       {/if}
     </div>
+
+    <nav class="spe-dock" aria-label={m.ste_toolbar_label()}>
+      <button type="button" aria-pressed={addOpen} onclick={() => togglePanel('add')}>{@html siteIconSvg('plus', 18)}<span>{m.ste_add()}</span></button>
+      <button type="button" aria-pressed={rightOpen && rightTab === 'section'} onclick={() => togglePanel('right', 'section')}>{@html siteIconSvg('sliders', 18)}<span>{m.ste_tab_section()}</span></button>
+      <button type="button" aria-pressed={rightOpen && rightTab === 'page'} onclick={() => togglePanel('right', 'page')}>{@html siteIconSvg('file-text', 18)}<span>{m.ste_tab_page()}</span></button>
+    </nav>
   </div>
 
   <Modal bind:open={historyOpen} title={m.ste_history()} subtitle={m.ste_history_desc()} size="md">
@@ -505,24 +608,33 @@
 {/if}
 
 <style>
-  .spe { display: flex; flex-direction: column; gap: 12px; min-height: 100%; }
-  .spe-bar { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--color-outline-variant); background: var(--color-surface-container); }
-  .spe-title-wrap { flex: 1; min-width: 220px; }
-  .spe-title { width: 100%; background: transparent; border: 0; outline: none; color: inherit; font: 700 1.25rem/1.3 'Space Grotesk', Inter, sans-serif; }
+  /* Plein écran par-dessus le dashboard : la page se construit comme sur un constructeur de site. */
+  .spe { position: fixed; inset: 0; z-index: var(--layer-editor); display: flex; flex-direction: column; background: var(--color-background, #0e1015); }
+  .spe-bar { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-bottom: 1px solid var(--color-outline-variant); background: var(--color-surface-container); }
+  .spe-title-wrap { flex: 1; min-width: 0; }
+  .spe-title { width: 100%; background: transparent; border: 0; outline: none; color: inherit; font: 700 1.1rem/1.3 'Space Grotesk', Inter, sans-serif; }
   .spe-title::placeholder { color: var(--color-on-surface-variant); }
   .spe-meta { display: flex; align-items: center; gap: 8px; margin-top: 2px; }
   .spe-save { font-size: 12px; color: var(--color-on-surface-variant); }
-  .spe-pill { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--color-surface-container); color: var(--color-on-surface-variant); }
+  .spe-pill { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--color-surface-container-high); color: var(--color-on-surface-variant); }
   .spe-pill-ok { background: color-mix(in srgb, var(--color-success) 14%, transparent); color: var(--color-success); }
   .spe-pill-warning { background: color-mix(in srgb, var(--color-warning) 14%, transparent); color: var(--color-warning); }
   .spe-pill-info { background: color-mix(in srgb, var(--color-primary) 14%, transparent); color: var(--color-primary); }
   .spe-peers { display: flex; list-style: none; margin: 0; padding: 0; }
-  .spe-peers li { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 700; color: #fff; background: var(--peer, #555); border: 2px solid rgb(14 16 21); margin-left: -6px; }
-  .spe-peers-more { background: var(--color-surface-container) !important; }
-  .spe-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-  .spe-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
-  .spe-body.has-panel { grid-template-columns: minmax(0, 1fr) 300px; }
-  .spe-panel { position: sticky; top: 84px; display: flex; flex-direction: column; gap: 14px; padding: 16px; border-radius: 14px; border: 1px solid var(--color-outline-variant); background: var(--color-surface-container); max-height: calc(100vh - 110px); overflow-y: auto; }
+  .spe-peers li { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 700; color: #fff; background: var(--peer, #555); border: 2px solid var(--color-surface-container); margin-left: -6px; }
+  .spe-peers-more { background: var(--color-surface-container-high) !important; }
+  .spe-devices { display: flex; gap: 2px; padding: 2px; border-radius: 8px; background: var(--color-surface-container-high); }
+  .spe-devices button { width: 34px; height: 30px; display: grid; place-items: center; border: 0; border-radius: 6px; background: transparent; color: var(--color-on-surface-variant); cursor: pointer; }
+  .spe-devices button[aria-pressed='true'] { background: var(--color-surface-container); color: var(--color-on-surface); box-shadow: 0 1px 3px rgb(0 0 0 / 0.2); }
+  .spe-actions { display: flex; align-items: center; gap: 6px; }
+  .spe-body { flex: 1; min-height: 0; display: flex; }
+  .spe-left, .spe-right { flex: none; overflow-y: auto; padding: 14px; background: var(--color-surface-container); }
+  .spe-left { width: 300px; border-right: 1px solid var(--color-outline-variant); }
+  .spe-right { width: 320px; border-left: 1px solid var(--color-outline-variant); display: flex; flex-direction: column; gap: 14px; }
+  .spe-canvas { flex: 1; min-width: 0; overflow-y: auto; padding: 20px; }
+  .spe-sheet-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; font-weight: 600; }
+  .spe-page { display: flex; flex-direction: column; gap: 14px; }
+  .spe-dock { display: none; }
   .spe-roles { display: flex; flex-direction: column; gap: 6px; max-height: 200px; overflow-y: auto; border: 0; padding: 0; }
   .spe-cover { display: flex; flex-direction: column; gap: 8px; }
   .spe-cover img { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 10px; }
@@ -531,5 +643,14 @@
   .spe-danger { display: flex; flex-wrap: wrap; gap: 8px; padding-top: 10px; border-top: 1px solid var(--color-outline-variant); }
   .spe-revisions { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
   .spe-revisions li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border-radius: 10px; background: var(--color-surface-container); }
-  @media (max-width: 1100px) { .spe-body.has-panel { grid-template-columns: 1fr; } .spe-panel { position: static; max-height: none; } }
+
+  /* Téléphone : panneaux en tiroirs qui montent du bas, barre d'outils en pied d'écran. */
+  @media (max-width: 900px) {
+    .spe-bar { padding: 6px 8px; gap: 6px; }
+    .spe-canvas { padding: 8px 8px 72px; }
+    .spe-left, .spe-right { position: fixed; left: 0; right: 0; bottom: 60px; z-index: 2; width: auto; max-height: 70vh; border: 0; border-top: 1px solid var(--color-outline-variant); border-radius: 16px 16px 0 0; box-shadow: 0 -12px 30px rgb(0 0 0 / 0.35); padding-bottom: calc(14px + env(safe-area-inset-bottom)); }
+    .spe-dock { position: fixed; left: 0; right: 0; bottom: 0; z-index: 3; display: grid; grid-template-columns: repeat(3, 1fr); height: 60px; padding-bottom: env(safe-area-inset-bottom); border-top: 1px solid var(--color-outline-variant); background: var(--color-surface-container); }
+    .spe-dock button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; border: 0; background: transparent; color: var(--color-on-surface-variant); font-size: 11px; font-weight: 600; }
+    .spe-dock button[aria-pressed='true'] { color: var(--color-primary); }
+  }
 </style>
