@@ -2,8 +2,9 @@
 import { releaseJail } from '../../../services/moderation/jailService.js';
 import { generateTranscriptFromMessages } from '../../../services/features/transcriptService.js';
 import { decideAppeal, ensureDefaultAppealForm, getAppealConfig, requestAppealInfo, sendPreActionAppealDM, upsertAppealConfig } from '../../../services/moderation/banAppealService.js';
-import { registerBanSanction, registerKickSanction, registerTimeoutSanction, registerWarnSanction, runGuildBan } from '../../../services/moderation/sanctionService.js';
+import { recordAppliedSanction, registerBanSanction, registerKickSanction, registerTimeoutSanction, registerWarnSanction, runGuildBan } from '../../../services/moderation/sanctionService.js';
 import prisma from '../../../utils/db.js';
+import { logger } from '../../../utils/logger.js';
 import { MAX_EVIDENCE_MESSAGES, parseEvidenceLinks } from '../../evidence.js';
 import { type SanctionStatus, type SanctionType } from '@prisma/client';
 import { type Message } from 'discord.js';
@@ -63,7 +64,7 @@ export function registerWriteSanctionsTools(ctx: McpToolContext) {
             // ne partage plus forcément de serveur avec le bot.
             await sendPreActionAppealDM(client, guildId, member_id, 'KICK').catch(() => false);
             await target.kick(`${reason} | ${actorTag}`);
-            sanction = await registerKickSanction({ guildId, target: targetData, moderator: actor, reason, client });
+            sanction = await recordAppliedSanction(guildId, 'Kick', () => registerKickSanction({ guildId, target: targetData, moderator: actor, reason, client }));
           } else if (type === 'TIMEOUT') {
             sanction = await registerTimeoutSanction({
               guildId,
@@ -78,14 +79,14 @@ export function registerWriteSanctionsTools(ctx: McpToolContext) {
             if (!target.bannable) return err('Le bot ne peut pas bannir ce membre (hiérarchie des rôles).');
             await sendPreActionAppealDM(client, guildId, member_id, type).catch(() => false);
             await runGuildBan(discordGuild, member_id, `${reason} | ${actorTag}`);
-            sanction = await registerBanSanction({
+            sanction = await recordAppliedSanction(guildId, type === 'TEMP_BAN' ? 'Tempban' : 'Ban', () => registerBanSanction({
               guildId,
               target: targetData,
               moderator: actor,
               reason,
               client,
               ...(duration_seconds ? { temporaryDurationMs: duration_seconds * 1000 } : {}),
-            });
+            }));
           } else {
             return err(`Type de sanction non supporté via MCP : ${type}`);
           }
@@ -101,9 +102,23 @@ export function registerWriteSanctionsTools(ctx: McpToolContext) {
               details: `Type: ${type} | Cible: ${targetData.tag} | Raison: ${reason}`,
               dateIso: new Date(),
             },
-          });
+          }).catch((e) => logger.error('MCP', `Audit de la sanction ${type} sur ${member_id} en échec:`, e));
 
-          return ok({ ok: true, sanctionId: sanction?.id ?? null, type, targetId: member_id });
+          // Kick et ban passent par recordAppliedSanction : `null` veut dire que Discord a
+          // appliqué l'action mais pas le casier. L'agent ne doit pas la relancer.
+          if (!sanction) {
+            return ok({
+              ok: true,
+              sanctionId: null,
+              type,
+              targetId: member_id,
+              recordFailed: true,
+              warning: type === 'TEMP_BAN'
+                ? "Le bannissement est appliqué sur Discord mais n'a pas pu être inscrit au casier : le débannissement automatique n'aura pas lieu. Ne relance pas la sanction."
+                : "La sanction est appliquée sur Discord mais n'a pas pu être inscrite au casier. Ne relance pas la sanction.",
+            });
+          }
+          return ok({ ok: true, sanctionId: sanction.id, type, targetId: member_id });
         } catch (e) {
           return toolError(e, "Erreur lors de l'application de la sanction");
         }

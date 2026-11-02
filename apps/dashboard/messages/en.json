@@ -4416,6 +4416,7 @@
   "mcm_action_ban": "Ban",
   "mcm_action_timeout": "Timeout",
   "mcm_action_done": "The {action} action has been carried out.",
+  "mcm_action_record_failed": "The {action} action was applied on Discord, but the sanction could not be added to the record. Check the record before trying again.",
   "mcm_action_error": "Something went wrong while running the action",
   "mcm_action_error_generic": "Something went wrong while running it.",
   "mcm_verif_title": "Force the security check?",

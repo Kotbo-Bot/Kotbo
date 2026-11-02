@@ -27,6 +27,7 @@ import {
   getSanctionTypeBreakdown,
   listSanctionsByMember,
   parseDurationToMs,
+  recordAppliedSanction,
   registerBanSanction,
   registerKickSanction,
   registerTimeoutSanction,
@@ -243,19 +244,6 @@ function validateTarget(interaction: ChatInputCommandInteraction<'cached'> | Use
 
 async function replyError(interaction: ChatInputCommandInteraction | UserContextMenuCommandInteraction, title: string, description: string) {
   await interaction.editReply({ embeds: [errorEmbed(title, description)] });
-}
-
-/**
- * Inscrit au casier une sanction déjà appliquée sur Discord. Un échec ici ne doit pas
- * s'annoncer comme un échec de sanction : le modérateur sanctionnerait une deuxième fois.
- */
-async function recordAppliedSanction<T>(guildId: string, action: string, register: () => Promise<T>): Promise<T | null> {
-  try {
-    return await register();
-  } catch (err) {
-    logger.error('Sanction', `${action} appliqué sur ${guildId} mais non inscrit au casier:`, err);
-    return null;
-  }
 }
 
 /** Compte rendu d'une sanction appliquée, avec un repli sans boutons si Discord les refuse. */

@@ -1767,6 +1767,20 @@ export async function announceSanctionReportToStaff(
   await channel.send({ embeds: [embed], allowedMentions: { parse: [] } }).catch(() => null);
 }
 
+/**
+ * Inscrit au casier une sanction déjà appliquée sur Discord. Un échec ici ne doit pas
+ * s'annoncer comme un échec de sanction : le modérateur sanctionnerait une deuxième fois.
+ * Renvoie `null` quand l'inscription a échoué, à charge pour l'appelant de le signaler.
+ */
+export async function recordAppliedSanction<T>(guildId: string, action: string, register: () => Promise<T>): Promise<T | null> {
+  try {
+    return await register();
+  } catch (err) {
+    logger.error('Sanction', `${action} appliqué sur ${guildId} mais non inscrit au casier:`, err);
+    return null;
+  }
+}
+
 export async function runGuildBan(guild: Guild, userId: string, reason: string): Promise<void> {
   await guild.members.ban(userId, { reason, deleteMessageSeconds: 0 });
 }

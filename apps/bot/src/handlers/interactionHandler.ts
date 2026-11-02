@@ -27,7 +27,7 @@ import { memberProfileIdentity } from '../services/moderation/memberIdentityServ
 import { handleVerifyButtonClick, handleVerificationStaffAction } from '../services/moderation/securityVerificationService.js';
 import { showModeratorNoteModal } from '../commands/moderation/note.js';
 import { sendReportToAdmin } from '../commands/moderation/signal.js';
-import { parseDurationToMs, registerBanSanction, registerKickSanction, registerTimeoutSanction, registerWarnSanction, runGuildBan } from '../services/moderation/sanctionService.js';
+import { parseDurationToMs, recordAppliedSanction, registerBanSanction, registerKickSanction, registerTimeoutSanction, registerWarnSanction, runGuildBan } from '../services/moderation/sanctionService.js';
 import { publicErrorMessage } from '../utils/publicError.js';
 
 
@@ -2055,13 +2055,6 @@ export async function handleModalSubmit(interaction: ModalSubmitInteraction, cli
       const locale = getLocale(interaction);
       return { name: gvwMessages.b1_record_failed_title({}, { locale }), value: gvwMessages.b1_record_failed_desc({}, { locale }) };
     };
-    const recordApplied = (action: string, register: () => Promise<unknown>) => register().then(
-      () => true,
-      (err: unknown) => {
-        logger.error('Sanction', `${action} appliqué sur ${interaction.guildId} mais non inscrit au casier:`, err);
-        return false;
-      },
-    );
 
     try {
       const targetUser = await client.users.fetch(targetUserId).catch(() => null);
@@ -2139,7 +2132,7 @@ export async function handleModalSubmit(interaction: ModalSubmitInteraction, cli
         const { sendPreActionAppealDM } = await import('../services/moderation/banAppealService.js');
         await sendPreActionAppealDM(client, guild.id, targetUserId, SanctionType.KICK).catch(() => false);
         await targetMember.kick(`${reason} | Modération: ${executor.tag}`);
-        const recorded = await recordApplied('Kick', () => registerKickSanction({
+        const recorded = await recordAppliedSanction(guild.id, 'Kick', () => registerKickSanction({
           guildId: interaction.guildId!,
           target,
           moderator,
@@ -2157,7 +2150,7 @@ export async function handleModalSubmit(interaction: ModalSubmitInteraction, cli
         const { sendPreActionAppealDM } = await import('../services/moderation/banAppealService.js');
         await sendPreActionAppealDM(client, guild.id, targetUserId, SanctionType.BAN).catch(() => false);
         await runGuildBan(guild, targetUserId, `${reason} | Modération: ${executor.tag}`);
-        const recorded = await recordApplied('Ban', () => registerBanSanction({
+        const recorded = await recordAppliedSanction(guild.id, 'Ban', () => registerBanSanction({
           guildId: interaction.guildId!,
           target,
           moderator,
