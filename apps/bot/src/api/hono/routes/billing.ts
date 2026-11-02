@@ -25,6 +25,7 @@ import {
   GIFT_DURATIONS_MONTHS,
   PLAN_KEYS,
   PLAN_REGISTRY,
+  REFERRAL_DISCOUNT_PERCENT,
   canPurchasePlan,
   getPlanDefinition,
   giftPriceCents,
@@ -72,6 +73,7 @@ import {
   redeemGiftCode,
   releaseGiftSession,
 } from '../../../services/billing/giftService.js';
+import { countReferrals, getOrCreateReferralCode, resolveReferralCode } from '../../../services/billing/referralService.js';
 
 const BASE = '/api/dashboard/guilds/{guildId}/billing';
 
@@ -282,6 +284,10 @@ export function createBillingRouter(client: Client): OpenAPIHono {
    * même quand l'essai n'est plus disponible : la page l'affiche dans son texte
    * d'explication, et la durée ne doit pas être écrite en dur côté client.
    */
+  /**
+   * `available` : ce serveur peut encore recevoir l'essai, ce qui demande un
+   * code de parrainage au moment de souscrire.
+   */
   const TrialInfo = z.object({
     available: z.boolean(),
     days: z.number(),
@@ -328,6 +334,8 @@ export function createBillingRouter(client: Client): OpenAPIHono {
     staffAccess: z.boolean(),
     accessExpiresAt: z.string().nullable(),
     trial: TrialInfo,
+    /** Code de parrainage de l'utilisateur connecté, à partager. */
+    referral: z.object({ code: z.string(), discountPercent: z.number(), referred: z.number() }),
     plans: z.array(PlanCard),
     /** Cadeaux offerts par l'utilisateur connecté, et reçus par ce serveur. */
     giftsPurchased: z.array(Gift),
@@ -426,9 +434,10 @@ export function createBillingRouter(client: Client): OpenAPIHono {
     const memberCount = client.guilds.cache.get(guildId)?.memberCount ?? null;
     const eligiblePlan = planForMemberCount(memberCount);
 
-    const [giftsPurchased, giftsReceived] = await Promise.all([
+    const [giftsPurchased, giftsReceived, referralCode] = await Promise.all([
       listGiftsPurchasedBy(c.var.auth.userId),
       listGiftsForGuild(guildId),
+      getOrCreateReferralCode(c.var.auth.userId),
     ]);
 
     // Éligibilité évaluée sur Plus, la seule offre vendue en ligne. Elle dépend de l'utilisateur connecté, pas seulement du
@@ -454,6 +463,11 @@ export function createBillingRouter(client: Client): OpenAPIHono {
       // n'a pas d'abonnement Stripe, donc pas de `currentPeriodEnd`.
       accessExpiresAt: guild?.accessExpiresAt?.toISOString() ?? null,
       trial: { available: trial.eligible, days: trial.days, reason: trial.reason ?? null },
+      referral: {
+        code: referralCode,
+        discountPercent: REFERRAL_DISCOUNT_PERCENT,
+        referred: await countReferrals(referralCode),
+      },
       // Les offres retirées de la vente n'apparaissent que pour le serveur
       // qui les a encore.
       plans: PLAN_REGISTRY.filter((definition) => definition.listed || definition.key === plan).map((definition) => ({
@@ -482,13 +496,19 @@ export function createBillingRouter(client: Client): OpenAPIHono {
       body: {
         content: {
           'application/json': {
-            schema: z.object({ plan: PurchasablePlan, interval: Interval }),
+            schema: z.object({
+              plan: PurchasablePlan,
+              interval: Interval,
+              /** Code de parrainage : seul moyen d'obtenir l'essai et la remise. */
+              referralCode: z.string().trim().max(40).optional(),
+            }),
           },
         },
       },
     },
     responses: {
       200: { description: 'URL de paiement', content: { 'application/json': { schema: z.object({ url: z.string() }) } } },
+      400: { description: 'Code de parrainage refusé', content: { 'application/json': { schema: z.object({ error: z.string() }) } } },
       409: { description: 'Offre ne correspondant pas à la taille du serveur', content: { 'application/json': { schema: z.object({ error: z.string() }) } } },
       503: { description: 'Facturation non configurée', content: { 'application/json': { schema: z.object({ error: z.string() }) } } },
     },
@@ -503,7 +523,7 @@ export function createBillingRouter(client: Client): OpenAPIHono {
     if (!isBillingEnabled()) return c.json({ error: 'Facturation non configurée sur cette instance.' }, 503);
 
     const { guildId } = c.req.valid('param');
-    const { plan, interval } = c.req.valid('json');
+    const { plan, interval, referralCode } = c.req.valid('json');
     const auth = c.var.auth;
 
     const guild = await prisma.guild.findUnique({
@@ -526,6 +546,23 @@ export function createBillingRouter(client: Client): OpenAPIHono {
       );
     }
 
+    // Le parrainage ne vaut que pour une première souscription : un code
+    // refusé est dit tout de suite, plutôt qu'un paiement plein tarif surprise.
+    let referral: string | null = null;
+    if (referralCode) {
+      const resolved = await resolveReferralCode(referralCode, auth.userId);
+      if (!resolved.ok) {
+        return c.json({ error: resolved.reason === 'own_code'
+          ? "C'est ton propre code de parrainage : il sert à ceux que tu invites."
+          : "Ce code de parrainage n'existe pas. Vérifie la saisie : les codes ne contiennent ni O, ni I, ni S." }, 400);
+      }
+      const eligibility = await checkTrialEligibility(guildId, auth.userId, plan as PlanKey);
+      if (!eligibility.eligible) {
+        return c.json({ error: "Le parrainage s'applique à une première souscription : ce serveur ou ton compte en a déjà profité." }, 400);
+      }
+      referral = resolved.code;
+    }
+
     try {
       const customerId = await ensureCustomer(guildId, guild?.stripeCustomerId ?? null, {
         guildName: discordGuild?.name,
@@ -542,14 +579,12 @@ export function createBillingRouter(client: Client): OpenAPIHono {
         create: { id: guildId, stripeCustomerId: customerId, billingOwnerId: auth.userId },
       });
 
-      // L'essai est réservé *avant* d'appeler Stripe : l'insertion en base est
-      // le verrou qui garantit « une fois par compte Discord », et un
-      // aller-retour réseau laisserait passer un second clic. En échec de
-      // réservation, on ouvre simplement un parcours d'achat sans essai plutôt
-      // que de renvoyer une erreur.
-      const eligibility = await checkTrialEligibility(guildId, auth.userId, plan as PlanKey);
-      const trialReserved =
-        eligibility.eligible && (await reserveTrial(guildId, auth.userId, plan as PlanKey, interval));
+      // L'essai n'existe qu'avec un code de parrainage. Il est réservé *avant*
+      // d'appeler Stripe : l'insertion en base est le verrou qui garantit « une
+      // fois par compte Discord », et un aller-retour réseau laisserait passer
+      // un second clic. En échec de réservation, on ouvre un parcours d'achat
+      // sans essai ni remise plutôt que de renvoyer une erreur.
+      const trialReserved = referral !== null && (await reserveTrial(guildId, auth.userId, plan as PlanKey, interval, referral));
 
       let session: { id: string; url: string };
       try {
@@ -560,6 +595,7 @@ export function createBillingRouter(client: Client): OpenAPIHono {
           interval,
           initiatedBy: auth.userId,
           trialDays: trialReserved ? TRIAL_DAYS : 0,
+          referralDiscount: trialReserved,
         });
       } catch (err) {
         // Stripe n'a pas ouvert la page : l'essai n'a jamais démarré, la
@@ -577,7 +613,7 @@ export function createBillingRouter(client: Client): OpenAPIHono {
         step: 'checkout_started',
         guildId,
         discordUserId: auth.userId,
-        metadata: { plan, interval, trialReserved, sessionId: session.id },
+        metadata: { plan, interval, trialReserved, referralCode: referral, sessionId: session.id },
       });
       if (trialReserved) {
         trackAcquisitionStep({
