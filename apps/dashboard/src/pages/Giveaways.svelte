@@ -9,7 +9,6 @@
   import { fade, scale } from 'svelte/transition';
   import { authStore } from '../lib/stores/auth.svelte';
   import { dashboardStore } from '../lib/stores/dashboard.svelte';
-  import { canViewFeature } from '../lib/permissions.svelte';
   import { createAsyncActionState } from '../lib/asyncAction.svelte';
   import { confirmDialog } from '../lib/stores/confirmDialog.svelte';
   import { resolveTabFromUrl, gotoTab } from '../lib/tabRouting';
@@ -44,7 +43,6 @@
     createGiveawayConfigPreset,
     updateGiveawayConfigPreset,
     deleteGiveawayConfigPreset,
-    fetchMemberCase,
     type GiveawayAppearance,
     type GiveawayBonusEntry,
     type GiveawayConfigPayload,
@@ -53,7 +51,7 @@
     type GiveawayRpgItem,
     type GiveawayTemplate
   } from '../lib/api';
-  import MemberCaseModal from '../lib/components/MemberCaseModal.svelte';
+  import { memberCaseModal } from '../lib/stores/memberCaseModal.svelte';
 
   const actionState = createAsyncActionState();
   const configAction = createAsyncActionState();
@@ -571,39 +569,6 @@
     if (!res) return;
     if (res.giveaways) giveaways = res.giveaways;
     if (typeof res.canManage === 'boolean') canManageFromApi = res.canManage;
-  }
-
-  // ─── Fiche membre (gagnants cliquables) ───
-  let userCaseModalOpen = $state(false);
-  let selectedUserIdForCase = $state<string | null>(null);
-  let selectedUserNameForCase = $state('');
-  let caseData = $state<any>(null);
-  let loadingCase = $state(false);
-  let caseError = $state('');
-
-  /**
-   * Le dossier d'un gagnant est la meme fiche que celle de la section Membres.
-   * Sans ce test, un role a qui le centre de gestion a ferme « Membres » la
-   * rouvrait depuis la liste des gagnants, et l'API repondait 403 apres coup.
-   */
-  const canOpenMemberCase = $derived(canViewFeature('members'));
-
-  async function openMemberCase(userId: string, name: string) {
-    if (!authStore.selectedGuildId || !canOpenMemberCase) return;
-    selectedUserIdForCase = userId;
-    selectedUserNameForCase = name;
-    userCaseModalOpen = true;
-    loadingCase = true;
-    caseError = '';
-    caseData = null;
-
-    try {
-      caseData = await fetchMemberCase(userId, authStore.selectedGuildId);
-    } catch (err) {
-      caseError = err instanceof Error ? err.message : m.giv_case_error();
-    } finally {
-      loadingCase = false;
-    }
   }
 
   onMount(async () => {
@@ -2041,10 +2006,10 @@
                       {#each announcedWinners(giveaway) as winner (winner.userId)}
                         <button
                           type="button"
-                          use:explainDisabled={(!canOpenMemberCase) ? m.common_reason_no_permission() : ''}
-                          onclick={() => openMemberCase(winner.userId, winner.displayName)}
-                          title={canOpenMemberCase ? m.giv_winner_open_case({ name: winner.displayName }) : undefined}
-                          class="flex items-center gap-1.5 pl-1 pr-2.5 py-1 rounded-full bg-success/10 border border-success/15 transition-colors max-w-full {canOpenMemberCase ? 'hover:bg-success/20 hover:border-success/30 cursor-pointer' : 'cursor-default'}"
+                          use:explainDisabled={(!memberCaseModal.canOpen) ? m.common_reason_no_permission() : ''}
+                          onclick={() => memberCaseModal.show(winner.userId, winner.displayName)}
+                          title={memberCaseModal.canOpen ? m.giv_winner_open_case({ name: winner.displayName }) : undefined}
+                          class="flex items-center gap-1.5 pl-1 pr-2.5 py-1 rounded-full bg-success/10 border border-success/15 transition-colors max-w-full {memberCaseModal.canOpen ? 'hover:bg-success/20 hover:border-success/30 cursor-pointer' : 'cursor-default'}"
                         >
                           {#if winner.avatarUrl}
                             <img src={winner.avatarUrl} alt="" class="w-5 h-5 rounded-full object-cover shrink-0" />
@@ -2137,21 +2102,6 @@
     </div>
   {/if}
 </ModulePage>
-
-<!-- Fiche membre, ouverte depuis un gagnant -->
-<MemberCaseModal
-  open={userCaseModalOpen}
-  userId={selectedUserIdForCase}
-  userName={selectedUserNameForCase}
-  {caseData}
-  loading={loadingCase}
-  error={caseError}
-  onClose={() => { userCaseModalOpen = false; }}
-  onSelectUser={(newUserId) => {
-    const node = caseData?.interactionGraph?.nodes?.find((n: any) => n.id === newUserId);
-    openMemberCase(newUserId, node?.label || m.giv_winner_fallback_name());
-  }}
-/>
 
 <!-- Modale unique : lancer un concours, ou ranger les mêmes champs sous un nom -->
 {#if showModal}

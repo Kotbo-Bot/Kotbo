@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { canViewFeature } from '../lib/permissions.svelte';
   import { onMount, onDestroy, untrack } from 'svelte';
   import { router } from 'tinro';
   import { resolveTabFromUrl, gotoTab } from '../lib/tabRouting';
@@ -7,13 +6,13 @@
   import { Tabs, FilterPills, Button } from '../lib/components/ui';
   import { unsavedChanges } from '../lib/stores/unsavedChanges.svelte';
   import { authStore } from '../lib/stores/auth.svelte';
-  import { fetchLinkedAccounts, updateLinkedAccountStatus, deleteLinkedAccount, fetchMemberCase, fetchFeatureConfigurations, updateFeatureConfiguration, scanSuspectedDetections, fetchSuspectedDetections, linkDetectedAccount, dismissDetection, restoreDetection, fetchMessageLogStats, updateMessageLogConfig } from '../lib/api';
+  import { fetchLinkedAccounts, updateLinkedAccountStatus, deleteLinkedAccount, fetchFeatureConfigurations, updateFeatureConfiguration, scanSuspectedDetections, fetchSuspectedDetections, linkDetectedAccount, dismissDetection, restoreDetection, fetchMessageLogStats, updateMessageLogConfig } from '../lib/api';
   import { toast } from '../lib/stores/toast.svelte';
   import { confirmDialog } from '../lib/stores/confirmDialog.svelte';
   import { dashboardStore } from '../lib/stores/dashboard.svelte';
   import Papicon from '../lib/components/Papicon.svelte';
   import { m } from '../lib/i18n';
-  import MemberCaseModal from '../lib/components/MemberCaseModal.svelte';
+  import { memberCaseModal } from '../lib/stores/memberCaseModal.svelte';
   import IdentityVerificationPanel from '../lib/components/security/IdentityVerificationPanel.svelte';
   import ModulePage from '../lib/components/ModulePage.svelte';
   import { createAsyncActionState } from '../lib/asyncAction.svelte';
@@ -353,35 +352,6 @@
     const days = Math.floor(hours / 24);
     if (days < 30) return `il y a ${days}j`;
     return new Date(value).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' });
-  }
-
-  // ── Modal ──
-  let modalOpen = $state(false);
-  let selectedUserId = $state<string | null>(null);
-  let selectedUserName = $state('');
-  let caseData = $state<any>(null);
-  let loadingCase = $state(false);
-  let caseError = $state('');
-
-
-  /**
-   * Le dossier membre appartient a la section Membres : la fenetre ne s'ouvre
-   * pas pour un role a qui le centre de gestion l'a fermee, quelle que soit la
-   * page qui la demande.
-   */
-  const canOpenMemberCase = $derived(canViewFeature('members'));
-
-  async function openMemberCase(userId: string, userName?: string) {
-    if (!canOpenMemberCase) return;
-    selectedUserId = userId;
-    selectedUserName = userName || 'Membre';
-    modalOpen = true;
-    loadingCase = true;
-    caseData = null;
-    caseError = '';
-    try { caseData = await fetchMemberCase(userId); }
-    catch (err) { caseError = errorMessage(err) || m.da_error_load_case(); }
-    finally { loadingCase = false; }
   }
 
   // ── Config ──
@@ -733,12 +703,12 @@
 
             <!-- Users link -->
             <div class="flex items-center gap-2 bg-surface-container-low/50 rounded-lg p-3 mb-3">
-              <button onclick={() => openMemberCase(link.user1Id, link.user1.tag)} class="flex items-center gap-1.5 flex-1 min-w-0 text-sm font-semibold text-on-surface hover:text-primary transition-colors">
+              <button disabled={!memberCaseModal.canOpen} onclick={() => memberCaseModal.show(link.user1Id, link.user1.tag)} class="flex items-center gap-1.5 flex-1 min-w-0 text-sm font-semibold text-on-surface hover:text-primary transition-colors">
                 {#if link.user1.avatar}<img src={link.user1.avatar} alt="" class="w-5 h-5 rounded-full shrink-0" />{/if}
                 <span class="truncate">@{link.user1.tag}</span>
               </button>
               <Papicon icon="ArrowLeftRight" size={14} class="text-on-surface-variant/20 shrink-0" />
-              <button onclick={() => openMemberCase(link.user2Id, link.user2.tag)} class="flex items-center justify-end gap-1.5 flex-1 min-w-0 text-sm font-semibold text-on-surface hover:text-primary transition-colors">
+              <button disabled={!memberCaseModal.canOpen} onclick={() => memberCaseModal.show(link.user2Id, link.user2.tag)} class="flex items-center justify-end gap-1.5 flex-1 min-w-0 text-sm font-semibold text-on-surface hover:text-primary transition-colors">
                 <span class="truncate">@{link.user2.tag}</span>
                 {#if link.user2.avatar}<img src={link.user2.avatar} alt="" class="w-5 h-5 rounded-full shrink-0" />{/if}
               </button>
@@ -978,7 +948,7 @@
                     <Papicon icon="Link2" size={11} class="text-on-surface-variant/30" />
                     <span class="text-2xs font-bold text-on-surface-variant/40">Alt(s) :</span>
                     {#each d.suspectedAlts as alt}
-                      <button onclick={() => openMemberCase(alt.userId, alt.username || alt.userId)}
+                      <button disabled={!memberCaseModal.canOpen} onclick={() => memberCaseModal.show(alt.userId, alt.username || alt.userId)}
                         class="flex items-center gap-1 px-1.5 py-0.5 rounded bg-surface-container-high/50 text-2xs font-bold text-on-surface hover:text-primary transition-colors">
                         {#if alt.avatarUrl}<img src={alt.avatarUrl} alt="" class="w-3.5 h-3.5 rounded-full" />{/if}
                         @{alt.username || alt.userId}
@@ -1288,7 +1258,7 @@
             <div class="space-y-2">
               {#each det.suspectedAlts as alt}
                 <div class="flex items-center justify-between gap-2 p-3 rounded-lg bg-surface-container-low/50 border border-outline-variant/5">
-                  <button onclick={() => { openMemberCase(alt.userId, alt.username || alt.userId); reportModalDetection = null; }}
+                  <button disabled={!memberCaseModal.canOpen} onclick={() => { memberCaseModal.show(alt.userId, alt.username || alt.userId); reportModalDetection = null; }}
                     class="flex items-center gap-2 text-sm font-semibold text-on-surface hover:text-primary transition-colors min-w-0">
                     {#if alt.avatarUrl}<img src={alt.avatarUrl} alt="" class="w-6 h-6 rounded-full shrink-0" />{/if}
                     <span class="truncate">@{alt.username || alt.userId}</span>
@@ -1354,7 +1324,7 @@
 
         <!-- Bottom actions -->
         <div class="flex flex-wrap gap-2 pt-2">
-          <button onclick={() => { openMemberCase(det.id, det.displayName || det.username || m.da_member_fallback()); reportModalDetection = null; }}
+          <button disabled={!memberCaseModal.canOpen} onclick={() => { memberCaseModal.show(det.id, det.displayName || det.username || m.da_member_fallback()); reportModalDetection = null; }}
             class="flex-1 py-2.5 rounded-lg bg-primary/10 text-primary text-xs font-bold hover:bg-primary hover:text-white transition-all flex items-center justify-center gap-1.5">
             <Papicon icon="FileText" size={13} /> {m.da_open_case()}
           </button>
@@ -1368,20 +1338,6 @@
     </div>
   </div>
 {/if}
-
-<MemberCaseModal
-  open={modalOpen}
-  userId={selectedUserId}
-  userName={selectedUserName}
-  {caseData}
-  loading={loadingCase}
-  error={caseError}
-  onClose={() => modalOpen = false}
-  onSelectUser={(newUserId) => {
-    const foundNode = caseData?.interactionGraph?.nodes?.find((n: any) => n.id === newUserId);
-    openMemberCase(newUserId, foundNode?.label || 'Membre');
-  }}
-/>
 
 <!-- Modal : activer le logging des messages (télémétrie pour la détection intelligente) -->
 {#if showLoggingModal}

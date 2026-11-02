@@ -1,6 +1,5 @@
 <script lang="ts">
   import { m, dateLocale } from '../lib/i18n';
-  import { canViewFeature } from '../lib/permissions.svelte';
   import { onMount } from 'svelte';
   import { dashboardStore } from '../lib/stores/dashboard.svelte';
   import { authStore } from '../lib/stores/auth.svelte';
@@ -11,8 +10,8 @@
   import ActionButton from '../lib/components/ActionButton.svelte';
   import Modal from '../lib/components/Modal.svelte';
   import Skeleton from '../lib/components/Skeleton.svelte';
-  import MemberCaseModal from '../lib/components/MemberCaseModal.svelte';
-  import { fetchBackups, createBackup, deleteBackup, exportBackup, importBackup, restoreBackup, fetchMemberCase } from '../lib/api';
+  import { memberCaseModal } from '../lib/stores/memberCaseModal.svelte';
+  import { fetchBackups, createBackup, deleteBackup, exportBackup, importBackup, restoreBackup } from '../lib/api';
 
   const createAction = createAsyncActionState();
   const deleteAction = createAsyncActionState();
@@ -29,13 +28,6 @@
   let selectedBackup = $state<any>(null);
   let importFile = $state<File | null>(null);
 
-  // Member modal state
-  let memberModalOpen = $state(false);
-  let memberModalUserId = $state<string | null>(null);
-  let memberModalUserName = $state('');
-  let memberCaseData = $state<any>(null);
-  let memberCaseLoading = $state(false);
-  let memberCaseError = $state('');
   let creatingBackup = $state<{
     name: string;
     description: string;
@@ -172,35 +164,6 @@
     }, {
       successMessage: m.backups_restore_toast()
     });
-  }
-
-
-  /**
-   * Le dossier membre appartient a la section Membres : la fenetre ne s'ouvre
-   * pas pour un role a qui le centre de gestion l'a fermee, quelle que soit la
-   * page qui la demande.
-   */
-  const canOpenMemberCase = $derived(canViewFeature('members'));
-
-  async function openMemberCase(backup: any) {
-    if (!canOpenMemberCase) return;
-    if (!backup.createdByUserId) return;
-    memberModalUserId = backup.createdByUserId;
-    memberModalUserName = backup.createdByUsername || m.backups_member_fallback();
-    memberModalOpen = true;
-    memberCaseLoading = true;
-    memberCaseError = '';
-    memberCaseData = null;
-    try {
-      memberCaseData = await fetchMemberCase(backup.createdByUserId, authStore.selectedGuildId ?? '');
-      if (memberCaseData?.profile) {
-        memberModalUserName = memberCaseData.profile.displayName || memberCaseData.profile.username || memberModalUserName;
-      }
-    } catch (error) {
-      memberCaseError = error instanceof Error ? error.message : m.backups_case_error();
-    } finally {
-      memberCaseLoading = false;
-    }
   }
 
   async function handleExportBackup(backup: any) {
@@ -474,9 +437,9 @@
                trois boutons le confinait a 35% de la carte, ou son nom etait
                systematiquement coupe. -->
           <div class="pt-3 border-t border-outline-variant/10 mt-2 space-y-2">
-            {#if backup.createdByUserId}
+            {#if backup.createdByUserId && memberCaseModal.canOpen}
               <button
-                onclick={() => openMemberCase(backup)}
+                onclick={() => memberCaseModal.show(backup.createdByUserId, backup.createdByUsername || m.backups_member_fallback())}
                 class="block w-full text-2xs text-on-surface-variant font-bold truncate hover:text-primary transition-colors text-left"
                 title={m.backups_view_case({ user: backup.createdByUsername })}
               >
@@ -662,17 +625,3 @@
     <InlineFeedback state={restoreAction} />
   </div>
 </Modal>
-
-<!-- Modal dossier membre (auteur du backup) -->
-<MemberCaseModal
-  open={memberModalOpen}
-  userId={memberModalUserId}
-  userName={memberModalUserName}
-  caseData={memberCaseData}
-  loading={memberCaseLoading}
-  error={memberCaseError}
-  onClose={() => {
-    memberModalOpen = false;
-    memberModalUserId = null;
-  }}
-/>

@@ -7,7 +7,6 @@
    * Même présentation que la fiche membre : chiffres en tuiles qui pilotent la
    * courbe, période précédente en pointillé, sections en cartes.
    */
-  import { router } from 'tinro';
   import Papicon from '../Papicon.svelte';
   import DetailSheet from '../DetailSheet.svelte';
   import { Button, Callout, FilterPills, SectionCard, type FilterOption } from '../ui';
@@ -17,6 +16,7 @@
   import { relativeDelta } from '../analytics/analyticsFilters.svelte';
   import { memberAvatarSrc } from '../../discordMedia';
   import { channelDetailsModal } from '../../stores/channelDetailsModal.svelte';
+  import { memberCaseModal } from '../../stores/memberCaseModal.svelte';
   import { fetchChannelDetails } from '../../api';
   import { m, dateLocale } from '../../i18n';
   import { errorMessage } from '@kotbo/shared';
@@ -80,9 +80,11 @@
     channelDetailsModal.close();
   }
 
-  function openMember(userId: string) {
+  // Même règle que le détail d'une invitation : le détail se ferme avant d'ouvrir la fiche,
+  // et sans accès à « Membres » les lignes ne sont pas cliquables.
+  function openMember(userId: string, userName: string) {
     closeModal();
-    router.goto(`/members/${userId}`);
+    void memberCaseModal.show(userId, userName);
   }
 
   function formatDate(value: string | Date | null | undefined) {
@@ -195,7 +197,7 @@
   <ul class="divide-y divide-outline-variant">
     {#each items as person, index (person.userId)}
       <li>
-        <button type="button" class="sheet-row" onclick={() => openMember(person.userId)}>
+        <button type="button" class="sheet-row" disabled={!memberCaseModal.canOpen} onclick={() => openMember(person.userId, person.userTag)}>
           <span class="w-5 shrink-0 text-xs tabular-nums text-on-surface-variant">{index + 1}</span>
           <img src={memberAvatarSrc(person.avatarUrl, person.userTag, person.userId)} alt="" class="h-8 w-8 shrink-0 rounded-lg object-cover" />
           <span class="min-w-0 flex-1">
@@ -424,7 +426,7 @@
 
       <!-- ══════════════ MEMBRES ══════════════ -->
       {:else if activeTab === 'membres'}
-        <SectionCard title={m.chd_top_contributors()} description={m.chd_click_to_open_member()} flush>
+        <SectionCard title={m.chd_top_contributors()} description={memberCaseModal.canOpen ? m.chd_click_to_open_member() : undefined} flush>
           {#snippet actions()}
             <span class="badge badge-neutral">{m.chd_logged_messages({ count: details.contributors.total })}</span>
           {/snippet}
@@ -542,7 +544,7 @@
                 <ul class="divide-y divide-outline-variant">
                   {#each details.moderation.topDeleted as row (row.userId)}
                     <li>
-                      <button type="button" class="sheet-row justify-between" onclick={() => openMember(row.userId)}>
+                      <button type="button" class="sheet-row justify-between" disabled={!memberCaseModal.canOpen} onclick={() => openMember(row.userId, row.userTag)}>
                         <span class="truncate text-sm text-on-surface">{row.userTag}</span>
                         <span class="text-sm tabular-nums text-error">{row.count}</span>
                       </button>
