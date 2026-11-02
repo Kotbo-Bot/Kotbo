@@ -379,7 +379,7 @@ export async function handleButton(interaction: Interaction, client: Client): Pr
     if (!guildId) return;
     await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
 
-    const [{ attackRaid, RaidError }, { buildAssaultEmbed }] = await Promise.all([
+    const [{ attackRaid, RaidError, RaidRefused }, { buildAssaultEmbed, raidRefusalText }] = await Promise.all([
       import('../services/features/rpg/rpgRaidService.js'),
       import('../services/features/rpg/rpgRaidPanel.js'),
     ]);
@@ -393,11 +393,12 @@ export async function handleButton(interaction: Interaction, client: Client): Pr
       // joueur ; le reste part au journal, l'utilisateur n'ayant que faire d'une trace.
       const expected = error instanceof RaidError;
       if (!expected) logger.error('RpgRaid', `Assaut en échec sur ${guildId}:`, error);
+      const locale = await resolveGuildLocale(guildId).catch(() => getLocale(interaction));
+      const reason = error instanceof RaidRefused ? raidRefusalText(error.refusal, locale)
+        : expected ? error.message
+        : gvwMessages.rpg_raid_panel_attack_failed({}, { locale });
       await interaction.editReply({
-        embeds: [errorEmbed(
-          'Assaut impossible',
-          expected ? error.message : "L'assaut n'a pas pu être livré.",
-        )],
+        embeds: [errorEmbed(gvwMessages.rpg_raid_panel_attack_error({}, { locale }), reason)],
       }).catch(() => null);
     }
     return;

@@ -16,6 +16,7 @@
   import Papicon from './Papicon.svelte';
   import EmptyState from './EmptyState.svelte';
   import LoadingHint from './LoadingHint.svelte';
+  import { formatRelative } from './staff/format';
 
   type SpamConfig = {
     guildId: string;
@@ -90,58 +91,30 @@
   };
 
   const SIGNAL_LABELS: Record<string, string> = {
-    no_typing: 'Posté sans indicateur de frappe',
-    paste_burst: 'Copier-coller',
-    inhuman_rate: 'Débit inhumain',
-    regular_intervals: 'Intervalles réguliers',
-    cross_channel_burst: 'Diffusion multi-salons',
-    attachment_flood: 'Rafale de pièces jointes',
-    near_duplicate: 'Quasi-doublons',
-    repeat_identical: 'Répétition identique',
-    mention_burst: 'Mentions en masse',
-    everyone_attempt: 'Tentative de @everyone',
-    unicode_obfuscation: 'Obfuscation unicode',
-    invite_link: 'Invitation Discord',
-    first_message_link: 'Lien dans les premiers messages',
-    link_from_newcomer: 'Lien d\'une arrivée récente',
+    no_typing: m.asp_sig_no_typing(),
+    paste_burst: m.asp_sig_paste_burst(),
+    inhuman_rate: m.asp_sig_inhuman_rate(),
+    regular_intervals: m.asp_sig_regular_intervals(),
+    cross_channel_burst: m.asp_sig_cross_channel_burst(),
+    attachment_flood: m.asp_sig_attachment_flood(),
+    near_duplicate: m.asp_sig_near_duplicate(),
+    repeat_identical: m.asp_sig_repeat_identical(),
+    mention_burst: m.asp_sig_mention_burst(),
+    everyone_attempt: m.asp_sig_everyone_attempt(),
+    unicode_obfuscation: m.asp_sig_unicode_obfuscation(),
+    invite_link: m.asp_sig_invite_link(),
+    first_message_link: m.asp_sig_first_message_link(),
+    link_from_newcomer: m.asp_sig_link_from_newcomer(),
   };
 
   const SIGNAL_TOGGLES: { field: keyof SpamConfig; label: string; help: string }[] = [
-    {
-      field: 'typingSignalEnabled',
-      label: 'Absence d\'indicateur de frappe',
-      help: 'Un client Discord réel émet un événement de frappe avant un message conséquent. Les scripts et les comptes pilotés par token volé ne le font pratiquement jamais. Le signal se neutralise automatiquement si le bot ne reçoit pas ces événements.',
-    },
-    {
-      field: 'pasteSignalEnabled',
-      label: 'Copier-coller',
-      help: 'Gros message (200 caractères et plus) envoyé après une frappe bien trop courte pour l\'avoir écrit : le geste du spammeur qui recopie la même arnaque de serveur en serveur. Coller un texte reste courant, le signal pèse peu seul et compte surtout en concordance. Les blocs de code sont ignorés.',
-    },
-    {
-      field: 'crossChannelEnabled',
-      label: 'Diffusion multi-salons',
-      help: 'Même message dans plusieurs salons en quelques secondes : la signature du compte compromis qui parcourt la liste des salons accessibles.',
-    },
-    {
-      field: 'duplicateEnabled',
-      label: 'Répétitions et quasi-doublons',
-      help: 'Comparaison après normalisation unicode : les variantes destinées à casser la comparaison exacte (homoglyphes, caractères invisibles, ponctuation) sont ramenées au même texte.',
-    },
-    {
-      field: 'cadenceEnabled',
-      label: 'Cadence de publication',
-      help: 'Débit incompatible avec une saisie humaine, et intervalles trop réguliers - un humain a une cadence irrégulière, une boucle programmée non.',
-    },
-    {
-      field: 'contentEnabled',
-      label: 'Analyse du contenu',
-      help: 'Mentions en masse, tentative de @everyone sans permission, obfuscation unicode, invitations Discord.',
-    },
-    {
-      field: 'trustEnabled',
-      label: 'Atténuation par la confiance',
-      help: 'Ancienneté, activité et rôles réduisent le score - mais uniquement sur le contenu, jamais sur les signaux d\'automatisation : un compte de confiance qui poste sans frappe et en rafale reste détecté.',
-    },
+    { field: 'typingSignalEnabled', label: m.asp_toggle_typing(), help: m.asp_toggle_typing_help() },
+    { field: 'pasteSignalEnabled', label: m.asp_toggle_paste(), help: m.asp_toggle_paste_help() },
+    { field: 'crossChannelEnabled', label: m.asp_toggle_cross_channel(), help: m.asp_toggle_cross_channel_help() },
+    { field: 'duplicateEnabled', label: m.asp_toggle_duplicate(), help: m.asp_toggle_duplicate_help() },
+    { field: 'cadenceEnabled', label: m.asp_toggle_cadence(), help: m.asp_toggle_cadence_help() },
+    { field: 'contentEnabled', label: m.asp_toggle_content(), help: m.asp_toggle_content_help() },
+    { field: 'trustEnabled', label: m.asp_toggle_trust(), help: m.asp_toggle_trust_help() },
   ];
 
   let config = $state<SpamConfig>({ ...DEFAULTS });
@@ -183,15 +156,6 @@
     return 'bg-outline-variant';
   }
 
-  function formatRelative(value: string): string {
-    const diff = Date.now() - new Date(value).getTime();
-    const minutes = Math.max(1, Math.floor(diff / 60000));
-    if (minutes < 60) return `il y a ${minutes} min`;
-    const hours = Math.floor(minutes / 60);
-    if (hours < 24) return `il y a ${hours} h`;
-    return `il y a ${Math.floor(hours / 24)} j`;
-  }
-
   async function load() {
     if (!authStore.selectedGuildId) return;
     loading = true;
@@ -207,7 +171,7 @@
       stats = res?.stats ?? null;
       samples = sampleRes?.samples ?? [];
     } catch (err) {
-      error = err instanceof Error ? err.message : 'Impossible de charger la configuration';
+      error = err instanceof Error ? err.message : m.asp_config_load_error();
     } finally {
       loading = false;
     }
@@ -283,10 +247,9 @@
 <div class="space-y-8 animate-in fade-in duration-300">
   <header class="flex flex-col md:flex-row md:items-end justify-between gap-x-6 gap-y-3">
     <div class="min-w-0">
-      <h2 class="text-lg font-semibold tracking-tight text-on-surface font-headline leading-tight">Anti-spam comportemental</h2>
+      <h2 class="text-lg font-semibold tracking-tight text-on-surface font-headline leading-tight">{m.asp_title()}</h2>
       <p class="mt-1 max-w-prose text-sm text-on-surface-variant">
-        Repère les comptes qui agissent comme des robots : messages répétés, liens postés partout,
-        rythme anormal. Il complète les filtres au-dessus, qui comptent seulement les messages.
+        {m.asp_intro()}
       </p>
     </div>
     <div class="flex items-center gap-2 shrink-0">
@@ -297,20 +260,20 @@
   {#if loading}
     <LoadingHint context="config" />
   {:else if error}
-    <EmptyState icon="AlertTriangle" title="Configuration indisponible" description={error} actionLabel="Réessayer" actionIcon="RefreshCw" onAction={load} />
+    <EmptyState icon="AlertTriangle" title={m.asp_config_unavailable()} description={error} actionLabel={m.common_retry()} actionIcon="RefreshCw" onAction={load} />
   {:else}
     <!-- ── Activation ─────────────────────────────────────────────────── -->
     <SectionCard
-      title="Activation"
-      description="Le moteur démarre en observation : il calcule et journalise sans jamais sanctionner."
+      title={m.asp_activation_title()}
+      description={m.asp_activation_desc()}
       icon="Power"
     >
       <div class="space-y-4">
         <div class="flex items-center justify-between gap-4">
           <div class="min-w-0">
-            <p class="text-sm font-medium text-on-surface">Moteur anti-spam</p>
+            <p class="text-sm font-medium text-on-surface">{m.asp_engine()}</p>
             <p class="text-xs text-on-surface-variant mt-0.5">
-              Évalue chaque message et applique une action selon le score obtenu.
+              {m.asp_engine_desc()}
             </p>
           </div>
           <ToggleSwitch checked={config.enabled} onToggle={(v) => (config.enabled = v)} />
@@ -323,16 +286,13 @@
           <div class="min-w-0">
             <p class="text-sm font-medium text-on-surface flex items-center gap-2">
               <Papicon icon={config.shadowMode ? 'Eye' : 'Zap'} size={15} />
-              Mode observation
+              {m.asp_shadow_mode()}
             </p>
             <p class="text-xs text-on-surface-variant mt-0.5 leading-relaxed">
               {#if config.shadowMode}
-                Actif : rien n'est supprimé ni sanctionné. Laisse tourner deux à trois semaines,
-                puis calez les seuils sur la répartition observée ci-dessous avant de désactiver.
+                {m.asp_shadow_on()}
               {:else}
-                <span class="text-warning font-medium">Désactivé</span> : les sanctions sont
-                réellement appliquées. Vérifie que tu as tranché assez de détections pour que
-                les seuils soient justifiés.
+                <span class="text-warning font-medium">{m.asp_shadow_off_label()}</span>{m.asp_shadow_off_desc()}
               {/if}
             </p>
           </div>
@@ -341,12 +301,12 @@
 
         <div class="grid sm:grid-cols-2 gap-3">
           <label class="block">
-            <span class="text-xs font-medium text-on-surface-variant">Salon d'alerte</span>
+            <span class="text-xs font-medium text-on-surface-variant">{m.asp_alert_channel()}</span>
             <select
               bind:value={config.alertChannelId}
               class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface"
             >
-              <option value={null}>Salon de logs par défaut</option>
+              <option value={null}>{m.asp_alert_channel_default()}</option>
               {#each channels as channel (channel.id)}
                 <option value={channel.id}>#{channel.name}</option>
               {/each}
@@ -355,7 +315,7 @@
 
           <label class="block">
             <span class="text-xs font-medium text-on-surface-variant">
-              Durée d'exclusion temporaire (minutes)
+              {m.asp_timeout_minutes()}
             </span>
             <input
               type="number"
@@ -371,8 +331,8 @@
 
     <!-- ── Calibration ────────────────────────────────────────────────── -->
     <SectionCard
-      title="Paliers d'action"
-      description="Chaque palier déclenche une action plus sévère. Les barres montrent la répartition réelle des scores sur 14 jours."
+      title={m.asp_tiers_title()}
+      description={m.asp_tiers_desc()}
       icon="Sliders"
     >
       {#if stats && stats.total > 0}
@@ -386,7 +346,7 @@
                 <div
                   class="w-full rounded-t transition-all duration-500 {bandColor(band.from)}"
                   style="height: {Math.max(2, (band.count / histogramMax) * 76)}px"
-                  title="{band.count} message(s) entre {band.from} et {band.to}"
+                  title={m.asp_band_tooltip({ count: band.count, from: band.from, to: band.to })}
                 ></div>
                 <span class="text-2xs text-on-surface-variant tabular-nums">{band.from}</span>
               </div>
@@ -397,39 +357,38 @@
             <div class="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
               <div class="rounded-lg bg-sky-500/10 px-2 py-2">
                 <div class="text-[15px] font-semibold text-sky-500 tabular-nums">{projection.logged}</div>
-                <div class="text-2xs text-on-surface-variant">journalisés</div>
+                <div class="text-2xs text-on-surface-variant">{m.asp_proj_logged()}</div>
               </div>
               <div class="rounded-lg bg-warning/10 px-2 py-2">
                 <div class="text-[15px] font-semibold text-warning tabular-nums">{projection.deleted}</div>
-                <div class="text-2xs text-on-surface-variant">supprimés</div>
+                <div class="text-2xs text-on-surface-variant">{m.asp_proj_deleted()}</div>
               </div>
               <div class="rounded-lg bg-orange-500/10 px-2 py-2">
                 <div class="text-[15px] font-semibold text-orange-500 tabular-nums">{projection.timedOut}</div>
-                <div class="text-2xs text-on-surface-variant">exclus</div>
+                <div class="text-2xs text-on-surface-variant">{m.asp_proj_timed_out()}</div>
               </div>
               <div class="rounded-lg bg-error/10 px-2 py-2">
                 <div class="text-[15px] font-semibold text-error tabular-nums">{projection.banned}</div>
-                <div class="text-2xs text-on-surface-variant">bannis</div>
+                <div class="text-2xs text-on-surface-variant">{m.asp_proj_banned()}</div>
               </div>
             </div>
             <p class="mt-2 text-xs text-on-surface-variant text-center">
-              Projection sur les {stats.total} évaluations des 14 derniers jours avec les seuils actuels.
+              {m.asp_projection({ total: stats.total })}
             </p>
           {/if}
         </div>
       {:else}
         <p class="mb-5 text-body-sm text-on-surface-variant leading-relaxed rounded-lg bg-surface-container/60 px-3 py-2.5">
-          Aucune évaluation enregistrée pour l'instant. Active le moteur en mode observation :
-          l'histogramme se remplira et permettra de choisir des seuils sur tes données plutôt qu'au jugé.
+          {m.asp_no_evaluation()}
         </p>
       {/if}
 
       <div class="space-y-4">
         {#each [
-          { field: 'logThreshold' as const, label: 'Journalisation', help: 'Enregistré pour analyse, aucune action visible.', color: 'accent-sky-500' },
-          { field: 'deleteThreshold' as const, label: 'Suppression', help: 'Message supprimé et avertissement enregistré.', color: 'accent-amber-500' },
-          { field: 'timeoutThreshold' as const, label: 'Exclusion temporaire', help: 'Message supprimé et membre exclu temporairement.', color: 'accent-orange-500' },
-          { field: 'banThreshold' as const, label: 'Bannissement', help: 'Réservé aux cas certains. Mettre 101 pour ne jamais bannir automatiquement.', color: 'accent-red-500' },
+          { field: 'logThreshold' as const, label: m.asp_tier_log(), help: m.asp_tier_log_help(), color: 'accent-sky-500' },
+          { field: 'deleteThreshold' as const, label: m.asp_tier_delete(), help: m.asp_tier_delete_help(), color: 'accent-amber-500' },
+          { field: 'timeoutThreshold' as const, label: m.asp_tier_timeout(), help: m.asp_tier_timeout_help(), color: 'accent-orange-500' },
+          { field: 'banThreshold' as const, label: m.asp_tier_ban(), help: m.asp_tier_ban_help(), color: 'accent-red-500' },
         ] as row (row.field)}
           <div>
             <div class="flex items-baseline justify-between gap-3">
@@ -451,8 +410,8 @@
 
     <!-- ── Signaux ────────────────────────────────────────────────────── -->
     <SectionCard
-      title="Signaux actifs"
-      description="Chaque signal contribue au score. Aucun signal ne décide seul : c'est leur concordance qui fait la preuve."
+      title={m.asp_signals_title()}
+      description={m.asp_signals_desc()}
       icon="Radar"
     >
       <div class="space-y-3">
@@ -472,7 +431,7 @@
                 {toggle.label}
                 {#if usage}
                   <span class="text-2xs px-1.5 py-0.5 rounded bg-surface-container text-on-surface-variant">
-                    {usage.count} déclenchements · poids ×{usage.weight.toFixed(2)}
+                    {m.asp_signal_usage({ count: usage.count, weight: usage.weight.toFixed(2) })}
                   </span>
                 {/if}
               </p>
@@ -488,7 +447,7 @@
 
       <div class="mt-5 pt-4 border-t border-outline-variant/30 grid sm:grid-cols-3 gap-3">
         <label class="block">
-          <span class="text-xs font-medium text-on-surface-variant">Fenêtre d'observation (s)</span>
+          <span class="text-xs font-medium text-on-surface-variant">{m.asp_window_seconds()}</span>
           <input
             type="number" min="5" max="300"
             bind:value={config.windowSeconds}
@@ -496,7 +455,7 @@
           />
         </label>
         <label class="block">
-          <span class="text-xs font-medium text-on-surface-variant">Salons pour la diffusion</span>
+          <span class="text-xs font-medium text-on-surface-variant">{m.asp_cross_channel_threshold()}</span>
           <input
             type="number" min="2" max="20"
             bind:value={config.crossChannelThreshold}
@@ -504,7 +463,7 @@
           />
         </label>
         <label class="block">
-          <span class="text-xs font-medium text-on-surface-variant">Similarité des doublons</span>
+          <span class="text-xs font-medium text-on-surface-variant">{m.asp_duplicate_similarity()}</span>
           <input
             type="number" min="0.5" max="1" step="0.01"
             bind:value={config.duplicateSimilarity}
@@ -516,14 +475,14 @@
 
     <!-- ── Exemptions ─────────────────────────────────────────────────── -->
     <SectionCard
-      title="Exemptions"
-      description="Les membres pouvant déjà gérer les messages sont exemptés d'office."
+      title={m.asp_exemptions_title()}
+      description={m.asp_exemptions_desc()}
       icon="Lock"
     >
       <div class="space-y-4">
         <div>
           <p class="text-xs font-medium text-on-surface-variant mb-2">
-            Rôles exemptés
+            {m.asp_exempt_roles()}
             {#if config.bypassRoleIds.length > 0}
               <span class="text-on-surface-variant">({config.bypassRoleIds.length})</span>
             {/if}
@@ -546,13 +505,13 @@
 
         <div>
           <p class="text-xs font-medium text-on-surface-variant mb-2">
-            Salons exemptés
+            {m.asp_exempt_channels()}
             {#if config.bypassChannelIds.length > 0}
               <span class="text-on-surface-variant">({config.bypassChannelIds.length})</span>
             {/if}
           </p>
           <p class="text-2xs text-on-surface-variant mb-2">
-            Utile pour les salons de spam assumé (mèmes, bots, tests) où la répétition est la norme.
+            {m.asp_exempt_channels_help()}
           </p>
           <div class="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto">
             {#each channels as channel (channel.id)}
@@ -574,8 +533,8 @@
 
     <!-- ── File de decision ───────────────────────────────────────────── -->
     <SectionCard
-      title="Détections à trancher"
-      description="Chaque décision alimente le recalibrage automatique des poids par signal."
+      title={m.asp_review_title()}
+      description={m.asp_review_desc()}
       icon="Scale"
     >
       {#snippet actions()}
@@ -589,16 +548,15 @@
             }}
             class="accent-primary"
           />
-          En attente uniquement
+          {m.asp_pending_only()}
         </label>
       {/snippet}
 
       {#if stats && stats.labelsNeeded > 0}
         <div class="mb-4 rounded-lg border border-sky-500/30 bg-sky-500/5 px-3 py-2.5">
           <p class="text-xs text-on-surface-variant leading-relaxed">
-            <span class="font-medium text-on-surface">{stats.labelsNeeded} décision(s)</span>
-            manquante(s) avant que le recalibrage automatique des poids puisse tourner. Il faut à la
-            fois des vrais et des faux positifs - sans les deux, il n'y a rien à discriminer.
+            <span class="font-medium text-on-surface">{m.asp_labels_needed_count({ count: stats.labelsNeeded })}</span>
+            {m.asp_labels_needed_desc()}
           </p>
         </div>
       {/if}
@@ -606,10 +564,10 @@
       {#if samples.length === 0}
         <EmptyState
           icon="ShieldCheck"
-          title="Aucune détection"
+          title={m.asp_no_detection()}
           description={pendingOnly
-            ? 'Rien à trancher pour le moment.'
-            : 'Le moteur n\'a encore rien évalué au-dessus du seuil de journalisation.'} reason="all-clear" />
+            ? m.asp_no_detection_pending()
+            : m.asp_no_detection_all()} reason="all-clear" />
       {:else}
         <div class="space-y-2.5">
           {#each samples as sample (sample.id)}
@@ -628,10 +586,10 @@
                       {sample.score}/100
                     </span>
                     <span class="text-xs text-on-surface-variant">
-                      <code class="text-2xs">{sample.userId}</code> dans <span class="text-on-surface">#{channels.find((c) => c.id === sample.channelId)?.name ?? sample.channelId}</span>
+                      <code class="text-2xs">{sample.userId}</code> {m.asp_sample_in()} <span class="text-on-surface">#{channels.find((c) => c.id === sample.channelId)?.name ?? sample.channelId}</span>
                     </span>
                     {#if sample.shadow}
-                      <span class="text-2xs px-1.5 py-0.5 rounded bg-sky-500/10 text-sky-500">observation</span>
+                      <span class="text-2xs px-1.5 py-0.5 rounded bg-sky-500/10 text-sky-500">{m.asp_sample_shadow()}</span>
                     {/if}
                     {#if sample.label}
                       <span
@@ -639,7 +597,7 @@
                           ? 'bg-error/10 text-error'
                           : 'bg-success/10 text-success'}"
                       >
-                        {sample.label === 'TRUE_POSITIVE' ? 'vrai positif' : 'faux positif'}
+                        {sample.label === 'TRUE_POSITIVE' ? m.asp_label_true_positive() : m.asp_label_false_positive()}
                       </span>
                     {/if}
                     <span class="text-2xs text-on-surface-variant ml-auto">{formatRelative(sample.createdAt)}</span>
@@ -668,7 +626,7 @@
                       disabled={decidingId !== null}
                       onclick={() => decide(sample, true)}
                     >
-                      Vrai positif
+                      {m.asp_btn_true_positive()}
                     </button>
                     <button
                       type="button"
@@ -676,7 +634,7 @@
                       disabled={decidingId !== null}
                       onclick={() => decide(sample, false)}
                     >
-                      Faux positif
+                      {m.asp_btn_false_positive()}
                     </button>
                   </div>
                 {/if}
@@ -690,7 +648,7 @@
     {#if dirty}
       <div class="sticky bottom-4 z-10">
         <div class="flex items-center justify-between gap-4 rounded-xl border border-primary/40 bg-surface-container-high/95 backdrop-blur px-4 py-3 shadow-lg">
-          <p class="text-body-sm text-on-surface">Modifications non enregistrées</p>
+          <p class="text-body-sm text-on-surface">{m.asp_unsaved()}</p>
           <div class="flex items-center gap-2">
             <button
               type="button"
@@ -698,7 +656,7 @@
               onclick={reset}
               disabled={saving}
             >
-              Annuler
+              {m.common_cancel()}
             </button>
             <button
               type="button"
@@ -706,7 +664,7 @@
               onclick={save}
               disabled={saving}
             >
-              {saving ? 'Enregistrement…' : 'Enregistrer'}
+              {saving ? m.asp_saving() : m.common_save()}
             </button>
           </div>
         </div>
