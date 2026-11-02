@@ -277,6 +277,24 @@ function ticketStatusPill(status: string, locale: SiteLocale): string {
   return `<span class="${cls('pill', active ? 'pill-ok' : 'pill-muted')}">${esc(active ? m.site_ticket_status_open({}, o) : m.site_ticket_status_closed({}, o))}</span>`;
 }
 
+/** Formulaire d'ouverture d'un ticket (géré par le script du site, `data-ticket-new`). */
+export function ticketNewForm(types: Awaited<ReturnType<typeof listSiteTicketTypes>>, locale: SiteLocale): string {
+  const o = { locale };
+  const typeSelect =
+    types.length > 1
+      ? `<div class="field"><label for="ticket-type">${esc(m.site_ticket_type({}, o))}</label><select id="ticket-type" name="typeId">${types.map((t) => `<option${attrs({ value: t.id })}>${t.emoji ? `${esc(t.emoji)} ` : ''}${esc(t.label)}</option>`).join('')}</select></div>`
+      : types.length === 1
+        ? `<input type="hidden" name="typeId"${attrs({ value: types[0].id })}>`
+        : '';
+  return `<form class="site-form" data-ticket-new novalidate>
+  ${typeSelect}
+  <div class="field"><label for="ticket-subject">${esc(m.site_ticket_subject({}, o))}<span class="req">*</span></label><input id="ticket-subject" type="text" name="subject" maxlength="100" required></div>
+  <div class="field"><label for="ticket-message">${esc(m.site_ticket_message({}, o))}<span class="req">*</span></label><textarea id="ticket-message" name="message" rows="5" maxlength="3800" required></textarea></div>
+  <p class="form-status" role="status" aria-live="polite"></p>
+  <div class="form-actions"><button type="submit" class="btn btn-primary">${esc(m.site_ticket_open({}, o))}</button></div>
+</form>`;
+}
+
 async function renderTicket(ctx: BlockContext, _config: Record<string, unknown>, ref: BlockRef): Promise<string> {
   const o = { locale: ctx.locale };
   const wrap = (body: string) => `<div class="ticket"${attrs({ 'data-ticket': ref.pageId })}>
@@ -321,19 +339,7 @@ async function renderTicket(ctx: BlockContext, _config: Record<string, unknown>,
     parts.push(`<div class="panel"><p class="card-meta">${ticketStatusPill(active.status, ctx.locale)} <strong>${esc(active.reason)}</strong> · ${timeTag(active.createdAt, ctx.locale, 'medium')}</p>${thread}</div>`);
   }
 
-  const typeSelect =
-    types.length > 1
-      ? `<div class="field"><label for="ticket-type">${esc(m.site_ticket_type({}, o))}</label><select id="ticket-type" name="typeId">${types.map((t) => `<option${attrs({ value: t.id })}>${t.emoji ? `${esc(t.emoji)} ` : ''}${esc(t.label)}</option>`).join('')}</select></div>`
-      : types.length === 1
-        ? `<input type="hidden" name="typeId"${attrs({ value: types[0].id })}>`
-        : '';
-  const newForm = `<form class="site-form" data-ticket-new novalidate>
-  ${typeSelect}
-  <div class="field"><label for="ticket-subject">${esc(m.site_ticket_subject({}, o))}<span class="req">*</span></label><input id="ticket-subject" type="text" name="subject" maxlength="100" required></div>
-  <div class="field"><label for="ticket-message">${esc(m.site_ticket_message({}, o))}<span class="req">*</span></label><textarea id="ticket-message" name="message" rows="5" maxlength="3800" required></textarea></div>
-  <p class="form-status" role="status" aria-live="polite"></p>
-  <div class="form-actions"><button type="submit" class="btn btn-primary">${esc(m.site_ticket_open({}, o))}</button></div>
-</form>`;
+  const newForm = ticketNewForm(types, ctx.locale);
   parts.push(active ? `<details class="faq-item"><summary>${esc(m.site_ticket_new({}, o))}</summary><div class="faq-answer">${newForm}</div></details>` : newForm);
 
   const past = tickets.filter((t) => t.id !== active?.id).slice(0, 5);
