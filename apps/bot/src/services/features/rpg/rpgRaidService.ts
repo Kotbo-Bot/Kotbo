@@ -758,13 +758,9 @@ export async function attackRaid(client: Client, guildId: string, userId: string
     });
     committed = true;
 
-    // Le joueur ressort du raid dans l'état où il en sort : les points de vie perdus se
-    // reportent sur le profil, comme après un combat de boss.
-    const remainingHp = Math.max(1, Math.min(stats.maxHealth, profile.health - result.damageTaken));
-    await prisma.rpgProfile.update({
-      where: { guildId_userId: { guildId, userId } },
-      data: { health: remainingHp },
-    });
+    // Les points de vie du profil ne bougent pas : ce que l'assaut retire ou rend reste dans
+    // l'assaut. Les reporter obligeait à se soigner entre chaque coup porté, et le plancher à
+    // 1 PV du report en rajoutait à un joueur tombé sans que personne le veuille.
 
     // Quêtes et campagne se comptent une fois l'assaut inscrit : un raid qui echoue en
     // cours de route ne doit pas avoir fait avancer un objectif pour un coup jamais porté.
