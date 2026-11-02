@@ -2049,6 +2049,19 @@ export async function handleModalSubmit(interaction: ModalSubmitInteraction, cli
     }
 
     const executor = interaction.user;
+    // Une fois le membre expulsé ou banni, un casier non mis à jour ne doit pas s'annoncer
+    // comme un échec : le modérateur sanctionnerait une deuxième fois.
+    const recordFailedField = () => {
+      const locale = getLocale(interaction);
+      return { name: gvwMessages.b1_record_failed_title({}, { locale }), value: gvwMessages.b1_record_failed_desc({}, { locale }) };
+    };
+    const recordApplied = (action: string, register: () => Promise<unknown>) => register().then(
+      () => true,
+      (err: unknown) => {
+        logger.error('Sanction', `${action} appliqué sur ${interaction.guildId} mais non inscrit au casier:`, err);
+        return false;
+      },
+    );
 
     try {
       const targetUser = await client.users.fetch(targetUserId).catch(() => null);
@@ -2126,14 +2139,16 @@ export async function handleModalSubmit(interaction: ModalSubmitInteraction, cli
         const { sendPreActionAppealDM } = await import('../services/moderation/banAppealService.js');
         await sendPreActionAppealDM(client, guild.id, targetUserId, SanctionType.KICK).catch(() => false);
         await targetMember.kick(`${reason} | Modération: ${executor.tag}`);
-        await registerKickSanction({
+        const recorded = await recordApplied('Kick', () => registerKickSanction({
           guildId: interaction.guildId!,
           target,
           moderator,
           reason,
           client,
-        });
-        await interaction.editReply({ embeds: [successEmbed('Expulsion appliquée', `L'utilisateur a été expulsé.`)] });
+        }));
+        const embed = successEmbed('Expulsion appliquée', `L'utilisateur a été expulsé.`);
+        if (!recorded) embed.addFields(recordFailedField());
+        await interaction.editReply({ embeds: [embed] });
       } else if (action === 'ban') {
         if (targetMember && !targetMember.bannable) {
           await interaction.editReply({ embeds: [errorEmbed('Action impossible', 'Le bot ne peut pas bannir ce membre (hiérarchie des rôles).')] });
@@ -2142,14 +2157,16 @@ export async function handleModalSubmit(interaction: ModalSubmitInteraction, cli
         const { sendPreActionAppealDM } = await import('../services/moderation/banAppealService.js');
         await sendPreActionAppealDM(client, guild.id, targetUserId, SanctionType.BAN).catch(() => false);
         await runGuildBan(guild, targetUserId, `${reason} | Modération: ${executor.tag}`);
-        await registerBanSanction({
+        const recorded = await recordApplied('Ban', () => registerBanSanction({
           guildId: interaction.guildId!,
           target,
           moderator,
           reason,
           client,
-        });
-        await interaction.editReply({ embeds: [successEmbed('Bannissement appliqué', `L'utilisateur a été banni.`)] });
+        }));
+        const embed = successEmbed('Bannissement appliqué', `L'utilisateur a été banni.`);
+        if (!recorded) embed.addFields(recordFailedField());
+        await interaction.editReply({ embeds: [embed] });
       }
     } catch (error) {
       await interaction.editReply({ embeds: [errorEmbed('Erreur', publicErrorMessage(error, 'Une erreur est survenue.'))] });
