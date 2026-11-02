@@ -194,7 +194,8 @@
     padding: 0.625rem 1.25rem;
     text-align: left;
   }
-  .sheet :global(button.sheet-row:hover) { background: var(--surface-container-low); }
+  .sheet :global(button.sheet-row:hover:not(:disabled)) { background: var(--surface-container-low); }
+  .sheet :global(button.sheet-row:disabled) { cursor: default; }
   .sheet :global(.sheet-bar) {
     display: block;
     height: 0.375rem;

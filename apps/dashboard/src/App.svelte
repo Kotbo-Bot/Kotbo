@@ -12,6 +12,7 @@
   import { feedbackModal } from "./lib/stores/feedbackModal.svelte";
   import { inviteDetailsModal } from "./lib/stores/inviteDetailsModal.svelte";
   import { channelDetailsModal } from "./lib/stores/channelDetailsModal.svelte";
+  import { memberCaseModal } from "./lib/stores/memberCaseModal.svelte";
   import ToastContainer from "./lib/components/ToastContainer.svelte";
   import BackendDownBanner from "./lib/components/BackendDownBanner.svelte";
   import GlobalConfirmDialog from "./lib/components/GlobalConfirmDialog.svelte";
@@ -1285,6 +1286,13 @@
   {#await import("./lib/components/channels/ChannelDetailsModal.svelte") then module}
     {@const ChannelDetailsModal = module.default}
     <ChannelDetailsModal />
+  {/await}
+{/if}
+
+{#if memberCaseModal.open}
+  {#await import("./lib/components/MemberCaseModalHost.svelte") then module}
+    {@const MemberCaseModalHost = module.default}
+    <MemberCaseModalHost />
   {/await}
 {/if}
 

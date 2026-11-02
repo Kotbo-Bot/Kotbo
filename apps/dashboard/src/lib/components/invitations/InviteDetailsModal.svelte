@@ -4,7 +4,6 @@
    * tuiles qui pilotent la courbe (période précédente en pointillé), sections
    * en cartes, actions de modération dans la colonne de droite.
    */
-  import { router } from 'tinro';
   import Papicon from '../Papicon.svelte';
   import DetailSheet from '../DetailSheet.svelte';
   import { Button, Callout, FilterPills, SectionCard, type FilterOption } from '../ui';
@@ -14,6 +13,7 @@
   import { relativeDelta } from '../analytics/analyticsFilters.svelte';
   import { memberAvatarSrc } from '../../discordMedia';
   import { inviteDetailsModal } from '../../stores/inviteDetailsModal.svelte';
+  import { memberCaseModal } from '../../stores/memberCaseModal.svelte';
   import { dashboardStore } from '../../stores/dashboard.svelte';
   import { toast } from '../../stores/toast.svelte';
   import { confirmDialog } from '../../stores/confirmDialog.svelte';
@@ -181,9 +181,12 @@
       .catch(() => toast.warning(m.d7_inv_link_copy_fail()));
   }
 
-  function openMember(userId: string) {
+  // Le détail se ferme avant d'ouvrir la fiche : resté ouvert dessous, un clic sur un code
+  // d'invitation dans la fiche le mettrait à jour hors de vue. Sans accès à « Membres »,
+  // les pseudos ne sont pas cliquables.
+  function openMember(userId: string, userName: string) {
     closeModal();
-    router.goto(`/members/${userId}`);
+    void memberCaseModal.show(userId, userName);
   }
 
   const tabs = $derived([
@@ -448,7 +451,9 @@
               ])}
               {#if details.invite?.inviterId}
                 <div class="mt-4 flex flex-col gap-2">
-                  <Button size="sm" icon="user" onclick={() => openMember(details.invite.inviterId)}>{m.d7_inv_open_creator()}</Button>
+                  {#if memberCaseModal.canOpen}
+                    <Button size="sm" icon="user" onclick={() => openMember(details.invite.inviterId, details.invite.inviterTag || details.invite.inviterId)}>{m.d7_inv_open_creator()}</Button>
+                  {/if}
                   {#if canModerate}
                     <Button size="sm" variant="danger" icon="trash" onclick={purgeInviter}>{m.d7_inv_purge_cascade_btn()}</Button>
                   {/if}
@@ -553,7 +558,7 @@
                 <ul class="divide-y divide-outline-variant">
                   {#each q.topSanctioned as row (row.userId)}
                     <li>
-                      <button type="button" class="sheet-row justify-between" onclick={() => openMember(row.userId)}>
+                      <button type="button" class="sheet-row justify-between" disabled={!memberCaseModal.canOpen} onclick={() => openMember(row.userId, row.userTag)}>
                         <span class="truncate text-sm text-on-surface">{row.userTag}</span>
                         <span class="text-sm tabular-nums text-error">{row.count}</span>
                       </button>
@@ -680,7 +685,7 @@
             <ul class="divide-y divide-outline-variant">
               {#each pagedJoins as join (join.userId + join.joinedAt)}
                 <li>
-                  <button type="button" class="sheet-row" onclick={() => openMember(join.userId)}>
+                  <button type="button" class="sheet-row" disabled={!memberCaseModal.canOpen} onclick={() => openMember(join.userId, join.userTag)}>
                     <img src={memberAvatarSrc(join.avatarUrl, join.userTag, join.userId)} alt="" class="h-9 w-9 shrink-0 rounded-lg object-cover" />
                     <span class="min-w-0 flex-1">
                       <span class="block truncate text-sm font-medium text-on-surface">{join.userTag}</span>

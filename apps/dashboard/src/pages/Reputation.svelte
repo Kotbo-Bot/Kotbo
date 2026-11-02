@@ -6,6 +6,7 @@
   import Papicon from '../lib/components/Papicon.svelte';
   import EmptyState from '../lib/components/EmptyState.svelte';
   import UserDisplay from '../lib/components/UserDisplay.svelte';
+  import { memberCaseModal } from '../lib/stores/memberCaseModal.svelte';
   import { m } from '../lib/i18n';
 
   let loading = $state(true);
@@ -14,6 +15,11 @@
   const totalRepGiven = $derived(
     data?.recentVotes?.length ?? 0
   );
+
+  /** Clic sur un pseudo : ouvre sa fiche, seulement pour qui a accès à « Membres ». */
+  function openMemberOnClick(name: string | null | undefined) {
+    return memberCaseModal.canOpen ? (userId: string) => memberCaseModal.show(userId, name || userId) : null;
+  }
 
   function getMedal(index: number): string {
     if (index === 0) return '\u{1F947}';
@@ -101,6 +107,7 @@
                 userId={entry.userId}
                 name={entry.displayName}
                 avatarUrl={entry.avatarUrl}
+                onClick={openMemberOnClick(entry.displayName)}
                 size="xs"
               />
               <div class="h-2 bg-surface-container-high rounded-full overflow-hidden">
@@ -134,6 +141,7 @@
                   userId={vote.giverId}
                   name={vote.giverName}
                   avatarUrl={vote.giverAvatarUrl}
+                  onClick={openMemberOnClick(vote.giverName)}
                   size="xs"
                   class="max-w-40"
                 />
@@ -144,6 +152,7 @@
                   userId={vote.receiverId}
                   name={vote.receiverName}
                   avatarUrl={vote.receiverAvatarUrl}
+                  onClick={openMemberOnClick(vote.receiverName)}
                   size="xs"
                   class="max-w-40"
                 />
