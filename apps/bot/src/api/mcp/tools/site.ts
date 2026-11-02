@@ -56,6 +56,7 @@ import {
 } from '../../../services/site/siteAdminService.js';
 import { AgentLockError, beginAgentWrite, getAgentLockStatus, releaseAgentLock } from '../../../services/site/siteAgentLock.js';
 import { resetCollabRoom, flushCollabRoom } from '../../../services/site/siteCollabService.js';
+import { applyTemplate, listGallery, publishTemplate, TEMPLATE_CATEGORIES, undoTemplate } from '../../../services/site/siteTemplateGallery.js';
 import { searchSite } from '../../../services/site/siteSearch.js';
 import { getSiteAnalytics } from '../../../services/site/siteAnalyticsService.js';
 import { listSiteAssets, storeSiteAsset, SITE_UPLOAD_MAX_BYTES } from '../../../services/site/siteUploads.js';
@@ -849,6 +850,83 @@ export function registerSiteTools(ctx: McpToolContext) {
         });
         await audit(key_name, 'Section supprimée (MCP)', `/s/${site.slug}`, `${page.slug} : section ${index}`);
         return ok({ totalSections: sections.length });
+      } catch (error) {
+        return failure(error);
+      }
+    }),
+  );
+
+  // ─── Galerie de modèles ────────────────────────────────────────────────
+
+  server.registerTool(
+    'list_site_templates',
+    {
+      description: "Galerie de modèles de site : officiels Kotbo (id « official:<type> ») puis modèles partagés par d'autres serveurs, les plus utilisés en tête. Chaque modèle donne son thème, son nombre de pages et l'accueil (document) pour juger de sa mise en page.",
+      inputSchema: { category: z.enum(TEMPLATE_CATEGORIES).optional(), query: z.string().max(80).optional() },
+      _meta: toolMeta,
+    },
+    guard('READ_SITE', async ({ category, query }) => {
+      try {
+        const templates = await listGallery(client, guildId, { category, q: query });
+        return ok({ templates: templates.map(({ home, ...rest }) => ({ ...rest, homeSections: home?.content.length ?? 0, home })) });
+      } catch (error) {
+        return failure(error);
+      }
+    }),
+  );
+
+  server.registerTool(
+    'apply_site_template',
+    {
+      description:
+        "Applique un modèle de la galerie au site : remplace le thème, le menu et la page d'accueil, et crée les pages du modèle (publiées, textes d'exemple à remplacer). Les pages existantes restent. Annulable avec undo_site_template tant que le propriétaire n'a pas choisi de le garder.",
+      inputSchema: { template_id: z.string().max(64), key_name: keyName },
+      _meta: toolMeta,
+    },
+    guard('WRITE_SITE', async ({ template_id, key_name }) => {
+      try {
+        const site = await requireSite();
+        lock(key_name, 'Application d\'un modèle');
+        const result = await applyTemplate(client, guildId, actorId, template_id);
+        await audit(key_name, 'Modèle de site appliqué (MCP)', `/s/${site.slug}`, template_id);
+        return ok(result);
+      } catch (error) {
+        return failure(error);
+      }
+    }),
+  );
+
+  server.registerTool(
+    'undo_site_template',
+    { description: "Annule le dernier modèle appliqué : thème, menu et accueil d'avant reviennent, les pages créées par le modèle sont supprimées.", inputSchema: { key_name: keyName }, _meta: toolMeta },
+    guard('WRITE_SITE', async ({ key_name }) => {
+      try {
+        const site = await requireSite();
+        lock(key_name, 'Annulation d\'un modèle');
+        await undoTemplate(guildId);
+        await audit(key_name, 'Modèle de site annulé (MCP)', `/s/${site.slug}`, '');
+        return ok({ ok: true });
+      } catch (error) {
+        return failure(error);
+      }
+    }),
+  );
+
+  server.registerTool(
+    'share_site_as_template',
+    {
+      description:
+        "Publie le site du serveur dans la galerie de modèles, visible de tous les serveurs : thème, menu et pages libres. Les textes deviennent des textes d'exemple, les blocs de modules reviennent à leurs réglages par défaut, les liens externes sont retirés. 5 modèles par serveur au plus. Demande l'accord du propriétaire avant.",
+      inputSchema: { name: z.string().min(1).max(60), description: z.string().max(300).optional(), category: z.enum(TEMPLATE_CATEGORIES).default('autre'), key_name: keyName },
+      _meta: toolMeta,
+    },
+    guard('WRITE_SITE', async ({ name, description, category, key_name }) => {
+      try {
+        const site = await requireSite();
+        lock(key_name, 'Partage du site en modèle');
+        const template = await publishTemplate(client, guildId, actorId, { name, description, category });
+        await audit(key_name, 'Site partagé en modèle (MCP)', `/s/${site.slug}`, template.name);
+        return ok({ template });
       } catch (error) {
         return failure(error);
       }
