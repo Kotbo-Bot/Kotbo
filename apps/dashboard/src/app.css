@@ -145,6 +145,8 @@
      tout modal : elle s'ouvre par-dessus la vue modérateur, et un modal qui la
      recouvrirait rendrait l'action impossible à valider (issue #200).
      Toute nouvelle surcouche se déclare ici plutôt qu'avec un z-index en dur. */
+  /* Éditeur de page du site en plein écran : couvre le dashboard, jamais une modale. */
+  --layer-editor: 9000;
   --layer-modal: 9999;
   --layer-modal-overlay: 10010;
   /* Un select ouvert dans une modale doit couvrir cette modale (mais rester

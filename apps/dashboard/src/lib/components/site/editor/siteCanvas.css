@@ -63,21 +63,75 @@
 .site-canvas .callout-body { flex: 1; min-width: 0; }
 .site-canvas .callout-body > :first-child { margin-top: 0; }
 
-.site-canvas .sect { position: relative; margin: 0 -14px; padding: 4px 14px; border: 1px dashed transparent; border-radius: var(--site-radius); }
-.site-canvas .sect:hover, .site-canvas .sect:focus-within { border-color: var(--site-border); }
+/* ─── Sections : mêmes règles que site.css, en requêtes de conteneur pour que
+   l'aperçu mobile (canevas étroit) se comporte comme un vrai téléphone. ─── */
+.site-canvas { container-type: inline-size; --canvas-pad: clamp(16px, 5vw, 56px); }
+.site-canvas.is-wide { padding-left: 0; padding-right: 0; }
+.site-canvas.is-wide .ProseMirror { padding: 0 var(--canvas-pad); }
+.site-canvas.is-mobile { max-width: 390px; margin: 0 auto; --canvas-pad: 16px; }
+.site-canvas .ProseMirror > .sect + .sect { margin-top: 0; }
+.site-canvas .sect { position: relative; outline: 1px dashed transparent; outline-offset: -1px; }
+.site-canvas .sect.pad-none { padding: 6px 0; }
+.site-canvas .sect.pad-small { padding: 24px 0; }
+.site-canvas .sect.pad-medium { padding: 56px 0; }
+.site-canvas .sect.pad-large { padding: 96px 0; }
+.site-canvas.is-wide .sect.w-full, .site-canvas.is-wide .sect.w-edge { margin-left: calc(-1 * var(--canvas-pad)); margin-right: calc(-1 * var(--canvas-pad)); }
+.site-canvas.is-wide .sect.w-full > .sect-inner { max-width: 1160px; margin: 0 auto; padding: 0 var(--canvas-pad); }
+.site-canvas.is-wide .sect.w-edge > .sect-inner { padding: 0 var(--canvas-pad); }
+.site-canvas .sect.w-contained:not(.bg-none) { border-radius: var(--site-radius); padding-left: 32px; padding-right: 32px; }
+.site-canvas .sect.h-tall, .site-canvas .sect.h-screen { display: flex; flex-direction: column; justify-content: center; }
+.site-canvas .sect.h-tall { min-height: 60vh; }
+.site-canvas .sect.h-screen { min-height: 85vh; }
+.site-canvas .sect.h-tall.va-top, .site-canvas .sect.h-screen.va-top { justify-content: flex-start; }
+.site-canvas .sect.h-tall.va-bottom, .site-canvas .sect.h-screen.va-bottom { justify-content: flex-end; }
+.site-canvas .sect > .sect-inner { width: 100%; }
+.site-canvas .sect.tone-inverse { color: #fff; }
+.site-canvas .sect.tone-inverse a { color: inherit; }
+.site-canvas .sect.tone-inverse :is(.callout, .site-atom, .faq-item, .testimonial, .bento .cell.surface) { color: var(--site-text); }
 .site-canvas .sect.bg-surface { background: var(--site-surface-strong); }
 .site-canvas .sect.bg-accent { background: var(--site-accent); color: var(--site-on-accent); }
-.site-canvas .sect.bg-dark, .site-canvas .sect.bg-gradient, .site-canvas .sect.bg-image { background: #14171c; color: #f1f3f6; }
-.site-canvas .sect-cols:not(.layout-1) { display: grid; gap: 14px 24px; }
+.site-canvas .sect.bg-dark { background: #14171c; }
+.site-canvas .sect.bg-color { background: var(--sect-color); }
+.site-canvas .sect.bg-image { background: linear-gradient(rgb(0 0 0 / var(--sect-overlay, 0.45)), rgb(0 0 0 / var(--sect-overlay, 0.45))), var(--sect-image) center / cover no-repeat, #111; }
+.site-canvas .sect.grad-accent { background: linear-gradient(135deg, var(--site-accent), color-mix(in srgb, var(--site-accent) 45%, #000)); }
+.site-canvas .sect.grad-sunset { background: linear-gradient(135deg, #c2410c, #9d174d); }
+.site-canvas .sect.grad-ocean { background: linear-gradient(135deg, #0369a1, #1e3a8a); }
+.site-canvas .sect.grad-forest { background: linear-gradient(135deg, #15803d, #064e3b); }
+.site-canvas .sect.grad-night { background: linear-gradient(160deg, #312e81, #0f172a); }
+.site-canvas .sect.grad-aurora { background: linear-gradient(135deg, #0e7490, #6d28d9); }
+.site-canvas .sect-cols:not(.layout-1) { display: grid; gap: 24px 32px; }
 .site-canvas .layout-1-1 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .site-canvas .layout-2-1 { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }
 .site-canvas .layout-1-2 { grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); }
 .site-canvas .layout-1-1-1 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .site-canvas .layout-1-2-1 { grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1fr); }
 .site-canvas .layout-1-1-1-1 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.site-canvas .sect.va-center .sect-cols { align-items: center; }
+.site-canvas .sect.va-bottom .sect-cols { align-items: end; }
 .site-canvas .sect-col { min-width: 0; }
-.site-canvas .sect-cols:not(.layout-1) > .sect-col { border: 1px dashed var(--site-border); border-radius: var(--site-radius); padding: 8px 12px; }
-@media (max-width: 760px) { .site-canvas .sect-cols:not(.layout-1) { grid-template-columns: minmax(0, 1fr); } }
+.site-canvas .sect-col > :first-child { margin-top: 0; }
+.site-canvas .sect-col > :last-child { margin-bottom: 0; }
+/* Repères d'édition : colonnes en pointillé, section active encadrée. */
+.site-canvas .sect-cols:not(.layout-1) > .sect-col { outline: 1px dashed color-mix(in srgb, currentColor 22%, transparent); outline-offset: 6px; border-radius: 2px; }
+.site-canvas .sect:hover { outline-color: color-mix(in srgb, var(--site-accent) 45%, transparent); }
+.site-canvas .sect.is-active { outline: 2px solid var(--site-accent); }
+/* Section masquée sur l'appareil affiché : estompée, pas cachée, pour rester éditable. */
+.site-canvas:not(.is-mobile) .sect.only-mobile, .site-canvas.is-mobile .sect.only-desktop { opacity: 0.45; }
+.site-canvas .site-sect-bar { position: absolute; top: 8px; right: 8px; z-index: 5; display: none; gap: 2px; padding: 3px; border-radius: 8px; background: rgb(17 19 24 / 0.92); box-shadow: 0 6px 18px rgb(0 0 0 / 0.3); }
+.site-canvas .sect:hover > .site-sect-bar, .site-canvas .sect.is-active > .site-sect-bar { display: flex; }
+.site-canvas .site-sect-tool { width: 32px; height: 32px; display: grid; place-items: center; border: 0; border-radius: 6px; background: transparent; color: #e5e7eb; cursor: pointer; }
+.site-canvas .site-sect-tool:hover { background: rgb(255 255 255 / 0.12); color: #fff; }
+.site-canvas .site-sect-drag { cursor: grab; }
+.site-canvas .site-sect-delete:hover { color: #f87171; }
+@container (max-width: 1000px) { .site-canvas .layout-1-1-1-1 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@container (max-width: 760px) {
+  .site-canvas .sect-cols:not(.layout-1) { grid-template-columns: minmax(0, 1fr); }
+  .site-canvas .sect.pad-medium { padding-top: 40px; padding-bottom: 40px; }
+  .site-canvas .sect.pad-large { padding-top: 64px; padding-bottom: 64px; }
+  .site-canvas .sect.w-contained:not(.bg-none) { padding-left: 20px; padding-right: 20px; }
+}
+/* Au doigt : boutons plus grands. */
+@media (pointer: coarse) { .site-canvas .site-sect-tool { width: 40px; height: 40px; } }
 .site-canvas .bento { display: grid; grid-template-columns: repeat(var(--cols, 2), minmax(0, 1fr)); gap: 14px; margin: 1.2em 0; }
 .site-canvas .bento.cols-1 { --cols: 1; } .site-canvas .bento.cols-2 { --cols: 2; } .site-canvas .bento.cols-3 { --cols: 3; } .site-canvas .bento.cols-4 { --cols: 4; }
 .site-canvas .bento .cell { position: relative; min-width: 0; border: 1px dashed var(--site-border); border-radius: var(--site-radius); padding: 14px; }
@@ -140,7 +194,8 @@
 /* Menu « / » et barre flottante : hors du canevas, dans le thème du dashboard */
 .site-slash-menu {
   position: fixed;
-  z-index: 60;
+  /* Au-dessus de l'éditeur plein écran, sous les modales. */
+  z-index: calc(var(--layer-editor) + 10);
   width: 320px;
   max-height: 360px;
   overflow-y: auto;
