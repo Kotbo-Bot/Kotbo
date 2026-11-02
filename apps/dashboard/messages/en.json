@@ -15185,6 +15185,8 @@
   "ste_block_memberQuests_desc": "Signed-in member's daily and weekly quests, with progress.",
   "ste_block_memberApplications": "My applications",
   "ste_block_memberApplications_desc": "Staff applications and forms sent by the signed-in member, with their status.",
+  "ste_block_memberApp": "Member space (apps)",
+  "ste_block_memberApp_desc": "The signed-in member's app grid: tickets, applications, progress, events, settings.",
   "sx_action_blacklist": "Blacklist",
   "sx_action_blacklist_desc": "Removes from staff and blocks any return",
   "sx_action_suspend_desc": "Keeps the grade, cuts staff permissions",

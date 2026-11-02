@@ -15185,6 +15185,8 @@
   "ste_block_memberQuests_desc": "Quêtes du jour et de la semaine du membre connecté, avec leur avancement.",
   "ste_block_memberApplications": "Mes candidatures",
   "ste_block_memberApplications_desc": "Candidatures au staff et formulaires envoyés par le membre connecté, avec leur état.",
+  "ste_block_memberApp": "Espace membre (apps)",
+  "ste_block_memberApp_desc": "La grille d'apps du membre connecté : tickets, candidatures, progression, événements, réglages.",
   "sx_action_blacklist": "Mettre en liste noire",
   "sx_action_blacklist_desc": "Retire du staff et bloque tout retour",
   "sx_action_suspend_desc": "Garde le grade, coupe les permissions staff",
