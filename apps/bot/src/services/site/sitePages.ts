@@ -27,6 +27,7 @@ import {
   SITE_ASSET_PATH_PREFIX,
   siteIconSvg,
   type SiteDocument,
+  type SiteMemberApp,
 } from '@kotbo/shared';
 import prisma from '../../utils/db.js';
 import { cache } from '../../utils/cache.js';
@@ -42,6 +43,7 @@ import { getGuildCounts } from './blocks/vitrineBlocks.js';
 import { getSiteInviteUrl } from './blocks/discordBlocks.js';
 import { pageUrl, renderArticleCards, renderSearchForm, renderWikiTree, visiblePages } from './blocks/contentBlocks.js';
 import { loadSiteForm, renderSiteForm } from './blocks/demarchesBlocks.js';
+import { MEMBER_APP_SLUGS } from './blocks/memberAppBlocks.js';
 import { renderSiteShell, renderThemeCss, safeBannerUrl, type Breadcrumb, type SiteIdentity } from './siteLayout.js';
 import { getPublicMemberProfile } from './siteMemberService.js';
 import { getSiteScript, getSiteStylesheet } from './siteAssets.js';
@@ -260,21 +262,39 @@ export function virtualDocument(pageId: string): SiteDocument | null {
   if (pageId === VOTES_PAGE_ID) {
     return normalizeSiteDocument({ type: 'doc', content: [mod('vote'), mod('voteLeaderboard', { limit: 10 })] });
   }
-  if (pageId === ME_PAGE_ID) {
-    const cell = (module: string) => ({ type: 'gridCell', attrs: { span: 1, rowSpan: 1, surface: true }, content: [mod(module)] });
+  return memberSpaceDocument(pageId);
+}
+
+/**
+ * Pages de l'espace membre, en apps : `_me` (grille), `_me-<app>` (liste ou
+ * blocs de l'app) et `_me-<app>-<id>` (fiche). L'identifiant de la fiche voyage
+ * dans celui de la page : c'est lui que le script renvoie pour recharger le
+ * bloc avec l'identité du visiteur.
+ */
+const MEMBER_PAGE = /^_me(?:-(tickets|applications|progress|events|settings)(?:-([a-z0-9]{20,32}))?)?$/;
+
+export function memberPageId(app: SiteMemberApp, id?: string): string {
+  return app === 'home' ? ME_PAGE_ID : `${ME_PAGE_ID}-${app}${id ? `-${id}` : ''}`;
+}
+
+function memberSpaceDocument(pageId: string): SiteDocument | null {
+  const match = MEMBER_PAGE.exec(pageId);
+  if (!match) return null;
+  const app = (match[1] ?? 'home') as SiteMemberApp;
+  const id = match[2] ?? '';
+  const memberApp = mod('memberApp', { app, id });
+  const section = (attrs: Record<string, unknown>, ...columns: unknown[][]) => ({ type: 'section', attrs: { padding: 'none', ...attrs }, content: columns.map((content) => ({ type: 'column', content })) });
+  if (app === 'home') return normalizeSiteDocument({ type: 'doc', content: [mod('profile'), memberApp] });
+  if (app === 'progress') {
     return normalizeSiteDocument({
       type: 'doc',
-      content: [
-        mod('profile'),
-        { type: 'grid', attrs: { columns: 2 }, content: [cell('memberRewards'), cell('memberSettings')] },
-        mod('memberInventory'),
-        mod('memberQuests'),
-        mod('memberApplications'),
-        mod('ticket'),
-      ],
+      content: [section({}, [memberApp]), section({ layout: '2-1' }, [mod('memberQuests')], [mod('profile'), mod('memberRewards')]), section({}, [mod('memberInventory')])],
     });
   }
-  return null;
+  if (app === 'events') return normalizeSiteDocument({ type: 'doc', content: [memberApp, mod('giveaways', { filter: 'active', limit: 6 }), mod('events', { limit: 6 })] });
+  if (app === 'settings') return normalizeSiteDocument({ type: 'doc', content: [memberApp, mod('memberSettings')] });
+  // Tickets et candidatures : la liste ou la fiche, tout est dans le bloc de l'app.
+  return normalizeSiteDocument({ type: 'doc', content: [memberApp] });
 }
 
 // ─── Rendu d'un document ────────────────────────────────────────────────────
@@ -590,11 +610,18 @@ async function searchResponse(ctx: SiteCtx): Promise<SiteHttpResponse> {
   return html(200, shell(ctx, { path: `${ctx.basePath}/search`, title: m.site_search({}, o), main, activeKey: 'search', noindex: true }), ctx.nonce, ctx.req.apiOrigin, { noindex: true });
 }
 
-async function meResponse(ctx: SiteCtx): Promise<SiteHttpResponse> {
+/** /me, /me/<app>, /me/<app>/<id> : l'espace membre, rendu en attente puis rempli par le script. */
+async function meResponse(ctx: SiteCtx, slug?: string, id?: string): Promise<SiteHttpResponse> {
   const o = { locale: ctx.locale };
-  const body = await renderDocumentHtml(ctx, virtualDocument(ME_PAGE_ID)!, ME_PAGE_ID);
-  const main = `${hero(m.site_my_space({}, o))}<div class="prose wide">${body}</div>`;
-  return html(200, shell(ctx, { path: `${ctx.basePath}/me`, title: m.site_my_space({}, o), main, activeKey: 'me', noindex: true, pageId: ME_PAGE_ID }), ctx.nonce, ctx.req.apiOrigin, { noindex: true });
+  const app = slug === undefined ? 'home' : (Object.entries(MEMBER_APP_SLUGS).find(([, s]) => s === slug)?.[0] as SiteMemberApp | undefined);
+  if (!app || (id !== undefined && !/^[a-z0-9]{20,32}$/.test(id))) return notFound(ctx);
+  const pageId = memberPageId(app, id);
+  const doc = virtualDocument(pageId);
+  if (!doc) return notFound(ctx);
+  const body = await renderDocumentHtml(ctx, doc, pageId);
+  const path = `${ctx.basePath}/me${slug ? `/${slug}` : ''}${id ? `/${id}` : ''}`;
+  const main = `${app === 'home' ? hero(m.site_my_space({}, o)) : ''}<div class="prose wide member-space">${body}</div>`;
+  return html(200, shell(ctx, { path, title: m.site_my_space({}, o), main, activeKey: 'me', noindex: true, pageId }), ctx.nonce, ctx.req.apiOrigin, { noindex: true });
 }
 
 /** Profil public d'un membre (masquable par le membre, non indexé). */
@@ -992,7 +1019,7 @@ export async function handleSiteRequest(req: SiteHttpRequest): Promise<SiteHttpR
     else if (section === 'sitemap.xml' && rest.length === 1) (response = await sitemapResponse(ctx)), (trackPath = null);
     else if (section === 'embed' && a && b && rest.length === 3) (response = await embedResponse(ctx, a, b)), (trackPath = null);
     else if (section === 'search' && rest.length === 1) response = await searchResponse(ctx);
-    else if (section === 'me' && rest.length === 1) response = await meResponse(ctx);
+    else if (section === 'me' && rest.length <= 3) response = await meResponse(ctx, a, b);
     else if (section === 'u' && a && rest.length === 2) response = await memberProfileResponse(ctx, a);
     else if (section === 'u' && a && b === 'card.png' && rest.length === 3) (response = await memberCardResponse(ctx, a)), (trackPath = null);
     else if (section === 'og.png' && rest.length === 1) (response = await serverCardResponse(ctx)), (trackPath = null);

@@ -21,7 +21,7 @@ import {
 } from '../../../../services/site/siteService.js';
 import { normalizeSiteDocument, type SiteDocument } from '@kotbo/shared';
 import { moderateMemberText } from '../../../../services/site/siteModeration.js';
-import { isTicketActive, openTicketFromSite, postTicketMessageFromSite } from '../../../../services/site/siteTicketService.js';
+import { isTicketActive, openTicketFromSite, postTicketMessageFromSite, relayMemberMessage } from '../../../../services/site/siteTicketService.js';
 import { toggleGiveawayParticipation } from '../../../../services/features/giveawayService.js';
 import { createSuggestion, voteOnSuggestion } from '../../../../services/features/suggestionService.js';
 import { buyListing } from '../../../../services/economy/marketplaceService.js';
@@ -616,6 +616,26 @@ export function createSiteApiRouter(client: Client): OpenAPIHono {
     const content = str((await readBody(c)).content, 3800);
     if (!content) return c.json({ error: m.site_form_required({}, o) }, 400);
     const sent = await postTicketMessageFromSite(client, site.guildId, ticket, viewer, content);
+    return sent ? c.json({ ok: true }, 201) : c.json({ error: m.site_ticket_offsite({}, o) }, 409);
+  });
+
+  // ── Réponse dans le salon d'une candidature (fiche de l'espace membre) ────
+  app.post('/api/site/:siteId/applications/:candidatureId/messages', async (c) => {
+    const site = await liveSite(c);
+    const o = { locale: localeOf(c) };
+    if (!site) return c.json({ error: 'Introuvable' }, 404);
+    const viewer = await viewerFor(client, c, site);
+    if (!viewer) return c.json({ error: m.site_err_login({}, o) }, 401);
+    if (rateLimited(`application-msg:${viewer.userId}`, 20, 60_000)) return c.json({ error: m.site_err_too_many({}, o) }, 429);
+    const candidatureId = c.req.param('candidatureId');
+    const candidature = CUID.test(candidatureId)
+      ? await prisma.recruitmentCandidature.findFirst({ where: { id: candidatureId, guildId: site.guildId, discordId: viewer.userId }, select: { status: true, ticketChannelId: true } })
+      : null;
+    // Une candidature tranchée n'attend plus de réponse : son salon reste au staff.
+    if (!candidature?.ticketChannelId || !['PENDING', 'ORAL'].includes(candidature.status)) return c.json({ error: m.site_err_not_found({}, o) }, 404);
+    const content = str((await readBody(c)).content, 3800);
+    if (!content) return c.json({ error: m.site_form_required({}, o) }, 400);
+    const sent = await relayMemberMessage(client, site.guildId, { channelId: candidature.ticketChannelId, threadId: null }, viewer, content);
     return sent ? c.json({ ok: true }, 201) : c.json({ error: m.site_ticket_offsite({}, o) }, 409);
   });
 
