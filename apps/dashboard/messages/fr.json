@@ -4416,6 +4416,7 @@
   "mcm_action_ban": "Bannir",
   "mcm_action_timeout": "Exclure temporairement",
   "mcm_action_done": "L'action {action} a été exécutée.",
+  "mcm_action_record_failed": "L'action {action} a été appliquée sur Discord, mais la sanction n'a pas pu être inscrite au casier. Vérifie le casier avant de recommencer.",
   "mcm_action_error": "Impossible de faire cette action. Réessaie.",
   "mcm_action_error_generic": "Une erreur est survenue lors de l'exécution.",
   "mcm_verif_title": "Forcer la vérification de sécurité ?",
