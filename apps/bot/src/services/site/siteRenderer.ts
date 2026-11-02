@@ -103,6 +103,15 @@ function align(node: SiteNode): string | null {
   return typeof value === 'string' && value !== 'left' ? `ta-${value}` : null;
 }
 
+/** Couleur de fond assez sombre pour passer le texte en clair (luminance relative). */
+function isDarkColor(hex: string): boolean {
+  const [r, g, b] = [1, 3, 5].map((i) => {
+    const c = parseInt(hex.slice(i, i + 2), 16) / 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b < 0.4;
+}
+
 function videoSrc(provider: string, id: string, host: string): string | null {
   switch (provider) {
     case 'youtube':
@@ -258,9 +267,41 @@ class Renderer {
       }
       case 'module':
         return this.env.moduleHtml[this.moduleIndex++] ?? '';
+      case 'section':
+        return this.section(node);
+      case 'column':
+        return `<div class="sect-col">${this.children(node)}</div>`;
       default:
         return '';
     }
+  }
+
+  section(node: SiteNode): string {
+    const a = node.attrs ?? {};
+    const color = a.background === 'color' && typeof a.bgColor === 'string' && /^#[0-9a-f]{6}$/i.test(a.bgColor) ? a.bgColor : '';
+    const image = a.background === 'image' && typeof a.bgImage === 'string' && SAFE_CSS_IMAGE.test(a.bgImage) ? a.bgImage : '';
+    const background = (a.background === 'color' && !color) || (a.background === 'image' && !image) ? 'none' : String(a.background ?? 'none');
+    const inverse = ['dark', 'gradient', 'image'].includes(background) || (color !== '' && isDarkColor(color));
+    const style = [color && `--sect-color:${color}`, image && `--sect-image:url("${image}");--sect-overlay:${Number(a.overlay ?? 45) / 100}`].filter(Boolean).join(';');
+    const pick = (value: unknown, fallback: string) => (typeof value === 'string' && /^[a-z0-9-]{1,20}$/.test(value) ? value : fallback);
+    const anchor = typeof a.anchor === 'string' && /^[a-z0-9][a-z0-9-]{0,59}$/.test(a.anchor) ? a.anchor : null;
+    const animation = pick(a.animation, 'none');
+    return `<div${attrs({
+      id: anchor,
+      class: cls(
+        'sect',
+        `bg-${background}`,
+        background === 'gradient' && `grad-${pick(a.bgGradient, 'accent')}`,
+        `pad-${pick(a.padding, 'medium')}`,
+        `w-${pick(a.width, 'contained')}`,
+        a.height !== 'auto' && `h-${pick(a.height, 'auto')}`,
+        a.align !== 'top' && `va-${pick(a.align, 'top')}`,
+        a.visibleOn !== 'all' && `only-${pick(a.visibleOn, 'all')}`,
+        inverse && 'tone-inverse',
+      ),
+      style: style || null,
+      'data-anim': animation !== 'none' ? animation : null,
+    })}><div class="sect-inner"><div class="sect-cols layout-${pick(a.layout, '1')}">${this.children(node)}</div></div></div>`;
   }
 
   toc(maxLevel: number): string {

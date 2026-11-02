@@ -20,6 +20,8 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; scroll-behavior: 
 
 body {
   margin: 0;
+  /* Les sections bord à bord font 100vw, barre de défilement comprise. */
+  overflow-x: clip;
   min-height: 100vh;
   display: flex;
   flex-direction: column;
@@ -751,6 +753,78 @@ dialog.kotbo-dialog p { margin: 0 0 14px; color: var(--site-muted); }
 .sec-banner.tone-accent .btn-primary, .sec-banner.has-image .btn-primary, .sec-banner.tone-dark .btn-primary { background: #fff; color: #111; }
 .sec-banner.tone-accent .btn-secondary, .sec-banner.has-image .btn-secondary, .sec-banner.tone-dark .btn-secondary { background: transparent; color: inherit; border-color: currentColor; }
 @media (max-width: 600px) { .sec-banner-inner { padding: 32px 20px; } }
+
+/* ─── Sections de page (bandes à colonnes) ──────────────────────────────── */
+
+/* Une section neutre (pad-none, sans fond) n'ajoute aucune boîte : les marges
+   de ses blocs la traversent, la page rend comme avant les sections. */
+.prose > .sect:not(.pad-none) { margin-top: 0; }
+.sect { position: relative; }
+.sect-cols:not(.layout-1) { display: grid; gap: 24px 32px; }
+.sect-cols.layout-1-1 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.sect-cols.layout-2-1 { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }
+.sect-cols.layout-1-2 { grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); }
+.sect-cols.layout-1-1-1 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.sect-cols.layout-1-2-1 { grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1fr); }
+.sect-cols.layout-1-1-1-1 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.sect-col { min-width: 0; }
+.sect-col > * + * { margin-top: 1em; }
+.sect-cols:not(.layout-1) .sect-col > :first-child, .sect:not(.pad-none) .sect-col > :first-child { margin-top: 0; }
+.sect-cols:not(.layout-1) .sect-col > :last-child, .sect:not(.pad-none) .sect-col > :last-child { margin-bottom: 0; }
+.sect.va-center .sect-cols { align-items: center; }
+.sect.va-bottom .sect-cols { align-items: end; }
+@media (max-width: 1000px) { .sect-cols.layout-1-1-1-1 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 760px) { .sect-cols:not(.layout-1) { grid-template-columns: minmax(0, 1fr); } }
+
+.sect.pad-small { padding-top: 24px; padding-bottom: 24px; }
+.sect.pad-medium { padding-top: 56px; padding-bottom: 56px; }
+.sect.pad-large { padding-top: 96px; padding-bottom: 96px; }
+@media (max-width: 600px) { .sect.pad-medium { padding-top: 40px; padding-bottom: 40px; } .sect.pad-large { padding-top: 64px; padding-bottom: 64px; } }
+
+/* Fond bord à bord : seulement dans les pages larges centrées, pas dans un article ni à côté d'une barre latérale. */
+.doc-wide .sect.w-full, .doc-wide .sect.w-edge { margin-left: calc(50% - 50vw); margin-right: calc(50% - 50vw); }
+.doc-wide .sect.w-full > .sect-inner { max-width: 1200px; margin: 0 auto; padding: 0 20px; }
+.doc-wide .sect.w-edge > .sect-inner { padding: 0 20px; }
+.layout-side .doc-wide .sect.w-full, .layout-side .doc-wide .sect.w-edge { margin-left: 0; margin-right: 0; }
+.sect.w-contained:not(.bg-none), .prose:not(.wide) .sect:not(.bg-none), .layout-side .sect:not(.bg-none) { border-radius: var(--site-radius); padding-left: 32px; padding-right: 32px; }
+@media (max-width: 600px) { .sect.w-contained:not(.bg-none) { padding-left: 20px; padding-right: 20px; } }
+
+.sect.h-tall, .sect.h-screen { display: flex; flex-direction: column; justify-content: center; }
+.sect.h-tall { min-height: 60vh; }
+.sect.h-screen { min-height: 100vh; min-height: 100svh; }
+.sect.h-tall.va-top, .sect.h-screen.va-top { justify-content: flex-start; }
+.sect.h-tall.va-bottom, .sect.h-screen.va-bottom { justify-content: flex-end; }
+.sect > .sect-inner { width: 100%; }
+
+.sect.tone-inverse { color: #fff; }
+.sect.tone-inverse a:not(.btn) { color: inherit; }
+.sect.tone-inverse .btn-primary { background: #fff; color: #111; }
+.sect.tone-inverse .btn-secondary { background: transparent; color: inherit; border-color: currentColor; }
+/* Les cartes gardent leur propre fond : leur texte reste celui du thème. */
+.sect.tone-inverse :is(.surface, .mod, .card-grid > article, .stack > article, .toc, .callout, .faq-item, .testimonial, .table-wrap) { color: var(--site-text); }
+.sect.tone-inverse :is(.surface, .mod, .callout, .faq-item, .testimonial) a:not(.btn) { color: var(--site-accent); }
+.sect.bg-surface { background: var(--site-surface-strong); }
+.sect.bg-accent { background: var(--site-accent); color: var(--site-on-accent); }
+.sect.bg-dark { background: #14171c; }
+.sect.bg-color { background: var(--sect-color); }
+.sect.bg-image { background: linear-gradient(rgb(0 0 0 / var(--sect-overlay, 0.45)), rgb(0 0 0 / var(--sect-overlay, 0.45))), var(--sect-image) center / cover no-repeat, #111; }
+.sect.grad-accent { background: linear-gradient(135deg, var(--site-accent), color-mix(in srgb, var(--site-accent) 45%, #000)); }
+.sect.grad-sunset { background: linear-gradient(135deg, #c2410c, #9d174d); }
+.sect.grad-ocean { background: linear-gradient(135deg, #0369a1, #1e3a8a); }
+.sect.grad-forest { background: linear-gradient(135deg, #15803d, #064e3b); }
+.sect.grad-night { background: linear-gradient(160deg, #312e81, #0f172a); }
+.sect.grad-aurora { background: linear-gradient(135deg, #0e7490, #6d28d9); }
+
+@media (max-width: 760px) { .sect.only-desktop { display: none; } }
+@media (min-width: 761px) { .sect.only-mobile { display: none; } }
+
+/* Apparition au défilement : posée par le script (html.js), jamais si le visiteur réduit les animations. */
+@media (prefers-reduced-motion: no-preference) {
+  .js .sect[data-anim] { transition: opacity 0.6s ease, transform 0.6s cubic-bezier(0.2, 0.7, 0.2, 1); }
+  .js .sect[data-anim]:not(.is-in) { opacity: 0; }
+  .js .sect[data-anim="slide-up"]:not(.is-in) { transform: translateY(28px); }
+  .js .sect[data-anim="zoom"]:not(.is-in) { transform: scale(0.96); }
+}
 
 /* Chiffres clés : une bande de grands nombres. */
 .key-stats { display: grid; grid-template-columns: repeat(min(var(--count, 3), 4), minmax(0, 1fr)); gap: 0; border: 1px solid var(--site-border); border-radius: var(--site-radius); background: var(--site-surface); }

@@ -1015,8 +1015,31 @@
   tickCountdowns();
   setInterval(tickCountdowns, 30000);
 
+  // ─── Apparition des sections ───────────────────────────────────────────
+
+  /** Révèle chaque section animée à son entrée dans l'écran, une seule fois. */
+  function revealSections() {
+    var sections = document.querySelectorAll('.sect[data-anim]');
+    if (sections.length === 0) return;
+    if (!('IntersectionObserver' in window)) {
+      sections.forEach(function (s) { s.classList.add('is-in'); });
+      return;
+    }
+    var observer = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (!entry.isIntersecting) return;
+        entry.target.classList.add('is-in');
+        observer.unobserve(entry.target);
+      });
+    }, { rootMargin: '0px 0px -8% 0px' });
+    sections.forEach(function (s) { observer.observe(s); });
+    // Le CSS ne masque les sections qu'une fois le script là pour les révéler.
+    root.classList.add('js');
+  }
+
   // ─── Démarrage ─────────────────────────────────────────────────────────
 
+  revealSections();
   document.querySelectorAll('section.mod[data-live]').forEach(bindLive);
 
   loadViewer().then(function () {
