@@ -40,6 +40,11 @@ const grid = (columns: number, ...cells: Node[]): Node => ({ type: 'grid', attrs
 const callout = (variant: string, icon: string, ...content: Node[]): Node => ({ type: 'callout', attrs: { variant, icon }, content });
 const faqItem = (question: string, answer: string): Node => ({ type: 'faqItem', attrs: { question }, content: [p(answer)] });
 const doc = (...content: Node[]): SiteDocument => normalizeSiteDocument({ type: 'doc', content });
+const centered = (node: Node): Node => ({ ...node, attrs: { ...((node.attrs as Node | undefined) ?? {}), textAlign: 'center' } });
+const section = (attrs: Node, ...columns: Node[][]): Node => ({ type: 'section', attrs, content: columns.map((content) => ({ type: 'column', content })) });
+
+/** Dégradé de l'en-tête d'accueil, assorti au type de communauté. */
+const HERO_GRADIENT: Record<SiteTemplateKey, string> = { general: 'ocean', gaming: 'night', rp: 'aurora', esport: 'sunset', etude: 'forest' };
 
 interface Copy {
   welcome: string;
@@ -182,18 +187,21 @@ export function buildSiteBlueprint(template: SiteTemplateKey, lang: Lang, module
   const on = (key: string) => modules[key] !== false;
   const pages: TemplatePage[] = [];
 
-  const homeCells: Node[] = [cell(2, mod('serverStats')), cell(1, mod('members'), mod('join', { label: c.joinUs }))];
+  // Accueil en sections : en-tête plein écran, le serveur en direct, les nouvelles, un dernier appel.
   pages.push({
     key: 'home',
     kind: 'PAGE',
     slug: 'accueil',
     title: c.home,
     content: doc(
-      h(1, c.welcome),
-      p(c.intro[template]),
-      grid(3, ...homeCells),
-      ...(on('news') ? [h(2, c.news), mod('news', { limit: 3 })] : []),
-      ...(on('site_blog') ? [h(2, c.latest), mod('blogList', { limit: 3 })] : []),
+      section(
+        { background: 'gradient', bgGradient: HERO_GRADIENT[template], width: 'full', padding: 'large', height: 'tall', align: 'center', animation: 'fade' },
+        [centered(h(1, c.welcome)), centered(p(c.intro[template])), mod('join', { label: c.joinUs })],
+      ),
+      section({ layout: '2-1', animation: 'slide-up' }, [mod('serverStats')], [mod('members')]),
+      ...(on('news') ? [section({}, [h(2, c.news), mod('news', { limit: 3 })])] : []),
+      ...(on('site_blog') ? [section({ background: 'surface', width: 'full' }, [h(2, c.latest), mod('blogList', { limit: 3 })])] : []),
+      section({ background: 'accent', width: 'full', align: 'center', anchor: 'rejoindre' }, [centered(h(2, c.joinUs)), mod('join', { label: c.joinUs })]),
     ),
     publish: true,
     inNav: true,
