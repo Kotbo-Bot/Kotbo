@@ -286,7 +286,7 @@
                 customWords = [...customWords, { id: res.id, word: entry.word, category: entry.category, enabled: true, guildId: null }];
               }
               return true;
-            }, { successMessage: `"${entry.word}" rétabli.` });
+            }, { successMessage: m.nm_word_restored({ word: entry.word }) });
           }
         });
 

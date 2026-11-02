@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from '../lib/i18n';
   import { onMount } from 'svelte';
   import { fetchEvaluations, generateEvaluation } from '../lib/api';
   import { toast } from '../lib/stores/toast.svelte';
@@ -15,7 +16,7 @@
     try {
       data = await fetchEvaluations();
     } catch {
-      toast.error('Impossible de charger. Réessaie.');
+      toast.error(m.d7_loading_error());
     } finally {
       loading = false;
     }
@@ -25,10 +26,10 @@
     generating = true;
     try {
       const result = await generateEvaluation(undefined, 30);
-      toast.success(`${result.count} évaluations générées`);
+      toast.success(m.eval_generated({ count: result.count }));
       await load();
     } catch {
-      toast.error('Impossible de générer. Réessaie.');
+      toast.error(m.eval_generate_failed());
     } finally {
       generating = false;
     }

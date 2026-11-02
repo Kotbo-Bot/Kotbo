@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from '../../../i18n';
   /**
    * Le seul moment ou l'on voit Kotbo agir sur son propre serveur.
    *
@@ -218,7 +219,7 @@
       }
     } catch (err) {
       phase = 'plan';
-      toast.error(errorMessage(err) || "La structure n'a pas pu être posée.");
+      toast.error(errorMessage(err) || m.onb_structure_save_failed());
     } finally {
       onboardingData.busy = false;
     }

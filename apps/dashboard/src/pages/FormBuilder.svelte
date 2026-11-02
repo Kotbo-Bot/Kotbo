@@ -309,7 +309,7 @@
         }
       }
     } catch {
-      if (!silent) toast.error('Impossible d\'enregistrer. Réessaie.');
+      if (!silent) toast.error(m.cm_save_api_error());
     } finally {
       saving = false;
     }

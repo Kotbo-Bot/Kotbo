@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from '../../lib/i18n';
   import { onMount } from 'svelte';
   import { toast } from '../../lib/stores/toast.svelte';
   import { confirmDialog } from '../../lib/stores/confirmDialog.svelte';
@@ -62,7 +63,7 @@
       newAdminId = '';
       const data = await fetchGlobalAdmins();
       globalAdmins = data.admins;
-      toast.success('Administrateur ajouté.');
+      toast.success(m.asec_admin_added());
     } catch (err) { toast.error(errorMessage(err)); }
   }
 
@@ -71,7 +72,7 @@
     try {
       await removeGlobalAdmin(userId);
       globalAdmins = globalAdmins.filter(a => a.userId !== userId);
-      toast.success(`Accès révoqué pour ${username}.`);
+      toast.success(m.asec_access_revoked({ name: username }));
     } catch (err) { toast.error(errorMessage(err)); }
   }
 
@@ -84,7 +85,7 @@
       newBlacklistReason = '';
       const data = await fetchGlobalBlacklist();
       globalBlacklist = data.blacklist;
-      toast.success('Utilisateur ajouté à la liste noire.');
+      toast.success(m.asec_blacklist_added());
     } catch (err) { toast.error(errorMessage(err)); }
   }
 
@@ -93,7 +94,7 @@
     try {
       await removeGlobalBlacklist(userId);
       globalBlacklist = globalBlacklist.filter(b => b.userId !== userId);
-      toast.success('Utilisateur retiré de la liste noire.');
+      toast.success(m.asec_blacklist_removed());
     } catch (err) { toast.error(errorMessage(err)); }
   }
 </script>

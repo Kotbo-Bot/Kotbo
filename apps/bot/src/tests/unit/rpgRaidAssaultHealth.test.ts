@@ -5,9 +5,10 @@ import { completeModuleMock } from '../helpers/moduleMock.js';
 /**
  * Un assaut de raid ne touche pas aux points de vie du joueur (issue #602).
  *
- * Le combat se joue toujours avec les PV du profil, mais ce qu'il retire ou rend reste dans
- * l'assaut : sans quoi chaque coup porté obligeait à se soigner avant le suivant, et le
- * plancher à 1 PV du report en rajoutait à un joueur tombé sans que personne le veuille.
+ * Chaque assaut part des PV max du joueur, et ce qu'il retire ou rend reste dans l'assaut :
+ * sans quoi chaque coup porté obligeait à se soigner avant le suivant, un joueur blessé
+ * ailleurs frappait affaibli, et le plancher à 1 PV du report en rajoutait à un joueur tombé
+ * sans que personne le veuille.
  */
 
 let profileHealth = 120;
@@ -95,6 +96,16 @@ beforeEach(() => {
 });
 
 describe('attackRaid et points de vie du joueur', () => {
+  test("l'assaut part des PV max du joueur, même blessé ailleurs", async () => {
+    profileHealth = 1;
+
+    const outcome = await attackRaid({} as never, 'guild-1', 'user-1', null);
+
+    // Le joueur, plus rapide que le boss, ouvre l'assaut : son premier tour montre les PV
+    // avec lesquels il est entré.
+    expect(outcome.result.turns[0]).toMatchObject({ attacker: 'player', playerHp: playerStats.maxHealth });
+  });
+
   test('les coups du boss ne retirent aucun PV au profil', async () => {
     const outcome = await attackRaid({} as never, 'guild-1', 'user-1', null);
 

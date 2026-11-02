@@ -68,7 +68,6 @@
     actionFeedback?: string;
     actionIsError?: boolean;
     onClose?: (e: MouseEvent) => void;
-    onAction?: (action: 'WARN' | 'KICK' | 'TIMEOUT' | 'BAN') => void;
     onSelectUser?: (userId: string) => void;
     /** Onglet affiché à l'ouverture : la fiche complète ouvre directement les actions. */
     initialTab?: MemberCaseTab;

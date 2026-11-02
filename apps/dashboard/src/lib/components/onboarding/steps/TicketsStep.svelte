@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from '../../../i18n';
   /**
    * Les motifs du panneau de tickets, et la couleur des panneaux.
    *
@@ -96,7 +97,7 @@
       celebrateStep();
       wizard.complete('tickets');
     } catch (err) {
-      toast.error(errorMessage(err) || "Le support n'a pas pu être enregistré.");
+      toast.error(errorMessage(err) || m.onb_tickets_save_failed());
     } finally {
       onboardingData.busy = false;
     }

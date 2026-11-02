@@ -126,7 +126,7 @@
         toast.error(m.cf_config_error());
       }
     } catch {
-      toast.error('Erreur réseau');
+      toast.error(m.cf_network_error());
     }
   }
 
@@ -146,7 +146,7 @@
         toast.error(m.cf_config_error());
       }
     } catch {
-      toast.error('Erreur réseau');
+      toast.error(m.cf_network_error());
     }
   }
 
@@ -176,7 +176,7 @@
         toast.error(m.cf_config_error());
       }
     } catch {
-      toast.error('Erreur réseau');
+      toast.error(m.cf_network_error());
     }
   }
 
@@ -196,7 +196,7 @@
         toast.error(m.cf_config_error());
       }
     } catch {
-      toast.error('Erreur réseau');
+      toast.error(m.cf_network_error());
     }
   }
 

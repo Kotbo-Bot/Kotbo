@@ -272,7 +272,7 @@ export async function updateSidebarFavorites(sidebarFavorites: string[], guildId
     return true;
   } catch (error) {
     console.error('API Error (Sidebar Favorites):', error);
-    toast.error('Erreur réseau ou serveur');
+    toast.error(m.api_network_or_server_error());
     return false;
   }
 }

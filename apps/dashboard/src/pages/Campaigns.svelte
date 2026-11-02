@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from '../lib/i18n';
   /**
    * Campagnes marketing : une suite de messages programmes, adressee a une
    * audience choisie, dont on mesure la portee.
@@ -136,7 +137,7 @@
           }),
       );
     } catch (err) {
-      toast.error(errorMessage(err) || 'Chargement des campagnes impossible');
+      toast.error(errorMessage(err) || m.camp_load_failed());
     } finally {
       loading = false;
     }
@@ -188,7 +189,7 @@
   async function save() {
     if (saving) return;
     if (!form.name.trim()) {
-      toast.error('Donne un nom à la campagne.');
+      toast.error(m.camp_name_required());
       return;
     }
 
@@ -196,11 +197,11 @@
     try {
       if (editingId) await updateCampaign(editingId, payload());
       else await createCampaign(payload());
-      toast.success(editingId ? 'Campagne mise à jour' : 'Campagne créée');
+      toast.success(editingId ? m.camp_updated() : m.camp_created());
       modalOpen = false;
       await load();
     } catch (err) {
-      toast.error(errorMessage(err) || 'Enregistrement impossible');
+      toast.error(errorMessage(err) || m.tmac_err_save());
     } finally {
       saving = false;
     }
@@ -218,7 +219,7 @@
         audienceInactiveDays: form.audienceInactiveDays,
       });
     } catch (err) {
-      toast.error(errorMessage(err) || "Calcul de l'audience impossible");
+      toast.error(errorMessage(err) || m.camp_audience_failed());
     } finally {
       previewing = false;
     }
@@ -241,9 +242,9 @@
     try {
       await setCampaignStatus(campaign.id, status);
       await load();
-      toast.success('Statut mis à jour');
+      toast.success(m.camp_status_updated());
     } catch (err) {
-      toast.error(errorMessage(err) || 'Changement de statut impossible');
+      toast.error(errorMessage(err) || m.camp_status_failed());
     }
   }
 
@@ -258,10 +259,10 @@
 
     try {
       await deleteCampaign(campaign.id);
-      toast.success('Campagne supprimée');
+      toast.success(m.camp_deleted());
       await load();
     } catch (err) {
-      toast.error(errorMessage(err) || 'Suppression impossible');
+      toast.error(errorMessage(err) || m.tmac_err_delete());
     }
   }
 

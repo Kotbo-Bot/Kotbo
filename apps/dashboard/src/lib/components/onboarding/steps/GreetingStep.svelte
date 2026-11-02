@@ -68,7 +68,7 @@
       celebrateStep();
       wizard.complete('greeting');
     } catch (err) {
-      toast.error(errorMessage(err) || "Le message d'accueil n'a pas pu être enregistré.");
+      toast.error(errorMessage(err) || m.onb_greeting_save_failed());
     } finally {
       onboardingData.busy = false;
     }

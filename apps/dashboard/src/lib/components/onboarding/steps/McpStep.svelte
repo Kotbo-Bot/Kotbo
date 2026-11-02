@@ -68,7 +68,7 @@
       wizard.answer({ mcpScope: scope });
       celebratePhase();
     } catch (err) {
-      toast.error(errorMessage(err) || "La clé n'a pas pu être créée.");
+      toast.error(errorMessage(err) || m.onb_mcp_key_create_failed());
     } finally {
       onboardingData.busy = false;
     }
@@ -83,7 +83,7 @@
     } catch {
       // Presse-papiers refuse - contexte non securise, permission bloquee : le
       // champ reste selectionnable a la main, ce qui est la seule alternative.
-      toast.info('Copie impossible : sélectionnez le texte pour le copier.');
+      toast.info(m.onb_mcp_copy_failed());
     }
   }
 </script>
