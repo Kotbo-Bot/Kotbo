@@ -37,6 +37,7 @@
     roles = [],
     channels = [],
     problems = [],
+    focusStepId = null,
     depth = 0,
     canMoveUp = false,
     canMoveDown = false,
@@ -50,6 +51,8 @@
     roles?: { id: string; name: string }[];
     channels?: { id: string; name: string }[];
     problems?: string[];
+    /** Étape à montrer : celle qui a échoué dans le rejeu d'où l'on vient. */
+    focusStepId?: string | null;
     depth?: number;
     canMoveUp?: boolean;
     canMoveDown?: boolean;
@@ -60,6 +63,13 @@
   } = $props();
 
   const action = $derived(step.kind === 'action' ? getAction((step as ActionStep).action) : undefined);
+
+  const focused = $derived(focusStepId !== null && step.id === focusStepId);
+  let card = $state<HTMLElement | null>(null);
+
+  $effect(() => {
+    if (focused) card?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  });
 
   /** Découpe une phrase à trous en morceaux de texte et en champs. */
   function parts(sentence: string): { text?: string; field?: string }[] {
@@ -143,7 +153,10 @@
 </script>
 
 <article
-  class="rounded-2xl bg-surface-container-high/60 border border-outline-variant/15 border-l-[3px] {ACCENT[step.kind]} {problems.length > 0 ? 'ring-1 ring-warning/30' : ''}"
+  bind:this={card}
+  class="rounded-2xl bg-surface-container-high/60 border border-outline-variant/15 border-l-[3px] {ACCENT[step.kind]} {focused
+    ? 'ring-2 ring-error/60'
+    : problems.length > 0 ? 'ring-1 ring-warning/30' : ''}"
 >
   <div class="flex items-start gap-2 p-3">
     <div class="flex-1 min-w-0 space-y-2">
@@ -375,6 +388,7 @@
               {triggerType}
               {roles}
               {channels}
+              {focusStepId}
               depth={depth + 1}
               canMoveUp={movable.up}
               canMoveDown={movable.down}

@@ -12,7 +12,7 @@
   import { unsavedChanges } from '../lib/stores/unsavedChanges.svelte';
   import { useUnsavedChanges } from '../lib/useUnsavedChanges.svelte';
   import { workflowDraftKey } from '../lib/workflowDraft';
-  import { testReplayStatus } from '../lib/workflowTest';
+  import { failedNodeId, testReplayStatus } from '../lib/workflowTest';
   import { isNodeOffered } from '../lib/workflowAvailability';
   import MemberSearchSelect from '../lib/components/MemberSearchSelect.svelte';
   import { m, dateLocale } from '../lib/i18n';
@@ -146,6 +146,8 @@
   let testing = $state(false);
   /** Membre qui joue l'événement de l'essai ; à défaut, celui qui le lance. */
   let testMember = $state<GuildMemberSearchResult | null>(null);
+  /** Nœud à montrer en ouvrant l'éditeur : celui de l'étape en erreur d'un rejeu. */
+  let focusNodeId = $state<string | null>(null);
   const editingDraft = $derived(view === 'editor' || (view === 'replay' && testSource !== null));
 
   const replayStep = $derived(replay?.steps[replayIndex]);
@@ -249,6 +251,7 @@
     advancedOnly = false;
     tab = 'steps';
     testMember = null;
+    focusNodeId = null;
     markSaved();
     view = 'editor';
   }
@@ -257,7 +260,7 @@
     openEditor(TEMPLATE_LABELS[template.id]?.name() ?? '', compileRecipe(template.build()));
   }
 
-  async function edit(id: string): Promise<void> {
+  async function edit(id: string, focus: string | null = null): Promise<void> {
     try {
       const result = await fetchWorkflow(id);
       if (!result?.workflow) return;
@@ -274,6 +277,7 @@
       tab = 'steps';
       // Le membre choisi valait pour l'automatisation précédente.
       testMember = null;
+      focusNodeId = focus;
       markSaved();
       view = 'editor';
     } catch (e) {
@@ -317,15 +321,30 @@
   }
 
   function closeReplay(): void {
+    // Revenir d'un essai ramène sur l'étape qui a échoué, s'il y en a une.
+    const failed = replay ? failedNodeId(replay.steps) : null;
     replay = null;
     replayIndex = 0;
     if (testSource !== null) {
+      focusNodeId = failed;
       testSource = null;
       view = 'editor';
       return;
     }
     graph = { nodes: [], edges: [] };
     view = 'list';
+  }
+
+  /** Quitte le rejeu d'une exécution pour corriger l'étape qui a échoué. */
+  async function fixInEditor(): Promise<void> {
+    if (!replay) return;
+    const workflowId = replay.workflowId;
+    const failed = failedNodeId(replay.steps);
+    await edit(workflowId, failed);
+    if (view === 'editor') {
+      replay = null;
+      replayIndex = 0;
+    }
   }
 
   /** Rejoue l'essai avec un autre membre, ou avec soi-même quand `member` est nul. */
@@ -529,15 +548,63 @@
   };
 </script>
 
+<!-- Points de départ : la galerie des modèles et la liste vide les montrent
+     tous les deux, la seconde pour qu'on démarre sans détour. -->
+{#snippet templateGallery()}
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-left">
+    {#each RECIPE_TEMPLATES as template (template.id)}
+      {@const labels = TEMPLATE_LABELS[template.id]}
+      <button
+        type="button"
+        onclick={() => startFromTemplate(template)}
+        class="flex items-start gap-3 p-4 rounded-2xl text-left bg-surface-container-high/50 border border-outline-variant/15 hover:border-primary/40 hover:bg-surface-container-high transition-all"
+      >
+        <span class="p-2.5 rounded-xl bg-primary/10 text-primary shrink-0">
+          <Papicon icon={template.icon} size={16} />
+        </span>
+        <span class="min-w-0 space-y-1">
+          <span class="block text-sm font-semibold text-on-surface">{labels?.name()}</span>
+          <span class="block text-xs text-on-surface-variant leading-snug">{labels?.description()}</span>
+        </span>
+      </button>
+    {/each}
+
+    <button
+      type="button"
+      onclick={() => openEditor('', { nodes: [], edges: [] })}
+      class="flex items-start gap-3 p-4 rounded-2xl text-left border border-dashed border-outline-variant/30 hover:border-primary/40 transition-all"
+    >
+      <span class="p-2.5 rounded-xl bg-surface-container-highest text-on-surface-variant shrink-0">
+        <Papicon icon="Plus" size={16} />
+      </span>
+      <span class="min-w-0 space-y-1">
+        <span class="block text-sm font-semibold text-on-surface">{m.wf_start_blank()}</span>
+        <span class="block text-xs text-on-surface-variant leading-snug">{m.wf_start_blank_desc()}</span>
+      </span>
+    </button>
+  </div>
+{/snippet}
+
 <ModulePage title={m.wf_page_title()} description={m.wf_page_desc()} icon="Workflow" featureKey="workflows">
   {#snippet actions()}
     <!-- Le rejeu ne modifie rien : il reste ouvert aux comptes sans droit de
          configuration, contrairement aux actions d'édition ci-dessous. -->
     {#if view === 'replay'}
+      <div class="flex items-center gap-2">
       <button
         onclick={closeReplay}
         class="px-4 py-2.5 rounded-xl text-xs font-semibold bg-surface-container-high text-on-surface hover:bg-surface-container-highest transition-all"
       >{testSource !== null ? m.wf_back_to_editor() : m.wf_back()}</button>
+      {#if testSource === null && canConfigure && replay && failedNodeId(replay.steps)}
+        <button
+          onclick={fixInEditor}
+          class="px-4 py-2.5 rounded-xl text-xs font-semibold bg-primary text-on-primary hover:opacity-90 transition-all flex items-center gap-2"
+        >
+          <Papicon icon="Pen" size={14} />
+          {m.wf_fix_in_editor()}
+        </button>
+      {/if}
+      </div>
     {:else if canConfigure}
       <div class="flex items-center gap-2">
         {#if view === 'editor'}
@@ -605,38 +672,7 @@
         </p>
       </div>
 
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-        {#each RECIPE_TEMPLATES as template (template.id)}
-          {@const labels = TEMPLATE_LABELS[template.id]}
-          <button
-            type="button"
-            onclick={() => startFromTemplate(template)}
-            class="flex items-start gap-3 p-4 rounded-2xl text-left bg-surface-container-high/50 border border-outline-variant/15 hover:border-primary/40 hover:bg-surface-container-high transition-all"
-          >
-            <span class="p-2.5 rounded-xl bg-primary/10 text-primary shrink-0">
-              <Papicon icon={template.icon} size={16} />
-            </span>
-            <span class="min-w-0 space-y-1">
-              <span class="block text-sm font-semibold text-on-surface">{labels?.name()}</span>
-              <span class="block text-xs text-on-surface-variant leading-snug">{labels?.description()}</span>
-            </span>
-          </button>
-        {/each}
-
-        <button
-          type="button"
-          onclick={() => openEditor('', { nodes: [], edges: [] })}
-          class="flex items-start gap-3 p-4 rounded-2xl text-left border border-dashed border-outline-variant/30 hover:border-primary/40 transition-all"
-        >
-          <span class="p-2.5 rounded-xl bg-surface-container-highest text-on-surface-variant shrink-0">
-            <Papicon icon="Plus" size={16} />
-          </span>
-          <span class="min-w-0 space-y-1">
-            <span class="block text-sm font-semibold text-on-surface">{m.wf_start_blank()}</span>
-            <span class="block text-xs text-on-surface-variant leading-snug">{m.wf_start_blank_desc()}</span>
-          </span>
-        </button>
-      </div>
+      {@render templateGallery()}
     </div>
 
   <!-- ══ Rejeu d'une exécution ══════════════════════════════════════════ -->
@@ -834,12 +870,14 @@
       {#if tab === 'steps'}
         <RecipeEditor
           {graph}
+          {focusNodeId}
           onChange={(next, nextIssues) => { graph = next; issues = nextIssues; }}
           onUnsupported={() => { advancedOnly = true; tab = 'graph'; }}
         />
       {:else}
         <WorkflowEditor
           {graph}
+          {focusNodeId}
           onChange={(next, nextIssues) => { graph = next; issues = nextIssues; }}
         />
       {/if}
@@ -889,10 +927,7 @@
             </p>
           </div>
           {#if workflows.length === 0 && canConfigure}
-            <button
-              onclick={() => (view = 'templates')}
-              class="px-4 py-2 rounded-xl text-xs font-semibold bg-primary text-on-primary hover:opacity-90 transition-all"
-            >{m.wf_create_first()}</button>
+            {@render templateGallery()}
           {/if}
         </div>
       {:else}
