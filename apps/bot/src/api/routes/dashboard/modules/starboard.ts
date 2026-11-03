@@ -40,6 +40,7 @@ const DEFAULTS = {
   watchedChannels: [] as string[],
   ignoredChannels: [] as string[],
   allowBots: false,
+  ignoreAuthorVotes: true,
   embedColor: '#F5C518',
   removeBelowThreshold: true,
 };
@@ -55,6 +56,7 @@ type StarboardPayload = Partial<{
   watchedChannels: string[];
   ignoredChannels: string[];
   allowBots: boolean;
+  ignoreAuthorVotes: boolean;
   embedColor: string;
   removeBelowThreshold: boolean;
 }>;
@@ -139,7 +141,7 @@ export async function handleStarboardRoutes(ctx: ModuleRouteContext): Promise<bo
 
       const data: Record<string, unknown> = {};
 
-      for (const key of ['countEmbedReactions', 'autoReactEmbed', 'allowBots', 'removeBelowThreshold'] as const) {
+      for (const key of ['countEmbedReactions', 'autoReactEmbed', 'allowBots', 'ignoreAuthorVotes', 'removeBelowThreshold'] as const) {
         if (!has(body, key)) continue;
         if (typeof body[key] !== 'boolean') {
           json(res, 400, { error: `Le champ ${key} doit être un booléen` });

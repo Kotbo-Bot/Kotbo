@@ -41,6 +41,9 @@ model StarboardConfig {
   ignoredChannels String[] @default([])
   /// Prendre en compte les messages postés par des bots.
   allowBots       Boolean  @default(false)
+  /// Ne pas compter la réaction de l'auteur sur son propre message (ni sur son
+  /// highlight) : on ne vote pas pour soi.
+  ignoreAuthorVotes Boolean @default(true)
 
   // ── Rendu & cycle de vie ───────────────────────────────────────────────────
   embedColor String @default("#F5C518")
