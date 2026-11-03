@@ -93,6 +93,32 @@ export function createDryRunEffects(real: WorkflowEffects, sample: DryRunSample)
   };
 }
 
+export interface TestPlanInput {
+  /** Membre qui lance l'essai. */
+  userId: string;
+  /** Membre choisi pour jouer l'événement, s'il y en a un. */
+  memberId?: string | null;
+  source: 'sample' | 'last';
+}
+
+export interface TestPlan {
+  memberId: string;
+  source: 'sample' | 'last';
+  /** Le membre a été choisi, et non pris par défaut. */
+  chosen: boolean;
+}
+
+/**
+ * Qui joue le membre de l'événement, et sur quel événement.
+ *
+ * Un membre choisi impose un événement d'exemple : la dernière exécution porte
+ * son propre membre, et la rejouer ignorerait le choix.
+ */
+export function resolveTestPlan(input: TestPlanInput): TestPlan {
+  if (input.memberId) return { memberId: input.memberId, source: 'sample', chosen: true };
+  return { memberId: input.userId, source: input.source, chosen: false };
+}
+
 export interface DryRunOptions {
   graph: WorkflowGraph;
   effects: WorkflowEffects;

@@ -2,6 +2,7 @@
   import { m } from '../../i18n';
   import Papicon from '../Papicon.svelte';
   import ValueField from './ValueField.svelte';
+  import StepMessagePreview from './StepMessagePreview.svelte';
   import Self from './StepCard.svelte';
   import {
     COOLDOWN_SCOPES,
@@ -131,6 +132,10 @@
     onChange({ ...(step as CooldownStep), ...patch });
   }
 
+  /** Actions dont l'étape montre ce que Discord affichera. */
+  const PREVIEWED_ACTIONS = new Set(['SendMessage', 'SendEmbed']);
+  let showPreview = $state(false);
+
   /** Réglages déjà posés dans la phrase : inutile de les répéter dessous. */
   const extraOptions = $derived(
     action ? action.fields.filter((field) => field.option && !action.sentence.includes(`{${field.key}}`)) : [],
@@ -177,6 +182,24 @@
             />
           </div>
         {/each}
+
+        {#if PREVIEWED_ACTIONS.has(action.type)}
+          <button
+            type="button"
+            onclick={() => (showPreview = !showPreview)}
+            aria-expanded={showPreview}
+            class="inline-flex items-center gap-1.5 text-2xs font-semibold text-primary hover:underline"
+          >
+            <Papicon icon={showPreview ? 'ChevronUp' : 'ChevronDown'} size={11} />
+            {showPreview ? m.wf_preview_hide() : m.wf_preview_show()}
+          </button>
+          {#if showPreview}
+            <div class="max-w-xl space-y-1">
+              <StepMessagePreview step={step as ActionStep} {triggerType} {channels} />
+              <p class="text-2xs text-on-surface-variant">{m.wf_preview_hint()}</p>
+            </div>
+          {/if}
+        {/if}
 
       {:else if step.kind === 'wait'}
         <div class="flex flex-wrap items-center gap-2 text-sm text-on-surface">

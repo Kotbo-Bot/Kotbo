@@ -12,6 +12,9 @@
   import { unsavedChanges } from '../lib/stores/unsavedChanges.svelte';
   import { useUnsavedChanges } from '../lib/useUnsavedChanges.svelte';
   import { workflowDraftKey } from '../lib/workflowDraft';
+  import { testReplayStatus } from '../lib/workflowTest';
+  import { isNodeOffered } from '../lib/workflowAvailability';
+  import MemberSearchSelect from '../lib/components/MemberSearchSelect.svelte';
   import { m, dateLocale } from '../lib/i18n';
   import {
     compileRecipe,
@@ -33,6 +36,7 @@
     fetchWorkflowExecutions,
     fetchWorkflowExecution,
     testWorkflowGraph,
+    type GuildMemberSearchResult,
     type WorkflowSummary,
     type WorkflowExecutionSummary,
     type WorkflowExecutionDetail,
@@ -140,6 +144,8 @@
    */
   let testSource = $state<'sample' | 'last' | null>(null);
   let testing = $state(false);
+  /** Membre qui joue l'événement de l'essai ; à défaut, celui qui le lance. */
+  let testMember = $state<GuildMemberSearchResult | null>(null);
   const editingDraft = $derived(view === 'editor' || (view === 'replay' && testSource !== null));
 
   const replayStep = $derived(replay?.steps[replayIndex]);
@@ -242,6 +248,7 @@
     issues = [];
     advancedOnly = false;
     tab = 'steps';
+    testMember = null;
     markSaved();
     view = 'editor';
   }
@@ -265,6 +272,8 @@
       issues = [];
       advancedOnly = false;
       tab = 'steps';
+      // Le membre choisi valait pour l'automatisation précédente.
+      testMember = null;
       markSaved();
       view = 'editor';
     } catch (e) {
@@ -319,6 +328,12 @@
     view = 'list';
   }
 
+  /** Rejoue l'essai avec un autre membre, ou avec soi-même quand `member` est nul. */
+  function retestWith(member: GuildMemberSearchResult | null): void {
+    testMember = member;
+    void runTest();
+  }
+
   /**
    * Essai à blanc du brouillon, enregistré ou non. Sa trace s'affiche dans le
    * rejeu : même lecture pas à pas qu'une vraie exécution, en partant de
@@ -334,6 +349,7 @@
     try {
       const { test } = await testWorkflowGraph(graph, {
         workflowId: editingId,
+        memberId: testMember?.id ?? null,
         source: editingId ? 'last' : 'sample',
       });
       if (test.steps.length === 0) {
@@ -344,7 +360,7 @@
       replay = {
         id: 'test',
         workflowId: editingId ?? '',
-        status: test.status === 'FAILED' ? 'FAILED' : 'COMPLETED',
+        status: testReplayStatus(test.status),
         error: test.error,
         nodeVisits: test.steps.length,
         iterations: 0,
@@ -629,8 +645,38 @@
       {#if testSource !== null}
         <div class="flex items-start gap-2.5 p-3 rounded-2xl bg-primary/10 border border-primary/20 text-xs text-on-surface">
           <Papicon icon="FlaskConical" size={14} class="text-primary shrink-0 mt-0.5" />
-          <span>{testSource === 'last' ? m.wf_test_banner_last() : m.wf_test_banner_sample()}</span>
+          <span>{testSource === 'last'
+            ? m.wf_test_banner_last()
+            : testMember
+              ? m.wf_test_banner_sample_member({ name: testMember.displayName || testMember.username })
+              : m.wf_test_banner_sample()}</span>
         </div>
+        <div class="flex flex-wrap items-center gap-2 text-xs text-on-surface-variant">
+          <label for="wf-test-member">{m.wf_test_member_label()}</label>
+          <div class="w-64 max-w-full">
+            <MemberSearchSelect
+              id="wf-test-member"
+              value={testMember?.id ?? ''}
+              placeholder={m.wf_test_member_placeholder()}
+              disabled={testing}
+              onselect={(member) => retestWith(member)}
+            />
+          </div>
+          {#if testMember}
+            <button
+              type="button"
+              onclick={() => retestWith(null)}
+              disabled={testing}
+              class="px-3 py-1.5 rounded-xl font-medium bg-surface-container-highest text-on-surface-variant hover:text-on-surface transition-all disabled:opacity-40"
+            >{m.wf_test_member_me()}</button>
+          {/if}
+        </div>
+        {#if replay.status === 'WAITING'}
+          <div class="flex items-start gap-2.5 p-3 rounded-2xl bg-warning/10 border border-warning/20 text-xs text-amber-800">
+            <Papicon icon="Warning" size={14} class="shrink-0 mt-0.5" />
+            <span>{m.wf_test_suspended()}</span>
+          </div>
+        {/if}
       {/if}
       <!-- Transport -->
       <div class="flex flex-wrap items-center gap-3 p-3 rounded-2xl bg-surface-container-high/50 border border-outline-variant/10">
@@ -853,6 +899,7 @@
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
           {#each filteredWorkflows as workflow (workflow.id)}
             {@const trigger = getTrigger(workflow.triggerType)}
+            {@const orphaned = !isNodeOffered(workflow.triggerType)}
             <article class="p-4 rounded-2xl bg-surface-container-high/50 border border-outline-variant/10 space-y-3 hover:border-outline-variant/30 transition-all">
               <div class="flex items-start justify-between gap-3">
                 <div class="min-w-0 space-y-1">
@@ -865,14 +912,27 @@
                     <p class="text-2xs text-on-surface-variant line-clamp-2">{workflow.description}</p>
                   {/if}
                 </div>
-                <span
-                  class="px-2.5 py-1 rounded-full text-2xs font-bold shrink-0 {workflow.enabled
-                    ? 'bg-success/15 text-success border border-success/30'
-                    : 'bg-surface-container-highest text-on-surface-variant'}"
-                >{workflow.enabled ? m.wf_status_active() : m.wf_status_paused()}</span>
+                {#if orphaned}
+                  <span
+                    class="px-2.5 py-1 rounded-full text-2xs font-bold shrink-0 bg-warning/15 text-amber-800 border border-warning/30"
+                  >{m.wf_status_module_paused()}</span>
+                {:else}
+                  <span
+                    class="px-2.5 py-1 rounded-full text-2xs font-bold shrink-0 {workflow.enabled
+                      ? 'bg-success/15 text-success border border-success/30'
+                      : 'bg-surface-container-highest text-on-surface-variant'}"
+                  >{workflow.enabled ? m.wf_status_active() : m.wf_status_paused()}</span>
+                {/if}
               </div>
 
-              {#if isSilent(workflow)}
+              {#if orphaned}
+                <p
+                  class="flex items-start gap-2 px-2.5 py-1.5 rounded-lg bg-warning/10 border border-warning/20 text-2xs text-amber-800"
+                >
+                  <Papicon icon="Warning" size={11} class="mt-0.5 shrink-0" />
+                  <span>{m.wf_module_paused_hint()}</span>
+                </p>
+              {:else if isSilent(workflow)}
                 <p
                   class="flex items-start gap-2 px-2.5 py-1.5 rounded-lg bg-warning/10 border border-warning/20 text-2xs text-amber-800"
                 >
