@@ -56,7 +56,8 @@ export function sampleTriggerOutputs(triggerType: string, sample: DryRunSample):
 const ENTITY_TYPES = new Set(['Member', 'Role', 'Channel', 'Message']);
 
 /**
- * Effets de l'essai : lectures réelles, actions consignées.
+ * Effets de l'essai : lectures réelles, actions consignées, ni délai réservé
+ * ni variable écrite.
  *
  * Une action dont une entrée obligatoire arrive vide échoue comme elle le ferait
  * en production (membre parti, rôle supprimé) : c'est précisément ce que
@@ -68,6 +69,16 @@ export function createDryRunEffects(real: WorkflowEffects, sample: DryRunSample)
     getChannel: (channelId) => real.getChannel(channelId),
     getMember: (userId) => real.getMember(userId),
     getGuildInfo: () => real.getGuildInfo(),
+    // Un essai ne réserve aucun délai : il passe toujours, sans gêner le
+    // prochain vrai déclenchement.
+    claimCooldown: async () => true,
+    getVariable: async (name, subject) => (real.getVariable ? real.getVariable(name, subject) : 0),
+    // Calcule la valeur qui serait écrite, à partir de la vraie, sans l'écrire.
+    async updateVariable(name, subject, operation, amount) {
+      if (operation === 'set') return amount;
+      const current = real.getVariable ? await real.getVariable(name, subject) : 0;
+      return current + amount;
+    },
     async runAction(type, inputs) {
       const def = getNodeDef(type);
       if (!def) return {};

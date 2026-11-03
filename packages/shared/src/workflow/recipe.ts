@@ -14,6 +14,8 @@
  * interchangeables.
  */
 
+import type { CooldownScope } from './catalog.js';
+
 // ============================================================================
 // VALEURS
 // ============================================================================
@@ -33,7 +35,15 @@ export type ValueRef =
   | { from: 'role'; roleId: string }
   | { from: 'channel'; channelId: string }
   /** Valeur issue du contexte du déclencheur, ex. `member` ou `member.displayName` */
-  | { from: 'context'; path: string };
+  | { from: 'context'; path: string }
+  /**
+   * Valeur d'une variable du serveur. N'est jamais saisie : seules les
+   * conditions sur une variable en produisent, à partir du nom qu'elles portent.
+   */
+  | { from: 'variable'; name: string; scope: VariableScope };
+
+/** Variable propre au membre du déclencheur, ou commune à tout le serveur. */
+export type VariableScope = 'member' | 'server';
 
 export const EMPTY_TEXT: ValueRef = { from: 'text', template: '' };
 
@@ -56,6 +66,7 @@ export function isEmptyValue(ref: ValueRef | undefined): boolean {
     case 'role': return !ref.roleId;
     case 'channel': return !ref.channelId;
     case 'context': return !ref.path;
+    case 'variable': return !ref.name.trim();
     default: return false;
   }
 }
@@ -95,6 +106,8 @@ export interface ConditionTest {
   operator?: string;
   value?: ValueRef;
   negate?: boolean;
+  /** Nom de la variable, pour les conditions qui en lisent une */
+  name?: string;
 }
 
 /** Un embranchement : « si …, alors … sinon … ». */
@@ -108,7 +121,18 @@ export interface ConditionStep {
   otherwise: RecipeStep[];
 }
 
-export type RecipeStep = ActionStep | WaitStep | ConditionStep;
+/**
+ * « Au plus une fois toutes les … » : les étapes suivantes ne s'exécutent que
+ * si le délai est écoulé pour le membre, le salon ou le serveur.
+ */
+export interface CooldownStep {
+  id: string;
+  kind: 'cooldown';
+  seconds: number;
+  scope: CooldownScope;
+}
+
+export type RecipeStep = ActionStep | WaitStep | ConditionStep | CooldownStep;
 
 export interface RecipeTrigger {
   /** Type de nœud déclencheur du catalogue, ex. `OnMemberJoin` */

@@ -12,7 +12,7 @@
  * l'enregistrement serait bien pire qu'un refus franc.
  */
 
-import { getNodeDef, isTriggerNode } from './catalog.js';
+import { getNodeDef, isCooldownScope, isTriggerNode, normalizeVariableName } from './catalog.js';
 import { CONDITION_LIBRARY, getAction, INFO_NODES } from './library.js';
 import {
   newStepId,
@@ -116,9 +116,27 @@ class Reader {
       case 'FormatText':
         return this.formatText(source.node);
 
+      case 'GetVariable':
+        return this.variable(source.node);
+
       default:
         return null;
     }
+  }
+
+  /**
+   * Une variable n'est lisible en phrase que pour le membre du déclencheur ou
+   * pour tout le serveur : un membre venu d'ailleurs sort du modèle.
+   */
+  private variable(node: WorkflowNode): ValueRef | null {
+    const name = normalizeVariableName(node.config?.name);
+    if (!name) return null;
+
+    const member = this.incoming(node.id, 'member');
+    if (member && (member.node.id !== this.trigger.id || member.portId !== 'member')) return null;
+
+    this.consumed.add(node.id);
+    return { from: 'variable', name, scope: member ? 'member' : 'server' };
   }
 
   /** Reconstitue le texte d'origine en réinjectant les chemins dans le gabarit. */
@@ -194,6 +212,7 @@ class Reader {
       // celle qui reste porte la valeur saisie par l'utilisateur.
       let matches = true;
       let value: ValueRef | undefined;
+      let name: string | undefined;
 
       for (const [portId, ref] of Object.entries(shape.inputs)) {
         const wired = this.incoming(source.node.id, portId);
@@ -201,6 +220,12 @@ class Reader {
 
         if (ref.from === 'context') {
           if (this.contextPath(wired) !== ref.path) { matches = false; break; }
+        } else if (ref.from === 'variable') {
+          // Le nom de la variable est porté par la condition, pas par sa valeur.
+          if (wired.node.type !== 'GetVariable') { matches = false; break; }
+          const read = this.value(wired);
+          if (read?.from !== 'variable' || read.scope !== ref.scope) { matches = false; break; }
+          name = read.name;
         } else {
           const read = this.value(wired);
           if (!read) { matches = false; break; }
@@ -216,6 +241,7 @@ class Reader {
         condition: def.key,
         ...(def.operators ? { operator } : {}),
         ...(value ? { value } : {}),
+        ...(name ? { name } : {}),
       };
     }
 
@@ -238,6 +264,21 @@ class Reader {
         if (this.incoming(current.id, 'seconds')) return null;
         this.consumed.add(current.id);
         out.push({ id: current.id, kind: 'wait', seconds: Number(current.config?.seconds ?? 60) });
+        current = this.next(current.id, 'next');
+        continue;
+      }
+
+      if (current.type === 'Cooldown') {
+        // Une sortie « En attente » branchée n'a pas d'équivalent en phrase.
+        if (this.next(current.id, 'blocked')) return null;
+        const scope = current.config?.scope;
+        this.consumed.add(current.id);
+        out.push({
+          id: current.id,
+          kind: 'cooldown',
+          seconds: Number(current.config?.seconds ?? 3600),
+          scope: isCooldownScope(scope) ? scope : 'member',
+        });
         current = this.next(current.id, 'next');
         continue;
       }
@@ -282,12 +323,16 @@ class Reader {
     if (!def) return null;
 
     const values: Record<string, ValueRef> = {};
-    const options: Record<string, unknown> = {};
 
     for (const field of def.fields) {
+      // Un réglage revient dans `values`, là où l'éditeur le lit : rangé à part,
+      // il réapparaissait vide à la réouverture (couleur d'embed, nom de variable).
       if (field.option) {
         const stored = node.config?.[field.key];
-        if (stored !== undefined) options[field.key] = stored;
+        if (stored === undefined || stored === '') continue;
+        values[field.key] = field.kind === 'number'
+          ? { from: 'number', value: Number(stored) }
+          : { from: 'text', template: String(stored) };
         continue;
       }
 
@@ -305,7 +350,6 @@ class Reader {
       kind: 'action',
       action: node.type,
       values,
-      ...(Object.keys(options).length > 0 ? { options } : {}),
     };
   }
 }

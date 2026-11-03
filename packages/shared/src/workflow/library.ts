@@ -510,7 +510,7 @@ export interface ActionField {
   max?: number;
 }
 
-export type ActionGroup = 'communication' | 'roles' | 'rewards' | 'moderation' | 'support' | 'timing';
+export type ActionGroup = 'communication' | 'roles' | 'rewards' | 'variables' | 'moderation' | 'support' | 'timing';
 
 export interface ActionPresentation {
   /** Type de nœud du catalogue moteur */
@@ -527,12 +527,19 @@ export const ACTION_GROUP_LABELS: Record<ActionGroup, string> = {
   communication: 'Communiquer',
   roles: 'Rôles',
   rewards: 'Récompenser',
+  variables: 'Variables',
   moderation: 'Modérer',
   support: 'Support',
   timing: 'Rythme',
 };
 
 const MEMBER_FIELD: ActionField = { key: 'member', label: 'Membre', kind: 'member' };
+
+/** Nom d'une variable : rangé dans la configuration du nœud, jamais branché. */
+const VARIABLE_NAME_FIELD: ActionField = { key: 'name', label: 'Nom', kind: 'richtext', option: true, placeholder: 'points' };
+
+/** Laissé vide, la variable vaut pour tout le serveur plutôt que pour un membre. */
+const VARIABLE_MEMBER_FIELD: ActionField = { ...MEMBER_FIELD, optional: true, placeholder: 'tout le serveur' };
 
 /**
  * Bornes des actions de récompense, partagées avec l'exécuteur du bot : un
@@ -778,6 +785,30 @@ export const ACTION_LIBRARY: ActionPresentation[] = [
       { key: 'text', label: 'Message', kind: 'richtext', placeholder: '{member.tag} a ouvert un ticket' },
     ],
   },
+  {
+    type: 'AddToVariable',
+    label: 'Ajouter à une variable',
+    sentence: 'Ajouter {amount} à la variable {name} de {member}',
+    group: 'variables',
+    icon: 'Plus',
+    fields: [
+      { key: 'amount', label: 'Nombre', kind: 'number', defaultValue: 1 },
+      VARIABLE_NAME_FIELD,
+      VARIABLE_MEMBER_FIELD,
+    ],
+  },
+  {
+    type: 'SetVariable',
+    label: 'Définir une variable',
+    sentence: 'Mettre la variable {name} de {member} à {amount}',
+    group: 'variables',
+    icon: 'Edit',
+    fields: [
+      VARIABLE_NAME_FIELD,
+      VARIABLE_MEMBER_FIELD,
+      { key: 'amount', label: 'Valeur', kind: 'number', defaultValue: 0 },
+    ],
+  },
 ];
 
 export function getAction(type: string): ActionPresentation | undefined {
@@ -808,7 +839,7 @@ export function availableActions(triggerType: string): ActionPresentation[] {
 
   return ACTION_LIBRARY.filter((action) => action.fields.every((field) => {
     const needed = CONTEXT_ONLY_FIELDS[field.kind];
-    return !needed || roots.has(needed);
+    return field.optional || !needed || roots.has(needed);
   }));
 }
 
@@ -847,7 +878,7 @@ export type ConditionGroup = 'member' | 'message' | 'channel' | 'guild' | 'conte
 
 export interface ConditionPresentation {
   key: string;
-  /** Phrase à trous : `{operator}` et `{value}` sont les seuls trous possibles */
+  /** Phrase à trous : `{operator}`, `{value}` et `{name}` (nom de variable) sont les seuls trous possibles */
   sentence: string;
   /** Même phrase à la forme négative, pour ne jamais afficher « non (… ) » */
   negativeSentence: string;
@@ -1165,6 +1196,36 @@ export const CONDITION_LIBRARY: ConditionPresentation[] = [
     build: (test) => ({
       node: 'Compare',
       inputs: { a: ctx('guild.memberCount'), b: userValue(test) },
+      config: { operator: test.operator ?? 'gte' },
+    }),
+  },
+  {
+    key: 'variable.member',
+    sentence: 'la variable {name} du membre vaut {operator} {value}',
+    negativeSentence: 'la variable {name} du membre ne vaut pas {operator} {value}',
+    group: 'member',
+    requires: ['member'],
+    valueKind: 'number',
+    operators: NUMBER_OPERATORS,
+    defaultOperator: 'gte',
+    build: (test) => ({
+      node: 'Compare',
+      inputs: { a: { from: 'variable', name: test.name ?? '', scope: 'member' }, b: userValue(test) },
+      config: { operator: test.operator ?? 'gte' },
+    }),
+  },
+  {
+    key: 'variable.server',
+    sentence: 'la variable {name} du serveur vaut {operator} {value}',
+    negativeSentence: 'la variable {name} du serveur ne vaut pas {operator} {value}',
+    group: 'guild',
+    requires: [],
+    valueKind: 'number',
+    operators: NUMBER_OPERATORS,
+    defaultOperator: 'gte',
+    build: (test) => ({
+      node: 'Compare',
+      inputs: { a: { from: 'variable', name: test.name ?? '', scope: 'server' }, b: userValue(test) },
       config: { operator: test.operator ?? 'gte' },
     }),
   },

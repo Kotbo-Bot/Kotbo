@@ -15,7 +15,7 @@
  *    de dix lignes exploserait le budget de nœuds.
  */
 
-import { getNodeDef } from './catalog.js';
+import { getNodeDef, normalizeVariableName } from './catalog.js';
 import { getAction, getCondition, INFO_NODES } from './library.js';
 import {
   templateTokens,
@@ -25,6 +25,7 @@ import {
   type Recipe,
   type RecipeStep,
   type ValueRef,
+  type VariableScope,
 } from './recipe.js';
 import type { WorkflowEdge, WorkflowGraph, WorkflowNode } from './types.js';
 
@@ -185,9 +186,31 @@ class Compiler {
         return place(`lit__num_${hash(String(ref.value))}`, 'ConstNumber', { value: ref.value }, 'value');
       case 'boolean':
         return place(`lit__bool_${ref.value}`, 'ConstBoolean', { value: ref.value }, 'value');
+      case 'variable':
+        return this.variableOutlet(ref.name, ref.scope, column);
       default:
         return null;
     }
+  }
+
+  /**
+   * Lecture d'une variable, mutualisée par nom et par portée. Celle d'un membre
+   * reçoit le membre du déclencheur ; celle du serveur n'en reçoit aucun.
+   */
+  private variableOutlet(rawName: string, scope: VariableScope, column: number): Outlet | null {
+    const name = normalizeVariableName(rawName);
+    if (!name) return null;
+
+    const id = `var__${scope}_${hash(name)}`;
+    return this.builder.memo(id, () => {
+      const at = this.builder.dataPosition(column);
+      this.builder.node(id, 'GetVariable', { name }, at.x, at.y);
+      if (scope === 'member') {
+        const member = this.contextOutlet('member', column);
+        if (member) this.builder.connect(member, { nodeId: id, portId: 'member' });
+      }
+      return { nodeId: id, portId: 'value' };
+    });
   }
 
   /**
@@ -353,6 +376,15 @@ export function compileRecipe(recipe: Recipe): WorkflowGraph {
 
       if (step.kind === 'wait') {
         builder.node(step.id, 'Delay', { seconds: step.seconds }, column * COLUMN_WIDTH, row * ROW_HEIGHT);
+        builder.connect(previous, { nodeId: step.id, portId: 'exec' });
+        previous = { nodeId: step.id, portId: 'next' };
+        continue;
+      }
+
+      // La suite part de « Disponible » ; « En attente » ne mène nulle part,
+      // ce qui arrête l'automatisation tant que le délai court.
+      if (step.kind === 'cooldown') {
+        builder.node(step.id, 'Cooldown', { seconds: step.seconds, scope: step.scope }, column * COLUMN_WIDTH, row * ROW_HEIGHT);
         builder.connect(previous, { nodeId: step.id, portId: 'exec' });
         previous = { nodeId: step.id, portId: 'next' };
         continue;

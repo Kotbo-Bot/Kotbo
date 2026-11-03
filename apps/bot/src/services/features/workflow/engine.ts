@@ -1,6 +1,9 @@
 import {
   DEFAULT_BUDGET,
+  MAX_COOLDOWN_SECONDS,
   getNodeDef,
+  isCooldownScope,
+  normalizeVariableName,
   resolveNodeInputs,
   type ExecutionBudget,
   type WorkflowEdge,
@@ -62,7 +65,25 @@ export interface WorkflowEffects {
     inputs: Record<string, unknown>,
     config: Record<string, unknown>,
   ): Promise<Record<string, unknown>>;
+  /**
+   * Réserve le passage d'un délai de récupération : `true` s'il était libre
+   * (et le voilà occupé pour `seconds`), `false` s'il court encore. Absent,
+   * le délai laisse toujours passer.
+   */
+  claimCooldown?(nodeId: string, subject: string, seconds: number): Promise<boolean>;
+  /** Valeur d'une variable du serveur ; `subject` vide pour celle du serveur. */
+  getVariable?(name: string, subject: string): Promise<number>;
+  /** Ajoute à une variable ou la remplace, et rend sa nouvelle valeur. */
+  updateVariable?(name: string, subject: string, operation: VariableOperation, amount: number): Promise<number>;
 }
+
+export type VariableOperation = 'add' | 'set';
+
+/** Actions qui écrivent une variable, traitées par le moteur et non par `runAction`. */
+const VARIABLE_ACTIONS: Record<string, VariableOperation> = {
+  AddToVariable: 'add',
+  SetVariable: 'set',
+};
 
 // ============================================================================
 // ÉTAT D'EXÉCUTION
@@ -223,6 +244,14 @@ export async function runWorkflow(options: RunOptions): Promise<ExecutionOutcome
         return value;
       }
 
+      if (node.type === 'GetVariable') {
+        const name = normalizeVariableName(node.config?.name);
+        const subject = await variableSubject(node);
+        const value = name && effects.getVariable ? await effects.getVariable(name, subject) : 0;
+        memo.set(key, value);
+        return value;
+      }
+
       const outputs = await evaluateDataNode(node);
       for (const [outId, outValue] of Object.entries(outputs)) {
         memo.set(`${generation}:${nodeId}:${outId}`, outValue);
@@ -253,6 +282,40 @@ export async function runWorkflow(options: RunOptions): Promise<ExecutionOutcome
       inputs[port.id] = await inputValue(node, port.id);
     }
     return inputs;
+  }
+
+  /**
+   * Titulaire d'une variable : le membre branché, sinon le serveur (chaîne
+   * vide). Un membre branché mais absent - parti du serveur - est une erreur :
+   * retomber sur la variable du serveur écrirait au mauvais endroit.
+   */
+  async function variableSubject(node: WorkflowNode): Promise<string> {
+    const wired = graph.edges.some((e) => e.target === node.id && e.targetHandle === 'member');
+    if (!wired) return '';
+    const member = await inputValue(node, 'member');
+    if (!isMember(member)) throw new Error('Membre absent : la variable du membre ne peut pas être lue ni écrite.');
+    return member.id;
+  }
+
+  /** Clé d'un délai de récupération selon sa portée, lue sur le déclencheur. */
+  function cooldownSubject(scope: unknown): string {
+    if (!isCooldownScope(scope) || scope === 'guild') return '';
+    const entity = state.triggerOutputs[scope] as { id?: unknown } | undefined;
+    return typeof entity?.id === 'string' ? `${scope}:${entity.id}` : '';
+  }
+
+  async function runActionNode(node: WorkflowNode, inputs: Record<string, unknown>): Promise<Record<string, unknown>> {
+    const operation = VARIABLE_ACTIONS[node.type];
+    if (!operation) return effects.runAction(node.type, inputs, node.config ?? {});
+
+    const name = normalizeVariableName(node.config?.name);
+    if (!name) throw new Error('Le nom de la variable n\'est pas renseigné.');
+    const subject = await variableSubject(node);
+    const amount = coerceToNumber(inputs.amount);
+    // Sans stockage (effets de test), la valeur rendue est celle qui serait écrite
+    // sur une variable encore vierge.
+    if (!effects.updateVariable) return { value: amount };
+    return { value: await effects.updateVariable(name, subject, operation, amount) };
   }
 
   async function evaluateDataNode(node: WorkflowNode): Promise<Record<string, unknown>> {
@@ -318,6 +381,17 @@ export async function runWorkflow(options: RunOptions): Promise<ExecutionOutcome
         continue;
       }
 
+      if (node.type === 'Cooldown') {
+        const seconds = Math.min(MAX_COOLDOWN_SECONDS, Math.max(1, coerceToNumber(node.config?.seconds ?? 3600)));
+        const free = effects.claimCooldown
+          ? await effects.claimCooldown(node.id, cooldownSubject(node.config?.scope), seconds)
+          : true;
+        const target = execTarget(graph, node.id, free ? 'next' : 'blocked');
+        if (target) state.stack.push({ kind: 'node', nodeId: target });
+        steps.push(step(state.stepOrder++, node, inputs, { disponible: free }, now() - stepStart));
+        continue;
+      }
+
       if (node.type === 'ForEach') {
         const items = coerceToList(inputs.list);
         if (items.length > budget.maxIterations) {
@@ -351,7 +425,7 @@ export async function runWorkflow(options: RunOptions): Promise<ExecutionOutcome
       if (def.category === 'action') {
         let outputs: Record<string, unknown>;
         try {
-          outputs = await effects.runAction(node.type, inputs, node.config ?? {});
+          outputs = await runActionNode(node, inputs);
         } catch (error) {
           // Consignée ici : sans elle, l'erreur retombait sur l'étape d'avant,
           // et le journal désignait un nœud qui n'avait pas échoué.
