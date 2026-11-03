@@ -51,6 +51,7 @@ import {
 import { createReactionRoleMenu, deleteReactionRoleMenu, updateReactionRoleMenu, normalizeButtonMode, MAX_REACTION_ROLE_BUTTONS, type ReactionRoleOption } from '../../../services/features/reactionRoleService.js';
 import { invalidateAutoResponseCache } from '../../../services/features/autoResponseService.js';
 import { normalizeAnswer } from '../../../services/features/funService.js';
+import { normalizeConfessionCooldown } from '../../../services/features/confessionPolicy.js';
 import { resolveSuggestion } from '../../../services/features/suggestionService.js';
 import { broadcastDashboardStateChange, json, readJsonBody, getGuildName, pushAudit, resolveMemberFeatureAccess, type AuthClaims, type DashboardAccess } from '../../shared.js';
 import { acquireProvisionLock, ensureTextChannel, missingProvisionPermissions, provisionCooldown, provisionCooldownMessage, releaseProvisionLock, startProvisionCooldown } from '../../../services/core/channelProvisioningService.js';
@@ -2775,6 +2776,7 @@ export async function handleGeneralistModulesRoutes(
             funImageOfDayChannelId: true,
             funConfessionChannelId: true,
             funConfessionLogChannelId: true,
+            funConfessionCooldownSeconds: true,
             funPunitiveMode: true,
             funEmojiRiddleUseDefaults: true,
           }
@@ -2821,12 +2823,21 @@ export async function handleGeneralistModulesRoutes(
           funImageOfDayChannelId?: string | null;
           funConfessionChannelId?: string | null;
           funConfessionLogChannelId?: string | null;
+          funConfessionCooldownSeconds?: number;
           funPunitiveMode?: boolean;
           funEmojiRiddleUseDefaults?: boolean;
         }>(req);
 
         if (!body) {
           json(res, 400, { error: 'Corps de requête manquant' });
+          return true;
+        }
+
+        const confessionCooldown = body.funConfessionCooldownSeconds === undefined
+          ? undefined
+          : normalizeConfessionCooldown(body.funConfessionCooldownSeconds);
+        if (confessionCooldown === null) {
+          json(res, 400, { error: 'Le délai entre deux confessions doit être un nombre de secondes' });
           return true;
         }
 
@@ -2854,6 +2865,7 @@ export async function handleGeneralistModulesRoutes(
             funImageOfDayChannelId: body.funImageOfDayChannelId,
             funConfessionChannelId: body.funConfessionChannelId,
             funConfessionLogChannelId: body.funConfessionLogChannelId,
+            funConfessionCooldownSeconds: confessionCooldown,
             funPunitiveMode: body.funPunitiveMode,
             funEmojiRiddleUseDefaults: typeof body.funEmojiRiddleUseDefaults === 'boolean'
               ? body.funEmojiRiddleUseDefaults
@@ -2905,6 +2917,7 @@ export async function handleGeneralistModulesRoutes(
             funImageOfDayChannelId: updatedGuild.funImageOfDayChannelId,
             funConfessionChannelId: updatedGuild.funConfessionChannelId,
             funConfessionLogChannelId: updatedGuild.funConfessionLogChannelId,
+            funConfessionCooldownSeconds: updatedGuild.funConfessionCooldownSeconds,
             funPunitiveMode: updatedGuild.funPunitiveMode,
             funEmojiRiddleUseDefaults: updatedGuild.funEmojiRiddleUseDefaults,
           },
@@ -2933,7 +2946,7 @@ export async function handleGeneralistModulesRoutes(
           where: { guildId },
           orderBy: { number: 'desc' },
           take: 50,
-          select: { number: true, content: true, createdAt: true, revealedAt: true },
+          select: { number: true, content: true, createdAt: true, revealedAt: true, deletedAt: true },
         });
         json(res, 200, { confessions });
       } catch (err) {

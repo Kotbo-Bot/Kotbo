@@ -262,6 +262,7 @@ export interface StarboardConfigPayload {
   watchedChannels: string[];
   ignoredChannels: string[];
   allowBots: boolean;
+  ignoreAuthorVotes: boolean;
   embedColor: string;
   removeBelowThreshold: boolean;
 }

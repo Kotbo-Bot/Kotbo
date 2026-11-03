@@ -3,22 +3,21 @@ import prisma from '../../utils/db.js';
 import { cache } from '../../utils/cache.js';
 import { COLORS } from '../../utils/embeds.js';
 import { logger } from '../../utils/logger.js';
+import { loadBannedWords } from '../moderation/bannedWordsService.js';
+import { checkConfession, type ConfessionRefusal } from './confessionPolicy.js';
 
-export const CONFESSION_MAX_LENGTH = 1500;
-const CONFESSION_COOLDOWN_MS = 60_000;
-
-const lastSentAt = new Map<string, number>();
+export { CONFESSION_MAX_LENGTH } from './confessionPolicy.js';
 
 export type ConfessionResult =
   | { ok: true; number: number }
-  | { ok: false; reason: 'cooldown' | 'empty' | 'too_long' | 'not_configured' | 'send_failed'; retryInSeconds?: number };
+  | { ok: false; reason: ConfessionRefusal | 'not_configured' | 'send_failed'; retryInSeconds?: number };
 
 function isSendable(channel: unknown): channel is TextBasedChannel & { send: (o: unknown) => Promise<{ id: string }> } {
   return !!channel && typeof (channel as { send?: unknown }).send === 'function';
 }
 
 /** Numéro suivant du serveur. La contrainte unique rejoue en cas de course. */
-async function createWithNextNumber(guildId: string, authorId: string, content: string) {
+async function createWithNextNumber(guildId: string, authorId: string, content: string, channelId: string) {
   for (let attempt = 0; attempt < 5; attempt++) {
     const last = await prisma.confession.findFirst({
       where: { guildId },
@@ -27,7 +26,7 @@ async function createWithNextNumber(guildId: string, authorId: string, content: 
     });
     try {
       return await prisma.confession.create({
-        data: { guildId, authorId, content, number: (last?.number ?? 0) + 1 },
+        data: { guildId, authorId, content, channelId, number: (last?.number ?? 0) + 1 },
       });
     } catch (err) {
       if ((err as { code?: string }).code !== 'P2002') throw err;
@@ -38,29 +37,37 @@ async function createWithNextNumber(guildId: string, authorId: string, content: 
 
 export async function submitConfession(
   guild: Guild,
-  channelId: string | null,
-  logChannelId: string | null,
+  config: { channelId: string | null; logChannelId: string | null; cooldownSeconds: number },
   authorId: string,
   rawContent: string,
 ): Promise<ConfessionResult> {
+  const { channelId, logChannelId } = config;
   if (!channelId) return { ok: false, reason: 'not_configured' };
 
-  const content = rawContent.trim();
-  if (!content) return { ok: false, reason: 'empty' };
-  if (content.length > CONFESSION_MAX_LENGTH) return { ok: false, reason: 'too_long' };
-
-  const key = `${guild.id}:${authorId}`;
-  const wait = (lastSentAt.get(key) ?? 0) + CONFESSION_COOLDOWN_MS - Date.now();
-  if (wait > 0) return { ok: false, reason: 'cooldown', retryInSeconds: Math.ceil(wait / 1000) };
-  lastSentAt.set(key, Date.now());
+  // Le délai part de la dernière confession en base : il survit aux
+  // redémarrages et vaut pour toutes les instances du bot.
+  const [last, bannedWords] = await Promise.all([
+    prisma.confession.findFirst({
+      where: { guildId: guild.id, authorId },
+      orderBy: { createdAt: 'desc' },
+      select: { createdAt: true },
+    }),
+    loadBannedWords(guild.id),
+  ]);
+  const check = checkConfession({
+    content: rawContent,
+    bannedWords,
+    lastSentAt: last?.createdAt ?? null,
+    cooldownSeconds: config.cooldownSeconds,
+    now: Date.now(),
+  });
+  if (!check.ok) return check;
+  const { content } = check;
 
   const channel = await guild.channels.fetch(channelId).catch(() => null);
-  if (!isSendable(channel)) {
-    lastSentAt.delete(key);
-    return { ok: false, reason: 'not_configured' };
-  }
+  if (!isSendable(channel)) return { ok: false, reason: 'not_configured' };
 
-  const confession = await createWithNextNumber(guild.id, authorId, content);
+  const confession = await createWithNextNumber(guild.id, authorId, content, channelId);
 
   try {
     const embed = new EmbedBuilder()
@@ -74,7 +81,6 @@ export async function submitConfession(
   } catch (err) {
     logger.warn('Confession', `Envoi impossible sur ${guild.id}`, err);
     await prisma.confession.delete({ where: { id: confession.id } }).catch(() => undefined);
-    lastSentAt.delete(key);
     return { ok: false, reason: 'send_failed' };
   }
 
@@ -111,10 +117,60 @@ export async function revealConfession(
   return { authorId: confession.authorId, content: confession.content };
 }
 
-export async function setConfessionChannels(guildId: string, channelId: string | null, logChannelId: string | null): Promise<void> {
+/** Code Discord d'un message déjà supprimé : le but est atteint. */
+const UNKNOWN_MESSAGE = 10008;
+
+/**
+ * Retire une confession publiée : le message Discord est supprimé, la ligne
+ * reste (contenu et auteur) pour garder la trace. Le retrait est noté dans le
+ * journal staff. `message_kept` signale un message que le bot n'a pas pu
+ * supprimer (permissions, salon disparu) : le staff doit le retirer à la main.
+ */
+export async function deleteConfession(
+  guild: Guild,
+  config: { channelId: string | null; logChannelId: string | null },
+  number: number,
+  deletedBy: string,
+): Promise<'deleted' | 'message_kept' | 'not_found' | 'already_deleted'> {
+  const confession = await prisma.confession.findUnique({
+    where: { guildId_number: { guildId: guild.id, number } },
+  });
+  if (!confession) return 'not_found';
+  if (confession.deletedAt) return 'already_deleted';
+
+  // Les confessions antérieures au suivi du salon visent le salon actuel.
+  const channelId = confession.channelId ?? config.channelId;
+  const messageRemoved = !confession.messageId || await removeMessage(guild, channelId, confession.messageId);
+
+  await prisma.confession.update({
+    where: { id: confession.id },
+    data: { deletedAt: new Date(), deletedBy },
+  });
+  await postStaffLog(guild, config.logChannelId, `Confession #${number} supprimée par <@${deletedBy}>.`);
+  return messageRemoved ? 'deleted' : 'message_kept';
+}
+
+async function removeMessage(guild: Guild, channelId: string | null, messageId: string): Promise<boolean> {
+  if (!channelId) return false;
+  const channel = await guild.channels.fetch(channelId).catch(() => null);
+  if (!channel?.isTextBased()) return false;
+  return channel.messages.delete(messageId).then(
+    () => true,
+    (err: { code?: number }) => err?.code === UNKNOWN_MESSAGE,
+  );
+}
+
+export async function setConfessionSettings(
+  guildId: string,
+  settings: { channelId: string; logChannelId: string | null; cooldownSeconds?: number },
+): Promise<void> {
   await prisma.guild.update({
     where: { id: guildId },
-    data: { funConfessionChannelId: channelId, funConfessionLogChannelId: logChannelId },
+    data: {
+      funConfessionChannelId: settings.channelId,
+      funConfessionLogChannelId: settings.logChannelId,
+      funConfessionCooldownSeconds: settings.cooldownSeconds,
+    },
   });
   await cache.invalidateGuild(guildId);
 }
