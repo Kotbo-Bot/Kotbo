@@ -26,6 +26,7 @@ import { resolveOnlineMembersCount } from '../../../services/core/presenceDetect
 import { canViewFeatureSection } from './featureGate.js';
 import { applyFreeAnalyticsLimits } from './analyticsFreeTier.js';
 import { getGuildPlan } from '../../../services/system/planService.js';
+import { isModuleEnabled } from '../../../services/core/moduleGate.js';
 
 export type LiveGuildCounts = {
   totalMembers: number;
@@ -838,6 +839,12 @@ export async function handleAnalyticsRoutes(
 
   // GET /api/dashboard/guilds/:guildId/analytics/daily-algo - Daily Algo analytics
   if (parts.length === 6 && parts[5] === 'daily-algo') {
+    // Le segment est celui d'Analytics : la garde de module ne le rattache
+    // pas au Daily Algo, d'où ce contrôle (module éteint ou en pause).
+    if (!(await isModuleEnabled(guildId, 'daily_algo'))) {
+      json(res, 404, { error: 'Le Daily Algo est désactivé sur ce serveur.' });
+      return true;
+    }
     try {
       const days = Math.min(365, Math.max(1, parseInt(url.searchParams.get('days') || '30', 10) || 30));
       const startDate = url.searchParams.get('startDate');

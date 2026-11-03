@@ -349,7 +349,8 @@ export const COMMAND_MODULES = new Map<ApplicationCommandDefinition, string>([
   [invitesCommand, 'analytics'],
   [widgetCommand, 'analytics'],
   [pulseCommand, 'analytics'],
-  [postCommand, 'news'],
+  // `/post` ne publie que le défi du jour : elle suit le Daily Algo, pas les actualités.
+  [postCommand, 'daily_algo'],
   [linkCommand, 'channel_links'],
 ]);
 

@@ -3,6 +3,7 @@ import { promisify } from 'node:util';
 import { gzip } from 'node:zlib';
 import { Client, type Guild } from 'discord.js';
 import { LinkedAccountStatus, Prisma } from '@prisma/client';
+import { isModulePaused } from '@kotbo/contracts';
 import { buildBettorStandings, buildSeasonLaureates, firmDebtOf, normalizeLevelCurve } from '@kotbo/shared';
 import { getRaidRecap, RAID_RECAP_PUBLIC_WINDOW_MS } from '../../services/features/rpg/rpgRaidService.js';
 import { getEngagedBetCredit, getEngagedBetCreditTotal } from '../../services/community/clanBetService.js';
@@ -462,6 +463,11 @@ export async function handlePublicRoutes(
   // secret ; il est stocke en empreinte, expire, et ne donne acces qu'a ce
   // dossier. Les notes internes ne sortent jamais par cette porte.
   if (parts[1] === 'public' && parts[2] === 'partner-portal' && parts[3]) {
+    // Partenariats en pause : les liens déjà envoyés ne mènent plus à rien.
+    if (isModulePaused('partnerships')) {
+      json(res, 404, { error: 'Lien invalide' });
+      return true;
+    }
     const token = parts[3];
     if (!/^[A-Za-z0-9_-]{20,64}$/.test(token)) {
       json(res, 400, { error: 'Lien invalide' });

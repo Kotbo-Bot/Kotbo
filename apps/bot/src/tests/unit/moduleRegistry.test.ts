@@ -160,6 +160,21 @@ describe('resolution du module proprietaire', () => {
     expect(getModuleForCustomId('inconnu:42')).toBeUndefined();
   });
 
+  test('les boutons et modals du daily algo remontent a leur module', () => {
+    // Sans ces prefixes, les boutons des anciens defis restaient cliquables
+    // une fois le module eteint : la garde ne savait pas a qui ils etaient.
+    for (const customId of [
+      'daily-algo-submit:run1',
+      'daily-algo-why:run1',
+      'daily-algo-solution:run1',
+      'daily-algo-feedback:sub1',
+      'modal:daily-algo-feedback:sub1',
+      'modal:daily-algo-rate:sub1',
+    ]) {
+      expect(getModuleForCustomId(customId)).toBe('daily_algo');
+    }
+  });
+
   test('une route du dashboard remonte a son module, sous-routes comprises', () => {
     expect(getModuleForPath('/tickets')).toBe('tickets');
     expect(getModuleForPath('/security/sanctions/42')).toBe('sanctions');

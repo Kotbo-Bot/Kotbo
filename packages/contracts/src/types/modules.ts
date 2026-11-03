@@ -580,6 +580,7 @@ export const MODULE_REGISTRY: ModuleDefinition[] = [
       'daily-algo-submissions',
     ],
     paths: ['/dailyalgo'],
+    interactionPrefixes: ['daily-algo-', 'modal:daily-algo-'],
   },
   {
     key: 'tickets',
