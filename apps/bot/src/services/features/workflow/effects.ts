@@ -19,6 +19,7 @@ import { logger } from '../../../utils/logger.js';
 import { isModuleEnabled } from '../../core/moduleGate.js';
 import { memberProfileIdentity } from '../../moderation/memberIdentityService.js';
 import type { WorkflowEffects } from './engine.js';
+import { claimCooldown, getVariable, updateVariable } from './workflowStore.js';
 import { MEMBER_NOTE_MAX_LENGTH, appendAutomaticNoteLine, formatAutomaticNoteLine } from './memberNote.js';
 import { expectBotNickname } from './nicknameEcho.js';
 import { expectBotRoleChange } from './roleEcho.js';
@@ -230,8 +231,18 @@ async function sendAppealLinkBeforeRemoval(guild: Guild, member: GuildMember, ty
   await sendPreActionAppealDM(guild.client, guild.id, member.id, type).catch(() => false);
 }
 
-export function createWorkflowEffects(guild: Guild): WorkflowEffects {
+/**
+ * `workflowId` n'est requis que par le délai de récupération, propre à chaque
+ * automatisation : sans lui, le délai laisse passer.
+ */
+export function createWorkflowEffects(guild: Guild, workflowId?: string): WorkflowEffects {
   return {
+    ...(workflowId
+      ? { claimCooldown: (nodeId: string, subject: string, seconds: number) => claimCooldown(workflowId, nodeId, subject, seconds) }
+      : {}),
+    getVariable: (name, subject) => getVariable(guild.id, name, subject),
+    updateVariable: (name, subject, operation, amount) => updateVariable(guild.id, name, subject, operation, amount),
+
     async getRole(roleId) {
       if (!roleId) return null;
       const role = guild.roles.cache.get(roleId) ?? await guild.roles.fetch(roleId).catch(() => null);

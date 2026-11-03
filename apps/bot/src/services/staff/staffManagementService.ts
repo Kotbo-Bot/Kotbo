@@ -1,4 +1,5 @@
 import prisma from '../../utils/db.js';
+import { withoutPausedModulePermissions } from '@kotbo/contracts';
 import { upsertHierarchyGradeRow, upsertStaffMemberRow } from './staffRowUpsert.js';
 import { resolveMemberAvatarUrl } from '../moderation/memberIdentityService.js';
 import { cache } from '../../utils/cache.js';
@@ -1208,7 +1209,7 @@ export const createAPIKey = async (
         keyHash,
         displayKey,
         name,
-        permissions,
+        permissions: withoutPausedModulePermissions(permissions),
       },
     }),
   ]);

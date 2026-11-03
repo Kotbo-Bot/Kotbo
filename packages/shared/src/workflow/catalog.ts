@@ -90,6 +90,34 @@ export const TRIGGER_MESSAGE_FILTER_KEY = 'messages';
 export const TRIGGER_EMOJI_FILTER_KEY = 'emojis';
 
 /**
+ * Portée d'un délai de récupération : le membre, le salon ou le serveur du
+ * déclencheur. Lue sur ses sorties, la portée ne demande aucun fil.
+ */
+export const COOLDOWN_SCOPES = ['member', 'channel', 'guild'] as const;
+export type CooldownScope = (typeof COOLDOWN_SCOPES)[number];
+
+export const COOLDOWN_SCOPE_LABELS: Record<CooldownScope, string> = {
+  member: 'chaque membre',
+  channel: 'chaque salon',
+  guild: 'tout le serveur',
+};
+
+/** Un an : au-delà, un délai de récupération n'en est plus un. */
+export const MAX_COOLDOWN_SECONDS = 31_536_000;
+
+export function isCooldownScope(value: unknown): value is CooldownScope {
+  return typeof value === 'string' && (COOLDOWN_SCOPES as readonly string[]).includes(value);
+}
+
+/** Nombre maximal de caractères d'un nom de variable. */
+export const MAX_VARIABLE_NAME_LENGTH = 50;
+
+/** Nom de variable tel qu'il est rangé : sans espaces autour, en minuscules. */
+export function normalizeVariableName(raw: unknown): string {
+  return typeof raw === 'string' ? raw.trim().toLowerCase().slice(0, MAX_VARIABLE_NAME_LENGTH) : '';
+}
+
+/**
  * Filtres des déclencheurs de réaction, appliqués par le bot avant de lancer
  * quoi que ce soit, comme le filtre de salons : un rôle-réaction posé sur un
  * seul message s'exécutait sinon, et s'enregistrait, à chaque réaction du
@@ -404,6 +432,7 @@ const TRIGGERS: NodeDef[] = [
     description:
       "Se déclenche quand un dossier de partenariat change d'étape. L'événement part après l'application des avantages : le rôle partenaire est déjà posé.",
     event: 'partnership:stage',
+    module: 'partnerships',
     inputs: [],
     outputs: [
       EXEC_OUT,
@@ -421,6 +450,7 @@ const TRIGGERS: NodeDef[] = [
     description:
       "Se déclenche au constat d'un manquement. « Périodes manquées » permet de ne réagir qu'à partir de la deuxième ou de la troisième fois.",
     event: 'partnership:commitment-failed',
+    module: 'partnerships',
     inputs: [],
     outputs: [
       EXEC_OUT,
@@ -436,6 +466,7 @@ const TRIGGERS: NodeDef[] = [
     description:
       "Se déclenche quand un membre arrive par l'invitation d'un partenariat. Ne part que pour les arrivées réellement attribuées, pas pour toutes les arrivées.",
     event: 'partnership:referral',
+    module: 'partnerships',
     inputs: [],
     outputs: [
       EXEC_OUT,
@@ -819,6 +850,28 @@ const FLOW: NodeDef[] = [
       { key: 'seconds', label: 'Secondes', type: 'number', defaultValue: 60, min: 1, max: 2_592_000 },
     ],
   },
+  {
+    type: 'Cooldown',
+    label: 'Délai de récupération',
+    category: 'flow',
+    description:
+      "Ne laisse passer qu'une fois par période, pour le membre, le salon ou tout le serveur. Les passages suivants sortent par « En attente » jusqu'à la fin du délai.",
+    inputs: [EXEC_IN],
+    outputs: [
+      { id: 'next', label: 'Disponible', type: 'Exec' },
+      { id: 'blocked', label: 'En attente', type: 'Exec' },
+    ],
+    config: [
+      { key: 'seconds', label: 'Durée (secondes)', type: 'number', defaultValue: 3600, min: 1, max: MAX_COOLDOWN_SECONDS },
+      {
+        key: 'scope',
+        label: 'Pour',
+        type: 'select',
+        defaultValue: 'member',
+        options: COOLDOWN_SCOPES.map((scope) => ({ value: scope, label: COOLDOWN_SCOPE_LABELS[scope] })),
+      },
+    ],
+  },
 ];
 
 // ============================================================================
@@ -1082,6 +1135,34 @@ const ACTIONS: NodeDef[] = [
     ],
     outputs: [EXEC_OUT],
   },
+  {
+    type: 'AddToVariable',
+    label: 'Ajouter à une variable',
+    category: 'action',
+    description:
+      "Ajoute un nombre (négatif pour retirer) à une variable du serveur, partagée par toutes ses automatisations. Avec un membre, la variable lui est propre ; sans, elle vaut pour tout le serveur.",
+    inputs: [
+      EXEC_IN,
+      { id: 'member', label: 'Membre', type: 'Member', optional: true },
+      { id: 'amount', label: 'Nombre', type: 'Number' },
+    ],
+    outputs: [EXEC_OUT, { id: 'value', label: 'Nouvelle valeur', type: 'Number' }],
+    config: [{ key: 'name', label: 'Nom de la variable', type: 'text', defaultValue: '', placeholder: 'points' }],
+  },
+  {
+    type: 'SetVariable',
+    label: 'Définir une variable',
+    category: 'action',
+    description:
+      "Remplace la valeur d'une variable du serveur. Avec un membre, la variable lui est propre ; sans, elle vaut pour tout le serveur.",
+    inputs: [
+      EXEC_IN,
+      { id: 'member', label: 'Membre', type: 'Member', optional: true },
+      { id: 'amount', label: 'Valeur', type: 'Number' },
+    ],
+    outputs: [EXEC_OUT, { id: 'value', label: 'Nouvelle valeur', type: 'Number' }],
+    config: [{ key: 'name', label: 'Nom de la variable', type: 'text', defaultValue: '', placeholder: 'points' }],
+  },
 ];
 
 // ============================================================================
@@ -1204,6 +1285,16 @@ const DATA: NodeDef[] = [
       { id: 'memberToday', label: 'Déclenchements aujourd\'hui', type: 'Number' },
       { id: 'memberThisHour', label: 'Déclenchements cette heure-ci', type: 'Number' },
     ],
+  },
+  {
+    type: 'GetVariable',
+    label: "Valeur d'une variable",
+    category: 'data',
+    description:
+      "Lit une variable du serveur. Avec un membre branché, sa variable à lui ; sans, celle de tout le serveur. Vaut 0 tant qu'elle n'a jamais été écrite.",
+    inputs: [{ id: 'member', label: 'Membre', type: 'Member', optional: true }],
+    outputs: [{ id: 'value', label: 'Valeur', type: 'Number' }],
+    config: [{ key: 'name', label: 'Nom de la variable', type: 'text', defaultValue: '', placeholder: 'points' }],
   },
   {
     type: 'GuildInfo',
@@ -1478,6 +1569,15 @@ const BY_TYPE = new Map(NODE_CATALOG.map((def) => [def.type, def]));
 
 export function getNodeDef(type: string): NodeDef | undefined {
   return BY_TYPE.get(type);
+}
+
+/**
+ * Un nœud n'est disponible que si le module dont il dépend n'est pas retiré du
+ * produit. Le test de pause est passé en paramètre : ce paquet ne dépend pas
+ * du registre des modules, que le bot comme le dashboard importent déjà.
+ */
+export function isNodeAvailable(type: string, isModulePaused: (key: string | undefined) => boolean): boolean {
+  return !isModulePaused(getNodeDef(type)?.module);
 }
 
 export function isTriggerNode(type: string): boolean {

@@ -147,6 +147,30 @@ export async function validateWorkflowGraph(
   });
 }
 
+/** Résultat d'un essai à blanc : la trace, sans rien d'exécuté sur Discord. */
+export interface WorkflowTestResult {
+  status: 'COMPLETED' | 'SUSPENDED' | 'FAILED';
+  /** Événement rejoué : le dernier réel, ou un exemple à défaut. */
+  source: 'sample' | 'last';
+  error: string | null;
+  steps: Array<Omit<WorkflowExecutionStep, 'id' | 'error'> & { error?: string }>;
+}
+
+/** Fait tourner le brouillon sans enregistrer ni agir, et rend sa trace. */
+export async function testWorkflowGraph(
+  graph: WorkflowGraph,
+  options: { workflowId?: string | null; source?: 'sample' | 'last' } = {},
+  guildId = authStore.selectedGuildId,
+): Promise<{ test: WorkflowTestResult }> {
+  return dashboardRequest('/workflows/test', {
+    method: 'POST',
+    payload: { graph, workflowId: options.workflowId ?? null, source: options.source ?? 'sample' },
+    guildId,
+    silent: true,
+    errorContext: 'API Error (Test Workflow):',
+  });
+}
+
 export async function fetchWorkflowExecutions(
   filters: { workflowId?: string; status?: WorkflowExecutionSummary['status']; before?: string; take?: number } = {},
   guildId = authStore.selectedGuildId,

@@ -13,6 +13,7 @@
  * complètes : une page à moitié vide ferait plus de mal au référencement que
  * pas de page du tout.
  */
+import { isModulePaused } from '@kotbo/contracts';
 import { Prisma } from '@prisma/client';
 import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
@@ -243,6 +244,8 @@ export async function listPublishedFeaturePages(): Promise<PublicFeaturePage[]> 
     .map(toRecord)
     // Une page publiée avant une règle plus stricte ne doit pas casser le site.
     .filter((page) => missingForPublication(page.content).length === 0)
+    // La page d'un module en pause ne présente plus une fonctionnalité offerte.
+    .filter((page) => !isModulePaused(page.key))
     .map((page) => ({ key: page.key, slug: page.slug, modules: page.modules, text: page.content }));
   publicCache = { pages, at: Date.now() };
   return pages;

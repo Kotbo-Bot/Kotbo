@@ -58,6 +58,11 @@
   });
 
   function pick(raw: string): void {
+    // Champ facultatif remis à vide (« tout le serveur » pour une variable).
+    if (raw === '') {
+      onChange({ from: 'context', path: '' });
+      return;
+    }
     if (raw.startsWith('ctx:')) {
       onChange({ from: 'context', path: raw.slice(4) });
       return;
@@ -143,8 +148,10 @@
       onchange={(event) => pick(event.currentTarget.value)}
       class="{chipClass} appearance-none pr-7 cursor-pointer focus:outline-none"
     >
-      <option value="" disabled>
-        {kind === 'role' ? m.wf_choose_role() : kind === 'channel' ? m.wf_choose_channel() : kind === 'message' ? m.wf_choose_message() : m.wf_choose_member()}
+      <option value="" disabled={!optional}>
+        {optional && placeholder
+          ? placeholder
+          : kind === 'role' ? m.wf_choose_role() : kind === 'channel' ? m.wf_choose_channel() : kind === 'message' ? m.wf_choose_message() : m.wf_choose_member()}
       </option>
 
       {#if contextChoices.length > 0}

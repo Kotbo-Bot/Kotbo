@@ -34,6 +34,7 @@ model Workflow {
   guild      Guild               @relation(fields: [guildId], references: [id], onDelete: Cascade)
   executions WorkflowExecution[]
   memberRuns WorkflowMemberRun[]
+  cooldowns  WorkflowCooldown[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -155,4 +156,38 @@ model WorkflowMemberRun {
 
   @@id([workflowId, userId, period])
   @@map("workflow_member_runs")
+}
+
+/// Délai de récupération en cours, posé par un nœud « Délai de récupération ».
+/// Une ligne par nœud et par titulaire (membre, salon, ou serveur pour une clé
+/// vide) ; `until` est l'échéance. Une ligne échue est réutilisée au passage
+/// suivant, et le balayage de nettoyage efface celles qui ne servent plus.
+model WorkflowCooldown {
+  workflowId String
+  nodeId     String
+  /// `member:<id>`, `channel:<id>`, ou vide pour tout le serveur
+  subjectKey String
+  until      DateTime
+
+  workflow Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  @@id([workflowId, nodeId, subjectKey])
+  @@index([until])
+  @@map("workflow_cooldowns")
+}
+
+/// Variable numérique d'un serveur, partagée entre toutes ses automatisations.
+/// Tenue pour un membre (`subjectKey` = son identifiant) ou pour tout le
+/// serveur (`subjectKey` vide).
+model WorkflowVariable {
+  guildId    String
+  name       String
+  subjectKey String
+  value      Float    @default(0)
+  updatedAt  DateTime @updatedAt
+
+  guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  @@id([guildId, name, subjectKey])
+  @@map("workflow_variables")
 }

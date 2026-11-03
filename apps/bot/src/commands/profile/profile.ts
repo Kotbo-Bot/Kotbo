@@ -1,3 +1,4 @@
+import { isModulePaused } from '@kotbo/contracts';
 import type { SlashCommandDefinition } from '../../commands.js';
 import { SlashCommandBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder, MessageFlags, type ChatInputCommandInteraction } from 'discord.js';
 import { getPublicProfileSnapshot } from '../../services/progression/profileService.js';
@@ -116,6 +117,9 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
   const publicName = profile.displayName ?? profile.globalName ?? profile.username ?? user.username;
   const hasPrivateProfile = profile.isProfilePrivate && !canSeePrivate;
 
+  // Badge, points, série et classement viennent du Daily Algo : en pause, ils
+  // disparaissent du profil avec lui.
+  const showDailyAlgo = !isModulePaused('daily_algo');
   const currentPoints = snapshot.dailyAlgoProfile?.totalPoints ?? 0;
   const currentTier = snapshot.dailyAlgoProfile?.tier ?? 'Débutant';
   const currentStreak = snapshot.dailyAlgoProfile?.currentStreak ?? 0;
@@ -216,15 +220,16 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
       `**${E.stats} Vue générale**`,
       `${E.dot} Discord: <@${profile.userId}>`,
       `${E.dot} Rôles: **${profile.rolesSnapshot.length}**`,
-      `${E.dot} Badge: **${currentTier}**`,
+      ...(showDailyAlgo ? [`${E.dot} Badge: **${currentTier}**`] : []),
     ].join('\n'),
     [
       `**${E.xp} Activité**`,
-      `${E.dot} Points: **${currentPoints.toFixed(1)}**`,
+      ...(showDailyAlgo ? [`${E.dot} Points: **${currentPoints.toFixed(1)}**`] : []),
       `${E.dot} Messages: **${profile.messageCount.toLocaleString('fr-FR')}**`,
       `${E.dot} Vocal: **${formatDuration(profile.voiceTimeSeconds)}**`,
-      `${E.dot} Streak Daily Algo: **${currentStreak}**`,
-      `${E.dot} Classement: ${rankEmoji(currentRank ?? 0)}`,
+      ...(showDailyAlgo
+        ? [`${E.dot} Streak Daily Algo: **${currentStreak}**`, `${E.dot} Classement: ${rankEmoji(currentRank ?? 0)}`]
+        : []),
     ].join('\n'),
     [
       `**${E.calendar} Arrivée & invitation**`,
@@ -236,7 +241,7 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
     separator({ divider: true, spacing: 'small' }),
     `**${E.shield} Rôles**\n${roles}`,
     `**${E.calendar} Événements**\n${eventHistory}`,
-    `**${E.fire} Daily Algo**\n${dailyAlgoLines}`,
+    ...(showDailyAlgo ? [`**${E.fire} Daily Algo**\n${dailyAlgoLines}`] : []),
   ];
 
   if (profile.guildLeftAt) {

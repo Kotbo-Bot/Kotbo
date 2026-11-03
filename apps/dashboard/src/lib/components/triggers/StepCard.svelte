@@ -4,17 +4,23 @@
   import ValueField from './ValueField.svelte';
   import Self from './StepCard.svelte';
   import {
+    COOLDOWN_SCOPES,
+    COOLDOWN_SCOPE_LABELS,
+    MAX_VARIABLE_NAME_LENGTH,
     acceptsMoreSteps,
     getAction,
     getCondition,
+    isCooldownScope,
     movableSteps,
     type ActionStep,
     type ConditionStep,
     type ConditionTest,
+    type CooldownStep,
     type RecipeStep,
     type ValueRef,
     type WaitStep,
   } from '@kotbo/shared';
+  import { DURATION_UNITS, splitDuration, toSeconds, type DurationUnit } from '../../durationUnits';
 
   /**
    * Une étape rendue comme une phrase.
@@ -109,7 +115,26 @@
     action: 'border-l-primary/60',
     condition: 'border-l-amber-400/60',
     wait: 'border-l-sky-400/60',
+    cooldown: 'border-l-primary/40',
   };
+
+  const UNIT_LABELS: Record<DurationUnit, () => string> = {
+    seconds: () => m.wf_unit_seconds(),
+    minutes: () => m.wf_unit_minutes(),
+    hours: () => m.wf_unit_hours(),
+    days: () => m.wf_unit_days(),
+  };
+
+  const cooldownDuration = $derived(step.kind === 'cooldown' ? splitDuration((step as CooldownStep).seconds) : null);
+
+  function setCooldown(patch: Partial<CooldownStep>): void {
+    onChange({ ...(step as CooldownStep), ...patch });
+  }
+
+  /** Réglages déjà posés dans la phrase : inutile de les répéter dessous. */
+  const extraOptions = $derived(
+    action ? action.fields.filter((field) => field.option && !action.sentence.includes(`{${field.key}}`)) : [],
+  );
 </script>
 
 <article
@@ -141,7 +166,7 @@
           {/each}
         </div>
 
-        {#each action.fields.filter((f) => f.option) as option (option.key)}
+        {#each extraOptions as option (option.key)}
           <div class="flex items-center gap-2 text-xs text-on-surface-variant">
             <span>{option.label}</span>
             <ValueField
@@ -166,6 +191,45 @@
           />
           <span class="text-on-surface-variant/90">{m.wf_wait_suffix()}</span>
         </div>
+
+      {:else if step.kind === 'cooldown' && cooldownDuration}
+        <div class="flex flex-wrap items-center gap-2 text-sm text-on-surface">
+          <Papicon icon="Timer" size={14} class="text-primary shrink-0" />
+          <span class="text-on-surface-variant/90">{m.wf_cooldown_prefix()}</span>
+          <input
+            type="number"
+            min="1"
+            value={cooldownDuration.amount}
+            oninput={(event) => setCooldown({ seconds: toSeconds(Number(event.currentTarget.value), cooldownDuration.unit) })}
+            class="w-20 px-2.5 py-1 rounded-lg text-xs bg-surface-container-highest border border-outline-variant/25 text-on-surface focus:outline-none focus:border-primary/60"
+            aria-label={m.wf_cooldown_amount()}
+          />
+          <select
+            value={cooldownDuration.unit}
+            onchange={(event) => setCooldown({ seconds: toSeconds(cooldownDuration.amount, event.currentTarget.value as DurationUnit) })}
+            class="px-2 py-1 rounded-lg text-xs bg-surface-container-highest border border-outline-variant/25 text-on-surface cursor-pointer focus:outline-none"
+            aria-label={m.wf_cooldown_unit()}
+          >
+            {#each DURATION_UNITS as entry (entry.unit)}
+              <option value={entry.unit}>{UNIT_LABELS[entry.unit]()}</option>
+            {/each}
+          </select>
+          <span class="text-on-surface-variant/90">{m.wf_cooldown_for()}</span>
+          <select
+            value={(step as CooldownStep).scope}
+            onchange={(event) => {
+              const scope = event.currentTarget.value;
+              if (isCooldownScope(scope)) setCooldown({ scope });
+            }}
+            class="px-2 py-1 rounded-lg text-xs bg-surface-container-highest border border-outline-variant/25 text-on-surface cursor-pointer focus:outline-none"
+            aria-label={m.wf_cooldown_scope()}
+          >
+            {#each COOLDOWN_SCOPES as scope (scope)}
+              <option value={scope}>{COOLDOWN_SCOPE_LABELS[scope]}</option>
+            {/each}
+          </select>
+        </div>
+        <p class="text-2xs text-on-surface-variant">{m.wf_cooldown_hint()}</p>
 
       {:else if step.kind === 'condition'}
         <div class="space-y-2">
@@ -201,6 +265,16 @@
                         <option value={operator.value}>{operator.label}</option>
                       {/each}
                     </select>
+                  {:else if piece.field === 'name'}
+                    <input
+                      type="text"
+                      value={test.name ?? ''}
+                      maxlength={MAX_VARIABLE_NAME_LENGTH}
+                      placeholder={m.wf_variable_placeholder()}
+                      oninput={(event) => updateTest(test.id, { name: event.currentTarget.value })}
+                      class="w-28 px-2.5 py-1 rounded-lg text-xs bg-surface-container-highest border border-outline-variant/25 text-on-surface focus:outline-none focus:border-primary/60"
+                      aria-label={m.wf_variable_name()}
+                    />
                   {:else if piece.field === 'value' && def.valueKind}
                     <ValueField
                       kind={def.valueKind}

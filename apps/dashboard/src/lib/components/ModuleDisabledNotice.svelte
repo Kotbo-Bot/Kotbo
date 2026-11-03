@@ -8,7 +8,7 @@
    * aucun moyen de comprendre qu'il s'agissait d'un module coupé, ni où le
    * rallumer.
    */
-  import { getModuleDefinition } from '@kotbo/contracts';
+  import { getModuleDefinition, isModulePaused } from '@kotbo/contracts';
   import { dashboardStore } from '../stores/dashboard.svelte';
   import { updateModuleStatus } from '../api';
   import { toast } from '../stores/toast.svelte';
@@ -18,9 +18,11 @@
 
   const definition = $derived(getModuleDefinition(moduleKey));
 
+  const paused = $derived(isModulePaused(moduleKey));
+
   const canEnable = $derived(
-    !!dashboardStore.state.access?.canManageSettings
-      || !!dashboardStore.state.featureAccess?.modules?.canConfigure,
+    !paused && (!!dashboardStore.state.access?.canManageSettings
+      || !!dashboardStore.state.featureAccess?.modules?.canConfigure),
   );
 
   let enabling = $state(false);
@@ -45,14 +47,21 @@
   </div>
 
   <div class="space-y-2">
-    <h1 class="text-lg font-semibold text-on-surface">
-      {definition?.name ?? 'Ce module'} est désactivé
-    </h1>
-    <p class="text-body-sm text-on-surface-variant leading-relaxed">
-      {definition?.description ?? ''}
-      Tant qu'il est éteint, ses commandes Discord, ses automatismes et cette page
-      restent indisponibles sur ce serveur.
-    </p>
+    {#if paused}
+      <h1 class="text-lg font-semibold text-on-surface">
+        {m.mdn_paused_title({ name: definition?.name ?? moduleKey })}
+      </h1>
+      <p class="text-body-sm text-on-surface-variant leading-relaxed">{m.mdn_paused_body()}</p>
+    {:else}
+      <h1 class="text-lg font-semibold text-on-surface">
+        {definition?.name ?? 'Ce module'} est désactivé
+      </h1>
+      <p class="text-body-sm text-on-surface-variant leading-relaxed">
+        {definition?.description ?? ''}
+        Tant qu'il est éteint, ses commandes Discord, ses automatismes et cette page
+        restent indisponibles sur ce serveur.
+      </p>
+    {/if}
   </div>
 
   <div class="flex items-center justify-center gap-2">

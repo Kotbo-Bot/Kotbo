@@ -1,4 +1,13 @@
-import { getNodeDef, isTriggerNode, resolveNodeInputs, resolveNodeOutputs } from './catalog.js';
+import {
+  COOLDOWN_SCOPE_LABELS,
+  getNodeDef,
+  isCooldownScope,
+  isNodeAvailable,
+  isTriggerNode,
+  normalizeVariableName,
+  resolveNodeInputs,
+  resolveNodeOutputs,
+} from './catalog.js';
 import { isValidCron } from './cron.js';
 import {
   canConnect,
@@ -68,6 +77,9 @@ function findCycle(
 function portById(ports: PortDef[], id: string): PortDef | undefined {
   return ports.find((port) => port.id === id);
 }
+
+/** Nœuds qui lisent ou écrivent une variable du serveur. */
+const VARIABLE_NODES = new Set(['GetVariable', 'AddToVariable', 'SetVariable']);
 
 export function validateGraph(
   graph: WorkflowGraph,
@@ -257,6 +269,37 @@ export function validateGraph(
     }
   }
 
+  // ── Délai de récupération ────────────────────────────────────────────────
+  // Sa portée se lit sur les sorties du déclencheur. Un déclencheur sans membre
+  // (une planification) ferait tomber le délai « par membre » sur tout le
+  // serveur : on le dit plutôt que de laisser croire à un délai individuel.
+  const triggerNode = nodes.find((node) => isTriggerNode(node.type));
+  const triggerOutputs = new Set((triggerNode ? getNodeDef(triggerNode.type)?.outputs ?? [] : []).map((port) => port.id));
+  for (const node of nodes) {
+    if (node.type !== 'Cooldown') continue;
+    const scope = node.config?.scope;
+    if (!isCooldownScope(scope) || scope === 'guild' || triggerOutputs.has(scope)) continue;
+    issues.push({
+      severity: 'warning',
+      code: 'COOLDOWN_SCOPE',
+      message: `Le déclencheur ne précise aucun ${scope === 'member' ? 'membre' : 'salon'} : le délai prévu pour ${COOLDOWN_SCOPE_LABELS[scope]} vaudra pour tout le serveur.`,
+      nodeId: node.id,
+    });
+  }
+
+  // ── Variables ────────────────────────────────────────────────────────────
+  // Le nom vit en configuration : sans lui, lecture et écriture ne visent rien.
+  for (const node of nodes) {
+    if (!VARIABLE_NODES.has(node.type)) continue;
+    if (normalizeVariableName(node.config?.name)) continue;
+    issues.push({
+      severity: 'error',
+      code: 'VARIABLE_NAME',
+      message: `${getNodeDef(node.type)?.label ?? node.type} : le nom de la variable n'est pas renseigné.`,
+      nodeId: node.id,
+    });
+  }
+
   // ── Cycles ───────────────────────────────────────────────────────────────
   const nodeIds = nodes.map((node) => node.id);
 
@@ -312,4 +355,23 @@ export function validateGraph(
 
 export function hasBlockingIssue(issues: ValidationIssue[]): boolean {
   return issues.some((issue) => issue.severity === 'error');
+}
+
+/**
+ * Nœuds dont le module est en pause. À part de `validateGraph` : celle-ci tourne
+ * aussi dans l'éditeur sur des automatisations déjà enregistrées, qu'il faut
+ * pouvoir ouvrir et relire ; seul l'enregistrement les refuse.
+ */
+export function pausedModuleIssues(
+  graph: WorkflowGraph,
+  isModulePaused: (key: string | undefined) => boolean,
+): ValidationIssue[] {
+  return (graph.nodes ?? [])
+    .filter((node) => !isNodeAvailable(node.type, isModulePaused))
+    .map((node) => ({
+      severity: 'error' as const,
+      code: 'PAUSED_MODULE',
+      message: `« ${getNodeDef(node.type)?.label ?? node.type} » dépend d'un module en pause : il ne se déclenchera pas.`,
+      nodeId: node.id,
+    }));
 }

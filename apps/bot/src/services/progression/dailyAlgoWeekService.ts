@@ -10,6 +10,7 @@
  * est branché en toute fin de clôture, derrière son propre interrupteur.
  */
 
+import { isModulePaused } from '@kotbo/contracts';
 import { EmbedBuilder, type Client, type Guild as DiscordGuild, type TextChannel } from 'discord.js';
 import { Prisma } from '@prisma/client';
 import prisma from '../../utils/db.js';
@@ -789,6 +790,8 @@ async function announceWeekResults(params: {
  * Déclenché le lundi ; une erreur sur un serveur n'interrompt pas les autres.
  */
 export async function runDailyAlgoWeeklyClosuresForAllGuilds(client: Client): Promise<void> {
+  // Module en pause : aucun défi, bilan ni bouton tant qu'il n'est pas rendu.
+  if (isModulePaused('daily_algo')) return;
   const guilds = await prisma.guild.findMany({
     where: { dailyAlgoEnabled: true },
     select: { id: true },

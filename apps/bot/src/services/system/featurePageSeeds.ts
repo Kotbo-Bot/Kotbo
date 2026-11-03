@@ -309,7 +309,7 @@ const MODULE_SEO: Record<string, { slug: { fr: string; en: string }; nameFr?: st
  * d'adresse ni de nom anglais.
  */
 export function featurePageSeedModules(): FeaturePageSeedModule[] {
-  return MODULE_REGISTRY.filter((module) => !module.core && MODULE_SEO[module.key]).map((module) => {
+  return MODULE_REGISTRY.filter((module) => !module.core && !module.paused && MODULE_SEO[module.key]).map((module) => {
     const seo = MODULE_SEO[module.key];
     return {
       key: module.key,

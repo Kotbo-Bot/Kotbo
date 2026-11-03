@@ -1,7 +1,8 @@
 <script lang="ts">
   import { m } from '../../i18n';
   import Papicon from '../Papicon.svelte';
-  import { NODE_CATALOG, PORT_COLORS, canConnect, type NodeDef, type PortDef, type PortDataType } from '@kotbo/shared';
+  import { PORT_COLORS, canConnect, type NodeDef, type PortDef, type PortDataType } from '@kotbo/shared';
+  import { OFFERED_NODE_CATALOG } from '../../workflowAvailability';
 
   /**
    * Choix du bloc à créer au bout d'un fil relâché dans le vide.
@@ -43,7 +44,7 @@
   }
 
   const candidates = $derived(
-    NODE_CATALOG
+    OFFERED_NODE_CATALOG
       // Un déclencheur ouvre le graphe : rien ne se branche en amont de lui,
       // et il n'a donc rien à proposer au bout d'une sortie tirée.
       .filter((def) => direction === 'target' || def.category !== 'trigger')

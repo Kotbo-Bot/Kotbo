@@ -9,6 +9,9 @@
   import { canConfigureFeature, canDeleteFeature } from '../lib/permissions.svelte';
   import { toast } from '../lib/stores/toast.svelte';
   import { confirmDialog } from '../lib/stores/confirmDialog.svelte';
+  import { unsavedChanges } from '../lib/stores/unsavedChanges.svelte';
+  import { useUnsavedChanges } from '../lib/useUnsavedChanges.svelte';
+  import { workflowDraftKey } from '../lib/workflowDraft';
   import { m, dateLocale } from '../lib/i18n';
   import {
     compileRecipe,
@@ -16,6 +19,7 @@
     getNodeDef,
     getTrigger,
     hasBlockingIssue,
+    validateGraph,
     type ValidationIssue,
     type WorkflowGraph,
   } from '@kotbo/shared';
@@ -28,6 +32,7 @@
     deleteWorkflow,
     fetchWorkflowExecutions,
     fetchWorkflowExecution,
+    testWorkflowGraph,
     type WorkflowSummary,
     type WorkflowExecutionSummary,
     type WorkflowExecutionDetail,
@@ -75,6 +80,50 @@
   let saving = $state(false);
 
   /**
+   * Dernier état enregistré (ou ouvert) de l'automatisation en cours d'édition.
+   * Sans lui, revenir à la liste ou changer de page jetait le travail en cours
+   * sans un mot.
+   */
+  let saved = $state<{ form: typeof form; graph: WorkflowGraph } | null>(null);
+
+  function markSaved(): void {
+    saved = { form: $state.snapshot(form), graph: $state.snapshot(graph) as WorkflowGraph };
+  }
+
+  const UNSAVED_ID = 'workflows';
+
+  useUnsavedChanges({
+    id: UNSAVED_ID,
+    label: m.wf_page_title(),
+    getConfig: () => (editingDraft ? workflowDraftKey(form, graph) : null),
+    getSaved: () => (editingDraft && saved ? workflowDraftKey(saved.form, saved.graph) : null),
+    onSave: save,
+    onReset: () => {
+      if (!saved) return;
+      form = $state.snapshot(saved.form);
+      graph = $state.snapshot(saved.graph) as WorkflowGraph;
+      issues = validateGraph(graph);
+    },
+    canEdit: () => canConfigure,
+  });
+
+  /** Retour à la liste depuis l'éditeur, après confirmation s'il reste des modifications. */
+  async function leaveEditor(): Promise<void> {
+    if (unsavedChanges.isDirty && unsavedChanges.ownerId === UNSAVED_ID) {
+      const confirmed = await confirmDialog.ask({
+        title: m.banner_unsaved_title(),
+        description: m.banner_unsaved_desc({ page: m.wf_page_title() }),
+        confirmLabel: m.banner_unsaved_leave(),
+        variant: 'warning',
+      });
+      if (!confirmed) return;
+    }
+    unsavedChanges.release(UNSAVED_ID);
+    saved = null;
+    view = 'list';
+  }
+
+  /**
    * Rejeu d'une exécution passée.
    *
    * Le moteur consigne chaque nœud traversé avec les valeurs qui y sont
@@ -84,6 +133,14 @@
   let replay = $state<WorkflowExecutionDetail | null>(null);
   let replayIndex = $state(0);
   let replayLoading = $state(false);
+
+  /**
+   * Rejeu ouvert par le bouton « Tester » : il montre la trace d'un essai à
+   * blanc du brouillon, et le quitter ramène à l'édition, brouillon intact.
+   */
+  let testSource = $state<'sample' | 'last' | null>(null);
+  let testing = $state(false);
+  const editingDraft = $derived(view === 'editor' || (view === 'replay' && testSource !== null));
 
   const replayStep = $derived(replay?.steps[replayIndex]);
   const replayNodeLabel = $derived(
@@ -185,6 +242,7 @@
     issues = [];
     advancedOnly = false;
     tab = 'steps';
+    markSaved();
     view = 'editor';
   }
 
@@ -207,6 +265,7 @@
       issues = [];
       advancedOnly = false;
       tab = 'steps';
+      markSaved();
       view = 'editor';
     } catch (e) {
       toast.error(errorMessage(e) || m.wf_error());
@@ -251,8 +310,59 @@
   function closeReplay(): void {
     replay = null;
     replayIndex = 0;
+    if (testSource !== null) {
+      testSource = null;
+      view = 'editor';
+      return;
+    }
     graph = { nodes: [], edges: [] };
     view = 'list';
+  }
+
+  /**
+   * Essai à blanc du brouillon, enregistré ou non. Sa trace s'affiche dans le
+   * rejeu : même lecture pas à pas qu'une vraie exécution, en partant de
+   * l'étape en erreur s'il y en a une.
+   */
+  async function runTest(): Promise<void> {
+    if (testing) return;
+    if (hasBlockingIssue(issues)) {
+      toast.error(m.wf_steps_incomplete());
+      return;
+    }
+    testing = true;
+    try {
+      const { test } = await testWorkflowGraph(graph, {
+        workflowId: editingId,
+        source: editingId ? 'last' : 'sample',
+      });
+      if (test.steps.length === 0) {
+        toast.error(m.wf_test_nothing());
+        return;
+      }
+      const now = new Date().toISOString();
+      replay = {
+        id: 'test',
+        workflowId: editingId ?? '',
+        status: test.status === 'FAILED' ? 'FAILED' : 'COMPLETED',
+        error: test.error,
+        nodeVisits: test.steps.length,
+        iterations: 0,
+        resumeAt: null,
+        startedAt: now,
+        completedAt: now,
+        failedStep: null,
+        steps: test.steps.map((step, index) => ({ ...step, id: `test-${index}`, error: step.error ?? null })),
+      };
+      const failedAt = test.steps.findIndex((step) => step.status === 'ERROR');
+      replayIndex = failedAt >= 0 ? failedAt : 0;
+      testSource = test.source;
+      view = 'replay';
+    } catch (e) {
+      toast.error(errorMessage(e) || m.wf_error());
+    } finally {
+      testing = false;
+    }
   }
 
   function seekReplay(delta: number): void {
@@ -282,16 +392,17 @@
 
   // ── Enregistrement ────────────────────────────────────────────────────────
 
-  async function save(): Promise<void> {
-    if (!canConfigure || saving) return;
+  /** Renvoie `true` une fois enregistré : la barre de sauvegarde s'en sert. */
+  async function save(): Promise<boolean> {
+    if (!canConfigure || saving) return false;
 
     if (!form.name.trim()) {
       toast.error(m.wf_need_name());
-      return;
+      return false;
     }
     if (hasBlockingIssue(issues)) {
       toast.error(m.wf_steps_incomplete());
-      return;
+      return false;
     }
 
     saving = true;
@@ -305,10 +416,13 @@
       const result = editingId ? await updateWorkflow(editingId, payload) : await createWorkflow(payload);
 
       if (result?.workflow) editingId = result.workflow.id;
+      markSaved();
       toast.success(m.wf_saved());
       await loadList();
+      return true;
     } catch (e) {
       toast.error(errorMessage(e) || m.wf_error());
+      return false;
     } finally {
       saving = false;
     }
@@ -407,14 +521,24 @@
       <button
         onclick={closeReplay}
         class="px-4 py-2.5 rounded-xl text-xs font-semibold bg-surface-container-high text-on-surface hover:bg-surface-container-highest transition-all"
-      >{m.wf_back()}</button>
+      >{testSource !== null ? m.wf_back_to_editor() : m.wf_back()}</button>
     {:else if canConfigure}
       <div class="flex items-center gap-2">
         {#if view === 'editor'}
           <button
-            onclick={() => { view = 'list'; }}
+            onclick={leaveEditor}
             class="px-4 py-2.5 rounded-xl text-xs font-semibold bg-surface-container-high text-on-surface hover:bg-surface-container-highest transition-all"
           >{m.wf_back()}</button>
+          <button
+            onclick={runTest}
+            disabled={testing || graph.nodes.length === 0 || hasBlockingIssue(issues)}
+            title={m.wf_test_hint()}
+            use:explainDisabled={(graph.nodes.length === 0) ? m.common_reason_select_one() : ''}
+            class="px-4 py-2.5 rounded-xl text-xs font-semibold bg-surface-container-high text-on-surface hover:bg-surface-container-highest transition-all disabled:opacity-40 flex items-center gap-2"
+          >
+            <Papicon icon={testing ? 'Loader' : 'Play'} size={14} class={testing ? 'animate-spin' : ''} />
+            {testing ? m.wf_testing() : m.wf_test()}
+          </button>
           <button
             onclick={save}
             disabled={saving || hasBlockingIssue(issues)}
@@ -502,6 +626,12 @@
   <!-- ══ Rejeu d'une exécution ══════════════════════════════════════════ -->
   {:else if view === 'replay' && replay}
     <div class="space-y-3">
+      {#if testSource !== null}
+        <div class="flex items-start gap-2.5 p-3 rounded-2xl bg-primary/10 border border-primary/20 text-xs text-on-surface">
+          <Papicon icon="FlaskConical" size={14} class="text-primary shrink-0 mt-0.5" />
+          <span>{testSource === 'last' ? m.wf_test_banner_last() : m.wf_test_banner_sample()}</span>
+        </div>
+      {/if}
       <!-- Transport -->
       <div class="flex flex-wrap items-center gap-3 p-3 rounded-2xl bg-surface-container-high/50 border border-outline-variant/10">
         <div class="flex items-center gap-1">

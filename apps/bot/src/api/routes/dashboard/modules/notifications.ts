@@ -11,8 +11,8 @@ export async function handleNotificationsRoutes(ctx: ModuleRouteContext): Promis
   // GET /api/dashboard/guilds/:guildId/notifications/features
   if (moduleKey === 'notifications' && parts.length === 6 && parts[5] === 'features' && method === 'GET') {
     try {
-      const { getOrCreateFeatureConfigs } = await import('../../../../services/core/dashboardManagementService.js');
-      const configs = await getOrCreateFeatureConfigs(guildId);
+      const { getAvailableFeatureConfigs } = await import('../../../../services/core/dashboardManagementService.js');
+      const configs = await getAvailableFeatureConfigs(guildId);
       json(res, 200, { features: configs });
     } catch (err) {
       logger.error('NotificationsAPI', 'Error fetching feature configurations:', err);

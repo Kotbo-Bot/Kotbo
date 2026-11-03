@@ -5,6 +5,7 @@ import {
   type StringSelectMenuInteraction,
   MessageFlags,
 } from 'discord.js';
+import { isModulePaused } from '@kotbo/contracts';
 import prisma from '../utils/db.js';
 import {
   sendMainConfigPanel,
@@ -30,9 +31,30 @@ async function replyConfigError(interaction: ButtonInteraction | ModalSubmitInte
   });
 }
 
+type ConfigInteraction =
+  | ButtonInteraction
+  | ModalSubmitInteraction
+  | ChannelSelectMenuInteraction
+  | StringSelectMenuInteraction;
+
+/**
+ * Le Daily Algo est en pause : un ancien panneau encore affiché sur Discord
+ * garde ses boutons, qui ne doivent plus rien écrire. Renvoie `true` quand
+ * l'interaction a été refusée.
+ */
+async function refusePausedDailyAlgo(interaction: ConfigInteraction, id: string): Promise<boolean> {
+  if (!id.includes(':daily-algo') || !isModulePaused('daily_algo')) return false;
+  await replyOrFollowUp(interaction, {
+    embeds: [errorEmbed('Daily Algo', 'Le Daily Algo est en pause : il ne peut pas être configuré pour le moment.')],
+    flags: [MessageFlags.Ephemeral],
+  });
+  return true;
+}
+
 export async function handleConfigSelectMenu(interaction: StringSelectMenuInteraction): Promise<void> {
   const guildId = interaction.guildId!;
   const value = interaction.values[0]!;
+  if (await refusePausedDailyAlgo(interaction, value)) return;
 
   switch (value) {
     case 'cfg:section:code-police':
@@ -62,6 +84,7 @@ export async function handleConfigSelectMenu(interaction: StringSelectMenuIntera
 export async function handleConfigButton(interaction: ButtonInteraction): Promise<void> {
   const guildId = interaction.guildId!;
   const customId = interaction.customId;
+  if (await refusePausedDailyAlgo(interaction, customId)) return;
 
   try {
     if (customId === 'cfg:back:main') {
@@ -171,6 +194,7 @@ export async function handleConfigButton(interaction: ButtonInteraction): Promis
 export async function handleConfigModal(interaction: ModalSubmitInteraction): Promise<void> {
   const guildId = interaction.guildId!;
   const customId = interaction.customId;
+  if (await refusePausedDailyAlgo(interaction, customId)) return;
 
   try {
     if (customId === 'cfg:modal:daily-algo:time') {
@@ -235,6 +259,7 @@ export async function handleConfigChannelSelect(interaction: ChannelSelectMenuIn
   const guildId = interaction.guildId!;
   const customId = interaction.customId;
   const channelId = interaction.values[0]!;
+  if (await refusePausedDailyAlgo(interaction, customId)) return;
 
   try {
     await interaction.deferUpdate();

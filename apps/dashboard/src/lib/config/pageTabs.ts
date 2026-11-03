@@ -1,3 +1,4 @@
+import { isModulePaused } from '@kotbo/contracts';
 import { m } from '../i18n';
 import { allPages } from './pages';
 
@@ -44,7 +45,7 @@ export const PAGE_TABS: Record<string, PageTabConfig[]> = {
     { id: 'pulse', label: () => m.an_tab_pulse(), icon: 'Activity' },
     { id: 'weekly', label: () => m.an_tab_weekly(), icon: 'Calendar' },
     { id: 'commands', label: () => m.an_tab_commands(), icon: 'Code' },
-    { id: 'algo', label: () => m.an_tab_algo(), icon: 'Code' },
+    ...(isModulePaused('daily_algo') ? [] : [{ id: 'algo', label: () => m.an_tab_algo(), icon: 'Code' }]),
     { id: 'content', label: () => m.anx_section_content(), icon: 'ChatCircleDots' },
     { id: 'emojis', label: () => m.anx_tab_emojis(), icon: 'Smile' },
     { id: 'stickers', label: () => m.anx_tab_stickers(), icon: 'image' },
