@@ -1803,6 +1803,7 @@ export async function handleGeneralistModulesRoutes(
           title: string;
           channelId: string;
           buttonMode?: string;
+          exclusive?: boolean;
           options: ReactionRoleOption[];
         }>(req);
 
@@ -1822,7 +1823,8 @@ export async function handleGeneralistModulesRoutes(
           body.channelId,
           body.title,
           body.options,
-          normalizeButtonMode(body.buttonMode)
+          normalizeButtonMode(body.buttonMode),
+          body.exclusive === true,
         );
 
         json(res, 200, { menu });
@@ -1841,6 +1843,7 @@ export async function handleGeneralistModulesRoutes(
           title?: string;
           channelId?: string;
           buttonMode?: string;
+          exclusive?: boolean;
           options?: ReactionRoleOption[];
         }>(req);
 
@@ -1866,6 +1869,7 @@ export async function handleGeneralistModulesRoutes(
           ...(body.channelId !== undefined ? { channelId: body.channelId } : {}),
           ...(body.options !== undefined ? { options: body.options } : {}),
           ...(body.buttonMode !== undefined ? { buttonMode: normalizeButtonMode(body.buttonMode) } : {}),
+          ...(typeof body.exclusive === 'boolean' ? { exclusive: body.exclusive } : {}),
         });
 
         if (!menu) {
