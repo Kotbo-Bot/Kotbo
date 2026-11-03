@@ -19,6 +19,7 @@
     TRIGGER_ROLE_FILTER_KEY,
     acceptsMoreSteps,
     availableConditions,
+    contextTokens,
     scheduleToCron,
     compileRecipe,
     decompileGraph,
@@ -192,7 +193,7 @@
     return values;
   }
 
-  function build(choice: { kind: 'action'; action: string } | { kind: 'condition' } | { kind: 'wait' }): RecipeStep {
+  function build(choice: { kind: 'action'; action: string } | { kind: 'condition' } | { kind: 'wait' } | { kind: 'cooldown' }): RecipeStep {
     const id = newStepId();
 
     if (choice.kind === 'action') {
@@ -200,6 +201,11 @@
     }
     if (choice.kind === 'wait') {
       return { id, kind: 'wait', seconds: 60 };
+    }
+    // Par membre quand le déclencheur en désigne un, sinon pour tout le serveur.
+    if (choice.kind === 'cooldown') {
+      const hasMember = contextTokens(recipe.trigger.type).some((token) => token.root && token.path === 'member');
+      return { id, kind: 'cooldown', seconds: 3600, scope: hasMember ? 'member' : 'guild' };
     }
 
     // Une condition sans test ne dit rien : on amorce avec la première

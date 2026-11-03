@@ -1,6 +1,10 @@
 /** Outils MCP - write workflows (permission WRITE_WORKFLOWS). */
 import {
+  COOLDOWN_SCOPES,
+  MAX_COOLDOWN_SECONDS,
+  MAX_VARIABLE_NAME_LENGTH,
   compileRecipe,
+  isCooldownScope,
   hasBlockingIssue,
   newStepId,
   validateGraph,
@@ -46,6 +50,8 @@ const conditionTestSchema = z.object({
   operator: z.string().optional(),
   value: valueRefSchema.optional(),
   negate: z.boolean().optional().describe('Inverse le test'),
+  name: z.string().max(MAX_VARIABLE_NAME_LENGTH).optional()
+    .describe('Nom de la variable, pour les conditions variable.member et variable.server'),
 });
 
 const actionSchema = z.object({
@@ -59,16 +65,24 @@ const waitSchema = z.object({
   seconds: z.number().int().min(1).max(2_592_000),
 });
 
+const cooldownSchema = z.object({
+  kind: z.literal('cooldown'),
+  seconds: z.number().int().min(1).max(MAX_COOLDOWN_SECONDS),
+  scope: z.enum(COOLDOWN_SCOPES).default('member')
+    .describe('Le délai vaut pour chaque membre, chaque salon, ou tout le serveur'),
+}).describe('Les étapes suivantes ne s\'exécutent qu\'une fois par délai');
+
 /**
  * L'imbrication est bornée plutôt qu'écrite récursivement : un schéma récursif
  * se convertit mal en JSON Schema, et trois niveaux couvrent tout ce que le
  * modèle sait dire - une condition close sa liste, rien ne peut la suivre.
  */
-const leafStep = z.discriminatedUnion('kind', [actionSchema, waitSchema]);
+const leafStep = z.discriminatedUnion('kind', [actionSchema, waitSchema, cooldownSchema]);
 
 const level2Step = z.discriminatedUnion('kind', [
   actionSchema,
   waitSchema,
+  cooldownSchema,
   z.object({
     kind: z.literal('condition'),
     match: z.enum(['all', 'any']).default('all'),
@@ -81,6 +95,7 @@ const level2Step = z.discriminatedUnion('kind', [
 const level1Step = z.discriminatedUnion('kind', [
   actionSchema,
   waitSchema,
+  cooldownSchema,
   z.object({
     kind: z.literal('condition'),
     match: z.enum(['all', 'any']).default('all'),
@@ -110,6 +125,15 @@ function toRecipe(input: RecipeInput): Recipe {
       return { id: newStepId(), kind: 'wait', seconds: Number(step.seconds) };
     }
 
+    if (step.kind === 'cooldown') {
+      return {
+        id: newStepId(),
+        kind: 'cooldown',
+        seconds: Number(step.seconds),
+        scope: isCooldownScope(step.scope) ? step.scope : 'member',
+      };
+    }
+
     if (step.kind === 'condition') {
       return {
         id: newStepId(),
@@ -121,6 +145,7 @@ function toRecipe(input: RecipeInput): Recipe {
           ...(test.operator ? { operator: String(test.operator) } : {}),
           ...(test.value ? { value: test.value as ValueRef } : {}),
           ...(test.negate ? { negate: true } : {}),
+          ...(test.name ? { name: String(test.name) } : {}),
         })),
         then: withIds((step.then as unknown[]) ?? []),
         otherwise: withIds((step.otherwise as unknown[]) ?? []),

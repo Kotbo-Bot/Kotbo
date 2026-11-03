@@ -70,6 +70,8 @@ export function registerReadWorkflowsTools(ctx: McpToolContext) {
         operators: condition.operators?.map((operator) => operator.value) ?? null,
         defaultOperator: condition.defaultOperator ?? null,
         valueKind: condition.valueKind ?? null,
+        // Les conditions sur une variable demandent son nom dans `name`.
+        needsName: condition.sentence.includes('{name}'),
       })),
     })),
   );

@@ -908,6 +908,7 @@ model Guild {
   workflows          Workflow[]
   workflowExecutions WorkflowExecution[]
   workflowTemporaryRoles WorkflowTemporaryRole[]
+  workflowVariables      WorkflowVariable[]
 
   // Staff Simulator (entraînement des modérateurs)
   simulationConfig    SimulationConfig?

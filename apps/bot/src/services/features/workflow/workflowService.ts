@@ -10,6 +10,7 @@ import { resolveGuildTimezone } from '../../../utils/timezone.js';
 import { isGuildActivated } from '../../../utils/activation.js';
 import { isModuleEnabled } from '../../core/moduleGate.js';
 import { createWorkflowEffects, toChannelValue, toMemberValue, toMessageValue, toRoleValue } from './effects.js';
+import { pruneExpiredCooldowns } from './workflowStore.js';
 import { createDryRunEffects, dryRunWorkflow, sampleTriggerOutputs, type DryRunResult, type DryRunSample } from './dryRun.js';
 import { RUN_INFO_KEY, runWorkflow, type ExecutionOutcome, type ExecutionState, type StepRecord } from './engine.js';
 import { matchesTriggerChannelFilter } from './channelFilter.js';
@@ -853,7 +854,7 @@ async function runAndPersist(
     const depth = currentCascadeDepth() + 1;
     const outcome = await runWithCascadeDepth(depth, () => runWorkflow({
       graph,
-      effects: createWorkflowEffects(guild),
+      effects: createWorkflowEffects(guild, workflow.id),
       triggerOutputs,
     }));
 
@@ -1221,7 +1222,7 @@ export async function resumePendingExecutions(client: Client): Promise<void> {
 
       const outcome = await runWithCascadeDepth(depth, () => runWorkflow({
         graph: execution.workflow.graph as unknown as WorkflowGraph,
-        effects: createWorkflowEffects(guild),
+        effects: createWorkflowEffects(guild, execution.workflowId),
         state,
       }));
 
@@ -1313,6 +1314,9 @@ export async function pruneWorkflowExecutions(now = new Date()): Promise<number>
       startedAt: { lt: threshold },
     });
   }
+
+  // Même balayage quotidien pour les délais de récupération échus.
+  await pruneExpiredCooldowns(now);
 
   return deleted;
 }
