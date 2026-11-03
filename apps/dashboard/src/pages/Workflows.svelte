@@ -1,6 +1,6 @@
 <script lang="ts">
   import { explainDisabled } from '../lib/actions/explainDisabled';
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import Papicon from '../lib/components/Papicon.svelte';
   import ModulePage from '../lib/components/ModulePage.svelte';
   import RecipeEditor from '../lib/components/triggers/RecipeEditor.svelte';
@@ -38,6 +38,7 @@
     fetchWorkflowExecution,
     testWorkflowGraph,
     type GuildMemberSearchResult,
+    type WorkflowWarning,
     type WorkflowSummary,
     type WorkflowExecutionSummary,
     type WorkflowExecutionDetail,
@@ -149,6 +150,8 @@
   let testMember = $state<GuildMemberSearchResult | null>(null);
   /** Nœud à montrer en ouvrant l'éditeur : celui de l'étape en erreur d'un rejeu. */
   let focusNodeId = $state<string | null>(null);
+  /** Étapes que le bot ne pourra pas faire, d'après le dernier enregistrement. */
+  let saveWarnings = $state<WorkflowWarning[]>([]);
   const editingDraft = $derived(view === 'editor' || (view === 'replay' && testSource !== null));
 
   const blocking = $derived(issues.filter((issue) => issue.severity === 'error'));
@@ -235,7 +238,31 @@
     loading = true;
     await loadList();
     loading = false;
+    await openLinkedExecution();
   });
+
+  /**
+   * Ouvre le rejeu désigné par l'adresse, celle du lien des alertes d'échec :
+   * on arrive ainsi directement sur l'étape qui a cassé.
+   */
+  async function openLinkedExecution(): Promise<void> {
+    const url = new URL(window.location.href);
+    const executionId = url.searchParams.get('execution');
+    const workflowId = url.searchParams.get('workflow');
+    if (!executionId || !workflowId) return;
+    // Retirés aussitôt : recharger la page ne doit pas rouvrir le rejeu.
+    url.searchParams.delete('execution');
+    url.searchParams.delete('workflow');
+    history.replaceState(history.state, '', url);
+    await openReplay({ id: executionId, workflowId });
+  }
+
+  /** Montre une étape signalée, même si elle l'était déjà. */
+  async function showStep(nodeId: string): Promise<void> {
+    focusNodeId = null;
+    await tick();
+    focusNodeId = nodeId;
+  }
 
   // ── Création ──────────────────────────────────────────────────────────────
 
@@ -248,6 +275,7 @@
     tab = 'steps';
     testMember = null;
     focusNodeId = null;
+    saveWarnings = [];
     markSaved();
     view = 'editor';
   }
@@ -274,6 +302,7 @@
       // Le membre choisi valait pour l'automatisation précédente.
       testMember = null;
       focusNodeId = focus;
+      saveWarnings = [];
       markSaved();
       view = 'editor';
     } catch (e) {
@@ -290,7 +319,7 @@
    * conservée pas à pas. Un workflow modifié depuis fait donc apparaître des
    * étapes rattachées à des nœuds disparus, que la carte ignore simplement.
    */
-  async function openReplay(execution: WorkflowExecutionSummary): Promise<void> {
+  async function openReplay(execution: Pick<WorkflowExecutionSummary, 'id' | 'workflowId'>): Promise<void> {
     if (replayLoading) return;
     replayLoading = true;
     try {
@@ -434,7 +463,9 @@
 
       if (result?.workflow) editingId = result.workflow.id;
       markSaved();
-      toast.success(m.wf_saved());
+      saveWarnings = result?.warnings ?? [];
+      if (saveWarnings.length > 0) toast.warning(m.wf_saved_with_warnings({ n: saveWarnings.length }));
+      else toast.success(m.wf_saved());
       await loadList();
       return true;
     } catch (e) {
@@ -812,6 +843,28 @@
           <Papicon icon="Warning" size={13} />
           {m.wf_incomplete({ n: blocking.length })}
         </p>
+      {/if}
+
+      {#if saveWarnings.length > 0}
+        <div class="p-3 rounded-2xl bg-warning/10 border border-warning/20 space-y-2">
+          <p class="flex items-center gap-2 text-xs font-semibold text-amber-800">
+            <Papicon icon="Warning" size={13} />
+            {m.wf_save_warnings_title()}
+          </p>
+          <ul class="space-y-1">
+            {#each saveWarnings as warning, index (index)}
+              <li class="flex items-start gap-2 text-2xs text-on-surface">
+                <span class="flex-1 min-w-0 break-words">{warning.message}</span>
+                <button
+                  type="button"
+                  onclick={() => showStep(warning.nodeId)}
+                  class="shrink-0 font-semibold text-primary hover:underline"
+                >{m.wf_save_warnings_show()}</button>
+              </li>
+            {/each}
+          </ul>
+          <p class="text-2xs text-on-surface-variant">{m.wf_save_warnings_hint()}</p>
+        </div>
       {/if}
 
       {#if tab === 'steps'}

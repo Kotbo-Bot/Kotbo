@@ -4465,6 +4465,8 @@
   "ntf_cat_partnerships": "Partnerships",
   "ntf_cat_community": "Community",
   "ntf_cat_system": "System",
+  "ntf_workflow_failed_title": "The automation “{name}” failed",
+  "ntf_workflow_failed_message": "{error} It will keep failing on every trigger until the step is fixed.",
   "ntf_level_up_title": "Level {level} reached",
   "ntf_join_blocked_title": "Server access denied",
   "ntf_reminder_title": "Reminder",

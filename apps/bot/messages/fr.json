@@ -4465,6 +4465,8 @@
   "ntf_cat_partnerships": "Partenariats",
   "ntf_cat_community": "Communauté",
   "ntf_cat_system": "Système",
+  "ntf_workflow_failed_title": "L'automatisation « {name} » a échoué",
+  "ntf_workflow_failed_message": "{error} Elle restera en échec à chaque déclenchement tant que l'étape n'est pas corrigée.",
   "ntf_level_up_title": "Niveau {level} atteint",
   "ntf_join_blocked_title": "Accès au serveur refusé",
   "ntf_reminder_title": "Rappel",
