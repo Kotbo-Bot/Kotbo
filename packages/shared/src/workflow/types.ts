@@ -113,6 +113,12 @@ export interface NodeDef {
    * Présent uniquement sur les nœuds de catégorie `trigger`.
    */
   event?: string;
+  /**
+   * Clé du module (registre `@kotbo/contracts`) sans lequel le nœud ne fait
+   * rien. Le dashboard s'en sert pour ne pas proposer un nœud dont le module
+   * est retiré du produit.
+   */
+  module?: string;
 }
 
 // ============================================================================

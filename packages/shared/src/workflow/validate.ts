@@ -1,4 +1,4 @@
-import { getNodeDef, isTriggerNode, resolveNodeInputs, resolveNodeOutputs } from './catalog.js';
+import { getNodeDef, isNodeAvailable, isTriggerNode, resolveNodeInputs, resolveNodeOutputs } from './catalog.js';
 import { isValidCron } from './cron.js';
 import {
   canConnect,
@@ -312,4 +312,23 @@ export function validateGraph(
 
 export function hasBlockingIssue(issues: ValidationIssue[]): boolean {
   return issues.some((issue) => issue.severity === 'error');
+}
+
+/**
+ * Nœuds dont le module est en pause. À part de `validateGraph` : celle-ci tourne
+ * aussi dans l'éditeur sur des automatisations déjà enregistrées, qu'il faut
+ * pouvoir ouvrir et relire ; seul l'enregistrement les refuse.
+ */
+export function pausedModuleIssues(
+  graph: WorkflowGraph,
+  isModulePaused: (key: string | undefined) => boolean,
+): ValidationIssue[] {
+  return (graph.nodes ?? [])
+    .filter((node) => !isNodeAvailable(node.type, isModulePaused))
+    .map((node) => ({
+      severity: 'error' as const,
+      code: 'PAUSED_MODULE',
+      message: `« ${getNodeDef(node.type)?.label ?? node.type} » dépend d'un module en pause : il ne se déclenchera pas.`,
+      nodeId: node.id,
+    }));
 }

@@ -15,9 +15,9 @@
  */
 import { z } from 'zod';
 import { ChannelType } from 'discord.js';
-import { MODULE_REGISTRY, getModuleDefinition } from '@kotbo/contracts';
+import { MODULE_REGISTRY, getModuleDefinition, isModulePaused } from '@kotbo/contracts';
 import {
-  getOrCreateFeatureConfigs,
+  getAvailableFeatureConfigs,
   updateFeatureConfig,
 } from '../../../services/core/dashboardManagementService.js';
 import { getModuleStates } from '../../../services/core/moduleGate.js';
@@ -49,7 +49,7 @@ export function registerManagementCenterTools(ctx: McpToolContext) {
       },
       guard('READ_STAFF', async ({ feature_key, configured_only }) => {
         const [configs, states] = await Promise.all([
-          getOrCreateFeatureConfigs(guildId),
+          getAvailableFeatureConfigs(guildId),
           getModuleStates(guildId),
         ]);
 
@@ -108,7 +108,7 @@ export function registerManagementCenterTools(ctx: McpToolContext) {
           }),
           // Rappele ici pour qu'un agent sache quelles clefs existent sans
           // avoir a les deviner ni a lister les modules par un autre appel.
-          knownFeatureKeys: MODULE_REGISTRY.map((module) => module.key),
+          knownFeatureKeys: MODULE_REGISTRY.filter((module) => !isModulePaused(module.key)).map((module) => module.key),
         });
       }),
     );
@@ -126,7 +126,7 @@ export function registerManagementCenterTools(ctx: McpToolContext) {
           "salon ou un role le retire. Requiert WRITE_MEMBERS, et que le proprietaire de la cle soit " +
           'administrateur du dashboard.',
         inputSchema: {
-          feature_key: z.string().describe('Cle de la fonctionnalite (ex: "tickets", "partnerships")'),
+          feature_key: z.string().describe('Cle de la fonctionnalite (ex: "tickets", "workflows")'),
           channel: z
             .string()
             .nullable()
@@ -176,7 +176,7 @@ export function registerManagementCenterTools(ctx: McpToolContext) {
           const guild = client.guilds.cache.get(guildId);
           if (!guild) return err('Serveur Discord introuvable');
 
-          const configs = await getOrCreateFeatureConfigs(guildId);
+          const configs = await getAvailableFeatureConfigs(guildId);
           const config = configs.find((entry) => entry.featureKey === feature_key);
           if (!config) {
             return err(

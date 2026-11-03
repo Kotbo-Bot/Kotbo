@@ -14,8 +14,8 @@
   import { toast } from '../../stores/toast.svelte';
   import { confirmDialog } from '../../stores/confirmDialog.svelte';
   import { m } from '../../i18n';
+  import { OFFERED_NODE_CATALOG } from '../../workflowAvailability';
   import {
-    NODE_CATALOG,
     canConnect,
     getNodeDef,
     layoutGraph,
@@ -100,7 +100,7 @@
   const CATEGORIES: NodeCategory[] = ['trigger', 'flow', 'action', 'data', 'logic'];
 
   const filteredCatalog = $derived(
-    NODE_CATALOG.filter((def) => {
+    OFFERED_NODE_CATALOG.filter((def) => {
       const matchesCategory = selectedCategoryFilter === 'all' || def.category === selectedCategoryFilter;
       const matchesSearch =
         !searchQuery.trim() ||

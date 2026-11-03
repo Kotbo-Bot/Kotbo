@@ -1,3 +1,4 @@
+import { isModulePaused } from '@kotbo/contracts';
 import type { SlashCommandDefinition } from '../../commands.js';
 import { ApplicationCommandOptionType, MessageFlags, SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, PermissionsBitField, ModalBuilder, TextInputBuilder, TextInputStyle, type AutocompleteInteraction, type ChatInputCommandInteraction, type ButtonInteraction, type AnySelectMenuInteraction, type ModalSubmitInteraction } from 'discord.js';
 import { COLORS_RAW, kotboContainer } from '../../utils/embeds.js';
@@ -73,8 +74,12 @@ let cachedCommands: SlashCommandDefinition[] | null = null;
 
 async function getCommands(): Promise<SlashCommandDefinition[]> {
   if (!cachedCommands) {
-    const { commands } = await import('../../commands.js');
-    cachedCommands = commands.filter((c) => c.data && typeof c.data.name === 'string');
+    const { commands, getCommandModuleKey } = await import('../../commands.js');
+    // Les commandes d'un module en pause ne sont deployees nulle part : l'aide
+    // ne doit pas les annoncer.
+    cachedCommands = commands.filter(
+      (c) => c.data && typeof c.data.name === 'string' && !isModulePaused(getCommandModuleKey(c.data.name)),
+    );
   }
   return cachedCommands;
 }

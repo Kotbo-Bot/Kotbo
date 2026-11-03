@@ -14,6 +14,7 @@ import {
   type ModalSubmitInteraction,
   type SelectMenuInteraction,
 } from 'discord.js';
+import { isModulePaused } from '@kotbo/contracts';
 import prisma from '../utils/db.js';
 import { errorEmbed } from '../utils/embeds.js';
 import { acknowledgeInteraction, renderPanelTarget } from '../utils/interactionResponses.js';
@@ -62,6 +63,9 @@ export async function sendMainConfigPanel(
   const feedCount = guild.feeds.length;
   const activeFeeds = guild.feeds.filter((feed) => feed.enabled).length;
 
+  // Daily Algo en pause : ni son etat, ni sa section ne s'affichent.
+  const dailyAlgoPaused = isModulePaused('daily_algo');
+
   const embed = new EmbedBuilder()
     .setColor(0x5865f2)
     .setTitle('🧭 Dashboard de configuration Kotbo')
@@ -74,7 +78,7 @@ export async function sendMainConfigPanel(
       },
       {
         name: '🚨 Automatisations',
-        value: `Police du code : ${formatToggleState(guild.codePoliceEnabled)}\nDaily Algo : ${formatToggleState(guild.dailyAlgoEnabled)}\nReleases GitHub : ${formatToggleState(guild.githubReleasesEnabled)}\nLogs avancés : ${formatChannel(guild.logChannelId, 'Non configuré')}`,
+        value: `Police du code : ${formatToggleState(guild.codePoliceEnabled)}\n${dailyAlgoPaused ? '' : `Daily Algo : ${formatToggleState(guild.dailyAlgoEnabled)}\n`}Releases GitHub : ${formatToggleState(guild.githubReleasesEnabled)}\nLogs avancés : ${formatChannel(guild.logChannelId, 'Non configuré')}`,
         inline: true,
       },
       {
@@ -82,13 +86,13 @@ export async function sendMainConfigPanel(
         value: `Public : ${formatChannel(guild.publicChannelId)}\nDigest : ${formatChannel(guild.digestChannelId ?? guild.publicChannelId)}\nYouTube : ${formatChannel(guild.youtubeChannelId ?? guild.nathanChannelId)}\nLogs : ${formatChannel(guild.logChannelId, 'Non configuré')}\n\n/status : ${guild.statusCheckChannelId ? `<#${guild.statusCheckChannelId}>` : 'Aucune restriction'}`,
         inline: true,
       },
-      {
+      ...(dailyAlgoPaused ? [] : [{
         name: '📚 Daily Algo',
         value: guild.dailyAlgoEnabled
           ? `${guild.dailyAlgoTime} UTC\nDéfi : ${formatChannel(guild.dailyAlgoChannelId, 'Non configuré')}\nValidation : ${formatChannel(guild.dailyAlgoValidationChannelId, 'Non configuré')}`
           : 'Désactivé',
         inline: true,
-      },
+      }]),
       {
         name: '📦 Releases GitHub',
         value: guild.githubReleasesEnabled
@@ -108,7 +112,9 @@ export async function sendMainConfigPanel(
   const row1 = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder().setCustomId('config:feeds').setLabel('📰 Flux').setStyle(ButtonStyle.Primary),
     new ButtonBuilder().setCustomId('cfg:section:code-police').setLabel('🚨 Code').setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId('cfg:section:daily-algo').setLabel('📚 Daily Algo').setStyle(ButtonStyle.Secondary),
+    ...(dailyAlgoPaused
+      ? []
+      : [new ButtonBuilder().setCustomId('cfg:section:daily-algo').setLabel('📚 Daily Algo').setStyle(ButtonStyle.Secondary)]),
     new ButtonBuilder().setCustomId('cfg:section:github-releases').setLabel('📦 GitHub').setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId('cfg:section:status').setLabel('🌐 /status').setStyle(ButtonStyle.Secondary),
   );

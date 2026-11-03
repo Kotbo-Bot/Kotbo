@@ -1,4 +1,5 @@
-import { cronMatches, hasBlockingIssue, validateGraph, getNodeDef, wallClockMinuteKey, FUN_GAME_LABELS, SANCTION_TYPE_LABELS, SUGGESTION_STATUS_LABELS, type WorkflowGraph } from '@kotbo/shared';
+import { isModulePaused } from '@kotbo/contracts';
+import { cronMatches, hasBlockingIssue, pausedModuleIssues, readTriggerChannelFilter, readTriggerRoleFilter, validateGraph, getNodeDef, wallClockMinuteKey, FUN_GAME_LABELS, SANCTION_TYPE_LABELS, SUGGESTION_STATUS_LABELS, type WorkflowGraph } from '@kotbo/shared';
 import { currentCascadeDepth, runWithCascadeDepth } from '@kotbo/core';
 import type { Client, Guild } from 'discord.js';
 import type { Prisma } from '@prisma/client';
@@ -9,6 +10,7 @@ import { resolveGuildTimezone } from '../../../utils/timezone.js';
 import { isGuildActivated } from '../../../utils/activation.js';
 import { isModuleEnabled } from '../../core/moduleGate.js';
 import { createWorkflowEffects, toChannelValue, toMemberValue, toMessageValue, toRoleValue } from './effects.js';
+import { createDryRunEffects, dryRunWorkflow, sampleTriggerOutputs, type DryRunResult, type DryRunSample } from './dryRun.js';
 import { RUN_INFO_KEY, runWorkflow, type ExecutionOutcome, type ExecutionState, type StepRecord } from './engine.js';
 import { matchesTriggerChannelFilter } from './channelFilter.js';
 import { matchesTriggerRoleFilter } from './roleFilter.js';
@@ -114,7 +116,7 @@ function extractTrigger(graph: WorkflowGraph): { triggerType: string; triggerEve
 }
 
 function assertValid(graph: WorkflowGraph): void {
-  const issues = validateGraph(graph);
+  const issues = [...validateGraph(graph), ...pausedModuleIssues(graph, isModulePaused)];
   if (hasBlockingIssue(issues)) {
     throw new WorkflowValidationError(issues.filter((i) => i.severity === 'error'));
   }
@@ -161,6 +163,86 @@ export async function updateWorkflow(guildId: string, id: string, input: SaveWor
 
   await invalidateTriggerEvents(guildId);
   return prisma.workflow.findUnique({ where: { id } });
+}
+
+// ── Essai à blanc ─────────────────────────────────────────────────────────────
+
+/**
+ * `last` rejoue l'événement de la dernière exécution, quand elle porte le même
+ * déclencheur que le brouillon ; sinon, ou à défaut d'exécution, on retombe sur
+ * un événement d'exemple. La réponse dit lequel a servi.
+ */
+export type WorkflowTestSource = 'sample' | 'last';
+
+export interface WorkflowTestInput {
+  graph: WorkflowGraph;
+  workflowId?: string | null;
+  /** Membre qui lance l'essai : c'est lui qui joue le membre de l'événement. */
+  userId: string;
+  source: WorkflowTestSource;
+}
+
+async function buildDryRunSample(guild: Guild, graph: WorkflowGraph, userId: string): Promise<DryRunSample> {
+  const member = guild.members.cache.get(userId) ?? await guild.members.fetch(userId).catch(() => null);
+
+  const filteredChannel = readTriggerChannelFilter(graph)
+    .map((id) => guild.channels.cache.get(id))
+    .find((channel) => channel && 'name' in channel);
+  const channel = filteredChannel
+    ?? guild.systemChannel
+    ?? guild.channels.cache.find((entry) => entry.isTextBased() && !entry.isThread());
+
+  const role = readTriggerRoleFilter(graph).map((id) => guild.roles.cache.get(id)).find(Boolean)
+    ?? guild.roles.cache.find((entry) => entry.id !== guild.id);
+
+  return {
+    member: member ? toMemberValue(member) : null,
+    channel: channel && 'name' in channel ? toChannelValue(channel) : null,
+    role: role ? toRoleValue(role) : null,
+    message: toMessageValue({ id: '0', content: "Message d'essai", channelId: channel?.id ?? '', authorId: userId }),
+  };
+}
+
+async function lastTriggerOutputs(
+  guildId: string,
+  workflowId: string,
+  triggerType: string,
+): Promise<Record<string, unknown> | null> {
+  const workflow = await prisma.workflow.findFirst({ where: { id: workflowId, guildId }, select: { triggerType: true } });
+  if (workflow?.triggerType !== triggerType) return null;
+
+  const execution = await prisma.workflowExecution.findFirst({
+    where: { workflowId, guildId },
+    orderBy: { startedAt: 'desc' },
+    select: { context: true },
+  });
+  const outputs = (execution?.context as { triggerOutputs?: unknown } | null)?.triggerOutputs;
+  return outputs && typeof outputs === 'object' ? { ...(outputs as Record<string, unknown>) } : null;
+}
+
+export async function testWorkflow(
+  guild: Guild,
+  input: WorkflowTestInput,
+): Promise<DryRunResult & { source: WorkflowTestSource }> {
+  assertValid(input.graph);
+  const { triggerType } = extractTrigger(input.graph);
+  const sample = await buildDryRunSample(guild, input.graph, input.userId);
+
+  const replayed = input.source === 'last' && input.workflowId
+    ? await lastTriggerOutputs(guild.id, input.workflowId, triggerType)
+    : null;
+  const triggerOutputs = replayed ?? sampleTriggerOutputs(triggerType, sample);
+
+  if (input.graph.nodes.some((node) => node.type === 'RunInfo') && !triggerOutputs[RUN_INFO_KEY]) {
+    triggerOutputs[RUN_INFO_KEY] = { memberToday: 1, memberThisHour: 1 };
+  }
+
+  const result = await dryRunWorkflow({
+    graph: input.graph,
+    effects: createDryRunEffects(createWorkflowEffects(guild), sample),
+    triggerOutputs,
+  });
+  return { ...result, source: replayed ? 'last' : 'sample' };
 }
 
 export async function deleteWorkflow(guildId: string, id: string): Promise<boolean> {

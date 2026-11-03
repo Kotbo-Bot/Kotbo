@@ -11,6 +11,7 @@
    * reçoivent d'ici, chargée seulement quand un sous-onglet en a besoin.
    */
   import { untrack } from 'svelte';
+  import { isModulePaused } from '@kotbo/contracts';
   import { router } from 'tinro';
   import { authStore } from '../lib/stores/auth.svelte';
   import { toast } from '../lib/stores/toast.svelte';
@@ -99,7 +100,8 @@
         { id: 'pulse', label: m.an_tab_pulse(), icon: 'Activity', scope: 'own' },
         { id: 'weekly', label: m.an_tab_weekly(), icon: 'Calendar', scope: 'own' },
         { id: 'commands', label: m.an_tab_commands(), icon: 'Code', scope: 'period' },
-        { id: 'algo', label: m.an_tab_algo(), icon: 'Code', scope: 'period' },
+        // Daily Algo en pause : son onglet sort de la page avec lui.
+        ...(isModulePaused('daily_algo') ? [] : [{ id: 'algo', label: m.an_tab_algo(), icon: 'Code', scope: 'period' as const }]),
       ],
     },
     {

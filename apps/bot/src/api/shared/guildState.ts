@@ -33,6 +33,7 @@ import {
   MODULE_REGISTRY,
   canonicalModuleKey,
   getModuleDependents,
+  isModulePaused,
   normalizePlanKey,
   planForMemberCount,
   planIncludesModule,
@@ -566,7 +567,9 @@ export const getGuildState = async (
    */
   const onboardingCanFinishWithoutPayment = canFinishOnboardingWithoutPayment(guild);
 
-  const modules: ModuleItem[] = MODULE_REGISTRY.map((definition) => {
+  // Un module en pause n'a rien a faire sur la page Modules : il ne peut pas
+  // etre allume, et sa carte promettrait une fonctionnalite indisponible.
+  const modules: ModuleItem[] = MODULE_REGISTRY.filter((definition) => !isModulePaused(definition.key)).map((definition) => {
     const requires = (definition.requires ?? []).map(canonicalModuleKey);
     const lockedByPlan = !definition.core && !planIncludesModule(guildPlan, definition.key);
     // Un module peut etre allume dans sa propre ligne et neanmoins inerte

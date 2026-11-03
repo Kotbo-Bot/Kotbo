@@ -578,6 +578,13 @@ describe('runWorkflow - journal d\'exécution', () => {
     });
 
     expect(result.status).toBe('FAILED');
+    // L'étape en erreur est celle de l'action, pas celle qui la précède : le
+    // journal nomme le nœud fautif à partir d'elle.
+    const failed = result.steps.filter((entry) => entry.status === 'ERROR');
+    expect(failed).toHaveLength(1);
+    expect(failed[0].nodeId).toBe('a');
+    expect(failed[0].error).toBe('boum');
+    expect(result.steps.find((entry) => entry.nodeId === 't')?.status).not.toBe('ERROR');
   });
 });
 
