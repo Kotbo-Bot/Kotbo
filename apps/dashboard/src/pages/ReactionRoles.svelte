@@ -14,6 +14,7 @@
   import Skeleton from '../lib/components/Skeleton.svelte';
   import { fetchReactionRoleMenus, createReactionRoleMenu, updateReactionRoleMenu, deleteReactionRoleMenu, type ReactionRoleButtonMode, type ReactionRoleButtonStyle } from '../lib/api';
   import FormSelect from '../lib/components/FormSelect.svelte';
+  import ToggleSwitch from '../lib/components/ToggleSwitch.svelte';
   import EmojiPicker from '../lib/components/EmojiPicker.svelte';
   import { parseDiscordEmojisAndMarkdown } from '../lib/emojiParser';
 
@@ -35,6 +36,7 @@
     messageId: string | null;
     title: string;
     buttonMode?: string;
+    exclusive?: boolean;
     options: any; // Array of { emoji?: string; label: string; roleId: string; mode?: 'toggle' | 'add_only' }
     createdAt: string;
   }>>([]);
@@ -44,6 +46,7 @@
   let formTitle = $state('');
   let formChannelId = $state('');
   let formButtonMode = $state<ReactionRoleButtonMode>('toggle');
+  let formExclusive = $state(false);
   // `mode: ''` = le bouton suit le mode du panneau.
   let formOptions = $state<Array<{ emoji: string; label: string; roleId: string; mode: ReactionRoleButtonMode | ''; style: ReactionRoleButtonStyle }>>([
     { emoji: '', label: '', roleId: '', mode: '', style: 'secondary' }
@@ -90,6 +93,7 @@
   const editedMenu = $derived(menus.find(item => item.id === editingMenuId) ?? null);
 
   const previewSubtitle = $derived.by(() => {
+    if (formExclusive) return m.reaction_roles_preview_subtitle_exclusive();
     const modes = new Set(formOptions.map(opt => resolveMode(opt.mode, formButtonMode)));
     if (modes.size > 1) return m.reaction_roles_preview_subtitle_mixed();
     if (modes.has('add_only')) return m.reaction_roles_preview_subtitle_add_only();
@@ -116,6 +120,7 @@
     formTitle = '';
     formChannelId = '';
     formButtonMode = 'toggle';
+    formExclusive = false;
     formOptions = [{ emoji: '', label: '', roleId: '', mode: '', style: 'secondary' }];
     actionState.clearFeedback();
     showModal = true;
@@ -126,6 +131,7 @@
     formTitle = menu.title;
     formChannelId = menu.channelId;
     formButtonMode = menu.buttonMode === 'add_only' ? 'add_only' : 'toggle';
+    formExclusive = menu.exclusive === true;
 
     const options = Array.isArray(menu.options) ? menu.options : [];
     formOptions = options.map((opt: any) => ({
@@ -167,6 +173,7 @@
       title: formTitle,
       channelId: formChannelId,
       buttonMode: formButtonMode,
+      exclusive: formExclusive,
       options: formOptions.map(opt => ({
         emoji: opt.emoji,
         label: opt.label,
@@ -272,6 +279,11 @@
                     <span class="flex items-center gap-1 bg-surface-container-high/40 px-2 py-0.5 rounded">
                       <Papicon icon={menu.buttonMode === 'add_only' ? 'Lock' : 'Settings'} size={10} />{modeLabel(menu.buttonMode)}
                     </span>
+                    {#if menu.exclusive}
+                      <span class="flex items-center gap-1 bg-surface-container-high/40 px-2 py-0.5 rounded">
+                        <Papicon icon="CheckCircle" size={10} />{m.reaction_roles_exclusive_badge()}
+                      </span>
+                    {/if}
                   </div>
                 </div>
 
@@ -420,6 +432,18 @@
           <p class="text-2xs text-on-surface-variant ml-2">
             {formButtonMode === 'add_only' ? m.reaction_roles_mode_add_only_desc() : m.reaction_roles_mode_toggle_desc()}
           </p>
+        </div>
+
+        <div class="flex items-center justify-between gap-4 p-4 bg-surface-container-high/40 rounded-lg border border-outline-variant/10">
+          <div class="min-w-0">
+            <p class="text-sm font-medium text-on-surface">{m.reaction_roles_exclusive_title()}</p>
+            <p class="text-2xs text-on-surface-variant mt-0.5">{m.reaction_roles_exclusive_desc()}</p>
+          </div>
+          <ToggleSwitch
+            checked={formExclusive}
+            onToggle={(v: boolean) => { formExclusive = v; }}
+            disabled={!canManageSettings}
+          />
         </div>
 
         <!-- Live Discord Message Preview -->

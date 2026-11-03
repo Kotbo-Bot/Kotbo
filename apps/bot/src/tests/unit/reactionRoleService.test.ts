@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
 import path from 'node:path';
 import { GuildMember, type ButtonInteraction, type Client } from 'discord.js';
+import { completeModuleMock } from '../helpers/moduleMock.js';
 
 const prismaMock = {
   reactionRoleMenu: {
@@ -24,7 +25,15 @@ const cacheMock = {
   getCachedDashboardSettings: mock(async () => null),
 };
 
+// Un rôle bloqué prévient le staff : l'envoi réel tirerait toute l'API.
+const notifyMock = mock(async () => ({ notification: null, dm: 'off' }));
+const notifyModule = () => completeModuleMock(
+  path.resolve(import.meta.dir, '../../services/notifications/notifyService.ts'),
+  { notify: notifyMock, dashboardLink: (link: string) => link },
+);
+
 for (const extension of ['ts', 'js']) {
+  mock.module(path.resolve(import.meta.dir, `../../services/notifications/notifyService.${extension}`), notifyModule);
   mock.module(path.resolve(import.meta.dir, `../../utils/db.${extension}`), () => ({
     default: prismaMock,
     prisma: prismaMock,
@@ -66,12 +75,35 @@ function fakeClient() {
   return { client, fetchMessage, deleteMessage };
 }
 
+/** Position du rôle le plus haut du bot dans le faux serveur. */
+const BOT_TOP_POSITION = 10;
+
+/**
+ * Serveur où le bot a « Gérer les rôles ». `positions` place un rôle ; un rôle
+ * absent de la liste est sous le bot.
+ */
+function fakeGuild(positions: Record<string, number> = {}) {
+  return {
+    id: 'guild-1',
+    ownerId: 'owner-1',
+    roles: {
+      cache: {
+        get: (id: string) => ({ id, name: id, managed: false, position: positions[id] ?? 1 }),
+      },
+      fetch: mock(async () => null),
+    },
+    members: {
+      me: { permissions: { has: () => true }, roles: { highest: { position: BOT_TOP_POSITION } } },
+    },
+  };
+}
+
 /**
  * `roles` est un accesseur sur le prototype de GuildMember : seul
  * `defineProperty` peut le remplacer, et le test a besoin d'un vrai
  * GuildMember car le service refuse les membres hors cache.
  */
-function fakeMember(ownedRoleIds: string[]) {
+function fakeMember(ownedRoleIds: string[], guild = fakeGuild()) {
   const member = Object.create(GuildMember.prototype) as GuildMember;
   const add = mock(async () => undefined);
   const remove = mock(async () => undefined);
@@ -84,6 +116,7 @@ function fakeMember(ownedRoleIds: string[]) {
     },
     configurable: true,
   });
+  Object.defineProperty(member, 'guild', { value: guild, configurable: true });
 
   return { member, add, remove };
 }
@@ -106,6 +139,7 @@ describe('reactionRoleService', () => {
     prismaMock.reactionRoleMenu.create.mockReset();
     prismaMock.reactionRoleMenu.update.mockReset();
     prismaMock.reactionRoleMenu.delete.mockReset();
+    notifyMock.mockClear();
   });
 
   test('supprime le menu en base et son message Discord', async () => {
@@ -259,6 +293,94 @@ describe('reactionRoleService', () => {
     expect(remove).toHaveBeenCalledWith('role-1');
   });
 
+  test('un rôle placé au-dessus du bot n’est pas tenté et le staff est prévenu', async () => {
+    const reply = mock(async () => undefined);
+    prismaMock.reactionRoleMenu.findFirst.mockResolvedValueOnce({
+      id: 'menu-1',
+      title: 'Couleurs',
+      buttonMode: 'toggle',
+      options: [{ label: 'Admin', roleId: 'role-haut' }],
+    });
+
+    const { member, add } = fakeMember([], fakeGuild({ 'role-haut': BOT_TOP_POSITION + 1 }));
+    await handleRoleToggleInteraction(fakeInteraction('role_toggle:role-haut:0', member, reply));
+
+    expect(add).not.toHaveBeenCalled();
+    expect(reply).toHaveBeenCalledWith(expect.objectContaining({
+      content: expect.stringContaining('staff a été prévenu'),
+    }));
+    // L'alerte part sans être attendue par la réponse au membre.
+    for (let i = 0; i < 20 && notifyMock.mock.calls.length === 0; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+    expect(notifyMock).toHaveBeenCalledWith(expect.objectContaining({
+      userId: 'owner-1',
+      kind: 'system.reaction_role_blocked',
+    }));
+  });
+
+  test('un seul rôle : prendre un rôle retire les autres rôles du menu', async () => {
+    const reply = mock(async () => undefined);
+    prismaMock.reactionRoleMenu.findFirst.mockResolvedValueOnce({
+      id: 'menu-1',
+      buttonMode: 'toggle',
+      exclusive: true,
+      options: [
+        { label: 'Rouge', roleId: 'rouge' },
+        { label: 'Bleu', roleId: 'bleu' },
+        { label: 'Vert', roleId: 'vert' },
+      ],
+    });
+
+    const { member, add, remove } = fakeMember(['rouge', 'moderateur']);
+    await handleRoleToggleInteraction(fakeInteraction('role_toggle:bleu:1', member, reply));
+
+    expect(add).toHaveBeenCalledWith('bleu');
+    expect(remove).toHaveBeenCalledWith(['rouge']);
+    expect(reply).toHaveBeenCalledWith(expect.objectContaining({
+      content: expect.stringContaining('à la place'),
+    }));
+  });
+
+  test('un seul rôle : un rôle du menu que le bot ne peut pas retirer reste en place', async () => {
+    const reply = mock(async () => undefined);
+    prismaMock.reactionRoleMenu.findFirst.mockResolvedValueOnce({
+      id: 'menu-1',
+      buttonMode: 'toggle',
+      exclusive: true,
+      options: [
+        { label: 'Rouge', roleId: 'rouge' },
+        { label: 'Bleu', roleId: 'bleu' },
+        { label: 'Vert', roleId: 'vert' },
+      ],
+    });
+
+    const { member, add, remove } = fakeMember(['rouge', 'vert'], fakeGuild({ vert: BOT_TOP_POSITION + 1 }));
+    await handleRoleToggleInteraction(fakeInteraction('role_toggle:bleu:1', member, reply));
+
+    expect(add).toHaveBeenCalledWith('bleu');
+    expect(remove).toHaveBeenCalledWith(['rouge']);
+  });
+
+  test('sans le mode un seul rôle, les rôles se cumulent', async () => {
+    const reply = mock(async () => undefined);
+    prismaMock.reactionRoleMenu.findFirst.mockResolvedValueOnce({
+      id: 'menu-1',
+      buttonMode: 'toggle',
+      exclusive: false,
+      options: [
+        { label: 'Rouge', roleId: 'rouge' },
+        { label: 'Bleu', roleId: 'bleu' },
+      ],
+    });
+
+    const { member, add, remove } = fakeMember(['rouge']);
+    await handleRoleToggleInteraction(fakeInteraction('role_toggle:bleu:1', member, reply));
+
+    expect(add).toHaveBeenCalledWith('bleu');
+    expect(remove).not.toHaveBeenCalled();
+  });
+
   test('renvoie null quand le menu a modifier n’existe pas', async () => {
     const { client } = fakeClient();
     prismaMock.reactionRoleMenu.findFirst.mockResolvedValueOnce(null);
@@ -367,6 +489,7 @@ describe('reactionRoleService', () => {
         channelId: 'channel-1',
         title: 'Mes rôles',
         buttonMode: 'add_only',
+        exclusive: false,
         options: [
           { label: 'Annonces', roleId: 'role-1' },
           { emoji: '📢', label: 'Events', roleId: 'role-2', mode: 'add_only' },
@@ -409,6 +532,7 @@ describe('reactionRoleService', () => {
         channelId: 'channel-1',
         title: 'Mes rôles',
         buttonMode: 'toggle',
+        exclusive: false,
         options: [
           { label: 'Annonces', roleId: 'role-1' },
           { label: 'Events', roleId: 'role-2', style: 'danger' },

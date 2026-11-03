@@ -1,10 +1,12 @@
 import type { Prisma } from '@prisma/client';
-import { Client, EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder, MessageFlags, GuildMember, type ButtonInteraction } from 'discord.js';
+import { Client, EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder, MessageFlags, GuildMember, PermissionFlagsBits, type ButtonInteraction, type Guild, type Role } from 'discord.js';
 import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
 import { resolveEmojiShortcodes } from '../../utils/emojis.js';
 import { FALLBACK_LOCALE, getEffectiveLocale, resolveGuildLocale, type BotLocale } from '../../utils/i18n.js';
 import * as m from '../../lib/paraglide/messages.js';
+import { roleBlocker, shouldAlertStaff, type RoleBlocker } from './reactionRoleAccess.js';
+import { rolesToSwapOut } from './reactionRoleExclusive.js';
 
 // Discord n'accepte que 5 lignes de 5 boutons par message : au-delà, c'est le
 // message entier qu'il refuse, et le panneau ne partirait jamais.
@@ -90,7 +92,8 @@ export async function createReactionRoleMenu(
   channelId: string,
   title: string,
   options: ReactionRoleOption[],
-  buttonMode: ReactionRoleButtonMode = 'toggle'
+  buttonMode: ReactionRoleButtonMode = 'toggle',
+  exclusive = false,
 ) {
   // 1. Enregistrer dans la BDD
   const menu = await prisma.reactionRoleMenu.create({
@@ -99,6 +102,7 @@ export async function createReactionRoleMenu(
       channelId,
       title,
       buttonMode: normalizeButtonMode(buttonMode),
+      exclusive,
       options: sanitizeOptions(options) as Prisma.InputJsonValue,
     },
   });
@@ -194,6 +198,7 @@ export async function updateReactionRoleMenu(
     channelId?: string;
     options?: ReactionRoleOption[];
     buttonMode?: ReactionRoleButtonMode;
+    exclusive?: boolean;
   },
 ) {
   const menu = await prisma.reactionRoleMenu.findFirst({
@@ -225,6 +230,7 @@ export async function updateReactionRoleMenu(
       ...(movedTo ? { channelId: movedTo, messageId: null } : {}),
       ...(changes.options ? { options: sanitizeOptions(changes.options) as Prisma.InputJsonValue } : {}),
       ...(changes.buttonMode !== undefined ? { buttonMode: normalizeButtonMode(changes.buttonMode) } : {}),
+      ...(changes.exclusive !== undefined ? { exclusive: changes.exclusive } : {}),
     },
   });
 
@@ -241,8 +247,10 @@ export async function updateReactionRoleMenu(
 function describeMenuModes(
   options: ReactionRoleOption[],
   menuMode: ReactionRoleButtonMode,
+  exclusive: boolean,
   locale: BotLocale,
 ): string {
+  if (exclusive) return m.panel_reactionroles_description_exclusive({}, { locale });
   const modes = new Set(options.map((option) => normalizeButtonMode(option.mode, menuMode)));
 
   if (modes.size > 1) return m.panel_reactionroles_description_mixed({}, { locale });
@@ -276,7 +284,7 @@ export async function sendOrUpdateMenuMessage(client: Client, menuId: string) {
     // Créer l'embed du menu
     const embed = new EmbedBuilder()
       .setTitle(resolveEmojiShortcodes(menu.title))
-      .setDescription(describeMenuModes(options, menuMode, locale))
+      .setDescription(describeMenuModes(options, menuMode, menu.exclusive, locale))
       .setColor('#5865F2')
       .setTimestamp();
 
@@ -394,15 +402,29 @@ export async function handleRoleToggleInteraction(interaction: ButtonInteraction
 
     const mode = normalizeButtonMode(clicked.mode, normalizeButtonMode(activeMenu.buttonMode));
     const role = `<@&${roleId}>`;
+    const hasRole = member.roles.cache.has(roleId);
 
-    if (member.roles.cache.has(roleId)) {
-      if (mode === 'add_only') {
-        return interaction.reply({
-          content: m.reactionroles_role_kept({ role }, { locale }),
-          flags: [MessageFlags.Ephemeral],
-        });
-      }
+    if (hasRole && mode === 'add_only') {
+      return interaction.reply({
+        content: m.reactionroles_role_kept({ role }, { locale }),
+        flags: [MessageFlags.Ephemeral],
+      });
+    }
 
+    // Sans ce contrôle, Discord refuse l'ajout et le membre ne lit qu'« erreur ».
+    const guild = member.guild;
+    const me = guild.members.me ?? await guild.members.fetchMe().catch(() => null);
+    const clickedRole = guild.roles.cache.get(roleId) ?? await guild.roles.fetch(roleId).catch(() => null);
+    const blocked = blockerOf(clickedRole, me);
+    if (blocked) {
+      void alertStaffRoleBlocked(guild, activeMenu.title, roleId, { reason: blocked, roleName: clickedRole?.name ?? null });
+      return interaction.reply({
+        content: m.reactionroles_role_unavailable({}, { locale }),
+        flags: [MessageFlags.Ephemeral],
+      });
+    }
+
+    if (hasRole) {
       await member.roles.remove(roleId);
       return interaction.reply({
         content: m.reactionroles_role_removed({ role }, { locale }),
@@ -410,9 +432,28 @@ export async function handleRoleToggleInteraction(interaction: ButtonInteraction
       });
     }
 
+    // Menu « un seul rôle » : les autres rôles du menu partent, sauf ceux que le
+    // bot ne peut pas retirer (un seul refus ferait échouer tout le retrait).
+    const swapOut = activeMenu.exclusive
+      ? rolesToSwapOut(configuredRoles.map((option) => option.roleId), member.roles.cache.keys(), roleId)
+        .filter((id) => !blockerOf(guild.roles.cache.get(id), me))
+      : [];
+
+    // Ajout d'abord : si le retrait échoue ensuite, le membre a deux rôles
+    // plutôt qu'aucun.
     await member.roles.add(roleId);
+    const swapped = swapOut.length > 0 && await member.roles.remove(swapOut).then(
+      () => true,
+      (err: unknown) => {
+        logger.warn('ReactionRoleService', `Rôles précédents non retirés pour ${member.id} :`, err);
+        return false;
+      },
+    );
+
     return interaction.reply({
-      content: m.reactionroles_role_added({ role }, { locale }),
+      content: swapped
+        ? m.reactionroles_role_swapped({ role, previous: swapOut.map((id) => `<@&${id}>`).join(', ') }, { locale })
+        : m.reactionroles_role_added({ role }, { locale }),
       flags: [MessageFlags.Ephemeral],
     });
   } catch (err) {
@@ -421,5 +462,59 @@ export async function handleRoleToggleInteraction(interaction: ButtonInteraction
       content: m.reactionroles_error({}, { locale }),
       flags: [MessageFlags.Ephemeral],
     });
+  }
+}
+
+function blockerOf(role: Role | null | undefined, me: GuildMember | null): RoleBlocker | null {
+  return roleBlocker({
+    exists: !!role,
+    managed: role?.managed ?? false,
+    botCanManageRoles: me?.permissions.has(PermissionFlagsBits.ManageRoles) ?? false,
+    rolePosition: role?.position ?? 0,
+    botTopPosition: me?.roles.highest.position ?? 0,
+  });
+}
+
+/** Dernière alerte envoyée, par serveur et par rôle. */
+const lastStaffAlerts = new Map<string, number>();
+
+/**
+ * Prévient le propriétaire du serveur qu'un bouton du menu ne marche plus, avec
+ * la correction à faire. Jamais bloquant pour la réponse au membre.
+ */
+async function alertStaffRoleBlocked(
+  guild: Guild,
+  menuTitle: string,
+  roleId: string,
+  blocked: { reason: RoleBlocker; roleName: string | null },
+): Promise<void> {
+  const key = `${guild.id}:${roleId}`;
+  const now = Date.now();
+  if (!shouldAlertStaff(lastStaffAlerts.get(key), now)) return;
+  lastStaffAlerts.set(key, now);
+
+  try {
+    // Import dynamique : le service de notifications tire l'API, qui importe ce fichier.
+    const { notify, dashboardLink } = await import('../notifications/notifyService.js');
+    const locale = await resolveGuildLocale(guild.id);
+    const role = blocked.roleName ?? roleId;
+    const reasons = {
+      missing: m.ntf_reaction_role_missing,
+      managed: m.ntf_reaction_role_managed,
+      no_permission: m.ntf_reaction_role_no_permission,
+      too_high: m.ntf_reaction_role_too_high,
+    } as const;
+    await notify({
+      guildId: guild.id,
+      userId: guild.ownerId,
+      kind: 'system.reaction_role_blocked',
+      title: m.ntf_reaction_role_blocked_title({ menu: menuTitle }, { locale }),
+      message: reasons[blocked.reason]({ role }, { locale }),
+      severity: 'WARNING',
+      link: dashboardLink('/reaction-roles', guild.id),
+      groupKey: `reaction-role-blocked:${roleId}`,
+    });
+  } catch (err) {
+    logger.warn('ReactionRoleService', `Alerte de rôle bloqué non envoyée pour ${roleId} :`, err);
   }
 }
