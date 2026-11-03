@@ -143,7 +143,7 @@ export async function handleWorkflowRoutes(
   // les membres et les salons du serveur, même s'il n'y écrit rien.
   if (sub === 'test' && method === 'POST') {
     try {
-      const body = await readJsonBody<{ graph?: unknown; workflowId?: unknown; source?: unknown }>(req);
+      const body = await readJsonBody<{ graph?: unknown; workflowId?: unknown; memberId?: unknown; source?: unknown }>(req);
       const graph = parseGraph(body?.graph);
       if (!graph) {
         json(res, 400, { error: 'Graphe invalide' });
@@ -158,6 +158,7 @@ export async function handleWorkflowRoutes(
         graph,
         workflowId: typeof body?.workflowId === 'string' ? body.workflowId : null,
         userId: user.userId,
+        memberId: typeof body?.memberId === 'string' && /^\d{17,20}$/.test(body.memberId) ? body.memberId : null,
         source: body?.source === 'last' ? 'last' : 'sample',
       });
       json(res, 200, { test: result });

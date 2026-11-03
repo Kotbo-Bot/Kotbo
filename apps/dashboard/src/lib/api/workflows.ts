@@ -159,12 +159,17 @@ export interface WorkflowTestResult {
 /** Fait tourner le brouillon sans enregistrer ni agir, et rend sa trace. */
 export async function testWorkflowGraph(
   graph: WorkflowGraph,
-  options: { workflowId?: string | null; source?: 'sample' | 'last' } = {},
+  options: { workflowId?: string | null; memberId?: string | null; source?: 'sample' | 'last' } = {},
   guildId = authStore.selectedGuildId,
 ): Promise<{ test: WorkflowTestResult }> {
   return dashboardRequest('/workflows/test', {
     method: 'POST',
-    payload: { graph, workflowId: options.workflowId ?? null, source: options.source ?? 'sample' },
+    payload: {
+      graph,
+      workflowId: options.workflowId ?? null,
+      memberId: options.memberId ?? null,
+      source: options.source ?? 'sample',
+    },
     guildId,
     silent: true,
     errorContext: 'API Error (Test Workflow):',

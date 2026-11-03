@@ -2,6 +2,7 @@
   import { m } from '../../i18n';
   import Papicon from '../Papicon.svelte';
   import { ACTION_GROUP_LABELS, availableActions, type ActionGroup } from '@kotbo/shared';
+  import { matchesQuery } from '../../workflowSearch';
 
   /**
    * Choix de l'étape à ajouter.
@@ -24,7 +25,7 @@
 
   const actions = $derived(
     availableActions(triggerType).filter((action) => (
-      !search.trim() || action.label.toLowerCase().includes(search.toLowerCase())
+      matchesQuery(search, [action.label, action.sentence, ACTION_GROUP_LABELS[action.group]])
     )),
   );
 

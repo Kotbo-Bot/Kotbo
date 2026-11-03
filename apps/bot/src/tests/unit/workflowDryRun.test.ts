@@ -10,6 +10,7 @@ import type { ChannelValue, MemberValue, MessageValue, RoleValue } from '../../s
 import {
   createDryRunEffects,
   dryRunWorkflow,
+  resolveTestPlan,
   sampleTriggerOutputs,
   type DryRunSample,
 } from '../../services/features/workflow/dryRun';
@@ -159,5 +160,21 @@ describe('dryRunWorkflow', () => {
     expect(result.error).toContain('Rôle');
     expect(result.steps.find((step) => step.nodeId === 'a')?.status).toBe('ERROR');
     expect(actions).toEqual([]);
+  });
+});
+
+describe('resolveTestPlan', () => {
+  test('sans membre choisi, celui qui lance l essai joue le membre', () => {
+    expect(resolveTestPlan({ userId: 'u1', source: 'last' })).toEqual({ memberId: 'u1', source: 'last', chosen: false });
+  });
+
+  test('un membre choisi joue l événement, qui devient un exemple', () => {
+    // La dernière exécution porte son propre membre : la rejouer ignorerait
+    // le choix.
+    expect(resolveTestPlan({ userId: 'u1', memberId: 'u2', source: 'last' })).toEqual({ memberId: 'u2', source: 'sample', chosen: true });
+  });
+
+  test('un membre vide compte comme aucun choix', () => {
+    expect(resolveTestPlan({ userId: 'u1', memberId: '', source: 'sample' })).toEqual({ memberId: 'u1', source: 'sample', chosen: false });
   });
 });

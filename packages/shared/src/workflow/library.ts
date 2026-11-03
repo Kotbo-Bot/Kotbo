@@ -497,7 +497,7 @@ export interface ActionField {
   key: string;
   label: string;
   kind: FieldKind;
-  /** Texte grisé du champ, ex. « Bienvenue {membre} ! » */
+  /** Texte grisé du champ, ex. « Bienvenue {member.displayName} ! » */
   placeholder?: string;
   optional?: boolean;
   /**
@@ -559,7 +559,7 @@ export const ACTION_LIBRARY: ActionPresentation[] = [
     group: 'communication',
     icon: 'MessageSquare',
     fields: [
-      { key: 'text', label: 'Message', kind: 'richtext', placeholder: 'Bienvenue {membre} !' },
+      { key: 'text', label: 'Message', kind: 'richtext', placeholder: 'Bienvenue {member.displayName} !' },
       { key: 'channel', label: 'Salon', kind: 'channel' },
     ],
   },
@@ -570,7 +570,7 @@ export const ACTION_LIBRARY: ActionPresentation[] = [
     group: 'communication',
     icon: 'Send',
     fields: [
-      { key: 'text', label: 'Message', kind: 'richtext', placeholder: 'Salut {membre} !' },
+      { key: 'text', label: 'Message', kind: 'richtext', placeholder: 'Salut {member.displayName} !' },
       MEMBER_FIELD,
     ],
   },
@@ -617,7 +617,7 @@ export const ACTION_LIBRARY: ActionPresentation[] = [
     icon: 'Pen',
     fields: [
       MEMBER_FIELD,
-      { key: 'nickname', label: 'Surnom', kind: 'richtext', placeholder: '[Nouveau] {membre}' },
+      { key: 'nickname', label: 'Surnom', kind: 'richtext', placeholder: '[Nouveau] {member.displayName}' },
     ],
   },
   {

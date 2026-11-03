@@ -11,7 +11,7 @@ import { isGuildActivated } from '../../../utils/activation.js';
 import { isModuleEnabled } from '../../core/moduleGate.js';
 import { createWorkflowEffects, toChannelValue, toMemberValue, toMessageValue, toRoleValue } from './effects.js';
 import { pruneExpiredCooldowns } from './workflowStore.js';
-import { createDryRunEffects, dryRunWorkflow, sampleTriggerOutputs, type DryRunResult, type DryRunSample } from './dryRun.js';
+import { createDryRunEffects, dryRunWorkflow, resolveTestPlan, sampleTriggerOutputs, type DryRunResult, type DryRunSample } from './dryRun.js';
 import { RUN_INFO_KEY, runWorkflow, type ExecutionOutcome, type ExecutionState, type StepRecord } from './engine.js';
 import { matchesTriggerChannelFilter } from './channelFilter.js';
 import { matchesTriggerRoleFilter } from './roleFilter.js';
@@ -178,13 +178,21 @@ export type WorkflowTestSource = 'sample' | 'last';
 export interface WorkflowTestInput {
   graph: WorkflowGraph;
   workflowId?: string | null;
-  /** Membre qui lance l'essai : c'est lui qui joue le membre de l'événement. */
+  /** Membre qui lance l'essai : il joue le membre de l'événement, faute d'un autre choisi. */
   userId: string;
+  /** Membre choisi pour jouer l'événement (un nouveau venu, un membre sans rôle). */
+  memberId?: string | null;
   source: WorkflowTestSource;
 }
 
-async function buildDryRunSample(guild: Guild, graph: WorkflowGraph, userId: string): Promise<DryRunSample> {
+async function buildDryRunSample(
+  guild: Guild,
+  graph: WorkflowGraph,
+  userId: string,
+  memberChosen: boolean,
+): Promise<DryRunSample> {
   const member = guild.members.cache.get(userId) ?? await guild.members.fetch(userId).catch(() => null);
+  if (!member && memberChosen) throw new UserFacingError("Ce membre n'est plus sur le serveur.");
 
   const filteredChannel = readTriggerChannelFilter(graph)
     .map((id) => guild.channels.cache.get(id))
@@ -227,9 +235,10 @@ export async function testWorkflow(
 ): Promise<DryRunResult & { source: WorkflowTestSource }> {
   assertValid(input.graph);
   const { triggerType } = extractTrigger(input.graph);
-  const sample = await buildDryRunSample(guild, input.graph, input.userId);
+  const plan = resolveTestPlan(input);
+  const sample = await buildDryRunSample(guild, input.graph, plan.memberId, plan.chosen);
 
-  const replayed = input.source === 'last' && input.workflowId
+  const replayed = plan.source === 'last' && input.workflowId
     ? await lastTriggerOutputs(guild.id, input.workflowId, triggerType)
     : null;
   const triggerOutputs = replayed ?? sampleTriggerOutputs(triggerType, sample);
