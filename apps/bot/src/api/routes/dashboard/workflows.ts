@@ -15,6 +15,8 @@ import {
   listWorkflows,
   setWorkflowEnabled,
   testWorkflow,
+  collectSaveWarnings,
+  type WorkflowWarning,
   updateWorkflow,
 } from '../../../services/features/workflow/workflowService.js';
 
@@ -184,6 +186,20 @@ export async function handleWorkflowRoutes(
     return true;
   }
 
+  /**
+   * Avertissements rendus avec l'enregistrement. Un serveur absent du cache ou
+   * une vérification en panne n'empêchent pas d'enregistrer : il n'y a alors
+   * simplement rien à signaler.
+   */
+  async function saveWarnings(graph: WorkflowGraph): Promise<WorkflowWarning[]> {
+    const guild = client.guilds.cache.get(guildId);
+    if (!guild) return [];
+    return collectSaveWarnings(guild, graph).catch((err) => {
+      logger.warn('WorkflowAPI', 'Vérification à l\'enregistrement impossible :', err);
+      return [];
+    });
+  }
+
   // ── Création ─────────────────────────────────────────────────────────────
   if (!sub && method === 'POST') {
     try {
@@ -202,7 +218,7 @@ export async function handleWorkflowRoutes(
       }, user.userId);
 
       await audit('Création workflow', `« ${workflow.name} » sur ${workflow.triggerType}.`);
-      json(res, 201, { workflow });
+      json(res, 201, { workflow, warnings: await saveWarnings(graph) });
     } catch (err) {
       if (err instanceof WorkflowValidationError) {
         json(res, 400, { error: 'Graphe invalide', issues: err.issues });
@@ -253,7 +269,7 @@ export async function handleWorkflowRoutes(
       }
 
       await audit('Mise à jour workflow', `« ${workflow.name} », actif : ${workflow.enabled}.`);
-      json(res, 200, { workflow });
+      json(res, 200, { workflow, warnings: await saveWarnings(graph) });
     } catch (err) {
       if (err instanceof WorkflowValidationError) {
         json(res, 400, { error: 'Graphe invalide', issues: err.issues });

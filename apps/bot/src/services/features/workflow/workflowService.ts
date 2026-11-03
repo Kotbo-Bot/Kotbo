@@ -9,7 +9,9 @@ import { cache } from '../../../utils/cache.js';
 import { resolveGuildTimezone } from '../../../utils/timezone.js';
 import { isGuildActivated } from '../../../utils/activation.js';
 import { isModuleEnabled } from '../../core/moduleGate.js';
-import { createWorkflowEffects, toChannelValue, toMemberValue, toMessageValue, toRoleValue } from './effects.js';
+import { checkActionAhead, createWorkflowEffects, toChannelValue, toMemberValue, toMessageValue, toRoleValue } from './effects.js';
+import { fixedEntityInputs } from './staticChecks.js';
+import { failureAlertFor, failureAlertLink } from './failureAlert.js';
 import { pruneExpiredCooldowns } from './workflowStore.js';
 import { createDryRunEffects, dryRunWorkflow, resolveTestPlan, sampleTriggerOutputs, type DryRunResult, type DryRunSample } from './dryRun.js';
 import { RUN_INFO_KEY, runWorkflow, type ExecutionOutcome, type ExecutionState, type StepRecord } from './engine.js';
@@ -253,6 +255,56 @@ export async function testWorkflow(
     triggerOutputs,
   });
   return { ...result, source: replayed ? 'last' : 'sample' };
+}
+
+/** Étape que le bot ne pourra pas faire, signalée à l'enregistrement. */
+export interface WorkflowWarning {
+  nodeId: string;
+  message: string;
+}
+
+/**
+ * Ce que le bot ne pourra pas faire, vérifiable dès l'enregistrement : module
+ * éteint, permission manquante dans un salon choisi, rôle hors de sa portée,
+ * salon ou rôle supprimé. Ce qui dépend du déclencheur attend l'exécution.
+ *
+ * Un avertissement, pas un refus : la permission peut être donnée ensuite, et
+ * le module activé après coup.
+ */
+export async function collectSaveWarnings(guild: Guild, graph: WorkflowGraph): Promise<WorkflowWarning[]> {
+  const effects = createWorkflowEffects(guild);
+  const warnings: WorkflowWarning[] = [];
+
+  for (const node of graph.nodes) {
+    const def = getNodeDef(node.type);
+    if (def?.category !== 'action') continue;
+
+    const inputs: Record<string, unknown> = {};
+    let missing = false;
+    for (const [port, entity] of Object.entries(fixedEntityInputs(graph, node.id))) {
+      const value = entity.kind === 'channel' ? await effects.getChannel(entity.id) : await effects.getRole(entity.id);
+      if (value) {
+        inputs[port] = value;
+        continue;
+      }
+      missing = true;
+      warnings.push({
+        nodeId: node.id,
+        message: `${def.label} : ${entity.kind === 'channel' ? 'le salon choisi' : 'le rôle choisi'} n'existe plus`,
+      });
+    }
+    if (missing) continue;
+
+    try {
+      await checkActionAhead(guild, node.type, inputs);
+    } catch (error) {
+      // Seules les raisons rédigées pour l'utilisateur deviennent des
+      // avertissements ; une panne de Discord ne dit rien de l'automatisation.
+      if (error instanceof UserFacingError) warnings.push({ nodeId: node.id, message: error.message });
+      else logger.debug('Workflow', 'Vérification à l\'enregistrement impossible :', error);
+    }
+  }
+  return warnings;
 }
 
 export async function deleteWorkflow(guildId: string, id: string): Promise<boolean> {
@@ -1097,6 +1149,12 @@ export async function persistOutcome(
 
   await writeSteps(executionId, outcome.steps);
 
+  // Lu avant la mise à jour, qui l'efface ou le remplace : c'est lui qui dit
+  // si cet échec ouvre une série.
+  const previous = failed
+    ? await prisma.workflow.findUnique({ where: { id: workflowId }, select: { lastError: true, name: true, createdById: true } })
+    : null;
+
   // Les compteurs du workflow ne bougent qu'une fois l'exécution terminée :
   // une suspension n'est ni un succès ni un échec.
   if (!suspended) {
@@ -1112,7 +1170,55 @@ export async function persistOutcome(
     });
   }
 
+  if (failed && previous) {
+    void alertWorkflowFailure(guildId, workflowId, executionId, previous, outcome.error);
+  }
+
   return executionId;
+}
+
+/**
+ * Prévient le créateur d'une automatisation qui vient de casser, une fois par
+ * série (cf. `failureAlertFor`). Le lien ouvre le rejeu de l'exécution, d'où
+ * l'étape fautive se corrige.
+ *
+ * Jamais bloquant : une alerte perdue ne doit pas faire échouer l'exécution
+ * qu'elle signale.
+ */
+async function alertWorkflowFailure(
+  guildId: string,
+  workflowId: string,
+  executionId: string,
+  previous: { lastError: string | null; name: string; createdById: string | null },
+  error: string,
+): Promise<void> {
+  const userId = failureAlertFor({ previousLastError: previous.lastError, createdById: previous.createdById });
+  if (!userId) return;
+  try {
+    // Import dynamique : le service de notifications tire l'API, qui
+    // importe ce fichier.
+    const [{ notify, dashboardLink }, { resolveGuildLocale }, m] = await Promise.all([
+      import('../../notifications/notifyService.js'),
+      import('../../../utils/i18n.js'),
+      import('../../../lib/paraglide/messages.js'),
+    ]);
+    const locale = await resolveGuildLocale(guildId);
+    await notify({
+      guildId,
+      userId,
+      kind: 'system.workflow_failed',
+      title: m.ntf_workflow_failed_title({ name: previous.name }, { locale }),
+      message: m.ntf_workflow_failed_message({ error: error.slice(0, 300) }, { locale }),
+      severity: 'WARNING',
+      // Absolu : un chemin relatif n'est gardé que pour un membre du module
+      // Staff, et le propriétaire qui crée ses automatisations n'y est pas
+      // forcément.
+      link: dashboardLink(failureAlertLink(workflowId, executionId), guildId),
+      groupKey: `workflow-failed:${workflowId}`,
+    });
+  } catch (err) {
+    logger.warn('Workflow', `Alerte d'échec non envoyée pour ${workflowId} :`, err);
+  }
 }
 
 // ============================================================================

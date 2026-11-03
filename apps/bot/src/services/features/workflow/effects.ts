@@ -308,8 +308,16 @@ function requirePermissions(
  * Appelé avant chaque vraie action, et seul pendant l'essai à blanc : l'essai
  * signale ainsi exactement ce que la vraie exécution refuserait.
  */
-async function checkAction(guild: Guild, type: string, inputs: Record<string, unknown>): Promise<void> {
+async function checkAction(
+  guild: Guild,
+  type: string,
+  inputs: Record<string, unknown>,
+  ahead = false,
+): Promise<void> {
   const action = actionLabel(type);
+  // À l'avance, une entrée encore inconnue (membre, message, salon venus du
+  // déclencheur) ne se vérifie pas : seule l'exécution la fournira.
+  const unknown = (value: unknown) => ahead && (value === undefined || value === null);
 
   const gate = MODULE_REQUIREMENTS[type];
   if (gate && !(await isModuleEnabled(guild.id, gate.module))) {
@@ -325,7 +333,8 @@ async function checkAction(guild: Guild, type: string, inputs: Record<string, un
   );
 
   const requirement = CHANNEL_REQUIREMENTS[type];
-  if (requirement) {
+  const channelInput = requirement?.target === 'channel' ? inputs.channel : requirement?.target === 'message' ? inputs.message : true;
+  if (requirement && !unknown(channelInput)) {
     const channel = requirement.target === 'channel'
       ? await resolveTextChannel(guild, inputs.channel)
       : requirement.target === 'message'
@@ -340,13 +349,21 @@ async function checkAction(guild: Guild, type: string, inputs: Record<string, un
     );
   }
 
-  if (ROLE_ACTIONS.has(type)) await resolveManageableRole(guild, inputs.role, action);
+  if (ROLE_ACTIONS.has(type) && !unknown(inputs.role)) await resolveManageableRole(guild, inputs.role, action);
 
   const target = MEMBER_REQUIREMENTS[type];
-  if (target) {
+  if (target && !unknown(inputs.member)) {
     const member = await resolveMember(guild, inputs.member);
     if (!target.allowed(member)) throw new WorkflowActionError(action, `${member.user.tag} ${target.refusal}`);
   }
+}
+
+/**
+ * Vérifie une action avant toute exécution, avec les seules entrées connues à
+ * l'enregistrement (salons et rôles choisis dans l'éditeur).
+ */
+export function checkActionAhead(guild: Guild, type: string, inputs: Record<string, unknown>): Promise<void> {
+  return checkAction(guild, type, inputs, true);
 }
 
 /**

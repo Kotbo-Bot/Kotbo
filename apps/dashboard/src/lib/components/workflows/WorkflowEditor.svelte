@@ -307,6 +307,18 @@
     });
   });
 
+  // Un focus demandé après le chargement (une étape signalée) sélectionne
+  // aussi son nœud.
+  $effect(() => {
+    const target = focusNodeId;
+    if (!target) return;
+    untrack(() => {
+      if (!nodes.some((n) => n.id === target)) return;
+      selectedId = target;
+      nodes = nodes.map((n) => ({ ...n, selected: n.id === target }));
+    });
+  });
+
   $effect(() => {
     void replayIndex;
     void replaySteps;
