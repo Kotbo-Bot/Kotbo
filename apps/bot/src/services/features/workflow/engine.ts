@@ -66,6 +66,12 @@ export interface WorkflowEffects {
     config: Record<string, unknown>,
   ): Promise<Record<string, unknown>>;
   /**
+   * Vérifie, sans rien modifier, que le bot pourrait faire l'action : module
+   * actif, permissions, rôle et membre à sa portée. Lève l'erreur que l'action
+   * lèverait. Absent, rien n'est vérifié à l'avance.
+   */
+  checkAction?(type: string, inputs: Record<string, unknown>): Promise<void>;
+  /**
    * Réserve le passage d'un délai de récupération : `true` s'il était libre
    * (et le voilà occupé pour `seconds`), `false` s'il court encore. Absent,
    * le délai laisse toujours passer.

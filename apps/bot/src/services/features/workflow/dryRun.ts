@@ -56,8 +56,8 @@ export function sampleTriggerOutputs(triggerType: string, sample: DryRunSample):
 const ENTITY_TYPES = new Set(['Member', 'Role', 'Channel', 'Message']);
 
 /**
- * Effets de l'essai : lectures réelles, actions consignées, ni délai réservé
- * ni variable écrite.
+ * Effets de l'essai : lectures réelles, actions contrôlées puis consignées,
+ * ni délai réservé ni variable écrite.
  *
  * Une action dont une entrée obligatoire arrive vide échoue comme elle le ferait
  * en production (membre parti, rôle supprimé) : c'est précisément ce que
@@ -88,6 +88,9 @@ export function createDryRunEffects(real: WorkflowEffects, sample: DryRunSample)
           throw new Error(`« ${port.label} » est vide : ${def.label} échouerait.`);
         }
       }
+      // Ce que la vraie exécution refuserait (permission, hiérarchie, module
+      // éteint) échoue ici aussi, avec la même raison.
+      await real.checkAction?.(type, inputs);
       return sampleOutputs(def.outputs, sample);
     },
   };
