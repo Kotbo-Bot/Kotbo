@@ -5,6 +5,7 @@
   import ModulePage from '../lib/components/ModulePage.svelte';
   import RecipeEditor from '../lib/components/triggers/RecipeEditor.svelte';
   import WorkflowEditor from '../lib/components/workflows/WorkflowEditor.svelte';
+  import ReplayStepPanel from '../lib/components/workflows/ReplayStepPanel.svelte';
   import { RECIPE_TEMPLATES, errorMessage, type RecipeTemplate } from '@kotbo/shared';
   import { canConfigureFeature, canDeleteFeature } from '../lib/permissions.svelte';
   import { toast } from '../lib/stores/toast.svelte';
@@ -149,11 +150,6 @@
   /** Nœud à montrer en ouvrant l'éditeur : celui de l'étape en erreur d'un rejeu. */
   let focusNodeId = $state<string | null>(null);
   const editingDraft = $derived(view === 'editor' || (view === 'replay' && testSource !== null));
-
-  const replayStep = $derived(replay?.steps[replayIndex]);
-  const replayNodeLabel = $derived(
-    replayStep ? getNodeDef(replayStep.nodeType)?.label ?? replayStep.nodeType : '',
-  );
 
   const blocking = $derived(issues.filter((issue) => issue.severity === 'error'));
 
@@ -335,12 +331,18 @@
     view = 'list';
   }
 
-  /** Quitte le rejeu d'une exécution pour corriger l'étape qui a échoué. */
-  async function fixInEditor(): Promise<void> {
+  /**
+   * Quitte le rejeu pour corriger une étape : un essai revient au brouillon,
+   * une exécution passée ouvre l'automatisation enregistrée.
+   */
+  async function fixInEditor(nodeId: string | null): Promise<void> {
     if (!replay) return;
-    const workflowId = replay.workflowId;
-    const failed = failedNodeId(replay.steps);
-    await edit(workflowId, failed);
+    if (testSource !== null) {
+      closeReplay();
+      focusNodeId = nodeId;
+      return;
+    }
+    await edit(replay.workflowId, nodeId);
     if (view === 'editor') {
       replay = null;
       replayIndex = 0;
@@ -403,26 +405,6 @@
   function seekReplay(delta: number): void {
     if (!replay) return;
     replayIndex = Math.min(replay.steps.length - 1, Math.max(0, replayIndex + delta));
-  }
-
-  /**
-   * Rend lisible une valeur consignée.
-   *
-   * Le moteur écrit des entités marquées d'un `kind` (membre, salon, rôle,
-   * message) autant que des scalaires : afficher le JSON brut d'un membre
-   * remplirait la colonne pour rien.
-   */
-  function describeValue(value: unknown): string {
-    if (value === null || value === undefined) return '-';
-    if (Array.isArray(value)) {
-      return value.length === 0 ? '-' : value.map(describeValue).join(', ');
-    }
-    if (typeof value === 'object') {
-      const tagged = value as { kind?: string; name?: string; displayName?: string; tag?: string; content?: string };
-      if (tagged.kind) return tagged.displayName || tagged.name || tagged.tag || tagged.content || tagged.kind;
-      return JSON.stringify(value);
-    }
-    return String(value);
   }
 
   // ── Enregistrement ────────────────────────────────────────────────────────
@@ -597,7 +579,7 @@
       >{testSource !== null ? m.wf_back_to_editor() : m.wf_back()}</button>
       {#if testSource === null && canConfigure && replay && failedNodeId(replay.steps)}
         <button
-          onclick={fixInEditor}
+          onclick={() => fixInEditor(failedNodeId(replay!.steps))}
           class="px-4 py-2.5 rounded-xl text-xs font-semibold bg-primary text-on-primary hover:opacity-90 transition-all flex items-center gap-2"
         >
           <Papicon icon="Pen" size={14} />
@@ -768,50 +750,15 @@
           />
         </div>
 
-        <!-- Valeurs consignées sur l'étape courante -->
-        <aside class="w-full lg:w-72 shrink-0 space-y-3">
-          {#if replayStep}
-            {@const stepStatus = replayStep.status}
-            <div class="p-3 rounded-2xl bg-surface-container-high/50 border border-outline-variant/10 space-y-2">
-              <div class="flex items-center justify-between gap-2">
-                <span class="text-sm font-bold text-on-surface truncate">{replayNodeLabel}</span>
-                <span
-                  class="px-2 py-0.5 rounded-full text-2xs font-bold shrink-0 {stepStatus === 'ERROR'
-                    ? 'bg-error/15 text-error'
-                    : stepStatus === 'SKIPPED'
-                      ? 'bg-surface-container-highest text-on-surface-variant'
-                      : 'bg-success/15 text-success'}"
-                >{stepStatus}</span>
-              </div>
-              <p class="text-2xs text-on-surface-variant">{m.wf_replay_duration({ n: replayStep.durationMs })}</p>
-              {#if replayStep.error}
-                <p class="px-2.5 py-1.5 rounded-lg bg-error/10 text-2xs text-error border border-error/20">{replayStep.error}</p>
-              {/if}
-            </div>
-
-            {#each [
-              { label: m.wf_replay_inputs(), values: replayStep.inputs },
-              { label: m.wf_replay_outputs(), values: replayStep.outputs },
-            ] as slot (slot.label)}
-              {@const entries = Object.entries(slot.values ?? {})}
-              <div class="p-3 rounded-2xl bg-surface-container-high/50 border border-outline-variant/10 space-y-2">
-                <h3 class="text-xs font-semibold text-on-surface-variant">{slot.label}</h3>
-                {#if entries.length === 0}
-                  <p class="text-2xs text-on-surface-variant">{m.wf_replay_no_value()}</p>
-                {:else}
-                  <dl class="space-y-1.5">
-                    {#each entries as [key, value] (key)}
-                      <div class="flex items-baseline gap-2 text-2xs">
-                        <dt class="font-semibold text-on-surface-variant shrink-0">{key}</dt>
-                        <dd class="text-on-surface truncate" title={describeValue(value)}>{describeValue(value)}</dd>
-                      </div>
-                    {/each}
-                  </dl>
-                {/if}
-              </div>
-            {/each}
-          {/if}
-        </aside>
+        <ReplayStepPanel
+          steps={replay.steps}
+          index={replayIndex}
+          {graph}
+          isTest={testSource !== null}
+          canFix={canConfigure}
+          onSeek={(position) => (replayIndex = position)}
+          onFix={(nodeId) => fixInEditor(nodeId)}
+        />
       </div>
     </div>
 

@@ -9,6 +9,7 @@ import {
 } from 'discord.js';
 import { currentCascadeDepth } from '@kotbo/core';
 import {
+  getNodeDef,
   MAX_TEMPORARY_ROLE_MINUTES,
   MAX_WORKFLOW_COINS,
   MAX_WORKFLOW_XP,
@@ -36,6 +37,14 @@ import {
   type RoleValue,
 } from './values.js';
 import { UserFacingError } from '../../../utils/userFacingError.js';
+import {
+  CHANNEL_REQUIREMENTS,
+  GUILD_REQUIREMENTS,
+  describeMissingPermissions,
+  inThread,
+  missingPermissions,
+  type BotPermission,
+} from './actionPermissions.js';
 
 /**
  * Pont entre le moteur de workflows et Discord.
@@ -168,6 +177,33 @@ function safeContent(raw: unknown, action: string): string {
   return text.slice(0, 2000);
 }
 
+/** Salon d'un message transporté, sans recharger le message lui-même. */
+async function resolveMessageChannel(guild: Guild, value: unknown, action: string): Promise<TextChannel> {
+  if (!isMessage(value)) throw new WorkflowActionError(action, 'message absent ou invalide');
+
+  const channel = guild.channels.cache.get(value.channelId)
+    ?? await guild.channels.fetch(value.channelId).catch(() => null);
+  if (!channel || !channel.isTextBased()) {
+    throw new WorkflowActionError(action, 'le salon du message est introuvable');
+  }
+  return channel as TextChannel;
+}
+
+/** Salon de logs configuré pour le serveur. */
+async function resolveLogChannel(guild: Guild, action: string): Promise<TextChannel> {
+  const config = await prisma.guild.findUnique({ where: { id: guild.id }, select: { logChannelId: true } });
+  if (!config?.logChannelId) {
+    throw new WorkflowActionError(action, 'aucun salon de logs n\'est configuré sur le serveur');
+  }
+
+  const channel = guild.channels.cache.get(config.logChannelId)
+    ?? await guild.channels.fetch(config.logChannelId).catch(() => null);
+  if (!channel || !channel.isTextBased()) {
+    throw new WorkflowActionError(action, 'le salon de logs configuré est introuvable');
+  }
+  return channel as TextChannel;
+}
+
 /**
  * Retrouve le vrai message Discord derrière la valeur transportée.
  *
@@ -177,15 +213,8 @@ function safeContent(raw: unknown, action: string): string {
  * aboutir et le dit.
  */
 async function resolveMessage(guild: Guild, value: unknown, action: string): Promise<Message> {
-  if (!isMessage(value)) throw new WorkflowActionError(action, 'message absent ou invalide');
-
-  const channel = guild.channels.cache.get(value.channelId)
-    ?? await guild.channels.fetch(value.channelId).catch(() => null);
-  if (!channel || !channel.isTextBased()) {
-    throw new WorkflowActionError(action, 'le salon du message est introuvable');
-  }
-
-  const message = await (channel as TextChannel).messages.fetch(value.id).catch(() => null);
+  const channel = await resolveMessageChannel(guild, value, action);
+  const message = await channel.messages.fetch((value as MessageValue).id).catch(() => null);
   if (!message) throw new WorkflowActionError(action, 'le message n\'existe plus');
   return message;
 }
@@ -231,6 +260,95 @@ async function sendAppealLinkBeforeRemoval(guild: Guild, member: GuildMember, ty
   await sendPreActionAppealDM(guild.client, guild.id, member.id, type).catch(() => false);
 }
 
+const MODULE_REQUIREMENTS: Partial<Record<string, { module: string; label: string }>> = {
+  TimeoutMember: { module: 'sanctions', label: 'Sanctions' },
+  KickMember: { module: 'sanctions', label: 'Sanctions' },
+  BanMember: { module: 'sanctions', label: 'Sanctions' },
+  CreateTicket: { module: 'tickets', label: 'Tickets' },
+  GiveCoins: { module: 'economy', label: 'Économie' },
+  RemoveCoins: { module: 'economy', label: 'Économie' },
+  GiveXp: { module: 'leveling', label: 'Leveling' },
+};
+
+/** Ce que le bot doit pouvoir faire au membre visé, contrôlé par discord.js. */
+const MEMBER_REQUIREMENTS: Partial<Record<string, { allowed: (member: GuildMember) => boolean; refusal: string }>> = {
+  SetNickname: { allowed: (member) => member.manageable, refusal: 'est au-dessus du bot' },
+  TimeoutMember: { allowed: (member) => member.moderatable, refusal: 'ne peut pas être modéré' },
+  KickMember: { allowed: (member) => member.kickable, refusal: 'ne peut pas être expulsé' },
+  BanMember: { allowed: (member) => member.bannable, refusal: 'ne peut pas être banni' },
+  GiveCoins: { allowed: (member) => !member.user.bot, refusal: 'est un bot, sans solde' },
+  RemoveCoins: { allowed: (member) => !member.user.bot, refusal: 'est un bot, sans solde' },
+  GiveXp: { allowed: (member) => !member.user.bot, refusal: 'est un bot, sans niveau' },
+};
+
+const ROLE_ACTIONS = new Set(['AddRole', 'RemoveRole', 'AddTemporaryRole']);
+
+function actionLabel(type: string): string {
+  return getNodeDef(type)?.label ?? type;
+}
+
+function requirePermissions(
+  action: string,
+  required: readonly BotPermission[] | undefined,
+  has: ((permission: BotPermission) => boolean) | null,
+  channelName: string | null,
+): void {
+  // Sans le membre du bot en cache, rien ne permet de conclure : Discord
+  // tranchera, comme avant ce contrôle.
+  if (!required || !has) return;
+  const missing = missingPermissions(required, has);
+  if (missing.length > 0) throw new WorkflowActionError(action, describeMissingPermissions(missing, channelName));
+}
+
+/**
+ * Ce que le bot doit pouvoir faire pour qu'une action aboutisse : module
+ * actif, permissions dans le salon visé et sur le serveur, rôle et membre à sa
+ * portée. Rien n'est modifié.
+ *
+ * Appelé avant chaque vraie action, et seul pendant l'essai à blanc : l'essai
+ * signale ainsi exactement ce que la vraie exécution refuserait.
+ */
+async function checkAction(guild: Guild, type: string, inputs: Record<string, unknown>): Promise<void> {
+  const action = actionLabel(type);
+
+  const gate = MODULE_REQUIREMENTS[type];
+  if (gate && !(await isModuleEnabled(guild.id, gate.module))) {
+    throw new WorkflowActionError(action, `le module ${gate.label} est désactivé`);
+  }
+
+  const me = guild.members.me;
+  requirePermissions(
+    action,
+    GUILD_REQUIREMENTS[type],
+    me ? (permission) => me.permissions.has(PermissionFlagsBits[permission]) : null,
+    null,
+  );
+
+  const requirement = CHANNEL_REQUIREMENTS[type];
+  if (requirement) {
+    const channel = requirement.target === 'channel'
+      ? await resolveTextChannel(guild, inputs.channel)
+      : requirement.target === 'message'
+        ? await resolveMessageChannel(guild, inputs.message, action)
+        : await resolveLogChannel(guild, action);
+    const granted = me ? channel.permissionsFor(me) : null;
+    requirePermissions(
+      action,
+      channel.isThread() ? inThread(requirement.permissions) : requirement.permissions,
+      granted ? (permission) => granted.has(PermissionFlagsBits[permission]) : null,
+      channel.name,
+    );
+  }
+
+  if (ROLE_ACTIONS.has(type)) await resolveManageableRole(guild, inputs.role, action);
+
+  const target = MEMBER_REQUIREMENTS[type];
+  if (target) {
+    const member = await resolveMember(guild, inputs.member);
+    if (!target.allowed(member)) throw new WorkflowActionError(action, `${member.user.tag} ${target.refusal}`);
+  }
+}
+
 /**
  * `workflowId` n'est requis que par le délai de récupération, propre à chaque
  * automatisation : sans lui, le délai laisse passer.
@@ -267,7 +385,10 @@ export function createWorkflowEffects(guild: Guild, workflowId?: string): Workfl
       return { name: guild.name, memberCount: guild.memberCount };
     },
 
+    checkAction: (type, inputs) => checkAction(guild, type, inputs),
+
     async runAction(type, inputs, config) {
+      await checkAction(guild, type, inputs);
       switch (type) {
         case 'SendMessage': {
           const channel = await resolveTextChannel(guild, inputs.channel);
@@ -330,9 +451,6 @@ export function createWorkflowEffects(guild: Guild, workflowId?: string): Workfl
 
         case 'SetNickname': {
           const member = await resolveMember(guild, inputs.member);
-          if (!member.manageable) {
-            throw new WorkflowActionError('Changer le surnom', `${member.user.tag} est au-dessus du bot`);
-          }
           const nickname = coerceToString(inputs.nickname).slice(0, 32) || null;
           // Annoncé avant l'appel : la mise à jour de Discord peut arriver
           // avant que la requête ne rende la main.
@@ -354,14 +472,8 @@ export function createWorkflowEffects(guild: Guild, workflowId?: string): Workfl
          * invisibles de la fiche membre comme des rapports.
          */
         case 'TimeoutMember': {
-          if (!(await isModuleEnabled(guild.id, 'sanctions'))) {
-            throw new WorkflowActionError('Exclure temporairement', 'le module Sanctions est désactivé');
-          }
           const member = await resolveMember(guild, inputs.member);
           const minutes = Math.max(1, Math.min(40_320, coerceToNumber(inputs.minutes)));
-          if (!member.moderatable) {
-            throw new WorkflowActionError('Exclure temporairement', `${member.user.tag} ne peut pas être modéré`);
-          }
 
           // `registerTimeoutSanction` applique l'exclusion elle-même.
           await (await sanctions()).registerTimeoutSanction({
@@ -377,13 +489,7 @@ export function createWorkflowEffects(guild: Guild, workflowId?: string): Workfl
         }
 
         case 'KickMember': {
-          if (!(await isModuleEnabled(guild.id, 'sanctions'))) {
-            throw new WorkflowActionError('Expulser', 'le module Sanctions est désactivé');
-          }
           const member = await resolveMember(guild, inputs.member);
-          if (!member.kickable) {
-            throw new WorkflowActionError('Expulser', `${member.user.tag} ne peut pas être expulsé`);
-          }
 
           const reason = coerceToString(inputs.reason) || 'Automatisation';
           const target = { id: member.id, tag: member.user.tag };
@@ -400,13 +506,7 @@ export function createWorkflowEffects(guild: Guild, workflowId?: string): Workfl
         }
 
         case 'BanMember': {
-          if (!(await isModuleEnabled(guild.id, 'sanctions'))) {
-            throw new WorkflowActionError('Bannir', 'le module Sanctions est désactivé');
-          }
           const member = await resolveMember(guild, inputs.member);
-          if (!member.bannable) {
-            throw new WorkflowActionError('Bannir', `${member.user.tag} ne peut pas être banni`);
-          }
 
           const days = Math.max(0, Math.min(3650, coerceToNumber(inputs.days)));
           const reason = coerceToString(inputs.reason) || 'Automatisation';
@@ -483,9 +583,6 @@ export function createWorkflowEffects(guild: Guild, workflowId?: string): Workfl
         }
 
         case 'CreateTicket': {
-          if (!(await isModuleEnabled(guild.id, 'tickets'))) {
-            throw new WorkflowActionError('Ouvrir un ticket', 'le module Tickets est désactivé');
-          }
           const member = await resolveMember(guild, inputs.member);
           const subject = coerceToString(inputs.subject).slice(0, 100) || 'Ticket automatique';
           const channel = await createTicketChannel(guild, member, subject);
@@ -494,19 +591,13 @@ export function createWorkflowEffects(guild: Guild, workflowId?: string): Workfl
 
         case 'ReplyToMessage': {
           const action = 'Répondre à un message';
-          const value = inputs.message;
-          if (!isMessage(value)) throw new WorkflowActionError(action, 'message absent ou invalide');
-
-          const channel = guild.channels.cache.get(value.channelId)
-            ?? await guild.channels.fetch(value.channelId).catch(() => null);
-          if (!channel || !channel.isTextBased()) {
-            throw new WorkflowActionError(action, 'le salon du message est introuvable');
-          }
+          const channel = await resolveMessageChannel(guild, inputs.message, action);
+          const value = inputs.message as MessageValue;
 
           // `failIfNotExists: false` : un message effacé entre-temps (un
           // workflow qui supprime puis répond, un membre qui efface le sien)
           // n'empêche pas la réponse, qui part alors sans citation.
-          await (channel as TextChannel).send({
+          await channel.send({
             content: safeContent(inputs.text, action),
             reply: { messageReference: value.id, failIfNotExists: false },
           });
@@ -557,10 +648,6 @@ export function createWorkflowEffects(guild: Guild, workflowId?: string): Workfl
         case 'RemoveCoins': {
           const action = type === 'GiveCoins' ? 'Donner des pièces' : 'Retirer des pièces';
           const member = await resolveMember(guild, inputs.member);
-          if (member.user.bot) throw new WorkflowActionError(action, `${member.user.tag} est un bot, sans solde`);
-          if (!(await isModuleEnabled(guild.id, 'economy'))) {
-            throw new WorkflowActionError(action, 'le module Économie est désactivé');
-          }
           const amount = boundedAmount(inputs.amount, MAX_WORKFLOW_COINS, action, 'montant');
           const where = { guildId: guild.id, userId: member.id };
 
@@ -606,10 +693,6 @@ export function createWorkflowEffects(guild: Guild, workflowId?: string): Workfl
         case 'GiveXp': {
           const action = 'Donner de l\'XP';
           const member = await resolveMember(guild, inputs.member);
-          if (member.user.bot) throw new WorkflowActionError(action, `${member.user.tag} est un bot, sans niveau`);
-          if (!(await isModuleEnabled(guild.id, 'leveling'))) {
-            throw new WorkflowActionError(action, 'le module Leveling est désactivé');
-          }
           const amount = boundedAmount(inputs.amount, MAX_WORKFLOW_XP, action, 'quantité d\'XP');
 
           // Import dynamique : le service de niveaux charge le rendu des cartes
@@ -657,18 +740,9 @@ export function createWorkflowEffects(guild: Guild, workflowId?: string): Workfl
           const text = coerceToString(inputs.text).trim().slice(0, 4096);
           if (!text) throw new WorkflowActionError(action, 'le texte est vide');
 
-          const config = await prisma.guild.findUnique({ where: { id: guild.id }, select: { logChannelId: true } });
-          if (!config?.logChannelId) {
-            throw new WorkflowActionError(action, 'aucun salon de logs n\'est configuré sur le serveur');
-          }
+          const channel = await resolveLogChannel(guild, action);
 
-          const channel = guild.channels.cache.get(config.logChannelId)
-            ?? await guild.channels.fetch(config.logChannelId).catch(() => null);
-          if (!channel || !channel.isTextBased()) {
-            throw new WorkflowActionError(action, 'le salon de logs configuré est introuvable');
-          }
-
-          await (channel as TextChannel).send({
+          await channel.send({
             embeds: [
               new EmbedBuilder()
                 .setColor(0x5865f2)
