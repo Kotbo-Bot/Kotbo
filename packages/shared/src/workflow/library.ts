@@ -203,6 +203,22 @@ export const TRIGGER_LIBRARY: TriggerPresentation[] = [
     example: 'Remercier publiquement le membre et lui donner un rôle de booster.',
   },
   {
+    type: 'OnMemberTenure',
+    sentence: 'Quand un membre atteint une ancienneté',
+    short: 'Ancienneté',
+    group: 'members',
+    icon: 'Trophy',
+    example: "Donner le rôle Habitué au bout de 90 jours et fêter l'anniversaire d'arrivée.",
+  },
+  {
+    type: 'OnMemberInactive',
+    sentence: "Quand un membre n'écrit plus depuis un moment",
+    short: 'Inactivité',
+    group: 'members',
+    icon: 'Clock',
+    example: 'Relancer en privé après 30 jours de silence, ou retirer le rôle Actif.',
+  },
+  {
     type: 'OnMessageSend',
     sentence: 'Quand un message est envoyé',
     short: 'Message',
@@ -773,6 +789,17 @@ export const ACTION_LIBRARY: ActionPresentation[] = [
     fields: [
       { key: 'text', label: 'Note', kind: 'richtext', placeholder: 'Averti automatiquement pour spam' },
       MEMBER_FIELD,
+    ],
+  },
+  {
+    type: 'KeepMessage',
+    label: 'Tenir un message à jour',
+    sentence: 'Tenir à jour {text} dans {channel}',
+    group: 'communication',
+    icon: 'Edit',
+    fields: [
+      { key: 'text', label: 'Message', kind: 'richtext', placeholder: 'Nous sommes {guild.memberCount} sur le serveur !' },
+      { key: 'channel', label: 'Salon', kind: 'channel' },
     ],
   },
   {

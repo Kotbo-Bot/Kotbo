@@ -1014,6 +1014,7 @@ model MemberProfile {
   @@unique([guildId, userId])
   @@index([guildId, lastSeenAt])
   @@index([guildId, guildJoinedAt])
+  @@index([guildId, lastMessageAt])
   @@index([guildId, messageCount])
   @@index([guildId, username])
   @@index([guildId, ghostStatus])

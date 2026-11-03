@@ -1,5 +1,5 @@
 import { isModulePaused } from '@kotbo/contracts';
-import { cronMatches, hasBlockingIssue, pausedModuleIssues, readTriggerChannelFilter, readTriggerRoleFilter, validateGraph, getNodeDef, wallClockMinuteKey, FUN_GAME_LABELS, SANCTION_TYPE_LABELS, SUGGESTION_STATUS_LABELS, type WorkflowGraph } from '@kotbo/shared';
+import { MEMBER_DAYS_TRIGGERS, isMemberDaysTrigger, readMemberDays, cronMatches, hasBlockingIssue, pausedModuleIssues, readTriggerChannelFilter, readTriggerRoleFilter, validateGraph, getNodeDef, wallClockMinuteKey, FUN_GAME_LABELS, SANCTION_TYPE_LABELS, SUGGESTION_STATUS_LABELS, type WorkflowGraph } from '@kotbo/shared';
 import { currentCascadeDepth, runWithCascadeDepth } from '@kotbo/core';
 import type { Client, Guild } from 'discord.js';
 import type { Prisma } from '@prisma/client';
@@ -13,6 +13,7 @@ import { checkActionAhead, createWorkflowEffects, toChannelValue, toMemberValue,
 import { fixedEntityInputs } from './staticChecks.js';
 import { failureAlertFor, failureAlertLink } from './failureAlert.js';
 import { pruneExpiredCooldowns } from './workflowStore.js';
+import { crossingRange, nextSweptUntil } from './memberDays.js';
 import { createDryRunEffects, dryRunWorkflow, resolveTestPlan, sampleTriggerOutputs, type DryRunResult, type DryRunSample } from './dryRun.js';
 import { RUN_INFO_KEY, runWorkflow, type ExecutionOutcome, type ExecutionState, type StepRecord } from './engine.js';
 import { matchesTriggerChannelFilter } from './channelFilter.js';
@@ -164,8 +165,20 @@ export async function updateWorkflow(guildId: string, id: string, input: SaveWor
 
   if (count === 0) return null;
 
+  if (!input.enabled) await forgetSweep(id);
   await invalidateTriggerEvents(guildId);
   return prisma.workflow.findUnique({ where: { id } });
+}
+
+/**
+ * Oublie où en était le balayage d'ancienneté ou d'inactivité.
+ *
+ * Appelé à la désactivation : réactivée des mois plus tard, l'automatisation
+ * lancerait sinon d'un coup tous les membres passés par le seuil entre-temps.
+ * Elle repart comme à sa première activation.
+ */
+async function forgetSweep(workflowId: string): Promise<void> {
+  await prisma.workflowSweep.deleteMany({ where: { workflowId } });
 }
 
 // ── Essai à blanc ─────────────────────────────────────────────────────────────
@@ -320,6 +333,7 @@ export async function deleteWorkflow(guildId: string, id: string): Promise<boole
  */
 export async function setWorkflowEnabled(guildId: string, id: string, enabled: boolean): Promise<boolean> {
   const { count } = await prisma.workflow.updateMany({ where: { id, guildId }, data: { enabled } });
+  if (count > 0 && !enabled) await forgetSweep(id);
   if (count > 0) await invalidateTriggerEvents(guildId);
   return count > 0;
 }
@@ -602,6 +616,13 @@ export async function buildTriggerOutputs(
     // du serveur, toujours disponibles, alimentent les étapes.
     case 'OnSchedule':
       return {};
+
+    // Un membre parti entre le balayage et l'exécution n'a plus rien à recevoir.
+    case 'OnMemberTenure':
+    case 'OnMemberInactive': {
+      const member = await memberOf(payload.userId);
+      return member ? { member, days: Number(payload.days ?? 0) } : null;
+    }
 
     case 'OnGiveawayEntry': {
       const member = await memberOf(payload.userId);
@@ -1078,6 +1099,102 @@ export async function dispatchScheduledWorkflows(client: Client, now = new Date(
       logger.error('Workflow', `Échec du balayage planifié pour ${workflow.id}:`, error);
     }
   }
+}
+
+/** Membres lancés au plus par automatisation et par passage ; le reste attend le suivant. */
+const MEMBER_DAYS_LIMIT = 200;
+
+/**
+ * Lance les automatisations d'ancienneté et d'inactivité pour les membres
+ * dont le seuil est tombé depuis le passage précédent.
+ *
+ * Le premier passage ne fait que poser le repère : activer « 365 jours »
+ * ne doit pas lancer d'un coup tous les membres déjà anciens. Le créneau est
+ * réservé en base avant d'agir, comme pour la planification : deux processus
+ * qui balaient en même temps ne lancent pas deux fois le même membre.
+ */
+export async function dispatchMemberDaysWorkflows(client: Client, now = new Date()): Promise<void> {
+  const guildIds = [...client.guilds.cache.keys()];
+  if (guildIds.length === 0) return;
+
+  const workflows = await prisma.workflow.findMany({
+    where: { enabled: true, triggerType: { in: Object.keys(MEMBER_DAYS_TRIGGERS) }, guildId: { in: guildIds } },
+    select: { id: true, guildId: true, triggerType: true, graph: true, sweep: { select: { sweptUntil: true } } },
+  });
+
+  for (const workflow of workflows) {
+    try {
+      if (!isGuildActivated(workflow.guildId)) continue;
+      if (!(await isModuleEnabled(workflow.guildId, 'workflows'))) continue;
+      const guild = client.guilds.cache.get(workflow.guildId);
+      if (!guild || !isMemberDaysTrigger(workflow.triggerType)) continue;
+
+      const graph = workflow.graph as unknown as WorkflowGraph;
+      const days = readMemberDays(graph);
+      if (days === null) continue;
+
+      if (!workflow.sweep) {
+        await prisma.workflowSweep.upsert({
+          where: { workflowId: workflow.id },
+          create: { workflowId: workflow.id, sweptUntil: now },
+          update: {},
+        });
+        continue;
+      }
+
+      const from = workflow.sweep.sweptUntil;
+      if (from >= now) continue;
+
+      const due = await membersReachingThreshold(workflow.guildId, MEMBER_DAYS_TRIGGERS[workflow.triggerType], crossingRange(from, now, days));
+      const batch = due.slice(0, MEMBER_DAYS_LIMIT);
+      const sweptUntil = nextSweptUntil({
+        to: now,
+        days,
+        found: due.length,
+        limit: MEMBER_DAYS_LIMIT,
+        lastReference: batch.at(-1)?.reference ?? null,
+      });
+
+      const { count } = await prisma.workflowSweep.updateMany({
+        where: { workflowId: workflow.id, sweptUntil: from },
+        data: { sweptUntil },
+      });
+      if (count === 0) continue;
+
+      for (const entry of batch) {
+        await runAndPersist(guild, workflow, { userId: entry.userId, days }, 'member-days');
+      }
+    } catch (error) {
+      logger.error('Workflow', `Échec du balayage ancienneté/inactivité pour ${workflow.id}:`, error);
+    }
+  }
+}
+
+/**
+ * Membres dont la date de référence tombe dans la fenêtre, les plus anciens
+ * d'abord. Pour l'inactivité, un membre qui n'a jamais écrit compte depuis
+ * son arrivée.
+ */
+async function membersReachingThreshold(
+  guildId: string,
+  reference: 'joined' | 'lastMessage',
+  range: { gt: Date; lte: Date },
+): Promise<Array<{ userId: string; reference: Date }>> {
+  const where: Prisma.MemberProfileWhereInput = reference === 'joined'
+    ? { guildId, isBot: false, guildJoinedAt: range }
+    : { guildId, isBot: false, OR: [{ lastMessageAt: range }, { lastMessageAt: null, guildJoinedAt: range }] };
+
+  const rows = await prisma.memberProfile.findMany({
+    where,
+    select: { userId: true, guildJoinedAt: true, lastMessageAt: true },
+  });
+
+  return rows
+    .map((row) => ({
+      userId: row.userId,
+      reference: (reference === 'joined' ? row.guildJoinedAt : row.lastMessageAt ?? row.guildJoinedAt) as Date,
+    }))
+    .sort((a, b) => a.reference.getTime() - b.reference.getTime());
 }
 
 // ============================================================================

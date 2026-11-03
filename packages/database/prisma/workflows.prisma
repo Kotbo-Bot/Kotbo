@@ -35,6 +35,8 @@ model Workflow {
   executions WorkflowExecution[]
   memberRuns WorkflowMemberRun[]
   cooldowns  WorkflowCooldown[]
+  keptMessages WorkflowKeptMessage[]
+  sweep        WorkflowSweep?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -190,4 +192,30 @@ model WorkflowVariable {
 
   @@id([guildId, name, subjectKey])
   @@map("workflow_variables")
+}
+
+/// Message publié par une étape « Tenir un message à jour », modifié ensuite
+/// à chaque passage au lieu d'en publier un nouveau.
+model WorkflowKeptMessage {
+  workflowId String
+  nodeId     String
+  channelId  String
+  messageId  String
+  updatedAt  DateTime @updatedAt
+
+  workflow Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  @@id([workflowId, nodeId])
+  @@map("workflow_kept_messages")
+}
+
+/// Jusqu'où le balayage des déclencheurs d'ancienneté et d'inactivité est
+/// allé : chaque passage prend les seuils tombés depuis, ni plus ni moins.
+model WorkflowSweep {
+  workflowId  String   @id
+  sweptUntil  DateTime
+
+  workflow Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  @@map("workflow_sweeps")
 }

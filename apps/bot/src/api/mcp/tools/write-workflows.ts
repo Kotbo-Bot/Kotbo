@@ -109,7 +109,7 @@ const recipeSchema = z.object({
   trigger: z.object({
     type: z.string().describe('Type issu de get_workflow_catalog, ex. « OnMemberJoin »'),
     config: z.record(z.unknown()).optional()
-      .describe('Réglages du déclencheur, ex. { "cron": "0 20 * * *" } pour OnSchedule'),
+      .describe('Réglages du déclencheur, ex. { "cron": "0 20 * * *" } pour OnSchedule, { "days": 30 } pour OnMemberTenure et OnMemberInactive'),
   }),
   steps: z.array(level1Step).default([]),
 });

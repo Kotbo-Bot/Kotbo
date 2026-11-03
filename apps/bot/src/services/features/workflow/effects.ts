@@ -24,6 +24,7 @@ import { claimCooldown, getVariable, updateVariable } from './workflowStore.js';
 import { MEMBER_NOTE_MAX_LENGTH, appendAutomaticNoteLine, formatAutomaticNoteLine } from './memberNote.js';
 import { expectBotNickname } from './nicknameEcho.js';
 import { expectBotRoleChange } from './roleEcho.js';
+import { keepMessage, serialized } from './keptMessage.js';
 import {
   coerceToNumber,
   coerceToString,
@@ -404,9 +405,42 @@ export function createWorkflowEffects(guild: Guild, workflowId?: string): Workfl
 
     checkAction: (type, inputs) => checkAction(guild, type, inputs),
 
-    async runAction(type, inputs, config) {
+    async runAction(type, inputs, config, context) {
       await checkAction(guild, type, inputs);
       switch (type) {
+        case 'KeepMessage': {
+          const action = 'Tenir un message à jour';
+          const channel = await resolveTextChannel(guild, inputs.channel);
+          const text = safeContent(inputs.text, action);
+          // Sans automatisation enregistrée (appel hors moteur), rien à quoi
+          // rattacher le message : il est simplement publié.
+          if (!workflowId || !context) {
+            const sent = await channel.send(text);
+            return { message: toMessageValue({ id: sent.id, content: text, channelId: channel.id, authorId: sent.author.id }) };
+          }
+          const where = { workflowId_nodeId: { workflowId, nodeId: context.nodeId } };
+          const kept = await serialized(`${workflowId}:${context.nodeId}`, () => keepMessage(channel.id, text, {
+            load: () => prisma.workflowKeptMessage.findUnique({ where, select: { channelId: true, messageId: true } }),
+            save: async (ref) => {
+              await prisma.workflowKeptMessage.upsert({
+                where,
+                create: { workflowId, nodeId: context.nodeId, ...ref },
+                update: ref,
+              });
+            },
+            edit: async (ref, content) => {
+              const message = await channel.messages.fetch(ref.messageId).catch(() => null);
+              if (!message) return false;
+              await message.edit(content);
+              return true;
+            },
+            send: async (_channelId, content) => (await channel.send(content)).id,
+          }));
+          return {
+            message: toMessageValue({ id: kept.messageId, content: text, channelId: kept.channelId, authorId: guild.client.user?.id ?? '' }),
+          };
+        }
+
         case 'SendMessage': {
           const channel = await resolveTextChannel(guild, inputs.channel);
           await channel.send(safeContent(inputs.text, 'Envoyer un message'));

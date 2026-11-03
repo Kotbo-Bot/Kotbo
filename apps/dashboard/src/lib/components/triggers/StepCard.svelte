@@ -143,7 +143,7 @@
   }
 
   /** Actions dont l'étape montre ce que Discord affichera. */
-  const PREVIEWED_ACTIONS = new Set(['SendMessage', 'SendEmbed']);
+  const PREVIEWED_ACTIONS = new Set(['SendMessage', 'SendEmbed', 'KeepMessage']);
   let showPreview = $state(false);
 
   /** Réglages déjà posés dans la phrase : inutile de les répéter dessous. */

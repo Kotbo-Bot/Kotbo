@@ -55,6 +55,7 @@ export const CHANNEL_REQUIREMENTS: Partial<Record<string, ChannelRequirement>> =
   DeleteMessage: { target: 'message', permissions: ['ViewChannel', 'ManageMessages'] },
   PinMessage: { target: 'message', permissions: ['ViewChannel', 'ReadMessageHistory', 'ManageMessages'] },
   SendLogMessage: { target: 'logs', permissions: [...WRITE, 'EmbedLinks'] },
+  KeepMessage: { target: 'channel', permissions: [...WRITE, 'ReadMessageHistory'] },
 };
 
 /**

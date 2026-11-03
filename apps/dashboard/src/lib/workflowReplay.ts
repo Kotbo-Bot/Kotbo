@@ -76,6 +76,7 @@ export function messagePreviewOf(
 ): MessagePreview | null {
   switch (nodeType) {
     case 'SendMessage':
+    case 'KeepMessage':
       return { channel: channelName(inputs.channel, 'salon'), content: text(inputs.text) };
     case 'ReplyToMessage':
       return { channel: 'salon', content: text(inputs.text) };

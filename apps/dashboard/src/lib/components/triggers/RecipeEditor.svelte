@@ -10,6 +10,7 @@
   import RoleFilterField from './RoleFilterField.svelte';
   import ReactionFilterFields from './ReactionFilterFields.svelte';
   import ScheduleField from './ScheduleField.svelte';
+  import MemberDaysField from './MemberDaysField.svelte';
   import { dashboardStore } from '../../stores/dashboard.svelte';
   import {
     DEFAULT_SCHEDULE,
@@ -37,6 +38,7 @@
     type ValidationIssue,
     type ValueRef,
     type WorkflowGraph,
+    isMemberDaysTrigger,
   } from '@kotbo/shared';
 
   /**
@@ -153,9 +155,12 @@
     const keep = recipe.trigger.type === type || recipe.steps.length === 0;
     // La planification part sur un motif valide : sans lui, choisir le
     // déclencheur afficherait aussitôt une erreur de validation.
+    // Même raison pour le nombre de jours de l'ancienneté et de l'inactivité.
     const config = type === 'OnSchedule'
       ? { cron: recipe.trigger.config?.cron ?? scheduleToCron(DEFAULT_SCHEDULE) }
-      : undefined;
+      : isMemberDaysTrigger(type)
+        ? { days: recipe.trigger.config?.days ?? getNodeDef(type)?.config?.find((field) => field.key === 'days')?.defaultValue }
+        : undefined;
 
     update({ trigger: { type, ...(config ? { config } : {}) }, steps: keep ? recipe.steps : [] });
     changingTrigger = false;
@@ -312,6 +317,13 @@
         <ScheduleField
           value={String(recipe.trigger.config?.cron ?? '')}
           onChange={(cron) => setTriggerConfig('cron', cron)}
+        />
+      {/if}
+      {#if isMemberDaysTrigger(recipe.trigger.type)}
+        <MemberDaysField
+          triggerType={recipe.trigger.type}
+          value={recipe.trigger.config?.days}
+          onChange={(days) => setTriggerConfig('days', days)}
         />
       {/if}
       {#if recipe.trigger.type === 'OnFunGameWon'}
