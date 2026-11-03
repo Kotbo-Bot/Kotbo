@@ -46,6 +46,13 @@ describe('messagePreviewOf', () => {
     });
   });
 
+  it('rend le message tenu à jour comme un message', () => {
+    expect(messagePreviewOf('KeepMessage', { channel: general, text: 'Nous sommes 250' })).toEqual({
+      channel: 'général',
+      content: 'Nous sommes 250',
+    });
+  });
+
   it('rend un encadré avec sa couleur', () => {
     expect(messagePreviewOf('SendEmbed', { channel: general, title: 'Bienvenue', description: 'Lis le règlement' }, { color: '#ff0000' }))
       .toEqual({ channel: 'général', embed: { title: 'Bienvenue', description: 'Lis le règlement', color: '#ff0000' } });

@@ -64,6 +64,8 @@ export interface WorkflowEffects {
     type: string,
     inputs: Record<string, unknown>,
     config: Record<string, unknown>,
+    /** L'étape qui agit : une action qui se souvient d'un passage à l'autre s'y rattache. */
+    context?: { nodeId: string },
   ): Promise<Record<string, unknown>>;
   /**
    * Vérifie, sans rien modifier, que le bot pourrait faire l'action : module
@@ -312,7 +314,7 @@ export async function runWorkflow(options: RunOptions): Promise<ExecutionOutcome
 
   async function runActionNode(node: WorkflowNode, inputs: Record<string, unknown>): Promise<Record<string, unknown>> {
     const operation = VARIABLE_ACTIONS[node.type];
-    if (!operation) return effects.runAction(node.type, inputs, node.config ?? {});
+    if (!operation) return effects.runAction(node.type, inputs, node.config ?? {}, { nodeId: node.id });
 
     const name = normalizeVariableName(node.config?.name);
     if (!name) throw new Error('Le nom de la variable n\'est pas renseigné.');

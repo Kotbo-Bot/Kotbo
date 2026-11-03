@@ -22,7 +22,7 @@ import { checkExpiredGiveaways } from '../services/features/giveawayService.js';
 import { refreshAllAutoLeaderboards } from '../services/progression/leaderboardService.js';
 import { pruneOldMessageLogs } from './messageLogging.js';
 import { pruneOldAuditEvents } from '../services/analytics/auditDiffService.js';
-import { dispatchScheduledWorkflows, pruneWorkflowExecutions, resumePendingExecutions } from '../services/features/workflow/workflowService.js';
+import { dispatchMemberDaysWorkflows, dispatchScheduledWorkflows, pruneWorkflowExecutions, resumePendingExecutions } from '../services/features/workflow/workflowService.js';
 import { expireTemporaryRoles } from '../services/features/workflow/temporaryRoles.js';
 import { pruneOldWordStats } from '../services/analytics/wordStatsService.js';
 import { runBanHygieneScan } from '../services/moderation/banHygieneService.js';
@@ -811,6 +811,12 @@ export async function registerCrons(client: Client): Promise<void> {
 
   cron.schedule('* * * * *', async () => {
     await runLocalSweep('workflow-schedule', () => dispatchScheduledWorkflows(client));
+  });
+
+  // Ancienneté et inactivité : des seuils en jours, un passage toutes les dix
+  // minutes suffit. Chaque passage reprend là où le précédent s'est arrêté.
+  cron.schedule('*/10 * * * *', async () => {
+    await runLocalSweep('workflow-member-days', () => dispatchMemberDaysWorkflows(client));
   });
 
   // Webhooks sortants : relances dues et purge du journal (30 jours). Chaque

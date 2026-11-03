@@ -2,9 +2,12 @@ import {
   COOLDOWN_SCOPE_LABELS,
   getNodeDef,
   isCooldownScope,
+  isMemberDaysTrigger,
   isNodeAvailable,
   isTriggerNode,
+  MAX_MEMBER_DAYS,
   normalizeVariableName,
+  readMemberDays,
   resolveNodeInputs,
   resolveNodeOutputs,
 } from './catalog.js';
@@ -267,6 +270,20 @@ export function validateGraph(
         nodeId: node.id,
       });
     }
+  }
+
+  // ── Ancienneté et inactivité ─────────────────────────────────────────────
+  // Même raison que la planification : le nombre de jours vit en
+  // configuration, et un nombre absent ne ferait jamais partir le workflow.
+  for (const node of nodes) {
+    if (!isMemberDaysTrigger(node.type)) continue;
+    if (readMemberDays({ nodes: [node], edges: [] }) !== null) continue;
+    issues.push({
+      severity: 'error',
+      code: 'INVALID_MEMBER_DAYS',
+      message: `Le nombre de jours doit être un entier entre 1 et ${MAX_MEMBER_DAYS}.`,
+      nodeId: node.id,
+    });
   }
 
   // ── Délai de récupération ────────────────────────────────────────────────
