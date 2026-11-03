@@ -1,6 +1,7 @@
 <script lang="ts">
   import Papicon from '../Papicon.svelte';
-  import { TRIGGER_GROUP_LABELS, TRIGGER_LIBRARY, type TriggerGroup } from '@kotbo/shared';
+  import { TRIGGER_GROUP_LABELS, type TriggerGroup } from '@kotbo/shared';
+  import { OFFERED_TRIGGERS } from '../../workflowAvailability';
 
   /**
    * Choix du déclencheur - la toute première question posée.
@@ -17,7 +18,7 @@
     onPick: (type: string) => void;
   } = $props();
 
-  const groups = [...new Set(TRIGGER_LIBRARY.map((trigger) => trigger.group))] as TriggerGroup[];
+  const groups = [...new Set(OFFERED_TRIGGERS.map((trigger) => trigger.group))] as TriggerGroup[];
 </script>
 
 <div class="space-y-5">
@@ -27,7 +28,7 @@
         {TRIGGER_GROUP_LABELS[group]}
       </h4>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
-        {#each TRIGGER_LIBRARY.filter((trigger) => trigger.group === group) as trigger (trigger.type)}
+        {#each OFFERED_TRIGGERS.filter((trigger) => trigger.group === group) as trigger (trigger.type)}
           <button
             type="button"
             onclick={() => onPick(trigger.type)}

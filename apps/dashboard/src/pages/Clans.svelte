@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { isModulePaused } from '@kotbo/contracts';
   import { explainDisabled } from '../lib/actions/explainDisabled';
   import { onMount, onDestroy, untrack } from 'svelte';
   import { fade, scale } from 'svelte/transition';
@@ -394,6 +395,8 @@
   // Ce panneau a sa propre sauvegarde (route /settings) et reste donc à l'écart du
   // suivi de modifications de la page, qui passe par updateClanSettings.
   const dailyAlgoEnabled = $derived(!!(dashboardStore.state as any).dailyAlgoEnabled);
+  // Daily Algo en pause : le pont disparaît de la page, il n'a plus rien à relier.
+  const dailyAlgoPaused = isModulePaused('daily_algo');
   const bridgeAction = createAsyncActionState();
 
   const bridge = $state({
@@ -1617,6 +1620,7 @@ savedBetSettings = {
             </div>
           </section>
 
+          {#if !dailyAlgoPaused}
           <!-- Lien avec le Daily Algo : verrouillé si le module est inactif -->
           <section class="bg-surface-container-low/40 border border-outline-variant/30 p-6 rounded-xl space-y-6">
             <h3 class="text-lg font-semibold border-b border-outline-variant/15 pb-2 flex items-center gap-2">
@@ -1700,6 +1704,7 @@ savedBetSettings = {
               </div>
             {/if}
           </section>
+          {/if}
         </div>
 
         <!-- Right Column: Manual Points Adjustments -->

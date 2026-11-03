@@ -26,6 +26,7 @@ import { resolveOnlineMembersCount } from '../../../services/core/presenceDetect
 import { canViewFeatureSection } from './featureGate.js';
 import { applyFreeAnalyticsLimits } from './analyticsFreeTier.js';
 import { getGuildPlan } from '../../../services/system/planService.js';
+import { isModulePaused } from '@kotbo/contracts';
 
 export type LiveGuildCounts = {
   totalMembers: number;
@@ -838,6 +839,13 @@ export async function handleAnalyticsRoutes(
 
   // GET /api/dashboard/guilds/:guildId/analytics/daily-algo - Daily Algo analytics
   if (parts.length === 6 && parts[5] === 'daily-algo') {
+    // Le segment est celui d'Analytics : la garde de module ne le rattache
+    // pas au Daily Algo. Seule la pause ferme la route, comme elle retire
+    // l'onglet du dashboard : un module simplement éteint garde son historique.
+    if (isModulePaused('daily_algo')) {
+      json(res, 404, { error: 'Le Daily Algo est en pause.' });
+      return true;
+    }
     try {
       const days = Math.min(365, Math.max(1, parseInt(url.searchParams.get('days') || '30', 10) || 30));
       const startDate = url.searchParams.get('startDate');

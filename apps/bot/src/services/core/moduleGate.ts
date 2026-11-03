@@ -31,6 +31,7 @@ import {
   canonicalModuleKey,
   getModuleDefinition,
   getModuleRequirements,
+  isModulePaused,
   normalizePlanKey,
   planIncludesModule,
   type PlanKey,
@@ -178,6 +179,12 @@ async function loadModuleStates(guildId: string): Promise<ModuleStates> {
     if (!planIncludesModule(plan, mod.key)) states[mod.key] = false;
   }
 
+  // Module retiré du produit : éteint partout, quelle que soit la ligne ou la
+  // colonne qui le disait actif. Avant la cascade, pour la même raison.
+  for (const mod of MODULE_REGISTRY) {
+    if (isModulePaused(mod.key)) states[mod.key] = false;
+  }
+
   // Cascade : un dépendant ne peut pas être plus actif que ce dont il dépend.
   for (const mod of MODULE_REGISTRY) {
     if (!states[mod.key]) continue;
@@ -207,7 +214,9 @@ export async function getModuleStates(guildId: string): Promise<ModuleStates> {
         // sur les défauts du registre, qui laissent le bot dans son état nominal.
         logger.error('ModuleGate', `Lecture de l'état des modules impossible pour ${guildId}:`, err);
         const fallback: ModuleStates = {};
-        for (const mod of MODULE_REGISTRY) fallback[mod.key] = mod.core ? true : mod.defaultEnabled;
+        for (const mod of MODULE_REGISTRY) {
+          fallback[mod.key] = mod.core ? true : mod.defaultEnabled && !isModulePaused(mod.key);
+        }
         return fallback;
       })
       .finally(() => {

@@ -14,6 +14,7 @@ import {
   EXECUTION_STATUSES,
   listWorkflows,
   setWorkflowEnabled,
+  testWorkflow,
   updateWorkflow,
 } from '../../../services/features/workflow/workflowService.js';
 
@@ -133,6 +134,40 @@ export async function handleWorkflowRoutes(
     } catch (err) {
       logger.error('WorkflowAPI', 'Erreur validation:', err);
       jsonFailure(res, err, 'Erreur lors de la validation', 'WorkflowAPI');
+    }
+    return true;
+  }
+
+  // ── Essai à blanc (bouton « Tester » de l'éditeur) ──────────────────────
+  // Réservé à qui peut configurer, comme toute requête non GET : l'essai lit
+  // les membres et les salons du serveur, même s'il n'y écrit rien.
+  if (sub === 'test' && method === 'POST') {
+    try {
+      const body = await readJsonBody<{ graph?: unknown; workflowId?: unknown; source?: unknown }>(req);
+      const graph = parseGraph(body?.graph);
+      if (!graph) {
+        json(res, 400, { error: 'Graphe invalide' });
+        return true;
+      }
+      const guild = client.guilds.cache.get(guildId);
+      if (!guild) {
+        json(res, 404, { error: 'Serveur Discord introuvable' });
+        return true;
+      }
+      const result = await testWorkflow(guild, {
+        graph,
+        workflowId: typeof body?.workflowId === 'string' ? body.workflowId : null,
+        userId: user.userId,
+        source: body?.source === 'last' ? 'last' : 'sample',
+      });
+      json(res, 200, { test: result });
+    } catch (err) {
+      if (err instanceof WorkflowValidationError) {
+        json(res, 400, { error: 'Graphe invalide', issues: err.issues });
+        return true;
+      }
+      logger.error('WorkflowAPI', 'Erreur essai:', err);
+      jsonFailure(res, err, "Erreur lors de l'essai de l'automatisation", 'WorkflowAPI');
     }
     return true;
   }

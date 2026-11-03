@@ -1,5 +1,6 @@
 <script lang="ts">
   import { m, dateLocale } from '../lib/i18n';
+  import { isModulePaused } from '@kotbo/contracts';
   import { removeWithUndo, orThrow } from '../lib/undoRemoval';
   import { memberAvatarSrc } from '../lib/discordMedia';
   import { router } from 'tinro';
@@ -67,7 +68,9 @@
   let copiedKeyId = $state('');
   let newKeyCreatedValue = $state('');
   let permRecruitment = $state(false);
-  let permDailyAlgo = $state(true);
+  // Daily Algo en pause : sa permission n'est plus proposee, ni cochee d'office.
+  const dailyAlgoPaused = isModulePaused('daily_algo');
+  let permDailyAlgo = $state(!dailyAlgoPaused);
 
   // Manager Notes Form
   let newNoteContent = $state('');
@@ -275,7 +278,7 @@
       showNewKeyForm = false;
       newKeyName = m.pf_my_api_key();
       permRecruitment = false;
-      permDailyAlgo = true;
+      permDailyAlgo = !dailyAlgoPaused;
       toast.success(m.pf_key_created());
     } catch (err) {
       console.error(err);
@@ -952,6 +955,7 @@
                         </span>
                       </span>
                     </label>
+                    {#if !dailyAlgoPaused}
                     <label class="flex items-start gap-3 rounded-lg border border-outline-variant p-3 cursor-pointer hover:bg-surface-container">
                       <input type="checkbox" bind:checked={permDailyAlgo} class="mt-0.5 accent-primary" />
                       <span>
@@ -959,6 +963,7 @@
                         <span class="block mt-0.5 text-xs text-on-surface-variant leading-relaxed">{m.pf_daily_algo_perm()}</span>
                       </span>
                     </label>
+                    {/if}
                   </div>
                 </fieldset>
 

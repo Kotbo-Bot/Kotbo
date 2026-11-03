@@ -126,9 +126,12 @@ export const OUTGOING_EVENTS: OutgoingEventDefinition[] = [
   define('giveaway:ended', 'giveaway.ended', 'community', 'Un concours est clôturé.',
     (p) => ({ giveawayId: p.giveawayId, prize: p.prize, channelId: p.channelId, participantCount: p.participantCount, winnerCount: p.winnerCount }),
     { giveawayId: 'clx0give', prize: 'Nitro', channelId: '555555555555555555', participantCount: 340, winnerCount: 1 }),
-  define('partnership:stage', 'partnership.stage_changed', 'community', "Un partenariat change d'étape.",
-    (p) => ({ partnershipId: p.partnershipId, partnerId: p.partnerId, partnerName: p.partnerName, partnerGuildId: p.partnerGuildId, from: p.fromStage, to: p.toStage, reason: p.reason }),
-    { partnershipId: 'clx0part', partnerId: 'clx0partner', partnerName: 'Serveur ami', partnerGuildId: null, from: 'NEGOTIATION', to: 'ACTIVE', reason: null }),
+  {
+    ...define('partnership:stage', 'partnership.stage_changed', 'community', "Un partenariat change d'étape.",
+      (p) => ({ partnershipId: p.partnershipId, partnerId: p.partnerId, partnerName: p.partnerName, partnerGuildId: p.partnerGuildId, from: p.fromStage, to: p.toStage, reason: p.reason }),
+      { partnershipId: 'clx0part', partnerId: 'clx0partner', partnerName: 'Serveur ami', partnerGuildId: null, from: 'NEGOTIATION', to: 'ACTIVE', reason: null }),
+    module: 'partnerships',
+  },
 
   // ── Structure du serveur ────────────────────────────────
   define('channel:create', 'channel.created', 'server', 'Un salon est créé.',

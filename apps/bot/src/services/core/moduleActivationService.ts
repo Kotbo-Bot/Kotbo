@@ -19,6 +19,7 @@ import {
   getModuleDependents,
   getModuleRequirements,
   isCoreModule,
+  isModulePaused,
   lowestPlanWithModule,
   normalizePlanKey,
   planIncludesModule,
@@ -118,6 +119,18 @@ export class PlanLockedError extends UserFacingError {
         : `Le module « ${moduleKey} » n'est pas compris dans l'offre ${currentPlan}.`,
     );
     this.name = 'PlanLockedError';
+  }
+}
+
+/**
+ * Tentative d'allumer un module retiré du produit. Aucune option ne la lève :
+ * la mise en place guidée elle-même n'a pas à préparer un module qui ne
+ * reviendra peut-être pas.
+ */
+export class PausedModuleError extends UserFacingError {
+  constructor(readonly moduleKey: string) {
+    super(`Le module « ${moduleKey} » est en pause : il ne peut pas être activé pour le moment.`);
+    this.name = 'PausedModuleError';
   }
 }
 
@@ -252,6 +265,11 @@ export async function setDashboardModuleStatus(
 
   if (isCoreModule(key)) {
     throw new CoreModuleError(key);
+  }
+
+  if (enabled) {
+    const paused = [key, ...getModuleRequirements(key)].find(isModulePaused);
+    if (paused) throw new PausedModuleError(paused);
   }
 
   const states = await getModuleStates(guildId);

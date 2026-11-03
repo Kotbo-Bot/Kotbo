@@ -1,3 +1,4 @@
+import { isModulePaused } from '@kotbo/contracts';
 import { IncomingMessage, ServerResponse } from 'node:http';
 import { Client } from 'discord.js';
 import prisma from '../../../utils/db.js';
@@ -106,7 +107,10 @@ export async function handleOutgoingWebhookRoutes(
 
       json(res, 200, {
         webhooks: webhooks.map((hook) => ({ ...hook, last24h: stats.get(hook.id) ?? { success: 0, failed: 0, pending: 0 } })),
-        catalog: OUTGOING_EVENTS.map(({ type, category, description, sample }) => ({ type, category, description, sample })),
+        // Un événement d'un module en pause n'est plus émis : inutile de l'offrir.
+        catalog: OUTGOING_EVENTS
+          .filter((event) => !isModulePaused(event.module))
+          .map(({ type, category, description, sample }) => ({ type, category, description, sample })),
         limits: { maxWebhooks: MAX_WEBHOOKS_PER_GUILD, maxAttempts: MAX_ATTEMPTS, retentionDays: DELIVERY_RETENTION_DAYS },
         apiVersion: OUTGOING_WEBHOOK_API_VERSION,
         pingEvent: PING_EVENT,

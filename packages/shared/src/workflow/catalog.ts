@@ -404,6 +404,7 @@ const TRIGGERS: NodeDef[] = [
     description:
       "Se déclenche quand un dossier de partenariat change d'étape. L'événement part après l'application des avantages : le rôle partenaire est déjà posé.",
     event: 'partnership:stage',
+    module: 'partnerships',
     inputs: [],
     outputs: [
       EXEC_OUT,
@@ -421,6 +422,7 @@ const TRIGGERS: NodeDef[] = [
     description:
       "Se déclenche au constat d'un manquement. « Périodes manquées » permet de ne réagir qu'à partir de la deuxième ou de la troisième fois.",
     event: 'partnership:commitment-failed',
+    module: 'partnerships',
     inputs: [],
     outputs: [
       EXEC_OUT,
@@ -436,6 +438,7 @@ const TRIGGERS: NodeDef[] = [
     description:
       "Se déclenche quand un membre arrive par l'invitation d'un partenariat. Ne part que pour les arrivées réellement attribuées, pas pour toutes les arrivées.",
     event: 'partnership:referral',
+    module: 'partnerships',
     inputs: [],
     outputs: [
       EXEC_OUT,
@@ -1478,6 +1481,15 @@ const BY_TYPE = new Map(NODE_CATALOG.map((def) => [def.type, def]));
 
 export function getNodeDef(type: string): NodeDef | undefined {
   return BY_TYPE.get(type);
+}
+
+/**
+ * Un nœud n'est disponible que si le module dont il dépend n'est pas retiré du
+ * produit. Le test de pause est passé en paramètre : ce paquet ne dépend pas
+ * du registre des modules, que le bot comme le dashboard importent déjà.
+ */
+export function isNodeAvailable(type: string, isModulePaused: (key: string | undefined) => boolean): boolean {
+  return !isModulePaused(getNodeDef(type)?.module);
 }
 
 export function isTriggerNode(type: string): boolean {

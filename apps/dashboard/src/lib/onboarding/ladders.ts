@@ -17,6 +17,7 @@
  * empile chaque nouveau rôle sous le précédent, et créer en partant du sommet
  * laisse la hiérarchie dans le bon sens sans avoir à la réordonner.
  */
+import { isModulePaused } from '@kotbo/contracts';
 import type { OnboardingRoleRequest, StaffRolePower } from '../api';
 
 /** Un rôle proposé : ce qui part sur Discord, plus ce qui l'explique à l'écran. */
@@ -188,9 +189,13 @@ export const STAFF_STRUCTURES: StaffStructure[] = [
  * leurs décisions portent, en dessous de l'administration pour qu'elles
  * s'arbitrent.
  */
-export type StaffPole = RoleBlueprint & { byDefault: boolean };
+export type StaffPole = RoleBlueprint & {
+  byDefault: boolean;
+  /** Module dont le pôle s'occupe : en pause, le pôle n'est plus proposé. */
+  module?: string;
+};
 
-export const STAFF_POLES: StaffPole[] = [
+const ALL_STAFF_POLES: StaffPole[] = [
   {
     key: 'staff.pole.moderation',
     name: 'Responsable modération',
@@ -229,6 +234,7 @@ export const STAFF_POLES: StaffPole[] = [
   },
   {
     key: 'staff.pole.partnerships',
+    module: 'partnerships',
     name: 'Responsable partenariats',
     color: '#14B8A6',
     power: 'coordinate',
@@ -246,6 +252,8 @@ export const STAFF_POLES: StaffPole[] = [
     byDefault: false,
   },
 ];
+
+export const STAFF_POLES: StaffPole[] = ALL_STAFF_POLES.filter((pole) => !isModulePaused(pole.module));
 
 /**
  * La hiérarchie complète, du plus haut au plus bas.

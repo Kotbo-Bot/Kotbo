@@ -1,3 +1,4 @@
+import { isModulePaused } from '@kotbo/contracts';
 import {
   ActionRowBuilder,
   ButtonBuilder,
@@ -1677,6 +1678,8 @@ export async function sendDailyAlgoSummaryForGuild(client: Client, guildId: stri
 // ── Summary Cron ───────────────────────────────────────────────────────────────
 
 export async function runDailyAlgoSummariesForAllGuilds(client: Client): Promise<void> {
+  // Module en pause : aucun défi, bilan ni bouton tant qu'il n'est pas rendu.
+  if (isModulePaused('daily_algo')) return;
   const now = new Date();
   const startOfDay = new Date(now);
   startOfDay.setUTCHours(0, 0, 0, 0);
@@ -1760,6 +1763,8 @@ async function ensureDailyAlgoRunButtons(client: Client, run: DailyAlgoRunMessag
 }
 
 export async function syncOngoingDailyAlgoButtons(client: Client): Promise<void> {
+  // Module en pause : aucun défi, bilan ni bouton tant qu'il n'est pas rendu.
+  if (isModulePaused('daily_algo')) return;
   const since = new Date();
   since.setDate(since.getDate() - 30);
 
@@ -1999,6 +2004,8 @@ export async function sendDailyAlgo(client: Client, guildId: string): Promise<Da
   };
 }
 export async function runDailyAlgoForAllGuilds(client: Client): Promise<void> {
+  // Module en pause : aucun défi, bilan ni bouton tant qu'il n'est pas rendu.
+  if (isModulePaused('daily_algo')) return;
   const now = new Date();
   const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 

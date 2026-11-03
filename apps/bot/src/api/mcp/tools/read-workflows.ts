@@ -4,6 +4,7 @@ import {
   CONDITION_LIBRARY,
   TRIGGER_LIBRARY,
   decompileGraph,
+  isNodeAvailable,
   type WorkflowGraph,
 } from '@kotbo/shared';
 import {
@@ -14,6 +15,7 @@ import {
 } from '../../../services/features/workflow/workflowService.js';
 import { type McpToolContext, err, ok } from '../toolkit.js';
 import { z } from 'zod';
+import { isModulePaused } from '@kotbo/contracts';
 
 export function registerReadWorkflowsTools(ctx: McpToolContext) {
   const { server, guildId, shouldRegister, guard, toolMeta } = ctx;
@@ -38,7 +40,8 @@ export function registerReadWorkflowsTools(ctx: McpToolContext) {
       _meta: toolMeta,
     },
     guard('READ_WORKFLOWS', async () => ok({
-      triggers: TRIGGER_LIBRARY.map((trigger) => ({
+      // Un déclencheur dont le module est en pause serait refusé à la création.
+      triggers: TRIGGER_LIBRARY.filter((trigger) => isNodeAvailable(trigger.type, isModulePaused)).map((trigger) => ({
         type: trigger.type,
         sentence: trigger.sentence,
         example: trigger.example,

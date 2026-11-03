@@ -111,7 +111,7 @@ for (const suffix of ['../../services/analytics/moduleStatsService.ts', '../../s
 
 const { getModuleStates, isModuleEnabled, invalidateModuleStates, filterGuildsWithModule } =
   await import('../../services/core/moduleGate.js');
-const { setDashboardModuleStatus, CoreModuleError, PlanLockedError } =
+const { setDashboardModuleStatus, CoreModuleError, PlanLockedError, PausedModuleError } =
   await import('../../services/core/moduleActivationService.js');
 
 const GUILD = 'guild-1';
@@ -367,6 +367,43 @@ describe('setDashboardModuleStatus', () => {
     featureRows = [{ guildId: GUILD, featureKey: 'tutoring', enabled: true }];
 
     const result = await setDashboardModuleStatus(GUILD, 'tutoring', false);
+
+    expect(result.enabled).toBeFalse();
+  });
+});
+
+/**
+ * Modules en pause : retires du produit sans que leurs donnees soient
+ * supprimees. Ni une ligne en base, ni une colonne historique, ni l offre ne
+ * doivent pouvoir les rallumer.
+ */
+describe('module en pause', () => {
+  test('est eteint malgre une ligne et une colonne qui l activent', async () => {
+    guildRow = guild({ dailyAlgoEnabled: true });
+    featureRows = [{ guildId: GUILD, featureKey: 'daily_algo', enabled: true }];
+
+    expect(await isModuleEnabled(GUILD, 'daily_algo')).toBeFalse();
+    expect((await getModuleStates(GUILD)).daily_algo).toBeFalse();
+  });
+
+  test('refuse d etre rallume, sans rien ecrire', async () => {
+    const err = await setDashboardModuleStatus(GUILD, 'daily_algo', true).catch((e) => e);
+
+    expect(err).toBeInstanceOf(PausedModuleError);
+    expect(err.moduleKey).toBe('daily_algo');
+    expect(featureRows.find((row) => row.featureKey === 'daily_algo')).toBeUndefined();
+  });
+
+  test('refuse aussi la mise en place guidee', async () => {
+    await expect(
+      setDashboardModuleStatus(GUILD, 'daily_algo', true, undefined, { recordIntentWhenLocked: true }),
+    ).rejects.toThrow(PausedModuleError);
+  });
+
+  test('laisse ecrire l extinction', async () => {
+    featureRows = [{ guildId: GUILD, featureKey: 'daily_algo', enabled: true }];
+
+    const result = await setDashboardModuleStatus(GUILD, 'daily_algo', false);
 
     expect(result.enabled).toBeFalse();
   });

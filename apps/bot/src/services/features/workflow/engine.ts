@@ -349,7 +349,18 @@ export async function runWorkflow(options: RunOptions): Promise<ExecutionOutcome
 
       // ── Actions ────────────────────────────────────────────────────────
       if (def.category === 'action') {
-        const outputs = await effects.runAction(node.type, inputs, node.config ?? {});
+        let outputs: Record<string, unknown>;
+        try {
+          outputs = await effects.runAction(node.type, inputs, node.config ?? {});
+        } catch (error) {
+          // Consignée ici : sans elle, l'erreur retombait sur l'étape d'avant,
+          // et le journal désignait un nœud qui n'avait pas échoué.
+          steps.push({
+            ...step(state.stepOrder++, node, inputs, {}, now() - stepStart, 'ERROR'),
+            error: error instanceof Error ? error.message : String(error),
+          });
+          throw error;
+        }
         for (const [outId, outValue] of Object.entries(outputs)) {
           memo.set(`${generation}:${node.id}:${outId}`, outValue);
         }
