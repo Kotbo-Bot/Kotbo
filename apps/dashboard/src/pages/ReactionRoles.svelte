@@ -12,7 +12,7 @@
   import InlineFeedback from '../lib/components/InlineFeedback.svelte';
   import SearchableSelect from '../lib/components/SearchableSelect.svelte';
   import Skeleton from '../lib/components/Skeleton.svelte';
-  import { fetchReactionRoleMenus, createReactionRoleMenu, updateReactionRoleMenu, deleteReactionRoleMenu, applyReactionRolePreset, type ReactionRoleButtonMode, type ReactionRoleButtonStyle, type ReactionRoleMenuMode, type ReactionRolePresetKey } from '../lib/api';
+  import { fetchReactionRoleMenus, createReactionRoleMenu, updateReactionRoleMenu, deleteReactionRoleMenu, fetchReactionRolePreset, type ReactionRoleButtonMode, type ReactionRoleButtonStyle, type ReactionRoleMenuMode, type ReactionRolePresetKey } from '../lib/api';
   import { normalizeMenuMode, resolveButtonMode, REACTION_ROLE_PRESET_KEYS, type BotRoleAccess, type RoleBlocker } from '@kotbo/contracts';
   import { dashboardRoleBlocker } from '../lib/reactionRoleBlockers';
   import FormSelect from '../lib/components/FormSelect.svelte';
@@ -51,7 +51,9 @@
   let formButtonMode = $state<ReactionRoleMenuMode>('toggle');
   let applyingPreset = $state<ReactionRolePresetKey | null>(null);
   // `mode: ''` = le bouton suit le mode du panneau.
-  let formOptions = $state<Array<{ emoji: string; label: string; roleId: string; mode: ReactionRoleButtonMode | ''; style: ReactionRoleButtonStyle }>>([
+  type NewRole = { name: string; color?: number };
+  // `newRole` : rôle proposé par un modèle, créé seulement à la publication.
+  let formOptions = $state<Array<{ emoji: string; label: string; roleId: string; mode: ReactionRoleButtonMode | ''; style: ReactionRoleButtonStyle; newRole?: NewRole | null }>>([
     { emoji: '', label: '', roleId: '', mode: '', style: 'secondary' }
   ]);
 
@@ -207,7 +209,7 @@
   async function handleSubmit() {
     if (!canManageSettings || !formTitle || !formChannelId || formOptions.length === 0) return;
 
-    const invalidOpt = formOptions.some(o => !o.label || !o.roleId);
+    const invalidOpt = formOptions.some(o => !o.label || (!o.roleId && !o.newRole));
     if (invalidOpt) {
       actionState.setError(m.reaction_roles_all_buttons_required_error());
       return;
@@ -221,6 +223,7 @@
         emoji: opt.emoji,
         label: opt.label,
         roleId: opt.roleId,
+        ...(!opt.roleId && opt.newRole ? { newRole: opt.newRole } : {}),
         // Un menu « un seul rôle » n'a pas de mode par bouton.
         ...(opt.mode && formButtonMode !== 'exclusive' ? { mode: opt.mode } : {}),
         ...(opt.style !== 'secondary' ? { style: opt.style } : {}),
@@ -228,12 +231,15 @@
     };
 
     const menuId = editingMenuId;
+    // Les rôles créés à la publication doivent rejoindre les listes du dashboard.
+    const createsRoles = pendingNewRoles > 0;
 
     if (menuId) {
       await actionState.run(async () => {
         const res = await updateReactionRoleMenu(menuId, payload);
         if (!res || !res.menu) throw new Error(m.reaction_roles_update_error());
         menus = menus.map(item => (item.id === menuId ? res.menu : item));
+        if (createsRoles) await dashboardStore.refresh();
         showModal = false;
         return true;
       }, { successMessage: m.reaction_roles_update_success() });
@@ -245,31 +251,37 @@
 
       if (!res || !res.menu) throw new Error(m.reaction_roles_deploy_error());
       menus = [res.menu, ...menus];
+      if (createsRoles) await dashboardStore.refresh();
       showModal = false;
       return true;
     }, { successMessage: m.reaction_roles_deploy_success() });
   }
 
+  /** Rôles proposés par un modèle et pas encore remplacés : créés à la publication. */
+  const pendingNewRoles = $derived(formOptions.filter(opt => !opt.roleId && opt.newRole).length);
+
+  function roleColor(color: number | undefined): string {
+    return color === undefined ? '#99aab5' : `#${color.toString(16).padStart(6, '0')}`;
+  }
+
   /**
-   * Crée les rôles d'un menu tout prêt puis remplit le formulaire. Le salon
-   * reste à choisir : rien n'est publié avant l'envoi du formulaire.
+   * Remplit le formulaire avec un menu tout prêt. Rien n'est créé sur le
+   * serveur : les rôles manquants sont proposés, et ne le seront qu'à la
+   * publication. Fermer la fenêtre ne laisse donc aucun rôle derrière soi.
    */
   async function applyPreset(key: ReactionRolePresetKey) {
     if (!canManageSettings || applyingPreset) return;
     applyingPreset = key;
     try {
       await actionState.run(async () => {
-        const res = await applyReactionRolePreset(key);
+        const res = await fetchReactionRolePreset(key);
         const preset = res?.preset;
         if (!preset) throw new Error(m.reaction_roles_preset_error());
-        // Les rôles créés doivent figurer dans les listes avant d'être affichés.
-        await dashboardStore.refresh();
         formTitle = preset.title;
         formButtonMode = normalizeMenuMode(preset.buttonMode);
-        formOptions = preset.options.map((opt: { label: string; roleId: string }) => ({
-          emoji: '', label: opt.label, roleId: opt.roleId, mode: '' as const, style: 'secondary' as const,
+        formOptions = preset.options.map((opt: { label: string; roleId: string; newRole?: NewRole | null }) => ({
+          emoji: '', label: opt.label, roleId: opt.roleId, mode: '' as const, style: 'secondary' as const, newRole: opt.newRole ?? null,
         }));
-        actionState.setMessage(m.reaction_roles_preset_applied({ n: preset.createdRoles }));
         return true;
       });
     } finally {
@@ -663,6 +675,29 @@
                 <div class="grid grid-cols-1 gap-3 {formButtonMode === 'exclusive' ? 'md:grid-cols-2' : 'md:grid-cols-3'}">
                   <div class="space-y-1">
                     <label for={`modal-role-${idx}`} class="text-2xs font-semibold text-on-surface-variant uppercase">{m.reaction_roles_field_role()}</label>
+                    {#if !opt.roleId && opt.newRole}
+                      <div class="rounded-lg bg-surface-container border border-dashed border-primary/40 px-3 py-2 space-y-1">
+                        <p class="flex items-center gap-2 text-xs font-semibold text-on-surface">
+                          <span class="w-2.5 h-2.5 rounded-full shrink-0" style="background-color: {roleColor(opt.newRole.color)}"></span>
+                          {m.reaction_roles_new_role_chip({ name: opt.newRole.name })}
+                        </p>
+                        <p class="text-2xs text-on-surface-variant">{m.reaction_roles_new_role_hint()}</p>
+                        {#if botRoleAccess && !botRoleAccess.canManageRoles}
+                          <p class="flex items-start gap-1 text-2xs text-error">
+                            <Papicon icon="AlertTriangle" size={12} class="mt-px shrink-0" />{m.reaction_roles_blocked_no_permission()}
+                          </p>
+                        {/if}
+                        {#if canManageSettings}
+                          <button
+                            type="button"
+                            onclick={() => { opt.newRole = null; }}
+                            class="text-2xs font-semibold text-primary hover:underline cursor-pointer"
+                          >
+                            {m.reaction_roles_new_role_replace()}
+                          </button>
+                        {/if}
+                      </div>
+                    {:else}
                     <SearchableSelect
                       id={`modal-role-${idx}`}
                       bind:value={opt.roleId}
@@ -676,6 +711,7 @@
                       <p class="flex items-start gap-1 text-2xs text-error">
                         <Papicon icon="AlertTriangle" size={12} class="mt-px shrink-0" />{BLOCKER_MESSAGES[blocker]()}
                       </p>
+                    {/if}
                     {/if}
                   </div>
 
@@ -714,6 +750,13 @@
             {/each}
           </div>
         </div>
+
+        {#if pendingNewRoles > 0}
+          <p class="flex items-center gap-2 text-2xs text-on-surface-variant bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2">
+            <Papicon icon="Info" size={14} />
+            {m.reaction_roles_new_roles_on_publish({ n: pendingNewRoles })}
+          </p>
+        {/if}
 
         <div class="flex justify-end gap-3 pt-4 border-t border-outline-variant/10">
           <button

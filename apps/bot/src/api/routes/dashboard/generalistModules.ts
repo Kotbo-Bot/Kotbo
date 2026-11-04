@@ -49,7 +49,7 @@ import {
   type GiveawayTemplateInput,
 } from '../../../services/features/giveawayTemplateService.js';
 import { createReactionRoleMenu, deleteReactionRoleMenu, updateReactionRoleMenu, getBotRoleAccess, normalizeMenuMode, MAX_REACTION_ROLE_BUTTONS, type ReactionRoleOption } from '../../../services/features/reactionRoleService.js';
-import { applyReactionRolePreset } from '../../../services/features/reactionRolePresets.js';
+import { hasNewRoles, materializeNewRoles, previewReactionRolePreset, type ReactionRoleOptionInput } from '../../../services/features/reactionRolePresets.js';
 import { REACTION_ROLE_PRESET_KEYS, type ReactionRolePresetKey } from '@kotbo/contracts';
 import { invalidateAutoResponseCache } from '../../../services/features/autoResponseService.js';
 import { normalizeAnswer } from '../../../services/features/funService.js';
@@ -139,6 +139,58 @@ const BLACKLIST_SELECT = {
   progressionBlacklistRoleIds: true,
   progressionBlacklistChannelIds: true,
 } as const;
+
+/**
+ * Crée, juste avant la publication d'un menu de rôles, les rôles qu'un modèle
+ * a proposés et que le staff a gardés. Rend `null` après avoir répondu quand la
+ * création est impossible : le menu n'est alors pas publié.
+ */
+async function withNewRolesCreated(
+  res: ServerResponse,
+  client: Client,
+  guildId: string,
+  options: ReactionRoleOptionInput[],
+  auditUser: string,
+): Promise<ReactionRoleOption[] | null> {
+  if (!hasNewRoles(options)) return options;
+
+  const discordGuild = client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId).catch(() => null);
+  if (!discordGuild) {
+    json(res, 404, { error: 'Serveur Discord introuvable.' });
+    return null;
+  }
+
+  // Deux envois rapides créeraient chacun le même jeu de rôles.
+  const lockKey = `reaction-role-new-roles:${guildId}`;
+  if (!acquireProvisionLock(lockKey)) {
+    json(res, 409, { error: 'Une création de rôles est déjà en cours sur ce serveur.' });
+    return null;
+  }
+
+  try {
+    const missing = await missingProvisionPermissions(discordGuild, [PermissionFlagsBits.ManageRoles]);
+    if (missing.length > 0) {
+      json(res, 400, { error: `Le bot n'a pas les permissions nécessaires pour créer les rôles : ${missing.join(', ')}.` });
+      return null;
+    }
+
+    const created = await materializeNewRoles(discordGuild, options);
+    if (created.createdRoles > 0) {
+      await pushAudit(guildId, {
+        user: auditUser,
+        action: 'Création de rôles (menu de rôles)',
+        context: getGuildName(client, guildId),
+        module: 'ReactionRoles',
+        eventType: 'Manuel',
+        details: `${created.createdRoles} rôle(s) créé(s) à la publication du menu`,
+        channelId: null,
+      });
+    }
+    return created.options;
+  } finally {
+    releaseProvisionLock(lockKey);
+  }
+}
 
 export async function handleGeneralistModulesRoutes(
   req: IncomingMessage,
@@ -1809,7 +1861,7 @@ export async function handleGeneralistModulesRoutes(
           title: string;
           channelId: string;
           buttonMode?: string;
-          options: ReactionRoleOption[];
+          options: ReactionRoleOptionInput[];
         }>(req);
 
         if (!body || !body.title || !body.channelId || !Array.isArray(body.options) || body.options.length === 0) {
@@ -1822,12 +1874,15 @@ export async function handleGeneralistModulesRoutes(
           return true;
         }
 
+        const options = await withNewRolesCreated(res, client, guildId, body.options, auditUser);
+        if (!options) return true;
+
         const menu = await createReactionRoleMenu(
           client,
           guildId,
           body.channelId,
           body.title,
-          body.options,
+          options,
           normalizeMenuMode(body.buttonMode),
         );
 
@@ -1839,9 +1894,10 @@ export async function handleGeneralistModulesRoutes(
       return true;
     }
 
-    // POST /api/dashboard/guilds/:guildId/reaction-roles/presets/:key
-    // Crée les rôles d'un menu tout prêt et rend de quoi remplir le formulaire.
-    if (parts.length === 7 && parts[5] === 'presets' && method === 'POST') {
+    // GET /api/dashboard/guilds/:guildId/reaction-roles/presets/:key
+    // Remplit le formulaire avec les rôles du modèle, sans rien créer : ceux qui
+    // manquent ne le seront qu'à la publication du menu.
+    if (parts.length === 7 && parts[5] === 'presets' && method === 'GET') {
       const key = parts[6] as ReactionRolePresetKey;
       if (!REACTION_ROLE_PRESET_KEYS.includes(key)) {
         json(res, 404, { error: 'Modèle de menu inconnu' });
@@ -1854,43 +1910,9 @@ export async function handleGeneralistModulesRoutes(
         return true;
       }
 
-      // Deux clics rapides créeraient chacun le même jeu de rôles.
-      const lockKey = `reaction-role-preset:${guildId}`;
-      if (!acquireProvisionLock(lockKey)) {
-        json(res, 409, { error: 'Une création de rôles est déjà en cours sur ce serveur.' });
-        return true;
-      }
-
-      try {
-        const missing = await missingProvisionPermissions(discordGuild, [PermissionFlagsBits.ManageRoles]);
-        if (missing.length > 0) {
-          json(res, 400, { error: `Le bot n'a pas les permissions nécessaires : ${missing.join(', ')}.` });
-          return true;
-        }
-
-        // Noms dans la langue du serveur : les rôles sont lus par ses membres.
-        const locale = await resolveGuildLocale(guildId, discordGuild.preferredLocale);
-        const preset = await applyReactionRolePreset(discordGuild, key, locale);
-
-        if (preset.createdRoles > 0) {
-          await pushAudit(guildId, {
-            user: auditUser,
-            action: 'Création de rôles (menu tout prêt)',
-            context: getGuildName(client, guildId),
-            module: 'ReactionRoles',
-            eventType: 'Manuel',
-            details: `${preset.createdRoles} rôle(s) créé(s) pour le modèle « ${key} »`,
-            channelId: null,
-          });
-        }
-
-        json(res, 200, { preset });
-      } catch (err) {
-        logger.error('ReactionRolesAPI', 'Error applying preset:', err);
-        jsonFailure(res, err, 'Erreur lors de la création des rôles du modèle', 'ReactionRolesAPI');
-      } finally {
-        releaseProvisionLock(lockKey);
-      }
+      // Noms dans la langue du serveur : les rôles sont lus par ses membres.
+      const locale = await resolveGuildLocale(guildId, discordGuild.preferredLocale);
+      json(res, 200, { preset: previewReactionRolePreset(discordGuild, key, locale) });
       return true;
     }
 
@@ -1902,7 +1924,7 @@ export async function handleGeneralistModulesRoutes(
           title?: string;
           channelId?: string;
           buttonMode?: string;
-          options?: ReactionRoleOption[];
+          options?: ReactionRoleOptionInput[];
         }>(req);
 
         if (!body) {
@@ -1922,10 +1944,15 @@ export async function handleGeneralistModulesRoutes(
           return true;
         }
 
+        const options = body.options === undefined
+          ? undefined
+          : await withNewRolesCreated(res, client, guildId, body.options, auditUser);
+        if (options === null) return true;
+
         const menu = await updateReactionRoleMenu(client, guildId, menuId, {
           ...(body.title !== undefined ? { title: body.title } : {}),
           ...(body.channelId !== undefined ? { channelId: body.channelId } : {}),
-          ...(body.options !== undefined ? { options: body.options } : {}),
+          ...(options !== undefined ? { options } : {}),
           ...(body.buttonMode !== undefined ? { buttonMode: normalizeMenuMode(body.buttonMode) } : {}),
         });
 

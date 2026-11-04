@@ -1,7 +1,9 @@
 /**
- * Menus de rôles tout prêts (couleurs, pronoms, notifications). Le préréglage
- * crée les rôles qui manquent et rend de quoi remplir le formulaire du
- * dashboard : le staff choisit le salon et peut tout retoucher avant de publier.
+ * Menus de rôles tout prêts (couleurs, pronoms, notifications). Choisir un
+ * modèle ne fait que remplir le formulaire du dashboard : les rôles qui
+ * manquent y sont proposés, et ne sont créés qu'à la publication du menu. Un
+ * staff qui essaie les modèles sans publier ne laisse donc aucun rôle derrière
+ * lui.
  */
 import type { Guild } from 'discord.js';
 import type { ReactionRoleMenuMode, ReactionRolePresetKey } from '@kotbo/contracts';
@@ -65,28 +67,81 @@ export function presetDefinition(key: ReactionRolePresetKey, locale: BotLocale) 
   };
 }
 
+/** Rôle à créer à la publication du menu, proposé par un modèle. */
+export type NewRoleSpec = { name: string; color?: number };
+
+/** Bouton reçu du dashboard : sans `roleId`, il porte le rôle à créer. */
+export type ReactionRoleOptionInput = ReactionRoleOption & { newRole?: NewRoleSpec | null };
+
+/** Limite Discord de longueur d'un nom de rôle. */
+const ROLE_NAME_MAX_LENGTH = 100;
+
 /**
- * Reprend les rôles du même nom déjà présents (sauf ceux d'une intégration,
- * que Discord interdit d'attribuer) et crée les autres, sans permission : un
- * rôle de couleur ou de notification n'ouvre aucun droit.
+ * Rôle à créer tel que reçu du navigateur, ramené à ce que Discord accepte.
+ * Sans nom, il n'y a rien à créer.
  */
-export async function applyReactionRolePreset(guild: Guild, key: ReactionRolePresetKey, locale: BotLocale) {
+function parseNewRole(value: NewRoleSpec | null | undefined): NewRoleSpec | null {
+  const name = typeof value?.name === 'string' ? value.name.trim().slice(0, ROLE_NAME_MAX_LENGTH) : '';
+  if (!name) return null;
+  const color = value?.color;
+  const validColor = typeof color === 'number' && Number.isInteger(color) && color >= 0 && color <= 0xffffff;
+  return { name, color: validColor ? color : undefined };
+}
+
+/**
+ * Rôle du même nom déjà présent et sans danger à distribuer. Un rôle
+ * d'intégration est écarté (Discord interdit de l'attribuer), tout comme un
+ * rôle qui porte des permissions : un rôle d'administration nommé « Annonces »
+ * serait sinon donné à quiconque clique.
+ */
+function findRoleByName(guild: Guild, name: string) {
+  return guild.roles.cache.find((role) => role.name === name && !role.managed && role.permissions.bitfield === 0n) ?? null;
+}
+
+/** Ce que le modèle proposerait sur ce serveur, sans rien y créer. */
+export function previewReactionRolePreset(guild: Guild, key: ReactionRolePresetKey, locale: BotLocale) {
   const preset = presetDefinition(key, locale);
-  const options: ReactionRoleOption[] = [];
+  const options: ReactionRoleOptionInput[] = preset.roles.map((spec) => {
+    const existing = findRoleByName(guild, spec.name);
+    return existing
+      ? { label: spec.name, roleId: existing.id }
+      : { label: spec.name, roleId: '', newRole: { name: spec.name, color: spec.color } };
+  });
+  return { title: preset.title, buttonMode: preset.buttonMode, options };
+}
+
+/**
+ * Crée, au moment de publier, les rôles proposés qui manquent encore, sans
+ * permission : un rôle de couleur ou de notification n'ouvre aucun droit. Un
+ * rôle choisi à la main l'emporte sur la proposition, et un rôle du même nom
+ * apparu entre-temps, sans permission, est repris plutôt que doublé.
+ */
+export async function materializeNewRoles(guild: Guild, options: ReactionRoleOptionInput[]) {
+  const resolved: ReactionRoleOption[] = [];
   let createdRoles = 0;
 
   // Une création après l'autre : Discord limite le débit des créations de rôles.
-  for (const spec of preset.roles) {
-    const existing = guild.roles.cache.find((role) => role.name === spec.name && !role.managed);
+  for (const { newRole: raw, ...option } of options) {
+    const newRole = option.roleId ? null : parseNewRole(raw);
+    if (!newRole) {
+      resolved.push(option);
+      continue;
+    }
+    const existing = findRoleByName(guild, newRole.name);
     const role = existing ?? await guild.roles.create({
-      name: spec.name,
-      color: spec.color,
+      name: newRole.name,
+      color: newRole.color,
       permissions: [],
       reason: 'Rôles à boutons : menu tout prêt',
     });
     if (!existing) createdRoles++;
-    options.push({ label: spec.name, roleId: role.id });
+    resolved.push({ ...option, roleId: role.id });
   }
 
-  return { title: preset.title, buttonMode: preset.buttonMode, options, createdRoles };
+  return { options: resolved, createdRoles };
+}
+
+/** Le menu demande-t-il de créer des rôles avant d'être publié ? */
+export function hasNewRoles(options: ReactionRoleOptionInput[]): boolean {
+  return options.some((option) => !option.roleId && !!parseNewRole(option.newRole));
 }
