@@ -50,6 +50,9 @@
   let formChannelId = $state('');
   let formButtonMode = $state<ReactionRoleMenuMode>('toggle');
   let applyingPreset = $state<ReactionRolePresetKey | null>(null);
+  /** Couleur et mode bouton par bouton : rarement utiles, repliés par défaut. */
+  let showAdvanced = $state(false);
+  let showPreview = $state(false);
   // `mode: ''` = le bouton suit le mode du panneau.
   type NewRole = { name: string; color?: number };
   // `newRole` : rôle proposé par un modèle, créé seulement à la publication.
@@ -80,6 +83,14 @@
       default: return m.reaction_roles_mode_toggle_label();
     }
   }
+
+  /** Mode propre à un bouton, nommé par ce qu'il fait au second clic. */
+  function buttonModeLabel(mode: string | null | undefined) {
+    return mode === 'add_only' ? m.reaction_roles_button_mode_add_only() : m.reaction_roles_button_mode_toggle();
+  }
+
+  /** Les trois réponses à « Combien de rôles un membre peut prendre ? ». */
+  const MODE_CHOICES: ReactionRoleMenuMode[] = ['toggle', 'exclusive', 'add_only'];
 
   const MODE_ICONS: Record<ReactionRoleMenuMode, string> = {
     toggle: 'Settings',
@@ -163,12 +174,19 @@
     }
   });
 
-  function openCreateModal() {
-    editingMenuId = null;
+  /** Formulaire vierge ; le salon choisi est gardé quand on repart de zéro. */
+  function resetForm() {
     formTitle = '';
-    formChannelId = '';
     formButtonMode = 'toggle';
     formOptions = [{ emoji: '', label: '', roleId: '', mode: '', style: 'secondary' }];
+  }
+
+  function openCreateModal() {
+    editingMenuId = null;
+    formChannelId = '';
+    resetForm();
+    showAdvanced = false;
+    showPreview = false;
     actionState.clearFeedback();
     showModal = true;
   }
@@ -192,6 +210,9 @@
       formOptions = [{ emoji: '', label: '', roleId: '', mode: '', style: 'secondary' }];
     }
 
+    // Un menu déjà réglé bouton par bouton montre ces réglages d'emblée.
+    showAdvanced = formOptions.some(opt => opt.mode !== '' || opt.style !== 'secondary');
+    showPreview = false;
     actionState.clearFeedback();
     showModal = true;
   }
@@ -255,6 +276,14 @@
       showModal = false;
       return true;
     }, { successMessage: m.reaction_roles_deploy_success() });
+  }
+
+  /** L'étape « modèle » n'existe qu'à la création, pour qui peut configurer. */
+  const showPresetStep = $derived(!editingMenuId && canManageSettings);
+
+  /** Numéro d'une étape, décalé quand l'étape « modèle » est absente. */
+  function step(n: number): number {
+    return showPresetStep ? n : n - 1;
   }
 
   /** Rôles proposés par un modèle et pas encore remplacés : créés à la publication. */
@@ -413,7 +442,7 @@
                       {/if}
                       {#if opt.mode && opt.mode !== menu.buttonMode && normalizeMenuMode(menu.buttonMode) !== 'exclusive'}
                         <span class="text-2xs bg-secondary/10 text-secondary border border-secondary/20 px-1.5 py-0.5 rounded font-semibold">
-                          {modeLabel(opt.mode)}
+                          {buttonModeLabel(opt.mode)}
                         </span>
                       {/if}
                       {#if opt.style && opt.style !== 'secondary'}
@@ -477,15 +506,22 @@
         </div>
       </div>
 
-      <form onsubmit={(e) => { e.preventDefault(); handleSubmit(); }} class="space-y-6 pt-2">
+      {#snippet stepTitle(n: number, title: string, hint: string)}
+        <p class="flex items-center gap-2.5 text-sm font-semibold text-on-surface">
+          <span class="w-6 h-6 rounded-full bg-primary/15 text-primary text-xs flex items-center justify-center shrink-0">{n}</span>
+          {title}
+          {#if hint}<span class="text-2xs font-normal text-on-surface-variant">{hint}</span>{/if}
+        </p>
+      {/snippet}
+
+      <form onsubmit={(e) => { e.preventDefault(); handleSubmit(); }} class="space-y-7 pt-2">
         <InlineFeedback state={actionState} />
 
-        {#if !editingMenuId && canManageSettings}
-          <div class="p-4 rounded-lg bg-surface-container-high/40 border border-outline-variant/10 space-y-3">
-            <div>
-              <p class="text-sm font-medium text-on-surface">{m.reaction_roles_presets_title()}</p>
-              <p class="text-2xs text-on-surface-variant mt-0.5">{m.reaction_roles_presets_desc()}</p>
-            </div>
+        <!-- Étape 1 : modèle (création seulement) -->
+        {#if showPresetStep}
+          <section class="space-y-3">
+            {@render stepTitle(1, m.reaction_roles_presets_title(), m.reaction_roles_step_optional())}
+            <p class="text-2xs text-on-surface-variant">{m.reaction_roles_presets_desc()}</p>
             <div class="flex flex-wrap gap-2">
               {#each REACTION_ROLE_PRESET_KEYS as key (key)}
                 <button
@@ -499,182 +535,80 @@
                   {PRESET_LABELS[key]()}
                 </button>
               {/each}
+              <button
+                type="button"
+                onclick={resetForm}
+                disabled={applyingPreset !== null}
+                class="min-h-11 px-4 rounded-lg border border-dashed border-outline-variant/30 text-xs font-semibold text-on-surface-variant hover:text-on-surface transition-colors cursor-pointer disabled:opacity-50"
+              >
+                {m.reaction_roles_preset_blank()}
+              </button>
             </div>
-          </div>
+          </section>
         {/if}
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div class="space-y-1.5">
-            <label for="modal-title" class="text-xs font-semibold text-on-surface-variant ml-2">{m.reaction_roles_field_title()}</label>
-            <input
-              id="modal-title"
-              type="text"
-              bind:value={formTitle}
-              placeholder={m.reaction_roles_field_title_ph()}
-              class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
-              required
-              disabled={!canManageSettings}
-            />
+        <!-- Étape 2 : combien de rôles -->
+        <section class="space-y-3">
+          {@render stepTitle(step(2), m.reaction_roles_step_mode(), '')}
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-2" role="radiogroup" aria-label={m.reaction_roles_step_mode()}>
+            {#each MODE_CHOICES as choice (choice)}
+              <button
+                type="button"
+                role="radio"
+                aria-checked={formButtonMode === choice}
+                onclick={() => { formButtonMode = choice; }}
+                disabled={!canManageSettings}
+                class="text-left p-3 rounded-lg border transition-colors cursor-pointer disabled:cursor-not-allowed {formButtonMode === choice ? 'border-primary bg-primary/10 ring-1 ring-primary' : 'border-outline-variant/20 bg-surface-container hover:border-primary/40'}"
+              >
+                <span class="flex items-center gap-1.5 text-sm font-semibold text-on-surface">
+                  <Papicon icon={MODE_ICONS[choice]} size={14} />{modeLabel(choice)}
+                </span>
+                <span class="block mt-1 text-2xs text-on-surface-variant leading-relaxed">{modeDescription(choice)}</span>
+              </button>
+            {/each}
+          </div>
+        </section>
+
+        <!-- Étape 3 : les boutons -->
+        <section class="space-y-3">
+          {@render stepTitle(step(3), m.reaction_roles_step_buttons(), '')}
+
+          <div class="hidden md:grid grid-cols-[8rem_minmax(0,1fr)_minmax(0,1fr)_2.5rem] gap-2 px-1 text-2xs font-semibold text-on-surface-variant">
+            <span>{m.reaction_roles_field_emoji()}</span>
+            <span>{m.reaction_roles_field_label()}</span>
+            <span>{m.reaction_roles_field_role()}</span>
+            <span></span>
           </div>
 
-          <div class="space-y-1.5">
-            <label for="modal-channel" class="text-xs font-semibold text-on-surface-variant ml-2">{m.reaction_roles_field_channel()}</label>
-            <SearchableSelect
-              id="modal-channel"
-              bind:value={formChannelId}
-              options={availableChannels.map(c => ({ id: c.id, name: channelDisplayName(c) }))}
-              placeholder={m.announcements_select_channel_placeholder()}
-              className="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all"
-              disabled={!canManageSettings}
-            />
-          </div>
-        </div>
-
-        {#if editedMenu && formChannelId && formChannelId !== editedMenu.channelId}
-          <p class="flex items-center gap-2 text-2xs text-on-surface-variant/80 bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2">
-            <Papicon icon="Info" size={14} />
-            {m.reaction_roles_moved_channel_notice()}
-          </p>
-        {/if}
-
-        <div class="space-y-1.5">
-          <label for="modal-mode" class="text-xs font-semibold text-on-surface-variant ml-2">{m.reaction_roles_field_mode()}</label>
-          <FormSelect
-            id="modal-mode"
-            bind:value={formButtonMode}
-            disabled={!canManageSettings}
-            className="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
-          >
-            <option value="toggle">{m.reaction_roles_mode_toggle_label()}</option>
-            <option value="add_only">{m.reaction_roles_mode_add_only_label()}</option>
-            <option value="exclusive">{m.reaction_roles_mode_exclusive_label()}</option>
-          </FormSelect>
-          <p class="text-2xs text-on-surface-variant ml-2">
-            {modeDescription(formButtonMode)}
-          </p>
-        </div>
-
-        <!-- Live Discord Message Preview -->
-        <div class="p-5 rounded-xl bg-[#36393f] border border-[#202225] text-[#dcddde] font-sans space-y-3 shadow-inner">
-          <div class="flex items-center gap-1.5 text-xs font-semibold text-[#8e9297] select-none">
-            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> {m.reaction_roles_live_preview()}
-          </div>
-
-          <div class="flex items-start gap-4">
-            <!-- Bot Avatar Mock -->
-            <div class="w-10 h-10 rounded-full bg-[#5865f2] flex items-center justify-center text-white font-bold shrink-0 shadow-md">
-              K
-            </div>
-
-            <!-- Message content -->
-            <div class="space-y-3 flex-1 min-w-0">
-              <div class="flex items-center gap-2 select-none">
-                <span class="font-bold text-white text-sm hover:underline cursor-pointer">Kotbo</span>
-                <span class="bg-[#5865f2] text-white text-2xs font-bold px-1.5 py-0.5 rounded uppercase">Bot</span>
-                <span class="text-xs text-[#72767d]">{m.announcements_today_at({ time: '12:00' })}</span>
-              </div>
-
-              <!-- Message Embed / Text -->
-              <div class="bg-[#2f3136] border-l-4 border-[#5865f2] rounded-r p-3 max-w-[520px] space-y-1 shadow-sm">
-                <div class="text-sm font-bold text-white wrap-break-word">
-                  {@html parseDiscordEmojisAndMarkdown(formTitle || m.reaction_roles_field_title_ph())}
-                </div>
-                <div class="text-xs text-[#b9bbbe]">
-                  {previewSubtitle}
-                </div>
-              </div>
-
-              <!-- Buttons Row -->
-              <div class="flex flex-wrap gap-2 pt-1">
-                {#each formOptions as opt}
-                  {#if opt.label || opt.emoji}
-                    <button
-                      type="button"
-                      class="flex items-center gap-1.5 px-3 py-1.5 text-white text-xs font-semibold rounded transition-colors {PREVIEW_STYLE_CLASSES[resolveStyle(opt.style)]}"
-                    >
-                      {#if opt.emoji}<span>{@html parseDiscordEmojisAndMarkdown(opt.emoji)}</span>{/if}
-                      <span>{opt.label || m.reaction_roles_preview_button_default()}</span>
-                    </button>
-                  {/if}
-                {/each}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Options / Boutons -->
-        <div class="space-y-3 pt-2">
-          <div class="flex items-center justify-between">
-            <span class="text-xs font-semibold text-on-surface-variant ml-2">
-              {m.reaction_roles_buttons_config({ n: formOptions.length })}
-              {#if formButtonMode === 'exclusive'}
-                <span class="block font-normal text-2xs">{m.reaction_roles_exclusive_buttons_note()}</span>
-              {/if}
-            </span>
-            <button
-              type="button"
-              onclick={addOption}
-              disabled={formOptions.length >= 20}
-              use:explainDisabled={(!canManageSettings) ? m.common_reason_no_permission() : ''}
-              class="text-xs font-bold text-primary hover:text-primary/80 transition-colors flex items-center gap-1 disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
-            >
-              <Papicon icon="Plus" size={14} /> {m.reaction_roles_add_button()}
-            </button>
-          </div>
-
-          <div class="space-y-4">
+          <div class="space-y-2">
             {#each formOptions as opt, idx}
-              <div class="p-4 rounded-lg bg-surface-container-high/20 border border-outline-variant/5 space-y-3">
-                <div class="flex items-center justify-between">
-                  <p class="text-sm font-bold flex items-center gap-1.5">
-                    <Papicon icon="MousePointer" size={16} />
-                    {m.reaction_roles_button_num({ n: idx + 1 })}
-                  </p>
-                  {#if formOptions.length > 1 && canManageSettings}
-                    <button
-                      type="button"
-                      onclick={() => removeOption(idx)}
-                      class="p-2 text-error hover:bg-error/10 rounded-lg transition-all cursor-pointer"
-                      title={m.reaction_roles_remove_button_title()}
-                    >
-                      <Papicon icon="Minus" size={16} />
-                    </button>
-                  {/if}
-                </div>
-
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div class="space-y-1">
-                    <label for={`modal-emoji-${idx}`} class="text-2xs font-semibold text-on-surface-variant uppercase">{m.reaction_roles_field_emoji()}</label>
-                    <div class="flex gap-2 items-center">
-                      <input
-                        id={`modal-emoji-${idx}`}
-                        type="text"
-                        bind:value={opt.emoji}
-                        placeholder="📢"
-                        class="flex-1 bg-surface-container rounded-lg px-3 py-2 text-xs text-on-surface border border-outline-variant/10 focus:ring-2 focus:ring-primary/30 focus:outline-none transition-all"
-                        disabled={!canManageSettings}
-                      />
-                      <EmojiPicker bind:value={opt.emoji} disabled={!canManageSettings} />
-                    </div>
-                  </div>
-
-                  <div class="space-y-1">
-                    <label for={`modal-label-${idx}`} class="text-2xs font-semibold text-on-surface-variant uppercase">{m.reaction_roles_field_label()}</label>
+              <div class="p-2 rounded-lg bg-surface-container-high/20 border border-outline-variant/10 space-y-2">
+                <div class="grid grid-cols-[minmax(0,1fr)_2.5rem] md:grid-cols-[8rem_minmax(0,1fr)_minmax(0,1fr)_2.5rem] gap-2 items-start">
+                  <div class="flex gap-1.5 items-center col-span-2 md:col-span-1">
                     <input
-                      id={`modal-label-${idx}`}
+                      id={`modal-emoji-${idx}`}
                       type="text"
-                      bind:value={opt.label}
-                      placeholder={m.reaction_roles_field_label_ph()}
-                      class="w-full bg-surface-container rounded-lg px-3 py-2 text-xs text-on-surface border border-outline-variant/10 focus:ring-2 focus:ring-primary/30 focus:outline-none transition-all"
-                      required
+                      bind:value={opt.emoji}
+                      placeholder="+"
+                      aria-label={m.reaction_roles_field_emoji()}
+                      class="w-full min-w-0 bg-surface-container rounded-lg px-3 py-2 text-xs text-on-surface border border-outline-variant/10 focus:ring-2 focus:ring-primary/30 focus:outline-none transition-all"
                       disabled={!canManageSettings}
                     />
+                    <EmojiPicker bind:value={opt.emoji} disabled={!canManageSettings} />
                   </div>
-                </div>
 
-                <div class="grid grid-cols-1 gap-3 {formButtonMode === 'exclusive' ? 'md:grid-cols-2' : 'md:grid-cols-3'}">
-                  <div class="space-y-1">
-                    <label for={`modal-role-${idx}`} class="text-2xs font-semibold text-on-surface-variant uppercase">{m.reaction_roles_field_role()}</label>
+                  <input
+                    id={`modal-label-${idx}`}
+                    type="text"
+                    bind:value={opt.label}
+                    placeholder={m.reaction_roles_field_label_ph()}
+                    aria-label={m.reaction_roles_field_label()}
+                    class="w-full bg-surface-container rounded-lg px-3 py-2 text-xs text-on-surface border border-outline-variant/10 focus:ring-2 focus:ring-primary/30 focus:outline-none transition-all"
+                    required
+                    disabled={!canManageSettings}
+                  />
+
+                  <div class="space-y-1 col-start-1 md:col-start-auto">
                     {#if !opt.roleId && opt.newRole}
                       <div class="rounded-lg bg-surface-container border border-dashed border-primary/40 px-3 py-2 space-y-1">
                         <p class="flex items-center gap-2 text-xs font-semibold text-on-surface">
@@ -698,82 +632,197 @@
                         {/if}
                       </div>
                     {:else}
-                    <SearchableSelect
-                      id={`modal-role-${idx}`}
-                      bind:value={opt.roleId}
-                      options={availableRoles.map(r => ({ id: r.id, name: `@${r.name}` }))}
-                      placeholder={m.reaction_roles_select_role_ph()}
-                      className="w-full rounded-lg bg-surface-container px-3 py-2 text-xs text-on-surface focus:ring-2 focus:ring-primary/30 transition-all"
-                      disabled={!canManageSettings}
-                    />
-                    {#if blockerOf(opt.roleId)}
-                      {@const blocker = blockerOf(opt.roleId)!}
-                      <p class="flex items-start gap-1 text-2xs text-error">
-                        <Papicon icon="AlertTriangle" size={12} class="mt-px shrink-0" />{BLOCKER_MESSAGES[blocker]()}
-                      </p>
-                    {/if}
+                      <SearchableSelect
+                        id={`modal-role-${idx}`}
+                        bind:value={opt.roleId}
+                        options={availableRoles.map(r => ({ id: r.id, name: `@${r.name}` }))}
+                        placeholder={m.reaction_roles_select_role_ph()}
+                        className="w-full rounded-lg bg-surface-container px-3 py-2 text-xs text-on-surface focus:ring-2 focus:ring-primary/30 transition-all"
+                        disabled={!canManageSettings}
+                      />
+                      {#if blockerOf(opt.roleId)}
+                        {@const blocker = blockerOf(opt.roleId)!}
+                        <p class="flex items-start gap-1 text-2xs text-error">
+                          <Papicon icon="AlertTriangle" size={12} class="mt-px shrink-0" />{BLOCKER_MESSAGES[blocker]()}
+                        </p>
+                      {/if}
                     {/if}
                   </div>
 
-                  {#if formButtonMode !== 'exclusive'}
-                  <div class="space-y-1">
-                    <label for={`modal-mode-${idx}`} class="text-2xs font-semibold text-on-surface-variant uppercase">{m.reaction_roles_button_mode()}</label>
-                    <FormSelect
-                      id={`modal-mode-${idx}`}
-                      bind:value={opt.mode}
-                      disabled={!canManageSettings}
-                      className="w-full rounded-lg bg-surface-container px-3 py-2 text-xs text-on-surface border border-outline-variant/10 focus:ring-2 focus:ring-primary/30 focus:outline-none transition-all"
-                    >
-                      <option value="">{m.reaction_roles_mode_inherit()} ({modeLabel(formButtonMode)})</option>
-                      <option value="toggle">{m.reaction_roles_mode_toggle_label()}</option>
-                      <option value="add_only">{m.reaction_roles_mode_add_only_label()}</option>
-                    </FormSelect>
-                  </div>
-                  {/if}
-
-                  <div class="space-y-1">
-                    <label for={`modal-style-${idx}`} class="text-2xs font-semibold text-on-surface-variant uppercase">{m.reaction_roles_button_style()}</label>
-                    <FormSelect
-                      id={`modal-style-${idx}`}
-                      bind:value={opt.style}
-                      disabled={!canManageSettings}
-                      className="w-full rounded-lg bg-surface-container px-3 py-2 text-xs text-on-surface border border-outline-variant/10 focus:ring-2 focus:ring-primary/30 focus:outline-none transition-all"
-                    >
-                      <option value="secondary">{m.reaction_roles_style_secondary_label()}</option>
-                      <option value="primary">{m.reaction_roles_style_primary_label()}</option>
-                      <option value="success">{m.reaction_roles_style_success_label()}</option>
-                      <option value="danger">{m.reaction_roles_style_danger_label()}</option>
-                    </FormSelect>
+                  <div class="row-start-2 col-start-2 md:row-start-auto md:col-start-auto flex justify-center">
+                    {#if formOptions.length > 1 && canManageSettings}
+                      <button
+                        type="button"
+                        onclick={() => removeOption(idx)}
+                        class="p-2 text-on-surface-variant hover:text-error hover:bg-error/10 rounded-lg transition-all cursor-pointer"
+                        title={m.reaction_roles_remove_button_title()}
+                        aria-label={m.reaction_roles_remove_button_title()}
+                      >
+                        <Papicon icon="Cross" size={14} />
+                      </button>
+                    {/if}
                   </div>
                 </div>
+
+                {#if showAdvanced}
+                  <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 md:pl-[8.5rem] md:pr-[3rem]">
+                    <label class="space-y-1 text-2xs font-semibold text-on-surface-variant">
+                      <span>{m.reaction_roles_button_style()}</span>
+                      <FormSelect
+                        id={`modal-style-${idx}`}
+                        bind:value={opt.style}
+                        disabled={!canManageSettings}
+                        className="w-full rounded-lg bg-surface-container px-3 py-2 text-xs text-on-surface border border-outline-variant/10 focus:ring-2 focus:ring-primary/30 focus:outline-none transition-all"
+                      >
+                        <option value="secondary">{m.reaction_roles_style_secondary_label()}</option>
+                        <option value="primary">{m.reaction_roles_style_primary_label()}</option>
+                        <option value="success">{m.reaction_roles_style_success_label()}</option>
+                        <option value="danger">{m.reaction_roles_style_danger_label()}</option>
+                      </FormSelect>
+                    </label>
+                    <!-- Un menu « un seul rôle » n'a pas de mode par bouton. -->
+                    {#if formButtonMode !== 'exclusive'}
+                      <label class="space-y-1 text-2xs font-semibold text-on-surface-variant">
+                        <span>{m.reaction_roles_button_mode()}</span>
+                        <FormSelect
+                          id={`modal-mode-${idx}`}
+                          bind:value={opt.mode}
+                          disabled={!canManageSettings}
+                          className="w-full rounded-lg bg-surface-container px-3 py-2 text-xs text-on-surface border border-outline-variant/10 focus:ring-2 focus:ring-primary/30 focus:outline-none transition-all"
+                        >
+                          <option value="">{m.reaction_roles_mode_inherit()} ({buttonModeLabel(formButtonMode)})</option>
+                          <option value="toggle">{m.reaction_roles_button_mode_toggle()}</option>
+                          <option value="add_only">{m.reaction_roles_button_mode_add_only()}</option>
+                        </FormSelect>
+                      </label>
+                    {/if}
+                  </div>
+                {/if}
               </div>
             {/each}
           </div>
-        </div>
 
-        {#if pendingNewRoles > 0}
-          <p class="flex items-center gap-2 text-2xs text-on-surface-variant bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2">
-            <Papicon icon="Info" size={14} />
-            {m.reaction_roles_new_roles_on_publish({ n: pendingNewRoles })}
-          </p>
+          <div class="flex items-center justify-between gap-3 flex-wrap">
+            <button
+              type="button"
+              onclick={addOption}
+              disabled={formOptions.length >= 20}
+              use:explainDisabled={(!canManageSettings) ? m.common_reason_no_permission() : ''}
+              class="text-xs font-semibold text-primary hover:text-primary/80 transition-colors flex items-center gap-1 disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
+            >
+              <Papicon icon="Plus" size={14} /> {m.reaction_roles_add_button()}
+            </button>
+            <button
+              type="button"
+              onclick={() => { showAdvanced = !showAdvanced; }}
+              aria-expanded={showAdvanced}
+              class="text-xs font-medium text-on-surface-variant hover:text-on-surface transition-colors flex items-center gap-1 cursor-pointer"
+            >
+              <Papicon icon={showAdvanced ? 'ChevronUp' : 'ChevronDown'} size={14} /> {m.reaction_roles_advanced_toggle()}
+            </button>
+          </div>
+        </section>
+
+        <!-- Étape 4 : où publier -->
+        <section class="space-y-3">
+          {@render stepTitle(step(4), m.reaction_roles_step_publish(), '')}
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div class="space-y-1">
+              <label for="modal-title" class="text-2xs font-semibold text-on-surface-variant">{m.reaction_roles_field_title()}</label>
+              <input
+                id="modal-title"
+                type="text"
+                bind:value={formTitle}
+                placeholder={m.reaction_roles_field_title_ph()}
+                class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
+                required
+                disabled={!canManageSettings}
+              />
+            </div>
+            <div class="space-y-1">
+              <label for="modal-channel" class="text-2xs font-semibold text-on-surface-variant">{m.reaction_roles_field_channel()}</label>
+              <SearchableSelect
+                id="modal-channel"
+                bind:value={formChannelId}
+                options={availableChannels.map(c => ({ id: c.id, name: channelDisplayName(c) }))}
+                placeholder={m.announcements_select_channel_placeholder()}
+                className="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all"
+                disabled={!canManageSettings}
+              />
+            </div>
+          </div>
+
+          {#if editedMenu && formChannelId && formChannelId !== editedMenu.channelId}
+            <p class="flex items-center gap-2 text-2xs text-on-surface-variant/80 bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2">
+              <Papicon icon="Info" size={14} />
+              {m.reaction_roles_moved_channel_notice()}
+            </p>
+          {/if}
+        </section>
+
+        {#if showPreview}
+          <div class="p-5 rounded-xl bg-[#36393f] border border-[#202225] text-[#dcddde] font-sans space-y-3" transition:fade={{ duration: 120 }}>
+            <div class="flex items-start gap-4">
+              <div class="w-10 h-10 rounded-full bg-[#5865f2] flex items-center justify-center text-white font-bold shrink-0">K</div>
+              <div class="space-y-3 flex-1 min-w-0">
+                <div class="flex items-center gap-2 select-none">
+                  <span class="font-bold text-white text-sm">Kotbo</span>
+                  <span class="bg-[#5865f2] text-white text-2xs font-bold px-1.5 py-0.5 rounded uppercase">Bot</span>
+                  <span class="text-xs text-[#72767d]">{m.announcements_today_at({ time: '12:00' })}</span>
+                </div>
+                <div class="bg-[#2f3136] border-l-4 border-[#5865f2] rounded-r p-3 max-w-[520px] space-y-1">
+                  <div class="text-sm font-bold text-white wrap-break-word">
+                    {@html parseDiscordEmojisAndMarkdown(formTitle || m.reaction_roles_field_title_ph())}
+                  </div>
+                  <div class="text-xs text-[#b9bbbe]">{previewSubtitle}</div>
+                </div>
+                <div class="flex flex-wrap gap-2 pt-1">
+                  {#each formOptions as opt}
+                    {#if opt.label || opt.emoji}
+                      <span class="flex items-center gap-1.5 px-3 py-1.5 text-white text-xs font-semibold rounded {PREVIEW_STYLE_CLASSES[resolveStyle(opt.style)]}">
+                        {#if opt.emoji}<span>{@html parseDiscordEmojisAndMarkdown(opt.emoji)}</span>{/if}
+                        <span>{opt.label || m.reaction_roles_preview_button_default()}</span>
+                      </span>
+                    {/if}
+                  {/each}
+                </div>
+              </div>
+            </div>
+          </div>
         {/if}
 
-        <div class="flex justify-end gap-3 pt-4 border-t border-outline-variant/10">
-          <button
-            type="button"
-            onclick={() => showModal = false}
-            class="px-6 py-3 bg-outline-variant/20 hover:bg-outline-variant/30 text-on-surface text-body-sm font-medium rounded-lg transition-all cursor-pointer"
-          >
-            {m.reaction_roles_cancel()}
-          </button>
-          {#if canManageSettings}
+        <div class="flex items-center justify-between gap-3 flex-wrap pt-4 border-t border-outline-variant/10">
+          <p class="flex items-center gap-1.5 text-2xs text-on-surface-variant min-h-5">
+            {#if pendingNewRoles > 0}
+              <Papicon icon="Info" size={14} />
+              {m.reaction_roles_new_roles_on_publish({ n: pendingNewRoles })}
+            {/if}
+          </p>
+          <div class="flex gap-2 ml-auto">
             <button
-              type="submit"
-              class="px-8 py-3 bg-primary text-on-primary font-medium text-body-sm rounded-lg transition-all cursor-pointer"
+              type="button"
+              onclick={() => { showPreview = !showPreview; }}
+              aria-pressed={showPreview}
+              class="px-4 py-3 rounded-lg border border-outline-variant/20 text-on-surface text-body-sm font-medium hover:bg-surface-container-high/40 transition-all cursor-pointer"
             >
-              {editingMenuId ? m.reaction_roles_save_confirm() : m.reaction_roles_deploy_confirm()}
+              {showPreview ? m.reaction_roles_preview_hide() : m.reaction_roles_preview_show()}
             </button>
-          {/if}
+            <button
+              type="button"
+              onclick={() => showModal = false}
+              class="px-4 py-3 rounded-lg text-on-surface-variant text-body-sm font-medium hover:bg-surface-container-high/40 transition-all cursor-pointer"
+            >
+              {m.reaction_roles_cancel()}
+            </button>
+            {#if canManageSettings}
+              <button
+                type="submit"
+                class="px-6 py-3 bg-primary text-on-primary font-medium text-body-sm rounded-lg transition-all cursor-pointer"
+              >
+                {editingMenuId ? m.reaction_roles_save_confirm() : m.reaction_roles_deploy_confirm()}
+              </button>
+            {/if}
+          </div>
         </div>
       </form>
     </div>
