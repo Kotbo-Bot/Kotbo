@@ -43,7 +43,7 @@ const PRESETS: Record<ReactionRolePresetKey, PresetSpec> = {
       { name: m.rr_preset_pronoun_he },
       { name: m.rr_preset_pronoun_she },
       { name: m.rr_preset_pronoun_they },
-      { name: m.rr_preset_pronoun_ask },
+      { name: m.rr_preset_pronoun_other },
     ],
   },
   notifications: {
