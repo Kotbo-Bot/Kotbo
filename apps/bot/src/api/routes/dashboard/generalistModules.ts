@@ -1869,6 +1869,7 @@ export async function handleGeneralistModulesRoutes(
           channelId: string;
           buttonMode?: string;
           description?: string | null;
+          showCounts?: boolean;
           options: ReactionRoleOptionInput[];
         }>(req);
 
@@ -1893,6 +1894,7 @@ export async function handleGeneralistModulesRoutes(
           options,
           normalizeMenuMode(body.buttonMode),
           normalizeMenuDescription(body.description),
+          body.showCounts === true,
         );
 
         json(res, 200, { menu });
@@ -1955,6 +1957,7 @@ export async function handleGeneralistModulesRoutes(
           channelId?: string;
           buttonMode?: string;
           description?: string | null;
+          showCounts?: boolean;
           options?: ReactionRoleOptionInput[];
         }>(req);
 
@@ -1986,6 +1989,7 @@ export async function handleGeneralistModulesRoutes(
           ...(options !== undefined ? { options } : {}),
           ...(body.buttonMode !== undefined ? { buttonMode: normalizeMenuMode(body.buttonMode) } : {}),
           ...(body.description !== undefined ? { description: normalizeMenuDescription(body.description) } : {}),
+          ...(typeof body.showCounts === 'boolean' ? { showCounts: body.showCounts } : {}),
         });
 
         if (!menu) {

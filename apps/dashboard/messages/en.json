@@ -7326,6 +7326,8 @@
   "reaction_roles_preset_pronouns": "Pronouns",
   "reaction_roles_preset_notifications": "Notifications",
   "reaction_roles_preset_error": "Could not apply the template. Try again.",
+  "reaction_roles_show_counts_title": "Member count on buttons",
+  "reaction_roles_show_counts_desc": "Shows \"Red · 12\": the number of members who have the role, not clicks, so toggling repeatedly doesn't inflate it. Updated a few seconds after a click.",
   "reaction_roles_field_description": "Message text",
   "reaction_roles_field_description_hint": "Leave empty to keep the text explaining how to take the roles.",
   "reaction_roles_options_title": "More options",

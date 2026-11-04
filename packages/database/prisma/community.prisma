@@ -326,6 +326,8 @@ model ReactionRoleMenu {
   buttonMode String  @default("toggle")
   /// Texte du message sous le titre ; vide, le bot explique ce que font les boutons.
   description String?
+  /// Nombre de membres qui ont le rôle, affiché sur chaque bouton.
+  showCounts Boolean @default(false)
 
   guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
 

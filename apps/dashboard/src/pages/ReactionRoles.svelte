@@ -13,9 +13,10 @@
   import SearchableSelect from '../lib/components/SearchableSelect.svelte';
   import Skeleton from '../lib/components/Skeleton.svelte';
   import { fetchReactionRoleMenus, createReactionRoleMenu, updateReactionRoleMenu, deleteReactionRoleMenu, fetchReactionRolePreset, republishReactionRoleMenu, type ReactionRoleButtonMode, type ReactionRoleButtonStyle, type ReactionRoleMenuMode, type ReactionRolePresetKey } from '../lib/api';
-  import { normalizeMenuMode, resolveButtonMode, REACTION_ROLE_PRESET_KEYS, type BotRoleAccess, type RoleBlocker } from '@kotbo/contracts';
+  import { BUTTON_LABEL_MAX_LENGTH, buttonLabelWithCount, normalizeMenuMode, resolveButtonMode, REACTION_ROLE_PRESET_KEYS, type BotRoleAccess, type RoleBlocker } from '@kotbo/contracts';
   import { dashboardRoleBlocker } from '../lib/reactionRoleBlockers';
   import EmojiPicker from '../lib/components/EmojiPicker.svelte';
+  import ToggleSwitch from '../lib/components/ToggleSwitch.svelte';
   import { parseDiscordEmojisAndMarkdown } from '../lib/emojiParser';
 
   const actionState = createAsyncActionState();
@@ -37,6 +38,7 @@
     title: string;
     buttonMode?: string;
     description?: string | null;
+    showCounts?: boolean;
     options: any; // Array of { emoji?: string; label: string; roleId: string; mode?: 'toggle' | 'add_only' }
     createdAt: string;
   }>>([]);
@@ -55,6 +57,8 @@
   let formTitle = $state('');
   /** Texte sous le titre ; vide, le bot affiche celui qui explique le mode. */
   let formDescription = $state('');
+  /** Nombre de membres de chaque rôle affiché sur son bouton. */
+  let formShowCounts = $state(false);
   let formChannelId = $state('');
   let formButtonMode = $state<ReactionRoleMenuMode>('toggle');
   let applyingPreset = $state<ReactionRolePresetKey | null>(null);
@@ -102,10 +106,11 @@
   }
 
   /**
-   * Un bouton a-t-il une couleur ou un second clic à lui ? L'onglet le signale.
+   * Le menu affiche-t-il les nombres, ou un bouton a-t-il une couleur ou un
+   * second clic à lui ? L'onglet le signale.
    * En mode « Un seul », le second clic d'un bouton ne compte pas : il est ignoré.
    */
-  const hasCustomOptions = $derived(formOptions.some(opt =>
+  const hasCustomOptions = $derived(formShowCounts || formOptions.some(opt =>
     opt.style !== 'secondary' || (opt.mode !== '' && formButtonMode !== 'exclusive')));
 
   const BUTTON_STYLES: ReactionRoleButtonStyle[] = ['secondary', 'primary', 'success', 'danger'];
@@ -207,6 +212,7 @@
   function resetForm() {
     formTitle = '';
     formDescription = '';
+    formShowCounts = false;
     formButtonMode = 'toggle';
     formOptions = [{ emoji: '', label: '', roleId: '', mode: '', style: 'secondary' }];
   }
@@ -225,6 +231,7 @@
     editingMenuId = menu.id;
     formTitle = menu.title;
     formDescription = menu.description ?? '';
+    formShowCounts = menu.showCounts === true;
     formChannelId = menu.channelId;
     formButtonMode = normalizeMenuMode(menu.buttonMode);
 
@@ -269,6 +276,7 @@
     const payload = {
       title: formTitle,
       description: formDescription.trim() || null,
+      showCounts: formShowCounts,
       channelId: formChannelId,
       buttonMode: formButtonMode,
       options: formOptions.map(opt => ({
@@ -319,8 +327,6 @@
   /** Même limite que le bot pour le texte du message. */
   const MENU_DESCRIPTION_MAX = 1000;
 
-  /** Limite Discord du texte d'un bouton. */
-  const BUTTON_LABEL_MAX = 80;
 
   /** Nom du rôle d'un bouton : choisi dans la liste, ou proposé par un modèle. */
   function roleNameOf(opt: FormOption): string {
@@ -330,7 +336,13 @@
 
   /** Texte publié sur le bouton : celui saisi, sinon le nom de son rôle. */
   function buttonLabel(opt: FormOption): string {
-    return (opt.label.trim() || roleNameOf(opt)).slice(0, BUTTON_LABEL_MAX);
+    return (opt.label.trim() || roleNameOf(opt)).slice(0, BUTTON_LABEL_MAX_LENGTH);
+  }
+
+  /** Texte du bouton tel que le bot le publiera, nombre de membres compris. */
+  function previewLabel(opt: FormOption): string {
+    const label = buttonLabel(opt);
+    return formShowCounts && label ? buttonLabelWithCount(label, memberCounts[opt.roleId] ?? 0) : label;
   }
 
   /**
@@ -712,7 +724,7 @@
                     type="text"
                     bind:value={opt.label}
                     placeholder={roleNameOf(opt) || m.reaction_roles_field_label_ph()}
-                    maxlength={BUTTON_LABEL_MAX}
+                    maxlength={BUTTON_LABEL_MAX_LENGTH}
                     aria-label={m.reaction_roles_field_label()}
                     class="w-full bg-surface-container rounded-lg px-3 py-2 text-xs text-on-surface border border-outline-variant/10 focus:ring-2 focus:ring-primary/30 focus:outline-none transition-all"
                     disabled={!canManageSettings}
@@ -887,7 +899,7 @@
                     {#each previewRows as row}
                       <div class="flex flex-wrap gap-2">
                         {#each row as opt}
-                          {@const text = buttonLabel(opt)}
+                          {@const text = previewLabel(opt)}
                           <!-- Pointillés : bouton sans texte ni rôle, il reste à compléter. -->
                           <span class="flex items-center gap-1.5 h-8 px-4 text-sm font-medium rounded-[3px] transition-colors {text ? `text-white ${PREVIEW_STYLE_CLASSES[resolveStyle(opt.style)]}` : 'border border-dashed border-[#949ba4] text-[#949ba4] italic'}">
                             {#if opt.emoji}<span>{@html parseDiscordEmojisAndMarkdown(opt.emoji)}</span>{/if}
@@ -968,6 +980,20 @@
           >
             <Papicon icon="Cross" size={14} />
           </button>
+        </div>
+
+        <div class="rounded-lg border border-outline-variant/15 bg-surface-container/60 p-3 space-y-1.5">
+          <div class="flex items-center justify-between gap-3">
+            <p class="text-xs font-semibold text-on-surface">{m.reaction_roles_show_counts_title()}</p>
+            <ToggleSwitch
+              size="sm"
+              ariaLabel={m.reaction_roles_show_counts_title()}
+              checked={formShowCounts}
+              onToggle={(value: boolean) => { formShowCounts = value; }}
+              disabled={!canManageSettings}
+            />
+          </div>
+          <p class="text-2xs text-on-surface-variant leading-relaxed">{m.reaction_roles_show_counts_desc()}</p>
         </div>
 
         {#if formButtonMode === 'exclusive'}

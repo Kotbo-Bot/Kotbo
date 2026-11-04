@@ -7326,6 +7326,8 @@
   "reaction_roles_preset_pronouns": "Pronoms",
   "reaction_roles_preset_notifications": "Notifications",
   "reaction_roles_preset_error": "Impossible d'appliquer le modèle. Réessaie.",
+  "reaction_roles_show_counts_title": "Nombre de membres sur les boutons",
+  "reaction_roles_show_counts_desc": "Affiche « Rouge · 12 » : le nombre de membres qui ont le rôle, pas de clics, donc basculer plusieurs fois ne le gonfle pas. Mis à jour quelques secondes après un clic.",
   "reaction_roles_field_description": "Texte du message",
   "reaction_roles_field_description_hint": "Laisse vide pour garder le texte qui explique comment prendre les rôles.",
   "reaction_roles_options_title": "Options secondaires",

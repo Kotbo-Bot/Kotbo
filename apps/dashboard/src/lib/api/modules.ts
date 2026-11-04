@@ -400,11 +400,11 @@ export interface ReactionRoleOption {
   newRole?: { name: string; color?: number } | null;
 }
 
-export async function createReactionRoleMenu(payload: { title: string; channelId: string; buttonMode: ReactionRoleMenuMode; description: string | null; options: ReactionRoleOption[] }, guildId = authStore.selectedGuildId) {
+export async function createReactionRoleMenu(payload: { title: string; channelId: string; buttonMode: ReactionRoleMenuMode; description: string | null; showCounts: boolean; options: ReactionRoleOption[] }, guildId = authStore.selectedGuildId) {
   return dashboardRequest('/reaction-roles', { method: 'POST', successMessage: m.api_ok_create_reaction_role_menu(), payload, guildId, errorContext: 'API Error (Create Reaction Role Menu):' });
 }
 
-export async function updateReactionRoleMenu(menuId: string, payload: { title?: string; channelId?: string; buttonMode?: ReactionRoleMenuMode; description?: string | null; options?: ReactionRoleOption[] }, guildId = authStore.selectedGuildId) {
+export async function updateReactionRoleMenu(menuId: string, payload: { title?: string; channelId?: string; buttonMode?: ReactionRoleMenuMode; description?: string | null; showCounts?: boolean; options?: ReactionRoleOption[] }, guildId = authStore.selectedGuildId) {
   return dashboardRequest(`/reaction-roles/${menuId}`, { method: 'PATCH', successMessage: m.api_ok_update_reaction_role_menu(), payload, guildId, errorContext: 'API Error (Update Reaction Role Menu):' });
 }
 

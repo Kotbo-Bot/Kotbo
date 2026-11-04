@@ -38,6 +38,20 @@ export function resolveButtonMode(optionMode: unknown, menuMode: unknown): React
   return parseButtonMode(optionMode) ?? menu;
 }
 
+/** Limite Discord du texte d'un bouton. */
+export const BUTTON_LABEL_MAX_LENGTH = 80;
+
+/**
+ * Texte d'un bouton suivi du nombre de membres qui ont son rôle. Le texte est
+ * raccourci au besoin : Discord refuserait tout le message au-delà de 80
+ * caractères. Partagé pour que l'aperçu du dashboard montre le bouton publié.
+ */
+export function buttonLabelWithCount(label: string, count: number | undefined): string {
+  if (count === undefined) return label;
+  const suffix = ` · ${count}`;
+  return label.slice(0, BUTTON_LABEL_MAX_LENGTH - suffix.length) + suffix;
+}
+
 /** Préréglages proposés à la création d'un menu. */
 export const REACTION_ROLE_PRESET_KEYS = ['colors', 'pronouns', 'notifications'] as const;
 export type ReactionRolePresetKey = (typeof REACTION_ROLE_PRESET_KEYS)[number];

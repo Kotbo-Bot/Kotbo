@@ -340,6 +340,8 @@ export type {
 } from './types/dashboardTelemetry.js';
 
 export {
+  BUTTON_LABEL_MAX_LENGTH,
+  buttonLabelWithCount,
   REACTION_ROLE_BUTTON_MODES,
   REACTION_ROLE_MENU_MODES,
   REACTION_ROLE_PRESET_KEYS,
