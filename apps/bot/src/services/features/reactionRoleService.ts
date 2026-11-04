@@ -1,5 +1,5 @@
 import type { Prisma } from '@prisma/client';
-import { Client, EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder, MessageFlags, GuildMember, PermissionFlagsBits, type ButtonInteraction, type Guild, type Role } from 'discord.js';
+import { Client, EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder, MessageFlags, GuildMember, PermissionFlagsBits, RESTJSONErrorCodes, type ButtonInteraction, type Guild, type Role } from 'discord.js';
 import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
 import { resolveEmojiShortcodes } from '../../utils/emojis.js';
@@ -328,6 +328,38 @@ export async function sendOrUpdateMenuMessage(client: Client, menuId: string) {
   } catch (err) {
     logger.error('ReactionRoleService', `Erreur lors de l'envoi/mise à jour du menu ${menuId}:`, err);
   }
+}
+
+/**
+ * Le message d'un menu est-il toujours sur Discord ? `missing` quand il a été
+ * supprimé (lui ou son salon) ou jamais publié : les boutons n'existent plus
+ * pour les membres. `unknown` pour toute autre erreur (permission, panne) : on
+ * ne crie pas à la disparition sur une simple lecture refusée.
+ */
+export async function menuMessageStatus(
+  guild: Guild,
+  menu: { channelId: string; messageId: string | null },
+): Promise<'ok' | 'missing' | 'unknown'> {
+  if (!menu.messageId) return 'missing';
+  try {
+    const channel = await guild.channels.fetch(menu.channelId);
+    if (!channel?.isTextBased()) return 'missing';
+    await channel.messages.fetch(menu.messageId);
+    return 'ok';
+  } catch (err) {
+    const code = (err as { code?: number })?.code;
+    return code === RESTJSONErrorCodes.UnknownMessage || code === RESTJSONErrorCodes.UnknownChannel ? 'missing' : 'unknown';
+  }
+}
+
+/** Membres qui portent chaque rôle des menus, d'après le cache du serveur. */
+export function roleMemberCounts(guild: Guild, roleIds: string[]): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const roleId of new Set(roleIds)) {
+    const role = guild.roles.cache.get(roleId);
+    if (role) counts[roleId] = role.members.size;
+  }
+  return counts;
 }
 
 /**

@@ -48,7 +48,7 @@ import {
   updateGiveawayTemplate,
   type GiveawayTemplateInput,
 } from '../../../services/features/giveawayTemplateService.js';
-import { createReactionRoleMenu, deleteReactionRoleMenu, updateReactionRoleMenu, getBotRoleAccess, normalizeMenuMode, MAX_REACTION_ROLE_BUTTONS, type ReactionRoleOption } from '../../../services/features/reactionRoleService.js';
+import { createReactionRoleMenu, deleteReactionRoleMenu, updateReactionRoleMenu, getBotRoleAccess, menuMessageStatus, roleMemberCounts, normalizeMenuMode, MAX_REACTION_ROLE_BUTTONS, type ReactionRoleOption } from '../../../services/features/reactionRoleService.js';
 import { hasNewRoles, materializeNewRoles, previewReactionRolePreset, type ReactionRoleOptionInput } from '../../../services/features/reactionRolePresets.js';
 import { REACTION_ROLE_PRESET_KEYS, type ReactionRolePresetKey } from '@kotbo/contracts';
 import { invalidateAutoResponseCache } from '../../../services/features/autoResponseService.js';
@@ -1846,7 +1846,14 @@ export async function handleGeneralistModulesRoutes(
         // avant qu'un membre ne clique dessus.
         const discordGuild = client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId).catch(() => null);
         const botRoleAccess = discordGuild ? await getBotRoleAccess(discordGuild) : null;
-        json(res, 200, { menus, botRoleAccess });
+        // Membres par rôle et message encore en place : le staff voit ce qui
+        // sert, et un menu dont le message a été supprimé sur Discord.
+        const roleIds = menus.flatMap((menu) => (Array.isArray(menu.options) ? menu.options as ReactionRoleOption[] : []).map((option) => option.roleId));
+        const memberCounts = discordGuild ? roleMemberCounts(discordGuild, roleIds) : {};
+        const messageStatuses = discordGuild
+          ? Object.fromEntries(await Promise.all(menus.map(async (menu) => [menu.id, await menuMessageStatus(discordGuild, menu)] as const)))
+          : {};
+        json(res, 200, { menus, botRoleAccess, memberCounts, messageStatuses });
       } catch (err) {
         logger.error('ReactionRolesAPI', 'Error fetching menus:', err);
         jsonFailure(res, err, 'Erreur lors de la récupération des menus', 'ReactionRolesAPI');
@@ -1913,6 +1920,27 @@ export async function handleGeneralistModulesRoutes(
       // Noms dans la langue du serveur : les rôles sont lus par ses membres.
       const locale = await resolveGuildLocale(guildId, discordGuild.preferredLocale);
       json(res, 200, { preset: previewReactionRolePreset(discordGuild, key, locale) });
+      return true;
+    }
+
+    // POST /api/dashboard/guilds/:guildId/reaction-roles/:menuId/republish
+    // Republie le message d'un menu supprimé sur Discord, à l'identique.
+    if (parts.length === 7 && parts[6] === 'republish' && method === 'POST') {
+      const menuId = parts[5];
+      try {
+        // Un changement vide remet seulement le message en place.
+        const menu = await updateReactionRoleMenu(client, guildId, menuId, {});
+        if (!menu) {
+          json(res, 404, { error: 'Menu de rôles introuvable' });
+          return true;
+        }
+        const discordGuild = client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId).catch(() => null);
+        const messageStatus = discordGuild ? await menuMessageStatus(discordGuild, menu) : 'unknown';
+        json(res, 200, { menu, messageStatus });
+      } catch (err) {
+        logger.error('ReactionRolesAPI', 'Error republishing menu:', err);
+        jsonFailure(res, err, 'Erreur lors de la republication du menu', 'ReactionRolesAPI');
+      }
       return true;
     }
 

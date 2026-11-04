@@ -3,7 +3,7 @@
   import { m } from '../lib/i18n';
   import { channelDisplayName } from '../lib/channelUtils';
   import { onMount } from 'svelte';
-  import { fade, scale, slide } from 'svelte/transition';
+  import { fade, fly, scale, slide } from 'svelte/transition';
   import { dashboardStore } from '../lib/stores/dashboard.svelte';
   import { createAsyncActionState } from '../lib/asyncAction.svelte';
   import { confirmDialog } from '../lib/stores/confirmDialog.svelte';
@@ -12,10 +12,9 @@
   import InlineFeedback from '../lib/components/InlineFeedback.svelte';
   import SearchableSelect from '../lib/components/SearchableSelect.svelte';
   import Skeleton from '../lib/components/Skeleton.svelte';
-  import { fetchReactionRoleMenus, createReactionRoleMenu, updateReactionRoleMenu, deleteReactionRoleMenu, fetchReactionRolePreset, type ReactionRoleButtonMode, type ReactionRoleButtonStyle, type ReactionRoleMenuMode, type ReactionRolePresetKey } from '../lib/api';
+  import { fetchReactionRoleMenus, createReactionRoleMenu, updateReactionRoleMenu, deleteReactionRoleMenu, fetchReactionRolePreset, republishReactionRoleMenu, type ReactionRoleButtonMode, type ReactionRoleButtonStyle, type ReactionRoleMenuMode, type ReactionRolePresetKey } from '../lib/api';
   import { normalizeMenuMode, resolveButtonMode, REACTION_ROLE_PRESET_KEYS, type BotRoleAccess, type RoleBlocker } from '@kotbo/contracts';
   import { dashboardRoleBlocker } from '../lib/reactionRoleBlockers';
-  import FormSelect from '../lib/components/FormSelect.svelte';
   import EmojiPicker from '../lib/components/EmojiPicker.svelte';
   import { parseDiscordEmojisAndMarkdown } from '../lib/emojiParser';
 
@@ -43,6 +42,12 @@
 
   /** Ce que le bot peut attribuer : sert à signaler les rôles qu'il ne pourra pas donner. */
   let botRoleAccess = $state<BotRoleAccess | null>(null);
+  /** Membres qui portent chaque rôle des menus. */
+  let memberCounts = $state<Record<string, number>>({});
+  /** Le message de chaque menu est-il toujours sur Discord ? */
+  type MessageStatus = 'ok' | 'missing' | 'unknown';
+  let messageStatuses = $state<Record<string, MessageStatus>>({});
+  let republishingId = $state<string | null>(null);
 
   // Form states
   let editingMenuId = $state<string | null>(null);
@@ -50,7 +55,10 @@
   let formChannelId = $state('');
   let formButtonMode = $state<ReactionRoleMenuMode>('toggle');
   let applyingPreset = $state<ReactionRolePresetKey | null>(null);
-  /** Couleur et mode bouton par bouton : rarement utiles, repliés par défaut. */
+  /**
+   * Volet « options secondaires », ouvert par l'onglet collé au bord de la
+   * fenêtre : couleur et second clic bouton par bouton, rarement utiles.
+   */
   let showAdvanced = $state(false);
   /** Aperçu Discord, dans un volet dépliant sous les étapes. */
   let showPreview = $state(false);
@@ -89,6 +97,21 @@
   function buttonModeLabel(mode: string | null | undefined) {
     return mode === 'add_only' ? m.reaction_roles_button_mode_add_only() : m.reaction_roles_button_mode_toggle();
   }
+
+  /**
+   * Un bouton a-t-il une couleur ou un second clic à lui ? L'onglet le signale.
+   * En mode « Un seul », le second clic d'un bouton ne compte pas : il est ignoré.
+   */
+  const hasCustomOptions = $derived(formOptions.some(opt =>
+    opt.style !== 'secondary' || (opt.mode !== '' && formButtonMode !== 'exclusive')));
+
+  const BUTTON_STYLES: ReactionRoleButtonStyle[] = ['secondary', 'primary', 'success', 'danger'];
+
+  const BUTTON_MODE_SEGMENTS: Array<{ value: ReactionRoleButtonMode | ''; label: () => string }> = [
+    { value: '', label: m.reaction_roles_mode_inherit },
+    { value: 'toggle', label: m.reaction_roles_button_mode_toggle },
+    { value: 'add_only', label: m.reaction_roles_button_mode_add_only },
+  ];
 
   /** Les trois réponses à « Combien de rôles un membre peut prendre ? ». */
   const MODE_CHOICES: ReactionRoleMenuMode[] = ['toggle', 'exclusive', 'add_only'];
@@ -167,6 +190,8 @@
       if (res && res.menus) {
         menus = res.menus;
         botRoleAccess = res.botRoleAccess ?? null;
+        memberCounts = res.memberCounts ?? {};
+        messageStatuses = res.messageStatuses ?? {};
       }
     } catch (err) {
       console.error(err);
@@ -211,8 +236,7 @@
       formOptions = [{ emoji: '', label: '', roleId: '', mode: '', style: 'secondary' }];
     }
 
-    // Un menu déjà réglé bouton par bouton montre ces réglages d'emblée.
-    showAdvanced = formOptions.some(opt => opt.mode !== '' || opt.style !== 'secondary');
+    showAdvanced = false;
     showPreview = false;
     actionState.clearFeedback();
     showModal = true;
@@ -261,6 +285,7 @@
         const res = await updateReactionRoleMenu(menuId, payload);
         if (!res || !res.menu) throw new Error(m.reaction_roles_update_error());
         menus = menus.map(item => (item.id === menuId ? res.menu : item));
+        messageStatuses = { ...messageStatuses, [menuId]: res.menu.messageId ? 'ok' : 'missing' };
         if (createsRoles) await dashboardStore.refresh();
         showModal = false;
         return true;
@@ -273,6 +298,7 @@
 
       if (!res || !res.menu) throw new Error(m.reaction_roles_deploy_error());
       menus = [res.menu, ...menus];
+      messageStatuses = { ...messageStatuses, [res.menu.id]: res.menu.messageId ? 'ok' : 'missing' };
       if (createsRoles) await dashboardStore.refresh();
       showModal = false;
       return true;
@@ -342,6 +368,25 @@
       });
     } finally {
       applyingPreset = null;
+    }
+  }
+
+  /** Remet en place le message d'un menu supprimé sur Discord. */
+  async function republish(menuId: string) {
+    if (!canManageSettings || republishingId) return;
+    republishingId = menuId;
+    try {
+      await actionState.run(async () => {
+        const res = await republishReactionRoleMenu(menuId);
+        if (!res?.menu) throw new Error(m.reaction_roles_republish_error());
+        menus = menus.map(item => (item.id === menuId ? res.menu : item));
+        messageStatuses = { ...messageStatuses, [menuId]: res.messageStatus };
+        // Salon disparu ou écriture refusée : le bot n'a rien pu reposter.
+        if (res.messageStatus === 'missing') throw new Error(m.reaction_roles_republish_failed());
+        return true;
+      }, { successMessage: m.reaction_roles_republish_success() });
+    } finally {
+      republishingId = null;
     }
   }
 
@@ -425,6 +470,24 @@
                       <Papicon icon="AlertTriangle" size={12} />{m.reaction_roles_blocked_summary({ n: blocked.length })}
                     </p>
                   {/if}
+                  {#if messageStatuses[menu.id] === 'missing'}
+                    <div class="flex items-center justify-between gap-3 flex-wrap mt-1 px-3 py-2 rounded-lg bg-error/10 border border-error/25">
+                      <p class="flex items-center gap-1.5 text-2xs font-semibold text-error">
+                        <Papicon icon="AlertTriangle" size={12} />{m.reaction_roles_message_missing()}
+                      </p>
+                      {#if canManageSettings}
+                        <button
+                          type="button"
+                          onclick={() => republish(menu.id)}
+                          disabled={republishingId !== null}
+                          aria-busy={republishingId === menu.id}
+                          class="flex items-center gap-1 px-2.5 py-1 rounded-md bg-error text-on-error text-2xs font-semibold hover:opacity-90 transition-opacity cursor-pointer disabled:opacity-50 disabled:cursor-wait"
+                        >
+                          <Papicon icon="Refresh" size={11} />{m.reaction_roles_republish()}
+                        </button>
+                      {/if}
+                    </div>
+                  {/if}
                 </div>
 
                 {#if canManageSettings}
@@ -467,6 +530,14 @@
                           {getRoleName(opt.roleId)}
                         </span>
                       {/if}
+                      {#if memberCounts[opt.roleId] !== undefined}
+                        <span
+                          class="flex items-center gap-0.5 text-2xs font-semibold text-on-surface-variant"
+                          title={m.reaction_roles_member_count({ n: memberCounts[opt.roleId] })}
+                        >
+                          <Papicon icon="Users" size={10} />{memberCounts[opt.roleId]}
+                        </span>
+                      {/if}
                       {#if opt.mode && opt.mode !== menu.buttonMode && normalizeMenuMode(menu.buttonMode) !== 'exclusive'}
                         <span class="text-2xs bg-secondary/10 text-secondary border border-secondary/20 px-1.5 py-0.5 rounded font-semibold">
                           {buttonModeLabel(opt.mode)}
@@ -507,7 +578,10 @@
 <!-- Modal Déployer un Panel -->
 {#if showModal}
   <div class="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" transition:fade={{ duration: 150 }}>
-    <div class="bg-surface-container-low/95 border border-outline-variant/20 max-w-3xl w-full rounded-xl p-8 space-y-6 shadow-sm relative max-h-[90vh] overflow-y-auto" transition:scale={{ start: 0.97, duration: 150 }}>
+    <!-- Fenêtre et, à sa droite, le volet des options secondaires -->
+    <div class="relative flex items-stretch gap-3 w-full max-w-3xl {showAdvanced ? 'lg:max-w-[68.75rem]' : ''} max-h-[90vh]" transition:scale={{ start: 0.97, duration: 150 }}>
+    <div class="relative flex-1 min-w-0">
+    <div class="bg-surface-container-low/95 border border-outline-variant/20 w-full h-full rounded-xl p-8 space-y-6 shadow-sm relative max-h-[90vh] overflow-y-auto">
 
       <!-- Close button -->
       <button
@@ -691,45 +765,13 @@
                   </div>
                 </div>
 
-                {#if showAdvanced}
-                  <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 md:pl-[8.5rem] md:pr-[3rem]">
-                    <label class="space-y-1 text-2xs font-semibold text-on-surface-variant">
-                      <span>{m.reaction_roles_button_style()}</span>
-                      <FormSelect
-                        id={`modal-style-${idx}`}
-                        bind:value={opt.style}
-                        disabled={!canManageSettings}
-                        className="w-full rounded-lg bg-surface-container px-3 py-2 text-xs text-on-surface border border-outline-variant/10 focus:ring-2 focus:ring-primary/30 focus:outline-none transition-all"
-                      >
-                        <option value="secondary">{m.reaction_roles_style_secondary_label()}</option>
-                        <option value="primary">{m.reaction_roles_style_primary_label()}</option>
-                        <option value="success">{m.reaction_roles_style_success_label()}</option>
-                        <option value="danger">{m.reaction_roles_style_danger_label()}</option>
-                      </FormSelect>
-                    </label>
-                    <!-- Un menu « un seul rôle » n'a pas de mode par bouton. -->
-                    {#if formButtonMode !== 'exclusive'}
-                      <label class="space-y-1 text-2xs font-semibold text-on-surface-variant">
-                        <span>{m.reaction_roles_button_mode()}</span>
-                        <FormSelect
-                          id={`modal-mode-${idx}`}
-                          bind:value={opt.mode}
-                          disabled={!canManageSettings}
-                          className="w-full rounded-lg bg-surface-container px-3 py-2 text-xs text-on-surface border border-outline-variant/10 focus:ring-2 focus:ring-primary/30 focus:outline-none transition-all"
-                        >
-                          <option value="">{m.reaction_roles_mode_inherit()} ({buttonModeLabel(formButtonMode)})</option>
-                          <option value="toggle">{m.reaction_roles_button_mode_toggle()}</option>
-                          <option value="add_only">{m.reaction_roles_button_mode_add_only()}</option>
-                        </FormSelect>
-                      </label>
-                    {/if}
                   </div>
                 {/if}
               </div>
             {/each}
           </div>
 
-          <div class="flex items-center justify-between gap-3 flex-wrap">
+          <div class="flex items-center gap-3 flex-wrap">
             <button
               type="button"
               onclick={addOption}
@@ -738,14 +780,6 @@
               class="text-xs font-semibold text-primary hover:text-primary/80 transition-colors flex items-center gap-1 disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
             >
               <Papicon icon="Plus" size={14} /> {m.reaction_roles_add_button()}
-            </button>
-            <button
-              type="button"
-              onclick={() => { showAdvanced = !showAdvanced; }}
-              aria-expanded={showAdvanced}
-              class="text-xs font-medium text-on-surface-variant hover:text-on-surface transition-colors flex items-center gap-1 cursor-pointer"
-            >
-              <Papicon icon={showAdvanced ? 'ChevronUp' : 'ChevronDown'} size={14} /> {m.reaction_roles_advanced_toggle()}
             </button>
           </div>
         </section>
@@ -870,6 +904,100 @@
           </div>
         </div>
       </form>
+    </div>
+
+    <!-- Onglet collé au bord droit : ouvre le volet des options secondaires -->
+    <button
+      type="button"
+      onclick={() => { showAdvanced = !showAdvanced; }}
+      aria-expanded={showAdvanced}
+      aria-controls="reaction-roles-options"
+      aria-label={m.reaction_roles_options_title()}
+      title={m.reaction_roles_options_title()}
+      class="absolute top-28 -right-4 z-20 w-8 h-14 flex items-center justify-center rounded-full bg-surface-container-low border border-outline-variant/30 shadow-sm text-on-surface-variant hover:text-primary hover:border-primary/40 transition-colors cursor-pointer"
+    >
+      <Papicon icon={showAdvanced ? 'ChevronLeft' : 'ChevronRight'} size={16} />
+      {#if hasCustomOptions && !showAdvanced}
+        <span class="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-primary ring-2 ring-surface-container-low"></span>
+      {/if}
+    </button>
+    </div>
+
+    {#if showAdvanced}
+      <!-- Sur grand écran à côté de la fenêtre, sinon par-dessus son bord droit -->
+      <aside
+        id="reaction-roles-options"
+        class="w-80 shrink-0 max-h-[90vh] overflow-y-auto rounded-xl bg-surface-container-low border border-outline-variant/20 p-5 space-y-4 shadow-sm max-lg:absolute max-lg:inset-y-0 max-lg:right-0 max-lg:z-30 max-lg:w-[min(20rem,calc(100%-1rem))]"
+        transition:fly={{ x: -12, duration: 160 }}
+      >
+        <div class="flex items-start justify-between gap-3">
+          <div>
+            <p class="text-sm font-semibold text-on-surface">{m.reaction_roles_options_title()}</p>
+            <p class="text-2xs text-on-surface-variant mt-0.5">{m.reaction_roles_options_desc()}</p>
+          </div>
+          <button
+            type="button"
+            onclick={() => { showAdvanced = false; }}
+            class="p-1.5 rounded-full text-on-surface-variant hover:bg-surface-container-high/50 transition-colors cursor-pointer"
+            aria-label={m.reaction_roles_close()}
+          >
+            <Papicon icon="Cross" size={14} />
+          </button>
+        </div>
+
+        {#if formButtonMode === 'exclusive'}
+          <p class="text-2xs text-on-surface-variant bg-surface-container-high/40 rounded-lg px-3 py-2">{m.reaction_roles_options_exclusive_note()}</p>
+        {/if}
+
+        {#each formOptions as opt, idx}
+          <div class="rounded-lg border border-outline-variant/15 bg-surface-container/60 p-3 space-y-3">
+            <p class="flex items-center gap-2 text-xs font-semibold text-on-surface min-w-0">
+              <span class="text-2xs text-on-surface-variant shrink-0">{idx + 1}</span>
+              {#if opt.emoji}<span class="shrink-0">{@html parseDiscordEmojisAndMarkdown(opt.emoji)}</span>{/if}
+              <span class="truncate">{buttonLabel(opt) || m.reaction_roles_preview_button_default()}</span>
+            </p>
+
+            <div class="space-y-1.5">
+              <p class="text-2xs font-semibold text-on-surface-variant">{m.reaction_roles_button_style()}</p>
+              <div class="flex gap-2" role="radiogroup" aria-label={m.reaction_roles_button_style()}>
+                {#each BUTTON_STYLES as style (style)}
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={opt.style === style}
+                    aria-label={styleLabel(style)}
+                    title={styleLabel(style)}
+                    onclick={() => { opt.style = style; }}
+                    disabled={!canManageSettings}
+                    class="w-7 h-7 rounded-md transition-shadow cursor-pointer disabled:cursor-not-allowed ring-offset-2 ring-offset-surface-container-low {PREVIEW_STYLE_CLASSES[style]} {opt.style === style ? 'ring-2 ring-primary' : ''}"
+                  ></button>
+                {/each}
+              </div>
+            </div>
+
+            {#if formButtonMode !== 'exclusive'}
+              <div class="space-y-1.5">
+                <p class="text-2xs font-semibold text-on-surface-variant">{m.reaction_roles_button_mode()}</p>
+                <div class="grid grid-cols-3 gap-0.5 rounded-lg bg-surface-container-high/50 p-0.5" role="radiogroup" aria-label={m.reaction_roles_button_mode()}>
+                  {#each BUTTON_MODE_SEGMENTS as segment (segment.value)}
+                    <button
+                      type="button"
+                      role="radio"
+                      aria-checked={opt.mode === segment.value}
+                      onclick={() => { opt.mode = segment.value; }}
+                      disabled={!canManageSettings}
+                      class="px-1.5 py-1.5 rounded-md text-2xs font-semibold leading-tight transition-colors cursor-pointer disabled:cursor-not-allowed {opt.mode === segment.value ? 'bg-surface-container-lowest text-primary shadow-sm' : 'text-on-surface-variant hover:text-on-surface'}"
+                    >
+                      {segment.label()}
+                    </button>
+                  {/each}
+                </div>
+              </div>
+            {/if}
+          </div>
+        {/each}
+      </aside>
+    {/if}
     </div>
   </div>
 {/if}

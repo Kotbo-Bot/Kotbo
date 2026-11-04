@@ -416,6 +416,11 @@ export async function fetchReactionRolePreset(key: ReactionRolePresetKey, guildI
   return dashboardRequest(`/reaction-roles/presets/${key}`, { method: 'GET', guildId, errorContext: 'API Error (Fetch Reaction Role Preset):' });
 }
 
+/** Republie le message d'un menu supprimé sur Discord. */
+export async function republishReactionRoleMenu(menuId: string, guildId = authStore.selectedGuildId) {
+  return dashboardRequest(`/reaction-roles/${menuId}/republish`, { method: 'POST', guildId, errorContext: 'API Error (Republish Reaction Role Menu):' });
+}
+
 export async function deleteReactionRoleMenu(menuId: string, guildId = authStore.selectedGuildId) {
   return dashboardMutation(`/reaction-roles/${menuId}`, { method: 'DELETE', guildId, errorContext: 'API Error (Delete Reaction Role Menu):' });
 }
