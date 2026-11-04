@@ -38,6 +38,7 @@
     replaySteps = null,
     replayIndex = -1,
     readonly = false,
+    focusNodeId = null,
     onSelectNode,
     onChange,
   }: {
@@ -46,6 +47,8 @@
     replayIndex?: number;
     /** Rejeu d'une exécution passée : le graphe se regarde, il ne s'édite pas. */
     readonly?: boolean;
+    /** Nœud sélectionné et cadré à l'ouverture : celui qui a échoué dans un rejeu. */
+    focusNodeId?: string | null;
     onSelectNode?: (nodeId: string | null) => void;
     onChange?: (graph: WorkflowGraph, issues: ValidationIssue[]) => void;
   } = $props();
@@ -170,6 +173,9 @@
 
   let lastLoadedGraph: WorkflowGraph | null = null;
 
+  /** Le cadrage initial ne vise le nœud que s'il existe encore dans le graphe. */
+  const focusedOnLoad = $derived(focusNodeId && graph.nodes.some((n) => n.id === focusNodeId) ? focusNodeId : null);
+
   // ── Historique ────────────────────────────────────────────────────────────
 
   /**
@@ -285,7 +291,9 @@
         type: 'kotbo',
         position: n.position,
         data: { nodeType: n.type, config: n.config ?? {}, graph: source },
+        selected: n.id === focusNodeId,
       }));
+      selectedId = source.nodes.some((n) => n.id === focusNodeId) ? focusNodeId : null;
       edges = withEdgeAnimation(source, source.edges.map((e: any) => ({
         id: e.id,
         source: e.source,
@@ -296,6 +304,18 @@
       issues = validateGraph(source);
       decorate(source, issues);
       resetHistory();
+    });
+  });
+
+  // Un focus demandé après le chargement (une étape signalée) sélectionne
+  // aussi son nœud.
+  $effect(() => {
+    const target = focusNodeId;
+    if (!target) return;
+    untrack(() => {
+      if (!nodes.some((n) => n.id === target)) return;
+      selectedId = target;
+      nodes = nodes.map((n) => ({ ...n, selected: n.id === target }));
     });
   });
 
@@ -715,6 +735,7 @@
         {nodeTypes}
         {isValidConnection}
         fitView
+        fitViewOptions={focusedOnLoad ? { nodes: [{ id: focusedOnLoad }], maxZoom: 1 } : undefined}
         nodesDraggable={!readonly}
         nodesConnectable={!readonly}
         deleteKey={readonly ? [] : ['Delete', 'Backspace']}

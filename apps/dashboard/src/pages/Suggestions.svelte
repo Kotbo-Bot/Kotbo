@@ -7,6 +7,7 @@
   import { unsavedChanges } from '../lib/stores/unsavedChanges.svelte';
   import { subscribeRealtime } from '../lib/stores/realtime.svelte';
   import { dashboardStore } from '../lib/stores/dashboard.svelte';
+  import { memberCaseModal } from '../lib/stores/memberCaseModal.svelte';
   import { createAsyncActionState } from '../lib/asyncAction.svelte';
   import ModulePage from '../lib/components/ModulePage.svelte';
   import SectionCard from '../lib/components/SectionCard.svelte';
@@ -240,6 +241,7 @@
               avatarUrl={suggestion.avatarUrl}
               subtitle={m.suggestions_posted_on({ date: formatDate(suggestion.createdAt) })}
               size="lg"
+              onClick={memberCaseModal.canOpen ? (userId) => memberCaseModal.show(userId, suggestion.username || userId) : null}
             />
 
             <div class="flex items-center gap-3">

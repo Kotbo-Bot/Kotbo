@@ -10,6 +10,7 @@ import type { ChannelValue, MemberValue, MessageValue, RoleValue } from '../../s
 import {
   createDryRunEffects,
   dryRunWorkflow,
+  resolveTestPlan,
   sampleTriggerOutputs,
   type DryRunSample,
 } from '../../services/features/workflow/dryRun';
@@ -159,5 +160,63 @@ describe('dryRunWorkflow', () => {
     expect(result.error).toContain('Rôle');
     expect(result.steps.find((step) => step.nodeId === 'a')?.status).toBe('ERROR');
     expect(actions).toEqual([]);
+  });
+});
+
+describe('contrôle des permissions pendant l essai', () => {
+  const sendHere: WorkflowGraph = {
+    nodes: [node('t', 'OnMemberJoin'), node('c', 'SelectChannel', { channelId: 'c9' }), node('a', 'SendMessage', { text: 'Salut' })],
+    edges: [edge('t', 'next', 'a', 'exec'), edge('c', 'channel', 'a', 'channel')],
+  };
+
+  test('l action que le bot ne pourrait pas faire échoue avec la raison', async () => {
+    const { effects, actions } = realEffects();
+    const checked: string[] = [];
+    effects.checkAction = async (type) => {
+      checked.push(type);
+      throw new Error('Envoyer un message : il manque au bot « Envoyer des messages » dans #salon-c9');
+    };
+
+    const result = await dryRunWorkflow({
+      graph: sendHere,
+      effects: createDryRunEffects(effects, sample),
+      triggerOutputs: { member },
+    });
+
+    expect(checked).toEqual(['SendMessage']);
+    expect(result.status).toBe('FAILED');
+    expect(result.error).toContain('Envoyer des messages');
+    expect(result.steps.find((step) => step.nodeId === 'a')?.status).toBe('ERROR');
+    expect(actions).toEqual([]);
+  });
+
+  test('l action permise passe sans être exécutée', async () => {
+    const { effects, actions } = realEffects();
+    effects.checkAction = async () => {};
+
+    const result = await dryRunWorkflow({
+      graph: sendHere,
+      effects: createDryRunEffects(effects, sample),
+      triggerOutputs: { member },
+    });
+
+    expect(result.status).toBe('COMPLETED');
+    expect(actions).toEqual([]);
+  });
+});
+
+describe('resolveTestPlan', () => {
+  test('sans membre choisi, celui qui lance l essai joue le membre', () => {
+    expect(resolveTestPlan({ userId: 'u1', source: 'last' })).toEqual({ memberId: 'u1', source: 'last', chosen: false });
+  });
+
+  test('un membre choisi joue l événement, qui devient un exemple', () => {
+    // La dernière exécution porte son propre membre : la rejouer ignorerait
+    // le choix.
+    expect(resolveTestPlan({ userId: 'u1', memberId: 'u2', source: 'last' })).toEqual({ memberId: 'u2', source: 'sample', chosen: true });
+  });
+
+  test('un membre vide compte comme aucun choix', () => {
+    expect(resolveTestPlan({ userId: 'u1', memberId: '', source: 'sample' })).toEqual({ memberId: 'u1', source: 'sample', chosen: false });
   });
 });

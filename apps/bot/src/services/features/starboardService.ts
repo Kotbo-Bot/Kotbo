@@ -37,6 +37,9 @@ import { cache } from '../../utils/cache.js';
 import { logger } from '../../utils/logger.js';
 import { resolveGuildLocale } from '../../utils/i18n.js';
 import * as m from '../../lib/paraglide/messages.js';
+import { normalizeEmojiKey, tallyVotes } from './starboardTally.js';
+
+export { normalizeEmojiKey } from './starboardTally.js';
 
 /** TTL du cache de configuration. Invalidé explicitement par le dashboard. */
 const CONFIG_TTL_SECONDS = 300;
@@ -86,18 +89,6 @@ export async function invalidateStarboardCache(guildId: string): Promise<void> {
 }
 
 // ── Emojis ───────────────────────────────────────────────────────────────────
-
-/**
- * Clé de comparaison d'un emoji configuré : l'id pour un emoji custom (seul
- * identifiant stable, le nom pouvant changer), le caractère sinon.
- */
-export function normalizeEmojiKey(raw: string): string {
-  const trimmed = raw.trim();
-  const custom = trimmed.match(/^<?a?:([^:\s]+):(\d{15,25})>?$/);
-  if (custom) return custom[2]!;
-  if (/^\d{15,25}$/.test(trimmed)) return trimmed;
-  return trimmed;
-}
 
 /** Même clé, mais depuis l'emoji d'une réaction reçue. */
 function reactionEmojiKey(emoji: GuildEmoji | ReactionEmoji | MessageReaction['emoji']): string {
@@ -153,23 +144,36 @@ function channelParentId(message: Message): string | null {
 
 /**
  * Additionne les réactions de vote d'un message. La réaction du bot (amorçage
- * automatique) est retirée : elle n'est le vote de personne.
+ * automatique) est retirée : elle n'est le vote de personne. Celle de l'auteur
+ * l'est aussi quand `excludedUserId` est fourni : on ne vote pas pour soi.
  */
-function tallyMessage(message: Message, config: StarboardConfig): { up: number; down: number } {
-  let up = 0;
-  let down = 0;
-
-  for (const reaction of message.reactions.cache.values()) {
+async function tallyMessage(
+  message: Message,
+  config: StarboardConfig,
+  excludedUserId: string | null,
+): Promise<{ up: number; down: number }> {
+  const votes = await Promise.all([...message.reactions.cache.values()].map(async (reaction) => {
     const key = reactionEmojiKey(reaction.emoji);
-    if (!key) continue;
-    const count = Math.max(0, reaction.count - (reaction.me ? 1 : 0));
-    if (count === 0) continue;
+    // Pas d'appel à Discord quand seul le bot a réagi : il n'y a rien à retirer.
+    const hasOtherVoters = reaction.count > (reaction.me ? 1 : 0);
+    const byAuthor = excludedUserId !== null && hasOtherVoters && isVoteEmoji(config, key)
+      ? await hasReacted(reaction, excludedUserId)
+      : false;
+    return { key, count: reaction.count, me: reaction.me, byAuthor };
+  }));
+  return tallyVotes(votes, config);
+}
 
-    if (config.upvoteEmojis.some((e) => normalizeEmojiKey(e) === key)) up += count;
-    else if (config.downvoteEmojis.some((e) => normalizeEmojiKey(e) === key)) down += count;
-  }
-
-  return { up, down };
+/**
+ * Discord liste les votants par id croissant, par pages de 100 : demander le
+ * premier votant situé juste après `userId - 1` répond en un seul appel, quel
+ * que soit le nombre de réactions.
+ */
+async function hasReacted(reaction: MessageReaction, userId: string): Promise<boolean> {
+  if (reaction.users.cache.has(userId)) return true;
+  const after = (BigInt(userId) - 1n).toString();
+  const users = await reaction.users.fetch({ limit: 1, after }).catch(() => null);
+  return users?.has(userId) ?? false;
 }
 
 // ── Rendu du highlight ───────────────────────────────────────────────────────
@@ -410,7 +414,11 @@ export async function refreshEntry(
     }
     if (message.author.bot && !config.allowBots) return;
 
-    const source = tallyMessage(message, config);
+    // Le bot peut être l'auteur (allowBots) : sa réaction est déjà retirée.
+    const excludedUserId = config.ignoreAuthorVotes && message.author.id !== client.user?.id
+      ? message.author.id
+      : null;
+    const source = await tallyMessage(message, config, excludedUserId);
     let up = source.up;
     let down = source.down;
 
@@ -421,7 +429,7 @@ export async function refreshEntry(
         ? await starChannel.messages.fetch(entry.starMessageId).catch(() => null)
         : null;
       if (starMessage) {
-        const starTally = tallyMessage(starMessage, config);
+        const starTally = await tallyMessage(starMessage, config, excludedUserId);
         up += starTally.up;
         down += starTally.down;
       }

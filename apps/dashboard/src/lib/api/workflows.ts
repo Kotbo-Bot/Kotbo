@@ -52,6 +52,12 @@ export interface WorkflowExecutionDetail extends WorkflowExecutionSummary {
   steps: WorkflowExecutionStep[];
 }
 
+/** Étape que le bot ne pourra pas faire, signalée à l'enregistrement. */
+export interface WorkflowWarning {
+  nodeId: string;
+  message: string;
+}
+
 export interface SaveWorkflowPayload {
   name: string;
   description?: string | null;
@@ -83,7 +89,7 @@ export async function fetchWorkflow(
 export async function createWorkflow(
   payload: SaveWorkflowPayload,
   guildId = authStore.selectedGuildId,
-): Promise<{ workflow: WorkflowDetail }> {
+): Promise<{ workflow: WorkflowDetail; warnings?: WorkflowWarning[] }> {
   // `silent` : la page annonce elle-même l'enregistrement, la duplication et la
   // suppression. Sans ça, le toast générique du client s'ajoute au sien.
   return dashboardRequest('/workflows', {
@@ -99,7 +105,7 @@ export async function updateWorkflow(
   id: string,
   payload: SaveWorkflowPayload,
   guildId = authStore.selectedGuildId,
-): Promise<{ workflow: WorkflowDetail }> {
+): Promise<{ workflow: WorkflowDetail; warnings?: WorkflowWarning[] }> {
   return dashboardRequest(`/workflows/${id}`, {
     method: 'PUT',
     payload,
@@ -159,12 +165,17 @@ export interface WorkflowTestResult {
 /** Fait tourner le brouillon sans enregistrer ni agir, et rend sa trace. */
 export async function testWorkflowGraph(
   graph: WorkflowGraph,
-  options: { workflowId?: string | null; source?: 'sample' | 'last' } = {},
+  options: { workflowId?: string | null; memberId?: string | null; source?: 'sample' | 'last' } = {},
   guildId = authStore.selectedGuildId,
 ): Promise<{ test: WorkflowTestResult }> {
   return dashboardRequest('/workflows/test', {
     method: 'POST',
-    payload: { graph, workflowId: options.workflowId ?? null, source: options.source ?? 'sample' },
+    payload: {
+      graph,
+      workflowId: options.workflowId ?? null,
+      memberId: options.memberId ?? null,
+      source: options.source ?? 'sample',
+    },
     guildId,
     silent: true,
     errorContext: 'API Error (Test Workflow):',

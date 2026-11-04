@@ -2,6 +2,7 @@
   import { m } from '../../i18n';
   import Papicon from '../Papicon.svelte';
   import ValueField from './ValueField.svelte';
+  import StepMessagePreview from './StepMessagePreview.svelte';
   import Self from './StepCard.svelte';
   import {
     COOLDOWN_SCOPES,
@@ -36,6 +37,7 @@
     roles = [],
     channels = [],
     problems = [],
+    focusStepId = null,
     depth = 0,
     canMoveUp = false,
     canMoveDown = false,
@@ -49,6 +51,8 @@
     roles?: { id: string; name: string }[];
     channels?: { id: string; name: string }[];
     problems?: string[];
+    /** Étape à montrer : celle qui a échoué dans le rejeu d'où l'on vient. */
+    focusStepId?: string | null;
     depth?: number;
     canMoveUp?: boolean;
     canMoveDown?: boolean;
@@ -59,6 +63,13 @@
   } = $props();
 
   const action = $derived(step.kind === 'action' ? getAction((step as ActionStep).action) : undefined);
+
+  const focused = $derived(focusStepId !== null && step.id === focusStepId);
+  let card = $state<HTMLElement | null>(null);
+
+  $effect(() => {
+    if (focused) card?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  });
 
   /** Découpe une phrase à trous en morceaux de texte et en champs. */
   function parts(sentence: string): { text?: string; field?: string }[] {
@@ -131,6 +142,10 @@
     onChange({ ...(step as CooldownStep), ...patch });
   }
 
+  /** Actions dont l'étape montre ce que Discord affichera. */
+  const PREVIEWED_ACTIONS = new Set(['SendMessage', 'SendEmbed', 'KeepMessage']);
+  let showPreview = $state(false);
+
   /** Réglages déjà posés dans la phrase : inutile de les répéter dessous. */
   const extraOptions = $derived(
     action ? action.fields.filter((field) => field.option && !action.sentence.includes(`{${field.key}}`)) : [],
@@ -138,7 +153,10 @@
 </script>
 
 <article
-  class="rounded-2xl bg-surface-container-high/60 border border-outline-variant/15 border-l-[3px] {ACCENT[step.kind]} {problems.length > 0 ? 'ring-1 ring-warning/30' : ''}"
+  bind:this={card}
+  class="rounded-2xl bg-surface-container-high/60 border border-outline-variant/15 border-l-[3px] {ACCENT[step.kind]} {focused
+    ? 'ring-2 ring-error/60'
+    : problems.length > 0 ? 'ring-1 ring-warning/30' : ''}"
 >
   <div class="flex items-start gap-2 p-3">
     <div class="flex-1 min-w-0 space-y-2">
@@ -177,6 +195,24 @@
             />
           </div>
         {/each}
+
+        {#if PREVIEWED_ACTIONS.has(action.type)}
+          <button
+            type="button"
+            onclick={() => (showPreview = !showPreview)}
+            aria-expanded={showPreview}
+            class="inline-flex items-center gap-1.5 text-2xs font-semibold text-primary hover:underline"
+          >
+            <Papicon icon={showPreview ? 'ChevronUp' : 'ChevronDown'} size={11} />
+            {showPreview ? m.wf_preview_hide() : m.wf_preview_show()}
+          </button>
+          {#if showPreview}
+            <div class="max-w-xl space-y-1">
+              <StepMessagePreview step={step as ActionStep} {triggerType} {channels} />
+              <p class="text-2xs text-on-surface-variant">{m.wf_preview_hint()}</p>
+            </div>
+          {/if}
+        {/if}
 
       {:else if step.kind === 'wait'}
         <div class="flex flex-wrap items-center gap-2 text-sm text-on-surface">
@@ -352,6 +388,7 @@
               {triggerType}
               {roles}
               {channels}
+              {focusStepId}
               depth={depth + 1}
               canMoveUp={movable.up}
               canMoveDown={movable.down}

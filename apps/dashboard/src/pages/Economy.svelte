@@ -8,6 +8,7 @@
   import { unsavedChanges } from '../lib/stores/unsavedChanges.svelte';
   import { dashboardStore } from '../lib/stores/dashboard.svelte';
   import { authStore } from '../lib/stores/auth.svelte';
+  import { memberCaseModal } from '../lib/stores/memberCaseModal.svelte';
   import { confirmDialog } from '../lib/stores/confirmDialog.svelte';
   import { toast } from '../lib/stores/toast.svelte';
   import ModulePage from '../lib/components/ModulePage.svelte';
@@ -1621,6 +1622,11 @@ import EmojiText from '../lib/components/EmojiText.svelte';
       (p.displayName && p.displayName.toLowerCase().includes(searchQuery.toLowerCase()))
     )
   );
+
+  /** Clic sur un membre du classement : sa fiche, seulement pour qui a accès à « Membres ». */
+  function openMember(member: { userId: string; displayName?: string | null; username?: string | null }) {
+    void memberCaseModal.show(member.userId, member.displayName || member.username || member.userId);
+  }
 </script>
 
 <!-- `featureKey` n'est pas decoratif : c'est lui qui donne a la page l'interrupteur
@@ -3415,13 +3421,16 @@ import EmojiText from '../lib/components/EmojiText.svelte';
                   <tr class="border-b border-outline-variant/5 hover:bg-surface-container-high/10 transition-colors">
                     <td class="py-4 px-4 font-bold">#{playerRanks.get(player.userId)}</td>
                     <td class="py-4 px-4 flex items-center gap-3">
-                      {#if player.avatarUrl}
-                        <img src={player.avatarUrl} alt="Avatar" class="w-8 h-8 rounded-full border border-outline-variant/20" />
-                      {:else}
-                        <div class="w-8 h-8 rounded-full bg-primary/20 text-primary flex items-center justify-center font-bold">U</div>
-                      {/if}
+                      <!-- Avatar : doublon du pseudo pour la souris, hors du parcours clavier -->
+                      <button type="button" tabindex="-1" aria-hidden="true" class="shrink-0" disabled={!memberCaseModal.canOpen} onclick={() => openMember(player)}>
+                        {#if player.avatarUrl}
+                          <img src={player.avatarUrl} alt="Avatar" class="w-8 h-8 rounded-full border border-outline-variant/20" />
+                        {:else}
+                          <div class="w-8 h-8 rounded-full bg-primary/20 text-primary flex items-center justify-center font-bold">U</div>
+                        {/if}
+                      </button>
                       <div>
-                        <div class="font-semibold text-sm">{player.displayName || player.username}</div>
+                        <button type="button" class="block text-left font-semibold text-sm hover:text-primary disabled:hover:text-on-surface transition-colors" disabled={!memberCaseModal.canOpen} onclick={() => openMember(player)}>{player.displayName || player.username}</button>
                         <div class="text-2xs text-on-surface-variant/40 font-mono mt-0.5">{player.userId}</div>
                         <!-- Bento mini-stats -->
                         <div class="flex items-center gap-2 mt-1 text-2xs font-bold text-on-surface-variant">

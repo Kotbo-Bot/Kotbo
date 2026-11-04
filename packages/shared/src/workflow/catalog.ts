@@ -105,6 +105,25 @@ export const COOLDOWN_SCOPE_LABELS: Record<CooldownScope, string> = {
 /** Un an : au-delà, un délai de récupération n'en est plus un. */
 export const MAX_COOLDOWN_SECONDS = 31_536_000;
 
+/** Dix ans : au-delà, aucun membre n'atteindra le seuil. */
+export const MAX_MEMBER_DAYS = 3650;
+
+/**
+ * Déclencheurs qui ne viennent pas d'un événement : un balayage périodique
+ * cherche les membres dont le seuil est tombé (cf. `memberDays.ts` du bot).
+ * La valeur nomme la date de référence comptée.
+ */
+export const MEMBER_DAYS_TRIGGERS = {
+  OnMemberTenure: 'joined',
+  OnMemberInactive: 'lastMessage',
+} as const satisfies Record<string, 'joined' | 'lastMessage'>;
+
+export type MemberDaysTrigger = keyof typeof MEMBER_DAYS_TRIGGERS;
+
+export function isMemberDaysTrigger(type: string): type is MemberDaysTrigger {
+  return Object.hasOwn(MEMBER_DAYS_TRIGGERS, type);
+}
+
 export function isCooldownScope(value: unknown): value is CooldownScope {
   return typeof value === 'string' && (COOLDOWN_SCOPES as readonly string[]).includes(value);
 }
@@ -795,6 +814,44 @@ const TRIGGERS: NodeDef[] = [
       { id: 'boostCount', label: 'Boosts du serveur', type: 'Number' },
     ],
   },
+  {
+    /**
+     * Comme la planification, ni l'un ni l'autre ne vient du bus : un balayage
+     * les lance, et le nom d'événement ne sert qu'à indexer la table.
+     */
+    type: 'OnMemberTenure',
+    label: 'Ancienneté atteinte',
+    category: 'trigger',
+    description:
+      "Se déclenche quand un membre atteint un nombre de jours sur le serveur, une seule fois par membre. Seuls les seuils atteints après l'activation comptent : les anciens membres ne partent pas tous d'un coup.",
+    event: 'member:tenure',
+    inputs: [],
+    outputs: [
+      EXEC_OUT,
+      { id: 'member', label: 'Membre', type: 'Member' },
+      { id: 'days', label: 'Jours sur le serveur', type: 'Number' },
+    ],
+    config: [
+      { key: 'days', label: 'Jours', type: 'number', defaultValue: 30, min: 1, max: MAX_MEMBER_DAYS },
+    ],
+  },
+  {
+    type: 'OnMemberInactive',
+    label: 'Membre inactif',
+    category: 'trigger',
+    description:
+      "Se déclenche quand un membre n'a rien écrit depuis un nombre de jours. Il repart s'il redevient actif puis se tait de nouveau. Un membre qui n'a jamais écrit compte depuis son arrivée.",
+    event: 'member:inactive',
+    inputs: [],
+    outputs: [
+      EXEC_OUT,
+      { id: 'member', label: 'Membre', type: 'Member' },
+      { id: 'days', label: 'Jours sans message', type: 'Number' },
+    ],
+    config: [
+      { key: 'days', label: 'Jours', type: 'number', defaultValue: 30, min: 1, max: MAX_MEMBER_DAYS },
+    ],
+  },
 ];
 
 // ============================================================================
@@ -1123,6 +1180,19 @@ const ACTIONS: NodeDef[] = [
       { id: 'text', label: 'Note', type: 'String' },
     ],
     outputs: [EXEC_OUT],
+  },
+  {
+    type: 'KeepMessage',
+    label: 'Tenir un message à jour',
+    category: 'action',
+    description:
+      "Publie un message au premier passage, puis le modifie à chaque passage suivant au lieu d'en envoyer un nouveau. Idéal pour un compteur ou un classement. S'il est supprimé ou si le salon change, un nouveau message est publié.",
+    inputs: [
+      EXEC_IN,
+      { id: 'channel', label: 'Salon', type: 'Channel' },
+      { id: 'text', label: 'Texte', type: 'String' },
+    ],
+    outputs: [EXEC_OUT, { id: 'message', label: 'Message', type: 'Message' }],
   },
   {
     type: 'SendLogMessage',
@@ -1467,6 +1537,17 @@ const LOGIC: NodeDef[] = [
 // ============================================================================
 // REGISTRE
 // ============================================================================
+
+/**
+ * Nombre de jours d'un déclencheur d'ancienneté ou d'inactivité, `null` s'il
+ * manque ou sort des bornes.
+ */
+export function readMemberDays(graph: WorkflowGraph): number | null {
+  const trigger = graph.nodes.find((node) => isMemberDaysTrigger(node.type));
+  if (!trigger) return null;
+  const days = Number(trigger.config?.days);
+  return Number.isInteger(days) && days >= 1 && days <= MAX_MEMBER_DAYS ? days : null;
+}
 
 /**
  * Salons retenus par le filtre du déclencheur d'un graphe. Vide quand le

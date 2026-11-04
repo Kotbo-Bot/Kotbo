@@ -1452,9 +1452,12 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "number": 0,
     "authorId": "",
     "content": "",
+    "channelId": null,
     "messageId": null,
     "revealedAt": null,
     "revealedBy": null,
+    "deletedAt": null,
+    "deletedBy": null,
     "createdAt": "__NOW__"
   },
   "NewsArticle": {
@@ -4211,7 +4214,7 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "price": 0,
     "listPrice": 0,
     "promoCodeId": null,
-    "status": "// Payée, en attente de la décision du staff (offre soumise à validation).",
+    "status": "PENDING",
     "source": "",
     "note": null,
     "decidedBy": null,
@@ -4531,6 +4534,18 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "coins": 0,
     "xp": 0,
     "createdAt": "__NOW__"
+  },
+  "SiteTemplate": {
+    "id": "",
+    "name": "",
+    "description": null,
+    "category": "general",
+    "lang": "fr",
+    "authorGuildId": "",
+    "authorUserId": "",
+    "sourceSiteId": null,
+    "theme": "",
+    "themeSettings": {}
   },
   "SpamDetectionConfig": {
     "guildId": "",
@@ -4917,6 +4932,7 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "watchedChannels": [],
     "ignoredChannels": [],
     "allowBots": false,
+    "ignoreAuthorVotes": true,
     "embedColor": "#F5C518",
     "removeBelowThreshold": true,
     "createdAt": "__NOW__",
@@ -5424,5 +5440,29 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "periodKey": "",
     "count": 0,
     "updatedAt": "__NOW__"
+  },
+  "WorkflowCooldown": {
+    "workflowId": "",
+    "nodeId": "",
+    "subjectKey": "",
+    "until": "__NOW__"
+  },
+  "WorkflowVariable": {
+    "guildId": "",
+    "name": "",
+    "subjectKey": "",
+    "value": 0,
+    "updatedAt": "__NOW__"
+  },
+  "WorkflowKeptMessage": {
+    "workflowId": "",
+    "nodeId": "",
+    "channelId": "",
+    "messageId": "",
+    "updatedAt": "__NOW__"
+  },
+  "WorkflowSweep": {
+    "workflowId": "",
+    "sweptUntil": "__NOW__"
   }
 };

@@ -52,6 +52,7 @@
     watchedChannels: [],
     ignoredChannels: [],
     allowBots: false,
+    ignoreAuthorVotes: true,
     embedColor: '#F5C518',
     removeBelowThreshold: true,
   };
@@ -110,6 +111,7 @@
       watchedChannels: raw?.watchedChannels ?? [],
       ignoredChannels: raw?.ignoredChannels ?? [],
       allowBots: raw?.allowBots ?? DEFAULTS.allowBots,
+      ignoreAuthorVotes: raw?.ignoreAuthorVotes ?? DEFAULTS.ignoreAuthorVotes,
       embedColor: raw?.embedColor ?? DEFAULTS.embedColor,
       removeBelowThreshold: raw?.removeBelowThreshold ?? DEFAULTS.removeBelowThreshold,
     };
@@ -327,6 +329,18 @@
         <ToggleSwitch
           checked={config.allowBots}
           onToggle={(v: boolean) => { config.allowBots = v; }}
+          disabled={!canConfigure}
+        />
+      </div>
+
+      <div class="mt-3 flex items-center justify-between gap-4 p-4 bg-surface-container rounded-lg border border-outline-variant">
+        <div class="min-w-0">
+          <p class="text-sm font-medium text-on-surface">{m.starboard_ignore_author_title()}</p>
+          <p class="text-xs text-on-surface-variant mt-0.5">{m.starboard_ignore_author_desc()}</p>
+        </div>
+        <ToggleSwitch
+          checked={config.ignoreAuthorVotes}
+          onToggle={(v: boolean) => { config.ignoreAuthorVotes = v; }}
           disabled={!canConfigure}
         />
       </div>

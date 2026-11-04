@@ -6,6 +6,7 @@
   import { API_BASE_URL, dashboardFetch } from '../lib/api';
   import { authStore } from '../lib/stores/auth.svelte';
   import { dashboardStore } from '../lib/stores/dashboard.svelte';
+  import { memberCaseModal } from '../lib/stores/memberCaseModal.svelte';
   import { toast } from '../lib/stores/toast.svelte';
   import { confirmDialog } from '../lib/stores/confirmDialog.svelte';
   import { useUnsavedChanges } from '../lib/useUnsavedChanges.svelte';
@@ -478,6 +479,14 @@
                     <div class="w-7 h-7 rounded-full border-3 border-primary/20 border-t-primary animate-spin"></div>
                   </div>
                 {:else}
+                  <!-- Le casier du membre, pour juger la demande à la lumière de ses autres sanctions -->
+                  {#if memberCaseModal.canOpen}
+                    <button type="button" class="inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline"
+                      onclick={() => memberCaseModal.show(appeal.userId, appeal.userTag || appeal.userId)}>
+                      <Papicon icon="user" size={14} /> {m.ba_open_member_case()}
+                    </button>
+                  {/if}
+
                   <!-- Sanctions contestées : un verdict par ligne -->
                   {#if detail.appeal.sanctions && detail.appeal.sanctions.length > 0}
                     {@const decided = detail.appeal.status !== 'PENDING' && detail.appeal.status !== 'NEEDS_INFO'}

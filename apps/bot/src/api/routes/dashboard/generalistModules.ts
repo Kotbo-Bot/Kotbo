@@ -48,9 +48,12 @@ import {
   updateGiveawayTemplate,
   type GiveawayTemplateInput,
 } from '../../../services/features/giveawayTemplateService.js';
-import { createReactionRoleMenu, deleteReactionRoleMenu, updateReactionRoleMenu, normalizeButtonMode, MAX_REACTION_ROLE_BUTTONS, type ReactionRoleOption } from '../../../services/features/reactionRoleService.js';
+import { createReactionRoleMenu, deleteReactionRoleMenu, updateReactionRoleMenu, getBotRoleAccess, menuMessageStatus, roleMemberCounts, normalizeEmbedColor, normalizeMenuDescription, normalizeMenuMode, MAX_REACTION_ROLE_BUTTONS, type ReactionRoleOption } from '../../../services/features/reactionRoleService.js';
+import { hasNewRoles, materializeNewRoles, previewReactionRolePreset, type ReactionRoleOptionInput } from '../../../services/features/reactionRolePresets.js';
+import { REACTION_ROLE_PRESET_KEYS, type ReactionRolePresetKey } from '@kotbo/contracts';
 import { invalidateAutoResponseCache } from '../../../services/features/autoResponseService.js';
 import { normalizeAnswer } from '../../../services/features/funService.js';
+import { normalizeConfessionCooldown } from '../../../services/features/confessionPolicy.js';
 import { resolveSuggestion } from '../../../services/features/suggestionService.js';
 import { broadcastDashboardStateChange, json, readJsonBody, getGuildName, pushAudit, resolveMemberFeatureAccess, type AuthClaims, type DashboardAccess } from '../../shared.js';
 import { acquireProvisionLock, ensureTextChannel, missingProvisionPermissions, provisionCooldown, provisionCooldownMessage, releaseProvisionLock, startProvisionCooldown } from '../../../services/core/channelProvisioningService.js';
@@ -136,6 +139,58 @@ const BLACKLIST_SELECT = {
   progressionBlacklistRoleIds: true,
   progressionBlacklistChannelIds: true,
 } as const;
+
+/**
+ * Crée, juste avant la publication d'un menu de rôles, les rôles qu'un modèle
+ * a proposés et que le staff a gardés. Rend `null` après avoir répondu quand la
+ * création est impossible : le menu n'est alors pas publié.
+ */
+async function withNewRolesCreated(
+  res: ServerResponse,
+  client: Client,
+  guildId: string,
+  options: ReactionRoleOptionInput[],
+  auditUser: string,
+): Promise<ReactionRoleOption[] | null> {
+  if (!hasNewRoles(options)) return options;
+
+  const discordGuild = client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId).catch(() => null);
+  if (!discordGuild) {
+    json(res, 404, { error: 'Serveur Discord introuvable.' });
+    return null;
+  }
+
+  // Deux envois rapides créeraient chacun le même jeu de rôles.
+  const lockKey = `reaction-role-new-roles:${guildId}`;
+  if (!acquireProvisionLock(lockKey)) {
+    json(res, 409, { error: 'Une création de rôles est déjà en cours sur ce serveur.' });
+    return null;
+  }
+
+  try {
+    const missing = await missingProvisionPermissions(discordGuild, [PermissionFlagsBits.ManageRoles]);
+    if (missing.length > 0) {
+      json(res, 400, { error: `Le bot n'a pas les permissions nécessaires pour créer les rôles : ${missing.join(', ')}.` });
+      return null;
+    }
+
+    const created = await materializeNewRoles(discordGuild, options);
+    if (created.createdRoles > 0) {
+      await pushAudit(guildId, {
+        user: auditUser,
+        action: 'Création de rôles (menu de rôles)',
+        context: getGuildName(client, guildId),
+        module: 'ReactionRoles',
+        eventType: 'Manuel',
+        details: `${created.createdRoles} rôle(s) créé(s) à la publication du menu`,
+        channelId: null,
+      });
+    }
+    return created.options;
+  } finally {
+    releaseProvisionLock(lockKey);
+  }
+}
 
 export async function handleGeneralistModulesRoutes(
   req: IncomingMessage,
@@ -1787,7 +1842,18 @@ export async function handleGeneralistModulesRoutes(
           where: { guildId },
           orderBy: { createdAt: 'desc' },
         });
-        json(res, 200, { menus });
+        // Le dashboard en déduit les rôles que le bot ne pourra pas donner,
+        // avant qu'un membre ne clique dessus.
+        const discordGuild = client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId).catch(() => null);
+        const botRoleAccess = discordGuild ? await getBotRoleAccess(discordGuild) : null;
+        // Membres par rôle et message encore en place : le staff voit ce qui
+        // sert, et un menu dont le message a été supprimé sur Discord.
+        const roleIds = menus.flatMap((menu) => (Array.isArray(menu.options) ? menu.options as ReactionRoleOption[] : []).map((option) => option.roleId));
+        const memberCounts = discordGuild ? roleMemberCounts(discordGuild, roleIds) : {};
+        const messageStatuses = discordGuild
+          ? Object.fromEntries(await Promise.all(menus.map(async (menu) => [menu.id, await menuMessageStatus(discordGuild, menu)] as const)))
+          : {};
+        json(res, 200, { menus, botRoleAccess, memberCounts, messageStatuses });
       } catch (err) {
         logger.error('ReactionRolesAPI', 'Error fetching menus:', err);
         jsonFailure(res, err, 'Erreur lors de la récupération des menus', 'ReactionRolesAPI');
@@ -1802,7 +1868,10 @@ export async function handleGeneralistModulesRoutes(
           title: string;
           channelId: string;
           buttonMode?: string;
-          options: ReactionRoleOption[];
+          description?: string | null;
+          showCounts?: boolean;
+          embedColor?: string | null;
+          options: ReactionRoleOptionInput[];
         }>(req);
 
         if (!body || !body.title || !body.channelId || !Array.isArray(body.options) || body.options.length === 0) {
@@ -1815,19 +1884,66 @@ export async function handleGeneralistModulesRoutes(
           return true;
         }
 
-        const menu = await createReactionRoleMenu(
-          client,
-          guildId,
-          body.channelId,
-          body.title,
-          body.options,
-          normalizeButtonMode(body.buttonMode)
-        );
+        const options = await withNewRolesCreated(res, client, guildId, body.options, auditUser);
+        if (!options) return true;
+
+        const menu = await createReactionRoleMenu(client, guildId, {
+          channelId: body.channelId,
+          title: body.title,
+          options,
+          buttonMode: normalizeMenuMode(body.buttonMode),
+          description: normalizeMenuDescription(body.description),
+          showCounts: body.showCounts === true,
+          embedColor: normalizeEmbedColor(body.embedColor),
+        });
 
         json(res, 200, { menu });
       } catch (err) {
         logger.error('ReactionRolesAPI', 'Error creating menu:', err);
         jsonFailure(res, err, 'Erreur lors de la création du menu de rôles', 'ReactionRolesAPI');
+      }
+      return true;
+    }
+
+    // GET /api/dashboard/guilds/:guildId/reaction-roles/presets/:key
+    // Remplit le formulaire avec les rôles du modèle, sans rien créer : ceux qui
+    // manquent ne le seront qu'à la publication du menu.
+    if (parts.length === 7 && parts[5] === 'presets' && method === 'GET') {
+      const key = parts[6] as ReactionRolePresetKey;
+      if (!REACTION_ROLE_PRESET_KEYS.includes(key)) {
+        json(res, 404, { error: 'Modèle de menu inconnu' });
+        return true;
+      }
+
+      const discordGuild = client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId).catch(() => null);
+      if (!discordGuild) {
+        json(res, 404, { error: 'Serveur Discord introuvable.' });
+        return true;
+      }
+
+      // Noms dans la langue du serveur : les rôles sont lus par ses membres.
+      const locale = await resolveGuildLocale(guildId, discordGuild.preferredLocale);
+      json(res, 200, { preset: previewReactionRolePreset(discordGuild, key, locale) });
+      return true;
+    }
+
+    // POST /api/dashboard/guilds/:guildId/reaction-roles/:menuId/republish
+    // Republie le message d'un menu supprimé sur Discord, à l'identique.
+    if (parts.length === 7 && parts[6] === 'republish' && method === 'POST') {
+      const menuId = parts[5];
+      try {
+        // Un changement vide remet seulement le message en place.
+        const menu = await updateReactionRoleMenu(client, guildId, menuId, {});
+        if (!menu) {
+          json(res, 404, { error: 'Menu de rôles introuvable' });
+          return true;
+        }
+        const discordGuild = client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId).catch(() => null);
+        const messageStatus = discordGuild ? await menuMessageStatus(discordGuild, menu) : 'unknown';
+        json(res, 200, { menu, messageStatus });
+      } catch (err) {
+        logger.error('ReactionRolesAPI', 'Error republishing menu:', err);
+        jsonFailure(res, err, 'Erreur lors de la republication du menu', 'ReactionRolesAPI');
       }
       return true;
     }
@@ -1840,7 +1956,10 @@ export async function handleGeneralistModulesRoutes(
           title?: string;
           channelId?: string;
           buttonMode?: string;
-          options?: ReactionRoleOption[];
+          description?: string | null;
+          showCounts?: boolean;
+          embedColor?: string | null;
+          options?: ReactionRoleOptionInput[];
         }>(req);
 
         if (!body) {
@@ -1860,11 +1979,19 @@ export async function handleGeneralistModulesRoutes(
           return true;
         }
 
+        const options = body.options === undefined
+          ? undefined
+          : await withNewRolesCreated(res, client, guildId, body.options, auditUser);
+        if (options === null) return true;
+
         const menu = await updateReactionRoleMenu(client, guildId, menuId, {
           ...(body.title !== undefined ? { title: body.title } : {}),
           ...(body.channelId !== undefined ? { channelId: body.channelId } : {}),
-          ...(body.options !== undefined ? { options: body.options } : {}),
-          ...(body.buttonMode !== undefined ? { buttonMode: normalizeButtonMode(body.buttonMode) } : {}),
+          ...(options !== undefined ? { options } : {}),
+          ...(body.buttonMode !== undefined ? { buttonMode: normalizeMenuMode(body.buttonMode) } : {}),
+          ...(body.description !== undefined ? { description: normalizeMenuDescription(body.description) } : {}),
+          ...(typeof body.showCounts === 'boolean' ? { showCounts: body.showCounts } : {}),
+          ...(body.embedColor !== undefined ? { embedColor: normalizeEmbedColor(body.embedColor) } : {}),
         });
 
         if (!menu) {
@@ -2775,6 +2902,7 @@ export async function handleGeneralistModulesRoutes(
             funImageOfDayChannelId: true,
             funConfessionChannelId: true,
             funConfessionLogChannelId: true,
+            funConfessionCooldownSeconds: true,
             funPunitiveMode: true,
             funEmojiRiddleUseDefaults: true,
           }
@@ -2821,12 +2949,21 @@ export async function handleGeneralistModulesRoutes(
           funImageOfDayChannelId?: string | null;
           funConfessionChannelId?: string | null;
           funConfessionLogChannelId?: string | null;
+          funConfessionCooldownSeconds?: number;
           funPunitiveMode?: boolean;
           funEmojiRiddleUseDefaults?: boolean;
         }>(req);
 
         if (!body) {
           json(res, 400, { error: 'Corps de requête manquant' });
+          return true;
+        }
+
+        const confessionCooldown = body.funConfessionCooldownSeconds === undefined
+          ? undefined
+          : normalizeConfessionCooldown(body.funConfessionCooldownSeconds);
+        if (confessionCooldown === null) {
+          json(res, 400, { error: 'Le délai entre deux confessions doit être un nombre de secondes' });
           return true;
         }
 
@@ -2854,6 +2991,7 @@ export async function handleGeneralistModulesRoutes(
             funImageOfDayChannelId: body.funImageOfDayChannelId,
             funConfessionChannelId: body.funConfessionChannelId,
             funConfessionLogChannelId: body.funConfessionLogChannelId,
+            funConfessionCooldownSeconds: confessionCooldown,
             funPunitiveMode: body.funPunitiveMode,
             funEmojiRiddleUseDefaults: typeof body.funEmojiRiddleUseDefaults === 'boolean'
               ? body.funEmojiRiddleUseDefaults
@@ -2905,6 +3043,7 @@ export async function handleGeneralistModulesRoutes(
             funImageOfDayChannelId: updatedGuild.funImageOfDayChannelId,
             funConfessionChannelId: updatedGuild.funConfessionChannelId,
             funConfessionLogChannelId: updatedGuild.funConfessionLogChannelId,
+            funConfessionCooldownSeconds: updatedGuild.funConfessionCooldownSeconds,
             funPunitiveMode: updatedGuild.funPunitiveMode,
             funEmojiRiddleUseDefaults: updatedGuild.funEmojiRiddleUseDefaults,
           },
@@ -2933,7 +3072,7 @@ export async function handleGeneralistModulesRoutes(
           where: { guildId },
           orderBy: { number: 'desc' },
           take: 50,
-          select: { number: true, content: true, createdAt: true, revealedAt: true },
+          select: { number: true, content: true, createdAt: true, revealedAt: true, deletedAt: true },
         });
         json(res, 200, { confessions });
       } catch (err) {

@@ -7,7 +7,8 @@
   import { Tabs, Button, Callout, Field, SectionCard, SettingsGroup, SettingsRow, ToggleSwitch, EmptyState } from '../lib/components/ui';
   import MetricCard from '../lib/components/MetricCard.svelte';
   import { dashboardStore } from '../lib/stores/dashboard.svelte';
-  import { hideUserIds, parseDetailsMetadata } from '../lib/logDetails';
+  import { parseDetailsMetadata } from '../lib/logDetails';
+  import { logEntryUser } from '../lib/logEntryUser';
   import RefreshButton from '../lib/components/RefreshButton.svelte';
   import Papicon from '../lib/components/Papicon.svelte';
   import MemberCaseModal from '../lib/components/MemberCaseModal.svelte';
@@ -228,16 +229,11 @@
   });
 
   function getLogChannelId(entry: { details: string; channelId: string | null }) {
-    return parseDetailsMetadata(entry.details, '', logLabels).extractedChannelId ?? entry.channelId;
+    return parseDetailsMetadata(entry.details, logLabels).extractedChannelId ?? entry.channelId;
   }
 
   function displayUser(entry: { user: string; details: string }) {
-    const parsed = parseDetailsMetadata(entry.details, entry.user, logLabels);
-    if (!parsed.extractedUser) {
-      return hideUserIds(entry.user).trim() || entry.user;
-    }
-    const normalized = parsed.extractedUser.replace(/\s*\(<@!?\d{15,25}>\)\s*$/, '').trim();
-    return normalized || hideUserIds(entry.user).trim() || entry.user;
+    return logEntryUser(entry).name;
   }
 
   const uniqueUsers = $derived([...new Set(discordLogs.map((entry) => displayUser(entry)))].sort((a, b) => a.localeCompare(b, 'fr')));
@@ -319,9 +315,9 @@
   // journalisée comme raison.
   const memberCase = new MemberCaseState();
 
-  function openCaseModal(entry: { user: string; details: string; action: string }) {
-    const parsed = parseDetailsMetadata(entry.details, entry.user, logLabels);
-    void memberCase.show(parsed.extractedUserId ?? '', displayUser(entry), m.lg_action_from_log({ action: entry.action }));
+  function openCaseModal(member: { name: string; userId: string | null }, action: string) {
+    if (!member.userId) return;
+    void memberCase.show(member.userId, member.name, m.lg_action_from_log({ action }));
   }
 
   const sanctions = $derived((dashboardStore.state.sanctions as any[]) || []);
@@ -582,6 +578,8 @@
         </thead>
         <tbody>
           {#each filteredLogs as entry}
+            <!-- « Système » et les auteurs sans identifiant n'ont pas de fiche à ouvrir. -->
+            {@const member = logEntryUser(entry)}
             <tr>
               <td class="whitespace-nowrap">
                 <p class="text-body-sm font-medium text-on-surface">{new Date(entry.dateIso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</p>
@@ -592,12 +590,12 @@
                   variant="ghost"
                   size="sm"
                   class="max-w-40"
-                  disabled={!memberCase.canOpen}
-                  disabledReason={m.common_reason_no_permission()}
-                  title={memberCase.canOpen ? m.lg_open_case() : undefined}
-                  onclick={() => openCaseModal(entry)}
+                  disabled={!memberCase.canOpen || !member.userId}
+                  disabledReason={memberCase.canOpen ? m.lg_no_member_id() : m.common_reason_no_permission()}
+                  title={memberCase.canOpen && member.userId ? m.lg_open_case() : undefined}
+                  onclick={() => openCaseModal(member, entry.action)}
                 >
-                  <span class="truncate">{displayUser(entry)}</span>
+                  <span class="truncate">{member.name}</span>
                 </Button>
               </td>
               <td class="max-w-xs text-body-sm text-on-surface-variant">

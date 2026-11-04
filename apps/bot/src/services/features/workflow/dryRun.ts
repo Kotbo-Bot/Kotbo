@@ -56,8 +56,8 @@ export function sampleTriggerOutputs(triggerType: string, sample: DryRunSample):
 const ENTITY_TYPES = new Set(['Member', 'Role', 'Channel', 'Message']);
 
 /**
- * Effets de l'essai : lectures réelles, actions consignées, ni délai réservé
- * ni variable écrite.
+ * Effets de l'essai : lectures réelles, actions contrôlées puis consignées,
+ * ni délai réservé ni variable écrite.
  *
  * Une action dont une entrée obligatoire arrive vide échoue comme elle le ferait
  * en production (membre parti, rôle supprimé) : c'est précisément ce que
@@ -88,9 +88,38 @@ export function createDryRunEffects(real: WorkflowEffects, sample: DryRunSample)
           throw new Error(`« ${port.label} » est vide : ${def.label} échouerait.`);
         }
       }
+      // Ce que la vraie exécution refuserait (permission, hiérarchie, module
+      // éteint) échoue ici aussi, avec la même raison.
+      await real.checkAction?.(type, inputs);
       return sampleOutputs(def.outputs, sample);
     },
   };
+}
+
+export interface TestPlanInput {
+  /** Membre qui lance l'essai. */
+  userId: string;
+  /** Membre choisi pour jouer l'événement, s'il y en a un. */
+  memberId?: string | null;
+  source: 'sample' | 'last';
+}
+
+export interface TestPlan {
+  memberId: string;
+  source: 'sample' | 'last';
+  /** Le membre a été choisi, et non pris par défaut. */
+  chosen: boolean;
+}
+
+/**
+ * Qui joue le membre de l'événement, et sur quel événement.
+ *
+ * Un membre choisi impose un événement d'exemple : la dernière exécution porte
+ * son propre membre, et la rejouer ignorerait le choix.
+ */
+export function resolveTestPlan(input: TestPlanInput): TestPlan {
+  if (input.memberId) return { memberId: input.memberId, source: 'sample', chosen: true };
+  return { memberId: input.userId, source: input.source, chosen: false };
 }
 
 export interface DryRunOptions {
