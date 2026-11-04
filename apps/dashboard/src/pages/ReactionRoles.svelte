@@ -12,9 +12,10 @@
   import InlineFeedback from '../lib/components/InlineFeedback.svelte';
   import SearchableSelect from '../lib/components/SearchableSelect.svelte';
   import Skeleton from '../lib/components/Skeleton.svelte';
-  import { fetchReactionRoleMenus, createReactionRoleMenu, updateReactionRoleMenu, deleteReactionRoleMenu, type ReactionRoleButtonMode, type ReactionRoleButtonStyle } from '../lib/api';
+  import { fetchReactionRoleMenus, createReactionRoleMenu, updateReactionRoleMenu, deleteReactionRoleMenu, applyReactionRolePreset, type ReactionRoleButtonMode, type ReactionRoleButtonStyle, type ReactionRoleMenuMode, type ReactionRolePresetKey } from '../lib/api';
+  import { normalizeMenuMode, resolveButtonMode, REACTION_ROLE_PRESET_KEYS, type BotRoleAccess, type RoleBlocker } from '@kotbo/contracts';
+  import { dashboardRoleBlocker } from '../lib/reactionRoleBlockers';
   import FormSelect from '../lib/components/FormSelect.svelte';
-  import ToggleSwitch from '../lib/components/ToggleSwitch.svelte';
   import EmojiPicker from '../lib/components/EmojiPicker.svelte';
   import { parseDiscordEmojisAndMarkdown } from '../lib/emojiParser';
 
@@ -36,17 +37,19 @@
     messageId: string | null;
     title: string;
     buttonMode?: string;
-    exclusive?: boolean;
     options: any; // Array of { emoji?: string; label: string; roleId: string; mode?: 'toggle' | 'add_only' }
     createdAt: string;
   }>>([]);
+
+  /** Ce que le bot peut attribuer : sert à signaler les rôles qu'il ne pourra pas donner. */
+  let botRoleAccess = $state<BotRoleAccess | null>(null);
 
   // Form states
   let editingMenuId = $state<string | null>(null);
   let formTitle = $state('');
   let formChannelId = $state('');
-  let formButtonMode = $state<ReactionRoleButtonMode>('toggle');
-  let formExclusive = $state(false);
+  let formButtonMode = $state<ReactionRoleMenuMode>('toggle');
+  let applyingPreset = $state<ReactionRolePresetKey | null>(null);
   // `mode: ''` = le bouton suit le mode du panneau.
   let formOptions = $state<Array<{ emoji: string; label: string; roleId: string; mode: ReactionRoleButtonMode | ''; style: ReactionRoleButtonStyle }>>([
     { emoji: '', label: '', roleId: '', mode: '', style: 'secondary' }
@@ -68,14 +71,56 @@
     danger: 'bg-[#da373c]/15 text-[#da373c] border-[#da373c]/30',
   };
 
-  function resolveMode(optionMode: string | null | undefined, menuMode: string | null | undefined): ReactionRoleButtonMode {
-    if (optionMode === 'add_only' || optionMode === 'toggle') return optionMode;
-    return menuMode === 'add_only' ? 'add_only' : 'toggle';
+  function modeLabel(mode: string | null | undefined) {
+    switch (normalizeMenuMode(mode)) {
+      case 'add_only': return m.reaction_roles_mode_add_only_label();
+      case 'exclusive': return m.reaction_roles_mode_exclusive_label();
+      default: return m.reaction_roles_mode_toggle_label();
+    }
   }
 
-  function modeLabel(mode: string | null | undefined) {
-    return mode === 'add_only' ? m.reaction_roles_mode_add_only_label() : m.reaction_roles_mode_toggle_label();
+  const MODE_ICONS: Record<ReactionRoleMenuMode, string> = {
+    toggle: 'Settings',
+    add_only: 'Lock',
+    exclusive: 'CheckCircle',
+  };
+
+  function modeDescription(mode: ReactionRoleMenuMode) {
+    switch (mode) {
+      case 'add_only': return m.reaction_roles_mode_add_only_desc();
+      case 'exclusive': return m.reaction_roles_mode_exclusive_desc();
+      default: return m.reaction_roles_mode_toggle_desc();
+    }
   }
+
+  const BLOCKER_MESSAGES: Record<RoleBlocker, () => string> = {
+    missing: m.reaction_roles_blocked_missing,
+    managed: m.reaction_roles_blocked_managed,
+    no_permission: m.reaction_roles_blocked_no_permission,
+    too_high: m.reaction_roles_blocked_too_high,
+  };
+
+  function blockerOf(roleId: string): RoleBlocker | null {
+    return dashboardRoleBlocker(roleId, availableRoles, botRoleAccess);
+  }
+
+  /** Rôles distincts du menu que le bot ne pourra pas donner. */
+  function blockedRoleIds(options: unknown): string[] {
+    if (!Array.isArray(options)) return [];
+    return [...new Set(options.map((opt: { roleId?: string }) => opt?.roleId ?? ''))].filter((id) => !!blockerOf(id));
+  }
+
+  const PRESET_LABELS: Record<ReactionRolePresetKey, () => string> = {
+    colors: m.reaction_roles_preset_colors,
+    pronouns: m.reaction_roles_preset_pronouns,
+    notifications: m.reaction_roles_preset_notifications,
+  };
+
+  const PRESET_ICONS: Record<ReactionRolePresetKey, string> = {
+    colors: 'Palette',
+    pronouns: 'User',
+    notifications: 'Bell',
+  };
 
   function resolveStyle(style: string | null | undefined): ReactionRoleButtonStyle {
     return style === 'primary' || style === 'success' || style === 'danger' ? style : 'secondary';
@@ -93,8 +138,8 @@
   const editedMenu = $derived(menus.find(item => item.id === editingMenuId) ?? null);
 
   const previewSubtitle = $derived.by(() => {
-    if (formExclusive) return m.reaction_roles_preview_subtitle_exclusive();
-    const modes = new Set(formOptions.map(opt => resolveMode(opt.mode, formButtonMode)));
+    if (formButtonMode === 'exclusive') return m.reaction_roles_preview_subtitle_exclusive();
+    const modes = new Set(formOptions.map(opt => resolveButtonMode(opt.mode, formButtonMode)));
     if (modes.size > 1) return m.reaction_roles_preview_subtitle_mixed();
     if (modes.has('add_only')) return m.reaction_roles_preview_subtitle_add_only();
     return m.reaction_roles_preview_subtitle();
@@ -107,6 +152,7 @@
       const res = await fetchReactionRoleMenus();
       if (res && res.menus) {
         menus = res.menus;
+        botRoleAccess = res.botRoleAccess ?? null;
       }
     } catch (err) {
       console.error(err);
@@ -120,7 +166,6 @@
     formTitle = '';
     formChannelId = '';
     formButtonMode = 'toggle';
-    formExclusive = false;
     formOptions = [{ emoji: '', label: '', roleId: '', mode: '', style: 'secondary' }];
     actionState.clearFeedback();
     showModal = true;
@@ -130,8 +175,7 @@
     editingMenuId = menu.id;
     formTitle = menu.title;
     formChannelId = menu.channelId;
-    formButtonMode = menu.buttonMode === 'add_only' ? 'add_only' : 'toggle';
-    formExclusive = menu.exclusive === true;
+    formButtonMode = normalizeMenuMode(menu.buttonMode);
 
     const options = Array.isArray(menu.options) ? menu.options : [];
     formOptions = options.map((opt: any) => ({
@@ -173,12 +217,12 @@
       title: formTitle,
       channelId: formChannelId,
       buttonMode: formButtonMode,
-      exclusive: formExclusive,
       options: formOptions.map(opt => ({
         emoji: opt.emoji,
         label: opt.label,
         roleId: opt.roleId,
-        ...(opt.mode ? { mode: opt.mode } : {}),
+        // Un menu « un seul rôle » n'a pas de mode par bouton.
+        ...(opt.mode && formButtonMode !== 'exclusive' ? { mode: opt.mode } : {}),
         ...(opt.style !== 'secondary' ? { style: opt.style } : {}),
       })),
     };
@@ -204,6 +248,33 @@
       showModal = false;
       return true;
     }, { successMessage: m.reaction_roles_deploy_success() });
+  }
+
+  /**
+   * Crée les rôles d'un menu tout prêt puis remplit le formulaire. Le salon
+   * reste à choisir : rien n'est publié avant l'envoi du formulaire.
+   */
+  async function applyPreset(key: ReactionRolePresetKey) {
+    if (!canManageSettings || applyingPreset) return;
+    applyingPreset = key;
+    try {
+      await actionState.run(async () => {
+        const res = await applyReactionRolePreset(key);
+        const preset = res?.preset;
+        if (!preset) throw new Error(m.reaction_roles_preset_error());
+        // Les rôles créés doivent figurer dans les listes avant d'être affichés.
+        await dashboardStore.refresh();
+        formTitle = preset.title;
+        formButtonMode = normalizeMenuMode(preset.buttonMode);
+        formOptions = preset.options.map((opt: { label: string; roleId: string }) => ({
+          emoji: '', label: opt.label, roleId: opt.roleId, mode: '' as const, style: 'secondary' as const,
+        }));
+        actionState.setMessage(m.reaction_roles_preset_applied({ n: preset.createdRoles }));
+        return true;
+      });
+    } finally {
+      applyingPreset = null;
+    }
   }
 
   async function handleDelete(id: string) {
@@ -265,6 +336,7 @@
       <!-- Menus list -->
       <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
         {#each menus as menu}
+          {@const blocked = blockedRoleIds(menu.options)}
           <div class="bg-surface-container-low/30 border border-outline-variant/10 p-6 rounded-xl flex flex-col justify-between hover:bg-surface-container-low/50 hover:border-outline-variant/20 hover:shadow-sm hover:shadow-primary/5 transition-all duration-300 relative group">
             <div class="space-y-4">
               <div class="flex items-start justify-between gap-4">
@@ -277,14 +349,14 @@
                       <span class="flex items-center gap-1 bg-surface-container-high/40 px-2 py-0.5 rounded"><Papicon icon="Link" size={10} />ID : {menu.messageId}</span>
                     {/if}
                     <span class="flex items-center gap-1 bg-surface-container-high/40 px-2 py-0.5 rounded">
-                      <Papicon icon={menu.buttonMode === 'add_only' ? 'Lock' : 'Settings'} size={10} />{modeLabel(menu.buttonMode)}
+                      <Papicon icon={MODE_ICONS[normalizeMenuMode(menu.buttonMode)]} size={10} />{modeLabel(menu.buttonMode)}
                     </span>
-                    {#if menu.exclusive}
-                      <span class="flex items-center gap-1 bg-surface-container-high/40 px-2 py-0.5 rounded">
-                        <Papicon icon="CheckCircle" size={10} />{m.reaction_roles_exclusive_badge()}
-                      </span>
-                    {/if}
                   </div>
+                  {#if blocked.length > 0}
+                    <p class="flex items-center gap-1.5 text-2xs font-semibold text-error">
+                      <Papicon icon="AlertTriangle" size={12} />{m.reaction_roles_blocked_summary({ n: blocked.length })}
+                    </p>
+                  {/if}
                 </div>
 
                 {#if canManageSettings}
@@ -311,13 +383,23 @@
               <div class="flex flex-wrap gap-2 pt-4 border-t border-outline-variant/10">
                 {#if Array.isArray(menu.options)}
                   {#each menu.options as opt}
+                    {@const blocker = blockerOf(opt.roleId)}
                     <div class="flex items-center gap-2 px-3 py-2 bg-surface-container-high/60 border border-outline-variant/10 rounded-xl text-xs font-bold text-on-surface hover:bg-surface-container-high transition-all">
                       {#if opt.emoji}<span class="text-base">{@html parseDiscordEmojisAndMarkdown(opt.emoji)}</span>{/if}
                       <span>{opt.label}</span>
-                      <span class="text-2xs bg-primary/10 text-primary border border-primary/20 px-1.5 py-0.5 rounded font-semibold">
-                        {getRoleName(opt.roleId)}
-                      </span>
-                      {#if opt.mode && opt.mode !== menu.buttonMode}
+                      {#if blocker}
+                        <span
+                          class="flex items-center gap-1 text-2xs bg-error/10 text-error border border-error/30 px-1.5 py-0.5 rounded font-semibold"
+                          title={BLOCKER_MESSAGES[blocker]()}
+                        >
+                          <Papicon icon="AlertTriangle" size={10} />{getRoleName(opt.roleId)}
+                        </span>
+                      {:else}
+                        <span class="text-2xs bg-primary/10 text-primary border border-primary/20 px-1.5 py-0.5 rounded font-semibold">
+                          {getRoleName(opt.roleId)}
+                        </span>
+                      {/if}
+                      {#if opt.mode && opt.mode !== menu.buttonMode && normalizeMenuMode(menu.buttonMode) !== 'exclusive'}
                         <span class="text-2xs bg-secondary/10 text-secondary border border-secondary/20 px-1.5 py-0.5 rounded font-semibold">
                           {modeLabel(opt.mode)}
                         </span>
@@ -384,6 +466,31 @@
       </div>
 
       <form onsubmit={(e) => { e.preventDefault(); handleSubmit(); }} class="space-y-6 pt-2">
+        <InlineFeedback state={actionState} />
+
+        {#if !editingMenuId && canManageSettings}
+          <div class="p-4 rounded-lg bg-surface-container-high/40 border border-outline-variant/10 space-y-3">
+            <div>
+              <p class="text-sm font-medium text-on-surface">{m.reaction_roles_presets_title()}</p>
+              <p class="text-2xs text-on-surface-variant mt-0.5">{m.reaction_roles_presets_desc()}</p>
+            </div>
+            <div class="flex flex-wrap gap-2">
+              {#each REACTION_ROLE_PRESET_KEYS as key (key)}
+                <button
+                  type="button"
+                  onclick={() => applyPreset(key)}
+                  disabled={applyingPreset !== null}
+                  aria-busy={applyingPreset === key}
+                  class="flex items-center gap-2 min-h-11 px-4 rounded-lg bg-surface-container border border-outline-variant/20 text-xs font-semibold text-on-surface hover:border-primary/40 hover:text-primary transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-wait"
+                >
+                  <Papicon icon={PRESET_ICONS[key]} size={14} />
+                  {PRESET_LABELS[key]()}
+                </button>
+              {/each}
+            </div>
+          </div>
+        {/if}
+
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div class="space-y-1.5">
             <label for="modal-title" class="text-xs font-semibold text-on-surface-variant ml-2">{m.reaction_roles_field_title()}</label>
@@ -428,22 +535,11 @@
           >
             <option value="toggle">{m.reaction_roles_mode_toggle_label()}</option>
             <option value="add_only">{m.reaction_roles_mode_add_only_label()}</option>
+            <option value="exclusive">{m.reaction_roles_mode_exclusive_label()}</option>
           </FormSelect>
           <p class="text-2xs text-on-surface-variant ml-2">
-            {formButtonMode === 'add_only' ? m.reaction_roles_mode_add_only_desc() : m.reaction_roles_mode_toggle_desc()}
+            {modeDescription(formButtonMode)}
           </p>
-        </div>
-
-        <div class="flex items-center justify-between gap-4 p-4 bg-surface-container-high/40 rounded-lg border border-outline-variant/10">
-          <div class="min-w-0">
-            <p class="text-sm font-medium text-on-surface">{m.reaction_roles_exclusive_title()}</p>
-            <p class="text-2xs text-on-surface-variant mt-0.5">{m.reaction_roles_exclusive_desc()}</p>
-          </div>
-          <ToggleSwitch
-            checked={formExclusive}
-            onToggle={(v: boolean) => { formExclusive = v; }}
-            disabled={!canManageSettings}
-          />
         </div>
 
         <!-- Live Discord Message Preview -->
@@ -497,7 +593,12 @@
         <!-- Options / Boutons -->
         <div class="space-y-3 pt-2">
           <div class="flex items-center justify-between">
-            <span class="text-xs font-semibold text-on-surface-variant ml-2">{m.reaction_roles_buttons_config({ n: formOptions.length })}</span>
+            <span class="text-xs font-semibold text-on-surface-variant ml-2">
+              {m.reaction_roles_buttons_config({ n: formOptions.length })}
+              {#if formButtonMode === 'exclusive'}
+                <span class="block font-normal text-2xs">{m.reaction_roles_exclusive_buttons_note()}</span>
+              {/if}
+            </span>
             <button
               type="button"
               onclick={addOption}
@@ -559,7 +660,7 @@
                   </div>
                 </div>
 
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div class="grid grid-cols-1 gap-3 {formButtonMode === 'exclusive' ? 'md:grid-cols-2' : 'md:grid-cols-3'}">
                   <div class="space-y-1">
                     <label for={`modal-role-${idx}`} class="text-2xs font-semibold text-on-surface-variant uppercase">{m.reaction_roles_field_role()}</label>
                     <SearchableSelect
@@ -570,8 +671,15 @@
                       className="w-full rounded-lg bg-surface-container px-3 py-2 text-xs text-on-surface focus:ring-2 focus:ring-primary/30 transition-all"
                       disabled={!canManageSettings}
                     />
+                    {#if blockerOf(opt.roleId)}
+                      {@const blocker = blockerOf(opt.roleId)!}
+                      <p class="flex items-start gap-1 text-2xs text-error">
+                        <Papicon icon="AlertTriangle" size={12} class="mt-px shrink-0" />{BLOCKER_MESSAGES[blocker]()}
+                      </p>
+                    {/if}
                   </div>
 
+                  {#if formButtonMode !== 'exclusive'}
                   <div class="space-y-1">
                     <label for={`modal-mode-${idx}`} class="text-2xs font-semibold text-on-surface-variant uppercase">{m.reaction_roles_button_mode()}</label>
                     <FormSelect
@@ -585,6 +693,7 @@
                       <option value="add_only">{m.reaction_roles_mode_add_only_label()}</option>
                     </FormSelect>
                   </div>
+                  {/if}
 
                   <div class="space-y-1">
                     <label for={`modal-style-${idx}`} class="text-2xs font-semibold text-on-surface-variant uppercase">{m.reaction_roles_button_style()}</label>

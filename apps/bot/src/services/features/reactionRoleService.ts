@@ -5,6 +5,14 @@ import { logger } from '../../utils/logger.js';
 import { resolveEmojiShortcodes } from '../../utils/emojis.js';
 import { FALLBACK_LOCALE, getEffectiveLocale, resolveGuildLocale, type BotLocale } from '../../utils/i18n.js';
 import * as m from '../../lib/paraglide/messages.js';
+import {
+  normalizeMenuMode,
+  parseButtonMode,
+  resolveButtonMode,
+  type BotRoleAccess,
+  type ReactionRoleButtonMode,
+  type ReactionRoleMenuMode,
+} from '@kotbo/contracts';
 import { roleBlocker, shouldAlertStaff, type RoleBlocker } from './reactionRoleAccess.js';
 import { rolesToSwapOut } from './reactionRoleExclusive.js';
 
@@ -12,9 +20,8 @@ import { rolesToSwapOut } from './reactionRoleExclusive.js';
 // message entier qu'il refuse, et le panneau ne partirait jamais.
 export const MAX_REACTION_ROLE_BUTTONS = 25;
 
-export const REACTION_ROLE_BUTTON_MODES = ['toggle', 'add_only'] as const;
-
-export type ReactionRoleButtonMode = (typeof REACTION_ROLE_BUTTON_MODES)[number];
+export { normalizeMenuMode };
+export type { ReactionRoleButtonMode, ReactionRoleMenuMode };
 
 export const REACTION_ROLE_BUTTON_STYLES = ['secondary', 'primary', 'success', 'danger'] as const;
 
@@ -34,20 +41,6 @@ export type ReactionRoleOption = {
   mode?: ReactionRoleButtonMode | null;
   style?: ReactionRoleButtonStyle | null;
 };
-
-/** Le mode écrit sur un bouton, ou `null` s'il hérite de celui du menu. */
-export function parseButtonMode(value: unknown): ReactionRoleButtonMode | null {
-  return REACTION_ROLE_BUTTON_MODES.includes(value as ReactionRoleButtonMode)
-    ? (value as ReactionRoleButtonMode)
-    : null;
-}
-
-export function normalizeButtonMode(
-  value: unknown,
-  fallback: ReactionRoleButtonMode = 'toggle',
-): ReactionRoleButtonMode {
-  return parseButtonMode(value) ?? fallback;
-}
 
 /** La couleur écrite sur un bouton, ou `null` s'il garde la couleur par défaut. */
 export function parseButtonStyle(value: unknown): ReactionRoleButtonStyle | null {
@@ -92,8 +85,7 @@ export async function createReactionRoleMenu(
   channelId: string,
   title: string,
   options: ReactionRoleOption[],
-  buttonMode: ReactionRoleButtonMode = 'toggle',
-  exclusive = false,
+  buttonMode: ReactionRoleMenuMode = 'toggle',
 ) {
   // 1. Enregistrer dans la BDD
   const menu = await prisma.reactionRoleMenu.create({
@@ -101,8 +93,7 @@ export async function createReactionRoleMenu(
       guildId,
       channelId,
       title,
-      buttonMode: normalizeButtonMode(buttonMode),
-      exclusive,
+      buttonMode: normalizeMenuMode(buttonMode),
       options: sanitizeOptions(options) as Prisma.InputJsonValue,
     },
   });
@@ -197,8 +188,7 @@ export async function updateReactionRoleMenu(
     title?: string;
     channelId?: string;
     options?: ReactionRoleOption[];
-    buttonMode?: ReactionRoleButtonMode;
-    exclusive?: boolean;
+    buttonMode?: ReactionRoleMenuMode;
   },
 ) {
   const menu = await prisma.reactionRoleMenu.findFirst({
@@ -229,8 +219,7 @@ export async function updateReactionRoleMenu(
       ...(changes.title !== undefined ? { title: changes.title } : {}),
       ...(movedTo ? { channelId: movedTo, messageId: null } : {}),
       ...(changes.options ? { options: sanitizeOptions(changes.options) as Prisma.InputJsonValue } : {}),
-      ...(changes.buttonMode !== undefined ? { buttonMode: normalizeButtonMode(changes.buttonMode) } : {}),
-      ...(changes.exclusive !== undefined ? { exclusive: changes.exclusive } : {}),
+      ...(changes.buttonMode !== undefined ? { buttonMode: normalizeMenuMode(changes.buttonMode) } : {}),
     },
   });
 
@@ -246,12 +235,11 @@ export async function updateReactionRoleMenu(
  */
 function describeMenuModes(
   options: ReactionRoleOption[],
-  menuMode: ReactionRoleButtonMode,
-  exclusive: boolean,
+  menuMode: ReactionRoleMenuMode,
   locale: BotLocale,
 ): string {
-  if (exclusive) return m.panel_reactionroles_description_exclusive({}, { locale });
-  const modes = new Set(options.map((option) => normalizeButtonMode(option.mode, menuMode)));
+  if (menuMode === 'exclusive') return m.panel_reactionroles_description_exclusive({}, { locale });
+  const modes = new Set(options.map((option) => resolveButtonMode(option.mode, menuMode)));
 
   if (modes.size > 1) return m.panel_reactionroles_description_mixed({}, { locale });
   if (modes.has('add_only')) return m.panel_reactionroles_description_add_only({}, { locale });
@@ -279,12 +267,12 @@ export async function sendOrUpdateMenuMessage(client: Client, menuId: string) {
 
     const options = Array.isArray(menu.options) ? menu.options as ReactionRoleOption[] : [];
     const locale = await resolveGuildLocale(menu.guildId, discordGuild.preferredLocale);
-    const menuMode = normalizeButtonMode(menu.buttonMode);
+    const menuMode = normalizeMenuMode(menu.buttonMode);
 
     // Créer l'embed du menu
     const embed = new EmbedBuilder()
       .setTitle(resolveEmojiShortcodes(menu.title))
-      .setDescription(describeMenuModes(options, menuMode, menu.exclusive, locale))
+      .setDescription(describeMenuModes(options, menuMode, locale))
       .setColor('#5865F2')
       .setTimestamp();
 
@@ -362,6 +350,7 @@ function findClickedOption(
 /**
  * Applique un clic sur un bouton de rôle. Le mode du bouton décide de ce que
  * fait un second clic : « toggle » retire le rôle, « add_only » le conserve.
+ * Dans un menu « exclusive », prendre un rôle retire les autres du menu.
  */
 export async function handleRoleToggleInteraction(interaction: ButtonInteraction) {
   const locale = await getEffectiveLocale(interaction).catch(() => FALLBACK_LOCALE);
@@ -400,7 +389,8 @@ export async function handleRoleToggleInteraction(interaction: ButtonInteraction
       });
     }
 
-    const mode = normalizeButtonMode(clicked.mode, normalizeButtonMode(activeMenu.buttonMode));
+    const menuMode = normalizeMenuMode(activeMenu.buttonMode);
+    const mode = resolveButtonMode(clicked.mode, menuMode);
     const role = `<@&${roleId}>`;
     const hasRole = member.roles.cache.has(roleId);
 
@@ -434,7 +424,7 @@ export async function handleRoleToggleInteraction(interaction: ButtonInteraction
 
     // Menu « un seul rôle » : les autres rôles du menu partent, sauf ceux que le
     // bot ne peut pas retirer (un seul refus ferait échouer tout le retrait).
-    const swapOut = activeMenu.exclusive
+    const swapOut = menuMode === 'exclusive'
       ? rolesToSwapOut(configuredRoles.map((option) => option.roleId), member.roles.cache.keys(), roleId)
         .filter((id) => !blockerOf(guild.roles.cache.get(id), me))
       : [];
@@ -465,13 +455,26 @@ export async function handleRoleToggleInteraction(interaction: ButtonInteraction
   }
 }
 
+function botRoleAccessOf(me: GuildMember | null): BotRoleAccess {
+  return {
+    canManageRoles: me?.permissions.has(PermissionFlagsBits.ManageRoles) ?? false,
+    topPosition: me?.roles.highest.position ?? 0,
+  };
+}
+
+/** Ce que le bot peut attribuer sur ce serveur : le dashboard en déduit les rôles bloqués. */
+export async function getBotRoleAccess(guild: Guild): Promise<BotRoleAccess> {
+  return botRoleAccessOf(guild.members.me ?? await guild.members.fetchMe().catch(() => null));
+}
+
 function blockerOf(role: Role | null | undefined, me: GuildMember | null): RoleBlocker | null {
+  const access = botRoleAccessOf(me);
   return roleBlocker({
     exists: !!role,
     managed: role?.managed ?? false,
-    botCanManageRoles: me?.permissions.has(PermissionFlagsBits.ManageRoles) ?? false,
+    botCanManageRoles: access.canManageRoles,
     rolePosition: role?.position ?? 0,
-    botTopPosition: me?.roles.highest.position ?? 0,
+    botTopPosition: access.topPosition,
   });
 }
 

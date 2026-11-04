@@ -321,9 +321,9 @@ model ReactionRoleMenu {
   messageId  String?
   title      String
   options    Json    // List of { emoji?: string, label: string, roleId: string, mode?: "toggle" | "add_only", style?: "secondary" | "primary" | "success" | "danger" }
-  buttonMode String  @default("toggle") // "toggle" | "add_only", surchargeable option par option
-  /// Un seul rôle du menu à la fois : en prendre un retire les autres (couleurs, pronoms...).
-  exclusive  Boolean @default(false)
+  // "toggle" | "add_only", surchargeable bouton par bouton, ou "exclusive" : un
+  // seul rôle du menu à la fois, en prendre un retire les autres (couleurs...).
+  buttonMode String  @default("toggle")
 
   guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
 
