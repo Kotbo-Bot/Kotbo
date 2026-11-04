@@ -228,14 +228,26 @@
     formOptions = [{ emoji: '', label: '', roleId: '', mode: '', style: 'secondary' }];
   }
 
+  /** État du formulaire à l'ouverture : le fermer après l'avoir changé demande confirmation. */
+  let formSnapshot = '';
+
+  function snapshotForm(): string {
+    return JSON.stringify([formTitle, formDescription, formShowCounts, formEmbedColor, formChannelId, formButtonMode, formOptions]);
+  }
+
+  function openModal() {
+    showAdvanced = false;
+    showPreview = false;
+    actionState.clearFeedback();
+    formSnapshot = snapshotForm();
+    showModal = true;
+  }
+
   function openCreateModal() {
     editingMenuId = null;
     formChannelId = '';
     resetForm();
-    showAdvanced = false;
-    showPreview = false;
-    actionState.clearFeedback();
-    showModal = true;
+    openModal();
   }
 
   /** Ouvre la création déjà remplie par un modèle, depuis la page vide. */
@@ -270,10 +282,7 @@
   function openEditModal(menu: (typeof menus)[number]) {
     editingMenuId = menu.id;
     loadMenuIntoForm(menu);
-    showAdvanced = false;
-    showPreview = false;
-    actionState.clearFeedback();
-    showModal = true;
+    openModal();
   }
 
   /** Nouveau menu reprenant un menu existant : rien n'est publié avant l'envoi. */
@@ -281,10 +290,37 @@
     editingMenuId = null;
     loadMenuIntoForm(menu);
     formTitle = m.reaction_roles_duplicate_title({ title: menu.title });
-    showAdvanced = false;
-    showPreview = false;
-    actionState.clearFeedback();
-    showModal = true;
+    openModal();
+  }
+
+  /** Ferme la fenêtre ; des changements non publiés demandent confirmation. */
+  async function requestCloseModal() {
+    if (snapshotForm() !== formSnapshot) {
+      const discard = await confirmDialog.ask({
+        title: m.reaction_roles_discard_title(),
+        description: m.reaction_roles_discard_desc(),
+        confirmLabel: m.reaction_roles_discard_confirm(),
+        variant: 'warning',
+      });
+      if (!discard) return;
+    }
+    showModal = false;
+  }
+
+  /**
+   * Échap ferme d'abord le volet, puis la fenêtre. Une frappe dans un champ est
+   * ignorée : Échap y ferme une liste déroulante, pas toute la fenêtre.
+   */
+  function handleKeydown(event: KeyboardEvent) {
+    if (event.key !== 'Escape' || !showModal || confirmDialog.open) return;
+    const target = event.target as HTMLElement | null;
+    if (target?.closest('input, textarea, select, [contenteditable="true"]')) return;
+    event.preventDefault();
+    if (showAdvanced) {
+      showAdvanced = false;
+      return;
+    }
+    void requestCloseModal();
   }
 
   function addOption() {
@@ -695,6 +731,8 @@
   {/if}
 </ModulePage>
 
+<svelte:window onkeydown={handleKeydown} />
+
 <!-- Modal Déployer un Panel -->
 {#if showModal}
   <div class="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" transition:fade={{ duration: 150 }}>
@@ -708,7 +746,8 @@
 
       <!-- Close button -->
       <button
-        onclick={() => showModal = false}
+        type="button"
+        onclick={requestCloseModal}
         class="absolute top-6 right-6 p-2 rounded-full bg-surface-container-high/40 hover:bg-error/15 hover:text-error text-on-surface-variant transition-colors cursor-pointer z-10"
         title={m.reaction_roles_close()}
       >
@@ -1038,7 +1077,7 @@
           <div class="flex gap-2 ml-auto">
             <button
               type="button"
-              onclick={() => showModal = false}
+              onclick={requestCloseModal}
               class="px-4 py-3 rounded-lg text-on-surface-variant text-body-sm font-medium hover:bg-surface-container-high/40 transition-all cursor-pointer"
             >
               {m.reaction_roles_cancel()}
