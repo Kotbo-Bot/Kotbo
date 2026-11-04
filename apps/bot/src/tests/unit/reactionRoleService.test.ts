@@ -51,7 +51,10 @@ const {
   deleteReactionRoleMenu,
   getBotRoleAccess,
   handleRoleToggleInteraction,
+  buttonLabelWithCount,
+  menuDescription,
   menuMessageStatus,
+  normalizeMenuDescription,
   roleMemberCounts,
   normalizeButtonStyle,
   updateReactionRoleMenu,
@@ -685,5 +688,64 @@ describe('suivi des menus publiés', () => {
     } as never;
 
     expect(roleMemberCounts(guild, ['rouge', 'bleu', 'rouge', 'disparu'])).toEqual({ rouge: 42, bleu: 17 });
+  });
+});
+
+describe('texte du message d’un menu', () => {
+  test('un texte saisi par le staff remplace le texte par défaut', () => {
+    expect(menuDescription('Choisis tes jeux', [], 'toggle', 'fr')).toBe('Choisis tes jeux');
+  });
+
+  test('sans texte saisi, le message explique ce que font les boutons', () => {
+    const fallback = menuDescription(null, [], 'exclusive', 'fr');
+    expect(fallback).toBe(menuDescription('', [], 'exclusive', 'fr'));
+    expect(fallback.length).toBeGreaterThan(0);
+  });
+
+  test('le texte reçu est nettoyé : espaces retirés, vide ramené à null, longueur bornée', () => {
+    expect(normalizeMenuDescription('  Salut  ')).toBe('Salut');
+    expect(normalizeMenuDescription('   ')).toBeNull();
+    expect(normalizeMenuDescription(42)).toBeNull();
+    expect(normalizeMenuDescription('a'.repeat(5000))).toHaveLength(1000);
+  });
+
+  test('le texte saisi est enregistré avec le menu', async () => {
+    prismaMock.reactionRoleMenu.create.mockResolvedValueOnce({ id: 'menu-1' });
+    prismaMock.reactionRoleMenu.findUnique.mockResolvedValueOnce(null);
+    const client = { guilds: { cache: { get: mock(() => undefined) }, fetch: mock(async () => null) } } as unknown as Client;
+
+    await createReactionRoleMenu(client, 'guild-1', 'channel-1', 'Jeux', [{ label: 'LoL', roleId: 'lol' }], 'toggle', 'Choisis tes jeux');
+
+    expect(prismaMock.reactionRoleMenu.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ description: 'Choisis tes jeux' }),
+    });
+  });
+});
+
+describe('nombre de membres sur les boutons', () => {
+  test('ajoute au texte du bouton le nombre de membres qui ont le rôle', () => {
+    expect(buttonLabelWithCount('Rouge', 12)).toBe('Rouge · 12');
+  });
+
+  test('sans nombre connu, le texte reste tel quel', () => {
+    expect(buttonLabelWithCount('Rouge', undefined)).toBe('Rouge');
+  });
+
+  test('un texte long est raccourci pour que le nombre tienne dans la limite Discord de 80 caractères', () => {
+    const label = buttonLabelWithCount('a'.repeat(80), 1234);
+    expect(label).toHaveLength(80);
+    expect(label.endsWith(' · 1234')).toBeTrue();
+  });
+
+  test('l’option est enregistrée avec le menu', async () => {
+    prismaMock.reactionRoleMenu.create.mockResolvedValueOnce({ id: 'menu-1' });
+    prismaMock.reactionRoleMenu.findUnique.mockResolvedValueOnce(null);
+    const client = { guilds: { cache: { get: mock(() => undefined) }, fetch: mock(async () => null) } } as unknown as Client;
+
+    await createReactionRoleMenu(client, 'guild-1', 'channel-1', 'Couleurs', [{ label: 'Rouge', roleId: 'rouge' }], 'exclusive', null, true);
+
+    expect(prismaMock.reactionRoleMenu.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ showCounts: true }),
+    });
   });
 });

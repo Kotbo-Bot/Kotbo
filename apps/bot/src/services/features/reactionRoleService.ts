@@ -6,6 +6,7 @@ import { resolveEmojiShortcodes } from '../../utils/emojis.js';
 import { FALLBACK_LOCALE, getEffectiveLocale, resolveGuildLocale, type BotLocale } from '../../utils/i18n.js';
 import * as m from '../../lib/paraglide/messages.js';
 import {
+  buttonLabelWithCount,
   normalizeMenuMode,
   parseButtonMode,
   resolveButtonMode,
@@ -20,7 +21,7 @@ import { rolesToSwapOut } from './reactionRoleExclusive.js';
 // message entier qu'il refuse, et le panneau ne partirait jamais.
 export const MAX_REACTION_ROLE_BUTTONS = 25;
 
-export { normalizeMenuMode };
+export { buttonLabelWithCount, normalizeMenuMode };
 export type { ReactionRoleButtonMode, ReactionRoleMenuMode };
 
 export const REACTION_ROLE_BUTTON_STYLES = ['secondary', 'primary', 'success', 'danger'] as const;
@@ -86,6 +87,8 @@ export async function createReactionRoleMenu(
   title: string,
   options: ReactionRoleOption[],
   buttonMode: ReactionRoleMenuMode = 'toggle',
+  description: string | null = null,
+  showCounts = false,
 ) {
   // 1. Enregistrer dans la BDD
   const menu = await prisma.reactionRoleMenu.create({
@@ -94,6 +97,8 @@ export async function createReactionRoleMenu(
       channelId,
       title,
       buttonMode: normalizeMenuMode(buttonMode),
+      ...(description ? { description } : {}),
+      ...(showCounts ? { showCounts: true } : {}),
       options: sanitizeOptions(options) as Prisma.InputJsonValue,
     },
   });
@@ -189,6 +194,9 @@ export async function updateReactionRoleMenu(
     channelId?: string;
     options?: ReactionRoleOption[];
     buttonMode?: ReactionRoleMenuMode;
+    /** `null` remet le texte par défaut. */
+    description?: string | null;
+    showCounts?: boolean;
   },
 ) {
   const menu = await prisma.reactionRoleMenu.findFirst({
@@ -220,6 +228,8 @@ export async function updateReactionRoleMenu(
       ...(movedTo ? { channelId: movedTo, messageId: null } : {}),
       ...(changes.options ? { options: sanitizeOptions(changes.options) as Prisma.InputJsonValue } : {}),
       ...(changes.buttonMode !== undefined ? { buttonMode: normalizeMenuMode(changes.buttonMode) } : {}),
+      ...(changes.description !== undefined ? { description: changes.description } : {}),
+      ...(changes.showCounts !== undefined ? { showCounts: changes.showCounts } : {}),
     },
   });
 
@@ -244,6 +254,26 @@ function describeMenuModes(
   if (modes.size > 1) return m.panel_reactionroles_description_mixed({}, { locale });
   if (modes.has('add_only')) return m.panel_reactionroles_description_add_only({}, { locale });
   return m.panel_reactionroles_description({}, { locale });
+}
+
+/** Longueur maximale du texte d'un menu, bien sous la limite d'un embed Discord. */
+const MENU_DESCRIPTION_MAX_LENGTH = 1000;
+
+/** Texte du message reçu du dashboard : vide ou invalide, il retombe sur le texte par défaut. */
+export function normalizeMenuDescription(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const text = value.trim().slice(0, MENU_DESCRIPTION_MAX_LENGTH);
+  return text || null;
+}
+
+/** Le texte saisi par le staff, sinon celui qui explique ce que font les boutons. */
+export function menuDescription(
+  custom: string | null,
+  options: ReactionRoleOption[],
+  menuMode: ReactionRoleMenuMode,
+  locale: BotLocale,
+): string {
+  return custom || describeMenuModes(options, menuMode, locale);
 }
 
 /**
@@ -272,7 +302,7 @@ export async function sendOrUpdateMenuMessage(client: Client, menuId: string) {
     // Créer l'embed du menu
     const embed = new EmbedBuilder()
       .setTitle(resolveEmojiShortcodes(menu.title))
-      .setDescription(describeMenuModes(options, menuMode, locale))
+      .setDescription(resolveEmojiShortcodes(menuDescription(menu.description, options, menuMode, locale)))
       .setColor('#5865F2')
       .setTimestamp();
 
@@ -282,12 +312,17 @@ export async function sendOrUpdateMenuMessage(client: Client, menuId: string) {
 
     for (let i = 0; i < options.length; i++) {
       const opt = options[i];
+      // Le nombre affiché est celui des membres qui ont le rôle, pas des clics :
+      // basculer dix fois ne le gonfle pas.
+      const label = menu.showCounts
+        ? buttonLabelWithCount(opt.label, discordGuild.roles.cache.get(opt.roleId)?.members.size)
+        : opt.label;
       // L'index suit le bouton dans son identifiant : deux boutons peuvent
       // viser le même rôle avec des modes différents, et Discord refuse deux
       // identifiants identiques dans un même message.
       const button = new ButtonBuilder()
         .setCustomId(`role_toggle:${opt.roleId}:${i}`)
-        .setLabel(opt.label)
+        .setLabel(label)
         .setStyle(DISCORD_BUTTON_STYLES[normalizeButtonStyle(opt.style)]);
 
       if (opt.emoji) {
@@ -360,6 +395,25 @@ export function roleMemberCounts(guild: Guild, roleIds: string[]): Record<string
     if (role) counts[roleId] = role.members.size;
   }
   return counts;
+}
+
+/** Délai entre deux mises à jour des nombres d'un même menu. */
+const COUNT_REFRESH_DELAY_MS = 5_000;
+const pendingCountRefreshes = new Set<string>();
+
+/**
+ * Met à jour les nombres affichés sur les boutons quelques secondes après un
+ * clic. Fenêtre fixe : les clics suivants rejoignent la mise à jour déjà
+ * prévue au lieu de la repousser, si bien qu'un membre qui bascule sans arrêt
+ * ne la bloque pas et ne provoque qu'une modification du message par période.
+ */
+function scheduleCountRefresh(client: Client, menuId: string): void {
+  if (pendingCountRefreshes.has(menuId)) return;
+  pendingCountRefreshes.add(menuId);
+  setTimeout(() => {
+    pendingCountRefreshes.delete(menuId);
+    void sendOrUpdateMenuMessage(client, menuId);
+  }, COUNT_REFRESH_DELAY_MS);
 }
 
 /**
@@ -448,6 +502,7 @@ export async function handleRoleToggleInteraction(interaction: ButtonInteraction
 
     if (hasRole) {
       await member.roles.remove(roleId);
+      if (activeMenu.showCounts) scheduleCountRefresh(interaction.client, activeMenu.id);
       return interaction.reply({
         content: m.reactionroles_role_removed({ role }, { locale }),
         flags: [MessageFlags.Ephemeral],
@@ -464,6 +519,7 @@ export async function handleRoleToggleInteraction(interaction: ButtonInteraction
     // Ajout d'abord : si le retrait échoue ensuite, le membre a deux rôles
     // plutôt qu'aucun.
     await member.roles.add(roleId);
+    if (activeMenu.showCounts) scheduleCountRefresh(interaction.client, activeMenu.id);
     const swapped = swapOut.length > 0 && await member.roles.remove(swapOut).then(
       () => true,
       (err: unknown) => {
