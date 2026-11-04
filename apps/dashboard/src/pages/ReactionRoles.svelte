@@ -3,7 +3,7 @@
   import { m } from '../lib/i18n';
   import { channelDisplayName } from '../lib/channelUtils';
   import { onMount } from 'svelte';
-  import { fade, scale } from 'svelte/transition';
+  import { fade, scale, slide } from 'svelte/transition';
   import { dashboardStore } from '../lib/stores/dashboard.svelte';
   import { createAsyncActionState } from '../lib/asyncAction.svelte';
   import { confirmDialog } from '../lib/stores/confirmDialog.svelte';
@@ -52,6 +52,7 @@
   let applyingPreset = $state<ReactionRolePresetKey | null>(null);
   /** Couleur et mode bouton par bouton : rarement utiles, repliés par défaut. */
   let showAdvanced = $state(false);
+  /** Aperçu Discord, dans un volet dépliant sous les étapes. */
   let showPreview = $state(false);
   // `mode: ''` = le bouton suit le mode du panneau.
   type NewRole = { name: string; color?: number };
@@ -63,7 +64,7 @@
   // Les couleurs Discord des quatre styles de bouton, reprises telles quelles
   // pour que l'aperçu montre ce que les membres verront.
   const PREVIEW_STYLE_CLASSES: Record<ReactionRoleButtonStyle, string> = {
-    secondary: 'bg-[#4f545c] hover:bg-[#686d73]',
+    secondary: 'bg-[#4e5058] hover:bg-[#6d6f78]',
     primary: 'bg-[#5865f2] hover:bg-[#4752c4]',
     success: 'bg-[#248046] hover:bg-[#1a6334]',
     danger: 'bg-[#da373c] hover:bg-[#a12828]',
@@ -280,6 +281,14 @@
 
   /** L'étape « modèle » n'existe qu'à la création, pour qui peut configurer. */
   const showPresetStep = $derived(!editingMenuId && canManageSettings);
+
+  /** Boutons de l'aperçu, par rangées de cinq comme Discord les affiche. */
+  const previewRows = $derived.by(() => {
+    const visible = formOptions.filter(opt => opt.label || opt.emoji);
+    const rows: (typeof visible)[] = [];
+    for (let i = 0; i < visible.length; i += 5) rows.push(visible.slice(i, i + 5));
+    return rows;
+  });
 
   /** Numéro d'une étape, décalé quand l'étape « modèle » est absente. */
   function step(n: number): number {
@@ -760,36 +769,60 @@
           {/if}
         </section>
 
-        {#if showPreview}
-          <div class="p-5 rounded-xl bg-[#36393f] border border-[#202225] text-[#dcddde] font-sans space-y-3" transition:fade={{ duration: 120 }}>
-            <div class="flex items-start gap-4">
-              <div class="w-10 h-10 rounded-full bg-[#5865f2] flex items-center justify-center text-white font-bold shrink-0">K</div>
-              <div class="space-y-3 flex-1 min-w-0">
-                <div class="flex items-center gap-2 select-none">
-                  <span class="font-bold text-white text-sm">Kotbo</span>
-                  <span class="bg-[#5865f2] text-white text-2xs font-bold px-1.5 py-0.5 rounded uppercase">Bot</span>
-                  <span class="text-xs text-[#72767d]">{m.announcements_today_at({ time: '12:00' })}</span>
-                </div>
-                <div class="bg-[#2f3136] border-l-4 border-[#5865f2] rounded-r p-3 max-w-[520px] space-y-1">
-                  <div class="text-sm font-bold text-white wrap-break-word">
-                    {@html parseDiscordEmojisAndMarkdown(formTitle || m.reaction_roles_field_title_ph())}
+        <!-- Aperçu Discord, replié par défaut -->
+        <section class="rounded-xl border border-outline-variant/15 overflow-hidden">
+          <button
+            type="button"
+            onclick={() => { showPreview = !showPreview; }}
+            aria-expanded={showPreview}
+            aria-controls="reaction-roles-preview"
+            class="w-full flex items-center justify-between gap-3 px-4 py-3 bg-surface-container-high/30 hover:bg-surface-container-high/50 transition-colors cursor-pointer text-left"
+          >
+            <span class="flex items-center gap-3 min-w-0">
+              <span class="w-8 h-8 rounded-lg bg-[#5865f2]/15 text-[#5865f2] flex items-center justify-center shrink-0">
+                <Papicon icon="Eye" size={16} />
+              </span>
+              <span class="min-w-0">
+                <span class="block text-sm font-semibold text-on-surface">{m.reaction_roles_preview_title()}</span>
+                <span class="block text-2xs text-on-surface-variant">{m.reaction_roles_preview_desc()}</span>
+              </span>
+            </span>
+            <Papicon icon={showPreview ? 'ChevronUp' : 'ChevronDown'} size={16} class="text-on-surface-variant shrink-0" />
+          </button>
+
+          {#if showPreview}
+            <div id="reaction-roles-preview" class="bg-[#313338] px-4 py-4 text-[#dbdee1] font-sans" transition:slide={{ duration: 160 }}>
+              <div class="flex items-start gap-3">
+                <div class="w-10 h-10 rounded-full bg-[#5865f2] flex items-center justify-center text-white font-bold shrink-0">K</div>
+                <div class="flex-1 min-w-0 space-y-2">
+                  <div class="flex items-center gap-1.5 select-none">
+                    <span class="font-semibold text-white text-sm">Kotbo</span>
+                    <span class="bg-[#5865f2] text-white text-[10px] font-semibold px-1 rounded-[3px] leading-4">BOT</span>
+                    <span class="text-xs text-[#949ba4]">{m.announcements_today_at({ time: '12:00' })}</span>
                   </div>
-                  <div class="text-xs text-[#b9bbbe]">{previewSubtitle}</div>
-                </div>
-                <div class="flex flex-wrap gap-2 pt-1">
-                  {#each formOptions as opt}
-                    {#if opt.label || opt.emoji}
-                      <span class="flex items-center gap-1.5 px-3 py-1.5 text-white text-xs font-semibold rounded {PREVIEW_STYLE_CLASSES[resolveStyle(opt.style)]}">
-                        {#if opt.emoji}<span>{@html parseDiscordEmojisAndMarkdown(opt.emoji)}</span>{/if}
-                        <span>{opt.label || m.reaction_roles_preview_button_default()}</span>
-                      </span>
-                    {/if}
-                  {/each}
+                  <div class="bg-[#2b2d31] border-l-4 border-[#5865f2] rounded-[4px] px-3 py-2.5 max-w-[520px] space-y-1">
+                    <div class="text-sm font-semibold text-white wrap-break-word">
+                      {@html parseDiscordEmojisAndMarkdown(formTitle || m.reaction_roles_field_title_ph())}
+                    </div>
+                    <div class="text-[13px] leading-snug text-[#dbdee1]">{previewSubtitle}</div>
+                  </div>
+                  <div class="space-y-2 pt-0.5">
+                    {#each previewRows as row}
+                      <div class="flex flex-wrap gap-2">
+                        {#each row as opt}
+                          <span class="flex items-center gap-1.5 h-8 px-4 text-white text-sm font-medium rounded-[3px] transition-colors {PREVIEW_STYLE_CLASSES[resolveStyle(opt.style)]}">
+                            {#if opt.emoji}<span>{@html parseDiscordEmojisAndMarkdown(opt.emoji)}</span>{/if}
+                            <span>{opt.label || m.reaction_roles_preview_button_default()}</span>
+                          </span>
+                        {/each}
+                      </div>
+                    {/each}
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        {/if}
+          {/if}
+        </section>
 
         <div class="flex items-center justify-between gap-3 flex-wrap pt-4 border-t border-outline-variant/10">
           <p class="flex items-center gap-1.5 text-2xs text-on-surface-variant min-h-5">
@@ -799,14 +832,6 @@
             {/if}
           </p>
           <div class="flex gap-2 ml-auto">
-            <button
-              type="button"
-              onclick={() => { showPreview = !showPreview; }}
-              aria-pressed={showPreview}
-              class="px-4 py-3 rounded-lg border border-outline-variant/20 text-on-surface text-body-sm font-medium hover:bg-surface-container-high/40 transition-all cursor-pointer"
-            >
-              {showPreview ? m.reaction_roles_preview_hide() : m.reaction_roles_preview_show()}
-            </button>
             <button
               type="button"
               onclick={() => showModal = false}
