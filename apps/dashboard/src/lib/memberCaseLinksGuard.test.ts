@@ -29,6 +29,7 @@ const PAGES = [
   'pages/Invitations.svelte',
   'lib/components/invitations/InviteDetailsModal.svelte',
   'pages/Reputation.svelte',
+  'pages/Suggestions.svelte',
   'pages/Marketplace.svelte',
   'pages/Giveaways.svelte',
   'pages/Planning.svelte',
