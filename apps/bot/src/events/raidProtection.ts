@@ -1,4 +1,4 @@
-import { type Client, Events, type GuildBasedChannel, type GuildMember, type Invite, type Message, type PartialGuildMember, type Typing, type VoiceState } from 'discord.js';
+import { type Client, Events, type GuildBasedChannel, type GuildMember, type Invite, type Message, type PartialGuildMember, type PartialUser, type Typing, type User, type VoiceState } from 'discord.js';
 import { logger } from '../utils/logger.js';
 import { getRaidProtectionConfig } from '../services/moderation/raidProtectionService.js';
 import { admitJoiningMember } from '../services/moderation/joinAdmissionService.js';
@@ -140,6 +140,21 @@ export function registerRaidProtectionListener(client: Client): void {
       await syncDiscordQuarantine(member);
     } catch (err) {
       logger.error('RaidProtection', `Erreur GuildMemberAvailable pour ${member.id}`, err);
+    }
+  });
+
+  // Le tag vit sur l'User : pour un membre en cache, sa pose ou son retrait
+  // n'émet que UserUpdate, jamais GuildMemberUpdate (le membre n'a pas changé).
+  client.on(Events.UserUpdate, async (_old: User | PartialUser, user: User) => {
+    for (const guild of client.guilds.cache.values()) {
+      const member = guild.members.cache.get(user.id);
+      if (!member) continue;
+      try {
+        await syncMemberTagRole(member);
+        await syncServerTagQuarantine(member);
+      } catch (err) {
+        logger.error('RaidProtection', `Erreur UserUpdate pour ${user.id} sur ${guild.id}`, err);
+      }
     }
   });
 }

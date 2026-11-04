@@ -31,6 +31,21 @@ import { isModuleEnabled } from '../services/core/moduleGate.js';
 
 const runningJobs = new Set<string>();
 
+/** Rescan des deux auto-rôles du tag (Annonces et Shield) sur chaque serveur qui en a un. */
+async function resyncServerTagRoles(client: Client): Promise<void> {
+  const { rescanGuildAutoRoles } = await import('../services/features/serverTagRoleService.js');
+  const { rescanGuildTagRoles } = await import('../services/moderation/tagRoleService.js');
+  // Séquentiel : chaque rescan demande la liste des membres à la gateway, limitée en débit.
+  for (const guildId of client.guilds.cache.keys()) {
+    try {
+      await rescanGuildAutoRoles(client, guildId);
+      await rescanGuildTagRoles(client, guildId);
+    } catch (err) {
+      logger.error('Cron', `Rattrapage des rôles du tag impossible sur ${guildId}`, err);
+    }
+  }
+}
+
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -423,6 +438,7 @@ export async function registerCrons(client: Client): Promise<void> {
       const { pruneSiteAnalytics } = await import('../services/site/siteAnalyticsService.js');
       await pruneSiteAnalytics();
     },
+    'server-tag-roles-resync': () => resyncServerTagRoles(client),
     'site-scheduled-publish': async () => {
       const { publishDuePages } = await import('../services/site/siteAdminService.js');
       await publishDuePages(client);
@@ -753,6 +769,13 @@ export async function registerCrons(client: Client): Promise<void> {
       await pruneAcquisitionEvents();
       await anonymiseDepartedGuilds();
     }, 2000);
+  });
+
+  // 🏷️ Rôles du tag de serveur : rattrapage toutes les 6 h (à :25). Discord
+  // n'envoie pas toujours la pose ou le retrait d'un tag (membre hors ligne
+  // jamais chargé, bot redémarré entre-temps) : le rôle restait figé (#615).
+  cron.schedule('25 */6 * * *', async () => {
+    await runCronJob('server-tag-roles-resync', () => resyncServerTagRoles(client), 2000);
   });
 
   // 🧭 Telemetrie du dashboard : purge au-dela de 180 jours (03:55).
