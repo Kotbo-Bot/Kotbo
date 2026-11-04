@@ -51,6 +51,8 @@ const {
   deleteReactionRoleMenu,
   getBotRoleAccess,
   handleRoleToggleInteraction,
+  menuMessageStatus,
+  roleMemberCounts,
   normalizeButtonStyle,
   updateReactionRoleMenu,
 } = await import('../../services/features/reactionRoleService.js');
@@ -628,5 +630,60 @@ describe('reactionRoleService', () => {
         ],
       },
     });
+  });
+});
+
+describe('suivi des menus publiés', () => {
+  /** Serveur dont le salon `salon-1` répond à la recherche du message par `fetchMessage`. */
+  function guildWithChannel(fetchMessage: () => Promise<unknown>, channel: unknown = undefined) {
+    const textChannel = channel === undefined ? { isTextBased: () => true, messages: { fetch: mock(fetchMessage) } } : channel;
+    return {
+      channels: { fetch: mock(async () => textChannel) },
+    } as never;
+  }
+
+  test('un message toujours en place est signalé comme publié', async () => {
+    const guild = guildWithChannel(async () => ({ id: 'message-1' }));
+    expect(await menuMessageStatus(guild, { channelId: 'salon-1', messageId: 'message-1' })).toBe('ok');
+  });
+
+  test('un menu jamais publié est signalé comme manquant', async () => {
+    const guild = guildWithChannel(async () => ({ id: 'message-1' }));
+    expect(await menuMessageStatus(guild, { channelId: 'salon-1', messageId: null })).toBe('missing');
+  });
+
+  test('un message supprimé sur Discord est signalé comme manquant', async () => {
+    const guild = guildWithChannel(async () => { throw Object.assign(new Error('Unknown Message'), { code: 10008 }); });
+    expect(await menuMessageStatus(guild, { channelId: 'salon-1', messageId: 'message-1' })).toBe('missing');
+  });
+
+  test('un salon supprimé rend le message manquant', async () => {
+    const guild = guildWithChannel(async () => ({}), null);
+    expect(await menuMessageStatus(guild, { channelId: 'salon-1', messageId: 'message-1' })).toBe('missing');
+  });
+
+  test('un salon que Discord ne connaît plus rend le message manquant', async () => {
+    const guild = {
+      channels: { fetch: mock(async () => { throw Object.assign(new Error('Unknown Channel'), { code: 10003 }); }) },
+    } as never;
+    expect(await menuMessageStatus(guild, { channelId: 'salon-1', messageId: 'message-1' })).toBe('missing');
+  });
+
+  test('une autre erreur (permission, panne) ne conclut pas à une disparition', async () => {
+    const guild = guildWithChannel(async () => { throw Object.assign(new Error('Missing Access'), { code: 50001 }); });
+    expect(await menuMessageStatus(guild, { channelId: 'salon-1', messageId: 'message-1' })).toBe('unknown');
+  });
+
+  test('compte les membres de chaque rôle des menus, une seule fois par rôle', () => {
+    const guild = {
+      roles: {
+        cache: new Map([
+          ['rouge', { members: { size: 42 } }],
+          ['bleu', { members: { size: 17 } }],
+        ]),
+      },
+    } as never;
+
+    expect(roleMemberCounts(guild, ['rouge', 'bleu', 'rouge', 'disparu'])).toEqual({ rouge: 42, bleu: 17 });
   });
 });

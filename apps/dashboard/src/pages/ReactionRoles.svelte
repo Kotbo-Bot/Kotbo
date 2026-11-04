@@ -12,7 +12,7 @@
   import InlineFeedback from '../lib/components/InlineFeedback.svelte';
   import SearchableSelect from '../lib/components/SearchableSelect.svelte';
   import Skeleton from '../lib/components/Skeleton.svelte';
-  import { fetchReactionRoleMenus, createReactionRoleMenu, updateReactionRoleMenu, deleteReactionRoleMenu, fetchReactionRolePreset, type ReactionRoleButtonMode, type ReactionRoleButtonStyle, type ReactionRoleMenuMode, type ReactionRolePresetKey } from '../lib/api';
+  import { fetchReactionRoleMenus, createReactionRoleMenu, updateReactionRoleMenu, deleteReactionRoleMenu, fetchReactionRolePreset, republishReactionRoleMenu, type ReactionRoleButtonMode, type ReactionRoleButtonStyle, type ReactionRoleMenuMode, type ReactionRolePresetKey } from '../lib/api';
   import { normalizeMenuMode, resolveButtonMode, REACTION_ROLE_PRESET_KEYS, type BotRoleAccess, type RoleBlocker } from '@kotbo/contracts';
   import { dashboardRoleBlocker } from '../lib/reactionRoleBlockers';
   import FormSelect from '../lib/components/FormSelect.svelte';
@@ -43,6 +43,12 @@
 
   /** Ce que le bot peut attribuer : sert à signaler les rôles qu'il ne pourra pas donner. */
   let botRoleAccess = $state<BotRoleAccess | null>(null);
+  /** Membres qui portent chaque rôle des menus. */
+  let memberCounts = $state<Record<string, number>>({});
+  /** Le message de chaque menu est-il toujours sur Discord ? */
+  type MessageStatus = 'ok' | 'missing' | 'unknown';
+  let messageStatuses = $state<Record<string, MessageStatus>>({});
+  let republishingId = $state<string | null>(null);
 
   // Form states
   let editingMenuId = $state<string | null>(null);
@@ -167,6 +173,8 @@
       if (res && res.menus) {
         menus = res.menus;
         botRoleAccess = res.botRoleAccess ?? null;
+        memberCounts = res.memberCounts ?? {};
+        messageStatuses = res.messageStatuses ?? {};
       }
     } catch (err) {
       console.error(err);
@@ -261,6 +269,7 @@
         const res = await updateReactionRoleMenu(menuId, payload);
         if (!res || !res.menu) throw new Error(m.reaction_roles_update_error());
         menus = menus.map(item => (item.id === menuId ? res.menu : item));
+        messageStatuses = { ...messageStatuses, [menuId]: res.menu.messageId ? 'ok' : 'missing' };
         if (createsRoles) await dashboardStore.refresh();
         showModal = false;
         return true;
@@ -273,6 +282,7 @@
 
       if (!res || !res.menu) throw new Error(m.reaction_roles_deploy_error());
       menus = [res.menu, ...menus];
+      messageStatuses = { ...messageStatuses, [res.menu.id]: res.menu.messageId ? 'ok' : 'missing' };
       if (createsRoles) await dashboardStore.refresh();
       showModal = false;
       return true;
@@ -342,6 +352,25 @@
       });
     } finally {
       applyingPreset = null;
+    }
+  }
+
+  /** Remet en place le message d'un menu supprimé sur Discord. */
+  async function republish(menuId: string) {
+    if (!canManageSettings || republishingId) return;
+    republishingId = menuId;
+    try {
+      await actionState.run(async () => {
+        const res = await republishReactionRoleMenu(menuId);
+        if (!res?.menu) throw new Error(m.reaction_roles_republish_error());
+        menus = menus.map(item => (item.id === menuId ? res.menu : item));
+        messageStatuses = { ...messageStatuses, [menuId]: res.messageStatus };
+        // Salon disparu ou écriture refusée : le bot n'a rien pu reposter.
+        if (res.messageStatus === 'missing') throw new Error(m.reaction_roles_republish_failed());
+        return true;
+      }, { successMessage: m.reaction_roles_republish_success() });
+    } finally {
+      republishingId = null;
     }
   }
 
@@ -425,6 +454,24 @@
                       <Papicon icon="AlertTriangle" size={12} />{m.reaction_roles_blocked_summary({ n: blocked.length })}
                     </p>
                   {/if}
+                  {#if messageStatuses[menu.id] === 'missing'}
+                    <div class="flex items-center justify-between gap-3 flex-wrap mt-1 px-3 py-2 rounded-lg bg-error/10 border border-error/25">
+                      <p class="flex items-center gap-1.5 text-2xs font-semibold text-error">
+                        <Papicon icon="AlertTriangle" size={12} />{m.reaction_roles_message_missing()}
+                      </p>
+                      {#if canManageSettings}
+                        <button
+                          type="button"
+                          onclick={() => republish(menu.id)}
+                          disabled={republishingId !== null}
+                          aria-busy={republishingId === menu.id}
+                          class="flex items-center gap-1 px-2.5 py-1 rounded-md bg-error text-on-error text-2xs font-semibold hover:opacity-90 transition-opacity cursor-pointer disabled:opacity-50 disabled:cursor-wait"
+                        >
+                          <Papicon icon="Refresh" size={11} />{m.reaction_roles_republish()}
+                        </button>
+                      {/if}
+                    </div>
+                  {/if}
                 </div>
 
                 {#if canManageSettings}
@@ -465,6 +512,14 @@
                       {:else}
                         <span class="text-2xs bg-primary/10 text-primary border border-primary/20 px-1.5 py-0.5 rounded font-semibold">
                           {getRoleName(opt.roleId)}
+                        </span>
+                      {/if}
+                      {#if memberCounts[opt.roleId] !== undefined}
+                        <span
+                          class="flex items-center gap-0.5 text-2xs font-semibold text-on-surface-variant"
+                          title={m.reaction_roles_member_count({ n: memberCounts[opt.roleId] })}
+                        >
+                          <Papicon icon="Users" size={10} />{memberCounts[opt.roleId]}
                         </span>
                       {/if}
                       {#if opt.mode && opt.mode !== menu.buttonMode && normalizeMenuMode(menu.buttonMode) !== 'exclusive'}
