@@ -7331,6 +7331,8 @@
   "reaction_roles_preset_colors_desc": "Une couleur de pseudo à la fois, au choix du membre.",
   "reaction_roles_preset_pronouns_desc": "Chacun affiche les pronoms qui lui correspondent.",
   "reaction_roles_preset_notifications_desc": "Les membres choisissent ce dont ils veulent être prévenus.",
+  "reaction_roles_row_label": "Rangée {n} sur Discord",
+  "reaction_roles_reorder_handle": "Déplacer le bouton {n} (glisser, ou flèches haut et bas)",
   "reaction_roles_embed_color_title": "Couleur de la barre",
   "reaction_roles_embed_color_reset": "Par défaut",
   "reaction_roles_embed_color_desc": "Le liseré à gauche du message. Sans choix, le bleu Discord.",

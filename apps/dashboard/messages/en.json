@@ -7331,6 +7331,8 @@
   "reaction_roles_preset_colors_desc": "One name color at a time, picked by each member.",
   "reaction_roles_preset_pronouns_desc": "Everyone shows the pronouns that fit them.",
   "reaction_roles_preset_notifications_desc": "Members choose what they want to be notified about.",
+  "reaction_roles_row_label": "Row {n} on Discord",
+  "reaction_roles_reorder_handle": "Move button {n} (drag, or up and down arrows)",
   "reaction_roles_embed_color_title": "Bar color",
   "reaction_roles_embed_color_reset": "Default",
   "reaction_roles_embed_color_desc": "The stripe on the left of the message. With no choice, Discord blue.",

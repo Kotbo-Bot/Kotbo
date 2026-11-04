@@ -282,6 +282,38 @@
     formOptions = formOptions.filter((_, i) => i !== idx);
   }
 
+  /** Déplace un bouton dans la liste : l'ordre est celui du message publié. */
+  function moveOption(from: number, to: number) {
+    if (to < 0 || to >= formOptions.length || from === to) return;
+    const next = [...formOptions];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    formOptions = next;
+  }
+
+  /** Réordonner n'a de sens qu'à partir de deux boutons, et pour qui peut configurer. */
+  const canReorder = $derived(canManageSettings && formOptions.length > 1);
+
+  /** Glisser-déposer : bouton saisi par sa poignée, et place visée. */
+  let dragIndex = $state<number | null>(null);
+  let dropIndex = $state<number | null>(null);
+
+  function dropOption() {
+    if (dragIndex !== null && dropIndex !== null) moveOption(dragIndex, dropIndex);
+    dragIndex = null;
+    dropIndex = null;
+  }
+
+  /** Flèches haut et bas sur la poignée : le même déplacement, au clavier. */
+  function handleGripKeydown(event: KeyboardEvent, idx: number) {
+    if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
+    event.preventDefault();
+    const to = event.key === 'ArrowUp' ? idx - 1 : idx + 1;
+    moveOption(idx, to);
+    // La poignée suit son bouton : on peut enchaîner les déplacements.
+    requestAnimationFrame(() => document.getElementById(`reaction-role-grip-${to}`)?.focus());
+  }
+
   async function handleSubmit() {
     if (!canManageSettings || !formTitle || !formChannelId || formOptions.length === 0) return;
 
@@ -742,7 +774,7 @@
         <section class="space-y-3">
           {@render stepTitle(step(3), m.reaction_roles_step_buttons(), '')}
 
-          <div class="hidden md:grid grid-cols-[8rem_minmax(0,1fr)_minmax(0,1fr)_2.5rem] gap-2 px-1 text-2xs font-semibold text-on-surface-variant">
+          <div class="hidden md:grid grid-cols-[8rem_minmax(0,1fr)_minmax(0,1fr)_2.5rem] gap-2 pl-9 pr-1 text-2xs font-semibold text-on-surface-variant">
             <span>{m.reaction_roles_field_emoji()}</span>
             <span>{m.reaction_roles_field_label()}</span>
             <span>{m.reaction_roles_field_role()}</span>
@@ -751,8 +783,44 @@
 
           <div class="space-y-2">
             {#each formOptions as opt, idx}
-              <div class="p-2 rounded-lg bg-surface-container-high/20 border border-outline-variant/10 space-y-2">
-                <div class="grid grid-cols-[minmax(0,1fr)_2.5rem] md:grid-cols-[8rem_minmax(0,1fr)_minmax(0,1fr)_2.5rem] gap-2 items-start">
+              <!-- Discord passe à la ligne tous les cinq boutons : on le montre. -->
+              {#if idx > 0 && idx % 5 === 0}
+                <p class="flex items-center gap-2 text-2xs font-semibold text-on-surface-variant pt-1">
+                  <span class="h-px flex-1 bg-outline-variant/30"></span>
+                  {m.reaction_roles_row_label({ n: idx / 5 + 1 })}
+                  <span class="h-px flex-1 bg-outline-variant/30"></span>
+                </p>
+              {/if}
+              <!-- svelte-ignore a11y_no_static_element_interactions -->
+              <div
+                class="p-2 rounded-lg bg-surface-container-high/20 border transition-colors {dragIndex !== null && dropIndex === idx && dragIndex !== idx ? 'border-primary ring-1 ring-primary/40' : 'border-outline-variant/10'} {dragIndex === idx ? 'opacity-50' : ''}"
+                ondragover={(event) => { if (dragIndex === null) return; event.preventDefault(); dropIndex = idx; }}
+                ondrop={(event) => { event.preventDefault(); dropOption(); }}
+              >
+                <div class="flex gap-1 items-start">
+                <!-- Pas un élément bouton : Firefox refuse de le faire glisser. -->
+                <span
+                  role="button"
+                  tabindex={canReorder ? 0 : -1}
+                  aria-disabled={!canReorder}
+                  id={`reaction-role-grip-${idx}`}
+                  draggable={canReorder ? 'true' : 'false'}
+                  ondragstart={(event) => {
+                    dragIndex = idx;
+                    if (event.dataTransfer) {
+                      event.dataTransfer.effectAllowed = 'move';
+                      event.dataTransfer.setData('text/plain', String(idx));
+                    }
+                  }}
+                  ondragend={() => { dragIndex = null; dropIndex = null; }}
+                  onkeydown={(event) => { if (canReorder) handleGripKeydown(event, idx); }}
+                  aria-label={m.reaction_roles_reorder_handle({ n: idx + 1 })}
+                  title={m.reaction_roles_reorder_handle({ n: idx + 1 })}
+                  class="mt-1 w-7 h-8 shrink-0 flex items-center justify-center rounded-md text-on-surface-variant transition-colors {canReorder ? 'hover:text-on-surface hover:bg-surface-container-high/60 cursor-grab active:cursor-grabbing' : 'opacity-30'}"
+                >
+                  <Papicon icon="GripVertical" size={14} />
+                </span>
+                <div class="flex-1 min-w-0 grid grid-cols-[minmax(0,1fr)_2.5rem] md:grid-cols-[8rem_minmax(0,1fr)_minmax(0,1fr)_2.5rem] gap-2 items-start">
                   <div class="flex gap-1.5 items-center col-span-2 md:col-span-1">
                     <input
                       id={`modal-emoji-${idx}`}
@@ -831,6 +899,7 @@
                       </button>
                     {/if}
                   </div>
+                </div>
                 </div>
               </div>
             {/each}
