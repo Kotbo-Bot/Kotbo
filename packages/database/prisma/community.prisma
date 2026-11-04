@@ -328,6 +328,8 @@ model ReactionRoleMenu {
   description String?
   /// Nombre de membres qui ont le rôle, affiché sur chaque bouton.
   showCounts Boolean @default(false)
+  /// Couleur de la barre de l'embed (« #RRGGBB ») ; vide, le bleu Discord.
+  embedColor String?
 
   guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
 

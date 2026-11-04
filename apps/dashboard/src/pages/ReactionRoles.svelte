@@ -17,6 +17,8 @@
   import { dashboardRoleBlocker } from '../lib/reactionRoleBlockers';
   import EmojiPicker from '../lib/components/EmojiPicker.svelte';
   import ToggleSwitch from '../lib/components/ToggleSwitch.svelte';
+  import FormColorPicker from '../lib/components/FormColorPicker.svelte';
+  import ReactionRoleDiscordPreview from '../lib/components/ReactionRoleDiscordPreview.svelte';
   import { parseDiscordEmojisAndMarkdown } from '../lib/emojiParser';
 
   const actionState = createAsyncActionState();
@@ -39,6 +41,7 @@
     buttonMode?: string;
     description?: string | null;
     showCounts?: boolean;
+    embedColor?: string | null;
     options: any; // Array of { emoji?: string; label: string; roleId: string; mode?: 'toggle' | 'add_only' }
     createdAt: string;
   }>>([]);
@@ -59,6 +62,8 @@
   let formDescription = $state('');
   /** Nombre de membres de chaque rôle affiché sur son bouton. */
   let formShowCounts = $state(false);
+  /** Couleur de la barre de l'embed ; vide, le bleu Discord. */
+  let formEmbedColor = $state('');
   let formChannelId = $state('');
   let formButtonMode = $state<ReactionRoleMenuMode>('toggle');
   let applyingPreset = $state<ReactionRolePresetKey | null>(null);
@@ -85,12 +90,8 @@
     danger: 'bg-[#da373c] hover:bg-[#a12828]',
   };
 
-  const STYLE_BADGE_CLASSES: Record<ReactionRoleButtonStyle, string> = {
-    secondary: 'bg-[#4f545c]/15 text-[#8e9297] border-[#4f545c]/30',
-    primary: 'bg-[#5865f2]/15 text-[#5865f2] border-[#5865f2]/30',
-    success: 'bg-[#248046]/15 text-[#3ba55d] border-[#248046]/30',
-    danger: 'bg-[#da373c]/15 text-[#da373c] border-[#da373c]/30',
-  };
+  /** Couleur de la barre de l'embed quand le staff n'en choisit pas. */
+  const DEFAULT_EMBED_COLOR = '#5865F2';
 
   function modeLabel(mode: string | null | undefined) {
     switch (normalizeMenuMode(mode)) {
@@ -106,11 +107,11 @@
   }
 
   /**
-   * Le menu affiche-t-il les nombres, ou un bouton a-t-il une couleur ou un
-   * second clic à lui ? L'onglet le signale.
+   * Le menu affiche-t-il les nombres ou une couleur à lui, ou un bouton a-t-il
+   * une couleur ou un second clic à lui ? L'onglet le signale.
    * En mode « Un seul », le second clic d'un bouton ne compte pas : il est ignoré.
    */
-  const hasCustomOptions = $derived(formShowCounts || formOptions.some(opt =>
+  const hasCustomOptions = $derived(formShowCounts || !!formEmbedColor || formOptions.some(opt =>
     opt.style !== 'secondary' || (opt.mode !== '' && formButtonMode !== 'exclusive')));
 
   const BUTTON_STYLES: ReactionRoleButtonStyle[] = ['secondary', 'primary', 'success', 'danger'];
@@ -161,6 +162,12 @@
     notifications: m.reaction_roles_preset_notifications,
   };
 
+  const PRESET_DESCRIPTIONS: Record<ReactionRolePresetKey, () => string> = {
+    colors: m.reaction_roles_preset_colors_desc,
+    pronouns: m.reaction_roles_preset_pronouns_desc,
+    notifications: m.reaction_roles_preset_notifications_desc,
+  };
+
   const PRESET_ICONS: Record<ReactionRolePresetKey, string> = {
     colors: 'Palette',
     pronouns: 'User',
@@ -182,13 +189,16 @@
 
   const editedMenu = $derived(menus.find(item => item.id === editingMenuId) ?? null);
 
-  const previewSubtitle = $derived.by(() => {
-    if (formButtonMode === 'exclusive') return m.reaction_roles_preview_subtitle_exclusive();
-    const modes = new Set(formOptions.map(opt => resolveButtonMode(opt.mode, formButtonMode)));
+  /** Texte affiché par le bot quand le staff n'en a pas saisi : il dépend du mode. */
+  function defaultSubtitle(mode: ReactionRoleMenuMode, options: Array<{ mode?: string | null }>): string {
+    if (mode === 'exclusive') return m.reaction_roles_preview_subtitle_exclusive();
+    const modes = new Set(options.map(opt => resolveButtonMode(opt.mode, mode)));
     if (modes.size > 1) return m.reaction_roles_preview_subtitle_mixed();
     if (modes.has('add_only')) return m.reaction_roles_preview_subtitle_add_only();
     return m.reaction_roles_preview_subtitle();
-  });
+  }
+
+  const previewSubtitle = $derived(defaultSubtitle(formButtonMode, formOptions));
 
   onMount(async () => {
     loading = true;
@@ -213,25 +223,45 @@
     formTitle = '';
     formDescription = '';
     formShowCounts = false;
+    formEmbedColor = '';
     formButtonMode = 'toggle';
     formOptions = [{ emoji: '', label: '', roleId: '', mode: '', style: 'secondary' }];
+  }
+
+  /** État du formulaire à l'ouverture : le fermer après l'avoir changé demande confirmation. */
+  let formSnapshot = '';
+
+  function snapshotForm(): string {
+    return JSON.stringify([formTitle, formDescription, formShowCounts, formEmbedColor, formChannelId, formButtonMode, formOptions]);
+  }
+
+  function openModal() {
+    showAdvanced = false;
+    showPreview = false;
+    actionState.clearFeedback();
+    formSnapshot = snapshotForm();
+    showModal = true;
   }
 
   function openCreateModal() {
     editingMenuId = null;
     formChannelId = '';
     resetForm();
-    showAdvanced = false;
-    showPreview = false;
-    actionState.clearFeedback();
-    showModal = true;
+    openModal();
   }
 
-  function openEditModal(menu: (typeof menus)[number]) {
-    editingMenuId = menu.id;
+  /** Ouvre la création déjà remplie par un modèle, depuis la page vide. */
+  async function startFromPreset(key: ReactionRolePresetKey) {
+    openCreateModal();
+    await applyPreset(key);
+  }
+
+  /** Copie les réglages d'un menu publié dans le formulaire. */
+  function loadMenuIntoForm(menu: (typeof menus)[number]) {
     formTitle = menu.title;
     formDescription = menu.description ?? '';
     formShowCounts = menu.showCounts === true;
+    formEmbedColor = menu.embedColor ?? '';
     formChannelId = menu.channelId;
     formButtonMode = normalizeMenuMode(menu.buttonMode);
 
@@ -247,11 +277,50 @@
     if (formOptions.length === 0) {
       formOptions = [{ emoji: '', label: '', roleId: '', mode: '', style: 'secondary' }];
     }
+  }
 
-    showAdvanced = false;
-    showPreview = false;
-    actionState.clearFeedback();
-    showModal = true;
+  function openEditModal(menu: (typeof menus)[number]) {
+    editingMenuId = menu.id;
+    loadMenuIntoForm(menu);
+    openModal();
+  }
+
+  /** Nouveau menu reprenant un menu existant : rien n'est publié avant l'envoi. */
+  function openDuplicateModal(menu: (typeof menus)[number]) {
+    editingMenuId = null;
+    loadMenuIntoForm(menu);
+    formTitle = m.reaction_roles_duplicate_title({ title: menu.title });
+    openModal();
+  }
+
+  /** Ferme la fenêtre ; des changements non publiés demandent confirmation. */
+  async function requestCloseModal() {
+    if (snapshotForm() !== formSnapshot) {
+      const discard = await confirmDialog.ask({
+        title: m.reaction_roles_discard_title(),
+        description: m.reaction_roles_discard_desc(),
+        confirmLabel: m.reaction_roles_discard_confirm(),
+        variant: 'warning',
+      });
+      if (!discard) return;
+    }
+    showModal = false;
+  }
+
+  /**
+   * Échap ferme d'abord le volet, puis la fenêtre. Une frappe dans un champ est
+   * ignorée : Échap y ferme une liste déroulante, pas toute la fenêtre.
+   */
+  function handleKeydown(event: KeyboardEvent) {
+    if (event.key !== 'Escape' || !showModal || confirmDialog.open) return;
+    const target = event.target as HTMLElement | null;
+    if (target?.closest('input, textarea, select, [contenteditable="true"]')) return;
+    event.preventDefault();
+    if (showAdvanced) {
+      showAdvanced = false;
+      return;
+    }
+    void requestCloseModal();
   }
 
   function addOption() {
@@ -262,6 +331,38 @@
   function removeOption(idx: number) {
     if (formOptions.length === 1) return;
     formOptions = formOptions.filter((_, i) => i !== idx);
+  }
+
+  /** Déplace un bouton dans la liste : l'ordre est celui du message publié. */
+  function moveOption(from: number, to: number) {
+    if (to < 0 || to >= formOptions.length || from === to) return;
+    const next = [...formOptions];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    formOptions = next;
+  }
+
+  /** Réordonner n'a de sens qu'à partir de deux boutons, et pour qui peut configurer. */
+  const canReorder = $derived(canManageSettings && formOptions.length > 1);
+
+  /** Glisser-déposer : bouton saisi par sa poignée, et place visée. */
+  let dragIndex = $state<number | null>(null);
+  let dropIndex = $state<number | null>(null);
+
+  function dropOption() {
+    if (dragIndex !== null && dropIndex !== null) moveOption(dragIndex, dropIndex);
+    dragIndex = null;
+    dropIndex = null;
+  }
+
+  /** Flèches haut et bas sur la poignée : le même déplacement, au clavier. */
+  function handleGripKeydown(event: KeyboardEvent, idx: number) {
+    if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
+    event.preventDefault();
+    const to = event.key === 'ArrowUp' ? idx - 1 : idx + 1;
+    moveOption(idx, to);
+    // La poignée suit son bouton : on peut enchaîner les déplacements.
+    requestAnimationFrame(() => document.getElementById(`reaction-role-grip-${to}`)?.focus());
   }
 
   async function handleSubmit() {
@@ -277,6 +378,7 @@
       title: formTitle,
       description: formDescription.trim() || null,
       showCounts: formShowCounts,
+      embedColor: formEmbedColor || null,
       channelId: formChannelId,
       buttonMode: formButtonMode,
       options: formOptions.map(opt => ({
@@ -346,14 +448,24 @@
   }
 
   /**
-   * Boutons de l'aperçu, par rangées de cinq comme Discord les affiche. Tous y
-   * figurent, même incomplets : en masquer un faisait croire à une limite.
+   * Boutons de l'aperçu. Tous y figurent, même incomplets : en masquer un
+   * faisait croire à une limite.
    */
-  const previewRows = $derived.by(() => {
-    const rows: FormOption[][] = [];
-    for (let i = 0; i < formOptions.length; i += 5) rows.push(formOptions.slice(i, i + 5));
-    return rows;
-  });
+  const previewButtons = $derived(formOptions.map(opt => ({ emoji: opt.emoji, text: previewLabel(opt), style: opt.style })));
+
+  /** Boutons d'un menu publié, tels que les membres les voient. */
+  function cardButtons(menu: (typeof menus)[number]) {
+    const options: Array<{ emoji?: string; label?: string; roleId?: string; style?: string }> = Array.isArray(menu.options) ? menu.options : [];
+    return options.map(opt => ({
+      emoji: opt.emoji ?? '',
+      text: menu.showCounts ? buttonLabelWithCount(opt.label ?? '', memberCounts[opt.roleId ?? '']) : (opt.label ?? ''),
+      style: resolveStyle(opt.style),
+    }));
+  }
+
+  function cardDescription(menu: (typeof menus)[number]): string {
+    return menu.description || defaultSubtitle(normalizeMenuMode(menu.buttonMode), Array.isArray(menu.options) ? menu.options : []);
+  }
 
   /** Numéro d'une étape, décalé quand l'étape « modèle » est absente. */
   function step(n: number): number {
@@ -514,6 +626,14 @@
                 {#if canManageSettings}
                   <div class="flex items-center gap-1 shrink-0">
                     <button
+                      onclick={() => openDuplicateModal(menu)}
+                      class="p-2 text-on-surface-variant hover:text-primary hover:bg-primary/10 border border-transparent rounded-xl transition-all cursor-pointer"
+                      title={m.reaction_roles_duplicate_tooltip()}
+                      aria-label={m.reaction_roles_duplicate_tooltip()}
+                    >
+                      <Papicon icon="Copy" size={16} />
+                    </button>
+                    <button
                       onclick={() => openEditModal(menu)}
                       class="p-2 text-on-surface-variant hover:text-primary hover:bg-primary/10 border border-transparent rounded-xl transition-all cursor-pointer"
                       title={m.reaction_roles_edit_button_title()}
@@ -531,63 +651,78 @@
                 {/if}
               </div>
 
-              <!-- Buttons listing -->
-              <div class="flex flex-wrap gap-2 pt-4 border-t border-outline-variant/10">
-                {#if Array.isArray(menu.options)}
+              <!-- Le message tel que les membres le voient -->
+              <ReactionRoleDiscordPreview
+                compact
+                title={menu.title}
+                description={cardDescription(menu)}
+                buttons={cardButtons(menu)}
+                color={menu.embedColor ?? DEFAULT_EMBED_COLOR}
+              />
+
+              <!-- Rôle donné par chaque bouton, avec ses membres et ce qui bloque -->
+              {#if Array.isArray(menu.options)}
+                <ul class="flex flex-wrap gap-1.5">
                   {#each menu.options as opt}
                     {@const blocker = blockerOf(opt.roleId)}
-                    <div class="flex items-center gap-2 px-3 py-2 bg-surface-container-high/60 border border-outline-variant/10 rounded-xl text-xs font-bold text-on-surface hover:bg-surface-container-high transition-all">
-                      {#if opt.emoji}<span class="text-base">{@html parseDiscordEmojisAndMarkdown(opt.emoji)}</span>{/if}
-                      <span>{opt.label}</span>
-                      {#if blocker}
-                        <span
-                          class="flex items-center gap-1 text-2xs bg-error/10 text-error border border-error/30 px-1.5 py-0.5 rounded font-semibold"
-                          title={BLOCKER_MESSAGES[blocker]()}
-                        >
-                          <Papicon icon="AlertTriangle" size={10} />{getRoleName(opt.roleId)}
-                        </span>
-                      {:else}
-                        <span class="text-2xs bg-primary/10 text-primary border border-primary/20 px-1.5 py-0.5 rounded font-semibold">
-                          {getRoleName(opt.roleId)}
-                        </span>
-                      {/if}
+                    <li
+                      class="flex items-center gap-1.5 px-2 py-1 rounded-lg text-2xs font-semibold border {blocker ? 'bg-error/10 text-error border-error/30' : 'bg-surface-container-high/50 text-on-surface border-outline-variant/10'}"
+                      title={blocker ? BLOCKER_MESSAGES[blocker]() : undefined}
+                    >
+                      {#if blocker}<Papicon icon="AlertTriangle" size={10} />{/if}
+                      <span>{getRoleName(opt.roleId)}</span>
                       {#if memberCounts[opt.roleId] !== undefined}
                         <span
-                          class="flex items-center gap-0.5 text-2xs font-semibold text-on-surface-variant"
+                          class="flex items-center gap-0.5 text-on-surface-variant"
                           title={m.reaction_roles_member_count({ n: memberCounts[opt.roleId] })}
                         >
                           <Papicon icon="Users" size={10} />{memberCounts[opt.roleId]}
                         </span>
                       {/if}
                       {#if opt.mode && opt.mode !== menu.buttonMode && normalizeMenuMode(menu.buttonMode) !== 'exclusive'}
-                        <span class="text-2xs bg-secondary/10 text-secondary border border-secondary/20 px-1.5 py-0.5 rounded font-semibold">
-                          {buttonModeLabel(opt.mode)}
-                        </span>
+                        <span class="text-secondary">· {buttonModeLabel(opt.mode)}</span>
                       {/if}
-                      {#if opt.style && opt.style !== 'secondary'}
-                        <span class="text-2xs border px-1.5 py-0.5 rounded font-semibold {STYLE_BADGE_CLASSES[resolveStyle(opt.style)]}">
-                          {styleLabel(opt.style)}
-                        </span>
-                      {/if}
-                    </div>
+                    </li>
                   {/each}
-                {:else}
-                  <p class="text-xs text-on-surface-variant/40 italic">{m.reaction_roles_invalid_options()}</p>
-                {/if}
-              </div>
+                </ul>
+              {:else}
+                <p class="text-xs text-on-surface-variant/40 italic">{m.reaction_roles_invalid_options()}</p>
+              {/if}
             </div>
           </div>
         {:else}
-          <div class="col-span-full flex flex-col items-center justify-center py-20 bg-surface-container-low/20 border border-outline-variant/10 rounded-xl text-center">
-            <Papicon icon="MousePointer" size={32} class="text-on-surface-variant/20 mb-3" />
-            <p class="text-sm text-on-surface-variant font-medium">{m.reaction_roles_empty_title()}</p>
+          <!-- Page vide : les modèles sont proposés tout de suite, en un clic -->
+          <div class="col-span-full flex flex-col items-center text-center py-12 px-4 bg-surface-container-low/20 border border-outline-variant/10 rounded-xl">
+            <Papicon icon="MousePointer" size={32} class="text-on-surface-variant/30 mb-3" />
+            <p class="text-sm text-on-surface font-semibold">{m.reaction_roles_empty_title()}</p>
+            <p class="text-xs text-on-surface-variant mt-1 max-w-md">{m.reaction_roles_empty_desc()}</p>
             {#if canManageSettings}
-              <button
-                onclick={openCreateModal}
-                class="mt-4 flex items-center gap-2 px-4 py-2 bg-primary/10 hover:bg-primary/20 text-primary font-bold text-xs rounded-lg transition-all cursor-pointer"
-              >
-                <Papicon icon="Add" size={14} /> {m.reaction_roles_empty_btn()}
-              </button>
+              <div class="mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 w-full max-w-3xl">
+                {#each REACTION_ROLE_PRESET_KEYS as key (key)}
+                  <button
+                    type="button"
+                    onclick={() => startFromPreset(key)}
+                    class="flex flex-col items-start gap-2 p-4 rounded-xl border border-outline-variant/20 bg-surface-container text-left hover:border-primary/40 hover:bg-primary/5 transition-colors cursor-pointer"
+                  >
+                    <span class="w-9 h-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+                      <Papicon icon={PRESET_ICONS[key]} size={18} />
+                    </span>
+                    <span class="text-sm font-semibold text-on-surface">{PRESET_LABELS[key]()}</span>
+                    <span class="text-2xs text-on-surface-variant leading-relaxed">{PRESET_DESCRIPTIONS[key]()}</span>
+                  </button>
+                {/each}
+                <button
+                  type="button"
+                  onclick={openCreateModal}
+                  class="flex flex-col items-start gap-2 p-4 rounded-xl border border-dashed border-outline-variant/30 text-left hover:border-primary/40 hover:bg-primary/5 transition-colors cursor-pointer"
+                >
+                  <span class="w-9 h-9 rounded-lg bg-surface-container-high/60 text-on-surface-variant flex items-center justify-center">
+                    <Papicon icon="Add" size={18} />
+                  </span>
+                  <span class="text-sm font-semibold text-on-surface">{m.reaction_roles_empty_btn()}</span>
+                  <span class="text-2xs text-on-surface-variant leading-relaxed">{m.reaction_roles_empty_blank_desc()}</span>
+                </button>
+              </div>
             {/if}
           </div>
         {/each}
@@ -596,17 +731,23 @@
   {/if}
 </ModulePage>
 
+<svelte:window onkeydown={handleKeydown} />
+
 <!-- Modal Déployer un Panel -->
 {#if showModal}
   <div class="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" transition:fade={{ duration: 150 }}>
-    <!-- Fenêtre et, à sa droite, le volet des options secondaires -->
-    <div class="relative flex items-stretch gap-3 w-full max-w-3xl {showAdvanced ? 'lg:max-w-[68.75rem]' : ''} max-h-[90vh]" transition:scale={{ start: 0.97, duration: 150 }}>
-    <div class="relative flex-1 min-w-0">
-    <div class="bg-surface-container-low/95 border border-outline-variant/20 w-full h-full rounded-xl p-8 space-y-6 shadow-sm relative max-h-[90vh] overflow-y-auto">
+    <!--
+      Fenêtre et volet des options secondaires. Le volet est posé en absolu :
+      l'ouvrir ne change ni la largeur ni la place de la fenêtre, qui sinon
+      sautait de côté pour lui faire de la place.
+    -->
+    <div class="relative w-full max-w-3xl" transition:scale={{ start: 0.97, duration: 150 }}>
+    <div class="bg-surface-container-low/95 border border-outline-variant/20 w-full rounded-xl p-8 space-y-6 shadow-sm relative max-h-[90vh] overflow-y-auto">
 
       <!-- Close button -->
       <button
-        onclick={() => showModal = false}
+        type="button"
+        onclick={requestCloseModal}
         class="absolute top-6 right-6 p-2 rounded-full bg-surface-container-high/40 hover:bg-error/15 hover:text-error text-on-surface-variant transition-colors cursor-pointer z-10"
         title={m.reaction_roles_close()}
       >
@@ -695,7 +836,7 @@
         <section class="space-y-3">
           {@render stepTitle(step(3), m.reaction_roles_step_buttons(), '')}
 
-          <div class="hidden md:grid grid-cols-[8rem_minmax(0,1fr)_minmax(0,1fr)_2.5rem] gap-2 px-1 text-2xs font-semibold text-on-surface-variant">
+          <div class="hidden md:grid grid-cols-[8rem_minmax(0,1fr)_minmax(0,1fr)_2.5rem] gap-2 pl-9 pr-1 text-2xs font-semibold text-on-surface-variant">
             <span>{m.reaction_roles_field_emoji()}</span>
             <span>{m.reaction_roles_field_label()}</span>
             <span>{m.reaction_roles_field_role()}</span>
@@ -704,8 +845,44 @@
 
           <div class="space-y-2">
             {#each formOptions as opt, idx}
-              <div class="p-2 rounded-lg bg-surface-container-high/20 border border-outline-variant/10 space-y-2">
-                <div class="grid grid-cols-[minmax(0,1fr)_2.5rem] md:grid-cols-[8rem_minmax(0,1fr)_minmax(0,1fr)_2.5rem] gap-2 items-start">
+              <!-- Discord passe à la ligne tous les cinq boutons : on le montre. -->
+              {#if idx > 0 && idx % 5 === 0}
+                <p class="flex items-center gap-2 text-2xs font-semibold text-on-surface-variant pt-1">
+                  <span class="h-px flex-1 bg-outline-variant/30"></span>
+                  {m.reaction_roles_row_label({ n: idx / 5 + 1 })}
+                  <span class="h-px flex-1 bg-outline-variant/30"></span>
+                </p>
+              {/if}
+              <!-- svelte-ignore a11y_no_static_element_interactions -->
+              <div
+                class="p-2 rounded-lg bg-surface-container-high/20 border transition-colors {dragIndex !== null && dropIndex === idx && dragIndex !== idx ? 'border-primary ring-1 ring-primary/40' : 'border-outline-variant/10'} {dragIndex === idx ? 'opacity-50' : ''}"
+                ondragover={(event) => { if (dragIndex === null) return; event.preventDefault(); dropIndex = idx; }}
+                ondrop={(event) => { event.preventDefault(); dropOption(); }}
+              >
+                <div class="flex gap-1 items-start">
+                <!-- Pas un élément bouton : Firefox refuse de le faire glisser. -->
+                <span
+                  role="button"
+                  tabindex={canReorder ? 0 : -1}
+                  aria-disabled={!canReorder}
+                  id={`reaction-role-grip-${idx}`}
+                  draggable={canReorder ? 'true' : 'false'}
+                  ondragstart={(event) => {
+                    dragIndex = idx;
+                    if (event.dataTransfer) {
+                      event.dataTransfer.effectAllowed = 'move';
+                      event.dataTransfer.setData('text/plain', String(idx));
+                    }
+                  }}
+                  ondragend={() => { dragIndex = null; dropIndex = null; }}
+                  onkeydown={(event) => { if (canReorder) handleGripKeydown(event, idx); }}
+                  aria-label={m.reaction_roles_reorder_handle({ n: idx + 1 })}
+                  title={m.reaction_roles_reorder_handle({ n: idx + 1 })}
+                  class="mt-1 w-7 h-8 shrink-0 flex items-center justify-center rounded-md text-on-surface-variant transition-colors {canReorder ? 'hover:text-on-surface hover:bg-surface-container-high/60 cursor-grab active:cursor-grabbing' : 'opacity-30'}"
+                >
+                  <Papicon icon="GripVertical" size={14} />
+                </span>
+                <div class="flex-1 min-w-0 grid grid-cols-[minmax(0,1fr)_2.5rem] md:grid-cols-[8rem_minmax(0,1fr)_minmax(0,1fr)_2.5rem] gap-2 items-start">
                   <div class="flex gap-1.5 items-center col-span-2 md:col-span-1">
                     <input
                       id={`modal-emoji-${idx}`}
@@ -784,6 +961,7 @@
                       </button>
                     {/if}
                   </div>
+                </div>
                 </div>
               </div>
             {/each}
@@ -878,39 +1056,13 @@
           </button>
 
           {#if showPreview}
-            <div id="reaction-roles-preview" class="bg-[#313338] px-4 py-4 text-[#dbdee1] font-sans" transition:slide={{ duration: 160 }}>
-              <div class="flex items-start gap-3">
-                <div class="w-10 h-10 rounded-full bg-[#5865f2] flex items-center justify-center text-white font-bold shrink-0">K</div>
-                <div class="flex-1 min-w-0 space-y-2">
-                  <div class="flex items-center gap-1.5 select-none">
-                    <span class="font-semibold text-white text-sm">Kotbo</span>
-                    <span class="bg-[#5865f2] text-white text-[10px] font-semibold px-1 rounded-[3px] leading-4">BOT</span>
-                    <span class="text-xs text-[#949ba4]">{m.announcements_today_at({ time: '12:00' })}</span>
-                  </div>
-                  <div class="bg-[#2b2d31] border-l-4 border-[#5865f2] rounded-[4px] px-3 py-2.5 max-w-[520px] space-y-1">
-                    <div class="text-sm font-semibold text-white wrap-break-word">
-                      {@html parseDiscordEmojisAndMarkdown(formTitle || m.reaction_roles_field_title_ph())}
-                    </div>
-                    <div class="text-[13px] leading-snug text-[#dbdee1] whitespace-pre-line wrap-break-word">
-                      {@html parseDiscordEmojisAndMarkdown(formDescription.trim() || previewSubtitle)}
-                    </div>
-                  </div>
-                  <div class="space-y-2 pt-0.5">
-                    {#each previewRows as row}
-                      <div class="flex flex-wrap gap-2">
-                        {#each row as opt}
-                          {@const text = previewLabel(opt)}
-                          <!-- Pointillés : bouton sans texte ni rôle, il reste à compléter. -->
-                          <span class="flex items-center gap-1.5 h-8 px-4 text-sm font-medium rounded-[3px] transition-colors {text ? `text-white ${PREVIEW_STYLE_CLASSES[resolveStyle(opt.style)]}` : 'border border-dashed border-[#949ba4] text-[#949ba4] italic'}">
-                            {#if opt.emoji}<span>{@html parseDiscordEmojisAndMarkdown(opt.emoji)}</span>{/if}
-                            <span>{text || m.reaction_roles_preview_button_default()}</span>
-                          </span>
-                        {/each}
-                      </div>
-                    {/each}
-                  </div>
-                </div>
-              </div>
+            <div id="reaction-roles-preview" transition:slide={{ duration: 160 }}>
+              <ReactionRoleDiscordPreview
+                title={formTitle || m.reaction_roles_field_title_ph()}
+                description={formDescription.trim() || previewSubtitle}
+                buttons={previewButtons}
+                color={formEmbedColor || DEFAULT_EMBED_COLOR}
+              />
             </div>
           {/if}
         </section>
@@ -925,7 +1077,7 @@
           <div class="flex gap-2 ml-auto">
             <button
               type="button"
-              onclick={() => showModal = false}
+              onclick={requestCloseModal}
               class="px-4 py-3 rounded-lg text-on-surface-variant text-body-sm font-medium hover:bg-surface-container-high/40 transition-all cursor-pointer"
             >
               {m.reaction_roles_cancel()}
@@ -958,13 +1110,15 @@
         <span class="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-primary ring-2 ring-surface-container-low"></span>
       {/if}
     </button>
-    </div>
 
     {#if showAdvanced}
-      <!-- Sur grand écran à côté de la fenêtre, sinon par-dessus son bord droit -->
+      <!--
+        Par-dessus le bord droit de la fenêtre ; à côté d'elle seulement quand
+        l'écran a la place de loger les deux sans déborder (1460 px).
+      -->
       <aside
         id="reaction-roles-options"
-        class="w-80 shrink-0 max-h-[90vh] overflow-y-auto rounded-xl bg-surface-container-low border border-outline-variant/20 p-5 space-y-4 shadow-sm max-lg:absolute max-lg:inset-y-0 max-lg:right-0 max-lg:z-30 max-lg:w-[min(20rem,calc(100%-1rem))]"
+        class="absolute z-30 inset-y-0 right-0 w-[min(20rem,calc(100%-1rem))] overflow-y-auto rounded-xl bg-surface-container-low border border-outline-variant/20 p-5 space-y-4 shadow-sm min-[1460px]:inset-y-auto min-[1460px]:top-0 min-[1460px]:right-auto min-[1460px]:left-full min-[1460px]:ml-5 min-[1460px]:w-80 min-[1460px]:max-h-[90vh]"
         transition:fly={{ x: -12, duration: 160 }}
       >
         <div class="flex items-start justify-between gap-3">
@@ -994,6 +1148,25 @@
             />
           </div>
           <p class="text-2xs text-on-surface-variant leading-relaxed">{m.reaction_roles_show_counts_desc()}</p>
+        </div>
+
+        <div class="rounded-lg border border-outline-variant/15 bg-surface-container/60 p-3 space-y-2">
+          <div class="flex items-center justify-between gap-3">
+            <p class="text-xs font-semibold text-on-surface">{m.reaction_roles_embed_color_title()}</p>
+            {#if formEmbedColor && canManageSettings}
+              <button
+                type="button"
+                onclick={() => { formEmbedColor = ''; }}
+                class="text-2xs font-semibold text-primary hover:underline cursor-pointer"
+              >
+                {m.reaction_roles_embed_color_reset()}
+              </button>
+            {/if}
+          </div>
+          {#if canManageSettings}
+            <FormColorPicker bind:value={formEmbedColor} />
+          {/if}
+          <p class="text-2xs text-on-surface-variant leading-relaxed">{m.reaction_roles_embed_color_desc()}</p>
         </div>
 
         {#if formButtonMode === 'exclusive'}
