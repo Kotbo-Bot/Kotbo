@@ -599,10 +599,13 @@
 <!-- Modal Déployer un Panel -->
 {#if showModal}
   <div class="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" transition:fade={{ duration: 150 }}>
-    <!-- Fenêtre et, à sa droite, le volet des options secondaires -->
-    <div class="relative flex items-stretch gap-3 w-full max-w-3xl {showAdvanced ? 'lg:max-w-[68.75rem]' : ''} max-h-[90vh]" transition:scale={{ start: 0.97, duration: 150 }}>
-    <div class="relative flex-1 min-w-0">
-    <div class="bg-surface-container-low/95 border border-outline-variant/20 w-full h-full rounded-xl p-8 space-y-6 shadow-sm relative max-h-[90vh] overflow-y-auto">
+    <!--
+      Fenêtre et volet des options secondaires. Le volet est posé en absolu :
+      l'ouvrir ne change ni la largeur ni la place de la fenêtre, qui sinon
+      sautait de côté pour lui faire de la place.
+    -->
+    <div class="relative w-full max-w-3xl" transition:scale={{ start: 0.97, duration: 150 }}>
+    <div class="bg-surface-container-low/95 border border-outline-variant/20 w-full rounded-xl p-8 space-y-6 shadow-sm relative max-h-[90vh] overflow-y-auto">
 
       <!-- Close button -->
       <button
@@ -958,13 +961,15 @@
         <span class="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-primary ring-2 ring-surface-container-low"></span>
       {/if}
     </button>
-    </div>
 
     {#if showAdvanced}
-      <!-- Sur grand écran à côté de la fenêtre, sinon par-dessus son bord droit -->
+      <!--
+        Par-dessus le bord droit de la fenêtre ; à côté d'elle seulement quand
+        l'écran a la place de loger les deux sans déborder (1460 px).
+      -->
       <aside
         id="reaction-roles-options"
-        class="w-80 shrink-0 max-h-[90vh] overflow-y-auto rounded-xl bg-surface-container-low border border-outline-variant/20 p-5 space-y-4 shadow-sm max-lg:absolute max-lg:inset-y-0 max-lg:right-0 max-lg:z-30 max-lg:w-[min(20rem,calc(100%-1rem))]"
+        class="absolute z-30 inset-y-0 right-0 w-[min(20rem,calc(100%-1rem))] overflow-y-auto rounded-xl bg-surface-container-low border border-outline-variant/20 p-5 space-y-4 shadow-sm min-[1460px]:inset-y-auto min-[1460px]:top-0 min-[1460px]:right-auto min-[1460px]:left-full min-[1460px]:ml-5 min-[1460px]:w-80 min-[1460px]:max-h-[90vh]"
         transition:fly={{ x: -12, duration: 160 }}
       >
         <div class="flex items-start justify-between gap-3">
