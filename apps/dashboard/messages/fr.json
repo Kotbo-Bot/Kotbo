@@ -7326,6 +7326,8 @@
   "reaction_roles_preset_pronouns": "Pronoms",
   "reaction_roles_preset_notifications": "Notifications",
   "reaction_roles_preset_error": "Impossible d'appliquer le modèle. Réessaie.",
+  "reaction_roles_duplicate_title": "{title} (copie)",
+  "reaction_roles_duplicate_tooltip": "Dupliquer",
   "reaction_roles_empty_desc": "Pars d'un modèle pour avoir un menu prêt en un clic, ou compose le tien.",
   "reaction_roles_empty_blank_desc": "Choisis toi-même les boutons et les rôles.",
   "reaction_roles_preset_colors_desc": "Une couleur de pseudo à la fois, au choix du membre.",

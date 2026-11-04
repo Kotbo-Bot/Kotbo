@@ -244,8 +244,8 @@
     await applyPreset(key);
   }
 
-  function openEditModal(menu: (typeof menus)[number]) {
-    editingMenuId = menu.id;
+  /** Copie les réglages d'un menu publié dans le formulaire. */
+  function loadMenuIntoForm(menu: (typeof menus)[number]) {
     formTitle = menu.title;
     formDescription = menu.description ?? '';
     formShowCounts = menu.showCounts === true;
@@ -265,7 +265,22 @@
     if (formOptions.length === 0) {
       formOptions = [{ emoji: '', label: '', roleId: '', mode: '', style: 'secondary' }];
     }
+  }
 
+  function openEditModal(menu: (typeof menus)[number]) {
+    editingMenuId = menu.id;
+    loadMenuIntoForm(menu);
+    showAdvanced = false;
+    showPreview = false;
+    actionState.clearFeedback();
+    showModal = true;
+  }
+
+  /** Nouveau menu reprenant un menu existant : rien n'est publié avant l'envoi. */
+  function openDuplicateModal(menu: (typeof menus)[number]) {
+    editingMenuId = null;
+    loadMenuIntoForm(menu);
+    formTitle = m.reaction_roles_duplicate_title({ title: menu.title });
     showAdvanced = false;
     showPreview = false;
     actionState.clearFeedback();
@@ -574,6 +589,14 @@
 
                 {#if canManageSettings}
                   <div class="flex items-center gap-1 shrink-0">
+                    <button
+                      onclick={() => openDuplicateModal(menu)}
+                      class="p-2 text-on-surface-variant hover:text-primary hover:bg-primary/10 border border-transparent rounded-xl transition-all cursor-pointer"
+                      title={m.reaction_roles_duplicate_tooltip()}
+                      aria-label={m.reaction_roles_duplicate_tooltip()}
+                    >
+                      <Papicon icon="Copy" size={16} />
+                    </button>
                     <button
                       onclick={() => openEditModal(menu)}
                       class="p-2 text-on-surface-variant hover:text-primary hover:bg-primary/10 border border-transparent rounded-xl transition-all cursor-pointer"
