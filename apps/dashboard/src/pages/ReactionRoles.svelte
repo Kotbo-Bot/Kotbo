@@ -162,6 +162,12 @@
     notifications: m.reaction_roles_preset_notifications,
   };
 
+  const PRESET_DESCRIPTIONS: Record<ReactionRolePresetKey, () => string> = {
+    colors: m.reaction_roles_preset_colors_desc,
+    pronouns: m.reaction_roles_preset_pronouns_desc,
+    notifications: m.reaction_roles_preset_notifications_desc,
+  };
+
   const PRESET_ICONS: Record<ReactionRolePresetKey, string> = {
     colors: 'Palette',
     pronouns: 'User',
@@ -230,6 +236,12 @@
     showPreview = false;
     actionState.clearFeedback();
     showModal = true;
+  }
+
+  /** Ouvre la création déjà remplie par un modèle, depuis la page vide. */
+  async function startFromPreset(key: ReactionRolePresetKey) {
+    openCreateModal();
+    await applyPreset(key);
   }
 
   function openEditModal(menu: (typeof menus)[number]) {
@@ -588,16 +600,38 @@
             </div>
           </div>
         {:else}
-          <div class="col-span-full flex flex-col items-center justify-center py-20 bg-surface-container-low/20 border border-outline-variant/10 rounded-xl text-center">
-            <Papicon icon="MousePointer" size={32} class="text-on-surface-variant/20 mb-3" />
-            <p class="text-sm text-on-surface-variant font-medium">{m.reaction_roles_empty_title()}</p>
+          <!-- Page vide : les modèles sont proposés tout de suite, en un clic -->
+          <div class="col-span-full flex flex-col items-center text-center py-12 px-4 bg-surface-container-low/20 border border-outline-variant/10 rounded-xl">
+            <Papicon icon="MousePointer" size={32} class="text-on-surface-variant/30 mb-3" />
+            <p class="text-sm text-on-surface font-semibold">{m.reaction_roles_empty_title()}</p>
+            <p class="text-xs text-on-surface-variant mt-1 max-w-md">{m.reaction_roles_empty_desc()}</p>
             {#if canManageSettings}
-              <button
-                onclick={openCreateModal}
-                class="mt-4 flex items-center gap-2 px-4 py-2 bg-primary/10 hover:bg-primary/20 text-primary font-bold text-xs rounded-lg transition-all cursor-pointer"
-              >
-                <Papicon icon="Add" size={14} /> {m.reaction_roles_empty_btn()}
-              </button>
+              <div class="mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 w-full max-w-3xl">
+                {#each REACTION_ROLE_PRESET_KEYS as key (key)}
+                  <button
+                    type="button"
+                    onclick={() => startFromPreset(key)}
+                    class="flex flex-col items-start gap-2 p-4 rounded-xl border border-outline-variant/20 bg-surface-container text-left hover:border-primary/40 hover:bg-primary/5 transition-colors cursor-pointer"
+                  >
+                    <span class="w-9 h-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+                      <Papicon icon={PRESET_ICONS[key]} size={18} />
+                    </span>
+                    <span class="text-sm font-semibold text-on-surface">{PRESET_LABELS[key]()}</span>
+                    <span class="text-2xs text-on-surface-variant leading-relaxed">{PRESET_DESCRIPTIONS[key]()}</span>
+                  </button>
+                {/each}
+                <button
+                  type="button"
+                  onclick={openCreateModal}
+                  class="flex flex-col items-start gap-2 p-4 rounded-xl border border-dashed border-outline-variant/30 text-left hover:border-primary/40 hover:bg-primary/5 transition-colors cursor-pointer"
+                >
+                  <span class="w-9 h-9 rounded-lg bg-surface-container-high/60 text-on-surface-variant flex items-center justify-center">
+                    <Papicon icon="Add" size={18} />
+                  </span>
+                  <span class="text-sm font-semibold text-on-surface">{m.reaction_roles_empty_btn()}</span>
+                  <span class="text-2xs text-on-surface-variant leading-relaxed">{m.reaction_roles_empty_blank_desc()}</span>
+                </button>
+              </div>
             {/if}
           </div>
         {/each}
