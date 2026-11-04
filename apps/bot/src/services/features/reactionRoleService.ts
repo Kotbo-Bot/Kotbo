@@ -475,9 +475,6 @@ function blockerOf(role: Role | null | undefined, me: GuildMember | null): RoleB
   });
 }
 
-/** Dernière alerte envoyée, par serveur et par rôle. */
-const lastStaffAlerts = new Map<string, number>();
-
 /**
  * Prévient le propriétaire du serveur qu'un bouton du menu ne marche plus, avec
  * la correction à faire. Jamais bloquant pour la réponse au membre.
@@ -488,12 +485,18 @@ async function alertStaffRoleBlocked(
   roleId: string,
   blocked: { reason: RoleBlocker; roleName: string | null },
 ): Promise<void> {
-  const key = `${guild.id}:${roleId}`;
-  const now = Date.now();
-  if (!shouldAlertStaff(lastStaffAlerts.get(key), now)) return;
-  lastStaffAlerts.set(key, now);
+  const groupKey = `reaction-role-blocked:${roleId}`;
 
   try {
+    // La dernière alerte se lit en base : le délai vaut pour toutes les
+    // instances, survit aux redémarrages, et compte aussi une alerte déjà lue.
+    const last = await prisma.notification.findFirst({
+      where: { guildId: guild.id, userId: guild.ownerId, groupKey },
+      orderBy: { updatedAt: 'desc' },
+      select: { updatedAt: true },
+    });
+    if (!shouldAlertStaff(last?.updatedAt.getTime(), Date.now())) return;
+
     // Import dynamique : le service de notifications tire l'API, qui importe ce fichier.
     const { notify, dashboardLink } = await import('../notifications/notifyService.js');
     const locale = await resolveGuildLocale(guild.id);
@@ -512,7 +515,7 @@ async function alertStaffRoleBlocked(
       message: reasons[blocked.reason]({ role }, { locale }),
       severity: 'WARNING',
       link: dashboardLink('/reaction-roles', guild.id),
-      groupKey: `reaction-role-blocked:${roleId}`,
+      groupKey,
     });
   } catch (err) {
     logger.warn('ReactionRoleService', `Alerte de rôle bloqué non envoyée pour ${roleId} :`, err);

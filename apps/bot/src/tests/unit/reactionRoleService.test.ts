@@ -11,6 +11,10 @@ const prismaMock = {
     update: mock(async () => ({ id: 'menu-1' })),
     delete: mock(async () => ({})),
   },
+  // Dernière alerte « rôle bloqué » déjà envoyée au propriétaire.
+  notification: {
+    findFirst: mock(async () => null as { updatedAt: Date } | null),
+  },
 };
 
 // Le service résout la langue du serveur avant de répondre : sans ce cache
@@ -139,6 +143,8 @@ describe('reactionRoleService', () => {
     prismaMock.reactionRoleMenu.create.mockReset();
     prismaMock.reactionRoleMenu.update.mockReset();
     prismaMock.reactionRoleMenu.delete.mockReset();
+    prismaMock.notification.findFirst.mockReset();
+    prismaMock.notification.findFirst.mockResolvedValue(null);
     notifyMock.mockClear();
   });
 
@@ -316,6 +322,44 @@ describe('reactionRoleService', () => {
     expect(notifyMock).toHaveBeenCalledWith(expect.objectContaining({
       userId: 'owner-1',
       kind: 'system.reaction_role_blocked',
+    }));
+  });
+
+  /** Clique sur un rôle placé au-dessus du bot, puis attend la fin de l'alerte lancée sans attendre. */
+  async function clickBlockedRole(roleId: string) {
+    const reply = mock(async () => undefined);
+    prismaMock.reactionRoleMenu.findFirst.mockResolvedValueOnce({
+      id: 'menu-1',
+      title: 'Couleurs',
+      buttonMode: 'toggle',
+      options: [{ label: 'Admin', roleId }],
+    });
+    const { member } = fakeMember([], fakeGuild({ [roleId]: BOT_TOP_POSITION + 1 }));
+    await handleRoleToggleInteraction(fakeInteraction(`role_toggle:${roleId}:0`, member, reply));
+    for (let i = 0; i < 20 && prismaMock.notification.findFirst.mock.calls.length === 0; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+
+  test('rôle bloqué : pas de nouvelle alerte moins d’une heure après la précédente, même lue', async () => {
+    prismaMock.notification.findFirst.mockResolvedValue({ updatedAt: new Date(Date.now() - 10 * 60 * 1000) });
+
+    await clickBlockedRole('role-deja-signale');
+
+    expect(prismaMock.notification.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: { guildId: 'guild-1', userId: 'owner-1', groupKey: 'reaction-role-blocked:role-deja-signale' },
+    }));
+    expect(notifyMock).not.toHaveBeenCalled();
+  });
+
+  test('rôle bloqué : une alerte vieille de plus d’une heure en autorise une nouvelle', async () => {
+    prismaMock.notification.findFirst.mockResolvedValue({ updatedAt: new Date(Date.now() - 2 * 60 * 60 * 1000) });
+
+    await clickBlockedRole('role-signale-hier');
+
+    expect(notifyMock).toHaveBeenCalledWith(expect.objectContaining({
+      groupKey: 'reaction-role-blocked:role-signale-hier',
     }));
   });
 

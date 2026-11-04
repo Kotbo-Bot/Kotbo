@@ -16,23 +16,44 @@ function isSendable(channel: unknown): channel is TextBasedChannel & { send: (o:
   return !!channel && typeof (channel as { send?: unknown }).send === 'function';
 }
 
-/** Numéro suivant du serveur. La contrainte unique rejoue en cas de course. */
-async function createWithNextNumber(guildId: string, authorId: string, content: string, channelId: string) {
-  for (let attempt = 0; attempt < 5; attempt++) {
-    const last = await prisma.confession.findFirst({
+/**
+ * Vérifie puis enregistre la confession sous un verrou du serveur. Le délai
+ * part de la dernière confession en base : il survit aux redémarrages et vaut
+ * pour toutes les instances du bot. Deux envois simultanés (double clic, deux
+ * instances) passent l'un après l'autre : le second voit la ligne du premier,
+ * donc le délai, et prend le numéro suivant.
+ */
+async function reserveConfession(
+  guildId: string,
+  authorId: string,
+  input: { rawContent: string; channelId: string; cooldownSeconds: number; bannedWords: string[] },
+) {
+  return prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${`confession:${guildId}`}))`;
+    const lastOfAuthor = await tx.confession.findFirst({
+      where: { guildId, authorId },
+      orderBy: { createdAt: 'desc' },
+      select: { createdAt: true },
+    });
+    const check = checkConfession({
+      content: input.rawContent,
+      bannedWords: input.bannedWords,
+      lastSentAt: lastOfAuthor?.createdAt ?? null,
+      cooldownSeconds: input.cooldownSeconds,
+      now: Date.now(),
+    });
+    if (!check.ok) return check;
+
+    const lastOfGuild = await tx.confession.findFirst({
       where: { guildId },
       orderBy: { number: 'desc' },
       select: { number: true },
     });
-    try {
-      return await prisma.confession.create({
-        data: { guildId, authorId, content, channelId, number: (last?.number ?? 0) + 1 },
-      });
-    } catch (err) {
-      if ((err as { code?: string }).code !== 'P2002') throw err;
-    }
-  }
-  throw new Error('Numéro de confession introuvable après 5 essais');
+    const confession = await tx.confession.create({
+      data: { guildId, authorId, content: check.content, channelId: input.channelId, number: (lastOfGuild?.number ?? 0) + 1 },
+    });
+    return { ok: true as const, confession };
+  });
 }
 
 export async function submitConfession(
@@ -44,30 +65,18 @@ export async function submitConfession(
   const { channelId, logChannelId } = config;
   if (!channelId) return { ok: false, reason: 'not_configured' };
 
-  // Le délai part de la dernière confession en base : il survit aux
-  // redémarrages et vaut pour toutes les instances du bot.
-  const [last, bannedWords] = await Promise.all([
-    prisma.confession.findFirst({
-      where: { guildId: guild.id, authorId },
-      orderBy: { createdAt: 'desc' },
-      select: { createdAt: true },
-    }),
-    loadBannedWords(guild.id),
-  ]);
-  const check = checkConfession({
-    content: rawContent,
-    bannedWords,
-    lastSentAt: last?.createdAt ?? null,
-    cooldownSeconds: config.cooldownSeconds,
-    now: Date.now(),
-  });
-  if (!check.ok) return check;
-  const { content } = check;
-
   const channel = await guild.channels.fetch(channelId).catch(() => null);
   if (!isSendable(channel)) return { ok: false, reason: 'not_configured' };
 
-  const confession = await createWithNextNumber(guild.id, authorId, content, channelId);
+  const reserved = await reserveConfession(guild.id, authorId, {
+    rawContent,
+    channelId,
+    cooldownSeconds: config.cooldownSeconds,
+    bannedWords: await loadBannedWords(guild.id),
+  });
+  if (!reserved.ok) return reserved;
+  const { confession } = reserved;
+  const { content } = confession;
 
   try {
     const embed = new EmbedBuilder()
