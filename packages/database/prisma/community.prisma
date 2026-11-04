@@ -324,6 +324,8 @@ model ReactionRoleMenu {
   // "toggle" | "add_only", surchargeable bouton par bouton, ou "exclusive" : un
   // seul rôle du menu à la fois, en prendre un retire les autres (couleurs...).
   buttonMode String  @default("toggle")
+  /// Texte du message sous le titre ; vide, le bot explique ce que font les boutons.
+  description String?
 
   guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
 

@@ -86,6 +86,7 @@ export async function createReactionRoleMenu(
   title: string,
   options: ReactionRoleOption[],
   buttonMode: ReactionRoleMenuMode = 'toggle',
+  description: string | null = null,
 ) {
   // 1. Enregistrer dans la BDD
   const menu = await prisma.reactionRoleMenu.create({
@@ -94,6 +95,7 @@ export async function createReactionRoleMenu(
       channelId,
       title,
       buttonMode: normalizeMenuMode(buttonMode),
+      ...(description ? { description } : {}),
       options: sanitizeOptions(options) as Prisma.InputJsonValue,
     },
   });
@@ -189,6 +191,8 @@ export async function updateReactionRoleMenu(
     channelId?: string;
     options?: ReactionRoleOption[];
     buttonMode?: ReactionRoleMenuMode;
+    /** `null` remet le texte par défaut. */
+    description?: string | null;
   },
 ) {
   const menu = await prisma.reactionRoleMenu.findFirst({
@@ -220,6 +224,7 @@ export async function updateReactionRoleMenu(
       ...(movedTo ? { channelId: movedTo, messageId: null } : {}),
       ...(changes.options ? { options: sanitizeOptions(changes.options) as Prisma.InputJsonValue } : {}),
       ...(changes.buttonMode !== undefined ? { buttonMode: normalizeMenuMode(changes.buttonMode) } : {}),
+      ...(changes.description !== undefined ? { description: changes.description } : {}),
     },
   });
 
@@ -244,6 +249,26 @@ function describeMenuModes(
   if (modes.size > 1) return m.panel_reactionroles_description_mixed({}, { locale });
   if (modes.has('add_only')) return m.panel_reactionroles_description_add_only({}, { locale });
   return m.panel_reactionroles_description({}, { locale });
+}
+
+/** Longueur maximale du texte d'un menu, bien sous la limite d'un embed Discord. */
+const MENU_DESCRIPTION_MAX_LENGTH = 1000;
+
+/** Texte du message reçu du dashboard : vide ou invalide, il retombe sur le texte par défaut. */
+export function normalizeMenuDescription(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const text = value.trim().slice(0, MENU_DESCRIPTION_MAX_LENGTH);
+  return text || null;
+}
+
+/** Le texte saisi par le staff, sinon celui qui explique ce que font les boutons. */
+export function menuDescription(
+  custom: string | null,
+  options: ReactionRoleOption[],
+  menuMode: ReactionRoleMenuMode,
+  locale: BotLocale,
+): string {
+  return custom || describeMenuModes(options, menuMode, locale);
 }
 
 /**
@@ -272,7 +297,7 @@ export async function sendOrUpdateMenuMessage(client: Client, menuId: string) {
     // Créer l'embed du menu
     const embed = new EmbedBuilder()
       .setTitle(resolveEmojiShortcodes(menu.title))
-      .setDescription(describeMenuModes(options, menuMode, locale))
+      .setDescription(resolveEmojiShortcodes(menuDescription(menu.description, options, menuMode, locale)))
       .setColor('#5865F2')
       .setTimestamp();
 

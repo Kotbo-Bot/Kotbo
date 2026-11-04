@@ -7326,6 +7326,8 @@
   "reaction_roles_preset_pronouns": "Pronoms",
   "reaction_roles_preset_notifications": "Notifications",
   "reaction_roles_preset_error": "Impossible d'appliquer le modèle. Réessaie.",
+  "reaction_roles_field_description": "Texte du message",
+  "reaction_roles_field_description_hint": "Laisse vide pour garder le texte qui explique comment prendre les rôles.",
   "reaction_roles_options_title": "Options secondaires",
   "reaction_roles_options_desc": "Couleur et second clic, bouton par bouton.",
   "reaction_roles_options_exclusive_note": "En mode « Un seul », chaque bouton retire son rôle au second clic : seule la couleur se règle ici.",

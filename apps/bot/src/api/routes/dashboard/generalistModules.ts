@@ -48,7 +48,7 @@ import {
   updateGiveawayTemplate,
   type GiveawayTemplateInput,
 } from '../../../services/features/giveawayTemplateService.js';
-import { createReactionRoleMenu, deleteReactionRoleMenu, updateReactionRoleMenu, getBotRoleAccess, menuMessageStatus, roleMemberCounts, normalizeMenuMode, MAX_REACTION_ROLE_BUTTONS, type ReactionRoleOption } from '../../../services/features/reactionRoleService.js';
+import { createReactionRoleMenu, deleteReactionRoleMenu, updateReactionRoleMenu, getBotRoleAccess, menuMessageStatus, roleMemberCounts, normalizeMenuDescription, normalizeMenuMode, MAX_REACTION_ROLE_BUTTONS, type ReactionRoleOption } from '../../../services/features/reactionRoleService.js';
 import { hasNewRoles, materializeNewRoles, previewReactionRolePreset, type ReactionRoleOptionInput } from '../../../services/features/reactionRolePresets.js';
 import { REACTION_ROLE_PRESET_KEYS, type ReactionRolePresetKey } from '@kotbo/contracts';
 import { invalidateAutoResponseCache } from '../../../services/features/autoResponseService.js';
@@ -1868,6 +1868,7 @@ export async function handleGeneralistModulesRoutes(
           title: string;
           channelId: string;
           buttonMode?: string;
+          description?: string | null;
           options: ReactionRoleOptionInput[];
         }>(req);
 
@@ -1891,6 +1892,7 @@ export async function handleGeneralistModulesRoutes(
           body.title,
           options,
           normalizeMenuMode(body.buttonMode),
+          normalizeMenuDescription(body.description),
         );
 
         json(res, 200, { menu });
@@ -1952,6 +1954,7 @@ export async function handleGeneralistModulesRoutes(
           title?: string;
           channelId?: string;
           buttonMode?: string;
+          description?: string | null;
           options?: ReactionRoleOptionInput[];
         }>(req);
 
@@ -1982,6 +1985,7 @@ export async function handleGeneralistModulesRoutes(
           ...(body.channelId !== undefined ? { channelId: body.channelId } : {}),
           ...(options !== undefined ? { options } : {}),
           ...(body.buttonMode !== undefined ? { buttonMode: normalizeMenuMode(body.buttonMode) } : {}),
+          ...(body.description !== undefined ? { description: normalizeMenuDescription(body.description) } : {}),
         });
 
         if (!menu) {

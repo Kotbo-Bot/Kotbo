@@ -36,6 +36,7 @@
     messageId: string | null;
     title: string;
     buttonMode?: string;
+    description?: string | null;
     options: any; // Array of { emoji?: string; label: string; roleId: string; mode?: 'toggle' | 'add_only' }
     createdAt: string;
   }>>([]);
@@ -52,6 +53,8 @@
   // Form states
   let editingMenuId = $state<string | null>(null);
   let formTitle = $state('');
+  /** Texte sous le titre ; vide, le bot affiche celui qui explique le mode. */
+  let formDescription = $state('');
   let formChannelId = $state('');
   let formButtonMode = $state<ReactionRoleMenuMode>('toggle');
   let applyingPreset = $state<ReactionRolePresetKey | null>(null);
@@ -203,6 +206,7 @@
   /** Formulaire vierge ; le salon choisi est gardé quand on repart de zéro. */
   function resetForm() {
     formTitle = '';
+    formDescription = '';
     formButtonMode = 'toggle';
     formOptions = [{ emoji: '', label: '', roleId: '', mode: '', style: 'secondary' }];
   }
@@ -220,6 +224,7 @@
   function openEditModal(menu: (typeof menus)[number]) {
     editingMenuId = menu.id;
     formTitle = menu.title;
+    formDescription = menu.description ?? '';
     formChannelId = menu.channelId;
     formButtonMode = normalizeMenuMode(menu.buttonMode);
 
@@ -263,6 +268,7 @@
 
     const payload = {
       title: formTitle,
+      description: formDescription.trim() || null,
       channelId: formChannelId,
       buttonMode: formButtonMode,
       options: formOptions.map(opt => ({
@@ -309,6 +315,9 @@
   const showPresetStep = $derived(!editingMenuId && canManageSettings);
 
   type FormOption = (typeof formOptions)[number];
+
+  /** Même limite que le bot pour le texte du message. */
+  const MENU_DESCRIPTION_MAX = 1000;
 
   /** Limite Discord du texte d'un bouton. */
   const BUTTON_LABEL_MAX = 80;
@@ -810,6 +819,23 @@
             </div>
           </div>
 
+          <div class="space-y-1">
+            <div class="flex items-baseline justify-between gap-2">
+              <label for="modal-description" class="text-2xs font-semibold text-on-surface-variant">{m.reaction_roles_field_description()}</label>
+              <span class="text-2xs text-on-surface-variant tabular-nums">{formDescription.length} / {MENU_DESCRIPTION_MAX}</span>
+            </div>
+            <textarea
+              id="modal-description"
+              bind:value={formDescription}
+              rows="2"
+              maxlength={MENU_DESCRIPTION_MAX}
+              placeholder={previewSubtitle}
+              class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none resize-y"
+              disabled={!canManageSettings}
+            ></textarea>
+            <p class="text-2xs text-on-surface-variant">{m.reaction_roles_field_description_hint()}</p>
+          </div>
+
           {#if editedMenu && formChannelId && formChannelId !== editedMenu.channelId}
             <p class="flex items-center gap-2 text-2xs text-on-surface-variant/80 bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2">
               <Papicon icon="Info" size={14} />
@@ -853,7 +879,9 @@
                     <div class="text-sm font-semibold text-white wrap-break-word">
                       {@html parseDiscordEmojisAndMarkdown(formTitle || m.reaction_roles_field_title_ph())}
                     </div>
-                    <div class="text-[13px] leading-snug text-[#dbdee1]">{previewSubtitle}</div>
+                    <div class="text-[13px] leading-snug text-[#dbdee1] whitespace-pre-line wrap-break-word">
+                      {@html parseDiscordEmojisAndMarkdown(formDescription.trim() || previewSubtitle)}
+                    </div>
                   </div>
                   <div class="space-y-2 pt-0.5">
                     {#each previewRows as row}

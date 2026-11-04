@@ -7326,6 +7326,8 @@
   "reaction_roles_preset_pronouns": "Pronouns",
   "reaction_roles_preset_notifications": "Notifications",
   "reaction_roles_preset_error": "Could not apply the template. Try again.",
+  "reaction_roles_field_description": "Message text",
+  "reaction_roles_field_description_hint": "Leave empty to keep the text explaining how to take the roles.",
   "reaction_roles_options_title": "More options",
   "reaction_roles_options_desc": "Color and second click, button by button.",
   "reaction_roles_options_exclusive_note": "In \"Just one\" mode, every button removes its role on a second click: only the color is set here.",
