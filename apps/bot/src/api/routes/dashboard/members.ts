@@ -731,6 +731,10 @@ export async function handleMembersRoutes(
           json(res, 404, { error: 'Le membre doit être présent sur le serveur.' });
           return true;
         }
+        if (!targetMember.moderatable) {
+          json(res, 400, { error: 'Le bot ne peut pas appliquer de timeout à ce membre.' });
+          return true;
+        }
 
         const {
           createVerificationSession,

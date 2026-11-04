@@ -10982,6 +10982,7 @@
   "ba_outcome_deleted": "Delete permanently",
   "ba_outcome_locked": "Uphold and lock",
   "ba_contested_sanctions": "Contested sanctions ({count})",
+  "ba_open_member_case": "Open member case file",
   "ba_contested_count": "{count} contested sanction(s)",
   "ba_contested_hint": "Each sanction gets its own verdict. Apply them, then issue the overall decision to notify the member.",
   "ba_item_apply": "Apply",

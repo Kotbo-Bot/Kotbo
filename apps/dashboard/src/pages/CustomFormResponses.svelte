@@ -4,6 +4,7 @@
   import { onMount } from 'svelte';
   import { router } from 'tinro';
   import { authStore } from '../lib/stores/auth.svelte';
+  import { memberCaseModal } from '../lib/stores/memberCaseModal.svelte';
   import { dashboardFetch } from '../lib/api';
   import Papicon from '../lib/components/Papicon.svelte';
   import ModulePage from '../lib/components/ModulePage.svelte';
@@ -438,7 +439,15 @@
           {#if selectedResponse.username}
             <div class="bg-surface-container rounded-xl p-3">
               <p class="text-xs text-on-surface-variant font-semibold mb-1 font-sans">Pseudo / Tag</p>
-              <p class="text-on-surface font-sans">{selectedResponse.username}{selectedResponse.userTag ? ` (${selectedResponse.userTag})` : ''}</p>
+              <!-- La ligne du tableau ouvre déjà la réponse : la fiche s'ouvre d'ici. -->
+              <UserDisplay
+                userId={selectedResponse.userId}
+                name={selectedResponse.username}
+                avatarUrl={selectedResponse.avatarUrl}
+                subtitle={selectedResponse.userTag}
+                size="sm"
+                onClick={memberCaseModal.canOpen ? (userId) => memberCaseModal.show(userId, selectedResponse?.username || userId) : null}
+              />
             </div>
           {/if}
           <div class="bg-surface-container rounded-xl p-3 col-span-2">

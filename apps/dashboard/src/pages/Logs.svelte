@@ -7,7 +7,8 @@
   import { Tabs, Button, Callout, Field, SectionCard, SettingsGroup, SettingsRow, ToggleSwitch, EmptyState } from '../lib/components/ui';
   import MetricCard from '../lib/components/MetricCard.svelte';
   import { dashboardStore } from '../lib/stores/dashboard.svelte';
-  import { hideUserIds, parseDetailsMetadata } from '../lib/logDetails';
+  import { parseDetailsMetadata } from '../lib/logDetails';
+  import { logEntryUser } from '../lib/logEntryUser';
   import RefreshButton from '../lib/components/RefreshButton.svelte';
   import Papicon from '../lib/components/Papicon.svelte';
   import MemberCaseModal from '../lib/components/MemberCaseModal.svelte';
@@ -228,16 +229,11 @@
   });
 
   function getLogChannelId(entry: { details: string; channelId: string | null }) {
-    return parseDetailsMetadata(entry.details, '', logLabels).extractedChannelId ?? entry.channelId;
+    return parseDetailsMetadata(entry.details, logLabels).extractedChannelId ?? entry.channelId;
   }
 
   function displayUser(entry: { user: string; details: string }) {
-    const parsed = parseDetailsMetadata(entry.details, entry.user, logLabels);
-    if (!parsed.extractedUser) {
-      return hideUserIds(entry.user).trim() || entry.user;
-    }
-    const normalized = parsed.extractedUser.replace(/\s*\(<@!?\d{15,25}>\)\s*$/, '').trim();
-    return normalized || hideUserIds(entry.user).trim() || entry.user;
+    return logEntryUser(entry).name;
   }
 
   const uniqueUsers = $derived([...new Set(discordLogs.map((entry) => displayUser(entry)))].sort((a, b) => a.localeCompare(b, 'fr')));
@@ -320,8 +316,8 @@
   const memberCase = new MemberCaseState();
 
   function openCaseModal(entry: { user: string; details: string; action: string }) {
-    const parsed = parseDetailsMetadata(entry.details, entry.user, logLabels);
-    void memberCase.show(parsed.extractedUserId ?? '', displayUser(entry), m.lg_action_from_log({ action: entry.action }));
+    const { name, userId } = logEntryUser(entry);
+    void memberCase.show(userId ?? '', name, m.lg_action_from_log({ action: entry.action }));
   }
 
   const sanctions = $derived((dashboardStore.state.sanctions as any[]) || []);
