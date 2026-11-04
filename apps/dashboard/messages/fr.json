@@ -10982,6 +10982,7 @@
   "ba_outcome_deleted": "Supprimer définitivement",
   "ba_outcome_locked": "Maintenir et verrouiller",
   "ba_contested_sanctions": "Sanctions contestées ({count})",
+  "ba_open_member_case": "Ouvrir la fiche du membre",
   "ba_contested_count": "{count} sanction(s) contestée(s)",
   "ba_contested_hint": "Chaque sanction reçoit son propre verdict. Applique-les, puis prononce la décision globale pour prévenir le membre.",
   "ba_item_apply": "Appliquer",
