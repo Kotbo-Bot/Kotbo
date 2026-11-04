@@ -1329,6 +1329,7 @@
   "lg_col_category": "Catégorie",
   "lg_col_details": "Détails",
   "lg_open_case": "Ouvrir le casier",
+  "lg_no_member_id": "Aucun membre identifié sur cette ligne.",
   "lg_no_events": "Aucun événement",
   "lg_no_events_hint": "Essaie une autre recherche ou retire un filtre.",
   "bsn_absences_configuration": "Absences (Configuration)",

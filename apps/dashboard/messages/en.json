@@ -1329,6 +1329,7 @@
   "lg_col_category": "Category",
   "lg_col_details": "Details",
   "lg_open_case": "Open case file",
+  "lg_no_member_id": "No member identified on this line.",
   "lg_no_events": "No events",
   "lg_no_events_hint": "Try another search or remove a filter.",
   "bsn_absences_configuration": "Absences (Configuration)",
