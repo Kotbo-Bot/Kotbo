@@ -18,6 +18,7 @@
   import EmojiPicker from '../lib/components/EmojiPicker.svelte';
   import ToggleSwitch from '../lib/components/ToggleSwitch.svelte';
   import FormColorPicker from '../lib/components/FormColorPicker.svelte';
+  import ReactionRoleDiscordPreview from '../lib/components/ReactionRoleDiscordPreview.svelte';
   import { parseDiscordEmojisAndMarkdown } from '../lib/emojiParser';
 
   const actionState = createAsyncActionState();
@@ -91,13 +92,6 @@
 
   /** Couleur de la barre de l'embed quand le staff n'en choisit pas. */
   const DEFAULT_EMBED_COLOR = '#5865F2';
-
-  const STYLE_BADGE_CLASSES: Record<ReactionRoleButtonStyle, string> = {
-    secondary: 'bg-[#4f545c]/15 text-[#8e9297] border-[#4f545c]/30',
-    primary: 'bg-[#5865f2]/15 text-[#5865f2] border-[#5865f2]/30',
-    success: 'bg-[#248046]/15 text-[#3ba55d] border-[#248046]/30',
-    danger: 'bg-[#da373c]/15 text-[#da373c] border-[#da373c]/30',
-  };
 
   function modeLabel(mode: string | null | undefined) {
     switch (normalizeMenuMode(mode)) {
@@ -189,13 +183,16 @@
 
   const editedMenu = $derived(menus.find(item => item.id === editingMenuId) ?? null);
 
-  const previewSubtitle = $derived.by(() => {
-    if (formButtonMode === 'exclusive') return m.reaction_roles_preview_subtitle_exclusive();
-    const modes = new Set(formOptions.map(opt => resolveButtonMode(opt.mode, formButtonMode)));
+  /** Texte affiché par le bot quand le staff n'en a pas saisi : il dépend du mode. */
+  function defaultSubtitle(mode: ReactionRoleMenuMode, options: Array<{ mode?: string | null }>): string {
+    if (mode === 'exclusive') return m.reaction_roles_preview_subtitle_exclusive();
+    const modes = new Set(options.map(opt => resolveButtonMode(opt.mode, mode)));
     if (modes.size > 1) return m.reaction_roles_preview_subtitle_mixed();
     if (modes.has('add_only')) return m.reaction_roles_preview_subtitle_add_only();
     return m.reaction_roles_preview_subtitle();
-  });
+  }
+
+  const previewSubtitle = $derived(defaultSubtitle(formButtonMode, formOptions));
 
   onMount(async () => {
     loading = true;
@@ -356,14 +353,24 @@
   }
 
   /**
-   * Boutons de l'aperçu, par rangées de cinq comme Discord les affiche. Tous y
-   * figurent, même incomplets : en masquer un faisait croire à une limite.
+   * Boutons de l'aperçu. Tous y figurent, même incomplets : en masquer un
+   * faisait croire à une limite.
    */
-  const previewRows = $derived.by(() => {
-    const rows: FormOption[][] = [];
-    for (let i = 0; i < formOptions.length; i += 5) rows.push(formOptions.slice(i, i + 5));
-    return rows;
-  });
+  const previewButtons = $derived(formOptions.map(opt => ({ emoji: opt.emoji, text: previewLabel(opt), style: opt.style })));
+
+  /** Boutons d'un menu publié, tels que les membres les voient. */
+  function cardButtons(menu: (typeof menus)[number]) {
+    const options: Array<{ emoji?: string; label?: string; roleId?: string; style?: string }> = Array.isArray(menu.options) ? menu.options : [];
+    return options.map(opt => ({
+      emoji: opt.emoji ?? '',
+      text: menu.showCounts ? buttonLabelWithCount(opt.label ?? '', memberCounts[opt.roleId ?? '']) : (opt.label ?? ''),
+      style: resolveStyle(opt.style),
+    }));
+  }
+
+  function cardDescription(menu: (typeof menus)[number]): string {
+    return menu.description || defaultSubtitle(normalizeMenuMode(menu.buttonMode), Array.isArray(menu.options) ? menu.options : []);
+  }
 
   /** Numéro d'une étape, décalé quand l'étape « modèle » est absente. */
   function step(n: number): number {
@@ -541,50 +548,43 @@
                 {/if}
               </div>
 
-              <!-- Buttons listing -->
-              <div class="flex flex-wrap gap-2 pt-4 border-t border-outline-variant/10">
-                {#if Array.isArray(menu.options)}
+              <!-- Le message tel que les membres le voient -->
+              <ReactionRoleDiscordPreview
+                compact
+                title={menu.title}
+                description={cardDescription(menu)}
+                buttons={cardButtons(menu)}
+                color={menu.embedColor ?? DEFAULT_EMBED_COLOR}
+              />
+
+              <!-- Rôle donné par chaque bouton, avec ses membres et ce qui bloque -->
+              {#if Array.isArray(menu.options)}
+                <ul class="flex flex-wrap gap-1.5">
                   {#each menu.options as opt}
                     {@const blocker = blockerOf(opt.roleId)}
-                    <div class="flex items-center gap-2 px-3 py-2 bg-surface-container-high/60 border border-outline-variant/10 rounded-xl text-xs font-bold text-on-surface hover:bg-surface-container-high transition-all">
-                      {#if opt.emoji}<span class="text-base">{@html parseDiscordEmojisAndMarkdown(opt.emoji)}</span>{/if}
-                      <span>{opt.label}</span>
-                      {#if blocker}
-                        <span
-                          class="flex items-center gap-1 text-2xs bg-error/10 text-error border border-error/30 px-1.5 py-0.5 rounded font-semibold"
-                          title={BLOCKER_MESSAGES[blocker]()}
-                        >
-                          <Papicon icon="AlertTriangle" size={10} />{getRoleName(opt.roleId)}
-                        </span>
-                      {:else}
-                        <span class="text-2xs bg-primary/10 text-primary border border-primary/20 px-1.5 py-0.5 rounded font-semibold">
-                          {getRoleName(opt.roleId)}
-                        </span>
-                      {/if}
+                    <li
+                      class="flex items-center gap-1.5 px-2 py-1 rounded-lg text-2xs font-semibold border {blocker ? 'bg-error/10 text-error border-error/30' : 'bg-surface-container-high/50 text-on-surface border-outline-variant/10'}"
+                      title={blocker ? BLOCKER_MESSAGES[blocker]() : undefined}
+                    >
+                      {#if blocker}<Papicon icon="AlertTriangle" size={10} />{/if}
+                      <span>{getRoleName(opt.roleId)}</span>
                       {#if memberCounts[opt.roleId] !== undefined}
                         <span
-                          class="flex items-center gap-0.5 text-2xs font-semibold text-on-surface-variant"
+                          class="flex items-center gap-0.5 text-on-surface-variant"
                           title={m.reaction_roles_member_count({ n: memberCounts[opt.roleId] })}
                         >
                           <Papicon icon="Users" size={10} />{memberCounts[opt.roleId]}
                         </span>
                       {/if}
                       {#if opt.mode && opt.mode !== menu.buttonMode && normalizeMenuMode(menu.buttonMode) !== 'exclusive'}
-                        <span class="text-2xs bg-secondary/10 text-secondary border border-secondary/20 px-1.5 py-0.5 rounded font-semibold">
-                          {buttonModeLabel(opt.mode)}
-                        </span>
+                        <span class="text-secondary">· {buttonModeLabel(opt.mode)}</span>
                       {/if}
-                      {#if opt.style && opt.style !== 'secondary'}
-                        <span class="text-2xs border px-1.5 py-0.5 rounded font-semibold {STYLE_BADGE_CLASSES[resolveStyle(opt.style)]}">
-                          {styleLabel(opt.style)}
-                        </span>
-                      {/if}
-                    </div>
+                    </li>
                   {/each}
-                {:else}
-                  <p class="text-xs text-on-surface-variant/40 italic">{m.reaction_roles_invalid_options()}</p>
-                {/if}
-              </div>
+                </ul>
+              {:else}
+                <p class="text-xs text-on-surface-variant/40 italic">{m.reaction_roles_invalid_options()}</p>
+              {/if}
             </div>
           </div>
         {:else}
@@ -891,39 +891,13 @@
           </button>
 
           {#if showPreview}
-            <div id="reaction-roles-preview" class="bg-[#313338] px-4 py-4 text-[#dbdee1] font-sans" transition:slide={{ duration: 160 }}>
-              <div class="flex items-start gap-3">
-                <div class="w-10 h-10 rounded-full bg-[#5865f2] flex items-center justify-center text-white font-bold shrink-0">K</div>
-                <div class="flex-1 min-w-0 space-y-2">
-                  <div class="flex items-center gap-1.5 select-none">
-                    <span class="font-semibold text-white text-sm">Kotbo</span>
-                    <span class="bg-[#5865f2] text-white text-[10px] font-semibold px-1 rounded-[3px] leading-4">BOT</span>
-                    <span class="text-xs text-[#949ba4]">{m.announcements_today_at({ time: '12:00' })}</span>
-                  </div>
-                  <div class="bg-[#2b2d31] border-l-4 rounded-[4px] px-3 py-2.5 max-w-[520px] space-y-1" style="border-left-color: {formEmbedColor || DEFAULT_EMBED_COLOR}">
-                    <div class="text-sm font-semibold text-white wrap-break-word">
-                      {@html parseDiscordEmojisAndMarkdown(formTitle || m.reaction_roles_field_title_ph())}
-                    </div>
-                    <div class="text-[13px] leading-snug text-[#dbdee1] whitespace-pre-line wrap-break-word">
-                      {@html parseDiscordEmojisAndMarkdown(formDescription.trim() || previewSubtitle)}
-                    </div>
-                  </div>
-                  <div class="space-y-2 pt-0.5">
-                    {#each previewRows as row}
-                      <div class="flex flex-wrap gap-2">
-                        {#each row as opt}
-                          {@const text = previewLabel(opt)}
-                          <!-- Pointillés : bouton sans texte ni rôle, il reste à compléter. -->
-                          <span class="flex items-center gap-1.5 h-8 px-4 text-sm font-medium rounded-[3px] transition-colors {text ? `text-white ${PREVIEW_STYLE_CLASSES[resolveStyle(opt.style)]}` : 'border border-dashed border-[#949ba4] text-[#949ba4] italic'}">
-                            {#if opt.emoji}<span>{@html parseDiscordEmojisAndMarkdown(opt.emoji)}</span>{/if}
-                            <span>{text || m.reaction_roles_preview_button_default()}</span>
-                          </span>
-                        {/each}
-                      </div>
-                    {/each}
-                  </div>
-                </div>
-              </div>
+            <div id="reaction-roles-preview" transition:slide={{ duration: 160 }}>
+              <ReactionRoleDiscordPreview
+                title={formTitle || m.reaction_roles_field_title_ph()}
+                description={formDescription.trim() || previewSubtitle}
+                buttons={previewButtons}
+                color={formEmbedColor || DEFAULT_EMBED_COLOR}
+              />
             </div>
           {/if}
         </section>
