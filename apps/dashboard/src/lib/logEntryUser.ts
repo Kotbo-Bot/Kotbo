@@ -33,12 +33,22 @@ export function hideUserIds(value: string, userNames?: Record<string, string>): 
     .replace(/\((\d{15,25})\)/g, '');
 }
 
+/**
+ * Identifiant écrit à côté de ce pseudo dans les détails (`pseudo (<@id>)`). Les logs
+ * avancés ne gardent que le pseudo de l'auteur dans sa colonne, mais le citent ainsi.
+ */
+function userIdNextToName(details: string, name: string): string | null {
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return details.match(new RegExp(`(?:^|[\\s:|])${escaped}\\s*\\(<@!?(\\d{15,25})>\\)`))?.[1] ?? null;
+}
+
 export function logEntryUser(entry: { user: string; details: string }): { name: string; userId: string | null } {
   const leading = entry.details.match(LEADING_MEMBER);
   const leadingName = leading?.[1]?.trim();
   if (leading && leadingName) return { name: leadingName, userId: leading[2] };
+  const name = hideUserIds(entry.user).trim() || entry.user;
   return {
-    name: hideUserIds(entry.user).trim() || entry.user,
-    userId: extractUserIdFromText(entry.user),
+    name,
+    userId: extractUserIdFromText(entry.user) ?? userIdNextToName(entry.details, name),
   };
 }
