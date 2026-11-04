@@ -1,5 +1,5 @@
 import type { Prisma } from '@prisma/client';
-import { Client, EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder, MessageFlags, GuildMember, PermissionFlagsBits, RESTJSONErrorCodes, type ButtonInteraction, type Guild, type Role } from 'discord.js';
+import { Client, EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder, MessageFlags, GuildMember, PermissionFlagsBits, RESTJSONErrorCodes, type ButtonInteraction, type HexColorString, type Guild, type Role } from 'discord.js';
 import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
 import { resolveEmojiShortcodes } from '../../utils/emojis.js';
@@ -77,19 +77,24 @@ function sanitizeOptions(options: ReactionRoleOption[]): ReactionRoleOption[] {
   });
 }
 
+/** Réglages d'un nouveau menu ; seuls le salon, le titre et les boutons sont requis. */
+export type NewReactionRoleMenu = {
+  channelId: string;
+  title: string;
+  options: ReactionRoleOption[];
+  buttonMode?: ReactionRoleMenuMode;
+  /** Texte sous le titre ; absent, le bot explique ce que font les boutons. */
+  description?: string | null;
+  showCounts?: boolean;
+  /** Couleur de la barre de l'embed ; absente, le bleu Discord. */
+  embedColor?: string | null;
+};
+
 /**
  * Crée et envoie un menu de rôles avec boutons dans un canal Discord
  */
-export async function createReactionRoleMenu(
-  client: Client,
-  guildId: string,
-  channelId: string,
-  title: string,
-  options: ReactionRoleOption[],
-  buttonMode: ReactionRoleMenuMode = 'toggle',
-  description: string | null = null,
-  showCounts = false,
-) {
+export async function createReactionRoleMenu(client: Client, guildId: string, settings: NewReactionRoleMenu) {
+  const { channelId, title, options, buttonMode = 'toggle', description, showCounts, embedColor } = settings;
   // 1. Enregistrer dans la BDD
   const menu = await prisma.reactionRoleMenu.create({
     data: {
@@ -99,6 +104,7 @@ export async function createReactionRoleMenu(
       buttonMode: normalizeMenuMode(buttonMode),
       ...(description ? { description } : {}),
       ...(showCounts ? { showCounts: true } : {}),
+      ...(embedColor ? { embedColor } : {}),
       options: sanitizeOptions(options) as Prisma.InputJsonValue,
     },
   });
@@ -197,6 +203,8 @@ export async function updateReactionRoleMenu(
     /** `null` remet le texte par défaut. */
     description?: string | null;
     showCounts?: boolean;
+    /** `null` remet le bleu Discord. */
+    embedColor?: string | null;
   },
 ) {
   const menu = await prisma.reactionRoleMenu.findFirst({
@@ -230,6 +238,7 @@ export async function updateReactionRoleMenu(
       ...(changes.buttonMode !== undefined ? { buttonMode: normalizeMenuMode(changes.buttonMode) } : {}),
       ...(changes.description !== undefined ? { description: changes.description } : {}),
       ...(changes.showCounts !== undefined ? { showCounts: changes.showCounts } : {}),
+      ...(changes.embedColor !== undefined ? { embedColor: changes.embedColor } : {}),
     },
   });
 
@@ -254,6 +263,16 @@ function describeMenuModes(
   if (modes.size > 1) return m.panel_reactionroles_description_mixed({}, { locale });
   if (modes.has('add_only')) return m.panel_reactionroles_description_add_only({}, { locale });
   return m.panel_reactionroles_description({}, { locale });
+}
+
+/** Couleur de la barre de l'embed quand le staff n'en choisit pas. */
+const DEFAULT_EMBED_COLOR: HexColorString = '#5865F2';
+
+/** Couleur reçue du dashboard, ramenée à « #RRGGBB » ; invalide ou vide, `null` (couleur par défaut). */
+export function normalizeEmbedColor(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const hex = value.trim().replace(/^#/, '');
+  return /^[0-9a-f]{6}$/i.test(hex) ? `#${hex.toUpperCase()}` : null;
 }
 
 /** Longueur maximale du texte d'un menu, bien sous la limite d'un embed Discord. */
@@ -303,7 +322,7 @@ export async function sendOrUpdateMenuMessage(client: Client, menuId: string) {
     const embed = new EmbedBuilder()
       .setTitle(resolveEmojiShortcodes(menu.title))
       .setDescription(resolveEmojiShortcodes(menuDescription(menu.description, options, menuMode, locale)))
-      .setColor('#5865F2')
+      .setColor((menu.embedColor ?? DEFAULT_EMBED_COLOR) as HexColorString)
       .setTimestamp();
 
     // Construire les boutons (maximum 5 boutons par ligne, maximum 25 boutons au total)

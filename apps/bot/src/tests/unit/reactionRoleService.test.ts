@@ -54,6 +54,7 @@ const {
   buttonLabelWithCount,
   menuDescription,
   menuMessageStatus,
+  normalizeEmbedColor,
   normalizeMenuDescription,
   roleMemberCounts,
   normalizeButtonStyle,
@@ -549,17 +550,15 @@ describe('reactionRoleService', () => {
       },
     } as unknown as Client;
 
-    await createReactionRoleMenu(
-      client,
-      'guild-1',
-      'channel-1',
-      'Mes rôles',
-      [
+    await createReactionRoleMenu(client, 'guild-1', {
+      channelId: 'channel-1',
+      title: 'Mes rôles',
+      options: [
         { emoji: '', label: 'Annonces', roleId: 'role-1', mode: 'nawak' as never },
         { emoji: '📢', label: 'Events', roleId: 'role-2', mode: 'add_only' },
       ],
-      'add_only',
-    );
+      buttonMode: 'add_only',
+    });
 
     expect(prismaMock.reactionRoleMenu.create).toHaveBeenCalledWith({
       data: {
@@ -586,7 +585,7 @@ describe('reactionRoleService', () => {
       },
     } as unknown as Client;
 
-    await createReactionRoleMenu(client, 'guild-1', 'channel-1', 'Couleurs', [{ label: 'Rouge', roleId: 'rouge' }], 'exclusive');
+    await createReactionRoleMenu(client, 'guild-1', { channelId: 'channel-1', title: 'Couleurs', options: [{ label: 'Rouge', roleId: 'rouge' }], buttonMode: 'exclusive' });
 
     expect(prismaMock.reactionRoleMenu.create).toHaveBeenCalledWith({
       data: expect.objectContaining({ buttonMode: 'exclusive' }),
@@ -610,16 +609,14 @@ describe('reactionRoleService', () => {
       },
     } as unknown as Client;
 
-    await createReactionRoleMenu(
-      client,
-      'guild-1',
-      'channel-1',
-      'Mes rôles',
-      [
+    await createReactionRoleMenu(client, 'guild-1', {
+      channelId: 'channel-1',
+      title: 'Mes rôles',
+      options: [
         { label: 'Annonces', roleId: 'role-1', style: 'arc-en-ciel' as never },
         { label: 'Events', roleId: 'role-2', style: 'danger' },
       ],
-    );
+    });
 
     expect(prismaMock.reactionRoleMenu.create).toHaveBeenCalledWith({
       data: {
@@ -714,7 +711,7 @@ describe('texte du message d’un menu', () => {
     prismaMock.reactionRoleMenu.findUnique.mockResolvedValueOnce(null);
     const client = { guilds: { cache: { get: mock(() => undefined) }, fetch: mock(async () => null) } } as unknown as Client;
 
-    await createReactionRoleMenu(client, 'guild-1', 'channel-1', 'Jeux', [{ label: 'LoL', roleId: 'lol' }], 'toggle', 'Choisis tes jeux');
+    await createReactionRoleMenu(client, 'guild-1', { channelId: 'channel-1', title: 'Jeux', options: [{ label: 'LoL', roleId: 'lol' }], description: 'Choisis tes jeux' });
 
     expect(prismaMock.reactionRoleMenu.create).toHaveBeenCalledWith({
       data: expect.objectContaining({ description: 'Choisis tes jeux' }),
@@ -742,10 +739,36 @@ describe('nombre de membres sur les boutons', () => {
     prismaMock.reactionRoleMenu.findUnique.mockResolvedValueOnce(null);
     const client = { guilds: { cache: { get: mock(() => undefined) }, fetch: mock(async () => null) } } as unknown as Client;
 
-    await createReactionRoleMenu(client, 'guild-1', 'channel-1', 'Couleurs', [{ label: 'Rouge', roleId: 'rouge' }], 'exclusive', null, true);
+    await createReactionRoleMenu(client, 'guild-1', { channelId: 'channel-1', title: 'Couleurs', options: [{ label: 'Rouge', roleId: 'rouge' }], buttonMode: 'exclusive', showCounts: true });
 
     expect(prismaMock.reactionRoleMenu.create).toHaveBeenCalledWith({
       data: expect.objectContaining({ showCounts: true }),
+    });
+  });
+});
+
+describe('couleur de la barre de l’embed', () => {
+  test('accepte une couleur hexadécimale, avec ou sans dièse, et la met en majuscules', () => {
+    expect(normalizeEmbedColor('#e74c3c')).toBe('#E74C3C');
+    expect(normalizeEmbedColor('2ecc71')).toBe('#2ECC71');
+  });
+
+  test('une valeur vide ou invalide remet la couleur par défaut (null)', () => {
+    expect(normalizeEmbedColor('')).toBeNull();
+    expect(normalizeEmbedColor('rouge')).toBeNull();
+    expect(normalizeEmbedColor('#12345')).toBeNull();
+    expect(normalizeEmbedColor(null)).toBeNull();
+  });
+
+  test('la couleur choisie est enregistrée avec le menu', async () => {
+    prismaMock.reactionRoleMenu.create.mockResolvedValueOnce({ id: 'menu-1' });
+    prismaMock.reactionRoleMenu.findUnique.mockResolvedValueOnce(null);
+    const client = { guilds: { cache: { get: mock(() => undefined) }, fetch: mock(async () => null) } } as unknown as Client;
+
+    await createReactionRoleMenu(client, 'guild-1', { channelId: 'channel-1', title: 'Couleurs', options: [{ label: 'Rouge', roleId: 'rouge' }], embedColor: '#E74C3C' });
+
+    expect(prismaMock.reactionRoleMenu.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ embedColor: '#E74C3C' }),
     });
   });
 });

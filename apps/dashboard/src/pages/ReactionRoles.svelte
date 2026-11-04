@@ -17,6 +17,7 @@
   import { dashboardRoleBlocker } from '../lib/reactionRoleBlockers';
   import EmojiPicker from '../lib/components/EmojiPicker.svelte';
   import ToggleSwitch from '../lib/components/ToggleSwitch.svelte';
+  import FormColorPicker from '../lib/components/FormColorPicker.svelte';
   import { parseDiscordEmojisAndMarkdown } from '../lib/emojiParser';
 
   const actionState = createAsyncActionState();
@@ -39,6 +40,7 @@
     buttonMode?: string;
     description?: string | null;
     showCounts?: boolean;
+    embedColor?: string | null;
     options: any; // Array of { emoji?: string; label: string; roleId: string; mode?: 'toggle' | 'add_only' }
     createdAt: string;
   }>>([]);
@@ -59,6 +61,8 @@
   let formDescription = $state('');
   /** Nombre de membres de chaque rôle affiché sur son bouton. */
   let formShowCounts = $state(false);
+  /** Couleur de la barre de l'embed ; vide, le bleu Discord. */
+  let formEmbedColor = $state('');
   let formChannelId = $state('');
   let formButtonMode = $state<ReactionRoleMenuMode>('toggle');
   let applyingPreset = $state<ReactionRolePresetKey | null>(null);
@@ -85,6 +89,9 @@
     danger: 'bg-[#da373c] hover:bg-[#a12828]',
   };
 
+  /** Couleur de la barre de l'embed quand le staff n'en choisit pas. */
+  const DEFAULT_EMBED_COLOR = '#5865F2';
+
   const STYLE_BADGE_CLASSES: Record<ReactionRoleButtonStyle, string> = {
     secondary: 'bg-[#4f545c]/15 text-[#8e9297] border-[#4f545c]/30',
     primary: 'bg-[#5865f2]/15 text-[#5865f2] border-[#5865f2]/30',
@@ -106,11 +113,11 @@
   }
 
   /**
-   * Le menu affiche-t-il les nombres, ou un bouton a-t-il une couleur ou un
-   * second clic à lui ? L'onglet le signale.
+   * Le menu affiche-t-il les nombres ou une couleur à lui, ou un bouton a-t-il
+   * une couleur ou un second clic à lui ? L'onglet le signale.
    * En mode « Un seul », le second clic d'un bouton ne compte pas : il est ignoré.
    */
-  const hasCustomOptions = $derived(formShowCounts || formOptions.some(opt =>
+  const hasCustomOptions = $derived(formShowCounts || !!formEmbedColor || formOptions.some(opt =>
     opt.style !== 'secondary' || (opt.mode !== '' && formButtonMode !== 'exclusive')));
 
   const BUTTON_STYLES: ReactionRoleButtonStyle[] = ['secondary', 'primary', 'success', 'danger'];
@@ -213,6 +220,7 @@
     formTitle = '';
     formDescription = '';
     formShowCounts = false;
+    formEmbedColor = '';
     formButtonMode = 'toggle';
     formOptions = [{ emoji: '', label: '', roleId: '', mode: '', style: 'secondary' }];
   }
@@ -232,6 +240,7 @@
     formTitle = menu.title;
     formDescription = menu.description ?? '';
     formShowCounts = menu.showCounts === true;
+    formEmbedColor = menu.embedColor ?? '';
     formChannelId = menu.channelId;
     formButtonMode = normalizeMenuMode(menu.buttonMode);
 
@@ -277,6 +286,7 @@
       title: formTitle,
       description: formDescription.trim() || null,
       showCounts: formShowCounts,
+      embedColor: formEmbedColor || null,
       channelId: formChannelId,
       buttonMode: formButtonMode,
       options: formOptions.map(opt => ({
@@ -890,7 +900,7 @@
                     <span class="bg-[#5865f2] text-white text-[10px] font-semibold px-1 rounded-[3px] leading-4">BOT</span>
                     <span class="text-xs text-[#949ba4]">{m.announcements_today_at({ time: '12:00' })}</span>
                   </div>
-                  <div class="bg-[#2b2d31] border-l-4 border-[#5865f2] rounded-[4px] px-3 py-2.5 max-w-[520px] space-y-1">
+                  <div class="bg-[#2b2d31] border-l-4 rounded-[4px] px-3 py-2.5 max-w-[520px] space-y-1" style="border-left-color: {formEmbedColor || DEFAULT_EMBED_COLOR}">
                     <div class="text-sm font-semibold text-white wrap-break-word">
                       {@html parseDiscordEmojisAndMarkdown(formTitle || m.reaction_roles_field_title_ph())}
                     </div>
@@ -999,6 +1009,25 @@
             />
           </div>
           <p class="text-2xs text-on-surface-variant leading-relaxed">{m.reaction_roles_show_counts_desc()}</p>
+        </div>
+
+        <div class="rounded-lg border border-outline-variant/15 bg-surface-container/60 p-3 space-y-2">
+          <div class="flex items-center justify-between gap-3">
+            <p class="text-xs font-semibold text-on-surface">{m.reaction_roles_embed_color_title()}</p>
+            {#if formEmbedColor && canManageSettings}
+              <button
+                type="button"
+                onclick={() => { formEmbedColor = ''; }}
+                class="text-2xs font-semibold text-primary hover:underline cursor-pointer"
+              >
+                {m.reaction_roles_embed_color_reset()}
+              </button>
+            {/if}
+          </div>
+          {#if canManageSettings}
+            <FormColorPicker bind:value={formEmbedColor} />
+          {/if}
+          <p class="text-2xs text-on-surface-variant leading-relaxed">{m.reaction_roles_embed_color_desc()}</p>
         </div>
 
         {#if formButtonMode === 'exclusive'}

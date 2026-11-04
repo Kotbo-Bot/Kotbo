@@ -48,7 +48,7 @@ import {
   updateGiveawayTemplate,
   type GiveawayTemplateInput,
 } from '../../../services/features/giveawayTemplateService.js';
-import { createReactionRoleMenu, deleteReactionRoleMenu, updateReactionRoleMenu, getBotRoleAccess, menuMessageStatus, roleMemberCounts, normalizeMenuDescription, normalizeMenuMode, MAX_REACTION_ROLE_BUTTONS, type ReactionRoleOption } from '../../../services/features/reactionRoleService.js';
+import { createReactionRoleMenu, deleteReactionRoleMenu, updateReactionRoleMenu, getBotRoleAccess, menuMessageStatus, roleMemberCounts, normalizeEmbedColor, normalizeMenuDescription, normalizeMenuMode, MAX_REACTION_ROLE_BUTTONS, type ReactionRoleOption } from '../../../services/features/reactionRoleService.js';
 import { hasNewRoles, materializeNewRoles, previewReactionRolePreset, type ReactionRoleOptionInput } from '../../../services/features/reactionRolePresets.js';
 import { REACTION_ROLE_PRESET_KEYS, type ReactionRolePresetKey } from '@kotbo/contracts';
 import { invalidateAutoResponseCache } from '../../../services/features/autoResponseService.js';
@@ -1870,6 +1870,7 @@ export async function handleGeneralistModulesRoutes(
           buttonMode?: string;
           description?: string | null;
           showCounts?: boolean;
+          embedColor?: string | null;
           options: ReactionRoleOptionInput[];
         }>(req);
 
@@ -1886,16 +1887,15 @@ export async function handleGeneralistModulesRoutes(
         const options = await withNewRolesCreated(res, client, guildId, body.options, auditUser);
         if (!options) return true;
 
-        const menu = await createReactionRoleMenu(
-          client,
-          guildId,
-          body.channelId,
-          body.title,
+        const menu = await createReactionRoleMenu(client, guildId, {
+          channelId: body.channelId,
+          title: body.title,
           options,
-          normalizeMenuMode(body.buttonMode),
-          normalizeMenuDescription(body.description),
-          body.showCounts === true,
-        );
+          buttonMode: normalizeMenuMode(body.buttonMode),
+          description: normalizeMenuDescription(body.description),
+          showCounts: body.showCounts === true,
+          embedColor: normalizeEmbedColor(body.embedColor),
+        });
 
         json(res, 200, { menu });
       } catch (err) {
@@ -1958,6 +1958,7 @@ export async function handleGeneralistModulesRoutes(
           buttonMode?: string;
           description?: string | null;
           showCounts?: boolean;
+          embedColor?: string | null;
           options?: ReactionRoleOptionInput[];
         }>(req);
 
@@ -1990,6 +1991,7 @@ export async function handleGeneralistModulesRoutes(
           ...(body.buttonMode !== undefined ? { buttonMode: normalizeMenuMode(body.buttonMode) } : {}),
           ...(body.description !== undefined ? { description: normalizeMenuDescription(body.description) } : {}),
           ...(typeof body.showCounts === 'boolean' ? { showCounts: body.showCounts } : {}),
+          ...(body.embedColor !== undefined ? { embedColor: normalizeEmbedColor(body.embedColor) } : {}),
         });
 
         if (!menu) {
