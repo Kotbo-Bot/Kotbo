@@ -338,3 +338,20 @@ export type {
   DashboardUsageRow,
   DashboardUsageTabRow,
 } from './types/dashboardTelemetry.js';
+
+export {
+  REACTION_ROLE_BUTTON_MODES,
+  REACTION_ROLE_MENU_MODES,
+  REACTION_ROLE_PRESET_KEYS,
+  normalizeMenuMode,
+  parseButtonMode,
+  resolveButtonMode,
+  roleBlocker,
+} from './types/reactionRoles.js';
+export type {
+  BotRoleAccess,
+  ReactionRoleButtonMode,
+  ReactionRoleMenuMode,
+  ReactionRolePresetKey,
+  RoleBlocker,
+} from './types/reactionRoles.js';

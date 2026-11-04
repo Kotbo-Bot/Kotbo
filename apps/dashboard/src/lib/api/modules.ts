@@ -3,6 +3,7 @@ import { authStore } from '../stores/auth.svelte';
 import { API_BASE_URL, dashboardMutation, dashboardRequest } from './client';
 
 import { m } from '../i18n';
+import type { ReactionRoleButtonMode, ReactionRoleMenuMode, ReactionRolePresetKey } from '@kotbo/contracts';
 // ==========================================
 // GENERALIST MODULES APIs
 // ==========================================
@@ -383,7 +384,7 @@ export async function fetchReactionRoleMenus(guildId = authStore.selectedGuildId
   return dashboardRequest('/reaction-roles', { method: 'GET', guildId, errorContext: 'API Error (Fetch Reaction Roles):' });
 }
 
-export type ReactionRoleButtonMode = 'toggle' | 'add_only';
+export type { ReactionRoleButtonMode, ReactionRoleMenuMode, ReactionRolePresetKey } from '@kotbo/contracts';
 
 export type ReactionRoleButtonStyle = 'secondary' | 'primary' | 'success' | 'danger';
 
@@ -397,12 +398,17 @@ export interface ReactionRoleOption {
   style?: ReactionRoleButtonStyle | null;
 }
 
-export async function createReactionRoleMenu(payload: { title: string; channelId: string; buttonMode: ReactionRoleButtonMode; exclusive?: boolean; options: ReactionRoleOption[] }, guildId = authStore.selectedGuildId) {
+export async function createReactionRoleMenu(payload: { title: string; channelId: string; buttonMode: ReactionRoleMenuMode; options: ReactionRoleOption[] }, guildId = authStore.selectedGuildId) {
   return dashboardRequest('/reaction-roles', { method: 'POST', successMessage: m.api_ok_create_reaction_role_menu(), payload, guildId, errorContext: 'API Error (Create Reaction Role Menu):' });
 }
 
-export async function updateReactionRoleMenu(menuId: string, payload: { title?: string; channelId?: string; buttonMode?: ReactionRoleButtonMode; exclusive?: boolean; options?: ReactionRoleOption[] }, guildId = authStore.selectedGuildId) {
+export async function updateReactionRoleMenu(menuId: string, payload: { title?: string; channelId?: string; buttonMode?: ReactionRoleMenuMode; options?: ReactionRoleOption[] }, guildId = authStore.selectedGuildId) {
   return dashboardRequest(`/reaction-roles/${menuId}`, { method: 'PATCH', successMessage: m.api_ok_update_reaction_role_menu(), payload, guildId, errorContext: 'API Error (Update Reaction Role Menu):' });
+}
+
+/** Crée les rôles d'un menu tout prêt ; rend le titre, le mode et les boutons à mettre dans le formulaire. */
+export async function applyReactionRolePreset(key: ReactionRolePresetKey, guildId = authStore.selectedGuildId) {
+  return dashboardRequest(`/reaction-roles/presets/${key}`, { method: 'POST', guildId, errorContext: 'API Error (Apply Reaction Role Preset):' });
 }
 
 export async function deleteReactionRoleMenu(menuId: string, guildId = authStore.selectedGuildId) {
