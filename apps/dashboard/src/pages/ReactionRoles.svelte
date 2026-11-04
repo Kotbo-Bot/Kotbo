@@ -231,7 +231,7 @@
   async function handleSubmit() {
     if (!canManageSettings || !formTitle || !formChannelId || formOptions.length === 0) return;
 
-    const invalidOpt = formOptions.some(o => !o.label || (!o.roleId && !o.newRole));
+    const invalidOpt = formOptions.some(o => !buttonLabel(o) || (!o.roleId && !o.newRole));
     if (invalidOpt) {
       actionState.setError(m.reaction_roles_all_buttons_required_error());
       return;
@@ -243,7 +243,7 @@
       buttonMode: formButtonMode,
       options: formOptions.map(opt => ({
         emoji: opt.emoji,
-        label: opt.label,
+        label: buttonLabel(opt),
         roleId: opt.roleId,
         ...(!opt.roleId && opt.newRole ? { newRole: opt.newRole } : {}),
         // Un menu « un seul rôle » n'a pas de mode par bouton.
@@ -282,11 +282,29 @@
   /** L'étape « modèle » n'existe qu'à la création, pour qui peut configurer. */
   const showPresetStep = $derived(!editingMenuId && canManageSettings);
 
-  /** Boutons de l'aperçu, par rangées de cinq comme Discord les affiche. */
+  type FormOption = (typeof formOptions)[number];
+
+  /** Limite Discord du texte d'un bouton. */
+  const BUTTON_LABEL_MAX = 80;
+
+  /** Nom du rôle d'un bouton : choisi dans la liste, ou proposé par un modèle. */
+  function roleNameOf(opt: FormOption): string {
+    if (opt.roleId) return availableRoles.find(r => r.id === opt.roleId)?.name ?? '';
+    return opt.newRole?.name ?? '';
+  }
+
+  /** Texte publié sur le bouton : celui saisi, sinon le nom de son rôle. */
+  function buttonLabel(opt: FormOption): string {
+    return (opt.label.trim() || roleNameOf(opt)).slice(0, BUTTON_LABEL_MAX);
+  }
+
+  /**
+   * Boutons de l'aperçu, par rangées de cinq comme Discord les affiche. Tous y
+   * figurent, même incomplets : en masquer un faisait croire à une limite.
+   */
   const previewRows = $derived.by(() => {
-    const visible = formOptions.filter(opt => opt.label || opt.emoji);
-    const rows: (typeof visible)[] = [];
-    for (let i = 0; i < visible.length; i += 5) rows.push(visible.slice(i, i + 5));
+    const rows: FormOption[][] = [];
+    for (let i = 0; i < formOptions.length; i += 5) rows.push(formOptions.slice(i, i + 5));
     return rows;
   });
 
@@ -610,10 +628,10 @@
                     id={`modal-label-${idx}`}
                     type="text"
                     bind:value={opt.label}
-                    placeholder={m.reaction_roles_field_label_ph()}
+                    placeholder={roleNameOf(opt) || m.reaction_roles_field_label_ph()}
+                    maxlength={BUTTON_LABEL_MAX}
                     aria-label={m.reaction_roles_field_label()}
                     class="w-full bg-surface-container rounded-lg px-3 py-2 text-xs text-on-surface border border-outline-variant/10 focus:ring-2 focus:ring-primary/30 focus:outline-none transition-all"
-                    required
                     disabled={!canManageSettings}
                   />
 
@@ -810,9 +828,11 @@
                     {#each previewRows as row}
                       <div class="flex flex-wrap gap-2">
                         {#each row as opt}
-                          <span class="flex items-center gap-1.5 h-8 px-4 text-white text-sm font-medium rounded-[3px] transition-colors {PREVIEW_STYLE_CLASSES[resolveStyle(opt.style)]}">
+                          {@const text = buttonLabel(opt)}
+                          <!-- Pointillés : bouton sans texte ni rôle, il reste à compléter. -->
+                          <span class="flex items-center gap-1.5 h-8 px-4 text-sm font-medium rounded-[3px] transition-colors {text ? `text-white ${PREVIEW_STYLE_CLASSES[resolveStyle(opt.style)]}` : 'border border-dashed border-[#949ba4] text-[#949ba4] italic'}">
                             {#if opt.emoji}<span>{@html parseDiscordEmojisAndMarkdown(opt.emoji)}</span>{/if}
-                            <span>{opt.label || m.reaction_roles_preview_button_default()}</span>
+                            <span>{text || m.reaction_roles_preview_button_default()}</span>
                           </span>
                         {/each}
                       </div>
