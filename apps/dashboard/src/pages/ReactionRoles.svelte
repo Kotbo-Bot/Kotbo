@@ -764,9 +764,6 @@
                     {/if}
                   </div>
                 </div>
-
-                  </div>
-                {/if}
               </div>
             {/each}
           </div>
