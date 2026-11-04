@@ -396,6 +396,8 @@ export interface ReactionRoleOption {
   mode?: ReactionRoleButtonMode | null;
   /** Absent : le bouton reste gris. */
   style?: ReactionRoleButtonStyle | null;
+  /** Rôle proposé par un modèle, créé à la publication quand `roleId` est vide. */
+  newRole?: { name: string; color?: number } | null;
 }
 
 export async function createReactionRoleMenu(payload: { title: string; channelId: string; buttonMode: ReactionRoleMenuMode; options: ReactionRoleOption[] }, guildId = authStore.selectedGuildId) {
@@ -406,9 +408,12 @@ export async function updateReactionRoleMenu(menuId: string, payload: { title?: 
   return dashboardRequest(`/reaction-roles/${menuId}`, { method: 'PATCH', successMessage: m.api_ok_update_reaction_role_menu(), payload, guildId, errorContext: 'API Error (Update Reaction Role Menu):' });
 }
 
-/** Crée les rôles d'un menu tout prêt ; rend le titre, le mode et les boutons à mettre dans le formulaire. */
-export async function applyReactionRolePreset(key: ReactionRolePresetKey, guildId = authStore.selectedGuildId) {
-  return dashboardRequest(`/reaction-roles/presets/${key}`, { method: 'POST', guildId, errorContext: 'API Error (Apply Reaction Role Preset):' });
+/**
+ * Contenu d'un menu tout prêt : titre, mode et boutons à mettre dans le
+ * formulaire. Rien n'est créé ; les rôles manquants le seront à la publication.
+ */
+export async function fetchReactionRolePreset(key: ReactionRolePresetKey, guildId = authStore.selectedGuildId) {
+  return dashboardRequest(`/reaction-roles/presets/${key}`, { method: 'GET', guildId, errorContext: 'API Error (Fetch Reaction Role Preset):' });
 }
 
 export async function deleteReactionRoleMenu(menuId: string, guildId = authStore.selectedGuildId) {
