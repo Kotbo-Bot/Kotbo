@@ -54,6 +54,7 @@ const MEMBER_NAME_PAGES = [
   'lib/components/aegis/AegisReviewQueue.svelte',
   'lib/components/tickets/TicketBlacklist.svelte',
   'lib/components/economy/RpgTowerPanel.svelte',
+  'lib/components/economy/RpgGuildsPanel.svelte',
 ];
 
 /** Lien ou navigation directe vers la page d'un membre. */

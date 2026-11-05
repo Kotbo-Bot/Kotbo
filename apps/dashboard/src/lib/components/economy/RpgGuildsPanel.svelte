@@ -12,6 +12,7 @@
   import { createAsyncActionState } from '../../asyncAction.svelte';
   import { dissolveRpgGuild, fetchRpgGuilds, removeRpgGuildMember, updateRpgGuild } from '../../api';
   import Papicon from '../Papicon.svelte';
+  import MemberName from '../MemberName.svelte';
   import EmojiPicker from '../EmojiPicker.svelte';
   import EmojiText from '../EmojiText.svelte';
   import InlineFeedback from '../InlineFeedback.svelte';
@@ -200,7 +201,7 @@
                     <li class="flex items-center justify-between gap-3 text-xs bg-surface-container-high/40 rounded-lg px-3 py-2">
                       <span class="flex items-center gap-2 min-w-0">
                         {#if member.userId === rpgGuild.ownerId}<Papicon icon="Crown" size={12} class="text-warning" />{/if}
-                        <span class="truncate font-semibold">{member.displayName}</span>
+                        <MemberName userId={member.userId} name={member.displayName} class="min-w-0 truncate font-semibold" />
                         <span class="text-on-surface-variant">{m.eco_player_level_xp({ level: member.level, xp: member.xp })}</span>
                       </span>
                       {#if canManage && member.userId !== rpgGuild.ownerId}
