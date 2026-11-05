@@ -15,6 +15,7 @@
   import ModulePage from '../lib/components/ModulePage.svelte';
   import RefreshButton from '../lib/components/RefreshButton.svelte';
   import Papicon from '../lib/components/Papicon.svelte';
+  import MemberName from '../lib/components/MemberName.svelte';
   import ToggleSwitch from '../lib/components/ToggleSwitch.svelte';
   import MultiSelect from '../lib/components/MultiSelect.svelte';
   import { m, dateLocale } from '../lib/i18n';
@@ -523,9 +524,11 @@
 
               <div class="min-w-0 flex-1">
                 <div class="flex items-center gap-2 flex-wrap">
-                  <span class="text-sm font-semibold text-on-surface">{message.authorName}</span>
                   {#if message.isBot}
+                    <span class="text-sm font-semibold text-on-surface">{message.authorName}</span>
                     <span class="px-1.5 py-0.5 text-2xs font-bold bg-primary/20 text-primary rounded">BOT</span>
+                  {:else}
+                    <MemberName userId={message.authorId} name={message.authorName} class="text-sm font-semibold text-on-surface" />
                   {/if}
                   <span class="text-xs text-on-surface-variant">#{message.channelName}</span>
                   <span class="text-xs text-on-surface-variant/40">· {formatDate(message.createdAt)}</span>

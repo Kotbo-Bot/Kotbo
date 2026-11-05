@@ -33,6 +33,7 @@
   import VisionPanel from '../../lib/components/security/VisionPanel.svelte';
   import ShieldCard from '../../lib/components/security/ShieldCard.svelte';
   import Callout from '../../lib/components/ui/Callout.svelte';
+  import MemberName from '../../lib/components/MemberName.svelte';
 
   type Config = Record<string, any>;
 
@@ -1155,7 +1156,7 @@
             {#each jailed as jail (jail.userId)}
               <div class="flex items-center justify-between gap-3 rounded-lg border border-outline-variant/30 px-3 py-2">
                 <div class="min-w-0">
-                  <p class="text-xs text-on-surface font-mono">{jail.userId}</p>
+                  <p class="text-xs text-on-surface font-mono"><MemberName userId={jail.userId} /></p>
                   <p class="text-xs text-on-surface-variant truncate">{JAIL_SOURCES[jail.source] ?? jail.source}{jail.reason ? ` · ${jail.reason}` : ''}</p>
                 </div>
                 <span class="text-xs text-on-surface-variant shrink-0">
