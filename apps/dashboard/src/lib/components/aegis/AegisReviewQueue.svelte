@@ -8,6 +8,7 @@
   import { untrack } from 'svelte';
   import { Button, Callout, EmptyState, FilterPills } from '../ui';
   import Papicon from '../Papicon.svelte';
+  import MemberName from '../MemberName.svelte';
   import { m, getLocale } from '../../i18n';
   import { toast } from '../../stores/toast.svelte';
   import { memberAvatarSrc } from '../../discordMedia';
@@ -128,7 +129,7 @@
           <div class="card__head">
             <img class="card__avatar" src={memberAvatarSrc(d.authorAvatar, d.authorName, d.authorId)} alt="" width="32" height="32" loading="lazy" />
             <div class="card__who">
-              <p class="card__name">{d.authorName ?? d.authorId}</p>
+              <p class="card__name"><MemberName userId={d.authorId} name={d.authorName} /></p>
               <p class="card__meta">
                 <span class="badge badge--{d.kind.toLowerCase()}">{kindLabel(d.kind)}</span>
                 {#if d.source === 'EDIT'}<span>· {m.aegis_source_EDIT()}</span>{/if}

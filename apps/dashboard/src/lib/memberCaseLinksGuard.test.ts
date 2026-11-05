@@ -18,6 +18,8 @@ import { join } from 'node:path';
  *  - Les pages listées ici ouvrent la fiche par ce store, n'offrent le clic que si
  *    `memberCaseModal.canOpen`, et ne contournent pas la règle par un lien ou une
  *    navigation directe vers `/members/<id>`.
+ *  - `MemberName` est le pseudo cliquable seul, pour les listes qui affichent l'avatar à
+ *    part : il porte la même règle, et les pages listées dans `MEMBER_NAME_PAGES` s'en servent.
  *  - Voir un membre n'est pas le modérer : la page membre ne propose « Modérer » et
  *    « Modifier la note » qu'avec `canModerateFeature('members')`. La fiche, elle, masque
  *    déjà ses actions sans ce droit.
@@ -43,6 +45,15 @@ const PAGES = [
   'pages/Backups.svelte',
   'lib/components/channels/ChannelDetailsModal.svelte',
   'lib/components/tickets/TicketPerformance.svelte',
+];
+
+/** Pages qui ouvrent la fiche par le pseudo seul, via `MemberName`. */
+const MEMBER_NAME_PAGES = [
+  'pages/MessageSearch.svelte',
+  'pages/security/AntiRaid.svelte',
+  'lib/components/aegis/AegisReviewQueue.svelte',
+  'lib/components/tickets/TicketBlacklist.svelte',
+  'lib/components/economy/RpgTowerPanel.svelte',
 ];
 
 /** Lien ou navigation directe vers la page d'un membre. */
@@ -130,6 +141,30 @@ describe.each(PAGES)('%s', (page) => {
 
   test("ne propose le clic qu'avec l'accès à « Membres »", () => {
     expect(source).toContain('memberCaseModal.canOpen');
+  });
+
+  test('ne navigue pas directement vers une page membre', () => {
+    expect(source).not.toMatch(MEMBER_PAGE_LINK);
+  });
+});
+
+describe('MemberName', () => {
+  const source = read('lib/components/MemberName.svelte');
+
+  test('ouvre la fiche membre par le store', () => {
+    expect(source).toContain('memberCaseModal.show(');
+  });
+
+  test("ne propose le clic qu'avec l'accès à « Membres »", () => {
+    expect(source).toMatch(/\{#if memberCaseModal\.canOpen\}[\s\S]*?<button/);
+  });
+});
+
+describe.each(MEMBER_NAME_PAGES)('%s', (page) => {
+  const source = read(page);
+
+  test('affiche le pseudo par MemberName', () => {
+    expect(source).toContain('<MemberName');
   });
 
   test('ne navigue pas directement vers une page membre', () => {

@@ -24,6 +24,7 @@
     type RpgTowerSimResult,
   } from '../../api';
   import Papicon from '../Papicon.svelte';
+  import MemberName from '../MemberName.svelte';
   import EmojiPicker from '../EmojiPicker.svelte';
   import EmojiText from '../EmojiText.svelte';
   import InlineFeedback from '../InlineFeedback.svelte';
@@ -1046,7 +1047,7 @@
         {:else}
           <span class="relative w-6 h-6 rounded-full bg-surface-container flex items-center justify-center text-on-surface-variant"><Papicon icon="user" size={12} /></span>
         {/if}
-        <span class="relative flex-1 font-semibold truncate">{entry.displayName}</span>
+        <MemberName userId={entry.userId} name={entry.displayName} class="relative flex-1 min-w-0 font-semibold truncate" />
         {#if extra}
           <span class="relative text-on-surface-variant hidden sm:inline">{m.eco_tower_leaderboard_runs({ runs: entry.totalRuns })}</span>
           {#if entry.bestRooms}<span class="relative text-on-surface-variant hidden sm:inline" title={m.eco_tower_leaderboard_rooms_tip()}>{m.eco_tower_leaderboard_rooms({ rooms: entry.bestRooms })}</span>{/if}
@@ -1224,7 +1225,7 @@
                     <li class="flex items-center gap-3 rounded-lg bg-surface-container-low px-3 py-2 text-xs">
                       <span class="w-6 text-right font-mono text-on-surface-variant">{index + 1}</span>
                       {#if entry.avatarUrl}<img src={entry.avatarUrl} alt="" class="w-6 h-6 rounded-full" loading="lazy" />{/if}
-                      <span class="flex-1 font-semibold truncate">{entry.displayName}</span>
+                      <MemberName userId={entry.userId} name={entry.displayName} class="flex-1 min-w-0 font-semibold truncate" />
                       <span class="text-on-surface-variant">{m.eco_tower_leaderboard_rooms({ rooms: entry.roomsExplored })}</span>
                       <span class="font-bold text-warning">{m.eco_tower_milestone_floor({ floor: entry.floorsCleared })}</span>
                     </li>
