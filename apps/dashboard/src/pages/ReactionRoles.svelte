@@ -737,7 +737,7 @@
         <p class="flex items-center gap-2 flex-wrap text-xs text-on-surface-variant">
           <Papicon icon="Smile" size={14} />
           {m.reaction_roles_emoji_hint()}
-          <a href="/workflows?template=reaction-role" class="text-primary hover:underline">{m.reaction_roles_emoji_hint_link()}</a>
+          <a href="/triggers?template=reaction-role" class="text-primary hover:underline">{m.reaction_roles_emoji_hint_link()}</a>
         </p>
       {/if}
     </div>
