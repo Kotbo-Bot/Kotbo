@@ -9,7 +9,7 @@
   import Papicon from '../lib/components/Papicon.svelte';
   import MemberCaseModal from '../lib/components/MemberCaseModal.svelte';
   import RolePermissionSettings from '../lib/components/RolePermissionSettings.svelte';
-  import OrgChart from '../lib/components/OrgChart.svelte';
+  import OrgChart from '../lib/components/staff/OrgChart.svelte';
   import { staff, STAFF_TABS, type StaffTab } from '../lib/components/staff/staffStore.svelte';
   import StaffDirectory from '../lib/components/staff/StaffDirectory.svelte';
   import StaffRoles from '../lib/components/staff/StaffRoles.svelte';
@@ -207,7 +207,7 @@
           {#if staff.loading.organigramme && !staff.hierarchySchema}
             <div class="section-card h-[60vh] animate-pulse" aria-busy="true"></div>
           {:else}
-            <OrgChart schema={staff.hierarchySchema} />
+            <OrgChart schema={staff.hierarchySchema} {openCase} />
           {/if}
         {:else if activeTab === 'warnings'}
           <StaffWarnings {openCase} />
