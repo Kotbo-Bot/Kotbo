@@ -26,7 +26,9 @@
     /** Nom accessible du bouton : « Options pour <sujet> ». */
     label,
     icon = 'more-horizontal',
-  }: { items: MenuItem[]; label: string; icon?: string } = $props();
+    /** Texte visible a cote de l'icone, quand l'icone seule ne dit pas ce que fait le menu. */
+    text = '',
+  }: { items: MenuItem[]; label: string; icon?: string; text?: string } = $props();
 
   const MENU_WIDTH = 256;
   const GUTTER = 8;
@@ -121,7 +123,7 @@
 <button
   bind:this={trigger}
   type="button"
-  class="btn btn-ghost btn-sm btn-icon"
+  class="btn btn-sm {text ? 'btn-tonal' : 'btn-ghost btn-icon'}"
   aria-label={label}
   aria-haspopup="menu"
   aria-expanded={open}
@@ -129,6 +131,7 @@
   onkeydown={onTriggerKeydown}
 >
   <Papicon {icon} size={15} />
+  {text}
 </button>
 
 {#if open}
