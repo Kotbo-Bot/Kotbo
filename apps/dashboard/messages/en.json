@@ -18241,5 +18241,8 @@
   "obs_progress": "Progression",
   "obs_golive": "Go live",
   "obs_server": "Your server",
-  "obs_building": "Building"
+  "obs_building": "Building",
+  "cbx_bio_count": "{count}/{max} characters",
+  "nbx_switch_current": "Switch server, current server {name}",
+  "nbx_server_named": "Server {name}"
 }

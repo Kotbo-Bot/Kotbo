@@ -357,7 +357,7 @@
                 rows={3}
                 class="w-full px-3 py-2 bg-surface-container border border-outline-variant rounded-lg text-sm text-on-surface resize-none"
               ></textarea>
-              <span class="text-2xs text-on-surface-variant">{botBio.length}/190 caracteres</span>
+              <span class="text-2xs text-on-surface-variant">{m.cbx_bio_count({ count: botBio.length, max: 190 })}</span>
             </div>
           </div>
         </div>

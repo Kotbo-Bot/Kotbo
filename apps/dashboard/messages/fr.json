@@ -18241,5 +18241,8 @@
   "obs_progress": "La progression",
   "obs_golive": "Mise en service",
   "obs_server": "Ton serveur",
-  "obs_building": "Construction"
+  "obs_building": "Construction",
+  "cbx_bio_count": "{count}/{max} caractères",
+  "nbx_switch_current": "Changer de serveur, serveur actuel {name}",
+  "nbx_server_named": "Serveur {name}"
 }

@@ -147,8 +147,8 @@
         disabled={authStore.guilds.length <= 1}
         class="app-navbar__mobile-context min-w-0 text-left disabled:cursor-default"
         aria-label={authStore.guilds.length > 1
-          ? `Changer de serveur, serveur actuel ${selectedGuild?.name ?? ''}`
-          : `Serveur ${selectedGuild?.name ?? ''}`}
+          ? m.nbx_switch_current({ name: selectedGuild?.name ?? '' })
+          : m.nbx_server_named({ name: selectedGuild?.name ?? '' })}
       >
         {#if guildIconUrl}
           <img
