@@ -7,7 +7,7 @@
 
   const { data, onOpenMember, chartLabels } = $props<{ 
     data: any; 
-    onOpenMember: (id: string, name: string) => void;
+    onOpenMember?: (id: string, name: string) => void;
     chartLabels?: any;
   }>();
 
@@ -154,9 +154,10 @@
       </div>
       <div class="space-y-3 flex-grow pr-2">
         {#each topModerators.slice(0, 5) as mod}
-          <button 
-            onclick={() => onOpenMember(mod.userId, mod.moderatorTag)}
-            class="w-full flex items-center justify-between p-3 rounded-lg bg-surface-container-high/20 hover:bg-surface-container-high/50 transition-all text-left"
+          <button
+            disabled={!onOpenMember}
+            onclick={() => onOpenMember?.(mod.userId, mod.moderatorTag)}
+            class="w-full flex items-center justify-between p-3 rounded-lg bg-surface-container-high/20 enabled:hover:bg-surface-container-high/50 transition-all text-left"
           >
             <div class="flex items-center gap-3">
               <img src={getAvatar(mod.avatarUrl, mod.moderatorTag, mod.userId)} alt="" class="w-8 h-8 rounded-lg object-cover" />
@@ -193,8 +194,9 @@
       <div class="space-y-3 flex-grow pr-2">
         {#each topSanctionedMembers.slice(0, 5) as member}
           <button
-            onclick={() => onOpenMember(member.targetUserId, member.targetTag)}
-            class="w-full flex items-center justify-between p-3 rounded-lg bg-surface-container-high/20 hover:bg-surface-container-high/50 transition-all text-left"
+            disabled={!onOpenMember}
+            onclick={() => onOpenMember?.(member.targetUserId, member.targetTag)}
+            class="w-full flex items-center justify-between p-3 rounded-lg bg-surface-container-high/20 enabled:hover:bg-surface-container-high/50 transition-all text-left"
           >
             <div class="flex items-center gap-3">
               <img src={getAvatar(member.avatarUrl, member.targetTag, member.targetUserId)} alt="" class="w-8 h-8 rounded-lg object-cover" />
@@ -237,9 +239,10 @@
       {#each recentSanctions.slice(0, 5) as sanction}
         <!-- Toute la ligne ouvre la fiche : viser l'avatar seul etait invisible. -->
         <button
+          disabled={!onOpenMember}
           type="button"
-          onclick={() => onOpenMember(sanction.targetUserId, sanction.targetTag)}
-          class="w-full text-left flex flex-col md:flex-row md:items-center justify-between p-5 rounded-xl bg-surface-container-high/30 border border-outline-variant/10 hover:bg-surface-container-high/50 transition-all group gap-4"
+          onclick={() => onOpenMember?.(sanction.targetUserId, sanction.targetTag)}
+          class="w-full text-left flex flex-col md:flex-row md:items-center justify-between p-5 rounded-xl bg-surface-container-high/30 border border-outline-variant/10 enabled:hover:bg-surface-container-high/50 transition-all group gap-4"
         >
           <div class="flex items-center gap-4">
             <div class="w-12 h-12 rounded-lg overflow-hidden bg-on-surface/5 flex items-center justify-center shrink-0">
@@ -261,7 +264,7 @@
                 <p class="text-xs font-bold text-on-surface">@{sanction.moderatorTag}</p>
               </div>
             </div>
-            <Papicon icon="CaretRight" size={16} class="text-on-surface-variant/20 group-hover:translate-x-1 transition-transform" />
+            <Papicon icon="CaretRight" size={16} class="text-on-surface-variant/20 group-enabled:group-hover:translate-x-1 transition-transform" />
           </div>
         </button>
       {/each}

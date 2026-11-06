@@ -446,7 +446,7 @@
                 avatarUrl={selectedResponse.avatarUrl}
                 subtitle={selectedResponse.userTag}
                 size="sm"
-                onClick={memberCaseModal.canOpen ? (userId) => memberCaseModal.show(userId, selectedResponse?.username || userId) : null}
+                onClick={memberCaseModal.opener(selectedResponse.username)}
               />
             </div>
           {/if}

@@ -21,7 +21,7 @@
   import { analyticsFilters as filters, relativeDelta } from './analyticsFilters.svelte';
   import { fmtDelta, fmtNumber, fmtPct, SERIES } from './analyticsFormat';
 
-  const { onOpenMember }: { onOpenMember: (userId: string, name: string) => void } = $props();
+  const { onOpenMember }: { onOpenMember?: (userId: string, name: string) => void } = $props();
 
   const loader = analyticsLoader(() => fetchCommandAnalytics(filters.periodQuery), 'commands');
   const data = $derived(loader.data as CommandAnalytics | null);
@@ -150,7 +150,7 @@
           <ul class="users">
             {#each data.topUsers as u, i (u.userId)}
               <li>
-                <button type="button" class="user" onclick={() => onOpenMember(u.userId, u.name ?? '')}>
+                <button type="button" disabled={!onOpenMember} class="user" onclick={() => onOpenMember?.(u.userId, u.name ?? '')}>
                   <span class="user__rank">{i + 1}</span>
                   <img class="user__avatar" src={memberAvatarSrc(u.avatarUrl, u.name, u.userId)} alt="" width="24" height="24" loading="lazy" />
                   <span class="user__name">{u.name ?? m.an_member_fallback()}</span>
@@ -266,7 +266,7 @@
     text-align: left;
   }
 
-  .user:hover {
+  .user:hover:not(:disabled) {
     background: var(--color-surface-container);
   }
 

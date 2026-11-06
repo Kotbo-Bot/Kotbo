@@ -31,7 +31,7 @@
     /** Réponse de l'ancien /analytics, pour les sessions vocales. */
     legacy: any;
     legacyLoading: boolean;
-    onOpenMember: (userId: string, name: string) => void;
+    onOpenMember?: (userId: string, name: string) => void;
   } = $props();
 
   let algo = $state<any>(null);

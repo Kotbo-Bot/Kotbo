@@ -63,6 +63,14 @@ export class MemberCaseState {
     }
   }
 
+  /**
+   * Gestionnaire de clic sur un pseudo, pour un `UserDisplay` : aucun sans accès à
+   * « Membres », et le pseudo reste alors un simple texte.
+   */
+  opener(userName?: string | null): ((userId: string) => void) | null {
+    return this.canOpen ? (userId: string) => void this.show(userId, userName || userId) : null;
+  }
+
   /** Membre choisi dans le graphe d'interactions de la fiche ouverte. */
   showFromGraph(userId: string) {
     const node = this.caseData?.interactionGraph?.nodes?.find((n) => n.id === userId);

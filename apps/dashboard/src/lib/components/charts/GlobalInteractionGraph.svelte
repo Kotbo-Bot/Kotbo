@@ -35,12 +35,13 @@
     nodes = [],
     edges = [],
     hiddenMembersCount = 0,
-    onSelectNode = (_id: string) => {}
+    onSelectNode
   }: {
     nodes: GraphNode[];
     edges: GraphEdge[];
     hiddenMembersCount?: number;
-    onSelectNode?: (id: string) => void;
+    /** Ouvre l'activité complète d'un membre. Sans lui, le bouton n'est pas proposé. */
+    onSelectNode?: (id: string, label: string) => void;
   } = $props();
 
   let container = $state<HTMLDivElement | null>(null);
@@ -531,16 +532,18 @@
           </div>
 
           <!-- Action Button -->
-          <button
-            onclick={() => {
-              onSelectNode(selectedNode!.id);
-              selectedNodeId = null;
-            }}
-            class="w-full mt-4 py-2 bg-[#1877f2] hover:bg-[#166fe5] text-white text-xs font-bold rounded-lg transition-all shadow-md flex items-center justify-center gap-1.5"
-          >
-            <Compass class="w-4 h-4" />
-            {m.d6_gig_view_activity()}
-          </button>
+          {#if onSelectNode}
+            <button
+              onclick={() => {
+                onSelectNode(selectedNode!.id, selectedNode!.label);
+                selectedNodeId = null;
+              }}
+              class="w-full mt-4 py-2 bg-[#1877f2] hover:bg-[#166fe5] text-white text-xs font-bold rounded-lg transition-all shadow-md flex items-center justify-center gap-1.5"
+            >
+              <Compass class="w-4 h-4" />
+              {m.d6_gig_view_activity()}
+            </button>
+          {/if}
 
           <!-- Top Interlocutors List (Dynamic friendship progress bars) -->
           <div class="mt-5 flex flex-col gap-2 border-t border-white/5 pt-4">
@@ -640,7 +643,7 @@
               </div>
               <div class="flex-1 min-w-0">
                 <div class="text-xs font-bold text-slate-200 truncate group-hover:text-primary transition-colors">{connector.label}</div>
-                <div class="text-2xs text-slate-400">{m.d6_gig_actions_count({ count: connector.activityCount })}</div>
+                <div class="text-2xs text-slate-400">{connector.activityCount > 1 ? m.d6_gig_actions_count_other({ count: connector.activityCount }) : m.d6_gig_actions_count_one({ count: connector.activityCount })}</div>
               </div>
             </button>
           {/each}

@@ -15,7 +15,7 @@
   import { analyticsExport, analyticsFilters as filters } from './analyticsFilters.svelte';
   import { fmtNumber, fmtPct, SERIES } from './analyticsFormat';
 
-  const { onOpenMember }: { onOpenMember: (userId: string, name: string) => void } = $props();
+  const { onOpenMember }: { onOpenMember?: (userId: string, name: string) => void } = $props();
 
   let data = $state<ConversationNetwork | null>(null);
   let failed = $state(false);
@@ -72,7 +72,7 @@
                 <span class="net-group__title">{m.anx_net_group_n({ n: i + 1 })} · {m.anx_net_group_size({ count: fmtNumber(group.size) })}</span>
                 <span class="net-group__leaders">
                   {#each group.leaders as leader (leader.userId)}
-                    <button type="button" class="net-chip" onclick={() => onOpenMember(leader.userId, nameOf(leader))}>
+                    <button type="button" disabled={!onOpenMember} class="net-chip" onclick={() => onOpenMember?.(leader.userId, nameOf(leader))}>
                       {@render avatar(leader, 20)}<span class="truncate">{nameOf(leader)}</span>
                     </button>
                   {/each}
@@ -90,7 +90,7 @@
           <ul class="net-list">
             {#each data.bridges as bridge (bridge.userId)}
               <li>
-                <button type="button" class="net-row" onclick={() => onOpenMember(bridge.userId, nameOf(bridge))}>
+                <button type="button" disabled={!onOpenMember} class="net-row" onclick={() => onOpenMember?.(bridge.userId, nameOf(bridge))}>
                   {@render avatar(bridge)}
                   <span class="net-row__name">{nameOf(bridge)}</span>
                   <span class="net-row__meta">{m.anx_net_bridge_groups({ count: fmtNumber(bridge.groups) })}</span>
@@ -105,9 +105,9 @@
         <ul class="net-list">
           {#each data.pairs as pair (pair.a.userId + pair.b.userId)}
             <li class="net-pair">
-              <button type="button" class="net-chip" onclick={() => onOpenMember(pair.a.userId, nameOf(pair.a))}>{@render avatar(pair.a, 20)}<span class="truncate">{nameOf(pair.a)}</span></button>
+              <button type="button" disabled={!onOpenMember} class="net-chip" onclick={() => onOpenMember?.(pair.a.userId, nameOf(pair.a))}>{@render avatar(pair.a, 20)}<span class="truncate">{nameOf(pair.a)}</span></button>
               <span class="text-on-surface-variant" aria-label={pair.reciprocal ? m.anx_net_mutual() : m.anx_net_one_way()} title={pair.reciprocal ? m.anx_net_mutual() : m.anx_net_one_way()}>{pair.reciprocal ? '⇄' : '→'}</span>
-              <button type="button" class="net-chip" onclick={() => onOpenMember(pair.b.userId, nameOf(pair.b))}>{@render avatar(pair.b, 20)}<span class="truncate">{nameOf(pair.b)}</span></button>
+              <button type="button" disabled={!onOpenMember} class="net-chip" onclick={() => onOpenMember?.(pair.b.userId, nameOf(pair.b))}>{@render avatar(pair.b, 20)}<span class="truncate">{nameOf(pair.b)}</span></button>
               <span class="net-pair__count">{m.anx_net_pair_counts({ replies: fmtNumber(pair.replies), mentions: fmtNumber(pair.mentions) })}</span>
             </li>
           {/each}
@@ -121,7 +121,7 @@
           <ul class="net-list">
             {#each data.isolated as member (member.userId)}
               <li>
-                <button type="button" class="net-row" onclick={() => onOpenMember(member.userId, nameOf(member))}>
+                <button type="button" disabled={!onOpenMember} class="net-row" onclick={() => onOpenMember?.(member.userId, nameOf(member))}>
                   {@render avatar(member)}
                   <span class="net-row__name">{nameOf(member)}</span>
                   <span class="net-row__meta">{m.anx_net_messages({ count: fmtNumber(member.messages) })}</span>
@@ -183,7 +183,7 @@
     color: var(--color-on-surface);
   }
 
-  .net-chip:hover {
+  .net-chip:hover:not(:disabled) {
     background: var(--color-surface-container-high);
   }
 
@@ -197,7 +197,7 @@
     text-align: left;
   }
 
-  .net-row:hover {
+  .net-row:hover:not(:disabled) {
     background: var(--color-surface-container);
   }
 

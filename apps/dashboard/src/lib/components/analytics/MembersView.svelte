@@ -33,7 +33,7 @@
   }: {
     /** Réponse de l'ancien /analytics : rôles, tag de clan. */
     legacy: any;
-    onOpenMember: (userId: string, name: string) => void;
+    onOpenMember?: (userId: string, name: string) => void;
   } = $props();
 
   const loader = analyticsLoader(() => fetchMemberOverview({ ...filters.periodQuery, includeBots: filters.includeBots }), 'members');
@@ -290,7 +290,7 @@
           <ul class="inviters">
             {#each data.inviters as inv, i (inv.userId)}
               <li>
-                <button type="button" class="inviter" onclick={() => onOpenMember(inv.userId, inv.name ?? '')}>
+                <button type="button" disabled={!onOpenMember} class="inviter" onclick={() => onOpenMember?.(inv.userId, inv.name ?? '')}>
                   <span class="inviter__rank">{i + 1}</span>
                   <img class="inviter__avatar" src={memberAvatarSrc(inv.avatarUrl, inv.name, inv.userId)} alt="" width="24" height="24" loading="lazy" />
                   <span class="inviter__name">{inv.name ?? m.an_member_fallback()}</span>
@@ -314,7 +314,7 @@
         load={(limit) => fetchActivityRankings({ ...filters.periodQuery, includeBots: filters.includeBots }, 'messages', 'members', limit)}
         reloadKey={`${filters.periodKey}|members`}
         compare={filters.compare}
-        onselect={(item) => onOpenMember(item.id, item.name ?? '')}
+        onselect={onOpenMember ? (item) => onOpenMember(item.id, item.name ?? '') : undefined}
         exportName="membres_actifs"
       />
       {#if roleItems.length > 0}
@@ -438,7 +438,7 @@
     text-align: left;
   }
 
-  .inviter:hover {
+  .inviter:hover:not(:disabled) {
     background: var(--color-surface-container);
   }
 

@@ -2493,7 +2493,7 @@
               <!-- Nom & Progression -->
               <div class="flex-1 min-w-0">
                 <div class="flex items-baseline gap-2 mb-1.5">
-                  <button type="button" class="min-w-0 text-left text-sm font-semibold text-on-surface truncate hover:text-primary disabled:hover:text-on-surface transition-colors" disabled={!memberCaseModal.canOpen} onclick={() => openMember(userLvl)}>{userLvl.displayName || userLvl.username || m.lv_unknown_member()}</button>
+                  <button type="button" class="min-w-0 text-left text-sm font-semibold text-on-surface truncate enabled:hover:text-primary transition-colors" disabled={!memberCaseModal.canOpen} onclick={() => openMember(userLvl)}>{userLvl.displayName || userLvl.username || m.lv_unknown_member()}</button>
                   {#if userLvl.username && userLvl.displayName !== userLvl.username}
                     <span class="text-2xs text-on-surface-variant/40 truncate font-semibold font-mono">@{userLvl.username}</span>
                   {/if}

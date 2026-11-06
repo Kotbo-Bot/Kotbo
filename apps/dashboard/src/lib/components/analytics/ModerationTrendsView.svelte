@@ -14,7 +14,7 @@
   import { analyticsFilters as filters, relativeDelta } from './analyticsFilters.svelte';
   import { fmtDelta, fmtDuration, fmtNumber, fmtPct, shortDate, SERIES } from './analyticsFormat';
 
-  const { onOpenMember }: { onOpenMember: (userId: string, name: string) => void } = $props();
+  const { onOpenMember }: { onOpenMember?: (userId: string, name: string) => void } = $props();
 
   const loader = analyticsLoader(() => fetchModerationTrends(filters.periodQuery), 'moderationTrends');
   const data = $derived(loader.data as ModerationTrends | null);
@@ -82,7 +82,7 @@
             <tbody>
               {#each data.moderators as mod (mod.userId)}
                 <tr>
-                  <th scope="row"><button type="button" class="row-link" onclick={() => onOpenMember(mod.userId, mod.name ?? '')}>{mod.name ?? m.an_member_fallback()}</button></th>
+                  <th scope="row"><button type="button" disabled={!onOpenMember} class="row-link" onclick={() => onOpenMember?.(mod.userId, mod.name ?? '')}>{mod.name ?? m.an_member_fallback()}</button></th>
                   <td class="num">{fmtNumber(mod.count)}</td>
                   <td class="num">{fmtPct(mod.share, 0)}</td>
                   {#if filters.compare}<td class="num">{fmtDelta(relativeDelta(mod.count, mod.previous), 'pct')}</td>{/if}
@@ -107,7 +107,7 @@
           <ul class="offenders">
             {#each data.recidivism.offenders as o (o.userId)}
               <li>
-                <button type="button" class="offender" onclick={() => onOpenMember(o.userId, o.name ?? '')}>
+                <button type="button" disabled={!onOpenMember} class="offender" onclick={() => onOpenMember?.(o.userId, o.name ?? '')}>
                   <span class="offender__name">{o.name ?? m.an_member_fallback()}</span>
                   <span class="offender__meta">{m.anx_modt_offender_count({ count: fmtNumber(o.count) })}{o.last ? ` · ${shortDate(o.last.slice(0, 10))}` : ''}</span>
                 </button>
@@ -165,7 +165,7 @@
     color: var(--color-on-surface);
   }
 
-  .row-link:hover {
+  .row-link:hover:not(:disabled) {
     color: var(--color-primary);
   }
 
@@ -202,7 +202,7 @@
     text-align: left;
   }
 
-  .offender:hover {
+  .offender:hover:not(:disabled) {
     background: var(--color-surface-container);
   }
 

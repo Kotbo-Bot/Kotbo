@@ -3,7 +3,10 @@
   import { m } from '../../i18n';
   import { memberAvatarSrc } from '../../discordMedia';
 
-  const { data = [], onOpenMember = (_id: string, _name: string) => {} } = $props();
+  const { data = [], onOpenMember } = $props<{
+    data?: any[];
+    onOpenMember?: (id: string, name: string) => void;
+  }>();
 
   const metrics = [
     { key: 'sanctionsCount', label: m.sp_metric_sanctions(), icon: 'Gavel', color: 'text-warning' },
@@ -46,8 +49,9 @@
             <tr class="hover:bg-surface-container-high/10 transition-colors group">
               <td class="px-6 py-4">
                 <button
-                  onclick={() => onOpenMember(staff.userId, staff.displayName || staff.username)}
-                  class="flex items-center gap-3 hover:opacity-80 transition-opacity"
+                  disabled={!onOpenMember}
+                  onclick={() => onOpenMember?.(staff.userId, staff.displayName || staff.username)}
+                  class="flex items-center gap-3 enabled:hover:opacity-80 transition-opacity"
                 >
                   <div class="relative">
                     <img src={memberAvatarSrc(staff.avatarUrl, staff.displayName || staff.username, staff.userId)} alt={staff.username} class="w-10 h-10 rounded-full border-2 border-outline-variant/10" />

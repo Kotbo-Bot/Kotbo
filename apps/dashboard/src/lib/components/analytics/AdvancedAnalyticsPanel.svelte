@@ -370,9 +370,10 @@
         <div class="divide-y divide-outline-variant/40">
           {#each data.atRisk as member}
             <button
+              disabled={!onOpenMember}
               type="button"
               onclick={() => openMember(member.userId, member.name)}
-              class="w-full flex items-center justify-between px-5 py-2.5 text-left hover:bg-surface-container-high/40 transition-colors"
+              class="w-full flex items-center justify-between px-5 py-2.5 text-left enabled:hover:bg-surface-container-high/40 transition-colors"
             >
               <div class="flex items-center gap-3 min-w-0">
                 {#if member.avatarUrl}
@@ -521,9 +522,10 @@
               <div class="divide-y divide-outline-variant/40">
                 {#each data.centrality as member, i}
                   <button
+                    disabled={!onOpenMember}
                     type="button"
                     onclick={() => openMember(member.userId, member.name)}
-                    class="w-full flex items-center justify-between px-5 py-2.5 text-left hover:bg-surface-container-high/40 transition-colors"
+                    class="w-full flex items-center justify-between px-5 py-2.5 text-left enabled:hover:bg-surface-container-high/40 transition-colors"
                   >
                     <div class="flex items-center gap-3 min-w-0">
                       <span class="text-2xs font-bold text-on-surface-variant/40 w-5">{i + 1}</span>
@@ -659,9 +661,10 @@
           <div class="divide-y divide-outline-variant/40">
             {#each data.moderatorLoad as mod}
               <button
+                disabled={!onOpenMember}
                 type="button"
                 onclick={() => openMember(mod.userId, mod.tag)}
-                class="w-full px-5 py-2.5 text-left hover:bg-surface-container-high/40 transition-colors"
+                class="w-full px-5 py-2.5 text-left enabled:hover:bg-surface-container-high/40 transition-colors"
               >
                 <div class="flex items-center justify-between text-sm mb-1">
                   <span class="text-on-surface truncate">{mod.tag ?? mod.userId}</span>

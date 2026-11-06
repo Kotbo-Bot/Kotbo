@@ -703,12 +703,12 @@
 
             <!-- Users link -->
             <div class="flex items-center gap-2 bg-surface-container-low/50 rounded-lg p-3 mb-3">
-              <button disabled={!memberCaseModal.canOpen} onclick={() => memberCaseModal.show(link.user1Id, link.user1.tag)} class="flex items-center gap-1.5 flex-1 min-w-0 text-sm font-semibold text-on-surface hover:text-primary transition-colors">
+              <button disabled={!memberCaseModal.canOpen} onclick={() => memberCaseModal.show(link.user1Id, link.user1.tag)} class="flex items-center gap-1.5 flex-1 min-w-0 text-sm font-semibold text-on-surface enabled:hover:text-primary transition-colors">
                 {#if link.user1.avatar}<img src={link.user1.avatar} alt="" class="w-5 h-5 rounded-full shrink-0" />{/if}
                 <span class="truncate">@{link.user1.tag}</span>
               </button>
               <Papicon icon="ArrowLeftRight" size={14} class="text-on-surface-variant/20 shrink-0" />
-              <button disabled={!memberCaseModal.canOpen} onclick={() => memberCaseModal.show(link.user2Id, link.user2.tag)} class="flex items-center justify-end gap-1.5 flex-1 min-w-0 text-sm font-semibold text-on-surface hover:text-primary transition-colors">
+              <button disabled={!memberCaseModal.canOpen} onclick={() => memberCaseModal.show(link.user2Id, link.user2.tag)} class="flex items-center justify-end gap-1.5 flex-1 min-w-0 text-sm font-semibold text-on-surface enabled:hover:text-primary transition-colors">
                 <span class="truncate">@{link.user2.tag}</span>
                 {#if link.user2.avatar}<img src={link.user2.avatar} alt="" class="w-5 h-5 rounded-full shrink-0" />{/if}
               </button>
@@ -949,7 +949,7 @@
                     <span class="text-2xs font-bold text-on-surface-variant/40">Alt(s) :</span>
                     {#each d.suspectedAlts as alt}
                       <button disabled={!memberCaseModal.canOpen} onclick={() => memberCaseModal.show(alt.userId, alt.username || alt.userId)}
-                        class="flex items-center gap-1 px-1.5 py-0.5 rounded bg-surface-container-high/50 text-2xs font-bold text-on-surface hover:text-primary transition-colors">
+                        class="flex items-center gap-1 px-1.5 py-0.5 rounded bg-surface-container-high/50 text-2xs font-bold text-on-surface enabled:hover:text-primary transition-colors">
                         {#if alt.avatarUrl}<img src={alt.avatarUrl} alt="" class="w-3.5 h-3.5 rounded-full" />{/if}
                         @{alt.username || alt.userId}
                       </button>
@@ -1259,7 +1259,7 @@
               {#each det.suspectedAlts as alt}
                 <div class="flex items-center justify-between gap-2 p-3 rounded-lg bg-surface-container-low/50 border border-outline-variant/5">
                   <button disabled={!memberCaseModal.canOpen} onclick={() => { memberCaseModal.show(alt.userId, alt.username || alt.userId); reportModalDetection = null; }}
-                    class="flex items-center gap-2 text-sm font-semibold text-on-surface hover:text-primary transition-colors min-w-0">
+                    class="flex items-center gap-2 text-sm font-semibold text-on-surface enabled:hover:text-primary transition-colors min-w-0">
                     {#if alt.avatarUrl}<img src={alt.avatarUrl} alt="" class="w-6 h-6 rounded-full shrink-0" />{/if}
                     <span class="truncate">@{alt.username || alt.userId}</span>
                   </button>
@@ -1324,10 +1324,13 @@
 
         <!-- Bottom actions -->
         <div class="flex flex-wrap gap-2 pt-2">
-          <button disabled={!memberCaseModal.canOpen} onclick={() => { memberCaseModal.show(det.id, det.displayName || det.username || m.da_member_fallback()); reportModalDetection = null; }}
-            class="flex-1 py-2.5 rounded-lg bg-primary/10 text-primary text-xs font-bold hover:bg-primary hover:text-white transition-all flex items-center justify-center gap-1.5">
-            <Papicon icon="FileText" size={13} /> {m.da_open_case()}
-          </button>
+          <!-- Sans accès à « Membres », pas de dossier à ouvrir : le bouton n'est pas proposé. -->
+          {#if memberCaseModal.canOpen}
+            <button onclick={() => { memberCaseModal.show(det.id, det.displayName || det.username || m.da_member_fallback()); reportModalDetection = null; }}
+              class="flex-1 py-2.5 rounded-lg bg-primary/10 text-primary text-xs font-bold hover:bg-primary hover:text-white transition-all flex items-center justify-center gap-1.5">
+              <Papicon icon="FileText" size={13} /> {m.da_open_case()}
+            </button>
+          {/if}
           <button onclick={() => { handleDismissDetection(det); reportModalDetection = null; }}
             disabled={saveAction.state.loading}
             class="py-2.5 px-4 rounded-lg border border-outline-variant/10 text-xs font-bold text-on-surface-variant hover:text-on-surface transition-all flex items-center justify-center gap-1.5 disabled:opacity-50">
