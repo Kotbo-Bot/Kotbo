@@ -37,7 +37,11 @@ const notifyModule = () => completeModuleMock(
   { notify: notifyMock, dashboardLink: (link: string) => link },
 );
 
+// Chaque prise ou retrait compte pour Analytics.
+const recordReactionRoleChange = mock(async () => undefined);
+
 for (const extension of ['ts', 'js']) {
+  mock.module(path.resolve(import.meta.dir, `../../services/analytics/reactionRoleStatsService.${extension}`), () => ({ recordReactionRoleChange }));
   mock.module(path.resolve(import.meta.dir, `../../services/notifications/notifyService.${extension}`), notifyModule);
   mock.module(path.resolve(import.meta.dir, `../../utils/db.${extension}`), () => ({
     default: prismaMock,
@@ -161,6 +165,7 @@ describe('reactionRoleService', () => {
     prismaMock.notification.findFirst.mockReset();
     prismaMock.notification.findFirst.mockResolvedValue(null);
     notifyMock.mockClear();
+    recordReactionRoleChange.mockClear();
   });
 
   test('supprime le menu en base et son message Discord', async () => {
@@ -228,7 +233,7 @@ describe('reactionRoleService', () => {
     const { member, remove } = fakeMember(['role-1']);
     await handleRoleToggleInteraction(fakeInteraction('role_toggle:role-1:0', member, reply));
 
-    expect(remove).toHaveBeenCalledWith('role-1');
+    expect(remove).toHaveBeenCalledWith('role-1', expect.any(String));
     expect(reply).toHaveBeenCalledWith(expect.objectContaining({
       content: expect.stringContaining('retiré'),
     }));
@@ -263,7 +268,7 @@ describe('reactionRoleService', () => {
     const { member, add } = fakeMember([]);
     await handleRoleToggleInteraction(fakeInteraction('role_toggle:role-1:0', member, reply));
 
-    expect(add).toHaveBeenCalledWith('role-1');
+    expect(add).toHaveBeenCalledWith('role-1', expect.any(String));
     expect(reply).toHaveBeenCalledWith(expect.objectContaining({
       content: expect.stringContaining('attribué'),
     }));
@@ -297,7 +302,7 @@ describe('reactionRoleService', () => {
     const { member, remove } = fakeMember(['role-1']);
     await handleRoleToggleInteraction(fakeInteraction('role_toggle:role-1:1', member, reply));
 
-    expect(remove).toHaveBeenCalledWith('role-1');
+    expect(remove).toHaveBeenCalledWith('role-1', expect.any(String));
   });
 
   test('un ancien bouton sans index reste géré', async () => {
@@ -311,7 +316,7 @@ describe('reactionRoleService', () => {
     const { member, remove } = fakeMember(['role-1']);
     await handleRoleToggleInteraction(fakeInteraction('role_toggle:role-1', member, reply));
 
-    expect(remove).toHaveBeenCalledWith('role-1');
+    expect(remove).toHaveBeenCalledWith('role-1', expect.any(String));
   });
 
   test('un rôle placé au-dessus du bot n’est pas tenté et le staff est prévenu', async () => {
@@ -393,8 +398,8 @@ describe('reactionRoleService', () => {
     const { member, add, remove } = fakeMember(['rouge', 'moderateur']);
     await handleRoleToggleInteraction(fakeInteraction('role_toggle:bleu:1', member, reply));
 
-    expect(add).toHaveBeenCalledWith('bleu');
-    expect(remove).toHaveBeenCalledWith(['rouge']);
+    expect(add).toHaveBeenCalledWith('bleu', expect.any(String));
+    expect(remove).toHaveBeenCalledWith(['rouge'], expect.any(String));
     expect(reply).toHaveBeenCalledWith(expect.objectContaining({
       content: expect.stringContaining('à la place'),
     }));
@@ -415,8 +420,8 @@ describe('reactionRoleService', () => {
     const { member, add, remove } = fakeMember(['rouge', 'vert'], fakeGuild({ vert: BOT_TOP_POSITION + 1 }));
     await handleRoleToggleInteraction(fakeInteraction('role_toggle:bleu:1', member, reply));
 
-    expect(add).toHaveBeenCalledWith('bleu');
-    expect(remove).toHaveBeenCalledWith(['rouge']);
+    expect(add).toHaveBeenCalledWith('bleu', expect.any(String));
+    expect(remove).toHaveBeenCalledWith(['rouge'], expect.any(String));
   });
 
   test('un seul rôle : un rôle du menu réglé autrefois en attribution définitive part aussi', async () => {
@@ -433,7 +438,7 @@ describe('reactionRoleService', () => {
     const { member, remove } = fakeMember(['rouge']);
     await handleRoleToggleInteraction(fakeInteraction('role_toggle:bleu:1', member, reply));
 
-    expect(remove).toHaveBeenCalledWith(['rouge']);
+    expect(remove).toHaveBeenCalledWith(['rouge'], expect.any(String));
   });
 
   test('un seul rôle : recliquer sur son rôle le retire, même réglé en attribution définitive', async () => {
@@ -450,7 +455,7 @@ describe('reactionRoleService', () => {
     const { member, remove } = fakeMember(['rouge']);
     await handleRoleToggleInteraction(fakeInteraction('role_toggle:rouge:0', member, reply));
 
-    expect(remove).toHaveBeenCalledWith('rouge');
+    expect(remove).toHaveBeenCalledWith('rouge', expect.any(String));
   });
 
   test('lit ce que le bot peut attribuer : permission et position de son rôle le plus haut', async () => {
@@ -471,7 +476,7 @@ describe('reactionRoleService', () => {
     const { member, add, remove } = fakeMember(['rouge']);
     await handleRoleToggleInteraction(fakeInteraction('role_toggle:bleu:1', member, reply));
 
-    expect(add).toHaveBeenCalledWith('bleu');
+    expect(add).toHaveBeenCalledWith('bleu', expect.any(String));
     expect(remove).not.toHaveBeenCalled();
   });
 
@@ -920,5 +925,67 @@ describe('suivi des rôles des menus hors du panneau', () => {
     await handleMenuMessagesDeleted(fakeGuild() as never, ['autre']);
 
     expect(notifyMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('clics comptés pour Analytics', () => {
+  beforeEach(() => {
+    prismaMock.reactionRoleMenu.findFirst.mockReset();
+    recordReactionRoleChange.mockClear();
+  });
+
+  test('un rôle pris puis un rôle retiré sont comptés chacun', async () => {
+    const reply = mock(async () => undefined);
+    const menu = { id: 'menu-1', guildId: 'guild-1', buttonMode: 'toggle', options: [{ label: 'Annonces', roleId: 'role-1' }] };
+
+    prismaMock.reactionRoleMenu.findFirst.mockResolvedValueOnce(menu);
+    await handleRoleToggleInteraction(fakeInteraction('role_toggle:role-1:0', fakeMember([]).member, reply));
+    prismaMock.reactionRoleMenu.findFirst.mockResolvedValueOnce(menu);
+    await handleRoleToggleInteraction(fakeInteraction('role_toggle:role-1:0', fakeMember(['role-1']).member, reply));
+
+    expect(recordReactionRoleChange.mock.calls as unknown[]).toEqual([
+      [{ guildId: 'guild-1', menuId: 'menu-1', roleId: 'role-1', change: 'added' }],
+      [{ guildId: 'guild-1', menuId: 'menu-1', roleId: 'role-1', change: 'removed' }],
+    ]);
+  });
+
+  test('un seul rôle : les rôles remplacés comptent comme retirés', async () => {
+    const reply = mock(async () => undefined);
+    prismaMock.reactionRoleMenu.findFirst.mockResolvedValueOnce({
+      id: 'menu-1',
+      guildId: 'guild-1',
+      buttonMode: 'exclusive',
+      options: [{ label: 'Rouge', roleId: 'rouge' }, { label: 'Bleu', roleId: 'bleu' }],
+    });
+
+    await handleRoleToggleInteraction(fakeInteraction('role_toggle:bleu:1', fakeMember(['rouge']).member, reply));
+
+    expect(recordReactionRoleChange.mock.calls as unknown[]).toEqual([
+      [{ guildId: 'guild-1', menuId: 'menu-1', roleId: 'bleu', change: 'added' }],
+      [{ guildId: 'guild-1', menuId: 'menu-1', roleId: 'rouge', change: 'removed' }],
+    ]);
+  });
+
+  test('le journal d’audit Discord nomme le menu d’où vient le rôle', async () => {
+    const reply = mock(async () => undefined);
+    prismaMock.reactionRoleMenu.findFirst.mockResolvedValueOnce({
+      id: 'menu-1', guildId: 'guild-1', title: 'Notifications', buttonMode: 'toggle', options: [{ label: 'Annonces', roleId: 'role-1' }],
+    });
+
+    const { member, add } = fakeMember([]);
+    await handleRoleToggleInteraction(fakeInteraction('role_toggle:role-1:0', member, reply));
+
+    expect(add).toHaveBeenCalledWith('role-1', expect.stringContaining('Notifications'));
+  });
+
+  test('un rôle gardé en attribution définitive ne compte pas', async () => {
+    const reply = mock(async () => undefined);
+    prismaMock.reactionRoleMenu.findFirst.mockResolvedValueOnce({
+      id: 'menu-1', guildId: 'guild-1', buttonMode: 'add_only', options: [{ label: 'Annonces', roleId: 'role-1' }],
+    });
+
+    await handleRoleToggleInteraction(fakeInteraction('role_toggle:role-1:0', fakeMember(['role-1']).member, reply));
+
+    expect(recordReactionRoleChange).not.toHaveBeenCalled();
   });
 });

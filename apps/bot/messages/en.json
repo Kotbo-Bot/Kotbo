@@ -1873,6 +1873,7 @@
   "regulation_staff_notice_desc": "The server rules are up to date in {channel}.",
   "regulation_staff_notice_articles": "Active articles",
   "regulation_staff_notice_footer": "Kotbo · Staff notification",
+  "reactionroles_audit_reason": "Role menu \"{menu}\"",
   "panel_reactionroles_description": "Use the buttons below to give yourself the matching roles, or remove them.",
   "panel_reactionroles_description_add_only": "Use the buttons below to give yourself the matching roles. Once granted, they cannot be removed from here.",
   "panel_reactionroles_description_mixed": "Use the buttons below to pick your roles. Some of them cannot be removed once granted.",

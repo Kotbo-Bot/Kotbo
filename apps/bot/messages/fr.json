@@ -1873,6 +1873,7 @@
   "regulation_staff_notice_desc": "Le règlement du serveur est à jour dans {channel}.",
   "regulation_staff_notice_articles": "Articles actifs",
   "regulation_staff_notice_footer": "Kotbo · Notification staff",
+  "reactionroles_audit_reason": "Menu de rôles « {menu} »",
   "panel_reactionroles_description": "Cliquez sur les boutons ci-dessous pour vous attribuer ou retirer les rôles correspondants.",
   "panel_reactionroles_description_add_only": "Cliquez sur les boutons ci-dessous pour vous attribuer les rôles correspondants. Une fois obtenus, ils ne se retirent pas d'ici.",
   "panel_reactionroles_description_mixed": "Cliquez sur les boutons ci-dessous pour choisir vos rôles. Certains d'entre eux ne se retirent plus une fois obtenus.",

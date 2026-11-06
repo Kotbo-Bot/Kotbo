@@ -848,6 +848,21 @@ export const fetchCommandAnalytics = (query: AnalyticsQuery, guildId = authStore
     method: 'GET', guildId, errorContext: 'API Error (Command Analytics):',
   });
 
+export interface ReactionRoleAnalytics {
+  totals: { added: number; removed: number; net: number; previousAdded: number; previousRemoved: number };
+  daily: Array<{ dateKey: string; added: number; removed: number; previousAdded: number; previousRemoved: number }>;
+  /** `menuTitle` / `roleName` à `null` : menu ou rôle supprimé depuis, ses clics restent comptés. */
+  roles: Array<{
+    menuId: string; roleId: string; menuTitle: string | null; roleName: string | null; roleColor: string | null;
+    added: number; removed: number; net: number; previousAdded: number; holders: number | null; spark: number[];
+  }>;
+}
+
+export const fetchReactionRoleAnalytics = (query: AnalyticsQuery, guildId = authStore.selectedGuildId) =>
+  dashboardRequest<ReactionRoleAnalytics>(`/analytics/reaction-roles/stats?${analyticsParams({ period: query.period, startDate: query.startDate, endDate: query.endDate })}`, {
+    method: 'GET', guildId, errorContext: 'API Error (Reaction Role Analytics):',
+  });
+
 export type HeatmapCell = { messages: number; voice: number; active: number; joins: number; leaves: number; net: number };
 export type HeatmapGrid = Record<number, Record<number, HeatmapCell>>;
 

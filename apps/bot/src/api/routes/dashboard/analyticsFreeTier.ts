@@ -10,7 +10,7 @@ import { FREE_ANALYTICS_DAYS } from '@kotbo/contracts';
 const PAID_ROUTES = new Set([
   'audience', 'conversation', 'insights', 'climate', 'reports', 'advanced', 'interactions',
   'weekly-comparison', 'daily-algo', 'commands', 'channel-tree', 'categories', 'correlation',
-  'growth-retention',
+  'growth-retention', 'reaction-roles',
 ]);
 
 /** Lisibles en gratuit (la page Pulse lit les alertes), mais pas modifiables. */

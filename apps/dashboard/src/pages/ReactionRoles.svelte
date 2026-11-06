@@ -1,5 +1,6 @@
 <script lang="ts">
   import { explainDisabled } from '../lib/actions/explainDisabled';
+  import { canConfigureFeature } from '../lib/permissions.svelte';
   import { m } from '../lib/i18n';
   import { channelDisplayName } from '../lib/channelUtils';
   import { onMount } from 'svelte';
@@ -29,6 +30,8 @@
     !!dashboardStore.state.featureAccess?.reaction_roles?.canConfigure
       || !!dashboardStore.state.access?.canManageSettings
   );
+
+  const canBuildWorkflows = $derived(canConfigureFeature('workflows'));
 
   const availableChannels = $derived(dashboardStore.state.discordChannels || []);
   const availableRoles = $derived(dashboardStore.state.discordRoles || []);
@@ -727,6 +730,16 @@
           </div>
         {/each}
       </div>
+
+      <!-- Les réactions emoji passent par les workflows : on y renvoie plutôt
+           que de laisser le staff chercher ici un mode qui n'existe pas. -->
+      {#if canBuildWorkflows}
+        <p class="flex items-center gap-2 flex-wrap text-xs text-on-surface-variant">
+          <Papicon icon="Smile" size={14} />
+          {m.reaction_roles_emoji_hint()}
+          <a href="/workflows?template=reaction-role" class="text-primary hover:underline">{m.reaction_roles_emoji_hint_link()}</a>
+        </p>
+      {/if}
     </div>
   {/if}
 </ModulePage>

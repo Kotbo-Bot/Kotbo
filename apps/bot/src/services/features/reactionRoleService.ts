@@ -16,6 +16,7 @@ import {
 } from '@kotbo/contracts';
 import { roleBlocker, shouldAlertStaff, type RoleBlocker } from './reactionRoleAccess.js';
 import { rolesToSwapOut } from './reactionRoleExclusive.js';
+import { recordReactionRoleChange } from '../analytics/reactionRoleStatsService.js';
 
 // Discord n'accepte que 5 lignes de 5 boutons par message : au-delà, c'est le
 // message entier qu'il refuse, et le panneau ne partirait jamais.
@@ -593,8 +594,15 @@ export async function handleRoleToggleInteraction(interaction: ButtonInteraction
       });
     }
 
+    // Le journal d'audit nomme le menu : les logs du serveur le reprennent, et
+    // le staff sait d'où vient un rôle que le bot a donné.
+    const reason = m.reactionroles_audit_reason({ menu: activeMenu.title }, { locale: await resolveGuildLocale(guild.id) });
+    const count = (id: string, change: 'added' | 'removed') =>
+      void recordReactionRoleChange({ guildId: guild.id, menuId: activeMenu.id, roleId: id, change });
+
     if (hasRole) {
-      await member.roles.remove(roleId);
+      await member.roles.remove(roleId, reason);
+      count(roleId, 'removed');
       if (activeMenu.showCounts) scheduleCountRefresh(interaction.client, activeMenu.id);
       return interaction.reply({
         content: m.reactionroles_role_removed({ role }, { locale }),
@@ -611,15 +619,18 @@ export async function handleRoleToggleInteraction(interaction: ButtonInteraction
 
     // Ajout d'abord : si le retrait échoue ensuite, le membre a deux rôles
     // plutôt qu'aucun.
-    await member.roles.add(roleId);
+    await member.roles.add(roleId, reason);
+    count(roleId, 'added');
     if (activeMenu.showCounts) scheduleCountRefresh(interaction.client, activeMenu.id);
-    const swapped = swapOut.length > 0 && await member.roles.remove(swapOut).then(
+    const swapped = swapOut.length > 0 && await member.roles.remove(swapOut, reason).then(
       () => true,
       (err: unknown) => {
         logger.warn('ReactionRoleService', `Rôles précédents non retirés pour ${member.id} :`, err);
         return false;
       },
     );
+
+    if (swapped) swapOut.forEach((id) => count(id, 'removed'));
 
     return interaction.reply({
       content: swapped
