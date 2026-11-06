@@ -1108,11 +1108,13 @@ function flushAndStop(exitCode = 0): Promise<void> {
       await flushIndexBuffers();
       // Kotbo × AegisAI : compteurs de la dernière minute, et le worker de la
       // file rend ses jobs en cours à Redis plutôt que de les laisser bloqués.
-      const [{ flushAegisStats }, { stopAegisQueue }] = await Promise.all([
+      // Rôles-boutons : les clics de la dernière minute comptent dans Analytics.
+      const [{ flushAegisStats }, { stopAegisQueue }, { flushReactionRoleStats }] = await Promise.all([
         import('./services/moderation/aegis/aegisStats.js'),
         import('./services/moderation/aegis/aegisQueue.js'),
+        import('./services/analytics/reactionRoleStatsService.js'),
       ]);
-      await Promise.allSettled([flushAegisStats(), stopAegisQueue()]);
+      await Promise.allSettled([flushAegisStats(), stopAegisQueue(), flushReactionRoleStats()]);
     } finally {
       process.exit(exitCode);
     }

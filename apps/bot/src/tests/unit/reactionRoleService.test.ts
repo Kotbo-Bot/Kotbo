@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
 import path from 'node:path';
-import { GuildMember, type ButtonInteraction, type Client } from 'discord.js';
+import { GuildMember, MessageFlags, RESTJSONErrorCodes, type ButtonInteraction, type Client } from 'discord.js';
 import { completeModuleMock } from '../helpers/moduleMock.js';
 
 const prismaMock = {
@@ -142,14 +142,24 @@ function fakeMember(ownedRoleIds: string[], guild = fakeGuild()) {
   return { member, add, remove };
 }
 
-function fakeInteraction(customId: string, member: GuildMember, reply: (...args: never[]) => unknown) {
+/**
+ * Le service diffère sa réponse dès le clic : `reply` reçoit donc la réponse
+ * finale, celle qui remplace le « réfléchit… » de Discord.
+ */
+function fakeInteraction(
+  customId: string,
+  member: GuildMember,
+  reply: (...args: never[]) => unknown,
+  deferReply: (...args: never[]) => unknown = mock(async () => undefined),
+) {
   return {
     customId,
     guildId: 'guild-1',
     guildLocale: 'fr',
     message: { id: 'message-1' },
     member,
-    reply,
+    deferReply,
+    editReply: reply,
   } as unknown as ButtonInteraction;
 }
 
@@ -840,6 +850,72 @@ describe('message publié d’un menu', () => {
     const payload = (send.mock.calls[0] as unknown as [{ embeds: Array<{ data: { timestamp?: string } }> }])[0];
     expect(payload.embeds[0].data.timestamp).toBeUndefined();
   });
+
+  /** Menu déjà publié dont la lecture du message suit `fetchMessage`. */
+  function publishedMenu(fetchMessage: () => Promise<unknown>) {
+    const send = mock(async () => ({ id: 'message-2' }));
+    const channel = { isTextBased: () => true, send, messages: { fetch: mock(fetchMessage) } };
+    const guild = {
+      id: 'guild-1',
+      preferredLocale: 'fr',
+      channels: { cache: { get: () => channel }, fetch: mock(async () => channel) },
+      roles: { cache: { get: () => undefined } },
+    };
+    const client = { guilds: { cache: { get: () => guild }, fetch: mock(async () => guild) } } as unknown as Client;
+    prismaMock.reactionRoleMenu.findUnique.mockResolvedValueOnce({
+      id: 'menu-1',
+      guildId: 'guild-1',
+      channelId: 'channel-1',
+      messageId: 'message-1',
+      title: 'Couleurs',
+      buttonMode: 'toggle',
+      description: null,
+      showCounts: true,
+      embedColor: null,
+      options: [{ label: 'Rouge', roleId: 'rouge' }],
+    });
+    return { client, send };
+  }
+
+  const gone = (code: number) => async () => { throw Object.assign(new Error('gone'), { code }); };
+
+  test('la mise à jour des nombres ne republie pas un message effacé par le staff', async () => {
+    const { client, send } = publishedMenu(gone(RESTJSONErrorCodes.UnknownMessage));
+
+    await sendOrUpdateMenuMessage(client, 'menu-1', { repost: false });
+
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  test('republié par le staff, un menu dont le message a disparu repart dans son salon', async () => {
+    const { client, send } = publishedMenu(gone(RESTJSONErrorCodes.UnknownMessage));
+
+    await sendOrUpdateMenuMessage(client, 'menu-1');
+
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(prismaMock.reactionRoleMenu.update).toHaveBeenCalledWith({
+      where: { id: 'menu-1' },
+      data: { messageId: 'message-2' },
+    });
+  });
+
+  test('une modification refusée n’envoie pas de second panneau', async () => {
+    const edit = mock(async () => { throw new Error('Discord indisponible'); });
+    const { client, send } = publishedMenu(async () => ({ edit }));
+
+    await sendOrUpdateMenuMessage(client, 'menu-1');
+
+    expect(edit).toHaveBeenCalledTimes(1);
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  test('un message illisible pour une autre raison qu’une suppression n’est pas republié', async () => {
+    const { client, send } = publishedMenu(gone(RESTJSONErrorCodes.MissingAccess));
+
+    await sendOrUpdateMenuMessage(client, 'menu-1');
+
+    expect(send).not.toHaveBeenCalled();
+  });
 });
 
 describe('suivi des rôles des menus hors du panneau', () => {
@@ -976,6 +1052,21 @@ describe('clics comptés pour Analytics', () => {
     await handleRoleToggleInteraction(fakeInteraction('role_toggle:role-1:0', member, reply));
 
     expect(add).toHaveBeenCalledWith('role-1', expect.stringContaining('Notifications'));
+  });
+
+  test('la réponse est différée en éphémère avant tout travail : le délai de 3 s de Discord ne la fait pas échouer', async () => {
+    const order: string[] = [];
+    const deferReply = mock(async () => { order.push('defer'); });
+    const reply = mock(async () => { order.push('reply'); });
+    prismaMock.reactionRoleMenu.findFirst.mockImplementationOnce(async () => {
+      order.push('menu');
+      return { id: 'menu-1', guildId: 'guild-1', buttonMode: 'toggle', options: [{ label: 'Annonces', roleId: 'role-1' }] };
+    });
+
+    await handleRoleToggleInteraction(fakeInteraction('role_toggle:role-1:0', fakeMember([]).member, reply, deferReply));
+
+    expect(deferReply).toHaveBeenCalledWith({ flags: [MessageFlags.Ephemeral] });
+    expect(order).toEqual(['defer', 'menu', 'reply']);
   });
 
   test('un rôle gardé en attribution définitive ne compte pas', async () => {
