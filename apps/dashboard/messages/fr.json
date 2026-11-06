@@ -7297,7 +7297,7 @@
   "announcements_thread_page_link_missing_error": "Les pages de type lien doivent avoir un salon ou une URL.",
   "announcements_thread_pages_saved_success": "Pages de présentation enregistrées.",
   "reaction_roles_title": "Rôles par réaction",
-  "reaction_roles_emoji_hint": "Tu préfères des réactions emoji sous un message ? Elles se montent avec un workflow.",
+  "reaction_roles_emoji_hint": "Tu préfères des réactions emoji sous un message ?",
   "reaction_roles_emoji_hint_link": "Créer un rôle par réaction emoji",
   "reaction_roles_desc": "Publie un message à boutons : chaque membre choisit ses rôles en un clic.",
   "reaction_roles_deployed_panels": "Panels déployés ({n})",

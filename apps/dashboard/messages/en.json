@@ -7297,7 +7297,7 @@
   "announcements_thread_page_link_missing_error": "Link pages must have a channel or URL.",
   "announcements_thread_pages_saved_success": "Introduction pages saved!",
   "reaction_roles_title": "Reaction roles",
-  "reaction_roles_emoji_hint": "Prefer emoji reactions under a message? They are built with a workflow.",
+  "reaction_roles_emoji_hint": "Prefer emoji reactions under a message?",
   "reaction_roles_emoji_hint_link": "Create an emoji reaction role",
   "reaction_roles_desc": "Post a message with buttons: each member picks their roles in one click.",
   "reaction_roles_deployed_panels": "Deployed Panels ({n})",
