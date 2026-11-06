@@ -106,6 +106,7 @@ export const NOTIFICATION_KINDS = {
   // Système
   'system.workflow_failed': { category: 'system' },
   'system.reaction_role_blocked': { category: 'system' },
+  'system.reaction_role_message_deleted': { category: 'system' },
   // Repli pour ce qui n'a pas encore de type
   'system.generic': { category: 'system' },
 } as const satisfies Record<string, NotificationKindMeta>;

@@ -4492,6 +4492,8 @@
   "ntf_reaction_role_managed": "Le rôle {role} est géré par une intégration (bot, boost) : Discord interdit de l'attribuer. Retire-le du menu.",
   "ntf_reaction_role_no_permission": "Le bot n'a pas la permission « Gérer les rôles » : il ne peut pas attribuer {role}.",
   "ntf_reaction_role_too_high": "Le rôle {role} est placé au-dessus du rôle du bot : remonte le rôle du bot au-dessus de lui dans les paramètres du serveur.",
+  "ntf_reaction_role_message_deleted_title": "Le message du menu « {menu} » a été supprimé",
+  "ntf_reaction_role_message_deleted": "Ses boutons ont disparu de Discord avec lui. Republie le menu depuis le dashboard, ou supprime-le s'il ne sert plus.",
   "ntf_level_up_title": "Niveau {level} atteint",
   "ntf_join_blocked_title": "Accès au serveur refusé",
   "ntf_reminder_title": "Rappel",

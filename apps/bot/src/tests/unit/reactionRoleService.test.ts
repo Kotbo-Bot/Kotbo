@@ -7,6 +7,7 @@ const prismaMock = {
   reactionRoleMenu: {
     findFirst: mock(async () => null as Record<string, unknown> | null),
     findUnique: mock(async () => null as Record<string, unknown> | null),
+    findMany: mock(async () => [] as Array<Record<string, unknown>>),
     create: mock(async () => ({ id: 'menu-1' })),
     update: mock(async () => ({ id: 'menu-1' })),
     delete: mock(async () => ({})),
@@ -47,7 +48,13 @@ for (const extension of ['ts', 'js']) {
 }
 
 const {
+  changedRoleIds,
   createReactionRoleMenu,
+  handleMenuMessagesDeleted,
+  handleMenuRoleDeleted,
+  menusUsingRoles,
+  refreshCountsForRoles,
+  sendOrUpdateMenuMessage,
   deleteReactionRoleMenu,
   getBotRoleAccess,
   handleRoleToggleInteraction,
@@ -149,6 +156,8 @@ describe('reactionRoleService', () => {
     prismaMock.reactionRoleMenu.create.mockReset();
     prismaMock.reactionRoleMenu.update.mockReset();
     prismaMock.reactionRoleMenu.delete.mockReset();
+    prismaMock.reactionRoleMenu.findMany.mockReset();
+    prismaMock.reactionRoleMenu.findMany.mockResolvedValue([]);
     prismaMock.notification.findFirst.mockReset();
     prismaMock.notification.findFirst.mockResolvedValue(null);
     notifyMock.mockClear();
@@ -539,6 +548,30 @@ describe('reactionRoleService', () => {
     });
   });
 
+  test('un changement de salon oublie l’ancien message en base avant de le supprimer', async () => {
+    // Sinon la suppression, vue par l'écouteur, passerait pour celle d'un
+    // membre du staff et déclencherait une alerte « message supprimé ».
+    const { client, deleteMessage } = fakeClient();
+    const order: string[] = [];
+    deleteMessage.mockImplementation(async () => { order.push('delete'); });
+    prismaMock.reactionRoleMenu.update.mockImplementation(async () => {
+      order.push('update');
+      return { id: 'menu-1' };
+    });
+    prismaMock.reactionRoleMenu.findFirst.mockResolvedValueOnce({
+      id: 'menu-1',
+      guildId: 'guild-1',
+      channelId: 'channel-1',
+      messageId: 'message-1',
+      buttonMode: 'toggle',
+      options: [{ label: 'Annonces', roleId: 'role-1' }],
+    });
+
+    await updateReactionRoleMenu(client, 'guild-1', 'menu-1', { channelId: 'channel-2' });
+
+    expect(order.slice(0, 2)).toEqual(['update', 'delete']);
+  });
+
   test('n’écrit en base que les modes de bouton connus', async () => {
     prismaMock.reactionRoleMenu.create.mockResolvedValueOnce({ id: 'menu-1' });
     prismaMock.reactionRoleMenu.findUnique.mockResolvedValueOnce(null);
@@ -770,5 +803,122 @@ describe('couleur de la barre de l’embed', () => {
     expect(prismaMock.reactionRoleMenu.create).toHaveBeenCalledWith({
       data: expect.objectContaining({ embedColor: '#E74C3C' }),
     });
+  });
+});
+
+describe('message publié d’un menu', () => {
+  test('l’embed ne porte pas d’heure : elle changerait à chaque mise à jour des nombres', async () => {
+    const send = mock(async () => ({ id: 'message-1' }));
+    const channel = { isTextBased: () => true, send, messages: { fetch: mock(async () => null) } };
+    const guild = {
+      id: 'guild-1',
+      preferredLocale: 'fr',
+      channels: { cache: { get: () => channel }, fetch: mock(async () => channel) },
+      roles: { cache: { get: () => undefined } },
+    };
+    const client = { guilds: { cache: { get: () => guild }, fetch: mock(async () => guild) } } as unknown as Client;
+    prismaMock.reactionRoleMenu.findUnique.mockResolvedValueOnce({
+      id: 'menu-1',
+      guildId: 'guild-1',
+      channelId: 'channel-1',
+      messageId: null,
+      title: 'Couleurs',
+      buttonMode: 'toggle',
+      description: null,
+      showCounts: false,
+      embedColor: null,
+      options: [{ label: 'Rouge', roleId: 'rouge' }],
+    });
+
+    await sendOrUpdateMenuMessage(client, 'menu-1');
+
+    const payload = (send.mock.calls[0] as unknown as [{ embeds: Array<{ data: { timestamp?: string } }> }])[0];
+    expect(payload.embeds[0].data.timestamp).toBeUndefined();
+  });
+});
+
+describe('suivi des rôles des menus hors du panneau', () => {
+  beforeEach(() => {
+    prismaMock.reactionRoleMenu.findMany.mockReset();
+    prismaMock.reactionRoleMenu.findMany.mockResolvedValue([]);
+    prismaMock.notification.findFirst.mockReset();
+    prismaMock.notification.findFirst.mockResolvedValue(null);
+    notifyMock.mockClear();
+  });
+
+  test('ne retient que les rôles gagnés ou perdus entre deux états d’un membre', () => {
+    expect(changedRoleIds(['a', 'b'], ['b', 'c']).sort()).toEqual(['a', 'c']);
+    expect(changedRoleIds(['a'], ['a'])).toEqual([]);
+  });
+
+  test('ne garde que les menus qui portent l’un des rôles', () => {
+    const menus = [
+      { id: 'm1', options: [{ roleId: 'a' }, { roleId: 'b' }] },
+      { id: 'm2', options: [{ roleId: 'c' }] },
+      { id: 'm3', options: 'invalide' },
+    ];
+    expect(menusUsingRoles(menus, ['b']).map((menu) => menu.id)).toEqual(['m1']);
+    expect(menusUsingRoles(menus, ['z'])).toEqual([]);
+  });
+
+  test('sans rôle changé, aucune lecture en base : un pseudo modifié ne coûte rien', async () => {
+    await refreshCountsForRoles({} as Client, 'guild-1', []);
+
+    expect(prismaMock.reactionRoleMenu.findMany).not.toHaveBeenCalled();
+  });
+
+  test('un rôle changé relit seulement les menus publiés qui affichent les nombres', async () => {
+    await refreshCountsForRoles({} as Client, 'guild-1', ['a']);
+
+    expect(prismaMock.reactionRoleMenu.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { guildId: 'guild-1', showCounts: true, messageId: { not: null } },
+    }));
+  });
+
+  test('un rôle supprimé sur Discord prévient le staff sans attendre le clic d’un membre', async () => {
+    prismaMock.reactionRoleMenu.findMany.mockResolvedValueOnce([
+      { title: 'Couleurs', options: [{ roleId: 'rouge' }] },
+      { title: 'Pronoms', options: [{ roleId: 'il' }] },
+    ]);
+
+    await handleMenuRoleDeleted({ id: 'rouge', name: 'Rouge', guild: fakeGuild() } as never);
+
+    expect(notifyMock).toHaveBeenCalledWith(expect.objectContaining({
+      userId: 'owner-1',
+      kind: 'system.reaction_role_blocked',
+      title: expect.stringContaining('Couleurs'),
+      // Même clé que l'alerte au clic : le membre qui clique ensuite n'en relance pas une.
+      groupKey: 'reaction-role-blocked:rouge',
+    }));
+  });
+
+  test('un rôle supprimé qu’aucun menu ne porte ne prévient personne', async () => {
+    prismaMock.reactionRoleMenu.findMany.mockResolvedValueOnce([{ title: 'Pronoms', options: [{ roleId: 'il' }] }]);
+
+    await handleMenuRoleDeleted({ id: 'rouge', name: 'Rouge', guild: fakeGuild() } as never);
+
+    expect(notifyMock).not.toHaveBeenCalled();
+  });
+
+  test('le message d’un menu supprimé sur Discord prévient le staff', async () => {
+    prismaMock.reactionRoleMenu.findMany.mockResolvedValueOnce([{ id: 'menu-1', title: 'Couleurs' }]);
+
+    await handleMenuMessagesDeleted(fakeGuild() as never, ['message-1', 'autre']);
+
+    expect(prismaMock.reactionRoleMenu.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { guildId: 'guild-1', messageId: { in: ['message-1', 'autre'] } },
+    }));
+    expect(notifyMock).toHaveBeenCalledWith(expect.objectContaining({
+      userId: 'owner-1',
+      kind: 'system.reaction_role_message_deleted',
+      title: expect.stringContaining('Couleurs'),
+      groupKey: 'reaction-role-message-deleted:menu-1',
+    }));
+  });
+
+  test('un message supprimé qui n’est pas celui d’un menu ne prévient personne', async () => {
+    await handleMenuMessagesDeleted(fakeGuild() as never, ['autre']);
+
+    expect(notifyMock).not.toHaveBeenCalled();
   });
 });
