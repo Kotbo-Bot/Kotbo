@@ -2,6 +2,7 @@
   import { untrack } from 'svelte';
   import { computeForceLayout, type LayoutEdge, type LayoutNode, type LayoutPosition } from '../../graph/forceLayout';
   import Papicon from '../Papicon.svelte';
+  import { m } from '../../i18n';
   import { MessageSquare, ThumbsUp, AtSign, Compass, RotateCcw, Search, Users, ShieldAlert } from 'lucide-svelte';
 
   interface GraphNode {
@@ -111,11 +112,11 @@
 
   function getStatusLabel(status: string | undefined) {
     switch (status) {
-      case 'online': return 'En ligne';
-      case 'idle': return 'Inactif';
-      case 'dnd': return 'Ne pas déranger';
+      case 'online': return m.mcm_presence_online();
+      case 'idle': return m.d6_gig_status_idle();
+      case 'dnd': return m.mcm_presence_dnd();
       case 'offline':
-      default: return 'Hors ligne';
+      default: return m.mcm_presence_offline();
     }
   }
 
@@ -265,7 +266,7 @@
         const node = nodeById.get(otherId);
         return {
           id: otherId,
-          label: node?.label || 'Membre',
+          label: node?.label || m.d6_gig_member_fallback(),
           avatar: node?.avatar,
           status: node?.status,
           count
@@ -288,7 +289,7 @@
       const node = source.get(pos.id);
       return {
         id: pos.id,
-        label: node?.label || 'Membre',
+        label: node?.label || m.d6_gig_member_fallback(),
         avatar: node?.avatar ?? null,
         activityCount: node?.activityCount ?? 0,
         status: node?.status || 'offline',
@@ -478,7 +479,7 @@
           <!-- Floating Avatar -->
           <div class="absolute -top-10 left-5">
             {#if selectedNode.avatar}
-              <img src={selectedNode.avatar} alt="Avatar" class="w-20 h-20 rounded-full border-4 border-[#18191a] shadow-lg" />
+              <img src={selectedNode.avatar} alt={m.mcm_avatar_alt()} class="w-20 h-20 rounded-full border-4 border-[#18191a] shadow-lg" />
             {:else}
               <div class="w-20 h-20 rounded-full bg-indigo-900 border-4 border-[#18191a] flex items-center justify-center text-indigo-200 font-bold text-xl shadow-lg">
                 {selectedNode.label.slice(0, 2).toUpperCase()}
@@ -496,7 +497,7 @@
             <div class="flex items-center gap-1.5">
               <span class="text-base font-bold text-slate-100">{selectedNode.label}</span>
               {#if selectedNode.isHub}
-                <span class="inline-flex items-center justify-center w-4 h-4 rounded-full bg-[#1877f2] text-white" title="Hub Communauté"><Papicon icon="check" size={10} /></span>
+                <span class="inline-flex items-center justify-center w-4 h-4 rounded-full bg-[#1877f2] text-white" title={m.d6_gig_hub()}><Papicon icon="check" size={10} /></span>
               {/if}
             </div>
             <span class="text-xs text-slate-400 font-medium mt-0.5 flex items-center gap-1.5">
@@ -509,23 +510,23 @@
           <div class="grid grid-cols-3 gap-2 mt-5 text-center">
             <div class="rounded-xl bg-[#242526] border border-white/5 py-2 px-1 flex flex-col items-center">
               <AtSign class="w-4 h-4 text-sky-400 mb-1" />
-              <span class="text-2xs text-slate-400 font-bold uppercase">Mentions</span>
+              <span class="text-2xs text-slate-400 font-bold uppercase">{m.d6_it_mentions()}</span>
               <span class="text-sm font-bold text-slate-100 mt-0.5">{stats.mentions}</span>
             </div>
             <div class="rounded-xl bg-[#242526] border border-white/5 py-2 px-1 flex flex-col items-center">
               <MessageSquare class="w-4 h-4 text-yellow-400 mb-1" />
-              <span class="text-2xs text-slate-400 font-bold uppercase">Réponses</span>
+              <span class="text-2xs text-slate-400 font-bold uppercase">{m.d6_it_replies()}</span>
               <span class="text-sm font-bold text-slate-100 mt-0.5">{stats.replies}</span>
             </div>
             <div class="rounded-xl bg-[#242526] border border-white/5 py-2 px-1 flex flex-col items-center">
               <ThumbsUp class="w-4 h-4 text-pink-400 mb-1" />
-              <span class="text-2xs text-slate-400 font-bold uppercase">Réactions</span>
+              <span class="text-2xs text-slate-400 font-bold uppercase">{m.d6_it_reactions()}</span>
               <span class="text-sm font-bold text-slate-100 mt-0.5">{stats.reactions}</span>
             </div>
           </div>
 
           <div class="flex justify-between items-center text-xs border-t border-white/5 pt-3 mt-4">
-            <span class="text-slate-400 font-medium">Interactions totales</span>
+            <span class="text-slate-400 font-medium">{m.d6_gig_total_interactions()}</span>
             <span class="font-bold text-[#1877f2] text-sm">{stats.total}</span>
           </div>
 
@@ -538,17 +539,17 @@
             class="w-full mt-4 py-2 bg-[#1877f2] hover:bg-[#166fe5] text-white text-xs font-bold rounded-lg transition-all shadow-md flex items-center justify-center gap-1.5"
           >
             <Compass class="w-4 h-4" />
-            Consulter l'activité complète
+            {m.d6_gig_view_activity()}
           </button>
 
           <!-- Top Interlocutors List (Dynamic friendship progress bars) -->
           <div class="mt-5 flex flex-col gap-2 border-t border-white/5 pt-4">
-            <span class="text-xs text-slate-400 font-semibold">Top 5 Interlocuteurs</span>
+            <span class="text-xs text-slate-400 font-semibold">{m.d6_gig_top_interlocutors()}</span>
             
             {#if selectedTopInteractors.length === 0}
               <div class="flex items-center gap-2 p-3 rounded-lg bg-[#242526]/20 border border-dashed border-white/5 justify-center text-slate-400 text-xs">
                 <ShieldAlert class="w-4 h-4 text-slate-500" />
-                Aucune interaction directe enregistrée.
+                {m.d6_gig_no_direct_interaction()}
               </div>
             {:else}
               {#each selectedTopInteractors as interactor}
@@ -569,7 +570,7 @@
                     </div>
                     <div class="flex-1 min-w-0 flex items-center justify-between">
                       <span class="text-xs font-semibold text-slate-200 truncate group-hover:text-primary transition-colors">{interactor.label}</span>
-                      <span class="text-2xs text-slate-400 font-medium">{interactor.count} int.</span>
+                      <span class="text-2xs text-slate-400 font-medium">{m.d6_gig_interactions_short({ count: interactor.count })}</span>
                     </div>
                   </div>
                   <!-- Progress bar showing relative share of interactions -->
@@ -594,23 +595,23 @@
             <Users class="w-5 h-5" />
           </div>
           <div>
-            <h4 class="text-sm font-bold text-slate-100">Réseau d'activité</h4>
-            <p class="text-2xs text-slate-400">Relations et liens sociaux du serveur</p>
+            <h4 class="text-sm font-bold text-slate-100">{m.d6_gig_title()}</h4>
+            <p class="text-2xs text-slate-400">{m.d6_gig_subtitle()}</p>
           </div>
         </div>
 
         <div class="space-y-2 border-t border-white/5 pt-3">
           <div class="flex justify-between text-xs">
-            <span class="text-slate-400">Total membres analysés</span>
+            <span class="text-slate-400">{m.d6_gig_members_analyzed()}</span>
             <span class="font-bold text-slate-200">{nodes.length}</span>
           </div>
           <div class="flex justify-between text-xs">
-            <span class="text-slate-400">Liaisons de communication</span>
+            <span class="text-slate-400">{m.d6_gig_links()}</span>
             <span class="font-bold text-slate-200">{edges.length}</span>
           </div>
           {#if hiddenMembersCount > 0}
             <div class="flex justify-between text-xs">
-              <span class="text-slate-400">Membres moins actifs non affichés</span>
+              <span class="text-slate-400">{m.d6_gig_hidden_members()}</span>
               <span class="font-bold text-slate-400">{hiddenMembersCount}</span>
             </div>
           {/if}
@@ -618,7 +619,7 @@
 
         <!-- Top Connectors Ranked List -->
         <div class="flex flex-col gap-2 mt-2 border-t border-white/5 pt-4">
-          <span class="text-xs text-slate-400 font-semibold">Top 5 Connecteurs du Serveur</span>
+          <span class="text-xs text-slate-400 font-semibold">{m.d6_gig_top_connectors()}</span>
           {#each topConnectors as connector, index}
             <button 
               onclick={() => focusNode(connector.id)}
@@ -639,7 +640,7 @@
               </div>
               <div class="flex-1 min-w-0">
                 <div class="text-xs font-bold text-slate-200 truncate group-hover:text-primary transition-colors">{connector.label}</div>
-                <div class="text-2xs text-slate-400">{connector.activityCount} actions enregistrées</div>
+                <div class="text-2xs text-slate-400">{m.d6_gig_actions_count({ count: connector.activityCount })}</div>
               </div>
             </button>
           {/each}
@@ -647,7 +648,7 @@
 
         <p class="flex items-start gap-2 text-2xs text-slate-400 leading-relaxed mt-2 bg-slate-900/50 p-3 rounded-lg border border-white/5">
           <Papicon icon="info" size={14} class="mt-px text-slate-500" />
-          <span>Clique sur n'importe quel membre du réseau ou sur un top connecteur pour explorer son cercle social et ses interlocuteurs favoris.</span>
+          <span>{m.d6_gig_hint()}</span>
         </p>
       </div>
     {/if}
@@ -665,25 +666,25 @@
           onclick={() => selectedTypeFilter = 'all'}
           class="px-2.5 py-1 rounded text-2xs font-bold transition-all {selectedTypeFilter === 'all' ? 'bg-[#1877f2] text-white' : 'text-slate-400 hover:text-slate-200'}"
         >
-          Tout
+          {m.d6_gig_filter_all()}
         </button>
         <button 
           onclick={() => selectedTypeFilter = 'mention'}
           class="px-2.5 py-1 rounded text-2xs font-bold transition-all flex items-center gap-1 {selectedTypeFilter === 'mention' ? 'bg-[#5865f2] text-white' : 'text-slate-400 hover:text-slate-200'}"
         >
-          <span class="w-1.5 h-1.5 rounded-full bg-[#5865f2]"></span> Mentions
+          <span class="w-1.5 h-1.5 rounded-full bg-[#5865f2]"></span> {m.d6_it_mentions()}
         </button>
         <button 
           onclick={() => selectedTypeFilter = 'reply'}
           class="px-2.5 py-1 rounded text-2xs font-bold transition-all flex items-center gap-1 {selectedTypeFilter === 'reply' ? 'bg-[#faa61a] text-white' : 'text-slate-400 hover:text-slate-200'}"
         >
-          <span class="w-1.5 h-1.5 rounded-full bg-[#faa61a]"></span> Réponses
+          <span class="w-1.5 h-1.5 rounded-full bg-[#faa61a]"></span> {m.d6_it_replies()}
         </button>
         <button 
           onclick={() => selectedTypeFilter = 'reaction'}
           class="px-2.5 py-1 rounded text-2xs font-bold transition-all flex items-center gap-1 {selectedTypeFilter === 'reaction' ? 'bg-[#f368e0] text-white' : 'text-slate-400 hover:text-slate-200'}"
         >
-          <span class="w-1.5 h-1.5 rounded-full bg-[#f368e0]"></span> Réactions
+          <span class="w-1.5 h-1.5 rounded-full bg-[#f368e0]"></span> {m.d6_it_reactions()}
         </button>
       </div>
 
@@ -694,7 +695,7 @@
           <input
             type="text"
             bind:value={searchQuery}
-            placeholder="Rechercher un membre..."
+            placeholder={m.d6_gig_search_placeholder()}
             class="w-full pl-9 pr-4 py-1.5 bg-[#18191a]/95 border border-white/5 rounded-lg text-xs text-slate-200 placeholder-slate-400 focus:outline-none focus:border-[#1877f2]/50 transition-all"
           />
         </div>
@@ -730,21 +731,21 @@
       <button
         onclick={() => zoom = Math.min(zoom * 1.25, 2.5)}
         class="w-9 h-9 rounded-lg border border-white/5 bg-[#18191a]/85 hover:bg-[#242526] text-slate-200 flex items-center justify-center transition-colors"
-        title="Zoomer"
+        title={m.d6_gig_zoom_in()}
       >
         <Papicon icon="plus" size={16} />
       </button>
       <button
         onclick={() => zoom = Math.max(zoom / 1.25, 0.4)}
         class="w-9 h-9 rounded-lg border border-white/5 bg-[#18191a]/85 hover:bg-[#242526] text-slate-200 flex items-center justify-center transition-colors"
-        title="Dézoomer"
+        title={m.d6_gig_zoom_out()}
       >
         <Papicon icon="minus" size={16} />
       </button>
       <button
         onclick={resetGraph}
         class="w-9 h-9 rounded-lg border border-white/5 bg-[#18191a]/85 hover:bg-[#242526] text-slate-300 flex items-center justify-center transition-colors"
-        title="Recentrer le graphe"
+        title={m.d6_gig_recenter()}
       >
         <RotateCcw class="w-4 h-4 text-[#1877f2]" />
       </button>
