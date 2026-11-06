@@ -53,8 +53,7 @@
     <div class="rounded-2xl border border-dashed border-outline-variant/40 px-5 py-8 text-center">
       <Papicon icon="check-circle" size={22} class="text-success mb-2" />
       <p class="text-body-sm text-on-surface-variant/65 leading-relaxed max-w-sm mx-auto">
-        Kotbo n'a repéré aucun autre bot de gestion. Les écrans suivants
-        configureront ton serveur à partir de ce qu'il porte déjà.
+        {m.obx_mb_none()}
       </p>
     </div>
 

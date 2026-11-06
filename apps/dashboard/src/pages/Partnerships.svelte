@@ -228,13 +228,13 @@
 </script>
 
 <ModulePage
-  title="Partenariats"
-  description="Tes partenariats, ce que vous vous apportez et les membres qu'ils t'amènent."
+  title={m.pship_title()}
+  description={m.pship_desc()}
   icon="handshake"
   featureKey="partnerships"
 >
   {#snippet actions()}
-    <ActionButton variant="primary" size="sm" icon="plus" label="Ajouter un partenaire" onclick={() => (panel = 'new')} />
+    <ActionButton variant="primary" size="sm" icon="plus" label={m.pship_add()} onclick={() => (panel = 'new')} />
     <RefreshButton onclick={load} loading={loading} />
   {/snippet}
 
@@ -246,24 +246,24 @@
       <div class="text-[18px] font-semibold text-on-surface tabular-nums">
         {partnerships.filter((row) => row.stage === 'ACTIVE' || row.stage === 'RENEWAL').length}
       </div>
-      <div class="text-2xs text-on-surface-variant">Partenariats actifs</div>
+      <div class="text-2xs text-on-surface-variant">{m.pship_stat_active()}</div>
     </div>
     <div class="rounded-xl bg-surface-container px-3 py-2.5">
       <div class="text-[18px] font-semibold text-on-surface tabular-nums">
         {partnerships.reduce((total, row) => total + row.referredJoins, 0)}
       </div>
-      <div class="text-2xs text-on-surface-variant">Arrivées apportées</div>
+      <div class="text-2xs text-on-surface-variant">{m.pship_stat_joins()}</div>
     </div>
     <div class="rounded-xl bg-surface-container px-3 py-2.5">
       <div class="text-[18px] font-semibold text-on-surface tabular-nums">{pendingCount}</div>
-      <div class="text-2xs text-on-surface-variant">Demandes en attente</div>
+      <div class="text-2xs text-on-surface-variant">{m.pship_stat_pending()}</div>
     </div>
     <div class="rounded-xl bg-surface-container px-3 py-2.5">
       <div class="text-[18px] font-semibold text-on-surface tabular-nums">
         {finance ? money(finance.receivedCents, finance.currency) : '-'}
       </div>
       <div class="text-2xs text-on-surface-variant">
-        Encaissé{finance && finance.lateCount > 0 ? ` · ${finance.lateCount} en retard` : ''}
+        {finance && finance.lateCount > 0 ? m.pship_stat_received_late({ count: finance.lateCount }) : m.pship_stat_received()}
       </div>
     </div>
   </div>
@@ -274,26 +274,26 @@
         class="px-3 py-1.5 text-xs rounded-md {view === 'pipeline' ? 'bg-surface text-on-surface' : 'text-on-surface-variant'}"
         onclick={() => (view = 'pipeline')}
       >
-        Pipeline
+        {m.pship_view_pipeline()}
       </button>
       <button
         class="px-3 py-1.5 text-xs rounded-md {view === 'requests' ? 'bg-surface text-on-surface' : 'text-on-surface-variant'}"
         onclick={() => (view = 'requests')}
       >
-        Demandes{pendingCount > 0 ? ` (${pendingCount})` : ''}
+        {pendingCount > 0 ? m.pship_view_requests_count({ count: pendingCount }) : m.pship_view_requests()}
       </button>
       <button
         class="px-3 py-1.5 text-xs rounded-md {view === 'settings' ? 'bg-surface text-on-surface' : 'text-on-surface-variant'}"
         onclick={() => (view = 'settings')}
       >
-        Réglages
+        {m.pship_view_settings()}
       </button>
     </div>
 
     {#if view === 'pipeline'}
       <input
         class="flex-1 min-w-[180px] max-w-xs rounded-lg border border-outline-variant/30 bg-surface-container-low px-3 py-1.5 text-xs text-on-surface"
-        placeholder="Rechercher un partenaire"
+        placeholder={m.pship_search_ph()}
         bind:value={search}
       />
     {/if}
@@ -305,11 +305,11 @@
     {#if visible.length === 0}
       <EmptyState
         icon="handshake"
-        title="Aucun partenariat"
-        description="Un dossier suit un échange de pubs, une alliance ou un sponsor : avantages appliqués à l'activation, engagements mesurés, retombées comptées."
+        title={m.pship_empty_title()}
+        description={m.pship_empty_desc()}
       >
         {#snippet action()}
-          <ActionButton variant="primary" size="sm" icon="plus" label="Ajouter un premier partenaire" onclick={() => (panel = 'new')} />
+          <ActionButton variant="primary" size="sm" icon="plus" label={m.pship_add_first()} onclick={() => (panel = 'new')} />
         {/snippet}
       </EmptyState>
     {:else}
@@ -368,10 +368,10 @@
     {#if applications.length === 0}
       <EmptyState
         icon="inbox"
-        title="Aucune demande"
+        title={m.pship_requests_empty()}
         description={settings?.applicationsOpen
-          ? "Les candidatures arrivent par /partenariat proposer, par un formulaire ou par l'annuaire."
-          : "Les demandes sont fermées : personne ne peut candidater pour l'instant."}
+          ? m.pship_requests_empty_open()
+          : m.pship_requests_empty_closed()}
       >
         {#snippet action()}
           {#if !settings?.applicationsOpen}
@@ -379,7 +379,7 @@
               variant="primary"
               size="sm"
               icon="check"
-              label="Ouvrir les demandes"
+              label={m.pship_open_requests()}
               onclick={() => saveSettings({ applicationsOpen: true })}
             />
           {/if}
@@ -403,11 +403,11 @@
 
               <div class="flex flex-wrap gap-3 text-2xs text-on-surface-variant">
                 {#if application.memberCount}
-                  <span class="inline-flex items-center gap-1"><Papicon icon="users" size={12} />{application.memberCount} membres</span>
+                  <span class="inline-flex items-center gap-1"><Papicon icon="users" size={12} />{m.pship_member_count({ count: application.memberCount })}</span>
                 {/if}
                 {#if application.inviteUrl}
                   <a class="inline-flex items-center gap-1 text-primary hover:underline" href={application.inviteUrl} target="_blank" rel="noopener noreferrer">
-                    <Papicon icon="link" size={12} />Voir le serveur
+                    <Papicon icon="link" size={12} />{m.pship_view_server()}
                   </a>
                 {/if}
                 <span class="inline-flex items-center gap-1">
@@ -434,24 +434,24 @@
                   <div class="pt-1 border-t border-outline-variant/10 space-y-2">
                     <label class="block">
                       <span class="text-2xs font-bold text-on-surface-variant/80 ml-1 mb-1.5 block">
-                        Motif du refus, transmis au demandeur
+                        {m.pship_reject_reason()}
                       </span>
                       <textarea
                         class="w-full rounded-lg border border-outline-variant/30 bg-surface-container-low px-3 py-2 text-xs text-on-surface"
                         rows="2"
-                        placeholder="Facultatif, mais toujours mieux qu'un refus sans explication"
+                        placeholder={m.pship_reject_reason_ph()}
                         bind:value={rejectReason}
                       ></textarea>
                     </label>
                     <div class="flex gap-2">
-                      <ActionButton variant="danger" size="sm" label="Confirmer le refus" onclick={() => decide(application, 'REJECTED')} />
-                      <ActionButton variant="neutral" size="sm" label="Annuler" onclick={() => { rejecting = null; rejectReason = ''; }} />
+                      <ActionButton variant="danger" size="sm" label={m.pship_confirm_reject()} onclick={() => decide(application, 'REJECTED')} />
+                      <ActionButton variant="neutral" size="sm" label={m.common_cancel()} onclick={() => { rejecting = null; rejectReason = ''; }} />
                     </div>
                   </div>
                 {:else}
                   <div class="flex gap-2 pt-1 border-t border-outline-variant/10">
-                    <ActionButton variant="primary" size="sm" icon="check" label="Accepter" onclick={() => decide(application, 'ACCEPTED')} />
-                    <ActionButton variant="danger" size="sm" icon="x" label="Refuser" onclick={() => { rejecting = application.id; rejectReason = ''; }} />
+                    <ActionButton variant="primary" size="sm" icon="check" label={m.pship_accept()} onclick={() => decide(application, 'ACCEPTED')} />
+                    <ActionButton variant="danger" size="sm" icon="x" label={m.pship_reject()} onclick={() => { rejecting = application.id; rejectReason = ''; }} />
                   </div>
                 {/if}
               {/if}

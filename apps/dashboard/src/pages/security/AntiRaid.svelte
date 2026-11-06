@@ -1,6 +1,6 @@
 <script lang="ts">
   import { explainDisabled } from '../../lib/actions/explainDisabled';
-  import { m } from '../../lib/i18n';
+  import { m, dateLocale } from '../../lib/i18n';
   import { onMount } from 'svelte';
   import { authStore } from '../../lib/stores/auth.svelte';
   import { dashboardStore } from '../../lib/stores/dashboard.svelte';
@@ -34,6 +34,7 @@
   import ShieldCard from '../../lib/components/security/ShieldCard.svelte';
   import Callout from '../../lib/components/ui/Callout.svelte';
   import MemberName from '../../lib/components/MemberName.svelte';
+  import { formatRelative } from '../../lib/components/staff/format';
 
   type Config = Record<string, any>;
 
@@ -62,30 +63,30 @@
   type Jailed = { userId: string; source: string; reason: string | null; releaseAt: string | null; createdAt: string };
 
   const JAIL_SOURCES: Record<string, string> = {
-    MANUAL: 'Manuelle',
-    SERVER_TAG: "Tag d'un autre serveur",
-    ACCOUNT_AGE: 'Compte trop récent',
-    DISCORD_QUARANTINE: 'Quarantaine Discord',
+    MANUAL: m.arx_jail_src_manual(),
+    SERVER_TAG: m.arx_jail_src_server_tag(),
+    ACCOUNT_AGE: m.arx_jail_src_account_age(),
+    DISCORD_QUARANTINE: m.arx_jail_src_discord(),
     HONEYPOT: 'Honeypot',
-    VISION: 'Kotbo Vision',
+    VISION: m.sec_tab_antiraid_vision(),
   };
 
   const SANCTION_OPTIONS = [
-    { value: 'DELETE', label: 'Supprimer seulement' },
-    { value: 'WARN', label: 'Avertissement' },
+    { value: 'DELETE', label: m.arx_sanction_delete_only() },
+    { value: 'WARN', label: m.arx_sanction_warn() },
     { value: 'TIMEOUT', label: 'Timeout' },
-    { value: 'JAIL', label: 'Quarantaine (Jail)' },
-    { value: 'KICK', label: 'Expulsion' },
+    { value: 'JAIL', label: m.arx_jail_title() },
+    { value: 'KICK', label: m.arx_sanction_kick() },
     { value: 'SOFTBAN', label: 'Softban' },
-    { value: 'BAN', label: 'Bannissement' },
+    { value: 'BAN', label: m.arx_sanction_ban() },
   ];
   const DURATION_OPTIONS: { value: number | null; label: string }[] = [
     { value: 5, label: '5 minutes' },
-    { value: 60, label: '1 heure' },
-    { value: 1440, label: '1 jour' },
-    { value: 10080, label: '7 jours' },
-    { value: 43200, label: '30 jours' },
-    { value: null, label: 'Permanente' },
+    { value: 60, label: m.arx_duration_1h() },
+    { value: 1440, label: m.arx_duration_1d() },
+    { value: 10080, label: m.arx_duration_7d() },
+    { value: 43200, label: m.arx_duration_30d() },
+    { value: null, label: m.arx_duration_permanent() },
   ];
 
   let config = $state<Config>({});
@@ -127,15 +128,15 @@
   // OAuth du multi-comptes porte deja ce nom, et la confusion entre les deux
   // etait l'une des raisons du reagencement.
   const TABS = $derived<SecurityTab[]>([
-    { key: 'detection', label: 'Détection & verrous', icon: 'ShieldAlert' },
-    { key: 'captcha',   label: "Captcha d'entrée",    icon: 'UserCheck' },
-    { key: 'scams',     label: 'Arnaques & tag',      icon: 'Fishing' },
+    { key: 'detection', label: m.arx_tab_detection(), icon: 'ShieldAlert' },
+    { key: 'captcha',   label: m.arx_tab_captcha(),    icon: 'UserCheck' },
+    { key: 'scams',     label: m.arx_tab_scams(),      icon: 'Fishing' },
     { key: 'vision',  label: m.sec_tab_antiraid_vision(), icon: 'ImageOff' },
     { key: 'jail',      label: m.sec_tab_antiraid_jail(), icon: 'Lock', count: jailed.length || undefined },
-    { key: 'invites',   label: 'Invitations',         icon: 'Link' },
+    { key: 'invites',   label: m.arx_tab_invites(),         icon: 'Link' },
     {
       key: 'queues',
-      label: "Files d'attente",
+      label: m.arx_tab_queues(),
       icon: 'Inbox',
       count: reports.length + inviteRequests.length,
     },
@@ -144,15 +145,6 @@
   function channelName(id: string | null | undefined): string {
     if (!id) return '-';
     return channels.find((c) => c.id === id)?.name ?? id;
-  }
-
-  function formatRelative(value: string): string {
-    const diff = Date.now() - new Date(value).getTime();
-    const minutes = Math.max(1, Math.floor(diff / 60000));
-    if (minutes < 60) return `il y a ${minutes} min`;
-    const hours = Math.floor(minutes / 60);
-    if (hours < 24) return `il y a ${hours} h`;
-    return `il y a ${Math.floor(hours / 24)} j`;
   }
 
   async function load() {
@@ -168,7 +160,7 @@
       pendingInvites = res?.pendingInvites ?? 0;
       scamImageCount = res?.scamImageCount ?? 0;
     } catch (err) {
-      error = err instanceof Error ? err.message : 'Impossible de charger la configuration';
+      error = err instanceof Error ? err.message : m.arx_load_failed();
     } finally {
       loading = false;
     }
@@ -215,9 +207,9 @@
   ) {
     if (busyAction) return;
     if (confirmMessage && !(await confirmDialog.ask({
-      title: 'Activer cette mesure d\'urgence ?',
+      title: m.arx_emergency_confirm_title(),
       description: confirmMessage,
-      confirmLabel: 'Activer',
+      confirmLabel: m.arx_emergency_confirm_button(),
       variant: 'danger',
     }))) return;
 
@@ -304,9 +296,9 @@
     if (!lineage || busyAction) return;
     if (!dryRun) {
       const confirmed = await confirmDialog.ask({
-        title: `Mettre ${quarantinePreview} membre(s) en quarantaine ?`,
-        description: 'C\'est réversible, mais les membres concernés le verront.',
-        confirmLabel: 'Mettre en quarantaine',
+        title: m.arx_quarantine_confirm_title({ count: quarantinePreview ?? 0 }),
+        description: m.arx_quarantine_confirm_desc(),
+        confirmLabel: m.arx_quarantine_confirm_button(),
         variant: 'warning',
       });
       if (!confirmed) return;
@@ -373,7 +365,7 @@
       bind:value={config[field]}
       class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface"
     >
-      <option value={null}>Aucun</option>
+      <option value={null}>{m.common_none()}</option>
       {#each list as item (item.id)}
         <option value={item.id}>{item.name}</option>
       {/each}
@@ -389,7 +381,7 @@
       bind:value={config[field]}
       class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface"
     >
-      <option value={null}>Aucun</option>
+      <option value={null}>{m.common_none()}</option>
       {#each roles as role (role.id)}
         <option value={role.id}>{role.name}</option>
       {/each}
@@ -422,8 +414,8 @@
 
 <SecurityPage
   basePath="/security/anti-raid"
-  title="Anti-raid"
-  description="Détection de raid, verrous d'urgence, captcha d'entrée et contrôle des invitations"
+  title={m.nav_security_antiraid()}
+  description={m.arx_page_desc()}
   icon="shieldwarning"
   tabs={TABS}
 >
@@ -435,7 +427,7 @@
   {#if loading}
     <LoadingHint context="config" />
   {:else if error}
-    <EmptyState icon="AlertTriangle" title="Configuration indisponible" description={error} actionLabel="Réessayer" actionIcon="RefreshCw" onAction={load} />
+    <EmptyState icon="AlertTriangle" title={m.arx_config_unavailable()} description={error} actionLabel={m.common_retry()} actionIcon="RefreshCw" onAction={load} />
   {:else}
     <!-- ── Barre d'etat & actions d'urgence ───────────────────────────── -->
     <!-- Seulement sur l'onglet des verrous : repetee sur chaque onglet, elle
@@ -444,45 +436,45 @@
     <ShieldCard {config} {channels} onSynced={syncServerFields} />
 
     <SectionCard
-      title="État du serveur"
-      description="Ces bascules s'appliquent immédiatement, sans passer par l'enregistrement."
+      title={m.arx_state_title()}
+      description={m.arx_state_desc()}
       icon="Zap"
     >
       <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
         {#each [
           {
             id: 'raidmode',
-            label: 'Mode raid',
+            label: m.arx_raid_mode(),
             active: Boolean(config.raidModeActive),
             help: config.raidModeActive
-              ? `Actif${config.raidModeManual ? ' (manuel)' : ` (auto, levée dans ${config.antiRaidAutoDisableMinutes ?? '?'} min)`}`
-              : 'Inactif',
+              ? (config.raidModeManual ? m.arx_raid_active_manual() : m.arx_raid_active_auto({ minutes: config.antiRaidAutoDisableMinutes ?? '?' }))
+              : m.arx_raid_inactive(),
             run: () => setRaidMode(!config.raidModeActive, authStore.selectedGuildId),
-            confirm: config.raidModeActive ? undefined : 'Activer le mode raid appliquera immédiatement l\'action configurée à toutes les arrivées.',
+            confirm: config.raidModeActive ? undefined : m.arx_raid_confirm(),
           },
           {
             id: 'joinlock',
-            label: 'Verrou des arrivées',
+            label: m.arx_join_lock(),
             active: Boolean(config.joinLockEnabled),
-            help: config.joinLockEnabled ? 'Les invitations sont suspendues' : 'Les arrivées sont ouvertes',
+            help: config.joinLockEnabled ? m.arx_join_lock_on() : m.arx_join_lock_off(),
             run: () => setJoinLock(!config.joinLockEnabled, undefined, authStore.selectedGuildId),
-            confirm: config.joinLockEnabled ? undefined : 'Plus personne ne pourra rejoindre le serveur.',
+            confirm: config.joinLockEnabled ? undefined : m.arx_join_lock_confirm(),
           },
           {
             id: 'dmlock',
-            label: 'Verrou des MP',
+            label: m.arx_dm_lock(),
             active: Boolean(config.dmLockEnabled),
-            help: config.dmLockEnabled ? 'Les MP entre membres sont suspendus' : 'Les MP sont ouverts',
+            help: config.dmLockEnabled ? m.arx_dm_lock_on() : m.arx_dm_lock_off(),
             run: () => setDmLock(!config.dmLockEnabled, undefined, authStore.selectedGuildId),
             confirm: undefined,
           },
           {
             id: 'invite-emergency',
-            label: 'Urgence invitations',
+            label: m.arx_invite_emergency(),
             active: Boolean(config.inviteEmergencyEnabled),
-            help: config.inviteEmergencyEnabled ? 'Toute invitation est supprimée' : 'Création normale',
+            help: config.inviteEmergencyEnabled ? m.arx_invite_emergency_on() : m.arx_invite_emergency_off(),
             run: () => setInviteEmergency(!config.inviteEmergencyEnabled, authStore.selectedGuildId),
-            confirm: config.inviteEmergencyEnabled ? undefined : 'Toutes les invitations existantes seront supprimées, et toute nouvelle invitation le sera aussi.',
+            confirm: config.inviteEmergencyEnabled ? undefined : m.arx_invite_emergency_confirm(),
           },
         ] as control (control.id)}
           <button
@@ -492,7 +484,7 @@
               ? 'border-error/40 bg-error/10 hover:bg-error/15'
               : 'border-outline-variant/30 bg-surface-container-low/40 hover:border-outline-variant/60'}"
             disabled={busyAction !== null}
-            onclick={() => runEmergency(control.id, control.run, `${control.label} : ${control.active ? 'désactivé' : 'activé'}`, control.confirm)}
+            onclick={() => runEmergency(control.id, control.run, control.active ? m.arx_control_off({ label: control.label }) : m.arx_control_on({ label: control.label }), control.confirm)}
           >
             <div class="flex items-center justify-between gap-2">
               <span class="text-body-sm font-medium text-on-surface">{control.label}</span>
@@ -501,7 +493,7 @@
               ></span>
             </div>
             <p class="text-xs mt-1 {control.active ? 'text-error' : 'text-on-surface-variant'}">
-              {busyAction === control.id ? 'Application…' : control.help}
+              {busyAction === control.id ? m.arx_applying() : control.help}
             </p>
           </button>
         {/each}
@@ -510,15 +502,15 @@
       <div class="mt-4 grid grid-cols-3 gap-3 text-center">
         <div class="rounded-lg bg-surface-container/60 px-3 py-2">
           <div class="text-[15px] font-semibold text-on-surface tabular-nums">{reportStats?.pending ?? 0}</div>
-          <div class="text-2xs text-on-surface-variant">signalements en attente</div>
+          <div class="text-2xs text-on-surface-variant">{m.arx_stat_pending_reports()}</div>
         </div>
         <div class="rounded-lg bg-surface-container/60 px-3 py-2">
           <div class="text-[15px] font-semibold text-on-surface tabular-nums">{pendingInvites}</div>
-          <div class="text-2xs text-on-surface-variant">invitations à valider</div>
+          <div class="text-2xs text-on-surface-variant">{m.arx_stat_pending_invites()}</div>
         </div>
         <div class="rounded-lg bg-surface-container/60 px-3 py-2">
           <div class="text-[15px] font-semibold text-on-surface tabular-nums">{scamImageCount}</div>
-          <div class="text-2xs text-on-surface-variant">empreintes d'arnaque</div>
+          <div class="text-2xs text-on-surface-variant">{m.arx_stat_scam_hashes()}</div>
         </div>
       </div>
     </SectionCard>
@@ -526,108 +518,108 @@
 
     {#if activeTab === 'detection'}
       <SectionCard
-        title="Détection de raid"
-        description="Une vague d'arrivées anormale déclenche automatiquement le mode raid."
+        title={m.arx_detection_title()}
+        description={m.arx_detection_desc()}
         icon="ShieldAlert"
       >
         <div class="space-y-3">
-          {@render switchRow('antiRaidEnabled', 'Anti-raid', 'Surveille le rythme des arrivées sur une fenêtre glissante et bascule le serveur en mode raid au-delà du seuil.')}
+          {@render switchRow('antiRaidEnabled', m.nav_security_antiraid(), m.arx_antiraid_help())}
 
           <div class="grid sm:grid-cols-2 gap-3">
-            {@render numberField('antiRaidJoinThreshold', 'Seuil d\'arrivées', 2, 200, 'Nombre d\'arrivées déclenchant le mode raid.')}
-            {@render numberField('antiRaidJoinWindowSec', 'Fenêtre (secondes)', 5, 600, 'Durée sur laquelle les arrivées sont comptées.')}
+            {@render numberField('antiRaidJoinThreshold', m.arx_join_threshold(), 2, 200, m.arx_join_threshold_help())}
+            {@render numberField('antiRaidJoinWindowSec', m.arx_window_seconds(), 5, 600, m.arx_join_window_help())}
           </div>
 
           <label class="block">
-            <span class="text-xs font-medium text-on-surface-variant">Action au déclenchement</span>
+            <span class="text-xs font-medium text-on-surface-variant">{m.arx_trigger_action()}</span>
             <select
               bind:value={config.antiRaidAction}
               class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface"
             >
-              <option value="LOCK">Verrouiller les arrivées</option>
-              <option value="CAPTCHA">Forcer le captcha pour tous les arrivants</option>
-              <option value="KICK">Expulser automatiquement les arrivants</option>
+              <option value="LOCK">{m.arx_action_lock()}</option>
+              <option value="CAPTCHA">{m.arx_action_captcha()}</option>
+              <option value="KICK">{m.arx_action_kick()}</option>
             </select>
             <p class="text-2xs text-on-surface-variant mt-1">
-              « Expulser » est la plus brutale : elle rejette aussi les arrivées légitimes pendant toute la durée du mode raid.
+              {m.arx_action_kick_warning()}
             </p>
           </label>
 
           <div class="grid sm:grid-cols-2 gap-3">
-            {@render channelSelect('antiRaidAlertChannelId', 'Salon d\'alerte', 'Sans salon d\'alerte, le mode raid s\'active sans que personne ne soit prévenu.')}
-            {@render numberField('antiRaidAutoDisableMinutes', 'Levée automatique (minutes)', 1, 1440, 'Durée du mode raid déclenché automatiquement.')}
+            {@render channelSelect('antiRaidAlertChannelId', m.arx_alert_channel(), m.arx_alert_channel_help())}
+            {@render numberField('antiRaidAutoDisableMinutes', m.arx_auto_disable(), 1, 1440, m.arx_auto_disable_help())}
           </div>
         </div>
       </SectionCard>
 
       <SectionCard
-        title="Comptes trop récents"
-        description="Traite à l'arrivée les comptes Discord créés depuis moins longtemps que le seuil."
+        title={m.arx_age_title()}
+        description={m.arx_age_desc()}
         icon="UserX"
       >
         <div class="space-y-3">
-          {@render switchRow('accountAgeGuardEnabled', 'Ancienneté minimale du compte', 'Chaque arrivée est comparée à la date de création du compte Discord. Les bots ne sont jamais concernés.')}
+          {@render switchRow('accountAgeGuardEnabled', m.arx_age_switch(), m.arx_age_switch_help())}
 
           <div class="grid sm:grid-cols-3 gap-3">
-            {@render numberField('accountAgeMinValue', 'Ancienneté minimale', 1, config.accountAgeMinUnit === 'MONTHS' ? 120 : 3650)}
+            {@render numberField('accountAgeMinValue', m.arx_age_min(), 1, config.accountAgeMinUnit === 'MONTHS' ? 120 : 3650)}
             <label class="block">
-              <span class="text-xs font-medium text-on-surface-variant">Unité</span>
+              <span class="text-xs font-medium text-on-surface-variant">{m.arx_unit()}</span>
               <select
                 bind:value={config.accountAgeMinUnit}
                 class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface"
               >
-                <option value="DAYS">Jours</option>
-                <option value="MONTHS">Mois</option>
+                <option value="DAYS">{m.arx_unit_days()}</option>
+                <option value="MONTHS">{m.arx_unit_months()}</option>
               </select>
             </label>
             <label class="block">
-              <span class="text-xs font-medium text-on-surface-variant">Action</span>
+              <span class="text-xs font-medium text-on-surface-variant">{m.arx_action()}</span>
               <select
                 bind:value={config.accountAgeAction}
                 class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface"
               >
-                <option value="ALERT">Signaler uniquement</option>
-                <option value="KICK">Expulser</option>
-                <option value="JAIL">Quarantaine jusqu'à l'âge requis</option>
-                <option value="TEMPBAN">Bannir jusqu'à l'âge requis</option>
-                <option value="BAN">Bannir définitivement</option>
+                <option value="ALERT">{m.arx_age_action_alert()}</option>
+                <option value="KICK">{m.arx_age_action_kick()}</option>
+                <option value="JAIL">{m.arx_age_action_jail()}</option>
+                <option value="TEMPBAN">{m.arx_age_action_tempban()}</option>
+                <option value="BAN">{m.arx_age_action_ban()}</option>
               </select>
             </label>
           </div>
 
           {#if (config.accountAgeMinUnit === 'MONTHS' ? config.accountAgeMinValue * 30 : config.accountAgeMinValue) >= 365}
             <p class="text-2xs text-warning leading-relaxed">
-              Seuil d'un an ou plus : une grande partie des arrivées légitimes sera concernée. Vérifie l'unité.
+              {m.arx_age_threshold_warning()}
             </p>
           {/if}
 
           {#if config.accountAgeAction === 'JAIL'}
             <p class="text-2xs text-on-surface-variant leading-relaxed">
-              Le compte entre sans rien voir (rôle Jail) et sort de quarantaine tout seul à la date où il atteint l'âge requis. Il est prévenu en MP de cette date.{#if !config.jailRoleId} Aucun rôle Jail configuré : ce sera un bannissement jusqu'à la même date.{/if}
+              {m.arx_age_jail_hint()}{#if !config.jailRoleId} {m.arx_age_jail_no_role()}{/if}
             </p>
           {/if}
 
           {#if config.accountAgeAction === 'BAN'}
             <p class="text-2xs text-error/90 leading-relaxed">
-              Le bannissement est définitif : le membre ne pourra plus revenir, même une fois son compte assez ancien, sauf déban manuel suivi d'une exemption ci-dessous.
+              {m.arx_age_ban_warning()}
             </p>
           {/if}
 
           <div class="grid sm:grid-cols-2 gap-3">
-            {@render channelSelect('accountAgeAlertChannelId', 'Salon d\'alerte', 'Chaque compte refoulé ou signalé y est publié.')}
+            {@render channelSelect('accountAgeAlertChannelId', m.arx_alert_channel(), m.arx_age_alert_help())}
             <label class="block">
-              <span class="text-xs font-medium text-on-surface-variant">Message envoyé en MP</span>
+              <span class="text-xs font-medium text-on-surface-variant">{m.arx_dm_message()}</span>
               <textarea
                 rows="2"
                 bind:value={config.accountAgeMessage}
                 class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface resize-y"
               ></textarea>
-              <p class="text-2xs text-on-surface-variant mt-1">Envoyé avant l'expulsion ou le bannissement.</p>
+              <p class="text-2xs text-on-surface-variant mt-1">{m.arx_dm_message_help()}</p>
             </label>
           </div>
 
           <label class="block">
-            <span class="text-xs font-medium text-on-surface-variant">Membres exemptés (identifiants)</span>
+            <span class="text-xs font-medium text-on-surface-variant">{m.arx_age_whitelist()}</span>
             <textarea
               rows="2"
               value={(config.accountAgeWhitelist ?? []).join('\n')}
@@ -635,37 +627,37 @@
               placeholder="123456789012345678"
               class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface font-mono resize-y"
             ></textarea>
-            <p class="text-2xs text-on-surface-variant mt-1">Un identifiant par ligne. Permet de laisser entrer un compte récent légitime.</p>
+            <p class="text-2xs text-on-surface-variant mt-1">{m.arx_age_whitelist_help()}</p>
           </label>
         </div>
       </SectionCard>
 
       <SectionCard
-        title="Rôles rendus au retour"
-        description="Un membre qui quitte puis revient retrouve les rôles qu'il avait au départ."
+        title={m.arx_persist_title()}
+        description={m.arx_persist_desc()}
         icon="UserPlus"
       >
         <div class="space-y-3">
-          {@render switchRow('rolePersistEnabled', 'Rôles persistants', 'Les rôles sont mémorisés au départ et rendus à l\'arrivée, après le captcha s\'il est actif. Les rôles de modération ou d\'administration ne sont rendus que si l\'option ci-dessous est active ; ceux gérés par une intégration, ceux placés au-dessus du bot et ceux du captcha ou de la vérification ne le sont jamais.')}
-          {@render switchRow('rolePersistStaff', 'Rendre aussi les rôles staff et admin', 'Un membre du staff qui revient retrouve ses rôles à permissions (donc son accès à la configuration) et son entrée dans l\'annuaire du staff. Ignoré pour un membre suspendu ou blacklisté.')}
+          {@render switchRow('rolePersistEnabled', m.arx_persist_switch(), m.arx_persist_switch_help())}
+          {@render switchRow('rolePersistStaff', m.arx_persist_staff(), m.arx_persist_staff_help())}
 
           <div class="grid sm:grid-cols-2 gap-3">
             <label class="block">
-              <span class="text-xs font-medium text-on-surface-variant">Rôles concernés</span>
+              <span class="text-xs font-medium text-on-surface-variant">{m.arx_persist_mode()}</span>
               <select
                 bind:value={config.rolePersistMode}
                 class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface"
               >
-                <option value="ALL">Tous, sauf ceux sélectionnés</option>
-                <option value="LIST">Seulement ceux sélectionnés</option>
+                <option value="ALL">{m.arx_persist_mode_all()}</option>
+                <option value="LIST">{m.arx_persist_mode_list()}</option>
               </select>
             </label>
-            {@render numberField('rolePersistMaxDays', 'Durée de conservation (jours)', 1, 365, 'Au-delà, le membre revient sans ses rôles.')}
+            {@render numberField('rolePersistMaxDays', m.arx_persist_days(), 1, 365, m.arx_persist_days_help())}
           </div>
 
           <div>
             <p class="text-xs font-medium text-on-surface-variant mb-2">
-              {config.rolePersistMode === 'LIST' ? 'Rôles rendus' : 'Rôles jamais rendus'}
+              {config.rolePersistMode === 'LIST' ? m.arx_persist_restored() : m.arx_persist_never()}
             </p>
             <div class="flex flex-wrap gap-1.5">
               {#each roles as role (role.id)}
@@ -685,17 +677,17 @@
 
           {#if config.rolePersistMode === 'LIST' && (config.rolePersistRoleIds ?? []).length === 0}
             <p class="text-2xs text-warning leading-relaxed">
-              Aucun rôle sélectionné : personne ne retrouvera de rôle à son retour.
+              {m.arx_persist_empty_warning()}
             </p>
           {/if}
         </div>
       </SectionCard>
 
-      <SectionCard title="Verrou des arrivées" description="Comportement quand le verrou est actif." icon="Lock">
+      <SectionCard title={m.arx_join_lock()} description={m.arx_join_lock_desc()} icon="Lock">
         <div class="space-y-3">
-          {@render switchRow('joinLockKick', 'Expulser les arrivées malgré le verrou', 'La suspension des invitations par Discord n\'est pas absolue : ce filet expulse les membres qui passent quand même.')}
+          {@render switchRow('joinLockKick', m.arx_join_lock_kick(), m.arx_join_lock_kick_help())}
           <label class="block">
-            <span class="text-xs font-medium text-on-surface-variant">Message envoyé en MP</span>
+            <span class="text-xs font-medium text-on-surface-variant">{m.arx_dm_message()}</span>
             <textarea
               rows="2"
               bind:value={config.joinLockMessage}
@@ -708,36 +700,36 @@
 
     {#if activeTab === 'captcha'}
       <SectionCard
-        title="Captcha des nouveaux membres"
-        description="Filtre les comptes automatisés à l'entrée."
+        title={m.arx_captcha_title()}
+        description={m.arx_captcha_desc()}
         icon="UserCheck"
       >
         <CaptchaFields bind:config />
         <div class="grid sm:grid-cols-2 gap-3 mt-4">
           <label class="block">
-            <span class="text-xs font-medium text-on-surface-variant">Déclenchement</span>
+            <span class="text-xs font-medium text-on-surface-variant">{m.arx_captcha_trigger()}</span>
             <select
               bind:value={config.captchaTrigger}
               class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface"
             >
-              <option value="ALWAYS">En permanence : chaque arrivée</option>
-              <option value="AUTO">Automatique : pendant un raid ou une alerte Shield</option>
-              <option value="SMART">Intelligent : automatique + comptes au profil suspect</option>
+              <option value="ALWAYS">{m.arx_captcha_always()}</option>
+              <option value="AUTO">{m.arx_captcha_auto()}</option>
+              <option value="SMART">{m.arx_captcha_smart()}</option>
             </select>
             <p class="text-2xs text-on-surface-variant mt-1">
               {#if config.captchaTrigger === 'SMART'}
-                Suspect : compte très récent, avatar par défaut, pseudo généré, signalé spammeur ou mis en quarantaine par Discord. Un membre exempté par l'équipe n'est jamais suspect.
+                {m.arx_captcha_smart_help()}
               {:else if config.captchaTrigger === 'AUTO'}
-                Hors raid, les arrivants entrent directement. À partir de Shield 3, tout le monde passe le captcha.
+                {m.arx_captcha_auto_help()}
               {:else}
-                Chaque arrivant passe le captcha, raid ou pas.
+                {m.arx_captcha_always_help()}
               {/if}
             </p>
           </label>
           <div class="flex items-start justify-between gap-4 rounded-xl border border-outline-variant/30 px-4 py-3">
             <div class="min-w-0">
-              <p class="text-body-sm font-medium text-on-surface">Captcha à l'image du serveur</p>
-              <p class="text-xs text-on-surface-variant mt-1 leading-relaxed">L'icône du serveur est incrustée dans l'image du captcha, et ses couleurs reprises.</p>
+              <p class="text-body-sm font-medium text-on-surface">{m.arx_captcha_branding()}</p>
+              <p class="text-xs text-on-surface-variant mt-1 leading-relaxed">{m.arx_captcha_branding_help()}</p>
             </div>
             <ToggleSwitch checked={config.captchaUseServerIcon !== false} onToggle={(v) => (config.captchaUseServerIcon = v)} />
           </div>
@@ -747,47 +739,47 @@
 
     {#if activeTab === 'scams'}
       <SectionCard
-        title="Filtre anti-arnaque"
-        description="Bloque les liens de phishing (faux Nitro, faux Steam), les faux giveaways crypto/casino et les faux recrutements « revenu facile ». Les images d'arnaque connues relèvent de l'onglet Kotbo Vision."
+        title={m.arx_scam_title()}
+        description={m.arx_scam_desc()}
         icon="Fishing"
       >
         {#snippet actions()}
           <!-- Le simulateur vit dans les filtres AutoMod : il rejoue l'analyse
                de texte et de domaines sur les messages passés. -->
-          <Button size="sm" variant="ghost" icon="history" href="/security/filters/simulator?rule=scam">Tester sur l'historique</Button>
+          <Button size="sm" variant="ghost" icon="history" href="/security/filters/simulator?rule=scam">{m.arx_scam_simulate()}</Button>
         {/snippet}
         <div class="space-y-3">
-          {@render switchRow('scamFilterEnabled', 'Filtre anti-arnaque', 'Analyse les domaines et les combinaisons de texte typiques des campagnes de phishing.')}
-          {@render switchRow('scamQrFilterEnabled', 'Filtre de codes QR', 'Le phishing par QR de connexion Discord ne contient aucun lien : aucun filtre de domaine ne peut l\'attraper. Les images porteuses d\'un code QR envoyées par un compte sans historique sont bloquées.')}
+          {@render switchRow('scamFilterEnabled', m.arx_scam_title(), m.arx_scam_switch_help())}
+          {@render switchRow('scamQrFilterEnabled', m.arx_qr_switch(), m.arx_qr_switch_help())}
 
-          {@render switchRow('scamOcrEnabled', 'Lecture du texte des images', 'Lit le texte des images postées par un compte sans historique (lecture locale, aucune image n\'est envoyée à un tiers) et le compare aux domaines et textes d\'arnaque connus. Rattrape les captures photographiées ou recadrées que la comparaison d\'empreintes ne reconnaît pas. Consomme du processeur : à activer si le serveur est visé par ces campagnes.')}
+          {@render switchRow('scamOcrEnabled', m.arx_ocr_switch(), m.arx_ocr_switch_help())}
 
           {#if config.scamQrFilterEnabled || config.scamOcrEnabled}
             <div class="rounded-xl border border-outline-variant/30 p-3">
-              {@render numberField('scamQrTrustedMessages', 'Messages avant d\'être considéré comme installé', 0, 10000, 'Au-delà, le membre n\'est plus concerné par le filtre de codes QR ni par la lecture du texte des images : partager un QR wifi ou 2FA est légitime.')}
+              {@render numberField('scamQrTrustedMessages', m.arx_qr_trusted(), 0, 10000, m.arx_qr_trusted_help())}
             </div>
           {/if}
 
           <div class="grid sm:grid-cols-3 gap-3">
             <label class="block">
-              <span class="text-xs font-medium text-on-surface-variant">Action</span>
+              <span class="text-xs font-medium text-on-surface-variant">{m.arx_action()}</span>
               <select
                 bind:value={config.scamFilterAction}
                 class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface"
               >
-                <option value="DELETE">Supprimer</option>
-                <option value="DELETE_AND_WARN">Supprimer et avertir</option>
-                <option value="DELETE_AND_TIMEOUT">Supprimer et exclure</option>
-                <option value="DELETE_AND_BAN">Supprimer et bannir</option>
+                <option value="DELETE">{m.common_delete()}</option>
+                <option value="DELETE_AND_WARN">{m.arx_scam_delete_warn()}</option>
+                <option value="DELETE_AND_TIMEOUT">{m.arx_scam_delete_timeout()}</option>
+                <option value="DELETE_AND_BAN">{m.arx_scam_delete_ban()}</option>
               </select>
             </label>
-            {@render numberField('scamFilterTimeoutMin', 'Exclusion (minutes)', 1, 40320)}
-            {@render channelSelect('scamFilterAlertChannelId', 'Salon d\'alerte')}
+            {@render numberField('scamFilterTimeoutMin', m.arx_scam_timeout(), 1, 40320)}
+            {@render channelSelect('scamFilterAlertChannelId', m.arx_alert_channel())}
           </div>
 
           <div class="grid sm:grid-cols-2 gap-3">
             <label class="block">
-              <span class="text-xs font-medium text-on-surface-variant">Domaines bloqués supplémentaires</span>
+              <span class="text-xs font-medium text-on-surface-variant">{m.arx_scam_extra_domains()}</span>
               <textarea
                 rows="3"
                 value={(config.scamFilterCustomDomains ?? []).join('\n')}
@@ -797,7 +789,7 @@
               ></textarea>
             </label>
             <label class="block">
-              <span class="text-xs font-medium text-on-surface-variant">Domaines exemptés</span>
+              <span class="text-xs font-medium text-on-surface-variant">{m.arx_scam_whitelist()}</span>
               <textarea
                 rows="3"
                 value={(config.scamFilterWhitelist ?? []).join('\n')}
@@ -811,27 +803,27 @@
       </SectionCard>
 
       <SectionCard
-        title="Rôle de tag"
-        description="Récompense les membres qui arborent le tag du serveur sur leur profil."
+        title={m.arx_tag_role()}
+        description={m.arx_tag_desc()}
         icon="Tag"
       >
         <div class="space-y-3">
-          {@render switchRow('tagRoleEnabled', 'Rôle de tag', 'Le rôle est attribué automatiquement dès qu\'un membre affiche le tag du serveur, et retiré dès qu\'il l\'enlève.')}
-          {@render roleSelect('tagRoleId', 'Rôle attribué')}
+          {@render switchRow('tagRoleEnabled', m.arx_tag_role(), m.arx_tag_help())}
+          {@render roleSelect('tagRoleId', m.arx_tag_role_given())}
         </div>
       </SectionCard>
 
       <SectionCard
-        title="Signalements communautaires"
-        description="Donne aux membres un canal structuré pour remonter les abus."
+        title={m.arx_reports_title()}
+        description={m.arx_reports_desc()}
         icon="Flag"
       >
         <div class="space-y-3">
-          {@render switchRow('reportsEnabled', 'Signalements', 'Les membres peuvent signaler un message ou un membre vers un salon staff.')}
-          {@render switchRow('reportsAnonymous', 'Signalements anonymes', 'Masque l\'auteur du signalement dans l\'embed staff. Réduit la peur des représailles, au prix de la traçabilité des abus de signalement.')}
+          {@render switchRow('reportsEnabled', m.arx_reports_switch(), m.arx_reports_help())}
+          {@render switchRow('reportsAnonymous', m.arx_reports_anonymous(), m.arx_reports_anonymous_help())}
           <div class="grid sm:grid-cols-2 gap-3">
-            {@render channelSelect('reportsChannelId', 'Salon des signalements')}
-            {@render numberField('reportsCooldownSec', 'Délai entre deux signalements (s)', 0, 3600, 'Anti-abus.')}
+            {@render channelSelect('reportsChannelId', m.arx_reports_channel())}
+            {@render numberField('reportsCooldownSec', m.arx_reports_cooldown(), 0, 3600, m.arx_reports_cooldown_help())}
           </div>
         </div>
       </SectionCard>
@@ -840,22 +832,22 @@
     {#if activeTab === 'invites'}
       <SectionCard
         title="Invite Guard"
-        description="Contrôle qui ouvre le serveur, et comment."
+        description={m.arx_invite_desc()}
         icon="Link"
       >
         <div class="space-y-3">
-          {@render switchRow('inviteGuardEnabled', 'Invite Guard', 'Surveille et journalise les créations d\'invitations.')}
-          {@render switchRow('inviteRequireUnitary', 'Exiger des invitations unitaires', 'Toute invitation à usages multiples ou illimités est supprimée. C\'est ce qui rend la source d\'un raid identifiable après coup.')}
-          {@render switchRow('inviteValidationEnabled', 'Validation par le staff', 'Chaque invitation est supprimée puis recréée seulement après approbation.')}
+          {@render switchRow('inviteGuardEnabled', 'Invite Guard', m.arx_invite_guard_help())}
+          {@render switchRow('inviteRequireUnitary', m.arx_invite_unitary(), m.arx_invite_unitary_help())}
+          {@render switchRow('inviteValidationEnabled', m.arx_invite_validation(), m.arx_invite_validation_help())}
 
           <div class="grid sm:grid-cols-3 gap-3">
-            {@render numberField('inviteSpamThreshold', 'Seuil de création', 1, 100, 'Alerte au-delà de N créations.')}
-            {@render numberField('inviteSpamWindowSec', 'Fenêtre (secondes)', 5, 3600)}
-            {@render channelSelect('inviteAlertChannelId', 'Salon d\'alerte')}
+            {@render numberField('inviteSpamThreshold', m.arx_invite_threshold(), 1, 100, m.arx_invite_threshold_help())}
+            {@render numberField('inviteSpamWindowSec', m.arx_window_seconds(), 5, 3600)}
+            {@render channelSelect('inviteAlertChannelId', m.arx_alert_channel())}
           </div>
 
           <div>
-            <p class="text-xs font-medium text-on-surface-variant mb-2">Rôles exemptés</p>
+            <p class="text-xs font-medium text-on-surface-variant mb-2">{m.arx_invite_bypass_roles()}</p>
             <div class="flex flex-wrap gap-1.5">
               {#each roles as role (role.id)}
                 <button
@@ -876,13 +868,13 @@
     {/if}
 
     {#if activeTab === 'queues'}
-      <SectionCard title="Signalements en attente" icon="Flag">
+      <SectionCard title={m.arx_queue_reports_title()} icon="Flag">
         {#snippet actions()}
           <RefreshButton onclick={loadQueues} iconOnly />
         {/snippet}
 
         {#if reports.length === 0}
-          <EmptyState icon="ShieldCheck" title="Aucun signalement en attente" description="La file est vide." reason="all-clear" />
+          <EmptyState icon="ShieldCheck" title={m.arx_queue_reports_empty()} description={m.arx_queue_empty_desc()} reason="all-clear" />
         {:else}
           <div class="space-y-2.5">
             {#each reports as report (report.id)}
@@ -890,7 +882,7 @@
                 <div class="flex items-start justify-between gap-3">
                   <div class="min-w-0 flex-1">
                     <p class="text-body-sm text-on-surface">
-                      <code class="text-2xs">{report.reporterId}</code> signale
+                      <code class="text-2xs">{report.reporterId}</code> {m.arx_report_reports()}
                       <code class="text-2xs">{report.targetId}</code>
                       <span class="text-on-surface-variant ml-1">· {formatRelative(report.createdAt)}</span>
                     </p>
@@ -901,7 +893,7 @@
                       </p>
                     {/if}
                     {#if report.channelId}
-                      <p class="mt-1 text-2xs text-on-surface-variant">dans #{channelName(report.channelId)}</p>
+                      <p class="mt-1 text-2xs text-on-surface-variant">{m.arx_in_channel({ channel: channelName(report.channelId) })}</p>
                     {/if}
                   </div>
                   <div class="flex flex-col gap-1.5 shrink-0">
@@ -911,7 +903,7 @@
                       disabled={busyAction !== null}
                       onclick={() => decideReport(report, true)}
                     >
-                      Traiter
+                      {m.arx_report_resolve()}
                     </button>
                     <button
                       type="button"
@@ -919,7 +911,7 @@
                       disabled={busyAction !== null}
                       onclick={() => decideReport(report, false)}
                     >
-                      Rejeter
+                      {m.arx_reject()}
                     </button>
                   </div>
                 </div>
@@ -929,20 +921,20 @@
         {/if}
       </SectionCard>
 
-      <SectionCard title="Invitations à valider" icon="Link">
+      <SectionCard title={m.arx_queue_invites_title()} icon="Link">
         {#if inviteRequests.length === 0}
-          <EmptyState icon="ShieldCheck" title="Aucune demande" description="Aucune invitation en attente de validation." reason="all-clear" />
+          <EmptyState icon="ShieldCheck" title={m.arx_queue_invites_empty()} description={m.arx_queue_invites_empty_desc()} reason="all-clear" />
         {:else}
           <div class="space-y-2.5">
             {#each inviteRequests as request (request.id)}
               <article class="rounded-xl border border-outline-variant/30 bg-surface-container-low/40 p-3.5 flex items-start justify-between gap-3">
                 <div class="min-w-0">
                   <p class="text-body-sm text-on-surface">
-                    <code class="text-2xs">{request.creatorId}</code> pour #{channelName(request.channelId)}
+                    <code class="text-2xs">{request.creatorId}</code> {m.arx_for_channel({ channel: channelName(request.channelId) })}
                   </p>
                   <p class="text-xs text-on-surface-variant mt-0.5">
-                    {request.maxUses === 0 ? 'usages illimités' : `${request.maxUses} usage(s)`} ·
-                    {request.maxAgeSec === 0 ? 'sans expiration' : `${Math.round(request.maxAgeSec / 3600)} h`} ·
+                    {request.maxUses === 0 ? m.arx_uses_unlimited() : m.arx_uses_count({ count: request.maxUses })} ·
+                    {request.maxAgeSec === 0 ? m.arx_no_expiry() : m.arx_hours({ count: Math.round(request.maxAgeSec / 3600) })} ·
                     {formatRelative(request.createdAt)}
                   </p>
                 </div>
@@ -953,7 +945,7 @@
                     disabled={busyAction !== null}
                     onclick={() => decideInvite(request, true)}
                   >
-                    Approuver
+                    {m.arx_approve()}
                   </button>
                   <button
                     type="button"
@@ -961,7 +953,7 @@
                     disabled={busyAction !== null}
                     onclick={() => decideInvite(request, false)}
                   >
-                    Rejeter
+                    {m.arx_reject()}
                   </button>
                 </div>
               </article>
@@ -971,13 +963,13 @@
       </SectionCard>
 
       <SectionCard
-        title="Lignage des invitations"
-        description="D'où vient un membre, et qui est entré par la même porte. Quand un raideur est démasqué, ses invités le sont rarement seuls."
+        title={m.arx_lineage_title()}
+        description={m.arx_lineage_desc()}
         icon="GitBranch"
       >
         <div class="flex flex-wrap items-end gap-2">
           <label class="block flex-1 min-w-55">
-            <span class="text-xs font-medium text-on-surface-variant">Identifiant du membre</span>
+            <span class="text-xs font-medium text-on-surface-variant">{m.arx_lineage_user_id()}</span>
             <input
               type="text"
               bind:value={lineageUserId}
@@ -992,7 +984,7 @@
             use:explainDisabled={(!lineageUserId.trim()) ? m.common_reason_fill_field() : ''}
             onclick={loadLineage}
           >
-            {lineageLoading ? 'Analyse…' : 'Analyser'}
+            {lineageLoading ? m.arx_analyzing() : m.arx_analyze()}
           </button>
         </div>
 
@@ -1001,29 +993,29 @@
             <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
               <div class="rounded-lg bg-surface-container/60 px-2 py-2">
                 <div class="text-[15px] font-semibold text-on-surface tabular-nums">{lineage.chain.length}</div>
-                <div class="text-2xs text-on-surface-variant">niveaux de parrainage</div>
+                <div class="text-2xs text-on-surface-variant">{m.arx_lineage_levels()}</div>
               </div>
               <div class="rounded-lg bg-surface-container/60 px-2 py-2">
                 <div class="text-[15px] font-semibold text-on-surface tabular-nums">{lineage.directInvites}</div>
-                <div class="text-2xs text-on-surface-variant">invités directs</div>
+                <div class="text-2xs text-on-surface-variant">{m.arx_lineage_direct()}</div>
               </div>
               <div class="rounded-lg bg-surface-container/60 px-2 py-2">
                 <div class="text-[15px] font-semibold text-on-surface tabular-nums">{lineage.totalDescendants}</div>
-                <div class="text-2xs text-on-surface-variant">descendance totale</div>
+                <div class="text-2xs text-on-surface-variant">{m.arx_lineage_total()}</div>
               </div>
               <div class="rounded-lg px-2 py-2 {lineage.taintedDescendants > 0 ? 'bg-error/10' : 'bg-surface-container/60'}">
                 <div class="text-[15px] font-semibold tabular-nums {lineage.taintedDescendants > 0 ? 'text-error' : 'text-on-surface'}">
                   {lineage.taintedDescendants}
                 </div>
-                <div class="text-2xs text-on-surface-variant">déjà sanctionnés</div>
+                <div class="text-2xs text-on-surface-variant">{m.arx_lineage_tainted()}</div>
               </div>
             </div>
 
             {#if lineage.trust.penalty > 0}
               <div class="rounded-lg border border-warning/30 bg-warning/5 px-3 py-2.5">
                 <p class="text-xs text-on-surface-variant leading-relaxed">
-                  Pénalité de confiance héritée : <span class="font-semibold text-warning">−{lineage.trust.penalty}</span>.
-                  Parrain problématique au degré {lineage.trust.depth} :
+                  {m.arx_penalty_label()} <span class="font-semibold text-warning">−{lineage.trust.penalty}</span>.
+                  {m.arx_penalty_sponsor({ depth: lineage.trust.depth })}
                   <code class="text-2xs">{lineage.trust.taintedBy}</code>.
                 </p>
               </div>
@@ -1031,7 +1023,7 @@
 
             {#if lineage.chain.length > 0}
               <div>
-                <p class="text-xs text-on-surface-variant mb-1">Chaîne de parrainage</p>
+                <p class="text-xs text-on-surface-variant mb-1">{m.arx_lineage_chain()}</p>
                 <div class="flex flex-wrap items-center gap-1">
                   {#each [...lineage.chain].reverse() as ancestor}
                     <code class="text-2xs px-1.5 py-0.5 rounded bg-surface-container text-on-surface-variant">{ancestor}</code>
@@ -1050,11 +1042,11 @@
                   disabled={busyAction !== null}
                   onclick={() => runQuarantine(true)}
                 >
-                  Simuler la quarantaine
+                  {m.arx_quarantine_simulate()}
                 </button>
                 {#if quarantinePreview !== null}
                   <span class="text-xs text-on-surface-variant">
-                    {quarantinePreview} membre(s) seraient mis en quarantaine.
+                    {m.arx_quarantine_preview({ count: quarantinePreview })}
                   </span>
                   <button
                     type="button"
@@ -1062,13 +1054,13 @@
                     disabled={busyAction !== null || quarantinePreview === 0}
                     onclick={() => runQuarantine(false)}
                   >
-                    Appliquer
+                    {m.arx_apply()}
                   </button>
                 {/if}
               </div>
               <p class="text-2xs text-on-surface-variant">
-                La quarantaine pose un rôle restrictif ou une exclusion de 24 h - jamais un bannissement.
-                Le staff n'est jamais touché. La décision définitive reste humaine.
+                {m.arx_quarantine_note1()}
+                {m.arx_quarantine_note2()}
               </p>
             {/if}
           </div>
@@ -1080,14 +1072,14 @@
     {#if activeTab === 'vision'}
       <SectionCard
         title="Kotbo Vision"
-        description="Compare chaque image postée (pièces jointes, embeds, messages transférés, stickers) aux images d'arnaque connues : catalogue global, catalogue du serveur et tes listes. Une variante recadrée, retournée, recompressée ou prise en capture reste reconnue."
+        description={m.arx_vision_desc()}
         icon="ImageOff"
       >
         <div class="space-y-3">
-          {@render switchRow('visionEnabled', 'Kotbo Vision', "Actif par défaut. Correspondance certaine : message supprimé et auteur sanctionné. Correspondance incertaine : message supprimé par précaution, sans sanction, et envoyé en vérification.")}
+          {@render switchRow('visionEnabled', 'Kotbo Vision', m.arx_vision_help())}
           <div class="grid sm:grid-cols-3 gap-3">
             <label class="block">
-              <span class="text-xs font-medium text-on-surface-variant">Sanction</span>
+              <span class="text-xs font-medium text-on-surface-variant">{m.arx_vision_sanction()}</span>
               <select
                 bind:value={config.visionSanction}
                 class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface"
@@ -1099,7 +1091,7 @@
             </label>
             {#if ['TIMEOUT', 'BAN', 'JAIL'].includes(config.visionSanction)}
               <label class="block">
-                <span class="text-xs font-medium text-on-surface-variant">Durée</span>
+                <span class="text-xs font-medium text-on-surface-variant">{m.arx_vision_duration()}</span>
                 <select
                   bind:value={config.visionDurationMin}
                   class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface"
@@ -1112,12 +1104,12 @@
                 </select>
               </label>
             {/if}
-            {@render channelSelect('visionReviewChannelId', 'Salon de vérification', "Pour le catalogue global et celui du serveur. Sans salon, les correspondances incertaines restent silencieuses.")}
+            {@render channelSelect('visionReviewChannelId', m.arx_vision_review_channel(), m.arx_vision_review_help())}
           </div>
           {#if config.visionSanction === 'JAIL' && !config.jailRoleId}
-            <Callout variant="warning">Aucun rôle Jail configuré : la quarantaine sera remplacée par un timeout. Configure-le dans l'onglet Quarantaine.</Callout>
+            <Callout variant="warning">{m.arx_vision_no_jail()}</Callout>
           {/if}
-          {@render switchRow('visionNotifyMember', 'Prévenir le membre en MP', "Explique pourquoi le message a disparu et rappelle quoi faire si le compte a été piraté (mot de passe, double authentification).")}
+          {@render switchRow('visionNotifyMember', m.arx_vision_notify(), m.arx_vision_notify_help())}
         </div>
       </SectionCard>
 
@@ -1126,31 +1118,31 @@
 
     {#if activeTab === 'jail'}
       <SectionCard
-        title="Quarantaine (Jail)"
-        description="Le membre reste sur le serveur mais n'y voit plus rien. Ses rôles lui sont retirés puis rendus à la levée. Sert à /sanction jail, à Kotbo Vision, au honeypot et aux arrivées suspectes."
+        title={m.arx_jail_title()}
+        description={m.arx_jail_desc()}
         icon="Lock"
       >
         {#snippet actions()}
           <Button size="sm" variant="secondary" icon="Wrench" disabled={busyAction !== null} onclick={() => setupJail(!config.jailChannelId)}>
-            {config.jailRoleId ? 'Réparer le rôle' : 'Créer le rôle Jail'}
+            {config.jailRoleId ? m.arx_jail_repair() : m.arx_jail_create()}
           </Button>
         {/snippet}
         <div class="space-y-3">
           {#if !config.jailRoleId}
-            <Callout variant="info">Crée le rôle en un clic : Kotbo le masque sur tous les salons (y compris ceux créés plus tard) et ouvre un salon #quarantaine où le staff peut échanger avec les membres concernés.</Callout>
+            <Callout variant="info">{m.arx_jail_create_hint()}</Callout>
           {/if}
           <div class="grid sm:grid-cols-2 gap-3">
-            {@render roleSelect('jailRoleId', 'Rôle Jail', "Refusé sur tous les salons. « Réparer le rôle » repose le refus là où il manque.")}
-            {@render channelSelect('jailChannelId', 'Salon de quarantaine', "Le seul salon visible en quarantaine. Facultatif.")}
+            {@render roleSelect('jailRoleId', m.arx_jail_role(), m.arx_jail_role_help())}
+            {@render channelSelect('jailChannelId', m.arx_jail_channel(), m.arx_jail_channel_help())}
           </div>
-          {@render switchRow('jailStripRoles', 'Retirer les rôles du membre', "Sans ça, un rôle qui ouvre un salon annulerait la quarantaine. Les rôles sont rendus à la levée.")}
-          {@render switchRow('discordQuarantineSyncEnabled', 'Synchroniser la quarantaine AutoMod Discord', "Quand l'AutoMod natif de Discord met un profil en quarantaine (pseudo, bio ou tag de serveur bloqué), Kotbo applique aussi la quarantaine Jail et la lève dès que le membre corrige son profil.")}
+          {@render switchRow('jailStripRoles', m.arx_jail_strip(), m.arx_jail_strip_help())}
+          {@render switchRow('discordQuarantineSyncEnabled', m.arx_jail_discord_sync(), m.arx_jail_discord_sync_help())}
         </div>
       </SectionCard>
 
-      <SectionCard title="Membres en quarantaine" description="Levée automatique à la date indiquée. Une quarantaine permanente se lève avec /sanction unjail." icon="Users">
+      <SectionCard title={m.arx_jailed_title()} description={m.arx_jailed_desc()} icon="Users">
         {#if jailed.length === 0}
-          <EmptyState icon="CheckCircle" title="Personne en quarantaine" reason="all-clear" />
+          <EmptyState icon="CheckCircle" title={m.arx_jailed_empty()} reason="all-clear" />
         {:else}
           <div class="space-y-1.5">
             {#each jailed as jail (jail.userId)}
@@ -1160,7 +1152,7 @@
                   <p class="text-xs text-on-surface-variant truncate">{JAIL_SOURCES[jail.source] ?? jail.source}{jail.reason ? ` · ${jail.reason}` : ''}</p>
                 </div>
                 <span class="text-xs text-on-surface-variant shrink-0">
-                  {jail.releaseAt ? `jusqu'au ${new Date(jail.releaseAt).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })}` : 'permanente'}
+                  {jail.releaseAt ? m.arx_jail_until({ date: new Date(jail.releaseAt).toLocaleString(dateLocale(), { dateStyle: 'short', timeStyle: 'short' }) }) : m.arx_jail_permanent()}
                 </span>
               </div>
             {/each}
@@ -1172,7 +1164,7 @@
     {#if dirty}
       <div class="sticky bottom-4 z-10">
         <div class="flex items-center justify-between gap-4 rounded-xl border border-primary/40 bg-surface-container-high/95 backdrop-blur px-4 py-3 shadow-lg">
-          <p class="text-body-sm text-on-surface">Modifications non enregistrées</p>
+          <p class="text-body-sm text-on-surface">{m.arx_unsaved()}</p>
           <div class="flex items-center gap-2">
             <button
               type="button"
@@ -1180,7 +1172,7 @@
               onclick={() => (config = { ...original })}
               disabled={saving}
             >
-              Annuler
+              {m.common_cancel()}
             </button>
             <button
               type="button"
@@ -1188,7 +1180,7 @@
               onclick={save}
               disabled={saving}
             >
-              {saving ? 'Enregistrement…' : 'Enregistrer'}
+              {saving ? m.arx_saving() : m.common_save()}
             </button>
           </div>
         </div>

@@ -481,7 +481,7 @@
               <span class="truncate">{s.label}</span>
               {#if s.isNew}<span class="side-link__badge">{m.anx_badge_new()}</span>{/if}
               {#if s.tabs.every((t) => isLocked(t.id))}
-                <span class="side-link__count" title="Offre Plus"><Papicon icon="Lock" size={14} /></span>
+                <span class="side-link__count" title={m.anx_plus_plan()}><Papicon icon="Lock" size={14} /></span>
               {:else if s.tabs.length > 1}<span class="side-link__count">{s.tabs.length}</span>{/if}
             {/if}
           </button>
@@ -519,11 +519,11 @@
 
       {#if isLocked(activeTab)}
         <!-- Rien n'est chargé : le bot refuserait. On dit ce que l'onglet apporte et on montre la démo. -->
-        <Callout variant="info" icon="Lock" title="« {tab.label} » fait partie de l'offre Plus">
-          {section.description} En gratuit, Analytics montre les {FREE_ANALYTICS_DAYS} derniers jours : vue d'ensemble, messages, vocal, carte de chaleur, membres, croissance et modération. Plus ouvre tout l'historique, les filtres et toutes les analyses.
+        <Callout variant="info" icon="Lock" title={m.anx_tab_locked({ tab: tab.label })}>
+          {section.description} {m.anx_free_limit({ days: FREE_ANALYTICS_DAYS })}
           {#snippet actions()}
             <Button href="https://kotbo.fr/demo/analytics/{tab.id}" target="_blank" variant="secondary" size="sm" icon="Eye">Voir un exemple rempli</Button>
-            <Button href="/billing" variant="primary" size="sm" iconRight="ArrowRight">Débloquer avec Plus</Button>
+            <Button href="/billing" variant="primary" size="sm" iconRight="ArrowRight">{m.anx_unlock_plus()}</Button>
           {/snippet}
         </Callout>
       {:else if tab.scope === 'own'}

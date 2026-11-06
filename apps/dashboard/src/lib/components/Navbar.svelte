@@ -74,14 +74,14 @@
       .filter(r => r.name !== '@everyone' && !r.managed)
       .sort((a, b) => b.position - a.position);
 
-    if (sortedRoles.length === 0) return 'Membre';
+    if (sortedRoles.length === 0) return m.wfp_role();
 
     let topRole = sortedRoles[0];
     if (topRole.name === 'Gérant' && sortedRoles.length > 1) {
       topRole = sortedRoles[1];
     }
 
-    return topRole?.name || 'Membre';
+    return topRole?.name || m.wfp_role();
   });
 
   const guildIconUrl = $derived(
@@ -133,7 +133,7 @@
       <button
         onclick={sidebarStore.toggleMobile}
         class="app-navbar__menu flex items-center justify-center w-8 h-8 rounded-md text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors"
-        aria-label="Ouvrir la navigation"
+        aria-label={m.nbx_open_nav()}
         aria-controls="dashboard-sidebar"
         aria-expanded={sidebarStore.mobileOpen}
       >
@@ -165,7 +165,7 @@
           </span>
         {/if}
         <span class="app-navbar__mobile-server-name">
-          {selectedGuild?.name ?? 'Serveur'}
+          {selectedGuild?.name ?? m.sbx_server()}
         </span>
         {#if authStore.guilds.length > 1}
           <Papicon icon="chevron-down" size={12} class="shrink-0" />
@@ -230,7 +230,7 @@
       <button
         onclick={toggleUserMenu}
         class="app-navbar__profile flex items-center gap-2 hover:bg-surface-container p-1 rounded-lg transition-colors group/avatar"
-        aria-label="Ouvrir le menu du profil"
+        aria-label={m.nbx_open_profile()}
         aria-expanded={userMenuOpen}
       >
         <div class="w-8 h-8 shrink-0 rounded-md overflow-hidden ring-1 ring-outline-variant">

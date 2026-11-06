@@ -32,25 +32,26 @@
   import ToggleSwitch from '../ToggleSwitch.svelte';
   import EmptyState from '../EmptyState.svelte';
   import LoadingHint from '../LoadingHint.svelte';
+  import { formatRelative } from '../staff/format';
 
   let { channels = [] }: { channels?: { id: string; name: string }[] } = $props();
 
   const SANCTIONS: { value: VisionSanction; label: string }[] = [
-    { value: 'DELETE', label: 'Supprimer seulement' },
-    { value: 'WARN', label: 'Avertissement' },
+    { value: 'DELETE', label: m.arx_sanction_delete_only() },
+    { value: 'WARN', label: m.arx_sanction_warn() },
     { value: 'TIMEOUT', label: 'Timeout' },
-    { value: 'JAIL', label: 'Quarantaine (Jail)' },
-    { value: 'KICK', label: 'Expulsion' },
+    { value: 'JAIL', label: m.arx_jail_title() },
+    { value: 'KICK', label: m.arx_sanction_kick() },
     { value: 'SOFTBAN', label: 'Softban' },
-    { value: 'BAN', label: 'Bannissement' },
+    { value: 'BAN', label: m.arx_sanction_ban() },
   ];
   const DURATIONS: { value: number | null; label: string }[] = [
     { value: 5, label: '5 minutes' },
-    { value: 60, label: '1 heure' },
-    { value: 1440, label: '1 jour' },
-    { value: 10080, label: '7 jours' },
-    { value: 43200, label: '30 jours' },
-    { value: null, label: 'Permanente' },
+    { value: 60, label: m.arx_duration_1h() },
+    { value: 1440, label: m.arx_duration_1d() },
+    { value: 10080, label: m.arx_duration_7d() },
+    { value: 43200, label: m.arx_duration_30d() },
+    { value: null, label: m.arx_duration_permanent() },
   ];
   /** Le navigateur réduit l'image avant l'envoi : l'empreinte résiste au redimensionnement. */
   const UPLOAD_MAX_SIDE = 1280;
@@ -75,13 +76,6 @@
   function channelName(id: string | null): string {
     if (!id) return '-';
     return channels.find((c) => c.id === id)?.name ?? id;
-  }
-
-  function relative(value: string): string {
-    const minutes = Math.max(1, Math.floor((Date.now() - new Date(value).getTime()) / 60000));
-    if (minutes < 60) return `il y a ${minutes} min`;
-    if (minutes < 1440) return `il y a ${Math.floor(minutes / 60)} h`;
-    return `il y a ${Math.floor(minutes / 1440)} j`;
   }
 
   async function load() {
@@ -140,9 +134,9 @@
 
   async function removeList(list: VisionList) {
     const ok = await confirmDialog.ask({
-      title: `Supprimer la liste « ${list.name} » ?`,
-      description: `Ses ${list.imageCount} image(s) ne seront plus bloquées. C'est définitif.`,
-      confirmLabel: 'Supprimer',
+      title: m.vis_delete_list_title({ name: list.name }),
+      description: m.vis_delete_list_desc({ count: list.imageCount }),
+      confirmLabel: m.common_delete(),
       variant: 'danger',
     });
     if (!ok) return;
@@ -172,7 +166,7 @@
       };
       img.onerror = () => {
         URL.revokeObjectURL(url);
-        reject(new Error('Image illisible'));
+        reject(new Error(m.vis_unreadable()));
       };
       img.src = url;
     });
@@ -248,46 +242,46 @@
 {:else if overview}
   <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
     <div class="rounded-xl border border-outline-variant/30 px-4 py-3">
-      <div class="text-xs text-on-surface-variant">Images bloquées</div>
+      <div class="text-xs text-on-surface-variant">{m.vis_stat_blocked()}</div>
       <div class="text-[15px] font-semibold text-on-surface tabular-nums">{overview.blockedTotal}</div>
     </div>
     <div class="rounded-xl border border-outline-variant/30 px-4 py-3">
-      <div class="text-xs text-on-surface-variant">Catalogue global</div>
+      <div class="text-xs text-on-surface-variant">{m.vis_stat_global()}</div>
       <div class="text-[15px] font-semibold text-on-surface tabular-nums">{overview.globalCatalogCount}</div>
     </div>
     <div class="rounded-xl border border-outline-variant/30 px-4 py-3">
-      <div class="text-xs text-on-surface-variant">Catalogue du serveur</div>
+      <div class="text-xs text-on-surface-variant">{m.vis_server_catalog()}</div>
       <div class="text-[15px] font-semibold text-on-surface tabular-nums">{overview.guildCatalogCount}</div>
     </div>
     <div class="rounded-xl border border-outline-variant/30 px-4 py-3">
-      <div class="text-xs text-on-surface-variant">Listes personnalisées</div>
+      <div class="text-xs text-on-surface-variant">{m.vis_stat_lists()}</div>
       <div class="text-[15px] font-semibold text-on-surface tabular-nums">{overview.lists.length} / {overview.maxLists}</div>
     </div>
   </div>
 
   <SectionCard
-    title="À vérifier"
-    description="Images proches d'une image interdite, sans certitude. Le message a été supprimé par précaution, sans sanction : à toi de trancher."
+    title={m.vis_review_title()}
+    description={m.vis_review_desc()}
     icon="Eye"
   >
     {#if overview.reviews.length === 0}
-      <EmptyState icon="CheckCircle" title="Rien à vérifier" description="Les images incertaines arriveront ici, et dans le salon de vérification s'il est configuré." reason="all-clear" />
+      <EmptyState icon="CheckCircle" title={m.vis_review_empty()} description={m.vis_review_empty_desc()} reason="all-clear" />
     {:else}
       <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {#each overview.reviews as review (review.id)}
           <div class="rounded-xl border border-outline-variant/30 overflow-hidden">
             {#if review.thumb}
-              <img src={review.thumb} alt="À vérifier" class="w-full h-40 object-contain bg-surface-container" />
+              <img src={review.thumb} alt={m.vis_review_alt()} class="w-full h-40 object-contain bg-surface-container" />
             {/if}
             <div class="p-3 space-y-2">
               <p class="text-xs text-on-surface">
-                Proche à <strong>{Math.round(review.score * 100)} %</strong>
-                {#if review.listId}de la liste « {overview.lists.find((l) => l.id === review.listId)?.name ?? '?'} »{/if}
+                {m.vis_close_to()} <strong>{Math.round(review.score * 100)} %</strong>
+                {#if review.listId}{m.vis_from_list({ name: overview.lists.find((l) => l.id === review.listId)?.name ?? '?' })}{/if}
               </p>
-              <p class="text-xs text-on-surface-variant">Auteur <span class="font-mono">{review.authorId}</span> · #{channelName(review.channelId)} · {relative(review.createdAt)}</p>
+              <p class="text-xs text-on-surface-variant">{m.vis_author()} <span class="font-mono">{review.authorId}</span> · #{channelName(review.channelId)} · {formatRelative(review.createdAt)}</p>
               <div class="flex gap-2">
-                <Button size="sm" variant="danger" disabled={busy !== null} onclick={() => decide(review.id, 'confirm')}>Confirmer</Button>
-                <Button size="sm" variant="secondary" disabled={busy !== null} onclick={() => decide(review.id, 'dismiss')}>Écarter</Button>
+                <Button size="sm" variant="danger" disabled={busy !== null} onclick={() => decide(review.id, 'confirm')}>{m.vis_confirm()}</Button>
+                <Button size="sm" variant="secondary" disabled={busy !== null} onclick={() => decide(review.id, 'dismiss')}>{m.vis_dismiss()}</Button>
               </div>
             </div>
           </div>
@@ -297,8 +291,8 @@
   </SectionCard>
 
   <SectionCard
-    title="Listes personnalisées"
-    description="Tes propres images interdites, quel que soit leur contenu. Une liste = un seul type d'image : mélanger des contenus sans rapport fausse la détection des variantes."
+    title={m.vis_stat_lists()}
+    description={m.vis_lists_desc()}
     icon="ImageOff"
   >
     <div class="space-y-2">
@@ -308,10 +302,10 @@
         onclick={() => openList(null)}
       >
         <div class="min-w-0">
-          <p class="text-body-sm font-medium text-on-surface">Catalogue du serveur</p>
-          <p class="text-xs text-on-surface-variant">Images captées par le honeypot, confirmées en vérification ou ajoutées par clic droit.</p>
+          <p class="text-body-sm font-medium text-on-surface">{m.vis_server_catalog()}</p>
+          <p class="text-xs text-on-surface-variant">{m.vis_server_catalog_desc()}</p>
         </div>
-        <span class="text-xs text-on-surface-variant tabular-nums shrink-0">{overview.guildCatalogCount} image(s)</span>
+        <span class="text-xs text-on-surface-variant tabular-nums shrink-0">{m.vis_image_count({ count: overview.guildCatalogCount })}</span>
       </button>
 
       {#each overview.lists as list (list.id)}
@@ -319,36 +313,36 @@
           <div class="flex items-center justify-between gap-3">
             <button type="button" class="min-w-0 text-left" onclick={() => openList(list.id)}>
               <p class="text-body-sm font-medium text-on-surface truncate">{list.name}</p>
-              <p class="text-xs text-on-surface-variant">{list.imageCount} image(s) · vérification : {list.reviewChannelId ? `#${channelName(list.reviewChannelId)}` : 'aucune (les doutes restent silencieux)'}</p>
+              <p class="text-xs text-on-surface-variant">{m.vis_image_count({ count: list.imageCount })} · {list.reviewChannelId ? m.vis_review_in({ channel: channelName(list.reviewChannelId) }) : m.vis_review_none()}</p>
             </button>
             <div class="flex items-center gap-2 shrink-0">
-              <ToggleSwitch checked={list.enabled} disabled={busy !== null} ariaLabel="Activer la liste" onToggle={(v) => patchList(list, { enabled: v })} />
-              <Button size="sm" variant="ghost" icon="Trash2" disabled={busy !== null} onclick={() => removeList(list)}>Supprimer</Button>
+              <ToggleSwitch checked={list.enabled} disabled={busy !== null} ariaLabel={m.vis_enable_list()} onToggle={(v) => patchList(list, { enabled: v })} />
+              <Button size="sm" variant="ghost" icon="Trash2" disabled={busy !== null} onclick={() => removeList(list)}>{m.common_delete()}</Button>
             </div>
           </div>
           {#if openedList === list.id}
             <div class="grid sm:grid-cols-3 gap-3">
               <label class="block">
-                <span class="text-xs font-medium text-on-surface-variant">Salon de vérification</span>
+                <span class="text-xs font-medium text-on-surface-variant">{m.arx_vision_review_channel()}</span>
                 <select
                   value={list.reviewChannelId}
                   onchange={(e) => patchList(list, { reviewChannelId: e.currentTarget.value || null })}
                   class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface"
                 >
-                  <option value="">Aucun</option>
+                  <option value="">{m.common_none()}</option>
                   {#each channels as channel (channel.id)}
                     <option value={channel.id}>#{channel.name}</option>
                   {/each}
                 </select>
               </label>
               <label class="block">
-                <span class="text-xs font-medium text-on-surface-variant">Sanction</span>
+                <span class="text-xs font-medium text-on-surface-variant">{m.arx_vision_sanction()}</span>
                 <select
                   value={list.sanction ?? ''}
                   onchange={(e) => patchList(list, { sanction: (e.currentTarget.value || null) as VisionSanction | null })}
                   class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface"
                 >
-                  <option value="">Celle de Kotbo Vision</option>
+                  <option value="">{m.vis_default_sanction()}</option>
                   {#each SANCTIONS as s (s.value)}
                     <option value={s.value}>{s.label}</option>
                   {/each}
@@ -356,7 +350,7 @@
               </label>
               {#if list.sanction && list.sanction !== 'DELETE' && list.sanction !== 'WARN' && list.sanction !== 'KICK' && list.sanction !== 'SOFTBAN'}
                 <label class="block">
-                  <span class="text-xs font-medium text-on-surface-variant">Durée</span>
+                  <span class="text-xs font-medium text-on-surface-variant">{m.arx_vision_duration()}</span>
                   <select
                     value={list.durationMin === null ? '' : String(list.durationMin)}
                     onchange={(e) => patchList(list, { durationMin: e.currentTarget.value ? Number(e.currentTarget.value) : null })}
@@ -380,19 +374,19 @@
           type="text"
           maxlength="60"
           bind:value={newListName}
-          placeholder={canCreateList ? 'Nom de la nouvelle liste (ex. Faux support)' : 'Nombre maximum de listes atteint'}
+          placeholder={canCreateList ? m.vis_new_list_ph() : m.vis_max_lists()}
           disabled={!canCreateList}
           class="flex-1 rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface"
         />
-        <Button type="submit" size="sm" icon="Plus" disabled={!canCreateList || !newListName.trim() || busy !== null}>Créer</Button>
+        <Button type="submit" size="sm" icon="Plus" disabled={!canCreateList || !newListName.trim() || busy !== null}>{m.vis_create()}</Button>
       </form>
     </div>
   </SectionCard>
 
   {#if openedList !== undefined}
     <SectionCard
-      title={openedListMeta ? `Images de « ${openedListMeta.name} »` : 'Images du catalogue du serveur'}
-      description="Une image ajoutée est bloquée dès qu'elle réapparaît, recadrée, retournée, recompressée ou dans une capture. Une image très proche d'une autre est rangée comme sa variante."
+      title={openedListMeta ? m.vis_list_images({ name: openedListMeta.name }) : m.vis_catalog_images()}
+      description={m.vis_images_desc()}
       icon="Image"
     >
       <div class="space-y-4">
@@ -404,37 +398,37 @@
         >
           <input type="file" accept="image/*" multiple class="sr-only" onchange={(e) => upload(e.currentTarget.files)} disabled={uploading !== null} />
           {#if uploading}
-            <span class="text-body-sm text-on-surface">Analyse en cours… {uploading.done} / {uploading.total}</span>
+            <span class="text-body-sm text-on-surface">{m.vis_uploading({ done: uploading.done, total: uploading.total })}</span>
           {:else}
-            <span class="text-body-sm text-on-surface">Dépose des images ici ou clique pour les choisir</span>
-            <span class="text-xs text-on-surface-variant">{UPLOAD_BATCH} images au plus par envoi. Astuce : sur Discord, clic droit sur un message → Apps → Kotbo → Ajouter à Kotbo Vision.</span>
+            <span class="text-body-sm text-on-surface">{m.vis_drop()}</span>
+            <span class="text-xs text-on-surface-variant">{m.vis_drop_hint({ count: UPLOAD_BATCH })}</span>
           {/if}
         </label>
 
         {#if imagesLoading}
           <LoadingHint context="config" />
         {:else if images.length === 0}
-          <EmptyState icon="Image" title="Aucune image" description="Ajoute les images que tu veux interdire sur le serveur." reason="instruction" />
+          <EmptyState icon="Image" title={m.vis_no_images()} description={m.vis_no_images_desc()} reason="instruction" />
         {:else}
           <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3">
             {#each images as image (image.id)}
               <div class="rounded-xl border overflow-hidden {image.status === 'ALLOWED' ? 'border-outline-variant/30 opacity-60' : 'border-outline-variant/30'}">
                 {#if image.thumb}
-                  <img src={image.thumb} alt={image.filename ?? 'Image interdite'} class="w-full h-24 object-contain bg-surface-container" />
+                  <img src={image.thumb} alt={image.filename ?? m.vis_banned_image()} class="w-full h-24 object-contain bg-surface-container" />
                 {:else}
-                  <div class="w-full h-24 flex items-center justify-center bg-surface-container text-xs text-on-surface-variant">Sans aperçu</div>
+                  <div class="w-full h-24 flex items-center justify-center bg-surface-container text-xs text-on-surface-variant">{m.vis_no_preview()}</div>
                 {/if}
                 <div class="p-2 space-y-1">
-                  <p class="text-xs text-on-surface truncate" title={image.filename ?? ''}>{image.filename ?? 'sans nom'}</p>
+                  <p class="text-xs text-on-surface truncate" title={image.filename ?? ''}>{image.filename ?? m.vis_unnamed()}</p>
                   <p class="text-xs text-on-surface-variant">
-                    {image.parentId ? 'Variante' : image.source === 'HONEYPOT' ? 'Honeypot' : image.source === 'REVIEW' ? 'Confirmée' : image.source === 'DISMISSED' ? 'Écartée' : 'Ajoutée'}
-                    · {image.hits} blocage(s)
+                    {image.parentId ? m.vis_src_variant() : image.source === 'HONEYPOT' ? 'Honeypot' : image.source === 'REVIEW' ? m.vis_src_confirmed() : image.source === 'DISMISSED' ? m.vis_src_dismissed() : m.vis_src_added()}
+                    · {m.vis_hits({ count: image.hits })}
                   </p>
                   <div class="flex gap-1">
                     <Button size="sm" variant="ghost" disabled={busy !== null} onclick={() => toggleImage(image)}>
-                      {image.status === 'BLOCKED' ? 'Autoriser' : 'Interdire'}
+                      {image.status === 'BLOCKED' ? m.vis_allow() : m.vis_ban()}
                     </Button>
-                    <Button size="sm" variant="ghost" icon="Trash2" disabled={busy !== null} onclick={() => removeImage(image)} />
+                    <Button size="sm" variant="ghost" icon="Trash2" aria-label={m.vis_delete_image()} disabled={busy !== null} onclick={() => removeImage(image)} />
                   </div>
                 </div>
               </div>
@@ -444,6 +438,6 @@
       </div>
     </SectionCard>
   {:else}
-    <Callout variant="info">Ouvre une liste ou le catalogue du serveur pour voir ses images et en ajouter.</Callout>
+    <Callout variant="info">{m.vis_open_hint()}</Callout>
   {/if}
 {/if}

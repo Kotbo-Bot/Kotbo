@@ -123,11 +123,11 @@
                  <span class="text-xs font-semibold text-amber-500">{m.ctv_security_required()}</span>
               </div>
               <h1 class="font-headline text-3xl font-semibold tracking-tighter text-white leading-tight">
-                Activation du Serveur <br/>
+                {m.actx_title()} <br/>
                 <span class="text-primary">{selectedGuild?.name || 'Discord'}</span>
               </h1>
               <p class="text-slate-400 font-body text-sm leading-relaxed max-w-[380px] mx-auto opacity-80">
-                L'utilisation de Kotbo nécessite un jeton d'activation global pour démarrer les modules et le tableau de bord de ce serveur.
+                {m.actx_desc()}
               </p>
             </div>
           </div>

@@ -23,9 +23,9 @@
   const { onEditTracks }: { onEditTracks: () => void } = $props();
 
   const TONES = [
-    { key: 'warm', label: 'Chaleureux', icon: 'heart', text: "Bienvenue {user} sur **{server}** ! Installe-toi, présente-toi, et n'hésite pas si tu as la moindre question. 🎉" },
-    { key: 'plain', label: 'Sobre', icon: 'align-left', text: 'Bienvenue {user} sur **{server}**. Merci de lire le règlement avant de participer.' },
-    { key: 'playful', label: 'Enjoué', icon: 'star', text: 'Un nouveau membre est apparu ! {user} rejoint **{server}**. 👋 Fais-toi plaisir, on ne mord pas.' },
+    { key: 'warm', label: m.obx_gr_warm(), icon: 'heart', text: "Bienvenue {user} sur **{server}** ! Installe-toi, présente-toi, et n'hésite pas si tu as la moindre question. 🎉" },
+    { key: 'plain', label: m.obx_gr_plain(), icon: 'align-left', text: 'Bienvenue {user} sur **{server}**. Merci de lire le règlement avant de participer.' },
+    { key: 'playful', label: m.obx_gr_playful(), icon: 'star', text: 'Un nouveau membre est apparu ! {user} rejoint **{server}**. 👋 Fais-toi plaisir, on ne mord pas.' },
   ];
 
   let message = $state('');
@@ -38,8 +38,8 @@
   /** Le gabarit, avec ses variables remplacees : c'est ce que l'arrivant lira. */
   const rendered = $derived(
     message
-      .replaceAll('{user}', `@${authStore.user?.username ?? 'nouveau'}`)
-      .replaceAll('{server}', selectedGuild?.name ?? 'ton serveur')
+      .replaceAll('{user}', `@${authStore.user?.username ?? m.obx_gr_newcomer()}`)
+      .replaceAll('{server}', selectedGuild?.name ?? m.obx_rc_your_server())
   );
 
   $effect(() => {
@@ -76,8 +76,8 @@
 </script>
 
 <WizardShell
-  title="Comment accueillir les arrivants ?"
-  lead="Ce message part automatiquement à chaque arrivée. Un serveur qui n'accueille pas perd la moitié de ses arrivants dans la première heure."
+  title={m.obx_gr_title()}
+  lead={m.obx_gr_lead()}
   {onEditTracks}
 >
   <div class="flex flex-wrap gap-2 mb-4">
@@ -95,7 +95,7 @@
   </div>
 
   <label for="welcome-message" class="block text-body-sm font-semibold text-on-surface mb-2">
-    Message de bienvenue
+    {m.obx_gr_label()}
   </label>
   <textarea
     id="welcome-message"
@@ -108,9 +108,9 @@
 
   <p class="mt-2 text-xs text-on-surface-variant/55 leading-relaxed">
     <code class="px-1 py-0.5 rounded bg-surface-container text-on-surface-variant">{'{user}'}</code>
-    mentionne l'arrivant,
+    {m.obx_gr_user_hint()}
     <code class="px-1 py-0.5 rounded bg-surface-container text-on-surface-variant">{'{server}'}</code>
-    donne le nom du serveur. Les deux sont remplacés à l'envoi.
+    {m.obx_gr_server_hint()}
   </p>
 
   {#snippet preview()}
@@ -125,7 +125,7 @@
       use:explainDisabled={(!message.trim()) ? m.common_reason_fill_field() : ''}
       class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-on-primary text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-40"
     >
-      {onboardingData.busy ? 'Enregistrement…' : 'Enregistrer'}
+      {onboardingData.busy ? m.obx_saving() : m.common_save()}
       <Papicon icon="ChevronRight" size={15} />
     </button>
   {/snippet}

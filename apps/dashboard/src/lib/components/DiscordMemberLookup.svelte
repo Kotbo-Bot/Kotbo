@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from '../i18n';
   import { dashboardFetch } from '../api';
   import { authStore } from '../stores/auth.svelte';
   import Papicon from './Papicon.svelte';
@@ -19,7 +20,7 @@
     selectedUsername = $bindable(''),
     selectedAvatarUrl = $bindable(''),
     selectedRoleIds = $bindable<string[]>([]),
-    placeholder = '@mention, pseudo ou ID Discord',
+    placeholder = m.dml_placeholder(),
     autoSelectOnExactMatch = true,
     disabled = false,
     staffOnly = false,
@@ -121,7 +122,7 @@
       });
 
       if (!response.ok) {
-        throw new Error('Impossible de récupérer les membres Discord');
+        throw new Error(m.dml_fetch_failed());
       }
 
       const data = await response.json();
@@ -133,7 +134,7 @@
       }
       console.error('Erreur chargement suggestions membres:', err);
       suggestions = [];
-      error = 'Impossible de charger les suggestions';
+      error = m.dml_suggest_failed();
     } finally {
       isLoading = false;
     }
@@ -182,7 +183,7 @@
   />
 
   {#if isLoading}
-    <p class="text-xs text-on-surface-variant mt-2 px-1">Recherche des membres...</p>
+    <p class="text-xs text-on-surface-variant mt-2 px-1">{m.dml_searching()}</p>
   {/if}
 
   {#if error}

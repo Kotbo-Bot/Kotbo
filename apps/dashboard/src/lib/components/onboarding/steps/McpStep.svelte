@@ -55,7 +55,7 @@
         name: `Kotbo · ${selectedGuild?.name ?? 'serveur'}`,
         permissions,
       });
-      if (!key?.id) throw new Error("La clé n'a pas pu être créée.");
+      if (!key?.id) throw new Error(m.obx_mcp_failed());
 
       created = { id: key.id, fullKey: key.fullKey ?? '' };
 
@@ -103,7 +103,7 @@
             pitch={entry.pitch()}
             detail={entry.detail()}
             icon={entry.icon}
-            badge={entry.key === 'read' ? 'Recommandé' : undefined}
+            badge={entry.key === 'read' ? m.obx_recommended() : undefined}
             selected={scope === entry.key}
             onclick={() => { wizard.answer({ mcpScope: entry.key }); celebrateStep(); }}
           />

@@ -50,10 +50,10 @@
     PLUS: 'Plus',
     PRO: 'Pro',
     ULTIMATE: 'Ultimate',
-    CUSTOM: 'Sur mesure',
+    CUSTOM: m.mpx_plan_custom(),
   };
   const requiredPlanLabel = $derived(
-    module?.requiredPlan ? PLAN_LABELS[module.requiredPlan] ?? module.requiredPlan : 'payante',
+    module?.requiredPlan ? PLAN_LABELS[module.requiredPlan] ?? module.requiredPlan : m.mpx_plan_paid(),
   );
 
   /** Ce que le module apporte, pour vendre le resultat et non la fonction. */
@@ -146,7 +146,7 @@
       {/if}
 
       {#if module && !isFixed && lockedByPlan}
-        <Button href="/billing" variant="primary" icon="Lock">Offre {requiredPlanLabel}</Button>
+        <Button href="/billing" variant="primary" icon="Lock">{m.mpx_plan_button({ plan: requiredPlanLabel })}</Button>
       {/if}
 
       {#if pageMenu.length > 0}
@@ -165,13 +165,13 @@
     <div data-guide-blocker="plan" class={bare ? "m-3" : ""}>
       <!-- Une vitrine, pas un mur : on dit ce que le module apporte, et la page
            reste visible en dessous pour qu'on voie ce qu'on debloque. -->
-      <Callout variant="info" icon="Lock" title="« {title} » fait partie de l'offre {requiredPlanLabel}">
-        {#if moduleBenefit}{moduleBenefit} {/if}Parcours la page ci-dessous pour voir ce que tu débloques : elle s'active dès que l'offre du serveur la comprend.
+      <Callout variant="info" icon="Lock" title={m.mpx_locked_title({ module: title, plan: requiredPlanLabel })}>
+        {#if moduleBenefit}{moduleBenefit} {/if}{m.mpx_locked_desc()}
         {#snippet actions()}
           {#if demoPreviewUrl}
-            <Button href={demoPreviewUrl} target="_blank" variant="secondary" size="sm" icon="Eye">Voir un exemple rempli</Button>
+            <Button href={demoPreviewUrl} target="_blank" variant="secondary" size="sm" icon="Eye">{m.mpx_demo()}</Button>
           {/if}
-          <Button href="/billing" variant="primary" size="sm" iconRight="ArrowRight">Débloquer avec l'offre {requiredPlanLabel}</Button>
+          <Button href="/billing" variant="primary" size="sm" iconRight="ArrowRight">{m.mpx_unlock({ plan: requiredPlanLabel })}</Button>
         {/snippet}
       </Callout>
     </div>

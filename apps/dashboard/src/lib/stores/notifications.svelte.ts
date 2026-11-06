@@ -1,3 +1,4 @@
+import { m } from '../i18n';
 import { router } from 'tinro';
 import type { NotificationCategory, NotificationChannelPrefs, NotificationSeverity } from '@kotbo/contracts';
 import { apiRequest } from '../api/client';
@@ -129,7 +130,7 @@ class NotificationsStore {
         this.fetchedAt = Date.now();
         this.revision += 1;
       } catch {
-        this.error = 'Impossible de récupérer les notifications. Réessaie.';
+        this.error = m.ntx_load_failed();
       } finally {
         this.loading = false;
         this.inflight = null;

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { m } from '../lib/i18n';
+  import { m, dateLocale } from '../lib/i18n';
   import { onMount } from 'svelte';
   import { fetchEvaluations, generateEvaluation } from '../lib/api';
   import { toast } from '../lib/stores/toast.svelte';
@@ -58,8 +58,8 @@
 </script>
 
 <ModulePage
-  title="Évaluations Staff"
-  description="Un bilan du travail de chaque membre du staff sur les 30 derniers jours."
+  title={m.evx_title()}
+  description={m.evx_desc()}
   icon="award"
   featureKey="evaluations"
 >
@@ -70,7 +70,7 @@
       disabled={generating}
     >
       <Papicon icon="zap" size={16} />
-      {generating ? 'Génération…' : 'Générer toutes'}
+      {generating ? m.evx_generating() : m.evx_generate_all()}
     </button>
   {/snippet}
 
@@ -78,7 +78,7 @@
 {#if loading}
   <div class="flex flex-col items-center justify-center py-16 text-on-surface-variant gap-4">
     <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-    <p class="text-sm">Chargement des donnees...</p>
+    <p class="text-sm">{m.evx_loading()}</p>
   </div>
 {:else if data}
 
@@ -91,15 +91,15 @@
             <span class="text-2xl font-bold text-on-surface leading-none">{data.averageScore}</span>
             <span class="text-2xs text-on-surface-variant">/100</span>
           </div>
-          <div class="text-xs font-medium text-on-surface-variant mt-1">Score moyen</div>
+          <div class="text-xs font-medium text-on-surface-variant mt-1">{m.evx_avg()}</div>
         </div>
         <div class="bg-surface-container-high/30 rounded-xl p-4 text-center flex flex-col items-center justify-center">
           <span class="text-3xl font-bold text-on-surface">{data.latestByStaff.length}</span>
-          <div class="text-xs font-medium text-on-surface-variant mt-1">Staff evalues</div>
+          <div class="text-xs font-medium text-on-surface-variant mt-1">{m.evx_count()}</div>
         </div>
         <div class="bg-surface-container-high/30 rounded-xl p-4 text-center flex flex-col items-center justify-center">
           <span class="text-3xl font-bold text-on-surface">{data.evaluations.length}</span>
-          <div class="text-xs font-medium text-on-surface-variant mt-1">Evaluations totales</div>
+          <div class="text-xs font-medium text-on-surface-variant mt-1">{m.evx_total()}</div>
         </div>
       </div>
     </div>
@@ -108,18 +108,18 @@
   <!-- ==================== SCORE TABLE ==================== -->
   {#if data.latestByStaff.length > 0}
     <div class="bg-surface-container-low/30 border border-outline-variant/10 rounded-xl p-6 space-y-4 mb-6">
-      <h3 class="text-base font-semibold flex items-center gap-2.5">Dernieres evaluations par staff</h3>
+      <h3 class="text-base font-semibold flex items-center gap-2.5">{m.evx_latest()}</h3>
       <div class="overflow-x-auto">
         <table class="w-full">
           <thead>
             <tr class="border-b border-outline-variant/10">
-              <th class="px-3 py-2.5 text-left text-xs font-medium text-on-surface-variant">Staff</th>
-              <th class="px-3 py-2.5 text-left text-xs font-medium text-on-surface-variant">Activite</th>
-              <th class="px-3 py-2.5 text-left text-xs font-medium text-on-surface-variant">Moderation</th>
-              <th class="px-3 py-2.5 text-left text-xs font-medium text-on-surface-variant">Presence</th>
-              <th class="px-3 py-2.5 text-left text-xs font-medium text-on-surface-variant">Global</th>
-              <th class="px-3 py-2.5 text-left text-xs font-medium text-on-surface-variant">Tendance</th>
-              <th class="px-3 py-2.5 text-left text-xs font-medium text-on-surface-variant">Periode</th>
+              <th class="px-3 py-2.5 text-left text-xs font-medium text-on-surface-variant">{m.evx_col_staff()}</th>
+              <th class="px-3 py-2.5 text-left text-xs font-medium text-on-surface-variant">{m.evx_col_activity()}</th>
+              <th class="px-3 py-2.5 text-left text-xs font-medium text-on-surface-variant">{m.evx_col_moderation()}</th>
+              <th class="px-3 py-2.5 text-left text-xs font-medium text-on-surface-variant">{m.evx_col_presence()}</th>
+              <th class="px-3 py-2.5 text-left text-xs font-medium text-on-surface-variant">{m.evx_col_global()}</th>
+              <th class="px-3 py-2.5 text-left text-xs font-medium text-on-surface-variant">{m.evx_col_trend()}</th>
+              <th class="px-3 py-2.5 text-left text-xs font-medium text-on-surface-variant">{m.evx_col_period()}</th>
             </tr>
           </thead>
           <tbody>
@@ -166,7 +166,7 @@
                   </span>
                 </td>
                 <td class="px-3 py-2.5 text-xs text-on-surface-variant">
-                  {new Date(ev.periodStart).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })} &mdash; {new Date(ev.periodEnd).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })}
+                  {new Date(ev.periodStart).toLocaleDateString(dateLocale(), { day: '2-digit', month: '2-digit' })} &mdash; {new Date(ev.periodEnd).toLocaleDateString(dateLocale(), { day: '2-digit', month: '2-digit' })}
                 </td>
               </tr>
             {/each}
@@ -176,13 +176,13 @@
     </div>
   {:else}
     <!-- Empty state -->
-    <EmptyState icon="award" title="Aucune évaluation générée" description="Kotbo prépare une évaluation par membre du staff à partir de son activité des 30 derniers jours." actionLabel="Générer les premières évaluations" actionIcon="zap" onAction={handleGenerateAll} />
+    <EmptyState icon="award" title={m.evx_empty()} description={m.evx_empty_desc()} actionLabel={m.evx_empty_action()} actionIcon="zap" onAction={handleGenerateAll} />
   {/if}
 
   <!-- ==================== HISTORY ==================== -->
   {#if data.evaluations.length > data.latestByStaff.length}
     <div class="bg-surface-container-low/30 border border-outline-variant/10 rounded-xl p-6 space-y-4">
-      <h3 class="text-base font-semibold flex items-center gap-2.5">Historique complet</h3>
+      <h3 class="text-base font-semibold flex items-center gap-2.5">{m.evx_history()}</h3>
       <div class="space-y-0.5">
         {#each data.evaluations as ev}
           <div class="flex items-center gap-3 py-2.5 px-3 border-b border-outline-variant/5 last:border-b-0 hover:bg-surface-container-high/10 transition-colors rounded-lg">
@@ -191,7 +191,7 @@
             <span class="flex-1 min-w-0 text-xs text-on-surface-variant truncate">
               {ev.totalMessages} msg, {Math.round(ev.totalVoiceMinutes / 60)}h vocal, {ev.sanctionsHandled} sanctions, {ev.ticketsResolved} tickets
             </span>
-            <span class="text-xs text-on-surface-variant shrink-0">{new Date(ev.createdAt).toLocaleDateString('fr-FR')}</span>
+            <span class="text-xs text-on-surface-variant shrink-0">{new Date(ev.createdAt).toLocaleDateString(dateLocale())}</span>
           </div>
         {/each}
       </div>

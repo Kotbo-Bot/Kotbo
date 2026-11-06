@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from '../../i18n';
   import { Handle, Position } from '@xyflow/svelte';
   import { PORT_COLORS, getNodeDef, resolveNodeInputs, resolveNodeOutputs, type PortDef, type WorkflowGraph } from '@kotbo/shared';
   import Papicon from '../Papicon.svelte';
@@ -27,7 +28,7 @@
 
   let showMessageModal = $state(false);
   let modalConfigKey = $state('text');
-  let modalTitle = $state('Éditer le message');
+  let modalTitle = $state(m.wfm_edit_message());
 
   const def = $derived(getNodeDef(data.nodeType));
   /** Le nœud tel qu'il est configuré, seule forme qui porte les ports variables. */
@@ -71,13 +72,13 @@
   const maxDataRows = $derived(Math.max(dataInputs.length, dataOutputs.length));
 
   function getExecInputLabel(port: PortDef): string {
-    return port.label || 'Entrée';
+    return port.label || m.wfn_in();
   }
 
   function getExecOutputLabel(port: PortDef): string {
     if (port.label) return port.label;
-    if (def?.category === 'trigger') return 'Déclencher';
-    return 'Suivant';
+    if (def?.category === 'trigger') return m.wfn_trigger();
+    return m.wfn_next();
   }
 
   function getDataPortLabel(port: PortDef): string {
@@ -144,7 +145,7 @@
                   type="target"
                   position={Position.Left}
                   id={inPort.id}
-                  title="Entrée de flux (Exec)"
+                  title={m.wfn_exec_in()}
                   style="left: -18px; top: 50%; transform: translateY(-50%); background: {PORT_COLORS.Exec}; width: 10px; height: 10px; border-radius: 2px; border: 1.5px solid rgba(15, 23, 42, 0.8);"
                 />
                 <span class="truncate font-semibold text-on-surface text-xs flex items-center gap-1">
@@ -191,7 +192,7 @@
                 onchange={(e) => data.onUpdateConfig?.(field.key, e.currentTarget.value)}
                 class="nodrag w-full px-2 py-1 rounded bg-surface-container border border-outline-variant/30 text-xs text-on-surface focus:ring-1 focus:ring-primary/50 outline-none cursor-pointer"
               >
-                <option value="">- Choisir un rôle -</option>
+                <option value="">{m.wfn_pick_role()}</option>
                 {#each (data.availableRoles ?? []) as role}
                   <option value={role.id}>@{role.name}</option>
                 {/each}
@@ -218,7 +219,7 @@
                 onchange={(e) => data.onUpdateConfig?.(field.key, e.currentTarget.value)}
                 class="nodrag w-full px-2 py-1 rounded bg-surface-container border border-outline-variant/30 text-xs text-on-surface focus:ring-1 focus:ring-primary/50 outline-none cursor-pointer"
               >
-                <option value="">- Choisir un salon -</option>
+                <option value="">{m.wfn_pick_channel()}</option>
                 {#each (data.availableChannels ?? []) as channel}
                   <option value={channel.id}>#{channel.name}</option>
                 {/each}
@@ -265,7 +266,7 @@
                 rows="2"
                 value={String(data.config?.[field.key] ?? '')}
                 oninput={(e) => data.onUpdateConfig?.(field.key, e.currentTarget.value)}
-                placeholder={field.placeholder || 'Saisir du texte...'}
+                placeholder={field.placeholder || m.wfn_text_ph()}
                 class="nodrag w-full px-2 py-1 rounded bg-surface-container border border-outline-variant/30 text-xs text-on-surface focus:ring-1 focus:ring-primary/50 outline-none resize-none"
               ></textarea>
 
@@ -275,7 +276,7 @@
                 type="text"
                 value={String(data.config?.[field.key] ?? '')}
                 oninput={(e) => data.onUpdateConfig?.(field.key, e.currentTarget.value)}
-                placeholder={field.placeholder || 'Saisir du texte...'}
+                placeholder={field.placeholder || m.wfn_text_ph()}
                 class="nodrag w-full px-2 py-1 rounded bg-surface-container border border-outline-variant/30 text-xs text-on-surface focus:ring-1 focus:ring-primary/50 outline-none"
               />
             {/if}
@@ -305,7 +306,7 @@
                   }}
                   class="nodrag w-full px-2 py-1 rounded bg-surface-container border border-outline-variant/30 text-xs text-on-surface focus:ring-1 focus:ring-primary/50 outline-none cursor-pointer"
                 >
-                  <option value="">- Sélectionner un salon -</option>
+                  <option value="">{m.wfn_pick_channel()}</option>
                   {#each (data.availableChannels ?? []) as channel}
                     <option value={channel.id}>#{channel.name}</option>
                   {/each}
@@ -321,7 +322,7 @@
                   }}
                   class="nodrag w-full px-2 py-1 rounded bg-surface-container border border-outline-variant/30 text-xs text-on-surface focus:ring-1 focus:ring-primary/50 outline-none cursor-pointer"
                 >
-                  <option value="">- Sélectionner un rôle -</option>
+                  <option value="">{m.wfn_pick_role()}</option>
                   {#each (data.availableRoles ?? []) as role}
                     <option value={role.id}>@{role.name}</option>
                   {/each}
@@ -334,16 +335,16 @@
                     type="text"
                     value={String(data.config?.[inputPort.id] ?? '')}
                     oninput={(e) => data.onUpdateConfig?.(inputPort.id, e.currentTarget.value)}
-                    placeholder="Ecrire le texte ici..."
+                    placeholder={m.wfn_write_ph()}
                     class="nodrag w-full px-2 py-1 rounded bg-surface-container border border-outline-variant/30 text-xs text-on-surface focus:ring-1 focus:ring-primary/50 outline-none"
                   />
                   <button
                     type="button"
-                    onclick={() => openWysiwyg(inputPort.id, `Éditer "${getDataPortLabel(inputPort)}"`)}
+                    onclick={() => openWysiwyg(inputPort.id, m.wfn_edit_field({ field: getDataPortLabel(inputPort) }))}
                     class="nodrag w-full px-2 py-1 rounded bg-indigo-500/15 hover:bg-indigo-500/25 border border-indigo-500/30 text-2xs font-semibold text-indigo-700 dark:text-indigo-300 transition-all flex items-center justify-center gap-1"
                   >
                     <Papicon icon="TextBubble" size={11} />
-                    <span>Éditeur WYSIWYG / Aperçu</span>
+                    <span>{m.wfn_editor()}</span>
                   </button>
                 </div>
 
@@ -376,11 +377,11 @@
     {#if data.nodeType === 'ConstText'}
       <button
         type="button"
-        onclick={() => openWysiwyg('value', 'Éditer le texte fixe')}
+        onclick={() => openWysiwyg('value', m.wfn_edit_const())}
         class="nodrag w-full px-2 py-1 rounded bg-indigo-500/15 hover:bg-indigo-500/25 border border-indigo-500/30 text-2xs font-semibold text-indigo-700 dark:text-indigo-300 transition-all flex items-center justify-center gap-1"
       >
         <Papicon icon="TextBubble" size={11} />
-        <span>Éditeur WYSIWYG / Aperçu</span>
+        <span>{m.wfn_editor()}</span>
       </button>
     {/if}
 

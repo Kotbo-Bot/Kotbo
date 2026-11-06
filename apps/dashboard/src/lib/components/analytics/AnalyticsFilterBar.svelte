@@ -90,7 +90,7 @@
   {#if filters.limitDays}
     <p class="text-body-sm text-on-surface-variant">
       En gratuit, Analytics garde {filters.limitDays} jours d'historique. Avec Plus : 30 jours, 90 jours, un an, des dates libres et les filtres par salon ou rôle.
-      <a href="/billing" class="font-medium text-primary hover:underline">Voir l'offre Plus</a>
+      <a href="/billing" class="font-medium text-primary hover:underline">{m.afb_see_plus()}</a>
     </p>
   {:else}
   <div class="flex flex-wrap items-center gap-3">

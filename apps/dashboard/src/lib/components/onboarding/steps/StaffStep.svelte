@@ -240,7 +240,7 @@
           size={15}
           class={onboardingData.busy ? 'animate-spin' : ''}
         />
-        {onboardingData.busy ? 'Création…' : m.onb_staff_create_action({ count: ladder.length })}
+        {onboardingData.busy ? m.obx_creating() : m.onb_staff_create_action({ count: ladder.length })}
       </button>
     {:else}
       <div>
@@ -328,7 +328,7 @@
               <span class="text-2xs tabular-nums text-on-surface-variant/35"></span>
             </div>
           {:else}
-            <p class="text-xs text-on-surface-variant/40 py-3">Aucun rôle retenu pour l'instant.</p>
+            <p class="text-xs text-on-surface-variant/40 py-3">{m.obx_sf_none()}</p>
           {/each}
         </div>
 
@@ -354,7 +354,7 @@
       class="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-on-primary
              hover:brightness-110 transition disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
     >
-      {onboardingData.busy ? 'Enregistrement…' : 'Continuer'}
+      {onboardingData.busy ? m.obx_saving() : m.obx_continue()}
       <Papicon icon="ChevronRight" size={15} />
     </button>
   {/snippet}

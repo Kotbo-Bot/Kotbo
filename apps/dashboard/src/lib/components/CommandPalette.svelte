@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from '../i18n';
   import { router } from 'tinro';
   import Papicon from './Papicon.svelte';
   import { authStore } from '../stores/auth.svelte';
@@ -24,6 +25,14 @@
     config: 'sliders',
     integrations: 'link',
   };
+
+  // Libelles de groupe : affiches, et cles de regroupement des resultats.
+  const GROUP_ACCOUNT = m.cp_group_account();
+  const GROUP_ACTIONS = m.cp_group_actions();
+  const GROUP_ADMIN = m.cp_group_admin();
+  const GROUP_PINNED = m.cp_group_pinned();
+  const GROUP_RECENT = m.cp_group_recent();
+  const GROUP_MISSING = m.cp_group_missing();
 
   interface PaletteItem {
     id: string;
@@ -64,7 +73,7 @@
     items.push({
       id: `${prefix}-${item.name}`,
       label: item.name,
-      sublabel: `Page · ${group}`,
+      sublabel: m.cp_page_in({ group }),
       icon: item.icon || fallbackIcon,
       group,
       action: () => router.goto(item.href)
@@ -74,7 +83,7 @@
       items.push({
         id: `${prefix}-${item.name}-${tab.id}`,
         label: `${item.name} › ${tab.label()}`,
-        sublabel: `Onglet · ${item.name}`,
+        sublabel: m.cp_tab_of({ page: item.name }),
         icon: tab.icon || item.icon || fallbackIcon,
         group,
         action: () => router.goto(tab.href)
@@ -93,21 +102,21 @@
 
     // Admin Items (only if isBotAdmin is true)
     if (authStore.isBotAdmin) {
-      items.push({ id: 'admin-overview', label: "Console d'administration", sublabel: 'Admin · Vue d\'ensemble', icon: 'activity', group: 'Administration', action: () => router.goto('/admin') });
-      items.push({ id: 'admin-servers',  label: 'Serveurs', sublabel: 'Admin · Liste des serveurs', icon: 'Server', group: 'Administration', action: () => router.goto('/admin/servers') });
-      items.push({ id: 'admin-shards',   label: 'Shards', sublabel: 'Admin · Status des fragments', icon: 'Zap', group: 'Administration', action: () => router.goto('/admin/shards') });
-      items.push({ id: 'admin-analytics', label: 'Analytics', sublabel: 'Admin · Acquisition, revenus, rétention', icon: 'TrendingUp', group: 'Administration', action: () => router.goto('/admin/analytics') });
-      items.push({ id: 'admin-dashboard-usage', label: 'Usage du dashboard', sublabel: 'Admin · Pages et modules consultés', icon: 'Eye', group: 'Administration', action: () => router.goto('/admin/analytics?tab=usage') });
-      items.push({ id: 'admin-modules',  label: 'Modules système', sublabel: 'Admin · Activation, usage et performance', icon: 'Box', group: 'Administration', action: () => router.goto('/admin/analytics?tab=modules') });
-      items.push({ id: 'admin-broadcast', label: 'Broadcast', sublabel: 'Admin · Annonces globales', icon: 'Megaphone', group: 'Administration', action: () => router.goto('/admin/broadcast') });
-      items.push({ id: 'admin-security', label: 'Sécurité & Blacklist', sublabel: 'Admin · Accès globaux', icon: 'ShieldCheck', group: 'Administration', action: () => router.goto('/admin/security') });
-      items.push({ id: 'admin-content',  label: 'Mots globaux', sublabel: 'Admin · Filtrage', icon: 'filter', group: 'Administration', action: () => router.goto('/admin/content') });
-      items.push({ id: 'admin-activation', label: "Codes d'activation", sublabel: 'Admin · Licences', icon: 'Key', group: 'Administration', action: () => router.goto('/admin/activation') });
-      items.push({ id: 'admin-audit',    label: "Journal d'audit", sublabel: 'Admin · Traçabilité', icon: 'ClipboardList', group: 'Administration', action: () => router.goto('/admin/audit') });
-      items.push({ id: 'admin-whitelabel', label: 'Marque blanche', sublabel: 'Admin · Instances', icon: 'Layers', group: 'Administration', action: () => router.goto('/admin/whitelabel') });
-      items.push({ id: 'admin-instances', label: 'Instances self-host', sublabel: 'Admin · Télémétrie et bannissement', icon: 'Server', group: 'Administration', action: () => router.goto('/admin/instances') });
-      items.push({ id: 'admin-gdpr',     label: 'Export RGPD', sublabel: 'Admin · Conformité', icon: 'ShieldCheck', group: 'Administration', action: () => router.goto('/admin/gdpr') });
-      items.push({ id: 'admin-config',   label: 'Configuration avancée', sublabel: 'Admin · Système', icon: 'Settings', group: 'Administration', action: () => router.goto('/admin/config') });
+      items.push({ id: 'admin-overview', label: m.cp_adm_overview(), sublabel: m.cp_adm_overview_sub(), icon: 'activity', group: GROUP_ADMIN, action: () => router.goto('/admin') });
+      items.push({ id: 'admin-servers',  label: m.cp_adm_servers(), sublabel: m.cp_adm_servers_sub(), icon: 'Server', group: GROUP_ADMIN, action: () => router.goto('/admin/servers') });
+      items.push({ id: 'admin-shards',   label: m.cp_adm_shards(), sublabel: m.cp_adm_shards_sub(), icon: 'Zap', group: GROUP_ADMIN, action: () => router.goto('/admin/shards') });
+      items.push({ id: 'admin-analytics', label: m.cp_adm_analytics(), sublabel: m.cp_adm_analytics_sub(), icon: 'TrendingUp', group: GROUP_ADMIN, action: () => router.goto('/admin/analytics') });
+      items.push({ id: 'admin-dashboard-usage', label: m.cp_adm_usage(), sublabel: m.cp_adm_usage_sub(), icon: 'Eye', group: GROUP_ADMIN, action: () => router.goto('/admin/analytics?tab=usage') });
+      items.push({ id: 'admin-modules',  label: m.cp_adm_modules(), sublabel: m.cp_adm_modules_sub(), icon: 'Box', group: GROUP_ADMIN, action: () => router.goto('/admin/analytics?tab=modules') });
+      items.push({ id: 'admin-broadcast', label: m.cp_adm_broadcast(), sublabel: m.cp_adm_broadcast_sub(), icon: 'Megaphone', group: GROUP_ADMIN, action: () => router.goto('/admin/broadcast') });
+      items.push({ id: 'admin-security', label: m.cp_adm_security(), sublabel: m.cp_adm_security_sub(), icon: 'ShieldCheck', group: GROUP_ADMIN, action: () => router.goto('/admin/security') });
+      items.push({ id: 'admin-content',  label: m.cp_adm_content(), sublabel: m.cp_adm_content_sub(), icon: 'filter', group: GROUP_ADMIN, action: () => router.goto('/admin/content') });
+      items.push({ id: 'admin-activation', label: m.cp_adm_activation(), sublabel: m.cp_adm_activation_sub(), icon: 'Key', group: GROUP_ADMIN, action: () => router.goto('/admin/activation') });
+      items.push({ id: 'admin-audit',    label: m.cp_adm_audit(), sublabel: m.cp_adm_audit_sub(), icon: 'ClipboardList', group: GROUP_ADMIN, action: () => router.goto('/admin/audit') });
+      items.push({ id: 'admin-whitelabel', label: m.cp_adm_whitelabel(), sublabel: m.cp_adm_whitelabel_sub(), icon: 'Layers', group: GROUP_ADMIN, action: () => router.goto('/admin/whitelabel') });
+      items.push({ id: 'admin-instances', label: m.cp_adm_instances(), sublabel: m.cp_adm_instances_sub(), icon: 'Server', group: GROUP_ADMIN, action: () => router.goto('/admin/instances') });
+      items.push({ id: 'admin-gdpr',     label: m.cp_adm_gdpr(), sublabel: m.cp_adm_gdpr_sub(), icon: 'ShieldCheck', group: GROUP_ADMIN, action: () => router.goto('/admin/gdpr') });
+      items.push({ id: 'admin-config',   label: m.cp_adm_config(), sublabel: m.cp_adm_config_sub(), icon: 'Settings', group: GROUP_ADMIN, action: () => router.goto('/admin/config') });
     }
 
     // Profil page. Son URL porte l'identifiant du membre : les onglets sont
@@ -116,19 +125,19 @@
     const profileBase = authStore.user?.id ? `/profile/${authStore.user.id}` : '/profile';
     items.push({
       id: 'profile',
-      label: 'Mon profil',
-      sublabel: 'Profil utilisateur',
+      label: m.cp_my_profile(),
+      sublabel: m.cp_user_profile(),
       icon: 'user',
-      group: 'Compte',
+      group: GROUP_ACCOUNT,
       action: () => router.goto(profileBase)
     });
     for (const tab of tabsForPage('/profile')) {
       items.push({
         id: `profile-${tab.id}`,
-        label: `Mon profil › ${tab.label()}`,
-        sublabel: 'Onglet · Mon profil',
+        label: `${m.cp_my_profile()} › ${tab.label()}`,
+        sublabel: m.cp_tab_of({ page: m.cp_my_profile() }),
         icon: tab.icon || 'user',
-        group: 'Compte',
+        group: GROUP_ACCOUNT,
         action: () => router.goto(`${profileBase}/${tab.id}`)
       });
     }
@@ -136,10 +145,10 @@
     for (const tab of tabsForPage('/userSettings')) {
       items.push({
         id: `usersettings-${tab.id}`,
-        label: `Préférences › ${tab.label()}`,
-        sublabel: 'Onglet · Préférences',
+        label: `${m.cp_preferences()} › ${tab.label()}`,
+        sublabel: m.cp_tab_of({ page: m.cp_preferences() }),
         icon: tab.icon || 'settings',
-        group: 'Compte',
+        group: GROUP_ACCOUNT,
         action: () => router.goto(tab.href)
       });
     }
@@ -147,30 +156,30 @@
     // Theme Toggle action
     items.push({
       id: 'action-theme',
-      label: themeStore.dark ? 'Passer en thème clair' : 'Passer en thème sombre',
-      sublabel: 'Apparence',
+      label: themeStore.dark ? m.cp_theme_light() : m.cp_theme_dark(),
+      sublabel: m.cp_appearance(),
       icon: themeStore.dark ? 'sun' : 'moon',
-      group: 'Actions',
+      group: GROUP_ACTIONS,
       action: () => themeStore.toggle()
     });
 
     // Feedback modal action
     items.push({
       id: 'action-feedback',
-      label: 'Signaler un problème ou proposer une idée',
-      sublabel: 'Envoyer un message à l\'équipe Kotbo',
+      label: m.cp_feedback(),
+      sublabel: m.cp_feedback_sub(),
       icon: 'bug_report',
-      group: 'Actions',
+      group: GROUP_ACTIONS,
       action: () => feedbackModal.show()
     });
 
     // Logout action
     items.push({
       id: 'action-logout',
-      label: 'Se déconnecter',
-      sublabel: 'Compte',
+      label: m.cp_logout(),
+      sublabel: GROUP_ACCOUNT,
       icon: 'log-out',
-      group: 'Actions',
+      group: GROUP_ACTIONS,
       action: () => authStore.logout()
     });
 
@@ -208,7 +217,7 @@
     const toItem = (page: { name: string; href: string; icon?: string }, group: string): PaletteItem => ({
       id: `${group}-${page.href}`,
       label: page.name,
-      sublabel: 'Page',
+      sublabel: m.cp_page(),
       icon: page.icon || 'home',
       group,
       action: () => router.goto(page.href),
@@ -217,13 +226,13 @@
     const pinned = navigationStore.favoriteItems.slice(0, 5);
     const pinnedHrefs = new Set(pinned.map((page) => page.href));
     const recent = navigationStore.recentItems.filter((page) => !pinnedHrefs.has(page.href)).slice(0, 5);
-    if (pinned.length > 0) groups['Épinglés'] = pinned.map((page) => toItem(page, 'Épinglés'));
-    if (recent.length > 0) groups['Récemment consultés'] = recent.map((page) => toItem(page, 'Récemment consultés'));
+    if (pinned.length > 0) groups[GROUP_PINNED] = pinned.map((page) => toItem(page, GROUP_PINNED));
+    if (recent.length > 0) groups[GROUP_RECENT] = recent.map((page) => toItem(page, GROUP_RECENT));
     if (pinned.length === 0 && recent.length === 0) {
       const general = navGroups.find((group) => group.key === 'general');
       if (general) groups[general.label] = general.items.map((page) => toItem(page, general.label));
     }
-    groups['Actions'] = allPaletteItems.filter((item) => item.group === 'Actions');
+    groups[GROUP_ACTIONS] = allPaletteItems.filter((item) => item.group === GROUP_ACTIONS);
     return groups;
   });
 
@@ -286,15 +295,15 @@
     // dans le flux avec les pages qu'elle rouvre, et on lui propose de dire ce
     // qu'elle cherchait - c'est la liste de ce qui manque a Kotbo.
     if (noMatch) {
-      const { Actions: _actions, ...fallback } = suggestedItems;
+      const { [GROUP_ACTIONS]: _actions, ...fallback } = suggestedItems;
       return {
         ...fallback,
-        'Il te manque quelque chose ?': [{
+        [GROUP_MISSING]: [{
           id: 'action-missing',
-          label: `Proposer « ${query.trim()} » à l'équipe Kotbo`,
-          sublabel: 'On lit chaque demande pour savoir quoi construire ensuite',
+          label: m.cp_suggest({ query: query.trim() }),
+          sublabel: m.cp_suggest_sub(),
           icon: 'lightbulb',
-          group: 'Il te manque quelque chose ?',
+          group: GROUP_MISSING,
           action: () => feedbackModal.show(),
         }],
       };
@@ -402,7 +411,7 @@
       type="button"
       class="absolute inset-0 bg-black/40 animate-in fade-in duration-100 border-none cursor-default w-full h-full text-left p-0"
       onclick={close}
-      aria-label="Fermer"
+      aria-label={m.common_close()}
     ></button>
 
     <!-- Palette panel -->
@@ -419,7 +428,7 @@
           oninput={() => selectedIndex = 0}
           onkeydown={handleKeydown}
           type="text"
-          placeholder="Chercher une page, une action..."
+          placeholder={m.cp_search_ph()}
           class="flex-1 bg-transparent text-sm text-on-surface placeholder-on-surface-variant/40 focus:outline-none"
         />
         <kbd class="hidden sm:flex px-1.5 py-0.5 rounded bg-surface-container border border-outline-variant text-2xs font-medium text-on-surface-variant/40 leading-none">
@@ -432,7 +441,7 @@
         {#if noMatch}
           <p class="flex items-center gap-2 px-3.5 pt-2 pb-1 text-sm text-on-surface-variant">
             <Papicon icon="SearchX" size={15} class="shrink-0" />
-            Aucun résultat pour « {query.trim()} ». Tu cherchais peut-être :
+            {m.cp_no_result({ query: query.trim() })}
           </p>
         {/if}
         {#each Object.entries(filteredItems()) as [group, items]}
@@ -471,15 +480,15 @@
       <div class="flex items-center gap-3 px-3 py-2 border-t border-outline-variant bg-surface-container">
         <div class="flex items-center gap-1 text-2xs text-on-surface-variant/40">
           <kbd class="px-1 py-0.5 rounded bg-surface-container-highest border border-outline-variant font-mono text-2xs">↑↓</kbd>
-          Naviguer
+          {m.cp_hint_navigate()}
         </div>
         <div class="flex items-center gap-1 text-2xs text-on-surface-variant/40">
           <kbd class="px-1 py-0.5 rounded bg-surface-container-highest border border-outline-variant font-mono text-2xs">↵</kbd>
-          Ouvrir
+          {m.cp_hint_open()}
         </div>
         <div class="flex items-center gap-1 text-2xs text-on-surface-variant/40">
           <kbd class="px-1 py-0.5 rounded bg-surface-container-highest border border-outline-variant font-mono text-2xs">Esc</kbd>
-          Fermer
+          {m.common_close()}
         </div>
       </div>
     </div>

@@ -163,7 +163,7 @@
 
 <svelte:window onkeydown={handleGlobalKeyDown} />
 
-<a class="skip-link" href="#main-content">Aller au contenu</a>
+<a class="skip-link" href="#main-content">{m.mlx_skip()}</a>
 
 <div class="app-shell flex min-h-screen bg-background text-on-background transition-colors duration-200">
   {#if !$isPhone}

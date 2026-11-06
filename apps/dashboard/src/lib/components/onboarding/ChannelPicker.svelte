@@ -107,7 +107,7 @@
              disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
     >
       <Papicon icon={creating ? 'loader' : 'plus'} size={14} class={creating ? 'animate-spin' : ''} />
-      {creating ? 'Création…' : createLabel}
+      {creating ? m.obx_creating() : createLabel}
     </button>
   {:else if suggested}
     <!-- Un salon a été deviné d'après son nom. La reconnaissance se trompe :
@@ -120,7 +120,7 @@
              hover:text-primary transition-colors disabled:opacity-50"
     >
       <Papicon icon={creating ? 'loader' : 'plus'} size={12} class={creating ? 'animate-spin' : ''} />
-      {creating ? 'Création…' : createLabel}
+      {creating ? m.obx_creating() : createLabel}
     </button>
   {/if}
 </div>

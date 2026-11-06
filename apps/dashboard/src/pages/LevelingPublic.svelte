@@ -261,11 +261,9 @@
               </div>
               <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">
                 {#if memberAhead}
-                  {currentLocale === 'fr'
-                    ? `À ${formatXp(gapAhead)} XP de #${hRank - 1} (${memberAhead.displayName || memberAhead.username})`
-                    : `${formatXp(gapAhead)} XP behind #${hRank - 1} (${memberAhead.displayName || memberAhead.username})`}
+                  {m.lpx_gap({ xp: formatXp(gapAhead), rank: hRank - 1, name: memberAhead.displayName || memberAhead.username })}
                 {:else}
-                  {currentLocale === 'fr' ? 'En tête du classement du serveur' : 'Leading the server leaderboard'}
+                  {m.lpx_leading()}
                 {/if}
               </p>
             </div>
@@ -277,7 +275,7 @@
               class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-300 transition-colors flex items-center gap-1.5"
             >
               <Papicon icon={shareCopied ? 'Check' : 'Share'} size={13} />
-              <span>{shareCopied ? (currentLocale === 'fr' ? 'Lien copié' : 'Link copied') : (currentLocale === 'fr' ? 'Partager ce rang' : 'Share standing')}</span>
+              <span>{shareCopied ? m.lpx_copied() : m.lpx_share()}</span>
             </button>
           </div>
         </div>

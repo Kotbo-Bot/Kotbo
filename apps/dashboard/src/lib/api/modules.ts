@@ -324,7 +324,7 @@ export async function fetchPublicGiveaways(guildId: string): Promise<PublicGivea
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
-    throw new Error(error.error || 'Impossible de charger les giveaways. Réessaie.');
+    throw new Error(error.error || m.apx_giveaways_failed());
   }
 
   return response.json();
@@ -346,7 +346,7 @@ export async function fetchPublicGiveaway(guildId: string, giveawayId: string): 
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
-    throw new Error(error.error || 'Impossible de charger le giveaway. Réessaie.');
+    throw new Error(error.error || m.apx_giveaway_failed());
   }
 
   return response.json();

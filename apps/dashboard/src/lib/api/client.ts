@@ -462,7 +462,7 @@ export async function dashboardFetch(
   if (!selectedGuildId) {
     throw new DashboardApiError({
       kind: 'client',
-      serverMessage: 'Aucun serveur selectionne',
+      serverMessage: m.apx_no_guild(),
       path,
       method: options.method ?? 'GET',
     });

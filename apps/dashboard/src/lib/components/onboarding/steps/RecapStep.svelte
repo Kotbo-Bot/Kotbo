@@ -67,37 +67,37 @@
    */
   const lines = $derived([
     ...(built
-      ? [{ icon: 'layout-grid', label: 'Structure et permissions', value: 'posées sur Discord' }]
+      ? [{ icon: 'layout-grid', label: m.obx_rc_structure(), value: m.obx_rc_structure_v() }]
       : []),
     ...(wizard.isDone('moderation')
-      ? [{ icon: 'shield', label: 'Modération', value: 'active en continu' }]
+      ? [{ icon: 'shield', label: m.obx_rc_moderation(), value: m.obx_rc_moderation_v() }]
       : []),
     ...(wizard.isDone('logs')
-      ? [{ icon: 'scroll', label: m.onb_step_logs(), value: 'journaux conservés' }]
+      ? [{ icon: 'scroll', label: m.onb_step_logs(), value: m.obx_rc_logs_v() }]
       : []),
     ...(wizard.isDone('greeting')
-      ? [{ icon: 'door-open', label: 'Accueil des arrivants', value: 'activé' }]
+      ? [{ icon: 'door-open', label: m.obx_rc_welcome(), value: m.obx_rc_welcome_v() }]
       : []),
     ...(wizard.isDone('rules')
-      ? [{ icon: 'book-open', label: 'Règlement', value: 'publié' }]
+      ? [{ icon: 'book-open', label: m.obx_rc_rules(), value: m.obx_rc_rules_v() }]
       : []),
     ...(wizard.isDone('tickets')
-      ? [{ icon: 'inbox', label: 'Support', value: 'panneau en place' }]
+      ? [{ icon: 'inbox', label: m.obx_rc_support(), value: m.obx_rc_support_v() }]
       : []),
     ...(wizard.isDone('levels')
-      ? [{ icon: 'crown', label: 'Progression', value: 'niveaux et récompenses' }]
+      ? [{ icon: 'crown', label: m.obx_rc_progress(), value: m.obx_rc_progress_v() }]
       : []),
     ...(wizard.isDone('economy')
-      ? [{ icon: 'coins', label: m.onb_step_economy(), value: wizard.currencyName ?? 'monnaie active' }]
+      ? [{ icon: 'coins', label: m.onb_step_economy(), value: wizard.currencyName ?? m.obx_rc_currency_v() }]
       : []),
     ...(wizard.isDone('animation')
-      ? [{ icon: 'target', label: m.onb_step_animation(), value: `${wizard.questKeys?.length ?? 0} quêtes` }]
+      ? [{ icon: 'target', label: m.onb_step_animation(), value: m.obx_rc_quests_v({ count: wizard.questKeys?.length ?? 0 }) }]
       : []),
     ...(wizard.isDone('staff')
-      ? [{ icon: 'users', label: m.onb_step_staff(), value: `${wizard.staffRoleIds?.length ?? 0} rôles` }]
+      ? [{ icon: 'users', label: m.onb_step_staff(), value: m.obx_rc_staff_v({ count: wizard.staffRoleIds?.length ?? 0 }) }]
       : []),
     ...(wizard.isDone('mcp')
-      ? [{ icon: 'command', label: m.onb_step_mcp(), value: 'clé créée' }]
+      ? [{ icon: 'command', label: m.onb_step_mcp(), value: m.obx_rc_mcp_v() }]
       : []),
   ]);
 
@@ -138,7 +138,7 @@
       {m.onb_recap_title()}
     </h1>
     <p class="mt-3 text-[15.5px] text-on-surface-variant">
-      {m.onb_recap_lead({ server: selectedGuild?.name ?? 'ton serveur' })}
+      {m.onb_recap_lead({ server: selectedGuild?.name ?? m.obx_rc_your_server() })}
     </p>
   </div>
 
@@ -188,10 +188,9 @@
 
   {#if dormant.length}
     <section class="mt-10">
-      <h2 class="text-body-sm font-semibold text-on-surface">Laissé de côté</h2>
+      <h2 class="text-body-sm font-semibold text-on-surface">{m.obx_rc_dormant()}</h2>
       <p class="mt-1 text-xs text-on-surface-variant">
-        Tu as écarté le salon qui les porte. Rien n'est perdu : chacun s'allume depuis
-        sa page du tableau de bord, le jour où tu lui donnes un salon.
+        {m.obx_rc_dormant_desc()}
       </p>
 
       <div class="mt-3 grid gap-2.5 sm:grid-cols-2">
@@ -203,7 +202,7 @@
             <div class="min-w-0 flex-1">
               <p class="text-body-sm font-semibold text-on-surface-variant/75">{entry.name}</p>
               <p class="mt-0.5 text-xs text-on-surface-variant leading-relaxed">
-                {entry.because} n'a pas été mis en place.
+                {m.obx_rc_because({ name: entry.because })}
               </p>
             </div>
           </div>

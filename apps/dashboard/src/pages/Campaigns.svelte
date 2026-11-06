@@ -69,11 +69,11 @@
   };
 
   const STATUS_META: Record<string, { label: string; text: string; bg: string }> = {
-    DRAFT: { label: 'Brouillon', text: 'text-on-surface-variant', bg: 'bg-surface-container' },
-    SCHEDULED: { label: 'Planifiée', text: 'text-sky-500', bg: 'bg-sky-500/10' },
-    RUNNING: { label: 'En cours', text: 'text-success', bg: 'bg-success/10' },
-    COMPLETED: { label: 'Terminée', text: 'text-on-surface-variant', bg: 'bg-surface-container' },
-    CANCELLED: { label: 'Annulée', text: 'text-error', bg: 'bg-error/10' },
+    DRAFT: { label: m.camp_status_draft(), text: 'text-on-surface-variant', bg: 'bg-surface-container' },
+    SCHEDULED: { label: m.camp_status_scheduled(), text: 'text-sky-500', bg: 'bg-sky-500/10' },
+    RUNNING: { label: m.camp_status_running(), text: 'text-success', bg: 'bg-success/10' },
+    COMPLETED: { label: m.camp_status_completed(), text: 'text-on-surface-variant', bg: 'bg-surface-container' },
+    CANCELLED: { label: m.camp_status_cancelled(), text: 'text-error', bg: 'bg-error/10' },
   };
 
   let campaigns = $state<Campaign[]>([]);
@@ -112,10 +112,10 @@
 
   /** Rend lisible un décalage exprimé en minutes. */
   function offsetLabel(minutes: number): string {
-    if (minutes === 0) return 'Jour J';
+    if (minutes === 0) return m.camp_day_zero();
     const abs = Math.abs(minutes);
-    const unit = abs >= 1440 ? `${Math.round(abs / 1440)} j` : abs >= 60 ? `${Math.round(abs / 60)} h` : `${abs} min`;
-    return minutes < 0 ? `J−${unit}` : `J+${unit}`;
+    const unit = abs >= 1440 ? m.camp_unit_days({ count: Math.round(abs / 1440) }) : abs >= 60 ? m.camp_unit_hours({ count: Math.round(abs / 60) }) : m.camp_unit_minutes({ count: abs });
+    return minutes < 0 ? m.camp_offset_before({ unit }) : m.camp_offset_after({ unit });
   }
 
   const stepsSent = (c: Campaign) => c.steps.filter((s) => s.status === 'SENT').length;
@@ -229,11 +229,11 @@
     if (status === 'SCHEDULED') {
       const dmSteps = campaign.steps.filter((s) => s.delivery === 'DM').length;
       const confirmed = await confirmDialog.ask({
-        title: `Lancer « ${campaign.name} » ?`,
+        title: m.camp_launch_confirm_title({ name: campaign.name }),
         description: dmSteps > 0
-          ? `${campaign.steps.length} étape(s), dont ${dmSteps} en message privé. Les envois partent automatiquement à leur échéance et ne se rattrapent pas.`
-          : `${campaign.steps.length} étape(s) partiront automatiquement à leur échéance.`,
-        confirmLabel: 'Lancer',
+          ? m.camp_launch_confirm_dm({ count: campaign.steps.length, dm: dmSteps })
+          : m.camp_launch_confirm({ count: campaign.steps.length }),
+        confirmLabel: m.camp_launch(),
         variant: 'warning',
       });
       if (!confirmed) return;
@@ -250,9 +250,9 @@
 
   async function remove(campaign: Campaign) {
     const confirmed = await confirmDialog.ask({
-      title: `Supprimer « ${campaign.name} » ?`,
-      description: 'La campagne et ses mesures sont perdues. Les messages déjà postés restent en place.',
-      confirmLabel: 'Supprimer',
+      title: m.camp_delete_confirm_title({ name: campaign.name }),
+      description: m.camp_delete_confirm_desc(),
+      confirmLabel: m.common_delete(),
       variant: 'danger',
     });
     if (!confirmed) return;
@@ -275,13 +275,13 @@
 </script>
 
 <ModulePage
-  title="Campagnes"
-  description="Envoie une série de messages programmés à un groupe de membres, et vois qui ils touchent."
+  title={m.camp_title()}
+  description={m.camp_desc()}
   icon="megaphone"
   featureKey="campaigns"
 >
   {#snippet actions()}
-    <ActionButton variant="primary" size="sm" icon="plus" label="Nouvelle campagne" onclick={openNew} />
+    <ActionButton variant="primary" size="sm" icon="plus" label={m.camp_new()} onclick={openNew} />
     <RefreshButton onclick={load} loading={loading} />
   {/snippet}
 
@@ -290,9 +290,9 @@
   {:else if campaigns.length === 0}
     <EmptyState
       icon="megaphone"
-      title="Aucune campagne"
-      description="Une campagne enchaîne plusieurs messages autour d'une date : un teaser, l'annonce, une relance."
-      actionLabel="Créer ma première campagne"
+      title={m.camp_empty_title()}
+      description={m.camp_empty_desc()}
+      actionLabel={m.camp_empty_action()}
       onAction={openNew}
     />
   {:else}
@@ -309,7 +309,7 @@
             <div class="flex flex-wrap items-center gap-3 text-xs text-on-surface-variant">
               <span class="inline-flex items-center gap-1.5">
                 <Papicon icon="layers" size={13} />
-                {stepsSent(campaign)}/{campaign.steps.length} étape(s) envoyée(s)
+                {m.camp_steps_sent({ sent: stepsSent(campaign), total: campaign.steps.length })}
               </span>
               {#if campaign.startAt}
                 <span class="inline-flex items-center gap-1.5">
@@ -320,7 +320,7 @@
               {#if campaign.targetGuildIds.length > 0}
                 <span class="inline-flex items-center gap-1.5">
                   <Papicon icon="share" size={13} />
-                  +{campaign.targetGuildIds.length} serveur(s)
+                  {m.camp_extra_servers({ count: campaign.targetGuildIds.length })}
                 </span>
               {/if}
             </div>
@@ -346,7 +346,7 @@
                       {/if}
                     </span>
                   {:else if step.status === 'FAILED'}
-                    <span class="text-2xs text-error shrink-0" title={step.lastError ?? ''}>échec</span>
+                    <span class="text-2xs text-error shrink-0" title={step.lastError ?? ''}>{m.camp_step_failed()}</span>
                   {/if}
                 </div>
               {/each}
@@ -356,35 +356,35 @@
               <div class="grid grid-cols-4 gap-2 pt-1">
                 <div class="rounded-lg bg-surface-container px-2 py-1.5 text-center">
                   <div class="text-body-sm font-semibold text-on-surface tabular-nums">{report.delivered}</div>
-                  <div class="text-2xs text-on-surface-variant">Envoyés</div>
+                  <div class="text-2xs text-on-surface-variant">{m.camp_stat_sent()}</div>
                 </div>
                 <div class="rounded-lg bg-surface-container px-2 py-1.5 text-center">
                   <div class="text-body-sm font-semibold text-on-surface tabular-nums">{report.failed}</div>
-                  <div class="text-2xs text-on-surface-variant">Échecs</div>
+                  <div class="text-2xs text-on-surface-variant">{m.camp_stat_failed()}</div>
                 </div>
                 <div class="rounded-lg bg-surface-container px-2 py-1.5 text-center">
                   <div class="text-body-sm font-semibold text-on-surface tabular-nums">{report.reactions}</div>
-                  <div class="text-2xs text-on-surface-variant">Réactions</div>
+                  <div class="text-2xs text-on-surface-variant">{m.camp_stat_reactions()}</div>
                 </div>
-                <div class="rounded-lg bg-surface-container px-2 py-1.5 text-center" title={campaign.inviteCode ? '' : "Sans code d'invitation, rien ne relie une arrivée à la campagne"}>
+                <div class="rounded-lg bg-surface-container px-2 py-1.5 text-center" title={campaign.inviteCode ? '' : m.camp_joins_no_code()}>
                   <div class="text-body-sm font-semibold text-on-surface tabular-nums">
                     {campaign.inviteCode ? report.joins : '-'}
                   </div>
-                  <div class="text-2xs text-on-surface-variant">Arrivées</div>
+                  <div class="text-2xs text-on-surface-variant">{m.camp_stat_joins()}</div>
                 </div>
               </div>
             {/if}
 
             <div class="flex flex-wrap gap-2 pt-1 border-t border-outline-variant/10">
               {#if campaign.status === 'DRAFT'}
-                <ActionButton variant="primary" size="sm" icon="play" label="Lancer" onclick={() => changeStatus(campaign, 'SCHEDULED')} />
-                <ActionButton variant="neutral" size="sm" icon="pencil" label="Modifier" onclick={() => openEdit(campaign)} />
+                <ActionButton variant="primary" size="sm" icon="play" label={m.camp_launch()} onclick={() => changeStatus(campaign, 'SCHEDULED')} />
+                <ActionButton variant="neutral" size="sm" icon="pencil" label={m.camp_edit()} onclick={() => openEdit(campaign)} />
               {:else if campaign.status === 'SCHEDULED' || campaign.status === 'RUNNING'}
-                <ActionButton variant="warning" size="sm" icon="pause" label="Annuler" onclick={() => changeStatus(campaign, 'CANCELLED')} />
+                <ActionButton variant="warning" size="sm" icon="pause" label={m.camp_cancel_campaign()} onclick={() => changeStatus(campaign, 'CANCELLED')} />
               {:else if campaign.status === 'CANCELLED'}
-                <ActionButton variant="neutral" size="sm" icon="rotate-ccw" label="Repasser en brouillon" onclick={() => changeStatus(campaign, 'DRAFT')} />
+                <ActionButton variant="neutral" size="sm" icon="rotate-ccw" label={m.camp_back_to_draft()} onclick={() => changeStatus(campaign, 'DRAFT')} />
               {/if}
-              <ActionButton variant="danger" size="sm" icon="trash" label="Supprimer" onclick={() => remove(campaign)} />
+              <ActionButton variant="danger" size="sm" icon="trash" label={m.common_delete()} onclick={() => remove(campaign)} />
             </div>
           </div>
         </SectionCard>
@@ -396,8 +396,8 @@
 <!-- ── Éditeur ──────────────────────────────────────────────────────────── -->
 <Modal
   bind:open={modalOpen}
-  title={editingId ? 'Modifier la campagne' : 'Nouvelle campagne'}
-  subtitle="Ce qu'on dit, à qui, et comment on saura si ça a marché"
+  title={editingId ? m.camp_edit_title() : m.camp_new()}
+  subtitle={m.camp_modal_subtitle()}
   size="xl"
   closeOnBackdropClick={!saving}
 >
@@ -406,11 +406,11 @@
     <div class="campaign-section">
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <label class="block">
-          <span class="text-xs font-bold text-on-surface-variant/80 ml-1 mb-2 block">Nom</span>
-          <FormInput type="text" bind:value={form.name} placeholder="Lancement de la saison 3" className="w-full" />
+          <span class="text-xs font-bold text-on-surface-variant/80 ml-1 mb-2 block">{m.camp_name()}</span>
+          <FormInput type="text" bind:value={form.name} placeholder={m.camp_name_ph()} className="w-full" />
         </label>
         <label class="block">
-          <span class="text-xs font-bold text-on-surface-variant/80 ml-1 mb-2 block">Date pivot (jour J)</span>
+          <span class="text-xs font-bold text-on-surface-variant/80 ml-1 mb-2 block">{m.camp_pivot()}</span>
           <input
             type="datetime-local"
             bind:value={form.startAt}
@@ -420,8 +420,8 @@
       </div>
 
       <label class="block mt-3">
-        <span class="text-xs font-bold text-on-surface-variant/80 ml-1 mb-2 block">Description interne</span>
-        <FormInput type="text" bind:value={form.description} placeholder="Vue par le staff seulement" className="w-full" />
+        <span class="text-xs font-bold text-on-surface-variant/80 ml-1 mb-2 block">{m.camp_internal_desc()}</span>
+        <FormInput type="text" bind:value={form.description} placeholder={m.camp_internal_desc_ph()} className="w-full" />
       </label>
     </div>
 
@@ -432,12 +432,12 @@
           <Papicon icon="layers" size={16} />
         </div>
         <div class="min-w-0 flex-1">
-          <p class="text-sm font-semibold text-on-surface">Étapes</p>
+          <p class="text-sm font-semibold text-on-surface">{m.camp_steps()}</p>
           <p class="text-xs text-on-surface-variant mt-0.5 leading-relaxed">
-            Le décalage se compte depuis la date pivot. Négatif pour un teaser : −10080 min = une semaine avant.
+            {m.camp_steps_hint()}
           </p>
         </div>
-        <ActionButton variant="neutral" size="sm" icon="plus" label="Ajouter" onclick={() => (form.steps = [...form.steps, emptyStep()])} />
+        <ActionButton variant="neutral" size="sm" icon="plus" label={m.camp_add_step()} onclick={() => (form.steps = [...form.steps, emptyStep()])} />
       </div>
 
       <div class="space-y-2.5 mt-3">
@@ -457,7 +457,7 @@
                   type="button"
                   class="p-1.5 rounded-lg hover:bg-error/10 text-on-surface-variant hover:text-error transition-colors"
                   onclick={() => (form.steps = form.steps.filter((_, i) => i !== index))}
-                  title="Retirer l'étape"
+                  title={m.camp_remove_step()}
                 >
                   <Papicon icon="trash" size={14} />
                 </button>
@@ -466,7 +466,7 @@
 
             <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <label class="block">
-                <span class="text-2xs font-bold text-on-surface-variant/80 ml-1 mb-1.5 block">Décalage (min)</span>
+                <span class="text-2xs font-bold text-on-surface-variant/80 ml-1 mb-1.5 block">{m.camp_offset()}</span>
                 <input
                   type="number"
                   bind:value={step.offsetMinutes}
@@ -474,17 +474,17 @@
                 />
               </label>
               <label class="block">
-                <span class="text-2xs font-bold text-on-surface-variant/80 ml-1 mb-1.5 block">Diffusion</span>
+                <span class="text-2xs font-bold text-on-surface-variant/80 ml-1 mb-1.5 block">{m.camp_delivery()}</span>
                 <FormSelect bind:value={step.delivery} className="w-full">
-                  <option value="CHANNEL">Dans un salon</option>
-                  <option value="DM">En message privé</option>
+                  <option value="CHANNEL">{m.camp_delivery_channel()}</option>
+                  <option value="DM">{m.camp_delivery_dm()}</option>
                 </FormSelect>
               </label>
               {#if step.delivery === 'CHANNEL'}
                 <label class="block">
-                  <span class="text-2xs font-bold text-on-surface-variant/80 ml-1 mb-1.5 block">Salon</span>
+                  <span class="text-2xs font-bold text-on-surface-variant/80 ml-1 mb-1.5 block">{m.camp_channel()}</span>
                   <FormSelect bind:value={step.channelId} className="w-full">
-                    <option value={null}>Choisir…</option>
+                    <option value={null}>{m.camp_choose()}</option>
                     {#each discordChannels as channel (channel.id)}
                       <option value={channel.id}>#{channel.name}</option>
                     {/each}
@@ -495,7 +495,7 @@
 
             <FormTextarea
               bind:value={step.content}
-              placeholder={'Le message. {server} et, en MP, {user} sont remplacés.'}
+              placeholder={m.camp_content_ph({ server: '{server}', user: '{user}' })}
               className="w-full h-20"
             />
           </div>
@@ -510,17 +510,16 @@
           <Papicon icon="users" size={16} />
         </div>
         <div class="min-w-0 flex-1">
-          <p class="text-sm font-semibold text-on-surface">Audience</p>
+          <p class="text-sm font-semibold text-on-surface">{m.camp_audience()}</p>
           <p class="text-xs text-on-surface-variant mt-0.5 leading-relaxed">
-            Les critères se cumulent. Ils ne servent qu'aux étapes en message privé :
-            un message en salon est vu par tous ceux qui y ont accès.
+            {m.camp_audience_hint()}
           </p>
         </div>
         <ActionButton
           variant="neutral"
           size="sm"
           icon="users"
-          label={previewing ? 'Calcul…' : 'Compter'}
+          label={previewing ? m.camp_counting() : m.camp_count()}
           disabled={previewing}
           onclick={preview}
         />
@@ -528,7 +527,7 @@
 
       {#if audiencePreview}
         <p class="text-xs text-on-surface-variant rounded-lg bg-surface-container px-3 py-2 mt-3">
-          <span class="font-semibold text-on-surface">{audiencePreview.count} membre(s)</span>
+          <span class="font-semibold text-on-surface">{m.camp_members({ count: audiencePreview.count })}</span>
           {#if audiencePreview.sample.length > 0}
             · {audiencePreview.sample.map((s) => s.name).join(', ')}{audiencePreview.count > audiencePreview.sample.length ? '…' : ''}
           {/if}
@@ -537,34 +536,34 @@
 
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
         <div>
-          <span class="text-2xs font-bold text-on-surface-variant/80 ml-1 mb-1.5 block">Rôles visés</span>
+          <span class="text-2xs font-bold text-on-surface-variant/80 ml-1 mb-1.5 block">{m.camp_roles_in()}</span>
           <MultiSelect
             bind:values={form.audienceRoleIds}
             options={discordRoles.map(r => ({ id: r.id, name: `@${r.name}` }))}
-            placeholder="Tous les membres"
+            placeholder={m.camp_all_members()}
           />
         </div>
         <div>
-          <span class="text-2xs font-bold text-on-surface-variant/80 ml-1 mb-1.5 block">Rôles exclus</span>
+          <span class="text-2xs font-bold text-on-surface-variant/80 ml-1 mb-1.5 block">{m.camp_roles_out()}</span>
           <MultiSelect
             bind:values={form.audienceExcludeRoleIds}
             options={discordRoles.map(r => ({ id: r.id, name: `@${r.name}` }))}
-            placeholder="Personne"
+            placeholder={m.camp_nobody()}
           />
         </div>
       </div>
 
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">
         <label class="block">
-          <span class="text-2xs font-bold text-on-surface-variant/80 ml-1 mb-1.5 block">Niveau minimum</span>
+          <span class="text-2xs font-bold text-on-surface-variant/80 ml-1 mb-1.5 block">{m.camp_min_level()}</span>
           <FormInput type="number" bind:value={form.audienceMinLevel} placeholder="-" className="w-full" />
         </label>
         <label class="block">
-          <span class="text-2xs font-bold text-on-surface-variant/80 ml-1 mb-1.5 block">Ancienneté (jours)</span>
+          <span class="text-2xs font-bold text-on-surface-variant/80 ml-1 mb-1.5 block">{m.camp_min_tenure()}</span>
           <FormInput type="number" bind:value={form.audienceMinTenureDays} placeholder="-" className="w-full" />
         </label>
         <label class="block">
-          <span class="text-2xs font-bold text-on-surface-variant/80 ml-1 mb-1.5 block">Inactif depuis (jours)</span>
+          <span class="text-2xs font-bold text-on-surface-variant/80 ml-1 mb-1.5 block">{m.camp_inactive()}</span>
           <FormInput type="number" bind:value={form.audienceInactiveDays} placeholder="-" className="w-full" />
         </label>
       </div>
@@ -577,25 +576,24 @@
           <Papicon icon="bar-chart-2" size={16} />
         </div>
         <div class="min-w-0 flex-1">
-          <p class="text-sm font-semibold text-on-surface">Mesure &amp; partenaires</p>
+          <p class="text-sm font-semibold text-on-surface">{m.camp_measure()}</p>
           <p class="text-xs text-on-surface-variant mt-0.5 leading-relaxed">
-            Comment attribuer les arrivées à la campagne, et où la relayer.
+            {m.camp_measure_hint()}
           </p>
         </div>
       </div>
 
       <div class="space-y-3 mt-3">
         <label class="block">
-          <span class="text-xs font-bold text-on-surface-variant/80 ml-1 mb-2 block">Code d'invitation à créditer</span>
-          <FormInput type="text" bind:value={form.inviteCode} placeholder="ex. saison3" className="w-full" />
+          <span class="text-xs font-bold text-on-surface-variant/80 ml-1 mb-2 block">{m.camp_invite_code()}</span>
+          <FormInput type="text" bind:value={form.inviteCode} placeholder={m.camp_invite_code_ph()} className="w-full" />
           <span class="text-2xs text-on-surface-variant ml-1 mt-1 block">
-            Les arrivées passées par ce code depuis la date pivot sont comptées comme conversions.
-            Sans lui, aucune arrivée n'est attribuable à la campagne.
+            {m.camp_invite_code_hint()}
           </span>
         </label>
 
         <label class="block">
-          <span class="text-xs font-bold text-on-surface-variant/80 ml-1 mb-2 block">Diffuser aussi sur (IDs de serveurs)</span>
+          <span class="text-xs font-bold text-on-surface-variant/80 ml-1 mb-2 block">{m.camp_targets()}</span>
           <FormInput
             type="text"
             value={form.targetGuildIds.join(', ')}
@@ -607,8 +605,7 @@
             className="w-full"
           />
           <span class="text-2xs text-on-surface-variant ml-1 mt-1 block">
-            Serveurs partenaires où Kotbo est présent. Les étapes en salon y sont postées si le salon
-            y existe sous le même identifiant ; les serveurs injoignables comptent comme des échecs.
+            {m.camp_targets_hint()}
           </span>
         </label>
       </div>
@@ -617,10 +614,10 @@
 
   {#snippet footer()}
     <div class="flex justify-end gap-2">
-      <ActionButton variant="neutral" label="Annuler" disabled={saving} onclick={() => (modalOpen = false)} />
+      <ActionButton variant="neutral" label={m.common_cancel()} disabled={saving} onclick={() => (modalOpen = false)} />
       <ActionButton
         variant="primary"
-        label={saving ? 'Enregistrement…' : 'Enregistrer'}
+        label={saving ? m.camp_saving() : m.common_save()}
         disabled={saving}
         onclick={save}
       />

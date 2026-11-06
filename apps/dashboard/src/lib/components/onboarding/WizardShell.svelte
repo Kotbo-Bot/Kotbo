@@ -167,7 +167,7 @@
           class="inline-flex items-center gap-1.5 text-body-sm font-medium text-on-surface-variant hover:text-on-surface transition-colors"
         >
           <Papicon icon="arrow-left-right" size={13} />
-          <span class="hidden sm:inline">Changer de serveur</span>
+          <span class="hidden sm:inline">{m.sbx_switch_server()}</span>
         </a>
       </div>
     </div>

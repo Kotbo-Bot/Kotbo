@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from '../lib/i18n';
   import PrivacyNotice from '../lib/components/PrivacyNotice.svelte';
   import { onMount } from 'svelte';
   import { API_BASE_URL } from '../lib/api';
@@ -45,14 +46,14 @@
         const bytes = Uint8Array.from(binaryString, c => c.charCodeAt(0));
         result = JSON.parse(new TextDecoder().decode(bytes));
       } catch {
-        error = 'Résultat de vérification invalide.';
+        error = m.vfy_err_result();
       }
       loading = false;
       return;
     }
 
     if (!guildId || !token) {
-      error = 'Lien de vérification invalide.';
+      error = m.vfy_err_link();
       loading = false;
       return;
     }
@@ -63,10 +64,10 @@
         sessionInfo = await res.json();
       } else {
         const data = await res.json().catch(() => ({}));
-        error = data.error || 'Session de vérification invalide ou expirée.';
+        error = data.error || m.vfy_err_session();
       }
     } catch {
-      error = 'Impossible de contacter le serveur.';
+      error = m.vfy_err_network();
     }
 
     loading = false;
@@ -74,13 +75,13 @@
 
   function getErrorMessage(code: string): string {
     switch (code) {
-      case 'expired': return 'Cette session de vérification a expiré. Veuillez en demander une nouvelle.';
-      case 'oauth_failed': return 'L\'authentification Discord a échoué. Veuillez réessayer.';
-      case 'oauth_config': return 'Configuration OAuth invalide côté serveur.';
-      case 'user_fetch': return 'Impossible de récupérer votre identité Discord.';
-      case 'invalid_state': return 'Paramètre de sécurité invalide. Veuillez réessayer.';
-      case 'missing_params': return 'Paramètres manquants dans la réponse OAuth.';
-      default: return 'Une erreur est survenue lors de la vérification.';
+      case 'expired': return m.vfy_err_expired();
+      case 'oauth_failed': return m.vfy_err_oauth();
+      case 'oauth_config': return m.vfy_err_oauth_config();
+      case 'user_fetch': return m.vfy_err_user();
+      case 'invalid_state': return m.vfy_err_state();
+      case 'missing_params': return m.vfy_err_params();
+      default: return m.vfy_err_generic();
     }
   }
 
@@ -121,10 +122,10 @@
   function getTimeRemaining(): string {
     if (!sessionInfo?.expiresAt) return '';
     const diff = new Date(sessionInfo.expiresAt).getTime() - Date.now();
-    if (diff <= 0) return 'Expiré';
+    if (diff <= 0) return m.vfy_expired();
     const hours = Math.floor(diff / (1000 * 60 * 60));
     const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-    return `${hours}h ${minutes}min`;
+    return m.vfy_time_left({ hours, minutes });
   }
 </script>
 
@@ -133,7 +134,7 @@
     {#if loading}
       <div class="bg-[#12121a] border border-white/5 rounded-2xl p-10 text-center">
         <div class="animate-spin w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full mx-auto mb-4"></div>
-        <p class="text-white/60 text-sm">Chargement de la session...</p>
+        <p class="text-white/60 text-sm">{m.vfy_loading()}</p>
       </div>
     {:else if error}
       <div class="bg-[#12121a] border border-red-500/20 rounded-2xl p-10 text-center">
@@ -142,9 +143,9 @@
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
           </svg>
         </div>
-        <h2 class="text-white text-xl font-bold mb-2">Erreur de vérification</h2>
+        <h2 class="text-white text-xl font-bold mb-2">{m.vfy_error_title()}</h2>
         <p class="text-red-300/80 text-sm mb-6">{error}</p>
-        <p class="text-white/30 text-xs">Contactez un administrateur si le problème persiste.</p>
+        <p class="text-white/30 text-xs">{m.vfy_error_hint()}</p>
       </div>
     {:else if result}
       <div class="bg-[#12121a] border border-{result.duplicateDetected ? 'amber' : 'emerald'}-500/20 rounded-2xl p-10 text-center">
@@ -154,11 +155,11 @@
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
             </svg>
           </div>
-          <h2 class="text-white text-xl font-bold mb-2">Double compte détecté</h2>
+          <h2 class="text-white text-xl font-bold mb-2">{m.vfy_duplicate()}</h2>
           <p class="text-amber-300/80 text-sm mb-4">{result.message}</p>
           {#if result.duplicateUserId}
             <div class="bg-amber-500/5 border border-amber-500/15 rounded-lg p-3 mb-4">
-              <p class="text-amber-300/60 text-xs">Compte associé : <span class="font-mono text-amber-300">{result.duplicateUserId}</span></p>
+              <p class="text-amber-300/60 text-xs">{m.vfy_linked_account()} <span class="font-mono text-amber-300">{result.duplicateUserId}</span></p>
             </div>
           {/if}
         {:else}
@@ -167,7 +168,7 @@
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
             </svg>
           </div>
-          <h2 class="text-white text-xl font-bold mb-2">Vérification réussie !</h2>
+          <h2 class="text-white text-xl font-bold mb-2">{m.vfy_success()}</h2>
           <p class="text-emerald-300/80 text-sm mb-4">{result.message}</p>
           {#if result.inviteUrl}
             <div class="mt-6">
@@ -176,7 +177,7 @@
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
                 </svg>
-                Rejoindre le serveur
+                {m.vfy_join()}
               </a>
             </div>
           {/if}
@@ -207,8 +208,8 @@
                 </svg>
               </div>
               <div>
-                <p class="text-white/80 text-sm font-medium">Vérification sécurisée</p>
-                <p class="text-white/40 text-xs mt-0.5">Vous serez redirigé vers Discord pour confirmer votre identité via OAuth2.</p>
+                <p class="text-white/80 text-sm font-medium">{m.vfy_secure()}</p>
+                <p class="text-white/40 text-xs mt-0.5">{m.vfy_secure_desc()}</p>
               </div>
             </div>
 
@@ -219,8 +220,8 @@
                 </svg>
               </div>
               <div>
-                <p class="text-white/80 text-sm font-medium">Protection anti-DC</p>
-                <p class="text-white/40 text-xs mt-0.5">Ce système détecte les doubles comptes pour protéger la communauté.</p>
+                <p class="text-white/80 text-sm font-medium">{m.vfy_anti_dc()}</p>
+                <p class="text-white/40 text-xs mt-0.5">{m.vfy_anti_dc_desc()}</p>
               </div>
             </div>
 
@@ -231,8 +232,8 @@
                 </svg>
               </div>
               <div>
-                <p class="text-white/80 text-sm font-medium">Expire dans {getTimeRemaining()}</p>
-                <p class="text-white/40 text-xs mt-0.5">Complétez la vérification avant l'expiration du lien.</p>
+                <p class="text-white/80 text-sm font-medium">{m.vfy_expires_in({ time: getTimeRemaining() })}</p>
+                <p class="text-white/40 text-xs mt-0.5">{m.vfy_expires_desc()}</p>
               </div>
             </div>
           </div>
@@ -244,26 +245,26 @@
           >
             {#if verifying}
               <div class="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full"></div>
-              Redirection...
+              {m.vfy_redirecting()}
             {:else}
               <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M20.317 4.37a19.791 19.791 0 00-4.885-1.515.074.074 0 00-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 00-5.487 0 12.64 12.64 0 00-.617-1.25.077.077 0 00-.079-.037A19.736 19.736 0 003.677 4.37a.07.07 0 00-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 00.031.057 19.9 19.9 0 005.993 3.03.078.078 0 00.084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 00-.041-.106 13.107 13.107 0 01-1.872-.892.077.077 0 01-.008-.128 10.2 10.2 0 00.372-.292.074.074 0 01.077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 01.078.01c.12.098.246.198.373.292a.077.077 0 01-.006.127 12.299 12.299 0 01-1.873.892.077.077 0 00-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 00.084.028 19.839 19.839 0 006.002-3.03.077.077 0 00.032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 00-.031-.03z"/>
               </svg>
-              Vérifier avec Discord
+              {m.vfy_verify()}
             {/if}
           </button>
 
           <p class="text-white/20 text-2xs text-center mt-4">
-            En cliquant, vous autorisez le bot à vérifier votre identité Discord.
+            {m.vfy_consent()}
           </p>
 
           <div class="mt-4 rounded-lg border border-white/5 bg-white/3 px-3 py-2.5">
-            <p class="text-white/50 text-xs font-semibold mb-1.5">Données collectées lors de la vérification</p>
+            <p class="text-white/50 text-xs font-semibold mb-1.5">{m.vfy_data_title()}</p>
             <ul class="text-white/40 text-2xs leading-relaxed space-y-1 list-disc list-inside">
-              <li>Identité Discord (identifiant, pseudo, avatar)</li>
-              <li>Adresse IP</li>
-              <li>Informations techniques de l'appareil (navigateur, système, langue, résolution d'écran, fuseau horaire, mémoire, cœurs CPU)</li>
-              <li>E-mail, connexions et serveurs Discord, si le champ d'autorisation OAuth les inclut</li>
+              <li>{m.vfy_data_identity()}</li>
+              <li>{m.vfy_data_ip()}</li>
+              <li>{m.vfy_data_device()}</li>
+              <li>{m.vfy_data_oauth()}</li>
             </ul>
           </div>
 
@@ -271,7 +272,7 @@
             <PrivacyNotice
               compact
               showDpa
-              text="Ces données servent à détecter les comptes multiples (DCA) et sécuriser le serveur. "
+              text={m.vfy_data_purpose()}
             />
           </div>
         </div>
@@ -280,7 +281,7 @@
 
     <!-- Footer -->
     <div class="text-center mt-6">
-      <p class="text-white/20 text-2xs">Kotbo Security Verification</p>
+      <p class="text-white/20 text-2xs">{m.vfy_footer()}</p>
     </div>
   </div>
 </div>

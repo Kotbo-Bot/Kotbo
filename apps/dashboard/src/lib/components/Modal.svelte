@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from '../i18n';
   import { portal } from '../actions/portal';
   import Papicon from './Papicon.svelte';
 
@@ -86,7 +87,7 @@
       onkeypress={(e) => e.key === 'Enter' && handleBackdropClick(e as any)}
       tabindex="-1"
       role="button"
-      aria-label="Fermer la fenêtre"
+      aria-label={m.mdx_close()}
     ></div>
 
     <!-- Modal Panel -->
@@ -114,7 +115,7 @@
               type="button"
               onclick={(e) => { open = false; onClose(e); }}
               class="ml-3 h-8 w-8 flex items-center justify-center rounded-md bg-surface-container hover:bg-surface-container-high transition-colors text-on-surface-variant hover:text-on-surface"
-              aria-label="Fermer"
+              aria-label={m.common_close()}
             >
               <Papicon icon="x" size={14} />
             </button>

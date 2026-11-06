@@ -262,9 +262,9 @@
   async function respond(proposalId: string, action: 'accept' | 'decline' | 'withdraw') {
     if (action === 'accept') {
       const confirmed = await confirmDialog.ask({
-        title: 'Accepter cette proposition ?',
-        description: 'Un dossier est ouvert de chaque côté et les deux sont reliés par un pont. Rien n\'est actif tant que tu ne l\'actives pas.',
-        confirmLabel: 'Accepter',
+        title: m.pdir_accept_confirm_title(),
+        description: m.pdir_accept_confirm_desc(),
+        confirmLabel: m.pdir_accept(),
         variant: 'default',
       });
       if (!confirmed) return;
@@ -299,8 +299,8 @@
 </script>
 
 <ModulePage
-  title="Annuaire des partenaires"
-  description="Trouve des serveurs partenaires, et fais-toi trouver par eux."
+  title={m.pdir_title()}
+  description={m.pdir_desc()}
   icon="compass"
   featureKey="partnerships"
 >
@@ -309,7 +309,7 @@
   {/snippet}
 
   <div class="inline-flex rounded-lg bg-surface-container p-0.5 mb-4 flex-wrap">
-    {#each [['listing', 'Ma vitrine'], ['discover', 'Découvrir'], ['proposals', `Propositions${receivedPending.length > 0 ? ` (${receivedPending.length})` : ''}`], ['trust', 'Confiance']] as [key, label] (key)}
+    {#each [['listing', m.pdir_tab_listing()], ['discover', m.pdir_tab_discover()], ['proposals', receivedPending.length > 0 ? m.pdir_tab_proposals_count({ count: receivedPending.length }) : m.pdir_tab_proposals()], ['trust', m.pdir_tab_trust()]] as [key, label] (key)}
       <button
         class="px-3 py-1.5 text-xs rounded-md {tab === key ? 'bg-surface text-on-surface' : 'text-on-surface-variant'}"
         onclick={() => (tab = key as typeof tab)}
@@ -327,95 +327,92 @@
         <div class="min-w-0">
           <p class="text-sm font-semibold text-on-surface flex items-center gap-2">
             <Papicon icon="compass" size={15} />
-            Ton serveur n'est pas référencé
+            {m.pdir_not_listed()}
           </p>
           <p class="text-xs text-on-surface-variant mt-1 max-w-2xl">
-            Tant que le référencement n'est pas autorisé, la fiche ci-dessous reste privée : la case « Publier »
-            sera refusée. Seul ce que tu écris ici est publié, et l'effectif l'est par tranche.
+            {m.pdir_not_listed_desc()}
           </p>
         </div>
         <ActionButton
           variant="primary"
           size="sm"
           icon="check"
-          label="Autoriser le référencement"
+          label={m.pdir_allow_listing()}
           onclick={() => toggleSetting('directoryOptIn', true)}
         />
       </div>
     {/if}
 
     <div class="grid grid-cols-1 xl:grid-cols-2 gap-3 items-start">
-      <SectionCard title="Ta fiche" description="Ce que les autres serveurs verront de toi">
+      <SectionCard title={m.pdir_profile_title()} description={m.pdir_profile_desc()}>
         {#snippet actions()}
           <ActionButton
             variant="neutral"
             size="sm"
             icon="sparkles"
-            label={filling ? 'Lecture…' : 'Remplir depuis mon serveur'}
+            label={filling ? m.pdir_reading() : m.pdir_fill_from_server()}
             onclick={fillFromServer}
           />
         {/snippet}
 
         <div class="space-y-3">
-          <FormInput label="Nom affiché" bind:value={form.displayName} />
-          <FormInput label="Accroche" bind:value={form.headline} placeholder="Une ligne pour donner envie" />
+          <FormInput label={m.pdir_display_name()} bind:value={form.displayName} />
+          <FormInput label={m.pdir_headline()} bind:value={form.headline} placeholder={m.pdir_headline_ph()} />
           <label class="block">
-            <span class="text-2xs font-bold text-on-surface-variant/80 ml-1 mb-1.5 block">Présentation</span>
+            <span class="text-2xs font-bold text-on-surface-variant/80 ml-1 mb-1.5 block">{m.pdir_description()}</span>
             <FormTextarea bind:value={form.description} rows={4} />
           </label>
-          <FormInput label="Thèmes (séparés par des virgules)" bind:value={form.tags} placeholder="gaming, entraide, francophone" />
-          <FormInput label="Types recherchés" bind:value={form.seekingTypes} placeholder="CROSS_PROMO, EVENT" />
+          <FormInput label={m.pdir_tags()} bind:value={form.tags} placeholder={m.pdir_tags_ph()} />
+          <FormInput label={m.pdir_seeking()} bind:value={form.seekingTypes} placeholder="CROSS_PROMO, EVENT" />
           <div class="space-y-1.5">
-            <FormInput label="Lien d'invitation" bind:value={form.inviteUrl} placeholder="https://discord.gg/…" />
+            <FormInput label={m.pdir_invite_url()} bind:value={form.inviteUrl} placeholder="https://discord.gg/…" />
             <ActionButton
               variant="neutral"
               size="sm"
               icon="link"
-              label={creatingInvite ? 'Creation…' : 'Creer le lien pour moi'}
+              label={creatingInvite ? m.pdir_creating() : m.pdir_create_invite()}
               onclick={createInvite}
             />
           </div>
-          <FormInput label="Effectif (publié par tranche)" type="number" bind:value={form.memberCount} />
+          <FormInput label={m.pdir_member_count()} type="number" bind:value={form.memberCount} />
 
           <label class="flex items-center gap-3 cursor-pointer">
             <input type="checkbox" bind:checked={form.openToProposals} />
-            <span class="text-body-sm text-on-surface">Accepter les propositions spontanées</span>
+            <span class="text-body-sm text-on-surface">{m.pdir_open_to_proposals()}</span>
           </label>
           <label class="flex items-center gap-3 cursor-pointer">
             <input type="checkbox" bind:checked={form.published} />
-            <span class="text-body-sm text-on-surface">Publier la fiche</span>
+            <span class="text-body-sm text-on-surface">{m.pdir_publish()}</span>
           </label>
 
           <p class="text-2xs text-on-surface-variant flex items-start gap-1.5">
             <Papicon icon="info" size={12} class="mt-0.5 shrink-0" />
             <span>
-              L'effectif n'est jamais publié en valeur exacte, seulement par tranche. Aucune donnée de membre ne
-              figure dans l'annuaire.
+              {m.pdir_privacy_note()}
             </span>
           </p>
 
-          <ActionButton variant="primary" size="sm" icon="save" label="Enregistrer" onclick={saveListing} />
+          <ActionButton variant="primary" size="sm" icon="save" label={m.common_save()} onclick={saveListing} />
         </div>
       </SectionCard>
 
-      <SectionCard title="Réputation publique" description="Déduite des dossiers menés à leur terme, jamais saisie">
+      <SectionCard title={m.pdir_reputation_title()} description={m.pdir_reputation_desc()}>
         {#if listing}
           <div class="grid grid-cols-2 gap-2">
             <div class="rounded-lg bg-surface-container px-3 py-2 text-center">
               <div class="text-[18px] font-semibold text-on-surface tabular-nums">{listing.reliabilityScore}</div>
-              <div class="text-2xs text-on-surface-variant">Fiabilité /100</div>
+              <div class="text-2xs text-on-surface-variant">{m.pdir_reliability()}</div>
             </div>
             <div class="rounded-lg bg-surface-container px-3 py-2 text-center">
               <div class="text-[18px] font-semibold text-on-surface tabular-nums">{listing.partnershipsDone}</div>
-              <div class="text-2xs text-on-surface-variant">Partenariats terminés</div>
+              <div class="text-2xs text-on-surface-variant">{m.pdir_done()}</div>
             </div>
           </div>
           <p class="text-2xs text-on-surface-variant mt-3">
-            Publiée le {date(listing.lastPublishedAt)}. La fiabilité est le rapport entre les partenariats menés à
-            terme et ceux qui ont été rompus.
+            {m.pdir_published_on({ date: date(listing.lastPublishedAt) })}
           </p>
         {:else}
-          <p class="text-xs text-on-surface-variant">Aucune fiche pour l'instant.</p>
+          <p class="text-xs text-on-surface-variant">{m.pdir_no_profile()}</p>
         {/if}
       </SectionCard>
     </div>
@@ -424,12 +421,12 @@
       <div class="flex flex-wrap gap-2 items-center">
         <input
           class="flex-1 min-w-[200px] max-w-md rounded-lg border border-outline-variant/30 bg-surface-container-low px-3 py-1.5 text-xs text-on-surface"
-          placeholder="Chercher un serveur par nom ou accroche"
+          placeholder={m.pdir_search_ph()}
           bind:value={query}
           onkeydown={(event) => event.key === 'Enter' && search()}
         />
-        <ActionButton variant="neutral" size="sm" icon="search" label={searching ? 'Recherche…' : 'Chercher'} onclick={search} />
-        <ActionButton variant="neutral" size="sm" icon="sparkles" label="Recalculer les suggestions" onclick={refreshMatches} />
+        <ActionButton variant="neutral" size="sm" icon="search" label={searching ? m.pdir_searching() : m.pdir_search()} onclick={search} />
+        <ActionButton variant="neutral" size="sm" icon="sparkles" label={m.pdir_recompute()} onclick={refreshMatches} />
 
         {#if settings && !settings.matchmakingEnabled}
           <label class="flex items-center gap-2 cursor-pointer text-2xs text-on-surface-variant">
@@ -438,16 +435,16 @@
               checked={false}
               onchange={() => toggleSetting('matchmakingEnabled', true)}
             />
-            Suggérer automatiquement des partenaires compatibles
+            {m.pdir_enable_matchmaking()}
           </label>
         {/if}
       </div>
 
       {#if proposing}
-        <SectionCard title={`Proposer à ${proposing.name}`} description="Ils recevront la proposition dans leur dashboard">
+        <SectionCard title={m.pdir_propose_to({ name: proposing.name })} description={m.pdir_propose_desc()}>
           <div class="space-y-3">
             <label class="block">
-              <span class="text-2xs font-bold text-on-surface-variant/80 ml-1 mb-1.5 block">Type de partenariat</span>
+              <span class="text-2xs font-bold text-on-surface-variant/80 ml-1 mb-1.5 block">{m.pdir_type()}</span>
               <select
                 class="w-full rounded-lg border border-outline-variant/30 bg-surface-container-low px-3 py-2 text-xs text-on-surface"
                 bind:value={proposalType}
@@ -460,26 +457,26 @@
 
             <label class="block">
               <span class="text-2xs font-bold text-on-surface-variant/80 ml-1 mb-1.5 block">
-                Mot d'accompagnement
+                {m.pdir_message()}
               </span>
               <textarea
                 class="w-full rounded-lg border border-outline-variant/30 bg-surface-container-low px-3 py-2 text-xs text-on-surface"
                 rows="3"
-                placeholder="Ce que tu proposes, en deux lignes"
+                placeholder={m.pdir_message_ph()}
                 bind:value={proposalMessage}
               ></textarea>
             </label>
 
             <div class="flex gap-2">
-              <ActionButton variant="primary" size="sm" icon="send" label={sending ? 'Envoi…' : 'Envoyer'} onclick={sendProposal} />
-              <ActionButton variant="neutral" size="sm" label="Annuler" onclick={() => (proposing = null)} />
+              <ActionButton variant="primary" size="sm" icon="send" label={sending ? m.pdir_sending() : m.pdir_send()} onclick={sendProposal} />
+              <ActionButton variant="neutral" size="sm" label={m.common_cancel()} onclick={() => (proposing = null)} />
             </div>
           </div>
         </SectionCard>
       {/if}
 
       {#if matches.length > 0}
-        <SectionCard title="Suggestions" description="Rapprochements calculés sur les thèmes, la taille, la langue et les types recherchés">
+        <SectionCard title={m.pdir_suggestions()} description={m.pdir_suggestions_desc()}>
           <div class="grid grid-cols-1 lg:grid-cols-2 gap-2">
             {#each matches as row (row.suggestion.id)}
               {@const reasons = row.suggestion.reasons ?? {}}
@@ -494,12 +491,12 @@
 
                 <p class="text-2xs text-on-surface-variant mt-1.5">
                   {#if reasons.sharedTags?.length}{reasons.sharedTags.join(', ')}{/if}
-                  {#if reasons.sameLocale} · même langue{/if}
+                  {#if reasons.sameLocale} · {m.pdir_same_language()}{/if}
                   {#if row.listing.sizeBucket} · {row.listing.sizeBucket}{/if}
                 </p>
 
                 <div class="flex gap-2 mt-2">
-                  <ActionButton variant="primary" size="sm" icon="send" label="Proposer" onclick={() => openProposal(row.listing.guildId, row.listing.displayName)} />
+                  <ActionButton variant="primary" size="sm" icon="send" label={m.pdir_propose()} onclick={() => openProposal(row.listing.guildId, row.listing.displayName)} />
                   <button
                     class="text-2xs text-on-surface-variant hover:underline"
                     onclick={async () => {
@@ -507,7 +504,7 @@
                       await load();
                     }}
                   >
-                    Écarter
+                    {m.pdir_dismiss()}
                   </button>
                 </div>
               </div>
@@ -517,18 +514,18 @@
       {/if}
 
       {#if results.length > 0}
-        <SectionCard title="Résultats" description={`${results.length} serveur(s)`}>
+        <SectionCard title={m.pdir_results()} description={m.pdir_results_count({ count: results.length })}>
           <div class="grid grid-cols-1 lg:grid-cols-2 gap-2">
             {#each results as item (item.guildId)}
               <div class="rounded-xl border border-outline-variant/20 bg-surface-container-low/50 px-3 py-2.5">
                 <p class="text-body-sm font-medium text-on-surface truncate">{item.displayName}</p>
                 <p class="text-2xs text-on-surface-variant">{item.headline ?? ''}</p>
                 <p class="text-2xs text-on-surface-variant mt-1">
-                  {item.sizeBucket ?? '-'} · fiabilité {item.reliabilityScore}/100
+                  {item.sizeBucket ?? '-'} · {m.pdir_reliability_score({ score: item.reliabilityScore })}
                   {#if item.tags?.length} · {item.tags.slice(0, 4).join(', ')}{/if}
                 </p>
                 <div class="mt-2">
-                  <ActionButton variant="neutral" size="sm" icon="send" label="Proposer un partenariat" onclick={() => openProposal(item.guildId, item.displayName)} />
+                  <ActionButton variant="neutral" size="sm" icon="send" label={m.pdir_propose_partnership()} onclick={() => openProposal(item.guildId, item.displayName)} />
                 </div>
               </div>
             {/each}
@@ -537,15 +534,15 @@
       {:else if !searching && matches.length === 0}
         <EmptyState
           icon="compass"
-          title="Rien à afficher"
-          description="Publie ta vitrine et active les suggestions dans les réglages pour que l'annuaire te propose des partenaires compatibles." reason="instruction" />
+          title={m.pdir_empty_title()}
+          description={m.pdir_empty_desc()} reason="instruction" />
       {/if}
     </div>
   {:else if tab === 'proposals'}
     <div class="grid grid-cols-1 xl:grid-cols-2 gap-3 items-start">
-      <SectionCard title="Reçues" description="Ce que d'autres serveurs te proposent">
+      <SectionCard title={m.pdir_received()} description={m.pdir_received_desc()}>
         {#if proposals.received.length === 0}
-          <p class="text-xs text-on-surface-variant">Aucune proposition reçue.</p>
+          <p class="text-xs text-on-surface-variant">{m.pdir_no_received()}</p>
         {:else}
           <div class="space-y-2">
             {#each proposals.received as proposal (proposal.id)}
@@ -554,11 +551,11 @@
                 {#if proposal.message}
                   <p class="text-2xs text-on-surface-variant mt-1 whitespace-pre-wrap">{proposal.message}</p>
                 {/if}
-                <p class="text-2xs text-on-surface-variant mt-1">Expire le {date(proposal.expiresAt)}</p>
+                <p class="text-2xs text-on-surface-variant mt-1">{m.pdir_expires_on({ date: date(proposal.expiresAt) })}</p>
                 {#if proposal.status === 'SENT' || proposal.status === 'SEEN'}
                   <div class="flex gap-2 mt-2">
-                    <ActionButton variant="primary" size="sm" icon="check" label="Accepter" onclick={() => respond(proposal.id, 'accept')} />
-                    <ActionButton variant="neutral" size="sm" icon="x" label="Décliner" onclick={() => respond(proposal.id, 'decline')} />
+                    <ActionButton variant="primary" size="sm" icon="check" label={m.pdir_accept()} onclick={() => respond(proposal.id, 'accept')} />
+                    <ActionButton variant="neutral" size="sm" icon="x" label={m.pdir_decline()} onclick={() => respond(proposal.id, 'decline')} />
                   </div>
                 {/if}
               </div>
@@ -567,9 +564,9 @@
         {/if}
       </SectionCard>
 
-      <SectionCard title="Envoyées" description="Ce que tu as proposé">
+      <SectionCard title={m.pdir_sent()} description={m.pdir_sent_desc()}>
         {#if proposals.sent.length === 0}
-          <p class="text-xs text-on-surface-variant">Aucune proposition envoyée.</p>
+          <p class="text-xs text-on-surface-variant">{m.pdir_no_sent()}</p>
         {:else}
           <div class="space-y-2">
             {#each proposals.sent as proposal (proposal.id)}
@@ -577,7 +574,7 @@
                 <span class="text-xs text-on-surface">{proposal.type} · {proposal.status}</span>
                 {#if proposal.status === 'SENT' || proposal.status === 'SEEN'}
                   <button class="text-2xs text-on-surface-variant hover:underline" onclick={() => respond(proposal.id, 'withdraw')}>
-                    Retirer
+                    {m.pdir_withdraw()}
                   </button>
                 {/if}
               </div>
@@ -588,16 +585,16 @@
     </div>
   {:else}
     <div class="grid grid-cols-1 xl:grid-cols-2 gap-3 items-start">
-      <SectionCard title="Liste de blocage" description="Serveurs et personnes avec qui tu ne veux plus travailler">
+      <SectionCard title={m.pdir_blocklist()} description={m.pdir_blocklist_desc()}>
         {#if blocklist.length === 0}
-          <p class="text-xs text-on-surface-variant">Personne n'est bloqué.</p>
+          <p class="text-xs text-on-surface-variant">{m.pdir_blocklist_empty()}</p>
         {:else}
           <div class="space-y-2">
             {#each blocklist as entry (entry.id)}
               <div class="rounded-lg bg-surface-container-low/50 px-3 py-2 flex items-center justify-between gap-3">
                 <span class="text-xs text-on-surface min-w-0">
                   <span class="block truncate">{entry.subjectRef}</span>
-                  <span class="text-2xs text-on-surface-variant">{entry.reason ?? 'Sans motif'}</span>
+                  <span class="text-2xs text-on-surface-variant">{entry.reason ?? m.pdir_no_reason()}</span>
                 </span>
                 <button
                   class="text-2xs text-on-surface-variant hover:underline shrink-0"
@@ -606,7 +603,7 @@
                     await load();
                   }}
                 >
-                  Débloquer
+                  {m.pdir_unblock()}
                 </button>
               </div>
             {/each}
@@ -614,9 +611,9 @@
         {/if}
       </SectionCard>
 
-      <SectionCard title="Signalements émis" description="Retire-les si le litige est réglé">
+      <SectionCard title={m.pdir_reports()} description={m.pdir_reports_desc()}>
         {#if reports.length === 0}
-          <p class="text-xs text-on-surface-variant">Aucun signalement.</p>
+          <p class="text-xs text-on-surface-variant">{m.pdir_no_reports()}</p>
         {:else}
           <div class="space-y-2">
             {#each reports as report (report.id)}
@@ -624,8 +621,8 @@
                 <span class="text-xs text-on-surface min-w-0">
                   <span class="block truncate">{report.partner.displayName}</span>
                   <span class="text-2xs text-on-surface-variant">
-                    {report.reason} · gravité {report.severity} · {date(report.createdAt)}
-                    {#if report.shared} · partagé au réseau{/if}
+                    {report.reason} · {m.pdir_severity({ severity: report.severity })} · {date(report.createdAt)}
+                    {#if report.shared} · {m.pdir_shared()}{/if}
                   </span>
                 </span>
                 <button
@@ -635,7 +632,7 @@
                     await load();
                   }}
                 >
-                  Retirer
+                  {m.pdir_withdraw()}
                 </button>
               </div>
             {/each}
@@ -643,8 +640,7 @@
         {/if}
 
         <p class="text-2xs text-on-surface-variant mt-3">
-          Les signalements partagés sont anonymisés : les autres serveurs voient leur nombre et leur nature, jamais
-          leur auteur. Un signal n'a jamais refusé un partenariat tout seul.
+          {m.pdir_reports_note()}
         </p>
       </SectionCard>
     </div>

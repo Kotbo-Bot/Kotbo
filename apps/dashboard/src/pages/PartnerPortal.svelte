@@ -13,6 +13,7 @@
   import { onMount } from 'svelte';
   import { API_BASE_URL } from '../lib/api';
   import Papicon from '../lib/components/Papicon.svelte';
+  import { m, dateLocale } from '../lib/i18n';
 
   const { token = '' }: { token?: string } = $props();
 
@@ -23,9 +24,9 @@
   let signed = $state(false);
 
   const partyLabel: Record<string, string> = {
-    US: 'À la charge du serveur',
-    PARTNER: 'À votre charge',
-    BOTH: 'Des deux côtés',
+    US: m.ppo_party_us(),
+    PARTNER: m.ppo_party_partner(),
+    BOTH: m.ppo_party_both(),
   };
 
   /** Le portail vit hors du dashboard : pas de store d'auth, pas d'en-tête. */
@@ -40,12 +41,12 @@
     try {
       const response = await fetch(portalUrl());
       if (!response.ok) {
-        error = response.status === 404 ? "Ce lien n'est plus valide." : 'Chargement impossible.';
+        error = response.status === 404 ? m.ppo_link_invalid() : m.ppo_load_failed();
         return;
       }
       data = await response.json();
     } catch {
-      error = 'Chargement impossible.';
+      error = m.ppo_load_failed();
     } finally {
       loading = false;
     }
@@ -58,20 +59,20 @@
       const response = await fetch(portalUrl('/accept'), { method: 'POST' });
       if (!response.ok) {
         const body = await response.json().catch(() => null);
-        error = body?.error ?? "L'accord n'a pas pu être accepté.";
+        error = body?.error ?? m.ppo_sign_failed();
         return;
       }
       signed = true;
       await load();
     } catch {
-      error = "L'accord n'a pas pu être accepté.";
+      error = m.ppo_sign_failed();
     } finally {
       signing = false;
     }
   }
 
   function date(value: string | null | undefined): string {
-    return value ? new Date(value).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' }) : '-';
+    return value ? new Date(value).toLocaleDateString(dateLocale(), { day: '2-digit', month: 'long', year: 'numeric' }) : '-';
   }
 
   onMount(load);
@@ -80,13 +81,13 @@
 <div class="min-h-screen bg-surface px-4 py-10">
   <div class="mx-auto max-w-2xl space-y-4">
     {#if loading}
-      <p class="text-body-sm text-on-surface-variant text-center">Chargement…</p>
+      <p class="text-body-sm text-on-surface-variant text-center">{m.ppo_loading()}</p>
     {:else if error && !data}
       <div class="rounded-2xl border border-outline-variant/20 bg-surface-container px-5 py-8 text-center">
         <Papicon icon="alert-triangle" size={28} class="mx-auto mb-3 text-warning" />
         <p class="text-sm text-on-surface">{error}</p>
         <p class="text-xs text-on-surface-variant mt-2">
-          Demandez un nouveau lien à l'équipe qui vous a contacté.
+          {m.ppo_ask_new_link()}
         </p>
       </div>
     {:else if data}
@@ -98,16 +99,16 @@
         <div class="min-w-0">
           <p class="text-[15px] font-semibold text-on-surface truncate">{data.host.name}</p>
           <p class="text-xs text-on-surface-variant truncate">
-            Partenariat avec {data.partner.displayName}
+            {m.ppo_partnership_with({ name: data.partner.displayName })}
           </p>
         </div>
       </div>
 
       <div class="rounded-2xl border border-outline-variant/20 bg-surface-container px-5 py-4 space-y-3">
         <div class="flex flex-wrap gap-3 text-xs text-on-surface-variant">
-          <span>Type : <span class="text-on-surface">{data.partnership.type}</span></span>
-          <span>État : <span class="text-on-surface">{data.partnership.stage}</span></span>
-          <span>Période : <span class="text-on-surface">{date(data.partnership.startAt)} → {date(data.partnership.endAt)}</span></span>
+          <span>{m.ppo_type()} <span class="text-on-surface">{data.partnership.type}</span></span>
+          <span>{m.ppo_stage()} <span class="text-on-surface">{data.partnership.stage}</span></span>
+          <span>{m.ppo_period()} <span class="text-on-surface">{date(data.partnership.startAt)} → {date(data.partnership.endAt)}</span></span>
         </div>
 
         {#if data.partnership.summary}
@@ -120,14 +121,14 @@
 
       {#if data.commitments.length > 0}
         <div class="rounded-2xl border border-outline-variant/20 bg-surface-container px-5 py-4">
-          <p class="text-2xs font-bold text-on-surface-variant/80 mb-2">Engagements</p>
+          <p class="text-2xs font-bold text-on-surface-variant/80 mb-2">{m.ppo_commitments()}</p>
           <div class="space-y-1.5">
             {#each data.commitments as commitment (commitment.kind + commitment.label)}
               <div class="flex items-start justify-between gap-3 text-xs">
                 <span class="text-on-surface">
                   {commitment.label ?? commitment.kind}
                   {#if commitment.targetCount}
-                    <span class="text-on-surface-variant"> · {commitment.targetCount} par {commitment.targetPeriod}</span>
+                    <span class="text-on-surface-variant"> · {m.ppo_target({ count: commitment.targetCount, period: commitment.targetPeriod })}</span>
                   {/if}
                 </span>
                 <span class="text-2xs text-on-surface-variant shrink-0">{partyLabel[commitment.party] ?? ''}</span>
@@ -140,10 +141,10 @@
       {#if data.agreement}
         <div class="rounded-2xl border border-outline-variant/20 bg-surface-container px-5 py-4 space-y-3">
           <div class="flex items-center justify-between gap-3">
-            <p class="text-2xs font-bold text-on-surface-variant/80">Accord - version {data.agreement.version}</p>
+            <p class="text-2xs font-bold text-on-surface-variant/80">{m.ppo_agreement_version({ version: data.agreement.version })}</p>
             <span class="text-2xs text-on-surface-variant">
-              {data.agreement.acceptedByUs ? 'Signé par le serveur' : 'En attente du serveur'}
-              {#if data.agreement.acceptedByPartner} · signé par vous{/if}
+              {data.agreement.acceptedByUs ? m.ppo_signed_by_server() : m.ppo_waiting_server()}
+              {#if data.agreement.acceptedByPartner} · {m.ppo_signed_by_you()}{/if}
             </span>
           </div>
 
@@ -155,26 +156,25 @@
               onclick={sign}
               disabled={signing}
             >
-              {signing ? 'Enregistrement…' : "J'accepte cet accord"}
+              {signing ? m.ppo_saving() : m.ppo_accept()}
             </button>
             <p class="text-2xs text-on-surface-variant">
-              Votre acceptation est horodatée et conservée avec l'accord. Elle ne vaut que pour cette version : une
-              modification ultérieure vous sera reproposée.
+              {m.ppo_accept_note()}
             </p>
           {:else if data.agreement.acceptedByPartner || signed}
             <p class="text-xs text-success flex items-center gap-1.5">
               <Papicon icon="check" size={13} />
-              Accord accepté.
+              {m.ppo_accepted()}
             </p>
           {:else if data.capability !== 'sign'}
-            <p class="text-2xs text-on-surface-variant">Ce lien permet de consulter l'accord, pas de le signer.</p>
+            <p class="text-2xs text-on-surface-variant">{m.ppo_view_only()}</p>
           {/if}
         </div>
       {/if}
 
       {#if data.documents.length > 0}
         <div class="rounded-2xl border border-outline-variant/20 bg-surface-container px-5 py-4">
-          <p class="text-2xs font-bold text-on-surface-variant/80 mb-2">Documents partagés</p>
+          <p class="text-2xs font-bold text-on-surface-variant/80 mb-2">{m.ppo_documents()}</p>
           <div class="space-y-1">
             {#each data.documents as document (document.url)}
               <a class="text-xs text-primary hover:underline block truncate" href={document.url} target="_blank" rel="noopener noreferrer">
@@ -190,7 +190,7 @@
       {/if}
 
       <p class="text-2xs text-on-surface-variant text-center">
-        Lien valable jusqu'au {date(data.expiresAt)}. Il ne donne accès qu'à ce dossier.
+        {m.ppo_valid_until({ date: date(data.expiresAt) })}
       </p>
     {/if}
   </div>

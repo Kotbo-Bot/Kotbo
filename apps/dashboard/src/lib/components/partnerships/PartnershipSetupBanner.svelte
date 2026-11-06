@@ -13,6 +13,7 @@
    */
   import ActionButton from '../ActionButton.svelte';
   import Papicon from '../Papicon.svelte';
+  import { m } from '../../i18n';
 
   type Readiness = {
     ready: boolean;
@@ -70,7 +71,7 @@
           variant="primary"
           size="sm"
           icon="sparkles"
-          label={running ? 'Mise en service…' : readiness.enabled ? 'Completer pour moi' : 'Activer pour moi'}
+          label={running ? m.psb_running() : readiness.enabled ? m.psb_complete() : m.psb_enable()}
           onclick={onsetup}
         />
       {/if}
@@ -99,7 +100,7 @@
                 class={item.optional ? 'text-on-surface-variant' : 'text-warning'}
               />
               {item.label}
-              {#if item.optional}<span class="text-2xs text-on-surface-variant">facultatif</span>{/if}
+              {#if item.optional}<span class="text-2xs text-on-surface-variant">{m.ppan_optional()}</span>{/if}
             </p>
             <p class="text-2xs text-on-surface-variant mt-0.5">{item.why}</p>
           </div>

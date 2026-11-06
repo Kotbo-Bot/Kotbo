@@ -127,10 +127,10 @@
 </script>
 
 <WizardShell
-  title="Quelles règles sur ce serveur ?"
+  title={m.obx_ru_title()}
   lead={existing.length > 0
-    ? `Ton règlement compte déjà ${existing.length} article(s) : ils restent tels quels. Ajoute seulement ce qui manque.`
-    : 'Décoche ce qui ne te ressemble pas, réécris le reste. Kotbo publiera le règlement dans son salon.'}
+    ? m.obx_ru_lead_existing({ count: existing.length })
+    : m.obx_ru_lead()}
   {onEditTracks}
 >
   {#if existing.length > 0}
@@ -138,7 +138,7 @@
          un choix ferait croire qu'on peut les perdre en decochant. -->
     <section class="mb-4 rounded-2xl border border-outline-variant/25 bg-surface-container-lowest/30 p-4">
       <h2 class="text-xs font-semibold text-on-surface-variant/45">
-        Déjà en place
+        {m.obx_st_present()}
       </h2>
       <ul class="mt-2 space-y-1.5">
         {#each existing as rule (rule.id)}
@@ -184,7 +184,7 @@
                   class="ml-auto shrink-0 inline-flex items-center gap-1 text-xs font-medium text-on-surface-variant/55 hover:text-primary transition-colors"
                 >
                   <Papicon icon="pencil" size={11} />
-                  {editing === rule.key ? 'Terminer' : 'Modifier'}
+                  {editing === rule.key ? m.obx_ru_done() : m.obx_ru_edit()}
                 </button>
               {/if}
             </div>
@@ -232,8 +232,7 @@
       </DiscordPreview>
     {:else}
       <p class="rounded-xl border border-outline-variant/30 bg-surface-container-low/30 px-4 py-3 text-body-sm text-on-surface-variant leading-relaxed">
-        Aucun article retenu : rien ne sera publié. Tu pourras écrire ton règlement
-        depuis le tableau de bord.
+        {m.obx_ru_empty()}
       </p>
     {/if}
   {/snippet}

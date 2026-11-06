@@ -84,7 +84,7 @@ export type StepDefinition = {
 
 export const STEPS: StepDefinition[] = [
   { key: 'welcome', label: () => 'Bienvenue', icon: 'sparkles', phase: 'discovery', track: null, requires: null, optional: false, layout: 'centered' },
-  { key: 'kind', label: () => 'Ton serveur', icon: 'search', phase: 'discovery', track: null, requires: null, optional: false, layout: 'centered' },
+  { key: 'kind', label: () => m.obs_server(), icon: 'search', phase: 'discovery', track: null, requires: null, optional: false, layout: 'centered' },
   { key: 'migration-bots', label: () => m.onb_step_migration_bots(), icon: 'radar', phase: 'discovery', track: null, requires: 'existing', optional: false, layout: 'centered' },
   { key: 'migration-findings', label: () => m.onb_step_migration_findings(), icon: 'download', phase: 'discovery', track: null, requires: 'existing', optional: true, layout: 'centered' },
   { key: 'tracks', label: () => m.onb_step_tracks(), icon: 'list-checks', phase: 'discovery', track: null, requires: null, optional: false, layout: 'centered' },
@@ -92,30 +92,30 @@ export const STEPS: StepDefinition[] = [
   { key: 'identity', label: () => 'Sa langue', icon: 'globe', phase: 'setup', track: null, requires: null, optional: false, layout: 'split' },
   { key: 'theme', label: () => 'Sa vocation', icon: 'compass', phase: 'setup', track: null, requires: null, optional: false, layout: 'split' },
 
-  { key: 'tickets', label: () => 'Le support', icon: 'inbox', phase: 'build', track: 'tickets', requires: null, optional: true, layout: 'split' },
+  { key: 'tickets', label: () => m.obs_support(), icon: 'inbox', phase: 'build', track: 'tickets', requires: null, optional: true, layout: 'split' },
 
   // Le mappage d'un serveur habite, section par section. Il precede la pose
   // parce que c'est lui qui decide ce qu'elle a a poser : sans lui, elle
   // deduisait tout d'un rapprochement de noms et doublait ce qu'il ratait.
   // Chaque ecran se retire de lui-meme quand sa vocation n'en retient pas les
   // sections - on ne demande pas ou ranger les vocaux d'un serveur d'entraide.
-  { key: 'map-access', label: () => "L'entrée", icon: 'door-open', phase: 'build', track: 'structure', requires: 'structured', optional: false, layout: 'split' },
-  { key: 'map-staff', label: () => "L'équipe", icon: 'users', phase: 'build', track: 'structure', requires: 'structured', optional: false, layout: 'split' },
-  { key: 'map-tickets', label: () => 'Le support', icon: 'inbox', phase: 'build', track: 'structure', requires: 'structured', optional: false, layout: 'split' },
-  { key: 'map-welcome', label: () => "L'accueil", icon: 'book-open', phase: 'build', track: 'structure', requires: 'structured', optional: false, layout: 'split' },
-  { key: 'map-stats', label: () => 'Les compteurs', icon: 'chart', phase: 'build', track: 'structure', requires: 'structured', optional: false, layout: 'split' },
-  { key: 'map-text', label: () => 'Les discussions', icon: 'message-circle', phase: 'build', track: 'structure', requires: 'structured', optional: false, layout: 'split' },
-  { key: 'map-fun', label: () => 'Le fun', icon: 'sparkles', phase: 'build', track: 'structure', requires: 'structured', optional: false, layout: 'split' },
-  { key: 'map-voice', label: () => 'Les vocaux', icon: 'mic', phase: 'build', track: 'structure', requires: 'structured', optional: false, layout: 'split' },
+  { key: 'map-access', label: () => m.obs_access(), icon: 'door-open', phase: 'build', track: 'structure', requires: 'structured', optional: false, layout: 'split' },
+  { key: 'map-staff', label: () => m.obs_staff(), icon: 'users', phase: 'build', track: 'structure', requires: 'structured', optional: false, layout: 'split' },
+  { key: 'map-tickets', label: () => m.obs_support(), icon: 'inbox', phase: 'build', track: 'structure', requires: 'structured', optional: false, layout: 'split' },
+  { key: 'map-welcome', label: () => m.obs_welcome(), icon: 'book-open', phase: 'build', track: 'structure', requires: 'structured', optional: false, layout: 'split' },
+  { key: 'map-stats', label: () => m.obs_counters(), icon: 'chart', phase: 'build', track: 'structure', requires: 'structured', optional: false, layout: 'split' },
+  { key: 'map-text', label: () => m.obs_chat(), icon: 'message-circle', phase: 'build', track: 'structure', requires: 'structured', optional: false, layout: 'split' },
+  { key: 'map-fun', label: () => m.obs_fun(), icon: 'sparkles', phase: 'build', track: 'structure', requires: 'structured', optional: false, layout: 'split' },
+  { key: 'map-voice', label: () => m.obs_voice(), icon: 'mic', phase: 'build', track: 'structure', requires: 'structured', optional: false, layout: 'split' },
 
-  { key: 'structure', label: () => 'La structure', icon: 'layout-grid', phase: 'build', track: 'structure', requires: null, optional: false, layout: 'split' },
-  { key: 'moderation', label: () => 'La modération', icon: 'shield', phase: 'build', track: 'moderation', requires: null, optional: false, layout: 'split' },
+  { key: 'structure', label: () => m.obs_structure(), icon: 'layout-grid', phase: 'build', track: 'structure', requires: null, optional: false, layout: 'split' },
+  { key: 'moderation', label: () => m.obs_moderation(), icon: 'shield', phase: 'build', track: 'moderation', requires: null, optional: false, layout: 'split' },
   { key: 'logs', label: () => m.onb_step_logs(), icon: 'scroll', phase: 'build', track: 'logs', requires: null, optional: true, layout: 'split' },
   { key: 'staff', label: () => m.onb_step_staff(), icon: 'users', phase: 'build', track: 'staff', requires: null, optional: true, layout: 'split' },
 
-  { key: 'greeting', label: () => "L'accueil", icon: 'door-open', phase: 'polish', track: 'greeting', requires: null, optional: false, layout: 'split' },
-  { key: 'rules', label: () => 'Le règlement', icon: 'book-open', phase: 'polish', track: 'rules', requires: null, optional: true, layout: 'split' },
-  { key: 'levels', label: () => 'La progression', icon: 'crown', phase: 'polish', track: 'levels', requires: null, optional: true, layout: 'split' },
+  { key: 'greeting', label: () => m.obs_welcome(), icon: 'door-open', phase: 'polish', track: 'greeting', requires: null, optional: false, layout: 'split' },
+  { key: 'rules', label: () => m.obs_rules(), icon: 'book-open', phase: 'polish', track: 'rules', requires: null, optional: true, layout: 'split' },
+  { key: 'levels', label: () => m.obs_progress(), icon: 'crown', phase: 'polish', track: 'levels', requires: null, optional: true, layout: 'split' },
   { key: 'economy', label: () => m.onb_step_economy(), icon: 'coins', phase: 'polish', track: 'economy', requires: null, optional: true, layout: 'split' },
   { key: 'economy-shop', label: () => m.onb_step_economy_shop(), icon: 'shopping-bag', phase: 'polish', track: 'economy', requires: null, optional: true, layout: 'split' },
   { key: 'animation', label: () => m.onb_step_animation(), icon: 'target', phase: 'polish', track: 'animation', requires: null, optional: true, layout: 'split' },
@@ -123,7 +123,7 @@ export const STEPS: StepDefinition[] = [
 
   { key: 'mcp', label: () => m.onb_step_mcp(), icon: 'command', phase: 'launch', track: 'mcp', requires: null, optional: true, layout: 'split' },
   { key: 'recap', label: () => m.onb_step_recap(), icon: 'award', phase: 'launch', track: null, requires: null, optional: false, layout: 'stage' },
-  { key: 'checkout', label: () => 'Mise en service', icon: 'gem', phase: 'launch', track: null, requires: null, optional: false, layout: 'centered' },
+  { key: 'checkout', label: () => m.obs_golive(), icon: 'gem', phase: 'launch', track: null, requires: null, optional: false, layout: 'centered' },
 ];
 
 const BY_KEY = new Map(STEPS.map((step) => [step.key, step]));
@@ -145,9 +145,9 @@ export function stepDefinition(step: WizardStep): StepDefinition {
  * parcours qu'on s'est choisi, pas celui qu'on aurait pu prendre.
  */
 export const PHASES: { key: PhaseKey; label: () => string }[] = [
-  { key: 'discovery', label: () => 'Découverte' },
-  { key: 'setup', label: () => 'Ton serveur' },
-  { key: 'build', label: () => 'Construction' },
+  { key: 'discovery', label: () => m.obs_discovery() },
+  { key: 'setup', label: () => m.obs_server() },
+  { key: 'build', label: () => m.obs_building() },
   { key: 'polish', label: () => 'Personnalisation' },
   { key: 'launch', label: () => 'Lancement' },
 ];

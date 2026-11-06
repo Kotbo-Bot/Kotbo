@@ -1,3 +1,4 @@
+import { m } from './i18n';
 import { findToken, type ContextToken, type ValueRef } from '@kotbo/shared';
 
 /**
@@ -18,15 +19,15 @@ export interface PreviewContext {
   guildName?: string;
 }
 
-const EXAMPLE_CHANNEL = 'général';
+const EXAMPLE_CHANNEL = m.wfp_channel();
 
 const ROOT_EXAMPLES: Record<string, string> = {
   Member: 'Alice',
   Channel: EXAMPLE_CHANNEL,
-  Role: 'Membre',
-  Message: 'Bonjour à tous !',
+  Role: m.wfp_role(),
+  Message: m.wfp_message(),
   Number: '5',
-  Boolean: 'oui',
+  Boolean: m.wfp_yes(),
 };
 
 const PROPERTY_EXAMPLES: Record<string, string> = {
@@ -35,9 +36,9 @@ const PROPERTY_EXAMPLES: Record<string, string> = {
   id: '123456789012345678',
   accountAgeDays: '120',
   joinedDaysAgo: '0',
-  isBot: 'non',
-  roles: 'Membre',
-  content: 'Bonjour à tous !',
+  isBot: m.wfp_no(),
+  roles: m.wfp_role(),
+  content: m.wfp_message(),
   author: 'Alice',
   channel: EXAMPLE_CHANNEL,
   length: '16',
@@ -49,7 +50,7 @@ const PROPERTY_EXAMPLES: Record<string, string> = {
 };
 
 function exampleFor(token: ContextToken, context: PreviewContext): string {
-  if (token.path === 'guild.name') return context.guildName || 'Mon serveur';
+  if (token.path === 'guild.name') return context.guildName || m.wfp_guild();
   if (!token.root) {
     const property = token.path.slice(token.path.lastIndexOf('.') + 1);
     if (PROPERTY_EXAMPLES[property]) return PROPERTY_EXAMPLES[property];

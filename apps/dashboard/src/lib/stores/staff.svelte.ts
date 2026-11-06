@@ -1,3 +1,4 @@
+import { m } from '../i18n';
 import { dashboardFetch } from '../api';
 import { authStore } from './auth.svelte';
 
@@ -87,7 +88,7 @@ class StaffStore {
       } catch (err) {
         console.error('StaffStore fetch error:', err);
         if (authStore.selectedGuildId === guildId) {
-          this.error = 'Impossible de charger les données staff. Réessaie.';
+          this.error = m.stx_load_failed();
         }
       } finally {
         if (authStore.selectedGuildId === guildId) {

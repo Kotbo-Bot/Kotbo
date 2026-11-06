@@ -105,10 +105,10 @@
 </script>
 
 <WizardShell
-  title="Pourquoi t'écrit-on ?"
+  title={m.obx_tk_title()}
   lead={inherited.length > 0
-    ? `${inherited.length} motif(s) ont été repris de ton ancien panneau : ils restent tels quels. Coche ce que tu veux ajouter.`
-    : 'Chaque motif retenu devient un bouton sur le panneau que Kotbo posera dans un instant. Un ticket ouvert crée un salon privé entre le membre et ton staff.'}
+    ? m.obx_tk_lead_inherited({ count: inherited.length })
+    : m.obx_tk_lead()}
   {onEditTracks}
 >
   {#if inherited.length > 0}
@@ -116,7 +116,7 @@
          choix ferait croire qu'on peut les perdre en decochant. -->
     <p class="mb-4 flex flex-wrap items-center gap-1.5 rounded-xl border border-outline-variant/25 bg-surface-container-lowest/30 px-3.5 py-3">
       <span class="mr-1 text-xs font-semibold text-on-surface-variant/45">
-        Déjà repris
+        {m.obx_tk_inherited()}
       </span>
       {#each inherited as type (type.id)}
         <span class="rounded-md bg-surface-container/70 px-1.5 py-0.5 text-xs text-on-surface-variant">
@@ -155,7 +155,7 @@
   <div class="mt-6">
     <p class="flex items-center gap-2 text-body-sm font-semibold text-on-surface mb-2.5">
       <Papicon icon="palette" size={14} class="text-primary" />
-      La couleur de tes panneaux
+      {m.obx_tk_color()}
     </p>
     <div class="flex flex-wrap gap-2">
       {#each PANEL_COLORS as color (color.value)}
@@ -172,7 +172,7 @@
       {/each}
     </div>
     <p class="mt-2 text-xs text-on-surface-variant/55 leading-relaxed">
-      Elle vaut pour tous les panneaux que Kotbo publie : tickets, règlement, quêtes, drops.
+      {m.obx_tk_color_desc()}
     </p>
   </div>
 
@@ -189,10 +189,10 @@
     <DiscordPreview channel="support">
       <DiscordEmbed
         color={panelColor}
-        title="Besoin d'aide ?"
+        title={m.obx_tk_preview_title()}
         description={buttons.length
-          ? "Choisissez un motif ci-dessous : un salon privé s'ouvrira avec l'équipe."
-          : "Aucun motif retenu : le panneau proposera un ticket générique."}
+          ? m.obx_tk_preview_desc()
+          : m.obx_tk_preview_empty()}
         {buttons}
       />
     </DiscordPreview>
@@ -204,7 +204,7 @@
       onclick={skip}
       class="text-body-sm font-medium text-on-surface-variant hover:text-on-surface transition-colors"
     >
-      Passer
+      {m.obx_skip()}
     </button>
     <button
       type="button"
@@ -212,7 +212,7 @@
       disabled={onboardingData.busy}
       class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-on-primary text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-40"
     >
-      {onboardingData.busy ? 'Enregistrement…' : 'Enregistrer'}
+      {onboardingData.busy ? m.obx_saving() : m.common_save()}
       <Papicon icon="ChevronRight" size={15} />
     </button>
   {/snippet}

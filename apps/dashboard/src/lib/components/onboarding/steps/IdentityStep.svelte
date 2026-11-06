@@ -91,8 +91,8 @@
 </script>
 
 <WizardShell
-  title="Dans quelle langue Kotbo doit-il parler ?"
-  lead="Elle vaut pour tout ce que le bot écrit : ses réponses, ses panneaux, et le nom des salons qu'il va poser."
+  title={m.obx_id_title()}
+  lead={m.obx_id_lead()}
   {onEditTracks}
 >
   <div class="grid gap-3 sm:grid-cols-2">
@@ -147,7 +147,7 @@
       {/if}
     </div>
     <p class="mt-2 text-xs text-on-surface-variant/55 leading-relaxed">
-      Il décide de l'heure des rapports, des concours programmés et des statistiques quotidiennes.
+      {m.obx_id_tz_desc()}
     </p>
   </div>
 

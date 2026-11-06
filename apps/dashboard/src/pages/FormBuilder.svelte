@@ -54,7 +54,7 @@
   }
 
   // ── State ──────────────────────────────────────────────────────────────────
-  let formName = $state('Formulaire sans titre');
+  let formName = $state(m.fb_untitled());
   let formDescription = $state('');
   let headerColor = $state('#6366f1');
   let sections = $state<Section[]>([{ id: 'section_0', title: m.fb_section_default_title({ number: 1 }), description: '' }]);
@@ -345,7 +345,7 @@
       <!-- Bannière / logo du thème -->
       {#if theme.bannerUrl}
         <div class="pf-banner rounded-xl overflow-hidden shadow-lg" style="border-radius:var(--form-radius,12px)">
-          <img src={theme.bannerUrl} alt="Bannière" class="w-full h-40 object-cover" />
+          <img src={theme.bannerUrl} alt={m.fb_banner_alt()} class="w-full h-40 object-cover" />
         </div>
       {/if}
       <!-- Header card -->
@@ -479,13 +479,13 @@
     <div class="form-builder-toolbar sticky top-0 z-10 bg-surface/95 border-b border-outline-variant/20 px-4 py-2 flex items-center gap-3">
       <button onclick={() => router.goto(isCustomFormMode ? '/forms' : '/recruitment-forms')}
         class="p-2 rounded-xl hover:bg-surface-container transition-colors"
-        aria-label="Revenir à la liste des formulaires">
+        aria-label={m.fb_back()}>
         <Papicon icon="arrow_back" size={20} />
       </button>
       <div class="form-builder-toolbar-title flex-1 min-w-0">
         <input bind:value={formName}
           class="w-full bg-transparent text-lg font-semibold text-on-surface outline-none focus:border-b-2 focus:border-primary"
-          placeholder="Titre du formulaire" />
+          placeholder={m.fb_title_ph()} />
       </div>
 
       <div class="flex items-center gap-2 ml-auto shrink-0">
@@ -532,7 +532,7 @@
           type="button"
           class="form-builder-tools-backdrop"
           onclick={() => showMobileTools = false}
-          aria-label="Fermer les outils"
+          aria-label={m.fb_close_tools()}
         ></button>
       {/if}
 
@@ -544,10 +544,10 @@
       >
         <div class="form-builder-tools-mobile-header">
           <div>
-            <p class="text-sm font-semibold text-on-surface">Outils du formulaire</p>
-            <p class="text-xs text-on-surface-variant">Sections, champs et apparence</p>
+            <p class="text-sm font-semibold text-on-surface">{m.fb_tools()}</p>
+            <p class="text-xs text-on-surface-variant">{m.fb_tools_desc()}</p>
           </div>
-          <button type="button" onclick={() => showMobileTools = false} aria-label="Fermer les outils">
+          <button type="button" onclick={() => showMobileTools = false} aria-label={m.fb_close_tools()}>
             <Papicon icon="x" size={18} />
           </button>
         </div>
@@ -756,11 +756,11 @@
                 </span>
                 <div class="ml-auto flex gap-1">
                   <button onclick={(e) => { e.stopPropagation(); moveField(field.id, -1); }}
-                    class="p-1.5 rounded-lg hover:bg-surface-container transition-colors" title="Déplacer vers le haut" aria-label="Déplacer vers le haut">
+                    class="p-1.5 rounded-lg hover:bg-surface-container transition-colors" title={m.fb_move_up()} aria-label={m.fb_move_up()}>
                     <Papicon icon="arrow-up" size={14} />
                   </button>
                   <button onclick={(e) => { e.stopPropagation(); moveField(field.id, 1); }}
-                    class="p-1.5 rounded-lg hover:bg-surface-container transition-colors" title="Déplacer vers le bas" aria-label="Déplacer vers le bas">
+                    class="p-1.5 rounded-lg hover:bg-surface-container transition-colors" title={m.fb_move_down()} aria-label={m.fb_move_down()}>
                     <Papicon icon="arrow-down" size={14} />
                   </button>
                   <button onclick={(e) => { e.stopPropagation(); duplicateField(field); }}

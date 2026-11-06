@@ -445,7 +445,7 @@
               </div>
               <h2 class="text-lg font-semibold text-on-surface mb-2">{m.pa_not_banned()}</h2>
               <p class="text-sm text-on-surface-variant">
-                Le compte <span class="font-semibold">{viewer.username || viewer.userId}</span> {m.pa_not_banned_desc()}
+                {m.pax_account()} <span class="font-semibold">{viewer.username || viewer.userId}</span> {m.pa_not_banned_desc()}
                 {#if lastAppeal && lastAppeal.status === 'ACCEPTED'}
                   {m.pa_accepted_on({ date: lastAppeal.decidedAt ? formatDate(lastAppeal.decidedAt) : '' })}
                 {/if}
