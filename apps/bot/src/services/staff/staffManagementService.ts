@@ -1408,6 +1408,21 @@ export const updateStaffHierarchy = async (
     if (!parentHierarchy) {
       throw new Error('Hiérarchie parente introuvable');
     }
+
+    // Une boucle A -> B -> A ferait disparaître les deux pôles de l'organigramme.
+    const visited = new Set<string>();
+    let ancestorId: string | null = data.parentHierarchyId;
+    while (ancestorId && !visited.has(ancestorId)) {
+      if (ancestorId === hierarchyId) {
+        throw new Error("Une hiérarchie ne peut pas être rattachée à l'une de ses sous-hiérarchies");
+      }
+      visited.add(ancestorId);
+      const ancestor: { parentHierarchyId: string | null } | null = await prisma.staffHierarchy.findFirst({
+        where: { id: ancestorId, guildId },
+        select: { parentHierarchyId: true },
+      });
+      ancestorId = ancestor?.parentHierarchyId ?? null;
+    }
   }
 
   const { parentHierarchyId, ...updateData } = data;
@@ -1702,9 +1717,31 @@ export const updateStaffRole = async (
   });
   if (!role) return null;
 
-  return prisma.staffRole.update({
+  const updated = await prisma.staffRole.update({
     where: { id: roleId },
     data,
   });
+
+  // Le grade change de pôle : ses membres le suivent. Un membre déjà présent
+  // dans le pôle visé y garde son grade (doublon ignoré).
+  if (data.hierarchyId && role.hierarchyId && data.hierarchyId !== role.hierarchyId) {
+    const gradeMatch = {
+      hierarchyId: role.hierarchyId,
+      grade: { equals: role.name, mode: 'insensitive' as const },
+    };
+    const members = await prisma.staffMemberHierarchyGrade.findMany({
+      where: gradeMatch,
+      select: { staffMemberId: true, grade: true },
+    });
+    await prisma.$transaction([
+      prisma.staffMemberHierarchyGrade.createMany({
+        data: members.map((member) => ({ ...member, hierarchyId: data.hierarchyId as string })),
+        skipDuplicates: true,
+      }),
+      prisma.staffMemberHierarchyGrade.deleteMany({ where: gradeMatch }),
+    ]);
+  }
+
+  return updated;
 };
 
