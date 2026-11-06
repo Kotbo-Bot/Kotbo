@@ -41,6 +41,7 @@
   import CohortTriangle from '../lib/components/analytics/CohortTriangle.svelte';
   import ResponseTimesView from '../lib/components/analytics/ResponseTimesView.svelte';
   import ConcentrationView from '../lib/components/analytics/ConcentrationView.svelte';
+  import ReactionRolesView from '../lib/components/analytics/ReactionRolesView.svelte';
   import ClimateView from '../lib/components/analytics/ClimateView.svelte';
   import ChannelHealthView from '../lib/components/analytics/ChannelHealthView.svelte';
   import NetworkInsightsView from '../lib/components/analytics/NetworkInsightsView.svelte';
@@ -131,6 +132,7 @@
         { id: 'engagement', label: m.anx_tab_engagement(), icon: 'Activity', scope: 'full' },
         { id: 'lifecycle', label: m.anx_tab_lifecycle(), icon: 'Users', scope: 'full' },
         { id: 'concentration', label: m.anx_tab_concentration(), icon: 'PieChart', scope: 'full' },
+        { id: 'reaction-roles', label: m.anx_tab_reaction_roles(), icon: 'MousePointer', scope: 'period' },
         { id: 'interactions', label: m.an_tab_network(), icon: 'Compass', scope: 'period' },
         { id: 'social', label: m.an_tab_social(), icon: 'Users', scope: 'own' },
         { id: 'ghosts', label: m.ghost_tab(), icon: 'Ghost', scope: 'own' },
@@ -555,6 +557,8 @@
           </div>
         {:else if activeTab === 'concentration'}
           <ConcentrationView />
+        {:else if activeTab === 'reaction-roles'}
+          <ReactionRolesView />
         {:else if activeTab === 'climate'}
           <ClimateView onOpenMember={openMember} />
         {:else if activeTab === 'interactions'}

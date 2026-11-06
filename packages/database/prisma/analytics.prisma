@@ -617,3 +617,24 @@ model CommandUsageDailyStat {
   @@id([guildId, dateKey, commandName, userId])
   @@map("command_usage_daily_stats")
 }
+
+// Rôles pris et retirés depuis les panneaux de rôles-boutons, par jour, menu et
+// rôle. Seuls les clics comptent. Suit Guild.analyticsEnabled. `menuId` n'est
+// pas une clé étrangère : un menu supprimé garde ses clics passés.
+model ReactionRoleDailyStat {
+  guildId String
+  dateKey String // YYYY-MM-DD
+  menuId  String
+  roleId  String
+
+  added   Int @default(0)
+  removed Int @default(0)
+
+  guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@id([guildId, dateKey, menuId, roleId])
+  @@map("reaction_role_daily_stats")
+}

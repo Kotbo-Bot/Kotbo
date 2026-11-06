@@ -428,6 +428,21 @@ export async function handleAnalyticsRoutes(
     return true;
   }
 
+  // GET …/analytics/reaction-roles/stats : rôles pris et retirés depuis les menus. Période seule.
+  if (parts.length === 7 && parts[5] === 'reaction-roles' && parts[6] === 'stats') {
+    try {
+      const { parseRange } = await import('../../../services/analytics/contentAnalyticsService.js');
+      const { getReactionRoleAnalytics } = await import('../../../services/analytics/reactionRoleStatsService.js');
+      const range = parseRange(url.searchParams);
+      json(res, 200, await cache.wrap(`guild:${guildId}:analytics:reaction-roles:${range.start}:${range.end}`, 300, () =>
+        getReactionRoleAnalytics(client, guildId, range)));
+    } catch (err) {
+      logger.error('AnalyticsAPI', 'Erreur analytics (reaction-roles/stats):', err);
+      jsonFailure(res, err, 'Erreur lors du calcul des statistiques', 'AnalyticsAPI');
+    }
+    return true;
+  }
+
   // GET …/analytics/climate : toxicité et émotions (Kotbo × AegisAI). Période seule.
   if (parts.length === 6 && parts[5] === 'climate') {
     try {

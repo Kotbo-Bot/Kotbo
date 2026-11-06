@@ -239,7 +239,23 @@
     await loadList();
     loading = false;
     await openLinkedExecution();
+    openLinkedTemplate();
   });
+
+  /**
+   * Ouvre l'éditeur sur le modèle désigné par l'adresse : la page des rôles par
+   * réaction y renvoie pour les réactions emoji.
+   */
+  function openLinkedTemplate(): void {
+    const url = new URL(window.location.href);
+    const templateId = url.searchParams.get('template');
+    if (!templateId) return;
+    // Retiré aussitôt : recharger la page ne doit pas rouvrir un brouillon.
+    url.searchParams.delete('template');
+    history.replaceState(history.state, '', url);
+    const template = RECIPE_TEMPLATES.find((entry) => entry.id === templateId);
+    if (template && canConfigure) startFromTemplate(template);
+  }
 
   /**
    * Ouvre le rejeu désigné par l'adresse, celle du lien des alertes d'échec :
@@ -550,6 +566,8 @@
     'anti-invite': { name: m.wf_tpl_invite, description: m.wf_tpl_invite_desc },
     'level-reward': { name: m.wf_tpl_level, description: m.wf_tpl_level_desc },
     'ticket-welcome': { name: m.wf_tpl_ticket, description: m.wf_tpl_ticket_desc },
+    'reaction-role': { name: m.wf_tpl_reaction_role, description: m.wf_tpl_reaction_role_desc },
+    'reaction-role-remove': { name: m.wf_tpl_reaction_role_remove, description: m.wf_tpl_reaction_role_remove_desc },
   };
 
   const STATUS_META: Record<string, { label: () => string; color: string }> = {

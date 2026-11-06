@@ -457,6 +457,7 @@ model Guild {
   analyticsReportSchedules AnalyticsReportSchedule[]
   analyticsSavedViews AnalyticsSavedView[]
   commandUsageDailyStats CommandUsageDailyStat[]
+  reactionRoleDailyStats ReactionRoleDailyStat[]
   contentItemDailyStats ContentItemDailyStat[]
   outgoingWebhooks OutgoingWebhook[]
   doingLists       DoingList[]

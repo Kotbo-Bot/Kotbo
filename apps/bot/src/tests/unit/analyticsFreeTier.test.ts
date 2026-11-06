@@ -21,7 +21,7 @@ describe('Analytics en gratuit', () => {
   });
 
   test('ferme les analyses avancées', () => {
-    for (const route of ['audience', 'conversation', 'insights', 'climate', 'reports', 'commands', 'interactions']) {
+    for (const route of ['audience', 'conversation', 'insights', 'climate', 'reports', 'commands', 'reaction-roles', 'interactions']) {
       expect(applyFreeAnalyticsLimits(parts(route, 'x'), 'GET', new URLSearchParams())).toBe(false);
     }
   });

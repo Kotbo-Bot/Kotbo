@@ -16,6 +16,7 @@ import {
 } from '@kotbo/contracts';
 import { roleBlocker, shouldAlertStaff, type RoleBlocker } from './reactionRoleAccess.js';
 import { rolesToSwapOut } from './reactionRoleExclusive.js';
+import { recordReactionRoleChange } from '../analytics/reactionRoleStatsService.js';
 
 // Discord n'accepte que 5 lignes de 5 boutons par message : au-delà, c'est le
 // message entier qu'il refuse, et le panneau ne partirait jamais.
@@ -219,16 +220,6 @@ export async function updateReactionRoleMenu(
     ? changes.channelId
     : null;
 
-  if (movedTo && menu.messageId) {
-    await deleteMenuMessage(
-      client,
-      guildId,
-      menu.channelId,
-      menu.messageId,
-      `Le menu ${menu.id} change de salon, mais son ancien message n'a pas pu être supprimé`,
-    );
-  }
-
   const updated = await prisma.reactionRoleMenu.update({
     where: { id: menu.id },
     data: {
@@ -241,6 +232,18 @@ export async function updateReactionRoleMenu(
       ...(changes.embedColor !== undefined ? { embedColor: changes.embedColor } : {}),
     },
   });
+
+  // L'ancien message n'est retiré qu'une fois oublié en base : l'écouteur des
+  // suppressions ne le prend alors pas pour un message effacé par le staff.
+  if (movedTo && menu.messageId) {
+    await deleteMenuMessage(
+      client,
+      guildId,
+      menu.channelId,
+      menu.messageId,
+      `Le menu ${menu.id} change de salon, mais son ancien message n'a pas pu être supprimé`,
+    );
+  }
 
   // Republier peut attribuer un nouveau `messageId` : le menu est relu pour
   // que l'appelant reçoive celui qui vaut vraiment.
@@ -322,8 +325,7 @@ export async function sendOrUpdateMenuMessage(client: Client, menuId: string) {
     const embed = new EmbedBuilder()
       .setTitle(resolveEmojiShortcodes(menu.title))
       .setDescription(resolveEmojiShortcodes(menuDescription(menu.description, options, menuMode, locale)))
-      .setColor((menu.embedColor ?? DEFAULT_EMBED_COLOR) as HexColorString)
-      .setTimestamp();
+      .setColor((menu.embedColor ?? DEFAULT_EMBED_COLOR) as HexColorString);
 
     // Construire les boutons (maximum 5 boutons par ligne, maximum 25 boutons au total)
     const rows: ActionRowBuilder<ButtonBuilder>[] = [];
@@ -435,6 +437,79 @@ function scheduleCountRefresh(client: Client, menuId: string): void {
   }, COUNT_REFRESH_DELAY_MS);
 }
 
+/** Rôles gagnés ou perdus par un membre entre deux de ses états. */
+export function changedRoleIds(before: Iterable<string>, after: Iterable<string>): string[] {
+  const previous = new Set(before);
+  const next = new Set(after);
+  return [
+    ...[...previous].filter((id) => !next.has(id)),
+    ...[...next].filter((id) => !previous.has(id)),
+  ];
+}
+
+/** Menus dont au moins un bouton vise l'un de ces rôles. */
+export function menusUsingRoles<T extends { options: unknown }>(menus: T[], roleIds: Iterable<string>): T[] {
+  const wanted = new Set(roleIds);
+  return menus.filter((menu) => Array.isArray(menu.options)
+    && (menu.options as Array<{ roleId?: unknown }>).some((option) => wanted.has(option?.roleId as string)));
+}
+
+/**
+ * Un rôle de menu a changé de porteurs hors du panneau (donné à la main, par
+ * un autre bot, membre parti) : les nombres affichés sur les boutons suivent.
+ */
+export async function refreshCountsForRoles(client: Client, guildId: string, roleIds: string[]): Promise<void> {
+  // Un pseudo ou un avatar changé ne touche aucun rôle : pas de lecture en base.
+  if (roleIds.length === 0) return;
+  const menus = await prisma.reactionRoleMenu.findMany({
+    where: { guildId, showCounts: true, messageId: { not: null } },
+    select: { id: true, options: true },
+  });
+  for (const menu of menusUsingRoles(menus, roleIds)) scheduleCountRefresh(client, menu.id);
+}
+
+/**
+ * Un rôle porté par un menu vient d'être supprimé sur Discord : le staff est
+ * prévenu tout de suite, plutôt qu'au premier membre qui clique pour rien.
+ */
+export async function handleMenuRoleDeleted(role: Role): Promise<void> {
+  const menus = await prisma.reactionRoleMenu.findMany({
+    where: { guildId: role.guild.id },
+    select: { title: true, options: true },
+  });
+  const affected = menusUsingRoles(menus, [role.id]);
+  if (affected.length === 0) return;
+  await alertStaffRoleBlocked(
+    role.guild,
+    affected.map((menu) => menu.title).join(', '),
+    role.id,
+    { reason: 'missing', roleName: role.name },
+  );
+}
+
+/**
+ * Le message d'un menu a été effacé sur Discord : ses boutons ont disparu
+ * avec lui. Le bot retire lui-même ses messages après les avoir oubliés en
+ * base, si bien que seule une suppression faite par quelqu'un d'autre arrive ici.
+ */
+export async function handleMenuMessagesDeleted(guild: Guild, messageIds: string[]): Promise<void> {
+  if (messageIds.length === 0) return;
+  const menus = await prisma.reactionRoleMenu.findMany({
+    where: { guildId: guild.id, messageId: { in: messageIds } },
+    select: { id: true, title: true },
+  });
+  for (const menu of menus) {
+    await alertStaff(guild, {
+      groupKey: `reaction-role-message-deleted:${menu.id}`,
+      kind: 'system.reaction_role_message_deleted',
+      build: (locale) => ({
+        title: m.ntf_reaction_role_message_deleted_title({ menu: menu.title }, { locale }),
+        message: m.ntf_reaction_role_message_deleted({}, { locale }),
+      }),
+    });
+  }
+}
+
 /**
  * Retrouve le bouton cliqué. L'index de l'identifiant est la source sûre, mais
  * les messages publiés avant son arrivée n'en portent pas : on retombe alors
@@ -519,8 +594,15 @@ export async function handleRoleToggleInteraction(interaction: ButtonInteraction
       });
     }
 
+    // Le journal d'audit nomme le menu : les logs du serveur le reprennent, et
+    // le staff sait d'où vient un rôle que le bot a donné.
+    const reason = m.reactionroles_audit_reason({ menu: activeMenu.title }, { locale: await resolveGuildLocale(guild.id) });
+    const count = (id: string, change: 'added' | 'removed') =>
+      void recordReactionRoleChange({ guildId: guild.id, menuId: activeMenu.id, roleId: id, change });
+
     if (hasRole) {
-      await member.roles.remove(roleId);
+      await member.roles.remove(roleId, reason);
+      count(roleId, 'removed');
       if (activeMenu.showCounts) scheduleCountRefresh(interaction.client, activeMenu.id);
       return interaction.reply({
         content: m.reactionroles_role_removed({ role }, { locale }),
@@ -537,15 +619,18 @@ export async function handleRoleToggleInteraction(interaction: ButtonInteraction
 
     // Ajout d'abord : si le retrait échoue ensuite, le membre a deux rôles
     // plutôt qu'aucun.
-    await member.roles.add(roleId);
+    await member.roles.add(roleId, reason);
+    count(roleId, 'added');
     if (activeMenu.showCounts) scheduleCountRefresh(interaction.client, activeMenu.id);
-    const swapped = swapOut.length > 0 && await member.roles.remove(swapOut).then(
+    const swapped = swapOut.length > 0 && await member.roles.remove(swapOut, reason).then(
       () => true,
       (err: unknown) => {
         logger.warn('ReactionRoleService', `Rôles précédents non retirés pour ${member.id} :`, err);
         return false;
       },
     );
+
+    if (swapped) swapOut.forEach((id) => count(id, 'removed'));
 
     return interaction.reply({
       content: swapped
@@ -586,22 +671,22 @@ function blockerOf(role: Role | null | undefined, me: GuildMember | null): RoleB
 }
 
 /**
- * Prévient le propriétaire du serveur qu'un bouton du menu ne marche plus, avec
- * la correction à faire. Jamais bloquant pour la réponse au membre.
+ * Prévient le propriétaire du serveur, au plus une fois par heure pour une même
+ * clé. Jamais bloquant pour l'appelant : un échec est seulement consigné.
  */
-async function alertStaffRoleBlocked(
+async function alertStaff(
   guild: Guild,
-  menuTitle: string,
-  roleId: string,
-  blocked: { reason: RoleBlocker; roleName: string | null },
+  alert: {
+    groupKey: string;
+    kind: 'system.reaction_role_blocked' | 'system.reaction_role_message_deleted';
+    build: (locale: BotLocale) => { title: string; message: string };
+  },
 ): Promise<void> {
-  const groupKey = `reaction-role-blocked:${roleId}`;
-
   try {
     // La dernière alerte se lit en base : le délai vaut pour toutes les
     // instances, survit aux redémarrages, et compte aussi une alerte déjà lue.
     const last = await prisma.notification.findFirst({
-      where: { guildId: guild.id, userId: guild.ownerId, groupKey },
+      where: { guildId: guild.id, userId: guild.ownerId, groupKey: alert.groupKey },
       orderBy: { updatedAt: 'desc' },
       select: { updatedAt: true },
     });
@@ -610,24 +695,41 @@ async function alertStaffRoleBlocked(
     // Import dynamique : le service de notifications tire l'API, qui importe ce fichier.
     const { notify, dashboardLink } = await import('../notifications/notifyService.js');
     const locale = await resolveGuildLocale(guild.id);
-    const role = blocked.roleName ?? roleId;
-    const reasons = {
-      missing: m.ntf_reaction_role_missing,
-      managed: m.ntf_reaction_role_managed,
-      no_permission: m.ntf_reaction_role_no_permission,
-      too_high: m.ntf_reaction_role_too_high,
-    } as const;
     await notify({
       guildId: guild.id,
       userId: guild.ownerId,
-      kind: 'system.reaction_role_blocked',
-      title: m.ntf_reaction_role_blocked_title({ menu: menuTitle }, { locale }),
-      message: reasons[blocked.reason]({ role }, { locale }),
+      kind: alert.kind,
+      ...alert.build(locale),
       severity: 'WARNING',
       link: dashboardLink('/reaction-roles', guild.id),
-      groupKey,
+      groupKey: alert.groupKey,
     });
   } catch (err) {
-    logger.warn('ReactionRoleService', `Alerte de rôle bloqué non envoyée pour ${roleId} :`, err);
+    logger.warn('ReactionRoleService', `Alerte ${alert.groupKey} non envoyée :`, err);
   }
+}
+
+const BLOCKER_NOTIFICATIONS = {
+  missing: m.ntf_reaction_role_missing,
+  managed: m.ntf_reaction_role_managed,
+  no_permission: m.ntf_reaction_role_no_permission,
+  too_high: m.ntf_reaction_role_too_high,
+} as const;
+
+/** Prévient le staff qu'un bouton du menu ne marche plus, avec la correction à faire. */
+function alertStaffRoleBlocked(
+  guild: Guild,
+  menuTitle: string,
+  roleId: string,
+  blocked: { reason: RoleBlocker; roleName: string | null },
+): Promise<void> {
+  const role = blocked.roleName ?? roleId;
+  return alertStaff(guild, {
+    groupKey: `reaction-role-blocked:${roleId}`,
+    kind: 'system.reaction_role_blocked',
+    build: (locale) => ({
+      title: m.ntf_reaction_role_blocked_title({ menu: menuTitle }, { locale }),
+      message: BLOCKER_NOTIFICATIONS[blocked.reason]({ role }, { locale }),
+    }),
+  });
 }

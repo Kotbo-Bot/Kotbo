@@ -39,6 +39,7 @@ import {
   touchSanctionTargetIdentity,
 } from '../services/moderation/memberCaseService.js';
 import * as dcDetectionService from '../services/moderation/dcDetectionService.js';
+import { pickRecentAuditEntry } from './auditEntryMatch.js';
 
 type MessageSnapshot = {
   guildId: string;
@@ -615,29 +616,32 @@ function shouldIgnoreMessage(message: Message | PartialMessage): boolean {
  * Rend un nom lisible, pas une mention : la valeur alimente le pied de page des
  * embeds, ou Discord n'en resout aucune.
  */
+async function resolveAuditEntry(
+  guild: Guild,
+  type: AuditLogEvent,
+  targetId?: string | null,
+): Promise<{ executor: string | null; reason: string | null }> {
+  try {
+    const audit = await guild.fetchAuditLogs({ type, limit: 6 });
+    const matching = pickRecentAuditEntry(audit.entries.values(), targetId, Date.now(), AUDIT_LOOKBACK_MS);
+    const executor = matching?.executor;
+    return {
+      executor: executor ? executor.tag ?? executor.username ?? `Utilisateur ${executor.id}` : null,
+      reason: matching?.reason ?? null,
+    };
+  } catch {
+    // Journal d'audit ferme (permission « Voir les logs du serveur » absente) :
+    // le log part sans pied de page plutot que d'inventer un auteur.
+    return { executor: null, reason: null };
+  }
+}
+
 async function resolveAuditExecutorName(
   guild: Guild,
   type: AuditLogEvent,
   targetId?: string | null,
 ): Promise<string | null> {
-  try {
-    const audit = await guild.fetchAuditLogs({ type, limit: 6 });
-    const now = Date.now();
-
-    const matching = audit.entries.find((entry) => {
-      if (now - (entry.createdTimestamp ?? 0) > AUDIT_LOOKBACK_MS) return false;
-      if (targetId && typeof entry.targetId === 'string' && entry.targetId !== targetId) return false;
-      return true;
-    });
-
-    const executor = matching?.executor;
-    if (!executor) return null;
-    return executor.tag ?? executor.username ?? `Utilisateur ${executor.id}`;
-  } catch {
-    // Journal d'audit ferme (permission « Voir les logs du serveur » absente) :
-    // le log part sans pied de page plutot que d'inventer un auteur.
-    return null;
-  }
+  return (await resolveAuditEntry(guild, type, targetId)).executor;
 }
 
 /**
@@ -1534,8 +1538,11 @@ export function registerAdvancedLogsListener(client: Client): void {
         )
         .setTimestamp();
 
-      const roleExecutor = await resolveAuditExecutorName(newMember.guild, AuditLogEvent.MemberRoleUpdate, newMember.id);
-      await sendLogEmbed(newMember.guild, embed, 'member_roles_update', [buildMemberCaseActionRow(newMember.id)], roleExecutor);
+      // La raison d'audit dit d'où vient le changement : menu de rôles par réaction,
+      // sanction, ou motif saisi par le staff dans Discord.
+      const roleAudit = await resolveAuditEntry(newMember.guild, AuditLogEvent.MemberRoleUpdate, newMember.id);
+      if (roleAudit.reason) embed.addFields({ name: 'Raison', value: roleAudit.reason.slice(0, 1024), inline: false });
+      await sendLogEmbed(newMember.guild, embed, 'member_roles_update', [buildMemberCaseActionRow(newMember.id)], roleAudit.executor);
     }
 
     const oldTimeout = oldMember.communicationDisabledUntilTimestamp ?? null;

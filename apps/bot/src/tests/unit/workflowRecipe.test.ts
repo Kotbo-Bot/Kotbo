@@ -224,6 +224,23 @@ describe('modèles proposés à la création', () => {
   });
 });
 
+describe('rôles par réaction emoji', () => {
+  // La page des rôles par réaction renvoie ici pour les réactions emoji : il
+  // faut un modèle pour la prise et un pour le retrait, sinon le rôle reste.
+  test('un modèle donne le rôle à la réaction, l’autre le retire quand elle part', async () => {
+    const { RECIPE_TEMPLATES } = await import('@kotbo/shared');
+    const byId = (id: string) => RECIPE_TEMPLATES.find((template) => template.id === id)?.build();
+
+    const add = byId('reaction-role');
+    const remove = byId('reaction-role-remove');
+
+    expect(add?.trigger.type).toBe('OnReactionAdd');
+    expect(add?.steps.map((step) => step.kind === 'action' && step.action)).toEqual(['AddRole']);
+    expect(remove?.trigger.type).toBe('OnReactionRemove');
+    expect(remove?.steps.map((step) => step.kind === 'action' && step.action)).toEqual(['RemoveRole']);
+  });
+});
+
 describe('bibliothèque humaine', () => {
   test('n\'expose que les actions réalisables avec le contexte du déclencheur', () => {
     const types = availableActions('OnMemberJoin').map((action) => action.type);
