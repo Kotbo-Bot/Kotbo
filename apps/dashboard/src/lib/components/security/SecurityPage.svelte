@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from '../../i18n';
   /**
    * Chassis commun aux pages du groupe Securite.
    *
@@ -68,7 +69,7 @@
       {#if readOnly}
         <span
           class="inline-flex items-center gap-1.5 rounded-lg bg-surface-container px-2.5 py-1.5 text-2xs font-medium text-on-surface-variant"
-          title="Seuls les administrateurs peuvent modifier la configuration de sécurité."
+          title={m.spx_admin_only()}
         >
           <Papicon icon="Eye" size={13} />
           Lecture seule

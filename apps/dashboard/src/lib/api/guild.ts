@@ -258,7 +258,7 @@ export async function updateSidebarFavorites(sidebarFavorites: string[], guildId
     });
 
     if (!response.ok) {
-      let message = 'Impossible d\'enregistrer les favoris. Réessaie.';
+      let message = m.apx_favorites_failed();
       try {
         const data = await response.json();
         message = data.error || data.message || message;
@@ -401,7 +401,7 @@ export async function uploadGuildEmoji(
   guildId = authStore.selectedGuildId,
 ): Promise<GuildEmojiSet> {
   if (!GUILD_EMOJI_ACCEPTED.includes(file.type)) {
-    throw new Error(`Format non supporté (${file.type || 'inconnu'}). Utilise PNG, JPEG, GIF ou WEBP.`);
+    throw new Error(m.apx_emoji_format({ type: file.type || m.apx_unknown() }));
   }
   if (file.size > GUILD_EMOJI_MAX_BYTES) {
     throw new Error(`Image trop lourde : ${Math.round(GUILD_EMOJI_MAX_BYTES / 1024)} Ko maximum.`);
@@ -409,7 +409,7 @@ export async function uploadGuildEmoji(
 
   const cleaned = sanitizeEmojiName(name);
   if (cleaned.length < 2) {
-    throw new Error('Nom trop court : 2 caractères minimum (lettres, chiffres, tirets bas).');
+    throw new Error(m.apx_emoji_name());
   }
 
   const result = await dashboardRequest('/emojis', {
@@ -419,7 +419,7 @@ export async function uploadGuildEmoji(
     silent: true,
     errorContext: 'API Error (Guild Emoji Upload):',
   });
-  if (!result) throw new Error("Erreur lors de la création de l'emoji");
+  if (!result) throw new Error(m.apx_emoji_failed());
   return result as GuildEmojiSet;
 }
 
@@ -444,7 +444,7 @@ function readFileAsBase64(file: File): Promise<string> {
       const separator = result.indexOf(',');
       resolve(separator >= 0 ? result.slice(separator + 1) : result);
     };
-    reader.onerror = () => reject(new Error('Lecture du fichier impossible'));
+    reader.onerror = () => reject(new Error(m.apx_read_failed()));
     reader.readAsDataURL(file);
   });
 }

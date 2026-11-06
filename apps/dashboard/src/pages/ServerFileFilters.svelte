@@ -17,6 +17,7 @@
   import Callout from '../lib/components/ui/Callout.svelte';
   import Button from '../lib/components/ui/Button.svelte';
   import LoadingHint from '../lib/components/LoadingHint.svelte';
+  import { useUnsavedChanges } from '../lib/useUnsavedChanges.svelte';
   import { m } from '../lib/i18n';
   import { authStore } from '../lib/stores/auth.svelte';
   import { dashboardStore } from '../lib/stores/dashboard.svelte';
@@ -34,31 +35,31 @@
   type Config = Record<string, any>;
 
   const MODES = [
-    { value: 'OFF', label: 'Désactivé' },
-    { value: 'BLACKLIST', label: 'Liste noire : les serveurs listés sont refusés' },
-    { value: 'WHITELIST', label: 'Liste blanche : seuls les serveurs listés passent' },
+    { value: 'OFF', label: m.common_disabled() },
+    { value: 'BLACKLIST', label: m.sff_mode_blacklist() },
+    { value: 'WHITELIST', label: m.sff_mode_whitelist() },
   ];
   const SANCTIONS = [
-    { value: 'DELETE', label: 'Message supprimé seulement' },
-    { value: 'WARN', label: 'Avertissement' },
+    { value: 'DELETE', label: m.sff_sanction_delete() },
+    { value: 'WARN', label: m.arx_sanction_warn() },
     { value: 'TIMEOUT', label: 'Timeout' },
-    { value: 'JAIL', label: 'Quarantaine (Jail)' },
-    { value: 'KICK', label: 'Expulsion' },
-    { value: 'BAN', label: 'Bannissement' },
+    { value: 'JAIL', label: m.arx_jail_title() },
+    { value: 'KICK', label: m.arx_sanction_kick() },
+    { value: 'BAN', label: m.arx_sanction_ban() },
   ];
   const DURATIONS = [
     { value: 10, label: '10 minutes' },
-    { value: 60, label: '1 heure' },
-    { value: 1440, label: '1 jour' },
-    { value: 10080, label: '7 jours' },
+    { value: 60, label: m.arx_duration_1h() },
+    { value: 1440, label: m.arx_duration_1d() },
+    { value: 10080, label: m.arx_duration_7d() },
   ];
   const GROUP_LABELS: Record<string, string> = {
-    EXECUTABLES: 'Exécutables',
-    IMAGES: 'Images',
-    VIDEOS: 'Vidéos',
+    EXECUTABLES: m.sff_group_executables(),
+    IMAGES: m.sff_group_images(),
+    VIDEOS: m.sff_group_videos(),
     AUDIO: 'Audio',
-    ARCHIVES: 'Archives',
-    DOCUMENTS: 'Documents',
+    ARCHIVES: m.sff_group_archives(),
+    DOCUMENTS: m.sff_group_documents(),
   };
 
   let config = $state<Config>({});
@@ -73,7 +74,15 @@
   let maxRules = $state(20);
   let draft = $state<{ targetId: string; mode: 'BLACKLIST' | 'WHITELIST'; groups: string[]; extensions: string }>({ targetId: '', mode: 'BLACKLIST', groups: [], extensions: '' });
 
-  const dirty = $derived(JSON.stringify(config) !== JSON.stringify(original));
+  // La barre « Modifications non enregistrées » est celle de MainLayout.
+  useUnsavedChanges({
+    id: 'server-file-filters',
+    label: m.am_page_title(),
+    getConfig: () => config,
+    getSaved: () => original,
+    onSave: save,
+    onReset: () => { config = { ...original }; },
+  });
   const channels = $derived(dashboardStore.state.discordChannels ?? []);
   const categories = $derived(dashboardStore.state.discordCategories ?? []);
   const servers = $derived(((config.otherServers ?? []) as string[]).map((entry) => {
@@ -105,16 +114,18 @@
     }
   }
 
-  async function save() {
-    if (!dirty || saving) return;
+  async function save(): Promise<boolean> {
+    if (saving) return false;
     saving = true;
     try {
       const res = await updateRaidProtection({ ...config }, authStore.selectedGuildId);
       config = { ...(res?.config ?? config) };
       original = { ...config };
       toast.success(m.sff_saved());
+      return true;
     } catch (err) {
       toast.error(err instanceof Error ? err.message : m.tmac_err_save());
+      return false;
     } finally {
       saving = false;
     }
@@ -192,15 +203,15 @@
 {#snippet sanctionFields(sanctionField: string, durationField: string)}
   <div class="grid sm:grid-cols-2 gap-3">
     <label class="block">
-      <span class="text-xs font-medium text-on-surface-variant">Sanction des messages supprimés</span>
+      <span class="text-xs font-medium text-on-surface-variant">{m.sff_sanction()}</span>
       <select bind:value={config[sanctionField]} class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface">
         {#each SANCTIONS as s (s.value)}<option value={s.value}>{s.label}</option>{/each}
       </select>
-      <p class="text-2xs text-on-surface-variant mt-1">Une sanction au plus par minute et par membre.</p>
+      <p class="text-2xs text-on-surface-variant mt-1">{m.sff_sanction_hint()}</p>
     </label>
     {#if ['TIMEOUT', 'BAN', 'JAIL'].includes(config[sanctionField])}
       <label class="block">
-        <span class="text-xs font-medium text-on-surface-variant">Durée</span>
+        <span class="text-xs font-medium text-on-surface-variant">{m.arx_vision_duration()}</span>
         <select bind:value={config[durationField]} class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface">
           {#each DURATIONS as d (d.value)}<option value={d.value}>{d.label}</option>{/each}
         </select>
@@ -209,7 +220,7 @@
   </div>
 {/snippet}
 
-<ModulePage title={m.am_page_title()} description="Invitations, messages transférés et tags d'autres serveurs ; extensions de fichiers." icon="filter" featureKey="raid_protection">
+<ModulePage title={m.am_page_title()} description={m.sff_page_desc()} icon="filter" featureKey="raid_protection">
   <Tabs label={m.am_page_title()} tabs={pageTabItems('/security/filters')} active="servers" onchange={(id) => gotoTab('/security/filters', id, 'bot')} />
 
   {#if loading}
@@ -217,47 +228,47 @@
   {:else}
     <div class="space-y-6">
       <SectionCard
-        title="Autres serveurs"
-        description="Bloque la publicité pour d'autres serveurs sans gêner tes partenaires. Ton propre serveur passe toujours ; les membres qui peuvent gérer le serveur ou les messages ne sont jamais visés."
+        title={m.sff_servers_title()}
+        description={m.sff_servers_desc()}
         icon="Globe"
       >
         <div class="space-y-4">
           <div class="grid sm:grid-cols-3 gap-3">
-            {@render modeSelect('otherInvitesMode', 'Invitations', "Y compris ptb./canary., et celles cachées dans un embed, un bouton ou un message transféré.")}
-            {@render modeSelect('otherForwardsMode', 'Messages transférés et liens de salon', "Message transféré depuis un autre serveur, ou lien vers un de ses salons ou événements.")}
-            {@render modeSelect('otherTagsMode', 'Tags de serveur affichés', "Le membre est mis en quarantaine (Jail) tant qu'il affiche le tag, et libéré dès qu'il le retire.")}
+            {@render modeSelect('otherInvitesMode', m.sff_invites(), m.sff_invites_help())}
+            {@render modeSelect('otherForwardsMode', m.sff_forwards(), m.sff_forwards_help())}
+            {@render modeSelect('otherTagsMode', m.sff_tags(), m.sff_tags_help())}
           </div>
           {#if config.otherInvitesMode !== 'OFF'}
             <label class="block sm:w-1/2">
-              <span class="text-xs font-medium text-on-surface-variant">Invitations d'ami et de groupe</span>
+              <span class="text-xs font-medium text-on-surface-variant">{m.sff_friend_invites()}</span>
               <select bind:value={config.otherFriendInvites} class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface">
-                <option value="FOLLOW">Suivre la liste</option>
-                <option value="ALLOW">Toujours autorisées</option>
-                <option value="BLOCK">Toujours supprimées</option>
+                <option value="FOLLOW">{m.sff_follow_list()}</option>
+                <option value="ALLOW">{m.sff_always_allowed()}</option>
+                <option value="BLOCK">{m.sff_always_deleted()}</option>
               </select>
             </label>
           {/if}
           {#if config.otherTagsMode !== 'OFF' && !config.jailRoleId}
-            <Callout variant="warning">Aucun rôle Jail : la quarantaine des tags ne peut pas s'appliquer. Crée-le dans Anti-raid → Quarantaine.</Callout>
+            <Callout variant="warning">{m.sff_no_jail()}</Callout>
           {/if}
 
           <div class="rounded-xl border border-outline-variant/30 p-3 space-y-2">
-            <p class="text-body-sm font-medium text-on-surface">Liste des serveurs ({servers.length}/25)</p>
+            <p class="text-body-sm font-medium text-on-surface">{m.sff_server_list({ count: servers.length, max: 25 })}</p>
             {#if servers.length === 0}
-              <p class="text-xs text-on-surface-variant">Vide. Attention : une liste blanche vide refuse toutes les invitations vers d'autres serveurs.</p>
+              <p class="text-xs text-on-surface-variant">{m.sff_server_list_empty()}</p>
             {:else}
               <div class="flex flex-wrap gap-2">
                 {#each servers as server (server.entry)}
                   <span class="inline-flex items-center gap-1 rounded-lg border border-outline-variant/40 px-2 py-1 text-xs text-on-surface">
                     {server.name}
-                    <Button size="sm" variant="ghost" icon="X" onclick={() => removeServer(server.entry)} />
+                    <Button size="sm" variant="ghost" icon="X" aria-label={m.sff_remove_server({ name: server.name })} onclick={() => removeServer(server.entry)} />
                   </span>
                 {/each}
               </div>
             {/if}
             <form class="flex gap-2" onsubmit={(e) => { e.preventDefault(); void addServer(); }}>
-              <input type="text" bind:value={invite} placeholder="Colle une invitation : discord.gg/partenaire" class="flex-1 rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface" />
-              <Button type="submit" size="sm" icon="Plus" disabled={busy || !invite.trim() || servers.length >= 25}>Ajouter</Button>
+              <input type="text" bind:value={invite} placeholder={m.sff_invite_ph()} class="flex-1 rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface" />
+              <Button type="submit" size="sm" icon="Plus" disabled={busy || !invite.trim() || servers.length >= 25}>{m.sff_add()}</Button>
             </form>
           </div>
           {@render sanctionFields('otherSanction', 'otherDurationMin')}
@@ -265,12 +276,12 @@
       </SectionCard>
 
       <SectionCard
-        title="Extensions de fichiers"
-        description="Bloque des familles de fichiers (exécutables, archives…) ou n'autorise que celles que tu choisis. Une règle de salon l'emporte sur celle de sa catégorie, qui l'emporte sur celle du serveur."
+        title={m.sff_files_title()}
+        description={m.sff_files_desc()}
         icon="Paperclip"
       >
         <div class="space-y-4">
-          {@render modeSelect('fileFilterMode', 'Règle du serveur', "Liste noire : les extensions cochées sont refusées. Liste blanche : seules elles passent.")}
+          {@render modeSelect('fileFilterMode', m.sff_server_rule(), m.sff_server_rule_help())}
           {#if config.fileFilterMode !== 'OFF'}
             <div class="flex flex-wrap gap-2">
               {#each Object.keys(GROUP_LABELS) as group (group)}
@@ -281,7 +292,7 @@
               {/each}
             </div>
             <label class="block">
-              <span class="text-xs font-medium text-on-surface-variant">Extensions en plus (50 au plus)</span>
+              <span class="text-xs font-medium text-on-surface-variant">{m.sff_extra_ext()}</span>
               <input
                 type="text"
                 value={(config.fileExtensions ?? []).join(', ')}
@@ -291,47 +302,47 @@
               />
             </label>
             {#if config.fileFilterMode === 'WHITELIST' && !(config.fileGroups ?? []).length && !(config.fileExtensions ?? []).length}
-              <Callout variant="warning">Une liste blanche sans extension refuse tous les fichiers.</Callout>
+              <Callout variant="warning">{m.sff_whitelist_empty()}</Callout>
             {/if}
           {/if}
           <div class="flex items-start justify-between gap-4 rounded-xl border border-outline-variant/30 px-4 py-3">
             <div class="min-w-0">
-              <p class="text-body-sm font-medium text-on-surface">Toujours refuser les fichiers déguisés</p>
-              <p class="text-xs text-on-surface-variant mt-1 leading-relaxed">Un exécutable renommé en .png (signature binaire) ou une « image » que Discord n'arrive pas à lire est supprimé partout, même sans liste blanche.</p>
+              <p class="text-body-sm font-medium text-on-surface">{m.sff_disguised()}</p>
+              <p class="text-xs text-on-surface-variant mt-1 leading-relaxed">{m.sff_disguised_help()}</p>
             </div>
             <ToggleSwitch checked={Boolean(config.fileRejectCorrupted)} onToggle={(v) => (config.fileRejectCorrupted = v)} />
           </div>
           {@render sanctionFields('fileSanction', 'fileDurationMin')}
 
           <div class="rounded-xl border border-outline-variant/30 p-3 space-y-3">
-            <p class="text-body-sm font-medium text-on-surface">Règles par salon ou catégorie ({rules.length}/{maxRules})</p>
+            <p class="text-body-sm font-medium text-on-surface">{m.sff_rules({ count: rules.length, max: maxRules })}</p>
             {#each rules as rule (rule.id)}
               <div class="flex items-center justify-between gap-3 rounded-lg border border-outline-variant/30 px-3 py-2">
                 <div class="min-w-0">
-                  <p class="text-xs text-on-surface">{channelName(rule.targetId)} · {rule.mode === 'WHITELIST' ? 'liste blanche' : 'liste noire'}</p>
-                  <p class="text-xs text-on-surface-variant truncate">{[...rule.groups.map((g) => GROUP_LABELS[g] ?? g), ...rule.extensions.map((e) => `.${e}`)].join(', ') || 'aucune extension'}</p>
+                  <p class="text-xs text-on-surface">{channelName(rule.targetId)} · {rule.mode === 'WHITELIST' ? m.sff_whitelist_lower() : m.sff_blacklist_lower()}</p>
+                  <p class="text-xs text-on-surface-variant truncate">{[...rule.groups.map((g) => GROUP_LABELS[g] ?? g), ...rule.extensions.map((e) => `.${e}`)].join(', ') || m.sff_no_extension()}</p>
                 </div>
-                <Button size="sm" variant="ghost" icon="Trash2" disabled={busy} onclick={() => removeRule(rule)} />
+                <Button size="sm" variant="ghost" icon="Trash2" aria-label={m.sff_remove_rule()} disabled={busy} onclick={() => removeRule(rule)} />
               </div>
             {/each}
             {#if rules.length < maxRules}
               <div class="grid sm:grid-cols-[1fr_1fr_auto] gap-2 items-end">
                 <label class="block">
-                  <span class="text-xs font-medium text-on-surface-variant">Salon ou catégorie</span>
+                  <span class="text-xs font-medium text-on-surface-variant">{m.sff_target()}</span>
                   <select bind:value={draft.targetId} class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface">
-                    <option value="">Choisir</option>
+                    <option value="">{m.sff_choose()}</option>
                     {#each categories as category (category.id)}<option value={category.id}>📁 {category.name}</option>{/each}
                     {#each channels as channel (channel.id)}<option value={channel.id}>#{channel.name}</option>{/each}
                   </select>
                 </label>
                 <label class="block">
-                  <span class="text-xs font-medium text-on-surface-variant">Mode</span>
+                  <span class="text-xs font-medium text-on-surface-variant">{m.sff_mode()}</span>
                   <select bind:value={draft.mode} class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface">
-                    <option value="BLACKLIST">Liste noire</option>
-                    <option value="WHITELIST">Liste blanche</option>
+                    <option value="BLACKLIST">{m.sff_blacklist()}</option>
+                    <option value="WHITELIST">{m.sff_whitelist()}</option>
                   </select>
                 </label>
-                <Button size="sm" icon="Plus" disabled={busy || !draft.targetId} onclick={addRule}>Ajouter</Button>
+                <Button size="sm" icon="Plus" disabled={busy || !draft.targetId} onclick={addRule}>{m.sff_add()}</Button>
               </div>
               {#if draft.targetId}
                 <div class="flex flex-wrap gap-2">
@@ -341,7 +352,7 @@
                       {GROUP_LABELS[group]}
                     </label>
                   {/each}
-                  <input type="text" bind:value={draft.extensions} placeholder="Extensions en plus : exe, zip" class="flex-1 min-w-40 rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-1.5 text-body-sm text-on-surface font-mono" />
+                  <input type="text" bind:value={draft.extensions} placeholder={m.sff_extra_ext_ph()} class="flex-1 min-w-40 rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-1.5 text-body-sm text-on-surface font-mono" />
                 </div>
               {/if}
             {/if}
@@ -350,16 +361,5 @@
       </SectionCard>
     </div>
 
-    {#if dirty}
-      <div class="sticky bottom-4 z-10 mt-6">
-        <div class="flex items-center justify-between gap-4 rounded-xl border border-primary/40 bg-surface-container-high/95 backdrop-blur px-4 py-3 shadow-lg">
-          <p class="text-body-sm text-on-surface">Modifications non enregistrées</p>
-          <div class="flex items-center gap-2">
-            <Button size="sm" variant="ghost" disabled={saving} onclick={() => (config = { ...original })}>Annuler</Button>
-            <Button size="sm" loading={saving} onclick={save}>Enregistrer</Button>
-          </div>
-        </div>
-      </div>
-    {/if}
   {/if}
 </ModulePage>

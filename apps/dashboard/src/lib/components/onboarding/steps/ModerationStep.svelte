@@ -51,8 +51,8 @@
 </script>
 
 <WizardShell
-  title="Quel niveau de modération ?"
-  lead="Regarde à droite : les mêmes messages, et ce que Kotbo en fait selon le réglage. Tu pourras affiner chaque filtre plus tard."
+  title={m.obx_md_title()}
+  lead={m.obx_md_lead()}
   {onEditTracks}
 >
   <div class="space-y-3">
@@ -63,7 +63,7 @@
         detail={entry.detail}
         icon={entry.icon}
         selected={level === entry.key}
-        badge={entry.key === 'standard' ? 'Recommandé' : undefined}
+        badge={entry.key === 'standard' ? m.obx_recommended() : undefined}
         onclick={() => { wizard.answer({ moderation: entry.key }); celebrateStep(); }}
       />
     {/each}

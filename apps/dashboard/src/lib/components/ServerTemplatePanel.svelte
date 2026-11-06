@@ -716,21 +716,18 @@
         </div>
         <div class="space-y-1 min-w-0 flex-1">
           <p class="text-sm font-semibold text-on-surface">
-            {isTakeover ? 'Serveur déjà en activité : reprise' : 'Serveur neuf : création complète'}
+            {isTakeover ? m.stp_takeover() : m.stp_fresh()}
           </p>
           <p class="text-body-sm text-on-surface-variant leading-relaxed">
             {#if isTakeover}
-              Seuls les modules sont cochés. Créer la maquette complète ici doublerait des
-              salons dont tes membres se servent déjà - à cocher toi-même, salon par salon,
-              si tu le veux vraiment.
+              {m.stp_takeover_desc()}
             {:else}
-              Rien n'indique une communauté installée : la maquette complète est cochée,
-              salons et rôles compris.
+              {m.stp_fresh_desc()}
             {/if}
           </p>
           {#if maturity.reasons.length > 0}
             <p class="text-xs text-on-surface-variant">
-              Constaté : {maturity.reasons.join(' · ')}.
+              {m.stp_observed({ list: maturity.reasons.join(' · ') })}
             </p>
           {/if}
         </div>
@@ -740,7 +737,7 @@
             onclick={selectFullTemplate}
             class="shrink-0 h-9 px-3 rounded-lg text-body-sm font-medium text-on-surface-variant border border-outline-variant/40 hover:bg-surface-container-high transition-colors"
           >
-            Cocher quand même tout
+            {m.stp_check_all()}
           </button>
         {/if}
       </div>
@@ -1238,9 +1235,9 @@
             {/each}
           </select>
           {#if isTraced(item.key)}
-            <span class="shrink-0 text-2xs text-primary/70">posé par Kotbo</span>
+            <span class="shrink-0 text-2xs text-primary/70">{m.stp_traced()}</span>
           {:else if adopt[item.key] && template?.matches?.[item.key]?.id === adopt[item.key]}
-            <span class="shrink-0 text-2xs text-on-surface-variant/45">détecté</span>
+            <span class="shrink-0 text-2xs text-on-surface-variant/45">{m.stp_detected()}</span>
           {/if}
         </div>
       {/if}

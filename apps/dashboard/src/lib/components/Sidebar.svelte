@@ -333,7 +333,7 @@
       hover:bg-surface-container hover:text-primary
       text-on-surface-variant
     "
-    aria-label={isCollapsed ? 'Déplier le menu' : 'Replier le menu'}
+    aria-label={isCollapsed ? m.sbx_expand() : m.sbx_collapse()}
   >
     <div class="transition-transform duration-200 {isCollapsed ? 'rotate-180' : ''}">
       <Papicon icon="chevrons-left" size={12} />
@@ -357,7 +357,7 @@
         type="button"
         onclick={() => sidebarStore.closeMobile?.()}
         class="flex items-center justify-center w-8 h-8 rounded-md text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors lg:hidden"
-        aria-label="Fermer le menu"
+        aria-label={m.sbx_close()}
       >
         <Papicon icon="x" size={16} />
       </button>
@@ -373,7 +373,7 @@
       }}
       disabled={authStore.guilds.length <= 1}
       class="mx-3 mb-3 flex min-h-12 items-center gap-3 rounded-xl border border-outline-variant bg-surface-container px-3 text-left transition-colors hover:bg-surface-container-high disabled:cursor-default"
-      aria-label={authStore.guilds.length > 1 ? 'Changer de serveur' : 'Serveur actuel'}
+      aria-label={authStore.guilds.length > 1 ? m.sbx_switch_server() : m.sbx_current_server()}
     >
       {#if currentGuildIcon}
         <img src={currentGuildIcon} alt="" width="32" height="32" class="h-8 w-8 shrink-0 rounded-lg object-cover" />
@@ -382,7 +382,7 @@
           {currentGuild?.name?.charAt(0) ?? '?'}
         </span>
       {/if}
-      <span class="min-w-0 flex-1 block truncate text-sm font-semibold text-on-surface">{currentGuild?.name ?? 'Serveur'}</span>
+      <span class="min-w-0 flex-1 block truncate text-sm font-semibold text-on-surface">{currentGuild?.name ?? m.sbx_server()}</span>
       {#if authStore.guilds.length > 1}
         <Papicon icon="chevron-right" size={16} class="shrink-0 text-on-surface-variant" />
       {/if}
@@ -404,7 +404,7 @@
     >
       <Papicon icon="search" size={14} class="shrink-0" />
       {#if !isCollapsed}
-        <span class="flex-1 text-left text-body-sm">Rechercher</span>
+        <span class="flex-1 text-left text-body-sm">{m.sbx_search()}</span>
         <kbd class="hidden lg:inline text-2xs font-medium text-on-surface-variant font-body">Ctrl K</kbd>
       {/if}
     </button>

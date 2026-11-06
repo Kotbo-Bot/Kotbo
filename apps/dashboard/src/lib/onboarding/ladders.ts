@@ -1,3 +1,4 @@
+import { m } from '../i18n';
 /**
  * Les échelles de rôles que le parcours sait créer lui-même.
  *
@@ -63,10 +64,10 @@ export type StaffStructure = {
 export const STAFF_STRUCTURES: StaffStructure[] = [
   {
     key: 'founder',
-    label: 'Fondateur en tête',
-    pitch: 'Tu es Fondateur, tes administrateurs sont en dessous',
+    label: m.obl_founder(),
+    pitch: m.obl_founder_pitch(),
     detail:
-      "Le plus courant dès qu'une équipe compte plus d'un administrateur : le rôle de tête distingue celui qui a créé le serveur de ceux qui l'administrent avec lui.",
+      m.obl_founder_detail(),
     icon: 'crown',
     top: [
       {
@@ -75,7 +76,7 @@ export const STAFF_STRUCTURES: StaffStructure[] = [
         color: '#F59E0B',
         power: 'admin',
         hoist: true,
-        duty: 'Le vôtre. Tous les droits, aucune limite.',
+        duty: m.obl_duty_owner(),
       },
       {
         key: 'staff.admin',
@@ -83,7 +84,7 @@ export const STAFF_STRUCTURES: StaffStructure[] = [
         color: '#EF4444',
         power: 'admin',
         hoist: true,
-        duty: 'Gère le serveur avec toi : salons, rôles, réglages.',
+        duty: m.obl_duty_admin(),
       },
     ],
     ground: [
@@ -93,7 +94,7 @@ export const STAFF_STRUCTURES: StaffStructure[] = [
         color: '#3B82F6',
         power: 'moderate',
         hoist: true,
-        duty: 'Sanctionne, supprime, exclut. Le travail quotidien.',
+        duty: m.obl_duty_mod(),
       },
       {
         key: 'staff.helper',
@@ -101,16 +102,16 @@ export const STAFF_STRUCTURES: StaffStructure[] = [
         color: '#10B981',
         power: 'assist',
         hoist: true,
-        duty: "Répond, oriente, calme. Peut mettre en sourdine, pas exclure.",
+        duty: m.obl_duty_helper(),
       },
     ],
   },
   {
     key: 'admin',
-    label: 'Administrateur en tête',
-    pitch: 'Tu es Administrateur, sans échelon au-dessus',
+    label: m.obl_admin(),
+    pitch: m.obl_admin_pitch(),
     detail:
-      "L'autre convention répandue : pas de rôle de fondateur, et un échelon intermédiaire entre l'administration et la modération de terrain.",
+      m.obl_admin_detail(),
     icon: 'shield',
     top: [
       {
@@ -119,7 +120,7 @@ export const STAFF_STRUCTURES: StaffStructure[] = [
         color: '#EF4444',
         power: 'admin',
         hoist: true,
-        duty: 'Le vôtre. Tous les droits, aucune limite.',
+        duty: m.obl_duty_owner(),
       },
       {
         key: 'staff.supermod',
@@ -127,7 +128,7 @@ export const STAFF_STRUCTURES: StaffStructure[] = [
         color: '#F97316',
         power: 'manage',
         hoist: true,
-        duty: "Encadre l'équipe et arbitre les décisions de modération.",
+        duty: m.obl_duty_staff_lead(),
       },
     ],
     ground: [
@@ -137,7 +138,7 @@ export const STAFF_STRUCTURES: StaffStructure[] = [
         color: '#3B82F6',
         power: 'moderate',
         hoist: true,
-        duty: 'Sanctionne, supprime, exclut. Le travail quotidien.',
+        duty: m.obl_duty_mod(),
       },
       {
         key: 'staff.helper',
@@ -145,16 +146,16 @@ export const STAFF_STRUCTURES: StaffStructure[] = [
         color: '#10B981',
         power: 'assist',
         hoist: true,
-        duty: "Répond, oriente, calme. Peut mettre en sourdine, pas exclure.",
+        duty: m.obl_duty_helper(),
       },
     ],
   },
   {
     key: 'flat',
-    label: 'Deux échelons',
-    pitch: 'Un administrateur, des modérateurs',
+    label: m.obl_flat(),
+    pitch: m.obl_flat_pitch(),
     detail:
-      "Pour un serveur qui démarre : au-delà de deux échelons, on passe plus de temps à décider qui est quoi qu'à modérer. Les pôles s'ajoutent plus tard.",
+      m.obl_flat_detail(),
     icon: 'users',
     top: [
       {
@@ -163,7 +164,7 @@ export const STAFF_STRUCTURES: StaffStructure[] = [
         color: '#EF4444',
         power: 'admin',
         hoist: true,
-        duty: 'Le vôtre. Tous les droits, aucune limite.',
+        duty: m.obl_duty_owner(),
       },
     ],
     ground: [
@@ -173,7 +174,7 @@ export const STAFF_STRUCTURES: StaffStructure[] = [
         color: '#3B82F6',
         power: 'moderate',
         hoist: true,
-        duty: 'Sanctionne, supprime, exclut. Le travail quotidien.',
+        duty: m.obl_duty_mod(),
       },
     ],
   },
@@ -202,7 +203,7 @@ const ALL_STAFF_POLES: StaffPole[] = [
     color: '#6366F1',
     power: 'moderate',
     hoist: false,
-    duty: "Tranche les sanctions contestées et forme les nouveaux modérateurs.",
+    duty: m.obl_duty_mod_lead(),
     byDefault: true,
   },
   {
@@ -211,7 +212,7 @@ const ALL_STAFF_POLES: StaffPole[] = [
     color: '#EC4899',
     power: 'coordinate',
     hoist: false,
-    duty: 'Organise et annonce les événements, gère les salons vocaux pendant.',
+    duty: m.obl_duty_events(),
     byDefault: true,
   },
   {
@@ -220,7 +221,7 @@ const ALL_STAFF_POLES: StaffPole[] = [
     color: '#0EA5E9',
     power: 'coordinate',
     hoist: false,
-    duty: 'Écrit les annonces et peut mentionner tout le serveur.',
+    duty: m.obl_duty_comms(),
     byDefault: false,
   },
   {
@@ -229,7 +230,7 @@ const ALL_STAFF_POLES: StaffPole[] = [
     color: '#8B5CF6',
     power: 'coordinate',
     hoist: false,
-    duty: "Suit les candidatures au staff et les entretiens.",
+    duty: m.obl_duty_recruit(),
     byDefault: false,
   },
   {
@@ -239,7 +240,7 @@ const ALL_STAFF_POLES: StaffPole[] = [
     color: '#14B8A6',
     power: 'coordinate',
     hoist: false,
-    duty: 'Traite les demandes de partenariat entre serveurs.',
+    duty: m.obl_duty_partners(),
     byDefault: false,
   },
   {
@@ -248,7 +249,7 @@ const ALL_STAFF_POLES: StaffPole[] = [
     color: '#F59E0B',
     power: 'coordinate',
     hoist: false,
-    duty: 'Anime la vie du serveur : jeux, quiz, soirées vocales.',
+    duty: m.obl_duty_host(),
     byDefault: false,
   },
 ];
@@ -294,29 +295,29 @@ export type LevelLadder = {
 export const LEVEL_LADDERS: LevelLadder[] = [
   {
     key: 'metals',
-    label: 'Les métaux',
-    pitch: 'Bronze, Argent, Or… tout le monde en comprend l’ordre',
+    label: m.obl_metals(),
+    pitch: m.obl_metals_pitch(),
     icon: 'award',
     names: ['Bronze', 'Argent', 'Or', 'Platine', 'Diamant', 'Maître', 'Champion', 'Légende'],
   },
   {
     key: 'seniority',
-    label: "L'ancienneté",
-    pitch: 'Ce que le rôle dit du membre, pas de son score',
+    label: m.obl_seniority(),
+    pitch: m.obl_seniority_pitch(),
     icon: 'clock',
     names: ['Nouveau', 'Habitué', 'Régulier', 'Fidèle', 'Pilier', 'Vétéran', 'Ancien', 'Légende'],
   },
   {
     key: 'ranks',
-    label: 'Les grades',
-    pitch: 'Une progression qui se mérite',
+    label: m.obl_ranks(),
+    pitch: m.obl_ranks_pitch(),
     icon: 'trophy',
     names: ['Recrue', 'Initié', 'Confirmé', 'Expert', 'Élite', 'Vétéran', 'Maître', 'Légende'],
   },
   {
     key: 'plain',
-    label: 'Sans fioriture',
-    pitch: 'Le palier pour nom : « Niveau 20 »',
+    label: m.obl_plain(),
+    pitch: m.obl_plain_pitch(),
     icon: 'hash',
     names: [],
   },
@@ -405,7 +406,7 @@ export function buildLevelLadder(ladder: LevelLadder, count: number): LevelRoleB
       // Non détaché de la liste des membres : huit rôles de niveau épinglés en
       // feraient une liste de catégories plutôt qu'une liste de gens.
       hoist: false,
-      duty: `Débloqué au niveau ${level}.`,
+      duty: m.obl_duty_level({ level }),
       level,
     }))
     .reverse();

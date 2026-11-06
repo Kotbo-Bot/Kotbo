@@ -1,3 +1,4 @@
+import { m } from '../i18n';
 import { API_BASE_URL, dashboardRequest } from './client';
 
 /** Miroir de apps/bot/src/services/features/tournament/bracket.ts. */
@@ -111,7 +112,7 @@ export async function fetchPublicTournament(guildId: string, eventId: string): P
   if (response.status === 404 || response.status === 400) return null;
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
-    throw new Error(error.error || 'Impossible de charger le tournoi. Réessaie.');
+    throw new Error(error.error || m.apx_tournament_failed());
   }
   return response.json();
 }

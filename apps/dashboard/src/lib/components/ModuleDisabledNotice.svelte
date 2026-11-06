@@ -69,7 +69,7 @@
       href="/modules"
       class="inline-flex items-center gap-1.5 h-10 px-4 rounded-lg border border-outline-variant/40 text-sm font-medium text-on-surface hover:bg-surface-container transition-colors"
     >
-      Voir les modules
+      {m.mdn_see_modules()}
     </a>
     {#if canEnable}
       <button

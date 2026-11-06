@@ -130,7 +130,7 @@
     } catch (err) {
       // Code de parrainage refusé : le bot dit pourquoi.
       onboardingData.busy = false;
-      toast.error(errorMessage(err) || "La page de paiement n'a pas pu être ouverte. Réessaie dans un instant.");
+      toast.error(errorMessage(err) || m.obx_co_checkout_failed());
       return;
     }
     onboardingData.busy = false;
@@ -168,8 +168,8 @@
 </script>
 
 <WizardShell
-  title="Ton serveur est prêt."
-  lead="Les modules gratuits tournent déjà. L'offre complète ouvre le reste : gestion du staff, IA de modération, site, saisons et clans."
+  title={m.obx_co_title()}
+  lead={m.obx_co_lead()}
   {onEditTracks}
 >
   <div class="flex items-center gap-3.5 rounded-2xl border border-primary/35 bg-primary/[0.04] px-5 py-4 mb-5">
@@ -181,26 +181,24 @@
       </div>
     {/if}
     <div class="min-w-0">
-      <p class="text-[15px] font-semibold text-on-surface truncate">{selectedGuild?.name ?? 'Ton serveur'}</p>
-      <p class="text-xs text-on-surface-variant">Configuré avec Kotbo</p>
+      <p class="text-[15px] font-semibold text-on-surface truncate">{selectedGuild?.name ?? m.obx_co_your_server()}</p>
+      <p class="text-xs text-on-surface-variant">{m.obx_co_configured()}</p>
     </div>
     <KotboMark size={28} class="ml-auto shrink-0" />
   </div>
 
   {#if billing && !billing.enabled}
     <div class="rounded-2xl border border-outline-variant/30 bg-surface-container-low/40 p-5">
-      <p class="text-sm font-semibold text-on-surface mb-1">Pas de facturation sur cette instance</p>
+      <p class="text-sm font-semibold text-on-surface mb-1">{m.obx_co_no_billing()}</p>
       <p class="text-body-sm text-on-surface-variant leading-relaxed">
-        Cette installation de Kotbo n'a pas de clé Stripe : tous les modules suivent la
-        configuration du serveur, sans offre commerciale.
+        {m.obx_co_no_billing_desc()}
       </p>
     </div>
   {:else if canFinishWithoutPayment}
     <div class="rounded-2xl border border-outline-variant/30 bg-surface-container-low/40 p-5">
-      <p class="text-sm font-semibold text-on-surface mb-1">Ton accès est déjà ouvert</p>
+      <p class="text-sm font-semibold text-on-surface mb-1">{m.obx_co_access()}</p>
       <p class="text-body-sm text-on-surface-variant leading-relaxed">
-        Ce serveur dispose déjà de son accès à Kotbo : il n'y a rien à régler ici. La
-        configuration que tu viens de poser s'applique dès maintenant.
+        {m.obx_co_access_desc()}
       </p>
     </div>
   {:else if offer}
@@ -210,17 +208,17 @@
         {#if offer.priceCents}
           <div class="text-right">
             <p class="text-lg font-bold tracking-tight text-on-surface">
-              {formatPrice(effectiveInterval === 'year' ? offer.priceCents.year : offer.priceCents.month)}<span class="text-body-sm font-medium text-on-surface-variant">/{effectiveInterval === 'year' ? 'an' : 'mois'}</span>
+              {formatPrice(effectiveInterval === 'year' ? offer.priceCents.year : offer.priceCents.month)}<span class="text-body-sm font-medium text-on-surface-variant">/{effectiveInterval === 'year' ? m.obx_co_year() : m.obx_co_month()}</span>
             </p>
             {#if effectiveInterval === 'year'}
               <p class="text-xs text-on-surface-variant">
-                soit {formatPrice(Math.round(offer.priceCents.year / 12))}/mois
+                {m.obx_co_per_month({ price: formatPrice(Math.round(offer.priceCents.year / 12)) })}
                 {#if yearlySavedCents > 0}
                   <span class="ml-1 line-through text-on-surface-variant/45">{formatPrice(offer.priceCents.month)}</span>
                 {/if}
               </p>
               {#if yearlySavedCents > 0}
-                <p class="text-xs font-medium text-success">{formatPrice(yearlySavedCents)} d'économie par an</p>
+                <p class="text-xs font-medium text-success">{m.obx_co_saved({ amount: formatPrice(yearlySavedCents) })}</p>
               {/if}
             {/if}
           </div>
@@ -236,7 +234,7 @@
               ? 'bg-primary text-on-primary'
               : 'text-on-surface-variant hover:text-on-surface'}"
           >
-            Mensuel
+            {m.obx_co_monthly()}
           </button>
           <button
             type="button"
@@ -246,7 +244,7 @@
               ? 'bg-primary text-on-primary'
               : 'text-on-surface-variant hover:text-on-surface'}"
           >
-            Annuel
+            {m.obx_co_yearly()}
             {#if yearlySavingPercent > 0}
               <span class="text-2xs px-1.5 py-0.5 rounded bg-success/20 text-success font-semibold">
                 −{yearlySavingPercent}%
@@ -262,16 +260,14 @@
         <p class="mt-3 flex items-start gap-2 text-body-sm font-medium text-success">
           <Papicon icon="gift" size={14} class="mt-0.5 shrink-0" />
           <span>
-            Code {referralCode} : {trialDays} jours d'essai gratuit, puis -{REFERRAL_DISCOUNT_PERCENT} % sur ta
-            première facture. Tu ne seras débité qu'après l'essai, et tu peux arrêter avant.
+            {m.obx_co_referral({ code: referralCode ?? '', days: trialDays, percent: REFERRAL_DISCOUNT_PERCENT })}
           </span>
         </p>
       {/if}
       <p class="mt-3 flex items-start gap-2 text-xs text-on-surface-variant/55 leading-relaxed">
         <Papicon icon="lock" size={12} class="mt-0.5 shrink-0" />
         <span>
-          Le paiement se déroule entièrement sur Stripe : aucune donnée bancaire ne passe
-          par Kotbo.
+          {m.obx_co_stripe()}
         </span>
       </p>
     </div>
@@ -284,17 +280,17 @@
           class="inline-flex items-center gap-1.5 text-body-sm font-medium text-on-surface-variant hover:text-on-surface transition-colors"
         >
           <Papicon icon="ticket" size={13} />
-          Tu as un code&nbsp;? Parrainage, partenaire…
+          {m.obx_co_have_code()}
         </button>
       {:else}
         <div class="rounded-2xl border border-outline-variant/30 bg-surface-container-low/30 p-4">
-          <p class="text-body-sm font-semibold text-on-surface mb-2">Code de parrainage ou d'activation</p>
+          <p class="text-body-sm font-semibold text-on-surface mb-2">{m.obx_co_code()}</p>
           <div class="flex items-center gap-2">
             <input
               type="text"
               bind:value={codeValue}
               disabled={codeBusy}
-              placeholder="KOTBO-XXXXXX ou KB-XXXX-XXXX-XXXX"
+              placeholder={m.obx_co_code_ph()}
               onkeydown={(event) => event.key === 'Enter' && redeemCode()}
               class="min-w-0 flex-1 rounded-lg border border-outline-variant/40 bg-surface-container px-3 py-2 text-body-sm text-on-surface placeholder:text-on-surface-variant/40 focus:outline-none focus:ring-2 focus:ring-primary/40"
             />
@@ -305,7 +301,7 @@
               use:explainDisabled={(!codeValue.trim()) ? m.common_reason_fill_field() : ''}
               class="shrink-0 px-3.5 py-2 rounded-lg bg-primary text-on-primary text-body-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-40"
             >
-              {codeBusy ? 'Vérification…' : 'Appliquer'}
+              {codeBusy ? m.obx_co_checking() : m.obx_apply()}
             </button>
           </div>
         </div>
@@ -321,7 +317,7 @@
         disabled={onboardingData.busy}
         class="inline-flex items-center px-4 py-2.5 rounded-xl text-sm font-medium text-on-surface-variant hover:text-on-surface transition-colors disabled:opacity-40"
       >
-        Continuer en gratuit
+        {m.obx_co_free()}
       </button>
       <button
         type="button"
@@ -329,7 +325,7 @@
         disabled={onboardingData.busy}
         class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-on-primary text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-40"
       >
-        {onboardingData.busy ? 'Ouverture…' : trialDays > 0 ? `Démarrer l'essai de ${trialDays} jours` : 'Mettre en service'}
+        {onboardingData.busy ? m.obx_co_opening() : trialDays > 0 ? m.obx_co_trial({ days: trialDays }) : m.obx_co_start()}
         <Papicon icon="ChevronRight" size={15} />
       </button>
     {:else}
@@ -339,7 +335,7 @@
         disabled={onboardingData.busy}
         class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-on-primary text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-40"
       >
-        Accéder au tableau de bord
+        {m.obx_co_dashboard()}
         <Papicon icon="ChevronRight" size={15} />
       </button>
     {/if}

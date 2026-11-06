@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from '../../i18n';
   /**
    * Ce que la reprise a relu, montre avant d'etre ecrit.
    *
@@ -22,15 +23,15 @@
   const summary = $derived.by(() => {
     switch (payload.kind) {
       case 'welcome':
-        return 'Voir le texte repris';
+        return m.obx_rcv_welcome();
       case 'rules':
-        return `Voir les ${payload.articles.length} articles repris`;
+        return m.obx_rcv_rules({ count: payload.articles.length });
       case 'ticketPanel':
         return payload.types.length > 0
-          ? `Voir le panneau et ses ${payload.types.length} sujets`
-          : 'Voir le panneau repris';
+          ? m.obx_rcv_panel_topics({ count: payload.types.length })
+          : m.obx_rcv_panel();
       case 'reactionRoles':
-        return `Voir les ${payload.options.length} rôles repris`;
+        return m.obx_rcv_roles({ count: payload.options.length });
     }
   });
 </script>
@@ -57,8 +58,8 @@
           {payload.message}
         </p>
         <p class="mt-2 text-2xs text-on-surface-variant">
-          <code class="text-primary/70">{'{user}'}</code> devient la mention de l'arrivant,
-          <code class="text-primary/70">{'{server}'}</code> le nom du serveur.
+          <code class="text-primary/70">{'{user}'}</code> {m.obx_rcv_user()}
+          <code class="text-primary/70">{'{server}'}</code> {m.obx_rcv_server()}
         </p>
 
       {:else if payload.kind === 'rules'}

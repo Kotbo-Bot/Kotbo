@@ -1,3 +1,4 @@
+import { m } from '../i18n';
 /**
  * Les reponses toutes faites du parcours, decrites une fois.
  *
@@ -35,29 +36,29 @@ export type Theme = {
 export const THEMES: Theme[] = [
   {
     key: 'communaute',
-    label: 'Une communauté',
-    pitch: 'On discute, on se retrouve, on organise des choses ensemble.',
+    label: m.obp_th_community(),
+    pitch: m.obp_th_community_pitch(),
     icon: 'users',
     sections: ['access', 'security', 'staff', 'tickets', 'welcome', 'stats', 'text', 'fun', 'voice'],
   },
   {
     key: 'gaming',
-    label: 'Du jeu',
-    pitch: 'Des vocaux, des niveaux, une économie et de quoi se classer.',
+    label: m.obp_th_gaming(),
+    pitch: m.obp_th_gaming_pitch(),
     icon: 'trophy',
     sections: ['access', 'security', 'staff', 'tickets', 'welcome', 'stats', 'text', 'fun', 'bots', 'voice'],
   },
   {
     key: 'entraide',
-    label: "De l'entraide",
-    pitch: "On pose des questions, on y répond. Les tickets font le gros du travail.",
+    label: m.obp_th_help(),
+    pitch: m.obp_th_help_pitch(),
     icon: 'help-circle',
     sections: ['access', 'security', 'staff', 'tickets', 'welcome', 'text'],
   },
   {
     key: 'creation',
-    label: 'De la création',
-    pitch: 'On publie, on montre, on commente. Salons médias et vocaux ouverts.',
+    label: m.obp_th_creative(),
+    pitch: m.obp_th_creative_pitch(),
     icon: 'sparkles',
     sections: ['access', 'security', 'staff', 'tickets', 'welcome', 'stats', 'text', 'fun', 'voice'],
   },
@@ -72,26 +73,26 @@ export const MODERATION_LEVELS: {
 }[] = [
   {
     key: 'light',
-    label: 'Souple',
-    pitch: 'Le strict nécessaire',
+    label: m.obp_md_loose(),
+    pitch: m.obp_md_loose_pitch(),
     detail:
-      "Liens d'invitation et spam évident sont bloqués, le reste passe. À choisir si ta communauté est petite et se connaît.",
+      m.obp_md_loose_detail(),
     icon: 'smile',
   },
   {
     key: 'standard',
-    label: 'Équilibré',
-    pitch: 'Ce que choisissent la plupart des serveurs',
+    label: m.obp_balanced(),
+    pitch: m.obp_md_standard_pitch(),
     detail:
-      "Filtres d'insultes, de liens et de spam, plus une détection de vague d'arrivées suspecte. Assez ferme sans être pénible.",
+      m.obp_md_standard_detail(),
     icon: 'shield',
   },
   {
     key: 'strict',
-    label: 'Strict',
-    pitch: 'Pour un serveur exposé',
+    label: m.obp_md_strict(),
+    pitch: m.obp_md_strict_pitch(),
     detail:
-      "Tous les filtres, seuils anti-raid resserrés, comptes trop récents mis à l'écart. À choisir si tu as déjà subi des raids.",
+      m.obp_md_strict_detail(),
     icon: 'lock',
   },
 ];
@@ -107,14 +108,14 @@ export const MODERATION_LEVELS: {
  * l'Europe, et le reglage complet reste dans le tableau de bord.
  */
 export const COMMON_TIMEZONES: { value: string; label: string }[] = [
-  { value: 'Europe/Paris', label: 'Paris, Bruxelles, Madrid' },
-  { value: 'Europe/London', label: 'Londres, Lisbonne' },
-  { value: 'Europe/Zurich', label: 'Genève, Zurich' },
-  { value: 'America/Montreal', label: 'Montréal, Québec' },
+  { value: 'Europe/Paris', label: m.obp_tz_paris() },
+  { value: 'Europe/London', label: m.obp_tz_london() },
+  { value: 'Europe/Zurich', label: m.obp_tz_zurich() },
+  { value: 'America/Montreal', label: m.obp_tz_montreal() },
   { value: 'Africa/Casablanca', label: 'Casablanca, Rabat' },
-  { value: 'Indian/Reunion', label: 'La Réunion' },
+  { value: 'Indian/Reunion', label: m.obp_tz_reunion() },
   { value: 'America/New_York', label: 'New York, Toronto' },
-  { value: 'UTC', label: 'UTC (heure universelle)' },
+  { value: 'UTC', label: m.obp_tz_utc() },
 ];
 
 // ── Écran « règlement » ──────────────────────────────────────────────────────
@@ -289,12 +290,12 @@ export function defaultTicketKeys(theme: ThemeKey): string[] {
 export const PANEL_COLORS: { value: string; label: string }[] = [
   { value: '#5865F2', label: 'Discord' },
   { value: '#00E5FF', label: 'Kotbo' },
-  { value: '#10B981', label: 'Émeraude' },
-  { value: '#F59E0B', label: 'Ambre' },
-  { value: '#EF4444', label: 'Rouge' },
-  { value: '#EC4899', label: 'Rose' },
-  { value: '#8B5CF6', label: 'Violet' },
-  { value: '#64748B', label: 'Ardoise' },
+  { value: '#10B981', label: m.obp_col_emerald() },
+  { value: '#F59E0B', label: m.obp_col_amber() },
+  { value: '#EF4444', label: m.obp_col_red() },
+  { value: '#EC4899', label: m.obp_col_pink() },
+  { value: '#8B5CF6', label: m.obp_col_violet() },
+  { value: '#64748B', label: m.obp_col_slate() },
 ];
 
 // ── Écran « progression » ────────────────────────────────────────────────────
@@ -317,28 +318,28 @@ export const LEVEL_RHYTHMS: {
 }[] = [
   {
     key: 'calm',
-    label: 'Calme',
-    pitch: 'Les niveaux montent lentement',
+    label: m.obp_rh_slow(),
+    pitch: m.obp_rh_slow_pitch(),
     detail:
-      "Un palier se mérite sur plusieurs semaines. À choisir si les rôles de niveau doivent rester rares.",
+      m.obp_rh_slow_detail(),
     icon: 'smile',
     config: { xpMin: 5, xpMax: 10, cooldownSeconds: 90, vocalXpPerMin: 2 },
   },
   {
     key: 'standard',
-    label: 'Équilibré',
-    pitch: 'Le rythme par défaut de Kotbo',
+    label: m.obp_balanced(),
+    pitch: m.obp_rh_standard_pitch(),
     detail:
-      "Un membre actif tous les jours passe les premiers niveaux dans la semaine, puis la courbe se resserre.",
+      m.obp_rh_standard_detail(),
     icon: 'sliders-horizontal',
     config: { xpMin: 15, xpMax: 25, cooldownSeconds: 60, vocalXpPerMin: 5 },
   },
   {
     key: 'intense',
-    label: 'Nerveux',
-    pitch: 'Ça monte vite, ça se voit',
+    label: m.obp_rh_fast(),
+    pitch: m.obp_rh_fast_pitch(),
     detail:
-      "Les montées de niveau sont fréquentes et animent le salon. À choisir sur un serveur qui parle beaucoup.",
+      m.obp_rh_fast_detail(),
     icon: 'zap',
     config: { xpMin: 25, xpMax: 40, cooldownSeconds: 30, vocalXpPerMin: 10 },
   },

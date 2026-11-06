@@ -42,23 +42,23 @@
   let settings = $state<string[]>([]);
 
   const SETTING_LABELS: Record<string, string> = {
-    ticketCategory: 'Catégorie des tickets',
-    ticketLogChannel: 'Salon de logs des tickets',
-    welcomeChannel: "Salon d'accueil",
-    logChannel: 'Salon de logs',
-    suggestionChannel: 'Salon de résumé',
-    moderatorRole: 'Rôle modérateur',
+    ticketCategory: m.mig_set_ticket_category(),
+    ticketLogChannel: m.mig_set_ticket_logs(),
+    welcomeChannel: m.mig_set_welcome(),
+    logChannel: m.mig_set_logs(),
+    suggestionChannel: m.mig_set_suggestions(),
+    moderatorRole: m.mig_set_mod_role(),
   };
 
   const FEATURE_LABELS: Record<string, string> = {
-    tickets: 'Tickets',
-    welcome: 'Bienvenue',
-    reactionRoles: 'Rôles par réaction',
-    automod: 'AutoMod',
-    leveling: 'Niveaux',
-    stats: 'Statistiques',
-    logs: 'Logs',
-    rules: 'Règlement',
+    tickets: m.mig_feat_tickets(),
+    welcome: m.mig_feat_welcome(),
+    reactionRoles: m.mig_feat_reactionroles(),
+    automod: m.mig_feat_automod(),
+    leveling: m.mig_feat_leveling(),
+    stats: m.mig_feat_stats(),
+    logs: m.mig_feat_logs(),
+    rules: m.mig_feat_rules(),
   };
 
   /** Les seules propositions applicables : celles qui portent une action. */
@@ -152,8 +152,8 @@
 </script>
 
 <ModulePage
-  title="Reprise"
-  description="Récupère ce que tes anciens bots avaient mis en place."
+  title={m.mig_title()}
+  description={m.mig_desc()}
   icon="download"
   featureKey="settings"
 >
@@ -164,17 +164,17 @@
   {#if loading && !plan}
     <LoadingHint context="config" />
   {:else if !plan}
-    <EmptyState icon="alert-triangle" title="Analyse indisponible" description="L'analyse du serveur n'a pas pu se terminer." actionLabel="Relancer l'analyse" actionIcon="RefreshCw" onAction={load} />
+    <EmptyState icon="alert-triangle" title={m.mig_unavailable()} description={m.mig_unavailable_desc()} actionLabel={m.mig_retry()} actionIcon="RefreshCw" onAction={load} />
   {:else}
     <div class="space-y-4">
       <!-- ── Bots détectés ──────────────────────────────────────────────── -->
       <SectionCard
-        title="Bots présents"
-        description="Kotbo reconnaît les bots les plus répandus par leur nom, puis cherche sur le serveur la trace des fonctions qu'ils utilisent vraiment."
+        title={m.mig_bots_title()}
+        description={m.mig_bots_desc()}
       >
         {#if plan.bots.length === 0}
           <p class="text-body-sm text-on-surface-variant">
-            Aucun autre bot sur ce serveur. Rien à reprendre.
+            {m.mig_no_bots()}
           </p>
         {:else}
           <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2.5">
@@ -230,10 +230,10 @@
                        renvoyer le staff verifier a la main un bot dont il n'y
                        a rien a reprendre. -->
                   <p class="mt-1.5 text-2xs text-on-surface-variant">
-                    Rien à reprendre  Kotbo ne couvre pas ce que fait ce bot.
+                    {m.mig_bot_uncovered()}
                   </p>
                 {:else}
-                  <p class="mt-1.5 text-2xs text-on-surface-variant">Bot non reconnu  à vérifier à la main.</p>
+                  <p class="mt-1.5 text-2xs text-on-surface-variant">{m.mig_bot_unknown()}</p>
                 {/if}
               </div>
             {/each}
@@ -243,8 +243,8 @@
 
       <!-- ── Ce qu'on a trouvé ──────────────────────────────────────────── -->
       <SectionCard
-        title="Trouvé sur le serveur"
-        description="Le nom d'un salon est un indice, pas une preuve : vérifiez avant d'appliquer."
+        title={m.mig_found_title()}
+        description={m.mig_found_desc()}
       >
         {#snippet actions()}
           {#if actionable.length > 0}
@@ -252,7 +252,7 @@
               variant="primary"
               size="sm"
               icon="download"
-              label={selectedCount > 0 ? `Reprendre (${selectedCount})` : 'Reprendre'}
+              label={selectedCount > 0 ? m.mig_apply_count({ count: selectedCount }) : m.mig_apply()}
               disabled={selectedCount === 0 || applying}
               onclick={applySelection}
             />
@@ -262,9 +262,9 @@
         {#if plan.findings.length === 0}
           <EmptyState
             icon="search"
-            title="Rien de repérable"
-            description="Aucun salon ni règle ne trahit une configuration existante. Tout est à configurer depuis les pages de Kotbo."
-      actionLabel="Voir la prise en main"
+            title={m.mig_nothing_title()}
+            description={m.mig_nothing_desc()}
+      actionLabel={m.mig_nothing_action()}
       actionHref="/setup"
     />
         {:else}
@@ -312,7 +312,7 @@
                       </p>
                     {:else}
                       <p class="mt-2 text-2xs text-on-surface-variant italic">
-                        Constat informatif : rien à appliquer automatiquement.
+                        {m.mig_info_only()}
                       </p>
                     {/if}
                   </div>
@@ -325,8 +325,8 @@
 
       <!-- ── Import d'un export ─────────────────────────────────────────── -->
       <SectionCard
-        title="Importer un export"
-        description="Les bots n'exportent pas le même format. Kotbo ne devine donc rien : il relève les identifiants Discord du fichier et tu remets chacun à sa place."
+        title={m.mig_import_title()}
+        description={m.mig_import_desc()}
       >
         <input
           type="file"
@@ -356,7 +356,7 @@
                   }}
                   className="w-full sm:w-56"
                 >
-                  <option value="">Ne pas utiliser</option>
+                  <option value="">{m.mig_unused()}</option>
                   {#each settings as setting}
                     <option value={setting}>{SETTING_LABELS[setting] ?? setting}</option>
                   {/each}
@@ -368,7 +368,7 @@
               <ActionButton
                 variant="primary"
                 size="sm"
-                label="Enregistrer les associations"
+                label={m.mig_save_assign()}
                 disabled={Object.values(assignments).filter(Boolean).length === 0}
                 onclick={saveAssignments}
               />
@@ -380,8 +380,8 @@
       <!-- ── Ce qui reste à faire ───────────────────────────────────────── -->
       {#if plan.manualSteps.length > 0}
         <SectionCard
-          title="À refaire à la main"
-          description="Ces données vivent dans la base de l'ancien bot : aucune inspection du serveur ne les rend."
+          title={m.mig_manual_title()}
+          description={m.mig_manual_desc()}
         >
           <ul class="space-y-2">
             {#each plan.manualSteps as step (step.feature)}

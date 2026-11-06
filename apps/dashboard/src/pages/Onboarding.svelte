@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from '../lib/i18n';
   /**
    * Le parcours de configuration : un ecran par question, une question par
    * decision.
@@ -111,11 +112,11 @@
       // rien, et laisser la personne coincee sur un parcours qu'elle ne peut
       // pas traverser est pire que de la renvoyer choisir un autre serveur.
       if (errorStatus(err) === 403) {
-        globalNotice.show(errorMessage(err) || "Tu n'as pas les droits nécessaires pour cette action.");
+        globalNotice.show(errorMessage(err) || m.obx_forbidden());
         router.goto('/servers');
         return;
       }
-      loadError = errorMessage(err) || "La configuration n'a pas pu être chargée.";
+      loadError = errorMessage(err) || m.obx_load_failed();
     } finally {
       loading = false;
     }
@@ -191,7 +192,7 @@
       onclick={load}
       class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-on-primary text-sm font-semibold hover:opacity-90 transition-opacity"
     >
-      Réessayer
+      {m.common_retry()}
     </button>
   </div>
 

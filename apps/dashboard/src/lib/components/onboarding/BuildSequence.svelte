@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from '../../i18n';
   /**
    * Le montage du serveur, pendant qu'il a lieu.
    *
@@ -91,7 +92,7 @@
   <div class="px-5 pt-5 pb-4">
     <div class="flex items-baseline justify-between gap-4 mb-3">
       <p class="text-body-sm font-semibold text-on-surface">
-        {finished ? 'Serveur monté.' : 'Kotbo monte ton serveur…'}
+        {finished ? m.obx_bs_done() : m.obx_bs_running()}
       </p>
       <p class="text-body-sm font-semibold tabular-nums text-primary">
         {revealed}<span class="text-on-surface-variant/45"> / {total}</span>
@@ -121,7 +122,7 @@
         {#if item.mode === 'adopt'}
           <!-- Il existait avant Kotbo : rien n'a ete cree, seul le branchement
                est nouveau. La coche verte de la creation mentirait. -->
-          <span class="shrink-0 text-2xs font-medium text-on-surface-variant/45">relié</span>
+          <span class="shrink-0 text-2xs font-medium text-on-surface-variant/45">{m.obx_mp_linked()}</span>
         {:else}
           <Papicon icon="check" size={12} class="shrink-0 text-success" />
         {/if}

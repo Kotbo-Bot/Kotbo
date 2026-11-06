@@ -474,8 +474,8 @@
 
                 <div class="col-span-2 flex items-center justify-between pt-2 border-t border-outline-variant/10">
                   <div>
-                    <span class="text-xs font-semibold text-on-surface-variant ml-2">Mode lent préventif</span>
-                    <p class="text-xs text-on-surface-variant ml-2 mt-1">Active un mode lent temporaire dès que le salon s'emballe (plusieurs membres postent rapidement), avant toute sanction individuelle.</p>
+                    <span class="text-xs font-semibold text-on-surface-variant ml-2">{m.amx_slowmode()}</span>
+                    <p class="text-xs text-on-surface-variant ml-2 mt-1">{m.amx_slowmode_desc()}</p>
                   </div>
                   <ToggleSwitch
                     checked={config.preventiveSlowmodeEnabled}
@@ -486,7 +486,7 @@
 
                 {#if config.preventiveSlowmodeEnabled}
                   <div class="space-y-1.5">
-                    <label for="preventiveSlowmodeMsgThreshold" class="text-xs font-semibold text-on-surface-variant ml-2">Messages déclencheurs</label>
+                    <label for="preventiveSlowmodeMsgThreshold" class="text-xs font-semibold text-on-surface-variant ml-2">{m.amx_slowmode_msgs()}</label>
                     <input
                       id="preventiveSlowmodeMsgThreshold"
                       type="number"
@@ -499,7 +499,7 @@
                   </div>
 
                   <div class="space-y-1.5">
-                    <label for="preventiveSlowmodeMinUsers" class="text-xs font-semibold text-on-surface-variant ml-2">Membres distincts min.</label>
+                    <label for="preventiveSlowmodeMinUsers" class="text-xs font-semibold text-on-surface-variant ml-2">{m.amx_slowmode_users()}</label>
                     <input
                       id="preventiveSlowmodeMinUsers"
                       type="number"
@@ -512,7 +512,7 @@
                   </div>
 
                   <div class="space-y-1.5">
-                    <label for="preventiveSlowmodeWindowSec" class="text-xs font-semibold text-on-surface-variant ml-2">Fenêtre d'observation (s)</label>
+                    <label for="preventiveSlowmodeWindowSec" class="text-xs font-semibold text-on-surface-variant ml-2">{m.amx_slowmode_window()}</label>
                     <input
                       id="preventiveSlowmodeWindowSec"
                       type="number"
@@ -525,7 +525,7 @@
                   </div>
 
                   <div class="space-y-1.5">
-                    <label for="preventiveSlowmodeSeconds" class="text-xs font-semibold text-on-surface-variant ml-2">Mode lent appliqué (s)</label>
+                    <label for="preventiveSlowmodeSeconds" class="text-xs font-semibold text-on-surface-variant ml-2">{m.amx_slowmode_seconds()}</label>
                     <input
                       id="preventiveSlowmodeSeconds"
                       type="number"
@@ -538,7 +538,7 @@
                   </div>
 
                   <div class="space-y-1.5">
-                    <label for="preventiveSlowmodeMinutes" class="text-xs font-semibold text-on-surface-variant ml-2">Durée du mode lent (min)</label>
+                    <label for="preventiveSlowmodeMinutes" class="text-xs font-semibold text-on-surface-variant ml-2">{m.amx_slowmode_minutes()}</label>
                     <input
                       id="preventiveSlowmodeMinutes"
                       type="number"
@@ -1091,10 +1091,10 @@
 
           <!-- Rôles des bots : donnés à chaque bot à son arrivée, à la place du rôle automatique. -->
           <div class="space-y-2">
-            <span class="text-xs font-semibold text-on-surface-variant ml-2">Rôles des bots</span>
-            <p class="text-xs text-on-surface-variant ml-2">Donnés à chaque bot dès son arrivée, à la place du rôle automatique. Les rôles d'intégration, ceux au-dessus de Kotbo et ceux qui donnent Administrateur sont ignorés.</p>
+            <span class="text-xs font-semibold text-on-surface-variant ml-2">{m.amx_bot_roles()}</span>
+            <p class="text-xs text-on-surface-variant ml-2">{m.amx_bot_roles_desc()}</p>
             <select
-              aria-label="Ajouter un rôle de bot"
+              aria-label={m.amx_add_bot_role()}
               class="w-full bg-surface-container-high/45 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none"
               value=""
               onchange={(e) => {
@@ -1103,7 +1103,7 @@
                 e.currentTarget.value = '';
               }}
             >
-              <option value="">Ajouter un rôle…</option>
+              <option value="">{m.amx_add_role()}</option>
               {#each availableRoles as role (role.id)}<option value={role.id}>{role.name}</option>{/each}
             </select>
             <div class="flex flex-wrap gap-2">
@@ -1113,7 +1113,7 @@
                   <Button size="sm" variant="ghost" icon="X" onclick={() => (config.antiBotRoleIds = config.antiBotRoleIds.filter((id) => id !== roleId))} />
                 </span>
               {:else}
-                <span class="text-xs text-on-surface-variant ml-2">Aucun : les bots reçoivent le rôle automatique.</span>
+                <span class="text-xs text-on-surface-variant ml-2">{m.amx_bot_roles_none()}</span>
               {/each}
             </div>
           </div>
@@ -1176,7 +1176,7 @@
                   {m.am_antibot_notice()}
                 </p>
               </div>
-              <p class="text-xs text-on-surface-variant ml-2">Pour laisser entrer un bot ponctuellement : <code>/bypass bot</code> (propriétaire), valable une fois pendant 10 minutes.</p>
+              <p class="text-xs text-on-surface-variant ml-2">{m.amx_bypass_before()} <code>/bypass bot</code> {m.amx_bypass_after()}</p>
             </div>
           {/if}
         </section>
@@ -1334,8 +1334,8 @@
         <div class="flex items-center gap-3">
           <Papicon icon="ShieldAlert" size={20} class="text-orange-400" />
           <div>
-            <p class="text-sm font-semibold text-on-surface">Captcha, détection de raid et verrous d'urgence</p>
-            <p class="text-xs text-on-surface-variant">Regroupés dans la page Anti-raid.</p>
+            <p class="text-sm font-semibold text-on-surface">{m.amx_moved_title()}</p>
+            <p class="text-xs text-on-surface-variant">{m.amx_moved_desc()}</p>
           </div>
         </div>
         <Papicon icon="chevron-right" size={16} class="shrink-0 text-on-surface-variant" />

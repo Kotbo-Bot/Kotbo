@@ -7,7 +7,7 @@
   let dismissed = $state(false);
 
   function handleReset() {
-    if (confirm('Remettre la démo dans son état d\'origine ? Tes changements seront perdus.')) {
+    if (confirm(m.dbx_reset_confirm())) {
       demoDb.reset();
       window.location.reload();
     }

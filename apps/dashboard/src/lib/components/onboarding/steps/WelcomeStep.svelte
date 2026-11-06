@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from '../../../i18n';
   /**
    * La rencontre : le bot et le serveur, cote a cote.
    *
@@ -27,10 +28,10 @@
   );
 
   const PROMISES = [
-    { icon: 'layout-grid', title: 'Une structure complète', text: "Salons, catégories, rôles et permissions cohérents, posés d'un coup." },
-    { icon: 'shield', title: 'Une modération réglée', text: 'Filtres de messages et seuils anti-raid, au niveau que tu choisis.' },
-    { icon: 'door-open', title: 'Un accueil préparé', text: "Message de bienvenue, règlement publié, rôles à l'arrivée." },
-    { icon: 'sparkles', title: 'Et tout le reste, au choix', text: "Économie, quêtes, journaux, pilotage par IA : tu coches ce qui t'intéresse." },
+    { icon: 'layout-grid', title: m.obx_wc_structure(), text: m.obx_wc_structure_desc() },
+    { icon: 'shield', title: m.obx_wc_moderation(), text: m.obx_wc_moderation_desc() },
+    { icon: 'door-open', title: m.obx_wc_welcome(), text: m.obx_wc_welcome_desc() },
+    { icon: 'sparkles', title: m.obx_wc_rest(), text: m.obx_wc_rest_desc() },
   ];
 </script>
 
@@ -49,16 +50,15 @@
     </div>
 
     <h1 class="mt-7 text-2xl sm:text-[30px] leading-tight font-semibold tracking-tight text-on-surface font-headline">
-      Kotbo est arrivé sur {selectedGuild?.name ?? 'ton serveur'}.
+      {m.obx_wc_title({ server: selectedGuild?.name ?? m.obx_rc_your_server() })}
     </h1>
     <p class="mt-3 max-w-lg text-[15px] text-on-surface-variant/75 leading-relaxed">
-      Quelques questions, et ton serveur est monté, protégé et prêt à accueillir.
-      Tu choisiras toi-même ce qu'on configure - et tu pourras tout ajuster ensuite.
+      {m.obx_wc_lead()}
     </p>
 
     <div class="mt-4 inline-flex items-center gap-2 rounded-full border border-outline-variant/35 bg-surface-container-low/40 px-3 py-1.5">
       <Papicon icon="clock" size={13} class="text-primary" />
-      <span class="text-xs font-medium text-on-surface-variant">À partir de 3 minutes</span>
+      <span class="text-xs font-medium text-on-surface-variant">{m.obx_wc_duration()}</span>
     </div>
   </div>
 
@@ -80,7 +80,7 @@
       onclick={() => wizard.next()}
       class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-on-primary text-sm font-semibold hover:opacity-90 transition-opacity"
     >
-      Commencer
+      {m.obx_wc_start()}
       <Papicon icon="ChevronRight" size={15} />
     </button>
   {/snippet}

@@ -758,7 +758,7 @@
   /** Exemple affiché sous l'interrupteur JSON, à recopier puis adapter. */
   const STICKY_JSON_EXAMPLE = JSON.stringify({
     content: '',
-    embeds: [{ title: '📌 À lire avant de poster', description: 'Consulte le **règlement** du serveur.', color: 5793266 }],
+    embeds: [{ title: m.cmx_sticky_example_title(), description: m.cmx_sticky_example_desc(), color: 5793266 }],
   }, null, 2);
 
   let stickies = $state([] as StickyDraft[]);
@@ -3301,7 +3301,7 @@
 
               {#if ['TIMEOUT', 'BAN', 'JAIL'].includes(config.honeypotSanction)}
                 <div class="space-y-1.5">
-                  <label for="honeypot-duration-select" class="text-xs font-bold text-on-surface/80 block">Durée de la sanction</label>
+                  <label for="honeypot-duration-select" class="text-xs font-bold text-on-surface/80 block">{m.cmx_hp_duration()}</label>
                   <select
                     id="honeypot-duration-select"
                     value={config.honeypotDurationMin === null ? '' : String(config.honeypotDurationMin)}
@@ -3309,32 +3309,32 @@
                     class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs outline-none focus:ring-1 focus:ring-primary/30"
                   >
                     {#if config.honeypotSanction === 'TIMEOUT'}
-                      <option value="">28 jours (maximum Discord)</option>
+                      <option value="">{m.cmx_hp_28d()}</option>
                     {:else}
-                      <option value="">Permanente : ne se lève pas d'elle-même</option>
+                      <option value="">{m.cmx_hp_permanent()}</option>
                     {/if}
-                    <option value="60">1 heure</option>
-                    <option value="1440">1 jour</option>
-                    <option value="10080">7 jours</option>
-                    {#if config.honeypotSanction !== 'TIMEOUT'}<option value="43200">30 jours</option>{/if}
+                    <option value="60">{m.arx_duration_1h()}</option>
+                    <option value="1440">{m.arx_duration_1d()}</option>
+                    <option value="10080">{m.arx_duration_7d()}</option>
+                    {#if config.honeypotSanction !== 'TIMEOUT'}<option value="43200">{m.arx_duration_30d()}</option>{/if}
                   </select>
                 </div>
               {/if}
 
               <div class="space-y-1.5">
-                <label for="honeypot-grace-select" class="text-xs font-bold text-on-surface/80 block">Délai avant sanction</label>
+                <label for="honeypot-grace-select" class="text-xs font-bold text-on-surface/80 block">{m.cmx_hp_grace()}</label>
                 <select
                   id="honeypot-grace-select"
                   bind:value={config.honeypotGraceSeconds}
                   class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs outline-none focus:ring-1 focus:ring-primary/30"
                 >
-                  <option value={0}>Sanction immédiate</option>
-                  <option value={30}>Demander d'abord : 30 secondes</option>
-                  <option value={60}>Demander d'abord : 1 minute</option>
-                  <option value={120}>Demander d'abord : 2 minutes</option>
-                  <option value={300}>Demander d'abord : 5 minutes</option>
+                  <option value={0}>{m.cmx_hp_immediate()}</option>
+                  <option value={30}>{m.cmx_hp_ask_30s()}</option>
+                  <option value={60}>{m.cmx_hp_ask_1m()}</option>
+                  <option value={120}>{m.cmx_hp_ask_2m()}</option>
+                  <option value={300}>{m.cmx_hp_ask_5m()}</option>
                 </select>
-                <p class="text-2xs text-on-surface-variant mt-1">Le membre est mentionné avec un bouton « C'était une erreur ». Sans clic à temps, la sanction tombe ; s'il poste le même message ailleurs entre-temps, elle tombe tout de suite.</p>
+                <p class="text-2xs text-on-surface-variant mt-1">{m.cmx_hp_grace_hint()}</p>
               </div>
 
               {#if config.honeypotSanction === 'KICK' || config.honeypotSanction === 'SOFTBAN'}

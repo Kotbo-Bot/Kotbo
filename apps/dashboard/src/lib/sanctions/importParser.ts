@@ -1,3 +1,4 @@
+import { m } from '../i18n';
 /**
  * Parsing et normalisation des fichiers d'import de sanctions (JSON/CSV/XLSX)
  * exportes depuis d'autres bots de moderation (Sapphire, Mee6, Dyno,
@@ -192,10 +193,10 @@ export function normalizeImportRow(row: ParsedImportRow, mapping: ColumnMapping)
   const errors: string[] = [];
 
   const type = normalizeSanctionType(get('type'));
-  if (!type) errors.push('Type de sanction inconnu ou manquant.');
+  if (!type) errors.push(m.ipx_type());
 
   const targetUserId = extractSnowflake(get('targetUserId'));
-  if (!targetUserId) errors.push('ID Discord de la cible manquant ou invalide.');
+  if (!targetUserId) errors.push(m.ipx_target());
 
   const targetTagRaw = get('targetTag');
   const targetTag = targetTagRaw ? String(targetTagRaw).trim() : null;
@@ -209,7 +210,7 @@ export function normalizeImportRow(row: ParsedImportRow, mapping: ColumnMapping)
   const reason = reasonRaw ? String(reasonRaw).trim() : '';
 
   const createdAt = parseImportDate(get('createdAt'));
-  if (!createdAt) errors.push('Date invalide ou manquante.');
+  if (!createdAt) errors.push(m.ipx_date());
 
   const durationSeconds = parseDurationToSeconds(get('durationSeconds'));
 

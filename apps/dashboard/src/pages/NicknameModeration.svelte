@@ -233,7 +233,7 @@
         if (!ok) throw new Error(m.nm_error_api());
         return true;
       },
-      { successMessage: `Paramètre mis à jour.` }
+      { successMessage: m.nmx_saved() }
     );
 
     if (!saved) {

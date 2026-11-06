@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { fetchEvidenceFileSignedUrl } from '../lib/api';
+  import { m } from '../lib/i18n';
 
   const { fileId } = $props<{ fileId: string }>();
 
@@ -23,14 +24,14 @@
           const match = disposition.match(/filename="([^"]+)"/);
           fileName = match ? match[1] : 'Fichier de preuve';
         } else {
-          error = 'Impossible de lire les détails du fichier.';
+          error = m.sef_err_details();
         }
       } else {
-        error = 'Impossible de charger le fichier de preuve ou lien expiré.';
+        error = m.sef_err_load();
       }
     } catch (err) {
       console.error(err);
-      error = 'Impossible de récupérer le fichier de preuve. Réessaie.';
+      error = m.sef_err_fetch();
     } finally {
       loading = false;
     }
@@ -49,8 +50,8 @@
         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
       </div>
       <div class="min-w-0">
-        <h1 class="text-sm font-semibold truncate max-w-md" title={fileName}>{fileName || 'Chargement…'}</h1>
-        <p class="text-xs text-white/40 truncate">{mimeType || 'Détection du format…'}</p>
+        <h1 class="text-sm font-semibold truncate max-w-md" title={fileName}>{fileName || m.sef_loading()}</h1>
+        <p class="text-xs text-white/40 truncate">{mimeType || m.sef_detecting()}</p>
       </div>
     </div>
 
@@ -63,7 +64,7 @@
         class="inline-flex items-center gap-2 bg-primary hover:bg-primary/95 text-on-primary px-4 py-2 rounded-lg text-body-sm font-medium transition-all duration-200 hover:-translate-y-[1px] active:translate-y-0 active:scale-[0.98] shadow-sm"
       >
         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-        Télécharger
+        {m.sef_download()}
       </a>
     {/if}
   </header>
@@ -73,20 +74,20 @@
     {#if loading}
       <div class="flex flex-col items-center gap-3">
         <div class="w-10 h-10 rounded-full border-4 border-primary border-t-transparent animate-spin"></div>
-        <p class="text-xs text-white/50 font-medium">Chargement de la preuve…</p>
+        <p class="text-xs text-white/50 font-medium">{m.sef_loading_evidence()}</p>
       </div>
     {:else if error}
       <div class="max-w-md w-full bg-[#2b2d31] border border-rose-500/10 rounded-2xl p-8 text-center shadow-2xl animate-in fade-in zoom-in-95 duration-300">
         <div class="w-16 h-16 bg-rose-500/10 text-rose-500 rounded-full flex items-center justify-center mx-auto mb-5 border border-rose-500/20">
           <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
         </div>
-        <h2 class="text-base font-bold text-white mb-2">Impossible d'afficher la preuve</h2>
+        <h2 class="text-base font-bold text-white mb-2">{m.sef_error_title()}</h2>
         <p class="text-xs text-white/60 leading-relaxed mb-6">{error}</p>
         <button
           onclick={() => window.close()}
           class="bg-white/10 hover:bg-white/15 text-white border border-white/10 px-5 py-2.5 rounded-lg text-xs font-semibold tracking-wide transition-all active:scale-[0.98]"
         >
-          Fermer l'onglet
+          {m.sef_close_tab()}
         </button>
       </div>
     {:else if signedUrl}
@@ -118,13 +119,13 @@
               <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
             </div>
             <h2 class="text-base font-bold text-white mb-2">{fileName}</h2>
-            <p class="text-xs text-white/50 mb-6">Ce type de fichier ne peut pas être prévisualisé directement dans le navigateur.</p>
+            <p class="text-xs text-white/50 mb-6">{m.sef_no_preview()}</p>
             <a
               href={signedUrl}
               download={fileName}
               class="inline-flex items-center gap-2 bg-primary hover:bg-primary/95 text-on-primary px-6 py-3 rounded-lg text-body-sm font-medium transition-all duration-200 active:scale-[0.98] shadow-sm"
             >
-              Télécharger le fichier
+              {m.sef_download_file()}
             </a>
           </div>
         {/if}

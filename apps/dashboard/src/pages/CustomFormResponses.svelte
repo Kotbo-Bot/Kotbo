@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { m } from '../lib/i18n';
+  import { m, dateLocale } from '../lib/i18n';
   import { Tabs } from '../lib/components/ui';
   import { onMount } from 'svelte';
   import { router } from 'tinro';
@@ -113,7 +113,7 @@
       labels,
       datasets: [
         {
-          label: 'Nombre de réponses',
+          label: m.cfr_count(),
           data: counts,
           backgroundColor: [
             'rgba(99, 102, 241, 0.6)',
@@ -164,12 +164,12 @@
         form = data.form;
       }
 
-      if (!rRes.ok) throw new Error('Impossible de charger les réponses');
+      if (!rRes.ok) throw new Error(m.cfr_load_failed());
       const rData = await rRes.json();
       responses = rData.submissions || [];
       responseTotal = rData.total ?? responses.length;
     } catch (e: unknown) {
-      error = e instanceof Error ? e.message : 'Erreur inconnue';
+      error = e instanceof Error ? e.message : m.cfr_unknown_error();
     } finally {
       loading = false;
     }
@@ -180,7 +180,7 @@
     loadingMore = true;
     try {
       const res = await dashboardFetch(`/custom-forms/${formId}/submissions?limit=100&offset=${responses.length}`);
-      if (!res.ok) throw new Error('Impossible de charger les réponses suivantes');
+      if (!res.ok) throw new Error(m.cfr_load_more_failed());
       const data = await res.json();
       responses = [...responses, ...(data.submissions || [])];
       responseTotal = data.total ?? responseTotal;
@@ -217,13 +217,13 @@
   }
 
   function formatDate(iso: string) {
-    return new Date(iso).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    return new Date(iso).toLocaleDateString(dateLocale(), { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
   }
 </script>
 
 <ModulePage
-  title={form ? `Réponses - ${form.name}` : 'Réponses au formulaire'}
-  description="Consulte et exporte toutes les réponses reçues."
+  title={form ? m.cfr_title_named({ name: form.name }) : m.cfr_title()}
+  description={m.cfr_desc()}
   icon="assignment"
   featureKey="custom_forms"
 >
@@ -234,7 +234,7 @@
       <button onclick={() => router.goto('/forms')}
         class="flex items-center gap-2 text-sm font-semibold text-on-surface-variant hover:text-primary transition-colors">
         <Papicon icon="arrow_back" size={16} />
-        Retour aux formulaires
+        {m.cfr_back()}
       </button>
       <div class="flex-1"></div>
       {#if form}
@@ -245,13 +245,13 @@
       {#if responses.length < responseTotal}
         <button onclick={loadMore} disabled={loadingMore}
           class="px-3 py-1.5 rounded-xl bg-surface-container text-xs font-bold disabled:opacity-50">
-          {loadingMore ? 'Chargement…' : `Charger plus (${responses.length}/${responseTotal})`}
+          {loadingMore ? m.cfr_loading() : m.cfr_load_more({ count: responses.length, total: responseTotal })}
         </button>
       {/if}
       <button onclick={exportCsv}
         class="flex items-center gap-2 px-4 py-2 rounded-xl bg-surface-container hover:bg-surface-container-high text-sm font-bold transition-colors">
         <Papicon icon="download" size={16} />
-        Export CSV
+        {m.cfr_export()}
       </button>
     </div>
 
@@ -261,8 +261,8 @@
         label={form.name}
         class="mb-4"
         tabs={[
-          { id: 'list', label: 'Individuel', icon: 'assignment', badge: filtered.length },
-          { id: 'analytics', label: 'Statistiques', icon: 'pie_chart' },
+          { id: 'list', label: m.cfr_tab_list(), icon: 'assignment', badge: filtered.length },
+          { id: 'analytics', label: m.cfr_tab_stats(), icon: 'pie_chart' },
         ]}
         active={activeTab}
         onchange={(id) => (activeTab = id as typeof activeTab)}
@@ -278,7 +278,7 @@
     {:else if responses.length === 0}
       <div class="rounded-lg border-2 border-dashed border-outline-variant/20 p-16 text-center text-on-surface-variant/40">
         <Papicon icon="inbox" size={48} class="mb-3" />
-        <p class="text-sm font-sans">Aucune réponse trouvée</p>
+        <p class="text-sm font-sans">{m.cfr_none()}</p>
       </div>
     {:else}
       {#if activeTab === 'list'}
@@ -286,7 +286,7 @@
         <div class="flex flex-wrap gap-3 mb-4">
           <div class="relative flex-1 min-w-48">
             <Papicon icon="search" size={16} class="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant/40" />
-            <input bind:value={searchQuery} placeholder="Rechercher par ID, utilisateur, tag…"
+            <input bind:value={searchQuery} placeholder={m.cfr_search_ph()}
               class="w-full bg-surface-container rounded-xl pl-9 pr-4 py-2.5 text-sm outline-none focus:ring-2 ring-primary/20 transition-all" />
           </div>
         </div>
@@ -294,7 +294,7 @@
         {#if filtered.length === 0}
           <div class="rounded-lg border-2 border-dashed border-outline-variant/20 p-16 text-center text-on-surface-variant/40">
             <Papicon icon="inbox" size={48} class="mb-3" />
-            <p class="text-sm font-sans">Aucune réponse correspondante</p>
+            <p class="text-sm font-sans">{m.cfr_no_match()}</p>
           </div>
         {:else}
           <div class="rounded-lg border border-outline-variant/20 overflow-x-auto shadow-sm">
@@ -302,8 +302,8 @@
               <thead>
                 <tr class="bg-surface-container-low/60 border-b border-outline-variant/10">
                   <th class="text-left px-5 py-3 font-semibold text-on-surface-variant text-xs">ID</th>
-                  <th class="text-left px-5 py-3 font-semibold text-on-surface-variant text-xs">Utilisateur Discord</th>
-                  <th class="text-left px-5 py-3 font-semibold text-on-surface-variant text-xs">Date de Soumission</th>
+                  <th class="text-left px-5 py-3 font-semibold text-on-surface-variant text-xs">{m.cfr_col_user()}</th>
+                  <th class="text-left px-5 py-3 font-semibold text-on-surface-variant text-xs">{m.cfr_col_date()}</th>
                   <th class="text-left px-5 py-3 font-semibold text-on-surface-variant text-xs"></th>
                 </tr>
               </thead>
@@ -322,7 +322,7 @@
                           size="sm"
                         />
                       {:else}
-                        <span class="text-on-surface-variant/30 italic font-sans">Anonyme</span>
+                        <span class="text-on-surface-variant/30 italic font-sans">{m.cfr_anonymous()}</span>
                       {/if}
                     </td>
                     <td class="px-5 py-3 text-xs text-on-surface-variant font-sans">{formatDate(r.createdAt)}</td>
@@ -335,7 +335,7 @@
             </table>
           </div>
 
-          <p class="text-xs text-on-surface-variant/40 text-right font-sans">{filtered.length} résultat{filtered.length !== 1 ? 's' : ''}</p>
+          <p class="text-xs text-on-surface-variant/40 text-right font-sans">{m.cfr_results({ count: filtered.length })}</p>
         {/if}
       {:else if activeTab === 'analytics'}
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -345,7 +345,7 @@
                 <div class="flex items-start justify-between border-b border-outline-variant/5 pb-2 mb-4">
                   <h4 class="font-semibold text-on-surface font-sans text-sm">{item.label}</h4>
                   <span class="text-xs font-semibold text-on-surface-variant bg-surface-container px-2.5 py-1 rounded-full shrink-0 ml-2">
-                    {item.totalResponses} réponse{item.totalResponses !== 1 ? 's' : ''}
+                    {m.cfr_responses({ count: item.totalResponses })}
                   </span>
                 </div>
                 
@@ -367,15 +367,15 @@
                 {:else if item.type === 'number'}
                   <div class="grid grid-cols-3 gap-3 text-center my-4">
                     <div class="bg-surface-container/30 border border-outline-variant/5 rounded-xl p-3">
-                      <span class="text-body-sm text-on-surface-variant font-semibold block mb-1">Moyenne</span>
+                      <span class="text-body-sm text-on-surface-variant font-semibold block mb-1">{m.cfr_average()}</span>
                       <span class="text-lg font-bold text-primary">{item.average ?? 0}</span>
                     </div>
                     <div class="bg-surface-container/30 border border-outline-variant/5 rounded-xl p-3">
-                      <span class="text-body-sm text-on-surface-variant font-semibold block mb-1">Min</span>
+                      <span class="text-body-sm text-on-surface-variant font-semibold block mb-1">{m.cfr_min()}</span>
                       <span class="text-lg font-bold text-on-surface">{item.min ?? 0}</span>
                     </div>
                     <div class="bg-surface-container/30 border border-outline-variant/5 rounded-xl p-3">
-                      <span class="text-body-sm text-on-surface-variant font-semibold block mb-1">Max</span>
+                      <span class="text-body-sm text-on-surface-variant font-semibold block mb-1">{m.cfr_max()}</span>
                       <span class="text-lg font-bold text-on-surface">{item.max ?? 0}</span>
                     </div>
                   </div>
@@ -389,7 +389,7 @@
                         </div>
                       {/each}
                     {:else}
-                      <span class="text-xs italic text-on-surface-variant/40">Aucune réponse</span>
+                      <span class="text-xs italic text-on-surface-variant/40">{m.cfr_empty_answer()}</span>
                     {/if}
                   </div>
                 {/if}
@@ -411,17 +411,18 @@
       type="button"
       class="absolute inset-0 bg-black/40 border-none cursor-default w-full h-full text-left p-0"
       onclick={() => selectedResponse = null}
-      aria-label="Fermer"
+      aria-label={m.common_close()}
     ></button>
 
     <!-- Detail panel -->
     <div class="relative z-10 bg-surface rounded-xl shadow-sm max-w-lg w-full max-h-[80vh] overflow-y-auto">
       <div class="sticky top-0 bg-surface border-b border-outline-variant/10 px-6 py-4 flex items-start justify-between rounded-t-3xl">
         <div>
-          <h2 class="font-semibold text-on-surface text-lg font-sans">Réponse détaillée</h2>
+          <h2 class="font-semibold text-on-surface text-lg font-sans">{m.cfr_detail()}</h2>
           <p class="text-xs font-mono text-on-surface-variant/40 mt-0.5">{selectedResponse.id}</p>
         </div>
         <button onclick={() => selectedResponse = null}
+          aria-label={m.common_close()}
           class="p-2 rounded-xl hover:bg-surface-container transition-colors">
           <Papicon icon="close" size={18} />
         </button>
@@ -432,13 +433,13 @@
         <div class="grid grid-cols-2 gap-3 text-sm">
           {#if selectedResponse.userId}
             <div class="bg-surface-container rounded-xl p-3">
-              <p class="text-xs text-on-surface-variant font-semibold mb-1 font-sans">Discord ID</p>
+              <p class="text-xs text-on-surface-variant font-semibold mb-1 font-sans">{m.cfr_discord_id()}</p>
               <p class="font-mono text-xs text-on-surface">{selectedResponse.userId}</p>
             </div>
           {/if}
           {#if selectedResponse.username}
             <div class="bg-surface-container rounded-xl p-3">
-              <p class="text-xs text-on-surface-variant font-semibold mb-1 font-sans">Pseudo / Tag</p>
+              <p class="text-xs text-on-surface-variant font-semibold mb-1 font-sans">{m.cfr_tag()}</p>
               <!-- La ligne du tableau ouvre déjà la réponse : la fiche s'ouvre d'ici. -->
               <UserDisplay
                 userId={selectedResponse.userId}
@@ -451,14 +452,14 @@
             </div>
           {/if}
           <div class="bg-surface-container rounded-xl p-3 col-span-2">
-            <p class="text-xs text-on-surface-variant font-semibold mb-1 font-sans">Date de soumission</p>
+            <p class="text-xs text-on-surface-variant font-semibold mb-1 font-sans">{m.cfr_submitted()}</p>
             <p class="text-xs text-on-surface font-sans">{formatDate(selectedResponse.createdAt)}</p>
           </div>
         </div>
 
         <!-- Answers -->
         <div>
-          <h3 class="text-sm font-semibold text-on-surface-variant mb-3 font-sans">Réponses aux questions</h3>
+          <h3 class="text-sm font-semibold text-on-surface-variant mb-3 font-sans">{m.cfr_answers()}</h3>
           <div class="space-y-3">
             {#each Object.entries(selectedResponse.data || {}) as [key, value]}
               <div class="bg-surface-container/60 rounded-xl p-3">

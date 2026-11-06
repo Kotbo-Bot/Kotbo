@@ -1,3 +1,4 @@
+import { m } from '../../i18n';
 import type { WorkflowGraph } from '@kotbo/shared';
 
 export interface WorkflowTemplate {
@@ -12,8 +13,8 @@ export interface WorkflowTemplate {
 export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
   {
     id: 'auto-role-on-join',
-    name: 'Rôle automatique à l\'arrivée',
-    description: 'Attribue automatiquement un rôle (ex: Membre, Arrivant) dès qu\'un utilisateur rejoint le serveur.',
+    name: m.wft_autorole(),
+    description: m.wft_autorole_desc(),
     category: 'welcome',
     icon: 'Shield',
     graph: {
@@ -51,8 +52,8 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
   },
   {
     id: 'welcome-dm',
-    name: 'Message de bienvenue en MP',
-    description: 'Envoie un message privé d\'accueil avec les informations utiles du serveur aux nouveaux arrivants.',
+    name: m.wft_welcome_dm(),
+    description: m.wft_welcome_dm_desc(),
     category: 'welcome',
     icon: 'Mail',
     graph: {
@@ -103,8 +104,8 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
   },
   {
     id: 'keyword-automod',
-    name: 'Auto-modération par mot clé',
-    description: 'Détecte la présence d\'un mot interdit dans un message et applique une exclusion temporaire à son auteur.',
+    name: m.wft_keyword_mod(),
+    description: m.wft_keyword_mod_desc(),
     category: 'moderation',
     icon: 'AlertTriangle',
     graph: {
@@ -234,8 +235,8 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
   },
   {
     id: 'ticket-auto-reply',
-    name: 'Auto-réponse ouverture de ticket',
-    description: 'Poste automatiquement un message d\'instruction ou de bienvenue dès qu\'un ticket de support est ouvert.',
+    name: m.wft_ticket_reply(),
+    description: m.wft_ticket_reply_desc(),
     category: 'support',
     icon: 'TextBubble',
     graph: {
@@ -286,8 +287,8 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
   },
   {
     id: 'levelup-congrats',
-    name: 'Félicitations passage de niveau',
-    description: 'Envoie un message de félicitations en privé ou dans un salon lorsqu\'un membre passe un niveau.',
+    name: m.wft_level_up(),
+    description: m.wft_level_up_desc(),
     category: 'gamification',
     icon: 'Sparkles',
     graph: {

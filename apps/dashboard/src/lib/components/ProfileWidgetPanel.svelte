@@ -1,9 +1,11 @@
 <script lang="ts">
-  import { m } from '../i18n';
+  import { m, dateLocale } from '../i18n';
   import { onMount } from 'svelte';
   import { fetchWidgetData, activateWidget, deactivateWidget, refreshWidget, refreshAllWidgets, rotateWidgetToken, API_BASE_URL } from '../api';
   import { toast } from '../stores/toast.svelte';
   import Papicon from './Papicon.svelte';
+  import LoadingHint from './LoadingHint.svelte';
+  import Button from './ui/Button.svelte';
 
   let loading = $state(true);
   let acting = $state(false);
@@ -144,9 +146,9 @@
 
 <!-- ======================== CONTENT ======================== -->
 {#if loading}
-  <div class="flex flex-col items-center justify-center py-16 text-on-surface-variant gap-4">
-    <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-    <p class="text-sm">Chargement...</p>
+  <div class="flex flex-col items-center justify-center py-16 text-on-surface-variant">
+    <p class="text-sm">{m.pwp_loading()}</p>
+    <LoadingHint context="data" />
   </div>
 {:else}
   <!-- ======================== STATS ROW ======================== -->
@@ -156,8 +158,8 @@
         <Papicon icon={isActive ? 'check-circle' : 'x-circle'} size={20} />
       </div>
       <div class="flex flex-col">
-        <span class="text-2xl font-bold">{isActive ? 'Actif' : 'Inactif'}</span>
-        <span class="text-xs font-medium text-on-surface-variant mt-0.5">Ton widget</span>
+        <span class="text-2xl font-bold">{isActive ? m.pwp_active() : m.pwp_inactive()}</span>
+        <span class="text-xs font-medium text-on-surface-variant mt-0.5">{m.pwp_your_widget()}</span>
       </div>
     </div>
     <div class="bg-surface-container-low/30 border border-outline-variant/10 rounded-xl p-4 flex items-center gap-3">
@@ -166,7 +168,7 @@
       </div>
       <div class="flex flex-col">
         <span class="text-2xl font-bold">{subscriptionCount}</span>
-        <span class="text-xs font-medium text-on-surface-variant mt-0.5">Widgets actifs</span>
+        <span class="text-xs font-medium text-on-surface-variant mt-0.5">{m.pwp_active_widgets()}</span>
       </div>
     </div>
   </div>
@@ -178,45 +180,25 @@
     <div class="bg-surface-container-low/30 border border-outline-variant/10 rounded-xl p-6 space-y-4">
       <h3 class="text-base font-semibold flex items-center gap-2.5">
         <Papicon icon="zap" size={18} />
-        Actions
+        {m.pwp_actions()}
       </h3>
       <div class="flex flex-col gap-3">
         {#if isActive}
-          <button
-            class="px-4 py-2 bg-primary text-on-primary text-body-sm font-medium rounded-xl shadow-sm active:scale-[0.98] transition-all flex items-center gap-2"
-            onclick={handleRefresh}
-            disabled={acting}
-          >
-            <Papicon icon="refresh-cw" size={14} />
-            Rafraîchir mon widget
-          </button>
-          <button
-            class="px-5 py-2.5 bg-rose-500 text-white text-body-sm font-medium rounded-xl shadow-sm active:scale-[0.98] transition-all flex items-center gap-2"
-            onclick={handleDeactivate}
-            disabled={acting}
-          >
-            <Papicon icon="x" size={14} />
-            Désactiver
-          </button>
+          <Button variant="primary" icon="refresh-cw" onclick={handleRefresh} disabled={acting}>
+            {m.pwp_refresh_mine()}
+          </Button>
+          <Button variant="danger" icon="x" onclick={handleDeactivate} disabled={acting}>
+            {m.pwp_disable()}
+          </Button>
         {:else}
-          <button
-            class="px-5 py-2.5 bg-emerald-500 text-white text-body-sm font-medium rounded-xl shadow-sm active:scale-[0.98] transition-all flex items-center gap-2"
-            onclick={handleActivate}
-            disabled={acting}
-          >
-            <Papicon icon="check" size={14} />
-            Activer le widget
-          </button>
+          <Button variant="primary" icon="check" onclick={handleActivate} disabled={acting}>
+            {m.pwp_enable()}
+          </Button>
         {/if}
 
-        <button
-          class="px-5 py-2.5 bg-surface-container-high/40 text-on-surface-variant hover:bg-surface-container-high/60 text-body-sm font-medium rounded-xl transition-all flex items-center gap-2"
-          onclick={handleRefreshAll}
-          disabled={acting}
-        >
-          <Papicon icon="refresh-cw" size={14} />
-          Rafraîchir tous les widgets
-        </button>
+        <Button variant="secondary" icon="refresh-cw" onclick={handleRefreshAll} disabled={acting}>
+          {m.pwp_refresh_all()}
+        </Button>
       </div>
     </div>
 
@@ -224,60 +206,54 @@
     <div class="bg-surface-container-low/30 border border-outline-variant/10 rounded-xl p-6 space-y-4">
       <h3 class="text-base font-semibold flex items-center gap-2.5">
         <Papicon icon="info" size={18} />
-        Fonctionnement
+        {m.pwp_how()}
       </h3>
       <div class="flex flex-col gap-4">
         <div class="flex items-start gap-3">
           <span class="shrink-0 w-7 h-7 bg-primary text-on-primary rounded-full flex items-center justify-center text-xs font-bold">1</span>
-          <span class="text-sm text-on-surface-variant leading-relaxed">Connecte-toi au dashboard - l'autorisation widget est incluse automatiquement lors de la connexion Discord</span>
+          <span class="text-sm text-on-surface-variant leading-relaxed">{m.pwp_step1()}</span>
         </div>
         <div class="flex items-start gap-3">
           <span class="shrink-0 w-7 h-7 bg-primary text-on-primary rounded-full flex items-center justify-center text-xs font-bold">2</span>
-          <span class="text-sm text-on-surface-variant leading-relaxed">Active le widget ici ou avec <code class="bg-surface-container-high/50 px-1.5 py-0.5 rounded text-xs">/widget activer</code> pour synchroniser tes statistiques.</span>
+          <span class="text-sm text-on-surface-variant leading-relaxed">{m.pwp_step2_before()} <code class="bg-surface-container-high/50 px-1.5 py-0.5 rounded text-xs">/widget activer</code> {m.pwp_step2_after()}</span>
         </div>
         <div class="flex items-start gap-3">
           <span class="shrink-0 w-7 h-7 bg-primary text-on-primary rounded-full flex items-center justify-center text-xs font-bold">3</span>
-          <span class="text-sm text-on-surface-variant leading-relaxed">Copie le script ci-dessous, exécute-le une fois dans Discord/Vencord, puis recharge avec <kbd class="font-mono text-xs">Ctrl+R</kbd>.</span>
+          <span class="text-sm text-on-surface-variant leading-relaxed">{m.pwp_step3()} <kbd class="font-mono text-xs">Ctrl+R</kbd>.</span>
         </div>
       </div>
     </div>
 
     {#if isActive}
-      <section class="lg:col-span-2 relative overflow-hidden rounded-xl border border-warning/20 bg-amber-400/[0.04] p-6">
+      <section class="lg:col-span-2 relative overflow-hidden rounded-xl border border-warning/20 bg-warning/[0.04] p-6">
         <div class="absolute -right-12 -top-16 h-44 w-44 rounded-full bg-warning/10 blur-3xl pointer-events-none"></div>
         <div class="relative grid gap-6 lg:grid-cols-[1fr_auto] lg:items-center">
           <div class="space-y-3">
             <div class="flex items-center gap-2 text-warning">
               <Papicon icon="terminal" size={18} />
-              <span class="text-xs font-semibold">Installation locale · Discord/Vencord</span>
+              <span class="text-xs font-semibold">{m.pwp_local_install()}</span>
             </div>
-            <h3 class="text-base font-semibold text-on-surface">Ajouter Kotbo à ton Profile Board</h3>
+            <h3 class="text-base font-semibold text-on-surface">{m.pwp_board_title()}</h3>
             <p class="max-w-2xl text-sm leading-relaxed text-on-surface-variant">
-              Discord refuse cette modification via OAuth. Le script utilise uniquement ta session locale Discord,
-              conserve tes widgets actuels et n’extrait aucun token.
+              {m.pwp_board_desc()}
             </p>
             <ol class="grid gap-2 text-xs text-on-surface-variant sm:grid-cols-2 lg:grid-cols-4">
-              <li><span class="mr-1.5 font-mono text-warning">01</span> Ouvre Discord/Vencord</li>
-              <li><span class="mr-1.5 font-mono text-warning">02</span> DevTools avec Ctrl+Shift+I</li>
-              <li><span class="mr-1.5 font-mono text-warning">03</span> Si demandé, tape « allow pasting »</li>
-              <li><span class="mr-1.5 font-mono text-warning">04</span> Colle le script dans Console</li>
+              <li><span class="mr-1.5 font-mono text-warning">01</span> {m.pwp_board_s1()}</li>
+              <li><span class="mr-1.5 font-mono text-warning">02</span> {m.pwp_board_s2()}</li>
+              <li><span class="mr-1.5 font-mono text-warning">03</span> {m.pwp_board_s3()}</li>
+              <li><span class="mr-1.5 font-mono text-warning">04</span> {m.pwp_board_s4()}</li>
             </ol>
           </div>
           <div class="flex min-w-56 flex-col gap-2">
-            <button
-              class="inline-flex items-center justify-center gap-2 rounded-lg bg-amber-400 px-5 py-3 text-body-sm font-medium text-black transition-transform hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-60"
-              onclick={handleCopyVencordScript}
-              disabled={copyingScript}
-            >
-              <Papicon icon={copyingScript ? 'loader' : 'copy'} size={15} />
-              {copyingScript ? 'Copie…' : 'Copier le script'}
-            </button>
+            <Button variant="primary" icon="copy" onclick={handleCopyVencordScript} loading={copyingScript}>
+              {copyingScript ? m.pwp_copying() : m.pwp_copy_script()}
+            </Button>
             <a
               href="/kotbo-widget-discord-v2.js"
               target="_blank"
               rel="noreferrer"
               class="text-center text-2xs text-on-surface-variant underline decoration-outline-variant underline-offset-4 hover:text-on-surface"
-            >Voir le fichier avant de l’exécuter</a>
+            >{m.pwp_view_file()}</a>
           </div>
         </div>
       </section>
@@ -289,16 +265,16 @@
         <div>
           <h3 class="text-base font-semibold flex items-center gap-2.5">
             <Papicon icon="smartphone" size={18} />
-            Widgets téléphone & PC
+            {m.pwp_devices_title()}
           </h3>
           <p class="mt-1 text-xs text-on-surface-variant">
-            Installe Kotbo comme application (PWA) et affiche tes stats sur ton écran d'accueil ou de verrouillage.
+            {m.pwp_devices_desc()}
           </p>
         </div>
 
         <!-- Token widget -->
         <div class="rounded-lg border border-outline-variant/10 bg-surface-container-high/20 p-4 space-y-2">
-          <p class="text-xs font-semibold text-on-surface-variant">Token widget (lecture seule)</p>
+          <p class="text-xs font-semibold text-on-surface-variant">{m.pwp_token()}</p>
           <div class="flex items-center gap-2">
             <code class="flex-1 min-w-0 truncate rounded-lg border border-outline-variant/10 bg-surface-container-highest/40 px-3 py-2 font-mono text-xs text-on-surface">
               {showToken ? (widgetToken ?? '-') : '••••••••••••••••••••••••••••••••'}
@@ -307,24 +283,26 @@
               class="shrink-0 rounded-lg border border-outline-variant/20 px-2.5 py-2 text-2xs text-on-surface-variant hover:text-on-surface transition-colors"
               onclick={() => showToken = !showToken}
             >
-              {showToken ? 'Masquer' : 'Afficher'}
+              {showToken ? m.pwp_hide() : m.pwp_show()}
             </button>
             <button
               class="shrink-0 rounded-lg border border-outline-variant/20 px-2.5 py-2 text-2xs text-on-surface-variant hover:text-on-surface transition-colors"
               onclick={() => widgetToken && copy(widgetToken, 'token')}
             >
-              {copiedField === 'token' ? 'Copié' : 'Copier'}
+              {copiedField === 'token' ? m.pwp_copied() : m.pwp_copy()}
             </button>
             <button
               class="shrink-0 rounded-lg border border-outline-variant/20 px-2.5 py-2 text-2xs text-on-surface-variant hover:text-on-surface transition-colors disabled:opacity-50"
               onclick={handleRotateToken}
               disabled={rotatingToken}
+              aria-label={m.pwp_rotate_token()}
+              title={m.pwp_rotate_token()}
             >
               <Papicon icon="refresh-cw" size={14} />
             </button>
           </div>
           <p class="text-2xs text-on-surface-variant">
-            Ce token permet uniquement de lire tes stats (niveau, messages, vocal, staff score). Régénère-le si tu penses qu'il a fuité.
+            {m.pwp_token_hint()}
           </p>
         </div>
 
@@ -336,10 +314,10 @@
               <span class="text-sm font-semibold">iOS · Scriptable</span>
             </div>
             <ol class="space-y-1.5 text-xs text-on-surface-variant leading-relaxed list-decimal list-inside">
-              <li>Installe l'app gratuite <strong>Scriptable</strong> (App Store)</li>
-              <li>Colle-y le script Kotbo ci-dessous</li>
-              <li>Ajoute un widget Scriptable à l'écran d'accueil</li>
-              <li>En paramètre du widget : <code class="text-2xs">{widgetToken}|{apiOrigin}</code></li>
+              <li>{m.pwp_ios_s1_before()} <strong>Scriptable</strong> {m.pwp_ios_s1_after()}</li>
+              <li>{m.pwp_ios_s2()}</li>
+              <li>{m.pwp_ios_s3()}</li>
+              <li>{m.pwp_ios_s4()} <code class="text-2xs">{widgetToken}|{apiOrigin}</code></li>
             </ol>
             <div class="flex flex-col gap-1.5">
               <a
@@ -349,12 +327,12 @@
                 class="inline-flex items-center justify-center gap-2 rounded-lg bg-surface-container-highest/50 px-3 py-2 text-xs font-semibold text-on-surface hover:bg-surface-container-highest/70 transition-colors"
               >
                 <Papicon icon="download" size={13} />
-                Télécharger le script
+                {m.pwp_download_script()}
               </a>
               <button
                 class="text-2xs text-on-surface-variant underline decoration-outline-variant underline-offset-4 hover:text-on-surface"
                 onclick={() => widgetToken && copy(`${widgetToken}|${apiOrigin}`, 'ios-param')}
-              >{copiedField === 'ios-param' ? 'Copié !' : 'Copier le paramètre'}</button>
+              >{copiedField === 'ios-param' ? m.pwp_copied() : m.pwp_copy_param()}</button>
             </div>
           </div>
 
@@ -365,9 +343,9 @@
               <span class="text-sm font-semibold">Android · KWGT</span>
             </div>
             <ol class="space-y-1.5 text-xs text-on-surface-variant leading-relaxed list-decimal list-inside">
-              <li>Installe <strong>KWGT Kustom Widget Maker</strong> (Play Store)</li>
-              <li>Crée un widget texte par statistique</li>
-              <li>Colle-y les formules du guide (déjà pré-remplies avec ton token)</li>
+              <li>{m.pwp_android_s1_before()} <strong>KWGT Kustom Widget Maker</strong> {m.pwp_android_s1_after()}</li>
+              <li>{m.pwp_android_s2()}</li>
+              <li>{m.pwp_android_s3()}</li>
             </ol>
             <div class="flex flex-col gap-1.5">
               <a
@@ -377,12 +355,12 @@
                 class="inline-flex items-center justify-center gap-2 rounded-lg bg-surface-container-highest/50 px-3 py-2 text-xs font-semibold text-on-surface hover:bg-surface-container-highest/70 transition-colors"
               >
                 <Papicon icon="download" size={13} />
-                Voir le guide
+                {m.pwp_view_guide()}
               </a>
               <button
                 class="text-2xs text-on-surface-variant underline decoration-outline-variant underline-offset-4 hover:text-on-surface"
                 onclick={() => copy(widgetDataUrl, 'android-url')}
-              >{copiedField === 'android-url' ? 'Copié !' : 'Copier l\'URL de données'}</button>
+              >{copiedField === 'android-url' ? m.pwp_copied() : m.pwp_copy_data_url()}</button>
             </div>
           </div>
 
@@ -393,12 +371,12 @@
               <span class="text-sm font-semibold">Windows 11 · Edge</span>
             </div>
             <ol class="space-y-1.5 text-xs text-on-surface-variant leading-relaxed list-decimal list-inside">
-              <li>Ouvre ce dashboard dans <strong>Microsoft Edge</strong></li>
-              <li>Menu ⋯ → Applications → « Installer ce site en tant qu'application »</li>
-              <li>Clic droit sur l'icône Kotbo installée → « Ajouter au panneau Widgets »</li>
+              <li>{m.pwp_win_s1()} <strong>Microsoft Edge</strong></li>
+              <li>{m.pwp_win_s2()}</li>
+              <li>{m.pwp_win_s3()}</li>
             </ol>
             <p class="text-2xs text-on-surface-variant">
-              Le widget se synchronise automatiquement dès que tu ouvres l'app installée - aucune configuration de token nécessaire.
+              {m.pwp_win_note()}
             </p>
           </div>
 
@@ -409,9 +387,9 @@
               <span class="text-sm font-semibold">Linux · Waybar / Conky</span>
             </div>
             <ol class="space-y-1.5 text-xs text-on-surface-variant leading-relaxed list-decimal list-inside">
-              <li>Copie le script (Waybar ou Conky) dans ton dossier de config</li>
-              <li>Renseigne ton token, <code class="text-2xs">chmod +x</code> le script</li>
-              <li>Ajoute le bloc de config fourni dans le guide</li>
+              <li>{m.pwp_linux_s1()}</li>
+              <li>{m.pwp_linux_s2_before()} <code class="text-2xs">chmod +x</code> {m.pwp_linux_s2_after()}</li>
+              <li>{m.pwp_linux_s3()}</li>
             </ol>
             <div class="flex flex-col gap-1.5">
               <a
@@ -421,12 +399,12 @@
                 class="inline-flex items-center justify-center gap-2 rounded-lg bg-surface-container-highest/50 px-3 py-2 text-xs font-semibold text-on-surface hover:bg-surface-container-highest/70 transition-colors"
               >
                 <Papicon icon="download" size={13} />
-                Voir le guide
+                {m.pwp_view_guide()}
               </a>
               <button
                 class="text-2xs text-on-surface-variant underline decoration-outline-variant underline-offset-4 hover:text-on-surface"
                 onclick={() => copy(widgetDataUrl, 'linux-url')}
-              >{copiedField === 'linux-url' ? 'Copié !' : 'Copier l\'URL de données'}</button>
+              >{copiedField === 'linux-url' ? m.pwp_copied() : m.pwp_copy_data_url()}</button>
             </div>
           </div>
         </div>
@@ -438,14 +416,14 @@
       <div class="bg-surface-container-low/30 border border-outline-variant/10 rounded-xl p-6 space-y-4">
         <h3 class="text-base font-semibold flex items-center gap-2.5">
           <Papicon icon="users" size={18} />
-          Staff avec widget actif
+          {m.pwp_staff_title()}
         </h3>
         <div class="flex flex-col divide-y divide-outline-variant/10">
           {#each data.subscriptions.filter((s: any) => s.enabled) as sub}
             <div class="flex items-center gap-4 py-3">
               <span class="flex-1 font-mono text-sm text-on-surface">{sub.userId}</span>
-              <span class="text-xs text-on-surface-variant">{new Date(sub.createdAt).toLocaleDateString('fr-FR')}</span>
-              <span class="px-2.5 py-0.5 rounded-full text-xs font-medium bg-success/10 text-success border border-success/15">Actif</span>
+              <span class="text-xs text-on-surface-variant">{new Date(sub.createdAt).toLocaleDateString(dateLocale())}</span>
+              <span class="px-2.5 py-0.5 rounded-full text-xs font-medium bg-success/10 text-success border border-success/15">{m.pwp_active()}</span>
             </div>
           {/each}
         </div>

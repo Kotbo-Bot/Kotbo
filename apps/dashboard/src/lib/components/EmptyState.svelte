@@ -21,13 +21,14 @@
   - `instruction`     : l'ecran explique quoi faire avec les controles au-dessus.
 -->
 <script lang="ts">
+  import { m } from '../i18n';
   import type { Snippet } from 'svelte';
   import Papicon from './Papicon.svelte';
   import Button from './ui/Button.svelte';
 
   const {
     icon = 'inbox',
-    title = 'Rien à afficher',
+    title = m.esx_default_title(),
     description = '',
     action,
     actionLabel = '',

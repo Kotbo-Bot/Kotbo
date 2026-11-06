@@ -117,7 +117,7 @@
         color={panelColor}
         title={`🎁 ${m.onb_drops_preview_title()}`}
         description={m.onb_drops_preview_line()}
-        fields={[{ emoji: '⚡', name: 'Récompense', value: 'entre 50 et 250 XP' }]}
+        fields={[{ emoji: '⚡', name: m.obx_dr_reward(), value: m.obx_dr_reward_value() }]}
         buttons={[{ emoji: '🎁', label: m.onb_drops_preview_button() }]}
       />
     </DiscordPreview>

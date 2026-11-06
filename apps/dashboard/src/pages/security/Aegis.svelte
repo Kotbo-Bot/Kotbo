@@ -23,10 +23,10 @@
 
 <ModulePage title={m.aegis_title()} description={m.aegis_subtitle()} icon="sparkles" featureKey="automod">
   {#if onFreePlan}
-    <Callout variant="info" icon="Lock" title="L'IA de modération fait partie de l'offre complète">
-      AutoMod et ses filtres tournent en gratuit. AegisAI lit le ton des messages, repère le harcèlement et la toxicité : règle-le dès maintenant, il s'active avec l'abonnement.
+    <Callout variant="info" icon="Lock" title={m.aex_plan_title()}>
+      {m.aex_plan_desc()}
       {#snippet actions()}
-        <Button href="/billing" variant="primary" size="sm" iconRight="ArrowRight">Voir les offres</Button>
+        <Button href="/billing" variant="primary" size="sm" iconRight="ArrowRight">{m.aex_see_plans()}</Button>
       {/snippet}
     </Callout>
   {/if}

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from '../../i18n';
   import Papicon from '../Papicon.svelte';
   import DiscordPreview from '../onboarding/DiscordPreview.svelte';
 
@@ -12,7 +13,7 @@
 
   const {
     open = false,
-    title = 'Éditer le message',
+    title = m.wfm_edit_message(),
     initialText = '',
     onSave,
     onClose,
@@ -50,12 +51,12 @@
           </div>
           <div>
             <h3 class="text-sm font-bold text-on-surface">{title}</h3>
-            <p class="text-2xs text-on-surface-variant">Éditeur avec aperçu Discord en temps réel</p>
+            <p class="text-2xs text-on-surface-variant">{m.wfm_desc()}</p>
           </div>
         </div>
         <button
           onclick={onClose}
-          aria-label="Fermer"
+          aria-label={m.common_close()}
           class="p-1.5 rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-container-highest transition-colors"
         >
           <Papicon icon="Cross" size={16} />
@@ -66,19 +67,19 @@
       <div class="p-5 space-y-4 overflow-y-auto">
         <p class="flex items-start gap-2 px-3 py-2 rounded-xl bg-primary/10 border border-primary/20 text-xs text-on-surface">
           <Papicon icon="Info" size={13} class="text-primary shrink-0 mt-0.5" />
-          <span>Ce texte part tel quel. Pour y insérer le membre, le salon ou une autre valeur, relie un nœud « Texte composé » à ce champ, ou écris l'étape dans l'éditeur en phrases.</span>
+          <span>{m.wfm_hint()}</span>
         </p>
 
         <!-- Zone de texte -->
         <div class="space-y-1.5">
           <label for="msg-modal-input" class="text-xs font-semibold text-on-surface-variant">
-            Contenu du message
+            {m.wfm_content()}
           </label>
           <textarea
             id="msg-modal-input"
             bind:value={text}
             rows="5"
-            placeholder="Saisis le texte de ton message ici..."
+            placeholder={m.wfm_content_ph()}
             class="w-full px-3.5 py-2.5 rounded-xl bg-surface-container-highest border border-outline-variant/30 text-sm text-on-surface focus:border-primary/50 focus:outline-none transition-all resize-y"
           ></textarea>
         </div>
@@ -86,9 +87,9 @@
         <div class="space-y-1.5">
           <p class="text-xs font-semibold text-on-surface-variant flex items-center gap-1.5">
             <Papicon icon="Camera" size={12} />
-            <span>Aperçu Discord</span>
+            <span>{m.wfm_preview()}</span>
           </p>
-          <DiscordPreview channel="salon" content={text.trim() ? text : 'Exemple de message...'} />
+          <DiscordPreview channel={m.wfm_preview_channel()} content={text.trim() ? text : m.wfm_preview_example()} />
         </div>
       </div>
 
@@ -99,7 +100,7 @@
           onclick={onClose}
           class="px-4 py-2 rounded-xl text-xs font-semibold bg-surface-container-highest text-on-surface-variant hover:text-on-surface transition-all"
         >
-          Annuler
+          {m.common_cancel()}
         </button>
         <button
           type="button"
@@ -107,7 +108,7 @@
           class="px-5 py-2 rounded-xl text-xs font-semibold bg-primary text-on-primary hover:opacity-90 transition-all flex items-center gap-1.5"
         >
           <Papicon icon="Check" size={14} />
-          <span>Valider et appliquer</span>
+          <span>{m.wfm_apply()}</span>
         </button>
       </div>
     </div>

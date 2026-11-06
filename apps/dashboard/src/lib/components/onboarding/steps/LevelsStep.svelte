@@ -144,8 +144,8 @@
 </script>
 
 <WizardShell
-  title="Faut-il récompenser les membres actifs ?"
-  lead="Chaque message et chaque minute en vocal rapportent de l'expérience. Les membres montent en niveau, et peuvent gagner des rôles en chemin."
+  title={m.obx_lv_title()}
+  lead={m.obx_lv_lead()}
   {onEditTracks}
 >
   <div class="space-y-3">
@@ -156,7 +156,7 @@
         detail={entry.detail}
         icon={entry.icon}
         selected={rhythm === entry.key}
-        badge={entry.key === 'standard' ? 'Recommandé' : undefined}
+        badge={entry.key === 'standard' ? m.obx_recommended() : undefined}
         onclick={() => { wizard.answer({ rhythm: entry.key }); celebrateStep(); }}
       />
     {/each}
@@ -165,25 +165,24 @@
   <div class="mt-6">
     <p class="flex items-center gap-2 text-body-sm font-semibold text-on-surface mb-1">
       <Papicon icon="award" size={14} class="text-primary" />
-      Des rôles à débloquer
-      <span class="font-normal text-on-surface-variant">- facultatif</span>
+      {m.obx_lv_roles()}
+      <span class="font-normal text-on-surface-variant">- {m.ppan_optional()}</span>
     </p>
     <p class="text-xs text-on-surface-variant leading-relaxed mb-3">
-      Le rôle est donné automatiquement au passage du niveau. C'est ce qui fait qu'on
-      regarde sa progression.
+      {m.obx_lv_roles_desc()}
     </p>
 
     <div class="grid gap-2.5 sm:grid-cols-2 mb-5">
       <ChoiceCard
-        label="Créer l'échelle pour moi"
-        pitch="Kotbo pose les rôles et leurs paliers"
+        label={m.obx_lv_create()}
+        pitch={m.obx_lv_create_pitch()}
         icon="sparkles"
         selected={mode === 'create'}
         onclick={() => { chosenMode = 'create'; }}
       />
       <ChoiceCard
-        label="Utiliser mes rôles"
-        pitch="Tu rattaches tes rôles aux paliers"
+        label={m.obx_lv_existing()}
+        pitch={m.obx_lv_existing_pitch()}
         icon="users"
         selected={mode === 'existing'}
         onclick={() => { chosenMode = 'existing'; }}
@@ -204,8 +203,8 @@
       </div>
 
       <div class="mt-5">
-        <p class="text-body-sm font-semibold text-on-surface mb-2">Combien de rôles ?</p>
-        <div class="flex flex-wrap gap-2" role="radiogroup" aria-label="Nombre de rôles à débloquer">
+        <p class="text-body-sm font-semibold text-on-surface mb-2">{m.obx_lv_count()}</p>
+        <div class="flex flex-wrap gap-2" role="radiogroup" aria-label={m.obx_lv_count_aria()}>
           {#each LADDER_COUNTS as option (option)}
             <button
               type="button"
@@ -225,13 +224,12 @@
         <p class="mt-2 text-xs text-on-surface-variant leading-relaxed">
           <!-- Le dernier palier est ce qui se lit en premier : c'est lui qui dit
                si l'échelle couvre un mois ou deux ans. -->
-          Du niveau {ladderAscending[0]?.level} au niveau {ladderAscending[ladderAscending.length - 1]?.level}.
+          {m.obx_lv_range({ from: ladderAscending[0]?.level ?? 0, to: ladderAscending[ladderAscending.length - 1]?.level ?? 0 })}
         </p>
       </div>
     {:else if roles.length === 0}
       <p class="rounded-xl border border-outline-variant/30 bg-surface-container-low/30 px-4 py-3 text-body-sm text-on-surface-variant">
-        Aucun rôle attribuable n'a été trouvé. Choisis « Créer l'échelle pour moi », ou
-        ajoute tes paliers plus tard depuis la page Niveaux.
+        {m.obx_lv_no_roles()}
       </p>
     {:else}
       <div class="space-y-2">
@@ -241,14 +239,14 @@
               <span class="w-7 h-7 rounded-lg bg-primary/10 text-primary flex items-center justify-center text-xs font-bold">
                 {level}
               </span>
-              Niveau {level}
+              {m.obx_lv_level({ level })}
             </span>
             <select
               bind:value={rewards[level]}
-              aria-label={`Rôle offert au niveau ${level}`}
+              aria-label={m.obx_lv_reward_aria({ level })}
               class="flex-1 min-w-0 rounded-lg border border-outline-variant/40 bg-surface-container-lowest/60 px-3 py-1.5 text-body-sm text-on-surface focus:outline-none focus:border-primary/50"
             >
-              <option value={undefined}>Aucun rôle</option>
+              <option value={undefined}>{m.obx_lv_no_role()}</option>
               {#each roles as role (role.id)}
                 <option value={role.id}>@{role.name}</option>
               {/each}
@@ -263,13 +261,13 @@
     <DiscordPreview channel="niveaux">
       <DiscordEmbed
         color={panelColor}
-        title={`🎉 Niveau ${firstTier} atteint !`}
-        description="Maë vient de passer un palier."
+        title={m.obx_lv_preview_title({ level: firstTier })}
+        description={m.obx_lv_preview_desc()}
         fields={[
-          { emoji: '⚡', name: 'Gain par message', value: `${config.xpMin} à ${config.xpMax} XP` },
-          { emoji: '🎧', name: 'Gain en vocal', value: `${config.vocalXpPerMin} XP par minute` },
+          { emoji: '⚡', name: m.obx_lv_gain_msg(), value: m.obx_lv_gain_msg_value({ min: config.xpMin, max: config.xpMax }) },
+          { emoji: '🎧', name: m.obx_lv_gain_voice(), value: m.obx_lv_gain_voice_value({ xp: config.vocalXpPerMin }) },
           ...(firstReward
-            ? [{ emoji: '🏅', name: 'Rôle débloqué', value: `@${firstReward}` }]
+            ? [{ emoji: '🏅', name: m.obx_lv_role_unlocked(), value: `@${firstReward}` }]
             : []),
         ]}
       />
@@ -279,7 +277,7 @@
       <!-- L'échelle entière, sous l'annonce : c'est en la voyant d'un bloc qu'on
            juge si huit paliers sont huit paliers de trop. -->
       <div class="mt-3 rounded-2xl border border-outline-variant/30 bg-surface-container-lowest/50 p-4">
-        <p class="text-xs font-semibold text-on-surface mb-3">Les paliers posés</p>
+        <p class="text-xs font-semibold text-on-surface mb-3">{m.obx_lv_tiers()}</p>
         <div class="space-y-1.5">
           {#each ladderAscending as role (role.key)}
             <div class="flex items-center gap-2.5">
@@ -297,8 +295,7 @@
     <p class="mt-3 flex items-start gap-2 text-xs text-on-surface-variant/55 leading-relaxed">
       <Papicon icon="clock" size={13} class="mt-0.5 shrink-0 text-on-surface-variant/35" />
       <span>
-        Un message ne rapporte qu'une fois toutes les {config.cooldownSeconds} s : c'est ce qui
-        empêche de monter en écrivant vite plutôt qu'en participant.
+        {m.obx_lv_cooldown({ seconds: config.cooldownSeconds })}
       </span>
     </p>
   {/snippet}
@@ -309,7 +306,7 @@
       onclick={skip}
       class="text-body-sm font-medium text-on-surface-variant hover:text-on-surface transition-colors"
     >
-      Passer
+      {m.obx_skip()}
     </button>
     <button
       type="button"
@@ -317,7 +314,7 @@
       disabled={onboardingData.busy}
       class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-on-primary text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-40"
     >
-      {onboardingData.busy ? 'Enregistrement…' : 'Activer la progression'}
+      {onboardingData.busy ? m.obx_saving() : m.obx_lv_apply()}
       <Papicon icon="ChevronRight" size={15} />
     </button>
   {/snippet}
