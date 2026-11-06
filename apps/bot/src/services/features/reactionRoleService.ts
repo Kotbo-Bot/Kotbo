@@ -298,10 +298,21 @@ export function menuDescription(
   return custom || describeMenuModes(options, menuMode, locale);
 }
 
+/** Erreur Discord qui dit que le message (ou son salon) n'existe plus. */
+function isGoneError(err: unknown): boolean {
+  const code = (err as { code?: number })?.code;
+  return code === RESTJSONErrorCodes.UnknownMessage || code === RESTJSONErrorCodes.UnknownChannel;
+}
+
 /**
- * Envoie ou met à jour le message d'un menu de rôles
+ * Envoie ou met à jour le message d'un menu de rôles.
+ *
+ * Un nouveau message ne part que si l'ancien a vraiment disparu, et seulement
+ * quand `repost` le permet : la mise à jour des nombres passe `false`, sinon
+ * un panneau effacé par le staff reviendrait au premier rôle qui bouge. Une
+ * modification refusée est consignée, pas doublée d'un second panneau.
  */
-export async function sendOrUpdateMenuMessage(client: Client, menuId: string) {
+export async function sendOrUpdateMenuMessage(client: Client, menuId: string, { repost = true } = {}) {
   try {
     const menu = await prisma.reactionRoleMenu.findUnique({
       where: { id: menuId },
@@ -362,25 +373,26 @@ export async function sendOrUpdateMenuMessage(client: Client, menuId: string) {
       rows.push(currentRow);
     }
 
-    let messageSent;
-    if (menu.messageId) {
-      // Tenter de modifier le message existant
-      const existingMsg = await channel.messages.fetch(menu.messageId).catch(() => null);
-      if (existingMsg) {
-        messageSent = await existingMsg.edit({ embeds: [embed], components: rows }).catch(() => null);
-      }
-    }
+    // Une lecture refusée pour une autre raison qu'une suppression remonte au
+    // `catch` : rien ne prouve que le panneau a disparu.
+    const existingMsg = menu.messageId
+      ? await channel.messages.fetch(menu.messageId).catch((err: unknown) => {
+        if (isGoneError(err)) return null;
+        throw err;
+      })
+      : null;
 
-    if (!messageSent) {
-      // Envoyer un nouveau message
-      messageSent = await channel.send({ embeds: [embed], components: rows }).catch(() => null);
-      if (messageSent) {
-        await prisma.reactionRoleMenu.update({
-          where: { id: menuId },
-          data: { messageId: messageSent.id },
-        });
-      }
+    if (existingMsg) {
+      await existingMsg.edit({ embeds: [embed], components: rows });
+      return;
     }
+    if (!repost) return;
+
+    const messageSent = await channel.send({ embeds: [embed], components: rows });
+    await prisma.reactionRoleMenu.update({
+      where: { id: menuId },
+      data: { messageId: messageSent.id },
+    });
   } catch (err) {
     logger.error('ReactionRoleService', `Erreur lors de l'envoi/mise à jour du menu ${menuId}:`, err);
   }
@@ -403,8 +415,7 @@ export async function menuMessageStatus(
     await channel.messages.fetch(menu.messageId);
     return 'ok';
   } catch (err) {
-    const code = (err as { code?: number })?.code;
-    return code === RESTJSONErrorCodes.UnknownMessage || code === RESTJSONErrorCodes.UnknownChannel ? 'missing' : 'unknown';
+    return isGoneError(err) ? 'missing' : 'unknown';
   }
 }
 
@@ -424,16 +435,17 @@ const pendingCountRefreshes = new Set<string>();
 
 /**
  * Met à jour les nombres affichés sur les boutons quelques secondes après un
- * clic. Fenêtre fixe : les clics suivants rejoignent la mise à jour déjà
- * prévue au lieu de la repousser, si bien qu'un membre qui bascule sans arrêt
- * ne la bloque pas et ne provoque qu'une modification du message par période.
+ * changement de rôle. Fenêtre fixe : les changements suivants rejoignent la
+ * mise à jour déjà prévue au lieu de la repousser, si bien qu'un membre qui
+ * bascule sans arrêt ne la bloque pas et ne provoque qu'une modification du
+ * message par période.
  */
 function scheduleCountRefresh(client: Client, menuId: string): void {
   if (pendingCountRefreshes.has(menuId)) return;
   pendingCountRefreshes.add(menuId);
   setTimeout(() => {
     pendingCountRefreshes.delete(menuId);
-    void sendOrUpdateMenuMessage(client, menuId);
+    void sendOrUpdateMenuMessage(client, menuId, { repost: false });
   }, COUNT_REFRESH_DELAY_MS);
 }
 
@@ -455,8 +467,9 @@ export function menusUsingRoles<T extends { options: unknown }>(menus: T[], role
 }
 
 /**
- * Un rôle de menu a changé de porteurs hors du panneau (donné à la main, par
- * un autre bot, membre parti) : les nombres affichés sur les boutons suivent.
+ * Un rôle de menu a changé de porteurs, depuis le panneau ou ailleurs (donné à
+ * la main, par un autre bot, membre parti) : les nombres affichés sur les
+ * boutons suivent. Les clics passent aussi par ici, via `GuildMemberUpdate`.
  */
 export async function refreshCountsForRoles(client: Client, guildId: string, roleIds: string[]): Promise<void> {
   // Un pseudo ou un avatar changé ne touche aucun rôle : pas de lecture en base.
@@ -533,7 +546,18 @@ function findClickedOption(
  * Dans un menu « exclusive », prendre un rôle retire les autres du menu.
  */
 export async function handleRoleToggleInteraction(interaction: ButtonInteraction) {
+  // Réponse différée avant toute lecture : base, ajout et retrait de rôles
+  // peuvent dépasser les 3 s que Discord laisse, surtout quand il ralentit les
+  // changements de rôles d'un gros serveur. Le membre verrait alors « échec »
+  // alors que son rôle est bien arrivé.
+  const deferred = await interaction.deferReply({ flags: [MessageFlags.Ephemeral] }).then(() => true, (err: unknown) => {
+    logger.warn('ReactionRoleService', 'Réponse au clic non différée :', err);
+    return false;
+  });
+  if (!deferred) return;
+
   const locale = await getEffectiveLocale(interaction).catch(() => FALLBACK_LOCALE);
+  const answer = (content: string) => interaction.editReply({ content });
 
   try {
     const [, roleId, rawIndex] = interaction.customId.split(':');
@@ -551,10 +575,7 @@ export async function handleRoleToggleInteraction(interaction: ButtonInteraction
     const clicked = roleId ? findClickedOption(configuredRoles, roleId, rawIndex) : null;
 
     if (!activeMenu || !clicked) {
-      return interaction.reply({
-        content: m.reactionroles_panel_inactive({}, { locale }),
-        flags: [MessageFlags.Ephemeral],
-      });
+      return answer(m.reactionroles_panel_inactive({}, { locale }));
     }
 
     // `interaction.member` peut etre un GuildMember complet ou sa forme brute
@@ -563,10 +584,7 @@ export async function handleRoleToggleInteraction(interaction: ButtonInteraction
     const member = interaction.member;
 
     if (!(member instanceof GuildMember)) {
-      return interaction.reply({
-        content: m.reactionroles_member_missing({}, { locale }),
-        flags: [MessageFlags.Ephemeral],
-      });
+      return answer(m.reactionroles_member_missing({}, { locale }));
     }
 
     const menuMode = normalizeMenuMode(activeMenu.buttonMode);
@@ -575,10 +593,7 @@ export async function handleRoleToggleInteraction(interaction: ButtonInteraction
     const hasRole = member.roles.cache.has(roleId);
 
     if (hasRole && mode === 'add_only') {
-      return interaction.reply({
-        content: m.reactionroles_role_kept({ role }, { locale }),
-        flags: [MessageFlags.Ephemeral],
-      });
+      return answer(m.reactionroles_role_kept({ role }, { locale }));
     }
 
     // Sans ce contrôle, Discord refuse l'ajout et le membre ne lit qu'« erreur ».
@@ -588,10 +603,7 @@ export async function handleRoleToggleInteraction(interaction: ButtonInteraction
     const blocked = blockerOf(clickedRole, me);
     if (blocked) {
       void alertStaffRoleBlocked(guild, activeMenu.title, roleId, { reason: blocked, roleName: clickedRole?.name ?? null });
-      return interaction.reply({
-        content: m.reactionroles_role_unavailable({}, { locale }),
-        flags: [MessageFlags.Ephemeral],
-      });
+      return answer(m.reactionroles_role_unavailable({}, { locale }));
     }
 
     // Le journal d'audit nomme le menu : les logs du serveur le reprennent, et
@@ -603,11 +615,7 @@ export async function handleRoleToggleInteraction(interaction: ButtonInteraction
     if (hasRole) {
       await member.roles.remove(roleId, reason);
       count(roleId, 'removed');
-      if (activeMenu.showCounts) scheduleCountRefresh(interaction.client, activeMenu.id);
-      return interaction.reply({
-        content: m.reactionroles_role_removed({ role }, { locale }),
-        flags: [MessageFlags.Ephemeral],
-      });
+      return answer(m.reactionroles_role_removed({ role }, { locale }));
     }
 
     // Menu « un seul rôle » : les autres rôles du menu partent, sauf ceux que le
@@ -621,7 +629,6 @@ export async function handleRoleToggleInteraction(interaction: ButtonInteraction
     // plutôt qu'aucun.
     await member.roles.add(roleId, reason);
     count(roleId, 'added');
-    if (activeMenu.showCounts) scheduleCountRefresh(interaction.client, activeMenu.id);
     const swapped = swapOut.length > 0 && await member.roles.remove(swapOut, reason).then(
       () => true,
       (err: unknown) => {
@@ -632,18 +639,12 @@ export async function handleRoleToggleInteraction(interaction: ButtonInteraction
 
     if (swapped) swapOut.forEach((id) => count(id, 'removed'));
 
-    return interaction.reply({
-      content: swapped
-        ? m.reactionroles_role_swapped({ role, previous: swapOut.map((id) => `<@&${id}>`).join(', ') }, { locale })
-        : m.reactionroles_role_added({ role }, { locale }),
-      flags: [MessageFlags.Ephemeral],
-    });
+    return answer(swapped
+      ? m.reactionroles_role_swapped({ role, previous: swapOut.map((id) => `<@&${id}>`).join(', ') }, { locale })
+      : m.reactionroles_role_added({ role }, { locale }));
   } catch (err) {
     logger.error('ReactionRoleService', 'Erreur lors de la bascule de rôle :', err);
-    return interaction.reply({
-      content: m.reactionroles_error({}, { locale }),
-      flags: [MessageFlags.Ephemeral],
-    });
+    return answer(m.reactionroles_error({}, { locale }));
   }
 }
 
