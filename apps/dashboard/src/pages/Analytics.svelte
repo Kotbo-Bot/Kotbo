@@ -335,10 +335,12 @@
   }
 
   // ── Fiche membre ───────────────────────────────────────────────────────────
-  // Les vues exigent un gestionnaire de clic : sans accès à « Membres », il ne fait rien.
   function openMemberDetails(memberId: string, memberName: string) {
     if (memberCaseModal.canOpen) void memberCaseModal.show(memberId, memberName || m.an_member_fallback());
   }
+
+  // Sans accès à « Membres », les vues ne reçoivent pas de gestionnaire : un pseudo y reste inerte.
+  const openMember = $derived(memberCaseModal.canOpen ? openMemberDetails : undefined);
 
   // ── Export ─────────────────────────────────────────────────────────────────
   type ExportRow = Record<string, string | number | boolean | null>;
@@ -534,27 +536,27 @@
         {:else if activeTab === 'overview'}
           <OverviewSection onNavigate={goTab} {legacy} />
         {:else if ['messages', 'voice', 'heatmap', 'pulse', 'weekly', 'commands', 'algo'].includes(activeTab)}
-          <ActivitySection view={activeTab as ActivityView} {legacy} {legacyLoading} onOpenMember={openMemberDetails} />
+          <ActivitySection view={activeTab as ActivityView} {legacy} {legacyLoading} onOpenMember={openMember} />
         {:else if ['content', 'emojis', 'stickers', 'gifs', 'sites', 'formatting'].includes(activeTab)}
           <ContentSection view={activeTab as ContentView} />
         {:else if activeTab === 'words'}
           <div class="flex flex-col gap-4">
             <RisingWordsView />
-            <AdvancedAnalyticsPanel section="words" onOpenMember={openMemberDetails} />
+            <AdvancedAnalyticsPanel section="words" onOpenMember={openMember} />
           </div>
         {:else if activeTab === 'channels'}
-          <ChannelsSection onOpenMember={openMemberDetails} />
+          <ChannelsSection onOpenMember={openMember} />
         {:else if activeTab === 'responses'}
           <ResponseTimesView />
         {:else if activeTab === 'channel-health'}
           <div class="flex flex-col gap-4">
             <ChannelHealthView />
-            <AdvancedAnalyticsPanel section="channels" onOpenMember={openMemberDetails} />
+            <AdvancedAnalyticsPanel section="channels" onOpenMember={openMember} />
           </div>
         {:else if activeTab === 'concentration'}
           <ConcentrationView />
         {:else if activeTab === 'climate'}
-          <ClimateView onOpenMember={openMemberDetails} />
+          <ClimateView onOpenMember={openMember} />
         {:else if activeTab === 'interactions'}
           {#if interactions}
             <div class="flex flex-col gap-4">
@@ -562,9 +564,9 @@
                 nodes={interactions.nodes || []}
                 edges={interactions.edges || []}
                 hiddenMembersCount={interactions.hiddenMembersCount || 0}
-                onSelectNode={(userId) => openMemberDetails(userId, m.an_loading_short())}
+                onSelectNode={openMember}
               />
-              <NetworkInsightsView onOpenMember={openMemberDetails} />
+              <NetworkInsightsView onOpenMember={openMember} />
             </div>
           {:else if interactionsError}
             <Callout variant="danger" title={m.an_network_error()}>
@@ -575,18 +577,18 @@
             <AnalyticsSkeleton />
           {/if}
         {:else if activeTab === 'social'}
-          <AdvancedAnalyticsPanel section="social" onOpenMember={openMemberDetails} />
+          <AdvancedAnalyticsPanel section="social" onOpenMember={openMember} />
         {:else if activeTab === 'ghosts'}
-          <GhostMembersPanel onOpenMember={openMemberDetails} />
+          <GhostMembersPanel onOpenMember={openMember} />
         {:else if activeTab === 'growth'}
           <div class="flex flex-col gap-4">
-            <GrowthSection {legacy} {legacyLoading} onOpenMember={openMemberDetails} />
+            <GrowthSection {legacy} {legacyLoading} onOpenMember={openMember} />
             {#if !onFreePlan}<GrowthInsightsView />{/if}
           </div>
         {:else if activeTab === 'website'}
           <SiteAnalyticsPanel guildId={authStore.selectedGuildId ?? ''} />
         {:else if activeTab === 'tickets'}
-          <StaffInsightsView onOpenMember={openMemberDetails} />
+          <StaffInsightsView onOpenMember={openMember} />
         {:else if activeTab === 'compare'}
           <CompareView />
         {:else if activeTab === 'alerts'}
@@ -598,24 +600,24 @@
         {:else if activeTab === 'engagement'}
           <EngagementView />
         {:else if activeTab === 'lifecycle'}
-          <LifecycleView onOpenMember={openMemberDetails} />
+          <LifecycleView onOpenMember={openMember} />
         {:else if activeTab === 'funnel'}
           <FunnelView />
         {:else if activeTab === 'cohorts'}
           <div class="flex flex-col gap-4">
             <CohortTriangle />
-            <AdvancedAnalyticsPanel section="retention" onOpenMember={openMemberDetails} />
+            <AdvancedAnalyticsPanel section="retention" onOpenMember={openMember} />
           </div>
         {:else if activeTab === 'churn'}
-          <AdvancedAnalyticsPanel section="churn" onOpenMember={openMemberDetails} />
+          <AdvancedAnalyticsPanel section="churn" onOpenMember={openMember} />
         {:else if activeTab === 'mod-advanced'}
-          <AdvancedAnalyticsPanel section="moderation" onOpenMember={openMemberDetails} />
+          <AdvancedAnalyticsPanel section="moderation" onOpenMember={openMember} />
         {:else if legacyError}
           <Callout variant="danger" title={m.an_error_generic()}>{legacyError}</Callout>
         {:else if !legacy}
           <AnalyticsSkeleton />
         {:else if activeTab === 'members'}
-          <MembersView {legacy} onOpenMember={openMemberDetails} />
+          <MembersView {legacy} onOpenMember={openMember} />
         {:else if activeTab === 'moderation'}
           <div class="flex flex-col gap-4">
             <div class="kpi-grid kpi-grid--4">
@@ -624,14 +626,14 @@
               <KpiTile label={m.anx_mod_per_day()} value={fmtNumber(Math.round(((legacy.totals?.sanctions ?? 0) / Math.max(1, filters.days)) * 10) / 10)} />
               <KpiTile label={m.anx_mod_moderators()} value={fmtNumber(legacy.topModerators?.length ?? 0)} hint={m.anx_mod_moderators_hint()} />
             </div>
-            {#if !onFreePlan}<ModerationTrendsView onOpenMember={openMemberDetails} />{/if}
-            <ModerationAudit data={legacy} {chartLabels} onOpenMember={openMemberDetails} />
+            {#if !onFreePlan}<ModerationTrendsView onOpenMember={openMember} />{/if}
+            <ModerationAudit data={legacy} {chartLabels} onOpenMember={openMember} />
           </div>
         {:else if activeTab === 'staff'}
-          <StaffAudit data={legacy} onOpenMember={openMemberDetails} {fmt} {fmtH} />
+          <StaffAudit data={legacy} onOpenMember={openMember} {fmt} {fmtH} />
         {:else if activeTab === 'performance'}
           {#if legacy.staffPerformance}
-            <StaffPerformance data={legacy.staffPerformance} onOpenMember={openMemberDetails} />
+            <StaffPerformance data={legacy.staffPerformance} onOpenMember={openMember} />
           {/if}
         {/if}
       {/key}

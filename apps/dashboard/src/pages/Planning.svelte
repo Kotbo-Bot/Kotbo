@@ -2170,7 +2170,7 @@
             <ul class="max-h-56 overflow-y-auto divide-y divide-outline-variant">
               {#each raw.presences as presence (presence.id ?? presence.staffUserId)}
                 <li class="flex items-center gap-2.5 py-2">
-                  <button type="button" class="flex items-center gap-2.5 min-w-0 flex-1 text-left hover:text-primary disabled:hover:text-on-surface" disabled={!memberCaseModal.canOpen} onclick={() => memberCaseModal.show(presence.staffUserId, memberName(presence.staffMember))}>
+                  <button type="button" class="flex items-center gap-2.5 min-w-0 flex-1 text-left enabled:hover:text-primary" disabled={!memberCaseModal.canOpen} onclick={() => memberCaseModal.show(presence.staffUserId, memberName(presence.staffMember))}>
                     {@render avatar(presence.staffMember?.avatarUrl, memberName(presence.staffMember), 'w-7 h-7')}
                     <span class="min-w-0">
                       <span class="block truncate text-body-sm font-medium">{memberName(presence.staffMember)}</span>

@@ -14,11 +14,6 @@
   let showCreate = $state(false);
   let newSeason = $state({ name: '', startDate: '', endDate: '' });
 
-  /** Clic sur un pseudo : ouvre sa fiche, seulement pour qui a accès à « Membres ». */
-  function openMemberOnClick(name: string | null | undefined) {
-    return memberCaseModal.canOpen ? (userId: string) => memberCaseModal.show(userId, name || userId) : null;
-  }
-
   async function load() {
     loading = true;
     try {
@@ -194,7 +189,7 @@
                     <div class="season-leaderboard-row grid items-center py-2 px-3 rounded-lg text-sm transition-colors hover:bg-surface-container-high/10 {i < 3 ? 'bg-surface-container-high/5' : ''}">
                       <span class="text-base leading-none">{getMedal(i)}</span>
                       <span class="font-semibold text-on-surface-variant">#{entry.rank}</span>
-                      <UserDisplay userId={entry.userId} name={entry.displayName} avatarUrl={entry.avatarUrl} size="xs" class="min-w-0" onClick={openMemberOnClick(entry.displayName)} />
+                      <UserDisplay userId={entry.userId} name={entry.displayName} avatarUrl={entry.avatarUrl} size="xs" class="min-w-0" onClick={memberCaseModal.opener(entry.displayName)} />
                       <span class="text-primary font-medium text-xs">Niv. {entry.level}</span>
                       <span class="text-right text-xs text-on-surface-variant">{entry.xp.toLocaleString()} XP</span>
                     </div>
@@ -214,7 +209,7 @@
                     <div class="season-leaderboard-row grid items-center py-2 px-3 rounded-lg text-sm transition-colors hover:bg-surface-container-high/10 {i < 3 ? 'bg-surface-container-high/5' : ''}">
                       <span class="text-base leading-none">{getMedal(i)}</span>
                       <span class="font-semibold text-on-surface-variant">#{entry.rank}</span>
-                      <UserDisplay userId={entry.userId} name={entry.displayName} avatarUrl={entry.avatarUrl} size="xs" class="min-w-0" onClick={openMemberOnClick(entry.displayName)} />
+                      <UserDisplay userId={entry.userId} name={entry.displayName} avatarUrl={entry.avatarUrl} size="xs" class="min-w-0" onClick={memberCaseModal.opener(entry.displayName)} />
                       <span class="font-medium text-xs truncate" style="color:{entry.tier.color}">{entry.tier.name}</span>
                       <span class="text-right text-xs text-on-surface-variant">{entry.rp.toLocaleString()} RP</span>
                     </div>

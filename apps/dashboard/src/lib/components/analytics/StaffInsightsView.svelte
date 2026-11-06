@@ -14,7 +14,7 @@
   import { analyticsFilters as filters, relativeDelta } from './analyticsFilters.svelte';
   import { fmtDuration, fmtNumber, fmtPct, SERIES } from './analyticsFormat';
 
-  const { onOpenMember }: { onOpenMember: (userId: string, name: string) => void } = $props();
+  const { onOpenMember }: { onOpenMember?: (userId: string, name: string) => void } = $props();
 
   const loader = analyticsLoader(() => fetchStaffInsights(filters.periodQuery), 'staffInsights');
   const data = $derived(loader.data as StaffInsights | null);
@@ -82,7 +82,7 @@
               <tbody>
                 {#each data.staff as s (s.userId)}
                   <tr>
-                    <th scope="row"><button type="button" class="row-link" onclick={() => onOpenMember(s.userId, s.name ?? '')}>{s.name ?? m.an_member_fallback()}</button></th>
+                    <th scope="row"><button type="button" disabled={!onOpenMember} class="row-link" onclick={() => onOpenMember?.(s.userId, s.name ?? '')}>{s.name ?? m.an_member_fallback()}</button></th>
                     <td class="num">{fmtNumber(s.claimed)}</td>
                     <td class="num">{fmtNumber(s.closed)}</td>
                     <td class="num">{fmtDuration(s.firstResponseMedianSec)}</td>
@@ -179,7 +179,7 @@
     color: var(--color-on-surface);
   }
 
-  .row-link:hover {
+  .row-link:hover:not(:disabled) {
     color: var(--color-primary);
   }
 

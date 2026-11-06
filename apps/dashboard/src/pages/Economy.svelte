@@ -3430,7 +3430,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
                         {/if}
                       </button>
                       <div>
-                        <button type="button" class="block text-left font-semibold text-sm hover:text-primary disabled:hover:text-on-surface transition-colors" disabled={!memberCaseModal.canOpen} onclick={() => openMember(player)}>{player.displayName || player.username}</button>
+                        <button type="button" class="block text-left font-semibold text-sm enabled:hover:text-primary transition-colors" disabled={!memberCaseModal.canOpen} onclick={() => openMember(player)}>{player.displayName || player.username}</button>
                         <div class="text-2xs text-on-surface-variant/40 font-mono mt-0.5">{player.userId}</div>
                         <!-- Bento mini-stats -->
                         <div class="flex items-center gap-2 mt-1 text-2xs font-bold text-on-surface-variant">

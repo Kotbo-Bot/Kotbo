@@ -15,7 +15,7 @@
   import { analyticsExport, analyticsFilters as filters, pct, relativeDelta } from './analyticsFilters.svelte';
   import { daysSince, fmtDelta, fmtMinutes, fmtNumber, fmtPct } from './analyticsFormat';
 
-  const { onOpenMember }: { onOpenMember: (userId: string, name: string) => void } = $props();
+  const { onOpenMember }: { onOpenMember?: (userId: string, name: string) => void } = $props();
 
   let tree = $state<ChannelTree | null>(null);
   let loading = $state(true);

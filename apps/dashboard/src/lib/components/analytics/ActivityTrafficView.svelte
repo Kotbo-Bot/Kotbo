@@ -39,7 +39,7 @@
     /** Réponse de l'ancien /analytics : sessions vocales et affluence. */
     legacy: any;
     legacyLoading: boolean;
-    onOpenMember: (userId: string, name: string) => void;
+    onOpenMember?: (userId: string, name: string) => void;
   } = $props();
 
   // ── Données ────────────────────────────────────────────────────────────────
@@ -139,7 +139,7 @@
           {format}
           compare={filters.compare}
           color={kind === 'messages' ? SERIES[0] : SERIES[2]}
-          onselect={(item) => onOpenMember(item.id, item.name ?? '')}
+          onselect={onOpenMember ? (item) => onOpenMember(item.id, item.name ?? '') : undefined}
           exportName={kind === 'messages' ? 'top_membres_messages' : 'top_membres_vocal'}
         />
         <TopList

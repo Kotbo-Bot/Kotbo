@@ -12,6 +12,7 @@
   import { confirmDialog } from '../lib/stores/confirmDialog.svelte';
   import { subscribeRealtime } from '../lib/stores/realtime.svelte';
   import { authStore } from '../lib/stores/auth.svelte';
+  import { memberCaseModal } from '../lib/stores/memberCaseModal.svelte';
   import { dashboardFetch } from '../lib/api';
   import { m, dateLocale } from '../lib/i18n';
 
@@ -138,7 +139,7 @@
                   {#if reg.teamName}
                     <p class="font-semibold text-on-surface">{reg.teamName}</p>
                   {/if}
-                  <UserDisplay userId={reg.userId} name={reg.username || reg.userTag} avatarUrl={reg.avatarUrl} size="sm" onClick={(userId) => router.goto(`/profile/${userId}`)} />
+                  <UserDisplay userId={reg.userId} name={reg.username || reg.userTag} avatarUrl={reg.avatarUrl} size="sm" onClick={memberCaseModal.opener(reg.username || reg.userTag)} />
                   {#if reg.teamMembers?.length}
                     <p class="mt-1 text-xs text-on-surface-variant">{m.tn_with_members({ names: reg.teamMembers.map((t: { name: string }) => t.name).join(', ') })}</p>
                   {/if}
@@ -315,7 +316,7 @@
                       {@const lastResp = stats?.latestResponses?.find((r: any) => r.userId === p.userId) ?? stats?.responses?.find((r: any) => r.userId === p.userId)}
                       <tr>
                         <td class="px-4 py-3">
-                          <UserDisplay userId={p.userId} name={p.profile?.displayName || p.username || p.userTag} avatarUrl={p.profile?.avatarUrl} size="sm" onClick={(userId) => router.goto(`/profile/${userId}`)} />
+                          <UserDisplay userId={p.userId} name={p.profile?.displayName || p.username || p.userTag} avatarUrl={p.profile?.avatarUrl} size="sm" onClick={memberCaseModal.opener(p.profile?.displayName || p.username || p.userTag)} />
                         </td>
                         <td class="px-4 py-3 font-semibold text-primary">{p.score} pts</td>
                         <td class="px-4 py-3">

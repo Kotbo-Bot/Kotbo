@@ -16,7 +16,7 @@
   import { analyticsExport, analyticsFilters as filters } from './analyticsFilters.svelte';
   import { daysSince, fmtNumber, fmtPct, shortDate, SERIES, SERIES_NEUTRAL } from './analyticsFormat';
 
-  const { onOpenMember }: { onOpenMember: (userId: string, name: string) => void } = $props();
+  const { onOpenMember }: { onOpenMember?: (userId: string, name: string) => void } = $props();
 
   let data = $state<LifecycleAnalytics | null>(null);
   let loading = $state(true);
@@ -129,7 +129,7 @@
             <ul class="seg-members">
               {#each members as member (member.userId)}
                 <li>
-                  <button type="button" class="seg-member" onclick={() => onOpenMember(member.userId, member.name ?? '')}>
+                  <button type="button" disabled={!onOpenMember} class="seg-member" onclick={() => onOpenMember?.(member.userId, member.name ?? '')}>
                     <img class="seg-member__avatar" src={memberAvatarSrc(member.avatarUrl, member.name, member.userId)} alt="" width="28" height="28" loading="lazy" />
                     <span class="seg-member__name">{member.name ?? m.an_member_fallback()}</span>
                     <span class="seg-member__meta">
@@ -255,7 +255,7 @@
     text-align: left;
   }
 
-  .seg-member:hover {
+  .seg-member:hover:not(:disabled) {
     background: var(--color-surface-container);
   }
 

@@ -45,6 +45,7 @@ const PAGES = [
   'pages/Backups.svelte',
   'lib/components/channels/ChannelDetailsModal.svelte',
   'lib/components/tickets/TicketPerformance.svelte',
+  'pages/EventControl.svelte',
 ];
 
 /** Pages qui ouvrent la fiche par le pseudo seul, via `MemberName`. */
@@ -56,6 +57,9 @@ const MEMBER_NAME_PAGES = [
   'lib/components/economy/RpgTowerPanel.svelte',
   'lib/components/economy/RpgGuildsPanel.svelte',
 ];
+
+/** Vues d'Analytics qui ouvrent la fiche par le gestionnaire `onOpenMember` de la page. */
+const ANALYTICS_VIEWS = () => sources('lib/components/analytics').filter((file) => read(file).includes('onOpenMember'));
 
 /** Lien ou navigation directe vers la page d'un membre. */
 const MEMBER_PAGE_LINK = /(?:goto\(|href=\{)`\/members\//;
@@ -93,6 +97,10 @@ describe('MemberCaseState', () => {
   test("l'ouverture est refusée sans accès à « Membres »", () => {
     expect(state).toContain("canViewFeature('members')");
     expect(state).toMatch(/show\([^)]*\)[^{]*\{\s*if \(!this\.canOpen/);
+  });
+
+  test("le clic d'un UserDisplay n'existe qu'avec l'accès à « Membres »", () => {
+    expect(state).toMatch(/opener\([^)]*\)[^{]*\{\s*return this\.canOpen \?/);
   });
 
   test("la fiche ne réclame plus d'actions à la page", () => {
@@ -137,15 +145,29 @@ describe.each(PAGES)('%s', (page) => {
   const source = read(page);
 
   test('ouvre la fiche membre par le store', () => {
-    expect(source).toContain('memberCaseModal.show(');
+    expect(source).toMatch(/memberCaseModal\.(?:show|opener)\(/);
   });
 
   test("ne propose le clic qu'avec l'accès à « Membres »", () => {
-    expect(source).toContain('memberCaseModal.canOpen');
+    // `opener` ne rend un gestionnaire qu'avec cet accès.
+    expect(source).toMatch(/memberCaseModal\.(?:canOpen|opener\()/);
   });
 
   test('ne navigue pas directement vers une page membre', () => {
     expect(source).not.toMatch(MEMBER_PAGE_LINK);
+  });
+});
+
+describe('pseudos désactivés sans accès à « Membres »', () => {
+  test("aucun ne s'éclaire au survol", () => {
+    // `[^>]` seul s'arrêterait au `>` de `() =>`.
+    const disabledByAccess = /<button\b(?:=>|[^>])*?disabled=\{!\w+\.canOpen\}(?:=>|[^>])*>[\s\S]*?<\/button>/g;
+    const offenders = [...sources('pages'), ...sources('lib')]
+      .filter((file) => file.endsWith('.svelte'))
+      .flatMap((file) => (read(file).match(disabledByAccess) ?? [])
+        .filter((button) => /(?<![\w:-])(?:group-)?hover:/.test(button))
+        .map(() => file));
+    expect(offenders).toEqual([]);
   });
 });
 
@@ -194,5 +216,111 @@ describe('MemberProfile', () => {
 
     expect(source).toMatch(/\{#snippet editNoteAction\(\)\}[^\n]*m\.mp_edit_note\(\)/);
     expect(source).toContain('actions={canModerateMembers ? editNoteAction : undefined}');
+  });
+});
+
+describe('EventControl', () => {
+  test('ouvre la fiche membre plutôt que le profil public', () => {
+    expect(read('pages/EventControl.svelte')).not.toMatch(/goto\(`\/profile\//);
+  });
+});
+
+describe('Analytics', () => {
+  test("ne transmet le clic vers la fiche qu'avec l'accès à « Membres »", () => {
+    const source = read('pages/Analytics.svelte');
+    expect(source).toContain('memberCaseModal.canOpen ? openMemberDetails : undefined');
+    expect(source).not.toContain('onOpenMember={openMemberDetails}');
+  });
+
+  test('le graphe des interactions ouvre la fiche sous le pseudo du membre', () => {
+    // Le nom passé à la fiche titre ses confirmations : jamais un texte d'attente.
+    const source = read('pages/Analytics.svelte');
+    expect(source).toMatch(/<GlobalInteractionGraph[\s\S]*?onSelectNode=\{openMember\}/);
+    expect(source).not.toContain('m.an_loading_short()');
+  });
+});
+
+describe('GlobalInteractionGraph', () => {
+  const source = read('lib/components/charts/GlobalInteractionGraph.svelte');
+
+  test("n'offre « Consulter l'activité complète » qu'avec un gestionnaire", () => {
+    expect(source).not.toMatch(/onSelectNode = /);
+    expect(source).toMatch(/\{#if onSelectNode\}\s*<button[\s\S]*?onSelectNode\(selectedNode!\.id, selectedNode!\.label\)/);
+  });
+});
+
+describe.each(ANALYTICS_VIEWS())('%s', (view) => {
+  const source = read(view);
+
+  test('le clic vers la fiche est facultatif', () => {
+    // Ni prop obligatoire, ni gestionnaire vide par défaut : son absence doit se voir.
+    expect(source).not.toMatch(/onOpenMember: \(/);
+    expect(source).not.toMatch(/onOpenMember = /);
+  });
+
+  test('un pseudo est inerte sans gestionnaire', () => {
+    const buttons = source.match(/<button\b[^>]*?onclick=\{\(\) => (?:onOpenMember|openMember)\b[^>]*>/g) ?? [];
+    for (const button of buttons) expect(button).toContain('disabled={!onOpenMember}');
+  });
+
+  test("un pseudo inerte ne s'éclaire pas au survol", () => {
+    // `[^>]` seul s'arrêterait au `>` de `() =>`.
+    const buttons = source.match(/<button\b(?:=>|[^>])*?disabled=\{!onOpenMember\}(?:=>|[^>])*>[\s\S]*?<\/button>/g) ?? [];
+    for (const button of buttons) {
+      expect(button).not.toMatch(/(?<![\w:-])hover:/);
+      expect(button).not.toMatch(/(?<!group-enabled:)group-hover:/);
+      const classes = button.match(/^<button\b(?:=>|[^>])*?class="([^"]*)"/)?.[1].split(/\s+/) ?? [];
+      for (const name of classes) {
+        expect(source).not.toMatch(new RegExp(`\\.${name}:hover(?!:not\\(:disabled\\))`));
+      }
+    }
+  });
+
+  test("une liste ne devient cliquable qu'avec le gestionnaire", () => {
+    const selects = source.match(/onselect=\{[^\n]*?(?:onOpenMember|openMember)\(/g) ?? [];
+    for (const select of selects) expect(select).toMatch(/^onselect=\{onOpenMember \?/);
+  });
+});
+
+describe('MemberCaseModal', () => {
+  const source = read('lib/components/MemberCaseModal.svelte');
+
+  test('relit le dossier par un seul chemin, qui écarte celui d\'un autre membre', () => {
+    // Un clic dans le graphe pendant une action change le membre affiché : son dossier ne
+    // doit pas recevoir celui du précédent.
+    expect(source.match(/fetchMemberCase\(/g)).toHaveLength(1);
+    expect(source).toMatch(/async function reloadCase\(id: string\)[\s\S]*?if \(updatedCase && userId === id\)/);
+  });
+
+  test('une action vise le membre de la confirmation', () => {
+    // La confirmation est une attente : le membre affiché peut changer pendant qu'elle est ouverte.
+    expect(source).toMatch(/async function executeModerationAction[\s\S]*?const memberId = userId;[\s\S]*?runMemberCaseAction\(memberId,/);
+  });
+
+  test('statistiques et messages ignorent une réponse dépassée', () => {
+    for (const fn of ['loadMemberAnalytics', 'loadMemberMessages', 'loadMemberMessageChannels']) {
+      expect(source).toMatch(new RegExp(`async function ${fn}\\(\\) \\{[\\s\\S]*?const currentId = \\+\\+\\w+;[\\s\\S]*?if \\(currentId !== \\w+\\) return;`));
+    }
+  });
+
+  test('la recherche de messages attend la fin de la frappe', () => {
+    expect(source).toMatch(/const delay = _q === lastMessageQuery \? 0 : \d+;/);
+    expect(source).toMatch(/setTimeout\(\(\) => void loadMemberMessages\(\), delay\)[\s\S]*?return \(\) => clearTimeout\(timer\);/);
+  });
+
+  test('les salons du membre précédent ne restent pas affichés', () => {
+    expect(source).toMatch(/if \(open\) \{[\s\S]*?messagesChannels = \[\];/);
+  });
+
+  test('une confirmation de sanction nomme le membre par son profil', () => {
+    // `userName` vient de la page qui ouvre la fiche : parfois un simple identifiant.
+    expect(source).not.toMatch(/mcm_confirm_\w+_title\(\{ name: userName \}\)/);
+    expect(source.match(/mcm_confirm_\w+_title\(\{ name: displayName \}\)/g)).toHaveLength(4);
+  });
+
+  test("l'échec de l'édition d'un rapport se voit", () => {
+    const update = source.slice(source.indexOf('async function handleUpdateReport'), source.indexOf('const sanctions = $derived'));
+    expect(update).toContain('toast.error(');
+    expect(update).not.toContain('console.error');
   });
 });
