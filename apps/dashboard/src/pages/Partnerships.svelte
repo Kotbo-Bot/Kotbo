@@ -32,6 +32,7 @@
   import ActionButton from '../lib/components/ActionButton.svelte';
   import LoadingHint from '../lib/components/LoadingHint.svelte';
   import Papicon from '../lib/components/Papicon.svelte';
+  import { Tabs } from '../lib/components/ui';
   import PartnershipSettingsPanel from '../lib/components/partnerships/PartnershipSettingsPanel.svelte';
   import PartnershipSetupBanner from '../lib/components/partnerships/PartnershipSetupBanner.svelte';
   import PartnershipPanel from '../lib/components/partnerships/PartnershipPanel.svelte';
@@ -269,26 +270,16 @@
   </div>
 
   <div class="flex flex-wrap items-center gap-2 mb-4">
-    <div class="inline-flex rounded-lg bg-surface-container p-0.5">
-      <button
-        class="px-3 py-1.5 text-xs rounded-md {view === 'pipeline' ? 'bg-surface text-on-surface' : 'text-on-surface-variant'}"
-        onclick={() => (view = 'pipeline')}
-      >
-        {m.pship_view_pipeline()}
-      </button>
-      <button
-        class="px-3 py-1.5 text-xs rounded-md {view === 'requests' ? 'bg-surface text-on-surface' : 'text-on-surface-variant'}"
-        onclick={() => (view = 'requests')}
-      >
-        {pendingCount > 0 ? m.pship_view_requests_count({ count: pendingCount }) : m.pship_view_requests()}
-      </button>
-      <button
-        class="px-3 py-1.5 text-xs rounded-md {view === 'settings' ? 'bg-surface text-on-surface' : 'text-on-surface-variant'}"
-        onclick={() => (view = 'settings')}
-      >
-        {m.pship_view_settings()}
-      </button>
-    </div>
+    <Tabs
+      label={m.pship_title()}
+      tabs={[
+        { id: 'pipeline', label: m.pship_view_pipeline() },
+        { id: 'requests', label: pendingCount > 0 ? m.pship_view_requests_count({ count: pendingCount }) : m.pship_view_requests() },
+        { id: 'settings', label: m.pship_view_settings() },
+      ]}
+      active={view}
+      onchange={(id) => (view = id as typeof view)}
+    />
 
     {#if view === 'pipeline'}
       <input

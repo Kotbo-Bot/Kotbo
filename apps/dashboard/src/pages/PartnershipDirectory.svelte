@@ -36,6 +36,7 @@
   import FormInput from '../lib/components/FormInput.svelte';
   import FormTextarea from '../lib/components/FormTextarea.svelte';
   import Papicon from '../lib/components/Papicon.svelte';
+  import { Tabs } from '../lib/components/ui';
   import { dateLocale } from '../lib/i18n';
 
   import { errorMessage } from '@kotbo/shared';
@@ -308,16 +309,18 @@
     <RefreshButton onclick={load} loading={loading} />
   {/snippet}
 
-  <div class="inline-flex rounded-lg bg-surface-container p-0.5 mb-4 flex-wrap">
-    {#each [['listing', m.pdir_tab_listing()], ['discover', m.pdir_tab_discover()], ['proposals', receivedPending.length > 0 ? m.pdir_tab_proposals_count({ count: receivedPending.length }) : m.pdir_tab_proposals()], ['trust', m.pdir_tab_trust()]] as [key, label] (key)}
-      <button
-        class="px-3 py-1.5 text-xs rounded-md {tab === key ? 'bg-surface text-on-surface' : 'text-on-surface-variant'}"
-        onclick={() => (tab = key as typeof tab)}
-      >
-        {label}
-      </button>
-    {/each}
-  </div>
+  <Tabs
+    label={m.pdir_title()}
+    class="mb-4 max-w-full"
+    tabs={[
+      { id: 'listing', label: m.pdir_tab_listing() },
+      { id: 'discover', label: m.pdir_tab_discover() },
+      { id: 'proposals', label: receivedPending.length > 0 ? m.pdir_tab_proposals_count({ count: receivedPending.length }) : m.pdir_tab_proposals() },
+      { id: 'trust', label: m.pdir_tab_trust() },
+    ]}
+    active={tab}
+    onchange={(id) => (tab = id as typeof tab)}
+  />
 
   {#if loading}
     <LoadingHint context="config" />

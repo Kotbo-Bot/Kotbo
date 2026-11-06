@@ -5,6 +5,8 @@
   import { toast } from '../lib/stores/toast.svelte';
   import ModulePage from '../lib/components/ModulePage.svelte';
   import Papicon from '../lib/components/Papicon.svelte';
+  import LoadingHint from '../lib/components/LoadingHint.svelte';
+  import Button from '../lib/components/ui/Button.svelte';
   import EmptyState from '../lib/components/EmptyState.svelte';
 
   let loading = $state(true);
@@ -64,21 +66,16 @@
   featureKey="evaluations"
 >
   {#snippet actions()}
-    <button
-      class="px-4 py-2 bg-primary text-on-primary text-body-sm font-medium rounded-xl shadow-sm active:scale-[0.98] transition-all flex items-center gap-2 disabled:opacity-50 disabled:pointer-events-none"
-      onclick={handleGenerateAll}
-      disabled={generating}
-    >
-      <Papicon icon="zap" size={16} />
+    <Button variant="primary" icon="zap" onclick={handleGenerateAll} loading={generating}>
       {generating ? m.evx_generating() : m.evx_generate_all()}
-    </button>
+    </Button>
   {/snippet}
 
 <!-- ======================== CONTENT ======================== -->
 {#if loading}
-  <div class="flex flex-col items-center justify-center py-16 text-on-surface-variant gap-4">
-    <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+  <div class="flex flex-col items-center justify-center py-16 text-on-surface-variant">
     <p class="text-sm">{m.evx_loading()}</p>
+    <LoadingHint context="data" />
   </div>
 {:else if data}
 

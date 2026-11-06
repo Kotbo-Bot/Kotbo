@@ -15,6 +15,7 @@
   import FormSelect from '../FormSelect.svelte';
   import FormInput from '../FormInput.svelte';
   import Papicon from '../Papicon.svelte';
+  import ToggleSwitch from '../ToggleSwitch.svelte';
   import { m } from '../../i18n';
 
   import type { DashboardChannel } from '@kotbo/contracts';
@@ -68,21 +69,26 @@
   ];
 </script>
 
+<!-- Une bascule et son libelle : cliquer le texte bascule aussi. -->
+{#snippet switchRow(key: string, label: string, hint = '', className = '')}
+  <label class="flex {hint ? 'items-start' : 'items-center'} gap-3 cursor-pointer {className}">
+    <ToggleSwitch size="sm" checked={!!settings?.[key]} onToggle={() => toggle(key)} ariaLabel={label} />
+    <span>
+      <span class="text-body-sm text-on-surface block">{label}</span>
+      {#if hint}
+        <span class="text-2xs text-on-surface-variant">{hint}</span>
+      {/if}
+    </span>
+  </label>
+{/snippet}
+
 {#if !settings}
   <p class="text-xs text-on-surface-variant">{m.pset_unavailable()}</p>
 {:else}
   <div class="grid grid-cols-1 xl:grid-cols-2 gap-3 items-start">
     <!-- ── Activation ──────────────────────────────────────────────────── -->
     <SectionCard title={m.pset_module_title()} description={m.pset_module_desc()}>
-      <label class="flex items-start gap-3 cursor-pointer">
-        <input type="checkbox" checked={settings.enabled} onchange={() => toggle('enabled')} class="mt-0.5" />
-        <span>
-          <span class="text-body-sm text-on-surface block">{m.pset_enable()}</span>
-          <span class="text-2xs text-on-surface-variant">
-            {m.pset_enable_hint()}
-          </span>
-        </span>
-      </label>
+      {@render switchRow('enabled', m.pset_enable(), m.pset_enable_hint())}
 
       <div class="mt-3">
         <span class="text-2xs font-bold text-on-surface-variant/80 ml-1 mb-1.5 block">{m.pset_default_tier()}</span>
@@ -97,13 +103,7 @@
         </FormSelect>
       </div>
 
-      <label class="flex items-start gap-3 cursor-pointer mt-3">
-        <input type="checkbox" checked={settings.requireDualApproval} onchange={() => toggle('requireDualApproval')} class="mt-0.5" />
-        <span>
-          <span class="text-body-sm text-on-surface block">{m.pset_dual_approval()}</span>
-          <span class="text-2xs text-on-surface-variant">{m.pset_dual_approval_hint()}</span>
-        </span>
-      </label>
+      {@render switchRow('requireDualApproval', m.pset_dual_approval(), m.pset_dual_approval_hint(), 'mt-3')}
     </SectionCard>
 
     <!-- ── Salons et rôles ─────────────────────────────────────────────── -->
@@ -145,13 +145,7 @@
 
     <!-- ── Candidatures ────────────────────────────────────────────────── -->
     <SectionCard title={m.pset_applications_title()} description={m.pset_applications_desc()}>
-      <label class="flex items-start gap-3 cursor-pointer">
-        <input type="checkbox" checked={settings.applicationsOpen} onchange={() => toggle('applicationsOpen')} class="mt-0.5" />
-        <span>
-          <span class="text-body-sm text-on-surface block">{m.pset_applications_open()}</span>
-          <span class="text-2xs text-on-surface-variant">{m.pset_applications_open_hint()}</span>
-        </span>
-      </label>
+      {@render switchRow('applicationsOpen', m.pset_applications_open(), m.pset_applications_open_hint())}
 
       <div class="grid grid-cols-2 gap-3 mt-3">
         <label class="block">
@@ -164,28 +158,14 @@
         </label>
       </div>
 
-      <label class="flex items-start gap-3 cursor-pointer mt-3">
-        <input type="checkbox" checked={settings.autoRejectBelowThreshold} onchange={() => toggle('autoRejectBelowThreshold')} class="mt-0.5" />
-        <span>
-          <span class="text-body-sm text-on-surface block">{m.pset_auto_reject()}</span>
-          <span class="text-2xs text-on-surface-variant">
-            {m.pset_auto_reject_hint()}
-          </span>
-        </span>
-      </label>
+      {@render switchRow('autoRejectBelowThreshold', m.pset_auto_reject(), m.pset_auto_reject_hint(), 'mt-3')}
     </SectionCard>
 
     <!-- ── Automatismes ────────────────────────────────────────────────── -->
     <SectionCard title={m.pset_automations_title()} description={m.pset_automations_desc()}>
       <div class="space-y-3">
         {#each automations as item (item.key)}
-          <label class="flex items-start gap-3 cursor-pointer">
-            <input type="checkbox" checked={settings[item.key]} onchange={() => toggle(item.key)} class="mt-0.5" />
-            <span>
-              <span class="text-body-sm text-on-surface block">{item.label}</span>
-              <span class="text-2xs text-on-surface-variant">{item.hint}</span>
-            </span>
-          </label>
+          {@render switchRow(item.key, item.label, item.hint)}
         {/each}
 
         <div class="grid grid-cols-2 gap-3 pt-2 border-t border-outline-variant/10">
@@ -213,10 +193,7 @@
     <SectionCard title={m.pset_alerts_title()} description={m.pset_alerts_desc()}>
       <div class="space-y-3">
         {#each notifications as item (item.key)}
-          <label class="flex items-center gap-3 cursor-pointer">
-            <input type="checkbox" checked={settings[item.key]} onchange={() => toggle(item.key)} />
-            <span class="text-body-sm text-on-surface">{item.label}</span>
-          </label>
+          {@render switchRow(item.key, item.label)}
         {/each}
 
         <label class="block pt-2 border-t border-outline-variant/10">
@@ -237,61 +214,23 @@
     <!-- ── Annuaire et réseau ──────────────────────────────────────────── -->
     <SectionCard title={m.pset_network_title()} description={m.pset_network_desc()}>
       <div class="space-y-3">
-        <label class="flex items-start gap-3 cursor-pointer">
-          <input type="checkbox" checked={settings.directoryOptIn} onchange={() => toggle('directoryOptIn')} class="mt-0.5" />
-          <span>
-            <span class="text-body-sm text-on-surface block">{m.pset_directory_opt_in()}</span>
-            <span class="text-2xs text-on-surface-variant">
-              {m.pset_directory_opt_in_hint()}
-            </span>
-          </span>
-        </label>
+        {@render switchRow('directoryOptIn', m.pset_directory_opt_in(), m.pset_directory_opt_in_hint())}
 
-        <label class="flex items-center gap-3 cursor-pointer">
-          <input type="checkbox" checked={settings.directoryAcceptProposals} onchange={() => toggle('directoryAcceptProposals')} />
-          <span class="text-body-sm text-on-surface">{m.pset_accept_proposals()}</span>
-        </label>
+        {@render switchRow('directoryAcceptProposals', m.pset_accept_proposals())}
 
-        <label class="flex items-center gap-3 cursor-pointer">
-          <input type="checkbox" checked={settings.matchmakingEnabled} onchange={() => toggle('matchmakingEnabled')} />
-          <span class="text-body-sm text-on-surface">{m.pset_matchmaking()}</span>
-        </label>
+        {@render switchRow('matchmakingEnabled', m.pset_matchmaking())}
 
         <div class="pt-2 border-t border-outline-variant/10 space-y-3">
-          <label class="flex items-start gap-3 cursor-pointer">
-            <input type="checkbox" checked={settings.reputationShare} onchange={() => toggle('reputationShare')} class="mt-0.5" />
-            <span>
-              <span class="text-body-sm text-on-surface block">{m.pset_reputation_share()}</span>
-              <span class="text-2xs text-on-surface-variant">
-                {m.pset_reputation_share_hint()}
-              </span>
-            </span>
-          </label>
+          {@render switchRow('reputationShare', m.pset_reputation_share(), m.pset_reputation_share_hint())}
 
-          <label class="flex items-start gap-3 cursor-pointer">
-            <input type="checkbox" checked={settings.reputationConsume} onchange={() => toggle('reputationConsume')} class="mt-0.5" />
-            <span>
-              <span class="text-body-sm text-on-surface block">{m.pset_reputation_consume()}</span>
-              <span class="text-2xs text-on-surface-variant">
-                {m.pset_reputation_consume_hint()}
-              </span>
-            </span>
-          </label>
+          {@render switchRow('reputationConsume', m.pset_reputation_consume(), m.pset_reputation_consume_hint())}
         </div>
       </div>
     </SectionCard>
 
     <!-- ── Finance ─────────────────────────────────────────────────────── -->
     <SectionCard title={m.pset_finance_title()} description={m.pset_finance_desc()}>
-      <label class="flex items-start gap-3 cursor-pointer">
-        <input type="checkbox" checked={settings.financeEnabled} onchange={() => toggle('financeEnabled')} class="mt-0.5" />
-        <span>
-          <span class="text-body-sm text-on-surface block">{m.pset_finance_enable()}</span>
-          <span class="text-2xs text-on-surface-variant">
-            {m.pset_finance_enable_hint()}
-          </span>
-        </span>
-      </label>
+      {@render switchRow('financeEnabled', m.pset_finance_enable(), m.pset_finance_enable_hint())}
 
       <div class="grid grid-cols-2 gap-3 mt-3">
         <label class="block">

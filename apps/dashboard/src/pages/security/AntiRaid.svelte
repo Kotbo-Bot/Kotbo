@@ -35,6 +35,7 @@
   import Callout from '../../lib/components/ui/Callout.svelte';
   import MemberName from '../../lib/components/MemberName.svelte';
   import { formatRelative } from '../../lib/components/staff/format';
+  import { useUnsavedChanges } from '../../lib/useUnsavedChanges.svelte';
 
   type Config = Record<string, any>;
 
@@ -119,7 +120,15 @@
   /** Nombre de membres qu'une application réelle toucherait, issu de la simulation. */
   let quarantinePreview = $state<number | null>(null);
 
-  const dirty = $derived(JSON.stringify(config) !== JSON.stringify(original));
+  // La barre « Modifications non enregistrées » est celle de MainLayout.
+  useUnsavedChanges({
+    id: 'security-anti-raid',
+    label: m.nav_security_antiraid(),
+    getConfig: () => config,
+    getSaved: () => original,
+    onSave: save,
+    onReset: () => { config = { ...original }; },
+  });
 
   const channels = $derived((dashboardStore.state.discordChannels ?? []) as { id: string; name: string }[]);
   const roles = $derived((dashboardStore.state.discordRoles ?? []) as { id: string; name: string }[]);
@@ -182,8 +191,8 @@
     }
   }
 
-  async function save() {
-    if (!dirty || saving) return;
+  async function save(): Promise<boolean> {
+    if (saving) return false;
     saving = true;
     try {
       const res = await updateRaidProtection({ ...config }, authStore.selectedGuildId);
@@ -191,8 +200,10 @@
       config = { ...saved };
       original = { ...saved };
       toast.success(m.ba_config_saved());
+      return true;
     } catch (err) {
       toast.error(err instanceof Error ? err.message : m.tmac_err_save());
+      return false;
     } finally {
       saving = false;
     }
@@ -1161,31 +1172,6 @@
       </SectionCard>
     {/if}
 
-    {#if dirty}
-      <div class="sticky bottom-4 z-10">
-        <div class="flex items-center justify-between gap-4 rounded-xl border border-primary/40 bg-surface-container-high/95 backdrop-blur px-4 py-3 shadow-lg">
-          <p class="text-body-sm text-on-surface">{m.arx_unsaved()}</p>
-          <div class="flex items-center gap-2">
-            <button
-              type="button"
-              class="px-3 py-1.5 rounded-lg text-xs font-medium text-on-surface-variant hover:text-on-surface transition-colors"
-              onclick={() => (config = { ...original })}
-              disabled={saving}
-            >
-              {m.common_cancel()}
-            </button>
-            <button
-              type="button"
-              class="px-3.5 py-1.5 rounded-lg text-xs font-medium bg-primary text-on-primary hover:opacity-90 disabled:opacity-50 transition-opacity"
-              onclick={save}
-              disabled={saving}
-            >
-              {saving ? m.arx_saving() : m.common_save()}
-            </button>
-          </div>
-        </div>
-      </div>
-    {/if}
   {/if}
   {/snippet}
 </SecurityPage>

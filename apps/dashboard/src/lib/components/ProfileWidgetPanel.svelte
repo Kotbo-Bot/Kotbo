@@ -4,6 +4,8 @@
   import { fetchWidgetData, activateWidget, deactivateWidget, refreshWidget, refreshAllWidgets, rotateWidgetToken, API_BASE_URL } from '../api';
   import { toast } from '../stores/toast.svelte';
   import Papicon from './Papicon.svelte';
+  import LoadingHint from './LoadingHint.svelte';
+  import Button from './ui/Button.svelte';
 
   let loading = $state(true);
   let acting = $state(false);
@@ -144,9 +146,9 @@
 
 <!-- ======================== CONTENT ======================== -->
 {#if loading}
-  <div class="flex flex-col items-center justify-center py-16 text-on-surface-variant gap-4">
-    <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+  <div class="flex flex-col items-center justify-center py-16 text-on-surface-variant">
     <p class="text-sm">{m.pwp_loading()}</p>
+    <LoadingHint context="data" />
   </div>
 {:else}
   <!-- ======================== STATS ROW ======================== -->
@@ -182,41 +184,21 @@
       </h3>
       <div class="flex flex-col gap-3">
         {#if isActive}
-          <button
-            class="px-4 py-2 bg-primary text-on-primary text-body-sm font-medium rounded-xl shadow-sm active:scale-[0.98] transition-all flex items-center gap-2"
-            onclick={handleRefresh}
-            disabled={acting}
-          >
-            <Papicon icon="refresh-cw" size={14} />
+          <Button variant="primary" icon="refresh-cw" onclick={handleRefresh} disabled={acting}>
             {m.pwp_refresh_mine()}
-          </button>
-          <button
-            class="px-5 py-2.5 bg-rose-500 text-white text-body-sm font-medium rounded-xl shadow-sm active:scale-[0.98] transition-all flex items-center gap-2"
-            onclick={handleDeactivate}
-            disabled={acting}
-          >
-            <Papicon icon="x" size={14} />
+          </Button>
+          <Button variant="danger" icon="x" onclick={handleDeactivate} disabled={acting}>
             {m.pwp_disable()}
-          </button>
+          </Button>
         {:else}
-          <button
-            class="px-5 py-2.5 bg-emerald-500 text-white text-body-sm font-medium rounded-xl shadow-sm active:scale-[0.98] transition-all flex items-center gap-2"
-            onclick={handleActivate}
-            disabled={acting}
-          >
-            <Papicon icon="check" size={14} />
+          <Button variant="primary" icon="check" onclick={handleActivate} disabled={acting}>
             {m.pwp_enable()}
-          </button>
+          </Button>
         {/if}
 
-        <button
-          class="px-5 py-2.5 bg-surface-container-high/40 text-on-surface-variant hover:bg-surface-container-high/60 text-body-sm font-medium rounded-xl transition-all flex items-center gap-2"
-          onclick={handleRefreshAll}
-          disabled={acting}
-        >
-          <Papicon icon="refresh-cw" size={14} />
+        <Button variant="secondary" icon="refresh-cw" onclick={handleRefreshAll} disabled={acting}>
           {m.pwp_refresh_all()}
-        </button>
+        </Button>
       </div>
     </div>
 
@@ -243,7 +225,7 @@
     </div>
 
     {#if isActive}
-      <section class="lg:col-span-2 relative overflow-hidden rounded-xl border border-warning/20 bg-amber-400/[0.04] p-6">
+      <section class="lg:col-span-2 relative overflow-hidden rounded-xl border border-warning/20 bg-warning/[0.04] p-6">
         <div class="absolute -right-12 -top-16 h-44 w-44 rounded-full bg-warning/10 blur-3xl pointer-events-none"></div>
         <div class="relative grid gap-6 lg:grid-cols-[1fr_auto] lg:items-center">
           <div class="space-y-3">
@@ -263,14 +245,9 @@
             </ol>
           </div>
           <div class="flex min-w-56 flex-col gap-2">
-            <button
-              class="inline-flex items-center justify-center gap-2 rounded-lg bg-amber-400 px-5 py-3 text-body-sm font-medium text-black transition-transform hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-60"
-              onclick={handleCopyVencordScript}
-              disabled={copyingScript}
-            >
-              <Papicon icon={copyingScript ? 'loader' : 'copy'} size={15} />
+            <Button variant="primary" icon="copy" onclick={handleCopyVencordScript} loading={copyingScript}>
               {copyingScript ? m.pwp_copying() : m.pwp_copy_script()}
-            </button>
+            </Button>
             <a
               href="/kotbo-widget-discord-v2.js"
               target="_blank"

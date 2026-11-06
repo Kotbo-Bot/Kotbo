@@ -17,6 +17,7 @@
   import Callout from '../lib/components/ui/Callout.svelte';
   import Button from '../lib/components/ui/Button.svelte';
   import LoadingHint from '../lib/components/LoadingHint.svelte';
+  import { useUnsavedChanges } from '../lib/useUnsavedChanges.svelte';
   import { m } from '../lib/i18n';
   import { authStore } from '../lib/stores/auth.svelte';
   import { dashboardStore } from '../lib/stores/dashboard.svelte';
@@ -73,7 +74,15 @@
   let maxRules = $state(20);
   let draft = $state<{ targetId: string; mode: 'BLACKLIST' | 'WHITELIST'; groups: string[]; extensions: string }>({ targetId: '', mode: 'BLACKLIST', groups: [], extensions: '' });
 
-  const dirty = $derived(JSON.stringify(config) !== JSON.stringify(original));
+  // La barre « Modifications non enregistrées » est celle de MainLayout.
+  useUnsavedChanges({
+    id: 'server-file-filters',
+    label: m.am_page_title(),
+    getConfig: () => config,
+    getSaved: () => original,
+    onSave: save,
+    onReset: () => { config = { ...original }; },
+  });
   const channels = $derived(dashboardStore.state.discordChannels ?? []);
   const categories = $derived(dashboardStore.state.discordCategories ?? []);
   const servers = $derived(((config.otherServers ?? []) as string[]).map((entry) => {
@@ -105,16 +114,18 @@
     }
   }
 
-  async function save() {
-    if (!dirty || saving) return;
+  async function save(): Promise<boolean> {
+    if (saving) return false;
     saving = true;
     try {
       const res = await updateRaidProtection({ ...config }, authStore.selectedGuildId);
       config = { ...(res?.config ?? config) };
       original = { ...config };
       toast.success(m.sff_saved());
+      return true;
     } catch (err) {
       toast.error(err instanceof Error ? err.message : m.tmac_err_save());
+      return false;
     } finally {
       saving = false;
     }
@@ -350,16 +361,5 @@
       </SectionCard>
     </div>
 
-    {#if dirty}
-      <div class="sticky bottom-4 z-10 mt-6">
-        <div class="flex items-center justify-between gap-4 rounded-xl border border-primary/40 bg-surface-container-high/95 backdrop-blur px-4 py-3 shadow-lg">
-          <p class="text-body-sm text-on-surface">{m.sff_unsaved()}</p>
-          <div class="flex items-center gap-2">
-            <Button size="sm" variant="ghost" disabled={saving} onclick={() => (config = { ...original })}>{m.common_cancel()}</Button>
-            <Button size="sm" loading={saving} onclick={save}>{m.common_save()}</Button>
-          </div>
-        </div>
-      </div>
-    {/if}
   {/if}
 </ModulePage>
