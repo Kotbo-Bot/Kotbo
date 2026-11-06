@@ -10,6 +10,7 @@
 <script lang="ts">
   import type { Tournament, TournamentMatch, TournamentStage } from '../../api/tournaments';
   import { m } from '../../i18n';
+  import { downloadSvgAsPng } from '../../svgExport';
 
   let {
     tournament,
@@ -173,30 +174,7 @@
   export async function exportPng(filename: string) {
     if (!svgEl) return;
     const source = new XMLSerializer().serializeToString(svgEl);
-    const url = URL.createObjectURL(new Blob([source], { type: 'image/svg+xml;charset=utf-8' }));
-    try {
-      const image = new Image();
-      await new Promise<void>((resolve, reject) => {
-        image.onload = () => resolve();
-        image.onerror = () => reject(new Error('svg'));
-        image.src = url;
-      });
-      const canvas = document.createElement('canvas');
-      canvas.width = layout.width * 2;
-      canvas.height = layout.height * 2;
-      const ctx = canvas.getContext('2d')!;
-      ctx.scale(2, 2);
-      ctx.drawImage(image, 0, 0);
-      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
-      if (!blob) throw new Error('png');
-      const link = document.createElement('a');
-      link.href = URL.createObjectURL(blob);
-      link.download = `${filename.replace(/[^\p{L}\p{N} _-]+/gu, '').trim() || 'tournoi'}.png`;
-      link.click();
-      setTimeout(() => URL.revokeObjectURL(link.href), 1000);
-    } finally {
-      URL.revokeObjectURL(url);
-    }
+    await downloadSvgAsPng(source, layout.width, layout.height, filename, 'tournoi');
   }
 </script>
 
