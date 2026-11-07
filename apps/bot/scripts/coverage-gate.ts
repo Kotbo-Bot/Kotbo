@@ -14,6 +14,10 @@ const run = spawnSync('bun', ['test', '--isolate', '--timeout', '30000', '--cove
   cwd: process.cwd(),
   encoding: 'utf8',
   stdio: 'pipe',
+  env: {
+    ...process.env,
+    BUN_TEST_RUNNING: '1',
+  },
   // En CI, Bun liste chaque test réussi : la sortie dépasse le plafond de 1 Mio
   // par défaut, au-delà duquel spawnSync tue les tests (ENOBUFS).
   maxBuffer: 256 * 1024 * 1024,
@@ -27,9 +31,41 @@ process.stdout.write(output);
 process.exitCode = check();
 
 function check(): number {
-  // Récapitulatif en fin de log : la sortie complète fait plusieurs Mio.
-  const recap = output.split('\n').filter((line) => /\(fail\)|^\s*\d+ (pass|fail)\s*$/.test(line));
-  if (recap.length) console.error(`\nRécapitulatif des tests :\n${recap.join('\n')}`);
+  // Récapitulatif en fin de log : la sortie complète fait plusieurs Mio et les
+  // visualiseurs de CI (ex. GitHub Actions) tronquent l'affichage web.
+  const stripAnsi = (str: string) => str.replace(/\x1B\[[0-9;]*[a-zA-Z]/g, '');
+  const rawLines = output.split(/\r?\n/);
+
+  const failureBlocks: string[] = [];
+  for (let i = 0; i < rawLines.length; i++) {
+    const clean = stripAnsi(rawLines[i]);
+    // Détecte les symboles d'échec Bun (croix unicode, (fail), préfixe d'erreur)
+    if (/^\s*([✗✕]|\(fail\)|error:)/i.test(clean) || /\berror:\s*expect\(/i.test(clean)) {
+      const start = Math.max(0, i - 4);
+      const end = Math.min(rawLines.length - 1, i + 15);
+      const block: string[] = [];
+      for (let j = start; j <= end; j++) {
+        block.push(stripAnsi(rawLines[j]));
+      }
+      failureBlocks.push(block.join('\n'));
+      i = end;
+    }
+  }
+
+  const summaryLines = rawLines
+    .map((l) => stripAnsi(l).trim())
+    .filter((l) => /^\d+\s+(pass|fail)\b/i.test(l) || /^Ran\s+\d+\s+tests\b/i.test(l));
+
+  if (run.status !== 0 || failureBlocks.length > 0) {
+    console.error('\n==================== ÉCHECS DE TESTS DÉTECTÉS ====================');
+    if (failureBlocks.length > 0) {
+      console.error(failureBlocks.join('\n----------------------------------------\n'));
+    }
+    if (summaryLines.length > 0) {
+      console.error('\nBilan : ' + summaryLines.join(' | '));
+    }
+    console.error('==================================================================\n');
+  }
 
   if (run.error) console.error(`Exécution des tests interrompue : ${run.error.message}`);
   if (run.signal) console.error(`Tests tués par le signal ${run.signal} (mémoire épuisée ?).`);
