@@ -47,6 +47,9 @@ export function route(method: string, path: string, handler: DemoHandler): void 
       return '([^/]+)';
     });
   routes.push({ method: method.toUpperCase(), pattern: new RegExp(`^${source}/?$`), keys, handler });
+  // Les routes à segments fixes passent avant les routes à paramètre, quel que soit
+  // l'ordre de déclaration : `/tickets/macros` ne doit pas tomber sur `/tickets/:ticketId`.
+  routes.sort((a, b) => a.keys.length - b.keys.length);
 }
 
 function json(status: number, body: unknown): Response {
