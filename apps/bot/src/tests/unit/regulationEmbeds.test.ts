@@ -4,7 +4,11 @@ import type { EmbedBuilder } from 'discord.js';
 
 const prismaMock = {
   guild: { findUnique: mock(async () => null), update: mock(async () => ({})) },
-  guildRegulationArticle: { findMany: mock(async () => []) },
+  guildRegulationArticle: {
+    findMany: mock(async (): Promise<{ id: string }[]> => []),
+    update: mock((args: { where: { id: string }; data: { sortOrder: number } }) => args),
+  },
+  $transaction: mock(async (ops: unknown[]) => ops),
   dashboardFeatureConfig: { findUnique: mock(async () => null) },
   staffMember: { findMany: mock(async () => []) },
 };
@@ -17,7 +21,7 @@ for (const extension of ['ts', 'js']) {
   }));
 }
 
-const { buildRegulationEmbeds } = await import('../../services/staff/regulationService.js');
+const { buildRegulationEmbeds, renumberRegulationArticles } = await import('../../services/staff/regulationService.js');
 
 /** Limite Discord : texte affichable cumulé d'un message. */
 const DISCORD_TEXT_LIMIT = 4000;
@@ -163,5 +167,19 @@ describe('buildRegulationEmbeds', () => {
     expect(embeds).toHaveLength(10);
     expect(lastFields.length).toBeLessThanOrEqual(25);
     expect(lastFields.at(-1)?.name).toContain('et plus');
+  });
+});
+
+describe('renumberRegulationArticles', () => {
+  test("place les ids demandés d'abord, ignore inconnus et doublons, garde le reste dans l'ordre", async () => {
+    prismaMock.guildRegulationArticle.findMany.mockImplementationOnce(async () => [{ id: 'a' }, { id: 'b' }, { id: 'c' }, { id: 'd' }]);
+    prismaMock.guildRegulationArticle.update.mockClear();
+
+    const order = await renumberRegulationArticles('g', ['c', 'zz', 'a', 'c']);
+
+    expect(order).toEqual(['c', 'a', 'b', 'd']);
+    expect(prismaMock.guildRegulationArticle.update.mock.calls.map(([args]) => [args.where.id, args.data.sortOrder])).toEqual([
+      ['c', 0], ['a', 1], ['b', 2], ['d', 3],
+    ]);
   });
 });
