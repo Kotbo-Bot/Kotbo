@@ -7,13 +7,13 @@
  * serveur par le règlement reste au dashboard : il réécrit les permissions de
  * tous les salons.
  */
-import type { GuildRegulationArticle } from '@prisma/client';
 import { z } from 'zod';
 import prisma from '../../../utils/db.js';
 import {
   loadRegulationArticles,
   publishOrUpdateRegulationMessage,
   renumberRegulationArticles,
+  type RegulationArticle,
 } from '../../../services/staff/regulationService.js';
 import { type McpToolContext, err, ok, toolError } from '../toolkit.js';
 
@@ -22,7 +22,7 @@ const DESCRIPTION = z.string().trim().min(1).max(6000).describe('Texte de l’ar
 const EMOJI = z.string().max(64).describe('Emoji affiché devant l’article (vide = 📌 par défaut)');
 const KEY_NAME = z.string().optional().describe("Nom de la clé MCP (pour l'audit)");
 
-function serializeArticle(a: GuildRegulationArticle) {
+function serializeArticle(a: RegulationArticle) {
   return { id: a.id, title: a.title, description: a.description, emoji: a.emoji, sortOrder: a.sortOrder, enabled: a.enabled };
 }
 
