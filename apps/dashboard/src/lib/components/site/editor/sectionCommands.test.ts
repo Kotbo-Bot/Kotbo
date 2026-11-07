@@ -37,7 +37,7 @@ function make(content: JSONContent[]): EditorType {
 
 /** Textes de chaque colonne de chaque section : [[["a"], ["b"]], …]. */
 function shape(editor: EditorType): string[][][] {
-  const json = editor.getJSON();
+  const json: JSONContent = editor.getJSON();
   return (json.content ?? []).map((s) => (s.content ?? []).map((c) => (c.content ?? []).map((b) => (b.content ?? []).map((t) => t.text).join(''))));
 }
 

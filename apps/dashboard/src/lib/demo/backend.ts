@@ -151,6 +151,7 @@ function isApiCall(input: RequestInfo | URL): boolean {
  */
 export function installDemoBackend(): void {
   const network = window.fetch.bind(window);
-  window.fetch = (input: RequestInfo | URL, init?: RequestInit) =>
-    isApiCall(input) ? handle(input, init) : network(input, init);
+  // Cast : sous bun-types (tests), `typeof fetch` réclame `preconnect`, propre à Bun.
+  window.fetch = ((input: RequestInfo | URL, init?: RequestInit) =>
+    isApiCall(input) ? handle(input, init) : network(input, init)) as typeof fetch;
 }

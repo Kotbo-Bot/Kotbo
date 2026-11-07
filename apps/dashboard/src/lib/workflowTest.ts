@@ -1,4 +1,4 @@
-import type { WorkflowExecutionSummary, WorkflowTestResult } from './api/workflows';
+import type { WorkflowExecutionSummary, WorkflowTestResult } from './api/workflowTypes';
 
 /**
  * Statut sous lequel le rejeu montre un essai.
