@@ -14,6 +14,7 @@ import {
   hasBlockingIssue,
   validateGraph,
   type Recipe,
+  type RecipeStep,
   type WorkflowGraph,
 } from '@kotbo/shared';
 import { runWorkflow, type WorkflowEffects } from '../../services/features/workflow/engine';
@@ -159,7 +160,7 @@ describe('variables dans les recettes', () => {
     expect(condition?.kind).toBe('condition');
     if (condition?.kind === 'condition') {
       expect(condition.tests[0]).toMatchObject({ condition: 'variable.member', name: 'messages', operator: 'gte', value: { from: 'number', value: 10 } });
-      expect(condition.then).toEqual((counting.steps[1] as { then: unknown }).then);
+      expect(condition.then).toEqual((counting.steps[1] as { then: RecipeStep[] }).then);
     }
   });
 

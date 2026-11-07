@@ -30,6 +30,8 @@ export interface OutgoingEventDefinition {
   map: (payload: never) => Record<string, unknown> | null;
   /** Exemple montré dans le dashboard et envoyé par le bouton « Tester ». */
   sample: Record<string, unknown>;
+  /** Module dont dépend l'événement : en pause, il n'est plus proposé. */
+  module?: string;
 }
 
 const iso = (timestamp: number) => new Date(timestamp).toISOString();
