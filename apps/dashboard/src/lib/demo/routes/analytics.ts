@@ -539,6 +539,87 @@ export function heatmap(seed = 31) {
   return out;
 }
 
+// ── Climat (AegisAI) : forme de `aegisAnalyticsService` côté bot ────────
+
+const EMOTIONS = ['joy', 'sad', 'anger', 'fear', 'surprise', 'neutral'] as const;
+const EMOTION_SHARE = { joy: 0.27, sad: 0.07, anger: 0.05, fear: 0.03, surprise: 0.1, neutral: 0.48 };
+
+function climateDays(days: number, offset = 0) {
+  return serverSeries(days, offset).map((d) => {
+    const random = seeded(9_100 + d.daysAgo);
+    const analyzed = Math.round(d.messages * 0.92);
+    const toxic = Math.round(analyzed * (0.008 + random() * 0.012));
+    const severe = Math.round(toxic * random() * 0.3);
+    const emotions = Object.fromEntries(EMOTIONS.map((e) => [e, Math.round(analyzed * EMOTION_SHARE[e] * (0.8 + random() * 0.4))])) as Record<(typeof EMOTIONS)[number], number>;
+    return {
+      dateKey: d.dateKey,
+      analyzed,
+      toxic,
+      severe,
+      toxicRate: analyzed ? (toxic / analyzed) * 100 : null,
+      avgToxicity: analyzed ? Math.round((6 + random() * 5) * 10) / 10 : null,
+      ...emotions,
+    };
+  });
+}
+
+function climateSummary(list: ReturnType<typeof climateDays>) {
+  const analyzed = sum(list, (d) => d.analyzed);
+  const toxic = sum(list, (d) => d.toxic);
+  const emotions = Object.fromEntries(EMOTIONS.map((e) => [e, sum(list, (d) => d[e])])) as Record<(typeof EMOTIONS)[number], number>;
+  const moods = EMOTIONS.filter((e) => e !== 'neutral');
+  return {
+    analyzed,
+    toxic,
+    severe: sum(list, (d) => d.severe),
+    toxicRate: analyzed ? (toxic / analyzed) * 100 : null,
+    avgToxicity: analyzed ? Math.round((sum(list, (d) => (d.avgToxicity ?? 0) * d.analyzed) / analyzed) * 10) / 10 : null,
+    emotionAnalyzed: analyzed,
+    emotions,
+    dominant: moods.reduce((a, b) => (emotions[b] > emotions[a] ? b : a)),
+  };
+}
+
+function climate(days: number) {
+  const daily = climateDays(days);
+  const previousDaily = climateDays(days, days);
+  const current = climateSummary(daily);
+  const random = seeded(77);
+  const heat = heatmap(53);
+  const total = sum(channelMessages(days), (c) => c.messages) || 1;
+  const toxicTotal = current.toxic;
+  return {
+    enabled: true,
+    thresholds: { review: 60, auto: 85 },
+    current,
+    previous: climateSummary(previousDaily),
+    daily,
+    previousDaily,
+    // heatmap() est indexé dimanche=0 ; le climat attend lundi=0.
+    heatmap: Array.from({ length: 7 }, (_, dow) => Array.from({ length: 24 }, (_, hour) => {
+      const analyzed = heat[(dow + 1) % 7][hour].messages;
+      const lateNight = hour >= 22 || hour < 2 ? 2.2 : 1;
+      return { analyzed, toxic: Math.round(analyzed * 0.012 * lateNight * (0.5 + random())), anger: Math.round(analyzed * 0.05 * lateNight) };
+    })),
+    channels: channelMessages(days).slice(0, 6).map(({ channel, messages }, i) => {
+      const share = messages / total;
+      const list = daily.map((d) => ({ ...d, analyzed: Math.round(d.analyzed * share), toxic: Math.round(d.toxic * share * (i === 1 ? 2.4 : 0.8)), severe: 0 }));
+      return { ...climateSummary(list), channelId: channel.id, name: channel.name, spark: list.map((d) => d.toxic) };
+    }).sort((a, b) => b.toxic - a.toxic),
+    members: memberTotals(days).slice(0, 6).map((t, i) => {
+      const analyzed = Math.round(t.messages * 0.92);
+      const toxic = Math.max(1, Math.round(toxicTotal * [0.14, 0.09, 0.06, 0.04, 0.03, 0.02][i]!));
+      return { userId: t.person.id, name: t.person.displayName, avatar: null, analyzed, toxic, toxicRate: analyzed ? (toxic / analyzed) * 100 : null, avgToxicity: 18 - i * 2 };
+    }).sort((a, b) => (b.toxicRate ?? 0) - (a.toxicRate ?? 0)),
+    detections: {
+      byKind: { TOXIC: Math.round(toxicTotal * 0.6), HARASSMENT: Math.round(toxicTotal * 0.15), CONFLICT: Math.round(toxicTotal * 0.2), DISTRESS: 3 },
+      byStatus: { AUTO: current.severe, PENDING: 4, CONFIRMED: Math.round(toxicTotal * 0.7), DISMISSED: Math.round(toxicTotal * 0.08) },
+      total: Math.round(toxicTotal * 0.95) + 3,
+      falsePositiveRate: 9.5,
+    },
+  };
+}
+
 function weekly(offset: number, mode: string) {
   const length = mode === 'month' ? 30 : 7;
   const sumPeriod = (start: number) => {
@@ -844,6 +925,7 @@ export function registerAnalyticsRoutes(): void {
   route('GET', `${base}/heatmap`, () => heatmap());
   route('GET', `${base}/weekly-comparison`, ({ query }) => weekly(Number(query.get('offset')) || 1, query.get('mode') ?? 'week'));
   route('GET', `${base}/growth-retention`, ({ query }) => growth(periodOf(query)));
+  route('GET', `${base}/climate`, ({ query }) => climate(periodOf(query)));
   route('GET', `${base}/daily-algo`, ({ query }) => dailyAlgo(periodOf(query)));
   route('GET', `${base}/interactions`, () => interactions());
   route('GET', `${base}/advanced`, ({ query }) => advanced(query.get('section') ?? ''));
