@@ -199,6 +199,7 @@ export class FauxDiscord {
 
   /** Un vrai `Client` discord.js, sans connexion, dont le REST passe par ce faux Discord. */
   creerClient(): Client {
+    if (process.env.SHARD_COUNT === 'auto') delete process.env.SHARD_COUNT;
     const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates, GatewayIntentBits.GuildMembers] });
     (client.rest as unknown as { request: (o: Brut) => Promise<unknown> }).request = (o) => this.traiter(o);
     const c = client as unknown as Brut;
