@@ -28,8 +28,11 @@ if (isDemoRuntime) {
   if (DEMO_BASE) {
     router.base(DEMO_BASE);
     if (typeof window !== 'undefined') {
+      // `?to=` : la page d'erreur de kotbo.fr y renvoie les liens profonds, que
+      // GitHub Pages ne sait pas servir. Seul un chemin interne est suivi.
+      const to = new URLSearchParams(window.location.search).get('to');
       const currentRel = window.location.pathname.replace(new RegExp(`^${DEMO_BASE}`), '') || '/';
-      router.goto(currentRel + window.location.search + window.location.hash, true);
+      router.goto(to?.startsWith('/') && !to.startsWith('//') ? to : currentRel + window.location.search + window.location.hash, true);
     }
   }
 
