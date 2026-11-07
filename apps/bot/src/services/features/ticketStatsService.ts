@@ -11,6 +11,7 @@
  * - le même découpage par membre du staff, par type et par étiquette.
  */
 import prisma from '../../utils/db.js';
+import { dateKeyRange, shiftDateKey } from '../analytics/dateKeys.js';
 import { BucketZoner } from '../analytics/zonedBuckets.js';
 import { computeSla, waitingOn, type SlaConfig } from './ticketHelpdesk.js';
 
@@ -186,11 +187,8 @@ export async function getTicketStats(guildId: string, days: number, timezone: st
   };
 
   // ── Volume par jour ──
-  const dayKeys: string[] = [];
-  for (let offset = span - 1; offset >= 0; offset -= 1) {
-    const key = zoner.fromDate(new Date(now.getTime() - offset * 86_400_000)).dateKey;
-    if (!dayKeys.includes(key)) dayKeys.push(key);
-  }
+  const todayKey = zoner.fromDate(now).dateKey;
+  const dayKeys = dateKeyRange(todayKey, span);
   const perDay = new Map(dayKeys.map((key) => [key, { created: 0, closed: 0 }]));
   for (const ticket of created) {
     const entry = perDay.get(zoner.fromDate(ticket.createdAt).dateKey);
@@ -304,11 +302,8 @@ export async function getTicketStats(guildId: string, days: number, timezone: st
     for (const tag of ticket.tags) tags.set(tag, (tags.get(tag) ?? 0) + 1);
   }
 
-  const prevKeys: string[] = [];
-  for (let offset = 2 * span - 1; offset >= span; offset -= 1) {
-    const key = zoner.fromDate(new Date(now.getTime() - offset * 86_400_000)).dateKey;
-    if (!prevKeys.includes(key)) prevKeys.push(key);
-  }
+  const prevEndKey = shiftDateKey(-1, new Date(`${dayKeys[0]}T00:00:00.000Z`));
+  const prevKeys = dateKeyRange(prevEndKey, span);
   const average = (values: number[]) => (values.length ? Math.round((values.reduce((a, b) => a + b, 0) / values.length) * 10) / 10 : null);
 
   return {
