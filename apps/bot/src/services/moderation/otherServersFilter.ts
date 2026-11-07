@@ -55,7 +55,7 @@ export function isRefused(listMode: ListMode, guildId: string | null, ownGuildId
 
 // Les caractères invisibles et les espaces autour des points servent à casser
 // les filtres : « discord . gg / abc ».
-const INVISIBLE = /[​-‍⁠﻿­]/g;
+const INVISIBLE = /[\u200B-\u200D\u2060\uFEFF\u00AD]/g;
 const INVITE_REGEX = /(?:https?:\/\/)?(?:(?:www|ptb|canary)\.)?(?:discord(?:app)?\s*\.\s*com\s*\/\s*invite|discord\s*\.\s*gg)\s*\/\s*([a-z0-9-]{2,32})/gi;
 const GUILD_LINK_REGEX = /(?:https?:\/\/)?(?:(?:www|ptb|canary)\.)?discord(?:app)?\.com\/(channels|events)\/(\d{17,20})\//gi;
 
