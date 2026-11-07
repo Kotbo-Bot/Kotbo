@@ -17657,7 +17657,7 @@
   "cbx_offline": "Hors ligne",
   "cbx_stop": "Arrêter",
   "cbx_start": "Démarrer",
-  "cbx_plan_locked": "L'identité du bot est réservée aux offres Plus, Pro, Ultimate et Custom. Passe à une offre payante pour l'activer sur ce serveur.",
+  "cbx_plan_locked": "L'identité du bot est réservée à l'offre Plus. Passe à Plus pour l'activer sur ce serveur.",
   "cbx_running_without_plan": "Un bot personnalisé lancé auparavant tourne encore.",
   "cbx_secrets_unreadable": "Un secret enregistré est illisible (clé de chiffrement changée). Ressaisis le token et le client secret.",
   "cbx_enable": "Activer le bot personnalisé",

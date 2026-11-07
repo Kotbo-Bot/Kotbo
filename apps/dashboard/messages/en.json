@@ -17657,7 +17657,7 @@
   "cbx_offline": "Offline",
   "cbx_stop": "Stop",
   "cbx_start": "Start",
-  "cbx_plan_locked": "Bot identity is reserved for the Plus, Pro, Ultimate and Custom plans. Upgrade to a paid plan to turn it on for this server.",
+  "cbx_plan_locked": "Bot identity is reserved for the Plus plan. Upgrade to Plus to turn it on for this server.",
   "cbx_running_without_plan": "A custom bot started earlier is still running.",
   "cbx_secrets_unreadable": "A saved secret is unreadable (encryption key changed). Enter the token and client secret again.",
   "cbx_enable": "Turn on the custom bot",

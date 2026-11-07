@@ -469,8 +469,8 @@ export function createBillingRouter(client: Client): OpenAPIHono {
         referred: await countReferrals(referralCode),
       },
       // Les offres retirées de la vente n'apparaissent que pour le serveur
-      // qui les a encore.
-      plans: PLAN_REGISTRY.filter((definition) => definition.listed || definition.key === plan).map((definition) => ({
+      // qui les a encore. Le sur-mesure reste montré : il se demande par contact.
+      plans: PLAN_REGISTRY.filter((definition) => definition.listed || definition.key === 'CUSTOM' || definition.key === plan).map((definition) => ({
         key: definition.key,
         name: definition.name,
         tagline: definition.tagline,

@@ -1605,7 +1605,8 @@ export async function handleAdminRoutes(
 
       json(res, 200, {
         enabled: isBillingEnabled(),
-        plans: PLAN_REGISTRY.map((definition) => ({ key: definition.key, name: definition.name })),
+        // Pro et Ultimate ne s'attribuent plus ; restent listés tant qu'un serveur les a.
+        plans: PLAN_REGISTRY.filter((d) => d.listed || d.key === 'CUSTOM' || (counts[d.key] ?? 0) > 0).map((definition) => ({ key: definition.key, name: definition.name })),
         counts,
         trialDays: TRIAL_DAYS,
         subscriptions: guilds.filter((g) => g.stripeSubscriptionId).length,

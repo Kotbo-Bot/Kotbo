@@ -564,9 +564,8 @@ export async function getRevenueStats(options: {
     year: { count: 0, mrrCents: 0 },
   };
   const byPlan: Record<string, { count: number; mrrCents: number }> = {
+    // Pro et Ultimate n'apparaissent que si un abonné y est encore (boucle ci-dessous).
     PLUS: { count: 0, mrrCents: 0 },
-    PRO: { count: 0, mrrCents: 0 },
-    ULTIMATE: { count: 0, mrrCents: 0 },
     CUSTOM: { count: 0, mrrCents: 0 },
   };
 
@@ -937,7 +936,9 @@ export async function getSegmentsStats(options: {
     churnRate: data.guilds > 0 ? round1((data.churned / data.guilds) * 100) : 0,
   }));
 
-  const columns = ['FREE', 'PLUS', 'PRO', 'ULTIMATE', 'CUSTOM'];
+  // Pro et Ultimate ne se vendent plus : colonnes montrées seulement s'il reste des serveurs dessus.
+  const legacy = new Set(guilds.map((g) => normalizePlanKey(g.plan)));
+  const columns = ['FREE', 'PLUS', 'PRO', 'ULTIMATE', 'CUSTOM'].filter((c) => (c !== 'PRO' && c !== 'ULTIMATE') || legacy.has(c));
   const sizeKeys: SizeBucketKey[] = ['0-100', '100-1k', '1k-10k', '10k-100k', '100k+'];
 
   const matrixData: Record<SizeBucketKey, Record<string, CrossMatrixCell>> = {} as never;
