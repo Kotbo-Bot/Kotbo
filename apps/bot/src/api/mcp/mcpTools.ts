@@ -51,6 +51,7 @@ import { registerRpgTowerTools } from './tools/rpg-tower.js';
 import { registerRpgClanTowerTools } from './tools/rpg-clan-tower.js';
 import { registerSiteTools } from './tools/site.js';
 import { registerShopTools } from './tools/shop.js';
+import { registerRegulationTools } from './tools/regulation.js';
 
 export function registerMcpTools(
   mcpServer: McpServer,
@@ -161,4 +162,5 @@ export function registerMcpTools(
   registerManagementCenterTools(ctx);
   registerSiteTools(ctx);
   registerShopTools(ctx);
+  registerRegulationTools(ctx);
 }
