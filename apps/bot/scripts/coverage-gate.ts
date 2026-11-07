@@ -22,32 +22,42 @@ const run = spawnSync('bun', ['test', '--isolate', '--timeout', '30000', '--cove
 const output = `${run.stdout ?? ''}${run.stderr ?? ''}`;
 process.stdout.write(output);
 
-if (run.error) console.error(`Exécution des tests interrompue : ${run.error.message}`);
-if (run.status !== 0) {
-  process.exit(run.status ?? 1);
-}
+// process.exitCode et jamais process.exit() : vers un pipe (la CI), exit()
+// coupait l'écriture de la sortie en plein milieu, résumé des échecs compris.
+process.exitCode = check();
 
-const match = output.match(/All files\s+\|\s+([0-9.]+)\s+\|\s+([0-9.]+)\s+\|/);
-if (!match) {
-  console.error('Impossible de lire la table de couverture Bun (ligne All files introuvable).');
-  process.exit(1);
-}
+function check(): number {
+  // Récapitulatif en fin de log : la sortie complète fait plusieurs Mio.
+  const recap = output.split('\n').filter((line) => /\(fail\)|^\s*\d+ (pass|fail)\s*$/.test(line));
+  if (recap.length) console.error(`\nRécapitulatif des tests :\n${recap.join('\n')}`);
 
-const funcs = Number(match[1]);
-const lines = Number(match[2]);
+  if (run.error) console.error(`Exécution des tests interrompue : ${run.error.message}`);
+  if (run.signal) console.error(`Tests tués par le signal ${run.signal} (mémoire épuisée ?).`);
+  if (run.status !== 0) return run.status ?? 1;
 
-if (Number.isNaN(funcs) || Number.isNaN(lines)) {
-  console.error('Valeurs de couverture invalides.');
-  process.exit(1);
-}
+  const match = output.match(/All files\s+\|\s+([0-9.]+)\s+\|\s+([0-9.]+)\s+\|/);
+  if (!match) {
+    console.error('Impossible de lire la table de couverture Bun (ligne All files introuvable).');
+    return 1;
+  }
 
-if (funcs < minFuncs || lines < minLines) {
-  console.error(
-    `Seuil de couverture non atteint: fonctions=${funcs.toFixed(2)}% (min ${minFuncs}%), lignes=${lines.toFixed(2)}% (min ${minLines}%).`,
+  const funcs = Number(match[1]);
+  const lines = Number(match[2]);
+
+  if (Number.isNaN(funcs) || Number.isNaN(lines)) {
+    console.error('Valeurs de couverture invalides.');
+    return 1;
+  }
+
+  if (funcs < minFuncs || lines < minLines) {
+    console.error(
+      `Seuil de couverture non atteint: fonctions=${funcs.toFixed(2)}% (min ${minFuncs}%), lignes=${lines.toFixed(2)}% (min ${minLines}%).`,
+    );
+    return 1;
+  }
+
+  console.log(
+    `Seuil de couverture valide: fonctions=${funcs.toFixed(2)}% (min ${minFuncs}%), lignes=${lines.toFixed(2)}% (min ${minLines}%).`,
   );
-  process.exit(1);
+  return 0;
 }
-
-console.log(
-  `Seuil de couverture valide: fonctions=${funcs.toFixed(2)}% (min ${minFuncs}%), lignes=${lines.toFixed(2)}% (min ${minLines}%).`,
-);
