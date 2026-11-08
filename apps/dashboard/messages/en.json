@@ -7808,6 +7808,8 @@
   "channel_links_modal_create_title": "Create a channel bridge",
   "channel_links_source_channel_label": "Channel on this server",
   "channel_links_select_channel_ph": "Select a channel",
+  "channel_links_create_channel_option": "+ Create the channel for me",
+  "channel_links_new_channel_tag": "new",
   "channel_links_loading_guilds": "Loading servers...",
   "channel_links_no_guilds_title": "No server available.",
   "channel_links_no_guilds_desc": "The bot must be present and you must be an admin on the target server.",
