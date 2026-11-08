@@ -271,14 +271,16 @@ describe('empreinte Kotbo Vision v2', () => {
   test('retrouve une image incrustée dans une capture plus large', async () => {
     const original = makeScamLikeImage(21);
     const known = (await analyzeImage(original))!.fingerprint;
+    // Lignes de messages en barres, pas en fillText : le rendu des polices
+    // diffère entre Windows et le runner Linux et faisait basculer le score
+    // (6,4 sur Windows, au-delà de 9 en CI). Cadrage choisi pour une marge nette.
     const screenshot = await transformed(original, (ctx, img) => {
       ctx.fillStyle = '#313338';
-      ctx.fillRect(0, 0, 600, 1100);
+      ctx.fillRect(0, 0, 640, 1100);
       ctx.fillStyle = '#dbdee1';
-      ctx.font = '20px sans-serif';
-      for (let i = 0; i < 10; i++) ctx.fillText(`message ${i}`, 10, 30 + i * 26);
-      ctx.drawImage(img, 60, 300);
-    }, [600, 1100]);
+      for (let i = 0; i < 10; i++) ctx.fillRect(10, 14 + i * 26, 90 + ((i * 37) % 160), 14);
+      ctx.drawImage(img, 80, 400);
+    }, [640, 1100]);
     const gray = (await analyzeImage(screenshot))!.gray;
     const windows = computeWindowHashes(gray, windowShapesFor([known.rawAspect]));
     expect(compareWindows(windows, known).verdict).not.toBeNull();
