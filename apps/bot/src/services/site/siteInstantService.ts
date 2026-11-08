@@ -25,6 +25,8 @@ const SIGNALS: Record<Exclude<SiteTemplateKey, 'general'>, string[]> = {
   rp: ['rp', 'hrp', 'roleplay', 'role-play', 'lore', 'fiche', 'fiches', 'personnage', 'personnages', 'background', 'univers', 'royaume', 'guilde', 'quete'],
   esport: ['esport', 'e-sport', 'esports', 'scrim', 'scrims', 'roster', 'competitif', 'competitive', 'ranked', 'tournoi', 'tournois', 'tournament', 'valorant', 'cs2', 'csgo', 'lol', 'overwatch', 'rocket', 'coaching', 'line-up', 'lineup'],
   gaming: ['gaming', 'gamer', 'gamers', 'jeu', 'jeux', 'game', 'games', 'minecraft', 'fortnite', 'gta', 'roblox', 'apex', 'warzone', 'lfg', 'partie', 'parties', 'steam', 'switch', 'playstation', 'xbox', 'mods', 'serveur-mc'],
+  // Pas « bot » ni « web » : presque tous les serveurs ont un salon de commandes ou un site.
+  dev: ['dev', 'devs', 'developpeur', 'developpeurs', 'developer', 'developers', 'developpement', 'development', 'code', 'coding', 'codeur', 'codeurs', 'programmation', 'programming', 'python', 'javascript', 'typescript', 'java', 'php', 'rust', 'golang', 'csharp', 'cpp', 'webdev', 'frontend', 'backend', 'fullstack', 'github', 'linux', 'hackathon', 'informatique'],
   etude: ['etude', 'etudes', 'study', 'studies', 'cours', 'devoirs', 'revision', 'revisions', 'bac', 'prepa', 'fac', 'universite', 'lycee', 'college', 'maths', 'physique', 'homework', 'examens', 'partiels', 'entraide-scolaire'],
 };
 
@@ -42,7 +44,7 @@ function tokens(value: string): string[] {
  * double ; il faut au moins deux indices pour quitter le modèle général.
  */
 export function guessSiteTemplate(input: { name: string; description?: string | null; channels: string[] }): SiteTemplateKey {
-  const scores: Record<string, number> = { rp: 0, esport: 0, gaming: 0, etude: 0 };
+  const scores: Record<string, number> = { rp: 0, esport: 0, gaming: 0, etude: 0, dev: 0 };
   const count = (words: string[], weight: number) => {
     for (const word of words) {
       for (const [key, signals] of Object.entries(SIGNALS)) if (signals.includes(word)) scores[key] += weight;
@@ -51,7 +53,7 @@ export function guessSiteTemplate(input: { name: string; description?: string | 
   count(tokens(`${input.name} ${input.description ?? ''}`), 2);
   count(input.channels.flatMap(tokens), 1);
   // À égalité, le plus spécifique l'emporte : un serveur RP ou esport est aussi un serveur de jeu.
-  const order: Array<Exclude<SiteTemplateKey, 'general'>> = ['rp', 'esport', 'etude', 'gaming'];
+  const order: Array<Exclude<SiteTemplateKey, 'general'>> = ['rp', 'esport', 'dev', 'etude', 'gaming'];
   const best = order.reduce((a, b) => (scores[b] > scores[a] ? b : a));
   return scores[best] >= 2 ? best : 'general';
 }

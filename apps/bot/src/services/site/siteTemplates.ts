@@ -13,7 +13,7 @@
 import { normalizeSiteDocument, type SiteDocument, type SiteNavItem, type SiteThemeKey } from '@kotbo/shared';
 import type { ModuleStates } from '../core/moduleGate.js';
 
-export const SITE_TEMPLATES = ['general', 'gaming', 'rp', 'esport', 'etude'] as const;
+export const SITE_TEMPLATES = ['general', 'gaming', 'rp', 'esport', 'etude', 'dev'] as const;
 export type SiteTemplateKey = (typeof SITE_TEMPLATES)[number];
 
 export function isSiteTemplate(value: unknown): value is SiteTemplateKey {
@@ -26,6 +26,7 @@ const THEMES: Record<SiteTemplateKey, SiteThemeKey> = {
   rp: 'royaume',
   esport: 'braise',
   etude: 'documentation',
+  dev: 'carbone',
 };
 
 type Lang = 'fr' | 'en';
@@ -44,7 +45,7 @@ const centered = (node: Node): Node => ({ ...node, attrs: { ...((node.attrs as N
 const section = (attrs: Node, ...columns: Node[][]): Node => ({ type: 'section', attrs, content: columns.map((content) => ({ type: 'column', content })) });
 
 /** Dégradé de l'en-tête d'accueil, assorti au type de communauté. */
-const HERO_GRADIENT: Record<SiteTemplateKey, string> = { general: 'ocean', gaming: 'night', rp: 'aurora', esport: 'sunset', etude: 'forest' };
+const HERO_GRADIENT: Record<SiteTemplateKey, string> = { general: 'ocean', gaming: 'night', rp: 'aurora', esport: 'sunset', etude: 'forest', dev: 'night' };
 
 interface Copy {
   welcome: string;
@@ -84,6 +85,7 @@ const COPY: Record<Lang, Copy> = {
       rp: 'Un univers à explorer, des histoires à écrire ensemble.',
       esport: 'Entraînements, compétitions et classements : viens grimper avec nous.',
       etude: 'Entraide, ressources et sessions de travail en groupe.',
+      dev: 'Partage tes projets, trouve des développeurs et progresse avec la communauté.',
     },
     home: 'Accueil',
     team: 'L’équipe',
@@ -122,6 +124,7 @@ const COPY: Record<Lang, Copy> = {
       rp: 'A world to explore and stories to write together.',
       esport: 'Practice, competitions and rankings: come climb with us.',
       etude: 'Mutual help, resources and group study sessions.',
+      dev: 'Share your projects, find developers and grow with the community.',
     },
     home: 'Home',
     team: 'The team',
@@ -172,7 +175,7 @@ export interface SiteBlueprint {
   tagline: string;
   pages: TemplatePage[];
   /** Menu, les cibles « page » désignées par la clé du modèle. */
-  navigation: Array<{ label: string; pageKey?: string; section?: 'wiki' | 'blog' }>;
+  navigation: Array<{ label: string; pageKey?: string; section?: 'wiki' | 'blog' | 'forum' | 'me' }>;
 }
 
 /** Adresses des pages du modèle, dans la langue du serveur. */
@@ -183,6 +186,7 @@ const SLUGS: Record<Lang, Record<string, string>> = {
 
 /** Plan du site d'après le type de communauté et les modules allumés. */
 export function buildSiteBlueprint(template: SiteTemplateKey, lang: Lang, modules: ModuleStates): SiteBlueprint {
+  if (template === 'dev') return buildDevBlueprint(lang, modules);
   const c = COPY[lang];
   const on = (key: string) => modules[key] !== false;
   const pages: TemplatePage[] = [];
@@ -278,6 +282,178 @@ export function buildSiteBlueprint(template: SiteTemplateKey, lang: Lang, module
 
   for (const page of pages) page.slug = SLUGS[lang][page.key] ?? page.slug;
   return { theme: THEMES[template], tagline: c.intro[template], pages, navigation };
+}
+
+// ─── Modèle « Dev & tech » ─────────────────────────────────────────────────
+// Communauté de développeurs : vitrine chiffrée, annonces, projets sur le
+// forum, recrutement, contact, boutique et espace membre.
+
+const button = (label: string, href: string, variant = 'primary'): Node => ({ type: 'button', attrs: { label, href, variant, align: 'center' } });
+const bullets = (...items: Array<[string, string]>): Node => ({
+  type: 'bulletList',
+  content: items.map(([title, body]) => ({ type: 'listItem', content: [p(text(title, [{ type: 'bold' }]), ` : ${body}`)] })),
+});
+
+const DEV_COPY = {
+  fr: {
+    heroTitle: 'Code, partage, progresse',
+    projects: 'Projets',
+    projectsLead: 'Les projets et demandes de dev postés par les membres, du plus récent au plus ancien.',
+    seeProjects: 'Voir les projets',
+    stats: 'Statistiques',
+    statsTitle: 'La communauté en chiffres',
+    statsLead: 'Le bot mesure l’activité du serveur : messages, entraide, projets partagés et vocal.',
+    seeStats: 'Toutes les statistiques',
+    topActive: 'Les plus actifs',
+    meTitle: 'Ton espace',
+    meLead: 'Connecte-toi avec Discord pour retrouver ton XP, ton niveau et ton activité sur le serveur.',
+    seeMe: 'Voir mon espace',
+    me: 'Mon espace',
+    news: 'Annonces',
+    newsLead: 'Tout ce qui est annoncé sur le Discord, de la plus récente à la plus ancienne.',
+    howTitle: 'Comment on gagne des points',
+    how: [
+      ['Messages', 'chaque message utile rapporte de l’XP, dans la limite d’un plafond quotidien.'],
+      ['Entraide', 'répondre aux questions des autres fait avancer plus vite.'],
+      ['Projets', 'publier un projet et en discuter compte aussi.'],
+      ['Vocal', 'le temps passé en vocal avec d’autres membres rapporte des points.'],
+      ['Régularité', 'être présent souvent vaut mieux qu’une seule grosse journée.'],
+    ] as Array<[string, string]>,
+    howNote: 'Adapte cette liste aux réglages de ton module Niveaux.',
+    recruit: 'Recrutement',
+    recruitLead: 'Rejoins l’équipe : postule directement depuis le site.',
+    contact: 'Contact',
+    contactLead: 'Une question, un souci ? Ouvre un ticket : la conversation reste synchronisée avec Discord.',
+    shop: 'Boutique',
+    shopLead: 'Dépense les points gagnés sur le serveur.',
+    joinUs: 'Rejoindre le Discord',
+  },
+  en: {
+    heroTitle: 'Code, share, grow',
+    projects: 'Projects',
+    projectsLead: 'Projects and dev requests posted by members, newest first.',
+    seeProjects: 'Browse projects',
+    stats: 'Stats',
+    statsTitle: 'The community in numbers',
+    statsLead: 'The bot measures server activity: messages, mutual help, shared projects and voice.',
+    seeStats: 'All stats',
+    topActive: 'Most active',
+    meTitle: 'Your space',
+    meLead: 'Log in with Discord to see your XP, level and activity on the server.',
+    seeMe: 'Open my space',
+    me: 'My space',
+    news: 'Announcements',
+    newsLead: 'Everything announced on the Discord, newest first.',
+    howTitle: 'How to earn points',
+    how: [
+      ['Messages', 'every useful message earns XP, up to a daily cap.'],
+      ['Mutual help', 'answering other people’s questions gets you further, faster.'],
+      ['Projects', 'posting a project and discussing it counts too.'],
+      ['Voice', 'time spent in voice with other members earns points.'],
+      ['Consistency', 'showing up often beats one big day.'],
+    ] as Array<[string, string]>,
+    howNote: 'Adjust this list to your Levels module settings.',
+    recruit: 'Recruitment',
+    recruitLead: 'Join the team: apply right from the website.',
+    contact: 'Contact',
+    contactLead: 'A question or a problem? Open a ticket: the conversation stays in sync with Discord.',
+    shop: 'Shop',
+    shopLead: 'Spend the points you earn on the server.',
+    joinUs: 'Join the Discord',
+  },
+} as const;
+
+const DEV_SLUGS: Record<Lang, Record<string, string>> = {
+  fr: { home: 'accueil', news: 'annonces', stats: 'statistiques', recruit: 'recrutement', contact: 'contact', market: 'marche' },
+  en: { home: 'home', news: 'announcements', stats: 'stats', recruit: 'recruitment', contact: 'contact', market: 'market' },
+};
+
+function buildDevBlueprint(lang: Lang, modules: ModuleStates): SiteBlueprint {
+  const c = DEV_COPY[lang];
+  const base = COPY[lang];
+  const on = (key: string) => modules[key] !== false;
+  const keyStats = mod('keyStats', {
+    items: [{ metric: 'members' }, { metric: 'online' }, { metric: 'messages30d' }, { metric: 'voiceHours30d' }].map((i) => ({ ...i, label: '', value: '' })),
+  });
+  const pages: TemplatePage[] = [];
+
+  pages.push({
+    key: 'home',
+    kind: 'PAGE',
+    slug: 'accueil',
+    title: base.home,
+    isHome: true,
+    publish: true,
+    inNav: true,
+    content: doc(
+      section(
+        { background: 'gradient', bgGradient: HERO_GRADIENT.dev, width: 'full', padding: 'large', height: 'tall', align: 'center', animation: 'fade' },
+        [centered(h(1, c.heroTitle)), centered(p(base.intro.dev)), button(c.seeProjects, '/~/forum'), mod('join', { label: c.joinUs })],
+      ),
+      section({ animation: 'slide-up' }, [h(2, c.statsTitle), keyStats]),
+      section(
+        { layout: '2-1' },
+        on('leveling') ? [h(3, c.topActive), mod('leaderboard', { variant: 'xp', limit: 5 }), button(c.seeStats, `/~/${DEV_SLUGS[lang].stats}`, 'ghost')] : [mod('serverStats')],
+        [h(3, c.meTitle), p(c.meLead), button(c.seeMe, '/~/me', 'secondary')],
+      ),
+      ...(on('news') ? [section({ background: 'surface', width: 'full' }, [h(2, c.news), mod('news', { limit: 5, layout: 'cards' })])] : []),
+      section({}, [h(2, c.projects), p(c.projectsLead), button(c.seeProjects, '/~/forum', 'secondary')]),
+      section({ background: 'accent', width: 'full', align: 'center', anchor: 'rejoindre' }, [centered(h(2, c.joinUs)), mod('join', { label: c.joinUs })]),
+    ),
+  });
+
+  if (on('news')) {
+    pages.push({ key: 'news', kind: 'PAGE', slug: 'annonces', title: c.news, excerpt: c.newsLead, content: doc(p(c.newsLead), mod('news', { limit: 20, layout: 'list' })), publish: true, inNav: true });
+  }
+
+  pages.push({
+    key: 'stats',
+    kind: 'PAGE',
+    slug: 'statistiques',
+    title: c.stats,
+    excerpt: c.statsLead,
+    publish: true,
+    inNav: true,
+    content: doc(
+      p(c.statsLead),
+      keyStats,
+      mod('pulse'),
+      ...(on('leveling') ? [h(2, c.topActive), mod('leaderboard', { variant: 'xp', limit: 10 })] : []),
+      h(2, c.howTitle),
+      bullets(...c.how),
+      callout('note', '', p(c.howNote)),
+    ),
+  });
+
+  if (on('recruitment') || on('custom_forms')) {
+    pages.push({ key: 'recruit', kind: 'PAGE', slug: 'recrutement', title: c.recruit, excerpt: c.recruitLead, content: doc(p(c.recruitLead), mod('recruitment')), publish: true, inNav: true });
+  }
+
+  pages.push({
+    key: 'contact',
+    kind: 'PAGE',
+    slug: 'contact',
+    title: c.contact,
+    excerpt: c.contactLead,
+    publish: true,
+    inNav: true,
+    content: doc(p(c.contactLead), ...(on('tickets') ? [mod('ticket')] : []), h(2, base.faq), { type: 'faq', content: base.faqItems.map(([q, a]) => faqItem(q, a)) }),
+  });
+
+  if (on('marketplace')) {
+    pages.push({ key: 'market', kind: 'PAGE', slug: 'marche', title: c.shop, excerpt: c.shopLead, content: doc(p(c.shopLead), mod('marketplace', { limit: 12 })), publish: true, inNav: true });
+  }
+
+  const navigation: SiteBlueprint['navigation'] = [];
+  for (const pg of pages) {
+    navigation.push({ label: pg.title, pageKey: pg.key });
+    // Projets (le forum du site) juste après l'accueil : c'est la vitrine d'une communauté de devs.
+    if (pg.key === 'home')navigation.push({ label: c.projects, section: 'forum' });
+  }
+  navigation.push({ label: c.me, section: 'me' });
+
+  for (const page of pages) page.slug = DEV_SLUGS[lang][page.key] ?? page.slug;
+  return { theme: THEMES.dev, tagline: base.intro.dev, pages, navigation };
 }
 
 /** Menu au format stocké, une fois les pages créées et leurs identifiants connus. */
