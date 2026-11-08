@@ -1,4 +1,5 @@
 /** Routes dashboard du module `settings`. */
+import { isModulePaused } from '@kotbo/contracts';
 import { applyRegulationLock } from '../../../../services/staff/regulationService.js';
 import { cache } from '../../../../utils/cache.js';
 import prisma from '../../../../utils/db.js';
@@ -88,6 +89,7 @@ export async function handleSettingsRoutes(ctx: ModuleRouteContext): Promise<boo
       });
 
       const data: Record<string, unknown> = {};
+      const dailyAlgoPaused = isModulePaused('daily_algo');
       let applyLockChanged = false;
       if (Object.prototype.hasOwnProperty.call(body, 'discordChannel')) {
         data.statusCheckChannelId = extractDiscordSnowflake(body.discordChannel);
@@ -249,8 +251,9 @@ export async function handleSettingsRoutes(ctx: ModuleRouteContext): Promise<boo
       }
       // Pont Daily Algo → Clans : troisième interrupteur, indépendant de
       // `clansEnabled` et `dailyAlgoEnabled`.
+      // Daily Algo en pause : ni lui ni son pont vers les clans ne se rallument.
       if (Object.prototype.hasOwnProperty.call(body, 'clanPointsFromDailyAlgo')) {
-        data.clanPointsFromDailyAlgo = !!body.clanPointsFromDailyAlgo;
+        data.clanPointsFromDailyAlgo = !!body.clanPointsFromDailyAlgo && !dailyAlgoPaused;
       }
       if (Object.prototype.hasOwnProperty.call(body, 'clanPointsFromDailyAlgoRate')) {
         data.clanPointsFromDailyAlgoRate = readClampedFloat(body.clanPointsFromDailyAlgoRate, 0.1, 100, 1);
@@ -283,7 +286,7 @@ export async function handleSettingsRoutes(ctx: ModuleRouteContext): Promise<boo
         data.codePoliceEnabled = !!body.codePoliceEnabled;
       }
       if (Object.prototype.hasOwnProperty.call(body, 'dailyAlgoEnabled')) {
-        data.dailyAlgoEnabled = !!body.dailyAlgoEnabled;
+        data.dailyAlgoEnabled = !!body.dailyAlgoEnabled && !dailyAlgoPaused;
       }
       if (Object.prototype.hasOwnProperty.call(body, 'githubReleasesEnabled')) {
         data.githubReleasesEnabled = !!body.githubReleasesEnabled;

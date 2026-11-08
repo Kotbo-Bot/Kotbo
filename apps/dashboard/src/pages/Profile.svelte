@@ -1,5 +1,6 @@
 <script lang="ts">
   import { m, dateLocale } from '../lib/i18n';
+  import { isModulePaused } from '@kotbo/contracts';
   import { removeWithUndo, orThrow } from '../lib/undoRemoval';
   import { memberAvatarSrc } from '../lib/discordMedia';
   import { router } from 'tinro';
@@ -67,7 +68,9 @@
   let copiedKeyId = $state('');
   let newKeyCreatedValue = $state('');
   let permRecruitment = $state(false);
-  let permDailyAlgo = $state(true);
+  // Daily Algo en pause : sa permission n'est plus proposee, ni cochee d'office.
+  const dailyAlgoPaused = isModulePaused('daily_algo');
+  let permDailyAlgo = $state(!dailyAlgoPaused);
 
   // Manager Notes Form
   let newNoteContent = $state('');
@@ -192,7 +195,7 @@
         publicProfile = null;
         applyDefaultTab('rank_card');
       } else {
-        error = errorMessage(err) || 'Impossible de charger le profil. Réessaie.';
+        error = errorMessage(err) || m.pfx_load_failed();
       }
     } finally {
       loading = false;
@@ -264,7 +267,7 @@
         })
       });
 
-      if (!res.ok) throw new Error('Impossible de créer la clé API. Réessaie.');
+      if (!res.ok) throw new Error(m.pfx_key_failed());
 
       const data = await res.json();
       newKeyCreatedValue = data.fullKey;
@@ -275,7 +278,7 @@
       showNewKeyForm = false;
       newKeyName = m.pf_my_api_key();
       permRecruitment = false;
-      permDailyAlgo = true;
+      permDailyAlgo = !dailyAlgoPaused;
       toast.success(m.pf_key_created());
     } catch (err) {
       console.error(err);
@@ -367,7 +370,7 @@
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || 'Impossible d\'envoyer. Réessaie.');
+        throw new Error(err.error || m.pfx_send_failed());
       }
       const data = await res.json();
       pendingResignation = data.resignation;
@@ -384,7 +387,7 @@
 
   function formatDate(date: string | Date | null | undefined) {
     if (!date) return '-';
-    return new Date(date).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' });
+    return new Date(date).toLocaleDateString(dateLocale(), { day: '2-digit', month: 'long', year: 'numeric' });
   }
 
   function formatTimeAgo(dateStr: string | null) {
@@ -532,7 +535,7 @@
             <MetricCard label="Messages" value={`${stats?.totalMessages ?? 0}`} note={m.pf_total_sent()} icon="MessageSquare" toneClass={NEUTRAL_TONE} />
             <MetricCard label={m.home_opt_voice()} value={`${Math.round((stats?.totalVoiceMinutes ?? 0))}m`} note={m.pf_time_spent()} icon="Mic" toneClass={NEUTRAL_TONE} />
             {#if visibility.discipline}
-              <MetricCard label="Sanctions" value={`${stats?.sanctionsIssued ?? 0}`} note="Avertissements et liste noire" icon="Hammer" toneClass={NEUTRAL_TONE} />
+              <MetricCard label={m.pfx_sanctions()} value={`${stats?.sanctionsIssued ?? 0}`} note={m.pfx_sanctions_note()} icon="Hammer" toneClass={NEUTRAL_TONE} />
               <MetricCard label={m.pf_warnings_label()} value={`${stats?.activeWarnings ?? 0}`} note={m.pf_active_received()} icon="ShieldAlert" toneClass={NEUTRAL_TONE} />
             {/if}
           </div>
@@ -946,12 +949,13 @@
                     <label class="flex items-start gap-3 rounded-lg border border-outline-variant p-3 cursor-pointer hover:bg-surface-container">
                       <input type="checkbox" bind:checked={permRecruitment} class="mt-0.5 accent-primary" />
                       <span>
-                        <span class="block text-sm font-medium text-on-surface">Module Recrutement</span>
+                        <span class="block text-sm font-medium text-on-surface">{m.pfx_perm_recruitment()}</span>
                         <span class="block mt-0.5 text-xs text-on-surface-variant leading-relaxed">
-                          Lier un formulaire externe (ex: Google Forms) pour enregistrer les candidatures sur Kotbo.
+                          {m.pfx_perm_recruitment_desc()}
                         </span>
                       </span>
                     </label>
+                    {#if !dailyAlgoPaused}
                     <label class="flex items-start gap-3 rounded-lg border border-outline-variant p-3 cursor-pointer hover:bg-surface-container">
                       <input type="checkbox" bind:checked={permDailyAlgo} class="mt-0.5 accent-primary" />
                       <span>
@@ -959,6 +963,7 @@
                         <span class="block mt-0.5 text-xs text-on-surface-variant leading-relaxed">{m.pf_daily_algo_perm()}</span>
                       </span>
                     </label>
+                    {/if}
                   </div>
                 </fieldset>
 

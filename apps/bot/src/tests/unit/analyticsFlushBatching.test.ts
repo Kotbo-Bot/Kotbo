@@ -5,14 +5,13 @@ import path from 'node:path';
  * Les flushes serveur/salon écrivaient un `upsert` par ligne dans une seule
  * transaction, et les quatre tables partaient en parallèle : sur un serveur
  * actif, Postgres refusait d'ouvrir la transaction (`P2028`) et le bot
- * tombait. On verrouille ici le chemin qui a remplacé ça : deux instructions
- * par table, des flushes qui s'enchaînent, et un flush en vol qui n'est jamais
- * doublé par le minuteur.
+ * tombait. On verrouille ici le chemin qui a remplacé ça : une instruction
+ * `INSERT ... ON CONFLICT` par table et par lot, des flushes qui
+ * s'enchaînent, et un flush en vol qui n'est jamais doublé par le minuteur.
  */
 
 const findUnique = mock((_args?: unknown) => Promise.resolve({ id: 'guild-flush', analyticsEnabled: true }));
 const upsert = mock((_args?: unknown) => Promise.resolve({ id: 'row' }));
-const createMany = mock((_args?: unknown) => Promise.resolve({ count: 0 }));
 const executeRawUnsafe = mock((_sql?: string, ..._params: unknown[]) => Promise.resolve(0));
 const transaction = mock((ops: unknown[], _options?: unknown) =>
   Promise.all(ops as Promise<unknown>[]).then(() => undefined),
@@ -20,10 +19,10 @@ const transaction = mock((ops: unknown[], _options?: unknown) =>
 
 const mockDb = {
   guild: { findUnique },
-  guildDailyStat: { upsert, createMany },
-  guildHourlyStat: { upsert, createMany },
-  channelDailyStat: { upsert, createMany },
-  memberDailyStat: { upsert, createMany },
+  guildDailyStat: { upsert },
+  guildHourlyStat: { upsert },
+  channelDailyStat: { upsert },
+  memberDailyStat: { upsert },
   $executeRawUnsafe: executeRawUnsafe,
   $transaction: transaction,
 };
@@ -35,6 +34,7 @@ mock.module(dbJsPath, () => ({ default: mockDb, prisma: mockDb, prismaRead: mock
 
 const { cache } = await import('../../utils/cache');
 const { trackMessage, flushAllAnalyticsStats } = await import('../../services/analytics/analyticsService');
+const { flushBulk } = await import('../../services/analytics/analyticsBulkFlush');
 
 const rawCallsFor = (table: string) =>
   executeRawUnsafe.mock.calls.filter(
@@ -43,14 +43,13 @@ const rawCallsFor = (table: string) =>
 
 beforeEach(async () => {
   upsert.mockClear();
-  createMany.mockClear();
   executeRawUnsafe.mockClear();
   transaction.mockClear();
   await cache.invalidateGuild('guild-flush');
 });
 
 describe('flush des statistiques serveur et salon', () => {
-  test('écrit chaque table en deux instructions, sans upsert unitaire', async () => {
+  test('écrit chaque table en une instruction, sans upsert unitaire', async () => {
     for (let i = 0; i < 40; i++) {
       await trackMessage('guild-flush', `salon-${i}`, `membre-${i}`);
     }
@@ -64,15 +63,16 @@ describe('flush des statistiques serveur et salon', () => {
     expect(rawCallsFor('member_daily_stats')).toHaveLength(1);
   });
 
-  test('laisse au pool le temps de fournir une connexion', async () => {
+  test('insère ou incrémente sur la clé primaire, sans transaction', async () => {
     await trackMessage('guild-flush', 'salon-1', 'membre-1');
     await flushAllAnalyticsStats();
 
-    // `maxWait` par défaut vaut 2 s : c'est ce délai trop court qui perdait
-    // les lots sous charge.
-    const options = transaction.mock.calls[0]?.[1] as { maxWait: number; timeout: number };
-    expect(options.maxWait).toBeGreaterThanOrEqual(10_000);
-    expect(options.timeout).toBeGreaterThan(options.maxWait);
+    const [sql] = rawCallsFor('member_daily_stats')[0]!;
+    expect(sql).toContain('INSERT INTO member_daily_stats AS m');
+    expect(sql).toContain('ON CONFLICT ON CONSTRAINT "member_daily_stats_pkey" DO UPDATE');
+    expect(sql).toContain('"updatedAt" = NOW()');
+    // Une seule instruction par lot : plus rien à attendre du pool en transaction.
+    expect(transaction).not.toHaveBeenCalled();
   });
 
   test('compte les auteurs uniques du salon sans les incrémenter', async () => {
@@ -83,8 +83,8 @@ describe('flush des statistiques serveur et salon', () => {
     await flushAllAnalyticsStats();
 
     const [sql, ...params] = rawCallsFor('channel_daily_stats')[0]!;
-    expect(sql).toContain('"messagesCount" = m."messagesCount" + v."messagesCount"');
-    expect(sql).toContain('"uniqueAuthors" = v."uniqueAuthors"');
+    expect(sql).toContain('"messagesCount" = m."messagesCount" + EXCLUDED."messagesCount"');
+    expect(sql).toContain('"uniqueAuthors" = EXCLUDED."uniqueAuthors"');
     // (guildId, channelId, dateKey), puis messagesCount, voiceMinutes, uniqueAuthors.
     expect(params[3]).toBe(3);
     expect(params[5]).toBe(2);
@@ -99,11 +99,51 @@ describe('flush des statistiques serveur et salon', () => {
   });
 
   test('une écriture en échec n\'arrête pas le bot ni les tables suivantes', async () => {
-    transaction.mockImplementationOnce(() => Promise.reject(new Error('P2028')));
+    executeRawUnsafe.mockImplementationOnce(() => Promise.reject(new Error('P2028')));
 
     await trackMessage('guild-flush', 'salon-1', 'membre-1');
 
     await expect(flushAllAnalyticsStats()).resolves.toBeUndefined();
     expect(rawCallsFor('member_daily_stats')).toHaveLength(1);
+  });
+});
+
+describe('flushBulk', () => {
+  const target = {
+    label: 'Test',
+    table: 'test_stats',
+    keys: [
+      { name: 'guildId', type: 'text' as const },
+      { name: 'dateKey', type: 'text' as const },
+    ],
+    counterColumns: ['n'],
+  };
+
+  test('fusionne deux lignes de même clé : Postgres rejetterait tout le lot', async () => {
+    await flushBulk(target, [
+      { keys: ['g', '2026-11-01'], counters: { n: 2 } },
+      { keys: ['g', '2026-11-01'], counters: { n: 3 } },
+    ]);
+
+    const [, ...params] = rawCallsFor('test_stats')[0]!;
+    expect(params).toEqual(['g', '2026-11-01', 5]);
+  });
+
+  test('écarte une clé coupée en trop de morceaux plutôt que de décaler le lot', async () => {
+    await flushBulk(target, [
+      { keys: ['g', '2026-11-01', 'reste'], counters: { n: 1 } },
+      { keys: ['g', '2026-11-02'], counters: { n: 4 } },
+    ]);
+
+    const [, ...params] = rawCallsFor('test_stats')[0]!;
+    expect(params).toEqual(['g', '2026-11-02', 4]);
+  });
+
+  test('sans horodatage, n\'écrit ni createdAt ni updatedAt', async () => {
+    await flushBulk({ ...target, timestamps: false }, [{ keys: ['g', '2026-11-01'], counters: { n: 1 } }]);
+
+    const [sql] = rawCallsFor('test_stats')[0]!;
+    expect(sql).not.toContain('updatedAt');
+    expect(sql).not.toContain('createdAt');
   });
 });

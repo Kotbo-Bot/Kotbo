@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from '../../../i18n';
   /**
    * A quoi sert ce serveur.
    *
@@ -62,10 +63,10 @@
 </script>
 
 <WizardShell
-  title="À quoi sert ce serveur ?"
+  title={m.obx_th_title()}
   lead={kind === 'existing'
-    ? "La réponse décide de ce que Kotbo complète et des modules à allumer."
-    : "La réponse décide des salons à poser et des modules à allumer."}
+    ? m.obx_th_lead_existing()
+    : m.obx_th_lead_new()}
   {onEditTracks}
 >
   <div class="space-y-3">
@@ -85,7 +86,7 @@
       <div class="px-3.5 py-2.5 border-b border-black/25 flex items-center gap-2">
         <Papicon icon="layout-grid" size={12} class="text-[#80848e]" />
         <span class="text-xs font-semibold text-[#dbdee1]">
-          {kind === 'existing' ? 'Ton serveur, complété' : "L'arborescence proposée"}
+          {kind === 'existing' ? m.obx_th_tree_existing() : m.obx_th_tree_new()}
         </span>
       </div>
 
@@ -93,7 +94,7 @@
         {#each tree as category (category.key)}
           <p class="px-2 pt-2.5 pb-1 text-xs font-semibold text-[#949ba4]">
             {category.name}
-            {#if category.already}<span class="ml-1 font-medium normal-case tracking-normal text-[#6d7178]">(déjà là)</span>{/if}
+            {#if category.already}<span class="ml-1 font-medium normal-case tracking-normal text-[#6d7178]">({m.obx_th_already()})</span>{/if}
           </p>
           {#each category.children as channel (channel.key)}
             <p class="flex items-center gap-1.5 rounded px-2 py-0.5 text-body-sm {channel.already ? 'text-[#80848e]' : 'text-[#dbdee1]'}">
@@ -102,13 +103,13 @@
               </span>
               <span class="truncate">{channel.name}</span>
               {#if channel.already}
-                <span class="ml-auto shrink-0 text-2xs text-[#6d7178]">déjà là</span>
+                <span class="ml-auto shrink-0 text-2xs text-[#6d7178]">{m.obx_th_already()}</span>
               {/if}
             </p>
           {/each}
         {:else}
           <p class="px-2 py-6 text-center text-xs text-[#949ba4]">
-            Lecture de la maquette…
+            {m.obx_th_loading()}
           </p>
         {/each}
       </div>
@@ -118,8 +119,7 @@
              par-dessus le serveur - « c'est pas ma structure ». Elle dit ce que
              la teinte grise veut dire : ce qui est deja la reste tel quel. -->
         <p class="px-3.5 py-2.5 border-t border-black/25 text-2xs leading-relaxed text-[#949ba4]">
-          {alreadyCount} de ces {totalCount} entrées existent déjà chez toi : Kotbo s'y branche
-          sans les renommer ni les déplacer. Tu confirmeras ligne par ligne juste après.
+          {m.obx_th_already_count({ count: alreadyCount, total: totalCount })}
         </p>
       {/if}
     </div>
@@ -131,7 +131,7 @@
       onclick={() => { wizard.answer({ theme }); wizard.complete('theme'); }}
       class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-on-primary text-sm font-semibold hover:opacity-90 transition-opacity"
     >
-      Continuer
+      {m.obx_continue()}
       <Papicon icon="ChevronRight" size={15} />
     </button>
   {/snippet}

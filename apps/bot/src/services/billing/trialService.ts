@@ -1,7 +1,8 @@
 /**
  * trialService.ts
  *
- * Essai gratuit de 15 jours, une seule fois.
+ * Essai gratuit de 15 jours, une seule fois, et seulement avec un code de
+ * parrainage (voir `referralService`).
  *
  * La règle commerciale tient en une phrase, mais elle a deux sujets : un essai
  * par **compte Discord**, et un essai par **serveur**. Les deux sont
@@ -92,10 +93,11 @@ export async function reserveTrial(
   discordUserId: string,
   plan: PlanKey,
   interval: BillingInterval,
+  referralCode: string,
 ): Promise<boolean> {
   try {
     await prisma.billingTrial.create({
-      data: { discordUserId, guildId, plan, interval },
+      data: { discordUserId, guildId, plan, interval, referralCode },
     });
     return true;
   } catch (err) {

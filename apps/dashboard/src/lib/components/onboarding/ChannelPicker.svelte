@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from '../../i18n';
   /**
    * « Choisissez un salon » - et, quand il n'y en a pas, « je le crée ».
    *
@@ -61,11 +62,11 @@
       onpick(channel.id);
       toast.success(
         channel.created
-          ? `#${channel.name} a été créé sur ton serveur.`
-          : `#${channel.name} existait déjà : il a été retenu.`,
+          ? m.onb_channel_created({ name: channel.name })
+          : m.onb_channel_reused({ name: channel.name }),
       );
     } catch (err) {
-      toast.error(errorMessage(err) || "Le salon n'a pas pu être créé.");
+      toast.error(errorMessage(err) || m.onb_channel_create_failed());
     } finally {
       creating = false;
     }
@@ -106,7 +107,7 @@
              disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
     >
       <Papicon icon={creating ? 'loader' : 'plus'} size={14} class={creating ? 'animate-spin' : ''} />
-      {creating ? 'Création…' : createLabel}
+      {creating ? m.obx_creating() : createLabel}
     </button>
   {:else if suggested}
     <!-- Un salon a été deviné d'après son nom. La reconnaissance se trompe :
@@ -119,7 +120,7 @@
              hover:text-primary transition-colors disabled:opacity-50"
     >
       <Papicon icon={creating ? 'loader' : 'plus'} size={12} class={creating ? 'animate-spin' : ''} />
-      {creating ? 'Création…' : createLabel}
+      {creating ? m.obx_creating() : createLabel}
     </button>
   {/if}
 </div>

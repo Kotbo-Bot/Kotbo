@@ -20,6 +20,7 @@
 import Stripe from 'stripe';
 import {
   PLAN_REGISTRY,
+  REFERRAL_DISCOUNT_PERCENT,
   getPlanDefinition,
   type BillingInterval,
   type PlanKey,
@@ -165,7 +166,7 @@ export async function ensureCustomer(
  * incrémenter à chaque modification substantielle des CGV, en même temps que la
  * date affichée sur la page.
  */
-export const CGV_VERSION = '2026-09-05';
+export const CGV_VERSION = '2026-11-02';
 
 /**
  * Consentement recueilli sur la page de paiement.
@@ -241,6 +242,29 @@ export interface CheckoutOptions {
   initiatedBy: string;
   /** Jours d'essai gratuit offerts, 0 pour aucun. */
   trialDays?: number;
+  /** Remise de parrainage sur la première facture. */
+  referralDiscount?: boolean;
+}
+
+/** Identifiant fixe : le coupon est créé une fois par compte Stripe, à la première demande. */
+const REFERRAL_COUPON_ID = `kotbo-parrainage-${REFERRAL_DISCOUNT_PERCENT}`;
+
+/**
+ * Coupon de parrainage. `repeating` sur un mois et non `once` : la remise
+ * démarre avec l'essai, et la première facture payante tombe au quinzième jour,
+ * donc dans ce mois.
+ */
+async function ensureReferralCoupon(stripe: Stripe): Promise<string> {
+  const existing = await stripe.coupons.retrieve(REFERRAL_COUPON_ID).catch(() => null);
+  if (existing && existing.valid) return existing.id;
+  const created = await stripe.coupons.create({
+    id: REFERRAL_COUPON_ID,
+    name: `Parrainage Kotbo -${REFERRAL_DISCOUNT_PERCENT} %`,
+    percent_off: REFERRAL_DISCOUNT_PERCENT,
+    duration: 'repeating',
+    duration_in_months: 1,
+  });
+  return created.id;
 }
 
 /**
@@ -271,6 +295,7 @@ export async function createCheckoutSession(
   };
 
   const trialDays = options.trialDays && options.trialDays > 0 ? options.trialDays : 0;
+  const referralCoupon = options.referralDiscount ? await ensureReferralCoupon(stripe) : null;
 
   const session = await stripe.checkout.sessions.create({
     mode: 'subscription',
@@ -292,7 +317,9 @@ export async function createCheckoutSession(
           }
         : {}),
     },
-    allow_promotion_codes: true,
+    // Stripe refuse les deux à la fois : la remise de parrainage remplace la
+    // saisie d'un code promo.
+    ...(referralCoupon ? { discounts: [{ coupon: referralCoupon }] } : { allow_promotion_codes: true }),
     // Acceptation des CGV et renonciation à la rétractation : sans elle, les
     // modules ne pourraient pas s'ouvrir avant quatorze jours.
     ...checkoutConsent('SUBSCRIPTION'),

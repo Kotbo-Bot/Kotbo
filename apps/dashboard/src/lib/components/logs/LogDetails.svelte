@@ -29,7 +29,7 @@
   });
 
   const parsed = $derived(parseDetailsStructure(details, labels));
-  const resolvedChannelId = $derived(parseDetailsMetadata(details, '', labels).extractedChannelId ?? channelId);
+  const resolvedChannelId = $derived(parseDetailsMetadata(details, labels).extractedChannelId ?? channelId);
   const messageBlocks = $derived(parsed.blocks.filter((block) => block.tone === 'message'));
   const diffBlocks = $derived(parsed.blocks.filter((block) => block.tone === 'before' || block.tone === 'after'));
   const otherBlocks = $derived(parsed.blocks.filter((block) => !block.tone));

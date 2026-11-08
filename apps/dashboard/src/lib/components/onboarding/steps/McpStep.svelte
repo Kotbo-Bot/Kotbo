@@ -55,7 +55,7 @@
         name: `Kotbo · ${selectedGuild?.name ?? 'serveur'}`,
         permissions,
       });
-      if (!key?.id) throw new Error("La clé n'a pas pu être créée.");
+      if (!key?.id) throw new Error(m.obx_mcp_failed());
 
       created = { id: key.id, fullKey: key.fullKey ?? '' };
 
@@ -68,7 +68,7 @@
       wizard.answer({ mcpScope: scope });
       celebratePhase();
     } catch (err) {
-      toast.error(errorMessage(err) || "La clé n'a pas pu être créée.");
+      toast.error(errorMessage(err) || m.onb_mcp_key_create_failed());
     } finally {
       onboardingData.busy = false;
     }
@@ -83,7 +83,7 @@
     } catch {
       // Presse-papiers refuse - contexte non securise, permission bloquee : le
       // champ reste selectionnable a la main, ce qui est la seule alternative.
-      toast.info('Copie impossible : sélectionnez le texte pour le copier.');
+      toast.info(m.onb_mcp_copy_failed());
     }
   }
 </script>
@@ -103,7 +103,7 @@
             pitch={entry.pitch()}
             detail={entry.detail()}
             icon={entry.icon}
-            badge={entry.key === 'read' ? 'Recommandé' : undefined}
+            badge={entry.key === 'read' ? m.obx_recommended() : undefined}
             selected={scope === entry.key}
             onclick={() => { wizard.answer({ mcpScope: entry.key }); celebrateStep(); }}
           />

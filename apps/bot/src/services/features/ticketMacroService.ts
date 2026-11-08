@@ -25,7 +25,7 @@ export const MACRO_SELECT_LIMIT = 25;
 export function renderMacroContent(
   content: string,
   vars: {
-    ticket: Pick<Ticket, 'id' | 'userId' | 'username' | 'ticketTypeLabel' | 'reason'>;
+    ticket: Pick<Ticket, 'id' | 'guildId' | 'channelId' | 'userId' | 'username' | 'ticketTypeLabel' | 'reason'>;
     staffTag: string;
     guildName: string;
   },
@@ -35,6 +35,11 @@ export function renderMacroContent(
     username: vars.ticket.username,
     staff: vars.staffTag,
     ticket_id: vars.ticket.id,
+    // Le salon (mention cliquable) ou son URL brute ; vides si le ticket n'a pas de salon.
+    ticket_channel: vars.ticket.channelId ? `<#${vars.ticket.channelId}>` : '',
+    ticket_link: vars.ticket.channelId
+      ? `https://discord.com/channels/${vars.ticket.guildId}/${vars.ticket.channelId}`
+      : '',
     ticket_type: vars.ticket.ticketTypeLabel || 'Ticket',
     ticket_reason: vars.ticket.reason || '',
     server: vars.guildName,

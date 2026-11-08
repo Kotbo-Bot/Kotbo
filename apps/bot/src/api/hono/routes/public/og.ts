@@ -228,8 +228,9 @@ export function createOgRouter(client: Client): OpenAPIHono {
   router.get('/api/og/preview', async (c) => {
     if (rateLimited(c)) return c.json({ error: 'Trop de requêtes' }, 429);
 
-    const path = normalizeOgPath(c.req.query('path') ?? c.req.header('x-original-uri'));
-    const meta = await resolveOgMetadata(client, path);
+    const rawPath = c.req.query('path') ?? c.req.header('x-original-uri');
+    const path = normalizeOgPath(rawPath);
+    const meta = await resolveOgMetadata(client, rawPath ?? path);
     const canonicalUrl = `${resolveDashboardOrigin(c)}${path === '/' ? '/' : path}`;
     const html = renderPreviewHtml(meta, canonicalUrl, resolveApiOrigin(c));
 
@@ -304,7 +305,7 @@ export function createOgRouter(client: Client): OpenAPIHono {
       return c.json({ error: 'URL hors du domaine' }, 400);
     }
 
-    const meta = await resolveOgMetadata(client, target.pathname);
+    const meta = await resolveOgMetadata(client, `${target.pathname}${target.search}`);
     const apiOrigin = resolveApiOrigin(c);
 
     c.header('Cache-Control', `public, max-age=${PREVIEW_CACHE_SECONDS}`);

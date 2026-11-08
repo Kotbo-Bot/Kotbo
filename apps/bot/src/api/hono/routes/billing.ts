@@ -25,6 +25,7 @@ import {
   GIFT_DURATIONS_MONTHS,
   PLAN_KEYS,
   PLAN_REGISTRY,
+  REFERRAL_DISCOUNT_PERCENT,
   canPurchasePlan,
   getPlanDefinition,
   giftPriceCents,
@@ -72,6 +73,7 @@ import {
   redeemGiftCode,
   releaseGiftSession,
 } from '../../../services/billing/giftService.js';
+import { countReferrals, getOrCreateReferralCode, resolveReferralCode } from '../../../services/billing/referralService.js';
 
 const BASE = '/api/dashboard/guilds/{guildId}/billing';
 
@@ -89,7 +91,7 @@ declare module 'hono' {
 }
 
 /** Offres achetables en ligne. `CUSTOM` se négocie, il n'est pas proposé ici. */
-const PurchasablePlan = z.enum(['PLUS', 'PRO', 'ULTIMATE']);
+const PurchasablePlan = z.enum(['PLUS']);
 const Interval = z.enum(['month', 'year']);
 
 export function createBillingRouter(client: Client): OpenAPIHono {
@@ -282,6 +284,10 @@ export function createBillingRouter(client: Client): OpenAPIHono {
    * même quand l'essai n'est plus disponible : la page l'affiche dans son texte
    * d'explication, et la durée ne doit pas être écrite en dur côté client.
    */
+  /**
+   * `available` : ce serveur peut encore recevoir l'essai, ce qui demande un
+   * code de parrainage au moment de souscrire.
+   */
   const TrialInfo = z.object({
     available: z.boolean(),
     days: z.number(),
@@ -328,6 +334,8 @@ export function createBillingRouter(client: Client): OpenAPIHono {
     staffAccess: z.boolean(),
     accessExpiresAt: z.string().nullable(),
     trial: TrialInfo,
+    /** Code de parrainage de l'utilisateur connecté, à partager. */
+    referral: z.object({ code: z.string(), discountPercent: z.number(), referred: z.number() }),
     plans: z.array(PlanCard),
     /** Cadeaux offerts par l'utilisateur connecté, et reçus par ce serveur. */
     giftsPurchased: z.array(Gift),
@@ -421,24 +429,22 @@ export function createBillingRouter(client: Client): OpenAPIHono {
     const sellable = new Set(sellablePlans());
     const plan = normalizePlanKey(guild?.plan);
 
-    // La taille du serveur décide de l'offre : les fonctionnalités étant
-    // identiques d'une offre payante à l'autre, c'est le seul critère qui
-    // reste. `memberCount` vient du cache de discord.js, rempli à la connexion.
+    // Offre unique : Plus, quelle que soit la taille. `memberCount` reste
+    // renvoyé pour l'affichage.
     const memberCount = client.guilds.cache.get(guildId)?.memberCount ?? null;
     const eligiblePlan = planForMemberCount(memberCount);
 
-    const [giftsPurchased, giftsReceived] = await Promise.all([
+    const [giftsPurchased, giftsReceived, referralCode] = await Promise.all([
       listGiftsPurchasedBy(c.var.auth.userId),
       listGiftsForGuild(guildId),
+      getOrCreateReferralCode(c.var.auth.userId),
     ]);
 
-    // Éligibilité évaluée sur PRO : les offres vendues en ligne partagent la
-    // même règle, et l'essai se consomme une fois quelle que soit celle qui
-    // le déclenche. Elle dépend de l'utilisateur connecté, pas seulement du
+    // Éligibilité évaluée sur Plus, la seule offre vendue en ligne. Elle dépend de l'utilisateur connecté, pas seulement du
     // serveur - deux administrateurs du même serveur peuvent voir un bouton
     // différent, et c'est exactement ce que la règle « une fois par compte
     // Discord » implique.
-    const trial = await checkTrialEligibility(guildId, c.var.auth.userId, 'PRO');
+    const trial = await checkTrialEligibility(guildId, c.var.auth.userId, 'PLUS');
 
     return c.json({
       enabled: isBillingEnabled(),
@@ -457,16 +463,20 @@ export function createBillingRouter(client: Client): OpenAPIHono {
       // n'a pas d'abonnement Stripe, donc pas de `currentPeriodEnd`.
       accessExpiresAt: guild?.accessExpiresAt?.toISOString() ?? null,
       trial: { available: trial.eligible, days: trial.days, reason: trial.reason ?? null },
-      plans: PLAN_REGISTRY.map((definition) => ({
+      referral: {
+        code: referralCode,
+        discountPercent: REFERRAL_DISCOUNT_PERCENT,
+        referred: await countReferrals(referralCode),
+      },
+      // Les offres retirées de la vente n'apparaissent que pour le serveur
+      // qui les a encore. Le sur-mesure reste montré : il se demande par contact.
+      plans: PLAN_REGISTRY.filter((definition) => definition.listed || definition.key === 'CUSTOM' || definition.key === plan).map((definition) => ({
         key: definition.key,
         name: definition.name,
         tagline: definition.tagline,
         description: definition.description,
         memberRange: definition.memberRange,
         priceCents: definition.displayPriceCents,
-        // Seule l'offre du palier est achetable : proposer les autres
-        // laisserait un serveur de 80 000 membres payer le tarif d'un serveur
-        // de 500, pour exactement les mêmes fonctionnalités.
         purchasable: sellable.has(definition.key) && definition.key === eligiblePlan,
       })),
       giftsPurchased,
@@ -486,13 +496,19 @@ export function createBillingRouter(client: Client): OpenAPIHono {
       body: {
         content: {
           'application/json': {
-            schema: z.object({ plan: PurchasablePlan, interval: Interval }),
+            schema: z.object({
+              plan: PurchasablePlan,
+              interval: Interval,
+              /** Code de parrainage : seul moyen d'obtenir l'essai et la remise. */
+              referralCode: z.string().trim().max(40).optional(),
+            }),
           },
         },
       },
     },
     responses: {
       200: { description: 'URL de paiement', content: { 'application/json': { schema: z.object({ url: z.string() }) } } },
+      400: { description: 'Code de parrainage refusé', content: { 'application/json': { schema: z.object({ error: z.string() }) } } },
       409: { description: 'Offre ne correspondant pas à la taille du serveur', content: { 'application/json': { schema: z.object({ error: z.string() }) } } },
       503: { description: 'Facturation non configurée', content: { 'application/json': { schema: z.object({ error: z.string() }) } } },
     },
@@ -507,7 +523,7 @@ export function createBillingRouter(client: Client): OpenAPIHono {
     if (!isBillingEnabled()) return c.json({ error: 'Facturation non configurée sur cette instance.' }, 503);
 
     const { guildId } = c.req.valid('param');
-    const { plan, interval } = c.req.valid('json');
+    const { plan, interval, referralCode } = c.req.valid('json');
     const auth = c.var.auth;
 
     const guild = await prisma.guild.findUnique({
@@ -517,19 +533,34 @@ export function createBillingRouter(client: Client): OpenAPIHono {
 
     const discordGuild = client.guilds.cache.get(guildId) ?? null;
 
-    // Le palier est une règle, pas une suggestion : le dashboard n'affiche
-    // qu'une offre achetable, mais la requête vient du navigateur et se
-    // rejoue. Sans ce contrôle, un serveur de 80 000 membres souscrirait le
-    // tarif d'un serveur de 500 en changeant un mot dans le corps JSON.
+    // La requête vient du navigateur et se rejoue : on revérifie que l'offre
+    // demandée est bien celle qui se vend.
     const memberCount = discordGuild?.memberCount ?? null;
     if (!canPurchasePlan(plan as PlanKey, memberCount)) {
       const expected = getPlanDefinition(planForMemberCount(memberCount));
       return c.json(
         {
-          error: `Avec ${memberCount ?? '?'} membres, ce serveur relève de l'offre ${expected.name}.`,
+          error: `Cette offre n'est plus vendue : choisis l'offre ${expected.name}.`,
         },
         409,
       );
+    }
+
+    // Le parrainage ne vaut que pour une première souscription : un code
+    // refusé est dit tout de suite, plutôt qu'un paiement plein tarif surprise.
+    let referral: string | null = null;
+    if (referralCode) {
+      const resolved = await resolveReferralCode(referralCode, auth.userId);
+      if (!resolved.ok) {
+        return c.json({ error: resolved.reason === 'own_code'
+          ? "C'est ton propre code de parrainage : il sert à ceux que tu invites."
+          : "Ce code de parrainage n'existe pas. Vérifie la saisie : les codes ne contiennent ni O, ni I, ni S." }, 400);
+      }
+      const eligibility = await checkTrialEligibility(guildId, auth.userId, plan as PlanKey);
+      if (!eligibility.eligible) {
+        return c.json({ error: "Le parrainage s'applique à une première souscription : ce serveur ou ton compte en a déjà profité." }, 400);
+      }
+      referral = resolved.code;
     }
 
     try {
@@ -548,14 +579,12 @@ export function createBillingRouter(client: Client): OpenAPIHono {
         create: { id: guildId, stripeCustomerId: customerId, billingOwnerId: auth.userId },
       });
 
-      // L'essai est réservé *avant* d'appeler Stripe : l'insertion en base est
-      // le verrou qui garantit « une fois par compte Discord », et un
-      // aller-retour réseau laisserait passer un second clic. En échec de
-      // réservation, on ouvre simplement un parcours d'achat sans essai plutôt
-      // que de renvoyer une erreur.
-      const eligibility = await checkTrialEligibility(guildId, auth.userId, plan as PlanKey);
-      const trialReserved =
-        eligibility.eligible && (await reserveTrial(guildId, auth.userId, plan as PlanKey, interval));
+      // L'essai n'existe qu'avec un code de parrainage. Il est réservé *avant*
+      // d'appeler Stripe : l'insertion en base est le verrou qui garantit « une
+      // fois par compte Discord », et un aller-retour réseau laisserait passer
+      // un second clic. En échec de réservation, on ouvre un parcours d'achat
+      // sans essai ni remise plutôt que de renvoyer une erreur.
+      const trialReserved = referral !== null && (await reserveTrial(guildId, auth.userId, plan as PlanKey, interval, referral));
 
       let session: { id: string; url: string };
       try {
@@ -566,6 +595,7 @@ export function createBillingRouter(client: Client): OpenAPIHono {
           interval,
           initiatedBy: auth.userId,
           trialDays: trialReserved ? TRIAL_DAYS : 0,
+          referralDiscount: trialReserved,
         });
       } catch (err) {
         // Stripe n'a pas ouvert la page : l'essai n'a jamais démarré, la
@@ -583,7 +613,7 @@ export function createBillingRouter(client: Client): OpenAPIHono {
         step: 'checkout_started',
         guildId,
         discordUserId: auth.userId,
-        metadata: { plan, interval, trialReserved, sessionId: session.id },
+        metadata: { plan, interval, trialReserved, referralCode: referral, sessionId: session.id },
       });
       if (trialReserved) {
         trackAcquisitionStep({
@@ -725,32 +755,18 @@ export function createBillingRouter(client: Client): OpenAPIHono {
     if (!isBillingEnabled()) return c.json({ error: 'Facturation non configurée sur cette instance.' }, 503);
 
     const { guildId } = c.req.valid('param');
-    const { months, plan, targetGuildId, note } = c.req.valid('json');
+    // `plan` reste accepté pour les anciens clients, mais seule Plus s'offre.
+    const { months, targetGuildId, note } = c.req.valid('json');
 
-    // Cadeau destiné à un serveur précis : son offre est celle de sa taille,
-    // pas celle que l'acheteur aurait choisie. Le bot doit y être présent -
-    // sans quoi il n'y a ni taille connue, ni serveur à créditer.
-    let giftPlan: PlanKey;
-    if (targetGuildId) {
-      const target = client.guilds.cache.get(targetGuildId);
-      if (!target) {
-        return c.json(
-          { error: "Kotbo n'est pas présent sur ce serveur : invitez-le avant de lui offrir une offre." },
-          400,
-        );
-      }
-      giftPlan = planForMemberCount(target.memberCount);
-      if (giftPlan === 'CUSTOM') {
-        return c.json(
-          { error: "Ce serveur relève de l'offre sur mesure : elle se met en place après un rendez-vous." },
-          400,
-        );
-      }
-    } else {
-      // Sans destinataire, l'acheteur choisit le palier. Le code sera refusé à
-      // l'activation s'il vise un serveur plus grand que l'offre payée.
-      giftPlan = (plan ?? 'PRO') as PlanKey;
+    // Cadeau destiné à un serveur précis : le bot doit y être présent, sans
+    // quoi il n'y a pas de serveur à créditer.
+    if (targetGuildId && !client.guilds.cache.get(targetGuildId)) {
+      return c.json(
+        { error: "Kotbo n'est pas présent sur ce serveur : invitez-le avant de lui offrir une offre." },
+        400,
+      );
     }
+    const giftPlan: PlanKey = planForMemberCount();
 
     if (!giftPriceCents(giftPlan, months)) {
       return c.json({ error: 'Cette offre ne peut pas être offerte.' }, 400);

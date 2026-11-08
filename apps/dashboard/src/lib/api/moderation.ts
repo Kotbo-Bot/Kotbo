@@ -324,6 +324,8 @@ export async function updateChannelsManagementConfig(
     honeypotChannelId?: string | null;
     honeypotSanction?: string;
     honeypotReinvite?: boolean;
+    honeypotGraceSeconds?: number;
+    honeypotDurationMin?: number | null;
     createHoneypotChannel?: boolean;
     wordStatsEnabled?: boolean;
   },

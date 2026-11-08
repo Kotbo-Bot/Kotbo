@@ -1906,8 +1906,9 @@ export async function handleTicketButton(client: Client, customId: string, inter
 
     const ticketChannel = interaction.channel as TextChannel;
     if (ticketChannel) {
-      // Rename channel
-      await renameChannelToOpen(client, ticketChannel.id).catch(() => null);
+      // Le renommage est plafonne par Discord (2 / 10 min) et peut attendre des
+      // minutes : en arriere-plan, pour ne pas figer l'embed et les boutons.
+      void renameChannelToOpen(client, ticketChannel.id).catch(() => null);
 
       // Restaurer les permissions de l'opener
       try {
@@ -3910,8 +3911,9 @@ export async function closeTicket(
     const channel = client.channels.cache.get(channelId) || await client.channels.fetch(channelId).catch(() => null);
     if (channel && (channel instanceof TextChannel || channel.isThread())) {
       const ticketChannel = channel as TextChannel;
-      // Rename channel
-      await renameChannelToClosed(client, ticketChannel.id).catch(() => null);
+      // En arriere-plan : le plafond de renommage Discord peut faire attendre des
+      // minutes, et une fermeture tardive ecraserait l'embed d'une reouverture.
+      void renameChannelToClosed(client, ticketChannel.id).catch(() => null);
 
       // Retirer les permissions d'écriture et lecture de l'opener
       try {

@@ -137,10 +137,97 @@ function ticketsSeed() {
   ];
 }
 
+type DemoTicket = ReturnType<typeof ticketsSeed>[number];
+
+/**
+ * Ligne de la boîte de réception (`InboxTicket`), tirée d'un ticket de démo.
+ * Le centre de support lit des champs que la graine n'a pas (`sla`, `tags`,
+ * `waitingOn`…) : ils se déduisent ici des messages, comme le fait l'API.
+ */
+export function toInboxRow(ticket: DemoTicket, types: Array<{ id: string; label: string }>) {
+  const last = (staff: boolean) => ticket.messages.filter((msg) => msg.isStaff === staff).at(-1)?.createdAt ?? null;
+  const lastMessage = ticket.messages.at(-1);
+  return {
+    ...ticket,
+    username: ticket.userName,
+    reason: ticket.subject,
+    claimedByName: ticket.claimedBy,
+    transcriptId: null,
+    ticketTypeLabel: types.find((type) => type.id === ticket.type)?.label ?? null,
+    tags: [],
+    firstResponseAt: ticket.messages.find((msg) => msg.isStaff)?.createdAt ?? null,
+    lastMemberMessageAt: last(false),
+    lastStaffMessageAt: last(true),
+    waitingOn: ticket.status === 'CLOSED' || !lastMessage ? null : lastMessage.isStaff ? 'member' : 'staff',
+    sla: { firstResponse: null, resolution: null, worst: null },
+  };
+}
+
+function blacklistSeed() {
+  const spammer = MEMBERS[MEMBERS.length - 1]!;
+  return [
+    { id: 'bl-1', userId: spammer.id, username: spammer.username, avatarUrl: null, reason: 'Tickets ouverts en boucle pour rien', expiresAt: new Date(Date.now() + 12 * 86_400_000).toISOString(), addedByTag: 'lena', allowReopen: false },
+  ];
+}
+
+/** Forme de `ticketStatsService` côté bot. Durées en minutes. */
+function ticketStats(days: number, timezone: string) {
+  const dates = Array.from({ length: days }, (_, i) => new Date(Date.now() - (days - 1 - i) * 86_400_000).toISOString().slice(0, 10));
+  const wave = (i: number, base: number, amp: number) => Math.max(0, Math.round(base + amp * Math.sin(i * 0.9 + base)));
+  const series = (shift: number) => ({
+    created: dates.map((_, i) => wave(i + shift, 3, 2)),
+    closed: dates.map((_, i) => wave(i + shift + 1, 3, 2)),
+    firstResponse: dates.map((_, i) => 9 + wave(i + shift, 6, 5)),
+    resolution: dates.map((_, i) => 180 + wave(i + shift, 120, 90)),
+    satisfaction: dates.map((_, i) => (i % 3 === 0 ? null : 4 + (wave(i + shift, 5, 4) % 10) / 10)),
+  });
+  const current = series(0);
+  const previous = series(7);
+  const total = (list: number[]) => list.reduce((s, n) => s + n, 0);
+  const created = total(current.created);
+  const closed = total(current.closed);
+  const staff = [MEMBERS[1]!, MEMBERS[2]!, ME];
+  return {
+    window: { days, from: dates[0], to: dates[dates.length - 1] },
+    daily: { dates, current, previous },
+    previous: { created: total(previous.created), closed: total(previous.closed), firstResponseMedian: 16, resolutionMedian: 290, satisfaction: 4.2 },
+    timezone,
+    volume: { created, closed, byDay: dates.map((date, i) => ({ date, created: current.created[i]!, closed: current.closed[i]! })) },
+    firstResponse: { count: closed, median: 14, p90: 52 },
+    resolution: { count: closed, median: 265, p90: 1_140 },
+    sla: { configured: true, firstResponseMinutes: 30, resolutionHours: 24, firstResponseMet: 87, resolutionMet: 93 },
+    satisfaction: { average: 4.3, count: 35, distribution: [1, 1, 4, 11, 18] },
+    backlog: { active: 3, unassigned: 1, waitingStaff: 1, breached: 0, oldestActiveAt: ago(2 * DAY) },
+    unanswered: { tickets: 2, reminders: 3 },
+    agents: staff.map((user, i) => {
+      const handled = Math.round(created * [0.45, 0.35, 0.2][i]!);
+      return {
+        userId: user.id,
+        name: user.displayName,
+        handled,
+        closed: Math.max(0, handled - 1),
+        firstResponse: { count: handled, median: 10 + i * 6, p90: 40 + i * 15 },
+        resolution: { count: handled, median: 220 + i * 60, p90: 900 + i * 200 },
+        rating: [4.6, 4.3, 4.1][i]!,
+        ratings: 12 - i * 3,
+        openNow: i === 2 ? 0 : 1,
+        unanswered: i === 1 ? 1 : 0,
+      };
+    }),
+    byType: [
+      { label: 'Support & Questions', count: Math.round(created * 0.7), resolution: { count: 0, median: 180, p90: 700 } },
+      { label: 'Signalement', count: Math.round(created * 0.3), resolution: { count: 0, median: 420, p90: 1_500 } },
+    ],
+    byTag: [],
+  };
+}
+
 export function registerTicketsRoutes(): void {
+  // GET /api/dashboard/guilds/:id/doing-lists/for/:source : aucune liste reliée dans la démo.
+  route('GET', '/api/dashboard/guilds/:id/doing-lists/for/:source', () => ({ lists: [], items: [] }));
+
   // GET /api/dashboard/guilds/:id/tickets
-  route('GET', '/api/dashboard/guilds/:id/tickets', () => {
-    const list = demoDb.get('tickets-list', ticketsSeed);
+  route('GET', '/api/dashboard/guilds/:id/tickets', ({ query }) => {
     const config = demoDb.get('tickets-config', () => ({
       ticketCategoryId: '900000000000000302',
       ticketStaffRoleId: role('Modérateur').id,
@@ -152,8 +239,28 @@ export function registerTicketsRoutes(): void {
       ],
     }));
 
+    const view = query.get('view') ?? 'open';
+    const search = (query.get('q') ?? '').toLowerCase();
+    const rows = demoDb
+      .get('tickets-list', ticketsSeed)
+      .map((ticket) => toInboxRow(ticket, config.ticketTypes))
+      .filter((row) => {
+        const closed = row.status === 'CLOSED';
+        if (search && !`${row.reason} ${row.username}`.toLowerCase().includes(search)) return false;
+        if (view === 'all') return true;
+        if (view === 'closed') return closed;
+        if (closed) return false;
+        if (view === 'unassigned') return !row.claimedById;
+        if (view === 'mine') return row.claimedById === ME.id;
+        if (view === 'waiting_staff') return row.waitingOn === 'staff';
+        // Aucun ticket de démo n'a d'échéance ni n'attend de validation.
+        if (view === 'breached' || view === 'pending') return false;
+        return true;
+      });
+    if (query.get('sort') === 'oldest') rows.reverse();
+
     return {
-      tickets: list,
+      tickets: rows,
       config,
       pagination: {
         limit: 50,
@@ -273,14 +380,39 @@ export function registerTicketsRoutes(): void {
   });
 
   // GET /api/dashboard/guilds/:id/tickets/macros
-  route('GET', '/api/dashboard/guilds/:id/tickets/macros', () => []);
+  route('GET', '/api/dashboard/guilds/:id/tickets/macros', () => ({ macros: [] }));
+
+  // GET|POST|DELETE /api/dashboard/guilds/:id/tickets/blacklist
+  route('GET', '/api/dashboard/guilds/:id/tickets/blacklist', () => ({ entries: demoDb.get<any[]>('tickets-blacklist', blacklistSeed) }));
+  route('POST', '/api/dashboard/guilds/:id/tickets/blacklist', ({ body }) => {
+    const person = MEMBERS.find((m) => m.id === body?.userId);
+    const entry = {
+      id: `bl-${Date.now()}`,
+      userId: String(body?.userId ?? ''),
+      username: person?.username ?? String(body?.userId ?? ''),
+      avatarUrl: null,
+      reason: body?.reason || null,
+      expiresAt: body?.durationDays ? new Date(Date.now() + Number(body.durationDays) * 86_400_000).toISOString() : null,
+      addedByTag: ME.username,
+      allowReopen: !!body?.allowReopen,
+    };
+    demoDb.update<any[]>('tickets-blacklist', blacklistSeed, (list) => [entry, ...list.filter((e) => e.userId !== entry.userId)]);
+    return { success: true, entry };
+  });
+  route('DELETE', '/api/dashboard/guilds/:id/tickets/blacklist/:userId', ({ params }) => {
+    demoDb.update<any[]>('tickets-blacklist', blacklistSeed, (list) => list.filter((e) => e.userId !== params.userId));
+    return { success: true };
+  });
+
+  // GET /api/dashboard/guilds/:id/tickets/stats
+  route('GET', '/api/dashboard/guilds/:id/tickets/stats', ({ query }) => ticketStats(Math.max(1, Number(query.get('days')) || 30), query.get('tz') ?? 'Europe/Paris'));
 
   // GET|PUT /api/dashboard/guilds/:id/tickets/signature
   route('GET', '/api/dashboard/guilds/:id/tickets/signature', () => ({ content: '', sendAsMe: false }));
   route('PUT', '/api/dashboard/guilds/:id/tickets/signature', () => ({ content: '', sendAsMe: false }));
 
   // GET /api/dashboard/guilds/:id/tickets/transcripts
-  route('GET', '/api/dashboard/guilds/:id/tickets/transcripts', () => []);
+  route('GET', '/api/dashboard/guilds/:id/tickets/transcripts', () => ({ transcripts: [] }));
 
   // GET /api/dashboard/guilds/:id/satisfaction
   route('GET', '/api/dashboard/guilds/:id/satisfaction', () => {

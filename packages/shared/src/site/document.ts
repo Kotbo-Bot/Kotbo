@@ -40,7 +40,8 @@ export const EMPTY_SITE_DOCUMENT: SiteDocument = { type: 'doc', content: [] };
 /** Bornes d'un document : au-delà, le surplus est tronqué, jamais refusé en bloc. */
 export const SITE_DOCUMENT_LIMITS = {
   maxNodes: 6000,
-  maxDepth: 14,
+  // Section et colonne ajoutent deux niveaux au-dessus des blocs.
+  maxDepth: 16,
   maxTextLength: 20_000,
   maxAttrLength: 2000,
   maxTableColumns: 12,
@@ -56,6 +57,117 @@ export const SITE_BANNER_TONES = ['surface', 'accent', 'dark'] as const;
 export const SITE_GALLERY_LAYOUTS = ['grid', 'carousel'] as const;
 /** Plafonds des sections : au-delà, le surplus est ignoré. */
 export const SITE_SECTION_LIMITS = { galleryImages: 24 } as const;
+
+/**
+ * Sections de page (bandes pleine largeur façon constructeur de site) : une
+ * page est une pile de sections, chacune découpée en 1 à 4 colonnes de blocs.
+ * La disposition donne la part de chaque colonne (`2-1` : deux tiers, un tiers).
+ */
+export const SITE_SECTION_LAYOUTS = ['1', '1-1', '2-1', '1-2', '1-1-1', '1-2-1', '1-1-1-1'] as const;
+export const SITE_SECTION_BACKGROUNDS = ['none', 'surface', 'accent', 'dark', 'color', 'image', 'gradient'] as const;
+export const SITE_SECTION_GRADIENTS = ['accent', 'sunset', 'ocean', 'forest', 'night', 'aurora'] as const;
+export const SITE_SECTION_PADDINGS = ['none', 'small', 'medium', 'large'] as const;
+/** `contained` : dans la colonne du site ; `full` : fond bord à bord, contenu aligné ; `edge` : tout bord à bord. */
+export const SITE_SECTION_WIDTHS = ['contained', 'full', 'edge'] as const;
+export const SITE_SECTION_HEIGHTS = ['auto', 'tall', 'screen'] as const;
+export const SITE_SECTION_ALIGNS = ['top', 'center', 'bottom'] as const;
+export const SITE_SECTION_ANIMATIONS = ['none', 'fade', 'slide-up', 'zoom'] as const;
+export const SITE_SECTION_VISIBILITY = ['all', 'desktop', 'mobile'] as const;
+export const SITE_SECTION_MAX_COLUMNS = 4;
+
+export type SiteSectionLayout = (typeof SITE_SECTION_LAYOUTS)[number];
+
+export interface SiteSectionAttrs {
+  layout: SiteSectionLayout;
+  background: (typeof SITE_SECTION_BACKGROUNDS)[number];
+  bgColor: string;
+  bgImage: string;
+  bgGradient: (typeof SITE_SECTION_GRADIENTS)[number];
+  /** Assombrissement de l'image de fond, en %, pour que le texte reste lisible. */
+  overlay: number;
+  padding: (typeof SITE_SECTION_PADDINGS)[number];
+  width: (typeof SITE_SECTION_WIDTHS)[number];
+  height: (typeof SITE_SECTION_HEIGHTS)[number];
+  align: (typeof SITE_SECTION_ALIGNS)[number];
+  animation: (typeof SITE_SECTION_ANIMATIONS)[number];
+  visibleOn: (typeof SITE_SECTION_VISIBILITY)[number];
+  /** Ancre (`#rejoindre`) pour viser la section depuis le menu ou un bouton. */
+  anchor: string;
+}
+
+export const SITE_SECTION_DEFAULTS: SiteSectionAttrs = {
+  layout: '1',
+  background: 'none',
+  bgColor: '',
+  bgImage: '',
+  bgGradient: 'accent',
+  overlay: 45,
+  padding: 'medium',
+  width: 'contained',
+  height: 'auto',
+  align: 'top',
+  animation: 'none',
+  visibleOn: 'all',
+  anchor: '',
+};
+
+/** Image utilisable dans un `url()` de style : HTTPS ou image du site, sans caractère qui casse la règle. */
+const SAFE_CSS_IMAGE = /^(https:\/\/|\/s\/_\/a\/)[^"'()\s\\]+$/;
+
+/** Couleur de fond assez sombre pour passer le texte en clair (luminance relative). */
+export function isDarkSiteColor(hex: string): boolean {
+  const [r, g, b] = [1, 3, 5].map((i) => {
+    const c = parseInt(hex.slice(i, i + 2), 16) / 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b < 0.4;
+}
+
+export interface SiteSectionPresentation {
+  className: string;
+  /** Variables CSS du fond (`--sect-color`, `--sect-image`), à poser telles quelles en `style`. */
+  style: string;
+  anchor: string | null;
+  animation: string | null;
+}
+
+/**
+ * Classes et style d'une section, à partir de ses attributs : le rendu du site
+ * et le canevas de l'éditeur s'en servent tous deux, pour un aperçu exact.
+ */
+export function siteSectionPresentation(attrs: Record<string, unknown> | undefined): SiteSectionPresentation {
+  const a = attrs ?? {};
+  const pick = <T extends string>(value: unknown, allowed: readonly T[], fallback: T): T => oneOf(value, allowed, fallback);
+  const color = a.background === 'color' && typeof a.bgColor === 'string' && /^#[0-9a-f]{6}$/i.test(a.bgColor) ? a.bgColor : '';
+  const image = a.background === 'image' && typeof a.bgImage === 'string' && SAFE_CSS_IMAGE.test(a.bgImage) ? a.bgImage : '';
+  const requested = pick(a.background, SITE_SECTION_BACKGROUNDS, 'none');
+  const background = (requested === 'color' && !color) || (requested === 'image' && !image) ? 'none' : requested;
+  const inverse = background === 'dark' || background === 'gradient' || background === 'image' || (color !== '' && isDarkSiteColor(color));
+  const height = pick(a.height, SITE_SECTION_HEIGHTS, 'auto');
+  const align = pick(a.align, SITE_SECTION_ALIGNS, 'top');
+  const visibleOn = pick(a.visibleOn, SITE_SECTION_VISIBILITY, 'all');
+  const animation = pick(a.animation, SITE_SECTION_ANIMATIONS, 'none');
+  const overlay = int(a.overlay, 0, 80, SITE_SECTION_DEFAULTS.overlay) / 100;
+  const classes = [
+    'sect',
+    `bg-${background}`,
+    background === 'gradient' ? `grad-${pick(a.bgGradient, SITE_SECTION_GRADIENTS, 'accent')}` : '',
+    `pad-${pick(a.padding, SITE_SECTION_PADDINGS, 'medium')}`,
+    `w-${pick(a.width, SITE_SECTION_WIDTHS, 'contained')}`,
+    height !== 'auto' ? `h-${height}` : '',
+    align !== 'top' ? `va-${align}` : '',
+    visibleOn !== 'all' ? `only-${visibleOn}` : '',
+    inverse ? 'tone-inverse' : '',
+  ];
+  const style = [color && `--sect-color:${color}`, image && `--sect-image:url("${image}");--sect-overlay:${overlay}`].filter(Boolean).join(';');
+  const anchor = typeof a.anchor === 'string' && /^[a-z0-9][a-z0-9-]{0,59}$/.test(a.anchor) ? a.anchor : null;
+  return { className: classes.filter(Boolean).join(' '), style, anchor, animation: animation === 'none' ? null : animation };
+}
+
+/** Première disposition qui a ce nombre de colonnes. */
+export function sectionLayoutFor(columns: number): SiteSectionLayout {
+  return SITE_SECTION_LAYOUTS.find((layout) => layout.split('-').length === columns) ?? '1';
+}
 
 /**
  * Contenu permis de chaque nœud bloc : `block` (tout bloc), `inline` (texte),
@@ -92,12 +204,17 @@ const BLOCK_CONTENT: Record<string, ContentRule> = {
   gallery: 'none',
   testimonials: ['testimonial'],
   testimonial: 'block',
+  section: ['column'],
+  column: 'block',
 };
 
-/** Nœuds permis directement sous `doc` (et partout où `block` est attendu). */
+/**
+ * Nœuds permis partout où `block` est attendu, et sous `doc`. Une section ne
+ * vit que sous `doc` (jamais imbriquée), une colonne que dans une section.
+ */
 const TOP_BLOCKS = new Set(
   Object.keys(BLOCK_CONTENT).filter(
-    (type) => !['listItem', 'taskItem', 'tableRow', 'tableHeader', 'tableCell', 'gridCell', 'faqItem', 'testimonial'].includes(type),
+    (type) => !['listItem', 'taskItem', 'tableRow', 'tableHeader', 'tableCell', 'gridCell', 'faqItem', 'testimonial', 'section', 'column'].includes(type),
   ),
 );
 
@@ -282,6 +399,28 @@ function normalizeAttrs(type: string, attrs: Record<string, unknown>): Record<st
       return { columns: int(attrs.columns, 1, 3, 3) };
     case 'testimonial':
       return { name: str(attrs.name, 80).trim(), role: str(attrs.role, 80).trim(), avatar: sanitizeSiteImageSrc(attrs.avatar) ?? '' };
+    case 'section': {
+      const bgColor = typeof attrs.bgColor === 'string' && /^#[0-9a-f]{6}$/i.test(attrs.bgColor) ? attrs.bgColor.toLowerCase() : '';
+      const bgImage = sanitizeSiteImageSrc(attrs.bgImage) ?? '';
+      const background = oneOf(attrs.background, SITE_SECTION_BACKGROUNDS, 'none');
+      const anchor = str(attrs.anchor, 60).trim().toLowerCase();
+      return {
+        layout: oneOf(attrs.layout, SITE_SECTION_LAYOUTS, '1'),
+        // Un fond couleur ou image sans sa valeur retombe à « aucun ».
+        background: (background === 'color' && !bgColor) || (background === 'image' && !bgImage) ? 'none' : background,
+        bgColor,
+        bgImage,
+        bgGradient: oneOf(attrs.bgGradient, SITE_SECTION_GRADIENTS, 'accent'),
+        overlay: int(attrs.overlay, 0, 80, SITE_SECTION_DEFAULTS.overlay),
+        padding: oneOf(attrs.padding, SITE_SECTION_PADDINGS, 'medium'),
+        width: oneOf(attrs.width, SITE_SECTION_WIDTHS, 'contained'),
+        height: oneOf(attrs.height, SITE_SECTION_HEIGHTS, 'auto'),
+        align: oneOf(attrs.align, SITE_SECTION_ALIGNS, 'top'),
+        animation: oneOf(attrs.animation, SITE_SECTION_ANIMATIONS, 'none'),
+        visibleOn: oneOf(attrs.visibleOn, SITE_SECTION_VISIBILITY, 'all'),
+        anchor: /^[a-z0-9][a-z0-9-]{0,59}$/.test(anchor) ? anchor : '',
+      } satisfies SiteSectionAttrs;
+    }
     case 'module': {
       if (!isSiteModuleKey(attrs.module)) return null;
       const moduleKey: SiteModuleKey = attrs.module;
@@ -353,9 +492,15 @@ function normalizeBlock(raw: unknown, allowed: ContentRule, depth: number, state
       if (['bulletList', 'orderedList', 'taskList', 'table', 'tableRow', 'grid', 'faq', 'testimonials'].includes(type)) return null;
       // Une cellule, un élément de liste ou un encadré vide garde un paragraphe
       // vide : ProseMirror refuse un nœud bloc sans contenu.
-      content.push({ type: 'paragraph' });
+      content.push(type === 'section' ? { type: 'column', content: [{ type: 'paragraph' }] } : { type: 'paragraph' });
     }
     node.content = content;
+  }
+
+  if (type === 'section' && node.attrs && node.content) {
+    // La disposition suit le nombre réel de colonnes, plafonné.
+    node.content = node.content.slice(0, SITE_SECTION_MAX_COLUMNS);
+    if (String(node.attrs.layout).split('-').length !== node.content.length) node.attrs.layout = sectionLayoutFor(node.content.length);
   }
 
   if (type === 'table') {
@@ -377,10 +522,52 @@ export function normalizeSiteDocument(input: unknown): SiteDocument {
   const state: WalkState = { nodes: 0 };
   const content: SiteNode[] = [];
   for (const child of raw.content) {
-    const node = normalizeBlock(child, 'block', 1, state);
+    // Sous `doc`, sections et blocs peuvent se côtoyer : les pages d'avant les
+    // sections restent valides telles quelles (voir sectionizeSiteDocument).
+    const node = normalizeBlock(child, isRecord(child) && child.type === 'section' ? ['section'] : 'block', 1, state);
     if (node) content.push(node);
   }
   return { type: 'doc', content };
+}
+
+/** Section sans fond ni marge : elle s'affiche exactement comme les blocs qu'elle enveloppe. */
+function plainSection(content: SiteNode[]): SiteNode {
+  return { type: 'section', attrs: { ...SITE_SECTION_DEFAULTS, padding: 'none' }, content: [{ type: 'column', content }] };
+}
+
+export function isSectionedDocument(doc: SiteDocument): boolean {
+  return doc.content.length > 0 && doc.content.every((node) => node.type === 'section');
+}
+
+/**
+ * Document dont le premier niveau n'est fait que de sections, comme l'éditeur
+ * l'attend. Les blocs isolés sont regroupés dans des sections neutres : une
+ * nouvelle commence à chaque titre de niveau 1 ou 2, et chaque bannière a la
+ * sienne, pour que l'éditeur propose des morceaux qui ont un sens. Le rendu
+ * ne change pas. Un document vide reçoit une section vide.
+ */
+export function sectionizeSiteDocument(doc: SiteDocument): SiteDocument {
+  if (doc.content.length === 0) {
+    return { type: 'doc', content: [{ type: 'section', attrs: { ...SITE_SECTION_DEFAULTS }, content: [{ type: 'column', content: [{ type: 'paragraph' }] }] }] };
+  }
+  const out: SiteNode[] = [];
+  let run: SiteNode[] = [];
+  const flush = () => {
+    if (run.length > 0) out.push(plainSection(run));
+    run = [];
+  };
+  for (const node of doc.content) {
+    if (node.type === 'section') {
+      flush();
+      out.push(node);
+      continue;
+    }
+    if (node.type === 'banner' || (node.type === 'heading' && Number(node.attrs?.level ?? 2) <= 2)) flush();
+    run.push(node);
+    if (node.type === 'banner') flush();
+  }
+  flush();
+  return { type: 'doc', content: out };
 }
 
 function safeParse(value: string): unknown {

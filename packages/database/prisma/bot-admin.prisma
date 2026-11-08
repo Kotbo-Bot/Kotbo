@@ -97,6 +97,10 @@ model BroadcastLog {
   targetGuilds String[]  @default([])
   channelPref  String    @default("NEWS") // NEWS, PUBLIC, STAFF, FALLBACK
 
+  // Sondage interserveur : vide = annonce simple, sinon un bouton par option.
+  pollOptions  String[]  @default([])
+  pollClosesAt DateTime?
+
   successCount Int       @default(0)
   failCount    Int       @default(0)
   totalTargeted Int      @default(0)
@@ -111,6 +115,7 @@ model BroadcastLog {
   createdAt DateTime @default(now())
 
   deliveries BroadcastDelivery[]
+  pollVotes  BroadcastPollVote[]
 
   @@index([status])
   @@index([scheduledAt])
@@ -187,6 +192,24 @@ model BroadcastDelivery {
   @@index([guildId])
   @@index([status])
   @@map("broadcast_deliveries")
+}
+
+// Un vote par personne et par sondage, tous serveurs confondus : revoter
+// remplace le choix precedent.
+model BroadcastPollVote {
+  broadcastId String
+  userId      String
+  guildId     String
+  optionIndex Int
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  broadcast BroadcastLog @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
+
+  @@id([broadcastId, userId])
+  @@index([broadcastId, optionIndex])
+  @@map("broadcast_poll_votes")
 }
 
 // Journal des actions sensibles de la console admin globale.

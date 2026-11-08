@@ -1,63 +1,17 @@
 /** Node Workflow Builder - automatisations par blocs. */
+export type * from './workflowTypes';
+import type {
+  SaveWorkflowPayload,
+  WorkflowDetail,
+  WorkflowExecutionDetail,
+  WorkflowExecutionSummary,
+  WorkflowSummary,
+  WorkflowTestResult,
+  WorkflowWarning,
+} from './workflowTypes';
 import type { ValidationIssue, WorkflowGraph } from '@kotbo/shared';
 import { authStore } from '../stores/auth.svelte';
 import { dashboardRequest } from './client';
-
-export interface WorkflowSummary {
-  id: string;
-  name: string;
-  description: string | null;
-  enabled: boolean;
-  triggerType: string;
-  triggerEvent: string;
-  runCount: number;
-  successCount: number;
-  failureCount: number;
-  lastRunAt: string | null;
-  lastError: string | null;
-  updatedAt: string;
-}
-
-export interface WorkflowDetail extends WorkflowSummary {
-  graph: WorkflowGraph;
-}
-
-export interface WorkflowExecutionSummary {
-  id: string;
-  workflowId: string;
-  status: 'RUNNING' | 'WAITING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
-  error: string | null;
-  nodeVisits: number;
-  iterations: number;
-  resumeAt: string | null;
-  startedAt: string;
-  completedAt: string | null;
-  /** Type du nœud en échec, quand une étape a échoué */
-  failedStep: string | null;
-}
-
-export interface WorkflowExecutionStep {
-  id: string;
-  order: number;
-  nodeId: string;
-  nodeType: string;
-  status: 'OK' | 'ERROR' | 'SKIPPED';
-  inputs: Record<string, unknown> | null;
-  outputs: Record<string, unknown> | null;
-  error: string | null;
-  durationMs: number;
-}
-
-export interface WorkflowExecutionDetail extends WorkflowExecutionSummary {
-  steps: WorkflowExecutionStep[];
-}
-
-export interface SaveWorkflowPayload {
-  name: string;
-  description?: string | null;
-  enabled: boolean;
-  graph: WorkflowGraph;
-}
 
 export async function fetchWorkflows(
   guildId = authStore.selectedGuildId,
@@ -83,7 +37,7 @@ export async function fetchWorkflow(
 export async function createWorkflow(
   payload: SaveWorkflowPayload,
   guildId = authStore.selectedGuildId,
-): Promise<{ workflow: WorkflowDetail }> {
+): Promise<{ workflow: WorkflowDetail; warnings?: WorkflowWarning[] }> {
   // `silent` : la page annonce elle-même l'enregistrement, la duplication et la
   // suppression. Sans ça, le toast générique du client s'ajoute au sien.
   return dashboardRequest('/workflows', {
@@ -99,7 +53,7 @@ export async function updateWorkflow(
   id: string,
   payload: SaveWorkflowPayload,
   guildId = authStore.selectedGuildId,
-): Promise<{ workflow: WorkflowDetail }> {
+): Promise<{ workflow: WorkflowDetail; warnings?: WorkflowWarning[] }> {
   return dashboardRequest(`/workflows/${id}`, {
     method: 'PUT',
     payload,
@@ -144,6 +98,26 @@ export async function validateWorkflowGraph(
     payload: { graph },
     guildId,
     errorContext: 'API Error (Validate Workflow):',
+  });
+}
+
+/** Fait tourner le brouillon sans enregistrer ni agir, et rend sa trace. */
+export async function testWorkflowGraph(
+  graph: WorkflowGraph,
+  options: { workflowId?: string | null; memberId?: string | null; source?: 'sample' | 'last' } = {},
+  guildId = authStore.selectedGuildId,
+): Promise<{ test: WorkflowTestResult }> {
+  return dashboardRequest('/workflows/test', {
+    method: 'POST',
+    payload: {
+      graph,
+      workflowId: options.workflowId ?? null,
+      memberId: options.memberId ?? null,
+      source: options.source ?? 'sample',
+    },
+    guildId,
+    silent: true,
+    errorContext: 'API Error (Test Workflow):',
   });
 }
 

@@ -363,6 +363,8 @@
     honeypotChannelId: '',
     honeypotSanction: 'TIMEOUT',
     honeypotReinvite: false,
+    honeypotGraceSeconds: 0,
+    honeypotDurationMin: null as number | null,
   });
 
   // Snapshot of last-saved state
@@ -406,6 +408,8 @@
     honeypotChannelId: '',
     honeypotSanction: 'TIMEOUT',
     honeypotReinvite: false,
+    honeypotGraceSeconds: 0,
+    honeypotDurationMin: null as number | null,
   })));
 
   /**
@@ -572,12 +576,21 @@
     }
   }
 
+  let renamingChannelId = $state<string | null>(null);
+  let renameDraft = $state('');
+
+  function startRename(ch: ChannelRow) {
+    renamingChannelId = ch.id;
+    renameDraft = ch.name;
+  }
+
   async function renameChannel(ch: ChannelRow) {
-    const name = window.prompt(m.cm_bc_rename_prompt({ name: ch.name }), ch.name);
-    if (!name || name.trim() === ch.name) return;
+    const name = renameDraft.trim();
+    renamingChannelId = null;
+    if (!name || name === ch.name) return;
 
     try {
-      await renameDiscordChannel(ch.id, name.trim());
+      await renameDiscordChannel(ch.id, name);
       toast.success(m.cm_channel_renamed());
       await loadByChannel();
     } catch (err) {
@@ -754,7 +767,7 @@
   /** Exemple affiché sous l'interrupteur JSON, à recopier puis adapter. */
   const STICKY_JSON_EXAMPLE = JSON.stringify({
     content: '',
-    embeds: [{ title: '📌 À lire avant de poster', description: 'Consulte le **règlement** du serveur.', color: 5793266 }],
+    embeds: [{ title: m.cmx_sticky_example_title(), description: m.cmx_sticky_example_desc(), color: 5793266 }],
   }, null, 2);
 
   let stickies = $state([] as StickyDraft[]);
@@ -1018,6 +1031,8 @@
         config.honeypotChannelId = res.honeypotChannelId ?? '';
         config.honeypotSanction = res.honeypotSanction ?? 'TIMEOUT';
         config.honeypotReinvite = res.honeypotReinvite ?? false;
+        config.honeypotGraceSeconds = res.honeypotGraceSeconds ?? 0;
+        config.honeypotDurationMin = res.honeypotDurationMin ?? null;
         savedConfig = JSON.parse(JSON.stringify(config));
       }
     } catch (err) {
@@ -1074,6 +1089,8 @@
         honeypotChannelId: config.honeypotChannelId || null,
         honeypotSanction: config.honeypotSanction,
         honeypotReinvite: config.honeypotReinvite,
+        honeypotGraceSeconds: config.honeypotGraceSeconds,
+        honeypotDurationMin: config.honeypotDurationMin,
       });
 
       // `res.error` d'abord : la route nomme le champ qu'elle refuse
@@ -1237,6 +1254,33 @@
                         </p>
                       {/if}
 
+                      {#if renamingChannelId === ch.id}
+                        <form
+                          class="flex flex-wrap items-center gap-2 pt-1 border-t border-outline-variant/10"
+                          onsubmit={(e) => { e.preventDefault(); renameChannel(ch); }}
+                        >
+                          <!-- svelte-ignore a11y_autofocus -->
+                          <input
+                            type="text"
+                            bind:value={renameDraft}
+                            aria-label={m.cm_bc_rename_prompt({ name: ch.name })}
+                            maxlength="100"
+                            autofocus
+                            onkeydown={(e) => { if (e.key === 'Escape') renamingChannelId = null; }}
+                            class="flex-1 min-w-40 bg-surface-container-high/40 border border-outline-variant/20 rounded-lg px-3 py-1.5 text-xs text-on-surface outline-none focus:ring-1 focus:ring-primary/50"
+                          />
+                          <button type="submit" class="px-3 py-1.5 bg-primary text-white text-xs font-medium rounded-lg">
+                            {m.cm_validate()}
+                          </button>
+                          <button
+                            type="button"
+                            onclick={() => (renamingChannelId = null)}
+                            class="px-3 py-1.5 bg-surface-container text-on-surface text-xs font-medium rounded-lg border border-outline-variant/40"
+                          >
+                            {m.common_cancel()}
+                          </button>
+                        </form>
+                      {:else}
                       <div class="flex flex-wrap gap-2 pt-1 border-t border-outline-variant/10">
                         <button
                           type="button"
@@ -1245,7 +1289,7 @@
                           hover:border-outline-variant disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                           disabled={!ch.manageable}
                           title={ch.manageable ? '' : m.cm_bc_cannot_edit()}
-                          onclick={() => renameChannel(ch)}
+                          onclick={() => startRename(ch)}
                         >
                           <Papicon icon="pencil" size={13} />
                           {m.cm_rename_title()}
@@ -1263,6 +1307,7 @@
                           {m.common_delete()}
                         </button>
                       </div>
+                      {/if}
                     </div>
                   {/if}
                 </div>
@@ -3286,8 +3331,47 @@
                   <option value="SOFTBAN">{m.cm_opt_softban()}</option>
                   <option value="KICK">{m.cm_opt_kick_simple()}</option>
                   <option value="WARN">{m.cm_opt_warn_simple()}</option>
+                  <option value="JAIL">Quarantaine (Jail)</option>
                 </select>
                 <p class="text-2xs text-on-surface-variant/40 mt-1">{m.cm_sanction_select_hint()}</p>
+              </div>
+
+              {#if ['TIMEOUT', 'BAN', 'JAIL'].includes(config.honeypotSanction)}
+                <div class="space-y-1.5">
+                  <label for="honeypot-duration-select" class="text-xs font-bold text-on-surface/80 block">{m.cmx_hp_duration()}</label>
+                  <select
+                    id="honeypot-duration-select"
+                    value={config.honeypotDurationMin === null ? '' : String(config.honeypotDurationMin)}
+                    onchange={(e) => (config.honeypotDurationMin = e.currentTarget.value ? Number(e.currentTarget.value) : null)}
+                    class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs outline-none focus:ring-1 focus:ring-primary/30"
+                  >
+                    {#if config.honeypotSanction === 'TIMEOUT'}
+                      <option value="">{m.cmx_hp_28d()}</option>
+                    {:else}
+                      <option value="">{m.cmx_hp_permanent()}</option>
+                    {/if}
+                    <option value="60">{m.arx_duration_1h()}</option>
+                    <option value="1440">{m.arx_duration_1d()}</option>
+                    <option value="10080">{m.arx_duration_7d()}</option>
+                    {#if config.honeypotSanction !== 'TIMEOUT'}<option value="43200">{m.arx_duration_30d()}</option>{/if}
+                  </select>
+                </div>
+              {/if}
+
+              <div class="space-y-1.5">
+                <label for="honeypot-grace-select" class="text-xs font-bold text-on-surface/80 block">{m.cmx_hp_grace()}</label>
+                <select
+                  id="honeypot-grace-select"
+                  bind:value={config.honeypotGraceSeconds}
+                  class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs outline-none focus:ring-1 focus:ring-primary/30"
+                >
+                  <option value={0}>{m.cmx_hp_immediate()}</option>
+                  <option value={30}>{m.cmx_hp_ask_30s()}</option>
+                  <option value={60}>{m.cmx_hp_ask_1m()}</option>
+                  <option value={120}>{m.cmx_hp_ask_2m()}</option>
+                  <option value={300}>{m.cmx_hp_ask_5m()}</option>
+                </select>
+                <p class="text-2xs text-on-surface-variant mt-1">{m.cmx_hp_grace_hint()}</p>
               </div>
 
               {#if config.honeypotSanction === 'KICK' || config.honeypotSanction === 'SOFTBAN'}

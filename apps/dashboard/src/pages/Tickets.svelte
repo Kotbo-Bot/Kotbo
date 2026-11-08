@@ -1,7 +1,7 @@
 <script lang="ts">
   import { explainDisabled } from '../lib/actions/explainDisabled';
   import { m } from '../lib/i18n';
-  import { canViewFeature } from '../lib/permissions.svelte';
+  import { MemberCaseState } from '../lib/memberCase.svelte';
   import { onMount, onDestroy } from 'svelte';
   import { router } from 'tinro';
   import { resolveTabFromUrl, gotoTab } from '../lib/tabRouting';
@@ -13,10 +13,7 @@
   import { createAsyncActionState } from '../lib/asyncAction.svelte';
   import { unsavedChanges } from '../lib/stores/unsavedChanges.svelte';
   import { subscribeRealtime } from '../lib/stores/realtime.svelte';
-  import {
-    fetchMemberCase,
-    runMemberCaseAction,
-    dashboardFetch } from '../lib/api';
+  import { dashboardFetch } from '../lib/api';
   import ModulePage from '../lib/components/ModulePage.svelte';
   import RefreshButton from '../lib/components/RefreshButton.svelte';
   import Papicon from '../lib/components/Papicon.svelte';
@@ -105,18 +102,6 @@
     try { localStorage.setItem(DETAILS_OPEN_KEY, detailsOpen ? '1' : '0'); } catch { /* stockage indisponible */ }
   }
 
-  // Member Case Modal Integration
-  let caseModalOpen = $state(false);
-  let selectedCaseUser = $state<{ name: string; id: string | null } | null>(null);
-  let selectedCaseData = $state<any>(null);
-  let selectedCaseLoading = $state(false);
-  let selectedCaseError = $state('');
-  let memberActionReason = $state(m.e1_tickets_member_action_default_reason());
-  let memberActionDuration = $state('30m');
-  let memberActionBusy = $state(false);
-  let memberActionFeedback = $state('');
-  let memberActionIsError = $state(false);
-
   async function changeTab(tab: typeof activeTab) {
     if (unsavedChanges.isDirty && unsavedChanges.ownerId === 'tickets') {
       const confirmLeave = await confirmDialog.ask({
@@ -161,7 +146,7 @@
       config = data.config || {};
       
     } catch (err) {
-      error = errorMessage(err) || 'Une erreur est survenue';
+      error = errorMessage(err) || m.common_error_occurred();
     } finally {
       loading = false;
       loadingMoreTickets = false;
@@ -552,70 +537,11 @@
     }
   }
 
-  // Member Case Logic
-
-  /**
-   * Le dossier membre appartient a la section Membres : la fenetre ne s'ouvre
-   * pas pour un role a qui le centre de gestion l'a fermee, quelle que soit la
-   * page qui la demande.
-   */
-  const canOpenMemberCase = $derived(canViewFeature('members'));
-
-  async function loadMemberCaseDetails(userId: string) {
-    if (!canOpenMemberCase) return;
-    selectedCaseLoading = true;
-    selectedCaseError = '';
-    try {
-      selectedCaseData = await fetchMemberCase(userId);
-    } catch (err) {
-      selectedCaseError = errorMessage(err) || m.e1_tickets_err_load_case();
-      selectedCaseData = null;
-    } finally {
-      selectedCaseLoading = false;
-    }
-  }
+  // Fiche propre à la page : une sanction lancée depuis un ticket propose sa raison par défaut.
+  const memberCase = new MemberCaseState();
 
   function openMemberCase(userId: string, userName: string) {
-    if (!canOpenMemberCase) return;
-    selectedCaseUser = { name: userName, id: userId };
-    selectedCaseData = null;
-    selectedCaseError = '';
-    memberActionReason = m.e1_tickets_member_action_default_reason();
-    memberActionDuration = '30m';
-    memberActionFeedback = '';
-    memberActionIsError = false;
-    caseModalOpen = true;
-    if (userId) {
-      void loadMemberCaseDetails(userId);
-    }
-  }
-
-  function closeCaseModal() {
-    caseModalOpen = false;
-    selectedCaseUser = null;
-    selectedCaseData = null;
-    selectedCaseError = '';
-  }
-
-  async function executeMemberAction(action: 'WARN' | 'KICK' | 'TIMEOUT' | 'BAN') {
-    if (!selectedCaseUser?.id) return;
-    memberActionBusy = true;
-    memberActionFeedback = '';
-    memberActionIsError = false;
-    try {
-      const durationMs = action === 'TIMEOUT' ? 30 * 60 * 1000 : null;
-      await runMemberCaseAction(selectedCaseUser.id, action, {
-        reason: memberActionReason.trim() || m.e1_tickets_action_reason_short(),
-        durationMs: durationMs ?? undefined
-      });
-      memberActionFeedback = m.e1_tickets_action_success();
-      await loadMemberCaseDetails(selectedCaseUser.id);
-    } catch (err) {
-      memberActionIsError = true;
-      memberActionFeedback = errorMessage(err) || m.e1_tickets_action_failed();
-    } finally {
-      memberActionBusy = false;
-    }
+    void memberCase.show(userId, userName, m.e1_tickets_member_action_default_reason());
   }
 
   function getStatusLabel(status: string) {
@@ -841,12 +767,14 @@
             <!-- Actions : elles passent à la ligne. En défilement horizontal à barre
                  masquée, celles qui dépassaient de la colonne disparaissaient. -->
             <div class="flex flex-wrap items-center gap-2 mt-3">
-              <button
-                onclick={() => openMemberCase(selectedTicketDetail.userId, selectedTicketDetail.username)}
-                class="px-3 py-1.5 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded-lg text-xs font-semibold hover:bg-indigo-500 hover:text-white transition-all flex items-center gap-1.5 shrink-0"
-              >
-                <Papicon icon="shield" size={12} /> {m.e1_tickets_btn_case()}
-              </button>
+              {#if memberCase.canOpen}
+                <button
+                  onclick={() => openMemberCase(selectedTicketDetail.userId, selectedTicketDetail.username)}
+                  class="px-3 py-1.5 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded-lg text-xs font-semibold hover:bg-indigo-500 hover:text-white transition-all flex items-center gap-1.5 shrink-0"
+                >
+                  <Papicon icon="shield" size={12} /> {m.e1_tickets_btn_case()}
+                </button>
+              {/if}
 
               {#if selectedTicketDetail?.status === 'OPEN' || selectedTicketDetail?.status === 'CLAIMED'}
                 {#if selectedTicketDetail.status === 'OPEN'}
@@ -1210,7 +1138,7 @@
   {:else if activeTab === 'transcripts'}
     <TicketTranscripts {refreshToken} />
   {:else if activeTab === 'satisfaction'}
-    <TicketSatisfactionTab {refreshToken} onopenmember={openMemberCase} />
+    <TicketSatisfactionTab {refreshToken} onopenmember={memberCase.canOpen ? openMemberCase : undefined} />
   {:else if activeTab === 'macros'}
     <TicketMacros {refreshToken} ticketTypes={(Array.isArray(config.ticketTypes) ? config.ticketTypes : []).map((type: { id: string; label: string }) => ({ id: type.id, label: type.label }))} />
   {:else if activeTab === 'blacklist'}
@@ -1401,23 +1329,19 @@
 {/if}
 
 <!-- Member Case Modal -->
-{#if caseModalOpen}
+{#if memberCase.open}
   {#await import('../lib/components/MemberCaseModal.svelte') then module}
     {@const MemberCaseModal = module.default}
     <MemberCaseModal
-      open={caseModalOpen}
-      userId={selectedCaseUser?.id}
-      userName={selectedCaseUser?.name || ''}
-      caseData={selectedCaseData}
-      loading={selectedCaseLoading}
-      error={selectedCaseError}
-      actionReason={memberActionReason}
-      actionDuration={memberActionDuration}
-      actionBusy={memberActionBusy}
-      actionFeedback={memberActionFeedback}
-      actionIsError={memberActionIsError}
-      onClose={closeCaseModal}
-      onAction={executeMemberAction}
+      open={memberCase.open}
+      userId={memberCase.userId}
+      userName={memberCase.userName}
+      caseData={memberCase.caseData}
+      loading={memberCase.loading}
+      error={memberCase.error}
+      actionReason={memberCase.actionReason}
+      onClose={() => memberCase.close()}
+      onSelectUser={(userId) => memberCase.showFromGraph(userId)}
     />
   {/await}
 {/if}

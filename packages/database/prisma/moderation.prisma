@@ -5,6 +5,9 @@ enum SanctionType {
   TEMP_BAN
   BAN
   SOFTBAN
+  // Quarantaine par rôle : le membre reste sur le serveur sans rien y voir.
+  // Durée bornée ou permanente (expiresAt null), cf. MemberJail.
+  JAIL
 }
 
 enum SanctionStatus {

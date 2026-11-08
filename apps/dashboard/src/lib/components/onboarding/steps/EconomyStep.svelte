@@ -15,7 +15,7 @@
    * regle depuis la page Economie, une fois qu'on a vu ce que les membres font
    * de leurs pieces.
    */
-  import { m } from '../../../i18n';
+  import { m, dateLocale } from '../../../i18n';
   import { authStore } from '../../../stores/auth.svelte';
   import { toast } from '../../../stores/toast.svelte';
   import { wizard } from '../../../stores/onboardingWizard.svelte';
@@ -73,7 +73,7 @@
     if (onboardingData.busy) return;
     const trimmed = name.trim();
     if (!trimmed) {
-      toast.error('Donne un nom à ta monnaie.');
+      toast.error(m.onb_economy_currency_name_required());
       return;
     }
 
@@ -92,7 +92,7 @@
       celebrateStep();
       wizard.complete('economy');
     } catch (err) {
-      toast.error(errorMessage(err) || "L'économie n'a pas pu être enregistrée.");
+      toast.error(errorMessage(err) || m.onb_economy_save_failed());
     } finally {
       onboardingData.busy = false;
     }
@@ -204,7 +204,7 @@
           hours: config.dailyCooldownHour,
         })}
         fields={[
-          { emoji, name: m.onb_economy_preview_balance(), value: `${(sample * 7).toLocaleString('fr-FR')} ${name.trim() || 'pièces'}` },
+          { emoji, name: m.onb_economy_preview_balance(), value: `${(sample * 7).toLocaleString(dateLocale())} ${name.trim() || 'pièces'}` },
         ]}
       />
     </DiscordPreview>

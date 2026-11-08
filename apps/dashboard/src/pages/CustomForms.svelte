@@ -34,7 +34,7 @@
     loading = true;
     try {
       const res = await dashboardFetch(`/custom-forms`);
-      if (!res.ok) throw new Error('Impossible de charger les formulaires');
+      if (!res.ok) throw new Error(m.cfm_load_failed());
       const data = await res.json();
       forms = data.forms || [];
     } catch (err) {
@@ -73,7 +73,7 @@
 
       if (!res.ok) {
         const err = await res.json();
-        throw new Error(err.error || 'Impossible de créer le formulaire. Réessaie.');
+        throw new Error(err.error || m.cfm_create_failed());
       }
 
       const createdData = await res.json();
@@ -95,7 +95,7 @@
       const res = await dashboardFetch(`/custom-forms/${formId}`, {
         method: 'DELETE'
         });
-      if (!res.ok) throw new Error('Impossible de supprimer. Réessaie.');
+      if (!res.ok) throw new Error(m.cfm_delete_failed());
       await fetchForms();
       return true;
     }, { successMessage: m.cf_delete_success() });
@@ -126,7 +126,7 @@
         toast.error(m.cf_config_error());
       }
     } catch {
-      toast.error('Erreur réseau');
+      toast.error(m.cf_network_error());
     }
   }
 
@@ -146,7 +146,7 @@
         toast.error(m.cf_config_error());
       }
     } catch {
-      toast.error('Erreur réseau');
+      toast.error(m.cf_network_error());
     }
   }
 
@@ -176,7 +176,7 @@
         toast.error(m.cf_config_error());
       }
     } catch {
-      toast.error('Erreur réseau');
+      toast.error(m.cf_network_error());
     }
   }
 
@@ -196,7 +196,7 @@
         toast.error(m.cf_config_error());
       }
     } catch {
-      toast.error('Erreur réseau');
+      toast.error(m.cf_network_error());
     }
   }
 

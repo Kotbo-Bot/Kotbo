@@ -1,4 +1,3 @@
-import type { Prisma } from '@prisma/client';
 import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
 
@@ -9,9 +8,12 @@ import { logger } from '../../utils/logger.js';
  * en parallèle. Le pool saturait, Postgres refusait d'ouvrir la transaction
  * suivante (`P2028`) et le CPU partait en vrille sur des lots rejoués.
  *
- * Ici, une table se flushe en deux instructions par lot, quel que soit le
- * nombre de lignes : `createMany` crée les lignes manquantes à zéro, puis un
- * seul `UPDATE ... FROM (VALUES ...)` applique les compteurs.
+ * Ici, une table se flushe en une seule instruction par lot, quel que soit le
+ * nombre de lignes : `INSERT ... ON CONFLICT DO UPDATE` sur la clé primaire
+ * composée de la table (`<table>_pkey`), que `keys` doit couvrir. Une ligne
+ * nouvelle est écrite une fois avec ses compteurs, au lieu d'être créée à zéro
+ * puis réécrite par un UPDATE (deux versions de ligne, donc deux fois plus de
+ * WAL et de nettoyage par VACUUM).
  */
 
 export type BulkKeyColumn = { name: string; type: 'text' | 'int' };
@@ -28,24 +30,40 @@ export type BulkTarget = {
   keys: BulkKeyColumn[];
   counterColumns: readonly string[];
   overwriteColumns?: readonly string[];
-  createMany: (data: Array<Record<string, string | number>>) => Prisma.PrismaPromise<unknown>;
+  /** false pour une table sans `createdAt` ni `updatedAt`. */
+  timestamps?: boolean;
 };
 
 const ANALYTICS_CHUNK_SIZE =
   Number.parseInt(process.env.ANALYTICS_CHUNK_SIZE ?? '200', 10) || 200;
 
 /**
- * `maxWait` vaut 2 s par défaut côté Prisma : sous charge, l'attente d'une
- * connexion libre dépassait ce délai et le lot entier était perdu avant même
- * d'avoir touché la base. On laisse au pool le temps de se dégager.
+ * Postgres refuse un lot où deux lignes visent la même clé (« ON CONFLICT DO
+ * UPDATE command cannot affect row a second time ») et perdrait tout le lot.
+ * Les tampons sont des Map, mais une clé reconstruite par `split` peut en
+ * rejoindre une autre (séparateur présent dans un chemin de site, par exemple) :
+ * on fusionne ces lignes plutôt que de risquer le lot.
  */
-const ANALYTICS_TX_MAX_WAIT_MS =
-  Number.parseInt(process.env.ANALYTICS_TX_MAX_WAIT_MS ?? '15000', 10) || 15000;
-const ANALYTICS_TX_TIMEOUT_MS =
-  Number.parseInt(process.env.ANALYTICS_TX_TIMEOUT_MS ?? '30000', 10) || 30000;
+function mergeDuplicateKeys(rows: BulkRow[]): BulkRow[] {
+  const merged = new Map<string, BulkRow>();
+  for (const row of rows) {
+    const id = JSON.stringify(row.keys.map(String));
+    const existing = merged.get(id);
+    if (!existing) {
+      merged.set(id, { keys: row.keys, counters: { ...row.counters }, overwrites: row.overwrites });
+      continue;
+    }
+    for (const [col, value] of Object.entries(row.counters)) {
+      existing.counters[col] = (existing.counters[col] ?? 0) + value;
+    }
+    if (row.overwrites) existing.overwrites = row.overwrites;
+  }
+  return [...merged.values()];
+}
 
 async function flushBulkChunk(target: BulkTarget, chunk: BulkRow[]): Promise<void> {
   const overwriteColumns = target.overwriteColumns ?? [];
+  const timestamps = target.timestamps !== false;
   const columnTypes = [
     ...target.keys.map((key) => key.type),
     ...target.counterColumns.map(() => 'int' as const),
@@ -60,55 +78,39 @@ async function flushBulkChunk(target: BulkTarget, chunk: BulkRow[]): Promise<voi
       ...target.counterColumns.map((col) => row.counters[col] ?? 0),
       ...overwriteColumns.map((col) => row.overwrites?.[col] ?? 0),
     );
-    return `(${columnTypes.map((type, index) => `$${base + 1 + index}::${type}`).join(', ')})`;
+    const values = columnTypes.map((type, index) => `$${base + 1 + index}::${type}`);
+    if (timestamps) values.push('NOW()', 'NOW()');
+    return `(${values.join(', ')})`;
   });
 
-  const valueColumns = [
+  const insertColumns = [
     ...target.keys.map((key) => key.name),
     ...target.counterColumns,
     ...overwriteColumns,
+    ...(timestamps ? ['createdAt', 'updatedAt'] : []),
   ]
     .map((col) => `"${col}"`)
     .join(', ');
 
   const setClause = [
-    ...target.counterColumns.map((col) => `"${col}" = m."${col}" + v."${col}"`),
-    ...overwriteColumns.map((col) => `"${col}" = v."${col}"`),
+    ...target.counterColumns.map((col) => `"${col}" = m."${col}" + EXCLUDED."${col}"`),
+    ...overwriteColumns.map((col) => `"${col}" = EXCLUDED."${col}"`),
+    ...(timestamps ? ['"updatedAt" = NOW()'] : []),
   ].join(', ');
 
-  const whereClause = target.keys
-    .map((key) => `m."${key.name}" = v."${key.name}"`)
-    .join(' AND ');
-
-  await prisma.$transaction(
-    [
-      // Les lignes absentes sont créées à zéro d'abord : l'UPDATE qui suit n'a
-      // alors plus qu'à incrémenter, sans avoir à générer d'`id` cuid ni
-      // d'`updatedAt` en SQL brut.
-      target.createMany(
-        chunk.map((row) => {
-          const data: Record<string, string | number> = {};
-          target.keys.forEach((key, index) => {
-            data[key.name] = row.keys[index]!;
-          });
-          return data;
-        }),
-      ),
-      prisma.$executeRawUnsafe(
-        `UPDATE ${target.table} AS m
-       SET ${setClause}, "updatedAt" = NOW()
-       FROM (VALUES ${tuples.join(', ')}) AS v(${valueColumns})
-       WHERE ${whereClause}`,
-        ...params,
-      ),
-    ],
-    { maxWait: ANALYTICS_TX_MAX_WAIT_MS, timeout: ANALYTICS_TX_TIMEOUT_MS },
+  await prisma.$executeRawUnsafe(
+    `INSERT INTO ${target.table} AS m (${insertColumns})
+     VALUES ${tuples.join(', ')}
+     ON CONFLICT ON CONSTRAINT "${target.table}_pkey" DO UPDATE SET ${setClause}`,
+    ...params,
   );
 }
 
 export async function flushBulk(target: BulkTarget, rows: BulkRow[]): Promise<void> {
-  for (let i = 0; i < rows.length; i += ANALYTICS_CHUNK_SIZE) {
-    const chunk = rows.slice(i, i + ANALYTICS_CHUNK_SIZE);
+  // Une clé coupée en trop de morceaux décalerait les paramètres de tout le lot.
+  const unique = mergeDuplicateKeys(rows.filter((row) => row.keys.length === target.keys.length));
+  for (let i = 0; i < unique.length; i += ANALYTICS_CHUNK_SIZE) {
+    const chunk = unique.slice(i, i + ANALYTICS_CHUNK_SIZE);
     await flushBulkChunk(target, chunk).catch((error) => {
       logger.error('Analytics', `Error flushing ${target.label} batch (offset ${i}):`, error);
     });

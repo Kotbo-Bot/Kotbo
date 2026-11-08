@@ -29,6 +29,7 @@ import {
   type LockableChannel,
 } from '../../services/moderation/lockdownService.js';
 import { getReportStats } from '../../services/moderation/reportService.js';
+import { provisionJail } from '../../services/moderation/jailService.js';
 
 const LOCKDOWN_SCOPE_CHOICES = [
   { name: 'Le salon', value: 'salon' },
@@ -169,7 +170,7 @@ const data = new SlashCommandBuilder()
           .addChannelOption((opt) =>
             opt.setName('salon-alertes').setDescription('Salon des alertes').addChannelTypes(ChannelType.GuildText))
           .addBooleanOption((opt) =>
-            opt.setName('images').setDescription('Bloquer aussi les images scam connues (base alimentée par le honeypot)')))
+            opt.setName('images').setDescription('Kotbo Vision : bloquer les images d\'arnaque connues (actif par défaut)')))
       .addSubcommand((sub) => sub.setName('desactiver').setDescription('Désactive le filtre anti-scam')))
   .addSubcommandGroup((group) =>
     group
@@ -211,7 +212,9 @@ const data = new SlashCommandBuilder()
           .addChannelOption((opt) =>
             opt.setName('salon').setDescription('Salon ou catégorie visé (défaut : le salon actuel)').addChannelTypes(...LOCKDOWN_CHANNEL_TYPES))
           .addStringOption((opt) =>
-            opt.setName('raison').setDescription('Affichée dans le salon et le journal d\'audit').setMaxLength(300)))
+            opt.setName('raison').setDescription('Affichée dans le salon et le journal d\'audit').setMaxLength(300))
+          .addBooleanOption((opt) =>
+            opt.setName('silencieux').setDescription('Ne publie aucun message dans le salon verrouillé')))
       .addSubcommand((sub) =>
         sub
           .setName('off')
@@ -219,7 +222,19 @@ const data = new SlashCommandBuilder()
           .addStringOption((opt) =>
             opt.setName('portee').setDescription('Ce qui est rouvert (défaut : le salon)').addChoices(...LOCKDOWN_SCOPE_CHOICES))
           .addChannelOption((opt) =>
-            opt.setName('salon').setDescription('Salon ou catégorie visé (défaut : le salon actuel)').addChannelTypes(...LOCKDOWN_CHANNEL_TYPES))))
+            opt.setName('salon').setDescription('Salon ou catégorie visé (défaut : le salon actuel)').addChannelTypes(...LOCKDOWN_CHANNEL_TYPES))
+          .addBooleanOption((opt) =>
+            opt.setName('silencieux').setDescription('Ne publie aucun message dans le salon rouvert'))))
+  .addSubcommandGroup((group) =>
+    group
+      .setName('jail')
+      .setDescription('Quarantaine par rôle : le membre reste sur le serveur sans rien y voir')
+      .addSubcommand((sub) =>
+        sub
+          .setName('setup')
+          .setDescription('Crée ou répare le rôle Jail et le masque sur tous les salons')
+          .addBooleanOption((opt) =>
+            opt.setName('salon').setDescription('Créer aussi un salon #quarantaine où le staff échange avec les membres en jail'))))
   .addSubcommand((sub) => sub.setName('status').setDescription('État de tous les modules de protection'));
 
 type LockdownScope = 'salon' | 'categorie' | 'serveur';
@@ -334,8 +349,12 @@ async function execute(interaction: ChatInputCommandInteraction) {
         {
           name: '🎣 Anti-scam',
           value: config?.scamFilterEnabled
-            ? `${on} - action ${config.scamFilterAction}${config.scamImageFilterEnabled ? ' · images scam bloquées 🖼️' : ''}`
+            ? `${on} - action ${config.scamFilterAction}`
             : off,
+        },
+        {
+          name: '🔍 Kotbo Vision (images)',
+          value: config?.visionEnabled === false ? off : `${on} - sanction ${config?.visionSanction ?? 'TIMEOUT'}`,
         },
         {
           name: '🔗 Contrôle des invitations',
@@ -363,14 +382,15 @@ async function execute(interaction: ChatInputCommandInteraction) {
 
     if (sub === 'on') {
       const reason = interaction.options.getString('raison');
+      const silent = interaction.options.getBoolean('silencieux') ?? false;
       const counts = { locked: 0, already: 0, failed: 0 };
       for (const channel of target.channels) {
         counts[await lockChannel(channel, interaction.user.id, reason)]++;
       }
 
-      // Annonce seulement pour un salon seul : sur une catégorie ou un serveur,
-      // un message par salon noierait tout le monde.
-      const single = target.channels.length === 1 ? target.channels[0] : null;
+      // Annonce seulement pour un salon seul, et seulement si non silencieux :
+      // sur une catégorie ou un serveur, un message par salon noierait tout le monde.
+      const single = !silent && target.channels.length === 1 ? target.channels[0] : null;
       if (single && counts.locked === 1 && single.isSendable()) {
         await single.send({
           embeds: [new EmbedBuilder()
@@ -403,12 +423,13 @@ async function execute(interaction: ChatInputCommandInteraction) {
       return;
     }
 
+    const silent = interaction.options.getBoolean('silencieux') ?? false;
     const counts = { unlocked: 0, gone: 0, failed: 0 };
     for (const channelId of toUnlock) {
       counts[await unlockChannel(guild, channelId)]++;
     }
 
-    const single = toUnlock.length === 1 ? guild.channels.cache.get(toUnlock[0]) : null;
+    const single = !silent && toUnlock.length === 1 ? guild.channels.cache.get(toUnlock[0]) : null;
     if (single && counts.unlocked === 1 && single.isSendable()) {
       await single.send({
         embeds: [new EmbedBuilder().setColor(COLORS.success).setTitle('🔓 Salon rouvert')],
@@ -564,6 +585,30 @@ async function execute(interaction: ChatInputCommandInteraction) {
     return;
   }
 
+  // ── jail ────────────────────────────────────────────────────────────────────
+  if (group === 'jail') {
+    await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
+    const me = guild.members.me;
+    if (!me?.permissions.has([PermissionFlagsBits.ManageRoles, PermissionFlagsBits.ManageChannels])) {
+      await interaction.editReply({ embeds: [errorEmbed('Permissions manquantes', 'Kotbo a besoin de « Gérer les rôles » et « Gérer les salons ».')] });
+      return;
+    }
+    const result = await provisionJail(guild, { createChannel: interaction.options.getBoolean('salon') ?? false });
+    await interaction.editReply({
+      embeds: [
+        successEmbed(
+          'Jail prêt',
+          [
+            `Rôle : <@&${result.roleId}>, masqué sur ${result.channelsUpdated} salon(s).`,
+            result.channelId ? `Salon de quarantaine : <#${result.channelId}>.` : 'Aucun salon de quarantaine.',
+            'Les salons créés ensuite seront masqués automatiquement. Utilise `/sanction jail` pour mettre un membre en quarantaine.',
+          ].join('\n'),
+        ),
+      ],
+    });
+    return;
+  }
+
   // ── scam ────────────────────────────────────────────────────────────────────
   if (group === 'scam') {
     if (sub === 'activer') {
@@ -571,7 +616,7 @@ async function execute(interaction: ChatInputCommandInteraction) {
         scamFilterEnabled: true,
         scamFilterAction: interaction.options.getString('action') ?? 'DELETE_AND_TIMEOUT',
         scamFilterAlertChannelId: interaction.options.getChannel('salon-alertes')?.id ?? null,
-        scamImageFilterEnabled: interaction.options.getBoolean('images') ?? true,
+        visionEnabled: interaction.options.getBoolean('images') ?? true,
       });
       await interaction.reply({
         embeds: [successEmbed('Filtre anti-scam activé', 'Les liens d\'arnaques connus (faux Nitro, phishing Steam/Discord) seront supprimés automatiquement.')],

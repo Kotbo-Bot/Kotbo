@@ -321,7 +321,15 @@ model ReactionRoleMenu {
   messageId  String?
   title      String
   options    Json    // List of { emoji?: string, label: string, roleId: string, mode?: "toggle" | "add_only", style?: "secondary" | "primary" | "success" | "danger" }
-  buttonMode String  @default("toggle") // "toggle" | "add_only", surchargeable option par option
+  // "toggle" | "add_only", surchargeable bouton par bouton, ou "exclusive" : un
+  // seul rôle du menu à la fois, en prendre un retire les autres (couleurs...).
+  buttonMode String  @default("toggle")
+  /// Texte du message sous le titre ; vide, le bot explique ce que font les boutons.
+  description String?
+  /// Nombre de membres qui ont le rôle, affiché sur chaque bouton.
+  showCounts Boolean @default(false)
+  /// Couleur de la barre de l'embed (« #RRGGBB ») ; vide, le bleu Discord.
+  embedColor String?
 
   guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
 
@@ -336,7 +344,9 @@ model ReactionRoleMenu {
 // ============================================================================
 // Le message publié ne porte aucun nom. `authorId` reste en base pour qu'un
 // administrateur puisse révéler l'auteur en cas d'abus (/confession reveler) :
-// chaque révélation est tracée dans le salon staff.
+// chaque révélation est tracée dans le salon staff. Une confession retirée par
+// le staff (/confession supprimer) garde sa ligne : le message Discord disparaît,
+// la trace et l'auteur restent.
 model Confession {
   id        String  @id @default(cuid())
   guildId   String
@@ -344,9 +354,13 @@ model Confession {
   number    Int
   authorId  String
   content   String
+  /// Salon de publication : il peut changer ensuite, le retrait vise celui-ci.
+  channelId String?
   messageId String?
   revealedAt DateTime?
   revealedBy String?
+  deletedAt DateTime?
+  deletedBy String?
 
   guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
 

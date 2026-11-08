@@ -32,6 +32,7 @@ import { memberBlocks } from './memberBlocks.js';
 import { voteBlocks } from './voteBlocks.js';
 import { autoBlocks } from './autoBlocks.js';
 import { memberActivityBlocks } from './memberActivityBlocks.js';
+import { memberAppBlocks } from './memberAppBlocks.js';
 
 export type { BlockContext, BlockRef } from './blockContext.js';
 
@@ -45,6 +46,7 @@ const REGISTRY: BlockRegistry = {
   ...voteBlocks,
   ...autoBlocks,
   ...memberActivityBlocks,
+  ...memberAppBlocks,
   // Import différé : le pouls lit des blocs qui, par le rendu, reviennent ici.
   pulse: async (ctx) => (await import('../sitePulse.js')).renderPulse(ctx),
 };

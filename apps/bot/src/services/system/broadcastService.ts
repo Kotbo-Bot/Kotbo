@@ -7,8 +7,8 @@
  *   - un cycle de vie (brouillon, programme, en cours, envoye, annule) ;
  *   - la validation des URL d'image avant diffusion.
  */
-import type { Client } from 'discord.js';
-import { EmbedBuilder, type ColorResolvable } from 'discord.js';
+import type { ButtonInteraction, Client } from 'discord.js';
+import { EmbedBuilder, MessageFlags, type ColorResolvable } from 'discord.js';
 import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
 import { resolveEmojiShortcodes, resolveEmojiShortcodesToUnicode } from '../../utils/emojis.js';
@@ -29,7 +29,15 @@ export interface BroadcastContent {
   target?: BroadcastTarget;
   targetGuilds?: string[];
   channelPref?: BroadcastChannelPref;
+  /** 2 a 5 choix : un bouton par option, une rangee Discord n'en porte pas plus. */
+  pollOptions?: string[];
+  /** ISO 8601. Passe cette date, les votes sont refuses. */
+  pollClosesAt?: string | null;
 }
+
+export const POLL_MIN_OPTIONS = 2;
+export const POLL_MAX_OPTIONS = 5;
+export const POLL_BUTTON_PREFIX = 'bcpoll:';
 
 export const DEFAULT_BROADCAST_TITLE = '📢 Annonce Globale Kotbo';
 export const DEFAULT_BROADCAST_FOOTER = "Système d'annonce globale Kotbo";
@@ -72,6 +80,8 @@ export function normalizeBroadcastContent(content: BroadcastContent): {
   target: BroadcastTarget;
   targetGuilds: string[];
   channelPref: BroadcastChannelPref;
+  pollOptions: string[];
+  pollClosesAt: Date | null;
   warnings: string[];
 } {
   const message = content.message?.trim();
@@ -109,6 +119,25 @@ export function normalizeBroadcastContent(content: BroadcastContent): {
     throw new BroadcastValidationError('Sélectionnez au moins un serveur pour un ciblage personnalisé.', 'targetGuilds');
   }
 
+  const pollOptions = [...new Set((content.pollOptions ?? []).map((option) => option.trim()).filter(Boolean))];
+  if (pollOptions.length > 0 && (pollOptions.length < POLL_MIN_OPTIONS || pollOptions.length > POLL_MAX_OPTIONS)) {
+    throw new BroadcastValidationError(
+      `Un sondage demande entre ${POLL_MIN_OPTIONS} et ${POLL_MAX_OPTIONS} options distinctes.`,
+      'pollOptions',
+    );
+  }
+  if (pollOptions.some((option) => option.length > 80)) {
+    throw new BroadcastValidationError('Une option de sondage dépasse 80 caractères.', 'pollOptions');
+  }
+
+  let pollClosesAt: Date | null = null;
+  if (pollOptions.length > 0 && content.pollClosesAt) {
+    pollClosesAt = new Date(content.pollClosesAt);
+    if (Number.isNaN(pollClosesAt.getTime()) || pollClosesAt.getTime() <= Date.now()) {
+      throw new BroadcastValidationError('La clôture du sondage doit être dans le futur.', 'pollClosesAt');
+    }
+  }
+
   return {
     title,
     message: resolveEmojiShortcodes(message),
@@ -119,8 +148,23 @@ export function normalizeBroadcastContent(content: BroadcastContent): {
     target,
     targetGuilds,
     channelPref: content.channelPref ?? 'AUTO',
+    pollOptions,
+    pollClosesAt,
     warnings,
   };
+}
+
+/** Rangee de boutons du sondage, en JSON brut : `broadcastEval` ne transporte pas de builders. */
+function buildPollComponents(broadcastId: string, options: string[]) {
+  return [{
+    type: 1,
+    components: options.map((label, index) => ({
+      type: 2,
+      style: 2,
+      label,
+      custom_id: `${POLL_BUTTON_PREFIX}${broadcastId}:${index}`,
+    })),
+  }];
 }
 
 /** Ordre de repli des salons, identique dans le processus principal et dans les shards. */
@@ -197,6 +241,7 @@ interface ShardBroadcastContext {
   channelMap: Record<string, GuildChannelConfig>;
   allowedIds: string[];
   channelPref: BroadcastChannelPref;
+  components: ReturnType<typeof buildPollComponents> | undefined;
 }
 
 /**
@@ -218,9 +263,15 @@ export async function deliverBroadcast(
     channelPref: BroadcastChannelPref;
     allowedIds: string[];
     channelMap: Record<string, GuildChannelConfig>;
+    /** Present = l'annonce porte un sondage ; `broadcastId` sert d'ancre aux boutons. */
+    poll?: { broadcastId: string; options: string[] };
   },
 ): Promise<DeliveryResult[]> {
+  const components = params.poll && params.poll.options.length > 0
+    ? buildPollComponents(params.poll.broadcastId, params.poll.options)
+    : undefined;
   const context: ShardBroadcastContext = {
+    components,
     embed: {
       title: params.title,
       message: params.message,
@@ -291,7 +342,7 @@ export async function deliverBroadcast(
             if (ctx.embed.thumbnailUrl) embed.setThumbnail(ctx.embed.thumbnailUrl);
             if (ctx.embed.imageUrl) embed.setImage(ctx.embed.imageUrl);
 
-            const sent = await channel.send({ embeds: [embed] });
+            const sent = await channel.send({ embeds: [embed], ...(ctx.components ? { components: ctx.components } : {}) });
             out.push({
               guildId: id,
               guildName: guild.name,
@@ -361,7 +412,7 @@ export async function deliverBroadcast(
       if (params.thumbnailUrl) embed.setThumbnail(params.thumbnailUrl);
       if (params.imageUrl) embed.setImage(params.imageUrl);
 
-      const sent = await channel.send({ embeds: [embed] });
+      const sent = await channel.send({ embeds: [embed], ...(components ? { components } : {}) });
       out.push({
         guildId: id,
         guildName: guild.name,
@@ -384,6 +435,82 @@ export async function deliverBroadcast(
     }
   }
   return out;
+}
+
+export interface PollResults {
+  options: { label: string; votes: number }[];
+  total: number;
+  closesAt: Date | null;
+  /** Votes par serveur, du plus au moins representatif. */
+  byGuild: { guildId: string; votes: number }[];
+}
+
+export async function getPollResults(broadcastId: string): Promise<PollResults | null> {
+  const broadcast = await prisma.broadcastLog.findUnique({
+    where: { id: broadcastId },
+    select: { pollOptions: true, pollClosesAt: true },
+  });
+  if (!broadcast || broadcast.pollOptions.length === 0) return null;
+
+  const [byOption, byGuild] = await Promise.all([
+    prisma.broadcastPollVote.groupBy({ by: ['optionIndex'], where: { broadcastId }, _count: { _all: true } }),
+    prisma.broadcastPollVote.groupBy({ by: ['guildId'], where: { broadcastId }, _count: { _all: true } }),
+  ]);
+  const counts = new Map(byOption.map((row) => [row.optionIndex, row._count._all]));
+  const options = broadcast.pollOptions.map((label, index) => ({ label, votes: counts.get(index) ?? 0 }));
+
+  return {
+    options,
+    total: options.reduce((sum, option) => sum + option.votes, 0),
+    closesAt: broadcast.pollClosesAt,
+    byGuild: byGuild
+      .map((row) => ({ guildId: row.guildId, votes: row._count._all }))
+      .sort((a, b) => b.votes - a.votes),
+  };
+}
+
+function formatPollResults(results: PollResults, chosen: number): string {
+  return results.options
+    .map((option, index) => {
+      const percent = results.total > 0 ? Math.round((option.votes / results.total) * 100) : 0;
+      return `${index === chosen ? '▸' : '▫️'} **${option.label}** : ${option.votes} (${percent} %)`;
+    })
+    .join('\n');
+}
+
+/** Bouton `bcpoll:<broadcastId>:<index>` : enregistre le vote puis montre l'etat global, en prive. */
+export async function handleBroadcastPollVote(interaction: ButtonInteraction): Promise<void> {
+  const [, broadcastId, rawIndex] = interaction.customId.split(':');
+  const optionIndex = Number.parseInt(rawIndex ?? '', 10);
+  const reply = (content: string) => interaction.reply({ content, flags: [MessageFlags.Ephemeral] });
+
+  const broadcast = broadcastId
+    ? await prisma.broadcastLog.findUnique({
+      where: { id: broadcastId },
+      select: { pollOptions: true, pollClosesAt: true },
+    })
+    : null;
+  if (!broadcast || !Number.isInteger(optionIndex) || optionIndex < 0 || optionIndex >= broadcast.pollOptions.length) {
+    await reply('Ce sondage n’existe plus.');
+    return;
+  }
+  if (broadcast.pollClosesAt && broadcast.pollClosesAt.getTime() <= Date.now()) {
+    const closed = await getPollResults(broadcastId);
+    await reply(`Ce sondage est clos.${closed ? `\n\n${formatPollResults(closed, -1)}` : ''}`);
+    return;
+  }
+
+  await prisma.broadcastPollVote.upsert({
+    where: { broadcastId_userId: { broadcastId, userId: interaction.user.id } },
+    update: { optionIndex, guildId: interaction.guildId ?? 'dm' },
+    create: { broadcastId, userId: interaction.user.id, guildId: interaction.guildId ?? 'dm', optionIndex },
+  });
+
+  const results = await getPollResults(broadcastId);
+  await reply(
+    `Vote enregistré : **${broadcast.pollOptions[optionIndex]}**. Tu peux le changer en cliquant sur une autre option.`
+    + (results ? `\n\n${formatPollResults(results, optionIndex)}\n_${results.total} vote(s), tous serveurs confondus_` : ''),
+  );
 }
 
 /** Persiste le detail d'envoi et met le broadcast dans son etat final. */
@@ -472,6 +599,7 @@ export function startBroadcastScheduler(
             channelPref: broadcast.channelPref as BroadcastChannelPref,
             allowedIds: [...allowed],
             channelMap,
+            poll: { broadcastId: broadcast.id, options: broadcast.pollOptions },
           });
 
           await finalizeBroadcast(broadcast.id, deliveries, allowed.size);

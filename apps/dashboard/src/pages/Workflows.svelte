@@ -1,14 +1,21 @@
 <script lang="ts">
   import { explainDisabled } from '../lib/actions/explainDisabled';
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import Papicon from '../lib/components/Papicon.svelte';
   import ModulePage from '../lib/components/ModulePage.svelte';
   import RecipeEditor from '../lib/components/triggers/RecipeEditor.svelte';
   import WorkflowEditor from '../lib/components/workflows/WorkflowEditor.svelte';
+  import ReplayStepPanel from '../lib/components/workflows/ReplayStepPanel.svelte';
   import { RECIPE_TEMPLATES, errorMessage, type RecipeTemplate } from '@kotbo/shared';
   import { canConfigureFeature, canDeleteFeature } from '../lib/permissions.svelte';
   import { toast } from '../lib/stores/toast.svelte';
   import { confirmDialog } from '../lib/stores/confirmDialog.svelte';
+  import { unsavedChanges } from '../lib/stores/unsavedChanges.svelte';
+  import { useUnsavedChanges } from '../lib/useUnsavedChanges.svelte';
+  import { workflowDraftKey } from '../lib/workflowDraft';
+  import { failedNodeId, testReplayStatus } from '../lib/workflowTest';
+  import { isNodeOffered } from '../lib/workflowAvailability';
+  import MemberSearchSelect from '../lib/components/MemberSearchSelect.svelte';
   import { m, dateLocale } from '../lib/i18n';
   import {
     compileRecipe,
@@ -16,6 +23,7 @@
     getNodeDef,
     getTrigger,
     hasBlockingIssue,
+    validateGraph,
     type ValidationIssue,
     type WorkflowGraph,
   } from '@kotbo/shared';
@@ -28,6 +36,9 @@
     deleteWorkflow,
     fetchWorkflowExecutions,
     fetchWorkflowExecution,
+    testWorkflowGraph,
+    type GuildMemberSearchResult,
+    type WorkflowWarning,
     type WorkflowSummary,
     type WorkflowExecutionSummary,
     type WorkflowExecutionDetail,
@@ -75,6 +86,50 @@
   let saving = $state(false);
 
   /**
+   * Dernier état enregistré (ou ouvert) de l'automatisation en cours d'édition.
+   * Sans lui, revenir à la liste ou changer de page jetait le travail en cours
+   * sans un mot.
+   */
+  let saved = $state<{ form: typeof form; graph: WorkflowGraph } | null>(null);
+
+  function markSaved(): void {
+    saved = { form: $state.snapshot(form), graph: $state.snapshot(graph) as WorkflowGraph };
+  }
+
+  const UNSAVED_ID = 'workflows';
+
+  useUnsavedChanges({
+    id: UNSAVED_ID,
+    label: m.wf_page_title(),
+    getConfig: () => (editingDraft ? workflowDraftKey(form, graph) : null),
+    getSaved: () => (editingDraft && saved ? workflowDraftKey(saved.form, saved.graph) : null),
+    onSave: save,
+    onReset: () => {
+      if (!saved) return;
+      form = $state.snapshot(saved.form);
+      graph = $state.snapshot(saved.graph) as WorkflowGraph;
+      issues = validateGraph(graph);
+    },
+    canEdit: () => canConfigure,
+  });
+
+  /** Retour à la liste depuis l'éditeur, après confirmation s'il reste des modifications. */
+  async function leaveEditor(): Promise<void> {
+    if (unsavedChanges.isDirty && unsavedChanges.ownerId === UNSAVED_ID) {
+      const confirmed = await confirmDialog.ask({
+        title: m.banner_unsaved_title(),
+        description: m.banner_unsaved_desc({ page: m.wf_page_title() }),
+        confirmLabel: m.banner_unsaved_leave(),
+        variant: 'warning',
+      });
+      if (!confirmed) return;
+    }
+    unsavedChanges.release(UNSAVED_ID);
+    saved = null;
+    view = 'list';
+  }
+
+  /**
    * Rejeu d'une exécution passée.
    *
    * Le moteur consigne chaque nœud traversé avec les valeurs qui y sont
@@ -85,10 +140,19 @@
   let replayIndex = $state(0);
   let replayLoading = $state(false);
 
-  const replayStep = $derived(replay?.steps[replayIndex]);
-  const replayNodeLabel = $derived(
-    replayStep ? getNodeDef(replayStep.nodeType)?.label ?? replayStep.nodeType : '',
-  );
+  /**
+   * Rejeu ouvert par le bouton « Tester » : il montre la trace d'un essai à
+   * blanc du brouillon, et le quitter ramène à l'édition, brouillon intact.
+   */
+  let testSource = $state<'sample' | 'last' | null>(null);
+  let testing = $state(false);
+  /** Membre qui joue l'événement de l'essai ; à défaut, celui qui le lance. */
+  let testMember = $state<GuildMemberSearchResult | null>(null);
+  /** Nœud à montrer en ouvrant l'éditeur : celui de l'étape en erreur d'un rejeu. */
+  let focusNodeId = $state<string | null>(null);
+  /** Étapes que le bot ne pourra pas faire, d'après le dernier enregistrement. */
+  let saveWarnings = $state<WorkflowWarning[]>([]);
+  const editingDraft = $derived(view === 'editor' || (view === 'replay' && testSource !== null));
 
   const blocking = $derived(issues.filter((issue) => issue.severity === 'error'));
 
@@ -174,7 +238,47 @@
     loading = true;
     await loadList();
     loading = false;
+    await openLinkedExecution();
+    openLinkedTemplate();
   });
+
+  /**
+   * Ouvre l'éditeur sur le modèle désigné par l'adresse : la page des rôles par
+   * réaction y renvoie pour les réactions emoji.
+   */
+  function openLinkedTemplate(): void {
+    const url = new URL(window.location.href);
+    const templateId = url.searchParams.get('template');
+    if (!templateId) return;
+    // Retiré aussitôt : recharger la page ne doit pas rouvrir un brouillon.
+    url.searchParams.delete('template');
+    history.replaceState(history.state, '', url);
+    const template = RECIPE_TEMPLATES.find((entry) => entry.id === templateId);
+    if (template && canConfigure) startFromTemplate(template);
+  }
+
+  /**
+   * Ouvre le rejeu désigné par l'adresse, celle du lien des alertes d'échec :
+   * on arrive ainsi directement sur l'étape qui a cassé.
+   */
+  async function openLinkedExecution(): Promise<void> {
+    const url = new URL(window.location.href);
+    const executionId = url.searchParams.get('execution');
+    const workflowId = url.searchParams.get('workflow');
+    if (!executionId || !workflowId) return;
+    // Retirés aussitôt : recharger la page ne doit pas rouvrir le rejeu.
+    url.searchParams.delete('execution');
+    url.searchParams.delete('workflow');
+    history.replaceState(history.state, '', url);
+    await openReplay({ id: executionId, workflowId });
+  }
+
+  /** Montre une étape signalée, même si elle l'était déjà. */
+  async function showStep(nodeId: string): Promise<void> {
+    focusNodeId = null;
+    await tick();
+    focusNodeId = nodeId;
+  }
 
   // ── Création ──────────────────────────────────────────────────────────────
 
@@ -185,6 +289,10 @@
     issues = [];
     advancedOnly = false;
     tab = 'steps';
+    testMember = null;
+    focusNodeId = null;
+    saveWarnings = [];
+    markSaved();
     view = 'editor';
   }
 
@@ -192,7 +300,7 @@
     openEditor(TEMPLATE_LABELS[template.id]?.name() ?? '', compileRecipe(template.build()));
   }
 
-  async function edit(id: string): Promise<void> {
+  async function edit(id: string, focus: string | null = null): Promise<void> {
     try {
       const result = await fetchWorkflow(id);
       if (!result?.workflow) return;
@@ -207,6 +315,11 @@
       issues = [];
       advancedOnly = false;
       tab = 'steps';
+      // Le membre choisi valait pour l'automatisation précédente.
+      testMember = null;
+      focusNodeId = focus;
+      saveWarnings = [];
+      markSaved();
       view = 'editor';
     } catch (e) {
       toast.error(errorMessage(e) || m.wf_error());
@@ -222,7 +335,7 @@
    * conservée pas à pas. Un workflow modifié depuis fait donc apparaître des
    * étapes rattachées à des nœuds disparus, que la carte ignore simplement.
    */
-  async function openReplay(execution: WorkflowExecutionSummary): Promise<void> {
+  async function openReplay(execution: Pick<WorkflowExecutionSummary, 'id' | 'workflowId'>): Promise<void> {
     if (replayLoading) return;
     replayLoading = true;
     try {
@@ -249,10 +362,89 @@
   }
 
   function closeReplay(): void {
+    // Revenir d'un essai ramène sur l'étape qui a échoué, s'il y en a une.
+    const failed = replay ? failedNodeId(replay.steps) : null;
     replay = null;
     replayIndex = 0;
+    if (testSource !== null) {
+      focusNodeId = failed;
+      testSource = null;
+      view = 'editor';
+      return;
+    }
     graph = { nodes: [], edges: [] };
     view = 'list';
+  }
+
+  /**
+   * Quitte le rejeu pour corriger une étape : un essai revient au brouillon,
+   * une exécution passée ouvre l'automatisation enregistrée.
+   */
+  async function fixInEditor(nodeId: string | null): Promise<void> {
+    if (!replay) return;
+    if (testSource !== null) {
+      closeReplay();
+      focusNodeId = nodeId;
+      return;
+    }
+    await edit(replay.workflowId, nodeId);
+    if (view === 'editor') {
+      replay = null;
+      replayIndex = 0;
+    }
+  }
+
+  /** Rejoue l'essai avec un autre membre, ou avec soi-même quand `member` est nul. */
+  function retestWith(member: GuildMemberSearchResult | null): void {
+    testMember = member;
+    void runTest();
+  }
+
+  /**
+   * Essai à blanc du brouillon, enregistré ou non. Sa trace s'affiche dans le
+   * rejeu : même lecture pas à pas qu'une vraie exécution, en partant de
+   * l'étape en erreur s'il y en a une.
+   */
+  async function runTest(): Promise<void> {
+    if (testing) return;
+    if (hasBlockingIssue(issues)) {
+      toast.error(m.wf_steps_incomplete());
+      return;
+    }
+    testing = true;
+    try {
+      const { test } = await testWorkflowGraph(graph, {
+        workflowId: editingId,
+        memberId: testMember?.id ?? null,
+        source: editingId ? 'last' : 'sample',
+      });
+      if (test.steps.length === 0) {
+        toast.error(m.wf_test_nothing());
+        return;
+      }
+      const now = new Date().toISOString();
+      replay = {
+        id: 'test',
+        workflowId: editingId ?? '',
+        status: testReplayStatus(test.status),
+        error: test.error,
+        nodeVisits: test.steps.length,
+        iterations: 0,
+        resumeAt: null,
+        startedAt: now,
+        completedAt: now,
+        failedStep: null,
+        steps: test.steps.map((step, index) => ({ ...step, id: `test-${index}`, error: step.error ?? null })),
+      };
+      const failedAt = test.steps.findIndex((step) => step.status === 'ERROR');
+      replayIndex = failedAt >= 0 ? failedAt : 0;
+      testSource = test.source;
+      view = 'replay';
+    } catch (e) {
+      toast.error(errorMessage(e) || m.wf_error());
+    } finally {
+      testing = false;
+    }
   }
 
   function seekReplay(delta: number): void {
@@ -260,38 +452,19 @@
     replayIndex = Math.min(replay.steps.length - 1, Math.max(0, replayIndex + delta));
   }
 
-  /**
-   * Rend lisible une valeur consignée.
-   *
-   * Le moteur écrit des entités marquées d'un `kind` (membre, salon, rôle,
-   * message) autant que des scalaires : afficher le JSON brut d'un membre
-   * remplirait la colonne pour rien.
-   */
-  function describeValue(value: unknown): string {
-    if (value === null || value === undefined) return '-';
-    if (Array.isArray(value)) {
-      return value.length === 0 ? '-' : value.map(describeValue).join(', ');
-    }
-    if (typeof value === 'object') {
-      const tagged = value as { kind?: string; name?: string; displayName?: string; tag?: string; content?: string };
-      if (tagged.kind) return tagged.displayName || tagged.name || tagged.tag || tagged.content || tagged.kind;
-      return JSON.stringify(value);
-    }
-    return String(value);
-  }
-
   // ── Enregistrement ────────────────────────────────────────────────────────
 
-  async function save(): Promise<void> {
-    if (!canConfigure || saving) return;
+  /** Renvoie `true` une fois enregistré : la barre de sauvegarde s'en sert. */
+  async function save(): Promise<boolean> {
+    if (!canConfigure || saving) return false;
 
     if (!form.name.trim()) {
       toast.error(m.wf_need_name());
-      return;
+      return false;
     }
     if (hasBlockingIssue(issues)) {
       toast.error(m.wf_steps_incomplete());
-      return;
+      return false;
     }
 
     saving = true;
@@ -305,10 +478,15 @@
       const result = editingId ? await updateWorkflow(editingId, payload) : await createWorkflow(payload);
 
       if (result?.workflow) editingId = result.workflow.id;
-      toast.success(m.wf_saved());
+      markSaved();
+      saveWarnings = result?.warnings ?? [];
+      if (saveWarnings.length > 0) toast.warning(m.wf_saved_with_warnings({ n: saveWarnings.length }));
+      else toast.success(m.wf_saved());
       await loadList();
+      return true;
     } catch (e) {
       toast.error(errorMessage(e) || m.wf_error());
+      return false;
     } finally {
       saving = false;
     }
@@ -388,6 +566,8 @@
     'anti-invite': { name: m.wf_tpl_invite, description: m.wf_tpl_invite_desc },
     'level-reward': { name: m.wf_tpl_level, description: m.wf_tpl_level_desc },
     'ticket-welcome': { name: m.wf_tpl_ticket, description: m.wf_tpl_ticket_desc },
+    'reaction-role': { name: m.wf_tpl_reaction_role, description: m.wf_tpl_reaction_role_desc },
+    'reaction-role-remove': { name: m.wf_tpl_reaction_role_remove, description: m.wf_tpl_reaction_role_remove_desc },
   };
 
   const STATUS_META: Record<string, { label: () => string; color: string }> = {
@@ -399,22 +579,80 @@
   };
 </script>
 
+<!-- Points de départ : la galerie des modèles et la liste vide les montrent
+     tous les deux, la seconde pour qu'on démarre sans détour. -->
+{#snippet templateGallery()}
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-left">
+    {#each RECIPE_TEMPLATES as template (template.id)}
+      {@const labels = TEMPLATE_LABELS[template.id]}
+      <button
+        type="button"
+        onclick={() => startFromTemplate(template)}
+        class="flex items-start gap-3 p-4 rounded-2xl text-left bg-surface-container-high/50 border border-outline-variant/15 hover:border-primary/40 hover:bg-surface-container-high transition-all"
+      >
+        <span class="p-2.5 rounded-xl bg-primary/10 text-primary shrink-0">
+          <Papicon icon={template.icon} size={16} />
+        </span>
+        <span class="min-w-0 space-y-1">
+          <span class="block text-sm font-semibold text-on-surface">{labels?.name()}</span>
+          <span class="block text-xs text-on-surface-variant leading-snug">{labels?.description()}</span>
+        </span>
+      </button>
+    {/each}
+
+    <button
+      type="button"
+      onclick={() => openEditor('', { nodes: [], edges: [] })}
+      class="flex items-start gap-3 p-4 rounded-2xl text-left border border-dashed border-outline-variant/30 hover:border-primary/40 transition-all"
+    >
+      <span class="p-2.5 rounded-xl bg-surface-container-highest text-on-surface-variant shrink-0">
+        <Papicon icon="Plus" size={16} />
+      </span>
+      <span class="min-w-0 space-y-1">
+        <span class="block text-sm font-semibold text-on-surface">{m.wf_start_blank()}</span>
+        <span class="block text-xs text-on-surface-variant leading-snug">{m.wf_start_blank_desc()}</span>
+      </span>
+    </button>
+  </div>
+{/snippet}
+
 <ModulePage title={m.wf_page_title()} description={m.wf_page_desc()} icon="Workflow" featureKey="workflows">
   {#snippet actions()}
     <!-- Le rejeu ne modifie rien : il reste ouvert aux comptes sans droit de
          configuration, contrairement aux actions d'édition ci-dessous. -->
     {#if view === 'replay'}
+      <div class="flex items-center gap-2">
       <button
         onclick={closeReplay}
         class="px-4 py-2.5 rounded-xl text-xs font-semibold bg-surface-container-high text-on-surface hover:bg-surface-container-highest transition-all"
-      >{m.wf_back()}</button>
+      >{testSource !== null ? m.wf_back_to_editor() : m.wf_back()}</button>
+      {#if testSource === null && canConfigure && replay && failedNodeId(replay.steps)}
+        <button
+          onclick={() => fixInEditor(failedNodeId(replay!.steps))}
+          class="px-4 py-2.5 rounded-xl text-xs font-semibold bg-primary text-on-primary hover:opacity-90 transition-all flex items-center gap-2"
+        >
+          <Papicon icon="Pen" size={14} />
+          {m.wf_fix_in_editor()}
+        </button>
+      {/if}
+      </div>
     {:else if canConfigure}
       <div class="flex items-center gap-2">
         {#if view === 'editor'}
           <button
-            onclick={() => { view = 'list'; }}
+            onclick={leaveEditor}
             class="px-4 py-2.5 rounded-xl text-xs font-semibold bg-surface-container-high text-on-surface hover:bg-surface-container-highest transition-all"
           >{m.wf_back()}</button>
+          <button
+            onclick={runTest}
+            disabled={testing || graph.nodes.length === 0 || hasBlockingIssue(issues)}
+            title={m.wf_test_hint()}
+            use:explainDisabled={(graph.nodes.length === 0) ? m.common_reason_select_one() : ''}
+            class="px-4 py-2.5 rounded-xl text-xs font-semibold bg-surface-container-high text-on-surface hover:bg-surface-container-highest transition-all disabled:opacity-40 flex items-center gap-2"
+          >
+            <Papicon icon={testing ? 'Loader' : 'Play'} size={14} class={testing ? 'animate-spin' : ''} />
+            {testing ? m.wf_testing() : m.wf_test()}
+          </button>
           <button
             onclick={save}
             disabled={saving || hasBlockingIssue(issues)}
@@ -465,43 +703,48 @@
         </p>
       </div>
 
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-        {#each RECIPE_TEMPLATES as template (template.id)}
-          {@const labels = TEMPLATE_LABELS[template.id]}
-          <button
-            type="button"
-            onclick={() => startFromTemplate(template)}
-            class="flex items-start gap-3 p-4 rounded-2xl text-left bg-surface-container-high/50 border border-outline-variant/15 hover:border-primary/40 hover:bg-surface-container-high transition-all"
-          >
-            <span class="p-2.5 rounded-xl bg-primary/10 text-primary shrink-0">
-              <Papicon icon={template.icon} size={16} />
-            </span>
-            <span class="min-w-0 space-y-1">
-              <span class="block text-sm font-semibold text-on-surface">{labels?.name()}</span>
-              <span class="block text-xs text-on-surface-variant leading-snug">{labels?.description()}</span>
-            </span>
-          </button>
-        {/each}
-
-        <button
-          type="button"
-          onclick={() => openEditor('', { nodes: [], edges: [] })}
-          class="flex items-start gap-3 p-4 rounded-2xl text-left border border-dashed border-outline-variant/30 hover:border-primary/40 transition-all"
-        >
-          <span class="p-2.5 rounded-xl bg-surface-container-highest text-on-surface-variant shrink-0">
-            <Papicon icon="Plus" size={16} />
-          </span>
-          <span class="min-w-0 space-y-1">
-            <span class="block text-sm font-semibold text-on-surface">{m.wf_start_blank()}</span>
-            <span class="block text-xs text-on-surface-variant leading-snug">{m.wf_start_blank_desc()}</span>
-          </span>
-        </button>
-      </div>
+      {@render templateGallery()}
     </div>
 
   <!-- ══ Rejeu d'une exécution ══════════════════════════════════════════ -->
   {:else if view === 'replay' && replay}
     <div class="space-y-3">
+      {#if testSource !== null}
+        <div class="flex items-start gap-2.5 p-3 rounded-2xl bg-primary/10 border border-primary/20 text-xs text-on-surface">
+          <Papicon icon="FlaskConical" size={14} class="text-primary shrink-0 mt-0.5" />
+          <span>{testSource === 'last'
+            ? m.wf_test_banner_last()
+            : testMember
+              ? m.wf_test_banner_sample_member({ name: testMember.displayName || testMember.username })
+              : m.wf_test_banner_sample()}</span>
+        </div>
+        <div class="flex flex-wrap items-center gap-2 text-xs text-on-surface-variant">
+          <label for="wf-test-member">{m.wf_test_member_label()}</label>
+          <div class="w-64 max-w-full">
+            <MemberSearchSelect
+              id="wf-test-member"
+              value={testMember?.id ?? ''}
+              placeholder={m.wf_test_member_placeholder()}
+              disabled={testing}
+              onselect={(member) => retestWith(member)}
+            />
+          </div>
+          {#if testMember}
+            <button
+              type="button"
+              onclick={() => retestWith(null)}
+              disabled={testing}
+              class="px-3 py-1.5 rounded-xl font-medium bg-surface-container-highest text-on-surface-variant hover:text-on-surface transition-all disabled:opacity-40"
+            >{m.wf_test_member_me()}</button>
+          {/if}
+        </div>
+        {#if replay.status === 'WAITING'}
+          <div class="flex items-start gap-2.5 p-3 rounded-2xl bg-warning/10 border border-warning/20 text-xs text-amber-800">
+            <Papicon icon="Warning" size={14} class="shrink-0 mt-0.5" />
+            <span>{m.wf_test_suspended()}</span>
+          </div>
+        {/if}
+      {/if}
       <!-- Transport -->
       <div class="flex flex-wrap items-center gap-3 p-3 rounded-2xl bg-surface-container-high/50 border border-outline-variant/10">
         <div class="flex items-center gap-1">
@@ -556,50 +799,15 @@
           />
         </div>
 
-        <!-- Valeurs consignées sur l'étape courante -->
-        <aside class="w-full lg:w-72 shrink-0 space-y-3">
-          {#if replayStep}
-            {@const stepStatus = replayStep.status}
-            <div class="p-3 rounded-2xl bg-surface-container-high/50 border border-outline-variant/10 space-y-2">
-              <div class="flex items-center justify-between gap-2">
-                <span class="text-sm font-bold text-on-surface truncate">{replayNodeLabel}</span>
-                <span
-                  class="px-2 py-0.5 rounded-full text-2xs font-bold shrink-0 {stepStatus === 'ERROR'
-                    ? 'bg-error/15 text-error'
-                    : stepStatus === 'SKIPPED'
-                      ? 'bg-surface-container-highest text-on-surface-variant'
-                      : 'bg-success/15 text-success'}"
-                >{stepStatus}</span>
-              </div>
-              <p class="text-2xs text-on-surface-variant">{m.wf_replay_duration({ n: replayStep.durationMs })}</p>
-              {#if replayStep.error}
-                <p class="px-2.5 py-1.5 rounded-lg bg-error/10 text-2xs text-error border border-error/20">{replayStep.error}</p>
-              {/if}
-            </div>
-
-            {#each [
-              { label: m.wf_replay_inputs(), values: replayStep.inputs },
-              { label: m.wf_replay_outputs(), values: replayStep.outputs },
-            ] as slot (slot.label)}
-              {@const entries = Object.entries(slot.values ?? {})}
-              <div class="p-3 rounded-2xl bg-surface-container-high/50 border border-outline-variant/10 space-y-2">
-                <h3 class="text-xs font-semibold text-on-surface-variant">{slot.label}</h3>
-                {#if entries.length === 0}
-                  <p class="text-2xs text-on-surface-variant">{m.wf_replay_no_value()}</p>
-                {:else}
-                  <dl class="space-y-1.5">
-                    {#each entries as [key, value] (key)}
-                      <div class="flex items-baseline gap-2 text-2xs">
-                        <dt class="font-semibold text-on-surface-variant shrink-0">{key}</dt>
-                        <dd class="text-on-surface truncate" title={describeValue(value)}>{describeValue(value)}</dd>
-                      </div>
-                    {/each}
-                  </dl>
-                {/if}
-              </div>
-            {/each}
-          {/if}
-        </aside>
+        <ReplayStepPanel
+          steps={replay.steps}
+          index={replayIndex}
+          {graph}
+          isTest={testSource !== null}
+          canFix={canConfigure}
+          onSeek={(position) => (replayIndex = position)}
+          onFix={(nodeId) => fixInEditor(nodeId)}
+        />
       </div>
     </div>
 
@@ -655,15 +863,39 @@
         </p>
       {/if}
 
+      {#if saveWarnings.length > 0}
+        <div class="p-3 rounded-2xl bg-warning/10 border border-warning/20 space-y-2">
+          <p class="flex items-center gap-2 text-xs font-semibold text-amber-800">
+            <Papicon icon="Warning" size={13} />
+            {m.wf_save_warnings_title()}
+          </p>
+          <ul class="space-y-1">
+            {#each saveWarnings as warning, index (index)}
+              <li class="flex items-start gap-2 text-2xs text-on-surface">
+                <span class="flex-1 min-w-0 break-words">{warning.message}</span>
+                <button
+                  type="button"
+                  onclick={() => showStep(warning.nodeId)}
+                  class="shrink-0 font-semibold text-primary hover:underline"
+                >{m.wf_save_warnings_show()}</button>
+              </li>
+            {/each}
+          </ul>
+          <p class="text-2xs text-on-surface-variant">{m.wf_save_warnings_hint()}</p>
+        </div>
+      {/if}
+
       {#if tab === 'steps'}
         <RecipeEditor
           {graph}
+          {focusNodeId}
           onChange={(next, nextIssues) => { graph = next; issues = nextIssues; }}
           onUnsupported={() => { advancedOnly = true; tab = 'graph'; }}
         />
       {:else}
         <WorkflowEditor
           {graph}
+          {focusNodeId}
           onChange={(next, nextIssues) => { graph = next; issues = nextIssues; }}
         />
       {/if}
@@ -713,16 +945,14 @@
             </p>
           </div>
           {#if workflows.length === 0 && canConfigure}
-            <button
-              onclick={() => (view = 'templates')}
-              class="px-4 py-2 rounded-xl text-xs font-semibold bg-primary text-on-primary hover:opacity-90 transition-all"
-            >{m.wf_create_first()}</button>
+            {@render templateGallery()}
           {/if}
         </div>
       {:else}
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
           {#each filteredWorkflows as workflow (workflow.id)}
             {@const trigger = getTrigger(workflow.triggerType)}
+            {@const orphaned = !isNodeOffered(workflow.triggerType)}
             <article class="p-4 rounded-2xl bg-surface-container-high/50 border border-outline-variant/10 space-y-3 hover:border-outline-variant/30 transition-all">
               <div class="flex items-start justify-between gap-3">
                 <div class="min-w-0 space-y-1">
@@ -735,14 +965,27 @@
                     <p class="text-2xs text-on-surface-variant line-clamp-2">{workflow.description}</p>
                   {/if}
                 </div>
-                <span
-                  class="px-2.5 py-1 rounded-full text-2xs font-bold shrink-0 {workflow.enabled
-                    ? 'bg-success/15 text-success border border-success/30'
-                    : 'bg-surface-container-highest text-on-surface-variant'}"
-                >{workflow.enabled ? m.wf_status_active() : m.wf_status_paused()}</span>
+                {#if orphaned}
+                  <span
+                    class="px-2.5 py-1 rounded-full text-2xs font-bold shrink-0 bg-warning/15 text-amber-800 border border-warning/30"
+                  >{m.wf_status_module_paused()}</span>
+                {:else}
+                  <span
+                    class="px-2.5 py-1 rounded-full text-2xs font-bold shrink-0 {workflow.enabled
+                      ? 'bg-success/15 text-success border border-success/30'
+                      : 'bg-surface-container-highest text-on-surface-variant'}"
+                  >{workflow.enabled ? m.wf_status_active() : m.wf_status_paused()}</span>
+                {/if}
               </div>
 
-              {#if isSilent(workflow)}
+              {#if orphaned}
+                <p
+                  class="flex items-start gap-2 px-2.5 py-1.5 rounded-lg bg-warning/10 border border-warning/20 text-2xs text-amber-800"
+                >
+                  <Papicon icon="Warning" size={11} class="mt-0.5 shrink-0" />
+                  <span>{m.wf_module_paused_hint()}</span>
+                </p>
+              {:else if isSilent(workflow)}
                 <p
                   class="flex items-start gap-2 px-2.5 py-1.5 rounded-lg bg-warning/10 border border-warning/20 text-2xs text-amber-800"
                 >

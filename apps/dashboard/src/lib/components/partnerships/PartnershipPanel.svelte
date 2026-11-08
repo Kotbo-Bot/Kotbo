@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from '../../i18n';
   /**
    * Panneau des partenariats : ajouter et gerer au meme endroit.
    *
@@ -156,9 +157,9 @@
     const signed = (data.agreements ?? []).some(
       (a: any) => a.state === 'ACCEPTED' && a.acceptedByUs && a.acceptedByPartner,
     );
-    if (data.tier === 'CONTRACT' && !signed) list.push("Accord non signe par les deux parties");
+    if (data.tier === 'CONTRACT' && !signed) list.push(m.ppan_blocker_unsigned());
     if ((data.tier === 'CONTRACT' || settings?.requireDualApproval) && !data.secondApprovedByUserId) {
-      list.push(data.approvedByUserId ? 'Seconde validation attendue' : 'Deux validations attendues');
+      list.push(data.approvedByUserId ? m.ppan_blocker_second() : m.ppan_blocker_two());
     }
     return list;
   });
@@ -183,7 +184,7 @@
       // n'est deplie, le resume suffit a la plupart des visites.
       if (openSection === null && failing > 0) openSection = 'commitments';
     } catch (err) {
-      toast.error(errorMessage(err) || 'Chargement impossible');
+      toast.error(errorMessage(err) || m.tn_public_error_title());
     } finally {
       loading = false;
     }
@@ -198,7 +199,7 @@
       await load();
       await onchanged();
     } catch (err) {
-      toast.error(errorMessage(err) || 'Action impossible');
+      toast.error(errorMessage(err) || m.common_action_failed());
     } finally {
       busy = false;
     }
@@ -212,12 +213,12 @@
     try {
       const result = await lookupPartnerInvite(inviteInput.trim());
       if (!result?.lookup) {
-        toast.error('Invitation introuvable ou expiree');
+        toast.error(m.ptp_invite_not_found());
         return;
       }
       lookup = result.lookup;
     } catch (err) {
-      toast.error(errorMessage(err) || 'Lecture impossible');
+      toast.error(errorMessage(err) || m.common_read_failed());
     } finally {
       lookingUp = false;
     }
@@ -233,7 +234,7 @@
   async function add() {
     const name = (lookup?.displayName ?? manualName).trim();
     if (!name) {
-      toast.error('Colle un lien ou donne un nom.');
+      toast.error(m.ptp_link_or_name_required());
       return;
     }
 
@@ -254,11 +255,11 @@
       });
 
       for (const warning of result?.warnings ?? []) toast.error(warning);
-      toast.success(`${name} ajoute`);
+      toast.success(m.ptp_partner_added({ name }));
       await onchanged();
       if (result?.partnershipId) onopen(result.partnershipId);
     } catch (err) {
-      toast.error(errorMessage(err) || 'Creation impossible');
+      toast.error(errorMessage(err) || m.common_create_failed());
     } finally {
       busy = false;
     }
@@ -268,12 +269,12 @@
 
   async function confirmBreak() {
     if (!breakReason.trim()) {
-      toast.error('Une rupture demande un motif.');
+      toast.error(m.ptp_break_reason_required());
       return;
     }
     await run(
       () => setPartnershipStage(partnershipId as string, 'BREACHED', breakReason.trim()),
-      'Partenariat rompu',
+      m.ppan_ok_broken(),
     );
     breaking = false;
     breakReason = '';
@@ -284,14 +285,14 @@
     busy = true;
     try {
       const result = await createGuestAccess(partnershipId as string, { capability: 'sign', days: 30 });
-      if (!result?.token) throw new Error('Lien non cree');
+      if (!result?.token) throw new Error(m.ppan_err_link());
       // Affiche dans le panneau, copiable : la base n'en garde que
       // l'empreinte, il ne sera plus jamais montre.
       guestLink = `${window.location.origin}/partner-portal/${result.token}`;
       await navigator.clipboard?.writeText(guestLink).catch(() => null);
-      toast.success('Lien cree et copie');
+      toast.success(m.ptp_link_created_copied());
     } catch (err) {
-      toast.error(errorMessage(err) || 'Creation du lien impossible');
+      toast.error(errorMessage(err) || m.ptp_link_create_failed());
     } finally {
       busy = false;
     }
@@ -345,7 +346,7 @@
   class="fixed inset-0 z-40 bg-black/20"
   role="button"
   tabindex="-1"
-  aria-label="Fermer le panneau"
+  aria-label={m.ppan_close_panel()}
   onclick={() => !busy && onclose()}
   onkeydown={(event) => event.key === 'Enter' && onclose()}
 ></div>
@@ -357,8 +358,8 @@
   <header class="px-4 py-3 border-b border-outline-variant/30 flex items-start gap-3">
     {#if creating}
       <div class="min-w-0 flex-1">
-        <p class="text-sm font-semibold text-on-surface">Ajouter un partenaire</p>
-        <p class="text-2xs text-on-surface-variant">Un lien suffit, le reste se regle apres</p>
+        <p class="text-sm font-semibold text-on-surface">{m.ppan_add_title()}</p>
+        <p class="text-2xs text-on-surface-variant">{m.ppan_add_desc()}</p>
       </div>
     {:else if data}
       {#if data.partner.iconUrl}
@@ -371,12 +372,12 @@
       <div class="min-w-0 flex-1">
         <p class="text-sm font-semibold text-on-surface truncate">{data.partner.displayName}</p>
         <p class="text-2xs text-on-surface-variant truncate">
-          {typeMeta?.label ?? data.type} · suivi {tierMeta?.label ?? data.tier}
+          {typeMeta?.label ?? data.type} · {m.ppan_tier({ tier: tierMeta?.label ?? data.tier })}
         </p>
       </div>
     {/if}
 
-    <button class="text-on-surface-variant hover:text-on-surface shrink-0" onclick={onclose} aria-label="Fermer">
+    <button class="text-on-surface-variant hover:text-on-surface shrink-0" onclick={onclose} aria-label={m.common_close()}>
       <Papicon icon="x" size={16} />
     </button>
   </header>
@@ -385,7 +386,7 @@
     {#if creating}
       <!-- ── Ajout ───────────────────────────────────────────────────── -->
       <label class="block">
-        <span class="text-2xs font-bold text-on-surface-variant/80 ml-1 mb-1.5 block">Lien d'invitation</span>
+        <span class="text-2xs font-bold text-on-surface-variant/80 ml-1 mb-1.5 block">{m.ppan_invite_link()}</span>
         <div class="flex gap-2">
           <div class="flex-1">
             <FormInput bind:value={inviteInput} placeholder="discord.gg/…" />
@@ -394,7 +395,7 @@
             variant="neutral"
             size="sm"
             icon="search"
-            label={lookingUp ? '…' : 'Lire'}
+            label={lookingUp ? '…' : m.ppan_read()}
             onclick={resolveInvite}
           />
         </div>
@@ -408,22 +409,22 @@
           <div class="min-w-0">
             <p class="text-body-sm font-medium text-on-surface truncate">{lookup.displayName}</p>
             <p class="text-2xs text-on-surface-variant">
-              {#if lookup.memberCount}{lookup.memberCount.toLocaleString('fr-FR')} membres{/if}
-              {#if !lookup.permanent} · lien temporaire{/if}
+              {#if lookup.memberCount}{m.ppan_members({ count: lookup.memberCount.toLocaleString(dateLocale()) })}{/if}
+              {#if !lookup.permanent} · {m.ppan_temporary_link()}{/if}
             </p>
           </div>
         </div>
       {:else}
         <label class="block">
           <span class="text-2xs font-bold text-on-surface-variant/80 ml-1 mb-1.5 block">
-            ou simplement leur nom
+            {m.ppan_or_name()}
           </span>
-          <FormInput bind:value={manualName} placeholder="Nom du partenaire" />
+          <FormInput bind:value={manualName} placeholder={m.ppan_partner_name()} />
         </label>
       {/if}
 
       <div class="pt-1">
-        <p class="text-2xs font-bold text-on-surface-variant/80 mb-1.5">Quel partenariat</p>
+        <p class="text-2xs font-bold text-on-surface-variant/80 mb-1.5">{m.ppan_which()}</p>
         <div class="space-y-1.5">
           {#each presets as item (item.key)}
             <button
@@ -448,23 +449,23 @@
 
       {#if preset}
         <p class="text-2xs text-on-surface-variant">
-          Pose {preset.commitments.length} engagement(s), {preset.benefits.length} avantage(s){preset.trackInvite
-            ? ' et une invitation dediee'
-            : ''}. Le dossier s'ouvre en piste, rien n'est applique avant activation.
+          {preset.trackInvite
+            ? m.ppan_preset_summary_invite({ commitments: preset.commitments.length, benefits: preset.benefits.length })
+            : m.ppan_preset_summary({ commitments: preset.commitments.length, benefits: preset.benefits.length })}
         </p>
       {/if}
     {:else if loading && !data}
-      <p class="text-xs text-on-surface-variant">Chargement…</p>
+      <p class="text-xs text-on-surface-variant">{m.ppan_loading()}</p>
     {:else if data}
       <!-- ── Etat et action principale ──────────────────────────────── -->
       <div class="flex flex-wrap items-center gap-2">
         <span class="text-2xs px-2 py-0.5 rounded-full font-semibold {toneOf[stageMeta?.tone] ?? toneOf.neutral}">
           {stageMeta?.label ?? data.stage}
         </span>
-        <span class="text-2xs text-on-surface-variant">Sante {data.healthScore}/100</span>
+        <span class="text-2xs text-on-surface-variant">{m.ppan_health_score({ score: data.healthScore })}</span>
         {#if bridged}
           <span class="text-2xs text-primary inline-flex items-center gap-1">
-            <Papicon icon="link" size={11} />pont
+            <Papicon icon="link" size={11} />{m.ppan_bridge()}
           </span>
         {/if}
       </div>
@@ -472,7 +473,7 @@
       {#if blockers.length > 0}
         <div class="rounded-lg bg-warning/10 px-3 py-2">
           <p class="text-2xs text-warning">
-            Avant d'activer : {blockers.join(' · ')}
+            {m.ppan_before_activating({ list: blockers.join(' · ') })}
           </p>
         </div>
       {/if}
@@ -483,7 +484,7 @@
             variant="primary"
             size="sm"
             label={labelOf(catalog?.stages ?? [], primaryStage)}
-            onclick={() => run(() => setPartnershipStage(partnershipId as string, primaryStage), 'Etape mise a jour')}
+            onclick={() => run(() => setPartnershipStage(partnershipId as string, primaryStage), m.ppan_ok_stage())}
           />
         {/if}
         {#if !data.secondApprovedByUserId}
@@ -491,8 +492,8 @@
             variant="neutral"
             size="sm"
             icon="check"
-            label="Valider"
-            onclick={() => run(() => approvePartnership(partnershipId as string), 'Validation posee')}
+            label={m.ppan_approve()}
+            onclick={() => run(() => approvePartnership(partnershipId as string), m.ppan_ok_approved())}
           />
         {/if}
         {#if otherStages.length > 0}
@@ -502,12 +503,12 @@
             onchange={(event) => {
               const target = event.target as HTMLSelectElement;
               if (target.value) {
-                void run(() => setPartnershipStage(partnershipId as string, target.value), 'Etape mise a jour');
+                void run(() => setPartnershipStage(partnershipId as string, target.value), m.ppan_ok_stage());
                 target.value = '';
               }
             }}
           >
-            <option value="">Autre etape…</option>
+            <option value="">{m.ppan_other_stage()}</option>
             {#each otherStages as stage (stage)}
               <option value={stage}>{labelOf(catalog?.stages ?? [], stage)}</option>
             {/each}
@@ -520,20 +521,19 @@
           <!-- Le motif se saisit ici. L'ancienne version passait par une boite
                du navigateur : sans contexte, sans annulation propre. -->
           <div class="rounded-lg border border-error/30 bg-error/5 px-3 py-2.5 space-y-2">
-            <p class="text-xs text-error font-medium">Rompre ce partenariat</p>
+            <p class="text-xs text-error font-medium">{m.ppan_break()}</p>
             <p class="text-2xs text-on-surface-variant">
-              Les avantages sont retires, la vitrine depubliee. Le motif est conserve dans l'historique du
-              partenaire.
+              {m.ppan_break_desc()}
             </p>
-            <FormTextarea bind:value={breakReason} rows={2} placeholder="Motif de la rupture" />
+            <FormTextarea bind:value={breakReason} rows={2} placeholder={m.ppan_break_reason()} />
             <div class="flex gap-2">
-              <ActionButton variant="danger" size="sm" label="Confirmer la rupture" onclick={confirmBreak} />
-              <ActionButton variant="neutral" size="sm" label="Annuler" onclick={() => (breaking = false)} />
+              <ActionButton variant="danger" size="sm" label={m.ppan_break_confirm()} onclick={confirmBreak} />
+              <ActionButton variant="neutral" size="sm" label={m.common_cancel()} onclick={() => (breaking = false)} />
             </div>
           </div>
         {:else}
           <button class="text-2xs text-error hover:underline" onclick={() => (breaking = true)}>
-            Rompre ce partenariat
+            {m.ppan_break()}
           </button>
         {/if}
       {/if}
@@ -553,9 +553,9 @@
       {:else}
         <button
           class="text-2xs text-primary hover:underline"
-          onclick={() => run(() => ensurePartnershipInvite(partnershipId as string), 'Invitation creee')}
+          onclick={() => run(() => ensurePartnershipInvite(partnershipId as string), m.ppan_ok_invite())}
         >
-          Creer l'invitation qui compte leurs arrivees
+          {m.ppan_create_invite()}
         </button>
       {/if}
 
@@ -580,10 +580,10 @@
       <div class="space-y-1 pt-1 border-t border-outline-variant/10">
         {@render section(
           'commitments',
-          'Engagements',
+          m.ppan_commitments(),
           failing > 0
-            ? `${data.commitments.length} engagement(s), ${failing} non tenu(s)`
-            : `${data.commitments.length} engagement(s)`,
+            ? m.ppan_commitments_failing({ count: data.commitments.length, failing })
+            : m.ppan_commitments_count({ count: data.commitments.length }),
           failing > 0,
         )}
 
@@ -596,7 +596,7 @@
                     {commitment.label ?? labelOf(catalog?.commitments ?? [], commitment.kind)}
                   </span>
                   <span class="text-2xs text-on-surface-variant">
-                    {commitment.party === 'US' ? 'a notre charge' : commitment.party === 'BOTH' ? 'des deux cotes' : 'a leur charge'}
+                    {commitment.party === 'US' ? m.ppan_party_us() : commitment.party === 'BOTH' ? m.ppan_party_both() : m.ppan_party_them()}
                     {#if commitment.targetCount} · {commitment.targetCount}/{commitment.targetPeriod}{/if}
                   </span>
                 </span>
@@ -609,15 +609,15 @@
                           setCommitmentState(partnershipId as string, commitment.id, {
                             state: commitment.state === 'BREACHED' ? 'FULFILLED' : 'BREACHED',
                           }),
-                        'Pointe',
+                        m.ppan_ok_marked(),
                       )}
                   >
-                    {commitment.state === 'BREACHED' ? 'non tenu' : 'tenu'}
+                    {commitment.state === 'BREACHED' ? m.ppan_not_met() : m.ppan_met()}
                   </button>
                   <button
                     class="text-on-surface-variant hover:text-error"
-                    aria-label="Retirer"
-                    onclick={() => run(() => removeCommitment(partnershipId as string, commitment.id), 'Retire')}
+                    aria-label={m.ppan_remove()}
+                    onclick={() => run(() => removeCommitment(partnershipId as string, commitment.id), m.ppan_ok_removed())}
                   >
                     <Papicon icon="x" size={11} />
                   </button>
@@ -638,9 +638,9 @@
               </div>
               <div class="w-24">
                 <FormSelect bind:value={commitmentPeriod} className="w-full text-xs">
-                  <option value="week">/semaine</option>
-                  <option value="month">/mois</option>
-                  <option value="total">au total</option>
+                  <option value="week">{m.ppan_per_week()}</option>
+                  <option value="month">{m.ppan_per_month()}</option>
+                  <option value="total">{m.ppan_in_total()}</option>
                 </FormSelect>
               </div>
               <ActionButton
@@ -656,7 +656,7 @@
                         targetCount: Number(commitmentCount),
                         targetPeriod: commitmentPeriod,
                       }),
-                    'Engagement ajoute',
+                    m.ppan_ok_commitment(),
                   )}
               />
             </div>
@@ -665,8 +665,8 @@
 
         {@render section(
           'benefits',
-          'Avantages',
-          `${(data.benefits ?? []).length} avantage(s) · ${(data.benefits ?? []).filter((b: any) => b.state === 'APPLIED').length} applique(s)`,
+          m.ppan_benefits(),
+          m.ppan_benefits_count({ count: (data.benefits ?? []).length, applied: (data.benefits ?? []).filter((b: any) => b.state === 'APPLIED').length }),
         )}
 
         {#if openSection === 'benefits'}
@@ -679,8 +679,8 @@
                 </span>
                 <button
                   class="text-on-surface-variant hover:text-error shrink-0"
-                  aria-label="Retirer"
-                  onclick={() => run(() => removePartnershipBenefit(partnershipId as string, benefit.id), 'Retire')}
+                  aria-label={m.ppan_remove()}
+                  onclick={() => run(() => removePartnershipBenefit(partnershipId as string, benefit.id), m.ppan_ok_removed())}
                 >
                   <Papicon icon="x" size={11} />
                 </button>
@@ -697,7 +697,7 @@
               </div>
               <div class="flex-1">
                 <FormSelect bind:value={benefitTarget} className="w-full text-xs">
-                  <option value="">Par defaut</option>
+                  <option value="">{m.ppan_default()}</option>
                   {#each roles as role (role.id)}
                     <option value={role.id}>@{role.name}</option>
                   {/each}
@@ -718,7 +718,7 @@
                         kind: benefitKind,
                         targetRef: benefitTarget || null,
                       }),
-                    'Avantage ajoute',
+                    m.ppan_ok_benefit(),
                   )}
               />
             </div>
@@ -727,34 +727,34 @@
               <ActionButton
                 variant="neutral"
                 size="sm"
-                label="Appliquer"
-                onclick={() => run(() => applyPartnershipBenefits(partnershipId as string), 'Avantages appliques')}
+                label={m.ppan_apply()}
+                onclick={() => run(() => applyPartnershipBenefits(partnershipId as string), m.ppan_ok_applied())}
               />
               <ActionButton
                 variant="neutral"
                 size="sm"
-                label="Tout retirer"
-                onclick={() => run(() => revokePartnershipBenefits(partnershipId as string), 'Avantages retires')}
+                label={m.ppan_remove_all()}
+                onclick={() => run(() => revokePartnershipBenefits(partnershipId as string), m.ppan_ok_revoked())}
               />
             </div>
             <p class="text-2xs text-on-surface-variant">
-              Ce qui existait avant le partenariat n'est jamais retire.
+              {m.ppan_revoke_note()}
             </p>
           </div>
         {/if}
 
         {@render section(
           'promo',
-          'Publicite',
-          `${(data.promotions ?? []).reduce((total: number, p: any) => total + p.postCount, 0)} publication(s)`,
+          m.ppan_promo(),
+          m.ppan_promo_count({ count: (data.promotions ?? []).reduce((total: number, p: any) => total + p.postCount, 0) }),
         )}
 
         {#if openSection === 'promo'}
           <div class="px-3 pb-2 space-y-2">
-            <FormInput bind:value={promoTitle} placeholder="Titre de l'annonce" />
-            <FormTextarea bind:value={promoContent} rows={3} placeholder="Texte fourni par le partenaire" />
+            <FormInput bind:value={promoTitle} placeholder={m.ppan_promo_title()} />
+            <FormTextarea bind:value={promoContent} rows={3} placeholder={m.ppan_promo_text()} />
             <FormSelect bind:value={promoChannel} className="w-full text-xs">
-              <option value="">Salon des publicites</option>
+              <option value="">{m.ppan_promo_channel()}</option>
               {#each channels as channel (channel.id)}
                 <option value={channel.id}>#{channel.name}</option>
               {/each}
@@ -765,7 +765,7 @@
                 variant="neutral"
                 size="sm"
                 icon="save"
-                label="Enregistrer"
+                label={m.common_save()}
                 onclick={() =>
                   run(
                     () =>
@@ -775,7 +775,7 @@
                         content: promoContent,
                         channelId: promoChannel || null,
                       }),
-                    'Publicite enregistree',
+                    m.ppan_ok_promo_saved(),
                   )}
               />
               {#if data.promotions?.[0]}
@@ -783,11 +783,11 @@
                   variant="neutral"
                   size="sm"
                   icon="send"
-                  label="Publier"
+                  label={m.ppan_publish()}
                   onclick={() =>
                     run(
                       () => publishPartnershipPromotion(partnershipId as string, data.promotions[0].id),
-                      'Publiee',
+                      m.ppan_ok_published(),
                     )}
                 />
               {/if}
@@ -800,12 +800,12 @@
                   checked={settings.autoPublishAds}
                   onchange={() => onsetting?.({ autoPublishAds: !settings.autoPublishAds })}
                 />
-                <span class="text-2xs text-on-surface">Publier automatiquement, pour tous les partenaires</span>
+                <span class="text-2xs text-on-surface">{m.ppan_auto_publish()}</span>
               </label>
             {/if}
 
             <p class="text-2xs text-on-surface-variant">
-              Les mentions sont neutralisees a la publication.
+              {m.ppan_mentions_note()}
             </p>
           </div>
         {/if}
@@ -813,8 +813,8 @@
         {#if data.tier === 'CONTRACT' || (data.payments ?? []).length > 0}
           {@render section(
             'contract',
-            'Accord et echeances',
-            `${(data.agreements ?? []).length} version(s) · ${(data.payments ?? []).length} echeance(s)`,
+            m.ppan_contract(),
+            m.ppan_contract_count({ versions: (data.agreements ?? []).length, payments: (data.payments ?? []).length }),
           )}
 
           {#if openSection === 'contract'}
@@ -823,39 +823,39 @@
                 <div class="flex items-center justify-between gap-2">
                   <span class="text-xs text-on-surface">
                     v{agreement.version} · {agreement.state.toLowerCase()}
-                    {#if agreement.acceptedByUs}· nous{/if}{#if agreement.acceptedByPartner}· eux{/if}
+                    {#if agreement.acceptedByUs}· {m.ppan_us()}{/if}{#if agreement.acceptedByPartner}· {m.ppan_them()}{/if}
                   </span>
                   {#if agreement.state === 'DRAFT'}
                     <button
                       class="text-2xs text-primary hover:underline"
                       onclick={() =>
-                        run(() => agreementAction(partnershipId as string, agreement.id, 'propose'), 'Proposee')}
+                        run(() => agreementAction(partnershipId as string, agreement.id, 'propose'), m.ppan_ok_proposed())}
                     >
-                      proposer
+                      {m.ppan_propose()}
                     </button>
                   {:else if agreement.state === 'PROPOSED' && !agreement.acceptedByUs}
                     <button
                       class="text-2xs text-primary hover:underline"
                       onclick={() =>
-                        run(() => agreementAction(partnershipId as string, agreement.id, 'accept'), 'Acceptee')}
+                        run(() => agreementAction(partnershipId as string, agreement.id, 'accept'), m.ppan_ok_accepted())}
                     >
-                      accepter
+                      {m.ppan_accept()}
                     </button>
                   {/if}
                 </div>
               {/each}
 
-              <FormTextarea bind:value={agreementDraft} rows={2} placeholder="Texte de l'accord" />
+              <FormTextarea bind:value={agreementDraft} rows={2} placeholder={m.ppan_agreement_text()} />
               <ActionButton
                 variant="neutral"
                 size="sm"
-                label="Rediger une version"
+                label={m.ppan_draft()}
                 onclick={() =>
                   run(async () => {
-                    if (!agreementDraft.trim()) throw new Error('Texte vide.');
+                    if (!agreementDraft.trim()) throw new Error(m.ppan_err_empty_text());
                     await draftPartnershipAgreement(partnershipId as string, agreementDraft.trim());
                     agreementDraft = '';
-                  }, 'Version redigee')}
+                  }, m.ppan_ok_drafted())}
               />
 
               <div class="pt-2 border-t border-outline-variant/10 space-y-2">
@@ -871,10 +871,10 @@
                         onclick={() =>
                           run(
                             () => settlePartnershipPayment(partnershipId as string, payment.id, {}),
-                            'Versement enregistre',
+                            m.ppan_ok_payment(),
                           )}
                       >
-                        recu
+                        {m.ppan_received()}
                       </button>
                     {/if}
                   </div>
@@ -882,7 +882,7 @@
 
                 <div class="flex gap-1.5 items-end">
                   <div class="flex-1">
-                    <FormInput bind:value={paymentAmount} placeholder="Montant (€)" />
+                    <FormInput bind:value={paymentAmount} placeholder={m.ppan_amount()} />
                   </div>
                   <div class="flex-1">
                     <FormInput type="date" bind:value={paymentDue} />
@@ -895,8 +895,8 @@
                     onclick={() =>
                       run(async () => {
                         const euros = Number(String(paymentAmount).replace(',', '.'));
-                        if (!Number.isFinite(euros) || euros <= 0) throw new Error('Montant invalide.');
-                        if (!paymentDue) throw new Error('Choisis une date.');
+                        if (!Number.isFinite(euros) || euros <= 0) throw new Error(m.ppan_err_amount());
+                        if (!paymentDue) throw new Error(m.ppan_err_date());
                         // Saisi en euros, stocke en centimes : demander des
                         // centimes a l'ecran etait une source d'erreur de
                         // facteur cent.
@@ -906,7 +906,7 @@
                         });
                         paymentAmount = '';
                         paymentDue = '';
-                      }, 'Echeance ajoutee')}
+                      }, m.ppan_ok_due())}
                   />
                 </div>
               </div>
@@ -914,13 +914,13 @@
           {/if}
         {/if}
 
-        {@render section('journal', 'Journal et notes', `${(data.events ?? []).length} evenement(s)`)}
+        {@render section('journal', m.ppan_journal(), m.ppan_journal_count({ count: (data.events ?? []).length }))}
 
         {#if openSection === 'journal'}
           <div class="px-3 pb-2 space-y-2">
             <div class="flex gap-1.5 items-end">
               <div class="flex-1">
-                <FormTextarea bind:value={noteDraft} rows={2} placeholder="Note interne" />
+                <FormTextarea bind:value={noteDraft} rows={2} placeholder={m.ppan_note()} />
               </div>
               <ActionButton
                 variant="neutral"
@@ -929,10 +929,10 @@
                 label=""
                 onclick={() =>
                   run(async () => {
-                    if (!noteDraft.trim()) throw new Error('Note vide.');
+                    if (!noteDraft.trim()) throw new Error(m.ppan_err_empty_note());
                     await addPartnershipNote(partnershipId as string, { body: noteDraft.trim() });
                     noteDraft = '';
-                  }, 'Note ajoutee')}
+                  }, m.ppan_ok_note())}
               />
             </div>
 
@@ -957,28 +957,28 @@
           <ActionButton
             variant="neutral"
             size="sm"
-            label="Verifier la reciprocite"
-            onclick={() => run(() => checkPartnershipReciprocity(partnershipId as string), 'Controle effectue')}
+            label={m.ppan_check()}
+            onclick={() => run(() => checkPartnershipReciprocity(partnershipId as string), m.ppan_ok_checked())}
           />
           <ActionButton
             variant="neutral"
             size="sm"
-            label="Vitrine"
-            onclick={() => run(() => refreshPartnershipShowcase(partnershipId as string), 'Vitrine a jour')}
+            label={m.ppan_showcase()}
+            onclick={() => run(() => refreshPartnershipShowcase(partnershipId as string), m.ppan_ok_showcase())}
           />
           <ActionButton
             variant="neutral"
             size="sm"
-            label="Sante"
-            onclick={() => run(() => refreshPartnershipHealth(partnershipId as string), 'Sante recalculee')}
+            label={m.ppan_health()}
+            onclick={() => run(() => refreshPartnershipHealth(partnershipId as string), m.ppan_ok_health())}
           />
-          <ActionButton variant="neutral" size="sm" label="Lien partenaire" onclick={makeGuestLink} />
+          <ActionButton variant="neutral" size="sm" label={m.ppan_guest_link()} onclick={makeGuestLink} />
         </div>
 
         {#if guestLink}
           <div class="rounded-lg bg-primary/5 border border-primary/20 px-3 py-2">
             <p class="text-2xs text-on-surface-variant mb-1">
-              A transmettre au partenaire. Copie, et affiche une seule fois.
+              {m.ppan_guest_link_note()}
             </p>
             <p class="text-2xs text-on-surface break-all">{guestLink}</p>
           </div>
@@ -992,7 +992,7 @@
               onchange={() => onsetting?.({ reciprocityChecks: !settings.reciprocityChecks })}
             />
             <span class="text-2xs text-on-surface">
-              Verifier automatiquement, toutes les {settings.reciprocityIntervalHours} h
+              {m.ppan_auto_check({ hours: settings.reciprocityIntervalHours })}
             </span>
           </label>
         {/if}
@@ -1002,8 +1002,8 @@
 
   {#if creating}
     <footer class="px-4 py-3 border-t border-outline-variant/30 flex justify-end gap-2">
-      <ActionButton variant="neutral" size="sm" label="Annuler" onclick={onclose} />
-      <ActionButton variant="primary" size="sm" label={busy ? 'Ajout…' : 'Ajouter'} onclick={add} />
+      <ActionButton variant="neutral" size="sm" label={m.common_cancel()} onclick={onclose} />
+      <ActionButton variant="primary" size="sm" label={busy ? m.ppan_adding() : m.ppan_add()} onclick={add} />
     </footer>
   {/if}
 </aside>

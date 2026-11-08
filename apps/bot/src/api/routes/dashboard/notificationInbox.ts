@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Client } from 'discord.js';
 import type { Prisma } from '@prisma/client';
-import { DEFAULT_NOTIFICATION_CHANNEL_PREFS, NOTIFICATION_CATEGORIES, isNotificationCategory } from '@kotbo/contracts';
+import { DEFAULT_NOTIFICATION_CHANNEL_PREFS, NOTIFICATION_CATEGORIES, isModulePaused, isNotificationCategory } from '@kotbo/contracts';
 import prisma from '../../../utils/db.js';
 import { json, readJsonBody, type AuthClaims } from '../../shared.js';
 import { jsonFailure } from '../../shared/failure.js';
@@ -45,7 +45,9 @@ export async function handleNotificationInboxRoutes(
         const rows = await prisma.notificationPreference.findMany({ where: { userId } });
         const byCategory = new Map(rows.map((r) => [r.category, r]));
         json(res, 200, {
-          categories: NOTIFICATION_CATEGORIES.map((category) => {
+          // La famille « partnerships » porte le nom de son module : en pause, il
+          // n'a plus rien a notifier, et sa ligne n'a rien a regler.
+          categories: NOTIFICATION_CATEGORIES.filter((category) => !isModulePaused(category)).map((category) => {
             const row = byCategory.get(category);
             return { category, ...(row ? { dashboard: row.dashboard, dm: row.dm, digest: row.digest } : DEFAULT_NOTIFICATION_CHANNEL_PREFS) };
           }),

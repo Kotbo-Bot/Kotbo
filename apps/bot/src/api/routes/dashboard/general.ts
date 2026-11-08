@@ -357,12 +357,11 @@ export async function handleGuildGeneralRoutes(
 
   // POST /api/dashboard/guilds/:guildId/onboarding/complete - clore le parcours
   //
-  // La seule sortie du tunnel qui ne passe pas par un paiement, et elle ne
-  // s'ouvre que pour un serveur qui n'a rien a payer : instance sans
-  // facturation, ou acces deja accorde (offre posee a la main, abonnement,
-  // code de partenariat). Ailleurs, c'est Stripe qui clot le parcours, par
-  // `syncSubscription` - sans quoi cette route serait le contournement qu'on
-  // vient precisement de retirer.
+  // La sortie du tunnel qui ne passe pas par un paiement : le serveur repart
+  // sur l'offre gratuite, ou sur l'acces qu'il a deja (offre posee a la main,
+  // abonnement, code de partenariat). Le paiement, lui, clot le parcours par
+  // `syncSubscription`. Ouvrir cette sortie n'ouvre rien d'autre : `moduleGate`
+  // continue de fermer les modules hors offre.
   //
   // L'ecriture est deja reservee aux administrateurs du dashboard par la garde
   // commune (`handleDashboardRoutes`) : personne d'autre ne peut l'appeler.
@@ -388,14 +387,10 @@ export async function handleGuildGeneralRoutes(
       // l'appel ne doit pas devenir une erreur, la page peut le refaire apres
       // un retour de paiement ou un simple rafraichissement.
       if (!guild.onboardingCompletedAt && isOnboardingFeatureEnabled()) {
-        if (!canFinishOnboardingWithoutPayment(guild)) {
-          json(res, 402, {
-            error: "La mise en service passe par le paiement : le parcours ne peut pas être clos ici.",
-          });
-          return true;
-        }
-
-        await markOnboardingComplete(guildId, 'dernier écran, rien à payer');
+        await markOnboardingComplete(
+          guildId,
+          canFinishOnboardingWithoutPayment(guild) ? 'dernier écran, rien à payer' : 'dernier écran, offre gratuite',
+        );
       }
 
       json(res, 200, { ok: true });

@@ -5,7 +5,7 @@ import { logger } from '../utils/logger.js';
 import { SanctionStatus, SanctionType } from '@prisma/client';
 import { COLORS, successEmbed, errorEmbed, truncate } from '../utils/embeds.js';
 import { handleConfigChannelSelect, handleConfigModal, handleConfigSelectMenu } from './configHandler.js';
-import { sendSetupStep1, sendSetupStep2, sendSetupStep3, sendSetupFinish } from '../panels/setupPanel.js';
+import { sendSetupStep1, sendSetupStep2, sendSetupStep3, sendSetupStep4, sendSetupFinish, handleSetupSecurityAction } from '../panels/setupPanel.js';
 import { reviewDailyAlgoSubmission } from '../services/progression/dailyAlgoService.js';
 import { renderPanelBeside, renderPanelTarget } from '../utils/interactionResponses.js';
 import { parseSetupStep, parseUserCaseRoute, parseValidateRoute, parseEventQuizRoute, parseEventResultRoute } from './interactionRoutes.js';
@@ -16,7 +16,7 @@ import { buildMemberCasePanel, type MemberCaseSection } from '../services/modera
 import { handleRecruitmentButton } from '../services/staff/recruitmentService.js';
 import { handleTicketButton, handleTicketModalSubmit, handleTicketSelectMenu } from '../services/features/ticketService.js';
 import { canManageGiveaways } from '../services/features/giveawayConfigService.js';
-import { getLocale, resolveGuildLocale } from '../utils/i18n.js';
+import { getEffectiveLocale, getLocale, resolveGuildLocale, type BotLocale } from '../utils/i18n.js';
 import * as gvwMessages from '../lib/paraglide/messages.js';
 import { handleRpgButton, handleRpgModalSubmit, handleRpgSelectMenu } from '../services/features/rpgPanelService.js';
 import { DROP_CLAIM_PREFIX, handleDropClaim } from '../services/features/dropService.js';
@@ -27,23 +27,26 @@ import { memberProfileIdentity } from '../services/moderation/memberIdentityServ
 import { handleVerifyButtonClick, handleVerificationStaffAction } from '../services/moderation/securityVerificationService.js';
 import { showModeratorNoteModal } from '../commands/moderation/note.js';
 import { sendReportToAdmin } from '../commands/moderation/signal.js';
-import { parseDurationToMs, registerBanSanction, registerKickSanction, registerTimeoutSanction, registerWarnSanction, runGuildBan } from '../services/moderation/sanctionService.js';
+import { parseDurationToMs, recordAppliedSanction, registerBanSanction, registerKickSanction, registerTimeoutSanction, registerWarnSanction, runGuildBan } from '../services/moderation/sanctionService.js';
 import { publicErrorMessage } from '../utils/publicError.js';
 
 
 /** Modal de saisie de raison (et durée pour timeout) partagé entre le select historique et les boutons rapides du casier. */
-function buildSanctionReasonModal(action: string, targetUserId: string, targetUsername: string): ModalBuilder {
-  const actionLabel = action === 'warn' ? 'Avertissement' : action === 'timeout' ? 'Timeout' : action === 'kick' ? 'Expulsion' : 'Bannissement';
+function buildSanctionReasonModal(action: string, targetUserId: string, targetUsername: string, locale: BotLocale): ModalBuilder {
+  const actionLabel = action === 'warn' ? gvwMessages.b1_sanction_label_warn({}, { locale })
+    : action === 'timeout' ? gvwMessages.b1_sanction_label_timeout({}, { locale })
+    : action === 'kick' ? gvwMessages.b1_sanction_label_kick({}, { locale })
+    : gvwMessages.b1_sanction_label_ban({}, { locale });
 
   const modal = new ModalBuilder()
     .setCustomId(`sanction_modal:${action}:${targetUserId}`)
-    .setTitle(`Sanction : ${truncate(targetUsername, 20)}`);
+    .setTitle(gvwMessages.sfm_title({ user: truncate(targetUsername, 20) }, { locale }));
 
   const reasonInput = new TextInputBuilder()
     .setCustomId('reason')
-    .setLabel(`Raison du ${actionLabel}`)
+    .setLabel(gvwMessages.sfm_reason_label({ action: actionLabel }, { locale }))
     .setStyle(TextInputStyle.Paragraph)
-    .setPlaceholder('Motif de la sanction...')
+    .setPlaceholder(gvwMessages.sfm_reason_placeholder({}, { locale }))
     .setRequired(true)
     .setMaxLength(500);
 
@@ -52,9 +55,9 @@ function buildSanctionReasonModal(action: string, targetUserId: string, targetUs
   if (action === 'timeout') {
     const durationInput = new TextInputBuilder()
       .setCustomId('duration')
-      .setLabel('Durée (ex: 2h, 1j)')
+      .setLabel(gvwMessages.sfm_duration_label({}, { locale }))
       .setStyle(TextInputStyle.Short)
-      .setPlaceholder('Exemple : 2h')
+      .setPlaceholder(gvwMessages.sfm_duration_placeholder({}, { locale }))
       .setRequired(true)
       .setMaxLength(50);
     rows.push(new ActionRowBuilder<TextInputBuilder>().addComponents(durationInput));
@@ -379,7 +382,7 @@ export async function handleButton(interaction: Interaction, client: Client): Pr
     if (!guildId) return;
     await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
 
-    const [{ attackRaid, RaidError }, { buildAssaultEmbed }] = await Promise.all([
+    const [{ attackRaid, RaidError, RaidRefused }, { buildAssaultEmbed, raidRefusalText }] = await Promise.all([
       import('../services/features/rpg/rpgRaidService.js'),
       import('../services/features/rpg/rpgRaidPanel.js'),
     ]);
@@ -393,11 +396,12 @@ export async function handleButton(interaction: Interaction, client: Client): Pr
       // joueur ; le reste part au journal, l'utilisateur n'ayant que faire d'une trace.
       const expected = error instanceof RaidError;
       if (!expected) logger.error('RpgRaid', `Assaut en échec sur ${guildId}:`, error);
+      const locale = await resolveGuildLocale(guildId).catch(() => getLocale(interaction));
+      const reason = error instanceof RaidRefused ? raidRefusalText(error.refusal, locale)
+        : expected ? error.message
+        : gvwMessages.rpg_raid_panel_attack_failed({}, { locale });
       await interaction.editReply({
-        embeds: [errorEmbed(
-          'Assaut impossible',
-          expected ? error.message : "L'assaut n'a pas pu être livré.",
-        )],
+        embeds: [errorEmbed(gvwMessages.rpg_raid_panel_attack_error({}, { locale }), reason)],
       }).catch(() => null);
     }
     return;
@@ -503,6 +507,13 @@ export async function handleButton(interaction: Interaction, client: Client): Pr
     return;
   }
 
+  // ── Sondage interserveur des annonces globales ──────────────────────
+  if (customId.startsWith('bcpoll:')) {
+    const { handleBroadcastPollVote } = await import('../services/system/broadcastService.js');
+    await handleBroadcastPollVote(interaction);
+    return;
+  }
+
   // ── Paris entre membres (points de clan) ────────────────────────────
   if (customId.startsWith('bet:')) {
     const { handleBetButton } = await import('../services/community/clanBetService.js');
@@ -581,8 +592,13 @@ export async function handleButton(interaction: Interaction, client: Client): Pr
 
     // Boutons rapides Warn/Timeout/Kick/Ban du casier → modal de raison
     if (caseRoute.action === 'sanction' && caseRoute.sanctionType) {
-      const targetUser = await client.users.fetch(caseRoute.userId).catch(() => null);
-      await interaction.showModal(buildSanctionReasonModal(caseRoute.sanctionType, caseRoute.userId, targetUser?.username ?? 'Utilisateur'));
+      // showModal doit partir dans les trois secondes : les deux lectures se font en parallèle.
+      const [locale, targetUser] = await Promise.all([
+        getEffectiveLocale(interaction),
+        client.users.fetch(caseRoute.userId).catch(() => null),
+      ]);
+      const targetUsername = targetUser?.username ?? gvwMessages.sfm_unknown_user({}, { locale });
+      await interaction.showModal(buildSanctionReasonModal(caseRoute.sanctionType, caseRoute.userId, targetUsername, locale));
       return;
     }
 
@@ -847,6 +863,32 @@ export async function handleButton(interaction: Interaction, client: Client): Pr
     return;
   }
 
+  // ── Honeypot : « C'était une erreur » pendant le délai avant sanction ──
+  if (customId.startsWith('hp:mistake:') && interaction.isButton()) {
+    const { handleHoneypotMistake } = await import('../events/honeypot.js');
+    await handleHoneypotMistake(interaction);
+    return;
+  }
+
+  // ── Shield : boutons du panneau ──────────────────────────────────────
+  // Pas de contrôle de permission : le panneau vit dans un salon réservé à
+  // l'équipe, l'accès au salon fait office de droit.
+  if (customId.startsWith('shield:set:') && interaction.inCachedGuild()) {
+    const { isShieldLevel, setShieldLevel, SHIELD_LEVELS } = await import('../services/moderation/shieldService.js');
+    const level = Number(customId.split(':')[2]);
+    if (!isShieldLevel(level)) return;
+    await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
+    const result = await setShieldLevel(interaction.guild, level, user.id);
+    const meta = SHIELD_LEVELS[level];
+    await interaction.editReply({
+      content: [
+        `${meta.emoji} **Shield ${level} : ${meta.name}**. ${meta.summary}`,
+        ...(result.warnings.length ? ['', '⚠️ Appliqué en partie :', ...result.warnings.map((w) => `• ${w}`)] : []),
+      ].join('\n'),
+    });
+    return;
+  }
+
   // ── Protection anti-raid (raid mode, reports staff) ──────────────────
   if (customId.startsWith('rprot:')) {
     const member = await resolveGuildMemberByUserId(interaction, user.id);
@@ -869,6 +911,34 @@ export async function handleButton(interaction: Interaction, client: Client): Pr
       await interaction.editReply({ content: '✅ Mode raid désactivé.' });
       // Désactive le bouton sur le message d'alerte
       await interaction.message.edit({ components: [] }).catch(() => null);
+      return;
+    }
+
+    if (action === 'vision_confirm' || action === 'vision_dismiss') {
+      await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
+      const { decideVisionReview } = await import('../services/moderation/visionService.js');
+      const confirm = action === 'vision_confirm';
+      const decision = await decideVisionReview(client, entityId, user.id, confirm);
+      if (!decision.ok) {
+        await interaction.editReply({ content: `ℹ️ ${decision.reason}` });
+        await interaction.message.edit({ components: [] }).catch(() => null);
+        return;
+      }
+      await interaction.editReply({
+        content: confirm
+          ? `✅ Image ajoutée au registre${decision.sanction ? `, auteur sanctionné (${decision.sanction})` : ''}.`
+          : '✅ Image écartée : elle ne sera plus signalée.',
+      });
+      const original = interaction.message.embeds[0];
+      if (original) {
+        const { EmbedBuilder } = await import('discord.js');
+        const updated = EmbedBuilder.from(original)
+          .setColor(confirm ? 0xed4245 : 0x57f287)
+          .addFields({ name: 'Décision', value: `${confirm ? 'Confirmée (interdite)' : 'Écartée (saine)'} par <@${user.id}>`, inline: false });
+        await interaction.message.edit({ embeds: [updated], components: [] }).catch(() => null);
+      } else {
+        await interaction.message.edit({ components: [] }).catch(() => null);
+      }
       return;
     }
 
@@ -1326,8 +1396,15 @@ export async function handleButton(interaction: Interaction, client: Client): Pr
     if (step === 'step1') await sendSetupStep1(client, guildId, interaction);
     else if (step === 'step2') await sendSetupStep2(client, guildId, interaction);
     else if (step === 'step3') await sendSetupStep3(client, guildId, interaction);
+    else if (step === 'step4') await sendSetupStep4(client, guildId, interaction);
     else if (step === 'finish') await sendSetupFinish(client, guildId, interaction);
-
+    else if (step === 'reset_mod_role') {
+      await prisma.guild.update({ where: { id: guildId }, data: { moderatorRoleId: null } }).catch(() => null);
+      await sendSetupStep2(client, guildId, interaction);
+    }
+    else if (step.startsWith('sec_')) {
+      await handleSetupSecurityAction(client, guildId, step, interaction);
+    }
     else if (step === 'trans_toggle') {
       await toggleGuildBoolean(guildId, 'translationEnabled');
       await sendSetupStep3(client, guildId, interaction);
@@ -1570,17 +1647,20 @@ export async function handleSelectMenu(interaction: AnySelectMenuInteraction, cl
     if (!interaction.isStringSelectMenu()) return;
     const action = interaction.values[0]; // warn, timeout, kick, ban
 
-    const member = await resolveGuildMemberByUserId(interaction, interaction.user.id);
+    const [locale, member] = await Promise.all([
+      getEffectiveLocale(interaction),
+      resolveGuildMemberByUserId(interaction, interaction.user.id),
+    ]);
     if (!(await canModerate(member, guildId))) {
-      await interaction.reply({ content: "❌ Tu n'as pas les permissions nécessaires.", flags: [MessageFlags.Ephemeral] });
+      await interaction.reply({ content: gvwMessages.sfm_no_permission({}, { locale }), flags: [MessageFlags.Ephemeral] });
       return;
     }
 
     const targetUserId = caseRoute.userId;
     const targetUser = await client.users.fetch(targetUserId).catch(() => null);
-    const targetUsername = targetUser?.username ?? 'Utilisateur';
+    const targetUsername = targetUser?.username ?? gvwMessages.sfm_unknown_user({}, { locale });
 
-    await interaction.showModal(buildSanctionReasonModal(action, targetUserId, targetUsername));
+    await interaction.showModal(buildSanctionReasonModal(action, targetUserId, targetUsername, locale));
     return;
   }
 
@@ -1631,6 +1711,14 @@ export async function handleSelectMenu(interaction: AnySelectMenuInteraction, cl
         create: { id: guildId, defaultTranslateTo: targetLang },
       });
       await sendSetupStep3(client, guildId, interaction);
+    }
+    else if (step === 'select_log_channel') {
+      await prisma.guild.upsert({
+        where: { id: guildId },
+        update: { logChannelId: val },
+        create: { id: guildId, logChannelId: val },
+      });
+      await sendSetupStep4(client, guildId, interaction, `Salon de logs défini sur <#${val}>.`);
     }
     return;
   }
@@ -1775,6 +1863,12 @@ export async function handleModalSubmit(interaction: ModalSubmitInteraction, cli
   if (customId.startsWith('appeal_modal:')) {
     const { handleAppealModalSubmit } = await import('../services/moderation/banAppealService.js');
     await handleAppealModalSubmit(client, customId, interaction);
+    return;
+  }
+
+  if (customId.startsWith('tournament-team-modal:')) {
+    const { handleTournamentTeamModal } = await import('../services/features/tournament/tournamentService.js');
+    await handleTournamentTeamModal(interaction, customId.split(':')[1]);
     return;
   }
 
@@ -1955,17 +2049,24 @@ export async function handleModalSubmit(interaction: ModalSubmitInteraction, cli
     if (!targetUserId) return;
 
     await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
+    const locale = await getEffectiveLocale(interaction);
 
     const reason = interaction.fields.getTextInputValue('reason');
     const durationInput = action === 'timeout' ? interaction.fields.getTextInputValue('duration') : null;
 
     const member = await resolveGuildMemberByUserId(interaction, interaction.user.id);
     if (!(await canModerate(member, interaction.guildId!))) {
-      await interaction.editReply("❌ Vous n'avez pas les permissions.");
+      await interaction.editReply({ embeds: [errorEmbed(gvwMessages.b1_action_impossible({}, { locale }), gvwMessages.sfm_no_permission({}, { locale }))] });
       return;
     }
 
     const executor = interaction.user;
+    // Une fois le membre expulsé ou banni, un casier non mis à jour ne doit pas s'annoncer
+    // comme un échec : le modérateur sanctionnerait une deuxième fois.
+    const recordFailedField = () => ({
+      name: gvwMessages.b1_record_failed_title({}, { locale }),
+      value: gvwMessages.b1_record_failed_desc({}, { locale }),
+    });
 
     try {
       const targetUser = await client.users.fetch(targetUserId).catch(() => null);
@@ -1985,7 +2086,7 @@ export async function handleModalSubmit(interaction: ModalSubmitInteraction, cli
       // Mêmes garde-fous que la commande /sanction : le bouton du casier ne doit
       // pas permettre à un modérateur de sanctionner un membre au-dessus de lui.
       if (targetUserId === executor.id) {
-        await interaction.editReply({ embeds: [errorEmbed('Action impossible', 'Vous ne pouvez pas vous sanctionner vous-même.')] });
+        await interaction.editReply({ embeds: [errorEmbed(gvwMessages.b1_action_impossible({}, { locale }), gvwMessages.b1_cannot_sanction_self({}, { locale }))] });
         return;
       }
       if (
@@ -1993,7 +2094,7 @@ export async function handleModalSubmit(interaction: ModalSubmitInteraction, cli
         && targetMember.roles.highest.position >= member.roles.highest.position
         && guild.ownerId !== executor.id
       ) {
-        await interaction.editReply({ embeds: [errorEmbed('Action impossible', 'Ce membre a un rôle égal ou supérieur au vôtre.')] });
+        await interaction.editReply({ embeds: [errorEmbed(gvwMessages.b1_action_impossible({}, { locale }), gvwMessages.b1_cannot_sanction_higher({}, { locale }))] });
         return;
       }
 
@@ -2008,15 +2109,15 @@ export async function handleModalSubmit(interaction: ModalSubmitInteraction, cli
         const warnCount = await prisma.sanction.count({
           where: { guildId: interaction.guildId!, targetUserId, type: SanctionType.WARN },
         });
-        await interaction.editReply({ embeds: [successEmbed('Avertissement appliqué', `L'avertissement a bien été enregistré. (Warn #${warnCount})`)] });
+        await interaction.editReply({ embeds: [successEmbed(gvwMessages.sfm_warn_done_title({}, { locale }), gvwMessages.sfm_warn_done_desc({ count: warnCount }, { locale }))] });
       } else if (action === 'timeout') {
         const durationMs = parseDurationToMs(durationInput || '');
         if (!durationMs) {
-          await interaction.editReply({ embeds: [errorEmbed('Durée invalide', 'Le format de la durée est invalide.')] });
+          await interaction.editReply({ embeds: [errorEmbed(gvwMessages.b1_invalid_duration_title({}, { locale }), gvwMessages.b1_invalid_duration_desc({ help: gvwMessages.b1_duration_help({}, { locale }) }, { locale }))] });
           return;
         }
         if (!targetMember) {
-          await interaction.editReply({ embeds: [errorEmbed('Membre introuvable', "L'utilisateur n'est pas sur ce serveur.")] });
+          await interaction.editReply({ embeds: [errorEmbed(gvwMessages.b1_member_not_found({}, { locale }), gvwMessages.b1_member_must_be_present_timeout({}, { locale }))] });
           return;
         }
         await registerTimeoutSanction({
@@ -2028,14 +2129,14 @@ export async function handleModalSubmit(interaction: ModalSubmitInteraction, cli
           member: targetMember,
           client,
         });
-        await interaction.editReply({ embeds: [successEmbed('Timeout appliqué', `Le timeout de ${durationInput} a bien été enregistré.`)] });
+        await interaction.editReply({ embeds: [successEmbed(gvwMessages.sfm_timeout_done_title({}, { locale }), gvwMessages.sfm_timeout_done_desc({ duration: durationInput ?? '' }, { locale }))] });
       } else if (action === 'kick') {
         if (!targetMember) {
-          await interaction.editReply({ embeds: [errorEmbed('Membre introuvable', "L'utilisateur n'est pas sur ce serveur.")] });
+          await interaction.editReply({ embeds: [errorEmbed(gvwMessages.b1_member_not_found({}, { locale }), gvwMessages.b1_member_must_be_present_kick({}, { locale }))] });
           return;
         }
         if (!targetMember.kickable) {
-          await interaction.editReply({ embeds: [errorEmbed('Action impossible', 'Le bot ne peut pas expulser ce membre (hiérarchie des rôles).')] });
+          await interaction.editReply({ embeds: [errorEmbed(gvwMessages.b1_action_impossible({}, { locale }), gvwMessages.b1_cannot_kick_member({}, { locale }))] });
           return;
         }
         // Le lien de contestation part avant l'expulsion : ensuite le membre ne
@@ -2043,33 +2144,37 @@ export async function handleModalSubmit(interaction: ModalSubmitInteraction, cli
         const { sendPreActionAppealDM } = await import('../services/moderation/banAppealService.js');
         await sendPreActionAppealDM(client, guild.id, targetUserId, SanctionType.KICK).catch(() => false);
         await targetMember.kick(`${reason} | Modération: ${executor.tag}`);
-        await registerKickSanction({
+        const recorded = await recordAppliedSanction(guild.id, 'Kick', () => registerKickSanction({
           guildId: interaction.guildId!,
           target,
           moderator,
           reason,
           client,
-        });
-        await interaction.editReply({ embeds: [successEmbed('Expulsion appliquée', `L'utilisateur a été expulsé.`)] });
+        }));
+        const embed = successEmbed(gvwMessages.sfm_kick_done_title({}, { locale }), gvwMessages.sfm_kick_done_desc({}, { locale }));
+        if (!recorded) embed.addFields(recordFailedField());
+        await interaction.editReply({ embeds: [embed] });
       } else if (action === 'ban') {
         if (targetMember && !targetMember.bannable) {
-          await interaction.editReply({ embeds: [errorEmbed('Action impossible', 'Le bot ne peut pas bannir ce membre (hiérarchie des rôles).')] });
+          await interaction.editReply({ embeds: [errorEmbed(gvwMessages.b1_action_impossible({}, { locale }), gvwMessages.b1_cannot_ban_member({}, { locale }))] });
           return;
         }
         const { sendPreActionAppealDM } = await import('../services/moderation/banAppealService.js');
         await sendPreActionAppealDM(client, guild.id, targetUserId, SanctionType.BAN).catch(() => false);
         await runGuildBan(guild, targetUserId, `${reason} | Modération: ${executor.tag}`);
-        await registerBanSanction({
+        const recorded = await recordAppliedSanction(guild.id, 'Ban', () => registerBanSanction({
           guildId: interaction.guildId!,
           target,
           moderator,
           reason,
           client,
-        });
-        await interaction.editReply({ embeds: [successEmbed('Bannissement appliqué', `L'utilisateur a été banni.`)] });
+        }));
+        const embed = successEmbed(gvwMessages.sfm_ban_done_title({}, { locale }), gvwMessages.sfm_ban_done_desc({}, { locale }));
+        if (!recorded) embed.addFields(recordFailedField());
+        await interaction.editReply({ embeds: [embed] });
       }
     } catch (error) {
-      await interaction.editReply({ embeds: [errorEmbed('Erreur', publicErrorMessage(error, 'Une erreur est survenue.'))] });
+      await interaction.editReply({ embeds: [errorEmbed(gvwMessages.b1_error({}, { locale }), publicErrorMessage(error, gvwMessages.b1_unknown_error({}, { locale })))] });
     }
     return;
   }

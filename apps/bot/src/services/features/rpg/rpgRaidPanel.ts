@@ -21,7 +21,7 @@ import { COLORS, joinFieldEntries } from '../../../utils/embeds.js';
 import { resolveGuildLocale, type BotLocale } from '../../../utils/i18n.js';
 import * as m from '../../../lib/paraglide/messages.js';
 import { getOrCreateEconomyConfig } from '../economyService.js';
-import type { RaidAttackOutcome } from './rpgRaidService.js';
+import type { RaidAttackOutcome, RaidRefusal } from './rpgRaidService.js';
 
 export const RAID_ATTACK_BUTTON = 'rpg_raid_attack';
 
@@ -337,4 +337,19 @@ export async function buildAssaultEmbed(guildId: string, outcome: RaidAttackOutc
 
   embed.setFooter({ text: m.rpg_raid_assault_left({ left: outcome.assaultsLeft }, { locale }) });
   return embed;
+}
+
+export function raidRefusalText(refusal: RaidRefusal, locale: BotLocale): string {
+  switch (refusal.kind) {
+    case 'disabled': return m.rpg_raid_panel_disabled({}, { locale });
+    case 'none': return m.rpg_raid_refused_none({}, { locale });
+    case 'closed': return m.rpg_raid_refused_closed({}, { locale });
+    case 'no_clan': return m.rpg_raid_panel_no_clan({}, { locale });
+    case 'no_guild': return m.rpg_raid_panel_no_guild({}, { locale });
+    case 'quota': return m.rpg_raid_refused_quota({ assaults: refusal.assaults }, { locale });
+    case 'quota_bought': return m.rpg_raid_refused_quota_bought({ assaults: refusal.assaults }, { locale });
+    case 'defeated': return m.rpg_raid_refused_defeated({}, { locale });
+    case 'team_quota': return m.rpg_raid_refused_team_quota({}, { locale });
+    case 'energy': return m.rpg_raid_refused_energy({ cost: refusal.cost }, { locale });
+  }
 }

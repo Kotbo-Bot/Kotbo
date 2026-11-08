@@ -32,6 +32,7 @@ import {
   fetchStaffServerChannels,
   dashboardFetch,
 } from '../../api';
+import { canAttach, siblingOrder, type HierarchySchema, type OrgMember, type OrgSection, type SchemaHierarchy } from './orgChartModel';
 import type { StaffMember, StaffRole, StaffHierarchy } from '../../types';
 import { m } from '../../i18n';
 import { errorMessage } from '@kotbo/shared';
@@ -78,6 +79,7 @@ export type DiscordOption = { id: string; name: string; color?: number | string 
 export type StaffConfig = {
   baseStaffRoleId: string | null;
   testStaffRoleId: string | null;
+  formerStaffRoleId: string | null;
   meetingAnnouncementChannelId: string | null;
   meetingVoiceChannelId: string | null;
   staffAnnouncementChannelId: string | null;
@@ -130,7 +132,7 @@ class StaffStore {
   members = $state<StaffMember[]>([]);
   roles = $state<StaffRole[]>([]);
   hierarchies = $state<StaffHierarchy[]>([]);
-  hierarchySchema = $state<any>(null);
+  hierarchySchema = $state<HierarchySchema | null>(null);
   warnings = $state<StaffWarning[]>([]);
   polls = $state<StaffPoll[]>([]);
   leadership = $state<LeadershipMetric[]>([]);
@@ -138,6 +140,7 @@ class StaffStore {
   config = $state<StaffConfig>({
     baseStaffRoleId: null,
     testStaffRoleId: null,
+    formerStaffRoleId: null,
     meetingAnnouncementChannelId: null,
     meetingVoiceChannelId: null,
     staffAnnouncementChannelId: null,
@@ -385,7 +388,8 @@ class StaffStore {
         await Promise.all([this.loadRoles(force), this.loadHierarchies(force), this.loadMembers()]);
         break;
       case 'organigramme':
-        await this.loadSchema(force);
+        // Les grades servent a les deplacer depuis l'organigramme.
+        await Promise.all([this.loadSchema(force), this.loadRoles(force)]);
         break;
       case 'warnings':
         await Promise.all([this.loadWarnings(force), this.loadMembers()]);
@@ -502,6 +506,7 @@ class StaffStore {
       this.config = {
         baseStaffRoleId: cfg.baseStaffRoleId ?? null,
         testStaffRoleId: cfg.testStaffRoleId ?? null,
+        formerStaffRoleId: cfg.formerStaffRoleId ?? null,
         meetingAnnouncementChannelId: cfg.meetingAnnouncementChannelId ?? null,
         meetingVoiceChannelId: cfg.meetingVoiceChannelId ?? null,
         staffAnnouncementChannelId: cfg.staffAnnouncementChannelId ?? null,
@@ -1006,6 +1011,89 @@ class StaffStore {
       await Promise.all([this.loadHierarchies(true), this.loadSchema(true), this.loadRoles(true)]);
     } catch {
       toast.error(m.sm_err_delete_generic());
+    }
+  }
+
+  /**
+   * Deplace un pole sous `parentId`, avant `beforeId` ou en dernier. Tous ses
+   * nouveaux freres sont renumerotes : `sortOrder` vaut souvent 0 partout.
+   */
+  async moveHierarchy(id: string, parentId: string | null, beforeId?: string): Promise<void> {
+    const list = this.hierarchySchema?.hierarchies ?? [];
+    if (!this.guildId || !list.some((h) => h.id === id) || !canAttach(list, id, parentId)) return;
+
+    const changes = new Map<string, Partial<SchemaHierarchy>>();
+    siblingOrder(list, id, parentId, beforeId).forEach((siblingId, sortOrder) => {
+      const sibling = list.find((h) => h.id === siblingId)!;
+      const change: Partial<SchemaHierarchy> = {};
+      if (sibling.sortOrder !== sortOrder) change.sortOrder = sortOrder;
+      if (siblingId === id && (sibling.parentHierarchyId ?? null) !== parentId) change.parentHierarchyId = parentId;
+      if (Object.keys(change).length) changes.set(siblingId, change);
+    });
+    if (changes.size === 0) return;
+
+    // Affichage immediat, puis enregistrement.
+    this.hierarchySchema = {
+      ...this.hierarchySchema!,
+      hierarchies: list.map((h) => ({ ...h, ...changes.get(h.id) })),
+    };
+    try {
+      const responses = await Promise.all([...changes].map(([hierarchyId, change]) =>
+        dashboardFetch(`/staff/hierarchies/${hierarchyId}`, {
+          guildId: this.guildId!,
+          method: 'PATCH',
+          headers: JSON_HEADERS,
+          body: JSON.stringify(change),
+        }),
+      ));
+      if (responses.some((res) => !res.ok)) throw new Error(m.sm_err_reorder());
+    } catch {
+      toast.error(m.sm_err_reorder());
+    } finally {
+      await Promise.allSettled([this.loadSchema(true), this.loadHierarchies(true)]);
+    }
+  }
+
+  /** Change un grade de pole, puis relit le schema : ses membres l'ont suivi. */
+  async moveRoleToHierarchy(roleId: string, target: { beforeRoleId?: string; hierarchyId: string }): Promise<void> {
+    await this.moveRole(roleId, target);
+    await this.loadSchema(true);
+  }
+
+  /**
+   * Passe un membre sur un autre grade. C'est un vrai changement de grade :
+   * sans lui, la synchro depuis Discord ramenerait le membre a sa place.
+   */
+  async moveMemberToGrade(member: OrgMember, section: OrgSection, grade: string): Promise<void> {
+    if (!this.guildId) return;
+    const poles = this.hierarchySchema?.hierarchies.filter((h) => h.members.some((entry) => entry.userId === member.userId)).length ?? 0;
+    const confirmed = await confirmDialog.ask({
+      title: m.sm_org_confirm_move_title({ name: member.name, grade }),
+      confirmLabel: m.sm_org_confirm_move_btn(),
+      variant: 'warning',
+      impacts: [m.sm_org_impact_roles(), ...(poles > 1 ? [m.sm_org_impact_other_poles()] : [])],
+    });
+    if (!confirmed) return;
+
+    const hierarchyPath = `/staff/members/${member.userId}/hierarchy-grade`;
+    try {
+      await this.patchMember(member.userId, { grade });
+      const added = await dashboardFetch(hierarchyPath, {
+        guildId: this.guildId,
+        method: 'POST',
+        headers: JSON_HEADERS,
+        body: JSON.stringify({ hierarchyId: section.hierarchyId, grade }),
+      });
+      if (!added.ok) throw new Error(m.sm_err_reorder());
+      if (member.hierarchyId !== section.hierarchyId) {
+        const removed = await dashboardFetch(`${hierarchyPath}/${member.hierarchyId}`, { guildId: this.guildId, method: 'DELETE' });
+        if (!removed.ok) throw new Error(m.sm_err_reorder());
+      }
+      toast.success(m.sm_org_toast_moved({ name: member.name, grade }));
+    } catch (err) {
+      toast.error(errorMessage(err) || m.sm_err_reorder());
+    } finally {
+      await Promise.allSettled([this.loadSchema(true), this.refreshMembers()]);
     }
   }
 

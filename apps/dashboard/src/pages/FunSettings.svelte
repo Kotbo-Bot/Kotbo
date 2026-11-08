@@ -46,6 +46,7 @@
     funImageOfDayChannelId: null as string | null,
     funConfessionChannelId: null as string | null,
     funConfessionLogChannelId: null as string | null,
+    funConfessionCooldownSeconds: 60,
     funPunitiveMode: true,
     funEmojiRiddleUseDefaults: true
   });
@@ -61,11 +62,12 @@
     funImageOfDayChannelId: null as string | null,
     funConfessionChannelId: null as string | null,
     funConfessionLogChannelId: null as string | null,
+    funConfessionCooldownSeconds: 60,
     funPunitiveMode: true,
     funEmojiRiddleUseDefaults: true
   });
 
-  let confessions = $state<{ number: number; content: string; createdAt: string; revealedAt: string | null }[]>([]);
+  let confessions = $state<{ number: number; content: string; createdAt: string; revealedAt: string | null; deletedAt: string | null }[]>([]);
 
   let gameState = $state({
     countingCurrent: 0,
@@ -115,6 +117,7 @@
       funImageOfDayChannelId: source.funImageOfDayChannelId ?? null,
       funConfessionChannelId: source.funConfessionChannelId ?? null,
       funConfessionLogChannelId: source.funConfessionLogChannelId ?? null,
+      funConfessionCooldownSeconds: source.funConfessionCooldownSeconds ?? 60,
       funPunitiveMode: source.funPunitiveMode ?? true,
       funEmojiRiddleUseDefaults: source.funEmojiRiddleUseDefaults ?? true
     };
@@ -157,7 +160,8 @@
     if (!canManageSettings) return false;
     let success = false;
     await actionState.run(async () => {
-      const res = await updateFunConfig(config);
+      // Un champ numérique vidé vaut null : on l'enregistre comme « aucun délai ».
+      const res = await updateFunConfig({ ...config, funConfessionCooldownSeconds: config.funConfessionCooldownSeconds ?? 0 });
       if (!res) throw new Error(m.fun_save_error());
       const saved = mapConfig(res.config);
       config = saved;
@@ -621,6 +625,20 @@
                 disabled={!canManageSettings}
               />
             </div>
+            <div class="space-y-1.5">
+              <label for="confessionCooldown" class="text-xs font-semibold text-on-surface-variant ml-2">{m.fun_confession_cooldown_label()}</label>
+              <input
+                id="confessionCooldown"
+                type="number"
+                min="0"
+                max="86400"
+                step="1"
+                bind:value={config.funConfessionCooldownSeconds}
+                class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm text-on-surface focus:ring-2 focus:ring-violet-500/30 transition-all"
+                disabled={!canManageSettings}
+              />
+              <p class="text-2xs text-on-surface-variant/55 ml-2">{m.fun_confession_cooldown_hint()}</p>
+            </div>
           </div>
 
           <div class="space-y-2">
@@ -633,7 +651,7 @@
                   <li class="bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm">
                     <div class="flex items-center justify-between text-2xs text-on-surface-variant/55 font-semibold mb-1">
                       <span>#{c.number}</span>
-                      <span>{new Date(c.createdAt).toLocaleString()}{c.revealedAt ? ` · ${m.fun_confession_revealed()}` : ''}</span>
+                      <span>{new Date(c.createdAt).toLocaleString()}{c.revealedAt ? ` · ${m.fun_confession_revealed()}` : ''}{c.deletedAt ? ` · ${m.fun_confession_deleted()}` : ''}</span>
                     </div>
                     <p class="text-on-surface whitespace-pre-wrap break-words">{c.content}</p>
                   </li>

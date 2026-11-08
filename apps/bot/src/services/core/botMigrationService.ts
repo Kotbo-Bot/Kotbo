@@ -842,13 +842,11 @@ async function applyInspection(guild: Guild, payload: InspectionPayload): Promis
     });
     if (existing > 0) return false;
 
-    await createReactionRoleMenu(
-      guild.client,
-      guildId,
-      payload.channelId,
-      payload.title,
-      payload.options,
-    );
+    await createReactionRoleMenu(guild.client, guildId, {
+      channelId: payload.channelId,
+      title: payload.title,
+      options: payload.options,
+    });
     return true;
   }
 

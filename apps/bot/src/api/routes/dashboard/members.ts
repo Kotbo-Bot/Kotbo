@@ -27,6 +27,7 @@ import {
   type FeatureAccessMap,
 } from '../../shared.js';
 import {
+  recordAppliedSanction,
   registerBanSanction,
   registerKickSanction,
   registerTimeoutSanction,
@@ -730,6 +731,10 @@ export async function handleMembersRoutes(
           json(res, 404, { error: 'Le membre doit être présent sur le serveur.' });
           return true;
         }
+        if (!targetMember.moderatable) {
+          json(res, 400, { error: 'Le bot ne peut pas appliquer de timeout à ce membre.' });
+          return true;
+        }
 
         const {
           createVerificationSession,
@@ -839,7 +844,9 @@ export async function handleMembersRoutes(
         }
 
         await targetMember.kick(`${reason} | Modération: ${user.username ?? user.userId}`);
-        const sanction = await registerKickSanction({ guildId, target, moderator, reason });
+        // Passé ce point le membre est expulsé : rien de ce qui suit ne doit répondre en
+        // échec, sinon le modérateur relance l'action.
+        const sanction = await recordAppliedSanction(guildId, 'Kick', () => registerKickSanction({ guildId, target, moderator, reason }));
 
         await pushAudit(guildId, {
           user: auditUser,
@@ -849,10 +856,10 @@ export async function handleMembersRoutes(
           eventType: 'Manuel',
           details: `Kick appliqué à ${target.tag} (${target.id}). Raison: ${reason}`,
           channelId: null,
-        });
+        }).catch((err) => logger.error('MembersAPI', `Audit du kick de ${userId} en échec:`, err));
 
         broadcastDashboardStateChange(guildId, 'member_kicked');
-        json(res, 200, { ok: true, sanctionId: sanction.id });
+        json(res, 200, sanction ? { ok: true, sanctionId: sanction.id } : { ok: true, sanctionId: null, recordFailed: true });
         return true;
       }
 
@@ -906,7 +913,7 @@ export async function handleMembersRoutes(
         // peut ne plus partager de serveur avec le membre pour lui écrire).
         await sendBanAppealNotificationDM(client, guildId, userId).catch(() => false);
         await runGuildBan(discordGuild, userId, `${reason} | Modération: ${user.username ?? user.userId}`);
-        const sanction = await registerBanSanction({ guildId, target, moderator, reason });
+        const sanction = await recordAppliedSanction(guildId, 'Ban', () => registerBanSanction({ guildId, target, moderator, reason }));
 
         await pushAudit(guildId, {
           user: auditUser,
@@ -916,10 +923,10 @@ export async function handleMembersRoutes(
           eventType: 'Manuel',
           details: `Ban appliqué à ${target.tag} (${target.id}). Raison: ${reason}`,
           channelId: null,
-        });
+        }).catch((err) => logger.error('MembersAPI', `Audit du ban de ${userId} en échec:`, err));
 
         broadcastDashboardStateChange(guildId, 'member_banned');
-        json(res, 200, { ok: true, sanctionId: sanction.id });
+        json(res, 200, sanction ? { ok: true, sanctionId: sanction.id } : { ok: true, sanctionId: null, recordFailed: true });
         return true;
       }
     } catch (err) {

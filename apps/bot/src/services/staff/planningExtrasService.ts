@@ -86,7 +86,7 @@ export async function getPlanningExtras(
     const [discordEvents, kotboEvents, meetings] = await Promise.all([
       fetchDiscordEvents(guildId),
       prisma.event.findMany({
-        where: { guildId, type: 'CUSTOM', status: { not: 'CANCELLED' } },
+        where: { guildId, type: { in: ['CUSTOM', 'TOURNAMENT'] }, status: { not: 'CANCELLED' } },
         select: { id: true, title: true, description: true, discordEventId: true, triggerType: true, triggerValue: true, status: true },
       }),
       prisma.staffMeeting.findMany({ where: { guildId, discordEventId: { not: null } }, select: { discordEventId: true } }),

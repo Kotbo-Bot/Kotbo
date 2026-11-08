@@ -281,6 +281,10 @@ export interface BroadcastPayload {
   target?: 'ALL' | 'ACTIVATED' | 'CUSTOM';
   targetGuilds?: string[];
   channelPref?: 'AUTO' | 'NEWS' | 'PUBLIC' | 'STAFF' | 'FALLBACK';
+  /** 2 a 5 choix = sondage interserveur. */
+  pollOptions?: string[];
+  /** ISO 8601. */
+  pollClosesAt?: string;
   dryRun?: boolean;
   /** ISO 8601. Present = annonce programmee au lieu d'un envoi immediat. */
   scheduledAt?: string;
@@ -349,6 +353,8 @@ export interface BroadcastLogEntry {
   target: string;
   targetGuilds: string[];
   channelPref: string;
+  pollOptions: string[];
+  pollClosesAt: string | null;
   successCount: number;
   failCount: number;
   totalTargeted: number;
@@ -377,6 +383,19 @@ export async function sendBroadcast(payload: BroadcastPayload): Promise<Broadcas
     const error = await response.json().catch(() => ({}));
     throw new Error(error.error || 'Erreur broadcast');
   }
+  return response.json();
+}
+
+export interface BroadcastPollResults {
+  options: { label: string; votes: number }[];
+  total: number;
+  closesAt: string | null;
+  byGuild: { guildId: string; guildName: string; votes: number }[];
+}
+
+export async function fetchBroadcastPoll(broadcastId: string): Promise<BroadcastPollResults> {
+  const response = await authorizedFetch(`${API_BASE_URL}/api/admin/broadcast/${broadcastId}/poll`);
+  if (!response.ok) throw new Error('Erreur chargement des résultats');
   return response.json();
 }
 

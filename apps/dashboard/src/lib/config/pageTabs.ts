@@ -1,3 +1,4 @@
+import { isModulePaused } from '@kotbo/contracts';
 import { m } from '../i18n';
 import { allPages } from './pages';
 
@@ -44,7 +45,7 @@ export const PAGE_TABS: Record<string, PageTabConfig[]> = {
     { id: 'pulse', label: () => m.an_tab_pulse(), icon: 'Activity' },
     { id: 'weekly', label: () => m.an_tab_weekly(), icon: 'Calendar' },
     { id: 'commands', label: () => m.an_tab_commands(), icon: 'Code' },
-    { id: 'algo', label: () => m.an_tab_algo(), icon: 'Code' },
+    ...(isModulePaused('daily_algo') ? [] : [{ id: 'algo', label: () => m.an_tab_algo(), icon: 'Code' }]),
     { id: 'content', label: () => m.anx_section_content(), icon: 'ChatCircleDots' },
     { id: 'emojis', label: () => m.anx_tab_emojis(), icon: 'Smile' },
     { id: 'stickers', label: () => m.anx_tab_stickers(), icon: 'image' },
@@ -94,6 +95,8 @@ export const PAGE_TABS: Record<string, PageTabConfig[]> = {
     { id: 'detection', label: () => m.sec_tab_antiraid_detection(), icon: 'ShieldAlert' },
     { id: 'captcha', label: () => m.sec_tab_antiraid_captcha(), icon: 'UserCheck' },
     { id: 'scams', label: () => m.sec_tab_antiraid_scams(), icon: 'Fishing' },
+    { id: 'vision', label: () => m.sec_tab_antiraid_vision(), icon: 'ImageOff' },
+    { id: 'jail', label: () => m.sec_tab_antiraid_jail(), icon: 'Lock' },
     { id: 'invites', label: () => m.sec_tab_antiraid_invites(), icon: 'Link' },
     { id: 'queues', label: () => m.sec_tab_antiraid_queues(), icon: 'Inbox' },
   ],
@@ -103,6 +106,7 @@ export const PAGE_TABS: Record<string, PageTabConfig[]> = {
     { id: 'discord', label: () => m.am_tab_discord_filters(), icon: 'shield' },
     { id: 'security', label: () => m.am_tab_security(), icon: 'lock' },
     { id: 'behavioral', label: () => m.am_tab_behavioral(), icon: 'activity' },
+    { id: 'servers', label: () => m.am_tab_servers(), icon: 'globe' },
     { id: 'exceptions', label: () => m.am_tab_exceptions(), icon: 'filter' },
     { id: 'simulator', label: () => m.sim_tab_label(), icon: 'history' },
     // Page a part (/security/filters/nicknames), rangee ici en onglet : elle

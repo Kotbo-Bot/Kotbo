@@ -401,6 +401,61 @@ const messageActions: MessageAction[] = [
     },
   },
   {
+    id: 'vision_add',
+    scope: 'message',
+    label: 'Ajouter à Kotbo Vision',
+    emoji: '🔍',
+    description: 'Interdit les images de ce message sur le serveur, variantes comprises',
+    category: 'Modération',
+    permission: PermissionFlagsBits.ManageGuild,
+    modal: {
+      title: 'Ajouter à Kotbo Vision',
+      fields: [
+        {
+          id: 'list',
+          label: 'Liste (vide : catalogue du serveur)',
+          style: TextInputStyle.Short,
+          placeholder: 'Nom exact d\'une liste Kotbo Vision',
+          required: false,
+          maxLength: 100,
+        },
+        {
+          id: 'delete',
+          label: 'Supprimer le message ? (oui / non)',
+          style: TextInputStyle.Short,
+          placeholder: 'oui',
+          required: false,
+          maxLength: 3,
+        },
+      ],
+    },
+    async run(ctx, input) {
+      const { addMessageImagesToCatalog } = await import('../moderation/visionService.js');
+      const { default: prisma } = await import('../../utils/db.js');
+      const listName = input.list?.trim();
+      let listId: string | null = null;
+      if (listName) {
+        const list = await prisma.visionList.findFirst({ where: { guildId: ctx.guild.id, name: listName } });
+        if (!list) return fail('Liste introuvable', `Aucune liste Kotbo Vision ne s'appelle « ${listName} ». Crée-la depuis le dashboard (Sécurité → Filtres → Kotbo Vision).`);
+        listId = list.id;
+      }
+      const result = await addMessageImagesToCatalog(ctx.message, listId, ctx.invoker.id);
+      if (result.added + result.variants + result.duplicates === 0) {
+        return warn('Aucune image ajoutée', 'Ce message ne contient aucune image exploitable (illisible, unie ou introuvable).');
+      }
+      const shouldDelete = (input.delete?.trim().toLowerCase() || 'oui').startsWith('o');
+      if (shouldDelete) await ctx.message.delete().catch(() => null);
+      return ok(
+        'Images ajoutées à Kotbo Vision',
+        [
+          `Registre : ${listName ? `liste « ${listName} »` : 'catalogue du serveur'}.`,
+          `${result.added} ajoutée(s) · ${result.variants} variante(s) rattachée(s) · ${result.duplicates} déjà connue(s) · ${result.refused} refusée(s).`,
+          shouldDelete ? 'Le message a été supprimé.' : 'Le message a été conservé.',
+        ].join('\n'),
+      );
+    },
+  },
+  {
     id: 'delete_warn',
     scope: 'message',
     label: 'Supprimer + avertir',

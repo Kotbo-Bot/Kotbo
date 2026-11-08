@@ -91,7 +91,7 @@
       if (!payload.apiPort) delete payload.apiPort;
       if (!payload.discordRedirectUri) delete payload.discordRedirectUri;
       await createWhiteLabelInstance(payload);
-      toast.success(`Instance "${form.name}" creee avec succes. Redemarrez le bot pour l'activer.`);
+      toast.success(m.awl_instance_created({ name: form.name }));
       showCreateModal = false;
       resetForm();
       await loadInstances();
@@ -103,7 +103,7 @@
   async function handleToggle(inst: WLInstance) {
     try {
       await updateWhiteLabelInstance(inst.id, { enabled: !inst.enabled });
-      toast.success(`Instance "${inst.name}" ${inst.enabled ? 'desactivee' : 'activee'}.`);
+      toast.success(inst.enabled ? m.awl_instance_disabled({ name: inst.name }) : m.awl_instance_enabled({ name: inst.name }));
       await loadInstances();
     } catch (err) {
       toast.error(errorMessage(err));
@@ -114,7 +114,7 @@
     if (!(await confirmDialog.danger(`Supprimer l'instance « ${inst.name} » ?`, `(${inst.slug}) Cette action est irréversible.`))) return;
     try {
       await deleteWhiteLabelInstance(inst.id);
-      toast.success('Instance supprimee.');
+      toast.success(m.awl_instance_deleted());
       await loadInstances();
     } catch (err) {
       toast.error(errorMessage(err));
@@ -136,7 +136,7 @@
     if (!detailInstance) return;
     try {
       await bindGuildToInstance(detailInstance.id, guildId);
-      toast.success('Guild rattachee.');
+      toast.success(m.awl_guild_attached());
       await openDetail(detailInstance);
       await loadInstances();
     } catch (err) {
@@ -148,7 +148,7 @@
     if (!detailInstance) return;
     try {
       await unbindGuildFromInstance(detailInstance.id, guildId);
-      toast.success('Guild detachee.');
+      toast.success(m.awl_guild_detached());
       await openDetail(detailInstance);
       await loadInstances();
     } catch (err) {

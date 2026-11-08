@@ -6,6 +6,7 @@ import type { AegisConfig } from '@prisma/client';
 import prisma from '../../../utils/db.js';
 import { cache } from '../../../utils/cache.js';
 import { UserFacingError } from '../../../utils/userFacingError.js';
+import { getGuildPlan } from '../../system/planService.js';
 
 /** Ce que le traitement lit : sans dates, la valeur fait l'aller-retour Redis telle quelle. */
 export type AegisRuntimeConfig = Omit<AegisConfig, 'createdAt' | 'updatedAt' | 'trainingConsentAt' | 'trainingConsentById'>;
@@ -16,15 +17,41 @@ export const AEGIS_HARASSMENT_ACTIONS = ['ALERT', 'TIMEOUT'] as const;
 const configKey = (guildId: string) => `guild:${guildId}:aegis-config`;
 const CONFIG_TTL_SECONDS = 300;
 
-/** Configuration active, ou null si le module est éteint sur ce serveur. */
-export async function getAegisConfig(guildId: string): Promise<AegisRuntimeConfig | null> {
+async function readAegisConfig(guildId: string): Promise<AegisRuntimeConfig | null> {
   const value = await cache.wrap<AegisRuntimeConfig | { enabled: false }>(configKey(guildId), CONFIG_TTL_SECONDS, async () => {
     const row = await prisma.aegisConfig.findUnique({ where: { guildId } });
     if (!row) return { enabled: false };
     const { createdAt: _c, updatedAt: _u, trainingConsentAt: _a, trainingConsentById: _b, ...runtime } = row;
     return runtime;
   });
-  return value.enabled ? (value as AegisRuntimeConfig) : null;
+  return 'guildId' in value ? value : null;
+}
+
+/**
+ * AegisAI vit dans AutoMod, ouvert en gratuit, mais l'IA est réservée aux
+ * offres payantes : sur `FREE`, la configuration se lit comme éteinte. Le
+ * partage pour l'entraînement, lui, reste un choix du serveur.
+ */
+async function readPlanAwareConfig(guildId: string): Promise<AegisRuntimeConfig | null> {
+  const config = await readAegisConfig(guildId);
+  if (!config?.enabled) return config;
+  return (await getGuildPlan(guildId)) === 'FREE' ? { ...config, enabled: false } : config;
+}
+
+/** Configuration active, ou null si le module est éteint sur ce serveur. */
+export async function getAegisConfig(guildId: string): Promise<AegisRuntimeConfig | null> {
+  const config = await readPlanAwareConfig(guildId);
+  return config?.enabled ? config : null;
+}
+
+/**
+ * Configuration des messages à envoyer : module allumé, ou éteint mais
+ * partage pour l'entraînement accepté (le message part alors sans rien
+ * déclencher). null : rien ne part.
+ */
+export async function getAegisSendConfig(guildId: string): Promise<AegisRuntimeConfig | null> {
+  const config = await readPlanAwareConfig(guildId);
+  return config && (config.enabled || config.trainingConsent === true) ? config : null;
 }
 
 export async function invalidateAegisConfig(guildId: string): Promise<void> {

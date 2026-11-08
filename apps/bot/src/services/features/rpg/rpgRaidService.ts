@@ -59,6 +59,29 @@ export class RaidError extends UserFacingError {
   }
 }
 
+export type RaidRefusal =
+  | { kind: 'disabled' }
+  | { kind: 'none' }
+  | { kind: 'closed' }
+  | { kind: 'no_clan' }
+  | { kind: 'no_guild' }
+  | { kind: 'quota'; assaults: number }
+  | { kind: 'quota_bought'; assaults: number }
+  | { kind: 'defeated' }
+  | { kind: 'team_quota' }
+  | { kind: 'energy'; cost: number };
+
+/**
+ * Refus d'un assaut, traduit par le panneau dans la langue du joueur. Le message en
+ * français reste celui des journaux et des appels hors Discord.
+ */
+export class RaidRefused extends RaidError {
+  constructor(readonly refusal: RaidRefusal, message: string, status: number) {
+    super(message, status);
+    this.name = 'RaidRefused';
+  }
+}
+
 // ── Catalogue de boss du serveur ──────────────────────────────────────────
 
 /**
@@ -628,25 +651,22 @@ export interface RaidAttackOutcome {
  */
 export async function attackRaid(client: Client, guildId: string, userId: string, member: GuildMember | null): Promise<RaidAttackOutcome> {
   const config = await getOrCreateEconomyConfig(guildId);
-  if (!config.enabled || !config.raidEnabled) throw new RaidError("Le raid n'est pas activé sur ce serveur.", 403);
+  if (!config.enabled || !config.raidEnabled) throw new RaidRefused({ kind: 'disabled' }, "Le raid n'est pas activé sur ce serveur.", 403);
 
   const raid = await getOpenRaid(guildId);
-  if (!raid) throw new RaidError("Aucun raid n'est en cours.", 404);
+  if (!raid) throw new RaidRefused({ kind: 'none' }, "Aucun raid n'est en cours.", 404);
 
   // Le cycle ne referme la fenêtre qu'à la minute suivante : sans ce contrôle, une bonne
   // minute d'assauts passe après l'heure, et ceux qui arrivent une fois les récompenses
   // versées comptent leurs dégâts sans jamais être payés.
-  if (raid.closesAt.getTime() <= Date.now()) throw new RaidError('Le raid vient de se terminer.', 409);
+  if (raid.closesAt.getTime() <= Date.now()) throw new RaidRefused({ kind: 'closed' }, 'Le raid vient de se terminer.', 409);
 
   const mode = asRaidTeamMode(raid.teamMode);
   const identity = await resolveRaidTeam(guildId, userId, mode, member);
   if (!identity) {
-    throw new RaidError(
-      mode === 'CLAN'
-        ? "Vous n'appartenez à aucun clan : le raid se livre en équipe."
-        : "Vous n'appartenez à aucune guilde RPG : le raid se livre en équipe.",
-      403,
-    );
+    throw mode === 'CLAN'
+      ? new RaidRefused({ kind: 'no_clan' }, "Vous n'appartenez à aucun clan : le raid se livre en équipe.", 403)
+      : new RaidRefused({ kind: 'no_guild' }, "Vous n'appartenez à aucune guilde RPG : le raid se livre en équipe.", 403);
   }
 
   // Le quota personnel se compte sur le raid entier et non sur la seule équipe frappée :
@@ -664,12 +684,9 @@ export async function attackRaid(client: Client, guildId: string, userId: string
 
   const personalQuota = raid.assaultsPerMember + bought;
   if (alreadyDone >= personalQuota) {
-    throw new RaidError(
-      bought > 0
-        ? `Vous avez déjà livré vos ${personalQuota} assauts, potions comprises.`
-        : `Vous avez déjà livré vos ${raid.assaultsPerMember} assauts de la semaine.`,
-      429,
-    );
+    throw bought > 0
+      ? new RaidRefused({ kind: 'quota_bought', assaults: personalQuota }, `Vous avez déjà livré vos ${personalQuota} assauts, potions comprises.`, 429)
+      : new RaidRefused({ kind: 'quota', assaults: raid.assaultsPerMember }, `Vous avez déjà livré vos ${raid.assaultsPerMember} assauts de la semaine.`, 429);
   }
 
   // L'instance n'est créée qu'une fois tous les refus passés : un membre à court d'énergie
@@ -680,7 +697,7 @@ export async function attackRaid(client: Client, guildId: string, userId: string
   });
 
   if (team) {
-    if (team.remainingHealth <= 0) throw new RaidError('Votre équipe a déjà abattu son boss.', 409);
+    if (team.remainingHealth <= 0) throw new RaidRefused({ kind: 'defeated' }, 'Votre équipe a déjà abattu son boss.', 409);
 
     // L'effectif est figé à l'engagement, réserve comprise : sans plafond d'assauts, une
     // équipe engagée à un membre - donc sur la réserve plancher - n'avait qu'à recruter
@@ -692,7 +709,7 @@ export async function attackRaid(client: Client, guildId: string, userId: string
     const teamAssaults = await prisma.rpgRaidAssault.count({ where: { raidTeamId: team.id } });
     const teamQuota = team.memberCount * (raid.assaultsPerMember + raid.boughtAssaultsMax);
     if (teamAssaults >= teamQuota) {
-      throw new RaidError("Votre équipe a épuisé les assauts de son effectif pour ce raid.", 429);
+      throw new RaidRefused({ kind: 'team_quota' }, "Votre équipe a épuisé les assauts de son effectif pour ce raid.", 429);
     }
   }
 
@@ -700,7 +717,7 @@ export async function attackRaid(client: Client, guildId: string, userId: string
     where: { guildId, userId, energy: { gte: raid.energyCost } },
     data: { energy: { decrement: raid.energyCost } },
   });
-  if (spent.count === 0) throw new RaidError(`Il vous faut ${raid.energyCost} points d'énergie pour un assaut.`, 409);
+  if (spent.count === 0) throw new RaidRefused({ kind: 'energy', cost: raid.energyCost }, `Il vous faut ${raid.energyCost} points d'énergie pour un assaut.`, 409);
 
   // Une fois l'assaut inscrit, l'énergie est bel et bien dépensée : un incident sur les
   // récompenses ne doit pas la rendre en plus du combat déjà livré. Tout ce qui précède
@@ -711,9 +728,11 @@ export async function attackRaid(client: Client, guildId: string, userId: string
     const profile = await getOrCreateRpgProfile(guildId, userId);
     const stats = await loadEffectiveStats(profile);
 
+    // Chaque assaut part des PV max : il ne touche pas aux PV du profil, et un joueur
+    // blessé ailleurs (bestiaire, donjon) n'a pas à se soigner pour frapper à pleine force.
     const result = runRaidAssault({
       stats,
-      playerHealth: Math.max(1, profile.health),
+      playerHealth: stats.maxHealth,
       playerSkills: await loadAvailableSkills(profile),
       boss: {
         attack: raid.bossAttack,
@@ -758,13 +777,9 @@ export async function attackRaid(client: Client, guildId: string, userId: string
     });
     committed = true;
 
-    // Le joueur ressort du raid dans l'état où il en sort : les points de vie perdus se
-    // reportent sur le profil, comme après un combat de boss.
-    const remainingHp = Math.max(1, Math.min(stats.maxHealth, profile.health - result.damageTaken));
-    await prisma.rpgProfile.update({
-      where: { guildId_userId: { guildId, userId } },
-      data: { health: remainingHp },
-    });
+    // Les points de vie du profil ne bougent pas : ce que l'assaut retire ou rend reste dans
+    // l'assaut. Les reporter obligeait à se soigner entre chaque coup porté, et le plancher à
+    // 1 PV du report en rajoutait à un joueur tombé sans que personne le veuille.
 
     // Quêtes et campagne se comptent une fois l'assaut inscrit : un raid qui echoue en
     // cours de route ne doit pas avoir fait avancer un objectif pour un coup jamais porté.

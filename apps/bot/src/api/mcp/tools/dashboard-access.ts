@@ -1,5 +1,5 @@
 /** Outils MCP - acces au dashboard par role (permissions READ_STAFF / WRITE_MEMBERS). */
-import { getOrCreateFeatureConfigs } from '../../../services/core/dashboardManagementService.js';
+import { getAvailableFeatureConfigs } from '../../../services/core/dashboardManagementService.js';
 import prisma from '../../../utils/db.js';
 import { cache } from '../../../utils/cache.js';
 import { broadcastDashboardStateChange } from '../../shared.js';
@@ -74,7 +74,7 @@ export function registerDashboardAccessTools(ctx: McpToolContext) {
         _meta: toolMeta,
       },
       guard('READ_STAFF', async ({ feature_key }) => {
-        const configs = await getOrCreateFeatureConfigs(guildId);
+        const configs = await getAvailableFeatureConfigs(guildId);
         const selected = feature_key
           ? configs.filter((config) => config.featureKey === feature_key)
           : configs;
@@ -142,7 +142,7 @@ export function registerDashboardAccessTools(ctx: McpToolContext) {
             : guild.roles.cache.find((r) => r.name.toLowerCase() === role.toLowerCase());
           if (!discordRole) return err(`Role « ${role} » introuvable`);
 
-          const configs = await getOrCreateFeatureConfigs(guildId);
+          const configs = await getAvailableFeatureConfigs(guildId);
           const config = configs.find((entry) => entry.featureKey === feature_key);
           if (!config) {
             return err(

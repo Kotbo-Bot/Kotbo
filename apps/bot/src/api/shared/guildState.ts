@@ -28,11 +28,12 @@ import {
   
   
 } from '../../utils/commandAccess.js';
-import { commands } from '../../commands.js';
+import { commands, getCommandModuleKey } from '../../commands.js';
 import {
   MODULE_REGISTRY,
   canonicalModuleKey,
   getModuleDependents,
+  isModulePaused,
   normalizePlanKey,
   planForMemberCount,
   planIncludesModule,
@@ -260,7 +261,8 @@ export function buildRichCommandCatalog(): CommandCatalogEntry[] {
 
   const catalogMap = new Map(COMMAND_CATALOG.map(c => [c.name, c]));
 
-  richCommandCatalog = commands.map(cmd => {
+  // Une commande d'un module en pause n'est deployee nulle part : rien a regler.
+  richCommandCatalog = commands.filter((cmd) => !isModulePaused(getCommandModuleKey(cmd.data.name))).map(cmd => {
     const serialized = typeof (cmd.data as any).toJSON === 'function' ? (cmd.data as any).toJSON() : cmd.data;
     const name = serialized.name;
     const staticMeta = catalogMap.get(name);
@@ -566,7 +568,9 @@ export const getGuildState = async (
    */
   const onboardingCanFinishWithoutPayment = canFinishOnboardingWithoutPayment(guild);
 
-  const modules: ModuleItem[] = MODULE_REGISTRY.map((definition) => {
+  // Un module en pause n'a rien a faire sur la page Modules : il ne peut pas
+  // etre allume, et sa carte promettrait une fonctionnalite indisponible.
+  const modules: ModuleItem[] = MODULE_REGISTRY.filter((definition) => !isModulePaused(definition.key)).map((definition) => {
     const requires = (definition.requires ?? []).map(canonicalModuleKey);
     const lockedByPlan = !definition.core && !planIncludesModule(guildPlan, definition.key);
     // Un module peut etre allume dans sa propre ligne et neanmoins inerte

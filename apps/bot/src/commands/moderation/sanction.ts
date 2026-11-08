@@ -27,13 +27,16 @@ import {
   getSanctionTypeBreakdown,
   listSanctionsByMember,
   parseDurationToMs,
+  recordAppliedSanction,
   registerBanSanction,
   registerKickSanction,
   registerTimeoutSanction,
   registerWarnSanction,
   registerSoftbanSanction,
+  registerJailSanction,
   runGuildBan,
 } from '../../services/moderation/sanctionService.js';
+import { JailNotConfiguredError, releaseJail } from '../../services/moderation/jailService.js';
 import { applyProgressiveSanction, getOrCreateDefaultTables } from '../../services/moderation/sanctionTableService.js';
 import { sendBanAppealNotificationDM, sendPreActionAppealDM } from '../../services/moderation/banAppealService.js';
 import * as altAccountService from '../../services/moderation/altAccountService.js';
@@ -42,6 +45,7 @@ import { extractTrackingInfo, resolveModuleFromCommand, wrapModuleTracking } fro
 import { getEffectiveLocale, getCommandMetadata } from '../../utils/i18n.js';
 import * as m from '../../lib/paraglide/messages.js';
 import { publicErrorMessage } from '../../utils/publicError.js';
+import { logger } from '../../utils/logger.js';
 
 type Locale = 'fr' | 'en';
 
@@ -60,6 +64,8 @@ const kickMeta = getCommandMetadata('b1_sanction_kick');
 const banMeta = getCommandMetadata('b1_sanction_ban');
 const tempbanMeta = getCommandMetadata('b1_sanction_tempban');
 const softbanMeta = getCommandMetadata('b1_sanction_softban');
+const jailMeta = getCommandMetadata('b1_sanction_jail');
+const unjailMeta = getCommandMetadata('b1_sanction_unjail');
 const listMeta = getCommandMetadata('b1_sanction_list');
 const tableauMeta = getCommandMetadata('b1_sanction_tableau');
 const contextMeta = getCommandMetadata('b1_sanction_context');
@@ -148,6 +154,24 @@ const data = new SlashCommandBuilder()
   )
   .addSubcommand((sub) =>
     sub
+      .setName(jailMeta.name)
+      .setNameLocalizations(jailMeta.nameLocalizations)
+      .setDescription(jailMeta.description)
+      .setDescriptionLocalizations(jailMeta.descriptionLocalizations)
+      .addUserOption((option) => option.setName('membre').setDescription(describe('b1_sanction_jail_opt_membre').en).setDescriptionLocalizations({ fr: describe('b1_sanction_jail_opt_membre').fr }).setRequired(true))
+      .addStringOption((option) => option.setName('raison').setDescription(describe('b1_sanction_jail_opt_raison').en).setDescriptionLocalizations({ fr: describe('b1_sanction_jail_opt_raison').fr }).setRequired(true))
+      .addStringOption((option) => option.setName('duree').setDescription(describe('b1_sanction_jail_opt_duree').en).setDescriptionLocalizations({ fr: describe('b1_sanction_jail_opt_duree').fr }).setRequired(false)),
+  )
+  .addSubcommand((sub) =>
+    sub
+      .setName(unjailMeta.name)
+      .setNameLocalizations(unjailMeta.nameLocalizations)
+      .setDescription(unjailMeta.description)
+      .setDescriptionLocalizations(unjailMeta.descriptionLocalizations)
+      .addUserOption((option) => option.setName('membre').setDescription(describe('b1_sanction_unjail_opt_membre').en).setDescriptionLocalizations({ fr: describe('b1_sanction_unjail_opt_membre').fr }).setRequired(true)),
+  )
+  .addSubcommand((sub) =>
+    sub
       .setName(listMeta.name)
       .setNameLocalizations(listMeta.nameLocalizations)
       .setDescription(listMeta.description)
@@ -219,7 +243,14 @@ function validateTarget(interaction: ChatInputCommandInteraction<'cached'> | Use
 }
 
 async function replyError(interaction: ChatInputCommandInteraction | UserContextMenuCommandInteraction, title: string, description: string) {
-  await interaction.reply({ embeds: [errorEmbed(title, description)], flags: [MessageFlags.Ephemeral] });
+  await interaction.editReply({ embeds: [errorEmbed(title, description)] });
+}
+
+/** Compte rendu d'une sanction appliquée, avec un repli sans boutons si Discord les refuse. */
+async function sendAppliedReport(interaction: ChatInputCommandInteraction<'cached'>, embed: EmbedBuilder, targetUserId: string) {
+  await interaction
+    .editReply({ embeds: [embed], components: [buildMemberCaseActionRow(targetUserId)] })
+    .catch(() => interaction.editReply({ embeds: [embed] }).catch(() => null));
 }
 
 async function notifyModeratorDashboardReportReminder(
@@ -399,6 +430,9 @@ async function execute(interaction: ChatInputCommandInteraction | UserContextMen
 }
 
 async function executeInternal(interaction: ChatInputCommandInteraction | UserContextMenuCommandInteraction): Promise<void> {
+  // Un ban enchaîne le MP d'appel, l'appel à Discord et l'écriture du dossier : bien
+  // au-delà des trois secondes que Discord laisse pour répondre à une commande.
+  await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
   const locale = await getEffectiveLocale(interaction);
   if (!canModerate(interaction)) {
     await replyError(interaction, m.b1_server_required_title({}, { locale }), m.b1_server_required_desc({}, { locale }));
@@ -419,10 +453,9 @@ async function executeInternal(interaction: ChatInputCommandInteraction | UserCo
 
     const row = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(menu);
 
-    await interaction.reply({
+    await interaction.editReply({
       content: m.b1_choose_sanction({ user: `<@${targetUserId}>` }, { locale }),
       components: [row],
-      flags: [MessageFlags.Ephemeral],
     });
     return;
   }
@@ -446,11 +479,9 @@ async function executeInternal(interaction: ChatInputCommandInteraction | UserCo
       const view = await buildSanctionListView(interaction.guildId, targetUser.id, targetUser.tag, currentPage, locale);
       currentPage = view.pageIndex;
 
-      const reply = await interaction.reply({
+      const reply = await interaction.editReply({
         embeds: [view.embed],
         components: [view.row, view.caseRow],
-        fetchReply: true,
-        flags: [MessageFlags.Ephemeral],
       });
 
       const collector = reply.createMessageComponentCollector({
@@ -521,7 +552,7 @@ async function executeInternal(interaction: ChatInputCommandInteraction | UserCo
           ]
         : [{ name: m.b1_total_warns({}, { locale }), value: `${warnCount}`, inline: true }];
 
-      await interaction.reply({
+      await interaction.editReply({
         embeds: [
           successEmbed(m.b1_warn_saved_title({}, { locale }), m.b1_warn_saved_desc({ user: `${targetUser}` }, { locale })).addFields(
             { name: m.b1_reason({}, { locale }), value: reason },
@@ -529,7 +560,6 @@ async function executeInternal(interaction: ChatInputCommandInteraction | UserCo
           ),
         ],
         components: [buildMemberCaseActionRow(targetUser.id)],
-        flags: [MessageFlags.Ephemeral],
       });
 
       await notifyModeratorDashboardReportReminder(interaction, {
@@ -571,7 +601,7 @@ async function executeInternal(interaction: ChatInputCommandInteraction | UserCo
         client: interaction.client,
       });
 
-      await interaction.reply({
+      await interaction.editReply({
         embeds: [
           successEmbed(m.b1_timeout_applied_title({}, { locale }), m.b1_timeout_applied_desc({ user: `${targetUser}` }, { locale })).addFields(
             { name: m.b1_duration({}, { locale }), value: formatDurationFr(durationMs), inline: true },
@@ -581,12 +611,83 @@ async function executeInternal(interaction: ChatInputCommandInteraction | UserCo
           ),
         ],
         components: [buildMemberCaseActionRow(targetUser.id)],
-        flags: [MessageFlags.Ephemeral],
       });
 
       await notifyModeratorDashboardReportReminder(interaction, {
         sanctionId: sanction.id,
         targetLabel: targetUser.tag,
+      });
+      return;
+    }
+
+    if (subcommand === 'jail') {
+      const reason = interaction.options.getString('raison', true).trim();
+
+      if (!targetMember) {
+        await replyError(interaction, m.b1_member_not_found({}, { locale }), m.b1_member_must_be_present_jail({}, { locale }));
+        return;
+      }
+      if (!targetMember.manageable) {
+        await replyError(interaction, m.b1_action_impossible({}, { locale }), m.b1_cannot_jail_member({}, { locale }));
+        return;
+      }
+
+      const durationInput = interaction.options.getString('duree');
+      const durationMs = durationInput ? parseDurationToMs(durationInput) : null;
+      if (durationInput && !durationMs) {
+        await replyError(interaction, m.b1_invalid_duration_title({}, { locale }), m.b1_invalid_duration_desc({ help: m.b1_duration_help({}, { locale }) }, { locale }));
+        return;
+      }
+
+      let sanction;
+      try {
+        sanction = await registerJailSanction({
+          guildId: interaction.guildId,
+          target,
+          moderator,
+          reason,
+          durationMs,
+          member: targetMember,
+          client: interaction.client,
+        });
+      } catch (err) {
+        if (err instanceof JailNotConfiguredError) {
+          await replyError(interaction, m.b1_action_impossible({}, { locale }), m.b1_jail_not_configured({}, { locale }));
+          return;
+        }
+        throw err;
+      }
+
+      await interaction.editReply({
+        embeds: [
+          successEmbed(m.b1_jail_applied_title({}, { locale }), m.b1_jail_applied_desc({ user: `${targetUser}` }, { locale })).addFields(
+            { name: m.b1_duration({}, { locale }), value: durationMs ? formatDurationFr(durationMs) : m.b1_jail_permanent({}, { locale }), inline: true },
+            { name: m.b1_reason({}, { locale }), value: reason, inline: false },
+            { name: m.b1_sanction_id({}, { locale }), value: sanction.id, inline: false },
+          ),
+        ],
+        components: [buildMemberCaseActionRow(targetUser.id)],
+      });
+
+      await notifyModeratorDashboardReportReminder(interaction, {
+        sanctionId: sanction.id,
+        targetLabel: targetUser.tag,
+      });
+      return;
+    }
+
+    if (subcommand === 'unjail') {
+      const released = await releaseJail(interaction.client, interaction.guildId, targetUser.id, {
+        note: `Quarantaine levée par ${interaction.user.tag}.`,
+        auditReason: `Quarantaine levée | Modération: ${interaction.user.tag}`,
+      });
+      if (!released) {
+        await replyError(interaction, m.b1_action_impossible({}, { locale }), m.b1_unjail_none({}, { locale }));
+        return;
+      }
+      await interaction.editReply({
+        embeds: [successEmbed(m.b1_unjail_done_title({}, { locale }), m.b1_unjail_done_desc({ user: `${targetUser}` }, { locale }))],
+        components: [buildMemberCaseActionRow(targetUser.id)],
       });
       return;
     }
@@ -607,18 +708,19 @@ async function executeInternal(interaction: ChatInputCommandInteraction | UserCo
       // membre ne partage plus forcément de serveur avec le bot.
       await sendPreActionAppealDM(interaction.client, interaction.guildId, targetUser.id, SanctionType.KICK).catch(() => false);
       await targetMember.kick(`${reason} | Modération: ${interaction.user.tag}`);
-      const sanction = await registerKickSanction({ guildId: interaction.guildId, target, moderator, reason, client: interaction.client });
+      const sanction = await recordAppliedSanction(interaction.guildId, 'Kick', () =>
+        registerKickSanction({ guildId: interaction.guildId, target, moderator, reason, client: interaction.client }));
 
-      await interaction.reply({
-        embeds: [successEmbed(m.b1_kick_done_title({}, { locale }), m.b1_kick_done_desc({ user: targetUser.tag }, { locale })).addFields({ name: m.b1_reason({}, { locale }), value: reason })],
-        components: [buildMemberCaseActionRow(targetUser.id)],
-        flags: [MessageFlags.Ephemeral],
-      });
+      const embed = successEmbed(m.b1_kick_done_title({}, { locale }), m.b1_kick_done_desc({ user: targetUser.tag }, { locale })).addFields({ name: m.b1_reason({}, { locale }), value: reason });
+      if (!sanction) embed.addFields({ name: m.b1_record_failed_title({}, { locale }), value: m.b1_record_failed_desc({}, { locale }) });
+      await sendAppliedReport(interaction, embed, targetUser.id);
 
-      await notifyModeratorDashboardReportReminder(interaction, {
-        sanctionId: sanction.id,
-        targetLabel: targetUser.tag,
-      });
+      if (sanction) {
+        await notifyModeratorDashboardReportReminder(interaction, {
+          sanctionId: sanction.id,
+          targetLabel: targetUser.tag,
+        });
+      }
       return;
     }
 
@@ -634,18 +736,19 @@ async function executeInternal(interaction: ChatInputCommandInteraction | UserCo
       // l'utilisateur ne partage plus forcément de serveur avec le bot.
       await sendBanAppealNotificationDM(interaction.client, interaction.guildId, targetUser.id).catch(() => false);
       await runGuildBan(interaction.guild, targetUser.id, `${reason} | Modération: ${interaction.user.tag}`);
-      const sanction = await registerBanSanction({ guildId: interaction.guildId, target, moderator, reason, client: interaction.client });
+      const sanction = await recordAppliedSanction(interaction.guildId, 'Ban', () =>
+        registerBanSanction({ guildId: interaction.guildId, target, moderator, reason, client: interaction.client }));
 
-      await interaction.reply({
-        embeds: [successEmbed(m.b1_ban_done_title({}, { locale }), m.b1_ban_done_desc({ user: targetUser.tag }, { locale })).addFields({ name: m.b1_reason({}, { locale }), value: reason })],
-        components: [buildMemberCaseActionRow(targetUser.id)],
-        flags: [MessageFlags.Ephemeral],
-      });
+      const embed = successEmbed(m.b1_ban_done_title({}, { locale }), m.b1_ban_done_desc({ user: targetUser.tag }, { locale })).addFields({ name: m.b1_reason({}, { locale }), value: reason });
+      if (!sanction) embed.addFields({ name: m.b1_record_failed_title({}, { locale }), value: m.b1_record_failed_desc({}, { locale }) });
+      await sendAppliedReport(interaction, embed, targetUser.id);
 
-      await notifyModeratorDashboardReportReminder(interaction, {
-        sanctionId: sanction.id,
-        targetLabel: targetUser.tag,
-      });
+      if (sanction) {
+        await notifyModeratorDashboardReportReminder(interaction, {
+          sanctionId: sanction.id,
+          targetLabel: targetUser.tag,
+        });
+      }
       return;
     }
 
@@ -666,31 +769,32 @@ async function executeInternal(interaction: ChatInputCommandInteraction | UserCo
 
       await sendPreActionAppealDM(interaction.client, interaction.guildId, targetUser.id, SanctionType.TEMP_BAN).catch(() => false);
       await runGuildBan(interaction.guild, targetUser.id, `${reason} | Modération: ${interaction.user.tag}`);
-      const sanction = await registerBanSanction({
-        guildId: interaction.guildId,
-        target,
-        moderator,
-        reason,
-        temporaryDurationMs: durationMs,
-        client: interaction.client,
-      });
+      const sanction = await recordAppliedSanction(interaction.guildId, 'Tempban', () =>
+        registerBanSanction({
+          guildId: interaction.guildId,
+          target,
+          moderator,
+          reason,
+          temporaryDurationMs: durationMs,
+          client: interaction.client,
+        }));
 
-      await interaction.reply({
-        embeds: [
-          successEmbed(m.b1_tempban_done_title({}, { locale }), m.b1_tempban_done_desc({ user: targetUser.tag }, { locale })).addFields(
-            { name: m.b1_duration({}, { locale }), value: formatDurationFr(durationMs), inline: true },
-            { name: m.b1_reason({}, { locale }), value: reason, inline: false },
-            { name: m.b1_auto_unban({}, { locale }), value: `<t:${Math.floor((sanction.expiresAt?.getTime() ?? Date.now()) / 1000)}:F>`, inline: false },
-          ),
-        ],
-        components: [buildMemberCaseActionRow(targetUser.id)],
-        flags: [MessageFlags.Ephemeral],
-      });
+      const embed = successEmbed(m.b1_tempban_done_title({}, { locale }), m.b1_tempban_done_desc({ user: targetUser.tag }, { locale })).addFields(
+        { name: m.b1_duration({}, { locale }), value: formatDurationFr(durationMs), inline: true },
+        { name: m.b1_reason({}, { locale }), value: reason, inline: false },
+      );
+      // C'est l'inscription au casier qui programme le débannissement : sans elle, il n'aura pas lieu.
+      embed.addFields(sanction
+        ? { name: m.b1_auto_unban({}, { locale }), value: `<t:${Math.floor((sanction.expiresAt?.getTime() ?? Date.now()) / 1000)}:F>`, inline: false }
+        : { name: m.b1_record_failed_title({}, { locale }), value: m.b1_record_failed_tempban_desc({}, { locale }), inline: false });
+      await sendAppliedReport(interaction, embed, targetUser.id);
 
-      await notifyModeratorDashboardReportReminder(interaction, {
-        sanctionId: sanction.id,
-        targetLabel: targetUser.tag,
-      });
+      if (sanction) {
+        await notifyModeratorDashboardReportReminder(interaction, {
+          sanctionId: sanction.id,
+          targetLabel: targetUser.tag,
+        });
+      }
       return;
     }
 
@@ -710,34 +814,43 @@ async function executeInternal(interaction: ChatInputCommandInteraction | UserCo
         reason: `${reason} | Softban par ${interaction.user.tag}`
       });
 
-      // 2. Débannir le membre immédiatement
-      await interaction.guild.members.unban(targetUser.id, `Softban (re-déban automatique) | Modération: ${interaction.user.tag}`);
+      // 2. Débannir le membre immédiatement. S'il reste banni, le modérateur doit le savoir :
+      // un message d'erreur générique lui ferait croire que rien n'a été appliqué.
+      try {
+        await interaction.guild.members.unban(targetUser.id, `Softban (re-déban automatique) | Modération: ${interaction.user.tag}`);
+      } catch (err) {
+        logger.error('Sanction', `Softban sur ${interaction.guildId} : débannissement en échec:`, err);
+        await interaction.editReply({
+          embeds: [errorEmbed(m.b1_softban_unban_failed_title({}, { locale }), m.b1_softban_unban_failed_desc({ user: targetUser.tag }, { locale }))],
+        });
+        return;
+      }
 
       // 3. Enregistrer la sanction dans la BDD
-      const sanction = await registerSoftbanSanction({
-        guildId: interaction.guildId,
-        target,
-        moderator,
-        reason,
-        client: interaction.client,
-      });
+      const sanction = await recordAppliedSanction(interaction.guildId, 'Softban', () =>
+        registerSoftbanSanction({
+          guildId: interaction.guildId,
+          target,
+          moderator,
+          reason,
+          client: interaction.client,
+        }));
 
-      await interaction.reply({
-        embeds: [
-          successEmbed(m.b1_softban_done_title({}, { locale }), m.b1_softban_done_desc({ user: targetUser.tag }, { locale })).addFields(
-            { name: m.b1_messages_deleted({}, { locale }), value: m.b1_last_7_days({}, { locale }), inline: true },
-            { name: m.b1_reason({}, { locale }), value: reason, inline: false },
-            { name: m.b1_sanction_id({}, { locale }), value: sanction.id, inline: false }
-          ),
-        ],
-        components: [buildMemberCaseActionRow(targetUser.id)],
-        flags: [MessageFlags.Ephemeral],
-      });
+      const embed = successEmbed(m.b1_softban_done_title({}, { locale }), m.b1_softban_done_desc({ user: targetUser.tag }, { locale })).addFields(
+        { name: m.b1_messages_deleted({}, { locale }), value: m.b1_last_7_days({}, { locale }), inline: true },
+        { name: m.b1_reason({}, { locale }), value: reason, inline: false },
+      );
+      embed.addFields(sanction
+        ? { name: m.b1_sanction_id({}, { locale }), value: sanction.id, inline: false }
+        : { name: m.b1_record_failed_title({}, { locale }), value: m.b1_record_failed_desc({}, { locale }), inline: false });
+      await sendAppliedReport(interaction, embed, targetUser.id);
 
-      await notifyModeratorDashboardReportReminder(interaction, {
-        sanctionId: sanction.id,
-        targetLabel: targetUser.tag,
-      });
+      if (sanction) {
+        await notifyModeratorDashboardReportReminder(interaction, {
+          sanctionId: sanction.id,
+          targetLabel: targetUser.tag,
+        });
+      }
       return;
     }
 
@@ -750,8 +863,6 @@ async function executeInternal(interaction: ChatInputCommandInteraction | UserCo
         await replyError(interaction, m.b1_action_refused({}, { locale }), m.b1_cannot_sanction_a_bot({}, { locale }));
         return;
       }
-
-      await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
 
       let result: Awaited<ReturnType<typeof applyProgressiveSanction>>;
       try {
@@ -805,14 +916,12 @@ async function executeInternal(interaction: ChatInputCommandInteraction | UserCo
       return;
     }
 
-    await interaction.reply({
+    await interaction.editReply({
       embeds: [infoEmbed(m.b1_unknown_subcommand_title({}, { locale }), m.b1_unknown_subcommand_desc({}, { locale }))],
-      flags: [MessageFlags.Ephemeral],
     });
   } catch (error) {
-    await interaction.reply({
+    await interaction.editReply({
       embeds: [errorEmbed(m.b1_error({}, { locale }), publicErrorMessage(error, m.b1_unknown_error({}, { locale })))],
-      flags: [MessageFlags.Ephemeral],
     });
   }
 }

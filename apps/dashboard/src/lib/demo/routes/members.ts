@@ -280,7 +280,7 @@ export function registerMembersRoutes(): void {
         enabled: true,
         serverCount: suspected ? 2 : 0,
         total: suspected ? 3 : 0,
-        breakdown: { WARN: suspected ? 2 : 0, KICK: 0, TIMEOUT: suspected ? 1 : 0, TEMP_BAN: 0, BAN: 0, SOFTBAN: 0 },
+        breakdown: { WARN: suspected ? 2 : 0, KICK: 0, TIMEOUT: suspected ? 1 : 0, TEMP_BAN: 0, BAN: 0, SOFTBAN: 0, JAIL: 0 },
         recent: suspected
           ? [
               { type: 'WARN', status: 'ACTIVE', durationSeconds: null, reason: 'Spam de liens', createdAt: ago(12 * DAY), guildId: '930000000000000011', guildName: 'Le Repaire' },

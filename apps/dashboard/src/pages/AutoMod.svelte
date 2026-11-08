@@ -29,7 +29,7 @@
   const actionState = createAsyncActionState();
   let loading = $state(false);
   // « nicknames » est rendu par la page enveloppe (security/Filters) : il figure ici pour que l'onglet existe.
-  const FILTER_TABS = ['bot', 'discord', 'security', 'behavioral', 'exceptions', 'simulator', 'nicknames'] as const;
+  const FILTER_TABS = ['bot', 'discord', 'security', 'behavioral', 'servers', 'exceptions', 'simulator', 'nicknames'] as const;
   let activeTab = $state<string>('bot');
 
   // L'onglet vit dans l'URL, comme ailleurs : la palette de commandes propose
@@ -58,6 +58,12 @@
     spamGroupSlowmodeEnabled: false,
     spamGroupSlowmodeSeconds: 10,
     spamGroupSlowmodeMinutes: 5,
+    preventiveSlowmodeEnabled: false,
+    preventiveSlowmodeMsgThreshold: 15,
+    preventiveSlowmodeMinUsers: 3,
+    preventiveSlowmodeWindowSec: 10,
+    preventiveSlowmodeSeconds: 5,
+    preventiveSlowmodeMinutes: 5,
 
     linksEnabled: false,
     linksAction: 'DELETE_AND_WARN',
@@ -101,6 +107,7 @@
     antiBotEnabled: false,
     antiBotAction: 'KICK',
     antiBotBypassUsers: [] as string[],
+    antiBotRoleIds: [] as string[],
 
     adminLockEnabled: false,
     adminLockAction: 'BLOCK',
@@ -122,6 +129,8 @@
     discordAutoModEnabled: true,
     spamEnabled: false, spamLimit: 5, spamIntervalSeconds: 5, spamAction: 'TIMEOUT',
     spamGroupSlowmodeEnabled: false, spamGroupSlowmodeSeconds: 10, spamGroupSlowmodeMinutes: 5,
+    preventiveSlowmodeEnabled: false, preventiveSlowmodeMsgThreshold: 15, preventiveSlowmodeMinUsers: 3,
+    preventiveSlowmodeWindowSec: 10, preventiveSlowmodeSeconds: 5, preventiveSlowmodeMinutes: 5,
     linksEnabled: false, linksAction: 'DELETE_AND_WARN', linksWhitelist: [],
     capsEnabled: false, capsThresholdPercent: 80, capsMinLength: 10,
     emojisEnabled: false, emojisLimit: 10,
@@ -131,7 +140,7 @@
     customWordsEnabled: false, customWordsAction: 'BLOCK', customWords: [], customWordsAllowList: [], customWordsTimeoutSec: 60,
     profanityEnabled: false, profanityPresetProfanity: true, profanityPresetSexual: true, profanityPresetSlurs: true, profanityAction: 'BLOCK', profanityAllowList: [], profanityTimeoutSec: 60,
     inviteFilterEnabled: false, inviteFilterAction: 'BLOCK', inviteFilterAllowedGuilds: [], inviteFilterTimeoutSec: 60,
-    antiBotEnabled: false, antiBotAction: 'KICK', antiBotBypassUsers: [],
+    antiBotEnabled: false, antiBotAction: 'KICK', antiBotBypassUsers: [], antiBotRoleIds: [],
     adminLockEnabled: false, adminLockAction: 'BLOCK', adminLockSecurityRoleIds: [], adminLockNotifyChannelId: null,
     burstSuspendEnabled: false, burstSuspendFastLimit: 5, burstSuspendFastWindowSec: 1, burstSuspendSlowLimit: 10, burstSuspendSlowWindowSec: 60,
     bypassRoles: [], bypassChannels: []
@@ -457,6 +466,85 @@
                       min="1"
                       max="1440"
                       bind:value={config.spamGroupSlowmodeMinutes}
+                      class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none"
+                      disabled={!canManageSettings}
+                    />
+                  </div>
+                {/if}
+
+                <div class="col-span-2 flex items-center justify-between pt-2 border-t border-outline-variant/10">
+                  <div>
+                    <span class="text-xs font-semibold text-on-surface-variant ml-2">{m.amx_slowmode()}</span>
+                    <p class="text-xs text-on-surface-variant ml-2 mt-1">{m.amx_slowmode_desc()}</p>
+                  </div>
+                  <ToggleSwitch
+                    checked={config.preventiveSlowmodeEnabled}
+                    onToggle={(v: boolean) => config.preventiveSlowmodeEnabled = v}
+                    disabled={!canManageSettings}
+                  />
+                </div>
+
+                {#if config.preventiveSlowmodeEnabled}
+                  <div class="space-y-1.5">
+                    <label for="preventiveSlowmodeMsgThreshold" class="text-xs font-semibold text-on-surface-variant ml-2">{m.amx_slowmode_msgs()}</label>
+                    <input
+                      id="preventiveSlowmodeMsgThreshold"
+                      type="number"
+                      min="3"
+                      max="200"
+                      bind:value={config.preventiveSlowmodeMsgThreshold}
+                      class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none"
+                      disabled={!canManageSettings}
+                    />
+                  </div>
+
+                  <div class="space-y-1.5">
+                    <label for="preventiveSlowmodeMinUsers" class="text-xs font-semibold text-on-surface-variant ml-2">{m.amx_slowmode_users()}</label>
+                    <input
+                      id="preventiveSlowmodeMinUsers"
+                      type="number"
+                      min="2"
+                      max="50"
+                      bind:value={config.preventiveSlowmodeMinUsers}
+                      class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none"
+                      disabled={!canManageSettings}
+                    />
+                  </div>
+
+                  <div class="space-y-1.5">
+                    <label for="preventiveSlowmodeWindowSec" class="text-xs font-semibold text-on-surface-variant ml-2">{m.amx_slowmode_window()}</label>
+                    <input
+                      id="preventiveSlowmodeWindowSec"
+                      type="number"
+                      min="2"
+                      max="120"
+                      bind:value={config.preventiveSlowmodeWindowSec}
+                      class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none"
+                      disabled={!canManageSettings}
+                    />
+                  </div>
+
+                  <div class="space-y-1.5">
+                    <label for="preventiveSlowmodeSeconds" class="text-xs font-semibold text-on-surface-variant ml-2">{m.amx_slowmode_seconds()}</label>
+                    <input
+                      id="preventiveSlowmodeSeconds"
+                      type="number"
+                      min="1"
+                      max="21600"
+                      bind:value={config.preventiveSlowmodeSeconds}
+                      class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none"
+                      disabled={!canManageSettings}
+                    />
+                  </div>
+
+                  <div class="space-y-1.5">
+                    <label for="preventiveSlowmodeMinutes" class="text-xs font-semibold text-on-surface-variant ml-2">{m.amx_slowmode_minutes()}</label>
+                    <input
+                      id="preventiveSlowmodeMinutes"
+                      type="number"
+                      min="1"
+                      max="1440"
+                      bind:value={config.preventiveSlowmodeMinutes}
                       class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none"
                       disabled={!canManageSettings}
                     />
@@ -1001,6 +1089,35 @@
             {m.am_antibot_desc()}
           </p>
 
+          <!-- Rôles des bots : donnés à chaque bot à son arrivée, à la place du rôle automatique. -->
+          <div class="space-y-2">
+            <span class="text-xs font-semibold text-on-surface-variant ml-2">{m.amx_bot_roles()}</span>
+            <p class="text-xs text-on-surface-variant ml-2">{m.amx_bot_roles_desc()}</p>
+            <select
+              aria-label={m.amx_add_bot_role()}
+              class="w-full bg-surface-container-high/45 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none"
+              value=""
+              onchange={(e) => {
+                const id = e.currentTarget.value;
+                if (id && !(config.antiBotRoleIds ?? []).includes(id)) config.antiBotRoleIds = [...(config.antiBotRoleIds ?? []), id];
+                e.currentTarget.value = '';
+              }}
+            >
+              <option value="">{m.amx_add_role()}</option>
+              {#each availableRoles as role (role.id)}<option value={role.id}>{role.name}</option>{/each}
+            </select>
+            <div class="flex flex-wrap gap-2">
+              {#each config.antiBotRoleIds ?? [] as roleId (roleId)}
+                <span class="inline-flex items-center gap-1 rounded-lg border border-outline-variant/30 px-2 py-1 text-xs text-on-surface">
+                  @{availableRoles.find((r: { id: string; name: string }) => r.id === roleId)?.name ?? roleId}
+                  <Button size="sm" variant="ghost" icon="X" onclick={() => (config.antiBotRoleIds = config.antiBotRoleIds.filter((id) => id !== roleId))} />
+                </span>
+              {:else}
+                <span class="text-xs text-on-surface-variant ml-2">{m.amx_bot_roles_none()}</span>
+              {/each}
+            </div>
+          </div>
+
           {#if config.antiBotEnabled}
             <div class="space-y-5 animate-in fade-in duration-300">
               <div class="space-y-1.5">
@@ -1059,6 +1176,7 @@
                   {m.am_antibot_notice()}
                 </p>
               </div>
+              <p class="text-xs text-on-surface-variant ml-2">{m.amx_bypass_before()} <code>/bypass bot</code> {m.amx_bypass_after()}</p>
             </div>
           {/if}
         </section>
@@ -1216,8 +1334,8 @@
         <div class="flex items-center gap-3">
           <Papicon icon="ShieldAlert" size={20} class="text-orange-400" />
           <div>
-            <p class="text-sm font-semibold text-on-surface">Captcha, détection de raid et verrous d'urgence</p>
-            <p class="text-xs text-on-surface-variant">Regroupés dans la page Anti-raid.</p>
+            <p class="text-sm font-semibold text-on-surface">{m.amx_moved_title()}</p>
+            <p class="text-xs text-on-surface-variant">{m.amx_moved_desc()}</p>
           </div>
         </div>
         <Papicon icon="chevron-right" size={16} class="shrink-0 text-on-surface-variant" />

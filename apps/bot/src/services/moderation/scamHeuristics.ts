@@ -15,6 +15,7 @@
  */
 
 import { createHash } from 'node:crypto';
+import { domainToASCII } from 'node:url';
 
 // ── Domaines ────────────────────────────────────────────────────────────────
 
@@ -71,8 +72,8 @@ const BARE_DOMAIN_TLDS = [
 
 const SCHEME_URL = /\bhttps?:\/\/([^\s/?#<>()[\]"'`]+)/gi;
 const BARE_DOMAIN = new RegExp(
-  `(?<![@\\w.-])((?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)+(?:${BARE_DOMAIN_TLDS}))(?![a-z0-9-])`,
-  'gi'
+  `(?<![@\\p{L}\\p{N}_.-])((?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)+(?:${BARE_DOMAIN_TLDS}))(?![\\p{L}\\p{N}-])`,
+  'giu'
 );
 
 /** Caractères invisibles ou de largeur nulle, utilisés pour casser les filtres. */
@@ -91,7 +92,11 @@ function cleanHost(raw: string): string | null {
   let host = raw.toLowerCase().replace(/^[^@]*@/, '').replace(/:\d+$/, '').replace(/\.+$/, '');
   host = host.replace(/^www\./, '');
   if (!host.includes('.') || host.length > 253) return null;
-  if (!/^[a-z0-9.-]+$/.test(host)) return null;
+  if (!/^[a-z0-9.-]+$/.test(host)) {
+    const ascii = domainToASCII(host);
+    if (!ascii || !/^[a-z0-9.-]+$/.test(ascii)) return null;
+    host = ascii;
+  }
   return host;
 }
 

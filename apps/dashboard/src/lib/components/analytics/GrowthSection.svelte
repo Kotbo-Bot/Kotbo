@@ -23,7 +23,7 @@
     /** Réponse de l'ancien /analytics : rétention, inviteurs, candidatures, arrivées. */
     legacy: any;
     legacyLoading: boolean;
-    onOpenMember: (userId: string, name: string) => void;
+    onOpenMember?: (userId: string, name: string) => void;
   } = $props();
 
   let activity = $state<ActivityAnalytics | null>(null);
@@ -146,7 +146,7 @@
     <div class="section-grid">
       <div class="span-6">
         <SectionCard title={m.anx_growth_inviters_title()} description={m.anx_growth_inviters_desc()}>
-          <BarList items={inviters} color={SERIES[2]} empty={m.anx_growth_inviters_empty()} onselect={(item) => onOpenMember(item.id, item.label)} />
+          <BarList items={inviters} color={SERIES[2]} empty={m.anx_growth_inviters_empty()} onselect={onOpenMember ? (item) => onOpenMember(item.id, item.label) : undefined} />
         </SectionCard>
       </div>
       <div class="span-6">
@@ -178,7 +178,7 @@
     <ul class="flex flex-col gap-1">
       {#each list as member (member.id)}
         <li>
-          <button type="button" class="member-row" onclick={() => onOpenMember(member.id, member.name)}>
+          <button type="button" disabled={!onOpenMember} class="member-row" onclick={() => onOpenMember?.(member.id, member.name)}>
             {#if member.avatarUrl}
               <img src={member.avatarUrl} alt="" width="28" height="28" class="h-7 w-7 shrink-0 rounded-full" loading="lazy" />
             {:else}
@@ -204,7 +204,7 @@
     text-align: left;
   }
 
-  .member-row:hover {
+  .member-row:hover:not(:disabled) {
     background: var(--color-surface-container);
   }
 

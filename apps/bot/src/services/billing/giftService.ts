@@ -85,7 +85,7 @@ export function monthsToMinutes(months: number, from: Date = new Date()): number
  */
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRTUVWXYZ2346789';
 
-function randomBlock(length: number): string {
+export function randomBlock(length: number): string {
   let out = '';
   for (let i = 0; i < length; i += 1) {
     // `crypto` et non `Math.random` : un code cadeau se paie, il ne doit pas se deviner.

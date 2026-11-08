@@ -599,6 +599,12 @@ export async function completeOral(
             logger.error('Recruitment', `Erreur attribution rôles staff: ${err.message}`)
           );
         }
+
+        if (guild?.formerStaffRoleId && discordMember.roles.cache.has(guild.formerStaffRoleId)) {
+          await discordMember.roles.remove(guild.formerStaffRoleId).catch(err =>
+            logger.error('Recruitment', `Erreur retrait rôle ancien staff: ${err.message}`)
+          );
+        }
       }
     } catch (err) {
       logger.error('Recruitment', `Erreur sync rôles Discord: ${err}`);

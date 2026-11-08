@@ -87,7 +87,7 @@ export async function publishEvent(client: Client, eventId: string) {
 
   if (!event) throw new Error('Événement introuvable');
 
-  if (event.type === 'CUSTOM') {
+  if (event.type === 'CUSTOM' || event.type === 'TOURNAMENT') {
     return publishCustomEventAnnouncement(client, eventId);
   }
 
@@ -569,6 +569,16 @@ export async function finishEvent(client: Client, eventId: string) {
       },
     },
   });
+
+  if (event?.type === 'TOURNAMENT') {
+    const { finishTournament } = await import('./tournament/tournamentService.js');
+    return finishTournament(client, eventId);
+  }
+  // Un événement personnalisé n'a pas de message de jeu à clore : seul son statut change.
+  if (event?.type === 'CUSTOM') {
+    await prisma.event.update({ where: { id: eventId }, data: { status: 'COMPLETED' } });
+    return { status: 'completed' };
+  }
 
   if (!event || !event.messageId || !event.channelId) throw new Error('Ã‰vénement introuvable');
 
@@ -1072,6 +1082,7 @@ export async function createCustomEvent(
     endTime?: string;
     createDiscordEvent?: boolean;
     location?: string;
+    type?: 'CUSTOM' | 'TOURNAMENT';
   }
 ) {
   const event = await prisma.event.create({
@@ -1079,7 +1090,7 @@ export async function createCustomEvent(
       guildId,
       title: data.title,
       description: data.description,
-      type: 'CUSTOM',
+      type: data.type === 'TOURNAMENT' ? 'TOURNAMENT' : 'CUSTOM',
       status: 'DRAFT',
       announcementChannelId: data.announcementChannelId,
       formId: data.formId || null,
@@ -1122,7 +1133,7 @@ export async function publishCustomEventAnnouncement(client: Client, eventId: st
   });
 
   if (!event) throw new Error('Evenement introuvable');
-  if (event.type !== 'CUSTOM') throw new Error("Cet evenement n'est pas de type CUSTOM");
+  if (event.type !== 'CUSTOM' && event.type !== 'TOURNAMENT') throw new Error("Cet evenement n'est pas de type CUSTOM");
 
   // `Event.config` est une colonne JSON : Prisma la type en JsonValue. On decrit
   // ici les seuls champs lus par cette fonction plutot que de neutraliser le
@@ -1200,6 +1211,14 @@ export async function publishCustomEventAnnouncement(client: Client, eventId: st
 
     const row = new ActionRowBuilder<ButtonBuilder>().addComponents(registerBtn);
 
+    if (event.type === 'TOURNAMENT') {
+      const { tournamentPublicUrl } = await import('./tournament/tournamentService.js');
+      row.addComponents(new ButtonBuilder()
+        .setLabel('🏆 Suivre le tournoi')
+        .setStyle(ButtonStyle.Link)
+        .setURL(tournamentPublicUrl(event.guildId, eventId)));
+    }
+
     if (discordEventId) {
       try {
         const discordGuild = (channel as TextChannel).guild;
@@ -1238,6 +1257,10 @@ export async function handleCustomEventRegisterButton(interaction: ButtonInterac
     include: { customForm: true },
   });
 
+  if (event?.type === 'TOURNAMENT') {
+    const { showTournamentRegistration } = await import('./tournament/tournamentService.js');
+    return showTournamentRegistration(interaction, eventId);
+  }
   if (!event || event.type !== 'CUSTOM') {
     return interaction.reply({ content: '❌ Evenement introuvable.', ephemeral: true });
   }

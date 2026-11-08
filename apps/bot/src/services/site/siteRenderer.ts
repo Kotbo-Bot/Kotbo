@@ -11,7 +11,7 @@
  * synchrone et pur.
  */
 
-import { collectSiteHeadings, siteIconSvg, type SiteDocument, type SiteIconName, type SiteMark, type SiteNode } from '@kotbo/shared';
+import { collectSiteHeadings, siteIconSvg, siteSectionPresentation, SITE_SECTION_LAYOUTS, type SiteDocument, type SiteIconName, type SiteMark, type SiteNode } from '@kotbo/shared';
 
 const CALLOUT_ICONS: Record<string, SiteIconName> = { info: 'info', success: 'circle-check', warning: 'alert', danger: 'octagon', note: 'note' };
 /** Image utilisable dans un `url()` de style : HTTPS ou image du site, sans caractère qui casse la règle. */
@@ -258,9 +258,19 @@ class Renderer {
       }
       case 'module':
         return this.env.moduleHtml[this.moduleIndex++] ?? '';
+      case 'section':
+        return this.section(node);
+      case 'column':
+        return `<div class="sect-col">${this.children(node)}</div>`;
       default:
         return '';
     }
+  }
+
+  section(node: SiteNode): string {
+    const look = siteSectionPresentation(node.attrs);
+    const layout = (SITE_SECTION_LAYOUTS as readonly unknown[]).includes(node.attrs?.layout) ? String(node.attrs?.layout) : '1';
+    return `<div${attrs({ id: look.anchor, class: look.className, style: look.style || null, 'data-anim': look.animation })}><div class="sect-inner"><div class="sect-cols layout-${layout}">${this.children(node)}</div></div></div>`;
   }
 
   toc(maxLevel: number): string {

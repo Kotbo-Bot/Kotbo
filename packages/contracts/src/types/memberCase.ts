@@ -12,7 +12,7 @@
  * depuis le bundle navigateur du dashboard.
  */
 
-export type DashboardSanctionType = 'WARN' | 'KICK' | 'TIMEOUT' | 'TEMP_BAN' | 'BAN' | 'SOFTBAN';
+export type DashboardSanctionType = 'WARN' | 'KICK' | 'TIMEOUT' | 'TEMP_BAN' | 'BAN' | 'SOFTBAN' | 'JAIL';
 export type DashboardSanctionStatus = 'ACTIVE' | 'RESOLVED' | 'FAILED';
 
 export type DashboardRole = {

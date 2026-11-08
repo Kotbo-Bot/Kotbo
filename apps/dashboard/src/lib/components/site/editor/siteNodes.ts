@@ -8,7 +8,9 @@
  * `editor.storage.siteNodes.onConfigure`, que la page branche sur sa modale.
  */
 import { Extension, Mark, Node, mergeAttributes, type Editor } from '@tiptap/core';
-import { SITE_CALLOUT_VARIANTS, SITE_HIGHLIGHT_COLORS, SITE_IMAGE_WIDTHS, sanitizeSiteHref, siteIconSvg, type SiteIconName } from '@kotbo/shared';
+import { Plugin, PluginKey } from '@tiptap/pm/state';
+import { Decoration, DecorationSet } from '@tiptap/pm/view';
+import { SITE_CALLOUT_VARIANTS, SITE_HIGHLIGHT_COLORS, SITE_IMAGE_WIDTHS, SITE_SECTION_DEFAULTS, sanitizeSiteHref, siteIconSvg, siteSectionPresentation, type SiteIconName } from '@kotbo/shared';
 
 /** Pictogramme de chaque style d'encadré, comme sur le site publié. */
 const CALLOUT_ICONS: Record<string, SiteIconName> = { info: 'info', success: 'circle-check', warning: 'alert', danger: 'octagon', note: 'note' };
@@ -21,6 +23,9 @@ export interface ConfigureRequest {
 
 export interface SiteNodesStorage {
   onConfigure: ((request: ConfigureRequest) => void) | null;
+  /** Bouton de la barre d'une section (sauf la poignée, qui passe par onSectionDrag). */
+  onSectionAction?: ((action: SectionAction, pos: number) => void) | null;
+  onSectionDrag?: ((pos: number, event: DragEvent) => void) | null;
   describeModule: ((key: string, config: Record<string, unknown>) => { label: string; summary: string; icon: SiteIconName; available: boolean }) | null;
   labels: Record<string, string>;
 }
@@ -332,6 +337,137 @@ export const GridCell = Node.create({
         },
       };
     };
+  },
+});
+
+// ─── Sections ───────────────────────────────────────────────────────────────
+
+/** Racine : une pile de sections, comme la liste blanche du serveur l'attend. */
+export const SiteDocumentNode = Node.create({
+  name: 'doc',
+  topNode: true,
+  content: 'section+',
+});
+
+const activeSectionKey = new PluginKey('activeSection');
+
+/** Marque la section où se trouve le curseur : sa barre d'outils reste visible, au doigt comme à la souris. */
+export const ActiveSection = Extension.create({
+  name: 'activeSection',
+  addProseMirrorPlugins() {
+    return [
+      new Plugin({
+        key: activeSectionKey,
+        props: {
+          decorations(state) {
+            const $pos = state.doc.resolve(state.selection.from);
+            const pos = $pos.depth >= 1 ? $pos.before(1) : $pos.pos;
+            const node = $pos.depth >= 1 ? $pos.node(1) : $pos.nodeAfter;
+            if (!node || node.type.name !== 'section') return null;
+            return DecorationSet.create(state.doc, [Decoration.node(pos, pos + node.nodeSize, {}, { active: true })]);
+          },
+        },
+      }),
+    ];
+  },
+});
+
+const isActive = (decorations: readonly Decoration[]) => decorations.some((d) => (d.spec as { active?: boolean }).active);
+
+export type SectionAction = 'drag' | 'up' | 'down' | 'settings' | 'duplicate' | 'delete';
+
+const SECTION_TOOLS: Array<[SectionAction, SiteIconName, string, string]> = [
+  ['drag', 'grip', 'sectionDrag', 'Glisser pour déplacer'],
+  ['up', 'arrow-up', 'sectionUp', 'Monter'],
+  ['down', 'arrow-down', 'sectionDown', 'Descendre'],
+  ['settings', 'sliders', 'sectionSettings', 'Réglages de la section'],
+  ['duplicate', 'copy', 'sectionDuplicate', 'Dupliquer'],
+  ['delete', 'trash', 'sectionDelete', 'Supprimer'],
+];
+
+export const Section = Node.create({
+  name: 'section',
+  content: 'column+',
+  isolating: true,
+  draggable: true,
+  addAttributes() {
+    // Tous les réglages voyagent tels quels ; le serveur les valide.
+    return Object.fromEntries(Object.entries(SITE_SECTION_DEFAULTS).map(([key, value]) => [key, { default: value }]));
+  },
+  parseHTML() {
+    return [{ tag: 'div[data-section]' }];
+  },
+  renderHTML({ HTMLAttributes }) {
+    return ['div', { 'data-section': '', class: siteSectionPresentation(HTMLAttributes).className }, ['div', { class: `sect-cols layout-${HTMLAttributes.layout}` }, 0]];
+  },
+  addNodeView() {
+    return ({ node, editor, getPos, decorations }) => {
+      let active = isActive(decorations);
+      const dom = document.createElement('div');
+      const inner = document.createElement('div');
+      inner.className = 'sect-inner';
+      const cols = document.createElement('div');
+      inner.append(cols);
+      const bar = document.createElement('div');
+      bar.className = 'site-sect-bar';
+      bar.contentEditable = 'false';
+      for (const [action, icon, key, fallback] of SECTION_TOOLS) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = `site-sect-tool site-sect-${action}`;
+        button.innerHTML = siteIconSvg(icon, 16);
+        button.title = label(editor, key, fallback);
+        button.setAttribute('aria-label', button.title);
+        if (action === 'drag') {
+          button.draggable = true;
+          button.addEventListener('dragstart', (event) => {
+            const pos = getPos();
+            if (typeof pos === 'number') editor.storage.siteNodes.onSectionDrag?.(pos, event);
+          });
+        } else {
+          button.addEventListener('mousedown', (event) => event.preventDefault());
+          button.addEventListener('click', () => {
+            const pos = getPos();
+            if (typeof pos === 'number') editor.storage.siteNodes.onSectionAction?.(action, pos);
+          });
+        }
+        bar.append(button);
+      }
+      const apply = (attrs: Record<string, unknown>) => {
+        const look = siteSectionPresentation(attrs);
+        dom.className = `${look.className} site-sect${active ? ' is-active' : ''}`;
+        dom.setAttribute('style', look.style);
+        cols.className = `sect-cols layout-${attrs.layout}`;
+        dom.dataset.anchor = look.anchor ?? '';
+      };
+      apply(node.attrs);
+      dom.append(bar, inner);
+      return {
+        dom,
+        contentDOM: cols,
+        update(updated, updatedDecorations) {
+          if (updated.type.name !== 'section') return false;
+          active = isActive(updatedDecorations);
+          apply(updated.attrs);
+          node = updated;
+          return true;
+        },
+        stopEvent: (event) => bar.contains(event.target as globalThis.Node),
+        ignoreMutation: (mutation) => bar.contains(mutation.target) || (mutation.type === 'attributes' && (mutation.target === dom || mutation.target === cols)),
+      };
+    };
+  },
+});
+
+export const Column = Node.create({
+  name: 'column',
+  content: 'block+',
+  isolating: true,
+  parseHTML() {
+    return [{ tag: 'div[data-column]' }];
+  },
+  renderHTML() {
+    return ['div', { 'data-column': '', class: 'sect-col' }, 0];
   },
 });
 

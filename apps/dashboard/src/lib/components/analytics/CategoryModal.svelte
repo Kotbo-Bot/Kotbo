@@ -26,7 +26,7 @@
     categoryId: string;
     categoryName: string;
     onClose: () => void;
-    onOpenMember: (userId: string, name: string) => void;
+    onOpenMember?: (userId: string, name: string) => void;
   } = $props();
 
   type Tab = 'resume' | 'salons' | 'membres';
@@ -63,7 +63,7 @@
 
   function openMember(id: string, name: string) {
     close();
-    onOpenMember(id, name);
+    onOpenMember?.(id, name);
   }
 
   const tabs = $derived([
@@ -142,7 +142,7 @@
 </script>
 
 {#snippet members(items: MemberItem[])}
-  <BarList {items} empty={m.anx_category_no_members()} onselect={(item) => openMember(item.id, item.label)}>
+  <BarList {items} empty={m.anx_category_no_members()} onselect={onOpenMember ? (item) => openMember(item.id, item.label) : undefined}>
     {#snippet leading(item)}
       {#if item.avatarUrl}
         <img src={item.avatarUrl} alt="" width="28" height="28" class="h-7 w-7 shrink-0 rounded-full" loading="lazy" />

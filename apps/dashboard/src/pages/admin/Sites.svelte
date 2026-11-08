@@ -11,7 +11,10 @@
   import { m, dateLocale } from '../../lib/i18n';
   import {
     fetchAdminSiteReports,
+    fetchAdminSiteTemplates,
     fetchAdminSites,
+    setAdminSiteTemplateHidden,
+    type AdminSiteTemplate,
     setAdminSiteReportStatus,
     suspendAdminSite,
     unsuspendAdminSite,
@@ -60,9 +63,29 @@
     }
   }
 
+  let templates = $state<AdminSiteTemplate[]>([]);
+
+  async function loadTemplates() {
+    try {
+      templates = (await fetchAdminSiteTemplates()).templates;
+    } catch (err) {
+      toast.error(siteErrorMessage(err));
+    }
+  }
+
+  async function setTemplateHidden(template: AdminSiteTemplate, hidden: boolean) {
+    try {
+      await setAdminSiteTemplateHidden(template.id, hidden);
+      await loadTemplates();
+    } catch (err) {
+      toast.error(siteErrorMessage(err));
+    }
+  }
+
   onMount(() => {
     void loadReports();
     void loadSites();
+    void loadTemplates();
   });
 
   async function setReport(report: AdminSiteReport, status: 'RESOLVED' | 'DISMISSED' | 'OPEN') {
@@ -134,6 +157,28 @@
                   <Button size="sm" variant="ghost" onclick={() => setReport(report, 'OPEN')}>{m.ste_admin_reopen()}</Button>
                 {/if}
               </div>
+            </li>
+          {/each}
+        </ul>
+      {/if}
+    </SectionCard>
+
+    <SectionCard title={m.ste_admin_templates()} description={m.ste_admin_templates_desc()} flush>
+      {#if templates.length === 0}
+        <div class="p-6"><EmptyState icon="shield-check" title={m.ste_admin_no_templates()} description="" reason="all-clear" /></div>
+      {:else}
+        <ul class="admin-list">
+          {#each templates as template (template.id)}
+            <li>
+              <div class="min-w-0 flex-1">
+                <p class="text-body-sm text-on-surface font-medium">{template.name}{template.hidden ? ` · ${m.ste_admin_template_hidden()}` : ''}</p>
+                <p class="text-2xs text-on-surface-variant">{m.ste_admin_template_meta({ reports: template.reporterIds.length, uses: template.uses, guild: template.authorGuildId })} · {when(template.createdAt)}</p>
+              </div>
+              {#if template.hidden}
+                <Button size="sm" onclick={() => setTemplateHidden(template, false)}>{m.ste_admin_template_show()}</Button>
+              {:else}
+                <Button size="sm" variant="danger" onclick={() => setTemplateHidden(template, true)}>{m.ste_admin_template_hide()}</Button>
+              {/if}
             </li>
           {/each}
         </ul>

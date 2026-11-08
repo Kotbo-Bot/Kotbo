@@ -62,6 +62,8 @@ export {
   getModuleForPath,
   getModuleRequirements,
   isCoreModule,
+  isModulePaused,
+  withoutPausedModulePermissions,
 } from './types/modules.js';
 export type {
   ModuleCategory,
@@ -113,10 +115,12 @@ export {
 } from './types/timezone.js';
 
 export {
+  FREE_ANALYTICS_DAYS,
+  FREE_MODULES,
   GIFT_DURATIONS_MONTHS,
   PLAN_KEYS,
-  PLAN_MEMBER_THRESHOLDS,
   PLAN_REGISTRY,
+  REFERRAL_DISCOUNT_PERCENT,
   SALES_CONTACT_URL,
   TRIAL_DAYS,
   canPurchasePlan,
@@ -334,3 +338,22 @@ export type {
   DashboardUsageRow,
   DashboardUsageTabRow,
 } from './types/dashboardTelemetry.js';
+
+export {
+  BUTTON_LABEL_MAX_LENGTH,
+  buttonLabelWithCount,
+  REACTION_ROLE_BUTTON_MODES,
+  REACTION_ROLE_MENU_MODES,
+  REACTION_ROLE_PRESET_KEYS,
+  normalizeMenuMode,
+  parseButtonMode,
+  resolveButtonMode,
+  roleBlocker,
+} from './types/reactionRoles.js';
+export type {
+  BotRoleAccess,
+  ReactionRoleButtonMode,
+  ReactionRoleMenuMode,
+  ReactionRolePresetKey,
+  RoleBlocker,
+} from './types/reactionRoles.js';

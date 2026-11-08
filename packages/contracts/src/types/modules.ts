@@ -125,6 +125,13 @@ export interface ModuleDefinition {
   paths?: string[];
   /** Préfixes de `customId` des boutons, menus et modals du module. */
   interactionPrefixes?: string[];
+  /**
+   * Module retiré du produit sans que ses données soient supprimées. Il est
+   * éteint sur tous les serveurs quelle que soit leur configuration, ne peut
+   * plus être rallumé et disparaît du dashboard. Retirer le drapeau le rend
+   * de nouveau activable ; ses données sont restées en base.
+   */
+  paused?: boolean;
 }
 
 /**
@@ -565,6 +572,7 @@ export const MODULE_REGISTRY: ModuleDefinition[] = [
     guildFields: ['dailyAlgoEnabled'],
     legacyField: 'dailyAlgoEnabled',
     aliases: ['dailyalgo'],
+    paused: true,
     apiSegments: [
       'daily-algo-problems',
       'daily-algo-runs',
@@ -572,6 +580,7 @@ export const MODULE_REGISTRY: ModuleDefinition[] = [
       'daily-algo-submissions',
     ],
     paths: ['/dailyalgo'],
+    interactionPrefixes: ['daily-algo-', 'modal:daily-algo-'],
   },
   {
     key: 'tickets',
@@ -882,6 +891,7 @@ export const MODULE_REGISTRY: ModuleDefinition[] = [
     category: 'cross_server',
     icon: 'Handshake',
     defaultEnabled: false,
+    paused: true,
     apiSegments: ['partnerships', 'partners', 'partner-applications', 'partnership-directory'],
     paths: ['/partnerships', '/partnerships/directory'],
     interactionPrefixes: ['partnership:', 'partnership_modal:'],
@@ -925,6 +935,25 @@ export function getModuleDefinition(key: string): ModuleDefinition | undefined {
 
 export function isCoreModule(key: string): boolean {
   return getModuleDefinition(key)?.core === true;
+}
+
+/** Module retiré du produit (voir `ModuleDefinition.paused`). */
+export function isModulePaused(key: string | undefined): boolean {
+  if (!key) return false;
+  const mod = getModuleDefinition(key);
+  return mod?.paused === true && mod.core !== true;
+}
+
+/**
+ * Retire les permissions `<module>:<action>` des modules en pause. Une clé
+ * d'API créée pendant la pause ne doit pas emporter un accès qui se rouvrirait
+ * tout seul le jour où le module revient.
+ */
+export function withoutPausedModulePermissions(permissions: string[]): string[] {
+  return permissions.filter((permission) => {
+    const separator = permission.indexOf(':');
+    return separator < 0 || !isModulePaused(permission.slice(0, separator));
+  });
 }
 
 /** Modules qui déclarent `key` dans leur `requires` (transitivement). */
@@ -1011,6 +1040,8 @@ export const ALL_MODULE_GUILD_FIELDS = [
 /** État par défaut de chaque module, avant toute écriture en base. */
 export function defaultModuleStates(): Record<string, boolean> {
   const states: Record<string, boolean> = {};
-  for (const mod of MODULE_REGISTRY) states[mod.key] = mod.core ? true : mod.defaultEnabled;
+  for (const mod of MODULE_REGISTRY) {
+    states[mod.key] = mod.core ? true : mod.defaultEnabled && !isModulePaused(mod.key);
+  }
   return states;
 }

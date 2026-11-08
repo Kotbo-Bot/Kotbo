@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from '../../../i18n';
   /**
    * « Quel salon est quoi ? », section par section.
    *
@@ -94,11 +95,11 @@
         name: role.name,
         disabled: !role.assignable || takenBy.has(role.id),
         note: takenBy.get(role.id)
-          ? `déjà utilisé pour ${takenBy.get(role.id)}`
+          ? m.obx_mp_taken({ name: takenBy.get(role.id) ?? '' })
           : role.managed
-            ? 'géré par une intégration'
+            ? m.obx_mp_managed()
             : !role.assignable
-              ? 'au-dessus du rôle de Kotbo'
+              ? m.obx_mp_above()
               : null,
       }));
     }
@@ -109,7 +110,7 @@
         id: channel.id,
         name: channel.name,
         disabled: takenBy.has(channel.id),
-        note: takenBy.get(channel.id) ? `déjà utilisé pour ${takenBy.get(channel.id)}` : null,
+        note: takenBy.get(channel.id) ? m.obx_mp_taken({ name: takenBy.get(channel.id) ?? '' }) : null,
       }));
   }
 
@@ -153,14 +154,14 @@
 
   /** Ou atterrira ce que cet ecran cree. */
   const destination = $derived.by(() => {
-    if (!category) return 'à la racine du serveur';
+    if (!category) return m.obx_mp_root();
     const decision = decisionOf(category.key);
-    if (decision.mode === 'skip') return 'à la racine du serveur';
+    if (decision.mode === 'skip') return m.obx_mp_root();
     if (decision.mode === 'adopt') {
       const found = template?.inventory.channels.find((channel) => channel.id === decision.id);
-      return found ? `dans ${found.name}` : 'dans la catégorie choisie';
+      return found ? m.obx_mp_in({ name: found.name }) : m.obx_mp_in_chosen();
     }
-    return `dans ${category.name}, que Kotbo créera`;
+    return m.obx_mp_in_new({ name: category.name });
   });
 
   /** Les modules que les lignes ecartees de cet ecran laisseront eteints. */
@@ -192,17 +193,17 @@
       <div class="rounded-xl border border-outline-variant/30 bg-surface-container-low/40 px-4 py-3.5">
         <div class="flex items-center gap-2 mb-2">
           <Papicon icon="folder" size={13} class="text-primary/70" />
-          <span class="text-xs font-semibold text-on-surface">La catégorie</span>
+          <span class="text-xs font-semibold text-on-surface">{m.obx_mp_category()}</span>
           {#if locked}
             <span class="text-2xs font-medium text-primary/70 rounded-full bg-primary/10 px-2 py-0.5">
-              posée par Kotbo
+              {m.obx_mp_locked()}
             </span>
           {/if}
         </div>
 
         {#if skipped}
           <p class="text-body-sm text-on-surface-variant leading-relaxed">
-            Aucun salon à y ranger : Kotbo ne créera pas de catégorie.
+            {m.obx_mp_empty_category()}
           </p>
         {:else}
           <select
@@ -211,15 +212,15 @@
             onchange={(event) => choose(category, event.currentTarget.value)}
             class="w-full rounded-lg border border-outline-variant/40 bg-surface-container-lowest/60 px-3 py-2 text-body-sm text-on-surface disabled:opacity-50"
           >
-            <optgroup label="Catégories du serveur">
+            <optgroup label={m.obx_mp_server_categories()}>
               {#each candidatesFor(category) as option (option.id)}
                 <option value="adopt:{option.id}" disabled={option.disabled}>
                   {option.name}{option.note ? ` (${option.note})` : ''}
                 </option>
               {/each}
             </optgroup>
-            <optgroup label="Sinon">
-              <option value="create">Créer « {category.name} »</option>
+            <optgroup label={m.obx_mp_otherwise()}>
+              <option value="create">{m.obx_mp_create({ name: category.name })}</option>
             </optgroup>
           </select>
         {/if}
@@ -249,17 +250,17 @@
                 </span>
               </p>
               {#if locked}
-                <p class="mt-1 text-2xs text-primary/70">Posé par Kotbo, déjà relié.</p>
+                <p class="mt-1 text-2xs text-primary/70">{m.obx_mp_locked_line()}</p>
               {:else if isSuggested(line.key)}
                 <!-- La ressemblance des noms a trouve quelque chose. Le dire, et
                      ne pas s'en contenter : c'est exactement ce rapprochement
                      silencieux qui produisait les doublons quand il ratait. -->
                 <p class="mt-1 text-2xs text-on-surface-variant/55">
-                  Détecté sur ton serveur. Confirme ou corrige.
+                  {m.obx_mp_suggested()}
                 </p>
               {:else if decision.mode === 'create'}
                 <p class="mt-1 text-2xs text-on-surface-variant/45">
-                  Sera créé {destination}.
+                  {m.obx_mp_will_create({ where: destination })}
                 </p>
               {/if}
             </div>
@@ -270,17 +271,17 @@
               onchange={(event) => choose(line, event.currentTarget.value)}
               class="shrink-0 w-[15.5rem] max-w-[52%] rounded-lg border border-outline-variant/40 bg-surface-container-lowest/60 px-3 py-2 text-body-sm text-on-surface disabled:opacity-50"
             >
-              <optgroup label={line.kind === 'role' ? 'Rôles du serveur' : 'Salons du serveur'}>
+              <optgroup label={line.kind === 'role' ? m.obx_mp_server_roles() : m.obx_mp_server_channels()}>
                 {#each candidatesFor(line) as option (option.id)}
                   <option value="adopt:{option.id}" disabled={option.disabled}>
                     {option.name}{option.note ? ` (${option.note})` : ''}
                   </option>
                 {/each}
               </optgroup>
-              <optgroup label="Sinon">
-                <option value="create">Créer « {line.name} »</option>
+              <optgroup label={m.obx_mp_otherwise()}>
+                <option value="create">{m.obx_mp_create({ name: line.name })}</option>
                 {#if isSkippable(line)}
-                  <option value="skip">Ne rien faire</option>
+                  <option value="skip">{m.obx_mp_skip()}</option>
                 {/if}
               </optgroup>
             </select>
@@ -296,9 +297,7 @@
         <p class="text-xs text-on-surface-variant leading-relaxed">
           <Papicon icon="info" size={12} class="inline text-on-surface-variant mr-1" />
           {#each dormant as entry, index (entry.key)}{index > 0 ? ', ' : ''}<span class="font-medium text-on-surface">{entry.name}</span>{/each}
-          {dormant.length > 1 ? 'resteront éteints' : 'restera éteint'} : le salon qui
-          {dormant.length > 1 ? 'les porte' : 'le porte'} a été écarté. Tu pourras
-          {dormant.length > 1 ? 'les' : "l'"} allumer plus tard depuis le tableau de bord.
+          {dormant.length > 1 ? m.obx_mp_dormant_many() : m.obx_mp_dormant_one()}
         </p>
       </div>
     {/if}
@@ -308,7 +307,7 @@
     <div class="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest/50 overflow-hidden">
       <div class="px-4 py-2.5 border-b border-outline-variant/20 flex items-center gap-2">
         <Papicon icon="list" size={12} class="text-on-surface-variant/40" />
-        <span class="text-xs font-semibold text-on-surface">Ce que ça donne</span>
+        <span class="text-xs font-semibold text-on-surface">{m.obx_mp_result()}</span>
       </div>
 
       <div class="p-3 space-y-1">
@@ -334,11 +333,11 @@
             {:else if decision.mode === 'adopt'}
               <Papicon icon="link" size={11} class="shrink-0 text-primary/70" />
               <span class="truncate text-on-surface-variant/85">{adopted ?? line.name}</span>
-              <span class="shrink-0 text-2xs text-on-surface-variant/40">relié</span>
+              <span class="shrink-0 text-2xs text-on-surface-variant/40">{m.obx_mp_linked()}</span>
             {:else}
               <Papicon icon="plus" size={11} class="shrink-0 text-success" />
               <span class="truncate text-on-surface-variant/85">{line.name}</span>
-              <span class="shrink-0 text-2xs text-success/70">nouveau</span>
+              <span class="shrink-0 text-2xs text-success/70">{m.obx_mp_new()}</span>
             {/if}
           </p>
         {/each}
@@ -358,7 +357,7 @@
       onclick={() => wizard.complete(wizard.step)}
       class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-on-primary text-sm font-semibold hover:opacity-90 transition-opacity"
     >
-      Continuer
+      {m.obx_continue()}
       <Papicon icon="ChevronRight" size={15} />
     </button>
   {/snippet}

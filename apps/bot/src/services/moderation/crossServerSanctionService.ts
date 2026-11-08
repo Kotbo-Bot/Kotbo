@@ -54,7 +54,7 @@ export type CrossServerSanctionSummary = {
 };
 
 function emptyBreakdown(): Record<SanctionType, number> {
-  return { WARN: 0, KICK: 0, TIMEOUT: 0, TEMP_BAN: 0, BAN: 0, SOFTBAN: 0 };
+  return { WARN: 0, KICK: 0, TIMEOUT: 0, TEMP_BAN: 0, BAN: 0, SOFTBAN: 0, JAIL: 0 };
 }
 
 function disabledSummary(): CrossServerSanctionSummary {

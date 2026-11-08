@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from '../lib/i18n';
   import { onMount } from 'svelte';
   import { API_BASE_URL } from '../lib/api';
   import { authStore } from '../lib/stores/auth.svelte';
@@ -88,21 +89,21 @@
       const val = answers[field.id];
       if (field.required) {
         if (!val || (Array.isArray(val) && val.length === 0) || val === '') {
-          newErrors[field.id] = 'Ce champ est obligatoire';
+          newErrors[field.id] = m.pfm_required();
           continue;
         }
       }
       if (field.type === 'email' && val && typeof val === 'string') {
         if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val)) {
-          newErrors[field.id] = 'Adresse email invalide';
+          newErrors[field.id] = m.pfm_invalid_email();
         }
       }
       if (field.type === 'number' && val !== undefined && val !== '') {
         const n = Number(val);
         if (field.validation?.min !== undefined && n < field.validation.min)
-          newErrors[field.id] = `Minimum: ${field.validation.min}`;
+          newErrors[field.id] = m.pfm_min({ value: field.validation.min });
         if (field.validation?.max !== undefined && n > field.validation.max)
-          newErrors[field.id] = `Maximum: ${field.validation.max}`;
+          newErrors[field.id] = m.pfm_max({ value: field.validation.max });
       }
     }
     errors = newErrors;
@@ -123,7 +124,7 @@
   }
 
   function nextSection() {
-    if (authRequired && !authStore.isAuthenticated) { submitError = 'Vous devez vous connecter avec Discord avant de continuer.'; return; }
+    if (authRequired && !authStore.isAuthenticated) { submitError = m.pfm_auth_continue(); return; }
     if (!validateSection()) return;
     const next = resolveNextSection();
     if (next < totalSections) {
@@ -143,7 +144,7 @@
 
   // ── Submit ─────────────────────────────────────────────────────────────────
   async function submit() {
-    if (authRequired && !authStore.isAuthenticated) { submitError = 'Vous devez vous connecter avec Discord avant de soumettre ce formulaire.'; return; }
+    if (authRequired && !authStore.isAuthenticated) { submitError = m.pfm_auth_submit(); return; }
     if (!validateSection()) return;
     submitting = true;
     submitError = '';
@@ -167,13 +168,13 @@
       });
       if (!res.ok) {
         const err = await res.json();
-        submitError = err.error || 'Impossible d\'envoyer. Réessaie.';
+        submitError = err.error || m.pfm_send_failed();
         return;
       }
       submitted = true;
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch {
-      submitError = 'Impossible de contacter le serveur. Vérifiez votre connexion.';
+      submitError = m.pfm_network();
     } finally {
       submitting = false;
     }
@@ -226,7 +227,7 @@
 </script>
 
 <svelte:head>
-  <title>{form?.name ?? 'Formulaire'} | Kotbo</title>
+  <title>{form?.name ?? m.pfm_form()} | Kotbo</title>
   <meta name="robots" content="noindex" />
 </svelte:head>
 
@@ -240,15 +241,15 @@
     <div class="flex items-center justify-center min-h-[60vh]">
       <div class="text-center">
         <div class="w-12 h-12 rounded-full border-4 border-primary/20 border-t-primary animate-spin mx-auto mb-4"></div>
-        <p class="text-on-surface-variant">Chargement du formulaire…</p>
+        <p class="text-on-surface-variant">{m.pfm_loading()}</p>
       </div>
     </div>
 
   {:else if notFound}
     <div class="max-w-lg mx-auto text-center py-24">
       <div class="flex justify-center mb-6 text-on-surface-variant/40"><Papicon icon="search" size={56} /></div>
-      <h1 class="text-2xl font-semibold text-on-surface mb-3">Formulaire introuvable</h1>
-      <p class="text-on-surface-variant text-sm">Ce formulaire n'existe pas ou n'est plus actif.</p>
+      <h1 class="text-2xl font-semibold text-on-surface mb-3">{m.pfm_not_found()}</h1>
+      <p class="text-on-surface-variant text-sm">{m.pfm_not_found_desc()}</p>
     </div>
 
   {:else if submitted}
@@ -264,12 +265,12 @@
                 style="stroke:var(--form-color)" />
             </svg>
           </div>
-          <h1 class="text-2xl font-semibold text-on-surface mb-3">Réponse envoyée !</h1>
+          <h1 class="text-2xl font-semibold text-on-surface mb-3">{m.pfm_sent()}</h1>
           <p class="text-on-surface-variant text-sm leading-relaxed">
-            {theme?.confirmationText || 'Votre réponse a bien été reçue. Vous serez contacté prochainement par notre équipe.'}
+            {theme?.confirmationText || m.pfm_sent_desc()}
           </p>
           <div class="mt-8 text-xs text-on-surface-variant/40">
-            Propulsé par <span class="font-bold" style="color:var(--form-color)">Kotbo</span>
+            {m.pfm_powered_by()} <span class="font-bold" style="color:var(--form-color)">Kotbo</span>
           </div>
         </div>
       </div>
@@ -335,12 +336,12 @@
             </div>
             <div>
               <h4 class="font-semibold text-on-surface text-sm">
-                {authRequired ? 'Connexion Discord obligatoire' : 'Connexion Discord recommandée'}
+                {authRequired ? m.pfm_auth_required() : m.pfm_auth_recommended()}
               </h4>
               <p class="text-xs text-on-surface-variant mt-0.5">
                 {authRequired
-                  ? 'Ce formulaire nécessite de se connecter avec Discord avant de pouvoir être rempli.'
-                  : 'Associez votre compte Discord pour préremplir votre ID et votre pseudo automatiquement.'}
+                  ? m.pfm_auth_required_desc()
+                  : m.pfm_auth_recommended_desc()}
               </p>
             </div>
           </div>
@@ -349,7 +350,7 @@
             class="px-4 py-2 text-white rounded-lg text-body-sm font-medium transition-all shadow-md shrink-0 flex items-center gap-2
  {authRequired ? 'bg-amber-600 hover:bg-amber-700' : 'bg-blue-600 hover:bg-blue-700'}"
           >
-            Se connecter
+            {m.pfm_login()}
           </button>
         </div>
       {:else}
@@ -358,7 +359,7 @@
             {#if authStore.user?.avatar}
               <img 
                 src="https://cdn.discordapp.com/avatars/{authStore.user.id}/{authStore.user.avatar}.png" 
-                alt="Avatar" 
+                alt={m.pfm_avatar_alt()} 
                 class="w-10 h-10 rounded-full shrink-0 border border-success/30" 
               />
             {:else}
@@ -367,15 +368,15 @@
               </div>
             {/if}
             <div>
-              <h4 class="font-semibold text-on-surface text-sm">Connecté avec Discord</h4>
-              <p class="text-xs text-on-surface-variant mt-0.5">En tant que <span class="font-bold text-success">{authStore.user?.username}</span> (ID: {authStore.user?.id})</p>
+              <h4 class="font-semibold text-on-surface text-sm">{m.pfm_logged_in()}</h4>
+              <p class="text-xs text-on-surface-variant mt-0.5">{m.pfm_as_before()} <span class="font-bold text-success">{authStore.user?.username}</span> {m.pfm_as_id({ id: authStore.user?.id ?? '' })}</p>
             </div>
           </div>
           <button
             onclick={() => authStore.logout()}
             class="px-3 py-1.5 border border-outline-variant/35 text-on-surface-variant hover:bg-surface-hover hover:text-on-surface rounded-lg text-xs font-semibold transition-all shrink-0"
           >
-            Déconnexion
+            {m.pfm_logout()}
           </button>
         </div>
       {/if}
@@ -404,7 +405,7 @@
           {:else if field.type === 'email'}
             <input id={field.id} type="email" value={(answers[field.id] as string) || ''}
               oninput={(e) => setAnswer(field.id, (e.target as HTMLInputElement).value)}
-              placeholder={field.placeholder || 'exemple@email.com'}
+              placeholder={field.placeholder || m.pfm_email_ph()}
               class="w-full bg-surface-container rounded-xl px-4 py-3 text-sm outline-none border-b-2 border-primary/20 focus:border-primary transition-colors" />
 
           {:else if field.type === 'number'}
@@ -464,7 +465,7 @@
             <select id={field.id} value={(answers[field.id] as string) || ''}
               onchange={(e) => setAnswer(field.id, (e.target as HTMLSelectElement).value)}
               class="w-full bg-surface-container rounded-xl px-4 py-3 text-sm outline-none border border-outline-variant/30 focus:border-primary transition-colors appearance-none cursor-pointer">
-              <option value="" disabled>Sélectionner une option…</option>
+              <option value="" disabled>{m.pfm_select()}</option>
               {#each field.options || [] as opt}
                 <option value={opt}>{opt}</option>
               {/each}
@@ -575,7 +576,7 @@
       <!-- Navigation buttons -->
       {#if !authRequired || authStore.isAuthenticated}
       {#if currentSection === totalSections - 1}
-        <PrivacyNotice compact text="Les réponses sont transmises aux responsables du serveur pour traiter ce formulaire. Ne saisissez pas de donnée sensible non demandée. " />
+        <PrivacyNotice compact text={m.pfm_privacy()} />
       {/if}
       <div class="flex items-center gap-3 pb-8">
         {#if currentSection > 0}
@@ -583,7 +584,7 @@
             class="px-6 py-3 rounded-xl bg-surface-container font-bold text-sm hover:bg-surface-container-high transition-colors">
             <span class="inline-flex items-center gap-2">
               <Papicon icon="arrow-left" size={14} />
-              Précédent
+              {m.pfm_previous()}
             </span>
           </button>
         {/if}
@@ -594,12 +595,12 @@
           {#if submitting}
             <span class="flex items-center gap-2">
               <div class="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin"></div>
-              Envoi…
+              {m.pfm_sending()}
             </span>
           {:else if currentSection < totalSections - 1}
-            Suivant →
+            {m.pfm_next()}
           {:else}
-            Envoyer ✓
+            {m.pfm_submit()}
           {/if}
         </button>
       </div>
@@ -607,7 +608,7 @@
 
       <!-- Footer -->
       <div class="text-center pb-4 text-xs text-on-surface-variant/30">
-        Propulsé par <span class="font-bold" style="color:var(--form-color)">Kotbo</span>
+        {m.pfm_powered_by()} <span class="font-bold" style="color:var(--form-color)">Kotbo</span>
       </div>
     </div>
   {/if}

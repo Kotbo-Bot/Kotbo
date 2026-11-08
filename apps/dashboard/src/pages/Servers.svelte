@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from '../lib/i18n';
   /**
    * Mes serveurs : la liste des serveurs Discord que la personne administre,
    * qu'ils aient Kotbo ou non.
@@ -50,7 +51,7 @@
       const result = await fetchManageableServers({ refresh });
       applyServers(result);
     } catch (err) {
-      toast.error(errorMessage(err) || 'La liste des serveurs est indisponible');
+      toast.error(errorMessage(err) || m.srv_list_unavailable());
       if (servers.length === 0) {
         servers = [];
       }
@@ -62,7 +63,7 @@
   function applyServers(result: Awaited<ReturnType<typeof fetchManageableServers>>) {
     if (result.oauthUnavailable) {
       if (servers.length > 0) {
-        toast.error('Impossible d’actualiser la liste des serveurs auprès de Discord.');
+        toast.error(m.srv_refresh_failed());
         return;
       }
       oauthUnavailable = true;
@@ -269,16 +270,16 @@
         onclick={() => authStore.logout()}
         class="text-body-sm font-medium text-on-surface-variant hover:text-on-surface transition-colors"
       >
-        Se déconnecter
+        {m.cp_logout()}
       </button>
     </div>
 
     <div class="flex flex-col gap-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
   <header class="flex flex-col md:flex-row md:items-end justify-between gap-x-6 gap-y-3">
     <div class="min-w-0">
-      <h1 class="text-2xl font-semibold tracking-tight text-on-surface font-headline leading-tight">Mes serveurs</h1>
+      <h1 class="text-2xl font-semibold tracking-tight text-on-surface font-headline leading-tight">{m.srv_title()}</h1>
       <p class="mt-1 max-w-prose text-sm text-on-surface-variant">
-        Les serveurs que tu administres, et ceux où Kotbo reste à inviter.
+        {m.srv_desc()}
       </p>
     </div>
 
@@ -291,7 +292,7 @@
           class="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg bg-primary text-on-primary text-sm font-medium hover:opacity-90 transition-opacity"
         >
           <Papicon icon="Plus" size={15} />
-          Ajouter à un serveur
+          {m.srv_add_to_server()}
         </a>
       {/if}
     </div>
@@ -307,8 +308,8 @@
     <div class="flex flex-col items-center gap-4 py-10">
       <KotboMark size={44} halo />
       <div class="text-center">
-        <p class="text-sm font-semibold text-on-surface">Nous demandons tes serveurs à Discord…</p>
-        <p class="mt-1 text-body-sm text-on-surface-variant">Quelques secondes, le temps de savoir où Kotbo est déjà là.</p>
+        <p class="text-sm font-semibold text-on-surface">{m.srv_loading()}</p>
+        <p class="mt-1 text-body-sm text-on-surface-variant">{m.srv_loading_desc()}</p>
       </div>
     </div>
 
@@ -326,8 +327,8 @@
   {:else if oauthUnavailable}
     <EmptyState
       icon="alert-triangle"
-      title="Discord n'a pas répondu"
-      description="La liste de tes serveurs vient de Discord, pas de Kotbo. Réessaie dans un instant."
+      title={m.srv_oauth_title()}
+      description={m.srv_oauth_desc()}
     >
       {#snippet action()}
         <button
@@ -337,7 +338,7 @@
           class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-on-primary text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
         >
           <Papicon icon="refresh-cw" size={14} class={loading ? 'animate-spin' : ''} />
-          Réessayer
+          {m.common_retry()}
         </button>
       {/snippet}
     </EmptyState>
@@ -349,7 +350,7 @@
           <input
             type="search"
             bind:value={query}
-            placeholder="Rechercher un serveur..."
+            placeholder={m.srv_search_ph()}
             class="w-full h-10 pl-9 pr-3 rounded-lg bg-surface-container-low/40 border border-outline-variant/30 text-sm text-on-surface placeholder-on-surface-variant/40 focus:outline-none focus:border-primary/50"
           />
         </div>
@@ -357,15 +358,15 @@
 
       <!-- ── Sans Kotbo : ce pour quoi on vient sur cette page ─────────────── -->
       <SectionCard
-        title="Prêts à recevoir Kotbo"
-        description="Tu y as les droits nécessaires, mais le bot n'y est pas encore."
+        title={m.srv_ready_title()}
+        description={m.srv_ready_desc()}
         icon="Plus"
       >
         {#if missing.length === 0}
           <p class="text-body-sm text-on-surface-variant">
             {servers.length === 0
-              ? "Aucun serveur où tu as la permission « Gérer le serveur »."
-              : 'Kotbo est déjà sur tous tes serveurs.'}
+              ? m.srv_ready_none()
+              : m.srv_ready_all()}
           </p>
         {:else}
           <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2.5">
@@ -383,7 +384,7 @@
                 <div class="min-w-0 flex-1">
                   <p class="text-body-sm font-medium text-on-surface truncate">{server.name}</p>
                   <p class="text-2xs text-on-surface-variant">
-                    {server.owner ? 'Propriétaire' : 'Administrateur'}
+                    {server.owner ? m.srv_owner() : m.srv_admin()}
                   </p>
                 </div>
 
@@ -395,7 +396,7 @@
                     class="shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-primary text-on-primary text-xs font-medium hover:opacity-90 transition-opacity"
                   >
                     <Papicon icon="Plus" size={13} />
-                    {pendingGuildId === server.id ? 'En attente…' : 'Ajouter'}
+                    {pendingGuildId === server.id ? m.srv_pending() : m.srv_add()}
                   </a>
                 {/if}
               </div>
@@ -406,13 +407,13 @@
 
       <!-- ── Deja equipes ─────────────────────────────────────────────────── -->
       <SectionCard
-        title="Serveurs équipés"
-        description="Kotbo y est déjà : ouvrez leur tableau de bord d'un clic."
+        title={m.srv_equipped_title()}
+        description={m.srv_equipped_desc()}
         icon="Grid"
       >
         {#if equipped.length === 0}
           <p class="text-body-sm text-on-surface-variant">
-            Kotbo n'est encore sur aucun de tes serveurs.
+            {m.srv_none()}
           </p>
         {:else}
           <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2.5">
@@ -437,11 +438,11 @@
                   <p class="text-body-sm font-medium text-on-surface truncate flex items-center gap-1.5">
                     {server.name}
                     {#if isCurrent}
-                      <span class="text-xs font-medium px-1 py-0.5 rounded bg-primary/10 text-primary">Actuel</span>
+                      <span class="text-xs font-medium px-1 py-0.5 rounded bg-primary/10 text-primary">{m.srv_current()}</span>
                     {/if}
                   </p>
                   <p class="text-2xs {server.activated ? 'text-on-surface-variant' : 'text-warning'}">
-                    {server.activated ? (server.owner ? 'Propriétaire' : 'Administrateur') : "En attente d'activation"}
+                    {server.activated ? (server.owner ? m.srv_owner() : m.srv_admin()) : m.srv_awaiting_activation()}
                   </p>
                 </div>
 

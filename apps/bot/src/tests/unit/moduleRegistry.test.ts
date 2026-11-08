@@ -17,6 +17,8 @@ import {
   getModuleForPath,
   getModuleRequirements,
   isCoreModule,
+  isModulePaused,
+  withoutPausedModulePermissions,
 } from '@kotbo/contracts';
 
 describe('registre des modules', () => {
@@ -90,6 +92,46 @@ describe('registre des modules', () => {
   });
 });
 
+describe('modules en pause', () => {
+  test('le daily algo et les partenariats sont en pause', () => {
+    expect(isModulePaused('daily_algo')).toBeTrue();
+    expect(isModulePaused('partnerships')).toBeTrue();
+  });
+
+  test('la pause se lit aussi par une cle historique', () => {
+    expect(isModulePaused('dailyalgo')).toBeTrue();
+  });
+
+  test('un module ordinaire ou inconnu n est pas en pause', () => {
+    expect(isModulePaused('tickets')).toBeFalse();
+    expect(isModulePaused('module-inexistant')).toBeFalse();
+    expect(isModulePaused(undefined)).toBeFalse();
+  });
+
+  test('un module du coeur ne peut pas etre mis en pause', () => {
+    for (const mod of MODULE_REGISTRY.filter((entry) => entry.core)) {
+      expect(isModulePaused(mod.key)).toBeFalse();
+    }
+  });
+
+  test('les permissions d un module en pause ne sont plus accordees', () => {
+    expect(
+      withoutPausedModulePermissions(['daily_algo:create_exercise', 'recruitment:forms', 'dailyalgo:read_exercise']),
+    ).toEqual(['recruitment:forms']);
+  });
+
+  test('une permission sans module connu est conservee', () => {
+    expect(withoutPausedModulePermissions(['custom', 'recruitment:manage'])).toEqual(['custom', 'recruitment:manage']);
+  });
+
+  test('un module en pause est eteint par defaut', () => {
+    const states = defaultModuleStates();
+    for (const mod of MODULE_REGISTRY.filter((entry) => entry.paused)) {
+      expect(states[mod.key]).toBeFalse();
+    }
+  });
+});
+
 describe('resolution du module proprietaire', () => {
   test('les alias historiques mènent a la cle canonique', () => {
     expect(canonicalModuleKey('dailyalgo')).toBe('daily_algo');
@@ -116,6 +158,21 @@ describe('resolution du module proprietaire', () => {
     expect(getModuleForCustomId('ticket:claim:abc')).toBe('tickets');
     expect(getModuleForCustomId('rpg_drop_claim:1')).toBe('economy');
     expect(getModuleForCustomId('inconnu:42')).toBeUndefined();
+  });
+
+  test('les boutons et modals du daily algo remontent a leur module', () => {
+    // Sans ces prefixes, les boutons des anciens defis restaient cliquables
+    // une fois le module eteint : la garde ne savait pas a qui ils etaient.
+    for (const customId of [
+      'daily-algo-submit:run1',
+      'daily-algo-why:run1',
+      'daily-algo-solution:run1',
+      'daily-algo-feedback:sub1',
+      'modal:daily-algo-feedback:sub1',
+      'modal:daily-algo-rate:sub1',
+    ]) {
+      expect(getModuleForCustomId(customId)).toBe('daily_algo');
+    }
   });
 
   test('une route du dashboard remonte a son module, sous-routes comprises', () => {

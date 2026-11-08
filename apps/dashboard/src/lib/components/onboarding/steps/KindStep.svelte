@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from '../../../i18n';
   /**
    * Serveur neuf a batir, ou serveur habite a reprendre.
    *
@@ -39,26 +40,26 @@
 </script>
 
 <WizardShell
-  title="D'où part ce serveur ?"
-  lead="La suite n'est pas la même selon la réponse. Nous avons regardé ton serveur et coché la plus probable."
+  title={m.obx_kd_title()}
+  lead={m.obx_kd_lead()}
 >
   <div class="space-y-3">
     <ChoiceCard
-      label="Un serveur tout neuf"
-      pitch="Peu de salons, peu de rôles, tout reste à poser."
-      detail="Kotbo pose la structure d'un coup : catégories, salons, rôles et permissions cohérents."
+      label={m.obx_kd_new()}
+      pitch={m.obx_kd_new_pitch()}
+      detail={m.obx_kd_new_detail()}
       icon="sparkles"
       selected={kind === 'new'}
-      badge={suggested === 'new' ? 'Recommandé' : undefined}
+      badge={suggested === 'new' ? m.obx_recommended() : undefined}
       onclick={() => choose('new')}
     />
     <ChoiceCard
-      label="Un serveur déjà en place"
-      pitch="Des salons, des rôles, et peut-être déjà d'autres bots."
-      detail="Kotbo regarde d'abord ce que tu as, reprend ce qu'il peut, et ne pose que ce qui manque."
+      label={m.obx_kd_existing()}
+      pitch={m.obx_kd_existing_pitch()}
+      detail={m.obx_kd_existing_detail()}
       icon="robot"
       selected={kind === 'existing'}
-      badge={suggested === 'existing' ? 'Recommandé' : undefined}
+      badge={suggested === 'existing' ? m.obx_recommended() : undefined}
       onclick={() => choose('existing')}
     />
   </div>
@@ -87,7 +88,7 @@
       }}
       class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-on-primary text-sm font-semibold hover:opacity-90 transition-opacity"
     >
-      Continuer
+      {m.obx_continue()}
       <Papicon icon="ChevronRight" size={15} />
     </button>
   {/snippet}

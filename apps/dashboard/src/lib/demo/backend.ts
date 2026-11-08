@@ -47,6 +47,9 @@ export function route(method: string, path: string, handler: DemoHandler): void 
       return '([^/]+)';
     });
   routes.push({ method: method.toUpperCase(), pattern: new RegExp(`^${source}/?$`), keys, handler });
+  // Les routes à segments fixes passent avant les routes à paramètre, quel que soit
+  // l'ordre de déclaration : `/tickets/macros` ne doit pas tomber sur `/tickets/:ticketId`.
+  routes.sort((a, b) => a.keys.length - b.keys.length);
 }
 
 function json(status: number, body: unknown): Response {
@@ -151,6 +154,7 @@ function isApiCall(input: RequestInfo | URL): boolean {
  */
 export function installDemoBackend(): void {
   const network = window.fetch.bind(window);
-  window.fetch = (input: RequestInfo | URL, init?: RequestInit) =>
-    isApiCall(input) ? handle(input, init) : network(input, init);
+  // Cast : sous bun-types (tests), `typeof fetch` réclame `preconnect`, propre à Bun.
+  window.fetch = ((input: RequestInfo | URL, init?: RequestInit) =>
+    isApiCall(input) ? handle(input, init) : network(input, init)) as typeof fetch;
 }

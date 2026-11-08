@@ -36,6 +36,8 @@ class AnalyticsFiltersStore {
   role = $state<string | null>(null);
   excludeStaff = $state(false);
   includeBots = $state(false);
+  /** Historique maximal en jours (offre gratuite), null sans limite. */
+  limitDays = $state<number | null>(null);
 
   constructor() {
     const stored = typeof window === 'undefined' ? {} : readStored();
@@ -59,6 +61,12 @@ class AnalyticsFiltersStore {
 
   get isCustom(): boolean {
     return this.period === 'custom' && Boolean(this.appliedStart && this.appliedEnd);
+  }
+
+  /** Pose la limite d'historique ; une période qui la dépasse retombe dessus, sans être retenue. */
+  setLimit(days: number | null) {
+    this.limitDays = days;
+    if (days && (this.period === 'custom' || Number(this.period) > days)) this.period = String(days) as PeriodPreset;
   }
 
   /** Nombre de jours couverts, pour les appels qui ne prennent qu'une durée. */

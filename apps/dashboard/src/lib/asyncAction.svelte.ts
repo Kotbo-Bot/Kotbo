@@ -1,3 +1,4 @@
+import { m } from './i18n';
 export function createAsyncActionState() {
   const state = $state({
     loading: false,
@@ -22,7 +23,7 @@ export function createAsyncActionState() {
 
   async function run(action, {
     successMessage = '',
-    failureMessage = "Une erreur est survenue pendant l'opération."
+    failureMessage = m.aax_failed()
   } = {}) {
     state.loading = true;
     clearFeedback();

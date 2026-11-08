@@ -248,6 +248,8 @@
         {m.tmac_intro()} <code class="px-1 rounded bg-surface-container">{'{user}'}</code>,
         <code class="px-1 rounded bg-surface-container">{'{staff}'}</code>,
         <code class="px-1 rounded bg-surface-container">{'{ticket_id}'}</code>,
+        <code class="px-1 rounded bg-surface-container">{'{ticket_channel}'}</code>,
+        <code class="px-1 rounded bg-surface-container">{'{ticket_link}'}</code>,
         <code class="px-1 rounded bg-surface-container">{'{ticket_type}'}</code>,
         <code class="px-1 rounded bg-surface-container">{'{server}'}</code>.
       </p>

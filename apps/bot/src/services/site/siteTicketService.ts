@@ -103,11 +103,11 @@ export interface SiteTicketSummary {
   threadId: string | null;
 }
 
-export async function listViewerTickets(guildId: string, userId: string): Promise<SiteTicketSummary[]> {
+export async function listViewerTickets(guildId: string, userId: string, limit = 10): Promise<SiteTicketSummary[]> {
   return prisma.ticket.findMany({
     where: { guildId, userId },
     orderBy: { createdAt: 'desc' },
-    take: 10,
+    take: limit,
     select: { id: true, reason: true, status: true, createdAt: true, channelId: true, threadId: true },
   });
 }
@@ -173,14 +173,19 @@ export async function readTicketThread(client: Client, guildId: string, ticket: 
     .filter((m): m is SiteTicketMessage => m !== null);
 }
 
-export async function postTicketMessageFromSite(
+/**
+ * Message du membre relayé dans un salon du serveur (ticket, salon de
+ * candidature) : embed signé du pied « Envoyé depuis le site », qui le fait
+ * reconnaître comme le sien à la relecture du fil.
+ */
+export async function relayMemberMessage(
   client: Client,
   guildId: string,
-  ticket: SiteTicketSummary & { userId: string },
+  target: Pick<SiteTicketSummary, 'channelId' | 'threadId'>,
   viewer: SiteViewer,
   content: string,
 ): Promise<boolean> {
-  const channel = await ticketChannel(client, ticket, guildId);
+  const channel = await ticketChannel(client, target, guildId);
   if (!channel || !('send' in channel)) return false;
   const embed = new EmbedBuilder()
     .setAuthor({ name: viewer.displayName, iconURL: viewer.avatarUrl ?? undefined })
@@ -189,7 +194,17 @@ export async function postTicketMessageFromSite(
     .setFooter({ text: SITE_RELAY_FOOTER })
     .setTimestamp();
   const sent = await channel.send({ content: `<@${viewer.userId}>`, embeds: [embed], allowedMentions: { parse: [] } }).catch(() => null);
-  if (!sent) return false;
+  return Boolean(sent);
+}
+
+export async function postTicketMessageFromSite(
+  client: Client,
+  guildId: string,
+  ticket: SiteTicketSummary & { userId: string },
+  viewer: SiteViewer,
+  content: string,
+): Promise<boolean> {
+  if (!(await relayMemberMessage(client, guildId, ticket, viewer, content))) return false;
   // Le relais est un message du bot : le tour de parole du membre est noté ici,
   // sans quoi les objectifs de délai du module compteraient la réponse au staff.
   await prisma.ticket.update({ where: { id: ticket.id }, data: { lastMemberMessageAt: new Date() } }).catch(() => null);

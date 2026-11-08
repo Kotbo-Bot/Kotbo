@@ -13,6 +13,7 @@
   import { getPageStatus } from '../config/pages';
   import { m } from '../i18n';
   import { getModuleDefinition, isCoreModule } from '@kotbo/contracts';
+  import { DEMO_MODE } from '../demo/mode';
 
   // `icon` reste accepte : les 59 pages qui le passent n'ont pas a changer,
   // mais l'en-tete ne l'affiche plus. Le menu montre deja l'icone de la page.
@@ -49,14 +50,24 @@
     PLUS: 'Plus',
     PRO: 'Pro',
     ULTIMATE: 'Ultimate',
-    CUSTOM: 'Sur mesure',
+    CUSTOM: m.mpx_plan_custom(),
   };
   const requiredPlanLabel = $derived(
-    module?.requiredPlan ? PLAN_LABELS[module.requiredPlan] ?? module.requiredPlan : 'payante',
+    module?.requiredPlan ? PLAN_LABELS[module.requiredPlan] ?? module.requiredPlan : m.mpx_plan_paid(),
   );
 
   /** Ce que le module apporte, pour vendre le resultat et non la fonction. */
   const moduleBenefit = $derived(featureKey ? getModuleDefinition(featureKey)?.description ?? '' : '');
+
+  /**
+   * Sous verrou, les routes du module sont fermees : la page reste vide. Pour
+   * le staff, la demo publique montre la meme page remplie.
+   */
+  const demoPreviewUrl = $derived(
+    !DEMO_MODE && lockedByPlan && getModuleDefinition(featureKey)?.category === 'staff'
+      ? `https://kotbo.fr/demo${$router.path}`
+      : null,
+  );
 
   const isBeta = $derived(getPageStatus($router.path, $router.url)?.beta ?? false);
 
@@ -135,7 +146,7 @@
       {/if}
 
       {#if module && !isFixed && lockedByPlan}
-        <Button href="/billing" variant="primary" icon="Lock">Offre {requiredPlanLabel}</Button>
+        <Button href="/billing" variant="primary" icon="Lock">{m.mpx_plan_button({ plan: requiredPlanLabel })}</Button>
       {/if}
 
       {#if pageMenu.length > 0}
@@ -154,10 +165,13 @@
     <div data-guide-blocker="plan" class={bare ? "m-3" : ""}>
       <!-- Une vitrine, pas un mur : on dit ce que le module apporte, et la page
            reste visible en dessous pour qu'on voie ce qu'on debloque. -->
-      <Callout variant="info" icon="Lock" title="« {title} » fait partie de l'offre {requiredPlanLabel}">
-        {#if moduleBenefit}{moduleBenefit} {/if}Parcours la page ci-dessous pour voir ce que tu débloques : elle s'active dès que l'offre du serveur la comprend.
+      <Callout variant="info" icon="Lock" title={m.mpx_locked_title({ module: title, plan: requiredPlanLabel })}>
+        {#if moduleBenefit}{moduleBenefit} {/if}{m.mpx_locked_desc()}
         {#snippet actions()}
-          <Button href="/billing" variant="primary" size="sm" iconRight="ArrowRight">Débloquer avec l'offre {requiredPlanLabel}</Button>
+          {#if demoPreviewUrl}
+            <Button href={demoPreviewUrl} target="_blank" variant="secondary" size="sm" icon="Eye">{m.mpx_demo()}</Button>
+          {/if}
+          <Button href="/billing" variant="primary" size="sm" iconRight="ArrowRight">{m.mpx_unlock({ plan: requiredPlanLabel })}</Button>
         {/snippet}
       </Callout>
     </div>

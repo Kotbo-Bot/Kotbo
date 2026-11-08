@@ -31,7 +31,7 @@ const macroFields = {
 };
 
 const CONTENT_HELP =
-  'Texte envoyé (2000 caractères max). Variables : {user}, {username}, {staff}, {ticket_id}, {ticket_type}, {ticket_reason}, {server}.';
+  'Texte envoyé (2000 caractères max). Variables : {user}, {username}, {staff}, {ticket_id}, {ticket_channel}, {ticket_link}, {ticket_type}, {ticket_reason}, {server}.';
 
 type MacroFieldArgs = {
   name?: string;

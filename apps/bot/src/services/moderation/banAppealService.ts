@@ -87,6 +87,7 @@ const SANCTION_TYPE_LABELS: Record<SanctionType, string> = {
   TEMP_BAN: 'Bannissement temporaire',
   BAN: 'Bannissement',
   SOFTBAN: 'Softban',
+  JAIL: 'Quarantaine (Jail)',
 };
 
 export function sanctionTypeLabel(type: SanctionType): string {

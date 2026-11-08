@@ -12,6 +12,7 @@
   import { dashboardFetch } from '../../api';
   import { errorMessage } from '@kotbo/shared';
   import Papicon from '../Papicon.svelte';
+  import MemberName from '../MemberName.svelte';
   import FormInput from '../FormInput.svelte';
 
   /** Incrémenté par la page (bouton Actualiser) pour relire la liste. */
@@ -169,7 +170,7 @@
               </div>
             {/if}
             <div class="min-w-0 flex-1">
-              <p class="text-sm font-semibold text-on-surface truncate">@{entry.username || entry.userId}</p>
+              <p class="text-sm font-semibold text-on-surface truncate"><MemberName userId={entry.userId} name={entry.username} prefix="@" /></p>
               <p class="text-2xs text-on-surface-variant truncate">
                 {entry.reason || m.e1_tickets_bl_no_reason()}
               </p>

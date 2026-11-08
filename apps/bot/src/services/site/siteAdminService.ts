@@ -19,6 +19,7 @@ import {
   normalizeSiteThemeSettings,
   sanitizeSiteCss,
   sanitizeSiteImageSrc,
+  sectionizeSiteDocument,
   SITE_ASSET_PATH_PREFIX,
   SITE_CSS_MAX_LENGTH,
   slugify,
@@ -212,6 +213,8 @@ function normalizeSiteSettings(current: unknown, patch: unknown): Record<string,
   if (typeof p.showMemberCount === 'boolean') base.showMemberCount = p.showMemberCount;
   if (typeof p.heroPulse === 'boolean') base.heroPulse = p.heroPulse;
   if (typeof p.legacyRedirect === 'boolean') base.legacyRedirect = p.legacyRedirect;
+  // Encart « essaie un modèle » fermé par le propriétaire.
+  if (typeof p.templatePromptDismissed === 'boolean') base.templatePromptDismissed = p.templatePromptDismissed;
   // Site automatique : relu en entier, fusionné sur ce qui est en place.
   if (p.auto !== undefined) base.auto = normalizeSiteAuto(mergeRecords(base.auto, p.auto));
   return base;
@@ -352,7 +355,7 @@ export async function getAdminPage(siteId: string, pageId: string) {
   });
 }
 
-async function uniquePageSlug(siteId: string, kind: SitePageKind, wanted: string, exceptId: string | null = null): Promise<string> {
+export async function uniquePageSlug(siteId: string, kind: SitePageKind, wanted: string, exceptId: string | null = null): Promise<string> {
   const base = slugify(wanted, 70) || 'page';
   const seed = validatePageSlug(base) === 'reserved' ? `${base}-page` : base;
   for (let i = 0; i < 200; i++) {
@@ -389,7 +392,7 @@ export async function createPage(
   const parentId = kind === 'WIKI' && typeof input.parentId === 'string' && CUID.test(input.parentId) ? input.parentId : null;
   await assertWikiParent(site.id, null, parentId);
   const slug = await uniquePageSlug(site.id, kind, typeof input.slug === 'string' && input.slug.trim() ? input.slug : title);
-  const content = normalizeSiteDocument(input.content ?? { type: 'doc', content: [] });
+  const content = sectionizeSiteDocument(normalizeSiteDocument(input.content ?? { type: 'doc', content: [] }));
   const settings = (site.settings ?? {}) as Record<string, unknown>;
   const last = await prisma.sitePage.findFirst({ where: { siteId: site.id, kind, parentId }, orderBy: { sortOrder: 'desc' }, select: { sortOrder: true } });
   return prisma.sitePage.create({
@@ -474,7 +477,7 @@ export async function updatePage(site: { id: string; guildId: string }, pageId: 
     structural = true;
   }
   if (patch.draftContent !== undefined) {
-    data.draftContent = normalizeSiteDocument(patch.draftContent) as unknown as Prisma.InputJsonValue;
+    data.draftContent = sectionizeSiteDocument(normalizeSiteDocument(patch.draftContent)) as unknown as Prisma.InputJsonValue;
     data.hasUnpublishedChanges = true;
     // Brouillon réécrit hors de la session à plusieurs : l'état Yjs enregistré
     // ne lui correspond plus, la prochaine session repartira du brouillon.

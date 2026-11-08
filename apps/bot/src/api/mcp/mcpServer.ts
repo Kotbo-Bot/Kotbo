@@ -9,6 +9,7 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import { JWT_SECRET, json } from '../shared.js';
 import { getActiveMcpKeyById, verifyMcpKey, verifyMcpKeyByClientCredentials } from './mcpKeyService.js';
 import { registerMcpTools } from './mcpTools.js';
+import { getGuildPlan } from '../../services/system/planService.js';
 import { logger } from '../../utils/logger.js';
 import { GENERIC_ERROR_MESSAGE, publicErrorMessage } from '../../utils/publicError.js';
 
@@ -757,6 +758,16 @@ export async function handleMCPRoutes(
     json(res, 400, {
       error: 'invalid_guild_id',
       error_description: 'Utilise l URL MCP complete depuis le dashboard Kotbo, avec l ID Discord du serveur.',
+    });
+    return true;
+  }
+
+  // Le serveur MCP fait partie de l'offre complète : refusé en clair sur
+  // `FREE`, plutôt qu'en « clé invalide » qui enverrait chercher ailleurs.
+  if ((await getGuildPlan(guildId)) === 'FREE') {
+    json(res, 402, {
+      error: 'plan_required',
+      error_description: "Le serveur MCP de Kotbo fait partie de l'offre complète. Abonne le serveur depuis la page Facturation du dashboard.",
     });
     return true;
   }

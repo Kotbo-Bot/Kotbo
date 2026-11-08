@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from '../../lib/i18n';
   /**
    * Securite > Configuration rapide : les niveaux de protection, seuls.
    *
@@ -14,7 +15,7 @@
 
 <ModulePage
   title="Configuration rapide"
-  description="Choisis un niveau de protection : il règle d'un coup les filtres et l'anti-raid."
+  description={m.qsx_desc()}
   icon="Sparkles"
   featureKey="automod"
 >

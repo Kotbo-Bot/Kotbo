@@ -200,6 +200,28 @@ export async function loadRegulationArticles(guildId: string): Promise<Regulatio
   });
 }
 
+/**
+ * Renumérote les articles de 0 à n-1. `requestedIds` place d'abord ces articles
+ * dans cet ordre (ids inconnus ou en double ignorés), le reste garde son ordre.
+ * Retourne l'ordre final.
+ */
+export async function renumberRegulationArticles(guildId: string, requestedIds: string[] = []): Promise<string[]> {
+  const existing = await prisma.guildRegulationArticle.findMany({
+    where: { guildId },
+    select: { id: true },
+    orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+  });
+  const known = new Set(existing.map((a) => a.id));
+  const ordered = [...new Set([...requestedIds.filter((id) => known.has(id)), ...existing.map((a) => a.id)])];
+
+  if (ordered.length > 0) {
+    await prisma.$transaction(
+      ordered.map((id, index) => prisma.guildRegulationArticle.update({ where: { id }, data: { sortOrder: index } })),
+    );
+  }
+  return ordered;
+}
+
 export async function publishOrUpdateRegulationMessage(client: Client, guildId: string) {
   const guild = await prisma.guild.findUnique({
     where: { id: guildId },

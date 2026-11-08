@@ -15,8 +15,8 @@
   }: {
     /** Incrémenté par la page (bouton Actualiser) pour relire les données. */
     refreshToken?: number;
-    /** Ouvre le dossier d'un membre, que la page affiche. */
-    onopenmember: (userId: string, name: string) => void;
+    /** Ouvre le dossier d'un membre, que la page affiche. Absent sans accès à « Membres » : les noms ne sont plus cliquables. */
+    onopenmember?: (userId: string, name: string) => void;
   } = $props();
 
   // Satisfaction State
@@ -52,7 +52,7 @@
   }
 
   function openSatisfactionMember(userId: string, person: SatisfactionPerson | null | undefined) {
-    onopenmember(userId, getSatisfactionPersonName(person, userId));
+    onopenmember?.(userId, getSatisfactionPersonName(person, userId));
   }
 
   function getRatingColor(rating: number): string {
@@ -177,7 +177,7 @@
             {@const previews = staff.recentComments ?? []}
             <div class="sat-staff-item">
               <div class="sat-staff-row">
-                <button type="button" class="sat-person-main sat-clickable-person" onclick={() => openSatisfactionMember(staff.staffId, staff.staff)}>
+                <button type="button" class="sat-person-main sat-clickable-person" disabled={!onopenmember} onclick={() => openSatisfactionMember(staff.staffId, staff.staff)}>
                   {#if staff.staff?.avatarUrl}
                     <img src={staff.staff.avatarUrl} alt="" class="sat-person-avatar" />
                   {:else}
@@ -220,7 +220,7 @@
                     <div class="sat-comment">
                       <div class="sat-comment-head">
                         <span class="sat-comment-emoji">{ratingEmojis[review.rating]}</span>
-                        <button type="button" class="sat-comment-author sat-clickable-person" onclick={() => openSatisfactionMember(review.userId, review.user)}>
+                        <button type="button" class="sat-comment-author sat-clickable-person" disabled={!onopenmember} onclick={() => openSatisfactionMember(review.userId, review.user)}>
                           {getSatisfactionPersonName(review.user, review.userId)}
                         </button>
                         <span class="sat-comment-date">{new Date(review.createdAt).toLocaleDateString(dateLocale())}</span>
@@ -252,7 +252,7 @@
             <div class="sat-review-item">
               <div class="sat-review-row">
                 <span class="sat-review-emoji">{ratingEmojis[review.rating]}</span>
-                <button type="button" class="sat-review-user sat-clickable-person" onclick={() => openSatisfactionMember(review.userId, review.user)}>
+                <button type="button" class="sat-review-user sat-clickable-person" disabled={!onopenmember} onclick={() => openSatisfactionMember(review.userId, review.user)}>
                   {#if review.user?.avatarUrl}
                     <img src={review.user.avatarUrl} alt="" class="sat-person-avatar" />
                   {:else}
@@ -321,7 +321,7 @@
             <div class="sat-comment">
               <div class="sat-comment-head">
                 <span class="sat-comment-emoji">{ratingEmojis[review.rating]}</span>
-                <button type="button" class="sat-comment-author sat-clickable-person" onclick={() => openSatisfactionMember(review.userId, review.user)}>
+                <button type="button" class="sat-comment-author sat-clickable-person" disabled={!onopenmember} onclick={() => openSatisfactionMember(review.userId, review.user)}>
                   {getSatisfactionPersonName(review.user, review.userId)}
                 </button>
                 <span class="sat-comment-rating" style="color: {getRatingColor(review.rating)}">{ratingLabels[review.rating]}</span>
@@ -426,7 +426,8 @@
   .sat-review-date { color: color-mix(in srgb, var(--color-on-surface-variant) 75%, transparent); font-size: 0.75rem; }
 
   .sat-clickable-person { border: 0; background: transparent; color: inherit; cursor: pointer; font: inherit; padding: 0; transition: background-color 160ms ease, color 160ms ease; }
-  .sat-clickable-person:hover { background: var(--color-surface-container-high, rgba(255,255,255,0.08)); }
+  .sat-clickable-person:disabled { cursor: default; }
+  .sat-clickable-person:hover:not(:disabled) { background: var(--color-surface-container-high, rgba(255,255,255,0.08)); }
   .sat-clickable-person:focus-visible { outline: 2px solid var(--color-primary, #5865F2); outline-offset: 2px; }
   .sat-person-main,
   .sat-review-user { display: flex; align-items: center; gap: 0.65rem; }

@@ -1,9 +1,19 @@
 <script lang="ts">
+  import { m } from '../../i18n';
   import Papicon from '../Papicon.svelte';
+  import DiscordPreview from '../onboarding/DiscordPreview.svelte';
+
+  /**
+   * Texte fixe d'un nœud, avec ce que Discord en affichera.
+   *
+   * Le texte part tel quel : le moteur ne remplace rien dans un champ fixe.
+   * Une valeur du contexte passe par un « Texte composé » relié au champ, ce
+   * que la modale rappelle plutôt que d'offrir des jetons qui partiraient bruts.
+   */
 
   const {
     open = false,
-    title = 'Éditer le message',
+    title = m.wfm_edit_message(),
     initialText = '',
     onSave,
     onClose,
@@ -24,28 +34,10 @@
     if (open) text = initialText;
   });
 
-  function insertVariable(variable: string) {
-    text = text ? `${text} ${variable}` : variable;
-  }
-
   function handleSave() {
     onSave?.(text);
     onClose?.();
   }
-
-  // Formatage simple pour l'aperçu Discord
-  const renderedDiscordText = $derived(() => {
-    if (!text.trim()) return 'Exemple de message...';
-    const output = text
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/\{membre\}/gi, '<span class="px-1.5 py-0.5 rounded bg-indigo-500/30 text-indigo-300 font-medium">@Membre</span>')
-      .replace(/\{author\}/gi, '<span class="px-1.5 py-0.5 rounded bg-indigo-500/30 text-indigo-300 font-medium">@Auteur</span>')
-      .replace(/\{channel\}/gi, '<span class="px-1.5 py-0.5 rounded bg-indigo-500/30 text-indigo-300 font-medium">#salon</span>')
-      .replace(/\{salon\}/gi, '<span class="px-1.5 py-0.5 rounded bg-indigo-500/30 text-indigo-300 font-medium">#salon</span>')
-      .replace(/\{serveur\}/gi, '<span class="font-semibold text-slate-200">Mon Serveur</span>');
-    return output;
-  });
 </script>
 
 {#if open}
@@ -59,12 +51,12 @@
           </div>
           <div>
             <h3 class="text-sm font-bold text-on-surface">{title}</h3>
-            <p class="text-2xs text-on-surface-variant">Éditeur avec aperçu Discord en temps réel</p>
+            <p class="text-2xs text-on-surface-variant">{m.wfm_desc()}</p>
           </div>
         </div>
         <button
           onclick={onClose}
-          aria-label="Fermer"
+          aria-label={m.common_close()}
           class="p-1.5 rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-container-highest transition-colors"
         >
           <Papicon icon="Cross" size={16} />
@@ -73,77 +65,31 @@
 
       <!-- Body -->
       <div class="p-5 space-y-4 overflow-y-auto">
-        <!-- Boutons d'insertion rapide de variables -->
-        <div class="space-y-1.5">
-          <p id="msg-modal-variables" class="text-xs font-semibold text-on-surface-variant">
-            Insérer une variable dynamique
-          </p>
-          <div class="flex flex-wrap gap-2" role="group" aria-labelledby="msg-modal-variables">
-            <button
-              type="button"
-              onclick={() => insertVariable('{membre}')}
-              class="px-2.5 py-1 rounded-lg text-xs font-medium bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border border-indigo-500/30 hover:bg-indigo-500/25 transition-all flex items-center gap-1"
-            >
-              <span>@Membre</span>
-              <span class="text-2xs opacity-60">{"{membre}"}</span>
-            </button>
-            <button
-              type="button"
-              onclick={() => insertVariable('{salon}')}
-              class="px-2.5 py-1 rounded-lg text-xs font-medium bg-sky-500/15 text-sky-700 dark:text-sky-300 border border-sky-500/30 hover:bg-sky-500/25 transition-all flex items-center gap-1"
-            >
-              <span>#Salon</span>
-              <span class="text-2xs opacity-60">{"{salon}"}</span>
-            </button>
-            <button
-              type="button"
-              onclick={() => insertVariable('{serveur}')}
-              class="px-2.5 py-1 rounded-lg text-xs font-medium bg-success/15 text-success border border-success/30 hover:bg-success/25 transition-all flex items-center gap-1"
-            >
-              <span>Nom du serveur</span>
-              <span class="text-2xs opacity-60">{"{serveur}"}</span>
-            </button>
-          </div>
-        </div>
+        <p class="flex items-start gap-2 px-3 py-2 rounded-xl bg-primary/10 border border-primary/20 text-xs text-on-surface">
+          <Papicon icon="Info" size={13} class="text-primary shrink-0 mt-0.5" />
+          <span>{m.wfm_hint()}</span>
+        </p>
 
         <!-- Zone de texte -->
         <div class="space-y-1.5">
           <label for="msg-modal-input" class="text-xs font-semibold text-on-surface-variant">
-            Contenu du message
+            {m.wfm_content()}
           </label>
           <textarea
             id="msg-modal-input"
             bind:value={text}
             rows="5"
-            placeholder="Saisis le texte de ton message ici..."
+            placeholder={m.wfm_content_ph()}
             class="w-full px-3.5 py-2.5 rounded-xl bg-surface-container-highest border border-outline-variant/30 text-sm text-on-surface focus:border-primary/50 focus:outline-none transition-all resize-y"
           ></textarea>
         </div>
 
-        <!-- Aperçu Discord WYSIWYG -->
         <div class="space-y-1.5">
           <p class="text-xs font-semibold text-on-surface-variant flex items-center gap-1.5">
             <Papicon icon="Camera" size={12} />
-            <span>Aperçu Discord (WYSIWYG)</span>
+            <span>{m.wfm_preview()}</span>
           </p>
-          <div class="p-4 rounded-xl bg-[#313338] border border-[#2b2d31] text-[#dbdee1] font-sans shadow-inner">
-            <div class="flex items-start gap-3">
-              <!-- Avatar Bot -->
-              <div class="w-10 h-10 rounded-full bg-[#5865f2] flex items-center justify-center text-white font-bold text-sm shrink-0 shadow">
-                K
-              </div>
-              <div class="space-y-1 min-w-0 flex-1">
-                <div class="flex items-center gap-2">
-                  <span class="font-semibold text-white text-sm">Kotbo</span>
-                  <span class="px-1 py-0.2 rounded bg-[#5865f2] text-xs font-semibold text-white">BOT</span>
-                  <span class="text-2xs text-[#949ba4]">Aujourd'hui à 12:00</span>
-                </div>
-                <div class="text-sm leading-relaxed whitespace-pre-wrap break-words">
-                  {@html renderedDiscordText()}
-                </div>
-              </div>
-            </div>
-          </div>
+          <DiscordPreview channel={m.wfm_preview_channel()} content={text.trim() ? text : m.wfm_preview_example()} />
         </div>
       </div>
 
@@ -154,7 +100,7 @@
           onclick={onClose}
           class="px-4 py-2 rounded-xl text-xs font-semibold bg-surface-container-highest text-on-surface-variant hover:text-on-surface transition-all"
         >
-          Annuler
+          {m.common_cancel()}
         </button>
         <button
           type="button"
@@ -162,7 +108,7 @@
           class="px-5 py-2 rounded-xl text-xs font-semibold bg-primary text-on-primary hover:opacity-90 transition-all flex items-center gap-1.5"
         >
           <Papicon icon="Check" size={14} />
-          <span>Valider et appliquer</span>
+          <span>{m.wfm_apply()}</span>
         </button>
       </div>
     </div>

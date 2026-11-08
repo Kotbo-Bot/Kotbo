@@ -1,4 +1,5 @@
 import prisma from '../../utils/db.js';
+import { withoutPausedModulePermissions } from '@kotbo/contracts';
 import { upsertHierarchyGradeRow, upsertStaffMemberRow } from './staffRowUpsert.js';
 import { resolveMemberAvatarUrl } from '../moderation/memberIdentityService.js';
 import { cache } from '../../utils/cache.js';
@@ -382,6 +383,9 @@ export const syncStaffDiscordRoles = async (
       rolesToRemove.push(guildConfig.testStaffRoleId);
     }
 
+    // De retour dans le staff : il n'est plus « ancien staff »
+    if (guildConfig.formerStaffRoleId) rolesToRemove.push(guildConfig.formerStaffRoleId);
+
     // Filter out roles that member already has / doesn't have to avoid unnecessary Discord API calls
     const currentRoleIds = discordMember.roles.cache.map(r => r.id);
     const finalRolesToRemove = rolesToRemove.filter(id => currentRoleIds.includes(id));
@@ -537,7 +541,12 @@ export const toggleTutorStatus = async (
  * rôles de grade). Utilisé aussi bien par le renvoi que par la suspension : la
  * différence entre les deux est la ligne en base, pas les rôles Discord.
  */
-const stripStaffDiscordRoles = async (guildId: string, userId: string, context: string) => {
+const stripStaffDiscordRoles = async (
+  guildId: string,
+  userId: string,
+  context: string,
+  options?: { markFormer?: boolean }
+) => {
   try {
     const client = getClient();
     const [guildConfig, staffRoles] = await Promise.all([
@@ -566,6 +575,13 @@ const stripStaffDiscordRoles = async (guildId: string, userId: string, context: 
     if (finalRolesToRemove.length > 0) {
       await discordMember.roles.remove(finalRolesToRemove).catch(err => {
         logger.error('StaffManagement', `Erreur retrait rôles lors ${context} de ${userId}: ${err.message}`);
+      });
+    }
+
+    const formerRoleId = guildConfig.formerStaffRoleId;
+    if (options?.markFormer && formerRoleId && !currentRoleIds.includes(formerRoleId)) {
+      await discordMember.roles.add(formerRoleId).catch(err => {
+        logger.error('StaffManagement', `Erreur ajout rôle ancien staff lors ${context} de ${userId}: ${err.message}`);
       });
     }
   } catch (err) {
@@ -636,7 +652,7 @@ export const setStaffSuspension = async (
 };
 
 export const removeStaffMember = async (guildId: string, userId: string) => {
-  await stripStaffDiscordRoles(guildId, userId, 'du renvoi');
+  await stripStaffDiscordRoles(guildId, userId, 'du renvoi', { markFormer: true });
 
   await cache.invalidateGuild(guildId);
 
@@ -1193,7 +1209,7 @@ export const createAPIKey = async (
         keyHash,
         displayKey,
         name,
-        permissions,
+        permissions: withoutPausedModulePermissions(permissions),
       },
     }),
   ]);
@@ -1391,6 +1407,21 @@ export const updateStaffHierarchy = async (
 
     if (!parentHierarchy) {
       throw new Error('Hiérarchie parente introuvable');
+    }
+
+    // Une boucle A -> B -> A ferait disparaître les deux pôles de l'organigramme.
+    const visited = new Set<string>();
+    let ancestorId: string | null = data.parentHierarchyId;
+    while (ancestorId && !visited.has(ancestorId)) {
+      if (ancestorId === hierarchyId) {
+        throw new Error("Une hiérarchie ne peut pas être rattachée à l'une de ses sous-hiérarchies");
+      }
+      visited.add(ancestorId);
+      const ancestor: { parentHierarchyId: string | null } | null = await prisma.staffHierarchy.findFirst({
+        where: { id: ancestorId, guildId },
+        select: { parentHierarchyId: true },
+      });
+      ancestorId = ancestor?.parentHierarchyId ?? null;
     }
   }
 
@@ -1686,9 +1717,31 @@ export const updateStaffRole = async (
   });
   if (!role) return null;
 
-  return prisma.staffRole.update({
+  const updated = await prisma.staffRole.update({
     where: { id: roleId },
     data,
   });
+
+  // Le grade change de pôle : ses membres le suivent. Un membre déjà présent
+  // dans le pôle visé y garde son grade (doublon ignoré).
+  if (data.hierarchyId && role.hierarchyId && data.hierarchyId !== role.hierarchyId) {
+    const gradeMatch = {
+      hierarchyId: role.hierarchyId,
+      grade: { equals: role.name, mode: 'insensitive' as const },
+    };
+    const members = await prisma.staffMemberHierarchyGrade.findMany({
+      where: gradeMatch,
+      select: { staffMemberId: true, grade: true },
+    });
+    await prisma.$transaction([
+      prisma.staffMemberHierarchyGrade.createMany({
+        data: members.map((member) => ({ ...member, hierarchyId: data.hierarchyId as string })),
+        skipDuplicates: true,
+      }),
+      prisma.staffMemberHierarchyGrade.deleteMany({ where: gradeMatch }),
+    ]);
+  }
+
+  return updated;
 };
 

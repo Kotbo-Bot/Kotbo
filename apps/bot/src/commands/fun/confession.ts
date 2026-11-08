@@ -12,10 +12,12 @@ import { errorEmbed, successEmbed } from '../../utils/embeds.js';
 import { getEffectiveLocale } from '../../utils/i18n.js';
 import {
   CONFESSION_MAX_LENGTH,
+  deleteConfession,
   revealConfession,
-  setConfessionChannels,
+  setConfessionSettings,
   submitConfession,
 } from '../../services/features/confessionService.js';
+import { CONFESSION_DEFAULT_COOLDOWN_SECONDS } from '../../services/features/confessionPolicy.js';
 
 const data = new SlashCommandBuilder()
   .setName('confession')
@@ -60,6 +62,16 @@ const data = new SlashCommandBuilder()
           .setDescriptionLocalizations({ fr: 'Salon privé du staff pour le journal' })
           .addChannelTypes(ChannelType.GuildText)
           .setRequired(false),
+      )
+      .addIntegerOption((o) =>
+        o
+          .setName('cooldown')
+          .setNameLocalizations({ fr: 'delai' })
+          .setDescription('Seconds between two confessions from the same member (0 = none)')
+          .setDescriptionLocalizations({ fr: "Secondes entre deux confessions d'un même membre (0 = aucun)" })
+          .setMinValue(0)
+          .setMaxValue(86_400)
+          .setRequired(false),
       ),
   )
   .addSubcommand((sub) =>
@@ -68,6 +80,22 @@ const data = new SlashCommandBuilder()
       .setNameLocalizations({ fr: 'reveler' })
       .setDescription('Reveal the author of a confession (admin)')
       .setDescriptionLocalizations({ fr: "Révéler l'auteur d'une confession (admin)" })
+      .addIntegerOption((o) =>
+        o
+          .setName('number')
+          .setNameLocalizations({ fr: 'numero' })
+          .setDescription('Confession number')
+          .setDescriptionLocalizations({ fr: 'Numéro de la confession' })
+          .setMinValue(1)
+          .setRequired(true),
+      ),
+  )
+  .addSubcommand((sub) =>
+    sub
+      .setName('delete')
+      .setNameLocalizations({ fr: 'supprimer' })
+      .setDescription('Remove a published confession (admin)')
+      .setDescriptionLocalizations({ fr: 'Retirer une confession publiée (admin)' })
       .addIntegerOption((o) =>
         o
           .setName('number')
@@ -90,23 +118,57 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
   const sub = interaction.options.getSubcommand();
   const isAdmin = interaction.memberPermissions.has(PermissionFlagsBits.Administrator);
 
+  if (sub !== 'send' && !isAdmin) {
+    await reply(errorEmbed(t('Accès refusé', 'Access denied'), t('Réservé aux administrateurs.', 'Administrators only.')));
+    return;
+  }
+
   if (sub === 'setup') {
-    if (!isAdmin) {
-      await reply(errorEmbed(t('Accès refusé', 'Access denied'), t('Réservé aux administrateurs.', 'Administrators only.')));
-      return;
-    }
     const channel = interaction.options.getChannel('channel', true);
     const log = interaction.options.getChannel('log');
-    await setConfessionChannels(interaction.guildId, channel.id, log?.id ?? null);
-    await reply(successEmbed(t('Confessions configurées', 'Confessions configured'), `<#${channel.id}>${log ? ` · journal <#${log.id}>` : ''}`));
+    const cooldown = interaction.options.getInteger('cooldown');
+    await setConfessionSettings(interaction.guildId, {
+      channelId: channel.id,
+      logChannelId: log?.id ?? null,
+      cooldownSeconds: cooldown ?? undefined,
+    });
+    const details = [
+      `<#${channel.id}>`,
+      log ? `${t('journal', 'log')} <#${log.id}>` : null,
+      cooldown !== null ? `${t('délai', 'cooldown')} ${cooldown} s` : null,
+    ].filter(Boolean).join(' · ');
+    await reply(successEmbed(t('Confessions configurées', 'Confessions configured'), details));
+    return;
+  }
+
+  if (sub === 'delete') {
+    const number = interaction.options.getInteger('number', true);
+    const outcome = await deleteConfession(
+      interaction.guild,
+      {
+        channelId: guildConfig?.funConfessionChannelId ?? null,
+        logChannelId: guildConfig?.funConfessionLogChannelId ?? null,
+      },
+      number,
+      interaction.user.id,
+    );
+    const messages = {
+      deleted: successEmbed(t('Confession supprimée', 'Confession removed'), t(`La confession #${number} a été retirée.`, `Confession #${number} was removed.`)),
+      message_kept: errorEmbed(
+        t('Message à retirer à la main', 'Remove the message manually'),
+        t(
+          `La confession #${number} est marquée supprimée, mais le bot n'a pas pu effacer son message : vérifie ses permissions dans le salon.`,
+          `Confession #${number} is marked as removed, but the bot could not delete its message: check its permissions in the channel.`,
+        ),
+      ),
+      not_found: errorEmbed(t('Introuvable', 'Not found'), t('Aucune confession avec ce numéro.', 'No confession with that number.')),
+      already_deleted: errorEmbed(t('Déjà supprimée', 'Already removed'), t('Cette confession est déjà supprimée.', 'This confession is already removed.')),
+    } as const;
+    await reply(messages[outcome]);
     return;
   }
 
   if (sub === 'reveal') {
-    if (!isAdmin) {
-      await reply(errorEmbed(t('Accès refusé', 'Access denied'), t('Réservé aux administrateurs.', 'Administrators only.')));
-      return;
-    }
     const found = await revealConfession(
       interaction.guild,
       guildConfig?.funConfessionLogChannelId ?? null,
@@ -129,8 +191,11 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
 
   const result = await submitConfession(
     interaction.guild,
-    guildConfig.funConfessionChannelId,
-    guildConfig.funConfessionLogChannelId,
+    {
+      channelId: guildConfig.funConfessionChannelId,
+      logChannelId: guildConfig.funConfessionLogChannelId,
+      cooldownSeconds: guildConfig.funConfessionCooldownSeconds ?? CONFESSION_DEFAULT_COOLDOWN_SECONDS,
+    },
     interaction.user.id,
     interaction.options.getString('message', true),
   );
@@ -141,9 +206,10 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
   }
 
   const reasons = {
-    cooldown: t(`Attends ${result.retryInSeconds ?? 60} s avant d'en envoyer une autre.`, `Wait ${result.retryInSeconds ?? 60}s before sending another.`),
+    cooldown: t(`Attends ${result.retryInSeconds ?? 0} s avant d'en envoyer une autre.`, `Wait ${result.retryInSeconds ?? 0}s before sending another.`),
     empty: t('Le message est vide.', 'The message is empty.'),
     too_long: t(`Maximum ${CONFESSION_MAX_LENGTH} caractères.`, `Maximum ${CONFESSION_MAX_LENGTH} characters.`),
+    blocked: t('Ton message contient un mot interdit sur ce serveur.', 'Your message contains a word banned on this server.'),
     not_configured: t('Le salon des confessions est introuvable.', 'The confession channel could not be found.'),
     send_failed: t("Impossible de publier : vérifie les permissions du bot dans le salon.", 'Could not post: check the bot permissions in the channel.'),
   } as const;

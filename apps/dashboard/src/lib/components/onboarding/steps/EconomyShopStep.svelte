@@ -12,7 +12,7 @@
    * ce n'est pas d'avoir coche trois cases qui fait qu'on considere la boutique
    * comme sienne, c'est d'avoir change un prix.
    */
-  import { m } from '../../../i18n';
+  import { m, dateLocale } from '../../../i18n';
   import { toast } from '../../../stores/toast.svelte';
   import { wizard } from '../../../stores/onboardingWizard.svelte';
   import { onboardingData } from '../../../stores/onboardingData.svelte';
@@ -87,7 +87,7 @@
     } catch (err) {
       // Un objet deja present - parcours rejoue, catalogue importe - fait
       // echouer sa seule creation. On le dit sans defaire ce qui est passe.
-      toast.info(errorMessage(err) || "Certains objets existaient déjà : ils n'ont pas été remplacés.");
+      toast.info(errorMessage(err) || m.onb_shop_items_kept());
       wizard.complete('economy-shop');
     } finally {
       onboardingData.busy = false;
@@ -163,7 +163,7 @@
               <p class="text-2xs text-[#949ba4] truncate">{effectOf(item)}</p>
             </div>
             <span class="shrink-0 text-xs font-semibold tabular-nums text-[#f0b232]">
-              <EmojiText value={emoji} /> {priceOf(item).toLocaleString('fr-FR')}
+              <EmojiText value={emoji} /> {priceOf(item).toLocaleString(dateLocale())}
             </span>
           </div>
         {:else}
@@ -188,7 +188,7 @@
       class="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-on-primary
              hover:brightness-110 transition disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
     >
-      {onboardingData.busy ? 'Création…' : 'Continuer'}
+      {onboardingData.busy ? m.obx_creating() : m.obx_continue()}
       <Papicon icon="ChevronRight" size={15} />
     </button>
   {/snippet}

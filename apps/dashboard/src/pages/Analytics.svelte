@@ -11,17 +11,17 @@
    * reçoivent d'ici, chargée seulement quand un sous-onglet en a besoin.
    */
   import { untrack } from 'svelte';
+  import { isModulePaused } from '@kotbo/contracts';
   import { router } from 'tinro';
-  import { canViewFeature } from '../lib/permissions.svelte';
   import { authStore } from '../lib/stores/auth.svelte';
   import { toast } from '../lib/stores/toast.svelte';
   import { downloadXlsx } from '../lib/xlsxExport';
   import { gotoTab, resolveTabFromUrl } from '../lib/tabRouting';
   import { m, dateLocale } from '../lib/i18n';
   import { errorMessage } from '@kotbo/shared';
-  import { fetchAnalytics, fetchGlobalInteractions, fetchMemberCase } from '../lib/api';
+  import { fetchAnalytics, fetchGlobalInteractions } from '../lib/api';
   import Papicon from '../lib/components/Papicon.svelte';
-  import MemberCaseModal from '../lib/components/MemberCaseModal.svelte';
+  import { memberCaseModal } from '../lib/stores/memberCaseModal.svelte';
   import { Button, Callout, SectionCard, Tabs } from '../lib/components/ui';
   import ExportDropdown from '../lib/components/analytics/ExportDropdown.svelte';
   import AnalyticsFilterBar from '../lib/components/analytics/AnalyticsFilterBar.svelte';
@@ -41,6 +41,7 @@
   import CohortTriangle from '../lib/components/analytics/CohortTriangle.svelte';
   import ResponseTimesView from '../lib/components/analytics/ResponseTimesView.svelte';
   import ConcentrationView from '../lib/components/analytics/ConcentrationView.svelte';
+  import ReactionRolesView from '../lib/components/analytics/ReactionRolesView.svelte';
   import ClimateView from '../lib/components/analytics/ClimateView.svelte';
   import ChannelHealthView from '../lib/components/analytics/ChannelHealthView.svelte';
   import NetworkInsightsView from '../lib/components/analytics/NetworkInsightsView.svelte';
@@ -60,6 +61,8 @@
   import GlobalInteractionGraph from '../lib/components/charts/GlobalInteractionGraph.svelte';
   import { analyticsExport, analyticsFilters as filters } from '../lib/components/analytics/analyticsFilters.svelte';
   import { fmtNumber } from '../lib/components/analytics/analyticsFormat';
+  import { dashboardStore } from '../lib/stores/dashboard.svelte';
+  import { FREE_ANALYTICS_DAYS } from '@kotbo/contracts';
 
   /** Ce que suit un sous-onglet : tous les filtres, la période, ou sa propre fenêtre. */
   type Scope = 'full' | 'period' | 'own';
@@ -98,7 +101,8 @@
         { id: 'pulse', label: m.an_tab_pulse(), icon: 'Activity', scope: 'own' },
         { id: 'weekly', label: m.an_tab_weekly(), icon: 'Calendar', scope: 'own' },
         { id: 'commands', label: m.an_tab_commands(), icon: 'Code', scope: 'period' },
-        { id: 'algo', label: m.an_tab_algo(), icon: 'Code', scope: 'period' },
+        // Daily Algo en pause : son onglet sort de la page avec lui.
+        ...(isModulePaused('daily_algo') ? [] : [{ id: 'algo', label: m.an_tab_algo(), icon: 'Code', scope: 'period' as const }]),
       ],
     },
     {
@@ -128,6 +132,7 @@
         { id: 'engagement', label: m.anx_tab_engagement(), icon: 'Activity', scope: 'full' },
         { id: 'lifecycle', label: m.anx_tab_lifecycle(), icon: 'Users', scope: 'full' },
         { id: 'concentration', label: m.anx_tab_concentration(), icon: 'PieChart', scope: 'full' },
+        { id: 'reaction-roles', label: m.anx_tab_reaction_roles(), icon: 'MousePointer', scope: 'period' },
         { id: 'interactions', label: m.an_tab_network(), icon: 'Compass', scope: 'period' },
         { id: 'social', label: m.an_tab_social(), icon: 'Users', scope: 'own' },
         { id: 'ghosts', label: m.ghost_tab(), icon: 'Ghost', scope: 'own' },
@@ -175,6 +180,17 @@
   ]);
 
   const allTabIds = $derived(sections.flatMap((s) => s.tabs.map((t) => t.id)));
+
+  // ── Offre gratuite ─────────────────────────────────────────────────────────
+  // Les stats de base sur 7 jours ; le reste se montre verrouillé, avec la
+  // démo pour voir ce qu'il donne. Le bot applique les mêmes limites.
+  const FREE_TABS = new Set(['overview', 'messages', 'voice', 'heatmap', 'members', 'growth', 'moderation']);
+  const onFreePlan = $derived(dashboardStore.state.plan === 'FREE');
+  const isLocked = (id: string) => onFreePlan && !FREE_TABS.has(id);
+
+  $effect(() => {
+    filters.setLimit(onFreePlan ? FREE_ANALYTICS_DAYS : null);
+  });
 
   /** Anciens onglets partis sur leur propre page. */
   const MOVED_TO_PAGE: Record<string, string> = { invitations: '/invitations' };
@@ -249,7 +265,7 @@
   let legacyError = $state('');
 
   $effect(() => {
-    if (!tab.legacy) return;
+    if (!tab.legacy || isLocked(tab.id)) return;
     const period = filters.periodQuery;
     untrack(() => loadLegacy(period));
   });
@@ -299,7 +315,7 @@
   let interactionsError = $state('');
 
   $effect(() => {
-    if (activeTab !== 'interactions') return;
+    if (activeTab !== 'interactions' || isLocked(activeTab)) return;
     const period = filters.periodQuery;
     untrack(() => loadInteractions(period));
   });
@@ -321,32 +337,12 @@
   }
 
   // ── Fiche membre ───────────────────────────────────────────────────────────
-  let modalOpen = $state(false);
-  let selectedUserId = $state<string | null>(null);
-  let selectedUserName = $state('');
-  let caseData = $state<any>(null);
-  let loadingCase = $state(false);
-  let caseError = $state('');
-
-  /** La fiche membre appartient à la section Membres du centre de gestion. */
-  const canOpenMemberCase = $derived(canViewFeature('members'));
-
-  async function openMemberDetails(memberId: string, memberName: string) {
-    if (!canOpenMemberCase) return;
-    selectedUserId = memberId;
-    selectedUserName = memberName || m.an_member_fallback();
-    modalOpen = true;
-    loadingCase = true;
-    caseError = '';
-    caseData = null;
-    try {
-      caseData = await fetchMemberCase(memberId, authStore.selectedGuildId);
-    } catch (e) {
-      caseError = errorMessage(e) || m.an_case_load_error();
-    } finally {
-      loadingCase = false;
-    }
+  function openMemberDetails(memberId: string, memberName: string) {
+    if (memberCaseModal.canOpen) void memberCaseModal.show(memberId, memberName || m.an_member_fallback());
   }
+
+  // Sans accès à « Membres », les vues ne reçoivent pas de gestionnaire : un pseudo y reste inerte.
+  const openMember = $derived(memberCaseModal.canOpen ? openMemberDetails : undefined);
 
   // ── Export ─────────────────────────────────────────────────────────────────
   type ExportRow = Record<string, string | number | boolean | null>;
@@ -447,10 +443,12 @@
       <h1 class="text-2xl font-semibold tracking-tight text-on-surface font-headline leading-tight">{m.anx_page_title()}</h1>
       <p class="mt-1 max-w-prose text-sm text-on-surface-variant">{section.description}</p>
     </div>
-    <div class="flex items-center flex-wrap md:justify-end gap-2 shrink-0">
-      <SavedViewsMenu {activeTab} onApply={goTab} />
-      <ExportDropdown onExportCSV={exportCSV} onExportXLSX={exportXLSX} onExportImage={exportImages} />
-    </div>
+    {#if !onFreePlan}
+      <div class="flex items-center flex-wrap md:justify-end gap-2 shrink-0">
+        <SavedViewsMenu {activeTab} onApply={goTab} />
+        <ExportDropdown onExportCSV={exportCSV} onExportXLSX={exportXLSX} onExportImage={exportImages} />
+      </div>
+    {/if}
   </header>
 
   <div class="analytics-v2__layout" class:analytics-v2__layout--collapsed={sidebarCollapsed}>
@@ -482,7 +480,9 @@
             {:else}
               <span class="truncate">{s.label}</span>
               {#if s.isNew}<span class="side-link__badge">{m.anx_badge_new()}</span>{/if}
-              {#if s.tabs.length > 1}<span class="side-link__count">{s.tabs.length}</span>{/if}
+              {#if s.tabs.every((t) => isLocked(t.id))}
+                <span class="side-link__count" title={m.anx_plus_plan()}><Papicon icon="Lock" size={14} /></span>
+              {:else if s.tabs.length > 1}<span class="side-link__count">{s.tabs.length}</span>{/if}
             {/if}
           </button>
         {/each}
@@ -511,43 +511,56 @@
       {#if section.tabs.length > 1}
         <Tabs
           label={m.anx_subtabs_label({ section: section.label })}
-          tabs={section.tabs.map((t) => ({ id: t.id, label: t.label, icon: t.icon }))}
+          tabs={section.tabs.map((t) => ({ id: t.id, label: t.label, icon: isLocked(t.id) ? 'Lock' : t.icon }))}
           active={tab.id}
           onchange={goTab}
         />
       {/if}
 
-      {#if tab.scope === 'own'}
+      {#if isLocked(activeTab)}
+        <!-- Rien n'est chargé : le bot refuserait. On dit ce que l'onglet apporte et on montre la démo. -->
+        <Callout variant="info" icon="Lock" title={m.anx_tab_locked({ tab: tab.label })}>
+          {section.description} {m.anx_free_limit({ days: FREE_ANALYTICS_DAYS })}
+          {#snippet actions()}
+            <Button href="https://kotbo.fr/demo/analytics/{tab.id}" target="_blank" variant="secondary" size="sm" icon="Eye">Voir un exemple rempli</Button>
+            <Button href="/billing" variant="primary" size="sm" iconRight="ArrowRight">{m.anx_unlock_plus()}</Button>
+          {/snippet}
+        </Callout>
+      {:else if tab.scope === 'own'}
         <Callout variant="info">{m.anx_filter_own_window()}</Callout>
       {:else}
         <AnalyticsFilterBar scopeSupport={tab.scope === 'full' ? 'full' : 'period'} />
       {/if}
 
       {#key activeTab}
-        {#if activeTab === 'overview'}
+        {#if isLocked(activeTab)}
+          <!-- Encadré ci-dessus. -->
+        {:else if activeTab === 'overview'}
           <OverviewSection onNavigate={goTab} {legacy} />
         {:else if ['messages', 'voice', 'heatmap', 'pulse', 'weekly', 'commands', 'algo'].includes(activeTab)}
-          <ActivitySection view={activeTab as ActivityView} {legacy} {legacyLoading} onOpenMember={openMemberDetails} />
+          <ActivitySection view={activeTab as ActivityView} {legacy} {legacyLoading} onOpenMember={openMember} />
         {:else if ['content', 'emojis', 'stickers', 'gifs', 'sites', 'formatting'].includes(activeTab)}
           <ContentSection view={activeTab as ContentView} />
         {:else if activeTab === 'words'}
           <div class="flex flex-col gap-4">
             <RisingWordsView />
-            <AdvancedAnalyticsPanel section="words" onOpenMember={openMemberDetails} />
+            <AdvancedAnalyticsPanel section="words" onOpenMember={openMember} />
           </div>
         {:else if activeTab === 'channels'}
-          <ChannelsSection onOpenMember={openMemberDetails} />
+          <ChannelsSection onOpenMember={openMember} />
         {:else if activeTab === 'responses'}
           <ResponseTimesView />
         {:else if activeTab === 'channel-health'}
           <div class="flex flex-col gap-4">
             <ChannelHealthView />
-            <AdvancedAnalyticsPanel section="channels" onOpenMember={openMemberDetails} />
+            <AdvancedAnalyticsPanel section="channels" onOpenMember={openMember} />
           </div>
         {:else if activeTab === 'concentration'}
           <ConcentrationView />
+        {:else if activeTab === 'reaction-roles'}
+          <ReactionRolesView />
         {:else if activeTab === 'climate'}
-          <ClimateView onOpenMember={openMemberDetails} />
+          <ClimateView onOpenMember={openMember} />
         {:else if activeTab === 'interactions'}
           {#if interactions}
             <div class="flex flex-col gap-4">
@@ -555,9 +568,9 @@
                 nodes={interactions.nodes || []}
                 edges={interactions.edges || []}
                 hiddenMembersCount={interactions.hiddenMembersCount || 0}
-                onSelectNode={(userId) => openMemberDetails(userId, m.an_loading_short())}
+                onSelectNode={openMember}
               />
-              <NetworkInsightsView onOpenMember={openMemberDetails} />
+              <NetworkInsightsView onOpenMember={openMember} />
             </div>
           {:else if interactionsError}
             <Callout variant="danger" title={m.an_network_error()}>
@@ -568,18 +581,18 @@
             <AnalyticsSkeleton />
           {/if}
         {:else if activeTab === 'social'}
-          <AdvancedAnalyticsPanel section="social" onOpenMember={openMemberDetails} />
+          <AdvancedAnalyticsPanel section="social" onOpenMember={openMember} />
         {:else if activeTab === 'ghosts'}
-          <GhostMembersPanel onOpenMember={openMemberDetails} />
+          <GhostMembersPanel onOpenMember={openMember} />
         {:else if activeTab === 'growth'}
           <div class="flex flex-col gap-4">
-            <GrowthSection {legacy} {legacyLoading} onOpenMember={openMemberDetails} />
-            <GrowthInsightsView />
+            <GrowthSection {legacy} {legacyLoading} onOpenMember={openMember} />
+            {#if !onFreePlan}<GrowthInsightsView />{/if}
           </div>
         {:else if activeTab === 'website'}
           <SiteAnalyticsPanel guildId={authStore.selectedGuildId ?? ''} />
         {:else if activeTab === 'tickets'}
-          <StaffInsightsView onOpenMember={openMemberDetails} />
+          <StaffInsightsView onOpenMember={openMember} />
         {:else if activeTab === 'compare'}
           <CompareView />
         {:else if activeTab === 'alerts'}
@@ -591,24 +604,24 @@
         {:else if activeTab === 'engagement'}
           <EngagementView />
         {:else if activeTab === 'lifecycle'}
-          <LifecycleView onOpenMember={openMemberDetails} />
+          <LifecycleView onOpenMember={openMember} />
         {:else if activeTab === 'funnel'}
           <FunnelView />
         {:else if activeTab === 'cohorts'}
           <div class="flex flex-col gap-4">
             <CohortTriangle />
-            <AdvancedAnalyticsPanel section="retention" onOpenMember={openMemberDetails} />
+            <AdvancedAnalyticsPanel section="retention" onOpenMember={openMember} />
           </div>
         {:else if activeTab === 'churn'}
-          <AdvancedAnalyticsPanel section="churn" onOpenMember={openMemberDetails} />
+          <AdvancedAnalyticsPanel section="churn" onOpenMember={openMember} />
         {:else if activeTab === 'mod-advanced'}
-          <AdvancedAnalyticsPanel section="moderation" onOpenMember={openMemberDetails} />
+          <AdvancedAnalyticsPanel section="moderation" onOpenMember={openMember} />
         {:else if legacyError}
           <Callout variant="danger" title={m.an_error_generic()}>{legacyError}</Callout>
         {:else if !legacy}
           <AnalyticsSkeleton />
         {:else if activeTab === 'members'}
-          <MembersView {legacy} onOpenMember={openMemberDetails} />
+          <MembersView {legacy} onOpenMember={openMember} />
         {:else if activeTab === 'moderation'}
           <div class="flex flex-col gap-4">
             <div class="kpi-grid kpi-grid--4">
@@ -617,30 +630,20 @@
               <KpiTile label={m.anx_mod_per_day()} value={fmtNumber(Math.round(((legacy.totals?.sanctions ?? 0) / Math.max(1, filters.days)) * 10) / 10)} />
               <KpiTile label={m.anx_mod_moderators()} value={fmtNumber(legacy.topModerators?.length ?? 0)} hint={m.anx_mod_moderators_hint()} />
             </div>
-            <ModerationTrendsView onOpenMember={openMemberDetails} />
-            <ModerationAudit data={legacy} {chartLabels} onOpenMember={openMemberDetails} />
+            {#if !onFreePlan}<ModerationTrendsView onOpenMember={openMember} />{/if}
+            <ModerationAudit data={legacy} {chartLabels} onOpenMember={openMember} />
           </div>
         {:else if activeTab === 'staff'}
-          <StaffAudit data={legacy} onOpenMember={openMemberDetails} {fmt} {fmtH} />
+          <StaffAudit data={legacy} onOpenMember={openMember} {fmt} {fmtH} />
         {:else if activeTab === 'performance'}
           {#if legacy.staffPerformance}
-            <StaffPerformance data={legacy.staffPerformance} onOpenMember={openMemberDetails} />
+            <StaffPerformance data={legacy.staffPerformance} onOpenMember={openMember} />
           {/if}
         {/if}
       {/key}
     </div>
   </div>
 
-  <MemberCaseModal
-    bind:open={modalOpen}
-    userId={selectedUserId}
-    userName={selectedUserName}
-    {caseData}
-    loading={loadingCase}
-    error={caseError}
-    onClose={() => (modalOpen = false)}
-    onSelectUser={(userId) => openMemberDetails(userId, m.an_loading_short())}
-  />
 </div>
 
 <style>

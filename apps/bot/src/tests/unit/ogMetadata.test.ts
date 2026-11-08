@@ -17,11 +17,67 @@ mock.module(cacheJsPath, () => cacheStub);
 // testes ne touche pas a la base : seul ce modele est fourni.
 const dbPath = path.resolve(import.meta.dir, '../../utils/db.ts');
 const dbJsPath = path.resolve(import.meta.dir, '../../utils/db.js');
-const dbStub = {
-  default: {
+const sampleLevels = [
+  { userId: '111111111111111111', xp: 15000, level: 24 },
+  { userId: '222222222222222222', xp: 11200, level: 20 },
+  { userId: '333333333333333333', xp: 9400, level: 18 },
+  { userId: '444444444444444444', xp: 6800, level: 15 },
+  { userId: '555555555555555555', xp: 5200, level: 13 },
+  { userId: '666666666666666666', xp: 4100, level: 11 },
+];
+
+const sampleProfiles = [
+  { userId: '111111111111111111', username: 'alice', displayName: 'Alice', globalName: 'Alice', avatarUrl: null },
+  { userId: '222222222222222222', username: 'bob', displayName: 'Bob', globalName: 'Bob', avatarUrl: null },
+  { userId: '333333333333333333', username: 'charlie', displayName: 'Charlie', globalName: 'Charlie', avatarUrl: null },
+  { userId: '444444444444444444', username: 'diana', displayName: 'Diana', globalName: 'Diana', avatarUrl: null },
+  { userId: '555555555555555555', username: 'elouan', displayName: 'Elouan', globalName: 'Elouan', avatarUrl: null },
+  { userId: '666666666666666666', username: 'farah', displayName: 'Farah', globalName: 'Farah', avatarUrl: null },
+];
+
+const dbModels = {
     botInstanceStats: { aggregate: async () => ({ _sum: { guildCount: 63, userCount: 20969 } }) },
-  },
-};
+    clan: {
+      count: async () => 2,
+      findMany: async () => [
+        { id: 'clan-1', name: 'Aegis' },
+        { id: 'clan-2', name: 'Nova' },
+      ],
+    },
+    clanMemberContribution: {
+      groupBy: async () => [
+        { clanId: 'clan-1', _sum: { xp: 4200 } },
+        { clanId: 'clan-2', _sum: { xp: 3100 } },
+      ],
+    },
+    memberProfile: {
+      findMany: async ({ where }: { where?: { userId?: { in?: string[] } } }) => {
+        const ids = where?.userId?.in;
+        return ids ? sampleProfiles.filter((p) => ids.includes(p.userId)) : sampleProfiles;
+      },
+    },
+    memberLevel: {
+      count: async ({ where }: { where?: { xp?: { gt?: number } } }) => {
+        const gt = where?.xp?.gt;
+        return typeof gt === 'number' ? sampleLevels.filter((l) => l.xp > gt).length : sampleLevels.length;
+      },
+      findUnique: async ({ where }: { where: { guildId_userId: { userId: string } } }) =>
+        sampleLevels.find((l) => l.userId === where.guildId_userId.userId) ?? null,
+      findMany: async ({ take }: { take?: number }) => sampleLevels.slice(0, take ?? sampleLevels.length),
+      findFirst: async ({ where, orderBy }: { where?: { xp?: { gt?: number; lt?: number } }; orderBy?: { xp: 'asc' | 'desc' } }) => {
+        let rows = [...sampleLevels];
+        if (typeof where?.xp?.gt === 'number') rows = rows.filter((l) => l.xp > where.xp!.gt!);
+        if (typeof where?.xp?.lt === 'number') rows = rows.filter((l) => l.xp < where.xp!.lt!);
+        rows.sort((a, b) => (orderBy?.xp === 'asc' ? a.xp - b.xp : b.xp - a.xp));
+        return rows[0] ?? null;
+      },
+      aggregate: async () => ({
+        _sum: { xp: sampleLevels.reduce((s, r) => s + r.xp, 0) },
+        _max: { level: sampleLevels[0].level },
+      }),
+    },
+  };
+const dbStub = { default: dbModels, prismaRead: dbModels };
 mock.module(dbPath, () => dbStub);
 mock.module(dbJsPath, () => dbStub);
 
@@ -134,6 +190,46 @@ describe('resolveOgMetadata - ressources protégées', () => {
     expect(a.imagePath).toBe(b.imagePath!);
     expect(a.imagePath).not.toContain('jeton');
     expect(a.robots).toBe('noindex, nofollow');
+  });
+});
+
+describe("resolveOgMetadata - classements et position d'un membre", () => {
+  test("la page clan-rpg présente le classement des clans et non l'espace développeurs", async () => {
+    const meta = await resolveOgMetadata(emptyClient, '/123456789012345678/clan-rpg');
+    expect(meta.title.toLowerCase()).toContain('clan');
+    expect(meta.title).not.toContain('développeurs');
+    expect(meta.card?.art?.type).toBe('podium');
+  });
+
+  test('le classement des niveaux expose le podium et les totaux du serveur', async () => {
+    const meta = await resolveOgMetadata(emptyClient, '/123456789012345678/leveling/classement');
+    expect(meta.title.toLowerCase()).toContain('level');
+    expect(meta.card?.art?.type).toBe('podium');
+    if (meta.card?.art?.type === 'podium') {
+      expect(meta.card.art.entries.map((e) => e.name)).toEqual(['Alice', 'Bob', 'Charlie']);
+    }
+    expect(meta.card?.stats?.length).toBe(3);
+  });
+
+  test("le lien ciblé d'un membre le situe par rapport au classement du serveur", async () => {
+    const meta = await resolveOgMetadata(
+      emptyClient,
+      '/123456789012345678/leveling/classement/555555555555555555',
+    );
+    expect(meta.title).toContain('Elouan');
+    expect(meta.title).toContain('#5');
+    expect(meta.description).toMatch(/1[,\s\u202f]600 XP/);
+    expect(meta.card?.stats?.[0]?.value).toBe('#5 / 6');
+    expect(meta.card?.art?.type).toBe('podium');
+    if (meta.card?.art?.type === 'podium') {
+      // #1 du serveur + voisin devant (#4) + membre surligné (#5) + voisin derrière (#6).
+      expect(meta.card.art.entries.map((e) => ({ rank: e.rank, name: e.name, highlight: Boolean(e.highlight) }))).toEqual([
+        { rank: 1, name: 'Alice', highlight: false },
+        { rank: 4, name: 'Diana', highlight: false },
+        { rank: 5, name: 'Elouan', highlight: true },
+        { rank: 6, name: 'Farah', highlight: false },
+      ]);
+    }
   });
 });
 

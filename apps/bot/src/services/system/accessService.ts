@@ -541,25 +541,26 @@ export async function announceTrialStart(
 // ─────────────────────────────────────────────────────────────
 
 /**
- * Termine l'accès d'un serveur : désactivation complète (comme un serveur
- * jamais activé) puis message de fin en salon **et** en MP au propriétaire.
+ * Termine l'accès d'un serveur : retour sur l'offre gratuite, puis message de
+ * fin en salon **et** en MP au propriétaire.
  *
- * Contrairement à une désactivation manuelle, le code consommé n'est pas
- * recyclé : un essai arrivé à terme ne doit jamais pouvoir être rejoué.
+ * Le serveur reste activé : depuis le freemium, la fin d'un essai ou d'un
+ * cadeau ferme les modules payants, pas la modération ni l'accueil. Le code
+ * consommé n'est pas recyclé : un essai arrivé à terme ne se rejoue pas.
  */
 export async function expireAccess(client: Client, guildId: string): Promise<void> {
   const status = await getAccessStatus(guildId);
   if (!status || status.accessExpiredAt) return;
 
-  const { deactivateGuild } = await import('../../utils/activation.js');
-  await deactivateGuild(guildId, { recycleCode: false });
+  const { setGuildPlan } = await import('./planService.js');
+  await setGuildPlan(guildId, 'FREE', `accès ${status.accessType} expiré`);
 
   await prisma.guild.update({
     where: { id: guildId },
     data: { accessExpiredAt: new Date() },
   });
 
-  logger.info('Access', `Accès ${status.accessType} expiré pour ${guildId} : serveur désactivé.`);
+  logger.info('Access', `Accès ${status.accessType} expiré pour ${guildId} : retour sur l'offre gratuite.`);
 
   // Fin d'un acces a duree limitee : essai non converti, cadeau arrive a son
   // terme, code epuise. Distinct d'une resiliation, qui passe par Stripe.

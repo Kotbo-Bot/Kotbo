@@ -27,6 +27,15 @@ import {
   removeEventRegistration,
 } from '../../../services/features/customFormService.js';
 import { getMemberIdentities } from '../../../services/moderation/memberIdentityService.js';
+import {
+  generateTournament,
+  getTournament,
+  reportTournamentMatch,
+  resetTournament,
+  resetTournamentMatch,
+  swapTournamentSeeds,
+} from '../../../services/features/tournament/tournamentService.js';
+import { UserFacingError } from '../../../utils/userFacingError.js';
 
 import { jsonFailure } from '../../shared/failure.js';
 export async function handleEventsRoutes(
@@ -67,11 +76,11 @@ export async function handleEventsRoutes(
       }
 
       let event;
-      if (body.type === 'CUSTOM') {
+      if (body.type === 'CUSTOM' || body.type === 'TOURNAMENT') {
         event = await createCustomEvent(client, guildId, body as Parameters<typeof createCustomEvent>[2]);
       } else {
         if (body.type !== 'QUIZ' && body.type !== 'CTF') {
-          json(res, 400, { error: "Type d'événement invalide : attendu CUSTOM, QUIZ ou CTF." });
+          json(res, 400, { error: "Type d'événement invalide : attendu CUSTOM, TOURNAMENT, QUIZ ou CTF." });
           return true;
         }
         event = await createEvent(guildId, body as Parameters<typeof createEvent>[1]);
@@ -284,6 +293,38 @@ export async function handleEventsRoutes(
       return true;
     }
 
+    // /api/dashboard/guilds/:guildId/events/:eventId/tournament[/generate|/reset|/swap|/matches/:stage/:round/:position]
+    if (parts[6] === 'tournament') {
+      try {
+        const action = parts[7];
+        if (method === 'GET' && !action) {
+          json(res, 200, { tournament: await getTournament(eventId, client) });
+          return true;
+        }
+        const body = method === 'DELETE' ? null : await readJsonBody<Record<string, unknown>>(req);
+        if (method === 'POST' && action === 'generate') {
+          await generateTournament(eventId, body?.shuffle === true);
+        } else if (method === 'POST' && action === 'reset') {
+          await resetTournament(eventId);
+        } else if (method === 'POST' && action === 'swap') {
+          await swapTournamentSeeds(eventId, Number(body?.seedA), Number(body?.seedB));
+        } else if (action === 'matches' && (method === 'PUT' || method === 'DELETE')) {
+          const [stage, round, position] = [parts[8] ?? '', Number(parts[9]), Number(parts[10])];
+          if (method === 'PUT') await reportTournamentMatch(eventId, stage, round, position, body ?? {});
+          else await resetTournamentMatch(eventId, stage, round, position);
+        } else {
+          return false;
+        }
+        broadcastDashboardStateChange(guildId, 'events_updated');
+        json(res, 200, { tournament: await getTournament(eventId, client) });
+      } catch (err) {
+        // Score refusé, arbre impossible à générer… : un refus normal, pas une panne.
+        if (err instanceof UserFacingError) json(res, 400, { error: err.message });
+        else jsonFailure(res, err, 'Impossible de mettre à jour le tournoi.', 'EventsAPI');
+      }
+      return true;
+    }
+
     // GET /api/dashboard/guilds/:guildId/events/:eventId/stats
     if (method === 'GET' && parts[6] === 'stats') {
       try {
@@ -305,7 +346,7 @@ export async function handleEventsRoutes(
         const identities = await getMemberIdentities(
           client,
           guildId,
-          registrations.map((registration) => registration.userId),
+          registrations.flatMap((registration) => [registration.userId, ...registration.teamMemberIds]),
         );
         json(res, 200, {
           registrations: registrations.map((registration) => {
@@ -314,6 +355,7 @@ export async function handleEventsRoutes(
               ...registration,
               username: identity?.displayName || registration.username,
               avatarUrl: identity?.avatarUrl || null,
+              teamMembers: registration.teamMemberIds.map((id) => ({ id, name: identities.get(id)?.displayName || id })),
             };
           }),
         });

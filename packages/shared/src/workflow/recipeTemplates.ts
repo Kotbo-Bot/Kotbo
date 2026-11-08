@@ -124,6 +124,44 @@ export const RECIPE_TEMPLATES: RecipeTemplate[] = [
       ],
     }),
   },
+  // Rôles par réaction emoji : deux workflows, l'un donne le rôle, l'autre le
+  // retire quand la réaction part. Le message visé se règle sur le déclencheur.
+  {
+    id: 'reaction-role',
+    icon: 'Smile',
+    build: (): Recipe => ({
+      trigger: { type: 'OnReactionAdd' },
+      steps: [
+        {
+          id: 'reaction-role-add',
+          kind: 'action',
+          action: 'AddRole',
+          values: {
+            role: { from: 'role', roleId: '' },
+            member: { from: 'context', path: 'member' },
+          },
+        },
+      ],
+    }),
+  },
+  {
+    id: 'reaction-role-remove',
+    icon: 'Smile',
+    build: (): Recipe => ({
+      trigger: { type: 'OnReactionRemove' },
+      steps: [
+        {
+          id: 'reaction-role-drop',
+          kind: 'action',
+          action: 'RemoveRole',
+          values: {
+            role: { from: 'role', roleId: '' },
+            member: { from: 'context', path: 'member' },
+          },
+        },
+      ],
+    }),
+  },
   {
     id: 'ticket-welcome',
     icon: 'TextBubble',

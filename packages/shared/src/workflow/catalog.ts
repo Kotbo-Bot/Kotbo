@@ -29,7 +29,9 @@ export const SANCTION_TYPE_LABELS: Record<string, string> = {
   TEMP_BAN: 'Bannissement temporaire',
   BAN: 'Bannissement',
   SOFTBAN: 'Softban',
+  JAIL: 'Quarantaine (Jail)',
   UNBAN: 'Débannissement',
+  UNJAIL: 'Levée de quarantaine',
   UNTIMEOUT: "Retrait d'exclusion temporaire",
 };
 
@@ -86,6 +88,53 @@ const ROLE_FILTER_FIELD: ConfigFieldDef = {
 /** Réglages des déclencheurs de réaction qui restreignent les messages et émojis écoutés. */
 export const TRIGGER_MESSAGE_FILTER_KEY = 'messages';
 export const TRIGGER_EMOJI_FILTER_KEY = 'emojis';
+
+/**
+ * Portée d'un délai de récupération : le membre, le salon ou le serveur du
+ * déclencheur. Lue sur ses sorties, la portée ne demande aucun fil.
+ */
+export const COOLDOWN_SCOPES = ['member', 'channel', 'guild'] as const;
+export type CooldownScope = (typeof COOLDOWN_SCOPES)[number];
+
+export const COOLDOWN_SCOPE_LABELS: Record<CooldownScope, string> = {
+  member: 'chaque membre',
+  channel: 'chaque salon',
+  guild: 'tout le serveur',
+};
+
+/** Un an : au-delà, un délai de récupération n'en est plus un. */
+export const MAX_COOLDOWN_SECONDS = 31_536_000;
+
+/** Dix ans : au-delà, aucun membre n'atteindra le seuil. */
+export const MAX_MEMBER_DAYS = 3650;
+
+/**
+ * Déclencheurs qui ne viennent pas d'un événement : un balayage périodique
+ * cherche les membres dont le seuil est tombé (cf. `memberDays.ts` du bot).
+ * La valeur nomme la date de référence comptée.
+ */
+export const MEMBER_DAYS_TRIGGERS = {
+  OnMemberTenure: 'joined',
+  OnMemberInactive: 'lastMessage',
+} as const satisfies Record<string, 'joined' | 'lastMessage'>;
+
+export type MemberDaysTrigger = keyof typeof MEMBER_DAYS_TRIGGERS;
+
+export function isMemberDaysTrigger(type: string): type is MemberDaysTrigger {
+  return Object.hasOwn(MEMBER_DAYS_TRIGGERS, type);
+}
+
+export function isCooldownScope(value: unknown): value is CooldownScope {
+  return typeof value === 'string' && (COOLDOWN_SCOPES as readonly string[]).includes(value);
+}
+
+/** Nombre maximal de caractères d'un nom de variable. */
+export const MAX_VARIABLE_NAME_LENGTH = 50;
+
+/** Nom de variable tel qu'il est rangé : sans espaces autour, en minuscules. */
+export function normalizeVariableName(raw: unknown): string {
+  return typeof raw === 'string' ? raw.trim().toLowerCase().slice(0, MAX_VARIABLE_NAME_LENGTH) : '';
+}
 
 /**
  * Filtres des déclencheurs de réaction, appliqués par le bot avant de lancer
@@ -402,6 +451,7 @@ const TRIGGERS: NodeDef[] = [
     description:
       "Se déclenche quand un dossier de partenariat change d'étape. L'événement part après l'application des avantages : le rôle partenaire est déjà posé.",
     event: 'partnership:stage',
+    module: 'partnerships',
     inputs: [],
     outputs: [
       EXEC_OUT,
@@ -419,6 +469,7 @@ const TRIGGERS: NodeDef[] = [
     description:
       "Se déclenche au constat d'un manquement. « Périodes manquées » permet de ne réagir qu'à partir de la deuxième ou de la troisième fois.",
     event: 'partnership:commitment-failed',
+    module: 'partnerships',
     inputs: [],
     outputs: [
       EXEC_OUT,
@@ -434,6 +485,7 @@ const TRIGGERS: NodeDef[] = [
     description:
       "Se déclenche quand un membre arrive par l'invitation d'un partenariat. Ne part que pour les arrivées réellement attribuées, pas pour toutes les arrivées.",
     event: 'partnership:referral',
+    module: 'partnerships',
     inputs: [],
     outputs: [
       EXEC_OUT,
@@ -762,6 +814,44 @@ const TRIGGERS: NodeDef[] = [
       { id: 'boostCount', label: 'Boosts du serveur', type: 'Number' },
     ],
   },
+  {
+    /**
+     * Comme la planification, ni l'un ni l'autre ne vient du bus : un balayage
+     * les lance, et le nom d'événement ne sert qu'à indexer la table.
+     */
+    type: 'OnMemberTenure',
+    label: 'Ancienneté atteinte',
+    category: 'trigger',
+    description:
+      "Se déclenche quand un membre atteint un nombre de jours sur le serveur, une seule fois par membre. Seuls les seuils atteints après l'activation comptent : les anciens membres ne partent pas tous d'un coup.",
+    event: 'member:tenure',
+    inputs: [],
+    outputs: [
+      EXEC_OUT,
+      { id: 'member', label: 'Membre', type: 'Member' },
+      { id: 'days', label: 'Jours sur le serveur', type: 'Number' },
+    ],
+    config: [
+      { key: 'days', label: 'Jours', type: 'number', defaultValue: 30, min: 1, max: MAX_MEMBER_DAYS },
+    ],
+  },
+  {
+    type: 'OnMemberInactive',
+    label: 'Membre inactif',
+    category: 'trigger',
+    description:
+      "Se déclenche quand un membre n'a rien écrit depuis un nombre de jours. Il repart s'il redevient actif puis se tait de nouveau. Un membre qui n'a jamais écrit compte depuis son arrivée.",
+    event: 'member:inactive',
+    inputs: [],
+    outputs: [
+      EXEC_OUT,
+      { id: 'member', label: 'Membre', type: 'Member' },
+      { id: 'days', label: 'Jours sans message', type: 'Number' },
+    ],
+    config: [
+      { key: 'days', label: 'Jours', type: 'number', defaultValue: 30, min: 1, max: MAX_MEMBER_DAYS },
+    ],
+  },
 ];
 
 // ============================================================================
@@ -815,6 +905,28 @@ const FLOW: NodeDef[] = [
     outputs: [EXEC_OUT],
     config: [
       { key: 'seconds', label: 'Secondes', type: 'number', defaultValue: 60, min: 1, max: 2_592_000 },
+    ],
+  },
+  {
+    type: 'Cooldown',
+    label: 'Délai de récupération',
+    category: 'flow',
+    description:
+      "Ne laisse passer qu'une fois par période, pour le membre, le salon ou tout le serveur. Les passages suivants sortent par « En attente » jusqu'à la fin du délai.",
+    inputs: [EXEC_IN],
+    outputs: [
+      { id: 'next', label: 'Disponible', type: 'Exec' },
+      { id: 'blocked', label: 'En attente', type: 'Exec' },
+    ],
+    config: [
+      { key: 'seconds', label: 'Durée (secondes)', type: 'number', defaultValue: 3600, min: 1, max: MAX_COOLDOWN_SECONDS },
+      {
+        key: 'scope',
+        label: 'Pour',
+        type: 'select',
+        defaultValue: 'member',
+        options: COOLDOWN_SCOPES.map((scope) => ({ value: scope, label: COOLDOWN_SCOPE_LABELS[scope] })),
+      },
     ],
   },
 ];
@@ -1070,6 +1182,19 @@ const ACTIONS: NodeDef[] = [
     outputs: [EXEC_OUT],
   },
   {
+    type: 'KeepMessage',
+    label: 'Tenir un message à jour',
+    category: 'action',
+    description:
+      "Publie un message au premier passage, puis le modifie à chaque passage suivant au lieu d'en envoyer un nouveau. Idéal pour un compteur ou un classement. S'il est supprimé ou si le salon change, un nouveau message est publié.",
+    inputs: [
+      EXEC_IN,
+      { id: 'channel', label: 'Salon', type: 'Channel' },
+      { id: 'text', label: 'Texte', type: 'String' },
+    ],
+    outputs: [EXEC_OUT, { id: 'message', label: 'Message', type: 'Message' }],
+  },
+  {
     type: 'SendLogMessage',
     label: 'Écrire dans les logs',
     category: 'action',
@@ -1079,6 +1204,34 @@ const ACTIONS: NodeDef[] = [
       { id: 'text', label: 'Texte', type: 'String' },
     ],
     outputs: [EXEC_OUT],
+  },
+  {
+    type: 'AddToVariable',
+    label: 'Ajouter à une variable',
+    category: 'action',
+    description:
+      "Ajoute un nombre (négatif pour retirer) à une variable du serveur, partagée par toutes ses automatisations. Avec un membre, la variable lui est propre ; sans, elle vaut pour tout le serveur.",
+    inputs: [
+      EXEC_IN,
+      { id: 'member', label: 'Membre', type: 'Member', optional: true },
+      { id: 'amount', label: 'Nombre', type: 'Number' },
+    ],
+    outputs: [EXEC_OUT, { id: 'value', label: 'Nouvelle valeur', type: 'Number' }],
+    config: [{ key: 'name', label: 'Nom de la variable', type: 'text', defaultValue: '', placeholder: 'points' }],
+  },
+  {
+    type: 'SetVariable',
+    label: 'Définir une variable',
+    category: 'action',
+    description:
+      "Remplace la valeur d'une variable du serveur. Avec un membre, la variable lui est propre ; sans, elle vaut pour tout le serveur.",
+    inputs: [
+      EXEC_IN,
+      { id: 'member', label: 'Membre', type: 'Member', optional: true },
+      { id: 'amount', label: 'Valeur', type: 'Number' },
+    ],
+    outputs: [EXEC_OUT, { id: 'value', label: 'Nouvelle valeur', type: 'Number' }],
+    config: [{ key: 'name', label: 'Nom de la variable', type: 'text', defaultValue: '', placeholder: 'points' }],
   },
 ];
 
@@ -1202,6 +1355,16 @@ const DATA: NodeDef[] = [
       { id: 'memberToday', label: 'Déclenchements aujourd\'hui', type: 'Number' },
       { id: 'memberThisHour', label: 'Déclenchements cette heure-ci', type: 'Number' },
     ],
+  },
+  {
+    type: 'GetVariable',
+    label: "Valeur d'une variable",
+    category: 'data',
+    description:
+      "Lit une variable du serveur. Avec un membre branché, sa variable à lui ; sans, celle de tout le serveur. Vaut 0 tant qu'elle n'a jamais été écrite.",
+    inputs: [{ id: 'member', label: 'Membre', type: 'Member', optional: true }],
+    outputs: [{ id: 'value', label: 'Valeur', type: 'Number' }],
+    config: [{ key: 'name', label: 'Nom de la variable', type: 'text', defaultValue: '', placeholder: 'points' }],
   },
   {
     type: 'GuildInfo',
@@ -1376,6 +1539,17 @@ const LOGIC: NodeDef[] = [
 // ============================================================================
 
 /**
+ * Nombre de jours d'un déclencheur d'ancienneté ou d'inactivité, `null` s'il
+ * manque ou sort des bornes.
+ */
+export function readMemberDays(graph: WorkflowGraph): number | null {
+  const trigger = graph.nodes.find((node) => isMemberDaysTrigger(node.type));
+  if (!trigger) return null;
+  const days = Number(trigger.config?.days);
+  return Number.isInteger(days) && days >= 1 && days <= MAX_MEMBER_DAYS ? days : null;
+}
+
+/**
  * Salons retenus par le filtre du déclencheur d'un graphe. Vide quand le
  * déclencheur n'en propose pas : une valeur restée dans la configuration après
  * un changement de déclencheur ne filtre rien.
@@ -1476,6 +1650,15 @@ const BY_TYPE = new Map(NODE_CATALOG.map((def) => [def.type, def]));
 
 export function getNodeDef(type: string): NodeDef | undefined {
   return BY_TYPE.get(type);
+}
+
+/**
+ * Un nœud n'est disponible que si le module dont il dépend n'est pas retiré du
+ * produit. Le test de pause est passé en paramètre : ce paquet ne dépend pas
+ * du registre des modules, que le bot comme le dashboard importent déjà.
+ */
+export function isNodeAvailable(type: string, isModulePaused: (key: string | undefined) => boolean): boolean {
+  return !isModulePaused(getNodeDef(type)?.module);
 }
 
 export function isTriggerNode(type: string): boolean {

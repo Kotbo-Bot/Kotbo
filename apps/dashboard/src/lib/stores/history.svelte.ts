@@ -1,3 +1,4 @@
+import { m } from '../i18n';
 import { toast } from './toast.svelte';
 
 export interface HistoryAction {
@@ -24,10 +25,10 @@ class HistoryStore {
     try {
       await action.undo();
       this.redoStack.push(action);
-      toast.info(`Annulé : ${action.label}`);
+      toast.info(m.hist_undone({ label: action.label }));
     } catch (e) {
       console.error('History undo error:', e);
-      toast.error(`Erreur lors de l'annulation de : ${action.label}`);
+      toast.error(m.hist_undo_failed({ label: action.label }));
     }
   }
 
@@ -37,10 +38,10 @@ class HistoryStore {
     try {
       await action.redo();
       this.undoStack.push(action);
-      toast.info(`Rétabli : ${action.label}`);
+      toast.info(m.hist_redone({ label: action.label }));
     } catch (e) {
       console.error('History redo error:', e);
-      toast.error(`Erreur lors du rétablissement de : ${action.label}`);
+      toast.error(m.hist_redo_failed({ label: action.label }));
     }
   }
 

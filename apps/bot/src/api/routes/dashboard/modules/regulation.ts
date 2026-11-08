@@ -1,5 +1,5 @@
 /** Routes dashboard du module `regulation`. */
-import { publishOrUpdateRegulationMessage } from '../../../../services/staff/regulationService.js';
+import { publishOrUpdateRegulationMessage, renumberRegulationArticles } from '../../../../services/staff/regulationService.js';
 import prisma from '../../../../utils/db.js';
 import { logger } from '../../../../utils/logger.js';
 import { getGuildName, json, pushAudit, readJsonBody } from '../../../shared.js';
@@ -52,20 +52,7 @@ export async function handleRegulationRoutes(ctx: ModuleRouteContext): Promise<b
           },
         });
 
-        const orderedArticles = await prisma.guildRegulationArticle.findMany({
-          where: { guildId },
-          select: { id: true },
-          orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
-        });
-
-        await prisma.$transaction(
-          orderedArticles.map((entry, index) =>
-            prisma.guildRegulationArticle.update({
-              where: { id: entry.id },
-              data: { sortOrder: index },
-            })
-          )
-        );
+        await renumberRegulationArticles(guildId);
 
         await pushAudit(guildId, {
           user: auditUser,
@@ -98,41 +85,7 @@ export async function handleRegulationRoutes(ctx: ModuleRouteContext): Promise<b
           return true;
         }
 
-        const existingArticles = await prisma.guildRegulationArticle.findMany({
-          where: { guildId },
-          select: { id: true },
-          orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
-        });
-        const existingById = new Set(existingArticles.map((article) => article.id));
-        const orderedIds: string[] = [];
-        const seenIds = new Set<string>();
-
-        for (const articleId of requestedIds) {
-          if (!existingById.has(articleId) || seenIds.has(articleId)) {
-            continue;
-          }
-
-          orderedIds.push(articleId);
-          seenIds.add(articleId);
-        }
-
-        for (const article of existingArticles) {
-          if (seenIds.has(article.id)) {
-            continue;
-          }
-
-          orderedIds.push(article.id);
-          seenIds.add(article.id);
-        }
-
-        await prisma.$transaction(
-          orderedIds.map((articleId, index) =>
-            prisma.guildRegulationArticle.update({
-              where: { id: articleId },
-              data: { sortOrder: index },
-            })
-          )
-        );
+        const orderedIds = await renumberRegulationArticles(guildId, requestedIds);
 
         await pushAudit(guildId, {
           user: auditUser,
@@ -225,22 +178,7 @@ export async function handleRegulationRoutes(ctx: ModuleRouteContext): Promise<b
 
         await prisma.guildRegulationArticle.delete({ where: { id: article.id } });
 
-        const remainingArticles = await prisma.guildRegulationArticle.findMany({
-          where: { guildId },
-          select: { id: true },
-          orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
-        });
-
-        if (remainingArticles.length > 0) {
-          await prisma.$transaction(
-            remainingArticles.map((entry, index) =>
-              prisma.guildRegulationArticle.update({
-                where: { id: entry.id },
-                data: { sortOrder: index },
-              })
-            )
-          );
-        }
+        await renumberRegulationArticles(guildId);
 
         await pushAudit(guildId, {
           user: auditUser,

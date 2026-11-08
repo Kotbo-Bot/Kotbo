@@ -1,5 +1,5 @@
 import type { Prisma } from '@prisma/client';
-import { MODULE_REGISTRY } from '@kotbo/contracts';
+import { MODULE_REGISTRY, isModulePaused } from '@kotbo/contracts';
 import prisma from '../../utils/db.js';
 import { getDeclaredModuleStates } from './moduleGate.js';
 
@@ -34,6 +34,16 @@ export const defaultFeatures = [
   })),
   ...LEGACY_FEATURES,
 ];
+
+/**
+ * Configurations que l'on montre ou laisse regler : celles des modules en pause
+ * restent en base (et dans `getOrCreateFeatureConfigs`, dont dependent les
+ * droits), mais sortent du dashboard et des outils MCP.
+ */
+export async function getAvailableFeatureConfigs(guildId: string) {
+  const configs = await getOrCreateFeatureConfigs(guildId);
+  return configs.filter((config) => !isModulePaused(config.featureKey));
+}
 
 export async function getOrCreateFeatureConfigs(guildId: string) {
   // 1. Fetch all existing configs with their relations first

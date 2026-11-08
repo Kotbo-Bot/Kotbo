@@ -95,6 +95,7 @@
       return null;
     }
     node.replaceWith(fresh);
+    restoreAppView(fresh);
     return fresh;
   }
 
@@ -579,6 +580,21 @@
         },
       );
     },
+    'data-application-reply': function (form) {
+      var content = (form.querySelector('textarea') || {}).value || '';
+      if (!content.trim()) return;
+      var id = form.getAttribute('data-application-reply');
+      submitWith(
+        form,
+        function () {
+          return request('POST', SITE_API + '/applications/' + encodeURIComponent(id) + '/messages', { content: content.trim() });
+        },
+        function () {
+          var section = blockOf(form);
+          if (section) refreshBlock(section);
+        },
+      );
+    },
     'data-comment': function (form) {
       var content = (form.querySelector('textarea') || {}).value || '';
       if (!content.trim()) return;
@@ -1015,8 +1031,93 @@
   tickCountdowns();
   setInterval(tickCountdowns, 30000);
 
+  // ─── Listes de l'espace membre : recherche, filtres, liste ou kanban ─────
+
+  /** Masque les lignes qui ne répondent ni au filtre ni à la recherche, et met le compte à jour. */
+  function applyAppList(list) {
+    var q = ((list.querySelector('[data-app-q]') || {}).value || '').trim().toLowerCase();
+    var pressed = list.querySelector('[data-app-filter][aria-pressed="true"]');
+    var filter = pressed ? pressed.getAttribute('data-app-filter') : 'all';
+    var shown = 0;
+    list.querySelectorAll('.o-list [data-row]').forEach(function (row) {
+      var ok = (row.getAttribute('data-filters') || '').split(' ').indexOf(filter) >= 0 && (row.getAttribute('data-text') || '').indexOf(q) >= 0;
+      row.hidden = !ok;
+      if (ok) shown += 1;
+    });
+    list.querySelectorAll('.o-kanban [data-row]').forEach(function (card) {
+      card.hidden = !((card.getAttribute('data-filters') || '').split(' ').indexOf(filter) >= 0 && (card.getAttribute('data-text') || '').indexOf(q) >= 0);
+    });
+    var count = list.querySelector('[data-app-count]');
+    if (count) count.textContent = (T.appCount || '{count}').replace('{count}', String(shown));
+    var none = list.querySelector('[data-app-none]');
+    if (none) none.hidden = shown > 0;
+  }
+
+  document.addEventListener('input', function (event) {
+    var input = event.target.closest && event.target.closest('[data-app-q]');
+    if (input) applyAppList(input.closest('[data-app-list]'));
+  });
+
+  document.addEventListener('click', function (event) {
+    var target = event.target.closest && event.target.closest('[data-app-filter], [data-app-view]');
+    if (!target) return;
+    var list = target.closest('[data-app-list]');
+    if (!list) return;
+    var attr = target.hasAttribute('data-app-filter') ? 'data-app-filter' : 'data-app-view';
+    list.querySelectorAll('[' + attr + ']').forEach(function (btn) {
+      btn.setAttribute('aria-pressed', btn === target ? 'true' : 'false');
+    });
+    if (attr === 'data-app-view') {
+      list.setAttribute('data-view', target.getAttribute('data-app-view'));
+      try {
+        localStorage.setItem('kotbo-app-view', target.getAttribute('data-app-view'));
+      } catch (e) {
+        /* Stockage refusé : la vue choisie ne sera simplement pas retenue. */
+      }
+    }
+    applyAppList(list);
+  });
+
+  /** Vue retenue (liste ou kanban) rappelée à chaque liste qui s'affiche, rechargée comprise. */
+  function restoreAppView(scope) {
+    var view = null;
+    try {
+      view = localStorage.getItem('kotbo-app-view');
+    } catch (e) {
+      view = null;
+    }
+    if (view !== 'kanban') return;
+    (scope || document).querySelectorAll('[data-app-list]').forEach(function (list) {
+      var btn = list.querySelector('[data-app-view="kanban"]');
+      if (btn) btn.click();
+    });
+  }
+
+  // ─── Apparition des sections ───────────────────────────────────────────
+
+  /** Révèle chaque section animée à son entrée dans l'écran, une seule fois. */
+  function revealSections() {
+    var sections = document.querySelectorAll('.sect[data-anim]');
+    if (sections.length === 0) return;
+    if (!('IntersectionObserver' in window)) {
+      sections.forEach(function (s) { s.classList.add('is-in'); });
+      return;
+    }
+    var observer = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (!entry.isIntersecting) return;
+        entry.target.classList.add('is-in');
+        observer.unobserve(entry.target);
+      });
+    }, { rootMargin: '0px 0px -8% 0px' });
+    sections.forEach(function (s) { observer.observe(s); });
+    // Le CSS ne masque les sections qu'une fois le script là pour les révéler.
+    root.classList.add('js');
+  }
+
   // ─── Démarrage ─────────────────────────────────────────────────────────
 
+  revealSections();
   document.querySelectorAll('section.mod[data-live]').forEach(bindLive);
 
   loadViewer().then(function () {

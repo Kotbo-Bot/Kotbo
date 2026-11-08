@@ -263,6 +263,7 @@ function clientStrings(locale: SiteLocale): Record<string, string> {
     reportSent: m.site_report_sent({}, o),
     linkCopied: m.site_link_copied({}, o),
     commentPending: m.site_comment_pending({}, o),
+    appCount: m.site_app_count({ count: '{count}' }, o),
     forumDeleteConfirm: m.site_forum_delete_confirm({}, o),
     commentLogin: m.site_comment_login({}, o),
     commentsEmpty: m.site_comments_empty({}, o),

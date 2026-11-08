@@ -63,3 +63,4 @@ export * from './ticketHelpdesk';
 export * from './welcomeExperiments';
 export * from './aegis';
 export * from './doingLists';
+export * from './tournaments';

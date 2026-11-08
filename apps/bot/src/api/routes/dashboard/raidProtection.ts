@@ -25,6 +25,17 @@ import {
 import { getLineageReport, quarantineLineage } from '../../../services/moderation/inviteLineageService.js';
 
 import { jsonFailure } from '../../shared/failure.js';
+import { handleVisionRoutes } from './visionRoutes.js';
+import { MAX_OTHER_SERVERS, resolveInvite } from '../../../services/moderation/otherServersFilter.js';
+import { FILE_GROUPS, MAX_FILE_RULES, invalidateFileRules, normalizeExtensions } from '../../../services/moderation/fileExtensionFilter.js';
+import { normalizeAutoSanction } from '../../../services/moderation/autoSanction.js';
+import {
+  createShieldPanelChannel,
+  createShieldStatusChannel,
+  isShieldLevel,
+  postShieldPanel,
+  setShieldLevel,
+} from '../../../services/moderation/shieldService.js';
 // Champs anti-spam modifiables depuis le dashboard
 const SPAM_PATCHABLE_FIELDS = [
   'enabled', 'shadowMode',
@@ -41,6 +52,7 @@ const PATCHABLE_FIELDS = [
   'captchaEnabled', 'captchaChannelId', 'captchaUnverifiedRoleId', 'captchaVerifiedRoleId', 'captchaTimeoutMinutes',
   'captchaMaxAttempts', 'captchaFailAction', 'captchaLogChannelId',
   'captchaMode', 'captchaVoiceChannelId', 'captchaVoiceQueueLimit', 'captchaVoiceLocale',
+  'captchaTrigger', 'captchaUseServerIcon',
   'antiRaidEnabled', 'antiRaidJoinThreshold', 'antiRaidJoinWindowSec', 'antiRaidAction',
   'antiRaidAlertChannelId', 'antiRaidAutoDisableMinutes',
   'accountAgeGuardEnabled', 'accountAgeMinValue', 'accountAgeMinUnit', 'accountAgeAction',
@@ -52,6 +64,10 @@ const PATCHABLE_FIELDS = [
   'scamFilterEnabled', 'scamFilterAction', 'scamFilterTimeoutMin', 'scamFilterCustomDomains',
   'scamFilterWhitelist', 'scamFilterAlertChannelId', 'scamImageFilterEnabled',
   'scamQrFilterEnabled', 'scamQrTrustedMessages', 'scamOcrEnabled',
+  'visionEnabled', 'visionSanction', 'visionDurationMin', 'visionReviewChannelId', 'visionNotifyMember',
+  'jailRoleId', 'jailChannelId', 'jailStripRoles', 'discordQuarantineSyncEnabled',
+  'otherInvitesMode', 'otherFriendInvites', 'otherForwardsMode', 'otherTagsMode', 'otherServers', 'otherSanction', 'otherDurationMin',
+  'fileFilterMode', 'fileGroups', 'fileExtensions', 'fileRejectCorrupted', 'fileSanction', 'fileDurationMin',
   'inviteGuardEnabled', 'inviteRequireUnitary', 'inviteValidationEnabled',
   'inviteSpamThreshold', 'inviteSpamWindowSec', 'inviteAlertChannelId', 'inviteBypassRoleIds',
 ] as const;
@@ -70,6 +86,126 @@ export async function handleRaidProtectionRoutes(
   const method = req.method;
   const sub = parts[5];
   const auditUser = `${user.username ?? 'Utilisateur'} (${user.userId})`;
+
+  if (await handleVisionRoutes(req, res, parts, _url, client, user, guildId)) return true;
+
+  // ── Automod : liste des autres serveurs ─────────────────────────────────
+  // POST /raid-protection/other-servers {invite}
+  if (sub === 'other-servers' && method === 'POST') {
+    try {
+      const body = (await readJsonBody(req)) ?? {};
+      const code = String(body.invite ?? '').trim().replace(/^.*\//, '');
+      const invite = code ? await resolveInvite(client, code) : { kind: 'INVALID' as const };
+      if (invite.kind !== 'GUILD') {
+        json(res, 400, { error: 'Invitation invalide ou expirée : colle une invitation vers le serveur à ajouter.' });
+        return true;
+      }
+      const config = (await getRaidProtectionConfig(guildId)) ?? (await upsertRaidProtectionConfig(guildId, {}));
+      const others = config.otherServers.filter((entry) => !entry.startsWith(`${invite.guildId}|`));
+      if (others.length >= MAX_OTHER_SERVERS) {
+        json(res, 409, { error: `${MAX_OTHER_SERVERS} serveurs au plus dans la liste.` });
+        return true;
+      }
+      const updated = await upsertRaidProtectionConfig(guildId, { otherServers: [...others, `${invite.guildId}|${invite.guildName.replace(/\|/g, ' ')}`] });
+      json(res, 200, { config: updated });
+    } catch (err) {
+      logger.error('RaidProtectionAPI', 'Erreur ajout serveur:', err);
+      jsonFailure(res, err, 'Erreur lors de l\'ajout du serveur', 'RaidProtectionAPI');
+    }
+    return true;
+  }
+
+  // ── Automod : règles de fichiers par salon / catégorie ───────────────────
+  // GET /raid-protection/file-rules · POST {targetId, mode, groups, extensions} · DELETE /:id
+  if (sub === 'file-rules') {
+    try {
+      if (method === 'GET') {
+        json(res, 200, { rules: await prisma.fileFilterRule.findMany({ where: { guildId }, orderBy: { createdAt: 'asc' } }), groups: FILE_GROUPS, maxRules: MAX_FILE_RULES });
+        return true;
+      }
+      if (method === 'POST') {
+        const body = (await readJsonBody(req)) ?? {};
+        const targetId = String(body.targetId ?? '');
+        const target = client.guilds.cache.get(guildId)?.channels.cache.get(targetId);
+        if (!target) {
+          json(res, 400, { error: 'Salon ou catégorie introuvable.' });
+          return true;
+        }
+        const exists = await prisma.fileFilterRule.findUnique({ where: { guildId_targetId: { guildId, targetId } }, select: { id: true } });
+        if (!exists && (await prisma.fileFilterRule.count({ where: { guildId } })) >= MAX_FILE_RULES) {
+          json(res, 409, { error: `${MAX_FILE_RULES} règles au plus.` });
+          return true;
+        }
+        const data = {
+          targetType: target.type === 4 ? 'CATEGORY' : 'CHANNEL',
+          mode: body.mode === 'WHITELIST' ? 'WHITELIST' : 'BLACKLIST',
+          groups: (Array.isArray(body.groups) ? body.groups : []).map(String).filter((g: string) => g in FILE_GROUPS),
+          extensions: normalizeExtensions(body.extensions),
+        };
+        const rule = await prisma.fileFilterRule.upsert({
+          where: { guildId_targetId: { guildId, targetId } },
+          create: { guildId, targetId, ...data },
+          update: data,
+        });
+        await invalidateFileRules(guildId);
+        json(res, 200, { rule });
+        return true;
+      }
+      if (method === 'DELETE' && parts[6]) {
+        await prisma.fileFilterRule.deleteMany({ where: { id: parts[6], guildId } });
+        await invalidateFileRules(guildId);
+        json(res, 200, { success: true });
+        return true;
+      }
+    } catch (err) {
+      logger.error('RaidProtectionAPI', 'Erreur règles de fichiers:', err);
+      jsonFailure(res, err, 'Erreur sur les règles de fichiers', 'RaidProtectionAPI');
+      return true;
+    }
+  }
+
+  // ── Shield ─────────────────────────────────────────────────────────────
+  // POST /raid-protection/shield {level} · /shield/panel {channelId | create} · /shield/status
+  if (sub === 'shield' && method === 'POST') {
+    try {
+      const guild = client.guilds.cache.get(guildId);
+      if (!guild) {
+        json(res, 404, { error: 'Serveur introuvable' });
+        return true;
+      }
+      const body = (await readJsonBody(req)) ?? {};
+      if (!parts[6]) {
+        const level = Number(body.level);
+        if (!isShieldLevel(level)) {
+          json(res, 400, { error: 'Niveau Shield invalide (1 à 5)' });
+          return true;
+        }
+        const result = await setShieldLevel(guild, level, user.userId);
+        await safePushAudit(guildId, { user: auditUser, action: `Shield ${result.previous} → ${result.level}`, context: getGuildName(client, guildId), module: 'RaidProtection', eventType: 'Manuel', details: result.warnings.join(' | '), channelId: null }, 'RaidProtectionAPI');
+        json(res, 200, { ...result, config: await getRaidProtectionConfig(guildId) });
+        return true;
+      }
+      if (parts[6] === 'panel') {
+        const channelId = body.create === true ? await createShieldPanelChannel(guild) : String(body.channelId ?? '');
+        const result = await postShieldPanel(guild, channelId);
+        if (!result.ok) {
+          json(res, 400, { error: result.reason });
+          return true;
+        }
+        json(res, 200, { channelId, config: await getRaidProtectionConfig(guildId) });
+        return true;
+      }
+      if (parts[6] === 'status') {
+        const channelId = await createShieldStatusChannel(guild);
+        json(res, 200, { channelId, config: await getRaidProtectionConfig(guildId) });
+        return true;
+      }
+    } catch (err) {
+      logger.error('RaidProtectionAPI', 'Erreur Shield:', err);
+      jsonFailure(res, err, 'Erreur Shield', 'RaidProtectionAPI');
+      return true;
+    }
+  }
 
   // GET /raid-protection - config + compteurs
   //
@@ -121,12 +257,40 @@ export async function handleRaidProtectionRoutes(
           data.accountAgeMinValue = Math.min(Math.max(value, 1), unit === 'MONTHS' ? 120 : 3650);
         }
       }
-      if ('accountAgeAction' in data && !['ALERT', 'KICK', 'BAN'].includes(String(data.accountAgeAction))) data.accountAgeAction = 'KICK';
+      if ('accountAgeAction' in data && !['ALERT', 'KICK', 'BAN', 'JAIL', 'TEMPBAN'].includes(String(data.accountAgeAction))) data.accountAgeAction = 'KICK';
       if ('accountAgeWhitelist' in data) {
         const list = Array.isArray(data.accountAgeWhitelist) ? data.accountAgeWhitelist : [];
         data.accountAgeWhitelist = [...new Set(list.map((id) => String(id).trim()).filter((id) => /^\d{17,20}$/.test(id)))];
       }
       if ('rolePersistMode' in data && data.rolePersistMode !== 'LIST') data.rolePersistMode = 'ALL';
+      const LIST_MODES = ['OFF', 'BLACKLIST', 'WHITELIST'];
+      for (const field of ['otherInvitesMode', 'otherForwardsMode', 'otherTagsMode', 'fileFilterMode']) {
+        if (field in data && !LIST_MODES.includes(String(data[field]))) data[field] = 'OFF';
+      }
+      if ('otherFriendInvites' in data && !['FOLLOW', 'ALLOW', 'BLOCK'].includes(String(data.otherFriendInvites))) data.otherFriendInvites = 'FOLLOW';
+      // La liste ne se modifie ici que pour retirer des serveurs : on n'en
+      // ajoute qu'en collant une invitation valide (route other-servers).
+      if ('otherServers' in data) {
+        const current = new Set((await getRaidProtectionConfig(guildId))?.otherServers ?? []);
+        data.otherServers = (Array.isArray(data.otherServers) ? data.otherServers : []).map(String).filter((entry) => current.has(entry));
+      }
+      if ('fileGroups' in data) data.fileGroups = (Array.isArray(data.fileGroups) ? data.fileGroups : []).map(String).filter((g) => g in FILE_GROUPS);
+      if ('fileExtensions' in data) data.fileExtensions = normalizeExtensions(data.fileExtensions);
+      for (const field of ['otherSanction', 'fileSanction']) {
+        if (field in data) data[field] = normalizeAutoSanction(data[field], 'DELETE');
+      }
+      for (const field of ['otherDurationMin', 'fileDurationMin']) {
+        if (field in data) {
+          const minutes = data[field] === null || data[field] === '' ? null : Math.floor(Number(data[field]));
+          data[field] = minutes && minutes > 0 ? Math.min(minutes, 365 * 24 * 60) : null;
+        }
+      }
+      if ('captchaTrigger' in data && !['ALWAYS', 'AUTO', 'SMART'].includes(String(data.captchaTrigger))) data.captchaTrigger = 'ALWAYS';
+      if ('visionSanction' in data && !['DELETE', 'WARN', 'TIMEOUT', 'KICK', 'SOFTBAN', 'BAN', 'JAIL'].includes(String(data.visionSanction))) data.visionSanction = 'TIMEOUT';
+      if ('visionDurationMin' in data) {
+        const minutes = data.visionDurationMin === null || data.visionDurationMin === '' ? null : Math.floor(Number(data.visionDurationMin));
+        data.visionDurationMin = minutes && minutes > 0 ? Math.min(minutes, 365 * 24 * 60) : null;
+      }
       if ('rolePersistRoleIds' in data) {
         const list = Array.isArray(data.rolePersistRoleIds) ? data.rolePersistRoleIds : [];
         data.rolePersistRoleIds = [...new Set(list.map((id) => String(id).trim()).filter((id) => /^\d{17,20}$/.test(id)))];
@@ -323,48 +487,6 @@ export async function handleRaidProtectionRoutes(
     } catch (err) {
       logger.error('RaidProtectionAPI', 'Erreur decision invite:', err);
       jsonFailure(res, err, 'Erreur lors du traitement de la demande', 'RaidProtectionAPI');
-    }
-    return true;
-  }
-
-  // GET /raid-protection/scam-images
-  if (sub === 'scam-images' && !parts[6] && method === 'GET') {
-    try {
-      const images = await prisma.scamImageHash.findMany({
-        where: { OR: [{ guildId }, { guildId: null }] },
-        orderBy: { createdAt: 'desc' },
-        take: 200,
-      });
-      json(res, 200, { images });
-    } catch (err) {
-      logger.error('RaidProtectionAPI', 'Erreur GET scam-images:', err);
-      jsonFailure(res, err, 'Erreur lors de la récupération des images', 'RaidProtectionAPI');
-    }
-    return true;
-  }
-
-  // DELETE /raid-protection/scam-images/:id
-  if (sub === 'scam-images' && parts[6] && method === 'DELETE') {
-    try {
-      // On ne peut supprimer que les hash de SA guilde (pas les globaux)
-      const deleted = await prisma.scamImageHash.deleteMany({ where: { id: parts[6], guildId } });
-      if (deleted.count === 0) {
-        json(res, 404, { error: 'Hash introuvable (ou global, non supprimable)' });
-        return true;
-      }
-      await safePushAudit(guildId, {
-        user: auditUser,
-        action: 'Hash d\'image scam supprimé',
-        context: getGuildName(client, guildId),
-        module: 'RaidProtection',
-        eventType: 'Manuel',
-        details: '',
-        channelId: null,
-      }, 'RaidProtectionAPI');
-      json(res, 200, { success: true });
-    } catch (err) {
-      logger.error('RaidProtectionAPI', 'Erreur DELETE scam-image:', err);
-      jsonFailure(res, err, 'Erreur lors de la suppression', 'RaidProtectionAPI');
     }
     return true;
   }

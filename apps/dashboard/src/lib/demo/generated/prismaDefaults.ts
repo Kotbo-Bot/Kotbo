@@ -175,7 +175,6 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "createdAt": "__NOW__"
   },
   "AegisHourlyStat": {
-    "id": "",
     "guildId": "",
     "dateKey": "",
     "hour": 0,
@@ -195,7 +194,6 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "updatedAt": "__NOW__"
   },
   "AegisMemberDailyStat": {
-    "id": "",
     "guildId": "",
     "dateKey": "",
     "userId": "",
@@ -213,7 +211,6 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "updatedAt": "__NOW__"
   },
   "GuildDailyStat": {
-    "id": "",
     "guildId": "",
     "dateKey": "",
     "totalMembers": 0,
@@ -242,7 +239,6 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "updatedAt": "__NOW__"
   },
   "ChannelDailyStat": {
-    "id": "",
     "guildId": "",
     "channelId": "",
     "dateKey": "",
@@ -253,14 +249,12 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "updatedAt": "__NOW__"
   },
   "GuildWordStat": {
-    "id": "",
     "guildId": "",
     "dateKey": "",
     "word": "",
     "count": 0
   },
   "MessageContentDailyStat": {
-    "id": "",
     "guildId": "",
     "dateKey": "",
     "channelId": "",
@@ -320,7 +314,6 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "updatedAt": "__NOW__"
   },
   "ContentItemDailyStat": {
-    "id": "",
     "guildId": "",
     "dateKey": "",
     "kind": "",
@@ -381,7 +374,6 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "updatedAt": "__NOW__"
   },
   "GuildHourlyStat": {
-    "id": "",
     "guildId": "",
     "dateKey": "",
     "hour": 0,
@@ -398,7 +390,6 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "updatedAt": "__NOW__"
   },
   "MemberDailyStat": {
-    "id": "",
     "guildId": "",
     "userId": "",
     "dateKey": "",
@@ -462,7 +453,6 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "createdAt": "__NOW__"
   },
   "MemberInteractionDailyStat": {
-    "id": "",
     "guildId": "",
     "dateKey": "",
     "userId": "",
@@ -473,7 +463,6 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "updatedAt": "__NOW__"
   },
   "ChannelResponseDailyStat": {
-    "id": "",
     "guildId": "",
     "dateKey": "",
     "channelId": "",
@@ -544,7 +533,6 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "createdAt": "__NOW__"
   },
   "CommandUsageDailyStat": {
-    "id": "",
     "guildId": "",
     "dateKey": "",
     "commandName": "",
@@ -668,6 +656,35 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "authorId": "",
     "createdAt": "__NOW__"
   },
+  "ThreadPanel": {
+    "id": "",
+    "guildId": "",
+    "channelId": "",
+    "messageId": null,
+    "name": "Panneau de discussion",
+    "enabled": true,
+    "title": "",
+    "description": "",
+    "color": "#5865f2",
+    "imageUrl": null,
+    "logChannelId": null,
+    "buttons": {},
+    "createdAt": "__NOW__",
+    "updatedAt": "__NOW__"
+  },
+  "PanelThread": {
+    "threadId": "",
+    "guildId": "",
+    "panelId": "",
+    "buttonId": "",
+    "parentId": "",
+    "ownerId": "",
+    "trustedIds": [],
+    "bannedIds": [],
+    "announceMessageId": null,
+    "closedAt": null,
+    "createdAt": "__NOW__"
+  },
   "ScheduledTask": {
     "id": "",
     "guildId": "",
@@ -726,6 +743,12 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "spamGroupSlowmodeEnabled": false,
     "spamGroupSlowmodeSeconds": 10,
     "spamGroupSlowmodeMinutes": 5,
+    "preventiveSlowmodeEnabled": false,
+    "preventiveSlowmodeMsgThreshold": 15,
+    "preventiveSlowmodeMinUsers": 3,
+    "preventiveSlowmodeWindowSec": 10,
+    "preventiveSlowmodeSeconds": 5,
+    "preventiveSlowmodeMinutes": 5,
     "linksEnabled": false,
     "linksAction": "DELETE_AND_WARN",
     "linksWhitelist": [],
@@ -759,6 +782,7 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "antiBotEnabled": false,
     "antiBotAction": "KICK",
     "antiBotBypassUsers": [],
+    "antiBotRoleIds": [],
     "bypassRoles": [],
     "bypassChannels": [],
     "adminLockEnabled": false,
@@ -867,7 +891,13 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "checkoutSessionId": null,
     "subscriptionId": null,
     "reservedAt": "__NOW__",
-    "startedAt": null
+    "startedAt": null,
+    "referralCode": null
+  },
+  "ReferralCode": {
+    "code": "",
+    "discordUserId": "",
+    "createdAt": "__NOW__"
   },
   "BillingGift": {
     "id": "",
@@ -958,6 +988,8 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "target": "ALL",
     "targetGuilds": [],
     "channelPref": "NEWS",
+    "pollOptions": [],
+    "pollClosesAt": null,
     "successCount": 0,
     "failCount": 0,
     "totalTargeted": 0,
@@ -1006,6 +1038,14 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "reason": null,
     "messageId": null,
     "createdAt": "__NOW__"
+  },
+  "BroadcastPollVote": {
+    "broadcastId": "",
+    "userId": "",
+    "guildId": "",
+    "optionIndex": 0,
+    "createdAt": "__NOW__",
+    "updatedAt": "__NOW__"
   },
   "AdminAuditLog": {
     "id": "",
@@ -1406,6 +1446,20 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "title": "",
     "options": {}
   },
+  "Confession": {
+    "id": "",
+    "guildId": "",
+    "number": 0,
+    "authorId": "",
+    "content": "",
+    "channelId": null,
+    "messageId": null,
+    "revealedAt": null,
+    "revealedBy": null,
+    "deletedAt": null,
+    "deletedBy": null,
+    "createdAt": "__NOW__"
+  },
   "NewsArticle": {
     "id": "",
     "guildId": "",
@@ -1531,6 +1585,25 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "createdAt": "__NOW__",
     "updatedAt": "__NOW__"
   },
+  "Convocation": {
+    "id": "",
+    "guildId": "",
+    "userId": "",
+    "staffId": "",
+    "reason": "",
+    "deadline": "__NOW__",
+    "expiryAction": "ALERT",
+    "waitingChannelId": null,
+    "channelId": "",
+    "messageId": null,
+    "threadId": null,
+    "status": "PENDING",
+    "acknowledgedAt": null,
+    "answeredAt": null,
+    "closedAt": null,
+    "createdAt": "__NOW__",
+    "updatedAt": "__NOW__"
+  },
   "CustomBotConfig": {
     "guildId": "",
     "enabled": false,
@@ -1641,7 +1714,6 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "createdAt": "__NOW__"
   },
   "DashboardTelemetryDailyStat": {
-    "id": "",
     "dateKey": "",
     "guildId": "",
     "page": "",
@@ -1822,6 +1894,66 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "sampleSize": 0,
     "updatedAt": "__NOW__",
     "createdAt": "__NOW__"
+  },
+  "DoingList": {
+    "id": "",
+    "guildId": "",
+    "name": "",
+    "description": null,
+    "modules": [],
+    "key": "",
+    "nextNumber": 1,
+    "createdById": "",
+    "createdAt": "__NOW__",
+    "updatedAt": "__NOW__"
+  },
+  "DoingListColumn": {
+    "id": "",
+    "listId": "",
+    "guildId": "",
+    "name": "",
+    "position": 0,
+    "wipLimit": null,
+    "isDone": false,
+    "createdAt": "__NOW__",
+    "updatedAt": "__NOW__"
+  },
+  "DoingListItem": {
+    "id": "",
+    "listId": "",
+    "guildId": "",
+    "columnId": "",
+    "title": "",
+    "position": 0,
+    "number": 0,
+    "type": "TASK",
+    "estimate": null,
+    "parentId": null,
+    "description": null,
+    "priority": null,
+    "dueDate": null,
+    "labels": []
+  },
+  "DoingListItemLink": {
+    "id": "",
+    "guildId": "",
+    "fromId": "",
+    "toId": "",
+    "type": "",
+    "createdById": "",
+    "createdAt": "__NOW__"
+  },
+  "DoingListEvent": {
+    "id": "",
+    "guildId": "",
+    "itemId": "",
+    "actorId": "",
+    "actorName": "",
+    "kind": "",
+    "body": null,
+    "data": null,
+    "createdAt": "__NOW__",
+    "updatedAt": "__NOW__"
   },
   "DropConfig": {
     "id": "",
@@ -2386,7 +2518,23 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "username": null,
     "userTag": null,
     "formData": null,
+    "seed": null,
+    "teamName": null,
+    "teamMemberIds": [],
     "createdAt": "__NOW__"
+  },
+  "EventTournamentMatch": {
+    "id": "",
+    "eventId": "",
+    "stage": "W",
+    "round": 0,
+    "position": 0,
+    "player1Id": "",
+    "player2Id": "",
+    "score1": 0,
+    "score2": 0,
+    "sets": null,
+    "updatedAt": "__NOW__"
   },
   "EventQuizQuestion": {
     "id": "",
@@ -2456,6 +2604,11 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "theme": null,
     "customCss": null,
     "hierarchyId": null,
+    "maxPendingCandidatures": null,
+    "maxAcceptedCandidatures": null,
+    "acceptedCapMode": "RESET",
+    "acceptedCount": 0,
+    "autoClosedReason": null,
     "createdAt": "__NOW__",
     "updatedAt": "__NOW__"
   },
@@ -2517,6 +2670,7 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "moderatorRoleId": null,
     "baseStaffRoleId": null,
     "testStaffRoleId": null,
+    "formerStaffRoleId": null,
     "recruitmentCategoryId": null,
     "recruitmentLogChannelId": null,
     "digestEnabled": false,
@@ -3667,59 +3821,61 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "captchaVoiceChannelId": null,
     "captchaVoiceLocale": "FR",
     "captchaVoiceQueueLimit": 25,
-    "antiRaidEnabled": false,
-    "antiRaidJoinThreshold": 10,
-    "antiRaidJoinWindowSec": 60,
-    "antiRaidAction": "LOCK",
-    "antiRaidAlertChannelId": null,
-    "antiRaidAutoDisableMinutes": 30,
-    "raidModeActive": false,
-    "raidModeActivatedAt": null,
-    "raidModeManual": false,
-    "accountAgeGuardEnabled": false,
-    "accountAgeMinValue": 7,
-    "accountAgeMinUnit": "DAYS",
-    "accountAgeAction": "KICK",
-    "accountAgeAlertChannelId": null,
-    "accountAgeMessage": "Ton compte Discord est trop récent pour rejoindre ce serveur.",
-    "accountAgeWhitelist": [],
-    "joinLockEnabled": false,
-    "joinLockUntil": null,
-    "joinLockKick": true,
-    "joinLockMessage": "Le serveur est temporairement fermé aux nouvelles arrivées. Merci de réessayer plus tard.",
-    "dmLockEnabled": false,
-    "dmLockUntil": null,
-    "reportsEnabled": false,
-    "reportsChannelId": null,
-    "reportsCooldownSec": 60,
-    "reportsAnonymous": false,
-    "tagRoleEnabled": false,
-    "tagRoleId": null,
-    "scamFilterEnabled": false,
-    "scamFilterAction": "DELETE_AND_TIMEOUT",
-    "scamFilterTimeoutMin": 60,
-    "scamFilterCustomDomains": [],
-    "scamFilterWhitelist": [],
-    "scamFilterAlertChannelId": null,
-    "scamImageFilterEnabled": false,
-    "scamQrFilterEnabled": false,
-    "scamQrTrustedMessages": 50,
-    "scamOcrEnabled": false,
-    "inviteGuardEnabled": false,
-    "inviteEmergencyEnabled": false,
-    "inviteRequireUnitary": false,
-    "inviteValidationEnabled": false,
-    "inviteSpamThreshold": 5,
-    "inviteSpamWindowSec": 60,
-    "inviteAlertChannelId": null,
-    "inviteBypassRoleIds": [],
-    "rolePersistEnabled": false,
-    "rolePersistMode": "ALL",
-    "rolePersistRoleIds": [],
-    "rolePersistMaxDays": 90,
-    "rolePersistStaff": false,
+    "captchaTrigger": "ALWAYS",
+    "captchaUseServerIcon": true,
+    "shieldLevel": 5,
+    "shieldPanelChannelId": null,
+    "shieldPanelMessageId": null,
+    "shieldStatusChannelId": null
+  },
+  "FileFilterRule": {
+    "id": "",
+    "guildId": "",
+    "targetId": "",
+    "targetType": "CHANNEL",
+    "mode": "BLACKLIST",
+    "groups": [],
+    "extensions": [],
+    "createdAt": "__NOW__"
+  },
+  "MemberJail": {
+    "guildId": "",
+    "userId": "",
+    "sanctionId": null,
+    "source": "MANUAL",
+    "roleIds": [],
+    "reason": null,
+    "releaseAt": null,
+    "createdAt": "__NOW__"
+  },
+  "VisionList": {
+    "id": "",
+    "guildId": "",
+    "name": "",
+    "enabled": true,
+    "reviewChannelId": null,
+    "sanction": null,
+    "durationMin": null,
+    "createdBy": null,
     "createdAt": "__NOW__",
     "updatedAt": "__NOW__"
+  },
+  "VisionReview": {
+    "id": "",
+    "guildId": "",
+    "listId": null,
+    "matchId": null,
+    "score": 0,
+    "authorId": "",
+    "channelId": "",
+    "sha256": "",
+    "fingerprint": "",
+    "thumb": null,
+    "status": "PENDING",
+    "reviewMessageId": null,
+    "handledBy": null,
+    "handledAt": null,
+    "createdAt": "__NOW__"
   },
   "MemberRoleSnapshot": {
     "guildId": "",
@@ -3749,6 +3905,13 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "source": "HONEYPOT",
     "addedBy": null,
     "ocrText": null,
+    "fingerprint": null,
+    "thumb": null,
+    "listId": null,
+    "parentId": null,
+    "status": "BLOCKED",
+    "hits": 0,
+    "lastSeenAt": null,
     "createdAt": "__NOW__"
   },
   "ScamDomain": {
@@ -3963,6 +4126,16 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "createdAt": "__NOW__",
     "updatedAt": "__NOW__"
   },
+  "RecruitmentPanel": {
+    "id": "",
+    "guildId": "",
+    "channelId": "",
+    "messageId": null,
+    "title": "",
+    "formIds": [],
+    "createdAt": "__NOW__",
+    "updatedAt": "__NOW__"
+  },
   "ReputationVote": {
     "id": "",
     "guildId": "",
@@ -4041,7 +4214,7 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "price": 0,
     "listPrice": 0,
     "promoCodeId": null,
-    "status": "// Payée, en attente de la décision du staff (offre soumise à validation).",
+    "status": "PENDING",
     "source": "",
     "note": null,
     "decidedBy": null,
@@ -4295,7 +4468,6 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "updatedAt": "__NOW__"
   },
   "SiteDailyStat": {
-    "id": "",
     "siteId": "",
     "guildId": "",
     "dateKey": "",
@@ -4362,6 +4534,18 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "coins": 0,
     "xp": 0,
     "createdAt": "__NOW__"
+  },
+  "SiteTemplate": {
+    "id": "",
+    "name": "",
+    "description": null,
+    "category": "general",
+    "lang": "fr",
+    "authorGuildId": "",
+    "authorUserId": "",
+    "sourceSiteId": null,
+    "theme": "",
+    "themeSettings": {}
   },
   "SpamDetectionConfig": {
     "guildId": "",
@@ -4469,6 +4653,7 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "plannedDurationDays": 14,
     "targetGrade": null,
     "hierarchyId": null,
+    "doingListId": null,
     "notes": null,
     "lastReportAt": null,
     "createdAt": "__NOW__",
@@ -4660,6 +4845,17 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "createdAt": "__NOW__",
     "updatedAt": "__NOW__"
   },
+  "StaffListPanel": {
+    "id": "",
+    "guildId": "",
+    "channelId": "",
+    "messageId": null,
+    "title": "",
+    "hierarchyId": null,
+    "renderHash": null,
+    "createdAt": "__NOW__",
+    "updatedAt": "__NOW__"
+  },
   "StaffHierarchy": {
     "id": "",
     "guildId": "",
@@ -4736,6 +4932,7 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "watchedChannels": [],
     "ignoredChannels": [],
     "allowBots": false,
+    "ignoreAuthorVotes": true,
     "embedColor": "#F5C518",
     "removeBelowThreshold": true,
     "createdAt": "__NOW__",
@@ -4770,6 +4967,15 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "machineFingerprint": null,
     "firstSeenAt": "__NOW__",
     "lastPingAt": "__NOW__"
+  },
+  "FeaturedGuild": {
+    "guildId": "",
+    "name": "",
+    "description": "",
+    "iconUrl": null,
+    "memberCount": 0,
+    "lastSeenAt": "__NOW__",
+    "createdAt": "__NOW__"
   },
   "LocalInstanceIdentity": {
     "id": "singleton",
@@ -4927,6 +5133,13 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "name": "",
     "category": null,
     "emoji": null
+  },
+  "TicketStaffSignature": {
+    "guildId": "",
+    "userId": "",
+    "content": "",
+    "sendAsMe": false,
+    "updatedAt": "__NOW__"
   },
   "RpgTowerConfig": {
     "guildId": "",
@@ -5227,5 +5440,29 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "periodKey": "",
     "count": 0,
     "updatedAt": "__NOW__"
+  },
+  "WorkflowCooldown": {
+    "workflowId": "",
+    "nodeId": "",
+    "subjectKey": "",
+    "until": "__NOW__"
+  },
+  "WorkflowVariable": {
+    "guildId": "",
+    "name": "",
+    "subjectKey": "",
+    "value": 0,
+    "updatedAt": "__NOW__"
+  },
+  "WorkflowKeptMessage": {
+    "workflowId": "",
+    "nodeId": "",
+    "channelId": "",
+    "messageId": "",
+    "updatedAt": "__NOW__"
+  },
+  "WorkflowSweep": {
+    "workflowId": "",
+    "sweptUntil": "__NOW__"
   }
 };

@@ -158,7 +158,7 @@ const pingStatsRoute = createRoute({
 // Router Factory
 // ===========================================================================
 
-export function createPublicStatsRouter(_client: Client) {
+export function createPublicStatsRouter(client: Client) {
   const router = new OpenAPIHono();
 
   // GET /api/public/stats
@@ -259,8 +259,10 @@ export function createPublicStatsRouter(_client: Client) {
       where: { guildId },
       select: { iconUrl: true },
     }).catch(() => null);
-    const source = featured?.iconUrl;
-    if (!source) return c.json({ error: 'Not found' }, 404);
+    if (!featured?.iconUrl) return c.json({ error: 'Not found' }, 404);
+    // L'URL en base date de la dernière synchro : une icône changée depuis
+    // donne un 404 sur Discord. Le cache du bot, quand il voit le serveur, est à jour.
+    const source = client.guilds.cache.get(guildId)?.iconURL({ size: 128 }) ?? featured.iconUrl;
 
     let entry = iconCache.get(source);
     if (!entry || Date.now() - entry.at > ICON_CACHE_TTL) {
@@ -274,7 +276,8 @@ export function createPublicStatsRouter(_client: Client) {
       } catch (err) {
         logger.warn('StatsAPI', `Icône ${guildId} injoignable sur Discord : ${err instanceof Error ? err.message : err}`);
         // Une icône périmée vaut mieux qu'une icône cassée.
-        if (!entry) return c.json({ error: 'Icon unavailable' }, 502);
+        // 404 et non 502 : Cloudflare remplace les 502 par sa propre page.
+        if (!entry) return c.json({ error: 'Icon unavailable' }, 404);
       }
     }
 

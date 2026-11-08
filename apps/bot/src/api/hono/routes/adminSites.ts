@@ -6,6 +6,7 @@ import { requireAuth } from '../middleware/auth.js';
 import { resolveAdminAccess } from '../../shared.js';
 import { recordAdminAudit } from '../../../services/system/adminAuditService.js';
 import { suspendSite, unsuspendSite } from '../../../services/site/siteAdminService.js';
+import { listReportedTemplates, setTemplateHidden } from '../../../services/site/siteTemplateGallery.js';
 
 // ============================================================================
 // SITES COMMUNAUTAIRES : ADMINISTRATION KOTBO
@@ -115,6 +116,26 @@ export function createAdminSitesRouter(client: Client): OpenAPIHono {
       targetId: site.guildId,
       summary: `Suspension du site /s/${site.slug} levée`,
       metadata: { siteId },
+    });
+    return c.json({ ok: true });
+  });
+
+  // ── Galerie de modèles : signalés ou masqués ──────────────────────────────
+  app.get('/api/admin/sites/templates', async (c) => c.json({ templates: await listReportedTemplates() }));
+
+  app.post('/api/admin/sites/templates/:templateId/hidden', async (c) => {
+    const templateId = c.req.param('templateId');
+    if (!CUID.test(templateId)) return c.json({ error: 'invalid_field' }, 400);
+    const hidden = (await c.req.json().catch(() => ({})) as { hidden?: unknown }).hidden === true;
+    await setTemplateHidden(templateId, hidden);
+    void recordAdminAudit({
+      actorId: c.var.auth.userId,
+      actorName: c.var.auth.username ?? null,
+      action: hidden ? 'site.template_hide' : 'site.template_show',
+      targetType: 'site_template',
+      targetId: templateId,
+      summary: hidden ? 'Modèle de site masqué de la galerie' : 'Modèle de site rétabli dans la galerie',
+      metadata: { templateId },
     });
     return c.json({ ok: true });
   });

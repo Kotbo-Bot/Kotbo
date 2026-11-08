@@ -115,8 +115,6 @@ const COUNTER_TARGET: BulkTarget = {
     { name: 'userId', type: 'text' },
   ],
   counterColumns: CONTENT_COUNTER_COLUMNS,
-  createMany: (data) =>
-    prisma.messageContentDailyStat.createMany({ data: data as never, skipDuplicates: true }),
 };
 
 const ITEM_COLUMNS = ['count'] as const;
@@ -133,8 +131,6 @@ const ITEM_TARGET: BulkTarget = {
     { name: 'userId', type: 'text' },
   ],
   counterColumns: ITEM_COLUMNS,
-  createMany: (data) =>
-    prisma.contentItemDailyStat.createMany({ data: data as never, skipDuplicates: true }),
 };
 
 async function runFlush(): Promise<void> {

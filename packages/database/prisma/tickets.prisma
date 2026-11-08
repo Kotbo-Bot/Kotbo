@@ -183,7 +183,7 @@ model TicketMacro {
   /// Regroupement libre affiche dans le selecteur Discord.
   category String?
   emoji    String?
-  /// Texte insere. Accepte {user}, {staff}, {ticket_id}, {ticket_type}, {server}.
+  /// Texte insere. Accepte {user}, {staff}, {ticket_id}, {ticket_channel}, {ticket_link}, {ticket_type}, {server}.
   content  String
   enabled  Boolean @default(true)
   /// Ordre d'affichage a usage egal. Plus petit = plus haut.

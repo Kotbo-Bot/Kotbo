@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from '../i18n';
   import Papicon from './Papicon.svelte';
   
   let { value = $bindable('#5865F2') }: { value: string } = $props();
@@ -55,7 +56,7 @@
       class="w-6 h-6 rounded-full border border-white/20 shadow-inner transition-transform" 
       style="background-color: {getPreviewColor(value)};"
     ></div>
-    <span class="font-mono font-bold text-on-surface uppercase tracking-wider">{value || 'Aucune'}</span>
+    <span class="font-mono font-bold text-on-surface uppercase tracking-wider">{value || m.fcp_none()}</span>
   </div>
   <Papicon icon="chevron-down" size={16} class="text-on-surface-variant" />
 </button>
@@ -67,7 +68,7 @@
     <div class="bg-surface border border-outline-variant/30 rounded-xl w-full max-w-sm shadow-sm p-8 animate-in zoom-in-95 duration-300" onclick={(e) => e.stopPropagation()}>
       <div class="flex items-center gap-3 mb-6">
         <Papicon icon="palette" size={28} class="text-primary" />
-        <h3 class="text-xl font-semibold text-on-surface">Choisir une couleur</h3>
+        <h3 class="text-xl font-semibold text-on-surface">{m.fcp_title()}</h3>
       </div>
 
       <div class="space-y-6">
@@ -75,12 +76,12 @@
         <div class="w-full h-24 rounded-lg border border-white/10 flex flex-col items-center justify-center relative overflow-hidden transition-colors" style="background-color: {getPreviewColor(tempValue)};">
           <div class="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent"></div>
           <span class="relative z-10 text-white font-mono font-semibold text-lg drop-shadow-md">{tempValue}</span>
-          <span class="relative z-10 text-white/80 text-xs font-semibold drop-shadow-sm">Aperçu du rendu</span>
+          <span class="relative z-10 text-white/80 text-xs font-semibold drop-shadow-sm">{m.fcp_preview()}</span>
         </div>
 
         <!-- Custom HEX Input -->
         <label class="block">
-          <span class="text-xs font-medium text-on-surface-variant/40 ml-1 mb-2 block">Code Hexadécimal</span>
+          <span class="text-xs font-medium text-on-surface-variant/40 ml-1 mb-2 block">{m.fcp_hex()}</span>
           <div class="relative">
             <input 
               type="text" 
@@ -93,7 +94,7 @@
 
         <!-- Preset Palette -->
         <div>
-          <span class="text-xs font-medium text-on-surface-variant/40 ml-1 mb-3 block">Couleurs recommandées</span>
+          <span class="text-xs font-medium text-on-surface-variant/40 ml-1 mb-3 block">{m.fcp_presets()}</span>
           <div class="form-color-modal__palette grid grid-cols-6 gap-3">
             {#each presetColors as pc}
               <button
@@ -107,8 +108,8 @@
         </div>
 
         <div class="flex gap-3 pt-4 border-t border-outline-variant/10">
-          <button onclick={() => showModal = false} class="flex-1 py-3 rounded-xl font-bold bg-surface-container hover:bg-surface-container-high transition-colors text-sm text-on-surface">Annuler</button>
-          <button onclick={saveColor} class="flex-1 py-3 rounded-xl font-bold bg-primary text-white active:scale-[0.98] transition-transform text-sm">Appliquer</button>
+          <button onclick={() => showModal = false} class="flex-1 py-3 rounded-xl font-bold bg-surface-container hover:bg-surface-container-high transition-colors text-sm text-on-surface">{m.common_cancel()}</button>
+          <button onclick={saveColor} class="flex-1 py-3 rounded-xl font-bold bg-primary text-white active:scale-[0.98] transition-transform text-sm">{m.ppan_apply()}</button>
         </div>
       </div>
     </div>

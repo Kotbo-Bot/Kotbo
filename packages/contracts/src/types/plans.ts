@@ -1,23 +1,21 @@
 /**
  * Registre des offres commerciales Kotbo - source de vérité unique.
  *
- * Kotbo est vendu **tout-en-un** : une offre payante ouvre l'intégralité du
- * catalogue, y compris les modules ajoutés plus tard. Ce fichier ne dit donc
- * plus *quels modules* sont vendus avec quelle offre - il n'y a plus de module
- * en plus ou en moins d'une offre à l'autre - mais *à quel serveur* s'adresse
- * quelle offre : le palier est décidé par la taille du serveur, pas par un
- * panier de fonctionnalités.
+ * Kotbo est **freemium** : l'offre gratuite ouvre ce que les autres bots
+ * donnent gratuitement (modération, sécurité, accueil, niveaux, tickets…), et
+ * une seule offre payante, **Plus**, ouvre l'intégralité du catalogue pour
+ * tous les serveurs, quelle que soit leur taille.
  *
- *   jusqu'à 1 000 membres       → Plus
- *   de 1 001 à 10 000 membres   → Pro
- *   de 10 001 à 100 000 membres → Ultimate
- *   au-delà de 100 000 membres  → Sur mesure (rendez-vous commercial)
+ * `PRO`, `ULTIMATE` et `CUSTOM` ne se vendent plus (`listed: false`) : ils
+ * restent connus pour les serveurs qui les ont déjà, sans quoi
+ * `normalizePlanKey` les ferait retomber sur `FREE` et leurs renouvellements
+ * Stripe ne retrouveraient plus leur offre.
  *
- * La seule frontière fonctionnelle qui subsiste est celle de `FREE`, qui
- * n'ouvre **aucun** module : Kotbo est un outil professionnel, pas un bot
- * public que l'on branche pour trois commandes. Un serveur sans abonnement
- * garde uniquement les pages du cœur (tableau de bord, modules, réglages,
- * facturation), le temps de souscrire.
+ * La seule frontière fonctionnelle est celle de `FREE` (`FREE_MODULES`). Elle
+ * ne ferme jamais la sécurité d'un serveur : un raid subi faute d'abonnement
+ * ferait plus de tort à Kotbo que l'abonnement ne rapporte. Ce qui reste payant
+ * est ce qu'aucun bot gratuit ne fait : la gestion du staff, l'IA, le
+ * cross-serveur, le site, l'engagement poussé (saisons, clans, RPG).
  *
  * Le lien avec `MODULE_REGISTRY` se fait par `planIncludesModule`, consulté par
  * `moduleGate` côté bot (garde d'exécution) et par le dashboard (affichage du
@@ -35,16 +33,12 @@ import { MODULE_REGISTRY } from './modules.js';
  * Offres, de la plus faible à la plus forte. L'ordre du tableau fait foi pour
  * `comparePlans` : un plan situé plus loin inclut tout ce que porte le précédent.
  *
- * - `FREE`     : état d'un serveur sans abonnement. Aucun module ouvert : le
- *                bot est présent mais inerte tant que rien n'est souscrit.
- * - `PLUS`     : offre des petits serveurs, jusqu'à 1 000 membres. Même produit
- *                que les autres, au tarif de leur taille : c'est l'entrée de
- *                gamme, pas une version amputée.
- * - `PRO`      : offre des serveurs de 1 001 à 10 000 membres, en libre-service.
- * - `ULTIMATE` : même produit, pour les serveurs de 10 001 à 100 000 membres.
- * - `CUSTOM`   : au-delà de 100 000 membres, ou accord négocié (white-label,
- *                partenariat). Jamais vendu par Stripe en libre-service : il est
- *                posé à la main depuis l'administration.
+ * - `FREE`     : état d'un serveur sans abonnement. Ouvre `FREE_MODULES`.
+ * - `PLUS`     : la seule offre vendue, tout le catalogue, pour tous les serveurs.
+ * - `PRO`      : ancienne offre des serveurs de 1 001 à 10 000 membres, plus vendue.
+ * - `ULTIMATE` : ancienne offre des serveurs de 10 001 à 100 000 membres, plus vendue.
+ * - `CUSTOM`   : accord négocié (white-label, partenariat), posé à la main
+ *                depuis l'administration, jamais vendu par Stripe.
  */
 export const PLAN_KEYS = ['FREE', 'PLUS', 'PRO', 'ULTIMATE', 'CUSTOM'] as const;
 export type PlanKey = (typeof PLAN_KEYS)[number];
@@ -80,12 +74,15 @@ export interface PlanDefinition {
    */
   modules: 'all' | string[];
   /**
-   * Taille de serveur à laquelle l'offre s'adresse, ou `null` pour `FREE` qui
-   * n'est pas un palier mais l'absence d'abonnement. C'est cette tranche qui
-   * décide de l'offre proposée : elle n'est pas un conseil, elle est la règle
-   * (voir `planForMemberCount`).
+   * Taille de serveur à laquelle l'offre s'adresse, ou `null` pour une offre
+   * qui n'est pas un palier (`FREE`, anciennes offres, accord négocié).
    */
   memberRange: PlanMemberRange | null;
+  /**
+   * Affichée dans la grille des offres. Une offre retirée de la vente ne
+   * l'est plus, sauf pour le serveur qui l'a encore.
+   */
+  listed: boolean;
   /**
    * Noms des variables d'environnement portant les identifiants de prix Stripe
    * (`price_...`). On stocke le *nom* et pas la valeur pour que ce fichier reste
@@ -105,15 +102,56 @@ export interface PlanDefinition {
   selfServe: boolean;
 }
 
+/**
+ * Modules ouverts sans abonnement, en plus du cœur. Une dépendance hors de
+ * cette liste éteindrait le module en cascade : `youtube` et `twitch` tirent
+ * `social_networks` avec eux (garde-fou dans `planRegistry.test.ts`).
+ */
+export const FREE_MODULES = [
+  // Modération et sécurité : jamais derrière un paiement.
+  'sanctions',
+  'automod',
+  'logs',
+  'raid_protection',
+  'security_verification',
+  'nickname_moderation',
+  // Accueil et contenu de base.
+  'welcome_goodbye',
+  'reaction_roles',
+  'regulation',
+  'embed_builder',
+  'auto_responses',
+  'auto_thread',
+  'news',
+  // Communauté.
+  'leveling',
+  'tickets',
+  'giveaways',
+  'events',
+  'suggestions',
+  'starboard',
+  'fun',
+  // Intégrations.
+  'analytics',
+  'workflows',
+  'social_networks',
+  'youtube',
+  'twitch',
+  'bump_reminder',
+  // Vitrine de la gestion du staff : le reste de la catégorie est payant.
+  'staff_directory',
+];
+
 export const PLAN_REGISTRY: PlanDefinition[] = [
   {
     key: 'FREE',
     name: 'Gratuit',
-    tagline: 'Le bot est là, rien n\'est ouvert.',
+    tagline: 'Tout ce qu\'un bot gratuit fait, en mieux.',
     description:
-      "État d'un serveur sans abonnement : aucun module n'est actif. Kotbo est un outil de gestion professionnel, pas un bot public - seules les pages de configuration restent accessibles, le temps de choisir une offre.",
-    modules: [],
+      "Modération, anti-raid, logs, accueil, niveaux, tickets, giveaways, analytics, notifications YouTube et Twitch : l'essentiel d'un serveur, sans carte bancaire et sans limite de durée.",
+    modules: FREE_MODULES,
     memberRange: null,
+    listed: true,
     priceEnv: null,
     displayPriceCents: null,
     selfServe: false,
@@ -121,47 +159,51 @@ export const PLAN_REGISTRY: PlanDefinition[] = [
   {
     key: 'PLUS',
     name: 'Plus',
-    tagline: 'Tout Kotbo, pour un serveur jusqu\'à 1 000 membres.',
+    tagline: 'Tout Kotbo, pour tous les serveurs.',
     description:
-      "Le catalogue complet, au tarif d'un petit serveur : quelques centaines de membres n'ont pas à payer le prix d'une communauté de dix mille. Exactement les mêmes modules que Pro et Ultimate, rien n'est réservé au palier au-dessus.",
+      "Le catalogue complet, au même prix quelle que soit la taille du serveur : gestion du staff, IA de modération, site, saisons, clans, économie, serveur MCP, cross-serveur, et les modules ajoutés plus tard.",
     modules: 'all',
-    memberRange: { min: 0, max: 1_000 },
+    memberRange: { min: 0, max: null },
+    listed: true,
     priceEnv: { month: 'STRIPE_PRICE_PLUS_MONTHLY', year: 'STRIPE_PRICE_PLUS_YEARLY' },
     displayPriceCents: { month: 500, year: 3_000 },
     selfServe: true,
   },
+  // Anciennes offres : plus vendues, gardées pour les serveurs qui les ont.
+  // `priceEnv` reste renseigné pour que le webhook relie encore leurs prix.
   {
     key: 'PRO',
     name: 'Pro',
-    tagline: 'Tout Kotbo, pour un serveur de 1 001 à 10 000 membres.',
-    description:
-      "L'intégralité du catalogue : modération, staff, progression, économie, tickets, événements, contenu, intégrations, cross-serveur. Rien n'est en option, et les modules ajoutés plus tard sont inclus d'office.",
+    tagline: 'Ancienne offre, remplacée par Plus.',
+    description: "Tout le catalogue. Cette offre n'est plus vendue : Plus ouvre exactement la même chose, pour tous les serveurs.",
     modules: 'all',
-    memberRange: { min: 1_001, max: 10_000 },
+    memberRange: null,
+    listed: false,
     priceEnv: { month: 'STRIPE_PRICE_PRO_MONTHLY', year: 'STRIPE_PRICE_PRO_YEARLY' },
     displayPriceCents: { month: 999, year: 4_999 },
-    selfServe: true,
+    selfServe: false,
   },
   {
     key: 'ULTIMATE',
     name: 'Ultimate',
-    tagline: 'Le même Kotbo, dimensionné au-dessus de 10 000 membres.',
-    description:
-      "Exactement les mêmes fonctionnalités que Pro - tout le catalogue - mais pour une communauté de 10 001 à 100 000 membres : volume de traitement, quotas et accompagnement suivent la taille du serveur.",
+    tagline: 'Ancienne offre, remplacée par Plus.',
+    description: "Tout le catalogue. Cette offre n'est plus vendue : Plus ouvre exactement la même chose, pour tous les serveurs.",
     modules: 'all',
-    memberRange: { min: 10_001, max: 100_000 },
+    memberRange: null,
+    listed: false,
     priceEnv: { month: 'STRIPE_PRICE_ULTIMATE_MONTHLY', year: 'STRIPE_PRICE_ULTIMATE_YEARLY' },
     displayPriceCents: { month: 2_500, year: 14_999 },
-    selfServe: true,
+    selfServe: false,
   },
   {
     key: 'CUSTOM',
     name: 'Sur mesure',
-    tagline: 'Au-delà de 100 000 membres, on en parle.',
+    tagline: 'Un accord convenu avec l\'équipe Kotbo.',
     description:
-      "Tout le catalogue, sur des conditions convenues au cas par cas : volumétrie, infrastructure dédiée, white-label, partenariat. Se met en place après un rendez-vous, jamais souscrit en ligne.",
+      "Tout le catalogue, sur des conditions convenues au cas par cas : white-label, partenariat, infrastructure dédiée. Posé par l'équipe Kotbo, jamais souscrit en ligne.",
     modules: 'all',
-    memberRange: { min: 100_001, max: null },
+    memberRange: null,
+    listed: false,
     priceEnv: null,
     displayPriceCents: null,
     selfServe: false,
@@ -208,46 +250,20 @@ export function comparePlans(a: PlanKey, b: PlanKey): number {
 }
 
 // ─────────────────────────────────────────────────────────────
-// Palier commercial : c'est la taille du serveur qui décide
+// Offre proposée à un serveur
 // ─────────────────────────────────────────────────────────────
 
 /**
- * Seuils de bascule, en nombre de membres. Écrits ici et nulle part ailleurs :
- * le dashboard les affiche, la route de paiement les fait respecter, et les
- * deux doivent dire la même chose.
+ * Offre payante proposée à un serveur. Depuis l'offre unique, c'est `PLUS`
+ * quelle que soit sa taille ; la signature garde l'effectif pour ne pas
+ * retoucher les appelants si un palier revenait.
  */
-export const PLAN_MEMBER_THRESHOLDS = {
-  /** Au-delà de ce nombre de membres, Plus ne suffit plus. */
-  PRO: 1_000,
-  /** Au-delà de ce nombre de membres, Pro ne suffit plus. */
-  ULTIMATE: 10_000,
-  /** Au-delà de ce nombre de membres, plus rien ne se vend en ligne. */
-  CUSTOM: 100_000,
-} as const;
-
-/**
- * Offre qui correspond à un serveur de cette taille. C'est la seule offre
- * payante qu'il puisse souscrire : les fonctionnalités étant identiques
- * partout, laisser le choix reviendrait à laisser un serveur de 80 000 membres
- * payer le tarif d'un serveur de 500.
- *
- * Un nombre de membres inconnu (cache du bot pas encore rempli, serveur
- * injoignable) retombe sur `PRO` : ni l'offre la plus chère, qu'on n'a aucune
- * raison de pousser sur la foi d'une donnée manquante, ni la moins chère, qui
- * laisserait un serveur de 50 000 membres payer le tarif d'un salon de 200.
- */
-export function planForMemberCount(memberCount: number | null | undefined): PaidPlanKey {
-  if (typeof memberCount !== 'number' || !Number.isFinite(memberCount)) return 'PRO';
-  if (memberCount > PLAN_MEMBER_THRESHOLDS.CUSTOM) return 'CUSTOM';
-  if (memberCount > PLAN_MEMBER_THRESHOLDS.ULTIMATE) return 'ULTIMATE';
-  if (memberCount > PLAN_MEMBER_THRESHOLDS.PRO) return 'PRO';
+export function planForMemberCount(_memberCount?: number | null): PaidPlanKey {
   return 'PLUS';
 }
 
 /**
- * Ce serveur peut-il souscrire cette offre en ligne ?
- *
- * `CUSTOM` répond toujours faux : il passe par un rendez-vous, pas par Stripe.
+ * Ce serveur peut-il souscrire cette offre en ligne ? Seule `PLUS` répond vrai.
  */
 export function canPurchasePlan(plan: PlanKey, memberCount: number | null | undefined): boolean {
   return getPlanDefinition(plan).selfServe && planForMemberCount(memberCount) === plan;
@@ -290,7 +306,7 @@ export function planIncludesModule(plan: PlanKey, moduleKey: string): boolean {
 
 /**
  * Offre la plus basse qui ouvre ce module. `null` si le module est déjà ouvert
- * sans abonnement - ce qui, désormais, ne concerne que les modules du cœur.
+ * sans abonnement (cœur et `FREE_MODULES`).
  *
  * Les offres payantes étant identiques, la réponse est toujours `PLUS` pour
  * un module verrouillé. Le dashboard n'affiche pas cette valeur telle quelle : il
@@ -311,7 +327,8 @@ export function lowestPlanWithModule(moduleKey: string): PlanKey | null {
 // ─────────────────────────────────────────────────────────────
 
 /**
- * Durée de l'essai gratuit offert à la première souscription, en jours.
+ * Durée de l'essai gratuit, en jours. Il n'est offert qu'avec un code de
+ * parrainage : sans code, la souscription est payante dès le premier jour.
  *
  * Ici et pas dans une variable d'environnement : la durée est un engagement
  * commercial affiché sur la page tarifs et dans les CGU, elle doit être la même
@@ -330,6 +347,18 @@ export const TRIAL_DAYS = 15;
 export function planAllowsTrial(plan: PlanKey): boolean {
   return getPlanDefinition(plan).selfServe;
 }
+
+/**
+ * Remise du filleul, en pourcentage, sur sa première facture après l'essai.
+ * Elle s'ajoute aux `TRIAL_DAYS` jours offerts par le code de parrainage.
+ */
+export const REFERRAL_DISCOUNT_PERCENT = 10;
+
+/**
+ * Historique lisible dans Analytics sans abonnement, en jours. Assez pour voir
+ * que les stats existent, trop court pour suivre une tendance.
+ */
+export const FREE_ANALYTICS_DAYS = 7;
 
 // ─────────────────────────────────────────────────────────────
 // Offrir Kotbo

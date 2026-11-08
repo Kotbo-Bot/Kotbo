@@ -19,7 +19,7 @@ export async function fetchPublicNews(guildId: string) {
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
-    throw new Error(error.error || 'Impossible de charger les actualités publiques. Réessaie.');
+    throw new Error(error.error || m.apx_news_failed());
   }
 
   return response.json();
@@ -34,7 +34,7 @@ export async function fetchPublicRanked(guildId: string) {
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
-    throw new Error(error.error || 'Impossible de charger le classement de prestige. Réessaie.');
+    throw new Error(error.error || m.apx_prestige_failed());
   }
 
   return response.json();
@@ -48,7 +48,7 @@ export async function fetchPublicLeveling(guildId: string) {
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
-    throw new Error(error.error || 'Impossible de charger le classement de leveling. Réessaie.');
+    throw new Error(error.error || m.apx_leveling_failed());
   }
 
   return response.json();
@@ -262,6 +262,7 @@ export interface StarboardConfigPayload {
   watchedChannels: string[];
   ignoredChannels: string[];
   allowBots: boolean;
+  ignoreAuthorVotes: boolean;
   embedColor: string;
   removeBelowThreshold: boolean;
 }

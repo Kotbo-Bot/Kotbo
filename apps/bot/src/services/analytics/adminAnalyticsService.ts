@@ -24,7 +24,6 @@ import { logger } from '../../utils/logger.js';
 import {
   ANALYTICS_DIMENSIONS,
   ONBOARDING_STEPS,
-  PLAN_MEMBER_THRESHOLDS,
   SIZE_BUCKETS,
   normalizePlanKey,
   planForMemberCount,
@@ -37,14 +36,11 @@ import { KOTBO_MODULES, type KotboModule } from './moduleStatsService.js';
 import { dateKeyFor } from './acquisitionSnapshotService.js';
 
 /**
- * Ce serveur paie-t-il un palier qui ne correspond plus à sa taille ?
+ * Ce serveur paie-t-il une offre autre que celle qui se vend aujourd'hui ?
  *
- * Le prix suivant la taille du serveur, un serveur qui grossit finit par sortir
- * de la tranche qu'il a souscrite. On compare l'offre en cours à celle que sa
- * taille appelle aujourd'hui plutôt que d'énumérer les seuils à la main : un
- * palier ajouté dans `PLAN_REGISTRY` est ainsi pris en compte sans retoucher
- * l'analytique. `FREE` n'est jamais hors palier - il ne paie rien - et `CUSTOM`
- * non plus, ses conditions étant négociées hors grille.
+ * Depuis l'offre unique, ce sont les abonnés restés sur Pro ou Ultimate, à
+ * basculer sur Plus. `FREE` n'est jamais hors palier - il ne paie rien - et
+ * `CUSTOM` non plus, ses conditions étant négociées hors grille.
  */
 function isOutOfTier(plan: string, memberCount: number): boolean {
   if (plan === 'FREE' || plan === 'CUSTOM') return false;
@@ -568,9 +564,8 @@ export async function getRevenueStats(options: {
     year: { count: 0, mrrCents: 0 },
   };
   const byPlan: Record<string, { count: number; mrrCents: number }> = {
+    // Pro et Ultimate n'apparaissent que si un abonné y est encore (boucle ci-dessous).
     PLUS: { count: 0, mrrCents: 0 },
-    PRO: { count: 0, mrrCents: 0 },
-    ULTIMATE: { count: 0, mrrCents: 0 },
     CUSTOM: { count: 0, mrrCents: 0 },
   };
 
@@ -941,7 +936,9 @@ export async function getSegmentsStats(options: {
     churnRate: data.guilds > 0 ? round1((data.churned / data.guilds) * 100) : 0,
   }));
 
-  const columns = ['FREE', 'PLUS', 'PRO', 'ULTIMATE', 'CUSTOM'];
+  // Pro et Ultimate ne se vendent plus : colonnes montrées seulement s'il reste des serveurs dessus.
+  const legacy = new Set(guilds.map((g) => normalizePlanKey(g.plan)));
+  const columns = ['FREE', 'PLUS', 'PRO', 'ULTIMATE', 'CUSTOM'].filter((c) => (c !== 'PRO' && c !== 'ULTIMATE') || legacy.has(c));
   const sizeKeys: SizeBucketKey[] = ['0-100', '100-1k', '1k-10k', '10k-100k', '100k+'];
 
   const matrixData: Record<SizeBucketKey, Record<string, CrossMatrixCell>> = {} as never;
@@ -1208,11 +1205,8 @@ export async function getGuildsExplorer(
   } else if (options.filter === 'churned') {
     where.churnedAt = { not: null };
   } else if (options.filter === 'out_of_tier') {
-    where.OR = [
-      { plan: 'PLUS', memberCount: { gt: PLAN_MEMBER_THRESHOLDS.PRO } },
-      { plan: 'PRO', memberCount: { gt: PLAN_MEMBER_THRESHOLDS.ULTIMATE } },
-      { plan: 'ULTIMATE', memberCount: { gt: PLAN_MEMBER_THRESHOLDS.CUSTOM } },
-    ];
+    // Les abonnés aux anciennes offres, comme `isOutOfTier`.
+    where.plan = { in: ['PRO', 'ULTIMATE'] };
   }
 
   const [total, lifecycles] = await Promise.all([

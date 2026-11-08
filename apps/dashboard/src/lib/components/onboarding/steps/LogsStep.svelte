@@ -72,7 +72,7 @@
       celebrateStep();
       wizard.complete('logs');
     } catch (err) {
-      toast.error(errorMessage(err) || "La journalisation n'a pas pu être enregistrée.");
+      toast.error(errorMessage(err) || m.onb_logs_save_failed());
     } finally {
       onboardingData.busy = false;
     }
@@ -120,9 +120,9 @@
         color="#f23f43"
         title={m.onb_logs_preview_deleted()}
         fields={[
-          { emoji: '👤', name: m.onb_logs_preview_author(), value: 'Maë · @mae' },
-          { emoji: '#️⃣', name: m.onb_logs_preview_channel(), value: '#général' },
-          { emoji: '💬', name: m.onb_logs_preview_content(), value: 'ce message a été supprimé par son auteur' },
+          { emoji: '👤', name: m.onb_logs_preview_author(), value: m.obx_lg_author() },
+          { emoji: '#️⃣', name: m.onb_logs_preview_channel(), value: m.obx_lg_channel() },
+          { emoji: '💬', name: m.onb_logs_preview_content(), value: m.obx_lg_content() },
         ]}
       />
     </DiscordPreview>

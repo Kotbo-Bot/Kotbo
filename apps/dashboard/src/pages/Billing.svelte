@@ -24,6 +24,7 @@
   import Button from '../lib/components/ui/Button.svelte';
   import { confetti } from '../lib/onboarding/celebrate';
   import { m, dateLocale } from '../lib/i18n';
+  import { errorMessage } from '@kotbo/shared';
 
   let status = $state<BillingStatus | null>(null);
   let loading = $state(true);
@@ -106,8 +107,21 @@
   const statusInfo = $derived(status?.status ? STATUS_LABELS[status.status] ?? null : null);
 
   const trial = $derived(status?.trial ?? null);
-  /** Vrai quand les boutons d'achat doivent annoncer l'essai plutôt que le prix. */
+  /** Ce serveur peut encore avoir l'essai, à condition de saisir un code de parrainage. */
   const trialAvailable = $derived(Boolean(trial?.available));
+  let referralInput = $state('');
+  /** Vrai quand les boutons d'achat doivent annoncer l'essai plutôt que le prix. */
+  const referralEntered = $derived(trialAvailable && referralInput.trim().length > 0);
+
+  async function copyReferral() {
+    if (!status?.referral) return;
+    try {
+      await navigator.clipboard.writeText(status.referral.code);
+      toast.success(m.bill_referral_copied());
+    } catch {
+      toast.error(status.referral.code);
+    }
+  }
 
   /**
    * Pourquoi l'essai n'est pas proposé. On l'explique au lieu de faire
@@ -132,7 +146,15 @@
   async function subscribe(plan: PlanKey) {
     if (plan === 'FREE' || plan === 'CUSTOM') return;
     pending = plan;
-    const url = await startCheckout(plan, interval);
+    let url: string | null = null;
+    try {
+      url = await startCheckout(plan, interval, referralEntered ? referralInput.trim() : undefined);
+    } catch (err) {
+      // Code de parrainage refusé : le bot dit pourquoi.
+      pending = null;
+      toast.error(errorMessage(err) || m.bill_err_checkout());
+      return;
+    }
     pending = null;
 
     if (!url) {
@@ -278,17 +300,25 @@
       {/if}
     </section>
 
-    <!-- ── Essai gratuit ─────────────────────────────────────────────────── -->
-    {#if trial && trialAvailable}
+    <!-- ── Parrainage : seul moyen d'avoir l'essai ───────────────────────── -->
+    {#if trial && trialAvailable && status.canManage !== false}
       <div class="rounded-xl border border-primary/30 bg-primary/5 p-4 flex items-start gap-3">
         <div class="w-8 h-8 rounded-lg bg-primary/15 text-primary flex items-center justify-center shrink-0">
           <Papicon name="Gift" size={16} />
         </div>
-        <div class="space-y-1 min-w-0">
-          <h2 class="text-sm font-semibold text-on-surface">{m.bill_trial_title({ days: trial.days })}</h2>
+        <div class="space-y-2 min-w-0 flex-1">
+          <h2 class="text-sm font-semibold text-on-surface">{m.bill_trial_title()}</h2>
           <p class="text-body-sm text-on-surface-variant leading-relaxed">
-            {m.bill_trial_desc({ days: trial.days })}
+            {m.bill_trial_desc({ days: trial.days, percent: status.referral?.discountPercent ?? 0 })}
           </p>
+          <input
+            type="text"
+            bind:value={referralInput}
+            aria-label={m.bill_trial_title()}
+            placeholder={m.bill_referral_placeholder()}
+            autocomplete="off"
+            class="w-full max-w-xs rounded-lg border border-outline-variant/40 bg-surface-container px-3 py-2 text-body-sm text-on-surface uppercase placeholder:normal-case placeholder:text-on-surface-variant/40 focus:outline-none focus:ring-2 focus:ring-primary/40"
+          />
         </div>
       </div>
     {:else if trialReasonText}
@@ -324,7 +354,7 @@
     </div>
 
     <!-- ── Grille des offres ─────────────────────────────────────────────── -->
-    <section class="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+    <section class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
       {#each orderedPlans as plan (plan.key)}
         {@const isCurrent = plan.key === currentPlan}
         {@const isUpgrade = rank(plan.key) > rank(currentPlan)}
@@ -354,7 +384,7 @@
                 <span class="text-xs text-on-surface-variant">/{interval === 'month' ? m.bill_per_month() : m.bill_per_year()}</span>
               </div>
               <p class="text-2xs text-on-surface-variant mt-0.5">
-                {m.bill_price_note()}{#if trialAvailable && plan.purchasable}&nbsp;- {m.bill_after_trial()}{/if}
+                {m.bill_price_note()}{#if referralEntered && plan.purchasable}&nbsp;- {m.bill_after_trial()}{/if}
               </p>
             {:else if plan.key === 'FREE'}
               <div class="text-2xl font-semibold text-on-surface tracking-tight">{m.bill_free()}</div>
@@ -401,7 +431,7 @@
             >
               {pending === plan.key
                 ? m.bill_opening()
-                : trialAvailable
+                : referralEntered
                   ? m.bill_try_plan({ plan: plan.name, days: trial?.days ?? 0 })
                   : m.bill_switch_to({ plan: plan.name })}
             </button>
@@ -434,7 +464,26 @@
     </section>
 
     <p class="text-xs text-on-surface-variant text-center leading-relaxed max-w-2xl mx-auto">
-      {m.bill_footer()}{#if trialAvailable}{' '}{m.bill_footer_trial()}{/if}
+      {m.bill_footer()}{#if referralEntered}{' '}{m.bill_footer_trial()}{/if}
     </p>
+
+    <!-- ── Code à partager ───────────────────────────────────────────────── -->
+    {#if status.referral}
+      <section class="rounded-xl border border-outline-variant/40 bg-surface-container-low p-4 flex flex-col sm:flex-row sm:items-center gap-3 max-w-2xl mx-auto w-full">
+        <div class="min-w-0 flex-1 space-y-1">
+          <h2 class="text-sm font-semibold text-on-surface">{m.bill_referral_own_title()}</h2>
+          <p class="text-body-sm text-on-surface-variant leading-relaxed">
+            {m.bill_referral_own_desc({ days: trial?.days ?? 0, percent: status.referral.discountPercent })}
+          </p>
+          {#if status.referral.referred > 0}
+            <p class="text-xs text-on-surface-variant">{m.bill_referral_own_count({ count: status.referral.referred })}</p>
+          {/if}
+        </div>
+        <div class="flex items-center gap-2 shrink-0">
+          <code class="px-3 py-2 rounded-lg bg-surface-container text-sm font-semibold tracking-wide text-on-surface">{status.referral.code}</code>
+          <Button size="sm" variant="secondary" icon="Copy" onclick={copyReferral}>{m.bill_referral_copy()}</Button>
+        </div>
+      </section>
+    {/if}
   {/if}
 </div>

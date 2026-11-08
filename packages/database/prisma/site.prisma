@@ -280,8 +280,6 @@ model SiteStaffProfile {
 // Fréquentation, agrégée par jour, sans cookie ni identifiant. `dimension`
 // vaut "all", "path", "referrer" ou "device" ; `key` porte la valeur.
 model SiteDailyStat {
-  id String @id @default(cuid())
-
   siteId    String
   guildId   String
   dateKey   String
@@ -292,7 +290,7 @@ model SiteDailyStat {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@unique([siteId, dateKey, dimension, key], map: "site_daily_stats_key")
+  @@id([siteId, dateKey, dimension, key])
   @@index([guildId, dateKey])
   @@map("site_daily_stats")
 }
@@ -430,4 +428,41 @@ model SiteVote {
   @@index([guildId, createdAt])
   @@index([guildId, userId, createdAt])
   @@map("site_votes")
+}
+
+// Modèle de site partagé dans la galerie : thème, menu et pages (textes
+// remplacés par des textes d'exemple, blocs de modules remis à leurs réglages
+// par défaut). Publication directe ; masqué d'office au-delà de 5 signalements.
+// Les images restent celles du site d'origine et sont copiées vers le site
+// qui applique le modèle.
+model SiteTemplate {
+  id String @id @default(cuid())
+
+  name        String
+  description String?
+  // general | gaming | rp | esport | etude | autre
+  category    String  @default("general")
+  lang        String  @default("fr")
+
+  authorGuildId String
+  authorUserId  String
+  sourceSiteId  String?
+
+  theme         String
+  themeSettings Json   @default("{}")
+  // [{ label, pageKey? , section? }]
+  navigation    Json   @default("[]")
+  // [{ key, title, slug, content, isHome, inNav }]
+  pages         Json   @default("[]")
+
+  uses        Int      @default(0)
+  reporterIds String[] @default([])
+  hidden      Boolean  @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([hidden, uses])
+  @@index([authorGuildId])
+  @@map("site_templates")
 }

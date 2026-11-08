@@ -9,7 +9,7 @@
  */
 
 import prisma from '../../utils/db.js';
-import { logger } from '../../utils/logger.js';
+import { flushBulk, type BulkRow, type BulkTarget } from './analyticsBulkFlush.js';
 
 const FLUSH_INTERVAL_MS = 60_000;
 const MAX_WORD_LENGTH = 24;
@@ -89,7 +89,7 @@ export function trackMessageWords(guildId: string, content: string): void {
   }
 }
 
-/** Vide le buffer en base (upsert par lots). Exporté pour les tests et l'arrêt propre. */
+/** Vide le buffer en base (INSERT groupé par lots). Exporté pour les tests et l'arrêt propre. */
 export async function flushWordStats(): Promise<void> {
   if (buffer.size === 0) return;
 
@@ -99,24 +99,28 @@ export async function flushWordStats(): Promise<void> {
 
   const dateKey = new Date().toISOString().slice(0, 10);
 
+  // Un upsert par mot faisait des centaines d'instructions par serveur et par
+  // minute : on passe par le même INSERT ... ON CONFLICT groupé que les autres stats.
+  const rows: BulkRow[] = [];
   for (const [guildId, words] of snapshot) {
-    const entries = [...words.entries()];
-    try {
-      // Une transaction par guilde : upsert incrémental de chaque mot.
-      await prisma.$transaction(
-        entries.map(([word, count]) =>
-          prisma.guildWordStat.upsert({
-            where: { guildId_dateKey_word: { guildId, dateKey, word } },
-            create: { guildId, dateKey, word, count },
-            update: { count: { increment: count } },
-          }),
-        ),
-      );
-    } catch (err) {
-      logger.error('WordStats', `Flush impossible pour ${guildId} (${entries.length} mots):`, err);
+    for (const [word, count] of words) {
+      rows.push({ keys: [guildId, dateKey, word], counters: { count } });
     }
   }
+  await flushBulk(WORD_TARGET, rows);
 }
+
+const WORD_TARGET: BulkTarget = {
+  label: 'GuildWordStats',
+  table: 'guild_word_stats',
+  keys: [
+    { name: 'guildId', type: 'text' },
+    { name: 'dateKey', type: 'text' },
+    { name: 'word', type: 'text' },
+  ],
+  counterColumns: ['count'],
+  timestamps: false,
+};
 
 export function startWordStatsFlusher(): void {
   if (flushTimer) return;

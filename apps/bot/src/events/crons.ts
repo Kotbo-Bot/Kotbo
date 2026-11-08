@@ -22,13 +22,29 @@ import { checkExpiredGiveaways } from '../services/features/giveawayService.js';
 import { refreshAllAutoLeaderboards } from '../services/progression/leaderboardService.js';
 import { pruneOldMessageLogs } from './messageLogging.js';
 import { pruneOldAuditEvents } from '../services/analytics/auditDiffService.js';
-import { dispatchScheduledWorkflows, pruneWorkflowExecutions, resumePendingExecutions } from '../services/features/workflow/workflowService.js';
+import { dispatchMemberDaysWorkflows, dispatchScheduledWorkflows, pruneWorkflowExecutions, resumePendingExecutions } from '../services/features/workflow/workflowService.js';
 import { expireTemporaryRoles } from '../services/features/workflow/temporaryRoles.js';
 import { pruneOldWordStats } from '../services/analytics/wordStatsService.js';
 import { runBanHygieneScan } from '../services/moderation/banHygieneService.js';
+import { refreshPhishingFeeds } from '../services/moderation/phishingFeedService.js';
 import { isModuleEnabled } from '../services/core/moduleGate.js';
 
 const runningJobs = new Set<string>();
+
+/** Rescan des deux auto-rôles du tag (Annonces et Shield) sur chaque serveur qui en a un. */
+async function resyncServerTagRoles(client: Client): Promise<void> {
+  const { rescanGuildAutoRoles } = await import('../services/features/serverTagRoleService.js');
+  const { rescanGuildTagRoles } = await import('../services/moderation/tagRoleService.js');
+  // Séquentiel : chaque rescan demande la liste des membres à la gateway, limitée en débit.
+  for (const guildId of client.guilds.cache.keys()) {
+    try {
+      await rescanGuildAutoRoles(client, guildId);
+      await rescanGuildTagRoles(client, guildId);
+    } catch (err) {
+      logger.error('Cron', `Rattrapage des rôles du tag impossible sur ${guildId}`, err);
+    }
+  }
+}
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -147,6 +163,14 @@ export async function registerCrons(client: Client): Promise<void> {
   logger.info('Cron', "Début de l'enregistrement des cron jobs...");
   // Initialiser le backup automatique de la base de données
   initializeDatabaseBackup();
+  void runLocalSweep('phishing-feeds-init', async () => {
+    await refreshPhishingFeeds();
+  });
+  cron.schedule('0 */6 * * *', () => {
+    void runLocalSweep('phishing-feeds', async () => {
+      await refreshPhishingFeeds();
+    });
+  });
   logger.info('Cron', 'Backup automatique initialisé');
 
   // Initialiser les planifications dynamiques de la base de données
@@ -414,6 +438,7 @@ export async function registerCrons(client: Client): Promise<void> {
       const { pruneSiteAnalytics } = await import('../services/site/siteAnalyticsService.js');
       await pruneSiteAnalytics();
     },
+    'server-tag-roles-resync': () => resyncServerTagRoles(client),
     'site-scheduled-publish': async () => {
       const { publishDuePages } = await import('../services/site/siteAdminService.js');
       await publishDuePages(client);
@@ -746,6 +771,13 @@ export async function registerCrons(client: Client): Promise<void> {
     }, 2000);
   });
 
+  // 🏷️ Rôles du tag de serveur : rattrapage toutes les 6 h (à :25). Discord
+  // n'envoie pas toujours la pose ou le retrait d'un tag (membre hors ligne
+  // jamais chargé, bot redémarré entre-temps) : le rôle restait figé (#615).
+  cron.schedule('25 */6 * * *', async () => {
+    await runCronJob('server-tag-roles-resync', () => resyncServerTagRoles(client), 2000);
+  });
+
   // 🧭 Telemetrie du dashboard : purge au-dela de 180 jours (03:55).
   cron.schedule('55 3 * * *', async () => {
     await runCronJob('dashboard-telemetry-prune', async () => {
@@ -802,6 +834,12 @@ export async function registerCrons(client: Client): Promise<void> {
 
   cron.schedule('* * * * *', async () => {
     await runLocalSweep('workflow-schedule', () => dispatchScheduledWorkflows(client));
+  });
+
+  // Ancienneté et inactivité : des seuils en jours, un passage toutes les dix
+  // minutes suffit. Chaque passage reprend là où le précédent s'est arrêté.
+  cron.schedule('*/10 * * * *', async () => {
+    await runLocalSweep('workflow-member-days', () => dispatchMemberDaysWorkflows(client));
   });
 
   // Webhooks sortants : relances dues et purge du journal (30 jours). Chaque

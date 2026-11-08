@@ -2,6 +2,7 @@
   import { m } from '../../i18n';
   import Papicon from '../Papicon.svelte';
   import { ACTION_GROUP_LABELS, availableActions, type ActionGroup } from '@kotbo/shared';
+  import { matchesQuery } from '../../workflowSearch';
 
   /**
    * Choix de l'étape à ajouter.
@@ -16,7 +17,7 @@
     onClose,
   }: {
     triggerType: string;
-    onPick: (choice: { kind: 'action'; action: string } | { kind: 'condition' } | { kind: 'wait' }) => void;
+    onPick: (choice: { kind: 'action'; action: string } | { kind: 'condition' } | { kind: 'wait' } | { kind: 'cooldown' }) => void;
     onClose: () => void;
   } = $props();
 
@@ -24,7 +25,7 @@
 
   const actions = $derived(
     availableActions(triggerType).filter((action) => (
-      !search.trim() || action.label.toLowerCase().includes(search.toLowerCase())
+      matchesQuery(search, [action.label, action.sentence, ACTION_GROUP_LABELS[action.group]])
     )),
   );
 
@@ -101,6 +102,17 @@
             <span class="min-w-0">
               <span class="block text-xs font-medium text-on-surface">{m.wf_add_wait()}</span>
               <span class="block text-2xs text-on-surface-variant">{m.wf_add_wait_desc()}</span>
+            </span>
+          </button>
+          <button
+            type="button"
+            onclick={() => onPick({ kind: 'cooldown' })}
+            class="flex items-center gap-2.5 p-3 rounded-2xl text-left bg-surface-container-high/60 border border-outline-variant/15 hover:border-primary/40 transition-all"
+          >
+            <span class="p-2 rounded-xl bg-primary/10 text-primary shrink-0"><Papicon icon="Timer" size={14} /></span>
+            <span class="min-w-0">
+              <span class="block text-xs font-medium text-on-surface">{m.wf_add_cooldown()}</span>
+              <span class="block text-2xs text-on-surface-variant">{m.wf_add_cooldown_desc()}</span>
             </span>
           </button>
         </div>

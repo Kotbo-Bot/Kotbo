@@ -104,7 +104,7 @@ export async function handleCustomBotRoutes(
 
   if (!allowed && !(parts.length === 5 && method === 'GET') && !isStop) {
     json(res, 403, {
-      error: 'L\'identité du bot est réservée aux offres payantes (Plus, Pro, Ultimate, Custom).',
+      error: 'L\'identité du bot est réservée à l\'offre Plus (ou sur mesure).',
       code: 'plan_required',
     });
     return true;

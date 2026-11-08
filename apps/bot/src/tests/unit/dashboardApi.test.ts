@@ -180,6 +180,14 @@ const mcpToolsJsPath = path.resolve(import.meta.dir, '../../api/mcp/mcpTools.js'
 mock.module(mcpToolsPath, () => mockMcpTools);
 mock.module(mcpToolsJsPath, () => mockMcpTools);
 
+// Le serveur MCP est reserve aux offres payantes : les cas MCP tournent sur PRO,
+// un cas dedie verifie le refus en gratuit.
+let mcpTestPlan = 'PRO';
+const realPlanService = await import('../../services/system/planService.js');
+const mockPlanService = { ...realPlanService, getGuildPlan: mock(async () => mcpTestPlan) };
+mock.module(path.resolve(import.meta.dir, '../../services/system/planService.ts'), () => mockPlanService);
+mock.module(path.resolve(import.meta.dir, '../../services/system/planService.js'), () => mockPlanService);
+
 // Import router modules and helpers after mocks are set up
 import { JWT_SECRET, splitPath, resolveDashboardAccess } from '../../api/shared.js';
 import { handlePublicRoutes } from '../../api/routes/public.js';
@@ -648,6 +656,20 @@ describe('Modular Routers Unit Tests', () => {
   });
 
   describe('1b. MCP OAuth Routes', () => {
+    test('refuses MCP on the free plan with an explicit 402', async () => {
+      mcpTestPlan = 'FREE';
+      const req = createMockRequest({ method: 'POST', url: '/api/mcp/112233445566778899' });
+      const res = createMockResponse();
+      const parts = splitPath(new URL(req.url!, 'http://localhost').pathname);
+      const url = new URL(req.url!, 'http://localhost');
+
+      const handled = await handleMCPRoutes(req as IncomingMessage & { bodyText?: string }, res, parts, url, mockClient);
+      mcpTestPlan = 'PRO';
+      expect(handled).toBeTrue();
+      expect(res.statusCode).toBe(402);
+      expect(JSON.parse(res.body).error).toBe('plan_required');
+    });
+
     test('rejects encoded guildId template from OAuth discovery', async () => {
       const req = createMockRequest({
         method: 'GET',

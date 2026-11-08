@@ -1,4 +1,5 @@
-import { cronMatches, hasBlockingIssue, validateGraph, getNodeDef, wallClockMinuteKey, FUN_GAME_LABELS, SANCTION_TYPE_LABELS, SUGGESTION_STATUS_LABELS, type WorkflowGraph } from '@kotbo/shared';
+import { isModulePaused } from '@kotbo/contracts';
+import { MEMBER_DAYS_TRIGGERS, isMemberDaysTrigger, readMemberDays, cronMatches, hasBlockingIssue, pausedModuleIssues, readTriggerChannelFilter, readTriggerRoleFilter, validateGraph, getNodeDef, wallClockMinuteKey, FUN_GAME_LABELS, SANCTION_TYPE_LABELS, SUGGESTION_STATUS_LABELS, type WorkflowGraph } from '@kotbo/shared';
 import { currentCascadeDepth, runWithCascadeDepth } from '@kotbo/core';
 import type { Client, Guild } from 'discord.js';
 import type { Prisma } from '@prisma/client';
@@ -8,7 +9,12 @@ import { cache } from '../../../utils/cache.js';
 import { resolveGuildTimezone } from '../../../utils/timezone.js';
 import { isGuildActivated } from '../../../utils/activation.js';
 import { isModuleEnabled } from '../../core/moduleGate.js';
-import { createWorkflowEffects, toChannelValue, toMemberValue, toMessageValue, toRoleValue } from './effects.js';
+import { checkActionAhead, createWorkflowEffects, toChannelValue, toMemberValue, toMessageValue, toRoleValue } from './effects.js';
+import { fixedEntityInputs } from './staticChecks.js';
+import { failureAlertFor, failureAlertLink } from './failureAlert.js';
+import { pruneExpiredCooldowns } from './workflowStore.js';
+import { crossingRange, nextSweptUntil } from './memberDays.js';
+import { createDryRunEffects, dryRunWorkflow, resolveTestPlan, sampleTriggerOutputs, type DryRunResult, type DryRunSample } from './dryRun.js';
 import { RUN_INFO_KEY, runWorkflow, type ExecutionOutcome, type ExecutionState, type StepRecord } from './engine.js';
 import { matchesTriggerChannelFilter } from './channelFilter.js';
 import { matchesTriggerRoleFilter } from './roleFilter.js';
@@ -114,7 +120,7 @@ function extractTrigger(graph: WorkflowGraph): { triggerType: string; triggerEve
 }
 
 function assertValid(graph: WorkflowGraph): void {
-  const issues = validateGraph(graph);
+  const issues = [...validateGraph(graph), ...pausedModuleIssues(graph, isModulePaused)];
   if (hasBlockingIssue(issues)) {
     throw new WorkflowValidationError(issues.filter((i) => i.severity === 'error'));
   }
@@ -159,8 +165,159 @@ export async function updateWorkflow(guildId: string, id: string, input: SaveWor
 
   if (count === 0) return null;
 
+  if (!input.enabled) await forgetSweep(id);
   await invalidateTriggerEvents(guildId);
   return prisma.workflow.findUnique({ where: { id } });
+}
+
+/**
+ * Oublie où en était le balayage d'ancienneté ou d'inactivité.
+ *
+ * Appelé à la désactivation : réactivée des mois plus tard, l'automatisation
+ * lancerait sinon d'un coup tous les membres passés par le seuil entre-temps.
+ * Elle repart comme à sa première activation.
+ */
+async function forgetSweep(workflowId: string): Promise<void> {
+  await prisma.workflowSweep.deleteMany({ where: { workflowId } });
+}
+
+// ── Essai à blanc ─────────────────────────────────────────────────────────────
+
+/**
+ * `last` rejoue l'événement de la dernière exécution, quand elle porte le même
+ * déclencheur que le brouillon ; sinon, ou à défaut d'exécution, on retombe sur
+ * un événement d'exemple. La réponse dit lequel a servi.
+ */
+export type WorkflowTestSource = 'sample' | 'last';
+
+export interface WorkflowTestInput {
+  graph: WorkflowGraph;
+  workflowId?: string | null;
+  /** Membre qui lance l'essai : il joue le membre de l'événement, faute d'un autre choisi. */
+  userId: string;
+  /** Membre choisi pour jouer l'événement (un nouveau venu, un membre sans rôle). */
+  memberId?: string | null;
+  source: WorkflowTestSource;
+}
+
+async function buildDryRunSample(
+  guild: Guild,
+  graph: WorkflowGraph,
+  userId: string,
+  memberChosen: boolean,
+): Promise<DryRunSample> {
+  const member = guild.members.cache.get(userId) ?? await guild.members.fetch(userId).catch(() => null);
+  if (!member && memberChosen) throw new UserFacingError("Ce membre n'est plus sur le serveur.");
+
+  const filteredChannel = readTriggerChannelFilter(graph)
+    .map((id) => guild.channels.cache.get(id))
+    .find((channel) => channel && 'name' in channel);
+  const channel = filteredChannel
+    ?? guild.systemChannel
+    ?? guild.channels.cache.find((entry) => entry.isTextBased() && !entry.isThread());
+
+  const role = readTriggerRoleFilter(graph).map((id) => guild.roles.cache.get(id)).find(Boolean)
+    ?? guild.roles.cache.find((entry) => entry.id !== guild.id);
+
+  return {
+    member: member ? toMemberValue(member) : null,
+    channel: channel && 'name' in channel ? toChannelValue(channel) : null,
+    role: role ? toRoleValue(role) : null,
+    message: toMessageValue({ id: '0', content: "Message d'essai", channelId: channel?.id ?? '', authorId: userId }),
+  };
+}
+
+async function lastTriggerOutputs(
+  guildId: string,
+  workflowId: string,
+  triggerType: string,
+): Promise<Record<string, unknown> | null> {
+  const workflow = await prisma.workflow.findFirst({ where: { id: workflowId, guildId }, select: { triggerType: true } });
+  if (workflow?.triggerType !== triggerType) return null;
+
+  const execution = await prisma.workflowExecution.findFirst({
+    where: { workflowId, guildId },
+    orderBy: { startedAt: 'desc' },
+    select: { context: true },
+  });
+  const outputs = (execution?.context as { triggerOutputs?: unknown } | null)?.triggerOutputs;
+  return outputs && typeof outputs === 'object' ? { ...(outputs as Record<string, unknown>) } : null;
+}
+
+export async function testWorkflow(
+  guild: Guild,
+  input: WorkflowTestInput,
+): Promise<DryRunResult & { source: WorkflowTestSource }> {
+  assertValid(input.graph);
+  const { triggerType } = extractTrigger(input.graph);
+  const plan = resolveTestPlan(input);
+  const sample = await buildDryRunSample(guild, input.graph, plan.memberId, plan.chosen);
+
+  const replayed = plan.source === 'last' && input.workflowId
+    ? await lastTriggerOutputs(guild.id, input.workflowId, triggerType)
+    : null;
+  const triggerOutputs = replayed ?? sampleTriggerOutputs(triggerType, sample);
+
+  if (input.graph.nodes.some((node) => node.type === 'RunInfo') && !triggerOutputs[RUN_INFO_KEY]) {
+    triggerOutputs[RUN_INFO_KEY] = { memberToday: 1, memberThisHour: 1 };
+  }
+
+  const result = await dryRunWorkflow({
+    graph: input.graph,
+    effects: createDryRunEffects(createWorkflowEffects(guild), sample),
+    triggerOutputs,
+  });
+  return { ...result, source: replayed ? 'last' : 'sample' };
+}
+
+/** Étape que le bot ne pourra pas faire, signalée à l'enregistrement. */
+export interface WorkflowWarning {
+  nodeId: string;
+  message: string;
+}
+
+/**
+ * Ce que le bot ne pourra pas faire, vérifiable dès l'enregistrement : module
+ * éteint, permission manquante dans un salon choisi, rôle hors de sa portée,
+ * salon ou rôle supprimé. Ce qui dépend du déclencheur attend l'exécution.
+ *
+ * Un avertissement, pas un refus : la permission peut être donnée ensuite, et
+ * le module activé après coup.
+ */
+export async function collectSaveWarnings(guild: Guild, graph: WorkflowGraph): Promise<WorkflowWarning[]> {
+  const effects = createWorkflowEffects(guild);
+  const warnings: WorkflowWarning[] = [];
+
+  for (const node of graph.nodes) {
+    const def = getNodeDef(node.type);
+    if (def?.category !== 'action') continue;
+
+    const inputs: Record<string, unknown> = {};
+    let missing = false;
+    for (const [port, entity] of Object.entries(fixedEntityInputs(graph, node.id))) {
+      const value = entity.kind === 'channel' ? await effects.getChannel(entity.id) : await effects.getRole(entity.id);
+      if (value) {
+        inputs[port] = value;
+        continue;
+      }
+      missing = true;
+      warnings.push({
+        nodeId: node.id,
+        message: `${def.label} : ${entity.kind === 'channel' ? 'le salon choisi' : 'le rôle choisi'} n'existe plus`,
+      });
+    }
+    if (missing) continue;
+
+    try {
+      await checkActionAhead(guild, node.type, inputs);
+    } catch (error) {
+      // Seules les raisons rédigées pour l'utilisateur deviennent des
+      // avertissements ; une panne de Discord ne dit rien de l'automatisation.
+      if (error instanceof UserFacingError) warnings.push({ nodeId: node.id, message: error.message });
+      else logger.debug('Workflow', 'Vérification à l\'enregistrement impossible :', error);
+    }
+  }
+  return warnings;
 }
 
 export async function deleteWorkflow(guildId: string, id: string): Promise<boolean> {
@@ -176,6 +333,7 @@ export async function deleteWorkflow(guildId: string, id: string): Promise<boole
  */
 export async function setWorkflowEnabled(guildId: string, id: string, enabled: boolean): Promise<boolean> {
   const { count } = await prisma.workflow.updateMany({ where: { id, guildId }, data: { enabled } });
+  if (count > 0 && !enabled) await forgetSweep(id);
   if (count > 0) await invalidateTriggerEvents(guildId);
   return count > 0;
 }
@@ -458,6 +616,13 @@ export async function buildTriggerOutputs(
     // du serveur, toujours disponibles, alimentent les étapes.
     case 'OnSchedule':
       return {};
+
+    // Un membre parti entre le balayage et l'exécution n'a plus rien à recevoir.
+    case 'OnMemberTenure':
+    case 'OnMemberInactive': {
+      const member = await memberOf(payload.userId);
+      return member ? { member, days: Number(payload.days ?? 0) } : null;
+    }
 
     case 'OnGiveawayEntry': {
       const member = await memberOf(payload.userId);
@@ -771,7 +936,7 @@ async function runAndPersist(
     const depth = currentCascadeDepth() + 1;
     const outcome = await runWithCascadeDepth(depth, () => runWorkflow({
       graph,
-      effects: createWorkflowEffects(guild),
+      effects: createWorkflowEffects(guild, workflow.id),
       triggerOutputs,
     }));
 
@@ -936,6 +1101,102 @@ export async function dispatchScheduledWorkflows(client: Client, now = new Date(
   }
 }
 
+/** Membres lancés au plus par automatisation et par passage ; le reste attend le suivant. */
+const MEMBER_DAYS_LIMIT = 200;
+
+/**
+ * Lance les automatisations d'ancienneté et d'inactivité pour les membres
+ * dont le seuil est tombé depuis le passage précédent.
+ *
+ * Le premier passage ne fait que poser le repère : activer « 365 jours »
+ * ne doit pas lancer d'un coup tous les membres déjà anciens. Le créneau est
+ * réservé en base avant d'agir, comme pour la planification : deux processus
+ * qui balaient en même temps ne lancent pas deux fois le même membre.
+ */
+export async function dispatchMemberDaysWorkflows(client: Client, now = new Date()): Promise<void> {
+  const guildIds = [...client.guilds.cache.keys()];
+  if (guildIds.length === 0) return;
+
+  const workflows = await prisma.workflow.findMany({
+    where: { enabled: true, triggerType: { in: Object.keys(MEMBER_DAYS_TRIGGERS) }, guildId: { in: guildIds } },
+    select: { id: true, guildId: true, triggerType: true, graph: true, sweep: { select: { sweptUntil: true } } },
+  });
+
+  for (const workflow of workflows) {
+    try {
+      if (!isGuildActivated(workflow.guildId)) continue;
+      if (!(await isModuleEnabled(workflow.guildId, 'workflows'))) continue;
+      const guild = client.guilds.cache.get(workflow.guildId);
+      if (!guild || !isMemberDaysTrigger(workflow.triggerType)) continue;
+
+      const graph = workflow.graph as unknown as WorkflowGraph;
+      const days = readMemberDays(graph);
+      if (days === null) continue;
+
+      if (!workflow.sweep) {
+        await prisma.workflowSweep.upsert({
+          where: { workflowId: workflow.id },
+          create: { workflowId: workflow.id, sweptUntil: now },
+          update: {},
+        });
+        continue;
+      }
+
+      const from = workflow.sweep.sweptUntil;
+      if (from >= now) continue;
+
+      const due = await membersReachingThreshold(workflow.guildId, MEMBER_DAYS_TRIGGERS[workflow.triggerType], crossingRange(from, now, days));
+      const batch = due.slice(0, MEMBER_DAYS_LIMIT);
+      const sweptUntil = nextSweptUntil({
+        to: now,
+        days,
+        found: due.length,
+        limit: MEMBER_DAYS_LIMIT,
+        lastReference: batch.at(-1)?.reference ?? null,
+      });
+
+      const { count } = await prisma.workflowSweep.updateMany({
+        where: { workflowId: workflow.id, sweptUntil: from },
+        data: { sweptUntil },
+      });
+      if (count === 0) continue;
+
+      for (const entry of batch) {
+        await runAndPersist(guild, workflow, { userId: entry.userId, days }, 'member-days');
+      }
+    } catch (error) {
+      logger.error('Workflow', `Échec du balayage ancienneté/inactivité pour ${workflow.id}:`, error);
+    }
+  }
+}
+
+/**
+ * Membres dont la date de référence tombe dans la fenêtre, les plus anciens
+ * d'abord. Pour l'inactivité, un membre qui n'a jamais écrit compte depuis
+ * son arrivée.
+ */
+async function membersReachingThreshold(
+  guildId: string,
+  reference: 'joined' | 'lastMessage',
+  range: { gt: Date; lte: Date },
+): Promise<Array<{ userId: string; reference: Date }>> {
+  const where: Prisma.MemberProfileWhereInput = reference === 'joined'
+    ? { guildId, isBot: false, guildJoinedAt: range }
+    : { guildId, isBot: false, OR: [{ lastMessageAt: range }, { lastMessageAt: null, guildJoinedAt: range }] };
+
+  const rows = await prisma.memberProfile.findMany({
+    where,
+    select: { userId: true, guildJoinedAt: true, lastMessageAt: true },
+  });
+
+  return rows
+    .map((row) => ({
+      userId: row.userId,
+      reference: (reference === 'joined' ? row.guildJoinedAt : row.lastMessageAt ?? row.guildJoinedAt) as Date,
+    }))
+    .sort((a, b) => a.reference.getTime() - b.reference.getTime());
+}
+
 // ============================================================================
 // PERSISTANCE DES EXÉCUTIONS
 // ============================================================================
@@ -1005,6 +1266,12 @@ export async function persistOutcome(
 
   await writeSteps(executionId, outcome.steps);
 
+  // Lu avant la mise à jour, qui l'efface ou le remplace : c'est lui qui dit
+  // si cet échec ouvre une série.
+  const previous = failed
+    ? await prisma.workflow.findUnique({ where: { id: workflowId }, select: { lastError: true, name: true, createdById: true } })
+    : null;
+
   // Les compteurs du workflow ne bougent qu'une fois l'exécution terminée :
   // une suspension n'est ni un succès ni un échec.
   if (!suspended) {
@@ -1020,7 +1287,55 @@ export async function persistOutcome(
     });
   }
 
+  if (failed && previous) {
+    void alertWorkflowFailure(guildId, workflowId, executionId, previous, outcome.error);
+  }
+
   return executionId;
+}
+
+/**
+ * Prévient le créateur d'une automatisation qui vient de casser, une fois par
+ * série (cf. `failureAlertFor`). Le lien ouvre le rejeu de l'exécution, d'où
+ * l'étape fautive se corrige.
+ *
+ * Jamais bloquant : une alerte perdue ne doit pas faire échouer l'exécution
+ * qu'elle signale.
+ */
+async function alertWorkflowFailure(
+  guildId: string,
+  workflowId: string,
+  executionId: string,
+  previous: { lastError: string | null; name: string; createdById: string | null },
+  error: string,
+): Promise<void> {
+  const userId = failureAlertFor({ previousLastError: previous.lastError, createdById: previous.createdById });
+  if (!userId) return;
+  try {
+    // Import dynamique : le service de notifications tire l'API, qui
+    // importe ce fichier.
+    const [{ notify, dashboardLink }, { resolveGuildLocale }, m] = await Promise.all([
+      import('../../notifications/notifyService.js'),
+      import('../../../utils/i18n.js'),
+      import('../../../lib/paraglide/messages.js'),
+    ]);
+    const locale = await resolveGuildLocale(guildId);
+    await notify({
+      guildId,
+      userId,
+      kind: 'system.workflow_failed',
+      title: m.ntf_workflow_failed_title({ name: previous.name }, { locale }),
+      message: m.ntf_workflow_failed_message({ error: error.slice(0, 300) }, { locale }),
+      severity: 'WARNING',
+      // Absolu : un chemin relatif n'est gardé que pour un membre du module
+      // Staff, et le propriétaire qui crée ses automatisations n'y est pas
+      // forcément.
+      link: dashboardLink(failureAlertLink(workflowId, executionId), guildId),
+      groupKey: `workflow-failed:${workflowId}`,
+    });
+  } catch (err) {
+    logger.warn('Workflow', `Alerte d'échec non envoyée pour ${workflowId} :`, err);
+  }
 }
 
 // ============================================================================
@@ -1139,7 +1454,7 @@ export async function resumePendingExecutions(client: Client): Promise<void> {
 
       const outcome = await runWithCascadeDepth(depth, () => runWorkflow({
         graph: execution.workflow.graph as unknown as WorkflowGraph,
-        effects: createWorkflowEffects(guild),
+        effects: createWorkflowEffects(guild, execution.workflowId),
         state,
       }));
 
@@ -1231,6 +1546,9 @@ export async function pruneWorkflowExecutions(now = new Date()): Promise<number>
       startedAt: { lt: threshold },
     });
   }
+
+  // Même balayage quotidien pour les délais de récupération échus.
+  await pruneExpiredCooldowns(now);
 
   return deleted;
 }

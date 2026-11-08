@@ -26,13 +26,13 @@
   });
 
   const periodOptions: FilterOption<PeriodPreset>[] = $derived([
-    { value: '1', label: m.an_period_24h() },
-    { value: '7', label: m.an_period_7d() },
-    { value: '30', label: m.an_period_30d() },
-    { value: '90', label: m.an_period_90d() },
-    { value: '365', label: m.an_period_365d() },
-    { value: 'custom', label: m.an_period_custom() },
-  ]);
+    { value: '1' as PeriodPreset, label: m.an_period_24h() },
+    { value: '7' as PeriodPreset, label: m.an_period_7d() },
+    { value: '30' as PeriodPreset, label: m.an_period_30d() },
+    { value: '90' as PeriodPreset, label: m.an_period_90d() },
+    { value: '365' as PeriodPreset, label: m.an_period_365d() },
+    { value: 'custom' as PeriodPreset, label: m.an_period_custom() },
+  ].filter((option) => !filters.limitDays || (option.value !== 'custom' && Number(option.value) <= filters.limitDays)));
 
   const channelOptions = $derived(
     (options?.categories ?? []).flatMap((cat) => [
@@ -87,6 +87,12 @@
     </div>
   {/if}
 
+  {#if filters.limitDays}
+    <p class="text-body-sm text-on-surface-variant">
+      En gratuit, Analytics garde {filters.limitDays} jours d'historique. Avec Plus : 30 jours, 90 jours, un an, des dates libres et les filtres par salon ou rôle.
+      <a href="/billing" class="font-medium text-primary hover:underline">{m.afb_see_plus()}</a>
+    </p>
+  {:else}
   <div class="flex flex-wrap items-center gap-3">
     <div class="filter-bar__select">
       <SearchableSelect
@@ -116,6 +122,7 @@
       <Button size="sm" variant="ghost" icon="x" onclick={() => filters.clearScope()}>{m.anx_filter_clear()}</Button>
     {/if}
   </div>
+  {/if}
 
   {#if scopeSupport === 'period' && filters.activeScopeFilters > 0}
     <p class="text-2xs text-on-surface-variant">{m.anx_filter_period_only()}</p>

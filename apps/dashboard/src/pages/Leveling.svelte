@@ -11,6 +11,7 @@
   import { unsavedChanges } from '../lib/stores/unsavedChanges.svelte';
   import { dashboardStore } from '../lib/stores/dashboard.svelte';
   import { authStore } from '../lib/stores/auth.svelte';
+  import { memberCaseModal } from '../lib/stores/memberCaseModal.svelte';
   import { memberAvatarSrc } from '../lib/discordMedia';
   import ModulePage from '../lib/components/ModulePage.svelte';
   import { createAsyncActionState } from '../lib/asyncAction.svelte';
@@ -1038,6 +1039,11 @@
       importFileError = m.lv_import_err_read();
     };
     reader.readAsText(file);
+  }
+
+  /** Clic sur un membre du classement : sa fiche, seulement pour qui a accès à « Membres ». */
+  function openMember(member: { userId: string; displayName?: string | null; username?: string | null }) {
+    void memberCaseModal.show(member.userId, member.displayName || member.username || member.userId);
   }
 </script>
 
@@ -2226,7 +2232,7 @@
               placeholder={m.lv_levelup_message_ph({ user: '{user}', level: '{level}' })}
               disabled={!canManageSettings}
             />
-            <p class="text-2xs text-on-surface-variant/40 ml-2">{m.lv_variables_label()} <code class="bg-surface-container px-1 py-0.5 rounded text-primary dark:text-blue-300">{`{user}`}</code> {m.lv_variables_mention()}, <code class="bg-surface-container px-1 py-0.5 rounded text-primary dark:text-blue-300">{`{username}`}</code>, <code class="bg-surface-container px-1 py-0.5 rounded text-primary dark:text-blue-300">{`{level}`}</code></p>
+            <p class="text-2xs text-on-surface-variant/40 ml-2">{m.lv_variables_label()} <code class="bg-surface-container px-1 py-0.5 rounded text-primary dark:text-blue-300">{`{user}`}</code> {m.lv_variables_mention()}, <code class="bg-surface-container px-1 py-0.5 rounded text-primary dark:text-blue-300">{`{username}`}</code>, <code class="bg-surface-container px-1 py-0.5 rounded text-primary dark:text-blue-300">{`{level}`}</code>, <code class="bg-surface-container px-1 py-0.5 rounded text-primary dark:text-blue-300">{`{leaderboard}`}</code> {m.lv_variables_leaderboard()}</p>
             <p class="text-2xs text-on-surface-variant/40 ml-2">{m.lv_levelup_message_hint()}</p>
           </div>
         </div>
@@ -2475,17 +2481,19 @@
                 {index + 1}
               </div>
 
-              <!-- Avatar -->
-              <img 
-                src={memberAvatarSrc(userLvl.avatarUrl, userLvl.displayName || userLvl.username, userLvl.userId)} 
-                alt="" 
-                class="w-11 h-11 rounded-xl border border-outline-variant/10 shadow-inner object-cover shrink-0"
-              />
+              <!-- Avatar : doublon du pseudo pour la souris, hors du parcours clavier -->
+              <button type="button" tabindex="-1" aria-hidden="true" class="shrink-0" disabled={!memberCaseModal.canOpen} onclick={() => openMember(userLvl)}>
+                <img 
+                  src={memberAvatarSrc(userLvl.avatarUrl, userLvl.displayName || userLvl.username, userLvl.userId)} 
+                  alt="" 
+                  class="w-11 h-11 rounded-xl border border-outline-variant/10 shadow-inner object-cover"
+                />
+              </button>
 
               <!-- Nom & Progression -->
               <div class="flex-1 min-w-0">
                 <div class="flex items-baseline gap-2 mb-1.5">
-                  <p class="text-sm font-semibold text-on-surface truncate">{userLvl.displayName || userLvl.username || m.lv_unknown_member()}</p>
+                  <button type="button" class="min-w-0 text-left text-sm font-semibold text-on-surface truncate enabled:hover:text-primary transition-colors" disabled={!memberCaseModal.canOpen} onclick={() => openMember(userLvl)}>{userLvl.displayName || userLvl.username || m.lv_unknown_member()}</button>
                   {#if userLvl.username && userLvl.displayName !== userLvl.username}
                     <span class="text-2xs text-on-surface-variant/40 truncate font-semibold font-mono">@{userLvl.username}</span>
                   {/if}

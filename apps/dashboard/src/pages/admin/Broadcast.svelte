@@ -1,6 +1,6 @@
 <script lang="ts">
   import { explainDisabled } from '../../lib/actions/explainDisabled';
-  import { m } from '../../lib/i18n';
+  import { m, dateLocale } from '../../lib/i18n';
   /**
    * Console d'annonces globales.
    *
@@ -28,7 +28,9 @@
     createBroadcastTemplate,
     deleteBroadcastTemplate,
     fetchBroadcastDeliveries,
+    fetchBroadcastPoll,
     cancelScheduledBroadcast,
+    type BroadcastPollResults,
     type BroadcastPayload,
     type BroadcastLogEntry,
     type BroadcastEmoji,
@@ -64,6 +66,9 @@
   let selectedGuilds = $state<string[]>([]);
   let scheduleEnabled = $state(false);
   let scheduledAt = $state('');
+  let pollEnabled = $state(false);
+  let pollOptions = $state(['', '']);
+  let pollClosesAt = $state('');
 
   // ── État de page ──────────────────────────────────────────────────────────
   let activeTab = $state<Tab>('compose');
@@ -95,6 +100,7 @@
   let deliveries = $state<BroadcastDelivery[]>([]);
   let deliveryFilter = $state<'ALL' | 'SENT' | 'FAILED' | 'SKIPPED'>('ALL');
   let deliveriesLoading = $state(false);
+  let pollResults = $state<BroadcastPollResults | null>(null);
 
   // Modèles
   let showTemplateModal = $state(false);
@@ -137,10 +143,19 @@
     scheduleEnabled && (!scheduledAt || new Date(scheduledAt).getTime() < Date.now() - 60_000),
   );
 
+  const filledPollOptions = $derived(pollOptions.map((option) => option.trim()).filter(Boolean));
+  const pollInvalid = $derived(
+    pollEnabled && (
+      new Set(filledPollOptions).size < 2
+      || new Set(filledPollOptions).size !== filledPollOptions.length
+      || (pollClosesAt !== '' && new Date(pollClosesAt).getTime() <= Date.now())
+    ),
+  );
+
   const canSend = $derived(
     message.trim().length > 0
       && !titleOver && !messageOver && !footerOver
-      && !scheduleInvalid
+      && !scheduleInvalid && !pollInvalid
       && !(target === 'CUSTOM' && selectedGuilds.length === 0),
   );
 
@@ -184,7 +199,7 @@
       mediaLibrary = media;
       templates = tpl.templates;
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Impossible de charger. Réessaie.');
+      toast.error(err instanceof Error ? err.message : m.d7_loading_error());
     } finally {
       loading = false;
     }
@@ -245,23 +260,24 @@
       target,
       targetGuilds: target === 'CUSTOM' ? selectedGuilds : undefined,
       channelPref,
+      pollOptions: pollEnabled ? filledPollOptions : undefined,
+      pollClosesAt: pollEnabled && pollClosesAt ? new Date(pollClosesAt).toISOString() : undefined,
       dryRun,
       scheduledAt: !dryRun && scheduleEnabled && scheduledAt ? new Date(scheduledAt).toISOString() : undefined,
     };
   }
 
   async function handleDryRun() {
-    if (!canSend) { toast.error('Complétez le formulaire avant la simulation'); return; }
+    if (!canSend) { toast.error(m.abc_form_incomplete()); return; }
     try {
       const result = await sendBroadcast(buildPayload(true));
       lastResult = result;
       for (const warning of result.warnings ?? []) toast.warning(warning);
-      toast.success(
-        `Simulation : ${result.totalTargeted} serveur(s) ciblé(s)`
-        + (result.unconfiguredCount ? `, dont ${result.unconfiguredCount} sans salon configuré` : ''),
-      );
+      toast.success(result.unconfiguredCount
+        ? m.abc_dry_run_result_unconfigured({ count: result.totalTargeted, unconfigured: result.unconfiguredCount })
+        : m.abc_dry_run_result({ count: result.totalTargeted }));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Erreur de simulation');
+      toast.error(err instanceof Error ? err.message : m.abc_dry_run_error());
     }
   }
 
@@ -273,16 +289,16 @@
       showConfirm = false;
 
       if (result.scheduled) {
-        toast.success(`Annonce programmée pour le ${new Date(result.scheduledAt!).toLocaleString('fr-FR')}`);
+        toast.success(m.abc_scheduled({ date: new Date(result.scheduledAt!).toLocaleString(dateLocale()) }));
       } else {
-        toast.success(`Envoyé : ${result.successCount} succès, ${result.failCount} échec(s) sur ${result.totalTargeted}`);
+        toast.success(m.abc_sent({ success: result.successCount, failed: result.failCount, total: result.totalTargeted }));
         message = '';
       }
 
       history = (await fetchBroadcastHistory(50)).logs;
       activeTab = 'history';
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erreur d'envoi");
+      toast.error(err instanceof Error ? err.message : m.abc_send_error());
     } finally {
       sending = false;
     }
@@ -294,10 +310,14 @@
     deliveryFilter = 'ALL';
     deliveryDrawerOpen = true;
     deliveriesLoading = true;
+    pollResults = null;
     try {
-      deliveries = (await fetchBroadcastDeliveries(log.id)).deliveries;
+      [deliveries, pollResults] = await Promise.all([
+        fetchBroadcastDeliveries(log.id).then((r) => r.deliveries),
+        log.pollOptions?.length ? fetchBroadcastPoll(log.id) : Promise.resolve(null),
+      ]);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Impossible de charger le rapport. Réessaie.');
+      toast.error(err instanceof Error ? err.message : m.abc_report_load_error());
       deliveries = [];
     } finally {
       deliveriesLoading = false;
@@ -309,9 +329,9 @@
     try {
       await cancelScheduledBroadcast(log.id);
       history = (await fetchBroadcastHistory(50)).logs;
-      toast.success('Annonce annulée');
+      toast.success(m.abc_cancelled());
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erreur d'annulation");
+      toast.error(err instanceof Error ? err.message : m.abc_cancel_error());
     }
   }
 
@@ -320,9 +340,9 @@
     try {
       await deleteBroadcastLog(id);
       history = history.filter((log) => log.id !== id);
-      toast.success('Entrée supprimée');
+      toast.success(m.abc_entry_deleted());
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Impossible de supprimer. Réessaie.');
+      toast.error(err instanceof Error ? err.message : m.home_delete_error());
     }
   }
 
@@ -336,22 +356,26 @@
     target = (log.target as typeof target) ?? 'ALL';
     selectedGuilds = log.targetGuilds ?? [];
     channelPref = (log.channelPref as typeof channelPref) ?? 'AUTO';
+    // Un modèle ne porte pas de sondage ; une annonce de l'historique, si.
+    pollEnabled = Boolean((log as BroadcastLogEntry).pollOptions?.length);
+    pollOptions = pollEnabled ? [...(log as BroadcastLogEntry).pollOptions] : ['', ''];
+    pollClosesAt = '';
     scheduleEnabled = false;
     activeTab = 'compose';
-    toast.success('Contenu chargé dans l’éditeur');
+    toast.success(m.abc_content_loaded());
   }
 
   // ── Modèles ───────────────────────────────────────────────────────────────
   async function saveTemplate() {
-    if (!templateName.trim()) { toast.error('Nom du modèle requis'); return; }
+    if (!templateName.trim()) { toast.error(m.abc_template_name_required()); return; }
     try {
       await createBroadcastTemplate({ ...buildPayload(false), name: templateName.trim() });
       templates = (await fetchBroadcastTemplates()).templates;
       showTemplateModal = false;
       templateName = '';
-      toast.success('Modèle enregistré');
+      toast.success(m.abc_template_saved());
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Erreur d’enregistrement');
+      toast.error(err instanceof Error ? err.message : m.abc_save_error());
     }
   }
 
@@ -360,9 +384,9 @@
     try {
       await deleteBroadcastTemplate(id);
       templates = templates.filter((t) => t.id !== id);
-      toast.success('Modèle supprimé');
+      toast.success(m.abc_template_deleted());
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Impossible de supprimer. Réessaie.');
+      toast.error(err instanceof Error ? err.message : m.home_delete_error());
     }
   }
 
@@ -375,18 +399,18 @@
     try {
       await deleteBroadcastMedia(media.id);
       mediaLibrary = await fetchBroadcastMedia();
-      toast.success('Image supprimée');
+      toast.success(m.abc_image_deleted());
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Impossible de supprimer. Réessaie.');
+      toast.error(err instanceof Error ? err.message : m.home_delete_error());
     }
   }
 
   async function copyMediaUrl(media: BroadcastMedia) {
     try {
       await navigator.clipboard.writeText(media.url);
-      toast.success('Lien copié');
+      toast.success(m.ste_link_copied());
     } catch {
-      toast.error('Copie impossible');
+      toast.error(m.abc_copy_failed());
     }
   }
 
@@ -404,9 +428,9 @@
           channelStatus: channelId ? ('OK' as const) : ('UNSET' as const),
         }
         : g);
-      toast.success(channelId ? `#${channel?.name} configuré pour ${guild.name}` : `Salon retiré pour ${guild.name}`);
+      toast.success(channelId ? m.abc_channel_set({ channel: channel?.name ?? '', guild: guild.name }) : m.abc_channel_removed({ guild: guild.name }));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Erreur de configuration');
+      toast.error(err instanceof Error ? err.message : m.abc_config_error());
     } finally {
       savingChannel = null;
     }
@@ -622,6 +646,75 @@
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
             <BroadcastImageField bind:value={imageUrl} label="Image principale" />
             <BroadcastImageField bind:value={thumbnailUrl} label="Vignette" aspect="square" />
+          </div>
+        </AdminCard>
+
+        <AdminCard
+          title="Sondage interserveur"
+          description="Un bouton par option sous l’annonce. Les votes de tous les serveurs sont comptés ensemble, un vote par personne."
+          icon="ListChecks"
+          tone="success"
+        >
+          <div class="space-y-3">
+            <label class="flex items-center gap-2.5 cursor-pointer">
+              <input type="checkbox" bind:checked={pollEnabled} class="w-4 h-4 rounded accent-(--primary-color)" />
+              <span class="text-body-sm font-semibold text-on-surface">Ajouter un sondage</span>
+            </label>
+
+            {#if pollEnabled}
+              <div class="space-y-2">
+                {#each pollOptions as _, index (index)}
+                  <div class="flex gap-2">
+                    <input
+                      bind:value={pollOptions[index]}
+                      maxlength="80"
+                      placeholder="Option {index + 1}"
+                      aria-label="Option {index + 1}"
+                      class="flex-1 h-10 px-3 rounded-xl bg-surface-container-low/70 border border-outline-variant/25 text-sm text-on-surface focus:outline-none focus:border-primary/60"
+                    />
+                    {#if pollOptions.length > 2}
+                      <button
+                        type="button"
+                        onclick={() => (pollOptions = pollOptions.filter((_, i) => i !== index))}
+                        aria-label="Retirer l’option {index + 1}"
+                        class="shrink-0 w-10 h-10 rounded-xl bg-on-surface/6 text-on-surface-variant hover:bg-error/12 hover:text-error transition flex items-center justify-center"
+                      >
+                        <Papicon icon="Trash" size={13} />
+                      </button>
+                    {/if}
+                  </div>
+                {/each}
+                {#if pollOptions.length < 5}
+                  <button
+                    type="button"
+                    onclick={() => (pollOptions = [...pollOptions, ''])}
+                    class="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg bg-on-surface/5 hover:bg-on-surface/10 text-xs font-semibold text-on-surface-variant hover:text-on-surface transition"
+                  >
+                    <Papicon icon="Plus" size={13} />
+                    Ajouter une option
+                  </button>
+                {/if}
+              </div>
+
+              <div>
+                <label for="bc-poll-close" class="text-xs font-semibold text-on-surface-variant mb-1.5 block">
+                  Clôture (facultatif)
+                </label>
+                <input
+                  id="bc-poll-close"
+                  type="datetime-local"
+                  bind:value={pollClosesAt}
+                  class="w-full h-10 px-3 rounded-xl bg-surface-container-lowest border border-outline-variant/25 text-sm text-on-surface focus:outline-none focus:border-primary/60"
+                />
+                <p class="text-2xs text-on-surface-variant mt-1">Sans date, le sondage reste ouvert.</p>
+              </div>
+
+              {#if pollInvalid}
+                <p class="text-xs text-error">
+                  Renseigne au moins deux options distinctes et, si tu fixes une clôture, une date future.
+                </p>
+              {/if}
+            {/if}
           </div>
         </AdminCard>
 
@@ -858,7 +951,7 @@
                 <div class="flex gap-1.5">
                   <button
                     type="button"
-                    onclick={() => { imageUrl = media.url; activeTab = 'compose'; toast.success('Image sélectionnée'); }}
+                    onclick={() => { imageUrl = media.url; activeTab = 'compose'; toast.success(m.abc_image_selected()); }}
                     class="flex-1 h-8 rounded-lg bg-primary/12 text-primary text-xs font-semibold hover:bg-primary/18 transition"
                   >
                     Utiliser
@@ -1085,6 +1178,34 @@
   subtitle={deliveryLog?.title ?? ''}
 >
   <div class="space-y-4">
+    {#if pollResults}
+      <div class="rounded-xl border border-outline-variant/25 bg-surface-container-low/40 p-3.5 space-y-3">
+        <div class="flex items-center justify-between">
+          <p class="text-body-sm font-semibold text-on-surface">Résultats du sondage</p>
+          <span class="text-2xs text-on-surface-variant tabular-nums">
+            {pollResults.total} vote(s){pollResults.closesAt ? ` · clôture ${formatDate(pollResults.closesAt)}` : ''}
+          </span>
+        </div>
+        {#each pollResults.options as option (option.label)}
+          {@const percent = pollResults.total > 0 ? Math.round((option.votes / pollResults.total) * 100) : 0}
+          <div>
+            <div class="flex items-center justify-between text-xs mb-1">
+              <span class="text-on-surface truncate">{option.label}</span>
+              <span class="text-on-surface-variant tabular-nums shrink-0 ml-2">{option.votes} · {percent} %</span>
+            </div>
+            <div class="h-2 rounded-full bg-on-surface/8 overflow-hidden">
+              <div class="h-full rounded-full bg-primary" style="width: {percent}%"></div>
+            </div>
+          </div>
+        {/each}
+        {#if pollResults.byGuild.length > 0}
+          <p class="text-2xs text-on-surface-variant leading-snug">
+            Participation : {pollResults.byGuild.slice(0, 5).map((g) => `${g.guildName} (${g.votes})`).join(', ')}{pollResults.byGuild.length > 5 ? `… +${pollResults.byGuild.length - 5}` : ''}
+          </p>
+        {/if}
+      </div>
+    {/if}
+
     <div class="flex flex-wrap gap-1.5">
       {#each [
         { value: 'ALL' as const, label: 'Tous', count: deliveries.length },

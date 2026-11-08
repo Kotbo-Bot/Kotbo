@@ -5,7 +5,8 @@
    * s'affiche dessous, dans la même vue (SiteAnalyticsPanel).
    */
   import { onMount } from 'svelte';
-  import { Button, Field, SectionCard, ToggleSwitch } from '../ui';
+  import { Button, Callout, Field, SectionCard, ToggleSwitch } from '../ui';
+  import SiteTemplateGallery from './SiteTemplateGallery.svelte';
   import { toast } from '../../stores/toast.svelte';
   import { m, dateLocale } from '../../i18n';
   import { fetchSiteStaffProfile, updateSite, updateSiteStaffProfile, type SitePageSummary, type SiteState } from '../../api/site';
@@ -34,6 +35,17 @@
       toast.error(siteErrorMessage(err));
     } finally {
       publishing = false;
+    }
+  }
+
+  let galleryOpen = $state(false);
+
+  async function dismissPrompt() {
+    try {
+      await updateSite({ settings: { templatePromptDismissed: true } }, guildId);
+      onChanged();
+    } catch (err) {
+      toast.error(siteErrorMessage(err));
     }
   }
 
@@ -73,6 +85,15 @@
 </script>
 
 <div class="overview">
+  {#if siteState.rights.manage && !site.settings?.templateId && !site.settings?.templatePromptDismissed}
+    <Callout variant="info" title={m.ste_gal_prompt_title()}>
+      <p>{m.ste_gal_prompt_desc()}</p>
+      <div class="flex flex-wrap gap-2 mt-2">
+        <Button size="sm" variant="primary" icon="layout-template" onclick={() => (galleryOpen = true)}>{m.ste_gal_browse()}</Button>
+        <Button size="sm" variant="ghost" onclick={dismissPrompt}>{m.ste_gal_prompt_later()}</Button>
+      </div>
+    </Callout>
+  {/if}
   {#if !site.published && siteState.rights.manage}
     <SectionCard>
       <div class="launch px-5 py-5">
@@ -147,6 +168,8 @@
     </SectionCard>
   {/if}
 </div>
+
+<SiteTemplateGallery bind:open={galleryOpen} {guildId} canManage={siteState.rights.manage} onApplied={onChanged} />
 
 <style>
   .overview { display: flex; flex-direction: column; gap: 16px; }

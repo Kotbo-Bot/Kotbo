@@ -24,6 +24,9 @@ import { BucketZoner, ZONE_MARGIN_DAYS, shiftKey } from '../../../services/analy
 import { resolveViewTimezone } from '../../../utils/timezone.js';
 import { resolveOnlineMembersCount } from '../../../services/core/presenceDetectionService.js';
 import { canViewFeatureSection } from './featureGate.js';
+import { applyFreeAnalyticsLimits } from './analyticsFreeTier.js';
+import { getGuildPlan } from '../../../services/system/planService.js';
+import { isModulePaused } from '@kotbo/contracts';
 
 export type LiveGuildCounts = {
   totalMembers: number;
@@ -98,6 +101,11 @@ export async function handleAnalyticsRoutes(
 
   if (parts[4] !== 'analytics') {
     return false;
+  }
+
+  if ((await getGuildPlan(guildId)) === 'FREE' && !applyFreeAnalyticsLimits(parts, method, url.searchParams)) {
+    json(res, 402, { error: 'plan_required', message: "Cette analyse fait partie de l'offre Plus." });
+    return true;
   }
 
   // POST /api/dashboard/guilds/:guildId/analytics/rescan-members
@@ -415,6 +423,21 @@ export async function handleAnalyticsRoutes(
         getCommandAnalytics(client, guildId, range)));
     } catch (err) {
       logger.error('AnalyticsAPI', 'Erreur analytics (commands/stats):', err);
+      jsonFailure(res, err, 'Erreur lors du calcul des statistiques', 'AnalyticsAPI');
+    }
+    return true;
+  }
+
+  // GET …/analytics/reaction-roles/stats : rôles pris et retirés depuis les menus. Période seule.
+  if (parts.length === 7 && parts[5] === 'reaction-roles' && parts[6] === 'stats') {
+    try {
+      const { parseRange } = await import('../../../services/analytics/contentAnalyticsService.js');
+      const { getReactionRoleAnalytics } = await import('../../../services/analytics/reactionRoleStatsService.js');
+      const range = parseRange(url.searchParams);
+      json(res, 200, await cache.wrap(`guild:${guildId}:analytics:reaction-roles:${range.start}:${range.end}`, 300, () =>
+        getReactionRoleAnalytics(client, guildId, range)));
+    } catch (err) {
+      logger.error('AnalyticsAPI', 'Erreur analytics (reaction-roles/stats):', err);
       jsonFailure(res, err, 'Erreur lors du calcul des statistiques', 'AnalyticsAPI');
     }
     return true;
@@ -831,6 +854,13 @@ export async function handleAnalyticsRoutes(
 
   // GET /api/dashboard/guilds/:guildId/analytics/daily-algo - Daily Algo analytics
   if (parts.length === 6 && parts[5] === 'daily-algo') {
+    // Le segment est celui d'Analytics : la garde de module ne le rattache
+    // pas au Daily Algo. Seule la pause ferme la route, comme elle retire
+    // l'onglet du dashboard : un module simplement éteint garde son historique.
+    if (isModulePaused('daily_algo')) {
+      json(res, 404, { error: 'Le Daily Algo est en pause.' });
+      return true;
+    }
     try {
       const days = Math.min(365, Math.max(1, parseInt(url.searchParams.get('days') || '30', 10) || 30));
       const startDate = url.searchParams.get('startDate');

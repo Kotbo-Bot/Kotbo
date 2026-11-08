@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from '../../lib/i18n';
   /**
    * Pages fonctionnalités du site vitrine (kotbo.fr), sur le modèle des pages
    * par plugin de MEE6 : une page par fonctionnalité, en français
@@ -129,12 +130,12 @@
       const result = await importFeaturePages();
       toast.success(
         result.created === 0
-          ? 'Toutes les fonctionnalités ont déjà leur page.'
-          : `${result.created} page(s) créée(s), dont ${result.published} publiée(s). Les autres sont en brouillon.`,
+          ? m.afp_all_have_page()
+          : m.afp_imported({ created: result.created, published: result.published }),
       );
       await load();
     } catch (err) {
-      toast.error(errorMessage(err) ?? "Erreur lors de l'import");
+      toast.error(errorMessage(err) ?? m.afp_import_error());
     } finally {
       importing = false;
     }
@@ -188,12 +189,12 @@
       toast.success(
         saved.published
           ? rebuildConfigured
-            ? 'Page enregistrée. Le site se reconstruit dans quelques minutes.'
-            : 'Page enregistrée. Elle sera en ligne au prochain déploiement du site.'
-          : 'Brouillon enregistré.',
+            ? m.afp_saved_rebuilding()
+            : m.afp_saved_next_deploy()
+          : m.afp_draft_saved(),
       );
     } catch (err) {
-      toast.error(errorMessage(err) ?? "Erreur lors de l'enregistrement");
+      toast.error(errorMessage(err) ?? m.afp_save_error());
     } finally {
       saving = false;
     }
@@ -209,9 +210,9 @@
       pages = pages.filter((page) => page.id !== draft?.id);
       drawerOpen = false;
       draft = null;
-      toast.success('Page supprimée.');
+      toast.success(m.afp_page_deleted());
     } catch (err) {
-      toast.error(errorMessage(err) ?? 'Erreur lors de la suppression');
+      toast.error(errorMessage(err) ?? m.afp_delete_error());
     } finally {
       deleting = false;
     }

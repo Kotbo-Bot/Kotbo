@@ -57,7 +57,7 @@ export function registerSessionRoutes(): void {
 
     return {
       guildName: DEMO_GUILD_NAME,
-      plan: 'PRO',
+      plan: 'PLUS',
       onboardingRequired: false,
       onboardingCanFinishWithoutPayment: false,
       configChannelId: channelByName('staff').id,

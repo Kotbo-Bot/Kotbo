@@ -233,7 +233,7 @@
         if (!ok) throw new Error(m.nm_error_api());
         return true;
       },
-      { successMessage: `Paramètre mis à jour.` }
+      { successMessage: m.nmx_saved() }
     );
 
     if (!saved) {
@@ -286,7 +286,7 @@
                 customWords = [...customWords, { id: res.id, word: entry.word, category: entry.category, enabled: true, guildId: null }];
               }
               return true;
-            }, { successMessage: `"${entry.word}" rétabli.` });
+            }, { successMessage: m.nm_word_restored({ word: entry.word }) });
           }
         });
 

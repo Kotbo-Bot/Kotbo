@@ -149,7 +149,7 @@
     // echouerait a l'heure dite, longtemps apres l'enregistrement.
     const hasEmbed = !!(formEmbedTitle.trim() || formEmbedDescription.trim() || formEmbedImageUrl.trim());
     if (formType === 'SEND_MESSAGE' && !formMessage.trim() && !hasEmbed) {
-      createAction.setError('Renseigne un texte ou un embed pour ce message programmé.');
+      createAction.setError(m.schx_need_content());
       return;
     }
 
@@ -234,7 +234,7 @@
       case 'CHANNEL_RESET': return m.schedules_type_channel_reset();
       case 'SERVER_BACKUP': return m.schedules_type_server_backup();
       case 'DATA_EXPORT': return m.schedules_type_data_export();
-      case 'SEND_MESSAGE': return 'Message programmé';
+      case 'SEND_MESSAGE': return m.schx_type_message();
       default: return type;
     }
   }
@@ -390,7 +390,7 @@
         <option value="CHANNEL_RESET">{m.schedules_form_type_reset_option()}</option>
         <option value="SERVER_BACKUP">{m.schedules_form_type_backup_option()}</option>
         <option value="DATA_EXPORT">{m.schedules_form_type_export_option()}</option>
-        <option value="SEND_MESSAGE">Message programmé</option>
+        <option value="SEND_MESSAGE">{m.schx_type_message()}</option>
       </FormSelect>
     </div>
 
@@ -411,10 +411,10 @@
     <!-- Message programmé -->
     {#if formType === 'SEND_MESSAGE'}
       <div class="space-y-2">
-        <span class="block text-xs font-semibold text-on-surface-variant ml-2">Message</span>
+        <span class="block text-xs font-semibold text-on-surface-variant ml-2">{m.schx_message()}</span>
         <FormTextarea
           bind:value={formMessage}
-          placeholder="Le texte posté dans le salon."
+          placeholder={m.schx_message_ph()}
           className="w-full h-24"
         />
       </div>
@@ -444,7 +444,7 @@
             />
           </div>
           <p class="text-2xs text-on-surface-variant">
-            L'image doit être servie en HTTPS. Couleur au format hexadécimal.
+            {m.schx_embed_hint()}
           </p>
         </div>
       </details>
@@ -452,10 +452,9 @@
       <label class="flex items-start gap-3 cursor-pointer px-2 py-2 hover:bg-white/5 rounded-lg transition-colors">
         <input type="checkbox" bind:checked={formAllowMentions} class="w-4 h-4 mt-0.5 rounded text-primary focus:ring-primary border-outline-variant/30" />
         <div>
-          <span class="text-xs font-bold text-on-surface">Autoriser les mentions</span>
+          <span class="text-xs font-bold text-on-surface">{m.schx_allow_mentions()}</span>
           <p class="text-2xs text-on-surface-variant">
-            Sans cela, @everyone, @here et les mentions de rôle sont écrits mais ne notifient personne -
-            un message qui se répète ne doit pas pinger tout le serveur par accident.
+            {m.schx_allow_mentions_hint()}
           </p>
         </div>
       </label>
@@ -463,10 +462,9 @@
       <label class="flex items-start gap-3 cursor-pointer px-2 py-2 hover:bg-white/5 rounded-lg transition-colors">
         <input type="checkbox" bind:checked={formRunOnce} class="w-4 h-4 mt-0.5 rounded text-primary focus:ring-primary border-outline-variant/30" />
         <div>
-          <span class="text-xs font-bold text-on-surface">Envoyer une seule fois</span>
+          <span class="text-xs font-bold text-on-surface">{m.schx_run_once()}</span>
           <p class="text-2xs text-on-surface-variant">
-            La tâche se désactive juste après l'envoi. À cocher pour un message daté :
-            son expression cron se redéclencherait sinon l'année suivante.
+            {m.schx_run_once_hint()}
           </p>
         </div>
       </label>

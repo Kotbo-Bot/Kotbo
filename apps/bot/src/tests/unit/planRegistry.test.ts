@@ -9,9 +9,11 @@
  */
 import { describe, expect, test } from 'bun:test';
 import {
+  FREE_MODULES,
   MODULE_REGISTRY,
   PLAN_KEYS,
-  PLAN_MEMBER_THRESHOLDS,
+  getModuleDefinition,
+  getModuleRequirements,
   PLAN_REGISTRY,
   canPurchasePlan,
   comparePlans,
@@ -98,6 +100,23 @@ describe('modules ouverts par une offre', () => {
     }
   });
 
+  test('chaque module gratuit existe et a ses dependances gratuites', () => {
+    // Une dependance payante eteindrait le module en cascade : la grille
+    // promettrait un module gratuit qui ne tourne jamais.
+    for (const key of FREE_MODULES) {
+      expect(getModuleDefinition(key)).toBeDefined();
+      for (const requirement of getModuleRequirements(key)) {
+        expect(planIncludesModule('FREE', requirement)).toBe(true);
+      }
+    }
+  });
+
+  test('la securite d un serveur ne passe jamais par un paiement', () => {
+    for (const key of ['sanctions', 'automod', 'raid_protection', 'security_verification', 'logs']) {
+      expect(planIncludesModule('FREE', key)).toBe(true);
+    }
+  });
+
   test('un module inconnu du registre est considere inclus', () => {
     // Meme regle que moduleGate : la garde ne ferme pas ce qu elle ne sait pas
     // decrire, sous peine d eteindre une fonctionnalite par simple oubli.
@@ -129,58 +148,36 @@ describe('comparaison et normalisation', () => {
   });
 });
 
-describe('palier decide par la taille du serveur', () => {
-  test('chaque tranche renvoie son offre, bornes comprises', () => {
-    // Les bornes sont ce qui casse en silence : un `>` mis pour un `>=` fait
-    // basculer tout un palier de serveurs sur le mauvais tarif.
-    expect(planForMemberCount(0)).toBe('PLUS');
-    expect(planForMemberCount(1)).toBe('PLUS');
-    expect(planForMemberCount(PLAN_MEMBER_THRESHOLDS.PRO)).toBe('PLUS');
-    expect(planForMemberCount(PLAN_MEMBER_THRESHOLDS.PRO + 1)).toBe('PRO');
-    expect(planForMemberCount(PLAN_MEMBER_THRESHOLDS.ULTIMATE)).toBe('PRO');
-    expect(planForMemberCount(PLAN_MEMBER_THRESHOLDS.ULTIMATE + 1)).toBe('ULTIMATE');
-    expect(planForMemberCount(PLAN_MEMBER_THRESHOLDS.CUSTOM)).toBe('ULTIMATE');
-    expect(planForMemberCount(PLAN_MEMBER_THRESHOLDS.CUSTOM + 1)).toBe('CUSTOM');
-  });
-
-  test('les tranches du registre collent aux seuils', () => {
-    // Les cartes affichent `memberRange`, la route de paiement applique les
-    // seuils : les deux racontent la meme grille ou le client voit un prix
-    // qu il ne peut pas souscrire.
-    for (const plan of PLAN_REGISTRY) {
-      if (!plan.memberRange) continue;
-      expect<PlanKey>(planForMemberCount(plan.memberRange.min)).toBe(plan.key);
-      if (plan.memberRange.max !== null) {
-        expect<PlanKey>(planForMemberCount(plan.memberRange.max)).toBe(plan.key);
-      }
+describe('offre unique', () => {
+  test('Plus est proposee a tous les serveurs, quelle que soit leur taille', () => {
+    for (const members of [0, 300, 5_000, 80_000, 2_000_000, null, undefined, Number.NaN]) {
+      expect(planForMemberCount(members)).toBe('PLUS');
+      expect(canPurchasePlan('PLUS', members)).toBe(true);
     }
   });
 
-  test('un effectif inconnu ne pousse ni vers le haut ni vers le bas', () => {
-    // Ni l offre la plus chere sur la foi d une donnee manquante, ni la moins
-    // chere qui laisserait un gros serveur payer le tarif d un petit.
-    expect(planForMemberCount(null)).toBe('PRO');
-    expect(planForMemberCount(undefined)).toBe('PRO');
-    expect(planForMemberCount(Number.NaN)).toBe('PRO');
+  test('les anciennes offres ne se vendent plus et ne s affichent plus', () => {
+    for (const key of ['PRO', 'ULTIMATE', 'CUSTOM'] as PlanKey[]) {
+      expect(canPurchasePlan(key, 5_000)).toBe(false);
+      expect(getPlanDefinition(key).listed).toBe(false);
+    }
+    expect(PLAN_REGISTRY.filter((plan) => plan.listed).map((plan) => plan.key)).toEqual(['FREE', 'PLUS']);
   });
 
-  test('un serveur ne peut acheter que le palier de sa taille', () => {
-    expect(canPurchasePlan('PLUS', 300)).toBe(true);
-    expect(canPurchasePlan('PRO', 300)).toBe(false);
-    expect(canPurchasePlan('PLUS', 5_000)).toBe(false);
-    // CUSTOM passe par un rendez-vous, jamais par Stripe.
-    expect(canPurchasePlan('CUSTOM', 200_000)).toBe(false);
+  test('un abonne a une ancienne offre garde tout le catalogue', () => {
+    // Retirer la cle ferait retomber ces serveurs sur FREE via normalizePlanKey.
+    for (const key of ['PRO', 'ULTIMATE']) {
+      expect(normalizePlanKey(key)).toBe(key as PlanKey);
+      expect(modulesForPlan(key as PlanKey).length).toBe(MODULE_REGISTRY.length);
+    }
   });
 });
 
 describe("offre a proposer pour debloquer un module", () => {
-  test('seuls les modules du coeur ne renvoient aucune offre', () => {
-    // Depuis que l offre gratuite n ouvre plus rien, « pas d offre a proposer »
-    // ne veut plus dire « module gratuit » mais « module du coeur » : ceux-la
-    // sont ouverts sans abonnement, sans quoi un serveur non abonne perdrait
-    // jusqu a la page qui lui permet de s abonner.
+  test('seuls le coeur et les modules gratuits ne renvoient aucune offre', () => {
+    const free = new Set<string>(FREE_MODULES);
     for (const mod of MODULE_REGISTRY) {
-      if (mod.core) expect(lowestPlanWithModule(mod.key)).toBeNull();
+      if (mod.core || free.has(mod.key)) expect(lowestPlanWithModule(mod.key)).toBeNull();
       else expect(lowestPlanWithModule(mod.key)).not.toBeNull();
     }
   });
@@ -215,8 +212,9 @@ describe('essai gratuit', () => {
 
   test('seules les offres vendues en ligne ouvrent droit a l essai', () => {
     expect(planAllowsTrial('PLUS')).toBe(true);
-    expect(planAllowsTrial('PRO')).toBe(true);
-    expect(planAllowsTrial('ULTIMATE')).toBe(true);
+    // Les anciennes offres ne se vendent plus, donc ne s essaient plus.
+    expect(planAllowsTrial('PRO')).toBe(false);
+    expect(planAllowsTrial('ULTIMATE')).toBe(false);
     // FREE n a rien a essayer, CUSTOM se negocie periode de decouverte comprise.
     expect(planAllowsTrial('FREE')).toBe(false);
     expect(planAllowsTrial('CUSTOM')).toBe(false);

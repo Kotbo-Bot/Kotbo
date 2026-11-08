@@ -27,7 +27,19 @@ export interface CommunitySite {
   customCss: string | null;
   navigation: SiteNavItem[];
   homePageId: string | null;
-  settings: { commentsByDefault?: boolean; showMemberCount?: boolean; heroPulse?: boolean; legacyRedirect?: boolean; auto?: unknown };
+  settings: {
+    commentsByDefault?: boolean;
+    showMemberCount?: boolean;
+    heroPulse?: boolean;
+    legacyRedirect?: boolean;
+    auto?: unknown;
+    /** Modèle de la galerie appliqué en dernier. */
+    templateId?: string;
+    /** Encart « essaie un modèle » fermé. */
+    templatePromptDismissed?: boolean;
+    /** Présent tant que le dernier modèle appliqué peut être annulé. */
+    templateUndo?: { templateId: string; appliedAt: string };
+  };
   /** Récompenses de l'activité sur le site (voir `normalizeSiteRewards`). */
   rewards: Record<string, unknown>;
   wikiEditorRoleIds: string[];
@@ -249,6 +261,99 @@ export async function uploadSiteAsset(file: File, guildId?: string): Promise<Sit
     throw new DashboardApiError({ kind: res.status >= 500 ? 'server' : 'client', status: res.status, code: data.error, serverMessage: data.error, path: '/assets', method: 'POST' });
   }
   return data.asset;
+}
+
+export type SiteVisualKind = 'banner' | 'glow' | 'mesh' | 'pattern' | 'blur';
+
+/** Fonds générés depuis l'icône, la bannière et la couleur du serveur. */
+export function generateSiteVisuals(guildId?: string) {
+  return apiRequest<{ visuals: Array<{ kind: SiteVisualKind; url: string }> }>(`${base(gid(guildId))}/visuals`, { method: 'POST', errorContext: 'API Error (Site visuals):', timeoutMs: 60_000 });
+}
+
+export interface StockImage {
+  id: string;
+  title: string;
+  thumb: string;
+  creator: string | null;
+  width: number | null;
+  height: number | null;
+}
+
+/** Banque d'images libre (CC0 et domaine public). */
+export function searchStockImages(query: string, page = 1, guildId?: string) {
+  return apiRequest<{ images: StockImage[] }>(`${base(gid(guildId))}/stock?q=${encodeURIComponent(query)}&page=${page}`, { errorContext: 'API Error (Stock images):' });
+}
+
+export function importStockImage(id: string, guildId?: string) {
+  return apiRequest<{ asset: SiteAsset }>(`${base(gid(guildId))}/stock/import`, { method: 'POST', payload: { id }, errorContext: 'API Error (Stock import):', timeoutMs: 60_000 });
+}
+
+// ─── Galerie de modèles ─────────────────────────────────────────────────────
+
+export const SITE_TEMPLATE_CATEGORIES = ['general', 'gaming', 'rp', 'esport', 'etude', 'autre'] as const;
+export type SiteTemplateCategory = (typeof SITE_TEMPLATE_CATEGORIES)[number];
+
+export interface GalleryTemplate {
+  id: string;
+  official: boolean;
+  name: string;
+  description: string | null;
+  category: string;
+  lang: string;
+  theme: string;
+  themeSettings: SiteThemeSettings;
+  home: SiteDocument | null;
+  pageCount: number;
+  uses: number;
+  mine: boolean;
+  createdAt: string | null;
+}
+
+export function fetchSiteTemplates(filter: { category?: string; q?: string } = {}, guildId?: string) {
+  const query = new URLSearchParams(Object.entries(filter).filter(([, v]) => v) as Array<[string, string]>).toString();
+  return apiRequest<{ templates: GalleryTemplate[] }>(`${base(gid(guildId))}/templates${query ? `?${query}` : ''}`, { errorContext: 'API Error (Site templates):' });
+}
+
+export function publishSiteTemplate(input: { name: string; description: string; category: SiteTemplateCategory }, guildId?: string) {
+  return apiRequest<{ template: { id: string; name: string } }>(`${base(gid(guildId))}/templates`, { method: 'POST', payload: input, errorContext: 'API Error (Publish template):' });
+}
+
+export function applySiteTemplate(templateId: string, guildId?: string) {
+  return apiRequest<{ pages: number; homePageId: string | null }>(`${base(gid(guildId))}/templates/${encodeURIComponent(templateId)}/apply`, { method: 'POST', errorContext: 'API Error (Apply template):', timeoutMs: 60_000 });
+}
+
+export function undoSiteTemplate(guildId?: string) {
+  return apiRequest<{ ok: boolean }>(`${base(gid(guildId))}/templates/undo`, { method: 'POST', errorContext: 'API Error (Undo template):' });
+}
+
+export function keepSiteTemplate(guildId?: string) {
+  return apiRequest<{ ok: boolean }>(`${base(gid(guildId))}/templates/keep`, { method: 'POST', errorContext: 'API Error (Keep template):' });
+}
+
+export function reportSiteTemplate(templateId: string, guildId?: string) {
+  return apiRequest<{ ok: boolean }>(`${base(gid(guildId))}/templates/${encodeURIComponent(templateId)}/report`, { method: 'POST', errorContext: 'API Error (Report template):' });
+}
+
+export function deleteSiteTemplate(templateId: string, guildId?: string) {
+  return apiRequest<{ ok: boolean }>(`${base(gid(guildId))}/templates/${encodeURIComponent(templateId)}`, { method: 'DELETE', errorContext: 'API Error (Delete template):' });
+}
+
+export interface AdminSiteTemplate {
+  id: string;
+  name: string;
+  authorGuildId: string;
+  hidden: boolean;
+  reporterIds: string[];
+  uses: number;
+  createdAt: string;
+}
+
+export function fetchAdminSiteTemplates() {
+  return apiRequest<{ templates: AdminSiteTemplate[] }>('/api/admin/sites/templates', { errorContext: 'API Error (Admin templates):' });
+}
+
+export function setAdminSiteTemplateHidden(templateId: string, hidden: boolean) {
+  return apiRequest<{ ok: boolean }>(`/api/admin/sites/templates/${templateId}/hidden`, { method: 'POST', payload: { hidden }, errorContext: 'API Error (Admin template):' });
 }
 
 export function deleteSiteAsset(assetId: string, guildId?: string) {

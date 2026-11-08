@@ -3,8 +3,6 @@
 // ============================================================================
 
 model GuildDailyStat {
-  id String @id @default(cuid())
-
   guildId String
   dateKey String // YYYY-MM-DD
 
@@ -41,14 +39,12 @@ model GuildDailyStat {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@unique([guildId, dateKey])
+  @@id([guildId, dateKey])
   @@map("guild_daily_stats")
 }
 
 
 model ChannelDailyStat {
-  id String @id @default(cuid())
-
   guildId   String
   channelId String
   dateKey   String // YYYY-MM-DD
@@ -62,7 +58,7 @@ model ChannelDailyStat {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@unique([guildId, channelId, dateKey])
+  @@id([guildId, channelId, dateKey])
   @@index([guildId, dateKey])
   @@map("channel_daily_stats")
 }
@@ -71,7 +67,6 @@ model ChannelDailyStat {
 // Fréquence des mots par jour - agrégat anonyme (aucun contenu brut, aucun auteur).
 // Alimenté à la volée par le tracker de messages quand wordStatsEnabled est actif.
 model GuildWordStat {
-  id      String @id @default(cuid())
   guildId String
   dateKey String // YYYY-MM-DD
   word    String
@@ -79,8 +74,7 @@ model GuildWordStat {
 
   guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
 
-  @@unique([guildId, dateKey, word])
-  @@index([guildId, dateKey])
+  @@id([guildId, dateKey, word])
   @@map("guild_word_stats")
 }
 
@@ -90,8 +84,6 @@ model GuildWordStat {
 // posté dans un fil compte pour le salon parent (styleThread le distingue).
 // Aucun texte ni lien n'est stocké : seulement des compteurs.
 model MessageContentDailyStat {
-  id String @id @default(cuid())
-
   guildId   String
   dateKey   String // YYYY-MM-DD
   channelId String
@@ -166,7 +158,7 @@ model MessageContentDailyStat {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@unique([guildId, dateKey, channelId, userId])
+  @@id([guildId, dateKey, channelId, userId])
   @@index([guildId, userId, dateKey])
   @@map("message_content_daily_stats")
 }
@@ -177,8 +169,6 @@ model MessageContentDailyStat {
 // par salon. Croiser salon ET membre n'est pas prévu : ce serait le produit
 // des deux, pour un gain marginal.
 model ContentItemDailyStat {
-  id String @id @default(cuid())
-
   guildId   String
   dateKey   String // YYYY-MM-DD
   // emoji_unicode | emoji_guild | emoji_external | sticker_guild |
@@ -195,7 +185,7 @@ model ContentItemDailyStat {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@unique([guildId, dateKey, kind, key, channelId, userId])
+  @@id([guildId, dateKey, kind, key, channelId, userId])
   @@index([guildId, userId, dateKey])
   @@map("content_item_daily_stats")
 }
@@ -290,8 +280,6 @@ model SuspendedInviter {
 }
 
 model GuildHourlyStat {
-  id       String @id @default(cuid())
-
   guildId  String
   dateKey  String // YYYY-MM-DD
   hour     Int    // 0-23
@@ -312,13 +300,11 @@ model GuildHourlyStat {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@unique([guildId, dateKey, hour])
+  @@id([guildId, dateKey, hour])
   @@map("guild_hourly_stats")
 }
 
 model MemberDailyStat {
-  id       String @id @default(cuid())
-
   guildId  String
   userId   String
   dateKey  String // YYYY-MM-DD
@@ -334,7 +320,7 @@ model MemberDailyStat {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@unique([guildId, userId, dateKey])
+  @@id([guildId, userId, dateKey])
   @@index([guildId, dateKey])
   @@map("member_daily_stats")
 }
@@ -466,8 +452,6 @@ model AnalyticsAnnotation {
 // Qui répond à qui, et qui mentionne qui : un compteur par paire et par jour,
 // jamais le contenu. Suit Guild.analyticsEnabled.
 model MemberInteractionDailyStat {
-  id String @id @default(cuid())
-
   guildId      String
   dateKey      String // YYYY-MM-DD
   userId       String // auteur du message
@@ -481,8 +465,7 @@ model MemberInteractionDailyStat {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@unique([guildId, dateKey, userId, targetUserId])
-  @@index([guildId, dateKey])
+  @@id([guildId, dateKey, userId, targetUserId])
   @@map("member_interaction_daily_stats")
 }
 
@@ -490,8 +473,6 @@ model MemberInteractionDailyStat {
 // il est répondu quand un autre membre écrit dans le salon dans les 6 h. Les
 // délais sont rangés par tranches pour estimer la médiane sans les stocker.
 model ChannelResponseDailyStat {
-  id String @id @default(cuid())
-
   guildId   String
   dateKey   String // jour du tour
   channelId String
@@ -510,8 +491,7 @@ model ChannelResponseDailyStat {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@unique([guildId, dateKey, channelId])
-  @@index([guildId, dateKey])
+  @@id([guildId, dateKey, channelId])
   @@map("channel_response_daily_stats")
 }
 
@@ -620,8 +600,6 @@ model AnalyticsSavedView {
 // Suit Guild.analyticsEnabled. Remplace, pour Analytics, le cumul sans date de
 // dashboard_command_usages.
 model CommandUsageDailyStat {
-  id String @id @default(cuid())
-
   guildId     String
   dateKey     String // YYYY-MM-DD
   commandName String // « rank », « ticket ouvrir »
@@ -636,7 +614,27 @@ model CommandUsageDailyStat {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@unique([guildId, dateKey, commandName, userId])
-  @@index([guildId, dateKey])
+  @@id([guildId, dateKey, commandName, userId])
   @@map("command_usage_daily_stats")
+}
+
+// Rôles pris et retirés depuis les panneaux de rôles-boutons, par jour, menu et
+// rôle. Seuls les clics comptent. Suit Guild.analyticsEnabled. `menuId` n'est
+// pas une clé étrangère : un menu supprimé garde ses clics passés.
+model ReactionRoleDailyStat {
+  guildId String
+  dateKey String // YYYY-MM-DD
+  menuId  String
+  roleId  String
+
+  added   Int @default(0)
+  removed Int @default(0)
+
+  guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@id([guildId, dateKey, menuId, roleId])
+  @@map("reaction_role_daily_stats")
 }

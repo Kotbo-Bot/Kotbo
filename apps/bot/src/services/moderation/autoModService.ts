@@ -3,6 +3,7 @@ import type { AutoModConfig } from '@prisma/client';
 import { kotboEventBus } from '@kotbo/core';
 import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
+import { cache } from '../../utils/cache.js';
 import { resolveLogChannel } from '../../utils/logChannel.js';
 import { registerWarnSanction, registerTimeoutSanction } from './sanctionService.js';
 import { loadBannedWords, loadGlobalWords, loadCustomWords } from './bannedWordsService.js';
@@ -11,7 +12,7 @@ import { mirrorModlogToStaffServer } from '../staff/staffServerService.js';
 import { getUppercasePercentage } from './capsDetection.js';
 import { classifyLink, findKeywordRanges, findLiteralRanges, INVITE_KEYWORDS, LINK_KEYWORDS, type CensorKind, type CensorRange } from './censorship.js';
 import { queueCensoredRepost, repostCensored } from './censorService.js';
-import { handleGroupSpam } from './groupSpamSlowmode.js';
+import { handleGroupSpam, handlePreventiveSlowmode } from './groupSpamSlowmode.js';
 
 // Cache for AutoMod configs: key is guildId, value is the config object
 const autoModConfigsCache = new Map<string, AutoModConfig>();
@@ -702,6 +703,17 @@ export async function handleAutoMod(message: Message, client: Client): Promise<b
     const content = message.content;
     const userId = message.author.id;
 
+    // 0. Mode lent préventif (débit global du salon)
+    if (config.preventiveSlowmodeEnabled) {
+      await handlePreventiveSlowmode(message, {
+        msgThreshold: config.preventiveSlowmodeMsgThreshold,
+        minUsers: config.preventiveSlowmodeMinUsers,
+        windowSec: config.preventiveSlowmodeWindowSec,
+        slowmodeSec: config.preventiveSlowmodeSeconds,
+        durationMin: config.preventiveSlowmodeMinutes,
+      });
+    }
+
     // 1. Anti-Spam
     if (config.spamEnabled) {
       const trackerKey = `${guildId}:${userId}`;
@@ -1307,6 +1319,42 @@ async function triggerGhostPingAlert(
   }
 }
 
+// ── Autorisation ponctuelle d'un bot (/bypass bot) ──────────────────────────
+// Le propriétaire autorise un bot à rejoindre UNE fois, dans les 10 minutes.
+// Rangée dans le cache partagé : le shard qui voit l'arrivée n'est pas
+// forcément celui qui a reçu la commande.
+
+const BOT_BYPASS_TTL_SEC = 10 * 60;
+type BotBypasses = Record<string, { by: string; expiresAt: number }>;
+
+async function readBotBypasses(guildId: string): Promise<BotBypasses> {
+  const all = (await cache.get<BotBypasses>(`antibot:bypass:${guildId}`)) ?? {};
+  const now = Date.now();
+  return Object.fromEntries(Object.entries(all).filter(([, v]) => v.expiresAt > now));
+}
+
+export async function grantBotBypass(guildId: string, botId: string, byUserId: string): Promise<Date> {
+  const all = await readBotBypasses(guildId);
+  const expiresAt = Date.now() + BOT_BYPASS_TTL_SEC * 1000;
+  all[botId] = { by: byUserId, expiresAt };
+  await cache.set(`antibot:bypass:${guildId}`, all, BOT_BYPASS_TTL_SEC);
+  return new Date(expiresAt);
+}
+
+export async function listBotBypasses(guildId: string): Promise<BotBypasses> {
+  return readBotBypasses(guildId);
+}
+
+/** Consomme l'autorisation d'un bot : valable une seule arrivée. */
+async function consumeBotBypass(guildId: string, botId: string): Promise<{ by: string } | null> {
+  const all = await readBotBypasses(guildId);
+  const grant = all[botId];
+  if (!grant) return null;
+  delete all[botId];
+  await cache.set(`antibot:bypass:${guildId}`, all, BOT_BYPASS_TTL_SEC);
+  return { by: grant.by };
+}
+
 /**
  * Gère l'ajout d'un bot sur le serveur en mode sécurisé.
  * Si antiBotEnabled est actif, seul le propriétaire du serveur peut ajouter un bot.
@@ -1324,6 +1372,12 @@ export async function handleAntiBotAdd(member: GuildMember, client: Client): Pro
     const config = await getOrCreateAutoModConfig(guildId);
 
     if (!config.antiBotEnabled) return false;
+
+    const bypass = await consumeBotBypass(guildId, member.id);
+    if (bypass) {
+      logger.info('AutoModService', `Bot ${member.user.tag} (${member.id}) admis sur ${guildId} : autorisé par ${bypass.by} (/bypass bot)`);
+      return false;
+    }
 
     // Chercher qui a ajouté le bot via l'audit log
     let addedById: string | null = null;

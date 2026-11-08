@@ -10,7 +10,7 @@ import type { Client } from 'discord.js';
 import { logger } from '../../../utils/logger.js';
 import { containsBannedWord, loadBannedWords } from '../bannedWordsService.js';
 import { AegisUnavailableError, getAegisClient, type EmotionResult, type ScanResult } from './aegisClient.js';
-import { getAegisConfig, type AegisRuntimeConfig } from './aegisConfig.js';
+import { getAegisSendConfig, type AegisRuntimeConfig } from './aegisConfig.js';
 import { isLate, type AegisJob } from './aegisQueue.js';
 import { recordAegisObservation } from './aegisStats.js';
 import { chunkText, textFingerprint } from './aegisText.js';
@@ -121,11 +121,20 @@ async function runModules(job: AegisJob, config: AegisRuntimeConfig, toxicity: n
 const EXEMPT_NOTE = "Membre exempté (administrateur, rôle ou salon exempté) : pas d'action automatique, à toi de trancher.";
 
 export async function processAegisJob(job: AegisJob): Promise<void> {
-  const config = await getAegisConfig(job.guildId);
+  const config = await getAegisSendConfig(job.guildId);
   if (!config) return;
   const api = getAegisClient();
   if (!api.configured) return;
   await waitForApi();
+
+  // Module éteint, partage accepté : le texte part pour l'entraînement seul,
+  // sans statistiques ni modération.
+  if (!config.enabled) {
+    await scanText(job.text, true, config.autoThreshold).catch((error) => {
+      if (!(error instanceof AegisUnavailableError)) logger.warn('AegisAI', `Message non partagé (${job.guildId}) :`, error);
+    });
+    return;
+  }
 
   let scan: ScanResult | undefined;
   let fallbackHit = false;

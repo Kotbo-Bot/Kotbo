@@ -9,6 +9,7 @@
   import { authStore } from '../lib/stores/auth.svelte';
   import { canViewFeature } from '../lib/permissions.svelte';
   import { dashboardStore } from '../lib/stores/dashboard.svelte';
+  import { memberCaseModal } from '../lib/stores/memberCaseModal.svelte';
   import {
     fetchStaffMembers,
     fetchStaffCalendarData,
@@ -34,7 +35,6 @@
     searchDiscordMembers,
     fetchCallPermissionConfig,
     updateCallPermissionConfig,
-    fetchMemberCase,
     createReminder,
     deleteReminder,
     type AbsenceSuperior,
@@ -53,7 +53,6 @@
   import ModulePage from '../lib/components/ModulePage.svelte';
   import SearchableSelect from '../lib/components/SearchableSelect.svelte';
   import Skeleton from '../lib/components/Skeleton.svelte';
-  import MemberCaseModal from '../lib/components/MemberCaseModal.svelte';
   import DiscordMarkdownEditor from '../lib/components/DiscordMarkdownEditor.svelte';
   import DoingListPin from '../lib/components/doingLists/DoingListPin.svelte';
   import { Button, Callout, Field, FilterPills, Menu, Modal, ToggleSwitch, type FilterOption, type MenuItem } from '../lib/components/ui';
@@ -273,20 +272,6 @@
   const canModerateMeetings = $derived(canManageMeetings || !!meetingsFeatureAccess.canModerate);
   const absencesFeatureAccess = $derived((dashboardStore.state.featureAccess as any)?.absences || {});
   const canModerateAbsences = $derived(canManageSettings || !!absencesFeatureAccess.canModerate || !!absencesFeatureAccess.canConfigure);
-  /**
-   * Le dossier membre est la fiche de la section Membres : un role a qui le
-   * centre de gestion l'a fermee ne doit pas la rouvrir depuis cette page.
-   */
-  const canOpenMemberCase = $derived(canViewFeature('members'));
-
-  // ── Dossier membre ──────────────────────────────────────
-  let userCaseModalOpen = $state(false);
-  let selectedUserIdForCase = $state<string | null>(null);
-  let selectedUserNameForCase = $state('');
-  let caseData = $state<any>(null);
-  let loadingCase = $state(false);
-  let caseError = $state('');
-
   // ── Reunions : suppression et edition ───────────────────
   let meetingDeleteModalOpen = $state(false);
   let meetingToDeleteId = $state<string | null>(null);
@@ -717,23 +702,6 @@
     newReminderMessage = '';
     newReminderTime = '';
     detailModalOpen = true;
-  }
-
-  async function openMemberCase(userId: string, name: string) {
-    if (!authStore.selectedGuildId || !canOpenMemberCase) return;
-    selectedUserIdForCase = userId;
-    selectedUserNameForCase = name;
-    userCaseModalOpen = true;
-    loadingCase = true;
-    caseError = '';
-    caseData = null;
-    try {
-      caseData = await fetchMemberCase(userId, authStore.selectedGuildId);
-    } catch (err) {
-      caseError = err instanceof Error ? err.message : m.planning_case_err();
-    } finally {
-      loadingCase = false;
-    }
   }
 
   // ── Creation ────────────────────────────────────────────
@@ -2202,7 +2170,7 @@
             <ul class="max-h-56 overflow-y-auto divide-y divide-outline-variant">
               {#each raw.presences as presence (presence.id ?? presence.staffUserId)}
                 <li class="flex items-center gap-2.5 py-2">
-                  <button type="button" class="flex items-center gap-2.5 min-w-0 flex-1 text-left hover:text-primary disabled:hover:text-on-surface" disabled={!canOpenMemberCase} onclick={() => openMemberCase(presence.staffUserId, memberName(presence.staffMember))}>
+                  <button type="button" class="flex items-center gap-2.5 min-w-0 flex-1 text-left enabled:hover:text-primary" disabled={!memberCaseModal.canOpen} onclick={() => memberCaseModal.show(presence.staffUserId, memberName(presence.staffMember))}>
                     {@render avatar(presence.staffMember?.avatarUrl, memberName(presence.staffMember), 'w-7 h-7')}
                     <span class="min-w-0">
                       <span class="block truncate text-body-sm font-medium">{memberName(presence.staffMember)}</span>
@@ -2393,20 +2361,6 @@
     <Button variant="primary" loading={permSaving} onclick={savePermissionConfig}>{m.common_save()}</Button>
   {/snippet}
 </Modal>
-
-<MemberCaseModal
-  open={userCaseModalOpen}
-  userId={selectedUserIdForCase}
-  userName={selectedUserNameForCase}
-  {caseData}
-  loading={loadingCase}
-  error={caseError}
-  onClose={() => { userCaseModalOpen = false; }}
-  onSelectUser={(newUserId) => {
-    const foundNode = caseData?.interactionGraph?.nodes?.find((n: any) => n.id === newUserId);
-    openMemberCase(newUserId, foundNode?.label || m.planning_member_fallback());
-  }}
-/>
 
 <!-- ===== Suppression d'une reunion ===== -->
 <Modal bind:open={meetingDeleteModalOpen} title={m.meetings_delete_modal_title()} subtitle={m.meetings_delete_modal_subtitle()}>

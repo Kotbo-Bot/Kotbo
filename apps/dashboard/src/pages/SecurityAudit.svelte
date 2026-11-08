@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m, dateLocale } from '../lib/i18n';
   import { onMount } from 'svelte';
   import { authStore } from '../lib/stores/auth.svelte';
   import { fetchSecurityAudit, applySecurityFix, applyAllSecurityFixes } from '../lib/api';
@@ -84,10 +85,10 @@
   } | null>(null);
 
   const SEVERITY_META: Record<Severity, { label: string; icon: string; text: string; bg: string; ring: string }> = {
-    CRITICAL: { label: 'Critique', icon: 'AlertOctagon', text: 'text-error', bg: 'bg-error/10', ring: 'ring-error/30' },
-    WARNING: { label: 'Avertissement', icon: 'AlertTriangle', text: 'text-warning', bg: 'bg-warning/10', ring: 'ring-warning/30' },
-    INFO: { label: 'Information', icon: 'Info', text: 'text-sky-500', bg: 'bg-sky-500/10', ring: 'ring-sky-500/30' },
-    OK: { label: 'Conforme', icon: 'ShieldCheck', text: 'text-success', bg: 'bg-success/10', ring: 'ring-success/30' },
+    CRITICAL: { label: m.sax_sev_critical(), icon: 'AlertOctagon', text: 'text-error', bg: 'bg-error/10', ring: 'ring-error/30' },
+    WARNING: { label: m.sax_sev_warning(), icon: 'AlertTriangle', text: 'text-warning', bg: 'bg-warning/10', ring: 'ring-warning/30' },
+    INFO: { label: m.sax_sev_info(), icon: 'Info', text: 'text-sky-500', bg: 'bg-sky-500/10', ring: 'ring-sky-500/30' },
+    OK: { label: m.sax_sev_ok(), icon: 'ShieldCheck', text: 'text-success', bg: 'bg-success/10', ring: 'ring-success/30' },
   };
 
   /**
@@ -195,9 +196,9 @@
     try {
       const res = await fetchSecurityAudit(true, authStore.selectedGuildId);
       report = res?.report ?? null;
-      if (showToast) toast.success('Audit actualisé');
+      if (showToast) toast.success(m.sa_refreshed());
     } catch (err) {
-      error = err instanceof Error ? err.message : "Impossible de lancer l'audit";
+      error = err instanceof Error ? err.message : m.sax_load_failed();
       report = null;
     } finally {
       loading = false;
@@ -209,8 +210,8 @@
     if (finding.fix.risky) {
       const confirmed = await confirmDialog.ask({
         title: finding.fix.label,
-        description: 'Cette action modifie des permissions existantes du serveur.',
-        confirmLabel: 'Appliquer',
+        description: m.sax_risky_desc(),
+        confirmLabel: m.sax_apply(),
         variant: 'warning',
       });
       if (!confirmed) return;
@@ -220,9 +221,9 @@
     try {
       const res = await applySecurityFix(finding.id, authStore.selectedGuildId);
       if (res?.report) report = res.report;
-      toast.success(res?.message ?? 'Correctif appliqué');
+      toast.success(res?.message ?? m.sa_fix_applied());
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Le correctif a échoué');
+      toast.error(err instanceof Error ? err.message : m.sa_fix_failed());
     } finally {
       fixingId = null;
     }
@@ -243,16 +244,16 @@
       const failed = res?.failed ?? [];
 
       if (failed.length === 0) {
-        toast.success(`${applied.length} correctif(s) appliqué(s)`);
+        toast.success(m.sa_fixes_applied({ count: applied.length }));
         bulkOpen = false;
       } else {
         // On garde la modale ouverte pour nommer les echecs : « 3 en echec »
         // sans dire lesquels n'aide personne a rattraper le coup.
         bulkResult = { applied, failed };
-        toast.warning(`${applied.length} appliqué(s), ${failed.length} en échec`);
+        toast.warning(m.sa_fixes_partial({ applied: applied.length, failed: failed.length }));
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "L'application des correctifs a échoué");
+      toast.error(err instanceof Error ? err.message : m.sa_fixes_failed());
     } finally {
       bulkRunning = false;
     }
@@ -273,8 +274,8 @@
 </script>
 
 <ModulePage
-  title="Bilan"
-  description="Ce qui protège ton serveur, et ce qu'il reste à régler."
+  title={m.sax_title()}
+  description={m.sax_desc()}
   icon="ShieldCheck"
   featureKey="raid_protection"
 >
@@ -284,7 +285,7 @@
         variant="primary"
         size="sm"
         icon="Sparkles"
-        label="Tout activer"
+        label={m.sax_enable_all()}
         disabled={busy}
         onclick={openBulk}
       />
@@ -295,7 +296,7 @@
   {#if loading && !report}
     <LoadingHint context="config" />
   {:else if error}
-    <EmptyState icon="AlertTriangle" title="Audit indisponible" description={error} actionLabel="Réessayer" actionIcon="RefreshCw" onAction={() => load()} />
+    <EmptyState icon="AlertTriangle" title={m.sax_unavailable()} description={error} actionLabel={m.common_retry()} actionIcon="RefreshCw" onAction={() => load()} />
   {:else if report}
     <!-- ── Synthese ───────────────────────────────────────────────────── -->
     <div class="grid gap-4 lg:grid-cols-[minmax(0,320px)_1fr]">
@@ -318,26 +319,26 @@
             </svg>
             <div class="absolute inset-0 flex flex-col items-center justify-center">
               <span class="text-4xl font-bold tracking-tight {scoreColor(report.score)}">{report.score}</span>
-              <span class="text-xs text-on-surface-variant">Note {report.grade}</span>
+              <span class="text-xs text-on-surface-variant">{m.sax_grade({ grade: report.grade })}</span>
             </div>
           </div>
 
           <div class="grid grid-cols-2 gap-2 w-full text-center">
             <div class="rounded-lg bg-error/10 px-3 py-2">
               <div class="text-lg font-semibold text-error">{counts.critical}</div>
-              <div class="text-2xs text-on-surface-variant">Critiques</div>
+              <div class="text-2xs text-on-surface-variant">{m.sax_stat_critical()}</div>
             </div>
             <div class="rounded-lg bg-warning/10 px-3 py-2">
               <div class="text-lg font-semibold text-warning">{counts.warning}</div>
-              <div class="text-2xs text-on-surface-variant">Avertissements</div>
+              <div class="text-2xs text-on-surface-variant">{m.sax_stat_warning()}</div>
             </div>
             <div class="rounded-lg bg-sky-500/10 px-3 py-2">
               <div class="text-lg font-semibold text-sky-500">{counts.info}</div>
-              <div class="text-2xs text-on-surface-variant">Informations</div>
+              <div class="text-2xs text-on-surface-variant">{m.sax_stat_info()}</div>
             </div>
             <div class="rounded-lg bg-success/10 px-3 py-2">
               <div class="text-lg font-semibold text-success">{counts.ok}</div>
-              <div class="text-2xs text-on-surface-variant">Conformes</div>
+              <div class="text-2xs text-on-surface-variant">{m.sax_stat_ok()}</div>
             </div>
           </div>
 
@@ -351,29 +352,27 @@
             >
               <span class="inline-flex items-center gap-1.5 text-body-sm font-semibold text-primary">
                 <Papicon icon="Sparkles" size={14} />
-                Tout activer
+                {m.sax_enable_all()}
               </span>
               <span class="block mt-0.5 text-2xs text-on-surface-variant">
-                {safeFixes.length} correctif(s) sans risque · +{safeFixPoints} points
+                {m.sax_safe_fixes({ count: safeFixes.length, points: safeFixPoints })}
               </span>
             </button>
           {/if}
 
           {#if riskyFixCount > 0}
             <p class="text-2xs text-center text-on-surface-variant/75 leading-relaxed">
-              {riskyFixCount} autre(s) correctif(s) touchent des permissions existantes
-              et se confirment un par un.
+              {m.sax_risky_count({ count: riskyFixCount })}
             </p>
           {/if}
 
           <p class="text-2xs text-on-surface-variant text-center">
-            Audit effectué en {formatDuration(report.durationMs)} ·
-            {new Date(report.generatedAt).toLocaleString('fr-FR')}
+            {m.sax_done_in({ duration: formatDuration(report.durationMs), date: new Date(report.generatedAt).toLocaleString(dateLocale()) })}
           </p>
         </div>
       </SectionCard>
 
-      <SectionCard title="Score par catégorie" description="La catégorie la plus faible est celle qui mérite l'effort en premier.">
+      <SectionCard title={m.sax_by_category()} description={m.sax_by_category_desc()}>
         <div class="space-y-2.5">
           {#each [...report.categories].sort((a, b) => a.score - b.score) as cat (cat.category)}
             <button
@@ -410,22 +409,22 @@
 
         <div class="mt-5 pt-4 border-t border-outline-variant/30 grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
           <div>
-            <div class="text-sm font-semibold text-on-surface">{report.stats.memberCount.toLocaleString('fr-FR')}</div>
-            <div class="text-2xs text-on-surface-variant">Membres</div>
+            <div class="text-sm font-semibold text-on-surface">{report.stats.memberCount.toLocaleString(dateLocale())}</div>
+            <div class="text-2xs text-on-surface-variant">{m.sax_members()}</div>
           </div>
           <div>
             <div class="text-sm font-semibold text-on-surface">{report.stats.adminMemberCount}</div>
-            <div class="text-2xs text-on-surface-variant">Administrateurs</div>
+            <div class="text-2xs text-on-surface-variant">{m.sax_admins()}</div>
           </div>
           <div>
             <div class="text-sm font-semibold text-on-surface">{report.stats.botCount}</div>
-            <div class="text-2xs text-on-surface-variant">Bots</div>
+            <div class="text-2xs text-on-surface-variant">{m.sax_bots()}</div>
           </div>
           <div>
             <div class="text-sm font-semibold text-on-surface">
               {report.stats.webhookCount ?? '-'}
             </div>
-            <div class="text-2xs text-on-surface-variant">Webhooks</div>
+            <div class="text-2xs text-on-surface-variant">{m.sax_webhooks()}</div>
           </div>
         </div>
       </SectionCard>
@@ -437,14 +436,14 @@
         <div class="flex items-start gap-3">
           <Papicon icon="AlertTriangle" size={16} class="text-warning mt-0.5 shrink-0" />
           <div class="min-w-0">
-            <p class="text-body-sm font-medium text-on-surface">Certains contrôles n'ont pas pu être exécutés</p>
+            <p class="text-body-sm font-medium text-on-surface">{m.sax_degraded()}</p>
             <ul class="mt-1 space-y-0.5">
               {#each report.degraded as item}
                 <li class="text-xs text-on-surface-variant">• {item}</li>
               {/each}
             </ul>
             <p class="mt-1.5 text-xs text-on-surface-variant">
-              Le score ne tient pas compte de ces contrôles : il peut être optimiste.
+              {m.sax_degraded_desc()}
             </p>
           </div>
         </div>
@@ -453,13 +452,13 @@
 
     <!-- ── Constats ───────────────────────────────────────────────────── -->
     <SectionCard
-      title="Constats"
-      description="{visibleFindings.length} élément(s) affiché(s) sur {report.findings.length} contrôles."
+      title={m.sax_findings()}
+      description={m.sax_findings_desc({ shown: visibleFindings.length, total: report.findings.length })}
     >
       {#snippet actions()}
         <label class="flex items-center gap-2 text-xs text-on-surface-variant cursor-pointer select-none">
           <input type="checkbox" bind:checked={showResolved} class="accent-primary" />
-          Afficher les points conformes
+          {m.sax_show_resolved()}
         </label>
       {/snippet}
 
@@ -472,7 +471,7 @@
             : 'bg-surface-container-low border-outline-variant/40 text-on-surface-variant hover:text-on-surface'}"
           onclick={() => (severityFilter = 'ALL')}
         >
-          Tout
+          {m.sax_all()}
         </button>
         {#each ['CRITICAL', 'WARNING', 'INFO'] as sev}
           {@const meta = SEVERITY_META[sev as Severity]}
@@ -504,9 +503,9 @@
       {#if visibleFindings.length === 0}
         <EmptyState
           icon="ShieldCheck"
-          title="Aucun constat pour ce filtre"
-          description="Aucun point à corriger dans cette catégorie et ce niveau de gravité."
-          actionLabel="Afficher tous les constats"
+          title={m.sax_empty_filter()}
+          description={m.sax_empty_filter_desc()}
+          actionLabel={m.sax_show_all()}
           actionIcon="Eraser"
           onAction={() => { severityFilter = 'ALL'; categoryFilter = 'ALL'; }}
         />
@@ -587,12 +586,12 @@
                     >
                       {#if fixingId === finding.id}
                         <Papicon icon="Loader" size={13} class="animate-spin" />
-                        Application…
+                        {m.sax_applying()}
                       {:else}
                         <Papicon icon="Wrench" size={13} />
                         {finding.fix.label}
                         {#if finding.fix.risky}
-                          <span class="text-2xs text-warning ml-0.5">· confirmation</span>
+                          <span class="text-2xs text-warning ml-0.5">· {m.sax_confirmation()}</span>
                         {/if}
                       {/if}
                     </button>
@@ -622,10 +621,10 @@
 <!-- ── Confirmation du lot ────────────────────────────────────────────── -->
 <Modal
   bind:open={bulkOpen}
-  title="Activer les recommandations"
+  title={m.sax_bulk_title()}
   subtitle={bulkResult
-    ? "Resultat de l'application"
-    : `${safeFixes.length} correctif(s) sans risque · +${safeFixPoints} points`}
+    ? m.sax_bulk_result()
+    : m.sax_safe_fixes({ count: safeFixes.length, points: safeFixPoints })}
   size="lg"
   closeOnBackdropClick={!bulkRunning}
   closeOnEscape={!bulkRunning}
@@ -635,7 +634,7 @@
       {#if bulkResult.applied.length > 0}
         <div>
           <p class="text-body-sm font-medium text-success mb-1.5">
-            {bulkResult.applied.length} correctif(s) appliqué(s)
+            {m.sax_applied({ count: bulkResult.applied.length })}
           </p>
           <ul class="space-y-1">
             {#each bulkResult.applied as item}
@@ -651,7 +650,7 @@
       {#if bulkResult.failed.length > 0}
         <div>
           <p class="text-body-sm font-medium text-error mb-1.5">
-            {bulkResult.failed.length} correctif(s) en échec
+            {m.sax_failed({ count: bulkResult.failed.length })}
           </p>
           <ul class="space-y-1">
             {#each bulkResult.failed as item}
@@ -665,15 +664,15 @@
       {/if}
 
       <div class="flex justify-end pt-1">
-        <ActionButton variant="neutral" label="Fermer" onclick={() => (bulkOpen = false)} />
+        <ActionButton variant="neutral" label={m.common_close()} onclick={() => (bulkOpen = false)} />
       </div>
     </div>
   {:else}
     <div class="space-y-4">
       <p class="text-body-sm text-on-surface-variant leading-relaxed">
-        Ces correctifs activent des protections et n'enlèvent aucun droit existant.
+        {m.sax_bulk_desc()}
         {#if riskyFixCount > 0}
-          Les {riskyFixCount} correctif(s) qui modifient des permissions restent à confirmer un par un.
+          {m.sax_bulk_risky({ count: riskyFixCount })}
         {/if}
       </p>
 
@@ -696,14 +695,14 @@
       <div class="flex justify-end gap-2 pt-1">
         <ActionButton
           variant="neutral"
-          label="Annuler"
+          label={m.common_cancel()}
           disabled={bulkRunning}
           onclick={() => (bulkOpen = false)}
         />
         <ActionButton
           variant="primary"
           icon={bulkRunning ? 'Loader' : 'Sparkles'}
-          label={bulkRunning ? 'Application…' : `Activer les ${safeFixes.length} recommandations`}
+          label={bulkRunning ? m.sax_applying() : m.sax_bulk_run({ count: safeFixes.length })}
           disabled={bulkRunning}
           onclick={runAllFixes}
         />

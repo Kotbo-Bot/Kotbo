@@ -16,6 +16,8 @@ export const publicClanSearchRateLimiter = new Map<string, number[]>();
  * d'où un plafond large qui n'arrête qu'une page partie en vrille.
  */
 export const publicGiveawaysRateLimiter = new Map<string, number[]>();
+/** Page publique d'un tournoi : elle se rafraîchit seule toutes les 20 s pendant le direct. */
+export const publicTournamentsRateLimiter = new Map<string, number[]>();
 /**
  * Portail partenaire. Serre : le jeton est le seul secret de la route, et un
  * limiteur large laisserait tout le loisir d'en essayer au hasard.

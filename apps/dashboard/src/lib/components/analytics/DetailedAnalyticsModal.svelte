@@ -163,9 +163,10 @@
             
             <!-- MESSAGES / VOICE -->
             {#if type === 'messages' || type === 'voice'}
-              <button 
+              <button
+                disabled={!onOpenMember}
                 onclick={() => onOpenMember?.(item.userId, item.name || item.username)}
-                class="w-full flex items-center justify-between p-4 rounded-lg bg-surface-container-high/20 border border-outline-variant/5 hover:bg-surface-container-high/60 transition-all text-left group"
+                class="w-full flex items-center justify-between p-4 rounded-lg bg-surface-container-high/20 border border-outline-variant/5 enabled:hover:bg-surface-container-high/60 transition-all text-left group"
               >
                 <div class="flex items-center gap-4">
                   <div class="w-8 text-center text-xs font-semibold text-on-surface-variant/40">{globalIndex}</div>
@@ -180,7 +181,7 @@
                     <p class="text-2xs font-semibold {type === 'messages' ? 'text-primary' : 'text-success'} uppercase tracking-widest">{type === 'messages' ? m.d7_dam_messages() : m.d7_dam_minutes()}</p>
                     <p class="text-base font-semibold text-on-surface">{(type === 'messages' ? item.messageCount : Math.round(item.voiceTimeSeconds / 60)).toLocaleString(dateLocale())}</p>
                   </div>
-                  <Papicon icon="ArrowRight" size={16} class="opacity-0 group-hover:opacity-100 transition-opacity" />
+                  <Papicon icon="ArrowRight" size={16} class="opacity-0 group-enabled:group-hover:opacity-100 transition-opacity" />
                 </div>
               </button>
 
@@ -208,9 +209,10 @@
 
             <!-- MODERATORS -->
             {:else if type === 'moderators'}
-              <button 
+              <button
+                disabled={!onOpenMember}
                 onclick={() => onOpenMember?.(item.userId, item.moderatorTag)}
-                class="w-full flex items-center justify-between p-4 rounded-lg bg-surface-container-high/20 border border-outline-variant/5 hover:bg-surface-container-high/60 transition-all text-left"
+                class="w-full flex items-center justify-between p-4 rounded-lg bg-surface-container-high/20 border border-outline-variant/5 enabled:hover:bg-surface-container-high/60 transition-all text-left"
               >
                 <div class="flex items-center gap-4">
                   <div class="w-8 text-center text-xs font-semibold text-on-surface-variant/40">{globalIndex}</div>
@@ -225,9 +227,10 @@
 
             <!-- SANCTIONED -->
             {:else if type === 'sanctioned'}
-              <button 
+              <button
+                disabled={!onOpenMember}
                 onclick={() => onOpenMember?.(item.targetUserId, item.targetTag)}
-                class="w-full flex items-center justify-between p-4 rounded-lg bg-surface-container-high/20 border border-outline-variant/5 hover:bg-surface-container-high/60 transition-all text-left"
+                class="w-full flex items-center justify-between p-4 rounded-lg bg-surface-container-high/20 border border-outline-variant/5 enabled:hover:bg-surface-container-high/60 transition-all text-left"
               >
                 <div class="flex items-center gap-4">
                   <div class="w-8 text-center text-xs font-semibold text-on-surface-variant/40">{globalIndex}</div>
@@ -242,9 +245,10 @@
 
             <!-- STAFF LEADERBOARD -->
             {:else if type === 'staff'}
-              <button 
+              <button
+                disabled={!onOpenMember}
                 onclick={() => onOpenMember?.(item.userId, item.name)}
-                class="w-full flex items-center gap-4 p-4 rounded-lg bg-surface-container-high/20 hover:bg-surface-container-high/50 border border-outline-variant/5 transition-all text-left group"
+                class="w-full flex items-center gap-4 p-4 rounded-lg bg-surface-container-high/20 enabled:hover:bg-surface-container-high/50 border border-outline-variant/5 transition-all text-left group"
               >
                 <div class="flex items-center justify-center w-8 h-8 rounded-full font-semibold text-xs {globalIndex <= 3 ? 'bg-warning/10 text-warning' : 'bg-on-surface/5 text-on-surface-variant/30 shrink-0'}">
                   {globalIndex}
@@ -278,7 +282,8 @@
               <div class="flex flex-col md:flex-row md:items-center justify-between p-5 rounded-xl bg-surface-container-high/30 border border-outline-variant/10 hover:bg-surface-container-high/50 transition-all group gap-4">
                 <div class="flex items-center gap-4">
                   <div class="w-8 text-center text-xs font-semibold text-on-surface-variant/40 hidden md:block">{globalIndex}</div>
-                  <button 
+                  <button
+                    disabled={!onOpenMember}
                     onclick={() => onOpenMember?.(item.targetUserId, item.targetTag)}
                     class="w-12 h-12 rounded-lg overflow-hidden bg-on-surface/5 flex items-center justify-center transition-transform shrink-0"
                   >

@@ -47,7 +47,7 @@
       const data = await res.json();
       transcripts = data.transcripts || [];
     } catch (err) {
-      error = errorMessage(err) || 'Une erreur est survenue';
+      error = errorMessage(err) || m.common_error_occurred();
     } finally {
       loading = false;
     }

@@ -1,3 +1,4 @@
+import { isModulePaused } from '@kotbo/contracts';
 import type { SlashCommandDefinition } from '../../commands.js';
 import {
   SlashCommandBuilder,
@@ -25,52 +26,61 @@ const data = new SlashCommandBuilder()
     sub
       .setName('info')
       .setDescription('Affiche les informations de configuration actuelles')
-  )
-  .addSubcommand(sub =>
-    sub
-      .setName('add-daily-algo')
-      .setDescription('Ajoute un nouveau problème dans la banque Daily Algo')
-      .addStringOption(option =>
-        option
-          .setName('titre')
-          .setDescription('Titre du problème')
-          .setRequired(true),
-      )
-      .addStringOption(option =>
-        option
-          .setName('question')
-          .setDescription('Énoncé du Daily Algo')
-          .setRequired(true),
-      )
-      .addStringOption(option =>
-        option
-          .setName('solution')
-          .setDescription('Solution attendue')
-          .setRequired(true),
-      )
-      .addStringOption(option =>
-        option
-          .setName('difficulte')
-          .setDescription('Niveau de difficulté')
-          .addChoices(
-            { name: 'Facile', value: 'facile' },
-            { name: 'Moyen', value: 'moyen' },
-            { name: 'Difficile', value: 'difficile' },
-          )
-          .setRequired(true),
-      )
-  )
-  .addSubcommand(sub =>
-    sub
-      .setName('set-algo-channel')
-      .setDescription('Définit le salon pour le Daily Algo')
-      .addChannelOption(option =>
-        option
-          .setName('channel')
-          .setDescription('Le salon des défis quotidiens')
-          .setRequired(true)
-      )
-  )
+  );
+
+// Daily Algo en pause : ses sous-commandes ne sont pas declarees, et donc
+// pas deployees.
+const DAILY_ALGO_PAUSED = isModulePaused('daily_algo');
+if (!DAILY_ALGO_PAUSED) {
+  data
+    .addSubcommand(sub =>
+      sub
+        .setName('add-daily-algo')
+        .setDescription('Ajoute un nouveau problème dans la banque Daily Algo')
+        .addStringOption(option =>
+          option
+            .setName('titre')
+            .setDescription('Titre du problème')
+            .setRequired(true),
+        )
+        .addStringOption(option =>
+          option
+            .setName('question')
+            .setDescription('Énoncé du Daily Algo')
+            .setRequired(true),
+        )
+        .addStringOption(option =>
+          option
+            .setName('solution')
+            .setDescription('Solution attendue')
+            .setRequired(true),
+        )
+        .addStringOption(option =>
+          option
+            .setName('difficulte')
+            .setDescription('Niveau de difficulté')
+            .addChoices(
+              { name: 'Facile', value: 'facile' },
+              { name: 'Moyen', value: 'moyen' },
+              { name: 'Difficile', value: 'difficile' },
+            )
+            .setRequired(true),
+        )
+    )
+    .addSubcommand(sub =>
+      sub
+        .setName('set-algo-channel')
+        .setDescription('Définit le salon pour le Daily Algo')
+        .addChannelOption(option =>
+          option
+            .setName('channel')
+            .setDescription('Le salon des défis quotidiens')
+            .setRequired(true)
+        )
+    );
+}
+
+data
   .addSubcommand(sub =>
     sub
       .setName('set-releases-channel')
@@ -162,6 +172,14 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
     return;
   }
 
+  if (DAILY_ALGO_PAUSED && (subcommand === 'add-daily-algo' || subcommand === 'set-algo-channel')) {
+    await interaction.reply(v2Message(
+      { flags: MessageFlags.Ephemeral },
+      errorContainer('Daily Algo', 'Le Daily Algo est en pause : il ne peut pas être configuré pour le moment.'),
+    ));
+    return;
+  }
+
   await upsertRetryingRace(() => prisma.guild.upsert({ where: { id: guildId }, update: {}, create: { id: guildId } }));
 
   if (subcommand === 'info') {
@@ -186,10 +204,14 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
         fields: [
           'Paramètres persistés en base de données',
           separator({ divider: true, spacing: 'small' }),
-          `**Salon Daily Algo**\n${guild?.dailyAlgoChannelId ? `<#${guild.dailyAlgoChannelId}>` : `${E.error} Non configuré`}`,
-          `**Salon validation Daily Algo**\n${guild?.dailyAlgoValidationChannelId ? `<#${guild.dailyAlgoValidationChannelId}>` : `${E.error} Non configuré`}`,
+          ...(DAILY_ALGO_PAUSED ? [] : [
+            `**Salon Daily Algo**\n${guild?.dailyAlgoChannelId ? `<#${guild.dailyAlgoChannelId}>` : `${E.error} Non configuré`}`,
+            `**Salon validation Daily Algo**\n${guild?.dailyAlgoValidationChannelId ? `<#${guild.dailyAlgoValidationChannelId}>` : `${E.error} Non configuré`}`,
+          ]),
           `**Salon releases GitHub**\n${guild?.githubReleasesChannelId ? `<#${guild.githubReleasesChannelId}>` : `${E.error} Non configuré`}`,
-          `**Daily Algo**\n${guild?.dailyAlgoEnabled ? `${E.success} Activé (${guild.dailyAlgoTime} UTC)` : `${E.error} Désactivé`}`,
+          ...(DAILY_ALGO_PAUSED ? [] : [
+            `**Daily Algo**\n${guild?.dailyAlgoEnabled ? `${E.success} Activé (${guild.dailyAlgoTime} UTC)` : `${E.error} Désactivé`}`,
+          ]),
           `**Releases GitHub**\n${guild?.githubReleasesEnabled ? `${E.success} Activé (${guild.githubRepositories.length} repos)` : `${E.error} Désactivé`}`,
         ],
       }),

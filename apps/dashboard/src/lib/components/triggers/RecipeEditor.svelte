@@ -10,6 +10,7 @@
   import RoleFilterField from './RoleFilterField.svelte';
   import ReactionFilterFields from './ReactionFilterFields.svelte';
   import ScheduleField from './ScheduleField.svelte';
+  import MemberDaysField from './MemberDaysField.svelte';
   import { dashboardStore } from '../../stores/dashboard.svelte';
   import {
     DEFAULT_SCHEDULE,
@@ -19,6 +20,7 @@
     TRIGGER_ROLE_FILTER_KEY,
     acceptsMoreSteps,
     availableConditions,
+    contextTokens,
     scheduleToCron,
     compileRecipe,
     decompileGraph,
@@ -36,6 +38,7 @@
     type ValidationIssue,
     type ValueRef,
     type WorkflowGraph,
+    isMemberDaysTrigger,
   } from '@kotbo/shared';
 
   /**
@@ -48,10 +51,13 @@
    */
   const {
     graph,
+    focusNodeId = null,
     onChange,
     onUnsupported,
   }: {
     graph: WorkflowGraph;
+    /** Nœud à montrer à l'ouverture, ramené à l'étape qui le porte. */
+    focusNodeId?: string | null;
     onChange: (graph: WorkflowGraph, issues: ValidationIssue[]) => void;
     /** Appelé quand le graphe reçu ne s'exprime pas en phrases */
     onUnsupported?: () => void;
@@ -110,6 +116,8 @@
 
   const issues = $derived(recipe.trigger.type ? validateGraph(compileRecipe(recipe)) : []);
 
+  const focusStepId = $derived(focusNodeId ? stepIdOfNode(focusNodeId) : null);
+
   /** Problèmes rattachés à chaque étape, l'identifiant de nœud portant le sien. */
   const problemsByStep = $derived.by(() => {
     const map = new Map<string, string[]>();
@@ -147,9 +155,12 @@
     const keep = recipe.trigger.type === type || recipe.steps.length === 0;
     // La planification part sur un motif valide : sans lui, choisir le
     // déclencheur afficherait aussitôt une erreur de validation.
+    // Même raison pour le nombre de jours de l'ancienneté et de l'inactivité.
     const config = type === 'OnSchedule'
       ? { cron: recipe.trigger.config?.cron ?? scheduleToCron(DEFAULT_SCHEDULE) }
-      : undefined;
+      : isMemberDaysTrigger(type)
+        ? { days: recipe.trigger.config?.days ?? getNodeDef(type)?.config?.find((field) => field.key === 'days')?.defaultValue }
+        : undefined;
 
     update({ trigger: { type, ...(config ? { config } : {}) }, steps: keep ? recipe.steps : [] });
     changingTrigger = false;
@@ -192,7 +203,7 @@
     return values;
   }
 
-  function build(choice: { kind: 'action'; action: string } | { kind: 'condition' } | { kind: 'wait' }): RecipeStep {
+  function build(choice: { kind: 'action'; action: string } | { kind: 'condition' } | { kind: 'wait' } | { kind: 'cooldown' }): RecipeStep {
     const id = newStepId();
 
     if (choice.kind === 'action') {
@@ -200,6 +211,11 @@
     }
     if (choice.kind === 'wait') {
       return { id, kind: 'wait', seconds: 60 };
+    }
+    // Par membre quand le déclencheur en désigne un, sinon pour tout le serveur.
+    if (choice.kind === 'cooldown') {
+      const hasMember = contextTokens(recipe.trigger.type).some((token) => token.root && token.path === 'member');
+      return { id, kind: 'cooldown', seconds: 3600, scope: hasMember ? 'member' : 'guild' };
     }
 
     // Une condition sans test ne dit rien : on amorce avec la première
@@ -303,6 +319,13 @@
           onChange={(cron) => setTriggerConfig('cron', cron)}
         />
       {/if}
+      {#if isMemberDaysTrigger(recipe.trigger.type)}
+        <MemberDaysField
+          triggerType={recipe.trigger.type}
+          value={recipe.trigger.config?.days}
+          onChange={(days) => setTriggerConfig('days', days)}
+        />
+      {/if}
       {#if recipe.trigger.type === 'OnFunGameWon'}
         <FunTriggerNotice />
       {/if}
@@ -352,6 +375,7 @@
           {roles}
           {channels}
           problems={problemsByStep.get(step.id) ?? []}
+          {focusStepId}
           canMoveUp={movable.up}
           canMoveDown={movable.down}
           onChange={replaceRoot}

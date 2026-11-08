@@ -8,6 +8,7 @@
   import { unsavedChanges } from '../lib/stores/unsavedChanges.svelte';
   import { dashboardStore } from '../lib/stores/dashboard.svelte';
   import { authStore } from '../lib/stores/auth.svelte';
+  import { memberCaseModal } from '../lib/stores/memberCaseModal.svelte';
   import { confirmDialog } from '../lib/stores/confirmDialog.svelte';
   import { toast } from '../lib/stores/toast.svelte';
   import ModulePage from '../lib/components/ModulePage.svelte';
@@ -395,7 +396,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
       untrack(() => {
         unsavedChanges.register({
           id: 'economy',
-          label: 'Économie & RPG',
+          label: m.ecx_unsaved_label(),
           onSave: () => handleSaveConfig(),
           onReset: () => {
             config = JSON.parse(JSON.stringify(savedConfig));
@@ -947,7 +948,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
 
     await actionState.run(async () => {
       const res = await startRpgRaid();
-      if (!res || !res.success) throw new Error('Le raid n\'a pas pu être lancé.');
+      if (!res || !res.success) throw new Error(m.ecx_raid_failed());
       await loadRaid();
       return true;
     }, { successMessage: m.eco_raid_toast_started() });
@@ -956,7 +957,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
   async function handleRestoreRaidBosses() {
     await actionState.run(async () => {
       const res = await restoreRpgRaidBosses();
-      if (!res) throw new Error('Restauration impossible.');
+      if (!res) throw new Error(m.ecx_restore_failed());
       await loadRaid();
       if (res.restored === 0) toast.info(m.eco_raid_restore_none());
       return true;
@@ -1103,20 +1104,20 @@ import EmojiText from '../lib/components/EmojiText.svelte';
     await actionState.run(async () => {
       if (JSON.stringify(config) !== JSON.stringify(savedConfig)) {
         const res = await updateEconomyConfig(config);
-        if (!res || !res.config) throw new Error('Erreur de sauvegarde de la configuration.');
+        if (!res || !res.config) throw new Error(m.ecx_save_config_failed());
         config = res.config;
         savedConfig = JSON.parse(JSON.stringify(res.config));
       }
       if (rpgChannelsDirty) {
         const res = await updateRpgChannels(rpgChannelIds);
-        if (!res) throw new Error('Erreur de sauvegarde des salons RPG.');
+        if (!res) throw new Error(m.ecx_save_channels_failed());
         rpgChannelIds = [...res.channelIds];
         savedRpgChannelIds = [...res.channelIds];
         rpgChannelsDiverged = res.diverged;
       }
       if (gamblingDirty) {
         const res = await updateGamblingGames(gamblingGames);
-        if (!res?.games) throw new Error("Erreur de sauvegarde des jeux d'argent.");
+        if (!res?.games) throw new Error(m.ecx_save_games_failed());
         gamblingGames = { ...res.games };
         savedGamblingGames = { ...res.games };
       }
@@ -1418,7 +1419,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
 
     await actionState.run(async () => {
       const res = await applyRpgBestiaryDifficulty(scope, difficulty);
-      if (!res || !res.success) throw new Error('Erreur lors de l\'application de la difficulte.');
+      if (!res || !res.success) throw new Error(m.ecx_difficulty_failed());
       rememberDifficulty(scope === 'boss' ? 'bossDifficulty' : 'monsterDifficulty', difficulty);
       await loadMonsters();
       return true;
@@ -1460,7 +1461,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
 
     await actionState.run(async () => {
       const res = await applyRpgShopDifficulty(difficulty);
-      if (!res || !res.success) throw new Error('Erreur lors de l\'application de la difficulte.');
+      if (!res || !res.success) throw new Error(m.ecx_difficulty_failed());
       rememberDifficulty('shopDifficulty', difficulty);
       await loadItems();
       return true;
@@ -1515,7 +1516,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
 
     await actionState.run(async () => {
       const res = await importRpgBestiary(payload);
-      if (!res || !res.success) throw new Error("Erreur lors de l'import du bestiaire.");
+      if (!res || !res.success) throw new Error(m.ecx_bestiary_import_failed());
       await loadMonsters();
       if (res.droppedLoot > 0) toast.warning(m.eco_bestiary_import_dropped_loot({ count: res.droppedLoot }));
       return true;
@@ -1621,6 +1622,11 @@ import EmojiText from '../lib/components/EmojiText.svelte';
       (p.displayName && p.displayName.toLowerCase().includes(searchQuery.toLowerCase()))
     )
   );
+
+  /** Clic sur un membre du classement : sa fiche, seulement pour qui a accès à « Membres ». */
+  function openMember(member: { userId: string; displayName?: string | null; username?: string | null }) {
+    void memberCaseModal.show(member.userId, member.displayName || member.username || member.userId);
+  }
 </script>
 
 <!-- `featureKey` n'est pas decoratif : c'est lui qui donne a la page l'interrupteur
@@ -1796,7 +1802,8 @@ import EmojiText from '../lib/components/EmojiText.svelte';
                         type="button"
                         onclick={() => { config.currencyIcon = null; }}
                         class="absolute -top-1.5 -right-1.5 bg-red-500 hover:bg-red-600 text-white w-5 h-5 rounded-full flex items-center justify-center shadow-sm ring-2 ring-surface-container-high transition-colors"
-                        title="Supprimer"
+                        title={m.common_delete()}
+                        aria-label={m.common_delete()}
                       >
                         <Papicon icon="x" size={11} />
                       </button>
@@ -3415,13 +3422,16 @@ import EmojiText from '../lib/components/EmojiText.svelte';
                   <tr class="border-b border-outline-variant/5 hover:bg-surface-container-high/10 transition-colors">
                     <td class="py-4 px-4 font-bold">#{playerRanks.get(player.userId)}</td>
                     <td class="py-4 px-4 flex items-center gap-3">
-                      {#if player.avatarUrl}
-                        <img src={player.avatarUrl} alt="Avatar" class="w-8 h-8 rounded-full border border-outline-variant/20" />
-                      {:else}
-                        <div class="w-8 h-8 rounded-full bg-primary/20 text-primary flex items-center justify-center font-bold">U</div>
-                      {/if}
+                      <!-- Avatar : doublon du pseudo pour la souris, hors du parcours clavier -->
+                      <button type="button" tabindex="-1" aria-hidden="true" class="shrink-0" disabled={!memberCaseModal.canOpen} onclick={() => openMember(player)}>
+                        {#if player.avatarUrl}
+                          <img src={player.avatarUrl} alt="Avatar" class="w-8 h-8 rounded-full border border-outline-variant/20" />
+                        {:else}
+                          <div class="w-8 h-8 rounded-full bg-primary/20 text-primary flex items-center justify-center font-bold">U</div>
+                        {/if}
+                      </button>
                       <div>
-                        <div class="font-semibold text-sm">{player.displayName || player.username}</div>
+                        <button type="button" class="block text-left font-semibold text-sm enabled:hover:text-primary transition-colors" disabled={!memberCaseModal.canOpen} onclick={() => openMember(player)}>{player.displayName || player.username}</button>
                         <div class="text-2xs text-on-surface-variant/40 font-mono mt-0.5">{player.userId}</div>
                         <!-- Bento mini-stats -->
                         <div class="flex items-center gap-2 mt-1 text-2xs font-bold text-on-surface-variant">
@@ -3582,13 +3592,13 @@ import EmojiText from '../lib/components/EmojiText.svelte';
           <div class="space-y-1">
             <label for="itemType" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_item_type()}</label>
             <select id="itemType" bind:value={editingItem.type} class="w-full bg-surface-container-high/45 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs focus:outline-none text-on-surface">
-              <option value="WEAPON">🗡️ WEAPON (Arme)</option>
-              <option value="ARMOR">🦺 ARMOR (Armure)</option>
-              <option value="ACCESSORY">💍 ACCESSORY (Accessoire)</option>
-              <option value="POTION">🧪 POTION (Consommable)</option>
-              <option value="MATERIAL">⚒️ MATERIAL (Matériau d'artisanat)</option>
-              <option value="SCROLL">🔮 SCROLL (Parchemin d'enchantement)</option>
-              <option value="QUEST">🔑 QUEST (Quête)</option>
+              <option value="WEAPON">🗡️ WEAPON ({m.ecx_item_weapon()})</option>
+              <option value="ARMOR">🦺 ARMOR ({m.ecx_item_armor()})</option>
+              <option value="ACCESSORY">💍 ACCESSORY ({m.ecx_item_accessory()})</option>
+              <option value="POTION">🧪 POTION ({m.ecx_item_potion()})</option>
+              <option value="MATERIAL">⚒️ MATERIAL ({m.ecx_item_material()})</option>
+              <option value="SCROLL">🔮 SCROLL ({m.ecx_item_scroll()})</option>
+              <option value="QUEST">🔑 QUEST ({m.ecx_item_quest()})</option>
             </select>
           </div>
           <div class="space-y-1">

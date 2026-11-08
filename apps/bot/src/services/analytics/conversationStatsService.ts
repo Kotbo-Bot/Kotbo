@@ -136,7 +136,6 @@ const RESPONSE_TARGET: BulkTarget = {
     { name: 'channelId', type: 'text' },
   ],
   counterColumns: RESPONSE_COLUMNS,
-  createMany: (data) => prisma.channelResponseDailyStat.createMany({ data: data as never, skipDuplicates: true }),
 };
 
 const INTERACTION_TARGET: BulkTarget = {
@@ -149,7 +148,6 @@ const INTERACTION_TARGET: BulkTarget = {
     { name: 'targetUserId', type: 'text' },
   ],
   counterColumns: INTERACTION_COLUMNS,
-  createMany: (data) => prisma.memberInteractionDailyStat.createMany({ data: data as never, skipDuplicates: true }),
 };
 
 async function runFlush(): Promise<void> {

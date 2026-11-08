@@ -15,18 +15,16 @@
  * les admins » alors qu'il l'etait pour tout serveur deja servi.
  *
  * Le parcours ne se termine donc plus que de deux manieres, toutes deux ecrites
- * cote serveur : le paiement (`syncSubscription`), ou le dernier ecran lorsqu'il
- * n'y a rien a payer - instance sans facturation, ou serveur dont l'acces a deja
- * ete accorde. Les deux passent par `markOnboardingComplete`, comme le passage
- * force depuis le panneau d'administration (`admin_skip`).
+ * cote serveur : le paiement (`syncSubscription`), ou le dernier ecran - sur
+ * l'offre gratuite, ou sur un acces deja accorde. Les deux passent par
+ * `markOnboardingComplete`, comme le passage force depuis le panneau
+ * d'administration (`admin_skip`).
  *
  * Ce module sert aussi a decider si une route de configuration doit s'ouvrir
- * alors que son module est eteint par l'offre. Le parcours demande a
- * l'administrateur de regler sa moderation, son accueil, son reglement, ses
- * tickets et ses niveaux avant de payer - c'est tout l'interet, il voit ce qu'il
- * achete. Or aucun de ces modules ne figure dans l'offre FREE : la garde des
- * modules refusait ces ecritures, et le parcours butait des l'ecran de
- * moderation sur un serveur qui n'avait, par construction, encore rien pris.
+ * alors que son module est eteint par l'offre. Le parcours fait regler des
+ * modules payants (economie, quetes, drops) avant tout paiement - c'est tout
+ * l'interet, l'administrateur voit ce qu'il achete. Sans cette ouverture, la
+ * garde des modules refusait ces ecritures et le parcours butait dessus.
  *
  * Ouvrir l'ecriture n'ouvre pas le service. `moduleGate` continue d'eteindre
  * ces modules au runtime tant que l'offre ne les comprend pas : la ligne est
@@ -106,7 +104,8 @@ export type GuildEntitlementFields = {
 };
 
 /**
- * Le dernier ecran peut-il se conclure sans passer par Stripe ?
+ * Le serveur a-t-il deja un acces payant, sans passer par Stripe ? Faux, il
+ * finit le parcours sur l'offre gratuite, et l'ecran propose l'essai.
  *
  * Deux cas : l'instance ne facture pas, ou le serveur a deja recu son acces
  * autrement - offre posee a la main, abonnement en cours, code d'activation,

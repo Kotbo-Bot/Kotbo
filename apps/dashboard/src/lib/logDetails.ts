@@ -16,6 +16,7 @@
  * a une chaine de traduction pres ; aucune des deux n'echappait quoi que ce soit.
  */
 import { escapeHtml } from './emojiParser';
+import { hideUserIds } from './logEntryUser';
 import { authStore } from './stores/auth.svelte';
 import { dashboardStore } from './stores/dashboard.svelte';
 
@@ -97,29 +98,6 @@ const ROLE_MENTION = /<@&(\d{15,25})>/g;
 const ESCAPED_CHANNEL_MENTION = /&lt;#(\d{15,25})&gt;/g;
 const ESCAPED_ROLE_MENTION = /&lt;@&amp;(\d{15,25})&gt;/g;
 
-export function extractUserIdFromText(value: string | null | undefined): string | null {
-  if (!value) return null;
-
-  const mentionMatch = value.match(/<@!?(\d{15,25})>/);
-  if (mentionMatch?.[1]) return mentionMatch[1];
-
-  const parenthesizedIdMatch = value.match(/\((\d{15,25})\)/);
-  if (parenthesizedIdMatch?.[1]) return parenthesizedIdMatch[1];
-
-  return null;
-}
-
-/** Retire les identifiants Discord bruts. Texte en entree, texte en sortie. */
-export function hideUserIds(value: string, userNames?: Record<string, string>): string {
-  return value
-    .replace(/\(<@!?\d{15,25}>\)/g, '')
-    .replace(/<@!?(\d{15,25})>/g, (_match, userId: string) => {
-      const name = userNames?.[userId];
-      return name ? `@${name}` : '@utilisateur';
-    })
-    .replace(/\((\d{15,25})\)/g, '');
-}
-
 function channelName(channelId: string, labels: MentionLabels): string {
   const channel = dashboardStore.state.discordChannels.find((entry) => entry.id === channelId);
   return channel ? channel.name : labels.unknownChannel;
@@ -160,20 +138,12 @@ function stripKnownPrefixes(details: string): string {
   return clean.replace(/^\|\s*/, '').trim();
 }
 
-export function parseDetailsMetadata(
-  details: string,
-  user: string | undefined,
-  labels: LogDetailsLabels,
-) {
-  const userMatch = details.match(/^([^|]+?\(<@!?\d{15,25}>\))/);
-  const userIdMatch = extractUserIdFromText(details) ?? extractUserIdFromText(user);
+export function parseDetailsMetadata(details: string, labels: LogDetailsLabels) {
   const channelMatch = details.match(/Salon:\s*<#(\d+)>/i);
 
   const cleanDetails = stripKnownPrefixes(details).replace(/\s*\|\s*/g, ' | ').trim();
 
   return {
-    extractedUser: userMatch?.[1]?.trim() ?? null,
-    extractedUserId: userIdMatch,
     extractedChannelId: channelMatch?.[1] ?? null,
     /** HTML sur. */
     cleanDetails: renderLogHtml(cleanDetails, labels),

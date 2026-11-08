@@ -54,6 +54,7 @@ export type BackgroundJobName =
   | 'analytics-daily-snapshot'
   | 'acquisition-events-prune'
   | 'dashboard-telemetry-prune'
+  | 'server-tag-roles-resync'
   | 'site-analytics-prune'
   | 'site-scheduled-publish'
   | 'notification-dm-flush'

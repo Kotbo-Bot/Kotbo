@@ -17,7 +17,7 @@ export interface PlanCard {
   purchasable: boolean;
 }
 
-/** Essai gratuit : disponible ou non, et pourquoi. */
+/** Essai gratuit, offert seulement avec un code de parrainage : possible ou non, et pourquoi. */
 export interface TrialInfo {
   available: boolean;
   /** Durée de l'essai en jours, décidée côté serveur (jamais écrite en dur ici). */
@@ -41,6 +41,10 @@ export interface BillingStatus {
    * peuvent donc voir un bouton différent.
    */
   trial: TrialInfo;
+  /** Faux pour un membre du staff en lecture seule. */
+  canManage?: boolean;
+  /** Code de parrainage de l'utilisateur connecté, et serveurs qui l'ont utilisé. */
+  referral?: { code: string; discountPercent: number; referred: number };
   plans: PlanCard[];
   /** Membres du serveur, tels que l'API les compte pour choisir l'offre. */
   memberCount?: number;
@@ -58,18 +62,19 @@ export async function fetchBillingStatus(guildId = authStore.selectedGuildId ?? 
  * L'appelant redirige lui-même : le paiement se déroule entièrement sur un
  * domaine Stripe, aucune donnée bancaire ne transite par le dashboard.
  *
- * L'essai gratuit n'est pas un paramètre : c'est le serveur qui décide s'il
- * l'accorde, à partir de la même règle que celle affichée par `trial`. Le
- * laisser au client permettrait de le réclamer en boucle.
+ * L'essai et la remise passent par le code de parrainage : c'est le serveur
+ * qui le vérifie et qui décide s'il les accorde. Un code refusé lève une erreur
+ * dont le message dit pourquoi.
  */
 export async function startCheckout(
   plan: Exclude<PlanKey, 'FREE' | 'CUSTOM'>,
   interval: BillingInterval,
+  referralCode?: string,
   guildId = authStore.selectedGuildId ?? undefined,
 ): Promise<string | null> {
   const result = await dashboardRequest('/billing/checkout', {
     method: 'POST',
-    payload: { plan, interval },
+    payload: { plan, interval, ...(referralCode ? { referralCode } : {}) },
     guildId,
     silent: true,
     errorContext: 'API Error (Checkout):',

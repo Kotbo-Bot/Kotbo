@@ -26,6 +26,7 @@ import {
   buildAccessFields,
   computeExpiry,
   dueReminder,
+  expireAccess,
   formatDuration,
   minutesUntil,
   normalizeAccessGrant,
@@ -202,5 +203,28 @@ describe('normalizeAccessGrant', () => {
 
   test('refuse un type inconnu', () => {
     expect(normalizeAccessGrant('LIFETIME', 30)).toHaveProperty('error');
+  });
+});
+
+describe('expireAccess', () => {
+  test('un essai termine repasse le serveur en gratuit sans le desactiver', async () => {
+    // Depuis le freemium, la fin d'un essai ferme les modules payants, pas la
+    // moderation : le serveur ne doit pas perdre son activation.
+    mockDb.guild.findUnique.mockImplementation(() => Promise.resolve({
+      activated: true,
+      accessType: 'TRIAL',
+      accessExpiresAt: new Date(Date.now() - 60_000),
+      accessExpiredAt: null,
+      accessDurationMinutes: 15 * DAY,
+      accessRemindersSent: [],
+    }));
+    mockDb.guild.update.mockClear();
+
+    const client = { guilds: { fetch: () => Promise.resolve(null) } };
+    await expireAccess(client as never, '123');
+
+    const writes = mockDb.guild.update.mock.calls.map((call) => (call as unknown as [{ data: Record<string, unknown> }])[0].data);
+    expect(writes).toContainEqual({ plan: 'FREE' });
+    expect(writes.some((data) => data.activated === false)).toBe(false);
   });
 });

@@ -973,6 +973,7 @@ export async function handleStaffRoutes(
               select: {
                 baseStaffRoleId: true,
                 testStaffRoleId: true,
+                formerStaffRoleId: true,
                 chiefStaffRoleId: true,
                 chiefStaffUserId: true,
                 meetingAnnouncementChannelId: true,
@@ -1005,6 +1006,7 @@ export async function handleStaffRoutes(
             const body = await readJsonBody<{
               baseStaffRoleId?: string | null;
               testStaffRoleId?: string | null;
+              formerStaffRoleId?: string | null;
               chiefStaffRoleId?: string | null;
               chiefStaffUserId?: string | null;
               meetingAnnouncementChannelId?: string | null;
@@ -1023,6 +1025,9 @@ export async function handleStaffRoutes(
             }
             if (Object.prototype.hasOwnProperty.call(body ?? {}, 'testStaffRoleId')) {
               data.testStaffRoleId = extractDiscordSnowflake(body?.testStaffRoleId ?? null);
+            }
+            if (Object.prototype.hasOwnProperty.call(body ?? {}, 'formerStaffRoleId')) {
+              data.formerStaffRoleId = extractDiscordSnowflake(body?.formerStaffRoleId ?? null);
             }
             if (Object.prototype.hasOwnProperty.call(body ?? {}, 'chiefStaffRoleId')) {
               data.chiefStaffRoleId = extractDiscordSnowflake(body?.chiefStaffRoleId ?? null);
@@ -1062,6 +1067,7 @@ export async function handleStaffRoutes(
               select: {
                 baseStaffRoleId: true,
                 testStaffRoleId: true,
+                formerStaffRoleId: true,
                 chiefStaffRoleId: true,
                 chiefStaffUserId: true,
                 meetingAnnouncementChannelId: true,

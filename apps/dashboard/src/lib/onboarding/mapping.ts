@@ -1,3 +1,4 @@
+import { m } from '../i18n';
 /**
  * Quel salon, quel role tient deja chacun des roles du plan.
  *
@@ -64,57 +65,57 @@ export const MAPPING_SCREENS: MappingScreen[] = [
   {
     step: 'map-access',
     sections: ['access', 'security'],
-    title: 'Comment on entre chez toi.',
-    lead: "Le rôle donné aux membres, et le salon-piège qui attrape les bots de spam. Si ton serveur a déjà un rôle qui joue ce rôle-là, désigne-le : Kotbo s'y branchera au lieu d'en créer un deuxième.",
+    title: m.obm_access(),
+    lead: m.obm_access_lead(),
     icon: 'door-open',
   },
   {
     step: 'map-staff',
     sections: ['staff'],
-    title: 'Ton équipe.',
-    lead: "Le rôle du staff et ses salons. C'est ici que les doublons font le plus de dégâts : un second salon de journalisation, et la moitié des traces partent dans celui que personne ne regarde.",
+    title: m.obm_staff(),
+    lead: m.obm_staff_lead(),
     icon: 'users',
   },
   {
     step: 'map-tickets',
     sections: ['tickets'],
-    title: 'Le support.',
-    lead: "Où les demandes arrivent, et où leurs transcriptions se rangent. Un serveur qui a déjà une catégorie de tickets la garde, avec les tickets ouverts qui s'y trouvent.",
+    title: m.obm_support(),
+    lead: m.obm_support_lead(),
     icon: 'inbox',
   },
   {
     step: 'map-welcome',
     sections: ['welcome'],
-    title: "L'accueil et le règlement.",
-    lead: "Le règlement écrit à la main est ce qu'on tient le plus à ne pas voir doublé. Désignez-le, Kotbo écrira dedans plutôt qu'à côté.",
+    title: m.obm_welcome(),
+    lead: m.obm_welcome_lead(),
     icon: 'book-open',
   },
   {
     step: 'map-stats',
     sections: ['stats'],
-    title: 'Les compteurs du serveur.',
-    lead: "Des salons vocaux que personne ne rejoint : leur nom porte le chiffre, et Kotbo le tient à jour. Si tu en as déjà, désigne-les : ils seront renommés au même format, pas doublés.",
+    title: m.obm_counters(),
+    lead: m.obm_counters_lead(),
     icon: 'chart',
   },
   {
     step: 'map-text',
     sections: ['text', 'bots'],
-    title: 'Les salons de discussion.',
-    lead: "Ceux qui existent déjà n'ont aucune raison d'être refaits. Ne garde en création que ce qui te manque vraiment.",
+    title: m.obm_chat(),
+    lead: m.obm_chat_lead(),
     icon: 'message-circle',
   },
   {
     step: 'map-fun',
     sections: ['fun'],
-    title: 'Les salons pour se détendre.',
-    lead: "Mèmes, jeux, musique : ce qui fait qu'on reste sur un serveur une fois la question posée. Si les vôtres existent, désignez-les plutôt que d'en ouvrir des seconds.",
+    title: m.obm_fun(),
+    lead: m.obm_fun_lead(),
     icon: 'sparkles',
   },
   {
     step: 'map-voice',
     sections: ['voice'],
-    title: 'Les vocaux.',
-    lead: "Le salon d'appel courant, et celui qui crée un vocal à la demande de qui s'y connecte.",
+    title: m.obm_voice(),
+    lead: m.obm_voice_lead(),
     icon: 'mic',
   },
 ];

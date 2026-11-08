@@ -7,17 +7,16 @@
   import { Tabs, Button, Callout, Field, SectionCard, SettingsGroup, SettingsRow, ToggleSwitch, EmptyState } from '../lib/components/ui';
   import MetricCard from '../lib/components/MetricCard.svelte';
   import { dashboardStore } from '../lib/stores/dashboard.svelte';
-  import { canViewFeature } from '../lib/permissions.svelte';
-  import { hideUserIds, parseDetailsMetadata } from '../lib/logDetails';
+  import { parseDetailsMetadata } from '../lib/logDetails';
+  import { logEntryUser } from '../lib/logEntryUser';
   import RefreshButton from '../lib/components/RefreshButton.svelte';
   import Papicon from '../lib/components/Papicon.svelte';
   import MemberCaseModal from '../lib/components/MemberCaseModal.svelte';
+  import { MemberCaseState } from '../lib/memberCase.svelte';
   import AuditDiffViewer from '../lib/components/logs/AuditDiffViewer.svelte';
   import LogDetails from '../lib/components/logs/LogDetails.svelte';
   import ColumnSortFilter, { type ColumnFilterOption } from '../lib/components/sanctions/ColumnSortFilter.svelte';
   import {
-    fetchMemberCase,
-    runMemberCaseAction,
     updateGlobalSettings,
     fetchFeatureConfigurations,
     updateFeatureConfiguration,
@@ -44,17 +43,6 @@
     types: [] as string[],
     channels: [] as string[],
   });
-  let caseModalOpen = $state(false);
-  let selectedCaseUser = $state<{ name: string; id: string | null } | null>(null);
-
-  let selectedCaseData = $state<any>(null);
-  let selectedCaseLoading = $state(false);
-  let selectedCaseError = $state('');
-  let memberActionReason = $state(m.lg_member_action_reason());
-  let memberActionDuration = $state('30m');
-  let memberActionBusy = $state(false);
-  let memberActionFeedback = $state('');
-  let memberActionIsError = $state(false);
   let sortField = $state<LogsSortField>('date');
   let sortDirection = $state<'asc' | 'desc'>('desc');
 
@@ -241,16 +229,11 @@
   });
 
   function getLogChannelId(entry: { details: string; channelId: string | null }) {
-    return parseDetailsMetadata(entry.details, '', logLabels).extractedChannelId ?? entry.channelId;
+    return parseDetailsMetadata(entry.details, logLabels).extractedChannelId ?? entry.channelId;
   }
 
   function displayUser(entry: { user: string; details: string }) {
-    const parsed = parseDetailsMetadata(entry.details, entry.user, logLabels);
-    if (!parsed.extractedUser) {
-      return hideUserIds(entry.user).trim() || entry.user;
-    }
-    const normalized = parsed.extractedUser.replace(/\s*\(<@!?\d{15,25}>\)\s*$/, '').trim();
-    return normalized || hideUserIds(entry.user).trim() || entry.user;
+    return logEntryUser(entry).name;
   }
 
   const uniqueUsers = $derived([...new Set(discordLogs.map((entry) => displayUser(entry)))].sort((a, b) => a.localeCompare(b, 'fr')));
@@ -328,115 +311,13 @@
     return channelDisplayName(channel);
   }
 
+  // Fiche propre à la page : une sanction lancée depuis un journal propose l'action
+  // journalisée comme raison.
+  const memberCase = new MemberCaseState();
 
-
-  function parseDurationToMs(input: string) {
-    const trimmed = input.trim().toLowerCase();
-    if (!trimmed) return null;
-    const match = trimmed.match(/^(\d+(?:[.,]\d+)?)\s*(s|sec|secs|seconde|secondes|m|min|mins|minute|minutes|h|heure|heures|d|j|jour|jours|w|semaine|semaines)$/i);
-    if (!match) return null;
-    const value = Number(match[1].replace(',', '.'));
-    if (!Number.isFinite(value) || value <= 0) return null;
-    const unit = match[2].toLowerCase();
-    const unitMs: Record<string, number> = {
-      s: 1000,
-      sec: 1000,
-      secs: 1000,
-      seconde: 1000,
-      secondes: 1000,
-      m: 60 * 1000,
-      min: 60 * 1000,
-      mins: 60 * 1000,
-      minute: 60 * 1000,
-      minutes: 60 * 1000,
-      h: 60 * 60 * 1000,
-      heure: 60 * 60 * 1000,
-      heures: 60 * 60 * 1000,
-      d: 24 * 60 * 60 * 1000,
-      j: 24 * 60 * 60 * 1000,
-      jour: 24 * 60 * 60 * 1000,
-      jours: 24 * 60 * 60 * 1000,
-      w: 7 * 24 * 60 * 60 * 1000,
-      semaine: 7 * 24 * 60 * 60 * 1000,
-      semaines: 7 * 24 * 60 * 60 * 1000,
-    };
-    return Math.round(value * (unitMs[unit] ?? 0)) || null;
-  }
-
-
-  async function loadMemberCase(userId: string) {
-    selectedCaseLoading = true;
-    selectedCaseError = '';
-    try {
-      selectedCaseData = await fetchMemberCase(userId);
-    } catch (error) {
-      selectedCaseError = error instanceof Error ? error.message : m.sc_member_load_error();
-      selectedCaseData = null;
-    } finally {
-      selectedCaseLoading = false;
-    }
-  }
-
-  async function executeMemberAction(action: 'WARN' | 'KICK' | 'TIMEOUT' | 'BAN') {
-    if (!selectedCaseUser?.id) return;
-    const userId = selectedCaseUser.id;
-
-    const reason = memberActionReason.trim() || m.lg_member_action_reason();
-    const durationMs = action === 'TIMEOUT' ? parseDurationToMs(memberActionDuration) : null;
-
-    if (action === 'TIMEOUT' && !durationMs) {
-      memberActionFeedback = m.lg_invalid_timeout();
-      memberActionIsError = true;
-      return;
-    }
-
-    memberActionBusy = true;
-    memberActionFeedback = '';
-    memberActionIsError = false;
-
-    try {
-      await runMemberCaseAction(userId, action, { reason, durationMs: durationMs ?? undefined });
-      memberActionFeedback = m.sc_action_applied();
-      await loadMemberCase(userId);
-    } catch (error) {
-      memberActionIsError = true;
-      memberActionFeedback = error instanceof Error ? error.message : m.sc_action_failed();
-    } finally {
-      memberActionBusy = false;
-    }
-  }
-
-  /**
-   * Le dossier membre est la fiche de la section Membres : un role a qui le
-   * centre de gestion l'a fermee ne doit pas la rouvrir depuis un journal.
-   */
-  const canOpenMemberCase = $derived(canViewFeature('members'));
-
-  function openCaseModal(entry: { user: string; details: string; action: string }) {
-    if (!canOpenMemberCase) return;
-    const parsed = parseDetailsMetadata(entry.details, entry.user, logLabels);
-    selectedCaseUser = {
-      name: displayUser(entry),
-      id: parsed.extractedUserId,
-    };
-    selectedCaseData = null;
-    selectedCaseError = '';
-    memberActionReason = m.lg_action_from_log({ action: entry.action });
-    memberActionDuration = '30m';
-    memberActionFeedback = '';
-    memberActionIsError = false;
-    caseModalOpen = true;
-
-    if (parsed.extractedUserId) {
-      void loadMemberCase(parsed.extractedUserId);
-    }
-  }
-
-  function closeCaseModal() {
-    caseModalOpen = false;
-    selectedCaseUser = null;
-    selectedCaseData = null;
-    selectedCaseError = '';
+  function openCaseModal(member: { name: string; userId: string | null }, action: string) {
+    if (!member.userId) return;
+    void memberCase.show(member.userId, member.name, m.lg_action_from_log({ action }));
   }
 
   const sanctions = $derived((dashboardStore.state.sanctions as any[]) || []);
@@ -697,6 +578,8 @@
         </thead>
         <tbody>
           {#each filteredLogs as entry}
+            <!-- « Système » et les auteurs sans identifiant n'ont pas de fiche à ouvrir. -->
+            {@const member = logEntryUser(entry)}
             <tr>
               <td class="whitespace-nowrap">
                 <p class="text-body-sm font-medium text-on-surface">{new Date(entry.dateIso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</p>
@@ -707,12 +590,12 @@
                   variant="ghost"
                   size="sm"
                   class="max-w-40"
-                  disabled={!canOpenMemberCase}
-                  disabledReason={m.common_reason_no_permission()}
-                  title={canOpenMemberCase ? m.lg_open_case() : undefined}
-                  onclick={() => openCaseModal(entry)}
+                  disabled={!memberCase.canOpen || !member.userId}
+                  disabledReason={memberCase.canOpen ? m.lg_no_member_id() : m.common_reason_no_permission()}
+                  title={memberCase.canOpen && member.userId ? m.lg_open_case() : undefined}
+                  onclick={() => openCaseModal(member, entry.action)}
                 >
-                  <span class="truncate">{displayUser(entry)}</span>
+                  <span class="truncate">{member.name}</span>
                 </Button>
               </td>
               <td class="max-w-xs text-body-sm text-on-surface-variant">
@@ -746,24 +629,17 @@
 </div>
 {/if}
 
-{#if caseModalOpen && selectedCaseUser}
-  <MemberCaseModal 
-    open={caseModalOpen}
-    userId={selectedCaseUser?.id}
-    caseData={selectedCaseData}
-    loading={selectedCaseLoading}
-    error={selectedCaseError}
-    actionReason={memberActionReason}
-    actionDuration={memberActionDuration}
-    actionBusy={memberActionBusy}
-    actionFeedback={memberActionFeedback}
-    actionIsError={memberActionIsError}
-    onAction={executeMemberAction}
-    onClose={closeCaseModal}
-    onSelectUser={(userId) => {
-      selectedCaseUser = { name: m.common_loading(), id: userId };
-      void loadMemberCase(userId);
-    }}
+{#if memberCase.open}
+  <MemberCaseModal
+    open={memberCase.open}
+    userId={memberCase.userId}
+    userName={memberCase.userName}
+    caseData={memberCase.caseData}
+    loading={memberCase.loading}
+    error={memberCase.error}
+    actionReason={memberCase.actionReason}
+    onClose={() => memberCase.close()}
+    onSelectUser={(userId) => memberCase.showFromGraph(userId)}
   />
 {/if}
 

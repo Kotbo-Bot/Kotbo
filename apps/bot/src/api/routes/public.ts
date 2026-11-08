@@ -3,6 +3,7 @@ import { promisify } from 'node:util';
 import { gzip } from 'node:zlib';
 import { Client, type Guild } from 'discord.js';
 import { LinkedAccountStatus, Prisma } from '@prisma/client';
+import { isModulePaused } from '@kotbo/contracts';
 import { buildBettorStandings, buildSeasonLaureates, firmDebtOf, normalizeLevelCurve } from '@kotbo/shared';
 import { getRaidRecap, RAID_RECAP_PUBLIC_WINDOW_MS } from '../../services/features/rpg/rpgRaidService.js';
 import { getEngagedBetCredit, getEngagedBetCreditTotal } from '../../services/community/clanBetService.js';
@@ -10,7 +11,8 @@ import { buildLinkedAccountFolder } from '../../services/moderation/altAccountSe
 import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
 import { cache } from '../../utils/cache.js';
-import { publicClansRateLimiter, publicClanSearchRateLimiter, publicGiveawaysRateLimiter } from '../limiters.js';
+import { publicClansRateLimiter, publicClanSearchRateLimiter, publicGiveawaysRateLimiter, publicTournamentsRateLimiter } from '../limiters.js';
+import { getTournament } from '../../services/features/tournament/tournamentService.js';
 import { questWindowBounds, questWindowKey } from '../../services/features/rpg/rpgQuestPolicy.js';
 import {
   json,
@@ -461,6 +463,11 @@ export async function handlePublicRoutes(
   // secret ; il est stocke en empreinte, expire, et ne donne acces qu'a ce
   // dossier. Les notes internes ne sortent jamais par cette porte.
   if (parts[1] === 'public' && parts[2] === 'partner-portal' && parts[3]) {
+    // Partenariats en pause : les liens déjà envoyés ne mènent plus à rien.
+    if (isModulePaused('partnerships')) {
+      json(res, 404, { error: 'Lien invalide' });
+      return true;
+    }
     const token = parts[3];
     if (!/^[A-Za-z0-9_-]{20,64}$/.test(token)) {
       json(res, 400, { error: 'Lien invalide' });
@@ -1221,6 +1228,45 @@ export async function handlePublicRoutes(
       const errMessage = err instanceof Error ? err.message : String(err);
       logger.error('PublicAPI', `Error fetching public giveaways for guild ${guildId}: ${errMessage}`);
       json(res, 500, { error: 'Erreur lors du chargement des giveaways' });
+    }
+    return true;
+  }
+
+  // GET /api/public/guilds/:guildId/tournaments/:eventId
+  if (parts[2] === 'guilds' && parts[3] && parts[4] === 'tournaments' && parts[5] && !parts[6] && method === 'GET') {
+    const guildId = parts[3];
+    const eventId = parts[5];
+    if (!/^\d{17,19}$/.test(guildId) || !/^[a-zA-Z0-9_-]{1,64}$/.test(eventId)) {
+      json(res, 400, { error: 'Adresse de tournoi invalide' });
+      return true;
+    }
+    if (!checkRateLimit(publicTournamentsRateLimiter, getClientIp(req), 60, 60_000)) {
+      json(res, 429, { error: 'Trop de requêtes. Veuillez réessayer plus tard.' });
+      return true;
+    }
+    try {
+      // Le filtre sur `guildId` empêche de lire, depuis l'adresse d'un serveur, le tournoi d'un autre.
+      // Un brouillon reste privé tant que l'équipe ne l'a pas publié.
+      const owned = await prisma.event.findFirst({
+        where: { id: eventId, guildId, type: 'TOURNAMENT', status: { not: 'DRAFT' } },
+        select: { id: true },
+      });
+      if (!owned || !(await isModuleEnabled(guildId, 'events'))) {
+        json(res, 404, { error: 'Tournoi introuvable sur ce serveur' });
+        return true;
+      }
+      const discordGuild = client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId).catch(() => null);
+      const tournament = await getTournament(eventId, client);
+      res.setHeader('Cache-Control', 'public, max-age=5');
+      json(res, 200, {
+        guildName: discordGuild?.name || 'Kotbo Server',
+        guildIcon: discordGuild?.iconURL({ size: 128 }) || null,
+        ...tournament,
+      });
+    } catch (err: unknown) {
+      const errMessage = err instanceof Error ? err.message : String(err);
+      logger.error('PublicAPI', `Error fetching public tournament ${eventId} for guild ${guildId}: ${errMessage}`);
+      json(res, 500, { error: 'Erreur lors du chargement du tournoi' });
     }
     return true;
   }

@@ -6,6 +6,8 @@
   import { router } from 'tinro';
   import Papicon from '../lib/components/Papicon.svelte';
   import MetricCard from '../lib/components/MetricCard.svelte';
+  import { formatRelative, formatTenure } from '../lib/components/staff/format';
+  import { m, dateLocale } from '../lib/i18n';
 
   import { errorMessage } from '@kotbo/shared';
   interface Props {
@@ -22,12 +24,12 @@
       // Fetch public profile snapshot
       const res = await fetch(`${API_BASE_URL}/api/public/profile/${userId}`);
       if (!res.ok) {
-        if (res.status === 404) throw new Error('Utilisateur introuvable');
-        throw new Error('Impossible de récupérer le profil. Réessaie.');
+        if (res.status === 404) throw new Error(m.ppf_err_not_found());
+        throw new Error(m.ppf_err_fetch());
       }
       profile = await res.json();
     } catch (err) {
-      error = errorMessage(err) || 'Impossible de charger le profil public';
+      error = errorMessage(err) || m.ppf_err_load();
     } finally {
       loading = false;
     }
@@ -35,46 +37,13 @@
 
   function formatDate(date: string | Date | null | undefined) {
     if (!date) return '-';
-    return new Date(date).toLocaleDateString('fr-FR', {
+    return new Date(date).toLocaleDateString(dateLocale(), {
       day: '2-digit',
       month: 'long',
       year: 'numeric',
     });
   }
 
-  function getDurationSince(value: string | null | undefined) {
-    if (!value) return 'Inconnu';
-    const start = new Date(value);
-    const now = new Date();
-    let years = now.getFullYear() - start.getFullYear();
-    let months = now.getMonth() - start.getMonth();
-    if (months < 0) { years--; months += 12; }
-
-    const parts: string[] = [];
-    if (years > 0) parts.push(`${years} an${years > 1 ? 's' : ''}`);
-    if (months > 0) parts.push(`${months} mois`);
-    if (parts.length === 0) {
-       const days = Math.floor((now.getTime() - start.getTime()) / 86400000);
-       return days <= 0 ? "Aujourd'hui" : `${days} j`;
-    }
-    return parts.join(', ');
-  }
-
-  function formatTimeAgo(dateStr: string | null) {
-    if (!dateStr) return 'Jamais';
-    const date = new Date(dateStr);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMins / 60);
-    const diffDays = Math.floor(diffHours / 24);
-
-    if (diffMins < 1) return "À l'instant";
-    if (diffMins < 60) return `Il y a ${diffMins} min`;
-    if (diffHours < 24) return `Il y a ${diffHours}h`;
-    if (diffDays === 1) return "Hier";
-    return `Il y a ${diffDays} jours`;
-  }
 </script>
 
 <div class="min-h-screen bg-surface-container-lowest/30 pb-24 font-sans text-on-surface antialiased">
@@ -86,7 +55,7 @@
     <div class="mb-8">
       <button onclick={() => router.goto('/')} class="group inline-flex items-center gap-2 rounded-xl bg-surface-container-low/60 hover:bg-surface-container-high/80 border border-outline-variant/10 px-5 py-2.5 text-body-sm font-medium text-on-surface-variant transition-all">
         <Papicon icon="ArrowLeft" size={14} class="transition-transform group-hover:-translate-x-1" />
-        Retour
+        {m.ppf_back()}
       </button>
     </div>
 
@@ -111,13 +80,13 @@
         <div class="w-20 h-20 rounded-xl bg-error/10 text-error border border-error/20 flex items-center justify-center mb-6 shadow-sm">
           <Papicon icon="AlertTriangle" size={36} />
         </div>
-        <h3 class="text-lg font-semibold tracking-tight text-on-surface font-headline">Profil Introuvable</h3>
+        <h3 class="text-lg font-semibold tracking-tight text-on-surface font-headline">{m.ppf_not_found()}</h3>
         <p class="mt-4 text-base font-bold text-on-surface-variant leading-relaxed">
-          {error}. Vérifiez que l'identifiant est correct ou que le compte n'a pas été restreint.
+          {m.ppf_error_desc({ error })}
         </p>
         <button onclick={() => router.goto('/')} class="mt-10 inline-flex items-center gap-3 rounded-lg bg-primary px-8 py-4 text-body-sm font-medium text-on-primary shadow-sm shadow-primary/20 active:scale-[0.98] transition-all">
           <Papicon icon="Home" size={16} />
-          Retour à l'accueil
+          {m.ppf_home()}
         </button>
       </div>
     {:else if profile}
@@ -127,7 +96,7 @@
         <!-- Banner Image/Gradient -->
         <div class="relative h-48 md:h-64 overflow-hidden bg-surface-container-low">
           {#if profile.banner}
-            <img src={profile.banner} alt="Banner" class="w-full h-full object-cover transition-transform duration-1000 " />
+            <img src={profile.banner} alt={m.ppf_banner_alt()} class="w-full h-full object-cover transition-transform duration-1000 " />
           {:else}
             <!-- Elegant animated mesh gradient -->
             <div class="absolute inset-0 bg-linear-to-br from-indigo-900/40 via-purple-950/20 to-surface-container-low blur-none hidden scale-125"></div>
@@ -140,7 +109,7 @@
           <div class="absolute top-6 right-6 z-20">
             <span class="inline-flex items-center gap-2 rounded-full bg-surface-container-lowest/30 border border-outline-variant/10 px-4 py-2 text-xs font-semibold text-white shadow-lg">
               <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-              Profil Communautaire
+              {m.ppf_badge()}
             </span>
           </div>
         </div>
@@ -166,7 +135,7 @@
                   <p class="text-base text-on-surface-variant font-bold">@{profile.username}</p>
                   {#if profile.isPrivate}
                     <span class="inline-flex items-center gap-1.5 rounded-lg bg-warning/10 border border-warning/20 px-2.5 py-1 text-xs font-semibold text-warning">
-                      <Papicon icon="Lock" size={10} /> Privé
+                      <Papicon icon="Lock" size={10} /> {m.ppf_private()}
                     </span>
                   {/if}
                 </div>
@@ -178,7 +147,7 @@
               <div class="pb-2">
                 <button onclick={() => router.goto('/profile')} class="group inline-flex items-center gap-2.5 rounded-lg bg-primary hover:bg-primary-hover px-8 py-4 text-body-sm font-medium text-on-primary shadow-sm shadow-primary/20 active:scale-[0.97] transition-all">
                   <Papicon icon="ShieldUser" size={16} class="transition-transform group-hover:rotate-6" />
-                  Mon Espace Staff
+                  {m.ppf_staff_space()}
                 </button>
               </div>
             {/if}
@@ -192,9 +161,9 @@
           <div class="w-16 h-16 rounded-lg bg-warning/10 border border-warning/20 flex items-center justify-center mx-auto mb-6 text-warning">
             <Papicon icon="Lock" size={28} />
           </div>
-          <h3 class="text-xl font-semibold text-on-surface font-headline">Ce profil est privé</h3>
+          <h3 class="text-xl font-semibold text-on-surface font-headline">{m.ppf_private_title()}</h3>
           <p class="mt-2 text-sm text-on-surface-variant max-w-md mx-auto leading-relaxed">
-            L'utilisateur a choisi de masquer ses statistiques et informations d'activité. Seuls les membres de l'équipe staff peuvent consulter ce dossier.
+            {m.ppf_private_desc()}
           </p>
         </div>
       {:else}
@@ -203,30 +172,30 @@
         <!-- ── Metrics Section ──────────────────────────────────────── -->
         <div class="grid grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <MetricCard 
-            label="Messages" 
-            value={profile.messageCount?.toLocaleString() || '0'} 
-            note="Total envoyés" 
+            label={m.ppf_messages()} 
+            value={profile.messageCount?.toLocaleString(dateLocale()) || '0'} 
+            note={m.ppf_messages_note()} 
             icon="MessageSquare" 
             toneClass="bg-blue-500/10 text-blue-500 border-blue-500/20" 
           />
           <MetricCard 
-            label="Vocal" 
-            value={`${Math.round((profile.voiceTimeSeconds || 0) / 60)} min`} 
-            note="Temps passé" 
+            label={m.ppf_voice()} 
+            value={m.ppf_minutes({ count: Math.round((profile.voiceTimeSeconds || 0) / 60) })} 
+            note={m.ppf_voice_note()} 
             icon="Mic" 
             toneClass="bg-success/10 text-success border-success/20" 
           />
           <MetricCard 
-            label="Événements" 
+            label={m.ppf_events()} 
             value={`${profile.eventParticipations?.length || 0}`} 
-            note="Participations" 
+            note={m.ppf_events_note()} 
             icon="Zap" 
             toneClass="bg-warning/10 text-warning border-warning/20" 
           />
           <MetricCard 
-            label="Ancienneté" 
-            value={getDurationSince(profile.guildJoinedAt)} 
-            note="Depuis l'arrivée" 
+            label={m.ppf_tenure()} 
+            value={profile.guildJoinedAt ? formatTenure(profile.guildJoinedAt) : m.ppf_unknown()} 
+            note={m.ppf_tenure_note()} 
             icon="Calendar" 
             toneClass="bg-purple-500/10 text-purple-500 border-purple-500/20" 
           />
@@ -238,42 +207,42 @@
           <div class="lg:col-span-1 space-y-6">
             <!-- Biography Card -->
             <div class="rounded-xl bg-surface-container-low/40 border border-outline-variant/10 p-8 shadow-sm relative overflow-hidden group">
-              <h4 class="text-sm font-semibold text-primary mb-4">Biographie</h4>
+              <h4 class="text-sm font-semibold text-primary mb-4">{m.ppf_bio()}</h4>
               <p class="text-sm text-on-surface-variant leading-relaxed">
-                {profile.bio?.trim() || 'Aucune biographie rédigée.'}
+                {profile.bio?.trim() || m.ppf_no_bio()}
               </p>
             </div>
 
             <!-- Identity Card -->
             <div class="rounded-xl bg-surface-container-low/40 border border-outline-variant/10 p-8 shadow-sm relative overflow-hidden group">
-              <h4 class="text-sm font-semibold text-primary mb-6">Dossier</h4>
+              <h4 class="text-sm font-semibold text-primary mb-6">{m.ppf_file()}</h4>
               <div class="space-y-6">
                 <div class="flex items-center justify-between border-b border-outline-variant/5 pb-3">
-                  <span class="text-xs font-semibold text-on-surface-variant">Compte Discord créé</span>
+                  <span class="text-xs font-semibold text-on-surface-variant">{m.ppf_account_created()}</span>
                   <span class="text-xs font-bold text-on-surface">{formatDate(profile.accountCreatedAt)}</span>
                 </div>
                 <div class="flex items-center justify-between border-b border-outline-variant/5 pb-3">
-                  <span class="text-xs font-semibold text-on-surface-variant">Arrivée sur le serveur</span>
+                  <span class="text-xs font-semibold text-on-surface-variant">{m.ppf_joined()}</span>
                   <span class="text-xs font-bold text-on-surface">{formatDate(profile.guildJoinedAt)}</span>
                 </div>
                 <div class="flex items-center justify-between border-b border-outline-variant/5 pb-3">
-                  <span class="text-xs font-semibold text-on-surface-variant">Dernier message</span>
-                  <span class="text-xs font-bold text-on-surface">{formatTimeAgo(profile.lastSeenAt)}</span>
+                  <span class="text-xs font-semibold text-on-surface-variant">{m.ppf_last_message()}</span>
+                  <span class="text-xs font-bold text-on-surface">{profile.lastSeenAt ? formatRelative(profile.lastSeenAt) : m.ppf_never()}</span>
                 </div>
                 <div class="flex items-center justify-between border-b border-outline-variant/5 pb-3">
-                  <span class="text-xs font-semibold text-on-surface-variant">Messages envoyés</span>
-                  <span class="text-xs font-bold text-on-surface">{profile.messageCount?.toLocaleString() || 0}</span>
+                  <span class="text-xs font-semibold text-on-surface-variant">{m.ppf_messages_sent()}</span>
+                  <span class="text-xs font-bold text-on-surface">{profile.messageCount?.toLocaleString(dateLocale()) || 0}</span>
                 </div>
                 <div class="flex items-center justify-between">
-                  <span class="text-xs font-semibold text-on-surface-variant">Temps en vocal</span>
-                  <span class="text-xs font-bold text-on-surface">{Math.round((profile.voiceTimeSeconds || 0) / 60)} min</span>
+                  <span class="text-xs font-semibold text-on-surface-variant">{m.ppf_voice_time()}</span>
+                  <span class="text-xs font-bold text-on-surface">{m.ppf_minutes({ count: Math.round((profile.voiceTimeSeconds || 0) / 60) })}</span>
                 </div>
               </div>
             </div>
 
             <!-- Badges/Roles Card -->
             <div class="rounded-xl bg-surface-container-low/40 border border-outline-variant/10 p-8 shadow-sm relative overflow-hidden group">
-              <h4 class="text-sm font-semibold text-primary mb-4">Badges & Rôles</h4>
+              <h4 class="text-sm font-semibold text-primary mb-4">{m.ppf_badges()}</h4>
               {#if profile.roles && profile.roles.length > 0}
                 <div class="flex flex-wrap gap-2">
                   {#each profile.roles as role}
@@ -283,7 +252,7 @@
                   {/each}
                 </div>
               {:else}
-                <p class="text-xs text-on-surface-variant/40 italic">Aucun badge de contribution répertorié.</p>
+                <p class="text-xs text-on-surface-variant/40 italic">{m.ppf_no_badges()}</p>
               {/if}
             </div>
           </div>
@@ -296,8 +265,8 @@
                   <Papicon icon="Zap" size={24} />
                 </div>
                 <div>
-                  <h3 class="text-xl font-semibold text-on-surface font-headline leading-tight">Historique Événements</h3>
-                  <p class="text-xs font-semibold text-on-surface-variant/40 mt-0.5">Participations communautaires récentes</p>
+                  <h3 class="text-xl font-semibold text-on-surface font-headline leading-tight">{m.ppf_events_history()}</h3>
+                  <p class="text-xs font-semibold text-on-surface-variant/40 mt-0.5">{m.ppf_events_recent()}</p>
                 </div>
               </div>
 
@@ -310,7 +279,7 @@
                         <p class="text-xs font-semibold text-primary mt-0.5">{event.type}</p>
                       </div>
                       <div class="text-right">
-                        <span class="text-sm font-semibold text-primary">{event.score} pts</span>
+                        <span class="text-sm font-semibold text-primary">{m.ppf_points({ count: event.score })}</span>
                         <p class="text-xs font-semibold text-on-surface-variant/30 mt-0.5">{formatDate(event.date)}</p>
                       </div>
                     </div>
@@ -319,7 +288,7 @@
               {:else}
                 <div class="py-16 text-center opacity-30">
                   <Papicon icon="Zap" size={48} class="mx-auto mb-4" />
-                  <p class="text-sm font-semibold">Aucune participation répertoriée</p>
+                  <p class="text-sm font-semibold">{m.ppf_no_events()}</p>
                 </div>
               {/if}
             </div>
@@ -330,13 +299,13 @@
         {#if !authStore.isAuthenticated}
           <div class="rounded-xl bg-linear-to-br from-indigo-950/40 via-purple-950/20 to-surface-container-low border border-outline-variant/10 p-10 text-center relative overflow-hidden shadow-sm">
             <div class="absolute -right-6 -bottom-6 w-36 h-36 bg-primary/5 rounded-full blur-none hidden pointer-events-none"></div>
-            <h3 class="text-2xl font-semibold text-on-surface font-headline tracking-tight leading-none mb-3">Vous faites partie de l'équipe staff ?</h3>
+            <h3 class="text-2xl font-semibold text-on-surface font-headline tracking-tight leading-none mb-3">{m.ppf_staff_cta()}</h3>
             <p class="text-sm text-on-surface-variant max-w-lg mx-auto mb-8 font-bold leading-relaxed">
-              Connectez-vous à votre compte Discord pour accéder aux dossiers internes, statistiques détaillées d'activité, absences et outils d'administration.
+              {m.ppf_staff_cta_desc()}
             </p>
             <a href={`${API_BASE_URL}/api/auth/discord/login?returnTo=${encodeURIComponent(window.location.pathname)}`} class="inline-flex items-center gap-3 rounded-lg bg-primary hover:bg-primary-hover px-10 py-5 text-sm font-semibold text-on-primary shadow-sm shadow-primary/20 active:scale-[0.98] transition-all">
               <Papicon icon="Lock" size={18} />
-              Se connecter avec Discord
+              {m.ppf_login()}
             </a>
           </div>
         {/if}
@@ -345,7 +314,7 @@
       <!-- Footer details -->
       <div class="mt-20 pt-8 border-t border-outline-variant/5 text-center">
         <p class="text-xs font-semibold text-on-surface-variant/20 italic">
-          Kotbo Ecosystem • Verified Community Profile Snapshot
+          {m.ppf_footer()}
         </p>
       </div>
 

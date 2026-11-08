@@ -68,7 +68,6 @@
     actionFeedback?: string;
     actionIsError?: boolean;
     onClose?: (e: MouseEvent) => void;
-    onAction?: (action: 'WARN' | 'KICK' | 'TIMEOUT' | 'BAN') => void;
     onSelectUser?: (userId: string) => void;
     /** Onglet affiché à l'ouverture : la fiche complète ouvre directement les actions. */
     initialTab?: MemberCaseTab;
@@ -223,8 +222,17 @@
   });
 
   // --- FONCTIONS DE CHARGEMENT ET D'ACTION ---
+  // Un filtre change ou un autre membre s'ouvre pendant un chargement : seule la dernière
+  // requête de chaque sorte s'affiche, une réponse arrivée après elle est ignorée.
+  let messagesRequestId = 0;
+  /** Texte de la dernière recherche de messages lancée, pour n'attendre que la frappe. */
+  let lastMessageQuery = '';
+  let messageChannelsRequestId = 0;
+  let analyticsRequestId = 0;
+
   async function loadMemberMessages() {
     if (!userId) return;
+    const currentId = ++messagesRequestId;
     messagesLoading = true;
     try {
       const data = await searchMessages({
@@ -238,23 +246,27 @@
         offset: messageOffset,
         order: 'desc'
       });
+      if (currentId !== messagesRequestId) return;
       messagesList = data.messages || [];
       messagesTotalCount = data.total || 0;
       messagesTotalCapped = data.totalCapped;
       messagesHasMore = data.hasMore;
     } catch (e) {
-      console.error('Failed to load member messages:', e);
+      if (currentId === messagesRequestId) console.error('Failed to load member messages:', e);
     } finally {
-      messagesLoading = false;
+      if (currentId === messagesRequestId) messagesLoading = false;
     }
   }
 
   async function loadMemberMessageChannels() {
     if (!userId) return;
+    const currentId = ++messageChannelsRequestId;
     try {
-      messagesChannels = await fetchMessageLogChannels(undefined, userId);
+      const channels = await fetchMessageLogChannels(undefined, userId);
+      if (currentId !== messageChannelsRequestId) return;
+      messagesChannels = channels;
     } catch (e) {
-      console.error('Failed to load member message channels:', e);
+      if (currentId === messageChannelsRequestId) console.error('Failed to load member message channels:', e);
     }
   }
 
@@ -293,8 +305,20 @@
   /** L'edition d'un rapport appartient a « Sanctions », pas a « Membres ». */
   const canModerateSanctions = $derived(canModerateFeature('sanctions'));
 
+  /**
+   * Relit le dossier après une action. Le membre affiché a pu changer entre-temps (un clic
+   * dans le graphe) : son dossier ne reçoit pas celui du membre visé par l'action.
+   */
+  async function reloadCase(id: string) {
+    const updatedCase = await fetchMemberCase(id);
+    if (updatedCase && userId === id) caseData = updatedCase;
+  }
+
   async function executeModerationAction(action: 'WARN' | 'KICK' | 'TIMEOUT' | 'BAN') {
     if (!userId || !canModerateMembers) return;
+    // La confirmation est une attente : l'action vise le membre qu'elle nomme, même si un
+    // autre s'ouvre pendant qu'elle est affichée.
+    const memberId = userId;
     
     const reasonText = actionReason.trim() || m.mcm_default_reason();
     let confirmTitle = '';
@@ -303,20 +327,20 @@
     let variant: 'danger' | 'warning' = 'warning';
     
     if (action === 'WARN') {
-      confirmTitle = m.mcm_confirm_warn_title({ name: userName });
+      confirmTitle = m.mcm_confirm_warn_title({ name: displayName });
       confirmDesc = m.mcm_confirm_warn_desc({ reason: reasonText });
       confirmLabel = m.mcm_action_warn();
     } else if (action === 'TIMEOUT') {
-      confirmTitle = m.mcm_confirm_timeout_title({ name: userName });
+      confirmTitle = m.mcm_confirm_timeout_title({ name: displayName });
       confirmDesc = m.mcm_confirm_timeout_desc({ duration: actionDuration, reason: reasonText });
       confirmLabel = m.mcm_action_exclude();
     } else if (action === 'KICK') {
-      confirmTitle = m.mcm_confirm_kick_title({ name: userName });
+      confirmTitle = m.mcm_confirm_kick_title({ name: displayName });
       confirmDesc = m.mcm_confirm_kick_desc({ reason: reasonText });
       confirmLabel = m.mcm_action_kick();
       variant = 'danger';
     } else if (action === 'BAN') {
-      confirmTitle = m.mcm_confirm_ban_title({ name: userName });
+      confirmTitle = m.mcm_confirm_ban_title({ name: displayName });
       confirmDesc = m.mcm_confirm_ban_desc({ reason: reasonText });
       confirmLabel = m.mcm_action_ban();
       variant = 'danger';
@@ -344,15 +368,14 @@
         payload.durationMs = parseDurationToMs(actionDuration);
       }
       
-      const res = await runMemberCaseAction(userId, action, payload);
+      const res = await runMemberCaseAction(memberId, action, payload);
       if (res?.ok) {
-        toast.success(m.mcm_action_done({ action }));
+        // Sanction appliquée sur Discord mais absente du casier : surtout pas un échec,
+        // le modérateur la relancerait.
+        if (res.recordFailed) toast.warning(m.mcm_action_record_failed({ action }), 10000);
+        else toast.success(m.mcm_action_done({ action }));
         actionReason = '';
-        // Recharger le dossier membre
-        const updatedCase = await fetchMemberCase(userId);
-        if (updatedCase) {
-          caseData = updatedCase;
-        }
+        await reloadCase(memberId);
       } else {
         throw new Error(res?.error || m.mcm_action_error());
       }
@@ -421,6 +444,7 @@
 
   async function handleRequestVerification() {
     if (!userId || !canModerateMembers) return;
+    const memberId = userId;
     if (verificationBlocked) {
       toast.error(verificationPending ? m.mcm_verif_already_pending() : m.mcm_verif_cooldown());
       return;
@@ -428,12 +452,11 @@
     if (!(await confirmDialog.ask({ title: m.mcm_verif_title(), description: m.mcm_verif_desc(), confirmLabel: m.mcm_verif_confirm(), variant: 'warning' }))) return;
     requestVerificationBusy = true;
     try {
-      const res = await runMemberCaseAction(userId, 'REQUEST_VERIFICATION', {
+      const res = await runMemberCaseAction(memberId, 'REQUEST_VERIFICATION', {
         reason: m.mcm_verif_reason()
       });
       toast.success(m.mcm_verif_sent());
-      const updatedCase = await fetchMemberCase(userId);
-      if (updatedCase) caseData = updatedCase;
+      await reloadCase(memberId);
     } catch (err) {
       toast.error(errorMessage(err) || m.mcm_error_request());
     } finally {
@@ -448,7 +471,8 @@
   let linkIsError = $state(false);
 
   async function handleLinkAccount() {
-    if (!canModerateMembers) return;
+    if (!userId || !canModerateMembers) return;
+    const memberId = userId;
     if (!targetAccountId.trim()) {
       linkIsError = true;
       linkFeedback = m.mcm_error_id_required();
@@ -460,18 +484,13 @@
     linkIsError = false;
 
     try {
-      const success = await linkMemberAccount(userId!, targetAccountId, linkReason);
+      const success = await linkMemberAccount(memberId, targetAccountId, linkReason);
       if (success) {
         linkIsError = false;
         linkFeedback = m.mcm_link_success();
         targetAccountId = '';
         linkReason = '';
-        if (userId) {
-          const updatedCase = await fetchMemberCase(userId);
-          if (updatedCase) {
-            caseData = updatedCase;
-          }
-        }
+        await reloadCase(memberId);
       } else {
         linkIsError = true;
         linkFeedback = m.mcm_link_error();
@@ -497,22 +516,20 @@
 
   /** Reproduit ici un lien déjà posé ailleurs, en traçant sa provenance dans la raison. */
   async function handleApplySuggestedLink(suggestion: { userId: string; serverCount: number; guilds: { guildName: string }[] }) {
-    if (applyingSuggestionId || !canModerateMembers) return;
+    if (!userId || applyingSuggestionId || !canModerateMembers) return;
+    const memberId = userId;
     applyingSuggestionId = suggestion.userId;
 
     const servers = suggestion.guilds.map((g) => g.guildName).join(', ');
     try {
       const success = await linkMemberAccount(
-        userId!,
+        memberId,
         suggestion.userId,
         m.mcm_xlink_apply_reason({ count: suggestion.serverCount, servers }),
       );
       if (success) {
         toast.success(m.mcm_link_success());
-        if (userId) {
-          const updatedCase = await fetchMemberCase(userId);
-          if (updatedCase) caseData = updatedCase;
-        }
+        await reloadCase(memberId);
       } else {
         toast.error(m.mcm_link_error());
       }
@@ -526,18 +543,15 @@
   let unlinkingAccountId = $state<string | null>(null);
 
   async function handleUnlinkAccount(targetId: string) {
+    if (!userId) return;
+    const memberId = userId;
     if (!(await confirmDialog.ask({ title: m.mcm_unlink_title(), confirmLabel: m.mcm_unlink_confirm(), variant: 'warning' }))) return;
     unlinkingAccountId = targetId;
 
     try {
-      const success = await unlinkMemberAccount(userId!, targetId);
+      const success = await unlinkMemberAccount(memberId, targetId);
       if (success) {
-        if (userId) {
-          const updatedCase = await fetchMemberCase(userId);
-          if (updatedCase) {
-            caseData = updatedCase;
-          }
-        }
+        await reloadCase(memberId);
       } else {
         toast.error(m.mcm_error_unlink());
       }
@@ -560,13 +574,15 @@
 
   async function handleSaveNote() {
     if (!userId || !canModerateMembers) return;
+    const memberId = userId;
     noteBusy = true;
     noteFeedback = '';
     try {
-      const result = await updateMemberNote(userId, moderatorNote);
+      const result = await updateMemberNote(memberId, moderatorNote);
       if (result?.ok) {
         noteFeedback = m.mcm_note_saved();
-        if (caseData?.profile) {
+        // La note n'est reportée que sur le dossier du membre à qui elle a été écrite.
+        if (userId === memberId && caseData?.profile) {
           caseData.profile.moderatorNote = moderatorNote;
         }
       } else {
@@ -626,8 +642,10 @@
           }
         }
       }
-    } catch (e) {
-      console.error('Failed to update sanction report:', e);
+    } catch {
+      // Un échec de l'API a déjà son message : on n'arrive ici que sur une erreur locale,
+      // une date d'incident vidée par exemple, qui ne doit pas passer sous silence.
+      toast.error(m.mcm_error_save());
     } finally {
       updateReportBusy = false;
     }
@@ -656,6 +674,7 @@
       case 'TEMP_BAN': return { icon: 'ban', tile: 'bg-error/10 text-error', dot: 'bg-error' };
       case 'BAN': return { icon: 'gavel', tile: 'bg-error/10 text-error', dot: 'bg-error' };
       case 'SOFTBAN': return { icon: 'eraser', tile: 'bg-surface-container-high text-on-surface-variant', dot: 'bg-on-surface-variant' };
+      case 'JAIL': return { icon: 'lock', tile: 'bg-warning/10 text-warning', dot: 'bg-warning' };
       default: return { icon: 'shield', tile: 'bg-surface-container-high text-on-surface-variant', dot: 'bg-on-surface-variant' };
     }
   }
@@ -822,11 +841,13 @@
 
   async function loadMemberAnalytics() {
     if (!userId || !authStore.selectedGuildId) return;
+    const currentId = ++analyticsRequestId;
     analyticsLoading = true;
     try {
       // 60 jours d'un coup, coupes en deux fenetres de 30 : la periode et celle
       // d'avant. L'API ne renvoie que les jours actifs, on remet les jours vides.
       const raw = await fetchMemberDetailedAnalytics(userId, 60) as MemberAnalyticsResponse | null;
+      if (currentId !== analyticsRequestId) return;
       const byDay = new Map((raw?.dailyTrend ?? []).map((d) => [d.dateKey, d]));
       const lastDays = (offset: number) => Array.from({ length: 30 }, (_, i) => {
         const day = new Date();
@@ -846,9 +867,9 @@
         activeDays: current.filter((d) => d.messages > 0 || d.voiceMinutes > 0).length,
       } : null;
     } catch (e) {
-      console.error('Failed to load member analytics:', e);
+      if (currentId === analyticsRequestId) console.error('Failed to load member analytics:', e);
     } finally {
-      analyticsLoading = false;
+      if (currentId === analyticsRequestId) analyticsLoading = false;
     }
   }
 
@@ -865,6 +886,10 @@
       messagesTotalCount = 0;
       messagesTotalCapped = false;
       messagesHasMore = false;
+      // Rien du membre précédent ne reste affiché pendant le chargement du suivant.
+      messagesChannels = [];
+      analyticsData = null;
+      previousTrend = [];
       void loadMemberAnalytics();
     }
   });
@@ -885,7 +910,12 @@
       const _t = messageTo;
       const _o = messageOffset;
       const _l = messageLimit;
-      void loadMemberMessages();
+      // Une recherche par frappe saturait l'API : le texte attend la fin de la saisie, les
+      // autres filtres et la pagination relancent tout de suite.
+      const delay = _q === lastMessageQuery ? 0 : 300;
+      lastMessageQuery = _q;
+      const timer = setTimeout(() => void loadMemberMessages(), delay);
+      return () => clearTimeout(timer);
     }
   });
 </script>

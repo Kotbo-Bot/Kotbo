@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from '../../lib/i18n';
   /**
    * Analytics.svelte
    *
@@ -210,7 +211,7 @@
       drawerTotalPages = res.pagination.totalPages;
       drawerTotalCount = res.pagination.total;
     } catch (err) {
-      toast.error('Erreur lors du chargement des serveurs');
+      toast.error(m.aana_servers_load_error());
     } finally {
       drawerLoading = false;
     }
@@ -229,9 +230,9 @@
     savingAlerts = true;
     try {
       await saveAdminAlertThresholds(alertThresholds);
-      toast.success('Seuils d’alerte enregistrés');
+      toast.success(m.aana_thresholds_saved());
     } catch (err) {
-      toast.error('Erreur lors de l’enregistrement');
+      toast.error(m.aana_save_error());
     } finally {
       savingAlerts = false;
     }
@@ -249,9 +250,9 @@
         dimension: selectedDimension,
         filter: drawerFilter,
       });
-      toast.success('Export CSV téléchargé');
+      toast.success(m.aana_csv_exported());
     } catch (err) {
-      toast.error("Échec de l'export CSV");
+      toast.error(m.aana_csv_export_failed());
     } finally {
       exportingCsv = false;
     }
@@ -697,7 +698,7 @@
       <!-- Répartitions Offres & Intervalles -->
       <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
         <!-- Par Offre -->
-        <AdminCard title="Répartition par Offre" description="PLUS, PRO, ULTIMATE et CUSTOM">
+        <AdminCard title="Répartition par Offre" description="Plus et Sur mesure">
           <div class="space-y-3 py-2">
             {#each Object.entries(revenueData.byPlan ?? {}) as [plan, item]}
               {@const totalMrr = revenueData.mrrCents || 1}

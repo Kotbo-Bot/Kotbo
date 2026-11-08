@@ -5,7 +5,8 @@ import { cache } from '../../utils/cache.js';
 import { resolveGuildLocale, type BotLocale, FALLBACK_LOCALE } from '../../utils/i18n.js';
 import { sanitizeFormTheme } from '../../utils/formCustomization.js';
 import type { CustomFormStructure } from '../features/customFormService.js';
-import { OG_ACCENT, OG_CARD_VERSION, normalizeAccent, type OgCardSpec } from './ogImageService.js';
+import { getMemberIdentities } from '../moderation/memberIdentityService.js';
+import { OG_ACCENT, OG_CARD_VERSION, normalizeAccent, type OgCardSpec, type OgPodiumEntry } from './ogImageService.js';
 import * as m from '../../lib/paraglide/messages.js';
 
 // ============================================================================
@@ -329,12 +330,25 @@ export function normalizeOgPath(raw: string | null | undefined): string {
   return path.slice(0, 512);
 }
 
+function extractQueryUserId(raw: string | null | undefined): string | undefined {
+  if (!raw || !raw.includes('?')) return undefined;
+  try {
+    const query = raw.slice(raw.indexOf('?')).split('#')[0];
+    const params = new URLSearchParams(query);
+    const candidate = params.get('user') ?? params.get('userId') ?? params.get('member');
+    return candidate && SNOWFLAKE.test(candidate) ? candidate : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export async function resolveOgMetadata(client: Client, rawPath: string): Promise<OgMetadata> {
   const path = normalizeOgPath(rawPath);
   const segments = path.split('/').filter(Boolean);
+  const queryUserId = extractQueryUserId(rawPath);
 
   try {
-    const resolved = await resolveByRoute(client, path, segments);
+    const resolved = await resolveByRoute(client, path, segments, queryUserId);
     if (resolved) return resolved;
   } catch (err) {
     logger.error('OpenGraph', `Resolution des metadonnees impossible pour ${path}`, err);
@@ -423,7 +437,12 @@ async function homeMetadata(): Promise<OgMetadata> {
   return meta;
 }
 
-async function resolveByRoute(client: Client, path: string, segments: string[]): Promise<OgMetadata | null> {
+async function resolveByRoute(
+  client: Client,
+  path: string,
+  segments: string[],
+  queryUserId?: string,
+): Promise<OgMetadata | null> {
   if (segments.length === 0) return homeMetadata();
 
   // ── Ressources identifiees par un id ────────────────────────────────────
@@ -448,7 +467,7 @@ async function resolveByRoute(client: Client, path: string, segments: string[]):
 
   // ── Pages publiques d'un serveur : /:guildId/... ────────────────────────
   if (segments[0] && SNOWFLAKE.test(segments[0])) {
-    return guildPageMetadata(client, path, segments[0], segments.slice(1));
+    return guildPageMetadata(client, path, segments[0], segments.slice(1), queryUserId);
   }
 
   // ── Pages du dashboard ──────────────────────────────────────────────────
@@ -735,6 +754,7 @@ async function guildPageMetadata(
   path: string,
   guildId: string,
   rest: string[],
+  queryUserId?: string,
 ): Promise<OgMetadata | null> {
   const locale = await resolveGuildLocale(guildId);
   const guild = guildIdentity(client, guildId);
@@ -748,16 +768,29 @@ async function guildPageMetadata(
     return giveawayMetadata(path, guildId, rest[1], guild, locale, meta);
   }
 
+  // Lien direct vers la position d'un membre dans le classement des niveaux :
+  // /:guildId/leveling/classement/:userId (ou ?user=:userId).
+  if (
+    rest[0] === 'leveling' &&
+    rest[1] === 'classement' &&
+    rest[2] &&
+    !rest[3] &&
+    SNOWFLAKE.test(rest[2])
+  ) {
+    return leaderboardMetadata(client, path, guildId, 'leveling', guild, locale, meta, rest[2]);
+  }
+
   const leaderboardKind = {
     'leveling/classement': 'leveling',
     'prestige/classement': 'prestige',
     'leveling/clan': 'clan',
     clan: 'clan',
+    'clan-rpg': 'clan',
     rpg: 'rpg',
   }[section];
 
   if (leaderboardKind) {
-    return leaderboardMetadata(path, guildId, leaderboardKind, guild, locale, meta);
+    return leaderboardMetadata(client, path, guildId, leaderboardKind, guild, locale, meta, queryUserId);
   }
 
   if (section === 'news') {
@@ -769,21 +802,6 @@ async function guildPageMetadata(
       cacheKey: `news:${guildId}`,
       kicker: m.og_news_kicker({}, { locale }),
       title: m.og_news_title({ guild: guild.name }, { locale }),
-      subtitle: meta.description,
-      guildName: guild.name,
-      guildIconUrl: guild.iconUrl,
-    };
-    return meta;
-  }
-
-  if (section === 'clan-rpg') {
-    meta.title = m.og_dev_title({ guild: guild.name }, { locale });
-    meta.description = m.og_dev_desc({}, { locale });
-    meta.imagePath = imagePathFor(path, 'v1');
-    meta.card = {
-      cacheKey: `dev:${guildId}`,
-      kicker: m.og_dev_kicker({}, { locale }),
-      title: m.og_dev_title({ guild: guild.name }, { locale }),
       subtitle: meta.description,
       guildName: guild.name,
       guildIconUrl: guild.iconUrl,
@@ -887,12 +905,14 @@ async function giveawayMetadata(
  * declencher ce calcul a chaque fois qu'un robot passe.
  */
 async function leaderboardMetadata(
+  client: Client,
   path: string,
   guildId: string,
   kind: string,
   guild: { name: string; iconUrl?: string },
   locale: BotLocale,
   meta: OgMetadata,
+  targetUserId?: string,
 ): Promise<OgMetadata> {
   const titles: Record<string, string> = {
     leveling: m.og_leaderboard_title_leveling({ guild: guild.name }, { locale }),
@@ -901,17 +921,23 @@ async function leaderboardMetadata(
     rpg: m.og_leaderboard_title_rpg({ guild: guild.name }, { locale }),
   };
 
-  const title = titles[kind] ?? titles.leveling;
+  let title = titles[kind] ?? titles.leveling;
   meta.title = title;
   meta.description = m.og_leaderboard_desc({ guild: guild.name }, { locale });
   meta.imageAlt = title;
 
-  // Le podium n'est dresse que pour les clans : ce sont des entites publiques
-  // du serveur. Un classement de MEMBRES reste chiffre - la carte est servie
-  // sans authentification, elle n'a pas a nommer des personnes que seule la
-  // page, elle, presente en contexte.
-  const podium: { name: string; score: string }[] = [];
+  const podium: OgPodiumEntry[] = [];
+  let podiumLabel: string | undefined;
   let total = 0;
+  let stats: { value: string; label: string }[] = [];
+  let imageTargetPath = path;
+  let versionKey = '0';
+  let cacheKey = `leaderboard:${guildId}:${kind}:0`;
+
+  const lvlPrefix = locale === 'fr' ? 'Niv.' : 'Lv.';
+  const formatLevelScore = (level: number, xp: number) =>
+    `${lvlPrefix} ${formatNumber(level, locale)} · ${formatNumber(xp, locale)} XP`;
+
   try {
     if (kind === 'clan' || kind === 'rpg') {
       total = await prisma.clan.count({ where: { guildId } });
@@ -928,35 +954,227 @@ async function leaderboardMetadata(
           select: { id: true, name: true },
         });
         const nameById = new Map(clans.map((clan) => [clan.id, clan.name]));
-        for (const row of top) {
+        for (const [idx, row] of top.entries()) {
           const name = nameById.get(row.clanId);
           if (!name) continue;
-          podium.push({ name, score: `${formatNumber(row._sum.xp ?? 0, locale)} XP` });
+          podium.push({ rank: idx + 1, name, score: `${formatNumber(row._sum.xp ?? 0, locale)} XP` });
         }
       }
-    } else {
+      stats = [{ value: formatNumber(total, locale), label: m.og_stat_clans({}, { locale }) }];
+      versionKey = String(total);
+      cacheKey = `leaderboard:${guildId}:${kind}:${total}`;
+    } else if (kind === 'leveling' && targetUserId && SNOWFLAKE.test(targetUserId)) {
+      const [memberRow, memberTotal] = await Promise.all([
+        prisma.memberLevel.findUnique({
+          where: { guildId_userId: { guildId, userId: targetUserId } },
+          select: { userId: true, xp: true, level: true },
+        }),
+        prisma.memberLevel.count({ where: { guildId } }),
+      ]);
+      total = memberTotal;
+
+      if (memberRow) {
+        const [higherCount, top, ahead, behind] = await Promise.all([
+          prisma.memberLevel.count({ where: { guildId, xp: { gt: memberRow.xp } } }),
+          prisma.memberLevel.findMany({
+            where: { guildId },
+            orderBy: { xp: 'desc' },
+            take: 3,
+            select: { userId: true, xp: true, level: true },
+          }),
+          prisma.memberLevel.findFirst({
+            where: { guildId, xp: { gt: memberRow.xp } },
+            orderBy: { xp: 'asc' },
+            select: { userId: true, xp: true, level: true },
+          }),
+          prisma.memberLevel.findFirst({
+            where: { guildId, xp: { lt: memberRow.xp } },
+            orderBy: { xp: 'desc' },
+            select: { userId: true, xp: true, level: true },
+          }),
+        ]);
+
+        const rank = higherCount + 1;
+        const idsToResolve = [
+          targetUserId,
+          ...top.map((r) => r.userId),
+          ...(ahead ? [ahead.userId] : []),
+          ...(behind ? [behind.userId] : []),
+        ];
+        const identities = await getMemberIdentities(client, guildId, idsToResolve).catch(() => new Map());
+        const nameOf = (uid: string) =>
+          identities.get(uid)?.displayName ?? (locale === 'fr' ? `Membre ${uid.slice(-4)}` : `Member ${uid.slice(-4)}`);
+
+        const memberName = nameOf(targetUserId);
+        title = m.og_leaderboard_member_title(
+          {
+            user: memberName,
+            rank: formatNumber(rank, locale),
+            level: formatNumber(memberRow.level, locale),
+            guild: guild.name,
+          },
+          { locale },
+        );
+        meta.title = title;
+        meta.imageAlt = title;
+        meta.description =
+          rank === 1 || !ahead
+            ? m.og_leaderboard_member_desc_leader(
+                {
+                  user: memberName,
+                  guild: guild.name,
+                  xp: formatNumber(memberRow.xp, locale),
+                  level: formatNumber(memberRow.level, locale),
+                  total: formatNumber(total, locale),
+                },
+                { locale },
+              )
+            : m.og_leaderboard_member_desc_chasing(
+                {
+                  user: memberName,
+                  rank: formatNumber(rank, locale),
+                  total: formatNumber(total, locale),
+                  guild: guild.name,
+                  xp: formatNumber(memberRow.xp, locale),
+                  level: formatNumber(memberRow.level, locale),
+                  gap: formatNumber(Math.max(1, ahead.xp - memberRow.xp), locale),
+                  nextRank: formatNumber(rank - 1, locale),
+                },
+                { locale },
+              );
+
+        podiumLabel = m.og_leaderboard_standing_label({}, { locale });
+        if (rank <= 3) {
+          top.forEach((row, idx) => {
+            podium.push({
+              rank: idx + 1,
+              name: nameOf(row.userId),
+              score: formatLevelScore(row.level, row.xp),
+              highlight: row.userId === targetUserId,
+            });
+          });
+          if (rank === 3 && behind && !podium.some((e) => e.rank === 4)) {
+            podium.push({
+              rank: 4,
+              name: nameOf(behind.userId),
+              score: formatLevelScore(behind.level, behind.xp),
+            });
+          }
+        } else {
+          if (top[0]) {
+            podium.push({
+              rank: 1,
+              name: nameOf(top[0].userId),
+              score: formatLevelScore(top[0].level, top[0].xp),
+            });
+          }
+          if (ahead && ahead.userId !== top[0]?.userId) {
+            podium.push({
+              rank: rank - 1,
+              name: nameOf(ahead.userId),
+              score: formatLevelScore(ahead.level, ahead.xp),
+            });
+          }
+          podium.push({
+            rank,
+            name: memberName,
+            score: formatLevelScore(memberRow.level, memberRow.xp),
+            highlight: true,
+          });
+          if (behind) {
+            podium.push({
+              rank: rank + 1,
+              name: nameOf(behind.userId),
+              score: formatLevelScore(behind.level, behind.xp),
+            });
+          }
+        }
+
+        stats = [
+          {
+            value: `#${formatNumber(rank, locale)} / ${formatNumber(total, locale)}`,
+            label: m.og_stat_rank({}, { locale }),
+          },
+          { value: formatNumber(memberRow.level, locale), label: m.og_stat_level({}, { locale }) },
+          { value: `${formatNumber(memberRow.xp, locale)} XP`, label: 'XP' },
+        ];
+        imageTargetPath = `/${guildId}/leveling/classement/${targetUserId}`;
+        versionKey = `${rank}-${memberRow.xp}-${total}`;
+        cacheKey = `leaderboard:${guildId}:leveling:${targetUserId}:${versionKey}`;
+      }
+    }
+
+    if (stats.length === 0) {
       total = await prisma.memberLevel.count({ where: { guildId } });
+      if (kind === 'leveling') {
+        const [top, agg] = await Promise.all([
+          prisma.memberLevel.findMany({
+            where: { guildId },
+            orderBy: { xp: 'desc' },
+            take: 3,
+            select: { userId: true, xp: true, level: true },
+          }),
+          prisma.memberLevel.aggregate({
+            where: { guildId },
+            _sum: { xp: true },
+            _max: { level: true },
+          }),
+        ]);
+        if (top.length > 0) {
+          const identities = await getMemberIdentities(
+            client,
+            guildId,
+            top.map((r) => r.userId),
+          ).catch(() => new Map());
+          top.forEach((row, idx) => {
+            const name =
+              identities.get(row.userId)?.displayName ??
+              (locale === 'fr' ? `Membre ${row.userId.slice(-4)}` : `Member ${row.userId.slice(-4)}`);
+            podium.push({
+              rank: idx + 1,
+              name,
+              score: formatLevelScore(row.level, row.xp),
+            });
+          });
+        }
+        stats = [{ value: formatNumber(total, locale), label: m.og_stat_members({}, { locale }) }];
+        if (agg._max.level) {
+          stats.push({ value: formatNumber(agg._max.level, locale), label: m.og_stat_max_level({}, { locale }) });
+        }
+        if (agg._sum.xp) {
+          stats.push({ value: formatNumber(agg._sum.xp, locale), label: m.og_stat_total_xp({}, { locale }) });
+        }
+        versionKey = `${total}-${top[0]?.xp ?? 0}`;
+        cacheKey = `leaderboard:${guildId}:${kind}:${versionKey}`;
+      } else {
+        stats = [{ value: formatNumber(total, locale), label: m.og_stat_members({}, { locale }) }];
+        versionKey = String(total);
+        cacheKey = `leaderboard:${guildId}:${kind}:${total}`;
+      }
     }
   } catch (err) {
     // Un classement indisponible ne doit pas priver le lien de son embed.
     logger.warn('OpenGraph', `Podium indisponible pour ${guildId} (${kind}): ${String(err)}`);
+    if (stats.length === 0) {
+      stats = [{
+        value: formatNumber(total, locale),
+        label: kind === 'clan' || kind === 'rpg'
+          ? m.og_stat_clans({}, { locale })
+          : m.og_stat_members({}, { locale }),
+      }];
+    }
   }
 
-  meta.imagePath = imagePathFor(path, String(total));
+  meta.imagePath = imagePathFor(imageTargetPath, versionKey);
   meta.card = {
-    cacheKey: `leaderboard:${guildId}:${kind}:${total}`,
+    cacheKey,
     kicker: m.og_leaderboard_kicker({}, { locale }),
     title,
     subtitle: meta.description,
     guildName: guild.name,
     guildIconUrl: guild.iconUrl,
-    stats: [{
-      value: formatNumber(total, locale),
-      label: kind === 'clan' || kind === 'rpg'
-        ? m.og_stat_clans({}, { locale })
-        : m.og_stat_members({}, { locale }),
-    }],
-    art: podium.length > 0 ? { type: 'podium', entries: podium } : { type: 'none' },
+    stats,
+    art: podium.length > 0 ? { type: 'podium', label: podiumLabel, entries: podium } : { type: 'none' },
   };
   return meta;
 }

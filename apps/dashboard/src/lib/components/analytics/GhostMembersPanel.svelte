@@ -506,6 +506,7 @@
                 <tr class="border-b border-outline-variant/5 hover:bg-surface-container-highest/40 transition-colors">
                   <td class="px-4 py-3">
                     <button
+                      disabled={!onOpenMember}
                       type="button"
                       onclick={() => onOpenMember?.(member.userId, member.displayName || member.username)}
                       class="flex w-full items-center gap-2.5 min-w-0 text-left group/member"

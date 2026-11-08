@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from '../../../i18n';
   /**
    * Le seul moment ou l'on voit Kotbo agir sur son propre serveur.
    *
@@ -218,7 +219,7 @@
       }
     } catch (err) {
       phase = 'plan';
-      toast.error(errorMessage(err) || "La structure n'a pas pu être posée.");
+      toast.error(errorMessage(err) || m.onb_structure_save_failed());
     } finally {
       onboardingData.busy = false;
     }
@@ -228,14 +229,14 @@
 <WizardShell
   layout={phase === 'plan' ? 'split' : 'stage'}
   title={phase === 'plan'
-    ? (mapped ? 'On récapitule avant de poser.' : kind === 'existing' ? 'Voilà ce que Kotbo va compléter.' : 'Voilà ce que Kotbo va poser.')
+    ? (mapped ? m.obx_st_title_mapped() : kind === 'existing' ? m.obx_st_title_existing() : m.obx_st_title_new())
     : undefined}
   lead={phase === 'plan'
     ? (mapped
-        ? "Ce que tu as relié n'est ni renommé, ni déplacé, ni repermissionné : Kotbo s'y branche et crée uniquement le reste."
+        ? m.obx_st_lead_mapped()
         : kind === 'existing'
-          ? "Ce que ton serveur porte déjà n'est ni recréé ni déplacé : Kotbo ne pose que ce qui manque."
-          : "Tout est prêt. Un clic, et ces salons existent sur ton serveur.")
+          ? m.obx_st_lead_existing()
+          : m.obx_st_lead_new())
     : undefined}
   canGoBack={phase === 'plan'}
   {onEditTracks}
@@ -243,10 +244,10 @@
   {#if phase === 'building'}
     <div class="max-w-xl mx-auto">
       <h1 class="mb-2 text-center text-2xl font-semibold tracking-tight text-on-surface font-headline">
-        Kotbo travaille sur ton serveur.
+        {m.obx_st_building()}
       </h1>
       <p class="mb-7 text-center text-sm text-on-surface-variant/65 leading-relaxed">
-        Ouvre Discord dans un autre onglet : ce que tu vois défiler apparaît en direct.
+        {m.obx_st_building_desc()}
       </p>
 
       <BuildSequence
@@ -262,14 +263,14 @@
         <KotboMark size={48} halo />
       </div>
       <p class="text-[17px] font-semibold text-on-surface mb-6">
-        Ton serveur vient de prendre forme.
+        {m.obx_st_built()}
       </p>
       <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {#each [
-          { n: built.roles, label: 'rôles' },
-          { n: built.categories, label: 'catégories' },
-          { n: built.channels, label: 'salons' },
-          { n: built.modules, label: 'modules' },
+          { n: built.roles, label: m.onb_recap_roles() },
+          { n: built.categories, label: m.onb_recap_categories() },
+          { n: built.channels, label: m.onb_recap_channels() },
+          { n: built.modules, label: m.obx_modules() },
         ] as stat (stat.label)}
           <div>
             <p class="text-2xl font-bold tracking-tight text-primary"><CountUp value={stat.n} /></p>
@@ -286,10 +287,10 @@
            chose qu'on redoutait en arrivant ici. -->
       <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
         {#each [
-          { n: tally.adopted, label: 'reliés', icon: 'link' },
-          { n: tally.created, label: 'à créer', icon: 'plus' },
-          { n: tally.skipped, label: 'laissés de côté', icon: 'minus' },
-          { n: planned?.modules ?? 0, label: 'modules', icon: 'toggle-right' },
+          { n: tally.adopted, label: m.obx_st_adopted(), icon: 'link' },
+          { n: tally.created, label: m.obx_st_created(), icon: 'plus' },
+          { n: tally.skipped, label: m.obx_st_skipped(), icon: 'minus' },
+          { n: planned?.modules ?? 0, label: m.obx_modules(), icon: 'toggle-right' },
         ] as stat (stat.label)}
           <div class="rounded-xl border border-outline-variant/30 bg-surface-container-low/40 px-4 py-3">
             <Papicon icon={stat.icon} size={14} class="text-primary/70 mb-1.5" />
@@ -301,10 +302,10 @@
     {:else if planned}
       <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
         {#each [
-          { n: planned.roles, label: 'rôles', icon: 'shield' },
-          { n: planned.categories, label: 'catégories', icon: 'folder' },
-          { n: planned.channels, label: 'salons', icon: 'message-circle' },
-          { n: planned.modules, label: 'modules', icon: 'toggle-right' },
+          { n: planned.roles, label: m.onb_recap_roles(), icon: 'shield' },
+          { n: planned.categories, label: m.onb_recap_categories(), icon: 'folder' },
+          { n: planned.channels, label: m.onb_recap_channels(), icon: 'message-circle' },
+          { n: planned.modules, label: m.obx_modules(), icon: 'toggle-right' },
         ] as stat (stat.label)}
           <div class="rounded-xl border border-outline-variant/30 bg-surface-container-low/40 px-4 py-3">
             <Papicon icon={stat.icon} size={14} class="text-primary/70 mb-1.5" />
@@ -320,13 +321,11 @@
            en chemin ne pouvait plus se finir. Ce qui existe etant reconnu ligne
            a ligne, rejouer ne cree que ce qui manque encore. -->
       <p class="mt-4 text-body-sm text-on-surface-variant leading-relaxed rounded-xl border border-outline-variant/30 bg-surface-container-low/30 px-4 py-3">
-        Une mise en place a déjà eu lieu sur ce serveur. Rien de ce qui existe ne sera
-        recréé : seules les lignes que tu viens de marquer « à créer » seront posées.
+        {m.obx_st_already_applied()}
       </p>
     {:else if blocked}
       <p class="mt-4 text-body-sm leading-relaxed rounded-xl border border-error/30 bg-error/[0.04] px-4 py-3 text-on-surface">
-        Kotbo n'a pas la permission « Gérer les salons » : il ne peut rien créer. Donne-la
-        lui dans les paramètres du serveur, puis rechargez cette page.
+        {m.obx_st_blocked()}
       </p>
     {/if}
   {/if}
@@ -335,7 +334,7 @@
     <div class="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest/50 overflow-hidden">
       <div class="px-4 py-2.5 border-b border-outline-variant/20 flex items-center gap-2">
         <Papicon icon="list" size={12} class="text-on-surface-variant/40" />
-        <span class="text-xs font-semibold text-on-surface">Le détail</span>
+        <span class="text-xs font-semibold text-on-surface">{m.obx_st_detail()}</span>
       </div>
 
       <div class="max-h-[420px] overflow-y-auto p-3 space-y-1">
@@ -351,7 +350,7 @@
                salons sur quinze donne l'impression de n'avoir rien fait ; avec
                cette liste, on lit que douze etaient deja bons. -->
           <p class="pt-3 pb-1 text-xs font-semibold text-on-surface-variant/35">
-            {mapped ? 'Relié à ce qui existe' : 'Déjà en place'}
+            {mapped ? m.obx_st_linked() : m.obx_st_present()}
           </p>
           {#each present as item (item.key)}
             <p class="flex items-center gap-2 text-body-sm {mapped
@@ -368,14 +367,14 @@
 
   {#snippet footer()}
     {#if phase === 'building'}
-      <span class="text-body-sm font-medium text-on-surface-variant">Montage en cours…</span>
+      <span class="text-body-sm font-medium text-on-surface-variant">{m.obx_st_assembling()}</span>
     {:else if phase === 'built'}
       <button
         type="button"
         onclick={() => wizard.complete('structure')}
         class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-on-primary text-sm font-semibold hover:opacity-90 transition-opacity"
       >
-        Continuer
+        {m.obx_continue()}
         <Papicon icon="ChevronRight" size={15} />
       </button>
     {:else if template?.applied && (tally?.created ?? 0) === 0}
@@ -384,7 +383,7 @@
         onclick={() => wizard.next()}
         class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-on-primary text-sm font-semibold hover:opacity-90 transition-opacity"
       >
-        Continuer
+        {m.obx_continue()}
         <Papicon icon="ChevronRight" size={15} />
       </button>
     {:else}
@@ -395,8 +394,8 @@
         class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-on-primary text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
       >
         {onboardingData.busy
-          ? 'En cours…'
-          : mapped ? 'Appliquer' : kind === 'existing' ? 'Compléter le serveur' : 'Poser la structure'}
+          ? m.obx_in_progress()
+          : mapped ? m.obx_apply() : kind === 'existing' ? m.obx_st_complete() : m.obx_st_apply()}
         <Papicon icon="ChevronRight" size={15} />
       </button>
     {/if}
