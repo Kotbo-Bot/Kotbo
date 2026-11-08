@@ -174,10 +174,12 @@ export async function handleChannelLinkRoutes(
       }
 
       const targets = [];
+      const toCreate: { guildId: string; mode: LinkMemberMode }[] = [];
       for (const raw of rawTargets) {
         const targetGuildId = typeof raw?.guildId === 'string' ? raw.guildId : null;
+        const createChannel = raw?.createChannel === true;
         const targetChannelId = typeof raw?.channelId === 'string' ? raw.channelId : null;
-        if (!targetGuildId || !targetChannelId) {
+        if (!targetGuildId || (!targetChannelId && !createChannel)) {
           json(res, 400, { error: 'Chaque cible doit préciser guildId et channelId.' });
           return true;
         }
@@ -189,7 +191,32 @@ export async function handleChannelLinkRoutes(
           json(res, 403, { error: 'Vous devez être admin de chacun des serveurs cibles.' });
           return true;
         }
-        targets.push({ guildId: targetGuildId, channelId: targetChannelId, mode: readMode(raw?.mode) });
+        if (createChannel) toCreate.push({ guildId: targetGuildId, mode: readMode(raw?.mode) });
+        else targets.push({ guildId: targetGuildId, channelId: targetChannelId!, mode: readMode(raw?.mode) });
+      }
+
+      // « Créer le salon pour moi » : un salon texte du même nom que la source,
+      // créé seulement une fois toutes les cibles validées.
+      const createdChannels: { delete: (reason?: string) => Promise<unknown> }[] = [];
+      if (toCreate.length > 0) {
+        const sourceChannel = client.guilds.cache.get(guildId)?.channels.cache.get(sourceChannelId);
+        const channelName = sourceChannel?.name ?? 'pont-kotbo';
+        for (const item of toCreate) {
+          try {
+            const created = await client.guilds.cache.get(item.guildId)!.channels.create({
+              name: channelName,
+              type: ChannelType.GuildText,
+              reason: 'Kotbo Link: salon créé pour le pont',
+            });
+            createdChannels.push(created);
+            targets.push({ guildId: item.guildId, channelId: created.id, mode: item.mode });
+          } catch (err) {
+            logger.warn('ChannelLinkAPI', `Création du salon impossible sur ${item.guildId}`, err);
+            await Promise.all(createdChannels.map((c) => c.delete('Kotbo Link: création du pont annulée').catch(() => null)));
+            json(res, 400, { error: 'Le bot n\'a pas pu créer le salon sur l\'un des serveurs (permission Gérer les salons ?).' });
+            return true;
+          }
+        }
       }
 
       const result = await createDirectGroup({
@@ -204,6 +231,7 @@ export async function handleChannelLinkRoutes(
       });
 
       if ('error' in result) {
+        await Promise.all(createdChannels.map((c) => c.delete('Kotbo Link: création du pont annulée').catch(() => null)));
         json(res, 400, { error: result.error });
         return true;
       }
@@ -495,7 +523,7 @@ export async function handleChannelLinkRoutes(
       // l'invitation partout, au lieu du seul salon d'en face.
       let topicUpdated = false;
       if (group.updateTopic) {
-        await refreshGroupTopics(client, group, true);
+        void refreshGroupTopics(client, group, true);
         topicUpdated = true;
       }
 
