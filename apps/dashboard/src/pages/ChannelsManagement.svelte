@@ -365,7 +365,11 @@
     honeypotReinvite: false,
     honeypotGraceSeconds: 0,
     honeypotDurationMin: null as number | null,
+    honeypotShowCount: false,
   });
+
+  // Lu au chargement, affiché à côté de l'option : pas un réglage.
+  let honeypotCatchCount = $state(0);
 
   // Snapshot of last-saved state
   let savedConfig = $state(JSON.parse(JSON.stringify({
@@ -410,6 +414,7 @@
     honeypotReinvite: false,
     honeypotGraceSeconds: 0,
     honeypotDurationMin: null as number | null,
+    honeypotShowCount: false,
   })));
 
   /**
@@ -1033,6 +1038,8 @@
         config.honeypotReinvite = res.honeypotReinvite ?? false;
         config.honeypotGraceSeconds = res.honeypotGraceSeconds ?? 0;
         config.honeypotDurationMin = res.honeypotDurationMin ?? null;
+        config.honeypotShowCount = res.honeypotShowCount ?? false;
+        honeypotCatchCount = res.honeypotCatchCount ?? 0;
         savedConfig = JSON.parse(JSON.stringify(config));
       }
     } catch (err) {
@@ -1091,6 +1098,7 @@
         honeypotReinvite: config.honeypotReinvite,
         honeypotGraceSeconds: config.honeypotGraceSeconds,
         honeypotDurationMin: config.honeypotDurationMin,
+        honeypotShowCount: config.honeypotShowCount,
       });
 
       // `res.error` d'abord : la route nomme le champ qu'elle refuse
@@ -3372,6 +3380,19 @@
                   <option value={300}>{m.cmx_hp_ask_5m()}</option>
                 </select>
                 <p class="text-2xs text-on-surface-variant mt-1">{m.cmx_hp_grace_hint()}</p>
+              </div>
+
+              <div class="flex items-center justify-between p-5 bg-surface-container-high/20 border border-outline-variant/5 rounded-xl transition-all">
+                <div class="space-y-0.5">
+                  <label for="honeypot-count-toggle" class="text-xs font-bold text-on-surface/80 block">{m.cmx_hp_show_count()}</label>
+                  <p class="text-2xs text-on-surface-variant">{m.cmx_hp_show_count_hint({ count: honeypotCatchCount.toLocaleString() })}</p>
+                </div>
+                <ToggleSwitch
+                  id="honeypot-count-toggle"
+                  checked={config.honeypotShowCount}
+                  onToggle={(v) => (config.honeypotShowCount = v)}
+                  ariaLabel={m.cmx_hp_show_count()}
+                />
               </div>
 
               {#if config.honeypotSanction === 'KICK' || config.honeypotSanction === 'SOFTBAN'}

@@ -17864,6 +17864,8 @@
   "cmx_hp_ask_2m": "Demander d'abord : 2 minutes",
   "cmx_hp_ask_5m": "Demander d'abord : 5 minutes",
   "cmx_hp_grace_hint": "Le membre est mentionné avec un bouton « C'était une erreur ». Sans clic à temps, la sanction tombe ; s'il poste le même message ailleurs entre-temps, elle tombe tout de suite.",
+  "cmx_hp_show_count": "Afficher le nombre de comptes piégés",
+  "cmx_hp_show_count_hint": "Ajouté à l'avertissement du salon piège et mis à jour à chaque prise. Comptes piégés jusqu'ici : {count}.",
   "ecx_unsaved_label": "Économie et RPG",
   "ecx_item_weapon": "Arme",
   "ecx_item_armor": "Armure",

@@ -17864,6 +17864,8 @@
   "cmx_hp_ask_2m": "Ask first: 2 minutes",
   "cmx_hp_ask_5m": "Ask first: 5 minutes",
   "cmx_hp_grace_hint": "The member is mentioned with an \"It was a mistake\" button. Without a click in time, the sanction applies; if they post the same message elsewhere in the meantime, it applies right away.",
+  "cmx_hp_show_count": "Show the number of trapped accounts",
+  "cmx_hp_show_count_hint": "Added to the trap channel's warning and updated with each catch. Accounts trapped so far: {count}.",
   "ecx_unsaved_label": "Economy and RPG",
   "ecx_item_weapon": "Weapon",
   "ecx_item_armor": "Armor",
