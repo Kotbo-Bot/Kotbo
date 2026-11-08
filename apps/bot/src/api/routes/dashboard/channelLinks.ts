@@ -495,7 +495,7 @@ export async function handleChannelLinkRoutes(
       // l'invitation partout, au lieu du seul salon d'en face.
       let topicUpdated = false;
       if (group.updateTopic) {
-        await refreshGroupTopics(client, group, true);
+        void refreshGroupTopics(client, group, true);
         topicUpdated = true;
       }
 
