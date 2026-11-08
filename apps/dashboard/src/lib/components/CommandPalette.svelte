@@ -11,6 +11,7 @@
   import { navigationStore } from '../stores/navigation.svelte';
   import { tabsForPage } from '../config/pageTabs';
   import { markNavigationSource, trackEvent } from '../telemetry/telemetry';
+  import { fuzzyScore, moduleKeywords, normalize, score } from '../utils/paletteSearch';
 
   const GROUP_ICONS: Record<string, string> = {
     general: 'home',
@@ -40,6 +41,8 @@
     sublabel?: string;
     icon: string;
     group: string;
+    keywords?: string;
+    href?: string;
     action: () => void;
   }
 
@@ -76,6 +79,8 @@
       sublabel: m.cp_page_in({ group }),
       icon: item.icon || fallbackIcon,
       group,
+      keywords: moduleKeywords(item.href),
+      href: item.href,
       action: () => router.goto(item.href)
     });
 
@@ -86,6 +91,7 @@
         sublabel: m.cp_tab_of({ page: item.name }),
         icon: tab.icon || item.icon || fallbackIcon,
         group,
+        keywords: moduleKeywords(tab.href),
         action: () => router.goto(tab.href)
       });
     }
@@ -186,27 +192,16 @@
     return items;
   });
 
-  const normalize = (value: string): string =>
-    value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
-
   /**
-   * Pertinence d'un element pour la saisie. Un mot qui commence par la saisie
-   * passe avant une saisie trouvee au milieu d'un mot : « sanc » trouvait
-   * d'abord « Statistiques > Croissance » (cro-issanc-e), parce que les
-   * groupes etaient affiches dans l'ordre du menu et non par pertinence.
-   * Une page passe avant ses onglets.
+   * A pertinence egale, ce que la personne ouvre souvent passe devant : une
+   * page epinglee ou consultee recemment l'emporte sur sa voisine.
    */
-  function score(item: PaletteItem, q: string): number {
-    const label = normalize(item.label);
-    const words = label.split(/[\s›>/'-]+/);
-    let value = 0;
-    if (label.startsWith(q)) value = 100;
-    else if (words.some((word) => word.startsWith(q))) value = 80;
-    else if (label.includes(q)) value = 40;
-    else if (normalize(item.sublabel ?? '').includes(q) || normalize(item.group).includes(q)) value = 20;
-    if (value > 0 && !item.label.includes('›')) value += 10;
-    return value;
-  }
+  const habitBonus = $derived.by(() => {
+    const bonus = new Map<string, number>();
+    navigationStore.recentItems.forEach((page, index) => bonus.set(page.href, 6 - index));
+    for (const page of navigationStore.favoriteItems) bonus.set(page.href, (bonus.get(page.href) ?? 0) + 5);
+    return bonus;
+  });
 
   /**
    * Sans saisie, la palette listait toutes les pages et tous leurs onglets,
@@ -236,44 +231,16 @@
     return groups;
   });
 
-  /** Distance d'edition entre deux mots courts (insertion, suppression, substitution). */
-  function editDistance(a: string, b: string): number {
-    const row = Array.from({ length: b.length + 1 }, (_, i) => i);
-    for (let i = 1; i <= a.length; i++) {
-      let previous = row[0];
-      row[0] = i;
-      for (let j = 1; j <= b.length; j++) {
-        const current = row[j];
-        row[j] = Math.min(row[j] + 1, row[j - 1] + 1, previous + (a[i - 1] === b[j - 1] ? 0 : 1));
-        previous = current;
-      }
-    }
-    return row[b.length];
-  }
-
-  /**
-   * Seconde chance quand la recherche exacte ne trouve rien : « sactions » ou
-   * « anti raid » doivent mener a Sanctions et a Anti-raid. On compare la saisie
-   * au debut de chaque mot, avec une faute toleree (deux au-dela de 6 lettres).
-   */
-  function fuzzyScore(item: PaletteItem, q: string): number {
-    if (q.length < 3) return 0;
-    const tolerance = q.length >= 6 ? 2 : 1;
-    const compact = q.replace(/[\s-]+/g, '');
-    const words = normalize(item.label).split(/[\s›>/'-]+/).filter(Boolean);
-    const joined = words.join('');
-    const candidates = [...words.map((word) => word.slice(0, q.length)), joined.slice(0, compact.length)];
-    const best = Math.min(...candidates.map((word) => editDistance(compact, word.replace(/[\s-]+/g, ''))));
-    return best <= tolerance ? 10 - best : 0;
-  }
-
   /** Resultats classes pour la saisie : exacts d'abord, sinon avec une faute toleree. */
   const ranked = $derived.by(() => {
     const q = normalize(query);
     if (!q) return [];
 
     const exact = allPaletteItems
-      .map((item) => ({ item, value: score(item, q) }))
+      .map((item) => {
+        const value = score(item, q);
+        return { item, value: value > 0 ? value + (habitBonus.get(item.href ?? '') ?? 0) : 0 };
+      })
       .filter((entry) => entry.value > 0)
       .sort((x, y) => y.value - x.value);
 
