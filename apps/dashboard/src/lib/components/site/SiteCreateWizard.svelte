@@ -15,13 +15,14 @@
   let { siteState, guildId, onCreated }: { siteState: SiteState; guildId: string; onCreated: () => void } = $props();
 
   // Même correspondance que les modèles du bot (siteTemplates.ts).
-  const THEMES: Record<SiteTemplate, string> = { general: 'azur', gaming: 'carbone', rp: 'royaume', esport: 'braise', etude: 'documentation' };
+  const THEMES: Record<SiteTemplate, string> = { general: 'azur', gaming: 'carbone', rp: 'royaume', esport: 'braise', etude: 'documentation', dev: 'carbone' };
   const TEMPLATES: Array<{ key: SiteTemplate; label: () => string; desc: () => string; icon: SiteIconName }> = [
     { key: 'general', label: () => m.ste_tpl_general(), desc: () => m.ste_tpl_general_desc(), icon: 'message-circle' },
     { key: 'gaming', label: () => m.ste_tpl_gaming(), desc: () => m.ste_tpl_gaming_desc(), icon: 'gamepad' },
     { key: 'rp', label: () => m.ste_tpl_rp(), desc: () => m.ste_tpl_rp_desc(), icon: 'castle' },
     { key: 'esport', label: () => m.ste_tpl_esport(), desc: () => m.ste_tpl_esport_desc(), icon: 'trophy' },
     { key: 'etude', label: () => m.ste_tpl_etude(), desc: () => m.ste_tpl_etude_desc(), icon: 'graduation' },
+    { key: 'dev', label: () => m.ste_tpl_dev(), desc: () => m.ste_tpl_dev_desc(), icon: 'code' },
   ];
 
   let slug = $state(untrack(() => siteState.suggestedSlug) ?? '');
