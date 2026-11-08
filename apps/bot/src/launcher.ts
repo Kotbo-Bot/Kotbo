@@ -176,8 +176,11 @@ type ShardingConfig = {
   shardCount?: number;
 };
 
-console.log("TOKEN DANS LE SHARD :", process.env.DISCORD_TOKEN ? "OK" : "MANQUANT");
-console.log("DATABASE_URL DANS LE SHARD :", process.env.DATABASE_URL ? "OK" : "MANQUANT");
+// SHARD_COUNT ne concerne que le ShardingManager : discord.js le relit dans
+// process.env à chaque `new Client`, et les custom bots créés ici plantaient
+// (« shardCount must be >= 1 ») quand il valait "" ou "auto".
+const ENV_SHARD_COUNT = process.env.SHARD_COUNT ? Number(process.env.SHARD_COUNT) : undefined;
+delete process.env.SHARD_COUNT;
 
 const SHARDING_CONFIG_KEY = 'SHARDING_CONFIG';
 
@@ -280,7 +283,7 @@ async function spawnInstance(instance: ResolvedInstance, workerPath: string): Pr
   const shardingConfig = await loadShardingConfig();
   const label = instance.isDefault ? 'default' : instance.slug;
 
-  const envShardCount = process.env.SHARD_COUNT ? Number(process.env.SHARD_COUNT) : undefined;
+  const envShardCount = ENV_SHARD_COUNT;
   let totalShards: number | 'auto' = shardingConfig.mode === 'fixed' && shardingConfig.shardCount
     ? shardingConfig.shardCount
     : 'auto';
