@@ -374,7 +374,6 @@
   "clan_confirm_delete": "Are you sure you want to delete the clan \"{name}\"?",
   "clan_err_delete": "Deletion error",
   "clan_success_deleted": "Clan deleted.",
-  "clan_err_wrong_confirm_word": "Please enter the correct confirmation word.",
   "clan_success_clear_started": "Clan role reset started.",
   "clan_success_season_started": "New clan season started!",
   "clan_success_distribute_started": "Random distribution started in the background.",

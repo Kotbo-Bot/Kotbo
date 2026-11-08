@@ -35,6 +35,7 @@ export type ZonedBucket = {
 export class BucketZoner {
   readonly timezone: string;
   private readonly formatter: Intl.DateTimeFormat;
+  private readonly wallClock: Intl.DateTimeFormat;
 
   constructor(timezone: string) {
     this.timezone = normalizeTimezone(timezone);
@@ -47,6 +48,16 @@ export class BucketZoner {
       month: '2-digit',
       day: '2-digit',
       hour: '2-digit',
+    });
+    this.wallClock = new Intl.DateTimeFormat('en-CA', {
+      timeZone: this.timezone,
+      hourCycle: 'h23',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
     });
   }
 
@@ -71,6 +82,24 @@ export class BucketZoner {
     // creneau tel quel, comme avant l'introduction du fuseau.
     if (Number.isNaN(ts)) return { dateKey, hour, weekday: weekdayOf(dateKey) };
     return this.fromDate(new Date(ts));
+  }
+
+  /**
+   * Instant du minuit local d'une cle jour. Le decalage est relu a l'instant
+   * trouve : le jour d'un changement d'heure, minuit n'a pas le decalage de midi.
+   */
+  startOf(dateKey: string): Date {
+    const utcMidnight = Date.parse(`${dateKey}T00:00:00Z`);
+    const guess = utcMidnight - this.offsetAt(utcMidnight);
+    return new Date(utcMidnight - this.offsetAt(guess));
+  }
+
+  /** Avance de l'heure murale sur UTC, en ms, a l'instant `ts`. */
+  private offsetAt(ts: number): number {
+    const parts = this.wallClock.formatToParts(new Date(ts));
+    const read = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find((part) => part.type === type)?.value ?? 0);
+    const wall = Date.UTC(read('year'), read('month') - 1, read('day'), read('hour') % 24, read('minute'), read('second'));
+    return wall - Math.floor(ts / 1000) * 1000;
   }
 }
 

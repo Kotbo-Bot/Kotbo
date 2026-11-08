@@ -1,13 +1,17 @@
-import { describe, expect, mock, test } from 'bun:test';
+import { afterEach, describe, expect, mock, test } from 'bun:test';
 import path from 'node:path';
 
 const NOW = Date.now();
 const ago = (minutes: number) => new Date(NOW - minutes * 60_000);
 
+// Tickets imposés par un test ; null = le jeu de données relatif à NOW.
+let fixedTickets: Record<string, unknown>[] | null = null;
+
 const mockDb = {
   guild: { findUnique: async () => ({ ticketSlaFirstResponseMinutes: 60, ticketSlaResolutionHours: null }) },
   ticket: {
     findMany: async ({ where }: { where: Record<string, unknown> }) => {
+      if (fixedTickets) return 'createdAt' in where ? fixedTickets : [];
       if ('closedAt' in where) return [{ createdAt: ago(300), closedAt: ago(100) }];
       if ('createdAt' in where) {
         return [
@@ -58,5 +62,41 @@ describe('performance du support', () => {
     expect(stats.daily.current.created.reduce((a, b) => a + b, 0)).toBe(2);
     // La note d'il y a 40 jours tombe dans la période d'avant.
     expect(stats.previous.satisfaction).toBe(1);
+  });
+});
+
+describe('fenêtre calendaire', () => {
+  afterEach(() => {
+    fixedTickets = null;
+  });
+
+  // Le 8/11 à 11h à Paris : la période de 30 jours traverse le passage à
+  // l'heure d'hiver du 25/10.
+  const now = new Date('2026-11-08T10:00:00.000Z');
+  const ticket = (createdAt: string) => ({
+    status: 'OPEN', createdAt: new Date(createdAt), firstResponseAt: null, firstResponderId: null, closedAt: null,
+    claimedById: null, claimedByName: null, ticketTypeLabel: null, tags: [], lastMemberMessageAt: null, lastStaffMessageAt: null,
+  });
+
+  test('30 jours distincts malgré le changement d heure', async () => {
+    fixedTickets = [];
+    const stats = await getTicketStats('g', 30, 'Europe/Paris', now);
+    expect(stats.daily.dates).toHaveLength(30);
+    expect(new Set(stats.daily.dates).size).toBe(30);
+    expect(stats.daily.dates[0]).toBe('2026-10-10');
+    expect(stats.daily.dates.at(-1)).toBe('2026-11-08');
+    expect(stats.window.from).toBe('2026-10-09T22:00:00.000Z');
+  });
+
+  test('chaque ticket compté dans le total tombe dans une case du graphique', async () => {
+    // Le 9/10 à 22h à Paris : dans les 30 × 24 h glissantes, mais la veille
+    // du premier jour affiché. Il appartient à la période d'avant.
+    fixedTickets = [ticket('2026-10-09T20:00:00.000Z'), ticket('2026-10-10T08:00:00.000Z')];
+    const stats = await getTicketStats('g', 30, 'Europe/Paris', now);
+    const plotted = stats.volume.byDay.reduce((sum, day) => sum + day.created, 0);
+    expect(stats.volume.created).toBe(1);
+    expect(plotted).toBe(stats.volume.created);
+    expect(stats.previous.created).toBe(1);
+    expect(stats.daily.previous.created.reduce((a, b) => a + b, 0)).toBe(1);
   });
 });

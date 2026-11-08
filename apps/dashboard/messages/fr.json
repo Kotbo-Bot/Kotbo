@@ -374,7 +374,6 @@
   "clan_confirm_delete": "Supprimer le clan « {name} » ?",
   "clan_err_delete": "Impossible de supprimer. Réessaie.",
   "clan_success_deleted": "Clan supprimé.",
-  "clan_err_wrong_confirm_word": "Saisis le mot de confirmation exact.",
   "clan_success_clear_started": "Remise à zéro des rôles de clan lancée.",
   "clan_success_season_started": "Nouvelle saison de clans démarrée.",
   "clan_success_distribute_started": "Distribution aléatoire lancée en arrière-plan.",

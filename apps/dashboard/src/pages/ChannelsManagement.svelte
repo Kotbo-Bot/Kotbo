@@ -576,12 +576,21 @@
     }
   }
 
+  let renamingChannelId = $state<string | null>(null);
+  let renameDraft = $state('');
+
+  function startRename(ch: ChannelRow) {
+    renamingChannelId = ch.id;
+    renameDraft = ch.name;
+  }
+
   async function renameChannel(ch: ChannelRow) {
-    const name = window.prompt(m.cm_bc_rename_prompt({ name: ch.name }), ch.name);
-    if (!name || name.trim() === ch.name) return;
+    const name = renameDraft.trim();
+    renamingChannelId = null;
+    if (!name || name === ch.name) return;
 
     try {
-      await renameDiscordChannel(ch.id, name.trim());
+      await renameDiscordChannel(ch.id, name);
       toast.success(m.cm_channel_renamed());
       await loadByChannel();
     } catch (err) {
@@ -1245,6 +1254,33 @@
                         </p>
                       {/if}
 
+                      {#if renamingChannelId === ch.id}
+                        <form
+                          class="flex flex-wrap items-center gap-2 pt-1 border-t border-outline-variant/10"
+                          onsubmit={(e) => { e.preventDefault(); renameChannel(ch); }}
+                        >
+                          <!-- svelte-ignore a11y_autofocus -->
+                          <input
+                            type="text"
+                            bind:value={renameDraft}
+                            aria-label={m.cm_bc_rename_prompt({ name: ch.name })}
+                            maxlength="100"
+                            autofocus
+                            onkeydown={(e) => { if (e.key === 'Escape') renamingChannelId = null; }}
+                            class="flex-1 min-w-40 bg-surface-container-high/40 border border-outline-variant/20 rounded-lg px-3 py-1.5 text-xs text-on-surface outline-none focus:ring-1 focus:ring-primary/50"
+                          />
+                          <button type="submit" class="px-3 py-1.5 bg-primary text-white text-xs font-medium rounded-lg">
+                            {m.cm_validate()}
+                          </button>
+                          <button
+                            type="button"
+                            onclick={() => (renamingChannelId = null)}
+                            class="px-3 py-1.5 bg-surface-container text-on-surface text-xs font-medium rounded-lg border border-outline-variant/40"
+                          >
+                            {m.common_cancel()}
+                          </button>
+                        </form>
+                      {:else}
                       <div class="flex flex-wrap gap-2 pt-1 border-t border-outline-variant/10">
                         <button
                           type="button"
@@ -1253,7 +1289,7 @@
                           hover:border-outline-variant disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                           disabled={!ch.manageable}
                           title={ch.manageable ? '' : m.cm_bc_cannot_edit()}
-                          onclick={() => renameChannel(ch)}
+                          onclick={() => startRename(ch)}
                         >
                           <Papicon icon="pencil" size={13} />
                           {m.cm_rename_title()}
@@ -1271,6 +1307,7 @@
                           {m.common_delete()}
                         </button>
                       </div>
+                      {/if}
                     </div>
                   {/if}
                 </div>
