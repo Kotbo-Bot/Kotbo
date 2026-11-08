@@ -7,6 +7,7 @@ import { randomBytes } from 'node:crypto';
 import type { ChannelLinkGroup, ChannelLinkGroupMember, ChannelLinkInvite } from '@prisma/client';
 import { isGuildActivated } from '../../utils/activation.js';
 import { refreshLinkGuestGuilds } from './channelLinkGuestService.js';
+import { recordLinkTraffic } from './channelLinkStatsService.js';
 import { INVITE_SOURCE, recordBotInvite } from '../analytics/inviteService.js';
 
 const TAG = 'ChannelLink';
@@ -1152,6 +1153,7 @@ export async function relayMessage(message: Message, client: Client): Promise<vo
         ? await messageLocations(group.id, repliedTo.messageId, repliedTo.channelId)
         : null;
       const refMsg = repliedTo ? await message.fetchReference().catch(() => null) : null;
+      let delivered = 0;
 
       for (const target of resolved.targets) {
         try {
@@ -1218,6 +1220,8 @@ export async function relayMessage(message: Message, client: Client): Promise<vo
             });
 
             warnOnStrippedEmojis(client, target, fullContent, sent.content);
+            delivered += 1;
+            void recordLinkTraffic(group, target.guildId, target.channelId, 'received');
             await saveMessageMapping(group, message.id, message.channel.id, target, sent.id, activeWebhookId);
             webhookClient.destroy();
           } else {
@@ -1281,12 +1285,16 @@ export async function relayMessage(message: Message, client: Client): Promise<vo
               files: files.slice(0, DISCORD_MAX_ATTACHMENTS),
               allowedMentions: { parse: [] },
             });
+            delivered += 1;
+            void recordLinkTraffic(group, target.guildId, target.channelId, 'received');
             await saveMessageMapping(group, message.id, message.channel.id, target, sent.id);
           }
         } catch (err) {
+          void recordLinkTraffic(group, target.guildId, target.channelId, 'failed');
           logger.error(TAG, `Erreur relay message ${message.id} vers ${target.guildId}/${target.channelId}`, err);
         }
       }
+      if (delivered > 0) void recordLinkTraffic(group, message.guild.id, message.channel.id, 'sent');
     } catch (err) {
       logger.error(TAG, `Erreur relay message ${message.id} sur le pont ${group.id}`, err);
     }

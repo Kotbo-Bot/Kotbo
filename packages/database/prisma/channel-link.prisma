@@ -206,6 +206,7 @@ model ChannelLinkGroup {
   invites  ChannelLinkInvite[]      @relation("ChannelLinkGroupInvites")
   messages ChannelLinkGroupMessage[]
   threads  ChannelLinkGroupThread[]
+  stats    ChannelLinkGroupDailyStat[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -295,4 +296,31 @@ model ChannelLinkGroupThread {
   @@index([groupId, sourceThreadId])
   @@index([groupId, relayedThreadId])
   @@map("channel_link_group_threads")
+}
+
+/**
+ * Trafic d'un pont, par jour et par salon : messages partis de ce salon,
+ * copies arrivées dans ce salon, copies perdues en route. Des nombres seuls,
+ * aucun membre : `ChannelLinkGroupMessage` ne peut pas servir à compter, il
+ * reste vide quand le pont ne relaie ni éditions ni suppressions. Salon sans
+ * clé étrangère vers le membre : un salon retiré du pont garde son historique.
+ * Suit `Guild.analyticsEnabled` du serveur propriétaire.
+ */
+model ChannelLinkGroupDailyStat {
+  groupId   String
+  dateKey   String // YYYY-MM-DD
+  guildId   String
+  channelId String
+
+  sent     Int @default(0)
+  received Int @default(0)
+  failed   Int @default(0)
+
+  group ChannelLinkGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@id([groupId, dateKey, guildId, channelId])
+  @@map("channel_link_group_daily_stats")
 }

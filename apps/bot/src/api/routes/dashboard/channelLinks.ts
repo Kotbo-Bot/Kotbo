@@ -23,6 +23,7 @@ import {
   type LinkRelayMode,
 } from '../../../services/features/channelLinkService.js';
 import { isLinkGuestGuild } from '../../../services/features/channelLinkGuestService.js';
+import { getLinkGroupStats } from '../../../services/features/channelLinkStatsService.js';
 import { INVITE_SOURCE, recordBotInvite } from '../../../services/analytics/inviteService.js';
 
 import { jsonFailure } from '../../shared/failure.js';
@@ -109,7 +110,12 @@ export async function handleChannelLinkRoutes(
         orderBy: { createdAt: 'desc' },
       });
 
-      json(res, 200, groups.map((group) => serializeGroup(group, guildId, client)));
+      const stats = await getLinkGroupStats(groups.map((group) => group.id));
+      json(res, 200, groups.map((group) => ({
+        ...serializeGroup(group, guildId, client),
+        // Trafic des 30 derniers jours, `null` tant que le pont n'a rien relayé.
+        stats: stats.get(group.id) ?? null,
+      })));
     } catch (err) {
       logger.error('ChannelLinkAPI', 'Erreur GET channel-links', err);
       jsonFailure(res, err, 'Erreur serveur', 'ChannelLinkAPI');
