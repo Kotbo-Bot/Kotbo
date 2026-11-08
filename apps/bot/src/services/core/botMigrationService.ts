@@ -26,6 +26,7 @@ import {
   type BotSignature,
   type KnownBot,
 } from './botRegistry.js';
+import { isLevelImportSource } from '../progression/levelImportSources.js';
 import { inspectMessages, type InspectionPayload } from './botMessageInspector.js';
 import { createReactionRoleMenu } from '../features/reactionRoleService.js';
 import { createStaffHierarchy, createStaffRole, importRoleMembers } from '../staff/staffManagementService.js';
@@ -296,7 +297,7 @@ export async function scanServerConfig(guild: Guild, bots: DetectedBot[] = []): 
         detail:
           `Ces rôles portent un niveau dans leur nom (${missing.slice(0, 3).map((r) => r.roleName).join(', ')}` +
           `${missing.length > 3 ? '…' : ''}). Kotbo peut les distribuer automatiquement une fois ce niveau atteint ` +
-          "- les niveaux déjà acquis par les membres, eux, ne se transfèrent pas.",
+          "- les niveaux déjà acquis se reprennent ensuite depuis Niveaux → Import (MEE6, DraftBot ou fichier).",
         action: 'Débloquer chaque rôle au niveau que son nom annonce',
         entities: missing.map((reward) => ({ id: reward.roleId, name: reward.roleName })),
       });
@@ -500,7 +501,7 @@ function buildPresetFindings(bots: DetectedBot[]): ScanFinding[] {
         key: `${PRESET_PREFIX}leveling:${levelingProfile.key}`,
         feature: 'leveling',
         title: `Reprendre la progression de ${bot.label}`,
-        detail: `${bot.label} gère les niveaux ici (${evidenceOf('leveling')}). ${levelingProfile.source} Les niveaux déjà acquis, eux, ne se transfèrent pas : seule la façon de progresser est reprise.`,
+        detail: `${bot.label} gère les niveaux ici (${evidenceOf('leveling')}). ${levelingProfile.source} ${isLevelImportSource(known.key) ? `Les niveaux des membres se reprennent ensuite depuis Niveaux → Import, en lisant le classement public de ${bot.label}.` : "Les niveaux déjà acquis, eux, ne se transfèrent pas : seule la façon de progresser est reprise."}`,
         action: `Activer les niveaux Kotbo avec le profil « ${levelingProfile.label} »`,
         entities: [],
       });
@@ -552,7 +553,7 @@ type ManualStep = {
 const MANUAL_STEPS: Record<string, ManualStep> = {
   leveling: {
     label: "Niveaux et XP des membres",
-    why: "L'XP accumulée vit dans la base de l'ancien bot. La plupart proposent un export ; sans lui, les compteurs repartent de zéro.",
+    why: "L'XP accumulée vit dans la base de l'ancien bot. Pour MEE6 et DraftBot, Niveaux → Import la reprend depuis leur classement public ; pour les autres, il faut leur export, sinon les compteurs repartent de zéro.",
   },
   reactionRoles: {
     label: 'Correspondances emoji → rôle',

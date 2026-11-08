@@ -4,6 +4,7 @@ import prisma, { prismaRead } from '../../../utils/db.js';
 import { logger } from '../../../utils/logger.js';
 import { defaultLevelUpMessage, getOrCreateLevelConfig, updateMemberLevelRoles, getXpForLevel, getLevelFromXp, getGuildLevelCurve, invalidateLevelConfigCache, levelCurveFromConfig, resyncGuildLevels, countCurveImpact, invalidateLevelRewardsCache, getRoleResyncStatus, startRoleResync, stopRoleResync } from '../../../services/progression/levelingService.js';
 import { clampXp, normalizeLevelCurve } from '@kotbo/shared';
+import { externalLevelsJob, forgetExternalLevels, isLevelImportSource, type ExternalLevel } from '../../../services/progression/levelImportSources.js';
 import { getOrCreateWelcomeConfig } from '../../../services/features/welcomeGoodbyeService.js';
 import { getMemberIdentities, resolveMemberAvatarUrl, resolveSearchedUserIds } from '../../../services/moderation/memberIdentityService.js';
 import {
@@ -689,7 +690,25 @@ export async function handleGeneralistModulesRoutes(
     // POST /api/dashboard/guilds/:guildId/leveling/import
     if (parts.length === 6 && parts[5] === 'import' && method === 'POST') {
       try {
-        const body = await readJsonBody<Record<string, unknown>>(req);
+        // Avec `source`, le classement est lu chez l'autre bot et le corps ignoré.
+        const sourceParam = url.searchParams.get('source');
+        if (sourceParam !== null && !isLevelImportSource(sourceParam)) {
+          json(res, 400, { error: "Source d'import inconnue." });
+          return true;
+        }
+        let external: ExternalLevel[] | null = null;
+        if (sourceParam) {
+          const job = externalLevelsJob(sourceParam, guildId);
+          if (job.error) throw job.error;
+          if (!job.entries) {
+            // Lecture en cours : le dashboard rappelle jusqu'à ce qu'elle aboutisse.
+            json(res, 202, { pending: true, fetched: job.fetched });
+            return true;
+          }
+          external = job.entries;
+        }
+
+        const body = external ? [] : await readJsonBody<Record<string, unknown>>(req);
         if (!body || !Array.isArray(body)) {
           json(res, 400, { error: "Le corps de la requête doit être un tableau d'utilisateurs." });
           return true;
@@ -701,11 +720,13 @@ export async function handleGeneralistModulesRoutes(
         const dryRun = url.searchParams.get('dry_run') === '1';
 
         const validItems: Array<{
+          userId?: string;
           username?: string;
           displayName?: string;
           level?: number;
           xp?: number;
-        }> = [];
+          progress?: number;
+        }> = external?.map((e) => ({ userId: e.userId, level: e.level, progress: e.progress })) ?? [];
 
         const failedMembers: Array<{
           username?: string;
@@ -790,11 +811,21 @@ export async function handleGeneralistModulesRoutes(
 
         const importedSuccessfully: Array<{ userId: string; level: number; xp: number }> = [];
         const importCurve = await getGuildLevelCurve(guildId);
+        // Un classement tiers garde les anciens membres : seuls ceux encore là
+        // sont repris, et comptés à part plutôt que listés un par un en échec.
+        let leftCount = 0;
 
         for (const item of validItems) {
           let userId: string | undefined;
 
-          if (item.username) {
+          if (item.userId) {
+            if (discordMembers.size > 0 && !discordMembers.has(item.userId)) {
+              leftCount++;
+              continue;
+            }
+            userId = item.userId;
+          }
+          if (!userId && item.username) {
             userId = identityMap.get(normalize(item.username));
           }
           if (!userId && item.displayName) {
@@ -813,9 +844,12 @@ export async function handleGeneralistModulesRoutes(
           let xp = item.xp;
           let level = item.level;
 
-          // Si seul le niveau est fourni, on déduit l'XP minimale de ce niveau.
+          // Si seul le niveau est fourni, on déduit l'XP de ce niveau sur la
+          // courbe du serveur, plus l'avancement dans le palier s'il est connu.
           if (xp === undefined && level !== undefined) {
-            xp = getXpForLevel(Math.max(0, level) - 1, importCurve);
+            const floor = getXpForLevel(Math.max(0, level) - 1, importCurve);
+            const next = getXpForLevel(Math.max(0, level), importCurve);
+            xp = floor + Math.floor((item.progress ?? 0) * Math.max(0, next - floor - 1));
           }
 
           // L'XP est la source de vérité : on la ramène dans les bornes stockables
@@ -875,6 +909,7 @@ export async function handleGeneralistModulesRoutes(
           importedCount: importedSuccessfully.length,
           failedCount: failedMembers.length,
           failedMembers,
+          leftCount,
           createdCount,
           levelChangeCount,
           xpLoweredCount,
@@ -903,6 +938,8 @@ export async function handleGeneralistModulesRoutes(
           });
         }
 
+        if (sourceParam) forgetExternalLevels(sourceParam, guildId);
+
         if (importedSuccessfully.length > 0) {
           (async () => {
             for (const record of importedSuccessfully) {
@@ -920,7 +957,7 @@ export async function handleGeneralistModulesRoutes(
           context: getGuildName(client, guildId),
           module: 'Leveling',
           eventType: 'Manuel',
-          details: `Importation réussie de ${importedSuccessfully.length} membres (échec: ${failedMembers.length})`,
+          details: `Importation réussie de ${importedSuccessfully.length} membres (échec: ${failedMembers.length})${sourceParam ? ` depuis ${sourceParam}` : ''}`,
           channelId: null
         });
 
