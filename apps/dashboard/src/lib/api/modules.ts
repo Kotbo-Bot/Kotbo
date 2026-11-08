@@ -62,11 +62,28 @@ export async function deleteLevelingReward(rewardId: string, guildId = authStore
 
 export async function importLevelingData(
   data: unknown[],
-  options: { dryRun?: boolean } = {},
+  options: { dryRun?: boolean; source?: 'mee6' | 'draftbot'; onProgress?: (fetched: number) => void } = {},
   guildId = authStore.selectedGuildId,
 ) {
-  const path = options.dryRun ? '/leveling/import?dry_run=1' : '/leveling/import';
-  return dashboardRequest(path, { method: 'POST', successMessage: m.api_ok_import_leveling_data(), payload: data, guildId, silent: options.dryRun, errorContext: 'API Error (Import Leveling):' });
+  const params = new URLSearchParams();
+  if (options.dryRun) params.set('dry_run', '1');
+  if (options.source) params.set('source', options.source);
+  const path = params.size ? `/leveling/import?${params}` : '/leveling/import';
+  // Une source est lue chez l'autre bot en tâche de fond : le serveur répond
+  // `pending` tant que la lecture dure, on rappelle jusqu'au rapport.
+  for (;;) {
+    const res = await dashboardRequest(path, {
+      method: 'POST',
+      successMessage: m.api_ok_import_leveling_data(),
+      payload: data,
+      guildId,
+      silent: options.dryRun || !!options.source,
+      errorContext: 'API Error (Import Leveling):',
+    });
+    if (!res?.pending) return res;
+    options.onProgress?.(res.fetched ?? 0);
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+  }
 }
 
 

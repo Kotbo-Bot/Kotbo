@@ -938,6 +938,9 @@
   const maxLevel = $derived(leaderboardStats?.maxLevel ?? 0);
 
   // Import states
+  // `file` : JSON collé ou déposé ; sinon le classement public de l'autre bot.
+  let importSource = $state<'file' | 'mee6' | 'draftbot'>('file');
+  let importFetched = $state<number | null>(null);
   let importRawJson = $state('');
   let importFileError = $state<string | null>(null);
   const importActionState = createAsyncActionState();
@@ -946,6 +949,7 @@
     importedCount: number;
     failedCount: number;
     failedMembers: Array<{ username?: string; display_name?: string; reason: string }>;
+    leftCount?: number;
     createdCount?: number;
     levelChangeCount?: number;
     xpLoweredCount?: number;
@@ -956,26 +960,32 @@
   async function handleImportSubmit(dryRun = false) {
     importFileError = null;
     importResults = null;
-    if (!importRawJson.trim()) {
-      importFileError = m.lv_import_err_empty();
-      return;
-    }
-
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(importRawJson);
-    } catch (err) {
-      importFileError = m.lv_import_err_json({ message: (err as Error).message });
-      return;
-    }
-
-    if (!Array.isArray(parsed)) {
-      importFileError = m.lv_import_err_not_array();
-      return;
+    const source = importSource === 'file' ? undefined : importSource;
+    let parsed: unknown = [];
+    if (!source) {
+      if (!importRawJson.trim()) {
+        importFileError = m.lv_import_err_empty();
+        return;
+      }
+      try {
+        parsed = JSON.parse(importRawJson);
+      } catch (err) {
+        importFileError = m.lv_import_err_json({ message: (err as Error).message });
+        return;
+      }
+      if (!Array.isArray(parsed)) {
+        importFileError = m.lv_import_err_not_array();
+        return;
+      }
     }
 
     await importActionState.run(async () => {
-      const res = await importLevelingData(parsed, { dryRun });
+      importFetched = source ? 0 : null;
+      const res = await importLevelingData(parsed as unknown[], {
+        dryRun,
+        source,
+        onProgress: (fetched) => (importFetched = fetched),
+      }).finally(() => (importFetched = null));
       if (!res) throw new Error(m.lv_import_err_failed());
       importResults = res;
       // Rien n'a ete ecrit en mode analyse : le classement affiche est encore
@@ -2603,8 +2613,31 @@
               {m.lv_import_input_title()}
             </h3>
 
+            <FilterPills
+              label={m.lv_import_source_label()}
+              options={[
+                { value: 'file', label: m.lv_import_source_file() },
+                { value: 'mee6', label: 'MEE6' },
+                { value: 'draftbot', label: 'DraftBot' },
+              ]}
+              value={importSource}
+              onchange={(value) => { importSource = value; importFileError = null; importResults = null; }}
+              disabled={importActionState.state.loading}
+            />
+
+            {#if importSource !== 'file'}
+              <div class="space-y-2 text-xs text-on-surface-variant leading-relaxed">
+                <p>{importSource === 'mee6' ? m.lv_import_source_mee6_hint() : m.lv_import_source_draftbot_hint()}</p>
+                <p>{m.lv_import_source_kept_level()}</p>
+                {#if importFetched !== null}
+                  <p class="font-semibold text-on-surface" role="status">
+                    {m.lv_import_source_fetching({ count: importFetched.toLocaleString() })}
+                  </p>
+                {/if}
+              </div>
+            {:else}
             <!-- Glisser-déposer / Sélecteur de fichier -->
-            <div 
+            <div
               role="button"
               tabindex="0"
               class="w-full border-2 border-dashed border-outline-variant/20 rounded-xl p-8 text-center hover:bg-surface-container-high/20 transition-all cursor-pointer flex flex-col items-center justify-center space-y-2 relative {isDragging ? 'border-primary bg-primary/5 scale-[1.01]' : ''}"
@@ -2636,6 +2669,7 @@
                 class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-xs font-mono focus:ring-2 focus:ring-secondary/30 transition-all text-on-surface focus:outline-none resize-y"
               ></textarea>
             </div>
+            {/if}
 
             <!-- Messages d'erreur locaux / globaux -->
             {#if importFileError}
@@ -2659,7 +2693,7 @@
               <button
                 type="button"
                 onclick={() => handleImportSubmit(true)}
-                use:explainDisabled={(!importRawJson.trim()) ? m.common_reason_fill_field() : ''}
+                use:explainDisabled={importActionState.state.loading ? m.lv_import_source_busy() : importSource === 'file' && !importRawJson.trim() ? m.common_reason_fill_field() : ''}
                 class="px-6 py-3.5 bg-surface-container-high/50 text-on-surface-variant font-medium text-body-sm rounded-lg hover:bg-surface-container-high transition-all disabled:opacity-50"
               >
                 {m.lv_import_dry_run()}
@@ -2667,7 +2701,7 @@
               <button
                 type="button"
                 onclick={() => handleImportSubmit(false)}
-                use:explainDisabled={(!importRawJson.trim()) ? m.common_reason_fill_field() : ''}
+                use:explainDisabled={importActionState.state.loading ? m.lv_import_source_busy() : importSource === 'file' && !importRawJson.trim() ? m.common_reason_fill_field() : ''}
                 class="px-8 py-3.5 bg-secondary text-on-secondary font-medium text-body-sm rounded-lg transition-all disabled:opacity-50"
               >
                 {m.lv_run_import()}
@@ -2774,6 +2808,12 @@
 
               {#if importResults.levelChangeCount !== undefined}
                 <dl class="text-2xs text-on-surface-variant space-y-1">
+                  {#if importResults.leftCount}
+                    <div class="flex justify-between gap-4">
+                      <dt>{m.lv_import_stat_left()}</dt>
+                      <dd class="font-semibold text-on-surface">{importResults.leftCount.toLocaleString()}</dd>
+                    </div>
+                  {/if}
                   <div class="flex justify-between gap-4">
                     <dt>{m.lv_import_stat_created()}</dt>
                     <dd class="font-semibold text-on-surface">{importResults.createdCount?.toLocaleString()}</dd>
