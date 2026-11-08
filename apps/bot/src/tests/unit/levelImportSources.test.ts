@@ -3,7 +3,14 @@
  * documentés : ces cas figent ce qu'on en lit, relevé sur leurs réponses.
  */
 import { describe, expect, test } from 'bun:test';
-import { isLevelImportSource, parseDraftbotPage, parseMee6Page } from '../../services/progression/levelImportSources.js';
+import {
+  isLevelImportSource,
+  isValidImportApiKey,
+  parseDraftbotPage,
+  parseLurkrPage,
+  parseMee6Page,
+  parseTatsuPage,
+} from '../../services/progression/levelImportSources.js';
 
 describe('parseMee6Page', () => {
   test('lit niveau et avancement dans le palier', () => {
@@ -50,8 +57,46 @@ describe('parseDraftbotPage', () => {
   });
 });
 
+describe('parseLurkrPage', () => {
+  test('progress en pourcentage, entrées anonymes écartées', () => {
+    const rows = parseLurkrPage({
+      levels: [
+        { userId: '441302111817433088', level: 20, progress: 40, xp: 12000, nextLevelXp: 500, rank: 1 },
+        { userId: 'anonymous:2', level: 18, progress: 10, xp: 9000, nextLevelXp: 400, rank: 2 },
+      ],
+    });
+    expect(rows).toEqual([{ userId: '441302111817433088', level: 20, progress: 0.4 }]);
+  });
+
+  test('un format inattendu lève une erreur lisible', () => {
+    expect(() => parseLurkrPage({ message: 'Guild not found' })).toThrow('Lurkr');
+  });
+});
+
+describe('parseTatsuPage', () => {
+  test('le score devient l\'XP, sans niveau', () => {
+    const rows = parseTatsuPage({
+      guild_id: '173184118492889089',
+      rankings: [
+        { rank: 1, score: 15234.6, user_id: '441302111817433088' },
+        { rank: 2, score: -3, user_id: '441302111817433089' },
+      ],
+    });
+    expect(rows).toEqual([{ userId: '441302111817433088', xp: 15234 }]);
+  });
+});
+
+test('isValidImportApiKey refuse ce qui casserait l\'en-tête', () => {
+  expect(isValidImportApiKey('abcDEF12-3456.7890_xyz')).toBe(true);
+  expect(isValidImportApiKey('court')).toBe(false);
+  expect(isValidImportApiKey('abcdefgh\r\nX-Evil: 1')).toBe(false);
+  expect(isValidImportApiKey(undefined)).toBe(false);
+});
+
 test('isLevelImportSource', () => {
   expect(isLevelImportSource('mee6')).toBe(true);
   expect(isLevelImportSource('draftbot')).toBe(true);
+  expect(isLevelImportSource('lurkr')).toBe(true);
+  expect(isLevelImportSource('tatsu')).toBe(true);
   expect(isLevelImportSource('amari')).toBe(false);
 });

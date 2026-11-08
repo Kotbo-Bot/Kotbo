@@ -690,15 +690,18 @@ export async function handleGeneralistModulesRoutes(
     // POST /api/dashboard/guilds/:guildId/leveling/import
     if (parts.length === 6 && parts[5] === 'import' && method === 'POST') {
       try {
-        // Avec `source`, le classement est lu chez l'autre bot et le corps ignoré.
+        // Avec `source`, le classement est lu chez l'autre bot ; le corps ne
+        // porte au plus que la clef d'API (`{ apiKey }`) de la source.
         const sourceParam = url.searchParams.get('source');
         if (sourceParam !== null && !isLevelImportSource(sourceParam)) {
           json(res, 400, { error: "Source d'import inconnue." });
           return true;
         }
+        const rawBody = await readJsonBody<unknown>(req);
         let external: ExternalLevel[] | null = null;
         if (sourceParam) {
-          const job = externalLevelsJob(sourceParam, guildId);
+          const apiKey = (rawBody as { apiKey?: unknown } | null)?.apiKey;
+          const job = externalLevelsJob(sourceParam, guildId, typeof apiKey === 'string' ? apiKey.trim() : undefined);
           if (job.error) throw job.error;
           if (!job.entries) {
             // Lecture en cours : le dashboard rappelle jusqu'à ce qu'elle aboutisse.
@@ -708,7 +711,7 @@ export async function handleGeneralistModulesRoutes(
           external = job.entries;
         }
 
-        const body = external ? [] : await readJsonBody<Record<string, unknown>>(req);
+        const body = external ? [] : rawBody;
         if (!body || !Array.isArray(body)) {
           json(res, 400, { error: "Le corps de la requête doit être un tableau d'utilisateurs." });
           return true;
@@ -726,7 +729,7 @@ export async function handleGeneralistModulesRoutes(
           level?: number;
           xp?: number;
           progress?: number;
-        }> = external?.map((e) => ({ userId: e.userId, level: e.level, progress: e.progress })) ?? [];
+        }> = external?.map((e) => ({ userId: e.userId, level: e.level, progress: e.progress, xp: e.xp })) ?? [];
 
         const failedMembers: Array<{
           username?: string;
