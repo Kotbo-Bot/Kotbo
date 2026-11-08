@@ -294,6 +294,13 @@
     return mode === 'WEBHOOK' ? m.channel_links_mode_webhook() : m.channel_links_mode_embed();
   }
 
+  // Courbe des messages envoyés, jour par jour, dans un repère 60×16.
+  function sparkPoints(daily: number[]) {
+    const max = Math.max(1, ...daily);
+    const step = 60 / Math.max(1, daily.length - 1);
+    return daily.map((v, i) => `${(i * step).toFixed(1)},${(15 - (v / max) * 14).toFixed(1)}`).join(' ');
+  }
+
   function groupTitle(group: any) {
     return group.name || m.channel_links_group_default_name({ count: group.members.length });
   }
@@ -386,6 +393,7 @@
                   <div class="flex flex-col gap-1.5 mb-3">
                     {#each group.members as member}
                       {@const warnings = memberWarnings(member)}
+                      {@const traffic = group.stats?.channels[`${member.guildId}:${member.channelId}`]}
                       <div class="flex items-center gap-2 min-w-0">
                         {#if member.guildIcon}
                           <img src={member.guildIcon} alt="" class="w-5 h-5 rounded shrink-0" />
@@ -399,6 +407,12 @@
                         </span>
                         <span class="text-xs font-medium text-on-surface">#{member.channelName}</span>
                         <span class="text-xs text-on-surface-variant/40" title={modeLabel(member.mode)}>{modeArrow(member.mode)}</span>
+                        {#if traffic}
+                          <span
+                            class="text-2xs tabular-nums text-on-surface-variant"
+                            title={m.channel_links_stats_member_tooltip(traffic)}
+                          >↑{traffic.sent} ↓{traffic.received}</span>
+                        {/if}
                         {#if !member.enabled}
                           <span class="text-2xs px-1.5 py-0.5 rounded-full bg-surface-container text-on-surface-variant">
                             {m.channel_links_member_paused()}
@@ -422,6 +436,20 @@
                         {/if}
                       </div>
                     {/each}
+                  </div>
+
+                  <div class="flex items-center gap-3 mb-3 text-xs text-on-surface-variant">
+                    {#if group.stats}
+                      <svg viewBox="0 0 60 16" class="w-16 h-4 shrink-0 text-primary" aria-hidden="true">
+                        <polyline points={sparkPoints(group.stats.daily)} fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" />
+                      </svg>
+                      <span>{m.channel_links_stats_summary(group.stats)}</span>
+                      {#if group.stats.failed > 0}
+                        <span class="text-warning">{m.channel_links_stats_failed({ count: group.stats.failed })}</span>
+                      {/if}
+                    {:else}
+                      <span>{m.channel_links_stats_empty()}</span>
+                    {/if}
                   </div>
 
                   <div class="flex flex-wrap gap-1.5">
