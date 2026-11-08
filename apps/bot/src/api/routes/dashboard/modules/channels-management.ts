@@ -11,7 +11,7 @@ import { ChannelType, PermissionFlagsBits, type Guild, type VoiceChannel } from 
 import { sendLogEmbed } from '../../../../utils/logDispatch.js';
 import { construireEmbedReglagesVocaux } from '../../../../utils/tempVoiceReglagesLog.js';
 import { resolveGuildLocale } from '../../../../utils/i18n.js';
-import { honeypotChannelName, provisionHoneypotChannel } from '../../../../services/moderation/honeypotProvisioning.js';
+import { honeypotChannelName, provisionHoneypotChannel, refreshHoneypotNotice } from '../../../../services/moderation/honeypotProvisioning.js';
 import {
   CHANNEL_PATCHES,
   MAX_ADDITIONAL_GENERATORS,
@@ -823,6 +823,7 @@ const CLES_NON_VOCALES = [
   'honeypotReinvite',
   'honeypotGraceSeconds',
   'honeypotDurationMin',
+  'honeypotShowCount',
   'wordStatsEnabled',
 ] as const;
 
@@ -1685,6 +1686,8 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
               honeypotReinvite: true,
               honeypotGraceSeconds: true,
               honeypotDurationMin: true,
+              honeypotShowCount: true,
+              honeypotCatchCount: true,
               wordStatsEnabled: true,
             },
           }),
@@ -1726,6 +1729,8 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
           honeypotReinvite: guild.honeypotReinvite,
           honeypotGraceSeconds: guild.honeypotGraceSeconds,
           honeypotDurationMin: guild.honeypotDurationMin,
+          honeypotShowCount: guild.honeypotShowCount,
+          honeypotCatchCount: guild.honeypotCatchCount,
           wordStatsEnabled: guild.wordStatsEnabled,
           // Toujours les défauts du schéma quand la ligne n'existe pas encore :
           // le formulaire d'accès du dashboard n'a pas à savoir ce que « jamais
@@ -1766,6 +1771,7 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
           honeypotReinvite?: boolean;
           honeypotGraceSeconds?: number;
           honeypotDurationMin?: number | null;
+          honeypotShowCount?: boolean;
           wordStatsEnabled?: boolean;
         }>(req);
 
@@ -1918,6 +1924,9 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
         if (Object.prototype.hasOwnProperty.call(body, 'honeypotDurationMin')) {
           const minutes = body.honeypotDurationMin === null ? null : Math.floor(Number(body.honeypotDurationMin));
           data.honeypotDurationMin = minutes && minutes >= 1 ? Math.min(minutes, 365 * 24 * 60) : null;
+        }
+        if (Object.prototype.hasOwnProperty.call(body, 'honeypotShowCount')) {
+          data.honeypotShowCount = !!body.honeypotShowCount;
         }
         if (Object.prototype.hasOwnProperty.call(body, 'wordStatsEnabled')) {
           data.wordStatsEnabled = !!body.wordStatsEnabled;
@@ -2335,8 +2344,15 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
           });
         }
 
+        // L'avertissement du salon piège redit la sanction et le compteur à jour.
+        if (discordGuild && data.honeypotEnabled !== false && Object.keys(data).some((key) => key.startsWith('honeypot'))) {
+          await refreshHoneypotNotice(discordGuild, { createIfMissing: true }).catch((err) =>
+            logger.error('ChannelsManagementAPI', `Avertissement du salon piège non mis à jour (${guildId}) :`, err)
+          );
+        }
+
         if (body.statsEnabled) {
-          updateGuildStats(client, guildId).catch((err) => 
+          updateGuildStats(client, guildId).catch((err) =>
             logger.error('ChannelsManagementAPI', `Erreur lors de la mise à jour des stats pour la guilde ${guildId} :`, err)
           );
         }
