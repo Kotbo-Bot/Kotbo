@@ -49,6 +49,7 @@
     addLevelingReward,
     deleteLevelingReward,
     importLevelingData,
+    extractLevelingLeaderboard,
     fetchClansData,
     updateClanSettings
   } from '../lib/api';
@@ -939,7 +940,52 @@
 
   // Import states
   // `file` : JSON collé ou déposé ; sinon le classement public de l'autre bot.
-  let importSource = $state<'file' | 'mee6' | 'draftbot' | 'lurkr' | 'tatsu'>('file');
+  // `ai` : captures ou texte lus par l'IA, versés ensuite dans la zone JSON.
+  let importSource = $state<'file' | 'ai' | 'mee6' | 'draftbot' | 'lurkr' | 'tatsu'>('file');
+  let aiImages = $state<File[]>([]);
+  let aiText = $state('');
+  const aiActionState = createAsyncActionState();
+  const AI_MAX_IMAGES = 8;
+  const AI_MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+
+  function handleAiImages(e: Event) {
+    importFileError = null;
+    const files = Array.from((e.target as HTMLInputElement).files ?? []);
+    if (files.length > AI_MAX_IMAGES) {
+      importFileError = m.lv_import_ai_too_many({ max: AI_MAX_IMAGES });
+      return;
+    }
+    if (files.some((file) => file.size > AI_MAX_IMAGE_BYTES)) {
+      importFileError = m.lv_import_ai_too_big();
+      return;
+    }
+    aiImages = files;
+  }
+
+  function toBase64(file: File): Promise<{ mediaType: string; data: string }> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve({ mediaType: file.type, data: String(reader.result).split(',')[1] ?? '' });
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function handleAiExtract() {
+    importFileError = null;
+    importResults = null;
+    await aiActionState.run(async () => {
+      const images = await Promise.all(aiImages.map(toBase64));
+      const res = await extractLevelingLeaderboard({ text: aiText.trim() || undefined, images });
+      const rows = res?.rows ?? [];
+      if (rows.length === 0) throw new Error(m.lv_import_ai_empty());
+      // Le résultat passe par la zone JSON : l'admin le relit et lance l'analyse
+      // comme pour un fichier, rien n'est écrit avant.
+      importRawJson = JSON.stringify(rows, null, 2);
+      importSource = 'file';
+      return true;
+    }, { successMessage: m.lv_import_ai_done() });
+  }
   let importFetched = $state<number | null>(null);
   // Jamais conservée : envoyée le temps de la lecture, puis oubliée avec la page.
   let importApiKey = $state('');
@@ -968,7 +1014,7 @@
   async function handleImportSubmit(dryRun = false) {
     importFileError = null;
     importResults = null;
-    const source = importSource === 'file' ? undefined : importSource;
+    const source = importSource === 'file' || importSource === 'ai' ? undefined : importSource;
     let parsed: unknown = [];
     if (!source) {
       if (!importRawJson.trim()) {
@@ -2626,6 +2672,7 @@
               label={m.lv_import_source_label()}
               options={[
                 { value: 'file', label: m.lv_import_source_file() },
+                { value: 'ai', label: m.lv_import_source_ai() },
                 { value: 'mee6', label: 'MEE6' },
                 { value: 'draftbot', label: 'DraftBot' },
                 { value: 'lurkr', label: 'Lurkr' },
@@ -2633,10 +2680,44 @@
               ]}
               value={importSource}
               onchange={(value) => { importSource = value; importFileError = null; importResults = null; }}
-              disabled={importActionState.state.loading}
+              disabled={importActionState.state.loading || aiActionState.state.loading}
             />
 
-            {#if importSource !== 'file'}
+            {#if importSource === 'ai'}
+              <div class="space-y-3 text-xs text-on-surface-variant leading-relaxed">
+                <p>{m.lv_import_ai_hint()}</p>
+                <label for="aiImages" class="block font-semibold">{m.lv_import_ai_images({ max: AI_MAX_IMAGES })}</label>
+                <input
+                  id="aiImages"
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/gif"
+                  multiple
+                  onchange={handleAiImages}
+                  class="block w-full text-xs text-on-surface"
+                />
+                {#if aiImages.length > 0}
+                  <p>{m.lv_import_ai_images_count({ count: aiImages.length })}</p>
+                {/if}
+                <label for="aiText" class="block font-semibold">{m.lv_import_ai_text()}</label>
+                <textarea
+                  id="aiText"
+                  rows="6"
+                  bind:value={aiText}
+                  class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-xs font-mono focus:ring-2 focus:ring-secondary/30 text-on-surface focus:outline-none resize-y"
+                ></textarea>
+                <InlineFeedback state={aiActionState} />
+                <div class="flex justify-end">
+                  <button
+                    type="button"
+                    onclick={handleAiExtract}
+                    use:explainDisabled={aiActionState.state.loading ? m.lv_import_source_busy() : aiImages.length === 0 && !aiText.trim() ? m.common_reason_fill_field() : ''}
+                    class="px-8 py-3.5 bg-secondary text-on-secondary font-medium text-body-sm rounded-lg transition-all disabled:opacity-50"
+                  >
+                    {aiActionState.state.loading ? m.lv_import_ai_reading() : m.lv_import_ai_run()}
+                  </button>
+                </div>
+              </div>
+            {:else if importSource !== 'file'}
               <div class="space-y-2 text-xs text-on-surface-variant leading-relaxed">
                 <p>{IMPORT_SOURCE_HINTS[importSource]()}</p>
                 {#if importSource === 'tatsu'}
@@ -2703,7 +2784,7 @@
             <InlineFeedback state={importActionState} />
 
             <!-- Boutons de validation -->
-            <div class="flex justify-end gap-3 pt-2">
+            <div class="flex justify-end gap-3 pt-2" class:hidden={importSource === 'ai'}>
               <button
                 type="button"
                 onclick={() => { importRawJson = ''; importFileError = null; importResults = null; }}

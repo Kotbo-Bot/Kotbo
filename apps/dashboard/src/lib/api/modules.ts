@@ -60,6 +60,25 @@ export async function deleteLevelingReward(rewardId: string, guildId = authStore
   return dashboardMutation(`/leveling/rewards/${rewardId}`, { method: 'DELETE', guildId, errorContext: 'API Error (Delete Leveling Reward):' });
 }
 
+/**
+ * Lecture par IA de captures ou de texte d'un classement tiers (offre Plus).
+ * Ne fait que rendre des lignes au format de l'import : rien n'est écrit.
+ */
+export async function extractLevelingLeaderboard(
+  input: { text?: string; images?: Array<{ mediaType: string; data: string }> },
+  guildId = authStore.selectedGuildId,
+) {
+  return dashboardRequest('/leveling/import/extract', {
+    method: 'POST',
+    payload: input,
+    guildId,
+    silent: true,
+    // Un appel au modèle sur plusieurs captures dépasse le délai par défaut.
+    timeoutMs: 120_000,
+    errorContext: 'API Error (Extract Leveling):',
+  });
+}
+
 export async function importLevelingData(
   data: unknown[],
   options: {
