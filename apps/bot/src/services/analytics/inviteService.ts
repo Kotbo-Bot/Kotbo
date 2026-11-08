@@ -119,7 +119,7 @@ export async function syncGuildInvites(guild: Guild, options: { maxAgeMs?: numbe
     }
 
     lastSyncAt.set(guild.id, Date.now());
-    logger.debug(
+    if (toCreate.length + toUpdate.length > 0) logger.debug(
       'Invites',
       `Synchronisation terminée pour le serveur ${guild.id} (${invites.size} invitations, ${toCreate.length} créées, ${toUpdate.length} mises à jour)`,
     );
