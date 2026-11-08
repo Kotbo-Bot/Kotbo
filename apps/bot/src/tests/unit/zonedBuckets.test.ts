@@ -76,3 +76,20 @@ describe('shiftKey', () => {
     expect(shiftKey('2026-12-31', 1)).toBe('2027-01-01');
   });
 });
+
+describe('BucketZoner.startOf', () => {
+  test('rend l instant du minuit local, ete comme hiver', () => {
+    const paris = new BucketZoner('Europe/Paris');
+    expect(paris.startOf('2026-08-20').toISOString()).toBe('2026-08-19T22:00:00.000Z');
+    expect(paris.startOf('2026-01-15').toISOString()).toBe('2026-01-14T23:00:00.000Z');
+  });
+
+  test('tient les jours de changement d heure et les fuseaux a la demi-heure', () => {
+    // Le 25/10 commence encore a l heure d ete, le 26/10 a l heure d hiver.
+    const paris = new BucketZoner('Europe/Paris');
+    expect(paris.startOf('2026-10-25').toISOString()).toBe('2026-10-24T22:00:00.000Z');
+    expect(paris.startOf('2026-10-26').toISOString()).toBe('2026-10-25T23:00:00.000Z');
+    expect(new BucketZoner('Asia/Kolkata').startOf('2026-08-20').toISOString()).toBe('2026-08-19T18:30:00.000Z');
+    expect(new BucketZoner('America/New_York').startOf('2026-03-08').toISOString()).toBe('2026-03-08T05:00:00.000Z');
+  });
+});
