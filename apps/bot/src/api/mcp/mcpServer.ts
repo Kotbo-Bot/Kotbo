@@ -80,7 +80,7 @@ setInterval(() => {
 // ── Rate limiter (shared, cleaned by dashboardApi.ts) ─────────────────────
 export const mcpRateLimiter = new Map<string, number[]>();
 
-function checkRateLimit(keyId: string): boolean {
+export function checkRateLimit(keyId: string): boolean {
   const now = Date.now();
   const ts = (mcpRateLimiter.get(keyId) ?? []).filter((t) => now - t < 60_000);
   if (ts.length >= 100) return false;
