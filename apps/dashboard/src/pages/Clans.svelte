@@ -2,7 +2,7 @@
   import { isModulePaused } from '@kotbo/contracts';
   import { explainDisabled } from '../lib/actions/explainDisabled';
   import { onMount, onDestroy, untrack } from 'svelte';
-  import { fade, scale } from 'svelte/transition';
+  import { fade } from 'svelte/transition';
   import { dashboardStore } from '../lib/stores/dashboard.svelte';
   import { authStore } from '../lib/stores/auth.svelte';
   import { createAsyncActionState } from '../lib/asyncAction.svelte';
@@ -18,6 +18,7 @@
   import ToggleSwitch from '../lib/components/ToggleSwitch.svelte';
   import Callout from '../lib/components/ui/Callout.svelte';
   import Button from '../lib/components/ui/Button.svelte';
+  import Modal from '../lib/components/Modal.svelte';
   import ClanRebalanceModal from '../lib/components/clans/ClanRebalanceModal.svelte';
   import { m, dateLocale } from '../lib/i18n';
   import { confirmDialog } from '../lib/stores/confirmDialog.svelte';
@@ -2298,100 +2299,70 @@ savedBetSettings = {
     {/if}
 </ModulePage>
 
-<!-- Modal: Créer / Éditer un Clan -->
-{#if showModal}
-  <div class="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" transition:fade={{ duration: 150 }}>
-    <div class="bg-surface-container-low/95 border border-outline-variant/20 max-w-lg w-full rounded-xl p-6 space-y-6 shadow-lg relative" transition:scale={{ start: 0.97, duration: 150 }}>
-      
-      <button
-        onclick={() => showModal = false}
-        class="absolute top-6 right-6 p-2 rounded-full bg-surface-container-high/40 hover:bg-error/15 hover:text-error text-on-surface-variant transition-colors cursor-pointer"
-      >
-        <Papicon icon="Cross" size={18} />
-      </button>
-
-      <div>
-        <h3 class="text-xl font-semibold">{editingClan ? m.clan_modal_edit_title() : m.clan_modal_create_title()}</h3>
-        <p class="text-xs text-on-surface-variant/80">{m.clan_modal_desc()}</p>
-      </div>
-
-      <form onsubmit={(e) => { e.preventDefault(); handleSaveClan(); }} class="space-y-4">
-        <div class="space-y-1.5">
-          <label for="clan-name" class="text-xs font-semibold text-on-surface-variant ml-1">{m.clan_name_label()}</label>
-          <input
-            id="clan-name"
-            type="text"
-            bind:value={formName}
-            placeholder={m.clan_name_placeholder()}
-            class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
-            required
-            disabled={!canManageSettings}
-          />
-        </div>
-
-        <div class="space-y-1.5">
-          <label for="clan-desc" class="text-xs font-semibold text-on-surface-variant ml-1">{m.clan_desc_label()}</label>
-          <textarea
-            id="clan-desc"
-            bind:value={formDescription}
-            placeholder={m.clan_desc_placeholder()}
-            class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none h-20"
-            disabled={!canManageSettings}
-          ></textarea>
-        </div>
-
-        <div class="space-y-1.5">
-          <label for="clan-role" class="text-xs font-semibold text-on-surface-variant ml-1">{m.clan_role_label()}</label>
-          <SearchableSelect
-            id="clan-role"
-            bind:value={formRoleId}
-            options={availableRoles.map(r => ({ id: r.id, name: r.name }))}
-            placeholder={m.clan_role_placeholder()}
-            disabled={!canManageSettings}
-          />
-        </div>
-
-        <div class="space-y-1.5">
-          <label for="clan-channel" class="text-xs font-semibold text-on-surface-variant ml-1">{m.clan_general_channel_label()}</label>
-          <SearchableSelect
-            id="clan-channel"
-            bind:value={formGeneralChannelId}
-            options={[{ id: '', name: m.clan_option_none_disabled() }, ...availableChannels.map(c => ({ id: c.id, name: `#${c.name}` }))]}
-            placeholder={m.clan_general_channel_placeholder()}
-            disabled={!canManageSettings}
-          />
-        </div>
-
-        <div class="space-y-1.5">
-          <label for="clan-leader-role" class="text-xs font-semibold text-on-surface-variant ml-1">{m.clan_leader_role_label()}</label>
-          <SearchableSelect
-            id="clan-leader-role"
-            bind:value={formLeaderRoleId}
-            options={[{ id: '', name: m.clan_option_none_disabled() }, ...availableRoles.map(r => ({ id: r.id, name: `@${r.name}` }))]}
-            placeholder={m.clan_leader_role_placeholder()}
-            disabled={!canManageSettings}
-          />
-        </div>
-
-        <div class="flex justify-end gap-2 pt-2">
-          <button
-            type="button"
-            onclick={() => showModal = false}
-            class="px-4 py-2 border border-outline-variant/30 hover:bg-surface-container-high/60 text-on-surface text-xs font-semibold rounded-lg transition-colors cursor-pointer"
-          >
-            {m.clan_cancel_btn()}
-          </button>
-          <button
-            type="submit"
-            class="px-4 py-2 bg-primary text-on-primary text-xs font-semibold rounded-lg hover:opacity-90 transition-opacity cursor-pointer"
-          >
-            {m.clan_save_btn()}
-          </button>
-        </div>
-      </form>
+<Modal bind:open={showModal} title={editingClan ? m.clan_modal_edit_title() : m.clan_modal_create_title()} subtitle={m.clan_modal_desc()} size="md" closeOnBackdropClick={false}>
+  <form id="clan-form" onsubmit={(e) => { e.preventDefault(); handleSaveClan(); }} class="space-y-4">
+    <div class="space-y-1.5">
+      <label for="clan-name" class="text-xs font-semibold text-on-surface-variant ml-1">{m.clan_name_label()}</label>
+      <input
+        id="clan-name"
+        type="text"
+        bind:value={formName}
+        placeholder={m.clan_name_placeholder()}
+        class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
+        required
+        disabled={!canManageSettings}
+      />
     </div>
-  </div>
-{/if}
+
+    <div class="space-y-1.5">
+      <label for="clan-desc" class="text-xs font-semibold text-on-surface-variant ml-1">{m.clan_desc_label()}</label>
+      <textarea
+        id="clan-desc"
+        bind:value={formDescription}
+        placeholder={m.clan_desc_placeholder()}
+        class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none h-20"
+        disabled={!canManageSettings}
+      ></textarea>
+    </div>
+
+    <div class="space-y-1.5">
+      <label for="clan-role" class="text-xs font-semibold text-on-surface-variant ml-1">{m.clan_role_label()}</label>
+      <SearchableSelect
+        id="clan-role"
+        bind:value={formRoleId}
+        options={availableRoles.map(r => ({ id: r.id, name: r.name }))}
+        placeholder={m.clan_role_placeholder()}
+        disabled={!canManageSettings}
+      />
+    </div>
+
+    <div class="space-y-1.5">
+      <label for="clan-channel" class="text-xs font-semibold text-on-surface-variant ml-1">{m.clan_general_channel_label()}</label>
+      <SearchableSelect
+        id="clan-channel"
+        bind:value={formGeneralChannelId}
+        options={[{ id: '', name: m.clan_option_none_disabled() }, ...availableChannels.map(c => ({ id: c.id, name: `#${c.name}` }))]}
+        placeholder={m.clan_general_channel_placeholder()}
+        disabled={!canManageSettings}
+      />
+    </div>
+
+    <div class="space-y-1.5">
+      <label for="clan-leader-role" class="text-xs font-semibold text-on-surface-variant ml-1">{m.clan_leader_role_label()}</label>
+      <SearchableSelect
+        id="clan-leader-role"
+        bind:value={formLeaderRoleId}
+        options={[{ id: '', name: m.clan_option_none_disabled() }, ...availableRoles.map(r => ({ id: r.id, name: `@${r.name}` }))]}
+        placeholder={m.clan_leader_role_placeholder()}
+        disabled={!canManageSettings}
+      />
+    </div>
+  </form>
+  {#snippet footer()}
+    <Button variant="ghost" onclick={() => (showModal = false)}>{m.clan_cancel_btn()}</Button>
+    <Button variant="primary" type="submit" form="clan-form" disabled={!canManageSettings}>{m.clan_save_btn()}</Button>
+  {/snippet}
+</Modal>
 
 {#if showRebalanceModal}
   <ClanRebalanceModal
@@ -2401,21 +2372,14 @@ savedBetSettings = {
   />
 {/if}
 
-<!-- Modal: Effacement d'une dette -->
-{#if debtToClear}
-  {@const target = debtToClear}
-  <div class="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" transition:fade={{ duration: 150 }}>
-    <div class="bg-surface-container-low border border-outline-variant/20 max-w-md w-full rounded-xl p-6 space-y-6 shadow-lg" transition:scale={{ start: 0.97, duration: 150 }}>
-      <div>
-        <h3 class="text-lg font-semibold text-on-surface">
-          {m.clan_bets_debt_clear_title()}
-        </h3>
-        <p class="text-sm font-bold text-warning mt-2">
-          {target.displayName ?? target.userId} · {target.amount.toLocaleString(dateLocale())} pts
-        </p>
-        <p class="text-xs text-on-surface-variant/80 mt-2">{m.clan_bets_debt_clear_desc()}</p>
-      </div>
-
+<Modal open={debtToClear !== null} onClose={() => (debtToClear = null)} title={m.clan_bets_debt_clear_title()} size="sm">
+  {#if debtToClear}
+    {@const target = debtToClear}
+    <div class="space-y-4">
+      <p class="text-sm font-bold text-warning">
+        {target.displayName ?? target.userId} · {target.amount.toLocaleString(dateLocale())} pts
+      </p>
+      <p class="text-xs text-on-surface-variant/80">{m.clan_bets_debt_clear_desc()}</p>
       {#if target.engaged > 0}
         <div class="space-y-3 bg-surface-container-high/40 rounded-lg p-4">
           <p class="text-xs text-on-surface-variant/80">
@@ -2427,25 +2391,17 @@ savedBetSettings = {
           </label>
         </div>
       {/if}
-
-      <div class="flex justify-end gap-2">
-        <button
-          type="button"
-          onclick={() => debtToClear = null}
-          class="px-4 py-2 border border-outline-variant/30 hover:bg-surface-container-high/60 text-on-surface text-xs font-semibold rounded-lg transition-colors cursor-pointer"
-        >
-          {m.clan_cancel_btn()}
-        </button>
-        <button
-          type="button"
-          onclick={handleClearDebt}
-          disabled={target.firm <= 0 && !clearEngagedDebt}
-          class="px-4 py-2 bg-rose-500 text-white text-xs font-semibold rounded-lg hover:bg-rose-600 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-        >
-          {m.clan_bets_debt_clear()}
-        </button>
-      </div>
     </div>
-  </div>
-{/if}
+  {/if}
+  {#snippet footer()}
+    <Button variant="ghost" onclick={() => (debtToClear = null)}>{m.clan_cancel_btn()}</Button>
+    <Button
+      variant="danger"
+      onclick={handleClearDebt}
+      disabled={!debtToClear || (debtToClear.firm <= 0 && !clearEngagedDebt)}
+    >
+      {m.clan_bets_debt_clear()}
+    </Button>
+  {/snippet}
+</Modal>
 
