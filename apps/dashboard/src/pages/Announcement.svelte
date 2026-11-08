@@ -22,6 +22,7 @@
   import ActionButton from '../lib/components/ActionButton.svelte';
   import EmojiPicker from '../lib/components/EmojiPicker.svelte';
   import WelcomeExperiments from '../lib/components/welcome/WelcomeExperiments.svelte';
+  import AnnouncementPreview from '../lib/components/announcements/AnnouncementPreview.svelte';
   import {
     fetchWelcomeConfig,
     updateWelcomeConfig,
@@ -754,37 +755,7 @@
                 {/if}
               </div>
 
-              <div class="space-y-1.5">
-                <span class="text-xs font-semibold text-on-surface-variant ml-2">{m.announcements_discord_preview()}</span>
-                <div class="p-5 rounded-lg bg-surface-container-high/35 border border-outline-variant/15 text-sm text-on-surface font-semibold font-sans whitespace-pre-wrap select-none relative overflow-hidden">
-                  <div class="flex items-start gap-4">
-                    <div class="w-10 h-10 rounded-full bg-outline-variant/30 flex items-center justify-center text-xs font-semibold text-on-surface-variant">BOT</div>
-                    <div>
-                      <div class="flex items-center gap-2">
-                        <span class="font-bold text-primary">Kotbo</span>
-                        <span class="bg-primary/20 text-primary text-2xs font-semibold px-1.5 py-0.5 rounded uppercase leading-none">BOT</span>
-                        <span class="text-2xs text-on-surface-variant/40">{m.announcements_today_at({ time: '12:00' })}</span>
-                      </div>
-                      <div class="mt-1 text-on-surface-variant/90 leading-relaxed text-sm font-medium font-sans">
-                        {previewText(config.welcomeMessage)}
-                      </div>
-                      {#if config.welcomeImageEnabled}
-                        <div class="mt-3 w-full max-w-sm aspect-5/2 rounded-xl bg-[#0b0e14] flex items-center justify-center border border-[#5865f2]/30 relative overflow-hidden">
-                          {#if config.welcomeImageUrl}
-                            <img src={config.welcomeImageUrl} alt="Background" class="absolute inset-0 w-full h-full object-cover opacity-50" />
-                          {/if}
-                          <div class="relative flex flex-col items-center gap-1.5 z-10 p-4 text-center">
-                            <div class="w-12 h-12 rounded-full border border-primary/20 bg-surface-container/85 flex items-center justify-center text-sm font-semibold text-primary">JD</div>
-                            <span class="text-xs font-semibold text-white leading-none drop-shadow-sm">{m.announcements_preview_welcome_title()}</span>
-                            <span class="text-2xs font-bold text-[#57f287] leading-none font-sans">JEANDUPONT</span>
-                            <span class="text-xs text-[#b8bcc8] font-medium">{m.announcements_preview_welcome_sub({ count: '1,234', server: 'KOTBO SERVER' })}</span>
-                          </div>
-                        </div>
-                      {/if}
-                    </div>
-                  </div>
-                </div>
-              </div>
+              <AnnouncementPreview time="12:00" text={previewText(config.welcomeMessage)} card={config.welcomeImageEnabled ? { imageUrl: config.welcomeImageUrl, title: m.announcements_preview_welcome_title(), subtitle: m.announcements_preview_welcome_sub({ count: '1,234', server: 'KOTBO SERVER' }) } : null} />
             </div>
           {:else}
             <p class="text-xs text-on-surface-variant italic text-center py-6">{m.announcements_welcome_disabled()}</p>
@@ -859,23 +830,8 @@
                 ></textarea>
               </div>
 
-              <div class="space-y-1.5 pt-4">
-                <span class="text-xs font-semibold text-on-surface-variant ml-2">{m.announcements_discord_preview()}</span>
-                <div class="p-5 rounded-lg bg-surface-container-high/35 border border-outline-variant/15 text-sm text-on-surface font-semibold font-sans whitespace-pre-wrap select-none relative overflow-hidden">
-                  <div class="flex items-start gap-4">
-                    <div class="w-10 h-10 rounded-full bg-outline-variant/30 flex items-center justify-center text-xs font-semibold text-on-surface-variant">BOT</div>
-                    <div>
-                      <div class="flex items-center gap-2">
-                        <span class="font-bold text-primary">Kotbo</span>
-                        <span class="bg-primary/20 text-primary text-2xs font-semibold px-1.5 py-0.5 rounded uppercase leading-none">BOT</span>
-                        <span class="text-2xs text-on-surface-variant/40">{m.announcements_today_at({ time: '12:05' })}</span>
-                      </div>
-                      <div class="mt-1 text-on-surface-variant/90 leading-relaxed text-sm font-medium font-sans">
-                        {previewText(config.leaveMessage)}
-                      </div>
-                    </div>
-                  </div>
-                </div>
+              <div class="pt-4">
+                <AnnouncementPreview time="12:05" text={previewText(config.leaveMessage)} />
               </div>
             </div>
           {:else}
@@ -979,37 +935,7 @@
                 {/if}
               </div>
 
-              <div class="space-y-1.5">
-                <span class="text-xs font-semibold text-on-surface-variant ml-2">{m.announcements_discord_preview()}</span>
-                <div class="p-5 rounded-lg bg-surface-container-high/35 border border-outline-variant/15 text-sm text-on-surface font-semibold font-sans whitespace-pre-wrap select-none relative overflow-hidden">
-                  <div class="flex items-start gap-4">
-                    <div class="w-10 h-10 rounded-full bg-outline-variant/30 flex items-center justify-center text-xs font-semibold text-on-surface-variant">BOT</div>
-                    <div>
-                      <div class="flex items-center gap-2">
-                        <span class="font-bold text-primary">Kotbo</span>
-                        <span class="bg-primary/20 text-primary text-2xs font-semibold px-1.5 py-0.5 rounded uppercase leading-none">BOT</span>
-                        <span class="text-2xs text-on-surface-variant/40">{m.announcements_today_at({ time: '12:10' })}</span>
-                      </div>
-                      <div class="mt-1 text-on-surface-variant/90 leading-relaxed text-sm font-medium font-sans">
-                        {previewText(config.boostMessage)}
-                      </div>
-                      {#if config.boostImageEnabled}
-                        <div class="mt-3 w-full max-w-sm aspect-5/2 rounded-xl bg-[#0b0e14] flex items-center justify-center border border-[#5865f2]/30 relative overflow-hidden">
-                          {#if config.boostImageUrl}
-                            <img src={config.boostImageUrl} alt="Background" class="absolute inset-0 w-full h-full object-cover opacity-50" />
-                          {/if}
-                          <div class="relative flex flex-col items-center gap-1.5 z-10 p-4 text-center">
-                            <div class="w-12 h-12 rounded-full border border-primary/20 bg-surface-container/85 flex items-center justify-center text-sm font-semibold text-primary">JD</div>
-                            <span class="text-xs font-semibold text-white leading-none drop-shadow-sm">{m.announcements_preview_boost_title()}</span>
-                            <span class="text-2xs font-bold text-[#57f287] leading-none font-sans">JEANDUPONT</span>
-                            <span class="text-xs text-[#b8bcc8] font-medium">{m.announcements_preview_boost_sub({ count: '1,234', boosts: '18' })}</span>
-                          </div>
-                        </div>
-                      {/if}
-                    </div>
-                  </div>
-                </div>
-              </div>
+              <AnnouncementPreview time="12:10" text={previewText(config.boostMessage)} card={config.boostImageEnabled ? { imageUrl: config.boostImageUrl, title: m.announcements_preview_boost_title(), subtitle: m.announcements_preview_boost_sub({ count: '1,234', boosts: '18' }) } : null} />
             </div>
           {:else}
             <p class="text-xs text-on-surface-variant italic text-center py-6">{m.announcements_boost_disabled()}</p>
