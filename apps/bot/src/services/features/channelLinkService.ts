@@ -350,7 +350,7 @@ export async function acceptLinkInvite(opts: {
   // continuerait de tout jeter.
   await refreshLinkGuestGuilds();
 
-  if (refreshed.updateTopic) await refreshGroupTopics(opts.client, refreshed, includeLink);
+  if (refreshed.updateTopic) void refreshGroupTopics(opts.client, refreshed, includeLink);
 
   return { group: refreshed, invite };
 }
@@ -429,7 +429,7 @@ export async function createDirectGroup(opts: {
   await invalidateGroupCache(group);
   await refreshLinkGuestGuilds();
 
-  if (shouldUpdateTopic) await refreshGroupTopics(opts.client, group, opts.includeTopicLink ?? true);
+  if (shouldUpdateTopic) void refreshGroupTopics(opts.client, group, opts.includeTopicLink ?? true);
 
   return group;
 }
@@ -471,7 +471,7 @@ export async function addGroupMember(opts: {
   await invalidateGroupCache(refreshed);
   await refreshLinkGuestGuilds();
 
-  if (refreshed.updateTopic) await refreshGroupTopics(opts.client, refreshed, opts.includeTopicLink ?? true);
+  if (refreshed.updateTopic) void refreshGroupTopics(opts.client, refreshed, opts.includeTopicLink ?? true);
 
   return refreshed;
 }
@@ -507,7 +507,7 @@ export async function removeGroupMember(groupId: string, memberId: string, clien
 
   const refreshed = (await loadGroup(groupId))!;
   await refreshLinkGuestGuilds();
-  if (client && refreshed.updateTopic) await refreshGroupTopics(client, refreshed, true);
+  if (client && refreshed.updateTopic) void refreshGroupTopics(client, refreshed, true);
 
   return refreshed;
 }
@@ -631,6 +631,10 @@ function stripLinkTopic(topic: string): string {
  * Le bloc listait l'unique salon d'en face ; il énumère maintenant tous les
  * autres participants. Comme la description Discord est plafonnée, la liste est
  * tronquée plutôt que refusée en bloc par l'API.
+ *
+ * Appelée sans `await` : Discord limite `setTopic` à 2 changements par 10 min
+ * par salon, et discord.js met la requête en file au lieu d'échouer. L'attendre
+ * bloquait l'appel du dashboard jusqu'au timeout. Ne rejette jamais.
  */
 export async function refreshGroupTopics(client: Client, group: LinkGroup, includeLink = true): Promise<void> {
   await Promise.all(

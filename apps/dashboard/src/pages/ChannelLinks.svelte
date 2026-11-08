@@ -117,6 +117,9 @@
     if (otherGuilds.length === 0) loadOtherGuilds();
   }
 
+  // Valeur du sélecteur : le bot crée le salon cible au lieu d'en choisir un.
+  const CREATE_CHANNEL = '__create__';
+
   function toggleTargetGuild(guildId: string) {
     const existing = newTargets.find((t) => t.guildId === guildId);
     newTargets = existing
@@ -144,7 +147,7 @@
         ownerMode: newOwnerMode,
         targets: newTargets.map((t) => ({
           guildId: t.guildId,
-          channelId: t.channelId,
+          ...(t.channelId === CREATE_CHANNEL ? { createChannel: true } : { channelId: t.channelId }),
           mode: newOwnerMode === 'SEND_ONLY' ? 'RECEIVE_ONLY' : 'BOTH',
         })),
         relayMode: newRelayMode,
@@ -533,6 +536,7 @@
                         class="w-full px-3 py-2 rounded-lg bg-surface-container border border-outline-variant/30 text-on-surface text-sm outline-none"
                       >
                         <option value="">{m.channel_links_select_channel_ph()}</option>
+                        <option value={CREATE_CHANNEL}>{m.channel_links_create_channel_option()}</option>
                         {#each guild.channels.filter((c: any) => !(guild.id === authStore.selectedGuildId && c.id === newSourceChannelId)) as ch}
                           <option value={ch.id}>#{ch.name}</option>
                         {/each}
@@ -591,7 +595,7 @@
               {@const guild = otherGuilds.find((g) => g.id === target.guildId)}
               {@const channel = guildChannels(target.guildId).find((c: any) => c.id === target.channelId)}
               <span class="text-sm font-medium text-on-surface">
-                {i > 0 ? '+ ' : ''}#{channel?.name}
+                {i > 0 ? '+ ' : ''}#{target.channelId === CREATE_CHANNEL ? `${sourceChannel?.name} (${m.channel_links_new_channel_tag()})` : channel?.name}
                 <span class="text-xs text-on-surface-variant">({guild?.name})</span>
               </span>
             {/each}

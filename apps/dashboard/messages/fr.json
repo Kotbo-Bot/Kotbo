@@ -7831,6 +7831,8 @@
   "channel_links_modal_create_title": "Créer un pont de salons",
   "channel_links_source_channel_label": "Salon sur ce serveur",
   "channel_links_select_channel_ph": "Sélectionner un salon",
+  "channel_links_create_channel_option": "+ Créer le salon pour moi",
+  "channel_links_new_channel_tag": "nouveau",
   "channel_links_loading_guilds": "Chargement des serveurs…",
   "channel_links_no_guilds_title": "Aucun serveur disponible.",
   "channel_links_no_guilds_desc": "Le bot doit être présent et tu dois être admin sur le serveur cible.",
