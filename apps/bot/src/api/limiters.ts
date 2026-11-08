@@ -18,6 +18,8 @@ export const publicClanSearchRateLimiter = new Map<string, number[]>();
 export const publicGiveawaysRateLimiter = new Map<string, number[]>();
 /** Classement public des niveaux, aussi gardé contre l'aspiration (shared/scrapeGuard.ts). */
 export const publicLevelingRateLimiter = new Map<string, number[]>();
+/** Lecture par IA d'un classement tiers, indexée par serveur : chaque appel est facturé. */
+export const levelImportLlmRateLimiter = new Map<string, number[]>();
 /** Page publique d'un tournoi : elle se rafraîchit seule toutes les 20 s pendant le direct. */
 export const publicTournamentsRateLimiter = new Map<string, number[]>();
 /**

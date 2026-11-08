@@ -5,6 +5,9 @@ import { logger } from '../../../utils/logger.js';
 import { defaultLevelUpMessage, getOrCreateLevelConfig, updateMemberLevelRoles, getXpForLevel, getLevelFromXp, getGuildLevelCurve, invalidateLevelConfigCache, levelCurveFromConfig, resyncGuildLevels, countCurveImpact, invalidateLevelRewardsCache, getRoleResyncStatus, startRoleResync, stopRoleResync } from '../../../services/progression/levelingService.js';
 import { clampXp, normalizeLevelCurve } from '@kotbo/shared';
 import { externalLevelsJob, forgetExternalLevels, isLevelImportSource, type ExternalLevel } from '../../../services/progression/levelImportSources.js';
+import { extractLeaderboardWithLlm, type LlmImportInput } from '../../../services/progression/levelImportLlm.js';
+import { getGuildPlan } from '../../../services/system/planService.js';
+import { levelImportLlmRateLimiter } from '../../limiters.js';
 import { getOrCreateWelcomeConfig } from '../../../services/features/welcomeGoodbyeService.js';
 import { getMemberIdentities, resolveMemberAvatarUrl, resolveSearchedUserIds } from '../../../services/moderation/memberIdentityService.js';
 import {
@@ -56,7 +59,7 @@ import { invalidateAutoResponseCache } from '../../../services/features/autoResp
 import { normalizeAnswer } from '../../../services/features/funService.js';
 import { normalizeConfessionCooldown } from '../../../services/features/confessionPolicy.js';
 import { resolveSuggestion } from '../../../services/features/suggestionService.js';
-import { broadcastDashboardStateChange, json, readJsonBody, getGuildName, pushAudit, resolveMemberFeatureAccess, type AuthClaims, type DashboardAccess } from '../../shared.js';
+import { broadcastDashboardStateChange, checkRateLimit, json, readJsonBody, getGuildName, pushAudit, resolveMemberFeatureAccess, type AuthClaims, type DashboardAccess } from '../../shared.js';
 import { acquireProvisionLock, ensureTextChannel, missingProvisionPermissions, provisionCooldown, provisionCooldownMessage, releaseProvisionLock, startProvisionCooldown } from '../../../services/core/channelProvisioningService.js';
 import { fetchAllMembers } from '../../../utils/discord.js';
 import { resolveEmojiShortcodes } from '../../../utils/emojis.js';
@@ -687,6 +690,30 @@ export async function handleGeneralistModulesRoutes(
       return true;
     }
 
+    // POST /api/dashboard/guilds/:guildId/leveling/import/extract
+    // Lecture par IA de captures ou de texte d'un classement tiers. Ne fait que
+    // rendre des lignes : l'admin les relit avant l'analyse et l'import.
+    if (parts.length === 7 && parts[5] === 'import' && parts[6] === 'extract' && method === 'POST') {
+      try {
+        if ((await getGuildPlan(guildId)) === 'FREE') {
+          json(res, 402, { error: 'plan_required', message: "La lecture par IA fait partie de l'offre Plus." });
+          return true;
+        }
+        // Chaque lecture coûte un appel au modèle : 20 par heure et par serveur.
+        if (!checkRateLimit(levelImportLlmRateLimiter, guildId, 20, 60 * 60_000)) {
+          json(res, 429, { error: 'Trop de lectures par IA pour ce serveur, réessaie dans une heure.' });
+          return true;
+        }
+        const body = await readJsonBody<LlmImportInput>(req);
+        const rows = await extractLeaderboardWithLlm(body ?? {});
+        json(res, 200, { rows });
+      } catch (err) {
+        logger.error('LevelingAPI', 'Error during LLM leaderboard extraction:', err);
+        jsonFailure(res, err, "Impossible de lire ce classement avec l'IA", 'LevelingAPI');
+      }
+      return true;
+    }
+
     // POST /api/dashboard/guilds/:guildId/leveling/import
     if (parts.length === 6 && parts[5] === 'import' && method === 'POST') {
       try {
@@ -746,10 +773,14 @@ export async function handleGeneralistModulesRoutes(
           const rawItem = item as Record<string, unknown>;
           const username = rawItem.username;
           const displayName = rawItem.display_name || rawItem.displayName;
+          // Identifiant Discord facultatif (mention lue par l'IA, export tiers) :
+          // plus sûr que le pseudo quand il est là.
+          const rawUserId = rawItem.user_id ?? rawItem.userId;
+          const userId = typeof rawUserId === 'string' && /^\d{17,20}$/.test(rawUserId) ? rawUserId : undefined;
           const level = typeof rawItem.level === 'number' ? rawItem.level : (typeof rawItem.level === 'string' ? parseInt(rawItem.level as string, 10) : NaN);
           const xp = typeof rawItem.xp === 'number' ? rawItem.xp : (typeof rawItem.xp === 'string' ? parseInt(rawItem.xp as string, 10) : NaN);
 
-          if (!username && !displayName) {
+          if (!username && !displayName && !userId) {
             failedMembers.push({ reason: "Nom d'utilisateur ou pseudo manquant" });
             continue;
           }
@@ -764,6 +795,7 @@ export async function handleGeneralistModulesRoutes(
           }
 
           validItems.push({
+            userId,
             username: username ? String(username) : undefined,
             displayName: displayName ? String(displayName) : undefined,
             level: isNaN(level) ? undefined : level,
