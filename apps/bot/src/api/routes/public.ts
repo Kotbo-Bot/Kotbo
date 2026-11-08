@@ -11,7 +11,8 @@ import { buildLinkedAccountFolder } from '../../services/moderation/altAccountSe
 import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
 import { cache } from '../../utils/cache.js';
-import { publicClansRateLimiter, publicClanSearchRateLimiter, publicGiveawaysRateLimiter, publicTournamentsRateLimiter } from '../limiters.js';
+import { publicClansRateLimiter, publicClanSearchRateLimiter, publicGiveawaysRateLimiter, publicLevelingRateLimiter, publicTournamentsRateLimiter } from '../limiters.js';
+import { isBrowserPageRequest, SCRAPE_REFUSED } from '../shared/scrapeGuard.js';
 import { getTournament } from '../../services/features/tournament/tournamentService.js';
 import { questWindowBounds, questWindowKey } from '../../services/features/rpg/rpgQuestPolicy.js';
 import {
@@ -1039,6 +1040,16 @@ export async function handlePublicRoutes(
     const guildId = parts[3];
     if (!/^\d{17,19}$/.test(guildId)) {
       json(res, 400, { error: 'ID de guilde invalide' });
+      return true;
+    }
+    if (!isBrowserPageRequest(req.headers)) {
+      json(res, 403, SCRAPE_REFUSED);
+      return true;
+    }
+    // La page charge le classement une fois : 30 lectures par minute n'arrêtent
+    // qu'une boucle, pas un visiteur qui rafraîchit.
+    if (!checkRateLimit(publicLevelingRateLimiter, getClientIp(req), 30, 60_000)) {
+      json(res, 429, { error: 'Trop de requêtes, réessaie dans une minute.' });
       return true;
     }
 
