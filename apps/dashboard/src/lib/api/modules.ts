@@ -62,7 +62,13 @@ export async function deleteLevelingReward(rewardId: string, guildId = authStore
 
 export async function importLevelingData(
   data: unknown[],
-  options: { dryRun?: boolean; source?: 'mee6' | 'draftbot'; onProgress?: (fetched: number) => void } = {},
+  options: {
+    dryRun?: boolean;
+    source?: 'mee6' | 'draftbot' | 'lurkr' | 'tatsu';
+    /** Clef d'API de la source quand elle en exige une (Tatsu). */
+    apiKey?: string;
+    onProgress?: (fetched: number) => void;
+  } = {},
   guildId = authStore.selectedGuildId,
 ) {
   const params = new URLSearchParams();
@@ -75,7 +81,7 @@ export async function importLevelingData(
     const res = await dashboardRequest(path, {
       method: 'POST',
       successMessage: m.api_ok_import_leveling_data(),
-      payload: data,
+      payload: options.source ? { apiKey: options.apiKey } : data,
       guildId,
       silent: options.dryRun || !!options.source,
       errorContext: 'API Error (Import Leveling):',

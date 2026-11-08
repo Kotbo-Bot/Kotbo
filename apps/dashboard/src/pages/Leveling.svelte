@@ -939,8 +939,16 @@
 
   // Import states
   // `file` : JSON collé ou déposé ; sinon le classement public de l'autre bot.
-  let importSource = $state<'file' | 'mee6' | 'draftbot'>('file');
+  let importSource = $state<'file' | 'mee6' | 'draftbot' | 'lurkr' | 'tatsu'>('file');
   let importFetched = $state<number | null>(null);
+  // Jamais conservée : envoyée le temps de la lecture, puis oubliée avec la page.
+  let importApiKey = $state('');
+  const IMPORT_SOURCE_HINTS = {
+    mee6: m.lv_import_source_mee6_hint,
+    draftbot: m.lv_import_source_draftbot_hint,
+    lurkr: m.lv_import_source_lurkr_hint,
+    tatsu: m.lv_import_source_tatsu_hint,
+  };
   let importRawJson = $state('');
   let importFileError = $state<string | null>(null);
   const importActionState = createAsyncActionState();
@@ -984,6 +992,7 @@
       const res = await importLevelingData(parsed as unknown[], {
         dryRun,
         source,
+        apiKey: source === 'tatsu' ? importApiKey.trim() : undefined,
         onProgress: (fetched) => (importFetched = fetched),
       }).finally(() => (importFetched = null));
       if (!res) throw new Error(m.lv_import_err_failed());
@@ -2619,6 +2628,8 @@
                 { value: 'file', label: m.lv_import_source_file() },
                 { value: 'mee6', label: 'MEE6' },
                 { value: 'draftbot', label: 'DraftBot' },
+                { value: 'lurkr', label: 'Lurkr' },
+                { value: 'tatsu', label: 'Tatsu' },
               ]}
               value={importSource}
               onchange={(value) => { importSource = value; importFileError = null; importResults = null; }}
@@ -2627,8 +2638,18 @@
 
             {#if importSource !== 'file'}
               <div class="space-y-2 text-xs text-on-surface-variant leading-relaxed">
-                <p>{importSource === 'mee6' ? m.lv_import_source_mee6_hint() : m.lv_import_source_draftbot_hint()}</p>
-                <p>{m.lv_import_source_kept_level()}</p>
+                <p>{IMPORT_SOURCE_HINTS[importSource]()}</p>
+                {#if importSource === 'tatsu'}
+                  <label for="importApiKey" class="block text-xs font-semibold text-on-surface-variant">{m.lv_import_source_tatsu_key()}</label>
+                  <input
+                    id="importApiKey"
+                    type="password"
+                    autocomplete="off"
+                    bind:value={importApiKey}
+                    class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-xs font-mono focus:ring-2 focus:ring-secondary/30 text-on-surface focus:outline-none"
+                  />
+                {/if}
+                <p>{importSource === 'tatsu' ? m.lv_import_source_score_as_xp() : m.lv_import_source_kept_level()}</p>
                 {#if importFetched !== null}
                   <p class="font-semibold text-on-surface" role="status">
                     {m.lv_import_source_fetching({ count: importFetched.toLocaleString() })}
@@ -2693,7 +2714,7 @@
               <button
                 type="button"
                 onclick={() => handleImportSubmit(true)}
-                use:explainDisabled={importActionState.state.loading ? m.lv_import_source_busy() : importSource === 'file' && !importRawJson.trim() ? m.common_reason_fill_field() : ''}
+                use:explainDisabled={importActionState.state.loading ? m.lv_import_source_busy() : (importSource === 'file' && !importRawJson.trim()) || (importSource === 'tatsu' && !importApiKey.trim()) ? m.common_reason_fill_field() : ''}
                 class="px-6 py-3.5 bg-surface-container-high/50 text-on-surface-variant font-medium text-body-sm rounded-lg hover:bg-surface-container-high transition-all disabled:opacity-50"
               >
                 {m.lv_import_dry_run()}
@@ -2701,7 +2722,7 @@
               <button
                 type="button"
                 onclick={() => handleImportSubmit(false)}
-                use:explainDisabled={importActionState.state.loading ? m.lv_import_source_busy() : importSource === 'file' && !importRawJson.trim() ? m.common_reason_fill_field() : ''}
+                use:explainDisabled={importActionState.state.loading ? m.lv_import_source_busy() : (importSource === 'file' && !importRawJson.trim()) || (importSource === 'tatsu' && !importApiKey.trim()) ? m.common_reason_fill_field() : ''}
                 class="px-8 py-3.5 bg-secondary text-on-secondary font-medium text-body-sm rounded-lg transition-all disabled:opacity-50"
               >
                 {m.lv_run_import()}
