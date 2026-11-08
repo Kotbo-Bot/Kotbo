@@ -95,6 +95,7 @@ import { bypassCommand } from './commands/admin/bypass.js';
 import { auditCommand } from './commands/admin/audit.js';
 import { reportCommand, reportMessageContextCommand } from './commands/moderation/report.js';
 import { wikiCommand } from './commands/community/wiki.js';
+import { regleCommand } from './commands/community/regle.js';
 
 export type SlashCommandDefinition = {
   data: { name: string; description: string; toJSON: () => unknown };
@@ -205,6 +206,7 @@ export const commands: SlashCommandDefinition[] = [
   optOutCommand,
   privacyCommand,
   wikiCommand,
+  regleCommand,
   confessionCommand,
 ];
 
@@ -304,6 +306,7 @@ export const COMMAND_MODULES = new Map<ApplicationCommandDefinition, string>([
   [giveawayCommand, 'giveaways'],
   [suggestCommand, 'suggestions'],
   [wikiCommand, 'site_wiki'],
+  [regleCommand, 'regulation'],
   [suggestionConfigCommand, 'suggestions'],
   [eventCommand, 'events'],
   [ctfCommand, 'events'],
