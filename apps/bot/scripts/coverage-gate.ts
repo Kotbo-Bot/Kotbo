@@ -56,16 +56,16 @@ function check(): number {
     .map((l) => stripAnsi(l).trim())
     .filter((l) => /^\d+\s+(pass|fail)\b/i.test(l) || /^Ran\s+\d+\s+tests\b/i.test(l));
 
-  if (run.status !== 0 || failureBlocks.length > 0) {
+  // Un test qui exerce un chemin d'erreur peut écrire « error: » sans échouer :
+  // seul le code de sortie de Bun fait foi.
+  if (run.status !== 0) {
     console.error('\n==================== ÉCHECS DE TESTS DÉTECTÉS ====================');
     if (failureBlocks.length > 0) {
       console.error(failureBlocks.join('\n----------------------------------------\n'));
     }
-    if (summaryLines.length > 0) {
-      console.error('\nBilan : ' + summaryLines.join(' | '));
-    }
     console.error('==================================================================\n');
   }
+  if (summaryLines.length > 0) console.error(`Bilan : ${summaryLines.join(' | ')}`);
 
   if (run.error) console.error(`Exécution des tests interrompue : ${run.error.message}`);
   if (run.signal) console.error(`Tests tués par le signal ${run.signal} (mémoire épuisée ?).`);
