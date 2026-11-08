@@ -21,6 +21,7 @@
   import ClanRebalanceModal from '../lib/components/clans/ClanRebalanceModal.svelte';
   import { m, dateLocale } from '../lib/i18n';
   import { confirmDialog } from '../lib/stores/confirmDialog.svelte';
+  import { toast } from '../lib/stores/toast.svelte';
   import {
     fetchClansData,
     fetchLevelingData,
@@ -376,10 +377,6 @@
     }
   }
 
-  // Confirmation state for reset/clear/distribute/reset-all/rollback
-  let confirmInput = $state('');
-  let confirmActionType = $state<'clear' | 'reset' | 'distribute' | 'reset-all' | 'rollback' | null>(null);
-  let showConfirmModal = $state(false);
   let showRebalanceModal = $state(false);
 
   const canManageSettings = $derived(
@@ -918,70 +915,76 @@ savedBetSettings = {
     }, { successMessage: m.clan_success_deleted() });
   }
 
-  function confirmWordFor(type: 'clear' | 'reset' | 'distribute' | 'reset-all' | 'rollback' | null): string {
-    return type === 'clear' ? m.clan_confirm_word_clear()
-      : type === 'reset' ? m.clan_confirm_word_reset()
-      : type === 'distribute' ? m.clan_confirm_word_distribute()
-      : type === 'reset-all' ? m.clan_confirm_word_resetall()
-      : m.clan_confirm_word_rollback();
-  }
+  type ClanBulkAction = 'clear' | 'reset' | 'distribute' | 'reset-all' | 'rollback';
 
-  function openConfirmation(type: 'clear' | 'reset' | 'distribute' | 'reset-all' | 'rollback') {
-    confirmActionType = type;
-    confirmInput = '';
-    showConfirmModal = true;
-  }
-
-  async function handleConfirmAction() {
-    if (!canManageSettings || !confirmActionType) return;
-
-    const expected = confirmWordFor(confirmActionType);
-
-    if (confirmInput.toUpperCase() !== expected.toUpperCase()) {
-      alert(m.clan_err_wrong_confirm_word());
-      return;
-    }
-
-    showConfirmModal = false;
-
-    await actionState.run(async () => {
-      if (confirmActionType === 'clear') {
-        const res = await clearClans();
-        if (!res) throw new Error(m.clan_err_clear());
-        await refreshData(true);
-      } else if (confirmActionType === 'reset') {
+  // Actions de masse : un mot à recopier avant de lancer, puis l'appel.
+  const bulkActions: Record<ClanBulkAction, { word: () => string; description: () => string; success: () => string; run: () => Promise<void> }> = {
+    clear: {
+      word: () => m.clan_confirm_word_clear(),
+      description: () => m.clan_confirm_desc_clear(),
+      success: () => m.clan_success_clear_started(),
+      run: async () => {
+        if (!(await clearClans())) throw new Error(m.clan_err_clear());
+      },
+    },
+    reset: {
+      word: () => m.clan_confirm_word_reset(),
+      description: () => m.clan_confirm_desc_reset(),
+      success: () => m.clan_success_season_started(),
+      run: async () => {
         const res = await resetClanSeason();
         if (!res) throw new Error(m.clan_err_reset());
         currentClanSeason = res.currentClanSeason;
-        await refreshData(true);
-      } else if (confirmActionType === 'distribute') {
-        const res = await distributeClans();
-        if (!res) throw new Error(m.clan_err_distribute());
-        await refreshData(true);
-      } else if (confirmActionType === 'reset-all') {
-        const res = await resetAllClans();
-        if (!res) throw new Error(m.clan_err_reset_all());
+      },
+    },
+    distribute: {
+      word: () => m.clan_confirm_word_distribute(),
+      description: () => m.clan_confirm_desc_distribute(),
+      success: () => m.clan_success_distribute_started(),
+      run: async () => {
+        if (!(await distributeClans())) throw new Error(m.clan_err_distribute());
+      },
+    },
+    'reset-all': {
+      word: () => m.clan_confirm_word_resetall(),
+      description: () => `${m.clan_confirm_desc_resetall_warning()} ${m.clan_confirm_desc_resetall()}`,
+      success: () => m.clan_success_reset_all(),
+      run: async () => {
+        if (!(await resetAllClans())) throw new Error(m.clan_err_reset_all());
         clansEnabled = false;
         currentClanSeason = 1;
-        await refreshData(true);
-      } else if (confirmActionType === 'rollback') {
+      },
+    },
+    rollback: {
+      word: () => m.clan_confirm_word_rollback(),
+      description: () => m.clan_confirm_desc_rollback({ prev: currentClanSeason - 1, current: currentClanSeason, prevprev: currentClanSeason - 2 }),
+      success: () => m.clan_success_rollback(),
+      run: async () => {
         const res = await rollbackClanSeason();
         if (!res) throw new Error(m.clan_err_rollback());
         currentClanSeason = res.currentClanSeason;
-        await refreshData(true);
-      }
-      return true;
-    }, {
-      successMessage: confirmActionType === 'clear'
-        ? m.clan_success_clear_started()
-        : confirmActionType === 'reset'
-        ? m.clan_success_season_started()
-        : confirmActionType === 'distribute'
-        ? m.clan_success_distribute_started()
-        : confirmActionType === 'reset-all'
-        ? m.clan_success_reset_all()
-        : m.clan_success_rollback()
+      },
+    },
+  };
+
+  async function openConfirmation(type: ClanBulkAction) {
+    if (!canManageSettings) return;
+    const action = bulkActions[type];
+    const confirmed = await confirmDialog.ask({
+      title: m.clan_validation_required_title(),
+      description: action.description(),
+      confirmLabel: m.clan_confirm_btn(),
+      cancelLabel: m.clan_cancel_btn(),
+      variant: 'danger',
+      requireInput: action.word(),
     });
+    if (!confirmed) return;
+
+    await actionState.run(async () => {
+      await action.run();
+      await refreshData(true);
+      return true;
+    }, { successMessage: action.success() });
   }
 
   async function handleRebalanceLaunched(message: string) {
@@ -993,7 +996,7 @@ savedBetSettings = {
   function handleDistribute() {
     if (!canManageSettings) return;
     if (clans.length === 0) {
-      alert(m.clan_err_no_clan_for_distribute());
+      toast.error(m.clan_err_no_clan_for_distribute());
       return;
     }
     openConfirmation('distribute');
@@ -2446,69 +2449,3 @@ savedBetSettings = {
   </div>
 {/if}
 
-<!-- Modal: Confirmation de Double Validation (Reset / Clear) -->
-{#if showConfirmModal}
-  <div class="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" transition:fade={{ duration: 150 }}>
-    <div class="bg-surface-container-low border border-outline-variant/20 max-w-md w-full rounded-xl p-6 space-y-6 shadow-lg relative" transition:scale={{ start: 0.97, duration: 150 }}>
-      
-      <button
-        onclick={() => showConfirmModal = false}
-        class="absolute top-6 right-6 p-2 rounded-full bg-surface-container-high/40 hover:bg-error/15 hover:text-error text-on-surface-variant transition-colors cursor-pointer"
-      >
-        <Papicon icon="Cross" size={18} />
-      </button>
-
-      <div>
-        <h3 class="text-lg font-semibold text-error flex items-center gap-2">
-          <Papicon icon="AlertTriangle" size={20} />
-          {m.clan_validation_required_title()}
-        </h3>
-        <p class="text-xs text-on-surface-variant/80 mt-1">
-          {#if confirmActionType === 'clear'}
-            {m.clan_confirm_desc_clear()}
-          {:else if confirmActionType === 'reset'}
-            {m.clan_confirm_desc_reset()}
-          {:else if confirmActionType === 'distribute'}
-            {m.clan_confirm_desc_distribute()}
-          {:else if confirmActionType === 'reset-all'}
-            <span class="text-error font-bold inline-flex items-center gap-1 align-[-2px]"><Papicon icon="AlertTriangle" size={13} /> {m.clan_confirm_desc_resetall_warning()}</span> {m.clan_confirm_desc_resetall()}
-          {:else if confirmActionType === 'rollback'}
-            {m.clan_confirm_desc_rollback({ prev: currentClanSeason - 1, current: currentClanSeason, prevprev: currentClanSeason - 2 })}
-          {/if}
-        </p>
-      </div>
-
-      <div class="space-y-4">
-        <div class="space-y-1.5">
-          <label for="confirm-word" class="text-xs font-semibold text-on-surface-variant ml-1">
-            {m.clan_type_to_confirm_label({ word: confirmWordFor(confirmActionType) })}
-          </label>
-          <input
-            id="confirm-word"
-            type="text"
-            bind:value={confirmInput}
-            placeholder={confirmWordFor(confirmActionType)}
-            class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none font-semibold"
-          />
-        </div>
-
-        <div class="flex justify-end gap-2">
-          <button
-            type="button"
-            onclick={() => showConfirmModal = false}
-            class="px-4 py-2 border border-outline-variant/30 hover:bg-surface-container-high/60 text-on-surface text-xs font-semibold rounded-lg transition-colors cursor-pointer"
-          >
-            {m.clan_cancel_btn()}
-          </button>
-          <button
-            type="button"
-            onclick={handleConfirmAction}
-            class="px-4 py-2 bg-rose-500 text-white text-xs font-semibold rounded-lg hover:bg-rose-600 transition-colors cursor-pointer"
-          >
-            {m.clan_confirm_btn()}
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
-{/if}
