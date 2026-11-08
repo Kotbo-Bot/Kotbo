@@ -675,6 +675,12 @@ model Guild {
   // Durée de la sanction (TIMEOUT, BAN, JAIL) ; null = permanente (BAN, JAIL)
   // ou 28 jours pour un timeout.
   honeypotDurationMin     Int?
+  // Message d'avertissement du salon piège : son texte suit la sanction, et
+  // il peut afficher le nombre de comptes piégés (compteur incrémenté à chaque
+  // sanction).
+  honeypotNoticeMessageId String?
+  honeypotShowCount       Boolean  @default(false)
+  honeypotCatchCount      Int      @default(0)
 
   // Backup system
   backups ServerBackup[]
