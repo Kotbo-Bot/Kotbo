@@ -5,13 +5,11 @@ import { logger } from '../utils/logger.js';
 import { SanctionStatus, SanctionType } from '@prisma/client';
 import { COLORS, successEmbed, errorEmbed, truncate } from '../utils/embeds.js';
 import { handleConfigChannelSelect, handleConfigModal, handleConfigSelectMenu } from './configHandler.js';
-import { sendSetupStep1, sendSetupStep2, sendSetupStep3, sendSetupStep4, sendSetupFinish, handleSetupSecurityAction } from '../panels/setupPanel.js';
+import { handleSetupInteraction } from '../panels/setupPanel.js';
 import { reviewDailyAlgoSubmission } from '../services/progression/dailyAlgoService.js';
 import { renderPanelBeside, renderPanelTarget } from '../utils/interactionResponses.js';
-import { parseSetupStep, parseUserCaseRoute, parseValidateRoute, parseEventQuizRoute, parseEventResultRoute } from './interactionRoutes.js';
+import { parseUserCaseRoute, parseValidateRoute, parseEventQuizRoute, parseEventResultRoute } from './interactionRoutes.js';
 import { handleQuizInteraction, buildEventResultsView, getEventStats } from '../services/features/eventService.js';
-import { toggleGuildBoolean } from '../utils/prismaToggles.js';
-import { requireSingleSelectedValue } from '../utils/interactionValidation.js';
 import { buildMemberCasePanel, type MemberCaseSection } from '../services/moderation/memberCaseService.js';
 import { handleRecruitmentButton } from '../services/staff/recruitmentService.js';
 import { handleTicketButton, handleTicketModalSubmit, handleTicketSelectMenu } from '../services/features/ticketService.js';
@@ -66,14 +64,6 @@ function buildSanctionReasonModal(action: string, targetUserId: string, targetUs
   rows.push(new ActionRowBuilder<TextInputBuilder>().addComponents(reasonInput));
   modal.addComponents(rows);
   return modal;
-}
-
-function normalizeTargetLanguage(value: string | null | undefined): 'FR' | 'EN' | 'ES' | 'DE' {
-  const normalized = value?.trim().toUpperCase();
-  if (normalized === 'EN' || normalized === 'ES' || normalized === 'DE') {
-    return normalized;
-  }
-  return 'FR';
 }
 
 type PendingDailyAlgoScoreDraft = {
@@ -1389,26 +1379,8 @@ export async function handleButton(interaction: Interaction, client: Client): Pr
 
   if (!guildId) return;
 
-  const setupStep = parseSetupStep(customId);
-  if (setupStep) {
-    const step = setupStep;
-
-    if (step === 'step1') await sendSetupStep1(client, guildId, interaction);
-    else if (step === 'step2') await sendSetupStep2(client, guildId, interaction);
-    else if (step === 'step3') await sendSetupStep3(client, guildId, interaction);
-    else if (step === 'step4') await sendSetupStep4(client, guildId, interaction);
-    else if (step === 'finish') await sendSetupFinish(client, guildId, interaction);
-    else if (step === 'reset_mod_role') {
-      await prisma.guild.update({ where: { id: guildId }, data: { moderatorRoleId: null } }).catch(() => null);
-      await sendSetupStep2(client, guildId, interaction);
-    }
-    else if (step.startsWith('sec_')) {
-      await handleSetupSecurityAction(client, guildId, step, interaction);
-    }
-    else if (step === 'trans_toggle') {
-      await toggleGuildBoolean(guildId, 'translationEnabled');
-      await sendSetupStep3(client, guildId, interaction);
-    }
+  if (customId.startsWith('setup:')) {
+    await handleSetupInteraction(client, guildId, interaction);
     return;
   }
 
@@ -1677,49 +1649,8 @@ export async function handleSelectMenu(interaction: AnySelectMenuInteraction, cl
     return;
   }
 
-  const setupStep = parseSetupStep(customId);
-  if (setupStep) {
-    const step = setupStep;
-    const val = await requireSingleSelectedValue(interaction, 'valeur');
-    if (!val) return;
-
-    if (step === 'select_config_channel') {
-      await prisma.guild.upsert({
-        where: { id: guildId },
-        update: { configChannelId: val },
-        create: { id: guildId, configChannelId: val },
-      });
-      await sendSetupStep1(client, guildId, interaction);
-    }
-    else if (step === 'select_public_channel') {
-      await prisma.guild.upsert({
-        where: { id: guildId },
-        update: { publicChannelId: val },
-        create: { id: guildId, publicChannelId: val },
-      });
-      await sendSetupStep1(client, guildId, interaction);
-    }
-    else if (step === 'select_mod_role') {
-      await prisma.guild.update({ where: { id: guildId }, data: { moderatorRoleId: val } });
-      await sendSetupStep2(client, guildId, interaction);
-    }
-    else if (step === 'trans_lang') {
-      const targetLang = normalizeTargetLanguage(val);
-      await prisma.guild.upsert({
-        where: { id: guildId },
-        update: { defaultTranslateTo: targetLang },
-        create: { id: guildId, defaultTranslateTo: targetLang },
-      });
-      await sendSetupStep3(client, guildId, interaction);
-    }
-    else if (step === 'select_log_channel') {
-      await prisma.guild.upsert({
-        where: { id: guildId },
-        update: { logChannelId: val },
-        create: { id: guildId, logChannelId: val },
-      });
-      await sendSetupStep4(client, guildId, interaction, `Salon de logs défini sur <#${val}>.`);
-    }
+  if (customId.startsWith('setup:')) {
+    await handleSetupInteraction(client, guildId, interaction);
     return;
   }
 

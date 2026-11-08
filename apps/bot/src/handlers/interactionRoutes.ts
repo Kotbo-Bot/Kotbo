@@ -18,11 +18,6 @@ export type UserCaseRoute = {
   sanctionId?: string;
 };
 
-export function parseSetupStep(customId: string): string | null {
-  if (!customId.startsWith('setup:')) return null;
-  return customId.split(':')[1] ?? null;
-}
-
 export function parseValidateRoute(customId: string): ValidateRoute | null {
   if (!customId.startsWith('validate:')) return null;
 
