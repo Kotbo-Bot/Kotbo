@@ -41,6 +41,23 @@ export async function recordLinkTraffic(
   }
 }
 
+/**
+ * Issue d'une copie, comptée une fois : l'échec de la correspondance en base
+ * survient après la livraison, la copie n'est pas perdue pour autant.
+ */
+export function creerIssueCopie(enregistrer: (counter: 'received' | 'failed') => void) {
+  let livree = false;
+  return {
+    livree: () => {
+      livree = true;
+      enregistrer('received');
+    },
+    echouee: () => {
+      if (!livree) enregistrer('failed');
+    },
+  };
+}
+
 const TARGET: BulkTarget = {
   label: 'ChannelLinkGroupDailyStats',
   table: 'channel_link_group_daily_stats',

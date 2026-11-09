@@ -8537,6 +8537,8 @@
   "mcp_btn_copied": "✓ Copied",
   "mcp_btn_logs": "Connections",
   "mcp_endpoint_notice": "Paste this URL into your AI client. The server supports OAuth 2.0 with PKCE for Claude/ChatGPT, and Bearer token for MCP clients that require it.",
+  "mcp_rest_label": "REST API (read-only)",
+  "mcp_rest_notice": "Use the same key, with an Authorization: Bearer mcp_… or X-API-Key header. GET this URL to list the available tools; GET /tool_name?param=value returns the result as JSON. Limit shared with MCP: 100 requests per minute.",
   "mcp_keys_section_title": "Access Keys",
   "mcp_loading": "Loading…",
   "mcp_empty_title": "No keys",

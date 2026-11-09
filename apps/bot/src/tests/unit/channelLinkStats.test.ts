@@ -7,7 +7,23 @@ const dbJsPath = path.resolve(import.meta.dir, '../../utils/db.js');
 mock.module(dbPath, () => ({ default: mockDb, prisma: mockDb, prismaRead: mockDb }));
 mock.module(dbJsPath, () => ({ default: mockDb, prisma: mockDb, prismaRead: mockDb }));
 
-const { summarizeLinkStats } = await import('../../services/features/channelLinkStatsService');
+const { creerIssueCopie, summarizeLinkStats } = await import('../../services/features/channelLinkStatsService');
+
+describe('creerIssueCopie', () => {
+  test('copie livrée puis correspondance en échec : comptée une seule fois, en reçue', () => {
+    const comptes: string[] = [];
+    const issue = creerIssueCopie((c) => comptes.push(c));
+    issue.livree();
+    issue.echouee();
+    expect(comptes).toEqual(['received']);
+  });
+
+  test('copie jamais livrée : comptée en échec', () => {
+    const comptes: string[] = [];
+    creerIssueCopie((c) => comptes.push(c)).echouee();
+    expect(comptes).toEqual(['failed']);
+  });
+});
 
 describe('summarizeLinkStats', () => {
   test('totaux par pont, par salon et courbe des envois jour par jour', () => {

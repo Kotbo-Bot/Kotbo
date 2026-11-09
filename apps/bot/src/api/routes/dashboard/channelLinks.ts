@@ -1,5 +1,5 @@
 import { IncomingMessage, ServerResponse } from 'node:http';
-import { ChannelType, Client } from 'discord.js';
+import { ChannelType, Client, PermissionFlagsBits } from 'discord.js';
 import prisma from '../../../utils/db.js';
 import { logger } from '../../../utils/logger.js';
 import {
@@ -13,6 +13,7 @@ import {
   getGroup,
   inspectRelayPermissions,
   needsMessageMapping,
+  permissionsSalonDePont,
   refreshGroupTopics,
   removeGroup,
   removeGroupMember,
@@ -204,21 +205,25 @@ export async function handleChannelLinkRoutes(
       // « Créer le salon pour moi » : un salon texte du même nom que la source,
       // créé seulement une fois toutes les cibles validées.
       const createdChannels: { delete: (reason?: string) => Promise<unknown> }[] = [];
+      const annulerSalonsCrees = () => Promise.all(createdChannels.map((c) => c.delete('Kotbo Link: création du pont annulée').catch(() => null)));
       if (toCreate.length > 0) {
-        const sourceChannel = client.guilds.cache.get(guildId)?.channels.cache.get(sourceChannelId);
+        const sourceGuild = client.guilds.cache.get(guildId);
+        const sourceChannel = sourceGuild?.channels.cache.get(sourceChannelId);
+        const sourcePublique = !!sourceGuild && sourceChannel?.permissionsFor(sourceGuild.roles.everyone)?.has(PermissionFlagsBits.ViewChannel) === true;
         const channelName = sourceChannel?.name ?? 'pont-kotbo';
         for (const item of toCreate) {
           try {
             const created = await client.guilds.cache.get(item.guildId)!.channels.create({
               name: channelName,
               type: ChannelType.GuildText,
+              permissionOverwrites: permissionsSalonDePont(sourcePublique, item.guildId, client.user!.id),
               reason: 'Kotbo Link: salon créé pour le pont',
             });
             createdChannels.push(created);
             targets.push({ guildId: item.guildId, channelId: created.id, mode: item.mode });
           } catch (err) {
             logger.warn('ChannelLinkAPI', `Création du salon impossible sur ${item.guildId}`, err);
-            await Promise.all(createdChannels.map((c) => c.delete('Kotbo Link: création du pont annulée').catch(() => null)));
+            await annulerSalonsCrees();
             json(res, 400, { error: 'Le bot n\'a pas pu créer le salon sur l\'un des serveurs (permission Gérer les salons ?).' });
             return true;
           }
@@ -234,10 +239,13 @@ export async function handleChannelLinkRoutes(
         ownerMode: readMode(body?.ownerMode, body?.direction === 'UNIDIRECTIONAL' ? 'SEND_ONLY' : 'BOTH'),
         relayMode: readRelayMode(body?.relayMode),
         client,
+      }).catch(async (err) => {
+        await annulerSalonsCrees();
+        throw err;
       });
 
       if ('error' in result) {
-        await Promise.all(createdChannels.map((c) => c.delete('Kotbo Link: création du pont annulée').catch(() => null)));
+        await annulerSalonsCrees();
         json(res, 400, { error: result.error });
         return true;
       }

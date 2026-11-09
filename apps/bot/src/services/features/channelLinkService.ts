@@ -7,7 +7,7 @@ import { randomBytes } from 'node:crypto';
 import type { ChannelLinkGroup, ChannelLinkGroupMember, ChannelLinkInvite } from '@prisma/client';
 import { isGuildActivated } from '../../utils/activation.js';
 import { refreshLinkGuestGuilds } from './channelLinkGuestService.js';
-import { recordLinkTraffic } from './channelLinkStatsService.js';
+import { creerIssueCopie, recordLinkTraffic } from './channelLinkStatsService.js';
 import { INVITE_SOURCE, recordBotInvite } from '../analytics/inviteService.js';
 
 const TAG = 'ChannelLink';
@@ -627,6 +627,20 @@ function stripLinkTopic(topic: string): string {
 }
 
 /**
+ * Permissions d'un salon créé pour un pont. Une source que @everyone ne voit
+ * pas ne doit pas ressortir dans un salon public du serveur d'en face : le
+ * salon y reste caché, et ses admins l'ouvrent à qui ils veulent. L'id du
+ * rôle @everyone est celui du serveur.
+ */
+export function permissionsSalonDePont(sourcePublique: boolean, guildId: string, botId: string) {
+  if (sourcePublique) return [];
+  return [
+    { id: guildId, deny: [PermissionFlagsBits.ViewChannel] },
+    { id: botId, allow: [PermissionFlagsBits.ViewChannel] },
+  ];
+}
+
+/**
  * Réécrit le bloc de description de chaque salon du pont.
  *
  * Le bloc listait l'unique salon d'en face ; il énumère maintenant tous les
@@ -1156,6 +1170,7 @@ export async function relayMessage(message: Message, client: Client): Promise<vo
       let delivered = 0;
 
       for (const target of resolved.targets) {
+        const issue = creerIssueCopie((counter) => void recordLinkTraffic(group, target.guildId, target.channelId, counter));
         try {
           const destGuild = client.guilds.cache.get(target.guildId);
           if (!destGuild) continue;
@@ -1221,7 +1236,7 @@ export async function relayMessage(message: Message, client: Client): Promise<vo
 
             warnOnStrippedEmojis(client, target, fullContent, sent.content);
             delivered += 1;
-            void recordLinkTraffic(group, target.guildId, target.channelId, 'received');
+            issue.livree();
             await saveMessageMapping(group, message.id, message.channel.id, target, sent.id, activeWebhookId);
             webhookClient.destroy();
           } else {
@@ -1286,11 +1301,11 @@ export async function relayMessage(message: Message, client: Client): Promise<vo
               allowedMentions: { parse: [] },
             });
             delivered += 1;
-            void recordLinkTraffic(group, target.guildId, target.channelId, 'received');
+            issue.livree();
             await saveMessageMapping(group, message.id, message.channel.id, target, sent.id);
           }
         } catch (err) {
-          void recordLinkTraffic(group, target.guildId, target.channelId, 'failed');
+          issue.echouee();
           logger.error(TAG, `Erreur relay message ${message.id} vers ${target.guildId}/${target.channelId}`, err);
         }
       }
