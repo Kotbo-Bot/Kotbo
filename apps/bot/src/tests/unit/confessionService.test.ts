@@ -52,7 +52,8 @@ const prismaMock = {
     const releases: Array<() => void> = [];
     const tx = {
       confession,
-      $queryRaw: async (_sql: TemplateStringsArray, ...values: unknown[]) => {
+      // Seul `$executeRaw` existe ici : `$queryRaw` échoue en réel sur le `void` renvoyé par le verrou.
+      $executeRaw: async (_sql: TemplateStringsArray, ...values: unknown[]) => {
         const key = values.join(':');
         const previous = advisoryLocks.get(key) ?? Promise.resolve();
         let release!: () => void;
@@ -60,7 +61,7 @@ const prismaMock = {
         advisoryLocks.set(key, previous.then(() => held));
         await previous;
         releases.push(release);
-        return [];
+        return 0;
       },
     };
     try {

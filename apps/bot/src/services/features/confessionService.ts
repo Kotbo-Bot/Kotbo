@@ -29,7 +29,8 @@ async function reserveConfession(
   input: { rawContent: string; channelId: string; cooldownSeconds: number; bannedWords: string[] },
 ) {
   return prisma.$transaction(async (tx) => {
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${`confession:${guildId}`}))`;
+    // `$executeRaw` et non `$queryRaw` : l'adaptateur pg refuse de lire une colonne `void`.
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`confession:${guildId}`}))`;
     const lastOfAuthor = await tx.confession.findFirst({
       where: { guildId, authorId },
       orderBy: { createdAt: 'desc' },
