@@ -40,6 +40,7 @@ import {
 } from '../services/moderation/memberCaseService.js';
 import * as dcDetectionService from '../services/moderation/dcDetectionService.js';
 import { pickRecentAuditEntry } from './auditEntryMatch.js';
+import { attribuerParCompteur, type ReleveAudit } from './voiceAuditAttribution.js';
 
 type MessageSnapshot = {
   guildId: string;
@@ -636,6 +637,56 @@ async function resolveAuditEntry(
   }
 }
 
+const relevesAuditVocal = new Map<string, ReleveAudit>();
+const filesAuditVocal = new Map<string, Promise<unknown>>();
+const attendre = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Auteur d'un déplacement (`salonId` = salon d'arrivée) ou d'une déconnexion,
+ * d'après le compteur des entrées d'audit (voir `voiceAuditAttribution.ts`).
+ * Une file par serveur et par type : deux événements simultanés liraient sinon
+ * la même hausse de compteur et s'attribueraient le même auteur.
+ */
+function resolveVoiceAuditActor(
+  guild: Guild,
+  type: AuditLogEvent.MemberMove | AuditLogEvent.MemberDisconnect,
+  salonId: string | null,
+): Promise<string | null | undefined> {
+  const cle = `${guild.id}:${type}`;
+  const tache = (filesAuditVocal.get(cle) ?? Promise.resolve()).then(async () => {
+    // Discord écrit l'entrée d'audit un peu après l'événement vocal : on lui
+    // laisse le temps, puis on relit une fois avant de conclure « lui-même ».
+    for (const delai of [1_000, 2_000]) {
+      await attendre(delai);
+      const audit = await guild.fetchAuditLogs({ type, limit: 10 }).catch(() => null);
+      if (!audit) return undefined;
+      const entrees = [...audit.entries.values()].map((e) => {
+        const extra = e.extra as { count?: number; channel?: { id: string } } | null;
+        return { id: e.id, createdTimestamp: e.createdTimestamp, executorId: e.executorId, count: extra?.count ?? 1, channelId: extra?.channel?.id ?? null };
+      });
+      const { auteurId, releve } = attribuerParCompteur(entrees, relevesAuditVocal.get(cle), salonId, Date.now(), AUDIT_LOOKBACK_MS);
+      relevesAuditVocal.set(cle, releve);
+      if (auteurId !== null) return auteurId;
+    }
+    return null;
+  });
+  filesAuditVocal.set(cle, tache.catch(() => null));
+  return tache.catch(() => undefined);
+}
+
+/** Champ « Déplacé par » / « Déconnecté par », plus le nom pour le pied de page. */
+async function describeVoiceActor(
+  client: Client,
+  auteurId: string | null | undefined,
+  member: GuildMember | null,
+  userId: string,
+): Promise<{ valeur: string; nom: string } | null> {
+  if (auteurId === undefined) return null;
+  if (auteurId === null || auteurId === userId) return { valeur: 'Lui-même', nom: safeTag(member, userId) };
+  const tag = await resolveUserTag(client, auteurId);
+  return { valeur: formatUser(auteurId, tag), nom: tag };
+}
+
 async function resolveAuditExecutorName(
   guild: Guild,
   type: AuditLogEvent,
@@ -1113,8 +1164,14 @@ export function registerAdvancedLogsListener(client: Client): void {
       // change, jamais qui l'a change : le pied de page annoncait « Action
       // realisee par » la victime elle-meme. Quand rien n'a ete annonce, on
       // n'affiche aucun auteur plutot qu'un faux.
+      // Sinon, le journal d'audit (une déconnexion par un modérateur y laisse
+      // une trace) : il est lu même après Kotbo, pour solder son entrée.
+      // L'intention d'abord : elle expire en 10 s, l'audit peut attendre sa file.
       const auteurDepart = prendreIntentionVocale(guild.id, userId, 'disconnect');
-      await sendLogEmbed(guild, embed, 'voice_leave', [buildMemberCaseActionRow(userId)], auteurDepart?.libelle ?? null, [previousChannelId]);
+      const auteurAudit = await describeVoiceActor(client, await resolveVoiceAuditActor(guild, AuditLogEvent.MemberDisconnect, null), member, userId);
+      const qui = auteurDepart ? { valeur: auteurDepart.libelle, nom: auteurDepart.libelle } : auteurAudit;
+      if (qui) embed.addFields({ name: 'Déconnecté par', value: qui.valeur, inline: true });
+      await sendLogEmbed(guild, embed, 'voice_leave', [buildMemberCaseActionRow(userId)], qui?.nom ?? null, [previousChannelId]);
       return;
     }
 
@@ -1157,10 +1214,14 @@ export function registerAdvancedLogsListener(client: Client): void {
         });
       }
 
-      // Meme correction qu'au depart : seul un deplacement annonce par Kotbo
-      // porte un auteur, les autres n'en portent aucun.
+      // Meme logique qu'au depart : Kotbo d'abord, sinon le journal d'audit,
+      // sinon aucun auteur plutot qu'un faux.
+      // L'intention d'abord : elle expire en 10 s, l'audit peut attendre sa file.
       const auteurDeplacement = prendreIntentionVocale(guild.id, userId, 'move');
-      await sendLogEmbed(guild, embed, 'voice_move', [buildMemberCaseActionRow(userId)], auteurDeplacement?.libelle ?? null, [oldState.channelId, newState.channelId]);
+      const auteurAuditMove = await describeVoiceActor(client, await resolveVoiceAuditActor(guild, AuditLogEvent.MemberMove, newState.channelId), member, userId);
+      const quiMove = auteurDeplacement ? { valeur: auteurDeplacement.libelle, nom: auteurDeplacement.libelle } : auteurAuditMove;
+      if (quiMove) embed.addFields({ name: 'Déplacé par', value: quiMove.valeur, inline: true });
+      await sendLogEmbed(guild, embed, 'voice_move', [buildMemberCaseActionRow(userId)], quiMove?.nom ?? null, [oldState.channelId, newState.channelId]);
     }
   });
 
@@ -1637,6 +1698,30 @@ export function registerAdvancedLogsListener(client: Client): void {
     }
 
     if (entry.action === AuditLogEvent.MemberUpdate) {
+      // Micro coupé / sourdine imposés par un modérateur (clic droit dans Discord).
+      const etat = (cle: string, oui: string, non: string) => {
+        const change = entry.changes.find((c) => c.key === cle);
+        return change ? (change.new ? oui : non) : null;
+      };
+      const micro = etat('mute', '🔇 Coupé', '🎙️ Rétabli');
+      const casque = etat('deaf', '🔕 Sourdine imposée', '🔔 Sourdine retirée');
+      if (micro || casque) {
+        const embed = buildModerationEmbed(
+          '🎙️ Micro / sourdine serveur',
+          0x457b9d,
+          targetId,
+          targetTag,
+          executorId,
+          moderatorTag,
+          reason,
+          [
+            ...(micro ? [{ name: 'Micro', value: micro, inline: true }] : []),
+            ...(casque ? [{ name: 'Casque', value: casque, inline: true }] : []),
+          ],
+        );
+        await sendLogEmbed(guild, embed, 'voice_moderation', [buildMemberCaseActionRow(targetId), buildMemberCaseActionRow(executorId)], moderatorTag);
+      }
+
       const timeoutChange = entry.changes.find((change) => change.key === 'communication_disabled_until');
       if (!timeoutChange) return;
 

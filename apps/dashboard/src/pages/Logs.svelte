@@ -116,6 +116,7 @@
         { type: 'voice_join', label: m.lg_ev_voice_join(), desc: m.lg_ev_voice_join_d() },
         { type: 'voice_leave', label: m.lg_ev_voice_leave(), desc: m.lg_ev_voice_leave_d() },
         { type: 'voice_move', label: m.lg_ev_voice_move(), desc: m.lg_ev_voice_move_d() },
+        { type: 'voice_moderation', label: m.lg_ev_voice_moderation(), desc: m.lg_ev_voice_moderation_d() },
         { type: 'voice_panel', label: m.lg_ev_voice_panel(), desc: m.lg_ev_voice_panel_d() }
       ]
     },
