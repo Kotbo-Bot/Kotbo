@@ -27,6 +27,16 @@ function focusables(node: HTMLElement): HTMLElement[] {
   );
 }
 
+/**
+ * Seule la fenetre du dessus reagit : une confirmation ouverte par-dessus ne
+ * prend pas toujours le focus, et Echap fermait alors la fenetre du dessous.
+ * Les fenetres sont portees dans body, la plus recente en dernier.
+ */
+function isTopmost(node: HTMLElement): boolean {
+  const modals = document.querySelectorAll('[aria-modal="true"]');
+  return modals[modals.length - 1] === node;
+}
+
 export function dialogFocus(node: HTMLElement, options: DialogFocusOptions) {
   let onEscape = options.onEscape;
   const previouslyFocused = document.activeElement as HTMLElement | null;
@@ -37,6 +47,8 @@ export function dialogFocus(node: HTMLElement, options: DialogFocusOptions) {
   });
 
   function onKeyDown(event: KeyboardEvent) {
+    if (!isTopmost(node)) return;
+
     if (event.key === 'Escape') {
       if (!onEscape || event.defaultPrevented) return;
       event.preventDefault();

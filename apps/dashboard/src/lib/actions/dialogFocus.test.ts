@@ -7,7 +7,7 @@ let doc: Document;
 beforeAll(async () => {
   const dom = new JSDOM('<!doctype html><html><body></body></html>');
   const g = globalThis as Record<string, unknown>;
-  for (const key of ['window', 'document', 'Node', 'HTMLElement', 'Element', 'KeyboardEvent']) {
+  for (const key of ['window', 'document', 'Node', 'HTMLElement', 'Element']) {
     g[key] ??= (dom.window as unknown as Record<string, unknown>)[key];
   }
   g.requestAnimationFrame ??= (cb: () => void) => setTimeout(cb, 0);
@@ -19,13 +19,14 @@ beforeAll(async () => {
 const nextFrame = () => new Promise((resolve) => setTimeout(resolve, 5));
 
 function press(target: HTMLElement, key: string, shiftKey = false) {
-  const event = new KeyboardEvent('keydown', { key, shiftKey, bubbles: true, cancelable: true });
+  const KeyboardEventCtor = doc.defaultView!.KeyboardEvent;
+  const event = new KeyboardEventCtor('keydown', { key, shiftKey, bubbles: true, cancelable: true });
   target.dispatchEvent(event);
   return event;
 }
 
 function setup(inner = '<button id="a">A</button><input id="b" /><button id="c">C</button>') {
-  doc.body.innerHTML = `<button id="trigger">Ouvrir</button><div id="panel" tabindex="-1">${inner}</div>`;
+  doc.body.innerHTML = `<button id="trigger">Ouvrir</button><div id="panel" role="dialog" aria-modal="true" tabindex="-1">${inner}</div>`;
   const trigger = doc.getElementById('trigger') as HTMLElement;
   const panel = doc.getElementById('panel') as HTMLElement;
   trigger.focus();
@@ -114,6 +115,21 @@ describe('dialogFocus', () => {
     dialogFocus(panel, {});
     const event = press(panel, 'Escape');
     expect(event.defaultPrevented).toBe(false);
+  });
+
+  test("une fenetre ouverte par-dessus : Echap et Tab ne concernent pas celle du dessous", () => {
+    const { panel } = setup();
+    const onEscape = mock(() => {});
+    dialogFocus(panel, { onEscape });
+    const confirm = doc.createElement('div');
+    confirm.setAttribute('aria-modal', 'true');
+    doc.body.appendChild(confirm);
+    const last = doc.getElementById('c') as HTMLElement;
+    last.focus();
+    press(last, 'Escape');
+    const tab = press(last, 'Tab');
+    expect(onEscape).not.toHaveBeenCalled();
+    expect(tab.defaultPrevented).toBe(false);
   });
 
   test('update remplace le gestionnaire Echap', () => {
