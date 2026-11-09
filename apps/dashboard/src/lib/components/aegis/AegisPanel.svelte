@@ -117,7 +117,7 @@
       }
     },
     onReset: () => {
-      if (saved && config) config = { ...structuredClone(saved), enabled: config.enabled, trainingConsent: config.trainingConsent };
+      if (saved && config) config = { ...$state.snapshot(saved), enabled: config.enabled, trainingConsent: config.trainingConsent };
     },
   });
 
