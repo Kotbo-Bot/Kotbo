@@ -36,6 +36,9 @@
   import { m } from '../i18n';
   import { responsiveTables } from '../actions/responsiveTables';
   import { getMobilePageLayout, getPageKey } from '../mobilePageContext';
+  import { buildCrumbs } from '../breadcrumbs';
+  import { brandingStore } from '../stores/branding.svelte';
+  import { focusMainAfterNavigation, pageTitle } from '../pageFocus';
 
   const { children }: { children?: Snippet } = $props();
 
@@ -95,6 +98,24 @@
       mobileNav.close();
       navigationStore.noteVisit(path);
     });
+  });
+
+  $effect(() => {
+    const crumbs = buildCrumbs($router.path);
+    document.title = pageTitle(crumbs.at(-1)?.name ?? m.bc_home(), brandingStore.brandName);
+  });
+
+  // Au premier affichage, le focus reste en haut de page, sur le lien d'evitement.
+  let mainEl = $state<HTMLElement | null>(null);
+  let previousPath: string | null = null;
+  $effect(() => {
+    const path = $router.path;
+    const main = untrack(() => mainEl);
+    if (previousPath !== null && path !== previousPath && main) {
+      // Une image plus tard : la palette ou le menu mobile ont rendu le focus.
+      requestAnimationFrame(() => focusMainAfterNavigation(main));
+    }
+    previousPath = path;
   });
 
   const collapsed = $derived(sidebarStore.collapsed);
@@ -178,11 +199,13 @@
     {/if}
 
     <main
+      bind:this={mainEl}
       id="main-content"
+      tabindex="-1"
       use:responsiveTables
       data-mobile-layout={mobilePageLayout}
       data-page={pageKey}
-      class="app-main w-full {fullBleed ? 'app-main--bleed' : 'px-8 py-6 pb-20 max-w-[1400px] mx-auto'}"
+      class="app-main w-full focus:outline-none {fullBleed ? 'app-main--bleed' : 'px-8 py-6 pb-20 max-w-[1400px] mx-auto'}"
     >
       <DemoBanner />
       {#if !$isPhone && !fullBleed}
