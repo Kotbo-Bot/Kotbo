@@ -12,13 +12,14 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Client } from 'discord.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import { json } from '../shared.js';
 import { verifyMcpKey } from './mcpKeyService.js';
 import { registerMcpTools } from './mcpTools.js';
 import { checkRateLimit, isValidMcpGuildId } from './mcpServer.js';
-import type { McpToolConfig, McpToolHandler } from './toolkit.js';
+import { PANNE_INTERNE_META, type McpToolConfig, type McpToolHandler } from './toolkit.js';
 import { getGuildPlan } from '../../services/system/planService.js';
 import { logger } from '../../utils/logger.js';
 import { GENERIC_ERROR_MESSAGE, publicErrorMessage } from '../../utils/publicError.js';
@@ -44,10 +45,19 @@ function inputSchemaOf(config: McpToolConfig): z.ZodObject<z.ZodRawShape> {
   return raw instanceof z.ZodObject ? raw : z.object(raw as z.ZodRawShape);
 }
 
+function lectureJson(texte: string): unknown[] {
+  try {
+    return [JSON.parse(texte)];
+  } catch {
+    return [];
+  }
+}
+
 /**
  * La query string n'a que des chaînes : chaque champ garde sa valeur brute si
  * son schéma l'accepte, sinon on essaie sa lecture JSON (nombre, booléen,
- * tableau). Les IDs Discord restent des chaînes, JSON.parse les arrondirait.
+ * tableau), puis un tableau d'une valeur. Les IDs Discord restent des chaînes,
+ * JSON.parse les arrondirait.
  */
 export function argsFromQuery(schema: z.ZodObject<z.ZodRawShape>, params: URLSearchParams) {
   const args: Record<string, unknown> = {};
@@ -55,17 +65,22 @@ export function argsFromQuery(schema: z.ZodObject<z.ZodRawShape>, params: URLSea
     const values = params.getAll(key);
     const raw: unknown = values.length > 1 ? values : values[0];
     const field = schema.shape[key];
-    if (!field || field.safeParse(raw).success) {
+    if (!field) {
       args[key] = raw;
       continue;
     }
-    try {
-      args[key] = JSON.parse(String(raw));
-    } catch {
-      args[key] = values.length > 1 ? values : raw;
-    }
+    // Le JSON passe avant la valeur seule : `["1","2"]` serait sinon un tableau d'un élément.
+    const lectures = [raw, ...lectureJson(String(raw)), [raw]];
+    const valides = lectures.filter((lecture) => field.safeParse(lecture).success);
+    args[key] = valides.length > 0 ? valides[0] : raw;
   }
   return schema.strict().safeParse(args);
+}
+
+export function statutOutil(result: Pick<CallToolResult, 'isError' | '_meta'>): number {
+  if (!result.isError) return 200;
+  if (result._meta?.['mcp/www_authenticate']) return 403;
+  return result._meta?.[PANNE_INTERNE_META] ? 500 : 400;
 }
 
 export async function handleRestApiRoutes(
@@ -146,7 +161,7 @@ export async function handleRestApiRoutes(
     } catch {
       data = { text };
     }
-    json(res, result.isError ? 400 : 200, data);
+    json(res, statutOutil(result), data);
   } catch (e) {
     logger.error('RestApi', `Outil ${toolName} en échec :`, e);
     json(res, 500, { error: publicErrorMessage(e, GENERIC_ERROR_MESSAGE, 'RestApi') });

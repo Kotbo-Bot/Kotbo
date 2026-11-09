@@ -94,6 +94,7 @@
   const readPermissions = $derived(PERMISSIONS.filter((p) => p.value.startsWith('READ_')));
   const writePermissions = $derived(PERMISSIONS.filter((p) => p.value.startsWith('WRITE_')));
   const endpointUrl = $derived(guildId ? `${API_BASE_URL}/api/mcp/${guildId}` : '');
+  const restApiUrl = $derived(guildId ? `${API_BASE_URL}/api/v1/${guildId}` : '');
   const aiGuides = $derived({
     claude: {
       name: 'Claude',
@@ -374,6 +375,23 @@
     <p class="text-xs text-gray-600 mt-2">
       {m.mcp_endpoint_notice()}
     </p>
+    {#if restApiUrl}
+      <div class="mt-4">
+        <p class="text-xs font-medium text-gray-500 mb-1.5">{m.mcp_rest_label()}</p>
+        <div class="flex items-center gap-2">
+          <code class="flex-1 bg-black/40 border border-white/8 rounded-lg px-3 py-2 text-xs font-mono text-gray-300 break-all">
+            {restApiUrl}
+          </code>
+          <button
+            onclick={() => copy(restApiUrl, 'rest')}
+            class="shrink-0 px-2.5 py-2 rounded-lg border border-white/10 text-xs text-gray-400 hover:text-white transition-colors"
+          >
+            {copiedField === 'rest' ? m.mcp_btn_copied() : m.mcp_btn_copy()}
+          </button>
+        </div>
+        <p class="text-xs text-gray-600 mt-2">{m.mcp_rest_notice()}</p>
+      </div>
+    {/if}
   </div>
 
   <!-- Keys -->

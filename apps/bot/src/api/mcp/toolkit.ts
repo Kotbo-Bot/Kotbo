@@ -7,6 +7,7 @@
 import { embedToApiShape, resolveMentionsToText } from '../../services/features/transcriptService.js';
 import prisma from '../../utils/db.js';
 import { GENERIC_ERROR_MESSAGE, publicErrorMessage } from '../../utils/publicError.js';
+import { classifyFailure } from '../../utils/failureKind.js';
 import { embedToV2 } from '../../utils/patchV2.js';
 import { type CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { type APIEmbed, ChannelType, Client, ContainerBuilder, ForumChannel, type Guild, type GuildBasedChannel, type Message, type NonThreadGuildBasedChannel, MessageFlags, type NewsChannel, TextChannel, TextDisplayBuilder, ThreadChannel } from 'discord.js';
@@ -33,6 +34,9 @@ export const err = (msg: string, meta?: Record<string, unknown>): CallToolResult
 
 export { publicErrorMessage };
 
+/** Marque une panne, par opposition à un refus métier : l'API REST en fait une 500. */
+export const PANNE_INTERNE_META = 'kotbo/internal_failure';
+
 /**
  * Échec d'un outil : le message brut de l'erreur ne remonte que s'il est écrit
  * pour l'utilisateur (voir utils/publicError.ts) ; sinon un message générique,
@@ -40,7 +44,11 @@ export { publicErrorMessage };
  */
 export const toolError = (e: unknown, context?: string): CallToolResult => {
   const message = publicErrorMessage(e, GENERIC_ERROR_MESSAGE, 'MCP');
-  return err(context ? `${context} : ${message}` : message);
+  const texte = context ? `${context} : ${message}` : message;
+  // Un message d'erreur métier reste une 400 ; une panne connue (base, réseau) a un message et un statut 5xx.
+  const { status, code } = classifyFailure(e);
+  const panne = code === 'internal_error' ? message === GENERIC_ERROR_MESSAGE : status >= 500;
+  return panne ? err(texte, { [PANNE_INTERNE_META]: true }) : err(texte);
 };
 
 // Renvoie une "erreur" structurée listant les candidats possibles quand une

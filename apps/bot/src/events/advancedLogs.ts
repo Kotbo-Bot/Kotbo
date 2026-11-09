@@ -20,7 +20,7 @@ import { kotboEventBus } from '@kotbo/core';
 import prisma from '../utils/db.js';
 import { upsertRetryingRace } from '../utils/upsertRetry.js';
 import { logger } from '../utils/logger.js';
-import { isLogIgnoredChannel, sendLogEmbed } from '../utils/logDispatch.js';
+import { isLogEventEnabled, isLogIgnoredChannel, sendLogEmbed } from '../utils/logDispatch.js';
 import { queueAuditLog } from '../utils/auditLogger.js';
 import { cache, getCachedGuild } from '../utils/cache.js';
 import { prendreIntentionVocale } from '../services/moderation/voiceIntentRegistry.js';
@@ -40,7 +40,7 @@ import {
 } from '../services/moderation/memberCaseService.js';
 import * as dcDetectionService from '../services/moderation/dcDetectionService.js';
 import { pickRecentAuditEntry } from './auditEntryMatch.js';
-import { attribuerParCompteur, type ReleveAudit } from './voiceAuditAttribution.js';
+import { attribuerLot, creerRegroupeurLots, type ReleveAudit } from './voiceAuditAttribution.js';
 
 type MessageSnapshot = {
   guildId: string;
@@ -637,52 +637,53 @@ async function resolveAuditEntry(
   }
 }
 
+type TypeAuditVocal = AuditLogEvent.MemberMove | AuditLogEvent.MemberDisconnect;
+type DemandeAuditVocale = { guild: Guild; type: TypeAuditVocal; salonId: string | null; botId: string | undefined };
+
 const relevesAuditVocal = new Map<string, ReleveAudit>();
-const filesAuditVocal = new Map<string, Promise<unknown>>();
-const attendre = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /**
- * Auteur d'un déplacement (`salonId` = salon d'arrivée) ou d'une déconnexion,
- * d'après le compteur des entrées d'audit (voir `voiceAuditAttribution.ts`).
- * Une file par serveur et par type : deux événements simultanés liraient sinon
- * la même hausse de compteur et s'attribueraient le même auteur.
+ * Une seule lecture du journal d'audit par rafale d'événements, une fois le
+ * calme revenu : Discord écrit l'entrée un peu après l'événement vocal, et des
+ * événements jugés séparément se prendraient les hausses des uns des autres.
  */
-function resolveVoiceAuditActor(
-  guild: Guild,
-  type: AuditLogEvent.MemberMove | AuditLogEvent.MemberDisconnect,
-  salonId: string | null,
-): Promise<string | null | undefined> {
-  const cle = `${guild.id}:${type}`;
-  const tache = (filesAuditVocal.get(cle) ?? Promise.resolve()).then(async () => {
-    // Discord écrit l'entrée d'audit un peu après l'événement vocal : on lui
-    // laisse le temps, puis on relit une fois avant de conclure « lui-même ».
-    for (const delai of [1_000, 2_000]) {
-      await attendre(delai);
-      const audit = await guild.fetchAuditLogs({ type, limit: 10 }).catch(() => null);
-      if (!audit) return undefined;
-      const entrees = [...audit.entries.values()].map((e) => {
-        const extra = e.extra as { count?: number; channel?: { id: string } } | null;
-        return { id: e.id, createdTimestamp: e.createdTimestamp, executorId: e.executorId, count: extra?.count ?? 1, channelId: extra?.channel?.id ?? null };
-      });
-      const { auteurId, releve } = attribuerParCompteur(entrees, relevesAuditVocal.get(cle), salonId, Date.now(), AUDIT_LOOKBACK_MS);
-      relevesAuditVocal.set(cle, releve);
-      if (auteurId !== null) return auteurId;
-    }
-    return null;
+const lireAuteursAuditVocal = creerRegroupeurLots<DemandeAuditVocale, string | null>(async (cle, demandes) => {
+  const { guild, type, botId } = demandes[0];
+  const audit = await guild.fetchAuditLogs({ type, limit: 10 }).catch(() => null);
+  if (!audit) {
+    // Les hausses de ce lot ne seront jamais lues : pas de relevé périmé.
+    relevesAuditVocal.delete(cle);
+    return demandes.map(() => null);
+  }
+  const entrees = [...audit.entries.values()].map((e) => {
+    const extra = e.extra as { count?: number; channel?: { id: string } } | null;
+    return { id: e.id, createdTimestamp: e.createdTimestamp, executorId: e.executorId, count: extra?.count ?? 1, channelId: extra?.channel?.id ?? null };
   });
-  filesAuditVocal.set(cle, tache.catch(() => null));
-  return tache.catch(() => undefined);
-}
+  const { auteurs, releve } = attribuerLot(entrees, relevesAuditVocal.get(cle), demandes.map((d) => d.salonId), botId, Date.now(), AUDIT_LOOKBACK_MS);
+  relevesAuditVocal.set(cle, releve);
+  return auteurs;
+}, { calmeMs: 3_000, plafondMs: 10_000 });
 
-/** Champ « Déplacé par » / « Déconnecté par », plus le nom pour le pied de page. */
-async function describeVoiceActor(
+/**
+ * Champ « Déplacé par » / « Déconnecté par » et nom du pied de page, d'après le
+ * journal d'audit (`salonId` = salon d'arrivée d'un déplacement). `null` quand
+ * rien ne désigne un modérateur. Aucune lecture si ce log est désactivé.
+ */
+async function auteurAuditVocal(
   client: Client,
-  auteurId: string | null | undefined,
-  member: GuildMember | null,
-  userId: string,
+  guild: Guild,
+  type: TypeAuditVocal,
+  salonId: string | null,
+  eventType: 'voice_leave' | 'voice_move',
 ): Promise<{ valeur: string; nom: string } | null> {
-  if (auteurId === undefined) return null;
-  if (auteurId === null || auteurId === userId) return { valeur: 'Lui-même', nom: safeTag(member, userId) };
+  const cle = `${guild.id}:${type}`;
+  if (!(await isLogEventEnabled(guild.id, eventType))) {
+    // Log coupé : les hausses à venir ne seront pas lues, le relevé périmerait.
+    relevesAuditVocal.delete(cle);
+    return null;
+  }
+  const auteurId = await lireAuteursAuditVocal(cle, { guild, type, salonId, botId: client.user?.id });
+  if (!auteurId) return null;
   const tag = await resolveUserTag(client, auteurId);
   return { valeur: formatUser(auteurId, tag), nom: tag };
 }
@@ -1165,11 +1166,11 @@ export function registerAdvancedLogsListener(client: Client): void {
       // realisee par » la victime elle-meme. Quand rien n'a ete annonce, on
       // n'affiche aucun auteur plutot qu'un faux.
       // Sinon, le journal d'audit (une déconnexion par un modérateur y laisse
-      // une trace) : il est lu même après Kotbo, pour solder son entrée.
-      // L'intention d'abord : elle expire en 10 s, l'audit peut attendre sa file.
+      // une trace). L'intention d'abord : elle expire en 10 s.
       const auteurDepart = prendreIntentionVocale(guild.id, userId, 'disconnect');
-      const auteurAudit = await describeVoiceActor(client, await resolveVoiceAuditActor(guild, AuditLogEvent.MemberDisconnect, null), member, userId);
-      const qui = auteurDepart ? { valeur: auteurDepart.libelle, nom: auteurDepart.libelle } : auteurAudit;
+      const qui = auteurDepart
+        ? { valeur: auteurDepart.libelle, nom: auteurDepart.libelle }
+        : await auteurAuditVocal(client, guild, AuditLogEvent.MemberDisconnect, null, 'voice_leave');
       if (qui) embed.addFields({ name: 'Déconnecté par', value: qui.valeur, inline: true });
       await sendLogEmbed(guild, embed, 'voice_leave', [buildMemberCaseActionRow(userId)], qui?.nom ?? null, [previousChannelId]);
       return;
@@ -1216,10 +1217,10 @@ export function registerAdvancedLogsListener(client: Client): void {
 
       // Meme logique qu'au depart : Kotbo d'abord, sinon le journal d'audit,
       // sinon aucun auteur plutot qu'un faux.
-      // L'intention d'abord : elle expire en 10 s, l'audit peut attendre sa file.
       const auteurDeplacement = prendreIntentionVocale(guild.id, userId, 'move');
-      const auteurAuditMove = await describeVoiceActor(client, await resolveVoiceAuditActor(guild, AuditLogEvent.MemberMove, newState.channelId), member, userId);
-      const quiMove = auteurDeplacement ? { valeur: auteurDeplacement.libelle, nom: auteurDeplacement.libelle } : auteurAuditMove;
+      const quiMove = auteurDeplacement
+        ? { valeur: auteurDeplacement.libelle, nom: auteurDeplacement.libelle }
+        : await auteurAuditVocal(client, guild, AuditLogEvent.MemberMove, newState.channelId, 'voice_move');
       if (quiMove) embed.addFields({ name: 'Déplacé par', value: quiMove.valeur, inline: true });
       await sendLogEmbed(guild, embed, 'voice_move', [buildMemberCaseActionRow(userId)], quiMove?.nom ?? null, [oldState.channelId, newState.channelId]);
     }
@@ -1719,7 +1720,9 @@ export function registerAdvancedLogsListener(client: Client): void {
             ...(casque ? [{ name: 'Casque', value: casque, inline: true }] : []),
           ],
         );
-        await sendLogEmbed(guild, embed, 'voice_moderation', [buildMemberCaseActionRow(targetId), buildMemberCaseActionRow(executorId)], moderatorTag);
+        // Un modérateur peut se couper le micro : Discord refuse deux `custom_id` identiques.
+        const casiers = [...new Set([targetId, executorId])].map((id) => buildMemberCaseActionRow(id));
+        await sendLogEmbed(guild, embed, 'voice_moderation', casiers, moderatorTag);
       }
 
       const timeoutChange = entry.changes.find((change) => change.key === 'communication_disabled_until');

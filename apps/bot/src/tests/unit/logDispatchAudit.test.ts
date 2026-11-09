@@ -29,7 +29,7 @@ for (const [relatif, fabrique] of moduleMocks) {
   mock.module(path.resolve(import.meta.dir, `${relatif}.js`), fabrique);
 }
 
-const { sendLogEmbed } = await import('../../utils/logDispatch.js');
+const { isLogEventEnabled, sendLogEmbed } = await import('../../utils/logDispatch.js');
 
 const guild = {
   id: '100000000000000000',
@@ -45,6 +45,14 @@ function embed() {
 }
 
 beforeEach(() => { audits.length = 0; });
+
+describe('isLogEventEnabled', () => {
+  test('suit l’interrupteur du type d’événement', async () => {
+    expect(await isLogEventEnabled('100000000000000000', 'voice_leave')).toBe(true);
+    prismaMock.guildLogEventConfig.findUnique.mockImplementationOnce(async () => ({ enabled: false, channelId: null }));
+    expect(await isLogEventEnabled('100000000000000000', 'voice_leave')).toBe(false);
+  });
+});
 
 describe('D2 — audit en base de sendLogEmbed', () => {
   test('sans détails fournis : résumé de l\'embed et salon de logs, comme avant', async () => {
