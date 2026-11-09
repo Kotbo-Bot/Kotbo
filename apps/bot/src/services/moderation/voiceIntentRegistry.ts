@@ -6,7 +6,7 @@
  * `{ channel, count }` et `{ count }`. Il est donc impossible de savoir de quel
  * membre une entrée parle. Pour les actions faites dans Discord, `advancedLogs`
  * apparie par la hausse du compteur (`voiceAuditAttribution.ts`) et se tait
- * quand deux modérateurs sont candidats ; c'est une déduction, pas une preuve.
+ * dès que le lot d'événements est ambigu ; c'est une déduction, pas une preuve.
  *
  * Mais pour tout ce que **Kotbo** provoque lui-même, la question a une réponse
  * certaine : le code sait déjà qui a demandé le déplacement. Ce registre le lui

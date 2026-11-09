@@ -120,6 +120,23 @@ export async function isLogIgnoredChannel(
   });
 }
 
+function configEvenementLog(guildId: string, eventType: string) {
+  return resoudreConfigLog({
+    cle: `guild:${guildId}:log_event_config:${eventType}`,
+    lireEnBase: () => prisma.guildLogEventConfig.findUnique({
+      where: { guildId_eventType: { guildId, eventType } },
+      select: { enabled: true, channelId: true },
+    }),
+    cacheGet: (cle) => cache.get<EntreeConfigLog>(cle),
+    cacheSet: (cle, valeur) => cache.set(cle, valeur, 60),
+  });
+}
+
+/** Pour éviter un travail coûteux (journal d'audit) dont le log serait jeté. */
+export async function isLogEventEnabled(guildId: string, eventType: string): Promise<boolean> {
+  return (await configEvenementLog(guildId, eventType)).journaliser;
+}
+
 export async function sendLogEmbed(
   guild: Guild,
   embed: EmbedBuilder,
@@ -153,15 +170,7 @@ export async function sendLogEmbed(
   // chemin chaud ne puissent plus decider differemment. Ils le faisaient : une
   // absence de ligne journalisait au premier passage puis etait relue comme un
   // refus pendant toute la duree de vie du cache.
-  const decision = await resoudreConfigLog({
-    cle: `guild:${guild.id}:log_event_config:${eventType}`,
-    lireEnBase: () => prisma.guildLogEventConfig.findUnique({
-      where: { guildId_eventType: { guildId: guild.id, eventType } },
-      select: { enabled: true, channelId: true },
-    }),
-    cacheGet: (cle) => cache.get<EntreeConfigLog>(cle),
-    cacheSet: (cle, valeur) => cache.set(cle, valeur, 60),
-  });
+  const decision = await configEvenementLog(guild.id, eventType);
 
   if (!decision.journaliser) return;
 
