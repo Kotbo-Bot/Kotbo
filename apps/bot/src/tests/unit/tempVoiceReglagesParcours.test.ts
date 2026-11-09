@@ -191,6 +191,8 @@ interface OptionsScene {
   garderBase?: boolean;
   /** `reglagesPerso` du générateur (absent = défaut, activé). */
   reglagesPerso?: boolean;
+  /** `visibilite` du générateur (absent = défaut, visible par tous). */
+  visibilite?: string;
 }
 
 interface Scene {
@@ -228,7 +230,10 @@ function reglerBase(opts: OptionsScene) {
     tempVoiceChannelId: IDS.GEN,
     tempVoiceCategoryId: null,
     tempVoiceNameTemplate: opts.modeleNom ?? 'Salon de {user}',
-    tempVoiceDefaults: opts.reglagesPerso === undefined ? {} : { reglagesPerso: opts.reglagesPerso },
+    tempVoiceDefaults: {
+      ...(opts.reglagesPerso === undefined ? {} : { reglagesPerso: opts.reglagesPerso }),
+      ...(opts.visibilite ? { visibilite: opts.visibilite } : {}),
+    },
     moderatorRoleId: IDS.ROLE_MOD,
     language: opts.langue,
   };
@@ -415,6 +420,25 @@ describe('Mes réglages — à la création', () => {
     const sc = await monterScene({ langue: 'fr', format: 'V2', mode: 'CLASSIC', garderBase: true, reglagesPerso: false });
     expect(cache(sc, IDS.CIBLE)).toBe(false);
     expect(salonBrut(sc).name).not.toBe('Repaire perso');
+  });
+});
+
+describe('Visibilité du générateur et staff', () => {
+  test('générateur « Privé », sans réglages enregistrés : caché à @everyone dès la création, le staff garde la vue', async () => {
+    sauves.clear();
+    const sc = await monterScene({ langue: 'fr', format: 'V2', mode: 'CLASSIC', visibilite: 'prive' });
+    expect(cache(sc, IDS.GUILD)).toBe(true);
+    expect(voitExpres(sc, IDS.ROLE_MOD)).toBe(true);
+    expect(voitExpres(sc, IDS.PROPRIO)).toBe(true);
+  });
+
+  test('menu Visibilité → Privé : le staff garde la vue', async () => {
+    sauves.clear();
+    const sc = await monterScene({ langue: 'fr', format: 'V2', mode: 'CLASSIC' });
+    expect(voitExpres(sc, IDS.ROLE_MOD)).toBe(false);
+    await choisir(sc, 'prive');
+    expect(cache(sc, IDS.GUILD)).toBe(true);
+    expect(voitExpres(sc, IDS.ROLE_MOD)).toBe(true);
   });
 });
 

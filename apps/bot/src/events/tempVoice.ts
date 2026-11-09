@@ -1037,11 +1037,16 @@ function menuVisibilite(etat: EtatSalon, actif: boolean, locale: BotLocale): Str
 }
 
 /** Applique la visibilité effective du salon (rôles d'office compris) ; un bloqué reste caché. */
-async function reappliquerVisibilite(channel: VoiceChannel, guildId: string, entree: EntreeSalonTemporaire): Promise<void> {
-  await appliquerVisibilite(channel, await visibiliteDuSalon(guildId, entree), {
+async function reappliquerVisibilite(
+  channel: VoiceChannel, guildId: string, entree: EntreeSalonTemporaire, acteurId?: string,
+): Promise<void> {
+  const visibilite = await visibiliteDuSalon(guildId, entree);
+  await appliquerVisibilite(channel, visibilite, {
     proprietaireId: entree.creatorId,
     rolesOffice: await rolesAutoriseDOffice(channel, guildId, entree),
   });
+  // Caché à @everyone : le staff garde la vue et l'entrée, comme au verrou.
+  if (visibilite !== 'tous') await garderEntreeStaff(channel, acteurId);
 }
 
 const tronquer = (s: string, max: number) => (s.length > max ? `${s.slice(0, max - 1)}…` : s);
@@ -1074,6 +1079,7 @@ async function appliquerReglagesEnregistres(
     proprietaireId: entree.creatorId,
     rolesOffice: await rolesAutoriseDOffice(channel, guildId, entree),
   });
+  if (r.visibilite !== 'tous') await garderEntreeStaff(channel);
   entree.visibility = r.visibilite;
   if (r.modeEcriture) await (dejaEnFile ? poserModeEcriture : appliquerModeEcriture)(channel, entree, r.modeEcriture);
   await persisterEtatSalon(guildId, channel.id);
@@ -3262,12 +3268,19 @@ async function createTempChannel(
 
   // Le reste des réglages (nom, limite, verrou, autorisés, visibilité) AVANT
   // d'y déplacer le créateur ; le mode de chat suit, une fois l'entrée connue.
+  const ctxVisibilite = {
+    proprietaireId: member.id,
+    rolesOffice: (policy.autoAllowRoleIds ?? []).filter((id) => id !== guild.id && tempChannel.permissionOverwrites.cache.has(id)),
+  };
+  const visibiliteInitiale = reglages?.visibilite ?? normaliserVisibilite(policy.visibilite);
   if (reglages) {
-    await appliquerReglagesPerso(tempChannel, reglages, {
-      proprietaireId: member.id,
-      rolesOffice: (policy.autoAllowRoleIds ?? []).filter((id) => id !== guild.id && tempChannel.permissionOverwrites.cache.has(id)),
-    }).catch((err: unknown) => logger.warn('TempVoice', `Réglages enregistrés non appliqués à ${tempChannel.id} :`, err));
+    await appliquerReglagesPerso(tempChannel, reglages, ctxVisibilite)
+      .catch((err: unknown) => logger.warn('TempVoice', `Réglages enregistrés non appliqués à ${tempChannel.id} :`, err));
+  } else if (visibiliteInitiale !== 'tous') {
+    await appliquerVisibilite(tempChannel, visibiliteInitiale, ctxVisibilite)
+      .catch((err: unknown) => logger.warn('TempVoice', `Visibilité du générateur non appliquée à ${tempChannel.id} :`, err));
   }
+  if (visibiliteInitiale !== 'tous') await garderEntreeStaff(tempChannel);
 
   // Le déplacement échoue si le membre a déjà quitté le vocal. La suppression
   // n'étant déclenchée que par le départ d'un occupant, un salon que personne
@@ -6156,7 +6169,7 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
     const visibilite = normaliserVisibilite(interaction.values[0]);
     cache.visibility = visibilite;
     await guild.channels.fetch(channel.id, { force: true }).catch(() => null);
-    await reappliquerVisibilite(channel, guildId, cache);
+    await reappliquerVisibilite(channel, guildId, cache, interaction.user.id);
     await persisterEtatSalon(guildId, channel.id);
     await rafraichirSousPanneauSalon(ctx);
     await reponseSupplementaire(
