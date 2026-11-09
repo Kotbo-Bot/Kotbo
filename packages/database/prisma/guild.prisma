@@ -1014,6 +1014,10 @@ model MemberProfile {
   // d'écriture à leur exception (`["<userId>", ...]`). `null` = aucun.
   tempVoiceWriteNoAsk Json?
 
+  /// Réglages enregistrés du membre pour ses salons vocaux temporaires : nom,
+  /// limite, accès, visibilité, bloqués, autorisés, mode de chat. `null` = rien d'enregistré.
+  tempVoiceSavedSettings Json?
+
   guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
   eventParticipations EventParticipant[]
 
@@ -1226,6 +1230,9 @@ model TempVoiceChannel {
   /// cette colonne, le demarrage la prenait pour une presence et l'effacait.
   /// `null` = aucune exception.
   writeExceptions Json?
+
+  /// Visibilité du salon : 'tous' | 'acces' | 'prive'. `null` = défaut du serveur.
+  visibility String?
 
   createdAt  DateTime @default(now())
 

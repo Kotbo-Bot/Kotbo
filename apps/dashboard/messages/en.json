@@ -18328,5 +18328,17 @@
   "obs_building": "Building",
   "cbx_bio_count": "{count}/{max} characters",
   "nbx_switch_current": "Switch server, current server {name}",
-  "nbx_server_named": "Server {name}"
+  "nbx_server_named": "Server {name}",
+  "cm_tv_perso_title": "Per-person settings and visibility",
+  "cm_tv_perso_desc": "What each member can keep from one channel to the next, and who sees the channels created.",
+  "cm_tv_reglages_perso_label": "Allow saving personal settings",
+  "cm_tv_reglages_perso_hint": "\"My settings\" menu in Ownership. Reapplied to each new channel of that person; on transfer, the new owner's settings apply if they have any, otherwise the channel keeps its own.",
+  "cm_tv_visibilite_label": "Default visibility of created channels",
+  "cm_tv_visibilite_tous": "Visible to everyone",
+  "cm_tv_visibilite_tous_hint": "Everyone sees the channel in the list; Open/Locked only controls who can join.",
+  "cm_tv_visibilite_acces": "Follows access",
+  "cm_tv_visibilite_acces_hint": "Open = visible to everyone; Locked = hidden from everyone except allowed members.",
+  "cm_tv_visibilite_prive": "Private (hidden)",
+  "cm_tv_visibilite_prive_hint": "Hidden from everyone except the owner, allowed members and standing roles, even when open.",
+  "cm_tv_visibilite_note": "A member blocked by the owner never sees the channel, whatever this setting. The owner can change their channel's visibility from the panel."
 }

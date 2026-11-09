@@ -18328,5 +18328,17 @@
   "obs_building": "Construction",
   "cbx_bio_count": "{count}/{max} caractères",
   "nbx_switch_current": "Changer de serveur, serveur actuel {name}",
-  "nbx_server_named": "Serveur {name}"
+  "nbx_server_named": "Serveur {name}",
+  "cm_tv_perso_title": "Réglages par personne et visibilité",
+  "cm_tv_perso_desc": "Ce que chaque membre peut garder d'un salon à l'autre, et qui voit les salons créés.",
+  "cm_tv_reglages_perso_label": "Permettre d'enregistrer ses réglages",
+  "cm_tv_reglages_perso_hint": "Menu « Mes réglages » dans Propriété. Réappliqués à chaque nouveau salon de la personne ; au transfert, ceux du nouveau propriétaire s'appliquent s'il en a, sinon le salon garde les siens.",
+  "cm_tv_visibilite_label": "Visibilité par défaut des salons créés",
+  "cm_tv_visibilite_tous": "Visible par tous",
+  "cm_tv_visibilite_tous_hint": "Tout le monde voit le salon dans la liste ; Ouvert/Verrouillé ne règle que qui peut entrer.",
+  "cm_tv_visibilite_acces": "Suit l'accès",
+  "cm_tv_visibilite_acces_hint": "Ouvert = visible par tous ; Verrouillé = caché à tous sauf les autorisés.",
+  "cm_tv_visibilite_prive": "Privé (caché)",
+  "cm_tv_visibilite_prive_hint": "Caché à tout le monde sauf le propriétaire, les autorisés et les rôles d'office, même ouvert.",
+  "cm_tv_visibilite_note": "Un membre bloqué par le propriétaire ne voit jamais le salon, quel que soit ce réglage. Le propriétaire peut changer la visibilité de son salon depuis le panneau."
 }

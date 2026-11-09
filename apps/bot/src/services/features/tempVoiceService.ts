@@ -4,7 +4,7 @@
  * serveurs déjà configurés inchangés.
  */
 import { OverwriteType, PermissionFlagsBits, type OverwriteResolvable } from 'discord.js';
-import type { TempVoiceOwnerMentionPlacement, TempVoiceOwnerPower, TempVoiceTextChatMode, TempVoicePolicy } from '@kotbo/shared';
+import { TEMP_VOICE_VISIBILITES, type TempVoiceOwnerMentionPlacement, type TempVoiceOwnerPower, type TempVoiceTextChatMode, type TempVoicePolicy, type TempVoiceVisibilite } from '@kotbo/shared';
 import {
   TEMP_VOICE_CLAIM_WHO,
   TEMP_VOICE_HANDOVER_DELAY_BOUNDS,
@@ -106,6 +106,8 @@ export function defaultTempVoicePolicy(): TempVoicePolicy {
     autoAllowRoleIds: [],
     textChat: 'inherit',
     ownerPowers: [...LEGACY_OWNER_POWERS],
+    visibilite: 'tous',
+    reglagesPerso: true,
   };
 }
 
@@ -152,6 +154,10 @@ export function normalizeTempVoicePolicy(raw: unknown, everyoneRoleId?: string):
     autoAllowRoleIds: normalizeRoleIds(source.autoAllowRoleIds, MAX_AUTO_ALLOW_ROLES, everyoneRoleId),
     textChat: normalizeTextChat(source.textChat),
     ownerPowers: normalizeOwnerPowers(source.ownerPowers),
+    visibilite: TEMP_VOICE_VISIBILITES.includes(source.visibilite as TempVoiceVisibilite)
+      ? (source.visibilite as TempVoiceVisibilite)
+      : 'tous',
+    reglagesPerso: typeof source.reglagesPerso === 'boolean' ? source.reglagesPerso : true,
   };
 }
 

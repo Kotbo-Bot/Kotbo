@@ -616,7 +616,7 @@ describe('T4/T5/T6/T7 — les quatre dispositions', () => {
     expect(imageDe(charge)).toBeNull();
 
     const embeds = (charge?.embeds ?? []) as Array<{ data?: { fields?: unknown[]; image?: unknown } }>;
-    expect(embeds[0]?.data?.fields?.length).toBe(6);
+    expect(embeds[0]?.data?.fields?.length).toBe(7);
     expect(embeds[0]?.data?.image).toBeUndefined();
   }, 60_000);
 
@@ -793,7 +793,7 @@ describe('T8/T9 — les teintes ne touchent que les rendus en image', () => {
     // Les trois lignes doivent être identiques hors le nom de la teinte.
     const sansNom = observees.map(({ teinte: _t, ...reste }) => JSON.stringify(reste));
     expect(new Set(sansNom).size).toBe(1);
-    expect(observees.every((o) => o.image === false && o.champs === 6)).toBe(true);
+    expect(observees.every((o) => o.image === false && o.champs === 7)).toBe(true);
   }, 120_000);
 });
 
@@ -836,8 +836,8 @@ describe('T10/T11 — CLASSIC et FLAT : messages et composants', () => {
     );
     expect(ecrit).toBe(true);
 
-    // Quatre rangées : actions, propriété+réglages, mode d'écriture, présents.
-    expect(((charge?.components as unknown[]) ?? []).length).toBe(4);
+    // Cinq rangées : actions, propriété+réglages, mode d'écriture, visibilité, présents.
+    expect(((charge?.components as unknown[]) ?? []).length).toBe(5);
 
     const publics = composantsDe(charge);
     const ids = idsDe(publics);
@@ -1132,7 +1132,7 @@ describe('T14/T15 — ce que la route accepte et ce qu’elle sert par défaut',
     expect(ecrit).toBe(true);
     expect(imageDe(charge)).toBeNull();
     const embeds = (charge?.embeds ?? []) as Array<{ data?: { fields?: unknown[] } }>;
-    expect(embeds[0]?.data?.fields?.length).toBe(6);
+    expect(embeds[0]?.data?.fields?.length).toBe(7);
     expect(porteLaMarque(charge)).toBe(false);
   }, 60_000);
 });
