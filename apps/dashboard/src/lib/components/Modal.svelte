@@ -1,12 +1,15 @@
 <script lang="ts">
   import { m } from '../i18n';
   import { portal } from '../actions/portal';
+  import { dialogFocus } from '../actions/dialogFocus';
+  import { scrollLock } from '../scrollLock';
   import Papicon from './Papicon.svelte';
 
   let {
     open = $bindable(false),
     onClose = () => {},
     title = '',
+    ariaLabel = '',
     subtitle = '',
     size = 'md',
     showCloseButton = true,
@@ -20,6 +23,8 @@
     open?: boolean;
     onClose?: (e?: any) => void;
     title?: string;
+    /** Nom de la fenetre quand elle n'affiche pas de `title` (RGAA 7.1). */
+    ariaLabel?: string;
     subtitle?: string;
     size?: 'sm' | 'md' | 'lg' | 'xl' | 'full' | 'screen';
     showCloseButton?: boolean;
@@ -44,6 +49,7 @@
   };
 
   const isScreen = $derived(size === 'screen');
+  const titleId = $props.id();
 
   function handleBackdropClick(e: MouseEvent) {
     if (closeOnBackdropClick && e.currentTarget === e.target) {
@@ -52,59 +58,41 @@
     }
   }
 
-  function handleKeydown(e: KeyboardEvent) {
-    if (closeOnEscape && e.key === 'Escape') {
-      open = false;
-      onClose(e);
-    }
+  function close() {
+    open = false;
+    onClose();
   }
-
-  $effect(() => {
-    if (open) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = '';
-    }
-    return () => {
-      document.body.style.overflow = '';
-    };
-  });
 </script>
 
 {#if open}
   <div
     use:portal
+    use:scrollLock
     class="app-modal {aboveCase ? 'app-modal--above-case' : ''} fixed inset-0 flex items-center justify-center {isScreen ? 'p-0 sm:p-4' : 'p-4'}"
-    role="dialog"
-    aria-modal="true"
-    aria-labelledby="modal-title"
+    role="presentation"
   >
-    <!-- Backdrop -->
-    <div
-      class="absolute inset-0 bg-black/40"
-      onclick={handleBackdropClick}
-      onkeydown={handleKeydown}
-      onkeypress={(e) => e.key === 'Enter' && handleBackdropClick(e as any)}
-      tabindex="-1"
-      role="button"
-      aria-label={m.mdx_close()}
-    ></div>
-
-    <!-- Modal Panel -->
+    <!-- Au clavier, on ferme avec Echap ou le bouton de fermeture. -->
     <!-- svelte-ignore a11y_click_events_have_key_events -->
     <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div class="absolute inset-0 bg-black/40" onclick={handleBackdropClick} aria-hidden="true"></div>
+
     <div
+      use:dialogFocus={{ onEscape: closeOnEscape ? close : undefined }}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby={title ? titleId : undefined}
+      aria-label={title ? undefined : ariaLabel || undefined}
+      tabindex="-1"
       class="app-modal__panel relative w-full {sizeClasses[size]} bg-surface-container-lowest shadow-lg overflow-hidden border border-outline-variant flex flex-col animate-in fade-in slide-up duration-150 {isScreen
         ? 'h-full rounded-none sm:h-[calc(100vh-2rem)] sm:rounded-xl'
-        : 'rounded-xl max-h-[90vh]'}"
-      onclick={(e) => e.stopPropagation()}
+        : 'rounded-xl max-h-[90vh]'} focus:outline-none"
     >
       <!-- Header -->
       {#if title || showCloseButton}
         <header class="app-modal__header px-5 py-4 border-b border-outline-variant flex items-center justify-between">
           <div class="min-w-0 flex-1">
             {#if title}
-              <h3 id="modal-title" class="text-base font-semibold text-on-surface">{title}</h3>
+              <h3 id={titleId} class="text-base font-semibold text-on-surface">{title}</h3>
             {/if}
             {#if subtitle}
               <p class="text-sm text-on-surface-variant mt-0.5">{subtitle}</p>
@@ -113,7 +101,7 @@
           {#if showCloseButton}
             <button
               type="button"
-              onclick={(e) => { open = false; onClose(e); }}
+              onclick={close}
               class="ml-3 h-8 w-8 flex items-center justify-center rounded-md bg-surface-container hover:bg-surface-container-high transition-colors text-on-surface-variant hover:text-on-surface"
               aria-label={m.common_close()}
             >

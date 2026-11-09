@@ -995,8 +995,9 @@
   onClose={onClose}
   size="screen"
   showCloseButton={false}
+  ariaLabel={displayName}
 >
-  <div class="mc" role="presentation" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
+  <div class="mc">
     <!-- ── Identite ───────────────────────────────────────── -->
     <header class="mc-header">
       {#if caseData?.profile?.bannerUrl}
@@ -1016,7 +1017,7 @@
         </div>
         <div class="min-w-0 flex-1">
           <div class="flex flex-wrap items-center gap-2">
-            <h2 id="modal-title" class="truncate text-xl font-semibold tracking-tight text-on-surface">{displayName}</h2>
+            <h2 class="truncate text-xl font-semibold tracking-tight text-on-surface">{displayName}</h2>
             {#if caseData?.profile?.staffGrade}
               <span class="badge badge-info"><Papicon icon="star" size={11} />{caseData.profile.staffGrade}</span>
             {/if}

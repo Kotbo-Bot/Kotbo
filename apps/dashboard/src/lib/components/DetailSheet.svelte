@@ -41,13 +41,13 @@
   } = $props();
 </script>
 
-<Modal flush {open} {onClose} size="screen" showCloseButton={false}>
-  <div class="sheet" role="presentation" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
+<Modal flush {open} {onClose} size="screen" showCloseButton={false} ariaLabel={title}>
+  <div class="sheet">
     <header class="sheet-header">
       <span class="sheet-icon"><Papicon {icon} size={24} /></span>
       <div class="min-w-0 flex-1">
         <div class="flex flex-wrap items-center gap-2">
-          <h2 id="modal-title" class="truncate text-xl font-semibold tracking-tight text-on-surface">{title}</h2>
+          <h2 class="truncate text-xl font-semibold tracking-tight text-on-surface">{title}</h2>
           {@render badges?.()}
         </div>
         {#if subtitle}<p class="mt-0.5 truncate text-sm text-on-surface-variant">{subtitle}</p>{/if}
