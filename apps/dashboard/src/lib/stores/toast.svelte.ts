@@ -1,4 +1,5 @@
 import { m } from '../i18n';
+import { PausableTimers } from '../pausableTimers';
 
 export type ToastType = 'success' | 'error' | 'info' | 'warning';
 
@@ -40,8 +41,8 @@ const UNDO_DURATION = 6000;
 class ToastStore {
   toasts = $state<Toast[]>([]);
 
-  /** Minuteries de disparition, pour pouvoir en relancer une sans doublon. */
-  private timers = new Map<string, ReturnType<typeof setTimeout>>();
+  /** Minuteries de disparition : relancees sans doublon, suspendues pendant la lecture. */
+  private timers = new PausableTimers();
 
   /** Actions differees, en attente de la fin de leur delai d'annulation. */
   private pending = new Map<string, PendingUndo>();
@@ -145,14 +146,16 @@ class ToastStore {
   }
 
   private scheduleRemoval(id: string, duration: number) {
-    const previous = this.timers.get(id);
-    if (previous) {
-      clearTimeout(previous);
-      this.timers.delete(id);
-    }
-    if (duration > 0) {
-      this.timers.set(id, setTimeout(() => this.remove(id), duration));
-    }
+    this.timers.start(id, duration, () => this.remove(id));
+  }
+
+  /** Survol ou focus clavier : la bulle reste le temps qu'on la lise. */
+  pause(id: string) {
+    this.timers.pause(id);
+  }
+
+  resume(id: string) {
+    this.timers.resume(id);
   }
 
   success(message: string, duration?: number, action?: { label: string; onClick: () => void | Promise<void> }) {
@@ -172,11 +175,7 @@ class ToastStore {
   }
 
   remove(id: string) {
-    const timer = this.timers.get(id);
-    if (timer) {
-      clearTimeout(timer);
-      this.timers.delete(id);
-    }
+    this.timers.clear(id);
     this.toasts = this.toasts.filter((t) => t.id !== id);
     // Fermer une bulle d'annulation, la voir expirer ou ceder sa place : dans
     // tous les cas l'utilisateur n'a pas annule, l'action part.
