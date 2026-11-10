@@ -1627,6 +1627,8 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
         const { tempChannels, suivreAccesSiVisibilite } = await import('../../../../events/tempVoice.js');
         const entree = tempChannels.get(channelId);
         if (entree) {
+          // La réservation du dashboard (rôle ou levée) remplace une réservation à des membres.
+          delete entree.reserveMembres;
           await suivreAccesSiVisibilite(channel as VoiceChannel, guildId, entree).catch((err: unknown) =>
             logger.warn('ChannelsManagementAPI', `Visibilité non suivie sur ${channelId} :`, err));
         }

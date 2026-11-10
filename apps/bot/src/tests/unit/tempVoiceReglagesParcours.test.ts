@@ -92,6 +92,8 @@ const prismaMock = {
 };
 
 let configServeur: Record<string, unknown> = {};
+/** Lectures de la configuration du serveur : une par cible jugée « staff ou non ». */
+let lecturesConfig = 0;
 
 interface LigneJournal {
   type: string;
@@ -107,7 +109,7 @@ const journal: LigneJournal[] = [];
 const mocks: Array<[string, () => Record<string, unknown>]> = [
   ['../../utils/db', () => ({ default: prismaMock, prisma: prismaMock, prismaRead: prismaMock })],
   ['../../utils/cache', () => completeModuleMock(path.resolve(import.meta.dir, '../../utils/cache.ts'), {
-    getCachedGuild: mock(async () => { if (monde) monde.horloge += 2; return { ...configServeur }; }),
+    getCachedGuild: mock(async () => { lecturesConfig += 1; if (monde) monde.horloge += 2; return { ...configServeur }; }),
     cache: { invalidateGuild: mock(async () => undefined) },
   })],
   ['../../utils/logDispatch', () => completeModuleMock(path.resolve(import.meta.dir, '../../utils/logDispatch.ts'), {
@@ -197,9 +199,12 @@ interface OptionsScene {
   additionnel?: boolean;
   /** Retouche le monde avant que le propriétaire n'entre dans le générateur. */
   avantCreation?: (m: FauxDiscord) => void;
+  /** Surcharges de la catégorie du générateur (absent = pas de catégorie). */
+  categorie?: Brut[];
 }
 
 const GEN2 = '900000000000000011';
+const CAT = '900000000000000012';
 
 interface Scene {
   monde: FauxDiscord;
@@ -234,7 +239,7 @@ function reglerBase(opts: OptionsScene) {
   configServeur = {
     tempVoiceEnabled: true,
     tempVoiceChannelId: IDS.GEN,
-    tempVoiceCategoryId: null,
+    tempVoiceCategoryId: opts.categorie ? CAT : null,
     tempVoiceNameTemplate: opts.modeleNom ?? 'Salon de {user}',
     tempVoiceGenerators: opts.additionnel ? [{ channelId: GEN2, nameTemplate: 'Salon de {user}' }] : [],
     tempVoiceDefaults: {
@@ -252,6 +257,7 @@ async function monterScene(opts: OptionsScene): Promise<Scene> {
   const m = new FauxDiscord({ latenceRestMs: opts.latenceRestMs ?? Number(process.env.BANC_LATENCE ?? 150), langueDiscord: opts.langue === 'fr' ? 'fr' : 'en-US' });
   monde = m;
   if (opts.additionnel) m.salons.set(GEN2, m.salonBrut(GEN2, '➕ Autre générateur', []));
+  if (opts.categorie) m.ajouterCategorie(CAT, opts.categorie);
   const client = m.creerClient();
   const enCours = suivreEcouteurs(client);
   tv.registerTempVoiceListener(client);
@@ -561,22 +567,56 @@ describe('Réglages enregistrés — ordre, verrou et visibilité', () => {
   });
 
   test('renommage sans réponse (limite de débit) : la limite passe, le salon est servi', async () => {
-    const sc = await creerAvec({}, {
-      avantCreation: (m) => intercepter(m, (o) => (estRenommage(o) ? new Promise(() => undefined) : null)),
-    });
+    // Borné : un renommage attendu sans fin retiendrait la création, et le test avec.
+    const sc = await Promise.race([
+      creerAvec({}, {
+        avantCreation: (m) => intercepter(m, (o) => (estRenommage(o) ? new Promise(() => undefined) : null)),
+      }),
+      new Promise<never>((_, rejeter) => setTimeout(() => rejeter(new Error('création retenue par le renommage')), 10_000)),
+    ]);
     expect(salonBrut(sc).user_limit).toBe(7);
     expect(cache(sc, IDS.CIBLE)).toBe(true);
-  });
+  }, 15_000);
 
-  test('salon réservé : appliquer des réglages « ouvert » ne lève pas son verrou', async () => {
+  test('salon réservé à un rôle : appliquer des réglages « ouvert » et « Privé » ne touche ni le verrou ni la visibilité', async () => {
     sauves.clear();
     const sc = await monterScene({ langue: 'fr', format: 'V2', mode: 'CLASSIC' });
     await cliquer(sc, { customId: 'tempvoice:reserve_select', genre: 'menuTexte', acteur: IDS.PROPRIO, values: [IDS.ROLE_RESA], porteur: sc.monde.messages.get(sc.panneauId)! });
     expect(base.salons.get(sc.salonId)?.roleId).toBe(IDS.ROLE_RESA);
     expect(refuse(sc, IDS.GUILD, P.Connect)).toBe(true);
-    sauves.set(cle(IDS.PROPRIO), reglagesDe({ verrouille: false, bloques: [] }));
+    sauves.set(cle(IDS.PROPRIO), reglagesDe({ verrouille: false, visibilite: 'prive', bloques: [] }));
     await mesReglages(sc, 'apply');
     expect(refuse(sc, IDS.GUILD, P.Connect)).toBe(true);
+    expect(cache(sc, IDS.GUILD)).toBe(false);
+    expect(tv.tempChannels.get(sc.salonId)?.visibility).toBe('tous');
+  });
+
+  test('salon réservé à des membres : appliquer des réglages « ouvert » et « Privé » ne touche ni le verrou ni la visibilité', async () => {
+    sauves.clear();
+    const sc = await monterScene({ langue: 'fr', format: 'V2', mode: 'CLASSIC' });
+    await cliquer(sc, { customId: 'tempvoice:reserve_membres', genre: 'menuMembres', acteur: IDS.PROPRIO, values: [IDS.AUTORISE], porteur: sc.monde.messages.get(sc.panneauId)! });
+    expect(refuse(sc, IDS.GUILD, P.Connect)).toBe(true);
+    sauves.set(cle(IDS.PROPRIO), reglagesDe({ verrouille: false, visibilite: 'prive', bloques: [], autorises: [IDS.DEHORS] }));
+    await mesReglages(sc, 'apply');
+    expect(refuse(sc, IDS.GUILD, P.Connect)).toBe(true);
+    expect(cache(sc, IDS.GUILD)).toBe(false);
+    expect(tv.tempChannels.get(sc.salonId)?.visibility).toBe('tous');
+    // Les autorisés, eux, s'ajoutent : comme « Autoriser » sur un salon réservé.
+    expect(a(sc, IDS.DEHORS, P.Connect)).toBe(true);
+  });
+
+  test('réglages enregistrés ouverts dans une catégorie fermée : Connect rendu = refus de la catégorie, jamais null', async () => {
+    const o: OptionsScene = { langue: 'fr', format: 'V2', mode: 'CLASSIC', categorie: [
+      { id: IDS.GUILD, type: 0, allow: '0', deny: P.Connect.toString() },
+      { id: IDS.ROLE_BOT, type: 0, allow: P.Connect.toString(), deny: '0' },
+    ] };
+    reglerBase(o);
+    sauves.clear();
+    sauves.set(cle(IDS.PROPRIO), reglagesDe({ verrouille: false, bloques: [] }));
+    const sc = await monterScene({ ...o, garderBase: true });
+    expect(salonBrut(sc).parent_id).toBe(CAT);
+    expect(refuse(sc, IDS.GUILD, P.Connect)).toBe(true);
+    expect(a(sc, IDS.GUILD, P.Connect)).toBe(false);
   });
 });
 
@@ -701,6 +741,105 @@ describe('« Mes réglages » — petits points', () => {
     sauves.clear();
     const sc = await monterScene({ langue: 'fr', format: 'V2', mode: 'CLASSIC', visibilite: 'prive' });
     expect(base.salons.get(sc.salonId)?.visibility).toBe('prive');
+  });
+});
+
+describe('Réglages enregistrés — chaque cible à part, bloqués absents, mesures', () => {
+  const ABSENT = '900000000000000177';
+  const ABSENT2 = '900000000000000178'; // scan:ok (identifiant factice du banc)
+  const routeSurcharge = (sc: Scene, id: string) => `/channels/${sc.salonId}/permissions/${id}`;
+  const lecturesSalon = (sc: Scene, depuis: number) =>
+    sc.monde.appels.slice(depuis).filter((x) => x.methode === 'GET' && x.route === `/channels/${sc.salonId}`).length;
+
+  test('un bloqué refusé par Discord n arrête pas les suivants, ni un autorisé refusé les autres', async () => {
+    sauves.clear();
+    avertissements.length = 0;
+    const sc = await monterScene({ langue: 'fr', format: 'V2', mode: 'CLASSIC' });
+    sauves.set(cle(IDS.PROPRIO), reglagesDe({ bloques: [IDS.CIBLE, IDS.INCONNU], autorises: [IDS.AUTORISE, IDS.DEHORS] }));
+    intercepter(sc.monde, (x) => (x.method === 'PUT' && [routeSurcharge(sc, IDS.CIBLE), routeSurcharge(sc, IDS.AUTORISE)].includes(String(x.fullRoute))
+      ? Promise.reject(new Error('Missing Permissions'))
+      : null));
+    await mesReglages(sc, 'apply');
+    expect(cache(sc, IDS.INCONNU)).toBe(true);
+    expect(a(sc, IDS.DEHORS, P.Connect)).toBe(true);
+    expect(avertissements.some((t) => t.includes(IDS.CIBLE) && t.includes('Missing Permissions'))).toBe(true);
+    expect(salonBrut(sc).name).toBe('Repaire perso');
+  });
+
+  test('un bloqué parti du serveur reste bloqué par son identifiant, en un seul appel pour tous les absents', async () => {
+    sauves.clear();
+    const sc = await monterScene({ langue: 'fr', format: 'V2', mode: 'CLASSIC' });
+    const membres = sc.client.guilds.cache.get(IDS.GUILD)!.members;
+    const lire = membres.fetch.bind(membres);
+    const lectures: unknown[] = [];
+    (membres as unknown as { fetch: unknown }).fetch = (o: unknown) => { lectures.push(o); return lire(o as never); };
+    sauves.set(cle(IDS.PROPRIO), reglagesDe({ bloques: [ABSENT, IDS.CIBLE, ABSENT2] }));
+    await mesReglages(sc, 'apply');
+    for (const id of [ABSENT, ABSENT2, IDS.CIBLE]) expect(cache(sc, id)).toBe(true);
+    expect(lectures).toHaveLength(1);
+    expect((lectures[0] as { user: string[] }).user).toEqual([ABSENT, ABSENT2]);
+  });
+
+  test('à la création, chaque bloqué n est jugé qu une fois', async () => {
+    lecturesConfig = 0;
+    await creerAvec({ bloques: [] });
+    const sans = lecturesConfig;
+    lecturesConfig = 0;
+    await creerAvec({ bloques: [IDS.CIBLE, IDS.INCONNU] });
+    expect(lecturesConfig - sans).toBe(2);
+  });
+
+  test('« Enregistrer » garde un staff que le propriétaire a autorisé lui-même', async () => {
+    sauves.clear();
+    const sc = await monterScene({ langue: 'fr', format: 'V2', mode: 'CLASSIC' });
+    await cliquer(sc, { customId: 'tempvoice:trust_select', genre: 'menuMembres', acteur: IDS.PROPRIO, values: [IDS.STAFF], porteur: sc.monde.messages.get(sc.panneauId)! });
+    expect(a(sc, IDS.STAFF, P.Connect)).toBe(true);
+    await mesReglages(sc, 'save');
+    expect((sauves.get(cle(IDS.PROPRIO)) as Brut).autorises).toContain(IDS.STAFF);
+  });
+
+  test('« Appliquer » : une relecture par étape qui écrit, pas plus', async () => {
+    sauves.clear();
+    const sc = await monterScene({ langue: 'fr', format: 'V2', mode: 'CLASSIC' });
+    sauves.set(cle(IDS.PROPRIO), reglagesDe({ verrouille: true, visibilite: 'prive', bloques: [IDS.CIBLE], autorises: [IDS.DEHORS] }));
+    const porteur = await ouvrirPropriete(sc);
+    const debut = sc.monde.appels.length;
+    await cliquer(sc, { customId: 'tempvoice:saved_select', genre: 'menuTexte', acteur: IDS.PROPRIO, values: ['apply'], porteur });
+    expect(cache(sc, IDS.GUILD)).toBe(true);
+    // Entrée, bloqués, verrou (et l'écriture du bot qui le suit), autorisés, visibilité, panneau : chaque relecture suit une écriture.
+    expect(lecturesSalon(sc, debut)).toBeLessThanOrEqual(7);
+  });
+
+  test('verrou en « Suit l accès » : relectures du salon bornées', async () => {
+    sauves.clear();
+    const sc = await monterScene({ langue: 'fr', format: 'V2', mode: 'CLASSIC', visibilite: 'acces' });
+    const debut = sc.monde.appels.length;
+    await cliquer(sc, { customId: 'tempvoice:bascule_verrou', genre: 'bouton', acteur: IDS.PROPRIO, porteur: sc.monde.messages.get(sc.panneauId)! });
+    expect(cache(sc, IDS.GUILD)).toBe(true);
+    expect(sc.monde.peutEcrire(sc.salonId, IDS.BOT)).toBe(true);
+    expect(lecturesSalon(sc, debut)).toBeLessThanOrEqual(5);
+    const debut2 = sc.monde.appels.length;
+    await cliquer(sc, { customId: 'tempvoice:bascule_verrou', genre: 'bouton', acteur: IDS.PROPRIO, porteur: sc.monde.messages.get(sc.panneauId)! });
+    expect(cache(sc, IDS.GUILD)).toBe(false);
+    expect(lecturesSalon(sc, debut2)).toBeLessThanOrEqual(5);
+  });
+
+  test('verrou en « Suit l accès » sans CHANNEL_UPDATE : verrou et réouverture gardent les écritures qui les précèdent', async () => {
+    sauves.clear();
+    const sc = await monterScene({ langue: 'fr', format: 'V2', mode: 'CLASSIC', visibilite: 'acces' });
+    // Passerelle muette : seule une relecture forcée met le cache à jour.
+    (sc.monde as unknown as { annoncerSalon: () => void }).annoncerSalon = () => {};
+    // Un mode mémorisé : la réouverture rend l'écriture par une seconde écriture sur @everyone.
+    tv.tempChannels.get(sc.salonId)!.modeEcriture = 'everyone';
+    const ecrivaitAvant = sc.monde.peutEcrire(sc.salonId, IDS.INCONNU);
+    await cliquer(sc, { customId: 'tempvoice:bascule_verrou', genre: 'bouton', acteur: IDS.PROPRIO, porteur: sc.monde.messages.get(sc.panneauId)! });
+    expect(cache(sc, IDS.GUILD)).toBe(true);
+    expect(refuse(sc, IDS.GUILD, P.Connect)).toBe(true);
+    expect(sc.monde.peutEcrire(sc.salonId, IDS.BOT)).toBe(true);
+    await cliquer(sc, { customId: 'tempvoice:bascule_verrou', genre: 'bouton', acteur: IDS.PROPRIO, porteur: sc.monde.messages.get(sc.panneauId)! });
+    expect(cache(sc, IDS.GUILD)).toBe(false);
+    expect(refuse(sc, IDS.GUILD, P.Connect)).toBe(false);
+    expect(sc.monde.peutEcrire(sc.salonId, IDS.INCONNU)).toBe(ecrivaitAvant);
   });
 });
 

@@ -3647,7 +3647,7 @@ describe('Reactivite du panneau : chaque changement, tout de suite, et vrai', ()
    * le panneau redessine afficherait l'etat d'avant le clic. C'est exactement le
    * defaut vu en conditions reelles.
    */
-  function scene(id: string) {
+  function scene(id: string, entree: { visibility?: 'tous' | 'acces' | 'prive' } = {}) {
     guildConfig = { tempVoiceEnabled: true, baseStaffRoleId: null, moderatorRoleId: null, testStaffRoleId: null };
     const { channel, syncFromGateway } = fakeChannel();
     channel.id = id;
@@ -3672,7 +3672,7 @@ describe('Reactivite du panneau : chaque changement, tout de suite, et vrai', ()
 
     const { client, listeners } = fakeClient();
     registerTempVoiceListener(client);
-    tempChannels.set(id, { creatorId: OWNER, panneauId: panneau.id });
+    tempChannels.set(id, { creatorId: OWNER, panneauId: panneau.id, ...entree });
 
     return {
       channel,
@@ -3773,6 +3773,13 @@ describe('Reactivite du panneau : chaque changement, tout de suite, et vrai', ()
     // Deux pour les lecteurs du panneau, une pour le verrou : sans elle, le bot
     // jugerait son écriture sur le cache d'avant le verrou.
     expect(sc.relectures()).toBeLessThanOrEqual(3);
+    sc.ranger();
+  }, 10_000);
+
+  test('« Suit l acces » : le verrou ne coute qu une relecture de plus', async () => {
+    const sc = scene('950000000000000010', { visibility: 'acces' });
+    await panneauApres(sc, 'bascule_verrou');
+    expect(sc.relectures()).toBeLessThanOrEqual(4);
     sc.ranger();
   }, 10_000);
 

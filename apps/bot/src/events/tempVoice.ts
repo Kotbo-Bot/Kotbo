@@ -186,6 +186,13 @@ export interface EntreeSalonTemporaire {
   exceptionsEcriture?: Record<string, boolean>;
   /** Visibilité choisie dans le panneau (`TempVoiceChannel.visibility`) ; absente = celle du générateur. */
   visibility?: Visibilite | null;
+  /**
+   * Réservé à des membres (« Réserver » sans rôle) : rien ne le distingue d'un verrou et
+   * d'autorisations posés à la main, et les réglages enregistrés ne doivent pas le rouvrir.
+   * shortcut: en mémoire seulement, un redémarrage l'oublie (le salon se lit alors comme verrouillé
+   * à la main) ; colonne en base si ce cas compte.
+   */
+  reserveMembres?: boolean;
 }
 
 export const tempChannels = new Map<string, EntreeSalonTemporaire>();
@@ -1043,14 +1050,14 @@ async function reappliquerVisibilite(
   const visibilite = await visibiliteDuSalon(guildId, entree);
   // Avant de cacher : une fois @everyone sans la vue, le bot ne pourrait plus rien poser.
   if (visibilite !== 'tous') await assurerBotGardeLeSalon(channel);
-  await relireMaintenant(channel);
+  // Pas de relecture entre les trois : chacun écrit des cibles que les autres ne lisent ni ne réécrivent
+  // (le bot ; @everyone et la vue des autres ; l'entrée du staff, qui pose la vue et la connexion d'un bloc).
   await appliquerVisibilite(channel, visibilite, {
     proprietaireId: entree.creatorId,
     rolesOffice: await rolesAutoriseDOffice(channel, guildId, entree),
   });
   if (visibilite === 'tous') return;
   // Caché à @everyone : le staff garde la vue et l'entrée, comme au verrou.
-  await relireMaintenant(channel);
   await garderEntreeStaff(channel, acteurId);
 }
 
@@ -1100,14 +1107,41 @@ function menuReglagesPerso(locale: BotLocale): StringSelectMenuBuilder {
       .setValue(valeur)));
 }
 
-/** Ceux que « Bannir » (ou « Autoriser ») accepterait du propriétaire : encore sur le serveur, pas un bot, pas un staff à bannir. */
+/** Les membres connus parmi `ids` : le cache, puis un seul appel par paquet de 100 (plafond de Discord) pour le reste. */
+async function membresConnus(guild: DiscordGuild, ids: string[]): Promise<Map<string, GuildMember>> {
+  const connus = new Map<string, GuildMember>();
+  const manquants: string[] = [];
+  for (const id of ids) {
+    const membre = guild.members.cache.get(id);
+    if (membre) connus.set(id, membre);
+    else manquants.push(id);
+  }
+  for (let i = 0; i < manquants.length; i += 100) {
+    const recus = await guild.members.fetch({ user: manquants.slice(i, i + 100), time: 5_000 }).catch(() => null);
+    for (const [id, membre] of recus ?? []) connus.set(id, membre);
+  }
+  return connus;
+}
+
+interface CibleAdmise { id: string; membre: GuildMember | null }
+
+/**
+ * Ceux que « Bannir » (ou « Autoriser ») accepterait du propriétaire : pas un bot, pas un staff à bannir.
+ * Un bloqué introuvable (parti du serveur, lecture en échec) le reste, par son identifiant ;
+ * un autorisé introuvable est sauté : la catégorie se juge sur le membre.
+ */
 async function ciblesAdmises(
   guild: DiscordGuild, proprietaireId: string, ids: string[], action: 'bannir' | 'autoriser',
-): Promise<GuildMember[]> {
-  const admises: GuildMember[] = [];
+): Promise<CibleAdmise[]> {
+  const connus = await membresConnus(guild, ids);
+  const admises: CibleAdmise[] = [];
   for (const id of ids) {
-    const membre = guild.members.cache.get(id) ?? await guild.members.fetch(id).catch(() => null);
-    if (!membre || membre.user?.bot) continue;
+    const membre = connus.get(id) ?? null;
+    if (!membre) {
+      if (action === 'bannir' && id !== proprietaireId) admises.push({ id, membre: null });
+      continue;
+    }
+    if (membre.user?.bot) continue;
     const verdict = peutAgirSurCible('proprietaire', action, null, {
       estStaff: await isProtectedTarget(guild.id, membre),
       estProprietaire: id === proprietaireId,
@@ -1115,7 +1149,7 @@ async function ciblesAdmises(
       dansLeSalon: false,
       autorise: false,
     }, FALLBACK_LOCALE);
-    if (verdict.autorise) admises.push(membre);
+    if (verdict.autorise) admises.push({ id, membre });
   }
   return admises;
 }
@@ -1123,60 +1157,94 @@ async function ciblesAdmises(
 /**
  * Pose des réglages enregistrés comme les boutons du panneau : d'abord ce qui
  * protège (bloqués, verrou, autorisés, visibilité), puis nom et limite. Une étape
- * refusée est journalisée sans arrêter les suivantes ; le salon est relu entre
- * deux (voir `relireMaintenant`). Mode de chat et persistance : à l'appelant.
+ * refusée est journalisée sans arrêter les suivantes, une cible refusée sans
+ * arrêter les autres ; le salon est relu après chaque étape qui a écrit une
+ * surcharge (voir `relireMaintenant`). Sur un salon réservé (à un rôle ou à des
+ * membres), ni le verrou ni la visibilité ne bougent : ils tiennent à la
+ * réservation. Mode de chat et persistance : à l'appelant.
  */
 async function poserReglagesEnregistres(
   channel: VoiceChannel, guildId: string, entree: EntreeSalonTemporaire, r: ReglagesPerso,
+  /** Déjà calculés par la création, qui les a refusés dans son POST. */
+  bloquesAdmis?: CibleAdmise[],
 ): Promise<void> {
-  const etape = async (nom: string, fn: () => Promise<unknown>) => {
-    await fn().catch((err: unknown) => logger.warn('TempVoice', `Réglage enregistré « ${nom} » non appliqué à ${channel.id} :`, err));
-    await relireMaintenant(channel);
+  /** `fn` dit si elle a écrit une surcharge ; un échec a pu en laisser une à moitié. */
+  const etape = async (nom: string, fn: () => Promise<boolean>) => {
+    const ecrit = await fn().catch((err: unknown) => {
+      logger.warn('TempVoice', `Réglage enregistré « ${nom} » non appliqué à ${channel.id} :`, err);
+      return true;
+    });
+    if (ecrit) await relireMaintenant(channel);
+  };
+  const pourChaque = async (nom: string, cibles: CibleAdmise[], fn: (c: CibleAdmise) => Promise<boolean>) => {
+    let ecrit = false;
+    for (const cible of cibles) {
+      ecrit = await fn(cible).catch((err: unknown) => {
+        logger.warn('TempVoice', `Réglage enregistré « ${nom} » non appliqué à ${cible.id} sur ${channel.id} :`, err);
+        return true;
+      }) || ecrit;
+    }
+    return ecrit;
   };
   await relireMaintenant(channel);
+  const reserve = entree.reserveMembres === true || await roleReserve(channel.id) !== null;
 
-  await etape('bloqués', async () => {
-    for (const membre of await ciblesAdmises(channel.guild, entree.creatorId, r.bloques, 'bannir')) {
-      if (!channel.permissionOverwrites.cache.get(membre.id)?.deny?.has(PermissionFlagsBits.ViewChannel)) {
-        await channel.permissionOverwrites.edit(membre.id, CHANNEL_PATCHES.ban);
-      }
-      originesSurcharge.oublier(guildId, channel.id, membre.id);
+  await etape('bloqués', async () => pourChaque(
+    'bloqués',
+    bloquesAdmis ?? await ciblesAdmises(channel.guild, entree.creatorId, r.bloques, 'bannir'),
+    async ({ id, membre }) => {
+      const ecrit = !channel.permissionOverwrites.cache.get(id)?.deny?.has(PermissionFlagsBits.ViewChannel);
+      // Par identifiant : un bloqué parti du serveur n'a pas de membre, et reste bloqué s'il revient.
+      if (ecrit) await channel.permissionOverwrites.edit(id, CHANNEL_PATCHES.ban, { type: OverwriteType.Member });
+      originesSurcharge.oublier(guildId, channel.id, id);
       // Comme « Bannir » : un bloqué déjà présent sort du salon.
-      if (membre.voice?.channelId === channel.id) await membre.voice.disconnect().catch(() => null);
-    }
-  });
+      if (membre?.voice?.channelId === channel.id) await membre.voice.disconnect().catch(() => null);
+      return ecrit;
+    },
+  ));
 
-  // Un salon réservé tient son verrou de la réservation : l'ouvrir ou le refermer ici la déferait.
   await etape('verrou', async () => {
-    if (await roleReserve(channel.id)) return;
+    if (reserve) return false;
     const verrouille = Boolean(channel.permissionOverwrites.cache.get(guildId)?.deny?.has(PermissionFlagsBits.Connect));
     if (r.verrouille && !verrouille) await verrouillerSalon(channel, entree);
     else if (!r.verrouille && verrouille) await deverrouillerSalon(channel, entree);
+    else return false;
+    return true;
   });
 
-  await etape('autorisés', async () => {
-    const autorises = r.autorises.filter((id) => !r.bloques.includes(id));
-    for (const membre of await ciblesAdmises(channel.guild, entree.creatorId, autorises, 'autoriser')) {
+  await etape('autorisés', async () => pourChaque(
+    'autorisés',
+    await ciblesAdmises(channel.guild, entree.creatorId, r.autorises.filter((id) => !r.bloques.includes(id)), 'autoriser'),
+    async ({ id, membre }) => {
       const patch = categoryTrustPatch(channel, membre);
-      if (!patch) continue;
+      if (!patch) return false;
       // Marqué comme « Autoriser » : sinon quitter le vocal en « ceux en vocal » effacerait ce droit.
-      if (await poserSurcharge(channel, membre.id, patchAutorisation(patch, entree, membre.id))) {
-        originesSurcharge.marquer(guildId, channel.id, membre.id, 'autorisation');
+      if (await poserSurcharge(channel, id, patchAutorisation(patch, entree, id))) {
+        originesSurcharge.marquer(guildId, channel.id, id, 'autorisation');
       }
-    }
+      return true;
+    },
+  ));
+
+  await etape('visibilité', async () => {
+    if (reserve) return false;
+    entree.visibility = r.visibilite;
+    await reappliquerVisibilite(channel, guildId, entree);
+    return true;
   });
 
-  await etape('visibilité', () => reappliquerVisibilite(channel, guildId, entree));
-
+  // Nom et limite : la réponse du PATCH remet le salon en cache, surcharges comprises.
   // Le renommage est limité par Discord : seulement si le nom change, et borné comme « Renommer ».
   await etape('nom', async () => {
-    if (!r.nom || r.nom === channel.name) return;
+    if (!r.nom || r.nom === channel.name) return false;
     // `pending` : la limite de débit le posera plus tard, sans retenir la file du salon.
     const renomme = await settleWithin(channel.setName(r.nom), RENAME_TIMEOUT_MS);
     if (renomme.status === 'failed') throw renomme.error;
+    return false;
   });
   await etape('limite', async () => {
     if (r.limite !== channel.userLimit) await channel.setUserLimit(r.limite);
+    return false;
   });
 }
 
@@ -1186,7 +1254,6 @@ async function appliquerReglagesEnregistres(
   /** Déjà dans `serializeByChannel` (transfert) : passer par la file attendrait sa propre fin. */
   dejaEnFile = false,
 ): Promise<void> {
-  entree.visibility = r.visibilite;
   await poserReglagesEnregistres(channel, guildId, entree, r);
   if (r.modeEcriture) {
     await (dejaEnFile ? poserModeEcriture : appliquerModeEcriture)(channel, entree, r.modeEcriture)
@@ -3350,7 +3417,8 @@ async function createTempChannel(
   const reglages = policy.reglagesPerso !== false
     ? await lireReglagesPerso(guild.id, member.id).catch(() => null)
     : null;
-  const bloquesDOffice = reglages ? (await ciblesAdmises(guild, member.id, reglages.bloques, 'bannir')).map((b) => b.id) : [];
+  const bloquesAdmis = reglages ? await ciblesAdmises(guild, member.id, reglages.bloques, 'bannir') : [];
+  const bloquesDOffice = bloquesAdmis.map((b) => b.id);
   const surchargesCreation = buildCreationOverwrites({
     everyoneRoleId: guild.id,
     ownerId: member.id,
@@ -3394,7 +3462,7 @@ async function createTempChannel(
   // Le reste des réglages (verrou, autorisés, visibilité, nom, limite) AVANT
   // d'y déplacer le créateur ; le mode de chat suit, une fois l'entrée connue.
   if (reglages) {
-    await poserReglagesEnregistres(tempChannel, guild.id, entree, reglages);
+    await poserReglagesEnregistres(tempChannel, guild.id, entree, reglages, bloquesAdmis);
   } else if (entree.visibility !== 'tous') {
     await reappliquerVisibilite(tempChannel, guild.id, entree)
       .catch((err: unknown) => logger.warn('TempVoice', `Visibilité du générateur non appliquée à ${tempChannel.id} :`, err));
@@ -4801,6 +4869,7 @@ async function verrouillerSalon(channel: VoiceChannel, cache: EntreeSalonTempora
 
 /** La réouverture de « Déverrouiller » : @everyone rendu à la catégorie, écriture rendue au mode. */
 async function deverrouillerSalon(channel: VoiceChannel, cache: EntreeSalonTemporaire): Promise<void> {
+  delete cache.reserveMembres;
   await channel.permissionOverwrites.edit(channel.guild.id, patchReouverture(CHANNEL_PATCHES.unlock, channel, cache));
   // Le mode réécrit @everyone : sans relecture, il reposerait le refus de connexion du cache.
   await relireMaintenant(channel);
@@ -6066,6 +6135,7 @@ async function appliquerReservation(
     await reply(m.panel_tempvoice_err_role_denied({}, { locale }));
     return;
   }
+  delete cache.reserveMembres;
 
   // Sans ce retrait, le salon porte au bout de quelques changements la liste
   // de tous les rôles réservés depuis sa création. Le retrait peut échouer, et
@@ -6206,6 +6276,7 @@ async function reserverPourDesMembres(
 
   await garderEntreeStaff(channel, ctx.interaction.user.id);
   await channel.permissionOverwrites.edit(guildId, CHANNEL_PATCHES.lock);
+  cache.reserveMembres = true;
   // Le verrou coupe `SendMessages` a @everyone - le bot compris, tant qu'il n'a
   // pas de surcharge a lui : sans cela, plus de panneau ni d'avis.
   await relireMaintenant(channel);
@@ -6321,10 +6392,13 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
     if (choix === 'save') {
       await relireMaintenant(channel);
       const r = capturerReglages(channel, cache.creatorId, await visibiliteDuSalon(guildId, cache), modeDuSalon(channel, cache));
-      // L'entrée que `garderEntreeStaff` pose à un staff n'est pas une autorisation du propriétaire.
+      // L'entrée que `garderEntreeStaff` pose à un staff n'est pas une autorisation du propriétaire ;
+      // un staff qu'il a autorisé lui-même (marque « autorisation ») en est une.
       const staff = new Set<string>();
+      const connus = await membresConnus(guild, r.autorises);
       for (const id of r.autorises) {
-        const membre = guild.members.cache.get(id) ?? await guild.members.fetch(id).catch(() => null);
+        if (originesSurcharge.origine(guildId, channel.id, id) === 'autorisation') continue;
+        const membre = connus.get(id);
         if (membre && await isProtectedTarget(guildId, membre)) staff.add(id);
       }
       r.autorises = r.autorises.filter((id) => !staff.has(id));
