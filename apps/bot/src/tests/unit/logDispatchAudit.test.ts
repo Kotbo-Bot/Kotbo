@@ -10,7 +10,7 @@ import { completeModuleMock } from '../helpers/moduleMock.js';
 
 const audits: Array<Record<string, unknown>> = [];
 const prismaMock = {
-  guildLogEventConfig: { findUnique: mock(async () => ({ enabled: true, channelId: '700000000000000000' })) },
+  guildLogEventConfig: { findUnique: mock(async (): Promise<{ enabled: boolean; channelId: string | null }> => ({ enabled: true, channelId: '700000000000000000' })) },
   guild: { findUnique: mock(async () => null) },
 };
 
