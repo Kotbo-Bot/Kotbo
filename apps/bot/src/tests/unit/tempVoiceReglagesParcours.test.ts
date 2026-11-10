@@ -5,17 +5,14 @@
  */
 import { afterAll, describe, expect, mock, setSystemTime, test } from 'bun:test';
 import path from 'node:path';
-import { Events, PermissionFlagsBits, PermissionsBitField, type Client } from 'discord.js';
+import { PermissionFlagsBits, type Client } from 'discord.js';
 
 import { completeModuleMock } from '../helpers/moduleMock.js';
 import {
   FauxDiscord,
   IDS,
-  clesBrutes,
   trouverComposant,
-  horsLangue,
   suivreEcouteurs,
-  textesVisibles,
   type AppelRest,
 } from '../helpers/bancDiscord.js';
 
@@ -160,17 +157,6 @@ function avancer(ms: number) {
 type Langue = 'fr' | 'en';
 type Format = 'V1' | 'V2';
 type ModePanneau = 'CLASSIC' | 'FLAT';
-type ModeChat = 'inherit' | 'everyone' | 'inVoice' | 'ownerOnly' | 'nobody';
-type Role = 'proprietaire' | 'autorise' | 'staff' | 'staffSansDroits' | 'inconnu' | 'admin';
-
-const ACTEUR: Record<Role, string> = {
-  proprietaire: IDS.PROPRIO,
-  autorise: IDS.AUTORISE,
-  staff: IDS.STAFF,
-  staffSansDroits: IDS.STAFF,
-  inconnu: IDS.INCONNU,
-  admin: IDS.ADMIN,
-};
 
 interface OptionsScene {
   langue: Langue;
@@ -597,7 +583,8 @@ describe('Réglages enregistrés — ordre, verrou et visibilité', () => {
     await cliquer(sc, { customId: 'tempvoice:reserve_membres', genre: 'menuMembres', acteur: IDS.PROPRIO, values: [IDS.AUTORISE], porteur: sc.monde.messages.get(sc.panneauId)! });
     expect(refuse(sc, IDS.GUILD, P.Connect)).toBe(true);
     sauves.set(cle(IDS.PROPRIO), reglagesDe({ verrouille: false, visibilite: 'prive', bloques: [], autorises: [IDS.DEHORS] }));
-    await mesReglages(sc, 'apply');
+    const lignes = await mesReglages(sc, 'apply');
+    expect(contient(lignes, m.panel_tempvoice_saved_done_apply_reserved({}, { locale: 'fr' }))).toBe(true);
     expect(refuse(sc, IDS.GUILD, P.Connect)).toBe(true);
     expect(cache(sc, IDS.GUILD)).toBe(false);
     expect(tv.tempChannels.get(sc.salonId)?.visibility).toBe('tous');
@@ -778,6 +765,26 @@ describe('Réglages enregistrés — chaque cible à part, bloqués absents, mes
     for (const id of [ABSENT, ABSENT2, IDS.CIBLE]) expect(cache(sc, id)).toBe(true);
     expect(lectures).toHaveLength(1);
     expect((lectures[0] as { user: string[] }).user).toEqual([ABSENT, ABSENT2]);
+  });
+
+  test('lecture des membres en échec : l id illisible est sauté (staff possible), le membre connu reste bloqué', async () => {
+    sauves.clear();
+    const sc = await monterScene({ langue: 'fr', format: 'V2', mode: 'CLASSIC' });
+    const membres = sc.client.guilds.cache.get(IDS.GUILD)!.members;
+    (membres as unknown as { fetch: unknown }).fetch = () => Promise.reject(new Error('GuildMembersTimeout'));
+    sauves.set(cle(IDS.PROPRIO), reglagesDe({ bloques: [ABSENT, IDS.CIBLE] }));
+    await mesReglages(sc, 'apply');
+    expect(cache(sc, ABSENT)).toBe(false);
+    expect(cache(sc, IDS.CIBLE)).toBe(true);
+  });
+
+  test('à la création, un bloqué absent n est pas dans le POST mais est bloqué juste après', async () => {
+    const sc = await creerAvec({ bloques: [IDS.CIBLE, ABSENT] });
+    const creation = sc.monde.appels.find((x) => x.methode === 'POST' && /\/guilds\/\d+\/channels$/.test(x.route)) as AppelRest;
+    const ids = ((creation.corps as Brut).permission_overwrites as Brut[]).map((o) => o.id);
+    expect(ids).toContain(IDS.CIBLE);
+    expect(ids).not.toContain(ABSENT);
+    expect(cache(sc, ABSENT)).toBe(true);
   });
 
   test('à la création, chaque bloqué n est jugé qu une fois', async () => {

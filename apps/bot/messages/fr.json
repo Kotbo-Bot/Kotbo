@@ -3568,6 +3568,7 @@
   "panel_tempvoice_saved_forget_desc": "Tes prochains salons repartent des réglages du serveur.",
   "panel_tempvoice_saved_done_save": "Réglages enregistrés : ils seront appliqués à tes prochains salons.",
   "panel_tempvoice_saved_done_apply": "Réglages enregistrés appliqués à ce salon.",
+  "panel_tempvoice_saved_done_apply_reserved": "Réglages enregistrés appliqués, sauf l'accès et la visibilité : le salon est réservé. Lève la réservation pour les appliquer.",
   "panel_tempvoice_saved_done_forget": "Réglages enregistrés oubliés.",
   "panel_tempvoice_saved_none": "Aucun réglage enregistré.",
   "panel_tempvoice_saved_disabled": "Les réglages enregistrés sont désactivés sur ce serveur.",

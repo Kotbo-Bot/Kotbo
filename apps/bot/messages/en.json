@@ -3568,6 +3568,7 @@
   "panel_tempvoice_saved_forget_desc": "Your next channels start again from the server settings.",
   "panel_tempvoice_saved_done_save": "Settings saved: they will be applied to your next channels.",
   "panel_tempvoice_saved_done_apply": "Saved settings applied to this channel.",
+  "panel_tempvoice_saved_done_apply_reserved": "Saved settings applied, except access and visibility: the channel is reserved. Lift the reservation to apply them.",
   "panel_tempvoice_saved_done_forget": "Saved settings forgotten.",
   "panel_tempvoice_saved_none": "No saved settings.",
   "panel_tempvoice_saved_disabled": "Saved settings are turned off on this server.",

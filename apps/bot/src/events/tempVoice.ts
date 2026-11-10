@@ -1107,9 +1107,15 @@ function menuReglagesPerso(locale: BotLocale): StringSelectMenuBuilder {
       .setValue(valeur)));
 }
 
-/** Les membres connus parmi `ids` : le cache, puis un seul appel par paquet de 100 (plafond de Discord) pour le reste. */
-async function membresConnus(guild: DiscordGuild, ids: string[]): Promise<Map<string, GuildMember>> {
+/**
+ * Les membres connus parmi `ids` : le cache, puis un seul appel par paquet de 100 (plafond de Discord) pour le reste.
+ * `illisibles` : les ids d'un paquet dont la lecture a échoué, qu'on ne peut ni juger ni dire partis.
+ */
+async function membresConnus(
+  guild: DiscordGuild, ids: string[],
+): Promise<{ connus: Map<string, GuildMember>; illisibles: Set<string> }> {
   const connus = new Map<string, GuildMember>();
+  const illisibles = new Set<string>();
   const manquants: string[] = [];
   for (const id of ids) {
     const membre = guild.members.cache.get(id);
@@ -1117,25 +1123,28 @@ async function membresConnus(guild: DiscordGuild, ids: string[]): Promise<Map<st
     else manquants.push(id);
   }
   for (let i = 0; i < manquants.length; i += 100) {
-    const recus = await guild.members.fetch({ user: manquants.slice(i, i + 100), time: 5_000 }).catch(() => null);
+    const paquet = manquants.slice(i, i + 100);
+    const recus = await guild.members.fetch({ user: paquet, time: 5_000 }).catch(() => null);
+    if (!recus) for (const id of paquet) illisibles.add(id);
     for (const [id, membre] of recus ?? []) connus.set(id, membre);
   }
-  return connus;
+  return { connus, illisibles };
 }
 
 interface CibleAdmise { id: string; membre: GuildMember | null }
 
 /**
  * Ceux que « Bannir » (ou « Autoriser ») accepterait du propriétaire : pas un bot, pas un staff à bannir.
- * Un bloqué introuvable (parti du serveur, lecture en échec) le reste, par son identifiant ;
- * un autorisé introuvable est sauté : la catégorie se juge sur le membre.
+ * Un bloqué parti du serveur le reste, par son identifiant ; un id dont la lecture a échoué est sauté
+ * (on ne sait pas si c'est un staff). Un autorisé introuvable est sauté : la catégorie se juge sur le membre.
  */
 async function ciblesAdmises(
   guild: DiscordGuild, proprietaireId: string, ids: string[], action: 'bannir' | 'autoriser',
 ): Promise<CibleAdmise[]> {
-  const connus = await membresConnus(guild, ids);
+  const { connus, illisibles } = await membresConnus(guild, ids);
   const admises: CibleAdmise[] = [];
   for (const id of ids) {
+    if (illisibles.has(id)) continue;
     const membre = connus.get(id) ?? null;
     if (!membre) {
       if (action === 'bannir' && id !== proprietaireId) admises.push({ id, membre: null });
@@ -1167,7 +1176,7 @@ async function poserReglagesEnregistres(
   channel: VoiceChannel, guildId: string, entree: EntreeSalonTemporaire, r: ReglagesPerso,
   /** Déjà calculés par la création, qui les a refusés dans son POST. */
   bloquesAdmis?: CibleAdmise[],
-): Promise<void> {
+): Promise<boolean> {
   /** `fn` dit si elle a écrit une surcharge ; un échec a pu en laisser une à moitié. */
   const etape = async (nom: string, fn: () => Promise<boolean>) => {
     const ecrit = await fn().catch((err: unknown) => {
@@ -1246,6 +1255,7 @@ async function poserReglagesEnregistres(
     if (r.limite !== channel.userLimit) await channel.setUserLimit(r.limite);
     return false;
   });
+  return reserve;
 }
 
 /** Pose des réglages enregistrés sur un salon, puis le mode de chat, et persiste. */
@@ -1253,13 +1263,14 @@ async function appliquerReglagesEnregistres(
   channel: VoiceChannel, guildId: string, entree: EntreeSalonTemporaire, r: ReglagesPerso,
   /** Déjà dans `serializeByChannel` (transfert) : passer par la file attendrait sa propre fin. */
   dejaEnFile = false,
-): Promise<void> {
-  await poserReglagesEnregistres(channel, guildId, entree, r);
+): Promise<{ reserve: boolean }> {
+  const reserve = await poserReglagesEnregistres(channel, guildId, entree, r);
   if (r.modeEcriture) {
     await (dejaEnFile ? poserModeEcriture : appliquerModeEcriture)(channel, entree, r.modeEcriture)
       .catch((err: unknown) => logger.warn('TempVoice', `Mode d'écriture enregistré non appliqué à ${channel.id} :`, err));
   }
   await persisterEtatSalon(guildId, channel.id);
+  return { reserve };
 }
 
 /** Droit effectif de @everyone, catégorie comprise ; `undefined` si Discord ne le dit pas. */
@@ -3418,7 +3429,9 @@ async function createTempChannel(
     ? await lireReglagesPerso(guild.id, member.id).catch(() => null)
     : null;
   const bloquesAdmis = reglages ? await ciblesAdmises(guild, member.id, reglages.bloques, 'bannir') : [];
-  const bloquesDOffice = bloquesAdmis.map((b) => b.id);
+  // Seuls les membres présents vont dans le POST : un refus de Discord sur un absent ferait échouer la création
+  // entière. Les absents sont posés juste après, par l'étape « bloqués ».
+  const bloquesDOffice = bloquesAdmis.filter((b) => b.membre).map((b) => b.id);
   const surchargesCreation = buildCreationOverwrites({
     everyoneRoleId: guild.id,
     ownerId: member.id,
@@ -6395,7 +6408,7 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
       // L'entrée que `garderEntreeStaff` pose à un staff n'est pas une autorisation du propriétaire ;
       // un staff qu'il a autorisé lui-même (marque « autorisation ») en est une.
       const staff = new Set<string>();
-      const connus = await membresConnus(guild, r.autorises);
+      const { connus } = await membresConnus(guild, r.autorises);
       for (const id of r.autorises) {
         if (originesSurcharge.origine(guildId, channel.id, id) === 'autorisation') continue;
         const membre = connus.get(id);
@@ -6413,8 +6426,9 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
         await reponseSupplementaire(interaction, m.panel_tempvoice_saved_none({}, { locale }));
         return;
       }
-      await appliquerReglagesEnregistres(channel, guildId, cache, r);
-      await reponseSupplementaire(interaction, `${I.check} ${m.panel_tempvoice_saved_done_apply({}, { locale })}`);
+      const { reserve } = await appliquerReglagesEnregistres(channel, guildId, cache, r);
+      const fait = reserve ? m.panel_tempvoice_saved_done_apply_reserved : m.panel_tempvoice_saved_done_apply;
+      await reponseSupplementaire(interaction, `${I.check} ${fait({}, { locale })}`);
       planifierRafraichissementPanneau(channel);
     } else if (choix === 'forget') {
       await oublierReglagesPerso(guildId, user.id);
