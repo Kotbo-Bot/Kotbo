@@ -51,7 +51,10 @@ describe('API REST : statut HTTP', () => {
     expect(statutOutil({})).toBe(200);
     expect(statutOutil(err('Membre introuvable.'))).toBe(400);
     expect(statutOutil(err('Permission requise.', { 'mcp/www_authenticate': ['Bearer'] }))).toBe(403);
-    expect(statutOutil(toolError(new Error('connexion perdue')))).toBe(500);
+    // Un `Error` nu porte un message écrit pour l'utilisateur (utils/publicError.ts) : refus métier, 400.
+    expect(statutOutil(toolError(new Error('Salon introuvable.')))).toBe(400);
+    // Plantage du code : message masqué, panne.
+    expect(statutOutil(toolError(new TypeError("Cannot read properties of undefined (reading 'id')")))).toBe(500);
     expect(statutOutil(toolError(Object.assign(new Error('refusé'), { code: 'ECONNREFUSED' })))).toBe(500);
   });
 });
