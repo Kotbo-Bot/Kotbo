@@ -3084,7 +3084,6 @@
   "d7_maintenance_deactivate": "DÉSACTIVER (retour normal)",
   "d7_maintenance_activate": "ACTIVER LA MAINTENANCE",
   "d7_error_stream": "Flux d'Erreurs",
-  "d7_last_uncaught_errors": "Dernières erreurs non interceptées",
   "d7_no_errors_detected": "Aucune erreur détectée ✅",
   "d7_gdpr_invalid_id": "Saisis un identifiant Discord valide (uniquement des chiffres).",
   "d7_gdpr_no_data_found": "Aucune donnée trouvée pour cet utilisateur.",

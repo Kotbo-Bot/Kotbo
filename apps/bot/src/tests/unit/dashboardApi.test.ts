@@ -55,8 +55,10 @@ const mockDb = {
     upsert: mock(() => Promise.resolve({})),
   },
   botErrorLog: {
-    findMany: mock(() => Promise.resolve([])),
-    deleteMany: mock(() => Promise.resolve({})),
+    findMany: mock(() => Promise.resolve<unknown[]>([])),
+    findUnique: mock(() => Promise.resolve<unknown>(null)),
+    groupBy: mock(() => Promise.resolve<unknown[]>([])),
+    deleteMany: mock(() => Promise.resolve({ count: 0 })),
   },
   activationCode: {
     findMany: mock(() => Promise.resolve([])),
@@ -1378,29 +1380,31 @@ describe('Accès dashboard des admins globaux', () => {
   });
 });
 
-describe('Journal d\'audit des actions admin sensibles', () => {
-  const ADMIN_ID = ADMIN_SESSION.userId;
+const ADMIN_ID = ADMIN_SESSION.userId;
 
-  async function adminRequest(method: string, url: string, body?: unknown) {
-    const req = createMockRequest({
-      method,
-      url,
-      headers: {
-        cookie: `kotbo_session=${ADMIN_SESSION_ID}`,
-        ...(body === undefined ? {} : { 'content-type': 'application/json' }),
-      },
-      body: body === undefined ? undefined : JSON.stringify(body),
-    });
-    const res = createMockResponse();
-    await handleAdminRoutes(req, res, splitPath(url), new URL(url, 'http://localhost'), mockClient);
-    return res;
-  }
+/** Requête sur une route `/api/admin`, au nom de l'admin global de test. */
+async function adminRequest(method: string, url: string, body?: unknown) {
+  const req = createMockRequest({
+    method,
+    url,
+    headers: {
+      cookie: `kotbo_session=${ADMIN_SESSION_ID}`,
+      ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+    },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  const res = createMockResponse();
+  await handleAdminRoutes(req, res, splitPath(url), new URL(url, 'http://localhost'), mockClient);
+  return res;
+}
 
-  /** Entrées d'audit écrites pendant le cas, dans l'ordre. */
-  function audits(): Array<Record<string, unknown>> {
-    return mockDb.adminAuditLog.create.mock.calls.map((call) => (call as unknown as [{ data: Record<string, unknown> }])[0].data);
-  }
+/** Entrées d'audit écrites pendant le cas, dans l'ordre. */
+function audits(): Array<Record<string, unknown>> {
+  return mockDb.adminAuditLog.create.mock.calls.map((call) => (call as unknown as [{ data: Record<string, unknown> }])[0].data);
+}
 
+/** Le bloc qui l'appelle s'exécute en admin global, journal d'audit vidé. */
+function asGlobalAdmin() {
   beforeEach(() => {
     mockDb.globalAdmin.findUnique.mockResolvedValue({ userId: ADMIN_ID } as never);
     mockDb.adminAuditLog.create.mockClear();
@@ -1409,6 +1413,10 @@ describe('Journal d\'audit des actions admin sensibles', () => {
   afterEach(() => {
     mockDb.globalAdmin.findUnique.mockResolvedValue(null);
   });
+}
+
+describe('Journal d\'audit des actions admin sensibles', () => {
+  asGlobalAdmin();
 
   test('la création d\'un code d\'activation est tracée, sans le code lui-même', async () => {
     mockDb.activationCode.create.mockResolvedValueOnce({ id: 'code-1', code: 'CODE-SECRET-1234', accessType: 'PERMANENT' } as never);
@@ -1451,5 +1459,82 @@ describe('Journal d\'audit des actions admin sensibles', () => {
       metadata: { fields: ['name', 'discordToken'] },
     });
     expect(JSON.stringify(audits()[0])).not.toContain('JETON-TRES-SECRET');
+  });
+});
+
+describe('Journal des erreurs du bot', () => {
+  asGlobalAdmin();
+
+  const GROUPE = { message: 'boom', source: 'uncaughtException' };
+
+  beforeEach(() => {
+    mockDb.botErrorLog.findMany.mockClear();
+    mockDb.botErrorLog.deleteMany.mockClear();
+  });
+
+  test('les erreurs identiques sont regroupées, la plus récente en tête', async () => {
+    mockDb.botErrorLog.groupBy.mockResolvedValueOnce([{
+      ...GROUPE,
+      _count: { _all: 3 },
+      _min: { createdAt: new Date('2026-11-01T10:00:00Z') },
+      _max: { createdAt: new Date('2026-11-02T10:00:00Z'), id: 'erreur-3' },
+    }]);
+    const res = await adminRequest('GET', '/api/admin/errors?view=groups');
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body).groups).toEqual([{
+      id: 'erreur-3',
+      ...GROUPE,
+      count: 3,
+      firstAt: '2026-11-01T10:00:00.000Z',
+      lastAt: '2026-11-02T10:00:00.000Z',
+    }]);
+  });
+
+  test('les occurrences d\'un groupe se lisent page par page', async () => {
+    mockDb.botErrorLog.findUnique.mockResolvedValueOnce(GROUPE);
+    mockDb.botErrorLog.findMany.mockResolvedValueOnce([
+      { id: 'erreur-3', ...GROUPE, stack: 'pile 3', createdAt: new Date('2026-11-02T10:00:00Z') },
+      { id: 'erreur-2', ...GROUPE, stack: 'pile 2', createdAt: new Date('2026-11-01T10:00:00Z') },
+    ]);
+    const res = await adminRequest('GET', '/api/admin/errors?group=erreur-3&limit=1');
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.errors.map((e: { id: string }) => e.id)).toEqual(['erreur-3']);
+    expect(body.errors[0].stack).toBe('pile 3');
+    expect(body.nextCursor).toBe('erreur-3');
+    const query = (mockDb.botErrorLog.findMany.mock.calls[0] as unknown as [Record<string, unknown>])[0];
+    expect(query).toMatchObject({ where: GROUPE, take: 2 });
+  });
+
+  test('la page suivante repart du curseur', async () => {
+    mockDb.botErrorLog.findUnique.mockResolvedValueOnce(GROUPE);
+    await adminRequest('GET', '/api/admin/errors?group=erreur-3&cursor=erreur-3&limit=1');
+    const query = (mockDb.botErrorLog.findMany.mock.calls[0] as unknown as [Record<string, unknown>])[0];
+    expect(query).toMatchObject({ cursor: { id: 'erreur-3' }, skip: 1 });
+  });
+
+  test('un groupe disparu entre-temps répond 404', async () => {
+    const res = await adminRequest('GET', '/api/admin/errors?group=purgee');
+    expect(res.statusCode).toBe(404);
+  });
+
+  test('purger un groupe ne retire que ses erreurs, et c\'est tracé', async () => {
+    mockDb.botErrorLog.findUnique.mockResolvedValueOnce(GROUPE);
+    mockDb.botErrorLog.deleteMany.mockResolvedValueOnce({ count: 3 });
+    const res = await adminRequest('DELETE', '/api/admin/errors?group=erreur-3');
+    expect(res.statusCode).toBe(200);
+    expect(mockDb.botErrorLog.deleteMany).toHaveBeenCalledWith({ where: GROUPE });
+    expect(audits()[0]).toMatchObject({ action: 'errors.purge', metadata: { count: 3, group: GROUPE } });
+  });
+
+  test('un groupe vide est refusé : il ne vaut jamais « tout le journal »', async () => {
+    const res = await adminRequest('DELETE', '/api/admin/errors?group=');
+    expect(res.statusCode).toBe(404);
+    expect(mockDb.botErrorLog.deleteMany).not.toHaveBeenCalled();
+  });
+
+  test('sans groupe, la purge vide tout le journal', async () => {
+    await adminRequest('DELETE', '/api/admin/errors');
+    expect(mockDb.botErrorLog.deleteMany).toHaveBeenCalledWith({ where: {} });
   });
 });

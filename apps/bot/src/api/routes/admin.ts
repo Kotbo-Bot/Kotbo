@@ -68,6 +68,13 @@ import {
 import { ensureAdminHealthSampling, getAdminHealthSeries } from '../../services/system/adminHealthService.js';
 import { collectUserData } from '../../services/system/gdprExportService.js';
 import { buildGdprZip } from '../../services/system/gdprZip.js';
+import {
+  errorPageSize,
+  listErrorGroups,
+  listErrorOccurrences,
+  purgeErrors,
+  resolveErrorGroup,
+} from '../../services/system/botErrorLogService.js';
 import { handleAdminAnalyticsRoutes } from './admin/analytics.js';
 import { handleAdminAchievementRoutes } from './admin/achievements.js';
 import { handleAdminFeaturePageRoutes } from './admin/featurePages.js';
@@ -995,37 +1002,44 @@ export async function handleAdminRoutes(
     }
   }
 
-  // Bot error logs listing/clear
-  if (parts[2] === 'errors') {
-    // GET /api/admin/errors
-    if (method === 'GET') {
-       try {
-         const errors = await prisma.botErrorLog.findMany({
-           orderBy: { createdAt: 'desc' },
-           take: 50
-         });
-         json(res, 200, { errors });
-       } catch (err) {
-         jsonFailure(res, err, 'Erreur de base de données');
-       }
-       return true;
-    }
+  // Journal des erreurs non rattrapées du bot (voir `botErrorLogService`)
+  //   GET    /api/admin/errors?view=groups            groupes d'erreurs identiques
+  //   GET    /api/admin/errors?group=:id&cursor=&limit occurrences d'un groupe (de tout le journal sans `group`)
+  //   DELETE /api/admin/errors?group=:id              purge un groupe (tout le journal sans `group`)
+  if (parts[2] === 'errors' && parts.length === 3 && (method === 'GET' || method === 'DELETE')) {
+    try {
+      const groupId = url.searchParams.get('group');
+      const group = groupId !== null ? await resolveErrorGroup(groupId) : null;
+      // Le groupe a pu être purgé depuis l'affichage de la liste. Un `group`
+      // vide est refusé lui aussi : il ne doit jamais valoir « tout le journal ».
+      if (groupId !== null && !group) {
+        json(res, 404, { error: "Ce groupe d'erreurs n'existe plus." });
+        return true;
+      }
 
-    // DELETE /api/admin/errors
-    if (method === 'DELETE') {
-       try {
-         const purged = await prisma.botErrorLog.deleteMany({});
-         await audit({
-           action: 'errors.purge',
-           summary: `Journal d'erreurs purgé (${purged.count} entrées)`,
-           metadata: { count: purged.count },
-         });
-         json(res, 200, { success: true });
-       } catch (err) {
-         jsonFailure(res, err, 'Erreur de base de données');
-       }
-       return true;
+      if (method === 'GET') {
+        if (url.searchParams.get('view') === 'groups') {
+          json(res, 200, { groups: await listErrorGroups() });
+          return true;
+        }
+        const page = await listErrorOccurrences(group, url.searchParams.get('cursor'), errorPageSize(url.searchParams.get('limit')));
+        json(res, 200, page);
+        return true;
+      }
+
+      const count = await purgeErrors(group);
+      await audit({
+        action: 'errors.purge',
+        summary: group
+          ? `Groupe d'erreurs purgé (${count} entrées) : ${group.message}`
+          : `Journal d'erreurs purgé (${count} entrées)`,
+        metadata: group ? { count, group: { message: group.message, source: group.source } } : { count },
+      });
+      json(res, 200, { success: true, count });
+    } catch (err) {
+      jsonFailure(res, err, 'Erreur de base de données');
     }
+    return true;
   }
 
   // ============================================================================
