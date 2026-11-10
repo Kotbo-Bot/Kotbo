@@ -112,6 +112,8 @@ export async function endSeason(client: Client, guildId: string, seasonId: strin
   const rewards = season.rewards as any[];
   if (rewards && rewards.length > 0) {
     const guild = client.guilds.cache.get(guildId);
+    // Les pièces appartiennent à l'économie : éteinte, seuls les rôles sont remis.
+    const economyEnabled = await isModuleEnabled(guildId, 'economy');
     if (guild) {
       for (const reward of rewards) {
         const ranked = snapshots.find((s) => s.rank === reward.rank);
@@ -124,7 +126,7 @@ export async function endSeason(client: Client, guildId: string, seasonId: strin
           await member.roles.add(reward.roleId).catch(() => null);
         }
 
-        if (reward.coins) {
+        if (reward.coins && economyEnabled) {
           await prisma.rpgProfile.updateMany({
             where: { guildId, userId: ranked.userId },
             data: { balance: { increment: reward.coins } },

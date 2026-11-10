@@ -498,7 +498,9 @@ client.once(Events.ClientReady, async (c) => {
   registerStickyMessageBusSubscribers(client);
   registerWelcomeGoodbyeBusSubscribers(client);
   registerModerationBusSubscribers(scopeClientToModule(client, 'sanctions'));
-  registerTicketsBusSubscribers(client);
+  // Vue filtrée : le module garde quelques `client.on()` (fils supprimés ou
+  // archivés, messages des fils) qui ne passent pas par le bus.
+  registerTicketsBusSubscribers(scopeClientToModule(client, 'tickets'));
 
   // ── Direct listeners (not yet migrated to the bus) ────────
   //

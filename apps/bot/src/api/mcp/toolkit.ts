@@ -14,23 +14,13 @@ import { type APIEmbed, ChannelType, Client, ContainerBuilder, ForumChannel, typ
 import { z } from 'zod';
 import type { McpKeyPermission } from '@prisma/client';
 
-// Helpers annotés explicitement en `CallToolResult` (le type de retour attendu
-// par `registerTool`), plutôt qu'en union de types anonymes inférés. Cela donne
-// un point d'ancrage stable au vérificateur ; le vrai gain mémoire vient
-// toutefois du wrapper non générique dans `registerMcpTools` (voir plus bas).
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type McpToolHandler = (args: any) => CallToolResult | Promise<CallToolResult>;
+// `ok`, `err` et `McpToolHandler` vivent dans `toolResult.ts`, sans dépendance :
+// la garde de module des outils (`toolModules.ts`) les emploie et doit rester
+// testable sans base.
+import { ok, err, type McpToolHandler } from './toolResult.js';
+
+export { ok, err, type McpToolHandler };
 export type ToolSecurityScheme = { type: 'noauth' } | { type: 'oauth2'; scopes: string[] };
-
-export const ok = (data: unknown): CallToolResult => ({
-  content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }],
-});
-
-export const err = (msg: string, meta?: Record<string, unknown>): CallToolResult => ({
-  content: [{ type: 'text' as const, text: JSON.stringify({ error: msg }) }],
-  isError: true,
-  ...(meta ? { _meta: meta } : {}),
-});
 
 export { publicErrorMessage };
 

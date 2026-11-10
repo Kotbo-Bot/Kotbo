@@ -52,6 +52,8 @@ import { registerRpgClanTowerTools } from './tools/rpg-clan-tower.js';
 import { registerSiteTools } from './tools/site.js';
 import { registerShopTools } from './tools/shop.js';
 import { registerRegulationTools } from './tools/regulation.js';
+import { withModuleGate } from './toolModules.js';
+import { isModuleEnabled } from '../../services/core/moduleGate.js';
 
 export function registerMcpTools(
   mcpServer: McpServer,
@@ -76,10 +78,19 @@ export function registerMcpTools(
   // on payait >9 Go de RAM de typecheck pour rien, ce qui faisait tomber `tsgo`
   // en OOM (et `tsc` culminait à ~13 Go).
   //
-  // Ce wrapper conserve exactement le même comportement à l'exécution.
+  // Côté typage, ce wrapper ne change rien à l'exécution. Il est en revanche le
+  // point de passage unique de tous les outils : la garde de module s'y pose
+  // une fois pour toutes (`toolModules.ts`). Elle enveloppe `guard` et passe
+  // donc avant la permission : sur un module éteint, une clé sans la
+  // permission reçoit le refus du module plutôt que la demande d'autorisation,
+  // qu'elle ne pourrait de toute façon pas exploiter.
   const server = {
     registerTool: (name: string, config: McpToolConfig, cb: McpToolHandler) =>
-      mcpServer.registerTool(name, config as never, cb as never),
+      mcpServer.registerTool(
+        name,
+        config as never,
+        withModuleGate(name, cb, (moduleKey) => isModuleEnabled(guildId, moduleKey)) as never,
+      ),
   };
 
   const has = (p: McpKeyPermission) => permissions.includes(p);
