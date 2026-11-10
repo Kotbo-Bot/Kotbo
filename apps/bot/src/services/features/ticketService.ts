@@ -3424,6 +3424,9 @@ export async function relayDmToThread(client: Client, message: Message): Promise
     orderBy: { createdAt: 'desc' }
   });
   if (!ticket || !ticket.threadId) return;
+  // Un MP ne porte pas de serveur : seule la ligne du ticket dit lequel
+  // vérifier, la vue filtrée du client le laisse donc passer.
+  if (!(await isModuleEnabled(ticket.guildId, 'tickets'))) return;
 
   try {
     const thread = await client.channels.fetch(ticket.threadId).catch(() => null);

@@ -13,6 +13,19 @@ export type DropType = 'XP' | 'RPG_XP' | 'CLAN_POINTS' | 'COINS' | 'RPG_ITEM';
 
 export const DROP_TYPES: readonly DropType[] = ['XP', 'RPG_XP', 'CLAN_POINTS', 'COINS', 'RPG_ITEM'] as const;
 
+/**
+ * Module (registre `@kotbo/contracts`) qui tient la ressource versée. Les drops
+ * ne la possèdent pas : un drop de pièces sur un serveur où l'économie est
+ * éteinte créditerait un solde que plus rien n'affiche ni ne dépense.
+ */
+export const DROP_TYPE_MODULE: Readonly<Record<DropType, string>> = {
+  XP: 'leveling',
+  RPG_XP: 'economy',
+  CLAN_POINTS: 'clans',
+  COINS: 'economy',
+  RPG_ITEM: 'economy',
+};
+
 
 /**
  * Façon dont un drop se ramasse :

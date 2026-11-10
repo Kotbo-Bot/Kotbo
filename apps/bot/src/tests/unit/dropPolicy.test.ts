@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { getModuleDefinition } from '@kotbo/contracts';
 import {
   DROP_AMOUNT_RANGE,
   DROP_DELETE_AFTER_DISABLED,
@@ -8,6 +9,8 @@ import {
   DROP_ITEM_POOL_MAX,
   DROP_ITEM_QUANTITY_RANGE,
   DROP_ITEM_WEIGHT_TOTAL,
+  DROP_TYPES,
+  DROP_TYPE_MODULE,
   dropItemsTotalWeight,
   normalizeDropItems,
   pickWeightedDropItem,
@@ -275,5 +278,23 @@ describe('tirage pondéré d’un objet', () => {
   test('une liste vide ou sans poids ne tire rien', () => {
     expect(pickWeightedDropItem([])).toBeNull();
     expect(pickWeightedDropItem([{ itemId: 'a', weight: 0 }])).toBeNull();
+  });
+});
+
+describe('module qui verse la récompense d\'un drop', () => {
+  test('chaque type de drop est rattaché à un module du registre', () => {
+    for (const type of DROP_TYPES) {
+      expect(getModuleDefinition(DROP_TYPE_MODULE[type])).toBeDefined();
+    }
+  });
+
+  test('l\'XP de niveau dépend du leveling, les points de clan des clans, le reste de l\'économie', () => {
+    expect(DROP_TYPE_MODULE).toEqual({
+      XP: 'leveling',
+      RPG_XP: 'economy',
+      CLAN_POINTS: 'clans',
+      COINS: 'economy',
+      RPG_ITEM: 'economy',
+    });
   });
 });

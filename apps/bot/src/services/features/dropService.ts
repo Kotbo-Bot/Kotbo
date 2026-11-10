@@ -18,6 +18,7 @@ import {
   DROP_DELETE_AFTER_DISABLED,
   DROP_ITEM_WEIGHT_RANGE,
   DROP_TYPES,
+  DROP_TYPE_MODULE,
   defaultDropTypeSettings,
   drawDropAmount,
   dropExpiresAt,
@@ -400,6 +401,9 @@ export async function runDropCycle(client: Client): Promise<void> {
       // La colonne dit que les drops sont allumés, la garde dit s'ils le sont
       // vraiment (bascule de module, cascade de dépendances). Lecture en cache.
       if (!(await isModuleEnabled(guild.id, 'drops'))) continue;
+      // Le module qui tient la ressource doit tourner lui aussi : sinon le drop
+      // se publie, se ramasse, et ne verse rien qu'on puisse voir.
+      if (!(await isModuleEnabled(guild.id, DROP_TYPE_MODULE[config.type as DropType]))) continue;
 
       await tickDropConfig(client, guild, config);
     } catch (error) {

@@ -12,6 +12,7 @@ import type { Client } from 'discord.js';
 import { resolveRankedTier } from '@kotbo/shared';
 import prisma, { prismaRead } from '../../../utils/db.js';
 import { logger } from '../../../utils/logger.js';
+import { isModuleEnabled } from '../../core/moduleGate.js';
 import { getGuildLadder, getRankedConfigSafe } from './rankedConfigService.js';
 import { invalidateGlobalLeaderboard } from './rankedLeaderboardService.js';
 
@@ -124,6 +125,8 @@ async function grantSeasonRewards(
   if (!guild) return 0;
 
   let granted = 0;
+  // Les pièces appartiennent à l'économie : éteinte, seuls les rôles sont remis.
+  const economyEnabled = await isModuleEnabled(guildId, 'economy');
 
   for (const reward of rewards) {
     const winner = entries.find((entry) => entry.rank === reward.rank);
@@ -134,7 +137,7 @@ async function grantSeasonRewards(
       if (member) await member.roles.add(reward.roleId).catch(() => null);
     }
 
-    if (reward.coins && reward.coins > 0) {
+    if (economyEnabled && reward.coins && reward.coins > 0) {
       await prisma.rpgProfile.updateMany({
         where: { guildId, userId: winner.userId },
         data: { balance: { increment: reward.coins } },

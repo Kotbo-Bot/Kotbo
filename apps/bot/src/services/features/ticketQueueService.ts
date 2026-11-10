@@ -13,6 +13,7 @@ import { DiscordAPIError, type Client, type Guild } from 'discord.js';
 import type { Ticket } from '@prisma/client';
 import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
+import { isModuleEnabled } from '../core/moduleGate.js';
 import { type BotLocale, resolveGuildLocale } from '../../utils/i18n.js';
 import { broadcastDashboardStateChange } from '../../api/shared/sharding.js';
 import { createTicketWorkspace, resolveTicketPanelType, type TicketPanelTypeConfig } from './ticketService.js';
@@ -112,6 +113,9 @@ export async function drainAllTicketQueues(client: Client): Promise<void> {
 export async function drainTicketQueue(client: Client, guildId: string): Promise<void> {
   const guild = client.guilds.cache.get(guildId);
   if (!guild || draining.has(guildId)) return;
+  // Appelée par un balayage périodique et par des événements de salon, hors de
+  // toute interaction : la garde du module ne passe pas avant elle.
+  if (!(await isModuleEnabled(guildId, 'tickets'))) return;
   draining.add(guildId);
 
   try {
