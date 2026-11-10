@@ -193,7 +193,13 @@ interface OptionsScene {
   reglagesPerso?: boolean;
   /** `visibilite` du générateur (absent = défaut, visible par tous). */
   visibilite?: string;
+  /** Le salon naît d'un générateur additionnel (`tempVoiceGenerators`), pas du principal. */
+  additionnel?: boolean;
+  /** Retouche le monde avant que le propriétaire n'entre dans le générateur. */
+  avantCreation?: (m: FauxDiscord) => void;
 }
+
+const GEN2 = '900000000000000011';
 
 interface Scene {
   monde: FauxDiscord;
@@ -230,6 +236,7 @@ function reglerBase(opts: OptionsScene) {
     tempVoiceChannelId: IDS.GEN,
     tempVoiceCategoryId: null,
     tempVoiceNameTemplate: opts.modeleNom ?? 'Salon de {user}',
+    tempVoiceGenerators: opts.additionnel ? [{ channelId: GEN2, nameTemplate: 'Salon de {user}' }] : [],
     tempVoiceDefaults: {
       ...(opts.reglagesPerso === undefined ? {} : { reglagesPerso: opts.reglagesPerso }),
       ...(opts.visibilite ? { visibilite: opts.visibilite } : {}),
@@ -244,6 +251,7 @@ async function monterScene(opts: OptionsScene): Promise<Scene> {
   if (!opts.garderBase) reglerBase(opts);
   const m = new FauxDiscord({ latenceRestMs: opts.latenceRestMs ?? Number(process.env.BANC_LATENCE ?? 150), langueDiscord: opts.langue === 'fr' ? 'fr' : 'en-US' });
   monde = m;
+  if (opts.additionnel) m.salons.set(GEN2, m.salonBrut(GEN2, '➕ Autre générateur', []));
   const client = m.creerClient();
   const enCours = suivreEcouteurs(client);
   tv.registerTempVoiceListener(client);
@@ -251,8 +259,9 @@ async function monterScene(opts: OptionsScene): Promise<Scene> {
   const avant = new Set(tv.tempChannels.keys());
   // Chaque arrivée un peu plus tard que la précédente : l'anti-rebond du panneau
   // ne laisse ainsi aucun minuteur réel en attente derrière la scène.
+  opts.avantCreation?.(m);
   avancer(1_500);
-  m.bouger(IDS.PROPRIO, IDS.GEN);
+  m.bouger(IDS.PROPRIO, opts.additionnel ? GEN2 : IDS.GEN);
   await m.calme(enCours);
   const salonId = [...tv.tempChannels.keys()].find((id) => !avant.has(id));
   if (!salonId) throw new Error(`Salon non créé : ${avertissements.slice(-3).join(' | ')} ${JSON.stringify(m.appels.map((a) => [a.methode, a.route, a.erreur]))}`);
@@ -479,3 +488,245 @@ describe('Mes réglages — au transfert', () => {
     expect(salonBrut(sc).name).toBe(nom);
   });
 });
+
+// ─── Correctifs de la relecture : chaque cas rejoue le parcours sur le banc ───
+
+const P = PermissionFlagsBits;
+const a = (sc: Scene, id: string, bit: bigint) => (surcharge(sc, id).allow & bit) !== 0n;
+const refuse = (sc: Scene, id: string, bit: bigint) => (surcharge(sc, id).deny & bit) !== 0n;
+const estEnVocal = (sc: Scene, id: string) => sc.monde.etatsVocaux.get(id) === sc.salonId;
+
+/** Remplace une réponse du faux Discord : `null` laisse passer la requête. */
+function intercepter(m: FauxDiscord, fn: (o: Brut) => Promise<unknown> | null) {
+  const traiter = m.traiter.bind(m);
+  m.traiter = (o: Brut) => fn(o) ?? traiter(o);
+}
+const estRenommage = (o: Brut) => o.method === 'PATCH' && /^\/channels\/\d+$/.test(String(o.fullRoute)) && typeof o.body?.name === 'string';
+
+/** Salon créé avec des réglages enregistrés (base remise à neuf, puis réglages posés). */
+async function creerAvec(r: Record<string, unknown>, opts: Partial<OptionsScene> = {}) {
+  const o: OptionsScene = { langue: 'fr', format: 'V2', mode: 'CLASSIC', ...opts };
+  reglerBase(o);
+  sauves.clear();
+  sauves.set(cle(IDS.PROPRIO), reglagesDe(r));
+  return monterScene({ ...o, garderBase: true });
+}
+
+describe('Réglages enregistrés — générateur additionnel', () => {
+  test('suit la visibilité du serveur', async () => {
+    sauves.clear();
+    const sc = await monterScene({ langue: 'fr', format: 'V2', mode: 'CLASSIC', additionnel: true, visibilite: 'prive' });
+    expect(tv.tempChannels.get(sc.salonId)?.generateurId).toBe(GEN2);
+    expect(cache(sc, IDS.GUILD)).toBe(true);
+  });
+
+  test('applique les réglages enregistrés', async () => {
+    const sc = await creerAvec({}, { additionnel: true });
+    expect(cache(sc, IDS.CIBLE)).toBe(true);
+    expect(salonBrut(sc).name).toBe('Repaire perso');
+  });
+
+  test('additionnel, réglages par personne coupés au serveur : rien appliqué', async () => {
+    const sc = await creerAvec({}, { additionnel: true, reglagesPerso: false });
+    expect(salonBrut(sc).name).not.toBe('Repaire perso');
+  });
+});
+
+describe('Réglages enregistrés — ordre, verrou et visibilité', () => {
+  test('verrouillé + Privé : Connect reste refusé, staff et bot gardent le salon, le propriétaire écrit', async () => {
+    const sc = await creerAvec({ verrouille: true, visibilite: 'prive' });
+    expect(refuse(sc, IDS.GUILD, P.Connect)).toBe(true);
+    expect(refuse(sc, IDS.GUILD, P.ViewChannel)).toBe(true);
+    expect(a(sc, IDS.ROLE_MOD, P.ViewChannel) && a(sc, IDS.ROLE_MOD, P.Connect)).toBe(true);
+    expect(a(sc, IDS.PROPRIO, P.SendMessages)).toBe(true);
+    expect(sc.monde.peutEcrire(sc.salonId, IDS.BOT)).toBe(true);
+    for (const bit of [P.ViewChannel, P.Connect, P.ManageChannels]) expect(a(sc, IDS.BOT, bit)).toBe(true);
+  });
+
+  test('Privé du générateur : le bot garde vue, connexion et gestion du salon', async () => {
+    sauves.clear();
+    const sc = await monterScene({ langue: 'fr', format: 'V2', mode: 'CLASSIC', visibilite: 'prive' });
+    for (const bit of [P.ViewChannel, P.Connect, P.ManageChannels]) expect(a(sc, IDS.BOT, bit)).toBe(true);
+  });
+
+  test('renommage refusé par Discord : visibilité et limite posées quand même, l échec est journalisé', async () => {
+    avertissements.length = 0;
+    const sc = await creerAvec({ visibilite: 'prive' }, {
+      avantCreation: (m) => intercepter(m, (o) => (estRenommage(o) ? Promise.reject(new Error('Missing Permissions')) : null)),
+    });
+    expect(cache(sc, IDS.GUILD)).toBe(true);
+    expect(cache(sc, IDS.CIBLE)).toBe(true);
+    expect(salonBrut(sc).user_limit).toBe(7);
+    expect(avertissements.some((t) => t.includes('« nom »'))).toBe(true);
+  });
+
+  test('renommage sans réponse (limite de débit) : la limite passe, le salon est servi', async () => {
+    const sc = await creerAvec({}, {
+      avantCreation: (m) => intercepter(m, (o) => (estRenommage(o) ? new Promise(() => undefined) : null)),
+    });
+    expect(salonBrut(sc).user_limit).toBe(7);
+    expect(cache(sc, IDS.CIBLE)).toBe(true);
+  });
+
+  test('salon réservé : appliquer des réglages « ouvert » ne lève pas son verrou', async () => {
+    sauves.clear();
+    const sc = await monterScene({ langue: 'fr', format: 'V2', mode: 'CLASSIC' });
+    await cliquer(sc, { customId: 'tempvoice:reserve_select', genre: 'menuTexte', acteur: IDS.PROPRIO, values: [IDS.ROLE_RESA], porteur: sc.monde.messages.get(sc.panneauId)! });
+    expect(base.salons.get(sc.salonId)?.roleId).toBe(IDS.ROLE_RESA);
+    expect(refuse(sc, IDS.GUILD, P.Connect)).toBe(true);
+    sauves.set(cle(IDS.PROPRIO), reglagesDe({ verrouille: false, bloques: [] }));
+    await mesReglages(sc, 'apply');
+    expect(refuse(sc, IDS.GUILD, P.Connect)).toBe(true);
+  });
+});
+
+describe('Réglages enregistrés — mêmes règles que « Autoriser » et « Bannir »', () => {
+  test('un staff bloqué ne l est pas, un bloqué présent est déconnecté', async () => {
+    sauves.clear();
+    const sc = await monterScene({ langue: 'fr', format: 'V2', mode: 'CLASSIC' });
+    expect(estEnVocal(sc, IDS.CIBLE)).toBe(true);
+    sauves.set(cle(IDS.PROPRIO), reglagesDe({ bloques: [IDS.STAFF, IDS.CIBLE, IDS.PROPRIO] }));
+    await mesReglages(sc, 'apply');
+    expect(cache(sc, IDS.CIBLE)).toBe(true);
+    expect(estEnVocal(sc, IDS.CIBLE)).toBe(false);
+    expect(cache(sc, IDS.STAFF)).toBe(false);
+    expect(estEnVocal(sc, IDS.STAFF)).toBe(true);
+    expect(cache(sc, IDS.PROPRIO)).toBe(false);
+  });
+
+  test('« ceux en vocal » : un autorisé enregistré garde son droit après être passé dans le salon', async () => {
+    const sc = await creerAvec({ bloques: [], autorises: [IDS.DEHORS], modeEcriture: 'inVoice' });
+    expect(a(sc, IDS.DEHORS, P.Connect)).toBe(true);
+    const avant = surcharge(sc, IDS.DEHORS);
+    avancer(1_500);
+    sc.monde.bouger(IDS.DEHORS, sc.salonId);
+    await sc.monde.calme(sc.enCours);
+    avancer(1_500);
+    sc.monde.bouger(IDS.DEHORS, null);
+    await sc.monde.calme(sc.enCours);
+    expect(surcharge(sc, IDS.DEHORS)).toEqual(avant);
+  });
+
+  test('« ceux en vocal » : en sortir garde l’écriture d’un autorisé enregistré présent, comme « Autoriser »', async () => {
+    sauves.clear();
+    const sc = await monterScene({ langue: 'fr', format: 'V2', mode: 'CLASSIC' });
+    const panneau = sc.monde.messages.get(sc.panneauId)!;
+    await cliquer(sc, { customId: 'tempvoice:mode_select', genre: 'menuTexte', acteur: IDS.PROPRIO, values: ['inVoice'], porteur: panneau });
+    expect(tv.tempChannels.get(sc.salonId)?.modeEcriture).toBe('inVoice');
+    sauves.set(cle(IDS.PROPRIO), reglagesDe({ bloques: [], autorises: [IDS.DEHORS] }));
+    await mesReglages(sc, 'apply');
+    avancer(1_500);
+    sc.monde.bouger(IDS.DEHORS, sc.salonId);
+    await sc.monde.calme(sc.enCours);
+    expect(a(sc, IDS.DEHORS, P.SendMessages)).toBe(true);
+    await cliquer(sc, { customId: 'tempvoice:mode_select', genre: 'menuTexte', acteur: IDS.PROPRIO, values: ['everyone'], porteur: sc.monde.messages.get(sc.panneauId)! });
+    expect(tv.tempChannels.get(sc.salonId)?.modeEcriture).toBe('everyone');
+    // Une présence perdrait son bit au changement de mode ; une autorisation ne bouge pas.
+    expect(a(sc, IDS.DEHORS, P.SendMessages)).toBe(true);
+    expect(a(sc, IDS.DEHORS, P.Connect)).toBe(true);
+  });
+});
+
+describe('« Suit l accès » après chaque changement de l entrée de @everyone', () => {
+  const acces = () => monterScene({ langue: 'fr', format: 'V2', mode: 'CLASSIC', visibilite: 'acces' });
+
+  test('réserver à un rôle cache le salon, lever la réservation le rend visible', async () => {
+    sauves.clear();
+    const sc = await acces();
+    expect(cache(sc, IDS.GUILD)).toBe(false);
+    const porteur = sc.monde.messages.get(sc.panneauId)!;
+    await cliquer(sc, { customId: 'tempvoice:reserve_select', genre: 'menuTexte', acteur: IDS.PROPRIO, values: [IDS.ROLE_RESA], porteur });
+    expect(cache(sc, IDS.GUILD)).toBe(true);
+    await cliquer(sc, { customId: 'tempvoice:reserve_select', genre: 'menuTexte', acteur: IDS.PROPRIO, values: [], porteur });
+    expect(refuse(sc, IDS.GUILD, P.Connect)).toBe(false);
+    expect(cache(sc, IDS.GUILD)).toBe(false);
+  });
+
+  test('réserver à des membres cache le salon', async () => {
+    sauves.clear();
+    const sc = await acces();
+    await cliquer(sc, { customId: 'tempvoice:reserve_membres', genre: 'menuMembres', acteur: IDS.PROPRIO, values: [IDS.AUTORISE], porteur: sc.monde.messages.get(sc.panneauId)! });
+    expect(refuse(sc, IDS.GUILD, P.Connect)).toBe(true);
+    expect(cache(sc, IDS.GUILD)).toBe(true);
+  });
+
+  test('anciens boutons lock / unlock', async () => {
+    sauves.clear();
+    const sc = await acces();
+    const porteur = sc.monde.messages.get(sc.panneauId)!;
+    await cliquer(sc, { customId: 'tempvoice:lock', genre: 'bouton', acteur: IDS.PROPRIO, porteur });
+    expect(cache(sc, IDS.GUILD)).toBe(true);
+    expect(sc.monde.peutEcrire(sc.salonId, IDS.BOT)).toBe(true);
+    await cliquer(sc, { customId: 'tempvoice:unlock', genre: 'bouton', acteur: IDS.PROPRIO, porteur });
+    expect(refuse(sc, IDS.GUILD, P.Connect)).toBe(false);
+    expect(cache(sc, IDS.GUILD)).toBe(false);
+  });
+
+  test('réservation posée puis levée depuis le dashboard', async () => {
+    sauves.clear();
+    const sc = await acces();
+    expect((await patchDashboard(sc, { roleId: IDS.ROLE_RESA })).statusCode).toBe(200);
+    await sc.monde.calme(sc.enCours);
+    expect(cache(sc, IDS.GUILD)).toBe(true);
+    expect((await patchDashboard(sc, { roleId: null })).statusCode).toBe(200);
+    await sc.monde.calme(sc.enCours);
+    expect(cache(sc, IDS.GUILD)).toBe(false);
+  });
+});
+
+describe('« Mes réglages » — petits points', () => {
+  test('fonction coupée par le serveur après l ouverture du menu : refus, rien enregistré', async () => {
+    sauves.clear();
+    const sc = await monterScene({ langue: 'fr', format: 'V2', mode: 'CLASSIC' });
+    const porteur = await ouvrirPropriete(sc);
+    configServeur.tempVoiceDefaults = { reglagesPerso: false };
+    const lignes = await cliquer(sc, { customId: 'tempvoice:saved_select', genre: 'menuTexte', acteur: IDS.PROPRIO, values: ['save'], porteur });
+    expect(sauves.has(cle(IDS.PROPRIO))).toBe(false);
+    expect(contient(lignes, m.panel_tempvoice_saved_disabled({}, { locale: 'fr' }))).toBe(true);
+  });
+
+  // L'entrée nominative que `garderEntreeStaff` pose à un staff qui verrouille (propriétaire du bot sans rôle staff).
+  test('« Enregistrer » ne compte pas l entrée nominative d un staff parmi les autorisés', async () => {
+    sauves.clear();
+    const sc = await monterScene({ langue: 'fr', format: 'V2', mode: 'CLASSIC' });
+    sc.monde.poserSurchargeDirecte(sc.salonId, IDS.STAFF, 1, P.ViewChannel | P.Connect);
+    await sc.monde.calme(sc.enCours);
+    await mesReglages(sc, 'save');
+    const r = sauves.get(cle(IDS.PROPRIO)) as Brut;
+    expect(r.autorises).toContain(IDS.AUTORISE);
+    expect(r.autorises).not.toContain(IDS.STAFF);
+  });
+
+  test('visibilité du générateur persistée à la création', async () => {
+    sauves.clear();
+    const sc = await monterScene({ langue: 'fr', format: 'V2', mode: 'CLASSIC', visibilite: 'prive' });
+    expect(base.salons.get(sc.salonId)?.visibility).toBe('prive');
+  });
+});
+
+// ─── Route du dashboard, appelée avec le client du banc ───
+
+async function patchDashboard(sc: Scene, corps: Record<string, unknown>) {
+  const { IncomingMessage, ServerResponse } = await import('node:http');
+  const { Socket } = await import('node:net');
+  const { handleChannelsManagementRoutes } = await import('../../api/routes/dashboard/modules/channels-management.js');
+  const { DASHBOARD_ACCESS_ADMIN } = await import('../../api/shared.js');
+  const req = new IncomingMessage(new Socket());
+  req.method = 'PATCH';
+  req.headers = { 'content-type': 'application/json' };
+  req.push(JSON.stringify(corps));
+  req.push(null);
+  const res = new ServerResponse(new IncomingMessage(new Socket()));
+  let code = 200;
+  Object.defineProperty(res, 'statusCode', { get: () => code, set: (v: number) => { code = v; } });
+  res.setHeader = () => res;
+  res.writeHead = ((statut: number) => { code = statut; return res; }) as never;
+  res.end = (() => res) as never;
+  const route = `/api/dashboard/guilds/${IDS.GUILD}/channels-management/temp-voice/channels/${sc.salonId}`;
+  await handleChannelsManagementRoutes({
+    req, res, parts: route.split('/').filter(Boolean), url: new URL(`http://localhost${route}`), client: sc.client,
+    user: { userId: IDS.ADMIN, username: 'admin' } as never, guildId: IDS.GUILD, access: DASHBOARD_ACCESS_ADMIN as never,
+    method: 'PATCH', auditUser: 'admin (dashboard)', moduleKey: 'channels-management',
+  });
+  return res;
+}

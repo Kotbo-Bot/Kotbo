@@ -1,11 +1,11 @@
-import { EmbedBuilder, OverwriteType, PermissionFlagsBits, type VoiceChannel } from 'discord.js';
+import { EmbedBuilder, PermissionFlagsBits, type VoiceChannel } from 'discord.js';
 import { Prisma } from '@prisma/client';
 import prisma from '../utils/db.js';
 import { logger } from '../utils/logger.js';
 import * as m from '../lib/paraglide/messages.js';
 import type { BotLocale } from '../utils/i18n.js';
-import { categoryOverwriteFor, libelleModeEcriture, MODES_ECRITURE, restoreFromCategory, type ModeEcriture } from '../services/features/tempVoiceService.js';
-import { appliquerVisibilite, autorisesDuSalon, bloquesDuSalon, normaliserVisibilite, type Visibilite } from './tempVoiceVisibilite.js';
+import { libelleModeEcriture, MODES_ECRITURE, type ModeEcriture } from '../services/features/tempVoiceService.js';
+import { autorisesDuSalon, bloquesDuSalon, normaliserVisibilite, type Visibilite } from './tempVoiceVisibilite.js';
 
 /** « Mes réglages » : ce qu'un propriétaire retrouve à chaque nouveau salon (colonne MemberProfile.tempVoiceSavedSettings). */
 export interface ReglagesPerso {
@@ -79,38 +79,6 @@ export function capturerReglages(
     autorises: autorisesDuSalon(channel, proprietaireId),
     modeEcriture,
   };
-}
-
-// Le mode de chat n'est PAS appliqué ici : poserModeEcriture est privé à tempVoice.ts, le câblage l'appelle avec r.modeEcriture.
-export async function appliquerReglagesPerso(
-  channel: VoiceChannel, r: ReglagesPerso, ctx: { proprietaireId: string; rolesOffice: string[] },
-): Promise<void> {
-  const { Connect } = PermissionFlagsBits;
-  // Le renommage est limité par Discord : seulement si le nom change.
-  if (r.nom && r.nom !== channel.name) await channel.setName(r.nom);
-  if (r.limite !== channel.userLimit) await channel.setUserLimit(r.limite);
-
-  const everyone = channel.guild.id;
-  const verrouilleActuel = Boolean(channel.permissionOverwrites.cache.get(everyone)?.deny?.has(Connect));
-  if (verrouilleActuel !== r.verrouille) {
-    // Rouvrir = rendre ce que porte la catégorie : `null` ne le ferait pas (Discord recopie à la création).
-    const patch = r.verrouille ? { Connect: false } : restoreFromCategory({ Connect: null }, categoryOverwriteFor(channel, everyone));
-    await channel.permissionOverwrites.edit(everyone, patch, { type: OverwriteType.Role });
-  }
-
-  const membre = { type: OverwriteType.Member };
-  for (const id of r.bloques) {
-    if (id === ctx.proprietaireId) continue;
-    await channel.permissionOverwrites.edit(id, { ViewChannel: false, Connect: false }, membre);
-    // Comme « Bannir » : un bloqué déjà présent sort du salon.
-    const present = channel.members?.get(id);
-    if (present?.voice?.channelId === channel.id) await present.voice.disconnect().catch(() => null);
-  }
-  for (const id of r.autorises) {
-    if (id === ctx.proprietaireId || r.bloques.includes(id)) continue;
-    await channel.permissionOverwrites.edit(id, { Connect: true, ViewChannel: true }, membre);
-  }
-  await appliquerVisibilite(channel, r.visibilite, ctx);
 }
 
 const mentions = (l: string[]) => (l.length ? l.map((id) => `<@${id}>`).join(' ').slice(0, 1024) : '—');

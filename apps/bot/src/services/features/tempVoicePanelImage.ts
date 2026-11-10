@@ -1,7 +1,7 @@
 /**
  * Carte d'état d'un salon vocal temporaire, rendue en PNG.
  *
- * POURQUOI UNE IMAGE. Components V2 n'a aucun composant de colonnes. Les six
+ * POURQUOI UNE IMAGE. Components V2 n'a aucun composant de colonnes. Les sept
  * valeurs ne se rangent nativement qu'en un seul cas : trois champs « inline »
  * d'un embed classique, ce qui impose une grille à 3 colonnes (et une colonne
  * unique sur téléphone, Discord décidant seul selon la largeur). Toute autre
@@ -243,7 +243,7 @@ export function rognerAuxPixelsPeints(canvas: Canvas, marge: number): Canvas {
 }
 
 /**
- * Les six valeurs dans l'ordre État, Places, Écriture, Autorisés, Bannis, Réservé.
+ * Les valeurs dans l'ordre État, Places, Visibilité, Écriture, Autorisés, Bannis, Réservé.
  */
 export async function rendreEtatPng(
   valeurs: readonly ValeurEtat[],

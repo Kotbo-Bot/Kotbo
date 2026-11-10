@@ -1623,6 +1623,14 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
           data.roleId = null;
         }
 
+        // « Suit l'accès » : réserver ferme le salon, lever la réservation le rouvre.
+        const { tempChannels, suivreAccesSiVisibilite } = await import('../../../../events/tempVoice.js');
+        const entree = tempChannels.get(channelId);
+        if (entree) {
+          await suivreAccesSiVisibilite(channel as VoiceChannel, guildId, entree).catch((err: unknown) =>
+            logger.warn('ChannelsManagementAPI', `Visibilité non suivie sur ${channelId} :`, err));
+        }
+
         await prisma.tempVoiceChannel.update({
           where: { id: channelId },
           data

@@ -3770,7 +3770,9 @@ describe('Reactivite du panneau : chaque changement, tout de suite, et vrai', ()
     // est partagee.
     const sc = scene('950000000000000006');
     await panneauApres(sc, 'bascule_verrou');
-    expect(sc.relectures()).toBeLessThanOrEqual(2);
+    // Deux pour les lecteurs du panneau, une pour le verrou : sans elle, le bot
+    // jugerait son écriture sur le cache d'avant le verrou.
+    expect(sc.relectures()).toBeLessThanOrEqual(3);
     sc.ranger();
   }, 10_000);
 

@@ -231,6 +231,8 @@ export function resolveTempVoiceGenerators(
   everyoneRoleId?: string,
 ): TempVoiceGenerator[] {
   const generators: TempVoiceGenerator[] = [];
+  // Visibilité et réglages par personne ne se règlent qu'au niveau du serveur (dashboard) : les additionnels les suivent.
+  const { visibilite, reglagesPerso } = normalizeTempVoicePolicy(guildConfig.tempVoiceDefaults, everyoneRoleId);
 
   if (guildConfig.tempVoiceChannelId) {
     generators.push({
@@ -254,7 +256,7 @@ export function resolveTempVoiceGenerators(
         categoryId: typeof entry.categoryId === 'string' ? entry.categoryId : undefined,
         nameTemplate: typeof entry.nameTemplate === 'string' ? entry.nameTemplate : DEFAULT_NAME_TEMPLATE,
         requiredRoleId: typeof entry.requiredRoleId === 'string' ? entry.requiredRoleId : undefined,
-        policy: normalizeTempVoicePolicy(entry, everyoneRoleId),
+        policy: { ...normalizeTempVoicePolicy(entry, everyoneRoleId), visibilite, reglagesPerso },
         primary: false,
         // Bornées à leurs énumérations, et seulement celles réellement posées :
         // une clé absente ou inconnue n'apparaît pas, pour que l'héritage la
