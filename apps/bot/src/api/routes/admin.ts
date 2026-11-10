@@ -62,6 +62,7 @@ import {
   listAdminAuditActions,
   recordAdminAudit,
   resolveRequestIp,
+  type AdminAuditEntry,
   type AdminAuditOutcome,
 } from '../../services/system/adminAuditService.js';
 import { ensureAdminHealthSampling, getAdminHealthSeries } from '../../services/system/adminHealthService.js';
@@ -125,6 +126,10 @@ export async function handleAdminRoutes(
     return true;
   }
 
+  // Trace d'une action sensible, au nom de l'admin connecté et depuis son IP.
+  const audit = (entry: Omit<AdminAuditEntry, 'actorId' | 'ip'>) =>
+    recordAdminAudit({ ...entry, actorId: user.userId, ip: resolveRequestIp(req) });
+
   // Routes d'analyse commerciale et tunnel d'acquisition
   if (parts[2] === 'analytics') {
     return handleAdminAnalyticsRoutes(req, res, parts, url, client, user);
@@ -161,6 +166,7 @@ export async function handleAdminRoutes(
   if (parts[2] === 'query-stats' && parts.length === 3 && (method === 'GET' || method === 'DELETE')) {
     if (method === 'DELETE') {
       resetQueryStats();
+      await audit({ action: 'query_stats.reset', summary: 'Profil des requêtes Prisma remis à zéro' });
       json(res, 200, { ok: true });
       return true;
     }
@@ -355,12 +361,10 @@ export async function handleAdminRoutes(
 
     // POST /api/admin/shards/restart-all
     if (method === 'POST' && parts.length === 4 && parts[3] === 'restart-all') {
-      await recordAdminAudit({
-        actorId: user.userId,
+      await audit({
         action: 'shard.restart_all',
         targetType: 'container',
         summary: 'Redémarrage complet du conteneur demandé',
-        ip: resolveRequestIp(req),
       });
       requestContainerRestart();
       json(res, 200, { ok: true, restart: 'container' });
@@ -377,26 +381,22 @@ export async function handleAdminRoutes(
 
       try {
         requestShardRespawn(shardId);
-        await recordAdminAudit({
-          actorId: user.userId,
+        await audit({
           action: 'shard.restart',
           targetType: 'shard',
           targetId: String(shardId),
           summary: `Redémarrage du shard #${shardId}`,
-          ip: resolveRequestIp(req),
         });
         json(res, 200, { ok: true, restart: 'shard', targetShard: shardId });
       } catch (err) {
         // Le respawn ciblé a échoué : on retombe sur un redémarrage complet,
         // ce que l'audit doit refléter tel quel.
-        await recordAdminAudit({
-          actorId: user.userId,
+        await audit({
           action: 'shard.restart',
           targetType: 'shard',
           targetId: String(shardId),
           summary: `Redémarrage du shard #${shardId} impossible : redémarrage du conteneur à la place`,
           outcome: 'FAILED',
-          ip: resolveRequestIp(req),
         });
         requestContainerRestart();
         json(res, 200, { ok: true, restart: 'container', targetShard: shardId });
@@ -452,6 +452,13 @@ export async function handleAdminRoutes(
 
     // POST /api/admin/guilds/:guildId/invite
     if (parts[4] === 'invite' && method === 'POST') {
+      // Une invitation fait entrer un admin sur le serveur d'un client.
+      const auditInvite = () => audit({
+        action: 'guild.invite',
+        targetType: 'guild',
+        targetId: guildId,
+        summary: 'Invitation de support créée (24 h, 1 utilisation)',
+      });
       if (client.shard) {
         const results = await client.shard.broadcastEval<{ error?: string; url?: string; code?: string } | null, { guildId: string }>(async (shardClient, context) => {
           const guild = shardClient.guilds.cache.get(context.guildId);
@@ -489,6 +496,7 @@ export async function handleAdminRoutes(
               expiresAt: new Date(Date.now() + 86400 * 1000),
             });
           }
+          await auditInvite();
           json(res, 200, { url: result.url });
         }
       } else {
@@ -505,6 +513,7 @@ export async function handleAdminRoutes(
         try {
           const invite = await (channel as TextChannel).createInvite({ maxAge: 86400, maxUses: 1 });
           await recordBotInvite(invite, INVITE_SOURCE.supportAdmin());
+          await auditInvite();
           json(res, 200, { url: invite.url });
         } catch (err) {
           jsonFailure(res, err, "Erreur lors de la création de l'invitation");
@@ -531,24 +540,20 @@ export async function handleAdminRoutes(
         if (!result) {
           json(res, 404, { error: 'Serveur introuvable' });
         } else if (result.success) {
-          await recordAdminAudit({
-            actorId: user.userId,
+          await audit({
             action: 'guild.leave',
             targetType: 'guild',
             targetId: guildId,
             summary: `Bot retiré du serveur ${await getGuildName(client, guildId)}`,
-            ip: resolveRequestIp(req),
           });
           json(res, 200, { success: true });
         } else {
-          await recordAdminAudit({
-            actorId: user.userId,
+          await audit({
             action: 'guild.leave',
             targetType: 'guild',
             targetId: guildId,
             summary: 'Départ du serveur impossible',
             outcome: 'FAILED',
-            ip: resolveRequestIp(req),
           });
           json(res, 500, { error: 'Impossible de quitter le serveur' });
         }
@@ -561,13 +566,11 @@ export async function handleAdminRoutes(
         try {
           const guildName = guild.name;
           await guild.leave();
-          await recordAdminAudit({
-            actorId: user.userId,
+          await audit({
             action: 'guild.leave',
             targetType: 'guild',
             targetId: guildId,
             summary: `Bot retiré du serveur ${guildName}`,
-            ip: resolveRequestIp(req),
           });
           json(res, 200, { success: true });
         } catch (err) {
@@ -617,13 +620,11 @@ export async function handleAdminRoutes(
               update: {},
               create: { userId: body.userId, addedBy: user.userId }
             }));
-            await recordAdminAudit({
-              actorId: user.userId,
+            await audit({
               action: 'admin.grant',
               targetType: 'user',
               targetId: body.userId,
               summary: `Droits d'administrateur global accordés à ${discordUser.username}`,
-              ip: resolveRequestIp(req),
             });
             json(res, 201, { success: true });
          } catch {
@@ -644,13 +645,11 @@ export async function handleAdminRoutes(
        }
        try {
          await prisma.globalAdmin.delete({ where: { userId: targetId } }).catch(() => {});
-         await recordAdminAudit({
-           actorId: user.userId,
+         await audit({
            action: 'admin.revoke',
            targetType: 'user',
            targetId,
            summary: "Droits d'administrateur global retirés",
-           ip: resolveRequestIp(req),
          });
          json(res, 200, { success: true });
        } catch (err) {
@@ -704,14 +703,12 @@ export async function handleAdminRoutes(
             blacklistSet.add(body.userId);
             globalThis.KOTBO_BLACKLIST = blacklistSet;
 
-            await recordAdminAudit({
-              actorId: user.userId,
+            await audit({
               action: 'blacklist.add',
               targetType: 'user',
               targetId: body.userId,
               summary: `${discordUser.username} ajouté à la blacklist globale`,
               metadata: body.reason ? { reason: body.reason } : undefined,
-              ip: resolveRequestIp(req),
             });
             json(res, 201, { success: true });
          } catch (err) {
@@ -735,13 +732,11 @@ export async function handleAdminRoutes(
            blacklistSet.delete(targetId);
          }
 
-         await recordAdminAudit({
-           actorId: user.userId,
+         await audit({
            action: 'blacklist.remove',
            targetType: 'user',
            targetId,
            summary: 'Utilisateur retiré de la blacklist globale',
-           ip: resolveRequestIp(req),
          });
          json(res, 200, { success: true });
        } catch (err) {
@@ -828,6 +823,12 @@ export async function handleAdminRoutes(
           orderBy: [{ word: 'asc' }],
         });
 
+        await audit({
+          action: 'banned_word.upsert',
+          targetType: 'banned_word',
+          summary: `Mots interdits globaux : ${created.length} ajoutés, ${updated.length} modifiés`,
+          metadata: { words: [...created, ...updated].map((entry) => entry.word) },
+        });
         json(res, 200, {
           ok: true,
           createdCount: created.length,
@@ -845,6 +846,12 @@ export async function handleAdminRoutes(
     if (method === 'POST' && parts.length === 4 && parts[3] === 'cleanup') {
       try {
         const result = await cleanupGlobalBannedWords();
+        await audit({
+          action: 'banned_word.cleanup',
+          targetType: 'banned_word',
+          summary: `Nettoyage des mots interdits globaux (${result.duplicateCount} doublons retirés)`,
+          metadata: { cleanedCount: result.cleanedCount, duplicateCount: result.duplicateCount },
+        });
         json(res, 200, { ok: true, ...result });
       } catch (err) {
         logger.error('BannedWordsAPI', 'POST banned-words cleanup error:', err);
@@ -908,6 +915,13 @@ export async function handleAdminRoutes(
             data: { word: nextWord, category: nextCategory, enabled: nextEnabled },
           });
 
+          await audit({
+            action: 'banned_word.update',
+            targetType: 'banned_word',
+            targetId: wordId,
+            summary: `Mot interdit global modifié : « ${existing.word} »${existing.word !== updated.word ? ` devient « ${updated.word} »` : ''}`,
+            metadata: { word: updated.word, category: updated.category, enabled: updated.enabled },
+          });
           json(res, 200, { ok: true, word: updated });
         } catch (err) {
           logger.error('BannedWordsAPI', 'PATCH global banned-word error:', err);
@@ -926,6 +940,12 @@ export async function handleAdminRoutes(
           }
 
           await prisma.bannedWord.delete({ where: { id: wordId } });
+          await audit({
+            action: 'banned_word.delete',
+            targetType: 'banned_word',
+            targetId: wordId,
+            summary: `Mot interdit global supprimé : « ${existing.word} »`,
+          });
           json(res, 200, { ok: true });
         } catch (err) {
           logger.error('BannedWordsAPI', 'DELETE global banned-word error:', err);
@@ -963,6 +983,10 @@ export async function handleAdminRoutes(
            create: { key: 'MAINTENANCE_MODE', value: body.maintenance ? 'true' : 'false' }
          });
          globalThis.KOTBO_MAINTENANCE_MODE = body.maintenance;
+         await audit({
+           action: body.maintenance ? 'maintenance.enable' : 'maintenance.disable',
+           summary: body.maintenance ? 'Maintenance globale activée' : 'Maintenance globale désactivée',
+         });
          json(res, 200, { success: true });
        } catch (err) {
          jsonFailure(res, err, 'Erreur de base de données');
@@ -990,7 +1014,12 @@ export async function handleAdminRoutes(
     // DELETE /api/admin/errors
     if (method === 'DELETE') {
        try {
-         await prisma.botErrorLog.deleteMany({});
+         const purged = await prisma.botErrorLog.deleteMany({});
+         await audit({
+           action: 'errors.purge',
+           summary: `Journal d'erreurs purgé (${purged.count} entrées)`,
+           metadata: { count: purged.count },
+         });
          json(res, 200, { success: true });
        } catch (err) {
          jsonFailure(res, err, 'Erreur de base de données');
@@ -1053,13 +1082,11 @@ export async function handleAdminRoutes(
           uploadedBy: user.userId,
         });
 
-        await recordAdminAudit({
-          actorId: user.userId,
+        await audit({
           action: 'broadcast.media.upload',
           targetType: 'broadcast_media',
           targetId: media.id,
           summary: `Image de broadcast hébergée : ${media.fileName} (${Math.round(media.size / 1024)} Ko)`,
-          ip: resolveRequestIp(req),
         });
 
         json(res, 201, media);
@@ -1078,13 +1105,11 @@ export async function handleAdminRoutes(
     if (method === 'DELETE' && parts[3] === 'media' && parts.length === 5) {
       const deleted = await deleteBroadcastMedia(parts[4]);
       if (deleted) {
-        await recordAdminAudit({
-          actorId: user.userId,
+        await audit({
           action: 'broadcast.media.delete',
           targetType: 'broadcast_media',
           targetId: parts[4],
           summary: 'Image de broadcast supprimée',
-          ip: resolveRequestIp(req),
         });
       }
       json(res, deleted ? 200 : 404, deleted ? { ok: true } : { error: 'Image introuvable' });
@@ -1204,13 +1229,11 @@ export async function handleAdminRoutes(
           json(res, 409, { error: "Cette annonce n'est plus annulable (déjà envoyée ou en cours)." });
           return true;
         }
-        await recordAdminAudit({
-          actorId: user.userId,
+        await audit({
           action: 'broadcast.cancel',
           targetType: 'broadcast',
           targetId: parts[3],
           summary: 'Annonce programmée annulée',
-          ip: resolveRequestIp(req),
         });
         json(res, 200, { ok: true });
       } catch (err) {
@@ -1454,14 +1477,12 @@ export async function handleAdminRoutes(
         });
 
         if (scheduledAt) {
-          await recordAdminAudit({
-            actorId: user.userId,
+          await audit({
             action: 'broadcast.schedule',
             targetType: 'broadcast',
             targetId: record.id,
             summary: `Annonce programmée pour ${scheduledAt.toISOString()} vers ${totalTargeted} serveur(s)`,
             metadata: { target: normalized.target, channelPref: normalized.channelPref },
-            ip: resolveRequestIp(req),
           });
           json(res, 200, {
             success: true,
@@ -1491,15 +1512,13 @@ export async function handleAdminRoutes(
         const { successCount, failCount } = await finalizeBroadcast(record.id, deliveries, totalTargeted);
         await markBroadcastMediaUsed([normalized.imageUrl, normalized.thumbnailUrl]);
 
-        await recordAdminAudit({
-          actorId: user.userId,
+        await audit({
           action: 'broadcast.send',
           targetType: 'broadcast',
           targetId: record.id,
           summary: `Annonce envoyée : ${successCount} succès, ${failCount} échec(s) sur ${totalTargeted} serveur(s)`,
           metadata: { target: normalized.target, channelPref: normalized.channelPref, hasImage: Boolean(normalized.imageUrl) },
           outcome: successCount > 0 || totalTargeted === 0 ? 'OK' : 'FAILED',
-          ip: resolveRequestIp(req),
         });
 
         json(res, 200, {
@@ -1646,14 +1665,12 @@ export async function handleAdminRoutes(
       });
       await invalidatePlan(guildId);
 
-      await recordAdminAudit({
-        actorId: user.userId,
+      await audit({
         action: 'guild.plan.set',
         targetType: 'guild',
         targetId: guildId,
         summary: `Offre de ${await getGuildName(client, guildId)} posée à ${plan} (${reason})`,
         metadata: { plan, reason },
-        ip: resolveRequestIp(req),
       });
 
       json(res, 200, {
@@ -1698,14 +1715,12 @@ export async function handleAdminRoutes(
         note: body?.note ?? null,
       });
 
-      await recordAdminAudit({
-        actorId: user.userId,
+      await audit({
         action: 'guild.billing.gift',
         targetType: 'guild',
         targetId: guildId,
         summary: `${gift.planName} offert à ${await getGuildName(client, guildId)} pour ${months} mois`,
         metadata: { plan: gift.plan, months, giftId: gift.id, note: gift.note },
-        ip: resolveRequestIp(req),
       });
 
       json(res, 200, {
@@ -1753,8 +1768,7 @@ export async function handleAdminRoutes(
       });
       await invalidatePlan(guildId);
 
-      await recordAdminAudit({
-        actorId: user.userId,
+      await audit({
         action: 'guild.billing.detach',
         targetType: 'guild',
         targetId: guildId,
@@ -1763,7 +1777,6 @@ export async function handleAdminRoutes(
           previousSubscriptionId: existing.stripeSubscriptionId,
           previousCustomerId: existing.stripeCustomerId,
         },
-        ip: resolveRequestIp(req),
       });
 
       json(res, 200, {
@@ -1794,14 +1807,12 @@ export async function handleAdminRoutes(
       // ne peut pas en rendre un sans l'autre - mais ça se dit.
       await prisma.billingTrial.delete({ where: { guildId } });
 
-      await recordAdminAudit({
-        actorId: user.userId,
+      await audit({
         action: 'guild.billing.trial_reset',
         targetType: 'guild',
         targetId: guildId,
         summary: `Essai gratuit rendu à ${await getGuildName(client, guildId)}`,
         metadata: { discordUserId: trial.discordUserId, consumed: Boolean(trial.subscriptionId) },
-        ip: resolveRequestIp(req),
       });
 
       json(res, 200, {
@@ -1843,14 +1854,12 @@ export async function handleAdminRoutes(
 
       await syncSubscription(subscription);
 
-      await recordAdminAudit({
-        actorId: user.userId,
+      await audit({
         action: 'guild.billing.resync',
         targetType: 'guild',
         targetId: guildId,
         summary: `Abonnement Stripe resynchronisé pour ${await getGuildName(client, guildId)}`,
         metadata: { subscriptionId: guild.stripeSubscriptionId, status: subscription.status },
-        ip: resolveRequestIp(req),
       });
 
       json(res, 200, { ok: true, status: subscription.status, message: `Abonnement relu : statut ${subscription.status}.` });
@@ -1928,6 +1937,14 @@ export async function handleAdminRoutes(
         }
       });
 
+      // Le code lui-même n'est pas journalisé : il suffit à activer un serveur.
+      await audit({
+        action: 'activation_code.create',
+        targetType: 'activation_code',
+        targetId: newCode.id,
+        summary: `Code d'activation créé (${newCode.accessType}${newCode.label ? `, « ${newCode.label} »` : ''})`,
+        metadata: { accessType: newCode.accessType, durationMinutes: newCode.durationMinutes ?? null },
+      });
       json(res, 201, newCode);
     } catch (err) {
       logger.error('AdminAPI', "Erreur lors de la création d'un code :", err);
@@ -1961,6 +1978,15 @@ export async function handleAdminRoutes(
       await prisma.activationCode.delete({
         where: { id: codeId }
       });
+      await audit({
+        action: 'activation_code.revoke',
+        targetType: 'activation_code',
+        targetId: codeId,
+        summary: codeRow.usedByGuildId
+          ? `Code d'activation révoqué, serveur ${codeRow.usedByGuildId} désactivé`
+          : "Code d'activation inutilisé révoqué",
+        metadata: { guildId: codeRow.usedByGuildId ?? null },
+      });
 
       json(res, 200, { ok: true });
     } catch (err) {
@@ -1992,6 +2018,11 @@ export async function handleAdminRoutes(
         }
       }
 
+      await audit({
+        action: 'staff_server.reconcile',
+        summary: `Serveurs staff réconciliés : ${counts.activated} activés, ${counts.deactivated} désactivés sur ${counts.checked}`,
+        metadata: counts,
+      });
       json(res, 200, { ok: true, ...counts });
     } catch (err) {
       logger.error('AdminAPI', 'Erreur lors de la synchronisation des serveurs staff :', err);
@@ -2008,13 +2039,11 @@ export async function handleAdminRoutes(
       await announceAccessRevoked(client, guildId).catch((err) =>
         logger.warn('AdminAPI', `Impossible de prévenir ${guildId} de la désactivation :`, err),
       );
-      await recordAdminAudit({
-        actorId: user.userId,
+      await audit({
         action: 'guild.deactivate',
         targetType: 'guild',
         targetId: guildId,
         summary: `Serveur ${await getGuildName(client, guildId)} désactivé`,
-        ip: resolveRequestIp(req),
       });
       json(res, 200, { ok: true, message: 'Le serveur a été désactivé.' });
     } catch (err) {
@@ -2058,8 +2087,7 @@ export async function handleAdminRoutes(
         );
       }
 
-      await recordAdminAudit({
-        actorId: user.userId,
+      await audit({
         action: 'guild.activate',
         targetType: 'guild',
         targetId: guildId,
@@ -2067,7 +2095,6 @@ export async function handleAdminRoutes(
           ? `Serveur ${await getGuildName(client, guildId)} activé pour ${formatDuration(result.durationMinutes!)}`
           : `Serveur ${await getGuildName(client, guildId)} activé (accès permanent)`,
         metadata: { accessType: result.accessType, code },
-        ip: resolveRequestIp(req),
       });
 
       json(res, 200, {
@@ -2108,6 +2135,13 @@ export async function handleAdminRoutes(
         json(res, 404, { error: "Ce serveur n'est pas enregistré." });
         return true;
       }
+      await audit({
+        action: 'guild.access_extend',
+        targetType: 'guild',
+        targetId: guildId,
+        summary: `Accès prolongé de ${formatDuration(minutes)} (${status.accessType})`,
+        metadata: { minutes, accessType: status.accessType, accessExpiresAt: status.accessExpiresAt?.toISOString() ?? null },
+      });
 
       json(res, 200, {
         ok: true,
@@ -2146,6 +2180,12 @@ export async function handleAdminRoutes(
     try {
       const body = await readJsonBody<{ force?: boolean; forcer?: boolean }>(req);
       const force = !!(body?.force || body?.forcer);
+      await audit({
+        action: 'guild.rescan_stats',
+        targetType: 'guild',
+        targetId: guildId,
+        summary: `Rescan de l'historique demandé${force ? ' (forcé)' : ''}`,
+      });
 
       if (client.shard) {
         const results = await client.shard.broadcastEval<{ status: string; error?: string } | null, { guildId: string; force: boolean; servicePath: string }>(async (shardClient, context) => {
@@ -2198,6 +2238,12 @@ export async function handleAdminRoutes(
     const guildId = parts[3];
 
     try {
+      await audit({
+        action: 'guild.resync_all',
+        targetType: 'guild',
+        targetId: guildId,
+        summary: 'Synchronisation complète demandée',
+      });
       if (client.shard) {
         const results = await client.shard.broadcastEval<
           { status: string; error?: string } | null,
@@ -2280,6 +2326,13 @@ export async function handleAdminRoutes(
         },
       });
       await cache.invalidateGuild(guildId).catch(() => null);
+      await audit({
+        action: 'guild.reset_template',
+        targetType: 'guild',
+        targetId: guildId,
+        summary: 'Mise en place du serveur rouverte',
+        metadata: { previouslyAppliedBy: guildRow.serverTemplateAppliedBy ?? null },
+      });
 
       json(res, 200, {
         ok: true,
@@ -2315,13 +2368,11 @@ export async function handleAdminRoutes(
       const { markOnboardingComplete } = await import('../../services/core/onboardingGate.js');
       await markOnboardingComplete(guildId, 'admin_skip');
 
-      await recordAdminAudit({
-        actorId: user.userId,
+      await audit({
         action: 'guild.onboarding.skip',
         targetType: 'guild',
         targetId: guildId,
         summary: `Parcours de configuration passé pour ${await getGuildName(client, guildId)}`,
-        ip: resolveRequestIp(req),
       });
 
       json(res, 200, { ok: true, message: 'Parcours de configuration passé.' });
@@ -2352,6 +2403,12 @@ export async function handleAdminRoutes(
     try {
       const body = await readJsonBody<{ force?: boolean }>(req);
       const force = !!body?.force;
+      await audit({
+        action: 'guild.rescan_members',
+        targetType: 'guild',
+        targetId: guildId,
+        summary: `Rescan des membres demandé${force ? ' (forcé)' : ''}`,
+      });
 
       const memberServicePath = path.resolve(__dirname, '../../services/analytics/memberScraperService.js');
 
@@ -2500,6 +2557,12 @@ export async function handleAdminRoutes(
         },
       });
 
+      await audit({
+        action: 'whitelabel.create',
+        targetType: 'whitelabel',
+        targetId: instance.id,
+        summary: `Instance marque blanche créée : ${instance.name} (${instance.slug})`,
+      });
       json(res, 201, { instance: { id: instance.id, slug: instance.slug, name: instance.name } });
     } catch (err) {
       logger.error('AdminAPI', 'POST whitelabel error:', err);
@@ -2584,6 +2647,16 @@ export async function handleAdminRoutes(
         data: updateData,
       });
 
+      // Les noms des champs seulement : jeton, secret OAuth et secret JWT
+      // passent par cette route et n'ont rien à faire dans un journal.
+      const fields = Object.keys(updateData).filter((field) => field !== 'dashboardOrigin');
+      await audit({
+        action: 'whitelabel.update',
+        targetType: 'whitelabel',
+        targetId: updated.id,
+        summary: `Instance marque blanche modifiée : ${updated.slug} (${fields.join(', ')})`,
+        metadata: { fields },
+      });
       json(res, 200, { instance: { id: updated.id, slug: updated.slug, name: updated.name } });
     } catch (err) {
       logger.error('AdminAPI', 'PATCH whitelabel/:id error:', err);
@@ -2611,6 +2684,12 @@ export async function handleAdminRoutes(
       }
 
       await prisma.whiteLabelInstance.delete({ where: { id: parts[3] } });
+      await audit({
+        action: 'whitelabel.delete',
+        targetType: 'whitelabel',
+        targetId: parts[3],
+        summary: `Instance marque blanche supprimée : ${existing.slug}`,
+      });
       json(res, 200, { ok: true });
     } catch (err) {
       logger.error('AdminAPI', 'DELETE whitelabel/:id error:', err);
@@ -2644,6 +2723,13 @@ export async function handleAdminRoutes(
         where: { id: String(body.guildId) },
         data: { instanceId: instance.id },
       });
+      await audit({
+        action: 'whitelabel.bind_guild',
+        targetType: 'guild',
+        targetId: String(body.guildId),
+        summary: `Serveur rattaché à l'instance marque blanche ${instance.slug}`,
+        metadata: { instanceId: instance.id },
+      });
 
       json(res, 200, { ok: true });
     } catch (err) {
@@ -2659,6 +2745,13 @@ export async function handleAdminRoutes(
       await prisma.guild.update({
         where: { id: parts[5] },
         data: { instanceId: null },
+      });
+      await audit({
+        action: 'whitelabel.unbind_guild',
+        targetType: 'guild',
+        targetId: parts[5],
+        summary: "Serveur détaché de son instance marque blanche",
+        metadata: { instanceId: parts[3] },
       });
 
       json(res, 200, { ok: true });
@@ -2751,14 +2844,12 @@ export async function handleAdminRoutes(
         },
       });
 
-      await recordAdminAudit({
-        actorId: user.userId,
+      await audit({
         action: 'instance.ban',
         targetType: 'botInstance',
         targetId: botClientId,
         summary: `Instance ${instance.botName} (${botClientId}) bannie (mode=${body.mode})${body.reason ? ' : ' + body.reason : ''}`,
         metadata: { botClientId, machineFingerprint: instance.machineFingerprint, mode: body.mode, reason: body.reason ?? null },
-        ip: resolveRequestIp(req),
       });
 
       json(res, 200, { ok: true });
@@ -2789,13 +2880,11 @@ export async function handleAdminRoutes(
         data: { unbannedAt: new Date(), unbannedBy: user.userId },
       });
 
-      await recordAdminAudit({
-        actorId: user.userId,
+      await audit({
         action: 'instance.unban',
         targetType: 'botInstance',
         targetId: botClientId,
         summary: `Instance ${instance?.botName ?? botClientId} débannie (${count} entrée(s))`,
-        ip: resolveRequestIp(req),
       });
 
       json(res, 200, { ok: true });
@@ -2822,6 +2911,14 @@ export async function handleAdminRoutes(
       const { deleteSatisfactionReviewMessages } = await import('../../services/features/ticketSatisfactionService.js');
       const result = await deleteSatisfactionReviewMessages(client, userId);
       logger.info('AdminAPI', `Avis de satisfaction de ${userId} retirés de Discord (${result.deleted} supprimés, ${result.cleared} déjà absents, ${result.failed} en échec) par ${user.userId}`);
+      await audit({
+        action: 'gdpr.delete_reviews',
+        targetType: 'user',
+        targetId: userId,
+        summary: `Avis de satisfaction retirés de Discord (${result.deleted} supprimés, ${result.failed} en échec)`,
+        metadata: { deleted: result.deleted, cleared: result.cleared, failed: result.failed },
+        outcome: result.failed > 0 ? 'FAILED' : 'OK',
+      });
       json(res, 200, result);
     } catch (err) {
       logger.error('AdminAPI', 'GDPR satisfaction reviews deletion error:', err);
@@ -2849,7 +2946,10 @@ export async function handleAdminRoutes(
     try {
       const data = await collectUserData(client, userId);
 
+      // Consulter comme exporter les données d'une personne est un traitement
+      // de données personnelles : les deux sont tracés.
       if (action === 'preview') {
+        await audit({ action: 'gdpr.preview', targetType: 'user', targetId: userId, summary: 'Aperçu RGPD consulté' });
         json(res, 200, {
           meta: data.meta,
           identity: data.identity,
@@ -2875,6 +2975,12 @@ export async function handleAdminRoutes(
       res.statusCode = 200;
       res.end(buffer);
       logger.info('AdminAPI', `Export RGPD généré pour ${userId} (${data.meta.totalRecords} enregistrements) par ${user.userId}`);
+      await audit({
+        action: 'gdpr.export',
+        targetType: 'user',
+        targetId: userId,
+        summary: `Export RGPD généré (${data.meta.totalRecords} enregistrements)`,
+      });
       return true;
     } catch (err) {
       logger.error('AdminAPI', 'GDPR export error:', err);

@@ -1,4 +1,4 @@
-import { describe, expect, test, mock, beforeEach } from 'bun:test';
+import { describe, expect, test, mock, beforeEach, afterEach } from 'bun:test';
 import path from 'node:path';
 import nodeCrypto from 'node:crypto';
 import { createServer, IncomingMessage, ServerResponse } from 'node:http';
@@ -63,6 +63,14 @@ const mockDb = {
     create: mock(() => Promise.resolve({})),
     findUnique: mock(() => Promise.resolve(null)),
     update: mock(() => Promise.resolve({})),
+    delete: mock(() => Promise.resolve({})),
+  },
+  adminAuditLog: {
+    create: mock(() => Promise.resolve({})),
+  },
+  whiteLabelInstance: {
+    findUnique: mock(() => Promise.resolve<unknown>(null)),
+    update: mock(() => Promise.resolve<unknown>({})),
   },
   dashboardAuditLog: {
     create: mock(() => Promise.resolve({})),
@@ -95,6 +103,7 @@ const mockActivation = {
   isGuildActivated: mock((_guildId: string) => true),
   activateGuild: mock(() => Promise.resolve({})),
   deactivateGuild: mock(() => Promise.resolve({})),
+  generateActivationCode: mock(() => 'CODE-SECRET-1234'),
 };
 const activationPath = path.resolve(import.meta.dir, '../../utils/activation.ts');
 const activationJsPath = path.resolve(import.meta.dir, '../../utils/activation.js');
@@ -119,11 +128,19 @@ const TEST_SESSION = {
   expiresAt: Date.now() + 3_600_000,
 };
 
+// Admin global distinct de l'utilisateur de test : l'acces admin est mis en
+// cache par utilisateur, et un cas plus haut y laisse un refus pour ce dernier.
+const ADMIN_SESSION_ID = 'admin-session-id';
+const ADMIN_SESSION = { ...TEST_SESSION, userId: 'audit-admin-1', username: 'AuditAdmin' };
+
 const sessionStorePath = path.resolve(import.meta.dir, '../../api/auth/sessionStore.ts');
 const sessionStoreJsPath = path.resolve(import.meta.dir, '../../api/auth/sessionStore.js');
 const mockSessionStore = () => completeModuleMock(sessionStorePath, {
-  getDashboardSession: mock(async (sessionId: string | null) =>
-    sessionId === TEST_SESSION_ID ? TEST_SESSION : null),
+  getDashboardSession: mock(async (sessionId: string | null) => {
+    if (sessionId === TEST_SESSION_ID) return TEST_SESSION;
+    if (sessionId === ADMIN_SESSION_ID) return ADMIN_SESSION;
+    return null;
+  }),
   sessionIdFromRequest: (req: { headers: Record<string, unknown> }) => {
     const raw = req.headers?.cookie;
     const cookie = Array.isArray(raw) ? raw[0] : raw;
@@ -1358,5 +1375,81 @@ describe('Accès dashboard des admins globaux', () => {
 
     expect(access.level).toBe('admin');
     expect(access.viaGlobalAdmin).toBeUndefined();
+  });
+});
+
+describe('Journal d\'audit des actions admin sensibles', () => {
+  const ADMIN_ID = ADMIN_SESSION.userId;
+
+  async function adminRequest(method: string, url: string, body?: unknown) {
+    const req = createMockRequest({
+      method,
+      url,
+      headers: {
+        cookie: `kotbo_session=${ADMIN_SESSION_ID}`,
+        ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+      },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    const res = createMockResponse();
+    await handleAdminRoutes(req, res, splitPath(url), new URL(url, 'http://localhost'), mockClient);
+    return res;
+  }
+
+  /** Entrées d'audit écrites pendant le cas, dans l'ordre. */
+  function audits(): Array<Record<string, unknown>> {
+    return mockDb.adminAuditLog.create.mock.calls.map((call) => (call as unknown as [{ data: Record<string, unknown> }])[0].data);
+  }
+
+  beforeEach(() => {
+    mockDb.globalAdmin.findUnique.mockResolvedValue({ userId: ADMIN_ID } as never);
+    mockDb.adminAuditLog.create.mockClear();
+  });
+
+  afterEach(() => {
+    mockDb.globalAdmin.findUnique.mockResolvedValue(null);
+  });
+
+  test('la création d\'un code d\'activation est tracée, sans le code lui-même', async () => {
+    mockDb.activationCode.create.mockResolvedValueOnce({ id: 'code-1', code: 'CODE-SECRET-1234', accessType: 'PERMANENT' } as never);
+    const res = await adminRequest('POST', '/api/admin/activation-codes', {});
+    expect(res.statusCode).toBe(201);
+    expect(audits()).toHaveLength(1);
+    expect(audits()[0]).toMatchObject({ action: 'activation_code.create', actorId: ADMIN_ID, targetId: 'code-1' });
+    expect(JSON.stringify(audits()[0])).not.toContain('CODE-SECRET-1234');
+  });
+
+  test('la révocation d\'un code d\'activation est tracée', async () => {
+    mockDb.activationCode.findUnique.mockResolvedValueOnce({ id: 'code-2', code: 'CODE-SECRET-1234', usedByGuildId: null } as never);
+    const res = await adminRequest('DELETE', '/api/admin/activation-codes/code-2');
+    expect(res.statusCode).toBe(200);
+    expect(audits()[0]).toMatchObject({ action: 'activation_code.revoke', actorId: ADMIN_ID, targetId: 'code-2' });
+  });
+
+  test('la bascule de la maintenance globale est tracée', async () => {
+    const res = await adminRequest('POST', '/api/admin/config', { maintenance: true });
+    // La route pose l'état sur le process : on le rend, d'autres suites le lisent.
+    globalThis.KOTBO_MAINTENANCE_MODE = false;
+    expect(res.statusCode).toBe(200);
+    expect(audits()[0]).toMatchObject({ action: 'maintenance.enable', actorId: ADMIN_ID });
+  });
+
+  test('la purge du journal d\'erreurs est tracée', async () => {
+    const res = await adminRequest('DELETE', '/api/admin/errors');
+    expect(res.statusCode).toBe(200);
+    expect(audits()[0]).toMatchObject({ action: 'errors.purge', actorId: ADMIN_ID });
+  });
+
+  test('la modification d\'une marque blanche nomme les champs, jamais les secrets', async () => {
+    mockDb.whiteLabelInstance.findUnique.mockResolvedValueOnce({ id: 'wl-1', slug: 'acme' });
+    mockDb.whiteLabelInstance.update.mockResolvedValueOnce({ id: 'wl-1', slug: 'acme', name: 'Acme' });
+    const res = await adminRequest('PATCH', '/api/admin/whitelabel/wl-1', { name: 'Acme', discordToken: 'JETON-TRES-SECRET' });
+    expect(res.statusCode).toBe(200);
+    expect(audits()[0]).toMatchObject({
+      action: 'whitelabel.update',
+      targetId: 'wl-1',
+      metadata: { fields: ['name', 'discordToken'] },
+    });
+    expect(JSON.stringify(audits()[0])).not.toContain('JETON-TRES-SECRET');
   });
 });
