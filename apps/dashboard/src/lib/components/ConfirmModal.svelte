@@ -3,6 +3,8 @@
   import Button from './ui/Button.svelte';
   import { m } from '../i18n';
   import { portal } from '../actions/portal';
+  import { dialogFocus } from '../actions/dialogFocus';
+  import { scrollLock } from '../scrollLock';
 
   interface Props {
     open?: boolean;
@@ -63,43 +65,50 @@
     }
   }
 
-  function handleKeydown(e: KeyboardEvent) {
-    if (!open) return;
-    if (e.key === 'Escape') handleCancel();
-    if (e.key === 'Enter' && canConfirm && !executing) handleConfirm();
+  function handleSubmit(e: SubmitEvent) {
+    e.preventDefault();
+    handleConfirm();
   }
-</script>
 
-<svelte:window onkeydown={handleKeydown} />
+  // Focus de depart : le champ a recopier, sinon le choix le moins risque
+  // (Annuler quand l'action est destructrice). Entree active ce bouton : plus
+  // de validation par un second Entree sur le declencheur reste sous la fenetre.
+  const focusTarget = $derived(requireInput ? 'input' : variant === 'danger' ? 'cancel' : 'confirm');
+
+  const titleId = $props.id();
+  const descriptionId = `${titleId}-description`;
+</script>
 
 {#if open}
   <div
     use:portal
+    use:scrollLock
     class="confirm-modal fixed inset-0 flex items-center justify-center p-4"
-    onclick={handleCancel}
-    onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleCancel(); }}
-    role="dialog"
-    tabindex="-1"
-    aria-modal="true"
-    aria-labelledby="confirm-modal-title"
-    aria-describedby={description ? 'confirm-modal-description' : undefined}
+    role="presentation"
   >
-    <div class="absolute inset-0 bg-black/40 animate-in fade-in duration-150"></div>
-
+    <!-- Au clavier, on annule avec Echap ou le bouton Annuler. -->
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
     <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div
-      class="confirm-modal__panel relative z-10 w-full max-w-md bg-surface-container-lowest border border-outline-variant rounded-xl shadow-lg p-5 space-y-5 animate-in fade-in slide-up duration-150"
-      onclick={(e) => e.stopPropagation()}
-      onkeydown={(e) => e.stopPropagation()}
+    <div class="absolute inset-0 bg-black/40 animate-in fade-in duration-150" onclick={handleCancel} aria-hidden="true"></div>
+
+    <form
+      use:dialogFocus={{ onEscape: handleCancel }}
+      onsubmit={handleSubmit}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby={titleId}
+      aria-describedby={description ? descriptionId : undefined}
+      tabindex="-1"
+      class="confirm-modal__panel relative z-10 w-full max-w-md bg-surface-container-lowest border border-outline-variant rounded-xl shadow-lg p-5 space-y-5 animate-in fade-in slide-up duration-150 focus:outline-none"
     >
       <div class="flex items-start gap-3">
         <span class="w-9 h-9 rounded-full flex items-center justify-center shrink-0 {config.tone}" aria-hidden="true">
           <Papicon icon={config.icon} size={17} />
         </span>
         <div class="min-w-0 pt-1.5">
-          <h3 id="confirm-modal-title" class="text-base font-semibold text-on-surface leading-snug">{title}</h3>
+          <h3 id={titleId} class="text-base font-semibold text-on-surface leading-snug">{title}</h3>
           {#if description}
-            <p id="confirm-modal-description" class="text-sm text-on-surface-variant mt-1.5 leading-relaxed">{description}</p>
+            <p id={descriptionId} class="text-sm text-on-surface-variant mt-1.5 leading-relaxed">{description}</p>
           {/if}
         </div>
       </div>
@@ -130,21 +139,23 @@
             autocomplete="off"
             spellcheck="false"
             class="input font-mono"
+            data-autofocus={focusTarget === 'input' || undefined}
           />
         </label>
       {/if}
 
       <div class="confirm-modal__actions flex items-center justify-end gap-2">
-        <Button variant="ghost" onclick={handleCancel}>{cancelLabel}</Button>
+        <Button variant="ghost" onclick={handleCancel} data-autofocus={focusTarget === 'cancel' || undefined}>{cancelLabel}</Button>
         <Button
+          type="submit"
           variant={config.button}
-          onclick={handleConfirm}
+          data-autofocus={focusTarget === 'confirm' || undefined}
           disabled={!canConfirm}
           loading={executing || loading}
         >
           {confirmLabel}
         </Button>
       </div>
-    </div>
+    </form>
   </div>
 {/if}
