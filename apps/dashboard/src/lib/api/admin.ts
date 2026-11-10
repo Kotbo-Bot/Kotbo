@@ -257,14 +257,46 @@ export async function updateMaintenanceConfig(maintenance: boolean) {
   return response.json();
 }
 
-export async function fetchBotErrors() {
-  const response = await authorizedFetch(`${API_BASE_URL}/api/admin/errors`, { method: 'GET' });
+/** Erreurs identiques (même message, même source), regroupées par le bot. */
+export interface BotErrorGroup {
+  /** Une ligne du groupe : c'est elle qui désigne le groupe dans les requêtes. */
+  id: string;
+  message: string;
+  source: string | null;
+  count: number;
+  firstAt: string;
+  lastAt: string;
+}
+
+export interface BotErrorOccurrence {
+  id: string;
+  message: string;
+  stack: string | null;
+  source: string | null;
+  createdAt: string;
+}
+
+export async function fetchBotErrorGroups(): Promise<{ groups: BotErrorGroup[] }> {
+  const response = await authorizedFetch(`${API_BASE_URL}/api/admin/errors?view=groups`, { method: 'GET' });
   if (!response.ok) throw new Error('Erreur chargement erreurs');
   return response.json();
 }
 
-export async function clearBotErrors() {
-  const response = await authorizedFetch(`${API_BASE_URL}/api/admin/errors`, { method: 'DELETE' });
+export async function fetchBotErrorOccurrences(
+  groupId: string,
+  cursor: string | null = null,
+): Promise<{ errors: BotErrorOccurrence[]; nextCursor: string | null }> {
+  const params = new URLSearchParams({ group: groupId });
+  if (cursor) params.set('cursor', cursor);
+  const response = await authorizedFetch(`${API_BASE_URL}/api/admin/errors?${params.toString()}`, { method: 'GET' });
+  if (!response.ok) throw new Error('Erreur chargement des occurrences');
+  return response.json();
+}
+
+/** Purge un groupe, ou tout le journal sans groupe. */
+export async function clearBotErrors(groupId?: string) {
+  const query = groupId !== undefined ? `?${new URLSearchParams({ group: groupId }).toString()}` : '';
+  const response = await authorizedFetch(`${API_BASE_URL}/api/admin/errors${query}`, { method: 'DELETE' });
   if (!response.ok) throw new Error('Erreur suppression erreurs');
   return response.json();
 }

@@ -3084,7 +3084,6 @@
   "d7_maintenance_deactivate": "DEACTIVATE (Back to Normal)",
   "d7_maintenance_activate": "ENABLE MAINTENANCE",
   "d7_error_stream": "Error Stream",
-  "d7_last_uncaught_errors": "Latest uncaught errors",
   "d7_no_errors_detected": "No errors detected ✅",
   "d7_gdpr_invalid_id": "Enter a valid Discord ID (digits only).",
   "d7_gdpr_no_data_found": "No data found for this user.",
