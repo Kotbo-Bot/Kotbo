@@ -5,7 +5,9 @@
  *
  * A poser sur le panneau, qui doit porter `tabindex="-1"` : c'est lui qui recoit
  * le focus, pas le premier champ - sur telephone, focaliser un champ ferait
- * monter le clavier avant que l'utilisateur ne le demande.
+ * monter le clavier avant que l'utilisateur ne le demande. Un element marque
+ * `data-autofocus` le recoit a la place (un bouton, qui ne fait pas monter le
+ * clavier).
  */
 export type DialogFocusOptions = {
   onEscape?: () => void;
@@ -43,7 +45,9 @@ export function dialogFocus(node: HTMLElement, options: DialogFocusOptions) {
 
   // Une image plus tard : un `autofocus` du contenu passe d'abord et l'emporte.
   const frame = requestAnimationFrame(() => {
-    if (!node.contains(document.activeElement)) node.focus({ preventScroll: true });
+    if (node.contains(document.activeElement)) return;
+    const target = node.querySelector<HTMLElement>('[data-autofocus]') ?? node;
+    target.focus({ preventScroll: true });
   });
 
   function onKeyDown(event: KeyboardEvent) {

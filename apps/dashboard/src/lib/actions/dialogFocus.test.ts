@@ -45,6 +45,13 @@ describe('dialogFocus', () => {
     expect(doc.activeElement).toBe(panel);
   });
 
+  test("l'element marque data-autofocus recoit le focus a l'ouverture", async () => {
+    const { panel } = setup('<button id="a">A</button><button id="c" data-autofocus>C</button>');
+    dialogFocus(panel, {});
+    await nextFrame();
+    expect(doc.activeElement?.id).toBe('c');
+  });
+
   test('un champ deja focalise (autofocus) garde le focus', async () => {
     const { panel } = setup();
     dialogFocus(panel, {});
