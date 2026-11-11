@@ -13,62 +13,36 @@ import * as altAccountService from '../../services/moderation/altAccountService.
 import prisma from '../../utils/db.js';
 import { COLORS, successEmbed, infoEmbed } from '../../utils/embeds.js';
 import { scanGuildMembersForYoungAccounts } from '../../services/moderation/dcDetectionService.js';
+import { getEffectiveLocale, localized, type BotLocale } from '../../utils/i18n.js';
+import * as m from '../../lib/paraglide/messages.js';
 
-const data = new SlashCommandBuilder()
-  .setName('dc')
-  .setDescription('Gestion des doubles comptes et liaisons.')
+const data = localized(new SlashCommandBuilder(), 'dc')
   .addSubcommand((sub) =>
-    sub
-      .setName('link')
-      .setDescription('Lier deux comptes entre eux.')
-      .addUserOption((opt) => opt.setName('compte1').setDescription('Premier compte').setRequired(true))
-      .addUserOption((opt) => opt.setName('compte2').setDescription('Deuxième compte').setRequired(true))
-      .addStringOption((opt) => opt.setName('raison').setDescription('Raison (obligatoire si non-admin)').setRequired(false))
+    localized(sub, 'dc_link')
+      .addUserOption((opt) => localized(opt, 'dc_opt_account1').setRequired(true))
+      .addUserOption((opt) => localized(opt, 'dc_opt_account2').setRequired(true))
+      .addStringOption((opt) => localized(opt, 'dc_opt_reason').setRequired(false))
   )
   .addSubcommand((sub) =>
-    sub
-      .setName('list')
-      .setDescription('Lister les comptes liés à un utilisateur.')
-      .addUserOption((opt) => opt.setName('cible').setDescription('Utilisateur à vérifier').setRequired(true))
+    localized(sub, 'dc_list')
+      .addUserOption((opt) => localized(opt, 'dc_opt_target').setRequired(true))
   )
   .addSubcommand((sub) =>
-    sub
-      .setName('report')
-      .setDescription('Déclarer que vous avez un autre compte (bonne foi).')
-      .addUserOption((opt) => opt.setName('principal').setDescription('Votre compte principal').setRequired(true))
+    localized(sub, 'dc_report')
+      .addUserOption((opt) => localized(opt, 'dc_opt_main').setRequired(true))
   )
   .addSubcommand((sub) =>
-    sub
-      .setName('unlink')
-      .setDescription('Supprimer le lien entre deux comptes.')
-      .addUserOption((opt) => opt.setName('compte1').setDescription('Premier compte').setRequired(true))
-      .addUserOption((opt) => opt.setName('compte2').setDescription('Deuxième compte').setRequired(true))
+    localized(sub, 'dc_unlink')
+      .addUserOption((opt) => localized(opt, 'dc_opt_account1').setRequired(true))
+      .addUserOption((opt) => localized(opt, 'dc_opt_account2').setRequired(true))
   )
   .addSubcommand((sub) =>
-    sub
-      .setName('scan')
-      .setDescription("Scanner les membres et signaler ceux dont le compte est trop récent à l'arrivée.")
-      .addIntegerOption((opt) =>
-        opt
-          .setName('seuil_jours')
-          .setDescription('Nombre de jours maximum entre création du compte et arrivée')
-          .setMinValue(1)
-          .setMaxValue(30)
-          .setRequired(false)
-      )
+    localized(sub, 'dc_scan')
+      .addIntegerOption((opt) => localized(opt, 'dc_opt_days').setMinValue(1).setMaxValue(30).setRequired(false))
   )
   .addSubcommand((sub) =>
-    sub
-      .setName('rescan')
-      .setDescription('Relancer le scan des membres pour détecter les comptes suspects.')
-      .addIntegerOption((opt) =>
-        opt
-          .setName('seuil_jours')
-          .setDescription('Nombre de jours maximum entre création du compte et arrivée')
-          .setMinValue(1)
-          .setMaxValue(30)
-          .setRequired(false)
-      )
+    localized(sub, 'dc_rescan')
+      .addIntegerOption((opt) => localized(opt, 'dc_opt_days').setMinValue(1).setMaxValue(30).setRequired(false))
   );
 
 async function canUseModerationTools(interaction: ChatInputCommandInteraction): Promise<boolean> {
@@ -81,60 +55,73 @@ async function canUseModerationTools(interaction: ChatInputCommandInteraction): 
   return isAdmin || !!isStaffDb || interaction.memberPermissions?.has(PermissionFlagsBits.ModerateMembers) || false;
 }
 
+function reviewButtons(user1Id: string, user2Id: string, locale: BotLocale) {
+  return new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`dc_validate_link:${user1Id}:${user2Id}`)
+      .setLabel(m.dc_btn_validate({}, { locale }))
+      .setStyle(ButtonStyle.Success),
+    new ButtonBuilder()
+      .setCustomId(`dc_reject_link:${user1Id}:${user2Id}`)
+      .setLabel(m.dc_btn_reject({}, { locale }))
+      .setStyle(ButtonStyle.Danger)
+  );
+}
+
 async function execute(interaction: ChatInputCommandInteraction) {
   const subcommand = interaction.options.getSubcommand();
+  const locale = await getEffectiveLocale(interaction);
+  const ephemeral = (content: string) => interaction.reply({ content, flags: [MessageFlags.Ephemeral] });
 
   if (subcommand === 'scan' || subcommand === 'rescan') {
     const guild = interaction.guild;
     if (!guild || !interaction.guildId) {
-      return interaction.reply({ content: '❌ Cette commande doit être utilisée dans un serveur.', flags: [MessageFlags.Ephemeral] });
+      return ephemeral(m.dc_guild_only({}, { locale }));
     }
 
     if (!(await canUseModerationTools(interaction))) {
-      return interaction.reply({ content: "❌ Tu n'as pas les permissions nécessaires pour lancer ce scan.", flags: [MessageFlags.Ephemeral] });
+      return ephemeral(m.dc_scan_no_perm({}, { locale }));
     }
 
-    const thresholdDays = interaction.options.getInteger('seuil_jours') ?? 3;
+    const thresholdDays = interaction.options.getInteger('max_days') ?? 3;
     const thresholdMs = thresholdDays * 24 * 60 * 60 * 1000;
 
     await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
 
     const result = await scanGuildMembersForYoungAccounts(guild, thresholdMs);
-    const preview = result.matches.slice(0, 10).map((match) => `• <@${match.userId}> - compte créé ${match.accountAgeLabel} avant l'arrivée`).join('\n');
+    const preview = result.matches
+      .slice(0, 10)
+      .map((match) => m.dc_scan_match({ user: `<@${match.userId}>`, age: match.accountAgeLabel }, { locale }))
+      .join('\n');
 
-    const summaryLines = [
-      `Membres analysés : **${result.scannedCount}**`,
-      `Membres signalés : **${result.flaggedCount}**`,
-      `Seuil : **${thresholdDays} jour${thresholdDays > 1 ? 's' : ''}**`,
+    const summaryLines: string[] = [
+      m.dc_scan_scanned({ count: result.scannedCount }, { locale }),
+      m.dc_scan_flagged({ count: result.flaggedCount }, { locale }),
+      m.dc_scan_threshold({ days: thresholdDays }, { locale }),
     ];
 
     if (result.flaggedCount > 0) {
       summaryLines.push('');
-      summaryLines.push('Premiers signalements :');
+      summaryLines.push(m.dc_scan_first({}, { locale }));
       summaryLines.push(preview);
       if (result.matches.length > 10) {
-        summaryLines.push(`… et ${result.matches.length - 10} autre(s).`);
+        summaryLines.push(m.dc_scan_more({ count: result.matches.length - 10 }, { locale }));
       }
     }
 
     await interaction.editReply({
-      embeds: [
-        infoEmbed(
-          'Scan DC terminé',
-          summaryLines.join('\n')
-        )
-      ]
+      embeds: [infoEmbed(m.dc_scan_title({}, { locale }), summaryLines.join('\n'))]
     });
     return;
   }
 
   if (subcommand === 'link') {
-    const u1 = interaction.options.getUser('compte1', true);
-    const u2 = interaction.options.getUser('compte2', true);
-    const reason = interaction.options.getString('raison');
+    const u1 = interaction.options.getUser('account1', true);
+    const u2 = interaction.options.getUser('account2', true);
+    const reason = interaction.options.getString('reason');
 
     if (u1.id === u2.id) {
-      return interaction.reply({ content: '❌ Impossible de lier un compte à lui-même.', flags: [MessageFlags.Ephemeral] });
+      return ephemeral(m.dc_link_self({}, { locale }));
     }
 
     const guild = interaction.guild;
@@ -142,7 +129,7 @@ async function execute(interaction: ChatInputCommandInteraction) {
 
     const dbGuild = await prisma.guild.findUnique({ where: { id: guild.id } });
     const isStaffDb = await prisma.staffMember.findUnique({ where: { guildId_userId: { guildId: guild.id, userId: interaction.user.id } } });
-    
+
     const isAdmin = interaction.memberPermissions?.has(PermissionFlagsBits.Administrator) || false;
     // We consider staff if they are in the staff_members table, or have the mod permission
     const isStaff = isAdmin || !!isStaffDb || interaction.memberPermissions?.has(PermissionFlagsBits.ModerateMembers) || false;
@@ -150,7 +137,7 @@ async function execute(interaction: ChatInputCommandInteraction) {
     if (!isStaff) {
       // Non-staff: Can only link their own account
       if (u1.id !== interaction.user.id && u2.id !== interaction.user.id) {
-        return interaction.reply({ content: '❌ Tu ne peux lier que ton propre compte.', flags: [MessageFlags.Ephemeral] });
+        return ephemeral(m.dc_link_own_only({}, { locale }));
       }
 
       await altAccountService.linkAccounts({
@@ -159,7 +146,7 @@ async function execute(interaction: ChatInputCommandInteraction) {
         user2Id: u2.id,
         type: 'MANUAL',
         status: 'PENDING',
-        reason: reason || "Déclaration de bonne foi par l'utilisateur",
+        reason: reason || m.dc_good_faith_reason({}, { locale }),
         linkedByUserId: interaction.user.id,
         metadata: { linkedBy: interaction.user.id, at: new Date().toISOString() }
       });
@@ -172,39 +159,35 @@ async function execute(interaction: ChatInputCommandInteraction) {
           const staffPing = dbGuild.baseStaffRoleId ? `<@&${dbGuild.baseStaffRoleId}>` : 'Staff';
           const embed = new EmbedBuilder()
             .setColor(COLORS.info)
-            .setTitle('🛡️ Déclaration de compte secondaire (En attente)')
-            .setDescription(`${staffPing} | <@${interaction.user.id}> a déclaré un lien entre <@${u1.id}> et <@${u2.id}>.\n\n*Cette demande est aussi visible sur le Dashboard dans l'onglet Doubles Comptes.*`)
+            .setTitle(m.dc_pending_title({}, { locale }))
+            .setDescription(m.dc_pending_desc({
+              staff: staffPing,
+              author: `<@${interaction.user.id}>`,
+              user1: `<@${u1.id}>`,
+              user2: `<@${u2.id}>`,
+            }, { locale }))
             .addFields(
-              { name: 'Compte 1', value: `<@${u1.id}> (${u1.id})`, inline: true },
-              { name: 'Compte 2', value: `<@${u2.id}> (${u2.id})`, inline: true },
-              { name: 'Raison', value: reason || 'Non fournie', inline: false }
+              { name: m.dc_field_account1({}, { locale }), value: `<@${u1.id}> (${u1.id})`, inline: true },
+              { name: m.dc_field_account2({}, { locale }), value: `<@${u2.id}> (${u2.id})`, inline: true },
+              { name: m.dc_field_reason({}, { locale }), value: reason || m.dc_reason_none({}, { locale }), inline: false }
             )
             .setTimestamp();
 
-          const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-            new ButtonBuilder()
-              .setCustomId(`dc_validate_link:${u1.id}:${u2.id}`)
-              .setLabel('Valider la liaison')
-              .setStyle(ButtonStyle.Success),
-            new ButtonBuilder()
-              .setCustomId(`dc_reject_link:${u1.id}:${u2.id}`)
-              .setLabel('Rejeter')
-              .setStyle(ButtonStyle.Danger)
-          );
-
-          await logChannel.send({ content: `${staffPing} <@${u1.id}> <@${u2.id}>`, embeds: [embed], components: [row], allowedMentions: { parse: [] } });
+          await logChannel.send({
+            content: `${staffPing} <@${u1.id}> <@${u2.id}>`,
+            embeds: [embed],
+            components: [reviewButtons(u1.id, u2.id, locale)],
+            allowedMentions: { parse: [] },
+          });
         }
       }
 
-      return interaction.reply({
-        content: '✅ Ta demande de liaison a été envoyée aux modérateurs pour validation.',
-        flags: [MessageFlags.Ephemeral]
-      });
+      return ephemeral(m.dc_link_request_sent({}, { locale }));
     }
 
     // Staff Logic
     if (!isAdmin && !reason) {
-      return interaction.reply({ content: '❌ En tant que membre du staff, tu dois obligatoirement fournir une raison pour lier ces comptes.', flags: [MessageFlags.Ephemeral] });
+      return ephemeral(m.dc_staff_reason_required({}, { locale }));
     }
 
     await altAccountService.linkAccounts({
@@ -213,18 +196,18 @@ async function execute(interaction: ChatInputCommandInteraction) {
       user2Id: u2.id,
       type: 'MANUAL',
       status: 'VALIDATED',
-      reason: reason || 'Action Administrateur',
+      reason: reason || m.dc_admin_reason({}, { locale }),
       linkedByUserId: interaction.user.id,
       metadata: { linkedBy: interaction.user.id, at: new Date().toISOString() }
     });
 
     const dmEmbed = new EmbedBuilder()
       .setColor(COLORS.success)
-      .setTitle('🔗 Comptes liés officiellement')
-      .setDescription(`Vos comptes **<@${u1.id}>** et **<@${u2.id}>** ont été reliés sur **${guild.name}**.`)
-      .addFields({ name: 'Raison / Notes', value: reason || 'Liaison validée par le staff.', inline: false })
+      .setTitle(m.dc_linked_dm_title({}, { locale }))
+      .setDescription(m.dc_linked_dm_desc({ user1: `<@${u1.id}>`, user2: `<@${u2.id}>`, server: guild.name }, { locale }))
+      .addFields({ name: m.dc_field_notes({}, { locale }), value: reason || m.dc_linked_by_staff({}, { locale }), inline: false })
       .setTimestamp()
-      .setFooter({ text: `Serveur : ${guild.name}` });
+      .setFooter({ text: m.dc_footer_server({ server: guild.name }, { locale }) });
 
     try {
       await u1.send({ embeds: [dmEmbed], allowedMentions: { parse: [] } }).catch(() => null);
@@ -234,34 +217,37 @@ async function execute(interaction: ChatInputCommandInteraction) {
     } catch { /* ignored */ }
 
     return interaction.reply({
-      embeds: [successEmbed('Comptes liés', `Les comptes <@${u1.id}> et <@${u2.id}> sont désormais liés. Les utilisateurs ont été prévenus par MP.`) ]
+      embeds: [successEmbed(
+        m.dc_linked_title({}, { locale }),
+        m.dc_linked_desc({ user1: `<@${u1.id}>`, user2: `<@${u2.id}>` }, { locale }),
+      )]
     });
   }
 
   if (subcommand === 'list') {
     if (!interaction.memberPermissions?.has(PermissionFlagsBits.ModerateMembers)) {
-      return interaction.reply({ content: "❌ Tu n'as pas la permission de modération requise.", flags: [MessageFlags.Ephemeral] });
+      return ephemeral(m.dc_no_mod_perm({}, { locale }));
     }
 
-    const target = interaction.options.getUser('cible', true);
+    const target = interaction.options.getUser('target', true);
     const linkedIds = await altAccountService.getAllLinkedUserIds(interaction.guildId!, target.id);
 
     if (linkedIds.length <= 1) {
-      return interaction.reply({ content: `ℹ️ Aucun compte lié trouvé pour <@${target.id}>.`, flags: [MessageFlags.Ephemeral] });
+      return ephemeral(m.dc_list_none({ user: `<@${target.id}>` }, { locale }));
     }
 
     const others = linkedIds.filter(id => id !== target.id);
-    const embed = infoEmbed('Comptes liés', `Liste des comptes associés à <@${target.id}> :`)
-      .addFields({ name: 'Comptes associés', value: others.map(id => `<@${id}> (${id})`).join('\n') });
+    const embed = infoEmbed(m.dc_linked_title({}, { locale }), m.dc_list_desc({ user: `<@${target.id}>` }, { locale }))
+      .addFields({ name: m.dc_list_field({}, { locale }), value: others.map(id => `<@${id}> (${id})`).join('\n') });
 
     return interaction.reply({ embeds: [embed], flags: [MessageFlags.Ephemeral] });
   }
 
   if (subcommand === 'report') {
-    const mainAccount = interaction.options.getUser('principal', true);
+    const mainAccount = interaction.options.getUser('main', true);
 
     if (mainAccount.id === interaction.user.id) {
-      return interaction.reply({ content: '❌ Tu ne peux pas te signaler toi-même comme ton propre compte principal.', flags: [MessageFlags.Ephemeral] });
+      return ephemeral(m.dc_report_self({}, { locale }));
     }
 
     // Send to staff for validation
@@ -272,12 +258,12 @@ async function execute(interaction: ChatInputCommandInteraction) {
     const logChannelId = dbGuild?.logChannelId;
 
     if (!logChannelId) {
-      return interaction.reply({ content: "❌ Le système de logs n'est pas configuré. Contacte un administrateur.", flags: [MessageFlags.Ephemeral] });
+      return ephemeral(m.dc_no_log_config({}, { locale }));
     }
 
     const logChannel = await guild.channels.fetch(logChannelId).catch(() => null);
     if (!logChannel || !logChannel.isTextBased()) {
-      return interaction.reply({ content: '❌ Salon de logs introuvable.', flags: [MessageFlags.Ephemeral] });
+      return ephemeral(m.dc_log_not_found({}, { locale }));
     }
 
     await altAccountService.linkAccounts({
@@ -286,56 +272,50 @@ async function execute(interaction: ChatInputCommandInteraction) {
       user2Id: mainAccount.id,
       type: 'MANUAL',
       status: 'PENDING',
-      reason: "Déclaration de bonne foi par l'utilisateur",
+      reason: m.dc_good_faith_reason({}, { locale }),
       linkedByUserId: interaction.user.id,
       metadata: { linkedBy: interaction.user.id, at: new Date().toISOString() }
     });
 
     const embed = new EmbedBuilder()
       .setColor(COLORS.info)
-      .setTitle('🛡️ Déclaration de compte secondaire (Bonne foi)')
-      .setDescription(`<@${interaction.user.id}> déclare que son compte principal est <@${mainAccount.id}>.\n\n*Cette demande est aussi visible sur le Dashboard dans l'onglet Doubles Comptes.*`)
+      .setTitle(m.dc_report_title({}, { locale }))
+      .setDescription(m.dc_report_desc({ author: `<@${interaction.user.id}>`, main: `<@${mainAccount.id}>` }, { locale }))
       .addFields(
-        { name: 'Compte secondaire', value: `<@${interaction.user.id}> (${interaction.user.id})`, inline: true },
-        { name: 'Compte principal', value: `<@${mainAccount.id}> (${mainAccount.id})`, inline: true }
+        { name: m.dc_field_alt({}, { locale }), value: `<@${interaction.user.id}> (${interaction.user.id})`, inline: true },
+        { name: m.dc_field_main({}, { locale }), value: `<@${mainAccount.id}> (${mainAccount.id})`, inline: true }
       )
       .setTimestamp();
 
-    const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-      new ButtonBuilder()
-        .setCustomId(`dc_validate_link:${interaction.user.id}:${mainAccount.id}`)
-        .setLabel('Valider la liaison')
-        .setStyle(ButtonStyle.Success),
-      new ButtonBuilder()
-        .setCustomId(`dc_reject_link:${interaction.user.id}:${mainAccount.id}`)
-        .setLabel('Rejeter')
-        .setStyle(ButtonStyle.Danger)
-    );
-
-    await logChannel.send({ embeds: [embed], components: [row], allowedMentions: { parse: [] } });
-
-    return interaction.reply({
-      content: '✅ Ta déclaration a été envoyée aux modérateurs pour validation. Merci de ta bonne foi !',
-      flags: [MessageFlags.Ephemeral]
+    await logChannel.send({
+      embeds: [embed],
+      components: [reviewButtons(interaction.user.id, mainAccount.id, locale)],
+      allowedMentions: { parse: [] },
     });
+
+    return ephemeral(m.dc_report_sent({}, { locale }));
   }
 
   if (subcommand === 'unlink') {
     if (!interaction.memberPermissions?.has(PermissionFlagsBits.ModerateMembers)) {
-      return interaction.reply({ content: "❌ Tu n'as pas la permission de modération requise.", flags: [MessageFlags.Ephemeral] });
+      return ephemeral(m.dc_no_mod_perm({}, { locale }));
     }
 
-    const u1 = interaction.options.getUser('compte1', true);
-    const u2 = interaction.options.getUser('compte2', true);
+    const u1 = interaction.options.getUser('account1', true);
+    const u2 = interaction.options.getUser('account2', true);
 
     await altAccountService.unlinkAccounts(interaction.guildId!, u1.id, u2.id);
 
     const dmEmbed = new EmbedBuilder()
       .setColor(COLORS.warning)
-      .setTitle('🔗 Comptes déliés')
-      .setDescription(`Vos comptes **<@${u1.id}>** et **<@${u2.id}>** ont été séparés sur **${interaction.guild?.name || 'le serveur'}**.`)
+      .setTitle(m.dc_unlinked_dm_title({}, { locale }))
+      .setDescription(m.dc_unlinked_dm_desc({
+        user1: `<@${u1.id}>`,
+        user2: `<@${u2.id}>`,
+        server: interaction.guild?.name || m.dc_the_server({}, { locale }),
+      }, { locale }))
       .setTimestamp()
-      .setFooter({ text: `Serveur : ${interaction.guild?.name || 'Kotbo'}` });
+      .setFooter({ text: m.dc_footer_server({ server: interaction.guild?.name || 'Kotbo' }, { locale }) });
 
     try {
       await u1.send({ embeds: [dmEmbed], allowedMentions: { parse: [] } }).catch(() => null);
@@ -345,7 +325,10 @@ async function execute(interaction: ChatInputCommandInteraction) {
     } catch { /* ignored */ }
 
     return interaction.reply({
-      embeds: [successEmbed('Comptes déliés', `Le lien entre <@${u1.id}> et <@${u2.id}> a été supprimé. Les utilisateurs ont été prévenus par MP.`)]
+      embeds: [successEmbed(
+        m.dc_unlinked_title({}, { locale }),
+        m.dc_unlinked_desc({ user1: `<@${u1.id}>`, user2: `<@${u2.id}>` }, { locale }),
+      )]
     });
   }
 }
