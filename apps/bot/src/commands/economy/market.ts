@@ -2,16 +2,14 @@ import { SlashCommandBuilder, type ChatInputCommandInteraction } from 'discord.j
 import type { SlashCommandDefinition } from '../../commands.js';
 import { buildMarketView } from '../../services/economy/marketplacePanel.js';
 import { renderPanelView } from '../../services/features/rpgPanelService.js';
-import { getEffectiveLocale } from '../../utils/i18n.js';
+import { getEffectiveLocale, localized } from '../../utils/i18n.js';
 
 /**
  * Hôtel des ventes : un seul panneau, comme `/rpg`. Acheter, enchérir, retirer et mettre en
  * vente passent par ses boutons ; les anciennes sous-commandes obligeaient à retrouver un
  * objet par autocomplétion puis à en retaper le prix.
  */
-const data = new SlashCommandBuilder()
-  .setName('market')
-  .setDescription('Hôtel des ventes - achetez et vendez des objets entre joueurs');
+const data = localized(new SlashCommandBuilder(), 'market_cmd');
 
 async function execute(interaction: ChatInputCommandInteraction) {
   const locale = await getEffectiveLocale(interaction);

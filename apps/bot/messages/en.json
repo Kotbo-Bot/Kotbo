@@ -5156,5 +5156,7 @@
   "adm_rescan_forced_no": "No",
   "adm_rescan_failed": "Couldn't start scraping: {error}",
   "shop_cmd_name": "shop",
-  "shop_cmd_description": "Server shop - roles, items, subscriptions"
+  "shop_cmd_description": "Server shop - roles, items, subscriptions",
+  "market_cmd_name": "market",
+  "market_cmd_description": "Auction house - buy and sell items between players"
 }

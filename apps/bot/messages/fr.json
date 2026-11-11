@@ -5156,5 +5156,7 @@
   "adm_rescan_forced_no": "Non",
   "adm_rescan_failed": "Impossible de démarrer le scraping : {error}",
   "shop_cmd_name": "boutique",
-  "shop_cmd_description": "Boutique du serveur - rôles, objets, abonnements"
+  "shop_cmd_description": "Boutique du serveur - rôles, objets, abonnements",
+  "market_cmd_name": "market",
+  "market_cmd_description": "Hôtel des ventes - achetez et vendez des objets entre joueurs"
 }
