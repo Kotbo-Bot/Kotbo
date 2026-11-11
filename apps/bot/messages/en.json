@@ -4763,5 +4763,7 @@
   "prot_emergency_on_title": "🚨 Invite emergency mode on",
   "prot_emergency_on_desc": "**{count} existing invite(s) deleted.**\nAny new invite will be deleted right away until you turn it off.",
   "prot_emergency_off_title": "Invite emergency mode off",
-  "prot_emergency_off_desc": "The normal invite control rules apply again."
+  "prot_emergency_off_desc": "The normal invite control rules apply again.",
+  "c1_pulse_name": "pulse",
+  "c1_pulse_description": "📊 Server health: Pulse score, trends and alerts"
 }

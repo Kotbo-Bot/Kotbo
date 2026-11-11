@@ -4763,5 +4763,7 @@
   "prot_emergency_on_title": "🚨 Mode urgence invitations activé",
   "prot_emergency_on_desc": "**{count} invitation(s) existante(s) supprimée(s).**\nToute nouvelle invitation sera supprimée immédiatement jusqu'à désactivation.",
   "prot_emergency_off_title": "Mode urgence invitations désactivé",
-  "prot_emergency_off_desc": "Les règles normales du contrôle des invitations s'appliquent à nouveau."
+  "prot_emergency_off_desc": "Les règles normales du contrôle des invitations s'appliquent à nouveau.",
+  "c1_pulse_name": "pulse",
+  "c1_pulse_description": "📊 Santé du serveur : score Pulse, tendances et alertes"
 }
