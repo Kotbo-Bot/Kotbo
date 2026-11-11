@@ -6,7 +6,7 @@ import { applicationCommands } from '../../commands.js';
 const FRENCH = /[éèêàâùûçôîœ«»]/i;
 
 // Cliquet : commandes pas encore traduites. La liste ne doit que rétrécir.
-const PENDING = new Set<string>(['boutique', 'excuse', 'market', 'simulation']);
+const PENDING = new Set<string>([]);
 
 // Noms propres volontairement en français, quelle que soit la langue.
 const ALLOWED = new Set(['Français']);
