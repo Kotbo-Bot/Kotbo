@@ -1,16 +1,13 @@
 import { MessageFlags, SlashCommandBuilder, type ChatInputCommandInteraction } from 'discord.js';
 import type { SlashCommandDefinition } from '../../commands.js';
 import { buildShopHome } from '../../services/shop/shopPanel.js';
-import { getEffectiveLocale } from '../../utils/i18n.js';
+import { getEffectiveLocale, localized } from '../../utils/i18n.js';
 
 /**
  * Boutique du serveur : rôles, objets, XP, abonnements et prestations, payés
  * en monnaie du bot. La même que sur le site communautaire (page Boutique).
  */
-const data = new SlashCommandBuilder()
-  .setName('boutique')
-  .setDescription('Boutique du serveur - rôles, objets, abonnements')
-  .setDescriptionLocalizations({ 'en-US': 'Server shop - roles, items, subscriptions', 'en-GB': 'Server shop - roles, items, subscriptions' });
+const data = localized(new SlashCommandBuilder(), 'shop_cmd');
 
 async function execute(interaction: ChatInputCommandInteraction) {
   if (!interaction.guild) return;

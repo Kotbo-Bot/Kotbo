@@ -5154,5 +5154,7 @@
   "adm_rescan_desc": "Le scraping historique des messages a été démarré en arrière-plan.\n\n{arrow} **Mode forcé :** {forced}\n{arrow} Tu peux suivre l'avancement dans les logs ou via le statut en base de données.",
   "adm_rescan_forced_yes": "Oui (recommencer à zéro)",
   "adm_rescan_forced_no": "Non",
-  "adm_rescan_failed": "Impossible de démarrer le scraping : {error}"
+  "adm_rescan_failed": "Impossible de démarrer le scraping : {error}",
+  "shop_cmd_name": "boutique",
+  "shop_cmd_description": "Boutique du serveur - rôles, objets, abonnements"
 }

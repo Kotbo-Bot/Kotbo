@@ -5154,5 +5154,7 @@
   "adm_rescan_desc": "Message history scraping has started in the background.\n\n{arrow} **Forced mode:** {forced}\n{arrow} You can follow progress in the logs or through the status in the database.",
   "adm_rescan_forced_yes": "Yes (start from scratch)",
   "adm_rescan_forced_no": "No",
-  "adm_rescan_failed": "Couldn't start scraping: {error}"
+  "adm_rescan_failed": "Couldn't start scraping: {error}",
+  "shop_cmd_name": "shop",
+  "shop_cmd_description": "Server shop - roles, items, subscriptions"
 }
