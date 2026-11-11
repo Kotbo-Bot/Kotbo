@@ -5158,5 +5158,7 @@
   "shop_cmd_name": "boutique",
   "shop_cmd_description": "Boutique du serveur - rôles, objets, abonnements",
   "market_cmd_name": "market",
-  "market_cmd_description": "Hôtel des ventes - achetez et vendez des objets entre joueurs"
+  "market_cmd_description": "Hôtel des ventes - achetez et vendez des objets entre joueurs",
+  "b2_excuse_opt_category_name": "catégorie",
+  "b2_excuse_opt_category_description": "Catégorie d'excuse (optionnel)"
 }

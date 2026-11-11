@@ -2,7 +2,7 @@ import type { SlashCommandDefinition } from '../../commands.js';
 import { SlashCommandBuilder, type ChatInputCommandInteraction } from 'discord.js';
 import prisma from '../../utils/db.js';
 import { errorEmbed, successEmbed } from '../../utils/embeds.js';
-import { getEffectiveLocale, getCommandMetadata } from '../../utils/i18n.js';
+import { getEffectiveLocale, getCommandMetadata, localized } from '../../utils/i18n.js';
 import * as m from '../../lib/paraglide/messages.js';
 
 const meta = getCommandMetadata('b2_excuse');
@@ -24,16 +24,13 @@ const data = new SlashCommandBuilder()
   .setDescription(meta.description)
   .setDescriptionLocalizations(meta.descriptionLocalizations)
   .addStringOption((option) =>
-    option
-      .setName('catégorie')
-      .setDescription(m.b2_excuse_opt_categorie({}, { locale: 'en' }))
-      .setDescriptionLocalizations({ fr: m.b2_excuse_opt_categorie({}, { locale: 'fr' }) })
+    localized(option, 'b2_excuse_opt_category')
       .setRequired(false)
       .addChoices(...EXCUSE_CATEGORIES.map(categoryChoice)),
   );
 
 async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
-  const category = interaction.options.getString('catégorie');
+  const category = interaction.options.getString('category');
   const locale = await getEffectiveLocale(interaction);
 
   const whereClause: { language: string; category?: string } = { language: 'fr' };

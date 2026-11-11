@@ -5158,5 +5158,7 @@
   "shop_cmd_name": "shop",
   "shop_cmd_description": "Server shop - roles, items, subscriptions",
   "market_cmd_name": "market",
-  "market_cmd_description": "Auction house - buy and sell items between players"
+  "market_cmd_description": "Auction house - buy and sell items between players",
+  "b2_excuse_opt_category_name": "category",
+  "b2_excuse_opt_category_description": "Excuse category (optional)"
 }
