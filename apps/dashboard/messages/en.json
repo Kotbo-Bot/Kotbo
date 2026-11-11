@@ -16833,6 +16833,8 @@
   "arx_vision_no_jail": "No Jail role set up: quarantine will be replaced by a timeout. Set it up in the Quarantine tab.",
   "arx_vision_notify": "Tell the member by DM",
   "arx_vision_notify_help": "Explains why the message disappeared and what to do if the account was hacked (password, two-factor authentication).",
+  "arx_vision_uncertain_delete": "Delete when unsure",
+  "arx_vision_uncertain_delete_help": "Deletes the message as soon as an image looks like a banned one, before staff decide. When off, the message stays until staff confirm.",
   "arx_jail_desc": "The member stays on the server but can't see anything. Their roles are removed, then given back when it's lifted. Used by /sanction jail, Kotbo Vision, the honeypot and suspicious arrivals.",
   "arx_jail_repair": "Repair the role",
   "arx_jail_create": "Create the Jail role",

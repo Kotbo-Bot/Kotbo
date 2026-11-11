@@ -183,6 +183,8 @@ model RaidProtectionConfig {
   visionReviewChannelId String?
   // Message privé à l'auteur sanctionné.
   visionNotifyMember    Boolean @default(true)
+  // Correspondance incertaine : supprimer le message avant la décision du staff.
+  visionUncertainDelete Boolean @default(false)
 
   guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
 
@@ -268,6 +270,8 @@ model VisionReview {
 
   authorId  String
   channelId String
+  // Message laissé en place en attendant la décision ; null s'il a été supprimé.
+  messageId String?
   sha256    String
   fingerprint String
   thumb     String?

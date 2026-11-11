@@ -1121,6 +1121,7 @@
             <Callout variant="warning">{m.arx_vision_no_jail()}</Callout>
           {/if}
           {@render switchRow('visionNotifyMember', m.arx_vision_notify(), m.arx_vision_notify_help())}
+          {@render switchRow('visionUncertainDelete', m.arx_vision_uncertain_delete(), m.arx_vision_uncertain_delete_help())}
         </div>
       </SectionCard>
 
