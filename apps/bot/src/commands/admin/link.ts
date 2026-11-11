@@ -7,6 +7,8 @@ import {
   EmbedBuilder,
 } from 'discord.js';
 import { COLORS, successEmbed, errorEmbed } from '../../utils/embeds.js';
+import { getEffectiveLocale, localized, localizedChoice, type BotLocale } from '../../utils/i18n.js';
+import * as m from '../../lib/paraglide/messages.js';
 import {
   createLinkInvite,
   acceptLinkInvite,
@@ -26,241 +28,109 @@ import { isGuildActivated } from '../../utils/activation.js';
 import { isLinkGuestGuild } from '../../services/features/channelLinkGuestService.js';
 import { INVITE_SOURCE, recordBotInvite } from '../../services/analytics/inviteService.js';
 
-const MODE_CHOICES = [
-  { name: 'Émet et reçoit', value: 'BOTH' },
-  { name: 'Émet seulement', value: 'SEND_ONLY' },
-  { name: 'Reçoit seulement', value: 'RECEIVE_ONLY' },
-];
+const MODE_KEYS: Record<LinkMemberMode, string> = {
+  BOTH: 'lnk_choice_both',
+  SEND_ONLY: 'lnk_choice_send_only',
+  RECEIVE_ONLY: 'lnk_choice_receive_only',
+};
+const MODE_CHOICES = Object.entries(MODE_KEYS).map(([value, key]) => localizedChoice(key, value));
 
 const RELAY_MODE_CHOICES = [
-  { name: 'Webhook (pseudo + avatar miroir)', value: 'WEBHOOK' },
-  { name: 'Embed (message dans un embed signé)', value: 'EMBED' },
+  localizedChoice('lnk_choice_webhook', 'WEBHOOK'),
+  localizedChoice('lnk_choice_embed', 'EMBED'),
 ];
 
-const data = new SlashCommandBuilder()
-  .setName('link')
-  .setDescription('Gérer les ponts entre salons de différents serveurs')
+const TEXT_CHANNELS = [ChannelType.GuildText, ChannelType.GuildAnnouncement] as const;
+
+const data = localized(new SlashCommandBuilder(), 'lnk')
   .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
   .addSubcommand((sub) =>
-    sub
-      .setName('invite')
-      .setDescription('Générer un code pour qu\'un ou plusieurs serveurs rejoignent un pont')
+    localized(sub, 'lnk_invite')
       .addChannelOption((opt) =>
-        opt
-          .setName('salon')
-          .setDescription('Le salon à relier')
-          .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
-          .setRequired(true),
-      )
+        localized(opt, 'lnk_opt_invite_channel').addChannelTypes(...TEXT_CHANNELS).setRequired(true))
+      .addStringOption((opt) => localized(opt, 'lnk_opt_bridge'))
       .addStringOption((opt) =>
-        opt
-          .setName('pont')
-          .setDescription('ID d\'un pont existant à rejoindre (par défaut : nouveau pont)'),
-      )
-      .addStringOption((opt) =>
-        opt
-          .setName('participation')
-          .setDescription('Ce que fera le salon qui utilise le code')
-          .addChoices(...MODE_CHOICES),
-      )
+        localized(opt, 'lnk_opt_participation_invite').addChoices(...MODE_CHOICES))
       .addIntegerOption((opt) =>
-        opt
-          .setName('utilisations')
-          .setDescription('Nombre de serveurs pouvant utiliser ce code (défaut: 1)')
-          .setMinValue(1)
-          .setMaxValue(25),
-      )
+        localized(opt, 'lnk_opt_uses').setMinValue(1).setMaxValue(25))
       .addStringOption((opt) =>
-        opt
-          .setName('mode')
-          .setDescription('Mode de relay')
-          .addChoices(...RELAY_MODE_CHOICES),
-      )
-      .addBooleanOption((opt) =>
-        opt
-          .setName('invitation-serveur')
-          .setDescription('Créer aussi une invitation Discord pour rejoindre ce serveur'),
-      ),
+        localized(opt, 'lnk_opt_mode').addChoices(...RELAY_MODE_CHOICES))
+      .addBooleanOption((opt) => localized(opt, 'lnk_opt_server_invite')),
   )
   .addSubcommand((sub) =>
-    sub
-      .setName('accept')
-      .setDescription('Rejoindre un pont avec un code d\'invitation')
-      .addStringOption((opt) =>
-        opt.setName('code').setDescription('Le code d\'invitation').setRequired(true),
-      )
+    localized(sub, 'lnk_accept')
+      .addStringOption((opt) => localized(opt, 'lnk_opt_code').setRequired(true))
       .addChannelOption((opt) =>
-        opt
-          .setName('salon')
-          .setDescription('Le salon de ce serveur à relier')
-          .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
-          .setRequired(true),
-      ),
+        localized(opt, 'lnk_opt_accept_channel').addChannelTypes(...TEXT_CHANNELS).setRequired(true)),
   )
   .addSubcommand((sub) =>
-    sub
-      .setName('salon')
-      .setDescription('Relier deux salons de ce serveur')
+    localized(sub, 'lnk_channels')
       .addChannelOption((opt) =>
-        opt
-          .setName('salon-source')
-          .setDescription('Premier salon')
-          .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
-          .setRequired(true),
-      )
+        localized(opt, 'lnk_opt_source_first').addChannelTypes(...TEXT_CHANNELS).setRequired(true))
       .addChannelOption((opt) =>
-        opt
-          .setName('salon-cible')
-          .setDescription('Second salon')
-          .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
-          .setRequired(true),
-      )
+        localized(opt, 'lnk_opt_target_second').addChannelTypes(...TEXT_CHANNELS).setRequired(true))
       .addStringOption((opt) =>
-        opt
-          .setName('participation')
-          .setDescription('Ce que fait le salon source')
-          .addChoices(...MODE_CHOICES),
-      )
+        localized(opt, 'lnk_opt_participation_source').addChoices(...MODE_CHOICES))
       .addStringOption((opt) =>
-        opt
-          .setName('mode')
-          .setDescription('Mode de relay')
-          .addChoices(...RELAY_MODE_CHOICES),
-      )
-      .addBooleanOption((opt) =>
-        opt.setName('modifier-topic').setDescription('Mettre à jour la description des salons (défaut: oui)'),
-      )
-      .addBooleanOption((opt) =>
-        opt.setName('lien-dans-topic').setDescription('Inclure un lien cliquable vers les salons liés dans le topic (défaut: oui)'),
-      )
-      .addBooleanOption((opt) =>
-        opt.setName('threads').setDescription('Synchroniser les threads et leurs messages (défaut: non)'),
-      )
-      .addBooleanOption((opt) =>
-        opt.setName('sondages').setDescription('Relayer les sondages (défaut: non)'),
-      ),
+        localized(opt, 'lnk_opt_mode').addChoices(...RELAY_MODE_CHOICES))
+      .addBooleanOption((opt) => localized(opt, 'lnk_opt_update_topic'))
+      .addBooleanOption((opt) => localized(opt, 'lnk_opt_topic_link'))
+      .addBooleanOption((opt) => localized(opt, 'lnk_opt_threads_sync'))
+      .addBooleanOption((opt) => localized(opt, 'lnk_opt_polls_default')),
   )
   .addSubcommand((sub) =>
-    sub
-      .setName('direct')
-      .setDescription('Ouvrir un pont avec un salon d\'un autre serveur (sans code)')
+    localized(sub, 'lnk_direct')
       .addChannelOption((opt) =>
-        opt
-          .setName('salon-source')
-          .setDescription('Le salon de ce serveur')
-          .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
-          .setRequired(true),
-      )
+        localized(opt, 'lnk_opt_source_here').addChannelTypes(...TEXT_CHANNELS).setRequired(true))
+      .addStringOption((opt) => localized(opt, 'lnk_opt_target_server').setRequired(true))
+      .addStringOption((opt) => localized(opt, 'lnk_opt_target_channel_id').setRequired(true))
+      .addStringOption((opt) => localized(opt, 'lnk_opt_bridge_name_optional'))
       .addStringOption((opt) =>
-        opt.setName('serveur-cible').setDescription('ID du serveur cible').setRequired(true),
-      )
+        localized(opt, 'lnk_opt_participation_here').addChoices(...MODE_CHOICES))
       .addStringOption((opt) =>
-        opt.setName('salon-cible').setDescription('ID du salon cible').setRequired(true),
-      )
-      .addStringOption((opt) =>
-        opt.setName('nom').setDescription('Nom du pont (facultatif)'),
-      )
-      .addStringOption((opt) =>
-        opt
-          .setName('participation')
-          .setDescription('Ce que fait le salon de ce serveur')
-          .addChoices(...MODE_CHOICES),
-      )
-      .addStringOption((opt) =>
-        opt
-          .setName('mode')
-          .setDescription('Mode de relay')
-          .addChoices(...RELAY_MODE_CHOICES),
-      )
-      .addBooleanOption((opt) =>
-        opt.setName('modifier-topic').setDescription('Mettre à jour la description des salons (défaut: oui)'),
-      )
-      .addBooleanOption((opt) =>
-        opt.setName('lien-dans-topic').setDescription('Inclure un lien cliquable vers les salons liés dans le topic (défaut: oui)'),
-      )
-      .addBooleanOption((opt) =>
-        opt.setName('threads').setDescription('Synchroniser les threads et leurs messages (défaut: non)'),
-      )
-      .addBooleanOption((opt) =>
-        opt.setName('sondages').setDescription('Relayer les sondages (défaut: non)'),
-      ),
+        localized(opt, 'lnk_opt_mode').addChoices(...RELAY_MODE_CHOICES))
+      .addBooleanOption((opt) => localized(opt, 'lnk_opt_update_topic'))
+      .addBooleanOption((opt) => localized(opt, 'lnk_opt_topic_link'))
+      .addBooleanOption((opt) => localized(opt, 'lnk_opt_threads_sync'))
+      .addBooleanOption((opt) => localized(opt, 'lnk_opt_polls_default')),
   )
   .addSubcommand((sub) =>
-    sub
-      .setName('ajouter')
-      .setDescription('Ajouter un salon d\'un autre serveur à un pont existant')
+    localized(sub, 'lnk_add')
+      .addStringOption((opt) => localized(opt, 'lnk_opt_id').setRequired(true))
+      .addStringOption((opt) => localized(opt, 'lnk_opt_server').setRequired(true))
+      .addStringOption((opt) => localized(opt, 'lnk_opt_channel_id').setRequired(true))
       .addStringOption((opt) =>
-        opt.setName('id').setDescription('ID du pont').setRequired(true),
-      )
+        localized(opt, 'lnk_opt_participation_add').addChoices(...MODE_CHOICES))
       .addStringOption((opt) =>
-        opt.setName('serveur').setDescription('ID du serveur à ajouter').setRequired(true),
-      )
-      .addStringOption((opt) =>
-        opt.setName('salon').setDescription('ID du salon à ajouter').setRequired(true),
-      )
-      .addStringOption((opt) =>
-        opt
-          .setName('participation')
-          .setDescription('Ce que fera ce salon dans le pont')
-          .addChoices(...MODE_CHOICES),
-      )
-      .addStringOption((opt) =>
-        opt
-          .setName('mode')
-          .setDescription('Mode de relay')
-          .addChoices(...RELAY_MODE_CHOICES),
-      ),
+        localized(opt, 'lnk_opt_mode').addChoices(...RELAY_MODE_CHOICES)),
   )
   .addSubcommand((sub) =>
-    sub
-      .setName('retirer')
-      .setDescription('Retirer un salon de ce serveur d\'un pont')
-      .addStringOption((opt) =>
-        opt.setName('id').setDescription('ID du pont').setRequired(true),
-      )
+    localized(sub, 'lnk_leave')
+      .addStringOption((opt) => localized(opt, 'lnk_opt_id').setRequired(true))
       .addChannelOption((opt) =>
-        opt
-          .setName('salon')
-          .setDescription('Le salon à retirer')
-          .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
-          .setRequired(true),
-      ),
+        localized(opt, 'lnk_opt_leave_channel').addChannelTypes(...TEXT_CHANNELS).setRequired(true)),
+  )
+  .addSubcommand((sub) => localized(sub, 'lnk_list'))
+  .addSubcommand((sub) => localized(sub, 'lnk_status'))
+  .addSubcommand((sub) =>
+    localized(sub, 'lnk_remove')
+      .addStringOption((opt) => localized(opt, 'lnk_opt_remove_id').setRequired(true)),
   )
   .addSubcommand((sub) =>
-    sub.setName('list').setDescription('Lister les ponts de ce serveur'),
-  )
-  .addSubcommand((sub) =>
-    sub
-      .setName('status')
-      .setDescription('Ce que le bot fait, et ne fait pas, sur ce serveur'),
-  )
-  .addSubcommand((sub) =>
-    sub
-      .setName('remove')
-      .setDescription('Supprimer un pont entier')
-      .addStringOption((opt) =>
-        opt.setName('id').setDescription('ID du pont à supprimer').setRequired(true),
-      ),
-  )
-  .addSubcommand((sub) =>
-    sub
-      .setName('config')
-      .setDescription('Configurer ce qu\'un pont relaie')
-      .addStringOption((opt) =>
-        opt.setName('id').setDescription('ID du pont').setRequired(true),
-      )
-      .addStringOption((opt) => opt.setName('nom').setDescription('Nom du pont'))
-      .addBooleanOption((opt) => opt.setName('texte').setDescription('Relayer le texte'))
-      .addBooleanOption((opt) => opt.setName('images').setDescription('Relayer les images'))
-      .addBooleanOption((opt) => opt.setName('embeds').setDescription('Relayer les embeds'))
-      .addBooleanOption((opt) => opt.setName('reactions').setDescription('Relayer les réactions'))
-      .addBooleanOption((opt) => opt.setName('edits').setDescription('Relayer les modifications'))
-      .addBooleanOption((opt) => opt.setName('deletes').setDescription('Relayer les suppressions'))
-      .addBooleanOption((opt) => opt.setName('actif').setDescription('Activer/désactiver le pont'))
-      .addBooleanOption((opt) => opt.setName('threads').setDescription('Synchroniser les threads'))
-      .addBooleanOption((opt) => opt.setName('sondages').setDescription('Relayer les sondages'))
-      .addBooleanOption((opt) => opt.setName('epingles').setDescription('Synchroniser les messages épinglés'))
-      .addBooleanOption((opt) => opt.setName('modifier-topic').setDescription('Mettre à jour auto le topic des salons')),
+    localized(sub, 'lnk_config')
+      .addStringOption((opt) => localized(opt, 'lnk_opt_id').setRequired(true))
+      .addStringOption((opt) => localized(opt, 'lnk_opt_name'))
+      .addBooleanOption((opt) => localized(opt, 'lnk_opt_text'))
+      .addBooleanOption((opt) => localized(opt, 'lnk_opt_images'))
+      .addBooleanOption((opt) => localized(opt, 'lnk_opt_embeds'))
+      .addBooleanOption((opt) => localized(opt, 'lnk_opt_reactions'))
+      .addBooleanOption((opt) => localized(opt, 'lnk_opt_edits'))
+      .addBooleanOption((opt) => localized(opt, 'lnk_opt_deletes'))
+      .addBooleanOption((opt) => localized(opt, 'lnk_opt_active'))
+      .addBooleanOption((opt) => localized(opt, 'lnk_opt_threads'))
+      .addBooleanOption((opt) => localized(opt, 'lnk_opt_polls'))
+      .addBooleanOption((opt) => localized(opt, 'lnk_opt_pins'))
+      .addBooleanOption((opt) => localized(opt, 'lnk_opt_auto_topic')),
   );
 
 /**
@@ -269,10 +139,10 @@ const data = new SlashCommandBuilder()
  * `/link` franchit la garde d'activation (voir `GATE_EXEMPT_COMMANDS` dans
  * index.ts) pour qu'un serveur invité puisse rejoindre un pont sans code, puis
  * le consulter et le quitter. Il ne gagne pas pour autant le droit d'ouvrir des
- * ponts pour son propre compte : `invite`, `salon`, `direct` et `ajouter`
+ * ponts pour son propre compte : `invite`, `channels`, `direct` et `add`
  * restent réservés aux serveurs disposant d'une licence.
  */
-const SUBCOMMANDS_WITHOUT_ACTIVATION = new Set(['accept', 'list', 'remove', 'retirer', 'status']);
+const SUBCOMMANDS_WITHOUT_ACTIVATION = new Set(['accept', 'list', 'remove', 'leave', 'status']);
 
 function readMode(value: string | null, fallback: LinkMemberMode = 'BOTH'): LinkMemberMode {
   return value === 'SEND_ONLY' || value === 'RECEIVE_ONLY' || value === 'BOTH' ? value : fallback;
@@ -291,17 +161,31 @@ function modeIcon(mode: string) {
   return '↔️';
 }
 
-function describeMembers(group: LinkGroup, interaction: ChatInputCommandInteraction): string {
+const yesNo = (value: boolean) => (value ? '✅' : '❌');
+
+function describeMembers(group: LinkGroup, interaction: ChatInputCommandInteraction, locale: BotLocale): string {
   return group.members
     .map((member) => {
       const isLocal = member.guildId === interaction.guildId;
       const guild = interaction.client.guilds.cache.get(member.guildId);
       const channelLabel = isLocal ? `<#${member.channelId}>` : `#${guild?.channels.cache.get(member.channelId)?.name ?? member.channelId}`;
-      const guildLabel = isLocal ? 'ce serveur' : `**${guild?.name ?? member.guildId}**`;
-      const paused = member.enabled ? '' : ' *(en pause)*';
+      const guildLabel = isLocal ? m.lnk_this_server({}, { locale }) : `**${guild?.name ?? member.guildId}**`;
+      const paused = member.enabled ? '' : m.lnk_paused({}, { locale });
       return `${modeIcon(member.mode)} ${channelLabel} - ${guildLabel}${paused}`;
     })
     .join('\n');
+}
+
+const EMBED_DESCRIPTION_LIMIT = 4096;
+
+/**
+ * Discord rejette l'embed entier au-dela de 4096 caracteres : sur un serveur qui
+ * cumule les ponts, la liste doit se couper plutot que de ne rien afficher.
+ */
+function clampDescription(text: string, locale: BotLocale): string {
+  if (text.length <= EMBED_DESCRIPTION_LIMIT) return text;
+  const suffix = m.lnk_list_truncated({}, { locale });
+  return `${text.slice(0, EMBED_DESCRIPTION_LIMIT - suffix.length)}${suffix}`;
 }
 
 /**
@@ -310,44 +194,37 @@ function describeMembers(group: LinkGroup, interaction: ChatInputCommandInteract
  * d'un autre serveur réduit à `:nom:` par Discord faute de droit sur le salon
  * qui reçoit - n'a aucune explication visible.
  */
-const EMBED_DESCRIPTION_LIMIT = 4096;
-
-/**
- * Discord rejette l'embed entier au-dela de 4096 caracteres : sur un serveur qui
- * cumule les ponts, la liste doit se couper plutot que de ne rien afficher.
- */
-function clampDescription(text: string): string {
-  if (text.length <= EMBED_DESCRIPTION_LIMIT) return text;
-  const suffix = '\n\n*(liste tronquée)*';
-  return `${text.slice(0, EMBED_DESCRIPTION_LIMIT - suffix.length)}${suffix}`;
-}
-
-function describePermissionIssues(group: LinkGroup, interaction: ChatInputCommandInteraction): string {
+function describePermissionIssues(group: LinkGroup, interaction: ChatInputCommandInteraction, locale: BotLocale): string {
   const issues = inspectRelayPermissions(interaction.client, group);
   if (issues.length === 0) return '';
 
   const lines = issues.map((issue) => {
     const isLocal = issue.guildId === interaction.guildId;
     const guild = interaction.client.guilds.cache.get(issue.guildId);
-    const channelLabel = isLocal
+    const channel = isLocal
       ? `<#${issue.channelId}>`
       : `#${guild?.channels.cache.get(issue.channelId)?.name ?? issue.channelId} (${guild?.name ?? issue.guildId})`;
 
-    if (issue.channelMissing) return `• ${channelLabel} : salon introuvable pour le bot.`;
+    if (issue.channelMissing) return m.lnk_perm_channel_missing({ channel }, { locale });
 
     const parts: string[] = [];
-    if (issue.bot.length > 0) parts.push(`au bot : ${issue.bot.map((p) => p.label).join(', ')}`);
-    if (issue.everyone.length > 0) parts.push(`à @everyone : ${issue.everyone.map((p) => p.label).join(', ')}`);
+    if (issue.bot.length > 0) parts.push(m.lnk_perm_bot({ perms: issue.bot.map((p) => p.label).join(', ') }, { locale }));
+    if (issue.everyone.length > 0) parts.push(m.lnk_perm_everyone({ perms: issue.everyone.map((p) => p.label).join(', ') }, { locale }));
 
-    return `• ${channelLabel} - manque ${parts.join(' ; ')}`;
+    return m.lnk_perm_missing({ channel, parts: parts.join(' ; ') }, { locale });
   });
 
-  return `\n\n⚠️ **Permissions incomplètes**\n${lines.join('\n')}`;
+  return `\n\n${m.lnk_perm_title({}, { locale })}\n${lines.join('\n')}`;
+}
+
+async function replyError(interaction: ChatInputCommandInteraction, locale: BotLocale, message: string) {
+  await interaction.editReply({ embeds: [errorEmbed(m.lnk_error({}, { locale }), message)] });
 }
 
 async function execute(interaction: ChatInputCommandInteraction) {
   const sub = interaction.options.getSubcommand();
   await interaction.deferReply({ ephemeral: true });
+  const locale = await getEffectiveLocale(interaction);
 
   if (
     interaction.guildId &&
@@ -355,55 +232,51 @@ async function execute(interaction: ChatInputCommandInteraction) {
     !SUBCOMMANDS_WITHOUT_ACTIVATION.has(sub)
   ) {
     await interaction.editReply({
-      embeds: [
-        errorEmbed(
-          'Serveur non activé',
-          "Ce serveur n'a pas de clé d'activation Kotbo.\n\n" +
-            "Il peut malgré tout rejoindre le pont d'un serveur activé : demandez-y `/link invite`, " +
-            'puis lancez ici `/link accept code:<code>`.\n\n' +
-            'Utilisez `/link status` pour voir ce que le bot fait - et ne fait pas - sur ce serveur.',
-        ),
-      ],
+      embeds: [errorEmbed(m.lnk_not_activated_title({}, { locale }), m.lnk_not_activated_desc({}, { locale }))],
     });
     return;
   }
 
   switch (sub) {
     case 'invite':
-      return handleInvite(interaction);
+      return handleInvite(interaction, locale);
     case 'accept':
-      return handleAccept(interaction);
-    case 'salon':
-      return handleSameServer(interaction);
+      return handleAccept(interaction, locale);
+    case 'channels':
+      return handleSameServer(interaction, locale);
     case 'direct':
-      return handleDirect(interaction);
-    case 'ajouter':
-      return handleAddMember(interaction);
-    case 'retirer':
-      return handleRemoveMember(interaction);
+      return handleDirect(interaction, locale);
+    case 'add':
+      return handleAddMember(interaction, locale);
+    case 'leave':
+      return handleRemoveMember(interaction, locale);
     case 'list':
-      return handleList(interaction);
+      return handleList(interaction, locale);
     case 'status':
-      return handleStatus(interaction);
+      return handleStatus(interaction, locale);
     case 'remove':
-      return handleRemove(interaction);
+      return handleRemove(interaction, locale);
     case 'config':
-      return handleConfig(interaction);
+      return handleConfig(interaction, locale);
   }
 }
 
-async function handleInvite(interaction: ChatInputCommandInteraction) {
-  const channel = interaction.options.getChannel('salon', true);
-  const groupId = interaction.options.getString('pont');
+function relayModeLabel(relayMode: 'WEBHOOK' | 'EMBED', locale: BotLocale): string {
+  return relayMode === 'WEBHOOK' ? m.lnk_mode_webhook_mirror({}, { locale }) : 'Embed';
+}
+
+async function handleInvite(interaction: ChatInputCommandInteraction, locale: BotLocale) {
+  const channel = interaction.options.getChannel('channel', true);
+  const groupId = interaction.options.getString('bridge');
   const memberMode = readMode(interaction.options.getString('participation'));
   const relayMode = (interaction.options.getString('mode') ?? 'WEBHOOK') as 'WEBHOOK' | 'EMBED';
-  const maxUses = interaction.options.getInteger('utilisations') ?? 1;
-  const createServerInvite = interaction.options.getBoolean('invitation-serveur') ?? false;
+  const maxUses = interaction.options.getInteger('uses') ?? 1;
+  const createServerInvite = interaction.options.getBoolean('server-invite') ?? false;
 
   if (groupId) {
     const group = await getGroup(groupId);
     if (!group || !group.members.some((mb) => mb.guildId === interaction.guildId)) {
-      await interaction.editReply({ embeds: [errorEmbed('Erreur', 'Pont introuvable sur ce serveur.')] });
+      await replyError(interaction, locale, m.lnk_bridge_not_found_here({}, { locale }));
       return;
     }
   }
@@ -427,7 +300,7 @@ async function handleInvite(interaction: ChatInputCommandInteraction) {
         const discordInvite = await targetChannel.createInvite({
           maxAge: 24 * 60 * 60,
           maxUses: 5,
-          reason: `Kotbo Link: Invitation pour relier le salon #${channel.id}`,
+          reason: m.lnk_invite_reason({ channel: channel.id }, { locale }),
         });
         serverInviteUrl = discordInvite.url;
         // Le serveur distant n'est pas encore connu à ce stade de l'appairage.
@@ -438,36 +311,37 @@ async function handleInvite(interaction: ChatInputCommandInteraction) {
     }
   }
 
+  const modeLabel = (m as any)[MODE_KEYS[memberMode]]({}, { locale }) as string;
   const description = [
-    `**Code :** \`${invite.code}\``,
-    `**Salon :** <#${channel.id}>`,
-    groupId ? `**Pont :** \`${groupId}\`` : '**Pont :** nouveau, créé à la première utilisation',
-    `**Participation du serveur invité :** ${MODE_CHOICES.find((c) => c.value === memberMode)!.name}`,
-    `**Mode :** ${relayMode === 'WEBHOOK' ? 'Webhook (miroir)' : 'Embed'}`,
-    `**Utilisations :** ${maxUses}`,
-    `**Expire :** <t:${Math.floor(invite.expiresAt.getTime() / 1000)}:R>`,
+    m.lnk_invite_code({ code: invite.code }, { locale }),
+    m.lnk_invite_channel({ channel: `<#${channel.id}>` }, { locale }),
+    groupId ? m.lnk_invite_bridge({ id: groupId }, { locale }) : m.lnk_invite_bridge_new({}, { locale }),
+    m.lnk_invite_participation({ mode: modeLabel }, { locale }),
+    m.lnk_mode_line({ mode: relayModeLabel(relayMode, locale) }, { locale }),
+    m.lnk_invite_uses({ uses: maxUses }, { locale }),
+    m.lnk_invite_expires({ date: `<t:${Math.floor(invite.expiresAt.getTime() / 1000)}:R>` }, { locale }),
     '',
     maxUses > 1
-      ? `Chaque serveur qui lance \`/link accept code:${invite.code}\` rejoint le même pont.`
-      : `Utilisez \`/link accept code:${invite.code}\` sur l'autre serveur pour compléter le pont.`,
+      ? m.lnk_invite_multi({ code: invite.code }, { locale })
+      : m.lnk_invite_single({ code: invite.code }, { locale }),
   ];
 
   if (serverInviteUrl) {
-    description.push('', `**Invitation serveur :** ${serverInviteUrl}`);
+    description.push('', m.lnk_invite_server_invite({ url: serverInviteUrl }, { locale }));
   }
 
   const embed = new EmbedBuilder()
     .setColor(COLORS.success)
-    .setTitle('🔗 Invitation de pont créée')
+    .setTitle(m.lnk_invite_title({}, { locale }))
     .setDescription(description.join('\n'))
     .setTimestamp();
 
   await interaction.editReply({ embeds: [embed] });
 }
 
-async function handleAccept(interaction: ChatInputCommandInteraction) {
+async function handleAccept(interaction: ChatInputCommandInteraction, locale: BotLocale) {
   const code = interaction.options.getString('code', true).trim().toUpperCase();
-  const channel = interaction.options.getChannel('salon', true);
+  const channel = interaction.options.getChannel('channel', true);
 
   const result = await acceptLinkInvite({
     code,
@@ -479,47 +353,42 @@ async function handleAccept(interaction: ChatInputCommandInteraction) {
   });
 
   if ('error' in result) {
-    await interaction.editReply({ embeds: [errorEmbed('Erreur', result.error)] });
+    await replyError(interaction, locale, result.error);
     return;
   }
 
   const lines = [
-    `Le salon <#${channel.id}> fait maintenant partie du pont :`,
+    m.lnk_accept_joined({ channel: `<#${channel.id}>` }, { locale }),
     '',
-    describeMembers(result.group, interaction),
+    describeMembers(result.group, interaction, locale),
     '',
-    `**ID du pont :** \`${result.group.id}\``,
+    m.lnk_bridge_id({ id: result.group.id }, { locale }),
   ];
 
   // Ce serveur n'a pas de code : le préciser franchement évite qu'on croie
   // avoir activé Kotbo en entier en rejoignant un pont.
   if (!isGuildActivated(interaction.guildId!)) {
-    lines.push(
-      '',
-      '🔒 **Mode liaison seule.** Ce serveur reste sans clé d\'activation : le bot n\'y fait ' +
-        'circuler que les messages du salon relié. Aucun autre module n\'est actif et aucune ' +
-        'donnée d\'activité n\'est enregistrée.',
-      'Détail complet : `/link status`.',
-    );
+    lines.push('', m.lnk_accept_guest({}, { locale }), m.lnk_accept_guest_detail({}, { locale }));
   }
 
   await interaction.editReply({
-    embeds: [successEmbed('🔗 Pont rejoint !', lines.join('\n') + describePermissionIssues(result.group, interaction))],
+    embeds: [successEmbed(
+      m.lnk_accept_title({}, { locale }),
+      lines.join('\n') + describePermissionIssues(result.group, interaction, locale),
+    )],
   });
 }
 
-async function handleSameServer(interaction: ChatInputCommandInteraction) {
-  const sourceChannel = interaction.options.getChannel('salon-source', true);
-  const targetChannel = interaction.options.getChannel('salon-cible', true);
+async function handleSameServer(interaction: ChatInputCommandInteraction, locale: BotLocale) {
+  const sourceChannel = interaction.options.getChannel('source-channel', true);
+  const targetChannel = interaction.options.getChannel('target-channel', true);
   const ownerMode = readMode(interaction.options.getString('participation'));
   const relayMode = (interaction.options.getString('mode') ?? 'WEBHOOK') as 'WEBHOOK' | 'EMBED';
-  const updateTopic = interaction.options.getBoolean('modifier-topic') ?? true;
-  const includeTopicLink = interaction.options.getBoolean('lien-dans-topic') ?? true;
+  const updateTopic = interaction.options.getBoolean('update-topic') ?? true;
+  const includeTopicLink = interaction.options.getBoolean('topic-link') ?? true;
 
   if (sourceChannel.id === targetChannel.id) {
-    await interaction.editReply({
-      embeds: [errorEmbed('Erreur', 'Impossible de lier un salon à lui-même.')],
-    });
+    await replyError(interaction, locale, m.lnk_same_channel({}, { locale }));
     return;
   }
 
@@ -531,50 +400,46 @@ async function handleSameServer(interaction: ChatInputCommandInteraction) {
     ownerMode,
     relayMode,
     relayThreads: interaction.options.getBoolean('threads') ?? false,
-    relayPolls: interaction.options.getBoolean('sondages') ?? false,
+    relayPolls: interaction.options.getBoolean('polls') ?? false,
     updateTopic,
     includeTopicLink,
     client: interaction.client,
   });
 
   if ('error' in result) {
-    await interaction.editReply({ embeds: [errorEmbed('Erreur', result.error)] });
+    await replyError(interaction, locale, result.error);
     return;
   }
 
-  const topicInfo = updateTopic ? '\n**Topic :** Mis à jour automatiquement ✅' : '';
+  const topicInfo = updateTopic ? m.lnk_topic_updated({}, { locale }) : '';
   const embed = successEmbed(
-    '🔗 Salons reliés !',
-    `${describeMembers(result, interaction)}\n` +
-    `**Mode :** ${relayMode === 'WEBHOOK' ? 'Webhook (miroir)' : 'Embed'}` +
+    m.lnk_linked_title({}, { locale }),
+    `${describeMembers(result, interaction, locale)}\n` +
+    m.lnk_mode_line({ mode: relayModeLabel(relayMode, locale) }, { locale }) +
     topicInfo +
-    `\n**ID :** \`${result.id}\`` +
-    describePermissionIssues(result, interaction),
+    `\n${m.lnk_id_line({ id: result.id }, { locale })}` +
+    describePermissionIssues(result, interaction, locale),
   );
 
   await interaction.editReply({ embeds: [embed] });
 }
 
-async function handleDirect(interaction: ChatInputCommandInteraction) {
-  const sourceChannel = interaction.options.getChannel('salon-source', true);
-  const targetGuildId = interaction.options.getString('serveur-cible', true);
-  const targetChannelId = interaction.options.getString('salon-cible', true);
+async function handleDirect(interaction: ChatInputCommandInteraction, locale: BotLocale) {
+  const sourceChannel = interaction.options.getChannel('source-channel', true);
+  const targetGuildId = interaction.options.getString('target-server', true);
+  const targetChannelId = interaction.options.getString('target-channel', true);
   const ownerMode = readMode(interaction.options.getString('participation'));
   const relayMode = (interaction.options.getString('mode') ?? 'WEBHOOK') as 'WEBHOOK' | 'EMBED';
 
   const targetGuild = interaction.client.guilds.cache.get(targetGuildId);
   if (!targetGuild) {
-    await interaction.editReply({
-      embeds: [errorEmbed('Erreur', 'Le bot n\'est pas présent sur le serveur cible.')],
-    });
+    await replyError(interaction, locale, m.lnk_bot_not_in_target({}, { locale }));
     return;
   }
 
   const targetChannel = targetGuild.channels.cache.get(targetChannelId);
   if (!targetChannel || !targetChannel.isTextBased()) {
-    await interaction.editReply({
-      embeds: [errorEmbed('Erreur', 'Le salon cible est introuvable ou n\'est pas un salon texte.')],
-    });
+    await replyError(interaction, locale, m.lnk_target_not_text({}, { locale }));
     return;
   }
 
@@ -583,50 +448,48 @@ async function handleDirect(interaction: ChatInputCommandInteraction) {
     ownerChannelId: sourceChannel.id,
     targets: [{ guildId: targetGuildId, channelId: targetChannelId, mode: mirrorMode(ownerMode) }],
     createdByUserId: interaction.user.id,
-    name: interaction.options.getString('nom'),
+    name: interaction.options.getString('name'),
     ownerMode,
     relayMode,
     relayThreads: interaction.options.getBoolean('threads') ?? false,
-    relayPolls: interaction.options.getBoolean('sondages') ?? false,
-    updateTopic: interaction.options.getBoolean('modifier-topic') ?? true,
-    includeTopicLink: interaction.options.getBoolean('lien-dans-topic') ?? true,
+    relayPolls: interaction.options.getBoolean('polls') ?? false,
+    updateTopic: interaction.options.getBoolean('update-topic') ?? true,
+    includeTopicLink: interaction.options.getBoolean('topic-link') ?? true,
     client: interaction.client,
   });
 
   if ('error' in result) {
-    await interaction.editReply({ embeds: [errorEmbed('Erreur', result.error)] });
+    await replyError(interaction, locale, result.error);
     return;
   }
 
   const embed = successEmbed(
-    '🔗 Pont créé !',
-    `${describeMembers(result, interaction)}\n\n` +
-    `**Mode :** ${relayMode === 'WEBHOOK' ? 'Webhook' : 'Embed'}\n` +
-    `**ID :** \`${result.id}\`\n\n` +
-    `Ajoutez d'autres serveurs avec \`/link ajouter id:${result.id}\` ou \`/link invite pont:${result.id}\`.` +
-    describePermissionIssues(result, interaction),
+    m.lnk_direct_title({}, { locale }),
+    `${describeMembers(result, interaction, locale)}\n\n` +
+    `${m.lnk_mode_line({ mode: relayMode === 'WEBHOOK' ? 'Webhook' : 'Embed' }, { locale })}\n` +
+    `${m.lnk_id_line({ id: result.id }, { locale })}\n\n` +
+    m.lnk_direct_hint({ id: result.id }, { locale }) +
+    describePermissionIssues(result, interaction, locale),
   );
 
   await interaction.editReply({ embeds: [embed] });
 }
 
-async function handleAddMember(interaction: ChatInputCommandInteraction) {
+async function handleAddMember(interaction: ChatInputCommandInteraction, locale: BotLocale) {
   const groupId = interaction.options.getString('id', true);
-  const memberGuildId = interaction.options.getString('serveur', true);
-  const memberChannelId = interaction.options.getString('salon', true);
+  const memberGuildId = interaction.options.getString('server', true);
+  const memberChannelId = interaction.options.getString('channel', true);
 
   const group = await getGroup(groupId);
   if (!group || !group.members.some((mb) => mb.guildId === interaction.guildId)) {
-    await interaction.editReply({ embeds: [errorEmbed('Erreur', 'Pont introuvable sur ce serveur.')] });
+    await replyError(interaction, locale, m.lnk_bridge_not_found_here({}, { locale }));
     return;
   }
 
   const memberGuild = interaction.client.guilds.cache.get(memberGuildId);
   const memberChannel = memberGuild?.channels.cache.get(memberChannelId);
   if (!memberGuild || !memberChannel || !memberChannel.isTextBased()) {
-    await interaction.editReply({
-      embeds: [errorEmbed('Erreur', 'Serveur ou salon introuvable pour le bot.')],
-    });
+    await replyError(interaction, locale, m.lnk_add_not_found({}, { locale }));
     return;
   }
 
@@ -641,68 +504,70 @@ async function handleAddMember(interaction: ChatInputCommandInteraction) {
   });
 
   if ('error' in result) {
-    await interaction.editReply({ embeds: [errorEmbed('Erreur', result.error)] });
+    await replyError(interaction, locale, result.error);
     return;
   }
 
   await interaction.editReply({
     embeds: [
-      successEmbed('🔗 Serveur ajouté au pont', describeMembers(result, interaction) + describePermissionIssues(result, interaction)),
+      successEmbed(
+        m.lnk_add_title({}, { locale }),
+        describeMembers(result, interaction, locale) + describePermissionIssues(result, interaction, locale),
+      ),
     ],
   });
 }
 
-async function handleRemoveMember(interaction: ChatInputCommandInteraction) {
+async function handleRemoveMember(interaction: ChatInputCommandInteraction, locale: BotLocale) {
   const groupId = interaction.options.getString('id', true);
-  const channel = interaction.options.getChannel('salon', true);
+  const channel = interaction.options.getChannel('channel', true);
 
   const group = await getGroup(groupId);
   const member = group?.members.find(
     (mb) => mb.guildId === interaction.guildId && mb.channelId === channel.id,
   );
   if (!group || !member) {
-    await interaction.editReply({
-      embeds: [errorEmbed('Erreur', 'Ce salon ne fait pas partie de ce pont.')],
-    });
+    await replyError(interaction, locale, m.lnk_leave_not_member({}, { locale }));
     return;
   }
 
   const remaining = await removeGroupMember(groupId, member.id, interaction.client);
+  const channelLabel = `<#${channel.id}>`;
 
   await interaction.editReply({
     embeds: [
       successEmbed(
-        '🚪 Salon retiré du pont',
+        m.lnk_leave_title({}, { locale }),
         remaining
-          ? `<#${channel.id}> ne fait plus partie du pont \`${groupId}\`.\n\n${describeMembers(remaining, interaction)}`
-          : `<#${channel.id}> ne fait plus partie du pont, qui n'avait plus assez de salons et a été supprimé.`,
+          ? `${m.lnk_leave_remaining({ channel: channelLabel, id: groupId }, { locale })}\n\n${describeMembers(remaining, interaction, locale)}`
+          : m.lnk_leave_deleted({ channel: channelLabel }, { locale }),
       ),
     ],
   });
 }
 
-async function handleList(interaction: ChatInputCommandInteraction) {
+async function handleList(interaction: ChatInputCommandInteraction, locale: BotLocale) {
   const groups = await listGroupsForGuild(interaction.guildId!);
 
   if (groups.length === 0) {
     await interaction.editReply({
-      embeds: [new EmbedBuilder().setColor(COLORS.info).setDescription('Aucun pont de salons configuré.')],
+      embeds: [new EmbedBuilder().setColor(COLORS.info).setDescription(m.lnk_list_empty({}, { locale }))],
     });
     return;
   }
 
   const blocks = groups.map((group) => {
     const statusIcon = group.enabled ? '🟢' : '🔴';
-    const title = group.name ?? `Pont de ${group.members.length} salons`;
-    return `${statusIcon} **${title}** \`${group.id.slice(0, 8)}\`\n${describeMembers(group, interaction)}`
-      + describePermissionIssues(group, interaction);
+    const title = group.name ?? m.lnk_list_default_name({ count: group.members.length }, { locale });
+    return `${statusIcon} **${title}** \`${group.id.slice(0, 8)}\`\n${describeMembers(group, interaction, locale)}`
+      + describePermissionIssues(group, interaction, locale);
   });
 
   const embed = new EmbedBuilder()
     .setColor(COLORS.info)
-    .setTitle('🔗 Ponts de salons')
-    .setDescription(clampDescription(blocks.join('\n\n')))
-    .setFooter({ text: `${groups.length} pont(s)` })
+    .setTitle(m.lnk_list_title({}, { locale }))
+    .setDescription(clampDescription(blocks.join('\n\n'), locale))
+    .setFooter({ text: m.lnk_list_footer({ count: groups.length }, { locale }) })
     .setTimestamp();
 
   await interaction.editReply({ embeds: [embed] });
@@ -714,7 +579,7 @@ async function handleList(interaction: ChatInputCommandInteraction) {
  * vie privée n'est pas « quelles options ai-je cochées » mais « qu'est-ce qui
  * est écrit quelque part » : c'est donc à cela que cet écran répond.
  */
-async function handleStatus(interaction: ChatInputCommandInteraction) {
+async function handleStatus(interaction: ChatInputCommandInteraction, locale: BotLocale) {
   const guildId = interaction.guildId!;
   const activated = isGuildActivated(guildId);
   const groups = await listGroupsForGuild(guildId);
@@ -723,15 +588,8 @@ async function handleStatus(interaction: ChatInputCommandInteraction) {
   if (activated) {
     const embed = new EmbedBuilder()
       .setColor(COLORS.info)
-      .setTitle('🔓 Serveur activé')
-      .setDescription(
-        'Ce serveur dispose d\'une clé d\'activation : les modules Kotbo y sont disponibles ' +
-          'selon la configuration du dashboard.\n\n' +
-          `**Ponts de salons :** ${activeGroups.length} actif(s) sur ${groups.length}.\n` +
-          'La collecte de statistiques d\'activité se coupe depuis le dashboard ' +
-          '(Paramètres généraux → *Statistiques d\'activité*) ; une fois désactivée, plus rien ' +
-          'n\'est enregistré sur les membres.',
-      )
+      .setTitle(m.lnk_status_activated_title({}, { locale }))
+      .setDescription(m.lnk_status_activated_desc({ active: activeGroups.length, total: groups.length }, { locale }))
       .setTimestamp();
     await interaction.editReply({ embeds: [embed] });
     return;
@@ -740,147 +598,119 @@ async function handleStatus(interaction: ChatInputCommandInteraction) {
   if (!isLinkGuestGuild(guildId)) {
     const embed = new EmbedBuilder()
       .setColor(COLORS.warning)
-      .setTitle('⚪ Bot inactif sur ce serveur')
-      .setDescription(
-        "Ce serveur n'a ni clé d'activation, ni pont avec un serveur activé : le bot n'y fait " +
-          'strictement rien et n\'enregistre rien.\n\n' +
-          'Pour rejoindre un pont : demandez `/link invite` sur le serveur activé, puis lancez ici ' +
-          '`/link accept code:<code>`.',
-      )
+      .setTitle(m.lnk_status_idle_title({}, { locale }))
+      .setDescription(m.lnk_status_idle_desc({}, { locale }))
       .setTimestamp();
     await interaction.editReply({ embeds: [embed] });
     return;
   }
 
   const storesMapping = activeGroups.some((g) => needsMessageMapping(g));
-  const bridged = activeGroups.map((group) => describeMembers(group, interaction)).join('\n');
+  const bridged = activeGroups.map((group) => describeMembers(group, interaction, locale)).join('\n');
 
   const embed = new EmbedBuilder()
     .setColor(COLORS.success)
-    .setTitle('🔒 Mode liaison seule')
+    .setTitle(m.lnk_status_guest_title({}, { locale }))
     .setDescription(
       clampDescription(
-        'Ce serveur **ne possède pas de clé d\'activation**. Le bot y est présent pour une seule ' +
-          'raison : faire circuler les messages des salons reliés ci-dessous.\n\n' +
-          `${bridged || '*Aucun pont actif.*'}`,
+        m.lnk_status_guest_desc({ bridged: bridged || m.lnk_status_no_active({}, { locale }) }, { locale }),
+        locale,
       ),
     )
     .addFields(
+      { name: m.lnk_status_does_title({}, { locale }), value: m.lnk_status_does({}, { locale }) },
+      { name: m.lnk_status_doesnt_title({}, { locale }), value: m.lnk_status_doesnt({}, { locale }) },
       {
-        name: '✅ Ce que le bot fait',
-        value:
-          'Recopier les messages des salons reliés, entre tous les serveurs du pont, avec le ' +
-          'pseudo et l\'avatar de leur auteur.',
+        name: m.lnk_status_stored_title({}, { locale }),
+        value: storesMapping ? m.lnk_status_stored_mapping({}, { locale }) : m.lnk_status_stored_nothing({}, { locale }),
       },
-      {
-        name: '🚫 Ce qu\'il ne fait pas',
-        value:
-          "Aucun module n'est actif ici : ni statistiques, ni niveaux, ni économie, ni " +
-          "modération, ni journalisation. Les événements de ce serveur n'atteignent même pas " +
-          'ces modules - ils sont écartés avant, et seul le relais les reçoit.',
-      },
-      {
-        name: '💾 Ce qui est enregistré',
-        value: storesMapping
-          ? "Uniquement la correspondance entre l'identifiant d'un message et ceux de ses copies, " +
-            'nécessaire pour propager les modifications, suppressions et réactions. Aucun contenu, ' +
-            'aucun profil, aucune statistique. Désactivez ces trois relais pour que même cette ' +
-            'correspondance cesse d\'être écrite.'
-          : 'Rien. Ces ponts ne relaient ni modification, ni suppression, ni réaction : aucune ' +
-            'ligne n\'est écrite en base pour les messages qui transitent.',
-      },
-      {
-        name: '🚪 Pour tout arrêter',
-        value: '`/link retirer id:<id> salon:<salon>` ou l\'expulsion du bot met fin au pont immédiatement.',
-      },
+      { name: m.lnk_status_stop_title({}, { locale }), value: m.lnk_status_stop({}, { locale }) },
     )
     .setTimestamp();
 
   await interaction.editReply({ embeds: [embed] });
 }
 
-async function handleRemove(interaction: ChatInputCommandInteraction) {
+async function handleRemove(interaction: ChatInputCommandInteraction, locale: BotLocale) {
   const groupId = interaction.options.getString('id', true);
 
   const group = await getGroup(groupId);
   if (!group || !group.members.some((mb) => mb.guildId === interaction.guildId)) {
-    await interaction.editReply({ embeds: [errorEmbed('Erreur', 'Pont introuvable sur ce serveur.')] });
+    await replyError(interaction, locale, m.lnk_bridge_not_found_here({}, { locale }));
     return;
   }
 
   await removeGroup(groupId, interaction.client);
 
   await interaction.editReply({
-    embeds: [successEmbed('🗑️ Pont supprimé', `Le pont \`${groupId}\` et tous ses salons ont été déliés.`)],
+    embeds: [successEmbed(m.lnk_removed_title({}, { locale }), m.lnk_removed_desc({ id: groupId }, { locale }))],
   });
 }
 
-async function handleConfig(interaction: ChatInputCommandInteraction) {
+async function handleConfig(interaction: ChatInputCommandInteraction, locale: BotLocale) {
   const groupId = interaction.options.getString('id', true);
 
   const group = await getGroup(groupId);
   if (!group || !group.members.some((mb) => mb.guildId === interaction.guildId)) {
-    await interaction.editReply({ embeds: [errorEmbed('Erreur', 'Pont introuvable sur ce serveur.')] });
+    await replyError(interaction, locale, m.lnk_bridge_not_found_here({}, { locale }));
     return;
   }
 
   const updates: Record<string, boolean | string | undefined> = {};
-  const nom = interaction.options.getString('nom');
-  const texte = interaction.options.getBoolean('texte');
+  const name = interaction.options.getString('name');
+  const text = interaction.options.getBoolean('text');
   const images = interaction.options.getBoolean('images');
   const embeds = interaction.options.getBoolean('embeds');
   const reactions = interaction.options.getBoolean('reactions');
   const edits = interaction.options.getBoolean('edits');
   const deletes = interaction.options.getBoolean('deletes');
-  const actif = interaction.options.getBoolean('actif');
+  const active = interaction.options.getBoolean('active');
   const threads = interaction.options.getBoolean('threads');
-  const sondages = interaction.options.getBoolean('sondages');
-  const epingles = interaction.options.getBoolean('epingles');
-  const modifierTopic = interaction.options.getBoolean('modifier-topic');
+  const polls = interaction.options.getBoolean('polls');
+  const pins = interaction.options.getBoolean('pins');
+  const updateTopic = interaction.options.getBoolean('update-topic');
 
-  if (nom !== null) updates.name = nom;
-  if (texte !== null) updates.relayText = texte;
+  if (name !== null) updates.name = name;
+  if (text !== null) updates.relayText = text;
   if (images !== null) updates.relayImages = images;
   if (embeds !== null) updates.relayEmbeds = embeds;
   if (reactions !== null) updates.relayReactions = reactions;
   if (edits !== null) updates.relayEdits = edits;
   if (deletes !== null) updates.relayDeletes = deletes;
-  if (actif !== null) updates.enabled = actif;
+  if (active !== null) updates.enabled = active;
   if (threads !== null) updates.relayThreads = threads;
-  if (sondages !== null) updates.relayPolls = sondages;
-  if (epingles !== null) updates.relayPins = epingles;
-  if (modifierTopic !== null) updates.updateTopic = modifierTopic;
+  if (polls !== null) updates.relayPolls = polls;
+  if (pins !== null) updates.relayPins = pins;
+  if (updateTopic !== null) updates.updateTopic = updateTopic;
 
   if (Object.keys(updates).length === 0) {
-    await interaction.editReply({
-      embeds: [errorEmbed('Erreur', 'Aucune option de configuration spécifiée.')],
-    });
+    await replyError(interaction, locale, m.lnk_config_nothing({}, { locale }));
     return;
   }
 
   const updated = await updateGroupConfig(groupId, updates as any);
   if (!updated) {
-    await interaction.editReply({ embeds: [errorEmbed('Erreur', 'Pont introuvable.')] });
+    await replyError(interaction, locale, m.lnk_bridge_not_found({}, { locale }));
     return;
   }
 
   const configLines = [
-    `📝 Texte : ${updated.relayText ? '✅' : '❌'}`,
-    `🖼️ Images : ${updated.relayImages ? '✅' : '❌'}`,
-    `📦 Embeds : ${updated.relayEmbeds ? '✅' : '❌'}`,
-    `😀 Réactions : ${updated.relayReactions ? '✅' : '❌'}`,
-    `✏️ Éditions : ${updated.relayEdits ? '✅' : '❌'}`,
-    `🗑️ Suppressions : ${updated.relayDeletes ? '✅' : '❌'}`,
-    `⚡ Actif : ${updated.enabled ? '✅' : '❌'}`,
-    `🧵 Threads : ${updated.relayThreads ? '✅' : '❌'}`,
-    `📊 Sondages : ${updated.relayPolls ? '✅' : '❌'}`,
-    `📌 Épinglages : ${updated.relayPins ? '✅' : '❌'}`,
-    `🏷️ Topic auto : ${updated.updateTopic ? '✅' : '❌'}`,
+    m.lnk_cfg_text({ v: yesNo(updated.relayText) }, { locale }),
+    m.lnk_cfg_images({ v: yesNo(updated.relayImages) }, { locale }),
+    m.lnk_cfg_embeds({ v: yesNo(updated.relayEmbeds) }, { locale }),
+    m.lnk_cfg_reactions({ v: yesNo(updated.relayReactions) }, { locale }),
+    m.lnk_cfg_edits({ v: yesNo(updated.relayEdits) }, { locale }),
+    m.lnk_cfg_deletes({ v: yesNo(updated.relayDeletes) }, { locale }),
+    m.lnk_cfg_active({ v: yesNo(updated.enabled) }, { locale }),
+    m.lnk_cfg_threads({ v: yesNo(updated.relayThreads) }, { locale }),
+    m.lnk_cfg_polls({ v: yesNo(updated.relayPolls) }, { locale }),
+    m.lnk_cfg_pins({ v: yesNo(updated.relayPins) }, { locale }),
+    m.lnk_cfg_topic({ v: yesNo(updated.updateTopic) }, { locale }),
   ];
 
   const embed = successEmbed(
-    '⚙️ Configuration mise à jour',
-    `**Pont :** \`${groupId}\`\n\n${configLines.join('\n')}`,
+    m.lnk_config_title({}, { locale }),
+    `${m.lnk_config_bridge({ id: groupId }, { locale })}\n\n${configLines.join('\n')}`,
   );
 
   await interaction.editReply({ embeds: [embed] });
