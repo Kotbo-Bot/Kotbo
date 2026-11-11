@@ -5160,5 +5160,16 @@
   "market_cmd_name": "market",
   "market_cmd_description": "Hôtel des ventes - achetez et vendez des objets entre joueurs",
   "b2_excuse_opt_category_name": "catégorie",
-  "b2_excuse_opt_category_description": "Catégorie d'excuse (optionnel)"
+  "b2_excuse_opt_category_description": "Catégorie d'excuse (optionnel)",
+  "sim_opt_scenario_name": "scenario",
+  "sim_opt_scenario_description": "Scénario à jouer",
+  "sim_difficulty_easy": "Facile",
+  "sim_difficulty_medium": "Intermédiaire",
+  "sim_difficulty_hard": "Difficile",
+  "sim_list_empty": "Aucun scénario disponible. Crée-en un depuis le dashboard.",
+  "sim_list_line": "• **{title}** - {difficulty}, {steps} étape(s)",
+  "sim_stopped": "Session interrompue. Le rapport a été publié dans le salon de test.",
+  "sim_no_session": "Tu n'as aucune session en cours.",
+  "sim_started": "Session lancée. Les incidents vont apparaître dans ce salon : réagis avec les boutons sous chaque message.",
+  "sim_start_failed": "❌ Impossible de démarrer la simulation."
 }

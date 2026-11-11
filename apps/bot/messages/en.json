@@ -5160,5 +5160,16 @@
   "market_cmd_name": "market",
   "market_cmd_description": "Auction house - buy and sell items between players",
   "b2_excuse_opt_category_name": "category",
-  "b2_excuse_opt_category_description": "Excuse category (optional)"
+  "b2_excuse_opt_category_description": "Excuse category (optional)",
+  "sim_opt_scenario_name": "scenario",
+  "sim_opt_scenario_description": "Scenario to play",
+  "sim_difficulty_easy": "Easy",
+  "sim_difficulty_medium": "Intermediate",
+  "sim_difficulty_hard": "Hard",
+  "sim_list_empty": "No scenarios available. Create one from the dashboard.",
+  "sim_list_line": "• **{title}** - {difficulty}, {steps} step(s)",
+  "sim_stopped": "Session stopped. The report was posted in the test channel.",
+  "sim_no_session": "You have no session running.",
+  "sim_started": "Session started. Incidents will show up in this channel: respond with the buttons under each message.",
+  "sim_start_failed": "❌ Couldn't start the simulation."
 }
