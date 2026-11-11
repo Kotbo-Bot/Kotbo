@@ -397,7 +397,12 @@ const URL_REGEX = /https?:\/\/([a-z0-9.-]+)/gi;
 
 export type ScamDetection = { matched: true; domain?: string; pattern: string } | { matched: false };
 
-export function detectScam(content: string, config: RaidProtectionConfig): ScamDetection {
+/**
+ * `fromOcr` : le texte vient d'une image. L'OCR commet exactement les confusions
+ * que traquent les motifs de domaine et les sosies (m lu « rn », l lu « 1 ») :
+ * seules les listes exactes s'appliquent alors aux domaines.
+ */
+export function detectScam(content: string, config: RaidProtectionConfig, fromOcr = false): ScamDetection {
   const whitelist = new Set(config.scamFilterWhitelist.map((d) => d.toLowerCase()));
   const customBlocked = config.scamFilterCustomDomains.map((d) => d.toLowerCase());
 
@@ -433,6 +438,7 @@ export function detectScam(content: string, config: RaidProtectionConfig): ScamD
         pattern: feedMatch.source === 'github_feed' ? 'github_phishing_feed' : 'github_suspicious_feed',
       };
     }
+    if (fromOcr) continue;
     for (const pattern of SCAM_DOMAIN_PATTERNS) {
       if (pattern.test(domain)) return { matched: true, domain, pattern: pattern.source };
     }
@@ -495,7 +501,7 @@ export async function detectInImageText(
   text: string,
   config: RaidProtectionConfig
 ): Promise<ScamDetection> {
-  const direct = detectScam(text, config);
+  const direct = detectScam(text, config, true);
   if (direct.matched) return direct;
   return detectKnownScam(guildId, text, config);
 }
