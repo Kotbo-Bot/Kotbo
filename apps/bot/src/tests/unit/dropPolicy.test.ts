@@ -25,6 +25,7 @@ import {
   dropMaxClaims,
   dropMessageDeleteAt,
   dropActivityVerdict,
+  estimateWeeklyDrops,
   DROP_ADVICE_MIN_SAMPLE,
   shouldAdviseActivityWait,
   dropJackpotAmount,
@@ -428,5 +429,44 @@ describe('conseil : attendre l\'activité quand les drops expirent sans gagnant'
 
   test('l\'attente d\'activité est déjà allumée : pas de conseil', () => {
     expect(shouldAdviseActivityWait({ closed: 10, unclaimed: 9 }, { minMessages: 5, windowMinutes: 15 })).toBe(false);
+  });
+});
+
+describe('estimation de ce qu\'un type distribue par semaine', () => {
+  const noJackpot = { dropJackpotEnabled: false, dropJackpotChance: 20, dropJackpotMultiplier: 5 };
+  const xp = defaultDropTypeSettings('XP');
+
+  test('premier arrivé seul : fréquence fois le milieu de la fourchette', () => {
+    // 360 min d'intervalle : 28 drops par semaine, 150 XP en moyenne.
+    expect(estimateWeeklyDrops('XP', xp, noJackpot)).toEqual({ drops: 28, distributed: 4_200, window: null });
+  });
+
+  test('les modes se partagent les drops, une course paie chacun de ses gagnants', () => {
+    const settings = { ...xp, race: { ...xp.race, enabled: true } };
+    // 14 drops au premier arrivé (150) + 14 courses de 3 gagnants (75 chacun).
+    expect(estimateWeeklyDrops('XP', settings, noJackpot)?.distributed).toBe(14 * 150 + 14 * 3 * 75);
+  });
+
+  test('ouvert à tous : compté par participant, à part', () => {
+    const settings = { ...xp, first: { ...xp.first, enabled: false }, window: { ...xp.window, enabled: true } };
+    expect(estimateWeeklyDrops('XP', settings, noJackpot)).toEqual({
+      drops: 28,
+      distributed: 0,
+      window: { drops: 28, perParticipant: (xp.window.minAmount + xp.window.maxAmount) / 2 },
+    });
+  });
+
+  test('le jackpot relève la moyenne, sauf pour les objets', () => {
+    const jackpot = { dropJackpotEnabled: true, dropJackpotChance: 20, dropJackpotMultiplier: 5 };
+    // Un drop sur 20 vaut 5 fois plus : la moyenne gagne 4/20, soit 20 %.
+    expect(estimateWeeklyDrops('XP', xp, jackpot)?.distributed).toBeCloseTo(4_200 * 1.2);
+
+    const items = defaultDropTypeSettings('RPG_ITEM');
+    expect(estimateWeeklyDrops('RPG_ITEM', items, jackpot)?.distributed)
+      .toBe(estimateWeeklyDrops('RPG_ITEM', items, noJackpot)?.distributed);
+  });
+
+  test('aucun mode : rien à estimer', () => {
+    expect(estimateWeeklyDrops('XP', { ...xp, first: { ...xp.first, enabled: false } }, noJackpot)).toBeNull();
   });
 });

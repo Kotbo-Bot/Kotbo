@@ -590,3 +590,54 @@ export function dropExpiresAt(
     : clampDropInt(lifetimeMinutes, DROP_LIFETIME_MINUTES_RANGE, 60);
   return new Date(postedAt.getTime() + minutes * MS_PER_MINUTE);
 }
+
+const WEEK_MINUTES = 7 * 24 * 60;
+
+/**
+ * Ce qu'un type distribue en une semaine, pour juger de son poids dans l'économie.
+ *
+ * - `drops` : apparitions par semaine, d'après l'intervalle moyen ;
+ * - `distributed` : total versé par les modes à gagnants comptés (premier arrivé,
+ *   course), en supposant chaque place prise ;
+ * - `window` : le mode ouvert à tous n'a pas de nombre de gagnants, son gain est donné
+ *   par participant.
+ *
+ * Les modes se partagent les apparitions à parts égales, comme au tirage, et chaque
+ * montant vaut le milieu de sa fourchette. Le jackpot relève la moyenne de
+ * (multiplicateur - 1) / N. C'est un ordre de grandeur : des drops expirés ou retenus
+ * par l'attente d'activité versent moins. `null` quand aucun mode n'est allumé.
+ */
+export interface DropWeeklyEstimate {
+  drops: number;
+  distributed: number;
+  window: { drops: number; perParticipant: number } | null;
+}
+
+export function estimateWeeklyDrops(
+  type: DropType,
+  settings: DropTypeSettings,
+  jackpot: Pick<DropGlobalSettings, 'dropJackpotEnabled' | 'dropJackpotChance' | 'dropJackpotMultiplier'>,
+): DropWeeklyEstimate | null {
+  const modes = enabledDropModes(settings);
+  if (modes.length === 0) return null;
+
+  const drops = WEEK_MINUTES / clampDropInt(settings.intervalMinutes, DROP_INTERVAL_MINUTES_RANGE, 360);
+  const perMode = drops / modes.length;
+  const boost = type !== 'RPG_ITEM' && jackpot.dropJackpotEnabled
+    ? 1 + (jackpot.dropJackpotMultiplier - 1) / jackpot.dropJackpotChance
+    : 1;
+  const mean = (mode: DropMode) => {
+    const { minAmount, maxAmount } = dropModeSettings(settings, mode);
+    return ((minAmount + maxAmount) / 2) * boost;
+  };
+
+  let distributed = 0;
+  if (settings.first.enabled) distributed += perMode * mean('FIRST');
+  if (settings.race.enabled) distributed += perMode * mean('RACE') * dropMaxClaims(settings, 'RACE');
+
+  return {
+    drops,
+    distributed,
+    window: settings.window.enabled ? { drops: perMode, perParticipant: mean('WINDOW') } : null,
+  };
+}

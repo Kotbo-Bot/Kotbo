@@ -10,6 +10,7 @@
   import { subscribeRealtime } from '../lib/stores/realtime.svelte';
   import Papicon from '../lib/components/Papicon.svelte';
   import EmojiText from '../lib/components/EmojiText.svelte';
+  import DropAnnouncementPreview from '../lib/components/DropAnnouncementPreview.svelte';
   import InlineFeedback from '../lib/components/InlineFeedback.svelte';
   import SearchableSelect from '../lib/components/SearchableSelect.svelte';
   import Skeleton from '../lib/components/Skeleton.svelte';
@@ -31,6 +32,7 @@
     updateDropGlobalSettings,
     updateModuleStatus,
     updateDropTypeSettings,
+    type DropAnnouncementLabels,
     type DropConfigEntry,
     type DropHistoryEntry,
   } from '../lib/api';
@@ -56,6 +58,7 @@
     dropItemsTotalWeight,
     dropTypeBlocker,
     enabledDropModes,
+    estimateWeeklyDrops,
     shouldAdviseActivityWait,
     type DropGlobalSettings,
     type DropOutcomes,
@@ -170,6 +173,8 @@
 
   let recentDrops = $state<DropHistoryEntry[]>([]);
   let weeklyOutcomes = $state<Partial<Record<DropType, DropOutcomes>>>({});
+  /** Gabarits de l'annonce, dans la langue du serveur. `null` tant que la route n'a pas répondu. */
+  let announcement = $state<DropAnnouncementLabels | null>(null);
   let availableChannels = $state<any[]>([]);
 
   const availableRoles = $derived(dashboardStore.state.discordRoles || []);
@@ -286,6 +291,21 @@
   function followUnclaimedAdvice(type: DropType) {
     applyActivityStep(type, ACTIVITY_DEFAULT_STEP);
     activeTab = type;
+  }
+
+  /** Pièce la plus probable de la liste, pour l'aperçu d'un drop d'objet. */
+  function likeliestItemLabel(): string | null {
+    const [top] = [...configs.RPG_ITEM.items].sort((a, b) => b.weight - a.weight);
+    const item = top ? itemNameById.get(top.itemId) : null;
+    return item ? `${item.emoji} ${item.name}` : null;
+  }
+
+  const mentionRoleName = $derived(
+    availableRoles.find((role: { id: string; name: string }) => role.id === globalSettings.dropMentionRoleId)?.name ?? null,
+  );
+
+  function formatEstimate(value: number): string {
+    return Math.round(value).toLocaleString(dateLocale());
   }
 
   /** Historique replié sur les plus récents : la liste complète double la hauteur de l'onglet. */
@@ -410,6 +430,7 @@
 
         recentDrops = res.recentDrops ?? [];
         weeklyOutcomes = res.weeklyOutcomes ?? {};
+        announcement = res.announcement ?? null;
 
         // Au premier chargement seulement : une mise à jour en direct ne doit pas
         // basculer le mode sous les yeux de qui est en train de régler.
@@ -1243,6 +1264,43 @@
           </div>
         </div>
       </section>
+
+      {#if announcement}
+        {@const estimate = estimateWeeklyDrops(type, configs[type], globalSettings)}
+        <section class="bg-surface-container-low/40 border border-outline-variant/30 p-6 rounded-xl space-y-5">
+          <div class="border-b border-outline-variant/15 pb-3">
+            <h3 class="text-lg font-semibold flex items-center gap-2"><Papicon icon="Eye" size={18} /> {m.drop_preview_heading()}</h3>
+            <p class="text-xs text-on-surface-variant mt-1">{m.drop_preview_desc()}</p>
+          </div>
+
+          <DropAnnouncementPreview
+            labels={announcement}
+            {type}
+            settings={configs[type]}
+            jackpot={globalSettings}
+            modeLabels={MODE_LABELS}
+            itemLabel={type === 'RPG_ITEM' ? likeliestItemLabel() : null}
+            {mentionRoleName}
+          />
+
+          {#if estimate}
+            <div class="space-y-1 border-t border-outline-variant/10 pt-4">
+              {#if estimate.distributed > 0}
+                <p class="text-sm font-semibold">
+                  {m.drop_estimate_distributed({ drops: formatEstimate(estimate.drops), total: formatEstimate(estimate.distributed), resource: TYPE_LABELS[type]() })}
+                </p>
+              {/if}
+              <!-- Un champ vidé pendant la saisie donne NaN : la ligne attend un vrai nombre. -->
+              {#if estimate.window && Number.isFinite(estimate.window.perParticipant)}
+                <p class="text-sm font-semibold">
+                  {m.drop_estimate_window({ amount: formatEstimate(estimate.window.perParticipant), resource: TYPE_LABELS[type](), drops: formatEstimate(estimate.window.drops) })}
+                </p>
+              {/if}
+              <p class="text-2xs text-on-surface-variant">{m.drop_estimate_hint()}</p>
+            </div>
+          {/if}
+        </section>
+      {/if}
     </div>
   {/if}
 </ModulePage>
