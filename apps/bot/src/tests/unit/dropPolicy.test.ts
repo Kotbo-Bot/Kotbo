@@ -394,8 +394,8 @@ describe('drops jackpot', () => {
   test('éteint par défaut, et seules les valeurs proposées sont retenues', () => {
     const defaults = normalizeDropGlobalSettings({});
     expect(defaults.dropJackpotEnabled).toBe(false);
-    expect(DROP_JACKPOT_CHANCE_CHOICES).toContain(defaults.dropJackpotChance);
-    expect(DROP_JACKPOT_MULTIPLIER_CHOICES).toContain(defaults.dropJackpotMultiplier);
+    expect(DROP_JACKPOT_CHANCE_CHOICES as readonly number[]).toContain(defaults.dropJackpotChance);
+    expect(DROP_JACKPOT_MULTIPLIER_CHOICES as readonly number[]).toContain(defaults.dropJackpotMultiplier);
 
     const odd = normalizeDropGlobalSettings({ dropJackpotChance: 7, dropJackpotMultiplier: 1_000 });
     expect(odd.dropJackpotChance).toBe(defaults.dropJackpotChance);

@@ -246,6 +246,7 @@ describe('handleDropsRoutes - historique', () => {
     expect(res.statusCode).toBe(200);
     const { recentDrops } = JSON.parse(res.body);
     expect(recentDrops[0].item).toEqual({ name: 'Lame du Crépuscule', emoji: 'E' });
+    expect(recentDrops[1].item).toBeNull();
   });
 
   test('les gabarits de l\'annonce arrivent avec leurs trous, pour l\'aperçu', async () => {
@@ -266,7 +267,6 @@ describe('handleDropsRoutes - historique', () => {
     expect(announcement.race).toContain('{winners}');
     expect(announcement.window).toContain('{closes}');
     expect(Object.keys(announcement.resources).sort()).toEqual(['CLAN_POINTS', 'COINS', 'RPG_ITEM', 'RPG_XP', 'XP']);
-    expect(recentDrops[1].item).toBeNull();
   });
 });
 

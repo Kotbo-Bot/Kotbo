@@ -143,7 +143,7 @@ beforeEach(() => {
 
 /** Appels qui marquent un ramassage comme versé (et non ceux qui prennent le bail). */
 function marquagesVerses(): unknown[] {
-  return dropClaimUpdateMany.mock.calls.filter(([args]) => 'paidAt' in (args as { data: object }).data);
+  return dropClaimUpdateMany.mock.calls.filter(([args]) => 'paidAt' in (args as unknown as { data: object }).data);
 }
 
 describe('ramassage d\'un drop dont le module de la ressource est éteint', () => {
