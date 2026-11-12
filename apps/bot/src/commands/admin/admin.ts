@@ -15,18 +15,14 @@ import { logger } from '../../utils/logger.js';
 import { getModuleStatsSummary, getModuleActivationStats, getModuleUsageStats, getModulePerformanceStats , KOTBO_MODULES, type KotboModule } from '../../services/analytics/moduleStatsService.js';
 import { separator, v2Message } from '@arcscord/components';
 import { publicErrorMessage } from '../../utils/publicError.js';
+import { getEffectiveLocale, localized, localizedChoice } from '../../utils/i18n.js';
+import * as m from '../../lib/paraglide/messages.js';
 
 
 
-const data = new SlashCommandBuilder()
-  .setName('admin')
-  .setDescription('Commandes administrateur')
+const data = localized(new SlashCommandBuilder(), 'adm')
   .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-  .addSubcommand(sub =>
-    sub
-      .setName('info')
-      .setDescription('Affiche les informations de configuration actuelles')
-  );
+  .addSubcommand(sub => localized(sub, 'adm_info'));
 
 // Daily Algo en pause : ses sous-commandes ne sont pas declarees, et donc
 // pas deployees.
@@ -34,110 +30,57 @@ const DAILY_ALGO_PAUSED = isModulePaused('daily_algo');
 if (!DAILY_ALGO_PAUSED) {
   data
     .addSubcommand(sub =>
-      sub
-        .setName('add-daily-algo')
-        .setDescription('Ajoute un nouveau problème dans la banque Daily Algo')
+      localized(sub, 'adm_add_algo')
+        .addStringOption(option => localized(option, 'adm_opt_title').setRequired(true))
+        .addStringOption(option => localized(option, 'adm_opt_question').setRequired(true))
+        .addStringOption(option => localized(option, 'adm_opt_solution').setRequired(true))
         .addStringOption(option =>
-          option
-            .setName('titre')
-            .setDescription('Titre du problème')
-            .setRequired(true),
-        )
-        .addStringOption(option =>
-          option
-            .setName('question')
-            .setDescription('Énoncé du Daily Algo')
-            .setRequired(true),
-        )
-        .addStringOption(option =>
-          option
-            .setName('solution')
-            .setDescription('Solution attendue')
-            .setRequired(true),
-        )
-        .addStringOption(option =>
-          option
-            .setName('difficulte')
-            .setDescription('Niveau de difficulté')
+          localized(option, 'adm_opt_difficulty')
             .addChoices(
-              { name: 'Facile', value: 'facile' },
-              { name: 'Moyen', value: 'moyen' },
-              { name: 'Difficile', value: 'difficile' },
+              localizedChoice('adm_choice_easy', 'facile'),
+              localizedChoice('adm_choice_medium', 'moyen'),
+              localizedChoice('adm_choice_hard', 'difficile'),
             )
             .setRequired(true),
         )
     )
     .addSubcommand(sub =>
-      sub
-        .setName('set-algo-channel')
-        .setDescription('Définit le salon pour le Daily Algo')
-        .addChannelOption(option =>
-          option
-            .setName('channel')
-            .setDescription('Le salon des défis quotidiens')
-            .setRequired(true)
-        )
+      localized(sub, 'adm_algo_channel')
+        .addChannelOption(option => localized(option, 'adm_opt_algo_channel').setRequired(true))
     );
 }
 
 data
   .addSubcommand(sub =>
-    sub
-      .setName('set-releases-channel')
-      .setDescription('Définit le salon pour les releases GitHub')
-      .addChannelOption(option =>
-        option
-          .setName('channel')
-          .setDescription('Le salon des releases GitHub')
-          .setRequired(true)
-      )
+    localized(sub, 'adm_releases_channel')
+      .addChannelOption(option => localized(option, 'adm_opt_releases_channel').setRequired(true))
   )
   .addSubcommand(sub =>
-    sub
-      .setName('stats')
-      .setDescription('Affiche les statistiques globales et des modules')
+    localized(sub, 'adm_stats')
       .addStringOption(option =>
-        option
-          .setName('type')
-          .setDescription('Type de statistiques')
+        localized(option, 'adm_opt_type')
           .setRequired(true)
           .addChoices(
-            { name: 'Global', value: 'global' },
-            { name: 'Modules', value: 'modules' },
-            { name: 'Activation', value: 'activation' },
-            { name: 'Usage', value: 'usage' },
-            { name: 'Performance', value: 'performance' },
+            localizedChoice('adm_choice_global', 'global'),
+            localizedChoice('adm_choice_modules', 'modules'),
+            localizedChoice('adm_choice_activation', 'activation'),
+            localizedChoice('adm_choice_usage', 'usage'),
+            localizedChoice('adm_choice_performance', 'performance'),
           )
       )
       .addIntegerOption(option =>
-        option
-          .setName('period')
-          .setDescription('Période en jours (défaut: 30)')
-          .setRequired(false)
-          .setMinValue(1)
-          .setMaxValue(365)
+        localized(option, 'adm_opt_period').setRequired(false).setMinValue(1).setMaxValue(365)
       )
       // Filtre lu par les types `usage` et `performance`. Autocomplétion plutôt
       // que `addChoices` : Discord plafonne les choix à 25 et la liste des
       // modules Kotbo dépasse ce seuil.
       .addStringOption(option =>
-        option
-          .setName('module')
-          .setDescription('Restreindre à un seul module (types Usage et Performance)')
-          .setRequired(false)
-          .setAutocomplete(true)
+        localized(option, 'adm_opt_module').setRequired(false).setAutocomplete(true)
       )
   )
   .addSubcommand(sub =>
-    sub
-      .setName('rescan-stats')
-      .setDescription("Scrapper l'historique des messages pour initialiser les statistiques")
-      .addBooleanOption(option =>
-        option
-          .setName('forcer')
-          .setDescription('Forcer le re-scrap complet (recommencer à zéro)')
-          .setRequired(false)
-      )
+    localized(sub, 'adm_rescan')
+      .addBooleanOption(option => localized(option, 'adm_opt_force').setRequired(false))
   );
 
 function isKotboModule(value: string | null): value is KotboModule {
@@ -163,11 +106,16 @@ async function autocomplete(interaction: AutocompleteInteraction): Promise<void>
 async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   const subcommand = interaction.options.getSubcommand() as string;
   const guildId = interaction.guildId;
+  const locale = await getEffectiveLocale(interaction);
+  const t = (key: string, params: Record<string, unknown> = {}) => (m as any)[key](params, { locale }) as string;
+  const errTitle = t('adm_error');
+  const notSet = `${E.error} ${t('adm_not_configured')}`;
+  const onOff = (on: boolean, detail = '') => (on ? `${E.success} ${t('adm_enabled')}${detail}` : `${E.error} ${t('adm_disabled')}`);
 
   if (!guildId) {
     await interaction.reply(v2Message(
       { flags: MessageFlags.Ephemeral },
-      errorContainer('Erreur', 'Cette commande doit être utilisée dans un serveur.'),
+      errorContainer(errTitle, t('adm_guild_only')),
     ));
     return;
   }
@@ -175,7 +123,7 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
   if (DAILY_ALGO_PAUSED && (subcommand === 'add-daily-algo' || subcommand === 'set-algo-channel')) {
     await interaction.reply(v2Message(
       { flags: MessageFlags.Ephemeral },
-      errorContainer('Daily Algo', 'Le Daily Algo est en pause : il ne peut pas être configuré pour le moment.'),
+      errorContainer('Daily Algo', t('adm_algo_paused')),
     ));
     return;
   }
@@ -200,27 +148,27 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
       { flags: MessageFlags.Ephemeral },
       kotboContainer({
         color: 'info',
-        title: `${E.settings} Configuration actuelle`,
+        title: `${E.settings} ${t('adm_info_title')}`,
         fields: [
-          'Paramètres persistés en base de données',
+          t('adm_info_subtitle'),
           separator({ divider: true, spacing: 'small' }),
           ...(DAILY_ALGO_PAUSED ? [] : [
-            `**Salon Daily Algo**\n${guild?.dailyAlgoChannelId ? `<#${guild.dailyAlgoChannelId}>` : `${E.error} Non configuré`}`,
-            `**Salon validation Daily Algo**\n${guild?.dailyAlgoValidationChannelId ? `<#${guild.dailyAlgoValidationChannelId}>` : `${E.error} Non configuré`}`,
+            `**${t('adm_info_algo_channel')}**\n${guild?.dailyAlgoChannelId ? `<#${guild.dailyAlgoChannelId}>` : notSet}`,
+            `**${t('adm_info_algo_validation')}**\n${guild?.dailyAlgoValidationChannelId ? `<#${guild.dailyAlgoValidationChannelId}>` : notSet}`,
           ]),
-          `**Salon releases GitHub**\n${guild?.githubReleasesChannelId ? `<#${guild.githubReleasesChannelId}>` : `${E.error} Non configuré`}`,
+          `**${t('adm_info_releases_channel')}**\n${guild?.githubReleasesChannelId ? `<#${guild.githubReleasesChannelId}>` : notSet}`,
           ...(DAILY_ALGO_PAUSED ? [] : [
-            `**Daily Algo**\n${guild?.dailyAlgoEnabled ? `${E.success} Activé (${guild.dailyAlgoTime} UTC)` : `${E.error} Désactivé`}`,
+            `**Daily Algo**\n${onOff(!!guild?.dailyAlgoEnabled, ` (${guild?.dailyAlgoTime} UTC)`)}`,
           ]),
-          `**Releases GitHub**\n${guild?.githubReleasesEnabled ? `${E.success} Activé (${guild.githubRepositories.length} repos)` : `${E.error} Désactivé`}`,
+          `**${t('adm_info_releases')}**\n${onOff(!!guild?.githubReleasesEnabled, ` (${guild?.githubRepositories.length} repos)`)}`,
         ],
       }),
     ));
   } else if (subcommand === 'add-daily-algo') {
-    const titre = interaction.options.getString('titre', true).trim();
+    const titre = interaction.options.getString('title', true).trim();
     const question = interaction.options.getString('question', true).trim();
     const solution = interaction.options.getString('solution', true).trim();
-    const difficulte = interaction.options.getString('difficulte', true).trim();
+    const difficulte = interaction.options.getString('difficulty', true).trim();
 
     const existing = await prisma.dailyAlgoProblem.findFirst({
       where: {
@@ -232,7 +180,7 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
     if (existing) {
       await interaction.reply(v2Message(
         { flags: MessageFlags.Ephemeral },
-        infoContainer('Daily Algo déjà présent', `Le problème **${titre}** existe déjà dans la banque française.`),
+        infoContainer(t('adm_algo_exists_title'), t('adm_algo_exists_desc', { title: titre })),
       ));
       return;
     }
@@ -253,7 +201,7 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
 
     await interaction.reply(v2Message(
       { flags: MessageFlags.Ephemeral },
-      successContainer('Daily Algo ajouté', `Le problème **${titre}** a été ajouté à la banque et pourra être sélectionné une seule fois.`),
+      successContainer(t('adm_algo_added_title'), t('adm_algo_added_desc', { title: titre })),
     ));
   } else if (subcommand === 'set-algo-channel') {
     const channel = interaction.options.getChannel('channel', true);
@@ -261,14 +209,14 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
     if (channel.type !== 0 && channel.type !== 5) { // 5 = GUILD_NEWS (announce channel)
       await interaction.reply(v2Message(
         { flags: MessageFlags.Ephemeral },
-        errorContainer('Erreur', 'Le salon doit être un salon texte'),
+        errorContainer(errTitle, t('adm_not_text')),
       ));
       return;
     }
 
     await interaction.reply(v2Message(
       { flags: MessageFlags.Ephemeral },
-      successContainer('Salon Daily Algo configuré', `Le Daily Algo sera publié dans ${channel.toString()}`),
+      successContainer(t('adm_algo_channel_set_title'), t('adm_algo_channel_set_desc', { channel: channel.toString() })),
     ));
 
     await prisma.guild.update({
@@ -281,14 +229,14 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
     if (channel.type !== 0 && channel.type !== 5) { // 5 = GUILD_NEWS (announce channel)
       await interaction.reply(v2Message(
         { flags: MessageFlags.Ephemeral },
-        errorContainer('Erreur', 'Le salon doit être un salon texte'),
+        errorContainer(errTitle, t('adm_not_text')),
       ));
       return;
     }
 
     await interaction.reply(v2Message(
       { flags: MessageFlags.Ephemeral },
-      successContainer('Salon releases GitHub configuré', `Les releases GitHub seront publiées dans ${channel.toString()}`),
+      successContainer(t('adm_releases_set_title'), t('adm_releases_set_desc', { channel: channel.toString() })),
     ));
 
     await prisma.guild.update({
@@ -307,7 +255,7 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
     if (requestedModule && !moduleName) {
       await interaction.reply(v2Message(
         { flags: MessageFlags.Ephemeral },
-        errorContainer('Module inconnu', `\`${requestedModule}\` ne fait pas partie des modules Kotbo.`),
+        errorContainer(t('adm_unknown_module_title'), t('adm_unknown_module_desc', { module: requestedModule })),
       ));
       return;
     }
@@ -339,32 +287,32 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
         await interaction.editReply(v2Message(
           kotboContainer({
             color: 'info',
-            title: `${E.stats} Statistiques Globales Kotbo`,
+            title: `${E.stats} ${t('adm_global_title')}`,
             fields: [
-              `Période: ${period} jours`,
+              t('adm_period', { days: period }),
               separator({ divider: true, spacing: 'small' }),
-              `**Serveurs**\n${guildCount}`,
-              `**Utilisateurs**\n${userCount}`,
-              `**Sanctions actives**\n${activeSanctions}`,
-              `**Submissions Daily Algo**\n${dailyAlgoSubmissions}`,
+              `**${t('adm_global_servers')}**\n${guildCount}`,
+              `**${t('adm_global_users')}**\n${userCount}`,
+              `**${t('adm_global_sanctions')}**\n${activeSanctions}`,
+              `**${t('adm_global_submissions')}**\n${dailyAlgoSubmissions}`,
               `**Uptime**\n${uptimeHours}h ${uptimeMinutes}m ${uptimeSeconds}s`,
-              `**Mémoire**\n${memoryMB} MB`,
+              `**${t('adm_global_memory')}**\n${memoryMB} MB`,
             ],
           }),
         ));
       } else if (type === 'modules') {
         const summary = await getModuleStatsSummary({ guildId, periodDays: period });
 
-        const lines = summary.topModules.slice(0, 10).map((m, i) =>
-          `**${i + 1}. ${m.moduleName}**\nUtilisation: ${m.totalUsage} | Temps moyen: ${Math.round(m.avgExecutionTimeMs)}ms | Erreurs: ${Math.round(m.errorRate)}%`
+        const lines = summary.topModules.slice(0, 10).map((mod, i) =>
+          `**${i + 1}. ${mod.moduleName}**\n${t('adm_modules_line', { usage: mod.totalUsage, ms: Math.round(mod.avgExecutionTimeMs), errors: Math.round(mod.errorRate) })}`
         );
 
         await interaction.editReply(v2Message(
           kotboContainer({
             color: 'info',
-            title: `${E.stats} Statistiques des Modules`,
+            title: `${E.stats} ${t('adm_modules_title')}`,
             fields: [
-              `Période: ${period} jours | Top 10 modules`,
+              t('adm_period_top', { days: period }),
               separator({ divider: true, spacing: 'small' }),
               ...lines,
             ],
@@ -376,15 +324,15 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
         const disabledCount = activation.length - enabledCount;
 
         const lines = activation.slice(0, 15).map(a =>
-          `**${a.moduleName}**\n${a.enabled ? `${E.success} Activé` : `${E.error} Désactivé`}`
+          `**${a.moduleName}**\n${onOff(a.enabled)}`
         );
 
         await interaction.editReply(v2Message(
           kotboContainer({
             color: 'info',
-            title: `${E.stats} Activation des Modules`,
+            title: `${E.stats} ${t('adm_activation_title')}`,
             fields: [
-              `${E.success} Activés: ${enabledCount} | ${E.error} Désactivés: ${disabledCount}`,
+              `${E.success} ${t('adm_activation_summary', { enabled: enabledCount })} | ${E.error} ${t('adm_activation_summary_off', { disabled: disabledCount })}`,
               separator({ divider: true, spacing: 'small' }),
               ...lines,
             ],
@@ -408,16 +356,16 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
           .sort((a, b) => b.totalUsage - a.totalUsage)
           .slice(0, 15);
 
-        const lines = sorted.map((m, i) =>
-          `**${i + 1}. ${m.moduleName}**\nTotal: ${m.totalUsage} | Cmd: ${m.commandExecutions} | API: ${m.apiCalls} | Events: ${m.eventTriggers}`
+        const lines = sorted.map((mod, i) =>
+          `**${i + 1}. ${mod.moduleName}**\nTotal: ${mod.totalUsage} | Cmd: ${mod.commandExecutions} | API: ${mod.apiCalls} | Events: ${mod.eventTriggers}`
         );
 
         await interaction.editReply(v2Message(
           kotboContainer({
             color: 'info',
-            title: `${E.stats} Utilisation des Modules`,
+            title: `${E.stats} ${t('adm_usage_title')}`,
             fields: [
-              `Période: ${period} jours${moduleName ? ` | Module: ${moduleName}` : ''}`,
+              `${t('adm_period', { days: period })}${moduleName ? t('adm_period_module', { module: moduleName }) : ''}`,
               separator({ divider: true, spacing: 'small' }),
               ...lines,
             ],
@@ -441,16 +389,16 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
           .sort((a, b) => b.totalExecutions - a.totalExecutions)
           .slice(0, 15);
 
-        const lines = sorted.map((m, i) =>
-          `**${i + 1}. ${m.moduleName}**\nExécutions: ${m.totalExecutions} | Temps moyen: ${Math.round(m.avgExecutionTimeMs)}ms | Erreurs: ${Math.round(m.errorRate)}%`
+        const lines = sorted.map((mod, i) =>
+          `**${i + 1}. ${mod.moduleName}**\n${t('adm_performance_line', { runs: mod.totalExecutions, ms: Math.round(mod.avgExecutionTimeMs), errors: Math.round(mod.errorRate) })}`
         );
 
         await interaction.editReply(v2Message(
           kotboContainer({
             color: 'info',
-            title: `${E.stats} Performance des Modules`,
+            title: `${E.stats} ${t('adm_performance_title')}`,
             fields: [
-              `Période: ${period} jours${moduleName ? ` | Module: ${moduleName}` : ''}`,
+              `${t('adm_period', { days: period })}${moduleName ? t('adm_period_module', { module: moduleName }) : ''}`,
               separator({ divider: true, spacing: 'small' }),
               ...lines,
             ],
@@ -460,11 +408,11 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
     } catch (err) {
       logger.error('AdminCommand', 'Error fetching stats:', err);
       await interaction.editReply(v2Message(
-        errorContainer('Erreur', 'Impossible de récupérer les statistiques.'),
+        errorContainer(errTitle, t('adm_stats_failed')),
       ));
     }
   } else if (subcommand === 'rescan-stats') {
-    const force = interaction.options.getBoolean('forcer') ?? false;
+    const force = interaction.options.getBoolean('force') ?? false;
 
     await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
 
@@ -474,14 +422,14 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
 
       await interaction.editReply(v2Message(
         successContainer(
-          'Scan des Statistiques Lancé',
-          `Le scraping historique des messages a été démarré avec succès en arrière-plan.\n\n${E.arrow} **Mode forcé :** ${force ? 'Oui (recommencer à zéro)' : 'Non'}\n${E.arrow} Vous pouvez suivre l'avancement dans les logs ou via le statut en base de données.`,
+          t('adm_rescan_title'),
+          t('adm_rescan_desc', { arrow: E.arrow, forced: force ? t('adm_rescan_forced_yes') : t('adm_rescan_forced_no') }),
         ),
       ));
     } catch (err) {
       console.error('Error starting historical scraping from admin:', err);
       await interaction.editReply(v2Message(
-        errorContainer('Erreur', `Impossible de démarrer le scraping : ${publicErrorMessage(err)}`),
+        errorContainer(errTitle, t('adm_rescan_failed', { error: publicErrorMessage(err) })),
       ));
     }
   }

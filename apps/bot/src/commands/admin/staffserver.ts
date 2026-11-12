@@ -16,7 +16,7 @@ import {
   fullSyncStaffRoles,
   autoSetupRoleMappings,
 } from '../../services/staff/staffServerService.js';
-import { getEffectiveLocale } from '../../utils/i18n.js';
+import { getEffectiveLocale, localized, localizedChoice } from '../../utils/i18n.js';
 import * as m from '../../lib/paraglide/messages.js';
 
 function syncModeLabel(mode: string, locale: 'fr' | 'en'): string {
@@ -32,87 +32,44 @@ function syncModeLabel(mode: string, locale: 'fr' | 'en'): string {
   }
 }
 
-const data = new SlashCommandBuilder()
-  .setName('staffserver')
-  .setDescription('Gérer les serveurs staff liés')
+const data = localized(new SlashCommandBuilder(), 'ssv')
   .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
   .addSubcommand((sub) =>
-    sub
-      .setName('setup')
-      .setDescription('Lier un serveur staff à ce serveur principal')
+    localized(sub, 'ssv_setup')
+      .addStringOption((opt) => localized(opt, 'ssv_opt_staff_server').setRequired(true))
       .addStringOption((opt) =>
-        opt.setName('serveur-staff').setDescription('ID du serveur staff').setRequired(true),
-      )
-      .addStringOption((opt) =>
-        opt
-          .setName('mode')
-          .setDescription('Mode de synchronisation des rôles')
+        localized(opt, 'ssv_opt_mode')
           .setRequired(true)
           .addChoices(
-            { name: 'Principal → Staff (hiérarchie ici, rôle simple là-bas)', value: 'MAIN_TO_STAFF' },
-            { name: 'Staff → Principal (hiérarchie là-bas, rôle simple ici)', value: 'STAFF_TO_MAIN' },
-            { name: 'Bidirectionnel (hiérarchie synchronisée des 2 côtés)', value: 'BIDIRECTIONAL' },
+            localizedChoice('ssv_choice_main_to_staff', 'MAIN_TO_STAFF'),
+            localizedChoice('ssv_choice_staff_to_main', 'STAFF_TO_MAIN'),
+            localizedChoice('ssv_choice_bidirectional', 'BIDIRECTIONAL'),
           ),
       )
-      .addStringOption((opt) =>
-        opt.setName('hierarchie').setDescription('ID de la hiérarchie staff (optionnel, toutes par défaut)'),
-      )
-      .addRoleOption((opt) =>
-        opt.setName('role-staff-simple').setDescription('Rôle "Staff" simple sur le serveur sans hiérarchie'),
-      )
-      .addChannelOption((opt) =>
-        opt
-          .setName('log-principal')
-          .setDescription('Salon de logs sur ce serveur')
-          .addChannelTypes(ChannelType.GuildText),
-      )
-      .addStringOption((opt) =>
-        opt.setName('log-staff').setDescription('ID du salon de logs sur le serveur staff'),
-      ),
+      .addStringOption((opt) => localized(opt, 'ssv_opt_hierarchy'))
+      .addRoleOption((opt) => localized(opt, 'ssv_opt_simple_role'))
+      .addChannelOption((opt) => localized(opt, 'ssv_opt_main_log').addChannelTypes(ChannelType.GuildText))
+      .addStringOption((opt) => localized(opt, 'ssv_opt_staff_log')),
   )
   .addSubcommand((sub) =>
-    sub
-      .setName('mapping')
-      .setDescription('Ajouter un mapping de rôle entre les 2 serveurs')
-      .addStringOption((opt) =>
-        opt.setName('link-id').setDescription('ID du lien staff-server').setRequired(true),
-      )
-      .addRoleOption((opt) =>
-        opt.setName('role-principal').setDescription('Rôle Discord sur ce serveur'),
-      )
-      .addStringOption((opt) =>
-        opt.setName('role-staff').setDescription('ID du rôle Discord sur le serveur staff'),
-      )
-      .addStringOption((opt) =>
-        opt.setName('staff-role-id').setDescription('ID du StaffRole en base (optionnel)'),
-      ),
+    localized(sub, 'ssv_mapping')
+      .addStringOption((opt) => localized(opt, 'ssv_opt_link_id').setRequired(true))
+      .addRoleOption((opt) => localized(opt, 'ssv_opt_main_role'))
+      .addStringOption((opt) => localized(opt, 'ssv_opt_staff_role'))
+      .addStringOption((opt) => localized(opt, 'ssv_opt_staff_role_db')),
   )
   .addSubcommand((sub) =>
-    sub
-      .setName('unmap')
-      .setDescription('Supprimer un mapping de rôle')
-      .addStringOption((opt) =>
-        opt.setName('mapping-id').setDescription('ID du mapping à supprimer').setRequired(true),
-      ),
+    localized(sub, 'ssv_unmap')
+      .addStringOption((opt) => localized(opt, 'ssv_opt_mapping_id').setRequired(true)),
+  )
+  .addSubcommand((sub) => localized(sub, 'ssv_list'))
+  .addSubcommand((sub) =>
+    localized(sub, 'ssv_sync')
+      .addStringOption((opt) => localized(opt, 'ssv_opt_sync_link').setRequired(true)),
   )
   .addSubcommand((sub) =>
-    sub.setName('list').setDescription('Lister les liens serveur staff'),
-  )
-  .addSubcommand((sub) =>
-    sub
-      .setName('sync')
-      .setDescription('Forcer une synchronisation complète des rôles')
-      .addStringOption((opt) =>
-        opt.setName('link-id').setDescription('ID du lien à synchroniser').setRequired(true),
-      ),
-  )
-  .addSubcommand((sub) =>
-    sub
-      .setName('remove')
-      .setDescription('Supprimer un lien serveur staff')
-      .addStringOption((opt) =>
-        opt.setName('link-id').setDescription('ID du lien à supprimer').setRequired(true),
-      ),
+    localized(sub, 'ssv_remove')
+      .addStringOption((opt) => localized(opt, 'ssv_opt_remove_link').setRequired(true)),
   );
 
 async function execute(interaction: ChatInputCommandInteraction) {
@@ -137,12 +94,12 @@ async function execute(interaction: ChatInputCommandInteraction) {
 
 async function handleSetup(interaction: ChatInputCommandInteraction) {
   const locale = await getEffectiveLocale(interaction);
-  const staffGuildId = interaction.options.getString('serveur-staff', true);
+  const staffGuildId = interaction.options.getString('staff-server', true);
   const syncMode = interaction.options.getString('mode', true) as 'MAIN_TO_STAFF' | 'STAFF_TO_MAIN' | 'BIDIRECTIONAL';
-  const hierarchyId = interaction.options.getString('hierarchie') ?? undefined;
-  const simpleStaffRole = interaction.options.getRole('role-staff-simple');
-  const logChannel = interaction.options.getChannel('log-principal');
-  const staffLogChannelId = interaction.options.getString('log-staff') ?? undefined;
+  const hierarchyId = interaction.options.getString('hierarchy') ?? undefined;
+  const simpleStaffRole = interaction.options.getRole('simple-staff-role');
+  const logChannel = interaction.options.getChannel('main-log');
+  const staffLogChannelId = interaction.options.getString('staff-log') ?? undefined;
 
   const staffGuild = interaction.client.guilds.cache.get(staffGuildId);
   if (!staffGuild) {
@@ -200,8 +157,8 @@ async function handleSetup(interaction: ChatInputCommandInteraction) {
 async function handleMapping(interaction: ChatInputCommandInteraction) {
   const locale = await getEffectiveLocale(interaction);
   const linkId = interaction.options.getString('link-id', true);
-  const mainRole = interaction.options.getRole('role-principal');
-  const staffRoleId = interaction.options.getString('role-staff');
+  const mainRole = interaction.options.getRole('main-role');
+  const staffRoleId = interaction.options.getString('staff-role');
   const staffRoleDbId = interaction.options.getString('staff-role-id');
 
   if (!mainRole && !staffRoleId) {

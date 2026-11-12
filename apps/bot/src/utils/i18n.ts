@@ -102,3 +102,30 @@ export function getCommandMetadata(keyPrefix: string) {
     },
   };
 }
+
+interface LocalizableBuilder {
+  setName(name: string): this;
+  setNameLocalizations(map: Record<string, string>): this;
+  setDescription(description: string): this;
+  setDescriptionLocalizations(map: Record<string, string>): this;
+}
+
+/**
+ * Nom et description fr/en d'une commande, sous-commande ou option, lus dans
+ * les clés `${keyPrefix}_name` et `${keyPrefix}_description`. Le nom anglais
+ * est le nom de base : c'est lui que l'interaction renvoie au code.
+ */
+export function localized<T extends LocalizableBuilder>(builder: T, keyPrefix: string): T {
+  const meta = getCommandMetadata(keyPrefix);
+  return builder
+    .setName(meta.name)
+    .setNameLocalizations(meta.nameLocalizations)
+    .setDescription(meta.description)
+    .setDescriptionLocalizations(meta.descriptionLocalizations);
+}
+
+/** Choix d'option fr/en lu dans la clé `key`. */
+export function localizedChoice<V extends string | number>(key: string, value: V) {
+  const msg = (m as any)[key];
+  return { name: msg({}, { locale: 'en' }) as string, name_localizations: { fr: msg({}, { locale: 'fr' }) as string }, value };
+}

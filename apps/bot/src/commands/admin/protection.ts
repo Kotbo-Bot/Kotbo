@@ -10,6 +10,8 @@ import {
 } from 'discord.js';
 import type { SlashCommandDefinition } from '../../commands.js';
 import { COLORS, successEmbed, errorEmbed } from '../../utils/embeds.js';
+import { getEffectiveLocale, localized, localizedChoice, type BotLocale } from '../../utils/i18n.js';
+import * as m from '../../lib/paraglide/messages.js';
 import {
   getRaidProtectionConfig,
   upsertRaidProtectionConfig,
@@ -32,9 +34,9 @@ import { getReportStats } from '../../services/moderation/reportService.js';
 import { provisionJail } from '../../services/moderation/jailService.js';
 
 const LOCKDOWN_SCOPE_CHOICES = [
-  { name: 'Le salon', value: 'salon' },
-  { name: 'Sa catégorie entière', value: 'categorie' },
-  { name: 'Tout le serveur', value: 'serveur' },
+  localizedChoice('prot_choice_scope_channel', 'channel'),
+  localizedChoice('prot_choice_scope_category', 'category'),
+  localizedChoice('prot_choice_scope_server', 'server'),
 ];
 
 const LOCKDOWN_CHANNEL_TYPES = [
@@ -47,197 +49,149 @@ const LOCKDOWN_CHANNEL_TYPES = [
   ChannelType.GuildCategory,
 ] as const;
 
-const data = new SlashCommandBuilder()
-  .setName('protection')
-  .setDescription('🛡️ Protection anti-raid : captcha, raid mode, locks, reports, anti-scam')
+const data = localized(new SlashCommandBuilder(), 'prot')
   .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
   .addSubcommandGroup((group) =>
-    group
-      .setName('captcha')
-      .setDescription('Vérification des nouveaux membres par captcha')
+    localized(group, 'prot_captcha')
       .addSubcommand((sub) =>
-        sub
-          .setName('activer')
-          .setDescription('Active le captcha à l\'arrivée')
+        localized(sub, 'prot_captcha_enable')
           .addChannelOption((opt) =>
-            opt.setName('salon').setDescription('Salon de vérification').addChannelTypes(ChannelType.GuildText).setRequired(true))
+            localized(opt, 'prot_opt_captcha_channel').addChannelTypes(ChannelType.GuildText).setRequired(true))
           .addRoleOption((opt) =>
-            opt.setName('role').setDescription('Rôle @Non-vérifié appliqué à l\'arrivée').setRequired(true))
+            localized(opt, 'prot_opt_captcha_role').setRequired(true))
           .addIntegerOption((opt) =>
-            opt.setName('delai').setDescription('Minutes avant expiration (défaut 10)').setMinValue(2).setMaxValue(60))
+            localized(opt, 'prot_opt_captcha_timeout').setMinValue(2).setMaxValue(60))
           .addIntegerOption((opt) =>
-            opt.setName('tentatives').setDescription('Tentatives max (défaut 3)').setMinValue(1).setMaxValue(10))
+            localized(opt, 'prot_opt_captcha_attempts').setMinValue(1).setMaxValue(10))
           .addStringOption((opt) =>
-            opt.setName('sanction').setDescription('Action en cas d\'échec').addChoices(
-              { name: 'Expulsion (kick)', value: 'KICK' },
-              { name: 'Bannissement', value: 'BAN' },
+            localized(opt, 'prot_opt_captcha_penalty').addChoices(
+              localizedChoice('prot_choice_kick', 'KICK'),
+              localizedChoice('prot_choice_ban', 'BAN'),
             ))
           .addChannelOption((opt) =>
-            opt.setName('salon-logs').setDescription('Salon de logs captcha').addChannelTypes(ChannelType.GuildText)))
-      .addSubcommand((sub) => sub.setName('desactiver').setDescription('Désactive le captcha')))
+            localized(opt, 'prot_opt_captcha_logs').addChannelTypes(ChannelType.GuildText)))
+      .addSubcommand((sub) => localized(sub, 'prot_captcha_disable')))
   .addSubcommandGroup((group) =>
-    group
-      .setName('antiraid')
-      .setDescription('Détection automatique des vagues d\'arrivées')
+    localized(group, 'prot_antiraid')
       .addSubcommand((sub) =>
-        sub
-          .setName('activer')
-          .setDescription('Active la détection de raid')
+        localized(sub, 'prot_antiraid_enable')
           .addIntegerOption((opt) =>
-            opt.setName('seuil').setDescription('Nombre d\'arrivées déclenchant l\'alerte (défaut 10)').setMinValue(3).setMaxValue(100))
+            localized(opt, 'prot_opt_threshold').setMinValue(3).setMaxValue(100))
           .addIntegerOption((opt) =>
-            opt.setName('fenetre').setDescription('Fenêtre en secondes (défaut 60)').setMinValue(10).setMaxValue(600))
+            localized(opt, 'prot_opt_window').setMinValue(10).setMaxValue(600))
           .addStringOption((opt) =>
-            opt.setName('action').setDescription('Action automatique en cas de raid').addChoices(
-              { name: 'Bloquer les arrivées (join lock)', value: 'LOCK' },
-              { name: 'Captcha forcé', value: 'CAPTCHA' },
-              { name: 'Expulsion automatique', value: 'KICK' },
+            localized(opt, 'prot_opt_raid_action').addChoices(
+              localizedChoice('prot_choice_lock', 'LOCK'),
+              localizedChoice('prot_choice_captcha', 'CAPTCHA'),
+              localizedChoice('prot_choice_autokick', 'KICK'),
             ))
           .addChannelOption((opt) =>
-            opt.setName('salon-alertes').setDescription('Salon des alertes de raid').addChannelTypes(ChannelType.GuildText))
+            localized(opt, 'prot_opt_raid_alerts').addChannelTypes(ChannelType.GuildText))
           .addIntegerOption((opt) =>
-            opt.setName('duree').setDescription('Minutes avant désactivation auto du raid mode (défaut 30)').setMinValue(5).setMaxValue(1440)))
-      .addSubcommand((sub) => sub.setName('desactiver').setDescription('Désactive la détection de raid')))
+            localized(opt, 'prot_opt_raid_duration').setMinValue(5).setMaxValue(1440)))
+      .addSubcommand((sub) => localized(sub, 'prot_antiraid_disable')))
   .addSubcommandGroup((group) =>
-    group
-      .setName('raidmode')
-      .setDescription('Activation manuelle du mode raid')
-      .addSubcommand((sub) => sub.setName('on').setDescription('Active immédiatement le mode raid'))
-      .addSubcommand((sub) => sub.setName('off').setDescription('Désactive le mode raid')))
+    localized(group, 'prot_raidmode')
+      .addSubcommand((sub) => localized(sub, 'prot_raidmode_on'))
+      .addSubcommand((sub) => localized(sub, 'prot_raidmode_off')))
   .addSubcommandGroup((group) =>
-    group
-      .setName('joinlock')
-      .setDescription('Blocage des nouvelles arrivées sur le serveur')
+    localized(group, 'prot_joinlock')
       .addSubcommand((sub) =>
-        sub
-          .setName('on')
-          .setDescription('Bloque les nouvelles arrivées')
+        localized(sub, 'prot_joinlock_on')
           .addIntegerOption((opt) =>
-            opt.setName('duree').setDescription('Durée en heures (vide = permanent)').setMinValue(1).setMaxValue(720)))
-      .addSubcommand((sub) => sub.setName('off').setDescription('Réautorise les arrivées')))
+            localized(opt, 'prot_opt_hours').setMinValue(1).setMaxValue(720)))
+      .addSubcommand((sub) => localized(sub, 'prot_joinlock_off')))
   .addSubcommandGroup((group) =>
-    group
-      .setName('dmlock')
-      .setDescription('Blocage des messages privés entre membres (dépasse la limite native de 24h)')
+    localized(group, 'prot_dmlock')
       .addSubcommand((sub) =>
-        sub
-          .setName('on')
-          .setDescription('Bloque les MP issus du serveur')
+        localized(sub, 'prot_dmlock_on')
           .addIntegerOption((opt) =>
-            opt.setName('duree').setDescription('Durée en heures (vide = permanent)').setMinValue(1).setMaxValue(720)))
-      .addSubcommand((sub) => sub.setName('off').setDescription('Réautorise les MP')))
+            localized(opt, 'prot_opt_hours').setMinValue(1).setMaxValue(720)))
+      .addSubcommand((sub) => localized(sub, 'prot_dmlock_off')))
   .addSubcommandGroup((group) =>
-    group
-      .setName('reports')
-      .setDescription('Signalements communautaires vers un salon staff')
+    localized(group, 'prot_reports')
       .addSubcommand((sub) =>
-        sub
-          .setName('activer')
-          .setDescription('Active les signalements')
+        localized(sub, 'prot_reports_enable')
           .addChannelOption((opt) =>
-            opt.setName('salon').setDescription('Salon staff recevant les signalements').addChannelTypes(ChannelType.GuildText).setRequired(true))
+            localized(opt, 'prot_opt_reports_channel').addChannelTypes(ChannelType.GuildText).setRequired(true))
           .addIntegerOption((opt) =>
-            opt.setName('cooldown').setDescription('Secondes entre deux signalements par membre (défaut 60)').setMinValue(0).setMaxValue(3600))
+            localized(opt, 'prot_opt_cooldown').setMinValue(0).setMaxValue(3600))
           .addBooleanOption((opt) =>
-            opt.setName('anonyme').setDescription('Masquer l\'auteur du signalement au staff')))
-      .addSubcommand((sub) => sub.setName('desactiver').setDescription('Désactive les signalements')))
+            localized(opt, 'prot_opt_anonymous')))
+      .addSubcommand((sub) => localized(sub, 'prot_reports_disable')))
   .addSubcommandGroup((group) =>
-    group
-      .setName('tagrole')
-      .setDescription('Rôle automatique pour les membres arborant le tag du serveur')
+    localized(group, 'prot_tagrole')
       .addSubcommand((sub) =>
-        sub
-          .setName('activer')
-          .setDescription('Active le rôle tag')
-          .addRoleOption((opt) => opt.setName('role').setDescription('Rôle attribué').setRequired(true)))
-      .addSubcommand((sub) => sub.setName('desactiver').setDescription('Désactive le rôle tag'))
-      .addSubcommand((sub) => sub.setName('rescan').setDescription('Resynchronise le rôle pour tous les membres')))
+        localized(sub, 'prot_tagrole_enable')
+          .addRoleOption((opt) => localized(opt, 'prot_opt_tag_role').setRequired(true)))
+      .addSubcommand((sub) => localized(sub, 'prot_tagrole_disable'))
+      .addSubcommand((sub) => localized(sub, 'prot_tagrole_rescan')))
   .addSubcommandGroup((group) =>
-    group
-      .setName('scam')
-      .setDescription('Filtre des liens d\'arnaques (faux Nitro, phishing)')
+    localized(group, 'prot_scam')
       .addSubcommand((sub) =>
-        sub
-          .setName('activer')
-          .setDescription('Active le filtre anti-scam')
+        localized(sub, 'prot_scam_enable')
           .addStringOption((opt) =>
-            opt.setName('action').setDescription('Action appliquée').addChoices(
-              { name: 'Supprimer uniquement', value: 'DELETE' },
-              { name: 'Supprimer + avertir', value: 'DELETE_AND_WARN' },
-              { name: 'Supprimer + timeout', value: 'DELETE_AND_TIMEOUT' },
-              { name: 'Supprimer + bannir', value: 'DELETE_AND_BAN' },
+            localized(opt, 'prot_opt_scam_action').addChoices(
+              localizedChoice('prot_choice_delete', 'DELETE'),
+              localizedChoice('prot_choice_delete_warn', 'DELETE_AND_WARN'),
+              localizedChoice('prot_choice_delete_timeout', 'DELETE_AND_TIMEOUT'),
+              localizedChoice('prot_choice_delete_ban', 'DELETE_AND_BAN'),
             ))
           .addChannelOption((opt) =>
-            opt.setName('salon-alertes').setDescription('Salon des alertes').addChannelTypes(ChannelType.GuildText))
+            localized(opt, 'prot_opt_alerts').addChannelTypes(ChannelType.GuildText))
           .addBooleanOption((opt) =>
-            opt.setName('images').setDescription('Kotbo Vision : bloquer les images d\'arnaque connues (actif par défaut)')))
-      .addSubcommand((sub) => sub.setName('desactiver').setDescription('Désactive le filtre anti-scam')))
+            localized(opt, 'prot_opt_images')))
+      .addSubcommand((sub) => localized(sub, 'prot_scam_disable')))
   .addSubcommandGroup((group) =>
-    group
-      .setName('invites')
-      .setDescription('Contrôle des invitations : urgence, règle unitaire, validation, anti-spam')
+    localized(group, 'prot_invites')
       .addSubcommand((sub) =>
-        sub
-          .setName('activer')
-          .setDescription('Active le contrôle des invitations')
+        localized(sub, 'prot_invites_enable')
           .addBooleanOption((opt) =>
-            opt.setName('unitaire').setDescription('Supprimer toute invitation non unitaire (≠ 1 usage, pas de ∞)'))
+            localized(opt, 'prot_opt_single_use'))
           .addBooleanOption((opt) =>
-            opt.setName('validation').setDescription('Toute invitation doit être validée par le staff'))
+            localized(opt, 'prot_opt_validation'))
           .addIntegerOption((opt) =>
-            opt.setName('seuil-spam').setDescription('Nombre de créations déclenchant une alerte (défaut 5)').setMinValue(2).setMaxValue(50))
+            localized(opt, 'prot_opt_spam_threshold').setMinValue(2).setMaxValue(50))
           .addIntegerOption((opt) =>
-            opt.setName('fenetre-spam').setDescription('Fenêtre anti-spam en secondes (défaut 60)').setMinValue(10).setMaxValue(3600))
+            localized(opt, 'prot_opt_spam_window').setMinValue(10).setMaxValue(3600))
           .addChannelOption((opt) =>
-            opt.setName('salon-alertes').setDescription('Salon des alertes et validations').addChannelTypes(ChannelType.GuildText))
+            localized(opt, 'prot_opt_invite_alerts').addChannelTypes(ChannelType.GuildText))
           .addRoleOption((opt) =>
-            opt.setName('role-exempt').setDescription('Rôle exempté des règles d\'invitation')))
-      .addSubcommand((sub) => sub.setName('desactiver').setDescription('Désactive le contrôle des invitations'))
+            localized(opt, 'prot_opt_exempt_role')))
+      .addSubcommand((sub) => localized(sub, 'prot_invites_disable'))
       .addSubcommand((sub) =>
-        sub
-          .setName('urgence')
-          .setDescription('Mode urgence : supprime TOUTES les invitations (existantes et futures)')
+        localized(sub, 'prot_invites_emergency')
           .addBooleanOption((opt) =>
-            opt.setName('actif').setDescription('true = activer, false = désactiver').setRequired(true))))
+            localized(opt, 'prot_opt_active').setRequired(true))))
   .addSubcommandGroup((group) =>
-    group
-      .setName('lockdown')
-      .setDescription('Verrouille des salons, puis rend leurs permissions d\'origine')
+    localized(group, 'prot_lockdown')
       .addSubcommand((sub) =>
-        sub
-          .setName('on')
-          .setDescription('Plus personne ne peut écrire ni parler dans les salons visés')
+        localized(sub, 'prot_lockdown_on')
           .addStringOption((opt) =>
-            opt.setName('portee').setDescription('Ce qui est verrouillé (défaut : le salon)').addChoices(...LOCKDOWN_SCOPE_CHOICES))
+            localized(opt, 'prot_opt_scope_lock').addChoices(...LOCKDOWN_SCOPE_CHOICES))
           .addChannelOption((opt) =>
-            opt.setName('salon').setDescription('Salon ou catégorie visé (défaut : le salon actuel)').addChannelTypes(...LOCKDOWN_CHANNEL_TYPES))
+            localized(opt, 'prot_opt_lock_channel').addChannelTypes(...LOCKDOWN_CHANNEL_TYPES))
           .addStringOption((opt) =>
-            opt.setName('raison').setDescription('Affichée dans le salon et le journal d\'audit').setMaxLength(300))
+            localized(opt, 'prot_opt_reason').setMaxLength(300))
           .addBooleanOption((opt) =>
-            opt.setName('silencieux').setDescription('Ne publie aucun message dans le salon verrouillé')))
+            localized(opt, 'prot_opt_silent_lock')))
       .addSubcommand((sub) =>
-        sub
-          .setName('off')
-          .setDescription('Rouvre les salons verrouillés avec leurs permissions d\'origine')
+        localized(sub, 'prot_lockdown_off')
           .addStringOption((opt) =>
-            opt.setName('portee').setDescription('Ce qui est rouvert (défaut : le salon)').addChoices(...LOCKDOWN_SCOPE_CHOICES))
+            localized(opt, 'prot_opt_scope_unlock').addChoices(...LOCKDOWN_SCOPE_CHOICES))
           .addChannelOption((opt) =>
-            opt.setName('salon').setDescription('Salon ou catégorie visé (défaut : le salon actuel)').addChannelTypes(...LOCKDOWN_CHANNEL_TYPES))
+            localized(opt, 'prot_opt_lock_channel').addChannelTypes(...LOCKDOWN_CHANNEL_TYPES))
           .addBooleanOption((opt) =>
-            opt.setName('silencieux').setDescription('Ne publie aucun message dans le salon rouvert'))))
+            localized(opt, 'prot_opt_silent_unlock'))))
   .addSubcommandGroup((group) =>
-    group
-      .setName('jail')
-      .setDescription('Quarantaine par rôle : le membre reste sur le serveur sans rien y voir')
+    localized(group, 'prot_jail')
       .addSubcommand((sub) =>
-        sub
-          .setName('setup')
-          .setDescription('Crée ou répare le rôle Jail et le masque sur tous les salons')
+        localized(sub, 'prot_jail_setup')
           .addBooleanOption((opt) =>
-            opt.setName('salon').setDescription('Créer aussi un salon #quarantaine où le staff échange avec les membres en jail'))))
-  .addSubcommand((sub) => sub.setName('status').setDescription('État de tous les modules de protection'));
+            localized(opt, 'prot_opt_jail_channel'))))
+  .addSubcommand((sub) => localized(sub, 'prot_status'));
 
-type LockdownScope = 'salon' | 'categorie' | 'serveur';
+type LockdownScope = 'channel' | 'category' | 'server';
 
 // Sur une catégorie ou tout le serveur, les salons privés sont laissés de côté : le
 // staff y écrit souvent grâce au seul rôle qui lui ouvre l'accès, et le refus posé
@@ -257,35 +211,40 @@ function resolveLockdownTargets(
   guild: Guild,
   picked: GuildBasedChannel | null,
   scope: LockdownScope,
+  locale: BotLocale,
 ): { channels: LockableChannel[]; label: string; categoryId: string | null } | { error: string } {
-  if (scope === 'serveur') {
+  if (scope === 'server') {
     const channels = guild.channels.cache.filter((c): c is LockableChannel => isPublicLockable(guild, c));
-    return { channels: [...channels.values()], label: 'tout le serveur (salons publics)', categoryId: null };
+    return { channels: [...channels.values()], label: m.prot_target_server({}, { locale }), categoryId: null };
   }
 
   const base = picked?.isThread() ? picked.parent : picked;
-  if (!base || base.isThread()) return { error: 'Impossible de déterminer le salon visé. Précise l\'option `salon`.' };
+  if (!base || base.isThread()) return { error: m.prot_target_unknown({}, { locale }) };
 
   const categoryId = base.type === ChannelType.GuildCategory
     ? base.id
-    : scope === 'categorie' ? base.parentId : null;
+    : scope === 'category' ? base.parentId : null;
 
   if (categoryId) {
     const channels = guild.channels.cache.filter(
       (c): c is LockableChannel => c.parentId === categoryId && isPublicLockable(guild, c),
     );
-    return { channels: [...channels.values()], label: `la catégorie <#${categoryId}> (salons publics)`, categoryId };
+    return { channels: [...channels.values()], label: m.prot_target_category({ category: `<#${categoryId}>` }, { locale }), categoryId };
   }
-  if (scope === 'categorie') return { error: 'Ce salon n\'est dans aucune catégorie.' };
+  if (scope === 'category') return { error: m.prot_target_no_category({}, { locale }) };
 
-  if (!isLockable(base)) return { error: 'Ce salon ne peut pas être verrouillé.' };
+  if (!isLockable(base)) return { error: m.prot_target_not_lockable({}, { locale }) };
   return { channels: [base], label: `<#${base.id}>`, categoryId: null };
 }
+
+const ts = (date: Date, style: 'f' | 'R') => `<t:${Math.floor(date.getTime() / 1000)}:${style}>`;
+const yesNo = (value: boolean | undefined) => (value ? '✅' : '❌');
 
 async function execute(interaction: ChatInputCommandInteraction) {
   const guild = interaction.guild;
   if (!guild) return;
 
+  const locale = await getEffectiveLocale(interaction);
   const group = interaction.options.getSubcommandGroup(false);
   const sub = interaction.options.getSubcommand();
 
@@ -296,70 +255,94 @@ async function execute(interaction: ChatInputCommandInteraction) {
     const reportStats = config?.reportsEnabled ? await getReportStats(guild.id) : null;
     const lockedCount = (await listLockedChannelIds(guild.id)).length;
 
-    const on = '🟢 Activé';
-    const off = '🔴 Désactivé';
+    const on = m.prot_on({}, { locale });
+    const off = m.prot_off({}, { locale });
+    const until = (date: Date | null | undefined) =>
+      date ? m.prot_status_until({ date: ts(date, 'f') }, { locale }) : m.prot_status_permanent({}, { locale });
     const embed = new EmbedBuilder()
       .setColor(COLORS.primary)
-      .setTitle('🛡️ Protection anti-raid - État des modules')
+      .setTitle(m.prot_status_title({}, { locale }))
       .addFields(
         {
           name: '🔐 Captcha',
           value: config?.captchaEnabled
-            ? `${on} - salon <#${config.captchaChannelId}>, ${config.captchaTimeoutMinutes} min, ${config.captchaMaxAttempts} tentatives, échec = ${config.captchaFailAction}`
+            ? m.prot_status_captcha({
+              on,
+              channel: `<#${config.captchaChannelId}>`,
+              minutes: config.captchaTimeoutMinutes,
+              attempts: config.captchaMaxAttempts,
+              action: config.captchaFailAction,
+            }, { locale })
             : off,
         },
         {
           name: '🚨 Anti-raid',
           value: config?.antiRaidEnabled
-            ? `${on} - ${config.antiRaidJoinThreshold} joins / ${config.antiRaidJoinWindowSec}s → ${config.antiRaidAction}`
+            ? m.prot_status_antiraid({
+              on,
+              threshold: config.antiRaidJoinThreshold,
+              window: config.antiRaidJoinWindowSec,
+              action: config.antiRaidAction,
+            }, { locale })
             : off,
         },
         {
           name: '⚡ Raid mode',
           value: config?.raidModeActive
-            ? `🟠 **ACTIF** depuis <t:${Math.floor((config.raidModeActivatedAt?.getTime() ?? Date.now()) / 1000)}:R> (${config.raidModeManual ? 'manuel' : 'auto'})`
-            : 'Inactif',
+            ? m.prot_status_raidmode_active({
+              since: ts(config.raidModeActivatedAt ?? new Date(), 'R'),
+              mode: config.raidModeManual ? m.prot_status_mode_manual({}, { locale }) : m.prot_status_mode_auto({}, { locale }),
+            }, { locale })
+            : m.prot_status_inactive({}, { locale }),
         },
         {
           name: '🔒 Join lock',
-          value: config?.joinLockEnabled
-            ? `${on}${config.joinLockUntil ? ` - jusqu'à <t:${Math.floor(config.joinLockUntil.getTime() / 1000)}:f>` : ' - permanent'}`
-            : off,
+          value: config?.joinLockEnabled ? `${on}${until(config.joinLockUntil)}` : off,
         },
         {
           name: '🔒 Lockdown',
-          value: lockedCount > 0 ? `🟠 **${lockedCount}** salon(s) verrouillé(s)` : 'Aucun salon verrouillé',
+          value: lockedCount > 0
+            ? m.prot_status_locked_count({ count: lockedCount }, { locale })
+            : m.prot_status_no_locked({}, { locale }),
         },
         {
           name: '✉️ DM lock',
-          value: config?.dmLockEnabled
-            ? `${on}${config.dmLockUntil ? ` - jusqu'à <t:${Math.floor(config.dmLockUntil.getTime() / 1000)}:f>` : ' - permanent'}`
-            : off,
+          value: config?.dmLockEnabled ? `${on}${until(config.dmLockUntil)}` : off,
         },
         {
-          name: '🚩 Signalements',
+          name: m.prot_status_reports_field({}, { locale }),
           value: config?.reportsEnabled
-            ? `${on} - salon <#${config.reportsChannelId}>${reportStats ? ` · ${reportStats.pending} en attente, ${reportStats.resolved} traités` : ''}`
+            ? m.prot_status_reports({ on, channel: `<#${config.reportsChannelId}>` }, { locale })
+              + (reportStats ? m.prot_status_reports_stats({ pending: reportStats.pending, resolved: reportStats.resolved }, { locale }) : '')
             : off,
         },
         {
           name: '🏷️ Tag role',
-          value: config?.tagRoleEnabled ? `${on} - rôle <@&${config.tagRoleId}>` : off,
+          value: config?.tagRoleEnabled ? m.prot_status_tagrole({ on, role: `<@&${config.tagRoleId}>` }, { locale }) : off,
         },
         {
           name: '🎣 Anti-scam',
           value: config?.scamFilterEnabled
-            ? `${on} - action ${config.scamFilterAction}`
+            ? m.prot_status_scam({ on, action: config.scamFilterAction }, { locale })
             : off,
         },
         {
-          name: '🔍 Kotbo Vision (images)',
-          value: config?.visionEnabled === false ? off : `${on} - sanction ${config?.visionSanction ?? 'TIMEOUT'}`,
+          name: '🔍 Kotbo Vision',
+          value: config?.visionEnabled === false
+            ? off
+            : m.prot_status_vision({ on, sanction: config?.visionSanction ?? 'TIMEOUT' }, { locale }),
         },
         {
-          name: '🔗 Contrôle des invitations',
+          name: m.prot_status_invites_field({}, { locale }),
           value: config?.inviteGuardEnabled
-            ? `${on}${config.inviteEmergencyEnabled ? ' - 🚨 **MODE URGENCE**' : ''} - unitaire: ${config.inviteRequireUnitary ? '✅' : '❌'} · validation: ${config.inviteValidationEnabled ? '✅' : '❌'} · spam: ${config.inviteSpamThreshold}/${config.inviteSpamWindowSec}s`
+            ? on
+              + (config.inviteEmergencyEnabled ? m.prot_status_invites_emergency({}, { locale }) : '')
+              + m.prot_status_invites({
+                single: yesNo(config.inviteRequireUnitary),
+                validation: yesNo(config.inviteValidationEnabled),
+                threshold: config.inviteSpamThreshold,
+                window: config.inviteSpamWindowSec,
+              }, { locale })
             : off,
         },
       )
@@ -371,18 +354,18 @@ async function execute(interaction: ChatInputCommandInteraction) {
   // ── lockdown ────────────────────────────────────────────────────────────────
   if (group === 'lockdown') {
     await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
-    const scope = (interaction.options.getString('portee') ?? 'salon') as LockdownScope;
-    const pickedId = interaction.options.getChannel('salon')?.id ?? interaction.channelId;
+    const scope = (interaction.options.getString('scope') ?? 'channel') as LockdownScope;
+    const pickedId = interaction.options.getChannel('channel')?.id ?? interaction.channelId;
     const picked = guild.channels.cache.get(pickedId) ?? null;
-    const target = resolveLockdownTargets(guild, picked, scope);
+    const target = resolveLockdownTargets(guild, picked, scope, locale);
     if ('error' in target) {
-      await interaction.editReply({ embeds: [errorEmbed('Lockdown impossible', target.error)] });
+      await interaction.editReply({ embeds: [errorEmbed(m.prot_lockdown_failed_title({}, { locale }), target.error)] });
       return;
     }
 
     if (sub === 'on') {
-      const reason = interaction.options.getString('raison');
-      const silent = interaction.options.getBoolean('silencieux') ?? false;
+      const reason = interaction.options.getString('reason');
+      const silent = interaction.options.getBoolean('silent') ?? false;
       const counts = { locked: 0, already: 0, failed: 0 };
       for (const channel of target.channels) {
         counts[await lockChannel(channel, interaction.user.id, reason)]++;
@@ -395,35 +378,37 @@ async function execute(interaction: ChatInputCommandInteraction) {
         await single.send({
           embeds: [new EmbedBuilder()
             .setColor(COLORS.warning)
-            .setTitle('🔒 Salon verrouillé')
-            .setDescription(reason ? `Raison : ${reason}` : 'Le staff a temporairement fermé ce salon.')],
+            .setTitle(m.prot_locked_title({}, { locale }))
+            .setDescription(reason ? m.prot_locked_reason({ reason }, { locale }) : m.prot_locked_no_reason({}, { locale }))],
         }).catch(() => null);
       }
 
       const lines = [
-        `**${counts.locked}** salon(s) verrouillé(s) dans ${target.label}.`,
-        counts.already ? `${counts.already} l'étai(en)t déjà.` : '',
-        counts.failed ? `⚠️ ${counts.failed} en échec : vérifie que le rôle du bot a « Gérer les rôles » et qu'il est placé assez haut.` : '',
-        'Les membres administrateurs, ou autorisés explicitement dans un salon, peuvent toujours y écrire.',
+        m.prot_lock_done({ count: counts.locked, target: target.label }, { locale }),
+        counts.already ? m.prot_lock_already({ count: counts.already }, { locale }) : '',
+        counts.failed ? m.prot_lock_failed({ count: counts.failed }, { locale }) : '',
+        m.prot_lock_admins_note({}, { locale }),
       ].filter(Boolean);
-      await interaction.editReply({ embeds: [successEmbed('Lockdown activé', lines.join('\n'))] });
+      await interaction.editReply({ embeds: [successEmbed(m.prot_lock_on_title({}, { locale }), lines.join('\n'))] });
       return;
     }
 
     const lockedIds = new Set(await listLockedChannelIds(guild.id));
     // Sur une catégorie, tout ce qui y est verrouillé est rouvert, salons privés
     // compris : l'un d'eux a pu être verrouillé seul, explicitement.
-    const toUnlock = scope === 'serveur'
+    const toUnlock = scope === 'server'
       ? [...lockedIds]
       : target.categoryId
         ? [...lockedIds].filter((id) => guild.channels.cache.get(id)?.parentId === target.categoryId)
         : target.channels.map((c) => c.id).filter((id) => lockedIds.has(id));
     if (toUnlock.length === 0) {
-      await interaction.editReply({ embeds: [errorEmbed('Rien à rouvrir', `Aucun salon verrouillé dans ${target.label}.`)] });
+      await interaction.editReply({
+        embeds: [errorEmbed(m.prot_unlock_nothing_title({}, { locale }), m.prot_unlock_nothing({ target: target.label }, { locale }))],
+      });
       return;
     }
 
-    const silent = interaction.options.getBoolean('silencieux') ?? false;
+    const silent = interaction.options.getBoolean('silent') ?? false;
     const counts = { unlocked: 0, gone: 0, failed: 0 };
     for (const channelId of toUnlock) {
       counts[await unlockChannel(guild, channelId)]++;
@@ -432,63 +417,73 @@ async function execute(interaction: ChatInputCommandInteraction) {
     const single = !silent && toUnlock.length === 1 ? guild.channels.cache.get(toUnlock[0]) : null;
     if (single && counts.unlocked === 1 && single.isSendable()) {
       await single.send({
-        embeds: [new EmbedBuilder().setColor(COLORS.success).setTitle('🔓 Salon rouvert')],
+        embeds: [new EmbedBuilder().setColor(COLORS.success).setTitle(m.prot_unlocked_title({}, { locale }))],
       }).catch(() => null);
     }
 
     const lines = [
-      `**${counts.unlocked}** salon(s) rouvert(s) avec leurs permissions d'origine.`,
-      counts.gone ? `${counts.gone} salon(s) supprimé(s) entre-temps, oublié(s).` : '',
-      counts.failed ? `⚠️ ${counts.failed} en échec, toujours verrouillé(s) : relance la commande une fois les permissions du bot vérifiées.` : '',
+      m.prot_unlock_done({ count: counts.unlocked }, { locale }),
+      counts.gone ? m.prot_unlock_gone({ count: counts.gone }, { locale }) : '',
+      counts.failed ? m.prot_unlock_failed({ count: counts.failed }, { locale }) : '',
     ].filter(Boolean);
-    await interaction.editReply({ embeds: [successEmbed('Lockdown levé', lines.join('\n'))] });
+    await interaction.editReply({ embeds: [successEmbed(m.prot_lock_off_title({}, { locale }), lines.join('\n'))] });
     return;
   }
 
   // ── captcha ─────────────────────────────────────────────────────────────────
   if (group === 'captcha') {
-    if (sub === 'activer') {
-      const channel = interaction.options.getChannel('salon', true);
+    if (sub === 'enable') {
+      const channel = interaction.options.getChannel('channel', true);
       const role = interaction.options.getRole('role', true);
       await upsertRaidProtectionConfig(guild.id, {
         captchaEnabled: true,
         captchaChannelId: channel.id,
         captchaUnverifiedRoleId: role.id,
-        captchaTimeoutMinutes: interaction.options.getInteger('delai') ?? 10,
-        captchaMaxAttempts: interaction.options.getInteger('tentatives') ?? 3,
-        captchaFailAction: interaction.options.getString('sanction') ?? 'KICK',
-        captchaLogChannelId: interaction.options.getChannel('salon-logs')?.id ?? null,
+        captchaTimeoutMinutes: interaction.options.getInteger('timeout') ?? 10,
+        captchaMaxAttempts: interaction.options.getInteger('attempts') ?? 3,
+        captchaFailAction: interaction.options.getString('penalty') ?? 'KICK',
+        captchaLogChannelId: interaction.options.getChannel('log-channel')?.id ?? null,
       });
       await interaction.reply({
-        embeds: [successEmbed('Captcha activé', `Les nouveaux membres recevront le rôle ${role} et devront résoudre un captcha dans ${channel}.\n\n⚠️ Vérifie que le rôle ${role} n'a accès **qu'à** ${channel}.`)],
+        embeds: [successEmbed(
+          m.prot_captcha_on_title({}, { locale }),
+          m.prot_captcha_on_desc({ role: `${role}`, channel: `${channel}` }, { locale }),
+        )],
         flags: [MessageFlags.Ephemeral],
       });
     } else {
       await upsertRaidProtectionConfig(guild.id, { captchaEnabled: false });
-      await interaction.reply({ embeds: [successEmbed('Captcha désactivé')], flags: [MessageFlags.Ephemeral] });
+      await interaction.reply({ embeds: [successEmbed(m.prot_captcha_off_title({}, { locale }))], flags: [MessageFlags.Ephemeral] });
     }
     return;
   }
 
   // ── antiraid ────────────────────────────────────────────────────────────────
   if (group === 'antiraid') {
-    if (sub === 'activer') {
+    if (sub === 'enable') {
       await upsertRaidProtectionConfig(guild.id, {
         antiRaidEnabled: true,
-        antiRaidJoinThreshold: interaction.options.getInteger('seuil') ?? 10,
-        antiRaidJoinWindowSec: interaction.options.getInteger('fenetre') ?? 60,
+        antiRaidJoinThreshold: interaction.options.getInteger('threshold') ?? 10,
+        antiRaidJoinWindowSec: interaction.options.getInteger('window') ?? 60,
         antiRaidAction: interaction.options.getString('action') ?? 'LOCK',
-        antiRaidAlertChannelId: interaction.options.getChannel('salon-alertes')?.id ?? null,
-        antiRaidAutoDisableMinutes: interaction.options.getInteger('duree') ?? 30,
+        antiRaidAlertChannelId: interaction.options.getChannel('alert-channel')?.id ?? null,
+        antiRaidAutoDisableMinutes: interaction.options.getInteger('duration') ?? 30,
       });
       const config = await getRaidProtectionConfig(guild.id);
       await interaction.reply({
-        embeds: [successEmbed('Anti-raid activé', `Détection : **${config?.antiRaidJoinThreshold} arrivées** en **${config?.antiRaidJoinWindowSec}s** → action **${config?.antiRaidAction}**.`)],
+        embeds: [successEmbed(
+          m.prot_antiraid_on_title({}, { locale }),
+          m.prot_antiraid_on_desc({
+            threshold: String(config?.antiRaidJoinThreshold),
+            window: String(config?.antiRaidJoinWindowSec),
+            action: String(config?.antiRaidAction),
+          }, { locale }),
+        )],
         flags: [MessageFlags.Ephemeral],
       });
     } else {
       await upsertRaidProtectionConfig(guild.id, { antiRaidEnabled: false });
-      await interaction.reply({ embeds: [successEmbed('Anti-raid désactivé')], flags: [MessageFlags.Ephemeral] });
+      await interaction.reply({ embeds: [successEmbed(m.prot_antiraid_off_title({}, { locale }))], flags: [MessageFlags.Ephemeral] });
     }
     return;
   }
@@ -499,19 +494,21 @@ async function execute(interaction: ChatInputCommandInteraction) {
     const config = await getRaidProtectionConfig(guild.id);
     if (sub === 'on') {
       if (config?.raidModeActive) {
-        await interaction.editReply({ embeds: [errorEmbed('Mode raid déjà actif')] });
+        await interaction.editReply({ embeds: [errorEmbed(m.prot_raidmode_already({}, { locale }))] });
         return;
       }
       const base = config ?? (await upsertRaidProtectionConfig(guild.id, {}));
       await activateRaidMode(guild, base, true, interaction.user.id);
-      await interaction.editReply({ embeds: [successEmbed('Mode raid activé', `Action appliquée : **${base.antiRaidAction}**. Désactivation manuelle uniquement.`)] });
+      await interaction.editReply({
+        embeds: [successEmbed(m.prot_raidmode_on_title({}, { locale }), m.prot_raidmode_on_desc({ action: base.antiRaidAction }, { locale }))],
+      });
     } else {
       if (!config?.raidModeActive) {
-        await interaction.editReply({ embeds: [errorEmbed('Le mode raid n\'est pas actif')] });
+        await interaction.editReply({ embeds: [errorEmbed(m.prot_raidmode_not_active({}, { locale }))] });
         return;
       }
       await deactivateRaidMode(guild, config);
-      await interaction.editReply({ embeds: [successEmbed('Mode raid désactivé')] });
+      await interaction.editReply({ embeds: [successEmbed(m.prot_raidmode_off_title({}, { locale }))] });
     }
     return;
   }
@@ -519,67 +516,75 @@ async function execute(interaction: ChatInputCommandInteraction) {
   // ── joinlock / dmlock ───────────────────────────────────────────────────────
   if (group === 'joinlock' || group === 'dmlock') {
     await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
-    const hours = interaction.options.getInteger('duree');
+    const hours = interaction.options.getInteger('duration');
     const until = hours ? new Date(Date.now() + hours * 60 * 60 * 1000) : null;
     const isJoin = group === 'joinlock';
 
     if (sub === 'on') {
       if (isJoin) await enableJoinLock(guild, until);
       else await enableDmLock(guild, until);
+      const what = isJoin ? m.prot_joinlock_blocked({}, { locale }) : m.prot_dmlock_blocked({}, { locale });
+      const when = until ? m.prot_lock_until({ date: ts(until, 'f') }, { locale }) : m.prot_lock_forever({}, { locale });
       await interaction.editReply({
         embeds: [successEmbed(
-          isJoin ? 'Join lock activé' : 'DM lock activé',
-          `${isJoin ? 'Les nouvelles arrivées sont bloquées' : 'Les messages privés issus du serveur sont bloqués'}${until ? ` jusqu'à <t:${Math.floor(until.getTime() / 1000)}:f>` : ' **en permanence** (renouvellement automatique)'}.`
+          isJoin ? m.prot_joinlock_on_title({}, { locale }) : m.prot_dmlock_on_title({}, { locale }),
+          `${what}${when}.`,
         )],
       });
     } else {
       if (isJoin) await disableJoinLock(guild);
       else await disableDmLock(guild);
-      await interaction.editReply({ embeds: [successEmbed(isJoin ? 'Join lock désactivé' : 'DM lock désactivé')] });
+      await interaction.editReply({
+        embeds: [successEmbed(isJoin ? m.prot_joinlock_off_title({}, { locale }) : m.prot_dmlock_off_title({}, { locale }))],
+      });
     }
     return;
   }
 
   // ── reports ─────────────────────────────────────────────────────────────────
   if (group === 'reports') {
-    if (sub === 'activer') {
-      const channel = interaction.options.getChannel('salon', true);
+    if (sub === 'enable') {
+      const channel = interaction.options.getChannel('channel', true);
       await upsertRaidProtectionConfig(guild.id, {
         reportsEnabled: true,
         reportsChannelId: channel.id,
         reportsCooldownSec: interaction.options.getInteger('cooldown') ?? 60,
-        reportsAnonymous: interaction.options.getBoolean('anonyme') ?? false,
+        reportsAnonymous: interaction.options.getBoolean('anonymous') ?? false,
       });
       await interaction.reply({
-        embeds: [successEmbed('Signalements activés', `Les membres peuvent signaler via \`/report\` ou le clic droit sur un message. Les signalements arrivent dans ${channel}.`)],
+        embeds: [successEmbed(m.prot_reports_on_title({}, { locale }), m.prot_reports_on_desc({ channel: `${channel}` }, { locale }))],
         flags: [MessageFlags.Ephemeral],
       });
     } else {
       await upsertRaidProtectionConfig(guild.id, { reportsEnabled: false });
-      await interaction.reply({ embeds: [successEmbed('Signalements désactivés')], flags: [MessageFlags.Ephemeral] });
+      await interaction.reply({ embeds: [successEmbed(m.prot_reports_off_title({}, { locale }))], flags: [MessageFlags.Ephemeral] });
     }
     return;
   }
 
   // ── tagrole ─────────────────────────────────────────────────────────────────
   if (group === 'tagrole') {
-    if (sub === 'activer') {
+    if (sub === 'enable') {
       const role = interaction.options.getRole('role', true);
       await upsertRaidProtectionConfig(guild.id, { tagRoleEnabled: true, tagRoleId: role.id });
       await interaction.reply({
-        embeds: [successEmbed('Tag role activé', `Les membres arborant le tag du serveur recevront automatiquement ${role}.`)],
+        embeds: [successEmbed(m.prot_tagrole_on_title({}, { locale }), m.prot_tagrole_on_desc({ role: `${role}` }, { locale }))],
         flags: [MessageFlags.Ephemeral],
       });
-    } else if (sub === 'desactiver') {
+    } else if (sub === 'disable') {
       await upsertRaidProtectionConfig(guild.id, { tagRoleEnabled: false });
-      await interaction.reply({ embeds: [successEmbed('Tag role désactivé')], flags: [MessageFlags.Ephemeral] });
+      await interaction.reply({ embeds: [successEmbed(m.prot_tagrole_off_title({}, { locale }))], flags: [MessageFlags.Ephemeral] });
     } else {
       await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
       const result = await rescanGuildTagRoles(interaction.client, guild.id);
       if (!result) {
-        await interaction.editReply({ embeds: [errorEmbed('Tag role non configuré', 'Active-le d\'abord avec `/protection tagrole activer`.')] });
+        await interaction.editReply({
+          embeds: [errorEmbed(m.prot_tagrole_not_configured_title({}, { locale }), m.prot_tagrole_not_configured_desc({}, { locale }))],
+        });
       } else {
-        await interaction.editReply({ embeds: [successEmbed('Rescan terminé', `➕ ${result.added} rôle(s) ajouté(s) · ➖ ${result.removed} retiré(s).`)] });
+        await interaction.editReply({
+          embeds: [successEmbed(m.prot_rescan_title({}, { locale }), m.prot_rescan_desc({ added: result.added, removed: result.removed }, { locale }))],
+        });
       }
     }
     return;
@@ -590,18 +595,20 @@ async function execute(interaction: ChatInputCommandInteraction) {
     await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
     const me = guild.members.me;
     if (!me?.permissions.has([PermissionFlagsBits.ManageRoles, PermissionFlagsBits.ManageChannels])) {
-      await interaction.editReply({ embeds: [errorEmbed('Permissions manquantes', 'Kotbo a besoin de « Gérer les rôles » et « Gérer les salons ».')] });
+      await interaction.editReply({ embeds: [errorEmbed(m.prot_jail_perms_title({}, { locale }), m.prot_jail_perms_desc({}, { locale }))] });
       return;
     }
-    const result = await provisionJail(guild, { createChannel: interaction.options.getBoolean('salon') ?? false });
+    const result = await provisionJail(guild, { createChannel: interaction.options.getBoolean('channel') ?? false });
     await interaction.editReply({
       embeds: [
         successEmbed(
-          'Jail prêt',
+          m.prot_jail_ready_title({}, { locale }),
           [
-            `Rôle : <@&${result.roleId}>, masqué sur ${result.channelsUpdated} salon(s).`,
-            result.channelId ? `Salon de quarantaine : <#${result.channelId}>.` : 'Aucun salon de quarantaine.',
-            'Les salons créés ensuite seront masqués automatiquement. Utilise `/sanction jail` pour mettre un membre en quarantaine.',
+            m.prot_jail_ready_role({ role: `<@&${result.roleId}>`, count: result.channelsUpdated }, { locale }),
+            result.channelId
+              ? m.prot_jail_ready_channel({ channel: `<#${result.channelId}>` }, { locale })
+              : m.prot_jail_ready_no_channel({}, { locale }),
+            m.prot_jail_ready_hint({}, { locale }),
           ].join('\n'),
         ),
       ],
@@ -611,28 +618,28 @@ async function execute(interaction: ChatInputCommandInteraction) {
 
   // ── scam ────────────────────────────────────────────────────────────────────
   if (group === 'scam') {
-    if (sub === 'activer') {
+    if (sub === 'enable') {
       await upsertRaidProtectionConfig(guild.id, {
         scamFilterEnabled: true,
         scamFilterAction: interaction.options.getString('action') ?? 'DELETE_AND_TIMEOUT',
-        scamFilterAlertChannelId: interaction.options.getChannel('salon-alertes')?.id ?? null,
+        scamFilterAlertChannelId: interaction.options.getChannel('alert-channel')?.id ?? null,
         visionEnabled: interaction.options.getBoolean('images') ?? true,
       });
       await interaction.reply({
-        embeds: [successEmbed('Filtre anti-scam activé', 'Les liens d\'arnaques connus (faux Nitro, phishing Steam/Discord) seront supprimés automatiquement.')],
+        embeds: [successEmbed(m.prot_scam_on_title({}, { locale }), m.prot_scam_on_desc({}, { locale }))],
         flags: [MessageFlags.Ephemeral],
       });
     } else {
       await upsertRaidProtectionConfig(guild.id, { scamFilterEnabled: false });
-      await interaction.reply({ embeds: [successEmbed('Filtre anti-scam désactivé')], flags: [MessageFlags.Ephemeral] });
+      await interaction.reply({ embeds: [successEmbed(m.prot_scam_off_title({}, { locale }))], flags: [MessageFlags.Ephemeral] });
     }
     return;
   }
 
   // ── invites ─────────────────────────────────────────────────────────────────
   if (group === 'invites') {
-    if (sub === 'activer') {
-      const exemptRole = interaction.options.getRole('role-exempt');
+    if (sub === 'enable') {
+      const exemptRole = interaction.options.getRole('exempt-role');
       const current = await getRaidProtectionConfig(guild.id);
       const bypassRoleIds = exemptRole
         ? [...new Set([...(current?.inviteBypassRoleIds ?? []), exemptRole.id])]
@@ -640,38 +647,46 @@ async function execute(interaction: ChatInputCommandInteraction) {
 
       await upsertRaidProtectionConfig(guild.id, {
         inviteGuardEnabled: true,
-        inviteRequireUnitary: interaction.options.getBoolean('unitaire') ?? current?.inviteRequireUnitary ?? false,
-        inviteValidationEnabled: interaction.options.getBoolean('validation') ?? current?.inviteValidationEnabled ?? false,
-        inviteSpamThreshold: interaction.options.getInteger('seuil-spam') ?? current?.inviteSpamThreshold ?? 5,
-        inviteSpamWindowSec: interaction.options.getInteger('fenetre-spam') ?? current?.inviteSpamWindowSec ?? 60,
-        inviteAlertChannelId: interaction.options.getChannel('salon-alertes')?.id ?? current?.inviteAlertChannelId ?? null,
+        inviteRequireUnitary: interaction.options.getBoolean('single-use') ?? current?.inviteRequireUnitary ?? false,
+        inviteValidationEnabled: interaction.options.getBoolean('approval') ?? current?.inviteValidationEnabled ?? false,
+        inviteSpamThreshold: interaction.options.getInteger('spam-threshold') ?? current?.inviteSpamThreshold ?? 5,
+        inviteSpamWindowSec: interaction.options.getInteger('spam-window') ?? current?.inviteSpamWindowSec ?? 60,
+        inviteAlertChannelId: interaction.options.getChannel('alert-channel')?.id ?? current?.inviteAlertChannelId ?? null,
         inviteBypassRoleIds: bypassRoleIds,
       });
       const updated = await getRaidProtectionConfig(guild.id);
       await interaction.reply({
-        embeds: [successEmbed('Contrôle des invitations activé',
-          `• Règle unitaire (1 usage) : ${updated?.inviteRequireUnitary ? '✅' : '❌'}\n` +
-          `• Validation staff : ${updated?.inviteValidationEnabled ? '✅' : '❌'}\n` +
-          `• Alerte spam : ${updated?.inviteSpamThreshold} créations / ${updated?.inviteSpamWindowSec}s\n` +
-          `• Rôles exemptés : ${bypassRoleIds.length > 0 ? bypassRoleIds.map((id) => `<@&${id}>`).join(', ') : 'aucun (admins toujours exemptés)'}`)],
+        embeds: [successEmbed(
+          m.prot_invites_on_title({}, { locale }),
+          m.prot_invites_on_desc({
+            single: yesNo(updated?.inviteRequireUnitary),
+            validation: yesNo(updated?.inviteValidationEnabled),
+            threshold: String(updated?.inviteSpamThreshold),
+            window: String(updated?.inviteSpamWindowSec),
+            roles: bypassRoleIds.length > 0
+              ? bypassRoleIds.map((id) => `<@&${id}>`).join(', ')
+              : m.prot_invites_no_exempt({}, { locale }),
+          }, { locale }),
+        )],
         flags: [MessageFlags.Ephemeral],
       });
-    } else if (sub === 'desactiver') {
+    } else if (sub === 'disable') {
       await upsertRaidProtectionConfig(guild.id, { inviteGuardEnabled: false, inviteEmergencyEnabled: false });
-      await interaction.reply({ embeds: [successEmbed('Contrôle des invitations désactivé')], flags: [MessageFlags.Ephemeral] });
-    } else if (sub === 'urgence') {
+      await interaction.reply({ embeds: [successEmbed(m.prot_invites_off_title({}, { locale }))], flags: [MessageFlags.Ephemeral] });
+    } else if (sub === 'emergency') {
       await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
-      const actif = interaction.options.getBoolean('actif', true);
+      const active = interaction.options.getBoolean('active', true);
       const { enableInviteEmergency, disableInviteEmergency } = await import('../../services/moderation/inviteGuardService.js');
-      if (actif) {
+      if (active) {
         const deleted = await enableInviteEmergency(guild);
         await interaction.editReply({
-          embeds: [successEmbed('🚨 Mode urgence invitations activé',
-            `**${deleted} invitation(s) existante(s) supprimée(s).**\nToute nouvelle invitation sera supprimée immédiatement jusqu'à désactivation.`)],
+          embeds: [successEmbed(m.prot_emergency_on_title({}, { locale }), m.prot_emergency_on_desc({ count: deleted }, { locale }))],
         });
       } else {
         await disableInviteEmergency(guild);
-        await interaction.editReply({ embeds: [successEmbed('Mode urgence invitations désactivé', 'Les règles normales du contrôle des invitations s\'appliquent à nouveau.')] });
+        await interaction.editReply({
+          embeds: [successEmbed(m.prot_emergency_off_title({}, { locale }), m.prot_emergency_off_desc({}, { locale }))],
+        });
       }
     }
     return;
