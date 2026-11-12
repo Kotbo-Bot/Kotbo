@@ -122,6 +122,11 @@ model Drop {
 }
 
 /// Ramassage d'un drop par un membre. L'unicité garantit un gain par personne.
+///
+/// La place est réservée avant le versement, qui touche d'autres modules et parfois
+/// Discord : il ne peut pas tenir dans la même transaction. Un ramassage sans
+/// `paidAt` est une place prise dont le gain reste à verser, et le cycle des drops
+/// reprend ceux qu'un redémarrage ou une erreur a laissés en route.
 model DropClaim {
   id      String @id @default(cuid())
   dropId  String
@@ -130,11 +135,19 @@ model DropClaim {
   /// Recopié du drop : le journal reste juste si la config change ensuite.
   amount  Int
 
+  /// Gain versé. Vide = place réservée, versement à reprendre.
+  paidAt      DateTime?
+  /// Dernière tentative de versement. La reprise la repousse par une écriture
+  /// conditionnelle avant de verser : deux processus ne reprennent pas le même.
+  attemptedAt DateTime  @default(now())
+
   drop Drop @relation(fields: [dropId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now())
 
   @@unique([dropId, userId])
   @@index([guildId, createdAt])
+  /// Reprise des versements restés en suspens.
+  @@index([paidAt, attemptedAt])
   @@map("drop_claims")
 }

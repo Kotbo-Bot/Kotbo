@@ -337,6 +337,7 @@
   "drop_claim_full": "Too late, this drop has just been claimed.",
   "drop_claim_no_clan": "You must belong to a clan to claim clan points. The drop stays available for someone else.",
   "drop_claim_failed": "Unable to grant you this drop right now.",
+  "drop_claim_pending": "Your spot is reserved, but the reward could not be granted right away: it will be granted automatically within a few minutes.",
   "drop_claim_module_off": "This reward is no longer handed out on this server: its module was disabled after the drop appeared.",
   "rpg_admin_reset_confirm_title": "⚠️ Reset Confirmation",
   "rpg_admin_reset_confirm_desc": "Are you sure you want to reset the **{component}** component of the economy/RPG? This action is **irreversible**!",
