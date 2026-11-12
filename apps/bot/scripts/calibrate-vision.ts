@@ -10,7 +10,8 @@
  *   bun run scripts/calibrate-vision.ts
  */
 import { createCanvas, Image, loadImage } from '@napi-rs/canvas';
-import { analyzeImage, compareFingerprints, compareWindows, computeWindowHashes, hammingDistance, signatureSimilarity, windowShapesFor } from '../src/services/moderation/imageForensics.js';
+import { analyzeImage, compareFingerprints, compareWindows, computeWindowHashes, hammingDistance, parseFingerprint, signatureSimilarity, windowShapesFor } from '../src/services/moderation/imageForensics.js';
+import visionSeed from '../src/data/visionSeed.json';
 
 function rng(seed: number) {
   let s = seed >>> 0;
@@ -372,6 +373,9 @@ const scams = await Promise.all([
   ...Array.from({ length: 20 }, (_, i) => chat(300 + i, true)),
   ...Array.from({ length: 15 }, (_, i) => doc(400 + i)),
 ].map((b) => analyzeImage(b)));
+// Le catalogue d'amorce réel, comparé comme en production : global, donc par
+// empreinte seulement (la recherche par fenêtres est réservée au serveur).
+const seedScams = visionSeed.map((e) => parseFingerprint(e.f)!);
 const scamShapes = windowShapesFor(scams.map((s) => s!.fingerprint.rawAspect), 2);
 const benign: Record<string, (seed: number) => Buffer> = {
   'discussion sombre': (i) => chat(i, true, true),
@@ -383,6 +387,7 @@ const benign: Record<string, (seed: number) => Buffer> = {
 };
 for (const [kind, make] of Object.entries(benign)) {
   const verdicts: Record<string, number> = {};
+  const seedVerdicts: Record<string, number> = {};
   const sims: number[] = [];
   let qr = 0;
   for (let i = 0; i < 40; i++) {
@@ -400,6 +405,9 @@ for (const [kind, make] of Object.entries(benign)) {
       if (scams.some((scam) => compareWindows(windows, scam!.fingerprint).verdict)) verdict = 'UNCERTAIN';
     }
     verdicts[verdict] = (verdicts[verdict] ?? 0) + 1;
+    const seedHits = seedScams.map((known) => compareFingerprints(img.fingerprint, known).verdict);
+    const seedVerdict = seedHits.includes('CERTAIN') ? 'CERTAIN' : seedHits.includes('UNCERTAIN') ? 'UNCERTAIN' : 'none';
+    seedVerdicts[seedVerdict] = (seedVerdicts[seedVerdict] ?? 0) + 1;
   }
-  console.log(`saine / ${kind.padEnd(18)} ${JSON.stringify(verdicts)}  signature max ${Math.max(...sims).toFixed(2)}  QR ${qr}/40`);
+  console.log(`saine / ${kind.padEnd(18)} ${JSON.stringify(verdicts)}  amorce ${JSON.stringify(seedVerdicts)}  signature max ${Math.max(...sims).toFixed(2)}  QR ${qr}/40`);
 }
