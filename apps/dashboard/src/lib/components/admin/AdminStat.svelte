@@ -51,8 +51,8 @@
 <svelte:element
   this={href ? 'a' : 'div'}
   href={href || undefined}
-  class="group relative rounded-2xl border border-outline-variant/25 bg-surface-container-lowest/70 p-4 flex flex-col gap-3 transition-colors
-    {href ? 'hover:border-primary/40 hover:bg-surface-container-low/70 focus-visible:outline-2 focus-visible:outline-primary' : ''}"
+  class="group relative rounded-[20px] border border-outline-variant/60 bg-surface p-4 flex flex-col gap-3 transition
+    {href ? 'hover:border-primary/50 active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-primary' : ''}"
 >
   <div class="flex items-start justify-between gap-3">
     <div class="min-w-0">
@@ -60,10 +60,10 @@
       {#if loading}
         <div class="mt-2 h-8 w-24 rounded-lg bg-on-surface/8 animate-pulse"></div>
       {:else}
-        <p class="text-[26px] leading-none font-semibold text-on-surface mt-2 tabular-nums truncate">{value}</p>
+        <p class="font-headline text-[28px] leading-none font-bold tracking-tight text-on-surface mt-2 tabular-nums truncate">{value}</p>
       {/if}
     </div>
-    <div class="w-9 h-9 shrink-0 rounded-xl flex items-center justify-center {toneConfig.chip}">
+    <div class="w-9 h-9 shrink-0 rounded-[11px] flex items-center justify-center {toneConfig.chip}">
       <Papicon {icon} size={17} />
     </div>
   </div>

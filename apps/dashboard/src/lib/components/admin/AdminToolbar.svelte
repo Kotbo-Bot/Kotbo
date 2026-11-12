@@ -56,7 +56,7 @@
         bind:value={search}
         type="search"
         {placeholder}
-        class="w-full h-10 pl-9 pr-9 rounded-xl bg-surface-container-low/70 border border-outline-variant/25 text-sm text-on-surface
+        class="w-full h-11 pl-9 pr-9 rounded-2xl bg-surface border border-outline-variant/60 text-sm text-on-surface
           placeholder:text-on-surface-variant focus:outline-none focus:border-primary/60 focus:ring-2 focus:ring-primary/15 transition"
       />
       {#if search}
@@ -83,14 +83,14 @@
           type="button"
           onclick={() => (activeFilter = filter.value)}
           aria-pressed={activeFilter === filter.value}
-          class="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-body-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-primary
+          class="inline-flex items-center gap-1.5 h-8 px-3 rounded-full text-body-sm font-semibold transition active:scale-[0.97] focus-visible:outline-2 focus-visible:outline-primary
             {activeFilter === filter.value
-              ? 'bg-primary/12 text-primary border border-primary/30'
+              ? 'bg-on-surface text-surface border border-transparent'
               : 'bg-on-surface/5 text-on-surface-variant border border-transparent hover:bg-on-surface/8 hover:text-on-surface'}"
         >
           {filter.label}
           {#if typeof filter.count === 'number'}
-            <span class="tabular-nums text-2xs font-semibold px-1.5 py-0.5 rounded {activeFilter === filter.value ? 'bg-primary/15' : 'bg-on-surface/8'}">
+            <span class="tabular-nums text-2xs font-semibold px-1.5 py-0.5 rounded-full {activeFilter === filter.value ? 'bg-surface/20' : 'bg-on-surface/8'}">
               {filter.count}
             </span>
           {/if}

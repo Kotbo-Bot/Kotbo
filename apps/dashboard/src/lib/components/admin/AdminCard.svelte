@@ -41,18 +41,18 @@
 </script>
 
 <section
-  class="rounded-2xl border border-outline-variant/25 bg-surface-container-lowest/70 backdrop-blur-sm overflow-hidden {className}"
+  class="rounded-[20px] border border-outline-variant/60 bg-surface overflow-hidden {className}"
 >
   {#if title || actions}
-    <header class="flex flex-wrap items-start justify-between gap-3 px-5 py-4 border-b border-outline-variant/20">
+    <header class="flex flex-wrap items-start justify-between gap-3 px-5 py-4 border-b border-outline-variant/40">
       <div class="flex items-start gap-3 min-w-0">
         {#if icon}
-          <div class="w-9 h-9 shrink-0 rounded-xl flex items-center justify-center {toneClasses[tone]}">
+          <div class="w-9 h-9 shrink-0 rounded-[11px] flex items-center justify-center {toneClasses[tone]}">
             <Papicon {icon} size={17} />
           </div>
         {/if}
         <div class="min-w-0">
-          <h2 class="text-[15px] font-semibold text-on-surface leading-tight">{title}</h2>
+          <h2 class="font-headline text-base font-semibold text-on-surface leading-tight">{title}</h2>
           {#if description}
             <p class="text-body-sm text-on-surface-variant mt-0.5 leading-snug">{description}</p>
           {/if}

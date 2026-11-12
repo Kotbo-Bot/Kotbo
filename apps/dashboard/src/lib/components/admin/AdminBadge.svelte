@@ -37,7 +37,7 @@
   const sizeClass = $derived(size === 'sm' ? 'h-5 px-1.5 text-2xs gap-1' : 'h-6 px-2 text-2xs gap-1.5');
 </script>
 
-<span class="inline-flex items-center rounded-md border font-semibold whitespace-nowrap {config.chip} {sizeClass}">
+<span class="inline-flex items-center rounded-full font-semibold whitespace-nowrap {config.chip} {sizeClass}">
   {#if dot}
     <span class="w-1.5 h-1.5 rounded-full {config.dot} {pulse ? 'animate-pulse' : ''}"></span>
   {:else if icon}
