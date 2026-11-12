@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { explainDisabled } from '../../lib/actions/explainDisabled';
   import { m } from '../../lib/i18n';
   import { onMount } from 'svelte';
   import { toast } from '../../lib/stores/toast.svelte';
@@ -16,6 +15,11 @@
   } from '../../lib/api';
   import Papicon from '../../lib/components/Papicon.svelte';
   import AdminShell from '../../lib/components/admin/AdminShell.svelte';
+  import AdminTable from '../../lib/components/admin/AdminTable.svelte';
+  import AdminBadge from '../../lib/components/admin/AdminBadge.svelte';
+  import AdminDrawer from '../../lib/components/admin/AdminDrawer.svelte';
+  import type { AdminTableColumn } from '../../lib/components/admin/types';
+  import { Button, Field, Modal, ToggleSwitch } from '../../lib/components/ui';
 
   import { errorMessage } from '@kotbo/shared';
   interface WLInstance {
@@ -40,8 +44,10 @@
   let instances = $state<WLInstance[]>([]);
   let loading = $state(true);
   let showCreateModal = $state(false);
+  let creating = $state(false);
   let detailInstance = $state<any>(null);
-  let allGuilds = $state<any[]>([]);
+  let detailOpen = $state(false);
+  let allGuilds = $state<{ id: string; name: string }[]>([]);
 
   // Form state
   let form = $state({
@@ -71,6 +77,10 @@
     };
   }
 
+  const formComplete = $derived(
+    Boolean(form.slug && form.name && form.discordToken && form.discordClientId && form.discordClientSecret && form.ownerId),
+  );
+
   async function loadInstances() {
     try {
       const data = await fetchWhiteLabelInstances();
@@ -86,6 +96,7 @@
   });
 
   async function handleCreate() {
+    creating = true;
     try {
       const payload: Record<string, any> = { ...form };
       if (!payload.apiPort) delete payload.apiPort;
@@ -97,6 +108,8 @@
       await loadInstances();
     } catch (err) {
       toast.error(errorMessage(err));
+    } finally {
+      creating = false;
     }
   }
 
@@ -115,18 +128,19 @@
     try {
       await deleteWhiteLabelInstance(inst.id);
       toast.success(m.awl_instance_deleted());
+      if (detailInstance?.id === inst.id) detailOpen = false;
       await loadInstances();
     } catch (err) {
       toast.error(errorMessage(err));
     }
   }
 
-  async function openDetail(inst: WLInstance) {
+  async function openDetail(inst: { id: string }) {
     try {
       const data = await fetchWhiteLabelInstance(inst.id);
       detailInstance = data.instance;
-      const guildsData = await fetchAdminGuilds();
-      allGuilds = guildsData;
+      detailOpen = true;
+      allGuilds = (await fetchAdminGuilds()).guilds ?? [];
     } catch (err) {
       toast.error(errorMessage(err));
     }
@@ -155,289 +169,229 @@
       toast.error(errorMessage(err));
     }
   }
+
+  const boundGuilds = $derived<{ id: string }[]>(detailInstance?.guilds ?? []);
+  const bindableGuilds = $derived(allGuilds.filter((guild) => !boundGuilds.some((bound) => bound.id === guild.id)));
+  const guildName = (id: string) => allGuilds.find((guild) => guild.id === id)?.name ?? '';
+
+  const columns: AdminTableColumn[] = [
+    { key: 'name', label: 'Instance' },
+    { key: 'guilds', label: 'Serveurs', align: 'right', width: 'w-28' },
+    { key: 'url', label: 'Dashboard', hideBelow: 'md' },
+    { key: 'enabled', label: 'Active', align: 'center', width: 'w-24' },
+    { key: 'actions', label: '', align: 'right', width: 'w-28' },
+  ];
 </script>
 
-<AdminShell title="Marque blanche" description="Instances white-label et serveurs qui leur sont rattachés.">
-  <div class="space-y-6">
-    <!-- Header -->
-    <div class="flex items-center justify-between">
-      <div>
-        <h2 class="text-xl font-semibold text-on-surface">White-Label</h2>
-        <p class="text-sm text-on-surface-variant mt-1">Gerez les instances white-label du bot</p>
-      </div>
-      <button
-        onclick={() => { resetForm(); showCreateModal = true; }}
-        class="flex items-center gap-2 px-4 py-2 bg-primary text-on-primary rounded-lg text-sm font-medium hover:opacity-90 transition-opacity"
-      >
-        <Papicon icon="plus" size={16} />
-        Nouvelle instance
-      </button>
-    </div>
+<AdminShell title="Marque blanche" description="Instances du bot déployées sous une autre marque, et serveurs qui leur sont rattachés.">
+  {#snippet actions()}
+    <Button variant="primary" icon="Plus" onclick={() => { resetForm(); showCreateModal = true; }}>Nouvelle instance</Button>
+  {/snippet}
 
-    {#if loading}
-      <div class="flex items-center justify-center py-12">
-        <div class="animate-spin w-6 h-6 border-2 border-primary border-t-transparent rounded-full"></div>
-      </div>
-    {:else if instances.length === 0}
-      <div class="section-card p-8 text-center">
-        <Papicon icon="layers" size={32} class="text-on-surface-variant/40 mx-auto mb-3" />
-        <p class="text-on-surface-variant">Aucune instance white-label configuree</p>
-        <p class="text-sm text-on-surface-variant mt-1">Creez une instance pour deployer le bot sous une marque differente</p>
-      </div>
-    {:else}
-      <div class="grid gap-4">
-        {#each instances as inst}
-          <div class="section-card p-4">
-            <div class="flex items-center justify-between">
-              <div class="flex items-center gap-3">
-                <div class="w-10 h-10 rounded-lg flex items-center justify-center" style="background-color: {inst.brandColor}20; border: 1px solid {inst.brandColor}40;">
-                  {#if inst.brandLogoUrl}
-                    <img src={inst.brandLogoUrl} alt={inst.name} class="w-6 h-6 rounded" />
-                  {:else}
-                    <Papicon icon="bot" size={18} style="color: {inst.brandColor}" />
-                  {/if}
-                </div>
-                <div>
-                  <div class="flex items-center gap-2">
-                    <span class="font-medium text-on-surface">{inst.name}</span>
-                    <span class="text-xs px-1.5 py-0.5 rounded bg-surface-container text-on-surface-variant font-mono">{inst.slug}</span>
-                    {#if inst.enabled}
-                      <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
-                    {:else}
-                      <span class="w-2 h-2 rounded-full bg-red-500"></span>
-                    {/if}
-                  </div>
-                  <div class="flex items-center gap-3 mt-0.5 text-xs text-on-surface-variant">
-                    <span>{inst.guildCount}/{inst.maxGuilds} guilds</span>
-                    {#if inst.dashboardUrl}
-                      <span>{inst.dashboardUrl}</span>
-                    {/if}
-                    {#if inst.apiPort}
-                      <span>Port {inst.apiPort}</span>
-                    {/if}
-                  </div>
-                </div>
-              </div>
-
-              <div class="flex items-center gap-2">
-                <button
-                  onclick={() => openDetail(inst)}
-                  class="p-2 rounded-lg hover:bg-surface-container transition-colors text-on-surface-variant"
-                  title="Details"
-                >
-                  <Papicon icon="settings" size={16} />
-                </button>
-                <button
-                  onclick={() => handleToggle(inst)}
-                  class="p-2 rounded-lg hover:bg-surface-container transition-colors"
-                  class:text-success={inst.enabled}
-                  class:text-error={!inst.enabled}
-                  title={inst.enabled ? 'Desactiver' : 'Activer'}
-                >
-                  <Papicon icon={inst.enabled ? 'toggle-right' : 'toggle-left'} size={16} />
-                </button>
-                <button
-                  onclick={() => handleDelete(inst)}
-                  class="p-2 rounded-lg hover:bg-error/10 transition-colors text-error"
-                  title="Supprimer"
-                >
-                  <Papicon icon="trash" size={16} />
-                </button>
-              </div>
-            </div>
-          </div>
-        {/each}
-      </div>
-    {/if}
-
-    <!-- Detail / Guild binding panel -->
-    {#if detailInstance}
-      <div class="section-card p-6 space-y-4">
-        <div class="flex items-center justify-between">
-          <h3 class="font-semibold text-on-surface">
-            {detailInstance.name}
-            <span class="text-xs font-mono text-on-surface-variant ml-2">{detailInstance.slug}</span>
-          </h3>
-          <button onclick={() => detailInstance = null} class="text-on-surface-variant hover:text-on-surface">
-            <Papicon icon="x" size={18} />
-          </button>
-        </div>
-
-        <div class="grid grid-cols-2 gap-4 text-sm">
-          <div>
-            <span class="text-on-surface-variant">Client ID</span>
-            <p class="font-mono text-on-surface">{detailInstance.discordClientId}</p>
-          </div>
-          <div>
-            <span class="text-on-surface-variant">Token</span>
-            <p class="font-mono text-on-surface">{detailInstance.discordToken}</p>
-          </div>
-          <div>
-            <span class="text-on-surface-variant">Dashboard URL</span>
-            <p class="text-on-surface">{detailInstance.dashboardUrl || 'Par defaut'}</p>
-          </div>
-          <div>
-            <span class="text-on-surface-variant">Owner</span>
-            <p class="font-mono text-on-surface">{detailInstance.ownerId}</p>
-          </div>
-        </div>
-
-        <hr class="border-outline-variant" />
-
-        <div>
-          <h4 class="font-medium text-on-surface mb-2">Guilds rattachees ({detailInstance.guilds?.length || 0}/{detailInstance.maxGuilds})</h4>
-
-          {#if detailInstance.guilds?.length > 0}
-            <div class="space-y-2 mb-4">
-              {#each detailInstance.guilds as guild}
-                <div class="flex items-center justify-between px-3 py-2 bg-surface-container rounded-lg">
-                  <span class="text-sm font-mono text-on-surface">{guild.id}</span>
-                  <button
-                    onclick={() => handleUnbindGuild(guild.id)}
-                    class="text-xs text-error hover:underline"
-                  >
-                    Detacher
-                  </button>
-                </div>
-              {/each}
-            </div>
-          {/if}
-
-          {#if (detailInstance.guilds?.length || 0) < detailInstance.maxGuilds}
-            <div class="mt-2">
-              <label for="bind-guild-select" class="text-xs text-on-surface-variant block mb-1">Rattacher une guild</label>
-              <select
-                id="bind-guild-select"
-                onchange={(e) => { const v = (e.target as HTMLSelectElement).value; if (v) handleBindGuild(v); }}
-                class="w-full px-3 py-2 bg-surface-container border border-outline-variant rounded-lg text-sm text-on-surface"
-              >
-                <option value="">Selectionnez une guild...</option>
-                {#each allGuilds.filter(g => !detailInstance.guilds?.some((bg: any) => bg.id === g.id)) as guild}
-                  <option value={guild.id}>{guild.name} ({guild.id})</option>
-                {/each}
-              </select>
-            </div>
-          {/if}
-        </div>
-      </div>
-    {/if}
-  </div>
-
-  <!-- Create Modal -->
-  {#if showCreateModal}
-    <div class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onclick={() => showCreateModal = false} role="button" tabindex="-1" onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') showCreateModal = false; }}>
-      <div class="bg-surface w-full max-w-lg rounded-2xl shadow-xl max-h-[85vh] overflow-y-auto" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} role="dialog" aria-modal="true" tabindex="-1">
-        <div class="p-6 space-y-4">
-          <div class="flex items-center justify-between">
-            <h3 class="text-lg font-semibold text-on-surface">Nouvelle instance White-Label</h3>
-            <button onclick={() => showCreateModal = false} class="text-on-surface-variant hover:text-on-surface">
-              <Papicon icon="x" size={18} />
-            </button>
-          </div>
-
-          <div class="space-y-3">
-            <div class="grid grid-cols-2 gap-3">
-              <div>
-                <label for="create-slug" class="text-xs text-on-surface-variant block mb-1">Slug *</label>
-                <input id="create-slug" bind:value={form.slug} placeholder="ma-commu" class="w-full px-3 py-2 bg-surface-container border border-outline-variant rounded-lg text-sm text-on-surface" />
-              </div>
-              <div>
-                <label for="create-name" class="text-xs text-on-surface-variant block mb-1">Nom *</label>
-                <input id="create-name" bind:value={form.name} placeholder="Ma Communaute" class="w-full px-3 py-2 bg-surface-container border border-outline-variant rounded-lg text-sm text-on-surface" />
-              </div>
-            </div>
-
-            <hr class="border-outline-variant" />
-            <p class="text-xs font-medium text-on-surface-variant">Discord App</p>
-
-            <div>
-              <label for="create-discord-token" class="text-xs text-on-surface-variant block mb-1">Bot Token *</label>
-              <input id="create-discord-token" bind:value={form.discordToken} type="password" placeholder="Bot token..." class="w-full px-3 py-2 bg-surface-container border border-outline-variant rounded-lg text-sm text-on-surface font-mono" />
-            </div>
-            <div class="grid grid-cols-2 gap-3">
-              <div>
-                <label for="create-discord-client-id" class="text-xs text-on-surface-variant block mb-1">Client ID *</label>
-                <input id="create-discord-client-id" bind:value={form.discordClientId} placeholder="123456..." class="w-full px-3 py-2 bg-surface-container border border-outline-variant rounded-lg text-sm text-on-surface font-mono" />
-              </div>
-              <div>
-                <label for="create-discord-client-secret" class="text-xs text-on-surface-variant block mb-1">Client Secret *</label>
-                <input id="create-discord-client-secret" bind:value={form.discordClientSecret} type="password" class="w-full px-3 py-2 bg-surface-container border border-outline-variant rounded-lg text-sm text-on-surface font-mono" />
-              </div>
-            </div>
-            <div>
-              <label for="create-discord-redirect-uri" class="text-xs text-on-surface-variant block mb-1">Redirect URI (optionnel)</label>
-              <input id="create-discord-redirect-uri" bind:value={form.discordRedirectUri} placeholder="https://api.commu.fr/api/auth/discord/callback" class="w-full px-3 py-2 bg-surface-container border border-outline-variant rounded-lg text-sm text-on-surface" />
-            </div>
-
-            <hr class="border-outline-variant" />
-            <p class="text-xs font-medium text-on-surface-variant">Dashboard</p>
-
-            <div class="grid grid-cols-2 gap-3">
-              <div>
-                <label for="create-dashboard-url" class="text-xs text-on-surface-variant block mb-1">URL Dashboard</label>
-                <input id="create-dashboard-url" bind:value={form.dashboardUrl} placeholder="https://panel.commu.fr" class="w-full px-3 py-2 bg-surface-container border border-outline-variant rounded-lg text-sm text-on-surface" />
-              </div>
-              <div>
-                <label for="create-api-port" class="text-xs text-on-surface-variant block mb-1">Port API</label>
-                <input id="create-api-port" bind:value={form.apiPort} type="number" placeholder="8788" class="w-full px-3 py-2 bg-surface-container border border-outline-variant rounded-lg text-sm text-on-surface" />
-              </div>
-            </div>
-
-            <hr class="border-outline-variant" />
-            <p class="text-xs font-medium text-on-surface-variant">Branding</p>
-
-            <div class="grid grid-cols-2 gap-3">
-              <div>
-                <label for="brand-name" class="text-xs text-on-surface-variant block mb-1">Nom de marque</label>
-                <input id="brand-name" bind:value={form.brandName} placeholder="Mon Bot" class="w-full px-3 py-2 bg-surface-container border border-outline-variant rounded-lg text-sm text-on-surface" />
-              </div>
-              <div>
-                <label for="brand-color" class="text-xs text-on-surface-variant block mb-1">Couleur primaire</label>
-                <div class="flex items-center gap-2">
-                  <input id="brand-color" bind:value={form.brandColor} type="color" class="w-8 h-8 rounded cursor-pointer border-0" />
-                  <input bind:value={form.brandColor} placeholder="#5865F2" class="flex-1 px-3 py-2 bg-surface-container border border-outline-variant rounded-lg text-sm text-on-surface font-mono" aria-label="Couleur primaire (hex)" />
-                </div>
-              </div>
-            </div>
-            <div>
-              <label for="brand-logo" class="text-xs text-on-surface-variant block mb-1">URL du logo</label>
-              <input id="brand-logo" bind:value={form.brandLogoUrl} placeholder="https://..." class="w-full px-3 py-2 bg-surface-container border border-outline-variant rounded-lg text-sm text-on-surface" />
-            </div>
-            <div>
-              <label for="brand-footer" class="text-xs text-on-surface-variant block mb-1">Texte de footer</label>
-              <input id="brand-footer" bind:value={form.brandFooterText} placeholder="Powered by..." class="w-full px-3 py-2 bg-surface-container border border-outline-variant rounded-lg text-sm text-on-surface" />
-            </div>
-
-            <hr class="border-outline-variant" />
-            <p class="text-xs font-medium text-on-surface-variant">Proprietaire</p>
-
-            <div class="grid grid-cols-2 gap-3">
-              <div>
-                <label for="owner-id" class="text-xs text-on-surface-variant block mb-1">Discord User ID *</label>
-                <input id="owner-id" bind:value={form.ownerId} placeholder="123456789..." class="w-full px-3 py-2 bg-surface-container border border-outline-variant rounded-lg text-sm text-on-surface font-mono" />
-              </div>
-              <div>
-                <label for="max-guilds" class="text-xs text-on-surface-variant block mb-1">Max guilds</label>
-                <input id="max-guilds" bind:value={form.maxGuilds} type="number" min="1" class="w-full px-3 py-2 bg-surface-container border border-outline-variant rounded-lg text-sm text-on-surface" />
-              </div>
-            </div>
-          </div>
-
-          <div class="flex justify-end gap-3 pt-2">
-            <button onclick={() => showCreateModal = false} class="px-4 py-2 text-sm text-on-surface-variant hover:text-on-surface transition-colors">
-              Annuler
-            </button>
-            <button
-              onclick={handleCreate}
-              disabled={!form.slug || !form.name || !form.discordToken || !form.discordClientSecret}
-              use:explainDisabled={(!form.discordClientId) ? m.common_reason_fill_field() : (!form.ownerId) ? m.common_reason_fill_field() : ''}
-              class="px-4 py-2 bg-primary text-on-primary rounded-lg text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
+  <AdminTable
+    {columns}
+    rows={instances}
+    {loading}
+    skeletonRows={3}
+    emptyIcon="Layers"
+    emptyTitle="Aucune instance en marque blanche"
+    emptyHint="Crée une instance pour déployer le bot sous une autre marque."
+  >
+    {#snippet row(item, _index)}
+      {@const inst = item as WLInstance}
+      <tr class="border-b border-outline-variant/12 hover:bg-on-surface/3 transition-colors">
+        <td class="px-4 py-3">
+          <button type="button" onclick={() => openDetail(inst)} class="flex items-center gap-3 min-w-0 text-left group">
+            <!-- La couleur vient de la marque du client, pas du thème. -->
+            <span
+              class="w-9 h-9 shrink-0 rounded-xl flex items-center justify-center overflow-hidden"
+              style="background-color: {inst.brandColor}20; color: {inst.brandColor}"
             >
-              Creer l'instance
-            </button>
+              {#if inst.brandLogoUrl}
+                <img src={inst.brandLogoUrl} alt="" class="w-6 h-6 rounded" loading="lazy" />
+              {:else}
+                <Papicon icon="Bot" size={16} />
+              {/if}
+            </span>
+            <span class="min-w-0">
+              <span class="block text-body-sm font-semibold text-on-surface truncate group-hover:text-primary transition-colors">{inst.name}</span>
+              <span class="block text-2xs text-on-surface-variant font-mono truncate">{inst.slug}</span>
+            </span>
+          </button>
+        </td>
+        <td class="px-4 py-3 text-right text-body-sm font-semibold text-on-surface tabular-nums">{inst.guildCount}/{inst.maxGuilds}</td>
+        <td class="px-4 py-3 hidden md:table-cell">
+          <p class="text-xs text-on-surface-variant truncate max-w-64">{inst.dashboardUrl ?? 'Par défaut'}</p>
+          {#if inst.apiPort}<p class="text-2xs text-on-surface-variant font-mono">Port {inst.apiPort}</p>{/if}
+        </td>
+        <td class="px-4 py-3">
+          <div class="flex justify-center">
+            <ToggleSwitch size="sm" checked={inst.enabled} ariaLabel="Activer {inst.name}" onToggle={() => handleToggle(inst)} />
           </div>
+        </td>
+        <td class="px-4 py-3">
+          <div class="flex items-center justify-end gap-1">
+            <Button size="sm" icon="Settings" title="Détails et serveurs" aria-label="Détails de {inst.name}" onclick={() => openDetail(inst)} />
+            <Button size="sm" variant="danger" icon="Trash" title="Supprimer" aria-label="Supprimer {inst.name}" onclick={() => handleDelete(inst)} />
+          </div>
+        </td>
+      </tr>
+    {/snippet}
+  </AdminTable>
+</AdminShell>
+
+<AdminDrawer bind:open={detailOpen} title={detailInstance?.name ?? ''} subtitle={detailInstance?.slug ?? ''}>
+  {#if detailInstance}
+    <dl class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      {#each [
+        { label: 'Client ID', value: detailInstance.discordClientId, mono: true },
+        { label: 'Jeton du bot', value: detailInstance.discordToken, mono: true },
+        { label: 'URL du dashboard', value: detailInstance.dashboardUrl || 'Par défaut', mono: false },
+        { label: 'Propriétaire', value: detailInstance.ownerId, mono: true },
+      ] as entry (entry.label)}
+        <div class="min-w-0">
+          <dt class="text-xs font-semibold text-on-surface-variant">{entry.label}</dt>
+          <dd class="text-body-sm text-on-surface break-all mt-0.5 {entry.mono ? 'font-mono' : ''}">{entry.value}</dd>
         </div>
+      {/each}
+    </dl>
+
+    <div class="mt-6 pt-5 border-t border-outline-variant/20 space-y-3">
+      <div class="flex items-center justify-between gap-3">
+        <h3 class="text-sm font-semibold text-on-surface">Serveurs rattachés</h3>
+        <AdminBadge label="{boundGuilds.length}/{detailInstance.maxGuilds}" tone={boundGuilds.length >= detailInstance.maxGuilds ? 'warning' : 'neutral'} />
       </div>
+
+      {#if boundGuilds.length === 0}
+        <p class="text-body-sm text-on-surface-variant">Aucun serveur rattaché pour l’instant.</p>
+      {:else}
+        <ul class="divide-y divide-outline-variant/20 rounded-xl border border-outline-variant/25">
+          {#each boundGuilds as guild (guild.id)}
+            <li class="flex items-center justify-between gap-3 px-3 py-2">
+              <div class="min-w-0">
+                {#if guildName(guild.id)}<p class="text-body-sm font-semibold text-on-surface truncate">{guildName(guild.id)}</p>{/if}
+                <p class="text-2xs font-mono text-on-surface-variant">{guild.id}</p>
+              </div>
+              <Button size="sm" variant="danger" onclick={() => handleUnbindGuild(guild.id)}>Détacher</Button>
+            </li>
+          {/each}
+        </ul>
+      {/if}
+
+      {#if boundGuilds.length < detailInstance.maxGuilds}
+        <Field label="Rattacher un serveur">
+          {#snippet children(id)}
+            <select
+              {id}
+              class="input"
+              onchange={(e) => { const v = e.currentTarget.value; e.currentTarget.value = ''; if (v) void handleBindGuild(v); }}
+            >
+              <option value="">Choisis un serveur…</option>
+              {#each bindableGuilds as guild (guild.id)}
+                <option value={guild.id}>{guild.name} ({guild.id})</option>
+              {/each}
+            </select>
+          {/snippet}
+        </Field>
+      {:else}
+        <p class="text-xs text-on-surface-variant">Plafond atteint : détache un serveur pour en rattacher un autre.</p>
+      {/if}
     </div>
   {/if}
-</AdminShell>
+</AdminDrawer>
+
+<Modal bind:open={showCreateModal} title="Nouvelle instance en marque blanche" size="md">
+  <form id="wl-create" class="space-y-5" onsubmit={(e) => { e.preventDefault(); if (formComplete) void handleCreate(); }}>
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <Field label="Slug" required>
+        {#snippet children(id)}<input {id} bind:value={form.slug} placeholder="ma-commu" class="input font-mono" />{/snippet}
+      </Field>
+      <Field label="Nom" required>
+        {#snippet children(id)}<input {id} bind:value={form.name} placeholder="Ma Communauté" class="input" />{/snippet}
+      </Field>
+    </div>
+
+    <fieldset class="space-y-3">
+      <legend class="text-xs font-semibold text-on-surface-variant mb-2">Application Discord</legend>
+      <Field label="Jeton du bot" required>
+        {#snippet children(id)}<input {id} bind:value={form.discordToken} type="password" autocomplete="off" class="input font-mono" />{/snippet}
+      </Field>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <Field label="Client ID" required>
+          {#snippet children(id)}<input {id} bind:value={form.discordClientId} placeholder="123456…" inputmode="numeric" class="input font-mono" />{/snippet}
+        </Field>
+        <Field label="Client Secret" required>
+          {#snippet children(id)}<input {id} bind:value={form.discordClientSecret} type="password" autocomplete="off" class="input font-mono" />{/snippet}
+        </Field>
+      </div>
+      <Field label="Redirect URI (optionnel)">
+        {#snippet children(id)}
+          <input {id} bind:value={form.discordRedirectUri} placeholder="https://api.commu.fr/api/auth/discord/callback" class="input" />
+        {/snippet}
+      </Field>
+    </fieldset>
+
+    <fieldset class="space-y-3">
+      <legend class="text-xs font-semibold text-on-surface-variant mb-2">Dashboard</legend>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <Field label="URL du dashboard">
+          {#snippet children(id)}<input {id} bind:value={form.dashboardUrl} placeholder="https://panel.commu.fr" class="input" />{/snippet}
+        </Field>
+        <Field label="Port de l’API">
+          {#snippet children(id)}<input {id} bind:value={form.apiPort} type="number" placeholder="8788" class="input" />{/snippet}
+        </Field>
+      </div>
+    </fieldset>
+
+    <fieldset class="space-y-3">
+      <legend class="text-xs font-semibold text-on-surface-variant mb-2">Marque</legend>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <Field label="Nom de marque">
+          {#snippet children(id)}<input {id} bind:value={form.brandName} placeholder="Mon Bot" class="input" />{/snippet}
+        </Field>
+        <Field label="Couleur principale">
+          {#snippet children(id)}
+            <div class="flex items-center gap-2">
+              <input {id} bind:value={form.brandColor} type="color" class="w-9 h-9 shrink-0 rounded-lg cursor-pointer border-0 bg-transparent" />
+              <input bind:value={form.brandColor} placeholder="#5865F2" class="input font-mono" aria-label="Couleur principale (hex)" />
+            </div>
+          {/snippet}
+        </Field>
+      </div>
+      <Field label="URL du logo">
+        {#snippet children(id)}<input {id} bind:value={form.brandLogoUrl} placeholder="https://…" class="input" />{/snippet}
+      </Field>
+      <Field label="Texte de pied de page">
+        {#snippet children(id)}<input {id} bind:value={form.brandFooterText} placeholder="Powered by…" class="input" />{/snippet}
+      </Field>
+    </fieldset>
+
+    <fieldset class="space-y-3">
+      <legend class="text-xs font-semibold text-on-surface-variant mb-2">Propriétaire</legend>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <Field label="ID Discord du propriétaire" required>
+          {#snippet children(id)}<input {id} bind:value={form.ownerId} placeholder="123456789…" inputmode="numeric" class="input font-mono" />{/snippet}
+        </Field>
+        <Field label="Serveurs maximum">
+          {#snippet children(id)}<input {id} bind:value={form.maxGuilds} type="number" min="1" class="input" />{/snippet}
+        </Field>
+      </div>
+    </fieldset>
+  </form>
+
+  {#snippet footer()}
+    <div class="flex justify-end gap-2">
+      <Button variant="ghost" onclick={() => (showCreateModal = false)}>Annuler</Button>
+      <Button
+        type="submit"
+        form="wl-create"
+        variant="primary"
+        loading={creating}
+        disabled={!formComplete}
+        disabledReason={m.common_reason_fill_field()}
+      >
+        Créer l’instance
+      </Button>
+    </div>
+  {/snippet}
+</Modal>
