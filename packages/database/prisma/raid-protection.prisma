@@ -342,7 +342,7 @@ model ScamImageHash {
   // diffusion des captures d'arnaque.
   phash    String?
   filename String?
-  source   String @default("HONEYPOT") // HONEYPOT | MANUAL | QR
+  source   String @default("HONEYPOT") // HONEYPOT | MANUAL | OCR | VARIANT | REVIEW | DISMISSED | SEED (catalogue d'amorce livré avec le bot)
   addedBy  String? // userId du membre à l'origine (auteur du scam ou staff)
 
   // Texte lu dans l'image (OCR local), normalisé. Une capture photographiée ou
