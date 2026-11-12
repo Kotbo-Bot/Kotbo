@@ -290,6 +290,16 @@ export function rollDropJackpot(
   return random() < 1 / settings.dropJackpotChance;
 }
 
+/** Rôle à mentionner pour un drop donné, ou `null` quand personne ne doit l'être. */
+export function dropMentionRoleId(
+  settings: Pick<DropGlobalSettings, 'dropMentionRoleId' | 'dropMentionJackpotOnly'>,
+  jackpot: boolean,
+): string | null {
+  if (!settings.dropMentionRoleId) return null;
+  if (settings.dropMentionJackpotOnly && !jackpot) return null;
+  return settings.dropMentionRoleId;
+}
+
 export function dropJackpotAmount(amount: number, multiplier: number): number {
   return Math.min(DROP_AMOUNT_RANGE.max, amount * multiplier);
 }
@@ -321,6 +331,11 @@ export interface DropGlobalSettings {
   dropsEnabled: boolean;
   dropChannelId: string | null;
   dropMentionRoleId: string | null;
+  /**
+   * Le rôle n'est mentionné que pour les jackpots. Mentionné à chaque drop, il fait couper
+   * les notifications du serveur ; réservé aux jackpots, il redevient attendu.
+   */
+  dropMentionJackpotOnly: boolean;
   dropLifetimeMinutes: number;
   /** Minutes après clôture avant suppression du message. `0` = jamais. */
   dropDeleteAfterMinutes: number;
@@ -334,6 +349,7 @@ export const DEFAULT_DROP_GLOBAL_SETTINGS: DropGlobalSettings = {
   dropsEnabled: false,
   dropChannelId: null,
   dropMentionRoleId: null,
+  dropMentionJackpotOnly: false,
   dropLifetimeMinutes: 60,
   dropDeleteAfterMinutes: DROP_DELETE_AFTER_DISABLED,
   dropJackpotEnabled: false,
@@ -427,6 +443,7 @@ export function normalizeDropGlobalSettings(raw: Partial<DropGlobalSettings> | n
     dropsEnabled: source.dropsEnabled ?? DEFAULT_DROP_GLOBAL_SETTINGS.dropsEnabled,
     dropChannelId: source.dropChannelId ?? null,
     dropMentionRoleId: source.dropMentionRoleId ?? null,
+    dropMentionJackpotOnly: source.dropMentionJackpotOnly ?? DEFAULT_DROP_GLOBAL_SETTINGS.dropMentionJackpotOnly,
     dropLifetimeMinutes: clampDropInt(
       source.dropLifetimeMinutes,
       DROP_LIFETIME_MINUTES_RANGE,

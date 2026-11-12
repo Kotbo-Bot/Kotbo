@@ -25,6 +25,7 @@ import {
   dropActivityVerdict,
   dropExpiresAt,
   dropJackpotAmount,
+  dropMentionRoleId,
   dropMaxClaims,
   dropMessageDeleteAt,
   enabledDropModes,
@@ -70,6 +71,7 @@ interface DropGuildContext {
   id: string;
   dropChannelId: string | null;
   dropMentionRoleId: string | null;
+  dropMentionJackpotOnly: boolean;
   dropLifetimeMinutes: number;
   dropDeleteAfterMinutes: number;
   dropJackpotEnabled: boolean;
@@ -346,13 +348,14 @@ async function publishDrop(
   });
 
   const locale = await resolveGuildLocale(guild.id);
-  const mention = guild.dropMentionRoleId ? `<@&${guild.dropMentionRoleId}>` : undefined;
+  const mentionRoleId = dropMentionRoleId(guild, jackpot);
+  const mention = mentionRoleId ? `<@&${mentionRoleId}>` : undefined;
 
   const message = await channel.send({
     content: mention,
     embeds: [buildDropEmbed(drop, locale, itemLabel)],
     components: [buildClaimRow(drop.id, locale, false)],
-    allowedMentions: mention ? { roles: [guild.dropMentionRoleId!] } : { parse: [] },
+    allowedMentions: mentionRoleId ? { roles: [mentionRoleId] } : { parse: [] },
   }).catch((error: unknown) => {
     logger.error('Drops', `Publication impossible du drop ${config.type} sur ${guild.id}:`, error);
     return null;
@@ -459,6 +462,7 @@ export async function runDropCycle(client: Client): Promise<void> {
       id: true,
       dropChannelId: true,
       dropMentionRoleId: true,
+      dropMentionJackpotOnly: true,
       dropLifetimeMinutes: true,
       dropDeleteAfterMinutes: true,
       dropJackpotEnabled: true,

@@ -412,6 +412,7 @@
           dropsEnabled: res.dropsEnabled,
           dropChannelId: res.dropChannelId,
           dropMentionRoleId: res.dropMentionRoleId,
+          dropMentionJackpotOnly: res.dropMentionJackpotOnly,
           dropLifetimeMinutes: res.dropLifetimeMinutes,
           dropDeleteAfterMinutes: res.dropDeleteAfterMinutes ?? DROP_DELETE_AFTER_DISABLED,
           dropJackpotEnabled: res.dropJackpotEnabled,
@@ -662,6 +663,20 @@
               disabled={!canManageSettings}
             />
             <p class="text-2xs text-on-surface-variant mt-1">{m.drop_mention_role_desc()}</p>
+            {#if globalSettings.dropMentionRoleId}
+              <label class="flex items-center gap-2 pt-1 text-xs text-on-surface cursor-pointer">
+                <input
+                  type="checkbox"
+                  bind:checked={globalSettings.dropMentionJackpotOnly}
+                  disabled={!canManageSettings}
+                  class="accent-primary"
+                />
+                {m.drop_mention_jackpot_only_label()}
+              </label>
+              {#if globalSettings.dropMentionJackpotOnly && !globalSettings.dropJackpotEnabled}
+                <p class="text-2xs text-warning">{m.drop_mention_jackpot_only_off_hint()}</p>
+              {/if}
+            {/if}
           </div>
 
           <div class="space-y-1.5">

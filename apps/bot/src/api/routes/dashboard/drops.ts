@@ -88,6 +88,7 @@ export async function handleDropsRoutes(
           dropsEnabled: true,
           dropChannelId: true,
           dropMentionRoleId: true,
+          dropMentionJackpotOnly: true,
           dropLifetimeMinutes: true,
           dropDeleteAfterMinutes: true,
           dropJackpotEnabled: true,
@@ -162,6 +163,7 @@ export async function handleDropsRoutes(
         dropsEnabled?: boolean;
         dropChannelId?: string | null;
         dropMentionRoleId?: string | null;
+        dropMentionJackpotOnly?: boolean;
         dropLifetimeMinutes?: number;
         dropDeleteAfterMinutes?: number;
         dropJackpotEnabled?: boolean;
@@ -175,6 +177,7 @@ export async function handleDropsRoutes(
           dropsEnabled: true,
           dropChannelId: true,
           dropMentionRoleId: true,
+          dropMentionJackpotOnly: true,
           dropLifetimeMinutes: true,
           dropDeleteAfterMinutes: true,
           dropJackpotEnabled: true,
@@ -194,6 +197,7 @@ export async function handleDropsRoutes(
         dropsEnabled: body?.dropsEnabled ?? current.dropsEnabled,
         dropChannelId: body?.dropChannelId === undefined ? current.dropChannelId : (body.dropChannelId || null),
         dropMentionRoleId: body?.dropMentionRoleId === undefined ? current.dropMentionRoleId : (body.dropMentionRoleId || null),
+        dropMentionJackpotOnly: body?.dropMentionJackpotOnly ?? current.dropMentionJackpotOnly,
         dropLifetimeMinutes: body?.dropLifetimeMinutes ?? current.dropLifetimeMinutes,
         dropDeleteAfterMinutes: body?.dropDeleteAfterMinutes ?? current.dropDeleteAfterMinutes,
         dropJackpotEnabled: body?.dropJackpotEnabled ?? current.dropJackpotEnabled,
@@ -217,6 +221,7 @@ export async function handleDropsRoutes(
         data: {
           dropChannelId: settings.dropChannelId,
           dropMentionRoleId: settings.dropMentionRoleId,
+          dropMentionJackpotOnly: settings.dropMentionJackpotOnly,
           dropLifetimeMinutes: settings.dropLifetimeMinutes,
           dropDeleteAfterMinutes: settings.dropDeleteAfterMinutes,
           dropJackpotEnabled: settings.dropJackpotEnabled,

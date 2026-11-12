@@ -13,6 +13,7 @@
   import type { DropAnnouncementLabels } from '../api';
   import {
     dropJackpotAmount,
+    dropMentionRoleId,
     enabledDropModes,
     dropModeSettings,
     type DropGlobalSettings,
@@ -33,7 +34,7 @@
     labels: DropAnnouncementLabels;
     type: DropType;
     settings: DropTypeSettings;
-    jackpot: Pick<DropGlobalSettings, 'dropJackpotEnabled' | 'dropJackpotMultiplier'>;
+    jackpot: Pick<DropGlobalSettings, 'dropJackpotEnabled' | 'dropJackpotMultiplier' | 'dropMentionJackpotOnly'>;
     modeLabels: Record<DropMode, () => string>;
     /** Pièce la plus probable, pour un drop d'objet : « 1 objet » n'est pas ce qui tombera. */
     itemLabel?: string | null;
@@ -52,6 +53,12 @@
   const jackpotPossible = $derived(jackpot.dropJackpotEnabled && type !== 'RPG_ITEM');
   let showJackpot = $state(false);
   const asJackpot = $derived(jackpotPossible && showJackpot);
+
+  // Même règle que la publication : le nom tient lieu d'identifiant, seul le choix compte.
+  const shownMention = $derived(dropMentionRoleId(
+    { dropMentionRoleId: mentionRoleName, dropMentionJackpotOnly: jackpot.dropMentionJackpotOnly },
+    asJackpot,
+  ));
 
   const numberFormat = $derived(new Intl.NumberFormat(labels.locale === 'fr' ? 'fr-FR' : 'en-US'));
 
@@ -94,8 +101,8 @@
     </div>
 
     <div class="discord">
-      {#if mentionRoleName}
-        <p class="mention-line"><span class="mention">@{mentionRoleName}</span></p>
+      {#if shownMention}
+        <p class="mention-line"><span class="mention">@{shownMention}</span></p>
       {/if}
       <div class="embed" style="border-left-color: {asJackpot ? JACKPOT_COLOR : EMBED_COLOR}">
         <p class="embed-title">{asJackpot ? labels.jackpotTitle : labels.title}</p>

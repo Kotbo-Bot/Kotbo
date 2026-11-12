@@ -337,3 +337,36 @@ describe('handleDropsRoutes - bilan de la semaine', () => {
     expect(weeklyOutcomes.RPG_ITEM).toEqual({ closed: 0, unclaimed: 0 });
   });
 });
+
+describe('handleDropsRoutes - mention réservée aux jackpots', () => {
+  beforeEach(() => {
+    mockDb.guild.update.mockClear();
+    guildRow = {
+      id: 'guild-123',
+      dropsEnabled: true,
+      dropChannelId: null,
+      dropMentionRoleId: 'role-drops',
+      dropMentionJackpotOnly: false,
+      dropLifetimeMinutes: 60,
+      dropDeleteAfterMinutes: 0,
+    };
+  });
+
+  test('l\'option est enregistrée', async () => {
+    const res = createMockResponse();
+    await handleDropsRoutes(
+      createMockRequest({ dropMentionJackpotOnly: true }),
+      res,
+      ['api', 'dashboard', 'guilds', 'guild-123', 'drops'],
+      mockClient,
+      mockUser,
+      'guild-123',
+      mockAccess,
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(mockDb.guild.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ dropMentionRoleId: 'role-drops', dropMentionJackpotOnly: true }),
+    }));
+  });
+});

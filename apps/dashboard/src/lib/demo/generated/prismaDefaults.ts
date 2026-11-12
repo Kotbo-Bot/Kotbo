@@ -2823,6 +2823,7 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "dropsEnabled": false,
     "dropChannelId": null,
     "dropMentionRoleId": null,
+    "dropMentionJackpotOnly": false,
     "dropLifetimeMinutes": 60,
     "dropDeleteAfterMinutes": 0,
     "dropJackpotEnabled": false,
