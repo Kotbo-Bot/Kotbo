@@ -78,6 +78,7 @@ export async function handleDropsRoutes(
         select: {
           id: true,
           type: true,
+          itemId: true,
           mode: true,
           channelId: true,
           amount: true,
@@ -89,11 +90,20 @@ export async function handleDropsRoutes(
         },
       });
 
+      // Un drop d'objet se lit « 2 » sans le nom de la pièce : une seule lecture
+      // pour tout l'historique. Un objet supprimé depuis reste à `null`.
+      const itemIds = [...new Set(recent.flatMap((drop) => (drop.itemId ? [drop.itemId] : [])))];
+      const items = itemIds.length > 0
+        ? await prisma.rpgItem.findMany({ where: { id: { in: itemIds } }, select: { id: true, name: true, emoji: true } })
+        : [];
+      const itemById = new Map(items.map((item) => [item.id, { name: item.name, emoji: item.emoji }]));
+
       json(res, 200, {
         ...normalizeDropGlobalSettings(guildData),
         configs: configs.map(serializeConfig),
-        recentDrops: recent.map((drop) => ({
+        recentDrops: recent.map(({ itemId, ...drop }) => ({
           ...drop,
+          item: itemId ? itemById.get(itemId) ?? null : null,
           createdAt: drop.createdAt.toISOString(),
           expiresAt: drop.expiresAt.toISOString(),
           closedAt: drop.closedAt?.toISOString() ?? null,

@@ -19,6 +19,7 @@ import {
   dropExpiresAt,
   dropMaxClaims,
   dropMessageDeleteAt,
+  dropTypeBlocker,
   enabledDropModes,
   nextAllowedPublicationAt,
   normalizeDropGlobalSettings,
@@ -296,5 +297,40 @@ describe('module qui verse la récompense d\'un drop', () => {
       COINS: 'economy',
       RPG_ITEM: 'economy',
     });
+  });
+});
+
+describe('ce qui empêche un type de drop de tomber', () => {
+  const pret = { defaultChannelId: 'salon-defaut', resourceModuleActive: true, rpgEnabled: true };
+
+  test('un type complet n\'est pas bloqué', () => {
+    expect(dropTypeBlocker('XP', defaultDropTypeSettings('XP'), pret)).toBeNull();
+  });
+
+  test('module de la ressource éteint', () => {
+    expect(dropTypeBlocker('COINS', defaultDropTypeSettings('COINS'), { ...pret, resourceModuleActive: false }))
+      .toBe('MODULE_OFF');
+  });
+
+  test('aucun salon, ni propre ni par défaut', () => {
+    expect(dropTypeBlocker('XP', defaultDropTypeSettings('XP'), { ...pret, defaultChannelId: null })).toBe('NO_CHANNEL');
+    expect(dropTypeBlocker('XP', { ...defaultDropTypeSettings('XP'), channelId: 'salon-xp' }, { ...pret, defaultChannelId: null }))
+      .toBeNull();
+  });
+
+  test('aucun mode de ramassage', () => {
+    const settings = defaultDropTypeSettings('XP');
+    expect(dropTypeBlocker('XP', { ...settings, first: { ...settings.first, enabled: false } }, pret)).toBe('NO_MODE');
+  });
+
+  test('drop d\'objet : RPG éteint, puis liste vide', () => {
+    const settings = { ...defaultDropTypeSettings('RPG_ITEM'), items: [{ itemId: 'epee', weight: 100 }] };
+    expect(dropTypeBlocker('RPG_ITEM', settings, { ...pret, rpgEnabled: false })).toBe('RPG_OFF');
+    expect(dropTypeBlocker('RPG_ITEM', { ...settings, items: [] }, pret)).toBe('NO_ITEMS');
+    expect(dropTypeBlocker('RPG_ITEM', settings, pret)).toBeNull();
+  });
+
+  test('le RPG éteint ne bloque que le drop d\'objet', () => {
+    expect(dropTypeBlocker('COINS', defaultDropTypeSettings('COINS'), { ...pret, rpgEnabled: false })).toBeNull();
   });
 });

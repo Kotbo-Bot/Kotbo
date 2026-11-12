@@ -13,6 +13,8 @@ export interface DropConfigEntry extends DropTypeSettings {
 export interface DropHistoryEntry {
   id: string;
   type: DropType;
+  /** Pièce tombée, pour un drop d'objet. `null` sinon, ou si l'objet a été supprimé. */
+  item: { name: string; emoji: string } | null;
   mode: string;
   channelId: string;
   amount: number;

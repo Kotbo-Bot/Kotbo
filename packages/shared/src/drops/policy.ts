@@ -386,6 +386,40 @@ export function pickDropMode(settings: DropTypeSettings, random: () => number = 
   return modes[Math.floor(random() * modes.length)] ?? modes[0];
 }
 
+/**
+ * Raison pour laquelle un type de drop allumé ne publiera rien.
+ *
+ * - `MODULE_OFF` : le module qui tient la ressource est éteint (le cycle saute le type) ;
+ * - `NO_CHANNEL` : ni salon propre, ni salon par défaut ;
+ * - `NO_MODE` : tous les modes de ramassage sont éteints ;
+ * - `RPG_OFF` : drop d'objet sans RPG, aucun inventaire où déposer la pièce ;
+ * - `NO_ITEMS` : drop d'objet sans liste d'objets.
+ *
+ * Une seule raison, la plus en amont : c'est celle qu'il faut lever en premier.
+ */
+export type DropTypeBlocker = 'MODULE_OFF' | 'NO_CHANNEL' | 'NO_MODE' | 'RPG_OFF' | 'NO_ITEMS';
+
+export interface DropTypeContext {
+  defaultChannelId: string | null;
+  resourceModuleActive: boolean;
+  rpgEnabled: boolean;
+}
+
+export function dropTypeBlocker(
+  type: DropType,
+  settings: DropTypeSettings,
+  context: DropTypeContext,
+): DropTypeBlocker | null {
+  if (!context.resourceModuleActive) return 'MODULE_OFF';
+  if (!settings.channelId && !context.defaultChannelId) return 'NO_CHANNEL';
+  if (enabledDropModes(settings).length === 0) return 'NO_MODE';
+  if (type === 'RPG_ITEM') {
+    if (!context.rpgEnabled) return 'RPG_OFF';
+    if (settings.items.length === 0) return 'NO_ITEMS';
+  }
+  return null;
+}
+
 export function dropModeSettings(settings: DropTypeSettings, mode: DropMode): DropModeSettings {
   if (mode === 'RACE') return settings.race;
   if (mode === 'WINDOW') return settings.window;

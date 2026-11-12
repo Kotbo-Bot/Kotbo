@@ -45,9 +45,11 @@
     defaultDropTypeSettings,
     dropAmountRange,
     dropItemsTotalWeight,
+    dropTypeBlocker,
     enabledDropModes,
     type DropGlobalSettings,
     type DropType,
+    type DropTypeBlocker,
   } from '@kotbo/shared';
 
   const actionState = createAsyncActionState();
@@ -172,6 +174,56 @@
   function moduleName(key: string): string {
     return moduleEntry(key)?.name ?? key;
   }
+
+  /**
+   * État d'un type tel que le cycle le verra : « Actif » sur un type qui ne
+   * publiera jamais rien (pas de salon, module éteint...) laisserait croire que
+   * les drops tournent.
+   */
+  function typeStatus(type: DropType): 'on' | 'off' | 'blocked' {
+    if (!configs[type].enabled || !globalSettings.dropsEnabled) return 'off';
+    return typeBlocker(type) ? 'blocked' : 'on';
+  }
+
+  function typeBlocker(type: DropType): DropTypeBlocker | null {
+    return dropTypeBlocker(type, configs[type], {
+      defaultChannelId: globalSettings.dropChannelId,
+      resourceModuleActive: isModuleActive(DROP_TYPE_MODULE[type]),
+      rpgEnabled,
+    });
+  }
+
+  /** Les mêmes textes que les avertissements de l'onglet du type. */
+  function blockerMessage(type: DropType, blocker: DropTypeBlocker): string {
+    if (blocker === 'MODULE_OFF') {
+      return type === 'CLAN_POINTS'
+        ? m.drop_clans_disabled_warning()
+        : m.drop_module_disabled_warning({ module: moduleName(DROP_TYPE_MODULE[type]) });
+    }
+    if (blocker === 'NO_CHANNEL') return m.drop_no_channel_warning();
+    if (blocker === 'NO_MODE') return m.drop_no_mode_warning();
+    if (blocker === 'RPG_OFF') return m.drop_item_pool_rpg_off();
+    return m.drop_item_pool_empty();
+  }
+
+  /** Une échéance passée attend le prochain passage du cycle ou l'écart minimal. */
+  function nextDropLabel(type: DropType): string {
+    const next = configs[type].nextDropAt;
+    if (typeStatus(type) !== 'on' || !next) return '-';
+    return new Date(next) <= new Date() ? m.drop_next_soon() : formatDate(next);
+  }
+
+  const STATUS_PILL: Record<'on' | 'off' | 'blocked', string> = {
+    on: 'bg-success/10 text-success border border-success/20',
+    off: 'bg-surface-container-high/60 text-on-surface-variant',
+    blocked: 'bg-warning/10 text-warning border border-warning/20',
+  };
+
+  const STATUS_LABEL: Record<'on' | 'off' | 'blocked', () => string> = {
+    on: () => m.drop_state_on(),
+    off: () => m.drop_state_off(),
+    blocked: () => m.drop_state_blocked(),
+  };
 
   const canManageSettings = $derived(
     !!dashboardStore.state.featureAccess?.drops?.canConfigure
@@ -433,11 +485,16 @@
       <Papicon icon="Gears" size={15} /> {m.drop_tab_global()}
     </button>
     {#each DROP_TYPES as type}
+      {@const status = typeStatus(type)}
       <button
         class="px-5 py-3 text-sm font-semibold border-b-2 transition-all cursor-pointer inline-flex items-center gap-2 {activeTab === type ? 'border-primary text-primary font-bold bg-primary/5 rounded-t-lg' : 'border-transparent text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low/30'}"
         onclick={() => activeTab = type}
       >
         <Papicon icon={TYPE_ICONS[type]} size={15} /> {TYPE_LABELS[type]()}
+        {#if status !== 'off'}
+          <span class="w-1.5 h-1.5 rounded-full {status === 'on' ? 'bg-success' : 'bg-warning'}" aria-hidden="true"></span>
+          <span class="sr-only">{STATUS_LABEL[status]()}</span>
+        {/if}
       </button>
     {/each}
   </div>
@@ -531,25 +588,36 @@
                 <th class="py-2 pr-4">{m.drop_overview_col_state()}</th>
                 <th class="py-2 pr-4">{m.drop_overview_col_channel()}</th>
                 <th class="py-2 pr-4">{m.drop_overview_col_interval()}</th>
-                <th class="py-2">{m.drop_overview_col_modes()}</th>
+                <th class="py-2 pr-4">{m.drop_overview_col_modes()}</th>
+                <th class="py-2">{m.drop_overview_col_next()}</th>
               </tr>
             </thead>
             <tbody>
               {#each DROP_TYPES as type}
+                {@const status = typeStatus(type)}
+                {@const blocker = status === 'blocked' ? typeBlocker(type) : null}
                 <tr class="text-sm border-t border-outline-variant/10">
                   <td class="py-2.5 pr-4 font-semibold">
-                    <span class="inline-flex items-center gap-2">
+                    <button
+                      type="button"
+                      class="inline-flex items-center gap-2 cursor-pointer hover:text-primary transition-colors"
+                      onclick={() => activeTab = type}
+                    >
                       <Papicon icon={TYPE_ICONS[type]} size={15} /> {TYPE_LABELS[type]()}
-                    </span>
+                    </button>
                   </td>
                   <td class="py-2.5 pr-4">
-                    <span class="text-2xs font-bold uppercase tracking-wider px-2 py-0.5 rounded-full {configs[type].enabled && globalSettings.dropsEnabled ? 'bg-success/10 text-success border border-success/20' : 'bg-surface-container-high/60 text-on-surface-variant'}">
-                      {configs[type].enabled && globalSettings.dropsEnabled ? m.drop_state_on() : m.drop_state_off()}
+                    <span class="text-2xs font-bold uppercase tracking-wider px-2 py-0.5 rounded-full {STATUS_PILL[status]}">
+                      {STATUS_LABEL[status]()}
                     </span>
+                    {#if blocker}
+                      <p class="text-2xs text-warning mt-1 max-w-xs">{blockerMessage(type, blocker)}</p>
+                    {/if}
                   </td>
                   <td class="py-2.5 pr-4 text-on-surface-variant/80">{channelName(configs[type].channelId)}</td>
                   <td class="py-2.5 pr-4 text-on-surface-variant/80">{m.drop_interval_hint({ count: dropsPerDay(configs[type].intervalMinutes) })}</td>
-                  <td class="py-2.5 text-on-surface-variant/80">{modeSummary(configs[type])}</td>
+                  <td class="py-2.5 pr-4 text-on-surface-variant/80">{modeSummary(configs[type])}</td>
+                  <td class="py-2.5 text-on-surface-variant/80 whitespace-nowrap">{nextDropLabel(type)}</td>
                 </tr>
               {/each}
             </tbody>
@@ -583,7 +651,10 @@
                     <td class="py-2.5 pr-4 text-on-surface-variant/80 whitespace-nowrap">{formatDate(drop.createdAt)}</td>
                     <td class="py-2.5 pr-4 font-semibold">{TYPE_LABELS[drop.type]?.() ?? drop.type}</td>
                     <td class="py-2.5 pr-4 text-on-surface-variant/80">{MODE_LABELS[drop.mode]?.() ?? drop.mode}</td>
-                    <td class="py-2.5 pr-4 font-bold">{drop.amount.toLocaleString(dateLocale())}</td>
+                    <td class="py-2.5 pr-4 font-bold">
+                      {drop.amount.toLocaleString(dateLocale())}
+                      {#if drop.item}<span class="font-normal"> <EmojiText value={drop.item.emoji} /> {drop.item.name}</span>{/if}
+                    </td>
                     <td class="py-2.5 text-on-surface-variant/80">
                       {drop.maxClaims > 0
                         ? `${drop.claimCount} / ${drop.maxClaims}`
@@ -761,7 +832,7 @@
             <ToggleSwitch checked={configs[type].first.enabled} onToggle={(v) => configs[type].first.enabled = v} disabled={!canManageSettings} />
           </div>
 
-          <div class="grid grid-cols-2 gap-4">
+          <div class="grid grid-cols-2 gap-4 transition-opacity {configs[type].first.enabled ? '' : 'opacity-50'}">
             <div class="space-y-1.5">
               <label for="drop-first-min-{type}" class="text-xs font-semibold text-on-surface-variant ml-1">{m.drop_mode_min_label()}</label>
               <input
@@ -771,7 +842,7 @@
                 min={amountRange.min}
                 max={amountRange.max}
                 class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold"
-                disabled={!canManageSettings}
+                disabled={!canManageSettings || !configs[type].first.enabled}
               />
             </div>
             <div class="space-y-1.5">
@@ -783,7 +854,7 @@
                 min={amountRange.min}
                 max={amountRange.max}
                 class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold"
-                disabled={!canManageSettings}
+                disabled={!canManageSettings || !configs[type].first.enabled}
               />
             </div>
           </div>
@@ -798,7 +869,7 @@
             <ToggleSwitch checked={configs[type].race.enabled} onToggle={(v) => configs[type].race.enabled = v} disabled={!canManageSettings} />
           </div>
 
-          <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 transition-opacity {configs[type].race.enabled ? '' : 'opacity-50'}">
             <div class="space-y-1.5">
               <label for="drop-race-winners-{type}" class="text-xs font-semibold text-on-surface-variant ml-1">{m.drop_race_winners_label()}</label>
               <input
@@ -808,7 +879,7 @@
                 min={DROP_RACE_WINNERS_RANGE.min}
                 max={DROP_RACE_WINNERS_RANGE.max}
                 class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold"
-                disabled={!canManageSettings}
+                disabled={!canManageSettings || !configs[type].race.enabled}
               />
             </div>
             <div class="space-y-1.5">
@@ -820,7 +891,7 @@
                 min={amountRange.min}
                 max={amountRange.max}
                 class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold"
-                disabled={!canManageSettings}
+                disabled={!canManageSettings || !configs[type].race.enabled}
               />
             </div>
             <div class="space-y-1.5">
@@ -832,7 +903,7 @@
                 min={amountRange.min}
                 max={amountRange.max}
                 class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold"
-                disabled={!canManageSettings}
+                disabled={!canManageSettings || !configs[type].race.enabled}
               />
             </div>
           </div>
@@ -847,7 +918,7 @@
             <ToggleSwitch checked={configs[type].window.enabled} onToggle={(v) => configs[type].window.enabled = v} disabled={!canManageSettings} />
           </div>
 
-          <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 transition-opacity {configs[type].window.enabled ? '' : 'opacity-50'}">
             <div class="space-y-1.5">
               <label for="drop-window-duration-{type}" class="text-xs font-semibold text-on-surface-variant ml-1">{m.drop_window_duration_label()}</label>
               <input
@@ -857,7 +928,7 @@
                 min={DROP_WINDOW_MINUTES_RANGE.min}
                 max={DROP_WINDOW_MINUTES_RANGE.max}
                 class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold"
-                disabled={!canManageSettings}
+                disabled={!canManageSettings || !configs[type].window.enabled}
               />
               <p class="text-2xs text-on-surface-variant mt-1">{m.drop_min_open_hint()}</p>
             </div>
@@ -870,7 +941,7 @@
                 min={amountRange.min}
                 max={amountRange.max}
                 class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold"
-                disabled={!canManageSettings}
+                disabled={!canManageSettings || !configs[type].window.enabled}
               />
             </div>
             <div class="space-y-1.5">
@@ -882,7 +953,7 @@
                 min={amountRange.min}
                 max={amountRange.max}
                 class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold"
-                disabled={!canManageSettings}
+                disabled={!canManageSettings || !configs[type].window.enabled}
               />
             </div>
           </div>
