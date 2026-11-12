@@ -1394,7 +1394,9 @@ async function adminRequest(method: string, url: string, body?: unknown) {
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   const res = createMockResponse();
-  await handleAdminRoutes(req, res, splitPath(url), new URL(url, 'http://localhost'), mockClient);
+  const parsed = new URL(url, 'http://localhost');
+  // Comme le serveur : les segments viennent du chemin, la query n'en fait pas partie.
+  await handleAdminRoutes(req, res, splitPath(parsed.pathname), parsed, mockClient);
   return res;
 }
 

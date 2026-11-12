@@ -851,6 +851,9 @@ const EN = JSON.parse(readFileSync(path.join(dossierMessages, 'en.json'), 'utf8'
 /** Sans emoji ni ponctuation de tête : « 🔒 Verrouillé » et « Verrouillé » se comparent. */
 const nu = (s: string) => s.replace(/<a?:\w+:\d+>/g, '').replace(/^[^\p{L}\p{N}]+/u, '').trim();
 
+/** Noms des membres du banc : un texte égal à l'un d'eux n'est pas une fuite de langue (membre « cible », cf. `/dc`). */
+const NOMS_DE_FIXTURE = new Set(['cible']);
+
 function empreintes(source: Record<string, unknown>, autre: Record<string, unknown>) {
   const valeursAutre = new Set(Object.values(autre).filter((x): x is string => typeof x === 'string').map(nu));
   const textesAutre = Object.values(autre).filter((x): x is string => typeof x === 'string').join('\n');
@@ -860,7 +863,7 @@ function empreintes(source: Record<string, unknown>, autre: Record<string, unkno
     const traduit = autre[cle];
     if (typeof val !== 'string' || typeof traduit !== 'string' || val === traduit) continue;
     const net = nu(val);
-    if (!/\{/.test(val) && net.length >= 3 && !valeursAutre.has(net)) exactes.set(net, cle);
+    if (!/\{/.test(val) && net.length >= 3 && !valeursAutre.has(net) && !NOMS_DE_FIXTURE.has(net)) exactes.set(net, cle);
     for (const morceau of val.split(/\{[^}]*\}/)) {
       const m = nu(morceau).replace(/[\s.:!?,;*_`]+$/u, '');
       if (m.length >= 14 && /\p{L}{4}/u.test(m) && !textesAutre.includes(m)) fragments.set(m, cle);
