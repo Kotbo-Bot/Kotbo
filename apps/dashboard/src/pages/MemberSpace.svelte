@@ -93,7 +93,8 @@
         <h1 class="text-2xl font-semibold tracking-tight text-on-surface font-headline leading-tight">{m.me_title()}</h1>
         <p class="mt-1 max-w-prose text-sm text-on-surface-variant">{m.me_subtitle()}</p>
       </div>
-      <div class="flex items-center gap-2 shrink-0">
+      <div class="flex items-center flex-wrap gap-2 shrink-0">
+        <Button href="/servers" size="sm" variant="primary" icon="Plus">{m.srv_add_to_server()}</Button>
         {#if hasDashboard}
           <Button href="/" size="sm" icon="arrow-left">{m.me_back_dashboard()}</Button>
         {:else}
@@ -155,11 +156,5 @@
     <section class="section-card p-5">
       <RankCardCustomizer />
     </section>
-
-    {#if !hasDashboard}
-      <p class="text-center text-body-sm text-on-surface-variant">
-        <a href="/servers" class="text-primary hover:underline">{m.me_manage_server()}</a>
-      </p>
-    {/if}
   </div>
 </main>

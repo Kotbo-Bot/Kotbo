@@ -222,7 +222,7 @@ export function sessionMember() {
 // ── Modules ────────────────────────────────────────────────────────────
 
 /** Modules éteints au départ : ceux qui demandent un compte externe ou une config qu'une démo n'a pas. */
-const OFF_BY_DEFAULT = new Set(['youtube', 'twitch', 'social_networks', 'daily_algo', 'codepolice', 'translation', 'staff_server', 'partnerships', 'channel_links', 'bump_reminder']);
+const OFF_BY_DEFAULT = new Set(['youtube', 'twitch', 'social_networks', 'daily_algo', 'codepolice', 'translation', 'staff_server', 'partnerships', 'channel_links', 'bump_reminder', 'rich_links']);
 
 export function moduleStatesSeed(): Record<string, boolean> {
   return Object.fromEntries(MODULE_REGISTRY.map((m) => [m.key, m.core ? true : !OFF_BY_DEFAULT.has(m.key)]));

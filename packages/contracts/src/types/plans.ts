@@ -138,6 +138,7 @@ export const FREE_MODULES = [
   'youtube',
   'twitch',
   'bump_reminder',
+  'rich_links',
   // Vitrine de la gestion du staff : le reste de la catégorie est payant.
   'staff_directory',
 ];

@@ -11686,6 +11686,8 @@
   "mod_channel_health_desc": "Repère les salons inactifs ou débordés et propose de les archiver.",
   "mod_bump_reminder_name": "Rappel de bump",
   "mod_bump_reminder_desc": "Repère les bumps (Disboard, Discadia, DS.me, Disforge…) et te prévient dès que tu peux bumper à nouveau.",
+  "mod_rich_links_name": "Aperçus de liens",
+  "mod_rich_links_desc": "Kotbo répond aux liens GitHub, X, Bluesky, TikTok, Instagram, YouTube, Steam, npm et autres par une carte : description, chiffres, image et bouton pour ouvrir.",
   "mod_campaigns_name": "Campagnes",
   "mod_campaigns_desc": "Des séries de messages programmés pour un groupe de membres, et leur portée.",
   "mod_channel_links_name": "Liens de salons",

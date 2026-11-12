@@ -871,6 +871,16 @@ export const MODULE_REGISTRY: ModuleDefinition[] = [
     // sur le widget Pulse, pas besoin d'un écran de réglages à part.
     defaultEnabled: true,
   },
+  {
+    key: 'rich_links',
+    name: 'Aperçus de liens',
+    description: 'Répond aux liens GitHub, X, Bluesky, TikTok, Instagram, YouTube, Steam, npm et autres par une carte : description, chiffres, image et bouton pour ouvrir.',
+    category: 'integrations',
+    icon: 'Link2',
+    // Éteint au départ : le bot se met à répondre dans tous les salons, ce
+    // qu'un serveur doit avoir choisi.
+    defaultEnabled: false,
+  },
 
   // ───────────────────── Cross-serveur ─────────────────────
   {

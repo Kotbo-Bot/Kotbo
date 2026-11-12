@@ -11686,6 +11686,8 @@
   "mod_channel_health_desc": "Spots inactive or overloaded channels and suggests archiving them.",
   "mod_bump_reminder_name": "Bump reminder",
   "mod_bump_reminder_desc": "Detects bumps (Disboard, Discadia, DS.me, Disforge...) and pings again as soon as the server can bump.",
+  "mod_rich_links_name": "Link previews",
+  "mod_rich_links_desc": "Kotbo replies to GitHub, X, Bluesky, TikTok, Instagram, YouTube, Steam, npm and other links with a card: description, figures, image and a button to open it.",
   "mod_campaigns_name": "Campaigns",
   "mod_campaigns_desc": "Series of scheduled messages for a group of members, and their reach.",
   "mod_channel_links_name": "Channel links",
