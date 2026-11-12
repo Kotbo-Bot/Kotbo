@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import {
   actionTrace,
   buildActionSources,
+  maskingOtherActors,
   projectListMembership,
   projectMcpApiKey,
   projectMemberReport,
@@ -104,5 +105,48 @@ describe('traces d\'action', () => {
     expect(sources[0]?.where(ids)).toEqual({
       OR: [{ moderatorUserId: { in: ids.staffIds } }, { revokedByUserId: { in: ids.staffIds } }],
     });
+  });
+});
+
+describe('identité du staff sur les lignes dont la personne est le sujet', () => {
+  const sanction = {
+    id: 'sanction-1',
+    targetUserId: ME,
+    reason: 'insultes',
+    moderatorUserId: 'modo-1',
+    moderatorTag: 'Modo#0001',
+    archivedByUserId: null,
+  };
+  const source = { category: 'moderation', key: 'sanction', label: 'Sanctions', model: 'sanction', where: () => ({}) };
+
+  test('le modérateur et son pseudo sont masqués, la sanction reste entière', () => {
+    expect(maskingOtherActors(source).project?.(sanction, ids)).toEqual({
+      id: 'sanction-1',
+      targetUserId: ME,
+      reason: 'insultes',
+      moderatorUserId: null,
+      moderatorTag: null,
+      archivedByUserId: null,
+    });
+  });
+
+  test('un pseudo recopié sous la forme « Name » est masqué aussi', () => {
+    const ticket = { id: 'ticket-2', userId: ME, claimedById: 'staff-1', claimedByName: 'Staff' };
+    expect(maskingOtherActors({ ...source, model: 'ticket' }).project?.(ticket, ids))
+      .toEqual({ id: 'ticket-2', userId: ME, claimedById: null, claimedByName: null });
+  });
+
+  test('une action de la personne elle-même reste nommée', () => {
+    const own = { id: 'ticket-1', userId: ME, closedById: ME, closedByTag: 'Moi#0001' };
+    expect(maskingOtherActors({ ...source, model: 'ticket' }).project?.(own, ids)).toEqual(own);
+  });
+
+  test('la projection propre à la source s\'applique ensuite', () => {
+    const counting = maskingOtherActors({
+      ...source,
+      project: projectListMembership({ upvoters: 'votedUp' }),
+    });
+    expect(counting.project?.({ id: 's1', upvoters: [ME], respondedById: 'modo-1' }, ids))
+      .toEqual({ id: 's1', upvotersCount: 1, votedUp: true, respondedById: null });
   });
 });

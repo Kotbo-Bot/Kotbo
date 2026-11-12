@@ -5,6 +5,7 @@ import { logger } from '../../utils/logger.js';
 import { getGuildName } from '../../api/shared.js';
 import {
   buildActionSources,
+  maskingOtherActors,
   projectListMembership,
   projectMcpApiKey,
   projectMemberReport,
@@ -282,10 +283,14 @@ const STATIC_SOURCES: GdprSource[] = [
 ];
 
 /**
- * Sources lues pour chaque export : les tables où la personne est le sujet,
- * puis les traces de ses actions, générées depuis le schéma.
+ * Sources lues pour chaque export : les tables où la personne est le sujet, sans
+ * l'identité du staff qui a agi dessus, puis les traces de ses propres actions,
+ * générées depuis le schéma.
  */
-const SOURCES: GdprSource[] = [...STATIC_SOURCES, ...buildActionSources(Prisma.dmmf.datamodel.models)];
+const SOURCES: GdprSource[] = [
+  ...STATIC_SOURCES.map(maskingOtherActors),
+  ...buildActionSources(Prisma.dmmf.datamodel.models),
+];
 
 /** Collecte l'ensemble des données Kotbo relatives à un identifiant Discord. */
 export async function collectUserData(client: Client, userId: string): Promise<GdprExport> {

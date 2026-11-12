@@ -102,6 +102,42 @@ export function actionTrace(fields: readonly string[]): GdprProjection {
   });
 }
 
+/** Pseudos recopiés à côté d'un identifiant : `moderatorUserId` → `moderatorTag`, `moderatorName`. */
+function nameFieldsOf(field: string): string[] {
+  const base = field.replace(/(UserId|Id)$/, '');
+  return base === field ? [] : [`${base}Tag`, `${base}Name`];
+}
+
+/**
+ * Sources où la personne est le sujet : l'identité du staff qui a agi sur la
+ * ligne (modérateur, décideur, responsable du ticket...) est masquée, sauf
+ * quand c'est la personne elle-même.
+ *
+ * Le droit d'accès porte sur les données de la personne, pas sur l'identité de
+ * qui les a traitées pour le compte du serveur (CJUE, C-579/21, Pankki S,
+ * 22 juin 2023). La nommer exposerait aussi le staff à des représailles, ce que
+ * l'article 15 § 4 du RGPD demande d'éviter. La sanction, sa raison et ses
+ * dates restent entières.
+ */
+export function maskingOtherActors(source: GdprSource): GdprSource {
+  const project = source.project;
+  return {
+    ...source,
+    project: (record, ids) => {
+      const masked: GdprRecord = { ...record };
+      for (const field of ACTOR_FIELDS) {
+        const value = record[field];
+        if (typeof value !== 'string' || ids.staffIds.includes(value)) continue;
+        masked[field] = null;
+        for (const name of nameFieldsOf(field)) {
+          if (name in masked) masked[name] = null;
+        }
+      }
+      return project ? project(masked, ids) : masked;
+    },
+  };
+}
+
 /** Ce que l'export lit d'un modèle Prisma (`Prisma.dmmf.datamodel.models`). */
 export interface SchemaModel {
   name: string;
