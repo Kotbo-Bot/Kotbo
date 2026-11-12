@@ -49,16 +49,21 @@
         { path: '/admin', label: m.d4_nav_overview(), icon: 'activity', exact: true },
         { path: '/admin/servers', label: m.d4_nav_servers(), icon: 'Server' },
         { path: '/admin/shards', label: m.d4_nav_shards(), icon: 'Zap' },
-        { path: '/admin/billing', label: 'Facturation', icon: 'CreditCard' },
         { path: '/admin/analytics', label: 'Analytics', icon: 'TrendingUp' },
+        { path: '/admin/audit', label: 'Journal d’audit', icon: 'ClipboardList' },
+        { path: '/admin/config', label: m.d4_nav_advanced(), icon: 'Settings' },
       ],
     },
+    // Un groupe par question : « qui paie et qui a accès », « qui abuse »,
+    // « que dit-on aux serveurs ». Une icône par entrée, jamais deux fois la
+    // même : barre repliée, c'est tout ce qui reste pour s'y retrouver.
     {
-      label: 'Communication',
+      label: 'Offre et accès',
       items: [
-        { path: '/admin/broadcast', label: m.d4_nav_broadcast(), icon: 'Megaphone' },
-        { path: '/admin/achievements', label: 'Succès attribués', icon: 'Award' },
-        { path: '/admin/feature-pages', label: 'Pages du site', icon: 'Globe' },
+        { path: '/admin/billing', label: 'Facturation', icon: 'CreditCard' },
+        { path: '/admin/activation', label: m.d4_nav_activation_codes(), icon: 'Key' },
+        { path: '/admin/whitelabel', label: m.d4_nav_whitelabel(), icon: 'Layers' },
+        { path: '/admin/instances', label: 'Instances self-host', icon: 'Cpu' },
       ],
     },
     {
@@ -67,17 +72,15 @@
         { path: '/admin/security', label: m.d4_nav_security(), icon: 'ShieldCheck' },
         { path: '/admin/content', label: m.d4_nav_global_words(), icon: 'filter' },
         { path: '/admin/sites', label: m.ste_admin_nav(), icon: 'Globe' },
-        { path: '/admin/activation', label: m.d4_nav_activation_codes(), icon: 'Key' },
-        { path: '/admin/whitelabel', label: m.d4_nav_whitelabel(), icon: 'Layers' },
-        { path: '/admin/instances', label: 'Instances self-host', icon: 'Server' },
+        { path: '/admin/gdpr', label: m.d4_nav_gdpr_export(), icon: 'Download' },
       ],
     },
     {
-      label: 'Exploitation',
+      label: 'Communication',
       items: [
-        { path: '/admin/audit', label: 'Journal d’audit', icon: 'ClipboardList' },
-        { path: '/admin/gdpr', label: m.d4_nav_gdpr_export(), icon: 'ShieldCheck' },
-        { path: '/admin/config', label: m.d4_nav_advanced(), icon: 'Settings' },
+        { path: '/admin/broadcast', label: m.d4_nav_broadcast(), icon: 'Megaphone' },
+        { path: '/admin/achievements', label: 'Succès attribués', icon: 'Award' },
+        { path: '/admin/feature-pages', label: 'Pages du site', icon: 'FileText' },
       ],
     },
   ];
