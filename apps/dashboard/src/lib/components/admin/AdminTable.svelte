@@ -73,7 +73,7 @@
           {#each columns as column (column.key)}
             <th
               scope="col"
-              class="sticky top-0 z-10 px-4 py-2.5 text-2xs font-semibold uppercase tracking-wider text-on-surface-variant whitespace-nowrap
+              class="sticky top-0 z-10 px-4 py-2.5 text-xs font-semibold text-on-surface-variant whitespace-nowrap
                 {alignClasses[column.align ?? 'left']} {column.width ?? ''} {column.hideBelow ? hideClasses[column.hideBelow] : ''}"
               aria-sort={column.sortKey && sortKey === column.sortKey
                 ? (sortDir === 'asc' ? 'ascending' : 'descending')
