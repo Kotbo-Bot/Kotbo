@@ -775,6 +775,86 @@
           <MainLayout>
             <ModuleDisabledNotice moduleKey={disabledModuleForRoute} />
           </MainLayout>
+        {:else if authStore.isBotAdmin && ($router.path === "/admin" || $router.path.startsWith("/admin/"))}
+          <!-- La console admin se rend sans MainLayout : elle a sa propre
+               coquille plein ecran. Dans le cadre du dashboard, elle empilait
+               deux barres laterales et deux en-tetes, dont ceux d'un serveur
+               sans rapport avec l'administration de l'instance. -->
+          <LazyRoute
+            path="/admin"
+            load={() => import("./pages/admin/Overview.svelte")}
+          />
+          <LazyRoute
+            path="/admin/servers"
+            load={() => import("./pages/admin/Servers.svelte")}
+          />
+          <LazyRoute
+            path="/admin/shards"
+            load={() => import("./pages/admin/Shards.svelte")}
+          />
+          <LazyRoute
+            path="/admin/security"
+            load={() => import("./pages/admin/Security.svelte")}
+          />
+          <LazyRoute
+            path="/admin/content"
+            load={() => import("./pages/admin/Content.svelte")}
+          />
+          <LazyRoute
+            path="/admin/config"
+            load={() => import("./pages/admin/Config.svelte")}
+          />
+          <LazyRoute
+            path="/admin/activation"
+            load={() => import("./pages/admin/Activation.svelte")}
+          />
+          <!-- Ancienne page des modules : devenue l'onglet Modules d'Analytics. -->
+          <Route path="/admin/modules">
+            <div use:redirectTo={"/admin/analytics?tab=modules"}></div>
+          </Route>
+          <LazyRoute
+            path="/admin/billing"
+            load={() => import("./pages/admin/Billing.svelte")}
+          />
+          <LazyRoute
+            path="/admin/analytics"
+            load={() => import("./pages/admin/Analytics.svelte")}
+          />
+          <LazyRoute
+            path="/admin/whitelabel"
+            load={() => import("./pages/admin/WhiteLabel.svelte")}
+          />
+          <LazyRoute
+            path="/admin/instances"
+            load={() => import("./pages/admin/Instances.svelte")}
+          />
+          <LazyRoute
+            path="/admin/broadcast"
+            load={() => import("./pages/admin/Broadcast.svelte")}
+          />
+          <LazyRoute
+            path="/admin/achievements"
+            load={() => import("./pages/admin/Achievements.svelte")}
+          />
+          <LazyRoute
+            path="/admin/feature-pages"
+            load={() => import("./pages/admin/FeaturePages.svelte")}
+          />
+          <LazyRoute
+            path="/admin/gdpr"
+            load={() => import("./pages/admin/Gdpr.svelte")}
+          />
+          <LazyRoute
+            path="/admin/audit"
+            load={() => import("./pages/admin/Audit.svelte")}
+          />
+          <LazyRoute
+            path="/admin/sites"
+            load={() => import("./pages/admin/Sites.svelte")}
+          />
+          <Route fallback>
+            <NotFound />
+          </Route>
         {:else}
           <MainLayout>
             <LazyRoute
@@ -790,80 +870,6 @@
               path="/activity"
               load={() => import("./pages/ActivityLog.svelte")}
             />
-            {#if authStore.isBotAdmin}
-              <LazyRoute
-                path="/admin"
-                load={() => import("./pages/admin/Overview.svelte")}
-              />
-              <LazyRoute
-                path="/admin/servers"
-                load={() => import("./pages/admin/Servers.svelte")}
-              />
-              <LazyRoute
-                path="/admin/shards"
-                load={() => import("./pages/admin/Shards.svelte")}
-              />
-              <LazyRoute
-                path="/admin/security"
-                load={() => import("./pages/admin/Security.svelte")}
-              />
-              <LazyRoute
-                path="/admin/content"
-                load={() => import("./pages/admin/Content.svelte")}
-              />
-              <LazyRoute
-                path="/admin/config"
-                load={() => import("./pages/admin/Config.svelte")}
-              />
-              <LazyRoute
-                path="/admin/activation"
-                load={() => import("./pages/admin/Activation.svelte")}
-              />
-              <!-- Ancienne page des modules : devenue l'onglet Modules d'Analytics. -->
-              <Route path="/admin/modules">
-                <div use:redirectTo={"/admin/analytics?tab=modules"}></div>
-              </Route>
-              <LazyRoute
-                path="/admin/billing"
-                load={() => import("./pages/admin/Billing.svelte")}
-              />
-              <LazyRoute
-                path="/admin/analytics"
-                load={() => import("./pages/admin/Analytics.svelte")}
-              />
-              <LazyRoute
-                path="/admin/whitelabel"
-                load={() => import("./pages/admin/WhiteLabel.svelte")}
-              />
-              <LazyRoute
-                path="/admin/instances"
-                load={() => import("./pages/admin/Instances.svelte")}
-              />
-              <LazyRoute
-                path="/admin/broadcast"
-                load={() => import("./pages/admin/Broadcast.svelte")}
-              />
-              <LazyRoute
-                path="/admin/achievements"
-                load={() => import("./pages/admin/Achievements.svelte")}
-              />
-              <LazyRoute
-                path="/admin/feature-pages"
-                load={() => import("./pages/admin/FeaturePages.svelte")}
-              />
-              <LazyRoute
-                path="/admin/gdpr"
-                load={() => import("./pages/admin/Gdpr.svelte")}
-              />
-              <LazyRoute
-                path="/admin/audit"
-                load={() => import("./pages/admin/Audit.svelte")}
-              />
-              <LazyRoute
-                path="/admin/sites"
-                load={() => import("./pages/admin/Sites.svelte")}
-              />
-            {/if}
             <LazyRoute
               path="/logs/*"
               load={() => import("./pages/Logs.svelte")}

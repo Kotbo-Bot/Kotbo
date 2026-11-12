@@ -816,7 +816,7 @@
       </div>
 
       <!-- Aperçu et envoi (colonne collante) -->
-      <div class="space-y-4 xl:sticky xl:top-24">
+      <div class="space-y-4 xl:sticky xl:top-6">
         <AdminCard title="Aperçu Discord" icon="Eye" padded={false}>
           <div class="p-4">
             <DiscordEmbedPreview
