@@ -79,7 +79,8 @@
   let reconciling = $state(false);
   let busyIds = $state<string[]>([]);
 
-  let search = $state('');
+  // `?q=` : l'accueil de la console ouvre cette page sur un serveur precis.
+  let search = $state(new URLSearchParams(location.search).get('q') ?? '');
   let statusFilter = $state('ALL');
   let sortKey = $state('memberCount');
   let sortDir = $state<'asc' | 'desc'>('desc');

@@ -1,24 +1,29 @@
 <script lang="ts">
   /**
-   * Vue d'ensemble de la console admin.
+   * Accueil de la console admin.
    *
-   * L'ancienne version n'affichait qu'un instantané : quatre compteurs et une
-   * barre de mémoire, sans historique. Impossible d'y voir une fuite mémoire
-   * lente, une dégradation de ping ou de savoir si l'état affiché est frais.
-   * Cette version s'appuie sur l'historique échantillonné côté bot
-   * (`/api/admin/health/series`) et met en avant ce qui demande une action.
+   * Une seule question : « est-ce que quelque chose demande mon attention, et
+   * comment va Kotbo ? ». Dans l'ordre : ce qu'il y a a traiter, les chiffres
+   * qui comptent, de quoi retrouver un serveur, puis la sante dans le temps.
+   *
+   * Chaque source se charge de son cote : une API lente ou en panne ne retient
+   * pas le reste de la page.
    */
   import { onMount, onDestroy } from 'svelte';
   import {
-    fetchAdminStats,
     fetchAdminHealthSeries,
     fetchAdminGuilds,
+    fetchAdminBilling,
+    fetchBotErrorGroups,
     fetchBroadcastHistory,
     fetchAdminAudit,
+    type AdminBillingState,
     type AdminHealthSeries,
     type AdminAuditEntry,
+    type BotErrorGroup,
     type BroadcastLogEntry,
   } from '../../lib/api';
+  import { fetchAdminSiteReports } from '../../lib/api/site';
   import { subscribeRealtime } from '../../lib/stores/realtime.svelte';
   import Papicon from '../../lib/components/Papicon.svelte';
   import AdminShell from '../../lib/components/admin/AdminShell.svelte';
@@ -26,19 +31,9 @@
   import AdminStat from '../../lib/components/admin/AdminStat.svelte';
   import AdminBadge from '../../lib/components/admin/AdminBadge.svelte';
   import AdminTimeSeries from '../../lib/components/admin/AdminTimeSeries.svelte';
+  import { adminHealth, refreshAdminHealth } from '../../lib/components/admin/adminHealth.svelte';
   import type { AdminTone } from '../../lib/components/admin/types';
-
-  interface AdminStats {
-    guildCount: number;
-    userCount: number;
-    activeSanctions: number;
-    dailyAlgoSubmissions: number;
-    uptime: number;
-    memoryUsage: { rss: number; heapTotal: number; heapUsed: number; external: number; arrayBuffers: number };
-    shardCount: number;
-    onlineShardCount: number;
-    averageShardPing: number;
-  }
+  import { Button, FilterPills } from '../../lib/components/ui';
 
   interface AdminGuild {
     id: string;
@@ -47,500 +42,437 @@
     memberCount: number;
     activated: boolean;
     joinedAt: string | null;
-    shardId: number;
   }
 
-  let stats = $state<AdminStats | null>(null);
+  const DAY_MS = 86_400_000;
+
+  let guilds = $state<AdminGuild[] | null>(null);
+  let billing = $state<AdminBillingState | null>(null);
+  let errorGroups = $state<BotErrorGroup[]>([]);
+  let openReports = $state(0);
   let series = $state<AdminHealthSeries | null>(null);
-  let guilds = $state<AdminGuild[]>([]);
-  let recentBroadcasts = $state<BroadcastLogEntry[]>([]);
-  let auditTrail = $state<AdminAuditEntry[]>([]);
+  let broadcasts = $state<BroadcastLogEntry[]>([]);
+  let audit = $state<AdminAuditEntry[]>([]);
 
-  let loading = $state(true);
-  let error = $state<string | null>(null);
-  let lastRefresh = $state<Date | null>(null);
-  let window_ = $state(60);
+  let refreshing = $state(false);
+  let chartWindow = $state('60');
   let metric = $state<'memory' | 'ping' | 'reach'>('memory');
-  let unsubscribeRealtime: (() => void) | null = null;
+  let query = $state('');
+  let unsubscribe: (() => void) | null = null;
 
-  const windows = [
-    { value: 15, label: '15 min' },
-    { value: 60, label: '1 h' },
-    { value: 360, label: '6 h' },
-    { value: 1440, label: '24 h' },
-  ];
+  const ignore = () => null;
 
-  async function load(initial = false) {
-    if (initial) loading = true;
-    try {
-      const [statsData, seriesData, guildData, broadcasts, audit] = await Promise.all([
-        fetchAdminStats() as Promise<AdminStats>,
-        fetchAdminHealthSeries(window_).catch(() => null),
-        initial ? fetchAdminGuilds().catch(() => ({ guilds: [] })) : Promise.resolve(null),
-        initial ? fetchBroadcastHistory(5).catch(() => ({ logs: [] })) : Promise.resolve(null),
-        initial ? fetchAdminAudit({ limit: 8 }).catch(() => ({ entries: [], nextCursor: null })) : Promise.resolve(null),
-      ]);
+  function loadGuilds() {
+    return fetchAdminGuilds().then((data) => (guilds = data.guilds ?? [])).catch(() => (guilds ??= []));
+  }
 
-      stats = statsData;
-      series = seriesData;
-      if (guildData) guilds = guildData.guilds ?? [];
-      if (broadcasts) recentBroadcasts = broadcasts.logs;
-      if (audit) auditTrail = audit.entries;
-
-      lastRefresh = new Date();
-      error = null;
-    } catch (err) {
-      error = err instanceof Error ? err.message : 'Impossible de charger. Réessaie.';
-    } finally {
-      loading = false;
-    }
+  async function loadAll() {
+    refreshing = true;
+    await Promise.all([
+      refreshAdminHealth(),
+      loadGuilds(),
+      fetchAdminBilling().then((data) => (billing = data)).catch(ignore),
+      fetchBotErrorGroups().then((data) => (errorGroups = data.groups)).catch(ignore),
+      fetchAdminSiteReports('OPEN').then((data) => (openReports = data.reports.length)).catch(ignore),
+      fetchAdminHealthSeries(Number(chartWindow)).then((data) => (series = data)).catch(ignore),
+      fetchBroadcastHistory(4).then((data) => (broadcasts = data.logs)).catch(ignore),
+      fetchAdminAudit({ limit: 6 }).then((data) => (audit = data.entries)).catch(ignore),
+    ]);
+    refreshing = false;
   }
 
   onMount(() => {
-    void load(true);
-    unsubscribeRealtime = subscribeRealtime({
+    void loadAll();
+    unsubscribe = subscribeRealtime({
       types: ['bot_guilds_changed'],
       guildScoped: false,
-      fallbackMs: 30_000,
-      onUpdate: () => void load(),
+      fallbackMs: 60_000,
+      onUpdate: () => void loadGuilds(),
     });
   });
 
-  onDestroy(() => {
-    unsubscribeRealtime?.();
-  });
+  onDestroy(() => unsubscribe?.());
 
-  // Changer de fenêtre ne doit recharger que la série, pas toute la page.
-  async function changeWindow(minutes: number) {
-    window_ = minutes;
-    series = await fetchAdminHealthSeries(minutes).catch(() => null);
+  async function changeWindow(value: string) {
+    chartWindow = value;
+    series = await fetchAdminHealthSeries(Number(value)).catch(() => series);
   }
 
-  // ── Dérivés ───────────────────────────────────────────────────────────────
+  // ── Derives ───────────────────────────────────────────────────────────────
+  const health = $derived(adminHealth.data);
   const samples = $derived(series?.samples ?? []);
-
-  const chartSeries = $derived.by(() => {
-    if (samples.length < 2) return [];
-    if (metric === 'memory') {
-      return [
-        { key: 'heap', label: 'Heap utilisé', color: 'var(--primary-color)', points: samples.map((s) => ({ t: s.t, v: s.heapUsed / 1024 / 1024 })) },
-        { key: 'rss', label: 'RSS', color: '#a855f7', points: samples.map((s) => ({ t: s.t, v: s.rss / 1024 / 1024 })) },
-      ];
-    }
-    if (metric === 'ping') {
-      return [
-        { key: 'ping', label: 'Ping moyen', color: '#0ea5e9', points: samples.map((s) => ({ t: s.t, v: s.averagePing })) },
-        { key: 'cpu', label: 'CPU (%)', color: '#f59e0b', points: samples.map((s) => ({ t: s.t, v: s.cpu })) },
-      ];
-    }
-    return [
-      { key: 'guilds', label: 'Serveurs', color: '#10b981', points: samples.map((s) => ({ t: s.t, v: s.guilds })) },
-      { key: 'shards', label: 'Shards en ligne', color: '#ef4444', points: samples.map((s) => ({ t: s.t, v: s.onlineShards })) },
-    ];
-  });
-
-  const chartUnit = $derived(metric === 'memory' ? ' Mo' : metric === 'ping' ? '' : '');
-
-  const heapSeries = $derived(samples.map((s) => s.heapUsed));
-  const pingSeries = $derived(samples.map((s) => s.averagePing));
-  const guildSeries = $derived(samples.map((s) => s.guilds));
-
-  const heapPercent = $derived(
-    stats ? Math.round((stats.memoryUsage.heapUsed / stats.memoryUsage.heapTotal) * 100) : 0,
+  const heapPercent = $derived(health ? Math.round((health.heapUsed / health.heapTotal) * 100) : 0);
+  const shardsHealthy = $derived(health ? health.onlineShardCount === health.shardCount && health.shardCount > 0 : true);
+  const activatedCount = $derived(guilds?.filter((guild) => guild.activated).length ?? 0);
+  const newThisWeek = $derived(
+    guilds?.filter((guild) => guild.joinedAt && Date.now() - new Date(guild.joinedAt).getTime() < 7 * DAY_MS).length ?? 0,
   );
 
-  /** Variation du heap sur la fenêtre, en % : c'est le signal de fuite mémoire. */
-  const heapDelta = $derived.by(() => {
-    if (samples.length < 2) return null;
-    const first = samples[0].heapUsed;
-    const last = samples[samples.length - 1].heapUsed;
-    if (first === 0) return null;
-    return ((last - first) / first) * 100;
-  });
+  interface Todo {
+    tone: AdminTone;
+    icon: string;
+    title: string;
+    detail: string;
+    href: string;
+  }
 
-  const pingDelta = $derived.by(() => {
-    if (samples.length < 2) return null;
-    const first = samples[0].averagePing;
-    const last = samples[samples.length - 1].averagePing;
-    if (first === 0) return null;
-    return ((last - first) / first) * 100;
-  });
+  /** Tout ce qui attend une decision, du plus grave au moins grave. */
+  const todos = $derived.by(() => {
+    const list: Todo[] = [];
 
-  const shardsHealthy = $derived(stats ? stats.onlineShardCount === stats.shardCount && stats.shardCount > 0 : false);
-
-  /**
-   * Points d'attention : la vue d'ensemble doit dire quoi faire, pas seulement
-   * afficher des nombres.
-   */
-  const alerts = $derived.by(() => {
-    const list: { tone: AdminTone; icon: string; title: string; detail: string; href?: string }[] = [];
-    if (!stats) return list;
-
-    if (!shardsHealthy) {
-      list.push({
-        tone: 'danger',
-        icon: 'Zap',
-        title: `${stats.shardCount - stats.onlineShardCount} shard(s) hors ligne`,
-        detail: 'Des serveurs ne reçoivent plus d’événements tant que le shard n’est pas revenu.',
-        href: '/admin/shards',
-      });
+    if (adminHealth.error) {
+      list.push({ tone: 'danger', icon: 'AlertTriangle', title: 'L’API du bot ne répond pas', detail: 'Les chiffres affichés peuvent être périmés.', href: '/admin/config' });
+    }
+    if (health && !shardsHealthy) {
+      const offline = health.shardCount - health.onlineShardCount;
+      list.push({ tone: 'danger', icon: 'Zap', title: `${offline} shard${offline > 1 ? 's' : ''} hors ligne`, detail: 'Des serveurs ne reçoivent plus rien tant qu’il n’est pas revenu.', href: '/admin/shards' });
     }
     if (heapPercent > 85) {
-      list.push({
-        tone: 'danger',
-        icon: 'AlertTriangle',
-        title: `Mémoire heap à ${heapPercent}%`,
-        detail: 'Le processus approche de sa limite : un redémarrage contrôlé vaut mieux qu’un OOM.',
-      });
-    } else if (heapDelta !== null && heapDelta > 25 && window_ >= 60) {
-      list.push({
-        tone: 'warning',
-        icon: 'TrendingUp',
-        title: `Heap +${heapDelta.toFixed(0)}% sur la fenêtre`,
-        detail: 'Croissance continue : surveillez, cela ressemble à une fuite mémoire.',
-      });
+      list.push({ tone: 'danger', icon: 'Cpu', title: `Mémoire à ${heapPercent} %`, detail: 'Un redémarrage contrôlé vaut mieux qu’un arrêt brutal.', href: '/admin/shards' });
+    } else if (series && series.heapTrendPerHour > 0 && samples.length > 1 && Number(chartWindow) >= 60) {
+      const first = samples[0].heapUsed;
+      const growth = first > 0 ? ((samples[samples.length - 1].heapUsed - first) / first) * 100 : 0;
+      if (growth > 25) {
+        list.push({ tone: 'warning', icon: 'TrendingUp', title: `Mémoire en hausse de ${growth.toFixed(0)} %`, detail: 'Croissance continue sur la période : à surveiller, ça ressemble à une fuite.', href: '/admin/shards' });
+      }
     }
-    if (stats.averageShardPing > 250) {
-      list.push({
-        tone: 'warning',
-        icon: 'activity',
-        title: `Ping Discord élevé (${stats.averageShardPing} ms)`,
-        detail: 'Latence passerelle dégradée : les interactions peuvent expirer.',
-      });
+    if (health && health.averageShardPing > 250) {
+      list.push({ tone: 'warning', icon: 'activity', title: `Latence Discord à ${health.averageShardPing} ms`, detail: 'Les commandes peuvent expirer avant la réponse.', href: '/admin/shards' });
     }
 
-    const inactive = guilds.filter((g) => !g.activated).length;
-    if (inactive > 0) {
-      list.push({
-        tone: 'info',
-        icon: 'Key',
-        title: `${inactive} serveur(s) non activé(s)`,
-        detail: 'Ils n’ont pas consommé de code d’activation et n’ont accès qu’aux fonctions de base.',
-        href: '/admin/servers',
+    const recentErrors = errorGroups.filter((group) => Date.now() - new Date(group.lastAt).getTime() < DAY_MS);
+    if (recentErrors.length > 0) {
+      const total = recentErrors.reduce((sum, group) => sum + group.count, 0);
+      list.push({ tone: 'warning', icon: 'Terminal', title: `${recentErrors.length} erreur${recentErrors.length > 1 ? 's' : ''} du bot depuis 24 h`, detail: `${total} occurrence${total > 1 ? 's' : ''} · la plus fréquente : ${recentErrors[0].message.slice(0, 80)}`, href: '/admin/config' });
+    }
+
+    if (openReports > 0) {
+      list.push({ tone: 'warning', icon: 'Globe', title: `${openReports} signalement${openReports > 1 ? 's' : ''} de site à examiner`, detail: 'Des visiteurs ont signalé un site communautaire.', href: '/admin/sites' });
+    }
+
+    if (billing) {
+      const unpaid = billing.guilds.filter((guild) => guild.stripeSubscriptionStatus === 'past_due' || guild.stripeSubscriptionStatus === 'unpaid');
+      if (unpaid.length > 0) {
+        list.push({ tone: 'warning', icon: 'CreditCard', title: `${unpaid.length} paiement${unpaid.length > 1 ? 's' : ''} en échec`, detail: unpaid.slice(0, 3).map((guild) => guild.name ?? guild.id).join(', '), href: '/admin/billing' });
+      }
+      const expiring = billing.guilds.filter((guild) => {
+        if (!guild.accessExpiresAt) return false;
+        const left = new Date(guild.accessExpiresAt).getTime() - Date.now();
+        return left > 0 && left < 3 * DAY_MS;
       });
+      if (expiring.length > 0) {
+        list.push({ tone: 'info', icon: 'Clock', title: `${expiring.length} accès expire${expiring.length > 1 ? 'nt' : ''} sous 3 jours`, detail: expiring.slice(0, 3).map((guild) => guild.name ?? guild.id).join(', '), href: '/admin/billing' });
+      }
     }
 
     return list;
   });
 
-  const topGuilds = $derived([...guilds].sort((a, b) => b.memberCount - a.memberCount).slice(0, 6));
-  const activatedCount = $derived(guilds.filter((g) => g.activated).length);
+  const toneChip: Record<AdminTone, string> = {
+    danger: 'bg-error/12 text-error',
+    warning: 'bg-warning/12 text-warning',
+    info: 'bg-sky-500/12 text-sky-500',
+    success: 'bg-success/12 text-success',
+    primary: 'bg-primary/12 text-primary',
+    neutral: 'bg-on-surface/8 text-on-surface-variant',
+  };
+
+  // Retrouver un serveur : la recherche se fait sur place, sans changer de page.
+  const matches = $derived.by(() => {
+    const all = guilds ?? [];
+    const needle = query.trim().toLowerCase();
+    const pool = needle ? all.filter((guild) => guild.name.toLowerCase().includes(needle) || guild.id.includes(needle)) : all;
+    return [...pool].sort((a, b) => b.memberCount - a.memberCount).slice(0, 6);
+  });
+
+  // Repartition des offres : une barre, pas un camembert pour quatre valeurs.
+  const planShades = ['bg-on-surface/15', 'bg-primary', 'bg-success', 'bg-warning', 'bg-sky-500'];
+  const plans = $derived.by(() => {
+    if (!billing) return [];
+    const total = Object.values(billing.counts).reduce((sum, count) => sum + count, 0);
+    return billing.plans
+      .map((plan, index) => ({ ...plan, count: billing!.counts[plan.key] ?? 0, shade: planShades[index % planShades.length] }))
+      .filter((plan) => plan.count > 0)
+      .map((plan) => ({ ...plan, percent: total > 0 ? (plan.count / total) * 100 : 0 }));
+  });
+  const payingCount = $derived(billing ? Object.entries(billing.counts).reduce((sum, [key, count]) => (key === 'FREE' ? sum : sum + count), 0) : 0);
+
+  const chartSeries = $derived.by(() => {
+    if (samples.length < 2) return [];
+    const points = (pick: (sample: (typeof samples)[number]) => number) => samples.map((sample) => ({ t: sample.t, v: pick(sample) }));
+    if (metric === 'memory') {
+      return [
+        { key: 'heap', label: 'Heap utilisé', color: 'var(--primary-color)', points: points((s) => s.heapUsed / 1024 / 1024) },
+        { key: 'rss', label: 'RSS', color: '#a855f7', points: points((s) => s.rss / 1024 / 1024) },
+      ];
+    }
+    if (metric === 'ping') {
+      return [
+        { key: 'ping', label: 'Ping moyen (ms)', color: '#0ea5e9', points: points((s) => s.averagePing) },
+        { key: 'cpu', label: 'CPU (%)', color: '#f59e0b', points: points((s) => s.cpu) },
+      ];
+    }
+    return [
+      { key: 'guilds', label: 'Serveurs', color: '#10b981', points: points((s) => s.guilds) },
+      { key: 'shards', label: 'Shards en ligne', color: '#ef4444', points: points((s) => s.onlineShards) },
+    ];
+  });
 
   // ── Formatage ─────────────────────────────────────────────────────────────
+  const nf = new Intl.NumberFormat('fr-FR');
+
   function formatUptime(seconds: number): string {
     const days = Math.floor(seconds / 86400);
     const hours = Math.floor((seconds % 86400) / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    if (days > 0) return `${days}j ${hours}h`;
-    if (hours > 0) return `${hours}h ${minutes}m`;
-    return `${minutes}m`;
-  }
-
-  function formatBytes(bytes: number): string {
-    if (bytes === 0) return '0 o';
-    const units = ['o', 'Ko', 'Mo', 'Go'];
-    const index = Math.floor(Math.log(bytes) / Math.log(1024));
-    return `${parseFloat((bytes / 1024 ** index).toFixed(1))} ${units[index]}`;
-  }
-
-  function formatNumber(value: number): string {
-    return value.toLocaleString('fr-FR');
+    if (days > 0) return `${days} j ${hours} h`;
+    return hours > 0 ? `${hours} h ${Math.floor((seconds % 3600) / 60)} min` : `${Math.floor(seconds / 60)} min`;
   }
 
   function relativeTime(iso: string): string {
-    const diff = Date.now() - new Date(iso).getTime();
-    const minutes = Math.round(diff / 60_000);
-    if (minutes < 1) return "à l'instant";
+    const minutes = Math.round((Date.now() - new Date(iso).getTime()) / 60_000);
+    if (minutes < 1) return 'à l’instant';
     if (minutes < 60) return `il y a ${minutes} min`;
     const hours = Math.round(minutes / 60);
-    if (hours < 24) return `il y a ${hours} h`;
-    return `il y a ${Math.round(hours / 24)} j`;
+    return hours < 24 ? `il y a ${hours} h` : `il y a ${Math.round(hours / 24)} j`;
   }
 </script>
 
-<AdminShell
-  title="Vue d’ensemble"
-  description="État de l’instance Kotbo, tendances de santé et points demandant une intervention."
->
+<AdminShell title="Accueil">
   {#snippet actions()}
-    {#if lastRefresh}
-      <span class="text-xs text-on-surface-variant tabular-nums hidden sm:block">
-        Actualisé {relativeTime(lastRefresh.toISOString())}
-      </span>
-    {/if}
-    <button
-      type="button"
-      onclick={() => load(true)}
-      class="h-9 px-3.5 rounded-xl bg-on-surface/6 hover:bg-on-surface/10 border border-outline-variant/25 text-body-sm font-semibold text-on-surface-variant hover:text-on-surface transition inline-flex items-center gap-2"
-    >
-      <Papicon icon="RefreshCw" size={13} />
-      Actualiser
-    </button>
+    <Button href="/admin/broadcast" icon="Megaphone">Nouvelle annonce</Button>
+    <Button href="/admin/activation" icon="Key">Générer un code</Button>
+    <Button icon="RefreshCw" loading={refreshing} aria-label="Actualiser" title="Actualiser" onclick={loadAll} />
   {/snippet}
 
-  {#if error}
-    <div class="rounded-2xl border border-error/30 bg-error/8 p-4 flex items-start gap-3">
-      <Papicon icon="AlertTriangle" size={18} class="text-error mt-0.5 shrink-0" />
+  <!-- 1. Ce qui attend une decision -->
+  {#if todos.length > 0}
+    <AdminCard title="À traiter" padded={false}>
+      {#snippet actions()}
+        <AdminBadge label={String(todos.length)} tone={todos.some((todo) => todo.tone === 'danger') ? 'danger' : 'warning'} />
+      {/snippet}
+      <ul class="divide-y divide-outline-variant/40">
+        {#each todos as todo (todo.title)}
+          <li>
+            <a href={todo.href} class="flex items-center gap-3 px-5 py-3.5 hover:bg-on-surface/3 transition-colors focus-visible:outline-2 focus-visible:outline-primary">
+              <span class="w-9 h-9 shrink-0 rounded-[11px] flex items-center justify-center {toneChip[todo.tone]}">
+                <Papicon icon={todo.icon} size={16} />
+              </span>
+              <span class="min-w-0 flex-1">
+                <span class="block text-sm font-semibold text-on-surface">{todo.title}</span>
+                <span class="block text-xs text-on-surface-variant truncate">{todo.detail}</span>
+              </span>
+              <Papicon icon="ChevronRight" size={15} class="text-on-surface-variant shrink-0" />
+            </a>
+          </li>
+        {/each}
+      </ul>
+    </AdminCard>
+  {:else if health && guilds}
+    <div class="flex items-center gap-3 rounded-[20px] bg-success/10 px-5 py-4">
+      <span class="w-9 h-9 shrink-0 rounded-[11px] bg-success/15 text-success flex items-center justify-center">
+        <Papicon icon="Check" size={17} />
+      </span>
       <div>
-        <p class="text-sm font-semibold text-error">Impossible de joindre l’API du bot</p>
-        <p class="text-body-sm text-on-surface-variant mt-0.5">{error}</p>
+        <p class="text-sm font-semibold text-on-surface">Rien à traiter</p>
+        <p class="text-xs text-on-surface-variant">Shards complets, pas d’erreur récente, aucun signalement ni paiement en attente.</p>
       </div>
     </div>
   {/if}
 
-  <!-- Métriques principales -->
+  <!-- 2. Les chiffres qui comptent -->
   <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
     <AdminStat
       label="Serveurs"
-      value={stats ? formatNumber(stats.guildCount) : '-'}
-      hint="{activatedCount} activés"
+      value={health ? nf.format(health.guildCount) : '–'}
+      hint={newThisWeek > 0 ? `+${newThisWeek} cette semaine` : `${activatedCount} activés`}
       icon="Server"
-      tone="primary"
-      series={guildSeries}
-      {loading}
+      tone="info"
+      series={samples.map((sample) => sample.guilds)}
+      loading={!health}
       href="/admin/servers"
     />
     <AdminStat
-      label="Membres cumulés"
-      value={stats ? formatNumber(stats.userCount) : '-'}
-      hint={stats && stats.guildCount > 0 ? `${Math.round(stats.userCount / stats.guildCount)} par serveur` : ''}
+      label="Membres couverts"
+      value={health ? nf.format(health.userCount) : '–'}
+      hint={health && health.guildCount > 0 ? `${nf.format(Math.round(health.userCount / health.guildCount))} par serveur` : ''}
       icon="Users"
-      tone="info"
-      {loading}
+      tone="primary"
+      loading={!health}
     />
     <AdminStat
-      label="Shards en ligne"
-      value={stats ? `${stats.onlineShardCount}/${stats.shardCount}` : '-'}
-      hint="{stats?.averageShardPing ?? 0} ms de ping moyen"
-      icon="Zap"
-      tone={shardsHealthy ? 'success' : 'danger'}
-      series={pingSeries}
-      delta={pingDelta}
-      {loading}
+      label="Serveurs payants"
+      value={billing ? nf.format(payingCount) : '–'}
+      hint={billing ? `${billing.subscriptions} abonnement${billing.subscriptions > 1 ? 's' : ''} · ${billing.trials} essai${billing.trials > 1 ? 's' : ''}` : ''}
+      icon="CreditCard"
+      tone="success"
+      loading={!billing}
+      href="/admin/billing"
+    />
+    <AdminStat
+      label="Santé du bot"
+      value={health ? `${health.averageShardPing} ms` : '–'}
+      hint={health ? `${health.onlineShardCount}/${health.shardCount} shards · mém. ${heapPercent} %` : ''}
+      icon="activity"
+      tone={!shardsHealthy || heapPercent > 85 ? 'danger' : health && health.averageShardPing > 250 ? 'warning' : 'success'}
+      series={samples.map((sample) => sample.averagePing)}
+      loading={!health}
       href="/admin/shards"
     />
-    <AdminStat
-      label="Mémoire heap"
-      value="{heapPercent}%"
-      hint={stats ? `${formatBytes(stats.memoryUsage.heapUsed)} / ${formatBytes(stats.memoryUsage.heapTotal)}` : ''}
-      icon="Cpu"
-      tone={heapPercent > 85 ? 'danger' : heapPercent > 65 ? 'warning' : 'success'}
-      series={heapSeries}
-      delta={heapDelta}
-      {loading}
-    />
   </div>
 
-  <!-- Points d'attention -->
-  {#if alerts.length > 0}
-    <AdminCard title="Points d’attention" icon="AlertTriangle" tone={alerts.some((a) => a.tone === 'danger') ? 'danger' : 'warning'}>
-      <ul class="space-y-2">
-        {#each alerts as alert (alert.title)}
-          <li class="flex items-start gap-3 p-3 rounded-xl bg-surface-container-low/50 border border-outline-variant/20">
-            <div
-              class="w-8 h-8 shrink-0 rounded-lg flex items-center justify-center
-                {alert.tone === 'danger' ? 'bg-error/12 text-error'
-                  : alert.tone === 'warning' ? 'bg-warning/12 text-warning'
-                    : 'bg-sky-500/12 text-sky-500'}"
-            >
-              <Papicon icon={alert.icon} size={15} />
-            </div>
-            <div class="min-w-0 flex-1">
-              <p class="text-body-sm font-semibold text-on-surface">{alert.title}</p>
-              <p class="text-xs text-on-surface-variant mt-0.5 leading-snug">{alert.detail}</p>
-            </div>
-            {#if alert.href}
-              <a
-                href={alert.href}
-                class="shrink-0 h-8 px-3 rounded-lg bg-on-surface/6 hover:bg-on-surface/10 text-xs font-semibold text-on-surface-variant hover:text-on-surface transition inline-flex items-center gap-1.5"
-              >
-                Ouvrir
-                <Papicon icon="ChevronRight" size={11} />
-              </a>
-            {/if}
-          </li>
-        {/each}
-      </ul>
-    </AdminCard>
-  {:else if !loading && stats}
-    <div class="rounded-2xl border border-success/25 bg-success/8 p-4 flex items-center gap-3">
-      <Papicon icon="CheckCircle" size={18} class="text-success shrink-0" />
-      <p class="text-body-sm text-success">
-        Aucun point d’attention : shards complets, mémoire et latence dans les clous.
-      </p>
-    </div>
-  {/if}
-
-  <!-- Historique de santé -->
-  <AdminCard title="Santé dans le temps" icon="activity" tone="primary" padded={false}>
-    {#snippet actions()}
-      <div class="flex items-center gap-1 p-0.5 rounded-lg bg-on-surface/6">
-        {#each [
-          { value: 'memory' as const, label: 'Mémoire' },
-          { value: 'ping' as const, label: 'Latence' },
-          { value: 'reach' as const, label: 'Couverture' },
-        ] as option (option.value)}
-          <button
-            type="button"
-            onclick={() => (metric = option.value)}
-            class="h-7 px-2.5 rounded-md text-xs font-semibold transition
-              {metric === option.value ? 'bg-surface-container-lowest text-on-surface shadow-sm' : 'text-on-surface-variant hover:text-on-surface'}"
-          >
-            {option.label}
-          </button>
-        {/each}
-      </div>
-      <div class="flex items-center gap-1 p-0.5 rounded-lg bg-on-surface/6">
-        {#each windows as option (option.value)}
-          <button
-            type="button"
-            onclick={() => changeWindow(option.value)}
-            class="h-7 px-2.5 rounded-md text-xs font-semibold transition
-              {window_ === option.value ? 'bg-surface-container-lowest text-on-surface shadow-sm' : 'text-on-surface-variant hover:text-on-surface'}"
-          >
-            {option.label}
-          </button>
-        {/each}
-      </div>
-    {/snippet}
-
-    <div class="p-5">
-      <AdminTimeSeries
-        series={chartSeries}
-        formatValue={(value) => `${Math.round(value)}${chartUnit}`}
-        emptyLabel="L’historique se remplit à partir de la première consultation de la console - revenez dans quelques minutes."
-      />
-
-      {#if series?.peak && samples.length > 1}
-        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-5 pt-4 border-t border-outline-variant/20">
-          <div>
-            <p class="text-xs font-semibold text-on-surface-variant">Pic heap</p>
-            <p class="text-[15px] font-semibold text-on-surface tabular-nums mt-0.5">{formatBytes(series.peak.heapUsed)}</p>
-          </div>
-          <div>
-            <p class="text-xs font-semibold text-on-surface-variant">Pic RSS</p>
-            <p class="text-[15px] font-semibold text-on-surface tabular-nums mt-0.5">{formatBytes(series.peak.rss)}</p>
-          </div>
-          <div>
-            <p class="text-xs font-semibold text-on-surface-variant">Pic ping</p>
-            <p class="text-[15px] font-semibold text-on-surface tabular-nums mt-0.5">{series.peak.averagePing} ms</p>
-          </div>
-          <div>
-            <p class="text-xs font-semibold text-on-surface-variant">Tendance heap</p>
-            <p class="text-[15px] font-semibold tabular-nums mt-0.5 {series.heapTrendPerHour > 0 ? 'text-warning' : 'text-success'}">
-              {series.heapTrendPerHour >= 0 ? '+' : ''}{formatBytes(Math.abs(series.heapTrendPerHour))}/h
-            </p>
-          </div>
+  <div class="grid grid-cols-1 lg:grid-cols-5 gap-5 items-start">
+    <!-- 3. Retrouver un serveur -->
+    <AdminCard title="Trouver un serveur" class="lg:col-span-3" padded={false}>
+      {#snippet actions()}
+        <a href="/admin/servers" class="text-body-sm font-semibold text-primary hover:underline">Tout voir</a>
+      {/snippet}
+      <div class="p-4 pb-2">
+        <div class="relative">
+          <Papicon icon="Search" size={15} class="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant pointer-events-none" />
+          <input type="search" bind:value={query} placeholder="Nom ou identifiant du serveur…" aria-label="Rechercher un serveur" class="input pl-9 h-11 rounded-2xl" />
         </div>
+      </div>
+      {#if guilds === null}
+        <div class="p-4 space-y-2">
+          {#each Array(4) as _, index (index)}
+            <div class="h-10 rounded-xl bg-on-surface/6 animate-pulse"></div>
+          {/each}
+        </div>
+      {:else if matches.length === 0}
+        <p class="px-5 py-6 text-body-sm text-on-surface-variant text-center">Aucun serveur ne correspond à « {query} ».</p>
+      {:else}
+        <ul class="pb-2">
+          {#each matches as guild (guild.id)}
+            <li>
+              <a
+                href="/admin/servers?q={guild.id}"
+                class="flex items-center gap-3 px-5 py-2.5 hover:bg-on-surface/3 transition-colors focus-visible:outline-2 focus-visible:outline-primary"
+              >
+                <span class="w-9 h-9 shrink-0 rounded-[11px] bg-on-surface/6 overflow-hidden flex items-center justify-center text-on-surface-variant">
+                  {#if guild.icon}
+                    <img src={guild.icon} alt="" class="w-full h-full object-cover" loading="lazy" />
+                  {:else}
+                    <Papicon icon="Server" size={15} />
+                  {/if}
+                </span>
+                <span class="min-w-0 flex-1 text-sm font-medium text-on-surface truncate">{guild.name}</span>
+                {#if !guild.activated}
+                  <AdminBadge size="sm" label="Non activé" tone="neutral" />
+                {/if}
+                <span class="text-body-sm text-on-surface-variant tabular-nums">{nf.format(guild.memberCount)}</span>
+              </a>
+            </li>
+          {/each}
+        </ul>
       {/if}
-    </div>
+    </AdminCard>
+
+    <!-- 4. Offres -->
+    <AdminCard title="Offres" class="lg:col-span-2">
+      {#snippet actions()}
+        <a href="/admin/billing" class="text-body-sm font-semibold text-primary hover:underline">Abonnements</a>
+      {/snippet}
+      {#if !billing}
+        <div class="h-24 rounded-xl bg-on-surface/6 animate-pulse"></div>
+      {:else if plans.length === 0}
+        <p class="text-body-sm text-on-surface-variant">Aucun serveur n’a encore d’offre.</p>
+      {:else}
+        <div class="flex h-3 rounded-full overflow-hidden gap-0.5" role="img" aria-label="Répartition des serveurs par offre">
+          {#each plans as plan (plan.key)}
+            <div class="{plan.shade} h-full" style="width: {plan.percent}%"></div>
+          {/each}
+        </div>
+        <dl class="mt-4 space-y-2.5">
+          {#each plans as plan (plan.key)}
+            <div class="flex items-center gap-2.5">
+              <span class="w-2.5 h-2.5 rounded-full {plan.shade}"></span>
+              <dt class="flex-1 text-body-sm text-on-surface">{plan.name}</dt>
+              <dd class="text-body-sm font-semibold text-on-surface tabular-nums">{nf.format(plan.count)}</dd>
+              <dd class="w-12 text-right text-xs text-on-surface-variant tabular-nums">{plan.percent.toFixed(0)} %</dd>
+            </div>
+          {/each}
+        </dl>
+      {/if}
+    </AdminCard>
+  </div>
+
+  <!-- 5. Sante dans le temps -->
+  <AdminCard title="Santé dans le temps" description={health ? `En ligne depuis ${formatUptime(health.uptime)}` : ''}>
+    {#snippet actions()}
+      <FilterPills
+        label="Mesure"
+        value={metric}
+        onchange={(value) => (metric = value)}
+        options={[
+          { value: 'memory', label: 'Mémoire' },
+          { value: 'ping', label: 'Latence' },
+          { value: 'reach', label: 'Couverture' },
+        ]}
+      />
+      <FilterPills
+        label="Période"
+        value={chartWindow}
+        onchange={changeWindow}
+        options={[
+          { value: '60', label: '1 h' },
+          { value: '360', label: '6 h' },
+          { value: '1440', label: '24 h' },
+        ]}
+      />
+    {/snippet}
+    <AdminTimeSeries
+      series={chartSeries}
+      formatValue={(value) => `${Math.round(value)}${metric === 'memory' ? ' Mo' : ''}`}
+      emptyLabel="L’historique se remplit à partir de la première visite de la console. Reviens dans quelques minutes."
+    />
   </AdminCard>
 
-  <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
-    <!-- Système -->
-    <AdminCard title="Processus" icon="Cpu" tone="info">
-      <dl class="space-y-2.5">
-        {#each [
-          { label: 'Uptime', value: stats ? formatUptime(stats.uptime) : '-' },
-          { label: 'RSS', value: stats ? formatBytes(stats.memoryUsage.rss) : '-' },
-          { label: 'Heap total', value: stats ? formatBytes(stats.memoryUsage.heapTotal) : '-' },
-          { label: 'Externe', value: stats ? formatBytes(stats.memoryUsage.external) : '-' },
-          { label: 'Sanctions actives', value: stats ? formatNumber(stats.activeSanctions) : '-' },
-          { label: 'Soumissions algo', value: stats ? formatNumber(stats.dailyAlgoSubmissions) : '-' },
-        ] as entry (entry.label)}
-          <div class="flex items-center justify-between gap-3">
-            <dt class="text-body-sm text-on-surface-variant">{entry.label}</dt>
-            <dd class="text-body-sm font-semibold text-on-surface tabular-nums">{entry.value}</dd>
-          </div>
-        {/each}
-      </dl>
-    </AdminCard>
-
-    <!-- Plus gros serveurs -->
-    <AdminCard title="Plus gros serveurs" icon="Server" tone="primary">
+  <!-- 6. Ce qui s'est passe recemment -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start">
+    <AdminCard title="Dernières actions admin">
       {#snippet actions()}
-        <a href="/admin/servers" class="text-xs font-semibold text-primary hover:underline">Tout voir</a>
+        <a href="/admin/audit" class="text-body-sm font-semibold text-primary hover:underline">Journal</a>
       {/snippet}
-
-      {#if topGuilds.length === 0}
-        <p class="text-body-sm text-on-surface-variant py-4 text-center">Aucun serveur chargé.</p>
+      {#if audit.length === 0}
+        <p class="text-body-sm text-on-surface-variant">Aucune action enregistrée. Le journal se remplit à la prochaine action sensible.</p>
       {:else}
-        <ul class="space-y-2">
-          {#each topGuilds as guild (guild.id)}
-            <li class="flex items-center gap-2.5">
-              <div class="w-7 h-7 shrink-0 rounded-lg bg-on-surface/6 overflow-hidden flex items-center justify-center">
-                {#if guild.icon}
-                  <img src={guild.icon} alt="" class="w-full h-full object-cover" loading="lazy" />
-                {:else}
-                  <Papicon icon="Server" size={12} class="text-on-surface-variant" />
-                {/if}
+        <ul class="space-y-3">
+          {#each audit as entry (entry.id)}
+            <li class="flex items-start gap-2.5">
+              <span class="w-2 h-2 rounded-full mt-1.5 shrink-0 {entry.outcome === 'OK' ? 'bg-success' : 'bg-error'}"></span>
+              <div class="min-w-0">
+                <p class="text-body-sm text-on-surface leading-snug">{entry.summary}</p>
+                <p class="text-xs text-on-surface-variant mt-0.5">{relativeTime(entry.createdAt)}</p>
               </div>
-              <span class="flex-1 min-w-0 text-body-sm font-medium text-on-surface truncate">{guild.name}</span>
-              {#if !guild.activated}
-                <AdminBadge size="sm" label="Inactif" tone="warning" />
-              {/if}
-              <span class="text-xs font-semibold text-on-surface-variant tabular-nums">{formatNumber(guild.memberCount)}</span>
             </li>
           {/each}
         </ul>
       {/if}
     </AdminCard>
 
-    <!-- Activité admin -->
-    <AdminCard title="Activité admin" icon="ClipboardList" tone="neutral">
+    <AdminCard title="Dernières annonces">
       {#snippet actions()}
-        <a href="/admin/audit" class="text-xs font-semibold text-primary hover:underline">Journal</a>
+        <a href="/admin/broadcast" class="text-body-sm font-semibold text-primary hover:underline">Annonces</a>
       {/snippet}
-
-      {#if auditTrail.length === 0}
-        <p class="text-body-sm text-on-surface-variant py-4 text-center leading-snug">
-          Aucune action enregistrée pour l’instant. Le journal se remplit dès la prochaine action sensible.
-        </p>
+      {#if broadcasts.length === 0}
+        <p class="text-body-sm text-on-surface-variant">Aucune annonce globale envoyée pour l’instant.</p>
       {:else}
-        <ul class="space-y-2.5">
-          {#each auditTrail.slice(0, 6) as entry (entry.id)}
-            <li class="flex items-start gap-2.5">
-              <span class="w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 {entry.outcome === 'OK' ? 'bg-emerald-500' : 'bg-red-500'}"></span>
-              <div class="min-w-0">
-                <p class="text-xs text-on-surface leading-snug">{entry.summary}</p>
-                <p class="text-2xs text-on-surface-variant mt-0.5">
-                  <span class="font-mono">{entry.action}</span> · {relativeTime(entry.createdAt)}
-                </p>
+        <ul class="space-y-3">
+          {#each broadcasts as log (log.id)}
+            <li class="flex items-center gap-3">
+              <span class="w-1 h-9 rounded-full shrink-0" style="background: {log.color}"></span>
+              <div class="min-w-0 flex-1">
+                <p class="text-body-sm font-semibold text-on-surface truncate">{log.title}</p>
+                <p class="text-xs text-on-surface-variant">{relativeTime(log.createdAt)} · {log.username ?? log.sentBy}</p>
               </div>
+              <p class="text-body-sm font-semibold tabular-nums shrink-0">
+                <span class="text-success">{log.successCount}</span>{#if log.failCount > 0}<span class="text-on-surface-variant"> / </span><span class="text-error">{log.failCount}</span>{/if}
+                <span class="text-xs font-normal text-on-surface-variant"> sur {log.totalTargeted}</span>
+              </p>
             </li>
           {/each}
         </ul>
       {/if}
     </AdminCard>
   </div>
-
-  <!-- Dernières annonces -->
-  {#if recentBroadcasts.length > 0}
-    <AdminCard title="Dernières annonces globales" icon="Megaphone" tone="warning">
-      {#snippet actions()}
-        <a href="/admin/broadcast" class="text-xs font-semibold text-primary hover:underline">Console d’annonces</a>
-      {/snippet}
-
-      <ul class="space-y-2">
-        {#each recentBroadcasts as log (log.id)}
-          <li class="flex items-center gap-3 p-2.5 rounded-xl bg-surface-container-low/40 border border-outline-variant/20">
-            <span class="w-1 h-8 rounded-full shrink-0" style="background: {log.color}"></span>
-            <div class="min-w-0 flex-1">
-              <p class="text-body-sm font-semibold text-on-surface truncate">{log.title}</p>
-              <p class="text-2xs text-on-surface-variant">{relativeTime(log.createdAt)} · {log.username ?? log.sentBy}</p>
-            </div>
-            <div class="text-right shrink-0">
-              <p class="text-body-sm font-semibold text-on-surface tabular-nums">
-                <span class="text-success">{log.successCount}</span>
-                {#if log.failCount > 0}
-                  <span class="text-on-surface-variant">/</span><span class="text-error">{log.failCount}</span>
-                {/if}
-              </p>
-              <p class="text-2xs text-on-surface-variant tabular-nums">sur {log.totalTargeted}</p>
-            </div>
-          </li>
-        {/each}
-      </ul>
-    </AdminCard>
-  {/if}
 </AdminShell>
