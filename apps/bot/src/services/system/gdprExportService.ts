@@ -1,8 +1,16 @@
 import type { Client } from 'discord.js';
+import { Prisma } from '@prisma/client';
 import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
 import { getGuildName } from '../../api/shared.js';
-import { projectGiveaway, projectMcpApiKey, projectMemberReport, type GdprProjection } from './gdprProjections.js';
+import {
+  buildActionSources,
+  projectListMembership,
+  projectMcpApiKey,
+  projectMemberReport,
+  projectProgressionBlacklist,
+  type GdprSource,
+} from './gdprProjections.js';
 
 /**
  * Service d'export RGPD (droit d'accès / portabilité).
@@ -48,18 +56,6 @@ export interface GdprExport {
 
 type PrismaModel = { findMany: (args: unknown) => Promise<unknown[]> };
 
-interface SourceDescriptor {
-  category: string;
-  key: string;
-  label: string;
-  /** Nom d'accès du modèle sur le client Prisma. */
-  model: string;
-  /** Construit la clause `where` à partir des identifiants recherchés. */
-  where: (ids: { discordId: string; staffIds: string[] }) => Record<string, unknown>;
-  /** Retire d'une ligne ce qui concerne d'autres membres (voir `gdprProjections`). */
-  project?: GdprProjection;
-}
-
 const CATEGORY_META: Record<string, { label: string; description: string }> = {
   identity: {
     label: 'Identité & profil',
@@ -101,10 +97,14 @@ const CATEGORY_META: Record<string, { label: string; description: string }> = {
     label: 'Système',
     description: 'Tâches planifiées, cibles de notifications, salons vocaux temporaires, instances white-label, clés MCP et workflows.',
   },
+  actions: {
+    label: 'Actions effectuées',
+    description: "Traces des actions faites en tant qu'administrateur ou membre du staff : quoi, où, quand et à quel titre, sans le contenu ni la personne visée.",
+  },
 };
 
 /** Toutes les sources de données interrogées, regroupées par catégorie. */
-const SOURCES: SourceDescriptor[] = [
+const STATIC_SOURCES: GdprSource[] = [
   // ── Identité & profil ──────────────────────────────────────────
   { category: 'identity', key: 'memberProfile', label: 'Profils membre', model: 'memberProfile', where: ({ discordId }) => ({ userId: discordId }) },
   { category: 'identity', key: 'memberLevel', label: 'Niveaux', model: 'memberLevel', where: ({ discordId }) => ({ userId: discordId }) },
@@ -132,15 +132,13 @@ const SOURCES: SourceDescriptor[] = [
   { category: 'verification', key: 'captchaSession', label: 'Sessions de captcha', model: 'captchaSession', where: ({ discordId }) => ({ userId: discordId }) },
 
   // ── Modération & sécurité ──────────────────────────────────────
-  { category: 'moderation', key: 'sanction', label: 'Sanctions', model: 'sanction', where: ({ discordId }) => ({ OR: [{ targetUserId: discordId }, { moderatorUserId: discordId }] }) },
-  { category: 'moderation', key: 'sanctionReport', label: 'Rapports de sanction', model: 'sanctionReport', where: ({ discordId }) => ({ createdByUserId: discordId }) },
-  { category: 'moderation', key: 'sanctionEvidenceFile', label: 'Preuves de sanction déposées', model: 'sanctionEvidenceFile', where: ({ discordId }) => ({ uploadedByUserId: discordId }) },
-  { category: 'moderation', key: 'linkedAccount', label: 'Comptes liés', model: 'linkedAccount', where: ({ discordId }) => ({ OR: [{ user1Id: discordId }, { user2Id: discordId }, { linkedByUserId: discordId }] }) },
+  { category: 'moderation', key: 'sanction', label: 'Sanctions', model: 'sanction', where: ({ discordId }) => ({ targetUserId: discordId }) },
+  { category: 'moderation', key: 'linkedAccount', label: 'Comptes liés', model: 'linkedAccount', where: ({ discordId }) => ({ OR: [{ user1Id: discordId }, { user2Id: discordId }] }) },
   { category: 'moderation', key: 'globalBlacklist', label: 'Liste noire globale', model: 'globalBlacklist', where: ({ discordId }) => ({ userId: discordId }) },
   { category: 'moderation', key: 'banAppeal', label: 'Appels de bannissement', model: 'banAppeal', where: ({ discordId }) => ({ userId: discordId }) },
   { category: 'moderation', key: 'banAppealBlacklist', label: "Liste noire d'appels", model: 'banAppealBlacklist', where: ({ discordId }) => ({ userId: discordId }) },
   { category: 'moderation', key: 'dcVoiceSession', label: 'Sessions vocales (détection)', model: 'dcVoiceSession', where: ({ discordId }) => ({ userId: discordId }) },
-  { category: 'moderation', key: 'dcDetectionSample', label: 'Échantillons de détection', model: 'dcDetectionSample', where: ({ discordId }) => ({ userId: discordId }) },
+  { category: 'moderation', key: 'dcDetectionSample', label: 'Échantillons de détection', model: 'dcDetectionSample', where: ({ discordId }) => ({ OR: [{ userId: discordId }, { altUserId: discordId }] }) },
   { category: 'moderation', key: 'suspendedInviter', label: 'Inviteur suspendu', model: 'suspendedInviter', where: ({ discordId }) => ({ userId: discordId }) },
   { category: 'moderation', key: 'memberRoleSnapshot', label: 'Rôles mémorisés au départ', model: 'memberRoleSnapshot', where: ({ discordId }) => ({ userId: discordId }) },
   { category: 'moderation', key: 'aegisDetection', label: 'Détections Aegis', model: 'aegisDetection', where: ({ discordId }) => ({ OR: [{ authorId: discordId }, { targetUserId: discordId }] }) },
@@ -151,13 +149,15 @@ const SOURCES: SourceDescriptor[] = [
   { category: 'moderation', key: 'inviteApprovalRequest', label: "Demandes d'approbation d'invitation", model: 'inviteApprovalRequest', where: ({ discordId }) => ({ creatorId: discordId }) },
   { category: 'moderation', key: 'memberReport', label: 'Signalements', model: 'memberReport', where: ({ discordId }) => ({ OR: [{ reporterId: discordId }, { targetId: discordId }] }), project: projectMemberReport },
   { category: 'moderation', key: 'spamDetectionSample', label: 'Échantillons de détection de spam', model: 'spamDetectionSample', where: ({ discordId }) => ({ userId: discordId }) },
+  { category: 'moderation', key: 'progressionBlacklist', label: 'Exclusions de la progression', model: 'guild', where: ({ discordId }) => ({ progressionBlacklistUserIds: { has: discordId } }), project: projectProgressionBlacklist },
+  { category: 'moderation', key: 'ghostPruneRun', label: 'Expulsions pour inactivité', model: 'ghostPruneRun', where: ({ discordId }) => ({ kickedUserIds: { has: discordId } }), project: projectListMembership({ kickedUserIds: 'kicked' }) },
   { category: 'moderation', key: 'convocation', label: 'Convocations', model: 'convocation', where: ({ discordId }) => ({ userId: discordId }) },
 
   // ── Messages ───────────────────────────────────────────────────
   { category: 'messages', key: 'messageLog', label: 'Journaux de messages', model: 'messageLog', where: ({ discordId }) => ({ authorId: discordId }) },
 
   // ── Contributions & contenus ───────────────────────────────────
-  { category: 'content', key: 'suggestion', label: 'Suggestions', model: 'suggestion', where: ({ discordId }) => ({ userId: discordId }) },
+  { category: 'content', key: 'suggestion', label: 'Suggestions écrites ou votées', model: 'suggestion', where: ({ discordId }) => ({ OR: [{ userId: discordId }, { upvoters: { has: discordId } }, { downvoters: { has: discordId } }] }), project: projectListMembership({ upvoters: 'votedUp', downvoters: 'votedDown' }) },
   { category: 'content', key: 'reputationVote', label: 'Votes de réputation', model: 'reputationVote', where: ({ discordId }) => ({ OR: [{ giverId: discordId }, { receiverId: discordId }] }) },
   { category: 'content', key: 'customFormSubmission', label: 'Soumissions de formulaires', model: 'customFormSubmission', where: ({ discordId }) => ({ userId: discordId }) },
   { category: 'content', key: 'dailyAlgoSubmission', label: "Soumissions Daily Algo", model: 'dailyAlgoSubmission', where: ({ discordId }) => ({ authorId: discordId }) },
@@ -177,6 +177,7 @@ const SOURCES: SourceDescriptor[] = [
   { category: 'content', key: 'partnerContact', label: 'Contacts de partenariat', model: 'partnerContact', where: ({ discordId }) => ({ userId: discordId }) },
   { category: 'content', key: 'partnershipReferral', label: 'Parrainages de partenariat', model: 'partnershipReferral', where: ({ discordId }) => ({ userId: discordId }) },
   { category: 'content', key: 'partnership', label: 'Partenariats gérés', model: 'partnership', where: ({ discordId }) => ({ ownerUserId: discordId }) },
+  { category: 'content', key: 'siteTemplate', label: 'Modèles de site signalés', model: 'siteTemplate', where: ({ discordId }) => ({ reporterIds: { has: discordId } }), project: projectListMembership({ reporterIds: 'reported' }) },
   { category: 'content', key: 'partnerApplication', label: 'Candidatures de partenaire', model: 'partnerApplication', where: ({ discordId }) => ({ applicantUserId: discordId }) },
 
   // ── Économie & marketplace ─────────────────────────────────────
@@ -215,14 +216,14 @@ const SOURCES: SourceDescriptor[] = [
   { category: 'economy', key: 'referralCode', label: 'Codes de parrainage', model: 'referralCode', where: ({ discordId }) => ({ discordUserId: discordId }) },
 
   // ── Engagement ─────────────────────────────────────────────────
-  { category: 'engagement', key: 'customEventRegistration', label: "Inscriptions à des événements", model: 'customEventRegistration', where: ({ discordId }) => ({ userId: discordId }) },
+  { category: 'engagement', key: 'customEventRegistration', label: "Inscriptions à des événements", model: 'customEventRegistration', where: ({ discordId }) => ({ OR: [{ userId: discordId }, { teamMemberIds: { has: discordId } }] }), project: projectListMembership({ teamMemberIds: 'inTeam' }) },
   { category: 'engagement', key: 'eventParticipant', label: 'Participations aux événements', model: 'eventParticipant', where: ({ discordId }) => ({ userId: discordId }) },
   { category: 'engagement', key: 'questProgress', label: 'Progression des quêtes', model: 'questProgress', where: ({ discordId }) => ({ userId: discordId }) },
   { category: 'engagement', key: 'memberInvite', label: 'Invitations (membre)', model: 'memberInvite', where: ({ discordId }) => ({ OR: [{ userId: discordId }, { inviterId: discordId }] }) },
   { category: 'engagement', key: 'guildInvite', label: 'Invitations créées', model: 'guildInvite', where: ({ discordId }) => ({ inviterId: discordId }) },
   { category: 'engagement', key: 'feedSubscriber', label: 'Abonnements aux flux', model: 'feedSubscriber', where: ({ discordId }) => ({ userId: discordId }) },
   { category: 'engagement', key: 'widgetSubscription', label: 'Abonnements aux widgets', model: 'widgetSubscription', where: ({ discordId }) => ({ userId: discordId }) },
-  { category: 'engagement', key: 'giveaway', label: 'Participations aux concours', model: 'giveaway', where: ({ discordId }) => ({ OR: [{ participants: { has: discordId } }, { winners: { has: discordId } }, { pendingWinners: { has: discordId } }] }), project: projectGiveaway },
+  { category: 'engagement', key: 'giveaway', label: 'Participations aux concours', model: 'giveaway', where: ({ discordId }) => ({ OR: [{ participants: { has: discordId } }, { winners: { has: discordId } }, { pendingWinners: { has: discordId } }] }), project: projectListMembership({ participants: 'participated', winners: 'won', pendingWinners: 'pendingWinner' }) },
   { category: 'engagement', key: 'clanMemberContribution', label: 'Contributions au clan', model: 'clanMemberContribution', where: ({ discordId }) => ({ userId: discordId }) },
   { category: 'engagement', key: 'clanContributionEvent', label: 'Historique des points de clan', model: 'clanContributionEvent', where: ({ discordId }) => ({ userId: discordId }) },
   { category: 'engagement', key: 'clanDebtSnapshot', label: 'Relevés de dette de clan', model: 'clanDebtSnapshot', where: ({ discordId }) => ({ userId: discordId }) },
@@ -250,21 +251,18 @@ const SOURCES: SourceDescriptor[] = [
   { category: 'staff', key: 'staffMember', label: 'Fiches staff', model: 'staffMember', where: ({ discordId }) => ({ userId: discordId }) },
   { category: 'staff', key: 'staffActivity', label: 'Activité staff', model: 'staffActivity', where: ({ staffIds }) => ({ staffUserId: { in: staffIds } }) },
   { category: 'staff', key: 'staffVoiceSession', label: 'Sessions vocales staff', model: 'staffVoiceSession', where: ({ staffIds }) => ({ staffUserId: { in: staffIds } }) },
-  { category: 'staff', key: 'staffEvaluation', label: 'Évaluations', model: 'staffEvaluation', where: ({ discordId, staffIds }) => ({ OR: [{ staffUserId: { in: staffIds } }, { evaluatorId: discordId }] }) },
-  { category: 'staff', key: 'staffWarning', label: 'Avertissements staff', model: 'staffWarning', where: ({ discordId, staffIds }) => ({ OR: [{ staffUserId: { in: staffIds } }, { issuedByUserId: discordId }] }) },
-  { category: 'staff', key: 'staffBlacklist', label: 'Liste noire staff', model: 'staffBlacklist', where: ({ discordId, staffIds }) => ({ OR: [{ staffUserId: { in: staffIds } }, { issuedByUserId: discordId }] }) },
-  { category: 'staff', key: 'staffResignation', label: 'Démissions', model: 'staffResignation', where: ({ discordId, staffIds }) => ({ OR: [{ staffUserId: { in: staffIds } }, { decisionByUserId: discordId }] }) },
+  { category: 'staff', key: 'staffEvaluation', label: 'Évaluations', model: 'staffEvaluation', where: ({ staffIds }) => ({ staffUserId: { in: staffIds } }) },
+  { category: 'staff', key: 'staffWarning', label: 'Avertissements staff', model: 'staffWarning', where: ({ staffIds }) => ({ staffUserId: { in: staffIds } }) },
+  { category: 'staff', key: 'staffBlacklist', label: 'Liste noire staff', model: 'staffBlacklist', where: ({ staffIds }) => ({ staffUserId: { in: staffIds } }) },
+  { category: 'staff', key: 'staffResignation', label: 'Démissions', model: 'staffResignation', where: ({ staffIds }) => ({ staffUserId: { in: staffIds } }) },
   { category: 'staff', key: 'staffTask', label: 'Tâches staff', model: 'staffTask', where: ({ staffIds }) => ({ OR: [{ assigneeId: { in: staffIds } }, { creatorId: { in: staffIds } }] }) },
   { category: 'staff', key: 'staffCall', label: 'Appels staff créés', model: 'staffCall', where: ({ staffIds }) => ({ creatorId: { in: staffIds } }) },
   { category: 'staff', key: 'staffCallInvitee', label: 'Invitations à des appels', model: 'staffCallInvitee', where: ({ staffIds }) => ({ staffUserId: { in: staffIds } }) },
   { category: 'staff', key: 'staffReminder', label: 'Rappels personnels', model: 'staffReminder', where: ({ discordId }) => ({ userId: discordId }) },
   { category: 'staff', key: 'staffHierarchy', label: 'Hiérarchies (responsable)', model: 'staffHierarchy', where: ({ discordId }) => ({ responsableUserId: discordId }) },
   { category: 'staff', key: 'staffMemberHierarchyGrade', label: 'Grades hiérarchiques', model: 'staffMemberHierarchyGrade', where: ({ staffIds }) => ({ staffMemberId: { in: staffIds } }) },
-  { category: 'staff', key: 'aPIKey', label: "Clés API staff", model: 'aPIKey', where: ({ staffIds }) => ({ createdByUserId: { in: staffIds } }) },
   { category: 'staff', key: 'mentorReport', label: 'Rapports de mentorat', model: 'mentorReport', where: ({ discordId }) => ({ authorId: discordId }) },
-  { category: 'staff', key: 'testingPeriod', label: "Périodes d'essai (mentor)", model: 'testingPeriod', where: ({ discordId }) => ({ mentorId: discordId }) },
-  { category: 'staff', key: 'tutoringChecklistProgress', label: 'Progression de tutorat', model: 'tutoringChecklistProgress', where: ({ discordId }) => ({ completedByUserId: discordId }) },
-  { category: 'staff', key: 'staffServerLink', label: 'Liens de serveur staff', model: 'staffServerLink', where: ({ discordId }) => ({ createdByUserId: discordId }) },
+  { category: 'staff', key: 'testingPeriod', label: "Périodes d'essai", model: 'testingPeriod', where: ({ staffIds }) => ({ staffUserId: { in: staffIds } }) },
   { category: 'staff', key: 'ticketStaffSignature', label: 'Signatures de tickets', model: 'ticketStaffSignature', where: ({ discordId }) => ({ userId: discordId }) },
   { category: 'staff', key: 'siteStaffProfile', label: 'Profil staff sur le site', model: 'siteStaffProfile', where: ({ discordId }) => ({ userId: discordId }) },
   { category: 'staff', key: 'staffAbsence', label: 'Absences', model: 'staffAbsence', where: ({ staffIds }) => ({ staffUserId: { in: staffIds } }) },
@@ -282,6 +280,12 @@ const SOURCES: SourceDescriptor[] = [
   { category: 'system', key: 'workflowTemporaryRole', label: 'Rôles temporaires des workflows', model: 'workflowTemporaryRole', where: ({ discordId }) => ({ userId: discordId }) },
   { category: 'system', key: 'workflowMemberRun', label: 'Passages dans les workflows', model: 'workflowMemberRun', where: ({ discordId }) => ({ userId: discordId }) },
 ];
+
+/**
+ * Sources lues pour chaque export : les tables où la personne est le sujet,
+ * puis les traces de ses actions, générées depuis le schéma.
+ */
+const SOURCES: GdprSource[] = [...STATIC_SOURCES, ...buildActionSources(Prisma.dmmf.datamodel.models)];
 
 /** Collecte l'ensemble des données Kotbo relatives à un identifiant Discord. */
 export async function collectUserData(client: Client, userId: string): Promise<GdprExport> {
@@ -303,6 +307,7 @@ export async function collectUserData(client: Client, userId: string): Promise<G
     logger.warn('GDPR', `Résolution des fiches staff impossible: ${(err as Error).message}`);
   }
   const staffIds = Array.from(new Set([userId, ...staffMemberIds]));
+  const ids = { discordId: userId, staffIds };
 
   // 3. Interrogation de chaque source.
   const byCategory = new Map<string, GdprTable[]>();
@@ -316,23 +321,23 @@ export async function collectUserData(client: Client, userId: string): Promise<G
       continue;
     }
     try {
-      const records = await model.findMany({ where: source.where({ discordId: userId, staffIds }) });
+      const records = await model.findMany({ where: source.where(ids) });
       if (!records.length) continue;
 
-      for (const rec of records as Record<string, unknown>[]) {
+      const project = source.project;
+      const exported = project
+        ? (records as Record<string, unknown>[]).map((record) => project(record, ids))
+        : records;
+
+      // Lu après projection : une ligne de serveur n'a son identifiant qu'une fois projetée.
+      for (const rec of exported as Record<string, unknown>[]) {
         const gid = rec.guildId;
         if (typeof gid === 'string') guildIds.add(gid);
       }
 
       totalRecords += records.length;
       const list = byCategory.get(source.category) ?? [];
-      const project = source.project;
-      list.push({
-        key: source.key,
-        label: source.label,
-        count: records.length,
-        records: project ? (records as Record<string, unknown>[]).map((record) => project(record, userId)) : records,
-      });
+      list.push({ key: source.key, label: source.label, count: records.length, records: exported });
       byCategory.set(source.category, list);
     } catch (err) {
       // Le message brut (requête Prisma) reste dans les journaux.
