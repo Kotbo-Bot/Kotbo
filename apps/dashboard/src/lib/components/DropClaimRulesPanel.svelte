@@ -24,6 +24,10 @@
   // le lira, la règle est éteinte et ne s'affiche pas comme active.
   const active = $derived(hasDropClaimRules(normalizeDropClaimRules(rules)));
 
+  // Règle éteinte (0) affichée en champ vide : le texte gris dit « Aucune … »,
+  // comme l'option « Aucun » du rôle. Un champ vidé rééteint la règle.
+  const off = (value: number) => value || null;
+
   // Replié par défaut : sans règle, tout le monde ramasse et il n'y a rien à
   // régler. Le badge de l'en-tête signale les règles actives sans l'ouvrir.
   let expanded = $state(false);
@@ -60,8 +64,8 @@
           type="number"
           min="0"
           max={DROP_CLAIM_DAILY_LIMIT_RANGE.max}
-          placeholder={m.drop_claim_rule_off_placeholder()}
-          bind:value={rules.dailyLimit}
+          placeholder={m.drop_claim_daily_limit_off()}
+          bind:value={() => off(rules.dailyLimit), (value) => rules.dailyLimit = value ?? 0}
           class={inputClass}
           {disabled}
         />
@@ -75,8 +79,8 @@
           type="number"
           min="0"
           max={DROP_CLAIM_MIN_MEMBER_DAYS_RANGE.max}
-          placeholder={m.drop_claim_rule_off_placeholder()}
-          bind:value={rules.minMemberDays}
+          placeholder={m.drop_claim_min_days_off()}
+          bind:value={() => off(rules.minMemberDays), (value) => rules.minMemberDays = value ?? 0}
           class={inputClass}
           {disabled}
         />
