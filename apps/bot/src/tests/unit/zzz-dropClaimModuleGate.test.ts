@@ -68,7 +68,12 @@ const tx = {
   },
 };
 
+/** Règles de ramassage du serveur, telles que lues dans la colonne. */
+let reglesRamassage: Record<string, unknown> = {};
+let ramassagesDuJour = 0;
+
 const fauxPrisma = {
+  guild: { findUnique: mock(async () => ({ dropClaimRules: reglesRamassage })) },
   drop: {
     findUnique: mock(async () => dropXp),
     update: mock(async () => ({})),
@@ -78,6 +83,7 @@ const fauxPrisma = {
     deleteMany: mock(async () => ({ count: 1 })),
     updateMany: dropClaimUpdateMany,
     findMany: mock(async () => [] as unknown[]),
+    count: mock(async () => ramassagesDuJour),
   },
   rpgItem: { findUnique: mock(async () => null) },
   $transaction: mock(async (arg: unknown) =>
@@ -105,10 +111,14 @@ const { countRecentMemberMessages, handleDropClaim, settlePendingDropClaims } = 
 
 const editReply = mock(async (_payload: { content: string }) => undefined);
 
-function clic() {
+function clic(member: { roles: string[]; joined_at: string } = {
+  roles: ['role-membre'],
+  joined_at: new Date(Date.now() - 400 * 24 * 60 * 60 * 1000).toISOString(),
+}) {
   return {
     guildId: GUILD_ID,
     user: { id: 'membre-1' },
+    member,
     client: {},
     deferReply: mock(async () => undefined),
     editReply,
@@ -118,6 +128,9 @@ function clic() {
 beforeEach(() => {
   levelingActif = true;
   bailPris = true;
+  reglesRamassage = {};
+  ramassagesDuJour = 0;
+  fauxPrisma.dropClaim.count.mockClear();
   addXp.mockReset();
   addXp.mockImplementation(async () => undefined);
   editReply.mockClear();
@@ -171,6 +184,49 @@ describe('versement garanti d\'un ramassage', () => {
     expect(fauxPrisma.dropClaim.deleteMany).not.toHaveBeenCalled();
     expect(marquagesVerses()).toHaveLength(0);
     expect(editReply).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('règles de ramassage du serveur', () => {
+  test('sans règle configurée, rien n\'est compté et le clic passe', async () => {
+    await handleDropClaim(clic(), DROP_ID);
+
+    expect(fauxPrisma.dropClaim.count).not.toHaveBeenCalled();
+    expect(tx.dropClaim.create).toHaveBeenCalledTimes(1);
+    expect(addXp).toHaveBeenCalledTimes(1);
+  });
+
+  test('plafond du jour atteint : refusé avant toute réservation', async () => {
+    reglesRamassage = { dailyLimit: 2 };
+    ramassagesDuJour = 2;
+    await handleDropClaim(clic(), DROP_ID);
+
+    expect(fauxPrisma.dropClaim.count).toHaveBeenCalledTimes(1);
+    expect(tx.dropClaim.create).not.toHaveBeenCalled();
+    expect(addXp).not.toHaveBeenCalled();
+    expect(editReply).toHaveBeenCalledTimes(1);
+  });
+
+  test('rôle requis absent : refusé', async () => {
+    reglesRamassage = { requiredRoleId: 'role-vip' };
+    await handleDropClaim(clic(), DROP_ID);
+
+    expect(tx.dropClaim.create).not.toHaveBeenCalled();
+  });
+
+  test('membre arrivé trop récemment : refusé', async () => {
+    reglesRamassage = { minMemberDays: 7 };
+    await handleDropClaim(clic({ roles: [], joined_at: new Date().toISOString() }), DROP_ID);
+
+    expect(tx.dropClaim.create).not.toHaveBeenCalled();
+  });
+
+  test('règles respectées : le clic passe', async () => {
+    reglesRamassage = { dailyLimit: 2, minMemberDays: 7, requiredRoleId: 'role-membre' };
+    ramassagesDuJour = 1;
+    await handleDropClaim(clic(), DROP_ID);
+
+    expect(tx.dropClaim.create).toHaveBeenCalledTimes(1);
   });
 });
 

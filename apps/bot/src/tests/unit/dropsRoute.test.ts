@@ -370,3 +370,55 @@ describe('handleDropsRoutes - mention réservée aux jackpots', () => {
     }));
   });
 });
+
+describe('handleDropsRoutes - règles de ramassage', () => {
+  beforeEach(() => {
+    mockDb.guild.update.mockClear();
+    guildRow = {
+      id: 'guild-123',
+      dropsEnabled: true,
+      dropChannelId: null,
+      dropMentionRoleId: null,
+      dropMentionJackpotOnly: false,
+      dropLifetimeMinutes: 60,
+      dropDeleteAfterMinutes: 0,
+      dropClaimRules: { dailyLimit: 0, minMemberDays: 7, requiredRoleId: null },
+    };
+  });
+
+  test('une règle envoyée seule garde les autres', async () => {
+    const res = createMockResponse();
+    await handleDropsRoutes(
+      createMockRequest({ dropClaimRules: { dailyLimit: 5 } }),
+      res,
+      ['api', 'dashboard', 'guilds', 'guild-123', 'drops'],
+      mockClient,
+      mockUser,
+      'guild-123',
+      mockAccess,
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(mockDb.guild.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        dropClaimRules: { dailyLimit: 5, minMemberDays: 7, requiredRoleId: null },
+      }),
+    }));
+  });
+
+  test('les règles sont relues à la lecture de la page', async () => {
+    const res = createMockResponse();
+    await handleDropsRoutes(
+      createMockRequest({}, 'GET'),
+      res,
+      ['api', 'dashboard', 'guilds', 'guild-123', 'drops'],
+      mockClient,
+      mockUser,
+      'guild-123',
+      mockAccess,
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body).dropClaimRules).toEqual({ dailyLimit: 0, minMemberDays: 7, requiredRoleId: null });
+  });
+});

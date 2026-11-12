@@ -304,6 +304,102 @@ export function dropJackpotAmount(amount: number, multiplier: number): number {
   return Math.min(DROP_AMOUNT_RANGE.max, amount * multiplier);
 }
 
+/**
+ * Règles de ramassage : configuration avancée, éteinte par défaut. Un serveur qui
+ * n'y touche pas laisse tout le monde ramasser, comme avant leur existence.
+ *
+ * Chaque règle vaut pour tous les types de drop. `0` ou `null` l'éteint.
+ */
+export interface DropClaimRules {
+  /** Ramassages au plus par membre sur 24 h glissantes, tous drops confondus. */
+  dailyLimit: number;
+  /** Ancienneté minimale sur le serveur, en jours : freine les comptes créés pour l'occasion. */
+  minMemberDays: number;
+  /** Rôle sans lequel on ne ramasse pas. */
+  requiredRoleId: string | null;
+}
+
+export const DROP_CLAIM_DAILY_LIMIT_RANGE = { min: 1, max: 100 } as const;
+export const DROP_CLAIM_MIN_MEMBER_DAYS_RANGE = { min: 1, max: 365 } as const;
+
+export const DEFAULT_DROP_CLAIM_RULES: DropClaimRules = {
+  dailyLimit: 0,
+  minMemberDays: 0,
+  requiredRoleId: null,
+};
+
+/** Fenêtre du plafond de ramassages : 24 h glissantes, sans fuseau horaire à choisir. */
+export const DROP_CLAIM_LIMIT_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+/** Ce qu'il faut savoir du membre au moment du clic. */
+export interface DropClaimFacts {
+  /** Arrivée sur le serveur ; `null` quand Discord ne la donne pas. */
+  joinedAt: Date | null;
+  roleIds: readonly string[];
+  /** Ramassages du membre sur les dernières 24 h. Lu seulement quand un plafond est réglé. */
+  claimsLast24h: number;
+  now: Date;
+}
+
+export type DropClaimBlocker = 'DAILY_LIMIT' | 'MEMBER_TOO_NEW' | 'MISSING_ROLE';
+
+/**
+ * Une entrée par règle, dans l'ordre où elles sont annoncées au membre. Ajouter
+ * une règle revient à ajouter une entrée ici, un champ dans `DropClaimRules` et
+ * son message : le service et la page n'ont rien d'autre à apprendre.
+ */
+const DROP_CLAIM_RULES: ReadonlyArray<{
+  blocker: DropClaimBlocker;
+  active: (rules: DropClaimRules) => boolean;
+  blocks: (rules: DropClaimRules, facts: DropClaimFacts) => boolean;
+}> = [
+  {
+    blocker: 'DAILY_LIMIT',
+    active: (rules) => rules.dailyLimit > 0,
+    blocks: (rules, facts) => facts.claimsLast24h >= rules.dailyLimit,
+  },
+  {
+    blocker: 'MEMBER_TOO_NEW',
+    active: (rules) => rules.minMemberDays > 0,
+    // Une arrivée inconnue ne bloque pas : refuser sur une donnée absente
+    // pénaliserait un membre de longue date que Discord n'a pas renseigné.
+    blocks: (rules, facts) => facts.joinedAt !== null
+      && facts.now.getTime() - facts.joinedAt.getTime() < rules.minMemberDays * 24 * 60 * 60 * 1000,
+  },
+  {
+    blocker: 'MISSING_ROLE',
+    active: (rules) => rules.requiredRoleId !== null,
+    blocks: (rules, facts) => !facts.roleIds.includes(rules.requiredRoleId as string),
+  },
+];
+
+/** Au moins une règle est réglée : la page le signale, le clic va lire le membre. */
+export function hasDropClaimRules(rules: DropClaimRules): boolean {
+  return DROP_CLAIM_RULES.some((rule) => rule.active(rules));
+}
+
+/** Première règle que le membre ne respecte pas, ou `null` s'il peut ramasser. */
+export function dropClaimBlocker(rules: DropClaimRules, facts: DropClaimFacts): DropClaimBlocker | null {
+  return DROP_CLAIM_RULES.find((rule) => rule.active(rules) && rule.blocks(rules, facts))?.blocker ?? null;
+}
+
+/** Bornée, et sous le minimum la règle est éteinte plutôt que ramenée à 1. */
+function optionalDropInt(value: unknown, range: { min: number; max: number }): number {
+  const parsed = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(parsed) || parsed < range.min) return 0;
+  return Math.min(range.max, Math.trunc(parsed));
+}
+
+/** Lit la colonne JSON : vide, illisible ou partielle, ce qui manque reste éteint. */
+export function normalizeDropClaimRules(raw: unknown): DropClaimRules {
+  const source = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw as Partial<DropClaimRules> : {};
+  return {
+    dailyLimit: optionalDropInt(source.dailyLimit, DROP_CLAIM_DAILY_LIMIT_RANGE),
+    minMemberDays: optionalDropInt(source.minMemberDays, DROP_CLAIM_MIN_MEMBER_DAYS_RANGE),
+    requiredRoleId: typeof source.requiredRoleId === 'string' && source.requiredRoleId ? source.requiredRoleId : null,
+  };
+}
+
 export interface DropModeSettings {
   enabled: boolean;
   minAmount: number;
@@ -343,6 +439,7 @@ export interface DropGlobalSettings {
   /** Un drop sur N est un jackpot. */
   dropJackpotChance: number;
   dropJackpotMultiplier: number;
+  dropClaimRules: DropClaimRules;
 }
 
 export const DEFAULT_DROP_GLOBAL_SETTINGS: DropGlobalSettings = {
@@ -355,6 +452,7 @@ export const DEFAULT_DROP_GLOBAL_SETTINGS: DropGlobalSettings = {
   dropJackpotEnabled: false,
   dropJackpotChance: DEFAULT_DROP_JACKPOT_CHANCE,
   dropJackpotMultiplier: DEFAULT_DROP_JACKPOT_MULTIPLIER,
+  dropClaimRules: DEFAULT_DROP_CLAIM_RULES,
 };
 
 /**
@@ -437,7 +535,9 @@ export function normalizeDropTypeSettings(
   };
 }
 
-export function normalizeDropGlobalSettings(raw: Partial<DropGlobalSettings> | null | undefined): DropGlobalSettings {
+export function normalizeDropGlobalSettings(
+  raw: (Omit<Partial<DropGlobalSettings>, 'dropClaimRules'> & { dropClaimRules?: unknown }) | null | undefined,
+): DropGlobalSettings {
   const source = raw ?? {};
   return {
     dropsEnabled: source.dropsEnabled ?? DEFAULT_DROP_GLOBAL_SETTINGS.dropsEnabled,
@@ -457,6 +557,7 @@ export function normalizeDropGlobalSettings(raw: Partial<DropGlobalSettings> | n
       DROP_JACKPOT_MULTIPLIER_CHOICES,
       DEFAULT_DROP_JACKPOT_MULTIPLIER,
     ),
+    dropClaimRules: normalizeDropClaimRules(source.dropClaimRules),
   };
 }
 

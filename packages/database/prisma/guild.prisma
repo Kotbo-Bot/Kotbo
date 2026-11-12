@@ -396,6 +396,10 @@ model Guild {
   dropJackpotEnabled    Boolean @default(false)
   dropJackpotChance     Int     @default(20)
   dropJackpotMultiplier Int     @default(5)
+  /// Règles de ramassage (configuration avancée) : `{ dailyLimit, minMemberDays,
+  /// requiredRoleId }`. Objet vide = aucune règle, tout le monde ramasse. JSON
+  /// plutôt qu'une colonne par règle : en ajouter une ne demande pas de migration.
+  dropClaimRules        Json    @default("{}")
 
   clans                 Clan[]
   dropConfigs           DropConfig[]

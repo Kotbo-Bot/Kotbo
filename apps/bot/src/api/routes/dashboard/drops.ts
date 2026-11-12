@@ -6,8 +6,11 @@ import { json, readJsonBody, getGuildName, pushAudit, broadcastDashboardStateCha
 import {
   DROP_ADVICE_WINDOW_DAYS,
   DROP_TYPES,
+  hasDropClaimRules,
+  normalizeDropClaimRules,
   normalizeDropGlobalSettings,
   normalizeDropTypeSettings,
+  type DropClaimRules,
   type DropOutcomes,
   type DropType,
   type DropTypeSettings,
@@ -25,6 +28,16 @@ import { resolveGuildLocale } from '../../../utils/i18n.js';
 import { jsonFailure } from '../../shared/failure.js';
 /** Nombre de drops passés renvoyés à la page, pour l'historique de l'onglet global. */
 const RECENT_DROPS_LIMIT = 15;
+
+/** Règles de ramassage en clair, pour le journal d'audit. */
+function describeClaimRules(rules: DropClaimRules): string {
+  if (!hasDropClaimRules(rules)) return 'aucune';
+  return [
+    rules.dailyLimit > 0 ? `${rules.dailyLimit} par 24 h` : null,
+    rules.minMemberDays > 0 ? `${rules.minMemberDays} j d'ancienneté` : null,
+    rules.requiredRoleId ? `rôle ${rules.requiredRoleId}` : null,
+  ].filter(Boolean).join(', ');
+}
 
 function isDropType(value: string | undefined): value is DropType {
   return !!value && (DROP_TYPES as readonly string[]).includes(value);
@@ -94,6 +107,7 @@ export async function handleDropsRoutes(
           dropJackpotEnabled: true,
           dropJackpotChance: true,
           dropJackpotMultiplier: true,
+          dropClaimRules: true,
         },
       });
 
@@ -169,6 +183,7 @@ export async function handleDropsRoutes(
         dropJackpotEnabled?: boolean;
         dropJackpotChance?: number;
         dropJackpotMultiplier?: number;
+        dropClaimRules?: Partial<DropClaimRules>;
       }>(req);
 
       const current = await prisma.guild.findUnique({
@@ -183,6 +198,7 @@ export async function handleDropsRoutes(
           dropJackpotEnabled: true,
           dropJackpotChance: true,
           dropJackpotMultiplier: true,
+          dropClaimRules: true,
         },
       });
 
@@ -203,6 +219,8 @@ export async function handleDropsRoutes(
         dropJackpotEnabled: body?.dropJackpotEnabled ?? current.dropJackpotEnabled,
         dropJackpotChance: body?.dropJackpotChance ?? current.dropJackpotChance,
         dropJackpotMultiplier: body?.dropJackpotMultiplier ?? current.dropJackpotMultiplier,
+        // Fusion règle par règle : le volet peut n'en envoyer qu'une.
+        dropClaimRules: { ...normalizeDropClaimRules(current.dropClaimRules), ...body?.dropClaimRules },
       });
 
       // L'interrupteur maître passe par la bascule de module plutôt que par la
@@ -227,6 +245,7 @@ export async function handleDropsRoutes(
           dropJackpotEnabled: settings.dropJackpotEnabled,
           dropJackpotChance: settings.dropJackpotChance,
           dropJackpotMultiplier: settings.dropJackpotMultiplier,
+          dropClaimRules: { ...settings.dropClaimRules },
         },
       });
 
@@ -236,7 +255,7 @@ export async function handleDropsRoutes(
         context: getGuildName(client, guildId),
         module: 'Drops',
         eventType: 'Manuel',
-        details: `Drops activés: ${settings.dropsEnabled}, durée de vie: ${settings.dropLifetimeMinutes} min, suppression du message: ${settings.dropDeleteAfterMinutes > 0 ? `${settings.dropDeleteAfterMinutes} min` : 'jamais'}, jackpot: ${settings.dropJackpotEnabled ? `1/${settings.dropJackpotChance} x${settings.dropJackpotMultiplier}` : 'non'}`,
+        details: `Drops activés: ${settings.dropsEnabled}, durée de vie: ${settings.dropLifetimeMinutes} min, suppression du message: ${settings.dropDeleteAfterMinutes > 0 ? `${settings.dropDeleteAfterMinutes} min` : 'jamais'}, jackpot: ${settings.dropJackpotEnabled ? `1/${settings.dropJackpotChance} x${settings.dropJackpotMultiplier}` : 'non'}, règles de ramassage: ${describeClaimRules(settings.dropClaimRules)}`,
         channelId: null,
       });
 

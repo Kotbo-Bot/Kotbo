@@ -2831,6 +2831,7 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "dropJackpotEnabled": false,
     "dropJackpotChance": 20,
     "dropJackpotMultiplier": 5,
+    "dropClaimRules": {},
     "chiefStaffRoleId": null,
     "chiefStaffUserId": null,
     "ticketCategoryId": null,
