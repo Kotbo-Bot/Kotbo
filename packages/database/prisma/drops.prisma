@@ -147,6 +147,8 @@ model DropClaim {
 
   @@unique([dropId, userId])
   @@index([guildId, createdAt])
+  /// Plafond de ramassages par membre sur 24 h.
+  @@index([guildId, userId, createdAt])
   /// Reprise des versements restés en suspens.
   @@index([paidAt, attemptedAt])
   @@map("drop_claims")

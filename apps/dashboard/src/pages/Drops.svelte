@@ -11,6 +11,7 @@
   import Papicon from '../lib/components/Papicon.svelte';
   import EmojiText from '../lib/components/EmojiText.svelte';
   import DropAnnouncementPreview from '../lib/components/DropAnnouncementPreview.svelte';
+  import DropClaimRulesPanel from '../lib/components/DropClaimRulesPanel.svelte';
   import InlineFeedback from '../lib/components/InlineFeedback.svelte';
   import SearchableSelect from '../lib/components/SearchableSelect.svelte';
   import Skeleton from '../lib/components/Skeleton.svelte';
@@ -59,6 +60,7 @@
     dropTypeBlocker,
     enabledDropModes,
     estimateWeeklyDrops,
+    normalizeDropClaimRules,
     shouldAdviseActivityWait,
     type DropGlobalSettings,
     type DropOutcomes,
@@ -144,8 +146,13 @@
   // suivent la fourchette du type affiché plutôt qu'une borne unique au million.
   const amountRange = $derived(dropAmountRange(activeType));
 
-  let globalSettings = $state<DropGlobalSettings>({ ...DEFAULT_DROP_GLOBAL_SETTINGS });
-  let savedGlobalSettings = $state<DropGlobalSettings>({ ...DEFAULT_DROP_GLOBAL_SETTINGS });
+  /** Copie avec ses règles : partagées, l'état courant et l'état enregistré bougeraient ensemble. */
+  function cloneGlobalSettings(settings: DropGlobalSettings): DropGlobalSettings {
+    return { ...settings, dropClaimRules: { ...settings.dropClaimRules } };
+  }
+
+  let globalSettings = $state<DropGlobalSettings>(cloneGlobalSettings(DEFAULT_DROP_GLOBAL_SETTINGS));
+  let savedGlobalSettings = $state<DropGlobalSettings>(cloneGlobalSettings(DEFAULT_DROP_GLOBAL_SETTINGS));
 
   function blankConfig(type: DropType): DropConfigEntry {
     return { type, nextDropAt: null, ...defaultDropTypeSettings(type) };
@@ -418,9 +425,10 @@
           dropJackpotEnabled: res.dropJackpotEnabled,
           dropJackpotChance: res.dropJackpotChance,
           dropJackpotMultiplier: res.dropJackpotMultiplier,
+          dropClaimRules: normalizeDropClaimRules(res.dropClaimRules),
         };
-        globalSettings = { ...loadedGlobal };
-        savedGlobalSettings = { ...loadedGlobal };
+        globalSettings = cloneGlobalSettings(loadedGlobal);
+        savedGlobalSettings = cloneGlobalSettings(loadedGlobal);
         dropsLoaded = true;
 
         for (const type of DROP_TYPES) {
@@ -482,10 +490,12 @@
           ...editable,
           dropChannelId: globalSettings.dropChannelId || null,
           dropMentionRoleId: globalSettings.dropMentionRoleId || null,
+          // Champs vidés et « Aucun » relus comme règles éteintes.
+          dropClaimRules: normalizeDropClaimRules(globalSettings.dropClaimRules),
         });
         if (!res) throw new Error(m.drop_save_error());
-        globalSettings = { ...res };
-        savedGlobalSettings = { ...res };
+        globalSettings = cloneGlobalSettings(res);
+        savedGlobalSettings = cloneGlobalSettings(res);
       }
 
       for (const type of DROP_TYPES) {
@@ -523,7 +533,7 @@
           label: m.drop_unsaved_label(),
           onSave: () => handleSaveSettings(),
           onReset: () => {
-            globalSettings = { ...savedGlobalSettings };
+            globalSettings = cloneGlobalSettings(savedGlobalSettings);
             for (const type of DROP_TYPES) {
               configs[type] = cloneConfig(savedConfigs[type]);
             }
@@ -771,6 +781,8 @@
             <p class="text-2xs text-on-surface-variant">{m.drop_jackpot_items_hint()}</p>
           {/if}
         </div>
+
+        <DropClaimRulesPanel bind:rules={globalSettings.dropClaimRules} roles={availableRoles} disabled={!canManageSettings} />
       </section>
 
       <section class="bg-surface-container-low/40 border border-outline-variant/30 p-6 rounded-xl space-y-4">

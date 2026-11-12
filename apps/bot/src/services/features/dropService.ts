@@ -12,10 +12,11 @@
  * `@kotbo/shared` pour rester testables ; ce service ne fait que les appliquer,
  * publier les messages et créditer les gains.
  */
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, MessageFlags, type ButtonInteraction, type Client } from 'discord.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, GuildMember, MessageFlags, type ButtonInteraction, type Client } from 'discord.js';
 import type { Prisma } from '@prisma/client';
 import {
   DROP_ACTIVITY_DISABLED,
+  DROP_CLAIM_LIMIT_WINDOW_MS,
   DROP_DELETE_AFTER_DISABLED,
   DROP_ITEM_WEIGHT_RANGE,
   DROP_TYPES,
@@ -23,13 +24,16 @@ import {
   defaultDropTypeSettings,
   drawDropAmount,
   dropActivityVerdict,
+  dropClaimBlocker,
   dropExpiresAt,
   dropJackpotAmount,
   dropMentionRoleId,
   dropMaxClaims,
   dropMessageDeleteAt,
   enabledDropModes,
+  hasDropClaimRules,
   nextAllowedPublicationAt,
+  normalizeDropClaimRules,
   normalizeDropDeleteAfterMinutes,
   normalizeDropItems,
   normalizeDropTypeSettings,
@@ -37,6 +41,7 @@ import {
   pickWeightedDropItem,
   planNextDropAt,
   rollDropJackpot,
+  type DropClaimFacts,
   type DropItemChance,
   type DropMode,
   type DropType,
@@ -861,6 +866,48 @@ export async function settlePendingDropClaims(client: Client): Promise<void> {
   }
 }
 
+/** Arrivée et rôles du membre qui clique, qu'il soit en cache ou brut de l'API. */
+function memberFacts(member: ButtonInteraction['member']): Pick<DropClaimFacts, 'joinedAt' | 'roleIds'> {
+  if (!member) return { joinedAt: null, roleIds: [] };
+  if (member instanceof GuildMember) {
+    return { joinedAt: member.joinedAt, roleIds: [...member.roles.cache.keys()] };
+  }
+  return { joinedAt: member.joined_at ? new Date(member.joined_at) : null, roleIds: member.roles };
+}
+
+/**
+ * Message de refus quand le membre ne respecte pas une règle de ramassage du
+ * serveur, `null` sinon. Sans règle réglée, le clic ne coûte qu'une lecture de
+ * la colonne : les ramassages du jour ne sont comptés que sous un plafond.
+ *
+ * Le comptage précède la réservation sans la verrouiller : deux clics simultanés
+ * sur deux drops peuvent dépasser le plafond d'un ramassage, ce qui reste sans
+ * conséquence pour une règle de confort.
+ */
+async function claimRuleRefusal(interaction: ButtonInteraction, guildId: string, locale: BotLocale): Promise<string | null> {
+  const row = await prisma.guild.findUnique({ where: { id: guildId }, select: { dropClaimRules: true } });
+  const rules = normalizeDropClaimRules(row?.dropClaimRules);
+  if (!hasDropClaimRules(rules)) return null;
+
+  const now = new Date();
+  const claimsLast24h = rules.dailyLimit > 0
+    ? await prisma.dropClaim.count({
+      where: { guildId, userId: interaction.user.id, createdAt: { gte: new Date(now.getTime() - DROP_CLAIM_LIMIT_WINDOW_MS) } },
+    })
+    : 0;
+
+  switch (dropClaimBlocker(rules, { ...memberFacts(interaction.member), claimsLast24h, now })) {
+    case 'DAILY_LIMIT':
+      return m.drop_claim_daily_limit({ limit: rules.dailyLimit }, { locale });
+    case 'MEMBER_TOO_NEW':
+      return m.drop_claim_member_too_new({ days: rules.minMemberDays }, { locale });
+    case 'MISSING_ROLE':
+      return m.drop_claim_missing_role({ role: `<@&${rules.requiredRoleId}>` }, { locale });
+    default:
+      return null;
+  }
+}
+
 /** Bouton « Ramasser » : réserve la place, verse le gain, ferme si le drop est complet. */
 export async function handleDropClaim(interaction: ButtonInteraction, dropId: string): Promise<void> {
   // Réponse différée d'entrée : un versement de points de clan va chercher le
@@ -888,6 +935,12 @@ export async function handleDropClaim(interaction: ButtonInteraction, dropId: st
   // lirait un gain fictif en consommant une place.
   if (!(await isModuleEnabled(drop.guildId, DROP_TYPE_MODULE[drop.type as DropType]))) {
     await refuse(m.drop_claim_module_off({}, { locale }));
+    return;
+  }
+
+  const ruleRefusal = await claimRuleRefusal(interaction, drop.guildId, locale);
+  if (ruleRefusal) {
+    await refuse(ruleRefusal);
     return;
   }
 

@@ -1,6 +1,12 @@
 import { describe, expect, test } from 'bun:test';
 import { getModuleDefinition } from '@kotbo/contracts';
 import {
+  DEFAULT_DROP_CLAIM_RULES,
+  DROP_CLAIM_DAILY_LIMIT_RANGE,
+  DROP_CLAIM_MIN_MEMBER_DAYS_RANGE,
+  dropClaimBlocker,
+  hasDropClaimRules,
+  normalizeDropClaimRules,
   DROP_ACTIVITY_DISABLED,
   DROP_ACTIVITY_MESSAGES_RANGE,
   DROP_ACTIVITY_WINDOW_MINUTES_RANGE,
@@ -489,5 +495,62 @@ describe('rôle mentionné à l\'apparition d\'un drop', () => {
 
   test('sans rôle choisi, personne n\'est mentionné', () => {
     expect(dropMentionRoleId({ dropMentionRoleId: null, dropMentionJackpotOnly: false }, true)).toBeNull();
+  });
+});
+
+describe('règles de ramassage (configuration avancée)', () => {
+  const now = new Date('2026-11-12T12:00:00Z');
+  const daysAgo = (days: number) => new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
+  const membre = { joinedAt: daysAgo(400), roleIds: ['role-membre'], claimsLast24h: 0, now };
+
+  test('sans configuration, aucune règle et personne n\'est bloqué', () => {
+    const rules = normalizeDropGlobalSettings({}).dropClaimRules;
+    expect(rules).toEqual(DEFAULT_DROP_CLAIM_RULES);
+    expect(hasDropClaimRules(rules)).toBe(false);
+    expect(dropClaimBlocker(rules, { joinedAt: now, roleIds: [], claimsLast24h: 1_000, now })).toBeNull();
+  });
+
+  test('une colonne vide ou illisible revient aux réglages par défaut', () => {
+    expect(normalizeDropClaimRules(null)).toEqual(DEFAULT_DROP_CLAIM_RULES);
+    expect(normalizeDropClaimRules('n\'importe quoi')).toEqual(DEFAULT_DROP_CLAIM_RULES);
+    expect(normalizeDropClaimRules([])).toEqual(DEFAULT_DROP_CLAIM_RULES);
+  });
+
+  test('les valeurs sont bornées, zéro éteint la règle', () => {
+    const rules = normalizeDropClaimRules({ dailyLimit: 10_000, minMemberDays: -3, requiredRoleId: '' });
+    expect(rules.dailyLimit).toBe(DROP_CLAIM_DAILY_LIMIT_RANGE.max);
+    expect(rules.minMemberDays).toBe(0);
+    expect(rules.requiredRoleId).toBeNull();
+    expect(normalizeDropClaimRules({ minMemberDays: 9_999 }).minMemberDays).toBe(DROP_CLAIM_MIN_MEMBER_DAYS_RANGE.max);
+    expect(normalizeDropClaimRules({ dailyLimit: 0 }).dailyLimit).toBe(0);
+  });
+
+  test('plafond par 24 h : atteint, le ramassage est refusé', () => {
+    const rules = normalizeDropClaimRules({ dailyLimit: 3 });
+    expect(hasDropClaimRules(rules)).toBe(true);
+    expect(dropClaimBlocker(rules, { ...membre, claimsLast24h: 2 })).toBeNull();
+    expect(dropClaimBlocker(rules, { ...membre, claimsLast24h: 3 })).toBe('DAILY_LIMIT');
+  });
+
+  test('ancienneté : un membre arrivé trop récemment est refusé', () => {
+    const rules = normalizeDropClaimRules({ minMemberDays: 7 });
+    expect(dropClaimBlocker(rules, { ...membre, joinedAt: daysAgo(2) })).toBe('MEMBER_TOO_NEW');
+    expect(dropClaimBlocker(rules, { ...membre, joinedAt: daysAgo(7) })).toBeNull();
+  });
+
+  test('ancienneté inconnue : le membre n\'est pas bloqué sur une donnée absente', () => {
+    const rules = normalizeDropClaimRules({ minMemberDays: 7 });
+    expect(dropClaimBlocker(rules, { ...membre, joinedAt: null })).toBeNull();
+  });
+
+  test('rôle requis : sans lui, le ramassage est refusé', () => {
+    const rules = normalizeDropClaimRules({ requiredRoleId: 'role-vip' });
+    expect(dropClaimBlocker(rules, membre)).toBe('MISSING_ROLE');
+    expect(dropClaimBlocker(rules, { ...membre, roleIds: ['role-membre', 'role-vip'] })).toBeNull();
+  });
+
+  test('plusieurs règles : la première non respectée est donnée', () => {
+    const rules = normalizeDropClaimRules({ dailyLimit: 1, minMemberDays: 7, requiredRoleId: 'role-vip' });
+    expect(dropClaimBlocker(rules, { joinedAt: daysAgo(1), roleIds: [], claimsLast24h: 5, now })).toBe('DAILY_LIMIT');
   });
 });
