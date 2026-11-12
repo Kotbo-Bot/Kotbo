@@ -102,7 +102,7 @@
   <div class="flex flex-wrap items-center justify-between gap-3 px-2">
     <div>
       <h2 id="bot-error-log-title" class="text-xl font-semibold font-headline flex items-center gap-3">
-        <Papicon icon="Terminal" size={24} class="text-red-400" />
+        <Papicon icon="Terminal" size={24} class="text-error" />
         {m.d7_error_stream()}
       </h2>
       {#if !loading && !loadError}

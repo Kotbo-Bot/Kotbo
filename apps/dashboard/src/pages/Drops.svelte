@@ -879,7 +879,7 @@
                     <td class="py-2.5 pr-4 text-on-surface-variant/80">{MODE_LABELS[drop.mode]?.() ?? drop.mode}</td>
                     <td class="py-2.5 pr-4 font-bold">
                       {#if drop.jackpot}
-                        <span class="text-2xs font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-warning/10 text-warning border border-warning/20 mr-1">{m.drop_history_jackpot()}</span>
+                        <span class="text-2xs font-bold px-2 py-0.5 rounded-full bg-warning/10 text-warning border border-warning/20 mr-1">{m.drop_history_jackpot()}</span>
                       {/if}
                       {drop.amount.toLocaleString(dateLocale())}
                       {#if drop.item}<span class="font-normal"> <EmojiText value={drop.item.emoji} /> {drop.item.name}</span>{/if}
