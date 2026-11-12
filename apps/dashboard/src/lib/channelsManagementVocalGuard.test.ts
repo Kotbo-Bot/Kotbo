@@ -132,3 +132,20 @@ describe('D — mode démonstration', () => {
     expect(dict('fr').demo_mode).toBe('Mode Démonstration');
   });
 });
+
+describe('réglages par personne et visibilité', () => {
+  test('la case et les 3 radios de visibilité sont liées à la politique par défaut, sans texte en dur', () => {
+    expect(balisage).toContain('bind:checked={config.tempVoiceDefaults.reglagesPerso}');
+    expect(balisage).toContain('bind:group={config.tempVoiceDefaults.visibilite}');
+    expect(balisage).toContain('id="tv-visibilite-{mode.key}"');
+    expect(balisage).toContain('<legend');
+    expect(script).toMatch(/visibilite: 'tous',\s*reglagesPerso: true,/);
+    for (const k of ['tous', 'acces', 'prive']) expect(script).toContain(`key: '${k}', label: () => m.cm_tv_visibilite_${k}()`);
+    for (const lang of ['fr', 'en'] as const) {
+      const d = dict(lang);
+      for (const k of ['perso_title', 'reglages_perso_label', 'reglages_perso_hint', 'visibilite_label', 'visibilite_note', ...['tous', 'acces', 'prive'].flatMap(v => [`visibilite_${v}`, `visibilite_${v}_hint`])]) {
+        expect(d[`cm_tv_${k}`]).toBeTruthy();
+      }
+    }
+  });
+});

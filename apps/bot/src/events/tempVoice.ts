@@ -142,6 +142,11 @@ import {
 } from '../services/features/tempVoiceService.js';
 import { rendreEtatPng, type ValeurEtat } from '../services/features/tempVoicePanelImage.js';
 import { estSansConversionV2, messageEstV2, sansConversionV2 } from '../utils/patchV2.js';
+import { appliquerVisibilite, normaliserVisibilite, type Visibilite } from './tempVoiceVisibilite.js';
+import {
+  capturerReglages, embedRecapReglages, enregistrerReglagesPerso, lireReglagesPerso, oublierReglagesPerso,
+  type ReglagesPerso,
+} from './tempVoiceReglagesPerso.js';
 import * as m from '../lib/paraglide/messages.js';
 import { FALLBACK_LOCALE, resolveGuildLocale, type BotLocale } from '../utils/i18n.js';
 import { TEMP_VOICE_OWNERSHIP_DEFAULTS, type TempVoiceOwnershipSettings } from '@kotbo/shared';
@@ -179,6 +184,15 @@ export interface EntreeSalonTemporaire {
    * forme exacte d'une présence, et sans cette liste le démarrage l'effacerait.
    */
   exceptionsEcriture?: Record<string, boolean>;
+  /** Visibilité choisie dans le panneau (`TempVoiceChannel.visibility`) ; absente = celle du générateur. */
+  visibility?: Visibilite | null;
+  /**
+   * Réservé à des membres (« Réserver » sans rôle) : rien ne le distingue d'un verrou et
+   * d'autorisations posés à la main, et les réglages enregistrés ne doivent pas le rouvrir.
+   * shortcut: en mémoire seulement, un redémarrage l'oublie (le salon se lit alors comme verrouillé
+   * à la main) ; colonne en base si ce cas compte.
+   */
+  reserveMembres?: boolean;
 }
 
 export const tempChannels = new Map<string, EntreeSalonTemporaire>();
@@ -361,6 +375,7 @@ async function persisterEtatSalon(guildId: string, salonId: string): Promise<voi
           demandes: etat.demandes.map((d) => ({ ...d })),
           silences: etat.silences.map((v) => ({ ...v })),
         },
+        ...(tempChannels.get(salonId)?.visibility ? { visibility: tempChannels.get(salonId)!.visibility } : {}),
       },
     });
   } catch (err) {
@@ -832,6 +847,7 @@ async function sweepOrphanChannels(client: Client): Promise<void> {
         renameHistory: unknown;
         accessRequests: unknown;
         writeExceptions: unknown;
+        visibility: string | null;
       }>;
     });
 
@@ -897,6 +913,7 @@ async function sweepOrphanChannels(client: Client): Promise<void> {
       ...(estModeEcriture(entry.writeMode) ? { modeEcriture: entry.writeMode } : {}),
       ...(typeof generateurStocke === 'string' ? { generateurId: generateurStocke } : {}),
       ...(Object.keys(exceptions).length > 0 ? { exceptionsEcriture: exceptions } : {}),
+      ...(entry.visibility ? { visibility: normaliserVisibilite(entry.visibility) } : {}),
     };
     tempChannels.set(entry.id, entree);
 
@@ -937,6 +954,8 @@ interface EtatSalon {
   modeEcriture: ModeEcriture;
   autorises: number;
   bannis: number;
+  /** Effective : celle du salon, sinon celle du générateur. */
+  visibilite: Visibilite;
 }
 
 /** Un salon tout juste créé n'a encore ni membres ni surcharges en cache : tout
@@ -986,7 +1005,272 @@ async function lireEtatSalon(channel: VoiceChannel, entree: EntreeSalonTemporair
     ),
     autorises,
     bannis,
+    visibilite: await visibiliteDuSalon(channel.guild?.id ?? '', entree),
   };
+}
+
+/** Visibilité effective d'un salon : son choix, sinon le réglage de son générateur. */
+async function visibiliteDuSalon(guildId: string, entree: EntreeSalonTemporaire): Promise<Visibilite> {
+  if (entree.visibility) return entree.visibility;
+  return normaliserVisibilite((await politiqueDuGenerateur(guildId, entree))?.visibilite);
+}
+
+function libelleVisibilite(v: Visibilite, locale: BotLocale): { libelle: string; description: string } {
+  const L = { locale };
+  if (v === 'acces') return { libelle: m.panel_tempvoice_visibility_acces({}, L), description: m.panel_tempvoice_visibility_acces_desc({}, L) };
+  if (v === 'prive') return { libelle: m.panel_tempvoice_visibility_prive({}, L), description: m.panel_tempvoice_visibility_prive_desc({}, L) };
+  return { libelle: m.panel_tempvoice_visibility_tous({}, L), description: m.panel_tempvoice_visibility_tous_desc({}, L) };
+}
+
+const ICONE_VISIBILITE: Readonly<Record<Visibilite, NomIcone>> = { tous: 'unlock', acces: 'shield', prive: 'lock' };
+
+/** Le menu « Visibilité », à côté d'Ouvert/Verrouillé, gardé comme le verrou. */
+function menuVisibilite(etat: EtatSalon, actif: boolean, locale: BotLocale): StringSelectMenuBuilder {
+  return new StringSelectMenuBuilder()
+    .setCustomId('tempvoice:visibility_select')
+    .setPlaceholder(m.panel_tempvoice_visibility_placeholder({}, { locale }))
+    .setDisabled(!actif)
+    .addOptions((['tous', 'acces', 'prive'] as const).map((v) => {
+      const libelle = libelleVisibilite(v, locale);
+      return avecIcone(
+        new StringSelectMenuOptionBuilder()
+          .setLabel(libelle.libelle)
+          .setDescription(libelle.description)
+          .setValue(v)
+          .setDefault(v === etat.visibilite),
+        I[ICONE_VISIBILITE[v]],
+      );
+    }));
+}
+
+/** Applique la visibilité effective du salon (rôles d'office compris) ; un bloqué reste caché. */
+async function reappliquerVisibilite(
+  channel: VoiceChannel, guildId: string, entree: EntreeSalonTemporaire, acteurId?: string,
+): Promise<void> {
+  const visibilite = await visibiliteDuSalon(guildId, entree);
+  // Avant de cacher : une fois @everyone sans la vue, le bot ne pourrait plus rien poser.
+  if (visibilite !== 'tous') await assurerBotGardeLeSalon(channel);
+  // Pas de relecture entre les trois : chacun écrit des cibles que les autres ne lisent ni ne réécrivent
+  // (le bot ; @everyone et la vue des autres ; l'entrée du staff, qui pose la vue et la connexion d'un bloc).
+  await appliquerVisibilite(channel, visibilite, {
+    proprietaireId: entree.creatorId,
+    rolesOffice: await rolesAutoriseDOffice(channel, guildId, entree),
+  });
+  if (visibilite === 'tous') return;
+  // Caché à @everyone : le staff garde la vue et l'entrée, comme au verrou.
+  await garderEntreeStaff(channel, acteurId);
+}
+
+/**
+ * Le bot n'a pas de surcharge à lui : sa vue vient de @everyone, que « Privé »
+ * refuse. Il se pose ce qu'il tient du serveur (ou de la catégorie), jamais plus :
+ * Discord n'accepte d'accorder que ce que le bot y possède. Pas les droits du
+ * salon : le verrou vient d'y refuser la connexion à @everyone, le bot compris.
+ */
+async function assurerBotGardeLeSalon(channel: VoiceChannel): Promise<void> {
+  const moi = channel.guild?.members?.me;
+  if (!moi?.id || moi.permissions?.has(PermissionFlagsBits.Administrator)) return;
+  const effectives = channel.parent?.permissionsFor?.(moi) ?? moi.permissions;
+  if (!effectives) return;
+  const propre = channel.permissionOverwrites.cache.get(moi.id)?.allow;
+  const patch: Record<string, true> = {};
+  for (const nom of ['ViewChannel', 'Connect', 'ManageChannels'] as const) {
+    if (effectives.has(PermissionFlagsBits[nom]) && !propre?.has(PermissionFlagsBits[nom])) patch[nom] = true;
+  }
+  if (Object.keys(patch).length > 0) await poserSurcharge(channel, moi.id, patch);
+}
+
+/** `permissionOverwrites.edit` fusionne avec le cache, que seul CHANNEL_UPDATE met à jour :
+ *  deux écritures de suite sur une même cible se relisent entre elles. Pas `relireSalon` :
+ *  une relecture partagée, partie avant l'écriture, rendrait l'état d'avant. */
+function relireMaintenant(channel: VoiceChannel): Promise<unknown> {
+  return Promise.resolve(channel.guild?.channels?.fetch(channel.id, { force: true })).catch(() => null);
+}
+
+const tronquer = (s: string, max: number) => (s.length > max ? `${s.slice(0, max - 1)}…` : s);
+
+const OPTIONS_REGLAGES_PERSO = [
+  ['save', m.panel_tempvoice_saved_save, m.panel_tempvoice_saved_save_desc],
+  ['apply', m.panel_tempvoice_saved_apply, m.panel_tempvoice_saved_apply_desc],
+  ['forget', m.panel_tempvoice_saved_forget, m.panel_tempvoice_saved_forget_desc],
+] as const;
+
+/** Le menu « Mes réglages » de la section Propriété (les libellés portent leur emoji 💾 ♻️ 🗑️). */
+function menuReglagesPerso(locale: BotLocale): StringSelectMenuBuilder {
+  return new StringSelectMenuBuilder()
+    .setCustomId('tempvoice:saved_select')
+    .setPlaceholder(m.panel_tempvoice_saved_placeholder({}, { locale }))
+    .addOptions(OPTIONS_REGLAGES_PERSO.map(([valeur, libelle, description]) => new StringSelectMenuOptionBuilder()
+      .setLabel(libelle({}, { locale }))
+      // Discord refuse une description de plus de 100 caractères (celle de « save » en fr en a 112).
+      .setDescription(tronquer(description({}, { locale }), 100))
+      .setValue(valeur)));
+}
+
+/**
+ * Les membres connus parmi `ids` : le cache, puis un seul appel par paquet de 100 (plafond de Discord) pour le reste.
+ * `illisibles` : les ids d'un paquet dont la lecture a échoué, qu'on ne peut ni juger ni dire partis.
+ */
+async function membresConnus(
+  guild: DiscordGuild, ids: string[],
+): Promise<{ connus: Map<string, GuildMember>; illisibles: Set<string> }> {
+  const connus = new Map<string, GuildMember>();
+  const illisibles = new Set<string>();
+  const manquants: string[] = [];
+  for (const id of ids) {
+    const membre = guild.members.cache.get(id);
+    if (membre) connus.set(id, membre);
+    else manquants.push(id);
+  }
+  for (let i = 0; i < manquants.length; i += 100) {
+    const paquet = manquants.slice(i, i + 100);
+    const recus = await guild.members.fetch({ user: paquet, time: 5_000 }).catch(() => null);
+    if (!recus) for (const id of paquet) illisibles.add(id);
+    for (const [id, membre] of recus ?? []) connus.set(id, membre);
+  }
+  return { connus, illisibles };
+}
+
+interface CibleAdmise { id: string; membre: GuildMember | null }
+
+/**
+ * Ceux que « Bannir » (ou « Autoriser ») accepterait du propriétaire : pas un bot, pas un staff à bannir.
+ * Un bloqué parti du serveur le reste, par son identifiant ; un id dont la lecture a échoué est sauté
+ * (on ne sait pas si c'est un staff). Un autorisé introuvable est sauté : la catégorie se juge sur le membre.
+ */
+async function ciblesAdmises(
+  guild: DiscordGuild, proprietaireId: string, ids: string[], action: 'bannir' | 'autoriser',
+): Promise<CibleAdmise[]> {
+  const { connus, illisibles } = await membresConnus(guild, ids);
+  const admises: CibleAdmise[] = [];
+  for (const id of ids) {
+    if (illisibles.has(id)) continue;
+    const membre = connus.get(id) ?? null;
+    if (!membre) {
+      if (action === 'bannir' && id !== proprietaireId) admises.push({ id, membre: null });
+      continue;
+    }
+    if (membre.user?.bot) continue;
+    const verdict = peutAgirSurCible('proprietaire', action, null, {
+      estStaff: await isProtectedTarget(guild.id, membre),
+      estProprietaire: id === proprietaireId,
+      estSoiMeme: id === proprietaireId,
+      dansLeSalon: false,
+      autorise: false,
+    }, FALLBACK_LOCALE);
+    if (verdict.autorise) admises.push({ id, membre });
+  }
+  return admises;
+}
+
+/**
+ * Pose des réglages enregistrés comme les boutons du panneau : d'abord ce qui
+ * protège (bloqués, verrou, autorisés, visibilité), puis nom et limite. Une étape
+ * refusée est journalisée sans arrêter les suivantes, une cible refusée sans
+ * arrêter les autres ; le salon est relu après chaque étape qui a écrit une
+ * surcharge (voir `relireMaintenant`). Sur un salon réservé (à un rôle ou à des
+ * membres), ni le verrou ni la visibilité ne bougent : ils tiennent à la
+ * réservation. Mode de chat et persistance : à l'appelant.
+ */
+async function poserReglagesEnregistres(
+  channel: VoiceChannel, guildId: string, entree: EntreeSalonTemporaire, r: ReglagesPerso,
+  /** Déjà calculés par la création, qui les a refusés dans son POST. */
+  bloquesAdmis?: CibleAdmise[],
+): Promise<boolean> {
+  /** `fn` dit si elle a écrit une surcharge ; un échec a pu en laisser une à moitié. */
+  const etape = async (nom: string, fn: () => Promise<boolean>) => {
+    const ecrit = await fn().catch((err: unknown) => {
+      logger.warn('TempVoice', `Réglage enregistré « ${nom} » non appliqué à ${channel.id} :`, err);
+      return true;
+    });
+    if (ecrit) await relireMaintenant(channel);
+  };
+  const pourChaque = async (nom: string, cibles: CibleAdmise[], fn: (c: CibleAdmise) => Promise<boolean>) => {
+    let ecrit = false;
+    for (const cible of cibles) {
+      ecrit = await fn(cible).catch((err: unknown) => {
+        logger.warn('TempVoice', `Réglage enregistré « ${nom} » non appliqué à ${cible.id} sur ${channel.id} :`, err);
+        return true;
+      }) || ecrit;
+    }
+    return ecrit;
+  };
+  await relireMaintenant(channel);
+  const reserve = entree.reserveMembres === true || await roleReserve(channel.id) !== null;
+
+  await etape('bloqués', async () => pourChaque(
+    'bloqués',
+    bloquesAdmis ?? await ciblesAdmises(channel.guild, entree.creatorId, r.bloques, 'bannir'),
+    async ({ id, membre }) => {
+      const ecrit = !channel.permissionOverwrites.cache.get(id)?.deny?.has(PermissionFlagsBits.ViewChannel);
+      // Par identifiant : un bloqué parti du serveur n'a pas de membre, et reste bloqué s'il revient.
+      if (ecrit) await channel.permissionOverwrites.edit(id, CHANNEL_PATCHES.ban, { type: OverwriteType.Member });
+      originesSurcharge.oublier(guildId, channel.id, id);
+      // Comme « Bannir » : un bloqué déjà présent sort du salon.
+      if (membre?.voice?.channelId === channel.id) await membre.voice.disconnect().catch(() => null);
+      return ecrit;
+    },
+  ));
+
+  await etape('verrou', async () => {
+    if (reserve) return false;
+    const verrouille = Boolean(channel.permissionOverwrites.cache.get(guildId)?.deny?.has(PermissionFlagsBits.Connect));
+    if (r.verrouille && !verrouille) await verrouillerSalon(channel, entree);
+    else if (!r.verrouille && verrouille) await deverrouillerSalon(channel, entree);
+    else return false;
+    return true;
+  });
+
+  await etape('autorisés', async () => pourChaque(
+    'autorisés',
+    await ciblesAdmises(channel.guild, entree.creatorId, r.autorises.filter((id) => !r.bloques.includes(id)), 'autoriser'),
+    async ({ id, membre }) => {
+      const patch = categoryTrustPatch(channel, membre);
+      if (!patch) return false;
+      // Marqué comme « Autoriser » : sinon quitter le vocal en « ceux en vocal » effacerait ce droit.
+      if (await poserSurcharge(channel, id, patchAutorisation(patch, entree, id))) {
+        originesSurcharge.marquer(guildId, channel.id, id, 'autorisation');
+      }
+      return true;
+    },
+  ));
+
+  await etape('visibilité', async () => {
+    if (reserve) return false;
+    entree.visibility = r.visibilite;
+    await reappliquerVisibilite(channel, guildId, entree);
+    return true;
+  });
+
+  // Nom et limite : la réponse du PATCH remet le salon en cache, surcharges comprises.
+  // Le renommage est limité par Discord : seulement si le nom change, et borné comme « Renommer ».
+  await etape('nom', async () => {
+    if (!r.nom || r.nom === channel.name) return false;
+    // `pending` : la limite de débit le posera plus tard, sans retenir la file du salon.
+    const renomme = await settleWithin(channel.setName(r.nom), RENAME_TIMEOUT_MS);
+    if (renomme.status === 'failed') throw renomme.error;
+    return false;
+  });
+  await etape('limite', async () => {
+    if (r.limite !== channel.userLimit) await channel.setUserLimit(r.limite);
+    return false;
+  });
+  return reserve;
+}
+
+/** Pose des réglages enregistrés sur un salon, puis le mode de chat, et persiste. */
+async function appliquerReglagesEnregistres(
+  channel: VoiceChannel, guildId: string, entree: EntreeSalonTemporaire, r: ReglagesPerso,
+  /** Déjà dans `serializeByChannel` (transfert) : passer par la file attendrait sa propre fin. */
+  dejaEnFile = false,
+): Promise<{ reserve: boolean }> {
+  const reserve = await poserReglagesEnregistres(channel, guildId, entree, r);
+  if (r.modeEcriture) {
+    await (dejaEnFile ? poserModeEcriture : appliquerModeEcriture)(channel, entree, r.modeEcriture)
+      .catch((err: unknown) => logger.warn('TempVoice', `Mode d'écriture enregistré non appliqué à ${channel.id} :`, err));
+  }
+  await persisterEtatSalon(guildId, channel.id);
+  return { reserve };
 }
 
 /** Droit effectif de @everyone, catégorie comprise ; `undefined` si Discord ne le dit pas. */
@@ -1045,9 +1329,10 @@ function carteEtat(etat: EtatSalon, locale: BotLocale): EmbedBuilder {
     .addFields(
       { name: m.panel_tempvoice_field_status({}, { locale }), value: `${etat.verrouille ? I.lock : I.unlock} ${etatEnClair}`, inline: true },
       { name: m.panel_tempvoice_field_slots({}, { locale }), value: `${I.profile} ${etat.occupants} / ${etat.limite > 0 ? etat.limite : '∞'}`, inline: true },
+      { name: m.panel_tempvoice_field_visibility({}, { locale }), value: `${I[ICONE_VISIBILITE[etat.visibilite]]} ${libelleVisibilite(etat.visibilite, locale).libelle}`, inline: true },
       { name: m.panel_tempvoice_field_chat({}, { locale }), value: `${iconeModeCarte(etat.modeEcriture)} ${mode.libelle}`, inline: true },
       { name: m.panel_tempvoice_field_allowed({}, { locale }), value: `${I.check} ${etat.autorises}`, inline: true },
-      { name: m.panel_tempvoice_field_banned({}, { locale }), value: `${I.ban} ${etat.bannis}`, inline: true },
+      { name: m.panel_tempvoice_field_blocked({}, { locale }), value: `${I.ban} ${etat.bannis}`, inline: true },
       {
         name: m.panel_tempvoice_field_reserved({}, { locale }),
         value: etat.reserveRoleId
@@ -1090,8 +1375,8 @@ const FICHIER_ICONE_MODE: Readonly<Record<ModeEcriture, string>> = {
   nobody: 'ktb_mute',
 };
 
-/** Les six valeurs dans l'ordre exact qu'attend `rendreEtatPng` :
- *  État, Places, Écriture, Autorisés, Bannis, Réservé. */
+/** Les valeurs dans l'ordre de la carte en embed :
+ *  État, Places, Visibilité, Écriture, Autorisés, Bannis, Réservé. */
 function valeursEtat(etat: EtatSalon, nomRoleReserve: string | null, locale: BotLocale): ValeurEtat[] {
   return [
     {
@@ -1102,9 +1387,10 @@ function valeursEtat(etat: EtatSalon, nomRoleReserve: string | null, locale: Bot
       icone: etat.verrouille ? 'ktb_lock' : 'ktb_unlock',
     },
     { libelle: m.panel_tempvoice_field_slots({}, { locale }), valeur: `${etat.occupants} / ${etat.limite > 0 ? etat.limite : '∞'}`, icone: 'ktb_profile' },
+    { libelle: m.panel_tempvoice_field_visibility({}, { locale }), valeur: libelleVisibilite(etat.visibilite, locale).libelle, icone: `ktb_${ICONE_VISIBILITE[etat.visibilite]}` },
     { libelle: m.panel_tempvoice_field_chat({}, { locale }), valeur: libelleModeEcriture(etat.modeEcriture, locale).libelle, icone: FICHIER_ICONE_MODE[etat.modeEcriture] },
     { libelle: m.panel_tempvoice_field_allowed({}, { locale }), valeur: String(etat.autorises), icone: 'ktb_check' },
-    { libelle: m.panel_tempvoice_field_banned({}, { locale }), valeur: String(etat.bannis), icone: 'ktb_ban' },
+    { libelle: m.panel_tempvoice_field_blocked({}, { locale }), valeur: String(etat.bannis), icone: 'ktb_ban' },
     // Jamais `<@&id>` ici : une image ne résout aucune mention, elle
     // afficherait la syntaxe brute. Le nom du rôle, sinon « Non ».
     {
@@ -1299,6 +1585,7 @@ function rangeesPlates(
       ),
     ),
     rangee(menuModeEcriture(etat, true, locale)),
+    rangee(menuVisibilite(etat, true, locale)),
   ];
 
   // Les bots occupent des places dans la liste sans qu'aucune action du panneau
@@ -1815,15 +2102,19 @@ function patchAutorisation<T extends Record<string, unknown>>(patch: T, entree: 
 }
 
 /** Rôles que le générateur du salon autorise d'office (repli : le générateur principal). */
-async function rolesAutoriseDOffice(channel: VoiceChannel, guildId: string, entree: EntreeSalonTemporaire): Promise<string[]> {
-  const config = await getCachedGuild(guildId).catch(() => null);
-  if (!config) return [];
+async function politiqueDuGenerateur(guildId: string, entree: EntreeSalonTemporaire): Promise<TempVoicePolicy | null> {
+  const config = guildId ? await getCachedGuild(guildId).catch(() => null) : null;
+  if (!config) return null;
   const generateurs = resolveTempVoiceGenerators(config as unknown as TempVoiceGuildConfig, guildId);
-  const generateur = generateurs.find((candidat) => candidat.channelId === entree.generateurId)
-    ?? generateurs.find((candidat) => candidat.primary);
+  return (generateurs.find((candidat) => candidat.channelId === entree.generateurId)
+    ?? generateurs.find((candidat) => candidat.primary))?.policy ?? null;
+}
+
+async function rolesAutoriseDOffice(channel: VoiceChannel, guildId: string, entree: EntreeSalonTemporaire): Promise<string[]> {
+  const policy = await politiqueDuGenerateur(guildId, entree);
   // Seuls les rôles déjà surchargés sur le salon sont réglés : un rôle ajouté
   // depuis ou posé par un autre générateur ne reçoit pas de surcharge neuve.
-  return (generateur?.policy.autoAllowRoleIds ?? [])
+  return (policy?.autoAllowRoleIds ?? [])
     .filter((id) => id !== guildId && channel.permissionOverwrites.cache.has(id));
 }
 
@@ -2329,6 +2620,7 @@ async function panneauSalon(
   const rangees = [
     rangeeBoutons,
     rangee(menuModeEcriture(etat, modeEcriture.autorise, locale)),
+    rangee(menuVisibilite(etat, verrou.autorise, locale)),
   ];
 
   // Les reglages admin vivaient uniquement dans le dashboard : un administrateur
@@ -2928,6 +3220,8 @@ function panneauPropriete(
   channel: VoiceChannel,
   entree: EntreeSalonTemporaire,
   ctxp: ContextePanneau,
+  /** « Mes réglages » : seulement pour le propriétaire, et si le générateur ne l'a pas coupé. */
+  reglagesPerso = false,
 ): PanneauRendu {
   const present = channel.members?.has(entree.creatorId) ?? false;
 
@@ -2952,6 +3246,7 @@ function panneauPropriete(
             peutAgir(ctxp.role, 'transferer', ctxp.reglages, ctxp.locale),
           ),
         ),
+        ...(reglagesPerso ? [rangee(menuReglagesPerso(ctxp.locale))] : []),
       ],
     };
   }
@@ -3128,18 +3423,32 @@ async function createTempChannel(
     ? toOverwriteDrafts(parentCategory.permissionOverwrites.cache.values())
     : [];
 
+  // Réglages enregistrés du créateur : ses bloqués sont refusés DÈS la création,
+  // pour qu'ils ne voient ni ne rejoignent jamais le salon, même un instant.
+  const reglages = policy.reglagesPerso !== false
+    ? await lireReglagesPerso(guild.id, member.id).catch(() => null)
+    : null;
+  const bloquesAdmis = reglages ? await ciblesAdmises(guild, member.id, reglages.bloques, 'bannir') : [];
+  // Seuls les membres présents vont dans le POST : un refus de Discord sur un absent ferait échouer la création
+  // entière. Les absents sont posés juste après, par l'étape « bloqués ».
+  const bloquesDOffice = bloquesAdmis.filter((b) => b.membre).map((b) => b.id);
+  const surchargesCreation = buildCreationOverwrites({
+    everyoneRoleId: guild.id,
+    ownerId: member.id,
+    inherited,
+    policy: generator.policy,
+  }).filter((o) => !bloquesDOffice.includes(String((o as { id?: unknown }).id)));
+  for (const id of bloquesDOffice) {
+    surchargesCreation.push({ id, type: OverwriteType.Member, deny: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Connect, PermissionFlagsBits.SendMessages] });
+  }
+
   const tempChannel = await guild.channels
     .create({
       name: renderChannelName(modeleDeNom(generator.nameTemplate, locale), member.displayName || member.user.username),
       type: ChannelType.GuildVoice,
       parent: generator.categoryId,
       userLimit: generator.policy.userLimit,
-      permissionOverwrites: buildCreationOverwrites({
-        everyoneRoleId: guild.id,
-        ownerId: member.id,
-        inherited,
-        policy: generator.policy,
-      }),
+      permissionOverwrites: surchargesCreation,
       reason: m.panel_tempvoice_audit_create({ user: member.user.tag }, { locale }),
     })
     .catch((err: unknown) => {
@@ -3148,6 +3457,29 @@ async function createTempChannel(
     });
 
   if (!tempChannel) return;
+
+  // Le générateur est à portée ICI et nulle part ailleurs : c'est le seul moment
+  // où l'on sait par quel salon générateur on est passé. Ne pas le noter
+  // maintenant, c'est ne plus jamais pouvoir le deviner.
+  // Le mode du panneau suit le réglage du générateur (table unique du service).
+  // « En vocal » est mémorisé AVANT sa pose, comme en base : si la pose échoue,
+  // le salon reste « en vocal » (les entrées le posent) au lieu d'être lu « Hérité ».
+  const modeInitial = modeEcritureDepuisTextChat(policy.textChat);
+  const entree: EntreeSalonTemporaire = {
+    creatorId: member.id,
+    generateurId: generator.channelId,
+    ...(modeInitial ? { modeEcriture: modeInitial } : {}),
+    visibility: reglages?.visibilite ?? normaliserVisibilite(policy.visibilite),
+  };
+
+  // Le reste des réglages (verrou, autorisés, visibilité, nom, limite) AVANT
+  // d'y déplacer le créateur ; le mode de chat suit, une fois l'entrée connue.
+  if (reglages) {
+    await poserReglagesEnregistres(tempChannel, guild.id, entree, reglages, bloquesAdmis);
+  } else if (entree.visibility !== 'tous') {
+    await reappliquerVisibilite(tempChannel, guild.id, entree)
+      .catch((err: unknown) => logger.warn('TempVoice', `Visibilité du générateur non appliquée à ${tempChannel.id} :`, err));
+  }
 
   // Le déplacement échoue si le membre a déjà quitté le vocal. La suppression
   // n'étant déclenchée que par le départ d'un occupant, un salon que personne
@@ -3169,18 +3501,7 @@ async function createTempChannel(
     return;
   }
 
-  // Le générateur est à portée ICI et nulle part ailleurs : c'est le seul moment
-  // où l'on sait par quel salon générateur on est passé. Ne pas le noter
-  // maintenant, c'est ne plus jamais pouvoir le deviner.
-  // Le mode du panneau suit le réglage du générateur (table unique du service).
-  // « En vocal » est mémorisé AVANT sa pose, comme en base : si la pose échoue,
-  // le salon reste « en vocal » (les entrées le posent) au lieu d'être lu « Hérité ».
-  const modeInitial = modeEcritureDepuisTextChat(policy.textChat);
-  tempChannels.set(tempChannel.id, {
-    creatorId: member.id,
-    generateurId: generator.channelId,
-    ...(modeInitial ? { modeEcriture: modeInitial } : {}),
-  });
+  tempChannels.set(tempChannel.id, entree);
 
   // Objet nommé plutôt qu'écrit dans l'appel : `generatorChannelId` n'est pas
   // dans le client Prisma généré de ce worktree, qui précède la migration
@@ -3192,15 +3513,30 @@ async function createTempChannel(
     creatorId: member.id,
     generatorChannelId: generator.channelId,
     writeMode: modeInitial,
+    visibility: entree.visibility,
   };
 
   await prisma.tempVoiceChannel
     .create({ data: ligneSalon })
     .catch((err: unknown) => logger.error('TempVoice', "Erreur lors de l'enregistrement du salon temporaire :", err));
 
-  const entree = tempChannels.get(tempChannel.id) ?? { creatorId: member.id };
+  if (reglages) {
+    if (reglages.modeEcriture) {
+      await appliquerModeEcriture(tempChannel, entree, reglages.modeEcriture).catch((err: unknown) =>
+        logger.warn('TempVoice', `Mode d'écriture enregistré non appliqué pour ${tempChannel.id} :`, err));
+    }
+    await persisterEtatSalon(guild.id, tempChannel.id);
+    await envoyerJournalVocal({
+      guild,
+      locale,
+      salonId: tempChannel.id,
+      parentId: tempChannel.parentId,
+      libelle: m.log_tempvoice_saved_applied_creation({ name: member.user.tag }, { locale }),
+      champs: [{ name: m.log_tempvoice_field_owner({}, { locale }), value: `<@${member.id}>`, inline: true }],
+    });
+  }
   // « Ceux en vocal » : poser la présence des occupants, comme le fait le panneau.
-  if (modeInitial === 'inVoice') {
+  if (modeInitial === 'inVoice' && !reglages?.modeEcriture) {
     await appliquerModeEcriture(tempChannel, entree, 'inVoice').catch((err: unknown) =>
       logger.warn('TempVoice', `Mode d'écriture initial non appliqué pour ${tempChannel.id} :`, err));
   }
@@ -3309,6 +3645,8 @@ export const LIBELLES_ACTIONS_PANNEAU: Readonly<Record<string, MessageSimple>> =
   reserve_select: m.log_tempvoice_action_reserve_select,
   reserve_membres: m.log_tempvoice_action_reserve_membres,
   mode_select: m.log_tempvoice_action_mode_select,
+  visibility_select: m.log_tempvoice_action_visibility_select,
+  saved_select: m.log_tempvoice_action_saved_select,
   reglages_mod: m.log_tempvoice_action_reglages_mod,
   membre_ici: m.log_tempvoice_action_membre_ici,
   membre_select: m.log_tempvoice_action_membre_select,
@@ -3365,7 +3703,7 @@ const ACTIONS_NAVIGATION = new Set([
  */
 const ACTIONS_A_EFFET = new Set([
   'bascule_verrou', 'limit_modal', 'rename_modal', 'reserve_select', 'reserve_membres',
-  'mode_select', 'reglages_mod', 'm_kick', 'm_ban', 'm_trust', 'm_untrust', 'm_transfer', 'm_ecrire',
+  'mode_select', 'visibility_select', 'saved_select', 'reglages_mod', 'm_kick', 'm_ban', 'm_trust', 'm_untrust', 'm_transfer', 'm_ecrire',
   'm_redemander', 'ecr_appliquer', 'ecr_jamais',
   'claim', 'reclamer', 'leader', 'resa_deplacer', 'resa_deconnecter', 'demande_ok', 'demande_ban',
   'transfer_select', 'trust_select', 'kick_select', 'ban_select', 'lock', 'unlock', 'chat',
@@ -3431,6 +3769,11 @@ function decrireChoix(
     valeur = mode === MODE_HERITE
       ? m.panel_tempvoice_mode_inherit_label({}, { locale })
       : libelleModeEcriture(mode, locale).libelle;
+  } else if (action === 'visibility_select' && valeurs) {
+    valeur = libelleVisibilite(normaliserVisibilite(valeurs[0]), locale).libelle;
+  } else if (action === 'saved_select' && valeurs) {
+    const option = OPTIONS_REGLAGES_PERSO.find(([v]) => v === valeurs[0]);
+    valeur = option ? option[1]({}, { locale }) : valeurs[0] ?? null;
   } else if (action === 'reglages_mod' && valeurs) {
     valeur = valeurs.length
       ? valeurs.map((r) => majusculeInitiale(sujetReglage(r as ReglageModerateur, locale))).join(', ')
@@ -3489,6 +3832,7 @@ async function photographierSalon(p: {
   photo.set(m.log_tempvoice_state_lock({}, L), everyone?.deny?.has(PermissionFlagsBits.Connect)
     ? m.log_tempvoice_val_locked({}, L)
     : m.log_tempvoice_val_open({}, L));
+  photo.set(m.panel_tempvoice_field_visibility({}, L), libelleVisibilite(await visibiliteDuSalon(channel.guild?.id ?? '', cache), p.locale).libelle);
   const cleReserve = m.log_tempvoice_state_reserved({}, L);
   photo.set(cleReserve, aucun);
   photo.set(m.log_tempvoice_state_owner({}, L), `<@${cache.creatorId}>`);
@@ -4036,6 +4380,8 @@ type OngletPanneau = (typeof ONGLETS_PANNEAU)[number];
 const ONGLET_DORIGINE: Readonly<Record<string, OngletPanneau>> = {
   bascule_verrou: 'salon',
   mode_select: 'salon',
+  visibility_select: 'salon',
+  saved_select: 'propriete',
   reserve: 'salon',
   reserve_select: 'salon',
   reserve_membres: 'salon',
@@ -4505,16 +4851,18 @@ async function basculerVerrou(ctx: ActionContext): Promise<string> {
   );
 
   if (verrouille) {
-    await channel.permissionOverwrites.edit(guildId, patchReouverture(CHANNEL_PATCHES.unlock, channel, cache));
-    if (!await rendreEcritureAuMode(channel, cache)) {
-      await channel.permissionOverwrites.edit(
-        cache.creatorId,
-        ownerChatPatch(false, categoryOverwriteFor(channel, cache.creatorId)),
-      );
-    }
+    await deverrouillerSalon(channel, cache);
+    await suivreAccesSiVisibilite(channel, guildId, cache);
     return `${I.unlock} ${m.panel_tempvoice_unlocked({}, { locale })}`;
   }
 
+  await verrouillerSalon(channel, cache, ctx.interaction.user.id);
+  await suivreAccesSiVisibilite(channel, guildId, cache);
+  return `${I.lock} ${m.panel_tempvoice_locked({}, { locale })}`;
+}
+
+/** Le verrou de « Verrouiller », partagé par tout ce qui ferme le salon à @everyone. */
+async function verrouillerSalon(channel: VoiceChannel, cache: EntreeSalonTemporaire, acteurId?: string): Promise<void> {
   // En « Personne » le propriétaire reste muet, en « ceux qui sont en vocal » sa
   // présence décide : le verrou ne lui pose le bit d'écriture dans aucun des deux.
   if (cache.modeEcriture !== 'nobody' && cache.modeEcriture !== 'inVoice') {
@@ -4523,13 +4871,34 @@ async function basculerVerrou(ctx: ActionContext): Promise<string> {
       ownerChatPatch(true, categoryOverwriteFor(channel, cache.creatorId)),
     );
   }
-  await garderEntreeStaff(channel, ctx.interaction.user.id);
-  await channel.permissionOverwrites.edit(guildId, CHANNEL_PATCHES.lock);
+  await garderEntreeStaff(channel, acteurId);
+  await channel.permissionOverwrites.edit(channel.guild.id, CHANNEL_PATCHES.lock);
   // Le verrou coupe `SendMessages` a @everyone - le bot compris, tant
   // qu'il n'a pas de surcharge a lui. Sans cela il ne peut plus mettre a
   // jour le panneau ni poster le moindre avis dans le salon.
+  await relireMaintenant(channel);
   await assurerBotPeutEcrire(channel);
-  return `${I.lock} ${m.panel_tempvoice_locked({}, { locale })}`;
+}
+
+/** La réouverture de « Déverrouiller » : @everyone rendu à la catégorie, écriture rendue au mode. */
+async function deverrouillerSalon(channel: VoiceChannel, cache: EntreeSalonTemporaire): Promise<void> {
+  delete cache.reserveMembres;
+  await channel.permissionOverwrites.edit(channel.guild.id, patchReouverture(CHANNEL_PATCHES.unlock, channel, cache));
+  // Le mode réécrit @everyone : sans relecture, il reposerait le refus de connexion du cache.
+  await relireMaintenant(channel);
+  if (!await rendreEcritureAuMode(channel, cache)) {
+    await channel.permissionOverwrites.edit(
+      cache.creatorId,
+      ownerChatPatch(false, categoryOverwriteFor(channel, cache.creatorId)),
+    );
+  }
+}
+
+/** « Suit l'accès » : verrouillé = caché, ouvert = visible. À appeler après tout changement de l'entrée de @everyone. */
+export async function suivreAccesSiVisibilite(channel: VoiceChannel, guildId: string, cache: EntreeSalonTemporaire): Promise<void> {
+  if (await visibiliteDuSalon(guildId, cache) !== 'acces') return;
+  await relireMaintenant(channel);
+  await reappliquerVisibilite(channel, guildId, cache);
 }
 
 /**
@@ -5779,6 +6148,7 @@ async function appliquerReservation(
     await reply(m.panel_tempvoice_err_role_denied({}, { locale }));
     return;
   }
+  delete cache.reserveMembres;
 
   // Sans ce retrait, le salon porte au bout de quelques changements la liste
   // de tous les rôles réservés depuis sa création. Le retrait peut échouer, et
@@ -5811,7 +6181,9 @@ async function appliquerReservation(
     // Le verrou coupe `SendMessages` a @everyone - le bot compris, tant
     // qu'il n'a pas de surcharge a lui. Sans cela il ne peut plus mettre a
     // jour le panneau ni poster le moindre avis dans le salon.
+    await relireMaintenant(channel);
     await assurerBotPeutEcrire(channel);
+    await suivreAccesSiVisibilite(channel, guildId, cache);
 
     const saved = await prisma.tempVoiceChannel
       .update({ where: { id: channel.id }, data: { roleId: selectedRoleId } })
@@ -5834,7 +6206,9 @@ async function appliquerReservation(
   }
 
   await channel.permissionOverwrites.edit(guildId, patchReouverture(CHANNEL_PATCHES.clearReservation, channel, cache));
+  await relireMaintenant(channel);
   await rendreEcritureAuMode(channel, cache);
+  await suivreAccesSiVisibilite(channel, guildId, cache);
   await prisma.tempVoiceChannel
     .update({ where: { id: channel.id }, data: { roleId: null } })
     .catch((err: unknown) => logger.error('TempVoice', "Erreur lors de l'enregistrement de la réservation :", err));
@@ -5915,9 +6289,12 @@ async function reserverPourDesMembres(
 
   await garderEntreeStaff(channel, ctx.interaction.user.id);
   await channel.permissionOverwrites.edit(guildId, CHANNEL_PATCHES.lock);
+  cache.reserveMembres = true;
   // Le verrou coupe `SendMessages` a @everyone - le bot compris, tant qu'il n'a
   // pas de surcharge a lui : sans cela, plus de panneau ni d'avis.
+  await relireMaintenant(channel);
   await assurerBotPeutEcrire(channel);
+  await suivreAccesSiVisibilite(channel, guildId, cache);
 
   const reste = refuses.length > 0
     ? (refuses.length > 1 ? m.panel_tempvoice_reserve_refused_many : m.panel_tempvoice_reserve_refused_one)(
@@ -5987,6 +6364,76 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
     );
     planifierRafraichissementPanneau(channel);
     await demanderPourLesExceptions(ctx, ancien, mode);
+    return;
+  }
+
+  // ─── Menu « Visibilité » : gardé comme le verrou ───
+  if (action === 'visibility_select' && interaction.isStringSelectMenu()) {
+    await acquitterMiseAJour(interaction);
+    const verdict = peutAgir(ctx.ctxp.role, 'verrouiller', ctx.ctxp.reglages, ctx.ctxp.locale);
+    if (!verdict.autorise) {
+      await reponseSupplementaire(interaction, `${I.lock} ${verdict.raison}`);
+      return;
+    }
+    const visibilite = normaliserVisibilite(interaction.values[0]);
+    cache.visibility = visibilite;
+    await guild.channels.fetch(channel.id, { force: true }).catch(() => null);
+    await reappliquerVisibilite(channel, guildId, cache, interaction.user.id);
+    await persisterEtatSalon(guildId, channel.id);
+    await rafraichirSousPanneauSalon(ctx);
+    await reponseSupplementaire(
+      interaction,
+      `${I[ICONE_VISIBILITE[visibilite]]} ${m.panel_tempvoice_visibility_changed({ value: libelleVisibilite(visibilite, locale).libelle }, { locale })}`,
+    );
+    planifierRafraichissementPanneau(channel);
+    return;
+  }
+
+  // ─── Menu « Mes réglages » : réservé au propriétaire ───
+  if (action === 'saved_select' && interaction.isStringSelectMenu()) {
+    await acquitterMiseAJour(interaction);
+    if (user.id !== cache.creatorId) {
+      await reponseSupplementaire(interaction, m.panel_tempvoice_err_owner_only({}, { locale }));
+      return;
+    }
+    // Relu : le menu a pu être affiché avant que le serveur ne coupe la fonction.
+    if ((await politiqueDuGenerateur(guildId, cache))?.reglagesPerso === false) {
+      await reponseSupplementaire(interaction, m.panel_tempvoice_saved_disabled({}, { locale }));
+      return;
+    }
+    const choix = interaction.values[0];
+    if (choix === 'save') {
+      await relireMaintenant(channel);
+      const r = capturerReglages(channel, cache.creatorId, await visibiliteDuSalon(guildId, cache), modeDuSalon(channel, cache));
+      // L'entrée que `garderEntreeStaff` pose à un staff n'est pas une autorisation du propriétaire ;
+      // un staff qu'il a autorisé lui-même (marque « autorisation ») en est une.
+      const staff = new Set<string>();
+      const { connus } = await membresConnus(guild, r.autorises);
+      for (const id of r.autorises) {
+        if (originesSurcharge.origine(guildId, channel.id, id) === 'autorisation') continue;
+        const membre = connus.get(id);
+        if (membre && await isProtectedTarget(guildId, membre)) staff.add(id);
+      }
+      r.autorises = r.autorises.filter((id) => !staff.has(id));
+      await enregistrerReglagesPerso(guildId, user.id, r);
+      await interaction.followUp({
+        embeds: [avis(`${I.check} ${m.panel_tempvoice_saved_done_save({}, { locale })}`), embedRecapReglages(r, locale)],
+        flags: [MessageFlags.Ephemeral],
+      }).catch(() => null);
+    } else if (choix === 'apply') {
+      const r = await lireReglagesPerso(guildId, user.id);
+      if (!r) {
+        await reponseSupplementaire(interaction, m.panel_tempvoice_saved_none({}, { locale }));
+        return;
+      }
+      const { reserve } = await appliquerReglagesEnregistres(channel, guildId, cache, r);
+      const fait = reserve ? m.panel_tempvoice_saved_done_apply_reserved : m.panel_tempvoice_saved_done_apply;
+      await reponseSupplementaire(interaction, `${I.check} ${fait({}, { locale })}`);
+      planifierRafraichissementPanneau(channel);
+    } else if (choix === 'forget') {
+      await oublierReglagesPerso(guildId, user.id);
+      await reponseSupplementaire(interaction, `${I.check} ${m.panel_tempvoice_saved_done_forget({}, { locale })}`);
+    }
     return;
   }
 
@@ -6147,7 +6594,8 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
       }
 
       case 'propriete': {
-        await ouvrirPorte(async () => panneauPropriete(channel, cache, ctx.ctxp));
+        await ouvrirPorte(async () => panneauPropriete(channel, cache, ctx.ctxp,
+          user.id === cache.creatorId && (await politiqueDuGenerateur(guildId, cache))?.reglagesPerso !== false));
         return;
       }
 
@@ -6256,19 +6704,8 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
           await reply(`${I.lock} ${verrouAutorise.raison}`);
           return;
         }
-        // Même règle que `basculerVerrou` : ni « Personne » ni « en vocal » ne reçoivent le bit.
-        if (cache.modeEcriture !== 'nobody' && cache.modeEcriture !== 'inVoice') {
-          await channel.permissionOverwrites.edit(
-            cache.creatorId,
-            ownerChatPatch(true, categoryOverwriteFor(channel, cache.creatorId)),
-          );
-        }
-        await garderEntreeStaff(channel, ctx.interaction.user.id);
-        await channel.permissionOverwrites.edit(guildId, CHANNEL_PATCHES.lock);
-        // Le verrou coupe `SendMessages` a @everyone - le bot compris, tant
-        // qu'il n'a pas de surcharge a lui. Sans cela il ne peut plus mettre a
-        // jour le panneau ni poster le moindre avis dans le salon.
-        await assurerBotPeutEcrire(channel);
+        await verrouillerSalon(channel, cache, ctx.interaction.user.id);
+        await suivreAccesSiVisibilite(channel, guildId, cache);
         await reply(`${I.lock} ${m.panel_tempvoice_locked_legacy({}, { locale })}`);
         planifierRafraichissementPanneau(channel);
         return;
@@ -6280,13 +6717,8 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
           await reply(`${I.lock} ${ouvertureAutorisee.raison}`);
           return;
         }
-        await channel.permissionOverwrites.edit(guildId, patchReouverture(CHANNEL_PATCHES.unlock, channel, cache));
-        if (!await rendreEcritureAuMode(channel, cache)) {
-          await channel.permissionOverwrites.edit(
-            cache.creatorId,
-            ownerChatPatch(false, categoryOverwriteFor(channel, cache.creatorId)),
-          );
-        }
+        await deverrouillerSalon(channel, cache);
+        await suivreAccesSiVisibilite(channel, guildId, cache);
         await reply(`${I.unlock} ${m.panel_tempvoice_unlocked_legacy({}, { locale })}`);
         planifierRafraichissementPanneau(channel);
         return;
@@ -6889,4 +7321,22 @@ async function changerProprietaire(
   await prisma.tempVoiceChannel
     .update({ where: { id: channel.id }, data: { creatorId: target.id } })
     .catch((err: unknown) => logger.error('TempVoice', "Erreur lors de l'enregistrement du propriétaire :", err));
+
+  // Le nouveau propriétaire a ses réglages : le salon les prend. Sans réglages,
+  // le salon garde ceux du précédent (rien n'est touché).
+  if (previousOwnerId === target.id) return;
+  if ((await politiqueDuGenerateur(guildId, cache))?.reglagesPerso === false) return;
+  const reglages = await lireReglagesPerso(guildId, target.id).catch(() => null);
+  if (!reglages) return;
+  await appliquerReglagesEnregistres(channel, guildId, cache, reglages, true)
+    .catch((err: unknown) => logger.warn('TempVoice', `Réglages de ${target.id} non appliqués au transfert de ${channel.id} :`, err));
+  const locale = await resolveGuildLocale(guildId, guild.preferredLocale ?? null);
+  await envoyerJournalVocal({
+    guild,
+    locale,
+    salonId: channel.id,
+    parentId: channel.parentId,
+    libelle: m.log_tempvoice_saved_applied_transfer({ name: target.user.tag }, { locale }),
+    champs: [{ name: m.log_tempvoice_field_owner({}, { locale }), value: `<@${previousOwnerId}> → <@${target.id}>`, inline: true }],
+  });
 }

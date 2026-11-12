@@ -22,6 +22,7 @@ import {
   Client,
   ClientApplication,
   ClientUser,
+  Collection,
   DiscordAPIError,
   Events,
   GatewayIntentBits,
@@ -212,6 +213,17 @@ export class FauxDiscord {
       voice_states: [...this.etatsVocaux].map(([u, ch]) => this.etatVocalBrut(u, ch)),
       threads: [], presences: [], stage_instances: [], guild_scheduled_events: [], member_count: this.membres.size, large: false,
     } as never);
+    // `members.fetch({ user: [...] })` passe par la passerelle (op 8), absente ici : on rend ce que Discord
+    // renverrait, les membres trouvés seulement (les autres sont `not_found`, sans erreur).
+    const membres = client.guilds.cache.get(IDS.GUILD)!.members;
+    const lireMembres = membres.fetch.bind(membres);
+    (membres as unknown as { fetch: (o: unknown) => Promise<unknown> }).fetch = (o) => {
+      const ids = (o as { user?: unknown } | undefined)?.user;
+      if (!Array.isArray(ids)) return lireMembres(o as never);
+      const trouves = ids.filter((id: string) => this.membres.has(id))
+        .map((id: string) => [id, (membres as unknown as { _add: (d: Brut) => unknown })._add(structuredClone(this.membres.get(id)!))] as const);
+      return Promise.resolve(new Collection(trouves));
+    };
     this.client = client;
     return client;
   }

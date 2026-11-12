@@ -22,6 +22,15 @@ export type TempVoiceOwnerPower = 'mute' | 'deafen' | 'move' | 'manageChannel' |
  */
 export type TempVoiceTextChatMode = 'inherit' | 'open' | 'inVoice' | 'locked' | 'nobody';
 
+/**
+ * Qui voit le salon dans la liste des salons.
+ * - `tous` : visible par tous ;
+ * - `acces` : suit l'accès, verrouillé => caché sauf aux autorisés ;
+ * - `prive` : seuls le propriétaire, les autorisés et les rôles d'office le voient.
+ */
+export const TEMP_VOICE_VISIBILITES = ['tous', 'acces', 'prive'] as const;
+export type TempVoiceVisibilite = (typeof TEMP_VOICE_VISIBILITES)[number];
+
 export interface TempVoicePolicy {
   /** Places du salon à la création ; 0 laisse le salon sans limite. */
   userLimit: number;
@@ -31,6 +40,9 @@ export interface TempVoicePolicy {
   autoAllowRoleIds: string[];
   textChat: TempVoiceTextChatMode;
   ownerPowers: TempVoiceOwnerPower[];
+  visibilite: TempVoiceVisibilite;
+  /** Permet aux membres d'enregistrer et d'appliquer leurs réglages. */
+  reglagesPerso: boolean;
 }
 
 /**

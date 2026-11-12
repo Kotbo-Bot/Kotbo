@@ -609,4 +609,21 @@ describe('reglages de presentation du panneau des salons temporaires', () => {
       reservationFallbackMode: served.reservationFallbackMode,
     }).toEqual({ ...PANEL_DEFAULTS });
   });
+
+  test('PATCH tempVoiceDefaults : visibilite et reglagesPerso valides conserves, visibilite inconnue => tous', async () => {
+    const ecrit = async (tempVoiceDefaults: Record<string, unknown>) => {
+      mockDb.guild.update = mock(async () => ({}));
+      const res = await callRoute('PATCH', { tempVoiceDefaults });
+      expect(res.statusCode).toBe(200);
+      const calls = mockDb.guild.update.mock.calls as unknown as Array<[{ data: { tempVoiceDefaults: Record<string, unknown> } }]>;
+      return calls[0]![0].data.tempVoiceDefaults;
+    };
+
+    const garde = await ecrit({ visibilite: 'prive', reglagesPerso: false });
+    expect(garde.visibilite).toBe('prive');
+    expect(garde.reglagesPerso).toBe(false);
+
+    const rabattu = await ecrit({ visibilite: 'nimporte' });
+    expect(rabattu.visibilite).toBe('tous');
+  });
 });

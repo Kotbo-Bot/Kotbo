@@ -489,6 +489,12 @@ const CAS: CasAction[] = [
     customId: 'tempvoice:mode_select', genre: 'menuTexte', values: ['ownerOnly'], chemin: [SALON],
     effet: (sc) => (tv.tempChannels.get(sc.salonId)?.modeEcriture === 'ownerOnly' ? null : `mode = ${tv.tempChannels.get(sc.salonId)?.modeEcriture}`),
   },
+  // « Mes réglages » : sans réglage enregistré, « apply » répond « aucun » (couvert en détail par tempVoiceReglagesParcours).
+  { customId: 'tempvoice:saved_select', genre: 'menuTexte', values: ['apply'], chemin: [PROPRIETE] },
+  {
+    customId: 'tempvoice:visibility_select', genre: 'menuTexte', values: ['prive'], chemin: [SALON],
+    effet: (sc) => (tv.tempChannels.get(sc.salonId)?.visibility === 'prive' ? null : `visibilite = ${tv.tempChannels.get(sc.salonId)?.visibility}`),
+  },
   { customId: 'tempvoice:reglages_mod', genre: 'menuTexte', values: ['renommer', 'limite'], chemin: [SALON, REGLAGES] },
   { customId: 'tempvoice:membre_ici', genre: 'menuTexte', values: [IDS.CIBLE], chemin: [MEMBRES] },
   { customId: 'tempvoice:membre_select', genre: 'menuMembres', values: [IDS.CIBLE], chemin: [MEMBRES] },

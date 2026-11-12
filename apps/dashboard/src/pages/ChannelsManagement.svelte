@@ -14,7 +14,7 @@
   import AutoThreadPanel from '../lib/components/channels/AutoThreadPanel.svelte';
   import ThreadPanelsPanel from '../lib/components/channels/ThreadPanelsPanel.svelte';
   import { ToggleSwitch } from '../lib/components/ui';
-  import { TEMP_VOICE_HANDOVER_DELAY_BOUNDS, TEMP_VOICE_OWNER_MENTION_DEFAULT, TEMP_VOICE_OWNERSHIP_DEFAULTS, type TempVoiceClaimWho, type TempVoiceOwnerMentionPlacement, type TempVoiceOwnershipSettings, type TempVoicePolicy } from '@kotbo/shared';
+  import { TEMP_VOICE_HANDOVER_DELAY_BOUNDS, TEMP_VOICE_OWNER_MENTION_DEFAULT, TEMP_VOICE_OWNERSHIP_DEFAULTS, type TempVoiceClaimWho, type TempVoiceOwnerMentionPlacement, type TempVoiceOwnershipSettings, type TempVoicePolicy, type TempVoiceVisibilite } from '@kotbo/shared';
   import { clampInt, selectableGeneratorChannels, takenGeneratorChannelIds, tempVoiceSubFromSearch, withTempVoiceSub, type TempVoiceSubTab } from '../lib/tempVoiceUi';
   import type { TempVoiceGenerator, TempVoiceGeneratorPayload } from '../lib/api/moderation';
   import { messageForNotice } from '../lib/api/errors';
@@ -42,6 +42,8 @@
       autoAllowRoleIds: [],
       textChat: 'inherit',
       ownerPowers: ['mute', 'deafen', 'move'],
+      visibilite: 'tous',
+      reglagesPerso: true,
     };
   }
 
@@ -255,6 +257,13 @@
   const PANEL_MODES: Array<{ key: TempVoicePanelMode; label: () => string; hint: () => string }> = [
     { key: 'CLASSIC', label: () => m.cm_tv_panel_mode_classic(), hint: () => m.cm_tv_panel_mode_classic_hint() },
     { key: 'FLAT', label: () => m.cm_tv_panel_mode_flat(), hint: () => m.cm_tv_panel_mode_flat_hint() },
+  ];
+
+  /** Visibilité par défaut des salons créés (cartes-radio, une aide par option). */
+  const TV_VISIBILITE_MODES: Array<{ key: TempVoiceVisibilite; label: () => string; hint: () => string }> = [
+    { key: 'tous', label: () => m.cm_tv_visibilite_tous(), hint: () => m.cm_tv_visibilite_tous_hint() },
+    { key: 'acces', label: () => m.cm_tv_visibilite_acces(), hint: () => m.cm_tv_visibilite_acces_hint() },
+    { key: 'prive', label: () => m.cm_tv_visibilite_prive(), hint: () => m.cm_tv_visibilite_prive_hint() },
   ];
 
   /** Cartes-radio de la mention du propriétaire, une aide par option. */
@@ -2237,6 +2246,50 @@
                   idPrefix="temp-voice-main"
                 />
               </div>
+
+              <fieldset class="max-w-xl border-t border-outline-variant/10 pt-6 mt-6 space-y-4">
+                <legend class="text-sm font-semibold text-primary">{m.cm_tv_perso_title()}</legend>
+                <p class="text-xs text-on-surface-variant">{m.cm_tv_perso_desc()}</p>
+                <label for="tv-reglages-perso" class="flex items-start gap-3 cursor-pointer">
+                  <input
+                    id="tv-reglages-perso"
+                    type="checkbox"
+                    bind:checked={config.tempVoiceDefaults.reglagesPerso}
+                    class="accent-primary w-4 h-4 mt-0.5"
+                  />
+                  <span class="space-y-1">
+                    <span class="text-xs font-bold text-on-surface block">{m.cm_tv_reglages_perso_label()}</span>
+                    <span class="text-2xs text-on-surface-variant leading-relaxed block">{m.cm_tv_reglages_perso_hint()}</span>
+                  </span>
+                </label>
+                <fieldset class="space-y-2">
+                  <legend class="text-xs font-bold text-on-surface/80">{m.cm_tv_visibilite_label()}</legend>
+                  <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    {#each TV_VISIBILITE_MODES as mode (mode.key)}
+                      <label
+                        for="tv-visibilite-{mode.key}"
+                        class="flex flex-col gap-1 border rounded-lg px-4 py-3 cursor-pointer transition-all {config.tempVoiceDefaults.visibilite === mode.key
+                          ? 'bg-primary/10 border-primary/40'
+                          : 'bg-surface-container-high/20 border-outline-variant/10 hover:border-primary/20'}"
+                      >
+                        <span class="flex items-center gap-2 text-xs font-bold text-on-surface">
+                          <input
+                            id="tv-visibilite-{mode.key}"
+                            type="radio"
+                            name="tv-visibilite"
+                            value={mode.key}
+                            bind:group={config.tempVoiceDefaults.visibilite}
+                            class="accent-primary w-3.5 h-3.5"
+                          />
+                          {mode.label()}
+                        </span>
+                        <span class="text-2xs text-on-surface-variant leading-relaxed">{mode.hint()}</span>
+                      </label>
+                    {/each}
+                  </div>
+                  <p class="text-2xs text-on-surface-variant/40">{m.cm_tv_visibilite_note()}</p>
+                </fieldset>
+              </fieldset>
               {/if}
 
               {#if tvSub === 'generators'}

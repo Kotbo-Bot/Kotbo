@@ -4,7 +4,7 @@
  * serveurs déjà configurés inchangés.
  */
 import { OverwriteType, PermissionFlagsBits, type OverwriteResolvable } from 'discord.js';
-import type { TempVoiceOwnerMentionPlacement, TempVoiceOwnerPower, TempVoiceTextChatMode, TempVoicePolicy } from '@kotbo/shared';
+import { TEMP_VOICE_VISIBILITES, type TempVoiceOwnerMentionPlacement, type TempVoiceOwnerPower, type TempVoiceTextChatMode, type TempVoicePolicy, type TempVoiceVisibilite } from '@kotbo/shared';
 import {
   TEMP_VOICE_CLAIM_WHO,
   TEMP_VOICE_HANDOVER_DELAY_BOUNDS,
@@ -106,6 +106,8 @@ export function defaultTempVoicePolicy(): TempVoicePolicy {
     autoAllowRoleIds: [],
     textChat: 'inherit',
     ownerPowers: [...LEGACY_OWNER_POWERS],
+    visibilite: 'tous',
+    reglagesPerso: true,
   };
 }
 
@@ -152,6 +154,10 @@ export function normalizeTempVoicePolicy(raw: unknown, everyoneRoleId?: string):
     autoAllowRoleIds: normalizeRoleIds(source.autoAllowRoleIds, MAX_AUTO_ALLOW_ROLES, everyoneRoleId),
     textChat: normalizeTextChat(source.textChat),
     ownerPowers: normalizeOwnerPowers(source.ownerPowers),
+    visibilite: TEMP_VOICE_VISIBILITES.includes(source.visibilite as TempVoiceVisibilite)
+      ? (source.visibilite as TempVoiceVisibilite)
+      : 'tous',
+    reglagesPerso: typeof source.reglagesPerso === 'boolean' ? source.reglagesPerso : true,
   };
 }
 
@@ -225,6 +231,8 @@ export function resolveTempVoiceGenerators(
   everyoneRoleId?: string,
 ): TempVoiceGenerator[] {
   const generators: TempVoiceGenerator[] = [];
+  // Visibilité et réglages par personne ne se règlent qu'au niveau du serveur (dashboard) : les additionnels les suivent.
+  const { visibilite, reglagesPerso } = normalizeTempVoicePolicy(guildConfig.tempVoiceDefaults, everyoneRoleId);
 
   if (guildConfig.tempVoiceChannelId) {
     generators.push({
@@ -248,7 +256,7 @@ export function resolveTempVoiceGenerators(
         categoryId: typeof entry.categoryId === 'string' ? entry.categoryId : undefined,
         nameTemplate: typeof entry.nameTemplate === 'string' ? entry.nameTemplate : DEFAULT_NAME_TEMPLATE,
         requiredRoleId: typeof entry.requiredRoleId === 'string' ? entry.requiredRoleId : undefined,
-        policy: normalizeTempVoicePolicy(entry, everyoneRoleId),
+        policy: { ...normalizeTempVoicePolicy(entry, everyoneRoleId), visibilite, reglagesPerso },
         primary: false,
         // Bornées à leurs énumérations, et seulement celles réellement posées :
         // une clé absente ou inconnue n'apparaît pas, pour que l'héritage la
