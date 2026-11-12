@@ -304,6 +304,44 @@ export function registerMembersRoutes(): void {
     return response;
   });
 
+  // GET /api/dashboard/guilds/:id/members/:userId/summary
+  route('GET', '/api/dashboard/guilds/:id/members/:userId/summary', ({ params }) => {
+    const person = MEMBERS.find((p) => p.id === params.userId) || MEMBERS[0];
+    const sanctionCount = demoDb.get<SanctionItem[]>('sanctions', sanctionsSeed).filter((s) => s.targetUserId === person.id).length;
+    return {
+      summary: {
+        level: { level: Math.max(1, Math.round(person.messages / 120)), xp: person.messages * 18, rank: 1 + (Number(person.id.slice(-2)) % 20) },
+        reputation: { received: Math.round(person.messages / 90), given: Math.round(person.messages / 140) },
+        economy: { balance: person.messages * 4, rank: 1 + (Number(person.id.slice(-2)) % 25) },
+        invites: { total: 0, stillHere: 0, leftWithinWeek: 0 },
+        support: { tickets: 0, openTickets: 0, averageRating: null, ratings: 0 },
+        community: { suggestions: 0, forms: 0, giveawayWins: 0 },
+        joins: 1,
+        signals: sanctionCount > 0 ? [{ key: 'sanctions', label: `${sanctionCount} sanction(s)`, tone: 'warning', count: sanctionCount }] : [],
+      },
+      insights: null,
+      climate: null,
+    };
+  });
+
+  // GET /api/dashboard/guilds/:id/members/:userId/timeline
+  route('GET', '/api/dashboard/guilds/:id/members/:userId/timeline', ({ params }) => {
+    const person = MEMBERS.find((p) => p.id === params.userId) || MEMBERS[0];
+    const logs = memberLogs(person, demoDb.get<SanctionItem[]>('sanctions', sanctionsSeed).filter((s) => s.targetUserId === person.id));
+    const items = logs.map((l) => ({
+      id: l.id,
+      type: l.action,
+      category: 'membership' as const,
+      at: l.dateIso,
+      title: l.action,
+      description: l.details,
+      actor: { id: null, name: l.user },
+      link: null,
+      tone: 'neutral' as const,
+    }));
+    return { items, nextBefore: null };
+  });
+
   // POST /api/dashboard/guilds/:id/members/:userId/actions
   route('POST', '/api/dashboard/guilds/:id/members/:userId/actions', ({ params, body }) => {
     const userId = params.userId;
