@@ -382,6 +382,8 @@ model Guild {
   dropChannelId String?
   /// Rôle mentionné à l'apparition d'un drop. Vide = aucune mention.
   dropMentionRoleId String?
+  /// Le rôle n'est mentionné que pour les jackpots.
+  dropMentionJackpotOnly Boolean @default(false)
   /// Durée de vie d'un drop que personne ne ramasse, en minutes. Le mode
   /// fenêtre a la sienne : elle est annoncée aux membres, celle-ci non.
   /// Plancher de cinq minutes appliqué à la lecture (voir `@kotbo/shared`).

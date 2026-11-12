@@ -25,6 +25,7 @@ import {
   dropMaxClaims,
   dropMessageDeleteAt,
   dropActivityVerdict,
+  dropMentionRoleId,
   estimateWeeklyDrops,
   DROP_ADVICE_MIN_SAMPLE,
   shouldAdviseActivityWait,
@@ -468,5 +469,25 @@ describe('estimation de ce qu\'un type distribue par semaine', () => {
 
   test('aucun mode : rien à estimer', () => {
     expect(estimateWeeklyDrops('XP', { ...xp, first: { ...xp.first, enabled: false } }, noJackpot)).toBeNull();
+  });
+});
+
+describe('rôle mentionné à l\'apparition d\'un drop', () => {
+  const always = { dropMentionRoleId: 'role-drops', dropMentionJackpotOnly: false };
+  const jackpotOnly = { ...always, dropMentionJackpotOnly: true };
+
+  test('par défaut, chaque drop mentionne le rôle', () => {
+    expect(normalizeDropGlobalSettings({}).dropMentionJackpotOnly).toBe(false);
+    expect(dropMentionRoleId(always, false)).toBe('role-drops');
+    expect(dropMentionRoleId(always, true)).toBe('role-drops');
+  });
+
+  test('réservée aux jackpots : seuls eux mentionnent', () => {
+    expect(dropMentionRoleId(jackpotOnly, false)).toBeNull();
+    expect(dropMentionRoleId(jackpotOnly, true)).toBe('role-drops');
+  });
+
+  test('sans rôle choisi, personne n\'est mentionné', () => {
+    expect(dropMentionRoleId({ dropMentionRoleId: null, dropMentionJackpotOnly: false }, true)).toBeNull();
   });
 });

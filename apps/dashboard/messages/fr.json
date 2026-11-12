@@ -10870,6 +10870,8 @@
   "drop_default_channel_desc": "Utilisé par les types de drop qui n'ont pas de salon à eux.",
   "drop_mention_role_label": "Rôle mentionné",
   "drop_mention_role_desc": "Mentionné à chaque apparition. Laisse vide pour ne prévenir personne.",
+  "drop_mention_jackpot_only_label": "Seulement pour les jackpots",
+  "drop_mention_jackpot_only_off_hint": "Le jackpot est désactivé : le rôle ne sera jamais mentionné.",
   "drop_lifetime_label": "Durée de vie (minutes)",
   "drop_lifetime_desc": "Au-delà, un drop que personne n'a ramassé se ferme. Le mode fenêtre a sa propre durée.",
   "drop_delete_after_label": "Suppression du message",
