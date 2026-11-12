@@ -14,7 +14,13 @@ import {
 } from '@kotbo/shared';
 import { PlanLockedError, setDashboardModuleStatus } from '../../../services/core/moduleActivationService.js';
 import { isGuildInOnboarding } from '../../../services/core/onboardingGate.js';
-import { dropSettingsFromRow, dropSettingsToRow, getOrCreateDropConfigs } from '../../../services/features/dropService.js';
+import {
+  dropAnnouncementLabels,
+  dropSettingsFromRow,
+  dropSettingsToRow,
+  getOrCreateDropConfigs,
+} from '../../../services/features/dropService.js';
+import { resolveGuildLocale } from '../../../utils/i18n.js';
 
 import { jsonFailure } from '../../shared/failure.js';
 /** Nombre de drops passés renvoyés à la page, pour l'historique de l'onglet global. */
@@ -95,9 +101,10 @@ export async function handleDropsRoutes(
         return true;
       }
 
-      const [configs, weeklyOutcomes] = await Promise.all([
+      const [configs, weeklyOutcomes, locale] = await Promise.all([
         getOrCreateDropConfigs(guildId),
         weeklyDropOutcomes(guildId),
+        resolveGuildLocale(guildId),
       ]);
 
       const recent = await prisma.drop.findMany({
@@ -132,6 +139,7 @@ export async function handleDropsRoutes(
         ...normalizeDropGlobalSettings(guildData),
         configs: configs.map(serializeConfig),
         weeklyOutcomes,
+        announcement: dropAnnouncementLabels(locale),
         recentDrops: recent.map(({ itemId, ...drop }) => ({
           ...drop,
           item: itemId ? itemById.get(itemId) ?? null : null,

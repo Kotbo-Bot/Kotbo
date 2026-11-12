@@ -164,6 +164,28 @@ function resourceLabel(type: DropType, locale: BotLocale, itemLabel?: string | n
   return m.drop_resource_xp({}, { locale });
 }
 
+/**
+ * Gabarits de l'annonce dans la langue du serveur, pour l'aperçu du dashboard.
+ *
+ * Les messages sont rendus avec leurs marqueurs (`{amount}`, `{resource}`...) en guise de
+ * valeurs : la page les remplit avec le formulaire en cours, sans route d'aperçu ni copie
+ * des textes de son côté. Mêmes messages que `buildDropEmbed`, donc même annonce.
+ */
+export function dropAnnouncementLabels(locale: BotLocale) {
+  const amount = '{amount}';
+  const resource = '{resource}';
+  return {
+    locale,
+    title: m.drop_announce_title({}, { locale }),
+    jackpotTitle: m.drop_jackpot_title({}, { locale }),
+    claimButton: m.drop_claim_button({}, { locale }),
+    first: m.drop_announce_desc_first({ amount, resource }, { locale }),
+    race: m.drop_announce_desc_race({ amount, resource, winners: '{winners}' }, { locale }),
+    window: m.drop_announce_desc_window({ amount, resource, closes: '{closes}' }, { locale }),
+    resources: Object.fromEntries(DROP_TYPES.map((type) => [type, resourceLabel(type, locale)])) as Record<DropType, string>,
+  };
+}
+
 function buildDropEmbed(drop: DropRow, locale: BotLocale, itemLabel?: string | null): EmbedBuilder {
   const resource = resourceLabel(drop.type as DropType, locale, itemLabel);
   const amount = drop.amount.toLocaleString(locale === 'fr' ? 'fr-FR' : 'en-US');

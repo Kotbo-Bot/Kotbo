@@ -246,6 +246,26 @@ describe('handleDropsRoutes - historique', () => {
     expect(res.statusCode).toBe(200);
     const { recentDrops } = JSON.parse(res.body);
     expect(recentDrops[0].item).toEqual({ name: 'Lame du Crépuscule', emoji: 'E' });
+  });
+
+  test('les gabarits de l\'annonce arrivent avec leurs trous, pour l\'aperçu', async () => {
+    const res = createMockResponse();
+    await handleDropsRoutes(
+      createMockRequest({}, 'GET'),
+      res,
+      ['api', 'dashboard', 'guilds', 'guild-123', 'drops'],
+      mockClient,
+      mockUser,
+      'guild-123',
+      mockAccess,
+    );
+
+    const { announcement } = JSON.parse(res.body);
+    expect(announcement.first).toContain('{amount}');
+    expect(announcement.first).toContain('{resource}');
+    expect(announcement.race).toContain('{winners}');
+    expect(announcement.window).toContain('{closes}');
+    expect(Object.keys(announcement.resources).sort()).toEqual(['CLAN_POINTS', 'COINS', 'RPG_ITEM', 'RPG_XP', 'XP']);
     expect(recentDrops[1].item).toBeNull();
   });
 });

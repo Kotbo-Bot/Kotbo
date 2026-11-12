@@ -27,10 +27,26 @@ export interface DropHistoryEntry {
   closedAt: string | null;
 }
 
+/**
+ * Gabarits de l'annonce dans la langue du serveur, trous compris (`{amount}`, `{resource}`,
+ * `{winners}`, `{closes}`), pour l'aperçu.
+ */
+export interface DropAnnouncementLabels {
+  locale: string;
+  title: string;
+  jackpotTitle: string;
+  claimButton: string;
+  first: string;
+  race: string;
+  window: string;
+  resources: Record<DropType, string>;
+}
+
 export interface DropsDataResult extends DropGlobalSettings {
   configs: DropConfigEntry[];
   /** Drops terminés sur les sept derniers jours, et ceux qui ont expiré sans gagnant. */
   weeklyOutcomes: Record<DropType, DropOutcomes>;
+  announcement: DropAnnouncementLabels;
   recentDrops: DropHistoryEntry[];
 }
 
