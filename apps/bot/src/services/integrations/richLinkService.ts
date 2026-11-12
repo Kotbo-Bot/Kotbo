@@ -352,8 +352,8 @@ const PROVIDERS: Provider[] = [
         body: plain(g.short_description),
         stats: join(
           price && `💶 **${plain(price)}**${discount}`,
-          g.recommendations?.total && `👍 **${count(g.recommendations.total)}** recommandations`,
-          g.metacritic?.score && `Metacritic **${g.metacritic.score}**`,
+          g.recommendations?.total ? `👍 **${count(g.recommendations.total)}** recommandations` : null,
+          g.metacritic?.score ? `Metacritic **${g.metacritic.score}**` : null,
         ),
         images: [g.header_image].filter(https),
         openLabel: 'Ouvrir Steam',

@@ -52,6 +52,14 @@ export function extractSlashCommandName(source: string): string | null {
   const fromMetadata = source.match(/getCommandMetadata\((['"])(?<name>[^'"]+)\1\)/);
   if (fromMetadata?.groups?.name) return fromMetadata.groups.name;
 
+  // `localized(new SlashCommandBuilder(), 'lnk')` : le nom est la clé anglaise `lnk_name`
+  // (cf. getCommandMetadata), lue dans le fichier de traduction.
+  const prefix = source.match(/localized\(\s*new\s+SlashCommandBuilder\(\)\s*,\s*(['"])(?<prefix>[^'"]+)\1/)?.groups?.prefix;
+  if (prefix) {
+    const en = JSON.parse(readFileSync(path.resolve(SRC_ROOT, '..', 'messages', 'en.json'), 'utf8')) as Record<string, string>;
+    return en[`${prefix}_name`] ?? prefix;
+  }
+
   const literal = source.match(/\.setName\((['"])(?<name>[^'"]+)\1\)/);
   return literal?.groups?.name ?? null;
 }
