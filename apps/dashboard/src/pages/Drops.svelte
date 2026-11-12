@@ -40,6 +40,7 @@
     DROP_LIFETIME_MINUTES_RANGE,
     DROP_RACE_WINNERS_RANGE,
     DROP_TYPES,
+    DROP_TYPE_MODULE,
     DROP_WINDOW_MINUTES_RANGE,
     defaultDropTypeSettings,
     dropAmountRange,
@@ -158,19 +159,6 @@
   let availableChannels = $state<any[]>([]);
 
   const availableRoles = $derived(dashboardStore.state.discordRoles || []);
-  /**
-   * Module qui exploite la ressource versée. Un drop de points de clan ne
-   * crédite personne sans les clans, et une récompense versée dans un module
-   * éteint reste inutilisable : la page le dit avant l'enregistrement.
-   */
-  const TYPE_MODULES: Record<DropType, string> = {
-    XP: 'leveling',
-    RPG_XP: 'economy',
-    CLAN_POINTS: 'clans',
-    COINS: 'economy',
-    RPG_ITEM: 'economy',
-  };
-
   /** Module absent de la liste = actif, même lecture que ModulePage. */
   function moduleEntry(key: string) {
     return ((dashboardStore.state.modules as any[]) ?? []).find((mod) => mod.id === key);
@@ -186,7 +174,7 @@
   }
 
   const canManageSettings = $derived(
-    !!dashboardStore.state.featureAccess?.leveling?.canConfigure
+    !!dashboardStore.state.featureAccess?.drops?.canConfigure
       || !!dashboardStore.state.access?.canManageSettings
   );
 
@@ -631,11 +619,13 @@
           </p>
         {/if}
 
-        {#if !isModuleActive(TYPE_MODULES[type])}
+        <!-- Le cycle saute un type dont le module de la ressource est eteint, et
+             le clic le refuse : la page le dit avant l'enregistrement. -->
+        {#if !isModuleActive(DROP_TYPE_MODULE[type])}
           <p class="text-xs text-warning bg-warning/10 border border-warning/20 rounded-lg px-4 py-3">
             {type === 'CLAN_POINTS'
               ? m.drop_clans_disabled_warning()
-              : m.drop_module_disabled_warning({ module: moduleName(TYPE_MODULES[type]) })}
+              : m.drop_module_disabled_warning({ module: moduleName(DROP_TYPE_MODULE[type]) })}
           </p>
         {/if}
 
