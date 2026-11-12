@@ -10950,6 +10950,8 @@
   "drop_activity_window_label": "Over the last (minutes)",
   "drop_activity_desc": "The drop waits until its channel has received this many member messages. If the channel stays quiet, it goes out anyway, at most one interval late.",
   "drop_next_waiting_activity": "Waiting for activity",
+  "drop_advice_unclaimed": "{unclaimed} of {closed} drops expired without a winner over the last 7 days: the channel is probably empty when they land.",
+  "drop_advice_unclaimed_action": "Wait for activity",
   "drop_activity_step_label": "Requirement",
   "drop_activity_step_1": "Very light",
   "drop_activity_step_2": "Light",

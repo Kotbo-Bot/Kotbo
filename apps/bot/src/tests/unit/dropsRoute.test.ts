@@ -31,6 +31,10 @@ const mockDb = {
   },
   drop: {
     findMany: mock(async () => recentDropRows),
+    // Premier appel : drops terminés ; second : ceux sans gagnant.
+    groupBy: mock(async (args: { where: { claimCount?: number } }) => (args.where.claimCount === 0
+      ? [{ type: 'XP', _count: { _all: 6 } }]
+      : [{ type: 'XP', _count: { _all: 10 } }, { type: 'COINS', _count: { _all: 3 } }])),
   },
   rpgItem: {
     findMany: mock(async () => [{ id: 'epee', name: 'Lame du Crépuscule', emoji: 'E' }]),
@@ -278,5 +282,38 @@ describe('handleDropsRoutes - jackpot', () => {
     expect(mockDb.guild.update).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ dropJackpotEnabled: true, dropJackpotChance: 50, dropJackpotMultiplier: 5 }),
     }));
+  });
+});
+
+describe('handleDropsRoutes - bilan de la semaine', () => {
+  beforeEach(() => {
+    guildRow = {
+      id: 'guild-123',
+      dropsEnabled: true,
+      dropChannelId: null,
+      dropMentionRoleId: null,
+      dropLifetimeMinutes: 60,
+      dropDeleteAfterMinutes: 0,
+    };
+    recentDropRows = [];
+  });
+
+  test('chaque type a son nombre de drops terminés et de drops sans gagnant', async () => {
+    const res = createMockResponse();
+    await handleDropsRoutes(
+      createMockRequest({}, 'GET'),
+      res,
+      ['api', 'dashboard', 'guilds', 'guild-123', 'drops'],
+      mockClient,
+      mockUser,
+      'guild-123',
+      mockAccess,
+    );
+
+    expect(res.statusCode).toBe(200);
+    const { weeklyOutcomes } = JSON.parse(res.body);
+    expect(weeklyOutcomes.XP).toEqual({ closed: 10, unclaimed: 6 });
+    expect(weeklyOutcomes.COINS).toEqual({ closed: 3, unclaimed: 0 });
+    expect(weeklyOutcomes.RPG_ITEM).toEqual({ closed: 0, unclaimed: 0 });
   });
 });

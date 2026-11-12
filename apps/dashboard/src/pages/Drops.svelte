@@ -56,7 +56,9 @@
     dropItemsTotalWeight,
     dropTypeBlocker,
     enabledDropModes,
+    shouldAdviseActivityWait,
     type DropGlobalSettings,
+    type DropOutcomes,
     type DropType,
     type DropTypeBlocker,
   } from '@kotbo/shared';
@@ -167,6 +169,7 @@
   );
 
   let recentDrops = $state<DropHistoryEntry[]>([]);
+  let weeklyOutcomes = $state<Partial<Record<DropType, DropOutcomes>>>({});
   let availableChannels = $state<any[]>([]);
 
   const availableRoles = $derived(dashboardStore.state.discordRoles || []);
@@ -267,6 +270,22 @@
     const preset = JACKPOT_PRESETS[Math.min(JACKPOT_PRESETS.length, Math.max(1, step)) - 1];
     globalSettings.dropJackpotChance = preset.chance;
     globalSettings.dropJackpotMultiplier = preset.multiplier;
+  }
+
+  /**
+   * Bilan qui justifie le conseil d'attente d'activité, ou `null`. Lu sur le formulaire et
+   * non sur l'enregistré : allumer l'option fait disparaître le conseil aussitôt.
+   */
+  function unclaimedAdvice(type: DropType): DropOutcomes | null {
+    const outcomes = weeklyOutcomes[type];
+    if (!outcomes || typeStatus(type) !== 'on') return null;
+    return shouldAdviseActivityWait(outcomes, configs[type].activity) ? outcomes : null;
+  }
+
+  /** Allume l'attente au cran par défaut et ouvre l'onglet : il ne reste qu'à enregistrer. */
+  function followUnclaimedAdvice(type: DropType) {
+    applyActivityStep(type, ACTIVITY_DEFAULT_STEP);
+    activeTab = type;
   }
 
   /** Historique replié sur les plus récents : la liste complète double la hauteur de l'onglet. */
@@ -390,6 +409,7 @@
         }
 
         recentDrops = res.recentDrops ?? [];
+        weeklyOutcomes = res.weeklyOutcomes ?? {};
 
         // Au premier chargement seulement : une mise à jour en direct ne doit pas
         // basculer le mode sous les yeux de qui est en train de régler.
@@ -739,6 +759,7 @@
               {#each DROP_TYPES as type}
                 {@const status = typeStatus(type)}
                 {@const blocker = status === 'blocked' ? typeBlocker(type) : null}
+                {@const advice = unclaimedAdvice(type)}
                 <tr class="text-sm border-t border-outline-variant/10">
                   <td class="py-2.5 pr-4 font-semibold">
                     <button
@@ -755,6 +776,20 @@
                     </span>
                     {#if blocker}
                       <p class="text-2xs text-warning mt-1 max-w-xs">{blockerMessage(type, blocker)}</p>
+                    {/if}
+                    {#if advice}
+                      <p class="text-2xs text-on-surface-variant mt-1 max-w-xs">
+                        {m.drop_advice_unclaimed({ unclaimed: advice.unclaimed, closed: advice.closed })}
+                      </p>
+                      {#if canManageSettings}
+                        <button
+                          type="button"
+                          onclick={() => followUnclaimedAdvice(type)}
+                          class="mt-1 text-2xs font-semibold text-primary hover:underline inline-flex items-center gap-1"
+                        >
+                          <Papicon icon="ChevronRight" size={12} /> {m.drop_advice_unclaimed_action()}
+                        </button>
+                      {/if}
                     {/if}
                   </td>
                   <td class="py-2.5 pr-4 text-on-surface-variant/80">{channelName(configs[type].channelId)}</td>

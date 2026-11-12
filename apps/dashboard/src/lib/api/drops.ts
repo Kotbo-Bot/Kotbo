@@ -1,5 +1,5 @@
 /** Drops aléatoires. */
-import type { DropGlobalSettings, DropType, DropTypeSettings } from '@kotbo/shared';
+import type { DropGlobalSettings, DropOutcomes, DropType, DropTypeSettings } from '@kotbo/shared';
 import { authStore } from '../stores/auth.svelte';
 import { dashboardRequest } from './client';
 
@@ -29,6 +29,8 @@ export interface DropHistoryEntry {
 
 export interface DropsDataResult extends DropGlobalSettings {
   configs: DropConfigEntry[];
+  /** Drops terminés sur les sept derniers jours, et ceux qui ont expiré sans gagnant. */
+  weeklyOutcomes: Record<DropType, DropOutcomes>;
   recentDrops: DropHistoryEntry[];
 }
 
