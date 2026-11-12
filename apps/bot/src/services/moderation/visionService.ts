@@ -7,12 +7,13 @@
  *  - le catalogue du serveur, alimenté par son honeypot et ses confirmations ;
  *  - les listes personnalisées, où le staff range ses propres images interdites.
  *
- * Correspondance certaine : message supprimé, auteur sanctionné, et la
- * variante rejoint le registre (une image recadrée une fois le sera encore).
- * Correspondance incertaine : message supprimé par précaution, sans sanction,
- * et signalé dans un salon de vérification où le staff tranche. Sans salon de
- * vérification, rien ne se passe : on ne supprime pas sur un doute que
- * personne ne pourra lever.
+ * Correspondance certaine (copie exacte ou quasi identique) : message supprimé,
+ * auteur sanctionné, et la variante rejoint le registre.
+ * Correspondance incertaine (ressemblance, recadrage, capture, code QR d'un
+ * nouveau venu) : signalée dans un salon de vérification où le staff tranche.
+ * Le message reste en place, sauf si le serveur a choisi de le supprimer par
+ * précaution. Sans salon de vérification, rien ne se passe : on n'agit pas sur
+ * un doute que personne ne pourra lever.
  */
 
 import {
@@ -42,10 +43,8 @@ import {
   analyzeImage,
   compareFingerprints,
   compareWindows,
-  compareWithLegacy,
   computeWindowHashes,
   parseFingerprint,
-  parseLegacyHash,
   serializeFingerprint,
   windowShapesFor,
   type FingerprintComparison,
@@ -156,8 +155,8 @@ type CatalogEntry = {
   status: 'BLOCKED' | 'ALLOWED';
   hash: string;
   filename: string | null;
+  parentId: string | null;
   fp: ParsedFingerprint | null;
-  legacy: ReturnType<typeof parseLegacyHash>;
 };
 
 type GuildCatalog = {
@@ -184,9 +183,9 @@ export function invalidateVisionCache(guildId?: string): void {
   }
 }
 
-const ENTRY_SELECT = { id: true, guildId: true, listId: true, status: true, hash: true, filename: true, fingerprint: true, phash: true } as const;
+const ENTRY_SELECT = { id: true, guildId: true, listId: true, status: true, hash: true, filename: true, fingerprint: true, parentId: true } as const;
 
-function toEntry(row: { id: string; guildId: string | null; listId: string | null; status: string; hash: string; filename: string | null; fingerprint: string | null; phash: string | null }): CatalogEntry {
+function toEntry(row: { id: string; guildId: string | null; listId: string | null; status: string; hash: string; filename: string | null; fingerprint: string | null; parentId: string | null }): CatalogEntry {
   return {
     id: row.id,
     guildId: row.guildId,
@@ -194,15 +193,15 @@ function toEntry(row: { id: string; guildId: string | null; listId: string | nul
     status: row.status === 'ALLOWED' ? 'ALLOWED' : 'BLOCKED',
     hash: row.hash,
     filename: row.filename,
+    parentId: row.parentId,
     fp: parseFingerprint(row.fingerprint),
-    legacy: row.fingerprint ? null : parseLegacyHash(row.phash),
   };
 }
 
 async function loadGlobalEntries(): Promise<CatalogEntry[]> {
   if (globalCache && globalCache.expiresAt > Date.now()) return globalCache.entries;
   const rows = await prisma.scamImageHash.findMany({
-    where: { guildId: null, status: 'BLOCKED', OR: [{ fingerprint: { not: null } }, { phash: { not: null } }] },
+    where: { guildId: null, status: 'BLOCKED', fingerprint: { not: null } },
     select: ENTRY_SELECT,
     orderBy: [{ hits: 'desc' }, { createdAt: 'desc' }],
     take: GLOBAL_LIMIT,
@@ -219,7 +218,7 @@ async function loadGuildCatalog(guildId: string): Promise<GuildCatalog> {
   const [lists, rows] = await Promise.all([
     prisma.visionList.findMany({ where: { guildId } }),
     prisma.scamImageHash.findMany({
-      where: { guildId, OR: [{ fingerprint: { not: null } }, { phash: { not: null } }] },
+      where: { guildId, fingerprint: { not: null } },
       select: ENTRY_SELECT,
       orderBy: [{ hits: 'desc' }, { createdAt: 'desc' }],
       take: GUILD_LIMIT,
@@ -251,10 +250,10 @@ export type VisionMatch = {
   via: 'exact' | 'fingerprint' | 'window';
 };
 
+// Une entrée ancienne (dHash seul, sans empreinte v2) ne compte qu'en copie
+// exacte : son hash confondait presque toutes les captures de texte.
 function compareEntry(image: AnalyzedImage, entry: CatalogEntry): FingerprintComparison | null {
-  if (entry.fp) return compareFingerprints(image.analysis.fingerprint, entry.fp);
-  if (entry.legacy) return compareWithLegacy(image.analysis.fingerprint, entry.legacy);
-  return null;
+  return entry.fp ? compareFingerprints(image.analysis.fingerprint, entry.fp) : null;
 }
 
 /**
@@ -334,7 +333,10 @@ function reasonFor(match: VisionMatch, list: VisionList | undefined): string {
 
 /** Mémorise une image comme variante d'une entrée, pour la reconnaître du premier coup. */
 async function learnVariant(guildId: string, parent: CatalogEntry, image: AnalyzedImage): Promise<void> {
-  const variants = await prisma.scamImageHash.count({ where: { parentId: parent.id } });
+  // Rattachée à l'entrée d'origine : une variante de variante contournerait le
+  // plafond et laisserait le registre dériver de proche en proche.
+  const rootId = parent.parentId ?? parent.id;
+  const variants = await prisma.scamImageHash.count({ where: { parentId: rootId } });
   if (variants >= MAX_VARIANTS_PER_ENTRY) return;
   const thumbed = image.analysis.thumb ? image : await analyzeBuffer(image.buffer, image.source, true);
   await prisma.scamImageHash
@@ -344,7 +346,7 @@ async function learnVariant(guildId: string, parent: CatalogEntry, image: Analyz
         // promotion (plusieurs serveurs) qui décide de ce qui devient global.
         guildId,
         listId: parent.guildId === guildId ? parent.listId : null,
-        parentId: parent.id,
+        parentId: rootId,
         hash: image.sha256,
         phash: image.analysis.phash,
         fingerprint: serializeFingerprint(image.analysis.fingerprint),
@@ -382,10 +384,11 @@ export type DeepImageDetection = {
   image: AnalyzedImage;
   via: 'qr' | 'ocr';
   reason: string;
+  ocrText?: string;
 };
 
 /**
- * Auto-indexe dans le catalogue Kotbo Vision une image inédite piégée par QR ou OCR :
+ * Auto-indexe dans le catalogue Kotbo Vision une image inédite piégée par OCR :
  * la prochaine fois que la campagne la rediffuse (même recadrée ou transférée),
  * elle sera bloquée dès l'étape d'empreinte visuelle en ~3 ms sans relancer l'OCR.
  */
@@ -393,7 +396,6 @@ async function autoIndexDetectedImage(
   guildId: string,
   addedBy: string,
   image: AnalyzedImage,
-  source: 'QR' | 'OCR',
   ocrText: string | null
 ): Promise<void> {
   if (image.analysis.fingerprint.flat) return;
@@ -412,7 +414,7 @@ async function autoIndexDetectedImage(
         fingerprint,
         thumb,
         filename: image.source.name.slice(0, 200),
-        source,
+        source: 'OCR',
         status: 'BLOCKED',
         addedBy,
         ocrText: compactText,
@@ -458,12 +460,7 @@ export async function inspectUnmatchedImages(
   if (config.scamQrFilterEnabled) {
     const qrImage = images.find((img) => img.analysis.qr.detected);
     if (qrImage) {
-      await autoIndexDetectedImage(guildId, authorId, qrImage, 'QR', null);
-      return {
-        image: qrImage,
-        via: 'qr',
-        reason: 'Kotbo Vision : code QR posté par un compte sans historique (phishing par QR de connexion, auto-indexé)',
-      };
+      return { image: qrImage, via: 'qr', reason: 'Kotbo Vision : code QR posté par un compte sans historique' };
     }
   }
 
@@ -473,13 +470,7 @@ export async function inspectUnmatchedImages(
       if (!ocrText) continue;
       const found = await detectInImageText(guildId, ocrText, config).catch(() => null);
       if (found?.matched) {
-        await recordScamSignals(guildId, ocrText, 'OCR', { countRepeat: true }).catch(() => null);
-        await autoIndexDetectedImage(guildId, authorId, image, 'OCR', ocrText);
-        return {
-          image,
-          via: 'ocr',
-          reason: `Kotbo Vision : ${reasonForScamDetection(found)} (lu par OCR et auto-indexé)`,
-        };
+        return { image, via: 'ocr', reason: `Kotbo Vision : ${reasonForScamDetection(found)} (lu par OCR et auto-indexé)`, ocrText };
       }
     }
   }
@@ -496,6 +487,17 @@ async function handleDeepImageInspection(
   const detected = await inspectUnmatchedImages(message.guild.id, message.author.id, images, config);
   if (!detected) return false;
 
+  // Un QR ne dit pas ce qu'il contient : billet, Wi-Fi ou connexion piégée. Le
+  // staff tranche, et l'image ne rejoint le registre que s'il confirme.
+  if (detected.via === 'qr') {
+    return handleUncertain(message, detected.image, config, {
+      summary: "contenant un **code QR**, d'un compte sans historique sur le serveur",
+      title: "code QR d'un nouveau venu",
+    });
+  }
+
+  await recordScamSignals(message.guild.id, detected.ocrText ?? '', 'OCR', { countRepeat: true }).catch(() => null);
+  await autoIndexDetectedImage(message.guild.id, message.author.id, detected.image, detected.ocrText ?? null);
   await message.delete().catch(() => null);
   const { action, durationMin } = sanctionFor(config, undefined);
   const result = await applyAutoSanction({
@@ -538,7 +540,7 @@ async function logDeepBlocked(
       { name: 'Membre', value: `<@${message.author.id}> (\`${message.author.id}\`)`, inline: true },
       { name: 'Salon', value: `<#${message.channelId}>`, inline: true },
       { name: 'Sanction', value: sanction, inline: true },
-      { name: 'Détection', value: detected.via === 'qr' ? 'Code QR suspect' : 'Lecture OCR + heuristiques', inline: true },
+      { name: 'Détection', value: 'Lecture OCR + heuristiques', inline: true },
       { name: 'Apprentissage', value: 'Empreinte indexée dans le catalogue', inline: true },
       { name: 'Motif', value: detected.reason, inline: false },
     )
@@ -566,7 +568,15 @@ export async function handleVision(message: Message): Promise<boolean> {
   const catalog = await loadGuildCatalog(message.guild.id);
   const list = match.entry.listId ? catalog.lists.get(match.entry.listId) : undefined;
 
-  if (match.verdict === 'UNCERTAIN') return handleUncertain(message, match, list, effectiveConfig);
+  if (match.verdict === 'UNCERTAIN') {
+    return handleUncertain(message, match.image, effectiveConfig, {
+      list,
+      matchId: match.entry.id,
+      score: match.comparison.similarity,
+      summary: `proche à **${Math.round(match.comparison.similarity * 100)} %** d'une image interdite${match.via === 'window' ? ' (retrouvée dans une capture)' : ''}`,
+      title: list ? `liste « ${list.name} »` : "image d'arnaque probable",
+    });
+  }
 
   await message.delete().catch(() => null);
   await recordHit(match.entry.id);
@@ -642,47 +652,59 @@ async function logBlocked(message: Message<true>, match: VisionMatch, list: Visi
 
 // ── Correspondances incertaines : file de vérification ─────────────────────
 
-async function handleUncertain(message: Message<true>, match: VisionMatch, list: VisionList | undefined, config: RaidProtectionConfig): Promise<boolean> {
+/**
+ * Signale une image douteuse au salon de vérification. Retourne true si le
+ * message a été supprimé (réglage « supprimer par précaution »).
+ */
+async function handleUncertain(
+  message: Message<true>,
+  image: AnalyzedImage,
+  config: RaidProtectionConfig,
+  info: { list?: VisionList; matchId?: string; score?: number; summary: string; title: string }
+): Promise<boolean> {
+  const { list } = info;
   const reviewChannelId = list?.reviewChannelId ?? config.visionReviewChannelId;
   if (!reviewChannelId) return false;
   const channel = await message.guild.channels.fetch(reviewChannelId).catch(() => null);
   if (!channel?.isTextBased() || !('send' in channel)) return false;
 
-  await message.delete().catch(() => null);
+  const deleted = config.visionUncertainDelete;
+  if (deleted) await message.delete().catch(() => null);
 
   // La même image déjà en attente : on ne la signale pas deux fois.
   const pending = await prisma.visionReview.findFirst({
-    where: { guildId: message.guild.id, sha256: match.image.sha256, status: 'PENDING' },
+    where: { guildId: message.guild.id, sha256: image.sha256, status: 'PENDING' },
     select: { id: true },
   });
-  if (pending) return true;
+  if (pending) return deleted;
 
-  const withThumb = await analyzeBuffer(match.image.buffer, match.image.source, true);
+  const withThumb = await analyzeBuffer(image.buffer, image.source, true);
   const review = await prisma.visionReview.create({
     data: {
       guildId: message.guild.id,
       listId: list?.id ?? null,
-      matchId: match.entry.id,
-      score: match.comparison.similarity,
+      matchId: info.matchId ?? null,
+      score: info.score ?? 0,
       authorId: message.author.id,
       channelId: message.channelId,
-      sha256: match.image.sha256,
-      fingerprint: serializeFingerprint(match.image.analysis.fingerprint),
+      messageId: deleted ? null : message.id,
+      sha256: image.sha256,
+      fingerprint: serializeFingerprint(image.analysis.fingerprint),
       thumb: withThumb?.analysis.thumb ?? null,
     },
   });
 
-  const reference = await prisma.scamImageHash.findUnique({ where: { id: match.entry.id }, select: { thumb: true } });
-  const files = [new AttachmentBuilder(match.image.buffer, { name: 'suspect.png' })];
+  const reference = info.matchId ? await prisma.scamImageHash.findUnique({ where: { id: info.matchId }, select: { thumb: true } }) : null;
+  const files = [new AttachmentBuilder(image.buffer, { name: 'suspect.png' })];
   const embed = new EmbedBuilder()
     .setColor(COLORS.warning)
-    .setTitle(`Vérification requise : ${list ? `liste « ${list.name} »` : 'image d\'arnaque probable'}`)
+    .setTitle(`Vérification requise : ${info.title}`)
     .setDescription(
       [
-        `Image postée par <@${message.author.id}> dans <#${message.channelId}>, proche à **${Math.round(match.comparison.similarity * 100)} %** d'une image interdite${match.via === 'window' ? ' (retrouvée dans une capture)' : ''}.`,
-        'Le message a été supprimé par précaution, sans sanction.',
+        `Image postée par <@${message.author.id}> dans <#${message.channelId}>, ${info.summary}.`,
+        deleted ? 'Le message a été supprimé par précaution, sans sanction.' : `Le message est resté en place : ${message.url}`,
         '',
-        '**Confirmer** : l\'image rejoint le registre, l\'auteur est sanctionné.',
+        `**Confirmer** : l'image rejoint le registre, ${deleted ? '' : 'le message est supprimé et '}l'auteur est sanctionné.`,
         '**Écarter** : l\'image est saine, elle ne sera plus signalée.',
       ].join('\n')
     )
@@ -700,7 +722,7 @@ async function handleUncertain(message: Message<true>, match: VisionMatch, list:
   );
   const posted = await channel.send({ embeds: [embed], files, components: [row], allowedMentions: { parse: [] } }).catch(() => null);
   if (posted) await prisma.visionReview.update({ where: { id: review.id }, data: { reviewMessageId: posted.id } });
-  return true;
+  return deleted;
 }
 
 export type ReviewDecision = { ok: true; status: 'CONFIRMED' | 'DISMISSED'; sanction?: string } | { ok: false; reason: string };
@@ -744,6 +766,10 @@ export async function decideVisionReview(client: Client, reviewId: string, decid
   // avait été attrapé du premier coup.
   const guild = client.guilds.cache.get(review.guildId);
   if (!guild) return { ok: true, status: 'CONFIRMED' };
+  if (review.messageId) {
+    const channel = await guild.channels.fetch(review.channelId).catch(() => null);
+    if (channel?.isTextBased()) await channel.messages.delete(review.messageId).catch(() => null);
+  }
   const config = await getRaidProtectionConfig(review.guildId);
   const list = review.listId ? await prisma.visionList.findUnique({ where: { id: review.listId } }) : null;
   const { action, durationMin } = config ? sanctionFor(config, list ?? undefined) : { action: 'TIMEOUT' as AutoSanction, durationMin: 1440 };

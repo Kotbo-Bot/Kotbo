@@ -2,12 +2,16 @@
  * Calibration des seuils Kotbo Vision : mesure la distance entre une image et ses
  * rediffusions typiques (recompression, bordure, recadrage, miroir, texte
  * ajouté), et entre images sans rapport. Les seuils de imageForensics.ts
- * doivent séparer les deux populations.
+ * doivent séparer les deux populations. La dernière partie mesure les fausses
+ * détections sur des images saines (captures de discussion, pages de texte,
+ * mèmes, jeux) face à des arnaques de même mise en page : aucune ne doit sortir
+ * CERTAIN ni porter de code QR.
  *
  *   bun run scripts/calibrate-vision.ts
  */
-import { createCanvas, loadImage } from '@napi-rs/canvas';
-import { analyzeImage, compareFingerprints, compareWindows, computeWindowHashes, hammingDistance, windowShapesFor } from '../src/services/moderation/imageForensics.js';
+import { createCanvas, Image, loadImage } from '@napi-rs/canvas';
+import { analyzeImage, compareFingerprints, compareWindows, computeWindowHashes, hammingDistance, parseFingerprint, signatureSimilarity, windowShapesFor } from '../src/services/moderation/imageForensics.js';
+import visionSeed from '../src/data/visionSeed.json';
 
 function rng(seed: number) {
   let s = seed >>> 0;
@@ -208,3 +212,202 @@ const stats = (xs: number[]) => {
 for (const kind of KINDS) console.log(`même image / ${kind.padEnd(8)} ${stats(same[kind])}  ${JSON.stringify(sameVerdicts[kind])}  v1: ${v1Hits[kind] ?? 0}/${N}`);
 console.log(`sans rapport          ${stats(diff)}  ${JSON.stringify(diffVerdicts)}`);
 console.log(`même gabarit          ${stats(tpl)}  ${JSON.stringify(tplVerdicts)}`);
+
+// ── Images saines face à des arnaques de même mise en page ──────────────────
+
+const WORDS = 'salut les gens vous allez bien on joue ce soir quelqu un a vu le dernier patch je crois que oui non mdr trop bien free nitro claim bonus withdraw code promo team serveur regles merci beaucoup'.split(' ');
+const sentence = (r: () => number, n: number) => Array.from({ length: n }, () => WORDS[Math.floor(r() * WORDS.length)]).join(' ');
+
+function chat(seed: number, dark: boolean, withImage = false): Buffer {
+  const r = rng(seed);
+  const w = [720, 1080, 900][Math.floor(r() * 3)];
+  const h = 500 + Math.floor(r() * 1000);
+  const c = createCanvas(w, h);
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = dark ? '#313338' : '#ffffff';
+  ctx.fillRect(0, 0, w, h);
+  let y = 20 + r() * 30;
+  while (y < h - 40) {
+    ctx.fillStyle = `hsl(${r() * 360}, 60%, 55%)`;
+    ctx.beginPath();
+    ctx.arc(36, y + 20, 20, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.font = 'bold 20px sans-serif';
+    ctx.fillText(sentence(r, 1), 72, y + 14);
+    ctx.fillStyle = dark ? '#dbdee1' : '#2e3338';
+    ctx.font = '20px sans-serif';
+    const lines = 1 + Math.floor(r() * 3);
+    for (let i = 0; i < lines; i++) ctx.fillText(sentence(r, 3 + Math.floor(r() * 9)), 72, y + 40 + i * 26);
+    y += 50 + lines * 26;
+    if (withImage && r() < 0.3) {
+      ctx.fillStyle = `hsl(${r() * 360}, 50%, 45%)`;
+      ctx.fillRect(72, y, 300, 180);
+      y += 200;
+    }
+  }
+  return c.toBuffer('image/png');
+}
+
+function doc(seed: number): Buffer {
+  const r = rng(seed);
+  const c = createCanvas(800, 1000);
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, 800, 1000);
+  ctx.fillStyle = '#111';
+  ctx.font = 'bold 34px sans-serif';
+  ctx.fillText(sentence(r, 4), 50, 80);
+  ctx.font = '22px sans-serif';
+  for (let y = 140; y < 960; y += 32) {
+    if (r() < 0.12) continue;
+    ctx.fillText(sentence(r, 6 + Math.floor(r() * 6)), 50, y);
+  }
+  return c.toBuffer('image/png');
+}
+
+function photo(seed: number, w = 800, h = 600): Buffer {
+  const r = rng(seed);
+  const c = createCanvas(w, h);
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = `hsl(${r() * 360}, 40%, ${20 + r() * 50}%)`;
+  ctx.fillRect(0, 0, w, h);
+  for (let i = 0; i < 25; i++) {
+    const x = r() * w;
+    const y = r() * h;
+    const rad = 40 + r() * 260;
+    const g = ctx.createRadialGradient(x, y, 0, x, y, rad);
+    g.addColorStop(0, `hsla(${r() * 360}, 60%, ${20 + r() * 60}%, 0.8)`);
+    g.addColorStop(1, 'hsla(0,0%,0%,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, w, h);
+  }
+  return c.toBuffer('image/png');
+}
+
+function meme(seed: number): Buffer {
+  const r = rng(seed);
+  const c = createCanvas(700, 760);
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, 700, 760);
+  ctx.fillStyle = '#000';
+  ctx.font = 'bold 36px sans-serif';
+  ctx.fillText(sentence(r, 5), 20, 50);
+  ctx.fillText(sentence(r, 4), 20, 100);
+  const p = photo(seed + 5000, 700, 620);
+  // collé tel quel
+  const img = new Image();
+  img.src = p;
+  ctx.drawImage(img, 0, 140);
+  return c.toBuffer('image/png');
+}
+
+function game(seed: number): Buffer {
+  const r = rng(seed);
+  const c = createCanvas(1280, 720);
+  const ctx = c.getContext('2d');
+  const img = new Image();
+  img.src = photo(seed + 9000, 1280, 720);
+  ctx.drawImage(img, 0, 0);
+  ctx.fillStyle = 'rgba(0,0,0,0.6)';
+  ctx.fillRect(20, 640, 400, 60);
+  ctx.fillStyle = '#e33';
+  ctx.fillRect(30, 650, 100 + r() * 280, 16);
+  ctx.fillStyle = '#39f';
+  ctx.fillRect(30, 674, 100 + r() * 280, 16);
+  ctx.fillStyle = 'rgba(0,0,0,0.6)';
+  ctx.fillRect(1060, 20, 200, 200);
+  ctx.fillStyle = '#fff';
+  ctx.font = '22px sans-serif';
+  ctx.fillText(`${Math.floor(r() * 99)} / 100`, 600, 40);
+  return c.toBuffer('image/png');
+}
+
+/** Arnaque en capture : carte sombre façon casino, gros montant, bouton. */
+function scamCasino(seed: number): Buffer {
+  const r = rng(seed);
+  const c = createCanvas(720, 1280);
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#1a1c24';
+  ctx.fillRect(0, 0, 720, 1280);
+  ctx.fillStyle = '#262a36';
+  ctx.fillRect(40, 200 + r() * 100, 640, 500);
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 60px sans-serif';
+  ctx.fillText(`$${Math.floor(r() * 9000)}.00`, 200, 420 + r() * 80);
+  ctx.font = '26px sans-serif';
+  ctx.fillText('Your withdrawal was successful', 140, 520 + r() * 60);
+  ctx.fillStyle = `hsl(${120 + r() * 40}, 70%, 45%)`;
+  ctx.fillRect(160, 760 + r() * 100, 400, 80);
+  ctx.fillStyle = '#9aa';
+  for (let i = 0; i < 5; i++) ctx.fillText(sentence(r, 5), 60, 960 + i * 50);
+  return c.toBuffer('image/png');
+}
+
+/** Arnaque en capture de tweet : fond blanc, avatar, texte, visuel. */
+function scamTweet(seed: number): Buffer {
+  const r = rng(seed);
+  const c = createCanvas(900, 1000);
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, 900, 1000);
+  ctx.fillStyle = '#222';
+  ctx.beginPath();
+  ctx.arc(70, 70, 40, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.font = 'bold 28px sans-serif';
+  ctx.fillText('MrBeast', 130, 60);
+  ctx.font = '26px sans-serif';
+  for (let i = 0; i < 4; i++) ctx.fillText(sentence(r, 8), 40, 170 + i * 40);
+  const img = new Image();
+  img.src = photo(seed + 777, 820, 560);
+  ctx.drawImage(img, 40, 360);
+  return c.toBuffer('image/png');
+}
+
+
+
+const scams = await Promise.all([
+  ...Array.from({ length: 20 }, (_, i) => scamCasino(100 + i)),
+  ...Array.from({ length: 20 }, (_, i) => scamTweet(200 + i)),
+  ...Array.from({ length: 20 }, (_, i) => chat(300 + i, true)),
+  ...Array.from({ length: 15 }, (_, i) => doc(400 + i)),
+].map((b) => analyzeImage(b)));
+// Le catalogue d'amorce réel, comparé comme en production : global, donc par
+// empreinte seulement (la recherche par fenêtres est réservée au serveur).
+const seedScams = visionSeed.map((e) => parseFingerprint(e.f)!);
+const scamShapes = windowShapesFor(scams.map((s) => s!.fingerprint.rawAspect), 2);
+const benign: Record<string, (seed: number) => Buffer> = {
+  'discussion sombre': (i) => chat(i, true, true),
+  'discussion claire': (i) => chat(i, false, true),
+  'page de texte': doc,
+  photo,
+  'mème': meme,
+  jeu: game,
+};
+for (const [kind, make] of Object.entries(benign)) {
+  const verdicts: Record<string, number> = {};
+  const seedVerdicts: Record<string, number> = {};
+  const sims: number[] = [];
+  let qr = 0;
+  for (let i = 0; i < 40; i++) {
+    const img = (await analyzeImage(make(5000 + i)))!;
+    if (img.qr.detected) qr++;
+    let verdict: string = 'none';
+    for (const scam of scams) {
+      sims.push(signatureSimilarity(img.fingerprint.signature!, scam!.fingerprint.signature!));
+      const c = compareFingerprints(img.fingerprint, scam!.fingerprint);
+      if (c.verdict === 'CERTAIN') verdict = 'CERTAIN';
+      else if (c.verdict && verdict === 'none') verdict = 'UNCERTAIN';
+    }
+    if (verdict === 'none') {
+      const windows = computeWindowHashes(img.gray, scamShapes, 3);
+      if (scams.some((scam) => compareWindows(windows, scam!.fingerprint).verdict)) verdict = 'UNCERTAIN';
+    }
+    verdicts[verdict] = (verdicts[verdict] ?? 0) + 1;
+    const seedHits = seedScams.map((known) => compareFingerprints(img.fingerprint, known).verdict);
+    const seedVerdict = seedHits.includes('CERTAIN') ? 'CERTAIN' : seedHits.includes('UNCERTAIN') ? 'UNCERTAIN' : 'none';
+    seedVerdicts[seedVerdict] = (seedVerdicts[seedVerdict] ?? 0) + 1;
+  }
+  console.log(`saine / ${kind.padEnd(18)} ${JSON.stringify(verdicts)}  amorce ${JSON.stringify(seedVerdicts)}  signature max ${Math.max(...sims).toFixed(2)}  QR ${qr}/40`);
+}

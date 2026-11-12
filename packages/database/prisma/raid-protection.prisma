@@ -183,6 +183,8 @@ model RaidProtectionConfig {
   visionReviewChannelId String?
   // Message privé à l'auteur sanctionné.
   visionNotifyMember    Boolean @default(true)
+  // Correspondance incertaine : supprimer le message avant la décision du staff.
+  visionUncertainDelete Boolean @default(false)
 
   guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
 
@@ -268,6 +270,8 @@ model VisionReview {
 
   authorId  String
   channelId String
+  // Message laissé en place en attendant la décision ; null s'il a été supprimé.
+  messageId String?
   sha256    String
   fingerprint String
   thumb     String?
@@ -338,7 +342,7 @@ model ScamImageHash {
   // diffusion des captures d'arnaque.
   phash    String?
   filename String?
-  source   String @default("HONEYPOT") // HONEYPOT | MANUAL | QR
+  source   String @default("HONEYPOT") // HONEYPOT | MANUAL | OCR | VARIANT | REVIEW | DISMISSED | SEED (catalogue d'amorce livré avec le bot)
   addedBy  String? // userId du membre à l'origine (auteur du scam ou staff)
 
   // Texte lu dans l'image (OCR local), normalisé. Une capture photographiée ou
