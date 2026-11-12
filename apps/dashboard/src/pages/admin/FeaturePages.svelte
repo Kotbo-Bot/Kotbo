@@ -28,6 +28,11 @@
   import Papicon from '../../lib/components/Papicon.svelte';
   import AdminShell from '../../lib/components/admin/AdminShell.svelte';
   import AdminDrawer from '../../lib/components/admin/AdminDrawer.svelte';
+  import AdminTable from '../../lib/components/admin/AdminTable.svelte';
+  import AdminToolbar from '../../lib/components/admin/AdminToolbar.svelte';
+  import AdminBadge from '../../lib/components/admin/AdminBadge.svelte';
+  import type { AdminTableColumn } from '../../lib/components/admin/types';
+  import { Button, Callout } from '../../lib/components/ui';
 
   const SITE = 'https://kotbo.fr';
   const LOCALES: { key: FeaturePageLocale; label: string }[] = [
@@ -35,7 +40,6 @@
     { key: 'en', label: 'Anglais' },
   ];
 
-  type Filter = 'all' | 'published' | 'draft';
   type Draft = FeaturePageInput & { id: string | null; key: string };
 
   let pages = $state<FeaturePage[]>([]);
@@ -43,7 +47,7 @@
   let modulesWithoutSeed = $state<string[]>([]);
   let loading = $state(true);
   let loadError = $state<string | null>(null);
-  let filter = $state<Filter>('all');
+  let filter = $state('all');
   let search = $state('');
   let importing = $state(false);
 
@@ -52,6 +56,12 @@
   let locale = $state<FeaturePageLocale>('fr');
   let saving = $state(false);
   let deleting = $state(false);
+
+  const pageColumns: AdminTableColumn[] = [
+    { key: 'page', label: 'Page' },
+    { key: 'status', label: 'État', width: 'w-48' },
+    { key: 'updated', label: 'Modifiée le', align: 'right', width: 'w-32', hideBelow: 'md' },
+  ];
 
   const counts = $derived({
     all: pages.length,
@@ -239,8 +249,7 @@
 
   onMount(load);
 
-  const inputClass =
-    'w-full px-3.5 py-2.5 rounded-xl bg-surface-container border border-outline-variant/20 text-on-surface text-sm focus:outline-none focus:border-primary/50 transition-colors';
+  const inputClass = 'input';
   const labelClass = 'block text-xs font-medium text-on-surface-variant';
 </script>
 
@@ -250,122 +259,83 @@
   </span>
 {/snippet}
 
-<AdminShell title="Pages du site" description="Les pages fonctionnalités de kotbo.fr, rédigées ici et publiées sur le site.">
-  <div class="max-w-5xl mx-auto space-y-6">
-    <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-      <div class="flex items-center gap-3">
-        <div class="w-11 h-11 rounded-2xl bg-primary/15 border border-primary/20 flex items-center justify-center shrink-0">
-          <Papicon icon="Globe" size={20} class="text-primary" />
-        </div>
-        <div>
-          <h1 class="text-xl font-bold text-on-surface leading-tight">Pages du site</h1>
-          <p class="text-sm text-on-surface-variant">
-            Une page par fonctionnalité sur kotbo.fr, en français et en anglais. Seules les pages publiées sont en ligne.
-          </p>
-        </div>
-      </div>
-      <div class="flex flex-wrap gap-2">
-        <button
-          onclick={runImport}
-          disabled={importing}
-          class="px-4 py-2.5 rounded-xl border border-outline-variant/30 text-on-surface text-sm font-semibold flex items-center gap-2 hover:bg-on-surface/5 disabled:opacity-40 transition-colors"
-          title="Crée une page en brouillon pour chaque module qui n'en a pas"
-        >
-          {#if importing}
-            <span class="w-4 h-4 border-2 border-on-surface/30 border-t-on-surface rounded-full animate-spin"></span>
-          {:else}
-            <Papicon icon="Download" size={15} />
-          {/if}
-          Importer les modules
-        </button>
-        <button
-          onclick={openNew}
-          class="px-4 py-2.5 rounded-xl bg-primary text-on-primary text-sm font-bold flex items-center gap-2 hover:bg-primary/90 transition-colors"
-        >
-          <Papicon icon="Plus" size={15} />
-          Nouvelle page
-        </button>
-      </div>
-    </div>
+<AdminShell
+  title="Pages du site"
+  description="Une page par fonctionnalité sur kotbo.fr, en français et en anglais. Seules les pages publiées sont en ligne."
+>
+  {#snippet actions()}
+    <Button icon="Download" loading={importing} title="Crée une page en brouillon pour chaque module qui n'en a pas" onclick={runImport}>
+      Importer les modules
+    </Button>
+    <Button variant="primary" icon="Plus" onclick={openNew}>Nouvelle page</Button>
+  {/snippet}
 
-    {#if !loading && !rebuildConfigured}
-      <div class="flex items-start gap-3 px-4 py-3 rounded-xl bg-warning/10 border border-warning/20 text-sm text-on-surface">
-        <Papicon icon="AlertTriangle" size={16} class="mt-0.5 shrink-0 text-warning" />
-        <p>
-          La reconstruction automatique du site n'est pas configurée (<code class="font-mono text-xs">LANDING_DEPLOY_TOKEN</code>).
-          Les pages publiées seront en ligne au prochain déploiement de kotbo.fr.
-        </p>
-      </div>
-    {/if}
+  {#if !loading && !rebuildConfigured}
+    <Callout variant="warning">
+      La reconstruction automatique du site n'est pas configurée (<code class="font-mono text-xs">LANDING_DEPLOY_TOKEN</code>).
+      Les pages publiées seront en ligne au prochain déploiement de kotbo.fr.
+    </Callout>
+  {/if}
 
-    {#if modulesWithoutSeed.length > 0}
-      <p class="text-xs text-on-surface-variant">
-        Modules sans page à importer (adresse et nom anglais à définir dans <code class="font-mono">featurePageSeeds.ts</code>) :
-        {modulesWithoutSeed.join(', ')}.
-      </p>
-    {/if}
+  {#if modulesWithoutSeed.length > 0}
+    <p class="text-xs text-on-surface-variant">
+      Modules sans page à importer (adresse et nom anglais à définir dans <code class="font-mono">featurePageSeeds.ts</code>) :
+      {modulesWithoutSeed.join(', ')}.
+    </p>
+  {/if}
 
-    <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
-      <div class="flex gap-1 p-1 rounded-xl bg-surface-container-low/60 border border-outline-variant/10" role="tablist" aria-label="Filtrer les pages">
-        {#each [{ key: 'all', label: 'Toutes' }, { key: 'published', label: 'Publiées' }, { key: 'draft', label: 'Brouillons' }] as tab (tab.key)}
-          <button
-            role="tab"
-            aria-selected={filter === tab.key}
-            onclick={() => (filter = tab.key as Filter)}
-            class="px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors {filter === tab.key ? 'bg-primary/15 text-primary' : 'text-on-surface-variant hover:text-on-surface'}"
-          >
-            {tab.label}
-            <span class="ml-1 text-xs opacity-70">{counts[tab.key as Filter]}</span>
+  {#if loadError}
+    <Callout variant="danger">
+      {loadError}
+      {#snippet actions()}
+        <Button size="sm" icon="RefreshCw" onclick={load}>Réessayer</Button>
+      {/snippet}
+    </Callout>
+  {/if}
+
+  <AdminToolbar
+    bind:search
+    bind:activeFilter={filter}
+    placeholder="Rechercher une page…"
+    filters={[
+      { value: 'all', label: 'Toutes', count: counts.all },
+      { value: 'published', label: 'Publiées', count: counts.published },
+      { value: 'draft', label: 'Brouillons', count: counts.draft },
+    ]}
+    resultCount={visible.length}
+    resultLabel="page"
+  />
+
+  <AdminTable
+    columns={pageColumns}
+    rows={visible}
+    {loading}
+    emptyIcon="Globe"
+    emptyTitle={pages.length === 0 ? "Aucune page pour l'instant" : 'Aucune page ne correspond'}
+    emptyHint={pages.length === 0
+      ? '« Importer les modules » crée une page par fonctionnalité de Kotbo : les pages déjà rédigées pour le site sont publiées, les autres arrivent en brouillon.'
+      : 'Élargis la recherche ou change de filtre.'}
+  >
+    {#snippet row(item, _index)}
+      {@const page = item as FeaturePage}
+      <tr class="border-b border-outline-variant/12 hover:bg-on-surface/3 transition-colors cursor-pointer" onclick={() => openEdit(page)}>
+        <td class="px-4 py-3">
+          <!-- Le bouton porte l'accès clavier ; le clic sur la ligne n'est qu'un confort à la souris. -->
+          <button type="button" class="text-left min-w-0 focus-visible:outline-2 focus-visible:outline-primary rounded" onclick={(e) => { e.stopPropagation(); openEdit(page); }}>
+            <span class="block text-body-sm font-semibold text-on-surface truncate">{page.content.fr.name || page.key}</span>
+            <span class="block text-2xs text-on-surface-variant truncate font-mono">/fonctionnalites/{page.slug.fr} · /en/features/{page.slug.en}</span>
           </button>
-        {/each}
-      </div>
-      <input bind:value={search} placeholder="Rechercher une page" class="{inputClass} sm:max-w-xs" />
-    </div>
-
-    {#if loadError}
-      <div class="flex items-center gap-3 px-4 py-3 rounded-xl bg-error/10 border border-error/20 text-error text-sm">
-        <Papicon icon="AlertTriangle" size={16} />
-        {loadError}
-      </div>
-    {/if}
-
-    {#if loading}
-      <div class="h-60 animate-pulse rounded-2xl bg-surface-container-low/50"></div>
-    {:else if !loadError}
-      {#if pages.length === 0}
-        <div class="rounded-2xl border border-dashed border-outline-variant/30 p-8 text-center space-y-2">
-          <p class="font-semibold text-on-surface">Aucune page pour l'instant.</p>
-          <p class="text-sm text-on-surface-variant">
-            « Importer les modules » crée une page par fonctionnalité de Kotbo : les pages déjà rédigées pour le site sont publiées, les autres arrivent en brouillon.
-          </p>
-        </div>
-      {:else}
-        <div class="bg-surface-container-low/50 border border-outline-variant/10 rounded-2xl overflow-hidden">
-          <ul class="divide-y divide-outline-variant/10">
-            {#each visible as page (page.id)}
-              <li>
-                <button onclick={() => openEdit(page)} class="w-full flex items-center gap-3 px-5 py-3.5 text-left hover:bg-on-surface/5 transition-colors">
-                  <div class="min-w-0 flex-1">
-                    <p class="font-semibold text-on-surface truncate">{page.content.fr.name || page.key}</p>
-                    <p class="text-xs text-on-surface-variant truncate font-mono">/fonctionnalites/{page.slug.fr} · /en/features/{page.slug.en}</p>
-                  </div>
-                  {#if !page.published && page.missing.length > 0}
-                    <span class="hidden sm:inline text-xs text-on-surface-variant">{page.missing.length} élément(s) à compléter</span>
-                  {/if}
-                  <span class="text-xs px-2 py-0.5 rounded-full font-bold {page.published ? 'bg-success/15 text-success' : 'bg-on-surface/10 text-on-surface-variant'}">
-                    {page.published ? 'Publiée' : 'Brouillon'}
-                  </span>
-                  <span class="hidden md:inline text-xs text-on-surface-variant w-24 text-right">{formatDate(page.updatedAt)}</span>
-                </button>
-              </li>
-            {:else}
-              <li class="px-5 py-4 text-sm text-on-surface-variant">Aucune page ne correspond.</li>
-            {/each}
-          </ul>
-        </div>
-      {/if}
-    {/if}
-  </div>
+        </td>
+        <td class="px-4 py-3">
+          <AdminBadge label={page.published ? 'Publiée' : 'Brouillon'} tone={page.published ? 'success' : 'neutral'} dot />
+          {#if !page.published && page.missing.length > 0}
+            <p class="text-2xs text-on-surface-variant mt-1">{page.missing.length} élément(s) à compléter</p>
+          {/if}
+        </td>
+        <td class="px-4 py-3 text-right text-xs text-on-surface-variant hidden md:table-cell">{formatDate(page.updatedAt)}</td>
+      </tr>
+    {/snippet}
+  </AdminTable>
 </AdminShell>
 
 <AdminDrawer
@@ -534,26 +504,21 @@
     {#if draft}
       <div class="flex flex-wrap items-center gap-2">
         {#if draft.id}
-          <button onclick={remove} disabled={deleting} class="px-4 py-2.5 rounded-xl text-error text-sm font-semibold hover:bg-error/10 disabled:opacity-40 transition-colors">
-            Supprimer
-          </button>
+          <Button variant="danger" icon="Trash2" loading={deleting} onclick={remove}>Supprimer</Button>
         {/if}
         <div class="ml-auto flex flex-wrap gap-2">
-          {#if draft.published}
-            <button onclick={() => save(false)} disabled={saving} class="px-4 py-2.5 rounded-xl border border-outline-variant/30 text-on-surface text-sm font-semibold hover:bg-on-surface/5 disabled:opacity-40 transition-colors">
-              Repasser en brouillon
-            </button>
-            <button onclick={() => save(true)} disabled={saving || draftMissing.length > 0} class="px-5 py-2.5 rounded-xl bg-primary text-on-primary text-sm font-bold hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
-              Enregistrer
-            </button>
-          {:else}
-            <button onclick={() => save(false)} disabled={saving} class="px-4 py-2.5 rounded-xl border border-outline-variant/30 text-on-surface text-sm font-semibold hover:bg-on-surface/5 disabled:opacity-40 transition-colors">
-              Enregistrer le brouillon
-            </button>
-            <button onclick={() => save(true)} disabled={saving || draftMissing.length > 0} class="px-5 py-2.5 rounded-xl bg-primary text-on-primary text-sm font-bold hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
-              Publier
-            </button>
-          {/if}
+          <Button loading={saving} onclick={() => save(false)}>
+            {draft.published ? 'Repasser en brouillon' : 'Enregistrer le brouillon'}
+          </Button>
+          <Button
+            variant="primary"
+            loading={saving}
+            disabled={draftMissing.length > 0}
+            disabledReason="Complète d'abord les éléments listés au-dessus."
+            onclick={() => save(true)}
+          >
+            {draft.published ? 'Enregistrer' : 'Publier'}
+          </Button>
         </div>
       </div>
     {/if}

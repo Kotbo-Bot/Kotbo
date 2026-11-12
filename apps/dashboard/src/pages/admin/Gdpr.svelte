@@ -3,6 +3,10 @@
   import { fetchGdprPreview, downloadGdprExport, type GdprPreview } from '../../lib/api';
   import Papicon from '../../lib/components/Papicon.svelte';
   import AdminShell from '../../lib/components/admin/AdminShell.svelte';
+  import AdminCard from '../../lib/components/admin/AdminCard.svelte';
+  import AdminStat from '../../lib/components/admin/AdminStat.svelte';
+  import AdminBadge from '../../lib/components/admin/AdminBadge.svelte';
+  import { Button, Callout, EmptyState, Field } from '../../lib/components/ui';
   import { m } from '../../lib/i18n';
 
   import { errorMessage } from '@kotbo/shared';
@@ -51,173 +55,119 @@
   function toggle(key: string) {
     expanded[key] = !expanded[key];
   }
-
-  function onKeydown(e: KeyboardEvent) {
-    if (e.key === 'Enter') runPreview();
-  }
 </script>
 
-<AdminShell title="Export RGPD" description="Aperçu et export des données personnelles détenues sur un utilisateur.">
-  <div class="max-w-4xl mx-auto space-y-6">
-    <!-- Header -->
-    <div class="space-y-2">
-      <div class="flex items-center gap-3">
-        <div class="w-11 h-11 rounded-2xl bg-primary/15 border border-primary/20 flex items-center justify-center">
-          <Papicon icon="ShieldCheck" size={20} class="text-primary" />
-        </div>
-        <div>
-          <h1 class="text-xl font-bold text-on-surface leading-tight">{m.d7_gdpr_export_title()}</h1>
-          <p class="text-sm text-on-surface-variant">{m.d7_gdpr_export_subtitle()}</p>
-        </div>
+<AdminShell title={m.d7_gdpr_export_title()} description={m.d7_gdpr_export_subtitle()}>
+  <AdminCard>
+    <form class="flex flex-col sm:flex-row sm:items-end gap-3" onsubmit={(e) => { e.preventDefault(); void runPreview(); }}>
+      <Field label={m.d7_gdpr_user_id_label()} hint={m.d7_gdpr_collect_hint()} class="flex-1">
+        {#snippet children(id, describedBy)}
+          <input
+            {id}
+            aria-describedby={describedBy}
+            bind:value={userId}
+            placeholder={m.d7_gdpr_id_placeholder()}
+            inputmode="numeric"
+            class="input font-mono"
+          />
+        {/snippet}
+      </Field>
+      <!-- Aligné sur le champ, pas sur son texte d'aide. -->
+      <div class="sm:pb-6">
+        <Button type="submit" variant="primary" icon="Search" {loading}>
+          {loading ? m.d7_gdpr_collecting() : m.d7_search()}
+        </Button>
       </div>
-    </div>
+    </form>
+  </AdminCard>
 
-    <!-- Search card -->
-    <div class="bg-surface-container-low/50 border border-outline-variant/10 rounded-2xl p-6 space-y-4">
-      <label for="gdpr-user-id" class="block text-sm font-semibold text-on-surface">{m.d7_gdpr_user_id_label()}</label>
-      <div class="flex flex-col sm:flex-row gap-3">
-        <input
-          id="gdpr-user-id"
-          bind:value={userId}
-          onkeydown={onKeydown}
-          placeholder={m.d7_gdpr_id_placeholder()}
-          inputmode="numeric"
-          class="flex-1 px-4 py-2.5 rounded-xl bg-surface-container border border-outline-variant/20 text-on-surface text-sm focus:outline-none focus:border-primary/50 transition-colors"
-        />
-        <button
-          onclick={runPreview}
-          disabled={!canSearch || loading}
-          class="px-5 py-2.5 rounded-xl bg-primary text-on-primary text-sm font-bold flex items-center justify-center gap-2 hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-        >
-          {#if loading}
-            <span class="w-4 h-4 border-2 border-on-primary/30 border-t-on-primary rounded-full animate-spin"></span>
-            {m.d7_gdpr_collecting()}
+  {#if error}
+    <Callout variant="danger">{error}</Callout>
+  {/if}
+
+  {#if preview}
+    <AdminCard>
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div class="flex items-center gap-3 min-w-0">
+          {#if preview.identity.discordUser?.avatarURL}
+            <img src={String(preview.identity.discordUser.avatarURL)} alt="" class="w-11 h-11 rounded-full shrink-0" />
           {:else}
-            <Papicon icon="Search" size={15} />
-            {m.d7_search()}
+            <div class="w-11 h-11 rounded-full bg-on-surface/6 flex items-center justify-center shrink-0 text-on-surface-variant">
+              <Papicon icon="User" size={18} />
+            </div>
           {/if}
-        </button>
+          <div class="min-w-0">
+            <p class="text-sm font-semibold text-on-surface truncate">
+              {preview.meta.username ?? m.d7_gdpr_unknown_user()}
+              {#if preview.meta.globalName}<span class="text-on-surface-variant font-normal"> · {preview.meta.globalName}</span>{/if}
+            </p>
+            <p class="text-xs text-on-surface-variant font-mono">{preview.meta.userId}</p>
+          </div>
+        </div>
+        <Button variant="primary" icon="Download" loading={downloading} onclick={download}>
+          {downloading ? m.d7_gdpr_generating() : m.d7_gdpr_download_zip()}
+        </Button>
       </div>
-      <p class="text-xs text-on-surface-variant/40">
-        {m.d7_gdpr_collect_hint()}
-      </p>
+
+      {#if preview.identity.guilds.length}
+        <div class="mt-4 flex flex-wrap gap-1.5">
+          {#each preview.identity.guilds as g (g.name)}
+            <AdminBadge label={g.name} icon="Server" />
+          {/each}
+        </div>
+      {/if}
+    </AdminCard>
+
+    <div class="grid grid-cols-3 gap-3">
+      <AdminStat label={m.d7_gdpr_records()} value={preview.meta.totalRecords} icon="Database" tone="primary" />
+      <AdminStat label={m.d7_gdpr_categories()} value={preview.categories.length} icon="Layers" tone="info" />
+      <AdminStat label={m.d7_gdpr_servers()} value={preview.meta.guildCount} icon="Server" tone="neutral" />
     </div>
 
-    {#if error}
-      <div class="flex items-center gap-3 px-4 py-3 rounded-xl bg-error/10 border border-error/20 text-error text-sm">
-        <Papicon icon="AlertTriangle" size={16} />
-        {error}
-      </div>
+    {#if preview.meta.errors.length}
+      <Callout variant="warning" title={m.d7_gdpr_collect_warnings({ count: preview.meta.errors.length })}>
+        <ul class="list-disc list-inside space-y-0.5">
+          {#each preview.meta.errors as e (e)}<li>{e}</li>{/each}
+        </ul>
+      </Callout>
     {/if}
 
-    <!-- Results -->
-    {#if preview}
-      <div class="space-y-5 animate-in fade-in duration-300">
-        <!-- Summary + download -->
-        <div class="bg-surface-container-low/50 border border-outline-variant/10 rounded-2xl p-6">
-          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div class="flex items-center gap-4">
-              {#if preview.identity.discordUser?.avatarURL}
-                <img src={String(preview.identity.discordUser.avatarURL)} alt="" class="w-12 h-12 rounded-full" />
-              {:else}
-                <div class="w-12 h-12 rounded-full bg-on-surface/5 flex items-center justify-center">
-                  <Papicon icon="User" size={20} class="text-on-surface-variant/40" />
+    {#if preview.categories.length}
+      <AdminCard padded={false}>
+        <ul class="divide-y divide-outline-variant/20">
+          {#each preview.categories as cat (cat.key)}
+            <li>
+              <button
+                type="button"
+                onclick={() => toggle(cat.key)}
+                aria-expanded={Boolean(expanded[cat.key])}
+                class="w-full flex items-center justify-between gap-3 px-5 py-3.5 hover:bg-on-surface/3 transition-colors text-left focus-visible:outline-2 focus-visible:outline-primary"
+              >
+                <div class="min-w-0">
+                  <p class="text-body-sm font-semibold text-on-surface flex items-center gap-2">
+                    {cat.label}
+                    <AdminBadge size="sm" label={String(cat.count)} tone="primary" />
+                  </p>
+                  <p class="text-xs text-on-surface-variant truncate">{cat.description}</p>
                 </div>
+                <Papicon icon={expanded[cat.key] ? 'ChevronDown' : 'ChevronRight'} size={15} class="text-on-surface-variant shrink-0" />
+              </button>
+              {#if expanded[cat.key]}
+                <dl class="px-5 pb-4 pt-1 space-y-1.5">
+                  {#each cat.tables as t (t.label)}
+                    <div class="flex items-center justify-between text-body-sm">
+                      <dt class="text-on-surface-variant">{t.label}</dt>
+                      <dd class="font-mono tabular-nums text-on-surface">{t.count}</dd>
+                    </div>
+                  {/each}
+                </dl>
               {/if}
-              <div>
-                <p class="font-bold text-on-surface">
-                  {preview.meta.username ?? m.d7_gdpr_unknown_user()}
-                  {#if preview.meta.globalName}<span class="text-on-surface-variant font-normal"> · {preview.meta.globalName}</span>{/if}
-                </p>
-                <p class="text-xs text-on-surface-variant font-mono">{preview.meta.userId}</p>
-              </div>
-            </div>
-            <button
-              onclick={download}
-              disabled={downloading}
-              class="px-5 py-2.5 rounded-xl bg-emerald-500 text-white text-sm font-bold flex items-center justify-center gap-2 hover:bg-emerald-600 disabled:opacity-40 transition-all shrink-0"
-            >
-              {#if downloading}
-                <span class="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
-                {m.d7_gdpr_generating()}
-              {:else}
-                <Papicon icon="Download" size={15} />
-                {m.d7_gdpr_download_zip()}
-              {/if}
-            </button>
-          </div>
-
-          <div class="grid grid-cols-3 gap-3 mt-5">
-            <div class="rounded-xl bg-on-surface/3 border border-outline-variant/10 px-4 py-3">
-              <p class="text-2xl font-bold text-on-surface">{preview.meta.totalRecords}</p>
-              <p class="text-xs text-on-surface-variant/40 font-semibold">{m.d7_gdpr_records()}</p>
-            </div>
-            <div class="rounded-xl bg-on-surface/3 border border-outline-variant/10 px-4 py-3">
-              <p class="text-2xl font-bold text-on-surface">{preview.categories.length}</p>
-              <p class="text-xs text-on-surface-variant/40 font-semibold">{m.d7_gdpr_categories()}</p>
-            </div>
-            <div class="rounded-xl bg-on-surface/3 border border-outline-variant/10 px-4 py-3">
-              <p class="text-2xl font-bold text-on-surface">{preview.meta.guildCount}</p>
-              <p class="text-xs text-on-surface-variant/40 font-semibold">{m.d7_gdpr_servers()}</p>
-            </div>
-          </div>
-
-          {#if preview.identity.guilds.length}
-            <div class="mt-4 flex flex-wrap gap-2">
-              {#each preview.identity.guilds as g}
-                <span class="text-xs px-2.5 py-1 rounded-lg bg-on-surface/5 border border-outline-variant/10 text-on-surface-variant">{g.name}</span>
-              {/each}
-            </div>
-          {/if}
-
-          {#if preview.meta.errors.length}
-            <div class="mt-4 px-4 py-3 rounded-xl bg-warning/10 border border-warning/20 text-warning text-xs">
-              <p class="font-semibold mb-1">{m.d7_gdpr_collect_warnings({ count: preview.meta.errors.length })}</p>
-              <ul class="list-disc list-inside space-y-0.5 opacity-80">
-                {#each preview.meta.errors as e}<li>{e}</li>{/each}
-              </ul>
-            </div>
-          {/if}
-        </div>
-
-        <!-- Categories breakdown -->
-        {#if preview.categories.length}
-          <div class="space-y-2">
-            {#each preview.categories as cat}
-              <div class="bg-surface-container-low/50 border border-outline-variant/10 rounded-2xl overflow-hidden">
-                <button
-                  onclick={() => toggle(cat.key)}
-                  class="w-full flex items-center justify-between gap-3 px-5 py-4 hover:bg-on-surface/3 transition-colors text-left"
-                >
-                  <div class="min-w-0">
-                    <p class="font-semibold text-on-surface flex items-center gap-2">
-                      {cat.label}
-                      <span class="text-xs px-2 py-0.5 rounded-full bg-primary/15 text-primary font-bold">{cat.count}</span>
-                    </p>
-                    <p class="text-xs text-on-surface-variant truncate">{cat.description}</p>
-                  </div>
-                  <Papicon icon={expanded[cat.key] ? 'ChevronDown' : 'ChevronRight'} size={16} class="text-on-surface-variant/40 shrink-0" />
-                </button>
-                {#if expanded[cat.key]}
-                  <div class="px-5 pb-4 space-y-1.5 border-t border-outline-variant/10 pt-3">
-                    {#each cat.tables as t}
-                      <div class="flex items-center justify-between text-sm">
-                        <span class="text-on-surface-variant">{t.label}</span>
-                        <span class="font-mono text-on-surface-variant">{t.count}</span>
-                      </div>
-                    {/each}
-                  </div>
-                {/if}
-              </div>
-            {/each}
-          </div>
-        {:else}
-          <div class="text-center py-10 text-on-surface-variant/40 text-sm">
-            <Papicon icon="Inbox" size={28} class="mx-auto mb-2 opacity-50" />
-            {m.d7_gdpr_no_data_retained()}
-          </div>
-        {/if}
-      </div>
+            </li>
+          {/each}
+        </ul>
+      </AdminCard>
+    {:else}
+      <EmptyState icon="Inbox" title={m.d7_gdpr_no_data_retained()} reason="all-clear" />
     {/if}
-  </div>
+  {/if}
 </AdminShell>

@@ -13,6 +13,9 @@
   } from '../../lib/api';
   import Papicon from '../../lib/components/Papicon.svelte';
   import AdminShell from '../../lib/components/admin/AdminShell.svelte';
+  import AdminCard from '../../lib/components/admin/AdminCard.svelte';
+  import AdminBadge from '../../lib/components/admin/AdminBadge.svelte';
+  import { Button, Callout, Field } from '../../lib/components/ui';
 
   const manualAchievements = RANK_CARD_ACHIEVEMENTS.filter(isManualRankCardAchievement);
 
@@ -100,112 +103,100 @@
   </defs>
 </svg>
 
-<AdminShell title="Succès attribués" description="Succès de carte de rang donnés à la main par l'équipe Kotbo.">
-  <div class="max-w-4xl mx-auto space-y-6">
-    <div class="flex items-center gap-3">
-      <div class="w-11 h-11 rounded-2xl bg-primary/15 border border-primary/20 flex items-center justify-center">
-        <Papicon icon="Award" size={20} class="text-primary" />
-      </div>
-      <div>
-        <h1 class="text-xl font-bold text-on-surface leading-tight">Succès attribués</h1>
-        <p class="text-sm text-on-surface-variant">
-          Ces succès ne se calculent pas : ils récompensent une aide à Kotbo. Les administrateurs Kotbo ne les ont pas d'office.
-        </p>
-      </div>
-    </div>
-
-    <div class="bg-surface-container-low/50 border border-outline-variant/10 rounded-2xl p-6 space-y-4">
-      <h2 class="text-sm font-semibold text-on-surface">Attribuer un succès</h2>
-      <div class="grid gap-3 sm:grid-cols-2">
-        <label class="space-y-1.5">
-          <span class="block text-xs font-medium text-on-surface-variant">Identifiant Discord</span>
-          <input
-            bind:value={userId}
-            placeholder="123456789012345678"
-            inputmode="numeric"
-            class="w-full px-4 py-2.5 rounded-xl bg-surface-container border border-outline-variant/20 text-on-surface text-sm focus:outline-none focus:border-primary/50 transition-colors"
-          />
-        </label>
-        <label class="space-y-1.5">
-          <span class="block text-xs font-medium text-on-surface-variant">Succès</span>
-          <select
-            bind:value={achievementId}
-            class="w-full px-4 py-2.5 rounded-xl bg-surface-container border border-outline-variant/20 text-on-surface text-sm focus:outline-none focus:border-primary/50 transition-colors"
-          >
+<AdminShell
+  title="Succès attribués"
+  description="Ces succès ne se calculent pas : ils récompensent une aide à Kotbo. Les administrateurs Kotbo ne les ont pas d'office."
+>
+  <AdminCard title="Attribuer un succès" icon="Award" tone="primary">
+    <form class="grid gap-4 sm:grid-cols-2" onsubmit={(e) => { e.preventDefault(); void grant(); }}>
+      <Field label="Identifiant Discord">
+        {#snippet children(id)}
+          <input {id} bind:value={userId} placeholder="123456789012345678" inputmode="numeric" class="input font-mono" />
+        {/snippet}
+      </Field>
+      <Field label="Succès">
+        {#snippet children(id)}
+          <select {id} bind:value={achievementId} class="input">
             {#each manualAchievements as achievement (achievement.id)}
               <option value={achievement.id}>{achievement.label.fr}</option>
             {/each}
           </select>
-        </label>
+        {/snippet}
+      </Field>
+      <Field label="Note (facultative, visible par l'équipe seulement)" class="sm:col-span-2">
+        {#snippet children(id)}
+          <input
+            {id}
+            bind:value={note}
+            maxlength="300"
+            placeholder="Ex. : doublon des annonces de raid signalé le 12 septembre"
+            class="input"
+          />
+        {/snippet}
+      </Field>
+      <div class="sm:col-span-2">
+        <Button
+          type="submit"
+          variant="primary"
+          icon="Plus"
+          loading={granting}
+          disabled={!canGrant}
+          disabledReason="Saisis un identifiant Discord valide (17 à 20 chiffres)."
+        >
+          Attribuer
+        </Button>
       </div>
-      <label class="block space-y-1.5">
-        <span class="block text-xs font-medium text-on-surface-variant">Note (facultative, visible par l'équipe seulement)</span>
-        <input
-          bind:value={note}
-          maxlength="300"
-          placeholder="Ex. : doublon des annonces de raid signalé le 12 septembre"
-          class="w-full px-4 py-2.5 rounded-xl bg-surface-container border border-outline-variant/20 text-on-surface text-sm focus:outline-none focus:border-primary/50 transition-colors"
-        />
-      </label>
-      <button
-        onclick={grant}
-        disabled={!canGrant || granting}
-        class="px-5 py-2.5 rounded-xl bg-primary text-on-primary text-sm font-bold flex items-center justify-center gap-2 hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-      >
-        {#if granting}
-          <span class="w-4 h-4 border-2 border-on-primary/30 border-t-on-primary rounded-full animate-spin"></span>
-        {:else}
-          <Papicon icon="Plus" size={15} />
-        {/if}
-        Attribuer
-      </button>
-    </div>
+    </form>
+  </AdminCard>
 
-    {#if loadError}
-      <div class="flex items-center gap-3 px-4 py-3 rounded-xl bg-error/10 border border-error/20 text-error text-sm">
-        <Papicon icon="AlertTriangle" size={16} />
-        {loadError}
-      </div>
-    {/if}
+  {#if loadError}
+    <Callout variant="danger">
+      {loadError}
+      {#snippet actions()}
+        <Button size="sm" icon="RefreshCw" onclick={load}>Réessayer</Button>
+      {/snippet}
+    </Callout>
+  {/if}
 
-    {#if loading}
-      <div class="h-40 animate-pulse rounded-2xl bg-surface-container-low/50"></div>
-    {:else if !loadError}
+  {#if loading}
+    <div class="h-40 animate-pulse rounded-2xl bg-on-surface/6"></div>
+  {:else if !loadError}
+    <div class="grid gap-4 lg:grid-cols-2">
       {#each manualAchievements as achievement (achievement.id)}
         {@const list = holders[achievement.id] ?? []}
-        <div class="bg-surface-container-low/50 border border-outline-variant/10 rounded-2xl overflow-hidden">
-          <div class="flex items-center gap-3 px-5 py-4 border-b border-outline-variant/10">
+        <AdminCard padded={false}>
+          <div class="flex items-center gap-3 px-5 py-4 border-b border-outline-variant/20">
             <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-black/70">
               <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">
                 <path d={RANK_CARD_BADGE_ICONS[achievement.icon]} fill="url(#admin-tier-{achievement.tier})" fill-rule="evenodd" />
               </svg>
             </span>
             <div class="min-w-0 flex-1">
-              <p class="font-semibold text-on-surface flex items-center gap-2">
+              <h2 class="text-[15px] font-semibold text-on-surface flex items-center gap-2">
                 {achievement.label.fr}
-                <span class="text-xs px-2 py-0.5 rounded-full bg-primary/15 text-primary font-bold">{list.length}</span>
-              </p>
+                <AdminBadge size="sm" label={String(list.length)} tone="primary" />
+              </h2>
               <p class="text-xs text-on-surface-variant truncate">{achievement.description.fr}</p>
             </div>
           </div>
 
           {#if list.length === 0}
-            <p class="px-5 py-4 text-sm text-on-surface-variant/40">Personne n'a encore ce succès.</p>
+            <p class="px-5 py-4 text-body-sm text-on-surface-variant">Personne n'a encore ce succès.</p>
           {:else}
-            <ul class="divide-y divide-outline-variant/10">
+            <ul class="divide-y divide-outline-variant/20">
               {#each list as holder (holder.userId)}
                 <li class="flex items-center gap-3 px-5 py-3">
                   {#if profiles[holder.userId]?.avatarUrl}
-                    <img src={profiles[holder.userId].avatarUrl} alt="" class="w-8 h-8 rounded-full" />
+                    <img src={profiles[holder.userId].avatarUrl} alt="" class="w-8 h-8 rounded-full shrink-0" />
                   {:else}
-                    <div class="w-8 h-8 rounded-full bg-on-surface/5 flex items-center justify-center">
-                      <Papicon icon="User" size={14} class="text-on-surface-variant/40" />
+                    <div class="w-8 h-8 rounded-full bg-on-surface/6 flex items-center justify-center shrink-0 text-on-surface-variant">
+                      <Papicon icon="User" size={14} />
                     </div>
                   {/if}
                   <div class="min-w-0 flex-1">
-                    <p class="text-sm text-on-surface truncate">
+                    <p class="text-body-sm text-on-surface truncate">
                       {nameOf(holder.userId)}
-                      <span class="font-mono text-xs text-on-surface-variant/40">{holder.userId}</span>
+                      <span class="font-mono text-xs text-on-surface-variant">{holder.userId}</span>
                     </p>
                     <p class="text-xs text-on-surface-variant truncate">
                       {formatDate(holder.unlockedAt)}
@@ -213,21 +204,21 @@
                       {#if holder.note} · {holder.note}{/if}
                     </p>
                   </div>
-                  <button
-                    onclick={() => revoke(achievement.id, holder)}
-                    disabled={revoking === `${achievement.id}:${holder.userId}`}
+                  <Button
+                    size="sm"
+                    variant="danger"
+                    icon="Trash2"
                     title="Retirer le succès"
                     aria-label="Retirer le succès"
-                    class="p-2 rounded-lg text-on-surface-variant hover:text-error hover:bg-error/10 disabled:opacity-40 transition-colors"
-                  >
-                    <Papicon icon="Trash2" size={15} />
-                  </button>
+                    loading={revoking === `${achievement.id}:${holder.userId}`}
+                    onclick={() => revoke(achievement.id, holder)}
+                  />
                 </li>
               {/each}
             </ul>
           {/if}
-        </div>
+        </AdminCard>
       {/each}
-    {/if}
-  </div>
+    </div>
+  {/if}
 </AdminShell>
