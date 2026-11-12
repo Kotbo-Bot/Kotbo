@@ -25,7 +25,19 @@ const mockDb = {
   dashboardAuditLog: {
     create: mock(async () => ({})),
   },
+  dropConfig: {
+    findMany: mock(async () => ['XP', 'RPG_XP', 'CLAN_POINTS', 'COINS', 'RPG_ITEM'].map((type) => ({ id: `config-${type}`, type }))),
+    createMany: mock(async () => ({ count: 0 })),
+  },
+  drop: {
+    findMany: mock(async () => recentDropRows),
+  },
+  rpgItem: {
+    findMany: mock(async () => [{ id: 'epee', name: 'Lame du Crépuscule', emoji: 'E' }]),
+  },
 };
+
+let recentDropRows: Array<Record<string, unknown>> = [];
 
 for (const dbPath of ['../../utils/db.ts', '../../utils/db.js']) {
   mock.module(path.resolve(__dirname, dbPath), () => ({
@@ -59,10 +71,10 @@ for (const suffix of [
 // Import après les mocks
 const { handleDropsRoutes } = await import('../../api/routes/dashboard/drops.js');
 
-function createMockRequest(body: Record<string, unknown>): IncomingMessage {
+function createMockRequest(body: Record<string, unknown>, method = 'PUT'): IncomingMessage {
   const socket = new Socket();
   const req = new IncomingMessage(socket);
-  req.method = 'PUT';
+  req.method = method;
   req.url = '/api/dashboard/guilds/guild-123/drops';
   req.headers = { 'content-type': 'application/json' };
   const raw = JSON.stringify(body);
@@ -195,5 +207,41 @@ describe('handleDropsRoutes - onboarding et offres', () => {
     expect(data.code).toBe('plan_locked');
     expect(data.moduleKey).toBe('drops');
     expect(data.requiredPlan).toBe('PRO');
+  });
+});
+
+describe('handleDropsRoutes - historique', () => {
+  beforeEach(() => {
+    guildRow = {
+      id: 'guild-123',
+      dropsEnabled: true,
+      dropChannelId: null,
+      dropMentionRoleId: null,
+      dropLifetimeMinutes: 60,
+      dropDeleteAfterMinutes: 0,
+    };
+    const base = { mode: 'FIRST', channelId: 'salon-1', maxClaims: 1, claimCount: 1, createdAt: new Date(), expiresAt: new Date(), closedAt: null };
+    recentDropRows = [
+      { ...base, id: 'drop-objet', type: 'RPG_ITEM', itemId: 'epee', amount: 2 },
+      { ...base, id: 'drop-xp', type: 'XP', itemId: null, amount: 120 },
+    ];
+  });
+
+  test('un drop d\'objet nomme la pièce tombée, les autres non', async () => {
+    const res = createMockResponse();
+    await handleDropsRoutes(
+      createMockRequest({}, 'GET'),
+      res,
+      ['api', 'dashboard', 'guilds', 'guild-123', 'drops'],
+      mockClient,
+      mockUser,
+      'guild-123',
+      mockAccess,
+    );
+
+    expect(res.statusCode).toBe(200);
+    const { recentDrops } = JSON.parse(res.body);
+    expect(recentDrops[0].item).toEqual({ name: 'Lame du Crépuscule', emoji: 'E' });
+    expect(recentDrops[1].item).toBeNull();
   });
 });

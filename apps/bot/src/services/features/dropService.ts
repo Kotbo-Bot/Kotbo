@@ -681,6 +681,13 @@ export async function handleDropClaim(interaction: ButtonInteraction, dropId: st
     await refuse(m.drop_claim_closed({}, { locale }));
     return;
   }
+  // Même contrôle que le cycle de publication, repassé au clic : un module coupé
+  // après l'apparition du drop ne verserait rien (`addXp` se tait), et le membre
+  // lirait un gain fictif en consommant une place.
+  if (!(await isModuleEnabled(drop.guildId, DROP_TYPE_MODULE[drop.type as DropType]))) {
+    await refuse(m.drop_claim_module_off({}, { locale }));
+    return;
+  }
 
   const reserved = await reserveClaim(drop, interaction.user.id).catch((error: unknown) => {
     // Une contention sur le drop peut faire expirer la transaction : le drop
