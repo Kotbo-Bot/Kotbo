@@ -16,6 +16,10 @@
   import LoadingHint from '../lib/components/LoadingHint.svelte';
   import ModulePage from '../lib/components/ModulePage.svelte';
   import ToggleSwitch from '../lib/components/ToggleSwitch.svelte';
+  import SimpleModeToggle from '../lib/components/SimpleModeToggle.svelte';
+  import SimpleModeNotice from '../lib/components/SimpleModeNotice.svelte';
+  import { createSimpleModePreference, nearestStep } from '../lib/simpleMode.svelte';
+  import { ACTIVITY_DEFAULT_STEP, ACTIVITY_PRESETS, JACKPOT_PRESETS } from '../lib/dropPresets';
   import Callout from '../lib/components/ui/Callout.svelte';
   import Button from '../lib/components/ui/Button.svelte';
   import { m, dateLocale } from '../lib/i18n';
@@ -31,7 +35,6 @@
     type DropHistoryEntry,
   } from '../lib/api';
   import {
-    DEFAULT_DROP_ACTIVITY_MESSAGES,
     DEFAULT_DROP_GLOBAL_SETTINGS,
     DROP_ACTIVITY_DISABLED,
     DROP_ACTIVITY_MESSAGES_RANGE,
@@ -53,7 +56,9 @@
     dropItemsTotalWeight,
     dropTypeBlocker,
     enabledDropModes,
+    shouldAdviseActivityWait,
     type DropGlobalSettings,
+    type DropOutcomes,
     type DropType,
     type DropTypeBlocker,
   } from '@kotbo/shared';
@@ -164,6 +169,7 @@
   );
 
   let recentDrops = $state<DropHistoryEntry[]>([]);
+  let weeklyOutcomes = $state<Partial<Record<DropType, DropOutcomes>>>({});
   let availableChannels = $state<any[]>([]);
 
   const availableRoles = $derived(dashboardStore.state.discordRoles || []);
@@ -219,6 +225,72 @@
   function activityOn(type: DropType): boolean {
     return configs[type].activity.minMessages !== DROP_ACTIVITY_DISABLED;
   }
+
+  const ACTIVITY_LABELS = [
+    m.drop_activity_step_1, m.drop_activity_step_2, m.drop_activity_step_3,
+    m.drop_activity_step_4, m.drop_activity_step_5,
+  ];
+  const activityMode = createSimpleModePreference('kotbo_drops_activity_mode');
+
+  function activityFitsSimpleMode(type: DropType): boolean {
+    // Éteinte, ses valeurs ne s'affichent pas : elles n'ont pas à coller.
+    if (!activityOn(type)) return true;
+    const { minMessages, windowMinutes } = configs[type].activity;
+    return ACTIVITY_PRESETS.some((preset) =>
+      preset.minMessages === minMessages && preset.windowMinutes === windowMinutes);
+  }
+
+  function activityStep(type: DropType): number {
+    return nearestStep(
+      ACTIVITY_PRESETS.map((preset) => preset.minMessages),
+      configs[type].activity.minMessages || ACTIVITY_PRESETS[ACTIVITY_DEFAULT_STEP - 1].minMessages,
+    );
+  }
+
+  function applyActivityStep(type: DropType, step: number) {
+    const preset = ACTIVITY_PRESETS[Math.min(ACTIVITY_PRESETS.length, Math.max(1, step)) - 1];
+    configs[type].activity = { ...preset };
+  }
+
+  const JACKPOT_LABELS = [m.drop_jackpot_step_1, m.drop_jackpot_step_2, m.drop_jackpot_step_3];
+  const jackpotMode = createSimpleModePreference('kotbo_drops_jackpot_mode');
+
+  function jackpotFitsSimpleMode(): boolean {
+    if (!globalSettings.dropJackpotEnabled) return true;
+    return JACKPOT_PRESETS.some((preset) =>
+      preset.chance === globalSettings.dropJackpotChance && preset.multiplier === globalSettings.dropJackpotMultiplier);
+  }
+
+  const jackpotStep = $derived(nearestStep(
+    JACKPOT_PRESETS.map((preset) => preset.chance),
+    globalSettings.dropJackpotChance,
+  ));
+
+  function applyJackpotStep(step: number) {
+    const preset = JACKPOT_PRESETS[Math.min(JACKPOT_PRESETS.length, Math.max(1, step)) - 1];
+    globalSettings.dropJackpotChance = preset.chance;
+    globalSettings.dropJackpotMultiplier = preset.multiplier;
+  }
+
+  /**
+   * Bilan qui justifie le conseil d'attente d'activité, ou `null`. Lu sur le formulaire et
+   * non sur l'enregistré : allumer l'option fait disparaître le conseil aussitôt.
+   */
+  function unclaimedAdvice(type: DropType): DropOutcomes | null {
+    const outcomes = weeklyOutcomes[type];
+    if (!outcomes || typeStatus(type) !== 'on') return null;
+    return shouldAdviseActivityWait(outcomes, configs[type].activity) ? outcomes : null;
+  }
+
+  /** Allume l'attente au cran par défaut et ouvre l'onglet : il ne reste qu'à enregistrer. */
+  function followUnclaimedAdvice(type: DropType) {
+    applyActivityStep(type, ACTIVITY_DEFAULT_STEP);
+    activeTab = type;
+  }
+
+  /** Historique replié sur les plus récents : la liste complète double la hauteur de l'onglet. */
+  const HISTORY_PREVIEW = 5;
+  let historyExpanded = $state(false);
 
   /** Une échéance passée attend le prochain passage du cycle ou l'écart minimal. */
   function nextDropLabel(type: DropType): string {
@@ -337,6 +409,14 @@
         }
 
         recentDrops = res.recentDrops ?? [];
+        weeklyOutcomes = res.weeklyOutcomes ?? {};
+
+        // Au premier chargement seulement : une mise à jour en direct ne doit pas
+        // basculer le mode sous les yeux de qui est en train de régler.
+        if (!silent) {
+          activityMode.resolve(DROP_TYPES.every(activityFitsSimpleMode));
+          jackpotMode.resolve(jackpotFitsSimpleMode());
+        }
       }
 
       // Le catalogue et l'état du RPG viennent de l'onglet Économie : sans eux, la liste
@@ -604,24 +684,54 @@
           </div>
 
           {#if globalSettings.dropJackpotEnabled}
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4" transition:fade={{ duration: 150 }}>
-              <div class="space-y-1.5">
-                <label for="drop-jackpot-chance" class="text-xs font-semibold text-on-surface-variant ml-1">{m.drop_jackpot_chance_label()}</label>
-                <select id="drop-jackpot-chance" bind:value={globalSettings.dropJackpotChance} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold disabled:opacity-50" disabled={!canManageSettings}>
-                  {#each DROP_JACKPOT_CHANCE_CHOICES as count (count)}
-                    <option value={count}>{m.drop_jackpot_chance_option({ count })}</option>
-                  {/each}
-                </select>
-              </div>
-              <div class="space-y-1.5">
-                <label for="drop-jackpot-multiplier" class="text-xs font-semibold text-on-surface-variant ml-1">{m.drop_jackpot_multiplier_label()}</label>
-                <select id="drop-jackpot-multiplier" bind:value={globalSettings.dropJackpotMultiplier} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold disabled:opacity-50" disabled={!canManageSettings}>
-                  {#each DROP_JACKPOT_MULTIPLIER_CHOICES as count (count)}
-                    <option value={count}>{m.drop_jackpot_multiplier_option({ count })}</option>
-                  {/each}
-                </select>
-              </div>
+            <div class="flex justify-end">
+              <SimpleModeToggle simple={jackpotMode.simple} onchange={(v) => jackpotMode.set(v)} />
             </div>
+            {#if jackpotMode.simple}
+              <div class="space-y-2">
+                <div class="flex items-baseline justify-between gap-3">
+                  <label for="drop-jackpot-step" class="text-xs font-semibold text-on-surface-variant ml-1">{m.drop_jackpot_step_label()}</label>
+                  <span class="text-xs font-semibold text-primary">{JACKPOT_LABELS[jackpotStep - 1]()}</span>
+                </div>
+                <input
+                  id="drop-jackpot-step"
+                  type="range"
+                  min="1"
+                  max={JACKPOT_PRESETS.length}
+                  step="1"
+                  value={jackpotStep}
+                  aria-valuetext={JACKPOT_LABELS[jackpotStep - 1]()}
+                  oninput={(e) => applyJackpotStep(Number(e.currentTarget.value))}
+                  class="w-full accent-primary"
+                  disabled={!canManageSettings}
+                />
+                <p class="text-2xs text-primary font-semibold">
+                  {m.drop_jackpot_step_value({ chance: globalSettings.dropJackpotChance, multiplier: globalSettings.dropJackpotMultiplier })}
+                </p>
+                {#if !jackpotFitsSimpleMode()}
+                  <SimpleModeNotice message={m.drop_jackpot_off_grid()} />
+                {/if}
+              </div>
+            {:else}
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div class="space-y-1.5">
+                  <label for="drop-jackpot-chance" class="text-xs font-semibold text-on-surface-variant ml-1">{m.drop_jackpot_chance_label()}</label>
+                  <select id="drop-jackpot-chance" bind:value={globalSettings.dropJackpotChance} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold disabled:opacity-50" disabled={!canManageSettings}>
+                    {#each DROP_JACKPOT_CHANCE_CHOICES as count (count)}
+                      <option value={count}>{m.drop_jackpot_chance_option({ count })}</option>
+                    {/each}
+                  </select>
+                </div>
+                <div class="space-y-1.5">
+                  <label for="drop-jackpot-multiplier" class="text-xs font-semibold text-on-surface-variant ml-1">{m.drop_jackpot_multiplier_label()}</label>
+                  <select id="drop-jackpot-multiplier" bind:value={globalSettings.dropJackpotMultiplier} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold disabled:opacity-50" disabled={!canManageSettings}>
+                    {#each DROP_JACKPOT_MULTIPLIER_CHOICES as count (count)}
+                      <option value={count}>{m.drop_jackpot_multiplier_option({ count })}</option>
+                    {/each}
+                  </select>
+                </div>
+              </div>
+            {/if}
             <p class="text-2xs text-on-surface-variant">{m.drop_jackpot_items_hint()}</p>
           {/if}
         </div>
@@ -649,6 +759,7 @@
               {#each DROP_TYPES as type}
                 {@const status = typeStatus(type)}
                 {@const blocker = status === 'blocked' ? typeBlocker(type) : null}
+                {@const advice = unclaimedAdvice(type)}
                 <tr class="text-sm border-t border-outline-variant/10">
                   <td class="py-2.5 pr-4 font-semibold">
                     <button
@@ -665,6 +776,20 @@
                     </span>
                     {#if blocker}
                       <p class="text-2xs text-warning mt-1 max-w-xs">{blockerMessage(type, blocker)}</p>
+                    {/if}
+                    {#if advice}
+                      <p class="text-2xs text-on-surface-variant mt-1 max-w-xs">
+                        {m.drop_advice_unclaimed({ unclaimed: advice.unclaimed, closed: advice.closed })}
+                      </p>
+                      {#if canManageSettings}
+                        <button
+                          type="button"
+                          onclick={() => followUnclaimedAdvice(type)}
+                          class="mt-1 text-2xs font-semibold text-primary hover:underline inline-flex items-center gap-1"
+                        >
+                          <Papicon icon="ChevronRight" size={12} /> {m.drop_advice_unclaimed_action()}
+                        </button>
+                      {/if}
                     {/if}
                   </td>
                   <td class="py-2.5 pr-4 text-on-surface-variant/80">{channelName(configs[type].channelId)}</td>
@@ -699,7 +824,7 @@
                 </tr>
               </thead>
               <tbody>
-                {#each recentDrops as drop (drop.id)}
+                {#each historyExpanded ? recentDrops : recentDrops.slice(0, HISTORY_PREVIEW) as drop (drop.id)}
                   <tr class="text-sm border-t border-outline-variant/10">
                     <td class="py-2.5 pr-4 text-on-surface-variant/80 whitespace-nowrap">{formatDate(drop.createdAt)}</td>
                     <td class="py-2.5 pr-4 font-semibold">{TYPE_LABELS[drop.type]?.() ?? drop.type}</td>
@@ -721,6 +846,19 @@
               </tbody>
             </table>
           </div>
+          {#if recentDrops.length > HISTORY_PREVIEW}
+            <div class="flex justify-center">
+              <button
+                type="button"
+                onclick={() => historyExpanded = !historyExpanded}
+                aria-expanded={historyExpanded}
+                class="text-2xs font-medium px-3 py-1.5 rounded-lg border border-outline-variant/20 hover:border-outline-variant/40 transition-all inline-flex items-center gap-1.5"
+              >
+                <Papicon icon={historyExpanded ? 'ChevronUp' : 'ChevronDown'} size={13} />
+                {historyExpanded ? m.drop_history_show_less() : m.drop_history_show_all({ count: recentDrops.length })}
+              </button>
+            </div>
+          {/if}
         {/if}
       </section>
     </div>
@@ -885,38 +1023,72 @@
               <p class="text-xs font-semibold">{m.drop_activity_toggle()}</p>
               <ToggleSwitch
                 checked={activityOn(type)}
-                onToggle={(v) => configs[type].activity.minMessages = v ? DEFAULT_DROP_ACTIVITY_MESSAGES : DROP_ACTIVITY_DISABLED}
+                onToggle={(v) => {
+                  if (v) applyActivityStep(type, ACTIVITY_DEFAULT_STEP);
+                  else configs[type].activity.minMessages = DROP_ACTIVITY_DISABLED;
+                }}
                 disabled={!canManageSettings}
               />
             </div>
 
             {#if activityOn(type)}
-              <div class="grid grid-cols-2 gap-4">
-                <div class="space-y-1.5">
-                  <label for="drop-activity-messages-{type}" class="text-xs font-semibold text-on-surface-variant ml-1">{m.drop_activity_messages_label()}</label>
-                  <input
-                    id="drop-activity-messages-{type}"
-                    type="number"
-                    bind:value={configs[type].activity.minMessages}
-                    min={DROP_ACTIVITY_MESSAGES_RANGE.min}
-                    max={DROP_ACTIVITY_MESSAGES_RANGE.max}
-                    class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold"
-                    disabled={!canManageSettings}
-                  />
-                </div>
-                <div class="space-y-1.5">
-                  <label for="drop-activity-window-{type}" class="text-xs font-semibold text-on-surface-variant ml-1">{m.drop_activity_window_label()}</label>
-                  <input
-                    id="drop-activity-window-{type}"
-                    type="number"
-                    bind:value={configs[type].activity.windowMinutes}
-                    min={DROP_ACTIVITY_WINDOW_MINUTES_RANGE.min}
-                    max={DROP_ACTIVITY_WINDOW_MINUTES_RANGE.max}
-                    class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold"
-                    disabled={!canManageSettings}
-                  />
-                </div>
+              {@const step = activityStep(type)}
+              <div class="flex justify-end">
+                <SimpleModeToggle simple={activityMode.simple} onchange={(v) => activityMode.set(v)} />
               </div>
+              {#if activityMode.simple}
+                <div class="space-y-2">
+                  <div class="flex items-baseline justify-between gap-3">
+                    <label for="drop-activity-step-{type}" class="text-xs font-semibold text-on-surface-variant ml-1">{m.drop_activity_step_label()}</label>
+                    <span class="text-xs font-semibold text-primary">{ACTIVITY_LABELS[step - 1]()}</span>
+                  </div>
+                  <input
+                    id="drop-activity-step-{type}"
+                    type="range"
+                    min="1"
+                    max={ACTIVITY_PRESETS.length}
+                    step="1"
+                    value={step}
+                    aria-valuetext={ACTIVITY_LABELS[step - 1]()}
+                    oninput={(e) => applyActivityStep(type, Number(e.currentTarget.value))}
+                    class="w-full accent-primary"
+                    disabled={!canManageSettings}
+                  />
+                  <p class="text-2xs text-primary font-semibold">
+                    {m.drop_activity_step_value({ messages: configs[type].activity.minMessages, minutes: configs[type].activity.windowMinutes })}
+                  </p>
+                  {#if !activityFitsSimpleMode(type)}
+                    <SimpleModeNotice message={m.drop_activity_off_grid()} />
+                  {/if}
+                </div>
+              {:else}
+                <div class="grid grid-cols-2 gap-4">
+                  <div class="space-y-1.5">
+                    <label for="drop-activity-messages-{type}" class="text-xs font-semibold text-on-surface-variant ml-1">{m.drop_activity_messages_label()}</label>
+                    <input
+                      id="drop-activity-messages-{type}"
+                      type="number"
+                      bind:value={configs[type].activity.minMessages}
+                      min={DROP_ACTIVITY_MESSAGES_RANGE.min}
+                      max={DROP_ACTIVITY_MESSAGES_RANGE.max}
+                      class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold"
+                      disabled={!canManageSettings}
+                    />
+                  </div>
+                  <div class="space-y-1.5">
+                    <label for="drop-activity-window-{type}" class="text-xs font-semibold text-on-surface-variant ml-1">{m.drop_activity_window_label()}</label>
+                    <input
+                      id="drop-activity-window-{type}"
+                      type="number"
+                      bind:value={configs[type].activity.windowMinutes}
+                      min={DROP_ACTIVITY_WINDOW_MINUTES_RANGE.min}
+                      max={DROP_ACTIVITY_WINDOW_MINUTES_RANGE.max}
+                      class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold"
+                      disabled={!canManageSettings}
+                    />
+                  </div>
+                </div>
+              {/if}
             {/if}
             <p class="text-2xs text-on-surface-variant">{m.drop_activity_desc()}</p>
           </div>

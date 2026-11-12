@@ -4,9 +4,11 @@ import prisma from '../../../utils/db.js';
 import { logger } from '../../../utils/logger.js';
 import { json, readJsonBody, getGuildName, pushAudit, broadcastDashboardStateChange, type AuthClaims, type DashboardAccess } from '../../shared.js';
 import {
+  DROP_ADVICE_WINDOW_DAYS,
   DROP_TYPES,
   normalizeDropGlobalSettings,
   normalizeDropTypeSettings,
+  type DropOutcomes,
   type DropType,
   type DropTypeSettings,
 } from '@kotbo/shared';
@@ -20,6 +22,27 @@ const RECENT_DROPS_LIMIT = 15;
 
 function isDropType(value: string | undefined): value is DropType {
   return !!value && (DROP_TYPES as readonly string[]).includes(value);
+}
+
+/**
+ * Bilan de chaque type sur la période du conseil : drops terminés, et ceux qui ont expiré
+ * sans gagnant. Deux comptages groupés pour tout le serveur, appuyés sur l'index
+ * `(guildId, createdAt)`, plutôt qu'une lecture des drops eux-mêmes.
+ */
+async function weeklyDropOutcomes(guildId: string): Promise<Record<DropType, DropOutcomes>> {
+  const since = new Date(Date.now() - DROP_ADVICE_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+  const where = { guildId, createdAt: { gte: since }, closedAt: { not: null } };
+  const [closed, unclaimed] = await Promise.all([
+    prisma.drop.groupBy({ by: ['type'], where, _count: { _all: true } }),
+    prisma.drop.groupBy({ by: ['type'], where: { ...where, claimCount: 0 }, _count: { _all: true } }),
+  ]);
+
+  const countOf = (rows: Array<{ type: string; _count: { _all: number } }>, type: DropType) =>
+    rows.find((row) => row.type === type)?._count._all ?? 0;
+  return Object.fromEntries(DROP_TYPES.map((type) => [
+    type,
+    { closed: countOf(closed, type), unclaimed: countOf(unclaimed, type) },
+  ])) as Record<DropType, DropOutcomes>;
 }
 
 /**
@@ -72,7 +95,10 @@ export async function handleDropsRoutes(
         return true;
       }
 
-      const configs = await getOrCreateDropConfigs(guildId);
+      const [configs, weeklyOutcomes] = await Promise.all([
+        getOrCreateDropConfigs(guildId),
+        weeklyDropOutcomes(guildId),
+      ]);
 
       const recent = await prisma.drop.findMany({
         where: { guildId },
@@ -105,6 +131,7 @@ export async function handleDropsRoutes(
       json(res, 200, {
         ...normalizeDropGlobalSettings(guildData),
         configs: configs.map(serializeConfig),
+        weeklyOutcomes,
         recentDrops: recent.map(({ itemId, ...drop }) => ({
           ...drop,
           item: itemId ? itemById.get(itemId) ?? null : null,

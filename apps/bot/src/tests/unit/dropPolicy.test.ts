@@ -25,6 +25,8 @@ import {
   dropMaxClaims,
   dropMessageDeleteAt,
   dropActivityVerdict,
+  DROP_ADVICE_MIN_SAMPLE,
+  shouldAdviseActivityWait,
   dropJackpotAmount,
   dropTypeBlocker,
   enabledDropModes,
@@ -405,5 +407,26 @@ describe('drops jackpot', () => {
   test('le gain est multiplié, sans dépasser le plafond des montants', () => {
     expect(dropJackpotAmount(120, 5)).toBe(600);
     expect(dropJackpotAmount(DROP_AMOUNT_RANGE.max, 10)).toBe(DROP_AMOUNT_RANGE.max);
+  });
+});
+
+describe('conseil : attendre l\'activité quand les drops expirent sans gagnant', () => {
+  const off = { minMessages: DROP_ACTIVITY_DISABLED, windowMinutes: 15 };
+
+  test('la plupart des drops expirent sans gagnant : conseil', () => {
+    expect(shouldAdviseActivityWait({ closed: 10, unclaimed: 6 }, off)).toBe(true);
+  });
+
+  test('moins de la moitié : pas de conseil', () => {
+    expect(shouldAdviseActivityWait({ closed: 10, unclaimed: 4 }, off)).toBe(false);
+  });
+
+  test('trop peu de drops pour conclure : pas de conseil', () => {
+    expect(shouldAdviseActivityWait({ closed: DROP_ADVICE_MIN_SAMPLE - 1, unclaimed: DROP_ADVICE_MIN_SAMPLE - 1 }, off))
+      .toBe(false);
+  });
+
+  test('l\'attente d\'activité est déjà allumée : pas de conseil', () => {
+    expect(shouldAdviseActivityWait({ closed: 10, unclaimed: 9 }, { minMessages: 5, windowMinutes: 15 })).toBe(false);
   });
 });

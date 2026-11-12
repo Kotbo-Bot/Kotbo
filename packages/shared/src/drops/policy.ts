@@ -236,6 +236,34 @@ export function dropActivityVerdict(input: {
 }
 
 /**
+ * Bilan d'un type sur la période du conseil : drops terminés, et parmi eux ceux qui ont
+ * expiré sans que personne les ramasse. Les drops encore ouverts n'y entrent pas.
+ */
+export interface DropOutcomes {
+  closed: number;
+  unclaimed: number;
+}
+
+/** Période observée pour le conseil, et taille d'échantillon en dessous de laquelle on se tait. */
+export const DROP_ADVICE_WINDOW_DAYS = 7;
+export const DROP_ADVICE_MIN_SAMPLE = 5;
+/** Part de drops sans gagnant à partir de laquelle le conseil apparaît. */
+const DROP_ADVICE_UNCLAIMED_RATIO = 0.5;
+
+/**
+ * Faut-il conseiller l'attente d'activité pour ce type ?
+ *
+ * Un type dont la plupart des drops expirent sans gagnant tombe dans un salon vide :
+ * c'est exactement ce que l'attente d'activité corrige. Rien n'est dit sur trois drops,
+ * ni quand l'option est déjà allumée.
+ */
+export function shouldAdviseActivityWait(outcomes: DropOutcomes, activity: DropActivitySettings): boolean {
+  if (activity.minMessages !== DROP_ACTIVITY_DISABLED) return false;
+  if (outcomes.closed < DROP_ADVICE_MIN_SAMPLE) return false;
+  return outcomes.unclaimed / outcomes.closed >= DROP_ADVICE_UNCLAIMED_RATIO;
+}
+
+/**
  * Drops jackpot : de temps en temps, un drop rapporte un multiple du montant tiré.
  *
  * Réglage unique pour tout le serveur, à valeurs fixes : une chance et un multiplicateur
