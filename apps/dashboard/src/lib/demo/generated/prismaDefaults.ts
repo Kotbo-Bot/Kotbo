@@ -1985,6 +1985,8 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "guildId": "",
     "userId": "",
     "amount": 0,
+    "paidAt": null,
+    "attemptedAt": "__NOW__",
     "createdAt": "__NOW__"
   },
   "EconomyConfig": {

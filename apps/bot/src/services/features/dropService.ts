@@ -473,6 +473,7 @@ export async function runDropCycle(client: Client): Promise<void> {
   if (guilds.length === 0) {
     await closeExpiredDrops(client);
     await purgeDeletedDropMessages(client);
+    await settlePendingDropClaims(client);
     return;
   }
 
@@ -510,6 +511,7 @@ export async function runDropCycle(client: Client): Promise<void> {
 
   await closeExpiredDrops(client);
   await purgeDeletedDropMessages(client);
+  await settlePendingDropClaims(client);
 }
 
 /** Grise le bouton d'un drop terminé et récapitule ce qui a été ramassé. */
@@ -640,37 +642,88 @@ async function closeExpiredDrops(client: Client): Promise<void> {
 }
 
 type ClaimOutcome =
-  | { ok: true; amount: number; full: boolean }
+  | { ok: true; claimId: string; full: boolean }
   | { ok: false; reason: 'already' | 'full' | 'error' };
 
+/** Ramassage à verser : sa ligne, et le membre qui touche le gain. */
+interface PendingClaim {
+  id: string;
+  userId: string;
+}
+
+/** Délai avant de reprendre un versement en suspens, bien au-delà de la durée d'un clic. */
+const CLAIM_SETTLE_RETRY_MS = 5 * 60 * 1000;
+/** Ramassages repris par passage du cycle. */
+const CLAIM_SETTLE_BATCH = 50;
+
 /**
- * Verse la récompense d'un drop.
+ * Marque un ramassage comme versé. Écriture conditionnelle : `false` quand un
+ * autre passage l'a déjà marqué.
+ */
+async function markClaimPaid(db: Prisma.TransactionClient, claimId: string): Promise<boolean> {
+  const marked = await db.dropClaim.updateMany({
+    where: { id: claimId, paidAt: null },
+    data: { paidAt: new Date() },
+  });
+  return marked.count > 0;
+}
+
+/**
+ * Verse dans la même transaction que le marquage : une ressource qui ne vit qu'en
+ * base est versée une fois, jamais deux, même si deux passages se croisent.
+ * Renvoie `false` quand le ramassage était déjà versé.
+ */
+async function payInTransaction(
+  claimId: string,
+  pay: (tx: Prisma.TransactionClient) => Promise<unknown>,
+): Promise<boolean> {
+  return prisma.$transaction(async (tx) => {
+    if (!(await markClaimPaid(tx, claimId))) return false;
+    await pay(tx);
+    return true;
+  });
+}
+
+/**
+ * Verse la récompense d'un drop et marque le ramassage comme versé.
  *
  * Renvoie ce qui a réellement été crédité : les points de clan d'un membre sans
  * clan ne vont nulle part, et le drop doit alors rester ouvert pour quelqu'un
- * d'autre plutôt que de disparaître dans le vide.
+ * d'autre plutôt que de disparaître dans le vide. Une erreur est propagée : le
+ * ramassage reste alors en suspens, et le cycle le reprendra.
+ *
+ * Pièces, XP RPG et objets ne vivent qu'en base : versement et marquage partagent
+ * une transaction. L'XP de niveau et les points de clan passent par leurs modules,
+ * qui annoncent, donnent des rôles et lisent Discord : le marquage suit le
+ * versement, et un arrêt entre les deux le ferait reprendre une seconde fois.
+ * Mieux vaut ce cas, rare et borné à un gain, qu'un clic qui ne rapporte rien.
  */
-async function creditDrop(client: Client, drop: DropRow, userId: string): Promise<number> {
+async function creditDrop(client: Client, drop: DropRow, claim: PendingClaim): Promise<number> {
+  const userId = claim.userId;
   switch (drop.type as DropType) {
     case 'XP': {
       await addXp(drop.guildId, userId, drop.amount, client, drop.channelId);
+      await markClaimPaid(prisma, claim.id);
       return drop.amount;
     }
     case 'RPG_XP': {
       const profile = await getOrCreateRpgProfile(drop.guildId, userId);
-      await prisma.rpgProfile.update({ where: { id: profile.id }, data: { xp: { increment: drop.amount } } });
+      const paid = await payInTransaction(claim.id, (tx) =>
+        tx.rpgProfile.update({ where: { id: profile.id }, data: { xp: { increment: drop.amount } } }));
       // Comme tout gain d'XP RPG : sans ce passage, l'XP s'empile sans jamais
       // faire monter de niveau tant qu'aucune autre action ne le déclenche.
-      await checkLevelUp(drop.guildId, userId);
+      if (paid) await checkLevelUp(drop.guildId, userId);
       return drop.amount;
     }
     case 'COINS': {
       const profile = await getOrCreateRpgProfile(drop.guildId, userId);
-      await prisma.rpgProfile.update({ where: { id: profile.id }, data: { balance: { increment: drop.amount } } });
+      await payInTransaction(claim.id, (tx) =>
+        tx.rpgProfile.update({ where: { id: profile.id }, data: { balance: { increment: drop.amount } } }));
       return drop.amount;
     }
     case 'RPG_ITEM': {
       if (!drop.itemId) return 0;
+      const itemId = drop.itemId;
 
       // Le module a pu être éteint et l'objet supprimé depuis la publication : les mêmes
       // contrôles sont repassés. Rendre 0 laisse le drop ouvert plutôt que de le consommer
@@ -679,15 +732,15 @@ async function creditDrop(client: Client, drop: DropRow, userId: string): Promis
       // La liste du serveur n'est volontairement pas relue : elle décide de ce qui *peut
       // être publié*, et un objet retiré après coup ne doit pas reprendre ce que le salon
       // a déjà promis nommément.
-      const eligible = await eligibleDropItems(drop.guildId, [{ itemId: drop.itemId, weight: DROP_ITEM_WEIGHT_RANGE.min }]);
+      const eligible = await eligibleDropItems(drop.guildId, [{ itemId, weight: DROP_ITEM_WEIGHT_RANGE.min }]);
       if (eligible.length === 0) return 0;
 
       const profile = await getOrCreateRpgProfile(drop.guildId, userId);
-      await prisma.rpgInventoryItem.upsert({
-        where: { rpgProfileId_itemId: { rpgProfileId: profile.id, itemId: drop.itemId } },
-        create: { rpgProfileId: profile.id, itemId: drop.itemId, quantity: drop.amount },
+      await payInTransaction(claim.id, (tx) => tx.rpgInventoryItem.upsert({
+        where: { rpgProfileId_itemId: { rpgProfileId: profile.id, itemId } },
+        create: { rpgProfileId: profile.id, itemId, quantity: drop.amount },
         update: { quantity: { increment: drop.amount } },
-      });
+      }));
       return drop.amount;
     }
     case 'CLAN_POINTS': {
@@ -700,7 +753,9 @@ async function creditDrop(client: Client, drop: DropRow, userId: string): Promis
         // Tous les gagnants du drop partent dans un seul message du flux, publié à sa clôture.
         feedGroup: { key: dropFeedGroupKey(drop.id), flushAt: drop.expiresAt },
       });
-      return granted.get(userId) ?? 0;
+      const credited = granted.get(userId) ?? 0;
+      if (credited > 0) await markClaimPaid(prisma, claim.id);
+      return credited;
     }
     default:
       return 0;
@@ -718,7 +773,7 @@ async function creditDrop(client: Client, drop: DropRow, userId: string): Promis
 async function reserveClaim(drop: DropRow, userId: string): Promise<ClaimOutcome> {
   try {
     return await prisma.$transaction(async (tx) => {
-      await tx.dropClaim.create({
+      const claim = await tx.dropClaim.create({
         data: { dropId: drop.id, guildId: drop.guildId, userId, amount: drop.amount },
       });
 
@@ -736,7 +791,7 @@ async function reserveClaim(drop: DropRow, userId: string): Promise<ClaimOutcome
 
       const updated = await tx.drop.findUnique({ where: { id: drop.id }, select: { claimCount: true } });
       const full = drop.maxClaims > 0 && (updated?.claimCount ?? 0) >= drop.maxClaims;
-      return { ok: true as const, amount: drop.amount, full };
+      return { ok: true as const, claimId: claim.id, full };
     });
   } catch (error) {
     const code = (error as { code?: string })?.code;
@@ -746,14 +801,64 @@ async function reserveClaim(drop: DropRow, userId: string): Promise<ClaimOutcome
   }
 }
 
-/** Annule une réservation dont la récompense n'a finalement pas été versée. */
-async function releaseClaim(drop: DropRow, userId: string): Promise<void> {
-  await prisma.$transaction([
-    prisma.dropClaim.deleteMany({ where: { dropId: drop.id, userId } }),
-    prisma.drop.update({ where: { id: drop.id }, data: { claimCount: { decrement: 1 } } }),
-  ]).catch((error: unknown) => {
-    logger.error('Drops', `Libération de la place de ${userId} sur le drop ${drop.id} impossible:`, error);
+/**
+ * Rend la place d'un ramassage dont la récompense ne sera pas versée. Un
+ * ramassage déjà versé n'est jamais retiré, et la place n'est rendue que si la
+ * ligne a bien été supprimée ici.
+ */
+async function releaseClaim(dropId: string, claimId: string): Promise<void> {
+  await prisma.$transaction(async (tx) => {
+    const removed = await tx.dropClaim.deleteMany({ where: { id: claimId, paidAt: null } });
+    if (removed.count > 0) {
+      await tx.drop.update({ where: { id: dropId }, data: { claimCount: { decrement: 1 } } });
+    }
+  }).catch((error: unknown) => {
+    // Le ramassage reste en suspens : la reprise le retentera.
+    logger.error('Drops', `Libération du ramassage ${claimId} sur le drop ${dropId} impossible:`, error);
   });
+}
+
+/**
+ * Reprend les versements qu'un redémarrage ou une erreur a laissés en route.
+ *
+ * Chaque ramassage est d'abord pris à bail par une écriture conditionnelle sur
+ * `attemptedAt` : le cycle peut tourner sur plusieurs processus, et le second
+ * à lire la ligne la trouve déjà repoussée. Un nouvel échec la laisse en
+ * suspens jusqu'au passage suivant, après le même délai.
+ */
+export async function settlePendingDropClaims(client: Client): Promise<void> {
+  const pending = await prisma.dropClaim.findMany({
+    where: { paidAt: null, attemptedAt: { lte: new Date(Date.now() - CLAIM_SETTLE_RETRY_MS) } },
+    orderBy: { attemptedAt: 'asc' },
+    take: CLAIM_SETTLE_BATCH,
+    include: { drop: true },
+  });
+
+  for (const claim of pending) {
+    const leased = await prisma.dropClaim.updateMany({
+      where: { id: claim.id, paidAt: null, attemptedAt: claim.attemptedAt },
+      data: { attemptedAt: new Date() },
+    });
+    if (leased.count === 0) continue;
+
+    // Même règle qu'au clic : un module coupé depuis ne verserait rien de visible.
+    if (!(await isModuleEnabled(claim.guildId, DROP_TYPE_MODULE[claim.drop.type as DropType]))) {
+      await releaseClaim(claim.dropId, claim.id);
+      continue;
+    }
+
+    const credited = await creditDrop(client, claim.drop, claim).catch((error: unknown) => {
+      logger.error('Drops', `Reprise du versement ${claim.id} (drop ${claim.dropId}) impossible:`, error);
+      return null;
+    });
+    if (credited === null) continue;
+
+    if (credited <= 0) {
+      await releaseClaim(claim.dropId, claim.id);
+    } else {
+      logger.info('Drops', `Versement repris pour ${claim.userId} sur le drop ${claim.dropId}.`);
+    }
+  }
 }
 
 /** Bouton « Ramasser » : réserve la place, verse le gain, ferme si le drop est complet. */
@@ -801,13 +906,20 @@ export async function handleDropClaim(interaction: ButtonInteraction, dropId: st
     return;
   }
 
-  const credited = await creditDrop(interaction.client, drop, interaction.user.id).catch((error: unknown) => {
-    logger.error('Drops', `Versement du drop ${dropId} à ${interaction.user.id} impossible:`, error);
-    return 0;
+  const credited = await creditDrop(
+    interaction.client,
+    drop,
+    { id: reserved.claimId, userId: interaction.user.id },
+  ).catch((error: unknown) => {
+    // La place reste réservée et non versée : la reprise du cycle s'en charge.
+    logger.error('Drops', `Versement du drop ${dropId} à ${interaction.user.id} impossible, repris plus tard:`, error);
+    return null;
   });
 
-  if (credited <= 0) {
-    await releaseClaim(drop, interaction.user.id);
+  if (credited === null) {
+    await refuse(m.drop_claim_pending({}, { locale }));
+  } else if (credited <= 0) {
+    await releaseClaim(drop.id, reserved.claimId);
     await refuse(
       drop.type === 'CLAN_POINTS'
         ? m.drop_claim_no_clan({}, { locale })
@@ -816,21 +928,22 @@ export async function handleDropClaim(interaction: ButtonInteraction, dropId: st
           : m.drop_claim_failed({}, { locale }),
     );
     return;
+  } else {
+    const claimedItem = drop.itemId
+      ? await prisma.rpgItem.findUnique({ where: { id: drop.itemId }, select: { name: true, emoji: true } })
+      : null;
+    const resource = resourceLabel(
+      drop.type as DropType,
+      locale,
+      claimedItem ? `${claimedItem.emoji} ${claimedItem.name}` : null,
+    );
+    const amount = credited.toLocaleString(locale === 'fr' ? 'fr-FR' : 'en-US');
+    await interaction.editReply({
+      content: m.drop_claim_success({ amount, resource }, { locale }),
+    }).catch(() => null);
   }
 
-  const claimedItem = drop.itemId
-    ? await prisma.rpgItem.findUnique({ where: { id: drop.itemId }, select: { name: true, emoji: true } })
-    : null;
-  const resource = resourceLabel(
-    drop.type as DropType,
-    locale,
-    claimedItem ? `${claimedItem.emoji} ${claimedItem.name}` : null,
-  );
-  const amount = credited.toLocaleString(locale === 'fr' ? 'fr-FR' : 'en-US');
-  await interaction.editReply({
-    content: m.drop_claim_success({ amount, resource }, { locale }),
-  }).catch(() => null);
-
+  // Un versement en suspens occupe sa place : le drop complet se ferme quand même.
   if (reserved.full) {
     const closed = await prisma.drop.updateMany({
       where: { id: drop.id, closedAt: null },

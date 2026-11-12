@@ -7,6 +7,10 @@
  * « Tu as ramassé 120 XP », sa place consommée pour rien. Le clic est désormais
  * refusé avant toute réservation.
  *
+ * Le versement est suivi à part de la réservation : une erreur laisse la place
+ * réservée et non versée, et le cycle reprend ces ramassages en suspens, sous
+ * un bail qui empêche deux processus de verser le même.
+ *
  * Le comptage des messages récents d'un salon (attente d'activité) est testé ici
  * aussi : il vit dans le même service, et profite des mêmes doubles.
  *
@@ -43,9 +47,22 @@ const dropXp = {
   createdAt: new Date(),
 };
 
+const CLAIM_ID = 'claim-1';
+
+/** Le bail de la reprise est pris (écriture conditionnelle sur `attemptedAt`). */
+let bailPris = true;
+
+const dropClaimUpdateMany = mock(async ({ where }: { where: Record<string, unknown> }) =>
+  ({ count: 'attemptedAt' in where ? (bailPris ? 1 : 0) : 1 }));
+
 const tx = {
-  dropClaim: { create: mock(async () => ({})) },
+  dropClaim: {
+    create: mock(async () => ({ id: CLAIM_ID })),
+    deleteMany: mock(async () => ({ count: 1 })),
+    updateMany: dropClaimUpdateMany,
+  },
   drop: {
+    update: mock(async () => ({})),
     updateMany: mock(async () => ({ count: 1 })),
     findUnique: mock(async () => ({ claimCount: 1 })),
   },
@@ -57,13 +74,17 @@ const fauxPrisma = {
     update: mock(async () => ({})),
     updateMany: mock(async () => ({ count: 0 })),
   },
-  dropClaim: { deleteMany: mock(async () => ({ count: 1 })) },
+  dropClaim: {
+    deleteMany: mock(async () => ({ count: 1 })),
+    updateMany: dropClaimUpdateMany,
+    findMany: mock(async () => [] as unknown[]),
+  },
   rpgItem: { findUnique: mock(async () => null) },
   $transaction: mock(async (arg: unknown) =>
     typeof arg === 'function' ? (arg as (client: typeof tx) => unknown)(tx) : Promise.all(arg as unknown[])),
 };
 
-const addXp = mock(async () => undefined);
+const addXp = mock(async (..._args: unknown[]) => undefined);
 
 function mockerModule(relatif: string, overrides: Record<string, unknown>): void {
   const source = path.resolve(import.meta.dir, `${relatif}.ts`);
@@ -80,7 +101,7 @@ mockerModule('../../services/core/moduleGate', {
 });
 mockerModule('../../services/progression/levelingService', { addXp });
 
-const { countRecentMemberMessages, handleDropClaim } = await import('../../services/features/dropService.js');
+const { countRecentMemberMessages, handleDropClaim, settlePendingDropClaims } = await import('../../services/features/dropService.js');
 
 const editReply = mock(async (_payload: { content: string }) => undefined);
 
@@ -96,10 +117,21 @@ function clic() {
 
 beforeEach(() => {
   levelingActif = true;
-  addXp.mockClear();
+  bailPris = true;
+  addXp.mockReset();
+  addXp.mockImplementation(async () => undefined);
   editReply.mockClear();
   tx.dropClaim.create.mockClear();
+  tx.dropClaim.deleteMany.mockClear();
+  fauxPrisma.dropClaim.deleteMany.mockClear();
+  fauxPrisma.dropClaim.findMany.mockReset();
+  dropClaimUpdateMany.mockClear();
 });
+
+/** Appels qui marquent un ramassage comme versé (et non ceux qui prennent le bail). */
+function marquagesVerses(): unknown[] {
+  return dropClaimUpdateMany.mock.calls.filter(([args]) => 'paidAt' in (args as { data: object }).data);
+}
 
 describe('ramassage d\'un drop dont le module de la ressource est éteint', () => {
   test('niveaux éteints : aucune place n\'est prise et rien n\'est versé', async () => {
@@ -116,6 +148,91 @@ describe('ramassage d\'un drop dont le module de la ressource est éteint', () =
 
     expect(tx.dropClaim.create).toHaveBeenCalledTimes(1);
     expect(addXp).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('versement garanti d\'un ramassage', () => {
+  test('versement réussi : le ramassage est marqué versé', async () => {
+    await handleDropClaim(clic(), DROP_ID);
+
+    expect(addXp).toHaveBeenCalledTimes(1);
+    expect(marquagesVerses()).toHaveLength(1);
+    expect(dropClaimUpdateMany).toHaveBeenCalledWith({
+      where: { id: CLAIM_ID, paidAt: null },
+      data: { paidAt: expect.any(Date) },
+    });
+  });
+
+  test('versement en erreur : la place reste réservée, la reprise s\'en chargera', async () => {
+    addXp.mockImplementation(async () => { throw new Error('base indisponible'); });
+    await handleDropClaim(clic(), DROP_ID);
+
+    expect(tx.dropClaim.deleteMany).not.toHaveBeenCalled();
+    expect(fauxPrisma.dropClaim.deleteMany).not.toHaveBeenCalled();
+    expect(marquagesVerses()).toHaveLength(0);
+    expect(editReply).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('reprise des versements restés en suspens', () => {
+  const enSuspens = {
+    id: 'claim-2',
+    dropId: DROP_ID,
+    guildId: GUILD_ID,
+    userId: 'membre-2',
+    amount: 120,
+    paidAt: null,
+    attemptedAt: new Date(Date.now() - 30 * 60 * 1000),
+    createdAt: new Date(Date.now() - 30 * 60 * 1000),
+    drop: dropXp,
+  };
+
+  test('seuls les ramassages non versés dont la tentative est ancienne sont relus', async () => {
+    fauxPrisma.dropClaim.findMany.mockImplementation(async () => []);
+    await settlePendingDropClaims({} as never);
+
+    const [args] = fauxPrisma.dropClaim.findMany.mock.calls[0] as unknown as [{ where: { paidAt: null; attemptedAt: { lte: Date } } }];
+    expect(args.where.paidAt).toBeNull();
+    expect(args.where.attemptedAt.lte.getTime()).toBeLessThan(Date.now() - 60 * 1000);
+  });
+
+  test('bail pris : le gain est versé puis marqué', async () => {
+    fauxPrisma.dropClaim.findMany.mockImplementation(async () => [enSuspens]);
+    await settlePendingDropClaims({} as never);
+
+    expect(addXp).toHaveBeenCalledTimes(1);
+    expect(addXp.mock.calls[0]?.slice(0, 3)).toEqual([GUILD_ID, 'membre-2', 120]);
+    expect(dropClaimUpdateMany).toHaveBeenCalledWith({
+      where: { id: 'claim-2', paidAt: null },
+      data: { paidAt: expect.any(Date) },
+    });
+  });
+
+  test('bail déjà pris par un autre processus : rien n\'est versé', async () => {
+    bailPris = false;
+    fauxPrisma.dropClaim.findMany.mockImplementation(async () => [enSuspens]);
+    await settlePendingDropClaims({} as never);
+
+    expect(addXp).not.toHaveBeenCalled();
+    expect(marquagesVerses()).toHaveLength(0);
+  });
+
+  test('module éteint depuis : la place est libérée sans versement', async () => {
+    levelingActif = false;
+    fauxPrisma.dropClaim.findMany.mockImplementation(async () => [enSuspens]);
+    await settlePendingDropClaims({} as never);
+
+    expect(addXp).not.toHaveBeenCalled();
+    expect(tx.dropClaim.deleteMany).toHaveBeenCalledWith({ where: { id: 'claim-2', paidAt: null } });
+  });
+
+  test('nouvel échec : le ramassage reste en suspens pour le passage suivant', async () => {
+    addXp.mockImplementation(async () => { throw new Error('base indisponible'); });
+    fauxPrisma.dropClaim.findMany.mockImplementation(async () => [enSuspens]);
+    await settlePendingDropClaims({} as never);
+
+    expect(tx.dropClaim.deleteMany).not.toHaveBeenCalled();
+    expect(marquagesVerses()).toHaveLength(0);
   });
 });
 
