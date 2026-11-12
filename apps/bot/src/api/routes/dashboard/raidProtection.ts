@@ -64,7 +64,7 @@ const PATCHABLE_FIELDS = [
   'scamFilterEnabled', 'scamFilterAction', 'scamFilterTimeoutMin', 'scamFilterCustomDomains',
   'scamFilterWhitelist', 'scamFilterAlertChannelId', 'scamImageFilterEnabled',
   'scamQrFilterEnabled', 'scamQrTrustedMessages', 'scamOcrEnabled',
-  'visionEnabled', 'visionSanction', 'visionDurationMin', 'visionReviewChannelId', 'visionNotifyMember',
+  'visionEnabled', 'visionSanction', 'visionDurationMin', 'visionReviewChannelId', 'visionNotifyMember', 'visionUncertainDelete',
   'jailRoleId', 'jailChannelId', 'jailStripRoles', 'discordQuarantineSyncEnabled',
   'otherInvitesMode', 'otherFriendInvites', 'otherForwardsMode', 'otherTagsMode', 'otherServers', 'otherSanction', 'otherDurationMin',
   'fileFilterMode', 'fileGroups', 'fileExtensions', 'fileRejectCorrupted', 'fileSanction', 'fileDurationMin',

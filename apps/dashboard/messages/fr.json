@@ -16925,6 +16925,8 @@
   "arx_vision_no_jail": "Aucun rôle Jail configuré : la quarantaine sera remplacée par un timeout. Configure-le dans l'onglet Quarantaine.",
   "arx_vision_notify": "Prévenir le membre en MP",
   "arx_vision_notify_help": "Explique pourquoi le message a disparu et rappelle quoi faire si le compte a été piraté (mot de passe, double authentification).",
+  "arx_vision_uncertain_delete": "Supprimer en cas de doute",
+  "arx_vision_uncertain_delete_help": "Supprime le message dès qu'une image ressemble à une image interdite, avant la décision du staff. Désactivé, le message reste en place jusqu'à ce que le staff confirme.",
   "arx_jail_desc": "Le membre reste sur le serveur mais n'y voit plus rien. Ses rôles lui sont retirés puis rendus à la levée. Sert à /sanction jail, à Kotbo Vision, au honeypot et aux arrivées suspectes.",
   "arx_jail_repair": "Réparer le rôle",
   "arx_jail_create": "Créer le rôle Jail",

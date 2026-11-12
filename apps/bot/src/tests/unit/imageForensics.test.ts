@@ -1,17 +1,15 @@
 import { describe, expect, test } from 'bun:test';
-import { createCanvas, loadImage } from '@napi-rs/canvas';
+import { createCanvas, Image, loadImage } from '@napi-rs/canvas';
 
 import {
   analyzeImage,
   compareFingerprints,
   compareWindows,
-  compareWithLegacy,
   computeWindowHashes,
   detectQrCode,
   hammingDistance,
   isPerceptualMatch,
   parseFingerprint,
-  parseLegacyHash,
   perceptualHash,
   serializeFingerprint,
   toGrayscale,
@@ -160,6 +158,24 @@ describe('detectQrCode', () => {
     expect(detectQrCode(gray!).detected).toBe(false);
   });
 
+  test('ne se declenche pas sur une capture de texte', async () => {
+    // Des lignes de mots : du 1:1:3:1:1 a l'horizontale partout, aucun motif en equerre.
+    const canvas = createCanvas(720, 900);
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, 720, 900);
+    ctx.fillStyle = '#111';
+    for (let y = 30; y < 880; y += 28) {
+      for (let x = 30, i = 0; x < 660; i++) {
+        const w = 14 + ((y * 7 + i * 31) % 70);
+        ctx.fillRect(x, y, w, 14);
+        x += w + 8 + ((y + i * 13) % 16);
+      }
+    }
+    const gray = await toGrayscale(canvas.toBuffer('image/png'));
+    expect(detectQrCode(gray!).detected).toBe(false);
+  });
+
   test('ne se declenche pas sur une image unie', async () => {
     const canvas = createCanvas(300, 300);
     const ctx = canvas.getContext('2d');
@@ -213,6 +229,12 @@ function makeScamLikeImage(seed: number): Buffer {
   return canvas.toBuffer('image/png');
 }
 
+function createCanvasFrom(buffer: Buffer) {
+  const img = new Image();
+  img.src = buffer;
+  return img;
+}
+
 async function transformed(buffer: Buffer, draw: (ctx: Ctx, img: Awaited<ReturnType<typeof loadImage>>) => void, size?: [number, number]): Promise<Buffer> {
   const img = await loadImage(buffer);
   const canvas = createCanvas(size?.[0] ?? img.width, size?.[1] ?? img.height);
@@ -228,7 +250,7 @@ describe('empreinte Kotbo Vision v2', () => {
     expect(parseFingerprint('v1;nimporte;quoi')).toBeNull();
   });
 
-  test('reconnaît avec certitude une recompression, une bordure et un miroir', async () => {
+  test('reconnaît avec certitude une recompression et une bordure, le miroir reste à vérifier', async () => {
     const original = makeScamLikeImage(7);
     const known = (await analyzeImage(original))!.fingerprint;
 
@@ -244,10 +266,37 @@ describe('empreinte Kotbo Vision v2', () => {
       ctx.drawImage(img, 0, 0);
     });
 
-    for (const variant of [recompressed, bordered, mirrored]) {
+    for (const variant of [recompressed, bordered]) {
       const fp = (await analyzeImage(variant))!.fingerprint;
       expect(compareFingerprints(fp, known).verdict).toBe('CERTAIN');
     }
+    expect(compareFingerprints((await analyzeImage(mirrored))!.fingerprint, known).verdict).toBe('UNCERTAIN');
+  });
+
+  test('deux images de même gabarit ne sont jamais une correspondance certaine', async () => {
+    // Même mise en page (bandeau de texte, visuel dessous), contenu différent :
+    // les hash 64 bits les confondent, la signature de pixels les départage.
+    const meme = (seed: number) => {
+      const canvas = createCanvas(480, 600);
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(0, 0, 480, 600);
+      ctx.fillStyle = '#000';
+      for (let i = 0; i < 2; i++) ctx.fillRect(20, 20 + i * 40, 300 + ((seed * 53 * (i + 1)) % 140), 22);
+      ctx.drawImage(createCanvasFrom(makeScamLikeImage(seed)), 0, 110, 480, 490);
+      return canvas.toBuffer('image/png');
+    };
+    const known = (await analyzeImage(meme(41)))!.fingerprint;
+    for (const seed of [42, 43, 44, 45, 46, 47]) {
+      expect(compareFingerprints((await analyzeImage(meme(seed)))!.fingerprint, known).verdict).not.toBe('CERTAIN');
+    }
+  });
+
+  test('une entrée sans signature (antérieure) ne donne jamais de certitude', async () => {
+    const analysis = (await analyzeImage(makeScamLikeImage(7)))!;
+    const old = parseFingerprint(serializeFingerprint({ ...analysis.fingerprint, signature: undefined }))!;
+    expect(old.signature).toBeUndefined();
+    expect(compareFingerprints(analysis.fingerprint, old).verdict).toBe('UNCERTAIN');
   });
 
   test('ne confond pas deux images sans rapport', async () => {
@@ -283,12 +332,7 @@ describe('empreinte Kotbo Vision v2', () => {
     }, [640, 1100]);
     const gray = (await analyzeImage(screenshot))!.gray;
     const windows = computeWindowHashes(gray, windowShapesFor([known.rawAspect]));
-    expect(compareWindows(windows, known).verdict).not.toBeNull();
-  });
-
-  test('compare une entrée v1 (dHash seul) à une empreinte v2', async () => {
-    const analysis = (await analyzeImage(makeScamLikeImage(31)))!;
-    const legacy = parseLegacyHash(analysis.phash)!;
-    expect(compareWithLegacy(analysis.fingerprint, legacy).verdict).toBe('CERTAIN');
+    // Une image retrouvée dans une capture passe toujours par le staff.
+    expect(compareWindows(windows, known).verdict).toBe('UNCERTAIN');
   });
 });
