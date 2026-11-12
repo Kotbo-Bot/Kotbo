@@ -31,7 +31,11 @@
     type DropHistoryEntry,
   } from '../lib/api';
   import {
+    DEFAULT_DROP_ACTIVITY_MESSAGES,
     DEFAULT_DROP_GLOBAL_SETTINGS,
+    DROP_ACTIVITY_DISABLED,
+    DROP_ACTIVITY_MESSAGES_RANGE,
+    DROP_ACTIVITY_WINDOW_MINUTES_RANGE,
     DROP_DELETE_AFTER_DISABLED,
     DROP_INTERVAL_MINUTES_RANGE,
     DROP_ITEM_POOL_MAX,
@@ -206,11 +210,21 @@
     return m.drop_item_pool_empty();
   }
 
+  /**
+   * Seul zéro éteint l'attente d'activité. Un champ vidé pendant la saisie vaut `null` :
+   * le traiter comme éteint ferait disparaître le champ sous le curseur.
+   */
+  function activityOn(type: DropType): boolean {
+    return configs[type].activity.minMessages !== DROP_ACTIVITY_DISABLED;
+  }
+
   /** Une échéance passée attend le prochain passage du cycle ou l'écart minimal. */
   function nextDropLabel(type: DropType): string {
     const next = configs[type].nextDropAt;
     if (typeStatus(type) !== 'on' || !next) return '-';
-    return new Date(next) <= new Date() ? m.drop_next_soon() : formatDate(next);
+    if (new Date(next) > new Date()) return formatDate(next);
+    // Échéance passée : avec l'attente d'activité, c'est le salon calme qui retient le drop.
+    return activityOn(type) ? m.drop_next_waiting_activity() : m.drop_next_soon();
   }
 
   const STATUS_PILL: Record<'on' | 'off' | 'blocked', string> = {
@@ -288,6 +302,7 @@
       // Copié et non partagé : l'instantané « enregistré » sert à détecter les
       // modifications, un tableau commun aux deux ne montrerait jamais d'écart.
       items: (config.items ?? []).map((entry) => ({ ...entry })),
+      activity: { ...config.activity },
       first: { ...config.first },
       race: { ...config.race },
       window: { ...config.window },
@@ -372,6 +387,7 @@
           enabled: configs[type].enabled,
           channelId: configs[type].channelId || null,
           intervalMinutes: configs[type].intervalMinutes,
+          activity: { ...configs[type].activity },
           items: configs[type].items.map((entry) => ({ ...entry })),
           first: { ...configs[type].first },
           race: { ...configs[type].race },
@@ -809,6 +825,62 @@
             <p class="text-2xs text-on-surface-variant">{m.drop_min_gap_hint()}</p>
           </div>
         </div>
+
+        <!-- Replie par defaut : le titre resume le reglage, on n'ouvre que pour le changer. -->
+        <details class="group border border-outline-variant/15 rounded-xl">
+          <summary class="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-3 [&::-webkit-details-marker]:hidden">
+            <span class="text-sm font-semibold flex items-center gap-2">
+              <span class="transition-transform group-open:rotate-90"><Papicon icon="ChevronRight" size={14} /></span>
+              {m.drop_activity_title()}
+            </span>
+            <span class="text-2xs font-semibold px-2 py-0.5 rounded-full {activityOn(type) ? 'bg-success/10 text-success border border-success/20' : 'bg-surface-container-high/60 text-on-surface-variant'}">
+              {activityOn(type)
+                ? m.drop_activity_summary({ messages: configs[type].activity.minMessages, minutes: configs[type].activity.windowMinutes })
+                : m.drop_activity_off()}
+            </span>
+          </summary>
+
+          <div class="px-4 pb-4 space-y-4">
+            <div class="flex items-center justify-between gap-4">
+              <p class="text-xs font-semibold">{m.drop_activity_toggle()}</p>
+              <ToggleSwitch
+                checked={activityOn(type)}
+                onToggle={(v) => configs[type].activity.minMessages = v ? DEFAULT_DROP_ACTIVITY_MESSAGES : DROP_ACTIVITY_DISABLED}
+                disabled={!canManageSettings}
+              />
+            </div>
+
+            {#if activityOn(type)}
+              <div class="grid grid-cols-2 gap-4">
+                <div class="space-y-1.5">
+                  <label for="drop-activity-messages-{type}" class="text-xs font-semibold text-on-surface-variant ml-1">{m.drop_activity_messages_label()}</label>
+                  <input
+                    id="drop-activity-messages-{type}"
+                    type="number"
+                    bind:value={configs[type].activity.minMessages}
+                    min={DROP_ACTIVITY_MESSAGES_RANGE.min}
+                    max={DROP_ACTIVITY_MESSAGES_RANGE.max}
+                    class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold"
+                    disabled={!canManageSettings}
+                  />
+                </div>
+                <div class="space-y-1.5">
+                  <label for="drop-activity-window-{type}" class="text-xs font-semibold text-on-surface-variant ml-1">{m.drop_activity_window_label()}</label>
+                  <input
+                    id="drop-activity-window-{type}"
+                    type="number"
+                    bind:value={configs[type].activity.windowMinutes}
+                    min={DROP_ACTIVITY_WINDOW_MINUTES_RANGE.min}
+                    max={DROP_ACTIVITY_WINDOW_MINUTES_RANGE.max}
+                    class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold"
+                    disabled={!canManageSettings}
+                  />
+                </div>
+              </div>
+            {/if}
+            <p class="text-2xs text-on-surface-variant">{m.drop_activity_desc()}</p>
+          </div>
+        </details>
       </section>
 
       <section class="bg-surface-container-low/40 border border-outline-variant/30 p-6 rounded-xl space-y-5">

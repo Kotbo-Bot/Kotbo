@@ -225,6 +225,7 @@ export async function handleDropsRoutes(
         first: { ...current.first, ...body?.first },
         race: { ...current.race, ...body?.race },
         window: { ...current.window, ...body?.window },
+        activity: { ...current.activity, ...body?.activity },
         channelId: body?.channelId === undefined ? current.channelId : (body.channelId || null),
       });
 
@@ -249,7 +250,7 @@ export async function handleDropsRoutes(
         context: getGuildName(client, guildId),
         module: 'Drops',
         eventType: 'Manuel',
-        details: `Activé: ${settings.enabled}, intervalle moyen: ${settings.intervalMinutes} min`,
+        details: `Activé: ${settings.enabled}, intervalle moyen: ${settings.intervalMinutes} min, activité requise: ${settings.activity.minMessages > 0 ? `${settings.activity.minMessages} msg / ${settings.activity.windowMinutes} min` : 'non'}`,
         channelId: null,
       });
 

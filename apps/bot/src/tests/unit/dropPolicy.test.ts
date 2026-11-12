@@ -1,6 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import { getModuleDefinition } from '@kotbo/contracts';
 import {
+  DROP_ACTIVITY_DISABLED,
+  DROP_ACTIVITY_MESSAGES_RANGE,
+  DROP_ACTIVITY_WINDOW_MINUTES_RANGE,
   DROP_AMOUNT_RANGE,
   DROP_DELETE_AFTER_DISABLED,
   DROP_INTERVAL_MINUTES_RANGE,
@@ -19,6 +22,7 @@ import {
   dropExpiresAt,
   dropMaxClaims,
   dropMessageDeleteAt,
+  dropActivityVerdict,
   dropTypeBlocker,
   enabledDropModes,
   nextAllowedPublicationAt,
@@ -332,5 +336,40 @@ describe('ce qui empêche un type de drop de tomber', () => {
 
   test('le RPG éteint ne bloque que le drop d\'objet', () => {
     expect(dropTypeBlocker('COINS', defaultDropTypeSettings('COINS'), { ...pret, rpgEnabled: false })).toBeNull();
+  });
+});
+
+describe('attente d\'activité dans le salon', () => {
+  const dueAt = since;
+  const activity = { minMessages: 5, windowMinutes: 15 };
+
+  test('éteinte par défaut, et bornée à la normalisation', () => {
+    expect(defaultDropTypeSettings('XP').activity.minMessages).toBe(DROP_ACTIVITY_DISABLED);
+
+    const normalized = normalizeDropTypeSettings('XP', { activity: { minMessages: 10_000, windowMinutes: 1 } });
+    expect(normalized.activity.minMessages).toBe(DROP_ACTIVITY_MESSAGES_RANGE.max);
+    expect(normalized.activity.windowMinutes).toBe(DROP_ACTIVITY_WINDOW_MINUTES_RANGE.min);
+    expect(normalizeDropTypeSettings('XP', { activity: { minMessages: -3, windowMinutes: 15 } }).activity.minMessages)
+      .toBe(DROP_ACTIVITY_DISABLED);
+  });
+
+  test('éteinte : le drop part sans rien compter', () => {
+    expect(dropActivityVerdict({
+      dueAt, now: dueAt, intervalMinutes: 60, activity: { minMessages: DROP_ACTIVITY_DISABLED, windowMinutes: 15 }, recentMessages: 0,
+    })).toBe('publish');
+  });
+
+  test('assez de messages : le drop part', () => {
+    expect(dropActivityVerdict({ dueAt, now: dueAt, intervalMinutes: 60, activity, recentMessages: 5 })).toBe('publish');
+  });
+
+  test('salon calme : le drop attend', () => {
+    expect(dropActivityVerdict({ dueAt, now: new Date(dueAt.getTime() + 30 * MINUTE_MS), intervalMinutes: 60, activity, recentMessages: 4 }))
+      .toBe('wait');
+  });
+
+  test('salon calme depuis un intervalle entier : le drop part quand même', () => {
+    expect(dropActivityVerdict({ dueAt, now: new Date(dueAt.getTime() + 60 * MINUTE_MS), intervalMinutes: 60, activity, recentMessages: 0 }))
+      .toBe('publish');
   });
 });

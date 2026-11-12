@@ -183,6 +183,58 @@ export function normalizeDropDeleteAfterMinutes(value: unknown): number {
   return clampDropInt(parsed, DROP_DELETE_AFTER_MINUTES_RANGE, DROP_DELETE_AFTER_DISABLED);
 }
 
+/**
+ * Attente d'activité : un drop dû ne part que si son salon a reçu assez de messages de
+ * membres sur les dernières minutes. Sans elle, un drop tiré à 4 h tombe dans un salon
+ * vide et expire sans personne.
+ *
+ * Zéro message vaut « sans condition » : c'est la valeur qui éteint l'option. Le plafond
+ * suit la lecture faite au moment du tirage - une seule page de messages Discord, soit
+ * cent au plus - en gardant de la marge.
+ */
+export const DROP_ACTIVITY_DISABLED = 0;
+export const DROP_ACTIVITY_MESSAGES_RANGE = { min: 1, max: 50 } as const;
+export const DROP_ACTIVITY_WINDOW_MINUTES_RANGE = { min: 5, max: 120 } as const;
+export const DEFAULT_DROP_ACTIVITY_MESSAGES = 5;
+const DEFAULT_DROP_ACTIVITY_WINDOW_MINUTES = 15;
+
+export interface DropActivitySettings {
+  /** Messages de membres exigés sur la fenêtre. `0` = pas de condition. */
+  minMessages: number;
+  windowMinutes: number;
+}
+
+function normalizeDropActivity(raw: Partial<DropActivitySettings> | null | undefined): DropActivitySettings {
+  const parsed = Number(raw?.minMessages);
+  const minMessages = !Number.isFinite(parsed) || Math.trunc(parsed) <= DROP_ACTIVITY_DISABLED
+    ? DROP_ACTIVITY_DISABLED
+    : clampDropInt(parsed, DROP_ACTIVITY_MESSAGES_RANGE, DEFAULT_DROP_ACTIVITY_MESSAGES);
+  return {
+    minMessages,
+    windowMinutes: clampDropInt(raw?.windowMinutes, DROP_ACTIVITY_WINDOW_MINUTES_RANGE, DEFAULT_DROP_ACTIVITY_WINDOW_MINUTES),
+  };
+}
+
+/**
+ * Le drop dû part-il maintenant ?
+ *
+ * Un salon qui reste calme ne bloque pas le type indéfiniment : passé un intervalle entier
+ * de retard, le drop part quand même. Sur un petit serveur, l'option espacerait sinon les
+ * drops jusqu'à les faire disparaître.
+ */
+export function dropActivityVerdict(input: {
+  dueAt: Date;
+  now: Date;
+  intervalMinutes: number;
+  activity: DropActivitySettings;
+  recentMessages: number;
+}): 'publish' | 'wait' {
+  if (input.activity.minMessages <= DROP_ACTIVITY_DISABLED) return 'publish';
+  if (input.recentMessages >= input.activity.minMessages) return 'publish';
+  const waitedMs = input.now.getTime() - input.dueAt.getTime();
+  return waitedMs >= input.intervalMinutes * 60 * 1000 ? 'publish' : 'wait';
+}
+
 export interface DropModeSettings {
   enabled: boolean;
   minAmount: number;
@@ -200,6 +252,7 @@ export interface DropTypeSettings {
   channelId: string | null;
   /** Écart moyen entre deux drops. Le tirage réel s'en écarte volontairement. */
   intervalMinutes: number;
+  activity: DropActivitySettings;
   first: DropModeSettings;
   race: DropModeSettings & { winnerCount: number };
   window: DropModeSettings & { durationMinutes: number };
@@ -242,6 +295,7 @@ export function defaultDropTypeSettings(type: DropType): DropTypeSettings {
     items: [],
     channelId: null,
     intervalMinutes: 360,
+    activity: { minMessages: DROP_ACTIVITY_DISABLED, windowMinutes: DEFAULT_DROP_ACTIVITY_WINDOW_MINUTES },
     first: { enabled: true, minAmount: base.min, maxAmount: base.max },
     // Un drop partagé rapporte moins par tête qu'une victoire au clic : le
     // barème de départ le reflète, l'administrateur reste libre de l'inverser.
@@ -288,6 +342,7 @@ export function normalizeDropTypeSettings(
     items: normalizeDropItems(source.items ?? fallback.items),
     channelId: source.channelId ?? null,
     intervalMinutes: clampDropInt(source.intervalMinutes, DROP_INTERVAL_MINUTES_RANGE, fallback.intervalMinutes),
+    activity: normalizeDropActivity(source.activity ?? fallback.activity),
     first: normalizeModeAmounts(source.first, fallback.first, range),
     race: {
       ...race,

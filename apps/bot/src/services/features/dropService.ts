@@ -15,12 +15,14 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, MessageFlags, type ButtonInteraction, type Client } from 'discord.js';
 import type { Prisma } from '@prisma/client';
 import {
+  DROP_ACTIVITY_DISABLED,
   DROP_DELETE_AFTER_DISABLED,
   DROP_ITEM_WEIGHT_RANGE,
   DROP_TYPES,
   DROP_TYPE_MODULE,
   defaultDropTypeSettings,
   drawDropAmount,
+  dropActivityVerdict,
   dropExpiresAt,
   dropMaxClaims,
   dropMessageDeleteAt,
@@ -70,6 +72,11 @@ interface DropGuildContext {
   dropDeleteAfterMinutes: number;
 }
 
+/** Salon où tombe un type : le sien, sinon celui par défaut du serveur. */
+function dropChannelIdFor(settings: DropTypeSettings, guild: DropGuildContext): string | null {
+  return settings.channelId ?? guild.dropChannelId;
+}
+
 /** Colonnes plates de la base vers l'objet de réglages de `@kotbo/shared`. */
 export function dropSettingsFromRow(row: NonNullable<DropConfigRow>): DropTypeSettings {
   return normalizeDropTypeSettings(row.type as DropType, {
@@ -77,6 +84,7 @@ export function dropSettingsFromRow(row: NonNullable<DropConfigRow>): DropTypeSe
     items: normalizeDropItems(row.items),
     channelId: row.channelId,
     intervalMinutes: row.intervalMinutes,
+    activity: { minMessages: row.activityMinMessages, windowMinutes: row.activityWindowMinutes },
     first: { enabled: row.firstEnabled, minAmount: row.firstMinAmount, maxAmount: row.firstMaxAmount },
     race: {
       enabled: row.raceEnabled,
@@ -100,6 +108,8 @@ export function dropSettingsToRow(settings: DropTypeSettings) {
     items: settings.items as unknown as Prisma.InputJsonValue,
     channelId: settings.channelId,
     intervalMinutes: settings.intervalMinutes,
+    activityMinMessages: settings.activity.minMessages,
+    activityWindowMinutes: settings.activity.windowMinutes,
     firstEnabled: settings.first.enabled,
     firstMinAmount: settings.first.minAmount,
     firstMaxAmount: settings.first.maxAmount,
@@ -217,6 +227,33 @@ async function eligibleDropItems(guildId: string, chances: DropItemChance[]) {
     .map((item) => ({ item, weight: weightOf.get(item.id) ?? DROP_ITEM_WEIGHT_RANGE.min }));
 }
 
+/** Une page de messages Discord : la plus grande lecture faite en un appel. */
+const RECENT_MESSAGES_PAGE = 100;
+
+/**
+ * Messages de membres postés dans un salon depuis `since`.
+ *
+ * Lu sur Discord au moment où le drop est dû plutôt que compté au fil de l'eau : le cycle
+ * tourne dans un seul processus pour tous les shards, un compteur en mémoire n'y verrait
+ * que les serveurs du sien. Les bots (dont les drops eux-mêmes), les webhooks et les
+ * messages système ne comptent pas. Un salon injoignable vaut zéro : le drop attend son
+ * plafond de retard, puis la publication dira elle-même ce qui ne va pas.
+ */
+export async function countRecentMemberMessages(client: Client, channelId: string, since: Date): Promise<number> {
+  const channel = await client.channels.fetch(channelId).catch(() => null);
+  if (!channel?.isTextBased()) return 0;
+
+  const messages = await channel.messages.fetch({ limit: RECENT_MESSAGES_PAGE }).catch(() => null);
+  if (!messages) return 0;
+
+  let count = 0;
+  for (const message of messages.values()) {
+    if (message.author.bot || message.system || message.webhookId) continue;
+    if (message.createdTimestamp >= since.getTime()) count += 1;
+  }
+  return count;
+}
+
 async function publishDrop(
   client: Client,
   guild: DropGuildContext,
@@ -224,7 +261,7 @@ async function publishDrop(
   settings: DropTypeSettings,
   mode: DropMode,
 ): Promise<void> {
-  const channelId = settings.channelId ?? guild.dropChannelId;
+  const channelId = dropChannelIdFor(settings, guild);
   if (!channelId) {
     logger.warn('Drops', `Aucun salon configuré pour le drop ${config.type} sur ${guild.id}.`);
     return;
@@ -320,6 +357,24 @@ async function tickDropConfig(client: Client, guild: DropGuildContext, config: N
   }
 
   if (config.nextDropAt > now) return;
+
+  // Attente d'activité : le drop reste dû, sans consommer son créneau, tant que
+  // le salon est calme. Le cycle repasse à la minute suivante. Placée avant le
+  // garde-fou anti-spam, qui décale l'échéance : sinon chaque drop d'un autre
+  // type remettrait à zéro le plafond de retard, mesuré depuis cette échéance.
+  if (settings.activity.minMessages > DROP_ACTIVITY_DISABLED) {
+    const channelId = dropChannelIdFor(settings, guild);
+    const since = new Date(now.getTime() - settings.activity.windowMinutes * 60 * 1000);
+    const recentMessages = channelId ? await countRecentMemberMessages(client, channelId, since) : 0;
+    const verdict = dropActivityVerdict({
+      dueAt: config.nextDropAt,
+      now,
+      intervalMinutes: settings.intervalMinutes,
+      activity: settings.activity,
+      recentMessages,
+    });
+    if (verdict === 'wait') return;
+  }
 
   // Garde-fou anti-spam, tous types confondus : quatre ressources qui tombent
   // coup sur coup font un bot qui inonde un salon, ce qui lui vaut d'être
