@@ -25,12 +25,15 @@ describe('crans des drops', () => {
     expect(ACTIVITY_PRESETS[ACTIVITY_DEFAULT_STEP - 1]).toBeDefined();
   });
 
-  test('jackpot : uniquement des valeurs proposées, du plus rare au plus fréquent', () => {
+  test('jackpot : uniquement des valeurs proposées, gain croissant vers la droite', () => {
     for (const preset of JACKPOT_PRESETS) {
       expect(DROP_JACKPOT_CHANCE_CHOICES as readonly number[]).toContain(preset.chance);
       expect(DROP_JACKPOT_MULTIPLIER_CHOICES as readonly number[]).toContain(preset.multiplier);
     }
+    // Un curseur se lit « plus » vers la droite : ici, plus gros et plus rare.
+    const multipliers = JACKPOT_PRESETS.map((preset) => preset.multiplier);
+    expect(multipliers).toEqual([...multipliers].sort((a, b) => a - b));
     const chances = JACKPOT_PRESETS.map((preset) => preset.chance);
-    expect(chances).toEqual([...chances].sort((a, b) => b - a));
+    expect(chances).toEqual([...chances].sort((a, b) => a - b));
   });
 });

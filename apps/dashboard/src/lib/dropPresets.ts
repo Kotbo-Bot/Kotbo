@@ -21,11 +21,13 @@ export const ACTIVITY_PRESETS = [
 export const ACTIVITY_DEFAULT_STEP = 3;
 
 /**
- * Jackpot, du plus rare au plus fréquent. Un jackpot fréquent doit rester modeste, sinon il
- * pèse sur l'économie : le gain moyen reste proche d'un cran à l'autre.
+ * Jackpot, du plus fréquent et modeste au plus rare et énorme : comme tout curseur, il
+ * monte vers la droite, et c'est le gain qui se lit d'abord. Un jackpot fréquent doit
+ * rester modeste, sinon il pèse sur l'économie : le gain moyen reste proche d'un cran à
+ * l'autre.
  */
 export const JACKPOT_PRESETS = [
-  { chance: 50, multiplier: 10 },
-  { chance: 20, multiplier: 5 },
   { chance: 10, multiplier: 3 },
+  { chance: 20, multiplier: 5 },
+  { chance: 50, multiplier: 10 },
 ] as const;
