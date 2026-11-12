@@ -61,6 +61,9 @@ export async function handleDropsRoutes(
           dropMentionRoleId: true,
           dropLifetimeMinutes: true,
           dropDeleteAfterMinutes: true,
+          dropJackpotEnabled: true,
+          dropJackpotChance: true,
+          dropJackpotMultiplier: true,
         },
       });
 
@@ -82,6 +85,7 @@ export async function handleDropsRoutes(
           mode: true,
           channelId: true,
           amount: true,
+          jackpot: true,
           maxClaims: true,
           claimCount: true,
           createdAt: true,
@@ -125,6 +129,9 @@ export async function handleDropsRoutes(
         dropMentionRoleId?: string | null;
         dropLifetimeMinutes?: number;
         dropDeleteAfterMinutes?: number;
+        dropJackpotEnabled?: boolean;
+        dropJackpotChance?: number;
+        dropJackpotMultiplier?: number;
       }>(req);
 
       const current = await prisma.guild.findUnique({
@@ -135,6 +142,9 @@ export async function handleDropsRoutes(
           dropMentionRoleId: true,
           dropLifetimeMinutes: true,
           dropDeleteAfterMinutes: true,
+          dropJackpotEnabled: true,
+          dropJackpotChance: true,
+          dropJackpotMultiplier: true,
         },
       });
 
@@ -151,6 +161,9 @@ export async function handleDropsRoutes(
         dropMentionRoleId: body?.dropMentionRoleId === undefined ? current.dropMentionRoleId : (body.dropMentionRoleId || null),
         dropLifetimeMinutes: body?.dropLifetimeMinutes ?? current.dropLifetimeMinutes,
         dropDeleteAfterMinutes: body?.dropDeleteAfterMinutes ?? current.dropDeleteAfterMinutes,
+        dropJackpotEnabled: body?.dropJackpotEnabled ?? current.dropJackpotEnabled,
+        dropJackpotChance: body?.dropJackpotChance ?? current.dropJackpotChance,
+        dropJackpotMultiplier: body?.dropJackpotMultiplier ?? current.dropJackpotMultiplier,
       });
 
       // L'interrupteur maître passe par la bascule de module plutôt que par la
@@ -171,6 +184,9 @@ export async function handleDropsRoutes(
           dropMentionRoleId: settings.dropMentionRoleId,
           dropLifetimeMinutes: settings.dropLifetimeMinutes,
           dropDeleteAfterMinutes: settings.dropDeleteAfterMinutes,
+          dropJackpotEnabled: settings.dropJackpotEnabled,
+          dropJackpotChance: settings.dropJackpotChance,
+          dropJackpotMultiplier: settings.dropJackpotMultiplier,
         },
       });
 
@@ -180,7 +196,7 @@ export async function handleDropsRoutes(
         context: getGuildName(client, guildId),
         module: 'Drops',
         eventType: 'Manuel',
-        details: `Drops activés: ${settings.dropsEnabled}, durée de vie: ${settings.dropLifetimeMinutes} min, suppression du message: ${settings.dropDeleteAfterMinutes > 0 ? `${settings.dropDeleteAfterMinutes} min` : 'jamais'}`,
+        details: `Drops activés: ${settings.dropsEnabled}, durée de vie: ${settings.dropLifetimeMinutes} min, suppression du message: ${settings.dropDeleteAfterMinutes > 0 ? `${settings.dropDeleteAfterMinutes} min` : 'jamais'}, jackpot: ${settings.dropJackpotEnabled ? `1/${settings.dropJackpotChance} x${settings.dropJackpotMultiplier}` : 'non'}`,
         channelId: null,
       });
 
@@ -225,6 +241,7 @@ export async function handleDropsRoutes(
         first: { ...current.first, ...body?.first },
         race: { ...current.race, ...body?.race },
         window: { ...current.window, ...body?.window },
+        activity: { ...current.activity, ...body?.activity },
         channelId: body?.channelId === undefined ? current.channelId : (body.channelId || null),
       });
 
@@ -249,7 +266,7 @@ export async function handleDropsRoutes(
         context: getGuildName(client, guildId),
         module: 'Drops',
         eventType: 'Manuel',
-        details: `Activé: ${settings.enabled}, intervalle moyen: ${settings.intervalMinutes} min`,
+        details: `Activé: ${settings.enabled}, intervalle moyen: ${settings.intervalMinutes} min, activité requise: ${settings.activity.minMessages > 0 ? `${settings.activity.minMessages} msg / ${settings.activity.windowMinutes} min` : 'non'}`,
         channelId: null,
       });
 

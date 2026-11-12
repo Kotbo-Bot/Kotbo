@@ -7,6 +7,9 @@
  * « Tu as ramassé 120 XP », sa place consommée pour rien. Le clic est désormais
  * refusé avant toute réservation.
  *
+ * Le comptage des messages récents d'un salon (attente d'activité) est testé ici
+ * aussi : il vit dans le même service, et profite des mêmes doubles.
+ *
  * Préfixe `zzz-` : ce fichier remplace `utils/db`, `utils/i18n`, `moduleGate` et
  * `levelingService` pour tout le process (`mock.module` est global, et
  * `--isolate` ne l'isole pas). Il doit charger après tous les `zz-` :
@@ -77,7 +80,7 @@ mockerModule('../../services/core/moduleGate', {
 });
 mockerModule('../../services/progression/levelingService', { addXp });
 
-const { handleDropClaim } = await import('../../services/features/dropService.js');
+const { countRecentMemberMessages, handleDropClaim } = await import('../../services/features/dropService.js');
 
 const editReply = mock(async (_payload: { content: string }) => undefined);
 
@@ -113,5 +116,48 @@ describe('ramassage d\'un drop dont le module de la ressource est éteint', () =
 
     expect(tx.dropClaim.create).toHaveBeenCalledTimes(1);
     expect(addXp).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('messages récents d\'un salon, pour l\'attente d\'activité', () => {
+  const now = Date.now();
+  const message = (id: string, minutesAgo: number, extra: Record<string, unknown> = {}) => [id, {
+    author: { bot: false },
+    system: false,
+    webhookId: null,
+    createdTimestamp: now - minutesAgo * 60 * 1000,
+    ...extra,
+  }] as const;
+
+  function salon(messages: Array<readonly [string, unknown]>) {
+    const fetchMessages = mock(async (_options: { limit: number }) => new Map(messages));
+    const client = {
+      channels: { fetch: mock(async () => ({ isTextBased: () => true, messages: { fetch: fetchMessages } })) },
+    } as never;
+    return { client, fetchMessages };
+  }
+
+  test('seuls les messages de membres de la fenêtre comptent', async () => {
+    const { client } = salon([
+      message('1', 2),
+      message('2', 5),
+      message('3', 1, { author: { bot: true } }),
+      message('4', 1, { webhookId: 'webhook' }),
+      message('5', 1, { system: true }),
+      message('6', 30),
+    ]);
+
+    expect(await countRecentMemberMessages(client, 'salon-1', new Date(now - 15 * 60 * 1000))).toBe(2);
+  });
+
+  test('une seule page de messages est lue', async () => {
+    const { client, fetchMessages } = salon([]);
+    await countRecentMemberMessages(client, 'salon-1', new Date(now - 15 * 60 * 1000));
+    expect(fetchMessages).toHaveBeenCalledWith({ limit: 100 });
+  });
+
+  test('salon injoignable : zéro, le drop attend son plafond de retard', async () => {
+    const client = { channels: { fetch: mock(async () => null) } } as never;
+    expect(await countRecentMemberMessages(client, 'salon-1', new Date(now))).toBe(0);
   });
 });

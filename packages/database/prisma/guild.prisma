@@ -389,6 +389,11 @@ model Guild {
   /// Délai avant suppression du message d'un drop terminé, en minutes.
   /// `0` = jamais : le message reste en place, grisé, comme avant l'option.
   dropDeleteAfterMinutes Int @default(0)
+  /// Drops jackpot : un drop sur `dropJackpotChance` rapporte `dropJackpotMultiplier`
+  /// fois son montant. Valeurs limitées aux choix proposés (voir `@kotbo/shared`).
+  dropJackpotEnabled    Boolean @default(false)
+  dropJackpotChance     Int     @default(20)
+  dropJackpotMultiplier Int     @default(5)
 
   clans                 Clan[]
   dropConfigs           DropConfig[]

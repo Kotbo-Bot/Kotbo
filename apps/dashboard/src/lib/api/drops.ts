@@ -18,6 +18,8 @@ export interface DropHistoryEntry {
   mode: string;
   channelId: string;
   amount: number;
+  /** Montant déjà multiplié : le drapeau ne sert qu'à l'affichage. */
+  jackpot: boolean;
   maxClaims: number;
   claimCount: number;
   createdAt: string;

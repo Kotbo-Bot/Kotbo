@@ -183,6 +183,89 @@ export function normalizeDropDeleteAfterMinutes(value: unknown): number {
   return clampDropInt(parsed, DROP_DELETE_AFTER_MINUTES_RANGE, DROP_DELETE_AFTER_DISABLED);
 }
 
+/**
+ * Attente d'activité : un drop dû ne part que si son salon a reçu assez de messages de
+ * membres sur les dernières minutes. Sans elle, un drop tiré à 4 h tombe dans un salon
+ * vide et expire sans personne.
+ *
+ * Zéro message vaut « sans condition » : c'est la valeur qui éteint l'option. Le plafond
+ * suit la lecture faite au moment du tirage - une seule page de messages Discord, soit
+ * cent au plus - en gardant de la marge.
+ */
+export const DROP_ACTIVITY_DISABLED = 0;
+export const DROP_ACTIVITY_MESSAGES_RANGE = { min: 1, max: 50 } as const;
+export const DROP_ACTIVITY_WINDOW_MINUTES_RANGE = { min: 5, max: 120 } as const;
+export const DEFAULT_DROP_ACTIVITY_MESSAGES = 5;
+const DEFAULT_DROP_ACTIVITY_WINDOW_MINUTES = 15;
+
+export interface DropActivitySettings {
+  /** Messages de membres exigés sur la fenêtre. `0` = pas de condition. */
+  minMessages: number;
+  windowMinutes: number;
+}
+
+function normalizeDropActivity(raw: Partial<DropActivitySettings> | null | undefined): DropActivitySettings {
+  const parsed = Number(raw?.minMessages);
+  const minMessages = !Number.isFinite(parsed) || Math.trunc(parsed) <= DROP_ACTIVITY_DISABLED
+    ? DROP_ACTIVITY_DISABLED
+    : clampDropInt(parsed, DROP_ACTIVITY_MESSAGES_RANGE, DEFAULT_DROP_ACTIVITY_MESSAGES);
+  return {
+    minMessages,
+    windowMinutes: clampDropInt(raw?.windowMinutes, DROP_ACTIVITY_WINDOW_MINUTES_RANGE, DEFAULT_DROP_ACTIVITY_WINDOW_MINUTES),
+  };
+}
+
+/**
+ * Le drop dû part-il maintenant ?
+ *
+ * Un salon qui reste calme ne bloque pas le type indéfiniment : passé un intervalle entier
+ * de retard, le drop part quand même. Sur un petit serveur, l'option espacerait sinon les
+ * drops jusqu'à les faire disparaître.
+ */
+export function dropActivityVerdict(input: {
+  dueAt: Date;
+  now: Date;
+  intervalMinutes: number;
+  activity: DropActivitySettings;
+  recentMessages: number;
+}): 'publish' | 'wait' {
+  if (input.activity.minMessages <= DROP_ACTIVITY_DISABLED) return 'publish';
+  if (input.recentMessages >= input.activity.minMessages) return 'publish';
+  const waitedMs = input.now.getTime() - input.dueAt.getTime();
+  return waitedMs >= input.intervalMinutes * 60 * 1000 ? 'publish' : 'wait';
+}
+
+/**
+ * Drops jackpot : de temps en temps, un drop rapporte un multiple du montant tiré.
+ *
+ * Réglage unique pour tout le serveur, à valeurs fixes : une chance et un multiplicateur
+ * libres sur chacun des cinq types feraient beaucoup de champs pour un effet d'ambiance.
+ * Les drops d'objet en sont exclus : multiplier une pièce rare, c'est précisément ce que
+ * leur liste choisie sert à empêcher.
+ */
+export const DROP_JACKPOT_CHANCE_CHOICES = [10, 20, 50] as const;
+export const DROP_JACKPOT_MULTIPLIER_CHOICES = [3, 5, 10] as const;
+const DEFAULT_DROP_JACKPOT_CHANCE = 20;
+const DEFAULT_DROP_JACKPOT_MULTIPLIER = 5;
+
+function pickChoice(value: unknown, choices: readonly number[], fallback: number): number {
+  const parsed = Number(value);
+  return choices.includes(parsed) ? parsed : fallback;
+}
+
+export function rollDropJackpot(
+  type: DropType,
+  settings: Pick<DropGlobalSettings, 'dropJackpotEnabled' | 'dropJackpotChance'>,
+  random: () => number = Math.random,
+): boolean {
+  if (type === 'RPG_ITEM' || !settings.dropJackpotEnabled) return false;
+  return random() < 1 / settings.dropJackpotChance;
+}
+
+export function dropJackpotAmount(amount: number, multiplier: number): number {
+  return Math.min(DROP_AMOUNT_RANGE.max, amount * multiplier);
+}
+
 export interface DropModeSettings {
   enabled: boolean;
   minAmount: number;
@@ -200,6 +283,7 @@ export interface DropTypeSettings {
   channelId: string | null;
   /** Écart moyen entre deux drops. Le tirage réel s'en écarte volontairement. */
   intervalMinutes: number;
+  activity: DropActivitySettings;
   first: DropModeSettings;
   race: DropModeSettings & { winnerCount: number };
   window: DropModeSettings & { durationMinutes: number };
@@ -212,6 +296,10 @@ export interface DropGlobalSettings {
   dropLifetimeMinutes: number;
   /** Minutes après clôture avant suppression du message. `0` = jamais. */
   dropDeleteAfterMinutes: number;
+  dropJackpotEnabled: boolean;
+  /** Un drop sur N est un jackpot. */
+  dropJackpotChance: number;
+  dropJackpotMultiplier: number;
 }
 
 export const DEFAULT_DROP_GLOBAL_SETTINGS: DropGlobalSettings = {
@@ -220,6 +308,9 @@ export const DEFAULT_DROP_GLOBAL_SETTINGS: DropGlobalSettings = {
   dropMentionRoleId: null,
   dropLifetimeMinutes: 60,
   dropDeleteAfterMinutes: DROP_DELETE_AFTER_DISABLED,
+  dropJackpotEnabled: false,
+  dropJackpotChance: DEFAULT_DROP_JACKPOT_CHANCE,
+  dropJackpotMultiplier: DEFAULT_DROP_JACKPOT_MULTIPLIER,
 };
 
 /**
@@ -242,6 +333,7 @@ export function defaultDropTypeSettings(type: DropType): DropTypeSettings {
     items: [],
     channelId: null,
     intervalMinutes: 360,
+    activity: { minMessages: DROP_ACTIVITY_DISABLED, windowMinutes: DEFAULT_DROP_ACTIVITY_WINDOW_MINUTES },
     first: { enabled: true, minAmount: base.min, maxAmount: base.max },
     // Un drop partagé rapporte moins par tête qu'une victoire au clic : le
     // barème de départ le reflète, l'administrateur reste libre de l'inverser.
@@ -288,6 +380,7 @@ export function normalizeDropTypeSettings(
     items: normalizeDropItems(source.items ?? fallback.items),
     channelId: source.channelId ?? null,
     intervalMinutes: clampDropInt(source.intervalMinutes, DROP_INTERVAL_MINUTES_RANGE, fallback.intervalMinutes),
+    activity: normalizeDropActivity(source.activity ?? fallback.activity),
     first: normalizeModeAmounts(source.first, fallback.first, range),
     race: {
       ...race,
@@ -312,6 +405,13 @@ export function normalizeDropGlobalSettings(raw: Partial<DropGlobalSettings> | n
       DEFAULT_DROP_GLOBAL_SETTINGS.dropLifetimeMinutes,
     ),
     dropDeleteAfterMinutes: normalizeDropDeleteAfterMinutes(source.dropDeleteAfterMinutes),
+    dropJackpotEnabled: source.dropJackpotEnabled ?? DEFAULT_DROP_GLOBAL_SETTINGS.dropJackpotEnabled,
+    dropJackpotChance: pickChoice(source.dropJackpotChance, DROP_JACKPOT_CHANCE_CHOICES, DEFAULT_DROP_JACKPOT_CHANCE),
+    dropJackpotMultiplier: pickChoice(
+      source.dropJackpotMultiplier,
+      DROP_JACKPOT_MULTIPLIER_CHOICES,
+      DEFAULT_DROP_JACKPOT_MULTIPLIER,
+    ),
   };
 }
 

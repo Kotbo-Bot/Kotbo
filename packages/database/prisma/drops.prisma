@@ -28,6 +28,12 @@ model DropConfig {
   /// se fait camper par les mêmes membres à chaque fois.
   intervalMinutes Int @default(360)
 
+  /// Attente d'activité : un drop dû ne part que si son salon a reçu au moins
+  /// ce nombre de messages de membres sur les `activityWindowMinutes` dernières
+  /// minutes, avec au plus un intervalle de retard. `0` = pas de condition.
+  activityMinMessages   Int @default(0)
+  activityWindowMinutes Int @default(15)
+
   /// Mode « premier arrivé » : un seul gagnant.
   firstEnabled   Boolean @default(true)
   firstMinAmount Int     @default(50)
@@ -85,6 +91,9 @@ model Drop {
   messageId String?
 
   amount Int
+  /// Drop jackpot : `amount` est déjà multiplié, le drapeau sert à l'annonce
+  /// et à l'historique.
+  jackpot Boolean @default(false)
   /// Ramassages autorisés. `0` = sans limite (mode fenêtre, borné par le temps).
   maxClaims  Int @default(1)
   /// Compteur incrémenté par une écriture conditionnelle : c'est lui qui

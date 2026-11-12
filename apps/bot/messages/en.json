@@ -321,6 +321,7 @@
   "drop_resource_rpg_item": "item",
   "drop_claim_item_gone": "❌ This item is no longer available: it was removed from the server, or the RPG has been disabled since.",
   "drop_announce_title": "A drop appeared!",
+  "drop_jackpot_title": "JACKPOT: an exceptional drop has appeared!",
   "drop_announce_desc_first": "**{amount}** **{resource}** just landed in this channel.\nThe first to click the button takes it all.",
   "drop_announce_desc_race": "**{amount}** **{resource}** just landed in this channel.\nThe first **{winners}** to click each take that amount.",
   "drop_announce_desc_window": "**{amount}** **{resource}** just landed in this channel.\nEveryone can help themselves until {closes}.",
