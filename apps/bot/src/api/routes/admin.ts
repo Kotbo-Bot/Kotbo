@@ -76,6 +76,7 @@ import {
   resolveErrorGroup,
 } from '../../services/system/botErrorLogService.js';
 import { handleAdminAnalyticsRoutes } from './admin/analytics.js';
+import { handleAdminInsightRoutes } from './admin/insights.js';
 import { handleAdminAchievementRoutes } from './admin/achievements.js';
 import { handleAdminFeaturePageRoutes } from './admin/featurePages.js';
 
@@ -140,6 +141,10 @@ export async function handleAdminRoutes(
   // Routes d'analyse commerciale et tunnel d'acquisition
   if (parts[2] === 'analytics') {
     return handleAdminAnalyticsRoutes(req, res, parts, url, client, user);
+  }
+
+  if (parts[2] === 'insights') {
+    return handleAdminInsightRoutes(req, res, parts, url, client);
   }
 
   if (parts[2] === 'achievements') {
