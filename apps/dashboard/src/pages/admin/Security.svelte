@@ -4,9 +4,10 @@
   import { toast } from '../../lib/stores/toast.svelte';
   import { confirmDialog } from '../../lib/stores/confirmDialog.svelte';
   import { fetchGlobalAdmins, addGlobalAdmin, removeGlobalAdmin, fetchGlobalBlacklist, addGlobalBlacklist, removeGlobalBlacklist } from '../../lib/api';
-  import Papicon from '../../lib/components/Papicon.svelte';
-  import Skeleton from '../../lib/components/Skeleton.svelte';
   import AdminShell from '../../lib/components/admin/AdminShell.svelte';
+  import AdminCard from '../../lib/components/admin/AdminCard.svelte';
+  import AdminBadge from '../../lib/components/admin/AdminBadge.svelte';
+  import { Button, Callout } from '../../lib/components/ui';
 
   import { errorMessage } from '@kotbo/shared';
   interface GlobalAdmin {
@@ -38,7 +39,6 @@
   let newBlacklistReason = $state('');
   let loading = $state(true);
   let error = $state<string | null>(null);
-  let adminTab = $state<'admins' | 'blacklist'>('admins');
 
   onMount(async () => {
     try {
@@ -99,197 +99,132 @@
   }
 </script>
 
-<AdminShell title="Sécurité" description="Administrateurs globaux, liste noire et erreurs remontées par le bot.">
-  <div class="space-y-6 pb-12 animate-in fade-in slide-in-from-bottom-3 duration-600">
+{#snippet avatar(username: string, avatarUrl: string | null)}
+  {#if avatarUrl}
+    <img src={avatarUrl} alt="" class="w-9 h-9 rounded-full shrink-0" loading="lazy" />
+  {:else}
+    <div class="w-9 h-9 rounded-full bg-on-surface/8 flex items-center justify-center shrink-0 text-on-surface-variant font-semibold text-sm">
+      {username.charAt(0).toUpperCase()}
+    </div>
+  {/if}
+{/snippet}
 
-    <div class="flex flex-wrap items-center justify-end gap-3">
-      <!-- Stats summary -->
-      {#if !loading && !error}
-        <div class="flex items-center gap-2 flex-wrap">
-          <div class="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-success/10 border border-success/20 text-success text-xs font-semibold">
-            <Papicon icon="ShieldCheck" size={13} />
-            {globalAdmins.length} admin{globalAdmins.length > 1 ? 's' : ''}
-          </div>
-          <div class="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-error/10 border border-error/20 text-error text-xs font-semibold">
-            <Papicon icon="UserX" size={13} />
-            {globalBlacklist.length} blacklisté{globalBlacklist.length > 1 ? 's' : ''}
-          </div>
+<AdminShell title="Sécurité" description="Qui a la main sur toute l’instance, et qui en est exclu partout.">
+  {#if error}
+    <Callout variant="danger" title="Erreur de chargement">{error}</Callout>
+  {/if}
+
+  <!-- Deux listes courtes : côte à côte plutôt que derrière des onglets. -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+    <AdminCard
+      title="Administrateurs globaux"
+      description="Accès complet à cette console et au dashboard de tous les serveurs."
+      icon="ShieldCheck"
+      tone="success"
+      padded={false}
+    >
+      {#snippet actions()}
+        <AdminBadge label={String(globalAdmins.length)} tone="success" />
+      {/snippet}
+
+      <form onsubmit={handleAddAdmin} class="flex gap-2 p-4 border-b border-outline-variant/20">
+        <input
+          type="text"
+          inputmode="numeric"
+          bind:value={newAdminId}
+          aria-label="ID Discord de l’administrateur"
+          placeholder="ID Discord (ex: 457275321171968000)"
+          class="input font-mono"
+          required
+        />
+        <Button type="submit" variant="primary" icon="Plus">Ajouter</Button>
+      </form>
+
+      {#if loading}
+        <div class="p-4 space-y-2">
+          {#each Array(2) as _, index (index)}
+            <div class="h-12 rounded-xl bg-on-surface/6 animate-pulse"></div>
+          {/each}
         </div>
+      {:else if globalAdmins.length === 0}
+        <p class="px-5 py-6 text-body-sm text-on-surface-variant text-center">Aucun administrateur global.</p>
+      {:else}
+        <ul class="divide-y divide-outline-variant/20">
+          {#each globalAdmins as admin (admin.userId)}
+            <li class="flex items-center gap-3 px-4 py-3">
+              {@render avatar(admin.username, admin.avatarUrl)}
+              <div class="min-w-0 flex-1">
+                <p class="text-body-sm font-semibold text-on-surface truncate">{admin.username}</p>
+                <p class="text-2xs text-on-surface-variant font-mono">{admin.userId}</p>
+              </div>
+              {#if admin.userId === OWNER_ID}
+                <AdminBadge label="Créateur" tone="success" />
+              {:else}
+                <Button
+                  size="sm"
+                  variant="danger"
+                  icon="Trash"
+                  title="Révoquer l'accès"
+                  aria-label="Révoquer l'accès de {admin.username}"
+                  onclick={() => handleRemoveAdmin(admin.userId, admin.username)}
+                />
+              {/if}
+            </li>
+          {/each}
+        </ul>
       {/if}
-    </div>
+    </AdminCard>
 
-    <!-- Tabs -->
-    <div class="flex gap-1 p-1 bg-on-surface/5 rounded-xl w-fit border border-outline-variant/10">
-      <button
-        onclick={() => adminTab = 'admins'}
-        class="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition-all duration-200
- {adminTab === 'admins' ? 'bg-surface-container text-on-surface shadow-sm' : 'text-on-surface-variant hover:text-on-surface'}"
-      >
-        <Papicon icon="ShieldCheck" size={13} />
-        Administrateurs
-      </button>
-      <button
-        onclick={() => adminTab = 'blacklist'}
-        class="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition-all duration-200
- {adminTab === 'blacklist' ? 'bg-surface-container text-on-surface shadow-sm' : 'text-on-surface-variant hover:text-on-surface'}"
-      >
-        <Papicon icon="UserX" size={13} />
-        Liste noire
-        {#if globalBlacklist.length > 0}
-          <span class="px-1.5 py-0.5 rounded-full bg-error/20 text-error text-2xs font-semibold">{globalBlacklist.length}</span>
-        {/if}
-      </button>
-    </div>
+    <AdminCard
+      title="Liste noire globale"
+      description="Ces comptes ne peuvent plus utiliser Kotbo, sur aucun serveur."
+      icon="UserX"
+      tone="danger"
+      padded={false}
+    >
+      {#snippet actions()}
+        <AdminBadge label={String(globalBlacklist.length)} tone={globalBlacklist.length > 0 ? 'danger' : 'neutral'} />
+      {/snippet}
 
-    {#if loading}
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        {#each Array(4) as _}
-          <Skeleton height="72px" class="rounded-xl" />
-        {/each}
-      </div>
+      <form onsubmit={handleAddBlacklist} class="grid gap-2 p-4 border-b border-outline-variant/20 sm:grid-cols-[1fr_1fr_auto]">
+        <input
+          type="text"
+          inputmode="numeric"
+          bind:value={newBlacklistId}
+          aria-label="ID Discord à bloquer"
+          placeholder="ID Discord à bloquer"
+          class="input font-mono"
+          required
+        />
+        <input type="text" bind:value={newBlacklistReason} aria-label="Raison" placeholder="Raison (optionnel)" class="input" />
+        <Button type="submit" variant="danger" icon="Ban">Bannir</Button>
+      </form>
 
-    {:else if error}
-      <div class="flex flex-col items-center justify-center py-16 gap-4 text-center bg-error/5 border border-error/15 rounded-lg">
-        <div class="w-12 h-12 rounded-lg bg-error/10 border border-error/20 flex items-center justify-center text-error">
-          <Papicon icon="AlertTriangle" size={22} />
+      {#if loading}
+        <div class="p-4 space-y-2">
+          {#each Array(2) as _, index (index)}
+            <div class="h-12 rounded-xl bg-on-surface/6 animate-pulse"></div>
+          {/each}
         </div>
-        <div>
-          <p class="font-semibold text-on-surface">Erreur de chargement</p>
-          <p class="text-sm text-on-surface-variant mt-1">{error}</p>
-        </div>
-      </div>
-
-    {:else if adminTab === 'admins'}
-      <!-- Global Admins panel -->
-      <div class="bg-surface-container-low/50 border border-outline-variant/10 rounded-lg p-6 space-y-5">
-        <!-- Add form -->
-        <div>
-          <p class="text-xs font-medium text-on-surface-variant/40 mb-2">Ajouter un administrateur</p>
-          <form onsubmit={handleAddAdmin} class="flex gap-2">
-            <input
-              type="text"
-              bind:value={newAdminId}
-              placeholder="ID Discord (ex: 457275321171968000)"
-              class="flex-1 bg-on-surface/4 border border-outline-variant/10 rounded-xl px-4 py-2.5 text-sm text-on-surface placeholder-on-surface-variant/30 focus:outline-none focus:border-primary/30 transition-all"
-              required
-            />
-            <button
-              type="submit"
-              class="px-5 py-2.5 rounded-xl bg-primary text-on-primary text-body-sm font-medium transition-all shadow-md shadow-primary/20"
-            >
-              Ajouter
-            </button>
-          </form>
-        </div>
-
-        <!-- Admin list -->
-        <div class="space-y-2">
-          {#if globalAdmins.length === 0}
-            <p class="text-sm text-center text-on-surface-variant/40 py-6 font-medium">Aucun administrateur global.</p>
-          {:else}
-            {#each globalAdmins as admin}
-              <div class="flex items-center justify-between px-4 py-3 bg-on-surface/3 hover:bg-on-surface/5 rounded-xl border border-outline-variant/8 transition-colors group">
-                <div class="flex items-center gap-3">
-                  {#if admin.avatarUrl}
-                    <img src={admin.avatarUrl} alt={admin.username} class="w-9 h-9 rounded-full border border-outline-variant/10 shadow-sm" />
-                  {:else}
-                    <div class="w-9 h-9 rounded-full bg-primary/15 border border-primary/20 flex items-center justify-center text-primary font-semibold text-sm">
-                      {admin.username.charAt(0).toUpperCase()}
-                    </div>
-                  {/if}
-                  <div>
-                    <p class="font-bold text-sm text-on-surface">{admin.username}</p>
-                    <p class="text-2xs text-on-surface-variant/30 font-mono">{admin.userId}</p>
-                  </div>
-                </div>
-                {#if admin.userId === OWNER_ID}
-                  <span class="text-xs font-semibold text-success bg-success/10 border border-success/20 px-2.5 py-1 rounded-full">Créateur</span>
-                {:else}
-                  <button
-                    onclick={() => handleRemoveAdmin(admin.userId, admin.username)}
-                    class="w-8 h-8 flex items-center justify-center rounded-lg text-on-surface-variant/30 hover:bg-error/10 hover:text-error transition-all opacity-0 group-hover:opacity-100"
-                    title="Révoquer l'accès"
-                  >
-                    <Papicon icon="Trash" size={14} />
-                  </button>
+      {:else if globalBlacklist.length === 0}
+        <p class="px-5 py-6 text-body-sm text-on-surface-variant text-center">Personne dans la liste noire.</p>
+      {:else}
+        <ul class="divide-y divide-outline-variant/20">
+          {#each globalBlacklist as user (user.userId)}
+            <li class="flex items-center gap-3 px-4 py-3">
+              {@render avatar(user.username, user.avatarUrl)}
+              <div class="min-w-0 flex-1">
+                <p class="text-body-sm font-semibold text-on-surface truncate">{user.username}</p>
+                <p class="text-2xs text-on-surface-variant font-mono">{user.userId}</p>
+                {#if user.reason}
+                  <p class="text-xs text-on-surface-variant mt-0.5">{user.reason}</p>
                 {/if}
               </div>
-            {/each}
-          {/if}
-        </div>
-      </div>
-
-    {:else}
-      <!-- Blacklist panel -->
-      <div class="bg-surface-container-low/50 border border-outline-variant/10 rounded-lg p-6 space-y-5">
-        <!-- Add form -->
-        <div class="space-y-2">
-          <p class="text-xs font-medium text-on-surface-variant/40">Ajouter à la liste noire</p>
-          <form onsubmit={handleAddBlacklist} class="space-y-2">
-            <input
-              type="text"
-              bind:value={newBlacklistId}
-              placeholder="ID Discord à bloquer"
-              class="w-full bg-on-surface/4 border border-outline-variant/10 rounded-xl px-4 py-2.5 text-sm text-on-surface placeholder-on-surface-variant/30 focus:outline-none focus:border-error/30 transition-all"
-              required
-            />
-            <div class="flex gap-2">
-              <input
-                type="text"
-                bind:value={newBlacklistReason}
-                placeholder="Raison (optionnel)"
-                class="flex-1 bg-on-surface/4 border border-outline-variant/10 rounded-xl px-4 py-2.5 text-sm text-on-surface placeholder-on-surface-variant/30 focus:outline-none focus:border-error/30 transition-all"
-              />
-              <button
-                type="submit"
-                class="px-5 py-2.5 rounded-xl bg-red-500 text-white text-body-sm font-medium hover:bg-red-600 transition-all shadow-md shadow-red-500/20"
-              >
-                Bannir
-              </button>
-            </div>
-          </form>
-        </div>
-
-        <!-- Blacklist entries -->
-        <div class="space-y-2">
-          {#if globalBlacklist.length === 0}
-            <div class="flex flex-col items-center py-8 gap-2 text-center">
-              <div class="w-10 h-10 rounded-xl bg-success/10 border border-success/15 flex items-center justify-center text-success">
-                <Papicon icon="ShieldCheck" size={18} />
-              </div>
-              <p class="text-sm text-on-surface-variant/40 font-medium">Personne dans la liste noire.</p>
-            </div>
-          {:else}
-            {#each globalBlacklist as user}
-              <div class="flex items-start justify-between px-4 py-3 bg-error/5 hover:bg-error/8 rounded-xl border border-error/10 transition-colors group">
-                <div class="flex items-center gap-3">
-                  {#if user.avatarUrl}
-                    <img src={user.avatarUrl} alt={user.username} class="w-9 h-9 rounded-full border border-error/20 shadow-sm" />
-                  {:else}
-                    <div class="w-9 h-9 rounded-full bg-error/15 border border-error/20 flex items-center justify-center text-error font-semibold text-sm">
-                      {user.username.charAt(0).toUpperCase()}
-                    </div>
-                  {/if}
-                  <div>
-                    <p class="font-bold text-sm text-on-surface">{user.username}</p>
-                    <p class="text-2xs text-on-surface-variant/30 font-mono">{user.userId}</p>
-                    {#if user.reason}
-                      <p class="text-2xs text-error/70 mt-0.5 italic">{user.reason}</p>
-                    {/if}
-                  </div>
-                </div>
-                <button
-                  onclick={() => handleRemoveBlacklist(user.userId)}
-                  class="w-8 h-8 flex items-center justify-center rounded-lg text-on-surface-variant/30 hover:bg-success/10 hover:text-success transition-all opacity-0 group-hover:opacity-100 shrink-0"
-                  title="Pardonner"
-                >
-                  <Papicon icon="Unlock" size={14} />
-                </button>
-              </div>
-            {/each}
-          {/if}
-        </div>
-      </div>
-    {/if}
+              <Button size="sm" icon="Unlock" onclick={() => handleRemoveBlacklist(user.userId)}>Retirer</Button>
+            </li>
+          {/each}
+        </ul>
+      {/if}
+    </AdminCard>
   </div>
 </AdminShell>

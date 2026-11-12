@@ -4,9 +4,13 @@
   import { toast } from '../../lib/stores/toast.svelte';
   import { confirmDialog } from '../../lib/stores/confirmDialog.svelte';
   import { fetchAdminShards, restartAdminShard, restartAllAdminShards, reconfigureAdminShards } from '../../lib/api';
-  import Papicon from '../../lib/components/Papicon.svelte';
-  import Skeleton from '../../lib/components/Skeleton.svelte';
   import AdminShell from '../../lib/components/admin/AdminShell.svelte';
+  import AdminCard from '../../lib/components/admin/AdminCard.svelte';
+  import AdminStat from '../../lib/components/admin/AdminStat.svelte';
+  import AdminTable from '../../lib/components/admin/AdminTable.svelte';
+  import AdminBadge from '../../lib/components/admin/AdminBadge.svelte';
+  import type { AdminTableColumn, AdminTone } from '../../lib/components/admin/types';
+  import { Button, Field } from '../../lib/components/ui';
 
   import { errorMessage } from '@kotbo/shared';
   type ShardSnapshot = {
@@ -62,12 +66,35 @@
     return 'Hors ligne';
   }
 
-  function shardStatusTone(status: ShardSnapshot['status']) {
-    if (status === 'online') return 'bg-success/10 text-success border-success/20';
-    if (status === 'starting') return 'bg-warning/10 text-warning border-warning/20';
-    if (status === 'restarting') return 'bg-blue-500/10 text-blue-400 border-blue-500/20';
-    return 'bg-error/10 text-error border-error/20';
+  function shardStatusTone(status: ShardSnapshot['status']): AdminTone {
+    if (status === 'online') return 'success';
+    if (status === 'starting') return 'warning';
+    if (status === 'restarting') return 'info';
+    return 'danger';
   }
+
+  const barTone: Record<AdminTone, string> = {
+    success: 'bg-success',
+    warning: 'bg-warning',
+    info: 'bg-sky-500',
+    danger: 'bg-error',
+    primary: 'bg-primary',
+    neutral: 'bg-on-surface-variant',
+  };
+
+  // Le squelette ne sert qu'au premier chargement : un rafraîchissement garde
+  // les lignes affichées au lieu de faire clignoter le tableau.
+  const initialLoading = $derived(shardLoading && !shardState);
+
+  const columns: AdminTableColumn[] = [
+    { key: 'shard', label: 'Shard' },
+    { key: 'status', label: 'État' },
+    { key: 'guilds', label: 'Serveurs', align: 'right' },
+    { key: 'members', label: 'Membres', align: 'right', hideBelow: 'sm' },
+    { key: 'ping', label: 'Ping', align: 'right' },
+    { key: 'uptime', label: 'Uptime', align: 'right', hideBelow: 'md' },
+    { key: 'actions', label: '', align: 'right', width: 'w-32' },
+  ];
 
   async function refreshShards() {
     try {
@@ -137,194 +164,121 @@
 </script>
 
 <AdminShell title="Shards" description="Répartition des serveurs sur les shards Discord, latence et redémarrages contrôlés.">
-  <div class="space-y-6 pb-12 animate-in fade-in slide-in-from-bottom-3 duration-600">
+  {#snippet actions()}
+    <Button icon="RefreshCw" loading={shardLoading} onclick={refreshShards}>Rafraîchir</Button>
+    <Button variant="danger" icon="Power" loading={shardActionLoading === 'restart-all'} onclick={handleRestartAllShards}>
+      Redémarrer tout
+    </Button>
+  {/snippet}
 
-    <div class="flex justify-end">
-      <button
-        type="button"
-        onclick={refreshShards}
-        disabled={shardLoading}
-        class="inline-flex items-center gap-2 h-9 px-3.5 rounded-xl text-body-sm font-semibold bg-on-surface/6 hover:bg-on-surface/10 border border-outline-variant/25 text-on-surface-variant hover:text-on-surface transition disabled:opacity-40"
-      >
-        <Papicon icon="RefreshCw" size={13} />
-        Rafraîchir
-      </button>
-    </div>
+  <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+    <AdminStat label="Shards" value={shardConfiguredCount} hint="mode {shardState?.config.mode === 'fixed' ? 'fixe' : 'automatique'}" icon="Zap" tone="primary" loading={initialLoading} />
+    <AdminStat
+      label="En ligne"
+      value="{shardState?.onlineShardCount ?? 0}/{shardConfiguredCount}"
+      icon="CheckCircle"
+      tone={(shardState?.onlineShardCount ?? 0) === shardConfiguredCount ? 'success' : 'danger'}
+      loading={initialLoading}
+    />
+    <AdminStat
+      label="Ping moyen"
+      value="{shardAveragePing} ms"
+      icon="activity"
+      tone={shardAveragePing > 250 ? 'danger' : shardAveragePing > 130 ? 'warning' : 'success'}
+      loading={initialLoading}
+    />
+  </div>
 
-    {#if shardLoading && !shardState}
-      <div class="grid grid-cols-3 gap-4">
-        {#each Array(3) as _}
-          <Skeleton height="90px" class="rounded-xl" />
-        {/each}
-      </div>
-      <Skeleton height="300px" class="rounded-xl" />
-    {:else}
-      <!-- KPI row -->
-      <div class="grid grid-cols-3 gap-4">
-        <div class="bg-surface-container-low/50 border border-outline-variant/10 rounded-xl p-4">
-          <p class="text-2xl font-semibold font-mono text-on-surface">{shardConfiguredCount}</p>
-          <p class="text-xs font-medium text-on-surface-variant/40 mt-1">Shards total</p>
-        </div>
-        <div class="bg-surface-container-low/50 border border-outline-variant/10 rounded-xl p-4">
-          <p class="text-2xl font-semibold font-mono text-success">{shardState?.onlineShardCount ?? 0}</p>
-          <p class="text-xs font-medium text-on-surface-variant/40 mt-1">En ligne</p>
-        </div>
-        <div class="bg-surface-container-low/50 border border-outline-variant/10 rounded-xl p-4">
-          <p class="text-2xl font-semibold font-mono text-blue-400">{shardAveragePing} ms</p>
-          <p class="text-xs font-medium text-on-surface-variant/40 mt-1">Ping moyen</p>
-        </div>
-      </div>
-
-      <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        <!-- Config panel -->
-        <div class="bg-surface-container-low/50 border border-outline-variant/10 rounded-lg p-6 space-y-5">
-          <div class="flex items-center gap-3">
-            <div class="w-8 h-8 rounded-xl bg-primary/10 border border-primary/15 flex items-center justify-center text-primary">
-              <Papicon icon="Settings" size={16} />
-            </div>
-            <div>
-              <p class="font-semibold text-on-surface text-sm">Configuration</p>
-              <p class="text-2xs text-on-surface-variant/40 font-medium">Mode de sharding</p>
-            </div>
-          </div>
-
-          <div class="grid grid-cols-2 gap-2">
-            <div class="bg-on-surface/4 rounded-xl p-3 space-y-0.5">
-              <p class="text-xs font-semibold text-on-surface-variant/30">Mode actif</p>
-              <p class="text-sm font-semibold text-on-surface uppercase">{shardState?.config.mode ?? 'auto'}</p>
-            </div>
-            <div class="bg-on-surface/4 rounded-xl p-3 space-y-0.5">
-              <p class="text-xs font-semibold text-on-surface-variant/30">En ligne</p>
-              <p class="text-sm font-semibold text-success">{shardState?.onlineShardCount ?? 0}/{shardConfiguredCount}</p>
-            </div>
-          </div>
-
-          <div class="space-y-1.5">
-            <p class="text-xs font-medium text-on-surface-variant/40">Mode de sharding</p>
-            <select
-              bind:value={shardMode}
-              class="w-full bg-on-surface/4 border border-outline-variant/10 rounded-xl px-3 py-2.5 text-sm text-on-surface focus:outline-none focus:border-primary/30 transition-all"
-            >
+  <div class="grid grid-cols-1 xl:grid-cols-3 gap-4 items-start">
+    <AdminCard title="Configuration" description="Mode de sharding" icon="Settings" tone="primary">
+      <form class="space-y-4" onsubmit={(e) => { e.preventDefault(); void handleReconfigureShards(); }}>
+        <Field label="Mode de sharding">
+          {#snippet children(id)}
+            <select {id} bind:value={shardMode} class="input">
               <option value="auto">Automatique</option>
               <option value="fixed">Fixe</option>
             </select>
-          </div>
-
-          <div class="space-y-1.5">
-            <p class="text-xs font-medium text-on-surface-variant/40">Nombre de shards</p>
+          {/snippet}
+        </Field>
+        <Field label="Nombre de shards" hint={shardMode === 'fixed' ? '' : 'Discord décide du nombre en mode automatique.'}>
+          {#snippet children(id, describedBy)}
             <input
+              {id}
+              aria-describedby={describedBy}
               type="number"
               min="1"
               bind:value={shardCount}
               placeholder="Auto si vide"
               disabled={shardMode !== 'fixed'}
-              class="w-full bg-on-surface/4 border border-outline-variant/10 rounded-xl px-3 py-2.5 text-sm text-on-surface focus:outline-none focus:border-primary/30 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+              class="input"
             />
-          </div>
+          {/snippet}
+        </Field>
+        <Button type="submit" variant="primary" fullWidth loading={shardActionLoading === 'reconfigure'}>Appliquer</Button>
+      </form>
+    </AdminCard>
 
-          <div class="flex flex-col gap-2 pt-2">
-            <button
-              type="button"
-              onclick={handleReconfigureShards}
-              disabled={shardActionLoading === 'reconfigure'}
-              class="w-full py-2.5 rounded-xl bg-primary text-on-primary font-semibold text-xs transition-all disabled:opacity-40"
-            >
-              {shardActionLoading === 'reconfigure' ? 'Enregistrement...' : 'Appliquer'}
-            </button>
-            <button
-              type="button"
-              onclick={handleRestartAllShards}
-              disabled={shardActionLoading === 'restart-all'}
-              class="w-full py-2.5 rounded-xl bg-warning/15 text-warning border border-warning/20 font-semibold text-xs transition-all hover:bg-warning/25 disabled:opacity-40"
-            >
-              {shardActionLoading === 'restart-all' ? 'Redémarrage...' : 'Redémarrer tout'}
-            </button>
-          </div>
-        </div>
-
-        <!-- Shards table + bar chart -->
-        <div class="xl:col-span-2 space-y-5">
-          <!-- Visual bar chart -->
-          <div class="bg-surface-container-low/50 border border-outline-variant/10 rounded-lg p-5">
-            <p class="text-body-sm font-medium text-on-surface-variant/30 mb-4">Répartition par shard</p>
-            <div class="flex items-end gap-3 h-24">
-              {#each shardRows as shard (shard.shardId)}
-                <div class="flex-1 flex flex-col items-center gap-1.5 min-w-0">
-                  <div class="w-full relative h-20">
-                    <div
-                      class="absolute bottom-0 w-full rounded-t-lg transition-all duration-700
- {shard.status === 'online' ? 'bg-linear-to-t from-emerald-600 to-emerald-400'
-                        : shard.status === 'starting' ? 'bg-linear-to-t from-amber-600 to-amber-400'
-                        : shard.status === 'restarting' ? 'bg-linear-to-t from-blue-600 to-blue-400'
-                        : 'bg-linear-to-t from-red-700 to-red-500'}"
-                      style="height: {maxShardGuildCount > 0 ? Math.max(10, (shard.guildCount / maxShardGuildCount) * 100) : 10}%"
-                    ></div>
-                  </div>
-                  <p class="text-2xs font-semibold text-on-surface-variant/40 truncate w-full text-center">#{shard.shardId}</p>
+    <div class="xl:col-span-2 space-y-4">
+      {#if shardRows.length > 1}
+        <AdminCard title="Serveurs par shard" icon="Server" tone="neutral">
+          <div class="flex items-end gap-2 h-24">
+            {#each shardRows as shard (shard.shardId)}
+              <div class="flex-1 flex flex-col items-center gap-1.5 min-w-0" title="Shard {shard.shardId} · {shard.guildCount} serveurs">
+                <div class="w-full relative h-20">
+                  <div
+                    class="absolute bottom-0 w-full rounded-t-md transition-all duration-700 {barTone[shardStatusTone(shard.status)]}"
+                    style="height: {maxShardGuildCount > 0 ? Math.max(6, (shard.guildCount / maxShardGuildCount) * 100) : 6}%"
+                  ></div>
                 </div>
-              {/each}
-            </div>
+                <p class="text-2xs font-semibold text-on-surface-variant tabular-nums truncate w-full text-center">#{shard.shardId}</p>
+              </div>
+            {/each}
           </div>
+        </AdminCard>
+      {/if}
 
-          <!-- Shards table -->
-          <div class="bg-surface-container-low/50 border border-outline-variant/10 rounded-lg overflow-hidden">
-            <div class="overflow-x-auto">
-              <table class="w-full">
-                <thead>
-                  <tr class="border-b border-outline-variant/10 bg-on-surface/3">
-                    <th class="text-left text-xs font-medium text-on-surface-variant/30 px-5 py-3.5">Shard</th>
-                    <th class="text-left text-xs font-medium text-on-surface-variant/30 px-5 py-3.5">État</th>
-                    <th class="text-left text-xs font-medium text-on-surface-variant/30 px-5 py-3.5">Serveurs</th>
-                    <th class="text-left text-xs font-medium text-on-surface-variant/30 px-5 py-3.5">Membres</th>
-                    <th class="text-left text-xs font-medium text-on-surface-variant/30 px-5 py-3.5">Ping</th>
-                    <th class="text-left text-xs font-medium text-on-surface-variant/30 px-5 py-3.5">Uptime</th>
-                    <th class="text-right text-xs font-medium text-on-surface-variant/30 px-5 py-3.5">Action</th>
-                  </tr>
-                </thead>
-                <tbody class="divide-y divide-outline-variant/8">
-                  {#each shardRows as shard (shard.shardId)}
-                    <tr class="group hover:bg-on-surface/3 transition-colors duration-150">
-                      <td class="px-5 py-3.5">
-                        <p class="font-semibold text-on-surface text-sm">#{shard.shardId}</p>
-                        <p class="text-2xs font-mono text-on-surface-variant/30">{shard.readyAt ? new Date(shard.readyAt).toLocaleTimeString('fr-FR') : '-'}</p>
-                      </td>
-                      <td class="px-5 py-3.5">
-                        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border {shardStatusTone(shard.status)}">
-                          <span class="w-1.5 h-1.5 rounded-full {shard.status === 'online' ? 'bg-emerald-400' : shard.status === 'starting' ? 'bg-amber-400 animate-pulse' : shard.status === 'restarting' ? 'bg-blue-400 animate-pulse' : 'bg-red-400'}"></span>
-                          {shardStatusLabel(shard.status)}
-                        </span>
-                      </td>
-                      <td class="px-5 py-3.5 font-bold text-sm text-on-surface">{shard.guildCount}</td>
-                      <td class="px-5 py-3.5 font-bold text-sm text-on-surface">{shard.memberCount.toLocaleString()}</td>
-                      <td class="px-5 py-3.5">
-                        <span class="font-semibold font-mono text-sm {shard.ping > 200 ? 'text-warning' : shard.ping > 100 ? 'text-warning' : 'text-success'}">{shard.ping} ms</span>
-                      </td>
-                      <td class="px-5 py-3.5 font-medium text-sm text-on-surface-variant">{formatShardUptime(shard.uptime)}</td>
-                      <td class="px-5 py-3.5 text-right">
-                        <button
-                          type="button"
-                          onclick={() => handleRestartShard(shard.shardId)}
-                          disabled={shardActionLoading === `restart:${shard.shardId}`}
-                          class="px-3 py-1.5 rounded-lg text-xs font-medium bg-on-surface/5 hover:bg-warning/15 text-on-surface-variant hover:text-warning border border-outline-variant/10 hover:border-warning/20 transition-all disabled:opacity-40"
-                        >
-                          {shardActionLoading === `restart:${shard.shardId}` ? '...' : 'Restart'}
-                        </button>
-                      </td>
-                    </tr>
-                  {/each}
-                  {#if shardRows.length === 0}
-                    <tr>
-                      <td colspan="7" class="px-5 py-10 text-center text-sm text-on-surface-variant/40">
-                        {shardLoading ? 'Chargement...' : 'Aucun shard disponible.'}
-                      </td>
-                    </tr>
-                  {/if}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      </div>
-    {/if}
+      <AdminTable
+        {columns}
+        rows={shardRows}
+        loading={initialLoading}
+        skeletonRows={2}
+        emptyIcon="Zap"
+        emptyTitle="Aucun shard disponible"
+        emptyHint="Le gestionnaire de shards n’a rien remonté. Rafraîchis dans quelques secondes."
+      >
+        {#snippet row(entry, _index)}
+          {@const shard = entry as ShardSnapshot}
+          <tr class="border-b border-outline-variant/12 hover:bg-on-surface/3 transition-colors">
+            <td class="px-4 py-3">
+              <p class="text-body-sm font-semibold text-on-surface tabular-nums">#{shard.shardId}</p>
+              <p class="text-2xs font-mono text-on-surface-variant">
+                {shard.readyAt ? new Date(shard.readyAt).toLocaleTimeString('fr-FR') : '-'}
+              </p>
+            </td>
+            <td class="px-4 py-3">
+              <AdminBadge
+                label={shardStatusLabel(shard.status)}
+                tone={shardStatusTone(shard.status)}
+                dot
+                pulse={shard.status === 'starting' || shard.status === 'restarting'}
+              />
+            </td>
+            <td class="px-4 py-3 text-right text-body-sm font-semibold text-on-surface tabular-nums">{shard.guildCount.toLocaleString('fr-FR')}</td>
+            <td class="px-4 py-3 text-right text-body-sm text-on-surface tabular-nums hidden sm:table-cell">{shard.memberCount.toLocaleString('fr-FR')}</td>
+            <td class="px-4 py-3 text-right">
+              <span class="text-body-sm font-semibold font-mono tabular-nums {shard.ping > 250 ? 'text-error' : shard.ping > 130 ? 'text-warning' : 'text-success'}">
+                {shard.ping} ms
+              </span>
+            </td>
+            <td class="px-4 py-3 text-right text-body-sm text-on-surface-variant tabular-nums hidden md:table-cell">{formatShardUptime(shard.uptime)}</td>
+            <td class="px-4 py-3 text-right">
+              <Button size="sm" icon="RefreshCw" loading={shardActionLoading === `restart:${shard.shardId}`} onclick={() => handleRestartShard(shard.shardId)}>
+                Redémarrer
+              </Button>
+            </td>
+          </tr>
+        {/snippet}
+      </AdminTable>
+    </div>
   </div>
 </AdminShell>
