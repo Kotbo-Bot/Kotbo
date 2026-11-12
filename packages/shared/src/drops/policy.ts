@@ -235,6 +235,37 @@ export function dropActivityVerdict(input: {
   return waitedMs >= input.intervalMinutes * 60 * 1000 ? 'publish' : 'wait';
 }
 
+/**
+ * Drops jackpot : de temps en temps, un drop rapporte un multiple du montant tiré.
+ *
+ * Réglage unique pour tout le serveur, à valeurs fixes : une chance et un multiplicateur
+ * libres sur chacun des cinq types feraient beaucoup de champs pour un effet d'ambiance.
+ * Les drops d'objet en sont exclus : multiplier une pièce rare, c'est précisément ce que
+ * leur liste choisie sert à empêcher.
+ */
+export const DROP_JACKPOT_CHANCE_CHOICES = [10, 20, 50] as const;
+export const DROP_JACKPOT_MULTIPLIER_CHOICES = [3, 5, 10] as const;
+const DEFAULT_DROP_JACKPOT_CHANCE = 20;
+const DEFAULT_DROP_JACKPOT_MULTIPLIER = 5;
+
+function pickChoice(value: unknown, choices: readonly number[], fallback: number): number {
+  const parsed = Number(value);
+  return choices.includes(parsed) ? parsed : fallback;
+}
+
+export function rollDropJackpot(
+  type: DropType,
+  settings: Pick<DropGlobalSettings, 'dropJackpotEnabled' | 'dropJackpotChance'>,
+  random: () => number = Math.random,
+): boolean {
+  if (type === 'RPG_ITEM' || !settings.dropJackpotEnabled) return false;
+  return random() < 1 / settings.dropJackpotChance;
+}
+
+export function dropJackpotAmount(amount: number, multiplier: number): number {
+  return Math.min(DROP_AMOUNT_RANGE.max, amount * multiplier);
+}
+
 export interface DropModeSettings {
   enabled: boolean;
   minAmount: number;
@@ -265,6 +296,10 @@ export interface DropGlobalSettings {
   dropLifetimeMinutes: number;
   /** Minutes après clôture avant suppression du message. `0` = jamais. */
   dropDeleteAfterMinutes: number;
+  dropJackpotEnabled: boolean;
+  /** Un drop sur N est un jackpot. */
+  dropJackpotChance: number;
+  dropJackpotMultiplier: number;
 }
 
 export const DEFAULT_DROP_GLOBAL_SETTINGS: DropGlobalSettings = {
@@ -273,6 +308,9 @@ export const DEFAULT_DROP_GLOBAL_SETTINGS: DropGlobalSettings = {
   dropMentionRoleId: null,
   dropLifetimeMinutes: 60,
   dropDeleteAfterMinutes: DROP_DELETE_AFTER_DISABLED,
+  dropJackpotEnabled: false,
+  dropJackpotChance: DEFAULT_DROP_JACKPOT_CHANCE,
+  dropJackpotMultiplier: DEFAULT_DROP_JACKPOT_MULTIPLIER,
 };
 
 /**
@@ -367,6 +405,13 @@ export function normalizeDropGlobalSettings(raw: Partial<DropGlobalSettings> | n
       DEFAULT_DROP_GLOBAL_SETTINGS.dropLifetimeMinutes,
     ),
     dropDeleteAfterMinutes: normalizeDropDeleteAfterMinutes(source.dropDeleteAfterMinutes),
+    dropJackpotEnabled: source.dropJackpotEnabled ?? DEFAULT_DROP_GLOBAL_SETTINGS.dropJackpotEnabled,
+    dropJackpotChance: pickChoice(source.dropJackpotChance, DROP_JACKPOT_CHANCE_CHOICES, DEFAULT_DROP_JACKPOT_CHANCE),
+    dropJackpotMultiplier: pickChoice(
+      source.dropJackpotMultiplier,
+      DROP_JACKPOT_MULTIPLIER_CHOICES,
+      DEFAULT_DROP_JACKPOT_MULTIPLIER,
+    ),
   };
 }
 

@@ -245,3 +245,38 @@ describe('handleDropsRoutes - historique', () => {
     expect(recentDrops[1].item).toBeNull();
   });
 });
+
+describe('handleDropsRoutes - jackpot', () => {
+  beforeEach(() => {
+    mockDb.guild.update.mockClear();
+    guildRow = {
+      id: 'guild-123',
+      dropsEnabled: true,
+      dropChannelId: null,
+      dropMentionRoleId: null,
+      dropLifetimeMinutes: 60,
+      dropDeleteAfterMinutes: 0,
+      dropJackpotEnabled: false,
+      dropJackpotChance: 20,
+      dropJackpotMultiplier: 5,
+    };
+  });
+
+  test('les réglages sont enregistrés, une valeur hors des choix retombe sur le défaut', async () => {
+    const res = createMockResponse();
+    await handleDropsRoutes(
+      createMockRequest({ dropJackpotEnabled: true, dropJackpotChance: 50, dropJackpotMultiplier: 7 }),
+      res,
+      ['api', 'dashboard', 'guilds', 'guild-123', 'drops'],
+      mockClient,
+      mockUser,
+      'guild-123',
+      mockAccess,
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(mockDb.guild.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ dropJackpotEnabled: true, dropJackpotChance: 50, dropJackpotMultiplier: 5 }),
+    }));
+  });
+});

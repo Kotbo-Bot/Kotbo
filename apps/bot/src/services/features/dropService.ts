@@ -24,6 +24,7 @@ import {
   drawDropAmount,
   dropActivityVerdict,
   dropExpiresAt,
+  dropJackpotAmount,
   dropMaxClaims,
   dropMessageDeleteAt,
   enabledDropModes,
@@ -34,6 +35,7 @@ import {
   pickDropMode,
   pickWeightedDropItem,
   planNextDropAt,
+  rollDropJackpot,
   type DropItemChance,
   type DropMode,
   type DropType,
@@ -70,6 +72,9 @@ interface DropGuildContext {
   dropMentionRoleId: string | null;
   dropLifetimeMinutes: number;
   dropDeleteAfterMinutes: number;
+  dropJackpotEnabled: boolean;
+  dropJackpotChance: number;
+  dropJackpotMultiplier: number;
 }
 
 /** Salon où tombe un type : le sien, sinon celui par défaut du serveur. */
@@ -176,9 +181,14 @@ function buildDropEmbed(drop: DropRow, locale: BotLocale, itemLabel?: string | n
   }
 
   return new EmbedBuilder()
-    .setTitle(m.drop_announce_title({}, { locale }))
+    .setTitle(dropTitle(drop, locale))
     .setDescription(description)
-    .setColor(COLORS.primary);
+    .setColor(drop.jackpot ? COLORS.warning : COLORS.primary);
+}
+
+/** Un jackpot s'annonce comme tel, du message d'apparition jusqu'au bilan. */
+function dropTitle(drop: DropRow, locale: BotLocale): string {
+  return drop.jackpot ? m.drop_jackpot_title({}, { locale }) : m.drop_announce_title({}, { locale });
 }
 
 function buildClaimRow(dropId: string, locale: BotLocale, disabled: boolean): ActionRowBuilder<ButtonBuilder> {
@@ -293,6 +303,8 @@ async function publishDrop(
   }
 
   const now = new Date();
+  const drawn = drawDropAmount(settings, mode);
+  const jackpot = rollDropJackpot(config.type as DropType, guild);
   const drop = await prisma.drop.create({
     data: {
       guildId: guild.id,
@@ -301,7 +313,8 @@ async function publishDrop(
       mode,
       channelId,
       itemId,
-      amount: drawDropAmount(settings, mode),
+      amount: jackpot ? dropJackpotAmount(drawn, guild.dropJackpotMultiplier) : drawn,
+      jackpot,
       maxClaims: dropMaxClaims(settings, mode),
       expiresAt: dropExpiresAt(now, settings, mode, guild.dropLifetimeMinutes),
       // Recopié du serveur : le délai suit le drop, régler l'option n'emporte
@@ -331,7 +344,7 @@ async function publishDrop(
   }
 
   await prisma.drop.update({ where: { id: drop.id }, data: { messageId: message.id } }).catch(() => null);
-  logger.info('Drops', `Drop ${config.type}/${mode} de ${drop.amount} publié sur ${guild.id}.`);
+  logger.info('Drops', `Drop ${config.type}/${mode}${jackpot ? ' (jackpot)' : ''} de ${drop.amount} publié sur ${guild.id}.`);
 }
 
 async function tickDropConfig(client: Client, guild: DropGuildContext, config: NonNullable<DropConfigRow>): Promise<void> {
@@ -426,6 +439,9 @@ export async function runDropCycle(client: Client): Promise<void> {
       dropMentionRoleId: true,
       dropLifetimeMinutes: true,
       dropDeleteAfterMinutes: true,
+      dropJackpotEnabled: true,
+      dropJackpotChance: true,
+      dropJackpotMultiplier: true,
     },
   });
   if (guilds.length === 0) {
@@ -513,7 +529,7 @@ async function closeDropMessage(client: Client, drop: DropRow): Promise<void> {
     : mentions;
 
   const embed = new EmbedBuilder()
-    .setTitle(m.drop_announce_title({}, { locale }))
+    .setTitle(dropTitle(drop, locale))
     .setColor(claimCount > 0 ? COLORS.success : COLORS.dark)
     .setDescription(
       claimCount === 0

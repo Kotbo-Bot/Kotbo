@@ -6,6 +6,8 @@ import {
   DROP_ACTIVITY_WINDOW_MINUTES_RANGE,
   DROP_AMOUNT_RANGE,
   DROP_DELETE_AFTER_DISABLED,
+  DROP_JACKPOT_CHANCE_CHOICES,
+  DROP_JACKPOT_MULTIPLIER_CHOICES,
   DROP_INTERVAL_MINUTES_RANGE,
   DROP_MIN_OPEN_MINUTES,
   DROP_MIN_PUBLISH_GAP_MINUTES,
@@ -23,6 +25,7 @@ import {
   dropMaxClaims,
   dropMessageDeleteAt,
   dropActivityVerdict,
+  dropJackpotAmount,
   dropTypeBlocker,
   enabledDropModes,
   nextAllowedPublicationAt,
@@ -30,6 +33,7 @@ import {
   normalizeDropTypeSettings,
   pickDropMode,
   planNextDropAt,
+  rollDropJackpot,
   type DropTypeSettings,
 } from '@kotbo/shared';
 
@@ -371,5 +375,35 @@ describe('attente d\'activité dans le salon', () => {
   test('salon calme depuis un intervalle entier : le drop part quand même', () => {
     expect(dropActivityVerdict({ dueAt, now: new Date(dueAt.getTime() + 60 * MINUTE_MS), intervalMinutes: 60, activity, recentMessages: 0 }))
       .toBe('publish');
+  });
+});
+
+describe('drops jackpot', () => {
+  const on = normalizeDropGlobalSettings({ dropJackpotEnabled: true, dropJackpotChance: 20, dropJackpotMultiplier: 5 });
+
+  test('éteint par défaut, et seules les valeurs proposées sont retenues', () => {
+    const defaults = normalizeDropGlobalSettings({});
+    expect(defaults.dropJackpotEnabled).toBe(false);
+    expect(DROP_JACKPOT_CHANCE_CHOICES).toContain(defaults.dropJackpotChance);
+    expect(DROP_JACKPOT_MULTIPLIER_CHOICES).toContain(defaults.dropJackpotMultiplier);
+
+    const odd = normalizeDropGlobalSettings({ dropJackpotChance: 7, dropJackpotMultiplier: 1_000 });
+    expect(odd.dropJackpotChance).toBe(defaults.dropJackpotChance);
+    expect(odd.dropJackpotMultiplier).toBe(defaults.dropJackpotMultiplier);
+  });
+
+  test('tiré à une chance sur N', () => {
+    expect(rollDropJackpot('XP', on, () => 0.049)).toBe(true);
+    expect(rollDropJackpot('XP', on, () => 0.05)).toBe(false);
+  });
+
+  test('jamais quand il est éteint, jamais sur un drop d\'objet', () => {
+    expect(rollDropJackpot('XP', { ...on, dropJackpotEnabled: false }, () => 0)).toBe(false);
+    expect(rollDropJackpot('RPG_ITEM', on, () => 0)).toBe(false);
+  });
+
+  test('le gain est multiplié, sans dépasser le plafond des montants', () => {
+    expect(dropJackpotAmount(120, 5)).toBe(600);
+    expect(dropJackpotAmount(DROP_AMOUNT_RANGE.max, 10)).toBe(DROP_AMOUNT_RANGE.max);
   });
 });

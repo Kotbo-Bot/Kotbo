@@ -321,6 +321,7 @@
   "drop_resource_rpg_item": "objet",
   "drop_claim_item_gone": "❌ Cet objet n'est plus disponible : il a été retiré du serveur, ou le RPG a été désactivé depuis.",
   "drop_announce_title": "Un drop est apparu !",
+  "drop_jackpot_title": "JACKPOT : un drop exceptionnel est apparu !",
   "drop_announce_desc_first": "**{amount}** **{resource}** viennent de tomber dans ce salon.\nLe premier à cliquer sur le bouton repart avec.",
   "drop_announce_desc_race": "**{amount}** **{resource}** viennent de tomber dans ce salon.\nLes **{winners}** premiers à cliquer repartent chacun avec ce montant.",
   "drop_announce_desc_window": "**{amount}** **{resource}** viennent de tomber dans ce salon.\nTout le monde peut se servir jusqu'à {closes}.",

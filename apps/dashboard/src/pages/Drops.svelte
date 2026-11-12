@@ -41,6 +41,8 @@
     DROP_ITEM_POOL_MAX,
     DROP_ITEM_WEIGHT_RANGE,
     DROP_ITEM_WEIGHT_TOTAL,
+    DROP_JACKPOT_CHANCE_CHOICES,
+    DROP_JACKPOT_MULTIPLIER_CHOICES,
     DROP_LIFETIME_MINUTES_RANGE,
     DROP_RACE_WINNERS_RANGE,
     DROP_TYPES,
@@ -320,6 +322,9 @@
           dropMentionRoleId: res.dropMentionRoleId,
           dropLifetimeMinutes: res.dropLifetimeMinutes,
           dropDeleteAfterMinutes: res.dropDeleteAfterMinutes ?? DROP_DELETE_AFTER_DISABLED,
+          dropJackpotEnabled: res.dropJackpotEnabled,
+          dropJackpotChance: res.dropJackpotChance,
+          dropJackpotMultiplier: res.dropJackpotMultiplier,
         };
         globalSettings = { ...loadedGlobal };
         savedGlobalSettings = { ...loadedGlobal };
@@ -588,6 +593,38 @@
             <p class="text-2xs text-on-surface-variant mt-1">{m.drop_delete_after_desc()}</p>
           </div>
         </div>
+
+        <div class="border border-outline-variant/15 rounded-xl p-4 space-y-4">
+          <div class="flex items-start justify-between gap-4">
+            <div>
+              <h4 class="text-sm font-semibold flex items-center gap-2"><Papicon icon="Sparkles" size={15} /> {m.drop_jackpot_title()}</h4>
+              <p class="text-xs text-on-surface-variant mt-0.5">{m.drop_jackpot_desc()}</p>
+            </div>
+            <ToggleSwitch checked={globalSettings.dropJackpotEnabled} onToggle={(v) => globalSettings.dropJackpotEnabled = v} disabled={!canManageSettings} />
+          </div>
+
+          {#if globalSettings.dropJackpotEnabled}
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4" transition:fade={{ duration: 150 }}>
+              <div class="space-y-1.5">
+                <label for="drop-jackpot-chance" class="text-xs font-semibold text-on-surface-variant ml-1">{m.drop_jackpot_chance_label()}</label>
+                <select id="drop-jackpot-chance" bind:value={globalSettings.dropJackpotChance} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold disabled:opacity-50" disabled={!canManageSettings}>
+                  {#each DROP_JACKPOT_CHANCE_CHOICES as count (count)}
+                    <option value={count}>{m.drop_jackpot_chance_option({ count })}</option>
+                  {/each}
+                </select>
+              </div>
+              <div class="space-y-1.5">
+                <label for="drop-jackpot-multiplier" class="text-xs font-semibold text-on-surface-variant ml-1">{m.drop_jackpot_multiplier_label()}</label>
+                <select id="drop-jackpot-multiplier" bind:value={globalSettings.dropJackpotMultiplier} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold disabled:opacity-50" disabled={!canManageSettings}>
+                  {#each DROP_JACKPOT_MULTIPLIER_CHOICES as count (count)}
+                    <option value={count}>{m.drop_jackpot_multiplier_option({ count })}</option>
+                  {/each}
+                </select>
+              </div>
+            </div>
+            <p class="text-2xs text-on-surface-variant">{m.drop_jackpot_items_hint()}</p>
+          {/if}
+        </div>
       </section>
 
       <section class="bg-surface-container-low/40 border border-outline-variant/30 p-6 rounded-xl space-y-4">
@@ -668,6 +705,9 @@
                     <td class="py-2.5 pr-4 font-semibold">{TYPE_LABELS[drop.type]?.() ?? drop.type}</td>
                     <td class="py-2.5 pr-4 text-on-surface-variant/80">{MODE_LABELS[drop.mode]?.() ?? drop.mode}</td>
                     <td class="py-2.5 pr-4 font-bold">
+                      {#if drop.jackpot}
+                        <span class="text-2xs font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-warning/10 text-warning border border-warning/20 mr-1">{m.drop_history_jackpot()}</span>
+                      {/if}
                       {drop.amount.toLocaleString(dateLocale())}
                       {#if drop.item}<span class="font-normal"> <EmojiText value={drop.item.emoji} /> {drop.item.name}</span>{/if}
                     </td>
