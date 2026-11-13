@@ -868,7 +868,8 @@ model Guild {
   bumpState BumpState?
 
   // Reputation System
-  reputationVotes ReputationVote[]
+  reputationVotes  ReputationVote[]
+  reputationConfig ReputationConfig?
 
   // Ticket Satisfaction
   ticketSatisfactions TicketSatisfaction[]
