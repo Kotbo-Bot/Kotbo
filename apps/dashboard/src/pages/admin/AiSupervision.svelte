@@ -6,7 +6,7 @@
    */
   import { onMount, onDestroy } from 'svelte';
   import { errorMessage } from '@kotbo/shared';
-  import { fetchAiSupervision, type AiSupervision } from '../../lib/api/adminInsights';
+  import { fetchAiSupervision, fetchAdminVisionImages, type AiSupervision, type AdminVisionImage } from '../../lib/api/adminInsights';
   import AdminShell from '../../lib/components/admin/AdminShell.svelte';
   import AdminCard from '../../lib/components/admin/AdminCard.svelte';
   import AdminBadge from '../../lib/components/admin/AdminBadge.svelte';
@@ -25,6 +25,29 @@
   let chartMode = $state<'line' | 'bar'>('line');
   let timer: ReturnType<typeof setInterval> | null = null;
 
+  // ── Galerie d'images Kotbo Vision ──────────────────────────────────────────
+  let visionImages = $state<AdminVisionImage[]>([]);
+  let visionImagesLoading = $state(false);
+  let visionThumbsOnly = $state(true);
+  let visionSourceFilter = $state('ALL');
+  let selectedModalImage = $state<AdminVisionImage | null>(null);
+
+  async function loadVisionImages() {
+    visionImagesLoading = true;
+    try {
+      const res = await fetchAdminVisionImages({
+        thumbsOnly: visionThumbsOnly,
+        source: visionSourceFilter,
+        limit: 150,
+      });
+      visionImages = res.images;
+    } catch {
+      visionImages = [];
+    } finally {
+      visionImagesLoading = false;
+    }
+  }
+
   async function load() {
     try {
       data = await fetchAiSupervision(Number(days));
@@ -38,6 +61,7 @@
 
   onMount(() => {
     void load();
+    void loadVisionImages();
     // La file bouge vite : on la relit sans que l'admin ait a recharger.
     timer = setInterval(load, 30_000);
   });
@@ -345,4 +369,165 @@
       {/if}
     </AdminCard>
   </div>
+
+  <!-- ── Galerie d'images Kotbo Vision ──────────────────────────────────────── -->
+  <AdminCard
+    title="Catalogue d'images et empreintes Kotbo Vision"
+    description="Inspection visuelle des images interceptées (honeypot, clics droits, QR codes, revues) et empreintes globales"
+  >
+    {#snippet actions()}
+      <div class="flex items-center gap-3 flex-wrap">
+        <label class="inline-flex items-center gap-2 text-xs text-on-surface cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={visionThumbsOnly}
+            onchange={(e) => {
+              visionThumbsOnly = e.currentTarget.checked;
+              void loadVisionImages();
+            }}
+            class="rounded border-outline-variant/40 bg-surface-container text-primary focus:ring-0"
+          />
+          <span>Avec aperçu uniquement</span>
+        </label>
+        <select
+          value={visionSourceFilter}
+          onchange={(e) => {
+            visionSourceFilter = e.currentTarget.value;
+            void loadVisionImages();
+          }}
+          class="h-8 px-2.5 rounded-lg bg-surface-container border border-outline-variant/30 text-xs text-on-surface focus:outline-none"
+        >
+          <option value="ALL">Toutes les sources</option>
+          <option value="HONEYPOT">Salon piège (Honeypot)</option>
+          <option value="QR">Codes QR</option>
+          <option value="REVIEW">Revues confirmées</option>
+          <option value="MANUAL">Ajout manuel</option>
+          <option value="SEED">Amorce (Seed)</option>
+        </select>
+        <Button size="sm" variant="secondary" icon="RefreshCw" onclick={loadVisionImages} disabled={visionImagesLoading}>
+          Actualiser
+        </Button>
+      </div>
+    {/snippet}
+
+    {#if visionImagesLoading && visionImages.length === 0}
+      <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3 py-4">
+        {#each Array(6) as _}
+          <div class="h-36 rounded-xl admin-surface animate-pulse"></div>
+        {/each}
+      </div>
+    {:else if visionImages.length === 0}
+      <div class="py-12 text-center text-on-surface-variant text-sm">
+        Aucune image trouvée avec ces filtres.
+      </div>
+    {:else}
+      <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 pt-2">
+        {#each visionImages as img (img.id)}
+          <button
+            type="button"
+            onclick={() => { selectedModalImage = img; }}
+            class="group rounded-xl border border-outline-variant/30 bg-surface-container-low/40 hover:border-primary/40 text-left overflow-hidden transition flex flex-col focus:outline-none"
+          >
+            {#if img.thumb}
+              <div class="w-full h-28 bg-surface-container flex items-center justify-center overflow-hidden">
+                <img
+                  src={img.thumb}
+                  alt={img.filename ?? 'Arnaque'}
+                  class="w-full h-full object-contain group-hover:scale-105 transition duration-200"
+                  loading="lazy"
+                />
+              </div>
+            {:else}
+              <div class="w-full h-28 bg-surface-container flex flex-col items-center justify-center text-xs text-on-surface-variant gap-1">
+                <span class="font-mono text-2xs opacity-70">Sans aperçu</span>
+                <span class="text-3xs text-on-surface-variant/70">(Empreinte)</span>
+              </div>
+            {/if}
+
+            <div class="p-2.5 space-y-1 min-w-0 flex-1 flex flex-col justify-between w-full">
+              <div>
+                <p class="text-xs font-semibold text-on-surface truncate" title={img.filename ?? 'image'}>
+                  {img.filename ?? 'image sans nom'}
+                </p>
+                <p class="text-2xs text-on-surface-variant flex items-center justify-between gap-1 mt-0.5">
+                  <span class="truncate">{SOURCE[img.source] ?? img.source}</span>
+                  <span class="font-mono tabular-nums">{img.hits} bloc.</span>
+                </p>
+              </div>
+              <div class="pt-1 border-t border-outline-variant/15 flex items-center justify-between gap-1 text-3xs text-on-surface-variant">
+                <span class="truncate">{img.guildName ?? 'Global'}</span>
+                {#if img.status === 'ALLOWED'}
+                  <AdminBadge size="sm" label="Autorisée" tone="success" />
+                {/if}
+              </div>
+            </div>
+          </button>
+        {/each}
+      </div>
+    {/if}
+  </AdminCard>
+
+  <!-- Modale d'agrandissement d'une image -->
+  {#if selectedModalImage}
+    <div
+      class="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
+      onclick={() => { selectedModalImage = null; }}
+      onkeydown={(e) => { if (e.key === 'Escape') selectedModalImage = null; }}
+      role="button"
+      tabindex="0"
+    >
+      <div
+        class="bg-surface-container-high rounded-2xl border border-outline-variant/40 p-5 max-w-xl w-full space-y-4 shadow-2xl"
+        onclick={(e) => e.stopPropagation()}
+        onkeydown={(e) => e.stopPropagation()}
+        role="dialog"
+        tabindex="-1"
+      >
+        <div class="flex items-center justify-between border-b border-outline-variant/20 pb-3">
+          <div class="min-w-0 pr-3">
+            <h3 class="text-sm font-semibold text-on-surface truncate">
+              {selectedModalImage.filename ?? 'Image d’arnaque'}
+            </h3>
+            <p class="text-xs text-on-surface-variant">
+              {SOURCE[selectedModalImage.source] ?? selectedModalImage.source} · {selectedModalImage.guildName ?? 'Global'}
+            </p>
+          </div>
+          <button
+            type="button"
+            onclick={() => { selectedModalImage = null; }}
+            class="w-8 h-8 rounded-lg bg-on-surface/8 hover:bg-on-surface/12 text-on-surface-variant flex items-center justify-center text-sm font-bold transition"
+          >
+            ✕
+          </button>
+        </div>
+
+        {#if selectedModalImage.thumb}
+          <div class="max-h-[60vh] flex items-center justify-center bg-black/40 rounded-xl overflow-hidden p-2">
+            <img
+              src={selectedModalImage.thumb}
+              alt={selectedModalImage.filename ?? 'Vignette'}
+              class="max-h-[55vh] w-auto object-contain rounded-lg shadow-md"
+            />
+          </div>
+        {:else}
+          <div class="h-40 flex items-center justify-center bg-surface-container rounded-xl text-xs text-on-surface-variant font-mono">
+            Aucun aperçu disponible pour cette empreinte
+          </div>
+        {/if}
+
+        <div class="grid grid-cols-2 gap-2 text-xs pt-1">
+          <div class="p-2.5 rounded-lg bg-surface-container">
+            <span class="text-on-surface-variant block text-2xs">Blocages enregistrés</span>
+            <span class="font-bold text-on-surface text-sm tabular-nums">{selectedModalImage.hits}</span>
+          </div>
+          <div class="p-2.5 rounded-lg bg-surface-container">
+            <span class="text-on-surface-variant block text-2xs">Statut</span>
+            <span class="font-bold text-on-surface text-sm">
+              {selectedModalImage.status === 'BLOCKED' ? 'Bloquée (BLOCKED)' : 'Autorisée (ALLOWED)'}
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  {/if}
 </AdminShell>

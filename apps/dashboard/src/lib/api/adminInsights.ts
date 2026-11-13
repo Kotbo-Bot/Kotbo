@@ -208,6 +208,29 @@ export interface AiSupervision {
 
 export const fetchAiSupervision = (days = 30) => read<AiSupervision>(`/api/admin/insights/ai?days=${days}`);
 
+export interface AdminVisionImage {
+  id: string;
+  guildId: string | null;
+  guildName: string | null;
+  filename: string | null;
+  thumb: string | null;
+  source: string;
+  status: 'BLOCKED' | 'ALLOWED';
+  hits: number;
+  lastSeenAt: string | null;
+  createdAt: string;
+  addedBy: string | null;
+}
+
+export const fetchAdminVisionImages = (opts: { thumbsOnly?: boolean; source?: string; limit?: number } = {}) => {
+  const params = new URLSearchParams();
+  if (opts.thumbsOnly) params.set('thumbs', '1');
+  if (opts.source) params.set('source', opts.source);
+  if (opts.limit) params.set('limit', String(opts.limit));
+  const query = params.toString();
+  return read<{ images: AdminVisionImage[] }>(`/api/admin/insights/ai/vision-images${query ? `?${query}` : ''}`);
+};
+
 // ── Profil des requetes ──────────────────────────────────────────────────────
 
 export interface QueryStats {
