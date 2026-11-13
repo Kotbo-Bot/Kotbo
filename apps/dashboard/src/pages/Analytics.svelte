@@ -10,62 +10,70 @@
    * Les anciens composants qui dépendent de la grosse réponse /analytics la
    * reçoivent d'ici, chargée seulement quand un sous-onglet en a besoin.
    */
-  import { untrack } from 'svelte';
-  import { isModulePaused } from '@kotbo/contracts';
-  import { router } from 'tinro';
-  import { authStore } from '../lib/stores/auth.svelte';
-  import { toast } from '../lib/stores/toast.svelte';
-  import { downloadXlsx } from '../lib/xlsxExport';
-  import { gotoTab, resolveTabFromUrl } from '../lib/tabRouting';
-  import { m, dateLocale } from '../lib/i18n';
-  import { errorMessage } from '@kotbo/shared';
-  import { fetchAnalytics, fetchGlobalInteractions } from '../lib/api';
-  import Papicon from '../lib/components/Papicon.svelte';
-  import { memberCaseModal } from '../lib/stores/memberCaseModal.svelte';
-  import { Button, Callout, SectionCard, Tabs } from '../lib/components/ui';
-  import ExportDropdown from '../lib/components/analytics/ExportDropdown.svelte';
-  import AnalyticsFilterBar from '../lib/components/analytics/AnalyticsFilterBar.svelte';
-  import SiteAnalyticsPanel from '../lib/components/site/SiteAnalyticsPanel.svelte';
-  import AnalyticsSkeleton from '../lib/components/analytics/AnalyticsSkeleton.svelte';
-  import OverviewSection from '../lib/components/analytics/OverviewSection.svelte';
-  import ActivitySection, { type ActivityView } from '../lib/components/analytics/ActivitySection.svelte';
-  import ContentSection, { type ContentView } from '../lib/components/analytics/ContentSection.svelte';
-  import ChannelsSection from '../lib/components/analytics/ChannelsSection.svelte';
-  import GrowthSection from '../lib/components/analytics/GrowthSection.svelte';
-  import KpiTile from '../lib/components/analytics/KpiTile.svelte';
-  import MembersView from '../lib/components/analytics/MembersView.svelte';
-  import GhostMembersPanel from '../lib/components/analytics/GhostMembersPanel.svelte';
-  import EngagementView from '../lib/components/analytics/EngagementView.svelte';
-  import LifecycleView from '../lib/components/analytics/LifecycleView.svelte';
-  import FunnelView from '../lib/components/analytics/FunnelView.svelte';
-  import CohortTriangle from '../lib/components/analytics/CohortTriangle.svelte';
-  import ResponseTimesView from '../lib/components/analytics/ResponseTimesView.svelte';
-  import ConcentrationView from '../lib/components/analytics/ConcentrationView.svelte';
-  import ReactionRolesView from '../lib/components/analytics/ReactionRolesView.svelte';
-  import ClimateView from '../lib/components/analytics/ClimateView.svelte';
-  import ChannelHealthView from '../lib/components/analytics/ChannelHealthView.svelte';
-  import NetworkInsightsView from '../lib/components/analytics/NetworkInsightsView.svelte';
-  import GrowthInsightsView from '../lib/components/analytics/GrowthInsightsView.svelte';
-  import ModerationTrendsView from '../lib/components/analytics/ModerationTrendsView.svelte';
-  import StaffInsightsView from '../lib/components/analytics/StaffInsightsView.svelte';
-  import RisingWordsView from '../lib/components/analytics/RisingWordsView.svelte';
-  import LivePanel from '../lib/components/analytics/LivePanel.svelte';
-  import AlertsView from '../lib/components/analytics/AlertsView.svelte';
-  import CompareView from '../lib/components/analytics/CompareView.svelte';
-  import SavedViewsMenu from '../lib/components/analytics/SavedViewsMenu.svelte';
-  import ReportsView from '../lib/components/analytics/ReportsView.svelte';
-  import AdvancedAnalyticsPanel from '../lib/components/analytics/AdvancedAnalyticsPanel.svelte';
-  import ModerationAudit from '../lib/components/analytics/ModerationAudit.svelte';
-  import StaffAudit from '../lib/components/analytics/StaffAudit.svelte';
-  import StaffPerformance from '../lib/components/analytics/StaffPerformance.svelte';
-  import GlobalInteractionGraph from '../lib/components/charts/GlobalInteractionGraph.svelte';
-  import { analyticsExport, analyticsFilters as filters } from '../lib/components/analytics/analyticsFilters.svelte';
-  import { fmtNumber } from '../lib/components/analytics/analyticsFormat';
-  import { dashboardStore } from '../lib/stores/dashboard.svelte';
-  import { FREE_ANALYTICS_DAYS } from '@kotbo/contracts';
+  import { untrack } from "svelte";
+  import { isModulePaused } from "@kotbo/contracts";
+  import { router } from "tinro";
+  import { authStore } from "../lib/stores/auth.svelte";
+  import { toast } from "../lib/stores/toast.svelte";
+  import { downloadXlsx } from "../lib/xlsxExport";
+  import { gotoTab, resolveTabFromUrl } from "../lib/tabRouting";
+  import { m, dateLocale } from "../lib/i18n";
+  import { errorMessage } from "@kotbo/shared";
+  import { fetchAnalytics, fetchGlobalInteractions } from "../lib/api";
+  import Papicon from "../lib/components/Papicon.svelte";
+  import { memberCaseModal } from "../lib/stores/memberCaseModal.svelte";
+  import { Button, Callout, SectionCard, Tabs } from "../lib/components/ui";
+  import ExportDropdown from "../lib/components/analytics/ExportDropdown.svelte";
+  import AnalyticsFilterBar from "../lib/components/analytics/AnalyticsFilterBar.svelte";
+  import SiteAnalyticsPanel from "../lib/components/site/SiteAnalyticsPanel.svelte";
+  import AnalyticsSkeleton from "../lib/components/analytics/AnalyticsSkeleton.svelte";
+  import OverviewSection from "../lib/components/analytics/OverviewSection.svelte";
+  import ActivitySection, {
+    type ActivityView,
+  } from "../lib/components/analytics/ActivitySection.svelte";
+  import ContentSection, {
+    type ContentView,
+  } from "../lib/components/analytics/ContentSection.svelte";
+  import ChannelsSection from "../lib/components/analytics/ChannelsSection.svelte";
+  import GrowthSection from "../lib/components/analytics/GrowthSection.svelte";
+  import KpiTile from "../lib/components/analytics/KpiTile.svelte";
+  import MembersView from "../lib/components/analytics/MembersView.svelte";
+  import ServerTagsSection from "../lib/components/analytics/ServerTagsSection.svelte";
+  import GhostMembersPanel from "../lib/components/analytics/GhostMembersPanel.svelte";
+  import EngagementView from "../lib/components/analytics/EngagementView.svelte";
+  import LifecycleView from "../lib/components/analytics/LifecycleView.svelte";
+  import FunnelView from "../lib/components/analytics/FunnelView.svelte";
+  import CohortTriangle from "../lib/components/analytics/CohortTriangle.svelte";
+  import ResponseTimesView from "../lib/components/analytics/ResponseTimesView.svelte";
+  import ConcentrationView from "../lib/components/analytics/ConcentrationView.svelte";
+  import ReactionRolesView from "../lib/components/analytics/ReactionRolesView.svelte";
+  import ClimateView from "../lib/components/analytics/ClimateView.svelte";
+  import ChannelHealthView from "../lib/components/analytics/ChannelHealthView.svelte";
+  import NetworkInsightsView from "../lib/components/analytics/NetworkInsightsView.svelte";
+  import GrowthInsightsView from "../lib/components/analytics/GrowthInsightsView.svelte";
+  import ModerationTrendsView from "../lib/components/analytics/ModerationTrendsView.svelte";
+  import StaffInsightsView from "../lib/components/analytics/StaffInsightsView.svelte";
+  import RisingWordsView from "../lib/components/analytics/RisingWordsView.svelte";
+  import LivePanel from "../lib/components/analytics/LivePanel.svelte";
+  import AlertsView from "../lib/components/analytics/AlertsView.svelte";
+  import CompareView from "../lib/components/analytics/CompareView.svelte";
+  import SavedViewsMenu from "../lib/components/analytics/SavedViewsMenu.svelte";
+  import ReportsView from "../lib/components/analytics/ReportsView.svelte";
+  import AdvancedAnalyticsPanel from "../lib/components/analytics/AdvancedAnalyticsPanel.svelte";
+  import ModerationAudit from "../lib/components/analytics/ModerationAudit.svelte";
+  import StaffAudit from "../lib/components/analytics/StaffAudit.svelte";
+  import StaffPerformance from "../lib/components/analytics/StaffPerformance.svelte";
+  import GlobalInteractionGraph from "../lib/components/charts/GlobalInteractionGraph.svelte";
+  import {
+    analyticsExport,
+    analyticsFilters as filters,
+  } from "../lib/components/analytics/analyticsFilters.svelte";
+  import { fmtNumber } from "../lib/components/analytics/analyticsFormat";
+  import { dashboardStore } from "../lib/stores/dashboard.svelte";
+  import { FREE_ANALYTICS_DAYS } from "@kotbo/contracts";
 
   /** Ce que suit un sous-onglet : tous les filtres, la période, ou sa propre fenêtre. */
-  type Scope = 'full' | 'period' | 'own';
+  type Scope = "full" | "period" | "own";
 
   interface SubTab {
     id: string;
@@ -87,94 +95,328 @@
 
   const sections: Section[] = $derived([
     {
-      id: 'overview', label: m.an_tab_overview(), icon: 'Grid', description: m.anx_section_overview_desc(),
-      tabs: [{ id: 'overview', label: m.an_tab_overview(), icon: 'Grid', scope: 'full', legacy: true }],
+      id: "overview",
+      label: m.an_tab_overview(),
+      icon: "Grid",
+      description: m.anx_section_overview_desc(),
+      tabs: [
+        {
+          id: "overview",
+          label: m.an_tab_overview(),
+          icon: "Grid",
+          scope: "full",
+          legacy: true,
+        },
+      ],
     },
     {
-      id: 'activity', label: m.anx_section_activity(), icon: 'Activity', description: m.anx_section_activity_desc(),
+      id: "activity",
+      label: m.anx_section_activity(),
+      icon: "Activity",
+      description: m.anx_section_activity_desc(),
       tabs: [
-        { id: 'messages', label: m.an_tab_messages(), icon: 'ChatCircleDots', scope: 'full' },
-        { id: 'voice', label: m.an_tab_voice(), icon: 'Microphone', scope: 'full', legacy: true },
-        { id: 'live', label: m.anx_tab_live(), icon: 'Radio', scope: 'own' },
-        { id: 'compare', label: m.anx_tab_compare(), icon: 'GitCompare', scope: 'period' },
-        { id: 'heatmap', label: m.an_tab_heatmap(), icon: 'Fire', scope: 'period' },
-        { id: 'pulse', label: m.an_tab_pulse(), icon: 'Activity', scope: 'own' },
-        { id: 'weekly', label: m.an_tab_weekly(), icon: 'Calendar', scope: 'own' },
-        { id: 'commands', label: m.an_tab_commands(), icon: 'Code', scope: 'period' },
+        {
+          id: "messages",
+          label: m.an_tab_messages(),
+          icon: "ChatCircleDots",
+          scope: "full",
+        },
+        {
+          id: "voice",
+          label: m.an_tab_voice(),
+          icon: "Microphone",
+          scope: "full",
+          legacy: true,
+        },
+        { id: "live", label: m.anx_tab_live(), icon: "Radio", scope: "own" },
+        {
+          id: "compare",
+          label: m.anx_tab_compare(),
+          icon: "GitCompare",
+          scope: "period",
+        },
+        {
+          id: "heatmap",
+          label: m.an_tab_heatmap(),
+          icon: "Fire",
+          scope: "period",
+        },
+        {
+          id: "pulse",
+          label: m.an_tab_pulse(),
+          icon: "Activity",
+          scope: "own",
+        },
+        {
+          id: "weekly",
+          label: m.an_tab_weekly(),
+          icon: "Calendar",
+          scope: "own",
+        },
+        {
+          id: "commands",
+          label: m.an_tab_commands(),
+          icon: "Code",
+          scope: "period",
+        },
         // Daily Algo en pause : son onglet sort de la page avec lui.
-        ...(isModulePaused('daily_algo') ? [] : [{ id: 'algo', label: m.an_tab_algo(), icon: 'Code', scope: 'period' as const }]),
+        ...(isModulePaused("daily_algo")
+          ? []
+          : [
+              {
+                id: "algo",
+                label: m.an_tab_algo(),
+                icon: "Code",
+                scope: "period" as const,
+              },
+            ]),
       ],
     },
     {
-      id: 'content', label: m.anx_section_content(), icon: 'ChatCircleDots', description: m.anx_section_content_desc(), isNew: true,
+      id: "content",
+      label: m.anx_section_content(),
+      icon: "ChatCircleDots",
+      description: m.anx_section_content_desc(),
+      isNew: true,
       tabs: [
-        { id: 'content', label: m.anx_tab_content_overview(), icon: 'Grid', scope: 'full' },
-        { id: 'emojis', label: m.anx_tab_emojis(), icon: 'Smile', scope: 'full' },
-        { id: 'stickers', label: m.anx_tab_stickers(), icon: 'image', scope: 'full' },
-        { id: 'gifs', label: m.anx_tab_gifs(), icon: 'Lightning', scope: 'full' },
-        { id: 'sites', label: m.anx_tab_sites(), icon: 'link', scope: 'full' },
-        { id: 'formatting', label: m.anx_tab_formatting(), icon: 'Type', scope: 'full' },
-        { id: 'words', label: m.an_tab_words(), icon: 'ChatCircleDots', scope: 'period' },
+        {
+          id: "content",
+          label: m.anx_tab_content_overview(),
+          icon: "Grid",
+          scope: "full",
+        },
+        {
+          id: "emojis",
+          label: m.anx_tab_emojis(),
+          icon: "Smile",
+          scope: "full",
+        },
+        {
+          id: "stickers",
+          label: m.anx_tab_stickers(),
+          icon: "image",
+          scope: "full",
+        },
+        {
+          id: "gifs",
+          label: m.anx_tab_gifs(),
+          icon: "Lightning",
+          scope: "full",
+        },
+        { id: "sites", label: m.anx_tab_sites(), icon: "link", scope: "full" },
+        {
+          id: "formatting",
+          label: m.anx_tab_formatting(),
+          icon: "Type",
+          scope: "full",
+        },
+        {
+          id: "words",
+          label: m.an_tab_words(),
+          icon: "ChatCircleDots",
+          scope: "period",
+        },
       ],
     },
     {
-      id: 'channels', label: m.anx_section_channels(), icon: 'ChatBubbles', description: m.anx_section_channels_desc(),
+      id: "channels",
+      label: m.anx_section_channels(),
+      icon: "ChatBubbles",
+      description: m.anx_section_channels_desc(),
       tabs: [
-        { id: 'channels', label: m.anx_tab_channel_tree(), icon: 'ChatBubbles', scope: 'period' },
-        { id: 'responses', label: m.anx_tab_responses(), icon: 'Clock', scope: 'full' },
-        { id: 'channel-health', label: m.anx_channels_health_title(), icon: 'heart', scope: 'period' },
+        {
+          id: "channels",
+          label: m.anx_tab_channel_tree(),
+          icon: "ChatBubbles",
+          scope: "period",
+        },
+        {
+          id: "responses",
+          label: m.anx_tab_responses(),
+          icon: "Clock",
+          scope: "full",
+        },
+        {
+          id: "channel-health",
+          label: m.anx_channels_health_title(),
+          icon: "heart",
+          scope: "period",
+        },
       ],
     },
     {
-      id: 'members', label: m.an_tab_members(), icon: 'UsersFour', description: m.anx_section_members_desc(),
+      id: "members",
+      label: m.an_tab_members(),
+      icon: "UsersFour",
+      description: m.anx_section_members_desc(),
       tabs: [
-        { id: 'members', label: m.an_tab_members(), icon: 'UsersFour', scope: 'period', legacy: true },
-        { id: 'engagement', label: m.anx_tab_engagement(), icon: 'Activity', scope: 'full' },
-        { id: 'lifecycle', label: m.anx_tab_lifecycle(), icon: 'Users', scope: 'full' },
-        { id: 'concentration', label: m.anx_tab_concentration(), icon: 'PieChart', scope: 'full' },
-        { id: 'reaction-roles', label: m.anx_tab_reaction_roles(), icon: 'MousePointer', scope: 'period' },
-        { id: 'interactions', label: m.an_tab_network(), icon: 'Compass', scope: 'period' },
-        { id: 'social', label: m.an_tab_social(), icon: 'Users', scope: 'own' },
-        { id: 'ghosts', label: m.ghost_tab(), icon: 'Ghost', scope: 'own' },
+        {
+          id: "members",
+          label: m.an_tab_members(),
+          icon: "UsersFour",
+          scope: "period",
+          legacy: true,
+        },
+        {
+          id: "engagement",
+          label: m.anx_tab_engagement(),
+          icon: "Activity",
+          scope: "full",
+        },
+        {
+          id: "lifecycle",
+          label: m.anx_tab_lifecycle(),
+          icon: "Users",
+          scope: "full",
+        },
+        {
+          id: "concentration",
+          label: m.anx_tab_concentration(),
+          icon: "PieChart",
+          scope: "full",
+        },
+        {
+          id: "reaction-roles",
+          label: m.anx_tab_reaction_roles(),
+          icon: "MousePointer",
+          scope: "period",
+        },
+        {
+          id: "interactions",
+          label: m.an_tab_network(),
+          icon: "Compass",
+          scope: "period",
+        },
+        { id: "social", label: m.an_tab_social(), icon: "Users", scope: "own" },
+        {
+          id: "server-tags",
+          label: m.anx_tab_server_tags(),
+          icon: "Tag",
+          scope: "period",
+        },
+        { id: "ghosts", label: m.ghost_tab(), icon: "Ghost", scope: "own" },
       ],
     },
     {
-      id: 'growth', label: m.anx_section_growth(), icon: 'TrendingUp', description: m.anx_section_growth_desc(),
+      id: "growth",
+      label: m.anx_section_growth(),
+      icon: "TrendingUp",
+      description: m.anx_section_growth_desc(),
       tabs: [
-        { id: 'growth', label: m.anx_tab_growth(), icon: 'TrendingUp', scope: 'period', legacy: true },
-        { id: 'funnel', label: m.anx_tab_funnel(), icon: 'Filter', scope: 'full' },
-        { id: 'cohorts', label: m.an_tab_cohorts(), icon: 'UsersFour', scope: 'own' },
-        { id: 'churn', label: m.an_tab_churn(), icon: 'Warning', scope: 'own' },
+        {
+          id: "growth",
+          label: m.anx_tab_growth(),
+          icon: "TrendingUp",
+          scope: "period",
+          legacy: true,
+        },
+        {
+          id: "funnel",
+          label: m.anx_tab_funnel(),
+          icon: "Filter",
+          scope: "full",
+        },
+        {
+          id: "cohorts",
+          label: m.an_tab_cohorts(),
+          icon: "UsersFour",
+          scope: "own",
+        },
+        { id: "churn", label: m.an_tab_churn(), icon: "Warning", scope: "own" },
       ],
     },
     {
-      id: 'moderation', label: m.an_tab_moderation(), icon: 'Gavel', description: m.anx_section_moderation_desc(),
+      id: "moderation",
+      label: m.an_tab_moderation(),
+      icon: "Gavel",
+      description: m.anx_section_moderation_desc(),
       tabs: [
-        { id: 'moderation', label: m.an_tab_moderation(), icon: 'Gavel', scope: 'period', legacy: true },
-        { id: 'mod-advanced', label: m.an_tab_mod_advanced(), icon: 'ChartLineUp', scope: 'own' },
+        {
+          id: "moderation",
+          label: m.an_tab_moderation(),
+          icon: "Gavel",
+          scope: "period",
+          legacy: true,
+        },
+        {
+          id: "mod-advanced",
+          label: m.an_tab_mod_advanced(),
+          icon: "ChartLineUp",
+          scope: "own",
+        },
       ],
     },
     {
-      id: 'climate', label: m.anx_section_climate(), icon: 'sparkles', description: m.anx_section_climate_desc(), isNew: true,
-      tabs: [{ id: 'climate', label: m.anx_tab_climate(), icon: 'sparkles', scope: 'period' }],
-    },
-    {
-      id: 'staff', label: m.anx_section_staff(), icon: 'Users', description: m.anx_section_staff_desc(),
+      id: "climate",
+      label: m.anx_section_climate(),
+      icon: "sparkles",
+      description: m.anx_section_climate_desc(),
+      isNew: true,
       tabs: [
-        { id: 'staff', label: m.an_tab_staff_directory(), icon: 'Users', scope: 'period', legacy: true },
-        { id: 'performance', label: m.an_tab_staff_performance(), icon: 'TrendUp', scope: 'period', legacy: true },
-        { id: 'tickets', label: m.anx_tab_tickets(), icon: 'Ticket', scope: 'period' },
+        {
+          id: "climate",
+          label: m.anx_tab_climate(),
+          icon: "sparkles",
+          scope: "period",
+        },
       ],
     },
     {
-      id: 'website', label: m.ste_analytics_section(), icon: 'Globe', description: m.ste_analytics_section_desc(), isNew: true,
-      tabs: [{ id: 'website', label: m.ste_analytics_tab(), icon: 'Globe', scope: 'own' }],
+      id: "staff",
+      label: m.anx_section_staff(),
+      icon: "Users",
+      description: m.anx_section_staff_desc(),
+      tabs: [
+        {
+          id: "staff",
+          label: m.an_tab_staff_directory(),
+          icon: "Users",
+          scope: "period",
+          legacy: true,
+        },
+        {
+          id: "performance",
+          label: m.an_tab_staff_performance(),
+          icon: "TrendUp",
+          scope: "period",
+          legacy: true,
+        },
+        {
+          id: "tickets",
+          label: m.anx_tab_tickets(),
+          icon: "Ticket",
+          scope: "period",
+        },
+      ],
     },
     {
-      id: 'automation', label: m.anx_section_automation(), icon: 'Bell', description: m.anx_section_automation_desc(),
+      id: "website",
+      label: m.ste_analytics_section(),
+      icon: "Globe",
+      description: m.ste_analytics_section_desc(),
+      isNew: true,
       tabs: [
-        { id: 'alerts', label: m.anx_tab_alerts(), icon: 'Bell', scope: 'own' },
-        { id: 'reports', label: m.anx_tab_reports(), icon: 'Mail', scope: 'own' },
+        {
+          id: "website",
+          label: m.ste_analytics_tab(),
+          icon: "Globe",
+          scope: "own",
+        },
+      ],
+    },
+    {
+      id: "automation",
+      label: m.anx_section_automation(),
+      icon: "Bell",
+      description: m.anx_section_automation_desc(),
+      tabs: [
+        { id: "alerts", label: m.anx_tab_alerts(), icon: "Bell", scope: "own" },
+        {
+          id: "reports",
+          label: m.anx_tab_reports(),
+          icon: "Mail",
+          scope: "own",
+        },
       ],
     },
   ]);
@@ -184,8 +426,16 @@
   // ── Offre gratuite ─────────────────────────────────────────────────────────
   // Les stats de base sur 7 jours ; le reste se montre verrouillé, avec la
   // démo pour voir ce qu'il donne. Le bot applique les mêmes limites.
-  const FREE_TABS = new Set(['overview', 'messages', 'voice', 'heatmap', 'members', 'growth', 'moderation']);
-  const onFreePlan = $derived(dashboardStore.state.plan === 'FREE');
+  const FREE_TABS = new Set([
+    "overview",
+    "messages",
+    "voice",
+    "heatmap",
+    "members",
+    "growth",
+    "moderation",
+  ]);
+  const onFreePlan = $derived(dashboardStore.state.plan === "FREE");
   const isLocked = (id: string) => onFreePlan && !FREE_TABS.has(id);
 
   $effect(() => {
@@ -193,55 +443,67 @@
   });
 
   /** Anciens onglets partis sur leur propre page. */
-  const MOVED_TO_PAGE: Record<string, string> = { invitations: '/invitations' };
+  const MOVED_TO_PAGE: Record<string, string> = { invitations: "/invitations" };
 
-  let activeTab = $state('overview');
+  let activeTab = $state("overview");
 
   $effect(() => {
     const path = $router.path;
-    const prefix = '/analytics/';
+    const prefix = "/analytics/";
     if (path.startsWith(prefix)) {
-      const segment = decodeURIComponent(path.slice(prefix.length).split('/')[0] ?? '');
+      const segment = decodeURIComponent(
+        path.slice(prefix.length).split("/")[0] ?? "",
+      );
       if (MOVED_TO_PAGE[segment]) {
         router.goto(MOVED_TO_PAGE[segment]!, true);
         return;
       }
     }
-    activeTab = resolveTabFromUrl('/analytics', allTabIds, 'overview', path);
+    activeTab = resolveTabFromUrl("/analytics", allTabIds, "overview", path);
   });
 
-  const section = $derived(sections.find((s) => s.tabs.some((t) => t.id === activeTab)) ?? sections[0]!);
-  const tab = $derived(section.tabs.find((t) => t.id === activeTab) ?? section.tabs[0]!);
+  const section = $derived(
+    sections.find((s) => s.tabs.some((t) => t.id === activeTab)) ??
+      sections[0]!,
+  );
+  const tab = $derived(
+    section.tabs.find((t) => t.id === activeTab) ?? section.tabs[0]!,
+  );
 
   // ── Barre latérale repliable ───────────────────────────────────────────────
   // Dépliée sur grand écran, repliée en icônes en dessous, sauf choix manuel
   // retenu dans le navigateur.
-  const SIDEBAR_KEY = 'kotbo.analytics.sidebar';
+  const SIDEBAR_KEY = "kotbo.analytics.sidebar";
 
-  function readSidebarChoice(): 'open' | 'closed' | null {
+  function readSidebarChoice(): "open" | "closed" | null {
     try {
       const value = localStorage.getItem(SIDEBAR_KEY);
-      return value === 'open' || value === 'closed' ? value : null;
+      return value === "open" || value === "closed" ? value : null;
     } catch {
       return null;
     }
   }
 
-  let sidebarChoice = $state<'open' | 'closed' | null>(typeof window === 'undefined' ? null : readSidebarChoice());
+  let sidebarChoice = $state<"open" | "closed" | null>(
+    typeof window === "undefined" ? null : readSidebarChoice(),
+  );
   let wideScreen = $state(true);
 
   $effect(() => {
-    const query = window.matchMedia('(min-width: 1440px)');
+    const query = window.matchMedia("(min-width: 1440px)");
     wideScreen = query.matches;
-    const onChange = (event: MediaQueryListEvent) => (wideScreen = event.matches);
-    query.addEventListener('change', onChange);
-    return () => query.removeEventListener('change', onChange);
+    const onChange = (event: MediaQueryListEvent) =>
+      (wideScreen = event.matches);
+    query.addEventListener("change", onChange);
+    return () => query.removeEventListener("change", onChange);
   });
 
-  const sidebarCollapsed = $derived(sidebarChoice ? sidebarChoice === 'closed' : !wideScreen);
+  const sidebarCollapsed = $derived(
+    sidebarChoice ? sidebarChoice === "closed" : !wideScreen,
+  );
 
   function toggleSidebar() {
-    sidebarChoice = sidebarCollapsed ? 'open' : 'closed';
+    sidebarChoice = sidebarCollapsed ? "open" : "closed";
     try {
       localStorage.setItem(SIDEBAR_KEY, sidebarChoice);
     } catch {
@@ -250,7 +512,7 @@
   }
 
   function goTab(id: string) {
-    gotoTab('/analytics', id, 'overview');
+    gotoTab("/analytics", id, "overview");
   }
 
   function goSection(id: string) {
@@ -260,9 +522,9 @@
 
   // ── Réponse /analytics historique, pour les anciens composants ─────────────
   let legacy = $state<any>(null);
-  let legacyKey = '';
+  let legacyKey = "";
   let legacyLoading = $state(false);
-  let legacyError = $state('');
+  let legacyError = $state("");
 
   $effect(() => {
     if (!tab.legacy || isLocked(tab.id)) return;
@@ -270,13 +532,18 @@
     untrack(() => loadLegacy(period));
   });
 
-  function loadLegacy(period: { period?: number; startDate?: string; endDate?: string }) {
+  function loadLegacy(period: {
+    period?: number;
+    startDate?: string;
+    endDate?: string;
+  }) {
     const key = JSON.stringify(period);
     if (key === legacyKey && (legacy || legacyLoading)) return;
     legacyKey = key;
     legacyLoading = true;
-    legacyError = '';
-    const options = period.period === 1 ? { ...period, granularity: '30' } : period;
+    legacyError = "";
+    const options =
+      period.period === 1 ? { ...period, granularity: "30" } : period;
     fetchAnalytics(options)
       .then((res) => {
         if (legacyKey !== key) return;
@@ -284,7 +551,8 @@
         analyticsExport.legacy = res;
       })
       .catch((e) => {
-        if (legacyKey === key) legacyError = errorMessage(e) || m.an_error_generic();
+        if (legacyKey === key)
+          legacyError = errorMessage(e) || m.an_error_generic();
       })
       .finally(() => {
         if (legacyKey === key) legacyLoading = false;
@@ -292,45 +560,58 @@
   }
 
   const isWeeklyView = $derived(!filters.isCustom && filters.days > 90);
-  const chartLabels = $derived(legacy?.dailyTrend?.map((d: any) => {
-    if (isWeeklyView) {
-      const parts = d.dateKey?.slice(5)?.split('-');
-      return { ...d, label: parts ? m.an_week_short({ date: `${parts[1]}/${parts[0]}` }) : d.dateKey?.slice(5) };
-    }
-    return { ...d, label: d.dateKey?.slice(5) };
-  }) ?? []);
+  const chartLabels = $derived(
+    legacy?.dailyTrend?.map((d: any) => {
+      if (isWeeklyView) {
+        const parts = d.dateKey?.slice(5)?.split("-");
+        return {
+          ...d,
+          label: parts
+            ? m.an_week_short({ date: `${parts[1]}/${parts[0]}` })
+            : d.dateKey?.slice(5),
+        };
+      }
+      return { ...d, label: d.dateKey?.slice(5) };
+    }) ?? [],
+  );
 
-  const fmt = (n: number) => n?.toLocaleString(dateLocale()) ?? '0';
+  const fmt = (n: number) => n?.toLocaleString(dateLocale()) ?? "0";
   const fmtH = (mins: number) => {
     const h = Math.floor((mins || 0) / 60);
     const min = Math.round((mins || 0) % 60);
-    if (h > 0) return `${h}h${min > 0 ? String(min).padStart(2, '0') : ''}`;
+    if (h > 0) return `${h}h${min > 0 ? String(min).padStart(2, "0") : ""}`;
     return `${min}min`;
   };
 
   // ── Réseau d'interactions ──────────────────────────────────────────────────
   let interactions = $state<any>(null);
-  let interactionsKey = '';
+  let interactionsKey = "";
   let interactionsLoading = $state(false);
-  let interactionsError = $state('');
+  let interactionsError = $state("");
 
   $effect(() => {
-    if (activeTab !== 'interactions' || isLocked(activeTab)) return;
+    if (activeTab !== "interactions" || isLocked(activeTab)) return;
     const period = filters.periodQuery;
     untrack(() => loadInteractions(period));
   });
 
   async function loadInteractions(period = filters.periodQuery, force = false) {
     const key = JSON.stringify(period);
-    if (!force && key === interactionsKey && (interactions || interactionsLoading)) return;
+    if (
+      !force &&
+      key === interactionsKey &&
+      (interactions || interactionsLoading)
+    )
+      return;
     interactionsKey = key;
     interactionsLoading = true;
-    interactionsError = '';
+    interactionsError = "";
     try {
       const res = await fetchGlobalInteractions(period);
       if (interactionsKey === key) interactions = res;
     } catch (e) {
-      if (interactionsKey === key) interactionsError = errorMessage(e) || m.an_error_interactions();
+      if (interactionsKey === key)
+        interactionsError = errorMessage(e) || m.an_error_interactions();
     } finally {
       if (interactionsKey === key) interactionsLoading = false;
     }
@@ -338,11 +619,14 @@
 
   // ── Fiche membre ───────────────────────────────────────────────────────────
   function openMemberDetails(memberId: string, memberName: string) {
-    if (memberCaseModal.canOpen) void memberCaseModal.show(memberId, memberName || m.an_member_fallback());
+    if (memberCaseModal.canOpen)
+      void memberCaseModal.show(memberId, memberName || m.an_member_fallback());
   }
 
   // Sans accès à « Membres », les vues ne reçoivent pas de gestionnaire : un pseudo y reste inerte.
-  const openMember = $derived(memberCaseModal.canOpen ? openMemberDetails : undefined);
+  const openMember = $derived(
+    memberCaseModal.canOpen ? openMemberDetails : undefined,
+  );
 
   // ── Export ─────────────────────────────────────────────────────────────────
   type ExportRow = Record<string, string | number | boolean | null>;
@@ -350,7 +634,12 @@
 
   function cell(value: unknown): string | number | boolean | null {
     if (value === null || value === undefined) return null;
-    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return value;
+    if (
+      typeof value === "string" ||
+      typeof value === "number" ||
+      typeof value === "boolean"
+    )
+      return value;
     return JSON.stringify(value);
   }
 
@@ -361,32 +650,45 @@
       sheets.push({
         name,
         rows: value.map((entry, index) =>
-          typeof entry === 'object' && entry !== null
-            ? Object.fromEntries(Object.entries(entry).map(([k, v]) => [k, cell(v)]))
-            : { index: index + 1, value: cell(entry) }),
+          typeof entry === "object" && entry !== null
+            ? Object.fromEntries(
+                Object.entries(entry).map(([k, v]) => [k, cell(v)]),
+              )
+            : { index: index + 1, value: cell(entry) },
+        ),
       });
       return;
     }
-    if (typeof value === 'object') {
+    if (typeof value === "object") {
       const entries = Object.entries(value as Record<string, unknown>);
       for (const [key, nested] of entries) {
-        if (Array.isArray(nested)) appendSheets(sheets, `${name}_${key}`, nested);
+        if (Array.isArray(nested))
+          appendSheets(sheets, `${name}_${key}`, nested);
       }
       const scalars = entries.filter(([, v]) => !Array.isArray(v));
-      if (scalars.length > 0) sheets.push({ name: `${name}_resume`, rows: scalars.map(([key, v]) => ({ key, value: cell(v) })) });
+      if (scalars.length > 0)
+        sheets.push({
+          name: `${name}_resume`,
+          rows: scalars.map(([key, v]) => ({ key, value: cell(v) })),
+        });
     }
   }
 
   function collectSheets(): ExportSheet[] {
     const sheets: ExportSheet[] = [];
-    for (const [name, value] of Object.entries(analyticsExport)) appendSheets(sheets, name, value);
+    for (const [name, value] of Object.entries(analyticsExport))
+      appendSheets(sheets, name, value);
     return sheets;
   }
 
-  function triggerDownload(content: BlobPart, fileName: string, mimeType: string) {
+  function triggerDownload(
+    content: BlobPart,
+    fileName: string,
+    mimeType: string,
+  ) {
     const blob = new Blob([content], { type: mimeType });
     const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
+    const link = document.createElement("a");
     link.href = url;
     link.download = fileName;
     document.body.appendChild(link);
@@ -396,7 +698,7 @@
   }
 
   const csvCell = (v: string | number | boolean | null) => {
-    if (v === null) return '';
+    if (v === null) return "";
     const s = String(v);
     return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
@@ -407,29 +709,54 @@
     const lines: string[] = [];
     for (const sheet of sheets) {
       const headers = [...new Set(sheet.rows.flatMap((r) => Object.keys(r)))];
-      lines.push(`# ${sheet.name}`, headers.join(','), ...sheet.rows.map((r) => headers.map((h) => csvCell(r[h] ?? null)).join(',')), '');
+      lines.push(
+        `# ${sheet.name}`,
+        headers.join(","),
+        ...sheet.rows.map((r) =>
+          headers.map((h) => csvCell(r[h] ?? null)).join(","),
+        ),
+        "",
+      );
     }
-    triggerDownload(lines.join('\n'), `analytics_kotbo_${new Date().toISOString().slice(0, 10)}.csv`, 'text/csv;charset=utf-8');
+    triggerDownload(
+      lines.join("\n"),
+      `analytics_kotbo_${new Date().toISOString().slice(0, 10)}.csv`,
+      "text/csv;charset=utf-8",
+    );
     toast.success(m.an_export_csv_done());
   }
 
   async function exportXLSX() {
     const sheets = collectSheets();
     if (sheets.length === 0) return toast.error(m.an_export_no_data());
-    const ok = await downloadXlsx(`analytics_kotbo_${new Date().toISOString().slice(0, 10)}.xlsx`, sheets);
+    const ok = await downloadXlsx(
+      `analytics_kotbo_${new Date().toISOString().slice(0, 10)}.xlsx`,
+      sheets,
+    );
     if (ok) toast.success(m.an_export_xlsx_done());
     else toast.error(m.an_export_no_data());
   }
 
   async function exportImages() {
-    const root = document.getElementById('analytics-export-root');
-    const canvases = root ? [...root.querySelectorAll('canvas')].filter((c) => c.width >= 280 && c.height >= 160) : [];
-    if (canvases.length === 0) return toast.error(m.an_export_no_visible_chart());
+    const root = document.getElementById("analytics-export-root");
+    const canvases = root
+      ? [...root.querySelectorAll("canvas")].filter(
+          (c) => c.width >= 280 && c.height >= 160,
+        )
+      : [];
+    if (canvases.length === 0)
+      return toast.error(m.an_export_no_visible_chart());
     let count = 0;
     for (const [index, canvas] of canvases.entries()) {
-      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
+      const blob = await new Promise<Blob | null>((resolve) =>
+        canvas.toBlob(resolve, "image/png"),
+      );
       if (!blob) continue;
-      triggerDownload(blob, `analytics_${activeTab}_${String(index + 1).padStart(2, '0')}.png`, 'image/png');
+      triggerDownload(
+        blob,
+        `analytics_${activeTab}_${String(index + 1).padStart(2, "0")}.png`,
+        "image/png",
+      );
       count += 1;
     }
     if (count === 0) toast.error(m.an_export_images_failed());
@@ -437,63 +764,116 @@
   }
 </script>
 
-<div id="analytics-export-root" class="analytics-v2 mx-auto flex w-full max-w-[96rem] flex-col gap-5 pb-20">
-  <header class="flex flex-col md:flex-row md:items-end justify-between gap-x-6 gap-y-3">
+<div
+  id="analytics-export-root"
+  class="analytics-v2 mx-auto flex w-full max-w-[96rem] flex-col gap-5 pb-20"
+>
+  <header
+    class="flex flex-col md:flex-row md:items-end justify-between gap-x-6 gap-y-3"
+  >
     <div class="min-w-0">
-      <h1 class="text-2xl font-semibold tracking-tight text-on-surface font-headline leading-tight">{m.anx_page_title()}</h1>
-      <p class="mt-1 max-w-prose text-sm text-on-surface-variant">{section.description}</p>
+      <h1
+        class="text-2xl font-semibold tracking-tight text-on-surface font-headline leading-tight"
+      >
+        {m.anx_page_title()}
+      </h1>
+      <p class="mt-1 max-w-prose text-sm text-on-surface-variant">
+        {section.description}
+      </p>
     </div>
     {#if !onFreePlan}
       <div class="flex items-center flex-wrap md:justify-end gap-2 shrink-0">
         <SavedViewsMenu {activeTab} onApply={goTab} />
-        <ExportDropdown onExportCSV={exportCSV} onExportXLSX={exportXLSX} onExportImage={exportImages} />
+        <ExportDropdown
+          onExportCSV={exportCSV}
+          onExportXLSX={exportXLSX}
+          onExportImage={exportImages}
+        />
       </div>
     {/if}
   </header>
 
-  <div class="analytics-v2__layout" class:analytics-v2__layout--collapsed={sidebarCollapsed}>
+  <div
+    class="analytics-v2__layout"
+    class:analytics-v2__layout--collapsed={sidebarCollapsed}
+  >
     <aside class="analytics-v2__sidebar">
       <button
         type="button"
         class="side-link side-link--quiet side-toggle"
         aria-expanded={!sidebarCollapsed}
-        aria-label={sidebarCollapsed ? m.anx_sidebar_expand() : m.anx_sidebar_collapse()}
-        title={sidebarCollapsed ? m.anx_sidebar_expand() : m.anx_sidebar_collapse()}
+        aria-label={sidebarCollapsed
+          ? m.anx_sidebar_expand()
+          : m.anx_sidebar_collapse()}
+        title={sidebarCollapsed
+          ? m.anx_sidebar_expand()
+          : m.anx_sidebar_collapse()}
         onclick={toggleSidebar}
       >
-        <Papicon icon={sidebarCollapsed ? 'panel-left-open' : 'panel-left-close'} size={16} />
-        {#if !sidebarCollapsed}<span class="truncate">{m.anx_sidebar_collapse()}</span>{/if}
+        <Papicon
+          icon={sidebarCollapsed ? "panel-left-open" : "panel-left-close"}
+          size={16}
+        />
+        {#if !sidebarCollapsed}<span class="truncate"
+            >{m.anx_sidebar_collapse()}</span
+          >{/if}
       </button>
       <nav aria-label={m.anx_nav_label()} class="flex flex-col gap-0.5">
         {#each sections as s (s.id)}
           <button
             type="button"
             class="side-link"
-            aria-current={s.id === section.id ? 'page' : undefined}
+            aria-current={s.id === section.id ? "page" : undefined}
             aria-label={sidebarCollapsed ? s.label : undefined}
             title={sidebarCollapsed ? s.label : undefined}
             onclick={() => goSection(s.id)}
           >
             <Papicon icon={s.icon} size={18} />
             {#if sidebarCollapsed}
-              {#if s.isNew}<span class="side-link__dot" aria-hidden="true"></span>{/if}
+              {#if s.isNew}<span class="side-link__dot" aria-hidden="true"
+                ></span>{/if}
             {:else}
               <span class="truncate">{s.label}</span>
-              {#if s.isNew}<span class="side-link__badge">{m.anx_badge_new()}</span>{/if}
+              {#if s.isNew}<span class="side-link__badge"
+                  >{m.anx_badge_new()}</span
+                >{/if}
               {#if s.tabs.every((t) => isLocked(t.id))}
-                <span class="side-link__count" title={m.anx_plus_plan()}><Papicon icon="Lock" size={14} /></span>
-              {:else if s.tabs.length > 1}<span class="side-link__count">{s.tabs.length}</span>{/if}
+                <span class="side-link__count" title={m.anx_plus_plan()}
+                  ><Papicon icon="Lock" size={14} /></span
+                >
+              {:else if s.tabs.length > 1}<span class="side-link__count"
+                  >{s.tabs.length}</span
+                >{/if}
             {/if}
           </button>
         {/each}
       </nav>
       <div class="flex flex-col gap-1 border-t border-outline-variant pt-3">
-        {#if !sidebarCollapsed}<span class="px-3 text-2xs text-on-surface-variant">{m.anx_nav_elsewhere()}</span>{/if}
-        <a class="side-link side-link--quiet" href="/pulse" title={sidebarCollapsed ? m.nav_pulse() : undefined} aria-label={sidebarCollapsed ? m.nav_pulse() : undefined}>
-          <Papicon icon="activity" size={16} />{#if !sidebarCollapsed}{m.nav_pulse()}{/if}
+        {#if !sidebarCollapsed}<span
+            class="px-3 text-2xs text-on-surface-variant"
+            >{m.anx_nav_elsewhere()}</span
+          >{/if}
+        <a
+          class="side-link side-link--quiet"
+          href="/pulse"
+          title={sidebarCollapsed ? m.nav_pulse() : undefined}
+          aria-label={sidebarCollapsed ? m.nav_pulse() : undefined}
+        >
+          <Papicon
+            icon="activity"
+            size={16}
+          />{#if !sidebarCollapsed}{m.nav_pulse()}{/if}
         </a>
-        <a class="side-link side-link--quiet" href="/invitations" title={sidebarCollapsed ? m.nav_invitations() : undefined} aria-label={sidebarCollapsed ? m.nav_invitations() : undefined}>
-          <Papicon icon="link" size={16} />{#if !sidebarCollapsed}{m.nav_invitations()}{/if}
+        <a
+          class="side-link side-link--quiet"
+          href="/invitations"
+          title={sidebarCollapsed ? m.nav_invitations() : undefined}
+          aria-label={sidebarCollapsed ? m.nav_invitations() : undefined}
+        >
+          <Papicon
+            icon="link"
+            size={16}
+          />{#if !sidebarCollapsed}{m.nav_invitations()}{/if}
         </a>
       </div>
     </aside>
@@ -502,7 +882,12 @@
       <div class="analytics-v2__mobile-sections">
         <Tabs
           label={m.anx_nav_label()}
-          tabs={sections.map((s) => ({ id: s.id, label: s.label, icon: s.icon, badge: s.isNew ? m.anx_badge_new() : undefined }))}
+          tabs={sections.map((s) => ({
+            id: s.id,
+            label: s.label,
+            icon: s.icon,
+            badge: s.isNew ? m.anx_badge_new() : undefined,
+          }))}
           active={section.id}
           onchange={goSection}
         />
@@ -511,7 +896,11 @@
       {#if section.tabs.length > 1}
         <Tabs
           label={m.anx_subtabs_label({ section: section.label })}
-          tabs={section.tabs.map((t) => ({ id: t.id, label: t.label, icon: isLocked(t.id) ? 'Lock' : t.icon }))}
+          tabs={section.tabs.map((t) => ({
+            id: t.id,
+            label: t.label,
+            icon: isLocked(t.id) ? "Lock" : t.icon,
+          }))}
           active={tab.id}
           onchange={goTab}
         />
@@ -519,49 +908,75 @@
 
       {#if isLocked(activeTab)}
         <!-- Rien n'est chargé : le bot refuserait. On dit ce que l'onglet apporte et on montre la démo. -->
-        <Callout variant="info" icon="Lock" title={m.anx_tab_locked({ tab: tab.label })}>
-          {section.description} {m.anx_free_limit({ days: FREE_ANALYTICS_DAYS })}
+        <Callout
+          variant="info"
+          icon="Lock"
+          title={m.anx_tab_locked({ tab: tab.label })}
+        >
+          {section.description}
+          {m.anx_free_limit({ days: FREE_ANALYTICS_DAYS })}
           {#snippet actions()}
-            <Button href="https://kotbo.fr/demo/analytics/{tab.id}" target="_blank" variant="secondary" size="sm" icon="Eye">Voir un exemple rempli</Button>
-            <Button href="/billing" variant="primary" size="sm" iconRight="ArrowRight">{m.anx_unlock_plus()}</Button>
+            <Button
+              href="https://kotbo.fr/demo/analytics/{tab.id}"
+              target="_blank"
+              variant="secondary"
+              size="sm"
+              icon="Eye">Voir un exemple rempli</Button
+            >
+            <Button
+              href="/billing"
+              variant="primary"
+              size="sm"
+              iconRight="ArrowRight">{m.anx_unlock_plus()}</Button
+            >
           {/snippet}
         </Callout>
-      {:else if tab.scope === 'own'}
+      {:else if tab.scope === "own"}
         <Callout variant="info">{m.anx_filter_own_window()}</Callout>
       {:else}
-        <AnalyticsFilterBar scopeSupport={tab.scope === 'full' ? 'full' : 'period'} />
+        <AnalyticsFilterBar
+          scopeSupport={tab.scope === "full" ? "full" : "period"}
+        />
       {/if}
 
       {#key activeTab}
         {#if isLocked(activeTab)}
           <!-- Encadré ci-dessus. -->
-        {:else if activeTab === 'overview'}
+        {:else if activeTab === "overview"}
           <OverviewSection onNavigate={goTab} {legacy} />
-        {:else if ['messages', 'voice', 'heatmap', 'pulse', 'weekly', 'commands', 'algo'].includes(activeTab)}
-          <ActivitySection view={activeTab as ActivityView} {legacy} {legacyLoading} onOpenMember={openMember} />
-        {:else if ['content', 'emojis', 'stickers', 'gifs', 'sites', 'formatting'].includes(activeTab)}
+        {:else if ["messages", "voice", "heatmap", "pulse", "weekly", "commands", "algo"].includes(activeTab)}
+          <ActivitySection
+            view={activeTab as ActivityView}
+            {legacy}
+            {legacyLoading}
+            onOpenMember={openMember}
+          />
+        {:else if ["content", "emojis", "stickers", "gifs", "sites", "formatting"].includes(activeTab)}
           <ContentSection view={activeTab as ContentView} />
-        {:else if activeTab === 'words'}
+        {:else if activeTab === "words"}
           <div class="flex flex-col gap-4">
             <RisingWordsView />
             <AdvancedAnalyticsPanel section="words" onOpenMember={openMember} />
           </div>
-        {:else if activeTab === 'channels'}
+        {:else if activeTab === "channels"}
           <ChannelsSection onOpenMember={openMember} />
-        {:else if activeTab === 'responses'}
+        {:else if activeTab === "responses"}
           <ResponseTimesView />
-        {:else if activeTab === 'channel-health'}
+        {:else if activeTab === "channel-health"}
           <div class="flex flex-col gap-4">
             <ChannelHealthView />
-            <AdvancedAnalyticsPanel section="channels" onOpenMember={openMember} />
+            <AdvancedAnalyticsPanel
+              section="channels"
+              onOpenMember={openMember}
+            />
           </div>
-        {:else if activeTab === 'concentration'}
+        {:else if activeTab === "concentration"}
           <ConcentrationView />
-        {:else if activeTab === 'reaction-roles'}
+        {:else if activeTab === "reaction-roles"}
           <ReactionRolesView />
-        {:else if activeTab === 'climate'}
+        {:else if activeTab === "climate"}
           <ClimateView onOpenMember={openMember} />
-        {:else if activeTab === 'interactions'}
+        {:else if activeTab === "interactions"}
           {#if interactions}
             <div class="flex flex-col gap-4">
               <GlobalInteractionGraph
@@ -575,75 +990,117 @@
           {:else if interactionsError}
             <Callout variant="danger" title={m.an_network_error()}>
               {interactionsError}
-              {#snippet actions()}<Button size="sm" onclick={() => loadInteractions(filters.periodQuery, true)}>{m.an_retry()}</Button>{/snippet}
+              {#snippet actions()}<Button
+                  size="sm"
+                  onclick={() => loadInteractions(filters.periodQuery, true)}
+                  >{m.an_retry()}</Button
+                >{/snippet}
             </Callout>
           {:else}
             <AnalyticsSkeleton />
           {/if}
-        {:else if activeTab === 'social'}
+        {:else if activeTab === "social"}
           <AdvancedAnalyticsPanel section="social" onOpenMember={openMember} />
-        {:else if activeTab === 'ghosts'}
+        {:else if activeTab === "server-tags"}
+          <ServerTagsSection onOpenMember={openMember} />
+        {:else if activeTab === "ghosts"}
           <GhostMembersPanel onOpenMember={openMember} />
-        {:else if activeTab === 'growth'}
+        {:else if activeTab === "growth"}
           <div class="flex flex-col gap-4">
             <GrowthSection {legacy} {legacyLoading} onOpenMember={openMember} />
             {#if !onFreePlan}<GrowthInsightsView />{/if}
           </div>
-        {:else if activeTab === 'website'}
-          <SiteAnalyticsPanel guildId={authStore.selectedGuildId ?? ''} />
-        {:else if activeTab === 'tickets'}
+        {:else if activeTab === "website"}
+          <SiteAnalyticsPanel guildId={authStore.selectedGuildId ?? ""} />
+        {:else if activeTab === "tickets"}
           <StaffInsightsView onOpenMember={openMember} />
-        {:else if activeTab === 'compare'}
+        {:else if activeTab === "compare"}
           <CompareView />
-        {:else if activeTab === 'alerts'}
+        {:else if activeTab === "alerts"}
           <AlertsView />
-        {:else if activeTab === 'reports'}
+        {:else if activeTab === "reports"}
           <ReportsView />
-        {:else if activeTab === 'live'}
+        {:else if activeTab === "live"}
           <LivePanel />
-        {:else if activeTab === 'engagement'}
+        {:else if activeTab === "engagement"}
           <EngagementView />
-        {:else if activeTab === 'lifecycle'}
+        {:else if activeTab === "lifecycle"}
           <LifecycleView onOpenMember={openMember} />
-        {:else if activeTab === 'funnel'}
+        {:else if activeTab === "funnel"}
           <FunnelView />
-        {:else if activeTab === 'cohorts'}
+        {:else if activeTab === "cohorts"}
           <div class="flex flex-col gap-4">
             <CohortTriangle />
-            <AdvancedAnalyticsPanel section="retention" onOpenMember={openMember} />
+            <AdvancedAnalyticsPanel
+              section="retention"
+              onOpenMember={openMember}
+            />
           </div>
-        {:else if activeTab === 'churn'}
+        {:else if activeTab === "churn"}
           <AdvancedAnalyticsPanel section="churn" onOpenMember={openMember} />
-        {:else if activeTab === 'mod-advanced'}
-          <AdvancedAnalyticsPanel section="moderation" onOpenMember={openMember} />
+        {:else if activeTab === "mod-advanced"}
+          <AdvancedAnalyticsPanel
+            section="moderation"
+            onOpenMember={openMember}
+          />
         {:else if legacyError}
-          <Callout variant="danger" title={m.an_error_generic()}>{legacyError}</Callout>
+          <Callout variant="danger" title={m.an_error_generic()}
+            >{legacyError}</Callout
+          >
         {:else if !legacy}
           <AnalyticsSkeleton />
-        {:else if activeTab === 'members'}
+        {:else if activeTab === "members"}
           <MembersView {legacy} onOpenMember={openMember} />
-        {:else if activeTab === 'moderation'}
+        {:else if activeTab === "moderation"}
           <div class="flex flex-col gap-4">
             <div class="kpi-grid kpi-grid--4">
-              <KpiTile label={m.anx_fact_sanctions()} value={fmtNumber(legacy.totals?.sanctions ?? 0)} />
-              <KpiTile label={m.anx_mod_active()} value={fmtNumber(legacy.moderation?.activeSanctions ?? 0)} hint={m.anx_mod_active_hint()} />
-              <KpiTile label={m.anx_mod_per_day()} value={fmtNumber(Math.round(((legacy.totals?.sanctions ?? 0) / Math.max(1, filters.days)) * 10) / 10)} />
-              <KpiTile label={m.anx_mod_moderators()} value={fmtNumber(legacy.topModerators?.length ?? 0)} hint={m.anx_mod_moderators_hint()} />
+              <KpiTile
+                label={m.anx_fact_sanctions()}
+                value={fmtNumber(legacy.totals?.sanctions ?? 0)}
+              />
+              <KpiTile
+                label={m.anx_mod_active()}
+                value={fmtNumber(legacy.moderation?.activeSanctions ?? 0)}
+                hint={m.anx_mod_active_hint()}
+              />
+              <KpiTile
+                label={m.anx_mod_per_day()}
+                value={fmtNumber(
+                  Math.round(
+                    ((legacy.totals?.sanctions ?? 0) /
+                      Math.max(1, filters.days)) *
+                      10,
+                  ) / 10,
+                )}
+              />
+              <KpiTile
+                label={m.anx_mod_moderators()}
+                value={fmtNumber(legacy.topModerators?.length ?? 0)}
+                hint={m.anx_mod_moderators_hint()}
+              />
             </div>
-            {#if !onFreePlan}<ModerationTrendsView onOpenMember={openMember} />{/if}
-            <ModerationAudit data={legacy} {chartLabels} onOpenMember={openMember} />
+            {#if !onFreePlan}<ModerationTrendsView
+                onOpenMember={openMember}
+              />{/if}
+            <ModerationAudit
+              data={legacy}
+              {chartLabels}
+              onOpenMember={openMember}
+            />
           </div>
-        {:else if activeTab === 'staff'}
+        {:else if activeTab === "staff"}
           <StaffAudit data={legacy} onOpenMember={openMember} {fmt} {fmtH} />
-        {:else if activeTab === 'performance'}
+        {:else if activeTab === "performance"}
           {#if legacy.staffPerformance}
-            <StaffPerformance data={legacy.staffPerformance} onOpenMember={openMember} />
+            <StaffPerformance
+              data={legacy.staffPerformance}
+              onOpenMember={openMember}
+            />
           {/if}
         {/if}
       {/key}
     </div>
   </div>
-
 </div>
 
 <style>
@@ -722,7 +1179,7 @@
     outline-offset: 1px;
   }
 
-  .side-link[aria-current='page'] {
+  .side-link[aria-current="page"] {
     background: color-mix(in srgb, var(--color-primary) 14%, transparent);
     color: var(--color-primary);
   }
@@ -775,11 +1232,21 @@
     align-items: start;
   }
 
-  .analytics-v2 :global(.span-4) { grid-column: span 4; }
-  .analytics-v2 :global(.span-5) { grid-column: span 5; }
-  .analytics-v2 :global(.span-6) { grid-column: span 6; }
-  .analytics-v2 :global(.span-7) { grid-column: span 7; }
-  .analytics-v2 :global(.span-12) { grid-column: span 12; }
+  .analytics-v2 :global(.span-4) {
+    grid-column: span 4;
+  }
+  .analytics-v2 :global(.span-5) {
+    grid-column: span 5;
+  }
+  .analytics-v2 :global(.span-6) {
+    grid-column: span 6;
+  }
+  .analytics-v2 :global(.span-7) {
+    grid-column: span 7;
+  }
+  .analytics-v2 :global(.span-12) {
+    grid-column: span 12;
+  }
 
   @media (max-width: 1279px) {
     .analytics-v2 :global(.kpi-grid--5) {

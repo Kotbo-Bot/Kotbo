@@ -15,6 +15,7 @@
   import Papicon from './Papicon.svelte';
   import { inviteDetailsModal } from '../stores/inviteDetailsModal.svelte';
   import { channelDetailsModal } from '../stores/channelDetailsModal.svelte';
+  import { serverDetailsModal } from '../stores/serverDetailsModal.svelte';
   import { fetchMemberCase, fetchMemberDetailedAnalytics, updateSanctionReport, linkMemberAccount, unlinkMemberAccount, updateMemberNote, runMemberCaseAction, searchMessages, formatMessageSearchTotal, fetchMessageLogChannels } from '../api';
   import { toDateTimeLocal, typeLabel as formatTypeLabel } from '../sanctions/formatters';
   import { buildReportRuleOptions, getRuleIdsFromBrokenRules, getRulesFromBrokenRules, buildBrokenRulesPayload } from '../sanctions/reportRules';
@@ -1032,6 +1033,24 @@
             {:else if verifications?.lastVerifiedAt}
               <span class="badge badge-success"><Papicon icon="check-circle" size={11} />{m.mcm_verif_badge_done()}</span>
             {/if}
+            {#if caseData?.serverTag?.tag}
+              <button
+                type="button"
+                class="badge badge-neutral cursor-pointer hover:border-primary/40 hover:text-primary"
+                title={m.mcm_open_server_details()}
+                onclick={() => {
+                  const st = caseData?.serverTag;
+                  if (st?.guildId) serverDetailsModal.show(st.guildId, st.guildName ?? undefined);
+                }}
+              >
+                {#if caseData.serverTag.badgeUrl}
+                  <img src={caseData.serverTag.badgeUrl} alt="" class="h-3.5 w-3.5 shrink-0 object-contain" />
+                {:else}
+                  <Papicon icon="tag" size={11} />
+                {/if}
+                <span>{caseData.serverTag.tag}</span>
+              </button>
+            {/if}
           </div>
           <p class="mt-0.5 flex flex-wrap items-center gap-x-2 text-sm text-on-surface-variant">
             <span>@{caseData?.profile?.username || userName}</span>
@@ -1262,6 +1281,30 @@
                     { label: m.mcm_pronouns(), value: caseData?.profile?.pronouns ?? m.mcm_not_specified_plural() },
                     { label: m.mcm_language_locale(), value: caseData?.profile?.locale ?? m.mcm_unknown_f() },
                   ])}
+                  {#if caseData?.serverTag}
+                    <div class="mt-3 flex items-center justify-between gap-2 border-t border-outline-variant pt-3 text-sm">
+                      <span class="text-on-surface-variant">{m.mcm_server_tag()}</span>
+                      <button
+                        type="button"
+                        class="inline-flex items-center gap-1.5 rounded-full border border-outline-variant bg-surface-container-low px-2.5 py-0.5 text-xs font-medium text-on-surface hover:border-primary/40 hover:text-primary"
+                        title={m.mcm_open_server_details()}
+                        onclick={() => {
+                          const st = caseData?.serverTag;
+                          if (st?.guildId) serverDetailsModal.show(st.guildId, st.guildName ?? undefined);
+                        }}
+                      >
+                        {#if caseData.serverTag.badgeUrl}
+                          <img src={caseData.serverTag.badgeUrl} alt="" class="h-3.5 w-3.5 shrink-0 object-contain" />
+                        {:else}
+                          <Papicon icon="tag" size={11} />
+                        {/if}
+                        <span>{caseData.serverTag.tag}</span>
+                        {#if caseData.serverTag.guildName}
+                          <span class="text-on-surface-variant">({caseData.serverTag.guildName})</span>
+                        {/if}
+                      </button>
+                    </div>
+                  {/if}
                 </SectionCard>
 
                 <SectionCard title={m.mcm_key_dates()}>

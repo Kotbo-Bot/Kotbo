@@ -920,3 +920,115 @@ export async function fetchAnalyticsFilterOptions(guildId = authStore.selectedGu
     errorContext: 'API Error (Analytics Filters):'
   });
 }
+
+export interface ServerTagServerSummary {
+  guildId: string;
+  name: string | null;
+  iconUrl: string | null;
+  tag: string | null;
+  badgeUrl: string | null;
+  count: number;
+  share: number;
+  isOwnGuild: boolean;
+  botPresent: boolean;
+}
+
+export interface ServerTagMemberItem {
+  userId: string;
+  name: string;
+  username: string | null;
+  avatarUrl: string | null;
+  tag: string;
+  badgeUrl: string | null;
+  serverId: string;
+  serverName: string | null;
+  isOwnGuild: boolean;
+  updatedAt: string | null;
+}
+
+export interface ServerTagsAnalytics {
+  totalMembers: number;
+  taggedMembers: number;
+  ownGuildTagged: number;
+  externalTagged: number;
+  untaggedMembers: number;
+  serverCount: number;
+  ownGuild: {
+    guildId: string;
+    name: string;
+    iconUrl: string | null;
+    tag: string | null;
+    badgeUrl: string | null;
+    count: number;
+  };
+  servers: ServerTagServerSummary[];
+  members: ServerTagMemberItem[];
+}
+
+export interface ServerDetailsAsset {
+  id: string;
+  kind: 'emoji' | 'sticker';
+  name: string | null;
+  animated: boolean;
+  imageUrl: string;
+  uses: number;
+}
+
+export interface ServerDetails {
+  server: {
+    guildId: string;
+    name: string | null;
+    iconUrl: string | null;
+    bannerUrl: string | null;
+    description: string | null;
+    memberCount: number | null;
+    onlineCount: number | null;
+    tag: string | null;
+    badgeUrl: string | null;
+    isOwnGuild: boolean;
+    botPresent: boolean;
+    source: string;
+  };
+  tagHolders: {
+    count: number;
+    members: Array<{
+      userId: string;
+      name: string;
+      username: string | null;
+      avatarUrl: string | null;
+      tag: string;
+      badgeUrl: string | null;
+      updatedAt: string | null;
+    }>;
+  };
+  assets: {
+    emojis: ServerDetailsAsset[];
+    stickers: ServerDetailsAsset[];
+    totalUses: number;
+  };
+}
+
+export async function fetchServerTagAnalytics(
+  query: AnalyticsQuery = {},
+  guildId = authStore.selectedGuildId,
+): Promise<ServerTagsAnalytics | null> {
+  const params = new URLSearchParams();
+  if (query.includeBots) params.append('includeBots', '1');
+  const suffix = params.toString() ? `?${params.toString()}` : '';
+  return dashboardRequest<ServerTagsAnalytics>(`/analytics/server-tags${suffix}`, {
+    method: 'GET',
+    guildId,
+    errorContext: 'API Error (Server Tags Analytics):',
+  });
+}
+
+export async function fetchServerDetails(
+  targetGuildId: string,
+  guildId = authStore.selectedGuildId,
+): Promise<ServerDetails | null> {
+  return dashboardRequest<ServerDetails>(`/analytics/servers/${encodeURIComponent(targetGuildId)}`, {
+    method: 'GET',
+    guildId,
+    errorContext: 'API Error (Server Details):',
+  });
+}
