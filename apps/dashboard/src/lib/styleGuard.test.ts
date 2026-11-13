@@ -39,7 +39,7 @@ const PATTERNS = {
   /** Variante dark: : les jetons portent deja le theme sombre. */
   darkVariant: { regex: /(?<![\w-])dark:/g, max: 67 },
   /** Micro-libelle en majuscules espacees. */
-  shoutingLabel: { regex: /uppercase[^"'`\n]*tracking-(?:widest|wider)|tracking-(?:widest|wider)[^"'`\n]*uppercase/g, max: 8 },
+  shoutingLabel: { regex: /uppercase[^"'`\n]*tracking-(?:widest|wider)|tracking-(?:widest|wider)[^"'`\n]*uppercase/g, max: 6 },
   /** Onglet ecrit a la main plutot qu'avec <Tabs>. */
   handMadeTab: { regex: /class="[^"]*\btab-button\b/g, max: 0 },
   /** Onglets en segments ecrits a la main (fond surface-container, bouton actif bg-surface). */
