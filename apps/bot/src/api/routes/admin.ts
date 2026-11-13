@@ -31,6 +31,7 @@ const __dirname = path.dirname(__filename);
 const servicePath = path.resolve(__dirname, '../../services/analytics/messageScraperService.js');
 const guildDataSyncServicePath = path.resolve(__dirname, '../../services/analytics/guildDataSyncService.js');
 import { json, verifyAuth, resolveAdminAccess, collectShardSnapshots, collectShardGuilds, loadShardingConfig, saveShardingConfig, requestContainerRestart, requestShardRespawn, normalizeGlobalBannedWord, normalizeGlobalBannedWordCategory, cleanupGlobalBannedWords, getGuildName, readJsonBody, DISCORD_CLIENT_OWNER_ID, ShardSnapshot, ShardingMode, ShardingConfig } from '../shared.js';
+import { getKnownGuildNames } from '../../services/core/serverTagService.js';
 import {
   getModuleActivationStats,
   getModuleUsageStats,
@@ -1582,9 +1583,9 @@ export async function handleAdminRoutes(
   // GET /api/admin/billing : état commercial de tous les serveurs connus
   if (parts.length === 3 && parts[2] === 'billing' && method === 'GET') {
     try {
-      const guildNames = new Map(
-        (await collectShardGuilds(client)).map((g: { id: string; name: string }) => [g.id, g.name] as const),
-      );
+      const shardGuilds = await collectShardGuilds(client);
+      const shardGuildNames = new Map(shardGuilds.map((g: { id: string; name: string }) => [g.id, g.name] as const));
+      const liveGuildIds = new Set(shardGuilds.map((g: { id: string }) => g.id));
 
       const [rows, trials] = await Promise.all([
         prisma.guild.findMany({
@@ -1607,6 +1608,8 @@ export async function handleAdminRoutes(
       ]);
 
       const trialByGuild = new Map(trials.map((t) => [t.guildId, t] as const));
+      const absentGuildIds = rows.map((r) => r.id).filter((id) => !liveGuildIds.has(id));
+      const knownNames = absentGuildIds.length > 0 ? await getKnownGuildNames(client, absentGuildIds) : new Map<string, string>();
 
       const guilds = rows.map((row) => {
         const trial = trialByGuild.get(row.id) ?? null;
@@ -1615,8 +1618,8 @@ export async function handleAdminRoutes(
           // Un serveur peut être en base sans que le bot y soit encore (il l'a
           // quitté, ou il est sur une autre instance) : on ne le cache pas, son
           // abonnement continue d'exister.
-          name: guildNames.get(row.id) ?? null,
-          present: guildNames.has(row.id),
+          name: shardGuildNames.get(row.id) ?? knownNames.get(row.id) ?? null,
+          present: liveGuildIds.has(row.id),
           plan: normalizePlanKey(row.plan),
           activated: row.activated,
           accessType: row.accessType,
@@ -1894,13 +1897,16 @@ export async function handleAdminRoutes(
   // GET /api/admin/activation-codes
   if (parts.length === 3 && parts[2] === 'activation-codes' && method === 'GET') {
     try {
-      const guildNames = new Map((await collectShardGuilds(client)).map((g: { id: string; name: string }) => [g.id, g.name] as const));
+      const shardGuilds = await collectShardGuilds(client);
+      const shardGuildNames = new Map(shardGuilds.map((g: { id: string; name: string }) => [g.id, g.name] as const));
       const codes = await prisma.activationCode.findMany({
         orderBy: { createdAt: 'desc' }
       });
       // État d'accès des serveurs ayant consommé un code, pour afficher
       // l'échéance et le temps restant à côté du code.
       const usedGuildIds = codes.map((c) => c.usedByGuildId).filter((id): id is string => !!id);
+      const absentUsedIds = usedGuildIds.filter((id) => !shardGuildNames.has(id));
+      const knownNames = absentUsedIds.length > 0 ? await getKnownGuildNames(client, absentUsedIds) : new Map<string, string>();
       const accessRows = usedGuildIds.length
         ? await prisma.guild.findMany({
             where: { id: { in: usedGuildIds } },
@@ -1912,7 +1918,7 @@ export async function handleAdminRoutes(
       const enrichedCodes = await Promise.all(codes.map(async (c) => {
         let guildName = null;
         if (c.usedByGuildId) {
-          guildName = guildNames.get(c.usedByGuildId) ?? getGuildName(client, c.usedByGuildId);
+          guildName = shardGuildNames.get(c.usedByGuildId) ?? knownNames.get(c.usedByGuildId) ?? getGuildName(client, c.usedByGuildId);
         }
         const access = c.usedByGuildId ? accessByGuild.get(c.usedByGuildId) : null;
         return {

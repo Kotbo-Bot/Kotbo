@@ -10,6 +10,7 @@ import { upsertRetryingRace } from '../../utils/upsertRetry.js';
 import { cache } from '../../utils/cache.js';
 import { logger } from '../../utils/logger.js';
 import { fetchExternal } from '../../utils/http.js';
+import { guildNameCache } from '../../services/core/serverTagService.js';
 
 // Contrat partage avec le dashboard : la definition vit dans @kotbo/contracts,
 // on la re-expose ici pour que le reste du bot continue d'importer depuis
@@ -1830,6 +1831,7 @@ export function safeIsoDate(value: unknown, fallback: string | null = null): str
   }
 }
 
-export const getGuildName = (client: Client, guildId: string) => client.guilds.cache.get(guildId)?.name ?? `Serveur ${guildId}`;
+export const getGuildName = (client: Client, guildId: string) =>
+  client.guilds.cache.get(guildId)?.name ?? guildNameCache.get(guildId) ?? `Serveur ${guildId}`;
 
 export const splitPath = (pathname: string) => pathname.split('/').filter(Boolean);
