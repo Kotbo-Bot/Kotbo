@@ -14,6 +14,10 @@
   import DropAnnouncementPreview from '../lib/components/DropAnnouncementPreview.svelte';
   import DropClaimRulesPanel from '../lib/components/DropClaimRulesPanel.svelte';
   import AmountRangeSlider from '../lib/components/AmountRangeSlider.svelte';
+  import DurationPresets from '../lib/components/DurationPresets.svelte';
+  import { matchesItemQuery, sortItemsByRarity, type PickableItem } from '../lib/dropItemPicker';
+  import { rpgRarityLabel } from '../lib/rpgRarity';
+  import { presetsWithin } from '../lib/durationFormat';
   import InlineFeedback from '../lib/components/InlineFeedback.svelte';
   import SearchableSelect from '../lib/components/SearchableSelect.svelte';
   import Skeleton from '../lib/components/Skeleton.svelte';
@@ -97,7 +101,24 @@
   ]);
 
   /** Catalogue du serveur, pour choisir ce qui peut tomber. Lu une fois au chargement. */
-  let availableItems = $state<Array<{ id: string; name: string; emoji: string }>>([]);
+  let availableItems = $state<PickableItem[]>([]);
+  /** Recherche dans le catalogue des objets, affichée au-delà d'une poignée d'objets. */
+  let itemQuery = $state('');
+  const ITEM_SEARCH_FROM = 8;
+  /** Catalogue trié par rareté puis par nom, réduit à la recherche, en groupes de rareté. */
+  const itemGroups = $derived.by(() => {
+    const groups: Array<{ rarity: string; items: PickableItem[] }> = [];
+    for (const item of sortItemsByRarity(availableItems).filter((entry) => matchesItemQuery(entry, itemQuery))) {
+      const last = groups.at(-1);
+      if (last && last.rarity === item.rarity) last.items.push(item);
+      else groups.push({ rarity: item.rarity, items: [item] });
+    }
+    return groups;
+  });
+
+  /** Teintes des parts du tirage, dans l'ordre de la liste : la barre et les lignes les partagent. */
+  const SHARE_TINTS = ['bg-primary', 'bg-primary/70', 'bg-primary/45', 'bg-primary/25'];
+  const shareTint = (index: number) => SHARE_TINTS[index % SHARE_TINTS.length];
   let rpgEnabled = $state(false);
 
   /**
@@ -158,6 +179,14 @@
 
   /** Les trois façons de ramasser, telles qu'elles se règlent sur un type. */
   type DropModeKey = 'first' | 'race' | 'window';
+
+  /** Crans proposés sous chaque champ de durée, dans ses bornes. Le champ garde la saisie libre. */
+  const DURATION_PRESETS = {
+    interval: presetsWithin([30, 60, 180, 360, 720, 1440, 4320, 10_080], DROP_INTERVAL_MINUTES_RANGE),
+    lifetime: presetsWithin([5, 10, 15, 30, 60, 120, 360], DROP_LIFETIME_MINUTES_RANGE),
+    window: presetsWithin([5, 10, 15, 30, 60], DROP_WINDOW_MINUTES_RANGE),
+    activity: presetsWithin([5, 15, 30, 60, 120], DROP_ACTIVITY_WINDOW_MINUTES_RANGE),
+  };
 
   /** Fourchette de montants commune aux trois modes. */
   const AMOUNT_BOUNDS = [
@@ -618,7 +647,7 @@
       // des objets qui peuvent tomber n'aurait rien à proposer.
       const [items, economy] = await Promise.all([fetchRpgItems(), fetchEconomyConfig()]);
       if (items?.items) {
-        availableItems = items.items.map((item: any) => ({ id: item.id, name: item.name, emoji: item.emoji }));
+        availableItems = items.items.map((item: any) => ({ id: item.id, name: item.name, emoji: item.emoji, rarity: item.rarity ?? 'COMMON' }));
       }
       if (economy?.config) {
         rpgEnabled = Boolean(economy.config.enabled && economy.config.rpgEnabled);
@@ -936,6 +965,7 @@
         class="input"
         disabled={!canManageSettings || !configs[type].window.enabled}
       />
+      <DurationPresets bind:value={configs[type].window.durationMinutes} presets={DURATION_PRESETS.window} label={m.drop_duration_presets_label()} disabled={!canManageSettings || !configs[type].window.enabled} />
     {/snippet}
   </Field>
 {/snippet}
@@ -1052,6 +1082,7 @@
                       class="input"
                       disabled={!canManageSettings}
                     />
+                    <DurationPresets bind:value={globalSettings.dropLifetimeMinutes} presets={DURATION_PRESETS.lifetime} label={m.drop_duration_presets_label()} disabled={!canManageSettings} />
                   {/snippet}
                 </Field>
                 <p class="text-2xs text-on-surface-variant">{m.drop_min_open_hint()}</p>
@@ -1313,31 +1344,64 @@
 
                 {#if !collapsed.items}
                   <div id="drop-items-body" class="space-y-2">
-                    <div class="flex flex-wrap gap-2">
-                      {#each availableItems as item (item.id)}
-                        {@const picked = configs[type].items.some((entry) => entry.itemId === item.id)}
-                        <button
-                          type="button"
-                          onclick={() => toggleDropItem(item.id)}
-                          disabled={(!picked && configs[type].items.length >= DROP_ITEM_POOL_MAX)}
-                          use:explainDisabled={(!canManageSettings) ? m.common_reason_no_permission() : ''}
-                          aria-pressed={picked}
-                          class="px-3 py-1.5 rounded-lg border text-2xs font-medium transition-all disabled:opacity-40 disabled:cursor-not-allowed {picked
-                            ? 'bg-primary/10 border-primary/40 text-primary'
-                            : 'bg-surface-container-high/30 border-outline-variant/15 text-on-surface-variant/80 hover:border-outline-variant/40'}"
-                        >
-                          <EmojiText value={item.emoji} /> {item.name}
-                        </button>
-                      {/each}
-                    </div>
+                    {#if availableItems.length > ITEM_SEARCH_FROM}
+                      <input
+                        type="search"
+                        bind:value={itemQuery}
+                        placeholder={m.drop_item_search_placeholder()}
+                        aria-label={m.drop_item_search_label()}
+                        class="input text-xs"
+                      />
+                    {/if}
+
+                    <!-- Rangé par rareté : les pièces précieuses se trouvent sans parcourir tout le catalogue. -->
+                    {#each itemGroups as group (group.rarity)}
+                      <div class="space-y-1.5">
+                        <p class="text-2xs font-semibold text-on-surface-variant">{rpgRarityLabel(group.rarity)}</p>
+                        <div class="flex flex-wrap gap-2">
+                          {#each group.items as item (item.id)}
+                            {@const picked = configs[type].items.some((entry) => entry.itemId === item.id)}
+                            <button
+                              type="button"
+                              onclick={() => toggleDropItem(item.id)}
+                              disabled={(!picked && configs[type].items.length >= DROP_ITEM_POOL_MAX)}
+                              use:explainDisabled={(!canManageSettings) ? m.common_reason_no_permission() : ''}
+                              aria-pressed={picked}
+                              class="px-3 py-1.5 rounded-lg border text-2xs font-medium transition-all disabled:opacity-40 disabled:cursor-not-allowed {picked
+                                ? 'bg-primary/10 border-primary/40 text-primary'
+                                : 'bg-surface-container-high/30 border-outline-variant/15 text-on-surface-variant/80 hover:border-outline-variant/40'}"
+                            >
+                              <EmojiText value={item.emoji} /> {item.name}
+                            </button>
+                          {/each}
+                        </div>
+                      </div>
+                    {:else}
+                      {#if itemQuery.trim()}
+                        <p class="text-2xs text-on-surface-variant italic">{m.drop_item_search_empty()}</p>
+                      {/if}
+                    {/each}
 
                     {#if configs[type].items.length > 0}
                       <div class="space-y-1.5 pt-1">
-                        {#each configs[type].items as entry (entry.itemId)}
+                        <!-- La part de chaque objet dans le tirage, d'un coup d'oeil ; les lignes
+                             dessous portent la même teinte. Un total au-delà de cent est ramené à
+                             la largeur de la barre, l'avertissement du total le signale déjà. -->
+                        <div class="flex h-2 w-full overflow-hidden rounded-full bg-surface-container-high gap-px" aria-hidden="true">
+                          {#each configs[type].items as entry, index (entry.itemId)}
+                            <span
+                              class="h-full {shareTint(index)}"
+                              style:width="{Math.max(0, entry.weight || 0) / Math.max(dropItemsTotal || 0, DROP_ITEM_WEIGHT_TOTAL) * 100}%"
+                            ></span>
+                          {/each}
+                        </div>
+                        {#each configs[type].items as entry, index (entry.itemId)}
+                          {@const itemName = itemNameById.get(entry.itemId)?.name ?? m.drop_item_unknown()}
                           <div class="flex items-center gap-3">
+                            <span class="w-2.5 h-2.5 rounded-sm shrink-0 {shareTint(index)}" aria-hidden="true"></span>
                             <span class="text-2xs flex-1 min-w-0 truncate">
                               {itemNameById.get(entry.itemId)?.emoji ?? ''}
-                              {itemNameById.get(entry.itemId)?.name ?? m.drop_item_unknown()}
+                              {itemName}
                             </span>
                             <input
                               type="number"
@@ -1346,7 +1410,8 @@
                               value={entry.weight}
                               oninput={(e) => setDropItemWeight(entry.itemId, Number((e.currentTarget as HTMLInputElement).value))}
                               disabled={!canManageSettings}
-                              class="w-20 bg-surface-container-high/40 border border-outline-variant/15 rounded-lg px-3 py-1.5 text-2xs text-right focus:outline-none disabled:opacity-50"
+                              aria-label={m.drop_item_weight_label({ item: itemName })}
+                              class="input w-20 px-3 py-1.5 text-2xs text-right"
                             />
                             <span class="text-2xs text-on-surface-variant w-4">%</span>
                           </div>
@@ -1404,6 +1469,7 @@
                       class="input"
                       disabled={!canManageSettings}
                     />
+                    <DurationPresets bind:value={configs[type].intervalMinutes} presets={DURATION_PRESETS.interval} label={m.drop_duration_presets_label()} disabled={!canManageSettings} />
                   {/snippet}
                 </Field>
                 <p class="text-2xs text-primary font-semibold mt-1">{m.drop_interval_hint({ count: dropsPerDay(configs[type].intervalMinutes) })}</p>
@@ -1495,6 +1561,7 @@
                             class="input"
                             disabled={!canManageSettings}
                           />
+                          <DurationPresets bind:value={configs[type].activity.windowMinutes} presets={DURATION_PRESETS.activity} label={m.drop_duration_presets_label()} disabled={!canManageSettings} />
                         {/snippet}
                       </Field>
                     </div>
