@@ -106,9 +106,10 @@
   title={displayName}
   ariaLabel={displayName}
   closeLabel={m.svd_close()}
-  {tabs}
-  {activeTab}
-  onTabChange={(id) => (activeTab = id as ServerTab)}
+  tabs={tabs}
+  active={activeTab}
+  onchange={(id) => (activeTab = id as ServerTab)}
+  bannerUrl={details?.server.bannerUrl}
   loading={loading && !details}
 >
   {#snippet leading()}
@@ -127,7 +128,7 @@
     </div>
   {/snippet}
 
-  {#snippet titleMeta()}
+  {#snippet badges()}
     {#if details?.server.tag}
       <span class="svd-tag-pill">
         {#if details.server.badgeUrl}
@@ -151,14 +152,13 @@
 
   {#snippet subtitle()}
     {#if guildId}
-      <span class="font-mono text-xs text-on-surface-variant">ID {guildId}</span
-      >
+      <span class="font-mono text-xs text-on-surface-variant">ID {guildId}</span>
     {/if}
     {#if details?.server.memberCount}
       <span aria-hidden="true">·</span>
-      <span class="text-xs text-on-surface-variant"
-        >{fmtNumber(details.server.memberCount)} membres</span
-      >
+      <span class="text-xs text-on-surface-variant">
+        {fmtNumber(details.server.memberCount)} membres
+      </span>
     {/if}
   {/snippet}
 
@@ -177,16 +177,6 @@
   {:else if details}
     {#if activeTab === "overview"}
       <div class="space-y-4">
-        {#if details.server.bannerUrl}
-          <div class="overflow-hidden rounded-xl border border-outline-variant">
-            <img
-              src={details.server.bannerUrl}
-              alt=""
-              class="h-32 w-full object-cover"
-            />
-          </div>
-        {/if}
-
         <div class="kpi-grid kpi-grid--4">
           <KpiTile
             label={m.svd_kpi_holders()}
@@ -473,11 +463,11 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 3rem;
-    height: 3rem;
+    width: 3.5rem;
+    height: 3.5rem;
     border-radius: 0.75rem;
-    background: var(--color-surface-container);
-    border: 1px solid var(--color-outline-variant);
+    background: var(--surface-container);
+    border: 1px solid var(--outline-variant);
     overflow: hidden;
   }
 
@@ -487,11 +477,11 @@
     gap: 0.375rem;
     padding: 0.125rem 0.5rem;
     border-radius: 0.375rem;
-    border: 1px solid var(--color-outline-variant);
-    background: var(--color-surface-container);
+    border: 1px solid var(--outline-variant);
+    background: var(--surface-container);
     font-size: 0.75rem;
     font-weight: 600;
-    color: var(--color-on-surface);
+    color: var(--on-surface);
     white-space: nowrap;
   }
 
@@ -505,6 +495,6 @@
   }
 
   button.svd-member-row:hover {
-    background: var(--color-surface-container-low);
+    background: var(--surface-container-low);
   }
 </style>

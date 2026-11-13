@@ -18,46 +18,77 @@
     icon,
     title,
     subtitle = '',
+    bannerUrl = null,
+    leading,
     badges,
+    titleMeta,
     actions,
     tabs = [],
     active = '',
+    activeTab,
     onchange = () => {},
+    onTabChange,
     tabsLabel = '',
     children,
   }: {
     open: boolean;
     onClose: () => void;
-    icon: string;
+    icon?: string;
     title: string;
-    subtitle?: string;
+    subtitle?: string | Snippet;
+    bannerUrl?: string | null;
+    leading?: Snippet;
     badges?: Snippet;
+    titleMeta?: Snippet;
     actions?: Snippet;
     tabs?: TabItem[];
     active?: string;
+    activeTab?: string;
     onchange?: (id: string) => void;
+    onTabChange?: (id: string) => void;
     tabsLabel?: string;
     children: Snippet;
   } = $props();
+
+  const currentTab = $derived(active || activeTab || '');
+  function handleTabChange(id: string) {
+    onchange(id);
+    onTabChange?.(id);
+  }
 </script>
 
 <Modal flush {open} {onClose} size="screen" showCloseButton={false} ariaLabel={title}>
   <div class="sheet">
     <header class="sheet-header">
-      <span class="sheet-icon"><Papicon {icon} size={24} /></span>
-      <div class="min-w-0 flex-1">
-        <div class="flex flex-wrap items-center gap-2">
-          <h2 class="truncate text-xl font-semibold tracking-tight text-on-surface">{title}</h2>
-          {@render badges?.()}
+      {#if bannerUrl}
+        <div class="sheet-banner" style="background-image: url('{bannerUrl}')" aria-hidden="true"></div>
+      {/if}
+      <div class="sheet-identity" class:sheet-identity--with-banner={Boolean(bannerUrl)}>
+        {#if leading}
+          {@render leading()}
+        {:else if icon}
+          <span class="sheet-icon"><Papicon {icon} size={24} /></span>
+        {/if}
+        <div class="min-w-0 flex-1">
+          <div class="flex flex-wrap items-center gap-2">
+            <h2 class="truncate text-xl font-semibold tracking-tight text-on-surface">{title}</h2>
+            {@render (badges ?? titleMeta)?.()}
+          </div>
+          {#if typeof subtitle === 'function'}
+            <div class="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-on-surface-variant">
+              {@render subtitle()}
+            </div>
+          {:else if subtitle}
+            <p class="mt-0.5 truncate text-sm text-on-surface-variant">{subtitle}</p>
+          {/if}
         </div>
-        {#if subtitle}<p class="mt-0.5 truncate text-sm text-on-surface-variant">{subtitle}</p>{/if}
+        <div class="sheet-actions">{@render actions?.()}</div>
       </div>
-      <div class="sheet-actions">{@render actions?.()}</div>
     </header>
 
     {#if tabs.length > 0}
       <div class="sheet-tabs">
-        <Tabs label={tabsLabel || title} class="max-w-full" {tabs} {active} {onchange} />
+        <Tabs label={tabsLabel || title} class="max-w-full" {tabs} active={currentTab} onchange={handleTabChange} />
       </div>
     {/if}
 
@@ -74,12 +105,26 @@
   }
   .sheet-header {
     display: flex;
+    flex-direction: column;
+    background: var(--surface-container-lowest);
+    border-bottom: 1px solid var(--outline-variant);
+  }
+  .sheet-banner {
+    width: 100%;
+    height: 6.5rem;
+    background-size: cover;
+    background-position: center;
+    background-color: var(--surface-container);
+  }
+  .sheet-identity {
+    display: flex;
     flex-wrap: wrap;
     align-items: center;
     gap: 1rem;
     padding: 1.25rem 1.5rem;
-    background: var(--surface-container-lowest);
-    border-bottom: 1px solid var(--outline-variant);
+  }
+  .sheet-identity--with-banner {
+    padding-top: 1rem;
   }
   .sheet-icon {
     display: flex;
@@ -112,7 +157,7 @@
     padding: 1.25rem 1.5rem 1.5rem;
   }
   @media (max-width: 640px) {
-    .sheet-header, .sheet-tabs, .sheet-body {
+    .sheet-identity, .sheet-tabs, .sheet-body {
       padding-left: 1rem;
       padding-right: 1rem;
     }

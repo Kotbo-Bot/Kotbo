@@ -207,6 +207,12 @@
     </Callout>
   {/if}
 
+  {#if guild?.banner}
+    <div class="mb-5 overflow-hidden rounded-2xl border border-outline-variant bg-surface-container h-44 sm:h-52 shadow-sm">
+      <img src={guild.banner} alt="" class="w-full h-full object-cover" />
+    </div>
+  {/if}
+
   <div class="flex flex-wrap items-center justify-between gap-3">
     <FilterPills
       label="Partie de la fiche"
