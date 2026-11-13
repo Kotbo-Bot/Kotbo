@@ -1102,7 +1102,6 @@
                     <DurationPresets bind:value={globalSettings.dropLifetimeMinutes} presets={DURATION_PRESETS.lifetime} label={m.drop_duration_presets_label()} disabled={!canManageSettings} />
                   {/snippet}
                 </Field>
-                <p class="text-2xs text-on-surface-variant">{m.drop_min_open_hint()}</p>
               </div>
 
               <Field id="drop-delete-after" label={m.drop_delete_after_label()} hint={m.drop_delete_after_desc()}>
@@ -1497,7 +1496,6 @@
                   {/snippet}
                 </Field>
                 <p class="text-2xs text-primary font-semibold mt-1">{m.drop_interval_hint({ count: dropsPerDay(configs[type].intervalMinutes) })}</p>
-                <p class="text-2xs text-on-surface-variant">{m.drop_interval_desc()}</p>
                 <p class="text-2xs text-on-surface-variant">{m.drop_min_gap_hint()}</p>
               </div>
             </div>
