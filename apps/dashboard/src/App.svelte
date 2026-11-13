@@ -3,6 +3,7 @@
   import { Route as RouteLegacy, router } from "tinro";
   const Route = RouteLegacy as any;
   import MainLayout from "./lib/components/MainLayout.svelte";
+  import AdminShellHost from "./lib/components/admin/AdminShellHost.svelte";
   import { authStore } from "./lib/stores/auth.svelte";
   import { rememberLoginReturn } from "./lib/loginReturn";
   import { dashboardStore } from "./lib/stores/dashboard.svelte";
@@ -12,6 +13,7 @@
   import { feedbackModal } from "./lib/stores/feedbackModal.svelte";
   import { inviteDetailsModal } from "./lib/stores/inviteDetailsModal.svelte";
   import { channelDetailsModal } from "./lib/stores/channelDetailsModal.svelte";
+  import { serverDetailsModal } from "./lib/stores/serverDetailsModal.svelte";
   import { memberCaseModal } from "./lib/stores/memberCaseModal.svelte";
   import ToastContainer from "./lib/components/ToastContainer.svelte";
   import BackendDownBanner from "./lib/components/BackendDownBanner.svelte";
@@ -776,10 +778,9 @@
             <ModuleDisabledNotice moduleKey={disabledModuleForRoute} />
           </MainLayout>
         {:else if authStore.isBotAdmin && ($router.path === "/admin" || $router.path.startsWith("/admin/"))}
-          <!-- La console admin se rend sans MainLayout : elle a sa propre
-               coquille plein ecran. Dans le cadre du dashboard, elle empilait
-               deux barres laterales et deux en-tetes, dont ceux d'un serveur
-               sans rapport avec l'administration de l'instance. -->
+          <!-- Coquille admin persistante : la barre laterale, le bandeau d'en-tete
+               et la sonde de sante restent montes pendant toute la navigation. -->
+          <AdminShellHost>
           <LazyRoute
             path="/admin"
             load={() => import("./pages/admin/Overview.svelte")}
@@ -827,7 +828,7 @@
           />
           <!-- Ancienne page des modules : devenue l'onglet Modules d'Analytics. -->
           <Route path="/admin/modules">
-            <div use:redirectTo={"/admin/analytics?tab=modules"}></div>
+            <div use:redirectTo={"/admin/analytics/modules"}></div>
           </Route>
           <LazyRoute
             path="/admin/billing"
@@ -836,6 +837,11 @@
           <LazyRoute
             path="/admin/analytics"
             load={() => import("./pages/admin/Analytics.svelte")}
+          />
+          <LazyRoute
+            path="/admin/analytics/:tab"
+            load={() => import("./pages/admin/Analytics.svelte")}
+            props={(meta) => ({ tab: meta.params.tab })}
           />
           <LazyRoute
             path="/admin/whitelabel"
@@ -872,6 +878,7 @@
           <Route fallback>
             <NotFound />
           </Route>
+          </AdminShellHost>
         {:else}
           <MainLayout>
             <LazyRoute
@@ -1309,6 +1316,13 @@
   {#await import("./lib/components/channels/ChannelDetailsModal.svelte") then module}
     {@const ChannelDetailsModal = module.default}
     <ChannelDetailsModal />
+  {/await}
+{/if}
+
+{#if serverDetailsModal.open}
+  {#await import("./lib/components/servers/ServerDetailsModal.svelte") then module}
+    {@const ServerDetailsModal = module.default}
+    <ServerDetailsModal />
   {/await}
 {/if}
 

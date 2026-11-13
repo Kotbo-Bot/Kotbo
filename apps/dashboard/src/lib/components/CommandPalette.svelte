@@ -112,8 +112,8 @@
       items.push({ id: 'admin-servers',  label: m.cp_adm_servers(), sublabel: m.cp_adm_servers_sub(), icon: 'Server', group: GROUP_ADMIN, action: () => router.goto('/admin/servers') });
       items.push({ id: 'admin-shards',   label: m.cp_adm_shards(), sublabel: m.cp_adm_shards_sub(), icon: 'Zap', group: GROUP_ADMIN, action: () => router.goto('/admin/shards') });
       items.push({ id: 'admin-analytics', label: m.cp_adm_analytics(), sublabel: m.cp_adm_analytics_sub(), icon: 'TrendingUp', group: GROUP_ADMIN, action: () => router.goto('/admin/analytics') });
-      items.push({ id: 'admin-dashboard-usage', label: m.cp_adm_usage(), sublabel: m.cp_adm_usage_sub(), icon: 'Eye', group: GROUP_ADMIN, action: () => router.goto('/admin/analytics?tab=usage') });
-      items.push({ id: 'admin-modules',  label: m.cp_adm_modules(), sublabel: m.cp_adm_modules_sub(), icon: 'Box', group: GROUP_ADMIN, action: () => router.goto('/admin/analytics?tab=modules') });
+      items.push({ id: 'admin-dashboard-usage', label: m.cp_adm_usage(), sublabel: m.cp_adm_usage_sub(), icon: 'Eye', group: GROUP_ADMIN, action: () => router.goto('/admin/analytics/usage') });
+      items.push({ id: 'admin-modules',  label: m.cp_adm_modules(), sublabel: m.cp_adm_modules_sub(), icon: 'Box', group: GROUP_ADMIN, action: () => router.goto('/admin/analytics/modules') });
       items.push({ id: 'admin-broadcast', label: m.cp_adm_broadcast(), sublabel: m.cp_adm_broadcast_sub(), icon: 'Megaphone', group: GROUP_ADMIN, action: () => router.goto('/admin/broadcast') });
       items.push({ id: 'admin-security', label: m.cp_adm_security(), sublabel: m.cp_adm_security_sub(), icon: 'ShieldCheck', group: GROUP_ADMIN, action: () => router.goto('/admin/security') });
       items.push({ id: 'admin-content',  label: m.cp_adm_content(), sublabel: m.cp_adm_content_sub(), icon: 'filter', group: GROUP_ADMIN, action: () => router.goto('/admin/content') });

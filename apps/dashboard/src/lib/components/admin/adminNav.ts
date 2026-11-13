@@ -41,7 +41,13 @@ export const ADMIN_SPACES: AdminSpace[] = [
     icon: 'TrendingUp',
     tabs: [
       { path: '/admin/activity', label: 'Activité' },
-      { path: '/admin/analytics', label: 'Acquisition et usage' },
+      { path: '/admin/analytics', label: 'Acquisition' },
+      { path: '/admin/analytics/revenue', label: 'Revenus' },
+      { path: '/admin/analytics/segments', label: 'Segments' },
+      { path: '/admin/analytics/retention', label: 'Rétention' },
+      { path: '/admin/analytics/usage', label: 'Usage du dashboard' },
+      { path: '/admin/analytics/modules', label: 'Modules' },
+      { path: '/admin/analytics/alerts', label: 'Alertes' },
       { path: '/admin/billing', label: 'Abonnements' },
     ],
   },
@@ -84,6 +90,12 @@ export const ADMIN_SPACES: AdminSpace[] = [
 export function tabMatches(tab: AdminTab, path: string): boolean {
   if (tab.path === '/admin') return path === '/admin' || path === '/admin/';
   return path === tab.path || path.startsWith(`${tab.path}/`);
+}
+
+/** La vue active : la plus precise de celles qui correspondent (`/admin/analytics/revenue` avant `/admin/analytics`). */
+export function tabForPath(space: AdminSpace, path: string): AdminTab {
+  const matches = space.tabs.filter((tab) => tabMatches(tab, path)).sort((a, b) => b.path.length - a.path.length);
+  return matches[0] ?? space.tabs[0];
 }
 
 export function spaceForPath(path: string): AdminSpace {

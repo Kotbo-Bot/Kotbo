@@ -1,17 +1,11 @@
 /*
  * Theme de la console admin.
  *
- * Le langage vient de tafac.fr : fond sable et encre cacao en clair, nuit
- * profonde en sombre, tout en nuances d'une seule teinte ; titres en SN Pro ;
- * pilules et cartes tres arrondies ; ombres teintees plutot que bordures.
- * L'indigo de Kotbo reste l'accent : liens, graphiques, anneau de focus.
- *
- * Les jetons du dashboard sont redefinis sur <html> tant que la console est
- * affichee (classe posee par AdminShell). Fenetres et panneaux, rendus hors
- * de la coquille, heritent ainsi du meme theme.
- *
- * `!important` sur les jetons : les themes du dashboard posent leurs couleurs
- * en style en ligne sur <html>, qui l'emporterait sinon sur cette feuille.
+ * Suit fidelement les jetons du theme actif du dashboard de base (clair, sombre
+ * ou variante choisie par l'utilisateur : `--background`, `--surface`,
+ * `--surface-container*`, `--on-surface`, `--primary-color`), tout en gardant
+ * le langage structurel de la console (barre laterale flottante, pilules et
+ * cartes arrondies, bandeau teinte sous l'en-tete, lavis discret).
  */
 @import "@fontsource/sn-pro/latin-500.css";
 @import "@fontsource/sn-pro/latin-600.css";
@@ -19,69 +13,75 @@
 @import "@fontsource/sn-pro/latin-800.css";
 
 html.admin-theme:root {
-  --background: #fcfbf8 !important;
-  --surface: #ffffff !important;
-  --on-background: #341200 !important;
-  --on-surface: #341200 !important;
-  --surface-container-lowest: #ffffff !important;
-  --surface-container-low: #f8f7f3 !important;
-  --surface-container: #f3f1eb !important;
-  --surface-container-high: #efede7 !important;
-  --surface-container-highest: #e5e3dd !important;
-  --on-surface-variant: #7b6455 !important;
-  --outline: #c9c0b5 !important;
-  --outline-variant: #ebe7df !important;
-  --surface-hover: rgba(52, 18, 0, 0.04) !important;
-  --surface-selection: rgba(52, 18, 0, 0.07) !important;
-  --font-headline: "SN Pro", "Inter", system-ui, sans-serif !important;
+  --font-headline: "SN Pro", var(--font-sans, "Inter", system-ui, sans-serif);
 
-  --admin-line: rgba(52, 18, 0, 0.08) !important;
-  --admin-shadow: 0 1px 3px rgba(52, 18, 0, 0.06), 0 10px 28px -14px rgba(52, 18, 0, 0.16) !important;
-  --admin-glass: rgba(252, 251, 248, 0.78) !important;
+  --admin-line: color-mix(in srgb, var(--on-surface) 9%, transparent);
+  --admin-shadow: 0 1px 3px rgba(0, 0, 0, 0.05), 0 10px 28px -14px rgba(0, 0, 0, 0.14);
+  --admin-glass: color-mix(in srgb, var(--background) 78%, transparent);
+  --admin-edge: color-mix(in srgb, var(--on-surface) 10%, transparent);
+  --admin-sidebar: var(--surface-container-low);
+  --admin-sidebar-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 16px 40px -14px rgba(0, 0, 0, 0.2);
+  --admin-band: color-mix(in srgb, var(--primary-color) 6%, var(--background));
+  --admin-band-line: color-mix(in srgb, var(--primary-color) 14%, var(--outline-variant));
 }
 
 html.admin-theme.dark:root {
-  --background: #0f0f0f !important;
-  --surface: #1c1c1c !important;
-  --on-background: #e4e4e4 !important;
-  --on-surface: #e4e4e4 !important;
-  --surface-container-lowest: #1c1c1c !important;
-  --surface-container-low: #161616 !important;
-  --surface-container: #242424 !important;
-  --surface-container-high: #2a2a2a !important;
-  --surface-container-highest: #343434 !important;
-  --on-surface-variant: #a3a3a3 !important;
-  --outline: #4d4d4d !important;
-  --outline-variant: #2a2a2a !important;
-  --surface-hover: rgba(255, 255, 255, 0.05) !important;
-  --surface-selection: rgba(255, 255, 255, 0.08) !important;
-
-  --admin-line: rgba(255, 255, 255, 0.08) !important;
-  --admin-shadow: 0 1px 3px rgba(0, 0, 0, 0.3) !important;
-  --admin-glass: rgba(15, 15, 15, 0.72) !important;
+  --admin-line: color-mix(in srgb, var(--on-surface) 9%, transparent);
+  --admin-shadow: 0 1px 3px rgba(0, 0, 0, 0.34), 0 10px 28px -14px rgba(0, 0, 0, 0.44);
+  --admin-glass: color-mix(in srgb, var(--surface-container-lowest) 76%, transparent);
+  --admin-edge: color-mix(in srgb, var(--on-surface) 11%, transparent);
+  --admin-sidebar: var(--surface-container-low);
+  --admin-sidebar-shadow: 0 12px 40px -16px rgba(0, 0, 0, 0.65);
+  --admin-band: color-mix(in srgb, var(--primary-color) 10%, var(--background));
+  --admin-band-line: color-mix(in srgb, var(--primary-color) 18%, var(--outline-variant));
 }
 
 html.admin-theme body {
   background: var(--background);
 }
 
+/* Lavis discret en tete de page, accorde a la couleur d'accent du theme. */
+html.admin-theme .admin-wash {
+  background-image: radial-gradient(
+    900px 320px at 78% -40px,
+    color-mix(in srgb, var(--primary-color) 8%, transparent),
+    transparent 70%
+  );
+}
+
+/* Integration des briques analytiques v3 (MetricTabs, KpiTile) dans la console. */
+html.admin-theme .metric-tabs {
+  background: var(--surface);
+  border-color: var(--admin-line);
+  border-radius: 22px;
+  box-shadow: var(--admin-shadow);
+}
+html.admin-theme .metric-tab {
+  border-color: var(--admin-line);
+}
+html.admin-theme .metric-tab:hover:not(.metric-tab--static),
+html.admin-theme .metric-tab[aria-selected='true'] {
+  background: var(--surface-container-low);
+}
+html.admin-theme .kpi-tile {
+  background: var(--surface);
+  border-color: var(--admin-line);
+  border-radius: 20px;
+  box-shadow: var(--admin-shadow);
+}
+
 /* Carte : la surface de base de toute la console. */
 .admin-surface {
   background: var(--surface);
   border: 1px solid var(--admin-line);
-  border-radius: 24px;
+  border-radius: 27px;
   box-shadow: var(--admin-shadow);
 }
 
-/* Boutons en pilule ; l'action principale est a l'encre, comme sur tafac. */
+/* Boutons en pilule ; l'action principale suit la couleur d'accent du theme. */
 html.admin-theme .btn {
   border-radius: 999px;
   font-weight: 600;
-}
-html.admin-theme .btn-primary {
-  background: var(--on-surface);
-  color: var(--background);
-  border-color: transparent;
 }
 html.admin-theme .btn-tonal {
   background: var(--surface-container);
@@ -98,7 +98,7 @@ html.admin-theme .input {
   background: var(--surface-container);
 }
 html.admin-theme .input:focus {
-  border-color: var(--on-surface);
+  border-color: var(--primary-color);
   box-shadow: none;
 }
 
