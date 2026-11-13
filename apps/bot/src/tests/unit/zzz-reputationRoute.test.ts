@@ -22,7 +22,16 @@ for (const dbPath of ['../../utils/db.ts', '../../utils/db.js']) {
 }
 
 let deletedVote: Record<string, unknown> | null = null;
-const SETTINGS = { dailyLimit: 3, announceChannelId: null, tiers: [{ threshold: 10, roleId: '555555555555555555' }] };
+const SETTINGS = {
+  dailyLimit: 3,
+  reactionEnabled: false,
+  reactionEmoji: null as string | null,
+  xpPerRep: 0,
+  coinsPerRep: 0,
+  announceChannelId: null,
+  tiers: [{ threshold: 10, roleId: '555555555555555555' }],
+};
+let currentSettings = { ...SETTINGS };
 const service = {
   getReputationDashboardData: mock(async (_guildId: string, _period: string) => ({
     config: SETTINGS,
@@ -42,6 +51,7 @@ const service = {
     nextCursor: null,
   })),
   saveReputationConfig: mock(async (_guildId: string, patch: Record<string, unknown>) => ({ ...SETTINGS, ...patch })),
+  getReputationConfig: mock(async (_guildId: string) => currentSettings),
 };
 const servicePath = path.resolve(__dirname, '../../services/community/reputationService.ts');
 for (const suffix of ['../../services/community/reputationService.ts', '../../services/community/reputationService.js']) {
@@ -123,6 +133,7 @@ async function call(method: string, suffix: string, body?: unknown, access: Dash
 beforeEach(() => {
   deletedVote = null;
   manageable = true;
+  currentSettings = { ...SETTINGS };
   guilds.clear();
   for (const fn of [...Object.values(service), ...Object.values(actions)]) fn.mockClear();
   mockDb.dashboardAuditLog.create.mockClear();
@@ -216,6 +227,40 @@ describe('PATCH /reputation/config', () => {
   test('refuse un salon d\'annonce mal formé, accepte null', async () => {
     expect((await call('PATCH', '/config', { announceChannelId: 'abc' })).status).toBe(400);
     expect((await call('PATCH', '/config', { announceChannelId: null })).status).toBe(200);
+  });
+
+  test('enregistre les gains par remerciement', async () => {
+    const { status } = await call('PATCH', '/config', { xpPerRep: 25, coinsPerRep: 100 });
+    expect(status).toBe(200);
+    expect(service.saveReputationConfig.mock.calls[0][1]).toEqual({ xpPerRep: 25, coinsPerRep: 100 });
+  });
+
+  test('refuse des gains négatifs ou au-delà des bornes', async () => {
+    for (const body of [{ xpPerRep: -1 }, { xpPerRep: 501 }, { coinsPerRep: 10_001 }, { coinsPerRep: 1.5 }]) {
+      expect((await call('PATCH', '/config', body)).status).toBe(400);
+    }
+    expect(service.saveReputationConfig).not.toHaveBeenCalled();
+  });
+
+  test('réduit un emoji custom à son id', async () => {
+    const { status } = await call('PATCH', '/config', { reactionEnabled: true, reactionEmoji: '<:merci:123456789012345678>' });
+    expect(status).toBe(200);
+    expect(service.saveReputationConfig.mock.calls[0][1]).toEqual({ reactionEnabled: true, reactionEmoji: '123456789012345678' });
+  });
+
+  test('refuse d\'allumer la réaction sans emoji', async () => {
+    const { status } = await call('PATCH', '/config', { reactionEnabled: true });
+    expect(status).toBe(400);
+    expect(service.saveReputationConfig).not.toHaveBeenCalled();
+  });
+
+  test('accepte d\'allumer la réaction quand un emoji est déjà réglé', async () => {
+    currentSettings = { ...SETTINGS, reactionEmoji: '🙏' };
+    expect((await call('PATCH', '/config', { reactionEnabled: true })).status).toBe(200);
+  });
+
+  test('refuse un texte à la place d\'un emoji', async () => {
+    expect((await call('PATCH', '/config', { reactionEmoji: 'merci beaucoup' })).status).toBe(400);
   });
 
   test('refuse un corps sans champ connu', async () => {

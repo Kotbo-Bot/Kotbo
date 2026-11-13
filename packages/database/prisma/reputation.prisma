@@ -43,6 +43,16 @@ model ReputationConfig {
   /// Votes qu'un membre peut donner par jour du serveur.
   dailyLimit Int @default(3)
 
+  /// Remercier en réagissant avec `reactionEmoji` sous un message. Unicode brut
+  /// ou id d'emoji custom, comme pour Starlight.
+  reactionEnabled Boolean @default(false)
+  reactionEmoji   String?
+
+  /// Gains du membre remercié, par remerciement reçu. `0` = aucun gain ; ils
+  /// ne sont versés que si le module concerné (Niveaux, Économie) est actif.
+  xpPerRep    Int @default(0)
+  coinsPerRep Int @default(0)
+
   /// Salon où annoncer un palier atteint. Vide = pas d'annonce, le rôle est
   /// donné en silence.
   announceChannelId String?

@@ -13,6 +13,12 @@ import { resolveGuildTimezone } from '../../utils/timezone.js';
 
 export interface ReputationSettings {
   dailyLimit: number;
+  /** Remercier en réagissant avec `reactionEmoji` (unicode brut ou id d'emoji custom). */
+  reactionEnabled: boolean;
+  reactionEmoji: string | null;
+  /** Gains du membre remercié, par remerciement reçu. */
+  xpPerRep: number;
+  coinsPerRep: number;
   /** Salon des annonces de palier. `null` = rôle donné sans annonce. */
   announceChannelId: string | null;
   /** Triés par seuil croissant. */
@@ -21,9 +27,17 @@ export interface ReputationSettings {
 
 export const DEFAULT_REPUTATION_SETTINGS: Readonly<ReputationSettings> = {
   dailyLimit: REPUTATION_DAILY_LIMIT.default,
+  reactionEnabled: false,
+  reactionEmoji: null,
+  xpPerRep: 0,
+  coinsPerRep: 0,
   announceChannelId: null,
   tiers: [],
 };
+
+function withoutTiers({ tiers: _tiers, ...columns }: ReputationSettings) {
+  return columns;
+}
 
 function defaultSettings(): ReputationSettings {
   return { ...DEFAULT_REPUTATION_SETTINGS, tiers: [] };
@@ -81,6 +95,10 @@ export async function getReputationConfig(guildId: string): Promise<ReputationSe
   const settings: ReputationSettings = row
     ? {
       dailyLimit: row.dailyLimit,
+      reactionEnabled: row.reactionEnabled ?? false,
+      reactionEmoji: row.reactionEmoji ?? null,
+      xpPerRep: row.xpPerRep ?? 0,
+      coinsPerRep: row.coinsPerRep ?? 0,
       announceChannelId: row.announceChannelId ?? null,
       tiers: (row.tiers ?? []).map((tier) => ({ threshold: tier.threshold, roleId: tier.roleId })),
     }
@@ -102,11 +120,7 @@ export async function saveReputationConfig(guildId: string, patch: Partial<Reput
   await prisma.$transaction(async (tx) => {
     await tx.reputationConfig.upsert({
       where: { guildId },
-      create: {
-        guildId,
-        dailyLimit: columns.dailyLimit ?? DEFAULT_REPUTATION_SETTINGS.dailyLimit,
-        announceChannelId: columns.announceChannelId ?? null,
-      },
+      create: { guildId, ...withoutTiers(DEFAULT_REPUTATION_SETTINGS), ...columns },
       update: columns,
     });
     if (tiers) {

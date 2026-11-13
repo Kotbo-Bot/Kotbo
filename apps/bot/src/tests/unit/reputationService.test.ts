@@ -5,7 +5,7 @@ let votesCount = 0;
 let createError: unknown = null;
 let rankAbove = 0n;
 let receivedTotal = 0;
-let configRow: { dailyLimit: number; announceChannelId?: string | null; tiers?: Array<{ threshold: number; roleId: string }> } | null = null;
+let configRow: Record<string, unknown> | null = null;
 let voteRows: Array<Record<string, unknown>> = [];
 let foundVote: Record<string, unknown> | null = null;
 
@@ -153,7 +153,7 @@ describe('getReputation', () => {
   });
 });
 
-const DEFAULTS = { dailyLimit: 3, announceChannelId: null, tiers: [] };
+const DEFAULTS = { dailyLimit: 3, reactionEnabled: false, reactionEmoji: null, xpPerRep: 0, coinsPerRep: 0, announceChannelId: null, tiers: [] };
 
 describe('réglages', () => {
   test('sans ligne, les valeurs par défaut', async () => {
@@ -161,13 +161,13 @@ describe('réglages', () => {
   });
 
   test('les paliers sont rendus avec les réglages', async () => {
-    configRow = { dailyLimit: 3, announceChannelId: '1', tiers: [{ threshold: 10, roleId: 'r' }] };
-    expect(await getReputationConfig('g')).toEqual({ dailyLimit: 3, announceChannelId: '1', tiers: [{ threshold: 10, roleId: 'r' }] });
+    configRow = { ...DEFAULTS, announceChannelId: '1', tiers: [{ threshold: 10, roleId: 'r' }] };
+    expect(await getReputationConfig('g')).toEqual({ ...DEFAULTS, announceChannelId: '1', tiers: [{ threshold: 10, roleId: 'r' }] });
   });
 
   test('la sauvegarde écrit la ligne et invalide le cache', async () => {
     expect(await getReputationConfig('g')).toEqual(DEFAULTS);
-    configRow = { dailyLimit: 8, announceChannelId: null, tiers: [] };
+    configRow = { ...DEFAULTS, dailyLimit: 8 };
     await saveReputationConfig('g', { dailyLimit: 8 });
     expect(mockDb.reputationConfig.upsert).toHaveBeenCalledTimes(1);
     expect(mockDb.reputationTier.deleteMany).not.toHaveBeenCalled();

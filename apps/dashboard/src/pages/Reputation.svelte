@@ -2,7 +2,9 @@
   import { onDestroy, onMount, untrack } from 'svelte';
   import { MediaQuery } from 'svelte/reactivity';
   import {
+    REPUTATION_COINS_PER_REP,
     REPUTATION_DAILY_LIMIT,
+    REPUTATION_XP_PER_REP,
     REPUTATION_TIERS_MAX,
     REPUTATION_TIER_THRESHOLD,
     validateReputationTiers,
@@ -33,6 +35,8 @@
   import Skeleton from '../lib/components/Skeleton.svelte';
   import Modal from '../lib/components/Modal.svelte';
   import SearchableSelect from '../lib/components/SearchableSelect.svelte';
+  import ToggleSwitch from '../lib/components/ToggleSwitch.svelte';
+  import EmojiListInput from '../lib/components/EmojiListInput.svelte';
   import ReputationTierAnnouncementPreview from '../lib/components/ReputationTierAnnouncementPreview.svelte';
   import Callout from '../lib/components/ui/Callout.svelte';
   import Button from '../lib/components/ui/Button.svelte';
@@ -48,7 +52,15 @@
   let data = $state<ReputationData | null>(null);
   let period = $state<ReputationPeriod>('all');
 
-  const EMPTY_CONFIG: ReputationConfig = { dailyLimit: REPUTATION_DAILY_LIMIT.default, announceChannelId: null, tiers: [] };
+  const EMPTY_CONFIG: ReputationConfig = {
+    dailyLimit: REPUTATION_DAILY_LIMIT.default,
+    reactionEnabled: false,
+    reactionEmoji: null,
+    xpPerRep: 0,
+    coinsPerRep: 0,
+    announceChannelId: null,
+    tiers: [],
+  };
 
   function cloneConfig(source: ReputationConfig): ReputationConfig {
     return { ...source, tiers: source.tiers.map((tier) => ({ ...tier })) };
@@ -58,6 +70,10 @@
   function comparable(source: ReputationConfig): string {
     return JSON.stringify({
       dailyLimit: source.dailyLimit,
+      reactionEnabled: source.reactionEnabled,
+      reactionEmoji: source.reactionEmoji || null,
+      xpPerRep: source.xpPerRep,
+      coinsPerRep: source.coinsPerRep,
       announceChannelId: source.announceChannelId || null,
       tiers: source.tiers.map(({ threshold, roleId }) => ({ threshold, roleId })),
     });
@@ -84,11 +100,24 @@
   );
 
   const configDirty = $derived(comparable(config) !== comparable(savedConfig));
-  const dailyLimitValid = $derived(
-    Number.isInteger(config.dailyLimit)
-      && config.dailyLimit >= REPUTATION_DAILY_LIMIT.min
-      && config.dailyLimit <= REPUTATION_DAILY_LIMIT.max
-  );
+  function inRange(value: number, range: { min: number; max: number }): boolean {
+    return Number.isInteger(value) && value >= range.min && value <= range.max;
+  }
+
+  const dailyLimitValid = $derived(inRange(config.dailyLimit, REPUTATION_DAILY_LIMIT));
+  const xpValid = $derived(inRange(config.xpPerRep, REPUTATION_XP_PER_REP));
+  const coinsValid = $derived(inRange(config.coinsPerRep, REPUTATION_COINS_PER_REP));
+  /** Même règle que l'API : l'option allumée sans emoji ne ferait rien. */
+  const reactionValid = $derived(!config.reactionEnabled || !!config.reactionEmoji);
+  const settingsValid = $derived(dailyLimitValid && xpValid && coinsValid && reactionValid);
+
+  /** Module absent de la liste = actif, même lecture que ModulePage. */
+  function isModuleActive(key: string): boolean {
+    const entry = ((dashboardStore.state.modules as unknown as Array<{ id: string; status?: string }> | undefined) ?? []).find((mod) => mod.id === key);
+    return !entry || entry.status === 'active';
+  }
+  const levelingActive = $derived(isModuleActive('leveling'));
+  const economyActive = $derived(isModuleActive('economy'));
 
   /** Mêmes règles que l'API, pour le dire avant l'enregistrement. */
   const tiersCheck = $derived(validateReputationTiers(config.tiers));
@@ -124,7 +153,7 @@
     { id: 'overview', label: m.rep_tab_overview(), icon: 'Crown' },
     { id: 'history', label: m.rep_tab_history(), icon: 'Clock' },
     { id: 'tiers', label: m.rep_tab_tiers(), icon: 'Award', badge: tiersError ? m.rep_tab_to_fix() : undefined },
-    { id: 'settings', label: m.rep_tab_settings(), icon: 'Gears', badge: configDirty ? m.rep_tab_modified() : undefined },
+    { id: 'settings', label: m.rep_tab_settings(), icon: 'Gears', badge: !settingsValid ? m.rep_tab_to_fix() : configDirty ? m.rep_tab_modified() : undefined },
   ]);
 
   const periodOptions = $derived([
@@ -231,12 +260,16 @@
 
   /** Appelé par la barre « Modifications non enregistrées » du layout. */
   async function saveConfig(): Promise<boolean> {
-    if (!dailyLimitValid || !('tiers' in tiersCheck)) {
-      toast.error(tiersError ?? m.rep_daily_limit_error({ min: REPUTATION_DAILY_LIMIT.min, max: REPUTATION_DAILY_LIMIT.max }));
+    if (!settingsValid || !('tiers' in tiersCheck)) {
+      toast.error(tiersError ?? m.rep_settings_invalid());
       return false;
     }
     const result = await updateReputationConfig({
       dailyLimit: config.dailyLimit,
+      reactionEnabled: config.reactionEnabled,
+      reactionEmoji: config.reactionEmoji || null,
+      xpPerRep: config.xpPerRep,
+      coinsPerRep: config.coinsPerRep,
       announceChannelId: config.announceChannelId || null,
       tiers: tiersCheck.tiers,
     });
@@ -636,6 +669,86 @@
               />
             {/snippet}
           </Field>
+        </section>
+
+        <section class="bg-surface-container-low/40 border border-outline-variant/30 p-6 rounded-xl space-y-5 mt-6">
+          <div class="flex items-start justify-between gap-4 border-b border-outline-variant/15 pb-3">
+            <div>
+              <h3 class="text-lg font-semibold flex items-center gap-2"><Papicon icon="Heart" size={18} /> {m.rep_reaction_heading()}</h3>
+              <p class="text-xs text-on-surface-variant mt-1">{m.rep_reaction_desc()}</p>
+            </div>
+            <ToggleSwitch
+              checked={config.reactionEnabled}
+              onToggle={(value) => config.reactionEnabled = value}
+              disabled={!canManageSettings}
+              ariaLabel={m.rep_reaction_toggle()}
+            />
+          </div>
+
+          <Field
+            id="rep-reaction-emoji"
+            label={m.rep_reaction_emoji_label()}
+            hint={m.rep_reaction_emoji_hint()}
+            error={reactionValid ? undefined : m.rep_reaction_emoji_required()}
+          >
+            {#snippet children(id)}
+              <EmojiListInput
+                {id}
+                max={1}
+                bind:values={() => (config.reactionEmoji ? [config.reactionEmoji] : []), (values) => config.reactionEmoji = values[0] ?? null}
+                placeholder={m.rep_reaction_emoji_placeholder()}
+                disabled={!canManageSettings}
+              />
+            {/snippet}
+          </Field>
+        </section>
+
+        <section class="bg-surface-container-low/40 border border-outline-variant/30 p-6 rounded-xl space-y-5 mt-6">
+          <div class="border-b border-outline-variant/15 pb-3">
+            <h3 class="text-lg font-semibold flex items-center gap-2"><Papicon icon="Coins" size={18} /> {m.rep_rewards_heading()}</h3>
+            <p class="text-xs text-on-surface-variant mt-1">{m.rep_rewards_desc()}</p>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <Field
+              id="rep-xp-per-rep"
+              label={m.rep_rewards_xp_label()}
+              hint={levelingActive ? m.rep_rewards_range_hint({ min: REPUTATION_XP_PER_REP.min, max: REPUTATION_XP_PER_REP.max }) : m.rep_rewards_xp_module_off()}
+              error={xpValid ? undefined : m.rep_rewards_range_error({ min: REPUTATION_XP_PER_REP.min, max: REPUTATION_XP_PER_REP.max })}
+            >
+              {#snippet children(id, describedBy)}
+                <input
+                  {id}
+                  type="number"
+                  class="input max-w-40"
+                  min={REPUTATION_XP_PER_REP.min}
+                  max={REPUTATION_XP_PER_REP.max}
+                  bind:value={config.xpPerRep}
+                  aria-describedby={describedBy}
+                  disabled={!canManageSettings}
+                />
+              {/snippet}
+            </Field>
+            <Field
+              id="rep-coins-per-rep"
+              label={m.rep_rewards_coins_label()}
+              hint={economyActive ? m.rep_rewards_range_hint({ min: REPUTATION_COINS_PER_REP.min, max: REPUTATION_COINS_PER_REP.max }) : m.rep_rewards_coins_module_off()}
+              error={coinsValid ? undefined : m.rep_rewards_range_error({ min: REPUTATION_COINS_PER_REP.min, max: REPUTATION_COINS_PER_REP.max })}
+            >
+              {#snippet children(id, describedBy)}
+                <input
+                  {id}
+                  type="number"
+                  class="input max-w-40"
+                  min={REPUTATION_COINS_PER_REP.min}
+                  max={REPUTATION_COINS_PER_REP.max}
+                  bind:value={config.coinsPerRep}
+                  aria-describedby={describedBy}
+                  disabled={!canManageSettings}
+                />
+              {/snippet}
+            </Field>
+          </div>
         </section>
       {/if}
     </div>

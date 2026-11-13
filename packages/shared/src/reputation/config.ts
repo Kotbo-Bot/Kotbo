@@ -9,6 +9,10 @@ export type ReputationPeriod = (typeof REPUTATION_PERIODS)[number];
 /** Votes qu'un membre peut donner par jour du serveur. */
 export const REPUTATION_DAILY_LIMIT = { min: 1, max: 20, default: 3 } as const;
 
+/** Gains du membre remercié, par remerciement reçu. `0` = aucun gain. */
+export const REPUTATION_XP_PER_REP = { min: 0, max: 500 } as const;
+export const REPUTATION_COINS_PER_REP = { min: 0, max: 10_000 } as const;
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 const PERIOD_DAYS: Record<Exclude<ReputationPeriod, 'all'>, number> = { week: 7, month: 30 };
 

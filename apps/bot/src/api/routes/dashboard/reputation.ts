@@ -13,7 +13,9 @@
 import { IncomingMessage, ServerResponse } from 'node:http';
 import { Client } from 'discord.js';
 import {
+  REPUTATION_COINS_PER_REP,
   REPUTATION_DAILY_LIMIT,
+  REPUTATION_XP_PER_REP,
   REPUTATION_TIERS_MAX,
   REPUTATION_TIER_THRESHOLD,
   isReputationPeriod,
@@ -32,6 +34,7 @@ import {
   type DashboardAccess,
 } from '../../shared.js';
 import {
+  getReputationConfig,
   getReputationDashboardData,
   listReputationVotes,
   saveReputationConfig,
@@ -39,6 +42,7 @@ import {
 } from '../../../services/community/reputationService.js';
 import { revokeRep } from '../../../services/community/reputationActions.js';
 import { manageableRole, tierAnnouncementLabels } from '../../../services/community/reputationTierService.js';
+import { normalizeEmojiKey } from '../../../services/features/starboardTally.js';
 import { getMemberIdentities } from '../../../services/moderation/memberIdentityService.js';
 import { jsonFailure } from '../../shared/failure.js';
 
@@ -86,13 +90,35 @@ function parseConfigPatch(
   if (!body || typeof body !== 'object') return { error: 'Payload invalide' };
   const patch: Partial<ReputationSettings> = {};
 
-  if (has(body, 'dailyLimit')) {
-    const value = (body as { dailyLimit: unknown }).dailyLimit;
-    const { min, max } = REPUTATION_DAILY_LIMIT;
+  const integers = [
+    ['dailyLimit', REPUTATION_DAILY_LIMIT, 'La limite par jour'],
+    ['xpPerRep', REPUTATION_XP_PER_REP, 'L\'XP par remerciement'],
+    ['coinsPerRep', REPUTATION_COINS_PER_REP, 'Les pièces par remerciement'],
+  ] as const;
+  for (const [key, { min, max }, label] of integers) {
+    if (!has(body, key)) continue;
+    const value = (body as Record<string, unknown>)[key];
     if (typeof value !== 'number' || !Number.isInteger(value) || value < min || value > max) {
-      return { error: `La limite par jour doit être un entier entre ${min} et ${max}` };
+      return { error: `${label} doit être un entier entre ${min} et ${max}` };
     }
-    patch.dailyLimit = value;
+    patch[key] = value;
+  }
+
+  if (has(body, 'reactionEnabled')) {
+    const value = (body as { reactionEnabled: unknown }).reactionEnabled;
+    if (typeof value !== 'boolean') return { error: 'Le champ reactionEnabled doit être un booléen' };
+    patch.reactionEnabled = value;
+  }
+
+  if (has(body, 'reactionEmoji')) {
+    const value = (body as { reactionEmoji: unknown }).reactionEmoji;
+    if (value !== null && typeof value !== 'string') return { error: 'L\'emoji de remerciement est invalide' };
+    // Même réduction que Starlight : un emoji custom est gardé sous son seul id.
+    const emoji = value === null ? '' : normalizeEmojiKey(value);
+    if (emoji && !SNOWFLAKE_RE.test(emoji) && [...emoji].length > 8) {
+      return { error: 'L\'emoji de remerciement est invalide' };
+    }
+    patch.reactionEmoji = emoji || null;
   }
 
   if (has(body, 'announceChannelId')) {
@@ -214,14 +240,26 @@ export async function handleReputationRoutes(
         return true;
       }
 
-      const config = await saveReputationConfig(guildId, parsed.patch);
+      // Allumer la réaction sans emoji laisserait l'option inerte sans le dire.
+      const { patch } = parsed;
+      if (patch.reactionEnabled === true || (has(patch, 'reactionEmoji') && !patch.reactionEmoji)) {
+        const current = await getReputationConfig(guildId);
+        const enabled = patch.reactionEnabled ?? current.reactionEnabled;
+        const emoji = has(patch, 'reactionEmoji') ? patch.reactionEmoji : current.reactionEmoji;
+        if (enabled && !emoji) {
+          json(res, 400, { error: 'Choisis un emoji pour remercier par réaction' });
+          return true;
+        }
+      }
+
+      const config = await saveReputationConfig(guildId, patch);
       await pushAudit(guildId, {
         user: auditUser,
         action: 'Mise à jour configuration Réputation',
         context: getGuildName(client, guildId),
         module: 'Réputation',
         eventType: 'Manuel',
-        details: `Limite par jour : ${config.dailyLimit} vote(s), ${config.tiers.length} palier(s), annonce : ${config.announceChannelId ?? 'aucune'}.`,
+        details: `Limite par jour : ${config.dailyLimit} vote(s), réaction : ${config.reactionEnabled ? config.reactionEmoji : 'non'}, gains : ${config.xpPerRep} XP / ${config.coinsPerRep} pièce(s), ${config.tiers.length} palier(s), annonce : ${config.announceChannelId ?? 'aucune'}.`,
         channelId: null,
       });
       json(res, 200, { config });

@@ -8,16 +8,22 @@ import { E, rankEmoji } from '../../utils/emojis.js';
 import { getReputation, getReputationLeaderboard } from '../../services/community/reputationService.js';
 import { recordRep } from '../../services/community/reputationActions.js';
 import { repRefusalText } from '../../services/community/reputationMessages.js';
-import { incrementQuestProgress } from '../../services/community/questService.js';
 import type { SlashCommandDefinition } from '../../commands.js';
 import { separator, v2Message } from '@arcscord/components'
-import { getEffectiveLocale, getCommandMetadata } from '../../utils/i18n.js';
+import { getEffectiveLocale, getCommandMetadata, type BotLocale } from '../../utils/i18n.js';
+import { REPUTATION_PERIODS, isReputationPeriod, type ReputationPeriod } from '@kotbo/shared';
 import * as m from '../../lib/paraglide/messages.js';
 
 const meta = getCommandMetadata('b2_rep');
 const giveMeta = getCommandMetadata('b2_rep_give');
 const checkMeta = getCommandMetadata('b2_rep_check');
 const topMeta = getCommandMetadata('b2_rep_top');
+
+const PERIOD_LABEL: Record<ReputationPeriod, (locale: BotLocale) => string> = {
+  week: (locale) => m.b2_rep_period_week({}, { locale }),
+  month: (locale) => m.b2_rep_period_month({}, { locale }),
+  all: (locale) => m.b2_rep_period_all({}, { locale }),
+};
 
 const data = new SlashCommandBuilder()
   .setName(meta.name)
@@ -51,7 +57,16 @@ const data = new SlashCommandBuilder()
     sub.setName(topMeta.name)
       .setNameLocalizations(topMeta.nameLocalizations)
       .setDescription(topMeta.description)
-      .setDescriptionLocalizations(topMeta.descriptionLocalizations));
+      .setDescriptionLocalizations(topMeta.descriptionLocalizations)
+      .addStringOption((opt) => opt
+        .setName('periode')
+        .setDescription(m.b2_rep_top_opt_periode({}, { locale: 'en' }))
+        .setDescriptionLocalizations({ fr: m.b2_rep_top_opt_periode({}, { locale: 'fr' }) })
+        .addChoices(...REPUTATION_PERIODS.map((period) => ({
+          name: PERIOD_LABEL[period]('en'),
+          name_localizations: { fr: PERIOD_LABEL[period]('fr') },
+          value: period,
+        })))));
 
 async function execute(interaction: ChatInputCommandInteraction) {
   const subcommand = interaction.options.getSubcommand();
@@ -68,6 +83,7 @@ async function execute(interaction: ChatInputCommandInteraction) {
       receiverId: target.id,
       reason,
       receiverIsBot: target.bot,
+      channelId: interaction.channelId,
     });
 
     if (!result.success) {
@@ -77,8 +93,6 @@ async function execute(interaction: ChatInputCommandInteraction) {
       });
       return;
     }
-
-    incrementQuestProgress(interaction.client, guildId, interaction.user.id, 'GIVE_REP', 1, interaction.channelId).catch(() => { });
 
     await interaction.reply(v2Message(
       kotboContainer({
@@ -117,15 +131,18 @@ async function execute(interaction: ChatInputCommandInteraction) {
 
   if (subcommand === 'top') {
     await interaction.deferReply();
-    const lb = await getReputationLeaderboard(guildId, 10);
+    const rawPeriod = interaction.options.getString('periode');
+    const period: ReputationPeriod = isReputationPeriod(rawPeriod) ? rawPeriod : 'all';
+    const lb = await getReputationLeaderboard(guildId, 10, period);
+    const title = `${E.trophy} ${m.b2_rep_leaderboard_title({}, { locale })} · ${PERIOD_LABEL[period](locale)}`;
 
     if (lb.entries.length === 0) {
       await interaction.editReply(v2Message(
         kotboContainer({
           color: 'dark',
-          title: `${E.trophy} ${m.b2_rep_leaderboard_title({}, { locale })}`,
+          title,
           fields: [
-            `${E.info} ${m.b2_rep_leaderboard_empty({}, { locale })}`,
+            `${E.info} ${period === 'all' ? m.b2_rep_leaderboard_empty({}, { locale }) : m.b2_rep_leaderboard_empty_period({}, { locale })}`,
           ],
           footerTitle: m.b2_rep_reputation({}, { locale })
         })
@@ -142,7 +159,7 @@ async function execute(interaction: ChatInputCommandInteraction) {
       { allowedMentions: { parse: [] } },
       kotboContainer({
         color: 'primary',
-        title: `${E.trophy} ${m.b2_rep_leaderboard_title({}, { locale })}`,
+        title,
         fields: [
           separator({ divider: true, spacing: 'small' }),
           lines.join('\n'),

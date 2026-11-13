@@ -6,6 +6,12 @@ import { m } from '../i18n';
 
 export interface ReputationConfig {
   dailyLimit: number;
+  /** Remercier en réagissant avec `reactionEmoji` (unicode brut ou id d'emoji custom). */
+  reactionEnabled: boolean;
+  reactionEmoji: string | null;
+  /** Gains du membre remercié, par remerciement reçu. */
+  xpPerRep: number;
+  coinsPerRep: number;
   /** Salon des annonces de palier. `null` = rôle donné sans annonce. */
   announceChannelId: string | null;
   /** Triés par seuil croissant. */

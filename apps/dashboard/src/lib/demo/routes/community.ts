@@ -79,8 +79,20 @@ export function registerCommunityRoutes(): void {
     leaderboard: byXp().slice(0, 10).map((p, i) => ({ rank: i + 1, userId: p.id, displayName: p.displayName, avatarUrl: null, level: p.level, xp: p.xp })),
   }));
 
-  const repConfig: { dailyLimit: number; announceChannelId: string | null; tiers: Array<{ threshold: number; roleId: string }> } = {
+  const repConfig: {
+    dailyLimit: number;
+    reactionEnabled: boolean;
+    reactionEmoji: string | null;
+    xpPerRep: number;
+    coinsPerRep: number;
+    announceChannelId: string | null;
+    tiers: Array<{ threshold: number; roleId: string }>;
+  } = {
     dailyLimit: 3,
+    reactionEnabled: false,
+    reactionEmoji: null,
+    xpPerRep: 0,
+    coinsPerRep: 0,
     announceChannelId: null,
     tiers: [],
   };
@@ -130,7 +142,11 @@ export function registerCommunityRoutes(): void {
   });
 
   route('PATCH', '/api/dashboard/guilds/:guildId/reputation/config', ({ body }) => {
-    if (typeof body?.dailyLimit === 'number') repConfig.dailyLimit = body.dailyLimit;
+    for (const key of ['dailyLimit', 'xpPerRep', 'coinsPerRep'] as const) {
+      if (typeof body?.[key] === 'number') repConfig[key] = body[key];
+    }
+    if (typeof body?.reactionEnabled === 'boolean') repConfig.reactionEnabled = body.reactionEnabled;
+    if (body && 'reactionEmoji' in body) repConfig.reactionEmoji = body.reactionEmoji;
     if (body && 'announceChannelId' in body) repConfig.announceChannelId = body.announceChannelId;
     if (Array.isArray(body?.tiers)) repConfig.tiers = [...body.tiers].sort((a, b) => a.threshold - b.threshold);
     return { config: { ...repConfig } };

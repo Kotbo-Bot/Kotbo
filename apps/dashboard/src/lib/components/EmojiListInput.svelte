@@ -16,12 +16,15 @@
     accentClass = 'bg-primary/10 border-primary/25 hover:bg-primary/20',
     placeholder = '',
     id = '',
+    max = Infinity,
   }: {
     values: string[];
     disabled?: boolean;
     accentClass?: string;
     placeholder?: string;
     id?: string;
+    /** Nombre d'emojis au plus. À 1, un nouvel emoji remplace le précédent. */
+    max?: number;
   } = $props();
 
   let draft = $state('');
@@ -40,7 +43,8 @@
   function add(raw: string) {
     const emoji = normalize(raw);
     if (!emoji || values.includes(emoji)) return;
-    values = [...values, emoji];
+    if (max === 1) values = [emoji];
+    else if (values.length < max) values = [...values, emoji];
   }
 
   function remove(emoji: string) {
