@@ -5,8 +5,8 @@ import {
 } from 'discord.js';
 import { errorContainer, kotboContainer } from '../../utils/embeds.js';
 import { E, rankEmoji } from '../../utils/emojis.js';
-import { giveRep, getReputation, getReputationLeaderboard, REP_DAILY_VOTE_LIMIT } from '../../services/community/reputationService.js';
-import { repRefusalMessage } from '../../services/community/reputationMessages.js';
+import { giveRep, getReputation, getReputationLeaderboard } from '../../services/community/reputationService.js';
+import { repRefusalText } from '../../services/community/reputationMessages.js';
 import { incrementQuestProgress } from '../../services/community/questService.js';
 import type { SlashCommandDefinition } from '../../commands.js';
 import { separator, v2Message } from '@arcscord/components'
@@ -65,7 +65,7 @@ async function execute(interaction: ChatInputCommandInteraction) {
 
     if (!result.success) {
       await interaction.reply({
-        components: [errorContainer(m.b2_rep_impossible({}, { locale }), repRefusalMessage(result.code, locale, REP_DAILY_VOTE_LIMIT))],
+        components: [errorContainer(m.b2_rep_impossible({}, { locale }), await repRefusalText(guildId, result.code, locale))],
         flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
       });
       return;
@@ -100,7 +100,7 @@ async function execute(interaction: ChatInputCommandInteraction) {
           [
             `${E.arrow} **${m.b2_rep_total({}, { locale })}** · **${profile.totalRep}** rep`,
             `${E.arrow} **${m.b2_rep_rank({}, { locale })}** · #${profile.rank}`,
-            `${E.arrow} **${m.b2_rep_votes_left({}, { locale })}** · ${REP_DAILY_VOTE_LIMIT - profile.votesGivenToday}/${REP_DAILY_VOTE_LIMIT}`,
+            `${E.arrow} **${m.b2_rep_votes_left({}, { locale })}** · ${Math.max(0, profile.dailyLimit - profile.votesGivenToday)}/${profile.dailyLimit}`,
           ].join('\n'),
         ],
         footerTitle: m.b2_rep_reputation({}, { locale })

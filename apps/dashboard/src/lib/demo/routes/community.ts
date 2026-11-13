@@ -79,11 +79,11 @@ export function registerCommunityRoutes(): void {
     leaderboard: byXp().slice(0, 10).map((p, i) => ({ rank: i + 1, userId: p.id, displayName: p.displayName, avatarUrl: null, level: p.level, xp: p.xp })),
   }));
 
-  route('GET', '/api/dashboard/guilds/:guildId/reputation', () => {
-    const people = members();
-    const pool = people.slice(0, 8);
-    const entries = pool.map((p, i) => ({ rank: i + 1, userId: p.id, displayName: p.displayName, avatarUrl: null, totalRep: 64 - i * 7 }));
-    const recent = pool.slice(1, 6).map((receiver, i) => {
+  const repConfig = { dailyLimit: 3 };
+  const repPool = () => members().slice(0, 8);
+  const repVotes = () => {
+    const pool = repPool();
+    return pool.slice(1, 6).map((receiver, i) => {
       const giver = pool[(i + 3) % pool.length];
       return {
         id: `rep-${i}`,
@@ -94,11 +94,37 @@ export function registerCommunityRoutes(): void {
         receiverName: receiver.displayName,
         receiverAvatarUrl: null,
         reason: ['Merci pour l’aide sur le règlement', 'Super animation hier soir', 'A bien accueilli les nouveaux', 'Partie très fair-play', 'A répondu en 5 minutes'][i],
+        channelId: null,
+        messageId: null,
+        messageUrl: null,
         createdAt: ago(90 * (i + 1)),
       };
     });
-    return { totalVotes: 412, leaderboard: { totalVoters: pool.length + 14, entries }, recentVotes: recent };
+  };
+
+  route('GET', '/api/dashboard/guilds/:guildId/reputation', ({ query }) => {
+    // Les périodes courtes ne gardent que le haut du classement, pour que le filtre se voie.
+    const keep = query.get('period') === 'week' ? 3 : query.get('period') === 'month' ? 5 : 8;
+    const entries = repPool().slice(0, keep).map((p, i) => ({ rank: i + 1, userId: p.id, displayName: p.displayName, avatarUrl: null, totalRep: 64 - i * 7 }));
+    return {
+      config: { ...repConfig },
+      leaderboard: { totalVoters: entries.length + 14, entries },
+      stats: { totalVotes: 412, votesLast7Days: 23, activeGivers7Days: 11, lastVoteAt: ago(90) },
+    };
   });
+
+  route('GET', '/api/dashboard/guilds/:guildId/reputation/votes', ({ query }) => {
+    const userId = query.get('userId');
+    const votes = repVotes().filter((v) => !userId || v.giverId === userId || v.receiverId === userId);
+    return { votes, nextCursor: null };
+  });
+
+  route('PATCH', '/api/dashboard/guilds/:guildId/reputation/config', ({ body }) => {
+    if (typeof body?.dailyLimit === 'number') repConfig.dailyLimit = body.dailyLimit;
+    return { config: { ...repConfig } };
+  });
+
+  route('DELETE', '/api/dashboard/guilds/:guildId/reputation/votes/:voteId', () => ({ deleted: true }));
 
   route('GET', '/api/dashboard/guilds/:guildId/marketplace', () => {
     const sellers = members().slice(0, 5);

@@ -33,6 +33,7 @@ export * from './instances';
 export * from './channelLinks';
 export * from './channelHealth';
 export * from './insights';
+export * from './reputation';
 export * from './quests';
 export * from './widgets';
 export * from './homeWidgets';

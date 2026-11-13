@@ -15,3 +15,11 @@ export function repRefusalMessage(code: RepRefusalCode, locale: BotLocale, daily
       return m.b2_rep_err_already_today({}, { locale });
   }
 }
+
+/** Même texte, avec la limite du jour lue dans les réglages du serveur. */
+export async function repRefusalText(guildId: string, code: RepRefusalCode, locale: BotLocale): Promise<string> {
+  // Import différé : ce fichier reste chargeable sans base de données.
+  const { getReputationConfig } = await import('./reputationService.js');
+  const { dailyLimit } = await getReputationConfig(guildId);
+  return repRefusalMessage(code, locale, dailyLimit);
+}

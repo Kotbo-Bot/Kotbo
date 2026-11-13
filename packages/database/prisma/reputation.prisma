@@ -12,6 +12,11 @@ model ReputationVote {
   value   Int    @default(1) // +1 ou -1
   reason  String?
 
+  /// Message remercié, quand le vote vient d'un message (menu contextuel ou
+  /// réaction). Le lien se reconstruit avec l'id du serveur.
+  channelId String?
+  messageId String?
+
   guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
 
   /// Jour du vote (YYYY-MM-DD) dans le fuseau du serveur : porte la contrainte « un vote par personne et par jour ».
@@ -22,5 +27,26 @@ model ReputationVote {
   @@index([guildId, receiverId])
   @@index([guildId, giverId, day])
   @@index([receiverId])
+  /// Historique du dashboard : du plus récent au plus ancien.
+  @@index([guildId, createdAt])
   @@map("reputation_votes")
+}
+
+/// Réglages du module, une ligne par serveur, créée à la première sauvegarde.
+///
+/// Pas de champ `enabled` : l'activation passe par la page Modules
+/// (`isModuleEnabled(guildId, 'reputation')`), aucun service ne lit cette
+/// table sans passer par cette garde.
+model ReputationConfig {
+  guildId String @id
+
+  /// Votes qu'un membre peut donner par jour du serveur.
+  dailyLimit Int @default(3)
+
+  guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("reputation_configs")
 }
