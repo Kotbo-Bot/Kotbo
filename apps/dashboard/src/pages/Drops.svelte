@@ -1,6 +1,6 @@
 <script lang="ts">
   import { explainDisabled } from '../lib/actions/explainDisabled';
-  import { onDestroy, onMount, untrack } from 'svelte';
+  import { onDestroy, onMount, untrack, type Snippet } from 'svelte';
   import { fade } from 'svelte/transition';
   import { dashboardStore } from '../lib/stores/dashboard.svelte';
   import { authStore } from '../lib/stores/auth.svelte';
@@ -24,6 +24,10 @@
   import { ACTIVITY_DEFAULT_STEP, ACTIVITY_PRESETS, JACKPOT_PRESETS } from '../lib/dropPresets';
   import Callout from '../lib/components/ui/Callout.svelte';
   import Button from '../lib/components/ui/Button.svelte';
+  import Field from '../lib/components/ui/Field.svelte';
+  import Tabs, { type TabItem } from '../lib/components/ui/Tabs.svelte';
+  import Modal from '../lib/components/Modal.svelte';
+  import { dropCountdown } from '../lib/dropCountdown';
   import { m, dateLocale } from '../lib/i18n';
   import {
     fetchDiscordChannels,
@@ -145,6 +149,15 @@
   // Un drop d'objet se règle en exemplaires, les autres en points : les champs de montant
   // suivent la fourchette du type affiché plutôt qu'une borne unique au million.
   const amountRange = $derived(dropAmountRange(activeType));
+
+  /** Les trois façons de ramasser, telles qu'elles se règlent sur un type. */
+  type DropModeKey = 'first' | 'race' | 'window';
+
+  /** Fourchette de montants commune aux trois modes. */
+  const AMOUNT_BOUNDS = [
+    { key: 'minAmount', suffix: 'min', label: () => m.drop_mode_min_label() },
+    { key: 'maxAmount', suffix: 'max', label: () => m.drop_mode_max_label() },
+  ] as const;
 
   /** Copie avec ses règles : partagées, l'état courant et l'état enregistré bougeraient ensemble. */
   function cloneGlobalSettings(settings: DropGlobalSettings): DropGlobalSettings {
@@ -320,11 +333,23 @@
   const HISTORY_PREVIEW = 5;
   let historyExpanded = $state(false);
 
+  /**
+   * Heure courante du panneau d'état, avancée toutes les 30 secondes : le compte à
+   * rebours du prochain drop ne reste pas figé tant que la page est ouverte.
+   */
+  let now = $state(new Date());
+  const nowTicker = setInterval(() => now = new Date(), 30 * 1000);
+
+  /** Panneau d'état ouvert sur mobile, où il ne tient pas à côté du formulaire. */
+  let statusOpen = $state(false);
+
   /** Une échéance passée attend le prochain passage du cycle ou l'écart minimal. */
   function nextDropLabel(type: DropType): string {
     const next = configs[type].nextDropAt;
-    if (typeStatus(type) !== 'on' || !next) return '-';
-    if (new Date(next) > new Date()) return formatDate(next);
+    if (typeStatus(type) !== 'on') return '-';
+    // Type tout juste allumé : le cycle lui fixe une échéance au passage suivant.
+    if (!next) return m.drop_next_unplanned();
+    if (new Date(next) > now) return dropCountdown(new Date(next), now, dateLocale());
     // Échéance passée : avec l'attente d'activité, c'est le salon calme qui retient le drop.
     return activityOn(type) ? m.drop_next_waiting_activity() : m.drop_next_soon();
   }
@@ -340,6 +365,7 @@
     off: () => m.drop_state_off(),
     blocked: () => m.drop_state_blocked(),
   };
+
 
   const canManageSettings = $derived(
     !!dashboardStore.state.featureAccess?.drops?.canConfigure
@@ -369,6 +395,21 @@
     COINS: 'Coins',
     RPG_ITEM: 'Package',
   };
+
+  // Un type bloqué le dit dans son onglet, en toutes lettres. « Actif » n'y figure
+  // pas : le panneau d'état le donne déjà, et cinq badges élargiraient la barre.
+  const tabItems = $derived<TabItem[]>([
+    { id: 'global', label: m.drop_tab_global(), icon: 'Gears' },
+    ...DROP_TYPES.map((type) => {
+      const status = typeStatus(type);
+      return {
+        id: type,
+        label: TYPE_LABELS[type](),
+        icon: TYPE_ICONS[type],
+        badge: status === 'blocked' ? STATUS_LABEL[status]() : undefined,
+      };
+    }),
+  ]);
 
   const MODE_LABELS: Record<string, () => string> = {
     FIRST: () => m.drop_mode_first_title(),
@@ -567,6 +608,7 @@
   });
 
   onDestroy(() => {
+    clearInterval(nowTicker);
     unsubscribeRealtime?.();
     unsavedChanges.release('drops');
   });
@@ -589,6 +631,125 @@
     });
   }
 </script>
+
+<!-- État des drops : ce que le cycle fera de chaque type, là où on le règle. Rendu
+     dans la colonne de droite sur grand écran, dans une fenêtre sur mobile. -->
+{#snippet statusPanel()}
+  {#if loading}
+    <Skeleton height="160px" />
+  {:else}
+  {#if !globalSettings.dropsEnabled}
+    <p class="text-xs text-warning">{m.drop_paused_title()}</p>
+  {/if}
+  <ul class="space-y-1">
+    {#each DROP_TYPES as type (type)}
+      {@const status = typeStatus(type)}
+      {@const blocker = status === 'blocked' ? typeBlocker(type) : null}
+      {@const advice = unclaimedAdvice(type)}
+      <li>
+        <button
+          type="button"
+          onclick={() => { activeTab = type; statusOpen = false; }}
+          class="w-full text-left rounded-lg px-2.5 py-2 transition-colors cursor-pointer hover:bg-surface-container-high/40 {activeTab === type ? 'bg-primary/5' : ''}"
+        >
+          <span class="flex items-center justify-between gap-2">
+            <span class="text-sm font-semibold inline-flex items-center gap-2 min-w-0">
+              <Papicon icon={TYPE_ICONS[type]} size={14} /> <span class="truncate">{TYPE_LABELS[type]()}</span>
+            </span>
+            <span class="text-2xs font-semibold px-2 py-0.5 rounded-full shrink-0 {STATUS_PILL[status]}">{STATUS_LABEL[status]()}</span>
+          </span>
+          {#if blocker}
+            <span class="block text-2xs text-warning mt-1">{blockerMessage(type, blocker)}</span>
+          {:else if status === 'on'}
+            <span class="block text-2xs text-on-surface-variant mt-1">
+              {m.drop_status_next({ when: nextDropLabel(type) })} · {channelName(configs[type].channelId)} · {modeSummary(configs[type])}
+            </span>
+          {/if}
+        </button>
+        {#if advice}
+          <div class="px-2.5 pb-1">
+            <p class="text-2xs text-on-surface-variant">{m.drop_advice_unclaimed({ unclaimed: advice.unclaimed, closed: advice.closed })}</p>
+            {#if canManageSettings}
+              <button
+                type="button"
+                onclick={() => { followUnclaimedAdvice(type); statusOpen = false; }}
+                class="mt-1 text-2xs font-semibold text-primary hover:underline inline-flex items-center gap-1"
+              >
+                <Papicon icon="ChevronRight" size={12} /> {m.drop_advice_unclaimed_action()}
+              </button>
+            {/if}
+          </div>
+        {/if}
+      </li>
+    {/each}
+  </ul>
+  {/if}
+{/snippet}
+
+<!-- Les trois modes partagent leur carte et leur fourchette de montants ; la course
+     ajoute le nombre de gagnants, la fenetre sa duree, en tete de grille. -->
+{#snippet modeCard(type: DropType, mode: DropModeKey, title: string, desc: string, cols: string, extra?: Snippet<[DropType]>)}
+  <div class="bg-surface-container-high/20 border border-outline-variant/10 rounded-lg p-5 space-y-4">
+    <div class="flex items-start justify-between gap-4">
+      <div>
+        <h4 class="text-sm font-bold">{title}</h4>
+        <p class="text-2xs text-on-surface-variant mt-0.5">{desc}</p>
+      </div>
+      <ToggleSwitch checked={configs[type][mode].enabled} onToggle={(v) => configs[type][mode].enabled = v} disabled={!canManageSettings} />
+    </div>
+
+    <div class="grid {cols} gap-4 transition-opacity {configs[type][mode].enabled ? '' : 'opacity-50'}">
+      {@render extra?.(type)}
+      {#each AMOUNT_BOUNDS as bound (bound.key)}
+        <Field id="drop-{mode}-{bound.suffix}-{type}" label={bound.label()}>
+          {#snippet children(id, describedBy)}
+            <input
+              {id} aria-describedby={describedBy}
+              type="number"
+              bind:value={configs[type][mode][bound.key]}
+              min={amountRange.min}
+              max={amountRange.max}
+              class="input"
+              disabled={!canManageSettings || !configs[type][mode].enabled}
+            />
+          {/snippet}
+        </Field>
+      {/each}
+    </div>
+  </div>
+{/snippet}
+
+{#snippet raceWinnersField(type: DropType)}
+  <Field id="drop-race-winners-{type}" label={m.drop_race_winners_label()}>
+    {#snippet children(id, describedBy)}
+      <input
+        {id} aria-describedby={describedBy}
+        type="number"
+        bind:value={configs[type].race.winnerCount}
+        min={DROP_RACE_WINNERS_RANGE.min}
+        max={DROP_RACE_WINNERS_RANGE.max}
+        class="input"
+        disabled={!canManageSettings || !configs[type].race.enabled}
+      />
+    {/snippet}
+  </Field>
+{/snippet}
+
+{#snippet windowDurationField(type: DropType)}
+  <Field id="drop-window-duration-{type}" label={m.drop_window_duration_label()} hint={m.drop_min_open_hint()}>
+    {#snippet children(id, describedBy)}
+      <input
+        {id} aria-describedby={describedBy}
+        type="number"
+        bind:value={configs[type].window.durationMinutes}
+        min={DROP_WINDOW_MINUTES_RANGE.min}
+        max={DROP_WINDOW_MINUTES_RANGE.max}
+        class="input"
+        disabled={!canManageSettings || !configs[type].window.enabled}
+      />
+    {/snippet}
+  </Field>
+{/snippet}
 
 <ModulePage
   title={m.drop_page_title()}
@@ -617,725 +778,537 @@
     </Callout>
   {/if}
 
-  <!-- Navigation par Onglets -->
-  <div class="flex flex-wrap border-b border-outline-variant/15 mb-6">
-    <button
-      class="px-5 py-3 text-sm font-semibold border-b-2 transition-all cursor-pointer inline-flex items-center gap-2 {activeTab === 'global' ? 'border-primary text-primary font-bold bg-primary/5 rounded-t-lg' : 'border-transparent text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low/30'}"
-      onclick={() => activeTab = 'global'}
-    >
-      <Papicon icon="Gears" size={15} /> {m.drop_tab_global()}
-    </button>
-    {#each DROP_TYPES as type}
-      {@const status = typeStatus(type)}
-      <button
-        class="px-5 py-3 text-sm font-semibold border-b-2 transition-all cursor-pointer inline-flex items-center gap-2 {activeTab === type ? 'border-primary text-primary font-bold bg-primary/5 rounded-t-lg' : 'border-transparent text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low/30'}"
-        onclick={() => activeTab = type}
-      >
-        <Papicon icon={TYPE_ICONS[type]} size={15} /> {TYPE_LABELS[type]()}
-        {#if status !== 'off'}
-          <span class="w-1.5 h-1.5 rounded-full {status === 'on' ? 'bg-success' : 'bg-warning'}" aria-hidden="true"></span>
-          <span class="sr-only">{STATUS_LABEL[status]()}</span>
-        {/if}
-      </button>
-    {/each}
+  <div class="mb-4 lg:hidden">
+    <Button size="sm" icon="List" onclick={() => statusOpen = true}>{m.drop_status_title()}</Button>
   </div>
+  <Modal bind:open={statusOpen} onClose={() => statusOpen = false} title={m.drop_status_title()}>
+    {@render statusPanel()}
+  </Modal>
 
-  {#if loading}
-    <div class="space-y-6">
-      <Skeleton height="80px" />
-      <Skeleton height="300px" />
-    </div>
-    <div class="flex justify-center mt-4">
-      <LoadingHint context="config" />
-    </div>
-  {:else if activeTab === 'global'}
-    <div class="space-y-6" transition:fade={{ duration: 150 }}>
-      <section class="bg-surface-container-low/40 border border-outline-variant/30 p-6 rounded-xl space-y-6">
-        <div class="flex items-start justify-between gap-4 border-b border-outline-variant/15 pb-3">
-          <div>
-            <h3 class="text-lg font-semibold flex items-center gap-2"><Papicon icon="Gears" size={18} /> {m.drop_global_heading()}</h3>
-            <p class="text-xs text-on-surface-variant mt-1">{m.drop_global_desc()}</p>
-          </div>
+  <!-- Sur grand écran, l'état des drops reste à côté du formulaire, quel que soit l'onglet. -->
+  <div class="lg:grid lg:grid-cols-[minmax(0,1fr)_17rem] lg:items-start lg:gap-6">
+    <div class="min-w-0">
+      <Tabs label={m.drop_tabs_label()} tabs={tabItems} active={activeTab} onchange={(id) => activeTab = id as typeof activeTab} class="mb-6" />
+
+      {#if loading}
+        <div class="space-y-6">
+          <Skeleton height="80px" />
+          <Skeleton height="300px" />
         </div>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div class="space-y-1.5">
-            <label for="drop-default-channel" class="text-xs font-semibold text-on-surface-variant ml-1">{m.drop_default_channel_label()}</label>
-            <SearchableSelect
-              id="drop-default-channel"
-              bind:value={globalSettings.dropChannelId}
-              options={[{ id: '', name: m.drop_option_none() }, ...availableChannels.map(c => ({ id: c.id, name: `#${c.name}` }))]}
-              placeholder={m.drop_select_channel_placeholder()}
-              disabled={!canManageSettings}
-            />
-            <p class="text-2xs text-on-surface-variant mt-1">{m.drop_default_channel_desc()}</p>
-          </div>
-
-          <div class="space-y-1.5">
-            <label for="drop-mention-role" class="text-xs font-semibold text-on-surface-variant ml-1">{m.drop_mention_role_label()}</label>
-            <SearchableSelect
-              id="drop-mention-role"
-              bind:value={globalSettings.dropMentionRoleId}
-              options={[{ id: '', name: m.drop_option_none() }, ...availableRoles.map((r: { id: string; name: string }) => ({ id: r.id, name: `@${r.name}` }))]}
-              placeholder={m.drop_select_role_placeholder()}
-              disabled={!canManageSettings}
-            />
-            <p class="text-2xs text-on-surface-variant mt-1">{m.drop_mention_role_desc()}</p>
-            {#if globalSettings.dropMentionRoleId}
-              <label class="flex items-center gap-2 pt-1 text-xs text-on-surface cursor-pointer">
-                <input
-                  type="checkbox"
-                  bind:checked={globalSettings.dropMentionJackpotOnly}
-                  disabled={!canManageSettings}
-                  class="accent-primary"
-                />
-                {m.drop_mention_jackpot_only_label()}
-              </label>
-              {#if globalSettings.dropMentionJackpotOnly && !globalSettings.dropJackpotEnabled}
-                <p class="text-2xs text-warning">{m.drop_mention_jackpot_only_off_hint()}</p>
-              {/if}
-            {/if}
-          </div>
-
-          <div class="space-y-1.5">
-            <label for="drop-lifetime" class="text-xs font-semibold text-on-surface-variant ml-1">{m.drop_lifetime_label()}</label>
-            <input
-              id="drop-lifetime"
-              type="number"
-              bind:value={globalSettings.dropLifetimeMinutes}
-              min={DROP_LIFETIME_MINUTES_RANGE.min}
-              max={DROP_LIFETIME_MINUTES_RANGE.max}
-              class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold"
-              disabled={!canManageSettings}
-            />
-            <p class="text-2xs text-on-surface-variant mt-1">{m.drop_lifetime_desc()}</p>
-            <p class="text-2xs text-on-surface-variant">{m.drop_min_open_hint()}</p>
-          </div>
-
-          <div class="space-y-1.5">
-            <label for="drop-delete-after" class="text-xs font-semibold text-on-surface-variant ml-1">{m.drop_delete_after_label()}</label>
-            <select
-              id="drop-delete-after"
-              bind:value={globalSettings.dropDeleteAfterMinutes}
-              class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold disabled:opacity-50"
-              disabled={!canManageSettings}
-            >
-              {#each deleteAfterChoices as choice (choice.value)}
-                <option value={choice.value}>{choice.label}</option>
-              {/each}
-            </select>
-            <p class="text-2xs text-on-surface-variant mt-1">{m.drop_delete_after_desc()}</p>
-          </div>
+        <div class="flex justify-center mt-4">
+          <LoadingHint context="config" />
         </div>
-
-        <div class="border border-outline-variant/15 rounded-xl p-4 space-y-4">
-          <div class="flex items-start justify-between gap-4">
-            <div>
-              <h4 class="text-sm font-semibold flex items-center gap-2"><Papicon icon="Sparkles" size={15} /> {m.drop_jackpot_title()}</h4>
-              <p class="text-xs text-on-surface-variant mt-0.5">{m.drop_jackpot_desc()}</p>
-            </div>
-            <ToggleSwitch checked={globalSettings.dropJackpotEnabled} onToggle={(v) => globalSettings.dropJackpotEnabled = v} disabled={!canManageSettings} />
-          </div>
-
-          {#if globalSettings.dropJackpotEnabled}
-            <div class="flex justify-end">
-              <SimpleModeToggle simple={jackpotMode.simple} onchange={(v) => jackpotMode.set(v)} />
-            </div>
-            {#if jackpotMode.simple}
-              <div class="space-y-2">
-                <div class="flex items-baseline justify-between gap-3">
-                  <label for="drop-jackpot-step" class="text-xs font-semibold text-on-surface-variant ml-1">{m.drop_jackpot_step_label()}</label>
-                  <span class="text-xs font-semibold text-primary">{JACKPOT_LABELS[jackpotStep - 1]()}</span>
-                </div>
-                <input
-                  id="drop-jackpot-step"
-                  type="range"
-                  min="1"
-                  max={JACKPOT_PRESETS.length}
-                  step="1"
-                  value={jackpotStep}
-                  aria-valuetext={JACKPOT_LABELS[jackpotStep - 1]()}
-                  oninput={(e) => applyJackpotStep(Number(e.currentTarget.value))}
-                  class="w-full accent-primary"
-                  disabled={!canManageSettings}
-                />
-                <p class="text-2xs text-primary font-semibold">
-                  {m.drop_jackpot_step_value({ chance: globalSettings.dropJackpotChance, multiplier: globalSettings.dropJackpotMultiplier })}
-                </p>
-                {#if !jackpotFitsSimpleMode()}
-                  <SimpleModeNotice message={m.drop_jackpot_off_grid()} />
-                {/if}
+      {:else if activeTab === 'global'}
+        <div class="space-y-6" transition:fade={{ duration: 150 }}>
+          <section class="bg-surface-container-low/40 border border-outline-variant/30 p-6 rounded-xl space-y-6">
+            <div class="flex items-start justify-between gap-4 border-b border-outline-variant/15 pb-3">
+              <div>
+                <h3 class="text-lg font-semibold flex items-center gap-2"><Papicon icon="Gears" size={18} /> {m.drop_global_heading()}</h3>
+                <p class="text-xs text-on-surface-variant mt-1">{m.drop_global_desc()}</p>
               </div>
-            {:else}
-              <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div class="space-y-1.5">
-                  <label for="drop-jackpot-chance" class="text-xs font-semibold text-on-surface-variant ml-1">{m.drop_jackpot_chance_label()}</label>
-                  <select id="drop-jackpot-chance" bind:value={globalSettings.dropJackpotChance} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold disabled:opacity-50" disabled={!canManageSettings}>
-                    {#each DROP_JACKPOT_CHANCE_CHOICES as count (count)}
-                      <option value={count}>{m.drop_jackpot_chance_option({ count })}</option>
-                    {/each}
-                  </select>
-                </div>
-                <div class="space-y-1.5">
-                  <label for="drop-jackpot-multiplier" class="text-xs font-semibold text-on-surface-variant ml-1">{m.drop_jackpot_multiplier_label()}</label>
-                  <select id="drop-jackpot-multiplier" bind:value={globalSettings.dropJackpotMultiplier} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold disabled:opacity-50" disabled={!canManageSettings}>
-                    {#each DROP_JACKPOT_MULTIPLIER_CHOICES as count (count)}
-                      <option value={count}>{m.drop_jackpot_multiplier_option({ count })}</option>
-                    {/each}
-                  </select>
-                </div>
-              </div>
-            {/if}
-            <p class="text-2xs text-on-surface-variant">{m.drop_jackpot_items_hint()}</p>
-          {/if}
-        </div>
-
-        <DropClaimRulesPanel bind:rules={globalSettings.dropClaimRules} roles={availableRoles} disabled={!canManageSettings} />
-      </section>
-
-      <section class="bg-surface-container-low/40 border border-outline-variant/30 p-6 rounded-xl space-y-4">
-        <div class="border-b border-outline-variant/15 pb-3">
-          <h3 class="text-lg font-semibold flex items-center gap-2"><Papicon icon="List" size={18} /> {m.drop_overview_heading()}</h3>
-          <p class="text-xs text-on-surface-variant mt-1">{m.drop_overview_desc()}</p>
-        </div>
-
-        <div class="overflow-x-auto">
-          <table class="w-full text-left border-collapse">
-            <thead>
-              <tr class="text-xs font-semibold text-on-surface-variant">
-                <th class="py-2 pr-4">{m.drop_overview_col_type()}</th>
-                <th class="py-2 pr-4">{m.drop_overview_col_state()}</th>
-                <th class="py-2 pr-4">{m.drop_overview_col_channel()}</th>
-                <th class="py-2 pr-4">{m.drop_overview_col_interval()}</th>
-                <th class="py-2 pr-4">{m.drop_overview_col_modes()}</th>
-                <th class="py-2">{m.drop_overview_col_next()}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {#each DROP_TYPES as type}
-                {@const status = typeStatus(type)}
-                {@const blocker = status === 'blocked' ? typeBlocker(type) : null}
-                {@const advice = unclaimedAdvice(type)}
-                <tr class="text-sm border-t border-outline-variant/10">
-                  <td class="py-2.5 pr-4 font-semibold">
-                    <button
-                      type="button"
-                      class="inline-flex items-center gap-2 cursor-pointer hover:text-primary transition-colors"
-                      onclick={() => activeTab = type}
-                    >
-                      <Papicon icon={TYPE_ICONS[type]} size={15} /> {TYPE_LABELS[type]()}
-                    </button>
-                  </td>
-                  <td class="py-2.5 pr-4">
-                    <span class="text-2xs font-bold uppercase tracking-wider px-2 py-0.5 rounded-full {STATUS_PILL[status]}">
-                      {STATUS_LABEL[status]()}
-                    </span>
-                    {#if blocker}
-                      <p class="text-2xs text-warning mt-1 max-w-xs">{blockerMessage(type, blocker)}</p>
-                    {/if}
-                    {#if advice}
-                      <p class="text-2xs text-on-surface-variant mt-1 max-w-xs">
-                        {m.drop_advice_unclaimed({ unclaimed: advice.unclaimed, closed: advice.closed })}
-                      </p>
-                      {#if canManageSettings}
-                        <button
-                          type="button"
-                          onclick={() => followUnclaimedAdvice(type)}
-                          class="mt-1 text-2xs font-semibold text-primary hover:underline inline-flex items-center gap-1"
-                        >
-                          <Papicon icon="ChevronRight" size={12} /> {m.drop_advice_unclaimed_action()}
-                        </button>
-                      {/if}
-                    {/if}
-                  </td>
-                  <td class="py-2.5 pr-4 text-on-surface-variant/80">{channelName(configs[type].channelId)}</td>
-                  <td class="py-2.5 pr-4 text-on-surface-variant/80">{m.drop_interval_hint({ count: dropsPerDay(configs[type].intervalMinutes) })}</td>
-                  <td class="py-2.5 pr-4 text-on-surface-variant/80">{modeSummary(configs[type])}</td>
-                  <td class="py-2.5 text-on-surface-variant/80 whitespace-nowrap">{nextDropLabel(type)}</td>
-                </tr>
-              {/each}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <section class="bg-surface-container-low/40 border border-outline-variant/30 p-6 rounded-xl space-y-4">
-        <div class="border-b border-outline-variant/15 pb-3">
-          <h3 class="text-lg font-semibold flex items-center gap-2"><Papicon icon="Clock" size={18} /> {m.drop_history_heading()}</h3>
-          <p class="text-xs text-on-surface-variant mt-1">{m.drop_history_desc()}</p>
-        </div>
-
-        {#if recentDrops.length === 0}
-          <p class="py-8 text-center text-xs text-on-surface-variant italic">{m.drop_history_empty()}</p>
-        {:else}
-          <div class="overflow-x-auto">
-            <table class="w-full text-left border-collapse">
-              <thead>
-                <tr class="text-xs font-semibold text-on-surface-variant">
-                  <th class="py-2 pr-4">{m.drop_history_col_date()}</th>
-                  <th class="py-2 pr-4">{m.drop_history_col_type()}</th>
-                  <th class="py-2 pr-4">{m.drop_history_col_mode()}</th>
-                  <th class="py-2 pr-4">{m.drop_history_col_amount()}</th>
-                  <th class="py-2">{m.drop_history_col_claims()}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {#each historyExpanded ? recentDrops : recentDrops.slice(0, HISTORY_PREVIEW) as drop (drop.id)}
-                  <tr class="text-sm border-t border-outline-variant/10">
-                    <td class="py-2.5 pr-4 text-on-surface-variant/80 whitespace-nowrap">{formatDate(drop.createdAt)}</td>
-                    <td class="py-2.5 pr-4 font-semibold">{TYPE_LABELS[drop.type]?.() ?? drop.type}</td>
-                    <td class="py-2.5 pr-4 text-on-surface-variant/80">{MODE_LABELS[drop.mode]?.() ?? drop.mode}</td>
-                    <td class="py-2.5 pr-4 font-bold">
-                      {#if drop.jackpot}
-                        <span class="text-2xs font-bold px-2 py-0.5 rounded-full bg-warning/10 text-warning border border-warning/20 mr-1">{m.drop_history_jackpot()}</span>
-                      {/if}
-                      {drop.amount.toLocaleString(dateLocale())}
-                      {#if drop.item}<span class="font-normal"> <EmojiText value={drop.item.emoji} /> {drop.item.name}</span>{/if}
-                    </td>
-                    <td class="py-2.5 text-on-surface-variant/80">
-                      {drop.maxClaims > 0
-                        ? `${drop.claimCount} / ${drop.maxClaims}`
-                        : m.drop_history_unlimited({ count: drop.claimCount })}
-                    </td>
-                  </tr>
-                {/each}
-              </tbody>
-            </table>
-          </div>
-          {#if recentDrops.length > HISTORY_PREVIEW}
-            <div class="flex justify-center">
-              <button
-                type="button"
-                onclick={() => historyExpanded = !historyExpanded}
-                aria-expanded={historyExpanded}
-                class="text-2xs font-medium px-3 py-1.5 rounded-lg border border-outline-variant/20 hover:border-outline-variant/40 transition-all inline-flex items-center gap-1.5"
-              >
-                <Papicon icon={historyExpanded ? 'ChevronUp' : 'ChevronDown'} size={13} />
-                {historyExpanded ? m.drop_history_show_less() : m.drop_history_show_all({ count: recentDrops.length })}
-              </button>
-            </div>
-          {/if}
-        {/if}
-      </section>
-    </div>
-  {:else}
-    {@const type = activeType}
-    <div class="space-y-6" transition:fade={{ duration: 150 }}>
-      <section class="bg-surface-container-low/40 border border-outline-variant/30 p-6 rounded-xl space-y-6">
-        <div class="flex items-start justify-between gap-4 border-b border-outline-variant/15 pb-3">
-          <div>
-            <h3 class="text-lg font-semibold flex items-center gap-2">
-              <Papicon icon={TYPE_ICONS[type]} size={18} /> {TYPE_LABELS[type]()}
-            </h3>
-            <p class="text-xs text-on-surface-variant mt-1">{TYPE_DESCRIPTIONS[type]()}</p>
-          </div>
-          <ToggleSwitch checked={configs[type].enabled} onToggle={(v) => configs[type].enabled = v} disabled={!canManageSettings} />
-        </div>
-
-        <p class="text-xs text-on-surface-variant">{m.drop_type_enable_desc()}</p>
-
-        {#if !configs[type].channelId && !globalSettings.dropChannelId}
-          <p class="text-xs text-warning bg-warning/10 border border-warning/20 rounded-lg px-4 py-3">
-            {m.drop_no_channel_warning()}
-          </p>
-        {/if}
-
-        <!-- Le cycle saute un type dont le module de la ressource est eteint, et
-             le clic le refuse : la page le dit avant l'enregistrement. -->
-        {#if !isModuleActive(DROP_TYPE_MODULE[type])}
-          <p class="text-xs text-warning bg-warning/10 border border-warning/20 rounded-lg px-4 py-3">
-            {type === 'CLAN_POINTS'
-              ? m.drop_clans_disabled_warning()
-              : m.drop_module_disabled_warning({ module: moduleName(DROP_TYPE_MODULE[type]) })}
-          </p>
-        {/if}
-
-        <!-- Le drop d'objet ne publie rien tant que le serveur n'a pas dit ce qu'il
-             accepte de voir tomber : le catalogue entier tire au hasard mettrait une
-             arme legendaire dans un salon par accident. -->
-        {#if type === 'RPG_ITEM'}
-          <div class="space-y-2 border border-outline-variant/15 rounded-xl p-4">
-            <div>
-              <h4 class="text-sm font-semibold">{m.drop_item_pool_title()}</h4>
-              <p class="text-xs text-on-surface-variant mt-0.5">{m.drop_item_pool_desc()}</p>
             </div>
 
-            {#if !rpgEnabled}
-              <p class="text-xs text-warning bg-warning/10 border border-warning/20 rounded-lg px-4 py-3">
-                {m.drop_item_pool_rpg_off()}
-              </p>
-            {/if}
-
-            <div class="flex flex-wrap gap-2">
-              {#each availableItems as item (item.id)}
-                {@const picked = configs[type].items.some((entry) => entry.itemId === item.id)}
-                <button
-                  type="button"
-                  onclick={() => toggleDropItem(item.id)}
-                  disabled={(!picked && configs[type].items.length >= DROP_ITEM_POOL_MAX)}
-                  use:explainDisabled={(!canManageSettings) ? m.common_reason_no_permission() : ''}
-                  aria-pressed={picked}
-                  class="px-3 py-1.5 rounded-lg border text-2xs font-medium transition-all disabled:opacity-40 disabled:cursor-not-allowed {picked
-                    ? 'bg-primary/10 border-primary/40 text-primary'
-                    : 'bg-surface-container-high/30 border-outline-variant/15 text-on-surface-variant/80 hover:border-outline-variant/40'}"
-                >
-                  <EmojiText value={item.emoji} /> {item.name}
-                </button>
-              {/each}
-            </div>
-
-            {#if configs[type].items.length > 0}
-              <div class="space-y-1.5 pt-1">
-                {#each configs[type].items as entry (entry.itemId)}
-                  <div class="flex items-center gap-3">
-                    <span class="text-2xs flex-1 min-w-0 truncate">
-                      {itemNameById.get(entry.itemId)?.emoji ?? ''}
-                      {itemNameById.get(entry.itemId)?.name ?? m.drop_item_unknown()}
-                    </span>
-                    <input
-                      type="number"
-                      min={DROP_ITEM_WEIGHT_RANGE.min}
-                      max={DROP_ITEM_WEIGHT_RANGE.max}
-                      value={entry.weight}
-                      oninput={(e) => setDropItemWeight(entry.itemId, Number((e.currentTarget as HTMLInputElement).value))}
-                      disabled={!canManageSettings}
-                      class="w-20 bg-surface-container-high/40 border border-outline-variant/15 rounded-lg px-3 py-1.5 text-2xs text-right focus:outline-none disabled:opacity-50"
-                    />
-                    <span class="text-2xs text-on-surface-variant w-4">%</span>
-                  </div>
-                {/each}
-
-                <div class="flex items-center justify-between gap-3 pt-1">
-                  <p class="text-2xs font-semibold {dropItemsBalanced ? 'text-success' : 'text-warning'}">
-                    {m.drop_item_total({ total: dropItemsTotal })}
-                  </p>
-                  <button
-                    type="button"
-                    onclick={balanceDropItems}
-                    use:explainDisabled={(!canManageSettings) ? m.common_reason_no_permission() : ''}
-                    class="text-2xs font-medium px-3 py-1.5 rounded-lg border border-outline-variant/20 hover:border-outline-variant/40 transition-all disabled:opacity-40"
-                  >
-                    {m.drop_item_balance()}
-                  </button>
-                </div>
-              </div>
-            {/if}
-
-            <p class="text-2xs text-on-surface-variant">
-              {configs[type].items.length === 0
-                ? m.drop_item_pool_empty()
-                : m.drop_item_pool_full({ max: DROP_ITEM_POOL_MAX })}
-            </p>
-            <p class="text-2xs text-on-surface-variant">{m.drop_item_quantity_hint()}</p>
-          </div>
-        {/if}
-
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div class="space-y-1.5">
-            <label for="drop-channel-{type}" class="text-xs font-semibold text-on-surface-variant ml-1">{m.drop_channel_label()}</label>
-            <SearchableSelect
-              id="drop-channel-{type}"
-              bind:value={configs[type].channelId}
-              options={[{ id: '', name: m.drop_option_default_channel() }, ...availableChannels.map(c => ({ id: c.id, name: `#${c.name}` }))]}
-              placeholder={m.drop_select_channel_placeholder()}
-              disabled={!canManageSettings}
-            />
-            <p class="text-2xs text-on-surface-variant mt-1">{m.drop_channel_desc()}</p>
-          </div>
-
-          <div class="space-y-1.5">
-            <label for="drop-interval-{type}" class="text-xs font-semibold text-on-surface-variant ml-1">{m.drop_interval_label()}</label>
-            <input
-              id="drop-interval-{type}"
-              type="number"
-              bind:value={configs[type].intervalMinutes}
-              min={DROP_INTERVAL_MINUTES_RANGE.min}
-              max={DROP_INTERVAL_MINUTES_RANGE.max}
-              class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold"
-              disabled={!canManageSettings}
-            />
-            <p class="text-2xs text-primary font-semibold mt-1">{m.drop_interval_hint({ count: dropsPerDay(configs[type].intervalMinutes) })}</p>
-            <p class="text-2xs text-on-surface-variant">{m.drop_interval_desc()}</p>
-            <p class="text-2xs text-on-surface-variant">{m.drop_min_gap_hint()}</p>
-          </div>
-        </div>
-
-        <!-- Replie par defaut : le titre resume le reglage, on n'ouvre que pour le changer. -->
-        <details class="group border border-outline-variant/15 rounded-xl">
-          <summary class="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-3 [&::-webkit-details-marker]:hidden">
-            <span class="text-sm font-semibold flex items-center gap-2">
-              <span class="transition-transform group-open:rotate-90"><Papicon icon="ChevronRight" size={14} /></span>
-              {m.drop_activity_title()}
-            </span>
-            <span class="text-2xs font-semibold px-2 py-0.5 rounded-full {activityOn(type) ? 'bg-success/10 text-success border border-success/20' : 'bg-surface-container-high/60 text-on-surface-variant'}">
-              {activityOn(type)
-                ? m.drop_activity_summary({ messages: configs[type].activity.minMessages, minutes: configs[type].activity.windowMinutes })
-                : m.drop_activity_off()}
-            </span>
-          </summary>
-
-          <div class="px-4 pb-4 space-y-4">
-            <div class="flex items-center justify-between gap-4">
-              <p class="text-xs font-semibold">{m.drop_activity_toggle()}</p>
-              <ToggleSwitch
-                checked={activityOn(type)}
-                onToggle={(v) => {
-                  if (v) applyActivityStep(type, ACTIVITY_DEFAULT_STEP);
-                  else configs[type].activity.minMessages = DROP_ACTIVITY_DISABLED;
-                }}
-                disabled={!canManageSettings}
-              />
-            </div>
-
-            {#if activityOn(type)}
-              {@const step = activityStep(type)}
-              <div class="flex justify-end">
-                <SimpleModeToggle simple={activityMode.simple} onchange={(v) => activityMode.set(v)} />
-              </div>
-              {#if activityMode.simple}
-                <div class="space-y-2">
-                  <div class="flex items-baseline justify-between gap-3">
-                    <label for="drop-activity-step-{type}" class="text-xs font-semibold text-on-surface-variant ml-1">{m.drop_activity_step_label()}</label>
-                    <span class="text-xs font-semibold text-primary">{ACTIVITY_LABELS[step - 1]()}</span>
-                  </div>
-                  <input
-                    id="drop-activity-step-{type}"
-                    type="range"
-                    min="1"
-                    max={ACTIVITY_PRESETS.length}
-                    step="1"
-                    value={step}
-                    aria-valuetext={ACTIVITY_LABELS[step - 1]()}
-                    oninput={(e) => applyActivityStep(type, Number(e.currentTarget.value))}
-                    class="w-full accent-primary"
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <Field id="drop-default-channel" label={m.drop_default_channel_label()} hint={m.drop_default_channel_desc()}>
+                {#snippet children(id)}
+                  <SearchableSelect
+                    {id}
+                    bind:value={globalSettings.dropChannelId}
+                    options={[{ id: '', name: m.drop_option_none() }, ...availableChannels.map(c => ({ id: c.id, name: `#${c.name}` }))]}
+                    placeholder={m.drop_select_channel_placeholder()}
                     disabled={!canManageSettings}
                   />
-                  <p class="text-2xs text-primary font-semibold">
-                    {m.drop_activity_step_value({ messages: configs[type].activity.minMessages, minutes: configs[type].activity.windowMinutes })}
-                  </p>
-                  {#if !activityFitsSimpleMode(type)}
-                    <SimpleModeNotice message={m.drop_activity_off_grid()} />
+                {/snippet}
+              </Field>
+
+              <div class="space-y-1.5">
+                <Field id="drop-mention-role" label={m.drop_mention_role_label()} hint={m.drop_mention_role_desc()}>
+                  {#snippet children(id)}
+                    <SearchableSelect
+                      {id}
+                      bind:value={globalSettings.dropMentionRoleId}
+                      options={[{ id: '', name: m.drop_option_none() }, ...availableRoles.map((r: { id: string; name: string }) => ({ id: r.id, name: `@${r.name}` }))]}
+                      placeholder={m.drop_select_role_placeholder()}
+                      disabled={!canManageSettings}
+                    />
+                  {/snippet}
+                </Field>
+                {#if globalSettings.dropMentionRoleId}
+                  <label class="flex items-center gap-2 pt-1 text-xs text-on-surface cursor-pointer">
+                    <input
+                      type="checkbox"
+                      bind:checked={globalSettings.dropMentionJackpotOnly}
+                      disabled={!canManageSettings}
+                      class="accent-primary"
+                    />
+                    {m.drop_mention_jackpot_only_label()}
+                  </label>
+                  {#if globalSettings.dropMentionJackpotOnly && !globalSettings.dropJackpotEnabled}
+                    <p class="text-2xs text-warning">{m.drop_mention_jackpot_only_off_hint()}</p>
                   {/if}
+                {/if}
+              </div>
+
+              <div class="space-y-1.5">
+                <Field id="drop-lifetime" label={m.drop_lifetime_label()} hint={m.drop_lifetime_desc()}>
+                  {#snippet children(id, describedBy)}
+                    <input
+                      {id} aria-describedby={describedBy}
+                      type="number"
+                      bind:value={globalSettings.dropLifetimeMinutes}
+                      min={DROP_LIFETIME_MINUTES_RANGE.min}
+                      max={DROP_LIFETIME_MINUTES_RANGE.max}
+                      class="input"
+                      disabled={!canManageSettings}
+                    />
+                  {/snippet}
+                </Field>
+                <p class="text-2xs text-on-surface-variant">{m.drop_min_open_hint()}</p>
+              </div>
+
+              <Field id="drop-delete-after" label={m.drop_delete_after_label()} hint={m.drop_delete_after_desc()}>
+                {#snippet children(id, describedBy)}
+                  <select
+                    {id} aria-describedby={describedBy}
+                    bind:value={globalSettings.dropDeleteAfterMinutes}
+                    class="input"
+                    disabled={!canManageSettings}
+                  >
+                    {#each deleteAfterChoices as choice (choice.value)}
+                      <option value={choice.value}>{choice.label}</option>
+                    {/each}
+                  </select>
+                {/snippet}
+              </Field>
+            </div>
+
+            <div class="border border-outline-variant/15 rounded-xl p-4 space-y-4">
+              <div class="flex items-start justify-between gap-4">
+                <div>
+                  <h4 class="text-sm font-semibold flex items-center gap-2"><Papicon icon="Sparkles" size={15} /> {m.drop_jackpot_title()}</h4>
+                  <p class="text-xs text-on-surface-variant mt-0.5">{m.drop_jackpot_desc()}</p>
                 </div>
-              {:else}
-                <div class="grid grid-cols-2 gap-4">
-                  <div class="space-y-1.5">
-                    <label for="drop-activity-messages-{type}" class="text-xs font-semibold text-on-surface-variant ml-1">{m.drop_activity_messages_label()}</label>
+                <ToggleSwitch checked={globalSettings.dropJackpotEnabled} onToggle={(v) => globalSettings.dropJackpotEnabled = v} disabled={!canManageSettings} />
+              </div>
+
+              {#if globalSettings.dropJackpotEnabled}
+                <div class="flex justify-end">
+                  <SimpleModeToggle simple={jackpotMode.simple} onchange={(v) => jackpotMode.set(v)} />
+                </div>
+                {#if jackpotMode.simple}
+                  <div class="space-y-2">
+                    <div class="flex items-baseline justify-between gap-3">
+                      <label for="drop-jackpot-step" class="field-label !mb-0">{m.drop_jackpot_step_label()}</label>
+                      <span class="text-xs font-semibold text-primary">{JACKPOT_LABELS[jackpotStep - 1]()}</span>
+                    </div>
                     <input
-                      id="drop-activity-messages-{type}"
-                      type="number"
-                      bind:value={configs[type].activity.minMessages}
-                      min={DROP_ACTIVITY_MESSAGES_RANGE.min}
-                      max={DROP_ACTIVITY_MESSAGES_RANGE.max}
-                      class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold"
+                      id="drop-jackpot-step"
+                      type="range"
+                      min="1"
+                      max={JACKPOT_PRESETS.length}
+                      step="1"
+                      value={jackpotStep}
+                      aria-valuetext={JACKPOT_LABELS[jackpotStep - 1]()}
+                      oninput={(e) => applyJackpotStep(Number(e.currentTarget.value))}
+                      class="w-full accent-primary"
                       disabled={!canManageSettings}
                     />
+                    <p class="text-2xs text-primary font-semibold">
+                      {m.drop_jackpot_step_value({ chance: globalSettings.dropJackpotChance, multiplier: globalSettings.dropJackpotMultiplier })}
+                    </p>
+                    {#if !jackpotFitsSimpleMode()}
+                      <SimpleModeNotice message={m.drop_jackpot_off_grid()} />
+                    {/if}
                   </div>
-                  <div class="space-y-1.5">
-                    <label for="drop-activity-window-{type}" class="text-xs font-semibold text-on-surface-variant ml-1">{m.drop_activity_window_label()}</label>
-                    <input
-                      id="drop-activity-window-{type}"
-                      type="number"
-                      bind:value={configs[type].activity.windowMinutes}
-                      min={DROP_ACTIVITY_WINDOW_MINUTES_RANGE.min}
-                      max={DROP_ACTIVITY_WINDOW_MINUTES_RANGE.max}
-                      class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold"
-                      disabled={!canManageSettings}
-                    />
+                {:else}
+                  <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <Field id="drop-jackpot-chance" label={m.drop_jackpot_chance_label()}>
+                      {#snippet children(id, describedBy)}
+                        <select {id} aria-describedby={describedBy} bind:value={globalSettings.dropJackpotChance} class="input" disabled={!canManageSettings}>
+                          {#each DROP_JACKPOT_CHANCE_CHOICES as count (count)}
+                            <option value={count}>{m.drop_jackpot_chance_option({ count })}</option>
+                          {/each}
+                        </select>
+                      {/snippet}
+                    </Field>
+                    <Field id="drop-jackpot-multiplier" label={m.drop_jackpot_multiplier_label()}>
+                      {#snippet children(id, describedBy)}
+                        <select {id} aria-describedby={describedBy} bind:value={globalSettings.dropJackpotMultiplier} class="input" disabled={!canManageSettings}>
+                          {#each DROP_JACKPOT_MULTIPLIER_CHOICES as count (count)}
+                            <option value={count}>{m.drop_jackpot_multiplier_option({ count })}</option>
+                          {/each}
+                        </select>
+                      {/snippet}
+                    </Field>
                   </div>
+                {/if}
+                <p class="text-2xs text-on-surface-variant">{m.drop_jackpot_items_hint()}</p>
+              {/if}
+            </div>
+
+            <DropClaimRulesPanel bind:rules={globalSettings.dropClaimRules} roles={availableRoles} disabled={!canManageSettings} />
+          </section>
+
+
+          <section class="bg-surface-container-low/40 border border-outline-variant/30 p-6 rounded-xl space-y-4">
+            <div class="border-b border-outline-variant/15 pb-3">
+              <h3 class="text-lg font-semibold flex items-center gap-2"><Papicon icon="Clock" size={18} /> {m.drop_history_heading()}</h3>
+              <p class="text-xs text-on-surface-variant mt-1">{m.drop_history_desc()}</p>
+            </div>
+
+            {#if recentDrops.length === 0}
+              <p class="py-8 text-center text-xs text-on-surface-variant italic">{m.drop_history_empty()}</p>
+            {:else}
+              <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse">
+                  <thead>
+                    <tr class="text-xs font-semibold text-on-surface-variant">
+                      <th class="py-2 pr-4">{m.drop_history_col_date()}</th>
+                      <th class="py-2 pr-4">{m.drop_history_col_type()}</th>
+                      <th class="py-2 pr-4">{m.drop_history_col_mode()}</th>
+                      <th class="py-2 pr-4">{m.drop_history_col_amount()}</th>
+                      <th class="py-2">{m.drop_history_col_claims()}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {#each historyExpanded ? recentDrops : recentDrops.slice(0, HISTORY_PREVIEW) as drop (drop.id)}
+                      <tr class="text-sm border-t border-outline-variant/10">
+                        <td class="py-2.5 pr-4 text-on-surface-variant/80 whitespace-nowrap">{formatDate(drop.createdAt)}</td>
+                        <td class="py-2.5 pr-4 font-semibold">{TYPE_LABELS[drop.type]?.() ?? drop.type}</td>
+                        <td class="py-2.5 pr-4 text-on-surface-variant/80">{MODE_LABELS[drop.mode]?.() ?? drop.mode}</td>
+                        <td class="py-2.5 pr-4 font-bold">
+                          {#if drop.jackpot}
+                            <span class="text-2xs font-bold px-2 py-0.5 rounded-full bg-warning/10 text-warning border border-warning/20 mr-1">{m.drop_history_jackpot()}</span>
+                          {/if}
+                          {drop.amount.toLocaleString(dateLocale())}
+                          {#if drop.item}<span class="font-normal"> <EmojiText value={drop.item.emoji} /> {drop.item.name}</span>{/if}
+                        </td>
+                        <td class="py-2.5 text-on-surface-variant/80">
+                          {drop.maxClaims > 0
+                            ? `${drop.claimCount} / ${drop.maxClaims}`
+                            : m.drop_history_unlimited({ count: drop.claimCount })}
+                        </td>
+                      </tr>
+                    {/each}
+                  </tbody>
+                </table>
+              </div>
+              {#if recentDrops.length > HISTORY_PREVIEW}
+                <div class="flex justify-center">
+                  <button
+                    type="button"
+                    onclick={() => historyExpanded = !historyExpanded}
+                    aria-expanded={historyExpanded}
+                    class="text-2xs font-medium px-3 py-1.5 rounded-lg border border-outline-variant/20 hover:border-outline-variant/40 transition-all inline-flex items-center gap-1.5"
+                  >
+                    <Papicon icon={historyExpanded ? 'ChevronUp' : 'ChevronDown'} size={13} />
+                    {historyExpanded ? m.drop_history_show_less() : m.drop_history_show_all({ count: recentDrops.length })}
+                  </button>
                 </div>
               {/if}
             {/if}
-            <p class="text-2xs text-on-surface-variant">{m.drop_activity_desc()}</p>
-          </div>
-        </details>
-      </section>
-
-      <section class="bg-surface-container-low/40 border border-outline-variant/30 p-6 rounded-xl space-y-5">
-        <div class="border-b border-outline-variant/15 pb-3">
-          <h3 class="text-lg font-semibold flex items-center gap-2"><Papicon icon="Tasks" size={18} /> {m.drop_modes_heading()}</h3>
-          <p class="text-xs text-on-surface-variant mt-1">{m.drop_modes_desc()}</p>
+          </section>
         </div>
+      {:else}
+        {@const type = activeType}
+        <div class="space-y-6" transition:fade={{ duration: 150 }}>
+          <section class="bg-surface-container-low/40 border border-outline-variant/30 p-6 rounded-xl space-y-6">
+            <div class="flex items-start justify-between gap-4 border-b border-outline-variant/15 pb-3">
+              <div>
+                <h3 class="text-lg font-semibold flex items-center gap-2">
+                  <Papicon icon={TYPE_ICONS[type]} size={18} /> {TYPE_LABELS[type]()}
+                </h3>
+                <p class="text-xs text-on-surface-variant mt-1">{TYPE_DESCRIPTIONS[type]()}</p>
+              </div>
+              <ToggleSwitch checked={configs[type].enabled} onToggle={(v) => configs[type].enabled = v} disabled={!canManageSettings} />
+            </div>
 
-        {#if enabledDropModes(configs[type]).length === 0}
-          <p class="text-xs text-warning bg-warning/10 border border-warning/20 rounded-lg px-4 py-3">
-            {m.drop_no_mode_warning()}
-          </p>
-        {/if}
+            <p class="text-xs text-on-surface-variant">{m.drop_type_enable_desc()}</p>
 
-        <div class="bg-surface-container-high/20 border border-outline-variant/10 rounded-lg p-5 space-y-4">
-          <div class="flex items-start justify-between gap-4">
-            <div>
-              <h4 class="text-sm font-bold">{m.drop_mode_first_title()}</h4>
-              <p class="text-2xs text-on-surface-variant mt-0.5">{m.drop_mode_first_desc()}</p>
-            </div>
-            <ToggleSwitch checked={configs[type].first.enabled} onToggle={(v) => configs[type].first.enabled = v} disabled={!canManageSettings} />
-          </div>
+            {#if !configs[type].channelId && !globalSettings.dropChannelId}
+              <Callout variant="warning">
+                {m.drop_no_channel_warning()}
+              </Callout>
+            {/if}
 
-          <div class="grid grid-cols-2 gap-4 transition-opacity {configs[type].first.enabled ? '' : 'opacity-50'}">
-            <div class="space-y-1.5">
-              <label for="drop-first-min-{type}" class="text-xs font-semibold text-on-surface-variant ml-1">{m.drop_mode_min_label()}</label>
-              <input
-                id="drop-first-min-{type}"
-                type="number"
-                bind:value={configs[type].first.minAmount}
-                min={amountRange.min}
-                max={amountRange.max}
-                class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold"
-                disabled={!canManageSettings || !configs[type].first.enabled}
-              />
-            </div>
-            <div class="space-y-1.5">
-              <label for="drop-first-max-{type}" class="text-xs font-semibold text-on-surface-variant ml-1">{m.drop_mode_max_label()}</label>
-              <input
-                id="drop-first-max-{type}"
-                type="number"
-                bind:value={configs[type].first.maxAmount}
-                min={amountRange.min}
-                max={amountRange.max}
-                class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold"
-                disabled={!canManageSettings || !configs[type].first.enabled}
-              />
-            </div>
-          </div>
-        </div>
+            <!-- Le cycle saute un type dont le module de la ressource est eteint, et
+                 le clic le refuse : la page le dit avant l'enregistrement. -->
+            {#if !isModuleActive(DROP_TYPE_MODULE[type])}
+              <Callout variant="warning">
+                {type === 'CLAN_POINTS'
+                  ? m.drop_clans_disabled_warning()
+                  : m.drop_module_disabled_warning({ module: moduleName(DROP_TYPE_MODULE[type]) })}
+              </Callout>
+            {/if}
 
-        <div class="bg-surface-container-high/20 border border-outline-variant/10 rounded-lg p-5 space-y-4">
-          <div class="flex items-start justify-between gap-4">
-            <div>
-              <h4 class="text-sm font-bold">{m.drop_mode_race_title()}</h4>
-              <p class="text-2xs text-on-surface-variant mt-0.5">{m.drop_mode_race_desc()}</p>
-            </div>
-            <ToggleSwitch checked={configs[type].race.enabled} onToggle={(v) => configs[type].race.enabled = v} disabled={!canManageSettings} />
-          </div>
+            <!-- Le drop d'objet ne publie rien tant que le serveur n'a pas dit ce qu'il
+                 accepte de voir tomber : le catalogue entier tire au hasard mettrait une
+                 arme legendaire dans un salon par accident. -->
+            {#if type === 'RPG_ITEM'}
+              <div class="space-y-2 border border-outline-variant/15 rounded-xl p-4">
+                <div>
+                  <h4 class="text-sm font-semibold">{m.drop_item_pool_title()}</h4>
+                  <p class="text-xs text-on-surface-variant mt-0.5">{m.drop_item_pool_desc()}</p>
+                </div>
 
-          <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 transition-opacity {configs[type].race.enabled ? '' : 'opacity-50'}">
-            <div class="space-y-1.5">
-              <label for="drop-race-winners-{type}" class="text-xs font-semibold text-on-surface-variant ml-1">{m.drop_race_winners_label()}</label>
-              <input
-                id="drop-race-winners-{type}"
-                type="number"
-                bind:value={configs[type].race.winnerCount}
-                min={DROP_RACE_WINNERS_RANGE.min}
-                max={DROP_RACE_WINNERS_RANGE.max}
-                class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold"
-                disabled={!canManageSettings || !configs[type].race.enabled}
-              />
-            </div>
-            <div class="space-y-1.5">
-              <label for="drop-race-min-{type}" class="text-xs font-semibold text-on-surface-variant ml-1">{m.drop_mode_min_label()}</label>
-              <input
-                id="drop-race-min-{type}"
-                type="number"
-                bind:value={configs[type].race.minAmount}
-                min={amountRange.min}
-                max={amountRange.max}
-                class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold"
-                disabled={!canManageSettings || !configs[type].race.enabled}
-              />
-            </div>
-            <div class="space-y-1.5">
-              <label for="drop-race-max-{type}" class="text-xs font-semibold text-on-surface-variant ml-1">{m.drop_mode_max_label()}</label>
-              <input
-                id="drop-race-max-{type}"
-                type="number"
-                bind:value={configs[type].race.maxAmount}
-                min={amountRange.min}
-                max={amountRange.max}
-                class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold"
-                disabled={!canManageSettings || !configs[type].race.enabled}
-              />
-            </div>
-          </div>
-        </div>
+                {#if !rpgEnabled}
+                  <Callout variant="warning">
+                    {m.drop_item_pool_rpg_off()}
+                  </Callout>
+                {/if}
 
-        <div class="bg-surface-container-high/20 border border-outline-variant/10 rounded-lg p-5 space-y-4">
-          <div class="flex items-start justify-between gap-4">
-            <div>
-              <h4 class="text-sm font-bold">{m.drop_mode_window_title()}</h4>
-              <p class="text-2xs text-on-surface-variant mt-0.5">{m.drop_mode_window_desc()}</p>
-            </div>
-            <ToggleSwitch checked={configs[type].window.enabled} onToggle={(v) => configs[type].window.enabled = v} disabled={!canManageSettings} />
-          </div>
+                <div class="flex flex-wrap gap-2">
+                  {#each availableItems as item (item.id)}
+                    {@const picked = configs[type].items.some((entry) => entry.itemId === item.id)}
+                    <button
+                      type="button"
+                      onclick={() => toggleDropItem(item.id)}
+                      disabled={(!picked && configs[type].items.length >= DROP_ITEM_POOL_MAX)}
+                      use:explainDisabled={(!canManageSettings) ? m.common_reason_no_permission() : ''}
+                      aria-pressed={picked}
+                      class="px-3 py-1.5 rounded-lg border text-2xs font-medium transition-all disabled:opacity-40 disabled:cursor-not-allowed {picked
+                        ? 'bg-primary/10 border-primary/40 text-primary'
+                        : 'bg-surface-container-high/30 border-outline-variant/15 text-on-surface-variant/80 hover:border-outline-variant/40'}"
+                    >
+                      <EmojiText value={item.emoji} /> {item.name}
+                    </button>
+                  {/each}
+                </div>
 
-          <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 transition-opacity {configs[type].window.enabled ? '' : 'opacity-50'}">
-            <div class="space-y-1.5">
-              <label for="drop-window-duration-{type}" class="text-xs font-semibold text-on-surface-variant ml-1">{m.drop_window_duration_label()}</label>
-              <input
-                id="drop-window-duration-{type}"
-                type="number"
-                bind:value={configs[type].window.durationMinutes}
-                min={DROP_WINDOW_MINUTES_RANGE.min}
-                max={DROP_WINDOW_MINUTES_RANGE.max}
-                class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold"
-                disabled={!canManageSettings || !configs[type].window.enabled}
-              />
-              <p class="text-2xs text-on-surface-variant mt-1">{m.drop_min_open_hint()}</p>
-            </div>
-            <div class="space-y-1.5">
-              <label for="drop-window-min-{type}" class="text-xs font-semibold text-on-surface-variant ml-1">{m.drop_mode_min_label()}</label>
-              <input
-                id="drop-window-min-{type}"
-                type="number"
-                bind:value={configs[type].window.minAmount}
-                min={amountRange.min}
-                max={amountRange.max}
-                class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold"
-                disabled={!canManageSettings || !configs[type].window.enabled}
-              />
-            </div>
-            <div class="space-y-1.5">
-              <label for="drop-window-max-{type}" class="text-xs font-semibold text-on-surface-variant ml-1">{m.drop_mode_max_label()}</label>
-              <input
-                id="drop-window-max-{type}"
-                type="number"
-                bind:value={configs[type].window.maxAmount}
-                min={amountRange.min}
-                max={amountRange.max}
-                class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold"
-                disabled={!canManageSettings || !configs[type].window.enabled}
-              />
-            </div>
-          </div>
-        </div>
-      </section>
+                {#if configs[type].items.length > 0}
+                  <div class="space-y-1.5 pt-1">
+                    {#each configs[type].items as entry (entry.itemId)}
+                      <div class="flex items-center gap-3">
+                        <span class="text-2xs flex-1 min-w-0 truncate">
+                          {itemNameById.get(entry.itemId)?.emoji ?? ''}
+                          {itemNameById.get(entry.itemId)?.name ?? m.drop_item_unknown()}
+                        </span>
+                        <input
+                          type="number"
+                          min={DROP_ITEM_WEIGHT_RANGE.min}
+                          max={DROP_ITEM_WEIGHT_RANGE.max}
+                          value={entry.weight}
+                          oninput={(e) => setDropItemWeight(entry.itemId, Number((e.currentTarget as HTMLInputElement).value))}
+                          disabled={!canManageSettings}
+                          class="w-20 bg-surface-container-high/40 border border-outline-variant/15 rounded-lg px-3 py-1.5 text-2xs text-right focus:outline-none disabled:opacity-50"
+                        />
+                        <span class="text-2xs text-on-surface-variant w-4">%</span>
+                      </div>
+                    {/each}
 
-      {#if announcement}
-        {@const estimate = estimateWeeklyDrops(type, configs[type], globalSettings)}
-        <section class="bg-surface-container-low/40 border border-outline-variant/30 p-6 rounded-xl space-y-5">
-          <div class="border-b border-outline-variant/15 pb-3">
-            <h3 class="text-lg font-semibold flex items-center gap-2"><Papicon icon="Eye" size={18} /> {m.drop_preview_heading()}</h3>
-            <p class="text-xs text-on-surface-variant mt-1">{m.drop_preview_desc()}</p>
-          </div>
+                    <div class="flex items-center justify-between gap-3 pt-1">
+                      <p class="text-2xs font-semibold {dropItemsBalanced ? 'text-success' : 'text-warning'}">
+                        {m.drop_item_total({ total: dropItemsTotal })}
+                      </p>
+                      <button
+                        type="button"
+                        onclick={balanceDropItems}
+                        use:explainDisabled={(!canManageSettings) ? m.common_reason_no_permission() : ''}
+                        class="text-2xs font-medium px-3 py-1.5 rounded-lg border border-outline-variant/20 hover:border-outline-variant/40 transition-all disabled:opacity-40"
+                      >
+                        {m.drop_item_balance()}
+                      </button>
+                    </div>
+                  </div>
+                {/if}
 
-          <DropAnnouncementPreview
-            labels={announcement}
-            {type}
-            settings={configs[type]}
-            jackpot={globalSettings}
-            modeLabels={MODE_LABELS}
-            itemLabel={type === 'RPG_ITEM' ? likeliestItemLabel() : null}
-            {mentionRoleName}
-          />
-
-          {#if estimate}
-            <div class="space-y-1 border-t border-outline-variant/10 pt-4">
-              {#if estimate.distributed > 0}
-                <p class="text-sm font-semibold">
-                  {m.drop_estimate_distributed({ drops: formatEstimate(estimate.drops), total: formatEstimate(estimate.distributed), resource: TYPE_LABELS[type]() })}
+                <p class="text-2xs text-on-surface-variant">
+                  {configs[type].items.length === 0
+                    ? m.drop_item_pool_empty()
+                    : m.drop_item_pool_full({ max: DROP_ITEM_POOL_MAX })}
                 </p>
-              {/if}
-              <!-- Un champ vidé pendant la saisie donne NaN : la ligne attend un vrai nombre. -->
-              {#if estimate.window && Number.isFinite(estimate.window.perParticipant)}
-                <p class="text-sm font-semibold">
-                  {m.drop_estimate_window({ amount: formatEstimate(estimate.window.perParticipant), resource: TYPE_LABELS[type](), drops: formatEstimate(estimate.window.drops) })}
-                </p>
-              {/if}
-              <p class="text-2xs text-on-surface-variant">{m.drop_estimate_hint()}</p>
+                <p class="text-2xs text-on-surface-variant">{m.drop_item_quantity_hint()}</p>
+              </div>
+            {/if}
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <Field id="drop-channel-{type}" label={m.drop_channel_label()} hint={m.drop_channel_desc()}>
+                {#snippet children(id)}
+                  <SearchableSelect
+                    {id}
+                    bind:value={configs[type].channelId}
+                    options={[{ id: '', name: m.drop_option_default_channel() }, ...availableChannels.map(c => ({ id: c.id, name: `#${c.name}` }))]}
+                    placeholder={m.drop_select_channel_placeholder()}
+                    disabled={!canManageSettings}
+                  />
+                {/snippet}
+              </Field>
+
+              <div class="space-y-1.5">
+                <Field id="drop-interval-{type}" label={m.drop_interval_label()}>
+                  {#snippet children(id, describedBy)}
+                    <input
+                      {id} aria-describedby={describedBy}
+                      type="number"
+                      bind:value={configs[type].intervalMinutes}
+                      min={DROP_INTERVAL_MINUTES_RANGE.min}
+                      max={DROP_INTERVAL_MINUTES_RANGE.max}
+                      class="input"
+                      disabled={!canManageSettings}
+                    />
+                  {/snippet}
+                </Field>
+                <p class="text-2xs text-primary font-semibold mt-1">{m.drop_interval_hint({ count: dropsPerDay(configs[type].intervalMinutes) })}</p>
+                <p class="text-2xs text-on-surface-variant">{m.drop_interval_desc()}</p>
+                <p class="text-2xs text-on-surface-variant">{m.drop_min_gap_hint()}</p>
+              </div>
             </div>
+
+            <!-- Replie par defaut : le titre resume le reglage, on n'ouvre que pour le changer. -->
+            <details class="group border border-outline-variant/15 rounded-xl">
+              <summary class="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-3 [&::-webkit-details-marker]:hidden">
+                <span class="text-sm font-semibold flex items-center gap-2">
+                  <span class="transition-transform group-open:rotate-90"><Papicon icon="ChevronRight" size={14} /></span>
+                  {m.drop_activity_title()}
+                </span>
+                <span class="text-2xs font-semibold px-2 py-0.5 rounded-full {activityOn(type) ? 'bg-success/10 text-success border border-success/20' : 'bg-surface-container-high/60 text-on-surface-variant'}">
+                  {activityOn(type)
+                    ? m.drop_activity_summary({ messages: configs[type].activity.minMessages, minutes: configs[type].activity.windowMinutes })
+                    : m.drop_activity_off()}
+                </span>
+              </summary>
+
+              <div class="px-4 pb-4 space-y-4">
+                <div class="flex items-center justify-between gap-4">
+                  <p class="text-xs font-semibold">{m.drop_activity_toggle()}</p>
+                  <ToggleSwitch
+                    checked={activityOn(type)}
+                    onToggle={(v) => {
+                      if (v) applyActivityStep(type, ACTIVITY_DEFAULT_STEP);
+                      else configs[type].activity.minMessages = DROP_ACTIVITY_DISABLED;
+                    }}
+                    disabled={!canManageSettings}
+                  />
+                </div>
+
+                {#if activityOn(type)}
+                  {@const step = activityStep(type)}
+                  <div class="flex justify-end">
+                    <SimpleModeToggle simple={activityMode.simple} onchange={(v) => activityMode.set(v)} />
+                  </div>
+                  {#if activityMode.simple}
+                    <div class="space-y-2">
+                      <div class="flex items-baseline justify-between gap-3">
+                        <label for="drop-activity-step-{type}" class="field-label !mb-0">{m.drop_activity_step_label()}</label>
+                        <span class="text-xs font-semibold text-primary">{ACTIVITY_LABELS[step - 1]()}</span>
+                      </div>
+                      <input
+                        id="drop-activity-step-{type}"
+                        type="range"
+                        min="1"
+                        max={ACTIVITY_PRESETS.length}
+                        step="1"
+                        value={step}
+                        aria-valuetext={ACTIVITY_LABELS[step - 1]()}
+                        oninput={(e) => applyActivityStep(type, Number(e.currentTarget.value))}
+                        class="w-full accent-primary"
+                        disabled={!canManageSettings}
+                      />
+                      <p class="text-2xs text-primary font-semibold">
+                        {m.drop_activity_step_value({ messages: configs[type].activity.minMessages, minutes: configs[type].activity.windowMinutes })}
+                      </p>
+                      {#if !activityFitsSimpleMode(type)}
+                        <SimpleModeNotice message={m.drop_activity_off_grid()} />
+                      {/if}
+                    </div>
+                  {:else}
+                    <div class="grid grid-cols-2 gap-4">
+                      <Field id="drop-activity-messages-{type}" label={m.drop_activity_messages_label()}>
+                        {#snippet children(id, describedBy)}
+                          <input
+                            {id} aria-describedby={describedBy}
+                            type="number"
+                            bind:value={configs[type].activity.minMessages}
+                            min={DROP_ACTIVITY_MESSAGES_RANGE.min}
+                            max={DROP_ACTIVITY_MESSAGES_RANGE.max}
+                            class="input"
+                            disabled={!canManageSettings}
+                          />
+                        {/snippet}
+                      </Field>
+                      <Field id="drop-activity-window-{type}" label={m.drop_activity_window_label()}>
+                        {#snippet children(id, describedBy)}
+                          <input
+                            {id} aria-describedby={describedBy}
+                            type="number"
+                            bind:value={configs[type].activity.windowMinutes}
+                            min={DROP_ACTIVITY_WINDOW_MINUTES_RANGE.min}
+                            max={DROP_ACTIVITY_WINDOW_MINUTES_RANGE.max}
+                            class="input"
+                            disabled={!canManageSettings}
+                          />
+                        {/snippet}
+                      </Field>
+                    </div>
+                  {/if}
+                {/if}
+                <p class="text-2xs text-on-surface-variant">{m.drop_activity_desc()}</p>
+              </div>
+            </details>
+          </section>
+
+          <section class="bg-surface-container-low/40 border border-outline-variant/30 p-6 rounded-xl space-y-5">
+            <div class="border-b border-outline-variant/15 pb-3">
+              <h3 class="text-lg font-semibold flex items-center gap-2"><Papicon icon="Tasks" size={18} /> {m.drop_modes_heading()}</h3>
+              <p class="text-xs text-on-surface-variant mt-1">{m.drop_modes_desc()}</p>
+            </div>
+
+            {#if enabledDropModes(configs[type]).length === 0}
+              <Callout variant="warning">
+                {m.drop_no_mode_warning()}
+              </Callout>
+            {/if}
+
+            {@render modeCard(type, 'first', m.drop_mode_first_title(), m.drop_mode_first_desc(), 'grid-cols-2')}
+            {@render modeCard(type, 'race', m.drop_mode_race_title(), m.drop_mode_race_desc(), 'grid-cols-1 sm:grid-cols-3', raceWinnersField)}
+            {@render modeCard(type, 'window', m.drop_mode_window_title(), m.drop_mode_window_desc(), 'grid-cols-1 sm:grid-cols-3', windowDurationField)}
+          </section>
+
+          {#if announcement}
+            {@const estimate = estimateWeeklyDrops(type, configs[type], globalSettings)}
+            <section class="bg-surface-container-low/40 border border-outline-variant/30 p-6 rounded-xl space-y-5">
+              <div class="border-b border-outline-variant/15 pb-3">
+                <h3 class="text-lg font-semibold flex items-center gap-2"><Papicon icon="Eye" size={18} /> {m.drop_preview_heading()}</h3>
+                <p class="text-xs text-on-surface-variant mt-1">{m.drop_preview_desc()}</p>
+              </div>
+
+              <DropAnnouncementPreview
+                labels={announcement}
+                {type}
+                settings={configs[type]}
+                jackpot={globalSettings}
+                modeLabels={MODE_LABELS}
+                itemLabel={type === 'RPG_ITEM' ? likeliestItemLabel() : null}
+                {mentionRoleName}
+              />
+
+              {#if estimate}
+                <div class="space-y-1 border-t border-outline-variant/10 pt-4">
+                  {#if estimate.distributed > 0}
+                    <p class="text-sm font-semibold">
+                      {m.drop_estimate_distributed({ drops: formatEstimate(estimate.drops), total: formatEstimate(estimate.distributed), resource: TYPE_LABELS[type]() })}
+                    </p>
+                  {/if}
+                  <!-- Un champ vidé pendant la saisie donne NaN : la ligne attend un vrai nombre. -->
+                  {#if estimate.window && Number.isFinite(estimate.window.perParticipant)}
+                    <p class="text-sm font-semibold">
+                      {m.drop_estimate_window({ amount: formatEstimate(estimate.window.perParticipant), resource: TYPE_LABELS[type](), drops: formatEstimate(estimate.window.drops) })}
+                    </p>
+                  {/if}
+                  <p class="text-2xs text-on-surface-variant">{m.drop_estimate_hint()}</p>
+                </div>
+              {/if}
+            </section>
           {/if}
-        </section>
+        </div>
       {/if}
     </div>
-  {/if}
+
+    <aside class="hidden lg:block sticky top-4" aria-label={m.drop_status_title()}>
+      <section class="bg-surface-container-low/40 border border-outline-variant/30 p-4 rounded-xl space-y-3">
+        <h3 class="text-sm font-semibold flex items-center gap-2"><Papicon icon="List" size={15} /> {m.drop_status_title()}</h3>
+        {@render statusPanel()}
+      </section>
+    </aside>
+  </div>
 </ModulePage>
