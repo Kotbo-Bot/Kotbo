@@ -7,7 +7,7 @@
  * pour un palier mal réglé. Le dashboard signale ces rôles sur l'onglet Paliers.
  */
 import { EmbedBuilder, type Client, type Guild, type GuildMember, type Role } from 'discord.js';
-import { crossedTiers, tiersAbove, type ReputationTier } from '@kotbo/shared';
+import { reachedTiers, tiersAbove, type ReputationTier } from '@kotbo/shared';
 import { COLORS } from '../../utils/embeds.js';
 import { logger } from '../../utils/logger.js';
 import { resolveGuildLocale, type BotLocale } from '../../utils/i18n.js';
@@ -30,16 +30,20 @@ export function manageableRole(guild: Pick<Guild, 'roles'>, roleId: string): Rol
   return role;
 }
 
-/** Donne les rôles des paliers franchis. Rend ceux réellement donnés. */
+/**
+ * Donne les rôles de tous les paliers atteints que le membre n'a pas encore.
+ * Pas seulement celui franchi par ce vote : un palier créé après coup, ou un
+ * rôle retiré à la main, est rattrapé au remerciement suivant. Rend les
+ * paliers réellement donnés.
+ */
 export async function grantReachedTiers(
   member: GuildMember,
   tiers: readonly ReputationTier[],
-  before: number,
-  after: number,
+  total: number,
   reason: string,
 ): Promise<ReputationTier[]> {
   const granted: ReputationTier[] = [];
-  for (const tier of crossedTiers(before, after, tiers)) {
+  for (const tier of reachedTiers(total, tiers)) {
     const role = manageableRole(member.guild, tier.roleId);
     if (!role) {
       logger.warn('Reputation', `Palier ${tier.threshold} : rôle ${tier.roleId} impossible à donner sur ${member.guild.id ?? '?'}`);
@@ -96,17 +100,22 @@ async function announce(member: GuildMember, channelId: string, tier: Reputation
   });
 }
 
-/** Après un gain : rôles des paliers franchis, puis annonce. */
+/**
+ * Après un gain : rôles des paliers atteints, puis annonce. Seul un palier
+ * franchi par ce vote est annoncé : un rattrapage se fait en silence, sans quoi
+ * le salon annoncerait comme nouveau un seuil dépassé depuis longtemps.
+ */
 export async function applyReputationGain(client: Client, guildId: string, userId: string, before: number, after: number): Promise<void> {
   const { tiers, announceChannelId } = await getReputationConfig(guildId);
-  if (crossedTiers(before, after, tiers).length === 0) return;
+  if (reachedTiers(after, tiers).length === 0) return;
 
   const member = await fetchMember(client, guildId, userId);
   if (!member) return;
   const locale = await resolveGuildLocale(guildId, member.guild.preferredLocale);
-  const granted = await grantReachedTiers(member, tiers, before, after, m.b2_rep_tier_audit_reason({}, { locale }));
-  if (announceChannelId && granted.length > 0) {
-    await announce(member, announceChannelId, granted[granted.length - 1], locale);
+  const granted = await grantReachedTiers(member, tiers, after, m.b2_rep_tier_audit_reason({}, { locale }));
+  const newlyCrossed = granted.filter((tier) => tier.threshold > before);
+  if (announceChannelId && newlyCrossed.length > 0) {
+    await announce(member, announceChannelId, newlyCrossed[newlyCrossed.length - 1], locale);
   }
 }
 

@@ -27,9 +27,9 @@ function byThreshold<T extends ReputationTier>(tiers: readonly T[]): T[] {
   return [...tiers].sort((a, b) => a.threshold - b.threshold);
 }
 
-/** Paliers atteints en passant de `before` à `after`, du plus bas au plus haut. */
-export function crossedTiers<T extends ReputationTier>(before: number, after: number, tiers: readonly T[]): T[] {
-  return byThreshold(tiers).filter((tier) => tier.threshold > before && tier.threshold <= after);
+/** Paliers qu'un total atteint, du plus bas au plus haut. */
+export function reachedTiers<T extends ReputationTier>(total: number, tiers: readonly T[]): T[] {
+  return byThreshold(tiers).filter((tier) => tier.threshold <= total);
 }
 
 /** Paliers qu'un total n'atteint pas : leurs rôles n'ont plus lieu d'être. */

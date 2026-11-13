@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import {
   REPUTATION_TIERS_MAX,
   REPUTATION_TIER_THRESHOLD,
-  crossedTiers,
+  reachedTiers,
   tiersAbove,
   validateReputationTiers,
 } from '@kotbo/shared';
@@ -13,21 +13,17 @@ const TIERS = [
   { threshold: 100, roleId: 'r100' },
 ];
 
-describe('crossedTiers', () => {
-  test('rend le palier atteint par le gain', () => {
-    expect(crossedTiers(9, 10, TIERS)).toEqual([{ threshold: 10, roleId: 'r10' }]);
+describe('reachedTiers', () => {
+  test('rend les paliers atteints, du plus bas au plus haut', () => {
+    expect(reachedTiers(60, TIERS).map((tier) => tier.threshold)).toEqual([10, 50]);
   });
 
-  test('rien quand le total reste entre deux paliers', () => {
-    expect(crossedTiers(10, 11, TIERS)).toEqual([]);
+  test('un total pile sur le seuil atteint le palier', () => {
+    expect(reachedTiers(10, TIERS).map((tier) => tier.threshold)).toEqual([10]);
   });
 
-  test('plusieurs paliers franchis d\'un coup, du plus bas au plus haut', () => {
-    expect(crossedTiers(0, 60, TIERS).map((tier) => tier.threshold)).toEqual([10, 50]);
-  });
-
-  test('une baisse ne franchit rien', () => {
-    expect(crossedTiers(60, 40, TIERS)).toEqual([]);
+  test('sous le premier seuil, rien', () => {
+    expect(reachedTiers(9, TIERS)).toEqual([]);
   });
 });
 

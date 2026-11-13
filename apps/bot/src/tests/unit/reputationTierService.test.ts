@@ -31,34 +31,40 @@ function fakeMember(held: string[], roles: Record<string, { editable: boolean; m
 }
 
 describe('grantReachedTiers', () => {
-  test('donne le rôle du palier franchi', async () => {
+  test('donne le rôle du palier atteint', async () => {
     const { member, add } = fakeMember([], { r10: { editable: true }, r50: { editable: true } });
-    const granted = await grantReachedTiers(member, TIERS, 9, 10, 'raison');
+    const granted = await grantReachedTiers(member, TIERS, 10, 'raison');
     expect(granted.map((tier) => tier.roleId)).toEqual(['r10']);
     expect(add).toHaveBeenCalledTimes(1);
   });
 
   test('saute un rôle que le bot ne peut pas donner, sans planter', async () => {
     const { member, add } = fakeMember([], { r10: { editable: false } });
-    expect(await grantReachedTiers(member, TIERS, 9, 10, 'raison')).toEqual([]);
+    expect(await grantReachedTiers(member, TIERS, 10, 'raison')).toEqual([]);
     expect(add).not.toHaveBeenCalled();
+  });
+
+  test('rattrape un palier plus bas que le membre n\'a pas encore', async () => {
+    const { member } = fakeMember(['r50'], { r10: { editable: true }, r50: { editable: true } });
+    const granted = await grantReachedTiers(member, TIERS, 51, 'raison');
+    expect(granted.map((tier) => tier.roleId)).toEqual(['r10']);
   });
 
   test('saute un rôle supprimé du serveur', async () => {
     const { member } = fakeMember([], {});
-    expect(await grantReachedTiers(member, TIERS, 9, 10, 'raison')).toEqual([]);
+    expect(await grantReachedTiers(member, TIERS, 10, 'raison')).toEqual([]);
   });
 
   test('ne redonne pas un rôle déjà porté et ne l\'annonce pas', async () => {
     const { member, add } = fakeMember(['r10'], { r10: { editable: true } });
-    expect(await grantReachedTiers(member, TIERS, 9, 10, 'raison')).toEqual([]);
+    expect(await grantReachedTiers(member, TIERS, 10, 'raison')).toEqual([]);
     expect(add).not.toHaveBeenCalled();
   });
 
   test('un échec Discord sur un rôle n\'empêche pas les suivants', async () => {
     const { member, add } = fakeMember([], { r10: { editable: true }, r50: { editable: true } });
     add.mockImplementationOnce(async () => { throw new Error('Missing Permissions'); });
-    const granted = await grantReachedTiers(member, TIERS, 0, 60, 'raison');
+    const granted = await grantReachedTiers(member, TIERS, 60, 'raison');
     expect(granted.map((tier) => tier.roleId)).toEqual(['r50']);
   });
 });

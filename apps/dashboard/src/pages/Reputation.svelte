@@ -75,7 +75,7 @@
       xpPerRep: source.xpPerRep,
       coinsPerRep: source.coinsPerRep,
       announceChannelId: source.announceChannelId || null,
-      tiers: source.tiers.map(({ threshold, roleId }) => ({ threshold, roleId })),
+      tiers: tiersKey(source.tiers),
     });
   }
 
@@ -118,6 +118,11 @@
   }
   const levelingActive = $derived(isModuleActive('leveling'));
   const economyActive = $derived(isModuleActive('economy'));
+
+  function tiersKey(tiers: ReputationConfig['tiers']): string {
+    return JSON.stringify(tiers.map(({ threshold, roleId }) => ({ threshold, roleId })));
+  }
+  const tiersDirty = $derived(tiersKey(config.tiers) !== tiersKey(savedConfig.tiers));
 
   /** Mêmes règles que l'API, pour le dire avant l'enregistrement. */
   const tiersCheck = $derived(validateReputationTiers(config.tiers));
@@ -260,7 +265,7 @@
 
   /** Appelé par la barre « Modifications non enregistrées » du layout. */
   async function saveConfig(): Promise<boolean> {
-    if (!settingsValid || !('tiers' in tiersCheck)) {
+    if (!settingsValid || (tiersDirty && !('tiers' in tiersCheck))) {
       toast.error(tiersError ?? m.rep_settings_invalid());
       return false;
     }
@@ -271,7 +276,9 @@
       xpPerRep: config.xpPerRep,
       coinsPerRep: config.coinsPerRep,
       announceChannelId: config.announceChannelId || null,
-      tiers: tiersCheck.tiers,
+      // Paliers inchangés : non renvoyés. Un rôle supprimé depuis ferait refuser
+      // par l'API tout l'enregistrement, même d'un simple réglage voisin.
+      ...(tiersDirty && 'tiers' in tiersCheck ? { tiers: tiersCheck.tiers } : {}),
     });
     if (!result) return false;
     savedConfig = cloneConfig(result.config);
