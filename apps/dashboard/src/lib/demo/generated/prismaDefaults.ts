@@ -1987,6 +1987,8 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "amount": 0,
     "paidAt": null,
     "attemptedAt": "__NOW__",
+    "attempts": 0,
+    "abandonedAt": null,
     "createdAt": "__NOW__"
   },
   "EconomyConfig": {

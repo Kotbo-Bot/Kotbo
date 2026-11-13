@@ -236,6 +236,19 @@ export function dropActivityVerdict(input: {
 }
 
 /**
+ * Délai entre deux lectures d'un salon calme pendant l'attente d'activité. Le drop dû
+ * attend parfois un intervalle entier : relire Discord à chaque minute coûterait jusqu'à
+ * des centaines d'appels par drop, pour une fenêtre d'activité d'au moins cinq minutes.
+ */
+export const DROP_ACTIVITY_RECHECK_MINUTES = 5;
+
+/** Faut-il relire l'activité du salon ? `lastCheckAt` vide = jamais lue. */
+export function dropActivityCheckDue(lastCheckAt: Date | null, now: Date): boolean {
+  if (!lastCheckAt) return true;
+  return now.getTime() - lastCheckAt.getTime() >= DROP_ACTIVITY_RECHECK_MINUTES * 60 * 1000;
+}
+
+/**
  * Bilan d'un type sur la période du conseil : drops terminés, et parmi eux ceux qui ont
  * expiré sans que personne les ramasse. Les drops encore ouverts n'y entrent pas.
  */
@@ -381,6 +394,38 @@ export function hasDropClaimRules(rules: DropClaimRules): boolean {
 /** Première règle que le membre ne respecte pas, ou `null` s'il peut ramasser. */
 export function dropClaimBlocker(rules: DropClaimRules, facts: DropClaimFacts): DropClaimBlocker | null {
   return DROP_CLAIM_RULES.find((rule) => rule.active(rules) && rule.blocks(rules, facts))?.blocker ?? null;
+}
+
+/**
+ * Le rôle requis a disparu du serveur. `guildRoleIds` vide (`null`) = rôles inconnus :
+ * rien n'est signalé sur une donnée absente.
+ */
+export function dropClaimRoleMissing(rules: DropClaimRules, guildRoleIds: readonly string[] | null): boolean {
+  return rules.requiredRoleId !== null && guildRoleIds !== null && !guildRoleIds.includes(rules.requiredRoleId);
+}
+
+/**
+ * Règles réellement appliquées au clic : un rôle requis supprimé du serveur ne peut plus
+ * être porté par personne, et bloquerait tous les ramassages sans que rien ne le dise.
+ * La règle est ignorée, et la page signale le rôle manquant.
+ */
+export function effectiveDropClaimRules(rules: DropClaimRules, guildRoleIds: readonly string[] | null): DropClaimRules {
+  return dropClaimRoleMissing(rules, guildRoleIds) ? { ...rules, requiredRoleId: null } : rules;
+}
+
+/**
+ * Reprises d'un versement en suspens avant abandon. Au-delà, l'erreur ne tient plus à un
+ * incident passager : le ramassage est marqué abandonné au lieu d'être repris sans fin.
+ */
+export const DROP_CLAIM_SETTLE_MAX_ATTEMPTS = 5;
+
+/**
+ * Sort d'un versement en suspens au passage du cycle. Module éteint : le gain promis au
+ * membre attend son retour, sans compter de tentative. Sinon on verse, jusqu'au plafond.
+ */
+export function dropClaimSettleAction(input: { moduleEnabled: boolean; attempts: number }): 'pay' | 'hold' | 'abandon' {
+  if (!input.moduleEnabled) return 'hold';
+  return input.attempts >= DROP_CLAIM_SETTLE_MAX_ATTEMPTS ? 'abandon' : 'pay';
 }
 
 /** Bornée, et sous le minimum la règle est éteinte plutôt que ramenée à 1. */

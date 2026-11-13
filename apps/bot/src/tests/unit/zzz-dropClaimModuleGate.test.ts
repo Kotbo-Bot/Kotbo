@@ -22,6 +22,8 @@
  */
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
 import path from 'node:path';
+import { SnowflakeUtil } from 'discord.js';
+import { DROP_CLAIM_SETTLE_MAX_ATTEMPTS } from '@kotbo/shared';
 import { completeModuleMock } from '../helpers/moduleMock.js';
 
 const GUILD_ID = 'guilde-drops';
@@ -82,6 +84,7 @@ const fauxPrisma = {
   dropClaim: {
     deleteMany: mock(async () => ({ count: 1 })),
     updateMany: dropClaimUpdateMany,
+    update: mock(async () => ({})),
     findMany: mock(async () => [] as unknown[]),
     count: mock(async () => ramassagesDuJour),
   },
@@ -114,9 +117,10 @@ const editReply = mock(async (_payload: { content: string }) => undefined);
 function clic(member: { roles: string[]; joined_at: string } = {
   roles: ['role-membre'],
   joined_at: new Date(Date.now() - 400 * 24 * 60 * 60 * 1000).toISOString(),
-}) {
+}, guildRoleIds: string[] | null = null) {
   return {
     guildId: GUILD_ID,
+    guild: guildRoleIds ? { roles: { cache: new Map(guildRoleIds.map((id) => [id, {}])) } } : null,
     user: { id: 'membre-1' },
     member,
     client: {},
@@ -138,6 +142,7 @@ beforeEach(() => {
   tx.dropClaim.deleteMany.mockClear();
   fauxPrisma.dropClaim.deleteMany.mockClear();
   fauxPrisma.dropClaim.findMany.mockReset();
+  fauxPrisma.dropClaim.update.mockClear();
   dropClaimUpdateMany.mockClear();
 });
 
@@ -221,6 +226,20 @@ describe('règles de ramassage du serveur', () => {
     expect(tx.dropClaim.create).not.toHaveBeenCalled();
   });
 
+  test('rôle requis supprimé du serveur : la règle est ignorée, le clic passe', async () => {
+    reglesRamassage = { requiredRoleId: 'role-vip' };
+    await handleDropClaim(clic(undefined, ['role-membre']), DROP_ID);
+
+    expect(tx.dropClaim.create).toHaveBeenCalledTimes(1);
+  });
+
+  test('rôle requis toujours sur le serveur : refusé sans lui', async () => {
+    reglesRamassage = { requiredRoleId: 'role-vip' };
+    await handleDropClaim(clic(undefined, ['role-membre', 'role-vip']), DROP_ID);
+
+    expect(tx.dropClaim.create).not.toHaveBeenCalled();
+  });
+
   test('règles respectées : le clic passe', async () => {
     reglesRamassage = { dailyLimit: 2, minMemberDays: 7, requiredRoleId: 'role-membre' };
     ramassagesDuJour = 1;
@@ -238,17 +257,20 @@ describe('reprise des versements restés en suspens', () => {
     userId: 'membre-2',
     amount: 120,
     paidAt: null,
+    abandonedAt: null,
+    attempts: 0,
     attemptedAt: new Date(Date.now() - 30 * 60 * 1000),
     createdAt: new Date(Date.now() - 30 * 60 * 1000),
     drop: dropXp,
   };
 
-  test('seuls les ramassages non versés dont la tentative est ancienne sont relus', async () => {
+  test('seuls les ramassages ni versés ni abandonnés dont la tentative est ancienne sont relus', async () => {
     fauxPrisma.dropClaim.findMany.mockImplementation(async () => []);
     await settlePendingDropClaims({} as never);
 
-    const [args] = fauxPrisma.dropClaim.findMany.mock.calls[0] as unknown as [{ where: { paidAt: null; attemptedAt: { lte: Date } } }];
+    const [args] = fauxPrisma.dropClaim.findMany.mock.calls[0] as unknown as [{ where: { paidAt: null; abandonedAt: null; attemptedAt: { lte: Date } } }];
     expect(args.where.paidAt).toBeNull();
+    expect(args.where.abandonedAt).toBeNull();
     expect(args.where.attemptedAt.lte.getTime()).toBeLessThan(Date.now() - 60 * 1000);
   });
 
@@ -258,6 +280,7 @@ describe('reprise des versements restés en suspens', () => {
 
     expect(addXp).toHaveBeenCalledTimes(1);
     expect(addXp.mock.calls[0]?.slice(0, 3)).toEqual([GUILD_ID, 'membre-2', 120]);
+    expect(fauxPrisma.dropClaim.update).toHaveBeenCalledWith({ where: { id: 'claim-2' }, data: { attempts: { increment: 1 } } });
     expect(dropClaimUpdateMany).toHaveBeenCalledWith({
       where: { id: 'claim-2', paidAt: null },
       data: { paidAt: expect.any(Date) },
@@ -273,13 +296,26 @@ describe('reprise des versements restés en suspens', () => {
     expect(marquagesVerses()).toHaveLength(0);
   });
 
-  test('module éteint depuis : la place est libérée sans versement', async () => {
+  test('module éteint depuis : le gain promis attend, sans être retiré ni compté', async () => {
     levelingActif = false;
     fauxPrisma.dropClaim.findMany.mockImplementation(async () => [enSuspens]);
     await settlePendingDropClaims({} as never);
 
     expect(addXp).not.toHaveBeenCalled();
-    expect(tx.dropClaim.deleteMany).toHaveBeenCalledWith({ where: { id: 'claim-2', paidAt: null } });
+    expect(tx.dropClaim.deleteMany).not.toHaveBeenCalled();
+    expect(fauxPrisma.dropClaim.deleteMany).not.toHaveBeenCalled();
+    expect(fauxPrisma.dropClaim.update).not.toHaveBeenCalled();
+  });
+
+  test('reprises épuisées : le ramassage est abandonné, sans nouveau versement', async () => {
+    fauxPrisma.dropClaim.findMany.mockImplementation(async () => [{ ...enSuspens, attempts: DROP_CLAIM_SETTLE_MAX_ATTEMPTS }]);
+    await settlePendingDropClaims({} as never);
+
+    expect(addXp).not.toHaveBeenCalled();
+    expect(dropClaimUpdateMany).toHaveBeenCalledWith({
+      where: { id: 'claim-2', paidAt: null },
+      data: { abandonedAt: expect.any(Date) },
+    });
   });
 
   test('nouvel échec : le ramassage reste en suspens pour le passage suivant', async () => {
@@ -303,7 +339,7 @@ describe('messages récents d\'un salon, pour l\'attente d\'activité', () => {
   }] as const;
 
   function salon(messages: Array<readonly [string, unknown]>) {
-    const fetchMessages = mock(async (_options: { limit: number }) => new Map(messages));
+    const fetchMessages = mock(async (_options: { limit: number; after?: string }) => new Map(messages));
     const client = {
       channels: { fetch: mock(async () => ({ isTextBased: () => true, messages: { fetch: fetchMessages } })) },
     } as never;
@@ -323,10 +359,14 @@ describe('messages récents d\'un salon, pour l\'attente d\'activité', () => {
     expect(await countRecentMemberMessages(client, 'salon-1', new Date(now - 15 * 60 * 1000))).toBe(2);
   });
 
-  test('une seule page de messages est lue', async () => {
+  test('une seule page est lue, à partir du début de la fenêtre', async () => {
     const { client, fetchMessages } = salon([]);
-    await countRecentMemberMessages(client, 'salon-1', new Date(now - 15 * 60 * 1000));
-    expect(fetchMessages).toHaveBeenCalledWith({ limit: 100 });
+    const since = new Date(now - 15 * 60 * 1000);
+    await countRecentMemberMessages(client, 'salon-1', since);
+    expect(fetchMessages).toHaveBeenCalledWith({
+      limit: 100,
+      after: SnowflakeUtil.generate({ timestamp: since.getTime() }).toString(),
+    });
   });
 
   test('salon injoignable : zéro, le drop attend son plafond de retard', async () => {

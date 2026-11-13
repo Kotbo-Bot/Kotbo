@@ -39,7 +39,12 @@ const mockDb = {
   rpgItem: {
     findMany: mock(async () => [{ id: 'epee', name: 'Lame du Crépuscule', emoji: 'E' }]),
   },
+  dropClaim: {
+    count: mock(async () => abandonedClaimCount),
+  },
 };
+
+let abandonedClaimCount = 0;
 
 let recentDropRows: Array<Record<string, unknown>> = [];
 
@@ -420,5 +425,75 @@ describe('handleDropsRoutes - règles de ramassage', () => {
 
     expect(res.statusCode).toBe(200);
     expect(JSON.parse(res.body).dropClaimRules).toEqual({ dailyLimit: 0, minMemberDays: 7, requiredRoleId: null });
+  });
+
+  /** Serveur en cache avec ses rôles : l'API peut vérifier le rôle requis. */
+  const clientAvecRoles = {
+    guilds: { cache: new Map([['guild-123', { name: 'Serveur', roles: { cache: new Map([['role-vip', {}]]) } }]]) },
+  } as unknown as Client;
+
+  test('un rôle requis absent du serveur est refusé', async () => {
+    const res = createMockResponse();
+    await handleDropsRoutes(
+      createMockRequest({ dropClaimRules: { requiredRoleId: 'role-inconnu' } }),
+      res,
+      ['api', 'dashboard', 'guilds', 'guild-123', 'drops'],
+      clientAvecRoles,
+      mockUser,
+      'guild-123',
+      mockAccess,
+    );
+
+    expect(res.statusCode).toBe(400);
+    expect(mockDb.guild.update).not.toHaveBeenCalled();
+  });
+
+  test('un rôle requis présent sur le serveur est enregistré', async () => {
+    const res = createMockResponse();
+    await handleDropsRoutes(
+      createMockRequest({ dropClaimRules: { requiredRoleId: 'role-vip' } }),
+      res,
+      ['api', 'dashboard', 'guilds', 'guild-123', 'drops'],
+      clientAvecRoles,
+      mockUser,
+      'guild-123',
+      mockAccess,
+    );
+
+    expect(res.statusCode).toBe(200);
+  });
+
+  test('un rôle supprimé depuis ne bloque pas l\'enregistrement des autres réglages', async () => {
+    guildRow = { ...guildRow, dropClaimRules: { requiredRoleId: 'role-supprime' } };
+    const res = createMockResponse();
+    await handleDropsRoutes(
+      createMockRequest({ dropLifetimeMinutes: 30 }),
+      res,
+      ['api', 'dashboard', 'guilds', 'guild-123', 'drops'],
+      clientAvecRoles,
+      mockUser,
+      'guild-123',
+      mockAccess,
+    );
+
+    expect(res.statusCode).toBe(200);
+  });
+
+  test('la page reçoit le nombre de versements abandonnés', async () => {
+    abandonedClaimCount = 2;
+    const res = createMockResponse();
+    await handleDropsRoutes(
+      createMockRequest({}, 'GET'),
+      res,
+      ['api', 'dashboard', 'guilds', 'guild-123', 'drops'],
+      mockClient,
+      mockUser,
+      'guild-123',
+      mockAccess,
+    );
+
+    expect(JSON.parse(res.body).abandonedClaims).toBe(2);
+    expect(mockDb.dropClaim.count).toHaveBeenCalledWith({ where: { guildId: 'guild-123', abandonedAt: { not: null } } });
+    abandonedClaimCount = 0;
   });
 });
