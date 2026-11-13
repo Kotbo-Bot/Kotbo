@@ -5,7 +5,8 @@ import {
 } from 'discord.js';
 import { errorContainer, kotboContainer } from '../../utils/embeds.js';
 import { E, rankEmoji } from '../../utils/emojis.js';
-import { giveRep, getReputation, getReputationLeaderboard } from '../../services/community/reputationService.js';
+import { getReputation, getReputationLeaderboard } from '../../services/community/reputationService.js';
+import { recordRep } from '../../services/community/reputationActions.js';
 import { repRefusalText } from '../../services/community/reputationMessages.js';
 import { incrementQuestProgress } from '../../services/community/questService.js';
 import type { SlashCommandDefinition } from '../../commands.js';
@@ -61,7 +62,13 @@ async function execute(interaction: ChatInputCommandInteraction) {
     const target = interaction.options.getUser('membre', true);
     const reason = interaction.options.getString('raison') ?? undefined;
 
-    const result = await giveRep(guildId, interaction.user.id, target.id, reason, { receiverIsBot: target.bot });
+    const result = await recordRep(interaction.client, {
+      guildId,
+      giverId: interaction.user.id,
+      receiverId: target.id,
+      reason,
+      receiverIsBot: target.bot,
+    });
 
     if (!result.success) {
       await interaction.reply({

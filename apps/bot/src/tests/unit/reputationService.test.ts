@@ -1,12 +1,11 @@
 import { describe, expect, test, mock, beforeEach } from 'bun:test';
 import path from 'node:path';
-import { completeModuleMock } from '../helpers/moduleMock.js';
 
 let votesCount = 0;
 let createError: unknown = null;
 let rankAbove = 0n;
 let receivedTotal = 0;
-let configRow: { dailyLimit: number } | null = null;
+let configRow: { dailyLimit: number; announceChannelId?: string | null; tiers?: Array<{ threshold: number; roleId: string }> } | null = null;
 let voteRows: Array<Record<string, unknown>> = [];
 let foundVote: Record<string, unknown> | null = null;
 
@@ -28,7 +27,14 @@ const mockDb = {
     findUnique: mock(async (_args?: unknown) => configRow),
     upsert: mock(async (args: { create: Record<string, unknown> }) => args.create),
   },
+  reputationTier: {
+    deleteMany: mock(async (_args?: unknown) => ({ count: 0 })),
+    createMany: mock(async (_args?: unknown) => ({ count: 0 })),
+  },
+  $transaction: mock(async (fn: (tx: unknown) => Promise<unknown>) => fn(mockDb)),
   $queryRaw: mock(async (..._args: unknown[]) => [{ above: rankAbove }]),
+  // Lu par le vrai `resolveGuildTimezone` : sans serveur, le fuseau par défaut.
+  guild: { findUnique: mock(async (_args?: unknown) => null) },
 };
 
 for (const dbPath of ['../../utils/db.ts', '../../utils/db.js']) {
@@ -36,27 +42,6 @@ for (const dbPath of ['../../utils/db.ts', '../../utils/db.js']) {
     default: mockDb,
     prisma: mockDb,
     prismaRead: mockDb,
-  }));
-}
-
-const memory = new Map<string, unknown>();
-const cachePath = path.resolve(__dirname, '../../utils/cache.ts');
-for (const suffix of ['../../utils/cache.ts', '../../utils/cache.js']) {
-  mock.module(path.resolve(__dirname, suffix), () => completeModuleMock(cachePath, {
-    cache: {
-      get: async (key: string) => memory.get(key) ?? null,
-      set: async (key: string, value: unknown) => { memory.set(key, value); },
-      delete: async (key: string) => { memory.delete(key); },
-      wrap: async (_key: string, _ttl: number, fn: () => Promise<unknown>) => fn(),
-    },
-  }));
-}
-
-const timezonePath =path.resolve(__dirname, '../../utils/timezone.ts');
-for (const suffix of ['../../utils/timezone.ts', '../../utils/timezone.js']) {
-  mock.module(path.resolve(__dirname, suffix), () => completeModuleMock(timezonePath, {
-    DEFAULT_TIMEZONE: 'UTC',
-    resolveGuildTimezone: mock(async () => 'UTC'),
   }));
 }
 
@@ -85,6 +70,8 @@ beforeEach(async () => {
     mockDb.reputationVote.findMany,
     mockDb.reputationVote.delete,
     mockDb.reputationConfig.upsert,
+    mockDb.reputationTier.deleteMany,
+    mockDb.reputationTier.createMany,
     mockDb.$queryRaw,
   ]) fn.mockClear();
   await invalidateReputationConfigCache('g');
@@ -166,17 +153,33 @@ describe('getReputation', () => {
   });
 });
 
+const DEFAULTS = { dailyLimit: 3, announceChannelId: null, tiers: [] };
+
 describe('réglages', () => {
   test('sans ligne, les valeurs par défaut', async () => {
-    expect(await getReputationConfig('g')).toEqual({ dailyLimit: 3 });
+    expect(await getReputationConfig('g')).toEqual(DEFAULTS);
+  });
+
+  test('les paliers sont rendus avec les réglages', async () => {
+    configRow = { dailyLimit: 3, announceChannelId: '1', tiers: [{ threshold: 10, roleId: 'r' }] };
+    expect(await getReputationConfig('g')).toEqual({ dailyLimit: 3, announceChannelId: '1', tiers: [{ threshold: 10, roleId: 'r' }] });
   });
 
   test('la sauvegarde écrit la ligne et invalide le cache', async () => {
-    expect(await getReputationConfig('g')).toEqual({ dailyLimit: 3 });
-    configRow = { dailyLimit: 8 };
+    expect(await getReputationConfig('g')).toEqual(DEFAULTS);
+    configRow = { dailyLimit: 8, announceChannelId: null, tiers: [] };
     await saveReputationConfig('g', { dailyLimit: 8 });
     expect(mockDb.reputationConfig.upsert).toHaveBeenCalledTimes(1);
-    expect(await getReputationConfig('g')).toEqual({ dailyLimit: 8 });
+    expect(mockDb.reputationTier.deleteMany).not.toHaveBeenCalled();
+    expect(await getReputationConfig('g')).toEqual({ ...DEFAULTS, dailyLimit: 8 });
+  });
+
+  test('des paliers envoyés remplacent ceux en place', async () => {
+    const tiers = [{ threshold: 10, roleId: 'r1' }, { threshold: 20, roleId: 'r2' }];
+    await saveReputationConfig('g', { tiers });
+    expect(mockDb.reputationTier.deleteMany).toHaveBeenCalledTimes(1);
+    const created = (mockDb.reputationTier.createMany.mock.calls[0][0] as { data: unknown[] }).data;
+    expect(created).toEqual(tiers.map((tier) => ({ guildId: 'g', ...tier })));
   });
 });
 

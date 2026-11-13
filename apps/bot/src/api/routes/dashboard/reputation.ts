@@ -12,7 +12,16 @@
  */
 import { IncomingMessage, ServerResponse } from 'node:http';
 import { Client } from 'discord.js';
-import { REPUTATION_DAILY_LIMIT, isReputationPeriod, type ReputationPeriod } from '@kotbo/shared';
+import {
+  REPUTATION_DAILY_LIMIT,
+  REPUTATION_TIERS_MAX,
+  REPUTATION_TIER_THRESHOLD,
+  isReputationPeriod,
+  validateReputationTiers,
+  type ReputationPeriod,
+  type ReputationTierError,
+} from '@kotbo/shared';
+import { resolveGuildLocale } from '../../../utils/i18n.js';
 import { logger } from '../../../utils/logger.js';
 import {
   getGuildName,
@@ -23,12 +32,13 @@ import {
   type DashboardAccess,
 } from '../../shared.js';
 import {
-  deleteReputationVote,
   getReputationDashboardData,
   listReputationVotes,
   saveReputationConfig,
   type ReputationSettings,
 } from '../../../services/community/reputationService.js';
+import { revokeRep } from '../../../services/community/reputationActions.js';
+import { manageableRole, tierAnnouncementLabels } from '../../../services/community/reputationTierService.js';
 import { getMemberIdentities } from '../../../services/moderation/memberIdentityService.js';
 import { jsonFailure } from '../../shared/failure.js';
 
@@ -54,8 +64,25 @@ async function identityResolver(client: Client, guildId: string, userIds: string
   };
 }
 
-/** Valide un corps de PATCH. Rend les champs à écrire, ou le motif du refus. */
-function parseConfigPatch(body: unknown): { patch: Partial<ReputationSettings> } | { error: string } {
+const TIER_ERRORS: Record<ReputationTierError, string> = {
+  NOT_ARRAY: 'Les paliers doivent être une liste',
+  TOO_MANY: `Pas plus de ${REPUTATION_TIERS_MAX} paliers`,
+  BAD_THRESHOLD: `Chaque seuil doit être un entier entre ${REPUTATION_TIER_THRESHOLD.min} et ${REPUTATION_TIER_THRESHOLD.max}`,
+  BAD_ROLE: 'Chaque palier doit désigner un rôle',
+  DUPLICATE_THRESHOLD: 'Deux paliers ne peuvent pas avoir le même seuil',
+  DUPLICATE_ROLE: 'Un même rôle ne peut pas servir à deux paliers',
+};
+
+/**
+ * Valide un corps de PATCH. Rend les champs à écrire, ou le motif du refus.
+ * `guildRoleIds` vaut `null` quand le serveur n'est pas dans le cache de ce
+ * shard : l'existence des rôles n'est alors pas vérifiable ici.
+ */
+function parseConfigPatch(
+  body: unknown,
+  guildId: string,
+  guildRoleIds: Set<string> | null,
+): { patch: Partial<ReputationSettings> } | { error: string } {
   if (!body || typeof body !== 'object') return { error: 'Payload invalide' };
   const patch: Partial<ReputationSettings> = {};
 
@@ -66,6 +93,24 @@ function parseConfigPatch(body: unknown): { patch: Partial<ReputationSettings> }
       return { error: `La limite par jour doit être un entier entre ${min} et ${max}` };
     }
     patch.dailyLimit = value;
+  }
+
+  if (has(body, 'announceChannelId')) {
+    const value = (body as { announceChannelId: unknown }).announceChannelId;
+    if (value !== null && (typeof value !== 'string' || !SNOWFLAKE_RE.test(value.trim()))) {
+      return { error: 'Le salon d\'annonce est invalide' };
+    }
+    patch.announceChannelId = value === null ? null : value.trim();
+  }
+
+  if (has(body, 'tiers')) {
+    const parsed = validateReputationTiers((body as { tiers: unknown }).tiers);
+    if ('error' in parsed) return { error: TIER_ERRORS[parsed.error] };
+    // @everyone porte l'id du serveur : le « donner » ne changerait rien.
+    if (parsed.tiers.some((tier) => tier.roleId === guildId || (guildRoleIds && !guildRoleIds.has(tier.roleId)))) {
+      return { error: 'Un palier désigne un rôle absent du serveur' };
+    }
+    patch.tiers = parsed.tiers;
   }
 
   if (Object.keys(patch).length === 0) return { error: 'Aucun champ à mettre à jour' };
@@ -91,8 +136,16 @@ export async function handleReputationRoutes(
     try {
       const data = await getReputationDashboardData(guildId, periodOf(url));
       const who = await identityResolver(client, guildId, data.leaderboard.entries.map((entry) => entry.userId));
+      const guild = client.guilds.cache.get(guildId);
+      const locale = await resolveGuildLocale(guildId, guild?.preferredLocale);
       json(res, 200, {
         ...data,
+        announcement: tierAnnouncementLabels(locale),
+        // Rôles de palier que le bot ne pourra pas donner : supprimés, gérés par
+        // une intégration ou placés au-dessus du sien. Inconnu hors du cache.
+        unmanageableTierRoleIds: guild
+          ? data.config.tiers.filter((tier) => !manageableRole(guild, tier.roleId)).map((tier) => tier.roleId)
+          : [],
         leaderboard: {
           ...data.leaderboard,
           entries: data.leaderboard.entries.map((entry) => ({
@@ -153,7 +206,9 @@ export async function handleReputationRoutes(
     }
 
     try {
-      const parsed = parseConfigPatch(await readJsonBody<unknown>(req));
+      const guild = client.guilds.cache.get(guildId);
+      const guildRoleIds = guild ? new Set(guild.roles.cache.keys()) : null;
+      const parsed = parseConfigPatch(await readJsonBody<unknown>(req), guildId, guildRoleIds);
       if ('error' in parsed) {
         json(res, 400, { error: parsed.error });
         return true;
@@ -166,7 +221,7 @@ export async function handleReputationRoutes(
         context: getGuildName(client, guildId),
         module: 'Réputation',
         eventType: 'Manuel',
-        details: `Limite par jour : ${config.dailyLimit} vote(s).`,
+        details: `Limite par jour : ${config.dailyLimit} vote(s), ${config.tiers.length} palier(s), annonce : ${config.announceChannelId ?? 'aucune'}.`,
         channelId: null,
       });
       json(res, 200, { config });
@@ -185,7 +240,7 @@ export async function handleReputationRoutes(
     }
 
     try {
-      const vote = await deleteReputationVote(guildId, parts[6]);
+      const vote = await revokeRep(client, guildId, parts[6]);
       if (!vote) {
         json(res, 404, { error: 'Vote introuvable' });
         return true;

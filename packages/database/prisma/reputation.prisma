@@ -43,10 +43,30 @@ model ReputationConfig {
   /// Votes qu'un membre peut donner par jour du serveur.
   dailyLimit Int @default(3)
 
-  guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  /// Salon où annoncer un palier atteint. Vide = pas d'annonce, le rôle est
+  /// donné en silence.
+  announceChannelId String?
+
+  guild Guild            @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  tiers ReputationTier[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@map("reputation_configs")
+}
+
+/// Palier : à `threshold` points de réputation reçus, le membre reçoit `roleId`.
+/// Les paliers se cumulent : atteindre le troisième ne retire pas les deux premiers.
+model ReputationTier {
+  id        String @id @default(cuid())
+  guildId   String
+  threshold Int
+  roleId    String
+
+  config ReputationConfig @relation(fields: [guildId], references: [guildId], onDelete: Cascade)
+
+  @@unique([guildId, threshold])
+  @@unique([guildId, roleId])
+  @@map("reputation_tiers")
 }

@@ -3,6 +3,7 @@ import {
   REPUTATION_DAILY_LIMIT,
   reputationPeriodStart,
   type ReputationPeriod,
+  type ReputationTier,
 } from '@kotbo/shared';
 import prisma, { prismaRead } from '../../utils/db.js';
 import { cache } from '../../utils/cache.js';
@@ -12,11 +13,21 @@ import { resolveGuildTimezone } from '../../utils/timezone.js';
 
 export interface ReputationSettings {
   dailyLimit: number;
+  /** Salon des annonces de palier. `null` = rôle donné sans annonce. */
+  announceChannelId: string | null;
+  /** Triés par seuil croissant. */
+  tiers: ReputationTier[];
 }
 
 export const DEFAULT_REPUTATION_SETTINGS: Readonly<ReputationSettings> = {
   dailyLimit: REPUTATION_DAILY_LIMIT.default,
+  announceChannelId: null,
+  tiers: [],
 };
+
+function defaultSettings(): ReputationSettings {
+  return { ...DEFAULT_REPUTATION_SETTINGS, tiers: [] };
+}
 
 export interface ReputationProfile {
   userId: string;
@@ -57,14 +68,23 @@ export async function getReputationConfig(guildId: string): Promise<ReputationSe
 
   // Primaire : juste après une sauvegarde, un réplica en retard remettrait
   // l'ancienne valeur en cache pour cinq minutes.
-  const row = await prisma.reputationConfig.findUnique({ where: { guildId } }).catch((err) => {
+  const row = await prisma.reputationConfig.findUnique({
+    where: { guildId },
+    include: { tiers: { orderBy: { threshold: 'asc' }, select: { threshold: true, roleId: true } } },
+  }).catch((err) => {
     logger.error('Reputation', `Lecture des réglages de ${guildId} impossible`, err);
     return undefined;
   });
   // Une lecture ratée n'est pas mise en cache : elle ne doit pas figer les défauts.
-  if (row === undefined) return { ...DEFAULT_REPUTATION_SETTINGS };
+  if (row === undefined) return defaultSettings();
 
-  const settings: ReputationSettings = row ? { dailyLimit: row.dailyLimit } : { ...DEFAULT_REPUTATION_SETTINGS };
+  const settings: ReputationSettings = row
+    ? {
+      dailyLimit: row.dailyLimit,
+      announceChannelId: row.announceChannelId ?? null,
+      tiers: (row.tiers ?? []).map((tier) => ({ threshold: tier.threshold, roleId: tier.roleId })),
+    }
+    : defaultSettings();
   await cache.set(configCacheKey(guildId), settings, CONFIG_TTL_SECONDS);
   return settings;
 }
@@ -73,16 +93,32 @@ export async function invalidateReputationConfigCache(guildId: string): Promise<
   await cache.delete(configCacheKey(guildId));
 }
 
-/** Écrit les réglages validés par l'appelant. */
+/**
+ * Écrit les réglages validés par l'appelant. Des paliers envoyés remplacent
+ * ceux en place, dans la même transaction que la ligne de réglages.
+ */
 export async function saveReputationConfig(guildId: string, patch: Partial<ReputationSettings>): Promise<ReputationSettings> {
-  const row = await prisma.reputationConfig.upsert({
-    where: { guildId },
-    create: { guildId, ...DEFAULT_REPUTATION_SETTINGS, ...patch },
-    update: patch,
+  const { tiers, ...columns } = patch;
+  await prisma.$transaction(async (tx) => {
+    await tx.reputationConfig.upsert({
+      where: { guildId },
+      create: {
+        guildId,
+        dailyLimit: columns.dailyLimit ?? DEFAULT_REPUTATION_SETTINGS.dailyLimit,
+        announceChannelId: columns.announceChannelId ?? null,
+      },
+      update: columns,
+    });
+    if (tiers) {
+      await tx.reputationTier.deleteMany({ where: { guildId } });
+      if (tiers.length > 0) {
+        await tx.reputationTier.createMany({ data: tiers.map((tier) => ({ guildId, ...tier })) });
+      }
+    }
   });
   await invalidateReputationConfigCache(guildId);
   broadcastDashboardStateChange(guildId, REPUTATION_REALTIME_REASON);
-  return { dailyLimit: row.dailyLimit };
+  return getReputationConfig(guildId);
 }
 
 // ── Votes ────────────────────────────────────────────────────────────────────

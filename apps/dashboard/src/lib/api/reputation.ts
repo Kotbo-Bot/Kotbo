@@ -1,11 +1,22 @@
 /** Réputation : remerciements entre membres. */
-import type { ReputationPeriod } from '@kotbo/shared';
+import type { ReputationPeriod, ReputationTier } from '@kotbo/shared';
 import { authStore } from '../stores/auth.svelte';
 import { dashboardRequest } from './client';
 import { m } from '../i18n';
 
 export interface ReputationConfig {
   dailyLimit: number;
+  /** Salon des annonces de palier. `null` = rôle donné sans annonce. */
+  announceChannelId: string | null;
+  /** Triés par seuil croissant. */
+  tiers: ReputationTier[];
+}
+
+/** Gabarits de l'annonce de palier dans la langue du serveur, trous compris (`{user}`, `{role}`, `{threshold}`). */
+export interface ReputationAnnouncementLabels {
+  locale: string;
+  title: string;
+  body: string;
 }
 
 export interface ReputationLeaderboardEntry {
@@ -27,6 +38,9 @@ export interface ReputationData {
   config: ReputationConfig;
   leaderboard: { entries: ReputationLeaderboardEntry[]; totalVoters: number };
   stats: ReputationStats;
+  announcement: ReputationAnnouncementLabels;
+  /** Rôles de palier que le bot ne peut pas donner (supprimés, gérés, trop hauts). */
+  unmanageableTierRoleIds: string[];
 }
 
 export interface ReputationVote {

@@ -346,17 +346,19 @@ const messageActions: MessageAction[] = [
     category: 'Communauté',
     allowSelf: false,
     async run(ctx) {
-      const { giveRep } = await import('../community/reputationService.js');
+      const { recordRep } = await import('../community/reputationActions.js');
       const { repRefusalText } = await import('../community/reputationMessages.js');
       const locale = await resolveGuildLocale(ctx.guild.id, ctx.guild.preferredLocale);
       const channelName = 'name' in ctx.message.channel ? ctx.message.channel.name : ctx.message.channelId;
-      const result = await giveRep(
-        ctx.guild.id,
-        ctx.invoker.id,
-        ctx.message.author.id,
-        m.b2_rep_ctx_reason_message({ channel: channelName }, { locale }),
-        { receiverIsBot: ctx.message.author.bot, channelId: ctx.message.channelId, messageId: ctx.message.id },
-      );
+      const result = await recordRep(ctx.guild.client, {
+        guildId: ctx.guild.id,
+        giverId: ctx.invoker.id,
+        receiverId: ctx.message.author.id,
+        reason: m.b2_rep_ctx_reason_message({ channel: channelName }, { locale }),
+        receiverIsBot: ctx.message.author.bot,
+        channelId: ctx.message.channelId,
+        messageId: ctx.message.id,
+      });
 
       if (!result.success) {
         return fail(m.b2_rep_ctx_refused_title({}, { locale }), await repRefusalText(ctx.guild.id, result.code, locale));
@@ -609,11 +611,16 @@ const userActions: UserAction[] = [
     category: 'Communauté',
     allowSelf: false,
     async run(ctx) {
-      const { giveRep } = await import('../community/reputationService.js');
+      const { recordRep } = await import('../community/reputationActions.js');
       const { repRefusalText } = await import('../community/reputationMessages.js');
       const locale = await resolveGuildLocale(ctx.guild.id, ctx.guild.preferredLocale);
       const target = await ctx.guild.members.fetch(ctx.targetId).catch(() => null);
-      const result = await giveRep(ctx.guild.id, ctx.invoker.id, ctx.targetId, undefined, { receiverIsBot: target?.user.bot ?? false });
+      const result = await recordRep(ctx.guild.client, {
+        guildId: ctx.guild.id,
+        giverId: ctx.invoker.id,
+        receiverId: ctx.targetId,
+        receiverIsBot: target?.user.bot ?? false,
+      });
 
       if (!result.success) {
         return fail(m.b2_rep_ctx_refused_title({}, { locale }), await repRefusalText(ctx.guild.id, result.code, locale));

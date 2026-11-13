@@ -79,7 +79,11 @@ export function registerCommunityRoutes(): void {
     leaderboard: byXp().slice(0, 10).map((p, i) => ({ rank: i + 1, userId: p.id, displayName: p.displayName, avatarUrl: null, level: p.level, xp: p.xp })),
   }));
 
-  const repConfig = { dailyLimit: 3 };
+  const repConfig: { dailyLimit: number; announceChannelId: string | null; tiers: Array<{ threshold: number; roleId: string }> } = {
+    dailyLimit: 3,
+    announceChannelId: null,
+    tiers: [],
+  };
   const repPool = () => members().slice(0, 8);
   const repVotes = () => {
     const pool = repPool();
@@ -110,6 +114,12 @@ export function registerCommunityRoutes(): void {
       config: { ...repConfig },
       leaderboard: { totalVoters: entries.length + 14, entries },
       stats: { totalVotes: 412, votesLast7Days: 23, activeGivers7Days: 11, lastVoteAt: ago(90) },
+      announcement: {
+        locale: 'fr',
+        title: 'Nouveau palier de réputation',
+        body: '{user} atteint **{threshold}** points de réputation et reçoit le rôle {role}.',
+      },
+      unmanageableTierRoleIds: [],
     };
   });
 
@@ -121,6 +131,8 @@ export function registerCommunityRoutes(): void {
 
   route('PATCH', '/api/dashboard/guilds/:guildId/reputation/config', ({ body }) => {
     if (typeof body?.dailyLimit === 'number') repConfig.dailyLimit = body.dailyLimit;
+    if (body && 'announceChannelId' in body) repConfig.announceChannelId = body.announceChannelId;
+    if (Array.isArray(body?.tiers)) repConfig.tiers = [...body.tiers].sort((a, b) => a.threshold - b.threshold);
     return { config: { ...repConfig } };
   });
 

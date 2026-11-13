@@ -1,9 +1,17 @@
 <script lang="ts">
   import { onDestroy, onMount, untrack } from 'svelte';
   import { MediaQuery } from 'svelte/reactivity';
-  import { REPUTATION_DAILY_LIMIT, type ReputationPeriod } from '@kotbo/shared';
+  import {
+    REPUTATION_DAILY_LIMIT,
+    REPUTATION_TIERS_MAX,
+    REPUTATION_TIER_THRESHOLD,
+    validateReputationTiers,
+    type ReputationPeriod,
+    type ReputationTierError,
+  } from '@kotbo/shared';
   import {
     deleteReputationVote,
+    fetchDiscordChannels,
     fetchReputationData,
     fetchReputationVotes,
     updateReputationConfig,
@@ -13,6 +21,7 @@
   } from '../lib/api';
   import { toast } from '../lib/stores/toast.svelte';
   import { dashboardStore } from '../lib/stores/dashboard.svelte';
+  import { authStore } from '../lib/stores/auth.svelte';
   import { unsavedChanges } from '../lib/stores/unsavedChanges.svelte';
   import { subscribeRealtime } from '../lib/stores/realtime.svelte';
   import { confirmDialog } from '../lib/stores/confirmDialog.svelte';
@@ -23,6 +32,8 @@
   import UserDisplay from '../lib/components/UserDisplay.svelte';
   import Skeleton from '../lib/components/Skeleton.svelte';
   import Modal from '../lib/components/Modal.svelte';
+  import SearchableSelect from '../lib/components/SearchableSelect.svelte';
+  import ReputationTierAnnouncementPreview from '../lib/components/ReputationTierAnnouncementPreview.svelte';
   import Callout from '../lib/components/ui/Callout.svelte';
   import Button from '../lib/components/ui/Button.svelte';
   import Field from '../lib/components/ui/Field.svelte';
@@ -30,15 +41,31 @@
   import FilterPills from '../lib/components/ui/FilterPills.svelte';
   import { m, dateLocale } from '../lib/i18n';
 
-  type Tab = 'overview' | 'history' | 'settings';
+  type Tab = 'overview' | 'history' | 'tiers' | 'settings';
 
   let activeTab = $state<Tab>('overview');
   let loading = $state(true);
   let data = $state<ReputationData | null>(null);
   let period = $state<ReputationPeriod>('all');
 
-  let savedConfig = $state<ReputationConfig>({ dailyLimit: REPUTATION_DAILY_LIMIT.default });
-  let config = $state<ReputationConfig>({ dailyLimit: REPUTATION_DAILY_LIMIT.default });
+  const EMPTY_CONFIG: ReputationConfig = { dailyLimit: REPUTATION_DAILY_LIMIT.default, announceChannelId: null, tiers: [] };
+
+  function cloneConfig(source: ReputationConfig): ReputationConfig {
+    return { ...source, tiers: source.tiers.map((tier) => ({ ...tier })) };
+  }
+
+  /** Forme comparable : « aucun salon » s'écrit `''` dans le sélecteur et `null` en base. */
+  function comparable(source: ReputationConfig): string {
+    return JSON.stringify({
+      dailyLimit: source.dailyLimit,
+      announceChannelId: source.announceChannelId || null,
+      tiers: source.tiers.map(({ threshold, roleId }) => ({ threshold, roleId })),
+    });
+  }
+
+  let savedConfig = $state<ReputationConfig>(cloneConfig(EMPTY_CONFIG));
+  let config = $state<ReputationConfig>(cloneConfig(EMPTY_CONFIG));
+  let textChannels = $state<Array<{ id: string; name: string }>>([]);
 
   let votes = $state<ReputationVote[]>([]);
   let nextCursor = $state<string | null>(null);
@@ -56,16 +83,47 @@
       || !!dashboardStore.state.access?.canManageSettings
   );
 
-  const configDirty = $derived(config.dailyLimit !== savedConfig.dailyLimit);
+  const configDirty = $derived(comparable(config) !== comparable(savedConfig));
   const dailyLimitValid = $derived(
     Number.isInteger(config.dailyLimit)
       && config.dailyLimit >= REPUTATION_DAILY_LIMIT.min
       && config.dailyLimit <= REPUTATION_DAILY_LIMIT.max
   );
 
+  /** Mêmes règles que l'API, pour le dire avant l'enregistrement. */
+  const tiersCheck = $derived(validateReputationTiers(config.tiers));
+  const TIER_ERROR_TEXT: Record<ReputationTierError, () => string> = {
+    NOT_ARRAY: () => m.rep_tiers_error_role(),
+    TOO_MANY: () => m.rep_tiers_error_too_many({ max: REPUTATION_TIERS_MAX }),
+    BAD_THRESHOLD: () => m.rep_tiers_error_threshold({ min: REPUTATION_TIER_THRESHOLD.min, max: REPUTATION_TIER_THRESHOLD.max }),
+    BAD_ROLE: () => m.rep_tiers_error_role(),
+    DUPLICATE_THRESHOLD: () => m.rep_tiers_error_duplicate_threshold(),
+    DUPLICATE_ROLE: () => m.rep_tiers_error_duplicate_role(),
+  };
+  const tiersError = $derived('error' in tiersCheck ? TIER_ERROR_TEXT[tiersCheck.error]() : null);
+
+  /** @everyone porte l'id du serveur : il n'a rien à faire dans un palier. */
+  const assignableRoles = $derived(
+    (dashboardStore.state.discordRoles || []).filter((role: { id: string }) => role.id !== authStore.selectedGuildId)
+  );
+
+  function roleName(roleId: string): string {
+    return assignableRoles.find((role: { id: string; name: string }) => role.id === roleId)?.name ?? roleId;
+  }
+
+  const unmanageableRoleNames = $derived(
+    (data?.unmanageableTierRoleIds ?? []).map((roleId) => roleName(roleId))
+  );
+
+  /** Palier montré dans l'aperçu : le plus haut qui a un rôle. */
+  const previewTier = $derived(
+    [...config.tiers].filter((tier) => tier.roleId).sort((a, b) => b.threshold - a.threshold)[0] ?? null
+  );
+
   const tabItems = $derived<TabItem[]>([
     { id: 'overview', label: m.rep_tab_overview(), icon: 'Crown' },
     { id: 'history', label: m.rep_tab_history(), icon: 'Clock' },
+    { id: 'tiers', label: m.rep_tab_tiers(), icon: 'Award', badge: tiersError ? m.rep_tab_to_fix() : undefined },
     { id: 'settings', label: m.rep_tab_settings(), icon: 'Gears', badge: configDirty ? m.rep_tab_modified() : undefined },
   ]);
 
@@ -101,8 +159,8 @@
       data = result;
       // Un rechargement en temps réel ne doit pas écraser une saisie en cours.
       if (!configDirty) {
-        savedConfig = { ...result.config };
-        config = { ...result.config };
+        savedConfig = cloneConfig(result.config);
+        config = cloneConfig(result.config);
       }
     } finally {
       loading = false;
@@ -162,13 +220,29 @@
     if (result?.deleted) votes = votes.filter((v) => v.id !== vote.id);
   }
 
+  function addTier() {
+    const highest = config.tiers.reduce((max, tier) => Math.max(max, tier.threshold), 0);
+    config.tiers = [...config.tiers, { threshold: Math.min(highest + 10, REPUTATION_TIER_THRESHOLD.max), roleId: '' }];
+  }
+
+  function removeTier(index: number) {
+    config.tiers = config.tiers.filter((_, i) => i !== index);
+  }
+
   /** Appelé par la barre « Modifications non enregistrées » du layout. */
   async function saveConfig(): Promise<boolean> {
-    if (!dailyLimitValid) return false;
-    const result = await updateReputationConfig({ dailyLimit: config.dailyLimit });
+    if (!dailyLimitValid || !('tiers' in tiersCheck)) {
+      toast.error(tiersError ?? m.rep_daily_limit_error({ min: REPUTATION_DAILY_LIMIT.min, max: REPUTATION_DAILY_LIMIT.max }));
+      return false;
+    }
+    const result = await updateReputationConfig({
+      dailyLimit: config.dailyLimit,
+      announceChannelId: config.announceChannelId || null,
+      tiers: tiersCheck.tiers,
+    });
     if (!result) return false;
-    savedConfig = { ...result.config };
-    config = { ...result.config };
+    savedConfig = cloneConfig(result.config);
+    config = cloneConfig(result.config);
     return true;
   }
 
@@ -179,7 +253,7 @@
           id: 'reputation',
           label: m.rep_unsaved_label(),
           onSave: () => saveConfig(),
-          onReset: () => { config = { ...savedConfig }; },
+          onReset: () => { config = cloneConfig(savedConfig); },
         });
       });
     } else if (!configDirty) {
@@ -199,6 +273,8 @@
     });
     await loadOverview();
     await loadHistory(true);
+    const channels = await fetchDiscordChannels().catch(() => null);
+    textChannels = channels?.textChannels ?? [];
   });
 
   onDestroy(() => {
@@ -223,6 +299,10 @@
       <div class="flex items-center justify-between gap-3">
         <dt class="text-on-surface-variant">{m.rep_status_active_givers()}</dt>
         <dd class="font-semibold">{data.stats.activeGivers7Days}</dd>
+      </div>
+      <div class="flex items-center justify-between gap-3">
+        <dt class="text-on-surface-variant">{m.rep_status_tiers()}</dt>
+        <dd class="font-semibold">{data.config.tiers.length}</dd>
       </div>
       <div class="flex items-center justify-between gap-3">
         <dt class="text-on-surface-variant">{m.rep_status_last_vote()}</dt>
@@ -278,6 +358,15 @@
             {@render statTile('Star', 'bg-warning/10 text-warning', data.stats.votesLast7Days, m.rep_votes_last_7_days())}
             {@render statTile('Users', 'bg-success/10 text-success', data.stats.activeGivers7Days, m.rep_status_active_givers())}
           </div>
+
+          {#if data.config.tiers.length === 0}
+            <Callout variant="info" title={m.rep_advice_no_tiers_title()}>
+              <p>{m.rep_advice_no_tiers_desc()}</p>
+              {#snippet actions()}
+                <Button size="sm" icon="Award" onclick={() => activeTab = 'tiers'}>{m.rep_advice_no_tiers_action()}</Button>
+              {/snippet}
+            </Callout>
+          {/if}
 
           {#if quietWeek}
             <Callout variant="info" title={m.rep_advice_quiet_title()}>
@@ -415,6 +504,112 @@
             </div>
           {/if}
         </section>
+      {:else if activeTab === 'tiers'}
+        <div class="space-y-6">
+          {#if unmanageableRoleNames.length > 0}
+            <Callout variant="warning" title={m.rep_tiers_unmanageable_title()}>
+              <p>{m.rep_tiers_unmanageable_desc({ roles: unmanageableRoleNames.map((name) => `@${name}`).join(', ') })}</p>
+            </Callout>
+          {/if}
+
+          <section class="bg-surface-container-low/40 border border-outline-variant/30 p-6 rounded-xl space-y-5">
+            <div class="border-b border-outline-variant/15 pb-3">
+              <h3 class="text-lg font-semibold flex items-center gap-2"><Papicon icon="Award" size={18} /> {m.rep_tiers_heading()}</h3>
+              <p class="text-xs text-on-surface-variant mt-1">{m.rep_tiers_desc()}</p>
+            </div>
+
+            {#if config.tiers.length === 0}
+              <EmptyState
+                icon="award"
+                title={m.rep_tiers_empty_title()}
+                description={m.rep_tiers_empty_desc()}
+                actionLabel={canManageSettings ? m.rep_tiers_add() : ''}
+                onAction={canManageSettings ? addTier : undefined}
+                reason={canManageSettings ? undefined : 'read-only'}
+              />
+            {:else}
+              <ul class="space-y-3">
+                {#each config.tiers as tier, index (index)}
+                  <li class="rep-tier-row grid items-end gap-3">
+                    <Field id="rep-tier-threshold-{index}" label={m.rep_tiers_threshold_label()}>
+                      {#snippet children(id)}
+                        <input
+                          {id}
+                          type="number"
+                          class="input"
+                          min={REPUTATION_TIER_THRESHOLD.min}
+                          max={REPUTATION_TIER_THRESHOLD.max}
+                          bind:value={tier.threshold}
+                          disabled={!canManageSettings}
+                        />
+                      {/snippet}
+                    </Field>
+                    <Field id="rep-tier-role-{index}" label={m.rep_tiers_role_label()}>
+                      {#snippet children(id)}
+                        <SearchableSelect
+                          {id}
+                          bind:value={tier.roleId}
+                          options={assignableRoles.map((role: { id: string; name: string }) => ({ id: role.id, name: `@${role.name}` }))}
+                          placeholder={m.rep_tiers_role_placeholder()}
+                          disabled={!canManageSettings}
+                        />
+                      {/snippet}
+                    </Field>
+                    {#if canManageSettings}
+                      <Button
+                        variant="ghost"
+                        icon="Trash"
+                        aria-label={m.rep_tiers_remove({ threshold: tier.threshold })}
+                        onclick={() => removeTier(index)}
+                      />
+                    {/if}
+                  </li>
+                {/each}
+              </ul>
+
+              {#if tiersError}
+                <p class="text-xs text-error" role="alert">{tiersError}</p>
+              {/if}
+
+              {#if canManageSettings}
+                <Button
+                  size="sm"
+                  icon="Plus"
+                  disabled={config.tiers.length >= REPUTATION_TIERS_MAX}
+                  disabledReason={m.rep_tiers_error_too_many({ max: REPUTATION_TIERS_MAX })}
+                  onclick={addTier}
+                >
+                  {m.rep_tiers_add()}
+                </Button>
+              {/if}
+            {/if}
+          </section>
+
+          <section class="bg-surface-container-low/40 border border-outline-variant/30 p-6 rounded-xl space-y-5">
+            <Field id="rep-announce-channel" label={m.rep_announce_channel_label()} hint={m.rep_announce_channel_hint()}>
+              {#snippet children(id)}
+                <SearchableSelect
+                  {id}
+                  bind:value={config.announceChannelId}
+                  options={[{ id: '', name: m.rep_announce_channel_none() }, ...textChannels.map((channel) => ({ id: channel.id, name: `#${channel.name}` }))]}
+                  placeholder={m.rep_announce_channel_placeholder()}
+                  disabled={!canManageSettings}
+                />
+              {/snippet}
+            </Field>
+
+            {#if config.announceChannelId && previewTier}
+              <div class="space-y-2">
+                <p class="text-xs font-semibold text-on-surface-variant flex items-center gap-1.5"><Papicon icon="Eye" size={13} /> {m.rep_announce_preview_heading()}</p>
+                <ReputationTierAnnouncementPreview
+                  labels={data.announcement}
+                  threshold={previewTier.threshold}
+                  roleName={roleName(previewTier.roleId)}
+                />
+              </div>
+            {/if}
+          </section>
+        </div>
       {:else}
         <section class="bg-surface-container-low/40 border border-outline-variant/30 p-6 rounded-xl space-y-6">
           <div class="border-b border-outline-variant/15 pb-3">
@@ -472,6 +667,21 @@
 
   .reputation-leaderboard-row {
     grid-template-columns: 28px 36px minmax(0, 1fr) 80px 60px auto;
+  }
+
+  .rep-tier-row {
+    grid-template-columns: 8rem minmax(0, 1fr) auto;
+  }
+
+  @media (max-width: 479px) {
+    .rep-tier-row {
+      grid-template-columns: minmax(0, 1fr) auto;
+    }
+
+    .rep-tier-row > :nth-child(2) {
+      grid-column: 1 / -1;
+      grid-row: 2;
+    }
   }
 
   /* La barre part en premier : le nombre à côté porte déjà la valeur. */

@@ -1,3 +1,10 @@
+/**
+ * Routes dashboard du module Réputation.
+ *
+ * Préfixe `zzz-` : ce fichier remplace `reputationService`, `reputationActions`,
+ * `reputationTierService` et `memberIdentityService` pour tout le process
+ * (`mock.module` est global). Il doit charger après les tests de ces services.
+ */
 import { describe, expect, test, mock, beforeEach } from 'bun:test';
 import { IncomingMessage, ServerResponse } from 'node:http';
 import { Socket } from 'node:net';
@@ -8,15 +15,17 @@ import { completeModuleMock } from '../helpers/moduleMock.js';
 
 const mockDb = {
   dashboardAuditLog: { create: mock(async (_args?: unknown) => ({})) },
+  guild: { findUnique: mock(async (_args?: unknown) => null) },
 };
 for (const dbPath of ['../../utils/db.ts', '../../utils/db.js']) {
   mock.module(path.resolve(__dirname, dbPath), () => ({ default: mockDb, prisma: mockDb, prismaRead: mockDb }));
 }
 
 let deletedVote: Record<string, unknown> | null = null;
+const SETTINGS = { dailyLimit: 3, announceChannelId: null, tiers: [{ threshold: 10, roleId: '555555555555555555' }] };
 const service = {
   getReputationDashboardData: mock(async (_guildId: string, _period: string) => ({
-    config: { dailyLimit: 3 },
+    config: SETTINGS,
     leaderboard: { entries: [{ userId: '111111111111111111', totalRep: 4, rank: 1 }], totalVoters: 2 },
     stats: { totalVotes: 4, votesLast7Days: 1, activeGivers7Days: 1, lastVoteAt: null },
   })),
@@ -32,12 +41,29 @@ const service = {
     }],
     nextCursor: null,
   })),
-  saveReputationConfig: mock(async (_guildId: string, patch: Record<string, unknown>) => ({ dailyLimit: 3, ...patch })),
-  deleteReputationVote: mock(async (_guildId: string, _voteId: string) => deletedVote),
+  saveReputationConfig: mock(async (_guildId: string, patch: Record<string, unknown>) => ({ ...SETTINGS, ...patch })),
 };
 const servicePath = path.resolve(__dirname, '../../services/community/reputationService.ts');
 for (const suffix of ['../../services/community/reputationService.ts', '../../services/community/reputationService.js']) {
   mock.module(path.resolve(__dirname, suffix), () => completeModuleMock(servicePath, service));
+}
+
+const actions = {
+  revokeRep: mock(async (_client: unknown, _guildId: string, _voteId: string) => deletedVote),
+};
+const actionsPath = path.resolve(__dirname, '../../services/community/reputationActions.ts');
+for (const suffix of ['../../services/community/reputationActions.ts', '../../services/community/reputationActions.js']) {
+  mock.module(path.resolve(__dirname, suffix), () => completeModuleMock(actionsPath, actions));
+}
+
+let manageable = true;
+const tierService = {
+  tierAnnouncementLabels: mock((locale: string) => ({ locale, title: 'T', body: '{user} {role} {threshold}' })),
+  manageableRole: mock((_guild: unknown, roleId: string) => (manageable ? { id: roleId } : null)),
+};
+const tierPath = path.resolve(__dirname, '../../services/community/reputationTierService.ts');
+for (const suffix of ['../../services/community/reputationTierService.ts', '../../services/community/reputationTierService.js']) {
+  mock.module(path.resolve(__dirname, suffix), () => completeModuleMock(tierPath, tierService));
 }
 
 const identitiesPath = path.resolve(__dirname, '../../services/moderation/memberIdentityService.ts');
@@ -53,7 +79,13 @@ for (const suffix of ['../../services/moderation/memberIdentityService.ts', '../
 const { handleReputationRoutes } = await import('../../api/routes/dashboard/reputation.js');
 
 const GUILD = '999999999999999999';
-const client = { guilds: { cache: new Map() } } as unknown as Client;
+const ROLE = '555555555555555555';
+const guilds = new Map<string, unknown>();
+const client = { guilds: { cache: guilds } } as unknown as Client;
+/** Serveur présent dans le cache du shard, avec ses rôles. */
+function cacheGuild(roleIds: string[]) {
+  guilds.set(GUILD, { preferredLocale: 'fr', roles: { cache: new Map(roleIds.map((id) => [id, { id }])) } });
+}
 const user: AuthClaims = { userId: 'user-1', username: 'Admin' } as AuthClaims;
 
 interface MockResponse extends ServerResponse { body: string }
@@ -90,7 +122,9 @@ async function call(method: string, suffix: string, body?: unknown, access: Dash
 
 beforeEach(() => {
   deletedVote = null;
-  for (const fn of Object.values(service)) fn.mockClear();
+  manageable = true;
+  guilds.clear();
+  for (const fn of [...Object.values(service), ...Object.values(actions)]) fn.mockClear();
   mockDb.dashboardAuditLog.create.mockClear();
 });
 
@@ -99,9 +133,17 @@ describe('GET /reputation', () => {
     const { status, json } = await call('GET', '?period=week');
     expect(status).toBe(200);
     expect(service.getReputationDashboardData.mock.calls[0][1]).toBe('week');
-    expect(json.config).toEqual({ dailyLimit: 3 });
+    expect(json.config).toEqual(SETTINGS);
+    expect(json.announcement.body).toContain('{user}');
     expect(json.stats.votesLast7Days).toBe(1);
     expect(json.leaderboard.entries[0].displayName).toBe('Alice');
+  });
+
+  test('signale les rôles de palier que le bot ne peut pas donner', async () => {
+    cacheGuild([ROLE]);
+    manageable = false;
+    const { json } = await call('GET', '');
+    expect(json.unmanageableTierRoleIds).toEqual([ROLE]);
   });
 
   test('une période inconnue retombe sur « tout »', async () => {
@@ -147,6 +189,35 @@ describe('PATCH /reputation/config', () => {
     expect(service.saveReputationConfig).not.toHaveBeenCalled();
   });
 
+  test('enregistre paliers et salon d\'annonce', async () => {
+    cacheGuild([ROLE]);
+    const tiers = [{ threshold: 10, roleId: ROLE }];
+    const { status } = await call('PATCH', '/config', { tiers, announceChannelId: '333333333333333333' });
+    expect(status).toBe(200);
+    expect(service.saveReputationConfig.mock.calls[0][1]).toEqual({ tiers, announceChannelId: '333333333333333333' });
+  });
+
+  test('refuse des paliers mal formés', async () => {
+    const { status } = await call('PATCH', '/config', { tiers: [{ threshold: 5, roleId: ROLE }, { threshold: 5, roleId: '666666666666666666' }] });
+    expect(status).toBe(400);
+  });
+
+  test('refuse un rôle absent du serveur', async () => {
+    cacheGuild([]);
+    const { status } = await call('PATCH', '/config', { tiers: [{ threshold: 5, roleId: ROLE }] });
+    expect(status).toBe(400);
+  });
+
+  test('refuse @everyone comme rôle de palier', async () => {
+    const { status } = await call('PATCH', '/config', { tiers: [{ threshold: 5, roleId: GUILD }] });
+    expect(status).toBe(400);
+  });
+
+  test('refuse un salon d\'annonce mal formé, accepte null', async () => {
+    expect((await call('PATCH', '/config', { announceChannelId: 'abc' })).status).toBe(400);
+    expect((await call('PATCH', '/config', { announceChannelId: null })).status).toBe(200);
+  });
+
   test('refuse un corps sans champ connu', async () => {
     const { status } = await call('PATCH', '/config', { foo: 1 });
     expect(status).toBe(400);
@@ -164,7 +235,7 @@ describe('DELETE /reputation/votes/:id', () => {
     deletedVote = { id: 'v1', guildId: GUILD, giverId: '222222222222222222', receiverId: '111111111111111111' };
     const { status } = await call('DELETE', '/votes/v1');
     expect(status).toBe(200);
-    expect(service.deleteReputationVote.mock.calls[0]).toEqual([GUILD, 'v1']);
+    expect(actions.revokeRep.mock.calls[0]).toEqual([client, GUILD, 'v1']);
     expect(mockDb.dashboardAuditLog.create).toHaveBeenCalledTimes(1);
   });
 
@@ -176,7 +247,7 @@ describe('DELETE /reputation/votes/:id', () => {
   test('refuse sans le droit de gérer les réglages', async () => {
     const { status } = await call('DELETE', '/votes/v1', undefined, DASHBOARD_ACCESS_MODERATOR);
     expect(status).toBe(403);
-    expect(service.deleteReputationVote).not.toHaveBeenCalled();
+    expect(actions.revokeRep).not.toHaveBeenCalled();
   });
 });
 
