@@ -10949,6 +10949,7 @@
   "drop_mode_window_desc": "Tout le monde peut se servir pendant la durée indiquée.",
   "drop_mode_min_label": "Récompense minimale",
   "drop_mode_max_label": "Récompense maximale",
+  "drop_mode_range_label": "Déplacer toute la fourchette de récompense",
   "drop_race_winners_label": "Nombre de gagnants",
   "drop_window_duration_label": "Durée d'ouverture (minutes)",
   "drop_min_open_hint": "Cinq minutes minimum : en dessous, seuls les membres déjà devant leur écran auraient une chance de cliquer.",

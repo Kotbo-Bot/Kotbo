@@ -1,6 +1,6 @@
 import { describe, test, expect } from 'bun:test';
 import { DROP_AMOUNT_RANGE, DROP_ITEM_QUANTITY_RANGE } from '@kotbo/shared';
-import { amountSteps, nearestStepIndex, orderedAmounts } from './amountScale';
+import { amountSteps, nearestStepIndex, orderedAmounts, shiftedRange } from './amountScale';
 
 /**
  * Le curseur des montants avance par paliers ronds : de 1 à un million, un curseur
@@ -36,5 +36,15 @@ describe('paliers du curseur de montants', () => {
     expect(orderedAmounts(300, 200, 'min')).toEqual({ min: 300, max: 300 });
     expect(orderedAmounts(300, 200, 'max')).toEqual({ min: 200, max: 200 });
     expect(orderedAmounts(50, 250, 'min')).toEqual({ min: 50, max: 250 });
+  });
+
+  test('la plage glisse d\'un bloc, avec le même écart entre ses bornes', () => {
+    expect(shiftedRange(2, 5, 3, 20)).toEqual({ min: 5, max: 8 });
+    expect(shiftedRange(2, 5, -1, 20)).toEqual({ min: 1, max: 4 });
+  });
+
+  test('arrivée à un bout, la plage s\'arrête sans se tasser', () => {
+    expect(shiftedRange(2, 5, -10, 20)).toEqual({ min: 0, max: 3 });
+    expect(shiftedRange(15, 18, 10, 20)).toEqual({ min: 17, max: 20 });
   });
 });

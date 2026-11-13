@@ -393,6 +393,33 @@
   let now = $state(new Date());
   const nowTicker = setInterval(() => now = new Date(), 30 * 1000);
 
+  /**
+   * Blocs de la colonne de droite repliés : ils prennent de la hauteur, on peut vouloir
+   * régler sans les avoir sous les yeux. Le choix est retenu par navigateur, comme le
+   * mode simple.
+   */
+  type CollapsibleBlock = 'status' | 'preview';
+
+  function readCollapsed(block: CollapsibleBlock): boolean {
+    try {
+      return typeof localStorage !== 'undefined' && localStorage.getItem(`kotbo_drops_${block}_collapsed`) === '1';
+    } catch {
+      return false;
+    }
+  }
+
+  let collapsed = $state<Record<CollapsibleBlock, boolean>>({
+    status: readCollapsed('status'),
+    preview: readCollapsed('preview'),
+  });
+
+  function toggleBlock(block: CollapsibleBlock) {
+    collapsed[block] = !collapsed[block];
+    try {
+      localStorage.setItem(`kotbo_drops_${block}_collapsed`, collapsed[block] ? '1' : '0');
+    } catch { /* stockage indisponible : le choix vaut pour la visite */ }
+  }
+
   /** Panneau d'état ouvert sur mobile, où il ne tient pas à côté du formulaire. */
   let statusOpen = $state(false);
 
@@ -725,6 +752,22 @@
   }
 </script>
 
+<!-- Titre d'un bloc repliable : il replie ou déplie le bloc dont il porte le nom. -->
+{#snippet blockToggle(block: CollapsibleBlock, label: string, icon: string, size: string, iconSize: number)}
+  <h3>
+    <button
+      type="button"
+      onclick={() => toggleBlock(block)}
+      aria-expanded={!collapsed[block]}
+      aria-controls="drop-{block}-body"
+      class="w-full {size} font-semibold flex items-center justify-between gap-2 cursor-pointer"
+    >
+      <span class="flex items-center gap-2"><Papicon {icon} size={iconSize} /> {label}</span>
+      <Papicon icon={collapsed[block] ? 'ChevronDown' : 'ChevronUp'} size={iconSize - 2} />
+    </button>
+  </h3>
+{/snippet}
+
 <!-- Aperçu de l'annonce et estimation d'un type : en bas de son onglet sur mobile, dans
      la colonne de droite sur grand écran, où il reste visible pendant qu'on règle. -->
 {#snippet previewPanel(type: DropType, labels: DropAnnouncementLabels)}
@@ -834,6 +877,7 @@
           bind:max={configs[type][mode].maxAmount}
           labelMin={m.drop_mode_min_label()}
           labelMax={m.drop_mode_max_label()}
+          labelRange={m.drop_mode_range_label()}
           disabled={!canManageSettings || !configs[type][mode].enabled}
         />
       </div>
@@ -1453,11 +1497,13 @@
 
           {#if announcement && !wide.current}
             <section class="bg-surface-container-low/40 border border-outline-variant/30 p-6 rounded-xl space-y-5">
-              <div class="border-b border-outline-variant/15 pb-3">
-                <h3 class="text-lg font-semibold flex items-center gap-2"><Papicon icon="Eye" size={18} /> {m.drop_preview_heading()}</h3>
+              <div class="{collapsed.preview ? '' : 'border-b border-outline-variant/15 pb-3'}">
+                {@render blockToggle('preview', m.drop_preview_heading(), 'Eye', 'text-lg', 18)}
                 <p class="text-xs text-on-surface-variant mt-1">{m.drop_preview_desc()}</p>
               </div>
-              {@render previewPanel(type, announcement)}
+              {#if !collapsed.preview}
+                <div id="drop-preview-body">{@render previewPanel(type, announcement)}</div>
+              {/if}
             </section>
           {/if}
         </div>
@@ -1468,13 +1514,17 @@
       <!-- Plus haute que l'écran avec l'aperçu : la colonne défile seule plutôt que de déborder. -->
       <aside class="sticky top-4 max-h-[calc(100vh-2rem)] overflow-y-auto space-y-4" aria-label={m.drop_status_title()}>
         <section class="bg-surface-container-low/40 border border-outline-variant/30 p-4 rounded-xl space-y-3">
-          <h3 class="text-sm font-semibold flex items-center gap-2"><Papicon icon="List" size={15} /> {m.drop_status_title()}</h3>
-          {@render statusPanel()}
+          {@render blockToggle('status', m.drop_status_title(), 'List', 'text-sm', 15)}
+          {#if !collapsed.status}
+            <div id="drop-status-body">{@render statusPanel()}</div>
+          {/if}
         </section>
         {#if activeTab !== 'global' && announcement}
           <section class="bg-surface-container-low/40 border border-outline-variant/30 p-4 rounded-xl space-y-3">
-            <h3 class="text-sm font-semibold flex items-center gap-2"><Papicon icon="Eye" size={15} /> {m.drop_preview_heading()}</h3>
-            {@render previewPanel(activeType, announcement)}
+            {@render blockToggle('preview', m.drop_preview_heading(), 'Eye', 'text-sm', 15)}
+            {#if !collapsed.preview}
+              <div id="drop-preview-body">{@render previewPanel(activeType, announcement)}</div>
+            {/if}
           </section>
         {/if}
       </aside>

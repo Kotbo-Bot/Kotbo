@@ -10949,6 +10949,7 @@
   "drop_mode_window_desc": "Anyone can help themselves for the given duration.",
   "drop_mode_min_label": "Minimum reward",
   "drop_mode_max_label": "Maximum reward",
+  "drop_mode_range_label": "Move the whole reward range",
   "drop_race_winners_label": "Number of winners",
   "drop_window_duration_label": "Open duration (minutes)",
   "drop_min_open_hint": "Five minutes minimum: below that, only members already watching the channel would get a chance to click.",
