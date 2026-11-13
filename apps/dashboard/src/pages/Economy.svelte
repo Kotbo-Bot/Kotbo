@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy, untrack } from 'svelte';
   import { RPG_ENCHANTMENTS, RPG_ITEM_RARITIES } from '@kotbo/contracts';
+  import { rpgRarityLabel } from '../lib/rpgRarity';
   import { router } from 'tinro';
   import { resolveTabFromUrl, gotoTab } from '../lib/tabRouting';
   import { pageTabItems } from '../lib/config/pageTabs';
@@ -235,13 +236,6 @@ import EmojiText from '../lib/components/EmojiText.svelte';
   );
   const filteredItems = $derived(activeItemFilter === 'all' ? items : items.filter((item) => item.type === activeItemFilter));
 
-  const rarityLabels = $derived<Record<string, string>>({
-    COMMON: m.eco_rarity_common(),
-    UNCOMMON: m.eco_rarity_uncommon(),
-    RARE: m.eco_rarity_rare(),
-    EPIC: m.eco_rarity_epic(),
-    LEGENDARY: m.eco_rarity_legendary(),
-  });
 
   // Bestiaire (monstres et boss)
   const DROPS_MAX = 8;
@@ -2213,7 +2207,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
                     {#if item.spdBonus} <span class="bg-warning/10 text-warning px-2 py-0.5 rounded-lg flex items-center gap-1"><Papicon icon="activity" size={10} /> SPD +{item.spdBonus}</span> {/if}
                     {#if item.hpBonus} <span class="bg-error/10 text-error px-2 py-0.5 rounded-lg flex items-center gap-1"><Papicon icon="heart" size={10} /> {m.eco_item_hp_bonus_badge({ hp: item.hpBonus })}</span> {/if}
                     {#if item.levelRequired > 0} <span class="bg-outline-variant/15 text-on-surface-variant/80 px-2 py-0.5 rounded-lg">{m.eco_item_level_badge({ level: item.levelRequired })}</span> {/if}
-                    {#if item.rarity && item.rarity !== 'COMMON'} <span class="bg-violet-500/10 text-violet-400 px-2 py-0.5 rounded-lg">{rarityLabels[item.rarity] ?? item.rarity}</span> {/if}
+                    {#if item.rarity && item.rarity !== 'COMMON'} <span class="bg-violet-500/10 text-violet-400 px-2 py-0.5 rounded-lg">{rpgRarityLabel(item.rarity)}</span> {/if}
                     {#if item.purchasable === false} <span class="bg-outline-variant/15 text-on-surface-variant px-2 py-0.5 rounded-lg">{m.eco_item_not_sold_badge()}</span> {/if}
                     {#if item.hpRestore} <span class="bg-success/10 text-success px-2 py-0.5 rounded-lg flex items-center gap-1"><Papicon icon="heart" size={10} /> HP +{item.hpRestore}</span> {/if}
                     {#if item.energyRestore} <span class="bg-purple-500/10 text-purple-400 px-2 py-0.5 rounded-lg flex items-center gap-1"><Papicon icon="zap" size={10} /> ÉNERGIE +{item.energyRestore}</span> {/if}
@@ -3616,7 +3610,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
             <label for="itemRarity" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_item_rarity()}</label>
             <select id="itemRarity" bind:value={editingItem.rarity} class="w-full bg-surface-container-high/45 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs focus:outline-none text-on-surface">
               {#each RPG_ITEM_RARITIES as rarity (rarity)}
-                <option value={rarity}>{rarityLabels[rarity]}</option>
+                <option value={rarity}>{rpgRarityLabel(rarity)}</option>
               {/each}
             </select>
           </div>

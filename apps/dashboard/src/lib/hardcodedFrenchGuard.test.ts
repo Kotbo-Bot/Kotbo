@@ -33,6 +33,7 @@ const TRANSLATED = [
   'lib/components/DemoBanner.svelte',
   'lib/components/DiscordMemberLookup.svelte',
   'lib/components/DropClaimRulesPanel.svelte',
+  'lib/components/DurationPresets.svelte',
   'lib/components/EmptyState.svelte',
   'lib/components/FormColorPicker.svelte',
   'lib/components/MainLayout.svelte',
