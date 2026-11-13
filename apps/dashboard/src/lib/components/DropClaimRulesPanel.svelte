@@ -2,6 +2,7 @@
   import {
     DROP_CLAIM_DAILY_LIMIT_RANGE,
     DROP_CLAIM_MIN_MEMBER_DAYS_RANGE,
+    dropClaimRoleMissing,
     hasDropClaimRules,
     normalizeDropClaimRules,
     type DropClaimRules,
@@ -23,6 +24,12 @@
   // Un champ vidé ou « Aucun » choisi laisse `null` ou `''` : relu comme l'API
   // le lira, la règle est éteinte et ne s'affiche pas comme active.
   const active = $derived(hasDropClaimRules(normalizeDropClaimRules(rules)));
+
+  // Rôle requis supprimé sur Discord : le clic l'ignore, la page le dit. Rôles pas
+  // encore chargés : rien n'est signalé sur une liste vide.
+  const roleMissing = $derived(
+    dropClaimRoleMissing(normalizeDropClaimRules(rules), roles.length > 0 ? roles.map((role) => role.id) : null),
+  );
 
   // Règle éteinte (0) affichée en champ vide : le texte gris dit « Aucune … »,
   // comme l'option « Aucun » du rôle. Un champ vidé rééteint la règle.
@@ -48,6 +55,9 @@
         <Papicon icon="ShieldCheck" size={15} /> {m.drop_claim_rules_title()}
         {#if active}
           <span class="text-2xs font-semibold px-2 py-0.5 rounded-full bg-primary/10 text-primary">{m.drop_claim_rules_active()}</span>
+        {/if}
+        {#if roleMissing}
+          <span class="text-2xs font-semibold px-2 py-0.5 rounded-full bg-warning/10 text-warning">{m.drop_claim_required_role_missing_badge()}</span>
         {/if}
       </h4>
       <p class="text-xs text-on-surface-variant mt-0.5">{m.drop_claim_rules_desc()}</p>
@@ -97,6 +107,9 @@
           {disabled}
         />
         <p class="text-2xs text-on-surface-variant mt-1">{m.drop_claim_required_role_desc()}</p>
+        {#if roleMissing}
+          <p class="text-2xs text-warning mt-1">{m.drop_claim_required_role_missing()}</p>
+        {/if}
       </div>
     </div>
   {/if}

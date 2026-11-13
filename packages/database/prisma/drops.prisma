@@ -140,6 +140,11 @@ model DropClaim {
   /// Dernière tentative de versement. La reprise la repousse par une écriture
   /// conditionnelle avant de verser : deux processus ne reprennent pas le même.
   attemptedAt DateTime  @default(now())
+  /// Reprises déjà faites par le cycle. Le clic n'en compte pas.
+  attempts    Int       @default(0)
+  /// Versement abandonné après trop de reprises en échec : le ramassage n'est plus
+  /// repris, et la page des drops le signale pour qu'un administrateur s'en occupe.
+  abandonedAt DateTime?
 
   drop Drop @relation(fields: [dropId], references: [id], onDelete: Cascade)
 
@@ -150,6 +155,6 @@ model DropClaim {
   /// Plafond de ramassages par membre sur 24 h.
   @@index([guildId, userId, createdAt])
   /// Reprise des versements restés en suspens.
-  @@index([paidAt, attemptedAt])
+  @@index([paidAt, abandonedAt, attemptedAt])
   @@map("drop_claims")
 }

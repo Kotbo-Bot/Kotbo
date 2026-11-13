@@ -6,6 +6,7 @@ import { json, readJsonBody, getGuildName, pushAudit, broadcastDashboardStateCha
 import {
   DROP_ADVICE_WINDOW_DAYS,
   DROP_TYPES,
+  dropClaimRoleMissing,
   hasDropClaimRules,
   normalizeDropClaimRules,
   normalizeDropGlobalSettings,
@@ -37,6 +38,12 @@ function describeClaimRules(rules: DropClaimRules): string {
     rules.minMemberDays > 0 ? `${rules.minMemberDays} j d'ancienneté` : null,
     rules.requiredRoleId ? `rôle ${rules.requiredRoleId}` : null,
   ].filter(Boolean).join(', ');
+}
+
+/** Rôles du serveur en cache ; `null` sans cache, la vérification est alors laissée au clic. */
+function cachedGuildRoleIds(client: Client, guildId: string): string[] | null {
+  const roles = client.guilds.cache.get(guildId)?.roles?.cache;
+  return roles && roles.size > 0 ? [...roles.keys()] : null;
 }
 
 function isDropType(value: string | undefined): value is DropType {
@@ -116,10 +123,15 @@ export async function handleDropsRoutes(
         return true;
       }
 
-      const [configs, weeklyOutcomes, locale] = await Promise.all([
+      const [configs, weeklyOutcomes, locale, abandonedClaims] = await Promise.all([
         getOrCreateDropConfigs(guildId),
         weeklyDropOutcomes(guildId),
         resolveGuildLocale(guildId),
+        // Versements abandonnés par la reprise sur la période du conseil : une alerte
+        // sans action possible ne doit pas rester affichée pour toujours.
+        prisma.dropClaim.count({
+          where: { guildId, abandonedAt: { gte: new Date(Date.now() - DROP_ADVICE_WINDOW_DAYS * 24 * 60 * 60 * 1000) } },
+        }),
       ]);
 
       const recent = await prisma.drop.findMany({
@@ -154,6 +166,7 @@ export async function handleDropsRoutes(
         ...normalizeDropGlobalSettings(guildData),
         configs: configs.map(serializeConfig),
         weeklyOutcomes,
+        abandonedClaims,
         announcement: dropAnnouncementLabels(locale),
         recentDrops: recent.map(({ itemId, ...drop }) => ({
           ...drop,
@@ -222,6 +235,18 @@ export async function handleDropsRoutes(
         // Fusion règle par règle : le volet peut n'en envoyer qu'une.
         dropClaimRules: { ...normalizeDropClaimRules(current.dropClaimRules), ...body?.dropClaimRules },
       });
+
+      // Un rôle requis nouvellement choisi doit exister : sinon plus personne ne
+      // ramasse. Un rôle déjà enregistré puis supprimé ne bloque pas le reste des
+      // réglages, la page le signale et le clic l'ignore.
+      const previousRoleId = normalizeDropClaimRules(current.dropClaimRules).requiredRoleId;
+      if (
+        settings.dropClaimRules.requiredRoleId !== previousRoleId
+        && dropClaimRoleMissing(settings.dropClaimRules, cachedGuildRoleIds(client, guildId))
+      ) {
+        json(res, 400, { error: 'Le rôle requis pour ramasser n\'existe pas sur ce serveur.' });
+        return true;
+      }
 
       // L'interrupteur maître passe par la bascule de module plutôt que par la
       // colonne : elle seule tient la ligne du registre et la colonne au même

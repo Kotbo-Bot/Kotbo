@@ -12,7 +12,7 @@
  * `@kotbo/shared` pour rester testables ; ce service ne fait que les appliquer,
  * publier les messages et créditer les gains.
  */
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, GuildMember, MessageFlags, type ButtonInteraction, type Client } from 'discord.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, GuildMember, MessageFlags, SnowflakeUtil, type ButtonInteraction, type Client } from 'discord.js';
 import type { Prisma } from '@prisma/client';
 import {
   DROP_ACTIVITY_DISABLED,
@@ -23,13 +23,16 @@ import {
   DROP_TYPE_MODULE,
   defaultDropTypeSettings,
   drawDropAmount,
+  dropActivityCheckDue,
   dropActivityVerdict,
   dropClaimBlocker,
+  dropClaimSettleAction,
   dropExpiresAt,
   dropJackpotAmount,
   dropMentionRoleId,
   dropMaxClaims,
   dropMessageDeleteAt,
+  effectiveDropClaimRules,
   enabledDropModes,
   hasDropClaimRules,
   nextAllowedPublicationAt,
@@ -282,7 +285,9 @@ export async function countRecentMemberMessages(client: Client, channelId: strin
   const channel = await client.channels.fetch(channelId).catch(() => null);
   if (!channel?.isTextBased()) return 0;
 
-  const messages = await channel.messages.fetch({ limit: RECENT_MESSAGES_PAGE }).catch(() => null);
+  // `after` : Discord ne renvoie que la fenêtre, un salon calme répond une page vide.
+  const after = SnowflakeUtil.generate({ timestamp: since.getTime() }).toString();
+  const messages = await channel.messages.fetch({ limit: RECENT_MESSAGES_PAGE, after }).catch(() => null);
   if (!messages) return 0;
 
   let count = 0;
@@ -291,6 +296,30 @@ export async function countRecentMemberMessages(client: Client, channelId: strin
     if (message.createdTimestamp >= since.getTime()) count += 1;
   }
   return count;
+}
+
+/**
+ * Dernière lecture de l'activité de chaque type en attente, par config. En mémoire : le
+ * cycle tourne dans un seul processus, et un redémarrage ne coûte qu'une lecture de plus.
+ */
+const activityCheckedAt = new Map<string, Date>();
+
+/**
+ * Messages récents du salon d'un type en attente d'activité. Entre deux lectures, le
+ * salon est tenu pour calme : le drop continue d'attendre, et le plafond de retard
+ * de `dropActivityVerdict` le fait partir à l'heure même sans relecture.
+ */
+async function recentMessagesForActivity(
+  client: Client,
+  configId: string,
+  channelId: string | null,
+  settings: DropTypeSettings,
+  now: Date,
+): Promise<number> {
+  if (!channelId || !dropActivityCheckDue(activityCheckedAt.get(configId) ?? null, now)) return 0;
+  activityCheckedAt.set(configId, now);
+  const since = new Date(now.getTime() - settings.activity.windowMinutes * 60 * 1000);
+  return countRecentMemberMessages(client, channelId, since);
 }
 
 async function publishDrop(
@@ -406,9 +435,7 @@ async function tickDropConfig(client: Client, guild: DropGuildContext, config: N
   // garde-fou anti-spam, qui décale l'échéance : sinon chaque drop d'un autre
   // type remettrait à zéro le plafond de retard, mesuré depuis cette échéance.
   if (settings.activity.minMessages > DROP_ACTIVITY_DISABLED) {
-    const channelId = dropChannelIdFor(settings, guild);
-    const since = new Date(now.getTime() - settings.activity.windowMinutes * 60 * 1000);
-    const recentMessages = channelId ? await countRecentMemberMessages(client, channelId, since) : 0;
+    const recentMessages = await recentMessagesForActivity(client, config.id, dropChannelIdFor(settings, guild), settings, now);
     const verdict = dropActivityVerdict({
       dueAt: config.nextDropAt,
       now,
@@ -417,6 +444,7 @@ async function tickDropConfig(client: Client, guild: DropGuildContext, config: N
       recentMessages,
     });
     if (verdict === 'wait') return;
+    activityCheckedAt.delete(config.id);
   }
 
   // Garde-fou anti-spam, tous types confondus : quatre ressources qui tombent
@@ -829,11 +857,12 @@ async function releaseClaim(dropId: string, claimId: string): Promise<void> {
  * Chaque ramassage est d'abord pris à bail par une écriture conditionnelle sur
  * `attemptedAt` : le cycle peut tourner sur plusieurs processus, et le second
  * à lire la ligne la trouve déjà repoussée. Un nouvel échec la laisse en
- * suspens jusqu'au passage suivant, après le même délai.
+ * suspens jusqu'au passage suivant, après le même délai, et le plafond de
+ * reprises de `@kotbo/shared` l'abandonne plutôt que de la reprendre sans fin.
  */
 export async function settlePendingDropClaims(client: Client): Promise<void> {
   const pending = await prisma.dropClaim.findMany({
-    where: { paidAt: null, attemptedAt: { lte: new Date(Date.now() - CLAIM_SETTLE_RETRY_MS) } },
+    where: { paidAt: null, abandonedAt: null, attemptedAt: { lte: new Date(Date.now() - CLAIM_SETTLE_RETRY_MS) } },
     orderBy: { attemptedAt: 'asc' },
     take: CLAIM_SETTLE_BATCH,
     include: { drop: true },
@@ -846,12 +875,19 @@ export async function settlePendingDropClaims(client: Client): Promise<void> {
     });
     if (leased.count === 0) continue;
 
-    // Même règle qu'au clic : un module coupé depuis ne verserait rien de visible.
-    if (!(await isModuleEnabled(claim.guildId, DROP_TYPE_MODULE[claim.drop.type as DropType]))) {
-      await releaseClaim(claim.dropId, claim.id);
+    // Le membre a lu « le gain suivra » : un module coupé depuis garde le gain en
+    // attente de son retour au lieu de le retirer.
+    const moduleEnabled = await isModuleEnabled(claim.guildId, DROP_TYPE_MODULE[claim.drop.type as DropType]);
+    const action = dropClaimSettleAction({ moduleEnabled, attempts: claim.attempts });
+    if (action === 'hold') continue;
+    if (action === 'abandon') {
+      await prisma.dropClaim.updateMany({ where: { id: claim.id, paidAt: null }, data: { abandonedAt: new Date() } });
+      logger.error('Drops', `Versement ${claim.id} (drop ${claim.dropId}, membre ${claim.userId}) abandonné après ${claim.attempts} reprises.`);
       continue;
     }
 
+    // `updateMany` : une ligne disparue entre-temps ne doit pas interrompre le lot.
+    await prisma.dropClaim.updateMany({ where: { id: claim.id, paidAt: null }, data: { attempts: { increment: 1 } } });
     const credited = await creditDrop(client, claim.drop, claim).catch((error: unknown) => {
       logger.error('Drops', `Reprise du versement ${claim.id} (drop ${claim.dropId}) impossible:`, error);
       return null;
@@ -876,6 +912,15 @@ function memberFacts(member: ButtonInteraction['member']): Pick<DropClaimFacts, 
 }
 
 /**
+ * Rôles du serveur, pour écarter un rôle requis supprimé depuis. `null` quand le serveur
+ * n'est pas en cache : sans liste fiable, la règle s'applique telle qu'enregistrée.
+ */
+function guildRoleIds(interaction: ButtonInteraction): string[] | null {
+  const roles = interaction.guild?.roles.cache;
+  return roles && roles.size > 0 ? [...roles.keys()] : null;
+}
+
+/**
  * Message de refus quand le membre ne respecte pas une règle de ramassage du
  * serveur, `null` sinon. Sans règle réglée, le clic ne coûte qu'une lecture de
  * la colonne : les ramassages du jour ne sont comptés que sous un plafond.
@@ -886,7 +931,7 @@ function memberFacts(member: ButtonInteraction['member']): Pick<DropClaimFacts, 
  */
 async function claimRuleRefusal(interaction: ButtonInteraction, guildId: string, locale: BotLocale): Promise<string | null> {
   const row = await prisma.guild.findUnique({ where: { id: guildId }, select: { dropClaimRules: true } });
-  const rules = normalizeDropClaimRules(row?.dropClaimRules);
+  const rules = effectiveDropClaimRules(normalizeDropClaimRules(row?.dropClaimRules), guildRoleIds(interaction));
   if (!hasDropClaimRules(rules)) return null;
 
   const now = new Date();

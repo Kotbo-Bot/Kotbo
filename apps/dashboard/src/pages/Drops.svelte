@@ -180,6 +180,7 @@
 
   let recentDrops = $state<DropHistoryEntry[]>([]);
   let weeklyOutcomes = $state<Partial<Record<DropType, DropOutcomes>>>({});
+  let abandonedClaims = $state(0);
   /** Gabarits de l'annonce, dans la langue du serveur. `null` tant que la route n'a pas répondu. */
   let announcement = $state<DropAnnouncementLabels | null>(null);
   let availableChannels = $state<any[]>([]);
@@ -439,6 +440,7 @@
 
         recentDrops = res.recentDrops ?? [];
         weeklyOutcomes = res.weeklyOutcomes ?? {};
+        abandonedClaims = res.abandonedClaims ?? 0;
         announcement = res.announcement ?? null;
 
         // Au premier chargement seulement : une mise à jour en direct ne doit pas
@@ -595,6 +597,12 @@
   featureKey="drops"
 >
   <InlineFeedback state={actionState} />
+
+  {#if abandonedClaims > 0}
+    <Callout variant="warning" title={m.drop_abandoned_claims_title({ count: abandonedClaims })}>
+      {m.drop_abandoned_claims_desc()}
+    </Callout>
+  {/if}
 
   {#if dropsLoaded && dropsModuleActive && !globalSettings.dropsEnabled}
     <Callout variant="warning" title={m.drop_paused_title()}>

@@ -5,7 +5,13 @@ import {
   DROP_CLAIM_DAILY_LIMIT_RANGE,
   DROP_CLAIM_MIN_MEMBER_DAYS_RANGE,
   dropClaimBlocker,
+  dropClaimRoleMissing,
+  effectiveDropClaimRules,
   hasDropClaimRules,
+  DROP_ACTIVITY_RECHECK_MINUTES,
+  dropActivityCheckDue,
+  DROP_CLAIM_SETTLE_MAX_ATTEMPTS,
+  dropClaimSettleAction,
   normalizeDropClaimRules,
   DROP_ACTIVITY_DISABLED,
   DROP_ACTIVITY_MESSAGES_RANGE,
@@ -388,6 +394,38 @@ describe('attente d\'activité dans le salon', () => {
   });
 });
 
+describe('relecture de l\'activité d\'un salon calme', () => {
+  test('jamais lue : la lecture est due', () => {
+    expect(dropActivityCheckDue(null, since)).toBe(true);
+  });
+
+  test('lue il y a moins que le délai : on ne relit pas Discord', () => {
+    const last = new Date(since.getTime() - (DROP_ACTIVITY_RECHECK_MINUTES * MINUTE_MS - 1));
+    expect(dropActivityCheckDue(last, since)).toBe(false);
+  });
+
+  test('lue il y a au moins le délai : la lecture est due', () => {
+    const last = new Date(since.getTime() - DROP_ACTIVITY_RECHECK_MINUTES * MINUTE_MS);
+    expect(dropActivityCheckDue(last, since)).toBe(true);
+  });
+});
+
+describe('reprise d\'un versement en suspens', () => {
+  test('module allumé, tentatives restantes : on verse', () => {
+    expect(dropClaimSettleAction({ moduleEnabled: true, attempts: 0 })).toBe('pay');
+    expect(dropClaimSettleAction({ moduleEnabled: true, attempts: DROP_CLAIM_SETTLE_MAX_ATTEMPTS - 1 })).toBe('pay');
+  });
+
+  test('module éteint : le gain promis attend son retour, sans user de tentative', () => {
+    expect(dropClaimSettleAction({ moduleEnabled: false, attempts: 0 })).toBe('hold');
+    expect(dropClaimSettleAction({ moduleEnabled: false, attempts: DROP_CLAIM_SETTLE_MAX_ATTEMPTS })).toBe('hold');
+  });
+
+  test('tentatives épuisées : le versement est abandonné plutôt que repris sans fin', () => {
+    expect(dropClaimSettleAction({ moduleEnabled: true, attempts: DROP_CLAIM_SETTLE_MAX_ATTEMPTS })).toBe('abandon');
+  });
+});
+
 describe('drops jackpot', () => {
   const on = normalizeDropGlobalSettings({ dropJackpotEnabled: true, dropJackpotChance: 20, dropJackpotMultiplier: 5 });
 
@@ -552,5 +590,25 @@ describe('règles de ramassage (configuration avancée)', () => {
   test('plusieurs règles : la première non respectée est donnée', () => {
     const rules = normalizeDropClaimRules({ dailyLimit: 1, minMemberDays: 7, requiredRoleId: 'role-vip' });
     expect(dropClaimBlocker(rules, { joinedAt: daysAgo(1), roleIds: [], claimsLast24h: 5, now })).toBe('DAILY_LIMIT');
+  });
+
+  test('rôle requis supprimé du serveur : signalé, et la règle ne bloque plus personne', () => {
+    const rules = normalizeDropClaimRules({ dailyLimit: 2, requiredRoleId: 'role-supprime' });
+    expect(dropClaimRoleMissing(rules, ['role-membre'])).toBe(true);
+    const effective = effectiveDropClaimRules(rules, ['role-membre']);
+    expect(effective).toEqual({ ...rules, requiredRoleId: null });
+    expect(dropClaimBlocker(effective, membre)).toBeNull();
+  });
+
+  test('rôle requis présent, ou rôles du serveur inconnus : la règle s\'applique', () => {
+    const rules = normalizeDropClaimRules({ requiredRoleId: 'role-vip' });
+    expect(dropClaimRoleMissing(rules, ['role-vip'])).toBe(false);
+    expect(dropClaimRoleMissing(rules, null)).toBe(false);
+    expect(effectiveDropClaimRules(rules, null)).toEqual(rules);
+    expect(dropClaimBlocker(effectiveDropClaimRules(rules, ['role-vip']), membre)).toBe('MISSING_ROLE');
+  });
+
+  test('sans rôle requis, rien n\'est signalé', () => {
+    expect(dropClaimRoleMissing(DEFAULT_DROP_CLAIM_RULES, [])).toBe(false);
   });
 });

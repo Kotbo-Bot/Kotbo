@@ -46,6 +46,8 @@ export interface DropsDataResult extends DropGlobalSettings {
   configs: DropConfigEntry[];
   /** Drops terminés sur les sept derniers jours, et ceux qui ont expiré sans gagnant. */
   weeklyOutcomes: Record<DropType, DropOutcomes>;
+  /** Ramassages dont le versement a été abandonné après trop de reprises en échec. */
+  abandonedClaims: number;
   announcement: DropAnnouncementLabels;
   recentDrops: DropHistoryEntry[];
 }
