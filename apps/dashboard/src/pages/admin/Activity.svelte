@@ -152,7 +152,7 @@
     {:else if metric === 'messages'}
       <TimeSeriesChart
         {labels}
-        mode="lines"
+        mode={chartMode}
         stacks={[
           { label: 'Messages', values: series.map((d) => d.messagesCount), color: SERIES[0] },
           { label: 'Réactions', values: series.map((d) => d.reactionsCount), color: SERIES[1] },
@@ -162,7 +162,7 @@
     {:else if metric === 'net'}
       <TimeSeriesChart
         {labels}
-        mode="lines"
+        mode={chartMode}
         stacks={[
           { label: 'Arrivées', values: series.map((d) => d.membersJoined), color: SERIES[2] },
           { label: 'Départs', values: series.map((d) => d.membersLeft), color: SERIES[3] },

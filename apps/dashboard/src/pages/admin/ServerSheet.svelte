@@ -306,7 +306,7 @@
       {:else if overviewMetric === 'messages'}
         <TimeSeriesChart
           {labels}
-          mode="lines"
+          mode={chartMode}
           stacks={[
             { label: 'Messages', values: series.map((day) => day.messages), color: SERIES[0] },
             { label: 'Membres actifs', values: series.map((day) => day.activeMembers), color: SERIES[1] },
@@ -316,7 +316,7 @@
       {:else if overviewMetric === 'net'}
         <TimeSeriesChart
           {labels}
-          mode="lines"
+          mode={chartMode}
           stacks={[
             { label: 'Arrivées', values: series.map((day) => day.joined), color: SERIES[1] },
             { label: 'Départs', values: series.map((day) => day.left), color: SERIES[3] },
