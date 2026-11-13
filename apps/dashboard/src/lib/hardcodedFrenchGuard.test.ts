@@ -104,6 +104,7 @@ const TRANSLATED = [
   'pages/PublicAppeal.svelte',
   'pages/PublicForm.svelte',
   'pages/PublicProfile.svelte',
+  'pages/Reputation.svelte',
   'pages/SanctionEvidenceFile.svelte',
   'pages/Schedules.svelte',
   'pages/security/Aegis.svelte',

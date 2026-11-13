@@ -50,7 +50,7 @@ const PATTERNS = {
    */
   localUnsavedBar: { regex: /sticky bottom-\d/g, max: 1 },
   /** Spinner ecrit a la main : Button loading pour une action, LoadingHint pour un chargement. */
-  handMadeSpinner: { regex: /animate-spin[^"'`\n]*rounded-full|rounded-full[^"'`\n]*animate-spin/g, max: 67 },
+  handMadeSpinner: { regex: /animate-spin[^"'`\n]*rounded-full|rounded-full[^"'`\n]*animate-spin/g, max: 66 },
   /**
    * Texte secondaire attenue sous 80 % : il tombe sous 4,5:1 (AA) sur les
    * fonds clairs comme sombres. Garder la couleur pleine ; /30 et /40 restent

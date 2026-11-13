@@ -13,6 +13,13 @@ export interface ReputationProfile {
   canVote: boolean;
 }
 
+/** Motif d'un refus de vote. Traduit par l'appelant, dans la langue du serveur. */
+export type RepRefusalCode = 'SELF' | 'BOT' | 'DAILY_LIMIT' | 'ALREADY_TODAY';
+
+export type GiveRepResult =
+  | { success: true; newTotal: number }
+  | { success: false; code: RepRefusalCode };
+
 export interface ReputationLeaderboard {
   entries: Array<{ userId: string; totalRep: number; rank: number }>;
   totalVoters: number;
@@ -35,16 +42,12 @@ export async function giveRep(
   receiverId: string,
   reason?: string,
   options: { receiverIsBot?: boolean } = {},
-): Promise<{ success: boolean; error?: string; newTotal?: number }> {
-  if (giverId === receiverId) {
-    return { success: false, error: 'Vous ne pouvez pas vous donner de la réputation.' };
-  }
-  if (options.receiverIsBot) {
-    return { success: false, error: 'Les bots ne peuvent pas recevoir de réputation.' };
-  }
+): Promise<GiveRepResult> {
+  if (giverId === receiverId) return { success: false, code: 'SELF' };
+  if (options.receiverIsBot) return { success: false, code: 'BOT' };
 
   const day = await currentRepDay(guildId);
-  const limitReached = { success: false, error: `Vous avez atteint la limite de ${REP_DAILY_VOTE_LIMIT} votes par jour.` };
+  const limitReached: GiveRepResult = { success: false, code: 'DAILY_LIMIT' };
 
   // Lectures sur le primaire : un réplica en retard laisserait passer un double clic.
   const votesToday = await prisma.reputationVote.count({ where: { guildId, giverId, day } });
@@ -58,9 +61,7 @@ export async function giveRep(
     });
     voteId = vote.id;
   } catch (err) {
-    if ((err as { code?: string }).code === 'P2002') {
-      return { success: false, error: 'Vous avez déjà donné un +rep à cette personne aujourd\'hui.' };
-    }
+    if ((err as { code?: string }).code === 'P2002') return { success: false, code: 'ALREADY_TODAY' };
     throw err;
   }
 
@@ -72,34 +73,43 @@ export async function giveRep(
     return limitReached;
   }
 
-  const newTotal = await prisma.reputationVote.aggregate({
-    where: { guildId, receiverId },
-    _sum: { value: true },
-  });
+  const newTotal = await receivedTotal(guildId, receiverId, prisma);
 
   logger.debug('Reputation', `${giverId} → +rep → ${receiverId} (guild: ${guildId})`);
 
-  return { success: true, newTotal: newTotal._sum.value ?? 0 };
+  return { success: true, newTotal };
+}
+
+/** Réputation reçue par un membre sur ce serveur. */
+async function receivedTotal(guildId: string, userId: string, db: typeof prismaRead = prismaRead): Promise<number> {
+  const agg = await db.reputationVote.aggregate({
+    where: { guildId, receiverId: userId },
+    _sum: { value: true },
+  });
+  return agg._sum.value ?? 0;
+}
+
+/**
+ * Rang d'un total : nombre de membres strictement devant, plus un. Les ex aequo
+ * partagent le rang, et rien n'oblige à charger tout le classement du serveur.
+ */
+async function rankOf(guildId: string, totalRep: number): Promise<number> {
+  const rows = await prismaRead.$queryRaw<Array<{ above: bigint }>>`
+    SELECT COUNT(*)::bigint AS above FROM (
+      SELECT "receiverId" FROM reputation_votes
+      WHERE "guildId" = ${guildId}
+      GROUP BY "receiverId"
+      HAVING SUM("value") > ${totalRep}
+    ) AS ahead`;
+  return Number(rows[0]?.above ?? 0) + 1;
 }
 
 export async function getReputation(guildId: string, userId: string): Promise<ReputationProfile> {
-  const [totalAgg, votesToday, allReps] = await Promise.all([
-    prismaRead.reputationVote.aggregate({
-      where: { guildId, receiverId: userId },
-      _sum: { value: true },
-    }),
+  const [totalRep, votesToday] = await Promise.all([
+    receivedTotal(guildId, userId),
     getVotesGivenToday(guildId, userId),
-    prismaRead.reputationVote.groupBy({
-      by: ['receiverId'],
-      where: { guildId },
-      _sum: { value: true },
-      orderBy: { _sum: { value: 'desc' } },
-    }),
   ]);
-
-  const totalRep = totalAgg._sum.value ?? 0;
-  const rankIndex = allReps.findIndex((r) => r.receiverId === userId);
-  const rank = rankIndex >= 0 ? rankIndex + 1 : allReps.length + 1;
+  const rank = await rankOf(guildId, totalRep);
 
   return {
     userId,
@@ -134,8 +144,10 @@ export async function getReputationLeaderboard(guildId: string, limit = 15): Pro
   };
 }
 
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+
 export async function getReputationDashboardData(guildId: string) {
-  const [leaderboard, recentVotes, totalVotes] = await Promise.all([
+  const [leaderboard, recentVotes, totalVotes, votesLast7Days] = await Promise.all([
     getReputationLeaderboard(guildId, 20),
     prismaRead.reputationVote.findMany({
       where: { guildId },
@@ -144,7 +156,8 @@ export async function getReputationDashboardData(guildId: string) {
       select: { giverId: true, receiverId: true, reason: true, createdAt: true },
     }),
     prismaRead.reputationVote.count({ where: { guildId } }),
+    prismaRead.reputationVote.count({ where: { guildId, createdAt: { gte: new Date(Date.now() - WEEK_MS) } } }),
   ]);
 
-  return { leaderboard, recentVotes, totalVotes };
+  return { leaderboard, recentVotes, totalVotes, votesLast7Days };
 }

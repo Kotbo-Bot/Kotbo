@@ -7,26 +7,19 @@
   import EmptyState from '../lib/components/EmptyState.svelte';
   import UserDisplay from '../lib/components/UserDisplay.svelte';
   import { memberCaseModal } from '../lib/stores/memberCaseModal.svelte';
-  import { m } from '../lib/i18n';
+  import LoadingHint from '../lib/components/LoadingHint.svelte';
+  import { m, dateLocale } from '../lib/i18n';
 
   let loading = $state(true);
   let data: any = $state(null);
-
-  const totalRepGiven = $derived(
-    data?.recentVotes?.length ?? 0
-  );
 
   /** Clic sur un pseudo : ouvre sa fiche, seulement pour qui a accès à « Membres ». */
   function openMemberOnClick(name: string | null | undefined) {
     return memberCaseModal.canOpen ? (userId: string) => memberCaseModal.show(userId, name || userId) : null;
   }
 
-  function getMedal(index: number): string {
-    if (index === 0) return '\u{1F947}';
-    if (index === 1) return '\u{1F948}';
-    if (index === 2) return '\u{1F949}';
-    return '';
-  }
+  /** Pastille du podium : or, argent, bronze ; rien au-delà, le numéro suffit. */
+  const PODIUM = ['rep-podium-gold', 'rep-podium-silver', 'rep-podium-bronze'];
 
   async function load() {
     loading = true;
@@ -51,10 +44,7 @@
 
 <!-- Loading -->
 {#if loading}
-  <div class="flex flex-col items-center justify-center py-16 text-on-surface-variant gap-4">
-    <div class="h-8 w-8 animate-spin rounded-full border-3 border-primary border-t-transparent"></div>
-    <p class="text-sm">{m.rep_loading()}</p>
-  </div>
+  <LoadingHint context="data" />
 {:else if data}
   <!-- Stats Row -->
   <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
@@ -81,8 +71,8 @@
         <Papicon icon="Star" size={20} />
       </div>
       <div class="flex flex-col">
-        <span class="text-xl font-bold text-on-surface">{totalRepGiven}</span>
-        <span class="text-xs font-medium text-on-surface-variant">{m.rep_total_rep_given()}</span>
+        <span class="text-xl font-bold text-on-surface">{data.votesLast7Days}</span>
+        <span class="text-xs font-medium text-on-surface-variant">{m.rep_votes_last_7_days()}</span>
       </div>
     </div>
   </div>
@@ -101,7 +91,9 @@
         <div class="space-y-1">
           {#each data.leaderboard.entries as entry, i}
             <div class="reputation-leaderboard-row grid items-center gap-2 px-2.5 py-2 rounded-lg text-sm transition-colors hover:bg-surface-container-high/20 {i < 3 ? 'bg-surface-container-high/10' : ''}">
-              <span class="text-base leading-none">{getMedal(i)}</span>
+              <span class="flex h-6 w-6 items-center justify-center rounded-full {PODIUM[i] ?? ''}" aria-hidden="true">
+                {#if i === 0}<Papicon icon="Crown" size={13} />{/if}
+              </span>
               <span class="font-semibold text-on-surface-variant text-xs">#{entry.rank}</span>
               <UserDisplay
                 userId={entry.userId}
@@ -112,7 +104,7 @@
               />
               <div class="h-2 bg-surface-container-high rounded-full overflow-hidden">
                 <div
-                  class="h-2 rounded-full transition-all duration-500 bg-emerald-500"
+                  class="h-2 rounded-full transition-all duration-500 bg-success"
                   style="width: {Math.min(100, (entry.totalRep / Math.max(data.leaderboard.entries[0]?.totalRep ?? 1, 1)) * 100)}%"
                 ></div>
               </div>
@@ -160,7 +152,7 @@
               {#if vote.reason}
                 <p class="text-xs text-on-surface-variant italic">{vote.reason}</p>
               {/if}
-              <span class="text-2xs text-on-surface-variant/30 block">{new Date(vote.createdAt).toLocaleDateString('fr-FR')}</span>
+              <span class="text-2xs text-on-surface-variant/30 block">{new Date(vote.createdAt).toLocaleDateString(dateLocale())}</span>
             </div>
           {/each}
         </div>
@@ -171,6 +163,19 @@
 </ModulePage>
 
 <style>
+  .rep-podium-gold {
+    background: color-mix(in srgb, var(--color-warning) 22%, transparent);
+    color: var(--color-warning);
+  }
+
+  .rep-podium-silver {
+    background: color-mix(in srgb, var(--color-on-surface-variant) 18%, transparent);
+  }
+
+  .rep-podium-bronze {
+    background: color-mix(in srgb, var(--color-tertiary) 20%, transparent);
+  }
+
   .reputation-leaderboard-row {
     grid-template-columns: 28px 36px 1fr 80px 60px;
   }

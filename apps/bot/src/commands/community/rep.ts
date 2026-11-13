@@ -6,6 +6,7 @@ import {
 import { errorContainer, kotboContainer } from '../../utils/embeds.js';
 import { E, rankEmoji } from '../../utils/emojis.js';
 import { giveRep, getReputation, getReputationLeaderboard, REP_DAILY_VOTE_LIMIT } from '../../services/community/reputationService.js';
+import { repRefusalMessage } from '../../services/community/reputationMessages.js';
 import { incrementQuestProgress } from '../../services/community/questService.js';
 import type { SlashCommandDefinition } from '../../commands.js';
 import { separator, v2Message } from '@arcscord/components'
@@ -64,7 +65,7 @@ async function execute(interaction: ChatInputCommandInteraction) {
 
     if (!result.success) {
       await interaction.reply({
-        components: [errorContainer(m.b2_rep_impossible({}, { locale }), result.error)],
+        components: [errorContainer(m.b2_rep_impossible({}, { locale }), repRefusalMessage(result.code, locale, REP_DAILY_VOTE_LIMIT))],
         flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
       });
       return;
@@ -79,7 +80,7 @@ async function execute(interaction: ChatInputCommandInteraction) {
         fields: [
           m.b2_rep_give_field({ from: `<@${interaction.user.id}>`, to: `<@${target.id}>` }, { locale }) + (reason ? `\n${E.dot} *${reason}*` : ''),
         ],
-        footerTitle: m.b2_rep_give_footer({ user: `<@${target.id}>`, total: result.newTotal ?? 0 }, { locale })
+        footerTitle: m.b2_rep_give_footer({ user: `<@${target.id}>`, total: result.newTotal }, { locale })
       })
     ));
   }

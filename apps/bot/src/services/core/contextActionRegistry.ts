@@ -12,6 +12,8 @@ import {
 import { COLORS_RAW, kotboContainer, truncate } from '../../utils/embeds.js';
 import { separator, v2Message } from '@arcscord/components';
 import { publicErrorMessage } from '../../utils/publicError.js';
+import { resolveGuildLocale } from '../../utils/i18n.js';
+import * as m from '../../lib/paraglide/messages.js';
 
 /**
  * Registre déclaratif des actions des menus contextuels.
@@ -344,21 +346,25 @@ const messageActions: MessageAction[] = [
     category: 'Communauté',
     allowSelf: false,
     async run(ctx) {
-      const { giveRep } = await import('../community/reputationService.js');
+      const { REP_DAILY_VOTE_LIMIT, giveRep } = await import('../community/reputationService.js');
+      const { repRefusalMessage } = await import('../community/reputationMessages.js');
+      const locale = await resolveGuildLocale(ctx.guild.id, ctx.guild.preferredLocale);
+      const channelName = 'name' in ctx.message.channel ? ctx.message.channel.name : ctx.message.channelId;
       const result = await giveRep(
         ctx.guild.id,
         ctx.invoker.id,
         ctx.message.author.id,
-        `Message utile dans #${'name' in ctx.message.channel ? ctx.message.channel.name : 'salon'}`,
+        m.b2_rep_ctx_reason_message({ channel: channelName }, { locale }),
+        { receiverIsBot: ctx.message.author.bot },
       );
 
       if (!result.success) {
-        return fail('Réputation refusée', result.error ?? 'Impossible de donner de la réputation à ce membre.');
+        return fail(m.b2_rep_ctx_refused_title({}, { locale }), repRefusalMessage(result.code, locale, REP_DAILY_VOTE_LIMIT));
       }
 
       return ok(
-        'Réputation donnée',
-        `Tu as donné +1 réputation à ${ctx.message.author} pour [son message](${messageLink(ctx.message)}).\n\nIl/elle totalise désormais **${result.newTotal}** point(s).`,
+        m.b2_rep_give_title({}, { locale }),
+        m.b2_rep_ctx_given_message({ user: `${ctx.message.author}`, link: messageLink(ctx.message), total: result.newTotal }, { locale }),
       );
     },
   },
@@ -603,14 +609,20 @@ const userActions: UserAction[] = [
     category: 'Communauté',
     allowSelf: false,
     async run(ctx) {
-      const { giveRep } = await import('../community/reputationService.js');
-      const result = await giveRep(ctx.guild.id, ctx.invoker.id, ctx.targetId);
+      const { REP_DAILY_VOTE_LIMIT, giveRep } = await import('../community/reputationService.js');
+      const { repRefusalMessage } = await import('../community/reputationMessages.js');
+      const locale = await resolveGuildLocale(ctx.guild.id, ctx.guild.preferredLocale);
+      const target = await ctx.guild.members.fetch(ctx.targetId).catch(() => null);
+      const result = await giveRep(ctx.guild.id, ctx.invoker.id, ctx.targetId, undefined, { receiverIsBot: target?.user.bot ?? false });
 
       if (!result.success) {
-        return fail('Réputation refusée', result.error ?? 'Impossible de donner de la réputation à ce membre.');
+        return fail(m.b2_rep_ctx_refused_title({}, { locale }), repRefusalMessage(result.code, locale, REP_DAILY_VOTE_LIMIT));
       }
 
-      return ok('Réputation donnée', `Tu as donné +1 réputation à <@${ctx.targetId}>.\n\nIl/elle totalise désormais **${result.newTotal}** point(s).`);
+      return ok(
+        m.b2_rep_give_title({}, { locale }),
+        m.b2_rep_ctx_given_user({ user: `<@${ctx.targetId}>`, total: result.newTotal }, { locale }),
+      );
     },
   },
   {
