@@ -210,15 +210,21 @@ describe('getReputationDashboardData', () => {
 });
 
 describe('listReputationVotes', () => {
+  const AT = new Date('2026-11-13T10:00:00.000Z');
+
   function rows(count: number) {
-    return Array.from({ length: count }, (_, i) => ({ id: `v${i}`, giverId: 'a', receiverId: 'b', createdAt: new Date() }));
+    return Array.from({ length: count }, (_, i) => ({ id: `v${i}`, giverId: 'a', receiverId: 'b', createdAt: AT }));
   }
 
-  test('rend un curseur quand une page de plus existe', async () => {
+  function whereOfCall() {
+    return (mockDb.reputationVote.findMany.mock.calls[0][0] as { where: Record<string, unknown> }).where;
+  }
+
+  test('rend un curseur (date et id du dernier vote) quand une page de plus existe', async () => {
     voteRows = rows(3);
     const page = await listReputationVotes('g', { limit: 2 });
     expect(page.votes).toHaveLength(2);
-    expect(page.nextCursor).toBe('v1');
+    expect(page.nextCursor).toBe(`${AT.getTime()}_v1`);
   });
 
   test('pas de curseur sur la dernière page', async () => {
@@ -227,10 +233,19 @@ describe('listReputationVotes', () => {
     expect(page.nextCursor).toBeNull();
   });
 
+  test('reprend sous le curseur par date puis id, sans dépendre d\'une ligne encore présente', async () => {
+    await listReputationVotes('g', { cursor: `${AT.getTime()}_v1`, limit: 2 });
+    const args = mockDb.reputationVote.findMany.mock.calls[0][0] as Record<string, unknown>;
+    // Plus de curseur Prisma : il exige que la ligne existe encore, un vote retiré vidait la page.
+    expect(args.cursor).toBeUndefined();
+    expect(whereOfCall().AND).toContainEqual({
+      OR: [{ createdAt: { lt: AT } }, { createdAt: AT, id: { lt: 'v1' } }],
+    });
+  });
+
   test('le filtre membre couvre les votes donnés et reçus', async () => {
     await listReputationVotes('g', { userId: 'u1', limit: 2 });
-    const where = (mockDb.reputationVote.findMany.mock.calls[0][0] as { where: { OR?: unknown[] } }).where;
-    expect(where.OR).toEqual([{ giverId: 'u1' }, { receiverId: 'u1' }]);
+    expect(whereOfCall().AND).toContainEqual({ OR: [{ giverId: 'u1' }, { receiverId: 'u1' }] });
   });
 });
 

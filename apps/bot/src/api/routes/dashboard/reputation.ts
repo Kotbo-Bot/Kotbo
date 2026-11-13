@@ -16,6 +16,7 @@ import {
   REPUTATION_COINS_PER_REP,
   REPUTATION_DAILY_LIMIT,
   REPUTATION_XP_PER_REP,
+  decodeReputationCursor,
   REPUTATION_TIERS_MAX,
   REPUTATION_TIER_THRESHOLD,
   isReputationPeriod,
@@ -47,7 +48,6 @@ import { getMemberIdentities } from '../../../services/moderation/memberIdentity
 import { jsonFailure } from '../../shared/failure.js';
 
 const SNOWFLAKE_RE = /^\d{17,20}$/;
-const CURSOR_RE = /^[A-Za-z0-9_-]{1,40}$/;
 
 const has = (body: object, key: string): boolean => Object.prototype.hasOwnProperty.call(body, key);
 
@@ -196,7 +196,7 @@ export async function handleReputationRoutes(
       json(res, 400, { error: 'Identifiant de membre invalide' });
       return true;
     }
-    if (cursor && !CURSOR_RE.test(cursor)) {
+    if (cursor && !decodeReputationCursor(cursor)) {
       json(res, 400, { error: 'Curseur invalide' });
       return true;
     }

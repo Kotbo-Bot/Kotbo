@@ -29,3 +29,21 @@ export function reputationPeriodStart(period: ReputationPeriod, now: Date = new 
   if (period === 'all') return null;
   return new Date(now.getTime() - PERIOD_DAYS[period] * DAY_MS);
 }
+
+/**
+ * Curseur de l'historique : date (ms) et id du dernier vote affiché. La reprise
+ * se fait « sous » ce couple plutôt que sur la ligne elle-même, qui a pu être
+ * retirée entre deux pages.
+ */
+const CURSOR_RE = /^(\d{1,15})_([A-Za-z0-9]{1,40})$/;
+
+export function encodeReputationCursor(createdAt: Date, id: string): string {
+  return `${createdAt.getTime()}_${id}`;
+}
+
+export function decodeReputationCursor(raw: string): { createdAt: Date; id: string } | null {
+  const match = CURSOR_RE.exec(raw);
+  if (!match) return null;
+  const createdAt = new Date(Number(match[1]));
+  return Number.isNaN(createdAt.getTime()) ? null : { createdAt, id: match[2] };
+}

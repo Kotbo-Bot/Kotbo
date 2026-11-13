@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import {
   REPUTATION_DAILY_LIMIT,
+  decodeReputationCursor,
+  encodeReputationCursor,
   isReputationPeriod,
   reputationPeriodStart,
 } from '@kotbo/shared';
@@ -35,5 +37,20 @@ describe('bornes de la limite par jour', () => {
   test('le défaut reste dans les bornes', () => {
     expect(REPUTATION_DAILY_LIMIT.default).toBeGreaterThanOrEqual(REPUTATION_DAILY_LIMIT.min);
     expect(REPUTATION_DAILY_LIMIT.default).toBeLessThanOrEqual(REPUTATION_DAILY_LIMIT.max);
+  });
+});
+
+describe('curseur de l\'historique', () => {
+  const at = new Date('2026-11-13T10:00:00.123Z');
+
+  test('aller-retour date et id', () => {
+    const cursor = encodeReputationCursor(at, 'clx1abc');
+    expect(decodeReputationCursor(cursor)).toEqual({ createdAt: at, id: 'clx1abc' });
+  });
+
+  test('refuse un curseur mal formé', () => {
+    for (const raw of ['', 'v0', 'abc_def', '123_', '_abc', '123_a-b', `${'9'.repeat(20)}_abc`]) {
+      expect(decodeReputationCursor(raw)).toBeNull();
+    }
   });
 });

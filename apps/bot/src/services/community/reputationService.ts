@@ -1,6 +1,8 @@
 import { formatWallClockInTimezone } from '@kotbo/contracts';
 import {
   REPUTATION_DAILY_LIMIT,
+  decodeReputationCursor,
+  encodeReputationCursor,
   reputationPeriodStart,
   type ReputationPeriod,
   type ReputationTier,
@@ -316,20 +318,27 @@ export interface ReputationVoteFilter {
 }
 
 /**
- * Historique paginé, du plus récent au plus ancien. Le curseur est l'id du
- * dernier vote rendu ; une ligne de plus est lue pour savoir s'il en reste.
+ * Historique paginé, du plus récent au plus ancien. La page suivante reprend
+ * sous la date et l'id du dernier vote rendu (voir `encodeReputationCursor`) ;
+ * une ligne de plus est lue pour savoir s'il en reste.
  */
 export async function listReputationVotes(guildId: string, filter: ReputationVoteFilter = {}) {
   const limit = filter.limit ?? REPUTATION_HISTORY_PAGE;
+  const after = filter.cursor ? decodeReputationCursor(filter.cursor) : null;
+  const conditions = [
+    ...(filter.userId ? [{ OR: [{ giverId: filter.userId }, { receiverId: filter.userId }] }] : []),
+    ...(after
+      ? [{ OR: [{ createdAt: { lt: after.createdAt } }, { createdAt: after.createdAt, id: { lt: after.id } }] }]
+      : []),
+  ];
   const rows = await prismaRead.reputationVote.findMany({
     where: {
       guildId,
       ...periodFilter(filter.period ?? 'all'),
-      ...(filter.userId ? { OR: [{ giverId: filter.userId }, { receiverId: filter.userId }] } : {}),
+      AND: conditions,
     },
     orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     take: limit + 1,
-    ...(filter.cursor ? { cursor: { id: filter.cursor }, skip: 1 } : {}),
     select: {
       id: true,
       giverId: true,
@@ -342,7 +351,8 @@ export async function listReputationVotes(guildId: string, filter: ReputationVot
   });
 
   const votes = rows.slice(0, limit);
-  return { votes, nextCursor: rows.length > limit ? votes[votes.length - 1].id : null };
+  const last = votes[votes.length - 1];
+  return { votes, nextCursor: rows.length > limit && last ? encodeReputationCursor(last.createdAt, last.id) : null };
 }
 
 /** Retire un vote du serveur. `null` quand il n'existe pas ou appartient à un autre serveur. */

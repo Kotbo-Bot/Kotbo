@@ -165,15 +165,21 @@ describe('GET /reputation', () => {
 
 describe('GET /reputation/votes', () => {
   test('rend les votes avec identités et lien vers le message', async () => {
-    const { status, json } = await call('GET', '/votes?period=month&cursor=v0');
+    const { status, json } = await call('GET', '/votes?period=month&cursor=1763028000000_clx1abc');
     expect(status).toBe(200);
-    expect(service.listReputationVotes.mock.calls[0][1]).toMatchObject({ period: 'month', cursor: 'v0' });
+    expect(service.listReputationVotes.mock.calls[0][1]).toMatchObject({ period: 'month', cursor: '1763028000000_clx1abc' });
     const vote = json.votes[0];
     expect(vote.giverName).toBe('Bob');
     expect(vote.giverAvatarUrl).toBeNull();
     expect(vote.receiverName).toBe('Alice');
     expect(vote.messageUrl).toBe(`https://discord.com/channels/${GUILD}/333333333333333333/444444444444444444`);
     expect(json.nextCursor).toBeNull();
+  });
+
+  test('refuse un curseur mal formé', async () => {
+    const { status } = await call('GET', '/votes?cursor=v0');
+    expect(status).toBe(400);
+    expect(service.listReputationVotes).not.toHaveBeenCalled();
   });
 
   test('refuse un identifiant de membre mal formé', async () => {
