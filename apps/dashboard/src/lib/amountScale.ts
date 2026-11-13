@@ -48,3 +48,12 @@ export function orderedAmounts(min: number, max: number, moved: 'min' | 'max'): 
   if (min <= max) return { min, max };
   return moved === 'min' ? { min, max: min } : { min: max, max };
 }
+
+/**
+ * Plage déplacée d'un bloc de `delta` paliers : l'écart entre les deux bornes est gardé,
+ * et la plage s'arrête au bout de l'échelle plutôt que de se resserrer contre lui.
+ */
+export function shiftedRange(minIndex: number, maxIndex: number, delta: number, lastIndex: number): { min: number; max: number } {
+  const shift = Math.min(Math.max(delta, -minIndex), lastIndex - maxIndex);
+  return { min: minIndex + shift, max: maxIndex + shift };
+}

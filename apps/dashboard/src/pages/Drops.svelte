@@ -393,6 +393,34 @@
   let now = $state(new Date());
   const nowTicker = setInterval(() => now = new Date(), 30 * 1000);
 
+  /**
+   * Blocs de la colonne de droite repliés : ils prennent de la hauteur, on peut vouloir
+   * régler sans les avoir sous les yeux. Le choix est retenu par navigateur, comme le
+   * mode simple.
+   */
+  type CollapsibleBlock = 'status' | 'preview' | 'items';
+
+  function readCollapsed(block: CollapsibleBlock): boolean {
+    try {
+      return typeof localStorage !== 'undefined' && localStorage.getItem(`kotbo_drops_${block}_collapsed`) === '1';
+    } catch {
+      return false;
+    }
+  }
+
+  let collapsed = $state<Record<CollapsibleBlock, boolean>>({
+    status: readCollapsed('status'),
+    preview: readCollapsed('preview'),
+    items: readCollapsed('items'),
+  });
+
+  function toggleBlock(block: CollapsibleBlock) {
+    collapsed[block] = !collapsed[block];
+    try {
+      localStorage.setItem(`kotbo_drops_${block}_collapsed`, collapsed[block] ? '1' : '0');
+    } catch { /* stockage indisponible : le choix vaut pour la visite */ }
+  }
+
   /** Panneau d'état ouvert sur mobile, où il ne tient pas à côté du formulaire. */
   let statusOpen = $state(false);
 
@@ -725,6 +753,28 @@
   }
 </script>
 
+<!-- Titre d'un bloc repliable : il replie ou déplie le bloc dont il porte le nom.
+     `tag` garde la hiérarchie des titres de l'endroit où il est posé. -->
+{#snippet blockToggle(block: CollapsibleBlock, label: string, icon: string, size: string, iconSize: number, tag = 'h3', summary = '')}
+  <svelte:element this={tag}>
+    <button
+      type="button"
+      onclick={() => toggleBlock(block)}
+      aria-expanded={!collapsed[block]}
+      aria-controls="drop-{block}-body"
+      class="w-full {size} font-semibold flex items-center justify-between gap-2 cursor-pointer"
+    >
+      <span class="flex items-center gap-2"><Papicon {icon} size={iconSize} /> {label}</span>
+      <span class="flex items-center gap-2 shrink-0">
+        {#if collapsed[block] && summary}
+          <span class="text-2xs font-normal text-on-surface-variant">{summary}</span>
+        {/if}
+        <Papicon icon={collapsed[block] ? 'ChevronDown' : 'ChevronUp'} size={iconSize - 2} />
+      </span>
+    </button>
+  </svelte:element>
+{/snippet}
+
 <!-- Aperçu de l'annonce et estimation d'un type : en bas de son onglet sur mobile, dans
      la colonne de droite sur grand écran, où il reste visible pendant qu'on règle. -->
 {#snippet previewPanel(type: DropType, labels: DropAnnouncementLabels)}
@@ -834,6 +884,7 @@
           bind:max={configs[type][mode].maxAmount}
           labelMin={m.drop_mode_min_label()}
           labelMax={m.drop_mode_max_label()}
+          labelRange={m.drop_mode_range_label()}
           disabled={!canManageSettings || !configs[type][mode].enabled}
         />
       </div>
@@ -1233,9 +1284,21 @@
                  arme legendaire dans un salon par accident. -->
             {#if type === 'RPG_ITEM'}
               <div class="space-y-2 border border-outline-variant/15 rounded-xl p-4">
+                <!-- Repliée, la liste se résume dans son titre ; un total qui ne fait pas
+                     cent reste signalé, l'enregistrement le refuserait. -->
                 <div>
-                  <h4 class="text-sm font-semibold">{m.drop_item_pool_title()}</h4>
-                  <p class="text-xs text-on-surface-variant mt-0.5">{m.drop_item_pool_desc()}</p>
+                  {@render blockToggle(
+                    'items',
+                    m.drop_item_pool_title(),
+                    TYPE_ICONS.RPG_ITEM,
+                    'text-sm',
+                    15,
+                    'h4',
+                    m.drop_item_pool_summary({ count: configs[type].items.length, total: dropItemsTotal }),
+                  )}
+                  {#if !collapsed.items}
+                    <p class="text-xs text-on-surface-variant mt-0.5">{m.drop_item_pool_desc()}</p>
+                  {/if}
                 </div>
 
                 {#if !rpgEnabled}
@@ -1244,67 +1307,75 @@
                   </Callout>
                 {/if}
 
-                <div class="flex flex-wrap gap-2">
-                  {#each availableItems as item (item.id)}
-                    {@const picked = configs[type].items.some((entry) => entry.itemId === item.id)}
-                    <button
-                      type="button"
-                      onclick={() => toggleDropItem(item.id)}
-                      disabled={(!picked && configs[type].items.length >= DROP_ITEM_POOL_MAX)}
-                      use:explainDisabled={(!canManageSettings) ? m.common_reason_no_permission() : ''}
-                      aria-pressed={picked}
-                      class="px-3 py-1.5 rounded-lg border text-2xs font-medium transition-all disabled:opacity-40 disabled:cursor-not-allowed {picked
-                        ? 'bg-primary/10 border-primary/40 text-primary'
-                        : 'bg-surface-container-high/30 border-outline-variant/15 text-on-surface-variant/80 hover:border-outline-variant/40'}"
-                    >
-                      <EmojiText value={item.emoji} /> {item.name}
-                    </button>
-                  {/each}
-                </div>
-
-                {#if configs[type].items.length > 0}
-                  <div class="space-y-1.5 pt-1">
-                    {#each configs[type].items as entry (entry.itemId)}
-                      <div class="flex items-center gap-3">
-                        <span class="text-2xs flex-1 min-w-0 truncate">
-                          {itemNameById.get(entry.itemId)?.emoji ?? ''}
-                          {itemNameById.get(entry.itemId)?.name ?? m.drop_item_unknown()}
-                        </span>
-                        <input
-                          type="number"
-                          min={DROP_ITEM_WEIGHT_RANGE.min}
-                          max={DROP_ITEM_WEIGHT_RANGE.max}
-                          value={entry.weight}
-                          oninput={(e) => setDropItemWeight(entry.itemId, Number((e.currentTarget as HTMLInputElement).value))}
-                          disabled={!canManageSettings}
-                          class="w-20 bg-surface-container-high/40 border border-outline-variant/15 rounded-lg px-3 py-1.5 text-2xs text-right focus:outline-none disabled:opacity-50"
-                        />
-                        <span class="text-2xs text-on-surface-variant w-4">%</span>
-                      </div>
-                    {/each}
-
-                    <div class="flex items-center justify-between gap-3 pt-1">
-                      <p class="text-2xs font-semibold {dropItemsBalanced ? 'text-success' : 'text-warning'}">
-                        {m.drop_item_total({ total: dropItemsTotal })}
-                      </p>
-                      <button
-                        type="button"
-                        onclick={balanceDropItems}
-                        use:explainDisabled={(!canManageSettings) ? m.common_reason_no_permission() : ''}
-                        class="text-2xs font-medium px-3 py-1.5 rounded-lg border border-outline-variant/20 hover:border-outline-variant/40 transition-all disabled:opacity-40"
-                      >
-                        {m.drop_item_balance()}
-                      </button>
-                    </div>
-                  </div>
+                {#if collapsed.items && configs[type].items.length > 0 && !dropItemsBalanced}
+                  <p class="text-2xs font-semibold text-warning">{m.drop_item_total({ total: dropItemsTotal })}</p>
                 {/if}
 
-                <p class="text-2xs text-on-surface-variant">
-                  {configs[type].items.length === 0
-                    ? m.drop_item_pool_empty()
-                    : m.drop_item_pool_full({ max: DROP_ITEM_POOL_MAX })}
-                </p>
-                <p class="text-2xs text-on-surface-variant">{m.drop_item_quantity_hint()}</p>
+                {#if !collapsed.items}
+                  <div id="drop-items-body" class="space-y-2">
+                    <div class="flex flex-wrap gap-2">
+                      {#each availableItems as item (item.id)}
+                        {@const picked = configs[type].items.some((entry) => entry.itemId === item.id)}
+                        <button
+                          type="button"
+                          onclick={() => toggleDropItem(item.id)}
+                          disabled={(!picked && configs[type].items.length >= DROP_ITEM_POOL_MAX)}
+                          use:explainDisabled={(!canManageSettings) ? m.common_reason_no_permission() : ''}
+                          aria-pressed={picked}
+                          class="px-3 py-1.5 rounded-lg border text-2xs font-medium transition-all disabled:opacity-40 disabled:cursor-not-allowed {picked
+                            ? 'bg-primary/10 border-primary/40 text-primary'
+                            : 'bg-surface-container-high/30 border-outline-variant/15 text-on-surface-variant/80 hover:border-outline-variant/40'}"
+                        >
+                          <EmojiText value={item.emoji} /> {item.name}
+                        </button>
+                      {/each}
+                    </div>
+
+                    {#if configs[type].items.length > 0}
+                      <div class="space-y-1.5 pt-1">
+                        {#each configs[type].items as entry (entry.itemId)}
+                          <div class="flex items-center gap-3">
+                            <span class="text-2xs flex-1 min-w-0 truncate">
+                              {itemNameById.get(entry.itemId)?.emoji ?? ''}
+                              {itemNameById.get(entry.itemId)?.name ?? m.drop_item_unknown()}
+                            </span>
+                            <input
+                              type="number"
+                              min={DROP_ITEM_WEIGHT_RANGE.min}
+                              max={DROP_ITEM_WEIGHT_RANGE.max}
+                              value={entry.weight}
+                              oninput={(e) => setDropItemWeight(entry.itemId, Number((e.currentTarget as HTMLInputElement).value))}
+                              disabled={!canManageSettings}
+                              class="w-20 bg-surface-container-high/40 border border-outline-variant/15 rounded-lg px-3 py-1.5 text-2xs text-right focus:outline-none disabled:opacity-50"
+                            />
+                            <span class="text-2xs text-on-surface-variant w-4">%</span>
+                          </div>
+                        {/each}
+
+                        <div class="flex items-center justify-between gap-3 pt-1">
+                          <p class="text-2xs font-semibold {dropItemsBalanced ? 'text-success' : 'text-warning'}">
+                            {m.drop_item_total({ total: dropItemsTotal })}
+                          </p>
+                          <button
+                            type="button"
+                            onclick={balanceDropItems}
+                            use:explainDisabled={(!canManageSettings) ? m.common_reason_no_permission() : ''}
+                            class="text-2xs font-medium px-3 py-1.5 rounded-lg border border-outline-variant/20 hover:border-outline-variant/40 transition-all disabled:opacity-40"
+                          >
+                            {m.drop_item_balance()}
+                          </button>
+                        </div>
+                      </div>
+                    {/if}
+
+                    <p class="text-2xs text-on-surface-variant">
+                      {configs[type].items.length === 0
+                        ? m.drop_item_pool_empty()
+                        : m.drop_item_pool_full({ max: DROP_ITEM_POOL_MAX })}
+                    </p>
+                    <p class="text-2xs text-on-surface-variant">{m.drop_item_quantity_hint()}</p>
+                  </div>
+                {/if}
               </div>
             {/if}
 
@@ -1453,11 +1524,13 @@
 
           {#if announcement && !wide.current}
             <section class="bg-surface-container-low/40 border border-outline-variant/30 p-6 rounded-xl space-y-5">
-              <div class="border-b border-outline-variant/15 pb-3">
-                <h3 class="text-lg font-semibold flex items-center gap-2"><Papicon icon="Eye" size={18} /> {m.drop_preview_heading()}</h3>
+              <div class="{collapsed.preview ? '' : 'border-b border-outline-variant/15 pb-3'}">
+                {@render blockToggle('preview', m.drop_preview_heading(), 'Eye', 'text-lg', 18)}
                 <p class="text-xs text-on-surface-variant mt-1">{m.drop_preview_desc()}</p>
               </div>
-              {@render previewPanel(type, announcement)}
+              {#if !collapsed.preview}
+                <div id="drop-preview-body">{@render previewPanel(type, announcement)}</div>
+              {/if}
             </section>
           {/if}
         </div>
@@ -1468,13 +1541,17 @@
       <!-- Plus haute que l'écran avec l'aperçu : la colonne défile seule plutôt que de déborder. -->
       <aside class="sticky top-4 max-h-[calc(100vh-2rem)] overflow-y-auto space-y-4" aria-label={m.drop_status_title()}>
         <section class="bg-surface-container-low/40 border border-outline-variant/30 p-4 rounded-xl space-y-3">
-          <h3 class="text-sm font-semibold flex items-center gap-2"><Papicon icon="List" size={15} /> {m.drop_status_title()}</h3>
-          {@render statusPanel()}
+          {@render blockToggle('status', m.drop_status_title(), 'List', 'text-sm', 15)}
+          {#if !collapsed.status}
+            <div id="drop-status-body">{@render statusPanel()}</div>
+          {/if}
         </section>
         {#if activeTab !== 'global' && announcement}
           <section class="bg-surface-container-low/40 border border-outline-variant/30 p-4 rounded-xl space-y-3">
-            <h3 class="text-sm font-semibold flex items-center gap-2"><Papicon icon="Eye" size={15} /> {m.drop_preview_heading()}</h3>
-            {@render previewPanel(activeType, announcement)}
+            {@render blockToggle('preview', m.drop_preview_heading(), 'Eye', 'text-sm', 15)}
+            {#if !collapsed.preview}
+              <div id="drop-preview-body">{@render previewPanel(activeType, announcement)}</div>
+            {/if}
           </section>
         {/if}
       </aside>
