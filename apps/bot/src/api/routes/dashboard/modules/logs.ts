@@ -15,8 +15,8 @@ export async function handleLogsRoutes(ctx: ModuleRouteContext): Promise<boolean
     const member = discordGuild ? await discordGuild.members.fetch(user.userId).catch(() => null) : null;
     const roleIds = member
       ? member.roles.cache
-          .map((role) => role?.id)
-          .filter((roleId): roleId is string => !!roleId)
+        .map((role) => role?.id)
+        .filter((roleId): roleId is string => !!roleId)
       : [];
     const featureAccess = await resolveFeatureAccessMap(client, guildId, access, user.userId, roleIds);
 
@@ -36,7 +36,7 @@ export async function handleLogsRoutes(ctx: ModuleRouteContext): Promise<boolean
       try {
         const LOG_EVENT_TYPES = [
           'message_delete', 'message_edit', 'message_bulk_delete',
-          'member_join', 'member_leave', 'member_roles_update', 'member_timeout',
+          'member_join', 'member_leave', 'member_roles_update', 'member_timeout', 'member_tag_update',
           'moderation_kick', 'moderation_ban', 'moderation_unban', 'moderation_timeout',
           'voice_join', 'voice_leave', 'voice_move', 'voice_moderation', 'voice_panel',
           'channel_lifecycle', 'role_lifecycle'

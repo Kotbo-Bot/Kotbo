@@ -39,6 +39,7 @@ import {
   touchSanctionTargetIdentity,
 } from '../services/moderation/memberCaseService.js';
 import * as dcDetectionService from '../services/moderation/dcDetectionService.js';
+import { getKnownGuildNames, guildTagBadgeUrl } from '../services/core/serverTagService.js';
 import { pickRecentAuditEntry } from './auditEntryMatch.js';
 import { attribuerLot, creerRegroupeurLots, type ReleveAudit } from './voiceAuditAttribution.js';
 
@@ -269,7 +270,7 @@ async function processSingleGuildSnapshot(guild: Guild, dateKey: string, hour: n
 
     // 1. Gather counts
     const totalMembers = guild.memberCount;
-    
+
     // Attempt to get more accurate counts via fetch if the cache seems incomplete
     // GuildPresences intent should keep cache updated, but for large guilds or on startup it might be off.
     const breakdown = collectPresenceBreakdown(guild);
@@ -290,7 +291,7 @@ async function processSingleGuildSnapshot(guild: Guild, dateKey: string, hour: n
         }
       },
     });
-    
+
     const idleMembers = breakdown.idle;
     const dndMembers = breakdown.dnd;
     const offlineMembers = totalMembers - onlineMembers;
@@ -1267,9 +1268,9 @@ export function registerAdvancedLogsListener(client: Client): void {
 
     if (isInviteSuspended || isCreatorSuspended) {
       logger.info('Sécurité', `Expulsion automatique du membre ${member.user.tag} (${member.id}) : ${suspensionReason}`);
-      
+
       const kickReason = `[Kotbo Sécurité] ${suspensionReason}`;
-      
+
       // Kick member immediately
       await member.kick(kickReason).catch((error) => {
         logger.error('Sécurité', `Impossible de kicker le membre suspendu ${member.id}:`, error);
@@ -1381,10 +1382,10 @@ export function registerAdvancedLogsListener(client: Client): void {
 
     const stayDuration = member.joinedAt ? Date.now() - member.joinedAt.getTime() : null;
     const stayDurationDays = stayDuration ? Math.floor(stayDuration / (1000 * 60 * 60 * 24)) : null;
-    const stayDurationFmt = stayDurationDays !== null 
-      ? (stayDurationDays === 0 ? "Moins d'un jour" : `${stayDurationDays} jours`) 
+    const stayDurationFmt = stayDurationDays !== null
+      ? (stayDurationDays === 0 ? "Moins d'un jour" : `${stayDurationDays} jours`)
       : 'Inconnu';
-    
+
     void recordInvitedMemberLeave(member.guild.id, member.id);
 
     const embed = buildMemberEmbed(
@@ -1429,7 +1430,7 @@ export function registerAdvancedLogsListener(client: Client): void {
   client.on(Events.MessageReactionAdd, async (reaction, user) => {
     if (!reaction.message.guildId || user.bot) return;
     void incrementGuildHourlyStat(reaction.message.guildId, 'reaction');
-    
+
     // Log the reaction interaction for the graph
     await prisma.dashboardAuditLog.create({
       data: {
@@ -1751,6 +1752,55 @@ export function registerAdvancedLogsListener(client: Client): void {
 
       await sendLogEmbed(guild, embed, 'moderation_timeout', [buildMemberCaseActionRow(targetId), buildMemberCaseActionRow(executorId)], moderatorTag);
     }
+  });
+
+  kotboEventBus.subscribe('member:tag', async (payload) => {
+    const guild = client.guilds.cache.get(payload.guildId);
+    if (!guild) return;
+
+    const idsToResolve = [payload.oldGuildId, payload.newGuildId].filter((id): id is string => Boolean(id));
+    const serverNames = idsToResolve.length > 0 ? await getKnownGuildNames(client, idsToResolve) : new Map<string, string>();
+    const formatTag = (tag: string | null, gId: string | null) => {
+      if (!tag) return 'Aucun';
+      const serverName = gId ? (serverNames.get(gId) ?? gId) : null;
+      return serverName ? `**${tag}** (${serverName})` : `**${tag}**`;
+    };
+
+    const actionLabel = !payload.oldTag && payload.newTag
+      ? 'Tag de serveur ajouté'
+      : payload.oldTag && !payload.newTag
+        ? 'Tag de serveur retiré'
+        : 'Tag de serveur modifié';
+
+    void queueAuditLog({
+      guildId: payload.guildId,
+      user: `${payload.userTag} (${payload.userId})`,
+      action: actionLabel,
+      context: guild.name,
+      module: 'Membres',
+      eventType: 'MEMBER_TAG_UPDATE',
+      source: 'discord',
+      details: `${formatTag(payload.oldTag, payload.oldGuildId)} → ${formatTag(payload.newTag, payload.newGuildId)}`,
+    });
+
+    if (!(await isLogEventEnabled(payload.guildId, 'member_tag_update'))) return;
+
+    const color = !payload.newTag ? 0xe76f51 : payload.isOwnGuild ? 0x2a9d8f : 0x5865f2;
+    const badgeUrl = guildTagBadgeUrl(payload.newGuildId, payload.newBadge)
+      ?? guildTagBadgeUrl(payload.oldGuildId, payload.oldBadge);
+
+    const embed = new EmbedBuilder()
+      .setColor(color)
+      .setTitle(`🏷️ ${actionLabel}`)
+      .setDescription(`<@${payload.userId}> (\`${payload.userId}\`)`)
+      .addFields(
+        { name: 'Ancien tag', value: formatTag(payload.oldTag, payload.oldGuildId), inline: true },
+        { name: 'Nouveau tag', value: formatTag(payload.newTag, payload.newGuildId), inline: true },
+      )
+      .setTimestamp();
+
+    if (badgeUrl) embed.setThumbnail(badgeUrl);
+    await sendLogEmbed(guild, embed, 'member_tag_update', [buildMemberCaseActionRow(payload.userId)], payload.userTag);
   });
 
   logger.success('Logs', 'Écouteur de logs avancés enregistré');
