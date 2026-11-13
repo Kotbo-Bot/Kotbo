@@ -777,108 +777,118 @@
           <MainLayout>
             <ModuleDisabledNotice moduleKey={disabledModuleForRoute} />
           </MainLayout>
-        {:else if authStore.isBotAdmin && ($router.path === "/admin" || $router.path.startsWith("/admin/"))}
-          <!-- Coquille admin persistante : la barre laterale, le bandeau d'en-tete
-               et la sonde de sante restent montes pendant toute la navigation. -->
-          <AdminShellHost>
-          <LazyRoute
-            path="/admin"
-            load={() => import("./pages/admin/Overview.svelte")}
-          />
-          <LazyRoute
-            path="/admin/servers"
-            load={() => import("./pages/admin/Servers.svelte")}
-          />
-          <LazyRoute
-            path="/admin/servers/:guildId"
-            load={() => import("./pages/admin/ServerSheet.svelte")}
-            props={(meta) => ({ guildId: meta.params.guildId })}
-          />
-          <LazyRoute
-            path="/admin/activity"
-            load={() => import("./pages/admin/Activity.svelte")}
-          />
-          <LazyRoute
-            path="/admin/ai"
-            load={() => import("./pages/admin/AiSupervision.svelte")}
-          />
-          <LazyRoute
-            path="/admin/performance"
-            load={() => import("./pages/admin/Performance.svelte")}
-          />
-          <LazyRoute
-            path="/admin/shards"
-            load={() => import("./pages/admin/Shards.svelte")}
-          />
-          <LazyRoute
-            path="/admin/security"
-            load={() => import("./pages/admin/Security.svelte")}
-          />
-          <LazyRoute
-            path="/admin/content"
-            load={() => import("./pages/admin/Content.svelte")}
-          />
-          <LazyRoute
-            path="/admin/config"
-            load={() => import("./pages/admin/Config.svelte")}
-          />
-          <LazyRoute
-            path="/admin/activation"
-            load={() => import("./pages/admin/Activation.svelte")}
-          />
-          <!-- Ancienne page des modules : devenue l'onglet Modules d'Analytics. -->
-          <Route path="/admin/modules">
-            <div use:redirectTo={"/admin/analytics/modules"}></div>
-          </Route>
-          <LazyRoute
-            path="/admin/billing"
-            load={() => import("./pages/admin/Billing.svelte")}
-          />
-          <LazyRoute
-            path="/admin/analytics"
-            load={() => import("./pages/admin/Analytics.svelte")}
-          />
-          <LazyRoute
-            path="/admin/analytics/:tab"
-            load={() => import("./pages/admin/Analytics.svelte")}
-            props={(meta) => ({ tab: meta.params.tab })}
-          />
-          <LazyRoute
-            path="/admin/whitelabel"
-            load={() => import("./pages/admin/WhiteLabel.svelte")}
-          />
-          <LazyRoute
-            path="/admin/instances"
-            load={() => import("./pages/admin/Instances.svelte")}
-          />
-          <LazyRoute
-            path="/admin/broadcast"
-            load={() => import("./pages/admin/Broadcast.svelte")}
-          />
-          <LazyRoute
-            path="/admin/achievements"
-            load={() => import("./pages/admin/Achievements.svelte")}
-          />
-          <LazyRoute
-            path="/admin/feature-pages"
-            load={() => import("./pages/admin/FeaturePages.svelte")}
-          />
-          <LazyRoute
-            path="/admin/gdpr"
-            load={() => import("./pages/admin/Gdpr.svelte")}
-          />
-          <LazyRoute
-            path="/admin/audit"
-            load={() => import("./pages/admin/Audit.svelte")}
-          />
-          <LazyRoute
-            path="/admin/sites"
-            load={() => import("./pages/admin/Sites.svelte")}
-          />
-          <Route fallback>
-            <NotFound />
-          </Route>
-          </AdminShellHost>
+        {:else if $router.path === "/admin" || $router.path.startsWith("/admin/")}
+          {#if authStore.isBotAdmin}
+            <!-- Coquille admin persistante : la barre laterale, le bandeau d'en-tete
+                 et la sonde de sante restent montes pendant toute la navigation. -->
+            <AdminShellHost>
+            <LazyRoute
+              path="/admin"
+              load={() => import("./pages/admin/Overview.svelte")}
+            />
+            <LazyRoute
+              path="/admin/servers"
+              load={() => import("./pages/admin/Servers.svelte")}
+            />
+            <LazyRoute
+              path="/admin/servers/:guildId"
+              load={() => import("./pages/admin/ServerSheet.svelte")}
+              props={(meta) => ({ guildId: meta.params.guildId })}
+            />
+            <LazyRoute
+              path="/admin/activity"
+              load={() => import("./pages/admin/Activity.svelte")}
+            />
+            <LazyRoute
+              path="/admin/ai"
+              load={() => import("./pages/admin/AiSupervision.svelte")}
+            />
+            <LazyRoute
+              path="/admin/performance"
+              load={() => import("./pages/admin/Performance.svelte")}
+            />
+            <LazyRoute
+              path="/admin/shards"
+              load={() => import("./pages/admin/Shards.svelte")}
+            />
+            <LazyRoute
+              path="/admin/security"
+              load={() => import("./pages/admin/Security.svelte")}
+            />
+            <LazyRoute
+              path="/admin/content"
+              load={() => import("./pages/admin/Content.svelte")}
+            />
+            <LazyRoute
+              path="/admin/config"
+              load={() => import("./pages/admin/Config.svelte")}
+            />
+            <LazyRoute
+              path="/admin/activation"
+              load={() => import("./pages/admin/Activation.svelte")}
+            />
+            <!-- Ancienne page des modules : devenue l'onglet Modules d'Analytics. -->
+            <Route path="/admin/modules">
+              <div use:redirectTo={"/admin/analytics/modules"}></div>
+            </Route>
+            <LazyRoute
+              path="/admin/billing"
+              load={() => import("./pages/admin/Billing.svelte")}
+            />
+            <LazyRoute
+              path="/admin/analytics"
+              load={() => import("./pages/admin/Analytics.svelte")}
+            />
+            <LazyRoute
+              path="/admin/analytics/:tab"
+              load={() => import("./pages/admin/Analytics.svelte")}
+              props={(meta) => ({ tab: meta.params.tab })}
+            />
+            <LazyRoute
+              path="/admin/whitelabel"
+              load={() => import("./pages/admin/WhiteLabel.svelte")}
+            />
+            <LazyRoute
+              path="/admin/instances"
+              load={() => import("./pages/admin/Instances.svelte")}
+            />
+            <LazyRoute
+              path="/admin/broadcast"
+              load={() => import("./pages/admin/Broadcast.svelte")}
+            />
+            <LazyRoute
+              path="/admin/achievements"
+              load={() => import("./pages/admin/Achievements.svelte")}
+            />
+            <LazyRoute
+              path="/admin/feature-pages"
+              load={() => import("./pages/admin/FeaturePages.svelte")}
+            />
+            <LazyRoute
+              path="/admin/gdpr"
+              load={() => import("./pages/admin/Gdpr.svelte")}
+            />
+            <LazyRoute
+              path="/admin/audit"
+              load={() => import("./pages/admin/Audit.svelte")}
+            />
+            <LazyRoute
+              path="/admin/sites"
+              load={() => import("./pages/admin/Sites.svelte")}
+            />
+            <Route fallback>
+              <NotFound />
+            </Route>
+            </AdminShellHost>
+          {:else if !authStore.initialized}
+            <div class="min-h-screen bg-surface flex items-center justify-center">
+              <div class="w-8 h-8 rounded-full border-2 border-primary border-t-transparent animate-spin"></div>
+            </div>
+          {:else}
+            <MainLayout>
+              <NoAccessNotice reason="feature" />
+            </MainLayout>
+          {/if}
         {:else}
           <MainLayout>
             <LazyRoute
