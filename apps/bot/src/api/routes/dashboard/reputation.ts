@@ -62,9 +62,19 @@ function periodOf(url: URL): ReputationPeriod {
  */
 async function identityResolver(client: Client, guildId: string, userIds: string[]) {
   const identities = await getMemberIdentities(client, guildId, [...new Set(userIds)]);
+  const name = (userId: string) => identities.get(userId)?.displayName ?? null;
   return {
-    name: (userId: string) => identities.get(userId)?.displayName ?? null,
+    name,
     avatar: (userId: string) => identities.get(userId)?.avatarUrl || null,
+    /**
+     * Désignation pour le journal d'audit : « pseudo (id) », ou l'id seul pour
+     * un membre parti. L'id reste écrit : la fiche membre retrouve ses entrées
+     * en le cherchant dans les détails.
+     */
+    label: (userId: string) => {
+      const display = name(userId);
+      return display ? `${display} (${userId})` : userId;
+    },
   };
 }
 
@@ -284,13 +294,17 @@ export async function handleReputationRoutes(
         return true;
       }
 
+      // Le vote est déjà retiré : un échec de résolution des pseudos ne doit
+      // pas répondre une erreur, le journal garde alors les identifiants seuls.
+      const who = await identityResolver(client, guildId, [vote.giverId, vote.receiverId]).catch(() => null);
+      const label = (userId: string) => who?.label(userId) ?? userId;
       await pushAudit(guildId, {
         user: auditUser,
         action: 'Retrait d\'un vote de réputation',
         context: getGuildName(client, guildId),
         module: 'Réputation',
         eventType: 'Manuel',
-        details: `Vote de ${vote.giverId} pour ${vote.receiverId} retiré.`,
+        details: `Vote de ${label(vote.giverId)} pour ${label(vote.receiverId)} retiré.`,
         channelId: null,
       });
       json(res, 200, { deleted: true });
