@@ -342,13 +342,23 @@
   let expandedDrop = $state<string | null>(null);
   let winnersByDrop = $state<Record<string, DropWinner[] | 'loading' | 'error'>>({});
 
-  /** `reset` recharge la première page (filtre changé) ; sinon reprend sous le dernier drop. */
+  /** Dernière lecture de l'historique lancée : une réponse plus ancienne est ignorée. */
+  let historyRequest = 0;
+
+  /**
+   * `reset` recharge la première page (filtre changé) ; sinon reprend sous le dernier drop.
+   * Une mise à jour en direct peut relancer la première page pendant un « charger plus » :
+   * sans le jeton, la réponse arrivée la dernière écraserait l'autre, doublons ou mauvais
+   * filtre compris.
+   */
   async function loadHistory(reset: boolean) {
+    const request = ++historyRequest;
     historyLoading = true;
     const page = await fetchDropHistory({
       type: historyFilter === 'ALL' ? undefined : historyFilter,
       before: reset ? undefined : recentDrops.at(-1)?.createdAt,
     });
+    if (request !== historyRequest) return;
     historyLoading = false;
     if (!page) return;
     recentDrops = reset ? page.drops : [...recentDrops, ...page.drops];
@@ -555,6 +565,8 @@
         // Une mise à jour en direct garde le filtre choisi, et relit les gagnants
         // affichés : un drop encore ouvert a pu en gagner depuis.
         if (historyFilter === 'ALL') {
+          historyRequest += 1; // une page en cours de lecture n'écrase pas celle-ci
+          historyLoading = false;
           recentDrops = res.recentDrops ?? [];
           historyHasMore = res.recentDropsHasMore ?? false;
         } else {
