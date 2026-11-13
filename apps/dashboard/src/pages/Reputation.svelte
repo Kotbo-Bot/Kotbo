@@ -44,6 +44,7 @@
   import Tabs, { type TabItem } from '../lib/components/ui/Tabs.svelte';
   import FilterPills from '../lib/components/ui/FilterPills.svelte';
   import { m, dateLocale } from '../lib/i18n';
+  import { DEFAULT_REPUTATION_CONFIG } from '../lib/reputationData';
 
   type Tab = 'overview' | 'history' | 'tiers' | 'settings';
 
@@ -51,16 +52,6 @@
   let loading = $state(true);
   let data = $state<ReputationData | null>(null);
   let period = $state<ReputationPeriod>('all');
-
-  const EMPTY_CONFIG: ReputationConfig = {
-    dailyLimit: REPUTATION_DAILY_LIMIT.default,
-    reactionEnabled: false,
-    reactionEmoji: null,
-    xpPerRep: 0,
-    coinsPerRep: 0,
-    announceChannelId: null,
-    tiers: [],
-  };
 
   function cloneConfig(source: ReputationConfig): ReputationConfig {
     return { ...source, tiers: source.tiers.map((tier) => ({ ...tier })) };
@@ -79,8 +70,8 @@
     });
   }
 
-  let savedConfig = $state<ReputationConfig>(cloneConfig(EMPTY_CONFIG));
-  let config = $state<ReputationConfig>(cloneConfig(EMPTY_CONFIG));
+  let savedConfig = $state<ReputationConfig>(cloneConfig(DEFAULT_REPUTATION_CONFIG));
+  let config = $state<ReputationConfig>(cloneConfig(DEFAULT_REPUTATION_CONFIG));
   let textChannels = $state<Array<{ id: string; name: string }>>([]);
 
   let votes = $state<ReputationVote[]>([]);
@@ -638,7 +629,7 @@
               {/snippet}
             </Field>
 
-            {#if config.announceChannelId && previewTier}
+            {#if config.announceChannelId && previewTier && data.announcement}
               <div class="space-y-2">
                 <p class="text-xs font-semibold text-on-surface-variant flex items-center gap-1.5"><Papicon icon="Eye" size={13} /> {m.rep_announce_preview_heading()}</p>
                 <ReputationTierAnnouncementPreview

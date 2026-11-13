@@ -290,6 +290,20 @@ describe('DELETE /reputation/votes/:id', () => {
     expect(mockDb.dashboardAuditLog.create).toHaveBeenCalledTimes(1);
   });
 
+  test('le journal nomme donneur et receveur, identifiant entre parenthèses', async () => {
+    deletedVote = { id: 'v1', guildId: GUILD, giverId: '222222222222222222', receiverId: '111111111111111111' };
+    await call('DELETE', '/votes/v1');
+    const entry = (mockDb.dashboardAuditLog.create.mock.calls[0][0] as { data: { details: string } }).data;
+    expect(entry.details).toBe('Vote de Bob (222222222222222222) pour Alice (111111111111111111) retiré.');
+  });
+
+  test('un membre parti reste désigné par son identifiant', async () => {
+    deletedVote = { id: 'v1', guildId: GUILD, giverId: '777777777777777777', receiverId: '111111111111111111' };
+    await call('DELETE', '/votes/v1');
+    const entry = (mockDb.dashboardAuditLog.create.mock.calls[0][0] as { data: { details: string } }).data;
+    expect(entry.details).toBe('Vote de 777777777777777777 pour Alice (111111111111111111) retiré.');
+  });
+
   test('404 pour un vote inconnu', async () => {
     const { status } = await call('DELETE', '/votes/absent');
     expect(status).toBe(404);

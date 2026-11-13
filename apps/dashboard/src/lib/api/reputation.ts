@@ -3,6 +3,7 @@ import type { ReputationPeriod, ReputationTier } from '@kotbo/shared';
 import { authStore } from '../stores/auth.svelte';
 import { dashboardRequest } from './client';
 import { m } from '../i18n';
+import { toReputationConfig, toReputationData } from '../reputationData';
 
 export interface ReputationConfig {
   dailyLimit: number;
@@ -44,7 +45,8 @@ export interface ReputationData {
   config: ReputationConfig;
   leaderboard: { entries: ReputationLeaderboardEntry[]; totalVoters: number };
   stats: ReputationStats;
-  announcement: ReputationAnnouncementLabels;
+  /** Absent d'un bot plus ancien : l'aperçu de l'annonce est alors masqué. */
+  announcement: ReputationAnnouncementLabels | null;
   /** Rôles de palier que le bot ne peut pas donner (supprimés, gérés, trop hauts). */
   unmanageableTierRoleIds: string[];
 }
@@ -72,12 +74,13 @@ export async function fetchReputationData(
   period: ReputationPeriod = 'all',
   guildId = authStore.selectedGuildId,
 ): Promise<ReputationData | null> {
-  return dashboardRequest(`/reputation?period=${period}`, {
+  const raw = await dashboardRequest<unknown>(`/reputation?period=${period}`, {
     method: 'GET',
     guildId,
     errorContext: 'API Error (Reputation):',
     silent: true,
   });
+  return toReputationData(raw);
 }
 
 /** Page de l'historique, reprise sous le dernier vote affiché. */
@@ -101,13 +104,15 @@ export async function updateReputationConfig(
   payload: Partial<ReputationConfig>,
   guildId = authStore.selectedGuildId,
 ): Promise<{ config: ReputationConfig } | null> {
-  return dashboardRequest('/reputation/config', {
+  const raw = await dashboardRequest<{ config?: unknown }>('/reputation/config', {
     method: 'PATCH',
     successMessage: m.api_ok_update_reputation_config(),
     payload,
     guildId,
     errorContext: 'API Error (Update Reputation Config):',
   });
+  const config = toReputationConfig(raw?.config);
+  return config ? { config } : null;
 }
 
 export async function deleteReputationVote(voteId: string, guildId = authStore.selectedGuildId): Promise<{ deleted: boolean } | null> {
