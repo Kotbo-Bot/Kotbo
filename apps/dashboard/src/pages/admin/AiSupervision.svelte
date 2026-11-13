@@ -9,18 +9,20 @@
   import { fetchAiSupervision, type AiSupervision } from '../../lib/api/adminInsights';
   import AdminShell from '../../lib/components/admin/AdminShell.svelte';
   import AdminCard from '../../lib/components/admin/AdminCard.svelte';
-  import AdminStat from '../../lib/components/admin/AdminStat.svelte';
   import AdminBadge from '../../lib/components/admin/AdminBadge.svelte';
-  import AdminTimeSeries from '../../lib/components/admin/AdminTimeSeries.svelte';
   import AdminBarList from '../../lib/components/admin/AdminBarList.svelte';
+  import MetricTabs, { type MetricTab } from '../../lib/components/analytics/MetricTabs.svelte';
+  import TimeSeriesChart from '../../lib/components/analytics/TimeSeriesChart.svelte';
+  import { SERIES, shortDate } from '../../lib/components/analytics/analyticsFormat';
   import type { AdminTone } from '../../lib/components/admin/types';
-  import { dayStart, formatCompact, formatDay, formatNumber, formatPercent, relativeTime } from '../../lib/components/admin/format';
+  import { formatCompact, formatNumber, formatPercent, relativeTime } from '../../lib/components/admin/format';
   import { Button, Callout, FilterPills } from '../../lib/components/ui';
 
   let data = $state<AiSupervision | null>(null);
   let error = $state<string | null>(null);
   let loading = $state(true);
   let days = $state('30');
+  let chartMode = $state<'line' | 'bar'>('line');
   let timer: ReturnType<typeof setInterval> | null = null;
 
   async function load() {
@@ -62,14 +64,80 @@
     return { tone: 'success', label: 'File à jour', detail: 'Les messages sont analysés au fil de l’eau.' };
   });
 
-  const chart = $derived.by(() => {
-    const series = aegis?.series ?? [];
-    if (series.length < 2) return [];
-    return [
-      { key: 'analyzed', label: 'Analysés', color: 'var(--primary-color)', points: series.map((day) => ({ t: dayStart(day.dateKey), v: day.analyzed })) },
-      { key: 'toxic', label: 'Toxiques', color: '#ef4444', points: series.map((day) => ({ t: dayStart(day.dateKey), v: day.toxic })) },
-    ];
+  const aegisSeries = $derived(aegis?.series ?? []);
+  const aegisLabels = $derived(aegisSeries.map((day) => shortDate(day.dateKey)));
+
+  /** Part des revues que le staff a confirmees : mesure la justesse des detections. */
+  const precision = $derived.by(() => {
+    const confirmed = aegis?.status?.CONFIRMED ?? 0;
+    const dismissed = aegis?.status?.DISMISSED ?? 0;
+    return confirmed + dismissed > 0 ? formatPercent(confirmed, confirmed + dismissed) : '–';
   });
+
+  const aegisMetrics = $derived<MetricTab[]>([
+    {
+      id: 'analyzed',
+      label: 'Messages analysés',
+      value: aegis ? formatCompact(aegis.analyzed) : '–',
+      spark: aegisSeries.map((day) => day.analyzed),
+      color: SERIES[0],
+      hint: aegis ? `sur ${aegis.enabledGuilds} serveur${aegis.enabledGuilds > 1 ? 's' : ''}` : undefined,
+    },
+    {
+      id: 'toxic',
+      label: 'Taux de toxicité',
+      value: aegis ? formatPercent(aegis.toxic, aegis.analyzed, 2) : '–',
+      spark: aegisSeries.map((day) => day.toxic),
+      color: SERIES[3],
+      invert: true,
+      hint: aegis ? `${formatNumber(aegis.toxic)} messages · ${formatNumber(aegis.severe)} traités d’office` : undefined,
+    },
+    {
+      id: 'pending',
+      label: 'Revues en attente',
+      value: aegis ? formatNumber(aegis.pendingReviews) : '–',
+      color: SERIES[2],
+      hint: 'tous serveurs, à trancher par leur staff',
+    },
+    {
+      id: 'precision',
+      label: 'Détections confirmées',
+      value: precision,
+      color: SERIES[1],
+      hint: aegis ? `${formatNumber(aegis.late)} analysées trop tard pour agir` : undefined,
+    },
+  ]);
+
+  const visionMetrics = $derived<MetricTab[]>([
+    {
+      id: 'images',
+      label: 'Images connues',
+      value: vision ? formatCompact(vision.images) : '–',
+      color: SERIES[0],
+      hint: vision ? `${formatCompact(vision.globalImages)} partagées · +${formatNumber(vision.newImages)} sur la période` : undefined,
+    },
+    {
+      id: 'domains',
+      label: 'Domaines d’arnaque',
+      value: vision ? formatCompact(vision.domains) : '–',
+      color: SERIES[3],
+      hint: vision ? `${formatCompact(vision.globalDomains)} bloqués partout` : undefined,
+    },
+    {
+      id: 'texts',
+      label: 'Textes d’arnaque',
+      value: vision ? formatCompact(vision.textSamples) : '–',
+      color: SERIES[1],
+      hint: 'empreintes de copier-coller',
+    },
+    {
+      id: 'visionPending',
+      label: 'Revues en attente',
+      value: vision ? formatNumber(vision.reviews?.PENDING ?? 0) : '–',
+      color: SERIES[2],
+      hint: vision ? `${vision.enabledLists} liste${vision.enabledLists > 1 ? 's' : ''} sur ${vision.guildsWithLists} serveur${vision.guildsWithLists > 1 ? 's' : ''}` : undefined,
+    },
+  ]);
 
   const EMOTIONS = [
     { key: 'joy', label: 'Joie' },
@@ -106,13 +174,6 @@
     Object.entries(record ?? {})
       .map(([key, value]) => ({ key, label: labels[key] ?? key, value }))
       .sort((a, b) => b.value - a.value);
-
-  /** Part des revues que le staff a confirmees : mesure la justesse des detections. */
-  const precision = $derived.by(() => {
-    const confirmed = aegis?.status.CONFIRMED ?? 0;
-    const dismissed = aegis?.status.DISMISSED ?? 0;
-    return confirmed + dismissed > 0 ? formatPercent(confirmed, confirmed + dismissed) : '–';
-  });
 </script>
 
 <AdminShell title="AegisAI et Vision" description="Les deux modules qui analysent ce qui est publié : est-ce qu’ils tiennent la charge, que détectent-ils, qu’attend une décision.">
@@ -169,46 +230,45 @@
     </div>
   </AdminCard>
 
-  <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
-    <AdminStat
-      label="Messages analysés"
-      value={aegis ? formatCompact(aegis.analyzed) : '–'}
-      hint={aegis ? `sur ${aegis.enabledGuilds} serveur${aegis.enabledGuilds > 1 ? 's' : ''}` : ''}
-      icon="ShieldCheck"
-      tone="primary"
-      series={aegis?.series.map((day) => day.analyzed) ?? []}
-      loading={first}
-    />
-    <AdminStat
-      label="Taux de toxicité"
-      value={aegis ? formatPercent(aegis.toxic, aegis.analyzed, 2) : '–'}
-      hint={aegis ? `${formatNumber(aegis.toxic)} messages · ${formatNumber(aegis.severe)} traités d’office` : ''}
-      icon="AlertTriangle"
-      tone="warning"
-      series={aegis?.series.map((day) => day.toxic) ?? []}
-      loading={first}
-    />
-    <AdminStat
-      label="Revues en attente"
-      value={aegis ? formatNumber(aegis.pendingReviews) : '–'}
-      hint="tous serveurs, à trancher par leur staff"
-      icon="Clock"
-      tone={aegis && aegis.pendingReviews > 50 ? 'warning' : 'neutral'}
-      loading={first}
-    />
-    <AdminStat
-      label="Détections confirmées"
-      value={precision}
-      hint={aegis ? `${formatNumber(aegis.late)} analysées trop tard pour agir` : ''}
-      icon="Check"
-      tone="success"
-      loading={first}
-    />
-  </div>
+  {#if first}
+    <div class="h-28 admin-surface animate-pulse"></div>
+  {:else}
+    <MetricTabs metrics={aegisMetrics} active="" onchange={() => {}} interactive={false} label="Indicateurs AegisAI" />
+  {/if}
 
   <div class="grid grid-cols-1 xl:grid-cols-3 gap-5 items-start">
     <AdminCard title="Analyses par jour" class="xl:col-span-2">
-      <AdminTimeSeries series={chart} height={220} formatTime={formatDay} formatValue={formatNumber} emptyLabel="Aucune analyse sur la période." />
+      {#snippet actions()}
+        <FilterPills
+          label="Style du graphique"
+          value={chartMode}
+          onchange={(v) => (chartMode = v)}
+          options={[
+            { value: 'line', label: 'Courbe' },
+            { value: 'bar', label: 'Barres' },
+          ]}
+        />
+      {/snippet}
+      {#if aegisSeries.length < 2}
+        <p class="py-10 text-center text-body-sm text-on-surface-variant">Aucune analyse sur la période.</p>
+      {:else if chartMode === 'line'}
+        <TimeSeriesChart
+          labels={aegisLabels}
+          mode="lines"
+          stacks={[
+            { label: 'Analysés', values: aegisSeries.map((day) => day.analyzed), color: SERIES[0] },
+            { label: 'Toxiques', values: aegisSeries.map((day) => day.toxic), color: SERIES[3] },
+          ]}
+          format={(v) => formatNumber(v)}
+        />
+      {:else}
+        <TimeSeriesChart
+          labels={aegisLabels}
+          mode="bar"
+          main={{ label: 'Analysés', values: aegisSeries.map((day) => day.analyzed), color: SERIES[0] }}
+          format={(v) => formatNumber(v)}
+        />
+      {/if}
     </AdminCard>
 
     <AdminCard title="Climat" description={aegis ? `${formatCompact(aegis.emotions.analyzed)} messages classés par émotion` : ''}>
@@ -255,33 +315,11 @@
   <!-- ── Kotbo Vision ────────────────────────────────────────────────────── -->
   <h2 class="font-headline text-2xl font-bold tracking-tight pt-4">Kotbo Vision</h2>
 
-  <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
-    <AdminStat
-      label="Images connues"
-      value={vision ? formatCompact(vision.images) : '–'}
-      hint={vision ? `${formatCompact(vision.globalImages)} partagées · +${formatNumber(vision.newImages)} sur la période` : ''}
-      icon="Image"
-      tone="primary"
-      loading={first}
-    />
-    <AdminStat
-      label="Domaines d’arnaque"
-      value={vision ? formatCompact(vision.domains) : '–'}
-      hint={vision ? `${formatCompact(vision.globalDomains)} bloqués partout` : ''}
-      icon="Globe"
-      tone="danger"
-      loading={first}
-    />
-    <AdminStat label="Textes d’arnaque" value={vision ? formatCompact(vision.textSamples) : '–'} hint="empreintes de copier-coller" icon="FileText" tone="info" loading={first} />
-    <AdminStat
-      label="Revues en attente"
-      value={vision ? formatNumber(vision.reviews.PENDING ?? 0) : '–'}
-      hint={vision ? `${vision.enabledLists} liste${vision.enabledLists > 1 ? 's' : ''} sur ${vision.guildsWithLists} serveur${vision.guildsWithLists > 1 ? 's' : ''}` : ''}
-      icon="Clock"
-      tone={vision && (vision.reviews.PENDING ?? 0) > 20 ? 'warning' : 'neutral'}
-      loading={first}
-    />
-  </div>
+  {#if first}
+    <div class="h-28 admin-surface animate-pulse"></div>
+  {:else}
+    <MetricTabs metrics={visionMetrics} active="" onchange={() => {}} interactive={false} label="Indicateurs Kotbo Vision" />
+  {/if}
 
   <div class="grid grid-cols-1 xl:grid-cols-2 gap-5 items-start">
     <AdminCard title="D’où viennent les images" description="Origine de chaque image du catalogue">
@@ -289,11 +327,11 @@
     </AdminCard>
 
     <AdminCard title="Domaines les plus vus" padded={false}>
-      {#if !vision || vision.topDomains.length === 0}
+      {#if !vision || (vision.topDomains ?? []).length === 0}
         <p class="px-6 pb-6 pt-4 text-body-sm text-on-surface-variant">Aucun domaine relevé pour l’instant.</p>
       {:else}
         <ul class="divide-y divide-outline-variant">
-          {#each vision.topDomains as domain (domain.domain)}
+          {#each vision.topDomains ?? [] as domain (domain.domain)}
             <li class="flex items-center gap-3 px-6 py-3">
               <div class="min-w-0 flex-1">
                 <p class="text-sm font-semibold font-mono text-on-surface truncate">{domain.domain}</p>

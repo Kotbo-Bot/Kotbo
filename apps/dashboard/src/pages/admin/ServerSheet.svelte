@@ -16,14 +16,15 @@
   import Papicon from '../../lib/components/Papicon.svelte';
   import AdminShell from '../../lib/components/admin/AdminShell.svelte';
   import AdminCard from '../../lib/components/admin/AdminCard.svelte';
-  import AdminStat from '../../lib/components/admin/AdminStat.svelte';
   import AdminBadge from '../../lib/components/admin/AdminBadge.svelte';
-  import AdminTimeSeries from '../../lib/components/admin/AdminTimeSeries.svelte';
   import AdminBarList from '../../lib/components/admin/AdminBarList.svelte';
   import AdminHeatmap from '../../lib/components/admin/AdminHeatmap.svelte';
   import AdminContentMix from '../../lib/components/admin/AdminContentMix.svelte';
+  import MetricTabs, { type MetricTab } from '../../lib/components/analytics/MetricTabs.svelte';
+  import TimeSeriesChart from '../../lib/components/analytics/TimeSeriesChart.svelte';
+  import { SERIES, shortDate } from '../../lib/components/analytics/analyticsFormat';
   import type { AdminTone } from '../../lib/components/admin/types';
-  import { dayStart, formatCompact, formatDate, formatDay, formatNumber, formatPercent, formatVoice, relativeTime } from '../../lib/components/admin/format';
+  import { formatCompact, formatDate, formatNumber, formatPercent, formatVoice, relativeTime } from '../../lib/components/admin/format';
   import { Button, Callout, FilterPills } from '../../lib/components/ui';
 
   const { guildId }: { guildId: string } = $props();
@@ -35,6 +36,8 @@
   let loading = $state(true);
   let days = $state('30');
   let section = $state<Section>('overview');
+  let overviewMetric = $state<'messages' | 'activeMembers' | 'voice' | 'net'>('messages');
+  let chartMode = $state<'line' | 'bar'>('line');
 
   async function load() {
     loading = true;
@@ -82,11 +85,12 @@
   const guild = $derived(sheet?.guild);
   const totals = $derived(sheet?.totals);
   const series = $derived(sheet?.series ?? []);
-  const enabledModules = $derived(sheet?.modules.filter((module) => module.enabled) ?? []);
-  const disabledModules = $derived(sheet?.modules.filter((module) => !module.enabled) ?? []);
+  const labels = $derived(series.map((day) => shortDate(day.dateKey)));
+  const enabledModules = $derived((sheet?.modules ?? []).filter((module) => module.enabled));
+  const disabledModules = $derived((sheet?.modules ?? []).filter((module) => !module.enabled));
 
-  const scoreTone = $derived<AdminTone>(!sheet ? 'neutral' : sheet.health.score >= 75 ? 'success' : sheet.health.score >= 50 ? 'warning' : 'danger');
-  const scoreLabel = $derived(!sheet ? '' : sheet.health.score >= 75 ? 'En forme' : sheet.health.score >= 50 ? 'À surveiller' : 'En difficulté');
+  const scoreTone = $derived<AdminTone>(!sheet ? 'neutral' : (sheet.health?.score ?? 0) >= 75 ? 'success' : (sheet.health?.score ?? 0) >= 50 ? 'warning' : 'danger');
+  const scoreLabel = $derived(!sheet ? '' : (sheet.health?.score ?? 0) >= 75 ? 'En forme' : (sheet.health?.score ?? 0) >= 50 ? 'À surveiller' : 'En difficulté');
   const toneText: Record<AdminTone, string> = {
     success: 'text-success',
     warning: 'text-warning',
@@ -97,21 +101,41 @@
   };
   const signalIcon = { danger: 'AlertTriangle', warning: 'AlertTriangle', info: 'Info', success: 'Check' } as const;
 
-  const points = (value: (day: (typeof series)[number]) => number) => series.map((day) => ({ t: dayStart(day.dateKey), v: value(day) }));
-  const activityChart = $derived(
-    series.length < 2
+  const overviewMetrics = $derived<MetricTab[]>(
+    !sheet
       ? []
       : [
-          { key: 'messages', label: 'Messages', color: 'var(--primary-color)', points: points((day) => day.messages) },
-          { key: 'active', label: 'Membres actifs', color: '#10b981', points: points((day) => day.activeMembers) },
-        ],
-  );
-  const membersChart = $derived(
-    series.length < 2
-      ? []
-      : [
-          { key: 'joined', label: 'Arrivées', color: '#10b981', points: points((day) => day.joined) },
-          { key: 'left', label: 'Départs', color: '#ef4444', points: points((day) => day.left) },
+          {
+            id: 'messages',
+            label: 'Messages',
+            value: formatCompact(sheet.totals.messages),
+            spark: series.map((day) => day.messages),
+            color: SERIES[0],
+            hint: sheet.fleet?.median > 0 ? `médiane de la flotte : ${formatCompact(sheet.fleet.median)}` : undefined,
+          },
+          {
+            id: 'activeMembers',
+            label: 'Membres actifs / jour',
+            value: formatNumber(sheet.totals.activeMembersAvg),
+            spark: series.map((day) => day.activeMembers),
+            color: SERIES[1],
+            hint: `${formatPercent(sheet.totals.activeMembersAvg, sheet.totals.memberCount, 1)} des membres`,
+          },
+          {
+            id: 'voice',
+            label: 'Vocal',
+            value: formatVoice(sheet.totals.voiceMinutes),
+            spark: series.map((day) => day.voiceMinutes),
+            color: SERIES[2],
+          },
+          {
+            id: 'net',
+            label: 'Membres gagnés',
+            value: `${sheet.totals.joined - sheet.totals.left >= 0 ? '+' : ''}${formatNumber(sheet.totals.joined - sheet.totals.left)}`,
+            spark: series.map((day) => day.joined - day.left),
+            color: SERIES[3],
+            hint: `${formatNumber(sheet.totals.joined)} arrivées · ${formatNumber(sheet.totals.left)} départs`,
+          },
         ],
   );
 
@@ -193,7 +217,7 @@
         { value: 'activity', label: 'Activité' },
         { value: 'setup', label: 'Modules et accès', count: enabledModules.length },
         { value: 'moderation', label: 'Modération' },
-        { value: 'journal', label: 'Journal', count: sheet?.audit.length ?? 0 },
+        { value: 'journal', label: 'Journal', count: sheet?.audit?.length ?? 0 },
       ]}
     />
     <FilterPills
@@ -222,7 +246,7 @@
             <p class="text-xs text-on-surface-variant">note sur 100</p>
           </div>
           <ul class="flex-1 space-y-2.5">
-            {#each sheet.health.signals as signal (signal.label)}
+            {#each sheet.health?.signals ?? [] as signal (signal.label)}
               <li class="flex items-start gap-2.5">
                 <span class="mt-0.5 shrink-0 {toneText[signal.tone]}"><Papicon icon={signalIcon[signal.tone]} size={15} /></span>
                 <span class="text-sm text-on-surface leading-snug">{signal.label}</span>
@@ -247,41 +271,79 @@
       </AdminCard>
     </div>
 
-    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
-      <AdminStat
-        label="Messages"
-        value={formatCompact(sheet.totals.messages)}
-        hint={sheet.fleet.median > 0 ? `médiane de la flotte : ${formatCompact(sheet.fleet.median)}` : ''}
-        icon="MessageCircle"
-        tone="primary"
-        series={series.map((day) => day.messages)}
-      />
-      <AdminStat
-        label="Membres actifs par jour"
-        value={formatNumber(sheet.totals.activeMembersAvg)}
-        hint="{formatPercent(sheet.totals.activeMembersAvg, sheet.totals.memberCount, 1)} des membres"
-        icon="Users"
-        tone="success"
-        series={series.map((day) => day.activeMembers)}
-      />
-      <AdminStat label="Vocal" value={formatVoice(sheet.totals.voiceMinutes)} icon="Mic" tone="info" series={series.map((day) => day.voiceMinutes)} />
-      <AdminStat
-        label="Membres gagnés"
-        value="{sheet.totals.joined - sheet.totals.left >= 0 ? '+' : ''}{formatNumber(sheet.totals.joined - sheet.totals.left)}"
-        hint="{formatNumber(sheet.totals.joined)} arrivées · {formatNumber(sheet.totals.left)} départs"
-        icon="TrendingUp"
-        tone={sheet.totals.joined >= sheet.totals.left ? 'success' : 'danger'}
-      />
-    </div>
+    <MetricTabs
+      metrics={overviewMetrics}
+      active={overviewMetric}
+      onchange={(id) => {
+        if (id === 'messages' || id === 'activeMembers' || id === 'voice' || id === 'net') overviewMetric = id;
+      }}
+      label="Indicateurs du serveur"
+    />
 
-    <AdminCard title="Activité" description="Messages et membres ayant écrit, jour par jour">
-      <AdminTimeSeries series={activityChart} height={220} formatTime={formatDay} formatValue={formatNumber} emptyLabel="Aucune mesure sur la période." />
+    <AdminCard
+      title={overviewMetric === 'messages'
+        ? 'Messages et membres actifs'
+        : overviewMetric === 'activeMembers'
+          ? 'Membres actifs par jour'
+          : overviewMetric === 'voice'
+            ? 'Minutes en vocal par jour'
+            : 'Arrivées et départs'}
+      description="Clique sur un compteur au-dessus pour changer de courbe"
+    >
+      {#snippet actions()}
+        <FilterPills
+          label="Style du graphique"
+          value={chartMode}
+          onchange={(v) => (chartMode = v)}
+          options={[
+            { value: 'line', label: 'Courbe' },
+            { value: 'bar', label: 'Barres' },
+          ]}
+        />
+      {/snippet}
+      {#if series.length < 2}
+        <p class="py-10 text-center text-body-sm text-on-surface-variant">Aucune mesure sur la période.</p>
+      {:else if overviewMetric === 'messages'}
+        <TimeSeriesChart
+          {labels}
+          mode="lines"
+          stacks={[
+            { label: 'Messages', values: series.map((day) => day.messages), color: SERIES[0] },
+            { label: 'Membres actifs', values: series.map((day) => day.activeMembers), color: SERIES[1] },
+          ]}
+          format={(v) => formatNumber(v)}
+        />
+      {:else if overviewMetric === 'net'}
+        <TimeSeriesChart
+          {labels}
+          mode="lines"
+          stacks={[
+            { label: 'Arrivées', values: series.map((day) => day.joined), color: SERIES[1] },
+            { label: 'Départs', values: series.map((day) => day.left), color: SERIES[3] },
+          ]}
+          format={(v) => formatNumber(v)}
+        />
+      {:else if overviewMetric === 'activeMembers'}
+        <TimeSeriesChart
+          {labels}
+          mode={chartMode}
+          main={{ label: 'Membres actifs', values: series.map((day) => day.activeMembers), color: SERIES[1] }}
+          format={(v) => formatNumber(v)}
+        />
+      {:else}
+        <TimeSeriesChart
+          {labels}
+          mode={chartMode}
+          main={{ label: 'Minutes de vocal', values: series.map((day) => day.voiceMinutes), color: SERIES[2] }}
+          format={(v) => formatVoice(v)}
+        />
+      {/if}
     </AdminCard>
   {:else if section === 'activity'}
     <div class="grid grid-cols-1 xl:grid-cols-2 gap-5 items-start">
       <AdminCard title="Salons" description="Les plus actifs en messages">
         <AdminBarList
-          items={sheet.channels.map((channel) => ({
+          items={(sheet.channels ?? []).map((channel) => ({
             key: channel.channelId,
             label: `#${channel.name ?? 'salon supprimé'}`,
             sublabel: channel.categoryName ?? '',
@@ -292,7 +354,7 @@
       </AdminCard>
       <AdminCard title="Catégories" description="Tous les salons du serveur">
         <AdminBarList
-          items={sheet.categories.map((category) => ({
+          items={(sheet.categories ?? []).map((category) => ({
             key: category.categoryId ?? '-',
             label: category.name ?? 'Sans catégorie',
             sublabel: `${category.channels} salon${category.channels > 1 ? 's' : ''}${category.voiceMinutes > 0 ? ` · ${formatVoice(category.voiceMinutes)} de vocal` : ''}`,
@@ -304,15 +366,35 @@
     </div>
 
     <AdminCard title="Arrivées et départs">
-      <AdminTimeSeries series={membersChart} height={200} formatTime={formatDay} formatValue={formatNumber} emptyLabel="Aucune mesure sur la période." />
+      {#if series.length < 2}
+        <p class="py-10 text-center text-body-sm text-on-surface-variant">Aucune mesure sur la période.</p>
+      {:else}
+        <TimeSeriesChart
+          {labels}
+          mode="lines"
+          stacks={[
+            { label: 'Arrivées', values: series.map((day) => day.joined), color: SERIES[1] },
+            { label: 'Départs', values: series.map((day) => day.left), color: SERIES[3] },
+          ]}
+          format={(v) => formatNumber(v)}
+        />
+      {/if}
     </AdminCard>
 
     <div class="grid grid-cols-1 xl:grid-cols-2 gap-5 items-start">
       <AdminCard title="Quand écrit-on ?" description="Messages par jour de la semaine et par heure">
-        <AdminHeatmap grid={sheet.heat} />
+        {#if sheet.heat}
+          <AdminHeatmap grid={sheet.heat} />
+        {:else}
+          <p class="text-body-sm text-on-surface-variant">Aucune mesure sur la période.</p>
+        {/if}
       </AdminCard>
       <AdminCard title="De quoi sont faits les messages">
-        <AdminContentMix content={sheet.content} />
+        {#if sheet.content}
+          <AdminContentMix content={sheet.content} />
+        {:else}
+          <p class="text-body-sm text-on-surface-variant">Aucune mesure sur la période.</p>
+        {/if}
       </AdminCard>
     </div>
   {:else if section === 'setup'}
@@ -410,7 +492,7 @@
             <dt class="text-body-sm text-on-surface-variant">Seuils revue · action</dt>
             <dd class="text-body-sm font-semibold text-on-surface tabular-nums">{sheet.aegis.reviewThreshold ?? '–'} · {sheet.aegis.autoThreshold ?? '–'}</dd>
           </div>
-          {#each Object.entries(sheet.aegis.detections) as [kind, count] (kind)}
+          {#each Object.entries(sheet.aegis?.detections ?? {}) as [kind, count] (kind)}
             <div class="flex items-baseline justify-between gap-3">
               <dt class="text-body-sm text-on-surface-variant">{AEGIS_KIND[kind] ?? kind}</dt>
               <dd class="text-body-sm font-semibold text-on-surface tabular-nums">{formatNumber(count)}</dd>
@@ -422,11 +504,11 @@
       <AdminCard title="Kotbo Vision">
         <dl class="space-y-2.5">
           {#each [
-            { label: 'Listes d’images', value: sheet.vision.lists },
-            { label: 'Images interdites propres au serveur', value: sheet.vision.images },
-            { label: 'Revues en attente', value: sheet.vision.reviews.PENDING ?? 0 },
-            { label: 'Revues confirmées', value: sheet.vision.reviews.CONFIRMED ?? 0 },
-            { label: 'Revues écartées', value: sheet.vision.reviews.DISMISSED ?? 0 },
+            { label: 'Listes d’images', value: sheet.vision?.lists ?? 0 },
+            { label: 'Images interdites propres au serveur', value: sheet.vision?.images ?? 0 },
+            { label: 'Revues en attente', value: sheet.vision?.reviews?.PENDING ?? 0 },
+            { label: 'Revues confirmées', value: sheet.vision?.reviews?.CONFIRMED ?? 0 },
+            { label: 'Revues écartées', value: sheet.vision?.reviews?.DISMISSED ?? 0 },
           ] as row (row.label)}
             <div class="flex items-baseline justify-between gap-3">
               <dt class="text-body-sm text-on-surface-variant">{row.label}</dt>
@@ -441,11 +523,11 @@
       {#snippet actions()}
         <a href="/admin/audit" class="text-body-sm font-semibold text-primary hover:underline">Journal complet</a>
       {/snippet}
-      {#if sheet.audit.length === 0}
+      {#if (sheet.audit ?? []).length === 0}
         <p class="text-body-sm text-on-surface-variant">Aucune action admin n’a visé ce serveur.</p>
       {:else}
         <ul class="space-y-3.5">
-          {#each sheet.audit as entry (entry.id)}
+          {#each sheet.audit ?? [] as entry (entry.id)}
             <li class="flex items-start gap-3">
               <span class="w-2 h-2 rounded-full mt-1.5 shrink-0 {entry.outcome === 'OK' ? 'bg-success' : 'bg-error'}"></span>
               <div class="min-w-0">

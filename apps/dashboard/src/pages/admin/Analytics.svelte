@@ -1,29 +1,30 @@
 <script lang="ts">
-  import { m } from '../../lib/i18n';
   /**
-   * Analytics.svelte
+   * Analytics commerciales de la console admin : acquisition, revenus,
+   * segments, retention, usage du dashboard, modules et seuils d'alerte.
    *
-   * Tableau de bord d'analyse commerciale et du tunnel d'acquisition.
-   * Onglets :
-   *   1. Tunnel d'acquisition (visite -> invite -> onboarding -> paiement)
-   *   2. Revenus & MRR (cascade MRR, ARPA, répartition, factures)
-   *   3. Segments & Paliers (dimension drilldown, matrice hors palier)
-   *   4. Rétention, Produit & Risques (cohortes M0-M12, signaux faibles, modules)
-   *   5. Seuils & Alertes (configuration des alertes Discord)
-   *   6. Usage du dashboard (pages, modules et onglets consultés - télémétrie produit)
-   *   7. Modules (activation, usage et performance sur le parc ; ex-/admin/modules)
-   *
-   * L'onglet se lit et s'écrit dans `?tab=` : /admin/modules redirige vers
-   * `?tab=modules`, et un lien partagé rouvre le bon onglet.
+   * Chaque vue est une entree de l'espace Analytics (`/admin/analytics/<vue>`),
+   * au meme niveau que l'activite et les abonnements : plus de rangee d'onglets
+   * propre a la page. Les blocs reprennent ceux des analytics d'un serveur
+   * (chiffres cles `MetricTabs`, classements `BarList`).
    */
+  import { m } from '../../lib/i18n';
+  import { router } from 'tinro';
   import { onMount } from 'svelte';
   import AdminShell from '../../lib/components/admin/AdminShell.svelte';
   import DashboardUsageTab from '../../lib/components/admin/analytics/DashboardUsageTab.svelte';
   import ModulesTab from '../../lib/components/admin/analytics/ModulesTab.svelte';
   import AdminCard from '../../lib/components/admin/AdminCard.svelte';
-  import AdminStat from '../../lib/components/admin/AdminStat.svelte';
+  import AdminTable from '../../lib/components/admin/AdminTable.svelte';
+  import AdminBadge from '../../lib/components/admin/AdminBadge.svelte';
   import AdminDrawer from '../../lib/components/admin/AdminDrawer.svelte';
-  import Papicon from '../../lib/components/Papicon.svelte';
+  import type { AdminTableColumn } from '../../lib/components/admin/types';
+  import MetricTabs from '../../lib/components/analytics/MetricTabs.svelte';
+  import BarList from '../../lib/components/analytics/BarList.svelte';
+  import TimeSeriesChart from '../../lib/components/analytics/TimeSeriesChart.svelte';
+  import { SERIES, shortDate } from '../../lib/components/analytics/analyticsFormat';
+  import { Button, Callout, EmptyState, Field, FilterPills } from '../../lib/components/ui';
+  import { moduleName } from '../../lib/moduleLabels';
   import { toast } from '../../lib/stores/toast.svelte';
   import type { AnalyticsDimension } from '@kotbo/contracts';
   import {
@@ -49,37 +50,43 @@
     type GuildExplorerItem,
   } from '../../lib/api';
 
-  // ── Navigation & Filtres ───────────────────────────────────────────────────
+  const { tab = '' }: { tab?: string } = $props();
+
+  // ── Vue affichee et filtres ────────────────────────────────────────────────
   type TabKey = 'funnel' | 'revenue' | 'segments' | 'retention' | 'alerts' | 'usage' | 'modules';
   const TAB_KEYS: readonly TabKey[] = ['funnel', 'revenue', 'segments', 'retention', 'alerts', 'usage', 'modules'];
+  const activeTab = $derived<TabKey>(TAB_KEYS.includes(tab as TabKey) ? (tab as TabKey) : 'funnel');
 
-  function tabFromUrl(): TabKey {
-    const requested = new URLSearchParams(window.location.search).get('tab');
-    return TAB_KEYS.includes(requested as TabKey) ? (requested as TabKey) : 'funnel';
-  }
-
-  let activeTab = $state<TabKey>(tabFromUrl());
-
-  // Les onglets autonomes chargent eux-mêmes leurs données.
+  // Les vues autonomes chargent elles-memes leurs donnees.
   const SELF_LOADED_TABS = new Set<TabKey>(['usage', 'modules']);
 
-  $effect(() => {
-    const url = new URL(window.location.href);
-    if (activeTab === 'funnel') url.searchParams.delete('tab');
-    else url.searchParams.set('tab', activeTab);
-    if (url.href !== window.location.href) window.history.replaceState(window.history.state, '', url);
-  });
+  const TITLES: Record<TabKey, string> = {
+    funnel: 'Acquisition',
+    revenue: 'Revenus',
+    segments: 'Segments',
+    retention: 'Rétention',
+    alerts: 'Alertes',
+    usage: 'Usage du dashboard',
+    modules: 'Modules',
+  };
+  const DESCRIPTIONS: Record<TabKey, string> = {
+    funnel: 'De la visite du site au premier paiement : où les serveurs arrivent, et où ils décrochent.',
+    revenue: 'Revenu récurrent, ce qui le fait bouger, et les dernières factures.',
+    segments: 'Les serveurs regroupés par taille, provenance ou type, avec leur conversion.',
+    retention: 'Qui reste, qui risque de partir, et quels modules font la différence.',
+    alerts: 'Les seuils qui déclenchent une alerte sur le salon de supervision.',
+    usage: 'Les pages du dashboard réellement consultées.',
+    modules: 'L’adoption et l’usage de chaque module sur l’ensemble des serveurs.',
+  };
 
-  type PeriodPreset = '7d' | '30d' | '90d' | '12m' | 'custom';
+  type PeriodPreset = '7d' | '30d' | '90d' | '12m';
   let periodPreset = $state<PeriodPreset>('30d');
-  let customFrom = $state('');
-  let customTo = $state('');
   let comparePrevious = $state(false);
 
   let loading = $state(true);
   let error = $state<string | null>(null);
 
-  // ── Données des onglets ────────────────────────────────────────────────────
+  // ── Donnees des vues ───────────────────────────────────────────────────────
   let funnelData = $state<FunnelStatsResult | null>(null);
   let onboardingData = $state<OnboardingFunnelResult | null>(null);
   let revenueData = $state<RevenueStatsResult | null>(null);
@@ -90,10 +97,9 @@
   let alertThresholds = $state<AlertThresholds | null>(null);
   let recentAlerts = $state<Array<{ key: string; lastFiredAt: string; lastValue: number | null }>>([]);
 
-  // Segments dimension
   let selectedDimension = $state<AnalyticsDimension>('size');
 
-  // ── Panneau latéral d'inspection (Drilldown) ──────────────────────────────
+  // ── Panneau lateral : les serveurs derriere un chiffre ─────────────────────
   let drawerOpen = $state(false);
   let drawerTitle = $state('Détail des serveurs');
   let drawerSubtitle = $state('');
@@ -106,24 +112,16 @@
   let drawerTotalCount = $state(0);
   let drawerLoading = $state(false);
 
-  // ── Calcul des bornes de dates ─────────────────────────────────────────────
   function getQueryDates() {
-    if (periodPreset === 'custom' && customFrom && customTo) {
-      return { from: customFrom, to: customTo };
-    }
     const now = new Date();
-    const to = now.toISOString();
-    let fromDate = new Date();
-
+    const fromDate = new Date();
     if (periodPreset === '7d') fromDate.setDate(now.getDate() - 7);
     else if (periodPreset === '30d') fromDate.setDate(now.getDate() - 30);
     else if (periodPreset === '90d') fromDate.setDate(now.getDate() - 90);
-    else if (periodPreset === '12m') fromDate.setFullYear(now.getFullYear() - 1);
-
-    return { from: fromDate.toISOString(), to };
+    else fromDate.setFullYear(now.getFullYear() - 1);
+    return { from: fromDate.toISOString(), to: now.toISOString() };
   }
 
-  // ── Chargement principal ───────────────────────────────────────────────────
   async function loadAll() {
     if (SELF_LOADED_TABS.has(activeTab)) {
       loading = false;
@@ -151,13 +149,13 @@
           fetchAdminModuleCorrelations(),
           fetchAdminRisksSummary(),
         ]);
-        cohortsData = cohortsRes.cohorts;
+        cohortsData = cohortsRes?.cohorts ?? [];
         modulesData = modulesRes;
         risksData = risksRes;
       } else if (activeTab === 'alerts') {
         const alertsRes = await fetchAdminAlertThresholds();
         alertThresholds = alertsRes.thresholds;
-        recentAlerts = alertsRes.recentAlerts;
+        recentAlerts = alertsRes?.recentAlerts ?? [];
       }
     } catch (err) {
       error = err instanceof Error ? err.message : 'Erreur de chargement des statistiques';
@@ -166,27 +164,22 @@
     }
   }
 
+  // Recharge a chaque changement de vue ou de filtre.
   $effect(() => {
-    // Recharger lors d'un changement d'onglet ou de filtre
-    const _tab = activeTab;
-    const _preset = periodPreset;
-    const _comp = comparePrevious;
-    const _dim = selectedDimension;
+    void activeTab;
+    void periodPreset;
+    void comparePrevious;
+    void selectedDimension;
     void loadAll();
   });
 
+  // Anciens liens `?tab=usage` (palette, favoris) : meme vue, nouvelle adresse.
   onMount(() => {
-    void loadAll();
+    const legacy = new URLSearchParams(window.location.search).get('tab');
+    if (!tab && TAB_KEYS.includes(legacy as TabKey) && legacy !== 'funnel') router.goto(`/admin/analytics/${legacy}`, true);
   });
 
-  // ── Drilldown Drawer ───────────────────────────────────────────────────────
-  async function openDrawer(params: {
-    title: string;
-    subtitle?: string;
-    filter?: string;
-    dimension?: AnalyticsDimension;
-    bucket?: string;
-  }) {
+  async function openDrawer(params: { title: string; subtitle?: string; filter?: string; dimension?: AnalyticsDimension; bucket?: string }) {
     drawerTitle = params.title;
     drawerSubtitle = params.subtitle ?? '';
     drawerFilter = params.filter;
@@ -200,17 +193,11 @@
   async function loadDrawerGuilds() {
     drawerLoading = true;
     try {
-      const res = await fetchAdminAnalyticsGuilds({
-        page: drawerPage,
-        limit: 20,
-        filter: drawerFilter,
-        dimension: drawerDimension,
-        bucket: drawerBucket,
-      });
-      drawerGuilds = res.guilds;
-      drawerTotalPages = res.pagination.totalPages;
-      drawerTotalCount = res.pagination.total;
-    } catch (err) {
+      const res = await fetchAdminAnalyticsGuilds({ page: drawerPage, limit: 20, filter: drawerFilter, dimension: drawerDimension, bucket: drawerBucket });
+      drawerGuilds = res?.guilds ?? [];
+      drawerTotalPages = res?.pagination?.totalPages ?? 1;
+      drawerTotalCount = res?.pagination?.total ?? 0;
+    } catch {
       toast.error(m.aana_servers_load_error());
     } finally {
       drawerLoading = false;
@@ -223,7 +210,6 @@
     void loadDrawerGuilds();
   }
 
-  // ── Sauvegarde des alertes ─────────────────────────────────────────────────
   let savingAlerts = $state(false);
   async function handleSaveAlerts() {
     if (!alertThresholds) return;
@@ -231,208 +217,265 @@
     try {
       await saveAdminAlertThresholds(alertThresholds);
       toast.success(m.aana_thresholds_saved());
-    } catch (err) {
+    } catch {
       toast.error(m.aana_save_error());
     } finally {
       savingAlerts = false;
     }
   }
 
-  // ── Export CSV ─────────────────────────────────────────────────────────────
   let exportingCsv = $state(false);
   async function handleExportCsv() {
     exportingCsv = true;
     const { from, to } = getQueryDates();
     try {
-      await downloadAdminAnalyticsCsv(activeTab, {
-        from,
-        to,
-        dimension: selectedDimension,
-        filter: drawerFilter,
-      });
+      await downloadAdminAnalyticsCsv(activeTab, { from, to, dimension: selectedDimension, filter: drawerFilter });
       toast.success(m.aana_csv_exported());
-    } catch (err) {
+    } catch {
       toast.error(m.aana_csv_export_failed());
     } finally {
       exportingCsv = false;
     }
   }
 
-  // ── Formateurs ─────────────────────────────────────────────────────────────
+  // ── Formatage ──────────────────────────────────────────────────────────────
+  const nf = new Intl.NumberFormat('fr-FR');
+
   function formatEuros(cents: number | null | undefined): string {
-    if (cents === null || cents === undefined) return '0,00 €';
-    return (cents / 100).toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' });
+    return ((cents ?? 0) / 100).toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' });
   }
 
-  function formatPercent(val: number | null | undefined): string {
-    if (val === null || val === undefined) return '0.0 %';
-    return `${val.toFixed(1)} %`;
+  function formatPercent(value: number | null | undefined): string {
+    return `${(value ?? 0).toFixed(1).replace('.', ',')} %`;
   }
 
   function formatDuration(seconds: number | null | undefined): string {
-    if (seconds === null || seconds === undefined) return '-';
+    if (seconds === null || seconds === undefined) return '–';
     if (seconds < 60) return `${seconds} s`;
-    const m = Math.floor(seconds / 60);
-    const s = seconds % 60;
-    if (m < 60) return `${m} min ${s > 0 ? `${s} s` : ''}`.trim();
-    const h = Math.floor(m / 60);
-    return `${h} h ${m % 60} min`;
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes} min`;
+    return `${Math.floor(minutes / 60)} h ${minutes % 60} min`;
   }
 
-  function getRetentionBg(rate: number): string {
-    if (rate >= 85) return 'bg-success/20 text-success border-success/30';
-    if (rate >= 70) return 'bg-teal-500/20 text-teal-400 border-teal-500/30';
-    if (rate >= 50) return 'bg-warning/20 text-warning border-warning/30';
-    if (rate >= 30) return 'bg-orange-500/20 text-orange-400 border-orange-500/30';
-    return 'bg-error/20 text-error border-error/30';
+  // ── Acquisition ────────────────────────────────────────────────────────────
+  const steps = $derived(funnelData?.steps ?? []);
+  const prevSteps = $derived(funnelData?.previousSteps ?? []);
+  const stepRate = (step: (typeof steps)[number] | undefined) => step?.conversionFromFirst ?? step?.conversionTop;
+  const joinedStep = $derived(steps.find((step) => step.step === 'bot_joined'));
+  const paidStep = $derived(steps.find((step) => step.step === 'first_payment'));
+
+  function pctDelta(cur: number, prev: number | undefined): number | null {
+    if (!comparePrevious || prev === undefined || prev === 0) return null;
+    return Math.round(((cur - prev) / prev) * 100);
   }
+
+  const funnelKpis = $derived([
+    { id: 'visits', label: 'Visites uniques', value: nf.format(steps[0]?.count ?? 0), delta: pctDelta(steps[0]?.count ?? 0, prevSteps[0]?.count), hint: 'sur le site', color: SERIES[0] },
+    { id: 'joins', label: 'Installations du bot', value: nf.format(joinedStep?.count ?? 0), delta: pctDelta(joinedStep?.count ?? 0, prevSteps.find((s) => s.step === 'bot_joined')?.count), hint: `${formatPercent(stepRate(joinedStep))} des visites`, color: SERIES[1] },
+    { id: 'onboarding', label: 'Configurations terminées', value: nf.format(onboardingData?.totalCompleted ?? 0), hint: `${formatPercent(onboardingData?.completionRate)} de celles commencées`, color: SERIES[2] },
+    { id: 'paid', label: 'Clients payants', value: nf.format(paidStep?.count ?? 0), delta: pctDelta(paidStep?.count ?? 0, prevSteps.find((s) => s.step === 'first_payment')?.count), hint: `${formatPercent(stepRate(paidStep))} des visites`, color: SERIES[3] },
+  ]);
+
+  const stepItems = $derived(
+    steps.map((step, index) => ({
+      id: step.step,
+      label: step.name ?? step.label ?? step.step,
+      value: step.count,
+      display: nf.format(step.count),
+      sub: [
+        index > 0 ? `${formatPercent(step.conversionFromPrev ?? step.conversionPrevious)} de l’étape d’avant` : '',
+        step.medianDurationSeconds !== null ? `délai médian ${formatDuration(step.medianDurationSeconds)}` : '',
+      ].filter(Boolean).join(' · '),
+    })),
+  );
+
+  const sourceItems = $derived(
+    Object.entries(funnelData?.sources ?? {})
+      .map(([key, value]) => ({ id: key, label: key.charAt(0).toUpperCase() + key.slice(1), value: value.visits, sub: `${value.joins} installations · ${value.paid} clients` }))
+      .sort((a, b) => b.value - a.value),
+  );
+  const contentItems = $derived(
+    Object.entries(funnelData?.contents ?? {})
+      .map(([key, value]) => ({ id: key, label: key, value: value.clicks, sub: `${value.joins} installations · ${value.paid} clients` }))
+      .sort((a, b) => b.value - a.value),
+  );
+  const dropItems = $derived(
+    (onboardingData?.stepDropOffs ?? []).map((drop) => ({ id: drop.step, label: drop.step, value: drop.count, display: `${nf.format(drop.count)} · ${formatPercent(drop.dropOffRate)}` })),
+  );
+
+  // ── Revenus ────────────────────────────────────────────────────────────────
+  let revMetric = $state<'mrr' | 'collected' | 'paying'>('mrr');
+  let revChartMode = $state<'line' | 'bar'>('line');
+  const revSeries = $derived(revenueData?.series ?? []);
+  const revLabels = $derived(revSeries.map((d) => shortDate(d.dateKey)));
+
+  const revenueKpis = $derived(
+    !revenueData
+      ? []
+      : [
+          {
+            id: 'mrr',
+            label: 'Revenu récurrent mensuel',
+            value: formatEuros(revenueData.mrrCents),
+            spark: revSeries.map((d) => Math.round(d.mrrCents / 100)),
+            hint: `${formatEuros(revenueData.arrCents)} sur un an`,
+            color: SERIES[0],
+          },
+          {
+            id: 'collected',
+            label: 'Encaissé sur la période',
+            value: formatEuros(revenueData.collectedCents),
+            spark: revSeries.map((d) => Math.round(d.collectedCents / 100)),
+            hint: 'factures payées',
+            color: SERIES[1],
+          },
+          {
+            id: 'paying',
+            label: 'Revenu par serveur',
+            value: formatEuros(revenueData.arpaCents),
+            spark: revSeries.map((d) => d.payingCount),
+            hint: `${revenueData.payingGuilds} serveurs payants`,
+            color: SERIES[2],
+          },
+          {
+            id: 'net',
+            label: 'Variation du récurrent',
+            value: formatEuros((revenueData.waterfall?.mrrEndCents ?? 0) - (revenueData.waterfall?.mrrStartCents ?? 0)),
+            hint: 'entre le début et la fin',
+            color: SERIES[3],
+          },
+        ],
+  );
+
+  const waterfallMax = $derived(
+    !revenueData?.waterfall
+      ? 1
+      : Math.max(
+          1,
+          revenueData.waterfall.mrrStartCents,
+          revenueData.waterfall.mrrEndCents,
+          revenueData.waterfall.newCents,
+          revenueData.waterfall.expansionCents,
+          revenueData.waterfall.contractionCents,
+          revenueData.waterfall.churnCents,
+        ),
+  );
+
+  const waterfall = $derived(
+    !revenueData?.waterfall
+      ? []
+      : [
+          { label: 'Au début', cents: revenueData.waterfall.mrrStartCents, value: formatEuros(revenueData.waterfall.mrrStartCents), tone: '', bar: 'bg-on-surface/35' },
+          { label: 'Nouveaux', cents: revenueData.waterfall.newCents, value: `+${formatEuros(revenueData.waterfall.newCents)}`, tone: 'text-success', bar: 'bg-success' },
+          { label: 'Montées en offre', cents: revenueData.waterfall.expansionCents, value: `+${formatEuros(revenueData.waterfall.expansionCents)}`, tone: 'text-success', bar: 'bg-success' },
+          { label: 'Baisses d’offre', cents: revenueData.waterfall.contractionCents, value: `−${formatEuros(revenueData.waterfall.contractionCents)}`, tone: 'text-error', bar: 'bg-error' },
+          { label: 'Résiliations', cents: revenueData.waterfall.churnCents, value: `−${formatEuros(revenueData.waterfall.churnCents)}`, tone: 'text-error', bar: 'bg-error' },
+          { label: 'À la fin', cents: revenueData.waterfall.mrrEndCents, value: formatEuros(revenueData.waterfall.mrrEndCents), tone: '', bar: 'bg-primary' },
+        ],
+  );
+
+  const planItems = $derived(
+    Object.entries(revenueData?.byPlan ?? {})
+      .map(([plan, item]) => ({ id: plan, label: plan, value: item.mrrCents, display: formatEuros(item.mrrCents), sub: `${item.count} serveur${item.count > 1 ? 's' : ''}` }))
+      .sort((a, b) => b.value - a.value),
+  );
+  const intervalItems = $derived(
+    !revenueData
+      ? []
+      : [
+          { id: 'month', label: 'Au mois', value: revenueData.byInterval.month.mrrCents, display: formatEuros(revenueData.byInterval.month.mrrCents), sub: `${revenueData.byInterval.month.count} abonnements` },
+          { id: 'year', label: 'À l’année', value: revenueData.byInterval.year.mrrCents, display: formatEuros(revenueData.byInterval.year.mrrCents), sub: `${revenueData.byInterval.year.count} abonnements` },
+        ],
+  );
+
+  const invoiceColumns: AdminTableColumn[] = [
+    { key: 'date', label: 'Date' },
+    { key: 'guild', label: 'Serveur' },
+    { key: 'plan', label: 'Offre' },
+    { key: 'interval', label: 'Rythme', hideBelow: 'sm' },
+    { key: 'amount', label: 'Montant TTC', align: 'right' },
+    { key: 'status', label: 'Statut', align: 'right' },
+  ];
+
+  // ── Segments ───────────────────────────────────────────────────────────────
+  const DIMENSIONS: { value: AnalyticsDimension; label: string }[] = [
+    { value: 'size', label: 'Taille' },
+    { value: 'source', label: 'Provenance' },
+    { value: 'instance', label: 'Instance' },
+    { value: 'locale', label: 'Langue' },
+    { value: 'kind', label: 'Type de communauté' },
+  ];
+  const segmentColumns: AdminTableColumn[] = [
+    { key: 'bucket', label: 'Segment' },
+    { key: 'total', label: 'Serveurs', align: 'right' },
+    { key: 'paying', label: 'Payants', align: 'right' },
+    { key: 'trial', label: 'Essais', align: 'right', hideBelow: 'sm' },
+    { key: 'conversion', label: 'Conversion', align: 'right' },
+    { key: 'mrr', label: 'Récurrent', align: 'right', hideBelow: 'md' },
+    { key: 'ltv', label: 'Valeur moyenne', align: 'right', hideBelow: 'lg' },
+  ];
+  const tierColumns: AdminTableColumn[] = [
+    { key: 'guild', label: 'Serveur' },
+    { key: 'members', label: 'Membres', align: 'right' },
+    { key: 'current', label: 'Offre actuelle' },
+    { key: 'recommended', label: 'Offre adaptée' },
+    { key: 'mrr', label: 'Récurrent', align: 'right', hideBelow: 'md' },
+  ];
+
+  // ── Retention ──────────────────────────────────────────────────────────────
+  const riskKpis = $derived(
+    !risksData
+      ? []
+      : [
+          { id: 'inactive', label: 'Payants inactifs depuis 14 jours', value: nf.format(risksData.summary.inactivePayingCount), hint: 'aucune activité du bot' },
+          { id: 'declining', label: 'Usage divisé par deux', value: nf.format(risksData.summary.decliningUsageCount), hint: 'd’une semaine à l’autre' },
+          { id: 'trials', label: 'Essais finissant sous 48 h', value: nf.format(risksData.summary.expiringTrials48hCount), hint: 'à convertir en priorité' },
+          { id: 'mrr', label: 'Revenu récurrent en jeu', value: formatEuros(risksData.summary.atRiskMrrCents), hint: 'total de ces serveurs' },
+        ],
+  );
+
+  const moduleLabel = (key: string) => moduleName(key, key);
+  const adoptionItems = $derived(
+    (modulesData?.moduleAdoption ?? []).slice(0, 10).map((entry) => ({
+      id: entry.module,
+      label: moduleLabel(entry.module),
+      value: entry.paidAdoptionRate,
+      display: formatPercent(entry.paidAdoptionRate),
+      sub: `${formatPercent(entry.freeAdoptionRate)} en gratuit`,
+    })),
+  );
+  const churnItems = $derived(
+    (modulesData?.churnDropOffModules ?? []).map((entry) => ({ id: entry.module, label: moduleLabel(entry.module), value: entry.dropOffCount })),
+  );
+
+  const first = $derived(loading && !funnelData && !revenueData && !segmentsData && !risksData && !alertThresholds);
 </script>
 
-<AdminShell
-  title="Analytics"
-  description="Acquisition, revenus, rétention, usage du dashboard et des modules sur tout le parc"
->
+<AdminShell title={TITLES[activeTab]} description={DESCRIPTIONS[activeTab]}>
   {#snippet actions()}
-    <div class="flex items-center gap-2 flex-wrap">
-      <!-- Sélecteur de période -->
-      <div class="flex items-center rounded-xl bg-surface-container-high p-1 border border-outline-variant/30 text-xs font-semibold">
-        <button
-          type="button"
-          class="px-2.5 py-1 rounded-lg transition {periodPreset === '7d' ? 'bg-primary text-on-primary' : 'text-on-surface-variant hover:text-on-surface'}"
-          onclick={() => { periodPreset = '7d'; }}
-        >
-          7j (Direct)
-        </button>
-        <button
-          type="button"
-          class="px-2.5 py-1 rounded-lg transition {periodPreset === '30d' ? 'bg-primary text-on-primary' : 'text-on-surface-variant hover:text-on-surface'}"
-          onclick={() => { periodPreset = '30d'; }}
-        >
-          30j
-        </button>
-        <button
-          type="button"
-          class="px-2.5 py-1 rounded-lg transition {periodPreset === '90d' ? 'bg-primary text-on-primary' : 'text-on-surface-variant hover:text-on-surface'}"
-          onclick={() => { periodPreset = '90d'; }}
-        >
-          90j
-        </button>
-        <button
-          type="button"
-          class="px-2.5 py-1 rounded-lg transition {periodPreset === '12m' ? 'bg-primary text-on-primary' : 'text-on-surface-variant hover:text-on-surface'}"
-          onclick={() => { periodPreset = '12m'; }}
-        >
-          1 an
-        </button>
-      </div>
-
-      <!-- Comparaison période précédente -->
-      {#if activeTab === 'funnel' || activeTab === 'revenue' || activeTab === 'usage' || activeTab === 'modules'}
-        <button
-          type="button"
-          class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-semibold transition
-            {comparePrevious ? 'bg-primary/15 text-primary border-primary/40' : 'bg-surface-container-high border-outline-variant/30 text-on-surface-variant hover:text-on-surface'}"
-          onclick={() => { comparePrevious = !comparePrevious; }}
-        >
-          <Papicon icon="GitCompare" size={13} />
-          Comparer
-        </button>
-      {/if}
-
-      <!-- Export CSV -->
-      {#if !SELF_LOADED_TABS.has(activeTab)}
-        <button
-          type="button"
-          disabled={exportingCsv}
-          class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-surface-container-high border border-outline-variant/30 text-xs font-semibold text-on-surface hover:bg-surface-container-highest transition disabled:opacity-50"
-          onclick={handleExportCsv}
-        >
-          <Papicon icon="Download" size={13} />
-          {exportingCsv ? 'Export...' : 'Export CSV'}
-        </button>
-      {/if}
-
-      <!-- Rafraîchir -->
-      {#if !SELF_LOADED_TABS.has(activeTab)}
-      <button
-        type="button"
-        disabled={loading}
-        class="w-8 h-8 flex items-center justify-center rounded-xl bg-surface-container-high border border-outline-variant/30 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-highest transition"
-        onclick={loadAll}
-        aria-label="Rafraîchir"
-      >
-        <Papicon icon="RefreshCw" size={13} class={loading ? 'animate-spin' : ''} />
-      </button>
-      {/if}
-    </div>
+    {#if activeTab !== 'alerts' && activeTab !== 'retention'}
+      <FilterPills
+        label="Période"
+        value={periodPreset}
+        onchange={(value) => (periodPreset = value)}
+        options={[
+          { value: '7d', label: '7 jours' },
+          { value: '30d', label: '30 jours' },
+          { value: '90d', label: '90 jours' },
+          { value: '12m', label: '1 an' },
+        ]}
+      />
+    {/if}
+    {#if activeTab === 'funnel' || activeTab === 'revenue' || activeTab === 'usage' || activeTab === 'modules'}
+      <Button icon="GitCompare" variant={comparePrevious ? 'primary' : 'secondary'} aria-pressed={comparePrevious} onclick={() => (comparePrevious = !comparePrevious)}>
+        Comparer
+      </Button>
+    {/if}
+    {#if !SELF_LOADED_TABS.has(activeTab)}
+      <Button icon="Download" loading={exportingCsv} onclick={handleExportCsv}>Export CSV</Button>
+      <Button icon="RefreshCw" {loading} aria-label="Actualiser" title="Actualiser" onclick={loadAll} />
+    {/if}
   {/snippet}
-
-  <!-- Bandeau d'onglets principaux -->
-  <div class="flex border-b border-outline-variant/20 mb-6 gap-1 overflow-x-auto pb-1">
-    <button
-      type="button"
-      class="flex items-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-sm transition shrink-0
-        {activeTab === 'funnel' ? 'bg-primary text-on-primary shadow-sm' : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high'}"
-      onclick={() => { activeTab = 'funnel'; }}
-    >
-      <Papicon icon="Filter" size={15} />
-      Tunnel d'acquisition
-    </button>
-    <button
-      type="button"
-      class="flex items-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-sm transition shrink-0
-        {activeTab === 'revenue' ? 'bg-primary text-on-primary shadow-sm' : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high'}"
-      onclick={() => { activeTab = 'revenue'; }}
-    >
-      <Papicon icon="CreditCard" size={15} />
-      Chiffre d'affaires & MRR
-    </button>
-    <button
-      type="button"
-      class="flex items-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-sm transition shrink-0
-        {activeTab === 'segments' ? 'bg-primary text-on-primary shadow-sm' : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high'}"
-      onclick={() => { activeTab = 'segments'; }}
-    >
-      <Papicon icon="PieChart" size={15} />
-      Segments & Paliers
-    </button>
-    <button
-      type="button"
-      class="flex items-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-sm transition shrink-0
-        {activeTab === 'retention' ? 'bg-primary text-on-primary shadow-sm' : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high'}"
-      onclick={() => { activeTab = 'retention'; }}
-    >
-      <Papicon icon="Activity" size={15} />
-      Rétention, Produit & Risques
-    </button>
-    <button
-      type="button"
-      class="flex items-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-sm transition shrink-0
-        {activeTab === 'alerts' ? 'bg-primary text-on-primary shadow-sm' : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high'}"
-      onclick={() => { activeTab = 'alerts'; }}
-    >
-      <Papicon icon="Bell" size={15} />
-      Seuils d'alerte
-    </button>
-    <button
-      type="button"
-      class="flex items-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-sm transition shrink-0
-        {activeTab === 'usage' ? 'bg-primary text-on-primary shadow-sm' : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high'}"
-      onclick={() => { activeTab = 'usage'; }}
-    >
-      <Papicon icon="Eye" size={15} />
-      Usage du dashboard
-    </button>
-    <button
-      type="button"
-      class="flex items-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-sm transition shrink-0
-        {activeTab === 'modules' ? 'bg-primary text-on-primary shadow-sm' : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high'}"
-      onclick={() => { activeTab = 'modules'; }}
-    >
-      <Papicon icon="Box" size={15} />
-      Modules
-    </button>
-  </div>
 
   {#if activeTab === 'usage' || activeTab === 'modules'}
     {@const range = getQueryDates()}
@@ -442,548 +485,240 @@
       <ModulesTab from={range.from} to={range.to} compare={comparePrevious} />
     {/if}
   {:else}
+    {#if error}
+      <Callout variant="danger">
+        {error}
+        {#snippet actions()}
+          <Button size="sm" icon="RefreshCw" onclick={loadAll}>Réessayer</Button>
+        {/snippet}
+      </Callout>
+    {/if}
 
-  {#if error}
-    <div class="mb-6 p-4 rounded-2xl bg-error/10 border border-error/25 text-error flex items-center gap-3">
-      <Papicon icon="AlertTriangle" size={18} />
-      <span class="text-sm font-semibold">{error}</span>
-    </div>
-  {/if}
+    {#if first}
+      <div class="h-72 admin-surface animate-pulse"></div>
 
-  {#if loading && !funnelData && !revenueData && !segmentsData}
-    <div class="py-24 text-center text-on-surface-variant">
-      <Papicon icon="RefreshCw" size={28} class="animate-spin mx-auto mb-3 text-primary" />
-      <p class="text-sm font-medium">Chargement des indicateurs...</p>
-    </div>
-  {:else}
+    <!-- ── Acquisition ─────────────────────────────────────────────────────── -->
+    {:else if activeTab === 'funnel' && funnelData}
+      <MetricTabs metrics={funnelKpis} active="" onchange={() => {}} interactive={false} label="Chiffres clés de l’acquisition" />
 
-    <!-- ═══════════════════════════════════════════════════════════════════════ -->
-    <!-- ONGLET 1 : TUNNEL D'ACQUISITION                                         -->
-    <!-- ═══════════════════════════════════════════════════════════════════════ -->
-    {#if activeTab === 'funnel' && funnelData}
-      {@const steps = funnelData.steps ?? []}
-      {@const firstStep = steps[0]}
-      {@const botJoinedStep = steps.find(s => s.step === 'bot_joined')}
-      {@const paidStep = steps.find(s => s.step === 'first_payment')}
+      <AdminCard title="Le tunnel, étape par étape" description="Combien passent d’une étape à la suivante, et en combien de temps">
+        <BarList items={stepItems} empty="Aucun événement d’acquisition sur la période." />
+      </AdminCard>
 
-      <!-- 4 Stats clés -->
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <AdminStat
-          label="Visites uniques"
-          value={firstStep?.count ?? 0}
-          icon="Eye"
-          tone="primary"
-          hint="Événements site_visit"
-        />
-        <AdminStat
-          label="Installations Bot"
-          value={botJoinedStep?.count ?? 0}
-          icon="Bot"
-          tone="info"
-          hint={`${formatPercent(botJoinedStep?.conversionFromFirst ?? botJoinedStep?.conversionTop)} des visites`}
-        />
-        <AdminStat
-          label="Parcours Onboarding"
-          value={`${onboardingData?.totalCompleted ?? 0} finis`}
-          icon="CheckCircle"
-          tone="success"
-          hint={`${formatPercent(onboardingData?.completionRate)} taux de succès`}
-        />
-        <AdminStat
-          label="Clients Payants"
-          value={paidStep?.count ?? 0}
-          icon="CreditCard"
-          tone="warning"
-          hint={`${formatPercent(paidStep?.conversionFromFirst ?? paidStep?.conversionTop)} conversion globale`}
-        />
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start">
+        <AdminCard title="D’où viennent les visites" description="Discord, moteurs de recherche, accès direct">
+          <BarList items={sourceItems} empty="Aucune visite mesurée sur la période." />
+        </AdminCard>
+        <AdminCard title="Boutons qui amènent des installations" description="Clics par bouton d’invitation du site">
+          <BarList items={contentItems} empty="Aucun clic mesuré sur la période." />
+        </AdminCard>
       </div>
 
-      <!-- Tunnel visuel étape par étape -->
-      <AdminCard title="Étapes principales du tunnel" description="Taux de conversion d'une étape à l'autre et délais médians" class="mb-6">
-        <div class="space-y-3 py-2">
-          {#each steps as step, idx}
-            {@const maxCount = firstStep?.count || 1}
-            {@const barWidth = Math.max(4, Math.round((step.count / maxCount) * 100))}
-            <div class="p-3.5 rounded-2xl bg-surface-container-low border border-outline-variant/15 hover:border-primary/40 transition">
-              <div class="flex items-center justify-between gap-4 mb-2">
-                <div class="flex items-center gap-3 min-w-0">
-                  <span class="w-6 h-6 rounded-lg bg-surface-container-highest text-on-surface-variant font-mono text-xs flex items-center justify-center font-bold">
-                    {idx + 1}
-                  </span>
-                  <div class="min-w-0">
-                    <span class="text-sm font-bold text-on-surface truncate block">{step.name ?? step.label ?? step.step}</span>
-                    <span class="text-2xs font-mono text-on-surface-variant">{step.step}</span>
-                  </div>
-                </div>
-
-                <div class="flex items-center gap-4 text-right shrink-0">
-                  <div>
-                    <span class="text-base font-black text-on-surface">{step.count.toLocaleString('fr-FR')}</span>
-                    <span class="text-xs text-on-surface-variant block">{formatPercent(step.conversionFromFirst ?? step.conversionTop)} du total</span>
-                  </div>
-                  {#if idx > 0}
-                    <div class="w-20 text-right">
-                      <span class="text-xs font-bold {(step.conversionFromPrev ?? step.conversionPrevious ?? 0) >= 50 ? 'text-success' : 'text-warning'}">
-                        {formatPercent(step.conversionFromPrev ?? step.conversionPrevious)}
-                      </span>
-                      <span class="text-2xs text-on-surface-variant block">étape préc.</span>
-                    </div>
-                  {/if}
-                  {#if step.medianDurationSeconds !== null}
-                    <div class="hidden sm:block text-right w-24">
-                      <span class="text-xs font-mono text-on-surface-variant">{formatDuration(step.medianDurationSeconds)}</span>
-                      <span class="text-2xs text-on-surface-variant/80 block">délai médian</span>
-                    </div>
-                  {/if}
-                </div>
+      {#if onboardingData}
+        <AdminCard title="Parcours de configuration" description="Où les nouveaux serveurs s’arrêtent avant d’avoir fini">
+          <dl class="grid grid-cols-3 gap-4 mb-5">
+            {#each [
+              { label: 'Commencés', value: nf.format(onboardingData.totalStarted) },
+              { label: 'Terminés', value: nf.format(onboardingData.totalCompleted) },
+              { label: 'Durée médiane', value: formatDuration(onboardingData.medianDurationSeconds) },
+            ] as entry (entry.label)}
+              <div>
+                <dt class="text-xs text-on-surface-variant">{entry.label}</dt>
+                <dd class="font-headline text-2xl font-bold tabular-nums">{entry.value}</dd>
               </div>
+            {/each}
+          </dl>
+          <p class="text-xs font-semibold text-on-surface-variant mb-2">Abandons par étape</p>
+          <BarList items={dropItems} color="var(--error-color)" empty="Aucun abandon sur la période." />
+        </AdminCard>
+      {/if}
 
-              <!-- Jauge de progression -->
-              <div class="w-full h-2 rounded-full bg-surface-container-highest overflow-hidden">
+    <!-- ── Revenus ─────────────────────────────────────────────────────────── -->
+    {:else if activeTab === 'revenue' && revenueData}
+      <MetricTabs
+        metrics={revenueKpis}
+        active={revMetric}
+        onchange={(id) => {
+          if (id === 'mrr' || id === 'collected' || id === 'paying') revMetric = id;
+        }}
+        label="Chiffres clés des revenus"
+      />
+
+      {#if revSeries.length > 0}
+        <AdminCard
+          title={revMetric === 'mrr' ? 'Évolution du MRR' : revMetric === 'collected' ? 'Montants encaissés par jour' : 'Serveurs payants'}
+          description="Clique sur un compteur au-dessus pour changer la courbe affichée"
+        >
+          {#snippet actions()}
+            <FilterPills
+              label="Mode du graphique"
+              value={revChartMode}
+              onchange={(v) => (revChartMode = v)}
+              options={[
+                { value: 'line', label: 'Courbe' },
+                { value: 'bar', label: 'Barres' },
+              ]}
+            />
+          {/snippet}
+          <TimeSeriesChart
+            labels={revLabels}
+            mode={revChartMode}
+            main={revMetric === 'mrr'
+              ? { label: 'MRR (€)', values: revSeries.map((d) => Math.round(d.mrrCents / 100)), color: SERIES[0] }
+              : revMetric === 'collected'
+                ? { label: 'Encaissé (€)', values: revSeries.map((d) => Math.round(d.collectedCents / 100)), color: SERIES[1] }
+                : { label: 'Serveurs payants', values: revSeries.map((d) => d.payingCount), color: SERIES[2] }}
+            format={(v) => (revMetric === 'paying' ? nf.format(v) : `${nf.format(v)} €`)}
+          />
+        </AdminCard>
+      {/if}
+
+      <AdminCard title="Ce qui a fait bouger le revenu récurrent" description="Du montant de départ au montant d’arrivée">
+        <dl class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-x-4 gap-y-5">
+          {#each waterfall as cell (cell.label)}
+            <div class="space-y-1.5">
+              <dt class="text-xs text-on-surface-variant">{cell.label}</dt>
+              <dd class="font-headline text-xl font-bold tabular-nums {cell.tone}">{cell.value}</dd>
+              <div class="h-1.5 w-full rounded-full bg-surface-container-high overflow-hidden">
                 <div
-                  class="h-full rounded-full transition-all duration-500 {idx === steps.length - 1 ? 'bg-amber-400' : 'bg-primary'}"
-                  style="width: {barWidth}%"
+                  class="h-full rounded-full {cell.bar}"
+                  style="width: {Math.max(4, Math.min(100, Math.round((Math.abs(cell.cents) / waterfallMax) * 100)))}%"
                 ></div>
               </div>
             </div>
           {/each}
-        </div>
+        </dl>
       </AdminCard>
 
-      <!-- Répartition Sources & Contenus -->
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-        <!-- Sources -->
-        <AdminCard title="Provenance du trafic" description="Classification CNIL : Discord, Moteurs de recherche, Direct">
-          <div class="divide-y divide-outline-variant/15 text-sm">
-            <div class="grid grid-cols-4 py-2 font-semibold text-xs text-on-surface-variant">
-              <span>Source</span>
-              <span class="text-right">Visites</span>
-              <span class="text-right">Bots</span>
-              <span class="text-right">Clients</span>
-            </div>
-            {#each Object.entries(funnelData.sources ?? {}) as [src, val]}
-              <div class="grid grid-cols-4 py-2.5 items-center">
-                <span class="font-semibold text-on-surface capitalize">{src}</span>
-                <span class="text-right font-mono text-on-surface-variant">{val.visits}</span>
-                <span class="text-right font-mono text-on-surface-variant">{val.joins}</span>
-                <span class="text-right font-mono font-bold text-warning">{val.paid}</span>
-              </div>
-            {/each}
-          </div>
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start">
+        <AdminCard title="Par offre">
+          <BarList items={planItems} empty="Aucun abonnement actif." />
         </AdminCard>
-
-        <!-- Contenus de liens -->
-        <AdminCard title="Emplacements des boutons" description="Performance par bouton d'invitation (hero, navbar, pricing...)">
-          <div class="divide-y divide-outline-variant/15 text-sm">
-            <div class="grid grid-cols-4 py-2 font-semibold text-xs text-on-surface-variant">
-              <span>Bouton (content)</span>
-              <span class="text-right">Clics</span>
-              <span class="text-right">Bots</span>
-              <span class="text-right">Clients</span>
-            </div>
-            {#each Object.entries(funnelData.contents ?? {}) as [cnt, val]}
-              <div class="grid grid-cols-4 py-2.5 items-center">
-                <span class="font-mono text-xs text-on-surface truncate">{cnt}</span>
-                <span class="text-right font-mono text-on-surface-variant">{val.clicks}</span>
-                <span class="text-right font-mono text-on-surface-variant">{val.joins}</span>
-                <span class="text-right font-mono font-bold text-warning">{val.paid}</span>
-              </div>
-            {/each}
-          </div>
+        <AdminCard title="Au mois ou à l’année" description="Revenu ramené au mois">
+          <BarList items={intervalItems} />
         </AdminCard>
       </div>
 
-      <!-- Zoom Onboarding -->
-      {#if onboardingData}
-        <AdminCard title="Parcours d'onboarding" description="Déperdition entre les étapes de configuration" class="mb-6">
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-            <div class="p-3 rounded-xl bg-surface-container-high">
-              <span class="text-xs text-on-surface-variant">Démarrés</span>
-              <p class="text-xl font-black text-on-surface">{onboardingData.totalStarted}</p>
-            </div>
-            <div class="p-3 rounded-xl bg-surface-container-high">
-              <span class="text-xs text-on-surface-variant">Complétés</span>
-              <p class="text-xl font-black text-success">{onboardingData.totalCompleted}</p>
-            </div>
-            <div class="p-3 rounded-xl bg-surface-container-high">
-              <span class="text-xs text-on-surface-variant">Durée médiane</span>
-              <p class="text-xl font-black text-on-surface">{formatDuration(onboardingData.medianDurationSeconds)}</p>
-            </div>
-          </div>
-
-          <div class="space-y-2">
-            <span class="text-xs font-semibold text-on-surface-variant block mb-2">Points d'abandon :</span>
-            {#each (onboardingData.stepDropOffs ?? []) as drop}
-              <div class="flex items-center justify-between p-2.5 rounded-xl bg-surface-container-low border border-outline-variant/15 text-sm">
-                <span class="font-mono text-xs text-on-surface">{drop.step}</span>
-                <div class="flex items-center gap-3">
-                  <span class="font-mono text-xs text-on-surface-variant">{drop.count} abandons</span>
-                  <span class="px-2 py-0.5 rounded text-xs font-bold {drop.dropOffRate > 20 ? 'bg-error/20 text-error' : 'bg-surface-container-highest text-on-surface-variant'}">
-                    {formatPercent(drop.dropOffRate)}
-                  </span>
-                </div>
-              </div>
-            {/each}
-          </div>
-        </AdminCard>
-      {/if}
-    {/if}
-
-    <!-- ═══════════════════════════════════════════════════════════════════════ -->
-    <!-- ONGLET 2 : REVENUS & MRR                                                -->
-    <!-- ═══════════════════════════════════════════════════════════════════════ -->
-    {#if activeTab === 'revenue' && revenueData}
-      <!-- 4 Stats clés -->
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <AdminStat
-          label="MRR Récurrent"
-          value={formatEuros(revenueData.mrrCents)}
-          icon="TrendingUp"
-          tone="primary"
-          hint={`ARR : ${formatEuros(revenueData.arrCents)}`}
-        />
-        <AdminStat
-          label="ARPA (Revenu / Serveur)"
-          value={formatEuros(revenueData.arpaCents)}
-          icon="DollarSign"
-          tone="info"
-          hint={`${revenueData.payingGuilds} serveurs payants`}
-        />
-        <AdminStat
-          label="Encaissé réel période"
-          value={formatEuros(revenueData.collectedCents)}
-          icon="CreditCard"
-          tone="success"
-          hint="Total factures payées"
-        />
-        <AdminStat
-          label="Chiffre d'Affaires Net"
-          value={formatEuros(revenueData.waterfall.mrrEndCents - revenueData.waterfall.mrrStartCents)}
-          icon="Activity"
-          tone={revenueData.waterfall.mrrEndCents >= revenueData.waterfall.mrrStartCents ? 'success' : 'danger'}
-          hint="Delta sur la période"
-        />
-      </div>
-
-      <!-- Cascade de MRR (Pont de variation) -->
-      <AdminCard title="Cascade de MRR (Waterfall)" description="Évolution du MRR : Nouveaux, Expansions, Contractions et Churn" class="mb-6">
-        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 py-2">
-          <div class="p-3 rounded-2xl bg-surface-container-high border border-outline-variant/20 text-center">
-            <span class="text-xs font-semibold text-on-surface-variant block mb-1">MRR Début</span>
-            <span class="text-base font-black text-on-surface">{formatEuros(revenueData.waterfall.mrrStartCents)}</span>
-          </div>
-          <div class="p-3 rounded-2xl bg-success/10 border border-success/30 text-center">
-            <span class="text-xs font-semibold text-success block mb-1">+ Nouveau</span>
-            <span class="text-base font-black text-success">+{formatEuros(revenueData.waterfall.newCents)}</span>
-          </div>
-          <div class="p-3 rounded-2xl bg-teal-500/10 border border-teal-500/30 text-center">
-            <span class="text-xs font-semibold text-teal-400 block mb-1">+ Expansion</span>
-            <span class="text-base font-black text-teal-400">+{formatEuros(revenueData.waterfall.expansionCents)}</span>
-          </div>
-          <div class="p-3 rounded-2xl bg-orange-500/10 border border-orange-500/30 text-center">
-            <span class="text-xs font-semibold text-orange-400 block mb-1">- Contraction</span>
-            <span class="text-base font-black text-orange-400">-{formatEuros(revenueData.waterfall.contractionCents)}</span>
-          </div>
-          <div class="p-3 rounded-2xl bg-error/10 border border-error/30 text-center">
-            <span class="text-xs font-semibold text-error block mb-1">- Churn</span>
-            <span class="text-base font-black text-error">-{formatEuros(revenueData.waterfall.churnCents)}</span>
-          </div>
-          <div class="p-3 rounded-2xl bg-primary/15 border border-primary/40 text-center">
-            <span class="text-xs font-semibold text-primary block mb-1">MRR Fin</span>
-            <span class="text-base font-black text-primary">{formatEuros(revenueData.waterfall.mrrEndCents)}</span>
-          </div>
-        </div>
-      </AdminCard>
-
-      <!-- Répartitions Offres & Intervalles -->
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-        <!-- Par Offre -->
-        <AdminCard title="Répartition par Offre" description="Plus et Sur mesure">
-          <div class="space-y-3 py-2">
-            {#each Object.entries(revenueData.byPlan ?? {}) as [plan, item]}
-              {@const totalMrr = revenueData.mrrCents || 1}
-              {@const pct = Math.round((item.mrrCents / totalMrr) * 100)}
-              <div class="p-3 rounded-xl bg-surface-container-low border border-outline-variant/15">
-                <div class="flex items-center justify-between text-sm mb-1.5">
-                  <span class="font-bold text-on-surface">{plan}</span>
-                  <div class="flex items-center gap-3">
-                    <span class="text-xs text-on-surface-variant font-mono">{item.count} serveurs</span>
-                    <span class="font-black text-on-surface">{formatEuros(item.mrrCents)}</span>
-                  </div>
-                </div>
-                <div class="w-full h-1.5 rounded-full bg-surface-container-highest overflow-hidden">
-                  <div class="h-full rounded-full bg-primary" style="width: {pct}%"></div>
-                </div>
-              </div>
-            {/each}
-          </div>
-        </AdminCard>
-
-        <!-- Par Périodicité -->
-        <AdminCard title="Répartition Mensuel vs Annuel" description="Souscriptions au mois vs engagement annuel">
-          <div class="grid grid-cols-2 gap-4 py-2">
-            <div class="p-4 rounded-2xl bg-surface-container-low border border-outline-variant/15 text-center">
-              <span class="text-xs font-semibold text-on-surface-variant block mb-1">Mensuel</span>
-              <p class="text-xl font-black text-on-surface">{revenueData.byInterval.month.count}</p>
-              <span class="text-xs text-primary font-mono font-bold block mt-1">
-                {formatEuros(revenueData.byInterval.month.mrrCents)} / m
-              </span>
-            </div>
-            <div class="p-4 rounded-2xl bg-surface-container-low border border-outline-variant/15 text-center">
-              <span class="text-xs font-semibold text-on-surface-variant block mb-1">Annuel (-17%)</span>
-              <p class="text-xl font-black text-success">{revenueData.byInterval.year.count}</p>
-              <span class="text-xs text-success font-mono font-bold block mt-1">
-                {formatEuros(revenueData.byInterval.year.mrrCents)} / m
-              </span>
-            </div>
-          </div>
-        </AdminCard>
-      </div>
-
-      <!-- Factures Récentes -->
-      <AdminCard title="Dernières factures réelles" description="Extraites des événements Stripe et enregistrées dans BillingInvoice">
-        <div class="overflow-x-auto">
-          <table class="w-full text-left text-sm">
-            <thead>
-              <tr class="border-b border-outline-variant/20 text-xs font-semibold text-on-surface-variant">
-                <th class="py-2.5 px-3">Date</th>
-                <th class="py-2.5 px-3">Serveur</th>
-                <th class="py-2.5 px-3">Offre</th>
-                <th class="py-2.5 px-3">Intervalle</th>
-                <th class="py-2.5 px-3 text-right">Montant TTC</th>
-                <th class="py-2.5 px-3 text-center">Statut</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-outline-variant/15">
-              {#each (revenueData.recentInvoices ?? []) as inv}
-                <tr class="hover:bg-surface-container-highest/30 transition">
-                  <td class="py-2.5 px-3 font-mono text-xs text-on-surface-variant">
-                    {inv.paidAt ? new Date(inv.paidAt).toLocaleDateString('fr-FR') : '-'}
-                  </td>
-                  <td class="py-2.5 px-3 font-mono text-xs text-on-surface font-semibold">
-                    {inv.guildId ?? 'Inconnu'}
-                  </td>
-                  <td class="py-2.5 px-3 text-xs font-bold text-on-surface">{inv.plan}</td>
-                  <td class="py-2.5 px-3 text-xs text-on-surface-variant capitalize">{inv.interval ?? 'mois'}</td>
-                  <td class="py-2.5 px-3 text-right font-mono font-bold text-on-surface">
-                    {formatEuros(inv.amountPaidCents)}
-                  </td>
-                  <td class="py-2.5 px-3 text-center">
-                    <span class="px-2 py-0.5 rounded text-2xs font-bold uppercase bg-success/20 text-success">
-                      {inv.status}
-                    </span>
-                  </td>
-                </tr>
-              {/each}
-            </tbody>
-          </table>
-        </div>
-      </AdminCard>
-    {/if}
-
-    <!-- ═══════════════════════════════════════════════════════════════════════ -->
-    <!-- ONGLET 3 : SEGMENTS & PALIERS                                           -->
-    <!-- ═══════════════════════════════════════════════════════════════════════ -->
-    {#if activeTab === 'segments' && segmentsData}
-      <!-- Sélecteur de Dimension -->
-      <div class="flex items-center gap-2 mb-6 flex-wrap">
-        <span class="text-xs font-semibold text-on-surface-variant mr-2">Axe d'analyse :</span>
-        {#each [
-          { id: 'size', label: 'Taille du serveur' },
-          { id: 'source', label: 'Provenance (CNIL)' },
-          { id: 'instance', label: 'Instance (White-label)' },
-          { id: 'locale', label: 'Langue' },
-          { id: 'kind', label: 'Type de communauté' },
-        ] as dim}
-          <button
-            type="button"
-            class="px-3 py-1.5 rounded-xl text-xs font-semibold transition
-              {selectedDimension === dim.id ? 'bg-primary text-on-primary' : 'bg-surface-container-high border border-outline-variant/30 text-on-surface-variant hover:text-on-surface'}"
-            onclick={() => { selectedDimension = dim.id as AnalyticsDimension; }}
-          >
-            {dim.label}
-          </button>
-        {/each}
-      </div>
-
-      <!-- Table de Distribution -->
-      <AdminCard title="Distribution des serveurs et conversion" description="Clique sur une ligne pour voir les serveurs correspondants" class="mb-6">
-        <div class="overflow-x-auto">
-          <table class="w-full text-left text-sm">
-            <thead>
-              <tr class="border-b border-outline-variant/20 text-xs font-semibold text-on-surface-variant">
-                <th class="py-2.5 px-3">Segment</th>
-                <th class="py-2.5 px-3 text-right">Serveurs</th>
-                <th class="py-2.5 px-3 text-right">Payants</th>
-                <th class="py-2.5 px-3 text-right">Essais</th>
-                <th class="py-2.5 px-3 text-right">Conversion</th>
-                <th class="py-2.5 px-3 text-right">MRR Total</th>
-                <th class="py-2.5 px-3 text-right">LTV Moyenne</th>
-                <th class="py-2.5 px-3 text-center">Action</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-outline-variant/15">
-              {#each (segmentsData.distribution ?? []) as row}
-                <tr class="hover:bg-surface-container-highest/30 transition">
-                  <td class="py-3 px-3 font-semibold text-on-surface">{row.bucket || '(Non renseigné)'}</td>
-                  <td class="py-3 px-3 text-right font-mono text-on-surface-variant">{row.totalGuilds}</td>
-                  <td class="py-3 px-3 text-right font-mono font-bold text-success">{row.payingGuilds}</td>
-                  <td class="py-3 px-3 text-right font-mono text-warning">{row.trialGuilds}</td>
-                  <td class="py-3 px-3 text-right font-mono font-bold text-on-surface">{formatPercent(row.conversionRate)}</td>
-                  <td class="py-3 px-3 text-right font-mono font-bold text-primary">{formatEuros(row.mrrCents)}</td>
-                  <td class="py-3 px-3 text-right font-mono text-on-surface-variant">{formatEuros(row.avgLtvCents)}</td>
-                  <td class="py-3 px-3 text-center">
-                    <button
-                      type="button"
-                      class="px-2.5 py-1 rounded-lg bg-surface-container-high hover:bg-surface-container-highest text-xs font-semibold text-primary transition"
-                      onclick={() => openDrawer({
-                        title: `Serveurs du segment ${row.bucket}`,
-                        dimension: selectedDimension,
-                        bucket: row.bucket,
-                      })}
-                    >
-                      Voir
-                    </button>
-                  </td>
-                </tr>
-              {/each}
-            </tbody>
-          </table>
-        </div>
-      </AdminCard>
-
-      <!-- Matrice Serveurs Hors Palier -->
-      <AdminCard
-        title="Serveurs hors palier (Opportunités d'Up-sell)"
-        description="Serveurs dont le nombre de membres dépasse la limite de leur offre souscrite"
+      <AdminTable
+        columns={invoiceColumns}
+        rows={revenueData.recentInvoices ?? []}
+        emptyIcon="CreditCard"
+        emptyTitle="Aucune facture sur la période"
+        emptyHint="Les factures payées arrivent ici dès que Stripe les confirme."
       >
-        {#if (segmentsData.outOfTierMatrix ?? []).length === 0}
-          <div class="py-8 text-center text-on-surface-variant">
-            <Papicon icon="CheckCircle" size={24} class="mx-auto mb-2 text-success" />
-            <p class="text-sm font-semibold">Tous les serveurs sont actuellement sur une offre adaptée à leur taille.</p>
-          </div>
-        {:else}
-          <div class="overflow-x-auto">
-            <table class="w-full text-left text-sm">
-              <thead>
-                <tr class="border-b border-outline-variant/20 text-xs font-semibold text-on-surface-variant">
-                  <th class="py-2.5 px-3">Serveur</th>
-                  <th class="py-2.5 px-3 text-right">Membres</th>
-                  <th class="py-2.5 px-3">Offre actuelle</th>
-                  <th class="py-2.5 px-3">Offre recommandée</th>
-                  <th class="py-2.5 px-3 text-right">MRR actuel</th>
-                  <th class="py-2.5 px-3 text-center">Action</th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-outline-variant/15">
-                {#each (segmentsData.outOfTierMatrix ?? []) as oot}
-                  <tr class="hover:bg-surface-container-highest/30 transition">
-                    <td class="py-3 px-3 font-semibold text-on-surface">{oot.guildName}</td>
-                    <td class="py-3 px-3 text-right font-mono font-bold text-warning">
-                      {oot.memberCount.toLocaleString('fr-FR')}
-                    </td>
-                    <td class="py-3 px-3">
-                      <span class="px-2 py-0.5 rounded text-xs font-bold bg-surface-container-highest text-on-surface-variant">
-                        {oot.currentPlan}
-                      </span>
-                    </td>
-                    <td class="py-3 px-3">
-                      <span class="px-2 py-0.5 rounded text-xs font-bold bg-primary/20 text-primary">
-                        {oot.recommendedPlan}
-                      </span>
-                    </td>
-                    <td class="py-3 px-3 text-right font-mono font-bold text-on-surface">{formatEuros(oot.mrrCents)}</td>
-                    <td class="py-3 px-3 text-center">
-                      <button
-                        type="button"
-                        class="px-2.5 py-1 rounded-lg bg-primary text-on-primary text-xs font-semibold hover:bg-primary/90 transition"
-                        onclick={() => openDrawer({
-                          title: oot.guildName,
-                          subtitle: `ID: ${oot.guildId} · ${oot.memberCount} membres`,
-                          filter: 'out_of_tier',
-                        })}
-                      >
-                        Inspecter
-                      </button>
-                    </td>
-                  </tr>
-                {/each}
-              </tbody>
-            </table>
-          </div>
-        {/if}
-      </AdminCard>
-    {/if}
+        {#snippet row(item, _index)}
+          {@const invoice = item as RevenueStatsResult['recentInvoices'][number]}
+          <tr class="border-b border-outline-variant/60 hover:bg-on-surface/3 transition-colors">
+            <td class="px-4 py-3 text-body-sm text-on-surface-variant tabular-nums">{invoice.paidAt ? new Date(invoice.paidAt).toLocaleDateString('fr-FR') : '–'}</td>
+            <td class="px-4 py-3">
+              {#if invoice.guildId}
+                <a href="/admin/servers/{invoice.guildId}" class="text-body-sm font-mono font-semibold text-on-surface hover:text-primary hover:underline">{invoice.guildId}</a>
+              {:else}
+                <span class="text-body-sm text-on-surface-variant">Inconnu</span>
+              {/if}
+            </td>
+            <td class="px-4 py-3 text-body-sm font-semibold">{invoice.plan}</td>
+            <td class="px-4 py-3 text-body-sm text-on-surface-variant hidden sm:table-cell">{invoice.interval === 'year' ? 'À l’année' : 'Au mois'}</td>
+            <td class="px-4 py-3 text-right text-sm font-semibold tabular-nums">{formatEuros(invoice.amountPaidCents)}</td>
+            <td class="px-4 py-3 text-right"><AdminBadge size="sm" label={invoice.status} tone="success" /></td>
+          </tr>
+        {/snippet}
+      </AdminTable>
 
-    <!-- ═══════════════════════════════════════════════════════════════════════ -->
-    <!-- ONGLET 4 : RÉTENTION, PRODUIT & RISQUES                                 -->
-    <!-- ═══════════════════════════════════════════════════════════════════════ -->
-    {#if activeTab === 'retention'}
-      <!-- Signaux faibles / Risques -->
+    <!-- ── Segments ────────────────────────────────────────────────────────── -->
+    {:else if activeTab === 'segments' && segmentsData}
+      <FilterPills label="Regrouper les serveurs par" value={selectedDimension} onchange={(value) => (selectedDimension = value)} options={DIMENSIONS} />
+
+      <AdminTable columns={segmentColumns} rows={segmentsData.distribution ?? []} emptyTitle="Aucun serveur à regrouper" emptyHint="Change d’axe ou de période.">
+        {#snippet row(item, _index)}
+          {@const segment = item as SegmentsStatsResult['distribution'][number]}
+          <tr
+            class="border-b border-outline-variant/60 hover:bg-on-surface/3 transition-colors cursor-pointer"
+            onclick={() => openDrawer({ title: `Serveurs du segment ${segment.bucket || 'non renseigné'}`, dimension: selectedDimension, bucket: segment.bucket })}
+          >
+            <td class="px-4 py-3">
+              <!-- Le bouton porte l'accès clavier ; le clic sur la ligne n'est qu'un confort à la souris. -->
+              <button
+                type="button"
+                class="text-sm font-semibold text-on-surface hover:text-primary rounded focus-visible:outline-2 focus-visible:outline-primary"
+                onclick={(event) => { event.stopPropagation(); void openDrawer({ title: `Serveurs du segment ${segment.bucket || 'non renseigné'}`, dimension: selectedDimension, bucket: segment.bucket }); }}
+              >
+                {segment.bucket || 'Non renseigné'}
+              </button>
+            </td>
+            <td class="px-4 py-3 text-right text-sm tabular-nums">{nf.format(segment.totalGuilds)}</td>
+            <td class="px-4 py-3 text-right text-sm font-semibold tabular-nums">{nf.format(segment.payingGuilds)}</td>
+            <td class="px-4 py-3 text-right text-sm tabular-nums text-on-surface-variant hidden sm:table-cell">{nf.format(segment.trialGuilds)}</td>
+            <td class="px-4 py-3 text-right text-sm font-semibold tabular-nums">{formatPercent(segment.conversionRate)}</td>
+            <td class="px-4 py-3 text-right text-sm tabular-nums hidden md:table-cell">{formatEuros(segment.mrrCents)}</td>
+            <td class="px-4 py-3 text-right text-sm tabular-nums text-on-surface-variant hidden lg:table-cell">{formatEuros(segment.avgLtvCents)}</td>
+          </tr>
+        {/snippet}
+      </AdminTable>
+
+      <div>
+        <h2 class="font-headline text-xl font-bold tracking-tight">Serveurs trop grands pour leur offre</h2>
+        <p class="text-body-sm text-on-surface-variant mt-1 mb-4">Leur nombre de membres dépasse le plafond de l’offre : autant d’occasions de proposer la suivante.</p>
+        <AdminTable
+          columns={tierColumns}
+          rows={segmentsData.outOfTierMatrix ?? []}
+          emptyIcon="Check"
+          emptyTitle="Aucun serveur hors palier"
+          emptyHint="Tous les serveurs sont sur une offre adaptée à leur taille."
+        >
+          {#snippet row(item, _index)}
+            {@const guild = item as SegmentsStatsResult['outOfTierMatrix'][number]}
+            <tr class="border-b border-outline-variant/60 hover:bg-on-surface/3 transition-colors">
+              <td class="px-4 py-3">
+                <a href="/admin/servers/{guild.guildId}" class="text-sm font-semibold text-on-surface hover:text-primary hover:underline">{guild.guildName}</a>
+              </td>
+              <td class="px-4 py-3 text-right text-sm font-semibold tabular-nums">{nf.format(guild.memberCount)}</td>
+              <td class="px-4 py-3"><AdminBadge size="sm" label={guild.currentPlan} tone="neutral" /></td>
+              <td class="px-4 py-3"><AdminBadge size="sm" label={guild.recommendedPlan} tone="primary" /></td>
+              <td class="px-4 py-3 text-right text-sm tabular-nums hidden md:table-cell">{formatEuros(guild.mrrCents)}</td>
+            </tr>
+          {/snippet}
+        </AdminTable>
+      </div>
+
+    <!-- ── Retention ───────────────────────────────────────────────────────── -->
+    {:else if activeTab === 'retention'}
       {#if risksData}
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-          <AdminStat
-            label="Inactifs > 14 jours"
-            value={risksData.summary.inactivePayingCount}
-            icon="AlertCircle"
-            tone="danger"
-            hint="Serveurs payants sans activité bot"
-          />
-          <AdminStat
-            label="Usage en chute > 50%"
-            value={risksData.summary.decliningUsageCount}
-            icon="TrendingDown"
-            tone="warning"
-            hint="Baisse d'usage semaine / semaine"
-          />
-          <AdminStat
-            label="Fin d'essai sous 48h"
-            value={risksData.summary.expiringTrials48hCount}
-            icon="Clock"
-            tone="info"
-            hint="À convertir en premier paiement"
-          />
-          <AdminStat
-            label="MRR à Risque"
-            value={formatEuros(risksData.summary.atRiskMrrCents)}
-            icon="AlertTriangle"
-            tone="danger"
-            hint="Total MRR des signaux faibles"
-          />
-        </div>
+        <MetricTabs metrics={riskKpis} active="" onchange={() => {}} interactive={false} label="Serveurs à risque" />
       {/if}
 
-      <!-- Matrice de Cohortes M0 à M12 -->
-      <AdminCard title="Matrice de rétention par cohorte (M0 à M12)" description="Taux de rétention des serveurs payants par mois d'acquisition" class="mb-6">
+      <AdminCard title="Qui reste, mois après mois" description="Part des serveurs payants encore abonnés, par mois d’arrivée (M0 = le mois de l’abonnement)">
         {#if cohortsData.length === 0}
-          <p class="py-8 text-center text-sm text-on-surface-variant">Pas encore assez d'historique de cohortes disponible.</p>
+          <EmptyState icon="Clock" title="Pas encore assez d’historique" description="Les cohortes apparaissent après le premier mois d’abonnements." reason="accumulating" />
         {:else}
           <div class="overflow-x-auto">
-            <table class="w-full text-center text-xs border-collapse">
+            <table class="w-full min-w-max text-center text-xs border-separate border-spacing-1">
               <thead>
-                <tr class="border-b border-outline-variant/20 text-on-surface-variant font-bold">
-                  <th class="py-2.5 px-3 text-left">Cohorte</th>
-                  <th class="py-2.5 px-2">Serveurs</th>
-                  {#each Array.from({ length: 13 }) as _, i}
-                    <th class="py-2.5 px-2">M{i}</th>
+                <tr class="text-on-surface-variant font-semibold">
+                  <th scope="col" class="py-2 pr-3 text-left">Arrivés en</th>
+                  <th scope="col" class="py-2 px-2 text-right">Serveurs</th>
+                  {#each Array(13) as _, index (index)}
+                    <th scope="col" class="py-2 w-11">M{index}</th>
                   {/each}
                 </tr>
               </thead>
-              <tbody class="divide-y divide-outline-variant/10">
-                {#each (cohortsData ?? []) as cohort}
+              <tbody>
+                {#each cohortsData as cohort (cohort.cohortMonth)}
                   <tr>
-                    <td class="py-2 px-3 text-left font-mono font-bold text-on-surface">{cohort.cohortMonth}</td>
-                    <td class="py-2 px-2 font-mono text-on-surface-variant">{cohort.initialGuilds}</td>
-                    {#each Array.from({ length: 13 }) as _, offset}
-                      {@const p = cohort.periods?.find((x) => x.periodIndex === offset) ?? cohort.periods?.[offset]}
-                      <td class="py-1 px-1">
-                        {#if p && ((p.retentionRate !== null && p.retentionRate !== undefined) || (p.retainedPct !== null && p.retainedPct !== undefined))}
-                          {@const rate = p.retentionRate ?? p.retainedPct ?? 0}
-                          <div class="py-1.5 rounded-lg border font-mono font-bold {getRetentionBg(rate)}">
-                            {Math.round(rate)}%
-                          </div>
-                        {:else}
-                          <span class="text-on-surface-variant/30">-</span>
+                    <th scope="row" class="py-1 pr-3 text-left font-mono font-semibold text-on-surface">{cohort.cohortMonth}</th>
+                    <td class="py-1 px-2 text-right tabular-nums text-on-surface-variant">{cohort.initialGuilds}</td>
+                    {#each Array(13) as _, offset (offset)}
+                      {@const period = cohort.periods?.find((entry) => entry.periodIndex === offset) ?? cohort.periods?.[offset]}
+                      {@const rate = period?.retentionRate ?? period?.retainedPct}
+                      <td>
+                        {#if rate !== null && rate !== undefined}
+                          <!-- Une seule teinte, plus dense quand la retention est forte. -->
+                          <span
+                            class="block py-1.5 rounded-md font-semibold tabular-nums {rate >= 60 ? 'text-on-primary' : 'text-on-surface'}"
+                            style="background: color-mix(in srgb, var(--primary-color) {Math.round(8 + rate * 0.92)}%, var(--surface-container))"
+                          >
+                            {Math.round(rate)}
+                          </span>
                         {/if}
                       </td>
                     {/each}
@@ -992,249 +727,126 @@
               </tbody>
             </table>
           </div>
+          <p class="text-xs text-on-surface-variant mt-3">Valeurs en %.</p>
         {/if}
       </AdminCard>
 
-      <!-- Modules : Adoption & Drop-off -->
       {#if modulesData}
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-          <AdminCard title="Adoption des modules (FREE vs Payant)" description="Comparaison des fonctionnalités activées selon l'offre">
-            <div class="divide-y divide-outline-variant/15 text-sm">
-              <div class="grid grid-cols-3 py-2 font-semibold text-xs text-on-surface-variant">
-                <span>Module</span>
-                <span class="text-right">Offre FREE</span>
-                <span class="text-right">Offres Payantes</span>
-              </div>
-              {#each (modulesData.moduleAdoption ?? []).slice(0, 8) as mod}
-                <div class="grid grid-cols-3 py-2.5 items-center">
-                  <span class="font-semibold text-on-surface">{mod.module}</span>
-                  <span class="text-right font-mono text-on-surface-variant">{formatPercent(mod.freeAdoptionRate)}</span>
-                  <span class="text-right font-mono font-bold text-success">{formatPercent(mod.paidAdoptionRate)}</span>
-                </div>
-              {/each}
-            </div>
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start">
+          <AdminCard title="Modules des serveurs payants" description="Part des serveurs payants qui l’ont activé, comparée aux gratuits">
+            <BarList items={adoptionItems} max={100} empty="Pas encore de mesure d’adoption." />
           </AdminCard>
-
-          <AdminCard title="Modules drop-off avant Churn" description="Dernières fonctionnalités désactivées avant la résiliation">
-            <div class="divide-y divide-outline-variant/15 text-sm">
-              <div class="grid grid-cols-2 py-2 font-semibold text-xs text-on-surface-variant">
-                <span>Module</span>
-                <span class="text-right">Arrêts avant Churn</span>
-              </div>
-              {#each (modulesData.churnDropOffModules ?? []) as cdo}
-                <div class="grid grid-cols-2 py-2.5 items-center">
-                  <span class="font-semibold text-on-surface">{cdo.module}</span>
-                  <span class="text-right font-mono font-bold text-error">{cdo.dropOffCount}</span>
-                </div>
-              {/each}
-            </div>
+          <AdminCard title="Derniers modules coupés avant de partir" description="Ce qui est désactivé juste avant une résiliation">
+            <BarList items={churnItems} color="var(--error-color)" empty="Aucune résiliation à analyser." />
           </AdminCard>
         </div>
       {/if}
-    {/if}
 
-    <!-- ═══════════════════════════════════════════════════════════════════════ -->
-    <!-- ONGLET 5 : SEUILS D'ALERTE                                              -->
-    <!-- ═══════════════════════════════════════════════════════════════════════ -->
-    {#if activeTab === 'alerts'}
-      <div class="max-w-2xl space-y-6">
-        <AdminCard title="Seuils de déclenchement des alertes Discord" description="Alertes transmises sur le salon Discord de supervision admin">
+    <!-- ── Alertes ─────────────────────────────────────────────────────────── -->
+    {:else if activeTab === 'alerts'}
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start">
+        <AdminCard title="Seuils" description="Au-delà, une alerte part sur le salon Discord de supervision">
           {#if alertThresholds}
-            <div class="space-y-4 py-2">
-              <div>
-                <label for="th-churn" class="block text-xs font-bold text-on-surface mb-1">
-                  Seuil de saut de Churn hebdomadaire (%)
-                </label>
-                <input
-                  id="th-churn"
-                  type="number"
-                  step="0.5"
-                  bind:value={alertThresholds.churnRateWeeklyPercent}
-                  class="w-full px-3.5 py-2 rounded-xl bg-surface-container-high border border-outline-variant/30 text-on-surface text-sm focus:outline-none focus:border-primary"
-                />
-                <span class="text-2xs text-on-surface-variant">Alerte si le churn rate hebdomadaire dépasse ce seuil (défaut : 5%)</span>
-              </div>
-
-              <div>
-                <label for="th-trial" class="block text-xs font-bold text-on-surface mb-1">
-                  Chute de conversion d'essai (%)
-                </label>
-                <input
-                  id="th-trial"
-                  type="number"
-                  step="1"
-                  bind:value={alertThresholds.trialConversionDropPercent}
-                  class="w-full px-3.5 py-2 rounded-xl bg-surface-container-high border border-outline-variant/30 text-on-surface text-sm focus:outline-none focus:border-primary"
-                />
-                <span class="text-2xs text-on-surface-variant">Alerte si la conversion de fin d'essai chute de plus de X% (défaut : 20%)</span>
-              </div>
-
-              <div>
-                <label for="th-onboard" class="block text-xs font-bold text-on-surface mb-1">
-                  Taux minimal de complétion de configuration (%)
-                </label>
-                <input
-                  id="th-onboard"
-                  type="number"
-                  step="1"
-                  bind:value={alertThresholds.onboardingCompletionMinPercent}
-                  class="w-full px-3.5 py-2 rounded-xl bg-surface-container-high border border-outline-variant/30 text-on-surface text-sm focus:outline-none focus:border-primary"
-                />
-                <span class="text-2xs text-on-surface-variant">Alerte si la complétion du wizard passe sous ce seuil (défaut : 40%)</span>
-              </div>
-
-              <div>
-                <label for="th-oot" class="block text-xs font-bold text-on-surface mb-1">
-                  Nombre maximal de serveurs hors palier tolérés
-                </label>
-                <input
-                  id="th-oot"
-                  type="number"
-                  step="1"
-                  bind:value={alertThresholds.outOfTierMaxCount}
-                  class="w-full px-3.5 py-2 rounded-xl bg-surface-container-high border border-outline-variant/30 text-on-surface text-sm focus:outline-none focus:border-primary"
-                />
-                <span class="text-2xs text-on-surface-variant">Alerte si le nombre de serveurs dépassant leur palier atteint ce niveau (défaut : 10)</span>
-              </div>
-
-              <div class="pt-3">
-                <button
-                  type="button"
-                  disabled={savingAlerts}
-                  class="px-5 py-2.5 rounded-xl bg-primary text-on-primary font-bold text-sm hover:bg-primary/90 transition disabled:opacity-50"
-                  onclick={handleSaveAlerts}
-                >
-                  {savingAlerts ? 'Enregistrement...' : 'Enregistrer les seuils'}
-                </button>
-              </div>
-            </div>
+            <form class="space-y-4" onsubmit={(event) => { event.preventDefault(); void handleSaveAlerts(); }}>
+              <Field label="Résiliations sur une semaine (%)" hint="Alerte si le taux hebdomadaire dépasse ce seuil. Par défaut : 5 %.">
+                {#snippet children(id, describedBy)}
+                  <input {id} aria-describedby={describedBy} type="number" step="0.5" bind:value={alertThresholds.churnRateWeeklyPercent} class="input" />
+                {/snippet}
+              </Field>
+              <Field label="Chute de la conversion des essais (%)" hint="Alerte si la conversion en fin d’essai baisse de plus que ça. Par défaut : 20 %.">
+                {#snippet children(id, describedBy)}
+                  <input {id} aria-describedby={describedBy} type="number" step="1" bind:value={alertThresholds.trialConversionDropPercent} class="input" />
+                {/snippet}
+              </Field>
+              <Field label="Configurations terminées, minimum (%)" hint="Alerte si moins de serveurs que ça vont au bout du parcours. Par défaut : 40 %.">
+                {#snippet children(id, describedBy)}
+                  <input {id} aria-describedby={describedBy} type="number" step="1" bind:value={alertThresholds.onboardingCompletionMinPercent} class="input" />
+                {/snippet}
+              </Field>
+              <Field label="Serveurs hors palier tolérés" hint="Alerte quand ce nombre de serveurs dépasse le plafond de leur offre. Par défaut : 10.">
+                {#snippet children(id, describedBy)}
+                  <input {id} aria-describedby={describedBy} type="number" step="1" bind:value={alertThresholds.outOfTierMaxCount} class="input" />
+                {/snippet}
+              </Field>
+              <Button type="submit" variant="primary" loading={savingAlerts}>Enregistrer les seuils</Button>
+            </form>
           {/if}
         </AdminCard>
 
-        <!-- Historique des alertes récentes -->
-        <AdminCard title="Dernières alertes émises" description="Historique des alertes envoyées par le cron de surveillance">
-          {#if (recentAlerts ?? []).length === 0}
-            <p class="py-4 text-center text-sm text-on-surface-variant">Aucune alerte récente enregistrée.</p>
+        <AdminCard title="Dernières alertes envoyées">
+          {#if recentAlerts.length === 0}
+            <p class="text-body-sm text-on-surface-variant">Aucune alerte récente : tout est resté sous les seuils.</p>
           {:else}
-            <div class="divide-y divide-outline-variant/15 text-sm">
-              {#each (recentAlerts ?? []) as al}
-                <div class="py-2.5 flex items-center justify-between">
-                  <div>
-                    <span class="font-bold text-on-surface">{al.key}</span>
-                    <span class="text-xs text-on-surface-variant block">
-                      Valeur mesurée : {al.lastValue ?? 'N/A'}
-                    </span>
+            <ul class="divide-y divide-outline-variant">
+              {#each recentAlerts as alert (alert.key)}
+                <li class="py-3 flex items-center justify-between gap-3">
+                  <div class="min-w-0">
+                    <p class="text-sm font-semibold text-on-surface truncate">{alert.key}</p>
+                    <p class="text-xs text-on-surface-variant">Valeur mesurée : {alert.lastValue ?? 'inconnue'}</p>
                   </div>
-                  <span class="font-mono text-xs text-on-surface-variant">
-                    {new Date(al.lastFiredAt).toLocaleString('fr-FR')}
-                  </span>
-                </div>
+                  <span class="text-xs text-on-surface-variant tabular-nums shrink-0">{new Date(alert.lastFiredAt).toLocaleString('fr-FR')}</span>
+                </li>
               {/each}
-            </div>
+            </ul>
           {/if}
         </AdminCard>
       </div>
     {/if}
   {/if}
+</AdminShell>
+
+<AdminDrawer bind:open={drawerOpen} title={drawerTitle} subtitle={drawerSubtitle} width="lg">
+  {#if drawerLoading}
+    <div class="space-y-3">
+      {#each Array(5) as _, index (index)}
+        <div class="h-16 rounded-2xl bg-on-surface/6 animate-pulse"></div>
+      {/each}
+    </div>
+  {:else if drawerGuilds.length === 0}
+    <EmptyState icon="Server" title="Aucun serveur dans cette sélection" reason="nothing-matches" />
+  {:else}
+    <p class="text-xs font-semibold text-on-surface-variant mb-3">{drawerTotalCount} serveur{drawerTotalCount > 1 ? 's' : ''}</p>
+    <ul class="divide-y divide-outline-variant">
+      {#each drawerGuilds as guild (guild.guildId)}
+        <li>
+          <a href="/admin/servers/{guild.guildId}" class="flex items-center gap-3 py-3 rounded-lg hover:bg-on-surface/3 focus-visible:outline-2 focus-visible:outline-primary">
+            <span class="w-10 h-10 shrink-0 rounded-xl bg-surface-container overflow-hidden flex items-center justify-center text-sm font-bold text-on-surface-variant">
+              {#if guild.icon}
+                <img src={guild.icon} alt="" class="w-full h-full object-cover" loading="lazy" />
+              {:else}
+                {(guild.name || guild.guildId).charAt(0).toUpperCase()}
+              {/if}
+            </span>
+            <span class="min-w-0 flex-1">
+              <span class="block text-sm font-semibold text-on-surface truncate">{guild.name || guild.guildId}</span>
+              <span class="block text-xs text-on-surface-variant truncate">
+                {nf.format(guild.memberCount)} membres{guild.source ? ` · ${guild.source}` : ''}{guild.firstPaidAt ? ` · client depuis le ${new Date(guild.firstPaidAt).toLocaleDateString('fr-FR')}` : ''}
+              </span>
+              {#if guild.riskReasons && guild.riskReasons.length > 0}
+                <span class="flex flex-wrap gap-1 mt-1.5">
+                  {#each guild.riskReasons as reason (reason)}
+                    <AdminBadge size="sm" label={reason} tone="danger" />
+                  {/each}
+                </span>
+              {/if}
+            </span>
+            <span class="shrink-0 text-right">
+              <AdminBadge size="sm" label={guild.plan} tone={guild.plan === 'FREE' ? 'neutral' : 'primary'} />
+              <span class="block text-xs font-semibold tabular-nums mt-1">{formatEuros(guild.mrrCents)} / mois</span>
+            </span>
+          </a>
+        </li>
+      {/each}
+    </ul>
   {/if}
 
-  <!-- ═════════════════════════════════════════════════════════════════════════ -->
-  <!-- DRAWER D'INSPECTION DÉTAILLÉE (DRILLDOWN)                                 -->
-  <!-- ═════════════════════════════════════════════════════════════════════════ -->
-  <AdminDrawer
-    bind:open={drawerOpen}
-    title={drawerTitle}
-    subtitle={drawerSubtitle}
-    width="lg"
-  >
-    {#if drawerLoading}
-      <div class="py-16 text-center text-on-surface-variant">
-        <Papicon icon="RefreshCw" size={24} class="animate-spin mx-auto mb-2 text-primary" />
-        <p class="text-sm font-medium">Chargement de la liste des serveurs...</p>
-      </div>
-    {:else if drawerGuilds.length === 0}
-      <div class="py-16 text-center text-on-surface-variant">
-        <Papicon icon="Server" size={24} class="mx-auto mb-2 text-on-surface-variant" />
-        <p class="text-sm font-medium">Aucun serveur dans cette sélection.</p>
-      </div>
-    {:else}
-      <div class="space-y-3">
-        <p class="text-xs font-semibold text-on-surface-variant mb-2">
-          {drawerTotalCount} serveur(s) trouvé(s) (page {drawerPage} / {drawerTotalPages})
-        </p>
-        {#each drawerGuilds as g}
-          <div class="p-3.5 rounded-2xl bg-surface-container-high border border-outline-variant/20 hover:border-primary/40 transition">
-            <div class="flex items-start justify-between gap-3 mb-2">
-              <div class="flex items-center gap-3">
-                {#if g.icon}
-                  <img src={g.icon} alt="" class="w-9 h-9 rounded-xl object-cover bg-surface-container-highest" />
-                {:else}
-                  <div class="w-9 h-9 rounded-xl bg-surface-container-highest flex items-center justify-center font-black text-xs text-on-surface-variant">
-                    {(g.name || g.guildId).slice(0, 2).toUpperCase()}
-                  </div>
-                {/if}
-                <div>
-                  <h4 class="text-sm font-bold text-on-surface leading-tight">{g.name}</h4>
-                  <span class="text-2xs font-mono text-on-surface-variant">{g.guildId}</span>
-                </div>
-              </div>
-
-              <div class="text-right">
-                <span class="px-2 py-0.5 rounded text-xs font-bold uppercase {g.plan !== 'FREE' ? 'bg-warning/20 text-warning' : 'bg-surface-container-highest text-on-surface-variant'}">
-                  {g.plan}
-                </span>
-                <span class="text-xs font-bold font-mono text-on-surface block mt-1">
-                  {formatEuros(g.mrrCents)} / m
-                </span>
-              </div>
-            </div>
-
-            <div class="flex items-center gap-4 text-xs text-on-surface-variant flex-wrap pt-2 border-t border-outline-variant/15">
-              <span>Membres : <strong class="text-on-surface">{g.memberCount}</strong></span>
-              {#if g.source}
-                <span>Source : <strong class="text-on-surface capitalize">{g.source}</strong></span>
-              {/if}
-              {#if g.firstPaidAt}
-                <span>Client depuis : <strong class="text-on-surface">{new Date(g.firstPaidAt).toLocaleDateString('fr-FR')}</strong></span>
-              {/if}
-            </div>
-
-            {#if g.riskReasons && g.riskReasons.length > 0}
-              <div class="mt-2.5 pt-2 border-t border-error/20 flex items-center gap-2 flex-wrap">
-                <span class="text-2xs font-bold uppercase text-error">Risque :</span>
-                {#each g.riskReasons as r}
-                  <span class="px-2 py-0.5 rounded text-2xs font-semibold bg-error/15 text-error border border-error/30">
-                    {r}
-                  </span>
-                {/each}
-              </div>
-            {/if}
-          </div>
-        {/each}
-
-        <!-- Pagination Drawer -->
-        {#if drawerTotalPages > 1}
-          <div class="flex items-center justify-between pt-4">
-            <button
-              type="button"
-              disabled={drawerPage <= 1}
-              class="px-3 py-1.5 rounded-xl bg-surface-container-high border border-outline-variant/30 text-xs font-semibold disabled:opacity-40"
-              onclick={() => changeDrawerPage(drawerPage - 1)}
-            >
-              Précédent
-            </button>
-            <span class="text-xs text-on-surface-variant">Page {drawerPage} sur {drawerTotalPages}</span>
-            <button
-              type="button"
-              disabled={drawerPage >= drawerTotalPages}
-              class="px-3 py-1.5 rounded-xl bg-surface-container-high border border-outline-variant/30 text-xs font-semibold disabled:opacity-40"
-              onclick={() => changeDrawerPage(drawerPage + 1)}
-            >
-              Suivant
-            </button>
-          </div>
-        {/if}
+  {#snippet footer()}
+    {#if drawerTotalPages > 1}
+      <div class="flex items-center justify-between gap-3">
+        <Button size="sm" icon="ChevronLeft" disabled={drawerPage <= 1} onclick={() => changeDrawerPage(drawerPage - 1)}>Précédent</Button>
+        <span class="text-xs text-on-surface-variant tabular-nums">Page {drawerPage} sur {drawerTotalPages}</span>
+        <Button size="sm" iconRight="ChevronRight" disabled={drawerPage >= drawerTotalPages} onclick={() => changeDrawerPage(drawerPage + 1)}>Suivant</Button>
       </div>
     {/if}
-  </AdminDrawer>
-</AdminShell>
+  {/snippet}
+</AdminDrawer>
