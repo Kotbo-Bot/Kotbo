@@ -51,16 +51,16 @@
 <svelte:element
   this={href ? 'a' : 'div'}
   href={href || undefined}
-  class="group relative rounded-[20px] border border-outline-variant/60 bg-surface p-4 flex flex-col gap-3 transition
-    {href ? 'hover:border-primary/50 active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-primary' : ''}"
+  class="admin-surface admin-press group relative p-5 flex flex-col gap-3
+    {href ? 'hover:bg-surface-container-low focus-visible:outline-2 focus-visible:outline-primary' : ''}"
 >
   <div class="flex items-start justify-between gap-3">
     <div class="min-w-0">
-      <p class="text-xs font-semibold text-on-surface-variant truncate">{label}</p>
+      <p class="text-body-sm font-semibold text-on-surface-variant truncate">{label}</p>
       {#if loading}
         <div class="mt-2 h-8 w-24 rounded-lg bg-on-surface/8 animate-pulse"></div>
       {:else}
-        <p class="font-headline text-[28px] leading-none font-bold tracking-tight text-on-surface mt-2 tabular-nums truncate">{value}</p>
+        <p class="font-headline text-[32px] leading-none font-bold tracking-[-0.02em] text-on-surface mt-2.5 tabular-nums truncate">{value}</p>
       {/if}
     </div>
     <div class="w-9 h-9 shrink-0 rounded-[11px] flex items-center justify-center {toneConfig.chip}">

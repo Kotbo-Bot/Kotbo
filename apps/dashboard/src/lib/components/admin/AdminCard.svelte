@@ -41,10 +41,10 @@
 </script>
 
 <section
-  class="rounded-[20px] border border-outline-variant/60 bg-surface overflow-hidden {className}"
+  class="admin-surface overflow-hidden {className}"
 >
   {#if title || actions}
-    <header class="flex flex-wrap items-start justify-between gap-3 px-5 py-4 border-b border-outline-variant/40">
+    <header class="flex flex-wrap items-start justify-between gap-3 px-6 pt-5 pb-1">
       <div class="flex items-start gap-3 min-w-0">
         {#if icon}
           <div class="w-9 h-9 shrink-0 rounded-[11px] flex items-center justify-center {toneClasses[tone]}">
@@ -52,7 +52,7 @@
           </div>
         {/if}
         <div class="min-w-0">
-          <h2 class="font-headline text-base font-semibold text-on-surface leading-tight">{title}</h2>
+          <h2 class="font-headline text-[19px] font-bold tracking-tight text-on-surface leading-tight">{title}</h2>
           {#if description}
             <p class="text-body-sm text-on-surface-variant mt-0.5 leading-snug">{description}</p>
           {/if}
@@ -64,7 +64,7 @@
     </header>
   {/if}
 
-  <div class={padded ? 'p-5' : ''}>
+  <div class={padded ? 'px-6 pb-6 pt-4' : title || actions ? 'pt-3' : ''}>
     {@render children?.()}
   </div>
 </section>

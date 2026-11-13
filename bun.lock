@@ -75,6 +75,7 @@
         "@fontsource/jetbrains-mono": "^5.2.8",
         "@fontsource/manrope": "^5.2.8",
         "@fontsource/outfit": "^5.2.8",
+        "@fontsource/sn-pro": "^5.3.0",
         "@getpapillon/papicons": "^0.2.1",
         "@kotbo/contracts": "workspace:*",
         "@kotbo/shared": "workspace:*",
@@ -276,6 +277,8 @@
     "@fontsource/manrope": ["@fontsource/manrope@5.2.8", "", {}, "sha512-gJHJmcuUk7qWcNCfcAri/DJQtXtBYqi9yKratr4jXhSo0I3xUtNNKI+igQIcw5c+m95g0vounk8ZnX/kb8o0TA=="],
 
     "@fontsource/outfit": ["@fontsource/outfit@5.2.8", "", {}, "sha512-rXC6g0MqD7cOBjht0bMqc43qM6lRqDLML9KXsmg9uykz0wLQhy8Z/ajrMG6iyoT3NJR+MYgU+OEHp7uHoTb+Yw=="],
+
+    "@fontsource/sn-pro": ["@fontsource/sn-pro@5.3.0", "", {}, "sha512-XbaKfRmFBp23x+USXj7c4OxMpMz/W8yjwcW+FIKdTY2E1ZsJk8HXYqUys57xuCfHrR91qBnWmKrhX8P/6iyNgw=="],
 
     "@getpapillon/papicons": ["@getpapillon/papicons@0.2.2", "", { "dependencies": { "react-native-svg": "^15.12.0" }, "peerDependencies": { "react": "*", "react-native": "*" }, "optionalPeers": ["react-native"] }, "sha512-QILXK+0TUVhHx1znzVDbKqxRvdMVkB9NaK+chLD0x+W1F1Fp+TvYfmRXMdBGoCwGHzcuCKh2oh+Jo5E3tTPgDQ=="],
 

@@ -56,8 +56,8 @@
         bind:value={search}
         type="search"
         {placeholder}
-        class="w-full h-11 pl-9 pr-9 rounded-2xl bg-surface border border-outline-variant/60 text-sm text-on-surface
-          placeholder:text-on-surface-variant focus:outline-none focus:border-primary/60 focus:ring-2 focus:ring-primary/15 transition"
+        class="w-full h-11 pl-9 pr-9 rounded-full bg-surface-container border border-transparent text-sm text-on-surface
+          placeholder:text-on-surface-variant focus:outline-none focus:border-on-surface transition"
       />
       {#if search}
         <button
@@ -85,12 +85,12 @@
           aria-pressed={activeFilter === filter.value}
           class="inline-flex items-center gap-1.5 h-8 px-3 rounded-full text-body-sm font-semibold transition active:scale-[0.97] focus-visible:outline-2 focus-visible:outline-primary
             {activeFilter === filter.value
-              ? 'bg-on-surface text-surface border border-transparent'
+              ? 'bg-on-surface text-background border border-transparent'
               : 'bg-on-surface/5 text-on-surface-variant border border-transparent hover:bg-on-surface/8 hover:text-on-surface'}"
         >
           {filter.label}
           {#if typeof filter.count === 'number'}
-            <span class="tabular-nums text-2xs font-semibold px-1.5 py-0.5 rounded-full {activeFilter === filter.value ? 'bg-surface/20' : 'bg-on-surface/8'}">
+            <span class="tabular-nums text-2xs font-semibold px-1.5 py-0.5 rounded-full {activeFilter === filter.value ? 'bg-background/20' : 'bg-on-surface/8'}">
               {filter.count}
             </span>
           {/if}

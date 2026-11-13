@@ -1,10 +1,9 @@
 /**
- * Plan de la console admin : six espaces, chacun avec ses onglets.
+ * Plan de la console admin : six espaces, chacun avec ses vues.
  *
- * L'ancienne barre alignait dix-sept pages au meme niveau. Ici on choisit
- * d'abord un sujet (six entrees, memorisables), puis une vue dans ce sujet.
- * Les adresses des pages ne changent pas : favoris, palette et telemetrie
- * continuent de pointer au meme endroit.
+ * On choisit d'abord un sujet (six entrees, memorisables), puis une vue dans
+ * ce sujet. Les adresses historiques n'ont pas change : favoris, palette et
+ * telemetrie continuent de pointer au meme endroit.
  */
 export interface AdminTab {
   path: string;
@@ -15,12 +14,6 @@ export interface AdminSpace {
   id: string;
   label: string;
   icon: string;
-  /**
-   * Couleur d'identite de l'espace (pastille d'icone, lavis d'en-tete). C'est
-   * un repere, pas un etat : elle ne porte jamais de texte, donc pas de
-   * contrainte de contraste a tenir dessus.
-   */
-  color: string;
   tabs: AdminTab[];
 }
 
@@ -29,14 +22,12 @@ export const ADMIN_SPACES: AdminSpace[] = [
     id: 'home',
     label: 'Accueil',
     icon: 'Home',
-    color: '#5b6cff',
     tabs: [{ path: '/admin', label: 'Accueil' }],
   },
   {
     id: 'servers',
     label: 'Serveurs',
     icon: 'Server',
-    color: '#0a9eec',
     tabs: [
       { path: '/admin/servers', label: 'Tous les serveurs' },
       { path: '/admin/activation', label: 'Codes d’activation' },
@@ -45,20 +36,19 @@ export const ADMIN_SPACES: AdminSpace[] = [
     ],
   },
   {
-    id: 'revenue',
-    label: 'Revenus',
-    icon: 'CreditCard',
-    color: '#1fb26a',
+    id: 'analytics',
+    label: 'Analytics',
+    icon: 'TrendingUp',
     tabs: [
+      { path: '/admin/activity', label: 'Activité' },
+      { path: '/admin/analytics', label: 'Acquisition et usage' },
       { path: '/admin/billing', label: 'Abonnements' },
-      { path: '/admin/analytics', label: 'Analytics' },
     ],
   },
   {
     id: 'moderation',
     label: 'Modération',
     icon: 'ShieldCheck',
-    color: '#f0503c',
     tabs: [
       { path: '/admin/security', label: 'Accès et liste noire' },
       { path: '/admin/content', label: 'Mots globaux' },
@@ -70,7 +60,6 @@ export const ADMIN_SPACES: AdminSpace[] = [
     id: 'comms',
     label: 'Communication',
     icon: 'Megaphone',
-    color: '#e8890c',
     tabs: [
       { path: '/admin/broadcast', label: 'Annonces' },
       { path: '/admin/achievements', label: 'Succès' },
@@ -78,19 +67,20 @@ export const ADMIN_SPACES: AdminSpace[] = [
     ],
   },
   {
-    id: 'system',
-    label: 'Système',
-    icon: 'Cpu',
-    color: '#8b6cf6',
+    id: 'supervision',
+    label: 'Supervision',
+    icon: 'activity',
     tabs: [
+      { path: '/admin/ai', label: 'AegisAI et Vision' },
       { path: '/admin/shards', label: 'Shards' },
+      { path: '/admin/performance', label: 'Performances' },
       { path: '/admin/config', label: 'Erreurs et maintenance' },
       { path: '/admin/audit', label: 'Journal d’audit' },
     ],
   },
 ];
 
-/** `/admin/servers/123` appartient a l'onglet `/admin/servers`, mais `/admin` seul n'attrape pas tout. */
+/** `/admin/servers/123` appartient a la vue `/admin/servers`, mais `/admin` seul n'attrape pas tout. */
 export function tabMatches(tab: AdminTab, path: string): boolean {
   if (tab.path === '/admin') return path === '/admin' || path === '/admin/';
   return path === tab.path || path.startsWith(`${tab.path}/`);

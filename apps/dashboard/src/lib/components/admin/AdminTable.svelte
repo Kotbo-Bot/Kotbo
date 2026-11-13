@@ -65,11 +65,11 @@
   }
 </script>
 
-<div class="rounded-[20px] border border-outline-variant/60 bg-surface overflow-hidden">
+<div class="admin-surface overflow-hidden">
   <div class="overflow-x-auto">
     <table class="w-full min-w-max text-sm border-collapse">
       <thead>
-        <tr class="border-b border-outline-variant/60">
+        <tr class="border-b border-outline-variant">
           {#each columns as column (column.key)}
             <th
               scope="col"
