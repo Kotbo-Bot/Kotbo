@@ -1,6 +1,7 @@
 <script lang="ts">
   import { explainDisabled } from '../lib/actions/explainDisabled';
   import { onDestroy, onMount, untrack, type Snippet } from 'svelte';
+  import { MediaQuery } from 'svelte/reactivity';
   import { fade } from 'svelte/transition';
   import { dashboardStore } from '../lib/stores/dashboard.svelte';
   import { authStore } from '../lib/stores/auth.svelte';
@@ -12,6 +13,7 @@
   import EmojiText from '../lib/components/EmojiText.svelte';
   import DropAnnouncementPreview from '../lib/components/DropAnnouncementPreview.svelte';
   import DropClaimRulesPanel from '../lib/components/DropClaimRulesPanel.svelte';
+  import AmountRangeSlider from '../lib/components/AmountRangeSlider.svelte';
   import InlineFeedback from '../lib/components/InlineFeedback.svelte';
   import SearchableSelect from '../lib/components/SearchableSelect.svelte';
   import Skeleton from '../lib/components/Skeleton.svelte';
@@ -26,12 +28,15 @@
   import Button from '../lib/components/ui/Button.svelte';
   import Field from '../lib/components/ui/Field.svelte';
   import Tabs, { type TabItem } from '../lib/components/ui/Tabs.svelte';
+  import FilterPills from '../lib/components/ui/FilterPills.svelte';
   import Modal from '../lib/components/Modal.svelte';
   import { dropCountdown } from '../lib/dropCountdown';
   import { m, dateLocale } from '../lib/i18n';
   import {
     fetchDiscordChannels,
     fetchDropsData,
+    fetchDropHistory,
+    fetchDropWinners,
     fetchRpgItems,
     fetchEconomyConfig,
     updateDropGlobalSettings,
@@ -40,6 +45,7 @@
     type DropAnnouncementLabels,
     type DropConfigEntry,
     type DropHistoryEntry,
+    type DropWinner,
   } from '../lib/api';
   import {
     DEFAULT_DROP_GLOBAL_SETTINGS,
@@ -329,9 +335,46 @@
     return Math.round(value).toLocaleString(dateLocale());
   }
 
-  /** Historique replié sur les plus récents : la liste complète double la hauteur de l'onglet. */
-  const HISTORY_PREVIEW = 5;
-  let historyExpanded = $state(false);
+  /** Historique : une page à la fois, filtrable par type, chaque drop dépliable sur ses gagnants. */
+  let historyFilter = $state<DropType | 'ALL'>('ALL');
+  let historyHasMore = $state(false);
+  let historyLoading = $state(false);
+  let expandedDrop = $state<string | null>(null);
+  let winnersByDrop = $state<Record<string, DropWinner[] | 'loading' | 'error'>>({});
+
+  /** `reset` recharge la première page (filtre changé) ; sinon reprend sous le dernier drop. */
+  async function loadHistory(reset: boolean) {
+    historyLoading = true;
+    const page = await fetchDropHistory({
+      type: historyFilter === 'ALL' ? undefined : historyFilter,
+      before: reset ? undefined : recentDrops.at(-1)?.createdAt,
+    });
+    historyLoading = false;
+    if (!page) return;
+    recentDrops = reset ? page.drops : [...recentDrops, ...page.drops];
+    historyHasMore = page.hasMore;
+  }
+
+  function setHistoryFilter(value: DropType | 'ALL') {
+    historyFilter = value;
+    expandedDrop = null;
+    void loadHistory(true);
+  }
+
+  async function loadWinners(dropId: string) {
+    winnersByDrop[dropId] = 'loading';
+    winnersByDrop[dropId] = (await fetchDropWinners(dropId)) ?? 'error';
+  }
+
+  function toggleWinners(dropId: string) {
+    expandedDrop = expandedDrop === dropId ? null : dropId;
+    if (expandedDrop && !winnersByDrop[expandedDrop]) void loadWinners(expandedDrop);
+  }
+
+  const WINNER_STATUS_LABEL: Record<'pending' | 'abandoned', () => string> = {
+    pending: () => m.drop_winner_pending(),
+    abandoned: () => m.drop_winner_abandoned(),
+  };
 
   /**
    * Heure courante du panneau d'état, avancée toutes les 30 secondes : le compte à
@@ -342,6 +385,13 @@
 
   /** Panneau d'état ouvert sur mobile, où il ne tient pas à côté du formulaire. */
   let statusOpen = $state(false);
+
+  /**
+   * Écran assez large pour la colonne de droite (le `lg` de Tailwind). Lu en script
+   * plutôt qu'en classes `hidden lg:block` : l'aperçu de l'annonce n'est monté qu'à un
+   * seul endroit, dans la colonne ou en bas de l'onglet.
+   */
+  const wide = new MediaQuery('min-width: 64rem');
 
   /** Une échéance passée attend le prochain passage du cycle ou l'écart minimal. */
   function nextDropLabel(type: DropType): string {
@@ -398,17 +448,29 @@
 
   // Un type bloqué le dit dans son onglet, en toutes lettres. « Actif » n'y figure
   // pas : le panneau d'état le donne déjà, et cinq badges élargiraient la barre.
+  // Un onglet modifié le dit aussi : l'enregistrement couvre tous les onglets d'un coup,
+  // encore faut-il savoir lesquels ont changé avant de le lancer.
   const tabItems = $derived<TabItem[]>([
-    { id: 'global', label: m.drop_tab_global(), icon: 'Gears' },
+    { id: 'global', label: m.drop_tab_global(), icon: 'Gears', badge: globalDirty() ? m.drop_tab_modified() : undefined },
     ...DROP_TYPES.map((type) => {
       const status = typeStatus(type);
+      const badges = [
+        status === 'blocked' ? STATUS_LABEL[status]() : null,
+        typeDirty(type) ? m.drop_tab_modified() : null,
+      ].filter(Boolean);
       return {
         id: type,
         label: TYPE_LABELS[type](),
         icon: TYPE_ICONS[type],
-        badge: status === 'blocked' ? STATUS_LABEL[status]() : undefined,
+        badge: badges.length > 0 ? badges.join(' · ') : undefined,
       };
     }),
+  ]);
+
+  /** Filtre de l'historique : tous les drops, ou un seul type. */
+  const historyFilterOptions = $derived([
+    { value: 'ALL' as const, label: m.drop_history_filter_all() },
+    ...DROP_TYPES.map((type) => ({ value: type, label: TYPE_LABELS[type]() })),
   ]);
 
   const MODE_LABELS: Record<string, () => string> = {
@@ -452,6 +514,14 @@
     };
   }
 
+  function globalDirty(): boolean {
+    return JSON.stringify(globalSettings) !== JSON.stringify(savedGlobalSettings);
+  }
+
+  function typeDirty(type: DropType): boolean {
+    return JSON.stringify(configs[type]) !== JSON.stringify(savedConfigs[type]);
+  }
+
   async function refreshData(silent = false) {
     if (!silent) loading = true;
     try {
@@ -469,17 +539,29 @@
           dropJackpotMultiplier: res.dropJackpotMultiplier,
           dropClaimRules: normalizeDropClaimRules(res.dropClaimRules),
         };
-        globalSettings = cloneGlobalSettings(loadedGlobal);
+        // Mise à jour en direct (un autre admin vient d'enregistrer) : une section en
+        // cours de saisie garde la saisie, seul son instantané enregistré suit.
+        // Sans ça, la sauvegarde d'un collègue effaçait sans prévenir ce qu'on tapait.
+        if (!silent || !globalDirty()) globalSettings = cloneGlobalSettings(loadedGlobal);
         savedGlobalSettings = cloneGlobalSettings(loadedGlobal);
         dropsLoaded = true;
 
         for (const type of DROP_TYPES) {
           const loaded = res.configs.find((config) => config.type === type) ?? blankConfig(type);
-          configs[type] = cloneConfig(loaded);
+          if (!silent || !typeDirty(type)) configs[type] = cloneConfig(loaded);
           savedConfigs[type] = cloneConfig(loaded);
         }
 
-        recentDrops = res.recentDrops ?? [];
+        // Une mise à jour en direct garde le filtre choisi, et relit les gagnants
+        // affichés : un drop encore ouvert a pu en gagner depuis.
+        if (historyFilter === 'ALL') {
+          recentDrops = res.recentDrops ?? [];
+          historyHasMore = res.recentDropsHasMore ?? false;
+        } else {
+          void loadHistory(true);
+        }
+        winnersByDrop = {};
+        if (expandedDrop) void loadWinners(expandedDrop);
         weeklyOutcomes = res.weeklyOutcomes ?? {};
         abandonedClaims = res.abandonedClaims ?? 0;
         announcement = res.announcement ?? null;
@@ -524,7 +606,7 @@
     let success = false;
 
     await actionState.run(async () => {
-      if (JSON.stringify(globalSettings) !== JSON.stringify(savedGlobalSettings)) {
+      if (globalDirty()) {
         // `dropsEnabled` reste hors de l'envoi : c'est la colonne du module, que
         // seul le menu de ModulePage bascule. La renvoyer telle que chargee au
         // montage pouvait rallumer ou eteindre le module dans son dos.
@@ -542,7 +624,7 @@
       }
 
       for (const type of DROP_TYPES) {
-        if (JSON.stringify(configs[type]) === JSON.stringify(savedConfigs[type])) continue;
+        if (!typeDirty(type)) continue;
         const res = await updateDropTypeSettings(type, {
           enabled: configs[type].enabled,
           channelId: configs[type].channelId || null,
@@ -566,8 +648,7 @@
   }
 
   $effect(() => {
-    const dirty = JSON.stringify(globalSettings) !== JSON.stringify(savedGlobalSettings)
-      || DROP_TYPES.some((type) => JSON.stringify(configs[type]) !== JSON.stringify(savedConfigs[type]));
+    const dirty = globalDirty() || DROP_TYPES.some(typeDirty);
 
     if (dirty && canManageSettings) {
       untrack(() => {
@@ -632,6 +713,38 @@
   }
 </script>
 
+<!-- Aperçu de l'annonce et estimation d'un type : en bas de son onglet sur mobile, dans
+     la colonne de droite sur grand écran, où il reste visible pendant qu'on règle. -->
+{#snippet previewPanel(type: DropType, labels: DropAnnouncementLabels)}
+  {@const estimate = estimateWeeklyDrops(type, configs[type], globalSettings)}
+  <DropAnnouncementPreview
+    {labels}
+    {type}
+    settings={configs[type]}
+    jackpot={globalSettings}
+    modeLabels={MODE_LABELS}
+    itemLabel={type === 'RPG_ITEM' ? likeliestItemLabel() : null}
+    {mentionRoleName}
+  />
+
+  {#if estimate}
+    <div class="space-y-1 border-t border-outline-variant/10 pt-4">
+      {#if estimate.distributed > 0}
+        <p class="text-sm font-semibold">
+          {m.drop_estimate_distributed({ drops: formatEstimate(estimate.drops), total: formatEstimate(estimate.distributed), resource: TYPE_LABELS[type]() })}
+        </p>
+      {/if}
+      <!-- Un champ vidé pendant la saisie donne NaN : la ligne attend un vrai nombre. -->
+      {#if estimate.window && Number.isFinite(estimate.window.perParticipant)}
+        <p class="text-sm font-semibold">
+          {m.drop_estimate_window({ amount: formatEstimate(estimate.window.perParticipant), resource: TYPE_LABELS[type](), drops: formatEstimate(estimate.window.drops) })}
+        </p>
+      {/if}
+      <p class="text-2xs text-on-surface-variant">{m.drop_estimate_hint()}</p>
+    </div>
+  {/if}
+{/snippet}
+
 <!-- État des drops : ce que le cycle fera de chaque type, là où on le règle. Rendu
      dans la colonne de droite sur grand écran, dans une fenêtre sur mobile. -->
 {#snippet statusPanel()}
@@ -646,6 +759,7 @@
       {@const status = typeStatus(type)}
       {@const blocker = status === 'blocked' ? typeBlocker(type) : null}
       {@const advice = unclaimedAdvice(type)}
+      {@const detailed = activeTab === 'global' || activeTab === type}
       <li>
         <button
           type="button"
@@ -658,15 +772,16 @@
             </span>
             <span class="text-2xs font-semibold px-2 py-0.5 rounded-full shrink-0 {STATUS_PILL[status]}">{STATUS_LABEL[status]()}</span>
           </span>
-          {#if blocker}
+          <!-- Sur l'onglet d'un type, les autres se résument à leur état : l'aperçu prend la place. -->
+          {#if detailed && blocker}
             <span class="block text-2xs text-warning mt-1">{blockerMessage(type, blocker)}</span>
-          {:else if status === 'on'}
+          {:else if detailed && status === 'on'}
             <span class="block text-2xs text-on-surface-variant mt-1">
               {m.drop_status_next({ when: nextDropLabel(type) })} · {channelName(configs[type].channelId)} · {modeSummary(configs[type])}
             </span>
           {/if}
         </button>
-        {#if advice}
+        {#if advice && detailed}
           <div class="px-2.5 pb-1">
             <p class="text-2xs text-on-surface-variant">{m.drop_advice_unclaimed({ unclaimed: advice.unclaimed, closed: advice.closed })}</p>
             {#if canManageSettings}
@@ -699,6 +814,17 @@
     </div>
 
     <div class="grid {cols} gap-4 transition-opacity {configs[type][mode].enabled ? '' : 'opacity-50'}">
+      <!-- Le curseur vise vite une valeur ronde ; les champs dessous gardent la saisie libre. -->
+      <div class="col-span-full">
+        <AmountRangeSlider
+          range={amountRange}
+          bind:min={configs[type][mode].minAmount}
+          bind:max={configs[type][mode].maxAmount}
+          labelMin={m.drop_mode_min_label()}
+          labelMax={m.drop_mode_max_label()}
+          disabled={!canManageSettings || !configs[type][mode].enabled}
+        />
+      </div>
       {@render extra?.(type)}
       {#each AMOUNT_BOUNDS as bound (bound.key)}
         <Field id="drop-{mode}-{bound.suffix}-{type}" label={bound.label()}>
@@ -778,15 +904,17 @@
     </Callout>
   {/if}
 
-  <div class="mb-4 lg:hidden">
-    <Button size="sm" icon="List" onclick={() => statusOpen = true}>{m.drop_status_title()}</Button>
-  </div>
-  <Modal bind:open={statusOpen} onClose={() => statusOpen = false} title={m.drop_status_title()}>
-    {@render statusPanel()}
-  </Modal>
+  {#if !wide.current}
+    <div class="mb-4">
+      <Button size="sm" icon="List" onclick={() => statusOpen = true}>{m.drop_status_title()}</Button>
+    </div>
+    <Modal bind:open={statusOpen} onClose={() => statusOpen = false} title={m.drop_status_title()}>
+      {@render statusPanel()}
+    </Modal>
+  {/if}
 
   <!-- Sur grand écran, l'état des drops reste à côté du formulaire, quel que soit l'onglet. -->
-  <div class="lg:grid lg:grid-cols-[minmax(0,1fr)_17rem] lg:items-start lg:gap-6">
+  <div class="lg:grid lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start lg:gap-6">
     <div class="min-w-0">
       <Tabs label={m.drop_tabs_label()} tabs={tabItems} active={activeTab} onchange={(id) => activeTab = id as typeof activeTab} class="mb-6" />
 
@@ -956,6 +1084,14 @@
               <p class="text-xs text-on-surface-variant mt-1">{m.drop_history_desc()}</p>
             </div>
 
+            <FilterPills
+              label={m.drop_history_filter_label()}
+              options={historyFilterOptions}
+              value={historyFilter}
+              onchange={setHistoryFilter}
+              disabled={historyLoading}
+            />
+
             {#if recentDrops.length === 0}
               <p class="py-8 text-center text-xs text-on-surface-variant italic">{m.drop_history_empty()}</p>
             {:else}
@@ -971,9 +1107,26 @@
                     </tr>
                   </thead>
                   <tbody>
-                    {#each historyExpanded ? recentDrops : recentDrops.slice(0, HISTORY_PREVIEW) as drop (drop.id)}
+                    {#each recentDrops as drop (drop.id)}
+                      {@const open = expandedDrop === drop.id}
                       <tr class="text-sm border-t border-outline-variant/10">
-                        <td class="py-2.5 pr-4 text-on-surface-variant/80 whitespace-nowrap">{formatDate(drop.createdAt)}</td>
+                        <td class="py-2.5 pr-4 text-on-surface-variant/80 whitespace-nowrap">
+                          {#if drop.claimCount > 0}
+                            <button
+                              type="button"
+                              onclick={() => toggleWinners(drop.id)}
+                              aria-expanded={open}
+                              aria-controls="drop-winners-{drop.id}"
+                              aria-label={m.drop_history_winners_toggle({ date: formatDate(drop.createdAt) })}
+                              class="inline-flex items-center gap-1.5 cursor-pointer hover:text-primary transition-colors"
+                            >
+                              <Papicon icon={open ? 'ChevronDown' : 'ChevronRight'} size={13} />
+                              {formatDate(drop.createdAt)}
+                            </button>
+                          {:else}
+                            <span class="pl-5">{formatDate(drop.createdAt)}</span>
+                          {/if}
+                        </td>
                         <td class="py-2.5 pr-4 font-semibold">{TYPE_LABELS[drop.type]?.() ?? drop.type}</td>
                         <td class="py-2.5 pr-4 text-on-surface-variant/80">{MODE_LABELS[drop.mode]?.() ?? drop.mode}</td>
                         <td class="py-2.5 pr-4 font-bold">
@@ -989,23 +1142,45 @@
                             : m.drop_history_unlimited({ count: drop.claimCount })}
                         </td>
                       </tr>
+                      {#if open}
+                        {@const winners = winnersByDrop[drop.id]}
+                        <tr id="drop-winners-{drop.id}">
+                          <td colspan="5" class="pb-3 pl-5">
+                            {#if winners === 'loading' || winners === undefined}
+                              <Skeleton height="32px" />
+                            {:else if winners === 'error'}
+                              <p class="text-xs text-warning">{m.drop_history_winners_error()}</p>
+                            {:else}
+                              <ul class="flex flex-wrap gap-2">
+                                {#each winners as winner (winner.userId)}
+                                  <li class="inline-flex items-center gap-2 rounded-full bg-surface-container-high/40 pl-1 pr-3 py-1 text-xs">
+                                    {#if winner.avatarUrl}
+                                      <img src={winner.avatarUrl} alt="" class="w-5 h-5 rounded-full" loading="lazy" />
+                                    {:else}
+                                      <Papicon icon="User" size={14} />
+                                    {/if}
+                                    <span class="font-semibold {winner.name ? '' : 'font-mono'}">{winner.name ?? winner.userId}</span>
+                                    {#if winner.status !== 'paid'}
+                                      <span class="text-2xs font-semibold text-warning">{WINNER_STATUS_LABEL[winner.status]()}</span>
+                                    {/if}
+                                  </li>
+                                {/each}
+                              </ul>
+                            {/if}
+                          </td>
+                        </tr>
+                      {/if}
                     {/each}
                   </tbody>
                 </table>
               </div>
-              {#if recentDrops.length > HISTORY_PREVIEW}
-                <div class="flex justify-center">
-                  <button
-                    type="button"
-                    onclick={() => historyExpanded = !historyExpanded}
-                    aria-expanded={historyExpanded}
-                    class="text-2xs font-medium px-3 py-1.5 rounded-lg border border-outline-variant/20 hover:border-outline-variant/40 transition-all inline-flex items-center gap-1.5"
-                  >
-                    <Papicon icon={historyExpanded ? 'ChevronUp' : 'ChevronDown'} size={13} />
-                    {historyExpanded ? m.drop_history_show_less() : m.drop_history_show_all({ count: recentDrops.length })}
-                  </button>
-                </div>
-              {/if}
+            {/if}
+            {#if historyHasMore}
+              <div class="flex justify-center">
+                <Button size="sm" icon="ChevronDown" loading={historyLoading} onclick={() => loadHistory(false)}>
+                  {m.drop_history_load_more()}
+                </Button>
+              </div>
             {/if}
           </section>
         </div>
@@ -1264,51 +1439,33 @@
             {@render modeCard(type, 'window', m.drop_mode_window_title(), m.drop_mode_window_desc(), 'grid-cols-1 sm:grid-cols-3', windowDurationField)}
           </section>
 
-          {#if announcement}
-            {@const estimate = estimateWeeklyDrops(type, configs[type], globalSettings)}
+          {#if announcement && !wide.current}
             <section class="bg-surface-container-low/40 border border-outline-variant/30 p-6 rounded-xl space-y-5">
               <div class="border-b border-outline-variant/15 pb-3">
                 <h3 class="text-lg font-semibold flex items-center gap-2"><Papicon icon="Eye" size={18} /> {m.drop_preview_heading()}</h3>
                 <p class="text-xs text-on-surface-variant mt-1">{m.drop_preview_desc()}</p>
               </div>
-
-              <DropAnnouncementPreview
-                labels={announcement}
-                {type}
-                settings={configs[type]}
-                jackpot={globalSettings}
-                modeLabels={MODE_LABELS}
-                itemLabel={type === 'RPG_ITEM' ? likeliestItemLabel() : null}
-                {mentionRoleName}
-              />
-
-              {#if estimate}
-                <div class="space-y-1 border-t border-outline-variant/10 pt-4">
-                  {#if estimate.distributed > 0}
-                    <p class="text-sm font-semibold">
-                      {m.drop_estimate_distributed({ drops: formatEstimate(estimate.drops), total: formatEstimate(estimate.distributed), resource: TYPE_LABELS[type]() })}
-                    </p>
-                  {/if}
-                  <!-- Un champ vidé pendant la saisie donne NaN : la ligne attend un vrai nombre. -->
-                  {#if estimate.window && Number.isFinite(estimate.window.perParticipant)}
-                    <p class="text-sm font-semibold">
-                      {m.drop_estimate_window({ amount: formatEstimate(estimate.window.perParticipant), resource: TYPE_LABELS[type](), drops: formatEstimate(estimate.window.drops) })}
-                    </p>
-                  {/if}
-                  <p class="text-2xs text-on-surface-variant">{m.drop_estimate_hint()}</p>
-                </div>
-              {/if}
+              {@render previewPanel(type, announcement)}
             </section>
           {/if}
         </div>
       {/if}
     </div>
 
-    <aside class="hidden lg:block sticky top-4" aria-label={m.drop_status_title()}>
-      <section class="bg-surface-container-low/40 border border-outline-variant/30 p-4 rounded-xl space-y-3">
-        <h3 class="text-sm font-semibold flex items-center gap-2"><Papicon icon="List" size={15} /> {m.drop_status_title()}</h3>
-        {@render statusPanel()}
-      </section>
-    </aside>
+    {#if wide.current}
+      <!-- Plus haute que l'écran avec l'aperçu : la colonne défile seule plutôt que de déborder. -->
+      <aside class="sticky top-4 max-h-[calc(100vh-2rem)] overflow-y-auto space-y-4" aria-label={m.drop_status_title()}>
+        <section class="bg-surface-container-low/40 border border-outline-variant/30 p-4 rounded-xl space-y-3">
+          <h3 class="text-sm font-semibold flex items-center gap-2"><Papicon icon="List" size={15} /> {m.drop_status_title()}</h3>
+          {@render statusPanel()}
+        </section>
+        {#if activeTab !== 'global' && announcement}
+          <section class="bg-surface-container-low/40 border border-outline-variant/30 p-4 rounded-xl space-y-3">
+            <h3 class="text-sm font-semibold flex items-center gap-2"><Papicon icon="Eye" size={15} /> {m.drop_preview_heading()}</h3>
+            {@render previewPanel(activeType, announcement)}
+          </section>
+        {/if}
+      </aside>
+    {/if}
   </div>
 </ModulePage>

@@ -41,10 +41,12 @@ const mockDb = {
   },
   dropClaim: {
     count: mock(async (_args?: unknown) => abandonedClaimCount),
+    findMany: mock(async (_args?: unknown) => claimRows),
   },
 };
 
 let abandonedClaimCount = 0;
+let claimRows: Array<Record<string, unknown>> = [];
 
 let recentDropRows: Array<Record<string, unknown>> = [];
 
@@ -80,11 +82,11 @@ for (const suffix of [
 // Import après les mocks
 const { handleDropsRoutes } = await import('../../api/routes/dashboard/drops.js');
 
-function createMockRequest(body: Record<string, unknown>, method = 'PUT'): IncomingMessage {
+function createMockRequest(body: Record<string, unknown>, method = 'PUT', url = '/api/dashboard/guilds/guild-123/drops'): IncomingMessage {
   const socket = new Socket();
   const req = new IncomingMessage(socket);
   req.method = method;
-  req.url = '/api/dashboard/guilds/guild-123/drops';
+  req.url = url;
   req.headers = { 'content-type': 'application/json' };
   const raw = JSON.stringify(body);
   req.push(raw);
@@ -499,5 +501,72 @@ describe('handleDropsRoutes - règles de ramassage', () => {
     expect(args.where.abandonedAt.gte.getTime()).toBeGreaterThan(Date.now() - 8 * 24 * 60 * 60 * 1000);
     expect(args.where.abandonedAt.gte.getTime()).toBeLessThan(Date.now() - 6 * 24 * 60 * 60 * 1000);
     abandonedClaimCount = 0;
+  });
+});
+
+describe('handleDropsRoutes - historique', () => {
+  const HISTORY = ['api', 'dashboard', 'guilds', 'guild-123', 'drops', 'history'];
+  const base = { mode: 'FIRST', channelId: 'salon-1', itemId: null, maxClaims: 1, claimCount: 1, expiresAt: new Date(), closedAt: null, jackpot: false };
+  const rangee = (index: number) => ({ ...base, id: `drop-${index}`, type: 'XP', amount: 10, createdAt: new Date(Date.UTC(2026, 10, 13, 12, index)) });
+
+  beforeEach(() => {
+    mockDb.drop.findMany.mockClear();
+    mockDb.dropClaim.findMany.mockClear();
+  });
+
+  async function appeler(url: string, parts = HISTORY) {
+    const res = createMockResponse();
+    await handleDropsRoutes(createMockRequest({}, 'GET', url), res, parts, mockClient, mockUser, 'guild-123', mockAccess);
+    return res;
+  }
+
+  test('une page de dix drops, et le signal qu\'il en reste', async () => {
+    recentDropRows = Array.from({ length: 11 }, (_, index) => rangee(index));
+    const res = await appeler('/api/dashboard/guilds/guild-123/drops/history');
+
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.drops).toHaveLength(10);
+    expect(body.hasMore).toBe(true);
+    const [args] = mockDb.drop.findMany.mock.calls.at(-1) as unknown as [{ take: number; where: Record<string, unknown> }];
+    expect(args.take).toBe(11);
+    expect(args.where).toEqual({ guildId: 'guild-123' });
+  });
+
+  test('filtre par type et reprend avant le dernier drop affiché', async () => {
+    recentDropRows = [rangee(1)];
+    const before = '2026-11-13T12:05:00.000Z';
+    const res = await appeler(`/api/dashboard/guilds/guild-123/drops/history?type=COINS&before=${encodeURIComponent(before)}`);
+
+    expect(JSON.parse(res.body).hasMore).toBe(false);
+    const [args] = mockDb.drop.findMany.mock.calls.at(-1) as unknown as [{ where: Record<string, unknown> }];
+    expect(args.where).toEqual({ guildId: 'guild-123', type: 'COINS', createdAt: { lt: new Date(before) } });
+  });
+
+  test('un type ou une date illisible est ignoré plutôt que refusé', async () => {
+    recentDropRows = [];
+    await appeler('/api/dashboard/guilds/guild-123/drops/history?type=PIZZA&before=hier');
+
+    const [args] = mockDb.drop.findMany.mock.calls.at(-1) as unknown as [{ where: Record<string, unknown> }];
+    expect(args.where).toEqual({ guildId: 'guild-123' });
+  });
+
+  test('les gagnants d\'un drop, avec l\'état de leur versement', async () => {
+    const claimedAt = new Date('2026-11-13T12:00:00Z');
+    claimRows = [
+      { userId: 'membre-1', amount: 120, createdAt: claimedAt, paidAt: claimedAt, abandonedAt: null },
+      { userId: 'membre-2', amount: 120, createdAt: claimedAt, paidAt: null, abandonedAt: null },
+      { userId: 'membre-3', amount: 120, createdAt: claimedAt, paidAt: null, abandonedAt: claimedAt },
+    ];
+    const res = await appeler('/api/dashboard/guilds/guild-123/drops/history/drop-1', [...HISTORY, 'drop-1']);
+
+    expect(res.statusCode).toBe(200);
+    const { winners } = JSON.parse(res.body);
+    expect(winners.map((winner: { status: string }) => winner.status)).toEqual(['paid', 'pending', 'abandoned']);
+    expect(winners[0]).toMatchObject({ userId: 'membre-1', name: null, amount: 120 });
+    // Le drop est cherché dans ce serveur : un identifiant d'un autre serveur ne renvoie rien.
+    const [args] = mockDb.dropClaim.findMany.mock.calls.at(-1) as unknown as [{ where: Record<string, unknown> }];
+    expect(args.where).toEqual({ dropId: 'drop-1', guildId: 'guild-123' });
+    claimRows = [];
   });
 });

@@ -50,6 +50,24 @@ export interface DropsDataResult extends DropGlobalSettings {
   abandonedClaims: number;
   announcement: DropAnnouncementLabels;
   recentDrops: DropHistoryEntry[];
+  /** Il reste des drops plus anciens que la première page. */
+  recentDropsHasMore: boolean;
+}
+
+export interface DropHistoryPage {
+  drops: DropHistoryEntry[];
+  hasMore: boolean;
+}
+
+/** Gagnant d'un drop. `name` vide quand le membre a quitté le serveur. */
+export interface DropWinner {
+  userId: string;
+  name: string | null;
+  avatarUrl: string | null;
+  amount: number;
+  claimedAt: string;
+  /** Versé, en attente de reprise, ou abandonné après trop d'échecs. */
+  status: 'paid' | 'pending' | 'abandoned';
 }
 
 export async function fetchDropsData(guildId = authStore.selectedGuildId): Promise<DropsDataResult | null> {
@@ -86,4 +104,29 @@ export async function updateDropTypeSettings(
     guildId,
     errorContext: `API Error (Update Drop ${type}):`,
   });
+}
+
+/** Page de l'historique : filtrée par type, et reprise sous le dernier drop affiché. */
+export async function fetchDropHistory(
+  filter: { type?: DropType; before?: string },
+  guildId = authStore.selectedGuildId,
+): Promise<DropHistoryPage | null> {
+  const query = new URLSearchParams();
+  if (filter.type) query.set('type', filter.type);
+  if (filter.before) query.set('before', filter.before);
+  const suffix = query.size > 0 ? `?${query}` : '';
+  return dashboardRequest(`/drops/history${suffix}`, {
+    method: 'GET',
+    guildId,
+    errorContext: 'API Error (Fetch Drop History):',
+  });
+}
+
+export async function fetchDropWinners(dropId: string, guildId = authStore.selectedGuildId): Promise<DropWinner[] | null> {
+  const result = await dashboardRequest<{ winners: DropWinner[] }>(`/drops/history/${encodeURIComponent(dropId)}`, {
+    method: 'GET',
+    guildId,
+    errorContext: 'API Error (Fetch Drop Winners):',
+  });
+  return result?.winners ?? null;
 }

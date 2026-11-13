@@ -27,6 +27,7 @@ const TRANSLATED = [
   'lib/api/modules.ts',
   'lib/api/tournaments.ts',
   'lib/asyncAction.svelte.ts',
+  'lib/components/AmountRangeSlider.svelte',
   'lib/components/analytics/AnalyticsFilterBar.svelte',
   'lib/components/CommandPalette.svelte',
   'lib/components/DemoBanner.svelte',
