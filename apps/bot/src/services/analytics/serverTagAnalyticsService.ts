@@ -457,9 +457,59 @@ export async function getServerDetails(
   stickers.sort((a, b) => b.uses - a.uses);
   const totalUses = [...emojis, ...stickers].reduce((sum, item) => sum + item.uses, 0);
 
-  const firstHolder = holders[0];
-  const inferredTag = resolved.tag ?? firstHolder?.primaryGuildTag ?? null;
-  const inferredBadgeUrl = resolved.badgeUrl ?? guildTagBadgeUrl(targetGuildId, firstHolder?.primaryGuildBadge);
+  // Complete avec le cache Discord du serveur actif (ex: membres pas encore resynchronises en base)
+  const mergedHolders = new Map<
+    string,
+    {
+      userId: string;
+      name: string;
+      username: string | null;
+      avatarUrl: string | null;
+      tag: string | null;
+      badge: string | null;
+      updatedAt: Date | null;
+    }
+  >();
+
+  for (const h of holders) {
+    mergedHolders.set(h.userId, {
+      userId: h.userId,
+      name: h.displayName ?? h.globalName ?? h.username ?? `Utilisateur ${h.userId}`,
+      username: h.username,
+      avatarUrl: h.avatarUrl,
+      tag: h.primaryGuildTag,
+      badge: h.primaryGuildBadge,
+      updatedAt: h.primaryGuildUpdatedAt,
+    });
+  }
+
+  const currentGuild = client.guilds.cache.get(currentGuildId);
+  if (currentGuild) {
+    for (const m of currentGuild.members.cache.values()) {
+      if (m.user.bot) continue;
+      const liveTag = extractPrimaryGuildTag(m.user);
+      if (liveTag?.guildId === targetGuildId) {
+        const prev = mergedHolders.get(m.id);
+        mergedHolders.set(m.id, {
+          userId: m.id,
+          name: m.displayName ?? m.user.globalName ?? m.user.username,
+          username: m.user.username,
+          avatarUrl: prev?.avatarUrl ?? m.displayAvatarURL({ size: 128 }),
+          tag: liveTag.tag,
+          badge: liveTag.badge,
+          updatedAt: prev?.updatedAt ?? null,
+        });
+      } else if (liveTag !== null && mergedHolders.has(m.id)) {
+        // Le membre a change de tag depuis la derniere synchro en base
+        mergedHolders.delete(m.id);
+      }
+    }
+  }
+
+  const resolvedHolders = [...mergedHolders.values()].slice(0, 100);
+  const firstHolder = resolvedHolders[0];
+  const inferredTag = resolved.tag ?? firstHolder?.tag ?? null;
+  const inferredBadgeUrl = resolved.badgeUrl ?? guildTagBadgeUrl(targetGuildId, firstHolder?.badge);
 
   return {
     server: {
@@ -477,15 +527,15 @@ export async function getServerDetails(
       source: resolved.source,
     },
     tagHolders: {
-      count: holders.length,
-      members: holders.map((h) => ({
+      count: mergedHolders.size,
+      members: resolvedHolders.map((h) => ({
         userId: h.userId,
-        name: h.displayName ?? h.globalName ?? h.username ?? `Utilisateur ${h.userId}`,
+        name: h.name,
         username: h.username,
         avatarUrl: h.avatarUrl,
-        tag: h.primaryGuildTag ?? inferredTag ?? '',
-        badgeUrl: guildTagBadgeUrl(targetGuildId, h.primaryGuildBadge) ?? inferredBadgeUrl,
-        updatedAt: h.primaryGuildUpdatedAt ? h.primaryGuildUpdatedAt.toISOString() : null,
+        tag: h.tag ?? inferredTag ?? '',
+        badgeUrl: guildTagBadgeUrl(targetGuildId, h.badge) ?? inferredBadgeUrl,
+        updatedAt: h.updatedAt ? h.updatedAt.toISOString() : null,
       })),
     },
     assets: {
