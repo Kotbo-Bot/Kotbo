@@ -398,7 +398,7 @@
    * régler sans les avoir sous les yeux. Le choix est retenu par navigateur, comme le
    * mode simple.
    */
-  type CollapsibleBlock = 'status' | 'preview';
+  type CollapsibleBlock = 'status' | 'preview' | 'items';
 
   function readCollapsed(block: CollapsibleBlock): boolean {
     try {
@@ -411,6 +411,7 @@
   let collapsed = $state<Record<CollapsibleBlock, boolean>>({
     status: readCollapsed('status'),
     preview: readCollapsed('preview'),
+    items: readCollapsed('items'),
   });
 
   function toggleBlock(block: CollapsibleBlock) {
@@ -752,9 +753,10 @@
   }
 </script>
 
-<!-- Titre d'un bloc repliable : il replie ou déplie le bloc dont il porte le nom. -->
-{#snippet blockToggle(block: CollapsibleBlock, label: string, icon: string, size: string, iconSize: number)}
-  <h3>
+<!-- Titre d'un bloc repliable : il replie ou déplie le bloc dont il porte le nom.
+     `tag` garde la hiérarchie des titres de l'endroit où il est posé. -->
+{#snippet blockToggle(block: CollapsibleBlock, label: string, icon: string, size: string, iconSize: number, tag = 'h3', summary = '')}
+  <svelte:element this={tag}>
     <button
       type="button"
       onclick={() => toggleBlock(block)}
@@ -763,9 +765,14 @@
       class="w-full {size} font-semibold flex items-center justify-between gap-2 cursor-pointer"
     >
       <span class="flex items-center gap-2"><Papicon {icon} size={iconSize} /> {label}</span>
-      <Papicon icon={collapsed[block] ? 'ChevronDown' : 'ChevronUp'} size={iconSize - 2} />
+      <span class="flex items-center gap-2 shrink-0">
+        {#if collapsed[block] && summary}
+          <span class="text-2xs font-normal text-on-surface-variant">{summary}</span>
+        {/if}
+        <Papicon icon={collapsed[block] ? 'ChevronDown' : 'ChevronUp'} size={iconSize - 2} />
+      </span>
     </button>
-  </h3>
+  </svelte:element>
 {/snippet}
 
 <!-- Aperçu de l'annonce et estimation d'un type : en bas de son onglet sur mobile, dans
@@ -1277,9 +1284,21 @@
                  arme legendaire dans un salon par accident. -->
             {#if type === 'RPG_ITEM'}
               <div class="space-y-2 border border-outline-variant/15 rounded-xl p-4">
+                <!-- Repliée, la liste se résume dans son titre ; un total qui ne fait pas
+                     cent reste signalé, l'enregistrement le refuserait. -->
                 <div>
-                  <h4 class="text-sm font-semibold">{m.drop_item_pool_title()}</h4>
-                  <p class="text-xs text-on-surface-variant mt-0.5">{m.drop_item_pool_desc()}</p>
+                  {@render blockToggle(
+                    'items',
+                    m.drop_item_pool_title(),
+                    TYPE_ICONS.RPG_ITEM,
+                    'text-sm',
+                    15,
+                    'h4',
+                    m.drop_item_pool_summary({ count: configs[type].items.length, total: dropItemsTotal }),
+                  )}
+                  {#if !collapsed.items}
+                    <p class="text-xs text-on-surface-variant mt-0.5">{m.drop_item_pool_desc()}</p>
+                  {/if}
                 </div>
 
                 {#if !rpgEnabled}
@@ -1288,67 +1307,75 @@
                   </Callout>
                 {/if}
 
-                <div class="flex flex-wrap gap-2">
-                  {#each availableItems as item (item.id)}
-                    {@const picked = configs[type].items.some((entry) => entry.itemId === item.id)}
-                    <button
-                      type="button"
-                      onclick={() => toggleDropItem(item.id)}
-                      disabled={(!picked && configs[type].items.length >= DROP_ITEM_POOL_MAX)}
-                      use:explainDisabled={(!canManageSettings) ? m.common_reason_no_permission() : ''}
-                      aria-pressed={picked}
-                      class="px-3 py-1.5 rounded-lg border text-2xs font-medium transition-all disabled:opacity-40 disabled:cursor-not-allowed {picked
-                        ? 'bg-primary/10 border-primary/40 text-primary'
-                        : 'bg-surface-container-high/30 border-outline-variant/15 text-on-surface-variant/80 hover:border-outline-variant/40'}"
-                    >
-                      <EmojiText value={item.emoji} /> {item.name}
-                    </button>
-                  {/each}
-                </div>
-
-                {#if configs[type].items.length > 0}
-                  <div class="space-y-1.5 pt-1">
-                    {#each configs[type].items as entry (entry.itemId)}
-                      <div class="flex items-center gap-3">
-                        <span class="text-2xs flex-1 min-w-0 truncate">
-                          {itemNameById.get(entry.itemId)?.emoji ?? ''}
-                          {itemNameById.get(entry.itemId)?.name ?? m.drop_item_unknown()}
-                        </span>
-                        <input
-                          type="number"
-                          min={DROP_ITEM_WEIGHT_RANGE.min}
-                          max={DROP_ITEM_WEIGHT_RANGE.max}
-                          value={entry.weight}
-                          oninput={(e) => setDropItemWeight(entry.itemId, Number((e.currentTarget as HTMLInputElement).value))}
-                          disabled={!canManageSettings}
-                          class="w-20 bg-surface-container-high/40 border border-outline-variant/15 rounded-lg px-3 py-1.5 text-2xs text-right focus:outline-none disabled:opacity-50"
-                        />
-                        <span class="text-2xs text-on-surface-variant w-4">%</span>
-                      </div>
-                    {/each}
-
-                    <div class="flex items-center justify-between gap-3 pt-1">
-                      <p class="text-2xs font-semibold {dropItemsBalanced ? 'text-success' : 'text-warning'}">
-                        {m.drop_item_total({ total: dropItemsTotal })}
-                      </p>
-                      <button
-                        type="button"
-                        onclick={balanceDropItems}
-                        use:explainDisabled={(!canManageSettings) ? m.common_reason_no_permission() : ''}
-                        class="text-2xs font-medium px-3 py-1.5 rounded-lg border border-outline-variant/20 hover:border-outline-variant/40 transition-all disabled:opacity-40"
-                      >
-                        {m.drop_item_balance()}
-                      </button>
-                    </div>
-                  </div>
+                {#if collapsed.items && configs[type].items.length > 0 && !dropItemsBalanced}
+                  <p class="text-2xs font-semibold text-warning">{m.drop_item_total({ total: dropItemsTotal })}</p>
                 {/if}
 
-                <p class="text-2xs text-on-surface-variant">
-                  {configs[type].items.length === 0
-                    ? m.drop_item_pool_empty()
-                    : m.drop_item_pool_full({ max: DROP_ITEM_POOL_MAX })}
-                </p>
-                <p class="text-2xs text-on-surface-variant">{m.drop_item_quantity_hint()}</p>
+                {#if !collapsed.items}
+                  <div id="drop-items-body" class="space-y-2">
+                    <div class="flex flex-wrap gap-2">
+                      {#each availableItems as item (item.id)}
+                        {@const picked = configs[type].items.some((entry) => entry.itemId === item.id)}
+                        <button
+                          type="button"
+                          onclick={() => toggleDropItem(item.id)}
+                          disabled={(!picked && configs[type].items.length >= DROP_ITEM_POOL_MAX)}
+                          use:explainDisabled={(!canManageSettings) ? m.common_reason_no_permission() : ''}
+                          aria-pressed={picked}
+                          class="px-3 py-1.5 rounded-lg border text-2xs font-medium transition-all disabled:opacity-40 disabled:cursor-not-allowed {picked
+                            ? 'bg-primary/10 border-primary/40 text-primary'
+                            : 'bg-surface-container-high/30 border-outline-variant/15 text-on-surface-variant/80 hover:border-outline-variant/40'}"
+                        >
+                          <EmojiText value={item.emoji} /> {item.name}
+                        </button>
+                      {/each}
+                    </div>
+
+                    {#if configs[type].items.length > 0}
+                      <div class="space-y-1.5 pt-1">
+                        {#each configs[type].items as entry (entry.itemId)}
+                          <div class="flex items-center gap-3">
+                            <span class="text-2xs flex-1 min-w-0 truncate">
+                              {itemNameById.get(entry.itemId)?.emoji ?? ''}
+                              {itemNameById.get(entry.itemId)?.name ?? m.drop_item_unknown()}
+                            </span>
+                            <input
+                              type="number"
+                              min={DROP_ITEM_WEIGHT_RANGE.min}
+                              max={DROP_ITEM_WEIGHT_RANGE.max}
+                              value={entry.weight}
+                              oninput={(e) => setDropItemWeight(entry.itemId, Number((e.currentTarget as HTMLInputElement).value))}
+                              disabled={!canManageSettings}
+                              class="w-20 bg-surface-container-high/40 border border-outline-variant/15 rounded-lg px-3 py-1.5 text-2xs text-right focus:outline-none disabled:opacity-50"
+                            />
+                            <span class="text-2xs text-on-surface-variant w-4">%</span>
+                          </div>
+                        {/each}
+
+                        <div class="flex items-center justify-between gap-3 pt-1">
+                          <p class="text-2xs font-semibold {dropItemsBalanced ? 'text-success' : 'text-warning'}">
+                            {m.drop_item_total({ total: dropItemsTotal })}
+                          </p>
+                          <button
+                            type="button"
+                            onclick={balanceDropItems}
+                            use:explainDisabled={(!canManageSettings) ? m.common_reason_no_permission() : ''}
+                            class="text-2xs font-medium px-3 py-1.5 rounded-lg border border-outline-variant/20 hover:border-outline-variant/40 transition-all disabled:opacity-40"
+                          >
+                            {m.drop_item_balance()}
+                          </button>
+                        </div>
+                      </div>
+                    {/if}
+
+                    <p class="text-2xs text-on-surface-variant">
+                      {configs[type].items.length === 0
+                        ? m.drop_item_pool_empty()
+                        : m.drop_item_pool_full({ max: DROP_ITEM_POOL_MAX })}
+                    </p>
+                    <p class="text-2xs text-on-surface-variant">{m.drop_item_quantity_hint()}</p>
+                  </div>
+                {/if}
               </div>
             {/if}
 

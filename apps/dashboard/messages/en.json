@@ -10854,6 +10854,7 @@
   "drop_tab_rpg_item": "RPG items",
   "drop_type_desc_rpg_item": "A game item drops in the channel and lands in the winner's inventory. Only the items you list can drop.",
   "drop_item_pool_title": "Items that can drop",
+  "drop_item_pool_summary": "{count} item(s), total {total}%",
   "drop_item_pool_desc": "The drop picks one at random each time it appears. With an empty list, no item drop is published.",
   "drop_item_pool_empty": "No item selected: this drop type will publish nothing.",
   "drop_item_total": "Total: {total}%",
