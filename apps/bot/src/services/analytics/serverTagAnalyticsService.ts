@@ -276,6 +276,7 @@ export async function getServerTagAnalytics(
           guildId: srv.guildId,
           name: existing.name,
           iconUrl: guildIconUrl(srv.guildId, existing.icon),
+          bannerUrl: null,
           description: existing.description,
           memberCount: existing.memberCount,
           onlineCount: existing.onlineCount,
@@ -403,7 +404,11 @@ export async function getServerDetails(
   ]);
 
   const liveGuild = client.guilds.cache.get(targetGuildId);
-  const bannerUrl = liveGuild?.bannerURL({ size: 512 }) ?? null;
+  const bannerUrl = liveGuild?.bannerURL({ size: 1024 })
+    ?? liveGuild?.discoverySplashURL({ size: 1024 })
+    ?? liveGuild?.splashURL({ size: 1024 })
+    ?? resolved.bannerUrl
+    ?? null;
 
   // Comptage d'usage des emojis/stickers sur les 30 derniers jours sur le serveur actif
   const assetIds = assetRows.map((a) => a.id);

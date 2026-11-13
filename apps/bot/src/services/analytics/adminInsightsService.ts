@@ -9,6 +9,7 @@
 import type { Client } from 'discord.js';
 import prisma from '../../utils/db.js';
 import { getAegisQueueStats } from '../moderation/aegis/aegisQueue.js';
+import { getKnownGuildNames, resolveExternalGuild } from '../core/serverTagService.js';
 
 const DAY_MS = 86_400_000;
 
@@ -164,11 +165,23 @@ interface GuildLabel {
   memberCount: number;
 }
 
-async function collectGuildLabels(client: Client): Promise<Map<string, GuildLabel>> {
+async function collectGuildLabels(client: Client, extraGuildIds: string[] = []): Promise<Map<string, GuildLabel>> {
   const read = (shard: Client): GuildLabel[] =>
     shard.guilds.cache.map((guild) => ({ id: guild.id, name: guild.name, icon: guild.iconURL(), memberCount: guild.memberCount }));
   const found = client.shard ? (await client.shard.broadcastEval(read)).flat() : read(client);
-  return new Map(found.map((label) => [label.id, label]));
+  const map = new Map(found.map((label) => [label.id, label]));
+
+  const missing = extraGuildIds.filter((id) => !map.has(id));
+  if (missing.length > 0) {
+    const known = await getKnownGuildNames(client, missing);
+    for (const [id, name] of known) {
+      if (!map.has(id)) {
+        map.set(id, { id, name, icon: null, memberCount: 0 });
+      }
+    }
+  }
+
+  return map;
 }
 
 interface GuildDetail {
@@ -200,7 +213,7 @@ async function collectGuildDetail(client: Client, guildId: string): Promise<Guil
       id: guild.id,
       name: guild.name,
       icon: guild.iconURL({ size: 128 }),
-      banner: guild.bannerURL({ size: 1024 }),
+      banner: guild.bannerURL({ size: 1024 }) ?? guild.discoverySplashURL({ size: 1024 }) ?? guild.splashURL({ size: 1024 }),
       description: guild.description,
       ownerId: guild.ownerId,
       memberCount: guild.memberCount,
@@ -296,6 +309,16 @@ export async function getGlobalActivity(client: Client, days: number) {
     dailyKeys,
   );
   const previousTotals = zeroed(previous._sum, dailyKeys);
+
+  const missingGuildIds = byGuild.map((row) => row.guildId).filter((id) => !guildLabels.has(id));
+  if (missingGuildIds.length > 0) {
+    const known = await getKnownGuildNames(client, missingGuildIds);
+    for (const [id, name] of known) {
+      if (!guildLabels.has(id)) {
+        guildLabels.set(id, { id, name, icon: null, memberCount: 0 });
+      }
+    }
+  }
 
   const labels = await collectChannelLabels(client, byChannel.map((row) => row.channelId));
   const channels = byChannel.map((row) => {
@@ -456,7 +479,8 @@ export async function getGuildSheet(client: Client, guildId: string, days: numbe
   const rankIndex = ranked.findIndex((row) => row.guildId === guildId);
   const fleetMedian = ranked.length > 0 ? ranked[Math.floor(ranked.length / 2)].messages : 0;
 
-  const memberCount = detail?.memberCount ?? series.findLast((day) => day.totalMembers > 0)?.totalMembers ?? 0;
+  const external = !detail ? await resolveExternalGuild(client, guildId).catch(() => null) : null;
+  const memberCount = detail?.memberCount ?? external?.memberCount ?? series.findLast((day) => day.totalMembers > 0)?.totalMembers ?? 0;
   const enabledModules = modules.filter((module) => module.enabled);
   const health = scoreGuildHealth({
     activated: db?.activated ?? false,
@@ -475,7 +499,15 @@ export async function getGuildSheet(client: Client, guildId: string, days: numbe
   return {
     days,
     present: Boolean(detail),
-    guild: detail ? { ...detail, channels: undefined, channelsCount: detail.channels.length } : { id: guildId, name: null },
+    guild: detail
+      ? { ...detail, channels: undefined, channelsCount: detail.channels.length }
+      : {
+          id: guildId,
+          name: external?.name ?? null,
+          icon: external?.iconUrl ?? null,
+          description: external?.description ?? null,
+          memberCount: external?.memberCount ?? 0,
+        },
     access: db,
     health,
     totals: {

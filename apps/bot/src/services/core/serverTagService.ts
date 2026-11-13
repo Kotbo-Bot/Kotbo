@@ -30,6 +30,7 @@ export type ResolvedExternalGuild = {
   guildId: string;
   name: string | null;
   iconUrl: string | null;
+  bannerUrl?: string | null;
   description: string | null;
   memberCount: number | null;
   onlineCount: number | null;
@@ -47,7 +48,7 @@ type CachedTagState = {
 };
 
 const tagStateCache = new Map<string, CachedTagState>();
-const guildNameCache = new Map<string, string>();
+export const guildNameCache = new Map<string, string>();
 const failedRemoteFetchAt = new Map<string, number>();
 
 export function guildTagBadgeUrl(
@@ -106,9 +107,18 @@ function sameTagState(a: CachedTagState, b: CachedTagState): boolean {
  * Les donnees sont conservees jusqu'a 3 ans apres le depart du bot.
  */
 export async function recordBotGuildSnapshot(guild: Guild, botPresent: boolean): Promise<void> {
-  if (!guild?.id || !guild.name) return;
-  guildNameCache.set(guild.id, guild.name);
+  if (!guild?.id) return;
   const now = new Date();
+  if (!guild.name) {
+    if (!botPresent) {
+      await prisma.discordExternalGuild.updateMany({
+        where: { guildId: guild.id },
+        data: { botPresent: false, botLeftAt: now, lastSeenAt: now },
+      }).catch(() => null);
+    }
+    return;
+  }
+  guildNameCache.set(guild.id, guild.name);
   await prisma.discordExternalGuild.upsert({
     where: { guildId: guild.id },
     create: {
@@ -198,6 +208,20 @@ export async function getKnownGuildNames(
     }
   }
 
+  // Tente la resolution API Discord pour les serveurs encore inconnus
+  const unresolved = uniqueMissing.filter((id) => !result.has(id));
+  if (unresolved.length > 0) {
+    const fetched = await Promise.all(
+      unresolved.map((id) => resolveExternalGuild(client, id).catch(() => null)),
+    );
+    for (const item of fetched) {
+      if (item?.name) {
+        guildNameCache.set(item.guildId, item.name);
+        result.set(item.guildId, item.name);
+      }
+    }
+  }
+
   return result;
 }
 
@@ -246,10 +270,16 @@ export async function resolveExternalGuild(
       },
     }).catch(() => null);
 
+    const bannerUrl = live.bannerURL({ size: 1024 })
+      ?? live.discoverySplashURL({ size: 1024 })
+      ?? live.splashURL({ size: 1024 })
+      ?? null;
+
     return {
       guildId: live.id,
       name: live.name,
       iconUrl: guildIconUrl(live.id, live.icon),
+      bannerUrl,
       description: live.description ?? null,
       memberCount: live.memberCount ?? null,
       onlineCount: live.approximatePresenceCount ?? null,
@@ -280,6 +310,7 @@ export async function resolveExternalGuild(
       guildId: targetGuildId,
       name: existing.name,
       iconUrl: guildIconUrl(targetGuildId, existing.icon),
+      bannerUrl: null,
       description: existing.description,
       memberCount: existing.memberCount,
       onlineCount: existing.onlineCount,
@@ -299,6 +330,7 @@ export async function resolveExternalGuild(
 
   let name: string | null = assetSource?.sourceGuildName ?? existing?.name ?? null;
   let icon: string | null = assetSource?.sourceGuildIcon ?? existing?.icon ?? null;
+  let bannerUrl: string | null = null;
   let description: string | null = existing?.description ?? null;
   let memberCount: number | null = existing?.memberCount ?? null;
   let onlineCount: number | null = existing?.onlineCount ?? null;
@@ -312,6 +344,7 @@ export async function resolveExternalGuild(
       const preview = await client.fetchGuildPreview(targetGuildId);
       name = preview.name;
       icon = preview.icon ?? icon;
+      bannerUrl = preview.discoverySplashURL({ size: 1024 }) ?? preview.splashURL({ size: 1024 }) ?? null;
       description = preview.description ?? description;
       memberCount = preview.approximateMemberCount ?? memberCount;
       onlineCount = preview.approximatePresenceCount ?? onlineCount;
@@ -382,6 +415,7 @@ export async function resolveExternalGuild(
     guildId: targetGuildId,
     name,
     iconUrl: guildIconUrl(targetGuildId, icon),
+    bannerUrl,
     description,
     memberCount,
     onlineCount,
