@@ -367,6 +367,11 @@
   /** Historique : une page à la fois, filtrable par type, chaque drop dépliable sur ses gagnants. */
   let historyFilter = $state<DropType | 'ALL'>('ALL');
   let historyHasMore = $state(false);
+  /**
+   * Taille de la première page, et ce qu'elle disait des drops plus anciens : « Réduire »
+   * y revient sans relire le serveur, et rend le bouton « charger plus » tel qu'il était.
+   */
+  let historyFirstPage = $state({ size: 0, hasMore: false });
   let historyLoading = $state(false);
   let expandedDrop = $state<string | null>(null);
   let winnersByDrop = $state<Record<string, DropWinner[] | 'loading' | 'error'>>({});
@@ -392,6 +397,17 @@
     if (!page) return;
     recentDrops = reset ? page.drops : [...recentDrops, ...page.drops];
     historyHasMore = page.hasMore;
+    if (reset) historyFirstPage = { size: page.drops.length, hasMore: page.hasMore };
+  }
+
+  /** Revient à la première page ; un drop déplié plus bas se replie avec elle. */
+  function collapseHistory() {
+    historyRequest += 1; // un « charger plus » encore en route n'y ajoute rien
+    historyLoading = false;
+    const kept = recentDrops.slice(0, historyFirstPage.size);
+    if (expandedDrop && !kept.some((drop) => drop.id === expandedDrop)) expandedDrop = null;
+    recentDrops = kept;
+    historyHasMore = historyFirstPage.hasMore;
   }
 
   function setHistoryFilter(value: DropType | 'ALL') {
@@ -626,6 +642,7 @@
           historyLoading = false;
           recentDrops = res.recentDrops ?? [];
           historyHasMore = res.recentDropsHasMore ?? false;
+          historyFirstPage = { size: recentDrops.length, hasMore: historyHasMore };
         } else {
           void loadHistory(true);
         }
@@ -1269,11 +1286,18 @@
                 </table>
               </div>
             {/if}
-            {#if historyHasMore}
-              <div class="flex justify-center">
-                <Button size="sm" icon="ChevronDown" loading={historyLoading} onclick={() => loadHistory(false)}>
-                  {m.drop_history_load_more()}
-                </Button>
+            {#if historyHasMore || recentDrops.length > historyFirstPage.size}
+              <div class="flex flex-wrap justify-center gap-2">
+                {#if historyHasMore}
+                  <Button size="sm" icon="ChevronDown" loading={historyLoading} onclick={() => loadHistory(false)}>
+                    {m.drop_history_load_more()}
+                  </Button>
+                {/if}
+                {#if recentDrops.length > historyFirstPage.size}
+                  <Button size="sm" icon="ChevronUp" onclick={collapseHistory}>
+                    {m.drop_history_collapse()}
+                  </Button>
+                {/if}
               </div>
             {/if}
           </section>

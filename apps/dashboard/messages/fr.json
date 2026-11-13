@@ -10919,6 +10919,7 @@
   "drop_history_filter_label": "Filtrer l'historique par type",
   "drop_history_filter_all": "Tous",
   "drop_history_load_more": "Charger les drops plus anciens",
+  "drop_history_collapse": "Réduire aux plus récents",
   "drop_history_winners_toggle": "Gagnants du drop du {date}",
   "drop_history_winners_error": "Impossible de charger les gagnants de ce drop.",
   "drop_winner_pending": "versement en attente",
