@@ -62,6 +62,11 @@ import { registerDailyAlgoHandlers } from './handlers/dailyAlgoHandler.js';
 import { registerMeetingEvents } from './events/meetingEvents.js';
 import { syncOngoingDailyAlgoButtons } from './services/progression/dailyAlgoService.js';
 import { checkTranslationProviderHealth } from './services/integrations/translationService.js';
+import {
+  cleanupExpiredExternalGuilds,
+  handleUserTagUpdate,
+  recordBotGuildSnapshot,
+} from './services/core/serverTagService.js';
 import { startDashboardApi } from './api/dashboardApi.js';
 import { broadcastDashboardEventAcrossShards } from './api/shared/sharding.js';
 import { initBotSentry, captureException } from './observability/sentry.js';
@@ -482,6 +487,22 @@ client.once(Events.ClientReady, async (c) => {
   // into independent processes (Phase 2).
   registerEventBusBridge(client);
 
+  // Persiste les fiches des serveurs connus et ecoute les changements de tag
+  for (const g of c.guilds.cache.values()) {
+    void recordBotGuildSnapshot(g, true);
+  }
+  setInterval(() => {
+    void cleanupExpiredExternalGuilds();
+  }, 24 * 60 * 60 * 1000).unref();
+
+  client.on(Events.GuildUpdate, (_oldGuild, newGuild) => {
+    void recordBotGuildSnapshot(newGuild, true);
+  });
+
+  client.on(Events.UserUpdate, (oldUser, newUser) => {
+    void handleUserTagUpdate(client, oldUser, newUser);
+  });
+
   // ── Bus-based modules (decoupled, error-isolated) ─────────
   // Les abonnés au bus filtrent eux-mêmes via `subscribeForModule`. Ceux qui
   // sont restés sur `client.on()` reçoivent la vue filtrée du client.
@@ -580,7 +601,7 @@ client.once(Events.ClientReady, async (c) => {
   // Les jobs conservés dans Redis peuvent être repris dès la création du
   // worker. Tous leurs handlers doivent donc être enregistrés auparavant.
   await startBackgroundQueueWorker();
-  
+
   // Non attendu : chaque run des 30 derniers jours coûte plusieurs appels
   // Discord séquentiels, et les étapes suivantes n'en dépendent pas.
   logger.info('System', 'Début de la synchronisation des boutons DailyAlgo...');
@@ -660,6 +681,7 @@ client.once(Events.ClientReady, async (c) => {
 
 client.on(Events.GuildCreate, async (guild) => {
   logger.info('System', `Le bot a rejoint le serveur : ${guild.name} (${guild.id})`);
+  void recordBotGuildSnapshot(guild, true);
 
   // Entree du tunnel cote serveur. `void` volontaire : l'arrivee ne doit pas
   // attendre une ecriture de statistiques, et le service n'echoue jamais.
@@ -733,6 +755,7 @@ client.on(Events.GuildCreate, async (guild) => {
 
 client.on(Events.GuildDelete, (guild) => {
   logger.info('System', `Le bot a quitté le serveur : ${guild.name} (${guild.id})`);
+  void recordBotGuildSnapshot(guild, false);
   stopAutoBackup(guild.id);
   void announceBotGuildChange(guild.id, 'left');
 
@@ -1004,7 +1027,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       } else {
         logger.warn('Event', "Interaction déjà acquittée au moment de la gestion d'erreur; aucun message supplémentaire envoyé.");
       }
-    } catch (e){
+    } catch (e) {
       captureException(e, 'interaction-create-error-handler');
 
       if (e instanceof DiscordAPIError && e.code === 40060) {
@@ -1055,7 +1078,7 @@ async function flushIndexBuffers() {
   // Flush Command Usage
   const usageEntries = [...commandUsageBuffer.entries()];
   commandUsageBuffer.clear();
-  
+
   if (usageEntries.length > 0) {
     try {
       const ops = usageEntries.map(([key, count]) => {

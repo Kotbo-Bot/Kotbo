@@ -29,6 +29,7 @@ import { getVerificationHistory } from '../../services/moderation/securityVerifi
 import { visiblePresenceStatus } from '../../services/core/presencePrivacyService.js';
 import { getCrossServerSanctionSummary, type CrossServerSanctionSummary } from '../../services/moderation/crossServerSanctionService.js';
 import { getCrossServerLinkSummary, type CrossServerLinkSummary } from '../../services/moderation/crossServerLinkService.js';
+import { extractPrimaryGuildTag, guildTagBadgeUrl, resolveExternalGuild } from '../../services/core/serverTagService.js';
 import { extractMessageId, extractMessagePreview, fetchMemberConnections, mapGuildRolePermissions, parseInviteFromDetails, safeIsoDate } from './core.js';
 import type { AuthClaims } from './core.js';
 import { formatChannelName, renderMentionsAsText } from './markdown.js';
@@ -709,6 +710,24 @@ export async function buildMemberCaseData(client: Client, guildId: string, userI
           })
       ),
       verifications: await buildVerificationsPayload(guildId, actualUserId),
+      serverTag: await (async () => {
+        const liveTag = extractPrimaryGuildTag(user);
+        const tagGuildId = liveTag?.guildId ?? profile?.primaryGuildId ?? null;
+        const tagText = liveTag?.tag ?? profile?.primaryGuildTag ?? null;
+        const tagBadge = liveTag?.badge ?? profile?.primaryGuildBadge ?? null;
+        if (!tagGuildId || !tagText) return null;
+        const resolved = await resolveExternalGuild(client, tagGuildId, { tag: tagText, badge: tagBadge }).catch(() => null);
+        return {
+          guildId: tagGuildId,
+          tag: tagText,
+          badge: tagBadge,
+          badgeUrl: guildTagBadgeUrl(tagGuildId, tagBadge),
+          serverName: resolved?.name ?? null,
+          serverIconUrl: resolved?.iconUrl ?? null,
+          isOwnGuild: tagGuildId === guildId,
+          updatedAt: safeIsoDate(profile?.primaryGuildUpdatedAt),
+        };
+      })(),
     };
 
     return result;

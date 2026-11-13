@@ -8,6 +8,7 @@ import { getCurrentInstance } from '../../utils/instanceContext.js';
 import { formatDurationFr, getSanctionTypeBreakdown, listSanctionsByMember, type ListedSanction } from './sanctionService.js';
 import * as altAccountService from './altAccountService.js';
 import { getCrossServerSanctionSummary, type CrossServerSanctionSummary } from './crossServerSanctionService.js';
+import { extractPrimaryGuildTag } from '../core/serverTagService.js';
 import { generateMemberStatsImage } from '../core/imageService.js';
 
 export type MemberCaseSection = 'resume' | 'sanctions' | 'identite' | 'activite';
@@ -64,6 +65,10 @@ type MemberProfileSnapshot = {
   voiceLastJoinedAt?: Date | null;
   voiceLastLeftAt?: Date | null;
   rolesSnapshot?: string[];
+  primaryGuildId?: string | null;
+  primaryGuildTag?: string | null;
+  primaryGuildBadge?: string | null;
+  primaryGuildUpdatedAt?: Date | null;
 };
 
 async function upsertMemberProfile(snapshot: MemberProfileSnapshot): Promise<void> {
@@ -92,6 +97,10 @@ async function upsertMemberProfile(snapshot: MemberProfileSnapshot): Promise<voi
     voiceLastJoinedAt: snapshot.voiceLastJoinedAt ?? undefined,
     voiceLastLeftAt: snapshot.voiceLastLeftAt ?? undefined,
     rolesSnapshot: nextRolesSnapshot,
+    ...(snapshot.primaryGuildId !== undefined ? { primaryGuildId: snapshot.primaryGuildId } : {}),
+    ...(snapshot.primaryGuildTag !== undefined ? { primaryGuildTag: snapshot.primaryGuildTag } : {}),
+    ...(snapshot.primaryGuildBadge !== undefined ? { primaryGuildBadge: snapshot.primaryGuildBadge } : {}),
+    ...(snapshot.primaryGuildUpdatedAt !== undefined ? { primaryGuildUpdatedAt: snapshot.primaryGuildUpdatedAt } : {}),
   };
 
   if (snapshot.messageCountDelta && snapshot.messageCountDelta > 0) {
@@ -139,6 +148,10 @@ async function upsertMemberProfile(snapshot: MemberProfileSnapshot): Promise<voi
         voiceLastJoinedAt: snapshot.voiceLastJoinedAt ?? null,
         voiceLastLeftAt: snapshot.voiceLastLeftAt ?? null,
         rolesSnapshot: nextRolesSnapshot,
+        primaryGuildId: snapshot.primaryGuildId ?? null,
+        primaryGuildTag: snapshot.primaryGuildTag ?? null,
+        primaryGuildBadge: snapshot.primaryGuildBadge ?? null,
+        primaryGuildUpdatedAt: snapshot.primaryGuildUpdatedAt ?? null,
       },
       update: updateData,
     });
@@ -186,12 +199,12 @@ async function fetchGuildUserContext(guild: Guild, userId: string, pageIndex = 0
   const pageSanctions = safePageIndex === pageIndex
     ? sanctions.sanctions
     : (await listSanctionsByMember({
-        guildId: guild.id,
-        targetUserId: userId,
-        targetUserIds: linkedUserIds,
-        page: safePageIndex,
-        pageSize: MEMBER_CASE_PAGE_SIZE,
-      })).sanctions;
+      guildId: guild.id,
+      targetUserId: userId,
+      targetUserIds: linkedUserIds,
+      page: safePageIndex,
+      pageSize: MEMBER_CASE_PAGE_SIZE,
+    })).sanctions;
 
   return {
     guild,
@@ -513,9 +526,9 @@ function buildSummaryContainer(context: MemberCaseContext): ContainerBuilder {
 
   const recentSanctions = context.sanctions.length > 0
     ? context.sanctions.slice(0, 3).map((s) => {
-        const emoji = E[SANCTION_TYPE_EMOJI_KEY[s.type]] ?? E.moderation;
-        return `${emoji} **${s.type}** · ${truncate(s.reason, 60)} · <t:${Math.floor(s.createdAt.getTime() / 1000)}:R>`;
-      }).join('\n')
+      const emoji = E[SANCTION_TYPE_EMOJI_KEY[s.type]] ?? E.moderation;
+      return `${emoji} **${s.type}** · ${truncate(s.reason, 60)} · <t:${Math.floor(s.createdAt.getTime() / 1000)}:R>`;
+    }).join('\n')
     : '*Aucune sanction enregistrée pour ce membre.*';
   const crossServerLine = context.crossServer.enabled && context.crossServer.total > 0
     ? `\n🌐 **Autres serveurs :** ${context.crossServer.total} sanction${context.crossServer.total > 1 ? 's' : ''} sur ${context.crossServer.serverCount} serveur${context.crossServer.serverCount > 1 ? 's' : ''}`
@@ -646,9 +659,9 @@ function buildActivityContainer(context: MemberCaseContext, extras?: ActivityExt
 
   const roles = context.member
     ? [...context.member.roles.cache.values()]
-        .filter((role) => role.id !== context.guild.id)
-        .sort((a, b) => b.position - a.position)
-        .map((role) => `<@&${role.id}>`)
+      .filter((role) => role.id !== context.guild.id)
+      .sort((a, b) => b.position - a.position)
+      .map((role) => `<@&${role.id}>`)
     : (profile?.rolesSnapshot ?? []).map((roleId) => `<@&${roleId}>`);
   container.addSeparatorComponents(separatorOld(true, SeparatorSpacingSize.Small));
   container.addTextDisplayComponents(
@@ -733,6 +746,7 @@ function buildSanctionsContainer(context: MemberCaseContext): ContainerBuilder {
 }
 
 export async function touchMemberProfileFromMember(member: GuildMember): Promise<void> {
+  const tag = extractPrimaryGuildTag(member.user);
   await upsertMemberProfile({
     guildId: member.guild.id,
     userId: member.id,
@@ -750,6 +764,10 @@ export async function touchMemberProfileFromMember(member: GuildMember): Promise
     guildLeftAt: null,
     lastSeenAt: new Date(),
     rolesSnapshot: [...member.roles.cache.keys()].filter((roleId) => roleId !== member.guild.id),
+    primaryGuildId: tag?.guildId ?? null,
+    primaryGuildTag: tag?.tag ?? null,
+    primaryGuildBadge: tag?.badge ?? null,
+    primaryGuildUpdatedAt: new Date(),
   });
 }
 
