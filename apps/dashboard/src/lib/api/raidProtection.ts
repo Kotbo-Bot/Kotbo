@@ -190,7 +190,7 @@ export async function deleteVisionList(listId: string, guildId = authStore.selec
   });
 }
 
-/** `listId`: null = catalogue du serveur, 'global' = catalogue global, sinon id d'une liste personnalisée. */
+/** `listId` null = catalogue du serveur (honeypot, confirmations). */
 export async function fetchVisionImages(listId: string | null, guildId = authStore.selectedGuildId) {
   return dashboardRequest<{ images: VisionImage[] }>(`/raid-protection/vision/images?list=${listId ?? 'server'}`, {
     method: 'GET',

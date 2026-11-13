@@ -37,7 +37,7 @@ function cleanChannelId(value: unknown): string | null {
  *   POST   vision/lists               créer une liste
  *   PATCH  vision/lists/:id           modifier une liste
  *   DELETE vision/lists/:id           supprimer une liste et ses images
- *   GET    vision/images?list=:id     images d'une liste, du serveur ou du catalogue global
+ *   GET    vision/images?list=:id     images d'une liste (ou du serveur)
  *   POST   vision/images              ajouter une image (base64)
  *   PATCH  vision/images/:id          interdire / autoriser une image
  *   DELETE vision/images/:id          retirer une image
@@ -169,13 +169,12 @@ export async function handleVisionRoutes(
     if (resource === 'images') {
       if (!id && method === 'GET') {
         const listParam = url.searchParams.get('list');
-        const isGlobal = listParam === 'global';
-        const listId = listParam && listParam !== 'server' && !isGlobal ? listParam : null;
+        const listId = listParam && listParam !== 'server' ? listParam : null;
         const images = await prisma.scamImageHash.findMany({
-          where: isGlobal ? { guildId: null, status: 'BLOCKED' } : { guildId, listId },
+          where: { guildId, listId },
           select: { id: true, filename: true, thumb: true, source: true, status: true, hits: true, lastSeenAt: true, parentId: true, createdAt: true, addedBy: true },
-          orderBy: isGlobal ? [{ hits: 'desc' }, { createdAt: 'desc' }] : { createdAt: 'desc' },
-          take: isGlobal ? 500 : 300,
+          orderBy: { createdAt: 'desc' },
+          take: 300,
         });
         json(res, 200, { images });
         return true;
