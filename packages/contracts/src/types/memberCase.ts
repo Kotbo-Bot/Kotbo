@@ -248,6 +248,17 @@ export type MemberCaseConnection = {
   visible: boolean;
 };
 
+export type MemberCaseServerTag = {
+  guildId: string;
+  tag: string;
+  badge: string | null;
+  badgeUrl: string | null;
+  serverName: string | null;
+  serverIconUrl: string | null;
+  isOwnGuild: boolean;
+  updatedAt: string | null;
+};
+
 /** Une demande de vérification de sécurité passée sur ce membre. */
 export type MemberCaseVerificationEntry = {
   id: string;
@@ -295,4 +306,5 @@ export type MemberCaseResponse = {
   /** Liens de double compte déjà posés sur d'autres serveurs de l'instance. */
   crossServerLinks: CrossServerLinkSummaryPayload;
   verifications: MemberCaseVerifications;
+  serverTag?: MemberCaseServerTag | null;
 };

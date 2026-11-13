@@ -129,6 +129,20 @@ export interface MemberUpdateEvent {
   timestamp: number;
 }
 
+export interface MemberTagEvent {
+  guildId: string;
+  userId: string;
+  userTag: string;
+  oldGuildId: string | null;
+  oldTag: string | null;
+  oldBadge: string | null;
+  newGuildId: string | null;
+  newTag: string | null;
+  newBadge: string | null;
+  isOwnGuild: boolean;
+  timestamp: number;
+}
+
 // ── Moderation Events ───────────────────────────────────────────
 export interface SanctionAppliedEvent {
   guildId: string;
@@ -507,6 +521,7 @@ export interface KotboEventMap {
   'partnership:referral': PartnershipReferralEvent;
   'member:leave': MemberLeaveEvent;
   'member:update': MemberUpdateEvent;
+  'member:tag': MemberTagEvent;
   'sanction:applied': SanctionAppliedEvent;
   'sanction:revoked': SanctionRevokedEvent;
   'automod:triggered': AutoModTriggeredEvent;
