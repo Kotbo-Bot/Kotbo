@@ -192,6 +192,21 @@ export const startDashboardApi = async (client: Client) => {
     async fetch(request, serverInstance) {
       const url = new URL(request.url);
 
+      function isAllowedWsOrigin(candidate: string | null): boolean {
+        if (!candidate) return false;
+        if (candidate === getDashboardOrigin()) return true;
+        if (getAllInstances().some((i) => i.dashboardOrigin === candidate)) return true;
+        if (isKotboPublicOrigin(candidate)) return true;
+        try {
+          const parsed = new URL(candidate);
+          if (CORS_EXTRA_ORIGINS.includes(parsed.origin)) return true;
+          if (['localhost', '127.0.0.1'].includes(parsed.hostname)) return true;
+        } catch {
+          return false;
+        }
+        return false;
+      }
+
       // Édition à plusieurs d'une page de site : même contrôle d'origine et de
       // session que le WebSocket du dashboard, plus le droit d'éditer la page.
       const collabParts = url.pathname.startsWith('/api/site/collab/')
@@ -202,16 +217,7 @@ export const startDashboardApi = async (client: Client) => {
         if (collabParts.length !== 2 || !SNOWFLAKE_RE.test(collabGuildId) || !/^[a-z0-9]{20,32}$/.test(collabPageId)) {
           return new Response('Chemin invalide', { status: 400 });
         }
-        const origin = request.headers.get('origin');
-        let allowedOrigin = origin === getDashboardOrigin() || getAllInstances().some((i) => i.dashboardOrigin === origin);
-        if (!allowedOrigin && process.env.NODE_ENV !== 'production' && origin) {
-          try {
-            allowedOrigin = ['localhost', '127.0.0.1'].includes(new URL(origin).hostname);
-          } catch {
-            allowedOrigin = false;
-          }
-        }
-        if (!allowedOrigin) return new Response('Origine WebSocket refusée', { status: 403 });
+        if (!isAllowedWsOrigin(request.headers.get('origin'))) return new Response('Origine WebSocket refusée', { status: 403 });
         const session = await getDashboardSession(sessionIdFromCookieHeader(request.headers.get('cookie') ?? undefined));
         if (!session) return new Response('Session WebSocket absente ou expirée', { status: 401 });
         const page = await prisma.sitePage.findFirst({ where: { id: collabPageId, guildId: collabGuildId }, select: { kind: true } });
@@ -230,16 +236,7 @@ export const startDashboardApi = async (client: Client) => {
       if (url.pathname.startsWith('/api/site/live/')) {
         const siteId = url.pathname.slice('/api/site/live/'.length);
         if (!/^[a-z0-9]{20,32}$/.test(siteId)) return new Response('Chemin invalide', { status: 400 });
-        const origin = request.headers.get('origin');
-        let allowedOrigin = origin === getDashboardOrigin() || getAllInstances().some((i) => i.dashboardOrigin === origin);
-        if (!allowedOrigin && process.env.NODE_ENV !== 'production' && origin) {
-          try {
-            allowedOrigin = ['localhost', '127.0.0.1'].includes(new URL(origin).hostname);
-          } catch {
-            allowedOrigin = false;
-          }
-        }
-        if (!allowedOrigin) return new Response('Origine WebSocket refusée', { status: 403 });
+        if (!isAllowedWsOrigin(request.headers.get('origin'))) return new Response('Origine WebSocket refusée', { status: 403 });
         const site = await prisma.communitySite.findUnique({ where: { id: siteId }, select: { id: true, suspendedAt: true } });
         if (!site || site.suspendedAt) return new Response('Site introuvable', { status: 404 });
         const session = await getDashboardSession(sessionIdFromCookieHeader(request.headers.get('cookie') ?? undefined)).catch(() => null);
@@ -252,16 +249,7 @@ export const startDashboardApi = async (client: Client) => {
 
       // WebSocket upgrade (inchangé)
       if (url.pathname === '/api/dashboard/ws') {
-        const origin = request.headers.get('origin');
-        let allowedOrigin = origin === getDashboardOrigin();
-        if (!allowedOrigin && process.env.NODE_ENV !== 'production' && origin) {
-          try {
-            allowedOrigin = ['localhost', '127.0.0.1'].includes(new URL(origin).hostname);
-          } catch {
-            allowedOrigin = false;
-          }
-        }
-        if (!allowedOrigin) return new Response('Origine WebSocket refusée', { status: 403 });
+        if (!isAllowedWsOrigin(request.headers.get('origin'))) return new Response('Origine WebSocket refusée', { status: 403 });
 
         const session = await getDashboardSession(sessionIdFromCookieHeader(request.headers.get('cookie') ?? undefined));
         if (!session) return new Response('Session WebSocket absente ou expirée', { status: 401 });
