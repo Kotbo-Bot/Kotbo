@@ -458,6 +458,48 @@ export async function handleAnalyticsRoutes(
     return true;
   }
 
+  // GET …/analytics/server-tags : repartition des tags de serveur et serveurs associes
+  if (parts.length === 6 && parts[5] === 'server-tags') {
+    try {
+      const { getServerTagAnalytics } = await import('../../../services/analytics/serverTagAnalyticsService.js');
+      const includeBots = url.searchParams.get('includeBots') === '1';
+      json(
+        res,
+        200,
+        await cache.wrap(`guild:${guildId}:analytics:server-tags:${includeBots ? 'b' : ''}`, 120, () =>
+          getServerTagAnalytics(client, guildId, { includeBots }),
+        ),
+      );
+    } catch (err) {
+      logger.error('AnalyticsAPI', 'Erreur analytics (server-tags):', err);
+      jsonFailure(res, err, 'Erreur lors du calcul des tags de serveur', 'AnalyticsAPI');
+    }
+    return true;
+  }
+
+  // GET …/analytics/servers/:targetGuildId : fiche detaillee d'un serveur
+  if (parts.length === 7 && parts[5] === 'servers' && parts[6]) {
+    const targetGuildId = parts[6];
+    if (!/^\d{17,20}$/.test(targetGuildId)) {
+      json(res, 400, { error: 'Identifiant de serveur invalide.' });
+      return true;
+    }
+    try {
+      const { getServerDetails } = await import('../../../services/analytics/serverTagAnalyticsService.js');
+      json(
+        res,
+        200,
+        await cache.wrap(`guild:${guildId}:analytics:server-detail:${targetGuildId}`, 120, () =>
+          getServerDetails(client, guildId, targetGuildId),
+        ),
+      );
+    } catch (err) {
+      logger.error('AnalyticsAPI', `Erreur analytics (servers/${targetGuildId}):`, err);
+      jsonFailure(res, err, 'Erreur lors du chargement de la fiche serveur', 'AnalyticsAPI');
+    }
+    return true;
+  }
+
   // GET …/analytics/members/overview : effectif, arrivées par source, inviteurs
   // et qualité des nouveaux. Période seule.
   if (parts.length === 7 && parts[5] === 'members' && parts[6] === 'overview') {
