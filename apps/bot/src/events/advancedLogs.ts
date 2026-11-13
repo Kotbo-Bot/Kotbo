@@ -1779,7 +1779,6 @@ export function registerAdvancedLogsListener(client: Client): void {
       context: guild.name,
       module: 'Membres',
       eventType: 'MEMBER_TAG_UPDATE',
-      source: 'discord',
       details: `${formatTag(payload.oldTag, payload.oldGuildId)} → ${formatTag(payload.newTag, payload.newGuildId)}`,
     });
 

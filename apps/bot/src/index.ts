@@ -24,6 +24,7 @@ import {
   type Interaction,
 } from 'discord.js';
 import { logger } from './utils/logger.js';
+import { ensureDashboardSchemaPatches } from './utils/schemaPatches.js';
 import { parseInstanceIdFromArgs, setCurrentInstance, getCurrentInstance, isWhiteLabelInstance } from './utils/instanceContext.js';
 import { loadAllInstances, getInstanceById, getDefaultInstance } from './utils/instanceResolver.js';
 import { queueAuditLog } from './utils/auditLogger.js';
@@ -417,6 +418,9 @@ client.once(Events.ClientReady, async (c) => {
   logger.success('Bot', `Connecté en tant que ${c.user.tag}`);
   const activityPrefix = isWhiteLabelInstance() ? `${getCurrentInstance().brandName} | ` : '';
   c.user.setActivity(`${activityPrefix}/help | v${botPackageJson.version}`, { type: ActivityType.Playing });
+
+  // S'assure que les colonnes/tables ajoutees recemment existent en base
+  await ensureDashboardSchemaPatches();
 
   // Load application emojis before anything else
   await loadApplicationEmojis(client);

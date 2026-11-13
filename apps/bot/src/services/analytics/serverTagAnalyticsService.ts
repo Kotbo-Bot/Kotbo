@@ -4,6 +4,7 @@
 
 import type { Client } from 'discord.js';
 import prisma from '../../utils/db.js';
+import { ensureServerTagSchemaPatches } from '../../utils/schemaPatches.js';
 import {
   extractPrimaryGuildTag,
   guildIconUrl,
@@ -107,28 +108,68 @@ export async function getServerTagAnalytics(
   guildId: string,
   options?: { includeBots?: boolean },
 ): Promise<ServerTagsAnalyticsResult> {
+  await ensureServerTagSchemaPatches();
   const includeBots = options?.includeBots === true;
   const guild = client.guilds.cache.get(guildId);
 
-  const profiles = await prisma.memberProfile.findMany({
-    where: {
-      guildId,
-      guildLeftAt: null,
-      ...(includeBots ? {} : { isBot: false }),
-    },
-    select: {
-      userId: true,
-      displayName: true,
-      globalName: true,
-      username: true,
-      avatarUrl: true,
-      isBot: true,
-      primaryGuildId: true,
-      primaryGuildTag: true,
-      primaryGuildBadge: true,
-      primaryGuildUpdatedAt: true,
-    },
-  });
+  let profiles: Array<{
+    userId: string;
+    displayName: string | null;
+    globalName: string | null;
+    username: string | null;
+    avatarUrl: string | null;
+    isBot: boolean;
+    primaryGuildId: string | null;
+    primaryGuildTag: string | null;
+    primaryGuildBadge: string | null;
+    primaryGuildUpdatedAt: Date | null;
+  }> = [];
+
+  try {
+    profiles = await prisma.memberProfile.findMany({
+      where: {
+        guildId,
+        guildLeftAt: null,
+        ...(includeBots ? {} : { isBot: false }),
+      },
+      select: {
+        userId: true,
+        displayName: true,
+        globalName: true,
+        username: true,
+        avatarUrl: true,
+        isBot: true,
+        primaryGuildId: true,
+        primaryGuildTag: true,
+        primaryGuildBadge: true,
+        primaryGuildUpdatedAt: true,
+      },
+    });
+  } catch {
+    // Repli si les colonnes primaryGuild* n'existent pas encore en base
+    const baseProfiles = await prisma.memberProfile.findMany({
+      where: {
+        guildId,
+        guildLeftAt: null,
+        ...(includeBots ? {} : { isBot: false }),
+      },
+      select: {
+        userId: true,
+        displayName: true,
+        globalName: true,
+        username: true,
+        avatarUrl: true,
+        isBot: true,
+      },
+    }).catch(() => []);
+    profiles = baseProfiles.map((p) => ({
+      ...p,
+      primaryGuildId: null,
+      primaryGuildTag: null,
+      primaryGuildBadge: null,
+      primaryGuildUpdatedAt: null,
+    }));
+  }
 
   // Rafraichit a la volee depuis le cache Discord pour les membres en ligne sans tag en base
   const merged = new Map<
@@ -331,6 +372,7 @@ export async function getServerDetails(
   currentGuildId: string,
   targetGuildId: string,
 ): Promise<ServerDetailsResult> {
+  await ensureServerTagSchemaPatches();
   const [resolved, holders, assetRows] = await Promise.all([
     resolveExternalGuild(client, targetGuildId),
     prisma.memberProfile.findMany({
@@ -352,12 +394,12 @@ export async function getServerDetails(
       },
       orderBy: { messageCount: 'desc' },
       take: 100,
-    }),
+    }).catch(() => []),
     prisma.discordAssetSource.findMany({
       where: { sourceGuildId: targetGuildId },
       select: { id: true, kind: true, name: true, animated: true },
       take: 120,
-    }),
+    }).catch(() => []),
   ]);
 
   const liveGuild = client.guilds.cache.get(targetGuildId);
@@ -368,16 +410,16 @@ export async function getServerDetails(
   const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   const usageRows = assetIds.length > 0
     ? await prisma.contentItemDailyStat.groupBy({
-      by: ['itemKey'],
+      by: ['key'],
       where: {
         guildId: currentGuildId,
         dateKey: { gte: thirtyDaysAgo },
-        itemKey: { in: assetIds },
+        key: { in: assetIds },
       },
       _sum: { count: true },
     }).catch(() => [])
     : [];
-  const usageMap = new Map(usageRows.map((r) => [r.², r._sum.count ?? 0]));
+  const usageMap = new Map(usageRows.map((r) => [r.key, r._sum?.count ?? 0]));
 
   const emojis: ServerDetailsAsset[] = [];
   const stickers: ServerDetailsAsset[] = [];
