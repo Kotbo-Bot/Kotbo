@@ -801,6 +801,23 @@ const TRIGGERS: NodeDef[] = [
     ],
   },
   {
+    type: 'OnServerTagChanged',
+    label: 'Tag de serveur modifié',
+    category: 'trigger',
+    description:
+      "Se déclenche quand un membre ajoute, change ou retire le tag de serveur affiché sur son profil Discord.",
+    event: 'member:tag',
+    inputs: [],
+    outputs: [
+      EXEC_OUT,
+      { id: 'member', label: 'Membre', type: 'Member' },
+      { id: 'newTag', label: 'Nouveau tag', type: 'String' },
+      { id: 'oldTag', label: 'Ancien tag', type: 'String' },
+      { id: 'serverId', label: 'ID du serveur du tag', type: 'String' },
+      { id: 'isOwnGuild', label: 'Tag de ce serveur', type: 'Boolean' },
+    ],
+  },
+  {
     type: 'OnMemberBoost',
     label: 'Boost du serveur',
     category: 'trigger',

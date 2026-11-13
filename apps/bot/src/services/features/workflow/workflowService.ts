@@ -514,6 +514,18 @@ export async function buildTriggerOutputs(
       return member ? { member, channel, minutes: Math.floor(durationMs / 60_000) } : null;
     }
 
+    case 'OnServerTagChanged': {
+      const member = await memberOf(payload.userId);
+      if (!member) return null;
+      return {
+        member,
+        newTag: String(payload.newTag ?? ''),
+        oldTag: String(payload.oldTag ?? ''),
+        serverId: String(payload.newGuildId ?? payload.oldGuildId ?? ''),
+        isOwnGuild: Boolean(payload.isOwnGuild),
+      };
+    }
+
     case 'OnSanctionApplied': {
       if (typeof payload.targetId !== 'string') return null;
       const type = String(payload.type ?? '');
@@ -1506,7 +1518,7 @@ const PRUNE_BATCH_SIZE = 2000;
 
 async function deleteExecutionsInBatches(where: Prisma.WorkflowExecutionWhereInput): Promise<number> {
   let deleted = 0;
-  for (;;) {
+  for (; ;) {
     const batch = await prisma.workflowExecution.findMany({ where, select: { id: true }, take: PRUNE_BATCH_SIZE });
     if (batch.length === 0) return deleted;
 

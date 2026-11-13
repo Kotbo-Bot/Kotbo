@@ -195,6 +195,14 @@ export const TRIGGER_LIBRARY: TriggerPresentation[] = [
     example: 'Écrire dans les logs l\'ancien et le nouveau surnom.',
   },
   {
+    type: 'OnServerTagChanged',
+    sentence: "Quand le tag de serveur d'un membre change",
+    short: 'Tag serveur',
+    group: 'members',
+    icon: 'Tag',
+    example: 'Réagir quand un membre adopte ou retire le tag du serveur (ou d\'un autre serveur).',
+  },
+  {
     type: 'OnMemberBoost',
     sentence: 'Quand un membre booste le serveur',
     short: 'Boost',

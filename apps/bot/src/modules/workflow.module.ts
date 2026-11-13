@@ -27,6 +27,10 @@ export function registerWorkflowBusSubscribers(client: Client): void {
     await dispatchEvent(client, payload.guildId, 'member:leave', payload as never);
   }, MODULE_NAME);
 
+  subscribeForModule('workflows', 'member:tag', async (payload) => {
+    await dispatchEvent(client, payload.guildId, 'member:tag', payload as never);
+  }, MODULE_NAME);
+
   /**
    * Discord ne publie pas d'événement dédié aux rôles : `member:update`
    * transporte déjà les rôles gagnés et perdus, on en dérive donc deux
