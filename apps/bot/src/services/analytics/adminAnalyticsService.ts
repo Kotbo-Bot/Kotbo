@@ -21,6 +21,7 @@
 import type { Client } from 'discord.js';
 import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
+import { getKnownGuildNames } from '../core/serverTagService.js';
 import {
   ANALYTICS_DIMENSIONS,
   ONBOARDING_STEPS,
@@ -1220,14 +1221,17 @@ export async function getGuildsExplorer(
   ]);
 
   const guildIds = lifecycles.map((g) => g.guildId);
-  const dbGuilds = await prisma.guild.findMany({
-    where: { id: { in: guildIds } },
-    select: { id: true, stripeCancelAtPeriodEnd: true, stripeSubscriptionStatus: true },
-  }).catch(() => []);
+  const [dbGuilds, knownNames] = await Promise.all([
+    prisma.guild.findMany({
+      where: { id: { in: guildIds } },
+      select: { id: true, stripeCancelAtPeriodEnd: true, stripeSubscriptionStatus: true },
+    }).catch(() => []),
+    getKnownGuildNames(client, guildIds),
+  ]);
   const dbGuildMap = new Map(dbGuilds.map((g) => [g.id, g]));
 
   const guilds: GuildExplorerItem[] = lifecycles.map((g) => {
-    const name = resolveGuildDisplayName(client, g.guildId);
+    const name = knownNames.get(g.guildId) ?? resolveGuildDisplayName(client, g.guildId);
     const dbG = dbGuildMap.get(g.guildId);
     const plan = normalizePlanKey(g.plan);
     const mCount = g.memberCount ?? 0;
@@ -1355,9 +1359,17 @@ export async function getRisksSummary(client: Client): Promise<RisksResult> {
     }).catch(() => [])).map((g) => [g.guildId, g.mrrCents])
   );
 
+  const riskGuildIds = [
+    ...pastDueGuilds.map((g) => g.id),
+    ...cancellingGuilds.map((g) => g.id),
+    ...expiringTrials.map((g) => g.guildId),
+    ...inactivePaying.map((g) => g.guildId),
+  ];
+  const knownRiskNames = await getKnownGuildNames(client, riskGuildIds);
+
   const pastDue: RiskGuildItem[] = pastDueGuilds.map((g) => ({
     guildId: g.id,
-    name: resolveGuildDisplayName(client, g.id),
+    name: knownRiskNames.get(g.id) ?? resolveGuildDisplayName(client, g.id),
     plan: g.plan,
     mrrCents: lifecycleMap.get(g.id) || 0,
     reason: 'Défaut de paiement Stripe',
@@ -1365,7 +1377,7 @@ export async function getRisksSummary(client: Client): Promise<RisksResult> {
 
   const cancelScheduled: RiskGuildItem[] = cancellingGuilds.map((g) => ({
     guildId: g.id,
-    name: resolveGuildDisplayName(client, g.id),
+    name: knownRiskNames.get(g.id) ?? resolveGuildDisplayName(client, g.id),
     plan: g.plan,
     mrrCents: lifecycleMap.get(g.id) || 0,
     reason: 'Résiliation programmée au terme',
@@ -1374,7 +1386,7 @@ export async function getRisksSummary(client: Client): Promise<RisksResult> {
 
   const trialExpiringSoon: RiskGuildItem[] = expiringTrials.map((g) => ({
     guildId: g.guildId,
-    name: resolveGuildDisplayName(client, g.guildId),
+    name: knownRiskNames.get(g.guildId) ?? resolveGuildDisplayName(client, g.guildId),
     plan: g.plan,
     mrrCents: g.mrrCents,
     reason: 'Essai gratuit arrivant à échéance sous 48h',
@@ -1383,7 +1395,7 @@ export async function getRisksSummary(client: Client): Promise<RisksResult> {
 
   const paidInactive: RiskGuildItem[] = inactivePaying.map((g) => ({
     guildId: g.guildId,
-    name: resolveGuildDisplayName(client, g.guildId),
+    name: knownRiskNames.get(g.guildId) ?? resolveGuildDisplayName(client, g.guildId),
     plan: g.plan,
     mrrCents: g.mrrCents,
     reason: 'Aucune commande ni usage depuis 14 jours',
