@@ -1007,6 +1007,12 @@ model MemberProfile {
 
   rolesSnapshot String[] @default([])
 
+  // Tag de serveur affiche par le membre (user.primaryGuild)
+  primaryGuildId String?
+  primaryGuildTag String?
+  primaryGuildBadge String?
+  primaryGuildUpdatedAt DateTime?
+
   isSuspectedDC Boolean @default(false)
   dcScore       Int?      // Dernier score de détection calculé (0-100)
   lastDcAlertAt DateTime? // Timestamp de la dernière alerte DC envoyée (cooldown 24h)
@@ -1042,6 +1048,7 @@ model MemberProfile {
   @@index([guildId, messageCount])
   @@index([guildId, username])
   @@index([guildId, ghostStatus])
+  @@index([guildId, primaryGuildId])
   @@index([userId])
   @@map("member_profiles")
 }

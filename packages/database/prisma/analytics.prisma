@@ -215,6 +215,28 @@ model DiscordAssetSource {
   @@map("discord_asset_sources")
 }
 
+// Metadonnees persistees des serveurs Discord (serveurs tiers vus via tags/emojis/stickers
+// et serveurs visites par le bot, conserves jusqu'a 3 ans apres son depart).
+model DiscordExternalGuild {
+  guildId     String    @id
+  name        String
+  icon        String?
+  description String?
+  memberCount Int?
+  onlineCount Int?
+  tag         String?
+  badge       String?
+  source      String    @default("tag")
+  botPresent  Boolean   @default(false)
+  botLeftAt   DateTime?
+  lastSeenAt  DateTime  @default(now())
+  resolvedAt  DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([botPresent, botLeftAt])
+  @@map("discord_external_guilds")
+}
+
 model MemberInvite {
   id String @id @default(cuid())
 
