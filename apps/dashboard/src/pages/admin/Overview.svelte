@@ -345,14 +345,14 @@
           {#each matches as guild (guild.id)}
             <li>
               <a
-                href="/admin/servers?q={guild.id}"
+                href="/admin/servers/{guild.id}"
                 class="flex items-center gap-3 px-5 py-2.5 hover:bg-on-surface/3 transition-colors focus-visible:outline-2 focus-visible:outline-primary"
               >
                 <span class="w-9 h-9 shrink-0 rounded-[11px] bg-on-surface/6 overflow-hidden flex items-center justify-center text-on-surface-variant">
                   {#if guild.icon}
                     <img src={guild.icon} alt="" class="w-full h-full object-cover" loading="lazy" />
                   {:else}
-                    <Papicon icon="Server" size={15} />
+                    <span class="text-sm font-bold">{guild.name.charAt(0).toUpperCase()}</span>
                   {/if}
                 </span>
                 <span class="min-w-0 flex-1 text-sm font-medium text-on-surface truncate">{guild.name}</span>
@@ -367,33 +367,80 @@
       {/if}
     </AdminCard>
 
-    <!-- 4. Offres -->
-    <AdminCard title="Offres" class="lg:col-span-2">
-      {#snippet actions()}
-        <a href="/admin/billing" class="text-body-sm font-semibold text-primary hover:underline">Abonnements</a>
-      {/snippet}
-      {#if !billing}
-        <div class="h-24 rounded-xl bg-on-surface/6 animate-pulse"></div>
-      {:else if plans.length === 0}
-        <p class="text-body-sm text-on-surface-variant">Aucun serveur n’a encore d’offre.</p>
-      {:else}
-        <div class="flex h-3 rounded-full overflow-hidden gap-0.5" role="img" aria-label="Répartition des serveurs par offre">
-          {#each plans as plan (plan.key)}
-            <div class="{plan.shade} h-full" style="width: {plan.percent}%"></div>
-          {/each}
-        </div>
-        <dl class="mt-4 space-y-2.5">
-          {#each plans as plan (plan.key)}
-            <div class="flex items-center gap-2.5">
-              <span class="w-2.5 h-2.5 rounded-full {plan.shade}"></span>
-              <dt class="flex-1 text-body-sm text-on-surface">{plan.name}</dt>
-              <dd class="text-body-sm font-semibold text-on-surface tabular-nums">{nf.format(plan.count)}</dd>
-              <dd class="w-12 text-right text-xs text-on-surface-variant tabular-nums">{plan.percent.toFixed(0)} %</dd>
-            </div>
-          {/each}
-        </dl>
-      {/if}
-    </AdminCard>
+    <!-- 4. Offres et activite recente, empilees a cote de la recherche -->
+    <div class="lg:col-span-2 space-y-5">
+      <AdminCard title="Offres">
+        {#snippet actions()}
+          <a href="/admin/billing" class="text-body-sm font-semibold text-primary hover:underline">Abonnements</a>
+        {/snippet}
+        {#if !billing}
+          <div class="h-24 rounded-xl bg-on-surface/6 animate-pulse"></div>
+        {:else if plans.length === 0}
+          <p class="text-body-sm text-on-surface-variant">Aucun serveur n’a encore d’offre.</p>
+        {:else}
+          <div class="flex h-3 rounded-full overflow-hidden gap-0.5" role="img" aria-label="Répartition des serveurs par offre">
+            {#each plans as plan (plan.key)}
+              <div class="{plan.shade} h-full" style="width: {plan.percent}%"></div>
+            {/each}
+          </div>
+          <dl class="mt-4 space-y-2.5">
+            {#each plans as plan (plan.key)}
+              <div class="flex items-center gap-2.5">
+                <span class="w-2.5 h-2.5 rounded-full {plan.shade}"></span>
+                <dt class="flex-1 text-body-sm text-on-surface">{plan.name}</dt>
+                <dd class="text-body-sm font-semibold text-on-surface tabular-nums">{nf.format(plan.count)}</dd>
+                <dd class="w-12 text-right text-xs text-on-surface-variant tabular-nums">{plan.percent.toFixed(0)} %</dd>
+              </div>
+            {/each}
+          </dl>
+        {/if}
+      </AdminCard>
+      <AdminCard title="Dernières annonces">
+        {#snippet actions()}
+          <a href="/admin/broadcast" class="text-body-sm font-semibold text-primary hover:underline">Annonces</a>
+        {/snippet}
+        {#if broadcasts.length === 0}
+          <p class="text-body-sm text-on-surface-variant">Aucune annonce globale envoyée pour l’instant.</p>
+        {:else}
+          <ul class="space-y-3">
+            {#each broadcasts as log (log.id)}
+              <li class="flex items-center gap-3">
+                <span class="w-1 h-9 rounded-full shrink-0" style="background: {log.color}"></span>
+                <div class="min-w-0 flex-1">
+                  <p class="text-body-sm font-semibold text-on-surface truncate">{log.title}</p>
+                  <p class="text-xs text-on-surface-variant">{relativeTime(log.createdAt)} · {log.username ?? log.sentBy}</p>
+                </div>
+                <p class="text-body-sm font-semibold tabular-nums shrink-0">
+                  <span class="text-success">{log.successCount}</span>{#if log.failCount > 0}<span class="text-on-surface-variant"> / </span><span class="text-error">{log.failCount}</span>{/if}
+                  <span class="text-xs font-normal text-on-surface-variant"> sur {log.totalTargeted}</span>
+                </p>
+              </li>
+            {/each}
+          </ul>
+        {/if}
+      </AdminCard>
+      <AdminCard title="Dernières actions admin">
+        {#snippet actions()}
+          <a href="/admin/audit" class="text-body-sm font-semibold text-primary hover:underline">Journal</a>
+        {/snippet}
+        {#if audit.length === 0}
+          <p class="text-body-sm text-on-surface-variant">Aucune action enregistrée. Le journal se remplit à la prochaine action sensible.</p>
+        {:else}
+          <ul class="space-y-3">
+            {#each audit as entry (entry.id)}
+              <li class="flex items-start gap-2.5">
+                <span class="w-2 h-2 rounded-full mt-1.5 shrink-0 {entry.outcome === 'OK' ? 'bg-success' : 'bg-error'}"></span>
+                <div class="min-w-0">
+                  <p class="text-body-sm text-on-surface leading-snug">{entry.summary}</p>
+                  <p class="text-xs text-on-surface-variant mt-0.5">{relativeTime(entry.createdAt)}</p>
+                </div>
+              </li>
+            {/each}
+          </ul>
+        {/if}
+      </AdminCard>
+
+    </div>
   </div>
 
   <!-- 5. Sante dans le temps -->
@@ -427,52 +474,4 @@
     />
   </AdminCard>
 
-  <!-- 6. Ce qui s'est passe recemment -->
-  <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start">
-    <AdminCard title="Dernières actions admin">
-      {#snippet actions()}
-        <a href="/admin/audit" class="text-body-sm font-semibold text-primary hover:underline">Journal</a>
-      {/snippet}
-      {#if audit.length === 0}
-        <p class="text-body-sm text-on-surface-variant">Aucune action enregistrée. Le journal se remplit à la prochaine action sensible.</p>
-      {:else}
-        <ul class="space-y-3">
-          {#each audit as entry (entry.id)}
-            <li class="flex items-start gap-2.5">
-              <span class="w-2 h-2 rounded-full mt-1.5 shrink-0 {entry.outcome === 'OK' ? 'bg-success' : 'bg-error'}"></span>
-              <div class="min-w-0">
-                <p class="text-body-sm text-on-surface leading-snug">{entry.summary}</p>
-                <p class="text-xs text-on-surface-variant mt-0.5">{relativeTime(entry.createdAt)}</p>
-              </div>
-            </li>
-          {/each}
-        </ul>
-      {/if}
-    </AdminCard>
-
-    <AdminCard title="Dernières annonces">
-      {#snippet actions()}
-        <a href="/admin/broadcast" class="text-body-sm font-semibold text-primary hover:underline">Annonces</a>
-      {/snippet}
-      {#if broadcasts.length === 0}
-        <p class="text-body-sm text-on-surface-variant">Aucune annonce globale envoyée pour l’instant.</p>
-      {:else}
-        <ul class="space-y-3">
-          {#each broadcasts as log (log.id)}
-            <li class="flex items-center gap-3">
-              <span class="w-1 h-9 rounded-full shrink-0" style="background: {log.color}"></span>
-              <div class="min-w-0 flex-1">
-                <p class="text-body-sm font-semibold text-on-surface truncate">{log.title}</p>
-                <p class="text-xs text-on-surface-variant">{relativeTime(log.createdAt)} · {log.username ?? log.sentBy}</p>
-              </div>
-              <p class="text-body-sm font-semibold tabular-nums shrink-0">
-                <span class="text-success">{log.successCount}</span>{#if log.failCount > 0}<span class="text-on-surface-variant"> / </span><span class="text-error">{log.failCount}</span>{/if}
-                <span class="text-xs font-normal text-on-surface-variant"> sur {log.totalTargeted}</span>
-              </p>
-            </li>
-          {/each}
-        </ul>
-      {/if}
-    </AdminCard>
-  </div>
 </AdminShell>

@@ -223,7 +223,7 @@
         <AdminCard title="Serveurs par shard" icon="Server" tone="neutral">
           <div class="flex items-end gap-2 h-24">
             {#each shardRows as shard (shard.shardId)}
-              <div class="flex-1 flex flex-col items-center gap-1.5 min-w-0" title="Shard {shard.shardId} · {shard.guildCount} serveurs">
+              <div class="flex-1 max-w-24 flex flex-col items-center gap-1.5 min-w-0" title="Shard {shard.shardId} · {shard.guildCount} serveurs">
                 <div class="w-full relative h-20">
                   <div
                     class="absolute bottom-0 w-full rounded-t-md transition-all duration-700 {barTone[shardStatusTone(shard.status)]}"

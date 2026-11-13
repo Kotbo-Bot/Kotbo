@@ -789,6 +789,23 @@
             load={() => import("./pages/admin/Servers.svelte")}
           />
           <LazyRoute
+            path="/admin/servers/:guildId"
+            load={() => import("./pages/admin/ServerSheet.svelte")}
+            props={(meta) => ({ guildId: meta.params.guildId })}
+          />
+          <LazyRoute
+            path="/admin/activity"
+            load={() => import("./pages/admin/Activity.svelte")}
+          />
+          <LazyRoute
+            path="/admin/ai"
+            load={() => import("./pages/admin/AiSupervision.svelte")}
+          />
+          <LazyRoute
+            path="/admin/performance"
+            load={() => import("./pages/admin/Performance.svelte")}
+          />
+          <LazyRoute
             path="/admin/shards"
             load={() => import("./pages/admin/Shards.svelte")}
           />

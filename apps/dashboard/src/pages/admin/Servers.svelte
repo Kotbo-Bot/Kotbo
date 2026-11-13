@@ -471,7 +471,8 @@
       {@const progress = syncProgress(guild)}
       <tr class="border-b border-outline-variant/12 hover:bg-on-surface/3 transition-colors">
         <td class="px-4 py-3">
-          <button type="button" onclick={() => openDetail(guild)} class="flex items-center gap-3 min-w-0 text-left group">
+          <!-- Le nom mene a la fiche ; les actions restent dans le panneau, a droite de la ligne. -->
+          <a href="/admin/servers/{guild.id}" class="flex items-center gap-3 min-w-0 text-left group rounded-lg focus-visible:outline-2 focus-visible:outline-primary">
             <div class="w-9 h-9 shrink-0 rounded-xl bg-on-surface/6 overflow-hidden flex items-center justify-center">
               {#if guild.icon}
                 <img src={guild.icon} alt="" class="w-full h-full object-cover" loading="lazy" />
@@ -483,7 +484,7 @@
               <p class="text-body-sm font-semibold text-on-surface truncate group-hover:text-primary transition-colors">{guild.name}</p>
               <p class="text-2xs text-on-surface-variant font-mono truncate">{guild.id}</p>
             </div>
-          </button>
+          </a>
         </td>
 
         <td class="px-4 py-3">
