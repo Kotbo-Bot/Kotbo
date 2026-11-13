@@ -19,6 +19,8 @@
   } from '../../api';
   import Papicon from '../Papicon.svelte';
   import AdminBadge from './AdminBadge.svelte';
+  import AdminCard from './AdminCard.svelte';
+  import { Button } from '../ui';
   import { formatRelative } from '../staff/format';
   import { m } from '../../i18n';
   import { errorMessage } from '@kotbo/shared';
@@ -112,26 +114,21 @@
       {/if}
     </div>
     <div class="flex items-center gap-2">
-      <button
-        type="button"
-        onclick={load}
-        disabled={loading}
-        class="px-3 py-2 rounded-lg text-body-sm font-semibold bg-surface-variant/60 hover:bg-surface-variant disabled:opacity-50 flex items-center gap-1.5"
-      >
-        <Papicon icon="RefreshCw" size={14} /> Actualiser
-      </button>
-      <button
-        type="button"
-        onclick={() => purge()}
+      <Button size="sm" icon="RefreshCw" {loading} onclick={load}>Actualiser</Button>
+      <Button
+        size="sm"
+        variant="danger"
+        icon="Trash"
         disabled={loading || groups.length === 0}
-        class="px-3 py-2 rounded-lg text-body-sm font-semibold text-error bg-error/10 hover:bg-error/15 disabled:opacity-50 flex items-center gap-1.5"
+        onclick={() => purge()}
       >
-        <Papicon icon="Trash" size={14} /> Tout purger
-      </button>
+        Tout purger
+      </Button>
     </div>
   </div>
 
-  <div class="premium-card rounded-[2.25rem] p-3 sm:p-4">
+  <AdminCard padded={false}>
+    <div class="p-3 sm:p-4">
     {#if loading}
       <div class="animate-pulse space-y-3 p-2" aria-busy="true">
         <div class="h-14 bg-surface/40 rounded-xl"></div>
@@ -202,5 +199,6 @@
         {/each}
       </ul>
     {/if}
-  </div>
+    </div>
+  </AdminCard>
 </section>

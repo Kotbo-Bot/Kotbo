@@ -123,7 +123,7 @@
     loadError = null;
     try {
       const result = await fetchFeaturePages();
-      pages = result.pages;
+      pages = result?.pages ?? [];
       rebuildConfigured = result.rebuildConfigured;
       modulesWithoutSeed = result.modulesWithoutSeed;
     } catch (err) {

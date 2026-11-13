@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { explainDisabled } from '../../lib/actions/explainDisabled';
   import { m } from '../../lib/i18n';
   /**
    * Journal d'audit de la console admin.
@@ -18,11 +17,12 @@
   } from '../../lib/api';
   import Papicon from '../../lib/components/Papicon.svelte';
   import AdminShell from '../../lib/components/admin/AdminShell.svelte';
-  import AdminCard from '../../lib/components/admin/AdminCard.svelte';
-  import AdminStat from '../../lib/components/admin/AdminStat.svelte';
   import AdminToolbar from '../../lib/components/admin/AdminToolbar.svelte';
   import AdminBadge from '../../lib/components/admin/AdminBadge.svelte';
   import AdminDrawer from '../../lib/components/admin/AdminDrawer.svelte';
+  import MetricTabs from '../../lib/components/analytics/MetricTabs.svelte';
+  import { SERIES, fmtNumber } from '../../lib/components/analytics/analyticsFormat';
+  import { Button, EmptyState, FilterPills } from '../../lib/components/ui';
   import type { AdminTone } from '../../lib/components/admin/types';
 
   let entries = $state<AdminAuditEntry[]>([]);
@@ -59,8 +59,8 @@
         sinceHours: windowHours || undefined,
         limit: 60,
       });
-      entries = result.entries;
-      nextCursor = result.nextCursor;
+      entries = result?.entries ?? [];
+      nextCursor = result?.nextCursor ?? null;
     } catch (err) {
       toast.error(err instanceof Error ? err.message : m.d7_loading_error());
     } finally {
@@ -80,8 +80,8 @@
         limit: 60,
         cursor: nextCursor,
       });
-      entries = [...entries, ...result.entries];
-      nextCursor = result.nextCursor;
+      entries = [...entries, ...(result?.entries ?? [])];
+      nextCursor = result?.nextCursor ?? null;
     } catch (err) {
       toast.error(err instanceof Error ? err.message : m.d7_loading_error());
     } finally {
@@ -92,7 +92,7 @@
   onMount(async () => {
     await Promise.all([
       load(),
-      fetchAdminAuditActions().then((data) => { actionTypes = data.actions; }).catch(() => {}),
+      fetchAdminAuditActions().then((data) => { actionTypes = data?.actions ?? []; }).catch(() => {}),
     ]);
   });
 
@@ -200,63 +200,49 @@
   description="Trace horodatée des actions sensibles réalisées depuis la console admin globale."
 >
   {#snippet actions()}
-    <button
-      type="button"
+    <Button
+      icon="Download"
+      disabled={entries.length === 0}
+      disabledReason={m.common_reason_select_one()}
       onclick={exportCsv}
-      use:explainDisabled={(entries.length === 0) ? m.common_reason_select_one() : ''}
-      class="h-9 px-3.5 rounded-xl bg-on-surface/6 hover:bg-on-surface/10 border border-outline-variant/25 text-body-sm font-semibold text-on-surface-variant hover:text-on-surface transition disabled:opacity-40 inline-flex items-center gap-2"
     >
-      <Papicon icon="Download" size={13} />
       Exporter en CSV
-    </button>
-    <button
-      type="button"
-      onclick={load}
-      class="h-9 px-3.5 rounded-xl bg-on-surface/6 hover:bg-on-surface/10 border border-outline-variant/25 text-body-sm font-semibold text-on-surface-variant hover:text-on-surface transition inline-flex items-center gap-2"
-    >
-      <Papicon icon="RefreshCw" size={13} />
-      Actualiser
-    </button>
+    </Button>
+    <Button icon="RefreshCw" {loading} onclick={load}>Actualiser</Button>
   {/snippet}
 
-  <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
-    <AdminStat label="Entrées affichées" value={entries.length} icon="ClipboardList" tone="primary" {loading} />
-    <AdminStat label="Échecs" value={failedCount} icon="AlertTriangle" tone={failedCount > 0 ? 'danger' : 'neutral'} {loading} />
-    <AdminStat label="Auteurs distincts" value={actorCount} icon="Users" tone="info" {loading} />
-    <AdminStat label="Types d’action" value={actionTypes.length} icon="filter" tone="neutral" {loading} />
-  </div>
+  <MetricTabs
+    interactive={false}
+    active=""
+    onchange={() => {}}
+    label="Indicateurs du journal d’audit"
+    metrics={[
+      { id: 'entries', label: 'Entrées affichées', value: fmtNumber(entries.length), color: SERIES[0] },
+      { id: 'failed', label: 'Échecs', value: fmtNumber(failedCount), color: SERIES[3] },
+      { id: 'actors', label: 'Auteurs distincts', value: fmtNumber(actorCount), color: SERIES[1] },
+      { id: 'types', label: 'Types d’action', value: fmtNumber(actionTypes.length), color: SERIES[2] },
+    ]}
+  />
 
   <div class="flex flex-col gap-3">
     <AdminToolbar bind:search placeholder="Rechercher un résumé, une action, un auteur ou un ID cible…">
       {#snippet actions()}
-        <div class="flex items-center gap-1 p-0.5 rounded-lg bg-on-surface/6">
-          {#each windows as option (option.value)}
-            <button
-              type="button"
-              onclick={() => applyWindow(option.value)}
-              class="h-8 px-2.5 rounded-md text-xs font-semibold transition
-                {windowHours === option.value ? 'bg-surface-container-lowest text-on-surface shadow-sm' : 'text-on-surface-variant hover:text-on-surface'}"
-            >
-              {option.label}
-            </button>
-          {/each}
-        </div>
-        <div class="flex items-center gap-1 p-0.5 rounded-lg bg-on-surface/6">
-          {#each [
+        <FilterPills
+          label="Fenêtre"
+          value={String(windowHours)}
+          onchange={(v) => applyWindow(Number(v))}
+          options={windows.map((w) => ({ value: String(w.value), label: w.label }))}
+        />
+        <FilterPills
+          label="Résultat"
+          value={outcomeFilter}
+          onchange={(v) => applyOutcome(v)}
+          options={[
             { value: 'ALL', label: 'Tous' },
             { value: 'OK', label: 'Réussis' },
             { value: 'FAILED', label: 'Échecs' },
-          ] as option (option.value)}
-            <button
-              type="button"
-              onclick={() => applyOutcome(option.value)}
-              class="h-8 px-2.5 rounded-md text-xs font-semibold transition
-                {outcomeFilter === option.value ? 'bg-surface-container-lowest text-on-surface shadow-sm' : 'text-on-surface-variant hover:text-on-surface'}"
-            >
-              {option.label}
-            </button>
-          {/each}
-        </div>
+          ]}
+        />
       {/snippet}
     </AdminToolbar>
 
@@ -267,10 +253,10 @@
             type="button"
             onclick={() => applyFilter(entry.action)}
             aria-pressed={actionFilter === entry.action}
-            class="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-lg text-xs font-mono font-medium transition
+            class="admin-press inline-flex items-center gap-1.5 h-7 px-3 rounded-full text-xs font-mono font-medium transition
               {actionFilter === entry.action
-                ? 'bg-primary/12 text-primary border border-primary/30'
-                : 'bg-on-surface/5 text-on-surface-variant border border-transparent hover:bg-on-surface/8 hover:text-on-surface'}"
+                ? 'bg-on-surface text-background'
+                : 'bg-surface-container text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'}"
           >
             {entry.action}
             <span class="tabular-nums text-2xs opacity-70">{entry.count}</span>
@@ -283,22 +269,16 @@
   {#if loading}
     <div class="space-y-2">
       {#each Array(8) as _, index (index)}
-        <div class="h-16 rounded-xl bg-on-surface/6 animate-pulse"></div>
+        <div class="h-16 rounded-2xl bg-on-surface/6 animate-pulse"></div>
       {/each}
     </div>
   {:else if entries.length === 0}
-    <AdminCard>
-      <div class="py-14 flex flex-col items-center gap-2 text-center">
-        <div class="w-11 h-11 rounded-2xl bg-on-surface/6 flex items-center justify-center text-on-surface-variant">
-          <Papicon icon="ClipboardList" size={20} />
-        </div>
-        <p class="text-sm font-semibold text-on-surface">Aucune entrée</p>
-        <p class="text-body-sm text-on-surface-variant max-w-md">
-          Le journal est alimenté à partir de cette mise à jour : les actions antérieures n’y figurent pas.
-          Élargis la fenêtre ou retire les filtres si tu cherches une action précise.
-        </p>
-      </div>
-    </AdminCard>
+    <EmptyState
+      icon="ClipboardList"
+      title="Aucune entrée"
+      description="Le journal est alimenté à partir de cette mise à jour : les actions antérieures n’y figurent pas. Élargis la fenêtre ou retire les filtres."
+      reason="nothing-matches"
+    />
   {:else}
     <div class="space-y-5">
       {#each grouped as [day, dayEntries] (day)}

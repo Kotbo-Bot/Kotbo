@@ -46,8 +46,8 @@
         fetchGlobalAdmins(),
         fetchGlobalBlacklist()
       ]);
-      globalAdmins = adminsData.admins;
-      globalBlacklist = blacklistData.blacklist;
+      globalAdmins = adminsData?.admins ?? [];
+      globalBlacklist = blacklistData?.blacklist ?? [];
     } catch (err) {
       error = errorMessage(err);
     } finally {
@@ -62,7 +62,7 @@
       await addGlobalAdmin(newAdminId.trim());
       newAdminId = '';
       const data = await fetchGlobalAdmins();
-      globalAdmins = data.admins;
+      globalAdmins = data?.admins ?? [];
       toast.success(m.asec_admin_added());
     } catch (err) { toast.error(errorMessage(err)); }
   }
@@ -84,7 +84,7 @@
       newBlacklistId = '';
       newBlacklistReason = '';
       const data = await fetchGlobalBlacklist();
-      globalBlacklist = data.blacklist;
+      globalBlacklist = data?.blacklist ?? [];
       toast.success(m.asec_blacklist_added());
     } catch (err) { toast.error(errorMessage(err)); }
   }

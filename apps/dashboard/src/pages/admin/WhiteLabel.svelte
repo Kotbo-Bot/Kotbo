@@ -84,7 +84,7 @@
   async function loadInstances() {
     try {
       const data = await fetchWhiteLabelInstances();
-      instances = data.instances;
+      instances = data?.instances ?? [];
     } catch (err) {
       toast.error(errorMessage(err));
     }

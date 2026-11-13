@@ -46,8 +46,8 @@
     loadError = null;
     try {
       const result = await fetchManualAchievements();
-      holders = result.holders;
-      profiles = result.profiles;
+      holders = result?.holders ?? {};
+      profiles = result?.profiles ?? {};
     } catch (err) {
       loadError = errorMessage(err) ?? 'Impossible de charger les succès. Réessaie.';
     } finally {
@@ -61,7 +61,7 @@
     try {
       const target = userId.trim();
       const result = await grantManualAchievement(target, achievementId, note);
-      profiles = { ...profiles, ...result.profiles };
+      profiles = { ...profiles, ...(result?.profiles ?? {}) };
       holders = { ...holders, [achievementId]: [result.holder, ...(holders[achievementId] ?? [])] };
       toast.success(m.aach_granted({ name: nameOf(target) }));
       userId = '';

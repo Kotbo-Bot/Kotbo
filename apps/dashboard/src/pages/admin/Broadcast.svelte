@@ -51,6 +51,7 @@
   import BroadcastImageField from '../../lib/components/admin/BroadcastImageField.svelte';
   import DiscordEmbedPreview from '../../lib/components/admin/DiscordEmbedPreview.svelte';
   import type { AdminTableColumn, AdminTone } from '../../lib/components/admin/types';
+  import { Button, FilterPills } from '../../lib/components/ui';
 
   type Tab = 'compose' | 'media' | 'templates' | 'channels' | 'history';
 
@@ -193,11 +194,11 @@
         fetchBroadcastMedia().catch(() => ({ media: [], usedBytes: 0, quotaBytes: 0 })),
         fetchBroadcastTemplates().catch(() => ({ templates: [] })),
       ]);
-      history = hist.logs;
-      emojis = emojiData.emojis;
-      guilds = channelData.guilds ?? [];
-      mediaLibrary = media;
-      templates = tpl.templates;
+      history = hist?.logs ?? [];
+      emojis = emojiData?.emojis ?? [];
+      guilds = channelData?.guilds ?? [];
+      mediaLibrary = media ?? { media: [], usedBytes: 0, quotaBytes: 0 };
+      templates = tpl?.templates ?? [];
     } catch (err) {
       toast.error(err instanceof Error ? err.message : m.d7_loading_error());
     } finally {
@@ -482,39 +483,15 @@
   description="Composez, programmez et diffusez une annonce vers l’ensemble des serveurs Kotbo, avec un rapport de livraison serveur par serveur."
 >
   {#snippet actions()}
-    <button
-      type="button"
-      onclick={reloadAll}
-      class="h-9 px-3.5 rounded-xl bg-on-surface/6 hover:bg-on-surface/10 border border-outline-variant/25 text-body-sm font-semibold text-on-surface-variant hover:text-on-surface transition inline-flex items-center gap-2"
-    >
-      <Papicon icon="RefreshCw" size={13} />
-      Actualiser
-    </button>
+    <Button icon="RefreshCw" {loading} onclick={reloadAll}>Actualiser</Button>
   {/snippet}
 
-  <!-- Onglets -->
-  <div class="flex items-center gap-1 p-1 rounded-xl bg-on-surface/5 border border-outline-variant/20 overflow-x-auto scrollbar-none">
-    {#each tabs as tab (tab.id)}
-      <button
-        type="button"
-        onclick={() => (activeTab = tab.id)}
-        aria-current={activeTab === tab.id ? 'page' : undefined}
-        class="shrink-0 inline-flex items-center gap-2 h-9 px-3.5 rounded-lg text-body-sm font-semibold transition-colors
-          {activeTab === tab.id
-            ? 'bg-surface-container-lowest text-on-surface shadow-sm'
-            : 'text-on-surface-variant hover:text-on-surface'}"
-      >
-        <Papicon icon={tab.icon} size={14} />
-        {tab.label}
-        {#if tab.badge}
-          <span class="px-1.5 py-0.5 rounded text-2xs font-bold tabular-nums
-            {tab.id === 'channels' && tab.badge > 0 ? 'bg-warning/15 text-warning' : 'bg-on-surface/10 text-on-surface-variant'}">
-            {tab.badge}
-          </span>
-        {/if}
-      </button>
-    {/each}
-  </div>
+  <FilterPills
+    label="Vues des annonces"
+    value={activeTab}
+    onchange={(v) => (activeTab = v)}
+    options={tabs.map((tab) => ({ value: tab.id, label: tab.label, count: tab.badge }))}
+  />
 
   {#if activeTab === 'compose'}
     <div class="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(0,520px)] gap-5 items-start">
