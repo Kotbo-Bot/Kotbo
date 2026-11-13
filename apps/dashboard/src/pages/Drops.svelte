@@ -367,6 +367,11 @@
   /** Historique : une page à la fois, filtrable par type, chaque drop dépliable sur ses gagnants. */
   let historyFilter = $state<DropType | 'ALL'>('ALL');
   let historyHasMore = $state(false);
+  /**
+   * Taille de la première page, et ce qu'elle disait des drops plus anciens : « Réduire »
+   * y revient sans relire le serveur, et rend le bouton « charger plus » tel qu'il était.
+   */
+  let historyFirstPage = $state({ size: 0, hasMore: false });
   let historyLoading = $state(false);
   let expandedDrop = $state<string | null>(null);
   let winnersByDrop = $state<Record<string, DropWinner[] | 'loading' | 'error'>>({});
@@ -392,6 +397,17 @@
     if (!page) return;
     recentDrops = reset ? page.drops : [...recentDrops, ...page.drops];
     historyHasMore = page.hasMore;
+    if (reset) historyFirstPage = { size: page.drops.length, hasMore: page.hasMore };
+  }
+
+  /** Revient à la première page ; un drop déplié plus bas se replie avec elle. */
+  function collapseHistory() {
+    historyRequest += 1; // un « charger plus » encore en route n'y ajoute rien
+    historyLoading = false;
+    const kept = recentDrops.slice(0, historyFirstPage.size);
+    if (expandedDrop && !kept.some((drop) => drop.id === expandedDrop)) expandedDrop = null;
+    recentDrops = kept;
+    historyHasMore = historyFirstPage.hasMore;
   }
 
   function setHistoryFilter(value: DropType | 'ALL') {
@@ -626,6 +642,7 @@
           historyLoading = false;
           recentDrops = res.recentDrops ?? [];
           historyHasMore = res.recentDropsHasMore ?? false;
+          historyFirstPage = { size: recentDrops.length, hasMore: historyHasMore };
         } else {
           void loadHistory(true);
         }
@@ -1085,7 +1102,6 @@
                     <DurationPresets bind:value={globalSettings.dropLifetimeMinutes} presets={DURATION_PRESETS.lifetime} label={m.drop_duration_presets_label()} disabled={!canManageSettings} />
                   {/snippet}
                 </Field>
-                <p class="text-2xs text-on-surface-variant">{m.drop_min_open_hint()}</p>
               </div>
 
               <Field id="drop-delete-after" label={m.drop_delete_after_label()} hint={m.drop_delete_after_desc()}>
@@ -1269,11 +1285,18 @@
                 </table>
               </div>
             {/if}
-            {#if historyHasMore}
-              <div class="flex justify-center">
-                <Button size="sm" icon="ChevronDown" loading={historyLoading} onclick={() => loadHistory(false)}>
-                  {m.drop_history_load_more()}
-                </Button>
+            {#if historyHasMore || recentDrops.length > historyFirstPage.size}
+              <div class="flex flex-wrap justify-center gap-2">
+                {#if historyHasMore}
+                  <Button size="sm" icon="ChevronDown" loading={historyLoading} onclick={() => loadHistory(false)}>
+                    {m.drop_history_load_more()}
+                  </Button>
+                {/if}
+                {#if recentDrops.length > historyFirstPage.size}
+                  <Button size="sm" icon="ChevronUp" onclick={collapseHistory}>
+                    {m.drop_history_collapse()}
+                  </Button>
+                {/if}
               </div>
             {/if}
           </section>
@@ -1473,7 +1496,6 @@
                   {/snippet}
                 </Field>
                 <p class="text-2xs text-primary font-semibold mt-1">{m.drop_interval_hint({ count: dropsPerDay(configs[type].intervalMinutes) })}</p>
-                <p class="text-2xs text-on-surface-variant">{m.drop_interval_desc()}</p>
                 <p class="text-2xs text-on-surface-variant">{m.drop_min_gap_hint()}</p>
               </div>
             </div>
