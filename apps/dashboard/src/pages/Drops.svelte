@@ -346,7 +346,9 @@
   /** Une échéance passée attend le prochain passage du cycle ou l'écart minimal. */
   function nextDropLabel(type: DropType): string {
     const next = configs[type].nextDropAt;
-    if (typeStatus(type) !== 'on' || !next) return '-';
+    if (typeStatus(type) !== 'on') return '-';
+    // Type tout juste allumé : le cycle lui fixe une échéance au passage suivant.
+    if (!next) return m.drop_next_unplanned();
     if (new Date(next) > now) return dropCountdown(new Date(next), now, dateLocale());
     // Échéance passée : avec l'attente d'activité, c'est le salon calme qui retient le drop.
     return activityOn(type) ? m.drop_next_waiting_activity() : m.drop_next_soon();
@@ -394,8 +396,8 @@
     RPG_ITEM: 'Package',
   };
 
-  // L'état de chaque type suit son libellé dans l'onglet : lu par tous, et pas
-  // seulement par une pastille de couleur doublée d'un texte masqué.
+  // Un type bloqué le dit dans son onglet, en toutes lettres. « Actif » n'y figure
+  // pas : le panneau d'état le donne déjà, et cinq badges élargiraient la barre.
   const tabItems = $derived<TabItem[]>([
     { id: 'global', label: m.drop_tab_global(), icon: 'Gears' },
     ...DROP_TYPES.map((type) => {
@@ -404,7 +406,7 @@
         id: type,
         label: TYPE_LABELS[type](),
         icon: TYPE_ICONS[type],
-        badge: status === 'off' ? undefined : STATUS_LABEL[status](),
+        badge: status === 'blocked' ? STATUS_LABEL[status]() : undefined,
       };
     }),
   ]);
@@ -630,7 +632,7 @@
   }
 </script>
 
-<!-- État des drops : ce que le cycle fera de chaque type, la où on le règle. Rendu
+<!-- État des drops : ce que le cycle fera de chaque type, là où on le règle. Rendu
      dans la colonne de droite sur grand écran, dans une fenêtre sur mobile. -->
 {#snippet statusPanel()}
   {#if loading}

@@ -10905,6 +10905,7 @@
   "drop_state_off": "Inactif",
   "drop_state_blocked": "Bloqué",
   "drop_next_soon": "Imminent",
+  "drop_next_unplanned": "en cours de planification",
   "drop_no_mode_short": "Aucun",
   "drop_history_heading": "Derniers drops",
   "drop_history_desc": "Ce qui est réellement tombé dans tes salons, et combien de membres l'ont ramassé.",
