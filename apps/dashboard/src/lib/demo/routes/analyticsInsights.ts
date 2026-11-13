@@ -406,10 +406,12 @@ function growthInsights(days: number) {
   });
   return {
     range: range(days),
-    departures: { total: left, unknownTenure: 0, byTenure: [
-      { key: 'under1d', count: Math.round(left * 0.22) }, { key: 'under7d', count: Math.round(left * 0.26) },
-      { key: 'under30d', count: Math.round(left * 0.21) }, { key: 'under180d', count: Math.round(left * 0.19) }, { key: 'over180d', count: Math.round(left * 0.12) },
-    ] },
+    departures: {
+      total: left, unknownTenure: 0, byTenure: [
+        { key: 'under1d', count: Math.round(left * 0.22) }, { key: 'under7d', count: Math.round(left * 0.26) },
+        { key: 'under30d', count: Math.round(left * 0.21) }, { key: 'under180d', count: Math.round(left * 0.19) }, { key: 'over180d', count: Math.round(left * 0.12) },
+      ]
+    },
     quickLeave: { joined, left24h: Math.round(joined * 0.09), rate: 9.1, previousRate: 11.4 },
     sources: { dates: series.map((d) => d.dateKey), groups, other: series.map((d) => Math.round(d.membersJoined * 0.1)) },
   };
@@ -424,10 +426,12 @@ function moderationTrends(days: number) {
     range: range(days),
     total,
     previousTotal: Math.round(total * 1.15),
-    byType: { dates: series.map((d) => d.dateKey), series: types.map(([type, w]) => {
-      const values = series.map((d, i) => Math.round(d.sanctions * 3 * w + ((i * 7) % 3 === 0 ? 1 : 0)));
-      return { type, total: sum(values, (v) => v), values };
-    }) },
+    byType: {
+      dates: series.map((d) => d.dateKey), series: types.map(([type, w]) => {
+        const values = series.map((d, i) => Math.round(d.sanctions * 3 * w + ((i * 7) % 3 === 0 ? 1 : 0)));
+        return { type, total: sum(values, (v) => v), values };
+      })
+    },
     moderators: mods.map((p, i) => {
       const count = Math.round(total * [0.42, 0.28, 0.18, 0.12][i]!);
       return { userId: p.id, name: p.displayName, count, previous: Math.round(count * 1.1), types: { WARN: Math.round(count * 0.6), TIMEOUT: Math.round(count * 0.3), BAN: Math.round(count * 0.1) }, share: [42, 28, 18, 12][i]! };
@@ -543,10 +547,12 @@ function memberOverview(days: number) {
     })),
     newcomers: {
       joined,
-      accountAge: { known: joined, buckets: [
-        { key: 'under1d', count: Math.round(joined * 0.04) }, { key: 'under7d', count: Math.round(joined * 0.07) },
-        { key: 'under30d', count: Math.round(joined * 0.12) }, { key: 'under365d', count: Math.round(joined * 0.27) }, { key: 'over365d', count: Math.round(joined * 0.5) },
-      ] },
+      accountAge: {
+        known: joined, buckets: [
+          { key: 'under1d', count: Math.round(joined * 0.04) }, { key: 'under7d', count: Math.round(joined * 0.07) },
+          { key: 'under30d', count: Math.round(joined * 0.12) }, { key: 'under365d', count: Math.round(joined * 0.27) }, { key: 'over365d', count: Math.round(joined * 0.5) },
+        ]
+      },
       onboarding: { completed: Math.round(joined * 0.83), rate: 83 },
       left24h: { count: Math.round(joined * 0.09), rate: 9.1 },
     },
@@ -760,5 +766,129 @@ export function registerAnalyticsInsightsRoutes(): void {
   route('DELETE', `${base}/annotations/:id`, ({ params }) => {
     demoDb.update(ANNOTATIONS, annotationsSeed, (list) => list.filter((a) => a.id !== params.id));
     return { ok: true };
+  });
+
+  const demoTagServers = [
+    {
+      guildId: '930000000000000001',
+      name: 'Kotbo Community',
+      iconUrl: null,
+      tag: 'KTBO',
+      badgeUrl: null,
+      memberCount: 14,
+      isOwnGuild: true,
+      botPresent: true,
+      description: 'Serveur principal de démonstration Kotbo.',
+      onlineCount: 42,
+    },
+    {
+      guildId: '930000000000000011',
+      name: 'DevHub Community',
+      iconUrl: null,
+      tag: 'DEVH',
+      badgeUrl: null,
+      memberCount: 6,
+      isOwnGuild: false,
+      botPresent: false,
+      description: 'Communauté de développeurs TypeScript, Svelte et Discord.',
+      onlineCount: 128,
+    },
+    {
+      guildId: '930000000000000012',
+      name: 'Koda',
+      iconUrl: null,
+      tag: 'KODA',
+      badgeUrl: null,
+      memberCount: 4,
+      isOwnGuild: false,
+      botPresent: false,
+      description: 'Serveur créatif et gaming.',
+      onlineCount: 84,
+    },
+  ];
+
+  const demoTagMembers = [
+    { userId: MEMBERS[0]?.id ?? '1', name: MEMBERS[0]?.username ?? 'vantar', username: MEMBERS[0]?.username ?? 'vantar', avatarUrl: null, tag: 'DEVH', badgeUrl: null, serverId: '930000000000000011', serverName: 'DevHub Community', isOwnGuild: false, updatedAt: new Date(Date.now() - 2 * DAY_MS).toISOString() },
+    { userId: MEMBERS[1]?.id ?? '2', name: MEMBERS[1]?.username ?? 'kyzo', username: MEMBERS[1]?.username ?? 'kyzo', avatarUrl: null, tag: 'KTBO', badgeUrl: null, serverId: '930000000000000001', serverName: 'Kotbo Community', isOwnGuild: true, updatedAt: new Date(Date.now() - 4 * DAY_MS).toISOString() },
+    { userId: MEMBERS[2]?.id ?? '3', name: MEMBERS[2]?.username ?? 'tom', username: MEMBERS[2]?.username ?? 'tom', avatarUrl: null, tag: 'KODA', badgeUrl: null, serverId: '930000000000000012', serverName: 'Koda', isOwnGuild: false, updatedAt: new Date(Date.now() - 6 * DAY_MS).toISOString() },
+  ];
+
+  route('GET', `${base}/server-tags`, () => ({
+    totalMembers: MEMBERS.length,
+    taggedMembers: 24,
+    ownGuildTagged: 14,
+    externalTagged: 10,
+    untaggedMembers: Math.max(0, MEMBERS.length - 24),
+    serverCount: demoTagServers.length,
+    ownGuild: {
+      guildId: '930000000000000001',
+      name: 'Kotbo Community',
+      iconUrl: null,
+      tag: 'KTBO',
+      badgeUrl: null,
+      count: 14,
+    },
+    servers: demoTagServers.map((s) => ({
+      guildId: s.guildId,
+      name: s.name,
+      iconUrl: s.iconUrl,
+      tag: s.tag,
+      badgeUrl: s.badgeUrl,
+      memberCount: s.memberCount,
+      isOwnGuild: s.isOwnGuild,
+      botPresent: s.botPresent,
+    })),
+    members: demoTagMembers,
+  }));
+
+  route('GET', `${base}/servers/:targetGuildId`, ({ params }) => {
+    const srv = demoTagServers.find((s) => s.guildId === params.targetGuildId) ?? {
+      guildId: params.targetGuildId,
+      name: `Serveur ${params.targetGuildId}`,
+      iconUrl: null,
+      tag: null,
+      badgeUrl: null,
+      memberCount: 0,
+      isOwnGuild: false,
+      botPresent: false,
+      description: null,
+      onlineCount: null,
+    };
+    const holders = demoTagMembers
+      .filter((m) => m.serverId === srv.guildId)
+      .map((m) => ({
+        userId: m.userId,
+        name: m.name,
+        username: m.username,
+        avatarUrl: m.avatarUrl,
+        tag: m.tag,
+        badgeUrl: m.badgeUrl,
+        updatedAt: m.updatedAt,
+      }));
+    return {
+      server: {
+        guildId: srv.guildId,
+        name: srv.name,
+        iconUrl: srv.iconUrl,
+        bannerUrl: null,
+        description: srv.description,
+        memberCount: srv.memberCount,
+        onlineCount: srv.onlineCount,
+        tag: srv.tag,
+        badgeUrl: srv.badgeUrl,
+        isOwnGuild: srv.isOwnGuild,
+        botPresent: srv.botPresent,
+        source: 'demo',
+      },
+      tagHolders: {
+        count: holders.length,
+        members: holders,
+      },
+      assets: {
+        emojis: [],
+        stickers: [],
+        totalUses: 0,
+      },
+    };
   });
 }

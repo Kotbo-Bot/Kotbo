@@ -283,21 +283,31 @@ export function registerMembersRoutes(): void {
         breakdown: { WARN: suspected ? 2 : 0, KICK: 0, TIMEOUT: suspected ? 1 : 0, TEMP_BAN: 0, BAN: 0, SOFTBAN: 0, JAIL: 0 },
         recent: suspected
           ? [
-              { type: 'WARN', status: 'ACTIVE', durationSeconds: null, reason: 'Spam de liens', createdAt: ago(12 * DAY), guildId: '930000000000000011', guildName: 'Le Repaire' },
-              { type: 'TIMEOUT', status: 'RESOLVED', durationSeconds: 3600, reason: 'Pub en MP', createdAt: ago(30 * DAY), guildId: '930000000000000012', guildName: 'Pixel Café' },
-            ]
+            { type: 'WARN', status: 'ACTIVE', durationSeconds: null, reason: 'Spam de liens', createdAt: ago(12 * DAY), guildId: '930000000000000011', guildName: 'Le Repaire' },
+            { type: 'TIMEOUT', status: 'RESOLVED', durationSeconds: 3600, reason: 'Pub en MP', createdAt: ago(30 * DAY), guildId: '930000000000000012', guildName: 'Pixel Café' },
+          ]
           : [],
       },
       crossServerLinks: { enabled: true, serverCount: 0, suggestions: [] },
+      serverTag: {
+        guildId: '930000000000000011',
+        tag: person.username === 'vantar' ? 'DEVH' : 'KODA',
+        badge: null,
+        badgeUrl: null,
+        guildName: person.username === 'vantar' ? 'DevHub Community' : 'Koda',
+        guildIconUrl: null,
+        isOwnGuild: false,
+        updatedAt: ago(6 * HOUR),
+      },
       verifications: person.username === 'tom'
         ? {
-            entries: [{ id: 'verif-tom', status: 'PENDING', level: 'MEDIUM', requestedAt: ago(2 * HOUR), verifiedAt: null, expiresAt: ago(-22 * HOUR) }],
-            total: 1,
-            lastRequestedAt: ago(2 * HOUR),
-            lastVerifiedAt: null,
-            hasPending: true,
-            cooldownUntil: null,
-          }
+          entries: [{ id: 'verif-tom', status: 'PENDING', level: 'MEDIUM', requestedAt: ago(2 * HOUR), verifiedAt: null, expiresAt: ago(-22 * HOUR) }],
+          total: 1,
+          lastRequestedAt: ago(2 * HOUR),
+          lastVerifiedAt: null,
+          hasPending: true,
+          cooldownUntil: null,
+        }
         : { entries: [], total: 0, lastRequestedAt: null, lastVerifiedAt: null, hasPending: false, cooldownUntil: null },
     };
 
