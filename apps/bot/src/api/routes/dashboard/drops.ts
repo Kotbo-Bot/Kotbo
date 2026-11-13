@@ -127,8 +127,11 @@ export async function handleDropsRoutes(
         getOrCreateDropConfigs(guildId),
         weeklyDropOutcomes(guildId),
         resolveGuildLocale(guildId),
-        // Versements que la reprise a abandonnés : des membres attendent un gain promis.
-        prisma.dropClaim.count({ where: { guildId, abandonedAt: { not: null } } }),
+        // Versements abandonnés par la reprise sur la période du conseil : une alerte
+        // sans action possible ne doit pas rester affichée pour toujours.
+        prisma.dropClaim.count({
+          where: { guildId, abandonedAt: { gte: new Date(Date.now() - DROP_ADVICE_WINDOW_DAYS * 24 * 60 * 60 * 1000) } },
+        }),
       ]);
 
       const recent = await prisma.drop.findMany({

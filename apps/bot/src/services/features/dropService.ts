@@ -886,7 +886,8 @@ export async function settlePendingDropClaims(client: Client): Promise<void> {
       continue;
     }
 
-    await prisma.dropClaim.update({ where: { id: claim.id }, data: { attempts: { increment: 1 } } });
+    // `updateMany` : une ligne disparue entre-temps ne doit pas interrompre le lot.
+    await prisma.dropClaim.updateMany({ where: { id: claim.id, paidAt: null }, data: { attempts: { increment: 1 } } });
     const credited = await creditDrop(client, claim.drop, claim).catch((error: unknown) => {
       logger.error('Drops', `Reprise du versement ${claim.id} (drop ${claim.dropId}) impossible:`, error);
       return null;

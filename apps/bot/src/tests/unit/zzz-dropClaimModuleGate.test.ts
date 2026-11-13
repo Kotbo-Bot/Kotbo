@@ -84,7 +84,6 @@ const fauxPrisma = {
   dropClaim: {
     deleteMany: mock(async () => ({ count: 1 })),
     updateMany: dropClaimUpdateMany,
-    update: mock(async () => ({})),
     findMany: mock(async () => [] as unknown[]),
     count: mock(async () => ramassagesDuJour),
   },
@@ -142,7 +141,6 @@ beforeEach(() => {
   tx.dropClaim.deleteMany.mockClear();
   fauxPrisma.dropClaim.deleteMany.mockClear();
   fauxPrisma.dropClaim.findMany.mockReset();
-  fauxPrisma.dropClaim.update.mockClear();
   dropClaimUpdateMany.mockClear();
 });
 
@@ -280,7 +278,7 @@ describe('reprise des versements restés en suspens', () => {
 
     expect(addXp).toHaveBeenCalledTimes(1);
     expect(addXp.mock.calls[0]?.slice(0, 3)).toEqual([GUILD_ID, 'membre-2', 120]);
-    expect(fauxPrisma.dropClaim.update).toHaveBeenCalledWith({ where: { id: 'claim-2' }, data: { attempts: { increment: 1 } } });
+    expect(dropClaimUpdateMany).toHaveBeenCalledWith({ where: { id: 'claim-2', paidAt: null }, data: { attempts: { increment: 1 } } });
     expect(dropClaimUpdateMany).toHaveBeenCalledWith({
       where: { id: 'claim-2', paidAt: null },
       data: { paidAt: expect.any(Date) },
@@ -304,7 +302,7 @@ describe('reprise des versements restés en suspens', () => {
     expect(addXp).not.toHaveBeenCalled();
     expect(tx.dropClaim.deleteMany).not.toHaveBeenCalled();
     expect(fauxPrisma.dropClaim.deleteMany).not.toHaveBeenCalled();
-    expect(fauxPrisma.dropClaim.update).not.toHaveBeenCalled();
+    expect(dropClaimUpdateMany.mock.calls.some(([args]) => 'attempts' in (args as unknown as { data: object }).data)).toBe(false);
   });
 
   test('reprises épuisées : le ramassage est abandonné, sans nouveau versement', async () => {

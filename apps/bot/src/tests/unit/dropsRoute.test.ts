@@ -40,7 +40,7 @@ const mockDb = {
     findMany: mock(async () => [{ id: 'epee', name: 'Lame du Crépuscule', emoji: 'E' }]),
   },
   dropClaim: {
-    count: mock(async () => abandonedClaimCount),
+    count: mock(async (_args?: unknown) => abandonedClaimCount),
   },
 };
 
@@ -493,7 +493,11 @@ describe('handleDropsRoutes - règles de ramassage', () => {
     );
 
     expect(JSON.parse(res.body).abandonedClaims).toBe(2);
-    expect(mockDb.dropClaim.count).toHaveBeenCalledWith({ where: { guildId: 'guild-123', abandonedAt: { not: null } } });
+    const [args] = mockDb.dropClaim.count.mock.calls.at(-1) as unknown as [{ where: { guildId: string; abandonedAt: { gte: Date } } }];
+    expect(args.where.guildId).toBe('guild-123');
+    // Seuls les abandons récents comptent : une alerte ancienne n'a plus rien à dire.
+    expect(args.where.abandonedAt.gte.getTime()).toBeGreaterThan(Date.now() - 8 * 24 * 60 * 60 * 1000);
+    expect(args.where.abandonedAt.gte.getTime()).toBeLessThan(Date.now() - 6 * 24 * 60 * 60 * 1000);
     abandonedClaimCount = 0;
   });
 });
