@@ -27,8 +27,103 @@ import {
 import { resolveGuildLocale } from '../../../utils/i18n.js';
 
 import { jsonFailure } from '../../shared/failure.js';
-/** Nombre de drops passés renvoyés à la page, pour l'historique de l'onglet global. */
-const RECENT_DROPS_LIMIT = 15;
+/** Drops passés par page de l'historique de l'onglet global. */
+const HISTORY_PAGE_SIZE = 10;
+/** Gagnants listés au dépli d'un drop : un mode fenêtre peut en compter des centaines. */
+const WINNERS_LIMIT = 100;
+
+const HISTORY_SELECT = {
+  id: true,
+  type: true,
+  itemId: true,
+  mode: true,
+  channelId: true,
+  amount: true,
+  jackpot: true,
+  maxClaims: true,
+  claimCount: true,
+  createdAt: true,
+  expiresAt: true,
+  closedAt: true,
+} as const;
+
+/**
+ * Une page de l'historique, du plus récent au plus ancien. `before` reprend sous le
+ * dernier drop affiché : un curseur plutôt qu'un décalage, pour qu'un drop publié entre
+ * deux pages ne fasse pas apparaître deux fois le même. Une ligne de plus est lue pour
+ * savoir s'il en reste.
+ */
+async function dropHistoryPage(guildId: string, filter: { type?: DropType; before?: Date }) {
+  const rows = await prisma.drop.findMany({
+    where: {
+      guildId,
+      ...(filter.type ? { type: filter.type } : {}),
+      ...(filter.before ? { createdAt: { lt: filter.before } } : {}),
+    },
+    orderBy: { createdAt: 'desc' },
+    take: HISTORY_PAGE_SIZE + 1,
+    select: HISTORY_SELECT,
+  });
+  const page = rows.slice(0, HISTORY_PAGE_SIZE);
+
+  // Un drop d'objet se lit « 2 » sans le nom de la pièce : une seule lecture
+  // pour toute la page. Un objet supprimé depuis reste à `null`.
+  const itemIds = [...new Set(page.flatMap((drop) => (drop.itemId ? [drop.itemId] : [])))];
+  const items = itemIds.length > 0
+    ? await prisma.rpgItem.findMany({ where: { id: { in: itemIds } }, select: { id: true, name: true, emoji: true } })
+    : [];
+  const itemById = new Map(items.map((item) => [item.id, { name: item.name, emoji: item.emoji }]));
+
+  return {
+    hasMore: rows.length > HISTORY_PAGE_SIZE,
+    drops: page.map(({ itemId, ...drop }) => ({
+      ...drop,
+      item: itemId ? itemById.get(itemId) ?? null : null,
+      createdAt: drop.createdAt.toISOString(),
+      expiresAt: drop.expiresAt.toISOString(),
+      closedAt: drop.closedAt?.toISOString() ?? null,
+    })),
+  };
+}
+
+/** Date de reprise lue dans l'URL ; illisible, l'historique repart du début. */
+function parseBefore(raw: string | null): Date | undefined {
+  if (!raw) return undefined;
+  const date = new Date(raw);
+  return Number.isNaN(date.getTime()) ? undefined : date;
+}
+
+/**
+ * Gagnants d'un drop, avec l'état de leur versement. Les noms viennent du cache du
+ * serveur, complété d'une seule requête pour les absents : un membre parti garde son
+ * identifiant, la page affiche alors celui-ci.
+ */
+async function dropWinners(client: Client, guildId: string, dropId: string) {
+  const claims = await prisma.dropClaim.findMany({
+    where: { dropId, guildId },
+    orderBy: { createdAt: 'asc' },
+    take: WINNERS_LIMIT,
+    select: { userId: true, amount: true, createdAt: true, paidAt: true, abandonedAt: true },
+  });
+
+  const guild = client.guilds.cache.get(guildId);
+  const missing = claims.map((claim) => claim.userId).filter((userId) => !guild?.members.cache.has(userId));
+  if (guild && missing.length > 0) {
+    await guild.members.fetch({ user: missing }).catch(() => null);
+  }
+
+  return claims.map((claim) => {
+    const member = guild?.members.cache.get(claim.userId);
+    return {
+      userId: claim.userId,
+      name: member?.displayName ?? null,
+      avatarUrl: member?.displayAvatarURL({ size: 32 }) ?? null,
+      amount: claim.amount,
+      claimedAt: claim.createdAt.toISOString(),
+      status: claim.paidAt ? 'paid' : claim.abandonedAt ? 'abandoned' : 'pending',
+    };
+  });
+}
 
 /** Règles de ramassage en clair, pour le journal d'audit. */
 function describeClaimRules(rules: DropClaimRules): string {
@@ -134,33 +229,7 @@ export async function handleDropsRoutes(
         }),
       ]);
 
-      const recent = await prisma.drop.findMany({
-        where: { guildId },
-        orderBy: { createdAt: 'desc' },
-        take: RECENT_DROPS_LIMIT,
-        select: {
-          id: true,
-          type: true,
-          itemId: true,
-          mode: true,
-          channelId: true,
-          amount: true,
-          jackpot: true,
-          maxClaims: true,
-          claimCount: true,
-          createdAt: true,
-          expiresAt: true,
-          closedAt: true,
-        },
-      });
-
-      // Un drop d'objet se lit « 2 » sans le nom de la pièce : une seule lecture
-      // pour tout l'historique. Un objet supprimé depuis reste à `null`.
-      const itemIds = [...new Set(recent.flatMap((drop) => (drop.itemId ? [drop.itemId] : [])))];
-      const items = itemIds.length > 0
-        ? await prisma.rpgItem.findMany({ where: { id: { in: itemIds } }, select: { id: true, name: true, emoji: true } })
-        : [];
-      const itemById = new Map(items.map((item) => [item.id, { name: item.name, emoji: item.emoji }]));
+      const history = await dropHistoryPage(guildId, {});
 
       json(res, 200, {
         ...normalizeDropGlobalSettings(guildData),
@@ -168,17 +237,34 @@ export async function handleDropsRoutes(
         weeklyOutcomes,
         abandonedClaims,
         announcement: dropAnnouncementLabels(locale),
-        recentDrops: recent.map(({ itemId, ...drop }) => ({
-          ...drop,
-          item: itemId ? itemById.get(itemId) ?? null : null,
-          createdAt: drop.createdAt.toISOString(),
-          expiresAt: drop.expiresAt.toISOString(),
-          closedAt: drop.closedAt?.toISOString() ?? null,
-        })),
+        recentDrops: history.drops,
+        recentDropsHasMore: history.hasMore,
       });
     } catch (err) {
       logger.error('DropsAPI', 'Error fetching drops config:', err);
       jsonFailure(res, err, 'Erreur lors de la récupération de la configuration des drops.', 'DropsAPI');
+    }
+    return true;
+  }
+
+  // GET /api/dashboard/guilds/:guildId/drops/history[?type=&before=] : page suivante ou filtrée
+  // GET /api/dashboard/guilds/:guildId/drops/history/:dropId : gagnants d'un drop
+  if (subAction === 'history' && method === 'GET') {
+    try {
+      const dropId = parts[6];
+      if (dropId) {
+        json(res, 200, { winners: await dropWinners(client, guildId, dropId) });
+        return true;
+      }
+      const url = new URL(req.url ?? '', 'http://localhost');
+      const type = url.searchParams.get('type') ?? undefined;
+      json(res, 200, await dropHistoryPage(guildId, {
+        type: isDropType(type) ? type : undefined,
+        before: parseBefore(url.searchParams.get('before')),
+      }));
+    } catch (err) {
+      logger.error('DropsAPI', 'Error fetching drop history:', err);
+      jsonFailure(res, err, 'Erreur lors de la récupération de l\'historique des drops.', 'DropsAPI');
     }
     return true;
   }
