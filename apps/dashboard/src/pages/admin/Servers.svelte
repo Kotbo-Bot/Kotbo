@@ -26,6 +26,7 @@
     reconcileStaffServers,
     resetAdminGuildServerTemplate,
     skipAdminGuildOnboarding,
+    type AdminPlanKey,
   } from '../../lib/api';
   import Papicon from '../../lib/components/Papicon.svelte';
   import AdminShell from '../../lib/components/admin/AdminShell.svelte';
@@ -46,6 +47,7 @@
     joinedAt: string;
     activated: boolean;
     activationCode: string | null;
+    plan: AdminPlanKey;
     serverTemplateAppliedAt: string | null;
     serverTemplateAppliedBy: string | null;
     onboardingCompletedAt: string | null;
@@ -199,7 +201,10 @@
   const filtered = $derived.by(() => {
     const needle = search.trim().toLowerCase();
     let rows = guilds.filter((guild) =>
-      !needle || guild.name.toLowerCase().includes(needle) || guild.id.includes(needle),
+      !needle ||
+      guild.name.toLowerCase().includes(needle) ||
+      guild.id.includes(needle) ||
+      (guild.plan && guild.plan.toLowerCase().includes(needle)),
     );
 
     if (statusFilter === 'ACTIVATED') rows = rows.filter((g) => g.activated);
@@ -211,6 +216,7 @@
     return [...rows].sort((a, b) => {
       switch (sortKey) {
         case 'name': return a.name.localeCompare(b.name, 'fr') * direction;
+        case 'plan': return (a.plan ?? 'FREE').localeCompare(b.plan ?? 'FREE') * direction;
         case 'joinedAt': return (new Date(a.joinedAt).getTime() - new Date(b.joinedAt).getTime()) * direction;
         case 'shardId': return (a.shardId - b.shardId) * direction;
         case 'activated': return (Number(a.activated) - Number(b.activated)) * direction;
@@ -377,8 +383,16 @@
     return null;
   }
 
+  function planTone(plan?: AdminPlanKey | null): AdminTone {
+    if (plan === 'CUSTOM') return 'warning';
+    if (plan === 'ULTIMATE' || plan === 'PRO') return 'primary';
+    if (plan === 'PLUS') return 'info';
+    return 'neutral';
+  }
+
   const columns: AdminTableColumn[] = [
     { key: 'name', label: 'Serveur', sortKey: 'name' },
+    { key: 'plan', label: 'Offre', sortKey: 'plan', width: 'w-28' },
     { key: 'status', label: 'État', sortKey: 'activated', width: 'w-44' },
     { key: 'members', label: 'Membres', sortKey: 'memberCount', align: 'right', width: 'w-28' },
     { key: 'shard', label: 'Shard', sortKey: 'shardId', align: 'right', width: 'w-20', hideBelow: 'md' },
@@ -488,6 +502,10 @@
         </td>
 
         <td class="px-4 py-3">
+          <AdminBadge size="sm" tone={planTone(guild.plan)} label={guild.plan ?? 'FREE'} />
+        </td>
+
+        <td class="px-4 py-3">
           <div class="flex flex-col gap-1 items-start">
             <AdminBadge
               label={guild.activated ? 'Activé' : 'Non activé'}
@@ -563,6 +581,7 @@
         <div class="min-w-0">
           <div class="flex items-center gap-2 flex-wrap">
             <AdminBadge label={guild.activated ? 'Activé' : 'Non activé'} tone={guild.activated ? 'success' : 'neutral'} dot />
+            <AdminBadge label="Offre {guild.plan ?? 'FREE'}" tone={planTone(guild.plan)} />
             <AdminBadge label="Shard #{guild.shardId}" tone="neutral" size="sm" />
           </div>
           <p class="text-xs text-on-surface-variant mt-1">
@@ -618,7 +637,11 @@
 
       <!-- Activation -->
       <div class="rounded-xl border border-outline-variant/25 bg-surface-container-low/40 p-3.5 space-y-2">
-        <p class="text-xs font-semibold text-on-surface-variant">Activation</p>
+        <p class="text-xs font-semibold text-on-surface-variant">Offre et activation</p>
+        <div class="flex items-center justify-between gap-3">
+          <span class="text-body-sm text-on-surface-variant">Offre</span>
+          <AdminBadge size="sm" tone={planTone(guild.plan)} label={guild.plan ?? 'FREE'} />
+        </div>
         <div class="flex items-center justify-between gap-3">
           <span class="text-body-sm text-on-surface-variant">Code utilisé</span>
           <span class="text-body-sm font-mono font-semibold text-on-surface">{guild.activationCode ?? '-'}</span>
