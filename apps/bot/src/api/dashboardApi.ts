@@ -188,6 +188,9 @@ export const startDashboardApi = async (client: Client) => {
   const startServer = (listenPort: number) => Bun.serve<WebSocketData>({
     port: listenPort,
     reusePort: true,
+    // Bun coupe à 10 s par défaut une requête qui n'a encore rien renvoyé : le proxy
+    // répond alors 502 sans CORS pendant que le handler finit (quiz, appels Discord lents).
+    idleTimeout: 60,
     async fetch(request, serverInstance) {
       const url = new URL(request.url);
 
