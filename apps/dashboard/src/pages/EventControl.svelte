@@ -78,6 +78,8 @@
       }
     } catch (err) {
       toast.error((err as Error).message);
+      // L'étape a pu aboutir côté serveur malgré l'erreur : on affiche la vraie position.
+      await loadStats();
     } finally {
       busy = false;
     }
