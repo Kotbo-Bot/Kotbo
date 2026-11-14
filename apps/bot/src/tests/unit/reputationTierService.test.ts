@@ -2,15 +2,16 @@ import { describe, expect, test, mock } from 'bun:test';
 import path from 'node:path';
 import type { GuildMember } from 'discord.js';
 
+let configRow: Record<string, unknown> | null = null;
 const mockDb = {
-  reputationConfig: { findUnique: mock(async () => null) },
+  reputationConfig: { findUnique: mock(async () => configRow) },
   guild: { findUnique: mock(async () => null) },
 };
 for (const dbPath of ['../../utils/db.ts', '../../utils/db.js']) {
   mock.module(path.resolve(__dirname, dbPath), () => ({ default: mockDb, prisma: mockDb, prismaRead: mockDb }));
 }
 
-const { grantReachedTiers, revokeLostTiers, tierAnnouncementLabels } = await import('../../services/community/reputationTierService.js');
+const { applyReputationGain, grantReachedTiers, revokeLostTiers, tierAnnouncementLabels } = await import('../../services/community/reputationTierService.js');
 
 const TIERS = [
   { threshold: 10, roleId: 'r10' },
@@ -92,5 +93,40 @@ describe('tierAnnouncementLabels', () => {
     expect(labels.body).toContain('{role}');
     expect(labels.body).toContain('{threshold}');
     expect(labels.title.length).toBeGreaterThan(0);
+  });
+});
+
+describe('applyReputationGain', () => {
+  /** Client dont le serveur connaît le membre et un salon d'annonce. */
+  function fakeClient(guildId: string) {
+    const { member, add } = fakeMember([], { r10: { editable: true } });
+    const send = mock(async (_payload: unknown) => ({}));
+    const channel = { isTextBased: () => true, isSendable: () => true, send };
+    const guild = {
+      id: guildId,
+      preferredLocale: 'fr',
+      roles: (member.guild as unknown as { roles: unknown }).roles,
+      channels: { cache: new Map([['annonces', channel]]) },
+      members: { fetch: async () => member },
+    };
+    Object.assign(member, { id: 'u', guild });
+    const client = { guilds: { cache: new Map([[guildId, guild]]) } } as never;
+    return { client, add, send };
+  }
+
+  test('un palier franchi par un vote est donné et annoncé', async () => {
+    configRow = { dailyLimit: 3, announceChannelId: 'annonces', tiers: [{ threshold: 10, roleId: 'r10' }] };
+    const { client, add, send } = fakeClient('g-annonce');
+    await applyReputationGain(client, 'g-annonce', 'u', 9, 10);
+    expect(add).toHaveBeenCalledTimes(1);
+    expect(send).toHaveBeenCalledTimes(1);
+  });
+
+  test('sans annonce, le palier est donné en silence', async () => {
+    configRow = { dailyLimit: 3, announceChannelId: 'annonces', tiers: [{ threshold: 10, roleId: 'r10' }] };
+    const { client, add, send } = fakeClient('g-silence');
+    await applyReputationGain(client, 'g-silence', 'u', 9, 10, { announce: false });
+    expect(add).toHaveBeenCalledTimes(1);
+    expect(send).not.toHaveBeenCalled();
   });
 });

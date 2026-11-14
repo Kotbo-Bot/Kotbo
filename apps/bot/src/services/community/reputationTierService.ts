@@ -112,7 +112,7 @@ export async function applyReputationGain(
   userId: string,
   before: number,
   after: number,
-  { announce = true }: { announce?: boolean } = {},
+  { announce: shouldAnnounce = true }: { announce?: boolean } = {},
 ): Promise<void> {
   const { tiers, announceChannelId } = await getReputationConfig(guildId);
   if (reachedTiers(after, tiers).length === 0) return;
@@ -122,7 +122,7 @@ export async function applyReputationGain(
   const locale = await resolveGuildLocale(guildId, member.guild.preferredLocale);
   const granted = await grantReachedTiers(member, tiers, after, m.b2_rep_tier_audit_reason({}, { locale }));
   const newlyCrossed = granted.filter((tier) => tier.threshold > before);
-  if (announce && announceChannelId && newlyCrossed.length > 0) {
+  if (shouldAnnounce && announceChannelId && newlyCrossed.length > 0) {
     await announce(member, announceChannelId, newlyCrossed[newlyCrossed.length - 1], locale);
   }
 }

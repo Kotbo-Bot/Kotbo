@@ -6156,7 +6156,7 @@
   "rep_member_card_week": "{count} this week",
   "rep_member_card_given": "Thanks given",
   "rep_member_card_thanked_by": "Thanked by {name}",
-  "rep_member_card_adjusted": "Adjusted by {points} by {name}",
+  "rep_member_card_adjusted": "Adjustment of {points} by {name}",
   "rep_member_card_empty": "No thanks received yet.",
   "api_ok_adjust_reputation": "Points adjusted",
   "api_ok_reset_reputation": "Reputation reset",
