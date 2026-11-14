@@ -200,7 +200,7 @@ describe('revokeRep', () => {
   test('annuler un retrait du staff fait remonter le total : les paliers sont rendus', async () => {
     deleted = { id: 'v2', guildId: 'g', kind: 'ADJUSTMENT', value: -3, giverId: 's', receiverId: 'b', xpGranted: 0, coinsGranted: 0 };
     await revokeRep(client, 'g', 'v2');
-    expect(tiers.applyReputationGain.mock.calls[0]).toEqual([client, 'g', 'b', 1, 4]);
+    expect(tiers.applyReputationGain.mock.calls[0]).toEqual([client, 'g', 'b', 1, 4, { announce: false }]);
     expect(tiers.applyReputationLoss).not.toHaveBeenCalled();
   });
 
@@ -218,11 +218,11 @@ describe('revokeRep', () => {
 });
 
 describe('adjustRep', () => {
-  test('un ajout applique les paliers du membre, de l\'ancien au nouveau total', async () => {
+  test('un ajout applique les paliers du membre, de l\'ancien au nouveau total, sans annonce', async () => {
     const result = await adjustRep(client, { guildId: 'g', staffId: 's', userId: 'b', amount: 5, reason: 'aide' });
     expect(result).toEqual(adjustResult);
     expect(service.adjustReputation.mock.calls[0]).toEqual(['g', 's', 'b', 5, 'aide']);
-    expect(tiers.applyReputationGain.mock.calls[0]).toEqual([client, 'g', 'b', 4, 9]);
+    expect(tiers.applyReputationGain.mock.calls[0]).toEqual([client, 'g', 'b', 4, 9, { announce: false }]);
     expect(rewards.grantRepRewards).not.toHaveBeenCalled();
   });
 

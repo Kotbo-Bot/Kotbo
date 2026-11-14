@@ -117,9 +117,9 @@ export async function revokeRep(client: Client, guildId: string, voteId: string)
 
   // Primaire : le vote vient d'être supprimé, un réplica pourrait encore le compter.
   const total = await receivedTotal(guildId, vote.receiverId, prisma);
-  // Annuler un retrait du staff fait remonter le total : les paliers reviennent.
+  // Annuler un retrait du staff fait remonter le total : les paliers reviennent, sans annonce.
   const tiers = vote.value < 0
-    ? applyReputationGain(client, guildId, vote.receiverId, total + vote.value, total)
+    ? applyReputationGain(client, guildId, vote.receiverId, total + vote.value, total, { announce: false })
     : applyReputationLoss(client, guildId, vote.receiverId, total);
   await tiers.catch((err) => {
     logger.warn('Reputation', `Paliers non mis à jour après le retrait d'un vote pour ${vote.receiverId}`, err);
@@ -135,14 +135,14 @@ export interface AdjustRepInput {
   reason: string | null;
 }
 
-/** Ajustement du staff, puis les paliers gagnés ou perdus. Aucun gain d'XP ni de pièces. */
+/** Ajustement du staff, puis les paliers gagnés ou perdus, sans annonce. Aucun gain d'XP ni de pièces. */
 export async function adjustRep(client: Client, input: AdjustRepInput): Promise<AdjustReputationResult> {
   const { guildId, staffId, userId, amount, reason } = input;
   const result = await adjustReputation(guildId, staffId, userId, amount, reason);
   if (!result.success) return result;
 
   const tiers = result.after > result.before
-    ? applyReputationGain(client, guildId, userId, result.before, result.after)
+    ? applyReputationGain(client, guildId, userId, result.before, result.after, { announce: false })
     : applyReputationLoss(client, guildId, userId, result.after);
   await tiers.catch((err) => {
     logger.warn('Reputation', `Paliers non mis à jour après un ajustement pour ${userId}`, err);

@@ -22,7 +22,7 @@ export type RepGuardSettings = Pick<
 export interface RepGuardInput {
   giver: { accountCreatedAt: Date; joinedAt: Date | null; roleIds: readonly string[] };
   receiverRoleIds: readonly string[];
-  /** Absent pour un vote sans salon (menu contextuel sur un membre). */
+  /** Absent quand le salon du vote est inconnu. */
   channelId?: string | null;
 }
 

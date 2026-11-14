@@ -57,6 +57,7 @@
     initialTab = 'resume' as MemberCaseTab,
     showProfileLink = true,
     extraTab = null,
+    caseGuildId = null,
   } = $props<{
     open?: boolean;
     userName?: string;
@@ -71,6 +72,8 @@
     actionIsError?: boolean;
     onClose?: (e: MouseEvent) => void;
     onSelectUser?: (userId: string) => void;
+    /** Serveur du dossier quand ce n'est pas le serveur sélectionné (serveur du staff). */
+    caseGuildId?: string | null;
     /** Onglet affiché à l'ouverture : la fiche complète ouvre directement les actions. */
     initialTab?: MemberCaseTab;
     /** Lien vers la fiche complète, masqué quand le dossier s'ouvre depuis elle. */
@@ -1385,7 +1388,8 @@
                   </div>
                 </dl>
               </section>
-              {#if userId}
+              <!-- La carte lit le serveur sélectionné : masquée quand le dossier porte sur un autre. -->
+              {#if userId && (!caseGuildId || caseGuildId === authStore.selectedGuildId)}
                 <MemberReputationCard {userId} userName={displayName || userId} />
               {/if}
               <SectionCard title={m.mcm_by_channel()}>

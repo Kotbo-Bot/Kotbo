@@ -30,6 +30,8 @@ export type UserActionContext = {
   guild: Guild;
   invoker: GuildMember;
   targetId: string;
+  /** Salon d'où le menu a été ouvert, `null` s'il est inconnu. */
+  channelId: string | null;
 };
 
 export type MessageActionContext = {
@@ -620,6 +622,8 @@ const userActions: UserAction[] = [
         giverId: ctx.invoker.id,
         receiverId: ctx.targetId,
         receiverIsBot: target?.user.bot ?? false,
+        // Le menu n'est attaché à aucun message : le salon d'ouverture porte l'exclusion des salons.
+        channelId: ctx.channelId ?? undefined,
       });
 
       if (!result.success) {

@@ -34,7 +34,7 @@ describe('repGuardRefusal', () => {
     expect(repGuardRefusal({ giver: VETERAN, receiverRoleIds: [], channelId: 'autre' }, settings, NOW)).toBeNull();
   });
 
-  test('un vote sans salon (menu sur un membre) ignore les salons exclus', () => {
+  test('un vote au salon inconnu ignore les salons exclus', () => {
     const settings = { ...NO_GUARDS, excludedChannelIds: ['c'] };
     expect(repGuardRefusal({ giver: VETERAN, receiverRoleIds: [] }, settings, NOW)).toBeNull();
   });
