@@ -38,6 +38,12 @@ import {
 import { UserFacingError } from '../../../utils/userFacingError.js';
 
 import { jsonFailure } from '../../shared/failure.js';
+
+// Une étape de quiz par événement à la fois : l'édition du message Discord peut traîner,
+// et un second clic pendant ce temps faisait sauter une question de plus.
+// shortcut: verrou en mémoire, valable tant que seul le shard 0 sert l'API.
+const stepsInProgress = new Set<string>();
+
 export async function handleEventsRoutes(
   req: IncomingMessage,
   res: ServerResponse,
@@ -145,28 +151,26 @@ export async function handleEventsRoutes(
       return true;
     }
 
-    // POST /api/dashboard/guilds/:guildId/events/:eventId/next
-    if (method === 'POST' && parts[6] === 'next') {
-      try {
-        const result = await nextQuestion(client, eventId);
-        broadcastDashboardStateChange(guildId, 'events_updated');
-        json(res, 200, result);
-      } catch (err) {
-        logger.error('EventsAPI', err);
-        jsonFailure(res, err, "Impossible de passer à l'étape suivante.", 'EventsAPI');
+    // POST /api/dashboard/guilds/:guildId/events/:eventId/next | /prev
+    if (method === 'POST' && (parts[6] === 'next' || parts[6] === 'prev')) {
+      const isNext = parts[6] === 'next';
+      if (stepsInProgress.has(eventId)) {
+        json(res, 409, { error: 'Une question est déjà en train de changer, patiente quelques secondes.' });
+        return true;
       }
-      return true;
-    }
-
-    // POST /api/dashboard/guilds/:guildId/events/:eventId/prev
-    if (method === 'POST' && parts[6] === 'prev') {
+      stepsInProgress.add(eventId);
+      const startedAt = Date.now();
       try {
-        const result = await prevQuestion(client, eventId);
+        const result = await (isNext ? nextQuestion : prevQuestion)(client, eventId);
         broadcastDashboardStateChange(guildId, 'events_updated');
         json(res, 200, result);
       } catch (err) {
         logger.error('EventsAPI', err);
-        jsonFailure(res, err, "Impossible de revenir à l'étape précédente.", 'EventsAPI');
+        jsonFailure(res, err, isNext ? "Impossible de passer à l'étape suivante." : "Impossible de revenir à l'étape précédente.", 'EventsAPI');
+      } finally {
+        stepsInProgress.delete(eventId);
+        const ms = Date.now() - startedAt;
+        if (ms > 5000) logger.warn('EventsAPI', `Étape ${parts[6]} de l'événement ${eventId} lente : ${ms} ms`);
       }
       return true;
     }

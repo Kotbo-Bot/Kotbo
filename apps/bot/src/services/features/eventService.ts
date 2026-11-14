@@ -14,6 +14,7 @@ import {
   type StringSelectMenuInteraction,
 } from 'discord.js';
 import prisma from '../../utils/db.js';
+import { UserFacingError } from '../../utils/userFacingError.js';
 import { logger } from '../../utils/logger.js';
 import { COLORS, truncate } from '../../utils/embeds.js';
 import { resolveEmojiShortcodes } from '../../utils/emojis.js';
@@ -148,192 +149,136 @@ export async function publishEvent(client: Client, eventId: string) {
   });
 }
 
-export async function nextQuestion(client: Client, eventId: string) {
+type QuizQuestionRow = {
+  id: string;
+  text: string;
+  options: unknown;
+  correctOptionIndex: number;
+  imageUrl: string | null;
+};
+
+const QUIZ_DISCORD_TIMEOUT_MS = 15_000;
+
+/**
+ * Affiche `question` sur le message du quiz, avec la réponse de `answered` si elle existe.
+ * Les appelants n'écrivent en base qu'après : si Discord échoue ou traîne, le quiz
+ * n'avance pas, et un nouveau clic ne saute plus de question.
+ */
+async function showQuizQuestion(
+  client: Client,
+  event: { channelId: string; messageId: string; questions: QuizQuestionRow[] },
+  question: QuizQuestionRow,
+  answered: QuizQuestionRow | undefined,
+) {
+  const render = async () => {
+    const channel = (await client.channels.fetch(event.channelId).catch(() => null)) as TextChannel | null;
+    if (!channel) throw new UserFacingError('Salon Discord du quiz introuvable.');
+    const message = await channel.messages.fetch(event.messageId).catch(() => null);
+    if (!message) throw new UserFacingError('Message du quiz introuvable sur Discord.');
+
+    const index = event.questions.findIndex((q) => q.id === question.id) + 1;
+    const embed = new EmbedBuilder()
+      .setTitle(truncate(`❓ Question ${index}/${event.questions.length} : ${question.text}`, 256))
+      .setDescription('Choisissez la bonne réponse ci-dessous !')
+      .setColor(COLORS.info)
+      .setTimestamp();
+
+    if (answered) {
+      const answer = (answered.options as string[])[answered.correctOptionIndex];
+      embed.addFields({
+        name: '✅ Dernière réponse',
+        value: truncate(`La bonne réponse à la question précédente était : **${answer}**`, 1024),
+      });
+    }
+    if (question.imageUrl) embed.setImage(question.imageUrl);
+
+    const options = question.options as string[];
+    const row = options.length <= 5
+      ? new ActionRowBuilder<ButtonBuilder>().addComponents(
+        options.map((opt, idx) => new ButtonBuilder()
+          .setCustomId(`event-quiz-answer:${question.id}:${idx}`)
+          .setLabel(truncate(opt, 80))
+          .setStyle(ButtonStyle.Primary)),
+      )
+      : new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
+        new StringSelectMenuBuilder()
+          .setCustomId(`event-quiz-select:${question.id}`)
+          .setPlaceholder('Choisissez votre réponse...')
+          .addOptions(options.map((opt, idx) => ({ label: truncate(opt, 100), value: idx.toString() }))),
+      );
+
+    await message.edit({ embeds: [embed], components: [row] });
+  };
+
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new UserFacingError('Discord ne répond pas, le quiz n\'a pas avancé. Réessaie dans quelques secondes.')),
+      QUIZ_DISCORD_TIMEOUT_MS,
+    );
+  });
+  try {
+    await Promise.race([render(), timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function loadQuizForStep(eventId: string) {
   const event = await prisma.event.findUnique({
     where: { id: eventId },
-    include: {
-      questions: {
-        orderBy: { sortOrder: 'asc' },
-      },
-    },
+    include: { questions: { orderBy: { sortOrder: 'asc' } } },
   });
+  if (!event || !event.messageId || !event.channelId) throw new UserFacingError('Événement non publié.');
+  return { ...event, channelId: event.channelId, messageId: event.messageId };
+}
 
-  if (!event || !event.messageId || !event.channelId) throw new Error('Ã‰vénement non publié');
-
-  // Trouver la question en cours ou la suivante
+export async function nextQuestion(client: Client, eventId: string) {
+  const event = await loadQuizForStep(eventId);
   const currentQuestion = event.questions.find((q) => q.status === 'ONGOING');
   const nextQuestion = event.questions.find((q) => q.status === 'DRAFT');
 
-  if (currentQuestion) {
-    // Clôturer la question actuelle
-    await prisma.eventQuizQuestion.update({
-      where: { id: currentQuestion.id },
-      data: { status: 'COMPLETED', endTime: new Date() },
-    });
-  }
-
   if (!nextQuestion) {
-    // Plus de questions, terminer l'évent
+    if (currentQuestion) {
+      await prisma.eventQuizQuestion.update({
+        where: { id: currentQuestion.id },
+        data: { status: 'COMPLETED', endTime: new Date() },
+      });
+    }
     return finishEvent(client, eventId);
   }
 
-  // Lancer la question suivante
-  await prisma.eventQuizQuestion.update({
-    where: { id: nextQuestion.id },
-    data: { status: 'ONGOING', startTime: new Date() },
-  });
+  await showQuizQuestion(client, event, nextQuestion, currentQuestion);
 
-  await prisma.event.update({
-    where: { id: eventId },
-    data: { status: 'ONGOING' },
-  });
-
-  const channel = (await client.channels.fetch(event.channelId).catch(() => null)) as TextChannel | null;
-  if (!channel) throw new Error('Salon Discord introuvable');
-
-  const message = await channel.messages.fetch(event.messageId).catch(() => null);
-  if (!message) throw new Error('Message principal introuvable');
-
-  const totalQuestions = event.questions.length;
-  const currentIdx = event.questions.findIndex(q => q.id === nextQuestion.id) + 1;
-
-  const embed = new EmbedBuilder()
-    .setTitle(`â�" Question ${currentIdx}/${totalQuestions} : ${nextQuestion.text}`)
-    .setDescription('Choisissez la bonne réponse ci-dessous !')
-    .setColor(COLORS.info)
-    .setTimestamp();
-
-  if (currentQuestion) {
-    const prevAnswer = (currentQuestion.options as string[])[currentQuestion.correctOptionIndex];
-    embed.addFields({ 
-      name: '✅ Dernière réponse', 
-      value: `La bonne réponse à la question précédente était : **${prevAnswer}**` 
-    });
-  }
-
-  if (nextQuestion.imageUrl) embed.setImage(nextQuestion.imageUrl);
-
-  const options = nextQuestion.options as string[];
-  const components: ActionRowBuilder<StringSelectMenuBuilder | ButtonBuilder>[] = [];
-
-  if (options.length <= 5) {
-    const row = new ActionRowBuilder<ButtonBuilder>();
-    options.forEach((opt, idx) => {
-      row.addComponents(
-        new ButtonBuilder()
-          .setCustomId(`event-quiz-answer:${nextQuestion.id}:${idx}`)
-          .setLabel(truncate(opt, 80))
-          .setStyle(ButtonStyle.Primary),
-      );
-    });
-    components.push(row);
-  } else {
-    const row = new ActionRowBuilder<StringSelectMenuBuilder>();
-    const select = new StringSelectMenuBuilder()
-      .setCustomId(`event-quiz-select:${nextQuestion.id}`)
-      .setPlaceholder('Choisissez votre réponse...');
-
-    options.forEach((opt, idx) => {
-      select.addOptions({
-        label: truncate(opt, 100),
-        value: idx.toString(),
-      });
-    });
-    row.addComponents(select);
-    components.push(row);
-  }
-
-  await message.edit({ embeds: [embed], components });
+  const now = new Date();
+  await prisma.$transaction([
+    ...(currentQuestion
+      ? [prisma.eventQuizQuestion.update({ where: { id: currentQuestion.id }, data: { status: 'COMPLETED', endTime: now } })]
+      : []),
+    prisma.eventQuizQuestion.update({ where: { id: nextQuestion.id }, data: { status: 'ONGOING', startTime: now } }),
+    prisma.event.update({ where: { id: eventId }, data: { status: 'ONGOING' } }),
+  ]);
 
   return { status: 'next_question_launched', questionId: nextQuestion.id };
 }
 
 export async function prevQuestion(client: Client, eventId: string) {
-  const event = await prisma.event.findUnique({
-    where: { id: eventId },
-    include: {
-      questions: {
-        orderBy: { sortOrder: 'asc' },
-      },
-    },
-  });
-
-  if (!event || !event.messageId || !event.channelId) throw new Error('Ã‰vénement non publié');
-
+  const event = await loadQuizForStep(eventId);
   const currentQuestion = event.questions.find((q) => q.status === 'ONGOING');
   const completedQuestions = event.questions.filter((q) => q.status === 'COMPLETED');
   const prevQuestion = completedQuestions[completedQuestions.length - 1];
+  if (!prevQuestion) throw new UserFacingError('Pas de question précédente.');
 
-  if (!prevQuestion) throw new Error('Pas de question précédente');
+  const prevIndex = event.questions.findIndex((q) => q.id === prevQuestion.id);
+  await showQuizQuestion(client, event, prevQuestion, event.questions[prevIndex - 1]);
 
-  // Reset current ONGOING to DRAFT
-  if (currentQuestion) {
-    await prisma.eventQuizQuestion.update({
-      where: { id: currentQuestion.id },
-      data: { status: 'DRAFT', startTime: null, endTime: null },
-    });
-  }
+  await prisma.$transaction([
+    ...(currentQuestion
+      ? [prisma.eventQuizQuestion.update({ where: { id: currentQuestion.id }, data: { status: 'DRAFT', startTime: null, endTime: null } })]
+      : []),
+    prisma.eventQuizQuestion.update({ where: { id: prevQuestion.id }, data: { status: 'ONGOING', endTime: null } }),
+  ]);
 
-  // Set COMPLETED to ONGOING
-  await prisma.eventQuizQuestion.update({
-    where: { id: prevQuestion.id },
-    data: { status: 'ONGOING', endTime: null },
-  });
-
-  const channel = (await client.channels.fetch(event.channelId).catch(() => null)) as TextChannel | null;
-  if (!channel) throw new Error('Salon Discord introuvable');
-
-  const message = await channel.messages.fetch(event.messageId).catch(() => null);
-  if (!message) throw new Error('Message principal introuvable');
-
-  const totalQuestions = event.questions.length;
-  const currentIdx = event.questions.findIndex(q => q.id === prevQuestion.id) + 1;
-
-  const embed = new EmbedBuilder()
-    .setTitle(`â�" Question ${currentIdx}/${totalQuestions} : ${prevQuestion.text}`)
-    .setDescription('Choisissez la bonne réponse ci-dessous !')
-    .setColor(COLORS.info)
-    .setTimestamp();
-
-  const questionBeforePrev = event.questions[currentIdx - 2];
-  if (questionBeforePrev) {
-    const prevAnswer = (questionBeforePrev.options as string[])[questionBeforePrev.correctOptionIndex];
-    embed.addFields({ 
-      name: '✅ Dernière réponse', 
-      value: `La bonne réponse à la question précédente était : **${prevAnswer}**` 
-    });
-  }
-
-  if (prevQuestion.imageUrl) embed.setImage(prevQuestion.imageUrl);
-
-  const options = prevQuestion.options as string[];
-  const components: ActionRowBuilder<StringSelectMenuBuilder | ButtonBuilder>[] = [];
-
-  if (options.length <= 5) {
-    const row = new ActionRowBuilder<ButtonBuilder>();
-    options.forEach((opt, idx) => {
-      row.addComponents(
-        new ButtonBuilder()
-          .setCustomId(`event-quiz-answer:${prevQuestion.id}:${idx}`)
-          .setLabel(truncate(opt, 80))
-          .setStyle(ButtonStyle.Primary),
-      );
-    });
-    components.push(row);
-  } else {
-    const select = new StringSelectMenuBuilder()
-      .setCustomId(`event-quiz-select:${prevQuestion.id}`)
-      .setPlaceholder('Choisissez votre réponse...')
-      .addOptions(
-        options.map((opt, idx) => ({
-          label: truncate(opt, 100),
-          value: idx.toString(),
-        })),
-      );
-    components.push(new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select));
-  }
-
-  await message.edit({ embeds: [embed], components });
   return { status: 'ongoing', questionId: prevQuestion.id };
 }
 
