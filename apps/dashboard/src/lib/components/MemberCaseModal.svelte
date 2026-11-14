@@ -27,6 +27,7 @@
   import Modal from './Modal.svelte';
   import { m, dateLocale } from '../i18n';
   import LogDetails from './logs/LogDetails.svelte';
+  import MemberReputationCard from './members/MemberReputationCard.svelte';
 
   import { errorMessage } from '@kotbo/shared';
   type MemberCaseTab = 'extra' | 'resume' | 'identite' | 'activite' | 'messages' | 'logs' | 'sanctions' | 'invites' | 'connexions' | 'analytics' | 'contenu' | 'candidatures' | 'linked_accounts' | 'notes';
@@ -1384,6 +1385,9 @@
                   </div>
                 </dl>
               </section>
+              {#if userId}
+                <MemberReputationCard {userId} userName={displayName || userId} />
+              {/if}
               <SectionCard title={m.mcm_by_channel()}>
                 {#if caseData?.messagesByChannel?.length}
                   {@const max = Math.max(...caseData.messagesByChannel.map((c) => c.count), 1)}

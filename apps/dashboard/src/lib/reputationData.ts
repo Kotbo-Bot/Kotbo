@@ -16,6 +16,11 @@ export const DEFAULT_REPUTATION_CONFIG: ReputationConfig = {
   xpPerRep: 0,
   coinsPerRep: 0,
   announceChannelId: null,
+  minAccountAgeDays: 0,
+  minMemberDays: 0,
+  sameMemberCooldownDays: 1,
+  excludedRoleIds: [],
+  excludedChannelIds: [],
   tiers: [],
 };
 
@@ -29,6 +34,8 @@ export function toReputationConfig(raw: unknown): ReputationConfig | null {
     ...DEFAULT_REPUTATION_CONFIG,
     ...(raw as Partial<ReputationConfig>),
     tiers: Array.isArray(raw.tiers) ? (raw.tiers as ReputationConfig['tiers']) : [],
+    excludedRoleIds: Array.isArray(raw.excludedRoleIds) ? (raw.excludedRoleIds as string[]) : [],
+    excludedChannelIds: Array.isArray(raw.excludedChannelIds) ? (raw.excludedChannelIds as string[]) : [],
   };
 }
 

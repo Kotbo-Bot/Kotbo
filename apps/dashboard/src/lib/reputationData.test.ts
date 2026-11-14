@@ -37,4 +37,15 @@ describe('toReputationConfig', () => {
   test('autre chose qu\'un objet est refusé', () => {
     expect(toReputationConfig(undefined)).toBeNull();
   });
+
+  test('des listes d\'exclusion qui ne sont pas des listes deviennent vides', () => {
+    const config = toReputationConfig({ excludedRoleIds: null, excludedChannelIds: 'c' });
+    expect(config?.excludedRoleIds).toEqual([]);
+    expect(config?.excludedChannelIds).toEqual([]);
+  });
+
+  test('un bot sans garde-fous rend ceux par défaut : aucun, attente d\'un jour', () => {
+    const config = toReputationConfig({ dailyLimit: 3 });
+    expect(config).toMatchObject({ minAccountAgeDays: 0, minMemberDays: 0, sameMemberCooldownDays: 1 });
+  });
 });

@@ -15,9 +15,21 @@ export interface ReputationConfig {
   coinsPerRep: number;
   /** Salon des annonces de palier. `null` = rôle donné sans annonce. */
   announceChannelId: string | null;
+  /** Garde-fous du donneur, en jours. `0` = aucune exigence. */
+  minAccountAgeDays: number;
+  minMemberDays: number;
+  /** Jours avant de remercier à nouveau le même membre. `1` = dès le lendemain. */
+  sameMemberCooldownDays: number;
+  /** Rôles qui ne peuvent ni remercier ni être remerciés. */
+  excludedRoleIds: string[];
+  /** Salons où l'on ne remercie pas. */
+  excludedChannelIds: string[];
   /** Triés par seuil croissant. */
   tiers: ReputationTier[];
 }
+
+/** `ADJUSTMENT` : points donnés ou retirés à la main par le staff, `value` signé. */
+export type ReputationVoteKind = 'VOTE' | 'ADJUSTMENT';
 
 /** Gabarits de l'annonce de palier dans la langue du serveur, trous compris (`{user}`, `{role}`, `{threshold}`). */
 export interface ReputationAnnouncementLabels {
@@ -53,6 +65,9 @@ export interface ReputationData {
 
 export interface ReputationVote {
   id: string;
+  /** Absent d'un bot plus ancien : un vote. */
+  kind?: ReputationVoteKind;
+  value?: number;
   giverId: string;
   receiverId: string;
   reason: string | null;
@@ -113,6 +128,61 @@ export async function updateReputationConfig(
   });
   const config = toReputationConfig(raw?.config);
   return config ? { config } : null;
+}
+
+export interface MemberReputation {
+  totalRep: number;
+  rank: number;
+  receivedVotes: number;
+  givenVotes: number;
+  receivedLast7Days: number;
+  recent: Array<{
+    id: string;
+    kind: ReputationVoteKind;
+    value: number;
+    giverId: string;
+    giverName: string | null;
+    reason: string | null;
+    createdAt: string;
+  }>;
+}
+
+/** Réputation d'un membre, pour sa fiche. `null` sans accès au module ou s'il est éteint. */
+export async function fetchMemberReputation(userId: string, guildId = authStore.selectedGuildId): Promise<MemberReputation | null> {
+  return dashboardRequest(`/reputation/members/${encodeURIComponent(userId)}`, {
+    method: 'GET',
+    guildId,
+    errorContext: 'API Error (Member Reputation):',
+    silent: true,
+  });
+}
+
+/** Donne (`amount` > 0) ou retire des points à un membre. */
+export async function adjustReputation(
+  payload: { userId: string; amount: number; reason: string | null },
+  guildId = authStore.selectedGuildId,
+): Promise<{ before: number; after: number } | null> {
+  return dashboardRequest('/reputation/adjustments', {
+    method: 'POST',
+    successMessage: m.api_ok_adjust_reputation(),
+    payload,
+    guildId,
+    errorContext: 'API Error (Adjust Reputation):',
+  });
+}
+
+/** Remet à zéro la réputation reçue par un membre, ou celle de tout le serveur. */
+export async function resetReputation(
+  target: { scope: 'member'; userId: string } | { scope: 'guild' },
+  guildId = authStore.selectedGuildId,
+): Promise<{ removed: number; members?: number } | null> {
+  return dashboardRequest('/reputation/reset', {
+    method: 'POST',
+    successMessage: m.api_ok_reset_reputation(),
+    payload: target,
+    guildId,
+    errorContext: 'API Error (Reset Reputation):',
+  });
 }
 
 export async function deleteReputationVote(voteId: string, guildId = authStore.selectedGuildId): Promise<{ deleted: boolean } | null> {

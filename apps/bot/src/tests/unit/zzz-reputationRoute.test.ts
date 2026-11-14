@@ -29,6 +29,11 @@ const SETTINGS = {
   xpPerRep: 0,
   coinsPerRep: 0,
   announceChannelId: null,
+  minAccountAgeDays: 0,
+  minMemberDays: 0,
+  sameMemberCooldownDays: 1,
+  excludedRoleIds: [] as string[],
+  excludedChannelIds: [] as string[],
   tiers: [{ threshold: 10, roleId: '555555555555555555' }],
 };
 let currentSettings = { ...SETTINGS };
@@ -52,14 +57,26 @@ const service = {
   })),
   saveReputationConfig: mock(async (_guildId: string, patch: Record<string, unknown>) => ({ ...SETTINGS, ...patch })),
   getReputationConfig: mock(async (_guildId: string) => currentSettings),
+  getMemberReputationSummary: mock(async (_guildId: string, _userId: string) => ({
+    totalRep: 6,
+    rank: 2,
+    receivedVotes: 5,
+    givenVotes: 3,
+    receivedLast7Days: 1,
+    recent: [{ id: 'v1', kind: 'VOTE', value: 1, giverId: '222222222222222222', reason: null, createdAt: new Date('2026-11-13T10:00:00Z') }],
+  })),
 };
 const servicePath = path.resolve(__dirname, '../../services/community/reputationService.ts');
 for (const suffix of ['../../services/community/reputationService.ts', '../../services/community/reputationService.js']) {
   mock.module(path.resolve(__dirname, suffix), () => completeModuleMock(servicePath, service));
 }
 
+let adjustResult: Record<string, unknown> = { success: true, before: 4, after: 9 };
 const actions = {
   revokeRep: mock(async (_client: unknown, _guildId: string, _voteId: string) => deletedVote),
+  adjustRep: mock(async (_client: unknown, _input: unknown) => adjustResult),
+  resetMemberRep: mock(async (_client: unknown, _guildId: string, _userId: string) => 3),
+  resetGuildRep: mock(async (_client: unknown, _guildId: string) => ({ count: 12, members: 4 })),
 };
 const actionsPath = path.resolve(__dirname, '../../services/community/reputationActions.ts');
 for (const suffix of ['../../services/community/reputationActions.ts', '../../services/community/reputationActions.js']) {
@@ -132,10 +149,11 @@ async function call(method: string, suffix: string, body?: unknown, access: Dash
 
 beforeEach(() => {
   deletedVote = null;
+  adjustResult = { success: true, before: 4, after: 9 };
   manageable = true;
   currentSettings = { ...SETTINGS };
   guilds.clear();
-  for (const fn of [...Object.values(service), ...Object.values(actions)]) fn.mockClear();
+  for (const fn of [...Object.values(service), ...Object.values(actions)]) (fn as { mockClear: () => void }).mockClear();
   mockDb.dashboardAuditLog.create.mockClear();
 });
 
@@ -269,6 +287,35 @@ describe('PATCH /reputation/config', () => {
     expect((await call('PATCH', '/config', { reactionEmoji: 'merci beaucoup' })).status).toBe(400);
   });
 
+  test('enregistre les garde-fous', async () => {
+    const body = {
+      minAccountAgeDays: 7,
+      minMemberDays: 2,
+      sameMemberCooldownDays: 3,
+      excludedRoleIds: ['666666666666666666', '666666666666666666'],
+      excludedChannelIds: ['333333333333333333'],
+    };
+    const { status } = await call('PATCH', '/config', body);
+    expect(status).toBe(200);
+    expect(service.saveReputationConfig.mock.calls[0][1]).toEqual({ ...body, excludedRoleIds: ['666666666666666666'] });
+  });
+
+  test('refuse des garde-fous hors bornes', async () => {
+    for (const body of [
+      { minAccountAgeDays: -1 },
+      { minAccountAgeDays: 366 },
+      { minMemberDays: 1.5 },
+      { sameMemberCooldownDays: 0 },
+      { sameMemberCooldownDays: 31 },
+      { excludedRoleIds: ['abc'] },
+      { excludedChannelIds: 'c' },
+      { excludedRoleIds: Array.from({ length: 26 }, (_, i) => `1000000000000000${String(i).padStart(2, '0')}`) },
+    ]) {
+      expect((await call('PATCH', '/config', body)).status).toBe(400);
+    }
+    expect(service.saveReputationConfig).not.toHaveBeenCalled();
+  });
+
   test('refuse un corps sans champ connu', async () => {
     const { status } = await call('PATCH', '/config', { foo: 1 });
     expect(status).toBe(400);
@@ -304,6 +351,13 @@ describe('DELETE /reputation/votes/:id', () => {
     expect(entry.details).toBe('Vote de 777777777777777777 pour Alice (111111111111111111) retiré.');
   });
 
+  test('le retrait d\'un ajustement est journalisé comme tel', async () => {
+    deletedVote = { id: 'v2', guildId: GUILD, kind: 'ADJUSTMENT', value: -5, giverId: '222222222222222222', receiverId: '111111111111111111' };
+    await call('DELETE', '/votes/v2');
+    const entry = (mockDb.dashboardAuditLog.create.mock.calls[0][0] as { data: { details: string } }).data;
+    expect(entry.details).toBe('Ajustement de -5 point(s) pour Alice (111111111111111111) retiré.');
+  });
+
   test('404 pour un vote inconnu', async () => {
     const { status } = await call('DELETE', '/votes/absent');
     expect(status).toBe(404);
@@ -313,6 +367,98 @@ describe('DELETE /reputation/votes/:id', () => {
     const { status } = await call('DELETE', '/votes/v1', undefined, DASHBOARD_ACCESS_MODERATOR);
     expect(status).toBe(403);
     expect(actions.revokeRep).not.toHaveBeenCalled();
+  });
+});
+
+describe('GET /reputation/members/:userId', () => {
+  test('rend la réputation du membre, avec les noms de qui l\'a remercié', async () => {
+    const { status, json } = await call('GET', '/members/111111111111111111');
+    expect(status).toBe(200);
+    expect(service.getMemberReputationSummary.mock.calls[0]).toEqual([GUILD, '111111111111111111']);
+    expect(json.totalRep).toBe(6);
+    expect(json.rank).toBe(2);
+    expect(json.recent[0].giverName).toBe('Bob');
+  });
+
+  test('refuse un identifiant mal formé', async () => {
+    expect((await call('GET', '/members/abc')).status).toBe(400);
+    expect(service.getMemberReputationSummary).not.toHaveBeenCalled();
+  });
+});
+
+describe('POST /reputation/adjustments', () => {
+  const MEMBER = '111111111111111111';
+
+  test('ajuste, journalise et rend l\'ancien et le nouveau total', async () => {
+    const { status, json } = await call('POST', '/adjustments', { userId: MEMBER, amount: 5, reason: '  Aide à l\'événement  ' });
+    expect(status).toBe(200);
+    expect(actions.adjustRep.mock.calls[0]).toEqual([client, { guildId: GUILD, staffId: 'user-1', userId: MEMBER, amount: 5, reason: 'Aide à l\'événement' }]);
+    expect(json).toEqual({ before: 4, after: 9 });
+    const entry = (mockDb.dashboardAuditLog.create.mock.calls[0][0] as { data: { details: string } }).data;
+    expect(entry.details).toContain('Alice (111111111111111111)');
+    expect(entry.details).toContain('+5');
+  });
+
+  test('un motif vide est enregistré comme absent', async () => {
+    await call('POST', '/adjustments', { userId: MEMBER, amount: -2, reason: '   ' });
+    expect((actions.adjustRep.mock.calls[0][1] as { reason: unknown }).reason).toBeNull();
+  });
+
+  test('refuse un montant nul, non entier ou hors bornes', async () => {
+    for (const amount of [0, 1.5, 1001, -1001, '3']) {
+      expect((await call('POST', '/adjustments', { userId: MEMBER, amount })).status).toBe(400);
+    }
+    expect(actions.adjustRep).not.toHaveBeenCalled();
+  });
+
+  test('refuse un membre mal formé ou un motif trop long', async () => {
+    expect((await call('POST', '/adjustments', { userId: 'abc', amount: 1 })).status).toBe(400);
+    expect((await call('POST', '/adjustments', { userId: MEMBER, amount: 1, reason: 'x'.repeat(201) })).status).toBe(400);
+    expect(actions.adjustRep).not.toHaveBeenCalled();
+  });
+
+  test('un retrait sous zéro est refusé avec le total actuel', async () => {
+    adjustResult = { success: false, code: 'BELOW_ZERO', total: 2 };
+    const { status, json } = await call('POST', '/adjustments', { userId: MEMBER, amount: -5 });
+    expect(status).toBe(409);
+    expect(json.total).toBe(2);
+    expect(mockDb.dashboardAuditLog.create).not.toHaveBeenCalled();
+  });
+
+  test('refuse sans le droit de gérer les réglages', async () => {
+    expect((await call('POST', '/adjustments', { userId: MEMBER, amount: 1 }, DASHBOARD_ACCESS_MODERATOR)).status).toBe(403);
+    expect(actions.adjustRep).not.toHaveBeenCalled();
+  });
+});
+
+describe('POST /reputation/reset', () => {
+  test('remet un membre à zéro et journalise', async () => {
+    const { status, json } = await call('POST', '/reset', { scope: 'member', userId: '111111111111111111' });
+    expect(status).toBe(200);
+    expect(actions.resetMemberRep.mock.calls[0]).toEqual([client, GUILD, '111111111111111111']);
+    expect(json).toEqual({ removed: 3 });
+    const entry = (mockDb.dashboardAuditLog.create.mock.calls[0][0] as { data: { details: string } }).data;
+    expect(entry.details).toContain('Alice (111111111111111111)');
+  });
+
+  test('remet tout le serveur à zéro et journalise', async () => {
+    const { status, json } = await call('POST', '/reset', { scope: 'guild' });
+    expect(status).toBe(200);
+    expect(actions.resetGuildRep.mock.calls[0]).toEqual([client, GUILD]);
+    expect(json).toEqual({ removed: 12, members: 4 });
+    expect(mockDb.dashboardAuditLog.create).toHaveBeenCalledTimes(1);
+  });
+
+  test('refuse une portée inconnue ou un membre mal formé', async () => {
+    expect((await call('POST', '/reset', {})).status).toBe(400);
+    expect((await call('POST', '/reset', { scope: 'member', userId: 'abc' })).status).toBe(400);
+    expect(actions.resetMemberRep).not.toHaveBeenCalled();
+    expect(actions.resetGuildRep).not.toHaveBeenCalled();
+  });
+
+  test('refuse sans le droit de gérer les réglages', async () => {
+    expect((await call('POST', '/reset', { scope: 'guild' }, DASHBOARD_ACCESS_MODERATOR)).status).toBe(403);
+    expect(actions.resetGuildRep).not.toHaveBeenCalled();
   });
 });
 
