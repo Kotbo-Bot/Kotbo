@@ -117,8 +117,12 @@ export async function revokeRep(client: Client, guildId: string, voteId: string)
 
   // Primaire : le vote vient d'être supprimé, un réplica pourrait encore le compter.
   const total = await receivedTotal(guildId, vote.receiverId, prisma);
-  await applyReputationLoss(client, guildId, vote.receiverId, total).catch((err) => {
-    logger.warn('Reputation', `Paliers non retirés après le retrait d'un vote pour ${vote.receiverId}`, err);
+  // Annuler un retrait du staff fait remonter le total : les paliers reviennent.
+  const tiers = vote.value < 0
+    ? applyReputationGain(client, guildId, vote.receiverId, total + vote.value, total)
+    : applyReputationLoss(client, guildId, vote.receiverId, total);
+  await tiers.catch((err) => {
+    logger.warn('Reputation', `Paliers non mis à jour après le retrait d'un vote pour ${vote.receiverId}`, err);
   });
   return vote;
 }

@@ -197,6 +197,13 @@ describe('revokeRep', () => {
     expect(rewards.reclaimRepRewards.mock.calls[0]).toEqual([client, 'g', 'b', { xp: 20, coins: 50 }]);
   });
 
+  test('annuler un retrait du staff fait remonter le total : les paliers sont rendus', async () => {
+    deleted = { id: 'v2', guildId: 'g', kind: 'ADJUSTMENT', value: -3, giverId: 's', receiverId: 'b', xpGranted: 0, coinsGranted: 0 };
+    await revokeRep(client, 'g', 'v2');
+    expect(tiers.applyReputationGain.mock.calls[0]).toEqual([client, 'g', 'b', 1, 4]);
+    expect(tiers.applyReputationLoss).not.toHaveBeenCalled();
+  });
+
   test('un échec de la reprise ne fait pas échouer le retrait', async () => {
     deleted = { id: 'v1', guildId: 'g', kind: 'VOTE', giverId: 'a', receiverId: 'b', xpGranted: 20, coinsGranted: 0 };
     rewards.reclaimRepRewards.mockImplementationOnce(async () => { throw new Error('leveling'); });
