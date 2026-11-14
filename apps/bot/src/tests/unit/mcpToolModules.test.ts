@@ -47,6 +47,8 @@ describe('module d\'un outil MCP', () => {
     ['get_member_quests', 'quests'],
     ['get_season_leaderboard', 'seasons'],
     ['get_reputation_leaderboard', 'reputation'],
+    ['get_member_reputation', 'reputation'],
+    ['adjust_reputation', 'reputation'],
     ['create_giveway', 'giveaways'],
     ['send_ticket_macro', 'tickets'],
     ['request_ban_appeal_info', 'ban_appeals'],

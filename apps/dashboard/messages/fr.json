@@ -10132,6 +10132,8 @@
   "wf_fun_notice_only_riddle": "Seul le rébus emoji a un salon : les victoires au nombre mystère ne se produiront pas.",
   "wf_fun_notice_fun_link": "Configurer les salons fun",
   "wf_invite_notice_module_off": "Le module Journaux est désactivé : c'est lui qui repère l'invitation utilisée, ce déclencheur ne marchera pas.",
+  "wf_reputation_notice_module_off": "Le module Réputation est éteint : aucun remerciement n'est enregistré, cette automatisation ne partira pas.",
+  "wf_reputation_notice_info": "Seuls les remerciements acceptés déclenchent : un vote refusé (limite du jour, garde-fous) ou un ajustement du staff ne compte pas.",
   "wf_invite_notice_permission": "Le bot doit avoir la permission Gérer le serveur pour lire les invitations. Les arrivées par l'URL personnalisée ne sont pas signalées.",
   "wf_no_steps": "Aucune étape pour l'instant. Ajoute la première action à exécuter.",
   "wf_add_step": "Ajouter une étape",

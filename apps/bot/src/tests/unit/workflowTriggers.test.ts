@@ -710,3 +710,36 @@ describe('déclencheurs de formulaire et de suggestion', () => {
     expect(rejected.calls).toEqual([]);
   });
 });
+
+describe('déclencheurs de réputation', () => {
+  test('remercier et être remercié partent du même vote, rattachés au module Réputation', () => {
+    for (const type of ['OnReputationGiven', 'OnReputationReceived']) {
+      const def = getNodeDef(type);
+      expect(def?.category).toBe('trigger');
+      expect(def?.event).toBe('reputation:given');
+      expect(def?.module).toBe('reputation');
+      expect(def?.config?.some((field) => field.key === 'channelIds')).toBe(true);
+    }
+  });
+
+  test('« membre » désigne celui qui remercie, puis celui qui est remercié', () => {
+    const paths = (type: string) => contextTokens(type).map((token) => token.path);
+    expect(paths('OnReputationGiven')).toEqual(expect.arrayContaining(['member.displayName', 'receiver.displayName', 'reason', 'total', 'channel.name']));
+    expect(paths('OnReputationReceived')).toEqual(expect.arrayContaining(['member.displayName', 'giver.displayName', 'reason', 'total', 'channel.name']));
+    expect(paths('OnReputationGiven')).not.toContain('giver.displayName');
+    expect(paths('OnReputationReceived')).not.toContain('receiver.displayName');
+  });
+
+  test('une recette « être remercié » se compile et se relit à l\'identique', () => {
+    const recipe: Recipe = {
+      trigger: { type: 'OnReputationReceived' },
+      steps: [{
+        id: 'log', kind: 'action', action: 'SendLogMessage',
+        values: { text: { from: 'text', template: '{giver.displayName} remercie {member.displayName} ({total} points) : {reason}' } },
+      }],
+    };
+    const graph = compileRecipe(recipe);
+    expect(hasBlockingIssue(validateGraph(graph))).toBe(false);
+    expect(decompileGraph(graph)).toEqual(recipe);
+  });
+});

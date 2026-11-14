@@ -129,6 +129,13 @@ export function registerWorkflowBusSubscribers(client: Client): void {
     await dispatchEvent(client, payload.guildId, 'giveaway:ended', payload as never);
   }, MODULE_NAME);
 
+  // Un seul événement pour deux déclencheurs : « remercier » et « être remercié »
+  // lisent le même vote, chacun du côté de son membre. Module Réputation
+  // éteint : aucun vote, donc rien de publié.
+  subscribeForModule('workflows', 'reputation:given', async (payload) => {
+    await dispatchEvent(client, payload.guildId, 'reputation:given', payload as never);
+  }, MODULE_NAME);
+
   subscribeForModule('workflows', 'form:submitted', async (payload) => {
     await dispatchEvent(client, payload.guildId, 'form:submitted', payload as never);
   }, MODULE_NAME);

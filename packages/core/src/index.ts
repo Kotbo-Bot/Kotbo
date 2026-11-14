@@ -34,6 +34,7 @@ export type {
   RoleDeleteEvent,
   FunGameKey,
   FunGameWonEvent,
+  ReputationGivenEvent,
 } from './eventBus.types.js';
 
 export { VerificationService } from './services/verification.service.js';

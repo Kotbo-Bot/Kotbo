@@ -6,6 +6,7 @@
   import TriggerPicker from './TriggerPicker.svelte';
   import FunTriggerNotice from './FunTriggerNotice.svelte';
   import InviteTriggerNotice from './InviteTriggerNotice.svelte';
+  import ReputationTriggerNotice from './ReputationTriggerNotice.svelte';
   import ChannelFilterField from './ChannelFilterField.svelte';
   import RoleFilterField from './RoleFilterField.svelte';
   import ReactionFilterFields from './ReactionFilterFields.svelte';
@@ -331,6 +332,9 @@
       {/if}
       {#if recipe.trigger.type === 'OnMemberInvited'}
         <InviteTriggerNotice />
+      {/if}
+      {#if recipe.trigger.type === 'OnReputationGiven' || recipe.trigger.type === 'OnReputationReceived'}
+        <ReputationTriggerNotice />
       {/if}
       {#if hasChannelFilter}
         <ChannelFilterField

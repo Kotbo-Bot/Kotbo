@@ -2,15 +2,60 @@
 import { archiveChannel, createSplitChannel, resolveHealthAlert, upsertChannelHealthConfig } from '../../../services/analytics/channelHealthService.js';
 import { createSeason, endSeason, startSeason } from '../../../services/progression/seasonService.js';
 import { publishSuggestionResolved } from '../../../services/features/suggestionService.js';
+import { adjustRep } from '../../../services/community/reputationActions.js';
+import { REPUTATION_ADJUSTMENT } from '@kotbo/shared';
 import prisma from '../../../utils/db.js';
 import { type NewsChannel, TextChannel } from 'discord.js';
 import { z } from 'zod';
-import { type McpToolContext, err, ok, resolveChannel, toolError } from '../toolkit.js';
+import { type McpToolContext, err, ok, resolveChannel, resolveMember, toolError } from '../toolkit.js';
 
 export function registerWriteCommunityTools(ctx: McpToolContext) {
-  const { server, guildId, client, shouldRegister, guard, audit, toolMeta } = ctx;
+  const { server, guildId, client, shouldRegister, guard, audit, toolMeta, ownerId } = ctx;
 
   if (shouldRegister('WRITE_COMMUNITY')) {
+    server.registerTool(
+      'adjust_reputation',
+      {
+        description:
+          "Donne (montant positif) ou retire (montant négatif) des points de réputation à un membre, comme un ajustement du staff depuis le dashboard : les rôles de palier suivent le nouveau total, sans annonce, et aucun gain d'XP ni de pièces n'est versé. Le total ne descend jamais sous zéro. Requiert la permission WRITE_COMMUNITY.",
+        inputSchema: {
+          member: z.string().describe('Nom, surnom, @mention ou ID Discord du membre'),
+          amount: z.number().int().min(REPUTATION_ADJUSTMENT.min).max(REPUTATION_ADJUSTMENT.max)
+            .describe('Points à donner (positif) ou à retirer (négatif), jamais 0'),
+          reason: z.string().max(200).optional().describe('Motif, visible dans l\'historique de la réputation'),
+          key_name: z.string().optional(),
+        },
+        _meta: toolMeta,
+      },
+      guard('WRITE_COMMUNITY', async ({ member, amount, reason, key_name }) => {
+        if (amount === 0) return err('Le nombre de points ne peut pas être 0.');
+        const resolved = await resolveMember(guildId, member);
+        if (!resolved.ok) return resolved.response;
+
+        try {
+          // L'historique nomme l'auteur de l'ajustement : le compte de la clé, sinon le bot.
+          const staffId = ownerId ?? client.user?.id;
+          if (!staffId) return err('Bot non prêt : réessaie dans un instant.');
+
+          const result = await adjustRep(client, {
+            guildId,
+            staffId,
+            userId: resolved.userId,
+            amount,
+            reason: reason?.trim() || null,
+          });
+          if (!result.success) {
+            return err(`${resolved.label} n'a que ${result.total} point(s) : impossible de descendre sous zéro.`);
+          }
+
+          await audit(key_name, 'Ajustement de réputation MCP', resolved.label, `${amount > 0 ? `+${amount}` : amount} point(s) (${result.before} → ${result.after})${reason?.trim() ? `, motif : ${reason.trim()}` : ''}`);
+          return ok({ ok: true, userId: resolved.userId, before: result.before, after: result.after });
+        } catch (e) {
+          return toolError(e);
+        }
+      })
+    );
+
     server.registerTool(
       'respond_suggestion',
       {

@@ -8,6 +8,7 @@
 import { describe, expect, test, mock, beforeEach } from 'bun:test';
 import path from 'node:path';
 import type { Client } from 'discord.js';
+import { kotboEventBus, type ReputationGivenEvent } from '@kotbo/core';
 import { completeModuleMock } from '../helpers/moduleMock.js';
 
 const mockDb = {};
@@ -67,6 +68,10 @@ const { recordRep, revokeRep, adjustRep, resetMemberRep, resetGuildRep } = await
 const client = {} as Client;
 const DAY_MS = 86_400_000;
 
+/** Votes publiés sur le bus, relevés par un vrai abonné : le bus n'est pas remplacé. */
+const published: ReputationGivenEvent[] = [];
+kotboEventBus.subscribe('reputation:given', async (payload) => { published.push(payload); }, 'test-reputation');
+
 /** Client dont le serveur connaît ces membres (rôles, dates). */
 function clientWithMembers(members: Record<string, { roles?: string[]; accountDays?: number; joinedDays?: number }>): Client {
   const fetch = async (userId: string) => {
@@ -88,6 +93,7 @@ beforeEach(() => {
   deleted = null;
   settings = SETTINGS;
   adjustResult = { success: true, before: 4, after: 9 };
+  published.length = 0;
   for (const fn of [...Object.values(service), ...Object.values(tiers), ...Object.values(rewards), quests.incrementQuestProgress]) fn.mockClear();
 });
 
@@ -140,6 +146,39 @@ describe('recordRep', () => {
     const result = await recordRep(client, { guildId: 'g', giverId: 'a', receiverId: 'b' });
     await flush();
     expect(result.success).toBe(true);
+  });
+});
+
+describe('recordRep, automatisations', () => {
+  test('un vote accepté est publié pour les déclencheurs « remercier » et « être remercié »', async () => {
+    await recordRep(client, { guildId: 'g', giverId: 'a', receiverId: 'b', reason: 'merci', channelId: 'c', messageId: 'm' });
+    expect(published).toHaveLength(1);
+    expect(published[0]).toMatchObject({
+      guildId: 'g',
+      voteId: 'v1',
+      giverId: 'a',
+      receiverId: 'b',
+      reason: 'merci',
+      channelId: 'c',
+      messageId: 'm',
+      total: 10,
+    });
+  });
+
+  test('sans motif ni message, les champs valent null', async () => {
+    await recordRep(client, { guildId: 'g', giverId: 'a', receiverId: 'b' });
+    expect(published[0]).toMatchObject({ reason: null, channelId: null, messageId: null });
+  });
+
+  test('un vote refusé n\'est pas publié', async () => {
+    giveResult = { success: false, code: 'DAILY_LIMIT' };
+    await recordRep(client, { guildId: 'g', giverId: 'a', receiverId: 'b' });
+    expect(published).toHaveLength(0);
+  });
+
+  test('un ajustement du staff n\'est pas un remerciement : rien n\'est publié', async () => {
+    await adjustRep(client, { guildId: 'g', staffId: 's', userId: 'b', amount: 5, reason: null });
+    expect(published).toHaveLength(0);
   });
 });
 
