@@ -179,6 +179,22 @@ export const TRIGGER_LIBRARY: TriggerPresentation[] = [
     example: 'Féliciter publiquement et débloquer un rôle de palier.',
   },
   {
+    type: 'OnReputationGiven',
+    sentence: 'Quand un membre en remercie un autre',
+    short: 'Remerciement donné',
+    group: 'members',
+    icon: 'Heart',
+    example: 'Compter les remerciements donnés et récompenser les membres les plus reconnaissants.',
+  },
+  {
+    type: 'OnReputationReceived',
+    sentence: 'Quand un membre est remercié',
+    short: 'Remerciement reçu',
+    group: 'members',
+    icon: 'Star',
+    example: 'Prévenir le membre en privé de qui l\'a remercié et pourquoi.',
+  },
+  {
     type: 'OnMemberInvited',
     sentence: 'Quand un membre arrive par une invitation',
     short: 'Invitation',

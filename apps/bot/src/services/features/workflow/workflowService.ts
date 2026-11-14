@@ -666,6 +666,23 @@ export async function buildTriggerOutputs(
       return member ? { member, level: Number(payload.level ?? 0) } : null;
     }
 
+    // Même vote, lu de chaque côté : `member` est celui à qui le déclencheur
+    // s'adresse. Un des deux partis du serveur entre-temps : rien ne part,
+    // les actions qui le citeraient n'auraient personne à nommer.
+    case 'OnReputationGiven':
+    case 'OnReputationReceived': {
+      const [giver, receiver] = await Promise.all([memberOf(payload.giverId), memberOf(payload.receiverId)]);
+      if (!giver || !receiver) return null;
+      const shared = {
+        channel: channelOf(payload.channelId),
+        reason: String(payload.reason ?? ''),
+        total: Number(payload.total ?? 0),
+      };
+      return triggerType === 'OnReputationGiven'
+        ? { member: giver, receiver, ...shared }
+        : { member: receiver, giver, ...shared };
+    }
+
     case 'OnBetResolved': {
       const winners = Array.isArray(payload.winners) ? payload.winners : [];
       const first = winners[0] as { userId?: unknown; netGain?: unknown } | undefined;

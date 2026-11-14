@@ -1,6 +1,7 @@
 /** Outils MCP - read community (permission READ_COMMUNITY). */
 import { getModuleActivationStats, getModulePerformanceStats, getModuleStatsSummary, getModuleUsageStats, KOTBO_MODULES } from '../../../services/analytics/moduleStatsService.js';
 import { getSeasonLeaderboard, getSeasonsDashboardData } from '../../../services/progression/seasonService.js';
+import { getMemberReputationSummary } from '../../../services/community/reputationService.js';
 import prisma from '../../../utils/db.js';
 import { z } from 'zod';
 import { type McpToolContext, err, ok, resolveMember, toolError } from '../toolkit.js';
@@ -251,6 +252,52 @@ export function registerReadCommunityTools(ctx: McpToolContext) {
             reputationPoints: v._sum.value ?? 0,
           }))
         );
+      })
+    );
+
+    server.registerTool(
+      'get_member_reputation',
+      {
+        description:
+          "Réputation d'un membre : points, rang, remerciements reçus et donnés, et ses cinq derniers mouvements (remerciements et ajustements du staff).",
+        inputSchema: {
+          member: z.string().describe('Nom, surnom, @mention ou ID Discord du membre'),
+        },
+        _meta: toolMeta,
+      },
+      guard('READ_COMMUNITY', async ({ member }) => {
+        const resolved = await resolveMember(guildId, member);
+        if (!resolved.ok) return resolved.response;
+
+        try {
+          const summary = await getMemberReputationSummary(guildId, resolved.userId);
+          const giverIds = [...new Set(summary.recent.map((entry) => entry.giverId))];
+          const profiles = await prisma.memberProfile.findMany({
+            where: { guildId, userId: { in: giverIds } },
+            select: { userId: true, username: true, displayName: true },
+          });
+          const nameOf = new Map(profiles.map((p) => [p.userId, p.displayName ?? p.username ?? p.userId]));
+
+          return ok({
+            userId: resolved.userId,
+            name: resolved.label,
+            reputationPoints: summary.totalRep,
+            // Sans point, le rang « ex aequo avec tout le monde » n'apprend rien.
+            rank: summary.totalRep > 0 ? summary.rank : null,
+            receivedVotes: summary.receivedVotes,
+            receivedLast7Days: summary.receivedLast7Days,
+            givenVotes: summary.givenVotes,
+            recent: summary.recent.map((entry) => ({
+              kind: entry.kind === 'ADJUSTMENT' ? 'staff_adjustment' : 'thanks',
+              points: entry.value,
+              from: nameOf.get(entry.giverId) ?? entry.giverId,
+              reason: entry.reason,
+              at: entry.createdAt.toISOString(),
+            })),
+          });
+        } catch (e) {
+          return toolError(e);
+        }
       })
     );
 

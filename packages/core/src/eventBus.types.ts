@@ -449,6 +449,26 @@ export interface FunGameWonEvent {
   timestamp: number;
 }
 
+/**
+ * Un membre vient d'en remercier un autre (commande, menu contextuel ou
+ * réaction), vote accepté. Les ajustements du staff ne sont pas publiés : ce
+ * ne sont pas des remerciements.
+ */
+export interface ReputationGivenEvent {
+  guildId: string;
+  voteId: string;
+  giverId: string;
+  receiverId: string;
+  reason: string | null;
+  /** Salon du remerciement, `null` s'il est inconnu. */
+  channelId: string | null;
+  /** Message remercié, quand le vote en vient. */
+  messageId: string | null;
+  /** Réputation du membre remercié après ce vote. */
+  total: number;
+  timestamp: number;
+}
+
 /** Un concours vient d'être clôturé, avec ou sans gagnant. */
 export interface GiveawayEndedEvent {
   guildId: string;
@@ -547,6 +567,7 @@ export interface KotboEventMap {
   'giveaway:winner': GiveawayWinnerEvent;
   'giveaway:ended': GiveawayEndedEvent;
   'fun:game-won': FunGameWonEvent;
+  'reputation:given': ReputationGivenEvent;
 }
 
 export type KotboEventName = keyof KotboEventMap;

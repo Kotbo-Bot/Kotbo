@@ -8,6 +8,7 @@
  * secondes. Leur échec est journalisé, jamais remonté au vote.
  */
 import type { Client, GuildMember } from 'discord.js';
+import { kotboEventBus } from '@kotbo/core';
 import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
 import {
@@ -78,6 +79,19 @@ export async function recordRep(client: Client, input: RecordRepInput): Promise<
 
   const result = await giveRep(guildId, giverId, receiverId, reason, { receiverIsBot, channelId, messageId });
   if (!result.success) return result;
+
+  // Déclencheurs « remercier » et « être remercié » : le bus n'attend pas ses abonnés.
+  kotboEventBus.publish('reputation:given', {
+    guildId,
+    voteId: result.voteId,
+    giverId,
+    receiverId,
+    reason: reason ?? null,
+    channelId: channelId ?? null,
+    messageId: messageId ?? null,
+    total: result.newTotal,
+    timestamp: Date.now(),
+  });
 
   afterVote(client, input, result.newTotal, result.voteId).catch((err) => {
     logger.warn('Reputation', `Suites du vote pour ${receiverId} interrompues`, err);
