@@ -14,6 +14,7 @@
   import { authStore } from '../lib/stores/auth.svelte';
   import { memberCaseModal } from '../lib/stores/memberCaseModal.svelte';
   import { dashboardFetch } from '../lib/api';
+  import { quizPresentationPath, quizPublicPath } from '../lib/api/quiz';
   import { m, dateLocale } from '../lib/i18n';
 
   const { eventId } = $props<{ eventId: string }>();
@@ -182,6 +183,10 @@
     <div class="flex flex-wrap gap-2">
       <Button variant="ghost" icon="ArrowLeft" href="/events">{m.evc_btn_back()}</Button>
       <Button variant="secondary" icon="Edit3" href="/events/edit/{eventId}">{m.evc_btn_edit()}</Button>
+      {#if event && isQuiz && event.status !== 'DRAFT' && authStore.selectedGuildId}
+        <Button variant="secondary" icon="Globe" href={quizPublicPath(authStore.selectedGuildId, eventId)} target="_blank">{m.qz_btn_player_page()}</Button>
+        <Button variant="secondary" icon="Monitor" href={quizPresentationPath(authStore.selectedGuildId, eventId)} target="_blank">{m.qz_btn_presentation()}</Button>
+      {/if}
       {#if event && isQuiz && !finished}
         <Button variant="secondary" icon="SkipBack" disabled={currentQIdx <= 1 || busy} disabledReason={m.evc_first_question_reason()} onclick={() => step('/prev')}>{m.evc_btn_prev_question()}</Button>
         <Button variant="primary" icon="SkipForward" loading={busy} onclick={() => step('/next')}>{currentQIdx === totalQ ? m.evc_btn_finish_quiz() : m.evc_btn_next_question()}</Button>

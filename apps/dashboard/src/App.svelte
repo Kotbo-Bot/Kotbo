@@ -90,6 +90,7 @@
       /^\/\d{17,19}\/clan-rpg\/?$/.test($router.path) ||
       /^\/\d{17,19}\/giveaways(\/[A-Za-z0-9_-]+)?\/?$/.test($router.path) ||
       /^\/\d{17,19}\/tournaments\/[A-Za-z0-9_-]+\/?$/.test($router.path) ||
+      /^\/\d{17,19}\/quiz\/[A-Za-z0-9_-]+(\/presentation)?\/?$/.test($router.path) ||
       // Un membre sans role de staff n'a pas de tableau de bord autour du
       // profil : il le voit comme un visiteur, depuis « Mon espace ».
       ($router.path.startsWith("/profile/") &&
@@ -660,6 +661,16 @@
       <LazyRoute
         path="/:serverId/tournaments/:eventId"
         load={() => import("./pages/TournamentPublic.svelte")}
+        props={(meta) => ({ serverId: meta.params.serverId, eventId: meta.params.eventId })}
+      />
+      <LazyRoute
+        path="/:serverId/quiz/:eventId/presentation"
+        load={() => import("./pages/QuizPublic.svelte")}
+        props={(meta) => ({ serverId: meta.params.serverId, eventId: meta.params.eventId, presentation: true })}
+      />
+      <LazyRoute
+        path="/:serverId/quiz/:eventId"
+        load={() => import("./pages/QuizPublic.svelte")}
         props={(meta) => ({ serverId: meta.params.serverId, eventId: meta.params.eventId })}
       />
       <LazyRoute
