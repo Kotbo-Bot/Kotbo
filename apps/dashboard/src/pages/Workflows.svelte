@@ -566,6 +566,8 @@
     'anti-invite': { name: m.wf_tpl_invite, description: m.wf_tpl_invite_desc },
     'level-reward': { name: m.wf_tpl_level, description: m.wf_tpl_level_desc },
     'ticket-welcome': { name: m.wf_tpl_ticket, description: m.wf_tpl_ticket_desc },
+    'reputation-thanks-dm': { name: m.wf_tpl_rep_dm, description: m.wf_tpl_rep_dm_desc },
+    'reputation-milestone': { name: m.wf_tpl_rep_milestone, description: m.wf_tpl_rep_milestone_desc },
     'reaction-role': { name: m.wf_tpl_reaction_role, description: m.wf_tpl_reaction_role_desc },
     'reaction-role-remove': { name: m.wf_tpl_reaction_role_remove, description: m.wf_tpl_reaction_role_remove_desc },
   };

@@ -12,6 +12,7 @@ import {
   parseEmojiFilter,
   parseMessageFilter,
   readTriggerChannelFilter,
+  RECIPE_TEMPLATES,
   TRIGGER_GROUP_LABELS,
   TRIGGER_LIBRARY,
   type Recipe,
@@ -724,8 +725,8 @@ describe('déclencheurs de réputation', () => {
 
   test('« membre » désigne celui qui remercie, puis celui qui est remercié', () => {
     const paths = (type: string) => contextTokens(type).map((token) => token.path);
-    expect(paths('OnReputationGiven')).toEqual(expect.arrayContaining(['member.displayName', 'receiver.displayName', 'reason', 'total', 'channel.name']));
-    expect(paths('OnReputationReceived')).toEqual(expect.arrayContaining(['member.displayName', 'giver.displayName', 'reason', 'total', 'channel.name']));
+    expect(paths('OnReputationGiven')).toEqual(expect.arrayContaining(['member.displayName', 'receiver.displayName', 'reason', 'reputation', 'channel.name']));
+    expect(paths('OnReputationReceived')).toEqual(expect.arrayContaining(['member.displayName', 'giver.displayName', 'reason', 'reputation', 'channel.name']));
     expect(paths('OnReputationGiven')).not.toContain('giver.displayName');
     expect(paths('OnReputationReceived')).not.toContain('receiver.displayName');
   });
@@ -735,11 +736,35 @@ describe('déclencheurs de réputation', () => {
       trigger: { type: 'OnReputationReceived' },
       steps: [{
         id: 'log', kind: 'action', action: 'SendLogMessage',
-        values: { text: { from: 'text', template: '{giver.displayName} remercie {member.displayName} ({total} points) : {reason}' } },
+        values: { text: { from: 'text', template: '{giver.displayName} remercie {member.displayName} ({reputation} points) : {reason}' } },
       }],
     };
     const graph = compileRecipe(recipe);
     expect(hasBlockingIssue(validateGraph(graph))).toBe(false);
     expect(decompileGraph(graph)).toEqual(recipe);
+  });
+
+  test('la condition sur la réputation n\'est proposée qu\'aux deux déclencheurs de remerciement', () => {
+    const keys = (type: string) => availableConditions(type).map((condition) => condition.key);
+    expect(keys('OnReputationGiven')).toContain('reputation.points');
+    expect(keys('OnReputationReceived')).toContain('reputation.points');
+    // La dette de clan expose aussi un total : la condition ne doit pas s'y glisser.
+    expect(keys('OnClanDebtOpened')).not.toContain('reputation.points');
+    expect(keys('OnLevelUp')).not.toContain('reputation.points');
+  });
+
+  test('les modèles de réputation se compilent et se relisent à l\'identique', () => {
+    for (const id of ['reputation-thanks-dm', 'reputation-milestone']) {
+      const template = RECIPE_TEMPLATES.find((entry) => entry.id === id);
+      expect(template).toBeDefined();
+      const recipe = template!.build();
+      expect(recipe.trigger.type).toBe('OnReputationReceived');
+      expect(decompileGraph(compileRecipe(recipe))).toEqual(recipe);
+    }
+  });
+
+  test('le message privé au membre remercié est prêt à l\'emploi, sans réglage', () => {
+    const recipe = RECIPE_TEMPLATES.find((entry) => entry.id === 'reputation-thanks-dm')!.build();
+    expect(hasBlockingIssue(validateGraph(compileRecipe(recipe)))).toBe(false);
   });
 });

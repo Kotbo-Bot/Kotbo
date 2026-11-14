@@ -1390,7 +1390,7 @@
               </section>
               <!-- La carte lit le serveur sélectionné : masquée quand le dossier porte sur un autre. -->
               {#if userId && (!caseGuildId || caseGuildId === authStore.selectedGuildId)}
-                <MemberReputationCard {userId} userName={displayName || userId} />
+                <MemberReputationCard {userId} userName={displayName || userId} onLeave={() => onClose(new MouseEvent('click'))} />
               {/if}
               <SectionCard title={m.mcm_by_channel()}>
                 {#if caseData?.messagesByChannel?.length}

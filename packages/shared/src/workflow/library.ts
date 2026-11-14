@@ -1202,6 +1202,21 @@ export const CONDITION_LIBRARY: ConditionPresentation[] = [
     }),
   },
   {
+    key: 'reputation.points',
+    sentence: 'la réputation du membre remercié est {operator} {value}',
+    negativeSentence: 'la réputation du membre remercié n\'est pas {operator} {value}',
+    group: 'context',
+    requires: ['reputation'],
+    valueKind: 'number',
+    operators: NUMBER_OPERATORS,
+    defaultOperator: 'gte',
+    build: (test) => ({
+      node: 'Compare',
+      inputs: { a: ctx('reputation'), b: userValue(test) },
+      config: { operator: test.operator ?? 'gte' },
+    }),
+  },
+  {
     key: 'ticket.type',
     sentence: 'le type de ticket est {value}',
     negativeSentence: 'le type de ticket n\'est pas {value}',
