@@ -676,7 +676,7 @@ export async function buildTriggerOutputs(
       const shared = {
         channel: channelOf(payload.channelId),
         reason: String(payload.reason ?? ''),
-        total: Number(payload.total ?? 0),
+        reputation: Number(payload.total ?? 0),
       };
       return triggerType === 'OnReputationGiven'
         ? { member: giver, receiver, ...shared }

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onDestroy, onMount, untrack } from 'svelte';
   import { MediaQuery } from 'svelte/reactivity';
+  import { router } from 'tinro';
   import {
     REPUTATION_COINS_PER_REP,
     REPUTATION_DAILY_LIMIT,
@@ -282,6 +283,7 @@
       if (request !== historyRequest || !page) return;
       votes = reset ? page.votes : [...votes, ...page.votes];
       nextCursor = page.nextCursor;
+      nameMemberFromVotes();
     } finally {
       if (request === historyRequest) historyLoading = false;
     }
@@ -301,6 +303,28 @@
     historyMember = { id: userId, name: name || userId };
     activeTab = 'history';
     void loadHistory(true);
+  }
+
+  const SNOWFLAKE_RE = /^\d{17,20}$/;
+
+  /**
+   * `?member=<id>` ouvre l'historique filtré sur ce membre (lien « Voir
+   * l'historique » de sa fiche). Seul l'identifiant passe par l'adresse : le
+   * pseudo vient du classement, ou des votes une fois chargés.
+   */
+  function applyMemberQuery(raw: unknown) {
+    if (typeof raw !== 'string' || !SNOWFLAKE_RE.test(raw) || raw === historyMember?.id) return;
+    const entry = data?.leaderboard.entries.find((candidate) => candidate.userId === raw);
+    showMemberHistory(raw, entry?.displayName ?? null);
+  }
+
+  /** Pseudo du membre filtré, lu dans un vote quand l'adresse n'a donné que son identifiant. */
+  function nameMemberFromVotes() {
+    const member = historyMember;
+    if (!member || member.name !== member.id) return;
+    const vote = votes.find((candidate) => candidate.giverId === member.id || candidate.receiverId === member.id);
+    const name = vote?.giverId === member.id ? vote.giverName : vote?.receiverName;
+    if (name) historyMember = { ...member, name };
   }
 
   function clearMemberFilter() {
@@ -380,6 +404,8 @@
   });
 
   let unsubscribeRealtime: (() => void) | null = null;
+  let unsubscribeRouter: (() => void) | null = null;
+  let destroyed = false;
 
   onMount(async () => {
     unsubscribeRealtime = subscribeRealtime({
@@ -391,12 +417,16 @@
     });
     await loadOverview();
     await loadHistory(true);
+    // Après le premier chargement : le classement sert à nommer le membre demandé.
+    if (!destroyed) unsubscribeRouter = router.subscribe((route) => applyMemberQuery(route.query?.member));
     const channels = await fetchDiscordChannels().catch(() => null);
     textChannels = channels?.textChannels ?? [];
   });
 
   onDestroy(() => {
+    destroyed = true;
     unsubscribeRealtime?.();
+    unsubscribeRouter?.();
     unsavedChanges.release('reputation');
   });
 </script>

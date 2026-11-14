@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { router } from 'tinro';
   import { fetchMemberReputation, resetReputation, type MemberReputation } from '../../api';
   import { canConfigureFeature, canViewFeature } from '../../permissions.svelte';
   import { confirmDialog } from '../../stores/confirmDialog.svelte';
@@ -11,9 +12,11 @@
   interface Props {
     userId: string;
     userName: string;
+    /** Ferme la fiche avant d'ouvrir la page Réputation. */
+    onLeave?: () => void;
   }
 
-  let { userId, userName }: Props = $props();
+  let { userId, userName, onLeave }: Props = $props();
 
   let data = $state<MemberReputation | null>(null);
   let loading = $state(false);
@@ -42,6 +45,11 @@
     return new Date(iso).toLocaleDateString(dateLocale(), { dateStyle: 'medium' });
   }
 
+  function openHistory() {
+    onLeave?.();
+    router.goto(`/reputation?member=${encodeURIComponent(userId)}`);
+  }
+
   async function resetMember() {
     const confirmed = await confirmDialog.ask({
       title: m.rep_reset_member_title(),
@@ -59,6 +67,9 @@
 {#if canView && (loading || data)}
   <SectionCard title={m.rep_member_card_title()}>
     {#snippet actions()}
+      {#if data && (data.receivedVotes > 0 || data.givenVotes > 0 || data.recent.length > 0)}
+        <Button size="sm" variant="ghost" icon="Clock" onclick={openHistory}>{m.rep_member_card_history()}</Button>
+      {/if}
       {#if canManage && data}
         <Button size="sm" variant="ghost" icon="SlidersHorizontal" onclick={() => adjustOpen = true}>{m.rep_staff_adjust_action()}</Button>
         <Button size="sm" variant="ghost" icon="RotateCcw" disabled={data.totalRep === 0 && data.recent.length === 0} onclick={resetMember}>{m.rep_member_card_reset()}</Button>
