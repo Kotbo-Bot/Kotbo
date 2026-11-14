@@ -4,6 +4,10 @@
   import {
     REPUTATION_COINS_PER_REP,
     REPUTATION_DAILY_LIMIT,
+    REPUTATION_EXCLUDED_MAX,
+    REPUTATION_MIN_ACCOUNT_AGE_DAYS,
+    REPUTATION_MIN_MEMBER_DAYS,
+    REPUTATION_SAME_MEMBER_COOLDOWN_DAYS,
     REPUTATION_XP_PER_REP,
     REPUTATION_TIERS_MAX,
     REPUTATION_TIER_THRESHOLD,
@@ -16,6 +20,7 @@
     fetchDiscordChannels,
     fetchReputationData,
     fetchReputationVotes,
+    resetReputation,
     updateReputationConfig,
     type ReputationConfig,
     type ReputationData,
@@ -37,6 +42,9 @@
   import SearchableSelect from '../lib/components/SearchableSelect.svelte';
   import ToggleSwitch from '../lib/components/ToggleSwitch.svelte';
   import EmojiListInput from '../lib/components/EmojiListInput.svelte';
+  import MultiSelect from '../lib/components/MultiSelect.svelte';
+  import MemberSearchSelect from '../lib/components/MemberSearchSelect.svelte';
+  import ReputationAdjustModal from '../lib/components/ReputationAdjustModal.svelte';
   import ReputationTierAnnouncementPreview from '../lib/components/ReputationTierAnnouncementPreview.svelte';
   import Callout from '../lib/components/ui/Callout.svelte';
   import Button from '../lib/components/ui/Button.svelte';
@@ -54,7 +62,12 @@
   let period = $state<ReputationPeriod>('all');
 
   function cloneConfig(source: ReputationConfig): ReputationConfig {
-    return { ...source, tiers: source.tiers.map((tier) => ({ ...tier })) };
+    return {
+      ...source,
+      excludedRoleIds: [...source.excludedRoleIds],
+      excludedChannelIds: [...source.excludedChannelIds],
+      tiers: source.tiers.map((tier) => ({ ...tier })),
+    };
   }
 
   /** Forme comparable : « aucun salon » s'écrit `''` dans le sélecteur et `null` en base. */
@@ -66,6 +79,11 @@
       xpPerRep: source.xpPerRep,
       coinsPerRep: source.coinsPerRep,
       announceChannelId: source.announceChannelId || null,
+      minAccountAgeDays: source.minAccountAgeDays,
+      minMemberDays: source.minMemberDays,
+      sameMemberCooldownDays: source.sameMemberCooldownDays,
+      excludedRoleIds: [...source.excludedRoleIds].sort(),
+      excludedChannelIds: [...source.excludedChannelIds].sort(),
       tiers: tiersKey(source.tiers),
     });
   }
@@ -100,7 +118,26 @@
   const coinsValid = $derived(inRange(config.coinsPerRep, REPUTATION_COINS_PER_REP));
   /** Même règle que l'API : l'option allumée sans emoji ne ferait rien. */
   const reactionValid = $derived(!config.reactionEnabled || !!config.reactionEmoji);
-  const settingsValid = $derived(dailyLimitValid && xpValid && coinsValid && reactionValid);
+  const accountAgeValid = $derived(inRange(config.minAccountAgeDays, REPUTATION_MIN_ACCOUNT_AGE_DAYS));
+  const memberDaysValid = $derived(inRange(config.minMemberDays, REPUTATION_MIN_MEMBER_DAYS));
+  const cooldownValid = $derived(inRange(config.sameMemberCooldownDays, REPUTATION_SAME_MEMBER_COOLDOWN_DAYS));
+  const excludedValid = $derived(
+    config.excludedRoleIds.length <= REPUTATION_EXCLUDED_MAX && config.excludedChannelIds.length <= REPUTATION_EXCLUDED_MAX
+  );
+  const guardsValid = $derived(accountAgeValid && memberDaysValid && cooldownValid && excludedValid);
+  const settingsValid = $derived(dailyLimitValid && xpValid && coinsValid && reactionValid && guardsValid);
+
+  /** Garde-fous en place, pour le résumé du bloc replié et le panneau d'état. */
+  function activeGuards(source: ReputationConfig): number {
+    return [
+      source.minAccountAgeDays > 0,
+      source.minMemberDays > 0,
+      source.sameMemberCooldownDays > 1,
+      source.excludedRoleIds.length > 0,
+      source.excludedChannelIds.length > 0,
+    ].filter(Boolean).length;
+  }
+  const guardCount = $derived(activeGuards(config));
 
   /** Module absent de la liste = actif, même lecture que ModulePage. */
   function isModuleActive(key: string): boolean {
@@ -160,6 +197,47 @@
 
   /** Pastille du podium : or, argent, bronze ; rien au-delà, le numéro suffit. */
   const PODIUM = ['rep-podium-gold', 'rep-podium-silver', 'rep-podium-bronze'];
+
+  /** Fenêtre d'ajustement : membre déjà choisi depuis le classement, sinon cherché dedans. */
+  let adjustOpen = $state(false);
+  let adjustMember = $state<{ id: string; name: string } | null>(null);
+  let resetMemberId = $state('');
+  let resetMemberName = $state('');
+
+  function openAdjust(target: { id: string; name: string } | null) {
+    adjustMember = target;
+    adjustOpen = true;
+  }
+
+  async function resetMember() {
+    if (!resetMemberId) return;
+    const confirmed = await confirmDialog.ask({
+      title: m.rep_reset_member_title(),
+      description: m.rep_reset_member_desc({ name: resetMemberName || resetMemberId }),
+      confirmLabel: m.rep_reset_member_confirm(),
+      variant: 'danger',
+      impacts: [m.rep_reset_impact_tiers(), m.rep_reset_impact_gains_kept()],
+    });
+    if (!confirmed) return;
+    const result = await resetReputation({ scope: 'member', userId: resetMemberId });
+    if (result) {
+      resetMemberId = '';
+      resetMemberName = '';
+    }
+  }
+
+  async function resetGuild() {
+    const confirmed = await confirmDialog.ask({
+      title: m.rep_reset_guild_title(),
+      description: m.rep_reset_guild_desc({ count: data?.stats.totalVotes ?? 0 }),
+      confirmLabel: m.rep_reset_guild_confirm(),
+      variant: 'danger',
+      requireInput: m.rep_reset_guild_word(),
+      impacts: [m.rep_reset_impact_tiers(), m.rep_reset_impact_gains_kept(), m.rep_reset_impact_irreversible()],
+    });
+    if (!confirmed) return;
+    await resetReputation({ scope: 'guild' });
+  }
 
   /** Plus de votes cumulés mais aucun cette semaine : le module s'endort. */
   const quietWeek = $derived(!!data && data.stats.totalVotes > 0 && data.stats.votesLast7Days === 0);
@@ -231,14 +309,18 @@
   }
 
   async function removeVote(vote: ReputationVote) {
+    const adjustment = vote.kind === 'ADJUSTMENT';
     const confirmed = await confirmDialog.ask({
-      title: m.rep_delete_vote_title(),
-      description: m.rep_delete_vote_desc({
-        giver: vote.giverName || vote.giverId,
-        receiver: vote.receiverName || vote.receiverId,
-      }),
+      title: adjustment ? m.rep_delete_adjustment_title() : m.rep_delete_vote_title(),
+      description: adjustment
+        ? m.rep_delete_adjustment_desc({ points: vote.value ?? 0, receiver: vote.receiverName || vote.receiverId })
+        : m.rep_delete_vote_desc({
+          giver: vote.giverName || vote.giverId,
+          receiver: vote.receiverName || vote.receiverId,
+        }),
       confirmLabel: m.rep_delete_vote_confirm(),
       variant: 'danger',
+      impacts: adjustment ? [] : [m.rep_delete_vote_impact_gains()],
     });
     if (!confirmed) return;
     const result = await deleteReputationVote(vote.id);
@@ -267,6 +349,11 @@
       xpPerRep: config.xpPerRep,
       coinsPerRep: config.coinsPerRep,
       announceChannelId: config.announceChannelId || null,
+      minAccountAgeDays: config.minAccountAgeDays,
+      minMemberDays: config.minMemberDays,
+      sameMemberCooldownDays: config.sameMemberCooldownDays,
+      excludedRoleIds: config.excludedRoleIds,
+      excludedChannelIds: config.excludedChannelIds,
       // Paliers inchangés : non renvoyés. Un rôle supprimé depuis ferait refuser
       // par l'API tout l'enregistrement, même d'un simple réglage voisin.
       ...(tiersDirty && 'tiers' in tiersCheck ? { tiers: tiersCheck.tiers } : {}),
@@ -334,6 +421,10 @@
       <div class="flex items-center justify-between gap-3">
         <dt class="text-on-surface-variant">{m.rep_status_tiers()}</dt>
         <dd class="font-semibold">{data.config.tiers.length}</dd>
+      </div>
+      <div class="flex items-center justify-between gap-3">
+        <dt class="text-on-surface-variant">{m.rep_status_guards()}</dt>
+        <dd class="font-semibold">{activeGuards(data.config) > 0 ? m.rep_guards_summary({ count: activeGuards(data.config) }) : m.rep_guards_off()}</dd>
       </div>
       <div class="flex items-center justify-between gap-3">
         <dt class="text-on-surface-variant">{m.rep_status_last_vote()}</dt>
@@ -443,13 +534,24 @@
                       ></div>
                     </div>
                     <span class="font-bold text-success text-right text-xs">+{entry.totalRep}</span>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      icon="Clock"
-                      aria-label={m.rep_show_member_history({ name: entry.displayName || entry.userId })}
-                      onclick={() => showMemberHistory(entry.userId, entry.displayName)}
-                    />
+                    <div class="flex items-center">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        icon="Clock"
+                        aria-label={m.rep_show_member_history({ name: entry.displayName || entry.userId })}
+                        onclick={() => showMemberHistory(entry.userId, entry.displayName)}
+                      />
+                      {#if canManageSettings}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          icon="SlidersHorizontal"
+                          aria-label={m.rep_adjust_member_aria({ name: entry.displayName || entry.userId })}
+                          onclick={() => openAdjust({ id: entry.userId, name: entry.displayName || entry.userId })}
+                        />
+                      {/if}
+                    </div>
                   </li>
                 {/each}
               </ol>
@@ -485,6 +587,11 @@
                 <li class="bg-surface-container-high/20 border border-outline-variant/10 rounded-xl p-3 space-y-2">
                   <div class="flex items-start justify-between gap-2">
                     <div class="flex items-center gap-2 flex-wrap min-w-0">
+                      {#if vote.kind === 'ADJUSTMENT'}
+                        <span class="text-2xs font-semibold px-2 py-0.5 rounded-full {(vote.value ?? 0) > 0 ? 'bg-success/10 text-success border border-success/20' : 'bg-error/10 text-error border border-error/20'}">
+                          {m.rep_history_adjustment({ points: (vote.value ?? 0) > 0 ? `+${vote.value}` : `${vote.value}` })}
+                        </span>
+                      {/if}
                       <UserDisplay
                         userId={vote.giverId}
                         name={vote.giverName}
@@ -508,7 +615,7 @@
                         variant="ghost"
                         size="sm"
                         icon="Trash"
-                        aria-label={m.rep_delete_vote_title()}
+                        aria-label={vote.kind === 'ADJUSTMENT' ? m.rep_delete_adjustment_title() : m.rep_delete_vote_title()}
                         onclick={() => removeVote(vote)}
                       />
                     {/if}
@@ -667,6 +774,92 @@
               />
             {/snippet}
           </Field>
+
+          <!-- Replié par défaut, comme les options facultatives de Drops : le résumé dit ce qui est en place. -->
+          <details class="group border border-outline-variant/15 rounded-xl">
+            <summary class="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-3 [&::-webkit-details-marker]:hidden">
+              <span class="text-sm font-semibold flex items-center gap-2">
+                <span class="transition-transform group-open:rotate-90"><Papicon icon="ChevronRight" size={14} /></span>
+                <Papicon icon="ShieldCheck" size={15} />
+                {m.rep_guards_heading()}
+              </span>
+              <span class="text-2xs font-semibold px-2 py-0.5 rounded-full {!guardsValid ? 'bg-error/10 text-error border border-error/20' : guardCount > 0 ? 'bg-success/10 text-success border border-success/20' : 'bg-surface-container-high/60 text-on-surface-variant'}">
+                {!guardsValid ? m.rep_tab_to_fix() : guardCount > 0 ? m.rep_guards_summary({ count: guardCount }) : m.rep_guards_off()}
+              </span>
+            </summary>
+
+            <div class="px-4 pb-4 space-y-5">
+              <p class="text-xs text-on-surface-variant">{m.rep_guards_desc()}</p>
+
+              <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <Field
+                  id="rep-min-account-age"
+                  label={m.rep_guards_account_age_label()}
+                  hint={m.rep_guards_days_hint()}
+                  error={accountAgeValid ? undefined : m.rep_rewards_range_error({ min: REPUTATION_MIN_ACCOUNT_AGE_DAYS.min, max: REPUTATION_MIN_ACCOUNT_AGE_DAYS.max })}
+                >
+                  {#snippet children(id, describedBy)}
+                    <input {id} type="number" class="input" min={REPUTATION_MIN_ACCOUNT_AGE_DAYS.min} max={REPUTATION_MIN_ACCOUNT_AGE_DAYS.max} bind:value={config.minAccountAgeDays} aria-describedby={describedBy} disabled={!canManageSettings} />
+                  {/snippet}
+                </Field>
+                <Field
+                  id="rep-min-member-days"
+                  label={m.rep_guards_member_days_label()}
+                  hint={m.rep_guards_days_hint()}
+                  error={memberDaysValid ? undefined : m.rep_rewards_range_error({ min: REPUTATION_MIN_MEMBER_DAYS.min, max: REPUTATION_MIN_MEMBER_DAYS.max })}
+                >
+                  {#snippet children(id, describedBy)}
+                    <input {id} type="number" class="input" min={REPUTATION_MIN_MEMBER_DAYS.min} max={REPUTATION_MIN_MEMBER_DAYS.max} bind:value={config.minMemberDays} aria-describedby={describedBy} disabled={!canManageSettings} />
+                  {/snippet}
+                </Field>
+                <Field
+                  id="rep-same-member-cooldown"
+                  label={m.rep_guards_cooldown_label()}
+                  hint={m.rep_guards_cooldown_hint()}
+                  error={cooldownValid ? undefined : m.rep_rewards_range_error({ min: REPUTATION_SAME_MEMBER_COOLDOWN_DAYS.min, max: REPUTATION_SAME_MEMBER_COOLDOWN_DAYS.max })}
+                >
+                  {#snippet children(id, describedBy)}
+                    <input {id} type="number" class="input" min={REPUTATION_SAME_MEMBER_COOLDOWN_DAYS.min} max={REPUTATION_SAME_MEMBER_COOLDOWN_DAYS.max} bind:value={config.sameMemberCooldownDays} aria-describedby={describedBy} disabled={!canManageSettings} />
+                  {/snippet}
+                </Field>
+              </div>
+
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Field
+                  id="rep-excluded-roles"
+                  label={m.rep_guards_roles_label()}
+                  hint={m.rep_guards_roles_hint()}
+                  error={config.excludedRoleIds.length <= REPUTATION_EXCLUDED_MAX ? undefined : m.rep_guards_too_many({ max: REPUTATION_EXCLUDED_MAX })}
+                >
+                  {#snippet children(id)}
+                    <MultiSelect
+                      {id}
+                      bind:values={config.excludedRoleIds}
+                      options={assignableRoles.map((role: { id: string; name: string }) => ({ id: role.id, name: `@${role.name}` }))}
+                      placeholder={m.rep_guards_none()}
+                      disabled={!canManageSettings}
+                    />
+                  {/snippet}
+                </Field>
+                <Field
+                  id="rep-excluded-channels"
+                  label={m.rep_guards_channels_label()}
+                  hint={m.rep_guards_channels_hint()}
+                  error={config.excludedChannelIds.length <= REPUTATION_EXCLUDED_MAX ? undefined : m.rep_guards_too_many({ max: REPUTATION_EXCLUDED_MAX })}
+                >
+                  {#snippet children(id)}
+                    <MultiSelect
+                      {id}
+                      bind:values={config.excludedChannelIds}
+                      options={textChannels.map((channel) => ({ id: channel.id, name: `#${channel.name}` }))}
+                      placeholder={m.rep_guards_none()}
+                      disabled={!canManageSettings}
+                    />
+                  {/snippet}
+                </Field>
+              </div>
+            </div>
+          </details>
         </section>
 
         <section class="bg-surface-container-low/40 border border-outline-variant/30 p-6 rounded-xl space-y-5 mt-6">
@@ -748,6 +941,58 @@
             </Field>
           </div>
         </section>
+
+        {#if canManageSettings}
+          <!-- Gestes du staff, à part des réglages : rien ici ne passe par la barre d'enregistrement. -->
+          <details class="group bg-surface-container-low/40 border border-outline-variant/30 rounded-xl mt-6">
+            <summary class="flex cursor-pointer list-none items-center justify-between gap-4 px-6 py-4 [&::-webkit-details-marker]:hidden">
+              <span class="text-lg font-semibold flex items-center gap-2">
+                <span class="transition-transform group-open:rotate-90"><Papicon icon="ChevronRight" size={16} /></span>
+                <Papicon icon="SlidersHorizontal" size={18} />
+                {m.rep_staff_heading()}
+              </span>
+              <span class="text-2xs font-semibold px-2 py-0.5 rounded-full bg-surface-container-high/60 text-on-surface-variant">{m.rep_staff_badge()}</span>
+            </summary>
+
+            <div class="px-6 pb-6 space-y-6">
+              <p class="text-xs text-on-surface-variant">{m.rep_staff_desc()}</p>
+
+              <div class="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p class="text-sm font-semibold">{m.rep_adjust_title()}</p>
+                  <p class="text-xs text-on-surface-variant">{m.rep_staff_adjust_desc()}</p>
+                </div>
+                <Button size="sm" icon="SlidersHorizontal" onclick={() => openAdjust(null)}>{m.rep_staff_adjust_action()}</Button>
+              </div>
+
+              <div class="space-y-3 border-t border-outline-variant/15 pt-5">
+                <div>
+                  <p class="text-sm font-semibold">{m.rep_reset_member_title()}</p>
+                  <p class="text-xs text-on-surface-variant">{m.rep_staff_reset_member_desc()}</p>
+                </div>
+                <div class="flex flex-wrap items-end gap-3">
+                  <div class="min-w-56 flex-1">
+                    <MemberSearchSelect
+                      id="rep-reset-member"
+                      bind:value={resetMemberId}
+                      placeholder={m.rep_adjust_member_placeholder()}
+                      onselect={(member) => resetMemberName = member.displayName || member.username}
+                    />
+                  </div>
+                  <Button size="sm" variant="danger" icon="RotateCcw" disabled={!resetMemberId} onclick={resetMember}>{m.rep_reset_member_confirm()}</Button>
+                </div>
+              </div>
+
+              <div class="flex flex-wrap items-center justify-between gap-3 border-t border-error/20 pt-5">
+                <div>
+                  <p class="text-sm font-semibold text-error">{m.rep_reset_guild_title()}</p>
+                  <p class="text-xs text-on-surface-variant">{m.rep_staff_reset_guild_desc()}</p>
+                </div>
+                <Button size="sm" variant="danger" icon="AlertTriangle" onclick={resetGuild}>{m.rep_reset_guild_confirm()}</Button>
+              </div>
+            </div>
+          </details>
+        {/if}
       {/if}
     </div>
 
@@ -760,6 +1005,10 @@
       </aside>
     {/if}
   </div>
+
+  {#if canManageSettings}
+    <ReputationAdjustModal bind:open={adjustOpen} member={adjustMember} />
+  {/if}
 </ModulePage>
 
 <style>

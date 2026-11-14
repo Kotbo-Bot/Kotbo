@@ -13,6 +13,17 @@ export const REPUTATION_DAILY_LIMIT = { min: 1, max: 20, default: 3 } as const;
 export const REPUTATION_XP_PER_REP = { min: 0, max: 500 } as const;
 export const REPUTATION_COINS_PER_REP = { min: 0, max: 10_000 } as const;
 
+/** Garde-fous du donneur, en jours. `0` = aucune exigence. */
+export const REPUTATION_MIN_ACCOUNT_AGE_DAYS = { min: 0, max: 365 } as const;
+export const REPUTATION_MIN_MEMBER_DAYS = { min: 0, max: 365 } as const;
+/** Jours avant de remercier à nouveau le même membre. `1` = dès le lendemain. */
+export const REPUTATION_SAME_MEMBER_COOLDOWN_DAYS = { min: 1, max: 30 } as const;
+/** Rôles ou salons exclus, par liste. */
+export const REPUTATION_EXCLUDED_MAX = 25;
+
+/** Points donnés ou retirés d'un coup par un ajustement du staff, jamais 0. */
+export const REPUTATION_ADJUSTMENT = { min: -1_000, max: 1_000 } as const;
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 const PERIOD_DAYS: Record<Exclude<ReputationPeriod, 'all'>, number> = { week: 7, month: 30 };
 

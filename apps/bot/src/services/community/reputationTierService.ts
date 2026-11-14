@@ -104,8 +104,16 @@ async function announce(member: GuildMember, channelId: string, tier: Reputation
  * Après un gain : rôles des paliers atteints, puis annonce. Seul un palier
  * franchi par ce vote est annoncé : un rattrapage se fait en silence, sans quoi
  * le salon annoncerait comme nouveau un seuil dépassé depuis longtemps.
+ * `announce: false` pour un geste du staff : le palier est donné sans message.
  */
-export async function applyReputationGain(client: Client, guildId: string, userId: string, before: number, after: number): Promise<void> {
+export async function applyReputationGain(
+  client: Client,
+  guildId: string,
+  userId: string,
+  before: number,
+  after: number,
+  { announce: shouldAnnounce = true }: { announce?: boolean } = {},
+): Promise<void> {
   const { tiers, announceChannelId } = await getReputationConfig(guildId);
   if (reachedTiers(after, tiers).length === 0) return;
 
@@ -114,7 +122,7 @@ export async function applyReputationGain(client: Client, guildId: string, userI
   const locale = await resolveGuildLocale(guildId, member.guild.preferredLocale);
   const granted = await grantReachedTiers(member, tiers, after, m.b2_rep_tier_audit_reason({}, { locale }));
   const newlyCrossed = granted.filter((tier) => tier.threshold > before);
-  if (announceChannelId && newlyCrossed.length > 0) {
+  if (shouldAnnounce && announceChannelId && newlyCrossed.length > 0) {
     await announce(member, announceChannelId, newlyCrossed[newlyCrossed.length - 1], locale);
   }
 }

@@ -86,6 +86,11 @@ export function registerCommunityRoutes(): void {
     xpPerRep: number;
     coinsPerRep: number;
     announceChannelId: string | null;
+    minAccountAgeDays: number;
+    minMemberDays: number;
+    sameMemberCooldownDays: number;
+    excludedRoleIds: string[];
+    excludedChannelIds: string[];
     tiers: Array<{ threshold: number; roleId: string }>;
   } = {
     dailyLimit: 3,
@@ -94,6 +99,11 @@ export function registerCommunityRoutes(): void {
     xpPerRep: 0,
     coinsPerRep: 0,
     announceChannelId: null,
+    minAccountAgeDays: 0,
+    minMemberDays: 0,
+    sameMemberCooldownDays: 1,
+    excludedRoleIds: [],
+    excludedChannelIds: [],
     tiers: [],
   };
   const repPool = () => members().slice(0, 8);
@@ -103,6 +113,8 @@ export function registerCommunityRoutes(): void {
       const giver = pool[(i + 3) % pool.length];
       return {
         id: `rep-${i}`,
+        kind: 'VOTE' as const,
+        value: 1,
         giverId: giver.id,
         giverName: giver.displayName,
         giverAvatarUrl: null,
@@ -142,8 +154,11 @@ export function registerCommunityRoutes(): void {
   });
 
   route('PATCH', '/api/dashboard/guilds/:guildId/reputation/config', ({ body }) => {
-    for (const key of ['dailyLimit', 'xpPerRep', 'coinsPerRep'] as const) {
+    for (const key of ['dailyLimit', 'xpPerRep', 'coinsPerRep', 'minAccountAgeDays', 'minMemberDays', 'sameMemberCooldownDays'] as const) {
       if (typeof body?.[key] === 'number') repConfig[key] = body[key];
+    }
+    for (const key of ['excludedRoleIds', 'excludedChannelIds'] as const) {
+      if (Array.isArray(body?.[key])) repConfig[key] = [...body[key]];
     }
     if (typeof body?.reactionEnabled === 'boolean') repConfig.reactionEnabled = body.reactionEnabled;
     if (body && 'reactionEmoji' in body) repConfig.reactionEmoji = body.reactionEmoji;
@@ -153,6 +168,27 @@ export function registerCommunityRoutes(): void {
   });
 
   route('DELETE', '/api/dashboard/guilds/:guildId/reputation/votes/:voteId', () => ({ deleted: true }));
+
+  route('GET', '/api/dashboard/guilds/:guildId/reputation/members/:userId', ({ params }) => {
+    const received = repVotes().filter((v) => v.receiverId === params.userId);
+    return {
+      totalRep: 12 + received.length,
+      rank: 4,
+      receivedVotes: 12 + received.length,
+      givenVotes: 7,
+      receivedLast7Days: received.length,
+      recent: received.map((v) => ({ id: v.id, kind: v.kind, value: v.value, giverId: v.giverId, giverName: v.giverName, reason: v.reason, createdAt: v.createdAt })),
+    };
+  });
+
+  route('POST', '/api/dashboard/guilds/:guildId/reputation/adjustments', ({ body }) => {
+    const amount = typeof body?.amount === 'number' ? body.amount : 0;
+    return { before: 12, after: Math.max(0, 12 + amount) };
+  });
+
+  route('POST', '/api/dashboard/guilds/:guildId/reputation/reset', ({ body }) => (
+    body?.scope === 'guild' ? { removed: 412, members: 37 } : { removed: 12 }
+  ));
 
   route('GET', '/api/dashboard/guilds/:guildId/marketplace', () => {
     const sellers = members().slice(0, 5);

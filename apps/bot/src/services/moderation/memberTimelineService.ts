@@ -428,18 +428,22 @@ const SOURCES: Source[] = [
         where: { guildId, OR: [{ receiverId: userId }, { giverId: userId }], createdAt: { lt: before } },
         orderBy: { createdAt: 'desc' },
         take: limit,
-        select: { id: true, giverId: true, receiverId: true, value: true, reason: true, createdAt: true },
+        select: { id: true, kind: true, giverId: true, receiverId: true, value: true, reason: true, createdAt: true },
       });
       return votes.map((v) => {
         const received = v.receiverId === userId;
         const other = received ? v.giverId : v.receiverId;
-        const sign = v.value > 0 ? '+' : '−';
+        const points = `${v.value > 0 ? '+' : '−'}${Math.abs(v.value)}`;
+        // Un ajustement est écrit par le staff : « donné » n'aurait pas de sens.
+        const title = v.kind === 'ADJUSTMENT'
+          ? (received ? `Réputation ajustée de ${points} par le staff` : `A ajusté de ${points} la réputation d'un membre`)
+          : (received ? `A reçu ${points} de réputation` : `A donné ${points} de réputation`);
         return {
           id: `rep:${v.id}`,
           type: received ? 'reputation.received' : 'reputation.given',
           category: 'community' as const,
           at: v.createdAt.toISOString(),
-          title: received ? `A reçu ${sign}1 de réputation` : `A donné ${sign}1 de réputation`,
+          title,
           description: truncate(v.reason),
           actor: { id: other, name: null },
           link: `/members/${other}`,

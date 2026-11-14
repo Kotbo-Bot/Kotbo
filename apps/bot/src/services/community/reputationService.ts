@@ -12,6 +12,7 @@ import { cache } from '../../utils/cache.js';
 import { broadcastDashboardStateChange } from '../../api/shared/sharding.js';
 import { logger } from '../../utils/logger.js';
 import { resolveGuildTimezone } from '../../utils/timezone.js';
+import { repCooldownBlocks, type RepGuardCode } from './reputationGuards.js';
 
 export interface ReputationSettings {
   dailyLimit: number;
@@ -23,6 +24,13 @@ export interface ReputationSettings {
   coinsPerRep: number;
   /** Salon des annonces de palier. `null` = rôle donné sans annonce. */
   announceChannelId: string | null;
+  /** Garde-fous du donneur, en jours. `0` = aucune exigence. */
+  minAccountAgeDays: number;
+  minMemberDays: number;
+  /** Jours avant de remercier à nouveau le même membre. */
+  sameMemberCooldownDays: number;
+  excludedRoleIds: string[];
+  excludedChannelIds: string[];
   /** Triés par seuil croissant. */
   tiers: ReputationTier[];
 }
@@ -34,6 +42,11 @@ export const DEFAULT_REPUTATION_SETTINGS: Readonly<ReputationSettings> = {
   xpPerRep: 0,
   coinsPerRep: 0,
   announceChannelId: null,
+  minAccountAgeDays: 0,
+  minMemberDays: 0,
+  sameMemberCooldownDays: 1,
+  excludedRoleIds: [],
+  excludedChannelIds: [],
   tiers: [],
 };
 
@@ -42,7 +55,7 @@ function withoutTiers({ tiers: _tiers, ...columns }: ReputationSettings) {
 }
 
 function defaultSettings(): ReputationSettings {
-  return { ...DEFAULT_REPUTATION_SETTINGS, tiers: [] };
+  return { ...DEFAULT_REPUTATION_SETTINGS, excludedRoleIds: [], excludedChannelIds: [], tiers: [] };
 }
 
 export interface ReputationProfile {
@@ -55,10 +68,10 @@ export interface ReputationProfile {
 }
 
 /** Motif d'un refus de vote. Traduit par l'appelant, dans la langue du serveur. */
-export type RepRefusalCode = 'SELF' | 'BOT' | 'DAILY_LIMIT' | 'ALREADY_TODAY';
+export type RepRefusalCode = 'SELF' | 'BOT' | 'DAILY_LIMIT' | 'ALREADY_TODAY' | 'COOLDOWN' | RepGuardCode;
 
 export type GiveRepResult =
-  | { success: true; newTotal: number }
+  | { success: true; newTotal: number; voteId: string }
   | { success: false; code: RepRefusalCode };
 
 export interface ReputationLeaderboard {
@@ -102,6 +115,11 @@ export async function getReputationConfig(guildId: string): Promise<ReputationSe
       xpPerRep: row.xpPerRep ?? 0,
       coinsPerRep: row.coinsPerRep ?? 0,
       announceChannelId: row.announceChannelId ?? null,
+      minAccountAgeDays: row.minAccountAgeDays ?? 0,
+      minMemberDays: row.minMemberDays ?? 0,
+      sameMemberCooldownDays: row.sameMemberCooldownDays ?? 1,
+      excludedRoleIds: row.excludedRoleIds ?? [],
+      excludedChannelIds: row.excludedChannelIds ?? [],
       tiers: (row.tiers ?? []).map((tier) => ({ threshold: tier.threshold, roleId: tier.roleId })),
     }
     : defaultSettings();
@@ -160,12 +178,22 @@ export async function giveRep(
   if (giverId === receiverId) return { success: false, code: 'SELF' };
   if (options.receiverIsBot) return { success: false, code: 'BOT' };
 
-  const [day, { dailyLimit }] = await Promise.all([currentRepDay(guildId), getReputationConfig(guildId)]);
+  const [day, { dailyLimit, sameMemberCooldownDays }] = await Promise.all([currentRepDay(guildId), getReputationConfig(guildId)]);
   const limitReached: GiveRepResult = { success: false, code: 'DAILY_LIMIT' };
 
   // Lectures sur le primaire : un réplica en retard laisserait passer un double clic.
   const votesToday = await prisma.reputationVote.count({ where: { guildId, giverId, day } });
   if (votesToday >= dailyLimit) return limitReached;
+
+  // Une attente d'un jour est déjà portée par l'index unique du jour.
+  if (sameMemberCooldownDays > 1) {
+    const last = await prisma.reputationVote.findFirst({
+      where: { guildId, giverId, receiverId, kind: 'VOTE' },
+      orderBy: { createdAt: 'desc' },
+      select: { day: true },
+    });
+    if (last?.day && repCooldownBlocks(last.day, day, sameMemberCooldownDays)) return { success: false, code: 'COOLDOWN' };
+  }
 
   let voteId: string;
   try {
@@ -201,7 +229,19 @@ export async function giveRep(
   logger.debug('Reputation', `${giverId} → +rep → ${receiverId} (guild: ${guildId})`);
   broadcastDashboardStateChange(guildId, REPUTATION_REALTIME_REASON);
 
-  return { success: true, newTotal };
+  return { success: true, newTotal, voteId };
+}
+
+/** Garde sur le vote les gains réellement versés, pour les reprendre s'il est retiré. */
+export async function recordVoteGains(voteId: string, gains: { xp: number; coins: number }): Promise<void> {
+  if (gains.xp <= 0 && gains.coins <= 0) return;
+  await prisma.reputationVote.update({
+    where: { id: voteId },
+    data: { xpGranted: gains.xp, coinsGranted: gains.coins },
+  }).catch((err: { code?: string }) => {
+    // P2025 : le vote a été retiré entre-temps, il n'y a plus rien à reprendre.
+    if (err?.code !== 'P2025') throw err;
+  });
 }
 
 /** Réputation reçue par un membre sur ce serveur. */
@@ -266,7 +306,7 @@ export async function getReputationLeaderboard(
       orderBy: { _sum: { value: 'desc' } },
       take: limit,
     }),
-    prismaRead.reputationVote.groupBy({ by: ['giverId'], where }),
+    prismaRead.reputationVote.groupBy({ by: ['giverId'], where: { ...where, kind: 'VOTE' } }),
   ]);
 
   return {
@@ -286,11 +326,11 @@ export async function getReputationDashboardData(guildId: string, period: Reputa
   const [config, leaderboard, totalVotes, votesLast7Days, activeGivers, lastVote] = await Promise.all([
     getReputationConfig(guildId),
     getReputationLeaderboard(guildId, 20, period),
-    prismaRead.reputationVote.count({ where: { guildId } }),
-    prismaRead.reputationVote.count({ where: { guildId, createdAt: { gte: weekAgo } } }),
-    prismaRead.reputationVote.groupBy({ by: ['giverId'], where: { guildId, createdAt: { gte: weekAgo } } }),
+    prismaRead.reputationVote.count({ where: { guildId, kind: 'VOTE' } }),
+    prismaRead.reputationVote.count({ where: { guildId, kind: 'VOTE', createdAt: { gte: weekAgo } } }),
+    prismaRead.reputationVote.groupBy({ by: ['giverId'], where: { guildId, kind: 'VOTE', createdAt: { gte: weekAgo } } }),
     prismaRead.reputationVote.findFirst({
-      where: { guildId },
+      where: { guildId, kind: 'VOTE' },
       orderBy: { createdAt: 'desc' },
       select: { createdAt: true },
     }),
@@ -341,6 +381,8 @@ export async function listReputationVotes(guildId: string, filter: ReputationVot
     take: limit + 1,
     select: {
       id: true,
+      kind: true,
+      value: true,
       giverId: true,
       receiverId: true,
       reason: true,
@@ -355,14 +397,85 @@ export async function listReputationVotes(guildId: string, filter: ReputationVot
   return { votes, nextCursor: rows.length > limit && last ? encodeReputationCursor(last.createdAt, last.id) : null };
 }
 
-/** Retire un vote du serveur. `null` quand il n'existe pas ou appartient à un autre serveur. */
+/** Retire un vote ou un ajustement du serveur. `null` quand il n'existe pas ou appartient à un autre serveur. */
 export async function deleteReputationVote(guildId: string, voteId: string) {
   const vote = await prisma.reputationVote.findFirst({
     where: { id: voteId, guildId },
-    select: { id: true, guildId: true, giverId: true, receiverId: true },
+    select: { id: true, guildId: true, kind: true, value: true, giverId: true, receiverId: true, xpGranted: true, coinsGranted: true },
   });
   if (!vote) return null;
   await prisma.reputationVote.delete({ where: { id: vote.id } });
   broadcastDashboardStateChange(guildId, REPUTATION_REALTIME_REASON);
   return vote;
+}
+
+// ── Gestion par le staff ─────────────────────────────────────────────────────
+
+export type AdjustReputationResult =
+  | { success: true; before: number; after: number }
+  | { success: false; code: 'BELOW_ZERO'; total: number };
+
+/**
+ * Donne ou retire des points à la main. Écrit comme un vote, de genre
+ * `ADJUSTMENT` et sans jour : les totaux, le classement et les paliers le
+ * comptent sans code à part, la limite par jour et les statistiques l'ignorent.
+ * Un retrait ne descend jamais sous zéro.
+ */
+export async function adjustReputation(
+  guildId: string,
+  staffId: string,
+  userId: string,
+  amount: number,
+  reason: string | null,
+): Promise<AdjustReputationResult> {
+  const before = await receivedTotal(guildId, userId, prisma);
+  if (before + amount < 0) return { success: false, code: 'BELOW_ZERO', total: before };
+
+  await prisma.reputationVote.create({
+    data: { guildId, giverId: staffId, receiverId: userId, kind: 'ADJUSTMENT', value: amount, reason, day: null },
+  });
+  broadcastDashboardStateChange(guildId, REPUTATION_REALTIME_REASON);
+  return { success: true, before, after: before + amount };
+}
+
+/** Remet à zéro la réputation reçue par un membre. Les votes qu'il a donnés restent. Rend le nombre de lignes retirées. */
+export async function resetMemberReputation(guildId: string, userId: string): Promise<number> {
+  const { count } = await prisma.reputationVote.deleteMany({ where: { guildId, receiverId: userId } });
+  broadcastDashboardStateChange(guildId, REPUTATION_REALTIME_REASON);
+  return count;
+}
+
+/** Remet à zéro tout le serveur. Rend les membres qui avaient des points, pour leur retirer leurs paliers. */
+export async function resetGuildReputation(guildId: string): Promise<{ count: number; receiverIds: string[] }> {
+  const receivers = await prisma.reputationVote.groupBy({ by: ['receiverId'], where: { guildId } });
+  const { count } = await prisma.reputationVote.deleteMany({ where: { guildId } });
+  broadcastDashboardStateChange(guildId, REPUTATION_REALTIME_REASON);
+  return { count, receiverIds: receivers.map((row) => row.receiverId) };
+}
+
+export interface MemberReputationSummary {
+  totalRep: number;
+  rank: number;
+  receivedVotes: number;
+  givenVotes: number;
+  receivedLast7Days: number;
+  recent: Array<{ id: string; kind: 'VOTE' | 'ADJUSTMENT'; value: number; giverId: string; reason: string | null; createdAt: Date }>;
+}
+
+/** Réputation d'un membre pour sa fiche du dashboard. */
+export async function getMemberReputationSummary(guildId: string, userId: string): Promise<MemberReputationSummary> {
+  const weekAgo = new Date(Date.now() - WEEK_MS);
+  const [totalRep, receivedVotes, givenVotes, receivedLast7Days, recent] = await Promise.all([
+    receivedTotal(guildId, userId),
+    prismaRead.reputationVote.count({ where: { guildId, receiverId: userId, kind: 'VOTE' } }),
+    prismaRead.reputationVote.count({ where: { guildId, giverId: userId, kind: 'VOTE' } }),
+    prismaRead.reputationVote.count({ where: { guildId, receiverId: userId, kind: 'VOTE', createdAt: { gte: weekAgo } } }),
+    prismaRead.reputationVote.findMany({
+      where: { guildId, receiverId: userId },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: 5,
+      select: { id: true, kind: true, value: true, giverId: true, reason: true, createdAt: true },
+    }),
+  ]);
+  return { totalRep, rank: await rankOf(guildId, totalRep), receivedVotes, givenVotes, receivedLast7Days, recent };
 }

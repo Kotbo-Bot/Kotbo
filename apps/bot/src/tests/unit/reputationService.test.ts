@@ -8,6 +8,8 @@ let receivedTotal = 0;
 let configRow: Record<string, unknown> | null = null;
 let voteRows: Array<Record<string, unknown>> = [];
 let foundVote: Record<string, unknown> | null = null;
+let deletedCount = 0;
+let receiverGroups: Array<{ receiverId: string }> = [];
 
 const mockDb = {
   reputationVote: {
@@ -18,8 +20,10 @@ const mockDb = {
       return { id: 'vote-1' };
     }),
     delete: mock(async (_args?: unknown) => ({})),
+    update: mock(async (_args?: unknown) => ({})),
+    deleteMany: mock(async (_args?: unknown) => ({ count: deletedCount })),
     aggregate: mock(async (_args?: unknown) => ({ _sum: { value: receivedTotal } })),
-    groupBy: mock(async (_args?: unknown) => []),
+    groupBy: mock(async (args?: { by?: string[] }) => (args?.by?.includes('receiverId') ? receiverGroups : [])),
     findMany: mock(async (_args?: unknown) => voteRows),
     findFirst: mock(async (_args?: unknown) => foundVote),
   },
@@ -54,6 +58,11 @@ const {
   listReputationVotes,
   deleteReputationVote,
   saveReputationConfig,
+  recordVoteGains,
+  adjustReputation,
+  resetMemberReputation,
+  resetGuildReputation,
+  getMemberReputationSummary,
 } = await import('../../services/community/reputationService.js');
 
 beforeEach(async () => {
@@ -64,7 +73,13 @@ beforeEach(async () => {
   configRow = null;
   voteRows = [];
   foundVote = null;
+  deletedCount = 0;
+  receiverGroups = [];
   for (const fn of [
+    mockDb.reputationVote.update,
+    mockDb.reputationVote.deleteMany,
+    mockDb.reputationVote.findFirst,
+    mockDb.reputationVote.groupBy,
     mockDb.reputationVote.count,
     mockDb.reputationVote.create,
     mockDb.reputationVote.findMany,
@@ -122,6 +137,32 @@ describe('giveRep', () => {
     expect(data.messageId).toBe('m1');
   });
 
+  test('un vote accepté rend son identifiant, pour y garder les gains', async () => {
+    const result = await giveRep('g', 'u1', 'u2');
+    expect(result).toMatchObject({ success: true, voteId: 'vote-1' });
+  });
+
+  test('l\'attente d\'un jour ne relit pas le dernier vote : l\'index du jour suffit', async () => {
+    await giveRep('g', 'u1', 'u2');
+    expect(mockDb.reputationVote.findFirst).not.toHaveBeenCalled();
+  });
+
+  test('refuse de remercier le même membre avant la fin de l\'attente', async () => {
+    configRow = { dailyLimit: 3, sameMemberCooldownDays: 30 };
+    foundVote = { day: new Date().toISOString().slice(0, 10) };
+    const result = await giveRep('g', 'u1', 'u2');
+    expect(result).toEqual({ success: false, code: 'COOLDOWN' });
+    expect(mockDb.reputationVote.create).not.toHaveBeenCalled();
+    const where = (mockDb.reputationVote.findFirst.mock.calls[0][0] as { where: Record<string, unknown> }).where;
+    expect(where).toEqual({ guildId: 'g', giverId: 'u1', receiverId: 'u2', kind: 'VOTE' });
+  });
+
+  test('accepte une fois l\'attente écoulée', async () => {
+    configRow = { dailyLimit: 3, sameMemberCooldownDays: 3 };
+    foundVote = { day: '2000-01-01' };
+    expect((await giveRep('g', 'u1', 'u2')).success).toBe(true);
+  });
+
   test('aucun message d\'erreur en dur : les refus ne portent qu\'un code', async () => {
     const result = await giveRep('g', 'u1', 'u1');
     expect('error' in result).toBe(false);
@@ -153,9 +194,27 @@ describe('getReputation', () => {
   });
 });
 
-const DEFAULTS = { dailyLimit: 3, reactionEnabled: false, reactionEmoji: null, xpPerRep: 0, coinsPerRep: 0, announceChannelId: null, tiers: [] };
+const DEFAULTS = {
+  dailyLimit: 3,
+  reactionEnabled: false,
+  reactionEmoji: null,
+  xpPerRep: 0,
+  coinsPerRep: 0,
+  announceChannelId: null,
+  minAccountAgeDays: 0,
+  minMemberDays: 0,
+  sameMemberCooldownDays: 1,
+  excludedRoleIds: [],
+  excludedChannelIds: [],
+  tiers: [],
+};
 
 describe('réglages', () => {
+  test('une ligne d\'avant les garde-fous les rend désactivés', async () => {
+    configRow = { dailyLimit: 3, tiers: [] };
+    expect(await getReputationConfig('g')).toEqual(DEFAULTS);
+  });
+
   test('sans ligne, les valeurs par défaut', async () => {
     expect(await getReputationConfig('g')).toEqual(DEFAULTS);
   });
@@ -260,5 +319,79 @@ describe('deleteReputationVote', () => {
     foundVote = { id: 'v1', guildId: 'g', receiverId: 'u2', giverId: 'u1' };
     expect(await deleteReputationVote('g', 'v1')).toEqual(foundVote);
     expect(mockDb.reputationVote.delete).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('recordVoteGains', () => {
+  test('garde les gains versés sur le vote', async () => {
+    await recordVoteGains('v1', { xp: 20, coins: 5 });
+    expect(mockDb.reputationVote.update.mock.calls[0][0]).toEqual({ where: { id: 'v1' }, data: { xpGranted: 20, coinsGranted: 5 } });
+  });
+
+  test('rien de versé : aucune écriture', async () => {
+    await recordVoteGains('v1', { xp: 0, coins: 0 });
+    expect(mockDb.reputationVote.update).not.toHaveBeenCalled();
+  });
+
+  test('un vote retiré entre-temps n\'est pas une erreur', async () => {
+    mockDb.reputationVote.update.mockImplementationOnce(async () => { throw Object.assign(new Error('absent'), { code: 'P2025' }); });
+    await recordVoteGains('v1', { xp: 20, coins: 0 });
+  });
+});
+
+describe('adjustReputation', () => {
+  test('écrit un ajustement sans jour, au nom du staff, et rend les deux totaux', async () => {
+    receivedTotal = 4;
+    const result = await adjustReputation('g', 'staff', 'u2', 5, 'aide');
+    expect(result).toEqual({ success: true, before: 4, after: 9 });
+    const data = (mockDb.reputationVote.create.mock.calls[0][0] as { data: Record<string, unknown> }).data;
+    expect(data).toEqual({ guildId: 'g', giverId: 'staff', receiverId: 'u2', kind: 'ADJUSTMENT', value: 5, reason: 'aide', day: null });
+  });
+
+  test('refuse de descendre sous zéro, sans écrire', async () => {
+    receivedTotal = 2;
+    expect(await adjustReputation('g', 'staff', 'u2', -3, null)).toEqual({ success: false, code: 'BELOW_ZERO', total: 2 });
+    expect(mockDb.reputationVote.create).not.toHaveBeenCalled();
+  });
+
+  test('retirer tout ce que le membre a reste permis', async () => {
+    receivedTotal = 3;
+    expect(await adjustReputation('g', 'staff', 'u2', -3, null)).toEqual({ success: true, before: 3, after: 0 });
+  });
+});
+
+describe('remises à zéro', () => {
+  test('un membre : seulement ce qu\'il a reçu', async () => {
+    deletedCount = 4;
+    expect(await resetMemberReputation('g', 'u2')).toBe(4);
+    expect(mockDb.reputationVote.deleteMany.mock.calls[0][0]).toEqual({ where: { guildId: 'g', receiverId: 'u2' } });
+  });
+
+  test('le serveur : tout, et rend les membres qui avaient des points', async () => {
+    deletedCount = 9;
+    receiverGroups = [{ receiverId: 'u1' }, { receiverId: 'u2' }];
+    expect(await resetGuildReputation('g')).toEqual({ count: 9, receiverIds: ['u1', 'u2'] });
+    expect(mockDb.reputationVote.deleteMany.mock.calls[0][0]).toEqual({ where: { guildId: 'g' } });
+  });
+});
+
+describe('getReputationDashboardData, ajustements', () => {
+  test('les statistiques ne comptent que les votes', async () => {
+    await getReputationDashboardData('g', 'all');
+    for (const call of mockDb.reputationVote.count.mock.calls) {
+      expect((call[0] as { where: { kind?: string } }).where.kind).toBe('VOTE');
+    }
+  });
+});
+
+describe('getMemberReputationSummary', () => {
+  test('total, rang, votes reçus et donnés, derniers mouvements', async () => {
+    receivedTotal = 6;
+    rankAbove = 1n;
+    votesCount = 2;
+    voteRows = [{ id: 'v1', kind: 'VOTE', value: 1, giverId: 'a', reason: null, createdAt: new Date() }];
+    const summary = await getMemberReputationSummary('g', 'u2');
+    expect(summary).toMatchObject({ totalRep: 6, rank: 2, receivedVotes: 2, givenVotes: 2, receivedLast7Days: 2 });
+    expect(summary.recent).toHaveLength(1);
   });
 });
