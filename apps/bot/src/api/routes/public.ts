@@ -13,6 +13,7 @@ import { logger } from '../../utils/logger.js';
 import { cache } from '../../utils/cache.js';
 import { publicClansRateLimiter, publicClanSearchRateLimiter, publicGiveawaysRateLimiter, publicTournamentsRateLimiter } from '../limiters.js';
 import { getTournament } from '../../services/features/tournament/tournamentService.js';
+import { getPublicQuizState, recordQuizAnswer } from '../../services/features/eventService.js';
 import { questWindowBounds, questWindowKey } from '../../services/features/rpg/rpgQuestPolicy.js';
 import {
   json,
@@ -1267,6 +1268,87 @@ export async function handlePublicRoutes(
       const errMessage = err instanceof Error ? err.message : String(err);
       logger.error('PublicAPI', `Error fetching public tournament ${eventId} for guild ${guildId}: ${errMessage}`);
       json(res, 500, { error: 'Erreur lors du chargement du tournoi' });
+    }
+    return true;
+  }
+
+  // GET  /api/public/guilds/:guildId/quizzes/:eventId         état du quiz (page joueurs et écran)
+  // POST /api/public/guilds/:guildId/quizzes/:eventId/answer  réponse d'un membre connecté
+  if (parts[2] === 'guilds' && parts[3] && parts[4] === 'quizzes' && parts[5]
+    && ((method === 'GET' && !parts[6]) || (method === 'POST' && parts[6] === 'answer' && !parts[7]))) {
+    const guildId = parts[3];
+    const eventId = parts[5];
+    if (!/^\d{17,19}$/.test(guildId) || !/^[a-zA-Z0-9_-]{1,64}$/.test(eventId)) {
+      json(res, 400, { error: 'Adresse de quiz invalide' });
+      return true;
+    }
+    // Plafond large : toute une salle derrière la même IP rafraîchit toutes les 3 s.
+    if (!checkRateLimit(publicTournamentsRateLimiter, `quiz:${getClientIp(req)}`, 1200, 60_000)) {
+      json(res, 429, { error: 'Trop de requêtes. Veuillez réessayer plus tard.' });
+      return true;
+    }
+    try {
+      // Le filtre sur `guildId` empêche de lire ou de jouer, depuis l'adresse d'un serveur, le quiz d'un autre.
+      const owned = await prisma.event.findFirst({
+        where: { id: eventId, guildId, type: 'QUIZ', status: { not: 'DRAFT' } },
+        select: { id: true },
+      });
+      if (!owned || !(await isModuleEnabled(guildId, 'events'))) {
+        json(res, 404, { error: 'Quiz introuvable sur ce serveur' });
+        return true;
+      }
+      const auth = await verifyAuth(req);
+
+      if (method === 'POST') {
+        if (!auth) {
+          json(res, 401, { error: 'Connecte-toi avec Discord pour répondre.' });
+          return true;
+        }
+        const body = await readJsonBody<{ questionId?: unknown; optionIndex?: unknown }>(req);
+        const questionId = typeof body?.questionId === 'string' ? body.questionId : '';
+        const optionIndex = typeof body?.optionIndex === 'number' && Number.isInteger(body.optionIndex) ? body.optionIndex : -1;
+        const question = questionId
+          ? await prisma.eventQuizQuestion.findFirst({ where: { id: questionId, eventId } })
+          : null;
+        if (!question || question.status !== 'ONGOING') {
+          json(res, 409, { error: 'Cette question est terminée.' });
+          return true;
+        }
+        const options = question.options as string[];
+        if (optionIndex < 0 || optionIndex >= options.length) {
+          json(res, 400, { error: 'Réponse invalide.' });
+          return true;
+        }
+        const guild = client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId).catch(() => null);
+        const member = guild ? await guild.members.fetch(auth.userId).catch(() => null) : null;
+        if (!member) {
+          json(res, 403, { error: 'Seuls les membres du serveur peuvent répondre.' });
+          return true;
+        }
+        await recordQuizAnswer(question, optionIndex, {
+          guildId,
+          userId: member.id,
+          userTag: member.user.tag,
+          username: member.user.username,
+          displayName: member.displayName,
+          avatarUrl: member.user.displayAvatarURL(),
+        });
+        json(res, 200, { ok: true, optionIndex });
+        return true;
+      }
+
+      const discordGuild = client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId).catch(() => null);
+      const state = await getPublicQuizState(eventId, auth?.userId ?? null);
+      // Propre à chaque joueur (sa réponse) et changeant d'une seconde à l'autre.
+      res.setHeader('Cache-Control', 'no-store');
+      json(res, 200, {
+        guildName: discordGuild?.name || 'Kotbo Server',
+        guildIcon: discordGuild?.iconURL({ size: 128 }) || null,
+        ...state,
+      });
+    } catch (err: unknown) {
+      logger.error('PublicAPI', `Error on public quiz ${eventId} for guild ${guildId}:`, err);
+      jsonFailure(res, err, 'Erreur lors du chargement du quiz', 'PublicAPI');
     }
     return true;
   }
