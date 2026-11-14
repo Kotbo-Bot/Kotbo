@@ -16,14 +16,6 @@ export async function refreshPulse(guildId = authStore.selectedGuildId) {
 }
 
 // ============================================================================
-// REPUTATION - SYSTÈME COMMUNAUTAIRE
-// ============================================================================
-
-export async function fetchReputationData(guildId = authStore.selectedGuildId) {
-  return dashboardRequest('/reputation', { method: 'GET', guildId, errorContext: 'API Error (Reputation):' });
-}
-
-// ============================================================================
 // TICKET SATISFACTION
 // ============================================================================
 
