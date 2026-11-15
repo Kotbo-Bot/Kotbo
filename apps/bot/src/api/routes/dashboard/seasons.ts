@@ -50,6 +50,7 @@ const INPUT_ERRORS: Record<SeasonInputError, string> = {
   EMPTY_REWARD: 'Chaque récompense donne un rôle, des pièces ou les deux',
   DUPLICATE_RANK: 'Deux récompenses pour le même rang',
   BAD_TOP_ROLE: 'Rôle du premier invalide',
+  BAD_ANNOUNCE_CHANNEL: 'Salon d\'annonce invalide',
 };
 
 export async function handleSeasonRoutes(
@@ -100,7 +101,7 @@ export async function handleSeasonRoutes(
         json(res, 400, { error: INPUT_ERRORS[parsed.error] });
         return true;
       }
-      json(res, 201, await createSeason(guildId, parsed.input));
+      json(res, 201, await createSeason(guildId, parsed.input, client));
     } catch (err) {
       logger.error('SeasonsAPI', 'Error creating season:', err);
       jsonFailure(res, err, 'Erreur lors de la création', 'SeasonsAPI');
@@ -111,7 +112,7 @@ export async function handleSeasonRoutes(
   // PATCH /api/dashboard/guilds/:guildId/seasons/:seasonId
   if (parts.length === 6 && method === 'PATCH') {
     try {
-      const result = await updateSeason(guildId, parts[5], (await readJsonBody(req)) ?? {});
+      const result = await updateSeason(guildId, parts[5], (await readJsonBody(req)) ?? {}, client);
       if (result === 'updated') json(res, 200, { ok: true });
       else if (result === 'not_found') json(res, 404, { error: 'Saison introuvable ou déjà terminée' });
       else json(res, 400, { error: INPUT_ERRORS[result] });
@@ -137,7 +138,7 @@ export async function handleSeasonRoutes(
   // POST /api/dashboard/guilds/:guildId/seasons/:seasonId/start
   if (parts.length === 7 && parts[6] === 'start' && method === 'POST') {
     try {
-      const result = await startSeason(guildId, parts[5]);
+      const result = await startSeason(guildId, parts[5], client);
       if (result === 'started') json(res, 200, { ok: true });
       else if (result === 'another_active') json(res, 409, { error: 'Une saison est déjà en cours : termine-la avant d\'en ouvrir une autre' });
       else json(res, 404, { error: 'Saison introuvable ou déjà ouverte' });

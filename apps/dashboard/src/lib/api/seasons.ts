@@ -15,6 +15,8 @@ export interface Season {
   endDate: string;
   rewards: SeasonReward[];
   topRoleId: string | null;
+  /** Salon des annonces d'ouverture et de clôture. Absent d'un bot plus ancien. */
+  announceChannelId?: string | null;
   _count?: { snapshots: number };
 }
 
@@ -55,6 +57,7 @@ export interface SeasonPayload {
   endDate: string;
   rewards: SeasonReward[];
   topRoleId: string | null;
+  announceChannelId: string | null;
 }
 
 export async function fetchSeasonsData(guildId = authStore.selectedGuildId): Promise<SeasonsData | null> {

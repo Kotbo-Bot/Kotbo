@@ -4,6 +4,7 @@
   import {
     deleteSeason,
     endSeason,
+    fetchDiscordChannels,
     fetchSeasonLeaderboard,
     fetchSeasonsData,
     startSeason,
@@ -34,6 +35,7 @@
   let loading = $state(true);
   let data = $state<SeasonsData | null>(null);
 
+  let textChannels = $state<Array<{ id: string; name: string }>>([]);
   let editorOpen = $state(false);
   let editing = $state<Season | null>(null);
 
@@ -159,7 +161,11 @@
     }
   }
 
-  onMount(() => load());
+  onMount(async () => {
+    await load();
+    const channels = await fetchDiscordChannels().catch(() => null);
+    textChannels = channels?.textChannels ?? [];
+  });
 </script>
 
 {#snippet statTile(icon: string, tone: string, value: string, label: string)}
@@ -391,7 +397,7 @@
   {/if}
 </ModulePage>
 
-<SeasonEditorModal bind:open={editorOpen} season={editing} {roles} {economyActive} onDone={() => load(true)} />
+<SeasonEditorModal bind:open={editorOpen} season={editing} {roles} channels={textChannels} {economyActive} onDone={() => load(true)} />
 
 <Modal
   bind:open={boardOpen}
