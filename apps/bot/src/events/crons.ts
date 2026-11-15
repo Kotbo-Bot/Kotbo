@@ -1157,8 +1157,9 @@ export async function registerCrons(client: Client): Promise<void> {
     }, 5000);
   }, { timezone: 'Europe/Paris' });
 
-  // 🏆 Leveling Seasons: Vérification quotidienne à 0h05
-  cron.schedule('5 0 * * *', async () => {
+  // Leveling Seasons : vérification toutes les heures, pour qu'une saison
+  // s'ouvre et se clôture à l'heure prévue plutôt qu'au lendemain.
+  cron.schedule('5 * * * *', async () => {
     await runCronJob('season-check', async () => {
       const { checkAndProgressSeasons } = await import('../services/progression/seasonService.js');
       await checkAndProgressSeasons(client);

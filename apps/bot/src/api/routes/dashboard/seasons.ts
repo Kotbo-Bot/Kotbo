@@ -2,13 +2,17 @@ import { IncomingMessage, ServerResponse } from 'node:http';
 import { Client } from 'discord.js';
 import { rankedTierByKey } from '@kotbo/shared';
 import { logger } from '../../../utils/logger.js';
-import { json, type AuthClaims, type DashboardAccess } from '../../shared.js';
+import { json, readJsonBody, type AuthClaims, type DashboardAccess } from '../../shared.js';
 import {
   getSeasonsDashboardData,
   createSeason,
+  updateSeason,
+  deleteSeason,
   startSeason,
   endSeason,
   getSeasonLeaderboard,
+  parseSeasonInput,
+  type SeasonInputError,
 } from '../../../services/progression/seasonService.js';
 import { getRankedSeasonStandings } from '../../../services/progression/ranked/rankedSeasonService.js';
 import { getRankedLeaderboard } from '../../../services/progression/ranked/rankedLeaderboardService.js';
@@ -31,16 +35,22 @@ async function withSeasonIdentities<T extends { userId: string }>(
   }));
 }
 
-function parseBody(req: IncomingMessage): Promise<Record<string, unknown>> {
-  return new Promise((resolve, reject) => {
-    let body = '';
-    req.on('data', (chunk: Buffer) => { body += chunk.toString(); });
-    req.on('end', () => {
-      try { resolve(JSON.parse(body || '{}')); }
-      catch { reject(new Error('Invalid JSON')); }
-    });
-  });
-}
+/** Messages des refus de validation, lus tels quels par le dashboard. */
+const INPUT_ERRORS: Record<SeasonInputError, string> = {
+  BAD_NAME: 'Le nom est requis et ne doit pas dépasser 80 caractères',
+  BAD_DATE: 'Date invalide',
+  END_BEFORE_START: 'La fin doit venir après le début',
+  END_IN_PAST: 'La date de fin est déjà passée',
+  BAD_DURATION: 'Une saison dure entre 1 et 366 jours',
+  NOT_ARRAY: 'Récompenses invalides',
+  TOO_MANY: 'Trop de récompenses',
+  BAD_RANK: 'Rang de récompense invalide',
+  BAD_ROLE: 'Rôle de récompense invalide',
+  BAD_COINS: 'Montant de pièces invalide',
+  EMPTY_REWARD: 'Chaque récompense donne un rôle, des pièces ou les deux',
+  DUPLICATE_RANK: 'Deux récompenses pour le même rang',
+  BAD_TOP_ROLE: 'Rôle du premier invalide',
+};
 
 export async function handleSeasonRoutes(
   req: IncomingMessage,
@@ -50,10 +60,15 @@ export async function handleSeasonRoutes(
   client: Client,
   user: AuthClaims,
   guildId: string,
-  _access: DashboardAccess,
+  access: DashboardAccess,
 ): Promise<boolean> {
   const method = req.method;
   if (parts[4] !== 'seasons') return false;
+
+  if (method !== 'GET' && !access.canManageSettings) {
+    json(res, 403, { error: 'Permissions insuffisantes' });
+    return true;
+  }
 
   // GET /api/dashboard/guilds/:guildId/seasons
   if (parts.length === 5 && method === 'GET') {
@@ -80,15 +95,12 @@ export async function handleSeasonRoutes(
   // POST /api/dashboard/guilds/:guildId/seasons
   if (parts.length === 5 && method === 'POST') {
     try {
-      const body = await parseBody(req) as { name: string; startDate: string; endDate: string; rewards?: any; topRoleId?: string };
-      const season = await createSeason(guildId, {
-        name: body.name,
-        startDate: new Date(body.startDate),
-        endDate: new Date(body.endDate),
-        rewards: body.rewards,
-        topRoleId: body.topRoleId,
-      });
-      json(res, 201, season);
+      const parsed = parseSeasonInput((await readJsonBody(req)) ?? {});
+      if ('error' in parsed) {
+        json(res, 400, { error: INPUT_ERRORS[parsed.error] });
+        return true;
+      }
+      json(res, 201, await createSeason(guildId, parsed.input));
     } catch (err) {
       logger.error('SeasonsAPI', 'Error creating season:', err);
       jsonFailure(res, err, 'Erreur lors de la création', 'SeasonsAPI');
@@ -96,11 +108,39 @@ export async function handleSeasonRoutes(
     return true;
   }
 
+  // PATCH /api/dashboard/guilds/:guildId/seasons/:seasonId
+  if (parts.length === 6 && method === 'PATCH') {
+    try {
+      const result = await updateSeason(guildId, parts[5], (await readJsonBody(req)) ?? {});
+      if (result === 'updated') json(res, 200, { ok: true });
+      else if (result === 'not_found') json(res, 404, { error: 'Saison introuvable ou déjà terminée' });
+      else json(res, 400, { error: INPUT_ERRORS[result] });
+    } catch (err) {
+      logger.error('SeasonsAPI', 'Error updating season:', err);
+      jsonFailure(res, err, 'Erreur lors de la modification', 'SeasonsAPI');
+    }
+    return true;
+  }
+
+  // DELETE /api/dashboard/guilds/:guildId/seasons/:seasonId
+  if (parts.length === 6 && method === 'DELETE') {
+    try {
+      const deleted = await deleteSeason(guildId, parts[5]);
+      json(res, deleted ? 200 : 404, deleted ? { ok: true } : { error: 'Seule une saison à venir peut être supprimée' });
+    } catch (err) {
+      logger.error('SeasonsAPI', 'Error deleting season:', err);
+      jsonFailure(res, err, 'Erreur lors de la suppression', 'SeasonsAPI');
+    }
+    return true;
+  }
+
   // POST /api/dashboard/guilds/:guildId/seasons/:seasonId/start
   if (parts.length === 7 && parts[6] === 'start' && method === 'POST') {
     try {
-      const success = await startSeason(guildId, parts[5]);
-      json(res, success ? 200 : 400, success ? { ok: true } : { error: 'Impossible de démarrer la saison' });
+      const result = await startSeason(guildId, parts[5]);
+      if (result === 'started') json(res, 200, { ok: true });
+      else if (result === 'another_active') json(res, 409, { error: 'Une saison est déjà en cours : termine-la avant d\'en ouvrir une autre' });
+      else json(res, 404, { error: 'Saison introuvable ou déjà ouverte' });
     } catch (err) {
       logger.error('SeasonsAPI', 'Error starting season:', err);
       jsonFailure(res, err, 'Erreur lors du démarrage', 'SeasonsAPI');
@@ -132,7 +172,7 @@ export async function handleSeasonRoutes(
       const ladder = await getGuildLadder(guildId).catch(() => null);
 
       json(res, 200, {
-        leaderboard,
+        leaderboard: await withSeasonIdentities(client, guildId, leaderboard),
         rankedStandings: await withSeasonIdentities(client, guildId, rankedStandings.map((entry) => ({
           ...entry,
           tier: ladder ? rankedTierByKey(entry.tierKey, ladder) : null,

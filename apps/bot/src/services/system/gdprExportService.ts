@@ -110,6 +110,7 @@ const STATIC_SOURCES: GdprSource[] = [
   { category: 'identity', key: 'memberProfile', label: 'Profils membre', model: 'memberProfile', where: ({ discordId }) => ({ userId: discordId }) },
   { category: 'identity', key: 'memberLevel', label: 'Niveaux', model: 'memberLevel', where: ({ discordId }) => ({ userId: discordId }) },
   { category: 'identity', key: 'seasonSnapshot', label: 'Instantanés de saison', model: 'seasonSnapshot', where: ({ discordId }) => ({ userId: discordId }) },
+  { category: 'identity', key: 'seasonBaseline', label: 'XP au début des saisons', model: 'seasonBaseline', where: ({ discordId }) => ({ userId: discordId }) },
   { category: 'identity', key: 'memberDailyStat', label: 'Statistiques quotidiennes', model: 'memberDailyStat', where: ({ discordId }) => ({ userId: discordId }) },
   { category: 'identity', key: 'dashboardCommandUsage', label: 'Usage des commandes dashboard', model: 'dashboardCommandUsage', where: ({ discordId }) => ({ userId: discordId }) },
   { category: 'identity', key: 'dashboardUserSettings', label: 'Préférences dashboard', model: 'dashboardUserSettings', where: ({ discordId }) => ({ userId: discordId }) },
