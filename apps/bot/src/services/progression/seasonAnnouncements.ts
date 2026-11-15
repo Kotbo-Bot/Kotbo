@@ -59,9 +59,13 @@ export function seasonEndDescription(
 
 async function send(client: Client, season: AnnouncedSeason, title: string, description: string): Promise<void> {
   if (!season.announceChannelId) return;
-  const guild = client.guilds.cache.get(season.guildId);
-  const channel = guild?.channels.cache.get(season.announceChannelId);
-  if (!channel?.isTextBased() || !channel.isSendable()) {
+  // Le cron tourne dans un seul processus : le serveur peut ne pas être dans
+  // son cache, d'où la lecture du salon par l'API en second recours.
+  const channel = client.guilds.cache.get(season.guildId)?.channels.cache.get(season.announceChannelId)
+    ?? await client.channels.fetch(season.announceChannelId).catch(() => null);
+  // Un identifiant saisi à la main (MCP) peut viser le salon d'un autre serveur.
+  const sameGuild = !!channel && 'guildId' in channel && channel.guildId === season.guildId;
+  if (!channel || !sameGuild || !channel.isTextBased() || !channel.isSendable()) {
     logger.warn('Season', `Salon d'annonce ${season.announceChannelId} introuvable ou fermé au bot sur ${season.guildId}`);
     return;
   }
