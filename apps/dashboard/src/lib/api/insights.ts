@@ -1,4 +1,4 @@
-/** Pulse, reputation, satisfaction, saisons, evaluations. */
+/** Pulse, reputation, satisfaction, evaluations. */
 import { authStore } from '../stores/auth.svelte';
 import { dashboardRequest } from './client';
 
@@ -38,30 +38,6 @@ export async function fetchStaffSatisfactionReviews(
     `/satisfaction/staff/${encodeURIComponent(staffId)}/reviews${query ? `?${query}` : ''}`,
     { method: 'GET', guildId, errorContext: 'API Error (Staff Reviews):' },
   );
-}
-
-// ============================================================================
-// LEVELING SEASONS
-// ============================================================================
-
-export async function fetchSeasonsData(guildId = authStore.selectedGuildId) {
-  return dashboardRequest('/seasons', { method: 'GET', guildId, errorContext: 'API Error (Seasons):' });
-}
-
-export async function createSeason(data: { name: string; startDate: string; endDate: string; rewards?: unknown; topRoleId?: string }, guildId = authStore.selectedGuildId) {
-  return dashboardRequest('/seasons', { method: 'POST', successMessage: m.api_ok_create_season(), payload: data, guildId, errorContext: 'API Error (Create Season):' });
-}
-
-export async function startSeason(seasonId: string, guildId = authStore.selectedGuildId) {
-  return dashboardRequest(`/seasons/${seasonId}/start`, { method: 'POST', successMessage: m.api_ok_start_season(), guildId, errorContext: 'API Error (Start Season):' });
-}
-
-export async function endSeason(seasonId: string, guildId = authStore.selectedGuildId) {
-  return dashboardRequest(`/seasons/${seasonId}/end`, { method: 'POST', successMessage: m.api_ok_end_season(), guildId, errorContext: 'API Error (End Season):' });
-}
-
-export async function fetchSeasonLeaderboard(seasonId: string, guildId = authStore.selectedGuildId) {
-  return dashboardRequest(`/seasons/${seasonId}/leaderboard`, { method: 'GET', guildId, errorContext: 'API Error (Season Leaderboard):' });
 }
 
 // ============================================================================

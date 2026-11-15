@@ -16,6 +16,7 @@ import { parseDiscordMarkdown } from '../../../api/shared/markdown.js';
 import { getMemberIdentities } from '../../moderation/memberIdentityService.js';
 import { getRankedLeaderboard } from '../../progression/ranked/rankedLeaderboardService.js';
 import { getReputationLeaderboard } from '../../community/reputationService.js';
+import { getSeasonLeaderboard } from '../../progression/seasonService.js';
 import { attrs, cls, esc, truncate } from '../siteHtml.js';
 import {
   avatar,
@@ -57,17 +58,7 @@ async function loadLeaderboard(guildId: string, variant: string, limit: number):
       case 'season': {
         const season = await prisma.levelingSeason.findFirst({ where: { guildId, status: 'ACTIVE' }, select: { id: true } });
         if (!season) return [];
-        const snapshots = await prisma.seasonSnapshot.findMany({
-          where: { guildId, seasonId: season.id },
-          orderBy: { rank: 'asc' },
-          take: limit,
-          select: { userId: true, xp: true, level: true },
-        });
-        if (snapshots.length > 0) return snapshots.map((s) => ({ userId: s.userId, value: s.xp, level: s.level }));
-        // Saison en cours sans instantané : même lecture que la page Saisons du dashboard.
-        return (
-          await prisma.memberLevel.findMany({ where: { guildId }, orderBy: { xp: 'desc' }, take: limit, select: { userId: true, xp: true, level: true } })
-        ).map((r) => ({ userId: r.userId, value: r.xp, level: r.level }));
+        return (await getSeasonLeaderboard(guildId, season.id, limit)).map((r) => ({ userId: r.userId, value: r.xp, level: r.level }));
       }
       case 'xp':
       default:
@@ -97,6 +88,7 @@ function leaderboardValue(variant: string, value: number, ctx: BlockContext): st
   if (variant === 'economy') return m.site_coins({ value: formatted }, o);
   if (variant === 'reputation') return m.site_rep({ value: formatted }, o);
   if (variant === 'prestige') return m.site_points({ value: formatted }, o);
+  if (variant === 'season') return `+${formatted} XP`;
   return `${formatted} XP`;
 }
 

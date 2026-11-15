@@ -5,6 +5,7 @@ import {
 import { errorContainer, kotboContainer } from '../../utils/embeds.js';
 import { E, rankEmoji, buildProgressBar } from '../../utils/emojis.js';
 import { getAllSeasons, getSeasonLeaderboard } from '../../services/progression/seasonService.js';
+import { seasonProgress } from '@kotbo/shared';
 import type { SlashCommandDefinition } from '../../commands.js';
 import { ContainerChild, separator, v2Message } from '@arcscord/components';
 import { getEffectiveLocale, getCommandMetadata } from '../../utils/i18n.js';
@@ -107,13 +108,7 @@ async function execute(interaction: ChatInputCommandInteraction) {
       return;
     }
 
-    const now = Date.now();
-    const start = new Date(active.startDate).getTime();
-    const end = new Date(active.endDate).getTime();
-    const totalDuration = end - start;
-    const elapsed = now - start;
-    const progressPct = totalDuration > 0 ? Math.min((elapsed / totalDuration) * 100, 100) : 0;
-    const daysLeft = Math.max(0, Math.ceil((end - now) / 86400000));
+    const { percent: progressPct, daysLeft } = seasonProgress(new Date(active.startDate), new Date(active.endDate));
 
     const lb = await getSeasonLeaderboard(guildId, active.id, 10);
 
@@ -121,7 +116,7 @@ async function execute(interaction: ChatInputCommandInteraction) {
       separator({ divider: true, spacing: 'small' }),
       [
         `${E.arrow} **${m.c4_seasons_field_period({}, { locale })}** · ${formatDate(active.startDate)} → ${formatDate(active.endDate)}`,
-        `${E.arrow} **${m.c4_seasons_field_progress({}, { locale })}** · ${buildProgressBar(progressPct, 8)} \`${Math.round(progressPct)}%\``,
+        `${E.arrow} **${m.c4_seasons_field_progress({}, { locale })}** · ${buildProgressBar(progressPct, 8)} \`${progressPct}%\``,
         `${E.arrow} **${m.c4_seasons_field_time_left({}, { locale })}** · ${m.c4_seasons_days_left({ days: daysLeft }, { locale })}`,
       ].join('\n')
     ]
@@ -130,7 +125,7 @@ async function execute(interaction: ChatInputCommandInteraction) {
     if (lb.length > 0) {
       const lbLines = lb.map((entry) => {
         const medal = rankEmoji(entry.rank);
-        return `${medal} <@${entry.userId}> - Lvl **${entry.level}** · **${entry.xp.toLocaleString('fr-FR')}** ${E.xp}`;
+        return `${medal} <@${entry.userId}> - Lvl **${entry.level}** · **+${entry.xp.toLocaleString('fr-FR')}** ${E.xp}`;
       });
 
       fields.push(
@@ -166,7 +161,7 @@ async function execute(interaction: ChatInputCommandInteraction) {
 
     const lines = lb.map((entry) => {
       const medal = rankEmoji(entry.rank);
-      return `${medal} <@${entry.userId}> - Lvl **${entry.level}** · **${entry.xp.toLocaleString('fr-FR')}** ${E.xp}`;
+      return `${medal} <@${entry.userId}> - Lvl **${entry.level}** · **+${entry.xp.toLocaleString('fr-FR')}** ${E.xp}`;
     });
 
     await interaction.editReply(v2Message(

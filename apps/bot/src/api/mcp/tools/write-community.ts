@@ -1,6 +1,6 @@
 /** Outils MCP - write community (permission WRITE_COMMUNITY). */
 import { archiveChannel, createSplitChannel, resolveHealthAlert, upsertChannelHealthConfig } from '../../../services/analytics/channelHealthService.js';
-import { createSeason, endSeason, startSeason } from '../../../services/progression/seasonService.js';
+import { createSeason, endSeason, parseSeasonInput, startSeason } from '../../../services/progression/seasonService.js';
 import { publishSuggestionResolved } from '../../../services/features/suggestionService.js';
 import { adjustRep } from '../../../services/community/reputationActions.js';
 import { REPUTATION_ADJUSTMENT } from '@kotbo/shared';
@@ -159,24 +159,32 @@ export function registerWriteCommunityTools(ctx: McpToolContext) {
     server.registerTool(
       'create_season',
       {
-        description: 'Crée une nouvelle saison de leveling. Requiert WRITE_COMMUNITY.',
+        description: 'Crée une saison de leveling : un classement de l\'XP gagnée entre le début et la fin, sans remise à zéro. Un début passé l\'ouvre aussitôt si aucune autre saison n\'est en cours. Requiert WRITE_COMMUNITY.',
         inputSchema: {
           name: z.string().describe('Nom de la saison'),
           start_date: z.string().describe('Date de début (ISO 8601)'),
           end_date: z.string().describe('Date de fin (ISO 8601)'),
-          top_role_id: z.string().optional().describe('Rôle attribué au #1 du classement'),
+          top_role_id: z.string().optional().describe('Rôle attribué au #1 du classement, repris au #1 de la saison précédente'),
+          rewards: z.array(z.object({
+            rank: z.number().int().min(1).max(100),
+            role_id: z.string().optional(),
+            coins: z.number().int().min(0).optional(),
+          })).max(10).optional().describe('Récompenses par rang, données à la clôture'),
           key_name: z.string().optional(),
         },
         _meta: toolMeta,
       },
-      guard('WRITE_COMMUNITY', async ({ name, start_date, end_date, top_role_id, key_name }) => {
+      guard('WRITE_COMMUNITY', async ({ name, start_date, end_date, top_role_id, rewards, key_name }) => {
         try {
-          const season = await createSeason(guildId, {
+          const parsed = parseSeasonInput({
             name,
-            startDate: new Date(start_date),
-            endDate: new Date(end_date),
+            startDate: start_date,
+            endDate: end_date,
             topRoleId: top_role_id,
+            rewards: rewards?.map((reward) => ({ rank: reward.rank, roleId: reward.role_id, coins: reward.coins })),
           });
+          if ('error' in parsed) return err(`Saison invalide : ${parsed.error}`);
+          const season = await createSeason(guildId, parsed.input);
           await audit(key_name, 'Création saison MCP', name, `ID: ${season.id}`);
           return ok({ ok: true, season });
         } catch (e) {
@@ -188,7 +196,7 @@ export function registerWriteCommunityTools(ctx: McpToolContext) {
     server.registerTool(
       'start_season',
       {
-        description: 'Démarre une saison de leveling (met fin aux autres saisons actives). Requiert WRITE_COMMUNITY.',
+        description: 'Démarre une saison de leveling à venir. Refusé si une autre saison est en cours. Requiert WRITE_COMMUNITY.',
         inputSchema: {
           season_id: z.string().describe('ID de la saison à démarrer'),
           key_name: z.string().optional(),
@@ -197,8 +205,9 @@ export function registerWriteCommunityTools(ctx: McpToolContext) {
       },
       guard('WRITE_COMMUNITY', async ({ season_id, key_name }) => {
         try {
-          const success = await startSeason(guildId, season_id);
-          if (!success) return err('Impossible de démarrer la saison');
+          const result = await startSeason(guildId, season_id);
+          if (result === 'another_active') return err('Une saison est déjà en cours : termine-la avant d\'en ouvrir une autre');
+          if (result !== 'started') return err('Saison introuvable ou déjà ouverte');
           await audit(key_name, 'Démarrage saison MCP', season_id, '');
           return ok({ ok: true, seasonId: season_id });
         } catch (e) {

@@ -472,7 +472,7 @@ export function registerReadCommunityTools(ctx: McpToolContext) {
     server.registerTool(
       'get_season_leaderboard',
       {
-        description: 'Récupère le classement d\'une saison de leveling spécifique. Requiert READ_COMMUNITY.',
+        description: 'Récupère le classement d\'une saison de leveling : XP gagnée pendant la saison (calculée à la volée si elle est en cours, figée sinon), messages et minutes de voix. Requiert READ_COMMUNITY.',
         inputSchema: {
           season_id: z.string().describe('ID de la saison'),
           limit: z.number().int().min(1).max(100).default(20),
