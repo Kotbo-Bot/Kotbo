@@ -354,14 +354,18 @@
         {#if active && progress}
           <div class="space-y-6">
             {#each advice as item (item.id)}
-              <Callout variant={item.variant} title={item.title}>
-                <p>{item.text}</p>
-                {#snippet actions()}
-                  {#if item.action && canManage}
+              {#if item.action && canManage}
+                <Callout variant={item.variant} title={item.title}>
+                  <p>{item.text}</p>
+                  {#snippet actions()}
                     <Button size="sm" icon="Pencil" onclick={() => openEditor(active)}>{item.action}</Button>
-                  {/if}
-                {/snippet}
-              </Callout>
+                  {/snippet}
+                </Callout>
+              {:else}
+                <Callout variant={item.variant} title={item.title}>
+                  <p>{item.text}</p>
+                </Callout>
+              {/if}
             {/each}
 
             <section class="bg-surface-container-low/40 border border-outline-variant/30 p-6 rounded-xl space-y-5">
@@ -432,14 +436,18 @@
         {:else}
           <div class="space-y-6">
             {#if nextUpcoming}
-              <Callout variant="info" title={m.sea_next_title({ name: nextUpcoming.name })}>
-                <p>{m.sea_next_desc({ date: formatDate(nextUpcoming.startDate) })}</p>
-                {#snippet actions()}
-                  {#if canManage}
+              {#if canManage}
+                <Callout variant="info" title={m.sea_next_title({ name: nextUpcoming.name })}>
+                  <p>{m.sea_next_desc({ date: formatDate(nextUpcoming.startDate) })}</p>
+                  {#snippet actions()}
                     <Button size="sm" icon="Zap" onclick={() => handleStart(nextUpcoming)}>{m.sea_btn_start_now()}</Button>
-                  {/if}
-                {/snippet}
-              </Callout>
+                  {/snippet}
+                </Callout>
+              {:else}
+                <Callout variant="info" title={m.sea_next_title({ name: nextUpcoming.name })}>
+                  <p>{m.sea_next_desc({ date: formatDate(nextUpcoming.startDate) })}</p>
+                </Callout>
+              {/if}
             {/if}
             <EmptyState
               icon="flag"
