@@ -84,8 +84,10 @@ export function validateSeasonSchedule(
   if (endDate <= startDate) return { error: 'END_BEFORE_START' };
   if (endDate <= now) return { error: 'END_IN_PAST' };
 
-  const days = (endDate.getTime() - startDate.getTime()) / DAY_MS;
-  if (days < SEASON_DURATION_DAYS.min || days > SEASON_DURATION_DAYS.max) return { error: 'BAD_DURATION' };
+  // Une seconde de marge : le formulaire va de 00:00 à 23:59:59, et une saison
+  // d'un seul jour choisi doit compter pour un jour.
+  const duration = endDate.getTime() - startDate.getTime() + 1000;
+  if (duration < SEASON_DURATION_DAYS.min * DAY_MS || duration > SEASON_DURATION_DAYS.max * DAY_MS + 1000) return { error: 'BAD_DURATION' };
 
   return { schedule: { name, startDate, endDate } };
 }

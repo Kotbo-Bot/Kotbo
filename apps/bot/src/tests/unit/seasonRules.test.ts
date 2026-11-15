@@ -105,6 +105,11 @@ describe('validateSeasonSchedule', () => {
     expect(validateSeasonSchedule({ name: 'Hiver', startDate: '2026-10-01', endDate: '2026-11-01' }, now)).toEqual({ error: 'END_IN_PAST' });
   });
 
+  test('accepte une saison d\'un seul jour choisi, de 00:00 à 23:59:59', () => {
+    const result = validateSeasonSchedule({ name: 'Hiver', startDate: '2026-12-01T00:00:00Z', endDate: '2026-12-01T23:59:59Z' }, now);
+    expect('schedule' in result).toBe(true);
+  });
+
   test('refuse une saison plus courte ou plus longue que les bornes', () => {
     const start = new Date('2026-12-01T00:00:00Z');
     const tooShort = new Date(start.getTime() + (SEASON_DURATION_DAYS.min * DAY_MS) / 2);

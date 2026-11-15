@@ -93,9 +93,13 @@ export async function getAllSeasons(guildId: string) {
   });
 }
 
-/** Crée la saison ; un début déjà passé l'ouvre aussitôt, si aucune autre ne tourne. */
+/**
+ * Crée la saison ; un début déjà passé l'ouvre aussitôt, si aucune autre ne
+ * tourne. Les écritures lisent la base principale : un réplica en retard
+ * donnerait un numéro déjà pris ou d'anciennes récompenses.
+ */
 export async function createSeason(guildId: string, input: SeasonInput, client: Client | null) {
-  const lastSeason = await prismaRead.levelingSeason.findFirst({
+  const lastSeason = await prisma.levelingSeason.findFirst({
     where: { guildId },
     orderBy: { number: 'desc' },
     select: { number: true },
@@ -116,7 +120,8 @@ export async function createSeason(guildId: string, input: SeasonInput, client: 
   });
 
   if (input.startDate <= new Date() && await startSeason(guildId, season.id, client) === 'started') {
-    return { ...season, status: 'ACTIVE' as const };
+    // L'ouverture a réécrit le statut et la date de début.
+    return (await prisma.levelingSeason.findUnique({ where: { id: season.id } })) ?? season;
   }
   broadcastDashboardStateChange(guildId, SEASONS_REALTIME_REASON);
   return season;
@@ -133,7 +138,7 @@ export async function updateSeason(
   raw: Record<string, unknown>,
   client: Client | null,
 ): Promise<'updated' | 'not_found' | SeasonInputError> {
-  const season = await prismaRead.levelingSeason.findFirst({ where: { id: seasonId, guildId } });
+  const season = await prisma.levelingSeason.findFirst({ where: { id: seasonId, guildId } });
   if (!season || (season.status !== 'UPCOMING' && season.status !== 'ACTIVE')) return 'not_found';
 
   const active = season.status === 'ACTIVE';
@@ -275,7 +280,8 @@ async function seasonActivity(db: Db, guildId: string, userIds: string[], start:
 }
 
 export async function endSeason(client: Client, guildId: string, seasonId: string): Promise<boolean> {
-  const season = await prismaRead.levelingSeason.findFirst({ where: { id: seasonId, guildId, status: 'ACTIVE' } });
+  // Base principale : les récompenses à donner sont celles enregistrées à l'instant.
+  const season = await prisma.levelingSeason.findFirst({ where: { id: seasonId, guildId, status: 'ACTIVE' } });
   if (!season) return false;
 
   const now = new Date();
