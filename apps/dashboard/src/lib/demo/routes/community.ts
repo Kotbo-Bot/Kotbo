@@ -48,17 +48,32 @@ const ITEMS = [
 
 export function registerCommunityRoutes(): void {
   route('GET', '/api/dashboard/guilds/:guildId/seasons', () => {
-    const ranked = byXp().slice(0, 10);
+    // XP gagnée depuis l'ouverture de la saison, pas l'XP totale.
+    const ranked = byXp().slice(0, 10).map((p, i) => ({ ...p, seasonXp: Math.max(40, Math.round(p.xp * 0.18) - i * 35) }));
+    const active = {
+      id: 'season-3',
+      number: 3,
+      name: 'Saison d’automne',
+      startDate: ago(30 * 24 * 60),
+      endDate: ago(-60 * 24 * 60),
+      status: 'ACTIVE',
+      rewards: [{ rank: 1, roleId: null, coins: 5_000 }, { rank: 2, roleId: null, coins: 2_500 }, { rank: 3, roleId: null, coins: 1_000 }],
+      topRoleId: null,
+      _count: { snapshots: 0 },
+    };
     return {
-      activeSeason: { id: 'season-3', name: 'Saison d’automne', startDate: ago(30 * 24 * 60), endDate: ago(-60 * 24 * 60), status: 'ACTIVE' },
+      activeSeason: active,
       activeLeaderboard: ranked.map((p, i) => ({
         rank: i + 1,
         userId: p.id,
         displayName: p.displayName,
         avatarUrl: null,
         level: p.level,
-        xp: p.xp,
+        xp: p.seasonXp,
+        messagesCount: 420 - i * 31,
+        voiceMinutes: 260 - i * 18,
       })),
+      activeTotals: { participants: members().length, totalXp: ranked.reduce((sum, p) => sum + p.seasonXp, 0) },
       activeRankedLeaderboard: ranked.slice(0, 8).map((p, i) => ({
         rank: i + 1,
         userId: p.id,
@@ -68,15 +83,24 @@ export function registerCommunityRoutes(): void {
         rp: 2_400 - i * 260,
       })),
       seasons: [
-        { id: 'season-3', number: 3, name: 'Saison d’automne', status: 'ACTIVE', startDate: ago(30 * 24 * 60), endDate: ago(-60 * 24 * 60), _count: { snapshots: members().length } },
-        { id: 'season-2', number: 2, name: 'Saison d’été', status: 'ENDED', startDate: ago(120 * 24 * 60), endDate: ago(31 * 24 * 60), _count: { snapshots: members().length - 1 } },
-        { id: 'season-1', number: 1, name: 'Lancement', status: 'ARCHIVED', startDate: ago(210 * 24 * 60), endDate: ago(121 * 24 * 60), _count: { snapshots: Math.max(1, members().length - 3) } },
+        active,
+        { id: 'season-2', number: 2, name: 'Saison d’été', status: 'ENDED', startDate: ago(120 * 24 * 60), endDate: ago(31 * 24 * 60), rewards: [{ rank: 1, roleId: null, coins: 3_000 }], topRoleId: null, _count: { snapshots: members().length - 1 } },
+        { id: 'season-1', number: 1, name: 'Lancement', status: 'ARCHIVED', startDate: ago(210 * 24 * 60), endDate: ago(121 * 24 * 60), rewards: [], topRoleId: null, _count: { snapshots: Math.max(1, members().length - 3) } },
       ],
     };
   });
 
   route('GET', '/api/dashboard/guilds/:guildId/seasons/:seasonId/leaderboard', () => ({
-    leaderboard: byXp().slice(0, 10).map((p, i) => ({ rank: i + 1, userId: p.id, displayName: p.displayName, avatarUrl: null, level: p.level, xp: p.xp })),
+    leaderboard: byXp().slice(0, 10).map((p, i) => ({
+      rank: i + 1,
+      userId: p.id,
+      displayName: p.displayName,
+      avatarUrl: null,
+      level: p.level,
+      xp: Math.max(40, Math.round(p.xp * 0.2) - i * 30),
+      messagesCount: 380 - i * 27,
+      voiceMinutes: 210 - i * 15,
+    })),
   }));
 
   const repConfig: {
