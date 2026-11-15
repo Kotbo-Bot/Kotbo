@@ -198,6 +198,8 @@ export async function handleEventsRoutes(
         }
         const currentEvent = await prisma.event.findUnique({ where: { id: eventId } });
         const isLive = currentEvent?.status === 'ONGOING';
+        // Le champ « nombre de membres » du dashboard envoie un nombre ; la colonne est un String.
+        if (typeof body.triggerValue === 'number') body.triggerValue = String(body.triggerValue);
 
         // Le corps vient du dashboard : on ne recopie que les champs presents,
         // et les listes imbriquees ne sont acceptees que dans leur forme attendue.
