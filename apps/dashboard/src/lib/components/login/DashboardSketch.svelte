@@ -105,7 +105,7 @@
 
   <!-- Libelles hors filtre : le crayon tremble, pas le texte. -->
   <text x="120" y="142" text-anchor="end" class="sketch-label">{labelServers}</text>
-  <text x="546" y="52" text-anchor="start" class="sketch-label">{labelAnalytics}</text>
+  <text x="592" y="52" text-anchor="end" class="sketch-label">{labelAnalytics}</text>
   <text x="362" y="380" text-anchor="start" class="sketch-label">{labelLogs}</text>
 </svg>
 
