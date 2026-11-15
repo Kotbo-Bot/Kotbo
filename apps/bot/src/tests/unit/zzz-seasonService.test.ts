@@ -126,8 +126,10 @@ beforeEach(() => {
 describe('startSeason', () => {
   test('ouvre une saison à venir et relève l\'XP de chacun dans la même transaction', async () => {
     seasons = [season({ status: 'UPCOMING' })];
+    const before = Date.now();
     expect(await startSeason('g', 's1')).toBe('started');
     expect(seasons[0].status).toBe('ACTIVE');
+    expect(seasons[0].startDate.getTime()).toBeGreaterThanOrEqual(before);
     expect(executeRaw).toHaveBeenCalledTimes(1);
     expect((executeRaw.mock.calls[0][0] as unknown as string[]).join('?')).toContain('season_baselines');
   });

@@ -6038,7 +6038,7 @@
   "sea_create_subtitle": "Le classement part de zéro au début de la saison",
   "sea_edit_title": "Modifier la saison",
   "sea_editor_explainer": "Les niveaux et l’XP ne sont pas touchés. À l’ouverture, Kotbo relève l’XP de chacun ; le classement de la saison compte ce qui est gagné ensuite.",
-  "sea_start_hint": "Une date passée ouvre la saison dès sa création.",
+  "sea_start_hint": "Une date du jour ou passée ouvre la saison tout de suite, si aucune autre ne tourne.",
   "sea_start_locked_hint": "La saison est en cours : sa date de début ne change plus.",
   "sea_start_blocked": "Une saison est déjà en cours.",
   "sea_no_active_title": "Aucune saison en cours",

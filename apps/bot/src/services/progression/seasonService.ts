@@ -128,7 +128,11 @@ export async function updateSeason(guildId: string, seasonId: string, raw: Recor
       ...(active ? {} : { startDate: parsed.input.startDate }),
     },
   });
-  return count > 0 ? 'updated' : 'not_found';
+  if (count === 0) return 'not_found';
+
+  // Même règle qu'à la création : un début avancé dans le passé ouvre la saison.
+  if (!active && parsed.input.startDate <= new Date()) await startSeason(guildId, seasonId);
+  return 'updated';
 }
 
 /** Seule une saison à venir se supprime : les autres ont un classement. */
@@ -148,13 +152,11 @@ export async function startSeason(guildId: string, seasonId: string): Promise<St
     const active = await tx.levelingSeason.findFirst({ where: { guildId, status: 'ACTIVE' }, select: { id: true } });
     if (active) return 'another_active';
 
-    const season = await tx.levelingSeason.findFirst({ where: { id: seasonId, guildId, status: 'UPCOMING' }, select: { startDate: true } });
-    if (!season) return 'not_found';
-
-    // Ouverte en avance : la saison commence maintenant, pas à la date prévue.
+    // La date de début devient celle du relevé : ouverte en avance, en retard
+    // ou créée avec un début passé, la période affichée est celle classée.
     const { count } = await tx.levelingSeason.updateMany({
       where: { id: seasonId, guildId, status: 'UPCOMING' },
-      data: { status: 'ACTIVE', startDate: season.startDate > now ? now : season.startDate },
+      data: { status: 'ACTIVE', startDate: now },
     });
     if (count === 0) return 'not_found';
 

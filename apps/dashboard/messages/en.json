@@ -6038,7 +6038,7 @@
   "sea_create_subtitle": "The leaderboard starts from zero when the season opens",
   "sea_edit_title": "Edit season",
   "sea_editor_explainer": "Levels and XP are left untouched. When the season opens, Kotbo records everyone's XP; the season leaderboard counts what is earned afterwards.",
-  "sea_start_hint": "A past date opens the season as soon as it is created.",
+  "sea_start_hint": "Today or a past date opens the season right away, if no other one is running.",
   "sea_start_locked_hint": "The season is running: its start date can no longer change.",
   "sea_start_blocked": "A season is already running.",
   "sea_no_active_title": "No season running",

@@ -14,10 +14,13 @@ EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
 -- Saisons déjà en cours : l'XP est relevée au passage de la migration, leur
--- classement repart de 0 à cet instant au lieu de rester sur l'XP totale.
+-- classement repart de 0 à cet instant au lieu de rester sur l'XP totale. Leur
+-- date de début devient celle du relevé, comme à toute ouverture.
 INSERT INTO "season_baselines" ("seasonId", "userId", "xp")
 SELECT s."id", ml."userId", ml."xp"
 FROM "leveling_seasons" s
 JOIN "member_levels" ml ON ml."guildId" = s."guildId"
 WHERE s."status" = 'ACTIVE' AND ml."xp" > 0
 ON CONFLICT DO NOTHING;
+
+UPDATE "leveling_seasons" SET "startDate" = NOW() WHERE "status" = 'ACTIVE';
