@@ -74,6 +74,18 @@ export function registerCommunityRoutes(): void {
         voiceMinutes: 260 - i * 18,
       })),
       activeTotals: { participants: members().length, totalXp: ranked.reduce((sum, p) => sum + p.seasonXp, 0) },
+      announcement: {
+        locale: 'fr',
+        startTitle: 'Saison #{number} · {name} ouverte',
+        startBody: 'Le classement compte l’XP gagnée à partir de maintenant, jusqu’au {date}. Les niveaux ne sont pas remis à zéro.',
+        rewardsHeading: 'Récompenses',
+        topRoleLine: 'Premier · {role}',
+        rewardCoins: '{coins} pièces',
+        endTitle: 'Saison #{number} · {name} terminée',
+        endLine: '**#{rank}** {user} · +{xp} XP',
+        endEmpty: 'Personne n’a gagné d’XP pendant cette saison.',
+        rewardsGivenHeading: 'Récompenses distribuées',
+      },
       activeRankedLeaderboard: ranked.slice(0, 8).map((p, i) => ({
         rank: i + 1,
         userId: p.id,

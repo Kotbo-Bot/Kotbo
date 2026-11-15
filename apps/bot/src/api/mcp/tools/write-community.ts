@@ -1,6 +1,6 @@
 /** Outils MCP - write community (permission WRITE_COMMUNITY). */
 import { archiveChannel, createSplitChannel, resolveHealthAlert, upsertChannelHealthConfig } from '../../../services/analytics/channelHealthService.js';
-import { createSeason, endSeason, parseSeasonInput, startSeason } from '../../../services/progression/seasonService.js';
+import { createSeason, deleteSeason, endSeason, parseSeasonInput, startSeason, updateSeason } from '../../../services/progression/seasonService.js';
 import { publishSuggestionResolved } from '../../../services/features/suggestionService.js';
 import { adjustRep } from '../../../services/community/reputationActions.js';
 import { REPUTATION_ADJUSTMENT } from '@kotbo/shared';
@@ -170,23 +170,87 @@ export function registerWriteCommunityTools(ctx: McpToolContext) {
             role_id: z.string().optional(),
             coins: z.number().int().min(0).optional(),
           })).max(10).optional().describe('Récompenses par rang, données à la clôture'),
+          announce_channel_id: z.string().optional().describe('Salon où annoncer l\'ouverture et la clôture'),
           key_name: z.string().optional(),
         },
         _meta: toolMeta,
       },
-      guard('WRITE_COMMUNITY', async ({ name, start_date, end_date, top_role_id, rewards, key_name }) => {
+      guard('WRITE_COMMUNITY', async ({ name, start_date, end_date, top_role_id, rewards, announce_channel_id, key_name }) => {
         try {
           const parsed = parseSeasonInput({
             name,
             startDate: start_date,
             endDate: end_date,
             topRoleId: top_role_id,
+            announceChannelId: announce_channel_id,
             rewards: rewards?.map((reward) => ({ rank: reward.rank, roleId: reward.role_id, coins: reward.coins })),
           });
           if ('error' in parsed) return err(`Saison invalide : ${parsed.error}`);
-          const season = await createSeason(guildId, parsed.input);
+          const season = await createSeason(guildId, parsed.input, client);
           await audit(key_name, 'Création saison MCP', name, `ID: ${season.id}`);
           return ok({ ok: true, season });
+        } catch (e) {
+          return toolError(e);
+        }
+      })
+    );
+
+    server.registerTool(
+      'update_season',
+      {
+        description: 'Modifie une saison à venir ou en cours ; un champ omis garde sa valeur, une chaîne vide retire le rôle du premier ou le salon d\'annonce. La date de début d\'une saison en cours ne change pas. Requiert WRITE_COMMUNITY.',
+        inputSchema: {
+          season_id: z.string().describe('ID de la saison à modifier'),
+          name: z.string().optional(),
+          start_date: z.string().optional().describe('Date de début (ISO 8601), saison à venir seulement'),
+          end_date: z.string().optional().describe('Date de fin (ISO 8601)'),
+          top_role_id: z.string().optional(),
+          rewards: z.array(z.object({
+            rank: z.number().int().min(1).max(100),
+            role_id: z.string().optional(),
+            coins: z.number().int().min(0).optional(),
+          })).max(10).optional().describe('Récompenses par rang, données à la clôture'),
+          announce_channel_id: z.string().optional(),
+          key_name: z.string().optional(),
+        },
+        _meta: toolMeta,
+      },
+      guard('WRITE_COMMUNITY', async ({ season_id, name, start_date, end_date, top_role_id, rewards, announce_channel_id, key_name }) => {
+        try {
+          const patch: Record<string, unknown> = {};
+          if (name !== undefined) patch.name = name;
+          if (start_date !== undefined) patch.startDate = start_date;
+          if (end_date !== undefined) patch.endDate = end_date;
+          if (top_role_id !== undefined) patch.topRoleId = top_role_id;
+          if (announce_channel_id !== undefined) patch.announceChannelId = announce_channel_id;
+          if (rewards !== undefined) patch.rewards = rewards.map((reward) => ({ rank: reward.rank, roleId: reward.role_id, coins: reward.coins }));
+
+          const result = await updateSeason(guildId, season_id, patch, client);
+          if (result === 'not_found') return err('Saison introuvable ou déjà terminée');
+          if (result !== 'updated') return err(`Saison invalide : ${result}`);
+          await audit(key_name, 'Modification saison MCP', season_id, Object.keys(patch).join(', '));
+          return ok({ ok: true, seasonId: season_id });
+        } catch (e) {
+          return toolError(e);
+        }
+      })
+    );
+
+    server.registerTool(
+      'delete_season',
+      {
+        description: 'Supprime une saison à venir. Une saison en cours ou terminée ne se supprime pas. Requiert WRITE_COMMUNITY.',
+        inputSchema: {
+          season_id: z.string().describe('ID de la saison à supprimer'),
+          key_name: z.string().optional(),
+        },
+        _meta: toolMeta,
+      },
+      guard('WRITE_COMMUNITY', async ({ season_id, key_name }) => {
+        try {
+          if (!(await deleteSeason(guildId, season_id))) return err('Seule une saison à venir peut être supprimée');
+          await audit(key_name, 'Suppression saison MCP', season_id, '');
+          return ok({ ok: true, seasonId: season_id });
         } catch (e) {
           return toolError(e);
         }
@@ -205,7 +269,7 @@ export function registerWriteCommunityTools(ctx: McpToolContext) {
       },
       guard('WRITE_COMMUNITY', async ({ season_id, key_name }) => {
         try {
-          const result = await startSeason(guildId, season_id);
+          const result = await startSeason(guildId, season_id, client);
           if (result === 'another_active') return err('Une saison est déjà en cours : termine-la avant d\'en ouvrir une autre');
           if (result !== 'started') return err('Saison introuvable ou déjà ouverte');
           await audit(key_name, 'Démarrage saison MCP', season_id, '');

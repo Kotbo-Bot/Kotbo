@@ -7,6 +7,7 @@
     SEASON_DURATION_DAYS,
     validateSeasonRewards,
     validateSeasonSchedule,
+    type SeasonAnnouncementLabels,
     type SeasonRewardError,
     type SeasonScheduleError,
   } from '@kotbo/shared';
@@ -18,19 +19,28 @@
   import Button from '../ui/Button.svelte';
   import Callout from '../ui/Callout.svelte';
   import Field from '../ui/Field.svelte';
+  import SeasonAnnouncementPreview from './SeasonAnnouncementPreview.svelte';
 
   let {
     open = $bindable(false),
     season = null,
     roles,
+    channels,
     economyActive,
+    labels = null,
+    nextNumber,
     onDone,
   }: {
     open?: boolean;
     /** Saison à modifier ; `null` pour en créer une. */
     season?: Season | null;
     roles: Array<{ id: string; name: string }>;
+    channels: Array<{ id: string; name: string }>;
     economyActive: boolean;
+    /** Gabarits des annonces ; absents d'un bot plus ancien, l'aperçu est alors masqué. */
+    labels?: SeasonAnnouncementLabels | null;
+    /** Numéro que prendra une nouvelle saison. */
+    nextNumber: number;
     onDone?: () => void;
   } = $props();
 
@@ -40,6 +50,7 @@
   let startDay = $state('');
   let endDay = $state('');
   let topRoleId = $state<string | null>(null);
+  let announceChannelId = $state<string | null>(null);
   let rewards = $state<RewardRow[]>([]);
   let saving = $state(false);
 
@@ -74,6 +85,7 @@
     startDay = season ? toDay(season.startDate) : today;
     endDay = season ? toDay(season.endDate) : addDays(today, 30);
     topRoleId = season?.topRoleId ?? null;
+    announceChannelId = season?.announceChannelId ?? null;
     rewards = (season?.rewards ?? []).map((reward) => ({ ...reward }));
   });
 
@@ -122,6 +134,7 @@
         endDate: endIso(),
         rewards: rewardsCheck.rewards,
         topRoleId,
+        announceChannelId,
       };
       const ok = season ? await updateSeason(season.id, payload) : await createSeason(payload);
       if (ok) {
@@ -164,6 +177,17 @@
     <Callout variant="info">
       <p>{m.sea_editor_explainer()}</p>
     </Callout>
+
+    <Field id="season-announce-channel" label={m.sea_announce_channel_label()} hint={m.sea_announce_channel_hint()}>
+      {#snippet children(id)}
+        <SearchableSelect
+          {id}
+          bind:value={announceChannelId}
+          options={channels.map((channel) => ({ id: channel.id, name: `#${channel.name}` }))}
+          placeholder={m.sea_announce_channel_none()}
+        />
+      {/snippet}
+    </Field>
 
     <section class="space-y-3">
       <div>
@@ -229,6 +253,16 @@
         {m.sea_reward_add()}
       </Button>
     </section>
+
+    {#if announceChannelId && labels}
+      <SeasonAnnouncementPreview
+        {labels}
+        season={{ number: season?.number ?? nextNumber, name: name.trim(), endDate: endIso() }}
+        rewards={'rewards' in rewardsCheck ? rewardsCheck.rewards : []}
+        {topRoleId}
+        roleName={(roleId) => roles.find((role) => role.id === roleId)?.name ?? roleId}
+      />
+    {/if}
   </div>
 
   {#snippet footer()}

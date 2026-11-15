@@ -28,6 +28,9 @@ model LevelingSeason {
   // Rôle exclusif attribué au top 1
   topRoleId String?
 
+  /// Salon où annoncer l'ouverture et la clôture. Vide = aucune annonce.
+  announceChannelId String?
+
   // Leaderboard final archivé (JSON: [{ userId, xp, level, rank }])
   finalLeaderboard Json?
 

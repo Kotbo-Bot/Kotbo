@@ -1,5 +1,5 @@
 /** Saisons de leveling : classement de l'XP gagnée sur une période. */
-import type { SeasonReward } from '@kotbo/shared';
+import type { SeasonAnnouncementLabels, SeasonReward } from '@kotbo/shared';
 import { authStore } from '../stores/auth.svelte';
 import { dashboardMutation, dashboardRequest } from './client';
 import { m } from '../i18n';
@@ -15,6 +15,8 @@ export interface Season {
   endDate: string;
   rewards: SeasonReward[];
   topRoleId: string | null;
+  /** Salon des annonces d'ouverture et de clôture. Absent d'un bot plus ancien. */
+  announceChannelId?: string | null;
   _count?: { snapshots: number };
 }
 
@@ -47,6 +49,8 @@ export interface SeasonsData {
   /** Absent d'un bot plus ancien. */
   activeTotals?: { participants: number; totalXp: number } | null;
   activeRankedLeaderboard?: RankedStanding[];
+  /** Gabarits des annonces dans la langue du serveur. Absent d'un bot plus ancien. */
+  announcement?: SeasonAnnouncementLabels;
 }
 
 export interface SeasonPayload {
@@ -55,6 +59,7 @@ export interface SeasonPayload {
   endDate: string;
   rewards: SeasonReward[];
   topRoleId: string | null;
+  announceChannelId: string | null;
 }
 
 export async function fetchSeasonsData(guildId = authStore.selectedGuildId): Promise<SeasonsData | null> {

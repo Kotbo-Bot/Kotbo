@@ -1,9 +1,9 @@
 /**
  * Saisons : référence d'XP à l'ouverture, clôture unique, récompenses.
  *
- * Préfixe `zzz-` : ce fichier remplace `moduleGate`, `economyService` et
- * `rankedSeasonService` pour tout le process (`mock.module` est global). Il
- * doit charger après leurs propres tests.
+ * Préfixe `zzz-` : ce fichier remplace `moduleGate`, `economyService`,
+ * `cache`, `sharding`, `seasonAnnouncements` et `rankedSeasonService` pour tout le
+ * process (`mock.module` est global). Il doit charger après leurs propres tests.
  */
 import { describe, expect, test, mock, beforeEach } from 'bun:test';
 import path from 'node:path';
@@ -12,8 +12,10 @@ import { completeModuleMock } from '../helpers/moduleMock.js';
 
 const ROLE = '123456789012345678';
 const TOP_ROLE = '223456789012345678';
+const BLACKLIST_ROLE = '323456789012345678';
+const CHANNEL = '423456789012345678';
 
-type Season = { id: string; guildId: string; number: number; status: string; startDate: Date; endDate: Date; rewards: unknown; topRoleId: string | null };
+type Season = { id: string; guildId: string; number: number; name: string; status: string; startDate: Date; endDate: Date; rewards: unknown; topRoleId: string | null; announceChannelId: string | null };
 
 let seasons: Season[] = [];
 let standingsRows: Array<{ userId: string; level: number; seasonXp: number }> = [];
@@ -68,7 +70,10 @@ function mockerModule(relatif: string, overrides: Record<string, unknown>): void
 }
 
 let economyOn = true;
+let blacklist = { progressionBlacklistUserIds: [] as string[], progressionBlacklistRoleIds: [] as string[] };
 const closeRanked = mock(async (..._args: unknown[]) => null);
+const announceStart = mock(async (..._args: unknown[]) => {});
+const announceEnd = mock(async (..._args: unknown[]) => {});
 mockerModule('../../utils/db', { default: db, prisma: db, prismaRead: db });
 mockerModule('../../services/core/moduleGate', {
   isModuleEnabled: mock(async (_guildId: string, key: string) => (key === 'economy' ? economyOn : true)),
@@ -77,11 +82,24 @@ mockerModule('../../services/features/economyService', {
   getOrCreateRpgProfile: mock(async (_guildId: string, userId: string) => ({ id: `profil-${userId}` })),
 });
 mockerModule('../../services/progression/ranked/rankedSeasonService', { closeRankedSeasonForLevelingSeason: closeRanked });
+mockerModule('../../utils/cache', { getCachedGuild: mock(async () => blacklist) });
+mockerModule('../../services/progression/seasonAnnouncements', { announceSeasonStart: announceStart, announceSeasonEnd: announceEnd });
+const broadcast = mock((..._args: unknown[]) => {});
+mockerModule('../../api/shared/sharding', { broadcastDashboardStateChange: broadcast });
 
-const { startSeason, endSeason, checkAndProgressSeasons, getSeasonLeaderboard } = await import('../../services/progression/seasonService.js');
+const { startSeason, endSeason, updateSeason, checkAndProgressSeasons, getSeasonLeaderboard } = await import('../../services/progression/seasonService.js');
 
-/** Serveur factice : `holders` sont les membres qui portent déjà le rôle du premier. */
-function fakeClient(holders: string[] = []) {
+/** Liste d'exclusion passée à la requête de classement : son seul paramètre tableau. */
+function excludedInQuery(): unknown {
+  const call = queryRaw.mock.calls.find((args) => !(args[0] as unknown as string[]).join('?').includes('COUNT(*)'));
+  return call?.slice(1).find(Array.isArray);
+}
+
+/**
+ * Serveur factice : `holders` portent déjà le rôle du premier, `blacklisted`
+ * le rôle de la liste noire de progression.
+ */
+function fakeClient(holders: string[] = [], blacklisted: string[] = []) {
   const added: Array<[string, string]> = [];
   const removed: Array<[string, string]> = [];
   const member = (id: string) => ({
@@ -93,7 +111,12 @@ function fakeClient(holders: string[] = []) {
   });
   const guild = {
     members: { fetch: mock(async (id: string) => member(id)) },
-    roles: { cache: new Map([[TOP_ROLE, { id: TOP_ROLE, members: new Map(holders.map((id) => [id, member(id)])) }]]) },
+    roles: {
+      cache: new Map([
+        [TOP_ROLE, { id: TOP_ROLE, members: new Map(holders.map((id) => [id, member(id)])) }],
+        [BLACKLIST_ROLE, { id: BLACKLIST_ROLE, members: new Map(blacklisted.map((id) => [id, member(id)])) }],
+      ]),
+    },
   };
   const client = { guilds: { cache: new Map([['g', guild]]), fetch: mock(async () => guild) } } as unknown as Client;
   return { client, added, removed };
@@ -104,11 +127,13 @@ function season(overrides: Partial<Season> = {}): Season {
     id: 's1',
     guildId: 'g',
     number: 1,
+    name: 'Hiver',
     status: 'ACTIVE',
     startDate: new Date('2026-11-01T00:00:00Z'),
     endDate: new Date('2026-12-01T00:00:00Z'),
     rewards: [],
     topRoleId: null,
+    announceChannelId: null,
     ...overrides,
   };
 }
@@ -120,7 +145,8 @@ beforeEach(() => {
     { userId: 'b', level: 12, seasonXp: 400 },
   ];
   economyOn = true;
-  for (const fn of [executeRaw, queryRaw, snapshotCreateMany, baselineDeleteMany, seasonUpdate, rpgUpdate, closeRanked]) fn.mockClear();
+  blacklist = { progressionBlacklistUserIds: [], progressionBlacklistRoleIds: [] };
+  for (const fn of [executeRaw, queryRaw, snapshotCreateMany, baselineDeleteMany, seasonUpdate, rpgUpdate, closeRanked, announceStart, announceEnd, broadcast]) fn.mockClear();
 });
 
 describe('startSeason', () => {
@@ -132,6 +158,20 @@ describe('startSeason', () => {
     expect(seasons[0].startDate.getTime()).toBeGreaterThanOrEqual(before);
     expect(executeRaw).toHaveBeenCalledTimes(1);
     expect((executeRaw.mock.calls[0][0] as unknown as string[]).join('?')).toContain('season_baselines');
+  });
+
+  test('annonce l\'ouverture avec les récompenses quand un client est fourni', async () => {
+    seasons = [season({ status: 'UPCOMING', announceChannelId: CHANNEL, rewards: [{ rank: 1, coins: 10 }], topRoleId: TOP_ROLE })];
+    const { client } = fakeClient();
+    await startSeason('g', 's1', client);
+    expect(announceStart).toHaveBeenCalledTimes(1);
+    expect(announceStart.mock.calls[0].slice(2)).toEqual([[{ rank: 1, roleId: null, coins: 10 }], TOP_ROLE]);
+  });
+
+  test('prévient la page Saisons en direct', async () => {
+    seasons = [season({ status: 'UPCOMING' })];
+    await startSeason('g', 's1');
+    expect(broadcast.mock.calls).toEqual([['g', 'seasons_updated']]);
   });
 
   test('refuse d\'ouvrir une saison pendant qu\'une autre est en cours, sans la clôturer', async () => {
@@ -161,6 +201,14 @@ describe('endSeason', () => {
     ]);
     expect(baselineDeleteMany.mock.calls[0][0]).toEqual({ where: { seasonId: 's1' } });
     expect(seasons[0].status).toBe('ENDED');
+  });
+
+  test('ne prévient la page qu\'une fois, à la vraie clôture', async () => {
+    seasons = [season()];
+    const { client } = fakeClient();
+    await endSeason(client, 'g', 's1');
+    await endSeason(client, 'g', 's1');
+    expect(broadcast).toHaveBeenCalledTimes(1);
   });
 
   test('une saison déjà clôturée ne redonne aucune récompense', async () => {
@@ -200,10 +248,46 @@ describe('endSeason', () => {
     expect(added).toEqual([['a', TOP_ROLE]]);
   });
 
-  test('passe les récompenses à la clôture du classement RP', async () => {
-    seasons = [season({ rewards: [{ rank: 1, roleId: ROLE, coins: 0 }, { rank: 2, coins: 10 }] })];
+  test('clôt le classement RP sans lui redonner les récompenses de la saison', async () => {
+    seasons = [season({ rewards: [{ rank: 1, roleId: ROLE, coins: 0 }] })];
     await endSeason(fakeClient().client, 'g', 's1');
-    expect(closeRanked.mock.calls[0][3]).toEqual([{ rank: 1, roleId: ROLE, coins: 0 }, { rank: 2, roleId: undefined, coins: 10 }]);
+    expect(closeRanked).toHaveBeenCalledTimes(1);
+    expect(closeRanked.mock.calls[0][3]).toBeUndefined();
+  });
+
+  test('écarte du classement les membres et les porteurs de rôle de la liste noire', async () => {
+    blacklist = { progressionBlacklistUserIds: ['listé'], progressionBlacklistRoleIds: [BLACKLIST_ROLE] };
+    seasons = [season()];
+    await endSeason(fakeClient([], ['porteur']).client, 'g', 's1');
+    expect(excludedInQuery()).toEqual(['listé', 'porteur']);
+  });
+
+  test('annonce la clôture avec le classement et les récompenses données', async () => {
+    seasons = [season({ announceChannelId: CHANNEL, rewards: [{ rank: 1, coins: 100 }] })];
+    await endSeason(fakeClient().client, 'g', 's1');
+    const [, announced, standings, plan] = announceEnd.mock.calls[0] as [unknown, Season, Array<{ userId: string }>, unknown];
+    expect(announced.id).toBe('s1');
+    expect(standings.map((entry) => entry.userId)).toEqual(['a', 'b']);
+    expect(plan).toEqual([{ userId: 'a', rank: 1, roleId: null, coins: 100 }]);
+  });
+});
+
+describe('updateSeason', () => {
+  test('un champ absent garde sa valeur', async () => {
+    seasons = [season({ status: 'UPCOMING', startDate: new Date(Date.now() + 86_400_000), endDate: new Date(Date.now() + 10 * 86_400_000), topRoleId: TOP_ROLE, announceChannelId: CHANNEL, rewards: [{ rank: 1, coins: 5 }] })];
+    expect(await updateSeason('g', 's1', { name: 'Printemps' }, null)).toBe('updated');
+    expect(seasons[0]).toMatchObject({ name: 'Printemps', topRoleId: TOP_ROLE, announceChannelId: CHANNEL, rewards: [{ rank: 1, roleId: null, coins: 5 }] });
+  });
+
+  test('null retire le salon d\'annonce', async () => {
+    seasons = [season({ announceChannelId: CHANNEL, startDate: new Date(Date.now() - 86_400_000), endDate: new Date(Date.now() + 86_400_000) })];
+    expect(await updateSeason('g', 's1', { announceChannelId: null }, null)).toBe('updated');
+    expect(seasons[0].announceChannelId).toBeNull();
+  });
+
+  test('refuse une saison terminée', async () => {
+    seasons = [season({ status: 'ENDED' })];
+    expect(await updateSeason('g', 's1', { name: 'Printemps' }, null)).toBe('not_found');
   });
 });
 
@@ -219,6 +303,13 @@ describe('checkAndProgressSeasons', () => {
 });
 
 describe('getSeasonLeaderboard', () => {
+  test('saison en cours : les membres listés sur la liste noire sont écartés', async () => {
+    blacklist = { progressionBlacklistUserIds: ['listé'], progressionBlacklistRoleIds: [BLACKLIST_ROLE] };
+    seasons = [season()];
+    await getSeasonLeaderboard('g', 's1', 10);
+    expect(excludedInQuery()).toEqual(['listé']);
+  });
+
   test('saison en cours : classement calculé sur l\'XP gagnée depuis l\'ouverture', async () => {
     seasons = [season()];
     const board = await getSeasonLeaderboard('g', 's1', 10);

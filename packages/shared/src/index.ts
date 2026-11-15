@@ -24,6 +24,7 @@ export * from './drops/policy.js';
 export * from './reputation/config.js';
 export * from './reputation/tiers.js';
 export * from './seasons/config.js';
+export * from './seasons/announcement.js';
 export * from './leveling/dailyCap.js';
 export * from './ranked/ladder.js';
 export * from './ranked/ladderCurve.js';

@@ -18,6 +18,8 @@ import { getRankedSeasonStandings } from '../../../services/progression/ranked/r
 import { getRankedLeaderboard } from '../../../services/progression/ranked/rankedLeaderboardService.js';
 import { getGuildLadder } from '../../../services/progression/ranked/rankedConfigService.js';
 import { getMemberIdentities } from '../../../services/moderation/memberIdentityService.js';
+import { seasonAnnouncementLabels } from '../../../services/progression/seasonAnnouncements.js';
+import { resolveGuildLocale } from '../../../utils/i18n.js';
 
 import { jsonFailure } from '../../shared/failure.js';
 /** Le classement archivé ne stocke que des identifiants : il faut les nommer. */
@@ -50,6 +52,7 @@ const INPUT_ERRORS: Record<SeasonInputError, string> = {
   EMPTY_REWARD: 'Chaque récompense donne un rôle, des pièces ou les deux',
   DUPLICATE_RANK: 'Deux récompenses pour le même rang',
   BAD_TOP_ROLE: 'Rôle du premier invalide',
+  BAD_ANNOUNCE_CHANNEL: 'Salon d\'annonce invalide',
 };
 
 export async function handleSeasonRoutes(
@@ -78,8 +81,11 @@ export async function handleSeasonRoutes(
       // sien, remis à zéro à la clôture, et la page l'ignorait complètement.
       const rankedLeaderboard = await getRankedLeaderboard(guildId, 20).catch(() => []);
 
+      const locale = await resolveGuildLocale(guildId, client.guilds.cache.get(guildId)?.preferredLocale);
       json(res, 200, {
         ...data,
+        // Gabarits de l'annonce dans la langue du serveur, pour l'aperçu.
+        announcement: seasonAnnouncementLabels(locale),
         // Les pseudos manquaient aux deux classements : `MemberLevel` comme
         // `RankedMember` ne stockent que des identifiants.
         activeLeaderboard: await withSeasonIdentities(client, guildId, data.activeLeaderboard),
@@ -100,7 +106,7 @@ export async function handleSeasonRoutes(
         json(res, 400, { error: INPUT_ERRORS[parsed.error] });
         return true;
       }
-      json(res, 201, await createSeason(guildId, parsed.input));
+      json(res, 201, await createSeason(guildId, parsed.input, client));
     } catch (err) {
       logger.error('SeasonsAPI', 'Error creating season:', err);
       jsonFailure(res, err, 'Erreur lors de la création', 'SeasonsAPI');
@@ -111,7 +117,7 @@ export async function handleSeasonRoutes(
   // PATCH /api/dashboard/guilds/:guildId/seasons/:seasonId
   if (parts.length === 6 && method === 'PATCH') {
     try {
-      const result = await updateSeason(guildId, parts[5], (await readJsonBody(req)) ?? {});
+      const result = await updateSeason(guildId, parts[5], (await readJsonBody(req)) ?? {}, client);
       if (result === 'updated') json(res, 200, { ok: true });
       else if (result === 'not_found') json(res, 404, { error: 'Saison introuvable ou déjà terminée' });
       else json(res, 400, { error: INPUT_ERRORS[result] });
@@ -137,7 +143,7 @@ export async function handleSeasonRoutes(
   // POST /api/dashboard/guilds/:guildId/seasons/:seasonId/start
   if (parts.length === 7 && parts[6] === 'start' && method === 'POST') {
     try {
-      const result = await startSeason(guildId, parts[5]);
+      const result = await startSeason(guildId, parts[5], client);
       if (result === 'started') json(res, 200, { ok: true });
       else if (result === 'another_active') json(res, 409, { error: 'Une saison est déjà en cours : termine-la avant d\'en ouvrir une autre' });
       else json(res, 404, { error: 'Saison introuvable ou déjà ouverte' });
