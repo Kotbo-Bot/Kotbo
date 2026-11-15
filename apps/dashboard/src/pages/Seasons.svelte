@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
+  import { MediaQuery } from 'svelte/reactivity';
   import { seasonProgress } from '@kotbo/shared';
   import {
     deleteSeason,
@@ -17,6 +18,7 @@
   import { authStore } from '../lib/stores/auth.svelte';
   import { confirmDialog } from '../lib/stores/confirmDialog.svelte';
   import { memberCaseModal } from '../lib/stores/memberCaseModal.svelte';
+  import { subscribeRealtime } from '../lib/stores/realtime.svelte';
   import ModulePage from '../lib/components/ModulePage.svelte';
   import Papicon from '../lib/components/Papicon.svelte';
   import EmptyState from '../lib/components/EmptyState.svelte';
@@ -45,6 +47,9 @@
   let board = $state<SeasonStanding[]>([]);
   let boardRanked = $state<RankedStanding[]>([]);
 
+  let statusOpen = $state(false);
+  const wide = new MediaQuery('min-width: 64rem');
+
   const canManage = $derived(
     !!dashboardStore.state.featureAccess?.seasons?.canConfigure
       || !!dashboardStore.state.access?.canManageSettings
@@ -65,6 +70,30 @@
   );
   const progress = $derived(active ? seasonProgress(new Date(active.startDate), new Date(active.endDate)) : null);
   const topXp = $derived(Math.max(1, data?.activeLeaderboard[0]?.xp ?? 1));
+  const nextNumber = $derived((data?.seasons ?? []).reduce((max, season) => Math.max(max, season.number), 0) + 1);
+  const lastEnded = $derived(
+    [...(data?.seasons ?? [])].filter((season) => season.status === 'ENDED' || season.status === 'ARCHIVED').sort((a, b) => b.endDate.localeCompare(a.endDate))[0] ?? null
+  );
+
+  function channelName(channelId: string): string {
+    return textChannels.find((channel) => channel.id === channelId)?.name ?? channelId;
+  }
+
+  /** Conseils sur la saison en cours, du plus utile au moins utile. */
+  const advice = $derived.by(() => {
+    if (!active) return [];
+    const list: Array<{ id: string; variant: 'info' | 'warning'; title: string; text: string; action?: string }> = [];
+    const hasRewards = (active.rewards?.length ?? 0) > 0 || !!active.topRoleId;
+    if (!hasRewards) list.push({ id: 'rewards', variant: 'info', title: m.sea_advice_no_rewards_title(), text: m.sea_advice_no_rewards_desc(), action: m.sea_advice_no_rewards_action() });
+    if (hasRewards && !economyActive && (active.rewards ?? []).some((reward) => reward.coins > 0)) {
+      list.push({ id: 'economy', variant: 'warning', title: m.sea_advice_economy_off_title(), text: m.sea_rewards_economy_off() });
+    }
+    if (active.announceChannelId === null) list.push({ id: 'announce', variant: 'info', title: m.sea_advice_no_announce_title(), text: m.sea_advice_no_announce_desc(), action: m.sea_advice_no_announce_action() });
+    if (new Date(active.endDate).getTime() - Date.now() < 24 * 60 * 60 * 1000) {
+      list.push({ id: 'soon', variant: 'info', title: m.sea_advice_ends_soon_title(), text: m.sea_advice_ends_soon_desc({ date: formatDateTime(active.endDate) }) });
+    }
+    return list;
+  });
 
   const tabItems = $derived<TabItem[]>([
     { id: 'current', label: m.sea_tab_current(), icon: 'Trophy' },
@@ -78,6 +107,10 @@
     ARCHIVED: { label: () => m.sea_status_archived(), cls: 'bg-surface-container-high/40 text-on-surface-variant border-outline-variant/20' },
   };
   const PODIUM = ['bg-warning/15 text-warning', 'bg-surface-container-highest text-on-surface', 'bg-primary/10 text-primary'];
+
+  function formatDateTime(iso: string): string {
+    return new Date(iso).toLocaleString(dateLocale(), { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  }
 
   function formatDate(iso: string): string {
     return new Date(iso).toLocaleDateString(dateLocale(), { day: 'numeric', month: 'short', year: 'numeric' });
@@ -161,12 +194,58 @@
     }
   }
 
+  let unsubscribeRealtime: (() => void) | null = null;
+
   onMount(async () => {
+    // L'XP gagnée n'émet aucun événement : le filet d'une minute fait monter
+    // le classement, les événements couvrent ouverture, clôture et réglages.
+    unsubscribeRealtime = subscribeRealtime({
+      reasons: ['seasons_updated'],
+      fallbackMs: 60_000,
+      onUpdate: () => load(true),
+    });
     await load();
     const channels = await fetchDiscordChannels().catch(() => null);
     textChannels = channels?.textChannels ?? [];
   });
+
+  onDestroy(() => unsubscribeRealtime?.());
 </script>
+
+{#snippet statusPanel()}
+  {#if loading || !data}
+    <Skeleton height="160px" />
+  {:else}
+    <dl class="space-y-2 text-sm">
+      <div class="flex items-center justify-between gap-3">
+        <dt class="text-on-surface-variant">{m.sea_status_current()}</dt>
+        <dd class="font-semibold text-right truncate">{active ? active.name : m.sea_status_none()}</dd>
+      </div>
+      {#if active && progress}
+        <div class="flex items-center justify-between gap-3">
+          <dt class="text-on-surface-variant">{m.sea_stat_days_left()}</dt>
+          <dd class="font-semibold">{progress.daysLeft}</dd>
+        </div>
+        <div class="flex items-center justify-between gap-3">
+          <dt class="text-on-surface-variant">{m.sea_status_rewards()}</dt>
+          <dd class="font-semibold">{(active.rewards?.length ?? 0) + (active.topRoleId ? 1 : 0)}</dd>
+        </div>
+        <div class="flex items-center justify-between gap-3">
+          <dt class="text-on-surface-variant">{m.sea_announce_channel_label()}</dt>
+          <dd class="font-semibold text-right truncate">{active.announceChannelId ? `#${channelName(active.announceChannelId)}` : m.sea_status_none()}</dd>
+        </div>
+      {/if}
+      <div class="flex items-center justify-between gap-3">
+        <dt class="text-on-surface-variant">{m.sea_status_next()}</dt>
+        <dd class="font-semibold text-right truncate">{nextUpcoming ? m.sea_status_next_value({ name: nextUpcoming.name, date: formatDate(nextUpcoming.startDate) }) : m.sea_status_none()}</dd>
+      </div>
+      <div class="flex items-center justify-between gap-3">
+        <dt class="text-on-surface-variant">{m.sea_status_last_ended()}</dt>
+        <dd class="font-semibold text-right">{lastEnded ? formatDate(lastEnded.endDate) : m.sea_status_never()}</dd>
+      </div>
+    </dl>
+  {/if}
+{/snippet}
 
 {#snippet statTile(icon: string, tone: string, value: string, label: string)}
   <div class="bg-surface-container-high/30 rounded-xl p-4 flex items-center gap-3">
@@ -250,154 +329,197 @@
     {/if}
   {/snippet}
 
-  <Tabs label={m.sea_tabs_label()} tabs={tabItems} active={activeTab} onchange={(id) => activeTab = id as Tab} class="mb-6" />
-
-  {#if loading}
-    <div class="space-y-6">
-      <Skeleton height="160px" />
-      <Skeleton height="320px" />
+  {#if !wide.current}
+    <div class="mb-4">
+      <Button size="sm" icon="List" onclick={() => statusOpen = true}>{m.sea_status_title()}</Button>
     </div>
-  {:else if !data}
-    <EmptyState icon="flag" title={m.sea_load_error()} actionLabel={m.sea_retry()} onAction={() => load()} />
-  {:else if activeTab === 'current'}
-    {#if active && progress}
-      <div class="space-y-6">
-        <section class="bg-surface-container-low/40 border border-outline-variant/30 p-6 rounded-xl space-y-5">
-          <div class="flex flex-wrap items-start justify-between gap-3">
-            <div class="min-w-0">
-              <div class="flex flex-wrap items-center gap-2">
-                <h2 class="text-lg font-semibold text-on-surface">{active.name}</h2>
-                <span class="text-xs text-on-surface-variant">#{active.number}</span>
-                {@render statusPill(active.status)}
+    <Modal bind:open={statusOpen} onClose={() => statusOpen = false} title={m.sea_status_title()}>
+      {@render statusPanel()}
+    </Modal>
+  {/if}
+
+  <!-- Sur grand écran, l'état du module reste à côté du contenu, quel que soit l'onglet. -->
+  <div class="lg:grid lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start lg:gap-6">
+    <div class="min-w-0">
+      <Tabs label={m.sea_tabs_label()} tabs={tabItems} active={activeTab} onchange={(id) => activeTab = id as Tab} class="mb-6" />
+
+      {#if loading}
+        <div class="space-y-6">
+          <Skeleton height="160px" />
+          <Skeleton height="320px" />
+        </div>
+      {:else if !data}
+        <EmptyState icon="flag" title={m.sea_load_error()} actionLabel={m.sea_retry()} onAction={() => load()} />
+      {:else if activeTab === 'current'}
+        {#if active && progress}
+          <div class="space-y-6">
+            {#each advice as item (item.id)}
+              <Callout variant={item.variant} title={item.title}>
+                <p>{item.text}</p>
+                {#snippet actions()}
+                  {#if item.action && canManage}
+                    <Button size="sm" icon="Pencil" onclick={() => openEditor(active)}>{item.action}</Button>
+                  {/if}
+                {/snippet}
+              </Callout>
+            {/each}
+
+            <section class="bg-surface-container-low/40 border border-outline-variant/30 p-6 rounded-xl space-y-5">
+              <div class="flex flex-wrap items-start justify-between gap-3">
+                <div class="min-w-0">
+                  <div class="flex flex-wrap items-center gap-2">
+                    <h2 class="text-lg font-semibold text-on-surface">{active.name}</h2>
+                    <span class="text-xs text-on-surface-variant">#{active.number}</span>
+                    {@render statusPill(active.status)}
+                  </div>
+                  <p class="flex items-center gap-1.5 text-xs text-on-surface-variant mt-1">
+                    <Papicon icon="Calendar" size={13} />
+                    {m.sea_period({ start: formatDate(active.startDate), end: formatDate(active.endDate) })}
+                  </p>
+                </div>
+                {#if canManage}
+                  <div class="flex flex-wrap gap-2">
+                    <Button size="sm" icon="Pencil" onclick={() => openEditor(active)}>{m.sea_btn_edit()}</Button>
+                    <Button size="sm" variant="danger" icon="Flag" onclick={() => handleEnd(active)}>{m.sea_btn_end_season()}</Button>
+                  </div>
+                {/if}
               </div>
-              <p class="flex items-center gap-1.5 text-xs text-on-surface-variant mt-1">
-                <Papicon icon="Calendar" size={13} />
-                {m.sea_period({ start: formatDate(active.startDate), end: formatDate(active.endDate) })}
-              </p>
-            </div>
-            {#if canManage}
-              <div class="flex flex-wrap gap-2">
-                <Button size="sm" icon="Pencil" onclick={() => openEditor(active)}>{m.sea_btn_edit()}</Button>
-                <Button size="sm" variant="danger" icon="Flag" onclick={() => handleEnd(active)}>{m.sea_btn_end_season()}</Button>
+
+              <div class="space-y-1.5">
+                <div class="flex items-center justify-between text-xs text-on-surface-variant">
+                  <span>{m.sea_progress({ percent: progress.percent })}</span>
+                  <span>{m.sea_days_left({ count: progress.daysLeft })}</span>
+                </div>
+                <div class="h-2 bg-surface-container-high rounded-full overflow-hidden" role="progressbar" aria-valuenow={progress.percent} aria-valuemin={0} aria-valuemax={100} aria-label={m.sea_progress_aria()}>
+                  <div class="h-2 rounded-full bg-success transition-all duration-500" style="width: {progress.percent}%"></div>
+                </div>
               </div>
+
+              <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                {@render statTile('Users', 'bg-primary/10 text-primary', (data.activeTotals?.participants ?? data.activeLeaderboard.length).toLocaleString(dateLocale()), m.sea_stat_participants())}
+                {@render statTile('Zap', 'bg-success/10 text-success', (data.activeTotals?.totalXp ?? 0).toLocaleString(dateLocale()), m.sea_stat_xp())}
+                {@render statTile('Clock', 'bg-warning/10 text-warning', String(progress.daysLeft), m.sea_stat_days_left())}
+              </div>
+
+              <div class="space-y-2">
+                <h3 class="text-sm font-semibold flex items-center gap-2"><Papicon icon="Award" size={15} /> {m.sea_rewards_heading()}</h3>
+                {@render rewardsSummary(active)}
+              </div>
+            </section>
+
+            <section class="bg-surface-container-low/40 border border-outline-variant/30 p-6 rounded-xl space-y-4">
+              <div>
+                <h3 class="text-base font-semibold flex items-center gap-2.5"><Papicon icon="Crown" size={16} /> {m.sea_current_ranking()}</h3>
+                <p class="text-xs text-on-surface-variant mt-1">{m.sea_ranking_hint()}</p>
+              </div>
+              {#if data.activeLeaderboard.length === 0}
+                <EmptyState icon="trophy" title={m.sea_ranking_empty_title()} description={m.sea_ranking_empty_desc()} reason="accumulating" />
+              {:else}
+                {@render standingsList(data.activeLeaderboard, topXp)}
+              {/if}
+            </section>
+
+            {#if (data.activeRankedLeaderboard?.length ?? 0) > 0}
+              <section class="bg-surface-container-low/40 border border-outline-variant/30 p-6 rounded-xl space-y-4">
+                <div>
+                  <h3 class="text-base font-semibold flex items-center gap-2.5"><Papicon icon="Shield" size={16} /> {m.sea_current_ranking_rp()}</h3>
+                  <p class="text-xs text-on-surface-variant mt-1">{m.sea_ranking_rp_hint()}</p>
+                </div>
+                {@render rankedList(data.activeRankedLeaderboard ?? [])}
+              </section>
             {/if}
           </div>
-
-          <div class="space-y-1.5">
-            <div class="flex items-center justify-between text-xs text-on-surface-variant">
-              <span>{m.sea_progress({ percent: progress.percent })}</span>
-              <span>{m.sea_days_left({ count: progress.daysLeft })}</span>
-            </div>
-            <div class="h-2 bg-surface-container-high rounded-full overflow-hidden" role="progressbar" aria-valuenow={progress.percent} aria-valuemin={0} aria-valuemax={100} aria-label={m.sea_progress_aria()}>
-              <div class="h-2 rounded-full bg-success transition-all duration-500" style="width: {progress.percent}%"></div>
-            </div>
+        {:else}
+          <div class="space-y-6">
+            {#if nextUpcoming}
+              <Callout variant="info" title={m.sea_next_title({ name: nextUpcoming.name })}>
+                <p>{m.sea_next_desc({ date: formatDate(nextUpcoming.startDate) })}</p>
+                {#snippet actions()}
+                  {#if canManage}
+                    <Button size="sm" icon="Zap" onclick={() => handleStart(nextUpcoming)}>{m.sea_btn_start_now()}</Button>
+                  {/if}
+                {/snippet}
+              </Callout>
+            {/if}
+            <EmptyState
+              icon="flag"
+              title={m.sea_no_active_title()}
+              description={m.sea_empty_desc()}
+              actionLabel={canManage && !nextUpcoming ? m.sea_empty_cta() : ''}
+              onAction={canManage && !nextUpcoming ? () => openEditor(null) : undefined}
+              reason={canManage ? (nextUpcoming ? 'instruction' : undefined) : 'read-only'}
+            />
           </div>
-
-          <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {@render statTile('Users', 'bg-primary/10 text-primary', (data.activeTotals?.participants ?? data.activeLeaderboard.length).toLocaleString(dateLocale()), m.sea_stat_participants())}
-            {@render statTile('Zap', 'bg-success/10 text-success', (data.activeTotals?.totalXp ?? 0).toLocaleString(dateLocale()), m.sea_stat_xp())}
-            {@render statTile('Clock', 'bg-warning/10 text-warning', String(progress.daysLeft), m.sea_stat_days_left())}
-          </div>
-
-          <div class="space-y-2">
-            <h3 class="text-sm font-semibold flex items-center gap-2"><Papicon icon="Award" size={15} /> {m.sea_rewards_heading()}</h3>
-            {@render rewardsSummary(active)}
-          </div>
-        </section>
-
-        <section class="bg-surface-container-low/40 border border-outline-variant/30 p-6 rounded-xl space-y-4">
-          <div>
-            <h3 class="text-base font-semibold flex items-center gap-2.5"><Papicon icon="Crown" size={16} /> {m.sea_current_ranking()}</h3>
-            <p class="text-xs text-on-surface-variant mt-1">{m.sea_ranking_hint()}</p>
-          </div>
-          {#if data.activeLeaderboard.length === 0}
-            <EmptyState icon="trophy" title={m.sea_ranking_empty_title()} description={m.sea_ranking_empty_desc()} reason="accumulating" />
-          {:else}
-            {@render standingsList(data.activeLeaderboard, topXp)}
-          {/if}
-        </section>
-
-        {#if (data.activeRankedLeaderboard?.length ?? 0) > 0}
-          <section class="bg-surface-container-low/40 border border-outline-variant/30 p-6 rounded-xl space-y-4">
-            <div>
-              <h3 class="text-base font-semibold flex items-center gap-2.5"><Papicon icon="Shield" size={16} /> {m.sea_current_ranking_rp()}</h3>
-              <p class="text-xs text-on-surface-variant mt-1">{m.sea_ranking_rp_hint()}</p>
-            </div>
-            {@render rankedList(data.activeRankedLeaderboard ?? [])}
-          </section>
         {/if}
-      </div>
-    {:else}
-      <div class="space-y-6">
-        {#if nextUpcoming}
-          <Callout variant="info" title={m.sea_next_title({ name: nextUpcoming.name })}>
-            <p>{m.sea_next_desc({ date: formatDate(nextUpcoming.startDate) })}</p>
-            {#snippet actions()}
-              {#if canManage}
-                <Button size="sm" icon="Zap" onclick={() => handleStart(nextUpcoming)}>{m.sea_btn_start_now()}</Button>
-              {/if}
-            {/snippet}
-          </Callout>
-        {/if}
+      {:else if data.seasons.length === 0}
         <EmptyState
           icon="flag"
-          title={m.sea_no_active_title()}
+          title={m.sea_empty_title()}
           description={m.sea_empty_desc()}
-          actionLabel={canManage && !nextUpcoming ? m.sea_empty_cta() : ''}
-          onAction={canManage && !nextUpcoming ? () => openEditor(null) : undefined}
-          reason={canManage ? (nextUpcoming ? 'instruction' : undefined) : 'read-only'}
+          actionLabel={canManage ? m.sea_empty_cta() : ''}
+          onAction={canManage ? () => openEditor(null) : undefined}
+          reason={canManage ? undefined : 'read-only'}
         />
-      </div>
+      {:else}
+        <ul class="space-y-3">
+          {#each data.seasons as season (season.id)}
+            <li class="bg-surface-container-low/40 border border-outline-variant/30 rounded-xl p-4 space-y-3">
+              <div class="flex flex-wrap items-start justify-between gap-3">
+                <div class="min-w-0 space-y-1">
+                  <div class="flex flex-wrap items-center gap-2">
+                    <span class="text-xs font-semibold text-on-surface-variant">#{season.number}</span>
+                    <h3 class="text-sm font-semibold text-on-surface">{season.name}</h3>
+                    {@render statusPill(season.status)}
+                  </div>
+                  <div class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-on-surface-variant">
+                    <span class="flex items-center gap-1"><Papicon icon="Calendar" size={13} /> {m.sea_period({ start: formatDate(season.startDate), end: formatDate(season.endDate) })}</span>
+                    {#if season.status === 'ENDED' || season.status === 'ARCHIVED'}
+                      <span class="flex items-center gap-1"><Papicon icon="Users" size={13} /> {m.sea_participants_count({ count: season._count?.snapshots ?? 0 })}</span>
+                    {/if}
+                  </div>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                  {#if season.status === 'ACTIVE'}
+                    <Button size="sm" icon="Trophy" onclick={() => activeTab = 'current'}>{m.sea_btn_view_current()}</Button>
+                  {:else if season.status === 'UPCOMING'}
+                    {#if canManage}
+                      <Button size="sm" icon="Zap" disabled={!!active} disabledReason={m.sea_start_blocked()} onclick={() => handleStart(season)}>{m.sea_btn_start()}</Button>
+                      <Button size="sm" variant="ghost" icon="Pencil" aria-label={m.sea_btn_edit()} onclick={() => openEditor(season)} />
+                      <Button size="sm" variant="ghost" icon="Trash" aria-label={m.sea_btn_delete()} onclick={() => handleDelete(season)} />
+                    {/if}
+                  {:else}
+                    <Button size="sm" icon="List" onclick={() => openBoard(season)}>{m.sea_btn_view_ranking()}</Button>
+                  {/if}
+                </div>
+              </div>
+              {@render rewardsSummary(season)}
+            </li>
+          {/each}
+        </ul>
+      {/if}
+    </div>
+
+    {#if wide.current}
+      <aside class="sticky top-4 space-y-4" aria-label={m.sea_status_title()}>
+        <section class="bg-surface-container-low/40 border border-outline-variant/30 p-4 rounded-xl space-y-3">
+          <h3 class="text-sm font-semibold flex items-center gap-2"><Papicon icon="List" size={15} /> {m.sea_status_title()}</h3>
+          {@render statusPanel()}
+        </section>
+      </aside>
     {/if}
-  {:else if data.seasons.length === 0}
-    <EmptyState
-      icon="flag"
-      title={m.sea_empty_title()}
-      description={m.sea_empty_desc()}
-      actionLabel={canManage ? m.sea_empty_cta() : ''}
-      onAction={canManage ? () => openEditor(null) : undefined}
-      reason={canManage ? undefined : 'read-only'}
-    />
-  {:else}
-    <ul class="space-y-3">
-      {#each data.seasons as season (season.id)}
-        <li class="bg-surface-container-low/40 border border-outline-variant/30 rounded-xl p-4 space-y-3">
-          <div class="flex flex-wrap items-start justify-between gap-3">
-            <div class="min-w-0 space-y-1">
-              <div class="flex flex-wrap items-center gap-2">
-                <span class="text-xs font-semibold text-on-surface-variant">#{season.number}</span>
-                <h3 class="text-sm font-semibold text-on-surface">{season.name}</h3>
-                {@render statusPill(season.status)}
-              </div>
-              <div class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-on-surface-variant">
-                <span class="flex items-center gap-1"><Papicon icon="Calendar" size={13} /> {m.sea_period({ start: formatDate(season.startDate), end: formatDate(season.endDate) })}</span>
-                {#if season.status === 'ENDED' || season.status === 'ARCHIVED'}
-                  <span class="flex items-center gap-1"><Papicon icon="Users" size={13} /> {m.sea_participants_count({ count: season._count?.snapshots ?? 0 })}</span>
-                {/if}
-              </div>
-            </div>
-            <div class="flex flex-wrap gap-2">
-              {#if season.status === 'ACTIVE'}
-                <Button size="sm" icon="Trophy" onclick={() => activeTab = 'current'}>{m.sea_btn_view_current()}</Button>
-              {:else if season.status === 'UPCOMING'}
-                {#if canManage}
-                  <Button size="sm" icon="Zap" disabled={!!active} disabledReason={m.sea_start_blocked()} onclick={() => handleStart(season)}>{m.sea_btn_start()}</Button>
-                  <Button size="sm" variant="ghost" icon="Pencil" aria-label={m.sea_btn_edit()} onclick={() => openEditor(season)} />
-                  <Button size="sm" variant="ghost" icon="Trash" aria-label={m.sea_btn_delete()} onclick={() => handleDelete(season)} />
-                {/if}
-              {:else}
-                <Button size="sm" icon="List" onclick={() => openBoard(season)}>{m.sea_btn_view_ranking()}</Button>
-              {/if}
-            </div>
-          </div>
-          {@render rewardsSummary(season)}
-        </li>
-      {/each}
-    </ul>
-  {/if}
+  </div>
 </ModulePage>
 
-<SeasonEditorModal bind:open={editorOpen} season={editing} {roles} channels={textChannels} {economyActive} onDone={() => load(true)} />
+<SeasonEditorModal
+  bind:open={editorOpen}
+  season={editing}
+  {roles}
+  channels={textChannels}
+  {economyActive}
+  labels={data?.announcement ?? null}
+  {nextNumber}
+  onDone={() => load(true)}
+/>
 
 <Modal
   bind:open={boardOpen}

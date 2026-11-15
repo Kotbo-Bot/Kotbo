@@ -18,6 +18,8 @@ import { getRankedSeasonStandings } from '../../../services/progression/ranked/r
 import { getRankedLeaderboard } from '../../../services/progression/ranked/rankedLeaderboardService.js';
 import { getGuildLadder } from '../../../services/progression/ranked/rankedConfigService.js';
 import { getMemberIdentities } from '../../../services/moderation/memberIdentityService.js';
+import { seasonAnnouncementLabels } from '../../../services/progression/seasonAnnouncements.js';
+import { resolveGuildLocale } from '../../../utils/i18n.js';
 
 import { jsonFailure } from '../../shared/failure.js';
 /** Le classement archivé ne stocke que des identifiants : il faut les nommer. */
@@ -79,8 +81,11 @@ export async function handleSeasonRoutes(
       // sien, remis à zéro à la clôture, et la page l'ignorait complètement.
       const rankedLeaderboard = await getRankedLeaderboard(guildId, 20).catch(() => []);
 
+      const locale = await resolveGuildLocale(guildId, client.guilds.cache.get(guildId)?.preferredLocale);
       json(res, 200, {
         ...data,
+        // Gabarits de l'annonce dans la langue du serveur, pour l'aperçu.
+        announcement: seasonAnnouncementLabels(locale),
         // Les pseudos manquaient aux deux classements : `MemberLevel` comme
         // `RankedMember` ne stockent que des identifiants.
         activeLeaderboard: await withSeasonIdentities(client, guildId, data.activeLeaderboard),

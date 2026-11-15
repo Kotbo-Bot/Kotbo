@@ -7,6 +7,7 @@
     SEASON_DURATION_DAYS,
     validateSeasonRewards,
     validateSeasonSchedule,
+    type SeasonAnnouncementLabels,
     type SeasonRewardError,
     type SeasonScheduleError,
   } from '@kotbo/shared';
@@ -18,6 +19,7 @@
   import Button from '../ui/Button.svelte';
   import Callout from '../ui/Callout.svelte';
   import Field from '../ui/Field.svelte';
+  import SeasonAnnouncementPreview from './SeasonAnnouncementPreview.svelte';
 
   let {
     open = $bindable(false),
@@ -25,6 +27,8 @@
     roles,
     channels,
     economyActive,
+    labels = null,
+    nextNumber,
     onDone,
   }: {
     open?: boolean;
@@ -33,6 +37,10 @@
     roles: Array<{ id: string; name: string }>;
     channels: Array<{ id: string; name: string }>;
     economyActive: boolean;
+    /** Gabarits des annonces ; absents d'un bot plus ancien, l'aperçu est alors masqué. */
+    labels?: SeasonAnnouncementLabels | null;
+    /** Numéro que prendra une nouvelle saison. */
+    nextNumber: number;
     onDone?: () => void;
   } = $props();
 
@@ -245,6 +253,16 @@
         {m.sea_reward_add()}
       </Button>
     </section>
+
+    {#if announceChannelId && labels}
+      <SeasonAnnouncementPreview
+        {labels}
+        season={{ number: season?.number ?? nextNumber, name: name.trim(), endDate: endIso() }}
+        rewards={'rewards' in rewardsCheck ? rewardsCheck.rewards : []}
+        {topRoleId}
+        roleName={(roleId) => roles.find((role) => role.id === roleId)?.name ?? roleId}
+      />
+    {/if}
   </div>
 
   {#snippet footer()}

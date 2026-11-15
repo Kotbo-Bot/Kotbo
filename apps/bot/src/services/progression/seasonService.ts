@@ -25,12 +25,15 @@ import { getOrCreateRpgProfile } from '../features/economyService.js';
 import { toDateKey } from '../analytics/dateKeys.js';
 import { getCachedGuild } from '../../utils/cache.js';
 import { announceSeasonEnd, announceSeasonStart } from './seasonAnnouncements.js';
+import { broadcastDashboardStateChange } from '../../api/shared/sharding.js';
 
 const LOG_TAG = 'Season';
 /** Membres figés à la clôture, et donc récompensables. */
 const ARCHIVE_LIMIT = 100;
 const FINAL_LEADERBOARD_SIZE = 20;
 const SNOWFLAKE_RE = /^\d{17,20}$/;
+/** Raison du rafraîchissement en direct de la page Saisons. */
+export const SEASONS_REALTIME_REASON = 'seasons_updated';
 
 type Db = Pick<Prisma.TransactionClient, '$queryRaw' | 'memberDailyStat'>;
 
@@ -115,6 +118,7 @@ export async function createSeason(guildId: string, input: SeasonInput, client: 
   if (input.startDate <= new Date() && await startSeason(guildId, season.id, client) === 'started') {
     return { ...season, status: 'ACTIVE' as const };
   }
+  broadcastDashboardStateChange(guildId, SEASONS_REALTIME_REASON);
   return season;
 }
 
@@ -159,12 +163,14 @@ export async function updateSeason(
 
   // Même règle qu'à la création : un début avancé dans le passé ouvre la saison.
   if (!active && parsed.input.startDate <= new Date()) await startSeason(guildId, seasonId, client);
+  broadcastDashboardStateChange(guildId, SEASONS_REALTIME_REASON);
   return 'updated';
 }
 
 /** Seule une saison à venir se supprime : les autres ont un classement. */
 export async function deleteSeason(guildId: string, seasonId: string): Promise<boolean> {
   const { count } = await prisma.levelingSeason.deleteMany({ where: { id: seasonId, guildId, status: 'UPCOMING' } });
+  if (count > 0) broadcastDashboardStateChange(guildId, SEASONS_REALTIME_REASON);
   return count > 0;
 }
 
@@ -197,6 +203,7 @@ export async function startSeason(guildId: string, seasonId: string, client: Cli
     return season;
   }, { timeout: 30_000 });
   if (typeof started === 'string') return started;
+  broadcastDashboardStateChange(guildId, SEASONS_REALTIME_REASON);
 
   if (client) {
     await announceSeasonStart(client, started, readStoredSeasonRewards(started.rewards), started.topRoleId).catch((err) => {
@@ -302,6 +309,7 @@ export async function endSeason(client: Client, guildId: string, seasonId: strin
     return ranked;
   }, { timeout: 30_000 });
   if (!standings) return false;
+  broadcastDashboardStateChange(guildId, SEASONS_REALTIME_REASON);
 
   const plan = planSeasonRewards(readStoredSeasonRewards(season.rewards), standings, season.topRoleId);
   await grantSeasonRewards(guild, guildId, plan, season.topRoleId);

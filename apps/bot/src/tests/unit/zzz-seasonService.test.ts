@@ -2,7 +2,7 @@
  * Saisons : référence d'XP à l'ouverture, clôture unique, récompenses.
  *
  * Préfixe `zzz-` : ce fichier remplace `moduleGate`, `economyService`,
- * `cache`, `seasonAnnouncements` et `rankedSeasonService` pour tout le
+ * `cache`, `sharding`, `seasonAnnouncements` et `rankedSeasonService` pour tout le
  * process (`mock.module` est global). Il doit charger après leurs propres tests.
  */
 import { describe, expect, test, mock, beforeEach } from 'bun:test';
@@ -84,6 +84,8 @@ mockerModule('../../services/features/economyService', {
 mockerModule('../../services/progression/ranked/rankedSeasonService', { closeRankedSeasonForLevelingSeason: closeRanked });
 mockerModule('../../utils/cache', { getCachedGuild: mock(async () => blacklist) });
 mockerModule('../../services/progression/seasonAnnouncements', { announceSeasonStart: announceStart, announceSeasonEnd: announceEnd });
+const broadcast = mock((..._args: unknown[]) => {});
+mockerModule('../../api/shared/sharding', { broadcastDashboardStateChange: broadcast });
 
 const { startSeason, endSeason, updateSeason, checkAndProgressSeasons, getSeasonLeaderboard } = await import('../../services/progression/seasonService.js');
 
@@ -144,7 +146,7 @@ beforeEach(() => {
   ];
   economyOn = true;
   blacklist = { progressionBlacklistUserIds: [], progressionBlacklistRoleIds: [] };
-  for (const fn of [executeRaw, queryRaw, snapshotCreateMany, baselineDeleteMany, seasonUpdate, rpgUpdate, closeRanked, announceStart, announceEnd]) fn.mockClear();
+  for (const fn of [executeRaw, queryRaw, snapshotCreateMany, baselineDeleteMany, seasonUpdate, rpgUpdate, closeRanked, announceStart, announceEnd, broadcast]) fn.mockClear();
 });
 
 describe('startSeason', () => {
@@ -164,6 +166,12 @@ describe('startSeason', () => {
     await startSeason('g', 's1', client);
     expect(announceStart).toHaveBeenCalledTimes(1);
     expect(announceStart.mock.calls[0].slice(2)).toEqual([[{ rank: 1, roleId: null, coins: 10 }], TOP_ROLE]);
+  });
+
+  test('prévient la page Saisons en direct', async () => {
+    seasons = [season({ status: 'UPCOMING' })];
+    await startSeason('g', 's1');
+    expect(broadcast.mock.calls).toEqual([['g', 'seasons_updated']]);
   });
 
   test('refuse d\'ouvrir une saison pendant qu\'une autre est en cours, sans la clôturer', async () => {
@@ -193,6 +201,14 @@ describe('endSeason', () => {
     ]);
     expect(baselineDeleteMany.mock.calls[0][0]).toEqual({ where: { seasonId: 's1' } });
     expect(seasons[0].status).toBe('ENDED');
+  });
+
+  test('ne prévient la page qu\'une fois, à la vraie clôture', async () => {
+    seasons = [season()];
+    const { client } = fakeClient();
+    await endSeason(client, 'g', 's1');
+    await endSeason(client, 'g', 's1');
+    expect(broadcast).toHaveBeenCalledTimes(1);
   });
 
   test('une saison déjà clôturée ne redonne aucune récompense', async () => {
