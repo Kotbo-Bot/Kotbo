@@ -58,3 +58,34 @@ application Discord. Tout se règle depuis la page **Identité** du dashboard.
   processus de l'API (cache rafraîchi chaque minute).
 - Une session ouverte sur un domaine perso ne se rafraîchit pas : elle dure
   sept jours, comme le jeton Discord, puis il faut se reconnecter.
+
+## Bot perso complet (option « Ton propre bot »)
+
+Par défaut, la page Identité applique le profil à Kotbo sur ce serveur
+seulement (pseudo, avatar, bannière, bio de membre). Activer « Ton propre
+bot » fait tourner le code Kotbo entier sous le token du serveur :
+
+1. Le token est testé puis scellé ; l'ID de l'application en est déduit.
+2. « Démarrer » crée ou met à jour l'instance `cb-<serveur>` (marque blanche,
+   secrets scellés, `maxGuilds` 1) et le launcher la lance à chaud
+   (message IPC `custom-instance-start`). Le statut se change sans relance
+   (`custom-instance-presence`).
+3. Le domaine perso doit être en ligne : une fois Kotbo parti, le serveur ne
+   se gère plus que là, l'API de Kotbo ne le voyant plus.
+4. Le serveur invite son bot (lien prérempli avec `guild_id`).
+5. « Retirer Kotbo » rattache le serveur à l'instance (`Guild.instanceId`),
+   puis Kotbo quitte le serveur. Traefik envoie alors `/api` du domaine vers
+   le port de l'instance ; il faut se reconnecter une fois sur le domaine.
+
+Chaque worker ne traite que les serveurs qui lui reviennent (garde de
+`client.emit`, `utils/guildOwnership.ts`) : pendant la bascule, Kotbo et le
+bot du serveur ne font rien en double. « Revenir à Kotbo » détache le
+serveur et arrête l'instance ; il faut réinviter Kotbo avant.
+
+Limites à connaître :
+
+- Chaque bot perso lancé est un processus Kotbo complet (plusieurs centaines
+  de Mo de RAM). La console `/admin/whitelabel` les liste avec leur état.
+- Les tâches planifiées qui ne passent que par la base (sans salon Discord)
+  tournent dans chaque processus : à vérifier avant d'ouvrir largement.
+- Un rattachement fait dans un processus met jusqu'à 30 s à être vu des autres.
