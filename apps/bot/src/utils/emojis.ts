@@ -10,6 +10,7 @@
 
 import type { Client } from 'discord.js';
 import { logger } from './logger.js';
+import { getCurrentInstance } from './instanceContext.js';
 
 // Maps emoji key (e.g. "success") → Discord emoji name (e.g. "ktb_check")
 const EMOJI_NAME_MAP: Record<string, string> = {
@@ -235,6 +236,8 @@ export async function loadApplicationEmojis(client: Client): Promise<void> {
       nameToFormatted.set(emoji.name!, `<${prefix}:${emoji.name}:${emoji.id}>`);
     }
 
+    let isDefaultInstance = true;
+    try { isDefaultInstance = getCurrentInstance().isDefault; } catch { /* contexte absent (tests) */ }
     const verified = new Set<string>();
     let loaded = 0;
     for (const [key, discordName] of Object.entries(EMOJI_NAME_MAP)) {
@@ -244,7 +247,8 @@ export async function loadApplicationEmojis(client: Client): Promise<void> {
         verified.add(key);
         loaded++;
       } else {
-        logger.warn('Emojis', `Emoji d'application "${discordName}" introuvable, fallback: ${UNICODE_FALLBACKS[key] || '?'}`);
+        // L'application d'un bot perso n'a pas les emojis Kotbo : le repli Unicode est normal.
+        if (isDefaultInstance) logger.warn('Emojis', `Emoji d'application "${discordName}" introuvable, fallback: ${UNICODE_FALLBACKS[key] || '?'}`);
         emojiStore[key] = UNICODE_FALLBACKS[key] || '';
       }
     }
