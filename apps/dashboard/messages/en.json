@@ -13825,7 +13825,6 @@
   "anx_mem_count": "Members",
   "anx_mem_peak_online": "Online peak",
   "anx_mem_peak_online_hint": "Highest number of members online at once, day by day. The tile shows the average of those peaks.",
-  "anx_mem_tagged": "{tag} tag",
   "anx_mem_sources_title": "Where joins come from",
   "anx_mem_sources_desc": "{count} joins with a known source. The percentage is the share still here.",
   "anx_mem_src_invite": "Invite link",

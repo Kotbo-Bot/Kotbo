@@ -13825,7 +13825,6 @@
   "anx_mem_count": "Membres",
   "anx_mem_peak_online": "Pic en ligne",
   "anx_mem_peak_online_hint": "Le plus grand nombre de membres en ligne en même temps, jour par jour. La tuile donne la moyenne de ces pics.",
-  "anx_mem_tagged": "Tag {tag}",
   "anx_mem_sources_title": "D'où viennent les arrivées",
   "anx_mem_sources_desc": "{count} arrivées dont la source est connue. Le pourcentage donne la part encore présente.",
   "anx_mem_src_invite": "Lien d'invitation",

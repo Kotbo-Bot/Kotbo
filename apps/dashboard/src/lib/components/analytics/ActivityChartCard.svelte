@@ -24,6 +24,7 @@
     previous?: string;
     invert?: boolean;
     hint?: string;
+    tag?: { text: string; badgeUrl?: string | null };
     aggregate: Aggregate;
     daily: number[];
     prevDaily: number[];

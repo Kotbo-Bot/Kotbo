@@ -18,12 +18,15 @@
     spark?: number[];
     color?: string;
     hint?: string;
+    /** Tag de serveur affiché en pastille à côté du libellé, comme dans la fiche membre. */
+    tag?: { text: string; badgeUrl?: string | null };
   }
 </script>
 
 <script lang="ts">
   import Papicon from '../Papicon.svelte';
   import Sparkline from './Sparkline.svelte';
+  import ServerTagPill from './ServerTagPill.svelte';
   import { m } from '../../i18n';
   import { fmtDelta } from './analyticsFormat';
 
@@ -73,7 +76,12 @@
 </script>
 
 {#snippet content(metric: MetricTab, selected: boolean, verdict: boolean | null)}
-  <span class="metric-tab__label">{metric.label}</span>
+  <span class="metric-tab__label">
+    {metric.label}
+    {#if metric.tag}
+      <ServerTagPill tag={metric.tag.text} badgeUrl={metric.tag.badgeUrl} />
+    {/if}
+  </span>
   <span class="metric-tab__row">
     <span class="metric-tab__value">{metric.value}</span>
     {#if metric.spark && metric.spark.length > 1}
@@ -181,6 +189,10 @@
   }
 
   .metric-tab__label {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    min-width: 0;
     font-size: 0.8125rem;
     color: var(--color-on-surface-variant);
     white-space: nowrap;
