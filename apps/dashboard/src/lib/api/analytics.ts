@@ -562,8 +562,6 @@ export interface LifecycleMember {
   recentDays: number;
   previousDays: number;
   joinedAt: string | null;
-  /** Tag de serveur affiché par le membre, comme sur Discord. */
-  serverTag?: { tag: string; badgeUrl: string | null } | null;
 }
 
 export interface LifecycleAnalytics {
@@ -1007,6 +1005,14 @@ export interface ServerDetails {
     emojis: ServerDetailsAsset[];
     stickers: ServerDetailsAsset[];
     totalUses: number;
+      /** Absent des réponses mises en cache avant son ajout. */
+    usageByDay?: Array<{ date: string; count: number }>;
+  };
+  activity?: {
+    messages: number;
+    voiceHours: number;
+    active7d: number;
+    shareOfGuild: number | null;
   };
 }
 
