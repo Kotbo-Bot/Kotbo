@@ -70,6 +70,7 @@ import {
   cleanupExpiredExternalGuilds,
   handleUserTagUpdate,
   recordBotGuildSnapshot,
+  warmGuildNameCache,
 } from './services/core/serverTagService.js';
 import { startDashboardApi } from './api/dashboardApi.js';
 import { broadcastDashboardEventAcrossShards } from './api/shared/sharding.js';
@@ -522,6 +523,7 @@ client.once(Events.ClientReady, async (c) => {
   for (const g of c.guilds.cache.values()) {
     void recordBotGuildSnapshot(g, true);
   }
+  void warmGuildNameCache();
   setInterval(() => {
     void cleanupExpiredExternalGuilds();
   }, 24 * 60 * 60 * 1000).unref();

@@ -21,7 +21,7 @@
 import type { Client } from 'discord.js';
 import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
-import { getKnownGuildNames } from '../core/serverTagService.js';
+import { getKnownGuildNames, guildNameCache } from '../core/serverTagService.js';
 import {
   ANALYTICS_DIMENSIONS,
   ONBOARDING_STEPS,
@@ -94,7 +94,7 @@ function round1(val: number): number {
 
 function resolveGuildDisplayName(client: Client, guildId: string): string {
   const cached = client.guilds?.cache?.get(guildId);
-  return cached?.name ?? `Serveur ${guildId}`;
+  return cached?.name ?? guildNameCache.get(guildId) ?? `Serveur ${guildId}`;
 }
 
 // ─────────────────────────────────────────────────────────────

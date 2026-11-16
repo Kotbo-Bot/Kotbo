@@ -151,6 +151,20 @@ export async function recordBotGuildSnapshot(guild: Guild, botPresent: boolean):
 }
 
 /**
+ * Prerempli le cache des noms depuis la base : les getGuildName synchrones ne voient
+ * sinon que les serveurs du shard courant et retombent sur "Serveur <id>".
+ */
+export async function warmGuildNameCache(): Promise<void> {
+  const rows = await prisma.discordExternalGuild.findMany({
+    where: { name: { not: '' } },
+    select: { guildId: true, name: true },
+  }).catch(() => []);
+  for (const row of rows) {
+    if (row.name && !guildNameCache.has(row.guildId)) guildNameCache.set(row.guildId, row.name);
+  }
+}
+
+/**
  * Resout les noms d'un lot de serveurs (cache Discord -> base persistee -> assets).
  * Evite d'afficher "Serveur <id>" lorsque le bot a quitte un serveur.
  */
