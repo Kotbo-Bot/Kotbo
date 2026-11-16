@@ -303,6 +303,14 @@ model Suggestion {
   upvoters       String[] @default([]) // Array of User IDs
   downvoters     String[] @default([]) // Array of User IDs
 
+  /// Titre facultatif, saisi dans la fenêtre de proposition.
+  title          String?
+  /// Fil de discussion ouvert sous le message, quand le serveur en crée.
+  threadId       String?
+  /// Premier passage du seuil de votes : la suggestion reste signalée même si
+  /// des votes partent ensuite.
+  thresholdReachedAt DateTime?
+
   guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now())
@@ -332,6 +340,20 @@ model SuggestionConfig {
   voteWhileApproved Boolean @default(false)
   /// Rôles autorisés à proposer. Vide = tout le monde.
   allowedRoleIds String[] @default([])
+  /// Garde-fous de qui propose. `0` = aucune exigence ; un gestionnaire du
+  /// serveur passe toujours.
+  cooldownMinutes   Int @default(0)
+  minAccountAgeDays Int @default(0)
+  minMemberDays     Int @default(0)
+
+  /// Prévenir l'auteur en message privé quand le staff tranche.
+  notifyAuthor Boolean @default(true)
+  /// Ouvrir un fil de discussion sous chaque nouvelle suggestion.
+  createThread Boolean @default(false)
+  /// Votes « pour » qui signalent la suggestion au staff. `null` = pas de seuil.
+  voteThreshold  Int?
+  /// Épingler le message quand le seuil est atteint ; il est désépinglé à la décision.
+  pinAtThreshold Boolean @default(false)
 
   guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
 

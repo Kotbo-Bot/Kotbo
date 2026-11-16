@@ -16,6 +16,17 @@ export interface SuggestionSettings {
   voteWhileApproved: boolean;
   /** Rôles autorisés à proposer. Vide = tout le monde. */
   allowedRoleIds: string[];
+  /** Garde-fous de qui propose. `0` = aucune exigence. */
+  cooldownMinutes: number;
+  minAccountAgeDays: number;
+  minMemberDays: number;
+  /** Prévenir l'auteur en message privé quand le staff tranche. */
+  notifyAuthor: boolean;
+  /** Ouvrir un fil de discussion sous chaque nouvelle suggestion. */
+  createThread: boolean;
+  /** Votes « pour » qui signalent la suggestion. `null` = pas de seuil. */
+  voteThreshold: number | null;
+  pinAtThreshold: boolean;
 }
 
 export const DEFAULT_SUGGESTION_SETTINGS: SuggestionSettings = {
@@ -23,6 +34,13 @@ export const DEFAULT_SUGGESTION_SETTINGS: SuggestionSettings = {
   requireComment: true,
   voteWhileApproved: false,
   allowedRoleIds: [],
+  cooldownMinutes: 0,
+  minAccountAgeDays: 0,
+  minMemberDays: 0,
+  notifyAuthor: true,
+  createThread: false,
+  voteThreshold: null,
+  pinAtThreshold: false,
 };
 
 /** Motif temps réel : la page Suggestions se recharge dès qu'une suggestion ou un réglage bouge. */
@@ -33,11 +51,19 @@ export async function getSuggestionSettings(guildId: string): Promise<Suggestion
     prisma.dashboardFeatureConfig.findFirst({ where: { guildId, featureKey: 'suggestions' }, select: { channelId: true } }),
     prisma.suggestionConfig.findUnique({ where: { guildId } }),
   ]);
+  if (!row) return { ...DEFAULT_SUGGESTION_SETTINGS, allowedRoleIds: [], channelId: feature?.channelId ?? null };
   return {
     channelId: feature?.channelId ?? null,
-    requireComment: row?.requireComment ?? DEFAULT_SUGGESTION_SETTINGS.requireComment,
-    voteWhileApproved: row?.voteWhileApproved ?? DEFAULT_SUGGESTION_SETTINGS.voteWhileApproved,
-    allowedRoleIds: row?.allowedRoleIds ?? [],
+    requireComment: row.requireComment,
+    voteWhileApproved: row.voteWhileApproved,
+    allowedRoleIds: row.allowedRoleIds,
+    cooldownMinutes: row.cooldownMinutes,
+    minAccountAgeDays: row.minAccountAgeDays,
+    minMemberDays: row.minMemberDays,
+    notifyAuthor: row.notifyAuthor,
+    createThread: row.createThread,
+    voteThreshold: row.voteThreshold,
+    pinAtThreshold: row.pinAtThreshold,
   };
 }
 

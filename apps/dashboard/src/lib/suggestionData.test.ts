@@ -16,6 +16,7 @@ function item(id: string, upvotes: number, downvotes: number, createdAt: string)
     userId: '1',
     username: 'Alice',
     avatarUrl: null,
+    title: null,
     content: 'Idée',
     status: 'PENDING',
     responseText: null,
@@ -26,6 +27,8 @@ function item(id: string, upvotes: number, downvotes: number, createdAt: string)
     downvotes,
     createdAt,
     messageUrl: null,
+    threadUrl: null,
+    thresholdReachedAt: null,
   };
 }
 

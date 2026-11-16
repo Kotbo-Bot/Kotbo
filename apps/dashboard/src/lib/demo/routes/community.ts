@@ -237,16 +237,28 @@ export function registerCommunityRoutes(): void {
 
   // ── Suggestions ────────────────────────────────────────────────────────────
   // Une file avec une suggestion en souffrance, pour que le conseil se voie.
-  const suggestionConfig = { channelId: '900000000000000320', requireComment: true, voteWhileApproved: false, allowedRoleIds: [] as string[] };
-  const suggestionSeed: Array<[string, string, number, number, string, string | null]> = [
-    ['Une soirée film par mois dans le salon vocal.', 'PENDING', 14, 2, ago(3 * 60), null],
-    ['Un salon dédié aux memes, pour aérer le général.', 'PENDING', 9, 4, ago(10 * DAY), null],
-    ['Ajouter un bot musique pour les soirées.', 'PENDING', 3, 6, ago(26 * 60), null],
-    ['Des rôles de couleur à débloquer avec les niveaux.', 'IMPLEMENTED', 22, 1, ago(18 * DAY), 'C’est en place : rendez-vous dans le salon des rôles.'],
-    ['Un tournoi mensuel avec des récompenses.', 'APPROVED', 17, 3, ago(9 * DAY), 'Bonne idée, on prépare le premier pour la fin du mois.'],
-    ['Supprimer le mode lent du salon général.', 'REJECTED', 5, 11, ago(6 * DAY), 'Le mode lent reste : il limite le spam aux heures de pointe.'],
+  const suggestionConfig = {
+    channelId: '900000000000000320',
+    requireComment: true,
+    voteWhileApproved: false,
+    allowedRoleIds: [] as string[],
+    cooldownMinutes: 30,
+    minAccountAgeDays: 0,
+    minMemberDays: 0,
+    notifyAuthor: true,
+    createThread: true,
+    voteThreshold: 10 as number | null,
+    pinAtThreshold: false,
+  };
+  const suggestionSeed: Array<[string | null, string, string, number, number, string, string | null]> = [
+    ['Soirée film mensuelle', 'Une soirée film par mois dans le salon vocal.', 'PENDING', 14, 2, ago(3 * 60), null],
+    [null, 'Un salon dédié aux memes, pour aérer le général.', 'PENDING', 9, 4, ago(10 * DAY), null],
+    ['Bot musique', 'Ajouter un bot musique pour les soirées.', 'PENDING', 3, 6, ago(26 * 60), null],
+    ['Rôles de couleur', 'Des rôles de couleur à débloquer avec les niveaux.', 'IMPLEMENTED', 22, 1, ago(18 * DAY), 'C’est en place : rendez-vous dans le salon des rôles.'],
+    [null, 'Un tournoi mensuel avec des récompenses.', 'APPROVED', 17, 3, ago(9 * DAY), 'Bonne idée, on prépare le premier pour la fin du mois.'],
+    [null, 'Supprimer le mode lent du salon général.', 'REJECTED', 5, 11, ago(6 * DAY), 'Le mode lent reste : il limite le spam aux heures de pointe.'],
   ];
-  const suggestions = suggestionSeed.map(([content, status, upvotes, downvotes, createdAt, responseText], i) => {
+  let suggestions = suggestionSeed.map(([title, content, status, upvotes, downvotes, createdAt, responseText], i) => {
     const author = members()[(i * 3 + 1) % members().length];
     const decided = status !== 'PENDING';
     return {
@@ -254,6 +266,7 @@ export function registerCommunityRoutes(): void {
       userId: author.id,
       username: author.displayName,
       avatarUrl: null,
+      title,
       content,
       status,
       responseText,
@@ -264,6 +277,8 @@ export function registerCommunityRoutes(): void {
       downvotes,
       createdAt,
       messageUrl: null,
+      threadUrl: null,
+      thresholdReachedAt: upvotes >= 10 ? createdAt : null,
     };
   });
 
@@ -302,9 +317,13 @@ export function registerCommunityRoutes(): void {
 
   route('PATCH', '/api/dashboard/guilds/:guildId/suggestions/config', ({ body }) => {
     if (body && 'channelId' in body) suggestionConfig.channelId = body.channelId;
-    for (const key of ['requireComment', 'voteWhileApproved'] as const) {
+    for (const key of ['requireComment', 'voteWhileApproved', 'notifyAuthor', 'createThread', 'pinAtThreshold'] as const) {
       if (typeof body?.[key] === 'boolean') suggestionConfig[key] = body[key];
     }
+    for (const key of ['cooldownMinutes', 'minAccountAgeDays', 'minMemberDays'] as const) {
+      if (typeof body?.[key] === 'number') suggestionConfig[key] = body[key];
+    }
+    if (body && 'voteThreshold' in body) suggestionConfig.voteThreshold = body.voteThreshold;
     if (Array.isArray(body?.allowedRoleIds)) suggestionConfig.allowedRoleIds = [...body.allowedRoleIds];
     return { config: { ...suggestionConfig, allowedRoleIds: [...suggestionConfig.allowedRoleIds] } };
   });
@@ -322,6 +341,15 @@ export function registerCommunityRoutes(): void {
     });
     return { suggestion: { ...suggestion } };
   });
+
+  route('DELETE', '/api/dashboard/guilds/:guildId/suggestions/:suggestionId', ({ params }) => {
+    suggestions = suggestions.filter((s) => s.id !== params.suggestionId);
+    return { deleted: true };
+  });
+
+  route('POST', '/api/dashboard/guilds/:guildId/suggestions/refresh', () => ({
+    total: suggestions.length,
+  }));
 
   route('GET', '/api/dashboard/guilds/:guildId/marketplace', () => {
     const sellers = members().slice(0, 5);

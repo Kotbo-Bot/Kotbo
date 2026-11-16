@@ -535,24 +535,8 @@ export async function handleButton(interaction: Interaction, client: Client): Pr
 
   // ── Suggestion form button ───────────────────────────────────────────
   if (customId === 'suggest_form_open') {
-    
-    const modal = new ModalBuilder()
-      .setCustomId('suggest_form_modal')
-      .setTitle('💡 Soumettre une suggestion');
-
-    const suggestionInput = new TextInputBuilder()
-      .setCustomId('suggestion_content')
-      .setLabel('Votre suggestion')
-      .setStyle(TextInputStyle.Paragraph)
-      .setPlaceholder('Décrivez votre suggestion en détail...')
-      .setRequired(true)
-      .setMaxLength(1000)
-      .setMinLength(10);
-
-    const row = new ActionRowBuilder<TextInputBuilder>().addComponents(suggestionInput);
-    modal.addComponents(row);
-
-    await interaction.showModal(modal);
+    const { buildSuggestionModal } = await import('../services/features/suggestionModal.js');
+    await interaction.showModal(buildSuggestionModal(await getEffectiveLocale(interaction)));
     return;
   }
 
@@ -1816,26 +1800,20 @@ export async function handleModalSubmit(interaction: ModalSubmitInteraction, cli
 
   // ── Suggestion form modal ─────────────────────────────────────────────
   if (customId === 'suggest_form_modal') {
-    const content = interaction.fields.getTextInputValue('suggestion_content');
-    
+    const [{ readSuggestionModal }, { createSuggestion }, locale] = await Promise.all([
+      import('../services/features/suggestionModal.js'),
+      import('../services/features/suggestionService.js'),
+      getEffectiveLocale(interaction),
+    ]);
+    const { title, content } = readSuggestionModal(interaction);
+    await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
+
     try {
-      const { createSuggestion } = await import('../services/features/suggestionService.js');
-      const suggestion = await createSuggestion(
-        guildId,
-        interaction.user.id,
-        interaction.user.username,
-        content,
-        client
-      );
-      
-      await interaction.reply({
-        content: `💡 Votre suggestion a été publiée avec succès ! (ID : \`${suggestion.id}\`)`,
-        flags: [MessageFlags.Ephemeral],
-      });
+      const suggestion = await createSuggestion(guildId, interaction.user.id, interaction.user.username, content, client, { title });
+      await interaction.editReply({ content: gvwMessages.b5_suggest_success({ id: suggestion.id }, { locale }) });
     } catch (err: unknown) {
-      await interaction.reply({
-        content: `❌ Impossible de publier la suggestion : ${publicErrorMessage(err, 'erreur inconnue')}`,
-        flags: [MessageFlags.Ephemeral],
+      await interaction.editReply({
+        content: gvwMessages.b5_suggest_error({ error: publicErrorMessage(err, gvwMessages.b5_unknown_error({}, { locale })) }, { locale }),
       });
     }
     return;

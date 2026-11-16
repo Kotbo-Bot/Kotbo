@@ -14,6 +14,18 @@ export interface SuggestionConfig {
   voteWhileApproved: boolean;
   /** Rôles autorisés à proposer. Vide = tout le monde. */
   allowedRoleIds: string[];
+  /** Garde-fous de qui propose. `0` = aucune exigence. */
+  cooldownMinutes: number;
+  minAccountAgeDays: number;
+  minMemberDays: number;
+  /** Prévenir l'auteur en message privé quand le staff tranche. */
+  notifyAuthor: boolean;
+  /** Ouvrir un fil de discussion sous chaque nouvelle suggestion. */
+  createThread: boolean;
+  /** Votes « pour » qui signalent la suggestion. `null` = pas de seuil. */
+  voteThreshold: number | null;
+  /** Épingler le message au seuil ; la décision le désépingle. */
+  pinAtThreshold: boolean;
 }
 
 export interface SuggestionItem {
@@ -21,6 +33,8 @@ export interface SuggestionItem {
   userId: string;
   username: string;
   avatarUrl: string | null;
+  /** Titre saisi par l'auteur, absent d'une suggestion proposée sans fenêtre. */
+  title: string | null;
   content: string;
   status: SuggestionStatus;
   responseText: string | null;
@@ -31,6 +45,10 @@ export interface SuggestionItem {
   downvotes: number;
   createdAt: string;
   messageUrl: string | null;
+  /** Fil de discussion, quand le serveur en ouvre. */
+  threadUrl: string | null;
+  /** Premier passage du seuil de votes. */
+  thresholdReachedAt: string | null;
 }
 
 export interface SuggestionStats {
@@ -130,5 +148,24 @@ export async function decideSuggestion(
     payload,
     guildId,
     errorContext: 'API Error (Resolve Suggestion):',
+  });
+}
+
+/** Supprime une suggestion, son message et son fil sur Discord. */
+export async function deleteSuggestion(suggestionId: string, guildId = authStore.selectedGuildId): Promise<{ deleted: boolean } | null> {
+  return dashboardRequest(`/suggestions/${encodeURIComponent(suggestionId)}`, {
+    method: 'DELETE',
+    successMessage: m.api_ok_delete_suggestion(),
+    guildId,
+    errorContext: 'API Error (Delete Suggestion):',
+  });
+}
+
+/** Repasse les messages déjà publiés au format actuel, en arrière-plan ; rend combien seront repris. */
+export async function refreshSuggestionMessages(guildId = authStore.selectedGuildId): Promise<{ total: number } | null> {
+  return dashboardRequest('/suggestions/refresh', {
+    method: 'POST',
+    guildId,
+    errorContext: 'API Error (Refresh Suggestion Messages):',
   });
 }

@@ -1,13 +1,15 @@
 import { describe, expect, test } from 'bun:test';
 import {
   SUGGESTION_STALE_DAYS,
-  canSubmitSuggestion,
+  crossedSuggestionThreshold,
   decodeTimeCursor,
   encodeTimeCursor,
   isSuggestionStale,
   isSuggestionStatus,
   isSuggestionVotingOpen,
   suggestionNeedsComment,
+  suggestionSubmitBlocker,
+  suggestionThreadName,
   summarizeSuggestionResolutions,
 } from '@kotbo/shared';
 
@@ -56,24 +58,81 @@ describe('ouverture des votes', () => {
 });
 
 describe('droit de proposer', () => {
-  const member = (roleIds: string[], canManageGuild = false) => ({ roleIds, canManageGuild });
-
-  test('liste vide : tout le monde, même un membre introuvable', () => {
-    expect(canSubmitSuggestion([], member([]))).toBe(true);
-    expect(canSubmitSuggestion([], null)).toBe(true);
+  const now = new Date('2026-11-16T12:00:00Z');
+  const OPEN = { allowedRoleIds: [] as string[], cooldownMinutes: 0, minAccountAgeDays: 0, minMemberDays: 0 };
+  const member = (over: Partial<{ roleIds: string[]; canManageGuild: boolean; accountCreatedAt: Date; joinedAt: Date | null }> = {}) => ({
+    roleIds: [] as string[],
+    canManageGuild: false,
+    accountCreatedAt: new Date(now.getTime() - 400 * DAY_MS),
+    joinedAt: new Date(now.getTime() - 100 * DAY_MS),
+    ...over,
   });
 
-  test('liste posée : il faut un des rôles', () => {
-    expect(canSubmitSuggestion(['r1', 'r2'], member(['r2']))).toBe(true);
-    expect(canSubmitSuggestion(['r1'], member(['r3']))).toBe(false);
+  test('sans règle : tout le monde, même un membre introuvable', () => {
+    expect(suggestionSubmitBlocker(OPEN, member(), null, now)).toBeNull();
+    expect(suggestionSubmitBlocker(OPEN, null, null, now)).toBeNull();
   });
 
-  test('un gestionnaire du serveur passe toujours', () => {
-    expect(canSubmitSuggestion(['r1'], member([], true))).toBe(true);
+  test('rôles posés : il faut un des rôles', () => {
+    const rules = { ...OPEN, allowedRoleIds: ['r1', 'r2'] };
+    expect(suggestionSubmitBlocker(rules, member({ roleIds: ['r2'] }), null, now)).toBeNull();
+    expect(suggestionSubmitBlocker(rules, member({ roleIds: ['r3'] }), null, now)).toEqual({ code: 'ROLE' });
+    expect(suggestionSubmitBlocker(rules, null, null, now)).toEqual({ code: 'ROLE' });
   });
 
-  test('liste posée et membre introuvable : refusé', () => {
-    expect(canSubmitSuggestion(['r1'], null)).toBe(false);
+  test('compte trop récent', () => {
+    const rules = { ...OPEN, minAccountAgeDays: 30 };
+    expect(suggestionSubmitBlocker(rules, member({ accountCreatedAt: new Date(now.getTime() - 10 * DAY_MS) }), null, now)).toEqual({ code: 'ACCOUNT_TOO_NEW' });
+    expect(suggestionSubmitBlocker(rules, member(), null, now)).toBeNull();
+  });
+
+  test('arrivé trop récemment sur le serveur, ou date d\'arrivée inconnue', () => {
+    const rules = { ...OPEN, minMemberDays: 7 };
+    expect(suggestionSubmitBlocker(rules, member({ joinedAt: new Date(now.getTime() - 2 * DAY_MS) }), null, now)).toEqual({ code: 'MEMBER_TOO_NEW' });
+    expect(suggestionSubmitBlocker(rules, member({ joinedAt: null }), null, now)).toEqual({ code: 'MEMBER_TOO_NEW' });
+  });
+
+  test('délai entre deux suggestions : rend l\'heure de reprise', () => {
+    const rules = { ...OPEN, cooldownMinutes: 60 };
+    const last = new Date(now.getTime() - 20 * 60_000);
+    expect(suggestionSubmitBlocker(rules, member(), last, now)).toEqual({ code: 'COOLDOWN', retryAt: new Date(last.getTime() + 60 * 60_000) });
+    expect(suggestionSubmitBlocker(rules, member(), new Date(now.getTime() - 61 * 60_000), now)).toBeNull();
+  });
+
+  test('le délai s\'applique même sans membre retrouvé', () => {
+    const rules = { ...OPEN, cooldownMinutes: 60 };
+    expect(suggestionSubmitBlocker(rules, null, new Date(now.getTime() - 60_000), now)?.code).toBe('COOLDOWN');
+  });
+
+  test('un gestionnaire du serveur passe toutes les règles', () => {
+    const rules = { allowedRoleIds: ['r1'], cooldownMinutes: 60, minAccountAgeDays: 30, minMemberDays: 30 };
+    const manager = member({ canManageGuild: true, accountCreatedAt: now, joinedAt: now });
+    expect(suggestionSubmitBlocker(rules, manager, new Date(now.getTime() - 60_000), now)).toBeNull();
+  });
+});
+
+describe('seuil de votes', () => {
+  test('franchi au vote qui l\'atteint', () => {
+    expect(crossedSuggestionThreshold(10, 9, 10)).toBe(true);
+  });
+
+  test('pas déjà au-dessus, pas en dessous, pas sans seuil', () => {
+    expect(crossedSuggestionThreshold(10, 10, 11)).toBe(false);
+    expect(crossedSuggestionThreshold(10, 8, 9)).toBe(false);
+    expect(crossedSuggestionThreshold(null, 9, 10)).toBe(false);
+  });
+});
+
+describe('nom du fil d\'une suggestion', () => {
+  test('le titre quand il y en a un', () => {
+    expect(suggestionThreadName('Soirée jeux', 'Un long texte')).toBe('Soirée jeux');
+  });
+
+  test('sinon le début du texte, sur une ligne, coupé à 100 caractères', () => {
+    const name = suggestionThreadName(null, `Première ligne\n${'x'.repeat(200)}`);
+    expect(name.length).toBe(100);
+    expect(name.startsWith('Première ligne x')).toBe(true);
+    expect(name.endsWith('…')).toBe(true);
   });
 });
 

@@ -5,6 +5,8 @@
  * - GET   /suggestions/list           historique paginé (status, userId, cursor)
  * - PATCH /suggestions/config         réglages
  * - POST  /suggestions/:id/resolve    décision du staff, révisable
+ * - DELETE /suggestions/:id           suppression (doublon, abus), message et fil compris
+ * - POST  /suggestions/refresh        messages déjà publiés repassés au format actuel
  *
  * L'activation du module passe par la page Modules. Trancher une suggestion
  * demande le droit « Modérer » de la fonctionnalité, ou la modération de
@@ -16,7 +18,11 @@ import { Client } from 'discord.js';
 import type { Suggestion } from '@prisma/client';
 import {
   SUGGESTION_ALLOWED_ROLES_MAX,
+  SUGGESTION_COOLDOWN_MINUTES,
+  SUGGESTION_MIN_ACCOUNT_AGE_DAYS,
+  SUGGESTION_MIN_MEMBER_DAYS,
   SUGGESTION_RESPONSE_MAX,
+  SUGGESTION_VOTE_THRESHOLD,
   decodeTimeCursor,
   isSuggestionStatus,
   suggestionNeedsComment,
@@ -34,7 +40,12 @@ import {
 import { getCachedFeatureAccess } from './featureGate.js';
 import { getSuggestionsOverview, listSuggestions } from '../../../services/features/suggestionDashboard.js';
 import { getSuggestionSettings, saveSuggestionSettings, type SuggestionSettings } from '../../../services/features/suggestionSettings.js';
-import { refreshApprovedSuggestionMessages, resolveSuggestion } from '../../../services/features/suggestionService.js';
+import {
+  countPublishedSuggestionMessages,
+  deleteSuggestion,
+  refreshPublishedSuggestionMessages,
+  resolveSuggestion,
+} from '../../../services/features/suggestionService.js';
 import { suggestionMessageLabels } from '../../../services/features/suggestionMessageLabels.js';
 import { getMemberIdentities } from '../../../services/moderation/memberIdentityService.js';
 import { jsonFailure } from '../../shared/failure.js';
@@ -43,6 +54,10 @@ const SNOWFLAKE_RE = /^\d{17,20}$/;
 const CUID_RE = /^[a-z0-9]{20,40}$/i;
 
 const has = (body: object, key: string): boolean => Object.prototype.hasOwnProperty.call(body, key);
+
+function isIntegerIn(value: unknown, min: number, max: number): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= min && value <= max;
+}
 
 /**
  * Forme renvoyée au dashboard : compteurs plutôt que listes de votants, pseudo
@@ -59,6 +74,7 @@ async function presentSuggestions(client: Client, guildId: string, rows: Suggest
     userId: row.userId,
     username: identities.get(row.userId)?.displayName || row.username,
     avatarUrl: identities.get(row.userId)?.avatarUrl || null,
+    title: row.title,
     content: row.content,
     status: row.status,
     responseText: row.responseText,
@@ -71,6 +87,8 @@ async function presentSuggestions(client: Client, guildId: string, rows: Suggest
     messageUrl: row.channelId && row.messageId
       ? `https://discord.com/channels/${guildId}/${row.channelId}/${row.messageId}`
       : null,
+    threadUrl: row.threadId ? `https://discord.com/channels/${guildId}/${row.threadId}` : null,
+    thresholdReachedAt: row.thresholdReachedAt,
   }));
 }
 
@@ -95,11 +113,32 @@ export function parseSuggestionConfigPatch(
     patch.channelId = value === null ? null : value.trim();
   }
 
-  for (const key of ['requireComment', 'voteWhileApproved'] as const) {
+  for (const key of ['requireComment', 'voteWhileApproved', 'notifyAuthor', 'createThread', 'pinAtThreshold'] as const) {
     if (!has(body, key)) continue;
     const value = (body as Record<string, unknown>)[key];
     if (typeof value !== 'boolean') return { error: `Le champ ${key} doit être un booléen` };
     patch[key] = value;
+  }
+
+  const integers = [
+    ['cooldownMinutes', SUGGESTION_COOLDOWN_MINUTES, 'Le délai entre deux suggestions'],
+    ['minAccountAgeDays', SUGGESTION_MIN_ACCOUNT_AGE_DAYS, 'L\'âge minimum du compte'],
+    ['minMemberDays', SUGGESTION_MIN_MEMBER_DAYS, 'L\'ancienneté minimum sur le serveur'],
+  ] as const;
+  for (const [key, { min, max }, label] of integers) {
+    if (!has(body, key)) continue;
+    const value = (body as Record<string, unknown>)[key];
+    if (!isIntegerIn(value, min, max)) return { error: `${label} doit être un entier entre ${min} et ${max}` };
+    patch[key] = value;
+  }
+
+  if (has(body, 'voteThreshold')) {
+    const value = (body as { voteThreshold: unknown }).voteThreshold;
+    const { min, max } = SUGGESTION_VOTE_THRESHOLD;
+    if (value !== null && !isIntegerIn(value, min, max)) {
+      return { error: `Le seuil de votes doit être un entier entre ${min} et ${max}` };
+    }
+    patch.voteThreshold = value as number | null;
   }
 
   if (has(body, 'allowedRoleIds')) {
@@ -214,7 +253,7 @@ export async function handleSuggestionRoutes(
       const config = await saveSuggestionSettings(guildId, parsed.patch);
       // Les messages déjà publiés suivent le réglage, sans faire attendre la réponse.
       if (before && before.voteWhileApproved !== config.voteWhileApproved) {
-        void refreshApprovedSuggestionMessages(client, guildId, config.voteWhileApproved).catch((err: unknown) => {
+        void refreshPublishedSuggestionMessages(client, guildId, { status: 'APPROVED' }).catch((err: unknown) => {
           logger.error('SuggestionsAPI', `Rafraîchissement des suggestions approuvées de ${guildId} impossible:`, err);
         });
       }
@@ -224,7 +263,7 @@ export async function handleSuggestionRoutes(
         context: getGuildName(client, guildId),
         module: 'Suggestions',
         eventType: 'Manuel',
-        details: `Salon : ${config.channelId ? `<#${config.channelId}>` : 'aucun'}, commentaire ${config.requireComment ? 'obligatoire' : 'facultatif'}, votes ${config.voteWhileApproved ? 'ouverts' : 'fermés'} après approbation, ${config.allowedRoleIds.length > 0 ? `${config.allowedRoleIds.length} rôle(s) autorisé(s) à proposer` : 'tout le monde peut proposer'}.`,
+        details: `Salon : ${config.channelId ? `<#${config.channelId}>` : 'aucun'}, commentaire ${config.requireComment ? 'obligatoire' : 'facultatif'}, votes ${config.voteWhileApproved ? 'ouverts' : 'fermés'} après approbation, ${config.allowedRoleIds.length > 0 ? `${config.allowedRoleIds.length} rôle(s) autorisé(s) à proposer` : 'tout le monde peut proposer'}, auteur ${config.notifyAuthor ? 'prévenu' : 'non prévenu'}, fil ${config.createThread ? 'ouvert' : 'non'}, seuil ${config.voteThreshold ?? 'aucun'}${config.voteThreshold && config.pinAtThreshold ? ' (épinglé)' : ''}, garde-fous : délai ${config.cooldownMinutes} min, compte ${config.minAccountAgeDays} j, ancienneté ${config.minMemberDays} j.`,
         channelId: config.channelId,
       });
       json(res, 200, { config });
@@ -290,6 +329,72 @@ export async function handleSuggestionRoutes(
     } catch (err) {
       logger.error('SuggestionsAPI', 'Error resolving suggestion:', err);
       jsonFailure(res, err, 'Erreur lors de la décision', 'SuggestionsAPI');
+    }
+    return true;
+  }
+
+  // DELETE /suggestions/:id
+  if (parts.length === 6 && method === 'DELETE') {
+    if (!access.canManageSettings) {
+      json(res, 403, { error: 'Permissions insuffisantes' });
+      return true;
+    }
+    const suggestionId = parts[5];
+    if (!CUID_RE.test(suggestionId)) {
+      json(res, 400, { error: 'Identifiant de suggestion invalide' });
+      return true;
+    }
+
+    try {
+      const deleted = await deleteSuggestion(client, guildId, suggestionId);
+      if (!deleted) {
+        json(res, 404, { error: 'Suggestion introuvable' });
+        return true;
+      }
+      await pushAudit(guildId, {
+        user: auditUser,
+        action: 'Suppression suggestion',
+        context: getGuildName(client, guildId),
+        module: 'Suggestions',
+        eventType: 'Manuel',
+        details: `Suggestion ${deleted.id} de ${deleted.username} (${deleted.userId}) supprimée : « ${deleted.content.slice(0, 200)} ».`,
+        channelId: deleted.channelId,
+      });
+      json(res, 200, { deleted: true });
+    } catch (err) {
+      logger.error('SuggestionsAPI', 'Error deleting suggestion:', err);
+      jsonFailure(res, err, 'Erreur lors de la suppression', 'SuggestionsAPI');
+    }
+    return true;
+  }
+
+  // POST /suggestions/refresh
+  if (parts.length === 6 && parts[5] === 'refresh' && method === 'POST') {
+    if (!access.canManageSettings) {
+      json(res, 403, { error: 'Permissions insuffisantes' });
+      return true;
+    }
+
+    try {
+      // Une édition à la fois pour ménager Discord : trop long pour faire
+      // attendre la réponse, la page reçoit le nombre de messages repris.
+      const total = await countPublishedSuggestionMessages(guildId);
+      void refreshPublishedSuggestionMessages(client, guildId).catch((err: unknown) => {
+        logger.error('SuggestionsAPI', `Mise à jour des messages de suggestions de ${guildId} impossible:`, err);
+      });
+      await pushAudit(guildId, {
+        user: auditUser,
+        action: 'Mise à jour des messages de suggestions',
+        context: getGuildName(client, guildId),
+        module: 'Suggestions',
+        eventType: 'Manuel',
+        details: `${total} message(s) repris au format actuel.`,
+        channelId: null,
+      });
+      json(res, 202, { total });
+    } catch (err) {
+      logger.error('SuggestionsAPI', 'Error refreshing suggestion messages:', err);
+      jsonFailure(res, err, 'Erreur lors de la mise à jour des messages', 'SuggestionsAPI');
     }
     return true;
   }

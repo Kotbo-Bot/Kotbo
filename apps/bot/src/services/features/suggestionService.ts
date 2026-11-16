@@ -1,10 +1,14 @@
-import { Client, MessageFlags, PermissionFlagsBits, type ButtonInteraction, type Guild, type Message } from 'discord.js';
+import { Client, MessageFlags, PermissionFlagsBits, ThreadAutoArchiveDuration, type ButtonInteraction, type Guild, type Message } from 'discord.js';
 import { kotboEventBus } from '@kotbo/core';
 import type { Suggestion } from '@prisma/client';
 import {
-  canSubmitSuggestion,
+  SUGGESTION_TITLE_MAX,
+  crossedSuggestionThreshold,
   isSuggestionStatus,
   isSuggestionVotingOpen,
+  suggestionSubmitBlocker,
+  suggestionThreadName,
+  type SuggestionRefusalCode,
   type SuggestionStatus,
 } from '@kotbo/shared';
 import prisma from '../../utils/db.js';
@@ -14,12 +18,16 @@ import { UserFacingError } from '../../utils/userFacingError.js';
 import { broadcastDashboardStateChange } from '../../api/shared/sharding.js';
 import { getEffectiveLocale, resolveGuildLocale } from '../../utils/i18n.js';
 import * as m from '../../lib/paraglide/messages.js';
-import { buildSuggestionMessage, isSuggestionMessageFor } from './suggestionMessage.js';
-import { suggestionMessageLabels } from './suggestionMessageLabels.js';
-import { getSuggestionSettings, SUGGESTIONS_REALTIME_REASON } from './suggestionSettings.js';
+import { buildSuggestionMessage, buildSuggestionNotice, isSuggestionMessageFor } from './suggestionMessage.js';
+import { suggestionMessageLabels, suggestionNoticeLabels, suggestionRefusalMessage } from './suggestionMessageLabels.js';
+import { getSuggestionSettings, SUGGESTIONS_REALTIME_REASON, type SuggestionSettings } from './suggestionSettings.js';
 
-/** Membre que les réglages du serveur n'autorisent pas à proposer. */
-export class SuggestionNotAllowedError extends UserFacingError {}
+/** Membre que les réglages du serveur n'autorisent pas à proposer maintenant. */
+export class SuggestionRefusedError extends UserFacingError {
+  constructor(readonly code: SuggestionRefusalCode, message: string) {
+    super(message);
+  }
+}
 
 type SuggestionFeatureConfig = {
   featureKey?: string;
@@ -31,7 +39,7 @@ type FetchedChannel = NonNullable<Awaited<ReturnType<Client['channels']['fetch']
 
 type RenderableSuggestion = Pick<
   Suggestion,
-  'id' | 'guildId' | 'userId' | 'username' | 'content' | 'status' | 'responseText' | 'upvoters' | 'downvoters' | 'channelId' | 'messageId'
+  'id' | 'guildId' | 'userId' | 'username' | 'title' | 'content' | 'status' | 'responseText' | 'upvoters' | 'downvoters' | 'channelId' | 'messageId'
 >;
 
 function isSuggestionFeatureConfig(value: unknown): value is SuggestionFeatureConfig {
@@ -51,6 +59,12 @@ function notifySuggestionsChanged(guildId: string): void {
   publishGuildSignal(guildId, 'module:suggestions');
 }
 
+function suggestionMessageUrl(suggestion: Pick<Suggestion, 'guildId' | 'channelId' | 'messageId'>): string | null {
+  return suggestion.channelId && suggestion.messageId
+    ? `https://discord.com/channels/${suggestion.guildId}/${suggestion.channelId}/${suggestion.messageId}`
+    : null;
+}
+
 async function fetchGuild(client: Client, guildId: string): Promise<Guild | null> {
   return client.guilds.cache.get(guildId) ?? await client.guilds.fetch(guildId).catch(() => null);
 }
@@ -64,6 +78,7 @@ async function renderSuggestion(guild: Guild, suggestion: RenderableSuggestion, 
   const status = statusOf(suggestion);
   return buildSuggestionMessage({
     id: suggestion.id,
+    title: suggestion.title,
     authorName: member?.displayName || suggestion.username,
     authorAvatarUrl: member?.user.displayAvatarURL({ size: 128 }) ?? null,
     content: suggestion.content,
@@ -178,6 +193,10 @@ async function refreshSuggestionMessage(
 
   try {
     await message.edit(await renderSuggestion(guild, suggestion, voteWhileApproved));
+    // Épinglée au seuil de votes : la décision libère l'épingle.
+    if (statusOf(suggestion) !== 'PENDING' && message.pinned) {
+      await message.unpin().catch((e: unknown) => logger.warn('Suggestions', `Désépinglage de la suggestion ${suggestion.id} impossible:`, e));
+    }
     if (suggestion.channelId !== message.channelId || suggestion.messageId !== message.id) {
       await prisma.suggestion.update({
         where: { id: suggestion.id },
@@ -191,30 +210,53 @@ async function refreshSuggestionMessage(
   }
 }
 
-/** Suggestions approuvées redessinées d'un coup : de quoi couvrir les récentes sans saturer l'API Discord. */
-const APPROVED_REFRESH_MAX = 50;
+/** Suggestions redessinées d'un coup : de quoi couvrir les récentes sans saturer l'API Discord. */
+export const SUGGESTION_REFRESH_MAX = 100;
 
 /**
- * Rouvre ou referme les boutons des suggestions approuvées quand le réglage
- * « votes ouverts après approbation » change : sans cela, les messages déjà
- * publiés gardaient l'ancien état. Une à une, pour rester sous la limite
- * d'édition de Discord.
+ * Redessine les messages déjà publiés, les plus récents d'abord : après un
+ * changement de réglage (`status: 'APPROVED'` quand l'ouverture des votes
+ * change) ou pour passer les anciens messages au format actuel. Un à un, pour
+ * rester sous la limite d'édition de Discord. Rend le nombre de messages édités.
  */
-export async function refreshApprovedSuggestionMessages(client: Client, guildId: string, voteWhileApproved: boolean): Promise<void> {
-  const approved = await prisma.suggestion.findMany({
-    where: { guildId, status: 'APPROVED', messageId: { not: null } },
-    orderBy: { createdAt: 'desc' },
-    take: APPROVED_REFRESH_MAX,
-  });
-  for (const suggestion of approved) {
-    await refreshSuggestionMessage(client, suggestion, voteWhileApproved);
+export async function refreshPublishedSuggestionMessages(
+  client: Client,
+  guildId: string,
+  filter: { status?: SuggestionStatus } = {},
+): Promise<number> {
+  const [suggestions, { voteWhileApproved }] = await Promise.all([
+    prisma.suggestion.findMany({
+      where: { guildId, messageId: { not: null }, ...(filter.status ? { status: filter.status } : {}) },
+      orderBy: { createdAt: 'desc' },
+      take: SUGGESTION_REFRESH_MAX,
+    }),
+    getSuggestionSettings(guildId),
+  ]);
+  let edited = 0;
+  for (const suggestion of suggestions) {
+    if (await refreshSuggestionMessage(client, suggestion, voteWhileApproved) === 'edited') edited += 1;
   }
+  return edited;
+}
+
+/** Nombre de messages que `refreshPublishedSuggestionMessages` reprendra. */
+export async function countPublishedSuggestionMessages(guildId: string): Promise<number> {
+  const count = await prisma.suggestion.count({ where: { guildId, messageId: { not: null } } });
+  return Math.min(count, SUGGESTION_REFRESH_MAX);
 }
 
 /**
  * Crée et publie une nouvelle suggestion dans le salon dédié
  */
-export async function createSuggestion(guildId: string, userId: string, username: string, content: string, client: Client) {
+export async function createSuggestion(
+  guildId: string,
+  userId: string,
+  username: string,
+  content: string,
+  client: Client,
+  options: { title?: string | null } = {},
+) {
+  const title = options.title?.trim().slice(0, SUGGESTION_TITLE_MAX) || null;
   // 1. Déterminer le salon de suggestions
   const [guildConfig, settings] = await Promise.all([
     prisma.guild.findUnique({
@@ -235,14 +277,21 @@ export async function createSuggestion(guildId: string, userId: string, username
   if (!discordGuild) throw new Error("Serveur introuvable");
 
   // 2. Droit de proposer, avant toute écriture
-  const member = await discordGuild.members.fetch(userId).catch(() => null);
-  const allowed = canSubmitSuggestion(settings.allowedRoleIds, member && {
+  const [member, last] = await Promise.all([
+    discordGuild.members.fetch(userId).catch(() => null),
+    settings.cooldownMinutes > 0
+      ? prisma.suggestion.findFirst({ where: { guildId, userId }, orderBy: { createdAt: 'desc' }, select: { createdAt: true } })
+      : null,
+  ]);
+  const refusal = suggestionSubmitBlocker(settings, member && {
     roleIds: [...member.roles.cache.keys()],
     canManageGuild: member.permissions.has(PermissionFlagsBits.ManageGuild),
-  });
-  if (!allowed) {
+    accountCreatedAt: member.user.createdAt,
+    joinedAt: member.joinedAt,
+  }, last?.createdAt ?? null);
+  if (refusal) {
     const locale = await resolveGuildLocale(guildId, discordGuild.preferredLocale);
-    throw new SuggestionNotAllowedError(m.b5_suggestion_err_role({}, { locale }));
+    throw new SuggestionRefusedError(refusal.code, suggestionRefusalMessage(refusal, settings, locale));
   }
 
   // Fallback si aucun canal configuré: chercher un canal textuel nommé "suggestions"
@@ -266,6 +315,7 @@ export async function createSuggestion(guildId: string, userId: string, username
       guildId,
       userId,
       username,
+      title,
       content,
       status: 'PENDING',
       channelId: targetChannelId,
@@ -279,9 +329,20 @@ export async function createSuggestion(guildId: string, userId: string, username
   const message = await channel.send({ ...payload, allowedMentions: { parse: [] } }).catch(() => null);
 
   if (message) {
+    // Un fil refusé (permissions, salon d'annonces, message déjà dans un fil)
+    // n'empêche pas la suggestion d'exister.
+    const thread = settings.createThread
+      ? await message.startThread({
+        name: suggestionThreadName(title, content),
+        autoArchiveDuration: ThreadAutoArchiveDuration.OneWeek,
+      }).catch((e: unknown) => {
+        logger.warn('Suggestions', `Fil de la suggestion ${suggestion.id} impossible à ouvrir:`, e);
+        return null;
+      })
+      : null;
     await prisma.suggestion.update({
       where: { id: suggestion.id },
-      data: { messageId: message.id },
+      data: { messageId: message.id, threadId: thread?.id ?? null },
     });
   }
 
@@ -301,7 +362,7 @@ export async function createSuggestion(guildId: string, userId: string, username
 }
 
 type SuggestionVoteResult =
-  | { ok: true; suggestion: Suggestion; voteWhileApproved: boolean }
+  | { ok: true; suggestion: Suggestion; settings: SuggestionSettings; thresholdReached: boolean }
   | { ok: false; reason: 'not_found' | 'closed' };
 
 /**
@@ -310,7 +371,8 @@ type SuggestionVoteResult =
  * pour que deux votes simultanés (Discord et site) ne s'écrasent pas.
  */
 export async function applySuggestionVote(guildId: string, suggestionId: string, userId: string, type: 'up' | 'down'): Promise<SuggestionVoteResult> {
-  const { voteWhileApproved } = await getSuggestionSettings(guildId);
+  const settings = await getSuggestionSettings(guildId);
+  const { voteWhileApproved } = settings;
   const result = await prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT 1 FROM suggestions WHERE id = ${suggestionId} FOR UPDATE`;
     const suggestion = await tx.suggestion.findUnique({ where: { id: suggestionId } });
@@ -338,8 +400,14 @@ export async function applySuggestionVote(guildId: string, suggestionId: string,
       }
     }
 
-    await tx.suggestion.update({ where: { id: suggestionId }, data: { upvoters, downvoters } });
-    return { ok: true as const, suggestion: { ...suggestion, upvoters, downvoters }, voteWhileApproved };
+    // Le seuil ne se franchit qu'une fois : des votes qui partent ensuite ne
+    // retirent pas le signalement, et revenir au-dessus ne le relance pas.
+    const thresholdReached = !suggestion.thresholdReachedAt
+      && crossedSuggestionThreshold(settings.voteThreshold, suggestion.upvoters.length, upvoters.length);
+    const thresholdReachedAt = thresholdReached ? new Date() : suggestion.thresholdReachedAt;
+
+    await tx.suggestion.update({ where: { id: suggestionId }, data: { upvoters, downvoters, thresholdReachedAt } });
+    return { ok: true as const, suggestion: { ...suggestion, upvoters, downvoters, thresholdReachedAt }, settings, thresholdReached };
   });
 
   if (result.ok) notifySuggestionsChanged(guildId);
@@ -353,8 +421,27 @@ export async function applySuggestionVote(guildId: string, suggestionId: string,
  */
 export async function voteOnSuggestion(client: Client, guildId: string, suggestionId: string, userId: string, type: 'up' | 'down'): Promise<SuggestionVoteResult> {
   const vote = await applySuggestionVote(guildId, suggestionId, userId, type);
-  if (vote.ok) await refreshSuggestionMessage(client, vote.suggestion, vote.voteWhileApproved);
+  if (vote.ok) await publishVote(client, vote, null);
   return vote;
+}
+
+/**
+ * Suites d'un vote enregistré : le message redessiné, puis l'épingle quand ce
+ * vote fait franchir le seuil et que le serveur le demande.
+ */
+async function publishVote(
+  client: Client,
+  vote: Extract<SuggestionVoteResult, { ok: true }>,
+  known: Message | null,
+): Promise<RefreshOutcome> {
+  const message = known ?? await findStoredSuggestionMessage(client, vote.suggestion);
+  if (!message) return 'missing';
+  const outcome = await refreshSuggestionMessage(client, vote.suggestion, vote.settings.voteWhileApproved, message);
+  // En attente seulement : la décision désépingle, une approuvée resterait épinglée sans fin.
+  if (vote.thresholdReached && vote.settings.pinAtThreshold && statusOf(vote.suggestion) === 'PENDING' && !message.pinned) {
+    await message.pin().catch((e: unknown) => logger.warn('Suggestions', `Épinglage de la suggestion ${vote.suggestion.id} impossible:`, e));
+  }
+  return outcome;
 }
 
 /**
@@ -381,7 +468,7 @@ export async function handleSuggestionVote(interaction: ButtonInteraction, type:
     return interaction.editReply({ content: m.b5_suggestion_vote_ok_no_message({}, o) });
   }
 
-  const outcome = await refreshSuggestionMessage(interaction.client, vote.suggestion, vote.voteWhileApproved, message);
+  const outcome = await publishVote(interaction.client, vote, message);
   return interaction.editReply({
     content: outcome === 'edited' ? m.b5_suggestion_vote_ok({}, o) : m.b5_suggestion_vote_ok_not_refreshed({}, o),
   });
@@ -443,8 +530,72 @@ export async function resolveSuggestion(
   notifySuggestionsChanged(guildId);
   if (updated.status !== current.status) publishSuggestionResolved(updated);
 
-  const { voteWhileApproved } = await getSuggestionSettings(guildId);
-  await refreshSuggestionMessage(client, updated, voteWhileApproved);
+  const settings = await getSuggestionSettings(guildId);
+  await refreshSuggestionMessage(client, updated, settings.voteWhileApproved);
+  if (updated.status !== current.status) await announceDecision(client, updated, settings);
 
   return { suggestion: updated, previousStatus: statusOf(current) };
+}
+
+/**
+ * Prévient l'auteur d'une décision : en message privé quand le serveur le
+ * veut, et dans le fil de la suggestion quand il y en a un. Un auteur aux
+ * messages privés fermés y est mentionné à la place. Rien ne part pour une
+ * remise en attente.
+ */
+async function announceDecision(client: Client, suggestion: Suggestion, settings: SuggestionSettings): Promise<void> {
+  const status = statusOf(suggestion);
+  if (status === 'PENDING' || (!settings.notifyAuthor && !suggestion.threadId)) return;
+
+  const guild = await fetchGuild(client, suggestion.guildId);
+  const locale = await resolveGuildLocale(suggestion.guildId, guild?.preferredLocale);
+  const notice = buildSuggestionNotice({
+    guildName: guild?.name ?? '',
+    status,
+    title: suggestion.title,
+    content: suggestion.content,
+    responseText: suggestion.responseText,
+    messageUrl: suggestionMessageUrl(suggestion),
+  }, suggestionNoticeLabels(locale));
+
+  let delivered = false;
+  if (settings.notifyAuthor) {
+    const author = await client.users.fetch(suggestion.userId).catch(() => null);
+    delivered = !!(await author?.send({ embeds: [notice] }).catch(() => null));
+  }
+
+  if (suggestion.threadId) {
+    const thread = await client.channels.fetch(suggestion.threadId).catch(() => null);
+    if (thread?.isThread()) {
+      const mention = settings.notifyAuthor && !delivered;
+      await thread.send({
+        content: mention ? `<@${suggestion.userId}>` : undefined,
+        embeds: [notice],
+        allowedMentions: { users: mention ? [suggestion.userId] : [] },
+      }).catch((e: unknown) => logger.warn('Suggestions', `Décision non publiée dans le fil ${suggestion.threadId}:`, e));
+    }
+  }
+}
+
+/**
+ * Supprime une suggestion (doublon, abus) et ce qu'elle a publié : le message
+ * et son fil. Les épingles des listes de suivi gardent leur copie. `null`
+ * quand elle n'existe pas sur ce serveur.
+ */
+export async function deleteSuggestion(client: Client, guildId: string, suggestionId: string): Promise<Suggestion | null> {
+  const suggestion = await prisma.suggestion.findFirst({ where: { id: suggestionId, guildId } });
+  if (!suggestion) return null;
+
+  const message = await findStoredSuggestionMessage(client, suggestion);
+  await message?.delete().catch((e: unknown) => logger.warn('Suggestions', `Message de la suggestion ${suggestion.id} non supprimé:`, e));
+  if (suggestion.threadId) {
+    const thread = await client.channels.fetch(suggestion.threadId).catch(() => null);
+    if (thread?.isThread()) {
+      await thread.delete().catch((e: unknown) => logger.warn('Suggestions', `Fil ${suggestion.threadId} non supprimé:`, e));
+    }
+  }
+
+  await prisma.suggestion.delete({ where: { id: suggestion.id } });
+  notifySuggestionsChanged(guildId);
+  return suggestion;
 }

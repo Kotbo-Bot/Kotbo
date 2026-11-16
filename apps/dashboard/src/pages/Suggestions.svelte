@@ -3,15 +3,21 @@
   import { MediaQuery } from 'svelte/reactivity';
   import {
     SUGGESTION_ALLOWED_ROLES_MAX,
+    SUGGESTION_COOLDOWN_MINUTES,
+    SUGGESTION_MIN_ACCOUNT_AGE_DAYS,
+    SUGGESTION_MIN_MEMBER_DAYS,
     SUGGESTION_STALE_DAYS,
+    SUGGESTION_VOTE_THRESHOLD,
     SUGGESTION_STATS_DAYS,
     isSuggestionStale,
     type SuggestionStatus,
   } from '@kotbo/shared';
   import {
+    deleteSuggestion,
     fetchDiscordChannels,
     fetchSuggestionList,
     fetchSuggestionsOverview,
+    refreshSuggestionMessages,
     updateSuggestionConfig,
     type SuggestionConfig,
     type SuggestionItem,
@@ -23,6 +29,7 @@
   import { unsavedChanges } from '../lib/stores/unsavedChanges.svelte';
   import { subscribeRealtime } from '../lib/stores/realtime.svelte';
   import { memberCaseModal } from '../lib/stores/memberCaseModal.svelte';
+  import { confirmDialog } from '../lib/stores/confirmDialog.svelte';
   import ModulePage from '../lib/components/ModulePage.svelte';
   import Papicon from '../lib/components/Papicon.svelte';
   import EmptyState from '../lib/components/EmptyState.svelte';
@@ -64,9 +71,8 @@
   /** Forme comparable : « aucun salon » s'écrit `''` dans le sélecteur et `null` en base. */
   function comparable(source: SuggestionConfig): string {
     return JSON.stringify({
+      ...source,
       channelId: source.channelId || null,
-      requireComment: source.requireComment,
-      voteWhileApproved: source.voteWhileApproved,
       allowedRoleIds: [...source.allowedRoleIds].sort(),
     });
   }
@@ -102,8 +108,64 @@
       || !!dashboardStore.state.access?.canManageSettings
   );
 
+  const canDelete = $derived(
+    !!dashboardStore.state.featureAccess?.suggestions?.canDelete
+      || !!dashboardStore.state.access?.canManageSettings
+  );
+
   const configDirty = $derived(comparable(config) !== comparable(savedConfig));
+
+  function inRange(value: number, range: { min: number; max: number }): boolean {
+    return Number.isInteger(value) && value >= range.min && value <= range.max;
+  }
+
   const rolesValid = $derived(config.allowedRoleIds.length <= SUGGESTION_ALLOWED_ROLES_MAX);
+  const thresholdValid = $derived(config.voteThreshold === null || inRange(config.voteThreshold, SUGGESTION_VOTE_THRESHOLD));
+  const cooldownValid = $derived(inRange(config.cooldownMinutes, SUGGESTION_COOLDOWN_MINUTES));
+  const accountAgeValid = $derived(inRange(config.minAccountAgeDays, SUGGESTION_MIN_ACCOUNT_AGE_DAYS));
+  const memberDaysValid = $derived(inRange(config.minMemberDays, SUGGESTION_MIN_MEMBER_DAYS));
+  const guardsValid = $derived(cooldownValid && accountAgeValid && memberDaysValid);
+  const settingsValid = $derived(rolesValid && thresholdValid && guardsValid);
+
+  /** Garde-fous en place, pour le résumé du bloc replié et le panneau d'état. */
+  function activeGuards(source: SuggestionConfig): number {
+    return [source.cooldownMinutes > 0, source.minAccountAgeDays > 0, source.minMemberDays > 0].filter(Boolean).length;
+  }
+  const guardCount = $derived(activeGuards(config));
+
+  /** Seuil allumé : une valeur par défaut raisonnable à ajuster ; éteint : `null`. */
+  const DEFAULT_THRESHOLD = 10;
+  function toggleThreshold(enabled: boolean) {
+    config.voteThreshold = enabled ? DEFAULT_THRESHOLD : null;
+    if (!enabled) config.pinAtThreshold = false;
+  }
+
+  let refreshing = $state(false);
+  async function republishMessages() {
+    refreshing = true;
+    try {
+      const result = await refreshSuggestionMessages();
+      if (result) toast.success(m.suggestions_refresh_started({ count: result.total }));
+    } finally {
+      refreshing = false;
+    }
+  }
+
+  async function removeSuggestion(suggestion: SuggestionItem) {
+    const confirmed = await confirmDialog.ask({
+      title: m.suggestions_delete_title(),
+      description: m.suggestions_delete_desc({ name: suggestion.username || suggestion.userId }),
+      confirmLabel: m.suggestions_delete_confirm(),
+      variant: 'danger',
+      impacts: [m.suggestions_delete_impact_discord(), m.suggestions_delete_impact_irreversible()],
+    });
+    if (!confirmed) return;
+    const result = await deleteSuggestion(suggestion.id);
+    if (!result?.deleted) return;
+    history = history.filter((item) => item.id !== suggestion.id);
+    if (data) data = { ...data, queue: data.queue.filter((item) => item.id !== suggestion.id) };
+    void loadOverview(true);
+  }
 
   /** @everyone porte l'id du serveur : l'autoriser revient à ne rien restreindre. */
   const assignableRoles = $derived(
@@ -125,7 +187,7 @@
   const tabItems = $derived<TabItem[]>([
     { id: 'queue', label: m.suggestions_tab_queue(), icon: 'Inbox', badge: data && data.stats.pending > 0 ? String(data.stats.pending) : undefined },
     { id: 'all', label: m.suggestions_tab_all(), icon: 'List' },
-    { id: 'settings', label: m.suggestions_tab_settings(), icon: 'Gears', badge: !rolesValid ? m.suggestions_tab_to_fix() : configDirty ? m.suggestions_tab_modified() : undefined },
+    { id: 'settings', label: m.suggestions_tab_settings(), icon: 'Gears', badge: !settingsValid ? m.suggestions_tab_to_fix() : configDirty ? m.suggestions_tab_modified() : undefined },
   ]);
 
   const sortOptions = $derived([
@@ -240,15 +302,18 @@
 
   /** Appelé par la barre « Modifications non enregistrées » du layout. */
   async function saveConfig(): Promise<boolean> {
-    if (!rolesValid) {
-      toast.error(m.suggestions_roles_too_many({ max: SUGGESTION_ALLOWED_ROLES_MAX }));
+    if (!settingsValid) {
+      toast.error(m.suggestions_settings_invalid());
       return false;
     }
+    // Rôles inchangés : non renvoyés. Un rôle supprimé depuis sur Discord ferait
+    // refuser par l'API tout l'enregistrement, même d'un réglage voisin.
+    const { allowedRoleIds, ...rest } = config;
+    const rolesChanged = [...allowedRoleIds].sort().join() !== [...savedConfig.allowedRoleIds].sort().join();
     const result = await updateSuggestionConfig({
+      ...rest,
       channelId: config.channelId || null,
-      requireComment: config.requireComment,
-      voteWhileApproved: config.voteWhileApproved,
-      allowedRoleIds: config.allowedRoleIds,
+      ...(rolesChanged ? { allowedRoleIds } : {}),
     });
     if (!result) return false;
     savedConfig = cloneConfig(result.config);
@@ -319,6 +384,14 @@
         <dd class="font-semibold text-right">{data.config.allowedRoleIds.length > 0 ? m.suggestions_status_roles({ count: data.config.allowedRoleIds.length }) : m.suggestions_status_everyone()}</dd>
       </div>
       <div class="flex items-center justify-between gap-3">
+        <dt class="text-on-surface-variant">{m.suggestions_status_threshold()}</dt>
+        <dd class="font-semibold">{data.config.voteThreshold ? m.suggestions_status_threshold_value({ count: data.config.voteThreshold }) : m.suggestions_status_none()}</dd>
+      </div>
+      <div class="flex items-center justify-between gap-3">
+        <dt class="text-on-surface-variant">{m.suggestions_status_guards()}</dt>
+        <dd class="font-semibold">{activeGuards(data.config) > 0 ? m.suggestions_guards_summary({ count: activeGuards(data.config) }) : m.suggestions_status_none()}</dd>
+      </div>
+      <div class="flex items-center justify-between gap-3">
         <dt class="text-on-surface-variant">{m.suggestions_status_last()}</dt>
         <dd class="font-semibold text-right">{data.stats.lastCreatedAt ? formatDate(data.stats.lastCreatedAt) : m.suggestions_status_never()}</dd>
       </div>
@@ -353,6 +426,11 @@
         onClick={openMemberOnClick(suggestion.username)}
       />
       <div class="flex flex-wrap items-center gap-2">
+        {#if suggestion.thresholdReachedAt && suggestion.status === 'PENDING'}
+          <span class="text-2xs font-semibold px-2 py-0.5 rounded-full bg-success/10 text-success border border-success/20 inline-flex items-center gap-1">
+            <Papicon icon="TrendingUp" size={11} /> {m.suggestions_threshold_badge()}
+          </span>
+        {/if}
         {#if stale}
           <span class="text-2xs font-semibold px-2 py-0.5 rounded-full bg-warning/10 text-warning border border-warning/20">{m.suggestions_stale_badge()}</span>
         {/if}
@@ -360,6 +438,9 @@
       </div>
     </div>
 
+    {#if suggestion.title}
+      <p class="text-sm font-semibold break-words">{suggestion.title}</p>
+    {/if}
     <p class="text-sm leading-relaxed whitespace-pre-wrap break-words">{suggestion.content}</p>
 
     {#if suggestion.responseText}
@@ -384,6 +465,11 @@
             <Papicon icon="ExternalLink" size={11} /> {m.suggestions_open_message()}
           </a>
         {/if}
+        {#if suggestion.threadUrl}
+          <a href={suggestion.threadUrl} target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 text-primary hover:underline">
+            <Papicon icon="MessageSquare" size={11} /> {m.suggestions_open_thread()}
+          </a>
+        {/if}
       </div>
       <div class="flex items-center gap-1">
         <Button
@@ -394,6 +480,15 @@
           onclick={() => showMemberHistory(suggestion)}
         />
         <DoingListPin module="suggestions" sourceId={suggestion.id} />
+        {#if canDelete}
+          <Button
+            variant="ghost"
+            size="sm"
+            icon="Trash"
+            aria-label={m.suggestions_delete_title()}
+            onclick={() => removeSuggestion(suggestion)}
+          />
+        {/if}
         {#if canModerate}
           <Button
             size="sm"
@@ -555,6 +650,19 @@
               {/snippet}
             </Field>
 
+            <div class="flex items-start justify-between gap-4 border-t border-outline-variant/15 pt-5">
+              <div>
+                <p class="text-sm font-semibold">{m.suggestions_thread_label()}</p>
+                <p class="text-xs text-on-surface-variant">{m.suggestions_thread_hint()}</p>
+              </div>
+              <ToggleSwitch
+                checked={config.createThread}
+                onToggle={(value) => config.createThread = value}
+                disabled={!canConfigure}
+                ariaLabel={m.suggestions_thread_label()}
+              />
+            </div>
+
             {#if data.messageLabels}
               <div class="space-y-2">
                 <div class="flex flex-wrap items-center justify-between gap-2">
@@ -597,6 +705,69 @@
                 ariaLabel={m.suggestions_vote_approved_label()}
               />
             </div>
+
+            <div class="flex items-start justify-between gap-4 border-t border-outline-variant/15 pt-5">
+              <div>
+                <p class="text-sm font-semibold">{m.suggestions_notify_label()}</p>
+                <p class="text-xs text-on-surface-variant">{m.suggestions_notify_hint()}</p>
+              </div>
+              <ToggleSwitch
+                checked={config.notifyAuthor}
+                onToggle={(value) => config.notifyAuthor = value}
+                disabled={!canConfigure}
+                ariaLabel={m.suggestions_notify_label()}
+              />
+            </div>
+          </section>
+
+          <section class="bg-surface-container-low/40 border border-outline-variant/30 p-6 rounded-xl space-y-5">
+            <div class="flex items-start justify-between gap-4 border-b border-outline-variant/15 pb-3">
+              <div>
+                <h3 class="text-lg font-semibold flex items-center gap-2"><Papicon icon="TrendingUp" size={18} /> {m.suggestions_threshold_heading()}</h3>
+                <p class="text-xs text-on-surface-variant mt-1">{m.suggestions_threshold_desc()}</p>
+              </div>
+              <ToggleSwitch
+                checked={config.voteThreshold !== null}
+                onToggle={toggleThreshold}
+                disabled={!canConfigure}
+                ariaLabel={m.suggestions_threshold_heading()}
+              />
+            </div>
+
+            {#if config.voteThreshold !== null}
+              <Field
+                id="suggestions-threshold"
+                label={m.suggestions_threshold_label()}
+                hint={m.suggestions_range_hint({ min: SUGGESTION_VOTE_THRESHOLD.min, max: SUGGESTION_VOTE_THRESHOLD.max })}
+                error={thresholdValid ? undefined : m.suggestions_range_error({ min: SUGGESTION_VOTE_THRESHOLD.min, max: SUGGESTION_VOTE_THRESHOLD.max })}
+              >
+                {#snippet children(id, describedBy)}
+                  <input
+                    {id}
+                    type="number"
+                    class="input max-w-32"
+                    min={SUGGESTION_VOTE_THRESHOLD.min}
+                    max={SUGGESTION_VOTE_THRESHOLD.max}
+                    bind:value={config.voteThreshold}
+                    aria-describedby={describedBy}
+                    disabled={!canConfigure}
+                  />
+                {/snippet}
+              </Field>
+
+              <div class="flex items-start justify-between gap-4 border-t border-outline-variant/15 pt-5">
+                <div>
+                  <p class="text-sm font-semibold">{m.suggestions_pin_label()}</p>
+                  <p class="text-xs text-on-surface-variant">{m.suggestions_pin_hint()}</p>
+                </div>
+                <ToggleSwitch
+                  checked={config.pinAtThreshold}
+                  onToggle={(value) => config.pinAtThreshold = value}
+                  disabled={!canConfigure}
+                  ariaLabel={m.suggestions_pin_label()}
+                />
+              </div>
+            {/if}
           </section>
 
           <section class="bg-surface-container-low/40 border border-outline-variant/30 p-6 rounded-xl space-y-5">
@@ -621,7 +792,68 @@
                 />
               {/snippet}
             </Field>
+
+            <!-- Replié par défaut, comme dans Réputation : le résumé dit ce qui est en place. -->
+            <details class="group border border-outline-variant/15 rounded-xl">
+              <summary class="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-3 [&::-webkit-details-marker]:hidden">
+                <span class="text-sm font-semibold flex items-center gap-2">
+                  <span class="transition-transform group-open:rotate-90"><Papicon icon="ChevronRight" size={14} /></span>
+                  <Papicon icon="ShieldCheck" size={15} />
+                  {m.suggestions_guards_heading()}
+                </span>
+                <span class="text-2xs font-semibold px-2 py-0.5 rounded-full {!guardsValid ? 'bg-error/10 text-error border border-error/20' : guardCount > 0 ? 'bg-success/10 text-success border border-success/20' : 'bg-surface-container-high/60 text-on-surface-variant'}">
+                  {!guardsValid ? m.suggestions_tab_to_fix() : guardCount > 0 ? m.suggestions_guards_summary({ count: guardCount }) : m.suggestions_guards_off()}
+                </span>
+              </summary>
+
+              <div class="px-4 pb-4 space-y-4">
+                <p class="text-xs text-on-surface-variant">{m.suggestions_guards_desc()}</p>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <Field
+                    id="suggestions-cooldown"
+                    label={m.suggestions_guards_cooldown_label()}
+                    hint={m.suggestions_guards_cooldown_hint()}
+                    error={cooldownValid ? undefined : m.suggestions_range_error({ min: SUGGESTION_COOLDOWN_MINUTES.min, max: SUGGESTION_COOLDOWN_MINUTES.max })}
+                  >
+                    {#snippet children(id, describedBy)}
+                      <input {id} type="number" class="input" min={SUGGESTION_COOLDOWN_MINUTES.min} max={SUGGESTION_COOLDOWN_MINUTES.max} bind:value={config.cooldownMinutes} aria-describedby={describedBy} disabled={!canConfigure} />
+                    {/snippet}
+                  </Field>
+                  <Field
+                    id="suggestions-account-age"
+                    label={m.suggestions_guards_account_label()}
+                    hint={m.suggestions_guards_days_hint()}
+                    error={accountAgeValid ? undefined : m.suggestions_range_error({ min: SUGGESTION_MIN_ACCOUNT_AGE_DAYS.min, max: SUGGESTION_MIN_ACCOUNT_AGE_DAYS.max })}
+                  >
+                    {#snippet children(id, describedBy)}
+                      <input {id} type="number" class="input" min={SUGGESTION_MIN_ACCOUNT_AGE_DAYS.min} max={SUGGESTION_MIN_ACCOUNT_AGE_DAYS.max} bind:value={config.minAccountAgeDays} aria-describedby={describedBy} disabled={!canConfigure} />
+                    {/snippet}
+                  </Field>
+                  <Field
+                    id="suggestions-member-days"
+                    label={m.suggestions_guards_member_label()}
+                    hint={m.suggestions_guards_days_hint()}
+                    error={memberDaysValid ? undefined : m.suggestions_range_error({ min: SUGGESTION_MIN_MEMBER_DAYS.min, max: SUGGESTION_MIN_MEMBER_DAYS.max })}
+                  >
+                    {#snippet children(id, describedBy)}
+                      <input {id} type="number" class="input" min={SUGGESTION_MIN_MEMBER_DAYS.min} max={SUGGESTION_MIN_MEMBER_DAYS.max} bind:value={config.minMemberDays} aria-describedby={describedBy} disabled={!canConfigure} />
+                    {/snippet}
+                  </Field>
+                </div>
+              </div>
+            </details>
           </section>
+
+          {#if canConfigure}
+            <!-- Geste ponctuel, à part des réglages : rien ici ne passe par la barre d'enregistrement. -->
+            <section class="bg-surface-container-low/40 border border-outline-variant/30 p-6 rounded-xl flex flex-wrap items-center justify-between gap-4">
+              <div class="min-w-0">
+                <h3 class="text-sm font-semibold flex items-center gap-2"><Papicon icon="RefreshCw" size={15} /> {m.suggestions_refresh_heading()}</h3>
+                <p class="text-xs text-on-surface-variant mt-1">{m.suggestions_refresh_desc()}</p>
+              </div>
+              <Button size="sm" icon="RefreshCw" loading={refreshing} onclick={republishMessages}>{m.suggestions_refresh_action()}</Button>
+            </section>
+          {/if}
         </div>
       {/if}
     </div>

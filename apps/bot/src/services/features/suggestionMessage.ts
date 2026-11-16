@@ -7,7 +7,7 @@
  * avec les mêmes gabarits.
  */
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, type ColorResolvable } from 'discord.js';
-import { SUGGESTION_STATUS_COLORS, type SuggestionStatus } from '@kotbo/shared';
+import { SUGGESTION_STATUS_COLORS, type SuggestionDecision, type SuggestionStatus } from '@kotbo/shared';
 import { resolveEmojiShortcodes } from '../../utils/emojis.js';
 
 /** Gabarits du message ; `votesValue` porte `{up}` et `{down}`, `footer` porte `{id}`. */
@@ -28,6 +28,8 @@ export interface SuggestionMessageLabels {
 
 export interface SuggestionMessageView {
   id: string;
+  /** Titre saisi par l'auteur ; sans lui, le titre générique. */
+  title: string | null;
   authorName: string;
   authorAvatarUrl: string | null;
   content: string;
@@ -53,7 +55,7 @@ function voteButton(view: SuggestionMessageView, side: 'up' | 'down', label: str
 export function buildSuggestionMessage(view: SuggestionMessageView, labels: SuggestionMessageLabels) {
   const votes = fillSuggestionTemplate(labels.votesValue, { up: view.upvotes, down: view.downvotes });
   const embed = new EmbedBuilder()
-    .setTitle(labels.title)
+    .setTitle(view.title?.trim() || labels.title)
     .setDescription(resolveEmojiShortcodes(view.content))
     .setAuthor(view.authorAvatarUrl ? { name: view.authorName, iconURL: view.authorAvatarUrl } : { name: view.authorName })
     .setColor(SUGGESTION_STATUS_COLORS[view.status] as ColorResolvable)
@@ -73,6 +75,49 @@ export function buildSuggestionMessage(view: SuggestionMessageView, labels: Sugg
   );
 
   return { embeds: [embed], components: [row] };
+}
+
+/** Gabarits de l'avis envoyé à l'auteur ; `title` porte `{server}`. */
+export interface SuggestionNoticeLabels {
+  title: string;
+  contentField: string;
+  responseField: string;
+  decided: Record<SuggestionDecision, string>;
+}
+
+export interface SuggestionNoticeView {
+  guildName: string;
+  status: SuggestionDecision;
+  title: string | null;
+  content: string;
+  responseText: string | null;
+  messageUrl: string | null;
+}
+
+/** Valeur d'un champ d'embed : 1 024 caractères au plus. */
+const FIELD_MAX = 1024;
+
+function fieldValue(text: string): string {
+  return text.length <= FIELD_MAX ? text : `${text.slice(0, FIELD_MAX - 1)}…`;
+}
+
+/**
+ * Avis de décision pour l'auteur, en message privé ou dans le fil de la
+ * suggestion : ce qui a été décidé, sur quelle idée, et pourquoi.
+ */
+export function buildSuggestionNotice(view: SuggestionNoticeView, labels: SuggestionNoticeLabels): EmbedBuilder {
+  const embed = new EmbedBuilder()
+    .setTitle(fillSuggestionTemplate(labels.title, { server: view.guildName }))
+    .setDescription(labels.decided[view.status])
+    .setColor(SUGGESTION_STATUS_COLORS[view.status] as ColorResolvable)
+    .setFields(
+      { name: labels.contentField, value: fieldValue(view.title?.trim() || resolveEmojiShortcodes(view.content)), inline: false },
+      ...(view.responseText?.trim()
+        ? [{ name: labels.responseField, value: fieldValue(view.responseText.trim()), inline: false }]
+        : []),
+    );
+  if (view.messageUrl) embed.setURL(view.messageUrl);
+  return embed;
 }
 
 /**

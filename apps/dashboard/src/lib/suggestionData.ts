@@ -13,6 +13,13 @@ export const DEFAULT_SUGGESTION_CONFIG: SuggestionConfig = {
   requireComment: true,
   voteWhileApproved: false,
   allowedRoleIds: [],
+  cooldownMinutes: 0,
+  minAccountAgeDays: 0,
+  minMemberDays: 0,
+  notifyAuthor: true,
+  createThread: false,
+  voteThreshold: null,
+  pinAtThreshold: false,
 };
 
 export type SuggestionQueueSort = 'score' | 'oldest' | 'recent';

@@ -43,6 +43,9 @@ const ROW = {
   status: 'PENDING',
   channelId: '333333333333333333',
   messageId: '444444444444444444',
+  title: 'Salon memes' as string | null,
+  threadId: '777777777777777777' as string | null,
+  thresholdReachedAt: null as Date | null,
   responseText: null as string | null,
   respondedById: null as string | null,
   respondedAt: null as Date | null,
@@ -52,7 +55,19 @@ const ROW = {
   updatedAt: new Date('2026-11-10T10:00:00Z'),
 };
 
-const SETTINGS = { channelId: null as string | null, requireComment: true, voteWhileApproved: false, allowedRoleIds: [] as string[] };
+const SETTINGS = {
+  channelId: null as string | null,
+  requireComment: true,
+  voteWhileApproved: false,
+  allowedRoleIds: [] as string[],
+  cooldownMinutes: 0,
+  minAccountAgeDays: 0,
+  minMemberDays: 0,
+  notifyAuthor: true,
+  createThread: false,
+  voteThreshold: null as number | null,
+  pinAtThreshold: false,
+};
 let currentSettings = { ...SETTINGS };
 
 const dashboard = {
@@ -73,9 +88,12 @@ const settings = {
 mockModule('../../services/features/suggestionSettings', settings);
 
 let resolveResult: unknown = null;
+let deleteResult: unknown = null;
 const service = {
   resolveSuggestion: mock(async (..._args: unknown[]) => resolveResult),
-  refreshApprovedSuggestionMessages: mock(async (..._args: unknown[]) => {}),
+  deleteSuggestion: mock(async (..._args: unknown[]) => deleteResult),
+  refreshPublishedSuggestionMessages: mock(async (..._args: unknown[]) => 3),
+  countPublishedSuggestionMessages: mock(async (..._args: unknown[]) => 3),
 };
 mockModule('../../services/features/suggestionService', service);
 
@@ -139,6 +157,7 @@ async function call(method: string, suffix: string, body?: unknown, access: Dash
 beforeEach(() => {
   currentSettings = { ...SETTINGS };
   resolveResult = null;
+  deleteResult = null;
   featureRights = {};
   guilds.clear();
   for (const fn of [...Object.values(dashboard), ...Object.values(settings), ...Object.values(service)]) {
@@ -166,6 +185,14 @@ describe('GET /suggestions', () => {
     expect(item.username).toBe('Alice');
     expect(item.avatarUrl).toBe('a.png');
     expect(item.messageUrl).toBe(`https://discord.com/channels/${GUILD}/${ROW.channelId}/${ROW.messageId}`);
+  });
+
+  test('titre, lien du fil et seuil atteint', async () => {
+    const { json } = await call('GET', '');
+    const [item] = json.queue;
+    expect(item.title).toBe('Salon memes');
+    expect(item.threadUrl).toBe(`https://discord.com/channels/${GUILD}/${ROW.threadId}`);
+    expect(item.thresholdReachedAt).toBeNull();
   });
 });
 
@@ -199,13 +226,13 @@ describe('PATCH /suggestions/config', () => {
 
   test('changer l\'ouverture des votes redessine les suggestions approuvées', async () => {
     await call('PATCH', '/config', { voteWhileApproved: true });
-    expect(service.refreshApprovedSuggestionMessages).toHaveBeenCalledWith(client, GUILD, true);
+    expect(service.refreshPublishedSuggestionMessages).toHaveBeenCalledWith(client, GUILD, { status: 'APPROVED' });
   });
 
   test('sans changement de cette option, aucun message n\'est redessiné', async () => {
     await call('PATCH', '/config', { voteWhileApproved: false });
     await call('PATCH', '/config', { requireComment: false });
-    expect(service.refreshApprovedSuggestionMessages).not.toHaveBeenCalled();
+    expect(service.refreshPublishedSuggestionMessages).not.toHaveBeenCalled();
   });
 
   test('réservé à qui configure', async () => {
@@ -235,6 +262,26 @@ describe('validation des réglages', () => {
   test('rôles : ni @everyone, ni rôle absent', () => {
     expect('error' in parseSuggestionConfigPatch({ allowedRoleIds: [GUILD] }, GUILD, roles)).toBe(true);
     expect('error' in parseSuggestionConfigPatch({ allowedRoleIds: ['777777777777777777'] }, GUILD, roles)).toBe(true);
+  });
+
+  test('options de la communauté : booléens', () => {
+    expect(parseSuggestionConfigPatch({ notifyAuthor: false, createThread: true, pinAtThreshold: true }, GUILD, roles))
+      .toEqual({ patch: { notifyAuthor: false, createThread: true, pinAtThreshold: true } });
+    expect('error' in parseSuggestionConfigPatch({ createThread: 1 }, GUILD, roles)).toBe(true);
+  });
+
+  test('seuil : entier dans les bornes, ou null pour l\'enlever', () => {
+    expect(parseSuggestionConfigPatch({ voteThreshold: 10 }, GUILD, roles)).toEqual({ patch: { voteThreshold: 10 } });
+    expect(parseSuggestionConfigPatch({ voteThreshold: null }, GUILD, roles)).toEqual({ patch: { voteThreshold: null } });
+    expect('error' in parseSuggestionConfigPatch({ voteThreshold: 1 }, GUILD, roles)).toBe(true);
+    expect('error' in parseSuggestionConfigPatch({ voteThreshold: 2.5 }, GUILD, roles)).toBe(true);
+  });
+
+  test('garde-fous : entiers dans les bornes', () => {
+    expect(parseSuggestionConfigPatch({ cooldownMinutes: 60, minAccountAgeDays: 7, minMemberDays: 0 }, GUILD, roles))
+      .toEqual({ patch: { cooldownMinutes: 60, minAccountAgeDays: 7, minMemberDays: 0 } });
+    expect('error' in parseSuggestionConfigPatch({ cooldownMinutes: -1 }, GUILD, roles)).toBe(true);
+    expect('error' in parseSuggestionConfigPatch({ minMemberDays: 400 }, GUILD, roles)).toBe(true);
   });
 
   test('rôles : non vérifiables hors du cache, acceptés', () => {
@@ -301,6 +348,39 @@ describe('POST /suggestions/:id/resolve', () => {
     resolveResult = { suggestion: decided, previousStatus: 'PENDING' };
     const access = { ...DASHBOARD_ACCESS_MODERATOR, canModerateContent: false };
     expect((await call('POST', `/${SUGGESTION_ID}/resolve`, { status: 'APPROVED', responseText: 'ok' }, access)).status).toBe(200);
+  });
+});
+
+describe('DELETE /suggestions/:id', () => {
+  test('supprime et journalise', async () => {
+    deleteResult = ROW;
+    const { status, json } = await call('DELETE', `/${SUGGESTION_ID}`);
+    expect(status).toBe(200);
+    expect(json).toEqual({ deleted: true });
+    expect(service.deleteSuggestion).toHaveBeenCalledWith(client, GUILD, SUGGESTION_ID);
+    expect(mockDb.dashboardAuditLog.create).toHaveBeenCalledTimes(1);
+  });
+
+  test('404 pour une suggestion d\'un autre serveur', async () => {
+    expect((await call('DELETE', `/${SUGGESTION_ID}`)).status).toBe(404);
+  });
+
+  test('réservé à qui peut supprimer', async () => {
+    expect((await call('DELETE', `/${SUGGESTION_ID}`, undefined, DASHBOARD_ACCESS_MODERATOR)).status).toBe(403);
+    expect(service.deleteSuggestion).not.toHaveBeenCalled();
+  });
+});
+
+describe('POST /suggestions/refresh', () => {
+  test('lance la mise à jour des messages et dit combien seront repris', async () => {
+    const { status, json } = await call('POST', '/refresh');
+    expect(status).toBe(202);
+    expect(json).toEqual({ total: 3 });
+    expect(service.refreshPublishedSuggestionMessages).toHaveBeenCalledWith(client, GUILD);
+  });
+
+  test('réservé à qui configure', async () => {
+    expect((await call('POST', '/refresh', undefined, DASHBOARD_ACCESS_MODERATOR)).status).toBe(403);
   });
 });
 
