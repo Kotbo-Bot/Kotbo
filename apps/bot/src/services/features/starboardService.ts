@@ -37,6 +37,8 @@ import { cache } from '../../utils/cache.js';
 import { logger } from '../../utils/logger.js';
 import { resolveGuildLocale } from '../../utils/i18n.js';
 import * as m from '../../lib/paraglide/messages.js';
+import { starboardExcerpt } from '@kotbo/shared';
+import { broadcastDashboardStateChange } from '../../api/shared/sharding.js';
 import { normalizeEmojiKey, tallyVotes } from './starboardTally.js';
 
 export { normalizeEmojiKey } from './starboardTally.js';
@@ -86,6 +88,13 @@ export async function getStarboardConfig(guildId: string): Promise<StarboardConf
 /** À appeler après toute écriture depuis le dashboard. */
 export async function invalidateStarboardCache(guildId: string): Promise<void> {
   await cache.delete(cacheKey(guildId));
+}
+
+/** Motif temps réel : la page Starlight se recharge quand un message entre ou sort de la une. */
+export const STARBOARD_REALTIME_REASON = 'starboard_updated';
+
+export function notifyStarboardChange(guildId: string): void {
+  broadcastDashboardStateChange(guildId, STARBOARD_REALTIME_REASON);
 }
 
 // ── Emojis ───────────────────────────────────────────────────────────────────
@@ -206,6 +215,14 @@ function collectOtherAttachments(message: Message): string[] {
     .filter((a) => !(a.contentType?.startsWith('image/') || IMAGE_EXT.test(a.url)))
     .map((a) => `[${a.name ?? 'fichier'}](${a.url})`)
     .slice(0, 5);
+}
+
+/**
+ * Ce que la galerie du dashboard montre du message, repris à chaque recalcul :
+ * le message a pu être modifié depuis son passage à la une.
+ */
+function messageSnapshot(message: Message): { excerpt: string | null; imageUrl: string | null } {
+  return { excerpt: starboardExcerpt(message.content), imageUrl: collectImages(message)[0] ?? null };
 }
 
 function parseColor(hex: string): number {
@@ -448,7 +465,7 @@ export async function refreshEntry(
       }
       await prisma.starboardEntry.update({
         where: { id: entry.id },
-        data: { upvotes: up, downvotes: down, score, peakScore: Math.max(entry.peakScore, score) },
+        data: { upvotes: up, downvotes: down, score, peakScore: Math.max(entry.peakScore, score), ...messageSnapshot(message) },
       }).catch(() => null);
       // Le highlight publié reste affiché : son compteur doit suivre.
       if (entry.starMessageId) await editHighlight(client, entry, message, config, { up, down, score });
@@ -465,6 +482,7 @@ export async function refreshEntry(
         downvotes: down,
         score,
         peakScore: score,
+        ...messageSnapshot(message),
       },
     }).catch((err) => {
       logger.error('Starlight', `Création de l'entrée ${messageId} impossible`, err);
@@ -480,7 +498,7 @@ export async function refreshEntry(
 
     await prisma.starboardEntry.update({
       where: { id: record.id },
-      data: { upvotes: up, downvotes: down, score, peakScore: Math.max(record.peakScore, score) },
+      data: { upvotes: up, downvotes: down, score, peakScore: Math.max(record.peakScore, score), ...messageSnapshot(message) },
     }).catch(() => null);
   } finally {
     refreshing.delete(key);
@@ -525,6 +543,7 @@ async function postHighlight(
     where: { id: entry.id },
     data: { starMessageId: sent.id, starChannelId: channel.id, postedAt: new Date() },
   }).catch(() => null);
+  notifyStarboardChange(entry.guildId);
 
   if (config.autoReactEmbed && perms.has(PermissionFlagsBits.AddReactions)) {
     await seedReactions(client, sent, config);
@@ -584,10 +603,10 @@ async function removeEntry(
       where: { id: entry.id },
       data: { starMessageId: null, starChannelId: null, postedAt: null },
     }).catch(() => null);
-    return;
+  } else {
+    await prisma.starboardEntry.delete({ where: { id: entry.id } }).catch(() => null);
   }
-
-  await prisma.starboardEntry.delete({ where: { id: entry.id } }).catch(() => null);
+  notifyStarboardChange(entry.guildId);
 }
 
 /**
@@ -613,6 +632,7 @@ export async function handleStarboardMessageDelete(
       where: { id: entry.id },
       data: { starMessageId: null, starChannelId: null, postedAt: null },
     }).catch(() => null);
+    notifyStarboardChange(guildId);
     return;
   }
 

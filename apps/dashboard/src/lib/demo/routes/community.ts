@@ -7,7 +7,8 @@
  */
 import { route } from '../backend';
 import { demoDb } from '../db';
-import { DAY, PEOPLE, ago } from '../fixtures';
+import { STARBOARD_STATS_DAYS, defaultStarboardSettings, isStarboardPeriod, starboardPeriodStart } from '@kotbo/shared';
+import { DAY, PEOPLE, ago, channelByName } from '../fixtures';
 
 const members = () => PEOPLE.filter((p) => !p.bot);
 const byXp = () => [...members()].sort((a, b) => b.xp - a.xp);
@@ -437,5 +438,80 @@ export function registerCommunityRoutes(): void {
   route('DELETE', '/api/dashboard/guilds/:guildId/quests/:questId', ({ params }) => {
     demoDb.update<Quest[]>('quests', questsSeed, (list) => list.filter((q) => q.id !== params.questId));
     return { success: true };
+  });
+
+  // ── Starlight (messages à la une) ─────────────────────────────────────────
+  const starboardConfig = { ...defaultStarboardSettings(), channelId: channelByName('annonces').id, threshold: 6, upvoteEmojis: ['⭐', '🔥'] };
+  const starSeed: Array<[string, string, number, number, number, number, boolean]> = [
+    ['général', 'Petit rappel : la soirée jeux commence à 21 h, venez nombreux !', 14, 1, 16, 2 * 60, true],
+    ['recherche-de-groupe', 'Qui pour un raid ce soir ? On cherche encore un soigneur.', 9, 0, 11, 26 * 60, true],
+    ['général', 'J’ai enfin fini le donjon en difficile, merci à toute l’équipe.', 21, 2, 24, 3 * DAY, true],
+    ['niveaux', 'Niveau 50 atteint, il en aura fallu des messages.', 7, 1, 10, 6 * DAY, false],
+    ['général', 'Le meilleur conseil que j’ai reçu ici : toujours lire le salon des annonces.', 12, 0, 12, 12 * DAY, true],
+    ['boutique', 'Le nouveau rôle de couleur est magnifique.', 8, 2, 9, 40 * DAY, true],
+  ];
+  const starEntries = starSeed.map(([channelName, excerpt, upvotes, downvotes, peakScore, minutesAgo, onBoard], i) => {
+    const author = members()[(i * 2 + 1) % members().length];
+    const createdAt = ago(minutesAgo);
+    return {
+      id: `demo-star-${i + 1}`,
+      channelId: channelByName(channelName).id,
+      authorId: author.id,
+      authorName: author.displayName,
+      avatarUrl: null,
+      excerpt,
+      imageUrl: null,
+      upvotes,
+      downvotes,
+      score: upvotes - downvotes,
+      peakScore,
+      onBoard,
+      createdAt,
+      postedAt: onBoard ? createdAt : null,
+      messageUrl: 'https://discord.com',
+      starUrl: onBoard ? 'https://discord.com' : null,
+    };
+  });
+
+  route('GET', '/api/dashboard/guilds/:guildId/starboard', () => {
+    const since = Date.parse(ago(STARBOARD_STATS_DAYS * DAY));
+    const recent = starEntries.filter((e) => Date.parse(e.createdAt) >= since);
+    const byChannel = new Map<string, number>();
+    for (const e of recent) byChannel.set(e.channelId, (byChannel.get(e.channelId) ?? 0) + 1);
+    return {
+      config: structuredClone(starboardConfig),
+      stats: {
+        postedRecent: recent.length,
+        avgPeakRecent: recent.length ? recent.reduce((sum, e) => sum + e.peakScore, 0) / recent.length : null,
+        bestPeakRecent: recent.length ? Math.max(...recent.map((e) => e.peakScore)) : null,
+        onBoard: starEntries.filter((e) => e.onBoard).length,
+        lastPostedAt: starEntries[0]?.createdAt ?? null,
+      },
+      topEntries: [...recent].sort((a, b) => b.peakScore - a.peakScore).slice(0, 5),
+      channelStats: [...byChannel].map(([channelId, count]) => ({ channelId, count })).sort((a, b) => b.count - a.count),
+      health: { channelFound: true, missingPermissions: [] },
+      messageLabels: { locale: 'fr', jumpButton: 'Aller au message', footerVotes: '{up} pour · {down} contre', attachmentsField: 'Pièces jointes' },
+    };
+  });
+
+  route('GET', '/api/dashboard/guilds/:guildId/starboard/entries', ({ query }) => {
+    const period = query.get('period');
+    const since = isStarboardPeriod(period) ? starboardPeriodStart(period) : null;
+    const channelId = query.get('channelId');
+    const authorId = query.get('authorId');
+    const entries = starEntries
+      .filter((e) => (!since || Date.parse(e.createdAt) >= since.getTime()))
+      .filter((e) => (!channelId || e.channelId === channelId) && (!authorId || e.authorId === authorId))
+      .sort((a, b) => query.get('sort') === 'score'
+        ? b.peakScore - a.peakScore
+        : Date.parse(b.createdAt) - Date.parse(a.createdAt));
+    return { entries, nextCursor: null };
+  });
+
+  route('PATCH', '/api/dashboard/guilds/:guildId/starboard', ({ body }) => {
+    for (const key of Object.keys(starboardConfig) as Array<keyof typeof starboardConfig>) {
+      if (body && key in body) (starboardConfig as Record<string, unknown>)[key] = structuredClone(body[key]);
+    }
+    return { config: structuredClone(starboardConfig) };
   });
 }

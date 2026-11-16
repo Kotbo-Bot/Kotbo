@@ -85,6 +85,14 @@ model StarboardEntry {
   /// Score maximal atteint : garde une trace même après retrait du highlight.
   peakScore Int @default(0)
 
+  // ── Aperçu pour la galerie du dashboard ────────────────────────────────────
+  /// Début du texte du message, repris à chaque recalcul (le message peut être
+  /// modifié). Null pour un message sans texte.
+  excerpt  String?
+  /// Première image du message. Les liens d'images de Discord expirent : la
+  /// galerie masque celle qui ne charge plus.
+  imageUrl String?
+
   postedAt DateTime?
 
   config StarboardConfig @relation(fields: [guildId], references: [guildId], onDelete: Cascade)
@@ -94,6 +102,8 @@ model StarboardEntry {
 
   @@unique([guildId, messageId])
   @@index([guildId, score])
+  @@index([guildId, createdAt])
+  @@index([guildId, peakScore])
   @@index([starMessageId])
   @@index([authorId])
   @@map("starboard_entries")

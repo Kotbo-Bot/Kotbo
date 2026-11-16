@@ -4960,6 +4960,8 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "downvotes": 0,
     "score": 0,
     "peakScore": 0,
+    "excerpt": null,
+    "imageUrl": null,
     "postedAt": null,
     "createdAt": "__NOW__",
     "updatedAt": "__NOW__"
