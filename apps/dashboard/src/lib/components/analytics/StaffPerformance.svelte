@@ -1,4 +1,5 @@
 <script lang="ts">
+  import UserDisplay from '../UserDisplay.svelte';
   import Papicon from '../Papicon.svelte';
   import { m } from '../../i18n';
   import { memberAvatarSrc } from '../../discordMedia';
@@ -59,10 +60,7 @@
                       <span class="absolute -top-1 -right-1 w-4 h-4 bg-emerald-500 rounded-full border-2 border-surface flex items-center justify-center text-white"><Papicon icon="star" size={9} /></span>
                     {/if}
                   </div>
-                  <div class="flex flex-col items-start">
-                    <span class="text-sm font-semibold">{staff.displayName || staff.username}</span>
-                    <span class="text-2xs text-on-surface-variant/40 font-mono">@{staff.username}</span>
-                  </div>
+                  <UserDisplay userId={staff.userId} name={staff.displayName || staff.username} username={staff.username} avatar={false} handle />
                 </button>
               </td>
               {#each metrics as metric}

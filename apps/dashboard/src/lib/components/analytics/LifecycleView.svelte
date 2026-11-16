@@ -9,9 +9,8 @@
   import { untrack } from 'svelte';
   import { Callout, FilterPills, SectionCard } from '../ui';
   import AnalyticsSkeleton from './AnalyticsSkeleton.svelte';
-  import ServerTagPill from '../ServerTagPill.svelte';
+  import UserDisplay from '../UserDisplay.svelte';
   import { fetchLifecycle, type LifecycleAnalytics, type LifecycleMember, type LifecycleSegment } from '../../api';
-  import { memberAvatarSrc } from '../../discordMedia';
   import { m } from '../../i18n';
   import { errorMessage } from '@kotbo/shared';
   import { analyticsExport, analyticsFilters as filters } from './analyticsFilters.svelte';
@@ -131,11 +130,7 @@
               {#each members as member (member.userId)}
                 <li>
                   <button type="button" disabled={!onOpenMember} class="seg-member" onclick={() => onOpenMember?.(member.userId, member.name ?? '')}>
-                    <img class="seg-member__avatar" src={memberAvatarSrc(member.avatarUrl, member.name, member.userId)} alt="" width="28" height="28" loading="lazy" />
-                    <span class="seg-member__name">{member.name ?? m.an_member_fallback()}</span>
-                    {#if member.serverTag}
-                      <ServerTagPill tag={member.serverTag.tag} badgeUrl={member.serverTag.badgeUrl} />
-                    {/if}
+                    <UserDisplay userId={member.userId} name={member.name} avatarUrl={member.avatarUrl} serverTag={member.serverTag} size="sm" class="min-w-0" />
                     <span class="seg-member__meta">
                       {#if list === 'new' && member.joinedAt}
                         {m.anx_seg_joined({ date: shortDate(member.joinedAt.slice(0, 10)) })}
@@ -268,23 +263,7 @@
     outline-offset: 1px;
   }
 
-  .seg-member__avatar {
-    width: 1.75rem;
-    height: 1.75rem;
-    flex-shrink: 0;
-    border-radius: 999px;
-    object-fit: cover;
-  }
 
-  .seg-member__name {
-    min-width: 0;
-    flex: 0 1 auto;
-    font-size: 0.875rem;
-    color: var(--color-on-surface);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
 
   .seg-member__meta {
     flex-shrink: 0;

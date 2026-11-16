@@ -8,6 +8,7 @@
   l'heure locale du lecteur.
 -->
 <script lang="ts">
+  import UserDisplay from '../UserDisplay.svelte';
   import { untrack } from 'svelte';
   import { Button, Callout, SectionCard } from '../ui';
   import ActivityChartCard, { type ChartMetric } from './ActivityChartCard.svelte';
@@ -17,7 +18,6 @@
   import BarList from './BarList.svelte';
   import AnalyticsSkeleton from './AnalyticsSkeleton.svelte';
   import { fetchClimateAnalytics, type AegisEmotion, type ClimateAnalytics } from '../../api';
-  import { memberAvatarSrc } from '../../discordMedia';
   import { m } from '../../i18n';
   import { analyticsLoader } from './analyticsLoader.svelte';
   import { analyticsAnnotations } from './annotations.svelte';
@@ -294,8 +294,7 @@
                 <li>
                   <button type="button" disabled={!onOpenMember} class="user" onclick={() => onOpenMember?.(u.userId, u.name ?? '')}>
                     <span class="user__rank">{i + 1}</span>
-                    <img class="user__avatar" src={memberAvatarSrc(u.avatar, u.name, u.userId)} alt="" width="24" height="24" loading="lazy" />
-                    <span class="user__name">{u.name ?? m.an_member_fallback()}</span>
+                    <UserDisplay userId={u.userId} name={u.name} avatarUrl={u.avatar} size="sm" class="min-w-0 flex-1" />
                     <span class="user__meta">{u.toxicRate === null ? '' : fmtPct(u.toxicRate)}</span>
                     <span class="user__value">{fmtNumber(u.toxic)}</span>
                   </button>
@@ -509,19 +508,7 @@
     color: var(--color-on-surface-variant);
   }
 
-  .user__avatar {
-    width: 1.5rem;
-    height: 1.5rem;
-    border-radius: 999px;
-  }
 
-  .user__name {
-    flex: 1;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
 
   .user__meta {
     font-size: 0.75rem;

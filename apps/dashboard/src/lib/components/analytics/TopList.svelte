@@ -16,6 +16,7 @@
   import Sparkline from './Sparkline.svelte';
   import AnalyticsSkeleton from './AnalyticsSkeleton.svelte';
   import { memberAvatarSrc } from '../../discordMedia';
+  import UserDisplay from '../UserDisplay.svelte';
   import { downloadSingleSheetXlsx } from '../../xlsxExport';
   import { toast } from '../../stores/toast.svelte';
   import { m } from '../../i18n';
@@ -166,8 +167,12 @@
   >
     <span class="top-row__rank">{rank}</span>
     <span class="top-row__ident">
-      {@render identity(item)}
-      <span class="top-row__name">{displayName(item)}</span>
+      {#if kind === 'members'}
+        <UserDisplay userId={item.id} name={item.name} avatarUrl={item.avatarUrl} size="sm" class="min-w-0" />
+      {:else}
+        {@render identity(item)}
+        <span class="top-row__name">{displayName(item)}</span>
+      {/if}
     </span>
     {#if item.spark.length > 1}
       <span class="top-row__spark"><Sparkline values={item.spark} {color} width={56} height={18} fill={false} /></span>

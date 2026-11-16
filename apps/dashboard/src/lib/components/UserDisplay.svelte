@@ -11,7 +11,7 @@
    * Les options `avatar`, `handle` et `tag` choisissent ce qui s'affiche.
    */
   import { memberAvatarSrc } from '../discordMedia';
-  import { memberIdentities, type MemberServerTag } from '../stores/memberIdentities.svelte';
+  import { memberIdentities } from '../stores/memberIdentities.svelte';
   import ServerTagPill from './ServerTagPill.svelte';
 
   const {
@@ -38,7 +38,7 @@
     username?: string | null;
     avatarUrl?: string | null;
     /** Tag deja connu de l'appelant ; `null` force l'absence de tag. */
-    serverTag?: MemberServerTag | null;
+    serverTag?: { tag: string; badgeUrl?: string | null } | null;
     /** Seconde ligne facultative (role, date, compteur...). */
     subtitle?: string | null;
     size?: 'xs' | 'sm' | 'md' | 'lg';

@@ -6,6 +6,7 @@
   les plus actifs. Période seule.
 -->
 <script lang="ts">
+  import UserDisplay from '../UserDisplay.svelte';
   import { untrack } from 'svelte';
   import { Button, Callout, SectionCard } from '../ui';
   import ActivityChartCard, { type ChartMetric } from './ActivityChartCard.svelte';
@@ -19,7 +20,6 @@
     rescanMemberStats,
     type MemberOverview,
   } from '../../api';
-  import { memberAvatarSrc } from '../../discordMedia';
   import { toast } from '../../stores/toast.svelte';
   import { m } from '../../i18n';
   import { analyticsLoader } from './analyticsLoader.svelte';
@@ -293,8 +293,7 @@
               <li>
                 <button type="button" disabled={!onOpenMember} class="inviter" onclick={() => onOpenMember?.(inv.userId, inv.name ?? '')}>
                   <span class="inviter__rank">{i + 1}</span>
-                  <img class="inviter__avatar" src={memberAvatarSrc(inv.avatarUrl, inv.name, inv.userId)} alt="" width="24" height="24" loading="lazy" />
-                  <span class="inviter__name">{inv.name ?? m.an_member_fallback()}</span>
+                  <UserDisplay userId={inv.userId} name={inv.name} avatarUrl={inv.avatarUrl} size="sm" class="min-w-0 flex-1" />
                   <span class="inviter__meta" title={m.anx_mem_retention()}>{inv.retention === null ? '' : m.anx_mem_still_here({ pct: fmtPct(inv.retention, 0) })}</span>
                   <span class="inviter__value">{fmtNumber(inv.joined)}</span>
                   {#if filters.compare}<span class="inviter__delta">{fmtDelta(relativeDelta(inv.joined, inv.previous), 'pct')}</span>{/if}
@@ -450,22 +449,7 @@
     color: var(--color-on-surface-variant);
   }
 
-  .inviter__avatar {
-    width: 1.5rem;
-    height: 1.5rem;
-    border-radius: 999px;
-    object-fit: cover;
-  }
 
-  .inviter__name {
-    flex: 1;
-    min-width: 0;
-    font-size: 0.875rem;
-    color: var(--color-on-surface);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
 
   .inviter__meta {
     flex-shrink: 0;
