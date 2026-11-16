@@ -13,6 +13,7 @@ import { resolve4, resolveTxt } from 'node:dns/promises';
 import { comparePlans, normalizePlanKey } from '@kotbo/contracts';
 import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
+import { cloudflareSaasEnabled, ensureCloudflareHostname } from './cloudflareHostnames.js';
 
 export interface CustomDomainEntry {
   guildId: string;
@@ -64,16 +65,21 @@ export function verificationRecord(host: string, guildId: string) {
  */
 export async function checkCustomDomainDns(host: string, guildId: string): Promise<{ txt: boolean; pointing: boolean }> {
   const record = verificationRecord(host, guildId);
+  const txtRecords = await resolveTxt(record.name).catch(() => [] as string[][]);
+  const txt = txtRecords.some((parts) => parts.join('').trim() === record.value);
+
+  // Cloudflare for SaaS : le domaine est proxifié, donc ses IP ne sont pas celles de la cible.
+  // « pointing » devient « Cloudflare a vu le CNAME et émis le certificat ».
+  if (cloudflareSaasEnabled()) {
+    return { txt, pointing: txt ? await ensureCloudflareHostname(host) : false };
+  }
+
   const target = customDomainTarget();
-  const [txtRecords, targetIps, hostIps] = await Promise.all([
-    resolveTxt(record.name).catch(() => [] as string[][]),
+  const [targetIps, hostIps] = await Promise.all([
     target ? resolve4(target).catch(() => [] as string[]) : Promise.resolve([] as string[]),
     resolve4(host).catch(() => [] as string[]),
   ]);
-  return {
-    txt: txtRecords.some((parts) => parts.join('').trim() === record.value),
-    pointing: hostIps.length > 0 && hostIps.every((ip) => targetIps.includes(ip)),
-  };
+  return { txt, pointing: hostIps.length > 0 && hostIps.every((ip) => targetIps.includes(ip)) };
 }
 
 let byHost = new Map<string, CustomDomainEntry>();
@@ -162,7 +168,9 @@ export function traefikDynamicConfig(
   const dashboardUpstream = env.CUSTOM_DOMAIN_DASHBOARD_UPSTREAM;
   if (!apiUpstream || !dashboardUpstream || domains.length === 0) return { http: {} };
 
-  const tls = { certResolver: env.CUSTOM_DOMAIN_CERT_RESOLVER || 'letsencrypt' };
+  // Derrière Cloudflare for SaaS, c'est Cloudflare qui présente le certificat au visiteur : Traefik
+  // garde son certificat par défaut (SSL « Full » côté Cloudflare), pas de défi Let's Encrypt.
+  const tls = cloudflareSaasEnabled(env) ? {} : { certResolver: env.CUSTOM_DOMAIN_CERT_RESOLVER || 'letsencrypt' };
   const routers: Record<string, unknown> = {};
   const services: Record<string, unknown> = {
     'kotbo-cd-api': { loadBalancer: { servers: [{ url: apiUpstream }] } },

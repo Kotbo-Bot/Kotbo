@@ -23,6 +23,17 @@ describe('domaine du dashboard perso', () => {
     expect(routers['kotbo-cd-panel-monserveur-fr'].tls).toEqual({ certResolver: 'letsencrypt' });
   });
 
+  test("avec Cloudflare for SaaS, Traefik n'ouvre pas de défi Let's Encrypt", () => {
+    const env = {
+      CUSTOM_DOMAIN_API_UPSTREAM: 'http://bot:8787',
+      CUSTOM_DOMAIN_DASHBOARD_UPSTREAM: 'http://dash:80',
+      CLOUDFLARE_API_TOKEN: 'x',
+      CLOUDFLARE_ZONE_ID: 'y',
+    };
+    const config = traefikDynamicConfig([{ host: 'panel.monserveur.fr' }], env) as { http: { routers: Record<string, { tls?: unknown }> } };
+    expect(config.http.routers['kotbo-cd-panel-monserveur-fr'].tls).toEqual({});
+  });
+
   test("un serveur servi par son bot envoie /api vers le port de son instance", () => {
     const env = { CUSTOM_DOMAIN_API_UPSTREAM: 'http://bot:8787', CUSTOM_DOMAIN_DASHBOARD_UPSTREAM: 'http://dash:80' };
     const config = traefikDynamicConfig([{ host: 'panel.monserveur.fr', apiPort: 8790 }], env) as {

@@ -10,6 +10,7 @@ import { SecretBoxUnavailableError, openSecret, sealSecret } from '../../../util
 import { getDefaultInstance } from '../../../utils/instanceResolver.js';
 import { refreshGuildOwnership } from '../../../utils/guildOwnership.js';
 import { jsonFailure } from '../../shared/failure.js';
+import { cloudflareSaasEnabled, removeCloudflareHostname } from '../../../services/system/cloudflareHostnames.js';
 import {
   checkCustomDomainDns,
   customDomainForHost,
@@ -353,6 +354,11 @@ export async function handleCustomBotRoutes(
       }
       await refreshCustomDomains();
 
+      // L'ancien domaine ne doit plus rester déclaré chez Cloudflare (quota facturé au nom d'hôte).
+      if (before?.customDashboardUrl && before.customDashboardUrl !== config.customDashboardUrl && cloudflareSaasEnabled()) {
+        await removeCloudflareHostname(before.customDashboardUrl).catch((err) => logger.warn('CustomBot', `[${guildId}] Nom d'hôte Cloudflare non retiré :`, err));
+      }
+
       // Désactiver le bot du serveur arrête son instance.
       if (updateData.enabled === false && before?.enabled) {
         const instance = await findCustomInstance(guildId);
@@ -530,18 +536,17 @@ export async function handleCustomBotRoutes(
         json(res, 400, { error: 'Ton bot n\'est pas encore sur le serveur : invite-le d\'abord.' });
         return true;
       }
-      // Sans domaine servi, plus aucun dashboard ne pourrait gérer ce serveur une fois Kotbo parti.
-      if (!config.customDashboardUrl || customDomainForHost(config.customDashboardUrl)?.guildId !== guildId) {
-        json(res, 400, { error: 'Mets d\'abord ton dashboard en ligne sur ton domaine.' });
-        return true;
-      }
+      // Le domaine est optionnel : sans lui, le serveur n'a plus de dashboard après la bascule (dashboardUrl null).
+      const servedHost = config.customDashboardUrl && customDomainForHost(config.customDashboardUrl)?.guildId === guildId
+        ? config.customDashboardUrl
+        : null;
 
       await prisma.guild.update({ where: { id: guildId }, data: { instanceId: instance.id } });
       await Promise.all([refreshGuildOwnership(), refreshCustomDomains()]);
       await leaveGuild(getDefaultInstance().discordToken, guildId);
 
       audit(guildId, user, 'Bascule vers le bot perso', 'Le bot du serveur prend le relais, Kotbo a quitté le serveur.', 'Système');
-      json(res, 200, { ok: true, dashboardUrl: `https://${config.customDashboardUrl}` });
+      json(res, 200, { ok: true, dashboardUrl: servedHost ? `https://${servedHost}` : null });
     } catch (err) {
       logger.error('CustomBot', 'Switch error:', err);
       jsonFailure(res, err, 'Erreur lors de la bascule', 'CustomBot');
