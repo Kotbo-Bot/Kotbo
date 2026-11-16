@@ -9,6 +9,8 @@
   dans la fenêtre que le reste du dashboard ouvre déjà.
 -->
 <script lang="ts">
+  import UserDisplay from '../UserDisplay.svelte';
+  import MemberTag from '../MemberTag.svelte';
   import { router } from 'tinro';
   import Papicon from '../Papicon.svelte';
   import Skeleton from '../Skeleton.svelte';
@@ -247,6 +249,7 @@
       <div class="min-w-0">
         <div class="flex flex-wrap items-center gap-2">
           <h2 class="text-xl font-semibold text-on-surface truncate">{displayName}</h2>
+          <MemberTag {userId} />
           {#if profile?.isOnServer}
             <span class="mp-chip bg-success/10 text-success">{m.mp_on_server()}</span>
           {:else}
@@ -457,8 +460,7 @@
             {#each stats.social.topInterlocutors.slice(0, 6) as peer (peer.userId)}
               <li>
                 <a class="flex items-center gap-2.5 rounded-lg -mx-1.5 px-1.5 py-1 hover:bg-surface-container-low" href={`/members/${peer.userId}`}>
-                  <img src={memberAvatarSrc(peer.avatarUrl, peer.userTag, peer.userId)} alt="" class="w-6 h-6 rounded-full" />
-                  <span class="text-body-sm text-on-surface truncate flex-1">{peer.userTag ?? peer.userId}</span>
+                  <UserDisplay userId={peer.userId} name={peer.userTag} avatarUrl={peer.avatarUrl} size="xs" class="min-w-0 flex-1" />
                   <span class="text-2xs text-on-surface-variant tabular-nums">{peer.total}</span>
                 </a>
               </li>
@@ -475,8 +477,7 @@
             {#each caseData.linkedAccounts as account (account.userId)}
               <li>
                 <a class="flex items-center gap-2.5 rounded-lg -mx-1.5 px-1.5 py-1 hover:bg-surface-container-low" href={`/members/${account.userId}`}>
-                  <img src={memberAvatarSrc(account.avatarUrl, account.userTag, account.userId)} alt="" class="w-6 h-6 rounded-full" />
-                  <span class="text-body-sm text-on-surface truncate flex-1">{account.userTag ?? account.userId}</span>
+                  <UserDisplay userId={account.userId} name={account.userTag} avatarUrl={account.avatarUrl} size="xs" class="min-w-0 flex-1" />
                   <span class="text-2xs text-on-surface-variant">{account.status === 'VALIDATED' ? m.mp_linked_validated() : m.mp_linked_pending()}</span>
                 </a>
               </li>

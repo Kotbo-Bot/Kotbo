@@ -1,4 +1,5 @@
 <script lang="ts">
+  import MemberTag from '../lib/components/MemberTag.svelte';
   import { onMount } from 'svelte';
   import { canViewFeature } from '../lib/permissions.svelte';
   import { router } from 'tinro';
@@ -433,7 +434,10 @@
               </div>
 
               <div class="min-w-0 flex-1">
-                <h3 class="truncate text-sm font-semibold text-on-surface group-hover:text-primary transition-colors">{member.displayName || m.mb_no_name()}</h3>
+                <div class="flex min-w-0 items-center gap-1.5">
+                  <h3 class="truncate text-sm font-semibold text-on-surface group-hover:text-primary transition-colors">{member.displayName || m.mb_no_name()}</h3>
+                  <MemberTag userId={member.id} />
+                </div>
                 <p class="truncate text-xs text-on-surface-variant">@{member.username || member.id.slice(0, 8)}</p>
               </div>
               <!-- Indique que la carte s'ouvre sur la fiche -->

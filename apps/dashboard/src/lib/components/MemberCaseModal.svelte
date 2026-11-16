@@ -1,4 +1,5 @@
 <script lang="ts">
+  import MemberTag from './MemberTag.svelte';
   import { Tabs, Button, Callout, SectionCard, EmptyState, Field } from './ui';
   import { memberAvatarSrc } from '../discordMedia';
   import MemberContentPanel from './analytics/MemberContentPanel.svelte';
@@ -967,6 +968,7 @@
       >
         <img src={memberAvatarSrc(caseData.invite.inviterAvatarUrl, tag, caseData.invite.inviterId)} alt="" class="{compact ? 'h-5 w-5' : 'h-6 w-6'} rounded-full object-cover" />
         <span class="truncate">@{tag}</span>
+        <MemberTag userId={caseData.invite.inviterId} />
       </button>
     {:else}
       <span class="mc-person mc-person--static">
@@ -1800,6 +1802,7 @@
                         <div class="min-w-0 flex-1">
                           <div class="flex flex-wrap items-center gap-2">
                             <span class="truncate text-sm font-medium text-on-surface">{suggestion.userTag ?? m.mcm_xlink_unknown_user({ id: suggestion.userId })}</span>
+                            <MemberTag userId={suggestion.userId} />
                             <span class="badge badge-neutral">{suggestion.serverCount > 1 ? m.mcm_xlink_servers_other({ count: suggestion.serverCount }) : m.mcm_xlink_servers_one({ count: suggestion.serverCount })}</span>
                             {#if !suggestion.presentOnGuild}<span class="badge badge-neutral">{m.mcm_xlink_absent()}</span>{/if}
                           </div>
@@ -1861,6 +1864,7 @@
                       <div class="min-w-0 flex-1">
                         <div class="flex items-center gap-2">
                           <span class="truncate text-sm font-medium text-on-surface">{link.userTag}</span>
+                          <MemberTag userId={link.userId} />
                           <span class="badge {link.status === 'VALIDATED' ? 'badge-success' : 'badge-warning'}">{link.status}</span>
                         </div>
                         <p class="text-xs text-on-surface-variant">{link.type} · {link.userId}</p>
